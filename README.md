@@ -14,8 +14,8 @@ apps for the deck in a few minutes, with nothing but a public GitHub repository.
 
 ## Install apps from this repository on a deck
 
-On the deck: **Settings > Apps > Sources > Add**, enter `OSRdesign/cyberdeck-zero-apps`, then
-**Settings > Apps > Available**, pick an app, **Install**. Installing asks for the deck user's sudo password
+On the deck: **Settings > Apps > Sources > + Add a GitHub source**, enter `OSRdesign/cyberdeck-zero-apps`, then
+go to the **Apps** tab, pick an app and press Enter to install. Installing asks for the deck user's sudo password
 (a `.deb` package is installed as root). Remove an app from the same menu.
 
 (The Store app can use the same repository: add the registry URL
@@ -141,12 +141,12 @@ Release**: upload the `.deb` there and set `download.url` of that entry to the r
 
 ## 7. Add your source on the deck
 
-**Settings > Apps > Sources > Add**, then type `your-github-name/your-apps` (a full
+**Settings > Apps > Sources > + Add a GitHub source**, then type `your-github-name/your-apps` (a full
 `https://github.com/you/your-apps` address or a direct `registry.json` URL also work). The deck syncs the
-registry and your apps appear under **Settings > Apps > Available**.
+registry and your apps appear in the **Apps** tab of **Settings > Apps**.
 
 To publish an update, raise `version` in `app.json`, run `tools/make_registry.py`, commit and push; the deck
-shows the new version after its next sync (GitHub's cache can delay it by a few minutes).
+shows the new version after **Sync my sources** (GitHub's cache can delay it by a few minutes).
 
 ## Good to know
 
