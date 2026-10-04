@@ -8,48 +8,16 @@ apps for the deck in a few minutes, with nothing but a public GitHub repository.
 
 ## Apps
 
-| App | What it does |
-| --- | --- |
-| **LAN Scan** (`lanscan`, 0.1.1) | Lists the devices on your Wi-Fi network (IP, MAC, vendor, name) and scans the open ports of one of them. |
-| **viz1090** (`viz1090`, 0.1.1) | The real [viz1090](https://github.com/nmatsuda/viz1090) ADS-B display, full screen, with its own RTL-SDR decoder, an intro screen (type the nearest airport code, or use a GPS) and a world map. Needs an RTL-SDR dongle and a launcher with full-screen app support. |
-| **Wi-Fi Survey** (`wifi-survey`, 0.1.0) | Shows the Wi-Fi networks around the deck: a **Networks** list (name, signal, channel, band, security, the network you are connected to marked) and a **Channels** chart that points out the least crowded channel. Passive only: it reads the scan results of NetworkManager (`nmcli`), nothing is sent, captured or connected. Depends on `network-manager`. |
+Each app has its own page with the full description, keys, requirements, known limits, credits and build notes.
 
-### Changes
+| App | Version | What it does |
+| --- | --- | --- |
+| [**LAN Scan**](apps/lanscan/README.md) (`lanscan`) | 0.1.1 | Lists the devices on your Wi-Fi network (IP, MAC, vendor, name) and scans the open ports of one of them. |
+| [**viz1090**](apps/viz1090/README.md) (`viz1090`) | 0.1.1 | The real viz1090 ADS-B display, full screen, fed by an RTL-SDR dongle, with an intro screen and a world map. Needs the dongle and a launcher with full-screen app support. |
+| [**Wi-Fi Survey**](apps/wifi-survey/README.md) (`wifi-survey`) | 0.1.0 | Shows the Wi-Fi networks around the deck and a chart that points out the least crowded channel. Passive only, reads the scan results of NetworkManager. |
 
-* **LAN Scan 0.1.1**: the source now lives in this repository, in `apps/lanscan/src`, and is built with
-  `apps/lanscan/build/build.sh` (same method as Wi-Fi Survey: the script copies the source into a scratch project of
-  a launcher checkout, runs `scons` and puts the binary in `apps/lanscan/root/`). It was moved unchanged: on the deck
-  the scan, the vendor names (from `oui.tsv`), the port scan and the keys behave as in 0.1.0. The deck offers it as
-  an update in **Settings > Apps**.
-* **viz1090 0.1.1**: touch works again when the Bluetooth keyboard is connected. 0.1.0 opened a fixed
-  `/dev/input/event1`, which on the deck is sometimes the infrared node of the RTL-SDR dongle and not the screen.
-  The display layer now looks through `/dev/input/event*` for the touch screen (a device that reports multitouch
-  positions and is not a keyboard, the Goodix panel first) and tries again every second if it is absent or goes away.
-  `VIZ_TOUCH=/dev/input/eventN` still forces a device. On the deck the right device was opened at every launch,
-  the keyboard, Esc and the close button kept working, and touch recovered by itself after an interruption.
-
-Known limits: the touch behaviour of both apps was checked with test touch events, not with a finger, until the
-owner of the deck has tried it. After an upgrade through the Apps menu the tile moves to the end of the launcher
-grid.
-
-### Wi-Fi Survey
-
-The app runs in the launcher's normal 640x340 window, under the top bar. A scan runs about every 5 seconds.
-
-| Key | Action |
-| --- | --- |
-| Left / Right / Tab | Switch between Networks and Channels |
-| Up / Down | Move in the list |
-| Enter | Open the detail of the selected network (Left / Right then show the previous / next one) |
-| R | Rescan now |
-| Esc | Back from the detail, or quit |
-
-The detail view follows the access point by its BSSID, so it stays on the same network when the list reorders
-after a scan. If the network disappears, the title shows "- gone" and the last known values stay on screen until
-it returns. The screenshots below were taken on the deck with test scan data.
-
-![Wi-Fi Survey, Networks](docs/screenshots/wifi-survey-networks.png)
-![Wi-Fi Survey, Channels](docs/screenshots/wifi-survey-channels.png)
+Known limit that applies to every app: after an upgrade through the Apps menu the tile moves to the end of the
+launcher grid.
 
 ## Install apps from this repository on a deck
 
@@ -199,8 +167,12 @@ shows the new version after **Sync my sources** (GitHub's cache can delay it by 
 * **Several sources** can be enabled at once; an app with the same `share_code` in two sources is shown once
   (the source listed last wins).
 
-## Licence
+## Licence and credits
 
-MIT. LAN Scan and Wi-Fi Survey use the IEEE OUI registry (vendor names) published at
-<https://standards-oui.ieee.org/>. Both run on the LVGL based `cp0_lvgl` runtime of the M5CardputerZero launcher
-(M5Stack, MIT).
+The repository is MIT. Each app page lists its own credits and licences in full; in short:
+
+* **LAN Scan** and **Wi-Fi Survey** use the IEEE OUI registry (vendor names) published at
+  <https://standards-oui.ieee.org/>. Both run on the LVGL based `cp0_lvgl` runtime of the M5CardputerZero launcher
+  (M5Stack, MIT).
+* **viz1090** bundles viz1090 (BSD), readsb (GPL-3 or later), fonts (SIL OFL 1.1, Font Awesome icons CC BY 4.0) and
+  map data (Natural Earth, OurAirports, public domain); see [its page](apps/viz1090/README.md).
