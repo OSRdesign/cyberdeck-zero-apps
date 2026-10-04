@@ -11,6 +11,7 @@ apps for the deck in a few minutes, with nothing but a public GitHub repository.
 | App | What it does |
 | --- | --- |
 | **LAN Scan** (`lanscan`) | Lists the devices on your Wi-Fi network (IP, MAC, vendor, name) and scans the open ports of one of them. |
+| **viz1090** (`viz1090`) | The real [viz1090](https://github.com/nmatsuda/viz1090) ADS-B display, full screen, with its own RTL-SDR decoder, an intro screen (type the nearest airport code, or use a GPS) and a world map. Needs an RTL-SDR dongle and a launcher with full-screen app support. |
 
 ## Install apps from this repository on a deck
 

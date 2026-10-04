@@ -38,10 +38,15 @@ def collect(root):
 
 
 def file_mode(rel, path):
-    """Executables: anything under a bin/ directory, *.sh, or with the exec bit set on POSIX."""
+    """Executables: anything under a bin/ directory, *.sh, an ELF binary or a script starting with #!, or a
+    file with the exec bit set on POSIX (the exec bit does not survive a checkout on Windows)."""
     if "/bin/" in "/" + rel or rel.endswith(".sh"):
         return 0o755
     try:
+        with open(path, "rb") as handle:
+            magic = handle.read(4)
+        if magic == b"\x7fELF" or magic[:2] == b"#!":
+            return 0o755
         if os.stat(path).st_mode & stat.S_IXUSR:
             return 0o755
     except OSError:
@@ -90,6 +95,7 @@ def main():
     parser.add_argument("--homepage", default="")
     parser.add_argument("--depends", default="", help="Debian Depends: field, e.g. 'curl, libfreetype6'")
     parser.add_argument("--section", default="APPLaunch")
+    parser.add_argument("--scripts", help="directory with maintainer scripts (preinst, postinst, prerm, postrm)")
     parser.add_argument("--out", default=".", help="output directory")
     args = parser.parse_args()
 
@@ -132,6 +138,14 @@ def main():
         ("./control", ("\n".join(control) + "\n").encode("utf-8"), 0o644),
         ("./md5sums", "".join(md5_lines).encode("utf-8"), 0o644),
     ]
+
+    if args.scripts:
+        for script in ("preinst", "postinst", "prerm", "postrm"):
+            script_path = os.path.join(args.scripts, script)
+            if os.path.isfile(script_path):
+                with open(script_path, "rb") as handle:
+                    content = handle.read().replace(b"\r\n", b"\n")
+                control_members.append(("./" + script, content, 0o755))
 
     deb = b"!<arch>\n"
     deb += ar_member("debian-binary", b"2.0\n", mtime)

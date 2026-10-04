@@ -1,0 +1,48 @@
+Package: viz1090 (cyberdeck-zero-apps)
+Packaged by: OSRdesign <https://github.com/OSRdesign/cyberdeck-zero-apps>
+
+This package bundles several programs and data sets, each under its own licence.
+
+1. viz1090  (/opt/viz1090/viz1090)
+   Source: https://github.com/nmatsuda/viz1090, commit fb7bf016d5d95ddca5b27f260e871484864b5c96
+   Built with one change (three constants in AircraftLabel.h, see build/build_on_pi.sh).
+
+   Copyright (C) 2020, Nathan Matsuda <info@nathanmatsuda.com>
+   Copyright (C) 2014, Malcolm Robb <Support@ATTAvionics.com>
+   Copyright (C) 2012, Salvatore Sanfilippo <antirez at gmail dot com>
+   All rights reserved.
+
+   Redistribution and use in source and binary forms, with or without modification, are permitted provided
+   that the following conditions are met:
+    * Redistributions of source code must retain the above copyright notice, this list of conditions and the
+      following disclaimer.
+    * Redistributions in binary form must reproduce the above copyright notice, this list of conditions and
+      the following disclaimer in the documentation and/or other materials provided with the distribution.
+
+   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+   WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+   PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+   ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+   TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+   HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+   POSSIBILITY OF SUCH DAMAGE.
+
+2. readsb  (/opt/viz1090/readsb)  - GNU General Public License, version 3 or later
+   Source: https://github.com/wiedehopf/readsb, commit 094720939c01943de82b14df6f42f67fff1cd514, built
+   unmodified with "make RTLSDR=yes". The complete licence text is in /usr/share/common-licenses/GPL-3.
+   The corresponding source code is available at the address above (that exact commit); to obtain it from the
+   packager as well, open an issue at https://github.com/OSRdesign/cyberdeck-zero-apps.
+
+3. The display bridge and intro screen (/opt/viz1090/libviz_fb.so, /opt/viz1090/vizsetup, run_viz1090.sh,
+   extract_map.py)  - MIT licence, sources in apps/viz1090/build/ of the packager's repository.
+   cp0_statusbar.[ch] come from https://github.com/OSRdesign/cyberdeck-zero-launcher (MIT).
+
+4. Fonts (/opt/viz1090/font)
+   Terminus TTF, Montserrat and the Font Awesome 5 Free font files are distributed under the SIL Open Font
+   License 1.1 (https://openfontlicense.org). Font Awesome Free icons are under CC BY 4.0
+   (https://fontawesome.com/license/free).
+
+5. Map data (/opt/viz1090/world-map.bin)
+   Natural Earth (public domain, https://www.naturalearthdata.com/) and OurAirports (public domain,
+   https://ourairports.com/data/), converted by apps/viz1090/build/make_world.py.

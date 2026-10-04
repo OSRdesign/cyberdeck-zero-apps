@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-10-03T19:31:42+00:00",
+  "generated_at": "2026-10-04T13:45:12+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CardputerZero"
@@ -41,8 +41,8 @@
         "display_name": "OSRdesign"
       },
       "version": "0.1.0",
-      "published_at": "2026-10-03T19:31:42+00:00",
-      "updated_at": "2026-10-03T19:31:42+00:00",
+      "published_at": "2026-10-04T13:45:11+00:00",
+      "updated_at": "2026-10-04T13:45:11+00:00",
       "review": {
         "status": "approved"
       },
@@ -52,9 +52,9 @@
         "type": "deb",
         "package": "lanscan",
         "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/lanscan_0.1.0_arm64.deb",
-        "md5": "58f1ccb2ebdc82c689aa419ad48b0c82",
-        "sha256": "0951fa7acbad6d6cc470cec7d97207781f789a8f8de383b97859f735a5821194",
-        "size": 1453622
+        "md5": "c66f2ad8b73e95ea7f68767ed3048f61",
+        "sha256": "03784e2256ff5783e12d485fe9c81e22a689a588c895fb1706535f37c2b9925b",
+        "size": 1453620
       },
       "depends": "",
       "permissions": {
@@ -71,6 +71,66 @@
         "screenshots": []
       },
       "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/lanscan/icon.png",
+      "screenshots": []
+    },
+    {
+      "uuid": "b316a757-7d69-5f51-8ba3-1f47e9b229b6",
+      "share_code": "viz1090",
+      "title": "viz1090",
+      "summary": "Full-screen ADS-B display: live aircraft from an RTL-SDR dongle on a world map.",
+      "description": "The real viz1090 (by Nathan Matsuda) on the deck, full screen, with its own decoder (readsb with RTL-SDR support), an intro screen (type the nearest airport code, or use a GPS) and a world map. Needs an RTL-SDR dongle with a 1090 MHz antenna and a launcher with full-screen support (X-Fullscreen in .desktop files). Map data: Natural Earth and OurAirports. viz1090: BSD licence; readsb: GPL-3 (source: https://github.com/wiedehopf/readsb).",
+      "locales": {
+        "en": {
+          "title": "viz1090",
+          "summary": "Full-screen ADS-B display: live aircraft from an RTL-SDR dongle on a world map.",
+          "description": "The real viz1090 (by Nathan Matsuda) on the deck, full screen, with its own decoder (readsb with RTL-SDR support), an intro screen (type the nearest airport code, or use a GPS) and a world map. Needs an RTL-SDR dongle with a 1090 MHz antenna and a launcher with full-screen support (X-Fullscreen in .desktop files). Map data: Natural Earth and OurAirports. viz1090: BSD licence; readsb: GPL-3 (source: https://github.com/wiedehopf/readsb)."
+        }
+      },
+      "i18n": {
+        "en": {
+          "title": "viz1090",
+          "summary": "Full-screen ADS-B display: live aircraft from an RTL-SDR dongle on a world map.",
+          "description": "The real viz1090 (by Nathan Matsuda) on the deck, full screen, with its own decoder (readsb with RTL-SDR support), an intro screen (type the nearest airport code, or use a GPS) and a world map. Needs an RTL-SDR dongle with a 1090 MHz antenna and a launcher with full-screen support (X-Fullscreen in .desktop files). Map data: Natural Earth and OurAirports. viz1090: BSD licence; readsb: GPL-3 (source: https://github.com/wiedehopf/readsb)."
+        }
+      },
+      "categories": [
+        "Radio"
+      ],
+      "author": {
+        "github": "OSRdesign",
+        "display_name": "OSRdesign"
+      },
+      "version": "0.1.0",
+      "published_at": "2026-10-04T13:45:12+00:00",
+      "updated_at": "2026-10-04T13:45:12+00:00",
+      "review": {
+        "status": "approved"
+      },
+      "license": "BSD-3-Clause AND GPL-3.0-or-later",
+      "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/viz1090",
+      "download": {
+        "type": "deb",
+        "package": "viz1090",
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/viz1090_0.1.0_arm64.deb",
+        "md5": "e32c03bebab1984b0ecd6b6e26bca2d6",
+        "sha256": "9af5825691af5e572f011c808f144ce05b0e48e18bba718d8fc7bcec00caaee8",
+        "size": 5482110
+      },
+      "depends": "libsdl2-2.0-0, libsdl2-ttf-2.0-0, libsdl2-gfx-1.0-0, librtlsdr0, libusb-1.0-0, libfreetype6, libncurses6, libzstd1, zlib1g, python3",
+      "permissions": {
+        "camera": false,
+        "microphone": false,
+        "imu": false,
+        "network": false,
+        "additional_hardware": true,
+        "background_service": false,
+        "external_display": false
+      },
+      "assets": {
+        "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/viz1090/icon.png",
+        "screenshots": []
+      },
+      "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/viz1090/icon.png",
       "screenshots": []
     }
   ]

@@ -73,6 +73,7 @@ def main():
                 sys.exit("%s: missing '%s'" % (manifest_path, key))
         package = "%s_%s_arm64.deb" % (meta["package"], meta["version"])
         package_path = os.path.join(REPO, "packages", package)
+        scripts = os.path.join(apps_dir, name, "DEBIAN")
         if not args.no_build:
             subprocess.check_call([
                 sys.executable, os.path.join(HERE, "build_deb.py"),
@@ -82,7 +83,7 @@ def main():
                 "--maintainer", meta.get("maintainer", "%s <noreply@users.noreply.github.com>" % owner),
                 "--homepage", meta.get("source_repo", ""),
                 "--depends", meta.get("depends", ""),
-                "--out", os.path.join(REPO, "packages")])
+                "--out", os.path.join(REPO, "packages")] + (["--scripts", scripts] if os.path.isdir(scripts) else []))
         if not os.path.isfile(package_path):
             sys.exit("package not found: " + package_path)
         md5, sha256, size = digest(package_path)

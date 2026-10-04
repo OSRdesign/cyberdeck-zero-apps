@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=viz1090
+Exec=/opt/viz1090/run_viz1090.sh
+Terminal=false
+Icon=share/images/viz1090.png
+Type=Application
+X-Fullscreen=true
