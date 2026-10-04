@@ -12,7 +12,7 @@ Each app has its own page with the full description, keys, requirements, known l
 
 | App | Version | What it does |
 | --- | --- | --- |
-| [**LAN Scan**](apps/lanscan/README.md) (`lanscan`) | 0.1.1 | Lists the devices on your Wi-Fi network (IP, MAC, vendor, name) and scans the open ports of one of them. |
+| [**LAN Scan**](apps/lanscan/README.md) (`lanscan`) | 0.1.2 | Lists the devices on your Wi-Fi network (IP, MAC, vendor, name) and scans the open ports of one of them. |
 | [**viz1090**](apps/viz1090/README.md) (`viz1090`) | 0.1.1 | The real viz1090 ADS-B display, full screen, fed by an RTL-SDR dongle, with an intro screen and a world map. Needs the dongle and a launcher with full-screen app support. |
 | [**Wi-Fi Survey**](apps/wifi-survey/README.md) (`wifi-survey`) | 0.1.0 | Shows the Wi-Fi networks around the deck and a chart that points out the least crowded channel. Passive only, reads the scan results of NetworkManager. |
 

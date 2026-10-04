@@ -1,6 +1,6 @@
 # LAN Scan
 
-Version 0.1.1, package `lanscan`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.1.2, package `lanscan`. Part of [cyberdeck-zero-apps](../../README.md).
 
 LAN Scan lists the devices on the Wi-Fi network the deck is connected to (IP, MAC, vendor, name) and scans the
 open ports of the one you select.
@@ -19,7 +19,7 @@ open ports of the one you select.
 
 On the deck: **Settings > Apps > Sources > + Add a GitHub source**, enter `OSRdesign/cyberdeck-zero-apps`, go to the
 **Apps** tab, pick **LAN Scan** and press Enter. Installing asks for the deck user's sudo password. See the
-[repository README](../../README.md) for details. If an older version is installed, the deck offers 0.1.1 as an
+[repository README](../../README.md) for details. If an older version is installed, the deck offers 0.1.2 as an
 update in the same menu.
 
 ## Use
@@ -85,5 +85,6 @@ page, `src/` and `build/` do not.
 
 ## Credits and licence
 
-MIT. Vendor names come from the IEEE OUI registry published at <https://standards-oui.ieee.org/>. The app runs on
+MIT. Vendor names come from the IEEE OUI registry published at <https://standards-oui.ieee.org/> (company names are shortened for the small screen; no formal licence is
+given with the listing). The app runs on
 the LVGL based `cp0_lvgl` runtime of the M5CardputerZero launcher (M5Stack, MIT).

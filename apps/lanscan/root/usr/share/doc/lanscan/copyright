@@ -1,0 +1,51 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: LAN Scan
+Upstream-Contact: OSRdesign <https://github.com/OSRdesign/cyberdeck-zero-apps>
+Source: https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/lanscan
+Comment: The application is linked against the LVGL based cp0_lvgl runtime of the
+ M5CardputerZero launcher (Copyright M5Stack Technology CO LTD, MIT), which is part of
+ the binary and is therefore listed in its Copyright field below.
+
+Files: usr/share/APPLaunch/bin/M5CardputerZero-LanScan
+Copyright: 2026 OSRdesign
+ M5Stack Technology CO LTD (cp0_lvgl runtime linked into the binary)
+License: MIT
+
+Files: usr/share/APPLaunch/applications/lanscan.desktop
+       usr/share/APPLaunch/share/images/lanscan.png
+Copyright: 2026 OSRdesign
+License: MIT
+
+Files: usr/share/APPLaunch/share/oui.tsv
+Copyright: IEEE Registration Authority (source data)
+License: LicenseRef-IEEE-OUI-public-listing
+Comment: oui.tsv maps MAC address prefixes (OUI) to vendor names. It is derived by
+ tools/make_oui.py (apps/lanscan/src/tools/) from the public IEEE OUI listing published by
+ the IEEE Registration Authority at https://standards-oui.ieee.org/oui/oui.csv. The
+ prefixes are kept; the company names are shortened (corporate suffixes such as "Inc." or
+ "Ltd." dropped, at most 30 characters) to fit the small screen, so the file is a modified,
+ abridged derivative and not a copy of the listing as published. No other terms are
+ claimed by the packager for this data.
+
+License: LicenseRef-IEEE-OUI-public-listing
+ The IEEE Registration Authority publishes its OUI listing openly for public lookup. No
+ formal licence is given with it. The data is redistributed here in shortened form only to
+ show vendor names next to MAC addresses. No endorsement by the IEEE is implied and no
+ warranty is given as to the accuracy or completeness of the shortened names. For the
+ authoritative data see https://standards-oui.ieee.org/.
+
+License: MIT
+ Permission is hereby granted, free of charge, to any person obtaining a copy of this software
+ and associated documentation files (the "Software"), to deal in the Software without
+ restriction, including without limitation the rights to use, copy, modify, merge, publish,
+ distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the
+ Software is furnished to do so, subject to the following conditions:
+ .
+ The above copyright notice and this permission notice shall be included in all copies or
+ substantial portions of the Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
+ BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
