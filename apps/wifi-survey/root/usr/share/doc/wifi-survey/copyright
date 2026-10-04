@@ -1,0 +1,9 @@
+Wi-Fi Survey
+Copyright (c) 2026 OSRdesign
+License: MIT
+
+The application uses the LVGL based cp0_lvgl runtime of the M5CardputerZero launcher
+(Copyright M5Stack Technology CO LTD, MIT).
+
+share/wifi-survey/oui.tsv is derived from the IEEE OUI registry published at
+https://standards-oui.ieee.org/ (vendor names for MAC address prefixes).

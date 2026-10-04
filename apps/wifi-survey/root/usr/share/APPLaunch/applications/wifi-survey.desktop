@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Wi-Fi Survey
+Exec=/usr/share/APPLaunch/bin/M5CardputerZero-wifi-survey
+Terminal=false
+Icon=share/images/wifi-survey.png
+Type=Application

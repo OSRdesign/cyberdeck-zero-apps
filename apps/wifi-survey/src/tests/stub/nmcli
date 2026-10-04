@@ -1,0 +1,13 @@
+#!/bin/sh
+# Stub of nmcli for the host test: prints what NetworkManager would (terse mode, escaped colons).
+case "$*" in
+*"device status"*) printf 'eth0:ethernet:connected\nwlan0:wifi:connected\nlo:loopback:unmanaged\n' ;;
+*"--rescan yes"*)
+  [ -n "$STUB_BUSY" ] && exit 1
+  printf '*:AA\\:BB\\:CC\\:DD\\:EE\\:01:Home\\:Net:Infra:6:2437 MHz:130 Mbit/s:82:WPA2\n'
+  printf ' :02\\:11\\:22\\:33\\:44\\:55::Infra:11:2462 MHz:54 Mbit/s:40:WPA2 WPA3\n'
+  printf ' :B8\\:27\\:EB\\:00\\:00\\:01:Cafe:Infra:1:2412 MHz:54 Mbit/s:30:--\n'
+  printf ' :DC\\:A6\\:32\\:00\\:00\\:02:Five:Infra:149:5745 MHz:270 Mbit/s:55:WPA2 802.1X\n' ;;
+*"--rescan no"*)
+  printf ' :B8\\:27\\:EB\\:00\\:00\\:01:Cafe:Infra:1:2412 MHz:54 Mbit/s:30:--\n' ;;
+esac

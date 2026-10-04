@@ -12,6 +12,26 @@ apps for the deck in a few minutes, with nothing but a public GitHub repository.
 | --- | --- |
 | **LAN Scan** (`lanscan`) | Lists the devices on your Wi-Fi network (IP, MAC, vendor, name) and scans the open ports of one of them. |
 | **viz1090** (`viz1090`) | The real [viz1090](https://github.com/nmatsuda/viz1090) ADS-B display, full screen, with its own RTL-SDR decoder, an intro screen (type the nearest airport code, or use a GPS) and a world map. Needs an RTL-SDR dongle and a launcher with full-screen app support. |
+| **Wi-Fi Survey** (`wifi-survey`) | Shows the Wi-Fi networks around the deck: a **Networks** list (name, signal, channel, band, security, the network you are connected to marked) and a **Channels** chart that points out the least crowded channel. Passive only: it reads the scan results of NetworkManager (`nmcli`), nothing is sent, captured or connected. Depends on `network-manager`. |
+
+### Wi-Fi Survey
+
+The app runs in the launcher's normal 640x340 window, under the top bar. A scan runs about every 5 seconds.
+
+| Key | Action |
+| --- | --- |
+| Left / Right / Tab | Switch between Networks and Channels |
+| Up / Down | Move in the list |
+| Enter | Open the detail of the selected network (Left / Right then show the previous / next one) |
+| R | Rescan now |
+| Esc | Back from the detail, or quit |
+
+The detail view follows the access point by its BSSID, so it stays on the same network when the list reorders
+after a scan. If the network disappears, the title shows "- gone" and the last known values stay on screen until
+it returns. The screenshots below were taken on the deck with test scan data.
+
+![Wi-Fi Survey, Networks](docs/screenshots/wifi-survey-networks.png)
+![Wi-Fi Survey, Channels](docs/screenshots/wifi-survey-channels.png)
 
 ## Install apps from this repository on a deck
 
@@ -164,5 +184,6 @@ shows the new version after **Sync my sources** (GitHub's cache can delay it by 
 
 ## Licence
 
-MIT. LAN Scan uses the IEEE OUI registry (vendor names) published at
-<https://standards-oui.ieee.org/>.
+MIT. LAN Scan and Wi-Fi Survey use the IEEE OUI registry (vendor names) published at
+<https://standards-oui.ieee.org/>. Both run on the LVGL based `cp0_lvgl` runtime of the M5CardputerZero launcher
+(M5Stack, MIT).

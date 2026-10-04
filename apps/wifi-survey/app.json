@@ -1,0 +1,14 @@
+{
+  "share_code": "wifi-survey",
+  "package": "wifi-survey",
+  "version": "0.1.0",
+  "title": "Wi-Fi Survey",
+  "summary": "See the Wi-Fi networks around you and which channels are crowded.",
+  "description": "Lists the Wi-Fi networks in range sorted by signal, with SSID, signal strength, channel, band and security, and marks the one the deck is connected to. Tap or press Enter on a network for its details (BSSID, vendor, frequency, rate). A second screen charts the number of networks per channel on 2.4 and 5 GHz and highlights the least crowded channel. Passive only: it reads the scan results of NetworkManager (nmcli), needs no root, and never connects, injects or captures anything.",
+  "categories": ["Network"],
+  "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
+  "license": "MIT",
+  "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/wifi-survey",
+  "depends": "network-manager",
+  "permissions": {"network": true}
+}
