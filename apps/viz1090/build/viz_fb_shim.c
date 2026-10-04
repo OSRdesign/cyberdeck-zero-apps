@@ -8,7 +8,7 @@
  *     events viz1090 handles (finger drag = pan, two-finger pinch = zoom, tap, + / - keys); the X button (top right) and Esc quit.
  *
  * Use:  SDL_VIDEODRIVER=offscreen LD_PRELOAD=libviz_fb.so ./viz1090 --screensize 640 480 ...
- * Environment: VIZ_TOUCH (default /dev/input/event1), VIZ_KEYBOARD (default /dev/input/bt-keyboard),
+ * Environment: VIZ_TOUCH (default: found by scanning /dev/input/event*), VIZ_KEYBOARD (default /dev/input/bt-keyboard),
  *              APPLAUNCH_TOUCH_SWAP_XY / _INVERT_X / _INVERT_Y (as for the launcher), VIZ_FB (default /dev/fb0).
  */
 #define _GNU_SOURCE
@@ -223,7 +223,7 @@ static void push_key(SDL_Keycode sym, SDL_Scancode scan)
 /* touch */
 #define SLOTS 5
 typedef struct { int active; int x, y; float nx, ny; } slot_t;
-static int touch_fd = -2;
+static int touch_fd = -1;
 static slot_t slots[SLOTS], prev_slots[SLOTS];
 static int cur_slot;
 static int min_x, max_x, min_y, max_y;
@@ -239,11 +239,65 @@ static float norm(int v, int lo, int hi)
     return f < 0 ? 0 : (f > 1 ? 1 : f);
 }
 
+/* Is this evdev node a touch screen? It must report multitouch X and Y and must not be a keyboard.
+ * Returns 2 for a name that says so (Goodix / TouchScreen), 1 for any other multitouch device, 0 for none. */
+static int touch_score(int fd)
+{
+    unsigned long abs_bits[(ABS_MAX + 8 * sizeof(unsigned long)) / (8 * sizeof(unsigned long))];
+    unsigned long key_bits[(KEY_MAX + 8 * sizeof(unsigned long)) / (8 * sizeof(unsigned long))];
+    memset(abs_bits, 0, sizeof(abs_bits));
+    memset(key_bits, 0, sizeof(key_bits));
+#define HAS(bits, n) (((bits)[(n) / (8 * sizeof(unsigned long))] >> ((n) % (8 * sizeof(unsigned long)))) & 1UL)
+    if (ioctl(fd, EVIOCGBIT(EV_ABS, sizeof(abs_bits)), abs_bits) < 0) return 0;
+    if (!HAS(abs_bits, ABS_MT_POSITION_X) || !HAS(abs_bits, ABS_MT_POSITION_Y)) return 0;
+    if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(key_bits)), key_bits) >= 0 && HAS(key_bits, KEY_A)) return 0;   /* a keyboard */
+#undef HAS
+    char name[128] = "";
+    if (ioctl(fd, EVIOCGNAME(sizeof(name) - 1), name) > 0) {
+        for (char *c = name; *c; ++c) if (*c >= 'A' && *c <= 'Z') *c = (char)(*c + 32);
+        if (strstr(name, "goodix") || strstr(name, "touchscreen")) return 2;
+    }
+    return 1;
+}
+
+/* The event number depends on the connect order (a Bluetooth keyboard can take any number), so look for the
+ * touch screen by what it reports. Returns an open descriptor or -1. */
+static int touch_find(void)
+{
+    int best_fd = -1, best = 0;
+    for (int i = 0; i < 32; ++i) {
+        char path[48];
+        snprintf(path, sizeof(path), "/dev/input/event%d", i);
+        const int fd = open(path, O_RDONLY | O_NONBLOCK);
+        if (fd < 0) continue;
+        const int score = touch_score(fd);
+        if (score > best) {
+            if (best_fd >= 0) close(best_fd);
+            best_fd = fd;
+            best = score;
+            if (score == 2) break;
+        } else {
+            close(fd);
+        }
+    }
+    return best_fd;
+}
+
+static time_t touch_retry;
+
 static void touch_open(void)
 {
+    const time_t now = time(NULL);
+    if (now == touch_retry) return;                 /* try at most once a second, and only while it is missing */
+    touch_retry = now;
     const char *path = getenv("VIZ_TOUCH");
-    touch_fd = open(path && path[0] ? path : "/dev/input/event1", O_RDONLY | O_NONBLOCK);
+    if (path && path[0]) touch_fd = open(path, O_RDONLY | O_NONBLOCK);   /* explicit override */
+    else touch_fd = touch_find();
     if (touch_fd < 0) { touch_fd = -1; return; }
+    memset(slots, 0, sizeof(slots));
+    memset(prev_slots, 0, sizeof(prev_slots));
+    memset(on_button, 0, sizeof(on_button));
+    pinch_prev = -1;
     struct input_absinfo info;
     if (ioctl(touch_fd, EVIOCGABS(ABS_MT_POSITION_X), &info) == 0) { min_x = info.minimum; max_x = info.maximum; }
     if (ioctl(touch_fd, EVIOCGABS(ABS_MT_POSITION_Y), &info) == 0) { min_y = info.minimum; max_y = info.maximum; }
@@ -251,6 +305,7 @@ static void touch_open(void)
     swap_xy = (s = getenv("APPLAUNCH_TOUCH_SWAP_XY")) ? atoi(s) : 1;
     inv_x = (s = getenv("APPLAUNCH_TOUCH_INVERT_X")) ? atoi(s) : 0;
     inv_y = (s = getenv("APPLAUNCH_TOUCH_INVERT_Y")) ? atoi(s) : 1;
+    fprintf(stderr, "[viz_fb] touch screen opened\n");
 }
 
 static int button_hit(float nx, float ny)
@@ -328,10 +383,11 @@ static void touch_report(void)
 
 static void touch_poll(void)
 {
-    if (touch_fd == -2) touch_open();
+    if (touch_fd < 0) touch_open();                 /* absent (or just unplugged): look again now and then */
     if (touch_fd < 0) return;
     struct input_event ev;
-    while (read(touch_fd, &ev, sizeof(ev)) == (ssize_t)sizeof(ev)) {
+    ssize_t n;
+    while ((n = read(touch_fd, &ev, sizeof(ev))) == (ssize_t)sizeof(ev)) {
         if (ev.type == EV_ABS) {
             if (ev.code == ABS_MT_SLOT) cur_slot = ev.value < 0 ? 0 : (ev.value >= SLOTS ? SLOTS - 1 : ev.value);
             else if (ev.code == ABS_MT_TRACKING_ID) slots[cur_slot].active = ev.value >= 0;
@@ -341,6 +397,7 @@ static void touch_poll(void)
             touch_report();
         }
     }
+    if (n < 0 && errno != EAGAIN && errno != EINTR) { close(touch_fd); touch_fd = -1; }   /* device went away */
 }
 
 /* keyboard (it may be asleep: retry now and then) */

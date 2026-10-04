@@ -1,7 +1,7 @@
 {
   "share_code": "viz1090",
   "package": "viz1090",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "title": "viz1090",
   "summary": "Full-screen ADS-B display: live aircraft from an RTL-SDR dongle on a world map.",
   "description": "The real viz1090 (by Nathan Matsuda) on the deck, full screen, with its own decoder (readsb with RTL-SDR support), an intro screen (type the nearest airport code, or use a GPS) and a world map. Needs an RTL-SDR dongle with a 1090 MHz antenna and a launcher with full-screen support (X-Fullscreen in .desktop files). Map data: Natural Earth and OurAirports. viz1090: BSD licence; readsb: GPL-3 (source: https://github.com/wiedehopf/readsb).",

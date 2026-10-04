@@ -1,22 +1,22 @@
 #!/bin/sh
-# Builds the Wi-Fi Survey app (aarch64) and installs the binary into the package tree.
-# Run from Windows:  wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/wifi-survey/build/build.sh
+# Builds the LAN Scan app (aarch64) and installs the binary into the package tree.
+# Run from Windows:  wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/lanscan/build/build.sh
 #
-# 1. copies src/ into the launcher tree projects/WifiSurvey (build scratch only, kept out of git through
+# 1. copies src/ into the launcher tree projects/LanScanBuild (build scratch only, kept out of git through
 #    .git/info/exclude: the launcher repo never tracks app code);
 # 2. runs scons there, under the shared WSL build lock;
-# 3. copies dist/WifiSurvey to root/usr/share/APPLaunch/bin/M5CardputerZero-wifi-survey.
+# 3. copies dist/LanScanBuild to root/usr/share/APPLaunch/bin/M5CardputerZero-LanScan.
 set -e
 APP=$(cd "$(dirname "$0")/.." && pwd)
 LAUNCHER=${LAUNCHER:-/mnt/c/CLAUDE/zero7/launcher}
-PROJ=$LAUNCHER/projects/WifiSurvey
-BIN=$APP/root/usr/share/APPLaunch/bin/M5CardputerZero-wifi-survey
+PROJ=$LAUNCHER/projects/LanScanBuild
+BIN=$APP/root/usr/share/APPLaunch/bin/M5CardputerZero-LanScan
 
 [ -d "$LAUNCHER/projects/APPLaunch" ] || { echo "launcher tree not found at $LAUNCHER" >&2; exit 1; }
 
 # keep the scratch project out of the launcher repo
 EXCLUDE=$LAUNCHER/.git/info/exclude
-grep -qx 'projects/WifiSurvey/' "$EXCLUDE" 2>/dev/null || echo 'projects/WifiSurvey/' >> "$EXCLUDE"
+grep -qx 'projects/LanScanBuild/' "$EXCLUDE" 2>/dev/null || echo 'projects/LanScanBuild/' >> "$EXCLUDE"
 
 # fresh copy of the sources (build/ and dist/ of the scratch project stay for incremental builds)
 mkdir -p "$PROJ"
@@ -33,7 +33,7 @@ export APPLAUNCH_HW=pizero2w CONFIG_REPO_AUTOMATION=y CONFIG_DEFAULT_FILE=linux_
 flock /tmp/wsl-build.lock scons -j"$(nproc)"
 
 mkdir -p "$(dirname "$BIN")"
-cp dist/WifiSurvey "$BIN"
+cp dist/LanScanBuild "$BIN"
 chmod 755 "$BIN"
 file "$BIN" 2>/dev/null || true
 echo "installed $BIN"

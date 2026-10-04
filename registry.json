@@ -40,21 +40,21 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.1.0",
-      "published_at": "2026-10-04T13:45:11+00:00",
-      "updated_at": "2026-10-04T13:45:11+00:00",
+      "version": "0.1.1",
+      "published_at": "2026-10-04T19:22:20+00:00",
+      "updated_at": "2026-10-04T19:22:20+00:00",
       "review": {
         "status": "approved"
       },
       "license": "MIT",
-      "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-launcher/tree/main/projects/LanScan",
+      "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/lanscan",
       "download": {
         "type": "deb",
         "package": "lanscan",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/lanscan_0.1.0_arm64.deb",
-        "md5": "c66f2ad8b73e95ea7f68767ed3048f61",
-        "sha256": "03784e2256ff5783e12d485fe9c81e22a689a588c895fb1706535f37c2b9925b",
-        "size": 1453620
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/lanscan_0.1.1_arm64.deb",
+        "md5": "09abd3dc0fffc45c357af1ae014d824f",
+        "sha256": "22ac3a290d4e4ac6bb8dfc99643a65dc78d9bc5112e0a74912e232665fbcaa1a",
+        "size": 1453066
       },
       "depends": "",
       "permissions": {
@@ -100,9 +100,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.1.0",
-      "published_at": "2026-10-04T13:45:12+00:00",
-      "updated_at": "2026-10-04T13:45:12+00:00",
+      "version": "0.1.1",
+      "published_at": "2026-10-04T19:29:31+00:00",
+      "updated_at": "2026-10-04T19:29:31+00:00",
       "review": {
         "status": "approved"
       },
@@ -111,10 +111,10 @@
       "download": {
         "type": "deb",
         "package": "viz1090",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/viz1090_0.1.0_arm64.deb",
-        "md5": "e32c03bebab1984b0ecd6b6e26bca2d6",
-        "sha256": "9af5825691af5e572f011c808f144ce05b0e48e18bba718d8fc7bcec00caaee8",
-        "size": 5482110
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/viz1090_0.1.1_arm64.deb",
+        "md5": "7f197fef8a3aaa6ba500feb144e0ca7f",
+        "sha256": "7cfec4ca69af1653a3ff99672d1a4a9f07cfa7dc6104813e153e849e3c51c458",
+        "size": 5482718
       },
       "depends": "libsdl2-2.0-0, libsdl2-ttf-2.0-0, libsdl2-gfx-1.0-0, librtlsdr0, libusb-1.0-0, libfreetype6, libncurses6, libzstd1, zlib1g, python3",
       "permissions": {

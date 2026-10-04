@@ -10,9 +10,27 @@ apps for the deck in a few minutes, with nothing but a public GitHub repository.
 
 | App | What it does |
 | --- | --- |
-| **LAN Scan** (`lanscan`) | Lists the devices on your Wi-Fi network (IP, MAC, vendor, name) and scans the open ports of one of them. |
-| **viz1090** (`viz1090`) | The real [viz1090](https://github.com/nmatsuda/viz1090) ADS-B display, full screen, with its own RTL-SDR decoder, an intro screen (type the nearest airport code, or use a GPS) and a world map. Needs an RTL-SDR dongle and a launcher with full-screen app support. |
-| **Wi-Fi Survey** (`wifi-survey`) | Shows the Wi-Fi networks around the deck: a **Networks** list (name, signal, channel, band, security, the network you are connected to marked) and a **Channels** chart that points out the least crowded channel. Passive only: it reads the scan results of NetworkManager (`nmcli`), nothing is sent, captured or connected. Depends on `network-manager`. |
+| **LAN Scan** (`lanscan`, 0.1.1) | Lists the devices on your Wi-Fi network (IP, MAC, vendor, name) and scans the open ports of one of them. |
+| **viz1090** (`viz1090`, 0.1.1) | The real [viz1090](https://github.com/nmatsuda/viz1090) ADS-B display, full screen, with its own RTL-SDR decoder, an intro screen (type the nearest airport code, or use a GPS) and a world map. Needs an RTL-SDR dongle and a launcher with full-screen app support. |
+| **Wi-Fi Survey** (`wifi-survey`, 0.1.0) | Shows the Wi-Fi networks around the deck: a **Networks** list (name, signal, channel, band, security, the network you are connected to marked) and a **Channels** chart that points out the least crowded channel. Passive only: it reads the scan results of NetworkManager (`nmcli`), nothing is sent, captured or connected. Depends on `network-manager`. |
+
+### Changes
+
+* **LAN Scan 0.1.1**: the source now lives in this repository, in `apps/lanscan/src`, and is built with
+  `apps/lanscan/build/build.sh` (same method as Wi-Fi Survey: the script copies the source into a scratch project of
+  a launcher checkout, runs `scons` and puts the binary in `apps/lanscan/root/`). It was moved unchanged: on the deck
+  the scan, the vendor names (from `oui.tsv`), the port scan and the keys behave as in 0.1.0. The deck offers it as
+  an update in **Settings > Apps**.
+* **viz1090 0.1.1**: touch works again when the Bluetooth keyboard is connected. 0.1.0 opened a fixed
+  `/dev/input/event1`, which on the deck is sometimes the infrared node of the RTL-SDR dongle and not the screen.
+  The display layer now looks through `/dev/input/event*` for the touch screen (a device that reports multitouch
+  positions and is not a keyboard, the Goodix panel first) and tries again every second if it is absent or goes away.
+  `VIZ_TOUCH=/dev/input/eventN` still forces a device. On the deck the right device was opened at every launch,
+  the keyboard, Esc and the close button kept working, and touch recovered by itself after an interruption.
+
+Known limits: the touch behaviour of both apps was checked with test touch events, not with a finger, until the
+owner of the deck has tried it. After an upgrade through the Apps menu the tile moves to the end of the launcher
+grid.
 
 ### Wi-Fi Survey
 
@@ -71,9 +89,8 @@ also works in the Store app.
 ## 2. Build your program for the deck
 
 Your app is a normal **aarch64 Linux executable** that draws a **320x170** picture; the launcher shows it
-scaled 2x. The easiest way to write one is with the LVGL based SDK of the launcher: copy
-[`projects/LanScan`](https://github.com/OSRdesign/cyberdeck-zero-launcher/tree/main/projects/LanScan) (a small
-complete example) in a checkout of the launcher repository and build it with
+scaled 2x. The easiest way to write one is with the LVGL based SDK of the launcher: copy [`apps/lanscan/src`](apps/lanscan/src) (a small complete example, with its
+[`build/build.sh`](apps/lanscan/build/build.sh)) into a checkout of the launcher repository and build it with
 `scons` (see the launcher's `projects/APPLaunch/pizero2w/README.md`). Keys arrive as normal keyboard events
 (arrows, Enter, Esc; hold Esc 3 s to quit), touch is turned into keys by the launcher
 (Settings > Touch picks the behaviour per app).
