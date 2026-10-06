@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "esc_policy.hpp"
 #include "ui_app_page.hpp"
 #include "wifiscan.hpp"
 
@@ -11,7 +12,7 @@
 #include <string>
 #include <vector>
 
-/* True once the page asked to quit (Esc on a top-level screen); main() polls it through should_quit. */
+/* True once the page asked to quit (never from a short Esc now; kept for main()'s should_quit hook). */
 bool wifisurvey_quit_requested();
 
 // Lists the Wi-Fi networks around the deck (Networks), shows how crowded each channel is (Channels) and the
@@ -23,7 +24,11 @@ public:
     ~UIWifiSurveyPage() override;
 
 private:
-    enum class View { Networks, Channels, Detail };
+    using View = wifisurvey::View;
+    static constexpr uint32_t kHintMs = 2500;
+    bool hint_on_ = false;
+    uint32_t hint_tick_ = 0;   // lv_tick_get() when the Esc hint was shown
+    void show_footer();
     static constexpr int kRows = 6;
     static constexpr int kSlots = 13;        // channel columns per band
 

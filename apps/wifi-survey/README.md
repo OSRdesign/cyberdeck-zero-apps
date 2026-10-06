@@ -32,7 +32,7 @@ The app runs in the launcher's normal 640x340 window, under the top bar.
 | Up / Down | Move in the list |
 | Enter | Open the detail of the selected network (Left / Right then show the previous / next one) |
 | R | Rescan now |
-| Esc | Back from the detail, or quit |
+| Esc | Detail: back to the list you came from. Networks / Channels: nothing, only a short hint "Hold Esc 3 s to exit". A short Esc never quits; hold Esc for 3 seconds to exit (handled by the launcher) |
 
 The detail view follows the access point by its BSSID, so it stays on the same network when the list reorders
 after a scan. If the network disappears, the title shows "- gone" and the last known values stay on screen until

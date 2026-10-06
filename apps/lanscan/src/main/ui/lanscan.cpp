@@ -134,16 +134,19 @@ void UILanScanPage::activate()
 
 void UILanScanPage::back()
 {
-    if (view_ == View::Ports) {
+    // short Esc is Back only, never quit (hold Esc 3 s is handled by the launcher)
+    const lanscan::EscResult r = lanscan::esc_short_press(view_);
+    if (r.hint) {
+        hint_on_ = true;
+        hint_tick_ = lv_tick_get();
+    } else {
         scanner_.stop();
-        view_ = View::Hosts;
+        view_ = r.next;
         selected_ = std::clamp(host_index_, 0, std::max(0, static_cast<int>(hosts_.size()) - 1));
         offset_ = std::max(0, selected_ - kRows + 1);
         if (selected_ < offset_) offset_ = selected_;
-        refresh();
-    } else if (navigate_home) {
-        navigate_home();
     }
+    refresh();
 }
 
 void UILanScanPage::refresh()
@@ -167,7 +170,7 @@ void UILanScanPage::refresh()
         } else {
             lv_label_set_text(status_, have_network_ ? "done" : "");
         }
-        lv_label_set_text(footer_, "Enter: ports   S: rescan   Esc: back");
+        lv_label_set_text(footer_, "Enter: ports   S: rescan   Hold Esc: exit");
     } else {
         const std::string target = scanner_.port_target();
         std::snprintf(text, sizeof(text), "%s  (%zu open)", target.c_str(), ports_.size());
@@ -179,6 +182,11 @@ void UILanScanPage::refresh()
             lv_label_set_text(status_, full_range_ ? "1-1024 done" : "done");
         }
         lv_label_set_text(footer_, "F: scan 1-1024   S: rescan   Esc: back");
+    }
+
+    if (hint_on_) {
+        if (!hosts_view || lv_tick_elaps(hint_tick_) >= kHintMs) hint_on_ = false;
+        else lv_label_set_text(footer_, lanscan::kEscHint);
     }
 
     const int count = hosts_view ? static_cast<int>(hosts_.size()) : static_cast<int>(ports_.size());

@@ -257,11 +257,18 @@ void UIWifiSurveyPage::set_view(View view)
     set_hidden(title_, !detail);
     lv_obj_set_style_text_color(tab_net_label_, lv_color_hex(view == View::Networks ? kGold : kMuted), 0);
     lv_obj_set_style_text_color(tab_ch_label_, lv_color_hex(view == View::Channels ? kGold : kMuted), 0);
-    const char *footer = view == View::Networks ? "Enter: detail   Tab: channels   R: refresh   Esc: quit"
-                         : view == View::Channels ? "Tab: networks   R: refresh   Esc: quit"
-                                                  : "Left/Right: prev/next   R: refresh   Esc: back";
-    lv_label_set_text(footer_, footer);
+    hint_on_ = false;
+    show_footer();
     refresh();
+}
+
+void UIWifiSurveyPage::show_footer()
+{
+    const char *footer = hint_on_ ? wifisurvey::kEscHint
+                         : view_ == View::Networks ? "Enter: detail   Tab: channels   R: refresh   Hold Esc: exit"
+                         : view_ == View::Channels ? "Tab: networks   R: refresh   Hold Esc: exit"
+                                                   : "Left/Right: prev/next   R: refresh   Esc: back";
+    lv_label_set_text(footer_, footer);
 }
 
 void UIWifiSurveyPage::toggle_tab(int delta)
@@ -327,6 +334,10 @@ void UIWifiSurveyPage::poll()
     const bool changed = s.generation != snap_.generation || s.scanning != snap_.scanning;
     const bool fresh = s.generation != snap_.generation;
     snap_ = s;
+    if (hint_on_ && lv_tick_elaps(hint_tick_) >= kHintMs) {
+        hint_on_ = false;
+        show_footer();
+    }
     if (fresh) {
         apply_snapshot();
         done_tick = lv_tick_get();
@@ -371,12 +382,14 @@ void UIWifiSurveyPage::activate()
 
 void UIWifiSurveyPage::back()
 {
-    if (view_ == View::Detail) {
-        set_view(tab_);
-    } else if (navigate_home) {
-        navigate_home();
+    // short Esc is Back only, never quit (hold Esc 3 s is handled by the launcher)
+    const wifisurvey::EscResult r = wifisurvey::esc_short_press(view_, tab_);
+    if (r.hint) {
+        hint_on_ = true;
+        hint_tick_ = lv_tick_get();
+        show_footer();
     } else {
-        g_quit = true;
+        set_view(r.next);
     }
 }
 
