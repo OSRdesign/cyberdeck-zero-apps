@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-10-04T22:02:46+00:00",
+  "generated_at": "2026-10-06T06:09:15+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CardputerZero"
@@ -40,9 +40,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.1.2",
-      "published_at": "2026-10-04T22:02:44+00:00",
-      "updated_at": "2026-10-04T22:02:44+00:00",
+      "version": "0.1.3",
+      "published_at": "2026-10-06T06:09:12+00:00",
+      "updated_at": "2026-10-06T06:09:12+00:00",
       "review": {
         "status": "approved"
       },
@@ -51,10 +51,10 @@
       "download": {
         "type": "deb",
         "package": "lanscan",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/lanscan_0.1.2_arm64.deb",
-        "md5": "3699407a5ae1797900aec8be09f78601",
-        "sha256": "27738c2cd5f26fd8cbc57f7b0b688a844389de2fa8f6226da36baba3dcea11bc",
-        "size": 1454718
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/lanscan_0.1.3_arm64.deb",
+        "md5": "05d9ef668cbdf4db7f0c7622a153c4a9",
+        "sha256": "3dc935d3e008d287fba3c46f0912311d3f059619ad2caf0ca091849538167f1f",
+        "size": 1454328
       },
       "depends": "",
       "permissions": {
@@ -160,9 +160,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.1.0",
-      "published_at": "2026-10-04T17:58:58+00:00",
-      "updated_at": "2026-10-04T17:58:58+00:00",
+      "version": "0.1.1",
+      "published_at": "2026-10-06T06:09:15+00:00",
+      "updated_at": "2026-10-06T06:09:15+00:00",
       "review": {
         "status": "approved"
       },
@@ -171,10 +171,10 @@
       "download": {
         "type": "deb",
         "package": "wifi-survey",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/wifi-survey_0.1.0_arm64.deb",
-        "md5": "9f54fe19a539417824c6b0d0f9a4c7a4",
-        "sha256": "b5bab1bc0720ac1a5da8ca559ea30c4eb0bf7c38d7bc1b752bd9d0f1b2b1546a",
-        "size": 1455828
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/wifi-survey_0.1.1_arm64.deb",
+        "md5": "53626f14d5a5d710c0c71ac82b3cc4ea",
+        "sha256": "3b76fc4fb9cdfc9f99752db18b28b2ad282c98e21fba8a02496c5797ad208687",
+        "size": 1455316
       },
       "depends": "network-manager",
       "permissions": {

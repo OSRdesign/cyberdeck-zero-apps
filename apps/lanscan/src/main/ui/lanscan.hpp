@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "esc_policy.hpp"
 #include "scanner.hpp"
 #include "ui_app_page.hpp"
 
@@ -18,7 +19,10 @@ public:
     ~UILanScanPage() override;
 
 private:
-    enum class View { Hosts, Ports };
+    using View = lanscan::View;
+    static constexpr uint32_t kHintMs = 2500;
+    bool hint_on_ = false;
+    uint32_t hint_tick_ = 0;   // lv_tick_get() when the Esc hint was shown
     static constexpr int kRows = 6;
 
     void start_scan();

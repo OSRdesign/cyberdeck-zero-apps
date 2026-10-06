@@ -33,7 +33,7 @@ devices found; the status shows the progress ("done" at the end).
 | Enter | Device list: scan the common ports of the selected device |
 | F | Port list: scan ports 1-1024 |
 | S | Rescan: the network in the device list, the same device in the port list |
-| Esc | Port list: back to the device list. Device list: the launcher's usual quit (hold Esc for 3 seconds) |
+| Esc | Port list: back to the device list. Device list: nothing, only a short hint "Hold Esc 3 s to exit". A short Esc never quits; hold Esc for 3 seconds to exit (handled by the launcher) |
 
 Touch: tapping a device row opens its port scan (tried with a finger on the deck).
 
