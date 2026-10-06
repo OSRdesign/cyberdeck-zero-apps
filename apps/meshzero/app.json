@@ -1,0 +1,15 @@
+{
+  "share_code": "meshzero",
+  "package": "meshzero",
+  "version": "0.1.0",
+  "draft": true,
+  "title": "MeshZero",
+  "summary": "Chat on a MeshCore LoRa mesh through a companion radio board on USB.",
+  "description": "A touch messenger and client for MeshCore networks. The deck controls a MeshCore companion radio board plugged into its USB port (the LoRa radio is on the board, the deck is the screen and keyboard). Lists contacts and adverts, sends direct and channel messages with delivery status, shows the radio status and lets you edit the node name, frequency, bandwidth, spreading factor, coding rate and TX power. Messages and contacts are kept between runs in ~/.local/share/meshzero. Text is typed with the Bluetooth keyboard; touch is for navigation and buttons. The board must run the MeshCore companion radio firmware (USB); the user must be in the dialout group.",
+  "categories": ["Radio"],
+  "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
+  "license": "MIT",
+  "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/meshzero",
+  "depends": "",
+  "permissions": {"additional_hardware": true}
+}

@@ -8,6 +8,12 @@ For every apps/<id>/app.json it
   1. builds packages/<package>_<version>_arm64.deb from apps/<id>/root/ (tools/build_deb.py),
   2. adds an entry to registry.json with the download URL, md5, sha256 and size of that package.
 
+An app whose app.json has  "draft": true  is skipped (no .deb, no registry entry). To build a local .deb of an
+app without publishing it (a draft included), use --only <id> --out <folder>: it writes just that .deb into the
+folder and touches neither packages/ nor registry.json.
+
+    python3 tools/make_registry.py --only meshzero --out C:/somewhere/outside/packages
+
 URLs point to raw.githubusercontent.com/<owner>/<repo>/<branch>/..., so nothing but a public GitHub
 repository is needed. owner/repo are taken from the git remote "origin" unless given.
 """
@@ -52,7 +58,11 @@ def main():
     parser.add_argument("--branch", default="main")
     parser.add_argument("--no-build", action="store_true", help="reuse the .deb files already in packages/")
     parser.add_argument("--registry-name", help="registry_id / display name (default: the repository name)")
+    parser.add_argument("--only", help="build only the app <id> (needs --out); a draft app is allowed")
+    parser.add_argument("--out", help="with --only: folder for the .deb; registry.json is not written")
     args = parser.parse_args()
+    if bool(args.only) != bool(args.out):
+        sys.exit("--only and --out go together")
 
     owner, repo = detect_remote()
     owner, repo = args.owner or owner, args.repo or repo
@@ -68,12 +78,21 @@ def main():
             continue
         with open(manifest_path, encoding="utf-8") as handle:
             meta = json.load(handle)
+        if args.only:
+            if name != args.only:
+                continue
+        elif meta.get("draft"):
+            print("skipping draft app: " + name)
+            continue
         for key in ("share_code", "package", "version", "title", "summary"):
             if not meta.get(key):
                 sys.exit("%s: missing '%s'" % (manifest_path, key))
         package = "%s_%s_arm64.deb" % (meta["package"], meta["version"])
         package_path = os.path.join(REPO, "packages", package)
         scripts = os.path.join(apps_dir, name, "DEBIAN")
+        if args.only:
+            os.makedirs(args.out, exist_ok=True)
+            package_path = os.path.join(args.out, package)
         if not args.no_build:
             subprocess.check_call([
                 sys.executable, os.path.join(HERE, "build_deb.py"),
@@ -83,10 +102,13 @@ def main():
                 "--maintainer", meta.get("maintainer", "%s <noreply@users.noreply.github.com>" % owner),
                 "--homepage", meta.get("source_repo", ""),
                 "--depends", meta.get("depends", ""),
-                "--out", os.path.join(REPO, "packages")] + (["--scripts", scripts] if os.path.isdir(scripts) else []))
+                "--out", args.out or os.path.join(REPO, "packages")] + (["--scripts", scripts] if os.path.isdir(scripts) else []))
         if not os.path.isfile(package_path):
             sys.exit("package not found: " + package_path)
         md5, sha256, size = digest(package_path)
+        if args.only:
+            print("%s  md5 %s  size %d" % (package_path, md5, size))
+            return
 
         now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat()
         asset_base = "%s/apps/%s" % (base, name)
