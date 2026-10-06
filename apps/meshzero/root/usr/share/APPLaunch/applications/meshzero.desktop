@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=MeshZero
+Exec=/usr/share/APPLaunch/bin/M5CardputerZero-meshzero
+Terminal=false
+Icon=share/images/meshzero.png
+Type=Application

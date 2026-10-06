@@ -92,6 +92,9 @@ A program that does not use the SDK works too: the launcher starts any executabl
 * `package` – the Debian package name (lowercase letters, digits, `+ - .`).
 * `version` – increase it for every release; the deck offers an upgrade when it grows.
 * `depends` – optional Debian dependencies that `apt` must have (e.g. `curl`); leave empty if none.
+* `draft` – optional. `"draft": true` keeps an unfinished app out of the store: `tools/make_registry.py` skips it (no
+  `.deb`, no registry entry). To build a local package of a draft anyway, without publishing, run
+  `python tools/make_registry.py --only <id> --out <folder outside packages/>`; it writes only that `.deb`.
 
 ## 4. Lay out the files
 
