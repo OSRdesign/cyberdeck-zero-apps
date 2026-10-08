@@ -1,0 +1,17 @@
+# Mesh Hop 0.2.2: no board plugged in at all (run with NOSIM=1 and the seeded old-layout history): an empty Chats list, not the last board's chats.
+#   NOSIM=1 sh p2_run.sh b-noboard.script
+wait 2500
+say == no board yet (expect board=- chat_rows=0 all_msgs=0 contacts=0 unread=0 link=No board found)
+dump
+shot n01-chats-no-board
+key tab
+key tab
+wait 300
+shot n02-contacts-no-board
+key tab
+key tab
+wait 600
+shot n03-settings-no-board
+key tab
+wait 300
+say == the old-layout files are still where they were (nothing was moved without a board)

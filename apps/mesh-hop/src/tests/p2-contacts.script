@@ -1,0 +1,140 @@
+# Mesh Hop 0.2.0 phase 2: contact details, groups, select mode, bulk delete (C8, C1, C3).
+# Run with:  SIMARGS="--contacts 8 --manual-add --new-nodes 3 --slow-remove 0.4"  (12 contacts, manual add mode, 3 strangers advert, slow deletes)
+# Touch coordinates are screen pixels (page at y=56): toolbar centres y=78, row i centre y=188+44*i, the "i" box at x>=584.
+wait 6500
+key tab
+key tab
+wait 600
+say == contacts (expect tab=Contacts contacts=12 shown=12 pending=3 select=0 groups=0)
+dump
+shot p01-contacts-toolbar
+
+# the details of a chat contact by touch (the "i" box of the first row)
+tap 612 188
+wait 400
+say == details of the first row (expect detail=1)
+dump
+shot p02-detail
+
+# groups of this contact: there is none yet, so the list offers a new group
+tap 234 430
+wait 500
+say == groups pick list (expect popup=list popup_title='Groups of this contact')
+dump
+shot p03-groups-list
+key enter
+wait 400
+type Family
+shot p04-new-group-editor
+key enter
+wait 500
+say == the group exists and holds the contact (expect groups=1 notice='Group Family made with 1 contact')
+dump
+key esc
+wait 300
+
+# select mode: mark three rows by touch, the toolbar changes, Delete shows the count
+tap 372 78
+wait 400
+say == select mode (expect select=1 selected=0)
+dump
+tap 100 188
+tap 100 232
+tap 100 276
+wait 300
+say == three marked (expect select=1 selected=3)
+dump
+shot p05-select-marked
+
+# the Select... menu: not heard for 7 days or more
+tap 136 78
+wait 400
+say == the select list (expect popup=list popup_title='Select contacts')
+dump
+shot p06-select-menu
+key esc
+wait 300
+
+# the Group... button: a new group with the marked contacts, typed name
+tap 380 78
+wait 400
+say == the group menu (expect popup=menu popup_title='Groups')
+dump
+shot p07-group-menu
+key down
+key down
+key enter
+wait 400
+type Hikers
+key enter
+wait 500
+say == a second group with 3 contacts, select mode left (expect groups=2 select=0)
+dump
+
+# the group filter: only Hikers
+tap 476 78
+wait 400
+say == the group pick list (expect popup=list popup_title='Show which group?')
+dump
+shot p08-group-filter
+key down
+key down
+key enter
+wait 900
+say == Hikers shown (expect shown=3 group='Hikers')
+dump
+shot p09-group-shown
+tap 476 78
+wait 400
+key home
+key enter
+wait 900
+say == all contacts again (expect shown=12 group='')
+dump
+
+# bulk delete with the keyboard: X, mark with Enter, D, the confirmation names the count, No first
+type x
+wait 300
+key enter
+key down
+key enter
+key down
+key enter
+wait 300
+say == three marked by keys (expect select=1 selected=3)
+dump
+type d
+wait 500
+say == confirmation with the count (expect popup=confirm popup_title='Delete 3 contacts?')
+dump
+shot p10-delete-confirm
+key esc
+wait 300
+say == No: nothing deleted (expect popup=none contacts=12 select=1)
+dump
+type d
+wait 400
+type y
+wait 600
+say == progress box (expect popup=progress)
+dump
+shot p11-progress
+wait 3000
+say == deleted one by one, select mode left (expect contacts=9 select=0 popup=none bulk=idle/3/0)
+dump
+shot p12-after-delete
+
+# the details of a contact, then Delete from the detail panel: Yes / No first
+tap 612 188
+wait 400
+say == details (expect detail=1)
+dump
+tap 386 430
+wait 400
+say == the delete box of one contact (expect popup=confirm popup_title='Delete contact?')
+dump
+shot p13-detail-delete
+type y
+wait 1500
+say == one contact went (expect contacts=8 detail=0 popup=none)
+dump

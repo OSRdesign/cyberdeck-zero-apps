@@ -9,6 +9,7 @@
 
 #include "channel_key.hpp"
 #include "clock_policy.hpp"
+#include "groups.hpp"
 #include "protocol.hpp"
 
 #include <map>
@@ -80,6 +81,60 @@ struct BoardCaps {
     Cap channels = Cap::Unknown;      // GET_CHANNEL answered
     bool gps_listed = false;          // the custom variable "gps" exists (the board has a GPS)
     bool gps_on = false;
+    Cap autoadd = Cap::Unknown;       // GET_AUTOADD_CONFIG answered (phase 2)
+    Cap stats = Cap::Unknown;         // GET_STATS answered
+    Cap discover = Cap::Unknown;      // SEND_CONTROL_DATA (the zero-hop discover) accepted
+    Cap repeat_freqs = Cap::Unknown;  // GET_ALLOWED_REPEAT_FREQ answered
+    bool autoadd_known = false;
+    AutoaddConfig autoadd_config;     // the flags the board reported
+    std::vector<RepeatRange> repeat_ranges;   // where the board may repeat (kHz); empty = nowhere (or not asked)
+};
+
+/* One node seen on the air: from an ADVERT push, an advert in the radio log, a NEW_ADVERT (pending, manual add mode) or the answer to a
+ * zero-hop discover. The list lives for the session (it is not saved); "ignored" keys are kept in prefs.txt. */
+struct NearbyRec {
+    std::string key_hex;              // 64 hex digits, or 16 when only the 8 byte prefix of a discover answer is known
+    bool full_key = false;
+    PubKey key{};                     // valid when full_key
+    uint8_t type = 0;                 // ADV_TYPE_*; 0 = not known yet
+    std::string name;                 // empty = not known yet
+    bool has_pos = false;
+    double lat = 0, lon = 0;
+    bool has_snr = false;
+    double snr = 0;                   // the latest
+    bool has_rssi = false;
+    int rssi = 0;
+    int hops = -1;                    // hops the latest packet took (0 = heard direct); -1 = not known
+    int hash_size = 0;                // bytes per hop hash of that packet (0 = not known)
+    uint32_t first_heard = 0, last_heard = 0;     // app clock
+    bool pending = false;             // the board told us about it (NEW_ADVERT) but did not add it: manual add mode
+    bool discovered = false;          // answered an active zero-hop discover
+    bool has_contact = false;         // `contact` holds the whole record from a NEW_ADVERT: Add sends exactly that
+    Contact contact;
+};
+struct NearbyObs {
+    std::string key_hex;
+    bool full_key = true;
+    uint8_t type = 0;
+    std::string name;
+    bool has_pos = false;
+    double lat = 0, lon = 0;
+    bool has_snr = false;
+    double snr = 0;
+    bool has_rssi = false;
+    int rssi = 0;
+    int hops = -1;
+    int hash_size = 0;
+    bool discovered = false;
+};
+constexpr size_t kMaxNearby = 150;
+
+/* The statistics screen (D9): the last answer of each sub type. */
+struct StatsSnapshot {
+    std::optional<CoreStats> core;
+    std::optional<RadioStats> radio;
+    std::optional<PacketStats> packets;
+    uint32_t updated = 0;             // app clock of the latest answer
 };
 
 /* Retry rules for direct messages (M3). Channels have no acknowledgement and are never retried. */
@@ -125,9 +180,24 @@ public:
     virtual void contacts_changed() = 0;
     virtual void channels_changed() = 0;
     virtual void read_changed() = 0;
-    virtual void prefs_changed() {}          // muted conversations, retry settings
+    virtual void prefs_changed() {}          // muted conversations, retry settings, the advert schedule, ignored nodes
     virtual void messages_removed() {}       // messages were deleted (a conversation, everything, or the old ones): rewrite the history
+    virtual void groups_changed() {}         // contact groups (phase 2)
+    /* A board with another identity (public key) is connected: everything the model held for the previous board was dropped, the new
+     * board's saved data is to be loaded now (load_* calls). Called once per change, never for the same board again. */
+    virtual void board_changed(const std::string & /*key_hex*/) {}
+    /* The app data of the current board (messages, read marks, groups, mute flags, ignored nodes, the advert schedule) was forgotten on purpose. */
+    virtual void board_data_forgotten() {}
 };
+
+/* The scheduled self advert (D2): the board has no advert interval, so the app sends the advert itself. Default off. */
+struct AdvertSchedule {
+    int interval_hours = 0;           // 0 = off; 1, 3, 6 or 12
+    bool flood = true;                // flood advert (reaches the whole mesh) or zero-hop (direct neighbours only)
+    bool operator==(const AdvertSchedule &o) const { return interval_hours == o.interval_hours && flood == o.flood; }
+};
+const std::vector<int> &advert_interval_options();            // 0, 1, 3, 6, 12
+AdvertSchedule normalize_schedule(AdvertSchedule s);
 
 class Model {
 public:
@@ -135,6 +205,17 @@ public:
     static constexpr size_t kMaxMessages = 1500;
 
     void set_listener(Listener *l) { listener_ = l; }
+    /* ---- which board the data belongs to. Messages, read marks, mute flags, groups, ignored nodes, the advert schedule, the contact and
+     * channel caches and the Nearby list all belong to ONE board, identified by its public key (SELF_INFO). The first SELF_INFO, and any
+     * later one with another key, drops all of it and tells the listener (the store) to load what it saved for that board. Before the
+     * first SELF_INFO nothing is loaded: the model is empty ("no board"). Local preferences about the deck (retry rules) stay. */
+    bool board_known() const { return !board_key_.empty(); }
+    const std::string &board_key() const { return board_key_; }          // 64 hex digits, empty while no board was seen
+    uint32_t board_epoch() const { return board_epoch_; }                // +1 at every change of board (the UI resets its selections)
+    bool select_board(const PubKey &key);                                // true when it was another board
+    /* Forget the app data of the current board on purpose (history, read marks, groups, mute flags, ignored nodes, the advert schedule).
+     * The board's contacts and channels, which mirror the board itself, stay. */
+    void forget_board_app_data();
     uint32_t revision() const { return revision_; }
     void touch() { ++revision_; }
 
@@ -164,6 +245,41 @@ public:
     const ContactRec *find_by_prefix(const KeyPrefix &prefix) const;
     std::vector<const ContactRec *> contacts_sorted() const;      // most recently heard first
     size_t contact_count() const { return contacts_.size(); }
+    /* While a batch is open (a bulk delete) the contact cache is not rewritten after every change, only once at the end. */
+    void begin_contact_batch() { batch_ = true; batch_dirty_ = false; }
+    void end_contact_batch();
+
+    // ---- nearby nodes (phase 2): adverts heard, pending contacts of the manual add mode, discover answers
+    void note_nearby(const NearbyObs &obs, uint32_t when);
+    void note_heard_advert(const HeardAdvert &h, uint32_t when);
+    /* A NEW_ADVERT in manual add mode: a node the board did not add. */
+    void add_pending(const Contact &c, uint32_t when);
+    const NearbyRec *find_nearby(const std::string &key_hex) const;
+    std::vector<const NearbyRec *> nearby_sorted() const;          // pending first, then newest
+    size_t nearby_count() const { return nearby_.size(); }
+    size_t pending_count() const;
+    void remove_nearby(const std::string &key_hex);
+    void clear_nearby();
+    bool is_ignored(const std::string &key_hex) const { return ignored_.count(key_hex) != 0; }
+    void set_ignored(const std::string &key_hex, bool ignored);
+    void load_ignored(const std::string &key_hex) { ignored_.insert(key_hex); }
+    const std::set<std::string> &ignored() const { return ignored_; }
+    static constexpr size_t kMaxIgnored = 300;
+    /* The board's contacts, channels and what was heard are gone (used by tests; a factory reset now shows up as a board with a new identity). */
+    void clear_board_data();
+
+    // ---- statistics (D9)
+    void set_stats(const StatsReply &s, uint32_t when);
+    const StatsSnapshot &stats() const { return stats_; }
+
+    // ---- contact groups (C1) and the advert schedule (D2): local to the deck
+    const ContactGroups &groups() const { return groups_; }
+    ContactGroups &groups_mut() { return groups_; }              // after a change the caller calls groups_changed()
+    void groups_changed();
+    void load_groups(const std::string &text) { groups_.parse(text); ++revision_; }
+    const AdvertSchedule &advert_schedule() const { return schedule_; }
+    void set_advert_schedule(AdvertSchedule s);
+    void load_advert_schedule(AdvertSchedule s) { schedule_ = normalize_schedule(s); }
 
     // ---- channels
     void set_channel(const ChannelRec &c);
@@ -231,7 +347,13 @@ public:
 
 private:
     void trim(const std::string &conv);
+    void reset_board_scoped();
 
+    void notify_contacts();
+    void refresh_pending();
+
+    std::string board_key_;
+    uint32_t board_epoch_ = 0;
     ClockInfo clock_;
     std::optional<SelfInfo> self_;
     std::optional<DeviceInfo> device_;
@@ -239,6 +361,12 @@ private:
     BoardCaps caps_;
     std::set<std::string> muted_;
     RetrySettings retry_;
+    AdvertSchedule schedule_;
+    ContactGroups groups_;
+    StatsSnapshot stats_;
+    std::map<std::string, NearbyRec> nearby_;
+    std::set<std::string> ignored_;
+    bool batch_ = false, batch_dirty_ = false;
     std::map<std::string, ContactRec> contacts_;
     std::vector<ChannelRec> channels_;
     std::set<std::string> added_;

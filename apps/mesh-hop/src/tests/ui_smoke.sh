@@ -5,7 +5,7 @@
 # On the deck (the aarch64 binary, no panel used; copy this file, smoke.script, offline.script and tools/meshcore_sim.py to one folder):
 #   MESHHOP_BIN=/usr/share/APPLaunch/bin/M5CardputerZero-mesh-hop sh ui_smoke.sh
 # Variables: SIMARGS (more options for the simulator, e.g. "--contacts 157 --chan-reply none"), SHOTS (screenshot folder), SCRIPT (default smoke.script), DATA (keep the history folder, default: a new one that is
-# deleted), NOSIM=1 (no simulated board: the offline case).
+# deleted), NOSIM=1 (no simulated board: the offline case), SIMCTL=1 (the script may use `sim <line>` to type into the simulator: "swap", "unplug"...).
 HERE=$(cd "$(dirname "$0")" && pwd)
 BIN=${MESHHOP_BIN:-${MESHHOP_HOST_OUT:-$HOME/mesh-hop-host}/mesh-hop}
 SHOTS=${SHOTS:-/tmp/mesh-hop-shots}
@@ -18,7 +18,13 @@ rm -f "$SHOTS"/*.png
 export MESHHOP_DATA=$DATA MESHHOP_PORT=$LINK MESHHOP_KEYMAP=us MESHHOP_LOADING_MS=${LOADING_MS:-400}
 SIMPID=
 if [ -z "$NOSIM" ]; then
-    python3 "$SIM" --link "$LINK" --echo $SIMARGS < /dev/null > "$SHOTS/sim.log" 2>&1 &
+    if [ -n "$SIMCTL" ]; then
+        FIFO=$(mktemp -u /tmp/mhsim.XXXXXX); mkfifo "$FIFO"; exec 3<>"$FIFO"
+        export MESHHOP_SIMIN=$FIFO
+        python3 "$SIM" --link "$LINK" --echo $SIMARGS <&3 > "$SHOTS/sim.log" 2>&1 &
+    else
+        python3 "$SIM" --link "$LINK" --echo $SIMARGS < /dev/null > "$SHOTS/sim.log" 2>&1 &
+    fi
     SIMPID=$!
     sleep 1
 else
@@ -28,6 +34,7 @@ fi
 RC=$?
 if [ -f "$DATA/mesh-hop.log" ]; then echo "== the app log (mesh-hop.log) =="; cat "$DATA/mesh-hop.log"; fi
 [ -n "$SIMPID" ] && kill $SIMPID 2>/dev/null
+[ -n "$FIFO" ] && rm -f "$FIFO"
 [ -z "$KEEP" ] && rm -rf "$DATA"
 echo "exit code $RC; screenshots in $SHOTS"
 exit $RC

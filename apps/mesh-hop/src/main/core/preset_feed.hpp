@@ -47,6 +47,51 @@ bool route_table_has_default(const std::string &text);
 /* $MESHHOP_ONLINE (1 / 0) when set, else the table of /proc/net/route. */
 bool network_online();
 
+/* When the silent download runs (the policy the app asks, pure so it is unit tested). One attempt 4 s after the start, once the deck is
+ * online (offline: the check repeats every 30 s); if that attempt FAILED, ONE retry about 60 s later, again only while the deck is online.
+ * Never more than two attempts per launch, and no retry after a success or when curl is missing / cannot start. */
+class PresetSchedule {
+public:
+    static constexpr uint64_t kFirstDelayMs = 4000, kOfflineCheckMs = 30000, kRetryDelayMs = 60000;
+    static constexpr int kMaxAttempts = 2;
+    /* start_ms: the monotonic time of the app start. */
+    explicit PresetSchedule(uint64_t start_ms) : start_(start_ms) {}
+    /* True when a download should be started now. `online` is called only when the time is right (it reads /proc/net/route). */
+    template <typename OnlineFn> bool due(uint64_t now, OnlineFn online)
+    {
+        if (running_ || done_) return false;
+        if (attempts_ == 0) {
+            if (now - start_ < kFirstDelayMs) return false;
+        } else if (!retry_armed_ || now < retry_at_) {
+            return false;
+        }
+        if (checked_ && now - last_check_ < kOfflineCheckMs) return false;
+        checked_ = true;
+        last_check_ = now;
+        return online();
+    }
+    void started() { running_ = true; checked_ = false; ++attempts_; }
+    /* retryable: the download was really tried (curl ran); false when curl is missing or could not start. */
+    void failed(uint64_t now, bool retryable)
+    {
+        running_ = false;
+        if (retryable && attempts_ < kMaxAttempts) {
+            retry_armed_ = true;
+            retry_at_ = now + kRetryDelayMs;
+        } else {
+            done_ = true;
+        }
+    }
+    void succeeded() { running_ = false; done_ = true; }
+    int attempts() const { return attempts_; }
+    bool finished() const { return done_; }
+
+private:
+    uint64_t start_ = 0, last_check_ = 0, retry_at_ = 0;
+    int attempts_ = 0;
+    bool running_ = false, done_ = false, checked_ = false, retry_armed_ = false;
+};
+
 class PresetFetcher {
 public:
     enum class State { Idle, Running, Done, Failed };

@@ -12,5 +12,5 @@ g++ -std=c++17 -Wall -Wextra -O1 -DTEST_DATA_DIR="\"$HERE/data\"" -I"$CORE" "$HE
 "$OUT/test_core"
 g++ -std=c++17 -Wall -Wextra -O1 -I"$CORE" "$HERE/test_sim.cpp" "$CORE"/*.cpp -lpthread -o "$OUT/test_sim"
 MESHHOP_SIM="$HERE/../../tools/meshcore_sim.py" "$OUT/test_sim"
-g++ -std=c++17 -Wall -Wextra -O1 -I"$CORE" -I"$UI" "$HERE/test_ui.cpp" "$UI/ui_logic.cpp" "$UI/png_writer.cpp" "$CORE"/*.cpp -lpthread -o "$OUT/test_ui"
+g++ -std=c++17 -Wall -Wextra -O1 -I"$CORE" -I"$UI" "$HERE/test_ui.cpp" "$UI/ui_logic.cpp" "$UI/ui_phase2.cpp" "$UI/png_writer.cpp" "$CORE"/*.cpp -lpthread -o "$OUT/test_ui"
 "$OUT/test_ui"

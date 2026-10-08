@@ -1,0 +1,8 @@
+# Mesh Hop 0.2.0: the preset download is tried once more 60 s after a failure (a flaky curl: the first call fails, the second works).
+# The first try starts 4 s after the launch and fails; the retry is due about 60 s later; 75 s is enough to see both. Read mesh-hop.log at the end.
+wait 8000
+say == after the first try (expect presets=bundled/26/2026-10-07)
+dump
+wait 62000
+say == after the retry (expect presets=fetched/27/)
+dump

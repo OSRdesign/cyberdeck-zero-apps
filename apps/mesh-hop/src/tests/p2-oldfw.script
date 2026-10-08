@@ -1,0 +1,59 @@
+# Mesh Hop 0.2.0 phase 2 on an old firmware: every feature the board lacks is switched off with the "Firmware too old" notice.
+# Run with:  SIMARGS="--fw-level 8 --no-autoadd --no-stats --no-discover --no-factory-reset"   (level 8: no repeat, no path hash mode)
+wait 3500
+key tab
+key tab
+key tab
+key tab
+wait 800
+say == settings on an old firmware (expect tab=Settings path_hash=- repeat=-)
+dump
+shot o01-settings-top
+# the statistics row is offered until the board has refused: then it becomes a notice
+key down
+key down
+key enter
+wait 800
+say == the board refused GET_STATS (expect stats_open=0 stats=- notice='Firmware too old for this feature: Statistics')
+dump
+shot o02-stats-notice
+# scroll to the radio rows: the path hash size and repeat notices
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+shot o03-radio-notices
+key end
+key up
+key up
+key enter
+wait 400
+type y
+wait 300
+say == the first reset box
+dump
+type y
+wait 3500
+type y
+wait 600
+say == the reset was refused (expect notice='Firmware too old for this feature: Factory reset')
+dump
+shot o04-reset-refused
+# the Nearby scan on a board without it
+key tab
+key tab
+key tab
+wait 400
+say == back on contacts (expect tab=Contacts)
+dump
+type n
+wait 400
+type s
+wait 800
+say == the scan is refused (expect notice='Firmware too old for this feature: Discover nearby nodes' scan=idle/0)
+dump
+shot o05-scan-refused

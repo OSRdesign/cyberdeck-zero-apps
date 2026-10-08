@@ -25,6 +25,7 @@
 #include <cstring>
 #include <functional>
 #include <map>
+#include <set>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -78,13 +79,13 @@ static void put_text(Bytes &b, const std::string &s, size_t width)
 static const char *kRealDeviceInfo = "3e52000d0baf280000000031392d4170722d32303236005365656564205869616f2d6e7266353200000000000000000000000000000000000000000000000076312e31352e302d6465653365323600000000000001";
 
 static Bytes make_self_info(const std::string &name, uint32_t freq_khz = 869525, uint32_t bw_hz = 250000, uint8_t sf = 11, uint8_t cr = 5,
-                            uint8_t txp = 22)
+                            uint8_t txp = 22, bool manual_add = false, uint8_t key_seed = 0xA0)
 {
     Bytes b = {resp::kSelfInfo, 1, txp, 30};
-    for (int i = 0; i < 32; ++i) b.push_back(static_cast<uint8_t>(0xA0 + i));
+    for (int i = 0; i < 32; ++i) b.push_back(static_cast<uint8_t>(key_seed + i));
     put32(b, static_cast<uint32_t>(48856600));
     put32(b, static_cast<uint32_t>(2352200));
-    b.push_back(0); b.push_back(0); b.push_back(0); b.push_back(0);
+    b.push_back(0); b.push_back(0); b.push_back(0); b.push_back(manual_add ? 1 : 0);        // multi acks, advert location policy, telemetry mode, manual add
     put32(b, freq_khz);
     put32(b, bw_hz);
     b.push_back(sf);
@@ -353,6 +354,21 @@ static void test_util()
 static uint32_t g_time = 1790000000;
 static uint32_t fake_time() { return g_time; }
 
+/* The data of a board lives in boards/<12 hex of its key>/: the tests plug board n after attaching the store. */
+static PubKey test_board_key(int n)
+{
+    PubKey k{};
+    for (size_t i = 0; i < k.size(); ++i) k[i] = static_cast<uint8_t>(n * 17 + static_cast<int>(i) * 3 + 1);
+    return k;
+}
+static std::string bdir_of(const std::string &dir, int n = 1) { return dir + "/boards/" + to_hex(test_board_key(n)).substr(0, 12); }
+static bool attach_b(Store &st, Model &m, int n = 1)
+{
+    const bool ok = st.attach(m);
+    m.select_board(test_board_key(n));
+    return ok;
+}
+
 static std::string tmpdir(const char *name)
 {
     std::string d = std::string("/tmp/meshzero-test-") + name + "-" + std::to_string(::getpid());
@@ -381,7 +397,7 @@ static void test_model_store()
     {
         Model m;
         Store st(dir);
-        CHECK(st.attach(m));
+        CHECK(attach_b(st, m));
         auto c1 = std::get<Contact>(*parse_packet(make_contact(resp::kContact, 0x10, "Alice \"A\"", 1, 1000)));
         auto c2 = std::get<Contact>(*parse_packet(make_contact(resp::kContact, 0x50, "Rptr", 2, 2000)));
         m.replace_contacts({c1, c2});
@@ -416,7 +432,7 @@ static void test_model_store()
     {   // reload from disk
         Model m;
         Store st(dir);
-        st.attach(m);
+        attach_b(st, m);
         CHECK(m.contact_count() == 2 && m.find_contact(to_hex(std::get<Contact>(*parse_packet(make_contact(resp::kContact, 0x10, "", 1, 0))).key)) != nullptr);
         CHECK(m.message_count() == 4);
         const auto msgs = m.messages("d:101112131415");
@@ -435,7 +451,7 @@ static void test_model_store()
         {
             Model m;
             Store st(d2);
-            st.attach(m);
+            attach_b(st, m);
             m.mark_added("#eu868");
             ChannelRec ch;
             ch.idx = 3; ch.name = "#eu868"; ch.empty = false;
@@ -444,7 +460,7 @@ static void test_model_store()
         }
         Model m;
         Store st(d2);
-        st.attach(m);
+        attach_b(st, m);
         CHECK(m.is_added("#eu868") && m.find_channel(3) && m.find_channel(3)->app_added);
         ChannelRec e; e.idx = 4; e.empty = true;
         m.set_channel(e);
@@ -457,12 +473,12 @@ static void test_model_store()
         CHECK(m.messages("c:1").back()->text == "m259");
     }
     {   // corrupt lines are skipped
-        FILE *f = std::fopen((dir + "/messages.jsonl").c_str(), "ab");
+        FILE *f = std::fopen((bdir_of(dir) + "/messages.jsonl").c_str(), "ab");
         std::fputs("{not json\n{\"i\":99}\n", f);
         std::fclose(f);
         Model m;
         Store st(dir);
-        st.attach(m);
+        attach_b(st, m);
         CHECK(m.message_count() == 4);
     }
     JsonObject o;
@@ -503,6 +519,31 @@ public:
     uint32_t board_time = 1789999000;
     bool refuse_set_time = false;
     std::map<int, std::pair<std::string, std::array<uint8_t, 16>>> slots;
+    // phase 2 (0.2.0)
+    int fw_level = 11;                   // in DEVICE_INFO: 9+ has the repeat byte, 10+ the path hash mode byte
+    int path_mode = 1;                   // the user's real board reports mode 1
+    bool repeat = false;
+    std::vector<RepeatRange> ranges = {{433000, 434000}, {863000, 870000}};
+    bool manual_add = false;
+    bool other_params_old = false;       // SET_OTHER_PARAMS only in the 4 byte form
+    bool autoadd_supported = true;
+    uint8_t autoadd = 0x02;
+    bool stats_supported = true;
+    bool discover_supported = true;
+    int discover_mode = 0;               // 0 OK, 1 MSG_SENT
+    struct Neighbour { uint8_t seed; uint8_t type; double snr; int rssi; bool prefix; };
+    std::vector<Neighbour> neighbours;   // answer a discover request, in this order
+    bool table_full = false;
+    bool hold_remove = false;            // REMOVE_CONTACT is not answered (to see that the next one waits)
+    std::set<std::string> remove_fail;   // key hex (first 8) that get an error from REMOVE_CONTACT
+    bool factory_ok = true;
+    bool drop_on_reboot = true;          // reboot / factory reset: the USB link goes away (after the last answer was read)
+    bool drop_when_empty = false;
+    bool reset_needs_word = false;
+    bool reset_new_key = true;           // the factory reset erases the identity: the board comes back with another public key
+    bool reset_answers = true;           // false: the board formats and restarts without ever sending the OK frame
+    uint8_t key_seed = 0xA0;             // the public key of the board is key_seed + 0..31
+    int reboots = 0, resets = 0;
 
     FakePeer()
     {
@@ -518,6 +559,7 @@ public:
         if (open_status != OpenStatus::Ok) return open_status;
         open_ = true;
         lost = false;
+        drop_when_empty = false;
         rx_.clear();
         // power-on chatter: a stale partial frame, a log push, then silence
         push_raw({0x11, 0x22});
@@ -528,6 +570,7 @@ public:
     bool is_open() const override { return open_; }
     long read(uint8_t *buf, size_t max) override
     {
+        if (drop_when_empty && rx_.empty()) lost = true;
         if (!open_ || lost) return -1;
         const size_t n = std::min(max, rx_.size());
         std::copy(rx_.begin(), rx_.begin() + static_cast<long>(n), buf);
@@ -560,7 +603,103 @@ private:
         commands.push_back(c);
         if (silent) return;
         switch (c[0]) {
-        case cmd::kDeviceQuery: push(hex(kRealDeviceInfo + 6)); break;   // payload of the real frame
+        case cmd::kDeviceQuery: {                                          // the payload of the real frame, with the switches applied
+            Bytes di = hex(kRealDeviceInfo + 6);
+            di[1] = static_cast<uint8_t>(fw_level);
+            di[80] = repeat ? 1 : 0;
+            di[81] = static_cast<uint8_t>(path_mode);
+            if (fw_level < 10) di.resize(81);
+            if (fw_level < 9) di.resize(80);
+            push(di);
+            break;
+        }
+        case cmd::kRemoveContact: {
+            if (hold_remove) break;
+            PubKey k{};
+            std::copy(c.begin() + 1, c.begin() + 33, k.begin());
+            if (remove_fail.count(to_hex(k).substr(0, 8))) { push({resp::kError, err::kFileIo}); break; }
+            const auto it = std::find_if(contacts.begin(), contacts.end(), [&](const Contact &x) { return x.key == k; });
+            if (it == contacts.end()) { push({resp::kError, err::kNotFound}); break; }
+            contacts.erase(it);
+            push({resp::kOk});
+            break;
+        }
+        case cmd::kAddUpdateContact: {
+            if (table_full) { push({resp::kError, err::kTableFull}); break; }
+            Contact n;
+            std::copy(c.begin() + 1, c.begin() + 33, n.key.begin());
+            n.type = c[33];
+            n.flags = c[34];
+            n.out_path_len = c[35];
+            n.name = std::string(reinterpret_cast<const char *>(&c[100]), 32).c_str();
+            const auto it = std::find_if(contacts.begin(), contacts.end(), [&](const Contact &x) { return x.key == n.key; });
+            if (it == contacts.end()) contacts.push_back(n);
+            else *it = n;
+            push({resp::kOk});
+            break;
+        }
+        case cmd::kSetOtherParams:
+            if (other_params_old && c.size() != 4) { push({resp::kError, err::kIllegalArg}); break; }
+            manual_add = c[1] != 0;
+            push({resp::kOk});
+            break;
+        case cmd::kGetAutoadd:
+            if (!autoadd_supported) push({resp::kError, err::kUnsupported});
+            else push({resp::kAutoaddConfig, autoadd, 0});
+            break;
+        case cmd::kSetAutoadd:
+            if (!autoadd_supported) { push({resp::kError, err::kUnsupported}); break; }
+            autoadd = c[1];
+            push({resp::kOk});
+            break;
+        case cmd::kSendControlData: {
+            if (!discover_supported) { push({resp::kError, err::kUnsupported}); break; }
+            if (discover_mode == 0) push({resp::kOk});
+            else { Bytes b = {resp::kMsgSent, 0, 1, 2, 3, 4}; put32(b, 500); push(b); }
+            for (const Neighbour &n : neighbours) {
+                Bytes f = {resp::kControlData, static_cast<uint8_t>(static_cast<int8_t>(n.snr * 4)), static_cast<uint8_t>(static_cast<int8_t>(n.rssi)), 0,
+                           static_cast<uint8_t>(0x90 | n.type), static_cast<uint8_t>(static_cast<int8_t>(-8)), c[3], c[4], c[5], c[6]};
+                for (int i = 0; i < (n.prefix ? 8 : 32); ++i) f.push_back(static_cast<uint8_t>(n.seed + i));
+                push(f);
+            }
+            break;
+        }
+        case cmd::kGetStats: {
+            if (!stats_supported) { push({resp::kError, err::kUnsupported}); break; }
+            Bytes f = {resp::kStats, c[1]};
+            if (c[1] == 0) { f.push_back(0x7A); f.push_back(0x0F); put32(f, 7300); f.push_back(2); f.push_back(0); f.push_back(1); }
+            else if (c[1] == 1) { f.push_back(0x92); f.push_back(0xFF); f.push_back(0xA1); f.push_back(22); put32(f, 61); put32(f, 940); }
+            else { for (uint32_t v : {500u, 120u, 14u, 106u, 310u, 190u, 9u}) put32(f, v); }
+            push(f);
+            break;
+        }
+        case cmd::kGetAllowedRepeatFreq: {
+            if (fw_level < 9) { push({resp::kError, err::kUnsupported}); break; }
+            Bytes f = {resp::kAllowedRepeatFreq};
+            for (const RepeatRange &r : ranges) { put32(f, r.lo_khz); put32(f, r.hi_khz); }
+            put32(f, 0); put32(f, 0);
+            push(f);
+            break;
+        }
+        case cmd::kSetPathHashMode:
+            if (fw_level < 10) { push({resp::kError, err::kUnsupported}); break; }
+            if (c.size() < 3 || c[2] > 2) { push({resp::kError, err::kIllegalArg}); break; }
+            path_mode = c[2];
+            push({resp::kOk});
+            break;
+        case cmd::kReboot:
+            ++reboots;
+            if (drop_on_reboot) drop_when_empty = true;
+            break;                                                           // no answer
+        case cmd::kFactoryReset:
+            if (!factory_ok || (reset_needs_word && Bytes(c.begin() + 1, c.end()) != Bytes{'r', 'e', 's', 'e', 't'})) { push({resp::kError, err::kUnsupported}); break; }
+            ++resets;
+            contacts.clear();
+            slots.clear();
+            if (reset_new_key) { key_seed = 0x30; self.name = "MeshCore"; }
+            if (reset_answers) push({resp::kOk});
+            if (drop_on_reboot) drop_when_empty = true;
+            break;
         case cmd::kAppStart: push(make_self_info_from()); break;
         case cmd::kGetCustomVars:
             if (!vars_supported) { push({resp::kError, err::kUnsupported}); break; }
@@ -587,6 +726,14 @@ private:
             self.freq_khz = c[1] | (c[2] << 8) | (c[3] << 16) | (static_cast<uint32_t>(c[4]) << 24);
             self.bw_hz = c[5] | (c[6] << 8) | (c[7] << 16) | (static_cast<uint32_t>(c[8]) << 24);
             self.sf = c[9]; self.cr = c[10];
+            if (c.size() > 11) {                                       // the trailing "client repeat" byte
+                const uint32_t khz = self.freq_khz;
+                bool ok = c[11] == 0;
+                for (const RepeatRange &r : ranges)
+                    if (khz >= r.lo_khz && khz <= r.hi_khz) ok = true;
+                if (!ok) { push({resp::kError, err::kIllegalArg}); break; }
+                repeat = c[11] != 0;
+            }
             push({resp::kOk});
             break;
         case cmd::kBattery: push(hex("0c7a0f")); break;
@@ -594,9 +741,10 @@ private:
             Bytes s = {resp::kContactStart};
             put32(s, static_cast<uint32_t>(contacts.size()));
             push(s);
-            push(make_contact_from(contacts[0]));
-            push({0x88, 1, 2, 3});                                     // a push in the middle of the stream
-            push(make_contact_from(contacts[1]));
+            for (size_t i = 0; i < contacts.size(); ++i) {
+                push(make_contact_from(contacts[i]));
+                if (i == 0) push({0x88, 1, 2, 3});                     // a push in the middle of the stream
+            }
             Bytes e = {resp::kContactEnd};
             put32(e, 1790000100);
             push(e);
@@ -646,7 +794,7 @@ private:
         default: push({resp::kError, err::kUnsupported});
         }
     }
-    Bytes make_self_info_from() const { return make_self_info(self.name, self.freq_khz, self.bw_hz, self.sf, self.cr, self.tx_power); }
+    Bytes make_self_info_from() const { return make_self_info(self.name, self.freq_khz, self.bw_hz, self.sf, self.cr, self.tx_power, manual_add, key_seed); }
     static Bytes make_contact_from(const Contact &c)
     {
         Bytes b = {resp::kContact};
@@ -685,7 +833,7 @@ static void test_client()
     const std::string dir = tmpdir("client");
     Model m;
     Store st(dir);
-    st.attach(m);
+    attach_b(st, m);
     FakePeer peer;
     Client c(peer, m);
     c.set_deck_clock([] { return DeckClock::Synced; }, [] {});
@@ -1222,7 +1370,7 @@ static void test_mute_and_prefs()
     {
         Model m;
         Store st(dir);
-        st.attach(m);
+        attach_b(st, m);
         ChannelRec ch;
         ch.idx = 1; ch.name = "#test"; ch.empty = false;
         m.set_channel(ch);
@@ -1256,7 +1404,7 @@ static void test_mute_and_prefs()
     {   // the next run: the mute flag and the retry settings come back
         Model m;
         Store st(dir);
-        st.attach(m);
+        attach_b(st, m);
         CHECK(m.is_muted("c:1") && !m.is_muted("c:9") && m.retry().attempts == 4 && m.retry().reset_after == 3);
         m.set_muted("c:1", false);
         m.set_retry({2, 1});
@@ -1264,7 +1412,7 @@ static void test_mute_and_prefs()
     {
         Model m;
         Store st(dir);
-        st.attach(m);
+        attach_b(st, m);
         CHECK(!m.is_muted("c:1") && m.retry().attempts == 2 && m.retry().reset_after == 1);
     }
     CHECK(normalize_retry({9, 9}).attempts == 4 && normalize_retry({9, 9}).reset_after == 3);
@@ -1558,7 +1706,7 @@ static void test_history_delete()
     {
         Model m;
         Store st(dir);
-        st.attach(m);
+        attach_b(st, m);
         auto c1 = std::get<Contact>(*parse_packet(make_contact(resp::kContact, 0x10, "Alice", 1, 1000)));
         m.upsert_contact(c1);
         ChannelRec ch;
@@ -1578,7 +1726,7 @@ static void test_history_delete()
         m.set_muted(da, true);                                       // a muted contact is not counted
         CHECK(m.unread(da) == 0 && m.unread_raw(da) == 2 && m.unread_total() == 5);
         m.mark_read(db);
-        CHECK(m.unread_total() == 3 && count_lines(dir + "/messages.jsonl") >= 9);
+        CHECK(m.unread_total() == 3 && count_lines(bdir_of(dir) + "/messages.jsonl") >= 9);
 
         // one conversation: its messages and its read mark go, nothing else
         CHECK(m.delete_conversation(db) == 3);
@@ -1588,7 +1736,7 @@ static void test_history_delete()
         for (const ConvSummary &s : m.conversations()) if (s.key == db) listed = true;
         CHECK(!listed);                                              // gone from the left pane
         CHECK(m.is_muted(da));                                       // the mute flag is a preference: kept
-        CHECK(count_lines(dir + "/messages.jsonl") == 6);            // the file was rewritten
+        CHECK(count_lines(bdir_of(dir) + "/messages.jsonl") == 6);            // the file was rewritten
         CHECK(m.delete_conversation(db) == 0);                       // nothing left: no change, no error
         CHECK(m.next_seq() > last_seq);                              // numbers are never reused
 
@@ -1598,12 +1746,12 @@ static void test_history_delete()
         for (const ConvSummary &s : m.conversations()) if (s.key == "c:1") chan_listed = true;
         CHECK(chan_listed && m.find_channel(1) && !m.find_channel(1)->empty);
         CHECK(m.unread_total() == 0 && m.unread_raw(da) == 2);
-        CHECK(count_lines(dir + "/messages.jsonl") == 3);
+        CHECK(count_lines(bdir_of(dir) + "/messages.jsonl") == 3);
     }
     {   // the next run sees the same
         Model m;
         Store st(dir);
-        st.attach(m);
+        attach_b(st, m);
         CHECK(m.message_count() == 3 && m.message_count_in(da) == 3 && m.message_count_in(db) == 0 && m.message_count_in("c:1") == 0);
         CHECK(m.is_muted(da) && m.contact_count() == 1 && m.find_channel(1));
         CHECK(m.unread_raw(da) == 2 && m.unread_total() == 0);
@@ -1618,12 +1766,12 @@ static void test_history_delete()
         CHECK(m.count_older_than(cutoff) == 1);                      // a-old (40 days); b-unknown-time was deleted with db; nothing else is that old
         CHECK(m.delete_older_than(cutoff) == 1 && m.message_count_in(da) == 2);
         CHECK(m.delete_older_than(cutoff) == 0);
-        CHECK(count_lines(dir + "/messages.jsonl") == 3);
+        CHECK(count_lines(bdir_of(dir) + "/messages.jsonl") == 3);
     }
     {
         Model m;
         Store st(dir);
-        st.attach(m);
+        attach_b(st, m);
         CHECK(m.message_count() == 3 && m.unread_raw(da) == 1);      // "my reply" is ours; a-new and b-again are unread
     }
     // older than: the unknown-time message is kept, a day boundary is exact, everything older goes at once
@@ -1631,7 +1779,7 @@ static void test_history_delete()
     {
         Model m;
         Store st(dir2);
-        st.attach(m);
+        attach_b(st, m);
         in_direct(m, pa, "old1", 1, kNow - 95 * kDay);
         in_direct(m, pa, "old2", 2, kNow - 31 * kDay);
         in_direct(m, pa, "edge", 3, kNow - 30 * kDay);               // exactly 30 days: not older than the cutoff
@@ -1642,7 +1790,7 @@ static void test_history_delete()
         CHECK(m.delete_older_than(c30) == 2 && m.message_count() == 3);
         CHECK(m.unread_total() == 3);
         CHECK(m.delete_all_messages() == 3 && m.message_count() == 0 && m.unread_total() == 0 && m.read_marks().empty());
-        CHECK(count_lines(dir2 + "/messages.jsonl") == 0);
+        CHECK(count_lines(bdir_of(dir2) + "/messages.jsonl") == 0);
         CHECK(m.delete_all_messages() == 0);
         const uint32_t s = in_direct(m, pa, "fresh", 6, kNow);
         CHECK(s > 5 && m.unread_total() == 1);                       // the counter never goes back
@@ -1652,11 +1800,11 @@ static void test_history_delete()
     }
     {   // a read mark above every message number must not let numbers be reused (deleted newest messages)
         const std::string dir3 = tmpdir("history3");
-        CHECK(std::system(("mkdir -p " + dir3).c_str()) == 0);
-        write_text(dir3 + "/read.txt", "d:010203040506 50\n");
+        CHECK(std::system(("mkdir -p " + bdir_of(dir3)).c_str()) == 0);
+        write_text(bdir_of(dir3) + "/read.txt", "d:010203040506 50\n");
         Model m;
         Store st(dir3);
-        st.attach(m);
+        attach_b(st, m);
         CHECK(m.next_seq() >= 51);
     }
     {   // every message deleted by age, the read marks stay: a new message must still count as unread after a restart
@@ -1664,7 +1812,7 @@ static void test_history_delete()
         {
             Model m;
             Store st(dir4);
-            st.attach(m);
+            attach_b(st, m);
             in_direct(m, pa, "one", 1, kNow - 50 * kDay);
             in_direct(m, pa, "two", 2, kNow - 49 * kDay);
             m.mark_read(da);
@@ -1672,7 +1820,7 @@ static void test_history_delete()
         }
         Model m;
         Store st(dir4);
-        st.attach(m);
+        attach_b(st, m);
         in_direct(m, pa, "three", 3, kNow);
         CHECK(m.unread_total() == 1 && m.unread(da) == 1);
     }
@@ -1886,8 +2034,13 @@ static void test_preset_feed()
     CHECK(plain.curl_path() == "/usr/bin/curl" && plain.url() == "https://api.meshcore.nz/api/v1/config");
 }
 
+#include "test_phase2.inc"
+#include "test_boards.inc"
+
 int main()
 {
+    test_phase2();
+    test_boards();
     test_history_delete();
     test_preset_feed();
     test_sha256();

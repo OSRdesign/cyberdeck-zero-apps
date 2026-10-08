@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include "archive.hpp"
 #include "channel_key.hpp"
 #include "client.hpp"
 #include "features.hpp"
@@ -16,7 +17,9 @@
 #include "presets.hpp"
 
 #include <cstdint>
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace meshhop {
@@ -142,21 +145,23 @@ struct ContactView {
     SortKey sort = SortKey::Heard;
     bool reverse = false;
     ContactFilter filter;
+    std::string group;                              // a contact group (phase 2); empty = every contact
     /* A tap on a column title: the same column reverses, another one sorts by it. */
     void tap_column(SortKey k);
     void cycle_sort();                              // the Sort button / S key: next key, ascending
     void toggle_reverse() { reverse = !reverse; }
     bool operator==(const ContactView &o) const
     {
-        return sort == o.sort && reverse == o.reverse && filter.type == o.filter.type && filter.age == o.filter.age;
+        return sort == o.sort && reverse == o.reverse && filter.type == o.filter.type && filter.age == o.filter.age && group == o.group;
     }
     bool operator!=(const ContactView &o) const { return !(*this == o); }
 };
 
 /* Sorted rows. Heard: newest first; Snr: best first; Name / Type / Hops / Distance: ascending (unknown values last).
- * reverse flips the order. filter drops the rows that do not match; now 0 = the app clock. */
+ * reverse flips the order. filter drops the rows that do not match; now 0 = the app clock. only_keys (when given) keeps just those
+ * contacts: the members of the chosen group. */
 std::vector<ContactRow> build_contact_rows(const meshzero::Model &model, SortKey sort, bool reverse = false, const ContactFilter &filter = ContactFilter(),
-                                           uint32_t now = 0);
+                                           uint32_t now = 0, const std::set<std::string> *only_keys = nullptr);
 
 /* The rows as they are on screen. A tap resolves the row from THIS list (never from a list rebuilt later), so the row that opens is
  * the row that was tapped, in whatever order it is shown. */
@@ -166,7 +171,128 @@ struct ContactSnapshot {
     std::string key_at(int index) const;            // "" for a bad index
     int index_of(const std::string &key_hex) const; // -1 when not shown
 };
+/* view.group, when set, restricts the rows to the members of that group of the model. */
 ContactSnapshot make_contact_snapshot(const meshzero::Model &model, const ContactView &view, uint32_t now = 0);
+
+/* ---- phase 2: selecting contacts for a bulk delete or a group (C3, C1) */
+
+/* The marked contacts of the select mode. Only what is SHOWN is ever acted on: a mark on a row the filter hides stays, but is not deleted. */
+class ContactSelection {
+public:
+    void clear() { keys_.clear(); }
+    bool contains(const std::string &key_hex) const { return keys_.count(key_hex) != 0; }
+    bool toggle(const std::string &key_hex);                      // the new state
+    size_t size() const { return keys_.size(); }
+    void select_shown(const std::vector<ContactRow> &rows);
+    /* Not heard for at least `days` days (a node never heard counts as stale). now 0 = the app clock. */
+    void select_stale(const std::vector<ContactRow> &rows, int days, uint32_t now = 0);
+    void select_never_heard(const std::vector<ContactRow> &rows);
+    void invert(const std::vector<ContactRow> &rows);             // the shown rows
+    std::vector<std::string> shown_selected(const std::vector<ContactRow> &rows) const;     // in row order
+    size_t hidden_count(const std::vector<ContactRow> &rows) const;                           // marked, but filtered out of view
+    void keep_only(const std::set<std::string> &existing);        // forget marks of contacts that are gone
+
+private:
+    std::set<std::string> keys_;
+};
+enum class SelectAction { All, None, Stale7, Stale30, NeverHeard, Invert };
+struct SelectMenu {
+    std::vector<std::string> labels;
+    std::vector<SelectAction> actions;
+};
+SelectMenu select_menu_items();
+/* The Yes / No box of a bulk delete: how many, who (the first names), what it does. */
+struct BulkDeletePrompt {
+    std::string title, body;
+    size_t count = 0;
+    bool empty = true;
+};
+BulkDeletePrompt bulk_delete_prompt(const meshzero::Model &model, const std::vector<ContactRow> &rows, const ContactSelection &sel);
+/* The pick list of the group button: "All contacts", then every group with its size. Index 0 is "all". */
+std::vector<std::string> group_filter_labels(const meshzero::ContactGroups &g);
+/* What the Group button of the select mode offers. */
+enum class GroupAction { AddTo, RemoveFrom, NewWith, RemoveAll, Manage };
+struct GroupMenu {
+    std::vector<std::string> labels;
+    std::vector<GroupAction> actions;
+};
+GroupMenu group_assign_menu(const meshzero::ContactGroups &g, size_t selected);
+/* "Friends (12)" etc. for pick lists. */
+std::vector<std::string> group_pick_labels(const meshzero::ContactGroups &g);
+
+/* ---- phase 2: the static details of a contact (C8) */
+
+/* "no route (flood)", "direct", "3 hops (2-byte hashes): 1a2b > 3c4d > 5e6f" */
+std::string fmt_route(uint8_t path_len, const std::array<uint8_t, 64> &path);
+std::string fmt_node_time(uint32_t ts);                           // "2026-10-08 14:05", "-" when the clock was not set
+std::string fmt_position(bool has, double lat, double lon);       // "48.85660, 2.35220" or "not shared"
+struct ContactDetail {
+    bool found = false;
+    bool chat = false;                  // has a text conversation
+    std::string title, name, type, key1, key2, route, last_advert, heard, position, distance, snr, groups;
+};
+ContactDetail build_contact_detail(const meshzero::Model &model, const std::string &key_hex);
+
+/* ---- phase 2: the Nearby list (C4) */
+
+enum class NearbyState { Pending, New, Contact, Ignored };
+const char *nearby_state_name(NearbyState s);
+struct NearbyRow {
+    std::string key_hex;
+    std::string title;                  // the name, else "Node <first 6 hex>"
+    std::string type_name;              // "Chat", "Repeater", ... or "?"
+    int type = 0;
+    std::string detail;                 // "SNR 5.5 dB  direct  12 s ago"
+    NearbyState state = NearbyState::New;
+    bool can_add = false;               // a full key and a known type
+    bool has_snr = false;
+    double snr = 0;
+};
+/* Pending first, then the newest. Ignored nodes are listed only with show_ignored. */
+std::vector<NearbyRow> build_nearby_rows(const meshzero::Model &model, bool show_ignored, uint32_t now = 0);
+size_t ignored_nearby_count(const meshzero::Model &model);
+std::string fmt_signal(bool has_snr, double snr, bool has_rssi, int rssi);       // "SNR 5.5 dB  RSSI -80"
+
+/* ---- phase 2: the message archive search (M7) */
+
+struct SearchState {
+    std::string text;
+    std::string conv;                   // a conversation key; empty = all
+    meshzero::DatePreset date = meshzero::DatePreset::Any;
+    uint32_t from = 0, to = 0;          // the custom range
+    meshzero::SearchDir dir = meshzero::SearchDir::Any;
+    meshzero::SearchQuery query(uint32_t now = 0) const;
+    void cycle_dir();                   // all -> received -> sent -> all
+    std::string date_label() const;
+    std::string conv_label(const meshzero::Model &model) const;
+};
+struct SearchRow {
+    uint32_t seq = 0;
+    std::string conv;
+    std::string head;                   // "14:05  Alice  You" style first line
+    std::string snippet;                // the text around the match
+    bool outgoing = false;
+};
+std::vector<SearchRow> build_search_rows(const meshzero::Model &model, const SearchState &st, size_t *total = nullptr, uint32_t now = 0);
+/* A one line piece of `text` around the first match of `needle`, at most max_chars characters, with "..." where it was cut. */
+std::string make_snippet(const std::string &text, const std::string &needle, size_t max_chars);
+std::string fmt_when(uint32_t ts, uint32_t now = 0);              // "14:05" today, "09-30 14:05" before
+/* The conversations to pick from (key, title): the channels and every direct conversation with messages. */
+std::vector<std::pair<std::string, std::string>> search_conversations(const meshzero::Model &model);
+
+/* ---- phase 2: the statistics screen (D9) */
+
+struct StatLine {
+    std::string label, value;
+};
+struct StatsView {
+    std::vector<StatLine> left;         // core and radio
+    std::vector<StatLine> right;        // packets
+    std::string updated;                // "Updated 3 s ago" / "Not read yet"
+    bool any = false;
+};
+StatsView build_stats_view(const meshzero::StatsSnapshot &s, uint32_t now = 0);
+std::string fmt_uptime(uint32_t secs);                            // "45 s", "12 min", "2 h 05 min", "3 d 4 h"
 /* True for the contacts that have a text conversation (chat nodes); repeaters, rooms and sensors open the detail panel. */
 bool opens_chat(int type);
 
@@ -196,8 +322,13 @@ struct Choice {
     std::string detail() const;
     std::string position() const;           // "3 / 26"
 };
-enum class ChoiceField { Bandwidth, Sf, Cr, Tx, Preset, RetryAttempts, ResetAfter };
-Choice make_choice(ChoiceField f, const meshzero::RadioSettings &s, const meshzero::RetrySettings &retry);
+enum class ChoiceField { Bandwidth, Sf, Cr, Tx, Preset, RetryAttempts, ResetAfter, PathHash, AdvertEvery, AdvertKind };
+/* What the phase 2 choices start from: the path hash mode the board reports (-1 unknown) and the advert schedule. */
+struct ChoiceExtra {
+    int path_hash_mode = -1;
+    meshzero::AdvertSchedule schedule;
+};
+Choice make_choice(ChoiceField f, const meshzero::RadioSettings &s, const meshzero::RetrySettings &retry, const ChoiceExtra *extra = nullptr);
 /* Applies the accepted index to the edited settings (or to the retry settings for the two retry fields). */
 void apply_choice(ChoiceField f, int index, meshzero::RadioSettings &s, meshzero::RetrySettings &retry);
 
@@ -205,9 +336,20 @@ enum class ChoiceResult { None, Moved, Accept, Cancel };
 /* Left / Right (also Up / Down) step, Enter accepts, Esc cancels. A repeat of Enter or Esc is ignored. */
 ChoiceResult choice_key(const KeyEvent &e, Choice &c);
 
+/* The mode a choice index stands for (path hash: index = mode) and the schedule an index stands for. */
+int path_hash_mode_from_index(int index);
+meshzero::AdvertSchedule apply_advert_choice(ChoiceField f, int index, meshzero::AdvertSchedule current);
+
 /* ---- the Yes / No box. focus: 0 = No, 1 = Yes. Y and N answer at once, Left / Right move, Enter takes the focus, Esc is No. */
 enum class ConfirmResult { None, Moved, Yes, No };
 ConfirmResult confirm_key(const KeyEvent &e, int &focus);
+/* A Yes that must wait (the second box of a factory reset): the seconds still to wait at `now`, 0 once it may be used. */
+int confirm_wait_left(uint64_t opened_ms, uint64_t now_ms, uint32_t delay_ms);
+std::string confirm_yes_text(const std::string &yes, int wait_left);       // "Yes, erase (3)" while waiting
+
+/* ---- a pick list (a long list of rows in a box): Up / Down move, Enter takes, Esc cancels, Home / End jump. */
+enum class ListResult { None, Moved, Accept, Cancel };
+ListResult list_key(const KeyEvent &e, int &selected, int count);
 
 /* ---- a menu of big buttons: Up / Down move, Enter takes, Esc cancels. */
 enum class MenuResult { None, Moved, Accept, Cancel };
@@ -217,6 +359,11 @@ MenuResult menu_key(const KeyEvent &e, int &selected, int count);
 enum class SRowKind {
     Header, Info, Name, Preset, Freq, Bw, Sf, Cr, Tx, RetryAttempts, ResetAfter, SyncClock, BoardGps, GpsNotice, Channel, AddChannel,
     AddPublic, ChannelsNotice, HistoryAll, HistoryOlder, HistoryNote, Undo, Save,
+    // phase 2 (0.2.0)
+    Position, Stats, StatsNotice, PathHash, PathHashNotice, Repeat, RepeatNotice, AdvertEvery, AdvertKind, ManualAdd, AutoAddTypes,
+    AutoAddNotice, Reboot, FactoryReset,
+    // 0.2.2: the data kept per board
+    HistoryForget, HistoryOthers,
 };
 struct SRowSpec {
     SRowKind kind = SRowKind::Info;
@@ -228,7 +375,16 @@ struct SettingsContext {
     meshzero::FeatureState channel_admin;   // ChannelAdmin
     bool slot0_empty = false;               // the Public channel is missing: offer to add it back
     std::vector<int> channels;              // slots of the channels to list (empty slots and slot 0 are dropped by the builder)
+    meshzero::FeatureState path_hash;       // PathHashMode: a row to choose 1 / 2 / 3 bytes, or the "firmware too old" notice
+    meshzero::FeatureState stats;           // Stats
+    meshzero::FeatureState autoadd;         // AutoAdd
+    meshzero::RepeatState repeat;           // client repeat (shown / available / why not)
+    bool have_self = false;                 // the board settings were read (manual add can be shown)
+    bool board_known = false;               // SELF_INFO was seen: there is a board whose saved data can be forgotten
+    size_t other_boards = 0;                // folders of other boards that are saved on the deck
 };
+/* The header titles of the Settings sections, by the number the layout gives them. */
+const char *settings_section_title(int section);
 std::vector<SRowSpec> settings_layout(const SettingsContext &ctx);
 /* True for the rows the selection can rest on (everything except headers, info lines and notices). */
 bool settings_row_selectable(SRowKind k);
@@ -241,6 +397,16 @@ struct ChannelEntry {
     bool has_key = false;           // the key was read from the board in this session: it can be shown
 };
 std::vector<ChannelEntry> build_channel_entries(const meshzero::Model &model);
+
+/* The auto-add filter of the board (SET_AUTOADD_CONFIG): the node types it still adds by itself in manual add mode, and the overwrite flag. */
+struct AutoAddItem {
+    std::string label;                  // "Chat nodes", "Repeaters", ...
+    uint8_t flag = 0;
+    bool on = false;
+};
+std::vector<AutoAddItem> autoadd_items(const meshzero::AutoaddConfig &c);
+uint8_t autoadd_toggled(uint8_t config, uint8_t flag);
+std::string autoadd_summary(const meshzero::AutoaddConfig &c);        // "Chat, Repeater" / "none"
 
 /* ------------------------------------------------------------------ history (phase 1b): options of a conversation, bulk delete */
 
@@ -262,6 +428,11 @@ struct DeletePrompt {
 DeletePrompt delete_conversation_prompt(const meshzero::Model &model, const std::string &conv);
 DeletePrompt delete_all_prompt(const meshzero::Model &model);
 DeletePrompt delete_older_prompt(const meshzero::Model &model, int days, uint32_t now);
+/* The data kept per board (0.2.2): forget what the deck saved for the connected board, or for the boards that are not connected. */
+DeletePrompt forget_board_prompt(const meshzero::Model &model, const std::string &board_id);
+DeletePrompt forget_others_prompt(size_t boards, uint64_t bytes);
+std::string fmt_bytes(uint64_t n);                      // "512 B", "12 KB", "1.4 MB"
+std::string fmt_boards(size_t n);                       // "1 board", "3 boards"
 
 /* "Delete messages older than": 7, 30 or 90 days. */
 const std::vector<int> &history_day_options();
@@ -306,12 +477,16 @@ Tab step_tab(Tab t, int delta);
 
 struct NavState {
     Tab tab = Tab::Chats;
-    bool popup_open = false;        // a choice, Yes / No, menu, info or Loading box
+    bool popup_open = false;        // a choice, Yes / No, menu, info, list or progress box
     bool editor_open = false;       // the modal text editor (settings values, channel name, clock)
     bool detail_open = false;       // the contact detail panel
     bool compose_focus = false;     // Chats: the keyboard types into the message entry
+    bool nearby_open = false;       // Contacts: the Nearby list
+    bool search_open = false;       // Chats: the message search
+    bool stats_open = false;        // Settings: the statistics screen
+    bool select_mode = false;       // Contacts: marking contacts for a bulk delete or a group
 };
-enum class BackAction { ClosePopup, CancelEditor, CloseDetail, FocusList, ExitHint };
+enum class BackAction { ClosePopup, CancelEditor, CloseSearch, CloseStats, CloseDetail, CloseNearby, ExitSelect, FocusList, ExitHint };
 /* A short Esc and every Back button. Never quits: only the launcher's 3 s hold ends the app. */
 BackAction back_action(const NavState &s);
 

@@ -183,6 +183,19 @@ int run_script(Platform &plat, App &app, const std::string &file, const std::str
         } else if (cmd == "dump") {
             run_for(plat, app, 60);
             std::printf("%s\n", app.debug_state().c_str());
+        } else if (cmd == "sim") {
+            // sim <line>: a line for the simulated board's stdin ("swap", "unplug", "plug", "msg text"...), through the fifo named by MESHHOP_SIMIN
+            std::string text;
+            std::getline(ss, text);
+            if (!text.empty() && text[0] == ' ') text.erase(0, 1);
+            const char *fifo = std::getenv("MESHHOP_SIMIN");
+            std::ofstream out(fifo ? fifo : "/dev/null", std::ios::app);
+            if (!fifo || !out) {
+                std::fprintf(stderr, "script:%d: sim needs MESHHOP_SIMIN (a fifo read by the simulator)\n", lineno);
+                ++failures;
+            } else {
+                out << text << '\n';
+            }
         } else if (cmd == "say") {
             std::string text;
             std::getline(ss, text);
