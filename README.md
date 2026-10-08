@@ -13,14 +13,10 @@ Each app has its own page with the full description, keys, requirements, known l
 | App | Version | What it does |
 | --- | --- | --- |
 | [**LAN Scan**](apps/lanscan/README.md) (`lanscan`) | 0.1.3 | Lists the devices on your Wi-Fi network (IP, MAC, vendor, name) and scans the open ports of one of them. |
+| [**Mesh Hop**](apps/mesh-hop/README.md) (`mesh-hop`) | 0.2.2 | Full-screen client for MeshCore LoRa mesh networks: chats, contacts, nearby nodes and radio settings, with a MeshCore companion radio board on USB and a Bluetooth keyboard. |
 | [**viz1090**](apps/viz1090/README.md) (`viz1090`) | 0.1.1 | The real viz1090 ADS-B display, full screen, fed by an RTL-SDR dongle, with an intro screen and a world map. Needs the dongle and a launcher with full-screen app support. |
 | [**Wi-Fi Survey**](apps/wifi-survey/README.md) (`wifi-survey`) | 0.1.1 | Shows the Wi-Fi networks around the deck and a chart that points out the least crowded channel. Passive only, reads the scan results of NetworkManager. |
 
-In development, **not yet published in the registry** (so not installable from Settings > Apps; a local `.deb` only, see its page):
-
-| App | Version | What it does |
-| --- | --- | --- |
-| [**Mesh Hop**](apps/mesh-hop/README.md) (`mesh-hop`) | 0.2.2 | Full-screen client for MeshCore LoRa mesh networks: chats, contacts, nearby nodes and radio settings, with a MeshCore companion radio board on USB and a Bluetooth keyboard. |
 
 Known limit that applies to every app: after an upgrade through the Apps menu the tile moves to the end of the
 launcher grid.
@@ -185,6 +181,6 @@ The repository is MIT. Each app page lists its own credits and licences in full;
   (M5Stack, MIT).
 * **viz1090** bundles viz1090 (BSD), readsb (GPL-3 or later), fonts (SIL OFL 1.1, Font Awesome icons CC BY 4.0) and
   map data (Natural Earth, OurAirports, public domain); see [its page](apps/viz1090/README.md).
-* **Mesh Hop** (in development) speaks the MeshCore protocol (MeshCore firmware and protocol, MIT; meshcore_py, MIT, as the
+* **Mesh Hop** speaks the MeshCore protocol (MeshCore firmware and protocol, MIT; meshcore_py, MIT, as the
   reference of the wire format). Other MeshCore clients (two MIT, two GPL) were feature references only, no code was copied from
   the GPL ones; see [its page](apps/mesh-hop/README.md).
