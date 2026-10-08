@@ -1,0 +1,25 @@
+# Mesh Hop without a board: the history and the contact cache of a previous run (DATA=<folder> NOSIM=1 SCRIPT=offline.script).
+wait 2500
+say == offline (expect link=No board found, conv=c:0, contacts=4)
+dump
+shot 20-offline-chats
+# a message cannot be sent: the text stays, the reason is in the footer
+key enter
+type no board
+wait 400
+key enter
+say == send refused (expect compose='no board' and a notice)
+dump
+shot 21-offline-send
+key esc
+key tab
+key tab
+shot 22-offline-contacts
+key tab
+key tab
+shot 23-offline-settings
+# the editors of the radio values need a board; the node name does not
+key enter
+wait 400
+shot 24-offline-name-editor
+key esc

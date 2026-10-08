@@ -1,0 +1,77 @@
+# Mesh Hop with 161 contacts (the user's list): the speed of the keys, the sort kept, the tapped row opens.
+#   SIMARGS="--contacts 157" SCRIPT=bigcontacts.script sh ui_smoke.sh
+wait 6000
+key tab
+key tab
+wait 600
+say == 161 contacts (expect contacts=161 shown=161, live_rows at most 11: only the visible rows are widgets)
+dump
+shot 30-contacts-161
+
+# Up / Down: each press re-binds two rows and scrolls, it does not rebuild the list
+bench down 100
+say == after 100 Down presses (expect contact_sel=100, live_rows<=11)
+dump
+shot 31-contacts-after-down
+bench up 60
+bench pgdn 10
+say == after PgUp / PgDn (expect contact_sel=100)
+dump
+key end
+say == End: the last row (expect contact_sel=160)
+dump
+shot 32-contacts-end
+key home
+
+# sort by name, descending: the first row is the last name
+type s
+wait 800
+say == sort by name (expect sort=name shown=161)
+dump
+type r
+wait 800
+say == reversed (expect sort=name(rev))
+dump
+shot 33-sorted-reversed
+# drag-scroll with a finger (touch): the rows follow, then the row under the finger is the one that opens
+drag 300 380 300 130
+wait 800
+say == after the drag (nothing opened: detail=0)
+dump
+shot 33b-after-drag
+tap 200 188
+wait 400
+say == tapped the first visible row after the drag: its detail or conversation opens (compare with the screenshot 33b)
+dump
+key esc
+key tab
+key tab
+key tab
+key tab
+key tab
+wait 300
+# the tapped row is the one that opens, in this order (and the sort is still there afterwards)
+tap 200 188
+wait 400
+say == tapped the first row of this order: its conversation or detail opens (see conv_title / detail_name, expect the first= name)
+dump
+key esc
+key tab
+key tab
+key tab
+key tab
+key tab
+wait 400
+say == back on Contacts after a tour of the tabs: the sort and the filters are kept (expect sort=name(rev) shown=161)
+dump
+
+# the filters of the 161 contacts
+type t
+wait 800
+say == type filter Chat (expect filter=Chat/Any time shown below 161)
+dump
+type h
+wait 800
+say == and heard within 1 h
+dump
+shot 34-filtered

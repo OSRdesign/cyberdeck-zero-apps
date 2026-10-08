@@ -1,0 +1,238 @@
+# Mesh Hop 0.1.1 scripted run (headless) against tools/meshcore_sim.py (default case: 4 contacts, GPS variable listed, channel send answered OK).
+# Screenshots go to the --shot-dir, `dump` prints the state. Keys and taps are the real ones: tab bar taps, list rows, buttons, popups,
+# drag-scroll. Coordinates are screen pixels (640x480; the page starts at y=56).
+wait 3500
+say == chats (expect tab=Chats link=Connected contacts=4 conv=c:0 unread=1: the unread total of Alice's message is on the Chats tab)
+dump
+shot 01-chats
+
+# write in the first channel with the keyboard, send with Enter: a channel message ends at "sent", never "delivered"
+key enter
+type hello from Mesh Hop
+shot 02-compose
+key enter
+wait 1500
+say == channel message sent (expect msgs=3 compose_focus=1 compose='' last_status='sent')
+dump
+shot 03-channel-sent
+key esc
+say == esc (expect compose_focus=0)
+dump
+
+# touch: the second conversation row, then the Mute button of the channel header
+tap 100 150
+say == tap row (expect conv=c:1)
+dump
+tap 585 78
+say == muted by touch (expect notice about muted)
+dump
+shot 04-muted
+tap 585 78
+say == unmuted
+key ctrl-m
+say == Ctrl+M mutes the selected channel too (expect notice 'muted')
+dump
+key ctrl-m
+say == and unmutes (expect notice 'unmuted')
+dump
+
+# add channel menu by touch (the row after the channels), private channel with a typed key
+tap 100 192
+wait 300
+say == add channel menu (expect popup=menu)
+dump
+shot 05-add-menu
+key down
+key enter
+wait 500
+type Club
+shot 06-private-name
+key enter
+wait 500
+type 00112233445566778899aabbccddeeff
+shot 07-private-key
+key enter
+wait 1500
+say == Club added (expect chat_rows=7)
+dump
+shot 08-club-added
+
+# a private channel with a random key: the key is shown once the board has the channel
+tap 100 236
+wait 300
+key down
+key down
+key enter
+wait 500
+type Family
+key enter
+wait 2500
+say == random key shown (expect popup=info)
+dump
+shot 09-random-key
+key enter
+wait 300
+say == info closed (expect popup=none)
+dump
+
+# the other tabs by Tab (Tab cycles in a loop, there are no other tab keys)
+key tab
+shot 10-map
+key tab
+wait 300
+say == contacts (expect tab=Contacts shown=4 sort=last heard)
+dump
+shot 11-contacts
+
+# sort: a "Loading..." popup first, the sort is kept
+type s
+say == loading popup (expect loading=1)
+dump
+shot 12-loading
+wait 800
+say == sorted by name (expect sort=name first='Alice')
+dump
+tap 70 155
+wait 600
+say == tap the Name title again: reversed (expect sort=name(rev) first='Weather room')
+dump
+shot 13-sorted-reversed
+# the tapped row opens: the first row of THIS order, not the first row of the default order
+tap 200 188
+wait 300
+say == the tapped row opens (expect detail=1 detail_name='Weather room')
+dump
+shot 14-detail
+key esc
+say == esc closes the detail, the sort is kept (expect detail=0 sort=name(rev))
+dump
+
+# filters by touch chips: type Repeater, then heard within 1 h
+tap 160 122
+wait 700
+say == type filter Repeater (expect shown=1 filter=Repeater/Any time)
+dump
+tap 484 122
+wait 700
+say == plus heard within 1 h (expect filter=Repeater/1 h)
+dump
+shot 15-filtered
+tap 35 122
+wait 700
+tap 418 122
+wait 700
+say == all types again, any time again (expect shown=4 filter=All/Any time)
+dump
+
+# Chat node (the last row of this order is Alice): Enter opens its conversation with the keyboard on the entry
+key home
+key down
+key down
+key down
+key enter
+wait 300
+say == chat opened from Contacts (expect tab=Chats conv=d:... compose_focus=1)
+dump
+key esc
+
+# settings by Tab, the choice popup by touch on the Preset row
+key tab
+key tab
+key tab
+key tab
+wait 300
+say == settings (expect tab=Settings)
+dump
+shot 16-settings
+tap 300 342
+wait 400
+say == preset popup (expect popup=choice popup_value='EU/UK (Deprecated)')
+dump
+shot 17-preset-popup
+tap 530 192
+wait 200
+say == one step to the right with the touch arrow (expect popup_value='Czech Republic (Narrow)')
+dump
+shot 18-preset-next
+tap 495 396
+wait 400
+say == accepted: the preset filled frequency, bandwidth, SF, CR (expect freq=869.432 MHz bw=62.5 kHz sf=7 cr=5 radio_dirty=1)
+dump
+shot 19-settings-changed
+
+# fixed choices with the keyboard: Left / Right change the value, Enter accepts, Esc cancels
+key down
+key down
+key enter
+wait 400
+say == bandwidth popup (expect popup=choice popup_value='62.5 kHz')
+dump
+key right
+key enter
+wait 300
+say == 125 kHz accepted (expect bw=125 kHz)
+dump
+key down
+key enter
+wait 300
+key left
+key left
+key esc
+wait 300
+say == spreading factor popup cancelled (expect popup=none sf=7)
+dump
+
+# message retries (M3, direct messages): how many tries, and when the stored route is forgotten
+key down
+key down
+key down
+key enter
+wait 400
+say == tries popup (expect popup=choice popup_value='3 tries')
+dump
+shot 20a-retry-popup
+key left
+key enter
+wait 300
+say == 2 tries, the reset point follows (expect retry=2/1)
+dump
+
+# Save to radio and Undo changes are the last rows of the list, each asks Yes / No
+key end
+shot 20-settings-end
+key enter
+wait 400
+say == save confirmation (expect popup=confirm)
+dump
+shot 21-save-confirm
+type n
+wait 300
+say == No: nothing saved (expect popup=none radio_dirty=1)
+dump
+key up
+key enter
+wait 400
+shot 22-undo-confirm
+type y
+wait 400
+say == Yes: undone (expect radio_dirty=0 freq=869.525 MHz)
+dump
+key tab
+key tab
+key tab
+key tab
+key tab
+wait 100
+say == Tab loop: five presses are a full turn (expect tab=Settings)
+dump
+
+# touch tabs
+tap 40 28
+say == tap Chats tab (expect tab=Chats)
+dump
+tap 211 28
+say == tap Contacts tab (expect tab=Contacts)
+dump
+key esc
+say == Esc on a top-level screen: only a hint, the app keeps running
+dump
