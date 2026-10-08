@@ -1,0 +1,15 @@
+{
+  "share_code": "mesh-hop",
+  "package": "mesh-hop",
+  "version": "0.1.1",
+  "draft": true,
+  "title": "Mesh Hop",
+  "summary": "Full-screen MeshCore messenger for the deck: chats, contacts and radio settings on 640x480.",
+  "description": "A full-screen client for MeshCore LoRa mesh networks. The deck controls a MeshCore companion radio board plugged into its USB port (the radio is on the board, the deck is the screen and keyboard). Two-pane Chats (channels and direct conversations with unread counts, a channel message ends at sent, a direct message at delivered), a Contacts table you can sort and filter by type and time since heard, and the radio Settings (node name, a list of the 26 firmware presets, bandwidth, spreading factor, coding rate and TX power chosen in a popup with arrows, direct message retries, board clock, board GPS switch, hashtag and private channels with a typed or random key, Yes / No confirmation before saving). Messages and contacts are kept between runs in ~/.local/share/mesh-hop. Text is typed with the Bluetooth keyboard only (there is no on-screen keyboard); touch is for taps, drag-scrolling and buttons, and Tab walks the tabs. Map and Terminal tabs are placeholders for later versions. The board must run the MeshCore companion radio firmware (USB); the user must be in the dialout group. Needs a launcher with full-screen app support (X-Fullscreen in .desktop files).",
+  "categories": ["Radio"],
+  "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
+  "license": "MIT",
+  "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/mesh-hop",
+  "depends": "libfreetype6",
+  "permissions": {"additional_hardware": true}
+}

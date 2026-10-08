@@ -1,0 +1,36 @@
+# The firmware check (D10) and the board GPS row.
+#   SIMARGS="--old-firmware"  SCRIPT=firmware.script sh ui_smoke.sh   firmware too old: notices, no GPS switch, no channel adding
+#   SIMARGS="--no-gps-var"    SCRIPT=firmware.script sh ui_smoke.sh   a board without GPS: no GPS row at all
+#   (default simulator)       SCRIPT=firmware.script sh ui_smoke.sh   a GPS board: the row switches gps:0 / gps:1
+wait 3500
+key tab
+key tab
+key tab
+key tab
+wait 500
+say == settings (expect tab=Settings)
+dump
+shot 50-settings-board
+# the first selectable row is the GPS switch on a GPS board (Enter toggles it), else the node name
+key enter
+wait 1500
+say == after Enter on the first row (a GPS board: notice 'Board GPS switched on'; otherwise the node name editor opens)
+dump
+shot 51-after-enter
+key esc
+# the end of the list: the channel section (a notice instead of the add row on a firmware too old for channels), then Undo and Save
+key end
+wait 300
+shot 52-settings-end
+# the Chats list: the "+ Add channel" row opens the menu, or says the firmware is too old (tap at the row just under CHANNELS)
+tap 40 28
+wait 300
+tap 100 100
+wait 200
+tap 100 148
+wait 200
+tap 100 192
+wait 400
+say == Chats list add row (an old firmware: notice 'Firmware too old for this feature: Channel management'; a recent one: the add menu, popup=menu)
+dump
+shot 53-chats-add

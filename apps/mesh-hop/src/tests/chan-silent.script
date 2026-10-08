@@ -1,0 +1,22 @@
+# A channel message the board never answers (the real board stayed on "sending" in the first test on the deck).
+#   SIMARGS="--chan-reply none" SCRIPT=chan-silent.script sh ui_smoke.sh      (also: --chan-reply msgsent | odd | ok)
+# Expect: "sending" for about 5 s, then "sent (unconfirmed)", never "sending" for ever; the app log (printed at the end) holds the lines
+# of the send and what the board sent back.
+wait 3500
+key enter
+type hello channel
+key enter
+wait 1500
+say == 1.5 s after Enter (expect last_status='sending')
+dump
+shot 40-chan-sending
+wait 4200
+say == 5.7 s after Enter (expect last_status='sent (unconfirmed)')
+dump
+shot 41-chan-unconfirmed
+# a second message, still nothing from the board: the same
+type second one
+key enter
+wait 6500
+say == second message (expect last_status='sent (unconfirmed)')
+dump

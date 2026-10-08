@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Mesh Hop
+Exec=/usr/share/APPLaunch/bin/M5CardputerZero-mesh-hop
+Terminal=false
+Icon=share/images/mesh-hop.png
+Type=Application
+X-Fullscreen=true

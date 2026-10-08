@@ -1,0 +1,50 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Mesh Hop
+Source: https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/mesh-hop
+Comment: The app speaks the MeshCore companion protocol. Protocol and firmware: MeshCore,
+ Copyright (c) Scott Powell / rippleradios.com, MIT, https://github.com/meshcore-dev/MeshCore.
+ The protocol code was written from the protocol documentation and from meshcore_py (Copyright (c) Florent de Lamotte,
+ MIT, https://github.com/meshcore-dev/meshcore_py), which was used as the reference of the wire format.
+ The UX is inspired by MeshCore clients such as wadamesh (GPL-3.0), Meshy (GPL-3.0-or-later), meshcore-gui (MIT) and
+ MeshCore Open (MIT): ideas only, no code was copied from the GPL ones.
+
+Files: *
+Copyright: 2026 OSRdesign
+License: MIT
+
+Files: usr/share/APPLaunch/bin/M5CardputerZero-mesh-hop
+Copyright: 2026 OSRdesign
+ 2026 M5Stack Technology CO LTD
+License: MIT
+Comment: The binary is built against LVGL (MIT, https://lvgl.io) and FreeType (FreeType License or GPL-2, the system library
+ libfreetype6). It contains the status bar renderer of the M5CardputerZero launcher (cp0_statusbar.c, M5Stack, MIT,
+ https://github.com/OSRdesign/cyberdeck-zero-launcher). At run time it reads the fonts that the launcher installs in
+ /usr/share/APPLaunch/share/font (Montserrat, Font Awesome Free, DejaVu Sans): SIL OFL 1.1, CC BY 4.0 (the icons) and the
+ Bitstream Vera / DejaVu licence; they are not part of this package.
+
+Files: usr/share/APPLaunch/share/images/mesh-hop.png
+Copyright: 2026 OSRdesign
+License: MIT
+
+Files: usr/share/doc/mesh-hop/copyright
+Copyright: 2026 OSRdesign
+License: MIT
+
+Files: usr/share/APPLaunch/applications/mesh-hop.desktop
+Copyright: 2026 OSRdesign
+License: MIT
+
+License: MIT
+ Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+ documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+ the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+ permit persons to whom the Software is furnished to do so, subject to the following conditions:
+ .
+ The above copyright notice and this permission notice shall be included in all copies or substantial portions of
+ the Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ SOFTWARE.
