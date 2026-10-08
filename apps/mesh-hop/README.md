@@ -2,10 +2,10 @@
 
 Version 0.2.2, package `mesh-hop`. Part of [cyberdeck-zero-apps](../../README.md).
 
-**Status: in development, not yet published in the registry.** `app.json` has `"draft": true`, so `tools/make_registry.py` neither
-builds nor lists it, and **it cannot be installed from Settings > Apps yet**. For now it is built locally and installed as a
-`.deb` by hand (see [Install and requirements](#install-and-requirements)). Version 0.2.2 was tested on the deck by the owner with real boards (Seeed XIAO
-nRF52840 and a spare XIAO S3 WIO, MeshCore firmware v1.15.0, a board swap included). The screenshots below come from the simulator, not from the panel.
+**Status: early release, published in the registry.** Install it from **Settings > Apps** like the other apps (see
+[Install and requirements](#install-and-requirements)). Version 0.2.2 was tested on the deck by the owner with real boards (Seeed XIAO
+nRF52840 and a spare XIAO S3 WIO, MeshCore firmware v1.15.0, a board swap included). Several MeshCore features are not there yet
+(see [Known limits](#known-limits)). The screenshots below come from the simulator, not from the panel.
 
 A full-screen (640x480) client for [MeshCore](https://github.com/meshcore-dev/MeshCore) LoRa mesh networks. The radio is a
 separate **companion radio board** plugged into the deck's USB port (MeshCore *companion radio, USB* firmware); the deck is
@@ -158,7 +158,10 @@ The keyboard layout is US by default, AZERTY when `MESHHOP_KEYMAP=fr` or `XKBLAY
 * `curl` (the package depends on it; the radio preset list is downloaded by `/usr/bin/curl`; without it the app keeps the saved
   or built-in list) and `libfreetype6`.
 
-**Install the local `.deb`** (until the app is published). On a PC with this repository:
+**Install from the deck:** Settings > Apps > Sources > + Add a GitHub source `OSRdesign/cyberdeck-zero-apps` (if not added yet),
+then Apps > Mesh Hop > Enter (it asks for the sudo password).
+
+**Or install a local `.deb`** (for a build you made yourself). On a PC with this repository:
 
 ```
 python tools/make_registry.py --only mesh-hop --out <a folder outside packages/>
@@ -201,7 +204,6 @@ All in `~/.local/share/mesh-hop`. The log holds no message text.
 
 ## Known limits
 
-* **Not published**: not in `registry.json`, not installable from Settings > Apps; a local `.deb` only.
 * The **Map** and **Terminal** tabs are placeholders (no map tiles, no command line yet).
 * **USB only**: no Bluetooth LE connection to the board yet (planned; the deck's Bluetooth is also used by the keyboard).
 * A **channel message has no delivery acknowledgement** in MeshCore: it ends at "sent" (or "sent (unconfirmed)" if the board does

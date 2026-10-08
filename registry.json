@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-10-06T06:09:15+00:00",
+  "generated_at": "2026-10-08T22:37:20+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CardputerZero"
@@ -71,6 +71,66 @@
         "screenshots": []
       },
       "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/lanscan/icon.png",
+      "screenshots": []
+    },
+    {
+      "uuid": "9d3fef69-7f03-5d37-8734-b7e984998822",
+      "share_code": "mesh-hop",
+      "title": "Mesh Hop",
+      "summary": "Full-screen MeshCore messenger for the deck: chats, contacts, nearby nodes and radio settings on 640x480.",
+      "description": "A full-screen client for MeshCore LoRa mesh networks. The deck controls a MeshCore companion radio board plugged into its USB port (the radio is on the board, the deck is the screen and keyboard). Two-pane Chats (channels and direct conversations with unread counts, mute and delete options by Ctrl+O or a 3 s hold on the name, search in the whole message archive by words, chat, dates and direction), a Contacts table you can sort and filter by type, time since heard and group, with select mode (bulk delete one by one with a progress box, groups), contact details (key, route, last advert, position) and a Nearby list of the nodes heard (adverts, pending contacts, an active zero-hop scan, Add and Ignore). Settings: board status with its position, a statistics screen, node name, radio presets (26 built in, refreshed from api.meshcore.nz in the background when the deck is online), bandwidth, spreading factor, coding rate, TX power and the path hash size (1, 2 or 3 bytes) chosen in a popup with arrows, repeat on or off where the board allows it, a scheduled advert, manual add mode and the auto-add types, direct message retries, board clock, board GPS switch, hashtag and private channels, reboot and factory reset of the board (double confirmation), a History section. Messages, contacts, groups and flags are kept between runs, separately for each board (by its public key), in ~/.local/share/mesh-hop. Text is typed with the Bluetooth keyboard only (there is no on-screen keyboard); touch is for taps, drag-scrolling and buttons, and Tab walks the tabs. Map and Terminal tabs are placeholders for later versions. The board must run the MeshCore companion radio firmware (USB); the user must be in the dialout group. Needs a launcher with full-screen app support (X-Fullscreen in .desktop files).",
+      "locales": {
+        "en": {
+          "title": "Mesh Hop",
+          "summary": "Full-screen MeshCore messenger for the deck: chats, contacts, nearby nodes and radio settings on 640x480.",
+          "description": "A full-screen client for MeshCore LoRa mesh networks. The deck controls a MeshCore companion radio board plugged into its USB port (the radio is on the board, the deck is the screen and keyboard). Two-pane Chats (channels and direct conversations with unread counts, mute and delete options by Ctrl+O or a 3 s hold on the name, search in the whole message archive by words, chat, dates and direction), a Contacts table you can sort and filter by type, time since heard and group, with select mode (bulk delete one by one with a progress box, groups), contact details (key, route, last advert, position) and a Nearby list of the nodes heard (adverts, pending contacts, an active zero-hop scan, Add and Ignore). Settings: board status with its position, a statistics screen, node name, radio presets (26 built in, refreshed from api.meshcore.nz in the background when the deck is online), bandwidth, spreading factor, coding rate, TX power and the path hash size (1, 2 or 3 bytes) chosen in a popup with arrows, repeat on or off where the board allows it, a scheduled advert, manual add mode and the auto-add types, direct message retries, board clock, board GPS switch, hashtag and private channels, reboot and factory reset of the board (double confirmation), a History section. Messages, contacts, groups and flags are kept between runs, separately for each board (by its public key), in ~/.local/share/mesh-hop. Text is typed with the Bluetooth keyboard only (there is no on-screen keyboard); touch is for taps, drag-scrolling and buttons, and Tab walks the tabs. Map and Terminal tabs are placeholders for later versions. The board must run the MeshCore companion radio firmware (USB); the user must be in the dialout group. Needs a launcher with full-screen app support (X-Fullscreen in .desktop files)."
+        }
+      },
+      "i18n": {
+        "en": {
+          "title": "Mesh Hop",
+          "summary": "Full-screen MeshCore messenger for the deck: chats, contacts, nearby nodes and radio settings on 640x480.",
+          "description": "A full-screen client for MeshCore LoRa mesh networks. The deck controls a MeshCore companion radio board plugged into its USB port (the radio is on the board, the deck is the screen and keyboard). Two-pane Chats (channels and direct conversations with unread counts, mute and delete options by Ctrl+O or a 3 s hold on the name, search in the whole message archive by words, chat, dates and direction), a Contacts table you can sort and filter by type, time since heard and group, with select mode (bulk delete one by one with a progress box, groups), contact details (key, route, last advert, position) and a Nearby list of the nodes heard (adverts, pending contacts, an active zero-hop scan, Add and Ignore). Settings: board status with its position, a statistics screen, node name, radio presets (26 built in, refreshed from api.meshcore.nz in the background when the deck is online), bandwidth, spreading factor, coding rate, TX power and the path hash size (1, 2 or 3 bytes) chosen in a popup with arrows, repeat on or off where the board allows it, a scheduled advert, manual add mode and the auto-add types, direct message retries, board clock, board GPS switch, hashtag and private channels, reboot and factory reset of the board (double confirmation), a History section. Messages, contacts, groups and flags are kept between runs, separately for each board (by its public key), in ~/.local/share/mesh-hop. Text is typed with the Bluetooth keyboard only (there is no on-screen keyboard); touch is for taps, drag-scrolling and buttons, and Tab walks the tabs. Map and Terminal tabs are placeholders for later versions. The board must run the MeshCore companion radio firmware (USB); the user must be in the dialout group. Needs a launcher with full-screen app support (X-Fullscreen in .desktop files)."
+        }
+      },
+      "categories": [
+        "Radio"
+      ],
+      "author": {
+        "github": "OSRdesign",
+        "display_name": "OSRdesign"
+      },
+      "version": "0.2.2",
+      "published_at": "2026-10-08T22:37:18+00:00",
+      "updated_at": "2026-10-08T22:37:18+00:00",
+      "review": {
+        "status": "approved"
+      },
+      "license": "MIT",
+      "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/mesh-hop",
+      "download": {
+        "type": "deb",
+        "package": "mesh-hop",
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/mesh-hop_0.2.2_arm64.deb",
+        "md5": "a6160cf8d73cb9891c39b4d7047bec2e",
+        "sha256": "1a6e7f32a9efe949241105a508c060d80f9b5d40f09e769302ba3df4de425de8",
+        "size": 1187704
+      },
+      "depends": "libfreetype6, curl",
+      "permissions": {
+        "camera": false,
+        "microphone": false,
+        "imu": false,
+        "network": true,
+        "additional_hardware": true,
+        "background_service": false,
+        "external_display": false
+      },
+      "assets": {
+        "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mesh-hop/icon.png",
+        "screenshots": []
+      },
+      "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mesh-hop/icon.png",
       "screenshots": []
     },
     {
