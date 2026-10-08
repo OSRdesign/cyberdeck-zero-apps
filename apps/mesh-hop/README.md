@@ -1,17 +1,31 @@
 # Mesh Hop
 
-Version 0.2.2 (roadmap phase 2, with the fixes of the deck test), package `mesh-hop`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.2.2, package `mesh-hop`. Part of [cyberdeck-zero-apps](../../README.md).
 
-**Status: work in progress, unpublished (draft).** `app.json` has `"draft": true`, so `tools/make_registry.py` neither builds
-nor lists it. Build a local package with `python tools/make_registry.py --only mesh-hop --out <folder>`.
+**Status: in development, not yet published in the registry.** `app.json` has `"draft": true`, so `tools/make_registry.py` neither
+builds nor lists it, and **it cannot be installed from Settings > Apps yet**. For now it is built locally and installed as a
+`.deb` by hand (see [Install and requirements](#install-and-requirements)). Version 0.2.2 was tested on the deck by the owner with real boards (Seeed XIAO
+nRF52840 and a spare XIAO S3 WIO, MeshCore firmware v1.15.0, a board swap included). The screenshots below come from the simulator, not from the panel.
 
 A full-screen (640x480) client for [MeshCore](https://github.com/meshcore-dev/MeshCore) LoRa mesh networks. The radio is a
 separate **companion radio board** plugged into the deck's USB port (MeshCore *companion radio, USB* firmware); the deck is
-its screen and keyboard. Mesh Hop replaces the 320x170 UI of MeshZero with a UI made for messaging and keeps everything below
+its screen and keyboard. Mesh Hop replaces the 320x170 UI of [MeshZero](../meshzero/README.md) with a UI made for messaging and keeps everything below
 it: the serial transport, the protocol, the client, the model and the history store (`src/main/core/`, a copy of the
 MeshZero core with unit tests). `apps/meshzero` stays as it is until Mesh Hop is accepted.
 
-## What it does (0.2.0)
+## Screenshots
+
+Made with the simulator's headless mode (`mesh-hop --headless`, a simulated board with invented names and test data), **not on the
+deck's panel**. The real screen shows the same 640x480 picture.
+
+| | |
+| --- | --- |
+| ![Chats](../../docs/screenshots/mesh-hop-chats.png) Chats: channels and direct conversations with unread pills, the conversation, entry and Send | ![Options of a conversation](../../docs/screenshots/mesh-hop-options.png) The options box of a conversation (Ctrl+O, or a 3 s hold on its name) |
+| ![Contacts](../../docs/screenshots/mesh-hop-contacts.png) Contacts: sortable table, filter chips, Select, Group, Nearby | ![Contact details](../../docs/screenshots/mesh-hop-details.png) Details of a contact: key, route, last advert, position |
+| ![Nearby](../../docs/screenshots/mesh-hop-nearby.png) Nearby: the nodes heard, with Add and Ignore | ![Settings](../../docs/screenshots/mesh-hop-settings.png) Settings: board status, name, radio |
+| ![Statistics](../../docs/screenshots/mesh-hop-statistics.png) Statistics of the board | ![History settings](../../docs/screenshots/mesh-hop-history.png) Settings > History and the board actions |
+
+## What it does
 
 * **Chats**: two panes. Left: the channels and the direct conversations, each with the **number of unread messages** (a gold
   pill; nothing for none, "muted" for a muted channel); the total of unread messages is on the **Chats tab title**. Right: the
@@ -132,12 +146,84 @@ The keyboard layout is US by default, AZERTY when `MESHHOP_KEYMAP=fr` or `XKBLAY
 
 ## Install and requirements
 
-Install from **Settings > Apps** like the other apps (a launcher with full-screen app support, `X-Fullscreen=true`, is needed).
-The package depends on `libfreetype6` and `curl` (the preset list is downloaded by `/usr/bin/curl`; without it the app keeps the
-saved or built-in list). The user must be in the `dialout` group (the Raspberry Pi OS default user is). The board is found by itself
-(`/dev/ttyACM*`, `/dev/ttyUSB*`, by USB id); to force a port put its path in `~/.local/share/mesh-hop/port` or start the app
-with `MESHHOP_PORT=/dev/...`. Fonts: the app reads the fonts the launcher installs in `/usr/share/APPLaunch/share/font`
-(Montserrat, Font Awesome, DejaVu Sans) and falls back to its built-in Montserrat without accents.
+**Requirements**
+
+* A **MeshCore companion radio board** with the *companion radio, USB* firmware, plugged into the deck's USB port. Some
+  features need a newer firmware (path hash size needs firmware level 10 and up, repeat level 9 and up; statistics, discover and
+  factory reset need their commands); without them the row says "Firmware too old for this feature".
+* A Bluetooth keyboard for all text (no on-screen keyboard). US layout (QWERTY) by default, AZERTY when `MESHHOP_KEYMAP=fr` or
+  `XKBLAYOUT="fr"` is in `/etc/default/keyboard`.
+* A launcher with **full-screen app support** (`X-Fullscreen=true` in the `.desktop` file).
+* The user must be in the `dialout` group (the Raspberry Pi OS default user is).
+* `curl` (the package depends on it; the radio preset list is downloaded by `/usr/bin/curl`; without it the app keeps the saved
+  or built-in list) and `libfreetype6`.
+
+**Install the local `.deb`** (until the app is published). On a PC with this repository:
+
+```
+python tools/make_registry.py --only mesh-hop --out <a folder outside packages/>
+```
+
+Copy the `mesh-hop_0.2.2_arm64.deb` it writes to the deck and, on the deck:
+
+```
+sudo apt install ./mesh-hop_0.2.2_arm64.deb
+```
+
+(`apt` pulls `curl` and `libfreetype6` if missing.) The tile "Mesh Hop" appears in the launcher. Remove it with
+`sudo apt remove mesh-hop`.
+
+The board is found by itself (`/dev/ttyACM*`, `/dev/ttyUSB*`, by USB id); to force a port put its path in
+`~/.local/share/mesh-hop/port` or start the app with `MESHHOP_PORT=/dev/...`. Fonts: the app reads the fonts the launcher
+installs in `/usr/share/APPLaunch/share/font` (Montserrat, Font Awesome, DejaVu Sans) and falls back to its built-in
+Montserrat without accents.
+
+## Reboot and factory reset: read this
+
+Settings > **Reboot the board** restarts it and erases nothing. Settings > **Factory reset the board** **erases the board's keys
+(its identity), contacts and channels**; it asks two Yes / No questions and the Yes of the second waits 3 s. The board then
+has a new identity: to the mesh it is a new node. Do not use it on the board you rely on unless you mean it.
+Settings > History > **Forget this board's data**, **Other boards' data** and the *Delete* rows remove the deck's saved copy
+of messages, groups and flags; each asks first.
+
+## Files the app keeps
+
+All in `~/.local/share/mesh-hop`. The log holds no message text.
+
+| Path | What |
+| --- | --- |
+| `boards/<first 12 hex digits of the board key>/` | per board: `messages.jsonl` (history), `read.txt` (read marks), `contacts.jsonl` and `channels.jsonl` (caches), `groups.jsonl` (and `groups.bak`), `prefs.txt` (mute flags, ignored nodes, advert schedule) |
+| `prefs.txt` | global: the direct message retry settings |
+| `presets.jsonl` | the last good copy of the radio preset list |
+| `port` | optional: the serial port to use |
+| `mesh-hop.log` | debug log, size bounded |
+| `*.pre-boards.bak` | the originals of the files of 0.2.1 and before, kept after they moved into the first board's folder |
+
+## Known limits
+
+* **Not published**: not in `registry.json`, not installable from Settings > Apps; a local `.deb` only.
+* The **Map** and **Terminal** tabs are placeholders (no map tiles, no command line yet).
+* **USB only**: no Bluetooth LE connection to the board yet (planned; the deck's Bluetooth is also used by the keyboard).
+* A **channel message has no delivery acknowledgement** in MeshCore: it ends at "sent" (or "sent (unconfirmed)" if the board does
+  not answer within 5 s), never "delivered". Direct messages do get "delivered" or "no ack".
+* "Heard by N repeaters" for a sent message is not shown yet.
+* The scheduled advert runs only while the app runs and the board is connected (the board has no advert timer of its own).
+* The deck keeps 200 messages per conversation and 1500 per board.
+* The screenshots on this page come from the simulator, not from the panel.
+
+## Credits and licences
+
+Mesh Hop is MIT (see the `copyright` file of the package).
+
+* **MeshCore** firmware and protocol: Scott Powell / rippleradios.com, MIT, <https://github.com/meshcore-dev/MeshCore>.
+* **meshcore_py** (Florent de Lamotte, MIT, <https://github.com/meshcore-dev/meshcore_py>) was the reference of the wire
+  format; the protocol code was written from the protocol documentation and from it. The radio presets come from the public list
+  of `api.meshcore.nz`.
+* **MeshCore Open** (MIT), **meshcore-gui** (MIT), **wadamesh** (GPL-3.0) and **Meshy** (GPL-3.0-or-later) were looked at as
+  feature references only. **No code was copied from the GPL projects.**
+* **LVGL** (MIT), **FreeType** (FreeType License or GPL-2, the system `libfreetype6`) and the status bar renderer of the
+  M5CardputerZero launcher (`cp0_statusbar`, M5Stack, MIT). The launcher's fonts are read at run time (Montserrat, Font Awesome
+  Free, DejaVu Sans: SIL OFL 1.1, CC BY 4.0 for the icons, Bitstream Vera / DejaVu licence); they are not in the package.
 
 ## Build and test
 
