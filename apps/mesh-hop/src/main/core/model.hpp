@@ -126,6 +126,7 @@ public:
     virtual void channels_changed() = 0;
     virtual void read_changed() = 0;
     virtual void prefs_changed() {}          // muted conversations, retry settings
+    virtual void messages_removed() {}       // messages were deleted (a conversation, everything, or the old ones): rewrite the history
 };
 
 class Model {
@@ -199,7 +200,11 @@ public:
     int unread_raw(const std::string &conv) const;                // the count whatever the mute flag says
     int unread_total() const;                                     // muted conversations are not counted
     void mark_read(const std::string &conv);
-    void load_read(const std::string &conv, uint32_t last_read_seq) { read_[conv] = last_read_seq; }
+    void load_read(const std::string &conv, uint32_t last_read_seq)
+    {
+        read_[conv] = last_read_seq;
+        if (last_read_seq >= next_seq_) next_seq_ = last_read_seq + 1;      // a deleted message must not let its number be reused
+    }
     const std::map<std::string, uint32_t> &read_marks() const { return read_; }
     uint32_t next_seq() const { return next_seq_; }
     size_t message_count() const { return messages_.size(); }
@@ -213,6 +218,16 @@ public:
     void set_retry(RetrySettings r);
     void load_retry(RetrySettings r) { retry_ = normalize_retry(r); }
     const std::vector<Message> &all_messages() const { return messages_; }
+
+    // ---- deleting history (phase 1b). Contacts, channels, settings, mute flags and the board are never touched.
+    size_t message_count_in(const std::string &conv) const;
+    /* All messages of one conversation and its read mark. Returns how many were removed. */
+    size_t delete_conversation(const std::string &conv);
+    /* Every message of every conversation (read marks cleared). */
+    size_t delete_all_messages();
+    /* Messages with a plausible time before `cutoff` (a UNIX time). A message whose time is unknown (clock was not set) is kept. */
+    size_t count_older_than(uint32_t cutoff) const;
+    size_t delete_older_than(uint32_t cutoff);
 
 private:
     void trim(const std::string &conv);

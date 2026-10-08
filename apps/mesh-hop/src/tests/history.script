@@ -1,0 +1,163 @@
+# Mesh Hop 0.1.2: options of a conversation (Ctrl+O and the 3 s hold), mute a contact, delete a conversation, delete by age, delete all.
+# Run with a seeded history (see history_run.sh): 10 messages, from 100 days to 1 hour old, in Public, #test, Alice and Bob.
+wait 3500
+say == start (expect all_msgs=12: the 10 seeded messages and 2 from the simulator, conv=c:0)
+dump
+shot h01-chats
+
+# Alice (first direct row), Ctrl+O: the options box
+tap 100 262
+wait 300
+say == Alice open (expect conv_title='Alice')
+dump
+key ctrl-o
+wait 400
+say == options box of a direct chat (expect popup=menu popup_title='Alice')
+dump
+shot h02-options-direct
+# Esc closes the box
+key esc
+wait 300
+say == Esc closes the box and does not leave Chats (expect popup=none tab=Chats)
+dump
+
+# mute the contact from the box
+key ctrl-o
+wait 400
+key enter
+wait 400
+say == muted (expect muted_conv=1 notice 'muted')
+dump
+shot h03-contact-muted
+key ctrl-o
+wait 400
+say == the box now offers Unmute (see screenshot)
+shot h04-options-unmute
+key esc
+wait 300
+# unmute by tapping the first item
+key ctrl-o
+wait 400
+tap 320 216
+wait 400
+say == unmuted by touch (expect muted_conv=0)
+dump
+
+# delete the conversation with Alice: No first, then Yes
+key ctrl-o
+wait 400
+key down
+key enter
+wait 500
+say == delete confirmation names the count (expect popup=confirm popup_title='Delete conversation?')
+dump
+shot h05-delete-conversation-confirm
+key esc
+wait 300
+say == No (Esc): nothing deleted (expect all_msgs=12 conv_title='Alice')
+dump
+key ctrl-o
+wait 400
+key down
+key enter
+wait 500
+type y
+wait 500
+say == deleted: Alice leaves the left pane, her 4 messages are gone (expect all_msgs=8 chat_rows=6 contacts=4 notice 'Deleted 4 messages')
+dump
+shot h06-after-delete
+
+# a long press on the Bob row (3 s) with its progress cue, then the options box
+hold 100 262 1700 h07-hold-progress
+wait 300
+say == the hold was released early: no box (expect popup=none)
+dump
+hold 100 262 3400 h08-hold-fired
+wait 300
+say == the 3 s hold opened the options of Bob (expect popup=menu popup_title='Bob')
+dump
+key esc
+wait 300
+say == no tap was triggered by the release (expect popup=none)
+dump
+
+# the same on a channel row (#test) and on the name in the header
+hold 100 148 3400 h09-hold-channel
+wait 300
+say == options of a channel (expect popup=menu popup_title='#test')
+dump
+shot h10-options-channel
+key down
+key enter
+wait 500
+say == delete the channel messages (expect popup=confirm popup_title='Delete messages?')
+dump
+shot h11-delete-messages-confirm
+type y
+wait 500
+say == #test cleared and still listed (expect all_msgs=6 chat_rows=6 notice 'Deleted 2 messages')
+dump
+hold 300 70 3400 h12-hold-title
+wait 300
+say == the header name opens the options of the open conversation (expect popup=menu)
+dump
+key esc
+wait 300
+
+# Settings > History
+key tab
+key tab
+key tab
+key tab
+wait 300
+key end
+key up
+key up
+wait 300
+shot h13-settings-history
+key enter
+wait 400
+say == the arrow choice: 30 days (expect popup=choice popup_value='30 days')
+dump
+shot h14-days-choice
+key left
+key enter
+wait 500
+say == 7 days: 4 messages are older (expect popup=confirm popup_title='Delete old messages?')
+dump
+shot h15-older-confirm
+key esc
+wait 300
+say == No: nothing deleted (expect all_msgs=6)
+dump
+key enter
+wait 400
+key left
+key enter
+wait 500
+type y
+wait 500
+say == the 4 old messages are gone, the 2 recent ones stay (expect all_msgs=2 notice 'Deleted 4 messages')
+dump
+key enter
+wait 400
+key enter
+wait 500
+say == nothing older any more: only a notice (expect popup=none notice 'No message is older than 7 days')
+dump
+key up
+key enter
+wait 500
+say == delete everything asks first with the count (expect popup=confirm popup_title='Delete all messages?')
+dump
+shot h16-delete-all-confirm
+type y
+wait 600
+say == all gone (expect all_msgs=0 notice 'Deleted 2 messages')
+dump
+shot h17-all-deleted
+key tab
+wait 300
+say == chats after the deletion: the channels and the add row stay, no direct row (expect tab=Chats chat_rows=4)
+dump
+shot h18-chats-empty

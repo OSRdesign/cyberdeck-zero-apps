@@ -23,7 +23,7 @@ namespace meshhop {
 
 namespace {
 
-constexpr const char *kVersion = "0.1.1";
+constexpr const char *kVersion = "0.1.2";
 
 // ---- the colours of the launcher and of MeshZero 0.1.0
 constexpr uint32_t kBackground = 0x101214;
@@ -71,6 +71,7 @@ enum Tag {
     kTagAgeChip = 50,      // 50..53
     kTagPopLeft = 60, kTagPopRight, kTagPopOk, kTagPopCancel, kTagPopYes, kTagPopNo,
     kTagPopItem = 70,      // 70..79
+    kTagTitleHold = 80,    // the title of the open conversation (hold 3 s: options)
 };
 
 App *g_app = nullptr;
@@ -136,12 +137,37 @@ void trampoline_button(lv_event_t *e)
 void trampoline_row(lv_event_t *e)
 {
     if (!g_app) return;
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    const lv_event_code_t code = lv_event_get_code(e);
     lv_obj_t *target = lv_event_get_target_obj(e);
     auto *list = static_cast<RowList *>(lv_event_get_user_data(e));
+    const int index = static_cast<int>(reinterpret_cast<intptr_t>(lv_obj_get_user_data(target)));
     lv_point_t p = {0, 0};
     if (lv_indev_t *indev = lv_event_get_indev(e)) lv_indev_get_point(indev, &p);
-    g_app->row_clicked(list, static_cast<int>(reinterpret_cast<intptr_t>(lv_obj_get_user_data(target))), p.x);
+    switch (code) {
+    case LV_EVENT_CLICKED: g_app->row_clicked(list, index, p.x); break;
+    case LV_EVENT_PRESSED: g_app->hold_event(0, list, index, p.x, p.y); break;
+    case LV_EVENT_PRESSING: g_app->hold_event(1, list, index, p.x, p.y); break;
+    case LV_EVENT_RELEASED:
+    case LV_EVENT_PRESS_LOST: g_app->hold_event(2, list, index, p.x, p.y); break;
+    default: break;
+    }
+}
+
+/* the title of the open conversation: a tap does nothing, a 3 s hold opens the options */
+void trampoline_title(lv_event_t *e)
+{
+    if (!g_app) return;
+    const lv_event_code_t code = lv_event_get_code(e);
+    lv_point_t p = {0, 0};
+    if (lv_indev_t *indev = lv_event_get_indev(e)) lv_indev_get_point(indev, &p);
+    switch (code) {
+    case LV_EVENT_CLICKED: g_app->button_clicked(kTagTitleHold); break;
+    case LV_EVENT_PRESSED: g_app->hold_event(0, nullptr, 0, p.x, p.y); break;
+    case LV_EVENT_PRESSING: g_app->hold_event(1, nullptr, 0, p.x, p.y); break;
+    case LV_EVENT_RELEASED:
+    case LV_EVENT_PRESS_LOST: g_app->hold_event(2, nullptr, 0, p.x, p.y); break;
+    default: break;
+    }
 }
 
 void trampoline_scroll(lv_event_t *e)
@@ -191,7 +217,8 @@ void RowList::create(lv_obj_t *parent, int x, int y, int w, int h, const Config 
         lv_obj_set_style_bg_color(s.row, lv_color_hex(kPressed), LV_STATE_PRESSED);
         lv_obj_set_style_border_side(s.row, LV_BORDER_SIDE_BOTTOM, 0);
         lv_obj_set_style_border_color(s.row, lv_color_hex(0x1E2226), 0);
-        lv_obj_add_event_cb(s.row, trampoline_row, LV_EVENT_CLICKED, this);
+        for (lv_event_code_t code : {LV_EVENT_CLICKED, LV_EVENT_PRESSED, LV_EVENT_PRESSING, LV_EVENT_RELEASED, LV_EVENT_PRESS_LOST})
+            lv_obj_add_event_cb(s.row, trampoline_row, code, this);
         for (int k = 0; k < cfg.max_boxes; ++k) {
             lv_obj_t *b = make_box(s.row, 0, 0, 10, 10);
             lv_obj_set_style_radius(b, 6, 0);
@@ -467,6 +494,18 @@ App::App(Platform &plat) : plat_(plat), serial_(Store::default_dir())
     store_->attach(model_);
     log_ = std::make_unique<FileLog>(store_->dir() + "/mesh-hop.log");
     log_->line(std::string("mesh-hop ") + kVersion + " started");
+    {   // the radio preset list: the saved copy of the last successful download, else the list built into the app
+        std::vector<RadioPreset> saved;
+        std::string date, src;
+        if (load_preset_cache(store_->dir(), saved, date, src)) {
+            set_presets(std::move(saved), PresetOrigin::Cached, date);
+            log_->line("presets: using the saved copy (" + date + ", " + std::to_string(radio_presets().size()) + " entries)");
+        } else {
+            const bool had_file = ::access((store_->dir() + "/presets.jsonl").c_str(), F_OK) == 0;
+            log_->line(std::string("presets: ") + (had_file ? "the saved copy is damaged, " : "") + "using the list built into the app (" + presets_date() + ")");
+        }
+        fetcher_ = std::make_unique<PresetFetcher>(store_->dir());
+    }
     client_ = std::make_unique<Client>(serial_, model_);
     client_->set_log([this](const std::string &s) { if (log_) log_->line(s); });
     if (const char *d = std::getenv("MESHHOP_DEBUG"); d && *d && *d != '0') client_->options().log_frames = true;
@@ -598,6 +637,12 @@ void App::build_chats()
     chat_info_ = make_label(p, f_small_, kMuted, rx + 250, 12, 170, 20, LV_TEXT_ALIGN_RIGHT);
     mute_btn_ = make_button(p, 640 - 104, 4, 98, 36, "Mute", kTagMuteChan, &mute_label_);
     set_hidden(mute_btn_, true);
+    // the name of the open conversation: hold it for 3 s to open the options (a tap does nothing)
+    title_hold_ = make_box(p, rx, 0, 240, 44);
+    lv_obj_add_flag(title_hold_, LV_OBJ_FLAG_CLICKABLE);
+    for (lv_event_code_t code : {LV_EVENT_CLICKED, LV_EVENT_PRESSED, LV_EVENT_PRESSING, LV_EVENT_RELEASED, LV_EVENT_PRESS_LOST})
+        lv_obj_add_event_cb(title_hold_, trampoline_title, code, nullptr);
+    set_hidden(title_hold_, true);
     lv_obj_t *line = make_box(p, rx, 44, 640 - rx, 1);
     lv_obj_set_style_bg_color(line, lv_color_hex(kSelected), 0);
     lv_obj_set_style_bg_opa(line, LV_OPA_COVER, 0);
@@ -741,6 +786,27 @@ void App::build_footer()
     foot_dot_ = make_box(f, 620, 8, 9, 9);
     lv_obj_set_style_radius(foot_dot_, 5, 0);
     lv_obj_set_style_bg_opa(foot_dot_, LV_OPA_COVER, 0);
+
+    // the cue of a touch held on a conversation name: a bar that fills over 3 s (never clickable: it must not take the touch)
+    hold_box_ = make_box(screen_, 215, kPageY + 286, 420, 56);
+    lv_obj_remove_flag(hold_box_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_color(hold_box_, lv_color_hex(kPanel), 0);
+    lv_obj_set_style_bg_opa(hold_box_, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(hold_box_, 8, 0);
+    lv_obj_set_style_border_width(hold_box_, 2, 0);
+    lv_obj_set_style_border_color(hold_box_, lv_color_hex(kGold), 0);
+    hold_label_ = make_label(hold_box_, f_small_, kText, 12, 8, 392, 18, LV_TEXT_ALIGN_CENTER);
+    lv_obj_t *track = make_box(hold_box_, 12, 34, 392, 10);
+    lv_obj_remove_flag(track, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_color(track, lv_color_hex(kSelected), 0);
+    lv_obj_set_style_bg_opa(track, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(track, 5, 0);
+    hold_bar_ = make_box(track, 0, 0, 1, 10);
+    lv_obj_remove_flag(hold_bar_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_color(hold_bar_, lv_color_hex(kGold), 0);
+    lv_obj_set_style_bg_opa(hold_bar_, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(hold_bar_, 5, 0);
+    set_hidden(hold_box_, true);
 }
 
 void App::build_editor()
@@ -843,7 +909,10 @@ std::string App::debug_state() const
                     " detail_name='" + (nav_.detail_open && model_.find_contact(detail_key_) ? model_.find_contact(detail_key_)->c.name : std::string()) + "'" +
                     " last_status='" + last_status + "'" +
                     " retry=" + std::to_string(model_.retry().attempts) + "/" + std::to_string(model_.retry().reset_after) +
-                    " live_rows=" + std::to_string(contact_list_.bound_rows()) + " notice='" + notice_text_ + "'";
+                    " live_rows=" + std::to_string(contact_list_.bound_rows()) + " notice='" + notice_text_ + "'" +
+                    " presets=" + (presets_origin() == PresetOrigin::Fetched ? "fetched" : presets_origin() == PresetOrigin::Cached ? "cached" : "bundled") + "/" +
+                    std::to_string(radio_presets().size()) + "/" + presets_list_date() + " all_msgs=" + std::to_string(model_.message_count()) +
+                    " popup_title='" + (pop_.kind == Popup::None ? std::string() : pop_.title) + "'" + " muted_conv=" + (conv_.empty() ? "-" : model_.is_muted(conv_) ? "1" : "0");
     return s;
 }
 
@@ -906,6 +975,212 @@ void App::toggle_mute(const std::string &conv)
     notice(model_.conv_title(conv) + (now_muted ? " muted: no unread count" : " unmuted"), true);
 }
 
+/* ---- options of a conversation, deleting history (phase 1b) */
+
+void App::open_conversation_options(const std::string &conv)
+{
+    if (conv.size() < 3 || editor_open_ || nav_.popup_open) return;
+    if (conv.rfind("c:", 0) == 0) {
+        const ChannelRec *c = model_.find_channel(std::atoi(conv.c_str() + 2));
+        if (!c || c->empty) return;
+    } else if (conv.rfind("d:", 0) != 0) {
+        return;
+    }
+    const ConvOptions o = conversation_options(model_, conv);
+    open_menu(o.title, o.labels, [this, conv, o](int i) {
+        if (i < 0 || i >= static_cast<int>(o.actions.size())) return;
+        switch (o.actions[static_cast<size_t>(i)]) {
+        case ConvAction::Mute:
+        case ConvAction::Unmute: toggle_mute(conv); break;
+        case ConvAction::DeleteConversation:
+        case ConvAction::DeleteMessages: confirm_delete_conversation(conv); break;
+        }
+    });
+}
+
+void App::after_deletion()
+{
+    // a direct conversation without messages leaves the left pane (it was only listed while open); a channel stays
+    if (conv_.rfind("d:", 0) == 0 && model_.message_count_in(conv_) == 0) {
+        if (chat_sel_key_ == conv_) chat_sel_key_.clear();
+        conv_.clear();
+        nav_.compose_focus = false;
+        lv_textarea_set_text(compose_, "");
+    }
+    built_conv_.clear();
+    built_sig_ = 0;
+    chat_sig_ = 0;
+    invalidate();
+}
+
+void App::confirm_delete_conversation(const std::string &conv)
+{
+    const DeletePrompt p = delete_conversation_prompt(model_, conv);
+    if (p.empty) {
+        notice("No messages to delete in " + truncate_ellipsis(model_.conv_title(conv), 24), true);
+        return;
+    }
+    open_confirm(p.title, p.body,
+                 [this, conv] {
+                     const size_t n = model_.delete_conversation(conv);
+                     if (log_) log_->line("history: deleted " + std::to_string(n) + " messages of " + conv);
+                     after_deletion();
+                     notice("Deleted " + fmt_message_count(n), true);
+                 },
+                 "Delete");
+}
+
+void App::confirm_delete_all()
+{
+    const DeletePrompt p = delete_all_prompt(model_);
+    if (p.empty) {
+        notice("There are no messages to delete", true);
+        return;
+    }
+    open_confirm(p.title, p.body,
+                 [this] {
+                     const size_t n = model_.delete_all_messages();
+                     if (log_) log_->line("history: deleted all " + std::to_string(n) + " messages");
+                     after_deletion();
+                     notice("Deleted " + fmt_message_count(n), true);
+                 },
+                 "Delete all");
+}
+
+void App::choose_delete_older()
+{
+    Popup p;
+    p.kind = Popup::Choice;
+    p.choice = make_days_choice(days_choice_);
+    p.title = p.choice.title;
+    p.on_accept = [this](int idx) {
+        const auto &opts = history_day_options();
+        if (idx < 0 || idx >= static_cast<int>(opts.size())) return;
+        days_choice_ = opts[static_cast<size_t>(idx)];
+        confirm_delete_older(days_choice_);
+    };
+    popup_begin(std::move(p));
+}
+
+void App::confirm_delete_older(int days)
+{
+    if (history_cutoff(now_unix(), days) == 0) {
+        notice("The clock is not set: the age of the messages is unknown", false);
+        return;
+    }
+    const DeletePrompt p = delete_older_prompt(model_, days, now_unix());
+    if (p.empty) {
+        notice("No message is older than " + std::to_string(days) + " days", true);
+        return;
+    }
+    open_confirm(p.title, p.body,
+                 [this, days] {
+                     const size_t n = model_.delete_older_than(history_cutoff(now_unix(), days));
+                     if (log_) log_->line("history: deleted " + std::to_string(n) + " messages older than " + std::to_string(days) + " days");
+                     after_deletion();
+                     notice("Deleted " + fmt_message_count(n), true);
+                 },
+                 "Delete");
+}
+
+void App::hold_event(int what, RowList *list, int index, int x, int y)
+{
+    if (what == 1) {
+        hold_.move(x, y);
+        return;
+    }
+    if (what == 2) {
+        hold_.cancel();
+        return;
+    }
+    // pressed: is this a name that has options?
+    std::string target;
+    if (list == &chat_list_) {
+        const std::string &id = chat_list_.id_at(index);
+        if (id.rfind("c:", 0) == 0 || id.rfind("d:", 0) == 0) target = id;
+    } else if (list == nullptr) {
+        const bool add_selected = chat_sel_ >= 0 && chat_sel_ < static_cast<int>(chat_rows_.size()) &&
+                                  chat_rows_[static_cast<size_t>(chat_sel_)].kind == ChatRow::Add;
+        if (!add_selected && (conv_.rfind("c:", 0) == 0 || conv_.rfind("d:", 0) == 0)) target = conv_;
+    }
+    if (target.empty() || nav_.popup_open || editor_open_ || view_pending_ || nav_.tab != Tab::Chats) {
+        hold_.cancel();
+        hold_.take_swallow();
+        return;
+    }
+    hold_scroll_y_ = lv_obj_get_scroll_y(chat_list_.obj());
+    hold_.begin(target, x, y, mono_ms());
+}
+
+void App::hold_tick(uint64_t now)
+{
+    if (!hold_.active()) {
+        if (hold_box_ && !lv_obj_has_flag(hold_box_, LV_OBJ_FLAG_HIDDEN)) set_hidden(hold_box_, true);
+        return;
+    }
+    if (nav_.popup_open || editor_open_ || nav_.tab != Tab::Chats || lv_obj_get_scroll_y(chat_list_.obj()) != hold_scroll_y_) {
+        hold_.cancel();                                  // a scroll of the list, or something else took over
+        set_hidden(hold_box_, true);
+        return;
+    }
+    if (hold_.poll(now)) {
+        set_hidden(hold_box_, true);
+        open_conversation_options(hold_.target());
+        return;
+    }
+    if (hold_.visible(now)) {
+        lv_label_set_text(hold_label_, ("Keep holding: options for " + truncate_ellipsis(model_.conv_title(hold_.target()), 26)).c_str());
+        lv_obj_set_width(hold_bar_, std::max(1, static_cast<int>(hold_.progress(now) * 392)));
+        set_hidden(hold_box_, false);
+    }
+}
+
+void App::presets_tick(uint64_t now)
+{
+    // a list fetched in the background is adopted only while no popup is open (the preset popup holds indexes into the list)
+    if (preset_pending_ready_ && !nav_.popup_open) {
+        preset_pending_ready_ = false;
+        const bool changed = preset_pending_.size() != radio_presets().size() ||
+                             !std::equal(preset_pending_.begin(), preset_pending_.end(), radio_presets().begin(), [](const RadioPreset &a, const RadioPreset &b) {
+                                 return a.name == b.name && a.freq_mhz == b.freq_mhz && a.bw_khz == b.bw_khz && a.sf == b.sf && a.cr == b.cr;
+                             });
+        set_presets(std::move(preset_pending_), PresetOrigin::Fetched, preset_pending_date_);
+        preset_pending_.clear();
+        if (changed) notice("Radio preset list updated (" + std::to_string(radio_presets().size()) + " entries)", true);
+        invalidate();
+    }
+    if (!fetcher_) return;
+    if (fetcher_->state() == PresetFetcher::State::Running) {
+        if (now - preset_poll_ms_ < 250) return;
+        preset_poll_ms_ = now;
+        const PresetFetcher::State st = fetcher_->poll(now);
+        if (st == PresetFetcher::State::Done) {
+            std::string date = fetch_date_text(deck_unix());
+            if (date.empty()) date = "unknown";
+            if (log_) log_->line("presets: fetched " + fetcher_->message() + " from " + fetcher_->url());
+            if (!save_preset_cache(store_->dir(), fetcher_->list(), date, fetcher_->url()) && log_) log_->line("presets: the saved copy could not be written");
+            preset_pending_ = fetcher_->list();
+            preset_pending_date_ = date;
+            preset_pending_ready_ = true;
+        } else if (st == PresetFetcher::State::Failed) {
+            if (log_) log_->line("presets: refresh failed (" + fetcher_->message() + "), keeping the " +
+                                 (presets_origin() == PresetOrigin::Bundled ? "built-in" : "saved") + " list");
+        }
+        return;
+    }
+    if (preset_tried_ || now - start_ms_ < 4000) return;      // let the screen settle first; one download per launch
+    if (preset_check_ms_ != 0 && now - preset_check_ms_ < 30000) return;
+    const bool first_check = preset_check_ms_ == 0;
+    preset_check_ms_ = now;
+    if (!network_online()) {
+        if (first_check && log_) log_->line("presets: the deck is offline, no refresh (checking again every 30 s)");
+        return;
+    }
+    preset_tried_ = true;
+    if (log_) log_->line("presets: online, downloading the list in the background");
+    if (!fetcher_->start(now) && log_) log_->line("presets: refresh not started (" + fetcher_->message() + ")");
+}
+
 /* ================================================================== tick and render */
 
 void App::tick()
@@ -922,6 +1197,8 @@ void App::tick()
         set_hidden(pop_overlay_, pop_.kind == Popup::None);
     }
     if (view_pending_ && now - view_ms_ >= loading_min_ms()) apply_contact_view();
+    hold_tick(now);
+    presets_tick(now);
     if (share_pending_) {                               // a new private channel: show its key once the board holds it
         const ChannelRec *c = model_.find_channel_by_name(share_name_);
         if (c && c->has_secret && c->secret == share_key_) {
@@ -1088,6 +1365,7 @@ void App::render_chats()
     else title = "No conversation";
     const bool is_channel = conv_.rfind("c:", 0) == 0 && !add_selected;
     set_hidden(mute_btn_, !is_channel);
+    set_hidden(title_hold_, add_selected || conv_.empty());
     lv_label_set_text(mute_label_, is_channel && model_.is_muted(conv_) ? "Unmute" : "Mute");
     lv_obj_set_width(chat_title_, is_channel ? 190 : 290);
     lv_label_set_text(chat_title_, truncate_ellipsis(title, is_channel ? 17 : 30).c_str());
@@ -1096,7 +1374,7 @@ void App::render_chats()
         const char *cur = lv_textarea_get_text(compose_);
         const int left = max_compose_bytes() - static_cast<int>(cur ? std::strlen(cur) : 0);
         info = std::to_string(std::max(0, left)) + " left";
-    } else if (is_channel && model_.is_muted(conv_)) {
+    } else if (!add_selected && !conv_.empty() && model_.is_muted(conv_)) {
         info = "muted";
     } else {
         int heard = 0;
@@ -1355,7 +1633,7 @@ void App::render_settings()
     std::vector<RowSpec> specs;
     auto id_of = [&](size_t i) { return std::to_string(i); };
     auto header = [&](int section) {
-        static const char *const titles[6] = {"BOARD", "RADIO", "DIRECT MESSAGES", "CLOCK", "CHANNELS", "RADIO CHANGES"};
+        static const char *const titles[7] = {"BOARD", "RADIO", "DIRECT MESSAGES", "CLOCK", "CHANNELS", "RADIO CHANGES", "HISTORY"};
         RowSpec s;
         s.h = 28;
         s.header = true;
@@ -1468,6 +1746,13 @@ void App::render_settings()
         case SRowKind::AddChannel: s = row("+ Add channel", "hashtag or private", kMuted, kBlue, true, false); break;
         case SRowKind::AddPublic: s = row("Add the Public channel", "slot 0 is empty", kMuted, kText, false, false); break;
         case SRowKind::ChannelsNotice: s = info("Channels", "Firmware too old for this feature", kGold); break;
+        case SRowKind::HistoryAll: {
+            const size_t n = model_.message_count();
+            s = row("Delete all messages", fmt_message_count(n), n ? kText : kMuted, kText, true, false);
+            break;
+        }
+        case SRowKind::HistoryOlder: s = row("Delete older than", "7, 30 or 90 days", kMuted, kText, true, false); break;
+        case SRowKind::HistoryNote: s = info("One conversation", "Chats: hold its name 3 s, or Ctrl+O", kMuted); break;
         case SRowKind::Undo:
             s = row("Undo changes", dirty_radio_ ? "discard the unsaved edits" : "no changes", kMuted, dirty_radio_ ? kText : kMuted, false, false);
             break;
@@ -1517,8 +1802,8 @@ void App::render_footer()
     } else {
         switch (nav_.tab) {
         case Tab::Chats:
-            left = nav_.compose_focus ? "Enter: send   Esc: list   Up/Down: scroll   Tab: tabs"
-                                      : "Up/Down: select   Enter: write   Ctrl+M: mute";
+            left = nav_.compose_focus ? "Enter: send  Esc: list  Up/Down: scroll  Ctrl+O: options"
+                                      : "Up/Down: select  Enter: write  Ctrl+O: options";
             break;
         case Tab::Contacts:
             left = nav_.detail_open ? "Enter: message   Esc: back" : "Enter: open   S: sort   T/H: filter   A: advert";
@@ -1663,7 +1948,7 @@ void App::popup_build()
         lv_label_set_text(body, pop_.body.c_str());
         pop_no_ = make_button(pop_panel_, 30, 194, 200, 56, pop_.no_text.c_str(), kTagPopNo);
         pop_yes_ = make_button(pop_panel_, 290, 194, 200, 56, pop_.yes_text.c_str(), kTagPopYes);
-        lv_obj_set_style_bg_color(pop_yes_, lv_color_hex(pop_.yes_text == "Remove" ? kDangerRed : kOkGreen), 0);
+        lv_obj_set_style_bg_color(pop_yes_, lv_color_hex(pop_.yes_text == "Remove" || pop_.yes_text.rfind("Delete", 0) == 0 ? kDangerRed : kOkGreen), 0);
         break;
     }
     case Popup::Menu: {
@@ -2128,9 +2413,10 @@ void App::channel_menu(int idx)
     const ChannelRec *c = model_.find_channel(idx);
     if (!c || c->empty) return;
     const bool muted = model_.is_muted(Model::conv_channel(idx));
-    open_menu(truncate_ellipsis(c->name, 24), {muted ? "Unmute" : "Mute", "Show the key", "Remove"}, [this, idx](int i) {
+    open_menu(truncate_ellipsis(c->name, 24), {muted ? "Unmute" : "Mute", "Show the key", "Delete messages", "Remove"}, [this, idx](int i) {
         if (i == 0) toggle_mute(Model::conv_channel(idx));
         else if (i == 1) show_channel_key(idx);
+        else if (i == 2) confirm_delete_conversation(Model::conv_channel(idx));
         else confirm_remove_channel(idx);
     });
 }
@@ -2172,6 +2458,9 @@ void App::settings_activate(int index, int x)
     }
     case SRowKind::AddChannel: add_channel_menu(); break;
     case SRowKind::AddPublic: client_->add_public_channel(); break;
+    case SRowKind::HistoryAll: confirm_delete_all(); break;
+    case SRowKind::HistoryOlder: choose_delete_older(); break;
+    case SRowKind::HistoryNote: break;
     case SRowKind::Undo: request_undo(); break;
     case SRowKind::Save: request_save(); break;
     }
@@ -2221,6 +2510,7 @@ void App::button_clicked(int tag)
     case kTagMuteChan:
         if (conv_.rfind("c:", 0) == 0) toggle_mute(conv_);
         break;
+    case kTagTitleHold: hold_.take_swallow(); break;       // a tap on the name does nothing
     case kTagAdvertFlood: client_->send_advert(true); break;
     case kTagAdvertZero: client_->send_advert(false); break;
     case kTagRefresh: client_->refresh_contacts(); break;
@@ -2250,6 +2540,7 @@ void App::row_clicked(RowList *list, int index, int x)
 {
     if (mono_ms() - start_ms_ < kStartGuardMs || editor_open_ || nav_.popup_open || view_pending_) return;
     if (list == &chat_list_) {
+        if (hold_.take_swallow()) return;                 // the release of a completed 3 s hold is not a tap
         select_chat_row(index);
         nav_.compose_focus = false;
         if (index >= 0 && index < static_cast<int>(chat_rows_.size()) && chat_rows_[static_cast<size_t>(index)].kind == ChatRow::Add) add_channel_menu();
@@ -2313,7 +2604,14 @@ void App::key_chats(const KeyEvent &e)
                               chat_rows_[static_cast<size_t>(chat_sel_)].kind == ChatRow::Add;
     // Ctrl+M mutes / unmutes the channel (plain letters start a message, so the shortcut needs Ctrl)
     if (e.key == Key::Char && e.ctrl && !e.alt && (e.text == "m" || e.text == "M")) {
-        if (!e.repeat && !add_selected && conv_.rfind("c:", 0) == 0) toggle_mute(conv_);
+        if (!e.repeat && !add_selected && !conv_.empty()) toggle_mute(conv_);
+        return;
+    }
+    // Ctrl+O opens the options of the conversation (mute, delete): the keyboard way of the 3 s hold on its name
+    if (e.key == Key::Char && e.ctrl && !e.alt && (e.text == "o" || e.text == "O")) {
+        if (e.repeat) return;
+        if (add_selected || conv_.empty()) notice("Select a conversation first", false);
+        else open_conversation_options(conv_);
         return;
     }
     if (nav_.compose_focus) {
@@ -2397,8 +2695,7 @@ void App::key_contacts(const KeyEvent &e)
 void App::key_settings(const KeyEvent &e)
 {
     std::vector<bool> ok;
-    for (const SRowSpec &r : srows_) ok.push_back(r.kind != SRowKind::Header && r.kind != SRowKind::Info && r.kind != SRowKind::GpsNotice &&
-                                                   r.kind != SRowKind::ChannelsNotice);
+    for (const SRowSpec &r : srows_) ok.push_back(settings_row_selectable(r.kind));
     switch (e.key) {
     case Key::Up:
     case Key::Down:

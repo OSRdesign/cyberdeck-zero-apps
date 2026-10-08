@@ -432,6 +432,11 @@ void Store::message_state(uint32_t seq, MsgState state, const std::string &note)
     append_line("messages.jsonl", line + "}\n");
 }
 
+void Store::messages_removed()
+{
+    compact();                                  // messages.jsonl is rewritten from what is left (an empty file when nothing is)
+}
+
 void Store::contacts_changed()
 {
     if (!model_) return;

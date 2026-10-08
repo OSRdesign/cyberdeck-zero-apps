@@ -7,7 +7,7 @@
  *   mesh-hop --headless [--script f] [--shot-dir d]  no panel, no input device: renders into memory and runs a script
  *
  * Script (one command per line, # starts a comment):
- *   wait <ms>   key <name>   type <text>   tap <x> <y>   drag <x1> <y1> <x2> <y2>   bench <key> <n>   shot <name>   dump   say <text>
+ *   wait <ms>   key <name>   type <text>   tap <x> <y>   hold <x> <y> <ms> [shot]   drag <x1> <y1> <x2> <y2>   bench <key> <n>   shot <name>   dump   say <text>
  *   key names: esc enter tab backtab up down left right pgup pgdn home end bksp del, ctrl-<letter>
  * The screenshots are PNG files in the --shot-dir; `dump` prints one line with the state of the app.
  */
@@ -122,6 +122,22 @@ int run_script(Platform &plat, App &app, const std::string &file, const std::str
             run_for(plat, app, 80);
             plat.inject_touch(false, x, y);
             run_for(plat, app, 80);
+        } else if (cmd == "hold") {
+            // hold <x> <y> <ms> [shot-name]: a finger kept down; with a name, a screenshot is taken at the end of the hold (before the release)
+            int x = 0, y = 0, ms = 0;
+            std::string shot;
+            ss >> x >> y >> ms >> shot;
+            plat.inject_touch(true, x, y);
+            if (shot.empty()) {
+                run_for(plat, app, static_cast<uint64_t>(ms));
+            } else {
+                run_for(plat, app, static_cast<uint64_t>(ms));
+                const std::string path = (shot_dir.empty() ? std::string(".") : shot_dir) + "/" + shot + ".png";
+                if (!plat.screenshot(path)) ++failures;
+                else std::printf("shot %s\n", path.c_str());
+            }
+            plat.inject_touch(false, x, y);
+            run_for(plat, app, 150);
         } else if (cmd == "drag") {
             int x1 = 0, y1 = 0, x2 = 0, y2 = 0;
             ss >> x1 >> y1 >> x2 >> y2;

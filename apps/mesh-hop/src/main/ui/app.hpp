@@ -13,6 +13,7 @@
 #include "log.hpp"
 #include "model.hpp"
 #include "platform.hpp"
+#include "preset_feed.hpp"
 #include "serial_transport.hpp"
 #include "store.hpp"
 #include "ui_logic.hpp"
@@ -115,6 +116,8 @@ public:
     // LVGL callbacks (public for the static trampolines)
     void button_clicked(int tag);
     void row_clicked(RowList *list, int index, int x);
+    /* A press on a name that can be held for 3 s (header title or a row of the chat list): what = 0 pressed, 1 moved, 2 ended. */
+    void hold_event(int what, RowList *list, int index, int x, int y);
 
 private:
     enum class EditKind { Name, Number, Channel, Clock, PrivName, PrivKey, RandName };
@@ -167,6 +170,14 @@ private:
     void select_chat_row(int index);
     void open_conversation(const std::string &conv, bool focus_compose);
     void toggle_mute(const std::string &conv);
+    void open_conversation_options(const std::string &conv);
+    void confirm_delete_conversation(const std::string &conv);
+    void confirm_delete_all();
+    void choose_delete_older();
+    void confirm_delete_older(int days);
+    void after_deletion();
+    void presets_tick(uint64_t now);
+    void hold_tick(uint64_t now);
     void send_message();
     void open_detail(const std::string &key_hex);
     void activate_contact(const std::string &key_hex);
@@ -226,6 +237,20 @@ private:
     meshzero::SerialTransport serial_;
     meshzero::DeckClockProbe deck_clock_;
     std::unique_ptr<meshzero::Client> client_;
+    std::unique_ptr<meshzero::PresetFetcher> fetcher_;
+
+    // the radio preset list refresh (A): one background download per launch, started once the deck is online
+    bool preset_tried_ = false;
+    uint64_t preset_check_ms_ = 0;
+    std::vector<meshzero::RadioPreset> preset_pending_;       // a fetched list waiting for the preset popup to be closed
+    bool preset_pending_ready_ = false;
+    std::string preset_pending_date_;
+
+    // a touch held on a name (B)
+    HoldTracker hold_;
+    int hold_scroll_y_ = 0;
+    uint64_t preset_poll_ms_ = 0;
+    int days_choice_ = 30;
 
     // fonts
     const lv_font_t *f_small_ = nullptr, *f_ui_ = nullptr, *f_big_ = nullptr;     // Montserrat 14 / 16 / 18
@@ -307,6 +332,7 @@ private:
     // chats
     RowList chat_list_;
     lv_obj_t *chat_title_ = nullptr, *chat_info_ = nullptr, *msgs_ = nullptr, *compose_ = nullptr;
+    lv_obj_t *title_hold_ = nullptr;
     lv_obj_t *send_btn_ = nullptr, *mute_btn_ = nullptr, *mute_label_ = nullptr, *send_label_ = nullptr;
     // contacts
     RowList contact_list_;
@@ -323,6 +349,7 @@ private:
     lv_obj_t *pop_overlay_ = nullptr, *pop_panel_ = nullptr;
     lv_obj_t *pop_value_ = nullptr, *pop_detail_ = nullptr, *pop_pos_ = nullptr, *pop_left_ = nullptr, *pop_right_ = nullptr;
     lv_obj_t *pop_yes_ = nullptr, *pop_no_ = nullptr;
+    lv_obj_t *hold_box_ = nullptr, *hold_bar_ = nullptr, *hold_label_ = nullptr;
     std::vector<lv_obj_t *> pop_items_;
     // footer
     lv_obj_t *foot_left_ = nullptr, *foot_right_ = nullptr, *foot_dot_ = nullptr;

@@ -493,6 +493,65 @@ std::vector<ConvSummary> Model::conversations() const
     return chans;
 }
 
+/* ---------------------------------------------------------------- deleting history */
+
+size_t Model::message_count_in(const std::string &conv) const
+{
+    size_t n = 0;
+    for (const Message &m : messages_)
+        if (m.conv == conv) ++n;
+    return n;
+}
+
+size_t Model::delete_conversation(const std::string &conv)
+{
+    const size_t before = messages_.size();
+    messages_.erase(std::remove_if(messages_.begin(), messages_.end(), [&](const Message &m) { return m.conv == conv; }), messages_.end());
+    const size_t removed = before - messages_.size();
+    const bool had_mark = read_.erase(conv) != 0;
+    if (removed || had_mark) ++revision_;
+    if (listener_) {
+        if (removed) listener_->messages_removed();
+        if (had_mark) listener_->read_changed();
+    }
+    return removed;
+}
+
+size_t Model::delete_all_messages()
+{
+    const size_t removed = messages_.size();
+    const bool had_marks = !read_.empty();
+    messages_.clear();
+    read_.clear();
+    if (removed || had_marks) ++revision_;
+    if (listener_) {
+        if (removed) listener_->messages_removed();
+        if (had_marks) listener_->read_changed();
+    }
+    return removed;
+}
+
+size_t Model::count_older_than(uint32_t cutoff) const
+{
+    size_t n = 0;
+    for (const Message &m : messages_)
+        if (m.ts >= kMinPlausibleTime && m.ts < cutoff) ++n;
+    return n;
+}
+
+size_t Model::delete_older_than(uint32_t cutoff)
+{
+    const size_t before = messages_.size();
+    messages_.erase(std::remove_if(messages_.begin(), messages_.end(), [&](const Message &m) { return m.ts >= kMinPlausibleTime && m.ts < cutoff; }),
+                    messages_.end());
+    const size_t removed = before - messages_.size();
+    if (removed) {
+        ++revision_;
+        if (listener_) listener_->messages_removed();
+    }
+    return removed;
+}
+
 void Model::set_muted(const std::string &conv, bool muted)
 {
     const bool was = is_muted(conv);

@@ -53,6 +53,7 @@ public:
     void channels_changed() override;
     void read_changed() override;
     void prefs_changed() override;
+    void messages_removed() override;
 
     /* Rewrites messages.jsonl from the model (also done automatically when the file has grown). */
     void compact();

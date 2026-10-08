@@ -216,7 +216,7 @@ MenuResult menu_key(const KeyEvent &e, int &selected, int count);
 /* ---- the Settings list. Save to radio and Undo changes are the LAST rows; the fixed Public channel (slot 0) is not listed. */
 enum class SRowKind {
     Header, Info, Name, Preset, Freq, Bw, Sf, Cr, Tx, RetryAttempts, ResetAfter, SyncClock, BoardGps, GpsNotice, Channel, AddChannel,
-    AddPublic, ChannelsNotice, Undo, Save,
+    AddPublic, ChannelsNotice, HistoryAll, HistoryOlder, HistoryNote, Undo, Save,
 };
 struct SRowSpec {
     SRowKind kind = SRowKind::Info;
@@ -230,6 +230,8 @@ struct SettingsContext {
     std::vector<int> channels;              // slots of the channels to list (empty slots and slot 0 are dropped by the builder)
 };
 std::vector<SRowSpec> settings_layout(const SettingsContext &ctx);
+/* True for the rows the selection can rest on (everything except headers, info lines and notices). */
+bool settings_row_selectable(SRowKind k);
 /* The channels listed in Settings: every non-empty slot except 0. */
 struct ChannelEntry {
     int idx = 0;
@@ -239,6 +241,58 @@ struct ChannelEntry {
     bool has_key = false;           // the key was read from the board in this session: it can be shown
 };
 std::vector<ChannelEntry> build_channel_entries(const meshzero::Model &model);
+
+/* ------------------------------------------------------------------ history (phase 1b): options of a conversation, bulk delete */
+
+/* What the options box of a conversation offers. A direct chat: mute / unmute this contact, delete the conversation. A channel: mute /
+ * unmute, delete its messages (the channel stays). Cancel is the button of the box. */
+enum class ConvAction { Mute, Unmute, DeleteConversation, DeleteMessages };
+struct ConvOptions {
+    std::string title;
+    std::vector<std::string> labels;
+    std::vector<ConvAction> actions;       // one per label
+};
+ConvOptions conversation_options(const meshzero::Model &model, const std::string &conv);
+/* The Yes / No box before a deletion. empty = true when there is nothing to delete (no box is shown then, only a notice). */
+struct DeletePrompt {
+    std::string title, body;
+    size_t count = 0;
+    bool empty = false;
+};
+DeletePrompt delete_conversation_prompt(const meshzero::Model &model, const std::string &conv);
+DeletePrompt delete_all_prompt(const meshzero::Model &model);
+DeletePrompt delete_older_prompt(const meshzero::Model &model, int days, uint32_t now);
+
+/* "Delete messages older than": 7, 30 or 90 days. */
+const std::vector<int> &history_day_options();
+Choice make_days_choice(int initial_days);
+/* The UNIX time before which a message is "older than N days"; 0 when the app clock is not plausible (nothing can be told). */
+uint32_t history_cutoff(uint32_t now, int days);
+std::string fmt_message_count(size_t n);               // "1 message", "12 messages"
+
+/* A touch held on a name (header or list row) for 3 s opens the options. The cue (a progress bar) appears after kShowMs so a plain tap
+ * or a scroll never flashes it; a move of more than kSlop pixels, a release or a lost press cancels. Pure state: the app feeds it events. */
+class HoldTracker {
+public:
+    static constexpr uint64_t kShowMs = 500, kFireMs = 3000;
+    static constexpr int kSlop = 16;
+    void begin(const std::string &target, int x, int y, uint64_t now);
+    void move(int x, int y);
+    void cancel();                                  // release, scroll or lost press
+    bool active() const { return active_; }
+    const std::string &target() const { return target_; }
+    bool visible(uint64_t now) const { return active_ && now - start_ >= kShowMs; }
+    double progress(uint64_t now) const;            // 0..1 over kFireMs
+    /* True exactly once when the hold has lasted kFireMs; the tracker is then idle and the click of the release is to be swallowed. */
+    bool poll(uint64_t now);
+    bool take_swallow();                            // the click that follows a completed hold: true once
+
+private:
+    bool active_ = false, swallow_ = false;
+    std::string target_;
+    int x_ = 0, y_ = 0;
+    uint64_t start_ = 0;
+};
 
 /* True when the frequency is inside the EU 868 band. */
 bool in_eu868(double mhz);

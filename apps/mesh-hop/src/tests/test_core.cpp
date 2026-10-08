@@ -15,7 +15,9 @@
 #include "features.hpp"
 #include "log.hpp"
 #include "presets.hpp"
+#include "preset_feed.hpp"
 
+#include <cmath>
 #include <cstdio>
 #include <ctime>
 #include <memory>
@@ -1495,8 +1497,399 @@ static void test_log()
     CHECK(nowhere.written() == 0);
 }
 
+/* ---------------------------------------------------------------- phase 1b: history deletion */
+
+static int count_lines(const std::string &file)
+{
+    FILE *f = std::fopen(file.c_str(), "rb");
+    if (!f) return -1;
+    int n = 0, c;
+    while ((c = std::fgetc(f)) != EOF)
+        if (c == '\n') ++n;
+    std::fclose(f);
+    return n;
+}
+
+static void write_text(const std::string &file, const std::string &text)
+{
+    FILE *f = std::fopen(file.c_str(), "wb");
+    if (f) {
+        std::fwrite(text.data(), 1, text.size(), f);
+        std::fclose(f);
+    }
+}
+
+static std::string read_text(const std::string &file)
+{
+    std::string out;
+    FILE *f = std::fopen(file.c_str(), "rb");
+    if (!f) return out;
+    char buf[4096];
+    size_t n;
+    while ((n = std::fread(buf, 1, sizeof(buf), f)) > 0) out.append(buf, n);
+    std::fclose(f);
+    return out;
+}
+
+static void test_history_delete()
+{
+    set_time_source(fake_time);
+    const std::string dir = tmpdir("history");
+    const uint32_t kNow = 1790000000;                       // a plausible clock
+    const uint32_t kDay = 86400;
+    const KeyPrefix pa = {1, 2, 3, 4, 5, 6}, pb = {9, 9, 9, 9, 9, 9};
+    const std::string da = Model::conv_direct(pa), db = Model::conv_direct(pb);
+    auto in_direct = [&](Model &m, const KeyPrefix &p, const char *text, uint32_t stamp, uint32_t ts) {
+        IncomingMessage dm;
+        dm.prefix = p;
+        dm.text = text;
+        dm.sender_timestamp = stamp;
+        return m.add_incoming(dm, ts);
+    };
+    auto in_chan = [&](Model &m, int idx, const char *text, uint32_t stamp, uint32_t ts) {
+        IncomingMessage cm;
+        cm.channel = true;
+        cm.channel_idx = idx;
+        cm.text = text;
+        cm.sender_timestamp = stamp;
+        return m.add_incoming(cm, ts);
+    };
+    uint32_t last_seq = 0;
+    {
+        Model m;
+        Store st(dir);
+        st.attach(m);
+        auto c1 = std::get<Contact>(*parse_packet(make_contact(resp::kContact, 0x10, "Alice", 1, 1000)));
+        m.upsert_contact(c1);
+        ChannelRec ch;
+        ch.idx = 1; ch.name = "#test"; ch.empty = false;
+        m.set_channel(ch);
+        in_chan(m, 1, "Zed: c-old", 1, kNow - 100 * kDay);          // 100 days old
+        in_chan(m, 1, "Zed: c-mid", 2, kNow - 20 * kDay);
+        in_chan(m, 1, "Zed: c-new", 3, kNow - 1 * kDay);
+        in_direct(m, pa, "a-old", 4, kNow - 40 * kDay);
+        in_direct(m, pa, "a-new", 5, kNow - 2 * kDay);
+        in_direct(m, pb, "b-old", 6, kNow - 10 * kDay);
+        in_direct(m, pb, "b-unknown-time", 7, 5000);                // received while the clock was not set
+        m.add_outgoing(da, "my reply", kNow - 2 * kDay);
+        last_seq = m.add_outgoing(db, "to b", kNow - 1 * kDay);
+        CHECK(m.message_count() == 9 && m.message_count_in(da) == 3 && m.message_count_in("c:1") == 3);
+        CHECK(m.unread_total() == 7);
+        m.set_muted(da, true);                                       // a muted contact is not counted
+        CHECK(m.unread(da) == 0 && m.unread_raw(da) == 2 && m.unread_total() == 5);
+        m.mark_read(db);
+        CHECK(m.unread_total() == 3 && count_lines(dir + "/messages.jsonl") >= 9);
+
+        // one conversation: its messages and its read mark go, nothing else
+        CHECK(m.delete_conversation(db) == 3);
+        CHECK(m.message_count() == 6 && m.message_count_in(db) == 0 && m.read_marks().count(db) == 0);
+        CHECK(m.unread_total() == 3 && m.contact_count() == 1);       // totals stay right; the contact stays
+        bool listed = false;
+        for (const ConvSummary &s : m.conversations()) if (s.key == db) listed = true;
+        CHECK(!listed);                                              // gone from the left pane
+        CHECK(m.is_muted(da));                                       // the mute flag is a preference: kept
+        CHECK(count_lines(dir + "/messages.jsonl") == 6);            // the file was rewritten
+        CHECK(m.delete_conversation(db) == 0);                       // nothing left: no change, no error
+        CHECK(m.next_seq() > last_seq);                              // numbers are never reused
+
+        // a channel: the history goes, the channel stays in the list
+        CHECK(m.delete_conversation("c:1") == 3 && m.message_count_in("c:1") == 0);
+        bool chan_listed = false;
+        for (const ConvSummary &s : m.conversations()) if (s.key == "c:1") chan_listed = true;
+        CHECK(chan_listed && m.find_channel(1) && !m.find_channel(1)->empty);
+        CHECK(m.unread_total() == 0 && m.unread_raw(da) == 2);
+        CHECK(count_lines(dir + "/messages.jsonl") == 3);
+    }
+    {   // the next run sees the same
+        Model m;
+        Store st(dir);
+        st.attach(m);
+        CHECK(m.message_count() == 3 && m.message_count_in(da) == 3 && m.message_count_in(db) == 0 && m.message_count_in("c:1") == 0);
+        CHECK(m.is_muted(da) && m.contact_count() == 1 && m.find_channel(1));
+        CHECK(m.unread_raw(da) == 2 && m.unread_total() == 0);
+        // a new incoming message recreates the deleted conversation
+        in_direct(m, pb, "b-again", 8, kNow);
+        CHECK(m.message_count_in(db) == 1 && m.unread(db) == 1 && m.unread_total() == 1);
+        bool back = false;
+        for (const ConvSummary &s : m.conversations()) if (s.key == db) back = s.unread == 1;
+        CHECK(back);
+        // older than N days: only messages with a known time before the cutoff
+        const uint32_t cutoff = kNow - 30 * kDay;
+        CHECK(m.count_older_than(cutoff) == 1);                      // a-old (40 days); b-unknown-time was deleted with db; nothing else is that old
+        CHECK(m.delete_older_than(cutoff) == 1 && m.message_count_in(da) == 2);
+        CHECK(m.delete_older_than(cutoff) == 0);
+        CHECK(count_lines(dir + "/messages.jsonl") == 3);
+    }
+    {
+        Model m;
+        Store st(dir);
+        st.attach(m);
+        CHECK(m.message_count() == 3 && m.unread_raw(da) == 1);      // "my reply" is ours; a-new and b-again are unread
+    }
+    // older than: the unknown-time message is kept, a day boundary is exact, everything older goes at once
+    const std::string dir2 = tmpdir("history2");
+    {
+        Model m;
+        Store st(dir2);
+        st.attach(m);
+        in_direct(m, pa, "old1", 1, kNow - 95 * kDay);
+        in_direct(m, pa, "old2", 2, kNow - 31 * kDay);
+        in_direct(m, pa, "edge", 3, kNow - 30 * kDay);               // exactly 30 days: not older than the cutoff
+        in_direct(m, pa, "unknown", 4, 1234);
+        in_direct(m, pa, "new", 5, kNow);
+        const uint32_t c30 = kNow - 30 * kDay;
+        CHECK(m.count_older_than(c30) == 2 && m.count_older_than(kNow - 90 * kDay) == 1 && m.count_older_than(kNow - 7 * kDay) == 3);
+        CHECK(m.delete_older_than(c30) == 2 && m.message_count() == 3);
+        CHECK(m.unread_total() == 3);
+        CHECK(m.delete_all_messages() == 3 && m.message_count() == 0 && m.unread_total() == 0 && m.read_marks().empty());
+        CHECK(count_lines(dir2 + "/messages.jsonl") == 0);
+        CHECK(m.delete_all_messages() == 0);
+        const uint32_t s = in_direct(m, pa, "fresh", 6, kNow);
+        CHECK(s > 5 && m.unread_total() == 1);                       // the counter never goes back
+        // the bound of the history still holds after deletions
+        for (int i = 0; i < 230; ++i) in_direct(m, pa, ("bulk " + std::to_string(i)).c_str(), 100 + static_cast<uint32_t>(i), kNow + static_cast<uint32_t>(i));
+        CHECK(m.message_count_in(da) == Model::kMaxPerConversation);
+    }
+    {   // a read mark above every message number must not let numbers be reused (deleted newest messages)
+        const std::string dir3 = tmpdir("history3");
+        CHECK(std::system(("mkdir -p " + dir3).c_str()) == 0);
+        write_text(dir3 + "/read.txt", "d:010203040506 50\n");
+        Model m;
+        Store st(dir3);
+        st.attach(m);
+        CHECK(m.next_seq() >= 51);
+    }
+    {   // every message deleted by age, the read marks stay: a new message must still count as unread after a restart
+        const std::string dir4 = tmpdir("history4");
+        {
+            Model m;
+            Store st(dir4);
+            st.attach(m);
+            in_direct(m, pa, "one", 1, kNow - 50 * kDay);
+            in_direct(m, pa, "two", 2, kNow - 49 * kDay);
+            m.mark_read(da);
+            CHECK(m.delete_older_than(kNow - 30 * kDay) == 2 && m.message_count() == 0);
+        }
+        Model m;
+        Store st(dir4);
+        st.attach(m);
+        in_direct(m, pa, "three", 3, kNow);
+        CHECK(m.unread_total() == 1 && m.unread(da) == 1);
+    }
+    // listeners: removal calls are batched into one rewrite; a Model without a store works
+    Model bare;
+    in_direct(bare, pa, "x", 1, kNow);
+    CHECK(bare.delete_conversation(da) == 1 && bare.message_count() == 0);
+}
+
+/* ---------------------------------------------------------------- phase 1b: the preset feed */
+
+#ifndef TEST_DATA_DIR
+#define TEST_DATA_DIR "tests/data"
+#endif
+
+static std::string replace_first(std::string s, const std::string &from, const std::string &to)
+{
+    const size_t p = s.find(from);
+    if (p != std::string::npos) s.replace(p, from.size(), to);
+    return s;
+}
+
+static void test_preset_feed()
+{
+    const std::string json = read_text(std::string(TEST_DATA_DIR) + "/meshcore_config.json");
+    CHECK(json.size() > 4000);
+    std::vector<RadioPreset> list;
+    std::string why;
+    // the real answer of api.meshcore.nz (fetched 2026-10-08): 26 entries, some with a network_settings object, other keys around them
+    CHECK(parse_preset_feed(json, list, why));
+    CHECK(list.size() == 26 && why.empty());
+    const auto &bundled = bundled_presets();
+    bool same = list.size() == bundled.size();
+    for (size_t i = 0; same && i < list.size(); ++i)
+        same = list[i].name == bundled[i].name && std::fabs(list[i].freq_mhz - bundled[i].freq_mhz) < 1e-6 &&
+               std::fabs(list[i].bw_khz - bundled[i].bw_khz) < 1e-6 && list[i].sf == bundled[i].sf && list[i].cr == bundled[i].cr;
+    CHECK(same);                                                    // the bundled file equals the feed of today
+    CHECK(list[1].name == "Australia (Narrow)" && list[1].bw_khz == 62.5 && list[1].cr == 7);
+    CHECK(list[0].bw_khz == 250 && list[8].name == "EU/UK (Narrow)" && list[8].freq_mhz == 869.618 && list[8].sf == 8 && list[8].cr == 8);
+
+    // a small valid list, numbers as JSON numbers, unknown keys ignored
+    auto entry = [](const std::string &title, const std::string &f, const std::string &bw, const std::string &sf, const std::string &cr) {
+        return "{\"title\":\"" + title + "\",\"frequency\":" + f + ",\"bandwidth\":" + bw + ",\"spreading_factor\":" + sf + ",\"coding_rate\":" + cr + ",\"x\":[1,{\"y\":null}]}";
+    };
+    auto wrap = [](const std::string &entries) { return "{\"config\":{\"suggested_radio_settings\":{\"entries\":[" + entries + "]}}}"; };
+    std::string five;
+    for (int i = 0; i < 5; ++i) five += (i ? "," : "") + entry("P" + std::to_string(i), "868.1", "125", "7", "5");
+    CHECK(parse_preset_feed(wrap(five), list, why) && list.size() == 5 && list[0].freq_mhz == 868.1);
+
+    // malformed or odd input: the whole list is refused and `out` stays empty
+    struct Bad { const char *what; std::string text; };
+    std::vector<Bad> bad = {
+        {"empty", ""},
+        {"not json", "hello"},
+        {"empty object", "{}"},
+        {"array root", "[]"},
+        {"entries missing", "{\"config\":{\"suggested_radio_settings\":{}}}"},
+        {"entries not a list", "{\"config\":{\"suggested_radio_settings\":{\"entries\":{}}}}"},
+        {"truncated", json.substr(0, json.size() / 2)},
+        {"trailing text", json + " x"},
+        {"two values", json + json},
+        {"bad escape", replace_first(json, "Australia", "Aus\\qtralia")},
+        {"raw newline in a string", replace_first(json, "\"Brazil\"", "\"Bra\nzil\"")},
+        {"surrogate", replace_first(json, "\"Brazil\"", "\"Bra\\ud800zil\"")},
+        {"control character in a title", replace_first(json, "\"Brazil\"", "\"Bra\\u0001zil\"")},
+        {"empty title", replace_first(json, "\"Brazil\"", "\"\"")},
+        {"title too long", replace_first(json, "\"Brazil\"", "\"" + std::string(60, 'x') + "\"")},
+        {"title not a string", replace_first(json, "\"Brazil\"", "7")},
+        {"frequency text", replace_first(json, "\"915.800\"", "\"abc\"")},
+        {"frequency exponent", replace_first(json, "\"915.800\"", "\"9e2\"")},
+        {"frequency negative", replace_first(json, "\"915.800\"", "\"-915.8\"")},
+        {"frequency too high", replace_first(json, "\"915.800\"", "\"9150.8\"")},
+        {"frequency too low", replace_first(json, "\"915.800\"", "\"100.5\"")},
+        {"frequency empty", replace_first(json, "\"915.800\"", "\"\"")},
+        {"frequency two dots", replace_first(json, "\"915.800\"", "\"915.8.0\"")},
+        {"bandwidth not LoRa", replace_first(json, "\"bandwidth\":\"250\"", "\"bandwidth\":\"63\"")},
+        {"bandwidth zero", replace_first(json, "\"bandwidth\":\"250\"", "\"bandwidth\":\"0\"")},
+        {"sf low", replace_first(json, "\"spreading_factor\":\"10\"", "\"spreading_factor\":\"4\"")},
+        {"sf high", replace_first(json, "\"spreading_factor\":\"10\"", "\"spreading_factor\":\"13\"")},
+        {"sf fraction", replace_first(json, "\"spreading_factor\":\"10\"", "\"spreading_factor\":\"7.5\"")},
+        {"cr low", replace_first(json, "\"coding_rate\":\"5\"", "\"coding_rate\":\"4\"")},
+        {"cr high", replace_first(json, "\"coding_rate\":\"5\"", "\"coding_rate\":\"9\"")},
+        {"duplicate title", replace_first(json, "\"Brazil\"", "\"Canada\"")},
+        {"field missing", replace_first(json, "\"coding_rate\":\"5\"", "\"coding_rate_x\":\"5\"")},
+        {"entry not an object", wrap("1,2,3,4,5")},
+        {"too few entries", wrap(entry("A", "868", "125", "7", "5"))},
+        {"bool as number", wrap(five.substr(0, 20) + "x")},
+    };
+    std::string deep(40, '[');
+    deep += std::string(40, ']');
+    bad.push_back({"nested too deep", "{\"config\":" + deep + "}"});
+    std::string many;
+    for (int i = 0; i < 130; ++i) many += (i ? "," : "") + entry("N" + std::to_string(i), "868.1", "125", "7", "5");
+    bad.push_back({"too many entries", wrap(many)});
+    bad.push_back({"too large", wrap(five) + std::string(kPresetFeedMaxBytes, ' ')});
+    for (const Bad &b : bad) {
+        std::vector<RadioPreset> out = {RadioPreset{}};
+        std::string w;
+        const bool ok = parse_preset_feed(b.text, out, w);
+        if (ok || !out.empty() || w.empty()) std::printf("  preset feed case not refused: %s\n", b.what);
+        CHECK(!ok && out.empty() && !w.empty());
+    }
+    // one odd entry among many good ones refuses the whole list
+    CHECK(!parse_preset_feed(replace_first(json, "\"bandwidth\":\"125\"", "\"bandwidth\":\"126\""), list, why) && list.empty());
+
+    // the saved copy
+    const std::string dir = tmpdir("presetcache");
+    CHECK(std::system(("mkdir -p " + dir).c_str()) == 0);
+    std::vector<RadioPreset> src;
+    CHECK(parse_preset_feed(json, src, why));
+    std::string date, srcurl;
+    std::vector<RadioPreset> back;
+    CHECK(!load_preset_cache(dir, back, date, srcurl));               // nothing saved yet
+    CHECK(save_preset_cache(dir, src, "2026-10-08", "https://api.meshcore.nz/api/v1/config"));
+    CHECK(load_preset_cache(dir, back, date, srcurl) && back.size() == 26 && date == "2026-10-08" && srcurl.find("meshcore.nz") != std::string::npos);
+    bool eq = back.size() == src.size();
+    for (size_t i = 0; eq && i < back.size(); ++i)
+        eq = back[i].name == src[i].name && std::fabs(back[i].freq_mhz - src[i].freq_mhz) < 1e-6 && back[i].bw_khz == src[i].bw_khz && back[i].sf == src[i].sf && back[i].cr == src[i].cr;
+    CHECK(eq);
+    CHECK(save_preset_cache(dir, src, "unknown", "x") && load_preset_cache(dir, back, date, srcurl) && date == "unknown");
+    CHECK(!save_preset_cache(dir, std::vector<RadioPreset>(), "2026-10-08", "x"));      // an invalid list is never saved
+    save_preset_cache(dir, src, "2026-10-08", "x");
+    const std::string saved = read_text(dir + "/presets.jsonl");
+    CHECK(count_lines(dir + "/presets.jsonl") == 27);
+    write_text(dir + "/presets.jsonl", replace_first(saved, "\"sf\":10", "\"sf\":14"));
+    CHECK(!load_preset_cache(dir, back, date, srcurl) && back.empty());   // one odd value: the whole copy is dropped
+    write_text(dir + "/presets.jsonl", replace_first(saved, "\"n\":26", "\"n\":25"));
+    CHECK(!load_preset_cache(dir, back, date, srcurl));
+    write_text(dir + "/presets.jsonl", replace_first(saved, "2026-10-08", "yesterday"));
+    CHECK(!load_preset_cache(dir, back, date, srcurl));
+    write_text(dir + "/presets.jsonl", saved.substr(0, saved.size() / 2));
+    CHECK(!load_preset_cache(dir, back, date, srcurl));
+    write_text(dir + "/presets.jsonl", "garbage\n");
+    CHECK(!load_preset_cache(dir, back, date, srcurl));
+
+    // the list in use: bundled, then a saved copy, then a fetched list; the footer text says which
+    reset_presets();
+    CHECK(presets_origin() == PresetOrigin::Bundled && radio_presets().size() == 26 && presets_origin_text().find("built into the app, 2026-10-07") != std::string::npos);
+    set_presets(src, PresetOrigin::Cached, "2026-10-08");
+    CHECK(presets_origin_text() == "Saved copy of the meshcore.nz list, fetched 2026-10-08");
+    set_presets(src, PresetOrigin::Fetched, "2026-10-09");
+    CHECK(presets_origin_text() == "List from meshcore.nz, fetched 2026-10-09" && presets_list_date() == "2026-10-09");
+    reset_presets();
+    CHECK(radio_presets().size() == bundled_presets().size() && presets_origin() == PresetOrigin::Bundled);
+
+    // the date text and the online test
+    CHECK(fetch_date_text(1790000000).size() == 10 && fetch_date_text(1790000000)[4] == '-' && fetch_date_text(100).empty());
+    const std::string hdr = "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\n";
+    CHECK(route_table_has_default(hdr + "wlan0\t00000000\t0101A8C0\t0003\t0\t0\t600\t00000000\t0\t0\t0\n"));
+    CHECK(!route_table_has_default(hdr + "wlan0\t0001A8C0\t00000000\t0001\t0\t0\t600\t00FFFFFF\t0\t0\t0\n"));      // a local subnet only
+    CHECK(!route_table_has_default(hdr + "lo\t00000000\t00000000\t0001\t0\t0\t0\t00000000\t0\t0\t0\n"));          // lo does not count
+    CHECK(!route_table_has_default(hdr + "wlan0\t00000000\t0101A8C0\t0002\t0\t0\t600\t00000000\t0\t0\t0\n"));     // not UP
+    CHECK(!route_table_has_default(hdr) && !route_table_has_default(""));
+    setenv("MESHHOP_ONLINE", "0", 1);
+    CHECK(!network_online());
+    setenv("MESHHOP_ONLINE", "1", 1);
+    CHECK(network_online());
+    unsetenv("MESHHOP_ONLINE");
+
+    // the background download, against a fake curl (a shell script): good answer, bad answer, failure, hang, missing program
+    const std::string tools = tmpdir("fakecurl");
+    CHECK(std::system(("mkdir -p " + tools).c_str()) == 0);
+    auto fake = [&](const std::string &name, const std::string &body) {
+        const std::string path = tools + "/" + name;
+        write_text(path, "#!/bin/sh\nout=\nwhile [ $# -gt 0 ]; do [ \"$1\" = -o ] && out=$2; shift; done\n" + body + "\n");
+        ::chmod(path.c_str(), 0755);
+        return path;
+    };
+    auto run = [&](const std::string &curl, PresetFetcher::State &final_state, std::string &msg, std::vector<RadioPreset> *got) {
+        setenv("MESHHOP_CURL", curl.c_str(), 1);
+        PresetFetcher f(dir);
+        const bool started = f.start(1000);
+        PresetFetcher::State st = f.state();
+        for (int i = 0; i < 300 && started && st == PresetFetcher::State::Running; ++i) {
+            ::usleep(10000);
+            st = f.poll(1000 + static_cast<uint64_t>(i) * 10);
+        }
+        final_state = st;
+        msg = f.message();
+        if (got) *got = f.list();
+        return started;
+    };
+    PresetFetcher::State fs;
+    std::string msg;
+    std::vector<RadioPreset> got;
+    CHECK(run(fake("good.sh", "cp '" + std::string(TEST_DATA_DIR) + "/meshcore_config.json' \"$out\""), fs, msg, &got) && fs == PresetFetcher::State::Done && got.size() == 26);
+    CHECK(::access((dir + "/presets.download").c_str(), F_OK) != 0);                // the temporary file is gone
+    CHECK(run(fake("junk.sh", "echo '<html>captive portal</html>' > \"$out\""), fs, msg, &got) && fs == PresetFetcher::State::Failed && got.empty() && msg.find("refused") != std::string::npos);
+    CHECK(run(fake("odd.sh", "sed 's/\"spreading_factor\":\"10\"/\"spreading_factor\":\"40\"/' '" + std::string(TEST_DATA_DIR) + "/meshcore_config.json' > \"$out\""), fs, msg, &got) &&
+          fs == PresetFetcher::State::Failed && got.empty());
+    CHECK(run(fake("fail.sh", "exit 22"), fs, msg, &got) && fs == PresetFetcher::State::Failed && msg.find("22") != std::string::npos);
+    CHECK(run(fake("empty.sh", ": > \"$out\""), fs, msg, &got) && fs == PresetFetcher::State::Failed);
+    CHECK(!run(tools + "/does-not-exist", fs, msg, &got) && fs == PresetFetcher::State::Failed && msg.find("not found") != std::string::npos);
+    {   // a hang: poll never blocks, and the deadline kills the process
+        setenv("MESHHOP_CURL", fake("hang.sh", "sleep 60").c_str(), 1);
+        PresetFetcher f(dir);
+        CHECK(f.start(0));
+        CHECK(f.poll(10) == PresetFetcher::State::Running);
+        CHECK(f.poll(PresetFetcher::kDeadlineMs - 1) == PresetFetcher::State::Running);
+        CHECK(f.poll(PresetFetcher::kDeadlineMs + 1) == PresetFetcher::State::Failed && f.message().find("in time") != std::string::npos);
+    }
+    {   // abort (the app closes) kills the child
+        setenv("MESHHOP_CURL", fake("hang2.sh", "sleep 60").c_str(), 1);
+        PresetFetcher f(dir);
+        CHECK(f.start(0));
+        f.abort();
+        CHECK(f.state() == PresetFetcher::State::Failed);
+    }
+    unsetenv("MESHHOP_CURL");
+    PresetFetcher plain(dir);                                                         // the defaults: the real program and the official address
+    CHECK(plain.curl_path() == "/usr/bin/curl" && plain.url() == "https://api.meshcore.nz/api/v1/config");
+}
+
 int main()
 {
+    test_history_delete();
+    test_preset_feed();
     test_sha256();
     test_input();
     test_proc_listings();

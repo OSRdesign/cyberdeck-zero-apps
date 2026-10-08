@@ -1,0 +1,24 @@
+# Mesh Hop 0.1.2: the radio preset list (refreshed in the background, saved copy, built-in list), seen in the Preset popup.
+# The download starts 4 s after the launch, so the first look is at 9 s.
+wait 9000
+say == the list in use (see presets=origin/entries/date)
+dump
+key tab
+key tab
+key tab
+key tab
+wait 300
+tap 300 342
+wait 500
+say == the Preset popup, the footer says where the list comes from
+dump
+shot p1-preset-popup
+key esc
+wait 300
+key tab
+wait 300
+shot p2-chats-footer
+key enter
+wait 300
+shot p3-chats-footer-compose
+key esc

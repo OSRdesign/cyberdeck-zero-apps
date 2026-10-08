@@ -8,7 +8,7 @@ CORE=$HERE/../main/core
 UI=$HERE/../main/ui
 OUT=${TMPDIR:-/tmp}/mesh-hop-tests
 mkdir -p "$OUT"
-g++ -std=c++17 -Wall -Wextra -O1 -I"$CORE" "$HERE/test_core.cpp" "$CORE"/*.cpp -lpthread -o "$OUT/test_core"
+g++ -std=c++17 -Wall -Wextra -O1 -DTEST_DATA_DIR="\"$HERE/data\"" -I"$CORE" "$HERE/test_core.cpp" "$CORE"/*.cpp -lpthread -o "$OUT/test_core"
 "$OUT/test_core"
 g++ -std=c++17 -Wall -Wextra -O1 -I"$CORE" "$HERE/test_sim.cpp" "$CORE"/*.cpp -lpthread -o "$OUT/test_sim"
 MESHHOP_SIM="$HERE/../../tools/meshcore_sim.py" "$OUT/test_sim"

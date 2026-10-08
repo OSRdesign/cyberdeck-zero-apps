@@ -4,6 +4,7 @@
 #include "ui_logic.hpp"
 
 #include "model.hpp"
+#include "presets.hpp"
 #include "protocol.hpp"
 #include "sha256.hpp"
 #include "util.hpp"
@@ -565,7 +566,12 @@ static void test_choice_popup()
     Choice pr = make_choice(ChoiceField::Preset, s, retry);
     CHECK(pr.labels.size() == 26 && pr.details.size() == 26 && pr.label() == "EU/UK (Deprecated)" && pr.index == 9);
     CHECK(pr.detail() == "869.525 MHz  250 kHz  SF11  4/5");
-    CHECK(pr.note.find("2026-10-07") != std::string::npos && pr.note.find("api.meshcore.nz") != std::string::npos);
+    CHECK(pr.note.find("built into the app, 2026-10-07") != std::string::npos);        // the footer says where the list comes from
+    set_presets(bundled_presets(), PresetOrigin::Fetched, "2026-10-08");
+    CHECK(make_choice(ChoiceField::Preset, s, retry).note.find("meshcore.nz, fetched 2026-10-08") != std::string::npos);
+    set_presets(bundled_presets(), PresetOrigin::Cached, "2026-10-08");
+    CHECK(make_choice(ChoiceField::Preset, s, retry).note.find("Saved copy") != std::string::npos);
+    reset_presets();
     CHECK(pr.note.find("match no preset") == std::string::npos);
     int deprecated = 0;
     for (const std::string &l : pr.labels)
@@ -793,8 +799,119 @@ static void test_describe_changes()
     CHECK(describe_radio_changes(cur, e).empty());
 }
 
+static void test_history_ui()
+{
+    set_time_source(fake_time);
+    const uint32_t kNow = g_time;
+    const KeyPrefix pa = {1, 2, 3, 4, 5, 6};
+    Model m;
+    Contact c;
+    c.key = {1, 2, 3, 4, 5, 6};
+    c.type = 1;
+    c.name = "Alice";
+    m.upsert_contact(c);
+    ChannelRec ch; ch.idx = 1; ch.name = "#test"; ch.empty = false;
+    m.set_channel(ch);
+    const std::string da = Model::conv_direct(pa);
+
+    // the options box: a direct chat and a channel, with Unmute when muted
+    ConvOptions o = conversation_options(m, da);
+    CHECK(o.title == "Alice" && o.labels.size() == 2 && o.labels[0] == "Mute this contact" && o.labels[1] == "Delete conversation");
+    CHECK(o.actions[0] == ConvAction::Mute && o.actions[1] == ConvAction::DeleteConversation);
+    m.set_muted(da, true);
+    o = conversation_options(m, da);
+    CHECK(o.labels[0] == "Unmute this contact" && o.actions[0] == ConvAction::Unmute);
+    o = conversation_options(m, "c:1");
+    CHECK(o.labels.size() == 2 && o.labels[0] == "Mute this channel" && o.labels[1] == "Delete messages" && o.actions[1] == ConvAction::DeleteMessages);
+    m.set_muted("c:1", true);
+    CHECK(conversation_options(m, "c:1").labels[0] == "Unmute this channel");
+
+    // a muted contact in the list: no pill, "muted"
+    IncomingMessage in;
+    in.prefix = pa; in.text = "hi"; in.sender_timestamp = 1;
+    m.add_incoming(in, kNow);
+    auto rows = build_chat_rows(m);
+    bool found = false;
+    for (const ChatRow &r : rows) if (r.key == da) found = r.kind == ChatRow::Direct && r.muted && r.unread == 0;
+    CHECK(found);
+    m.delete_conversation(da);
+    rows = build_chat_rows(m);
+    CHECK(find_chat_row(rows, da) < 0);                                           // gone from the left pane
+    rows = build_chat_rows(m, da);                                                 // listed only while it is the open chat
+    int at = find_chat_row(rows, da);
+    CHECK(at >= 0 && rows[static_cast<size_t>(at)].muted);
+
+    // the prompts
+    in.text = "one"; in.sender_timestamp = 2; m.add_incoming(in, kNow - 40 * 86400);
+    in.text = "two"; in.sender_timestamp = 3; m.add_incoming(in, kNow);
+    DeletePrompt p = delete_conversation_prompt(m, da);
+    CHECK(!p.empty && p.count == 2 && p.title == "Delete conversation?" && p.body.find("2 messages with Alice") != std::string::npos &&
+          p.body.find("stays in Contacts") != std::string::npos);
+    p = delete_conversation_prompt(m, "c:1");
+    CHECK(p.empty && p.title == "Delete messages?");
+    IncomingMessage cm; cm.channel = true; cm.channel_idx = 1; cm.text = "Zed: x"; cm.sender_timestamp = 9;
+    m.add_incoming(cm, kNow);
+    p = delete_conversation_prompt(m, "c:1");
+    CHECK(!p.empty && p.count == 1 && p.body.find("1 message of #test") != std::string::npos && p.body.find("channel stays") != std::string::npos);
+    p = delete_all_prompt(m);
+    CHECK(!p.empty && p.count == 3 && p.body.find("all 3 messages") != std::string::npos && p.body.find("Contacts, channels and settings stay") != std::string::npos);
+    p = delete_older_prompt(m, 30, kNow);
+    CHECK(!p.empty && p.count == 1 && p.body.find("1 message older than 30 days") != std::string::npos);
+    CHECK(delete_older_prompt(m, 90, kNow).empty);
+    CHECK(delete_older_prompt(m, 30, 100).empty && delete_older_prompt(m, 30, 100).count == 0);     // clock not set: nothing can be told
+    CHECK(fmt_message_count(1) == "1 message" && fmt_message_count(0) == "0 messages" && fmt_message_count(12) == "12 messages");
+
+    // the days choice (arrow popup): 7, 30, 90, default 30
+    Choice d = make_days_choice(30);
+    CHECK(d.labels.size() == 3 && d.labels[0] == "7 days" && d.labels[2] == "90 days" && d.index == 1 && d.label() == "30 days");
+    CHECK(make_days_choice(7).index == 0 && make_days_choice(90).index == 2 && make_days_choice(5).index == 1);
+    CHECK(d.step(1) && d.label() == "90 days" && !d.step(1) && d.step(-2) && d.label() == "7 days" && !d.can_prev());
+    CHECK(history_day_options() == std::vector<int>({7, 30, 90}));
+    CHECK(history_cutoff(kNow, 30) == kNow - 30 * 86400 && history_cutoff(kNow, 7) == kNow - 7 * 86400 && history_cutoff(50, 7) == 0 && history_cutoff(kNow, 0) == 0);
+
+    // the Settings list has a History section before the last two rows; its rows are selectable except the note
+    SettingsContext ctx;
+    ctx.connected = true;
+    ctx.channels = {0, 1};
+    const auto layout = settings_layout(ctx);
+    int all_at = -1, older_at = -1, note_at = -1, undo_at = -1, header_at = -1;
+    for (size_t i = 0; i < layout.size(); ++i) {
+        if (layout[i].kind == SRowKind::HistoryAll) all_at = static_cast<int>(i);
+        if (layout[i].kind == SRowKind::HistoryOlder) older_at = static_cast<int>(i);
+        if (layout[i].kind == SRowKind::HistoryNote) note_at = static_cast<int>(i);
+        if (layout[i].kind == SRowKind::Undo) undo_at = static_cast<int>(i);
+        if (layout[i].kind == SRowKind::Header && layout[i].arg == 6) header_at = static_cast<int>(i);
+    }
+    CHECK(header_at > 0 && all_at == header_at + 1 && older_at == all_at + 1 && note_at == older_at + 1 && undo_at > note_at);
+    CHECK(layout.back().kind == SRowKind::Save && layout[layout.size() - 2].kind == SRowKind::Undo);
+    CHECK(settings_row_selectable(SRowKind::HistoryAll) && settings_row_selectable(SRowKind::HistoryOlder) && !settings_row_selectable(SRowKind::HistoryNote) &&
+          !settings_row_selectable(SRowKind::Header) && settings_row_selectable(SRowKind::Save) && settings_row_selectable(SRowKind::Channel));
+
+    // the 3 s hold on a name
+    HoldTracker h;
+    CHECK(!h.active() && !h.poll(5000) && h.progress(5000) == 0 && !h.visible(5000));
+    h.begin("d:010203040506", 100, 200, 1000);
+    CHECK(h.active() && h.target() == "d:010203040506" && !h.visible(1100) && h.visible(1500) && std::fabs(h.progress(2500) - 0.5) < 1e-9);
+    CHECK(!h.poll(3999) && h.active());
+    h.move(110, 190);                                                              // a small tremor stays within the slop
+    CHECK(h.active());
+    CHECK(h.poll(4000) && !h.active() && !h.poll(4001));                           // fires exactly once
+    CHECK(h.take_swallow() && !h.take_swallow());                                  // the release click is swallowed once
+    h.begin("c:1", 10, 10, 0);                                                     // a tap and release before 3 s: nothing
+    h.cancel();
+    CHECK(!h.poll(5000) && !h.take_swallow());
+    h.begin("c:1", 10, 10, 0);                                                     // a finger that moves away: cancelled (a scroll)
+    h.move(10, 10 + HoldTracker::kSlop + 1);
+    CHECK(!h.active() && !h.poll(5000));
+    h.begin("c:1", 10, 10, 0);
+    CHECK(h.poll(3000));
+    h.begin("c:2", 10, 10, 10000);                                                 // a new press forgets the old swallow flag
+    CHECK(!h.take_swallow() && h.progress(10000 + 4000) == 1.0);
+}
+
 int main()
 {
+    test_history_ui();
     test_png();
     test_keys_us();
     test_keys_fr();

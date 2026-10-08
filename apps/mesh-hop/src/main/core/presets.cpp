@@ -21,7 +21,7 @@ const Raw kRaw[] = {
 };
 } // namespace
 
-const std::vector<RadioPreset> &radio_presets()
+const std::vector<RadioPreset> &bundled_presets()
 {
     static const std::vector<RadioPreset> v = [] {
         std::vector<RadioPreset> out;
@@ -29,6 +29,62 @@ const std::vector<RadioPreset> &radio_presets()
         return out;
     }();
     return v;
+}
+
+namespace {
+struct Active {
+    std::vector<RadioPreset> list = bundled_presets();
+    PresetOrigin origin = PresetOrigin::Bundled;
+    std::string date = MESHHOP_PRESETS_DATE;
+};
+Active &active()
+{
+    static Active a;
+    return a;
+}
+} // namespace
+
+const std::vector<RadioPreset> &radio_presets()
+{
+    return active().list;
+}
+
+void set_presets(std::vector<RadioPreset> list, PresetOrigin origin, const std::string &date)
+{
+    Active &a = active();
+    a.list = std::move(list);
+    a.origin = origin;
+    a.date = date;
+}
+
+void reset_presets()
+{
+    Active &a = active();
+    a.list = bundled_presets();
+    a.origin = PresetOrigin::Bundled;
+    a.date = MESHHOP_PRESETS_DATE;
+}
+
+PresetOrigin presets_origin()
+{
+    return active().origin;
+}
+
+const std::string &presets_list_date()
+{
+    return active().date;
+}
+
+std::string presets_origin_text()
+{
+    const Active &a = active();
+    const std::string d = a.date.empty() ? "date unknown" : a.date;
+    switch (a.origin) {
+    case PresetOrigin::Fetched: return "List from meshcore.nz, fetched " + d;
+    case PresetOrigin::Cached: return "Saved copy of the meshcore.nz list, fetched " + d;
+    case PresetOrigin::Bundled: break;
+    }
+    return "List built into the app, " + d;
 }
 
 const char *presets_source_url()

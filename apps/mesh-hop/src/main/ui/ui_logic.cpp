@@ -337,6 +337,7 @@ std::vector<ChatRow> build_chat_rows(const Model &model, const std::string &also
             ConvSummary extra;
             extra.key = also_direct;
             extra.title = model.conv_title(also_direct);
+            extra.muted = model.is_muted(also_direct);
             convs.push_back(extra);                 // after the channels, before the older directs: the list puts it first below
         }
     }
@@ -785,7 +786,7 @@ Choice make_choice(ChoiceField f, const RadioSettings &s, const RetrySettings &r
         const int cur = find_preset(s.freq_mhz, s.bw_khz, s.sf, s.cr);
         c.index = cur >= 0 ? cur : 0;
         c.note = cur >= 0 ? "" : "The current settings match no preset.";
-        c.note += std::string(c.note.empty() ? "" : " ") + "List of " + presets_date() + " (" + presets_source_url() + ")";
+        c.note += std::string(c.note.empty() ? "" : "\n") + presets_origin_text() + ".";
         break;
     }
     case ChoiceField::RetryAttempts:
@@ -942,10 +943,19 @@ std::vector<SRowSpec> settings_layout(const SettingsContext &ctx)
     if (ctx.channel_admin.available) add(SRowKind::AddChannel);
     else if (!ctx.channel_admin.notice.empty()) add(SRowKind::ChannelsNotice);
     if (ctx.connected && ctx.slot0_empty && ctx.channel_admin.available) add(SRowKind::AddPublic);
+    add(SRowKind::Header, 6);                       // HISTORY (local messages only: contacts, channels and settings are never touched)
+    add(SRowKind::HistoryAll);
+    add(SRowKind::HistoryOlder);
+    add(SRowKind::HistoryNote);
     add(SRowKind::Header, 5);                       // CHANGES
     add(SRowKind::Undo);                            // the last two rows
     add(SRowKind::Save);
     return rows;
+}
+
+bool settings_row_selectable(SRowKind k)
+{
+    return k != SRowKind::Header && k != SRowKind::Info && k != SRowKind::GpsNotice && k != SRowKind::ChannelsNotice && k != SRowKind::HistoryNote;
 }
 
 std::vector<ChannelEntry> build_channel_entries(const Model &model)
@@ -962,6 +972,140 @@ std::vector<ChannelEntry> build_channel_entries(const Model &model)
         out.push_back(e);
     }
     return out;
+}
+
+/* ------------------------------------------------------------------ history */
+
+std::string fmt_message_count(size_t n)
+{
+    return std::to_string(n) + (n == 1 ? " message" : " messages");
+}
+
+ConvOptions conversation_options(const Model &model, const std::string &conv)
+{
+    ConvOptions o;
+    const bool channel = conv.rfind("c:", 0) == 0;
+    const bool muted = model.is_muted(conv);
+    o.title = truncate_ellipsis(model.conv_title(conv), 24);
+    if (channel) {
+        o.labels = {muted ? "Unmute this channel" : "Mute this channel", "Delete messages"};
+        o.actions = {muted ? ConvAction::Unmute : ConvAction::Mute, ConvAction::DeleteMessages};
+    } else {
+        o.labels = {muted ? "Unmute this contact" : "Mute this contact", "Delete conversation"};
+        o.actions = {muted ? ConvAction::Unmute : ConvAction::Mute, ConvAction::DeleteConversation};
+    }
+    return o;
+}
+
+DeletePrompt delete_conversation_prompt(const Model &model, const std::string &conv)
+{
+    DeletePrompt p;
+    const bool channel = conv.rfind("c:", 0) == 0;
+    const std::string name = truncate_ellipsis(model.conv_title(conv), 28);
+    p.count = model.message_count_in(conv);
+    p.empty = p.count == 0;
+    if (channel) {
+        p.title = "Delete messages?";
+        p.body = "Delete " + fmt_message_count(p.count) + " of " + name + " from this deck? The channel stays; only the history here is cleared. This cannot be undone.";
+    } else {
+        p.title = "Delete conversation?";
+        p.body = "Delete " + fmt_message_count(p.count) + " with " + name + " from this deck? " + name +
+                 " stays in Contacts; a new message starts a new conversation. This cannot be undone.";
+    }
+    return p;
+}
+
+DeletePrompt delete_all_prompt(const Model &model)
+{
+    DeletePrompt p;
+    p.count = model.message_count();
+    p.empty = p.count == 0;
+    p.title = "Delete all messages?";
+    p.body = "Delete all " + fmt_message_count(p.count) + " of every conversation from this deck? Contacts, channels and settings stay. This cannot be undone.";
+    return p;
+}
+
+DeletePrompt delete_older_prompt(const Model &model, int days, uint32_t now)
+{
+    DeletePrompt p;
+    const uint32_t cutoff = history_cutoff(now, days);
+    p.count = cutoff ? model.count_older_than(cutoff) : 0;
+    p.empty = p.count == 0;
+    p.title = "Delete old messages?";
+    p.body = "Delete " + fmt_message_count(p.count) + " older than " + std::to_string(days) +
+             " days from this deck? Newer messages, contacts, channels and settings stay. This cannot be undone.";
+    return p;
+}
+
+const std::vector<int> &history_day_options()
+{
+    static const std::vector<int> v = {7, 30, 90};
+    return v;
+}
+
+Choice make_days_choice(int initial_days)
+{
+    Choice c;
+    c.title = "Delete messages older than";
+    int idx = 1;
+    const auto &v = history_day_options();
+    for (size_t i = 0; i < v.size(); ++i) {
+        c.labels.push_back(std::to_string(v[i]) + " days");
+        if (v[i] == initial_days) idx = static_cast<int>(i);
+    }
+    c.index = c.initial = idx;
+    c.note = "You are asked to confirm, with the number of messages, before anything is deleted.";
+    return c;
+}
+
+uint32_t history_cutoff(uint32_t now, int days)
+{
+    if (now < meshzero::kMinPlausibleTime || days <= 0) return 0;
+    const uint64_t span = static_cast<uint64_t>(days) * 86400u;
+    return now > span ? static_cast<uint32_t>(now - span) : 0;
+}
+
+void HoldTracker::begin(const std::string &target, int x, int y, uint64_t now)
+{
+    active_ = true;
+    swallow_ = false;
+    target_ = target;
+    x_ = x;
+    y_ = y;
+    start_ = now;
+}
+
+void HoldTracker::move(int x, int y)
+{
+    if (!active_) return;
+    if (std::abs(x - x_) > kSlop || std::abs(y - y_) > kSlop) active_ = false;
+}
+
+void HoldTracker::cancel()
+{
+    active_ = false;
+}
+
+double HoldTracker::progress(uint64_t now) const
+{
+    if (!active_) return 0;
+    const double p = static_cast<double>(now - start_) / static_cast<double>(kFireMs);
+    return p < 0 ? 0 : p > 1 ? 1 : p;
+}
+
+bool HoldTracker::poll(uint64_t now)
+{
+    if (!active_ || now - start_ < kFireMs) return false;
+    active_ = false;
+    swallow_ = true;
+    return true;
+}
+
+bool HoldTracker::take_swallow()
+{
+    const bool s = swallow_;
+    swallow_ = false;
+    return s;
 }
 
 bool in_eu868(double mhz)
