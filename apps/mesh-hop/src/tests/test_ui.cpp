@@ -909,8 +909,12 @@ static void test_history_ui()
     CHECK(!h.take_swallow() && h.progress(10000 + 4000) == 1.0);
 }
 
+#include "test_phase2_ui.inc"
+
 int main()
 {
+    test_phase2_ui();
+    test_boards_ui();
     test_history_ui();
     test_png();
     test_keys_us();

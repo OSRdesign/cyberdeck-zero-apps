@@ -354,8 +354,88 @@ std::optional<Packet> parse_packet(const Bytes &f)
         if (f.size() >= 3) {
             l.snr = r.i8() / 4.0;
             l.rssi = r.i8();
+            if (f.size() > 3) l.raw.assign(f.begin() + 3, f.end());
         }
         return l;
+    }
+    case resp::kStats: {
+        if (f.size() < 2) return std::nullopt;
+        StatsReply s;
+        const uint8_t sub = r.u8();
+        if (sub == 0) {
+            if (f.size() < 11) return std::nullopt;
+            s.kind = StatsReply::Core;
+            s.core.battery_mv = r.u16();
+            s.core.uptime_secs = r.u32();
+            s.core.errors = r.u16();
+            s.core.queue_len = r.u8();
+        } else if (sub == 1) {
+            if (f.size() < 14) return std::nullopt;
+            s.kind = StatsReply::Radio;
+            s.radio.noise_floor = static_cast<int16_t>(r.u16());
+            s.radio.last_rssi = r.i8();
+            s.radio.last_snr = r.i8() / 4.0;
+            s.radio.tx_air_secs = r.u32();
+            s.radio.rx_air_secs = r.u32();
+        } else if (sub == 2) {
+            if (f.size() < 26) return std::nullopt;
+            s.kind = StatsReply::Packets;
+            s.packets.recv = r.u32();
+            s.packets.sent = r.u32();
+            s.packets.flood_tx = r.u32();
+            s.packets.direct_tx = r.u32();
+            s.packets.flood_rx = r.u32();
+            s.packets.direct_rx = r.u32();
+            if (f.size() >= 30) {
+                s.packets.has_errors = true;
+                s.packets.recv_errors = r.u32();
+            }
+        } else {
+            Unknown u;
+            u.code = code;
+            u.length = f.size();
+            return u;
+        }
+        return s;
+    }
+    case resp::kAutoaddConfig: {
+        if (f.size() < 2) return std::nullopt;
+        AutoaddConfig a;
+        a.config = r.u8();
+        if (f.size() >= 3) {
+            a.has_max_hops = true;
+            a.max_hops = r.u8();
+        }
+        return a;
+    }
+    case resp::kAllowedRepeatFreq: {
+        AllowedRepeatFreq a;
+        while (r.left() >= 8 && a.ranges.size() < 16) {
+            RepeatRange rr;
+            rr.lo_khz = r.u32();
+            rr.hi_khz = r.u32();
+            if (rr.lo_khz == 0 || rr.hi_khz == 0) break;           // meshcore_py: a zero ends the list
+            a.ranges.push_back(rr);
+        }
+        return a;
+    }
+    case resp::kControlData: {
+        if (f.size() < 4) return std::nullopt;
+        ControlData c;
+        c.snr = r.i8() / 4.0;
+        c.rssi = r.i8();
+        c.path_len = r.u8();
+        c.payload.assign(f.begin() + 4, f.end());
+        // DISCOVER_RESP: flags 0x9n (n = node type), snr*4, tag (4), then the key: 32 bytes, or an 8 byte prefix (reader.py)
+        if (!c.payload.empty() && (c.payload[0] & 0xF0) == 0x90 && c.payload.size() >= 1 + 1 + 4 + 6) {
+            c.node_type = c.payload[0] & 0x0F;
+            c.snr_in = static_cast<int8_t>(c.payload[1]) / 4.0;
+            std::copy_n(c.payload.begin() + 2, 4, c.tag.begin());
+            const size_t have = c.payload.size() - 6;
+            c.pubkey.assign(c.payload.begin() + 6, c.payload.begin() + 6 + static_cast<long>(have >= 32 ? 32 : std::min<size_t>(have, 8)));
+            c.discover = true;
+        }
+        return c;
     }
     case resp::kContactDeleted: {
         if (f.size() < 33) return std::nullopt;
@@ -470,7 +550,7 @@ Bytes build_reset_path(const PubKey &key)
     return b;
 }
 
-Bytes build_set_radio(double freq_mhz, double bw_khz, uint8_t sf, uint8_t cr)
+Bytes build_set_radio(double freq_mhz, double bw_khz, uint8_t sf, uint8_t cr, int repeat)
 {
     // meshcore_py truncates int(float(freq) * 1000); rounding avoids 869.618 becoming 869617 kHz.
     Bytes b = {cmd::kSetRadio};
@@ -478,7 +558,153 @@ Bytes build_set_radio(double freq_mhz, double bw_khz, uint8_t sf, uint8_t cr)
     put_u32(b, static_cast<uint32_t>(std::llround(bw_khz * 1000.0)));
     b.push_back(sf);
     b.push_back(cr);
+    if (repeat >= 0) b.push_back(repeat ? 1 : 0);
     return b;
+}
+
+Bytes build_remove_contact(const PubKey &key)
+{
+    Bytes b = {cmd::kRemoveContact};
+    b.insert(b.end(), key.begin(), key.end());
+    return b;
+}
+
+Bytes build_add_update_contact(const Contact &c)
+{
+    Bytes b = {cmd::kAddUpdateContact};
+    b.insert(b.end(), c.key.begin(), c.key.end());
+    b.push_back(c.type);
+    b.push_back(c.flags);
+    b.push_back(c.out_path_len);
+    b.insert(b.end(), c.out_path.begin(), c.out_path.end());
+    std::string n = truncate_utf8(c.name, 32);
+    n.resize(32, '\0');
+    b.insert(b.end(), n.begin(), n.end());
+    put_u32(b, c.last_advert);
+    put_u32(b, static_cast<uint32_t>(static_cast<int32_t>(std::llround(c.lat * 1e6))));
+    put_u32(b, static_cast<uint32_t>(static_cast<int32_t>(std::llround(c.lon * 1e6))));
+    return b;
+}
+
+Bytes build_reboot()
+{
+    Bytes b = {cmd::kReboot};
+    const std::string w = "reboot";
+    b.insert(b.end(), w.begin(), w.end());
+    return b;
+}
+
+Bytes build_factory_reset()
+{
+    // The companion firmware (MeshCore examples/companion_radio/MyMesh.cpp, tags companion-v1.11.0 to v1.17.1 and main) handles
+    //   cmd_frame[0] == CMD_FACTORY_RESET && memcmp(&cmd_frame[1], "reset", 5) == 0
+    // so the frame is the command byte 0x33 followed by the five letters "reset", exactly like REBOOT with "reboot". Without the word the command is
+    // not recognised (the final else answers ERR_CODE_UNSUPPORTED_CMD). The reference client meshcore_py (commands_device.confirm_factory_reset)
+    // sends the bare byte 0x33 and is wrong about it (its comment "the firmware has no token verification" does not match the firmware).
+    Bytes b = {cmd::kFactoryReset};
+    const std::string w = "reset";
+    b.insert(b.end(), w.begin(), w.end());
+    return b;
+}
+
+Bytes build_get_stats(uint8_t sub_type)
+{
+    return {cmd::kGetStats, sub_type};
+}
+
+Bytes build_set_other_params(bool manual_add, uint8_t telemetry_mode, uint8_t adv_loc_policy, uint8_t multi_acks, bool with_multi_acks)
+{
+    Bytes b = {cmd::kSetOtherParams, static_cast<uint8_t>(manual_add ? 1 : 0), telemetry_mode, adv_loc_policy};
+    if (with_multi_acks) b.push_back(multi_acks);
+    return b;
+}
+
+Bytes build_set_autoadd_config(uint8_t flags)
+{
+    return {cmd::kSetAutoadd, flags};
+}
+
+Bytes build_get_autoadd_config()
+{
+    return {cmd::kGetAutoadd};
+}
+
+Bytes build_get_allowed_repeat_freq()
+{
+    return {cmd::kGetAllowedRepeatFreq};
+}
+
+Bytes build_set_path_hash_mode(int mode)
+{
+    return {cmd::kSetPathHashMode, 0, static_cast<uint8_t>(mode)};
+}
+
+Bytes build_discover_request(uint8_t type_filter, uint32_t tag, bool prefix_only)
+{
+    Bytes b = {cmd::kSendControlData, static_cast<uint8_t>(0x80 | (prefix_only ? 1 : 0)), type_filter};
+    put_u32(b, tag);
+    return b;
+}
+
+/* ADVERT out of the radio log. Layout (packet_format.md, payloads.md): header (route type bits 0-1, payload type bits 2-5), 4 bytes of
+ * transport codes for the two transport route types, the path length byte (hops in bits 0-5, hash size - 1 in bits 6-7), the path, then
+ * the payload: public key (32), timestamp (4), signature (64), appdata (flags; latitude and longitude when 0x10; two 2-byte features when
+ * 0x20 / 0x40; the name when 0x80). */
+std::optional<HeardAdvert> parse_heard_advert(const LogData &log)
+{
+    const Bytes &p = log.raw;
+    if (p.size() < 2) return std::nullopt;
+    const uint8_t header = p[0];
+    if (((header >> 2) & 0x0F) != 0x04) return std::nullopt;                // not PAYLOAD_TYPE_ADVERT
+    size_t pos = 1;
+    const int route = header & 0x03;
+    if (route == 0 || route == 3) pos += 4;                                  // transport codes
+    if (pos >= p.size()) return std::nullopt;
+    const uint8_t plen = p[pos++];
+    const int hash_size = (plen >> 6) + 1;
+    if (hash_size > 3) return std::nullopt;                                  // 0b11 is reserved
+    const int hops = plen & 0x3F;
+    const size_t path_bytes = static_cast<size_t>(hops) * static_cast<size_t>(hash_size);
+    if (pos + path_bytes > p.size()) return std::nullopt;
+    pos += path_bytes;
+    if (p.size() - pos < 32 + 4 + 64) return std::nullopt;
+    HeardAdvert h;
+    std::copy_n(p.begin() + static_cast<long>(pos), 32, h.key.begin());
+    pos += 32;
+    h.timestamp = static_cast<uint32_t>(p[pos]) | static_cast<uint32_t>(p[pos + 1]) << 8 | static_cast<uint32_t>(p[pos + 2]) << 16 |
+                  static_cast<uint32_t>(p[pos + 3]) << 24;
+    pos += 4 + 64;                                                           // timestamp, signature (not checked)
+    h.hops = hops;
+    h.hash_size = hash_size;
+    h.snr = log.snr;
+    h.rssi = log.rssi;
+    if (pos < p.size()) {
+        const uint8_t flags = p[pos++];
+        const uint8_t type = flags & 0x0F;
+        if (type >= advtype::kChat && type <= advtype::kSensor) h.type = type;
+        auto i32 = [&](size_t at) {
+            return static_cast<int32_t>(static_cast<uint32_t>(p[at]) | static_cast<uint32_t>(p[at + 1]) << 8 | static_cast<uint32_t>(p[at + 2]) << 16 |
+                                        static_cast<uint32_t>(p[at + 3]) << 24);
+        };
+        if (flags & 0x10) {
+            if (pos + 8 <= p.size()) {
+                h.has_pos = true;
+                h.lat = i32(pos) / 1e6;
+                h.lon = i32(pos + 4) / 1e6;
+                if (h.lat < -90.0 || h.lat > 90.0 || h.lon < -180.0 || h.lon > 180.0 || (h.lat == 0 && h.lon == 0)) h.has_pos = false;
+            }
+            pos += 8;
+        }
+        if (flags & 0x20) pos += 2;
+        if (flags & 0x40) pos += 2;
+        if ((flags & 0x80) && pos < p.size()) {
+            std::string n(reinterpret_cast<const char *>(p.data() + pos), p.size() - pos);
+            const size_t nul = n.find('\0');
+            if (nul != std::string::npos) n.resize(nul);
+            h.name = truncate_utf8(sanitize_utf8(n), 32);
+        }
+    }
+    return h;
 }
 
 Bytes build_set_tx_power(int dbm)

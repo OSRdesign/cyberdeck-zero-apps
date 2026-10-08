@@ -1,0 +1,31 @@
+# Mesh Hop 0.2.2: factory reset of the board. The simulator formats for 4 s before it answers (--reset-format-delay 4), then restarts with a new
+# identity.   sh p2_run.sh b-reset.script "--reset-format-delay 4"
+wait 3500
+say == before (expect board=a0a1a2a3a4a5 contacts=4 all_msgs=12)
+dump
+key tab
+key tab
+key tab
+key tab
+wait 600
+key end
+key up
+key up
+key enter
+wait 500
+type y
+wait 700
+shot r01-second-box
+wait 3000
+type y
+wait 1500
+say == waiting for the answer: the footer says what is happening (expect reset=waiting, a notice starting with Board reset or nothing yet)
+dump
+shot r02-erasing
+wait 9000
+say == the board restarted: another identity, empty (expect reset=done contacts=0 all_msgs=0 board!=a0a1a2a3a4a5 others=1 notice starting with Board reset: the board restarted)
+dump
+shot r03-board-reset
+key tab
+wait 400
+shot r04-chats-after-reset

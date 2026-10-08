@@ -23,7 +23,7 @@ namespace meshhop {
 
 namespace {
 
-constexpr const char *kVersion = "0.1.2";
+constexpr const char *kVersion = "0.2.2";
 
 // ---- the colours of the launcher and of MeshZero 0.1.0
 constexpr uint32_t kBackground = 0x101214;
@@ -72,6 +72,11 @@ enum Tag {
     kTagPopLeft = 60, kTagPopRight, kTagPopOk, kTagPopCancel, kTagPopYes, kTagPopNo,
     kTagPopItem = 70,      // 70..79
     kTagTitleHold = 80,    // the title of the open conversation (hold 3 s: options)
+    // phase 2
+    kTagNearby = 90, kTagSelect, kTagGroup, kTagSelDone, kTagSelMenu, kTagSelDelete, kTagSelGroup,
+    kTagDetailGroups, kTagDetailDelete, kTagChatDetails, kTagNearbyClose, kTagNearbyScan, kTagNearbyIgnored,
+    kTagSearchOpen, kTagSearchClose, kTagSearchConv, kTagSearchDate, kTagSearchDir, kTagSearchBox,
+    kTagStatsClose, kTagStatsRefresh, kTagStatsAuto,
 };
 
 App *g_app = nullptr;
@@ -221,6 +226,7 @@ void RowList::create(lv_obj_t *parent, int x, int y, int w, int h, const Config 
             lv_obj_add_event_cb(s.row, trampoline_row, code, this);
         for (int k = 0; k < cfg.max_boxes; ++k) {
             lv_obj_t *b = make_box(s.row, 0, 0, 10, 10);
+            lv_obj_remove_flag(b, LV_OBJ_FLAG_CLICKABLE);                 // a tap on a button-like cell belongs to the row (the x of the tap says which)
             lv_obj_set_style_radius(b, 6, 0);
             lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
             set_hidden(b, true);
@@ -234,10 +240,12 @@ void RowList::create(lv_obj_t *parent, int x, int y, int w, int h, const Config 
             s.labels.push_back(l);
         }
         s.bar = make_box(s.row, 0, 0, 4, 10);
+        lv_obj_remove_flag(s.bar, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_set_style_bg_color(s.bar, lv_color_hex(kGold), 0);
         lv_obj_set_style_bg_opa(s.bar, LV_OPA_COVER, 0);
         set_hidden(s.bar, true);
         s.pill = make_box(s.row, 0, 0, 34, 22);
+        lv_obj_remove_flag(s.pill, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_set_style_radius(s.pill, 11, 0);
         lv_obj_set_style_bg_color(s.pill, lv_color_hex(kGold), 0);
         lv_obj_set_style_bg_opa(s.pill, LV_OPA_COVER, 0);
@@ -247,6 +255,16 @@ void RowList::create(lv_obj_t *parent, int x, int y, int w, int h, const Config 
         set_hidden(s.pill, true);
         hide(s);
     }
+}
+
+void RowList::reset()
+{
+    pool_.clear();
+    rows_.clear();
+    off_.clear();
+    cont_ = spacer_ = nullptr;
+    total_ = 0;
+    selected_ = -1;
 }
 
 void RowList::hide(Slot &s)
@@ -494,6 +512,7 @@ App::App(Platform &plat) : plat_(plat), serial_(Store::default_dir())
     store_->attach(model_);
     log_ = std::make_unique<FileLog>(store_->dir() + "/mesh-hop.log");
     log_->line(std::string("mesh-hop ") + kVersion + " started");
+    store_->set_log([this](const std::string &s) { if (log_) log_->line(s); });
     {   // the radio preset list: the saved copy of the last successful download, else the list built into the app
         std::vector<RadioPreset> saved;
         std::string date, src;
@@ -505,6 +524,7 @@ App::App(Platform &plat) : plat_(plat), serial_(Store::default_dir())
             log_->line(std::string("presets: ") + (had_file ? "the saved copy is damaged, " : "") + "using the list built into the app (" + presets_date() + ")");
         }
         fetcher_ = std::make_unique<PresetFetcher>(store_->dir());
+        preset_sched_ = std::make_unique<PresetSchedule>(start_ms_);
     }
     client_ = std::make_unique<Client>(serial_, model_);
     client_->set_log([this](const std::string &s) { if (log_) log_->line(s); });
@@ -576,7 +596,7 @@ void App::build_screen()
     build_chats();
     build_placeholder(&page_[static_cast<int>(Tab::Map)], "Map", "The map of the nodes with a position comes in phase 3.\nUntil then the Contacts tab shows the distances.");
     build_contacts();
-    build_placeholder(&page_[static_cast<int>(Tab::Terminal)], "Terminal", "A meshcore-cli style command line comes in phase 2.");
+    build_placeholder(&page_[static_cast<int>(Tab::Terminal)], "Terminal", "A meshcore-cli style command line comes in a later version.");
     build_settings();
     build_footer();
     build_editor();
@@ -627,7 +647,8 @@ void App::build_chats()
     cfg.max_cells = 3;
     cfg.max_boxes = 0;
     cfg.min_row_h = 26;
-    chat_list_.create(p, 0, 0, kListW, kPageH, cfg);
+    chat_list_.create(p, 0, 0, kListW, kPageH - 44, cfg);
+    search_btn_ = make_button(p, 4, kPageH - 44, kListW - 8, 44, "Search messages", kTagSearchOpen);
     lv_obj_t *div = make_box(p, kListW, 0, 1, kPageH);
     lv_obj_set_style_bg_color(div, lv_color_hex(kSelected), 0);
     lv_obj_set_style_bg_opa(div, LV_OPA_COVER, 0);
@@ -635,8 +656,8 @@ void App::build_chats()
     const int rx = kListW + 1;                    // the right pane
     chat_title_ = make_label(p, f_text_, kGold, rx + 10, 10, 290, 24);
     chat_info_ = make_label(p, f_small_, kMuted, rx + 250, 12, 170, 20, LV_TEXT_ALIGN_RIGHT);
-    mute_btn_ = make_button(p, 640 - 104, 4, 98, 36, "Mute", kTagMuteChan, &mute_label_);
-    set_hidden(mute_btn_, true);
+    details_btn_ = make_button(p, 640 - 104, 0, 98, 44, "Details", kTagChatDetails);
+    set_hidden(details_btn_, true);
     // the name of the open conversation: hold it for 3 s to open the options (a tap does nothing)
     title_hold_ = make_box(p, rx, 0, 240, 44);
     lv_obj_add_flag(title_hold_, LV_OBJ_FLAG_CLICKABLE);
@@ -687,16 +708,28 @@ void App::build_chats()
     lv_obj_add_event_cb(compose_, trampoline_button, LV_EVENT_CLICKED, reinterpret_cast<void *>(static_cast<intptr_t>(kTagCompose)));
     send_btn_ = make_button(p, 640 - 90, 353, 84, 40, "Send", kTagSend, &send_label_);
     lv_obj_set_style_bg_color(send_btn_, lv_color_hex(kOkGreen), 0);
+    build_search();
 }
 
 void App::build_contacts()
 {
     lv_obj_t *p = page_[static_cast<int>(Tab::Contacts)];
-    make_button(p, 8, 0, 84, 44, "Advert", kTagAdvertFlood);
-    make_button(p, 98, 0, 96, 44, "Zero-hop", kTagAdvertZero);
-    make_button(p, 200, 0, 84, 44, "Refresh", kTagRefresh);
-    make_button(p, 290, 0, 196, 44, "", kTagSort, &sort_label_);
-    contacts_count_ = make_label(p, f_small_, kMuted, 492, 12, 140, 20, LV_TEXT_ALIGN_RIGHT);
+    // the toolbar (every button 44 px high): normal, and the one of the select mode
+    tb_normal_ = make_box(p, 0, 0, 640, 44);
+    make_button(tb_normal_, 4, 0, 72, 44, "Advert", kTagAdvertFlood);
+    make_button(tb_normal_, 80, 0, 84, 44, "Zero-hop", kTagAdvertZero);
+    make_button(tb_normal_, 168, 0, 72, 44, "Refresh", kTagRefresh);
+    nearby_btn_ = make_button(tb_normal_, 244, 0, 88, 44, "Nearby", kTagNearby, &nearby_btn_label_);
+    make_button(tb_normal_, 336, 0, 72, 44, "Select", kTagSelect);
+    make_button(tb_normal_, 412, 0, 128, 44, "Group: All", kTagGroup, &group_btn_label_);
+    make_button(tb_normal_, 544, 0, 92, 44, "Sort", kTagSort, &sort_label_);
+    tb_select_ = make_box(p, 0, 0, 640, 44);
+    make_button(tb_select_, 4, 0, 76, 44, "Done", kTagSelDone);
+    make_button(tb_select_, 84, 0, 104, 44, "Select...", kTagSelMenu);
+    del_btn_ = make_button(tb_select_, 192, 0, 132, 44, "Delete", kTagSelDelete, &del_btn_label_);
+    make_button(tb_select_, 328, 0, 104, 44, "Group...", kTagSelGroup);
+    sel_count_ = make_label(tb_select_, f_small_, kMuted, 436, 12, 196, 20, LV_TEXT_ALIGN_RIGHT);
+    set_hidden(tb_select_, true);
 
     // the filters (C2): node type, and time since the node was last heard. Each chip is a 44 px high touch target.
     static const int type_x[5] = {8, 66, 130, 222, 288}, type_w[5] = {54, 60, 88, 62, 76};
@@ -731,8 +764,8 @@ void App::build_contacts()
     lv_obj_set_style_bg_opa(sep, LV_OPA_COVER, 0);
 
     static const char *const names[6] = {"Name", "Type", "Heard", "SNR", "Hops", "Distance"};
-    static const int xs[6] = {12, 220, 308, 384, 468, 544};
-    static const int ws[6] = {200, 84, 72, 80, 72, 88};
+    static const int xs[6] = {12, 212, 292, 360, 432, 484};
+    static const int ws[6] = {196, 76, 66, 70, 48, 100};
     lv_obj_t *hdr = make_box(p, 0, 88, 640, 22);
     lv_obj_set_style_bg_color(hdr, lv_color_hex(kPanel), 0);
     lv_obj_set_style_bg_opa(hdr, LV_OPA_COVER, 0);
@@ -744,27 +777,124 @@ void App::build_contacts()
         lv_obj_remove_flag(col_hdr_[i], LV_OBJ_FLAG_CLICKABLE);
         lv_label_set_text(col_hdr_[i], names[i]);
     }
+    contacts_count_ = make_label(hdr, f_small_, kMuted, 80, 2, 124, 18, LV_TEXT_ALIGN_RIGHT);     // "12 of 161", over the Name title (not clickable)
     RowList::Config cfg;
-    cfg.max_cells = 6;
-    cfg.max_boxes = 0;
+    cfg.max_cells = 8;
+    cfg.max_boxes = 2;
     cfg.min_row_h = kContactRowH;
     contact_list_.create(p, 0, 110, 640, 290, cfg);
 
-    // the detail panel of a repeater, sensor or room (and of any contact), over the table
+    // the detail panel of a contact (C8), over the table: static facts and large buttons
     detail_ = make_box(p, 0, 0, 640, kPageH);
     lv_obj_set_style_bg_color(detail_, lv_color_hex(kBackground), 0);
     lv_obj_set_style_bg_opa(detail_, LV_OPA_COVER, 0);
     lv_obj_add_flag(detail_, LV_OBJ_FLAG_CLICKABLE);                  // swallows taps meant for the table below
-    detail_title_ = make_label(detail_, f_big_, kGold, 16, 10, 600, 26);
-    static const char *const keys[8] = {"Name", "Type", "Key", "Path", "Last heard", "Position", "Distance", "Last SNR"};
-    for (int i = 0; i < 8; ++i) {
-        lv_obj_t *k = make_label(detail_, f_small_, kMuted, 16, 54 + i * 33, 110, 20);
+    detail_title_ = make_label(detail_, f_big_, kGold, 16, 8, 600, 26);
+    static const char *const keys[10] = {"Name", "Type", "Groups", "Public key", "Route", "Last advert", "Heard here", "Position", "Distance", "Last SNR"};
+    static const int ys[10] = {44, 72, 100, 128, 172, 200, 228, 256, 284, 312};
+    for (int i = 0; i < 10; ++i) {
+        lv_obj_t *k = make_label(detail_, f_small_, kMuted, 16, ys[i] + 4, 110, 20);
         lv_label_set_text(k, keys[i]);
-        detail_val_[i] = make_label(detail_, f_text_, kText, 132, 50 + i * 33, 490, 24);
+        detail_val_[i] = make_label(detail_, i == 3 ? f_text_small_ : f_text_, kText, 132, ys[i], 496, i == 3 ? 44 : 24);
+        if (i == 3 || i == 4) lv_label_set_long_mode(detail_val_[i], LV_LABEL_LONG_MODE_WRAP);
     }
-    detail_msg_btn_ = make_button(detail_, 16, 328, 160, 44, "Message", kTagDetailMsg);
-    make_button(detail_, 190, 328, 160, 44, "Close", kTagDetailClose);
+    detail_msg_btn_ = make_button(detail_, 8, 352, 148, 44, "Message", kTagDetailMsg);
+    make_button(detail_, 160, 352, 148, 44, "Groups", kTagDetailGroups);
+    lv_obj_t *dd = make_button(detail_, 312, 352, 148, 44, "Delete", kTagDetailDelete);
+    lv_obj_set_style_bg_color(dd, lv_color_hex(kDangerRed), 0);
+    make_button(detail_, 464, 352, 164, 44, "Close", kTagDetailClose);
     set_hidden(detail_, true);
+    build_nearby();
+}
+
+/* The Nearby list (C4): adverts heard, pending contacts of the manual add mode and the answers to a zero-hop scan, with Add / Ignore. */
+void App::build_nearby()
+{
+    lv_obj_t *p = page_[static_cast<int>(Tab::Contacts)];
+    nearby_ = make_box(p, 0, 0, 640, kPageH);
+    lv_obj_set_style_bg_color(nearby_, lv_color_hex(kBackground), 0);
+    lv_obj_set_style_bg_opa(nearby_, LV_OPA_COVER, 0);
+    lv_obj_add_flag(nearby_, LV_OBJ_FLAG_CLICKABLE);
+    nearby_title_ = make_label(nearby_, f_big_, kGold, 12, 10, 330, 26);
+    make_button(nearby_, 346, 0, 92, 44, "Scan", kTagNearbyScan, &nearby_scan_label_);
+    make_button(nearby_, 442, 0, 96, 44, "Ignored", kTagNearbyIgnored, &nearby_ign_label_);
+    make_button(nearby_, 542, 0, 94, 44, "Close", kTagNearbyClose);
+    RowList::Config cfg;
+    cfg.max_cells = 6;
+    cfg.max_boxes = 2;
+    cfg.min_row_h = 56;
+    nearby_list_.create(nearby_, 0, 48, 640, kPageH - 48, cfg);
+    nearby_empty_ = make_label(nearby_, f_ui_, kMuted, 30, 150, 580, 100, LV_TEXT_ALIGN_CENTER);
+    lv_label_set_long_mode(nearby_empty_, LV_LABEL_LONG_MODE_WRAP);
+    set_hidden(nearby_, true);
+}
+
+/* Search in the message archive (M7): a panel over the Chats page. */
+void App::build_search()
+{
+    lv_obj_t *p = page_[static_cast<int>(Tab::Chats)];
+    search_panel_ = make_box(p, 0, 0, 640, kPageH);
+    lv_obj_set_style_bg_color(search_panel_, lv_color_hex(kBackground), 0);
+    lv_obj_set_style_bg_opa(search_panel_, LV_OPA_COVER, 0);
+    lv_obj_add_flag(search_panel_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *t = make_label(search_panel_, f_big_, kGold, 12, 10, 400, 26);
+    lv_label_set_text(t, "Search messages");
+    make_button(search_panel_, 540, 0, 96, 44, "Close", kTagSearchClose);
+    sr_query_ = lv_textarea_create(search_panel_);
+    lv_obj_set_pos(sr_query_, 8, 48);
+    lv_obj_set_size(sr_query_, 624, 44);
+    lv_textarea_set_one_line(sr_query_, true);
+    lv_obj_set_scrollbar_mode(sr_query_, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_style_text_font(sr_query_, f_text_, 0);
+    lv_obj_set_style_text_color(sr_query_, lv_color_hex(kText), 0);
+    lv_obj_set_style_bg_color(sr_query_, lv_color_hex(kPanel), 0);
+    lv_obj_set_style_bg_opa(sr_query_, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(sr_query_, 6, 0);
+    lv_obj_set_style_border_width(sr_query_, 2, 0);
+    lv_obj_set_style_border_color(sr_query_, lv_color_hex(kGold), 0);
+    lv_obj_set_style_pad_all(sr_query_, 8, 0);
+    lv_obj_set_style_text_color(sr_query_, lv_color_hex(kMuted), LV_PART_TEXTAREA_PLACEHOLDER);
+    lv_obj_set_style_bg_opa(sr_query_, LV_OPA_TRANSP, LV_PART_CURSOR);
+    lv_obj_set_style_border_side(sr_query_, LV_BORDER_SIDE_LEFT, LV_PART_CURSOR | LV_STATE_FOCUSED);
+    lv_obj_set_style_border_width(sr_query_, 2, LV_PART_CURSOR | LV_STATE_FOCUSED);
+    lv_obj_set_style_border_color(sr_query_, lv_color_hex(kGold), LV_PART_CURSOR | LV_STATE_FOCUSED);
+    lv_textarea_set_max_length(sr_query_, 60);
+    lv_obj_add_state(sr_query_, LV_STATE_FOCUSED);
+    lv_textarea_set_placeholder_text(sr_query_, "Type the words to find (Bluetooth keyboard)");
+    make_button(search_panel_, 8, 96, 200, 44, "", kTagSearchConv, &sr_conv_label_);
+    make_button(search_panel_, 212, 96, 232, 44, "", kTagSearchDate, &sr_date_label_);
+    make_button(search_panel_, 448, 96, 184, 44, "", kTagSearchDir, &sr_dir_label_);
+    sr_count_ = make_label(search_panel_, f_small_, kMuted, 12, 146, 616, 18);
+    RowList::Config cfg;
+    cfg.max_cells = 3;
+    cfg.max_boxes = 0;
+    cfg.min_row_h = 56;
+    search_list_.create(search_panel_, 0, 166, 640, kPageH - 166, cfg);
+    set_hidden(search_panel_, true);
+}
+
+/* The statistics screen (D9): a panel over the Settings page. */
+void App::build_stats()
+{
+    lv_obj_t *p = page_[static_cast<int>(Tab::Settings)];
+    stats_panel_ = make_box(p, 0, 0, 640, kPageH);
+    lv_obj_set_style_bg_color(stats_panel_, lv_color_hex(kBackground), 0);
+    lv_obj_set_style_bg_opa(stats_panel_, LV_OPA_COVER, 0);
+    lv_obj_add_flag(stats_panel_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *t = make_label(stats_panel_, f_big_, kGold, 12, 10, 290, 26);
+    lv_label_set_text(t, "Statistics");
+    make_button(stats_panel_, 304, 0, 104, 44, "Refresh", kTagStatsRefresh);
+    make_button(stats_panel_, 412, 0, 120, 44, "", kTagStatsAuto, &st_auto_label_);
+    make_button(stats_panel_, 540, 0, 96, 44, "Close", kTagStatsClose);
+    for (int i = 0; i < 10; ++i) {
+        st_label_[0][i] = make_label(stats_panel_, f_ui_, kMuted, 12, 56 + i * 28, 130, 22);
+        st_value_[0][i] = make_label(stats_panel_, f_text_, kText, 146, 56 + i * 28, 176, 22);
+        st_label_[1][i] = make_label(stats_panel_, f_ui_, kMuted, 336, 56 + i * 28, 150, 22);
+        st_value_[1][i] = make_label(stats_panel_, f_text_, kText, 490, 56 + i * 28, 140, 22);
+    }
+    st_updated_ = make_label(stats_panel_, f_small_, kMuted, 12, 372, 400, 18);
+    st_note_ = make_label(stats_panel_, f_small_, kMuted, 336, 372, 296, 18, LV_TEXT_ALIGN_RIGHT);
+    set_hidden(stats_panel_, true);
 }
 
 void App::build_settings()
@@ -774,8 +904,8 @@ void App::build_settings()
     cfg.max_boxes = 3;
     cfg.min_row_h = 28;
     settings_list_.create(page_[static_cast<int>(Tab::Settings)], 0, 0, 640, kPageH, cfg);
+    build_stats();
 }
-
 void App::build_footer()
 {
     lv_obj_t *f = make_box(screen_, 0, kFooterY, 640, kFooterH);
@@ -884,7 +1014,7 @@ std::string App::debug_state() const
     const char *compose = compose_ ? lv_textarea_get_text(compose_) : "";
     const char *editor = ed_ta_ ? lv_textarea_get_text(ed_ta_) : "";
     const char *pk = pop_.kind == Popup::Choice ? "choice" : pop_.kind == Popup::Confirm ? "confirm" : pop_.kind == Popup::Menu ? "menu"
-                     : pop_.kind == Popup::Info ? "info" : "none";
+                     : pop_.kind == Popup::Info ? "info" : pop_.kind == Popup::List ? "list" : pop_.kind == Popup::Progress ? "progress" : "none";
     std::string last_status;
     if (!conv_.empty()) {
         const auto msgs = model_.messages(conv_);
@@ -913,6 +1043,23 @@ std::string App::debug_state() const
                     " presets=" + (presets_origin() == PresetOrigin::Fetched ? "fetched" : presets_origin() == PresetOrigin::Cached ? "cached" : "bundled") + "/" +
                     std::to_string(radio_presets().size()) + "/" + presets_list_date() + " all_msgs=" + std::to_string(model_.message_count()) +
                     " popup_title='" + (pop_.kind == Popup::None ? std::string() : pop_.title) + "'" + " muted_conv=" + (conv_.empty() ? "-" : model_.is_muted(conv_) ? "1" : "0");
+    // phase 2
+    const DeviceInfo *dev = model_.device() ? &*model_.device() : nullptr;
+    s += std::string(" select=") + (nav_.select_mode ? "1" : "0") + " selected=" + std::to_string(csel_.size()) + " group='" + cview_.group + "'" +
+         " nearby_open=" + (nav_.nearby_open ? "1" : "0") + " nearby=" + std::to_string(nearby_rows_.size()) + "/" + std::to_string(model_.nearby_count()) +
+         " pending=" + std::to_string(model_.pending_count()) + " ignored=" + std::to_string(model_.ignored().size()) +
+         " search_open=" + (nav_.search_open ? "1" : "0") + " search_hits=" + std::to_string(search_rows_.size()) + " search_text='" + search_.text + "'" +
+         " stats_open=" + (nav_.stats_open ? "1" : "0") + " stats=" + (model_.stats().core ? "core" : "-") + (model_.stats().radio ? "+radio" : "") + (model_.stats().packets ? "+packets" : "") +
+         " path_hash=" + (dev ? std::to_string(dev->path_hash_mode) : std::string("-")) + " repeat=" + (dev && dev->has_repeat ? (dev->repeat ? "on" : "off") : "-") +
+         " manual_add=" + (model_.self() ? (model_.self()->manual_add_contacts ? "1" : "0") : "-") +
+         " autoadd=" + (model_.caps().autoadd == Cap::Yes ? std::to_string(model_.caps().autoadd_config.config) : std::string("-")) +
+         " advert=" + std::to_string(model_.advert_schedule().interval_hours) + (model_.advert_schedule().flood ? "h/flood" : "h/zero") +
+         " groups=" + std::to_string(model_.groups().groups().size()) + " bulk=" + (client_->bulk().active ? "active" : "idle") + "/" + std::to_string(client_->bulk().done) + "/" + std::to_string(client_->bulk().failed) +
+         " scan=" + (client_->discover().active ? "active" : "idle") + "/" + std::to_string(client_->discover().found) + " focus_seq=" + std::to_string(focus_seq_) +
+         " board=" + (model_.board_known() ? model_.board_key().substr(0, 12) : std::string("-")) + " epoch=" + std::to_string(model_.board_epoch()) +
+         " board_dir=" + store_->board_id() + " others=" + std::to_string(other_boards_n_) +
+         " reset=" + (client_->reset_phase() == Client::ResetPhase::None ? "-" : client_->reset_phase() == Client::ResetPhase::Waiting ? "waiting"
+                      : client_->reset_phase() == Client::ResetPhase::Done ? "done" : "kept-keys");
     return s;
 }
 
@@ -938,7 +1085,16 @@ void App::select_tab(Tab t)
     nav_.detail_open = false;
     set_hidden(detail_, true);
     detail_key_.clear();
+    // every layer over a page closes with the tab (the search, the Nearby list, the statistics, the select mode)
+    if (nav_.search_open) close_search();
+    if (nav_.stats_open) close_stats();
+    if (nav_.nearby_open) close_nearby();
+    if (nav_.select_mode) leave_select_mode();
     if (t == Tab::Settings && !dirty_radio_) edit_ = model_.radio_settings();
+    if (t == Tab::Settings && client_->ready() && mono_ms() - self_refresh_ms_ > 20000) {     // the board position and settings as the board holds them now
+        self_refresh_ms_ = mono_ms();
+        client_->refresh_self();
+    }
     invalidate();
     set_page_visible();
 }
@@ -1011,6 +1167,96 @@ void App::after_deletion()
     built_sig_ = 0;
     chat_sig_ = 0;
     invalidate();
+}
+
+/* Another board (another public key) is connected, or the first one was recognised: the model already holds that board's own data. What the UI
+ * kept for the previous board (open conversation, search, selection, group filter, an open box) must not leak into the new one. */
+void App::on_board_changed()
+{
+    seen_epoch_ = model_.board_epoch();
+    if (log_) log_->line("board identity: " + (model_.board_known() ? model_.board_key().substr(0, 12) : std::string("none")) + ", the conversations, contacts, groups and flags were reloaded");
+    if (editor_open_) close_editor(false);
+    if (nav_.popup_open || pop_.kind != Popup::None) close_popup();
+    if (nav_.search_open) close_search();
+    if (nav_.stats_open) close_stats();
+    if (nav_.nearby_open) close_nearby();
+    if (nav_.select_mode) leave_select_mode();
+    nav_.detail_open = false;
+    set_hidden(detail_, true);
+    detail_key_.clear();
+    csel_.clear();
+    cview_.group.clear();
+    csnap_valid_ = false;
+    contact_sel_key_.clear();
+    contact_sel_ = 0;
+    conv_.clear();
+    chat_sel_key_.clear();
+    chat_sel_ = -1;
+    nav_.compose_focus = false;
+    if (compose_) lv_textarea_set_text(compose_, "");
+    focus_conv_.clear();
+    focus_seq_ = 0;
+    search_ = SearchState();
+    search_rows_.clear();
+    built_conv_.clear();
+    built_sig_ = 0;
+    chat_sig_ = 0;
+    settings_sig_ = 0;
+    nearby_sig_ = 0;
+    dirty_radio_ = false;
+    edit_ = model_.radio_settings();
+    refresh_other_boards(true);
+    invalidate();
+}
+
+void App::refresh_other_boards(bool force)
+{
+    const uint64_t now = mono_ms();
+    if (!force && other_cache_ms_ != 0 && now - other_cache_ms_ < 5000) return;
+    other_cache_ms_ = now;
+    other_boards_n_ = 0;
+    other_boards_bytes_ = 0;
+    if (!store_) return;
+    for (const Store::SavedBoard &b : store_->other_boards()) {
+        ++other_boards_n_;
+        other_boards_bytes_ += b.bytes;
+    }
+}
+
+void App::confirm_forget_board()
+{
+    if (!model_.board_known()) {
+        notice("No board is known yet", false);
+        return;
+    }
+    const DeletePrompt p = forget_board_prompt(model_, model_.board_key().substr(0, 12));
+    open_confirm(p.title, p.body,
+                 [this] {
+                     model_.forget_board_app_data();
+                     cview_.group.clear();
+                     csnap_valid_ = false;
+                     after_deletion();
+                     notice("This board's saved data was forgotten", true);
+                 },
+                 "Forget", "No", 0, true);
+}
+
+void App::confirm_forget_others()
+{
+    refresh_other_boards(true);
+    const DeletePrompt p = forget_others_prompt(other_boards_n_, other_boards_bytes_);
+    if (p.empty) {
+        notice("No other board has saved data", true);
+        return;
+    }
+    open_confirm(p.title, p.body,
+                 [this] {
+                     const size_t n = store_->forget_other_boards();
+                     refresh_other_boards(true);
+                     settings_sig_ = 0;
+                     notice("Forgot the saved data of " + fmt_boards(n), true);
+                 },
+                 "Forget", "No", 0, true);
 }
 
 void App::confirm_delete_conversation(const std::string &conv)
@@ -1149,7 +1395,7 @@ void App::presets_tick(uint64_t now)
         if (changed) notice("Radio preset list updated (" + std::to_string(radio_presets().size()) + " entries)", true);
         invalidate();
     }
-    if (!fetcher_) return;
+    if (!fetcher_ || !preset_sched_) return;
     if (fetcher_->state() == PresetFetcher::State::Running) {
         if (now - preset_poll_ms_ < 250) return;
         preset_poll_ms_ = now;
@@ -1162,25 +1408,34 @@ void App::presets_tick(uint64_t now)
             preset_pending_ = fetcher_->list();
             preset_pending_date_ = date;
             preset_pending_ready_ = true;
+            preset_sched_->succeeded();
         } else if (st == PresetFetcher::State::Failed) {
-            if (log_) log_->line("presets: refresh failed (" + fetcher_->message() + "), keeping the " +
-                                 (presets_origin() == PresetOrigin::Bundled ? "built-in" : "saved") + " list");
+            preset_sched_->failed(now, true);                 // the download was really tried: one more try about 60 s later, if the deck is online
+            if (log_)
+                log_->line("presets: refresh failed (" + fetcher_->message() + "), keeping the " + (presets_origin() == PresetOrigin::Bundled ? "built-in" : "saved") +
+                           " list" + (preset_sched_->finished() ? "" : "; one more try in 60 s"));
         }
         return;
     }
-    if (preset_tried_ || now - start_ms_ < 4000) return;      // let the screen settle first; one download per launch
-    if (preset_check_ms_ != 0 && now - preset_check_ms_ < 30000) return;
-    const bool first_check = preset_check_ms_ == 0;
-    preset_check_ms_ = now;
-    if (!network_online()) {
-        if (first_check && log_) log_->line("presets: the deck is offline, no refresh (checking again every 30 s)");
-        return;
+    // 4 s after the start, once the deck is online (offline: looked at again every 30 s); the second and last try 60 s after a failure
+    static bool offline_logged = false;
+    const bool due = preset_sched_->due(now, [this] {
+        const bool on = network_online();
+        if (!on && !offline_logged && log_) {
+            offline_logged = true;
+            log_->line("presets: the deck is offline, no refresh (checking again every 30 s)");
+        }
+        return on;
+    });
+    if (!due) return;
+    const bool retry = preset_sched_->attempts() >= 1;
+    preset_sched_->started();
+    if (log_) log_->line(std::string("presets: online, downloading the list in the background") + (retry ? " (second try)" : ""));
+    if (!fetcher_->start(now)) {
+        if (log_) log_->line("presets: refresh not started (" + fetcher_->message() + ")");
+        preset_sched_->failed(now, false);                     // no curl, or it cannot start: nothing to retry
     }
-    preset_tried_ = true;
-    if (log_) log_->line("presets: online, downloading the list in the background");
-    if (!fetcher_->start(now) && log_) log_->line("presets: refresh not started (" + fetcher_->message() + ")");
 }
-
 /* ================================================================== tick and render */
 
 void App::tick()
@@ -1190,6 +1445,7 @@ void App::tick()
         last_poll_ms_ = now;
         client_->poll(now);
     }
+    if (model_.board_epoch() != seen_epoch_) on_board_changed();
     if (pop_dirty_) {                                   // the widgets of a new popup are built here, never inside the click of another
         popup_build();
         popup_refresh();
@@ -1199,6 +1455,7 @@ void App::tick()
     if (view_pending_ && now - view_ms_ >= loading_min_ms()) apply_contact_view();
     hold_tick(now);
     presets_tick(now);
+    tick_phase2(now);
     if (share_pending_) {                               // a new private channel: show its key once the board holds it
         const ChannelRec *c = model_.find_channel_by_name(share_name_);
         if (c && c->has_secret && c->secret == share_key_) {
@@ -1221,7 +1478,7 @@ void App::tick()
         notice(client_->notice().text, client_->notice().ok);
         need = true;
     }
-    if (!notice_text_.empty() && now - notice_ms_ >= kNoticeMs) {
+    if (!notice_text_.empty() && now > notice_ms_ && now - notice_ms_ >= kNoticeMs) {          // (a notice set later in this very tick has a later time than `now`)
         notice_text_.clear();
         need = true;
     }
@@ -1266,9 +1523,17 @@ void App::render()
     set_page_visible();
     render_tabs();
     switch (nav_.tab) {
-    case Tab::Chats: render_chats(); break;
+    case Tab::Chats:
+        render_chats();
+        set_hidden(search_panel_, !nav_.search_open);
+        if (nav_.search_open) render_search();
+        break;
     case Tab::Contacts: render_contacts(); break;
-    case Tab::Settings: render_settings(); break;
+    case Tab::Settings:
+        render_settings();
+        set_hidden(stats_panel_, !nav_.stats_open);
+        if (nav_.stats_open) render_stats();
+        break;
     default: break;
     }
     render_footer();
@@ -1313,7 +1578,8 @@ void App::update_compose_style()
 void App::render_chats()
 {
     // the left list: a title and the number of unread messages (no last message), "muted" for a muted channel
-    const std::vector<ChatRow> rows = build_chat_rows(model_, conv_.rfind("d:", 0) == 0 ? conv_ : std::string());
+    // before the first SELF_INFO no board is known: an empty list (the conversations of the last board are not shown as if they were this one's)
+    const std::vector<ChatRow> rows = model_.board_known() ? build_chat_rows(model_, conv_.rfind("d:", 0) == 0 ? conv_ : std::string()) : std::vector<ChatRow>();
     chat_rows_ = rows;
     chat_sel_ = chat_sel_key_.empty() ? -1 : find_chat_row(chat_rows_, chat_sel_key_);
     if (chat_sel_ < 0 && chat_sel_key_ != "+") chat_sel_ = first_selectable(chat_rows_);
@@ -1364,11 +1630,16 @@ void App::render_chats()
     else if (!conv_.empty()) title = model_.conv_title(conv_);
     else title = "No conversation";
     const bool is_channel = conv_.rfind("c:", 0) == 0 && !add_selected;
-    set_hidden(mute_btn_, !is_channel);
+    bool has_details = false;                                   // a direct chat with a contact we know: the Details button (touch)
+    if (!add_selected && conv_.rfind("d:", 0) == 0 && conv_.size() == 14) {
+        KeyPrefix dp{};
+        has_details = from_hex(conv_.substr(2), dp.data(), 6) && model_.find_by_prefix(dp) != nullptr;
+    }
+    const bool side_button = has_details;
+    set_hidden(details_btn_, !has_details);
     set_hidden(title_hold_, add_selected || conv_.empty());
-    lv_label_set_text(mute_label_, is_channel && model_.is_muted(conv_) ? "Unmute" : "Mute");
-    lv_obj_set_width(chat_title_, is_channel ? 190 : 290);
-    lv_label_set_text(chat_title_, truncate_ellipsis(title, is_channel ? 17 : 30).c_str());
+    lv_obj_set_width(chat_title_, side_button ? 190 : 290);
+    lv_label_set_text(chat_title_, truncate_ellipsis(title, side_button ? 17 : 30).c_str());
     std::string info;
     if (nav_.compose_focus && !conv_.empty()) {
         const char *cur = lv_textarea_get_text(compose_);
@@ -1384,8 +1655,8 @@ void App::render_chats()
         info = std::to_string(heard) + (heard == 1 ? " node heard" : " nodes heard") + " (1 h)";
     }
     lv_label_set_text(chat_info_, info.c_str());
-    lv_obj_set_pos(chat_info_, kListW + 1 + (is_channel ? 120 : 250), 12);
-    lv_obj_set_width(chat_info_, is_channel ? 205 : 170);
+    lv_obj_set_pos(chat_info_, kListW + 1 + (side_button ? 120 : 250), 12);
+    lv_obj_set_width(chat_info_, side_button ? 205 : 170);
     render_chat_messages(false);
     update_compose_style();
     set_hidden(compose_, add_selected || conv_.empty());
@@ -1398,8 +1669,10 @@ void App::render_chat_messages(bool force)
     const bool add_selected = chat_sel_ >= 0 && chat_rows_[static_cast<size_t>(chat_sel_)].kind == ChatRow::Add;
     const auto msgs = conv_.empty() || add_selected ? std::vector<const Message *>() : model_.messages(conv_);
     uint32_t sig = fnv(0, conv_);
+    sig = fnv_int(sig, model_.board_known() ? 1 : 0);
     sig = fnv_int(sig, add_selected ? 1 : 0);
     sig = fnv_int(sig, static_cast<int>(msgs.size()));
+    sig = fnv_int(sig, conv_ == focus_conv_ ? static_cast<int>(focus_seq_) : 0);
     for (const Message *m : msgs) {
         sig = fnv_int(sig, static_cast<int>(m->seq));
         sig = fnv_int(sig, static_cast<int>(m->state));
@@ -1423,13 +1696,24 @@ void App::render_chat_messages(bool force)
         lv_obj_set_style_text_font(l, f_ui_, 0);
         set_color(l, kMuted);
         lv_label_set_text(l, add_selected ? "Press Enter or tap the row to add a channel:\na hashtag channel (#name), or a private channel with its own key."
+                          : !model_.board_known() ? "No board yet.\nPlug in a MeshCore board: its own conversations appear here."
                           : conv_.empty() ? "Select a channel or a contact on the left."
                                           : "No messages yet. Type a message with the keyboard and press Enter,\nor tap the entry box.");
         last = l;
     }
-    const size_t start = msgs.size() > static_cast<size_t>(kMaxShownMessages) ? msgs.size() - kMaxShownMessages : 0;
+    size_t start = msgs.size() > static_cast<size_t>(kMaxShownMessages) ? msgs.size() - kMaxShownMessages : 0;
+    size_t end = msgs.size();
+    const uint32_t want_seq = conv_ == focus_conv_ ? focus_seq_ : 0;        // a message found by the search: the window is put around it
+    if (want_seq) {
+        for (size_t i = 0; i < msgs.size(); ++i)
+            if (msgs[i]->seq == want_seq) {
+                start = i > 20 ? i - 20 : 0;
+                end = std::min(msgs.size(), start + static_cast<size_t>(kMaxShownMessages));
+            }
+    }
+    lv_obj_t *focus_item = nullptr;
     const bool channel = conv_.rfind("c:", 0) == 0;
-    for (size_t i = start; i < msgs.size(); ++i) {
+    for (size_t i = start; i < end; ++i) {
         const Message &m = *msgs[i];
         lv_obj_t *item = lv_obj_create(msgs_);
         lv_obj_remove_style_all(item);
@@ -1442,6 +1726,11 @@ void App::render_chat_messages(bool force)
         if (m.dir == Dir::Out) {
             lv_obj_set_style_bg_color(item, lv_color_hex(kPanel), 0);
             lv_obj_set_style_bg_opa(item, LV_OPA_COVER, 0);
+        }
+        if (want_seq && m.seq == want_seq) {                                 // the found message: a gold frame
+            focus_item = item;
+            lv_obj_set_style_border_width(item, 2, 0);
+            lv_obj_set_style_border_color(item, lv_color_hex(kGold), 0);
         }
         lv_obj_t *hdr = make_box(item, 0, 0, inner_w - 10, 20);
         lv_obj_t *who = make_label(hdr, f_text_small_, m.dir == Dir::Out ? kGreen : kBlue, 0, 0, 200, 20);
@@ -1462,40 +1751,43 @@ void App::render_chat_messages(bool force)
         last = item;
     }
     lv_obj_update_layout(msgs_);
-    if (at_bottom && last) lv_obj_scroll_to_view(last, LV_ANIM_OFF);
+    if (focus_item && first) lv_obj_scroll_to_view(focus_item, LV_ANIM_OFF);
+    else if (at_bottom && last && !want_seq) lv_obj_scroll_to_view(last, LV_ANIM_OFF);
     else lv_obj_scroll_to_y(msgs_, old_scroll, LV_ANIM_OFF);
 }
 
 /* ---- contacts */
 
-void App::rebuild_contact_snapshot()
+void App::build_contact_specs()
 {
-    const uint32_t rev = model_.revision();
-    csnap_ = make_contact_snapshot(model_, cview_);
-    csnap_rev_ = rev;
-    csnap_minute_ = now_unix() / 60;
-    csnap_valid_ = true;
     std::vector<RowSpec> specs;
     specs.reserve(csnap_.rows.size());
+    const bool select = nav_.select_mode;
     for (const ContactRow &r : csnap_.rows) {
         RowSpec s;
         s.h = kContactRowH;
         s.id = r.key_hex;
         const uint32_t type_color = r.type == advtype::kRepeater ? kBlue : r.type == advtype::kChat ? kText : kGold;
         const int y = centre(kContactRowH, f_ui_);
-        s.cells.push_back({truncate_ellipsis(r.name, 22), kText, 12, 200, LV_TEXT_ALIGN_LEFT, f_text_, y});
-        s.cells.push_back({r.type_name, type_color, 220, 84, LV_TEXT_ALIGN_LEFT, f_ui_, y});
-        s.cells.push_back({fmt_age_coarse(r.heard), kMuted, 308, 72, LV_TEXT_ALIGN_LEFT, f_ui_, y});
-        s.cells.push_back({fmt_snr(r.has_snr, r.snr), kMuted, 384, 80, LV_TEXT_ALIGN_LEFT, f_ui_, y});
-        s.cells.push_back({r.hops < 0 ? "-" : std::to_string(r.hops), kMuted, 468, 72, LV_TEXT_ALIGN_LEFT, f_ui_, y});
-        s.cells.push_back({r.has_dist ? fmt_distance(r.dist_km) : "-", kMuted, 544, 88, LV_TEXT_ALIGN_LEFT, f_ui_, y});
+        const bool marked = select && csel_.contains(r.key_hex);
+        if (select) {                                       // a check box at the left; the whole row is the touch target
+            s.cells.push_back({marked ? LV_SYMBOL_OK : " ", marked ? 0x101214u : kText, 8, 28, LV_TEXT_ALIGN_CENTER, f_ui_, 8, marked ? kGold : kSelected});
+        }
+        const int nx = select ? 44 : 12;
+        s.cells.push_back({truncate_ellipsis(r.name, select ? 18 : 22), marked ? kGold : kText, nx, select ? 164 : 196, LV_TEXT_ALIGN_LEFT, f_text_, y});
+        s.cells.push_back({r.type_name, type_color, 212, 76, LV_TEXT_ALIGN_LEFT, f_ui_, y});
+        s.cells.push_back({fmt_age_coarse(r.heard), kMuted, 292, 66, LV_TEXT_ALIGN_LEFT, f_ui_, y});
+        s.cells.push_back({fmt_snr(r.has_snr, r.snr), kMuted, 360, 70, LV_TEXT_ALIGN_LEFT, f_ui_, y});
+        s.cells.push_back({r.hops < 0 ? "-" : std::to_string(r.hops), kMuted, 432, 48, LV_TEXT_ALIGN_LEFT, f_ui_, y});
+        s.cells.push_back({r.has_dist ? fmt_distance(r.dist_km) : "-", kMuted, 484, select ? 150 : 98, LV_TEXT_ALIGN_LEFT, f_ui_, y});
+        if (!select) s.cells.push_back({"i", kText, 590, 44, LV_TEXT_ALIGN_CENTER, f_ui_, 4, kSelected});   // the details of this contact (a 44 px target)
         specs.push_back(std::move(s));
     }
     if (specs.empty()) {
         RowSpec s;
         s.h = 60;
         s.selectable = false;
-        const bool filtered = cview_.filter.active() && model_.contact_count() > 0;
+        const bool filtered = (cview_.filter.active() || !cview_.group.empty()) && model_.contact_count() > 0;
         s.cells.push_back({filtered ? "No contact matches the filters." : client_->ready() ? "No contacts yet. Send an advert and wait for the others." : "No contacts cached. Connect the radio board.",
                            kMuted, 12, 616, LV_TEXT_ALIGN_LEFT, f_ui_, 20});
         specs.push_back(std::move(s));
@@ -1508,15 +1800,30 @@ void App::rebuild_contact_snapshot()
     contact_list_.set(std::move(specs), sel, true);
 }
 
+void App::rebuild_contact_snapshot()
+{
+    const uint32_t rev = model_.revision();
+    // a group that was deleted no longer filters
+    if (!cview_.group.empty() && !model_.groups().has(cview_.group)) cview_.group.clear();
+    csnap_ = make_contact_snapshot(model_, cview_);
+    csnap_rev_ = rev;
+    csnap_minute_ = now_unix() / 60;
+    csnap_valid_ = true;
+    if (nav_.select_mode) {                                  // marks of contacts that are gone are dropped
+        std::set<std::string> alive;
+        for (const ContactRec *c : model_.contacts_sorted()) alive.insert(c->key_hex());
+        csel_.keep_only(alive);
+    }
+    build_contact_specs();
+}
+
 void App::render_contact_toolbar()
 {
     const ContactView &v = view_pending_ ? view_next_ : cview_;
-    std::string sl = std::string("Sort: ") + sort_name(v.sort) + (v.reverse ? " (rev)" : "");
-    lv_label_set_text(sort_label_, sl.c_str());
-    static const SortKey keys[6] = {SortKey::Name, SortKey::Type, SortKey::Heard, SortKey::Snr, SortKey::Hops, SortKey::Distance};
+    static const SortKey sort_keys[6] = {SortKey::Name, SortKey::Type, SortKey::Heard, SortKey::Snr, SortKey::Hops, SortKey::Distance};
     static const char *const names[6] = {"Name", "Type", "Heard", "SNR", "Hops", "Distance"};
     for (int i = 0; i < 6; ++i) {
-        const bool on = keys[i] == v.sort;
+        const bool on = sort_keys[i] == v.sort;
         lv_label_set_text(col_hdr_[i], (std::string(names[i]) + (on ? (v.reverse ? " ^" : " v") : "")).c_str());
         set_color(col_hdr_[i], on ? kGold : kMuted);
     }
@@ -1534,6 +1841,23 @@ void App::render_contact_toolbar()
     std::string cnt = csnap_.rows.size() == total ? std::to_string(total) + (total == 1 ? " contact" : " contacts")
                                                   : std::to_string(csnap_.rows.size()) + " of " + std::to_string(total);
     lv_label_set_text(contacts_count_, cnt.c_str());
+    set_hidden(tb_normal_, nav_.select_mode);
+    set_hidden(tb_select_, !nav_.select_mode);
+    lv_label_set_text(group_btn_label_, v.group.empty() ? "Group: All" : ("Group: " + truncate_ellipsis(v.group, 8)).c_str());
+    lv_obj_set_style_bg_color(lv_obj_get_parent(group_btn_label_), lv_color_hex(v.group.empty() ? kSelected : kGold), 0);
+    set_color(group_btn_label_, v.group.empty() ? kText : 0x101214);
+    const size_t pending = model_.pending_count();
+    lv_label_set_text(nearby_btn_label_, pending ? ("Nearby " + std::to_string(pending)).c_str() : "Nearby");
+    lv_obj_set_style_bg_color(nearby_btn_, lv_color_hex(pending ? kGold : kSelected), 0);
+    set_color(nearby_btn_label_, pending ? 0x101214 : kText);
+    if (nav_.select_mode) {
+        const size_t n = csel_.shown_selected(csnap_.rows).size();
+        lv_label_set_text(del_btn_label_, n ? ("Delete " + std::to_string(n)).c_str() : "Delete");
+        lv_obj_set_style_bg_color(del_btn_, lv_color_hex(n ? kDangerRed : kSelectedDim), 0);
+        std::string c = std::to_string(n) + (n == 1 ? " contact marked" : " contacts marked");
+        if (const size_t hidden = csel_.hidden_count(csnap_.rows)) c += " (+" + std::to_string(hidden) + " hidden)";
+        lv_label_set_text(sel_count_, c.c_str());
+    }
 }
 
 void App::render_contacts()
@@ -1545,8 +1869,9 @@ void App::render_contacts()
     render_contact_toolbar();
     set_hidden(detail_, !nav_.detail_open);
     if (nav_.detail_open) render_detail();
+    set_hidden(nearby_, !nav_.nearby_open);
+    if (nav_.nearby_open) render_nearby();
 }
-
 void App::change_contact_view(const ContactView &next)
 {
     if (next == (view_pending_ ? view_next_ : cview_)) return;
@@ -1586,32 +1911,26 @@ void App::move_contact_selection(int delta, bool absolute)
 
 void App::render_detail()
 {
-    const ContactRec *r = model_.find_contact(detail_key_);
-    if (!r) {
+    const ContactDetail d = build_contact_detail(model_, detail_key_);
+    if (!d.found) {
         lv_label_set_text(detail_title_, "(gone)");
         for (auto *v : detail_val_) lv_label_set_text(v, "");
         set_hidden(detail_msg_btn_, true);
         return;
     }
-    lv_label_set_text(detail_title_, truncate_ellipsis(r->c.name.empty() ? to_hex(r->prefix()) : r->c.name, 40).c_str());
-    lv_label_set_text(detail_val_[0], r->c.name.c_str());
-    lv_label_set_text(detail_val_[1], contact_type_name(r->c.type));
-    lv_label_set_text(detail_val_[2], (to_hex(r->c.key.data(), 12) + "...").c_str());
-    lv_label_set_text(detail_val_[3], fmt_hops(path_hops(r->c.out_path_len)).c_str());
-    lv_label_set_text(detail_val_[4], (fmt_age(r->last_heard()) + " ago").c_str());
-    char b[96];
-    const bool pos = !(r->c.lat == 0 && r->c.lon == 0);
-    if (pos) std::snprintf(b, sizeof(b), "%.5f, %.5f", r->c.lat, r->c.lon);
-    else std::snprintf(b, sizeof(b), "not shared");
-    lv_label_set_text(detail_val_[5], b);
-    std::string dist = "-";
-    if (const auto &self = model_.self(); self && pos && !(self->lat == 0 && self->lon == 0))
-        dist = fmt_distance(distance_km(self->lat, self->lon, r->c.lat, r->c.lon));
-    lv_label_set_text(detail_val_[6], dist.c_str());
-    lv_label_set_text(detail_val_[7], fmt_snr(r->has_snr, r->snr).c_str());
-    set_hidden(detail_msg_btn_, !opens_chat(r->c.type));
+    lv_label_set_text(detail_title_, d.title.c_str());
+    lv_label_set_text(detail_val_[0], d.name.c_str());
+    lv_label_set_text(detail_val_[1], d.type.c_str());
+    lv_label_set_text(detail_val_[2], d.groups.c_str());
+    lv_label_set_text(detail_val_[3], (d.key1 + "\n" + d.key2).c_str());
+    lv_label_set_text(detail_val_[4], d.route.c_str());
+    lv_label_set_text(detail_val_[5], d.last_advert.c_str());
+    lv_label_set_text(detail_val_[6], d.heard.c_str());
+    lv_label_set_text(detail_val_[7], d.position.c_str());
+    lv_label_set_text(detail_val_[8], d.distance.c_str());
+    lv_label_set_text(detail_val_[9], d.snr.c_str());
+    set_hidden(detail_msg_btn_, !d.chat);
 }
-
 /* ---- settings */
 
 void App::render_settings()
@@ -1624,6 +1943,14 @@ void App::render_settings()
     ctx.connected = connected;
     ctx.gps = feature_state(Feature::BoardGps, dev, model_.caps());
     ctx.channel_admin = feature_state(Feature::ChannelAdmin, dev, model_.caps());
+    ctx.path_hash = feature_state(Feature::PathHashMode, dev, model_.caps());
+    ctx.stats = feature_state(Feature::Stats, dev, model_.caps());
+    ctx.autoadd = feature_state(Feature::AutoAdd, dev, model_.caps());
+    ctx.repeat = repeat_state(dev, model_.caps(), model_.self() ? model_.self()->freq_mhz() : 0);
+    ctx.have_self = model_.self().has_value();
+    ctx.board_known = model_.board_known();
+    refresh_other_boards(false);
+    ctx.other_boards = other_boards_n_;
     const ChannelRec *ch0 = model_.find_channel(0);
     ctx.slot0_empty = !ch0 || ch0->empty;
     const std::vector<ChannelEntry> entries = build_channel_entries(model_);
@@ -1633,12 +1960,11 @@ void App::render_settings()
     std::vector<RowSpec> specs;
     auto id_of = [&](size_t i) { return std::to_string(i); };
     auto header = [&](int section) {
-        static const char *const titles[7] = {"BOARD", "RADIO", "DIRECT MESSAGES", "CLOCK", "CHANNELS", "RADIO CHANGES", "HISTORY"};
         RowSpec s;
         s.h = 28;
         s.header = true;
         s.selectable = false;
-        std::string t = titles[section];
+        std::string t = settings_section_title(section);
         if (section == 1 && dirty_radio_) t += "   (unsaved: see the end of the list)";
         s.cells.push_back({t, section == 1 && dirty_radio_ ? kGold : kMuted, 12, 600, LV_TEXT_ALIGN_LEFT, f_small_, centre(28, f_small_)});
         return s;
@@ -1649,6 +1975,15 @@ void App::render_settings()
         s.selectable = false;
         s.cells.push_back({label, kMuted, 12, 200, LV_TEXT_ALIGN_LEFT, f_ui_, centre(30, f_ui_)});
         s.cells.push_back({value, color, 220, 408, LV_TEXT_ALIGN_LEFT, f_text_, centre(30, f_text_)});
+        return s;
+    };
+    // a "firmware too old" or "not allowed" line: the reason in the small font, in gold
+    auto notice_row = [&](const char *label, const std::string &text) {
+        RowSpec s;
+        s.h = 34;
+        s.selectable = false;
+        s.cells.push_back({label, kMuted, 12, 200, LV_TEXT_ALIGN_LEFT, f_ui_, centre(34, f_ui_)});
+        s.cells.push_back({text, kGold, 220, 408, LV_TEXT_ALIGN_LEFT, f_text_small_, centre(34, f_text_small_)});
         return s;
     };
     // a row that does something: label, value, and a ">" when it opens a popup
@@ -1702,6 +2037,45 @@ void App::render_settings()
                 }
             }
             break;
+        case SRowKind::Position: {
+            const auto &self = model_.self();
+            const bool has = self && !(self->lat == 0 && self->lon == 0);
+            s = row("Position", has ? fmt_position(true, self->lat, self->lon) : "not set", has ? kText : kMuted, kText, false, false);
+            break;
+        }
+        case SRowKind::Stats: s = row("Statistics", "packets, airtime, errors", kMuted, kText, true, false); break;
+        case SRowKind::StatsNotice: s = notice_row("Statistics", ctx.stats.notice); break;
+        case SRowKind::PathHash: {
+            const int mode = dev ? dev->path_hash_mode : -1;
+            s = row("Path hash size", mode >= 0 ? path_hash_text(mode) : "unknown", kText, kText, true, false);
+            break;
+        }
+        case SRowKind::PathHashNotice: s = notice_row("Path hash size", ctx.path_hash.notice); break;
+        case SRowKind::Repeat:
+            s = row("Repeat", dev && dev->repeat ? "On: this board forwards packets" : "Off", dev && dev->repeat ? kGold : kText, kText, false, false);
+            s.cells.push_back({dev && dev->repeat ? "tap to switch off" : "tap to switch on", kMuted, 450, 170, LV_TEXT_ALIGN_RIGHT, f_small_, centre(44, f_small_)});
+            break;
+        case SRowKind::RepeatNotice: s = notice_row("Repeat", ctx.repeat.note); break;
+        case SRowKind::AdvertEvery: {
+            const AdvertSchedule sc = model_.advert_schedule();
+            s = row("Advert every", sc.interval_hours ? std::to_string(sc.interval_hours) + " h" : "Off", sc.interval_hours ? kGold : kText, kText, true, false);
+            break;
+        }
+        case SRowKind::AdvertKind:
+            s = row("Advert type", model_.advert_schedule().flood ? "Flood (whole mesh)" : "Zero-hop (neighbours)", kText, model_.advert_schedule().interval_hours ? kText : kMuted, true, false);
+            break;
+        case SRowKind::ManualAdd: {
+            const bool manual = model_.self() && model_.self()->manual_add_contacts;
+            s = row("Add nodes by itself", manual ? "Off: new nodes wait in Nearby" : "On: the board adds new nodes", manual ? kGold : kText, kText, false, false);
+            s.cells.push_back({"tap to switch", kMuted, 480, 140, LV_TEXT_ALIGN_RIGHT, f_small_, centre(44, f_small_)});
+            break;
+        }
+        case SRowKind::AutoAddTypes:
+            s = row("Still added by itself", model_.caps().autoadd_known ? autoadd_summary(model_.caps().autoadd_config) : "-", kText, kText, true, false);
+            break;
+        case SRowKind::AutoAddNotice: s = notice_row("Auto-add types", ctx.autoadd.notice); break;
+        case SRowKind::Reboot: s = row("Reboot the board", "restarts it, nothing is erased", kMuted, kText, true, false); break;
+        case SRowKind::FactoryReset: s = row("Factory reset the board", "erases its keys, contacts, channels", kRed, kRed, true, false); break;
         case SRowKind::BoardGps:
             s = row("Board GPS", model_.caps().gps_on ? "On" : "Off", model_.caps().gps_on ? kGreen : kText, kText, false, false);
             s.cells.push_back({model_.caps().gps_on ? "tap to switch off" : "tap to switch on", kMuted, 450, 170, LV_TEXT_ALIGN_RIGHT, f_small_, centre(44, f_small_)});
@@ -1753,6 +2127,8 @@ void App::render_settings()
         }
         case SRowKind::HistoryOlder: s = row("Delete older than", "7, 30 or 90 days", kMuted, kText, true, false); break;
         case SRowKind::HistoryNote: s = info("One conversation", "Chats: hold its name 3 s, or Ctrl+O", kMuted); break;
+        case SRowKind::HistoryForget: s = row("Forget this board's data", "history, groups, mute flags", kMuted, kText, true, false); break;
+        case SRowKind::HistoryOthers: s = row("Other boards' data", fmt_boards(other_boards_n_) + ", " + fmt_bytes(other_boards_bytes_), kMuted, kText, true, false); break;
         case SRowKind::Undo:
             s = row("Undo changes", dirty_radio_ ? "discard the unsaved edits" : "no changes", kMuted, dirty_radio_ ? kText : kMuted, false, false);
             break;
@@ -1795,6 +2171,8 @@ void App::render_footer()
         case Popup::Choice: left = "Left/Right: change   Enter: accept   Esc: cancel"; break;
         case Popup::Confirm: left = "Y: yes   N: no   Left/Right: choose   Enter   Esc: no"; break;
         case Popup::Menu: left = "Up/Down: choose   Enter: select   Esc: cancel"; break;
+        case Popup::List: left = "Up/Down: choose   Enter: select   Esc: cancel"; break;
+        case Popup::Progress: left = "Esc or Enter: stop after the contact in progress"; break;
         default: left = "Enter or Esc: close"; break;
         }
     } else if (editor_open_) {
@@ -1802,13 +2180,17 @@ void App::render_footer()
     } else {
         switch (nav_.tab) {
         case Tab::Chats:
-            left = nav_.compose_focus ? "Enter: send  Esc: list  Up/Down: scroll  Ctrl+O: options"
-                                      : "Up/Down: select  Enter: write  Ctrl+O: options";
+            left = nav_.search_open ? "Type  Up/Down  Enter: open  Ctrl+K D R: filters"
+                   : nav_.compose_focus ? "Enter: send  Esc: list  Up/Down: scroll  Ctrl+O: options"
+                                        : "Enter: write  Ctrl+O: options  Ctrl+F: find";
             break;
         case Tab::Contacts:
-            left = nav_.detail_open ? "Enter: message   Esc: back" : "Enter: open   S: sort   T/H: filter   A: advert";
+            left = nav_.detail_open ? "Enter: message   G: groups   D: delete   Esc: back"
+                   : nav_.nearby_open ? "Enter: add   I: ignore   S: scan   V: ignored   Esc: back"
+                   : nav_.select_mode ? "Space: mark  A all  N none  I invert  M menu  D delete  G group"
+                                      : "Enter: open  I: info  X: select  N: nearby  G: group";
             break;
-        case Tab::Settings: left = "Enter: change   Left/Right: step   S: save   V: undo"; break;
+        case Tab::Settings: left = nav_.stats_open ? "R: refresh   A: auto refresh   Esc: back" : "Enter: change   Left/Right: step   S: save   V: undo"; break;
         default: left = "Tab: next tab   Esc: back"; break;
         }
     }
@@ -1846,10 +2228,27 @@ void App::open_choice(ChoiceField f)
 {
     Popup p;
     p.kind = Popup::Choice;
-    p.choice = make_choice(f, edit_, model_.retry());
+    ChoiceExtra extra;
+    extra.path_hash_mode = model_.device() ? model_.device()->path_hash_mode : -1;
+    extra.schedule = model_.advert_schedule();
+    p.choice = make_choice(f, edit_, model_.retry(), &extra);
     p.title = p.choice.title;
     choice_field_ = f;
     p.on_accept = [this, f](int idx) {
+        if (f == ChoiceField::PathHash) {                                   // written to the board at once (the board keeps it), then read back
+            const int mode = path_hash_mode_from_index(idx);
+            if (model_.device() && mode == model_.device()->path_hash_mode) notice(std::string("Path hash size stays ") + path_hash_text(mode), true);
+            else client_->set_path_hash_mode(mode);
+            return;
+        }
+        if (f == ChoiceField::AdvertEvery || f == ChoiceField::AdvertKind) {   // a preference of the deck: the app sends the advert
+            const AdvertSchedule next = apply_advert_choice(f, idx, model_.advert_schedule());
+            model_.set_advert_schedule(next);
+            notice(next.interval_hours ? "Advert every " + std::to_string(next.interval_hours) + " h (" + (next.flood ? "flood" : "zero-hop") + ") while the app runs"
+                                       : std::string("Scheduled advert off"), true);
+            invalidate();
+            return;
+        }
         RadioSettings s = edit_;
         RetrySettings r = model_.retry();
         apply_choice(f, idx, s, r);
@@ -1867,7 +2266,8 @@ void App::open_choice(ChoiceField f)
     popup_begin(std::move(p));
 }
 
-void App::open_confirm(const std::string &title, const std::string &body, std::function<void()> on_yes, const std::string &yes, const std::string &no)
+void App::open_confirm(const std::string &title, const std::string &body, std::function<void()> on_yes, const std::string &yes, const std::string &no,
+                        uint32_t yes_delay_ms, bool danger)
 {
     Popup p;
     p.kind = Popup::Confirm;
@@ -1877,6 +2277,27 @@ void App::open_confirm(const std::string &title, const std::string &body, std::f
     p.no_text = no;
     p.focus = 0;                                      // the safe answer is the default
     p.on_yes = std::move(on_yes);
+    p.yes_delay_ms = yes_delay_ms;
+    p.danger = danger;
+    popup_begin(std::move(p));
+}
+
+void App::open_list(const std::string &title, const std::vector<std::string> &items, int focus, std::function<void(int)> on_pick)
+{
+    Popup p;
+    p.kind = Popup::List;
+    p.title = title;
+    p.items = items;
+    p.focus = std::clamp(focus, 0, std::max(0, static_cast<int>(items.size()) - 1));
+    p.on_accept = std::move(on_pick);
+    popup_begin(std::move(p));
+}
+
+void App::open_progress(const std::string &title)
+{
+    Popup p;
+    p.kind = Popup::Progress;
+    p.title = title;
     popup_begin(std::move(p));
 }
 
@@ -1904,8 +2325,10 @@ void App::open_info(const std::string &title, const std::string &body, const std
 void App::popup_build()
 {
     lv_obj_clean(pop_panel_);
+    pop_list_.reset();
     pop_items_.clear();
     pop_value_ = pop_detail_ = pop_pos_ = pop_left_ = pop_right_ = pop_yes_ = pop_no_ = nullptr;
+    pop_bar_ = pop_bar_fill_ = pop_progress_ = nullptr;
     auto title = [&](int x, int w) {
         lv_obj_t *t = make_label(pop_panel_, f_big_, kGold, x, 14, w, 26);
         lv_label_set_text(t, pop_.title.c_str());
@@ -1947,8 +2370,44 @@ void App::popup_build()
         lv_label_set_long_mode(body, LV_LABEL_LONG_MODE_WRAP);
         lv_label_set_text(body, pop_.body.c_str());
         pop_no_ = make_button(pop_panel_, 30, 194, 200, 56, pop_.no_text.c_str(), kTagPopNo);
-        pop_yes_ = make_button(pop_panel_, 290, 194, 200, 56, pop_.yes_text.c_str(), kTagPopYes);
-        lv_obj_set_style_bg_color(pop_yes_, lv_color_hex(pop_.yes_text == "Remove" || pop_.yes_text.rfind("Delete", 0) == 0 ? kDangerRed : kOkGreen), 0);
+        pop_yes_ = make_button(pop_panel_, 290, 194, 200, 56, confirm_yes_text(pop_.yes_text, confirm_wait_left(pop_.opened_ms, mono_ms(), pop_.yes_delay_ms)).c_str(), kTagPopYes);
+        lv_obj_set_style_bg_color(pop_yes_, lv_color_hex(pop_.yes_text == "Remove" || pop_.yes_text.rfind("Delete", 0) == 0 || pop_.yes_delay_ms > 0 || pop_.danger ? kDangerRed : kOkGreen), 0);
+        break;
+    }
+    case Popup::List: {
+        panel_at(40, 24, 560, 352);
+        title(20, 520);
+        RowList::Config cfg;
+        cfg.max_cells = 2;
+        cfg.max_boxes = 0;
+        cfg.min_row_h = 48;
+        pop_list_.create(pop_panel_, 10, 52, 540, 236, cfg);
+        std::vector<RowSpec> rows;
+        for (size_t i = 0; i < pop_.items.size(); ++i) {
+            RowSpec s;
+            s.h = 48;
+            s.id = std::to_string(i);
+            s.cells.push_back({pop_.items[i], kText, 14, 510, LV_TEXT_ALIGN_LEFT, f_text_, centre(48, f_text_)});
+            rows.push_back(std::move(s));
+        }
+        pop_list_.set(std::move(rows), pop_.focus, true);
+        pop_list_.scroll_to_selected();
+        make_button(pop_panel_, 170, 296, 220, 48, "Cancel", kTagPopCancel);
+        break;
+    }
+    case Popup::Progress: {
+        panel_at(80, 90, 480, 220);
+        title(20, 440);
+        pop_progress_ = make_label(pop_panel_, f_value_small_, kText, 20, 56, 440, 32, LV_TEXT_ALIGN_CENTER);
+        pop_bar_ = make_box(pop_panel_, 30, 104, 420, 16);
+        lv_obj_set_style_bg_color(pop_bar_, lv_color_hex(kSelected), 0);
+        lv_obj_set_style_bg_opa(pop_bar_, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(pop_bar_, 8, 0);
+        pop_bar_fill_ = make_box(pop_bar_, 0, 0, 1, 16);
+        lv_obj_set_style_bg_color(pop_bar_fill_, lv_color_hex(kGold), 0);
+        lv_obj_set_style_bg_opa(pop_bar_fill_, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(pop_bar_fill_, 8, 0);
+        make_button(pop_panel_, 140, 140, 200, 56, "Stop", kTagPopCancel);
         break;
     }
     case Popup::Menu: {
@@ -2028,6 +2487,10 @@ void App::popup_accept()
 
 void App::popup_cancel()
 {
+    if (pop_.kind == Popup::Progress) {                 // Stop: the job ends after the contact in flight; the box closes when it has
+        client_->cancel_bulk();
+        return;
+    }
     auto cb = pop_.on_cancel;
     close_popup();
     if (cb) cb();
@@ -2054,10 +2517,25 @@ void App::popup_key(const KeyEvent &e)
     case Popup::Confirm: {
         const ConfirmResult r = confirm_key(e, pop_.focus);
         if (r == ConfirmResult::Moved) popup_refresh();
-        else if (r == ConfirmResult::Yes) popup_yes();
-        else if (r == ConfirmResult::No) popup_cancel();
+        else if (r == ConfirmResult::Yes) {
+            if (confirm_wait_left(pop_.opened_ms, mono_ms(), pop_.yes_delay_ms) == 0) popup_yes();     // a Yes that must wait does not answer early
+        } else if (r == ConfirmResult::No) popup_cancel();
         break;
     }
+    case Popup::List: {
+        const ListResult r = list_key(e, pop_.focus, static_cast<int>(pop_.items.size()));
+        if (r == ListResult::Moved) {
+            pop_list_.set_selected(pop_.focus, true, true);
+        } else if (r == ListResult::Accept) {
+            popup_accept();
+        } else if (r == ListResult::Cancel) {
+            popup_cancel();
+        }
+        break;
+    }
+    case Popup::Progress:
+        if (!e.repeat && (e.key == Key::Esc || e.key == Key::Enter)) popup_cancel();                // Stop
+        break;
     case Popup::Menu: {
         const MenuResult r = menu_key(e, pop_.focus, static_cast<int>(pop_.items.size()));
         if (r == MenuResult::Moved) popup_refresh();
@@ -2088,7 +2566,9 @@ void App::popup_click(int tag)
         break;
     case kTagPopCancel:
     case kTagPopNo: popup_cancel(); break;
-    case kTagPopYes: popup_yes(); break;
+    case kTagPopYes:
+        if (confirm_wait_left(pop_.opened_ms, mono_ms(), pop_.yes_delay_ms) == 0) popup_yes();
+        break;
     default:
         if (tag >= kTagPopItem && tag < kTagPopItem + 10 && pop_.kind == Popup::Menu) {
             pop_.focus = tag - kTagPopItem;
@@ -2111,10 +2591,10 @@ void App::open_editor(EditKind kind, const std::string &title, const std::string
     }
     edit_kind_ = kind;
     edit_row_ = row;
-    edit_mode_ = kind == EditKind::Number ? EditMode::Number : kind == EditKind::Clock ? EditMode::Clock
+    edit_mode_ = kind == EditKind::Number ? EditMode::Number : kind == EditKind::Clock || kind == EditKind::DateRange ? EditMode::Clock
                  : kind == EditKind::Channel ? EditMode::Channel : kind == EditKind::PrivKey ? EditMode::HexKey : EditMode::Name;
     edit_limit_ = kind == EditKind::Name || kind == EditKind::PrivName || kind == EditKind::RandName ? 31 : kind == EditKind::Channel ? 30
-                  : kind == EditKind::PrivKey ? 39 : 16;
+                  : kind == EditKind::PrivKey ? 39 : kind == EditKind::GroupNew || kind == EditKind::GroupRename ? 24 : kind == EditKind::DateRange ? 21 : 16;
     lv_label_set_text(ed_title_, title.c_str());
     lv_label_set_text(ed_hint_, hint.c_str());
     lv_label_set_text(ed_err_, "");
@@ -2186,9 +2666,35 @@ void App::close_editor(bool accept)
             uint32_t ts = 0;
             if (!parse_local_datetime(text, ts)) { editor_error("Use YYYY-MM-DD HH:MM (2025 or later)"); return; }
             client_->clock_set_user(ts);
+        } else if (edit_kind_ == EditKind::GroupNew) {
+            const std::string bad = model_.groups_mut().add_group(text);
+            if (!bad.empty()) { editor_error(bad); return; }
+            if (!group_keys_.empty()) model_.groups_mut().add_members(text, group_keys_);
+            model_.groups_changed();
+            notice("Group " + text + " made" + (group_keys_.empty() ? "" : " with " + std::to_string(group_keys_.size()) + (group_keys_.size() == 1 ? " contact" : " contacts")), true);
+            group_keys_.clear();
+            if (nav_.select_mode) leave_select_mode();
+            csnap_valid_ = false;
+        } else if (edit_kind_ == EditKind::GroupRename) {
+            const std::string bad = model_.groups_mut().rename_group(group_target_, text);
+            if (!bad.empty()) { editor_error(bad); return; }
+            if (cview_.group == group_target_) cview_.group = text;
+            model_.groups_changed();
+            notice("Group renamed to " + text, true);
+            csnap_valid_ = false;
+        } else if (edit_kind_ == EditKind::DateRange) {
+            uint32_t from = 0, to = 0;
+            const std::string bad = parse_date_range(text, from, to);
+            if (!bad.empty()) { editor_error(bad); return; }
+            search_.date = DatePreset::Custom;
+            search_.from = from;
+            search_.to = to;
+            refresh_search_results();
         }
     } else if (edit_kind_ == EditKind::Clock) {
         client_->clock_skip();                      // Esc: the board clock stays as it is
+    } else if (edit_kind_ == EditKind::GroupNew) {
+        group_keys_.clear();
     }
     editor_open_ = false;
     nav_.editor_open = false;
@@ -2244,6 +2750,7 @@ void App::select_chat_row(int index)
     chat_sel_ = index;
     chat_sel_key_ = r.key;
     if (r.kind != ChatRow::Add) {
+        if (r.key != conv_) focus_seq_ = 0;
         conv_ = r.key;
         model_.mark_read(conv_);
     }
@@ -2286,6 +2793,7 @@ void App::send_message()
     }
     lv_textarea_set_text(compose_, "");
     nav_.compose_focus = true;
+    focus_seq_ = 0;                                  // a new message: the conversation shows its end again
     invalidate();
 }
 
@@ -2362,8 +2870,8 @@ void App::request_undo()
 
 void App::settings_choice(ChoiceField f)
 {
-    const bool retry_field = f == ChoiceField::RetryAttempts || f == ChoiceField::ResetAfter;
-    if (!retry_field && !client_->ready()) { notice("Connect the radio first", false); return; }
+    const bool local_field = f == ChoiceField::RetryAttempts || f == ChoiceField::ResetAfter || f == ChoiceField::AdvertEvery || f == ChoiceField::AdvertKind;
+    if (!local_field && !client_->ready()) { notice("Connect the radio first", false); return; }
     open_choice(f);
 }
 
@@ -2430,7 +2938,28 @@ void App::settings_activate(int index, int x)
     case SRowKind::Header:
     case SRowKind::Info:
     case SRowKind::GpsNotice:
+    case SRowKind::StatsNotice:
+    case SRowKind::PathHashNotice:
+    case SRowKind::RepeatNotice:
+    case SRowKind::AutoAddNotice:
     case SRowKind::ChannelsNotice: break;
+    case SRowKind::Position:
+        if (client_->refresh_self()) {
+            self_refresh_ms_ = mono_ms();
+            notice("Reading the position from the board...", true);
+        } else {
+            notice("Connect the radio first", false);
+        }
+        break;
+    case SRowKind::Stats: open_stats(); break;
+    case SRowKind::PathHash: settings_choice(ChoiceField::PathHash); break;
+    case SRowKind::Repeat: ask_repeat(!(model_.device() && model_.device()->repeat)); break;
+    case SRowKind::AdvertEvery: settings_choice(ChoiceField::AdvertEvery); break;
+    case SRowKind::AdvertKind: settings_choice(ChoiceField::AdvertKind); break;
+    case SRowKind::ManualAdd: client_->set_manual_add(!(model_.self() && model_.self()->manual_add_contacts)); break;
+    case SRowKind::AutoAddTypes: autoadd_menu(); break;
+    case SRowKind::Reboot: ask_reboot(); break;
+    case SRowKind::FactoryReset: ask_factory_reset(); break;
     case SRowKind::Name: open_editor(EditKind::Name, "Node name", "The name other nodes see when you send an advert (up to 31 bytes).", edit_.name); break;
     case SRowKind::Preset: settings_choice(ChoiceField::Preset); break;
     case SRowKind::Bw: settings_choice(ChoiceField::Bandwidth); break;
@@ -2461,8 +2990,731 @@ void App::settings_activate(int index, int x)
     case SRowKind::HistoryAll: confirm_delete_all(); break;
     case SRowKind::HistoryOlder: choose_delete_older(); break;
     case SRowKind::HistoryNote: break;
+    case SRowKind::HistoryForget: confirm_forget_board(); break;
+    case SRowKind::HistoryOthers: confirm_forget_others(); break;
     case SRowKind::Undo: request_undo(); break;
     case SRowKind::Save: request_save(); break;
+    }
+}
+
+/* ================================================================== phase 2 */
+
+/* ---- contacts: select mode, bulk delete, groups, details */
+
+void App::enter_select_mode()
+{
+    if (nav_.select_mode || nav_.detail_open || nav_.nearby_open || nav_.popup_open || editor_open_) return;
+    nav_.select_mode = true;                                  // (groups work without the board; only the delete needs it)
+    csel_.clear();
+    if (csnap_valid_) build_contact_specs();
+    invalidate();
+}
+
+void App::leave_select_mode()
+{
+    nav_.select_mode = false;
+    csel_.clear();
+    if (csnap_valid_) build_contact_specs();
+    invalidate();
+}
+
+void App::toggle_selected(const std::string &key_hex)
+{
+    if (key_hex.empty() || !nav_.select_mode) return;
+    csel_.toggle(key_hex);
+    build_contact_specs();
+    invalidate();
+}
+
+void App::open_select_menu()
+{
+    const SelectMenu m = select_menu_items();
+    open_list("Select contacts", m.labels, 0, [this, m](int i) {
+        if (i < 0 || i >= static_cast<int>(m.actions.size())) return;
+        switch (m.actions[static_cast<size_t>(i)]) {
+        case SelectAction::All: csel_.select_shown(csnap_.rows); break;
+        case SelectAction::None: csel_.clear(); break;
+        case SelectAction::Stale7: csel_.select_stale(csnap_.rows, 7); break;
+        case SelectAction::Stale30: csel_.select_stale(csnap_.rows, 30); break;
+        case SelectAction::NeverHeard: csel_.select_never_heard(csnap_.rows); break;
+        case SelectAction::Invert: csel_.invert(csnap_.rows); break;
+        }
+        build_contact_specs();
+        const size_t n = csel_.shown_selected(csnap_.rows).size();
+        notice(std::to_string(n) + (n == 1 ? " contact marked" : " contacts marked"), true);
+        invalidate();
+    });
+}
+
+void App::confirm_bulk_delete()
+{
+    const BulkDeletePrompt p = bulk_delete_prompt(model_, csnap_.rows, csel_);
+    if (p.empty) {
+        notice("Mark the contacts to delete first", false);
+        return;
+    }
+    if (!client_->ready()) {
+        notice("Connect the radio first", false);
+        return;
+    }
+    open_confirm(p.title, p.body,
+                 [this] {
+                     std::vector<PubKey> keys;
+                     for (const std::string &k : csel_.shown_selected(csnap_.rows)) {
+                         PubKey pk{};
+                         if (from_hex(k, pk.data(), 32)) keys.push_back(pk);
+                     }
+                     if (log_) log_->line("contacts: bulk delete of " + std::to_string(keys.size()) + " asked");
+                     if (client_->remove_contacts(keys)) open_progress("Deleting contacts");
+                 },
+                 "Delete " + std::to_string(p.count));
+}
+
+void App::open_group_filter()
+{
+    std::vector<std::string> labels = group_filter_labels(model_.groups());
+    const size_t n_groups = model_.groups().groups().size();
+    labels.push_back("+ New group...");
+    if (n_groups) labels.push_back("Rename or delete a group...");
+    int focus = 0;
+    for (size_t i = 0; i < n_groups; ++i)
+        if (model_.groups().groups()[i].name == cview_.group) focus = static_cast<int>(i) + 1;
+    open_list("Show which group?", labels, focus, [this, n_groups](int i) {
+        if (i == 0) {
+            ContactView v = cview_;
+            v.group.clear();
+            change_contact_view(v);
+        } else if (i >= 1 && i <= static_cast<int>(n_groups)) {
+            ContactView v = cview_;
+            v.group = model_.groups().groups()[static_cast<size_t>(i) - 1].name;
+            change_contact_view(v);
+        } else if (i == static_cast<int>(n_groups) + 1) {
+            group_keys_.clear();
+            open_editor(EditKind::GroupNew, "New group", "Name of the group (up to 24 characters). Add contacts to it with Select > Group.", "");
+        } else {
+            open_list("Which group?", group_pick_labels(model_.groups()), 0, [this](int k) {
+                if (k < 0 || k >= static_cast<int>(model_.groups().groups().size())) return;
+                const std::string name = model_.groups().groups()[static_cast<size_t>(k)].name;
+                open_menu(truncate_ellipsis(name, 24), {"Rename", "Delete this group"}, [this, name](int j) {
+                    if (j == 0) {
+                        group_target_ = name;
+                        open_editor(EditKind::GroupRename, "Rename group", "New name of the group (up to 24 characters).", name);
+                    } else {
+                        open_confirm("Delete group?", "Delete the group " + name + "? The contacts stay; only the group goes.", [this, name] {
+                            if (model_.groups_mut().delete_group(name).empty()) {
+                                model_.groups_changed();
+                                if (cview_.group == name) {
+                                    ContactView v = cview_;
+                                    v.group.clear();
+                                    change_contact_view(v);
+                                }
+                                notice("Group " + name + " deleted", true);
+                            }
+                        }, "Delete");
+                    }
+                });
+            });
+        }
+    });
+}
+
+void App::ask_new_group(const std::vector<std::string> &keys)
+{
+    group_keys_ = keys;
+    open_editor(EditKind::GroupNew, "New group", "Name of the group (up to 24 characters). The contacts you chose go into it.", "");
+}
+
+void App::open_group_assign()
+{
+    const std::vector<std::string> keys = csel_.shown_selected(csnap_.rows);
+    if (keys.empty()) {
+        notice("Mark the contacts first", false);
+        return;
+    }
+    const GroupMenu m = group_assign_menu(model_.groups(), keys.size());
+    open_menu("Groups", m.labels, [this, m](int i) {
+        if (i >= 0 && i < static_cast<int>(m.actions.size())) group_pick(m.actions[static_cast<size_t>(i)]);
+    });
+}
+
+void App::group_pick(GroupAction a)
+{
+    const std::vector<std::string> keys = csel_.shown_selected(csnap_.rows);
+    if (keys.empty()) return;
+    switch (a) {
+    case GroupAction::NewWith: ask_new_group(keys); break;
+    case GroupAction::RemoveAll: {
+        const size_t n = model_.groups_mut().remove_everywhere(keys);
+        if (n) model_.groups_changed();
+        csnap_valid_ = false;
+        notice(n ? "Taken out of all groups" : "They were in no group", true);
+        break;
+    }
+    case GroupAction::AddTo:
+    case GroupAction::RemoveFrom:
+        open_list(a == GroupAction::AddTo ? "Add to which group?" : "Take out of which group?", group_pick_labels(model_.groups()), 0, [this, a, keys](int i) {
+            if (i < 0 || i >= static_cast<int>(model_.groups().groups().size())) return;
+            const std::string name = model_.groups().groups()[static_cast<size_t>(i)].name;
+            const size_t n = a == GroupAction::AddTo ? model_.groups_mut().add_members(name, keys) : model_.groups_mut().remove_members(name, keys);
+            if (n) model_.groups_changed();
+            csnap_valid_ = false;
+            notice(std::to_string(n) + (n == 1 ? " contact " : " contacts ") + (a == GroupAction::AddTo ? "added to " : "taken out of ") + name, true);
+            leave_select_mode();
+        });
+        break;
+    case GroupAction::Manage: break;
+    }
+}
+
+/* The groups of one contact, from its detail panel: a tap flips the membership and the list opens again, so several can be set. */
+void App::group_toggle_for(const std::string &key_hex)
+{
+    const ContactGroups &g = model_.groups();
+    std::vector<std::string> labels;
+    for (const ContactGroup &grp : g.groups())
+        labels.push_back(std::string(g.is_member(grp.name, key_hex) ? "[x] " : "[ ] ") + truncate_ellipsis(grp.name, 24));
+    labels.push_back("+ New group with this contact...");
+    group_focus_ = std::clamp(group_focus_, 0, static_cast<int>(labels.size()) - 1);
+    const size_t n = g.groups().size();
+    open_list("Groups of this contact", labels, group_focus_, [this, key_hex, n](int i) {
+        if (i >= 0 && i < static_cast<int>(n)) {
+            const std::string name = model_.groups().groups()[static_cast<size_t>(i)].name;
+            if (model_.groups().is_member(name, key_hex)) model_.groups_mut().remove_members(name, {key_hex});
+            else model_.groups_mut().add_members(name, {key_hex});
+            model_.groups_changed();
+            csnap_valid_ = false;
+            group_focus_ = i;
+            group_toggle_for(key_hex);
+        } else {
+            ask_new_group({key_hex});
+        }
+    });
+}
+
+void App::open_contact_info(const std::string &key_hex)
+{
+    if (!model_.find_contact(key_hex)) return;
+    open_detail(key_hex);
+}
+
+void App::delete_detail_contact()
+{
+    const ContactRec *r = model_.find_contact(detail_key_);
+    if (!r) return;
+    if (!client_->ready()) {
+        notice("Connect the radio first", false);
+        return;
+    }
+    const std::string name = r->c.name.empty() ? to_hex(r->prefix()) : r->c.name;
+    PubKey key = r->c.key;
+    open_confirm("Delete contact?", "Delete " + truncate_ellipsis(name, 30) + " from the radio board? It comes back only when its node adverts again. This cannot be undone.",
+                 [this, key] {
+                     if (client_->remove_contacts({key})) {
+                         nav_.detail_open = false;
+                         invalidate();
+                     }
+                 },
+                 "Delete");
+}
+
+/* ---- nearby */
+
+void App::open_nearby()
+{
+    if (nav_.popup_open || editor_open_ || nav_.select_mode) return;
+    nav_.nearby_open = true;
+    nearby_sel_ = 0;
+    nearby_sel_key_.clear();
+    nearby_sig_ = 0;
+    invalidate();
+}
+
+void App::close_nearby()
+{
+    nav_.nearby_open = false;
+    set_hidden(nearby_, true);
+    invalidate();
+}
+
+void App::render_nearby()
+{
+    nearby_rows_ = build_nearby_rows(model_, nearby_show_ignored_);
+    const size_t pending = model_.pending_count();
+    std::string title = "Nearby nodes (" + std::to_string(nearby_rows_.size()) + ")";
+    if (pending) title += "  " + std::to_string(pending) + " waiting";
+    lv_label_set_text(nearby_title_, title.c_str());
+    lv_label_set_text(nearby_scan_label_, client_->discover().active ? "Scanning" : "Scan");
+    const size_t ign = ignored_nearby_count(model_);
+    lv_label_set_text(nearby_ign_label_, nearby_show_ignored_ ? "Hide ign." : ign ? ("Ignored " + std::to_string(ign)).c_str() : "Ignored");
+    // keep the selection on the same node while the list changes
+    int sel = -1;
+    for (size_t i = 0; i < nearby_rows_.size(); ++i)
+        if (nearby_rows_[i].key_hex == nearby_sel_key_) sel = static_cast<int>(i);
+    if (sel < 0) sel = nearby_rows_.empty() ? -1 : std::clamp(nearby_sel_, 0, static_cast<int>(nearby_rows_.size()) - 1);
+    nearby_sel_ = std::max(sel, 0);
+    nearby_sel_key_ = sel >= 0 ? nearby_rows_[static_cast<size_t>(sel)].key_hex : std::string();
+
+    uint32_t sig = fnv_int(0, sel);
+    sig = fnv_int(sig, nearby_show_ignored_ ? 1 : 0);
+    for (const NearbyRow &r : nearby_rows_) {
+        sig = fnv(sig, r.key_hex);
+        sig = fnv(sig, r.title);
+        sig = fnv(sig, r.detail);
+        sig = fnv_int(sig, static_cast<int>(r.state));
+        sig = fnv_int(sig, r.can_add ? 1 : 0);
+    }
+    if (sig != nearby_sig_ && !plat_.touching()) {
+        nearby_sig_ = sig;
+        std::vector<RowSpec> specs;
+        for (const NearbyRow &r : nearby_rows_) {
+            RowSpec s;
+            s.h = 56;
+            s.id = r.key_hex;
+            const uint32_t state_color = r.state == NearbyState::Pending ? kGold : r.state == NearbyState::New ? kBlue : kMuted;
+            s.cells.push_back({r.title, r.state == NearbyState::Ignored ? kMuted : r.state == NearbyState::Pending ? kGold : kText, 12, 290, LV_TEXT_ALIGN_LEFT, f_text_, 6});
+            s.cells.push_back({r.type_name, r.type == advtype::kRepeater ? kBlue : kMuted, 306, 84, LV_TEXT_ALIGN_LEFT, f_small_, 10});
+            s.cells.push_back({nearby_state_name(r.state), state_color, 392, 76, LV_TEXT_ALIGN_LEFT, f_small_, 10});
+            s.cells.push_back({r.detail, kMuted, 12, 456, LV_TEXT_ALIGN_LEFT, f_small_, 34});
+            if (r.state == NearbyState::Ignored) {
+                s.cells.push_back({"Restore", kText, 472, 160, LV_TEXT_ALIGN_CENTER, f_ui_, 6, kSelected});
+            } else if (r.state != NearbyState::Contact) {
+                if (r.can_add) s.cells.push_back({"Add", kText, 472, 76, LV_TEXT_ALIGN_CENTER, f_ui_, 6, kOkGreen});
+                s.cells.push_back({"Ignore", kText, 552, 80, LV_TEXT_ALIGN_CENTER, f_ui_, 6, kSelected});
+            }
+            specs.push_back(std::move(s));
+        }
+        nearby_list_.set(std::move(specs), sel, true);
+    }
+    if (nearby_rows_.empty()) {
+        lv_label_set_text(nearby_empty_, !client_->ready() ? "Connect the radio board to hear nodes."
+                          : nearby_show_ignored_ ? "Nothing here."
+                          : "No node heard yet. Nodes that advertise in range show up here by themselves. Press Scan to ask the nodes in direct radio range to answer.");
+        set_hidden(nearby_empty_, false);
+    } else {
+        set_hidden(nearby_empty_, true);
+    }
+}
+
+void App::nearby_ignore(const std::string &key_hex)
+{
+    const bool now_ignored = !model_.is_ignored(key_hex);
+    model_.set_ignored(key_hex, now_ignored);
+    notice(now_ignored ? "Ignored: hidden from this list (the Ignored button shows them)" : "Restored", true);
+    nearby_sig_ = 0;
+    invalidate();
+}
+
+void App::nearby_activate(int index, int x)
+{
+    if (index < 0 || index >= static_cast<int>(nearby_rows_.size())) return;
+    const NearbyRow &r = nearby_rows_[static_cast<size_t>(index)];
+    nearby_sel_ = index;
+    nearby_sel_key_ = r.key_hex;
+    if (r.state == NearbyState::Ignored) {
+        if (x >= 472) nearby_ignore(r.key_hex);
+    } else if (r.state != NearbyState::Contact) {
+        if (x >= 552) nearby_ignore(r.key_hex);
+        else if (x >= 472 && r.can_add) client_->add_nearby(r.key_hex);
+    }
+    nearby_sig_ = 0;
+    invalidate();
+}
+
+void App::key_nearby(const KeyEvent &e)
+{
+    const int n = static_cast<int>(nearby_rows_.size());
+    auto move = [&](int to) {
+        if (n == 0) return;
+        nearby_sel_ = std::clamp(to, 0, n - 1);
+        nearby_sel_key_ = nearby_rows_[static_cast<size_t>(nearby_sel_)].key_hex;
+        nearby_list_.set_selected(nearby_sel_, true, true);
+    };
+    switch (e.key) {
+    case Key::Up: move(nearby_sel_ - 1); break;
+    case Key::Down: move(nearby_sel_ + 1); break;
+    case Key::PageUp: move(nearby_sel_ - 5); break;
+    case Key::PageDown: move(nearby_sel_ + 5); break;
+    case Key::Home: move(0); break;
+    case Key::End: move(n - 1); break;
+    case Key::Enter:
+        if (e.repeat || n == 0) break;
+        {
+            const NearbyRow &r = nearby_rows_[static_cast<size_t>(nearby_sel_)];
+            if (r.state == NearbyState::Ignored) nearby_ignore(r.key_hex);
+            else if (r.can_add) client_->add_nearby(r.key_hex);
+            else notice(r.state == NearbyState::Contact ? "Already a contact" : "Cannot be added yet: wait for its next advert", r.state == NearbyState::Contact);
+        }
+        nearby_sig_ = 0;
+        invalidate();
+        break;
+    case Key::Char: {
+        if (e.ctrl || e.alt || e.repeat) break;
+        const char c = e.text.size() == 1 ? static_cast<char>(std::tolower(static_cast<unsigned char>(e.text[0]))) : 0;
+        if (c == 'i' && n > 0) nearby_ignore(nearby_rows_[static_cast<size_t>(nearby_sel_)].key_hex);
+        else if (c == 's') client_->start_discover();
+        else if (c == 'v') {
+            nearby_show_ignored_ = !nearby_show_ignored_;
+            nearby_sig_ = 0;
+            invalidate();
+        }
+        break;
+    }
+    default: break;
+    }
+}
+
+void App::key_detail(const KeyEvent &e)
+{
+    if (e.repeat) return;
+    if (e.key == Key::Enter) {
+        const ContactRec *r = model_.find_contact(detail_key_);
+        if (r && opens_chat(r->c.type)) open_conversation(Model::conv_direct(r->prefix()), true);
+    } else if (e.key == Key::Delete) {
+        delete_detail_contact();
+    } else if (e.key == Key::Char && !e.ctrl && !e.alt && e.text.size() == 1) {
+        const char c = static_cast<char>(std::tolower(static_cast<unsigned char>(e.text[0])));
+        if (c == 'g') {
+            group_focus_ = 0;
+            group_toggle_for(detail_key_);
+        } else if (c == 'd') {
+            delete_detail_contact();
+        }
+    }
+}
+
+/* ---- message search */
+
+void App::open_search()
+{
+    if (nav_.popup_open || editor_open_ || nav_.search_open || nav_.tab != Tab::Chats) return;
+    nav_.search_open = true;
+    nav_.compose_focus = false;
+    lv_textarea_set_text(sr_query_, search_.text.c_str());
+    search_sel_ = 0;
+    refresh_search_results();
+    invalidate();
+}
+
+void App::close_search()
+{
+    nav_.search_open = false;
+    set_hidden(search_panel_, true);
+    invalidate();
+}
+
+void App::refresh_search_results(bool to_top)
+{
+    search_rows_ = build_search_rows(model_, search_, &search_total_);
+    search_sig_ = model_.next_seq() * 2654435761u ^ static_cast<uint32_t>(model_.message_count());
+    std::vector<RowSpec> specs;
+    for (const SearchRow &r : search_rows_) {
+        RowSpec s;
+        s.h = 56;
+        s.id = std::to_string(r.seq);
+        s.cells.push_back({r.head, r.outgoing ? kGreen : kBlue, 12, 610, LV_TEXT_ALIGN_LEFT, f_small_, 6});
+        s.cells.push_back({r.snippet, kText, 12, 610, LV_TEXT_ALIGN_LEFT, f_text_, 26});
+        specs.push_back(std::move(s));
+    }
+    search_sel_ = search_rows_.empty() ? -1 : std::clamp(search_sel_, 0, static_cast<int>(search_rows_.size()) - 1);
+    search_list_.set(std::move(specs), search_sel_, true);
+    if (to_top) search_list_.scroll_to_top();
+}
+
+void App::render_search()
+{
+    lv_label_set_text(sr_conv_label_, ("Chat: " + search_.conv_label(model_)).c_str());
+    lv_label_set_text(sr_date_label_, search_.date_label().c_str());
+    lv_label_set_text(sr_dir_label_, (std::string("Show: ") + search_dir_name(search_.dir)).c_str());
+    if (search_sig_ != (model_.next_seq() * 2654435761u ^ static_cast<uint32_t>(model_.message_count()))) refresh_search_results(false);   // a message arrived or was deleted
+    std::string c;
+    if (search_.query(now_unix()).empty()) c = std::to_string(search_total_) + (search_total_ == 1 ? " message" : " messages") + " in the archive";
+    else if (search_total_ == 0) c = "No message matches";
+    else c = std::to_string(search_total_) + (search_total_ == 1 ? " message matches" : " messages match") +
+             (search_total_ > search_rows_.size() ? ", the newest " + std::to_string(search_rows_.size()) + " are listed" : std::string());
+    lv_label_set_text(sr_count_, c.c_str());
+    // an active filter shows in gold
+    auto tint = [&](lv_obj_t *label, bool on) {
+        lv_obj_set_style_bg_color(lv_obj_get_parent(label), lv_color_hex(on ? kGold : kSelected), 0);
+        set_color(label, on ? 0x101214 : kText);
+    };
+    tint(sr_conv_label_, !search_.conv.empty());
+    tint(sr_date_label_, search_.date != DatePreset::Any);
+    tint(sr_dir_label_, search_.dir != SearchDir::Any);
+}
+
+void App::search_open_hit(int index)
+{
+    if (index < 0 || index >= static_cast<int>(search_rows_.size())) return;
+    const SearchRow r = search_rows_[static_cast<size_t>(index)];
+    close_search();
+    open_conversation(r.conv, false);
+    focus_conv_ = r.conv;
+    focus_seq_ = r.seq;
+    built_conv_.clear();
+    built_sig_ = 0;
+    invalidate();
+}
+
+void App::search_pick_conv()
+{
+    const auto convs = search_conversations(model_);
+    std::vector<std::string> labels = {"All chats"};
+    int focus = 0;
+    for (size_t i = 0; i < convs.size(); ++i) {
+        labels.push_back(truncate_ellipsis(convs[i].second, 30));
+        if (convs[i].first == search_.conv) focus = static_cast<int>(i) + 1;
+    }
+    open_list("Search in which chat?", labels, focus, [this, convs](int i) {
+        search_.conv = i <= 0 || i > static_cast<int>(convs.size()) ? std::string() : convs[static_cast<size_t>(i) - 1].first;
+        refresh_search_results();
+        invalidate();
+    });
+}
+
+void App::search_pick_date()
+{
+    std::vector<std::string> labels;
+    for (DatePreset p : {DatePreset::Any, DatePreset::Day, DatePreset::Week, DatePreset::Month, DatePreset::Quarter, DatePreset::Custom}) labels.push_back(date_preset_name(p));
+    labels.back() = "Custom range...";
+    open_list("Which dates?", labels, static_cast<int>(search_.date), [this](int i) {
+        static const DatePreset presets[6] = {DatePreset::Any, DatePreset::Day, DatePreset::Week, DatePreset::Month, DatePreset::Quarter, DatePreset::Custom};
+        if (i < 0 || i > 5) return;
+        if (presets[i] != DatePreset::Any && now_unix() < kMinPlausibleTime) {
+            notice("The clock is not set: dates cannot be told", false);
+            return;
+        }
+        if (presets[i] == DatePreset::Custom) {
+            open_editor(EditKind::DateRange, "Dates", "One day (2026-09-30) or a range (2026-09-01 2026-09-30), local time.", "");
+            return;
+        }
+        search_.date = presets[i];
+        refresh_search_results();
+        invalidate();
+    });
+}
+
+void App::search_edit(const KeyEvent &e)
+{
+    switch (e.key) {
+    case Key::Backspace: lv_textarea_delete_char(sr_query_); break;
+    case Key::Delete: lv_textarea_delete_char_forward(sr_query_); break;
+    case Key::Left: lv_textarea_cursor_left(sr_query_); return;
+    case Key::Right: lv_textarea_cursor_right(sr_query_); return;
+    case Key::Char: {
+        if (e.ctrl || e.alt) return;
+        const char *cur = lv_textarea_get_text(sr_query_);
+        const std::string add = filter_typed(EditMode::Free, cur ? cur : "", e.text, 60);
+        if (add.empty()) return;
+        lv_textarea_add_text(sr_query_, add.c_str());
+        break;
+    }
+    default: return;
+    }
+    const char *now_text = lv_textarea_get_text(sr_query_);
+    search_.text = now_text ? now_text : "";
+    search_sel_ = 0;
+    refresh_search_results();
+    invalidate();
+}
+
+void App::key_search(const KeyEvent &e)
+{
+    const int n = static_cast<int>(search_rows_.size());
+    auto move = [&](int to) {
+        if (n == 0) return;
+        search_sel_ = std::clamp(to, 0, n - 1);
+        search_list_.set_selected(search_sel_, true, true);
+    };
+    if (e.key == Key::Char && e.ctrl && !e.alt && e.text.size() == 1) {
+        const char c = static_cast<char>(std::tolower(static_cast<unsigned char>(e.text[0])));
+        if (e.repeat) return;
+        if (c == 'k') {
+            search_pick_conv();
+        } else if (c == 'd') {
+            search_pick_date();
+        } else if (c == 'r') {
+            search_.cycle_dir();
+            refresh_search_results();
+            invalidate();
+        }
+        return;
+    }
+    switch (e.key) {
+    case Key::Up: move(search_sel_ - 1); break;
+    case Key::Down: move(search_sel_ + 1); break;
+    case Key::PageUp: move(search_sel_ - 4); break;
+    case Key::PageDown: move(search_sel_ + 4); break;
+    case Key::Home: move(0); break;
+    case Key::End: move(n - 1); break;
+    case Key::Enter:
+        if (!e.repeat) search_open_hit(search_sel_);
+        break;
+    default: search_edit(e); break;
+    }
+}
+
+/* ---- statistics */
+
+void App::open_stats()
+{
+    if (!client_->ready()) {
+        notice("Connect the radio first", false);
+        return;
+    }
+    if (model_.caps().stats == Cap::No) {
+        notice("Firmware too old for this feature: Statistics", false);
+        return;
+    }
+    nav_.stats_open = true;
+    stats_ms_ = mono_ms();
+    stats_sig_ = 0;
+    client_->refresh_stats();
+    invalidate();
+}
+
+void App::close_stats()
+{
+    nav_.stats_open = false;
+    set_hidden(stats_panel_, true);
+    invalidate();
+}
+
+void App::render_stats()
+{
+    const StatsView v = build_stats_view(model_.stats());
+    for (int col = 0; col < 2; ++col) {
+        const std::vector<StatLine> &lines = col == 0 ? v.left : v.right;
+        for (int i = 0; i < 10; ++i) {
+            const bool have = i < static_cast<int>(lines.size());
+            lv_label_set_text(st_label_[col][i], have ? lines[static_cast<size_t>(i)].label.c_str() : "");
+            lv_label_set_text(st_value_[col][i], have ? lines[static_cast<size_t>(i)].value.c_str() : "");
+        }
+    }
+    lv_label_set_text(st_updated_, v.updated.c_str());
+    lv_label_set_text(st_auto_label_, stats_auto_ ? "Auto: 5 s" : "Auto: off");
+    lv_obj_set_style_bg_color(lv_obj_get_parent(st_auto_label_), lv_color_hex(stats_auto_ ? kOkGreen : kSelected), 0);
+    std::string note;
+    if (model_.caps().stats == Cap::No) note = "Firmware too old for this feature: Statistics";
+    else if (!client_->ready()) note = "Not connected";
+    else if (client_->stats_busy()) note = "Reading...";
+    else if (!v.any) note = "No answer yet";
+    lv_label_set_text(st_note_, note.c_str());
+    set_color(st_note_, model_.caps().stats == Cap::No ? kGold : kMuted);
+}
+
+void App::key_stats(const KeyEvent &e)
+{
+    if (e.repeat) return;
+    const char c = e.key == Key::Char && !e.ctrl && !e.alt && e.text.size() == 1 ? static_cast<char>(std::tolower(static_cast<unsigned char>(e.text[0]))) : 0;
+    if (e.key == Key::Enter || c == 'r') {
+        if (!client_->refresh_stats()) notice(client_->stats_busy() ? "Already reading..." : "Cannot read the statistics now", client_->stats_busy());
+        stats_ms_ = mono_ms();
+    } else if (c == 'a') {
+        stats_auto_ = !stats_auto_;
+        invalidate();
+    }
+}
+
+/* ---- the board: auto-add types, reboot, factory reset, repeat */
+
+void App::autoadd_menu()
+{
+    if (!client_->ready()) {
+        notice("Connect the radio first", false);
+        return;
+    }
+    if (!model_.caps().autoadd_known) {
+        notice("The board has not told its auto-add types yet", false);
+        return;
+    }
+    const AutoaddConfig cfg = model_.caps().autoadd_config;
+    const std::vector<AutoAddItem> items = autoadd_items(cfg);
+    std::vector<std::string> labels;
+    for (const AutoAddItem &i : items) labels.push_back(std::string(i.on ? "[x] " : "[ ] ") + i.label);
+    open_list("Added by itself in manual mode", labels, 0, [this, items, cfg](int i) {
+        if (i < 0 || i >= static_cast<int>(items.size())) return;
+        client_->set_autoadd_flags(autoadd_toggled(cfg.config, items[static_cast<size_t>(i)].flag));
+    });
+}
+
+void App::ask_reboot()
+{
+    if (!client_->ready()) {
+        notice("Connect the radio first", false);
+        return;
+    }
+    open_confirm("Reboot the board?", "The board restarts. The USB link drops for a few seconds and Mesh Hop reconnects by itself. Nothing is erased.",
+                 [this] { client_->reboot(); }, "Yes, reboot");
+}
+
+void App::ask_factory_reset()
+{
+    if (!client_->ready()) {
+        notice("Connect the radio first", false);
+        return;
+    }
+    open_confirm("Factory reset the board?",
+                 "This erases the board's keys (its identity), its contacts and its channels and sets its radio back to the defaults. The messages, the groups and the settings of this deck stay. It cannot be undone.",
+                 [this] {
+                     open_confirm("Really erase the board?", "Last chance. The board loses its identity, its contacts and its channels now. Other people will see a new node.",
+                                  [this] { client_->factory_reset(); }, "Yes, erase", "No, keep it", 3000, true);
+                 },
+                 "Continue", "No", 0, true);
+}
+
+void App::ask_repeat(bool on)
+{
+    if (!client_->ready()) {
+        notice("Connect the radio first", false);
+        return;
+    }
+    if (!on) {
+        client_->set_client_repeat(false);
+        return;
+    }
+    open_confirm("Switch repeat on?", "The board will forward the packets it hears for other nodes, like a repeater. That uses airtime of everyone on this frequency. Only the frequencies the board allows can use it.",
+                 [this] { client_->set_client_repeat(true); }, "Yes, repeat");
+}
+
+/* Called every tick: the progress box of a bulk delete, the waiting Yes, the end of a scan, the automatic statistics. */
+void App::tick_phase2(uint64_t now)
+{
+    if (pop_.kind == Popup::Progress && !pop_dirty_ && pop_progress_) {
+        const Client::BulkProgress &b = client_->bulk();
+        const size_t handled = b.done + b.failed;
+        lv_label_set_text(pop_progress_, (std::to_string(handled) + " of " + std::to_string(b.total) + (b.cancelled && b.active ? "  (stopping)" : "")).c_str());
+        lv_obj_set_width(pop_bar_fill_, b.total ? std::max<int>(1, static_cast<int>(420 * handled / b.total)) : 1);
+        if (!b.active) {                                                // done: the notice says what happened
+            close_popup();
+            if (nav_.select_mode) leave_select_mode();
+            csnap_valid_ = false;
+            invalidate();
+        }
+    }
+    if (pop_.kind == Popup::Confirm && pop_.yes_delay_ms > 0 && !pop_dirty_ && pop_yes_) {
+        const int left = confirm_wait_left(pop_.opened_ms, now, pop_.yes_delay_ms);
+        lv_label_set_text(lv_obj_get_child(pop_yes_, 0), confirm_yes_text(pop_.yes_text, left).c_str());
+        lv_obj_set_style_bg_color(pop_yes_, lv_color_hex(left ? kSelectedDim : kDangerRed), 0);
+        set_color(lv_obj_get_child(pop_yes_, 0), left ? kMuted : kText);
+    }
+    if (client_->discover().finished_id != discover_seen_id_) {
+        discover_seen_id_ = client_->discover().finished_id;
+        nearby_sig_ = 0;
+        invalidate();
+    }
+    if (nav_.stats_open && model_.caps().stats == Cap::No) {                // the board refused: back to Settings, where the row is now a notice
+        close_stats();
+        notice("Firmware too old for this feature: Statistics", false);
+    }
+    if (nav_.stats_open && client_->ready()) {
+        if (stats_auto_ && now - stats_ms_ >= 5000 && !client_->stats_busy()) {
+            stats_ms_ = now;
+            client_->refresh_stats();
+        }
+        if (model_.revision() != stats_sig_) {
+            stats_sig_ = model_.revision();
+            invalidate();
+        }
     }
 }
 
@@ -2507,9 +3759,6 @@ void App::button_clicked(int tag)
             invalidate();
         }
         break;
-    case kTagMuteChan:
-        if (conv_.rfind("c:", 0) == 0) toggle_mute(conv_);
-        break;
     case kTagTitleHold: hold_.take_swallow(); break;       // a tap on the name does nothing
     case kTagAdvertFlood: client_->send_advert(true); break;
     case kTagAdvertZero: client_->send_advert(false); break;
@@ -2530,6 +3779,53 @@ void App::button_clicked(int tag)
         nav_.detail_open = false;
         invalidate();
         break;
+    case kTagNearby: open_nearby(); break;
+    case kTagSelect: enter_select_mode(); break;
+    case kTagGroup: open_group_filter(); break;
+    case kTagSelDone: leave_select_mode(); break;
+    case kTagSelMenu: open_select_menu(); break;
+    case kTagSelDelete: confirm_bulk_delete(); break;
+    case kTagSelGroup: open_group_assign(); break;
+    case kTagDetailGroups:
+        group_focus_ = 0;
+        group_toggle_for(detail_key_);
+        break;
+    case kTagDetailDelete: delete_detail_contact(); break;
+    case kTagChatDetails: {
+        KeyPrefix dp{};
+        const ContactRec *dc = conv_.size() == 14 && from_hex(conv_.substr(2), dp.data(), 6) ? model_.find_by_prefix(dp) : nullptr;
+        if (dc) {
+            const std::string key = dc->key_hex();
+            select_tab(Tab::Contacts);
+            open_detail(key);
+        }
+        break;
+    }
+    case kTagNearbyClose: close_nearby(); break;
+    case kTagNearbyScan: client_->start_discover(); break;
+    case kTagNearbyIgnored:
+        nearby_show_ignored_ = !nearby_show_ignored_;
+        nearby_sig_ = 0;
+        invalidate();
+        break;
+    case kTagSearchOpen: open_search(); break;
+    case kTagSearchClose: close_search(); break;
+    case kTagSearchConv: search_pick_conv(); break;
+    case kTagSearchDate: search_pick_date(); break;
+    case kTagSearchDir:
+        search_.cycle_dir();
+        refresh_search_results();
+        invalidate();
+        break;
+    case kTagStatsClose: close_stats(); break;
+    case kTagStatsRefresh:
+        if (!client_->refresh_stats()) notice(client_->stats_busy() ? "Already reading..." : "Cannot read the statistics now", client_->stats_busy());
+        stats_ms_ = mono_ms();
+        break;
+    case kTagStatsAuto:
+        stats_auto_ = !stats_auto_;
+        invalidate();
+        break;
     case kTagEdOk: close_editor(true); break;
     case kTagEdCancel: close_editor(false); break;
     default: break;
@@ -2538,6 +3834,13 @@ void App::button_clicked(int tag)
 
 void App::row_clicked(RowList *list, int index, int x)
 {
+    if (list == &pop_list_) {                           // a row of a pick-list box
+        if (nav_.popup_open && pop_.kind == Popup::List && !pop_dirty_ && mono_ms() - pop_.opened_ms >= 150 && index >= 0 && index < static_cast<int>(pop_.items.size())) {
+            pop_.focus = index;
+            popup_accept();
+        }
+        return;
+    }
     if (mono_ms() - start_ms_ < kStartGuardMs || editor_open_ || nav_.popup_open || view_pending_) return;
     if (list == &chat_list_) {
         if (hold_.take_swallow()) return;                 // the release of a completed 3 s hold is not a tap
@@ -2547,7 +3850,15 @@ void App::row_clicked(RowList *list, int index, int x)
     } else if (list == &contact_list_) {
         // the row that was tapped, whatever the order it is shown in: its id is the contact key of THIS row
         const std::string key = contact_list_.id_at(index);
-        if (!key.empty()) activate_contact(key);
+        if (!key.empty()) {
+            if (nav_.select_mode) toggle_selected(key);                   // select mode: a tap marks the row
+            else if (x >= 584) open_contact_info(key);                    // the "i" box at the right of the row: the details
+            else activate_contact(key);
+        }
+    } else if (list == &nearby_list_) {
+        nearby_activate(index, x);
+    } else if (list == &search_list_) {
+        search_open_hit(index);
     } else if (list == &settings_list_) {
         settings_activate(index, x);
         invalidate();
@@ -2560,6 +3871,10 @@ void App::back()
     switch (a) {
     case BackAction::ClosePopup: popup_cancel(); break;
     case BackAction::CancelEditor: close_editor(false); break;
+    case BackAction::CloseSearch: close_search(); break;
+    case BackAction::CloseStats: close_stats(); break;
+    case BackAction::CloseNearby: close_nearby(); break;
+    case BackAction::ExitSelect: leave_select_mode(); break;
     case BackAction::CloseDetail:
         nav_.detail_open = false;
         invalidate();
@@ -2614,6 +3929,11 @@ void App::key_chats(const KeyEvent &e)
         else open_conversation_options(conv_);
         return;
     }
+    // Ctrl+F opens the search in the message archive
+    if (e.key == Key::Char && e.ctrl && !e.alt && (e.text == "f" || e.text == "F")) {
+        if (!e.repeat) open_search();
+        return;
+    }
     if (nav_.compose_focus) {
         switch (e.key) {
         case Key::Enter:
@@ -2658,13 +3978,15 @@ void App::key_chats(const KeyEvent &e)
 void App::key_contacts(const KeyEvent &e)
 {
     if (nav_.detail_open) {
-        if (e.key == Key::Enter && !e.repeat) {
-            const ContactRec *r = model_.find_contact(detail_key_);
-            if (r && opens_chat(r->c.type)) open_conversation(Model::conv_direct(r->prefix()), true);
-        }
+        key_detail(e);
+        return;
+    }
+    if (nav_.nearby_open) {
+        key_nearby(e);
         return;
     }
     if (view_pending_) return;
+    const bool sel = nav_.select_mode;
     switch (e.key) {
     case Key::Up: move_contact_selection(-1, false); break;
     case Key::Down: move_contact_selection(1, false); break;
@@ -2673,25 +3995,40 @@ void App::key_contacts(const KeyEvent &e)
     case Key::Home: move_contact_selection(0, true); break;
     case Key::End: move_contact_selection(static_cast<int>(csnap_.rows.size()) - 1, true); break;
     case Key::Enter:
-        if (!e.repeat) activate_contact(contact_sel_key_);
+        if (e.repeat) break;
+        if (sel) toggle_selected(contact_sel_key_);
+        else activate_contact(contact_sel_key_);
+        break;
+    case Key::Delete:
+        if (sel && !e.repeat) confirm_bulk_delete();
         break;
     case Key::Char: {
         if (e.ctrl || e.alt || e.repeat) break;
         const char c = e.text.size() == 1 ? static_cast<char>(std::tolower(static_cast<unsigned char>(e.text[0]))) : 0;
         ContactView v = cview_;
-        if (c == 's') { v.cycle_sort(); change_contact_view(v); }
+        if (sel && c == ' ') toggle_selected(contact_sel_key_);                    // select mode: Space (or Enter) marks the row
+        else if (sel && c == 'a') { csel_.select_shown(csnap_.rows); build_contact_specs(); invalidate(); }
+        else if (sel && c == 'n') { csel_.clear(); build_contact_specs(); invalidate(); }
+        else if (sel && c == 'i') { csel_.invert(csnap_.rows); build_contact_specs(); invalidate(); }
+        else if (sel && c == 'm') open_select_menu();
+        else if (sel && c == 'd') confirm_bulk_delete();
+        else if (sel && c == 'g') open_group_assign();
+        else if (c == 's') { v.cycle_sort(); change_contact_view(v); }
         else if (c == 'r') { v.toggle_reverse(); change_contact_view(v); }
         else if (c == 't') { v.filter.type = next_type_filter(v.filter.type); change_contact_view(v); }
         else if (c == 'h') { v.filter.age = next_age_filter(v.filter.age); change_contact_view(v); }
-        else if (c == 'a') client_->send_advert(true);
-        else if (c == 'd') client_->send_advert(false);
-        else if (c == 'u') client_->refresh_contacts();
+        else if (!sel && c == 'a') client_->send_advert(true);
+        else if (!sel && c == 'd') client_->send_advert(false);
+        else if (!sel && c == 'u') client_->refresh_contacts();
+        else if (!sel && c == 'x') enter_select_mode();
+        else if (!sel && c == 'g') open_group_filter();
+        else if (!sel && c == 'n') open_nearby();
+        else if (!sel && c == 'i') open_contact_info(contact_sel_key_);
         break;
     }
     default: break;
     }
 }
-
 void App::key_settings(const KeyEvent &e)
 {
     std::vector<bool> ok;
@@ -2760,9 +4097,15 @@ void App::on_key(const KeyEvent &e)
         return;
     }
     switch (nav_.tab) {
-    case Tab::Chats: key_chats(e); break;
+    case Tab::Chats:
+        if (nav_.search_open) key_search(e);
+        else key_chats(e);
+        break;
     case Tab::Contacts: key_contacts(e); break;
-    case Tab::Settings: key_settings(e); break;
+    case Tab::Settings:
+        if (nav_.stats_open) key_stats(e);
+        else key_settings(e);
+        break;
     default: break;
     }
 }

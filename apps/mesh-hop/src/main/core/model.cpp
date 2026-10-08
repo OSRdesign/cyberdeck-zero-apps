@@ -89,8 +89,51 @@ std::string validate_name(const std::string &name)
 
 void Model::set_self(const SelfInfo &s)
 {
+    select_board(s.key);            // another identity: the previous board's data goes, the new board's saved data comes (before self_ is set)
     self_ = s;
     ++revision_;
+}
+
+void Model::reset_board_scoped()
+{
+    contacts_.clear();
+    channels_.clear();
+    added_.clear();
+    messages_.clear();
+    read_.clear();
+    muted_.clear();
+    ignored_.clear();
+    nearby_.clear();
+    groups_ = ContactGroups();
+    schedule_ = AdvertSchedule();
+    stats_ = StatsSnapshot();
+    batch_ = batch_dirty_ = false;
+    next_seq_ = 1;
+}
+
+bool Model::select_board(const PubKey &key)
+{
+    const std::string hex = to_hex(key);
+    if (hex == board_key_) return false;
+    reset_board_scoped();
+    board_key_ = hex;
+    ++board_epoch_;
+    ++revision_;
+    if (listener_) listener_->board_changed(hex);
+    ++revision_;
+    return true;
+}
+
+void Model::forget_board_app_data()
+{
+    messages_.clear();
+    read_.clear();
+    muted_.clear();
+    ignored_.clear();
+    groups_ = ContactGroups();
+    schedule_ = AdvertSchedule();
+    ++revision_;
+    if (listener_) listener_->board_data_forgotten();
 }
 
 void Model::set_device(const DeviceInfo &d)
@@ -112,6 +155,46 @@ void Model::clear_device()
     battery_.reset();
     caps_ = BoardCaps();
     clock_ = ClockInfo();
+    stats_ = StatsSnapshot();
+    ++revision_;
+}
+
+const std::vector<int> &advert_interval_options()
+{
+    static const std::vector<int> v = {0, 1, 3, 6, 12};
+    return v;
+}
+
+AdvertSchedule normalize_schedule(AdvertSchedule s)
+{
+    const auto &opts = advert_interval_options();
+    if (std::find(opts.begin(), opts.end(), s.interval_hours) == opts.end()) s.interval_hours = 0;
+    return s;
+}
+
+void Model::set_advert_schedule(AdvertSchedule s)
+{
+    s = normalize_schedule(s);
+    if (s == schedule_) return;
+    schedule_ = s;
+    ++revision_;
+    if (listener_) listener_->prefs_changed();
+}
+
+void Model::groups_changed()
+{
+    ++revision_;
+    if (listener_) listener_->groups_changed();
+}
+
+void Model::set_stats(const StatsReply &s, uint32_t when)
+{
+    switch (s.kind) {
+    case StatsReply::Core: stats_.core = s.core; break;
+    case StatsReply::Radio: stats_.radio = s.radio; break;
+    case StatsReply::Packets: stats_.packets = s.packets; break;
+    }
+    stats_.updated = when;
     ++revision_;
 }
 
@@ -148,7 +231,24 @@ void Model::replace_contacts(const std::vector<Contact> &list)
     }
     contacts_.swap(next);
     ++revision_;
+    refresh_pending();
+    notify_contacts();
+}
+
+void Model::notify_contacts()
+{
+    if (batch_) {
+        batch_dirty_ = true;
+        return;
+    }
     if (listener_) listener_->contacts_changed();
+}
+
+void Model::end_contact_batch()
+{
+    const bool dirty = batch_dirty_;
+    batch_ = batch_dirty_ = false;
+    if (dirty && listener_) listener_->contacts_changed();
 }
 
 void Model::upsert_contact(const Contact &c)
@@ -156,14 +256,15 @@ void Model::upsert_contact(const Contact &c)
     ContactRec &rec = contacts_[to_hex(c.key)];
     rec.c = c;
     ++revision_;
-    if (listener_) listener_->contacts_changed();
+    refresh_pending();
+    notify_contacts();
 }
 
 void Model::remove_contact(const PubKey &key)
 {
     if (contacts_.erase(to_hex(key)) == 0) return;
     ++revision_;
-    if (listener_) listener_->contacts_changed();
+    notify_contacts();
 }
 
 void Model::heard(const PubKey &key, uint32_t when)
@@ -172,7 +273,7 @@ void Model::heard(const PubKey &key, uint32_t when)
     if (it == contacts_.end()) return;
     it->second.heard_local = when;
     ++revision_;
-    if (listener_) listener_->contacts_changed();
+    notify_contacts();
 }
 
 void Model::note_snr(const KeyPrefix &prefix, double snr, uint32_t when)
@@ -183,8 +284,182 @@ void Model::note_snr(const KeyPrefix &prefix, double snr, uint32_t when)
         kv.second.snr = snr;
         kv.second.heard_local = when;
         ++revision_;
-        if (listener_) listener_->contacts_changed();
+        notify_contacts();
         return;
+    }
+}
+
+/* ---------------------------------------------------------------- nearby nodes */
+
+void Model::refresh_pending()
+{
+    for (auto &kv : nearby_)
+        if (kv.second.pending && contacts_.count(kv.first)) kv.second.pending = false;
+}
+
+void Model::note_nearby(const NearbyObs &in, uint32_t when)
+{
+    NearbyObs obs = in;
+    if (obs.key_hex.size() != 64 && obs.key_hex.size() != 16) return;
+    if (obs.key_hex.size() == 16) {                          // a prefix: resolve it against what is known
+        obs.full_key = false;
+        for (const auto &kv : contacts_)
+            if (kv.first.compare(0, 16, obs.key_hex) == 0) {
+                obs.key_hex = kv.first;
+                obs.full_key = true;
+                break;
+            }
+        if (!obs.full_key)
+            for (const auto &kv : nearby_)
+                if (kv.second.full_key && kv.first.compare(0, 16, obs.key_hex) == 0) {
+                    obs.key_hex = kv.first;
+                    obs.full_key = true;
+                    break;
+                }
+    } else {
+        obs.full_key = true;
+    }
+    auto it = nearby_.find(obs.key_hex);
+    if (it == nearby_.end()) {
+        if (nearby_.size() >= kMaxNearby) {                  // drop the one heard longest ago (never a pending one while others exist)
+            auto victim = nearby_.end();
+            for (auto j = nearby_.begin(); j != nearby_.end(); ++j) {
+                if (victim == nearby_.end() || (victim->second.pending && !j->second.pending) ||
+                    (victim->second.pending == j->second.pending && j->second.last_heard < victim->second.last_heard))
+                    victim = j;
+            }
+            if (victim != nearby_.end()) nearby_.erase(victim);
+        }
+        NearbyRec r;
+        r.key_hex = obs.key_hex;
+        r.full_key = obs.full_key;
+        if (r.full_key) from_hex(r.key_hex, r.key.data(), 32);
+        r.first_heard = when;
+        it = nearby_.emplace(obs.key_hex, r).first;
+    }
+    NearbyRec &r = it->second;
+    if (obs.type != 0) r.type = obs.type;
+    if (!obs.name.empty()) r.name = obs.name;
+    if (obs.has_pos) {
+        r.has_pos = true;
+        r.lat = obs.lat;
+        r.lon = obs.lon;
+    }
+    if (obs.has_snr) {
+        r.has_snr = true;
+        r.snr = obs.snr;
+    }
+    if (obs.has_rssi) {
+        r.has_rssi = true;
+        r.rssi = obs.rssi;
+    }
+    if (obs.hops >= 0) {
+        r.hops = obs.hops;
+        if (obs.hash_size > 0) r.hash_size = obs.hash_size;
+    }
+    if (obs.discovered) {
+        r.discovered = true;
+        r.hops = 0;
+    }
+    r.last_heard = when;                                    // no revision bump: an advert in the radio log must not rebuild the contact table; the Nearby panel redraws every second
+}
+
+void Model::note_heard_advert(const HeardAdvert &h, uint32_t when)
+{
+    NearbyObs o;
+    o.key_hex = to_hex(h.key);
+    o.type = h.type;
+    o.name = h.name;
+    o.has_pos = h.has_pos;
+    o.lat = h.lat;
+    o.lon = h.lon;
+    o.has_snr = true;
+    o.snr = h.snr;
+    o.has_rssi = true;
+    o.rssi = h.rssi;
+    o.hops = h.hops;
+    o.hash_size = h.hash_size;
+    note_nearby(o, when);
+}
+
+void Model::add_pending(const Contact &c, uint32_t when)
+{
+    NearbyObs o;
+    o.key_hex = to_hex(c.key);
+    o.type = c.type;
+    o.name = c.name;
+    o.has_pos = !(c.lat == 0 && c.lon == 0);
+    o.lat = c.lat;
+    o.lon = c.lon;
+    note_nearby(o, when);
+    const auto it = nearby_.find(o.key_hex);
+    if (it == nearby_.end()) return;
+    it->second.pending = contacts_.count(o.key_hex) == 0;
+    it->second.has_contact = true;
+    it->second.contact = c;
+}
+
+const NearbyRec *Model::find_nearby(const std::string &key_hex) const
+{
+    const auto it = nearby_.find(key_hex);
+    return it == nearby_.end() ? nullptr : &it->second;
+}
+
+std::vector<const NearbyRec *> Model::nearby_sorted() const
+{
+    std::vector<const NearbyRec *> v;
+    v.reserve(nearby_.size());
+    for (const auto &kv : nearby_) v.push_back(&kv.second);
+    std::sort(v.begin(), v.end(), [](const NearbyRec *a, const NearbyRec *b) {
+        if (a->pending != b->pending) return a->pending;
+        if (a->last_heard != b->last_heard) return a->last_heard > b->last_heard;
+        return a->key_hex < b->key_hex;
+    });
+    return v;
+}
+
+size_t Model::pending_count() const
+{
+    size_t n = 0;
+    for (const auto &kv : nearby_)
+        if (kv.second.pending && !is_ignored(kv.first)) ++n;
+    return n;
+}
+
+void Model::remove_nearby(const std::string &key_hex)
+{
+    if (nearby_.erase(key_hex)) ++revision_;
+}
+
+void Model::clear_nearby()
+{
+    if (nearby_.empty()) return;
+    nearby_.clear();
+    ++revision_;
+}
+
+void Model::set_ignored(const std::string &key_hex, bool ignored)
+{
+    if (ignored) {
+        if (ignored_.count(key_hex)) return;
+        if (ignored_.size() >= kMaxIgnored) ignored_.erase(ignored_.begin());
+        ignored_.insert(key_hex);
+    } else if (ignored_.erase(key_hex) == 0) {
+        return;
+    }
+    ++revision_;
+    if (listener_) listener_->prefs_changed();
+}
+
+void Model::clear_board_data()
+{
+    contacts_.clear();
+    channels_.clear();
+    nearby_.clear();
+    ++revision_;
+    if (listener_) {
+        listener_->contacts_changed();
+        listener_->channels_changed();
     }
 }
 

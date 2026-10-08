@@ -113,6 +113,8 @@ wait 300
 key end
 key up
 key up
+key up
+key up
 wait 300
 shot h13-settings-history
 key enter

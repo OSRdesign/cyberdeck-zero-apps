@@ -1,0 +1,114 @@
+# Mesh Hop 0.2.0 phase 2: search in the message archive (M7): text, conversation, dates, direction, open the conversation at the message.
+# Run with p2_run.sh (seeded history: 10 messages, 100 days to 1 hour old, plus the 2 of the simulator).
+# Touch (page at y=56): the filter buttons are at y=174 (chat x=108, dates x=328, direction x=540), Close at (588,78), result rows centre y=250+56*i.
+wait 3500
+key ctrl-f
+wait 500
+say == the search opens on the whole archive (expect search_open=1 search_hits=12 tab=Chats)
+dump
+shot s01-search-empty
+
+type alice
+wait 400
+say == four messages mention Alice (expect search_hits=4 search_text='alice')
+dump
+shot s02-hits
+
+# direction by touch: received, sent, all
+tap 540 174
+wait 300
+say == received only (expect search_hits=3)
+dump
+tap 540 174
+wait 300
+say == sent only (expect search_hits=1)
+dump
+shot s03-sent
+tap 540 174
+wait 300
+say == all again (expect search_hits=4)
+dump
+
+# dates by touch: the list, then the last 7 days
+tap 328 174
+wait 500
+say == the date list (expect popup=list popup_title='Which dates?')
+dump
+shot s04-date-list
+key down
+key down
+key enter
+wait 500
+say == last 7 days (expect search_hits=2)
+dump
+shot s05-last-week
+
+# a typed range: 60 to 30 days ago, with the text cleared
+key bksp
+key bksp
+key bksp
+key bksp
+key bksp
+key ctrl-d
+wait 400
+key end
+key enter
+wait 400
+type @D60@ @D30@
+shot s06-date-editor
+key enter
+wait 500
+say == the range of 60 to 30 days ago (expect search_hits=2 search_text='')
+dump
+shot s07-range
+
+# the conversation filter: Alice only, and the range off
+key ctrl-d
+wait 400
+key home
+key enter
+wait 400
+key ctrl-k
+wait 400
+shot s08-conv-list
+key down
+key down
+key down
+key enter
+wait 500
+say == only the conversation with Alice (expect search_hits=4)
+dump
+
+# Ctrl+R cycles the direction; Enter opens the selected message in its conversation
+key ctrl-r
+key ctrl-r
+key ctrl-r
+wait 300
+key down
+key enter
+wait 700
+say == the conversation opened at the message (expect search_open=0 tab=Chats conv=d:101112131415 focus_seq=)
+dump
+shot s09-opened-at-message
+
+# Esc closes the search without leaving Chats; a tap on a result opens it too
+key ctrl-f
+wait 400
+key esc
+wait 300
+say == Esc closes the search (expect search_open=0 tab=Chats)
+dump
+key ctrl-f
+wait 400
+key ctrl-k
+wait 400
+key home
+key enter
+wait 300
+type bob
+wait 300
+tap 300 250
+wait 700
+say == a tap opened the first result (expect search_open=0 conv=d:505152535455)
+dump
+shot s10-bob

@@ -1,0 +1,98 @@
+# Mesh Hop 0.2.2: two boards on the same cable (the simulator's "swap" is the exchange of the boards). Run with SIMCTL=1 and the seeded old-layout
+# history:   SIMCTL=1 sh p2_run.sh b-swap.script
+# Each board keeps its own messages, read marks, mute flags, groups, ignored nodes and advert schedule; the old files are moved to the first board.
+wait 3500
+say == board A connected, the seeded old-layout history was moved to it (expect board=a0a1a2a3a4a5 epoch=1 board_dir=a0a1a2a3a4a5 all_msgs=12)
+dump
+shot b01-chats-A
+key ctrl-m
+wait 300
+say == the first channel is muted on A (expect muted_conv=1)
+dump
+key tab
+key tab
+wait 400
+shot b02-contacts-A
+# Settings: the board status has no extra hint on the position row and no path hash line (it is in the Radio section)
+key tab
+key tab
+wait 800
+say == Settings top (expect tab=Settings board=a0a1a2a3a4a5)
+dump
+shot b03-settings-top-A
+key end
+key up
+key up
+key up
+key up
+wait 500
+say == the History rows of board A: forget this board, no other board yet
+shot b04-settings-history-A
+key tab
+wait 300
+sim swap
+wait 1800
+say == the cable is empty for a moment (expect link=Board disconnected, board A still shown)
+dump
+shot b05-unplugged
+wait 7500
+say == board B: its own conversations, contacts and flags (expect board=b0b1b2b3b4b5 epoch=2 contacts=3 all_msgs=2 unread=2 muted_conv=0 ignored=0 groups=0 others=1)
+dump
+shot b06-chats-B
+key tab
+key tab
+wait 500
+shot b07-contacts-B
+key tab
+key tab
+wait 800
+key end
+key up
+key up
+key up
+key up
+wait 500
+say == B's Settings: the saved data of the other board is offered (expect settings_sel on Other boards' data)
+shot b08-settings-history-B
+key tab
+wait 300
+sim swap
+wait 9500
+say == board A is back with everything (expect board=a0a1a2a3a4a5 epoch=3 contacts=4 all_msgs>=12 muted_conv=1 others=1)
+dump
+shot b09-chats-A-again
+key tab
+key tab
+key tab
+key tab
+wait 600
+key end
+key up
+key up
+key up
+key up
+wait 300
+key enter
+wait 600
+say == forget the other boards: a Yes / No box (expect popup=confirm popup_title='Forget other boards' data?')
+dump
+shot b10-forget-others
+type y
+wait 600
+say == forgotten (expect others=0 popup=none)
+dump
+key end
+key up
+key up
+key up
+key up
+wait 300
+key enter
+wait 600
+say == forget this board's data (expect popup=confirm popup_title='Forget this board's data?')
+dump
+shot b11-forget-board
+type n
+wait 300
+say == No: nothing happens (expect all_msgs=12 popup=none)
+dump

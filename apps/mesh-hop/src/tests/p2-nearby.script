@@ -1,0 +1,53 @@
+# Mesh Hop 0.2.0 phase 2: the Nearby list, the zero-hop scan, Add and Ignore (C4).
+# Run with:  SIMARGS="--manual-add --new-nodes 3"  (manual add mode: three strangers advert and wait as pending contacts)
+# Touch coordinates (page at y=56): toolbar centres y=78; Nearby panel buttons y=78 (Scan x=392, Ignored x=490, Close x=589); rows of 56 px start at y=104.
+wait 6800
+key tab
+key tab
+wait 600
+tap 288 78
+wait 600
+say == the Nearby list (expect nearby_open=1 nearby=3/3 pending=3 contacts=4)
+dump
+shot n01-nearby
+
+# the active scan: the nodes in direct range answer with SNR, the strangers get their own row
+tap 392 78
+wait 3000
+say == the scan runs (expect scan=active/4 nearby=5/5: the two contacts that answered are listed too)
+dump
+shot n02-scan
+wait 7000
+say == the scan ended (expect scan=idle/4 notice='Scan finished: 4 nodes answered')
+dump
+
+# Add by touch: the first row (pending, newest first), the board holds it afterwards
+tap 510 132
+wait 800
+say == one added (expect contacts=5 pending=2 and a notice: <name of the node> added to the contacts)
+dump
+shot n03-added
+
+# Ignore by touch on the next row
+tap 592 188
+wait 500
+say == one ignored (expect ignored=1 pending=1)
+dump
+shot n04-ignored
+
+# the Ignored button shows them; Restore with a tap
+tap 490 78
+wait 500
+shot n05-show-ignored
+say == the list with ignored nodes (expect nearby=5/5 ignored=1)
+dump
+type i
+wait 300
+say == I ignores the selected row (expect ignored=2)
+dump
+
+# keys: Down, Enter adds the selected pending node when it can be added
+key esc
+wait 300
+say == Esc closes Nearby, not the tab (expect nearby_open=0 tab=Contacts)
+dump

@@ -92,6 +92,55 @@ public:
     /* The most text that can be sent in this conversation (bytes). */
     size_t max_text(const std::string &conv) const;
 
+    // ---- phase 2: contacts
+    /* Deletes contacts on the board one by one (REMOVE_CONTACT per key, the next one only after the answer to the last). Progress in
+     * bulk(); the model and the contact cache are updated as each one goes, the cache file is rewritten once at the end. */
+    struct BulkProgress {
+        bool active = false;
+        size_t total = 0, done = 0, failed = 0;
+        bool cancelled = false;          // the user stopped it, or the link was lost
+        uint32_t id = 0;                 // grows with every job: the UI shows the end of a job once
+    };
+    bool remove_contacts(const std::vector<PubKey> &keys);
+    void cancel_bulk() { if (bulk_.active) bulk_.cancelled = true; }
+    const BulkProgress &bulk() const { return bulk_; }
+    /* Adds a node of the Nearby list to the board (ADD_UPDATE_CONTACT). */
+    bool add_nearby(const std::string &key_hex);
+    /* Manual add mode (SET_OTHER_PARAMS manual_add_contacts): true = new nodes wait in Nearby until added, false = the board adds them. */
+    bool set_manual_add(bool manual);
+    /* The auto-add filter (SET_AUTOADD_CONFIG): which types the board still adds by itself in manual mode, and overwrite-oldest. */
+    bool refresh_autoadd();
+    bool set_autoadd_flags(uint8_t flags);
+    /* The zero-hop discover (SEND_CONTROL_DATA): the answers arrive for kDiscoverWindowMs and fill the Nearby list. */
+    static constexpr uint32_t kDiscoverWindowMs = 8000;
+    struct DiscoverState {
+        bool active = false;
+        uint32_t tag = 0;
+        uint64_t until_ms = 0;
+        int found = 0;                   // distinct nodes that answered
+        uint32_t finished_id = 0;        // grows when a scan ends
+    };
+    bool start_discover(uint8_t type_filter = kDiscoverAllTypes);
+    const DiscoverState &discover() const { return discover_; }
+
+    // ---- phase 2: the board
+    bool reboot();
+    /* FACTORY_RESET: the firmware formats its file system (this can take a good while on an ESP32 board: the wait is kFactoryResetWaitMs), answers
+     * OK, waits a second and restarts with a new identity. The answer may be missing when the link drops first: the outcome is judged by the identity
+     * the board reports when it is back (reset_phase()). */
+    bool factory_reset();
+    static constexpr uint32_t kFactoryResetWaitMs = 60000;
+    enum class ResetPhase { None, Waiting, Done, KeptKeys };
+    /* Waiting: asked, the board has not come back yet. Done: it came back with another identity (shown for 2 minutes). KeptKeys: it came back with
+     * the same keys, so nothing was erased (shown for 2 minutes). */
+    ResetPhase reset_phase() const { return reset_phase_; }
+    /* Path hash size: mode 0, 1, 2 = 1, 2, 3 bytes per hash in the paths of the packets the board sends. */
+    bool set_path_hash_mode(int mode);
+    bool set_client_repeat(bool on);
+    bool refresh_stats();                 // core, radio and packet statistics, one after the other
+    bool stats_busy() const { return stats_pending_ > 0; }
+    bool refresh_self();                  // APP_START again: position, name, flags as the board holds them now
+
     // ---- counters (tests, diagnostics)
     size_t frames_received() const { return frames_rx_; }
     size_t bad_frames() const { return bad_frames_ + parser_.bad_headers(); }
@@ -107,6 +156,7 @@ private:
         std::vector<uint8_t> progress;    // codes that keep it alive (the contact stream)
         uint32_t timeout_ms = 5000;
         bool accept_any = false;          // any answer that is not an error and not a push completes it (channel send)
+        bool no_reply = false;            // the board sends no answer (reboot): the command completes when it is written
         Done done;
     };
     struct Outgoing {
@@ -147,6 +197,14 @@ private:
     void read_custom_vars();
     bool add_channel_in_free_slot(const std::string &name, const ChannelSecret &key, bool hashtag);
     std::string app_name() const { return "mcdeck"; }
+    void pump_bulk();
+    void end_bulk(const std::string &why);
+    void send_other_params(bool manual, bool with_multi_acks);
+    void read_device_info();
+    void read_repeat_ranges();
+    void tick_discover();
+    void tick_schedule();
+    void send_advert_impl(bool flood, bool scheduled);
 
     ITransport &transport_;
     Model &model_;
@@ -177,6 +235,11 @@ private:
     std::vector<Outgoing> outgoing_;
     std::vector<ChannelSend> chan_pending_;
     uint8_t last_code_ = 0;               // the code of the frame that completed the request being finished
+    std::string last_head_;               // the first bytes of the latest answer frame (hex), for the log
+    ResetPhase reset_phase_ = ResetPhase::None;
+    PubKey reset_prev_key_{};
+    uint64_t notice_hold_until_ = 0;      // good news does not replace the notice about a factory reset before this time
+    uint64_t reset_until_ms_ = 0;         // Waiting: give up judging after this; Done / KeptKeys: stop showing after this
     std::function<void(const std::string &)> log_;
     Options options_;
     std::function<DeckClock()> deck_state_;
@@ -186,6 +249,18 @@ private:
     bool gps_ = false, gps_known_ = false;
     Notice notice_;
     size_t frames_rx_ = 0, bad_frames_ = 0;
+
+    // phase 2
+    BulkProgress bulk_;
+    std::deque<PubKey> bulk_queue_;
+    std::vector<std::string> bulk_removed_;
+    bool bulk_inflight_ = false;
+    DiscoverState discover_;
+    std::array<uint8_t, 4> discover_tag_bytes_{};
+    uint32_t tag_counter_ = 0;
+    int stats_pending_ = 0;
+    AdvertSchedule sched_seen_;
+    uint64_t next_advert_ms_ = 0;
 };
 
 } // namespace meshzero

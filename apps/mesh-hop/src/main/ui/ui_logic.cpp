@@ -576,17 +576,24 @@ ContactSnapshot make_contact_snapshot(const Model &model, const ContactView &vie
 {
     ContactSnapshot s;
     s.view = view;
-    s.rows = build_contact_rows(model, view.sort, view.reverse, view.filter, now);
+    if (view.group.empty()) {
+        s.rows = build_contact_rows(model, view.sort, view.reverse, view.filter, now);
+    } else {
+        const std::set<std::string> members = model.groups().members(view.group);
+        s.rows = build_contact_rows(model, view.sort, view.reverse, view.filter, now, &members);
+    }
     return s;
 }
 
-std::vector<ContactRow> build_contact_rows(const Model &model, SortKey sort, bool reverse, const ContactFilter &filter, uint32_t now_in)
+std::vector<ContactRow> build_contact_rows(const Model &model, SortKey sort, bool reverse, const ContactFilter &filter, uint32_t now_in,
+                                           const std::set<std::string> *only_keys)
 {
     const uint32_t now = now_in ? now_in : now_unix();
     std::vector<ContactRow> rows;
     const auto &self = model.self();
     const bool self_pos = self && !(self->lat == 0 && self->lon == 0);
     for (const ContactRec *r : model.contacts_sorted()) {
+        if (only_keys && only_keys->count(r->key_hex()) == 0) continue;
         ContactRow c;
         c.key_hex = r->key_hex();
         c.name = r->c.name.empty() ? to_hex(r->prefix()) : r->c.name;
@@ -747,9 +754,11 @@ std::string Choice::position() const
     return std::to_string(index + 1) + " / " + std::to_string(labels.size());
 }
 
-Choice make_choice(ChoiceField f, const RadioSettings &s, const RetrySettings &retry)
+Choice make_choice(ChoiceField f, const RadioSettings &s, const RetrySettings &retry, const ChoiceExtra *extra)
 {
     Choice c;
+    const ChoiceExtra none;
+    if (!extra) extra = &none;
     switch (f) {
     case ChoiceField::Bandwidth:
         c.title = "Bandwidth";
@@ -803,9 +812,48 @@ Choice make_choice(ChoiceField f, const RadioSettings &s, const RetrySettings &r
         c.note = "When the stored route fails, the route is forgotten and the message floods. Default: before try 3.";
         break;
     }
+    case ChoiceField::PathHash:
+        c.title = "Path hash size";
+        for (int m = 0; m <= 2; ++m) c.labels.push_back(path_hash_text(m));
+        // the last remark is from packet_format.md: firmware 1.12.0 and older only handled legacy 1-byte path hashes
+        c.details = {"Works with every repeater. Most room for the message.", "Fewer collisions. Firmware 1.12 or older: 1 byte only.",
+                     "Fewest collisions. Firmware 1.12 or older: 1 byte only."};
+        c.index = std::clamp(extra->path_hash_mode, 0, 2);
+        c.note = "A larger hash means fewer collisions between repeaters, but leaves less room per message.";
+        break;
+    case ChoiceField::AdvertEvery:
+        c.title = "Scheduled advert";
+        for (int h : advert_interval_options()) c.labels.push_back(h == 0 ? std::string("Off") : "Every " + std::to_string(h) + " h");
+        for (size_t i = 0; i < advert_interval_options().size(); ++i)
+            if (advert_interval_options()[i] == extra->schedule.interval_hours) c.index = static_cast<int>(i);
+        c.note = "The app sends your advert by itself while it runs and the board is connected (the board has no timer of its own). Default: off.";
+        break;
+    case ChoiceField::AdvertKind:
+        c.title = "Scheduled advert type";
+        c.labels = {"Flood", "Zero-hop"};
+        c.details = {"Reaches the whole mesh: use it rarely.", "Only the nodes in direct radio range hear it."};
+        c.index = extra->schedule.flood ? 0 : 1;
+        c.note = "A flood advert is repeated by every repeater and uses airtime of the whole mesh.";
+        break;
     }
     c.initial = c.index;
     return c;
+}
+
+int path_hash_mode_from_index(int index)
+{
+    return index >= 0 && index <= 2 ? index : -1;
+}
+
+AdvertSchedule apply_advert_choice(ChoiceField f, int index, AdvertSchedule cur)
+{
+    if (f == ChoiceField::AdvertEvery) {
+        const auto &o = advert_interval_options();
+        if (index >= 0 && index < static_cast<int>(o.size())) cur.interval_hours = o[static_cast<size_t>(index)];
+    } else if (f == ChoiceField::AdvertKind) {
+        cur.flood = index == 0;
+    }
+    return normalize_schedule(cur);
 }
 
 void apply_choice(ChoiceField f, int index, RadioSettings &s, RetrySettings &retry)
@@ -840,6 +888,9 @@ void apply_choice(ChoiceField f, int index, RadioSettings &s, RetrySettings &ret
         retry.reset_after = index;
         retry = normalize_retry(retry);
         break;
+    case ChoiceField::PathHash:
+    case ChoiceField::AdvertEvery:
+    case ChoiceField::AdvertKind: break;           // not radio settings: the app applies them (path_hash_mode_from_index, apply_advert_choice)
     }
 }
 
@@ -913,6 +964,12 @@ MenuResult menu_key(const KeyEvent &e, int &selected, int count)
 
 /* ---- the Settings list */
 
+const char *settings_section_title(int section)
+{
+    static const char *const titles[] = {"BOARD", "RADIO", "DIRECT MESSAGES", "CLOCK", "CHANNELS", "RADIO CHANGES", "HISTORY", "SCHEDULED ADVERT", "CONTACTS", "BOARD ACTIONS"};
+    return section >= 0 && section < 10 ? titles[section] : "";
+}
+
 std::vector<SRowSpec> settings_layout(const SettingsContext &ctx)
 {
     std::vector<SRowSpec> rows;
@@ -922,8 +979,11 @@ std::vector<SRowSpec> settings_layout(const SettingsContext &ctx)
     add(SRowKind::Info, 1);                         // firmware
     add(SRowKind::Info, 2);                         // battery
     add(SRowKind::Info, 3);                         // clock
+    if (ctx.connected && ctx.have_self) add(SRowKind::Position);          // the board position (phase 2, D6)
     if (ctx.gps.available) add(SRowKind::BoardGps);
     else if (!ctx.gps.notice.empty()) add(SRowKind::GpsNotice);
+    if (ctx.stats.available) add(SRowKind::Stats);
+    else if (!ctx.stats.notice.empty()) add(SRowKind::StatsNotice);
     add(SRowKind::Header, 1);                       // RADIO
     add(SRowKind::Name);
     add(SRowKind::Preset);
@@ -932,9 +992,21 @@ std::vector<SRowSpec> settings_layout(const SettingsContext &ctx)
     add(SRowKind::Sf);
     add(SRowKind::Cr);
     add(SRowKind::Tx);
+    if (ctx.path_hash.available) add(SRowKind::PathHash);
+    else if (!ctx.path_hash.notice.empty()) add(SRowKind::PathHashNotice);
+    if (ctx.repeat.shown) add(ctx.repeat.available ? SRowKind::Repeat : SRowKind::RepeatNotice);
     add(SRowKind::Header, 2);                       // MESSAGES
     add(SRowKind::RetryAttempts);
     add(SRowKind::ResetAfter);
+    add(SRowKind::Header, 7);                       // SCHEDULED ADVERT (an app timer)
+    add(SRowKind::AdvertEvery);
+    add(SRowKind::AdvertKind);
+    if (ctx.connected && ctx.have_self) {
+        add(SRowKind::Header, 8);                   // CONTACTS: manual add mode and the auto-add filter
+        add(SRowKind::ManualAdd);
+        if (ctx.autoadd.available) add(SRowKind::AutoAddTypes);
+        else if (!ctx.autoadd.notice.empty()) add(SRowKind::AutoAddNotice);
+    }
     add(SRowKind::Header, 3);                       // CLOCK
     add(SRowKind::SyncClock);
     add(SRowKind::Header, 4);                       // CHANNELS
@@ -947,6 +1019,13 @@ std::vector<SRowSpec> settings_layout(const SettingsContext &ctx)
     add(SRowKind::HistoryAll);
     add(SRowKind::HistoryOlder);
     add(SRowKind::HistoryNote);
+    if (ctx.board_known) add(SRowKind::HistoryForget);        // this board's saved app data (the history is kept per board)
+    if (ctx.other_boards > 0) add(SRowKind::HistoryOthers);   // the saved data of boards that are not connected
+    if (ctx.connected) {
+        add(SRowKind::Header, 9);                   // BOARD ACTIONS
+        add(SRowKind::Reboot);
+        add(SRowKind::FactoryReset);
+    }
     add(SRowKind::Header, 5);                       // CHANGES
     add(SRowKind::Undo);                            // the last two rows
     add(SRowKind::Save);
@@ -955,9 +1034,9 @@ std::vector<SRowSpec> settings_layout(const SettingsContext &ctx)
 
 bool settings_row_selectable(SRowKind k)
 {
-    return k != SRowKind::Header && k != SRowKind::Info && k != SRowKind::GpsNotice && k != SRowKind::ChannelsNotice && k != SRowKind::HistoryNote;
+    return k != SRowKind::Header && k != SRowKind::Info && k != SRowKind::GpsNotice && k != SRowKind::ChannelsNotice && k != SRowKind::HistoryNote &&
+           k != SRowKind::StatsNotice && k != SRowKind::PathHashNotice && k != SRowKind::RepeatNotice && k != SRowKind::AutoAddNotice;
 }
-
 std::vector<ChannelEntry> build_channel_entries(const Model &model)
 {
     std::vector<ChannelEntry> out;
@@ -1021,7 +1100,7 @@ DeletePrompt delete_all_prompt(const Model &model)
     p.count = model.message_count();
     p.empty = p.count == 0;
     p.title = "Delete all messages?";
-    p.body = "Delete all " + fmt_message_count(p.count) + " of every conversation from this deck? Contacts, channels and settings stay. This cannot be undone.";
+    p.body = "Delete all " + fmt_message_count(p.count) + " of every conversation of this board from this deck? Contacts, channels and settings stay. This cannot be undone.";
     return p;
 }
 
@@ -1034,6 +1113,41 @@ DeletePrompt delete_older_prompt(const Model &model, int days, uint32_t now)
     p.title = "Delete old messages?";
     p.body = "Delete " + fmt_message_count(p.count) + " older than " + std::to_string(days) +
              " days from this deck? Newer messages, contacts, channels and settings stay. This cannot be undone.";
+    return p;
+}
+
+std::string fmt_bytes(uint64_t n)
+{
+    char b[32];
+    if (n < 1024) std::snprintf(b, sizeof(b), "%llu B", static_cast<unsigned long long>(n));
+    else if (n < 1024ull * 1024) std::snprintf(b, sizeof(b), "%llu KB", static_cast<unsigned long long>((n + 512) / 1024));
+    else std::snprintf(b, sizeof(b), "%.1f MB", static_cast<double>(n) / (1024.0 * 1024.0));
+    return b;
+}
+
+std::string fmt_boards(size_t n)
+{
+    return std::to_string(n) + (n == 1 ? " board" : " boards");
+}
+
+DeletePrompt forget_board_prompt(const Model &model, const std::string &board_id)
+{
+    DeletePrompt p;
+    p.count = model.message_count();
+    p.title = "Forget this board's data?";
+    p.body = "Delete what this deck saved for board " + board_id + ": " + fmt_message_count(p.count) +
+             ", read marks, groups, mute flags, ignored nodes and the advert schedule. The board, its contacts and its channels are not touched, and other boards keep their data. This cannot be undone.";
+    return p;
+}
+
+DeletePrompt forget_others_prompt(size_t boards, uint64_t bytes)
+{
+    DeletePrompt p;
+    p.count = boards;
+    p.empty = boards == 0;
+    p.title = "Forget other boards' data?";
+    p.body = "Delete the data this deck saved for " + fmt_boards(boards) + " that " + (boards == 1 ? "is" : "are") + " not connected (" + fmt_bytes(bytes) +
+             "): history, groups, mute flags. Plugging one of them back starts with an empty history. The boards are not touched. This cannot be undone.";
     return p;
 }
 
@@ -1138,7 +1252,11 @@ BackAction back_action(const NavState &s)
 {
     if (s.popup_open) return BackAction::ClosePopup;
     if (s.editor_open) return BackAction::CancelEditor;
+    if (s.search_open) return BackAction::CloseSearch;
+    if (s.stats_open) return BackAction::CloseStats;
     if (s.detail_open) return BackAction::CloseDetail;
+    if (s.nearby_open) return BackAction::CloseNearby;
+    if (s.select_mode) return BackAction::ExitSelect;
     if (s.tab == Tab::Chats && s.compose_focus) return BackAction::FocusList;
     return BackAction::ExitHint;
 }
@@ -1187,6 +1305,13 @@ BoardLine board_line(const Client &c, const Model &model)
     case Link::Busy: b.text = "board: port busy"; b.tone = Tone::Red; break;
     case Link::Error: b.text = "board: port error"; b.tone = Tone::Red; break;
     case Link::NotCompanion: b.text = "board: wrong firmware"; b.tone = Tone::Red; break;
+    }
+    // a factory reset: say what happened, not "disconnected" or "failed"
+    switch (c.reset_phase()) {
+    case Client::ResetPhase::Waiting: b.text = "board: reset, restarting"; b.tone = Tone::Gold; break;
+    case Client::ResetPhase::Done: b.text = "board: reset done"; b.tone = Tone::Green; break;
+    case Client::ResetPhase::KeptKeys: b.text = "board: NOT reset"; b.tone = Tone::Red; break;
+    case Client::ResetPhase::None: break;
     }
     return b;
 }

@@ -1,0 +1,177 @@
+# Mesh Hop 0.2.0 phase 2: the statistics screen, the path hash size, repeat, the scheduled advert, manual add and the auto-add types,
+# the position row, reboot and factory reset (D2, D5, D6, D9, the path hash mode).  Default simulator (firmware level 11, mode 1 = 2 byte hashes).
+# Selectable Settings rows in order: Position, Board GPS, Statistics, Node name, Preset, Frequency, Bandwidth, SF, CR, TX power, Path hash size,
+# Repeat, Message tries, Forget the route, Advert every, Advert type, Add nodes by itself, Still added by itself, Sync clock, ... Reboot, Factory reset, Undo, Save.
+wait 3500
+key tab
+key tab
+key tab
+key tab
+wait 800
+say == settings: the board status shows the position (nothing else on its row); the path hash size is only in the Radio section (expect tab=Settings path_hash=1)
+dump
+shot t00-settings-top
+
+# the statistics screen, refreshed by itself every 5 s
+key down
+key down
+key enter
+wait 1500
+say == statistics (expect stats_open=1 stats=core+radio+packets)
+dump
+shot t01-stats
+wait 6500
+shot t02-stats-refreshed
+key esc
+wait 300
+say == Esc closes the statistics, not the app (expect stats_open=0 tab=Settings)
+dump
+
+# the path hash size: a box with a large arrow each side, the one line of explanation, 3 bytes
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 500
+say == the path hash popup starts on the board's mode (expect popup=choice popup_value='2 bytes')
+dump
+shot t03-path-hash
+tap 530 192
+wait 300
+say == one step right with the touch arrow (expect popup_value='3 bytes')
+dump
+tap 495 396
+wait 800
+say == written to the board and read back (expect path_hash=2 popup=none notice='Path hash size set to 3 bytes')
+dump
+key enter
+wait 400
+key left
+key left
+key enter
+wait 800
+say == back to 1 byte (expect path_hash=0)
+dump
+
+# repeat: a Yes / No box first when it goes on; off needs no question
+key down
+key enter
+wait 500
+say == repeat asks first (expect popup=confirm popup_title='Switch repeat on?')
+dump
+shot t04-repeat-confirm
+type y
+wait 800
+say == repeat on (expect repeat=on)
+dump
+key enter
+wait 800
+say == repeat off at once (expect repeat=off)
+dump
+
+# the scheduled advert: off, 1, 3, 6, 12 h and flood or zero-hop (a preference of the deck)
+key down
+key down
+key down
+key enter
+wait 400
+say == advert every: starts on Off (expect popup=choice popup_value='Off')
+dump
+shot t05-advert-every
+key right
+key right
+key enter
+wait 400
+say == every 3 h (expect advert=3h/flood)
+dump
+key down
+key enter
+wait 400
+key right
+key enter
+wait 400
+say == zero-hop (expect advert=3h/zero)
+dump
+shot t06-advert-rows
+
+# manual add mode, then the auto-add types (a list with check marks)
+key down
+key enter
+wait 1200
+say == manual add on: the board keeps no new node (expect manual_add=1)
+dump
+key down
+key enter
+wait 500
+say == the auto-add list (expect popup=list popup_title='Added by itself in manual mode')
+dump
+shot t07-autoadd-list
+key enter
+wait 1000
+say == chat nodes toggled off (expect autoadd=0)
+dump
+key down
+key down
+shot t08-settings-contacts
+
+# the position row reads the board again
+key home
+key enter
+wait 600
+say == position read (expect a notice: Reading the position from the board...)
+dump
+
+# reboot: Yes / No, the link goes away and comes back
+key end
+key up
+key up
+key up
+key enter
+wait 500
+say == reboot asks (expect popup=confirm popup_title='Reboot the board?')
+dump
+shot t09-reboot-confirm
+type n
+wait 300
+key enter
+wait 500
+type y
+wait 800
+say == reboot sent (expect a notice that starts with Reboot sent)
+dump
+wait 7000
+say == the link is back (expect link=Connected)
+dump
+
+# factory reset: two Yes / No boxes, the Yes of the second one waits 3 s
+key end
+key up
+key up
+key enter
+wait 500
+say == first box (expect popup=confirm popup_title='Factory reset the board?')
+dump
+shot t10-reset-first
+type y
+wait 700
+say == second box (expect popup=confirm popup_title='Really erase the board?')
+dump
+shot t11-reset-second-waiting
+type y
+wait 300
+say == a Yes before 3 s does nothing (expect popup=confirm)
+dump
+wait 3000
+shot t12-reset-second-ready
+type y
+wait 800
+say == asked (expect a notice that starts with Board reset: it restarts by itself)
+dump
+wait 8000
+say == the board is back with a new identity, empty (expect link=Connected contacts=0 reset=done epoch=2)
+dump

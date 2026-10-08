@@ -44,11 +44,7 @@ wait 400
 say == tapped the first visible row after the drag: its detail or conversation opens (compare with the screenshot 33b)
 dump
 key esc
-key tab
-key tab
-key tab
-key tab
-key tab
+tap 211 28
 wait 300
 # the tapped row is the one that opens, in this order (and the sort is still there afterwards)
 tap 200 188
@@ -56,11 +52,7 @@ wait 400
 say == tapped the first row of this order: its conversation or detail opens (see conv_title / detail_name, expect the first= name)
 dump
 key esc
-key tab
-key tab
-key tab
-key tab
-key tab
+tap 211 28
 wait 400
 say == back on Contacts after a tour of the tabs: the sort and the filters are kept (expect sort=name(rev) shown=161)
 dump

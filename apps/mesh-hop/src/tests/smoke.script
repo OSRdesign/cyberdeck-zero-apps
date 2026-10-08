@@ -1,4 +1,4 @@
-# Mesh Hop 0.1.1 scripted run (headless) against tools/meshcore_sim.py (default case: 4 contacts, GPS variable listed, channel send answered OK).
+# Mesh Hop 0.1.1 / 0.2.0 scripted run (headless) against tools/meshcore_sim.py (default case: 4 contacts, GPS variable listed, channel send answered OK).
 # Screenshots go to the --shot-dir, `dump` prints the state. Keys and taps are the real ones: tab bar taps, list rows, buttons, popups,
 # drag-scroll. Coordinates are screen pixels (640x480; the page starts at y=56).
 wait 3500
@@ -144,7 +144,12 @@ wait 300
 say == settings (expect tab=Settings)
 dump
 shot 16-settings
-tap 300 342
+# the Preset row is the fourth selectable row (Position, Board GPS, Statistics, Node name, Preset): keys, the list is longer than the page now
+key down
+key down
+key down
+key down
+key enter
 wait 400
 say == preset popup (expect popup=choice popup_value='EU/UK (Deprecated)')
 dump
@@ -182,7 +187,9 @@ wait 300
 say == spreading factor popup cancelled (expect popup=none sf=7)
 dump
 
-# message retries (M3, direct messages): how many tries, and when the stored route is forgotten
+# message retries (M3, direct messages): how many tries, and when the stored route is forgotten (after TX power: path hash size, repeat)
+key down
+key down
 key down
 key down
 key down

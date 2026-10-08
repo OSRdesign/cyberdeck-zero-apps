@@ -4,7 +4,9 @@
 
 #include "store.hpp"
 
+#include <algorithm>
 #include <cerrno>
+#include <dirent.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -209,6 +211,22 @@ std::string contact_line(const ContactRec &r)
     return s + "}\n";
 }
 
+bool read_whole(const std::string &file, std::string &out)
+{
+    std::ifstream in(file, std::ios::binary);
+    if (!in) return false;
+    std::stringstream ss;
+    ss << in.rdbuf();
+    out = ss.str();
+    return true;
+}
+
+bool file_exists(const std::string &file)
+{
+    struct stat st;
+    return ::stat(file.c_str(), &st) == 0 && S_ISREG(st.st_mode);
+}
+
 template <typename Fn> void for_each_line(const std::string &file, Fn fn)
 {
     std::ifstream in(file, std::ios::binary);
@@ -262,15 +280,100 @@ bool Store::attach(Model &model)
 {
     model_ = &model;
     healthy_ = make_dirs(dir_);
-    if (healthy_) {
-        load_contacts();
-        load_channels();
-        load_messages();
-        load_read();
-        load_prefs();
-    }
+    if (healthy_) load_global_prefs();           // the board's own files are loaded when the board is known (board_changed)
     model.set_listener(this);
     return healthy_;
+}
+
+std::string Store::board_id() const
+{
+    const size_t slash = bdir_.rfind('/');
+    return bdir_.empty() || slash == std::string::npos ? std::string() : bdir_.substr(slash + 1);
+}
+
+void Store::board_changed(const std::string &key_hex)
+{
+    bdir_.clear();
+    if (!healthy_ || key_hex.size() < 12) return;
+    const std::string dir = dir_ + "/boards/" + key_hex.substr(0, 12);
+    if (!make_dirs(dir)) {
+        say("history: cannot create " + dir + ": this board's history is not saved");
+        return;
+    }
+    bdir_ = dir;
+    appended_ = 0;
+    migrated_ = 0;
+    migrate_legacy_files();
+    load_contacts();
+    load_channels();
+    load_messages();
+    load_read();
+    load_prefs();
+    load_groups();
+    say("history: board " + key_hex.substr(0, 12) + ": " + std::to_string(model_->message_count()) + " messages, " + std::to_string(model_->contact_count()) +
+        " cached contacts loaded from " + dir);
+}
+
+namespace {
+
+bool copy_file(const std::string &from, const std::string &to)
+{
+    std::string text;
+    if (!read_whole(from, text)) return false;
+    const std::string tmp = to + ".tmp";
+    FILE *f = std::fopen(tmp.c_str(), "wb");
+    if (!f) return false;
+    bool ok = std::fwrite(text.data(), 1, text.size(), f) == text.size();
+    ok = std::fflush(f) == 0 && ok;
+    std::fclose(f);
+    if (!ok || std::rename(tmp.c_str(), to.c_str()) != 0) {
+        std::remove(tmp.c_str());
+        return false;
+    }
+    return true;
+}
+
+bool board_pref_line(const std::string &line)
+{
+    return line.rfind("mute ", 0) == 0 || line.rfind("advert ", 0) == 0 || line.rfind("ignore ", 0) == 0;
+}
+
+} // namespace
+
+/* The data folder of 0.2.1 and before had one set of files for "the" board. They go to the board connected now (the first of the new layout);
+ * the originals stay as <name>.pre-boards.bak, so that nothing is lost, and the next start finds nothing to move. */
+void Store::migrate_legacy_files()
+{
+    static const char *const names[] = {"messages.jsonl", "read.txt", "contacts.jsonl", "channels.jsonl", "groups.jsonl", "groups.bak"};
+    for (const char *n : names) {
+        const std::string from = gpath(n);
+        if (!file_exists(from)) continue;
+        const std::string to = path(n);
+        if (!file_exists(to) && !copy_file(from, to)) {
+            say(std::string("history: migration: cannot copy ") + n + ", it stays where it is");
+            continue;
+        }
+        if (std::rename(from.c_str(), (from + ".pre-boards.bak").c_str()) == 0) ++migrated_;
+    }
+    std::string text;
+    if (read_whole(gpath("prefs.txt"), text)) {
+        std::string board_part, global_part;
+        std::istringstream in(text);
+        std::string line;
+        while (std::getline(in, line)) {
+            if (!line.empty() && line.back() == '\r') line.pop_back();
+            if (line.empty()) continue;
+            (board_pref_line(line) ? board_part : global_part) += line + "\n";
+        }
+        if (!board_part.empty()) {
+            if (!file_exists(path("prefs.txt"))) rewrite_at(path("prefs.txt"), board_part);
+            copy_file(gpath("prefs.txt"), gpath("prefs.txt.pre-boards.bak"));
+            rewrite_at(gpath("prefs.txt"), global_part);
+            ++migrated_;
+        }
+    }
+    if (migrated_ > 0)
+        say("history: migrated " + std::to_string(migrated_) + " files of the old layout into " + bdir_ + " (the originals are kept as *.pre-boards.bak in " + dir_ + ")");
 }
 
 void Store::load_messages()
@@ -365,13 +468,11 @@ void Store::load_read()
     });
 }
 
-void Store::load_prefs()
+void Store::load_global_prefs()
 {
     RetrySettings retry = model_->retry();
-    for_each_line(path("prefs.txt"), [&](const std::string &line) {
-        if (line.rfind("mute ", 0) == 0 && line.size() > 5) {
-            model_->load_muted(line.substr(5));
-        } else if (line.rfind("retry ", 0) == 0) {
+    for_each_line(gpath("prefs.txt"), [&](const std::string &line) {
+        if (line.rfind("retry ", 0) == 0) {
             int a = retry.attempts, r = retry.reset_after;
             if (std::sscanf(line.c_str() + 6, "%d %d", &a, &r) == 2) {
                 retry.attempts = a;
@@ -382,9 +483,63 @@ void Store::load_prefs()
     model_->load_retry(retry);
 }
 
+void Store::load_prefs()
+{
+    AdvertSchedule sched = model_->advert_schedule();
+    for_each_line(path("prefs.txt"), [&](const std::string &line) {
+        if (line.rfind("mute ", 0) == 0 && line.size() > 5) {
+            model_->load_muted(line.substr(5));
+        } else if (line.rfind("advert ", 0) == 0) {
+            int hours = 0, flood = 1;
+            if (std::sscanf(line.c_str() + 7, "%d %d", &hours, &flood) == 2) {
+                sched.interval_hours = hours;
+                sched.flood = flood != 0;
+            }
+        } else if (line.rfind("ignore ", 0) == 0 && line.size() >= 7 + 16) {
+            const std::string k = line.substr(7);
+            if (k.size() == 64 || k.size() == 16) model_->load_ignored(k);
+        }
+    });
+    model_->load_advert_schedule(sched);
+}
+
+namespace {
+
+/* groups.jsonl starts with a header {"v":1,"n":<groups>} so that a damaged copy can be told from a deliberate empty one. */
+/* The groups of a file's text; false when the header is missing or does not match what was read. */
+bool parse_groups_file(const std::string &text, ContactGroups &out)
+{
+    const size_t nl = text.find('\n');
+    if (nl == std::string::npos) return false;
+    JsonObject h;
+    if (!parse_json_object(text.substr(0, nl), h) || !h.count("n") || !h.count("v")) return false;
+    const size_t n = out.parse(text.substr(nl + 1));
+    return n == static_cast<size_t>(h["n"].num);
+}
+
+} // namespace
+
+void Store::load_groups()
+{
+    ContactGroups g;
+    std::string text;
+    bool ok = false;
+    if (read_whole(path("groups.jsonl"), text)) ok = parse_groups_file(text, g);
+    if (!ok) {
+        ContactGroups b;
+        std::string btext;
+        if (read_whole(path("groups.bak"), btext) && parse_groups_file(btext, b)) {
+            g = b;                                                   // the main file is missing or damaged: the previous copy
+            ok = true;
+            groups_restored_ = true;
+        }
+    }
+    if (ok) model_->load_groups(g.serialize());
+}
+
 bool Store::append_line(const char *name, const std::string &line)
 {
-    if (!healthy_) return false;
+    if (!healthy_ || bdir_.empty()) return false;          // no board known: nothing to save
     FILE *f = std::fopen(path(name).c_str(), "ab");
     if (!f) { healthy_ = false; return false; }
     const bool ok = std::fwrite(line.data(), 1, line.size(), f) == line.size();
@@ -395,14 +550,20 @@ bool Store::append_line(const char *name, const std::string &line)
 
 bool Store::rewrite(const char *name, const std::string &content)
 {
+    if (bdir_.empty()) return false;
+    return rewrite_at(path(name), content);
+}
+
+bool Store::rewrite_at(const std::string &file, const std::string &content)
+{
     if (!healthy_) return false;
-    const std::string tmp = path(name) + ".tmp";
+    const std::string tmp = file + ".tmp";
     FILE *f = std::fopen(tmp.c_str(), "wb");
     if (!f) { healthy_ = false; return false; }
     bool ok = std::fwrite(content.data(), 1, content.size(), f) == content.size();
     ok = std::fflush(f) == 0 && ok;
     std::fclose(f);
-    if (!ok || std::rename(tmp.c_str(), path(name).c_str()) != 0) {
+    if (!ok || std::rename(tmp.c_str(), file.c_str()) != 0) {
         std::remove(tmp.c_str());
         healthy_ = false;
         return false;
@@ -455,13 +616,108 @@ void Store::channels_changed()
     rewrite("channels.jsonl", all);
 }
 
+void Store::write_global_prefs()
+{
+    if (!model_) return;
+    rewrite_at(gpath("prefs.txt"), "retry " + std::to_string(model_->retry().attempts) + " " + std::to_string(model_->retry().reset_after) + "\n");
+}
+
 void Store::prefs_changed()
 {
     if (!model_) return;
+    write_global_prefs();
+    if (bdir_.empty()) return;
     std::string all;
     for (const std::string &c : model_->muted()) all += "mute " + c + "\n";
-    all += "retry " + std::to_string(model_->retry().attempts) + " " + std::to_string(model_->retry().reset_after) + "\n";
+    all += "advert " + std::to_string(model_->advert_schedule().interval_hours) + " " + (model_->advert_schedule().flood ? "1" : "0") + "\n";
+    for (const std::string &k : model_->ignored()) all += "ignore " + k + "\n";
     rewrite("prefs.txt", all);
+}
+
+void Store::board_data_forgotten()
+{
+    if (bdir_.empty()) return;
+    for (const char *n : {"messages.jsonl", "read.txt", "groups.jsonl", "groups.bak", "prefs.txt"}) std::remove(path(n).c_str());
+    appended_ = 0;
+    prefs_changed();
+    say("history: the saved app data of board " + board_id() + " was forgotten (messages, read marks, groups, mute flags, ignored nodes, advert schedule)");
+}
+
+/* ---- the saved data of the other boards */
+
+namespace {
+
+bool is_board_id(const char *name)
+{
+    if (std::strlen(name) != 12) return false;
+    for (const char *c = name; *c; ++c)
+        if (!((*c >= '0' && *c <= '9') || (*c >= 'a' && *c <= 'f'))) return false;
+    return true;
+}
+
+uint64_t folder_bytes(const std::string &dir)
+{
+    uint64_t total = 0;
+    DIR *d = ::opendir(dir.c_str());
+    if (!d) return 0;
+    while (const dirent *e = ::readdir(d)) {
+        if (e->d_name[0] == '.') continue;
+        struct stat st;
+        if (::stat((dir + "/" + e->d_name).c_str(), &st) == 0 && S_ISREG(st.st_mode)) total += static_cast<uint64_t>(st.st_size);
+    }
+    ::closedir(d);
+    return total;
+}
+
+} // namespace
+
+std::vector<Store::SavedBoard> Store::other_boards() const
+{
+    std::vector<SavedBoard> out;
+    const std::string root = dir_ + "/boards";
+    DIR *d = ::opendir(root.c_str());
+    if (!d) return out;
+    const std::string mine = board_id();
+    while (const dirent *e = ::readdir(d)) {
+        if (!is_board_id(e->d_name) || mine == e->d_name) continue;
+        SavedBoard b;
+        b.id = e->d_name;
+        b.bytes = folder_bytes(root + "/" + e->d_name);
+        out.push_back(b);
+    }
+    ::closedir(d);
+    std::sort(out.begin(), out.end(), [](const SavedBoard &a, const SavedBoard &b) { return a.id < b.id; });
+    return out;
+}
+
+size_t Store::forget_other_boards()
+{
+    size_t removed = 0;
+    for (const SavedBoard &b : other_boards()) {
+        const std::string folder = dir_ + "/boards/" + b.id;
+        DIR *d = ::opendir(folder.c_str());
+        if (d) {
+            while (const dirent *e = ::readdir(d)) {
+                if (e->d_name[0] == '.') continue;
+                std::remove((folder + "/" + e->d_name).c_str());
+            }
+            ::closedir(d);
+        }
+        if (::rmdir(folder.c_str()) == 0) {
+            ++removed;
+            say("history: the saved data of board " + b.id + " was forgotten");
+        }
+    }
+    return removed;
+}
+
+void Store::groups_changed()
+{
+    if (!model_) return;
+    std::string old;
+    if (read_whole(path("groups.jsonl"), old) && !old.empty()) rewrite("groups.bak", old);       // the previous version stays as the backup
+    const ContactGroups &g = model_->groups();
+    rewrite("groups.jsonl", "{\"v\":1,\"n\":" + std::to_string(g.groups().size()) + "}\n" + g.serialize());
 }
 
 void Store::read_changed()

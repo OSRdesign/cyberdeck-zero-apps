@@ -2,6 +2,7 @@
 // MESHHOP_SIM = path of the simulator script. Takes about 15 seconds (real time).
 #include "client.hpp"
 #include "clock_policy.hpp"
+#include "features.hpp"
 #include "serial_transport.hpp"
 #include "store.hpp"
 
@@ -121,20 +122,153 @@ int main()
     CHECK(client.remove_channel(2));
     CHECK(wait_for(client, [&] { return model.find_channel(2) && model.find_channel(2)->empty; }, 3000));
 
-    // unplug / replug
+    // ---- phase 2 (0.2.0) over the real serial path
+    // path hash size: the simulator reports mode 1 (2 byte hashes) like the user's board
+    CHECK(model.device() && model.device()->fw_ver == 11 && model.device()->path_hash_mode == 1);
+    CHECK(client.set_path_hash_mode(2));
+    CHECK(wait_for(client, [&] { return model.device()->path_hash_mode == 2; }, 3000));
+    CHECK(client.set_path_hash_mode(1));
+    CHECK(wait_for(client, [&] { return model.device()->path_hash_mode == 1; }, 3000));
+
+    // statistics: three sub types
+    CHECK(client.refresh_stats());
+    CHECK(wait_for(client, [&] { return !client.stats_busy() && model.stats().core && model.stats().radio && model.stats().packets; }, 4000));
+    CHECK(model.stats().core->battery_mv == 3960 && model.stats().radio->noise_floor == -112 && model.stats().radio->last_rssi == -95 &&
+          model.stats().packets->has_errors && model.stats().packets->recv_errors == 3 && model.stats().packets->flood_tx == 4);
+
+    // auto-add filter and manual add mode
+    CHECK(wait_for(client, [&] { return model.caps().autoadd == Cap::Yes; }, 2000) && model.caps().autoadd_config.config == 0x02);
+    CHECK(client.set_autoadd_flags(0x06));
+    CHECK(wait_for(client, [&] { return model.caps().autoadd_config.config == 0x06; }, 3000));
+
+    // repeat: the board lists where it may repeat; 869.525 MHz is inside 863-870 MHz
+    CHECK(model.caps().repeat_freqs == Cap::Yes && repeat_state(&*model.device(), model.caps(), model.self()->freq_mhz()).available);
+    CHECK(client.set_client_repeat(true));
+    CHECK(wait_for(client, [&] { return model.device()->repeat; }, 3000));
+    CHECK(client.set_client_repeat(false));
+    CHECK(wait_for(client, [&] { return !model.device()->repeat; }, 3000));
+
+    // the zero-hop discover: Alice and the repeater are contacts, Newbie and Ridge are strangers
+    CHECK(client.start_discover());
+    CHECK(wait_for(client, [&] { return client.discover().found == 4; }, 5000));
+    CHECK(model.nearby_count() >= 4 && model.nearby_count() <= 5);        // the four that answered (+ a known contact whose advert push came earlier)
+    const NearbyRec *newbie = nullptr;
+    for (const NearbyRec *n : model.nearby_sorted())
+        if (n->type == 1 && !model.find_contact(n->key_hex)) newbie = n;
+    CHECK(newbie && newbie->full_key && newbie->snr == 8.0 && newbie->rssi == -61);
+    const std::string newbie_key = newbie ? newbie->key_hex : "";
+    CHECK(wait_for(client, [&] { return !client.discover().active; }, 12000));
+    CHECK(client.add_nearby(newbie_key));
+    CHECK(wait_for(client, [&] { return model.find_contact(newbie_key) != nullptr; }, 3000));
+    CHECK(model.contact_count() == 5 && model.find_contact(newbie_key)->c.type == 1);
+
+    // manual add: a new advert is pending, not a contact; the log gives its SNR
+    CHECK(client.set_manual_add(true));
+    CHECK(wait_for(client, [&] { return model.self() && model.self()->manual_add_contacts; }, 3000));
+    say("newnode");
+    CHECK(wait_for(client, [&] { return model.pending_count() == 1; }, 3000));
+    CHECK(model.contact_count() == 5);
+    std::string pending_key;
+    for (const NearbyRec *n : model.nearby_sorted())
+        if (n->pending) { pending_key = n->key_hex; CHECK(n->has_snr && n->hops == 1 && n->hash_size == 2 && n->name == "Ridge repeater" && n->type == 2); }
+    CHECK(client.add_nearby(pending_key));
+    CHECK(wait_for(client, [&] { return model.find_contact(pending_key) != nullptr; }, 3000));
+    CHECK(model.pending_count() == 0 && model.contact_count() == 6);
+    CHECK(client.set_manual_add(false));
+    CHECK(wait_for(client, [&] { return model.self() && !model.self()->manual_add_contacts; }, 3000));
+
+    // bulk delete of two contacts, one by one
+    std::vector<PubKey> doomed;
+    for (const ContactRec *r : model.contacts_sorted())
+        if (r->c.name == "Bob" || r->c.name == "Weather room") doomed.push_back(r->c.key);
+    CHECK(doomed.size() == 2 && client.remove_contacts(doomed));
+    CHECK(wait_for(client, [&] { return !client.bulk().active && client.bulk().done == 2; }, 5000));
+    CHECK(model.contact_count() == 4);
+    CHECK(client.refresh_contacts());
+    CHECK(wait_for(client, [&] { return model.contact_count() == 4; }, 3000));                        // the board agrees with the model
+
+    // reboot: the port goes away and comes back, the data is still there
+    CHECK(client.reboot());
+    CHECK(wait_for(client, [&] { return client.link() == Link::Searching; }, 4000));
+    CHECK(wait_for(client, [&] { return client.link() == Link::Ready; }, 10000));
+    CHECK(wait_for(client, [&] { return model.contact_count() == 4 && model.find_channel(39) != nullptr; }, 6000));
+
+    // ---- 0.2.2: another board on the same cable ("swap" unplugs, changes the board and plugs it back)
+    const std::string key_a = model.board_key();
+    const size_t msgs_a = model.message_count();
+    const int unread_a = model.unread_total();
+    CHECK(model.board_known() && key_a == to_hex(model.self()->key) && msgs_a > 0 && model.contact_count() == 4);
+    const uint32_t epoch_a = model.board_epoch();
+    say("swap");
+    CHECK(wait_for(client, [&] { return client.link() == Link::Searching; }, 4000));
+    CHECK(model.board_key() == key_a && model.message_count() == msgs_a);                    // unplugged: the last board's data is what is shown
+    CHECK(wait_for(client, [&] { return client.link() == Link::Ready && model.board_key() != key_a; }, 10000));
+    CHECK(model.board_epoch() == epoch_a + 1 && model.self_name() == "SimNodeB");
+    CHECK(wait_for(client, [&] { return model.contact_count() == 3 && model.message_count() >= 2 && model.find_channel(1) && model.find_channel(1)->name == "#boardb"; }, 8000));
+    const std::string key_b = model.board_key();
+    CHECK(model.unread_total() == 2 && model.messages("c:1").size() == 1 && model.messages("c:1")[0]->text == "B's own channel");  // B's own messages only
+    for (const ContactRec *r : model.contacts_sorted()) CHECK(r->c.name != "Alice" && r->c.name != "Bob");
+    CHECK(model.find_channel(39) == nullptr || model.find_channel(39)->empty);              // A's channel 39 (the simulator's own test slot) is not B's
+    CHECK(model.advert_schedule().interval_hours == 0 && model.groups().groups().empty() && model.muted().empty());
+    const uint32_t bseq = client.send_channel(1, "hello from the deck on B");
+    CHECK(bseq != 0 && wait_for(client, [&] { return model.find_message(bseq)->state == MsgState::Sent; }, 3000));
+    const size_t msgs_b = model.message_count();
+    say("swap");                                                                               // back to the first board
+    CHECK(wait_for(client, [&] { return client.link() == Link::Searching; }, 4000));
+    CHECK(wait_for(client, [&] { return client.link() == Link::Ready && model.board_key() == key_a; }, 10000));
+    CHECK(model.board_epoch() == epoch_a + 2);
+    CHECK(wait_for(client, [&] { return model.contact_count() == 4 && model.find_channel(39) != nullptr; }, 8000));
+    CHECK(model.message_count() >= msgs_a && model.unread_total() >= unread_a && model.self_name() == "DeckZero");       // its history is back (plus what arrived since)
+    CHECK(model.find_message(seq) != nullptr && model.find_message(seq)->text == "ping from the deck");
+    {
+        bool leaked = false;
+        for (const Message &m : model.all_messages())
+            if (m.text == "hello from the deck on B") leaked = true;
+        CHECK(!leaked);                                                                        // what was written on B is not in A's history
+    }
+
+    // factory reset: the board answers, restarts with a new identity; the app shows the new (empty) board, the old identity keeps its folder
+    const size_t msgs = model.message_count();
+    CHECK(client.factory_reset());
+    CHECK(wait_for(client, [&] { return client.reset_phase() == Client::ResetPhase::Waiting && client.notice().text.find("Board reset") == 0; }, 3000));
+    CHECK(wait_for(client, [&] { return client.link() == Link::Searching; }, 4000));
+    CHECK(wait_for(client, [&] { return client.link() == Link::Ready; }, 10000));
+    CHECK(wait_for(client, [&] { return client.reset_phase() == Client::ResetPhase::Done; }, 4000));
+    CHECK(wait_for(client, [&] { return model.find_channel(0) && model.find_channel(0)->empty && model.find_channel(39) != nullptr; }, 6000));
+    CHECK(model.board_key() != key_a && model.board_key() != key_b && model.contact_count() == 0 && model.message_count() == 0 && model.unread_total() == 0);
+    CHECK(client.notice().text.find("Board reset") == 0 && client.notice().ok);
+    CHECK(::access((data + "/boards/" + key_a.substr(0, 12) + "/messages.jsonl").c_str(), F_OK) == 0);       // the old identity's history is still on the deck
+    CHECK(store.other_boards().size() == 2 && store.board_id() == model.board_key().substr(0, 12));
+    CHECK(msgs > 0);
+    say("swap");                                                                               // board B again: its history was kept
+    CHECK(wait_for(client, [&] { return client.link() == Link::Searching; }, 4000));
+    CHECK(wait_for(client, [&] { return client.link() == Link::Ready && model.board_key() == key_b; }, 10000));
+    CHECK(wait_for(client, [&] { return model.contact_count() == 3; }, 6000));
+    {
+        bool back = false;
+        for (const Message &m : model.all_messages())
+            if (m.text == "hello from the deck on B") back = true;
+        CHECK(model.message_count() >= msgs_b && back);
+    }
+
+    // unplug / replug the same board: nothing changes
+    const uint32_t epoch_b = model.board_epoch();
     say("unplug");
     CHECK(wait_for(client, [&] { return client.link() == Link::Searching; }, 4000));
-    CHECK(model.contact_count() == 4);
     say("plug");
     CHECK(wait_for(client, [&] { return client.link() == Link::Ready; }, 8000));
+    CHECK(model.board_key() == key_b && model.board_epoch() == epoch_b);
 
-    // history survives a restart
+    // history survives a restart, per board
     const size_t count = model.message_count();
     {
         Model m2;
         Store s2(data);
         s2.attach(m2);
-        CHECK(m2.message_count() == count && m2.contact_count() == 4);
+        CHECK(!m2.board_known() && m2.message_count() == 0 && m2.conversations().empty());        // nothing before a board says who it is
+        PubKey kb2 = model.self()->key;
+        m2.select_board(kb2);                                // the same board: its saved history is loaded
+        CHECK(m2.message_count() == count && m2.contact_count() == 3);
     }
 
     say("quit");
