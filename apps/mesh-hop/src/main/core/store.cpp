@@ -196,6 +196,7 @@ std::string message_line(const Message &m)
                     ",\"h\":" + std::to_string(m.hops);
     if (m.has_snr) s += ",\"snr\":" + fmt_double(m.snr);
     if (!m.note.empty()) s += ",\"e\":" + json_quote(m.note);
+    if (m.heard_back > 0) s += ",\"hb\":" + std::to_string(m.heard_back);
     return s + "}\n";
 }
 
@@ -390,6 +391,7 @@ void Store::load_messages()
             if (it == by_seq.end()) return;
             it->second.state = static_cast<MsgState>(static_cast<int>(num_of(o, "st")));
             it->second.note = str_of(o, "e");
+            if (o.count("hb")) it->second.heard_back = static_cast<int>(num_of(o, "hb"));
             return;
         }
         if (!o.count("i") || !o.count("k")) return;
@@ -407,6 +409,7 @@ void Store::load_messages()
         m.has_snr = o.count("snr") != 0;
         m.snr = num_of(o, "snr");
         m.note = str_of(o, "e");
+        m.heard_back = static_cast<int>(num_of(o, "hb", 0));
         if (m.state == MsgState::Pending) {       // the app stopped while it was sending
             m.state = MsgState::Failed;
             m.note = "interrupted";
@@ -590,6 +593,18 @@ void Store::message_state(uint32_t seq, MsgState state, const std::string &note)
 {
     std::string line = "{\"u\":" + std::to_string(seq) + ",\"st\":" + std::to_string(static_cast<int>(state));
     if (!note.empty()) line += ",\"e\":" + json_quote(note);
+    append_line("messages.jsonl", line + "}\n");
+}
+
+/* The final heard-back count of a channel message: a state line with the extra key "hb" (state and note repeated, since a state line sets
+ * both). An older Mesh Hop reads the line and ignores the key: no migration. */
+void Store::message_heard_back(uint32_t seq, int count)
+{
+    const Message *m = model_ ? model_->find_message(seq) : nullptr;
+    if (!m) return;
+    std::string line = "{\"u\":" + std::to_string(seq) + ",\"st\":" + std::to_string(static_cast<int>(m->state));
+    if (!m->note.empty()) line += ",\"e\":" + json_quote(m->note);
+    line += ",\"hb\":" + std::to_string(count);
     append_line("messages.jsonl", line + "}\n");
 }
 

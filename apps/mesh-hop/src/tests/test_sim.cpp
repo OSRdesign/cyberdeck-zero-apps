@@ -57,7 +57,7 @@ int main()
     if (pid == 0) {
         ::dup2(to_sim[0], 0);
         ::close(to_sim[1]);
-        ::execlp("python3", "python3", sim, "--link", link.c_str(), "--ack-delay", "0.3", "--echo", static_cast<char *>(nullptr));
+        ::execlp("python3", "python3", sim, "--link", link.c_str(), "--ack-delay", "0.3", "--echo", "--heard-back", "2", "--heard-back-direct", static_cast<char *>(nullptr));
         ::_exit(127);
     }
     ::close(to_sim[0]);
@@ -94,10 +94,17 @@ int main()
     CHECK(wait_for(client, [&] { return model.messages(Model::conv_direct(alice->prefix())).size() >= 3; }, 5000));
     CHECK(model.messages(Model::conv_direct(alice->prefix())).back()->text == "got: ping from the deck");
 
-    // channel message + echo
-    const uint32_t cseq = client.send_channel(0, "hello mesh");
+    // channel message + echo; the mesh repeats it back over 2 paths (+ one copy heard straight from the sender, not counted), seen in the
+    // radio log: "heard back by 2 repeaters" (phase 3). The packet log keeps what it captured.
+    client.packet_log().start();
+    const uint32_t cseq = client.send_channel(0, "hello mesh Ã©tÃ©");
     CHECK(wait_for(client, [&] { return model.find_message(cseq)->state == MsgState::Sent; }, 2000));
     CHECK(wait_for(client, [&] { return model.messages("c:0").size() >= 3; }, 4000));
+    CHECK(wait_for(client, [&] { return model.find_message(cseq)->heard_back == 2; }, 5000));
+    bool logged_grp = false;
+    for (size_t i = 0; i < client.packet_log().size(); ++i) logged_grp = logged_grp || client.packet_log().at(i).pkt.is_group_text();
+    CHECK(logged_grp && client.echoes_open() == 1);
+    client.packet_log().stop();
 
     // typed stdin command: a message arrives on its own
     const size_t before = model.message_count();

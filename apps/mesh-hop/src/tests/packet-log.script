@@ -1,0 +1,81 @@
+# The packet log (D8): Settings > Packet log, a panel over the Settings page. Capture is off at every start; S (or Space, or the Start
+# button) starts and stops it, C (or Clear) empties it, Up/Down select a row (its bytes below), Esc closes. At most 500 packets, in memory.
+#   SIMARGS="--heard-back 2 --new-nodes 2" SCRIPT=packet-log.script sh ui_smoke.sh
+wait 3500
+key tab
+key tab
+key tab
+key tab
+wait 800
+key home
+key down
+key down
+key down
+wait 300
+say == Settings: the Packet log row is selected (expect tab=Settings log_open=0 log_capture=0)
+dump
+shot packet-log-0-settings
+key enter
+wait 400
+say == the panel opens, nothing captured (expect log_open=1 log_capture=0 log_n=0)
+dump
+shot packet-log-1-off
+type s
+wait 300
+say == capturing (expect log_capture=1 notice='Capturing the packets the board hears (memory only, the last 500)')
+dump
+wait 7000
+say == the board's radio log fills the rows (expect log_n>=1: the simulator pushes a well formed packet every 6 s, the random bytes between them seldom parse as one)
+dump
+shot packet-log-2-capturing
+
+# a channel message: the panel closes with the tab, the capture goes on; its echoes are in the log
+key tab
+wait 300
+key enter
+type packet log test
+key enter
+wait 4000
+key tab
+key tab
+key tab
+key tab
+wait 500
+say == Settings again: the row tells the capture is on
+dump
+shot packet-log-3-row
+key enter
+wait 400
+say == the newest rows hold our own GRP_TXT on the Public hash (expect log_open=1 log_capture=1)
+dump
+shot packet-log-4-echoes
+key up
+key up
+wait 200
+say == Up: an older row selected, its bytes below (expect log_sel>=0)
+dump
+shot packet-log-5-selected
+tap 300 160
+wait 200
+say == a tap selects the row under the finger
+dump
+key end
+wait 200
+say == End: back on the newest row, following again (expect log_sel=-1)
+dump
+
+# stop, clear, close
+tap 416 78
+wait 300
+say == Stop tapped (expect log_capture=0)
+dump
+shot packet-log-6-stopped
+type c
+wait 300
+say == C cleared it (expect log_n=0 notice='Packet log cleared')
+dump
+shot packet-log-7-cleared
+key esc
+wait 300
+say == Esc closes the panel, not the app (expect log_open=0 tab=Settings)
+dump

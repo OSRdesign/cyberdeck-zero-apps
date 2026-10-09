@@ -122,7 +122,7 @@ public:
     void hold_event(int what, RowList *list, int index, int x, int y);
 
 private:
-    enum class EditKind { Name, Number, Channel, Clock, PrivName, PrivKey, RandName, GroupNew, GroupRename, DateRange };
+    enum class EditKind { Name, Number, Channel, Clock, PrivName, PrivKey, RandName, GroupNew, GroupRename, DateRange, Position };
 
     struct Popup {
         enum Kind { None, Choice, Confirm, Menu, Info, List, Progress } kind = None;
@@ -147,6 +147,7 @@ private:
     void build_nearby();
     void build_search();
     void build_stats();
+    void build_packet_log();
     void build_settings();
     void build_placeholder(lv_obj_t **page, const char *title, const char *text);
     void build_editor();
@@ -167,6 +168,7 @@ private:
     void render_nearby();
     void render_search();
     void render_stats();
+    void render_packet_log();
     void render_settings();
     void render_footer();
     void update_statusbar(bool force);
@@ -251,6 +253,13 @@ private:
     void ask_factory_reset();
     void ask_repeat(bool on);
     void tick_phase2(uint64_t now);
+    // phase 3: the packet log (D8)
+    void open_packet_log();
+    void close_packet_log();
+    void key_packet_log(const KeyEvent &e);
+    void packet_log_toggle();
+    void packet_log_clear();
+    void packet_log_select(int64_t abs_index);
 
     // popups
     void open_choice(ChoiceField f);
@@ -276,6 +285,17 @@ private:
     void editor_key(const KeyEvent &e);
     void editor_error(const std::string &text);
     void editor_note(const std::string &text);
+    // the Position box (D6): an editor with two fields (latitude, longitude), the board GPS switch and Clear. It counts as the open
+    // editor (editor_open_, edit_kind_ == EditKind::Position), so every guard of the editor holds for it too.
+    void build_position_box();
+    void open_position_box();
+    void close_position_box(bool apply);
+    void position_clear();
+    void position_key(const KeyEvent &e);
+    void position_layout(bool gps);
+    void position_refresh();
+    void position_focus(int focus);
+    void position_error(const std::string &text, bool error);
 
     // keys per screen
     void key_chats(const KeyEvent &e);
@@ -369,6 +389,12 @@ private:
     uint64_t stats_ms_ = 0, self_refresh_ms_ = 0;
     uint32_t stats_sig_ = 0;
 
+    // the packet log (D8): the rows are the client's ring, oldest first; the selection is kept as an absolute number (dropped + index)
+    // so that it stays on the same packet while the oldest ones fall out. -1 = follow the newest.
+    int64_t log_sel_abs_ = -1;
+    uint32_t log_rev_ = 0;
+    uint64_t log_built_sel_ = ~0ull;
+
     // settings
     meshzero::RadioSettings edit_;
     bool dirty_radio_ = false;
@@ -392,6 +418,11 @@ private:
     std::vector<std::string> group_keys_;  // contacts to put into the group being created
     std::string group_target_;             // the group being renamed
     int group_focus_ = 0;
+    // the Position box
+    enum PosFocus { kPosLat = 0, kPosLon, kPosGps, kPosClear };
+    int pos_focus_ = kPosLat;
+    bool pos_fresh_[2] = {false, false};   // the prefilled value is replaced by the first typed character (like the number editor)
+    bool pos_gps_shown_ = false;
 
     // a new private channel whose key is shown once the board has it
     bool share_pending_ = false;
@@ -435,6 +466,9 @@ private:
     RowList search_list_;
     // statistics panel (over the Settings page)
     lv_obj_t *stats_panel_ = nullptr, *st_label_[2][10] = {}, *st_value_[2][10] = {}, *st_updated_ = nullptr, *st_auto_label_ = nullptr, *st_note_ = nullptr;
+    // packet log panel (over the Settings page)
+    lv_obj_t *log_panel_ = nullptr, *log_status_ = nullptr, *log_toggle_ = nullptr, *log_toggle_label_ = nullptr, *log_detail_ = nullptr, *log_hex_ = nullptr;
+    RowList log_list_;
     // settings
     RowList settings_list_;
     // popup list and progress
@@ -442,6 +476,10 @@ private:
     lv_obj_t *pop_bar_ = nullptr, *pop_bar_fill_ = nullptr, *pop_progress_ = nullptr;
     // editor
     lv_obj_t *ed_overlay_ = nullptr, *ed_title_ = nullptr, *ed_hint_ = nullptr, *ed_ta_ = nullptr, *ed_err_ = nullptr;
+    // the Position box
+    lv_obj_t *pos_overlay_ = nullptr, *pos_panel_ = nullptr, *pos_now_ = nullptr, *pos_gps_ = nullptr, *pos_gps_label_ = nullptr;
+    lv_obj_t *pos_label_[2] = {}, *pos_ta_[2] = {}, *pos_hint_ = nullptr, *pos_err_ = nullptr;
+    lv_obj_t *pos_cancel_ = nullptr, *pos_clear_ = nullptr, *pos_ok_ = nullptr;
     // popup
     lv_obj_t *pop_overlay_ = nullptr, *pop_panel_ = nullptr;
     lv_obj_t *pop_value_ = nullptr, *pop_detail_ = nullptr, *pop_pos_ = nullptr, *pop_left_ = nullptr, *pop_right_ = nullptr;

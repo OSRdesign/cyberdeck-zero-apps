@@ -36,6 +36,7 @@ constexpr uint8_t kSetCustomVar = 41;
 constexpr uint8_t kSetRadio = 11;
 constexpr uint8_t kSetTxPower = 12;
 constexpr uint8_t kResetPath = 13;
+constexpr uint8_t kSetAdvertLatLon = 14;
 constexpr uint8_t kRemoveContact = 15;
 constexpr uint8_t kReboot = 19;
 constexpr uint8_t kBattery = 20;
@@ -347,6 +348,9 @@ Bytes build_reset_path(const PubKey &key);
  * radio parameters only); 0 / 1 = the trailing "client repeat" byte of firmware level 9 and up (meshcore_py set_radio). */
 Bytes build_set_radio(double freq_mhz, double bw_khz, uint8_t sf, uint8_t cr, int repeat = -1);
 Bytes build_set_tx_power(int dbm);
+/* SET_ADVERT_LATLON (meshcore_py set_coords): 0E, latitude and longitude as signed 32-bit microdegrees, then a 32-bit altitude (0; the
+ * firmware reads it "for future support"). The firmware answers OK, or ERROR illegal arg outside -90..90 / -180..180. 0, 0 = no position. */
+Bytes build_set_advert_latlon(double lat, double lon);
 /* REMOVE_CONTACT: the 32 byte public key. The board answers OK (or ERROR not found). */
 Bytes build_remove_contact(const PubKey &key);
 /* ADD_UPDATE_CONTACT (meshcore_py update_contact): key, type, flags, path length byte, 64 byte path, 32 byte name, last advert, lat, lon. */

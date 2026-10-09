@@ -10,7 +10,9 @@
 
 #include "clock_policy.hpp"
 #include "frame.hpp"
+#include "logdata.hpp"
 #include "model.hpp"
+#include "packet_log.hpp"
 #include "transport.hpp"
 
 #include <deque>
@@ -88,6 +90,9 @@ public:
     bool remove_channel(int idx);
     /* Board GPS on/off: SET_CUSTOM_VAR gps:1|0, then the variables are read back. Needs the board to list the variable. */
     bool set_board_gps(bool on);
+    /* The node position (SET_ADVERT_LATLON, decimal degrees; 0, 0 clears it), then SELF_INFO is read back so the screen shows what the
+     * board holds. Refused (notice, nothing sent) outside -90..90 / -180..180. The board shares it in its next advert; none is sent here. */
+    bool set_position(double lat, double lon);
     bool refresh_contacts();
     /* The most text that can be sent in this conversation (bytes). */
     size_t max_text(const std::string &conv) const;
@@ -140,6 +145,19 @@ public:
     bool refresh_stats();                 // core, radio and packet statistics, one after the other
     bool stats_busy() const { return stats_pending_ > 0; }
     bool refresh_self();                  // APP_START again: position, name, flags as the board holds them now
+
+    // ---- phase 3: the radio log (PUSH_LOG_RX_DATA, every packet the board hears; no command enables it)
+    /* "Heard back by N repeaters" (Message::heard_back): every channel text we send is registered with an EchoTracker (logdata.hpp), every
+     * packet of the radio log is fed to it. N = the distinct NON-empty paths our payload came back on (a packet with an empty path was heard
+     * straight from its sender, which says nothing about repeaters). N moves while the window is open (kEchoWindowS after the send), then
+     * it is final and saved with the message. Only an approximation: see Message::heard_back and EchoTracker. Direct messages are not
+     * tracked (they have acks). Nothing is registered when the channel key was not read from the board in this session (no hash). */
+    static constexpr double kEchoWindowS = 60.0;
+    /* The capture of the packet log (D8): off at every start, switched by the user. */
+    PacketLog &packet_log() { return packet_log_; }
+    const PacketLog &packet_log() const { return packet_log_; }
+    /* Channel sends still inside their window (tests, diagnostics). */
+    size_t echoes_open() const { return echoes_.size(); }
 
     // ---- counters (tests, diagnostics)
     size_t frames_received() const { return frames_rx_; }
@@ -205,6 +223,9 @@ private:
     void tick_discover();
     void tick_schedule();
     void send_advert_impl(bool flood, bool scheduled);
+    void register_echo(uint32_t seq, int channel_idx, const std::string &text);
+    void on_log_packet(const LogPacket &pkt);
+    void tick_echoes();
 
     ITransport &transport_;
     Model &model_;
@@ -261,6 +282,17 @@ private:
     int stats_pending_ = 0;
     AdvertSchedule sched_seen_;
     uint64_t next_advert_ms_ = 0;
+
+    // phase 3: the radio log
+    struct ChannelEcho {
+        EchoTracker::Id id = EchoTracker::kNone;
+        uint32_t seq = 0;
+        uint32_t epoch = 0;                   // Model::board_epoch() at the send: another board's messages are never touched
+        std::vector<Bytes> routes;            // hash size byte + path, non-empty paths only
+    };
+    EchoTracker echo_{kEchoWindowS};
+    std::vector<ChannelEcho> echoes_;
+    PacketLog packet_log_;
 };
 
 } // namespace meshzero

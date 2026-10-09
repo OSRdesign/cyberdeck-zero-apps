@@ -144,7 +144,8 @@ wait 300
 say == settings (expect tab=Settings)
 dump
 shot 16-settings
-# the Preset row is the fourth selectable row (Position, Board GPS, Statistics, Node name, Preset): keys, the list is longer than the page now
+# the Preset row is the fifth selectable row (Position, Board GPS, Statistics, Packet log, Node name, Preset): keys, the list is longer than the page now
+key down
 key down
 key down
 key down

@@ -5,6 +5,7 @@
 #include "client.hpp"
 
 #include "features.hpp"
+#include "position.hpp"
 #include "sha256.hpp"
 
 #include <algorithm>
@@ -540,6 +541,8 @@ void Client::on_frame(const Bytes &frame)
         if (const auto h = parse_heard_advert(*ld)) {
             if (!model_.self() || h->key != model_.self()->key) model_.note_heard_advert(*h, now_unix());
         }
+        LogPacket lp;
+        if (parse_log_rx(frame, lp)) on_log_packet(lp);
     } else if (const auto *st = std::get_if<StatsReply>(&p)) {
         model_.set_stats(*st, now_unix());
     } else if (const auto *cd = std::get_if<ControlData>(&p)) {
@@ -599,6 +602,7 @@ void Client::poll(uint64_t now_ms)
 {
     now_ = now_ms;
     if (reset_phase_ != ResetPhase::None && now_ > reset_until_ms_) reset_phase_ = ResetPhase::None;
+    tick_echoes();                                     // the heard-back windows close even while the board is away
     if (!transport_.is_open()) {
         if (now_ >= next_open_) try_open();
         return;
@@ -807,6 +811,7 @@ uint32_t Client::send_channel(int idx, const std::string &text_in)
     const uint32_t ts = now_unix();
     const uint32_t seq = model_.add_outgoing(Model::conv_channel(idx), text, ts);
     chan_pending_.push_back({seq, now_ + kChannelSendFallbackMs});
+    register_echo(seq, idx, text);
     log("channel send seq=" + std::to_string(seq) + " channel=" + std::to_string(idx) + " bytes=" + std::to_string(text.size()));
     Request r;
     r.payload = build_send_channel_txt(static_cast<uint8_t>(idx), text, ts);
@@ -832,6 +837,58 @@ uint32_t Client::send_channel(int idx, const std::string &text_in)
     };
     enqueue(std::move(r), true);
     return seq;
+}
+
+/* ------------------------------------------------------------------ the radio log: heard back, packet log */
+
+void Client::register_echo(uint32_t seq, int idx, const std::string &text)
+{
+    const ChannelRec *ch = model_.find_channel(idx);
+    if (!ch || ch->empty || !ch->has_secret) {
+        log("channel send seq=" + std::to_string(seq) + ": channel key not known, no heard-back count");
+        return;
+    }
+    // what the firmware puts on the air: the channel hash (first byte of sha256 of the 16 byte secret) and "<node name>: <text>" encrypted;
+    // the lengths are UTF-8 bytes (std::string sizes). Without SELF_INFO the name is unknown: any size is accepted then.
+    const int hash = sha256(ch->secret.data(), ch->secret.size())[0];
+    const size_t size = model_.self() ? expected_grp_txt_payload_size(model_.self()->name.size(), text.size()) : 0;
+    ChannelEcho e;
+    e.id = echo_.register_sent(hash, static_cast<double>(now_) / 1000.0, size);
+    e.seq = seq;
+    e.epoch = model_.board_epoch();
+    echoes_.push_back(std::move(e));
+}
+
+void Client::on_log_packet(const LogPacket &pkt)
+{
+    packet_log_.add(pkt, now_unix());
+    const EchoTracker::Id id = echo_.on_packet(pkt, static_cast<double>(now_) / 1000.0);
+    if (id == EchoTracker::kNone || pkt.path.empty()) return;          // an empty path: heard straight from the sender, no repeater
+    for (ChannelEcho &e : echoes_) {
+        if (e.id != id) continue;
+        Bytes route;
+        route.push_back(pkt.hash_size);
+        route.insert(route.end(), pkt.path.begin(), pkt.path.end());
+        if (std::find(e.routes.begin(), e.routes.end(), route) != e.routes.end()) return;
+        e.routes.push_back(std::move(route));
+        if (e.epoch == model_.board_epoch()) model_.set_heard_back(e.seq, static_cast<int>(e.routes.size()), false);
+        return;
+    }
+}
+
+void Client::tick_echoes()
+{
+    const double now_s = static_cast<double>(now_) / 1000.0;
+    for (size_t i = 0; i < echoes_.size(); ++i) {
+        const ChannelEcho &e = echoes_[i];
+        if (!echo_.expired(e.id, now_s)) continue;       // (a send pushed out of the tracker's last 16 counts as expired too)
+        if (!e.routes.empty() && e.epoch == model_.board_epoch()) {
+            model_.set_heard_back(e.seq, static_cast<int>(e.routes.size()), true);
+            log("channel send seq=" + std::to_string(e.seq) + ": heard back on " + std::to_string(e.routes.size()) + " routes");
+        }
+        echoes_.erase(echoes_.begin() + static_cast<long>(i));
+        --i;
+    }
 }
 
 /* ------------------------------------------------------------------ settings */
@@ -984,6 +1041,37 @@ bool Client::set_board_gps(bool on)
             read_custom_vars();
         } else if (o != Outcome::Aborted) {
             set_notice(false, "Board GPS: " + (o == Outcome::Error ? error_text(err) : std::string("no answer")));
+        }
+    };
+    enqueue(std::move(r), true);
+    return true;
+}
+
+bool Client::set_position(double lat, double lon)
+{
+    if (!ready()) { set_notice(false, "Not connected to a radio"); return false; }
+    const std::string bad = check_position(lat, lon);
+    if (!bad.empty()) { set_notice(false, bad); return false; }
+    const bool clear = !position_is_set(lat, lon);
+    const std::string text = clear ? "Position cleared" : "Position set to " + fmt_coordinate(lat) + ", " + fmt_coordinate(lon);
+    Request r;
+    r.payload = build_set_advert_latlon(lat, lon);
+    r.accept = {resp::kOk};
+    r.done = [this, text](Outcome o, const Packet *, int err) {
+        log("set position: " + answer_text(static_cast<int>(o), err));          // never the coordinates
+        if (o == Outcome::Ok) {
+            // read the position back: what the board reports is what the screen shows
+            Request g;
+            g.payload = build_app_start(app_name());
+            g.accept = {resp::kSelfInfo};
+            g.done = [this, text](Outcome og, const Packet *, int) {
+                if (og == Outcome::Ok) set_notice(true, text);
+                else if (og != Outcome::Aborted) set_notice(false, "Position sent, but the board did not confirm");
+            };
+            enqueue(std::move(g), true);
+        } else if (o != Outcome::Aborted) {
+            set_notice(false, o == Outcome::Error && err == err::kUnsupported ? "Firmware too old for this feature: Position"
+                                                                                : "Position not set: " + (o == Outcome::Error ? error_text(err) : std::string("no answer")));
         }
     };
     enqueue(std::move(r), true);

@@ -364,6 +364,8 @@ enum class SRowKind {
     AutoAddNotice, Reboot, FactoryReset,
     // 0.2.2: the data kept per board
     HistoryForget, HistoryOthers,
+    // phase 3: the packet log (D8)
+    PacketLog,
 };
 struct SRowSpec {
     SRowKind kind = SRowKind::Info;
@@ -484,9 +486,10 @@ struct NavState {
     bool nearby_open = false;       // Contacts: the Nearby list
     bool search_open = false;       // Chats: the message search
     bool stats_open = false;        // Settings: the statistics screen
+    bool packet_log_open = false;   // Settings: the packet log (D8)
     bool select_mode = false;       // Contacts: marking contacts for a bulk delete or a group
 };
-enum class BackAction { ClosePopup, CancelEditor, CloseSearch, CloseStats, CloseDetail, CloseNearby, ExitSelect, FocusList, ExitHint };
+enum class BackAction { ClosePopup, CancelEditor, CloseSearch, CloseStats, CloseDetail, CloseNearby, ExitSelect, FocusList, ExitHint, ClosePacketLog };
 /* A short Esc and every Back button. Never quits: only the launcher's 3 s hold ends the app. */
 BackAction back_action(const NavState &s);
 
@@ -498,8 +501,31 @@ struct StatusText {
     Tone tone = Tone::Muted;
 };
 /* The delivery status of one of our messages (empty text for a received one). A channel message ends at "sent" (or "sent
- * (unconfirmed)" when the board never answered): a channel has no acknowledgement, so it is never "delivered". */
+ * (unconfirmed)" when the board never answered): a channel has no acknowledgement, so it is never "delivered". Once the board heard it
+ * come back over repeaters (Message::heard_back) a sent channel message says "heard back by N repeaters" instead: N is the count of
+ * distinct routes, an approximation of repeaters (see Message::heard_back). */
 StatusText message_status(const meshzero::Message &m, bool channel);
+
+/* ------------------------------------------------------------------ phase 3: the packet log (D8) */
+
+const char *payload_type_name(uint8_t type);              // "REQ", "GRP_TXT", "ADVERT" ... "TYPE 13" for an unknown one
+std::string route_name(const meshzero::LogPacket &p);     // "FLOOD", "DIRECT", "T-FLOOD", "T-DIRECT" (T: with transport codes)
+std::string fmt_hms(uint32_t ts);                         // "14:05:33" local time, "--:--:--" when the clock is not set
+/* The channels whose key hashes to `hash` (first byte of sha256 of the secret): only channels whose key was read from the board in this
+ * session. Two names = an ambiguous hash. */
+std::vector<std::string> channels_for_hash(const meshzero::Model &model, int hash);
+/* "d9", "d9 Public", "d9 Public|#test ?" (ambiguous: two channels share the hash). "" for a packet that is not a group text. */
+std::string channel_hash_text(const meshzero::Model &model, const meshzero::LogPacket &p);
+struct PacketRow {
+    std::string time, route, type, hops, snr, rssi, size, channel;
+};
+PacketRow build_packet_row(const meshzero::Model &model, const meshzero::LoggedPacket &lp);
+/* The raw packet in hex, 4 byte groups: "15416364 d9eb430a ...". */
+std::string packet_hex(const meshzero::Bytes &raw);
+/* The line above the hex of the selected packet: "path 63de (1 hop, 2-byte hashes)  transport 2211 4433  raw 89 bytes". */
+std::string packet_detail(const meshzero::LogPacket &p);
+/* "Capturing: 12 / 500", "Stopped: 12 / 500", ", 40 dropped" when the ring overflowed. */
+std::string packet_log_status(const meshzero::PacketLog &log);
 
 /* The one line of the status footer for the board. */
 struct BoardLine {

@@ -1,0 +1,37 @@
+# Heard back by N repeaters (phase 3): a channel message we send comes back in the radio log (PUSH_LOG_RX_DATA) over 2 routes, plus one
+# copy heard straight from the sender (empty path: not counted). The status says "sent" until the first echo, the count moves while the
+# 60 s window is open, then it is final (and saved with the message).
+#   SIMARGS="--heard-back 2 --heard-back-direct" SCRIPT=heard-back.script sh ui_smoke.sh
+wait 3500
+key enter
+type hello mesh, who hears me?
+key enter
+wait 700
+say == sent, nothing heard back yet (expect last_status='sent' echoes=1)
+dump
+shot heard-back-1-sent
+wait 1000
+say == the copy with an empty path (1 s) is not counted, the first route (1.7 s) is: live count (expect last_status='heard back by 1 repeater')
+dump
+shot heard-back-2-one
+wait 1800
+say == the second route, the window is still open (expect last_status='heard back by 2 repeaters' echoes=1)
+dump
+shot heard-back-3-two
+wait 58000
+say == the window closed: final (expect last_status='heard back by 2 repeaters' echoes=0)
+dump
+shot heard-back-4-final
+# a direct message is not tracked: it keeps its ack status
+key esc
+key down
+key down
+key down
+wait 300
+key enter
+type direct one
+key enter
+wait 2000
+say == a direct message: acks as before, no echo window (expect echoes=0 last_status='delivered')
+dump
+shot heard-back-5-direct

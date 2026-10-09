@@ -23,6 +23,11 @@ away for 2 s and comes back; --no-factory-reset, --strict-reset-word needs the w
 "swap" unplugs the cable, changes into the other board and plugs it back, like exchanging two boards on the same USB port). The factory reset
 gives the board a NEW public key each time and an empty identity; --reset-format-delay SEC makes the board format for SEC seconds before it answers
 (the ESP32 file system format is slow), --reset-no-ok restarts without ever sending the OK frame.
+Phase 3 cases: --heard-back N makes the mesh repeat our own channel sends back to the board: N copies of the GRP_TXT (the channel hash, the
+size the firmware would give "<name>: <text>") arrive in the radio log (0x88) 1 to 3 s after the send, each over another path (1 or 2 hops),
+as if the board heard repeaters forward it (--heard-back-direct adds one copy with an empty path, as if heard from the sender). The radio log
+push every 3 s alternates random bytes with well formed packets of other traffic (REQ, ACK, TXT_MSG, PATH, a GRP_TXT of a channel the
+board does not have, a transport route), for the packet log (D8).
 
     python3 meshcore_sim.py                      # creates the port /tmp/ttyMC0 (a symlink to the pty)
     python3 meshcore_sim.py --link /tmp/ttyMC1 --chatter 20 --echo
@@ -43,6 +48,7 @@ cable. With socat instead (the app on one end, the simulator on the other):
 
 import argparse
 import errno
+import hashlib
 import os
 import random
 import select
@@ -64,6 +70,7 @@ CMD_GET_CUSTOM_VARS, CMD_SET_CUSTOM_VAR = 40, 41
 CMD_ADD_UPDATE_CONTACT, CMD_REMOVE_CONTACT, CMD_REBOOT, CMD_SET_OTHER_PARAMS = 9, 15, 19, 38
 CMD_FACTORY_RESET, CMD_SEND_CONTROL_DATA, CMD_GET_STATS, CMD_SET_AUTOADD, CMD_GET_AUTOADD = 51, 55, 56, 58, 59
 CMD_GET_ALLOWED_REPEAT_FREQ, CMD_SET_PATH_HASH_MODE = 60, 61
+CMD_SET_ADVERT_LATLON = 14
 
 
 def text_field(s, width):
@@ -101,6 +108,8 @@ class Radio:
         self.battery_mv = 3960
         self.clock_offset = args.board_clock_offset     # seconds: the board clock is the sim host clock plus this
         self.gps = "1" if args.gps else "0"
+        # the node position in microdegrees (SELF_INFO, set by SET_ADVERT_LATLON); 0, 0 = not set
+        self.lat_e6, self.lon_e6 = (0, 0) if args.no_position else (48856600, 2352200)
         self.channel_count = 0
         now = int(time.time())
         # many contacts for the speed of the lists: every kind, every age, spread around the node
@@ -123,7 +132,7 @@ class Radio:
         self.path_mode = 1                                # the user's real board reports mode 1 (2 byte hashes) in its DEVICE_INFO
         self.repeat = False
         self.manual_add = bool(args.manual_add)
-        self.multi_acks, self.loc_policy, self.telemetry = 0, 0, 0
+        self.multi_acks, self.loc_policy, self.telemetry = 0, 1 if args.share_location else 0, 0
         self.autoadd = 0x02
         self.repeat_ranges = [] if args.repeat_ranges == "none" else [tuple(int(v) for v in r.split("-")) for r in args.repeat_ranges.split(",")]
         self.rx_packets, self.tx_packets = 120, 31
@@ -141,7 +150,7 @@ class Radio:
         self.reset_count = 0
 
     SWAP_ATTRS = ("name", "key", "contacts", "channels", "queue", "nodes", "neighbours", "node_count", "manual_add", "multi_acks", "loc_policy",
-                  "telemetry", "autoadd", "path_mode", "repeat", "freq_khz", "bw_hz", "sf", "cr", "txp", "gps", "battery_mv")
+                  "telemetry", "autoadd", "path_mode", "repeat", "freq_khz", "bw_hz", "sf", "cr", "txp", "gps", "battery_mv", "lat_e6", "lon_e6")
 
     def make_board_b(self):
         """Another board: its own key, name, contacts, channels and waiting messages."""
@@ -195,6 +204,45 @@ class Radio:
     def log_frame(self, packet, snr=6.25, rssi=-91):
         return bytes([0x88, int(snr * 4) & 0xFF, rssi & 0xFF]) + packet
 
+    def grp_txt_payload(self, idx, text_bytes):
+        """The payload of a GRP_TXT as the firmware sends it: channel hash, 2 byte MAC, the AES-128 ciphertext of
+        timestamp (4) + flags (1) + "<name>: <text>", zero padded to 16. The bytes after the hash are random (nothing decrypts them)."""
+        _, secret = self.channels.get(idx, ("", b"\0" * 16))
+        plain = 4 + 1 + len(self.name.encode()) + 2 + len(text_bytes)
+        size = (plain + 15) // 16 * 16
+        return bytes([hashlib.sha256(secret).digest()[0]]) + os.urandom(2 + size)
+
+    def echo_channel_send(self, idx, text_bytes, out):
+        """Our own channel message heard back: the same payload over different paths, 1 to 3 s after the send."""
+        payload = self.grp_txt_payload(idx, text_bytes)
+        hsz = self.path_mode + 1
+        copies = [b""] if self.args.heard_back_direct else []
+        for i in range(self.args.heard_back):
+            hops = 1 + i % 2
+            copies.append(bytes((0x40 + i * 17 + h * 5 + j) & 0xFF for h in range(hops) for j in range(hsz)))
+        for i, path in enumerate(copies):
+            frame = bytes([0x15, ((hsz - 1) << 6) | (len(path) // hsz)]) + path + payload
+            self.after(1.0 + 0.7 * i, lambda f=frame, k=i: out(self.log_frame(f, snr=7.5 - 2.25 * k, rssi=-85 - 6 * k)))
+        print("meshcore_sim: channel %d send heard back %d times" % (idx, len(copies)), flush=True)
+
+    def other_traffic(self):
+        """A well formed packet of somebody else's traffic, as the radio log shows it."""
+        known = {hashlib.sha256(sec).digest()[0] for _, sec in self.channels.values()}
+        kind = random.randrange(6)
+        if kind == 0:      # REQ, flood, 3 hops of 2 byte hashes
+            return bytes([0x01, 0x43]) + os.urandom(6) + os.urandom(20)
+        if kind == 1:      # ACK, direct, no path left
+            return bytes([0x0E, 0x00]) + os.urandom(4)
+        if kind == 2:      # TXT_MSG, flood, 1 hop
+            return bytes([0x09, 0x41]) + os.urandom(2) + os.urandom(38)
+        if kind == 3:      # PATH, direct, 2 hops
+            return bytes([0x22, 0x42]) + os.urandom(4) + os.urandom(26)
+        if kind == 4:      # GRP_TXT of a channel the board does not have
+            h = random.choice([v for v in range(256) if v not in known])
+            return bytes([0x15, 0x41]) + os.urandom(2) + bytes([h]) + os.urandom(2 + 32)
+        # TRACE over a transport flood route: 4 transport code bytes before the path
+        return bytes([0x24]) + struct.pack("<HH", 0x1234, 0xBEEF) + bytes([0x41]) + os.urandom(2) + os.urandom(12)
+
     def new_node_advert(self, out):
         """An advert from a node the board does not know: radio log + NEW_ADVERT (kept as a pending contact in manual mode, added otherwise)."""
         if self.node_count < len(self.nodes):
@@ -227,7 +275,7 @@ class Radio:
 
     def self_info(self):
         name = self.name.encode()
-        return (bytes([5, 1, self.txp & 0xFF, self.max_txp]) + self.key + struct.pack("<ii", 48856600, 2352200)
+        return (bytes([5, 1, self.txp & 0xFF, self.max_txp]) + self.key + struct.pack("<ii", self.lat_e6, self.lon_e6)
                 + bytes([self.multi_acks, self.loc_policy, self.telemetry, 1 if self.manual_add else 0])
                 + struct.pack("<II", self.freq_khz, self.bw_hz) + bytes([self.sf, self.cr]) + name)
 
@@ -245,6 +293,18 @@ class Radio:
             out(self.device_info())
         elif code == CMD_APP_START:
             out(self.self_info())
+        elif code == CMD_SET_ADVERT_LATLON:
+            # the firmware (companion_radio MyMesh.cpp): at least 9 bytes, the altitude is optional; out of range -> ERR_CODE_ILLEGAL_ARG
+            if a.old_firmware or len(c) < 9:
+                out(bytes([1, 1]))
+            else:
+                lat, lon = struct.unpack("<ii", c[1:9])
+                if -90000000 <= lat <= 90000000 and -180000000 <= lon <= 180000000:
+                    self.lat_e6, self.lon_e6 = lat, lon
+                    print("meshcore_sim: position set to %.6f, %.6f (%d bytes)" % (lat / 1e6, lon / 1e6, len(c)), flush=True)
+                    out(b"\x00")
+                else:
+                    out(bytes([1, 6]))
         elif code in (CMD_SET_TIME, CMD_RESET_PATH):
             out(b"\x00")
         elif code == CMD_ADVERT:
@@ -456,6 +516,8 @@ class Radio:
             elif a.chan_reply == "odd":
                 out(bytes([0x1F, 9, 9]))
             print("meshcore_sim: channel send %d bytes, replied %s" % (len(c), a.chan_reply), flush=True)
+            if a.heard_back or a.heard_back_direct:
+                self.echo_channel_send(c[2], bytes(c[7:]), out)
             if a.echo:
                 text = c[7:].decode("utf-8", "ignore")
                 self.after(1.0, lambda: self.push_msg(out, self.chan_msg(c[2], "Zed: echo " + text)))
@@ -533,6 +595,8 @@ def main():
                     help="the board clock is the host clock plus SEC (negative: behind, e.g. -13500000 = about 5 months; positive: ahead)")
     ap.add_argument("--refuse-set-time", action="store_true", help="refuse every SET_TIME with ERR_CODE_ILLEGAL_ARG (a time in the past is always refused)")
     ap.add_argument("--no-gps-var", action="store_true", help="the board lists custom variables but no gps (a board without a GPS receiver)")
+    ap.add_argument("--no-position", action="store_true", help="the node position starts at 0, 0 (not set)")
+    ap.add_argument("--share-location", action="store_true", help="the advert location policy starts at 1 (share): the board puts its position into its adverts")
     ap.add_argument("--old-firmware", action="store_true", help="no custom variables and no channel commands (a firmware too old for the new features)")
     ap.add_argument("--chan-reply", choices=["ok", "msgsent", "odd", "none"], default="ok",
                     help="the answer to a channel send: OK (default), MSG_SENT, an unexpected frame, or nothing at all")
@@ -556,6 +620,8 @@ def main():
     ap.add_argument("--identity", choices=["A", "B"], default="A", help="which board is on the cable at the start (B: another key, name, contacts and channels)")
     ap.add_argument("--reset-format-delay", type=float, default=0, metavar="SEC", help="the factory reset formats for SEC seconds before the OK frame (an ESP32 board is slow)")
     ap.add_argument("--reset-no-ok", action="store_true", help="the factory reset restarts the board without sending the OK frame")
+    ap.add_argument("--heard-back", type=int, default=0, metavar="N", help="our channel sends come back in the radio log over N different paths (phase 3)")
+    ap.add_argument("--heard-back-direct", action="store_true", help="plus one copy with an empty path (heard straight from the sender)")
     ap.add_argument("--strict-reset-word", action="store_true", help="FACTORY_RESET needs the word 'reset' behind the command byte (what I remember of the firmware)")
     args = ap.parse_args()
     if args.old_firmware:
@@ -570,6 +636,7 @@ def main():
     buf = b""
     next_chatter = time.time() + args.chatter if args.chatter else None
     log_next = time.time() + 3
+    log_junk = False
     stdin_ok = not sys.stdin.closed and (sys.stdin.isatty() or not os.isatty(0))
     stdin_open = True
 
@@ -644,7 +711,11 @@ def main():
             fn()
         if now >= log_next:
             log_next = now + 3
-            out(bytes([0x88, 0x28, 0xB0]) + os.urandom(random.randint(20, 60)))
+            log_junk = not log_junk
+            if log_junk:
+                out(bytes([0x88, 0x28, 0xB0]) + os.urandom(random.randint(20, 60)))
+            else:
+                out(radio.log_frame(radio.other_traffic(), snr=random.choice([-6.5, 2.25, 9.0]), rssi=random.choice([-112, -97, -70])))
         if next_chatter and now >= next_chatter:
             next_chatter = now + args.chatter
             if random.random() < 0.5:

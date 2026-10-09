@@ -1,6 +1,6 @@
 # Mesh Hop
 
-Version 0.2.2, package `mesh-hop`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.3.0 (in test; 0.2.2 is the published one), package `mesh-hop`. Part of [cyberdeck-zero-apps](../../README.md).
 
 **Status: early release, published in the registry.** Install it from **Settings > Apps** like the other apps (see
 [Install and requirements](#install-and-requirements)). Version 0.2.2 was tested on the deck by the owner with real boards (Seeed XIAO
@@ -32,6 +32,14 @@ deck's panel**. The real screen shows the same 640x480 picture.
   conversation with the time of each message and the status of yours, a message entry and a **Send** button. A channel
   message ends at **sent** when the board accepts it (a channel has no acknowledgement, so never "delivered"; if the board
   does not answer within 5 s it shows "sent (unconfirmed)"); a direct message goes sending, sent, delivered or no ack.
+  **Heard back by N repeaters** (phase 3): the board reports every radio packet it hears (PUSH_LOG_RX_DATA, no command needed). When
+  your own channel message comes back from the mesh, "sent" becomes "heard back by N repeaters"; N grows while it keeps coming back
+  over new routes for 60 s, then it is final and saved with the message. Read it as a hint, not a count of repeaters: the app cannot
+  decrypt, so it matches the channel hash and the size of the packet; **N is the number of distinct routes** (a copy heard straight
+  from the sender is not counted; one repeater reached over two routes counts twice, two repeaters with the same short hash once), and
+  another person's message of the same size on the same channel in the same minute can be taken for yours. It needs the channel key
+  read from the board in this session (done at connect; a firmware without channel commands gets no count). Direct messages keep their
+  acks and are not counted.
   **Mute** (Ctrl+M, or the options box: Ctrl+O or a 3 s hold on the name) silences a channel or a contact: no pill, not counted in the tab total, "muted" in the list.
   **Options of a conversation** (Ctrl+O, or hold a finger 3 s on its name in the list or in the header; a bar shows the hold
   filling): a direct chat offers *Mute / Unmute this contact* and *Delete conversation*; a channel offers *Mute / Unmute* and
@@ -70,7 +78,15 @@ deck's panel**. The real screen shows the same 640x480 picture.
   refreshes the list in the background at launch, once more 60 s later if that failed, keeps the last good copy in
   `~/.local/share/mesh-hop/presets.jsonl` and says in the preset box which list it shows), frequency, **bandwidth, spreading factor,
   coding rate and TX power in a choice box** (the value in the middle, a large arrow on each side: touch the arrows, or Left /
-  Right, Enter accepts, Esc cancels); new in 0.2.0:
+  Right, Enter accepts, Esc cancels).
+  * **Position box** (Enter or a tap on the Position row): the position the board holds, the **Board GPS** switch (only when the
+    firmware lists the `gps` custom variable; a board without GPS shows none), and the **latitude** and **longitude** typed on the
+    Bluetooth keyboard in decimal degrees ('.' or ',' before the decimals; Tab: next field, Enter: OK, Esc: cancel). A value outside
+    -90..90 / -180..180, or not a number, is refused in the box and nothing is sent. OK sends SET_ADVERT_LATLON (`0E`, latitude and
+    longitude in signed microdegrees, altitude 0) and reads the position back (SELF_INFO); **Clear** sets 0, 0, which the firmware and
+    the app read as "no position". Setting a position sends no advert: the board puts it into its own adverts only when its location
+    policy shares it (the box says which). With the board GPS on, the GPS fix replaces a typed position.
+  New in 0.2.0:
   * **Path hash size**: 1, 2 or 3 bytes per repeater hash in the paths of the packets the board sends (MeshCore "path hash
     mode" 0, 1, 2). A larger hash means fewer collisions between repeaters but leaves less room per message. Read from the board
     (DEVICE_INFO, firmware level 10 and up), set with SET_PATH_HASH_MODE and read back; an older firmware shows the
@@ -83,6 +99,12 @@ deck's panel**. The real screen shows the same 640x480 picture.
     **Still added by itself** edits the auto-add filter (which types the board still adds in manual mode, and replace-oldest).
   * **Statistics** (firmware with GET_STATS): battery, uptime, errors, queue, noise floor, RSSI, SNR, TX / RX airtime and the
     packet counters; Refresh, and an automatic refresh every 5 s while the screen is open.
+  * **Packet log** (phase 3, D8; under Statistics, a panel over Settings like the statistics): the radio packets the board hears, one row
+    each: time (hh:mm:ss), route (FLOOD / DIRECT, `T-` with transport codes), payload type, hops, SNR, RSSI, payload size and, for a
+    group text, the channel hash with the channel name when one of your channels has that hash (`a|b ?` when two share it). The
+    selected row shows its path and its raw bytes in hex below. **Capture is off at every start**: Start / `S` / Space starts and
+    stops it, Clear / `C` empties it, Up/Down/PgUp/PgDn/Home/End select (End follows the newest again), Esc or Close goes back. It
+    keeps the last 500 packets in memory only; nothing is written to disk (no export yet).
   * **Reboot the board** (Yes / No) and **Factory reset the board** (two Yes / No boxes; the Yes of the second waits 3 s). A factory
     reset erases the board's keys (its identity), contacts and channels. The firmware formats its file system first (up to a minute on
     an ESP32 board), answers OK and restarts with a new identity; the app waits up to 60 s, then judges by the identity the board reports
@@ -96,7 +118,7 @@ deck's panel**. The real screen shows the same 640x480 picture.
 * **Firmware check**: a feature the board's firmware lacks (custom variables, channel commands, path hash mode, repeat, statistics,
   auto-add filter, discover, factory reset) is switched off with the notice "Firmware too old for this feature"; a board without
   GPS shows no GPS row.
-* **Map** and **Terminal**: placeholders for later versions.
+* **Map** and **Terminal**: placeholders for later versions (the packet log lives in Settings, next to the statistics).
 * Footer: hints for the current screen on the left, the board (model and state) on the right. The top bar is the launcher's
   shared bar (clock, Wi-Fi, Bluetooth), the five tabs sit in its left part.
 * **Per board (0.2.2).** The app knows the board by its public key (SELF_INFO). The history, read marks, the contact and channel caches,
@@ -117,8 +139,8 @@ deck's panel**. The real screen shows the same 640x480 picture.
 * Text is typed with the **Bluetooth keyboard only**. There is no on-screen keyboard. With no keyboard awake an editor says
   "Keyboard needed: wake the Bluetooth keyboard" and the entry box shows the same hint.
 * Short **Esc is always Back** and never quits (it shows "Hold Esc 3 s to exit" on a top-level screen); **holding Esc for
-  3 s** ends the app: the launcher does that. Esc closes the newest layer first: box, editor, search, statistics, details,
-  Nearby, select mode.
+  3 s** ends the app: the launcher does that. Esc closes the newest layer first: box, editor, search, statistics, packet log,
+  details, Nearby, select mode.
 * Everything is reachable by touch: tap rows, tabs, chips, arrows and buttons, drag to scroll lists and conversations.
   There is no swipe gesture. Buttons are at least 44 px high.
 
@@ -138,6 +160,7 @@ deck's panel**. The real screen shows the same 640x480 picture.
 | Enter, `I`, `S`, `V` | Nearby: add, ignore (or restore), scan, show / hide the ignored |
 | `G` `D` | Contact details: groups, delete |
 | `R` `A` | Statistics: refresh, switch the automatic refresh |
+| `S` or Space, `C`, Up/Down | Packet log: start / stop the capture, clear it, select a row |
 | `S` `V` | Settings: save, undo (each asks Yes / No) |
 | `K`, Del | Settings, channel row: show the key, remove the channel |
 | `Y` `N` | Yes / No boxes |
@@ -208,7 +231,9 @@ All in `~/.local/share/mesh-hop`. The log holds no message text.
 * **USB only**: no Bluetooth LE connection to the board yet (planned; the deck's Bluetooth is also used by the keyboard).
 * A **channel message has no delivery acknowledgement** in MeshCore: it ends at "sent" (or "sent (unconfirmed)" if the board does
   not answer within 5 s), never "delivered". Direct messages do get "delivered" or "no ack".
-* "Heard by N repeaters" for a sent message is not shown yet.
+* "Heard back by N repeaters" is an approximation (distinct routes, matched by channel hash and size; see Chats above). A count that
+  is still moving when the app quits is lost; the final one is saved (an extra `"hb"` key in `messages.jsonl` that older versions ignore).
+* The packet log is not saved or exported, and holds 500 packets at most.
 * The scheduled advert runs only while the app runs and the board is connected (the board has no advert timer of its own).
 * The deck keeps 200 messages per conversation and 1500 per board.
 * The screenshots on this page come from the simulator, not from the panel.
@@ -250,13 +275,17 @@ server stands in for `api.meshcore.nz`; `MESHHOP_ONLINE=0|1` forces the online t
 the program) now also runs the retry case. 0.2.0 adds `p2_run.sh` (seeded history, the words `@D60@` in a script become the date 60 days
 ago) with `p2-contacts.script`, `p2-nearby.script`, `p2-search.script`, `p2-settings.script` and `p2-oldfw.script`; the first line of each
 says which simulator options to give. 0.2.2 adds `b-swap.script` (two boards, run with `SIMCTL=1`: the script command `sim <line>` types into the
-simulator), `b-noboard.script` (`NOSIM=1`) and `b-reset.script` (`--reset-format-delay 4`).
+simulator), `b-noboard.script` (`NOSIM=1`) and `b-reset.script` (`--reset-format-delay 4`). The Position box has `position.script` (a GPS board)
+and `position-nogps.script` (`--no-gps-var --share-location`); the simulator keeps the position set by SET_ADVERT_LATLON (`--no-position` starts at 0, 0).
+Phase 3: `--heard-back N` makes the simulator send our own channel messages back in its radio log over N routes 1 to 3 s after the send
+(`--heard-back-direct` adds a copy with an empty path), and its radio log every 3 s alternates random bytes with well formed packets of other
+traffic. `heard-back.script` (`--heard-back 2 --heard-back-direct`) and `packet-log.script` (`--heard-back 2 --new-nodes 2`) cover both features.
 
 ## Layout of the sources
 
 | Path | What |
 | --- | --- |
-| `src/main/core/` | transport, protocol, client, model, store, clock policy, presets (`radio_presets.inc` is the dated data file), preset feed (strict parser, saved copy, background curl, download schedule), channel keys, firmware features, contact groups, message archive search, log (no LVGL; unit tested) |
+| `src/main/core/` | transport, protocol, client, model, store, clock policy, presets (`radio_presets.inc` is the dated data file), preset feed (strict parser, saved copy, background curl, download schedule), channel keys, firmware features, contact groups, message archive search, log, the radio log parser and echo tracker (`logdata.*`), the packet log ring (`packet_log.*`) (no LVGL; unit tested) |
 | `src/main/ui/ui_logic.*`, `ui_phase2.cpp` | keys, editor filters, formatting, chat and contact rows, filters and sort state, selection, groups, details, Nearby rows, search rows, statistics view, popup logic, Settings layout, Back rule (no LVGL; unit tested) |
 | `src/main/ui/platform.*` | framebuffer, touch and keyboard (evdev), headless mode |
 | `src/main/ui/app.*` | the screens, the virtual row list, the popups |

@@ -1,0 +1,34 @@
+# The Position box on a board without GPS (like board A, the nRF52840): no GPS switch, the box is shorter, Tab goes from the two
+# fields to Clear.   SIMARGS="--no-gps-var --share-location" SCRIPT=position-nogps.script sh ui_smoke.sh
+wait 3500
+key tab
+key tab
+key tab
+key tab
+wait 800
+key home
+key enter
+wait 800
+say == no GPS switch (expect pos_box=1 pos_gps_row=0)
+dump
+shot position-box-nogps
+key tab
+key tab
+say == Tab: latitude, longitude, Clear (expect pos_focus=3)
+dump
+shot position-box-nogps-clear-focus
+key tab
+say == and round again (expect pos_focus=0)
+dump
+type 1.5.
+say == a second '.' is typed but refused on OK (expect pos_fields='1.5.|2.3522')
+dump
+key enter
+wait 400
+say == (expect pos_err='Latitude: use decimal degrees, for example 48.8566')
+dump
+shot position-box-nogps-error
+key esc
+wait 300
+say == (expect pos_box=0 self_pos='48.85660, 2.35220')
+dump

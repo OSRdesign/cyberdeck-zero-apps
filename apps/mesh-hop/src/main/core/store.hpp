@@ -9,7 +9,8 @@
  *
  * Per board, in boards/<first 12 hex digits of the board's public key>/ (the folder is chosen when SELF_INFO tells which board is connected;
  * plugging another board shows that board's own data, plugging the first one back restores it):
- *   messages.jsonl   one line per message, then small {"u":seq,"st":state} lines for later state changes; rewritten
+ *   messages.jsonl   one line per message, then small {"u":seq,"st":state} lines for later state changes ("hb": the final heard-back
+ *                    count of a channel message we sent, an optional key that older versions ignore); rewritten
  *                    (compacted) when it has grown, bounded by Model::kMaxPerConversation / kMaxMessages
  *   contacts.jsonl   the contact cache, rewritten whenever the contact list changes
  *   channels.jsonl   the channel names seen last
@@ -70,6 +71,7 @@ public:
     // Listener
     void message_added(const Message &m) override;
     void message_state(uint32_t seq, MsgState state, const std::string &note) override;
+    void message_heard_back(uint32_t seq, int count) override;
     void contacts_changed() override;
     void channels_changed() override;
     void read_changed() override;

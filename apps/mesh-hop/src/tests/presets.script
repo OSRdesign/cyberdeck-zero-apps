@@ -1,5 +1,5 @@
 # Mesh Hop 0.1.2: the radio preset list (refreshed in the background, saved copy, built-in list), seen in the Preset popup.
-# The download starts 4 s after the launch, so the first look is at 9 s. (0.2.0: the Preset row is the fifth selectable row of Settings, reached by keys.)
+# The download starts 4 s after the launch, so the first look is at 9 s. (the Preset row is the sixth selectable row of Settings since the Packet log row, reached by keys.)
 wait 9000
 say == the list in use (see presets=origin/entries/date)
 dump
@@ -8,6 +8,7 @@ key tab
 key tab
 key tab
 wait 300
+key down
 key down
 key down
 key down

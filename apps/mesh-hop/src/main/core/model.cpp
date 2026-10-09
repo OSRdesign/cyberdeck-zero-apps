@@ -670,6 +670,19 @@ void Model::set_state(uint32_t seq, MsgState state, const std::string &note)
     }
 }
 
+void Model::set_heard_back(uint32_t seq, int count, bool final)
+{
+    for (auto it = messages_.rbegin(); it != messages_.rend(); ++it) {
+        if (it->seq != seq) continue;
+        if (it->heard_back != count) {
+            it->heard_back = count;
+            ++revision_;
+        }
+        if (final && listener_) listener_->message_heard_back(seq, count);
+        return;
+    }
+}
+
 const Message *Model::find_message(uint32_t seq) const
 {
     for (auto it = messages_.rbegin(); it != messages_.rend(); ++it)

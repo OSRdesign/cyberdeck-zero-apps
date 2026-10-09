@@ -1,0 +1,81 @@
+# The Position box (D6): Settings > Position opens a box with the board GPS switch (a board that lists "gps" only), the latitude and
+# longitude typed on the keyboard (Tab: next field, Enter: OK, Esc: cancel), Clear (0, 0).
+#   SCRIPT=position.script sh ui_smoke.sh                                       a GPS board (gps:0)
+#   SIMARGS="--no-gps-var --share-location" SCRIPT=position-nogps.script sh ui_smoke.sh   a board without GPS (like board A)
+wait 3500
+key tab
+key tab
+key tab
+key tab
+wait 800
+key home
+key enter
+wait 800
+say == the box opens on the board's position, the latitude field has the focus (expect pos_box=1 pos_focus=0 pos_fields='48.8566|2.3522' pos_gps_row=1)
+dump
+shot position-box-open
+
+# a bad value: nothing is sent, the reason is in the box, the focus goes to the field at fault
+type 91
+key tab
+type 200
+key enter
+wait 400
+say == refused (expect pos_box=1 pos_focus=0 pos_fields='91|200' pos_err='Latitude must be between -90 and 90' self_pos='48.85660, 2.35220')
+dump
+shot position-box-error
+key bksp
+key bksp
+type 45,5
+key tab
+key bksp
+key bksp
+key bksp
+type -3.25
+say == typed, ',' became '.' (expect pos_fields='45.5|-3.25' pos_focus=1)
+dump
+shot position-box-typed
+key enter
+wait 1000
+say == sent and read back (expect pos_box=0 self_pos='45.50000, -3.25000' notice='Position set to 45.5, -3.25')
+dump
+shot position-box-applied
+
+# the board GPS switch: Tab to it, Enter switches it
+key enter
+wait 600
+key tab
+key tab
+say == the GPS switch has the focus (expect pos_focus=2)
+dump
+shot position-box-gps-focus
+key enter
+wait 1000
+say == GPS on, read back (expect gps=on pos_box=1)
+dump
+shot position-box-gps-on
+
+# Clear: 0, 0
+key tab
+key enter
+wait 1000
+say == cleared (expect pos_box=0 self_pos='not shared' notice='Position cleared')
+dump
+shot position-box-cleared
+
+# Esc closes the box, never the app; touch: a tap on the row opens it, Cancel closes it
+key enter
+wait 600
+key esc
+wait 300
+say == Esc: closed (expect pos_box=0 tab=Settings)
+dump
+key enter
+wait 600
+say == opened again on a cleared position: empty fields (expect pos_box=1 pos_fields='|')
+dump
+shot position-box-empty
+tap 120 380
+wait 300
+say == Cancel tapped (expect pos_box=0)
+dump
