@@ -1,10 +1,10 @@
 # Mesh Hop
 
-Version 0.3.0 (in test; 0.2.2 is the published one), package `mesh-hop`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.3.0 (published), package `mesh-hop`. Part of [cyberdeck-zero-apps](../../README.md).
 
 **Status: early release, published in the registry.** Install it from **Settings > Apps** like the other apps (see
-[Install and requirements](#install-and-requirements)). Version 0.2.2 was tested on the deck by the owner with real boards (Seeed XIAO
-nRF52840 and a spare XIAO S3 WIO, MeshCore firmware v1.15.0, a board swap included). Several MeshCore features are not there yet
+[Install and requirements](#install-and-requirements)). Versions 0.2.2 and 0.3.0 were tested on the deck by the owner with real boards (Seeed XIAO
+nRF52840 and a spare XIAO S3 WIO, MeshCore firmware v1.15.0, a board swap included). The GPS switch of the Position box is not tested on a real board yet. Several MeshCore features are not there yet
 (see [Known limits](#known-limits)). The screenshots below come from the simulator, not from the panel.
 
 A full-screen (640x480) client for [MeshCore](https://github.com/meshcore-dev/MeshCore) LoRa mesh networks. The radio is a
@@ -190,10 +190,10 @@ then Apps > Mesh Hop > Enter (it asks for the sudo password).
 python tools/make_registry.py --only mesh-hop --out <a folder outside packages/>
 ```
 
-Copy the `mesh-hop_0.2.2_arm64.deb` it writes to the deck and, on the deck:
+Copy the `mesh-hop_0.3.0_arm64.deb` it writes to the deck and, on the deck:
 
 ```
-sudo apt install ./mesh-hop_0.2.2_arm64.deb
+sudo apt install ./mesh-hop_0.3.0_arm64.deb
 ```
 
 (`apt` pulls `curl` and `libfreetype6` if missing.) The tile "Mesh Hop" appears in the launcher. Remove it with
