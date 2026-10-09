@@ -6,6 +6,7 @@
 
 #include "clock_policy.hpp"
 #include "input_state.hpp"
+#include "position.hpp"
 #include "protocol.hpp"
 #include "sha256.hpp"
 
@@ -23,7 +24,7 @@ namespace meshhop {
 
 namespace {
 
-constexpr const char *kVersion = "0.2.2";
+constexpr const char *kVersion = "0.3.0";
 
 // ---- the colours of the launcher and of MeshZero 0.1.0
 constexpr uint32_t kBackground = 0x101214;
@@ -77,6 +78,10 @@ enum Tag {
     kTagDetailGroups, kTagDetailDelete, kTagChatDetails, kTagNearbyClose, kTagNearbyScan, kTagNearbyIgnored,
     kTagSearchOpen, kTagSearchClose, kTagSearchConv, kTagSearchDate, kTagSearchDir, kTagSearchBox,
     kTagStatsClose, kTagStatsRefresh, kTagStatsAuto,
+    // the Position box
+    kTagPosOk, kTagPosCancel, kTagPosClear, kTagPosGps, kTagPosLat, kTagPosLon,
+    // phase 3: the packet log
+    kTagLogToggle, kTagLogClear, kTagLogClose,
 };
 
 App *g_app = nullptr;
@@ -600,6 +605,7 @@ void App::build_screen()
     build_settings();
     build_footer();
     build_editor();
+    build_position_box();
     build_popup();
 
     // the shared top bar of the launcher, drawn over the right part of the strip
@@ -905,6 +911,45 @@ void App::build_settings()
     cfg.min_row_h = 28;
     settings_list_.create(page_[static_cast<int>(Tab::Settings)], 0, 0, 640, kPageH, cfg);
     build_stats();
+    build_packet_log();
+}
+
+namespace {
+// the columns of the packet log (x, width): time, route, type, hops, SNR, RSSI, payload size, channel
+constexpr int kLogCol[8][2] = {{12, 66}, {80, 70}, {152, 90}, {244, 42}, {288, 50}, {340, 44}, {386, 40}, {428, 204}};
+constexpr int kLogRowH = 28;
+} // namespace
+
+/* The packet log (D8): a panel over the Settings page, like the statistics. The rows on top, the bytes of the selected row below. */
+void App::build_packet_log()
+{
+    lv_obj_t *p = page_[static_cast<int>(Tab::Settings)];
+    log_panel_ = make_box(p, 0, 0, 640, kPageH);
+    lv_obj_set_style_bg_color(log_panel_, lv_color_hex(kBackground), 0);
+    lv_obj_set_style_bg_opa(log_panel_, LV_OPA_COVER, 0);
+    lv_obj_add_flag(log_panel_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *t = make_label(log_panel_, f_big_, kGold, 12, 10, 130, 26);
+    lv_label_set_text(t, "Packet log");
+    log_status_ = make_label(log_panel_, f_small_, kMuted, 144, 14, 222, 18);
+    log_toggle_ = make_button(log_panel_, 370, 0, 92, 44, "", kTagLogToggle, &log_toggle_label_);
+    make_button(log_panel_, 466, 0, 80, 44, "Clear", kTagLogClear);
+    make_button(log_panel_, 550, 0, 86, 44, "Close", kTagLogClose);
+    static const char *const titles[8] = {"Time", "Route", "Type", "Hops", "SNR", "RSSI", "Size", "Channel"};
+    for (int i = 0; i < 8; ++i) {
+        lv_obj_t *h = make_label(log_panel_, f_small_, kMuted, kLogCol[i][0], 50, kLogCol[i][1], 18);
+        lv_label_set_text(h, titles[i]);
+    }
+    RowList::Config cfg;
+    cfg.max_cells = 8;
+    cfg.max_boxes = 0;
+    cfg.min_row_h = kLogRowH;
+    log_list_.create(log_panel_, 0, 70, 640, 216, cfg);
+    lv_obj_t *div = make_box(log_panel_, 0, 288, 640, 1);
+    lv_obj_set_style_bg_color(div, lv_color_hex(kSelected), 0);
+    lv_obj_set_style_bg_opa(div, LV_OPA_COVER, 0);
+    log_detail_ = make_label(log_panel_, f_small_, kMuted, 12, 294, 616, 18);
+    log_hex_ = make_label(log_panel_, f_text_small_, kText, 12, 314, 616, 85);     // up to 5 lines; the dots mode cuts a longer packet
+    set_hidden(log_panel_, true);
 }
 void App::build_footer()
 {
@@ -977,6 +1022,59 @@ void App::build_editor()
     lv_obj_t *ok = make_button(panel, 360, 188, 160, 44, "OK", kTagEdOk);
     lv_obj_set_style_bg_color(ok, lv_color_hex(kOkGreen), 0);
     set_hidden(ed_overlay_, true);
+}
+
+/* The Position box: the panel, title, field and buttons of the editor (same colours, fonts and sizes), with two fields side by side,
+ * the board GPS switch (a board that lists the "gps" variable only) and Clear. position_layout() places the rows. */
+void App::build_position_box()
+{
+    pos_overlay_ = make_box(screen_, 0, kPageY, 640, kPageH);
+    lv_obj_set_style_bg_color(pos_overlay_, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(pos_overlay_, LV_OPA_80, 0);
+    lv_obj_add_flag(pos_overlay_, LV_OBJ_FLAG_CLICKABLE);
+    pos_panel_ = make_box(pos_overlay_, 50, 35, 540, 330);
+    lv_obj_set_style_bg_color(pos_panel_, lv_color_hex(kPanel), 0);
+    lv_obj_set_style_bg_opa(pos_panel_, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(pos_panel_, 8, 0);
+    lv_obj_set_style_border_width(pos_panel_, 2, 0);
+    lv_obj_set_style_border_color(pos_panel_, lv_color_hex(kGold), 0);
+    lv_obj_t *title = make_label(pos_panel_, f_big_, kGold, 20, 14, 500, 26);
+    lv_label_set_text(title, "Position");
+    pos_now_ = make_label(pos_panel_, f_small_, kMuted, 20, 44, 500, 20);
+    pos_gps_ = make_button(pos_panel_, 20, 70, 500, 44, "", kTagPosGps, &pos_gps_label_);
+    static const char *const names[2] = {"Latitude", "Longitude"};
+    for (int i = 0; i < 2; ++i) {
+        pos_label_[i] = make_label(pos_panel_, f_small_, kMuted, 20 + i * 260, 124, 240, 20);
+        lv_label_set_text(pos_label_[i], names[i]);
+        // the same field as the editor's
+        lv_obj_t *ta = lv_textarea_create(pos_panel_);
+        lv_obj_set_pos(ta, 20 + i * 260, 146);
+        lv_obj_set_size(ta, 240, 48);
+        lv_textarea_set_one_line(ta, true);
+        lv_obj_set_scrollbar_mode(ta, LV_SCROLLBAR_MODE_OFF);
+        lv_obj_set_style_text_font(ta, f_text_, 0);
+        lv_obj_set_style_text_color(ta, lv_color_hex(kText), 0);
+        lv_obj_set_style_bg_color(ta, lv_color_hex(kBackground), 0);
+        lv_obj_set_style_bg_opa(ta, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(ta, 2, 0);
+        lv_obj_set_style_border_color(ta, lv_color_hex(kGold), 0);
+        lv_obj_set_style_pad_all(ta, 8, 0);
+        lv_obj_set_style_bg_opa(ta, LV_OPA_TRANSP, LV_PART_CURSOR);
+        lv_obj_set_style_border_side(ta, LV_BORDER_SIDE_LEFT, LV_PART_CURSOR | LV_STATE_FOCUSED);
+        lv_obj_set_style_border_width(ta, 2, LV_PART_CURSOR | LV_STATE_FOCUSED);
+        lv_obj_set_style_border_color(ta, lv_color_hex(kGold), LV_PART_CURSOR | LV_STATE_FOCUSED);
+        lv_textarea_set_max_length(ta, 24);
+        lv_obj_add_event_cb(ta, trampoline_button, LV_EVENT_CLICKED, reinterpret_cast<void *>(static_cast<intptr_t>(i == 0 ? kTagPosLat : kTagPosLon)));
+        pos_ta_[i] = ta;
+    }
+    pos_hint_ = make_label(pos_panel_, f_small_, kMuted, 20, 202, 500, 36);
+    lv_label_set_long_mode(pos_hint_, LV_LABEL_LONG_MODE_WRAP);
+    pos_err_ = make_label(pos_panel_, f_small_, kRed, 20, 242, 500, 20);
+    pos_cancel_ = make_button(pos_panel_, 20, 272, 150, 44, "Cancel", kTagPosCancel);
+    pos_clear_ = make_button(pos_panel_, 195, 272, 150, 44, "Clear", kTagPosClear);
+    pos_ok_ = make_button(pos_panel_, 370, 272, 150, 44, "OK", kTagPosOk);
+    lv_obj_set_style_bg_color(pos_ok_, lv_color_hex(kOkGreen), 0);
+    set_hidden(pos_overlay_, true);
 }
 
 void App::build_popup()
@@ -1060,6 +1158,24 @@ std::string App::debug_state() const
          " board_dir=" + store_->board_id() + " others=" + std::to_string(other_boards_n_) +
          " reset=" + (client_->reset_phase() == Client::ResetPhase::None ? "-" : client_->reset_phase() == Client::ResetPhase::Waiting ? "waiting"
                       : client_->reset_phase() == Client::ResetPhase::Done ? "done" : "kept-keys");
+    // the Position box
+    const bool pos_box = editor_open_ && edit_kind_ == EditKind::Position;
+    s += std::string(" pos_box=") + (pos_box ? "1" : "0") + " pos_focus=" + std::to_string(pos_box ? pos_focus_ : -1) +
+         " pos_fields='" + (pos_box ? std::string(lv_textarea_get_text(pos_ta_[0])) + "|" + lv_textarea_get_text(pos_ta_[1]) : std::string()) + "'" +
+         " pos_gps_row=" + (pos_box && pos_gps_shown_ ? "1" : "0") + " pos_err='" + (pos_box ? std::string(lv_label_get_text(pos_err_)) : std::string()) + "'" +
+         " self_pos='" + (model_.self() ? fmt_position(position_is_set(model_.self()->lat, model_.self()->lon), model_.self()->lat, model_.self()->lon) : std::string("-")) + "'" +
+         " gps=" + (model_.caps().gps_listed ? (model_.caps().gps_on ? "on" : "off") : "-");
+    // phase 3: heard back, the packet log
+    {
+        const PacketLog &pl = client_->packet_log();
+        const int64_t first = static_cast<int64_t>(pl.dropped());
+        const bool sel_ok = log_sel_abs_ >= first && log_sel_abs_ < first + static_cast<int64_t>(pl.size());
+        const LoggedPacket *sel = pl.size() == 0 ? nullptr : sel_ok ? &pl.at(static_cast<size_t>(log_sel_abs_ - first)) : &pl.at(pl.size() - 1);
+        const PacketRow pr = sel ? build_packet_row(model_, *sel) : PacketRow();
+        s += std::string(" echoes=") + std::to_string(client_->echoes_open()) + " log_open=" + (nav_.packet_log_open ? "1" : "0") +
+             " log_capture=" + (pl.capturing() ? "1" : "0") + " log_n=" + std::to_string(pl.size()) + " log_sel=" + std::to_string(log_sel_abs_) +
+             " log_row='" + (sel ? pr.route + " " + pr.type + " " + pr.hops + " " + pr.size + " " + pr.channel : std::string()) + "'";
+    }
     return s;
 }
 
@@ -1088,6 +1204,7 @@ void App::select_tab(Tab t)
     // every layer over a page closes with the tab (the search, the Nearby list, the statistics, the select mode)
     if (nav_.search_open) close_search();
     if (nav_.stats_open) close_stats();
+    if (nav_.packet_log_open) close_packet_log();
     if (nav_.nearby_open) close_nearby();
     if (nav_.select_mode) leave_select_mode();
     if (t == Tab::Settings && !dirty_radio_) edit_ = model_.radio_settings();
@@ -1179,6 +1296,7 @@ void App::on_board_changed()
     if (nav_.popup_open || pop_.kind != Popup::None) close_popup();
     if (nav_.search_open) close_search();
     if (nav_.stats_open) close_stats();
+    if (nav_.packet_log_open) close_packet_log();
     if (nav_.nearby_open) close_nearby();
     if (nav_.select_mode) leave_select_mode();
     nav_.detail_open = false;
@@ -1533,9 +1651,12 @@ void App::render()
         render_settings();
         set_hidden(stats_panel_, !nav_.stats_open);
         if (nav_.stats_open) render_stats();
+        set_hidden(log_panel_, !nav_.packet_log_open);
+        if (nav_.packet_log_open) render_packet_log();
         break;
     default: break;
     }
+    position_refresh();
     render_footer();
 }
 
@@ -1677,6 +1798,7 @@ void App::render_chat_messages(bool force)
         sig = fnv_int(sig, static_cast<int>(m->seq));
         sig = fnv_int(sig, static_cast<int>(m->state));
         sig = fnv(sig, m->note);
+        sig = fnv_int(sig, m->heard_back);
     }
     // the clock of the "HH:MM" does not move; the footer and the list carry the ages
     if (!force && built_sig_ == sig && built_conv_ == conv_) return;
@@ -1738,7 +1860,7 @@ void App::render_chat_messages(bool force)
         const StatusText st = message_status(m, channel);
         if (!st.text.empty()) {
             std::string mark = m.state == MsgState::Delivered && !channel ? (dejavu_ ? "\xE2\x9C\x93\xE2\x9C\x93 " : "") :
-                               (m.state == MsgState::Sent || (m.state == MsgState::Delivered && channel)) && m.note.empty() ? (dejavu_ ? "\xE2\x9C\x93 " : "") : "";
+                               (m.state == MsgState::Sent || (m.state == MsgState::Delivered && channel)) && (m.note.empty() || (channel && m.heard_back > 0)) ? (dejavu_ ? "\xE2\x9C\x93 " : "") : "";
             lv_obj_t *sl = make_label(hdr, f_text_small_, tone_color(st.tone), inner_w - 10 - 230, 0, 230, 20, LV_TEXT_ALIGN_RIGHT);
             lv_label_set_text(sl, (mark + st.text).c_str());
         }
@@ -2040,11 +2162,17 @@ void App::render_settings()
         case SRowKind::Position: {
             const auto &self = model_.self();
             const bool has = self && !(self->lat == 0 && self->lon == 0);
-            s = row("Position", has ? fmt_position(true, self->lat, self->lon) : "not set", has ? kText : kMuted, kText, false, false);
+            s = row("Position", has ? fmt_position(true, self->lat, self->lon) : "not set", has ? kText : kMuted, kText, true, false);   // ">": opens the Position box
             break;
         }
         case SRowKind::Stats: s = row("Statistics", "packets, airtime, errors", kMuted, kText, true, false); break;
         case SRowKind::StatsNotice: s = notice_row("Statistics", ctx.stats.notice); break;
+        case SRowKind::PacketLog: {
+            const PacketLog &pl = client_->packet_log();
+            s = row("Packet log", pl.capturing() ? "capturing, " + std::to_string(pl.size()) + " packets" : pl.size() ? "stopped, " + std::to_string(pl.size()) + " packets" : "off: the radio packets heard",
+                    pl.capturing() ? kGold : kMuted, kText, true, false);
+            break;
+        }
         case SRowKind::PathHash: {
             const int mode = dev ? dev->path_hash_mode : -1;
             s = row("Path hash size", mode >= 0 ? path_hash_text(mode) : "unknown", kText, kText, true, false);
@@ -2176,7 +2304,7 @@ void App::render_footer()
         default: left = "Enter or Esc: close"; break;
         }
     } else if (editor_open_) {
-        left = "Type with the keyboard   Enter: OK   Esc: cancel";
+        left = edit_kind_ == EditKind::Position ? "Tab: next field   Enter: OK   Esc: cancel" : "Type with the keyboard   Enter: OK   Esc: cancel";
     } else {
         switch (nav_.tab) {
         case Tab::Chats:
@@ -2190,7 +2318,11 @@ void App::render_footer()
                    : nav_.select_mode ? "Space: mark  A all  N none  I invert  M menu  D delete  G group"
                                       : "Enter: open  I: info  X: select  N: nearby  G: group";
             break;
-        case Tab::Settings: left = nav_.stats_open ? "R: refresh   A: auto refresh   Esc: back" : "Enter: change   Left/Right: step   S: save   V: undo"; break;
+        case Tab::Settings:
+            left = nav_.stats_open ? "R: refresh   A: auto refresh   Esc: back"
+                   : nav_.packet_log_open ? "Up/Down: select  Space: start/stop  C: clear  Esc: back"
+                                          : "Enter: change   Left/Right: step   S: save   V: undo";
+            break;
         default: left = "Tab: next tab   Esc: back"; break;
         }
     }
@@ -2624,6 +2756,10 @@ void App::editor_note(const std::string &text)
 void App::close_editor(bool accept)
 {
     if (!editor_open_) return;
+    if (edit_kind_ == EditKind::Position) {
+        close_position_box(accept);
+        return;
+    }
     const std::string text = lv_textarea_get_text(ed_ta_);
     bool chain_key = false;
     if (accept) {
@@ -2707,6 +2843,10 @@ void App::close_editor(bool accept)
 
 void App::editor_key(const KeyEvent &e)
 {
+    if (edit_kind_ == EditKind::Position) {
+        position_key(e);
+        return;
+    }
     switch (e.key) {
     case Key::Esc:
         if (!e.repeat) close_editor(false);
@@ -2737,6 +2877,175 @@ void App::editor_key(const KeyEvent &e)
     if (edit_kind_ == EditKind::PrivKey && (e.key == Key::Char || e.key == Key::Backspace || e.key == Key::Delete)) {
         const int n = channel_key_digits(lv_textarea_get_text(ed_ta_));
         editor_note(std::to_string(n) + " of 32 hex characters");
+    }
+}
+
+/* ================================================================== the Position box (D6) */
+
+void App::open_position_box()
+{
+    if (editor_open_) return;
+    if (mono_ms() - start_ms_ < kStartGuardMs) return;
+    if (!client_->ready()) { notice("Connect the radio first", false); return; }
+    client_->refresh_self();                                  // the position as the board holds it now (the box shows it when it comes)
+    const auto &self = model_.self();
+    const bool has = self && position_is_set(self->lat, self->lon);
+    lv_textarea_set_text(pos_ta_[0], has ? fmt_coordinate(self->lat).c_str() : "");
+    lv_textarea_set_text(pos_ta_[1], has ? fmt_coordinate(self->lon).c_str() : "");
+    for (lv_obj_t *ta : pos_ta_) lv_textarea_set_cursor_pos(ta, LV_TEXTAREA_CURSOR_LAST);
+    pos_fresh_[0] = pos_fresh_[1] = has;
+    edit_kind_ = EditKind::Position;
+    editor_open_ = true;
+    nav_.editor_open = true;
+    edit_open_ms_ = mono_ms();
+    pos_gps_shown_ = position_box_has_gps(model_.device() ? &*model_.device() : nullptr, model_.caps());
+    position_layout(pos_gps_shown_);
+    position_focus(kPosLat);
+    // no keyboard: the box still opens (the GPS switch and Clear work by touch), and says what is missing to type
+    position_error(keyboard_ready() ? "" : "Keyboard needed to type a position: wake the Bluetooth keyboard", false);
+    position_refresh();
+    set_hidden(pos_overlay_, false);
+    invalidate();
+}
+
+/* The rows of the box; without the GPS switch the rest moves up and the panel is shorter. */
+void App::position_layout(bool gps)
+{
+    const int dy = gps ? 0 : -54;
+    set_hidden(pos_gps_, !gps);
+    for (int i = 0; i < 2; ++i) {
+        lv_obj_set_y(pos_label_[i], 124 + dy);
+        lv_obj_set_y(pos_ta_[i], 146 + dy);
+    }
+    lv_obj_set_y(pos_hint_, 202 + dy);
+    lv_obj_set_y(pos_err_, 242 + dy);
+    for (lv_obj_t *b : {pos_cancel_, pos_clear_, pos_ok_}) lv_obj_set_y(b, 272 + dy);
+    const int h = 330 + dy;
+    lv_obj_set_pos(pos_panel_, 50, (kPageH - h) / 2);
+    lv_obj_set_size(pos_panel_, 540, h);
+    if (!gps && pos_focus_ == kPosGps) position_focus(kPosClear);
+}
+
+/* What the board reports (position, GPS on / off, location sharing) into the box; from render() while it is open. */
+void App::position_refresh()
+{
+    if (!editor_open_ || edit_kind_ != EditKind::Position) return;
+    const bool gps = position_box_has_gps(model_.device() ? &*model_.device() : nullptr, model_.caps());
+    if (gps != pos_gps_shown_) {                              // the custom variables were read while the box is open
+        pos_gps_shown_ = gps;
+        position_layout(gps);
+    }
+    const auto &self = model_.self();
+    const bool has = self && position_is_set(self->lat, self->lon);
+    lv_label_set_text(pos_now_, ("On the board: " + (has ? fmt_position(true, self->lat, self->lon) : std::string("not set"))).c_str());
+    const bool on = gps && model_.caps().gps_on;
+    if (gps) lv_label_set_text(pos_gps_label_, on ? "Board GPS: On    tap to switch off" : "Board GPS: Off    tap to switch on");
+    // the privacy line: setting the position sends no advert; the board puts it into its adverts only when its location policy shares it
+    std::string hint = on ? "The board GPS is on: its fix replaces a typed position." : "Decimal degrees (48.8566 or 48,8566).";
+    hint += self && self->adv_loc_policy == 0 ? " The board keeps its position out of its adverts (location sharing off)."
+                                              : " Other nodes see this position when this node sends an advert.";
+    lv_label_set_text(pos_hint_, hint.c_str());
+}
+
+/* Focus: a field (gold border and the cursor) or a button (the gold ring of the popups). */
+void App::position_focus(int focus)
+{
+    pos_focus_ = focus;
+    for (int i = 0; i < 2; ++i) {
+        const bool f = focus == i;
+        lv_obj_set_style_border_color(pos_ta_[i], lv_color_hex(f ? kGold : kPressed), 0);
+        if (f) lv_obj_add_state(pos_ta_[i], LV_STATE_FOCUSED);
+        else lv_obj_remove_state(pos_ta_[i], LV_STATE_FOCUSED);
+    }
+    lv_obj_set_style_border_width(pos_gps_, focus == kPosGps ? 3 : 0, 0);
+    lv_obj_set_style_border_color(pos_gps_, lv_color_hex(kGold), 0);
+    lv_obj_set_style_border_width(pos_clear_, focus == kPosClear ? 3 : 0, 0);
+    lv_obj_set_style_border_color(pos_clear_, lv_color_hex(kGold), 0);
+}
+
+void App::position_error(const std::string &text, bool error)
+{
+    set_color(pos_err_, error ? kRed : kMuted);
+    lv_label_set_text(pos_err_, text.c_str());
+}
+
+/* OK / Enter (apply: checked first, nothing is sent on a bad value), Cancel / Esc (apply false), or Clear (0, 0). */
+void App::close_position_box(bool apply)
+{
+    if (!editor_open_ || edit_kind_ != EditKind::Position) return;
+    if (apply) {
+        double lat = 0, lon = 0;
+        const std::string bad = parse_position(lv_textarea_get_text(pos_ta_[0]), lv_textarea_get_text(pos_ta_[1]), lat, lon);
+        if (!bad.empty()) {
+            position_error(bad, true);
+            position_focus(bad.find("atitude") != std::string::npos ? kPosLat : kPosLon);
+            return;
+        }
+        if (!client_->set_position(lat, lon)) { position_error(client_->notice().text, true); return; }
+    }
+    editor_open_ = false;
+    nav_.editor_open = false;
+    set_hidden(pos_overlay_, true);
+    invalidate();
+}
+
+void App::position_clear()
+{
+    const auto &self = model_.self();
+    if (!self || !position_is_set(self->lat, self->lon)) { position_error("No position to clear: the board has none", false); return; }
+    if (!client_->set_position(0, 0)) { position_error(client_->notice().text, true); return; }
+    close_position_box(false);
+}
+
+void App::position_key(const KeyEvent &e)
+{
+    switch (e.key) {
+    case Key::Esc:
+        if (!e.repeat) close_position_box(false);
+        return;
+    case Key::Enter:
+        if (e.repeat || mono_ms() - edit_open_ms_ < 350) return;          // an Enter already on its way must not apply
+        if (pos_focus_ == kPosGps) client_->set_board_gps(!model_.caps().gps_on);
+        else if (pos_focus_ == kPosClear) position_clear();
+        else close_position_box(true);
+        return;
+    case Key::Tab:
+    case Key::BackTab: {
+        if (e.repeat) return;
+        std::vector<int> order = {kPosLat, kPosLon};
+        if (pos_gps_shown_) order.push_back(kPosGps);
+        order.push_back(kPosClear);
+        const int n = static_cast<int>(order.size());
+        int at = static_cast<int>(std::find(order.begin(), order.end(), pos_focus_) - order.begin());
+        if (at >= n) at = 0;
+        position_focus(order[static_cast<size_t>((at + (e.key == Key::Tab ? 1 : n - 1)) % n)]);
+        return;
+    }
+    default: break;
+    }
+    if (pos_focus_ != kPosLat && pos_focus_ != kPosLon) return;
+    const int i = pos_focus_;
+    lv_obj_t *ta = pos_ta_[i];
+    switch (e.key) {
+    case Key::Backspace: pos_fresh_[i] = false; lv_textarea_delete_char(ta); break;
+    case Key::Delete: pos_fresh_[i] = false; lv_textarea_delete_char_forward(ta); break;
+    case Key::Left: pos_fresh_[i] = false; lv_textarea_cursor_left(ta); break;
+    case Key::Right: pos_fresh_[i] = false; lv_textarea_cursor_right(ta); break;
+    case Key::Home: pos_fresh_[i] = false; lv_textarea_set_cursor_pos(ta, 0); break;
+    case Key::End: pos_fresh_[i] = false; lv_textarea_set_cursor_pos(ta, LV_TEXTAREA_CURSOR_LAST); break;
+    case Key::Char: {
+        if (e.ctrl || e.alt) break;
+        const char *cur = lv_textarea_get_text(ta);
+        const std::string add = filter_typed(EditMode::Number, pos_fresh_[i] ? "" : (cur ? cur : ""), e.text, 16);     // digits, '.', '-'; ',' becomes '.'
+        if (!add.empty()) {
+            if (pos_fresh_[i]) lv_textarea_set_text(ta, "");    // like a selected text: the first character replaces it
+            pos_fresh_[i] = false;
+            lv_textarea_add_text(ta, add.c_str());
+        }
+        position_error("", true);
+        break;
+    }
+    default: break;
     }
 }
 
@@ -2944,14 +3253,11 @@ void App::settings_activate(int index, int x)
     case SRowKind::AutoAddNotice:
     case SRowKind::ChannelsNotice: break;
     case SRowKind::Position:
-        if (client_->refresh_self()) {
-            self_refresh_ms_ = mono_ms();
-            notice("Reading the position from the board...", true);
-        } else {
-            notice("Connect the radio first", false);
-        }
+        self_refresh_ms_ = mono_ms();
+        open_position_box();                                  // (it reads the position from the board again as it opens)
         break;
     case SRowKind::Stats: open_stats(); break;
+    case SRowKind::PacketLog: open_packet_log(); break;
     case SRowKind::PathHash: settings_choice(ChoiceField::PathHash); break;
     case SRowKind::Repeat: ask_repeat(!(model_.device() && model_.device()->repeat)); break;
     case SRowKind::AdvertEvery: settings_choice(ChoiceField::AdvertEvery); break;
@@ -3706,6 +4012,7 @@ void App::tick_phase2(uint64_t now)
         close_stats();
         notice("Firmware too old for this feature: Statistics", false);
     }
+    if (nav_.packet_log_open && client_->packet_log().revision() != log_rev_) invalidate();
     if (nav_.stats_open && client_->ready()) {
         if (stats_auto_ && now - stats_ms_ >= 5000 && !client_->stats_busy()) {
             stats_ms_ = now;
@@ -3715,6 +4022,133 @@ void App::tick_phase2(uint64_t now)
             stats_sig_ = model_.revision();
             invalidate();
         }
+    }
+}
+
+/* ---- the packet log (D8) */
+
+void App::open_packet_log()
+{
+    nav_.packet_log_open = true;
+    log_rev_ = 0;
+    log_built_sel_ = ~0ull;
+    invalidate();
+}
+
+void App::close_packet_log()
+{
+    nav_.packet_log_open = false;
+    set_hidden(log_panel_, true);
+    invalidate();
+}
+
+void App::packet_log_toggle()
+{
+    PacketLog &pl = client_->packet_log();
+    if (pl.capturing()) {
+        pl.stop();
+        notice("Packet capture stopped: " + std::to_string(pl.size()) + " packets kept", true);
+    } else {
+        pl.start();
+        if (log_) log_->line("packet log: capture started");
+        notice("Capturing the packets the board hears (memory only, the last 500)", true);
+    }
+    invalidate();
+}
+
+void App::packet_log_clear()
+{
+    client_->packet_log().clear();
+    log_sel_abs_ = -1;
+    notice("Packet log cleared", true);
+    invalidate();
+}
+
+void App::packet_log_select(int64_t abs_index)
+{
+    const PacketLog &pl = client_->packet_log();
+    if (pl.size() == 0) { log_sel_abs_ = -1; return; }
+    const int64_t first = static_cast<int64_t>(pl.dropped());
+    const int64_t last = first + static_cast<int64_t>(pl.size()) - 1;
+    abs_index = std::clamp<int64_t>(abs_index, first, last);
+    log_sel_abs_ = abs_index == last ? -1 : abs_index;          // on the newest row: keep following the new ones
+    invalidate();
+}
+
+void App::render_packet_log()
+{
+    const PacketLog &pl = client_->packet_log();
+    lv_label_set_text(log_status_, packet_log_status(pl).c_str());
+    set_color(log_status_, pl.capturing() ? kGold : kMuted);
+    lv_label_set_text(log_toggle_label_, pl.capturing() ? "Stop" : "Start");
+    lv_obj_set_style_bg_color(log_toggle_, lv_color_hex(pl.capturing() ? kOkGreen : kSelected), 0);
+
+    const int64_t first = static_cast<int64_t>(pl.dropped());
+    if (log_sel_abs_ >= 0 && (log_sel_abs_ < first || log_sel_abs_ >= first + static_cast<int64_t>(pl.size()))) log_sel_abs_ = -1;
+    const int sel = pl.size() == 0 ? -1 : log_sel_abs_ < 0 ? static_cast<int>(pl.size()) - 1 : static_cast<int>(log_sel_abs_ - first);
+    const uint64_t sel_key = static_cast<uint64_t>(sel + 1);
+    if (pl.revision() != log_rev_) {
+        if (plat_.touching()) return;                     // never rebuild a list under the finger
+        log_rev_ = pl.revision();
+        std::vector<RowSpec> specs;
+        specs.reserve(pl.size());
+        const int y = centre(kLogRowH, f_small_);
+        for (size_t i = 0; i < pl.size(); ++i) {
+            const PacketRow r = build_packet_row(model_, pl.at(i));
+            RowSpec s;
+            s.h = kLogRowH;
+            s.id = std::to_string(first + static_cast<int64_t>(i));
+            const std::string *v[8] = {&r.time, &r.route, &r.type, &r.hops, &r.snr, &r.rssi, &r.size, &r.channel};
+            for (int c = 0; c < 8; ++c)
+                s.cells.push_back({*v[c], c == 2 || c == 7 ? kText : kMuted, kLogCol[c][0], kLogCol[c][1], LV_TEXT_ALIGN_LEFT, f_small_, y});
+            specs.push_back(std::move(s));
+        }
+        if (specs.empty()) {
+            RowSpec s;
+            s.h = 60;
+            s.selectable = false;
+            s.cells.push_back({pl.capturing() ? "Capturing: waiting for the board to hear a packet..." : "Not capturing. Space or Start records the packets the board hears.",
+                               kMuted, 12, 616, LV_TEXT_ALIGN_LEFT, f_ui_, 8});
+            s.cells.push_back({"Off at every start; kept in memory only, the last 500. Nothing is written to disk.", kMuted, 12, 616, LV_TEXT_ALIGN_LEFT, f_small_, 34});
+            specs.push_back(std::move(s));
+        }
+        log_list_.set(std::move(specs), sel, true);
+        log_built_sel_ = sel_key;
+        log_list_.scroll_to_selected();
+    } else if (sel_key != log_built_sel_) {
+        log_built_sel_ = sel_key;
+        log_list_.set_selected(sel, true, true);
+    }
+    if (sel >= 0) {
+        const LogPacket &pk = pl.at(static_cast<size_t>(sel)).pkt;
+        lv_label_set_text(log_detail_, packet_detail(pk).c_str());
+        lv_label_set_text(log_hex_, packet_hex(pk.raw).c_str());
+    } else {
+        lv_label_set_text(log_detail_, "");
+        lv_label_set_text(log_hex_, "");
+    }
+}
+
+void App::key_packet_log(const KeyEvent &e)
+{
+    const PacketLog &pl = client_->packet_log();
+    const int64_t first = static_cast<int64_t>(pl.dropped());
+    const int64_t cur = log_sel_abs_ < 0 ? first + static_cast<int64_t>(pl.size()) - 1 : log_sel_abs_;
+    switch (e.key) {
+    case Key::Up: packet_log_select(cur - 1); break;
+    case Key::Down: packet_log_select(cur + 1); break;
+    case Key::PageUp: packet_log_select(cur - 7); break;
+    case Key::PageDown: packet_log_select(cur + 7); break;
+    case Key::Home: packet_log_select(first); break;
+    case Key::End: packet_log_select(first + static_cast<int64_t>(pl.size())); break;
+    case Key::Char: {
+        if (e.ctrl || e.alt || e.repeat) break;
+        const char c = e.text.size() == 1 ? static_cast<char>(std::tolower(static_cast<unsigned char>(e.text[0]))) : 0;
+        if (c == ' ' || c == 's') packet_log_toggle();
+        else if (c == 'c') packet_log_clear();
+        break;
+    }
+    default: break;
     }
 }
 
@@ -3826,8 +4260,27 @@ void App::button_clicked(int tag)
         stats_auto_ = !stats_auto_;
         invalidate();
         break;
+    case kTagLogToggle: packet_log_toggle(); break;
+    case kTagLogClear: packet_log_clear(); break;
+    case kTagLogClose: close_packet_log(); break;
     case kTagEdOk: close_editor(true); break;
     case kTagEdCancel: close_editor(false); break;
+    // the Position box (its buttons only act while it is open)
+    case kTagPosOk: close_position_box(true); break;
+    case kTagPosCancel: close_position_box(false); break;
+    case kTagPosClear:
+        if (editor_open_ && edit_kind_ == EditKind::Position) position_clear();
+        break;
+    case kTagPosGps:
+        if (editor_open_ && edit_kind_ == EditKind::Position) {
+            position_focus(kPosGps);
+            client_->set_board_gps(!model_.caps().gps_on);
+        }
+        break;
+    case kTagPosLat:
+    case kTagPosLon:
+        if (editor_open_ && edit_kind_ == EditKind::Position) position_focus(tag == kTagPosLat ? kPosLat : kPosLon);
+        break;
     default: break;
     }
 }
@@ -3862,6 +4315,9 @@ void App::row_clicked(RowList *list, int index, int x)
     } else if (list == &settings_list_) {
         settings_activate(index, x);
         invalidate();
+    } else if (list == &log_list_) {
+        const std::string &id = log_list_.id_at(index);
+        if (!id.empty()) packet_log_select(std::atoll(id.c_str()));
     }
 }
 
@@ -3873,6 +4329,7 @@ void App::back()
     case BackAction::CancelEditor: close_editor(false); break;
     case BackAction::CloseSearch: close_search(); break;
     case BackAction::CloseStats: close_stats(); break;
+    case BackAction::ClosePacketLog: close_packet_log(); break;
     case BackAction::CloseNearby: close_nearby(); break;
     case BackAction::ExitSelect: leave_select_mode(); break;
     case BackAction::CloseDetail:
@@ -4104,6 +4561,7 @@ void App::on_key(const KeyEvent &e)
     case Tab::Contacts: key_contacts(e); break;
     case Tab::Settings:
         if (nav_.stats_open) key_stats(e);
+        else if (nav_.packet_log_open) key_packet_log(e);
         else key_settings(e);
         break;
     default: break;

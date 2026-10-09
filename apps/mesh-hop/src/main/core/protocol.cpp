@@ -562,6 +562,16 @@ Bytes build_set_radio(double freq_mhz, double bw_khz, uint8_t sf, uint8_t cr, in
     return b;
 }
 
+Bytes build_set_advert_latlon(double lat, double lon)
+{
+    // meshcore_py truncates int(lat * 1e6); rounding keeps a typed 48.8566 at 48856600 rather than 48856599.
+    Bytes b = {cmd::kSetAdvertLatLon};
+    put_u32(b, static_cast<uint32_t>(static_cast<int32_t>(std::llround(lat * 1e6))));
+    put_u32(b, static_cast<uint32_t>(static_cast<int32_t>(std::llround(lon * 1e6))));
+    put_u32(b, 0);                              // altitude
+    return b;
+}
+
 Bytes build_remove_contact(const PubKey &key)
 {
     Bytes b = {cmd::kRemoveContact};

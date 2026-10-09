@@ -772,6 +772,75 @@ static void test_channel_status_text()
     m.state = MsgState::Failed;
     m.note = "table full";
     CHECK(message_status(m, true).text == "failed: table full");
+    // heard back over repeaters (phase 3): only a sent channel message says it, "sent" until the first echo
+    m.state = MsgState::Sent;
+    m.note.clear();
+    m.heard_back = 0;
+    CHECK(message_status(m, true).text == "sent");
+    m.heard_back = 1;
+    CHECK(message_status(m, true).text == "heard back by 1 repeater" && message_status(m, true).tone == Tone::Blue);
+    m.heard_back = 3;
+    CHECK(message_status(m, true).text == "heard back by 3 repeaters");
+    m.note = "no confirmation from the board";                                              // the echo shows it went out after all
+    CHECK(message_status(m, true).text == "heard back by 3 repeaters");
+    CHECK(message_status(m, false).text == "sent, waiting for ack");                       // never on a direct message
+    m.state = MsgState::Pending;
+    m.note.clear();
+    CHECK(message_status(m, true).text == "sending");
+}
+
+static void test_packet_log_rows()
+{
+    Model model;
+    ChannelRec pub;
+    pub.idx = 0; pub.name = "Public"; pub.empty = false; pub.has_secret = true; pub.secret = kPublicChannelSecret;
+    model.set_channel(pub);
+    const uint8_t h = sha256(kPublicChannelSecret.data(), kPublicChannelSecret.size())[0];
+    ChannelRec cached;                                                       // no key read in this session: never matched
+    cached.idx = 2; cached.name = "Cached"; cached.empty = false; cached.has_secret = false; cached.secret = kPublicChannelSecret;
+    model.set_channel(cached);
+
+    Bytes f = {0x88, static_cast<uint8_t>(-22), static_cast<uint8_t>(-104), 0x15, 0x41, 0x63, 0xde, h};
+    for (int i = 0; i < 34; ++i) f.push_back(static_cast<uint8_t>(i));
+    LoggedPacket lp;
+    CHECK(parse_log_rx(f, lp.pkt));
+    lp.time = 0;
+    PacketRow r = build_packet_row(model, lp);
+    char hh[4];
+    std::snprintf(hh, sizeof(hh), "%02x", h);
+    CHECK(r.time == "--:--:--" && r.route == "FLOOD" && r.type == "GRP_TXT" && r.hops == "1" && r.snr == "-5.50" && r.rssi == "-104" && r.size == "35");
+    CHECK(r.channel == std::string(hh) + " Public");
+    // a second channel with the same key: the hash is ambiguous
+    ChannelRec twin = pub;
+    twin.idx = 3; twin.name = "Twin";
+    model.set_channel(twin);
+    CHECK(channels_for_hash(model, h).size() == 2 && build_packet_row(model, lp).channel == std::string(hh) + " Public|Twin ?");
+    CHECK(channels_for_hash(model, h ^ 1).empty());
+    // transport direct, unknown type, no channel column for other types
+    LogPacket t;
+    CHECK(parse_log_rx({0x88, 4, 0xF0, 0x37, 0x11, 0x22, 0x33, 0x44, 0x00, 0x99}, t));
+    CHECK(route_name(t) == "T-DIRECT" && std::string(payload_type_name(t.payload_type)) == "TYPE 13" && channel_hash_text(model, t).empty());
+    CHECK(packet_detail(t) == "path: none (heard from the sender)  transport 2211 4433  raw 7 bytes");
+    CHECK(std::string(payload_type_name(4)) == "ADVERT" && std::string(payload_type_name(15)) == "RAW_CUSTOM");
+    CHECK(packet_detail(lp.pkt) == "path 63de (1 hop, 2-byte hashes)  raw 39 bytes");
+    CHECK(packet_hex({0x15, 0x41, 0x63, 0xde, 0xd9}) == "154163de d9" && packet_hex({}).empty());
+    CHECK(fmt_hms(1790000000).size() == 8 && fmt_hms(1790000000)[2] == ':');
+    PacketLog log(3);
+    CHECK(packet_log_status(log) == "Stopped: 0 / 3");
+    log.start();
+    for (int i = 0; i < 5; ++i) log.add(lp.pkt, 1);
+    CHECK(packet_log_status(log) == "Capturing: 3 / 3, 2 dropped");
+    // navigation: Esc closes the packet log; the row is in Settings, connected or not
+    NavState n;
+    n.tab = Tab::Settings;
+    n.packet_log_open = true;
+    CHECK(back_action(n) == BackAction::ClosePacketLog);
+    n.popup_open = true;
+    CHECK(back_action(n) == BackAction::ClosePopup);
+    SettingsContext ctx;
+    bool found = false;
+    for (const SRowSpec &s : settings_layout(ctx)) found = found || s.kind == SRowKind::PacketLog;
+    CHECK(found && settings_row_selectable(SRowKind::PacketLog));
 }
 
 static void test_hex_key_editor()
@@ -935,6 +1004,7 @@ int main()
     test_settings_layout();
     test_navigation_popup();
     test_channel_status_text();
+    test_packet_log_rows();
     test_hex_key_editor();
     test_describe_changes();
     std::printf("ui: %d checks, %d failed\n", g_checks, g_fail);

@@ -37,6 +37,10 @@ struct Message {
     double snr = 0;
     int hops = -1;               // -1: direct / unknown
     std::string note;            // failure reason
+    /* A channel message we sent: on how many distinct non-empty routes the board heard it come back (Client: EchoTracker). It stands for
+     * "repeaters" but is only an approximation: one repeater heard over two routes counts twice, two repeaters with the same hop hash
+     * count once, and a message of the same size from another sender on the channel in the same minute can be taken for ours. 0 = none. */
+    int heard_back = 0;
 };
 
 struct ContactRec {
@@ -177,6 +181,7 @@ public:
     virtual ~Listener() = default;
     virtual void message_added(const Message &m) = 0;
     virtual void message_state(uint32_t seq, MsgState state, const std::string &note) = 0;
+    virtual void message_heard_back(uint32_t /*seq*/, int /*count*/) {}      // the final count of a channel message (its window closed)
     virtual void contacts_changed() = 0;
     virtual void channels_changed() = 0;
     virtual void read_changed() = 0;
@@ -308,6 +313,9 @@ public:
     uint32_t add_outgoing(const std::string &conv, const std::string &text, uint32_t local_time, int hops = -1);
     void load_message(const Message &m);                         // from the history (no listener call)
     void set_state(uint32_t seq, MsgState state, const std::string &note = "");
+    /* The heard-back count of a channel message we sent (Message::heard_back). final: the window is closed, the count no longer moves and
+     * is saved with the message (only then: the live updates stay in memory). */
+    void set_heard_back(uint32_t seq, int count, bool final);
     const Message *find_message(uint32_t seq) const;
     std::vector<const Message *> messages(const std::string &conv) const;   // oldest first
     std::vector<ConvSummary> conversations() const;               // channels, then directs by last activity

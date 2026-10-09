@@ -17,7 +17,8 @@ wait 800
 say == the board refused GET_STATS (expect stats_open=0 stats=- notice='Firmware too old for this feature: Statistics')
 dump
 shot o02-stats-notice
-# scroll to the radio rows: the path hash size and repeat notices
+# scroll to the radio rows: the path hash size and repeat notices (past the Packet log row)
+key down
 key down
 key down
 key down

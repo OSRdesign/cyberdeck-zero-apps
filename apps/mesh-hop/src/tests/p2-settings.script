@@ -1,6 +1,6 @@
 # Mesh Hop 0.2.0 phase 2: the statistics screen, the path hash size, repeat, the scheduled advert, manual add and the auto-add types,
 # the position row, reboot and factory reset (D2, D5, D6, D9, the path hash mode).  Default simulator (firmware level 11, mode 1 = 2 byte hashes).
-# Selectable Settings rows in order: Position, Board GPS, Statistics, Node name, Preset, Frequency, Bandwidth, SF, CR, TX power, Path hash size,
+# Selectable Settings rows in order: Position, Board GPS, Statistics, Packet log, Node name, Preset, Frequency, Bandwidth, SF, CR, TX power, Path hash size,
 # Repeat, Message tries, Forget the route, Advert every, Advert type, Add nodes by itself, Still added by itself, Sync clock, ... Reboot, Factory reset, Undo, Save.
 wait 3500
 key tab
@@ -27,7 +27,8 @@ wait 300
 say == Esc closes the statistics, not the app (expect stats_open=0 tab=Settings)
 dump
 
-# the path hash size: a box with a large arrow each side, the one line of explanation, 3 bytes
+# the path hash size: a box with a large arrow each side, the one line of explanation, 3 bytes (Packet log, then the radio rows)
+key down
 key down
 key down
 key down
@@ -119,12 +120,14 @@ key down
 key down
 shot t08-settings-contacts
 
-# the position row reads the board again
+# the position row opens the Position box (it reads the board again); position.script tests the box itself
 key home
 key enter
 wait 600
-say == position read (expect a notice: Reading the position from the board...)
+say == the Position box (expect pos_box=1)
 dump
+key esc
+wait 300
 
 # reboot: Yes / No, the link goes away and comes back
 key end

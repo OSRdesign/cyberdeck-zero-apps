@@ -6,6 +6,7 @@
 
 #include "client.hpp"
 #include "protocol.hpp"
+#include "sha256.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -984,6 +985,7 @@ std::vector<SRowSpec> settings_layout(const SettingsContext &ctx)
     else if (!ctx.gps.notice.empty()) add(SRowKind::GpsNotice);
     if (ctx.stats.available) add(SRowKind::Stats);
     else if (!ctx.stats.notice.empty()) add(SRowKind::StatsNotice);
+    add(SRowKind::PacketLog);                       // the packet log (D8): an app capture, also viewable when the board is gone
     add(SRowKind::Header, 1);                       // RADIO
     add(SRowKind::Name);
     add(SRowKind::Preset);
@@ -1254,6 +1256,7 @@ BackAction back_action(const NavState &s)
     if (s.editor_open) return BackAction::CancelEditor;
     if (s.search_open) return BackAction::CloseSearch;
     if (s.stats_open) return BackAction::CloseStats;
+    if (s.packet_log_open) return BackAction::ClosePacketLog;
     if (s.detail_open) return BackAction::CloseDetail;
     if (s.nearby_open) return BackAction::CloseNearby;
     if (s.select_mode) return BackAction::ExitSelect;
@@ -1270,7 +1273,11 @@ StatusText message_status(const Message &m, bool channel)
     switch (m.state) {
     case MsgState::Pending: s.text = m.note.empty() ? "sending" : m.note; s.tone = Tone::Gold; break;
     case MsgState::Sent:
-        if (channel) {
+        if (channel && m.heard_back > 0) {
+            // came back over repeaters: it went out, whatever the board answered (N = distinct routes, an approximation of repeaters)
+            s.text = "heard back by " + std::to_string(m.heard_back) + (m.heard_back == 1 ? " repeater" : " repeaters");
+            s.tone = Tone::Blue;
+        } else if (channel) {
             s.text = m.note.empty() ? "sent" : "sent (unconfirmed)";
             s.tone = m.note.empty() ? Tone::Blue : Tone::Gold;
         } else {
@@ -1286,6 +1293,113 @@ StatusText message_status(const Message &m, bool channel)
     case MsgState::NoAck: s.text = "no ack"; s.tone = Tone::Red; break;
     default: break;
     }
+    return s;
+}
+
+/* ------------------------------------------------------------------ phase 3: the packet log (D8) */
+
+const char *payload_type_name(uint8_t type)
+{
+    static const char *const names[16] = {"REQ", "RESPONSE", "TXT_MSG", "ACK", "ADVERT", "GRP_TXT", "GRP_DATA", "ANON_REQ", "PATH", "TRACE",
+                                          "MULTIPART", "CONTROL", "TYPE 12", "TYPE 13", "TYPE 14", "RAW_CUSTOM"};
+    return names[type & 15];
+}
+
+std::string route_name(const LogPacket &p)
+{
+    const bool direct = p.route_type == logdata::kRouteDirect || p.route_type == logdata::kRouteTransportDirect;
+    return std::string(p.has_transport ? "T-" : "") + (direct ? "DIRECT" : "FLOOD");
+}
+
+std::string fmt_hms(uint32_t ts)
+{
+    if (ts < kMinPlausibleTime) return "--:--:--";
+    const time_t t = static_cast<time_t>(ts);
+    struct tm tmv;
+    localtime_r(&t, &tmv);
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "%02d:%02d:%02d", tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
+    return buf;
+}
+
+std::vector<std::string> channels_for_hash(const Model &model, int hash)
+{
+    std::vector<std::string> out;
+    if (hash < 0) return out;
+    for (const ChannelRec &c : model.channels()) {
+        if (c.empty || !c.has_secret) continue;
+        if (sha256(c.secret.data(), c.secret.size())[0] == hash) out.push_back(c.name);
+    }
+    return out;
+}
+
+std::string channel_hash_text(const Model &model, const LogPacket &p)
+{
+    const int hash = p.channel_hash();
+    if (hash < 0) return "";
+    char h[4];
+    std::snprintf(h, sizeof(h), "%02x", hash);
+    const std::vector<std::string> names = channels_for_hash(model, hash);
+    std::string s = h;
+    for (size_t i = 0; i < names.size(); ++i) s += (i == 0 ? " " : "|") + names[i];
+    if (names.size() > 1) s += " ?";
+    return s;
+}
+
+PacketRow build_packet_row(const Model &model, const LoggedPacket &lp)
+{
+    const LogPacket &p = lp.pkt;
+    PacketRow r;
+    r.time = fmt_hms(lp.time);
+    r.route = route_name(p);
+    r.type = payload_type_name(p.payload_type);
+    r.hops = std::to_string(p.hop_count);
+    char b[32];
+    std::snprintf(b, sizeof(b), "%.2f", p.snr);
+    r.snr = b;
+    r.rssi = std::to_string(p.rssi);
+    r.size = std::to_string(p.payload.size());
+    r.channel = channel_hash_text(model, p);
+    return r;
+}
+
+std::string packet_hex(const Bytes &raw)
+{
+    std::string s;
+    s.reserve(raw.size() * 2 + raw.size() / 4);
+    for (size_t i = 0; i < raw.size(); ++i) {
+        if (i && i % 4 == 0) s += ' ';
+        s += to_hex(&raw[i], 1);
+    }
+    return s;
+}
+
+std::string packet_detail(const LogPacket &p)
+{
+    std::string s;
+    if (p.path.empty()) {
+        s = "path: none (heard from the sender)";
+    } else {
+        s = "path ";
+        for (size_t i = 0; i < p.path.size(); i += p.hash_size) {
+            if (i) s += ">";
+            s += to_hex(&p.path[i], std::min<size_t>(p.hash_size, p.path.size() - i));
+        }
+        s += " (" + std::to_string(p.hop_count) + (p.hop_count == 1 ? " hop, " : " hops, ") + std::to_string(p.hash_size) + "-byte hashes)";
+    }
+    if (p.has_transport) {
+        char b[32];
+        std::snprintf(b, sizeof(b), "  transport %04x %04x", p.transport[0], p.transport[1]);
+        s += b;
+    }
+    s += "  raw " + std::to_string(p.raw.size()) + " bytes";
+    return s;
+}
+
+std::string packet_log_status(const PacketLog &log)
+{
+    std::string s = std::string(log.capturing() ? "Capturing: " : "Stopped: ") + std::to_string(log.size()) + " / " + std::to_string(log.capacity());
+    if (log.dropped()) s += ", " + std::to_string(log.dropped()) + " dropped";
     return s;
 }
 

@@ -14,9 +14,11 @@
 #include "channel_key.hpp"
 #include "features.hpp"
 #include "log.hpp"
+#include "logdata.hpp"
 #include "presets.hpp"
 #include "preset_feed.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
@@ -2037,8 +2039,455 @@ static void test_preset_feed()
 #include "test_phase2.inc"
 #include "test_boards.inc"
 
+static Bytes hex_sp(std::string s)
+{
+    s.erase(std::remove(s.begin(), s.end(), ' '), s.end());
+    return hex(s.c_str());
+}
+
+static void test_logdata()
+{
+    // two frames from a real board (Seeed Xiao S3 WIO, firmware v1.15.0)
+    const Bytes a = hex_sp("88 32 df 15 41 63 de d9 eb 43 0a 61 9f 64 01 27 8e 27 b9 c8 31 a8 d1 b8 c8 e0 a7 a2 d9 59 ea 18 3f 67 9e d3 fd 95 f7 57 84 1d 46 69 44 2f 34 04 da 1d 31 bd d7 f5 39 3d ab e3 ab b7 0d b6 46 aa bb 3b 7e f7 5f 37 59 b6 e1 e7 8f 54 ab a8 58 12 fa 6a 6d e8 b8 45 3f 8f 8f cf");
+    const Bytes b = hex_sp("88 31 de 01 44 b0 36 87 7d aa e9 63 de 32 34 53 7d 77 d2 d7 22 b8 35 65 11 5e 56 84 7b 67 dc dd 24");
+    LogPacket pa, pb;
+    CHECK(parse_log_rx(a, pa));
+    CHECK(pa.snr == 12.5 && pa.rssi == -33);
+    CHECK(pa.route_type == logdata::kRouteFlood && pa.payload_type == 5 && pa.version == 0 && !pa.has_transport);
+    CHECK(pa.hop_count == 1 && pa.hash_size == 2 && pa.path == hex("63de"));
+    CHECK(pa.payload.size() == 83 && pa.payload[0] == 0xd9);
+    CHECK(pa.is_group_text() && pa.channel_hash() == 0xd9 && pa.echo_key() == pa.payload);
+    CHECK(pa.raw.size() == a.size() - 3);
+    CHECK(parse_log_rx(b, pb));
+    CHECK(pb.snr == 12.25 && pb.rssi == -34 && pb.route_type == 1 && pb.payload_type == 0);
+    CHECK(pb.hop_count == 4 && pb.hash_size == 2 && pb.path.size() == 8 && pb.payload.size() == 20);
+    CHECK(!pb.is_group_text() && pb.channel_hash() == -1 && pb.echo_key().empty());
+
+    // sizes: name '5F3945EB' (8) + 51 bytes of text -> 83
+    CHECK(expected_grp_txt_payload_size(8, 51) == 83);
+    CHECK(expected_grp_txt_payload_size(0, 0) == 3 + 16);
+    CHECK(expected_grp_txt_payload_size(1, 8) == 3 + 16);      // 4+1+1+2+8 = 16
+    CHECK(expected_grp_txt_payload_size(1, 9) == 3 + 32);
+
+    // every truncation: never out of bounds, and a true result is self consistent
+    for (const Bytes *s : {&a, &b})
+        for (size_t n = 0; n <= s->size(); ++n) {
+            const Bytes cut(s->begin(), s->begin() + n);
+            LogPacket p;
+            const bool ok = parse_log_rx(cut, p);
+            if (ok)
+                CHECK(3 + 1 + 1 + p.path.size() + p.payload.size() == n);
+            if (n < 5)
+                CHECK(!ok);
+        }
+    {   // A cut inside the path is rejected, a cut inside the payload still parses
+        LogPacket p;
+        CHECK(!parse_log_rx(Bytes(a.begin(), a.begin() + 6), p));
+        CHECK(parse_log_rx(Bytes(a.begin(), a.begin() + 8), p) && p.payload.size() == 1);
+    }
+    // transport codes (route types 0 and 3), hash size 3, reserved hash size 4, wrong code
+    {
+        LogPacket p;
+        CHECK(parse_log_rx(hex_sp("88 04 f0 14 11 22 33 44 82 aa bb cc dd ee ff 99"), p));
+        CHECK(p.route_type == 0 && p.has_transport && p.transport[0] == 0x2211 && p.transport[1] == 0x4433);
+        CHECK(p.hop_count == 2 && p.hash_size == 3 && p.path.size() == 6 && p.payload == hex("99") && p.rssi == -16);
+        CHECK(!parse_log_rx(hex_sp("88 04 f0 14 11 22 33 44"), p));
+        CHECK(!parse_log_rx(hex_sp("88 04 f0 15 c1 aa bb cc dd 99"), p));         // hash size 4
+        CHECK(!parse_log_rx(hex_sp("89 04 f0 15 00 99"), p));
+        CHECK(parse_log_rx(hex_sp("88 04 f0 15 00"), p) && p.payload.empty() && p.channel_hash() == -1);
+        Bytes big = hex_sp("88 04 f0 15 bf");                                        // 63 hops * 3 = 189 > 64
+        big.resize(big.size() + 200, 0x55);
+        CHECK(!parse_log_rx(big, p));
+    }
+    // garbage
+    {
+        uint32_t x = 12345;
+        for (int i = 0; i < 20000; ++i) {
+            Bytes g(1 + (x >> 8) % 40);
+            for (auto &c : g) {
+                x = x * 1664525u + 1013904223u;
+                c = static_cast<uint8_t>(x >> 24);
+            }
+            if (i & 1)
+                g[0] = 0x88;
+            LogPacket p;
+            if (parse_log_rx(g, p))
+                CHECK(p.path.size() == static_cast<size_t>(p.hop_count) * p.hash_size && p.path.size() <= 64);
+        }
+    }
+
+    // EchoTracker
+    {
+        EchoTracker t;
+        CHECK(t.window() == 60.0);
+        const int id = t.register_sent(0xd9, 100.0, 83);
+        CHECK(!t.has_echo(id) && t.matched_key(id).empty());
+        CHECK(t.on_packet(pb, 101) == EchoTracker::kNone);                        // not a GRP_TXT
+        LogPacket other = pa;
+        other.payload[0] = 0x11;
+        CHECK(t.on_packet(other, 101) == EchoTracker::kNone);                     // other channel
+        LogPacket small = pa;
+        small.payload.pop_back();
+        CHECK(t.on_packet(small, 101) == EchoTracker::kNone);                     // wrong size
+        CHECK(t.on_packet(pa, 99.0) == EchoTracker::kNone);                       // before the send
+        CHECK(t.on_packet(pa, 102) == id && t.heard_count(id) == 1);
+        CHECK(t.matched_key(id) == pa.payload);
+        CHECK(t.on_packet(pa, 103) == id && t.heard_count(id) == 1);              // same path again
+        LogPacket via = pa;                                                      // same payload over another path
+        via.path = hex("1234");
+        CHECK(t.on_packet(via, 104) == id && t.heard_count(id) == 2);
+        LogPacket hop0 = pa;
+        hop0.hop_count = 0;
+        hop0.path.clear();
+        CHECK(t.on_packet(hop0, 105) == id && t.heard_count(id) == 3);
+        LogPacket h1 = via;                                                      // same bytes but hash size 1 = another path
+        h1.hash_size = 1;
+        CHECK(t.on_packet(h1, 105) == id && t.heard_count(id) == 4);
+        LogPacket diff = pa;                                                     // same hash and size, other payload: not ours
+        diff.payload.back() ^= 1;
+        CHECK(t.on_packet(diff, 106) == EchoTracker::kNone && t.heard_count(id) == 4);
+        CHECK(!t.expired(id, 160.0) && t.expired(id, 160.5));
+        CHECK(t.on_packet(pa, 160.0) == id);                                      // the window edge is inside
+        CHECK(t.on_packet(via, 161.0) == EchoTracker::kNone);                     // after the window
+        CHECK(t.heard_count(id) == 4);
+        CHECK(t.heard_count(77) == 0 && t.expired(77, 0));
+    }
+    {   // no size filter, custom window, two sends on the same channel
+        EchoTracker t(10.0);
+        const int s1 = t.register_sent(0xd9, 0);
+        const int s2 = t.register_sent(0xd9, 5);
+        CHECK(s1 != s2);
+        CHECK(t.on_packet(pa, 6) == s2);                                          // newest send takes it
+        CHECK(t.on_packet(pa, 12) == s2);
+        CHECK(t.on_packet(pa, 16) == EchoTracker::kNone);
+        t.set_window(100);
+        CHECK(t.on_packet(pa, 16) == s2);
+    }
+    {   // a payload already matched stays with its send: a late copy of the first message after a second send of the same size
+        EchoTracker t;
+        const int s1 = t.register_sent(0xd9, 0, 83);
+        CHECK(t.on_packet(pa, 1) == s1);
+        const int s2 = t.register_sent(0xd9, 2, 83);
+        LogPacket late = pa;
+        late.path = hex("1234");
+        CHECK(t.on_packet(late, 3) == s1 && t.heard_count(s1) == 2 && t.heard_count(s2) == 0 && t.matched_key(s2).empty());
+        LogPacket second = pa;
+        second.payload.back() ^= 1;
+        CHECK(t.on_packet(second, 4) == s2 && t.heard_count(s2) == 1);
+    }
+}
+
+/* ------------------------------------------------------------------ phase 3: heard back by N repeaters, the packet log (D8) */
+
+#include "packet_log.hpp"
+
+/* A PUSH_LOG_RX_DATA frame of a flood GRP_TXT: channel hash, then filler up to payload_size (the "ciphertext"). */
+static Bytes grp_txt_log(uint8_t hash, size_t payload_size, const Bytes &path, uint8_t hash_size = 2, uint8_t fill = 0x5A)
+{
+    Bytes f = {0x88, 24, static_cast<uint8_t>(-90), 0x15, static_cast<uint8_t>(((hash_size - 1) << 6) | (path.size() / hash_size))};
+    f = f + path;
+    f.push_back(hash);
+    for (size_t i = 1; i < payload_size; ++i) f.push_back(fill);
+    return f;
+}
+
+/* Records what the model tells its listener about heard-back counts (the store saves only the final one). */
+struct HeardRecorder : Listener {
+    std::vector<std::pair<uint32_t, int>> finals;
+    void message_added(const Message &) override {}
+    void message_state(uint32_t, MsgState, const std::string &) override {}
+    void contacts_changed() override {}
+    void channels_changed() override {}
+    void read_changed() override {}
+    void message_heard_back(uint32_t seq, int count) override { finals.push_back({seq, count}); }
+};
+
+static void test_heard_back()
+{
+    const uint8_t pub_hash = sha256(kPublicChannelSecret.data(), kPublicChannelSecret.size())[0];
+    const ChannelSecret test_secret = hashtag_secret("#test");
+    const uint8_t test_hash = sha256(test_secret.data(), test_secret.size())[0];
+    CHECK(pub_hash != test_hash);
+    {   // the registered size counts UTF-8 BYTES: "Deck Zero" (9) + 8 x "é" (2 bytes each) + "x" = 17 bytes, 9 characters.
+        // 4 + 1 + 9 + 2 + 17 = 33 -> 48 byte ciphertext -> 51 (with characters it would be 32 -> 35: the wrong block)
+        Ready r;
+        HeardRecorder rec;
+        r.model.set_listener(&rec);
+        const std::string text = "\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9x";
+        CHECK(text.size() == 17 && expected_grp_txt_payload_size(9, 17) == 51 && expected_grp_txt_payload_size(9, 9) == 35);
+        const uint32_t seq = r.client->send_channel(0, text);
+        CHECK(seq != 0 && r.client->echoes_open() == 1);
+        run(*r.client, 300);
+        CHECK(r.model.find_message(seq)->state == MsgState::Sent && r.model.find_message(seq)->heard_back == 0);
+        r.peer.push(grp_txt_log(pub_hash, 35, hex("63de")));               // the size a character count would give: not ours
+        run(*r.client, 100);
+        CHECK(r.model.find_message(seq)->heard_back == 0);
+        r.peer.push(grp_txt_log(pub_hash, 51, hex("63de")));
+        run(*r.client, 100);
+        CHECK(r.model.find_message(seq)->heard_back == 1);
+        CHECK(rec.finals.empty());                                         // live: not saved yet
+    }
+    {   // matching: an empty path says nothing about repeaters; distinct non-empty routes count once each; the count freezes after 60 s
+        Ready r;
+        HeardRecorder rec;
+        r.model.set_listener(&rec);
+        const std::string text = "hello mesh";
+        const size_t size = expected_grp_txt_payload_size(r.model.self()->name.size(), text.size());
+        const uint32_t seq = r.client->send_channel(0, text);
+        run(*r.client, 300);
+        r.peer.push(grp_txt_log(pub_hash, size, Bytes()));                 // heard straight from the sender
+        run(*r.client, 100);
+        CHECK(r.model.find_message(seq)->heard_back == 0);
+        r.peer.push(grp_txt_log(pub_hash, size, hex("63de")));
+        r.peer.push(grp_txt_log(pub_hash, size, hex("63de")));             // the same route again
+        r.peer.push(grp_txt_log(test_hash, size, hex("1111")));            // another channel
+        r.peer.push(grp_txt_log(pub_hash, size, hex("63de"), 2, 0x77));    // same hash and size, another payload: somebody else
+        run(*r.client, 100);
+        CHECK(r.model.find_message(seq)->heard_back == 1);
+        r.peer.push(grp_txt_log(pub_hash, size, hex("1234aaaa")));          // two hops, another route
+        run(*r.client, 100);
+        CHECK(r.model.find_message(seq)->heard_back == 2);
+        CHECK(r.client->echoes_open() == 1);
+        run(*r.client, 61000);
+        CHECK(r.client->echoes_open() == 0);
+        CHECK(rec.finals.size() == 1 && rec.finals[0].first == seq && rec.finals[0].second == 2);
+        r.peer.push(grp_txt_log(pub_hash, size, hex("5555")));              // after the window: frozen
+        run(*r.client, 100);
+        CHECK(r.model.find_message(seq)->heard_back == 2 && rec.finals.size() == 1);
+        CHECK(r.logged("heard back on 2 routes") && !r.logged("hello mesh"));
+    }
+    {   // only empty-path copies: nothing extra, nothing saved
+        Ready r;
+        HeardRecorder rec;
+        r.model.set_listener(&rec);
+        const uint32_t seq = r.client->send_channel(1, "quiet");
+        run(*r.client, 300);
+        r.peer.push(grp_txt_log(test_hash, expected_grp_txt_payload_size(9, 5), Bytes()));
+        run(*r.client, 61000);
+        CHECK(r.model.find_message(seq)->heard_back == 0 && rec.finals.empty() && r.client->echoes_open() == 0);
+    }
+    {   // two quick sends of the same size: a late copy of the first one stays with the first one
+        Ready r;
+        const size_t size = expected_grp_txt_payload_size(9, 3);
+        const uint32_t s1 = r.client->send_channel(0, "one");
+        run(*r.client, 300);
+        r.peer.push(grp_txt_log(pub_hash, size, hex("63de"), 2, 0x01));
+        run(*r.client, 100);
+        const uint32_t s2 = r.client->send_channel(0, "two");
+        run(*r.client, 300);
+        r.peer.push(grp_txt_log(pub_hash, size, hex("1234"), 2, 0x01));     // the first message, heard over another route
+        r.peer.push(grp_txt_log(pub_hash, size, hex("63de"), 2, 0x02));     // the second message
+        run(*r.client, 100);
+        CHECK(r.model.find_message(s1)->heard_back == 2 && r.model.find_message(s2)->heard_back == 1);
+    }
+    {   // a channel whose key was not read from the board: no hash, nothing registered; direct messages are never registered
+        Ready r;
+        ChannelRec cached;
+        cached.idx = 5;
+        cached.name = "Cached";
+        cached.empty = false;
+        r.model.load_channel(cached);
+        CHECK(r.client->send_channel(5, "x") != 0 && r.client->echoes_open() == 0 && r.logged("channel key not known"));
+        CHECK(r.client->send_direct(to_hex(r.model.contacts_sorted()[0]->c.key), "dm") != 0 && r.client->echoes_open() == 0);
+    }
+    {   // the final count is saved with the message and survives a reload and a compaction; older lines without "hb" read as 0
+        const std::string dir = tmpdir("heard");
+        uint32_t seq = 0, plain = 0;
+        {
+            Model m;
+            Store st(dir);
+            attach_b(st, m);
+            seq = m.add_outgoing("c:0", "mine", g_time);
+            plain = m.add_outgoing("c:0", "unheard", g_time + 1);
+            m.set_state(seq, MsgState::Sent);
+            m.set_state(plain, MsgState::Sent, "no confirmation from the board");
+            m.set_heard_back(seq, 2, false);                               // live: memory only
+            m.set_heard_back(seq, 3, true);
+        }
+        {
+            Model m;
+            Store st(dir);
+            attach_b(st, m);
+            CHECK(m.find_message(seq) && m.find_message(seq)->heard_back == 3 && m.find_message(seq)->state == MsgState::Sent);
+            CHECK(m.find_message(plain) && m.find_message(plain)->heard_back == 0 && m.find_message(plain)->note == "no confirmation from the board");
+            st.compact();
+        }
+        {
+            Model m;
+            Store st(dir);
+            attach_b(st, m);
+            CHECK(m.find_message(seq) && m.find_message(seq)->heard_back == 3);
+        }
+    }
+}
+
+static void test_packet_log()
+{
+    LogPacket p;
+    CHECK(parse_log_rx(grp_txt_log(0xd9, 35, hex("63de")), p));
+    {   // off by default; a bounded ring: the oldest go first
+        PacketLog log(5);
+        log.add(p, 1);
+        CHECK(!log.capturing() && log.size() == 0);
+        log.start();
+        for (uint32_t i = 0; i < 8; ++i) log.add(p, 100 + i);
+        CHECK(log.size() == 5 && log.dropped() == 3 && log.at(0).time == 103 && log.at(4).time == 107);
+        log.stop();
+        log.add(p, 200);
+        CHECK(log.size() == 5 && log.at(4).time == 107);
+        log.clear();
+        CHECK(log.size() == 0 && log.dropped() == 0 && !log.capturing());
+        CHECK(PacketLog().capacity() == 500);
+    }
+    {   // 500 entries at most
+        PacketLog log;
+        log.start();
+        for (uint32_t i = 0; i < 1234; ++i) log.add(p, i);
+        CHECK(log.size() == 500 && log.dropped() == 734 && log.at(0).time == 734 && log.at(499).time == 1233);
+    }
+    {   // through the client: every well formed 0x88 while capturing, none before
+        Ready r;
+        CHECK(!r.client->packet_log().capturing() && r.client->packet_log().size() == 0);
+        r.client->packet_log().start();
+        r.peer.push(grp_txt_log(0xd9, 35, hex("63de")));
+        r.peer.push({0x88, 0x10});                                          // too short: not a packet
+        r.peer.push(hex_sp("88 04 f0 14 11 22 33 44 82 aa bb cc dd ee ff 99"));
+        run(*r.client, 100);
+        CHECK(r.client->packet_log().size() == 2);
+        CHECK(r.client->packet_log().at(0).pkt.channel_hash() == 0xd9 && r.client->packet_log().at(1).pkt.has_transport);
+    }
+}
+
+/* ------------------------------------------------------------------ the Position box (D6): SET_ADVERT_LATLON, typed coordinates, GPS row */
+
+#include "position.hpp"
+
+static void test_position()
+{
+    // the frame of meshcore_py set_coords: 0E, latitude, longitude (signed microdegrees, little endian), altitude 0
+    CHECK(build_set_advert_latlon(48.8566, 2.3522) == hex_sp("0e 18 7e e9 02 48 e4 23 00 00 00 00 00"));
+    CHECK(build_set_advert_latlon(-33.8688, 151.2093) == hex_sp("0e 00 34 fb fd 54 45 03 09 00 00 00 00"));
+    CHECK(build_set_advert_latlon(90, -180) == hex_sp("0e 80 4a 5d 05 00 6b 45 f5 00 00 00 00"));
+    CHECK(build_set_advert_latlon(0, 0) == hex_sp("0e 00 00 00 00 00 00 00 00 00 00 00 00"));
+    CHECK(build_set_advert_latlon(48.85660049, 2.0).size() == 13 && build_set_advert_latlon(1e-7, 0)[1] == 0);     // rounded to microdegrees
+
+    // typed coordinates: '.' or ',', a sign, spaces around; nothing else
+    double v = 7;
+    CHECK(parse_coordinate("48.8566", true, v).empty() && std::fabs(v - 48.8566) < 1e-9);
+    CHECK(parse_coordinate("  48,8566 ", true, v).empty() && std::fabs(v - 48.8566) < 1e-9);
+    CHECK(parse_coordinate("-33.8688", true, v).empty() && std::fabs(v + 33.8688) < 1e-9);
+    CHECK(parse_coordinate("+2", false, v).empty() && v == 2);
+    CHECK(parse_coordinate(".5", true, v).empty() && v == 0.5);
+    CHECK(parse_coordinate("5.", true, v).empty() && v == 5);
+    CHECK(parse_coordinate("-0", true, v).empty() && v == 0 && !std::signbit(v));
+    CHECK(parse_coordinate("90", true, v).empty() && parse_coordinate("-90", true, v).empty());
+    CHECK(parse_coordinate("180", false, v).empty() && parse_coordinate("-180.0", false, v).empty() && v == -180);
+    CHECK(parse_coordinate("90.000001", true, v) == "Latitude must be between -90 and 90");
+    CHECK(parse_coordinate("-180.5", false, v) == "Longitude must be between -180 and 180");
+    CHECK(parse_coordinate("120", true, v) == "Latitude must be between -90 and 90");          // a longitude typed in the latitude field
+    CHECK(parse_coordinate("", true, v) == "Type the latitude" && parse_coordinate("   ", false, v) == "Type the longitude");
+    v = 7;
+    for (const char *bad : {"abc", "1e5", "inf", "nan", "0x10", "1.2.3", "1,2.3", "-", ".", "--1", "1 2", "48.8566N", "4\xC2\xB0", "1-"}) {
+        CHECK(parse_coordinate(bad, true, v) == "Latitude: use decimal degrees, for example 48.8566");
+        CHECK(v == 7);                                                     // untouched on a refusal
+    }
+    CHECK(parse_coordinate("x", false, v) == "Longitude: use decimal degrees, for example 2.3522");
+    CHECK(parse_coordinate(std::string(30, '1'), false, v).find("decimal degrees") != std::string::npos);
+    double la = 1, lo = 1;
+    CHECK(parse_position("91", "x", la, lo) == "Latitude must be between -90 and 90" && la == 1 && lo == 1);   // the first field's reason
+    CHECK(parse_position("45", "200", la, lo) == "Longitude must be between -180 and 180" && la == 1 && lo == 1);
+    CHECK(parse_position(" 45,5", "-3.25 ", la, lo).empty() && la == 45.5 && lo == -3.25);
+    CHECK(check_position(0, 0).empty() && check_position(-90, 180).empty() && !check_position(NAN, 0).empty() && !check_position(0, INFINITY).empty());
+    CHECK(!position_is_set(0, 0) && position_is_set(0, 0.000001) && position_is_set(-1, 0));
+    CHECK(fmt_coordinate(48.8566) == "48.8566" && fmt_coordinate(-0.5) == "-0.5" && fmt_coordinate(2) == "2" && fmt_coordinate(0) == "0");
+    CHECK(fmt_coordinate(-0.0000001) == "0" && fmt_coordinate(12.3456789) == "12.345679" && fmt_coordinate(-180) == "-180");
+    CHECK(parse_coordinate(fmt_coordinate(-33.868812), true, v).empty() && std::fabs(v + 33.868812) < 1e-9);   // a prefilled field reads back
+
+    // the GPS switch of the box: only for a board that lists the custom variable "gps"
+    {
+        Ready r([](FakePeer &p) { p.vars_text = "gps:1"; });
+        CHECK(position_box_has_gps(&*r.model.device(), r.model.caps()));
+    }
+    {
+        Ready r([](FakePeer &p) { p.vars_text = "radio.fem:1"; });       // a board without GPS (the nRF52840 board A)
+        CHECK(!position_box_has_gps(&*r.model.device(), r.model.caps()));
+    }
+    {
+        Ready r([](FakePeer &p) { p.vars_supported = false; });          // no custom variables at all
+        CHECK(!position_box_has_gps(&*r.model.device(), r.model.caps()));
+    }
+    CHECK(!position_box_has_gps(nullptr, BoardCaps()));                  // nothing known yet
+
+    // the client: refused values send nothing; the answer is shown; the position is read back from SELF_INFO
+    {
+        Ready r;
+        run(*r.client, 2000);
+        const size_t n = r.peer.commands.size();
+        CHECK(!r.client->set_position(91, 0) && !r.client->notice().ok && r.client->notice().text == "Latitude must be between -90 and 90");
+        CHECK(!r.client->set_position(0, -181) && !r.client->set_position(NAN, 0));
+        run(*r.client, 300);
+        bool sent = false;
+        for (size_t i = n; i < r.peer.commands.size(); ++i)
+            if (r.peer.commands[i][0] == cmd::kSetAdvertLatLon) sent = true;
+        CHECK(!sent);
+
+        // the fake board does not know the command: "unsupported"
+        CHECK(r.client->set_position(48.1, 2.2));
+        run(*r.client, 400);
+        CHECK(has_cmd(r.peer, cmd::kSetAdvertLatLon) && !r.client->notice().ok && r.client->notice().text == "Firmware too old for this feature: Position");
+        CHECK(r.logged("set position: error 1"));
+        for (const std::string &l : r.log) CHECK(l.find("48.1") == std::string::npos);      // no coordinates in the log
+
+        // a board that takes it: OK, then SELF_INFO with the new position
+        CHECK(r.client->queued() == 0);
+        r.peer.silent = true;
+        CHECK(r.client->set_position(-33.8688, 151.2093));
+        run(*r.client, 100);
+        CHECK(r.peer.commands.back() == build_set_advert_latlon(-33.8688, 151.2093));
+        r.peer.push({resp::kOk});
+        run(*r.client, 100);
+        CHECK(r.peer.commands.back() == build_app_start("mcdeck"));
+        Bytes si = make_self_info("Deck Zero");
+        const int32_t la_e6 = -33868800, lo_e6 = 151209300;
+        for (int i = 0; i < 4; ++i) {
+            si[36 + i] = static_cast<uint8_t>(static_cast<uint32_t>(la_e6) >> (8 * i));
+            si[40 + i] = static_cast<uint8_t>(static_cast<uint32_t>(lo_e6) >> (8 * i));
+        }
+        r.peer.push(si);
+        run(*r.client, 100);
+        CHECK(r.client->notice().ok && r.client->notice().text == "Position set to -33.8688, 151.2093");
+        CHECK(r.model.self() && std::fabs(r.model.self()->lat + 33.8688) < 1e-9 && std::fabs(r.model.self()->lon - 151.2093) < 1e-9);
+
+        // clear (0, 0): the same command, "Position cleared"
+        CHECK(r.client->set_position(0, 0));
+        run(*r.client, 100);
+        CHECK(r.peer.commands.back() == hex_sp("0e 00 00 00 00 00 00 00 00 00 00 00 00"));
+        r.peer.push({resp::kOk});
+        run(*r.client, 100);
+        Bytes z = make_self_info("Deck Zero");
+        for (int i = 36; i < 44; ++i) z[static_cast<size_t>(i)] = 0;
+        r.peer.push(z);
+        run(*r.client, 100);
+        CHECK(r.client->notice().ok && r.client->notice().text == "Position cleared" && r.model.self() && !position_is_set(r.model.self()->lat, r.model.self()->lon));
+
+        // an error answer (out of range on the board's side): not set
+        CHECK(r.client->set_position(10, 10));
+        run(*r.client, 100);
+        r.peer.push({resp::kError, err::kIllegalArg});
+        run(*r.client, 100);
+        CHECK(!r.client->notice().ok && r.client->notice().text.rfind("Position not set: ", 0) == 0);
+        CHECK(r.peer.commands.back()[0] == cmd::kSetAdvertLatLon);       // nothing read back after a refusal
+        r.peer.silent = false;
+    }
+    {   // not connected: refused, nothing sent
+        Ready r(nullptr, false);
+        CHECK(!r.client->set_position(1, 1) && r.client->notice().text == "Not connected to a radio");
+    }
+}
+
 int main()
 {
+    test_position();
     test_phase2();
     test_boards();
     test_history_delete();
@@ -2064,6 +2513,9 @@ int main()
     test_channel_status();
     test_caps_and_private_channels();
     test_log();
+    test_logdata();
+    test_heard_back();
+    test_packet_log();
     std::printf("%d checks, %d failed\n", g_checks, g_fail);
     return g_fail ? 1 : 0;
 }
