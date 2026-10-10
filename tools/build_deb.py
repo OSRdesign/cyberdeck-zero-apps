@@ -22,6 +22,58 @@ import tarfile
 import time
 
 
+# Every package needs this glibc (the binaries are built against Debian 13 and need GLIBC_2.38): with it in
+# Depends, dpkg refuses the package cleanly on an older system instead of installing an app that cannot start.
+LIBC_FLOOR = "libc6 (>= 2.38)"
+LIBC_FLOOR_VERSION = (2, 38)
+
+
+def _libc6_floor(clause):
+    """For a Depends clause naming libc6 alone: the version of its '>=' / '=' / '>>' bound as a tuple, (0,) when
+    unversioned or weaker; None when the clause is not about libc6 (or is an alternative 'a | b')."""
+    if "|" in clause:
+        return None
+    name = clause.split("(")[0].split(":")[0].strip()
+    if name != "libc6":
+        return None
+    if "(" not in clause:
+        return (0,)
+    rel = clause.split("(", 1)[1].rstrip(")").strip()
+    for op in (">=", ">>", "="):
+        if rel.startswith(op):
+            parts = []
+            for piece in rel[len(op):].strip().split("-")[0].split("."):
+                digits = "".join(ch for ch in piece if ch.isdigit())
+                if not digits:
+                    break
+                parts.append(int(digits))
+            return tuple(parts) or (0,)
+    return (0,)
+
+
+def merge_depends(depends):
+    """Return the Depends field with the libc6 floor merged in: no duplicates, an existing stronger libc6 bound
+    kept, a weaker or unversioned one replaced in place. The floor goes first when there was no libc6 clause."""
+    clauses = [c.strip() for c in depends.split(",") if c.strip()]
+    out = []
+    seen = set()
+    floor_done = False
+    for clause in clauses:
+        version = _libc6_floor(clause)
+        if version is not None:
+            if floor_done:
+                continue
+            clause = clause if version >= LIBC_FLOOR_VERSION else LIBC_FLOOR
+            floor_done = True
+        if clause in seen:
+            continue
+        seen.add(clause)
+        out.append(clause)
+    if not floor_done:
+        out.insert(0, LIBC_FLOOR)
+    return ", ".join(out)
+
+
 def collect(root):
     """Yield (relative path with forward slashes, absolute path, is_dir)."""
     entries = []
@@ -93,7 +145,8 @@ def main():
     parser.add_argument("--description", required=True, help="one-line description")
     parser.add_argument("--maintainer", default="Unknown <unknown@example.com>")
     parser.add_argument("--homepage", default="")
-    parser.add_argument("--depends", default="", help="Debian Depends: field, e.g. 'curl, libfreetype6'")
+    parser.add_argument("--depends", default="", help="Debian Depends: field, e.g. 'curl, libfreetype6' "
+                        "(" + LIBC_FLOOR + " is always added)")
     parser.add_argument("--section", default="APPLaunch")
     parser.add_argument("--scripts", help="directory with maintainer scripts (preinst, postinst, prerm, postrm)")
     parser.add_argument("--out", default=".", help="output directory")
@@ -128,8 +181,7 @@ def main():
         "Section: " + args.section,
         "Priority: optional",
     ]
-    if args.depends:
-        control.append("Depends: " + args.depends)
+    control.append("Depends: " + merge_depends(args.depends))
     if args.homepage:
         control.append("Homepage: " + args.homepage)
     control.append("Description: " + args.description)
