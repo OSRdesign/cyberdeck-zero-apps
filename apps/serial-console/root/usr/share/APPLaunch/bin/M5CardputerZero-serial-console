@@ -1,0 +1,240 @@
+#!/bin/sh
+# Serial console for the CardputerZero launcher: a small numbered menu, then picocom.
+# Runs in the launcher's terminal (Terminal=true). Plain POSIX sh (dash).
+#
+# Tests: SERIAL_CONSOLE_TEST=1 . this-file   defines the functions without running the menu.
+# Paths can be moved for tests: SC_BYID_DIR, SC_DEV_DIR, SC_CONF, SC_LOG_DIR, SC_PICOCOM.
+
+SC_BYID_DIR=${SC_BYID_DIR:-/dev/serial/by-id}
+SC_DEV_DIR=${SC_DEV_DIR:-/dev}
+SC_CONF=${SC_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/cardputerzero/serial-console.conf}
+SC_LOG_DIR=${SC_LOG_DIR:-$HOME/serial-logs}
+SC_PICOCOM=${SC_PICOCOM:-picocom}
+
+SC_BAUDS="1200 2400 4800 9600 19200 38400 57600 115200 230400 460800 921600"
+SC_FRAMES="8N1 7E1 8E1 8O1 7O1 8N2"
+SC_ENDINGS="CR LF CRLF"
+
+# ---- pure functions (tested on the host) ----
+
+# Next word after $1 in the list $2 (wraps; the first word when $1 is not in the list).
+sc_next() {
+    _cur=$1; _first=; _take=0
+    for _w in $2; do
+        [ -z "$_first" ] && _first=$_w
+        if [ "$_take" = 1 ]; then echo "$_w"; return 0; fi
+        [ "$_w" = "$_cur" ] && _take=1
+    done
+    echo "$_first"
+}
+
+# 0 when $1 is a word of the list $2.
+sc_in_list() {
+    for _w in $2; do [ "$_w" = "$1" ] && return 0; done
+    return 1
+}
+
+# Short label from a /dev/serial/by-id name: usb-Silicon_Labs_CP2102_0001-if00-port0 -> Silicon_Labs_CP2102_0001
+sc_label() {
+    printf '%s\n' "$1" | sed -e 's/^usb-//' -e 's/-if[0-9][0-9]*\(-port[0-9][0-9]*\)\{0,1\}$//' | cut -c1-30
+}
+
+# Lists the ports, one per line: "<device path>|<label>|<by-id name or empty>".
+# $1 by-id dir, $2 dev dir, $3 = 1 to add the on-board UARTs (ttyS*, ttyAMA*).
+sc_list_ports() {
+    _byid=$1; _dev=$2; _all=$3; _seen=" "
+    if [ -d "$_byid" ]; then
+        for _l in "$_byid"/*; do
+            [ -e "$_l" ] || continue
+            _real=$(readlink -f "$_l") || continue
+            case ${_real##*/} in ttyUSB*|ttyACM*) ;; *) continue ;; esac
+            case "$_seen" in *" $_real "*) continue ;; esac
+            _seen="$_seen$_real "
+            _n=${_l##*/}
+            echo "$_real|$(sc_label "$_n")|$_n"
+        done
+    fi
+    _globs="ttyUSB* ttyACM*"
+    [ "$_all" = 1 ] && _globs="$_globs ttyS* ttyAMA*"
+    for _g in $_globs; do
+        for _d in "$_dev"/$_g; do
+            [ -e "$_d" ] || continue
+            _real=$(readlink -f "$_d") || _real=$_d
+            case "$_seen" in *" $_real "*) continue ;; esac
+            _seen="$_seen$_real "
+            echo "$_d|-|"
+        done
+    done
+}
+
+# picocom frame options for 8N1-style text: "-d 8 -y n -p 1". Fails on a bad frame.
+sc_frame_opts() {
+    case $1 in
+        [5-8][NEO][12]) ;;
+        *) return 1 ;;
+    esac
+    _d=$(printf '%s' "$1" | cut -c1)
+    _p=$(printf '%s' "$1" | cut -c2 | tr 'NEO' 'neo')
+    _s=$(printf '%s' "$1" | cut -c3)
+    echo "-d $_d -y $_p -p $_s"
+}
+
+# picocom arguments, one per line. $1 device $2 baud $3 frame $4 echo(on/off) $5 ending(CR/LF/CRLF)
+# $6 log(on/off) $7 log dir $8 timestamp for the log name.
+sc_build_args() {
+    _fo=$(sc_frame_opts "$3") || return 1
+    echo "-b"; echo "$2"
+    for _w in $_fo; do echo "$_w"; done
+    echo "--imap"; echo "lfcrlf"
+    case $5 in
+        LF) echo "--omap"; echo "crlf" ;;
+        CRLF) echo "--omap"; echo "crcrlf" ;;
+    esac
+    [ "$4" = on ] && echo "-c"
+    if [ "$6" = on ]; then
+        echo "--logfile"; echo "$7/${1##*/}-$8.log"
+    fi
+    echo "$1"
+}
+
+# Reads key=value lines from the config file into SC_* variables (never sourced; unknown or bad values ignored).
+sc_load_conf() {
+    [ -r "$1" ] || return 0
+    while IFS='=' read -r _k _v; do
+        case $_k in
+            port) SC_PORT=$_v ;;
+            baud) case $_v in *[!0-9]*|'') ;; *) SC_BAUD=$_v ;; esac ;;
+            frame) sc_frame_opts "$_v" >/dev/null && SC_FRAME=$_v ;;
+            echo) case $_v in on|off) SC_ECHO=$_v ;; esac ;;
+            ending) sc_in_list "$_v" "$SC_ENDINGS" && SC_ENDING=$_v ;;
+            log) case $_v in on|off) SC_LOG=$_v ;; esac ;;
+            all) case $_v in 0|1) SC_ALL=$_v ;; esac ;;
+        esac
+    done < "$1"
+}
+
+sc_save_conf() {
+    mkdir -p "$(dirname "$1")" 2>/dev/null || return 0
+    printf 'port=%s\nbaud=%s\nframe=%s\necho=%s\nending=%s\nlog=%s\nall=%s\n' \
+        "$SC_PORT" "$SC_BAUD" "$SC_FRAME" "$SC_ECHO" "$SC_ENDING" "$SC_LOG" "$SC_ALL" > "$1" 2>/dev/null || true
+}
+
+# Applies one menu answer to the settings and sets SC_ACT to "connect <n>" (0 = Enter), "quit", "refresh" or "bad".
+# Sets variables instead of printing so that it is not run in a subshell.
+sc_apply() {
+    SC_ACT=refresh
+    case $1 in
+        '') SC_ACT="connect 0" ;;
+        *[!0-9]*)
+            case $1 in
+                b) SC_BAUD=$(sc_next "$SC_BAUD" "$SC_BAUDS") ;;
+                b[0-9]*) case ${1#b} in *[!0-9]*) SC_ACT=bad ;; *) SC_BAUD=${1#b} ;; esac ;;
+                f) SC_FRAME=$(sc_next "$SC_FRAME" "$SC_FRAMES") ;;
+                e) if [ "$SC_ECHO" = on ]; then SC_ECHO=off; else SC_ECHO=on; fi ;;
+                n) SC_ENDING=$(sc_next "$SC_ENDING" "$SC_ENDINGS") ;;
+                l) if [ "$SC_LOG" = on ]; then SC_LOG=off; else SC_LOG=on; fi ;;
+                a) if [ "$SC_ALL" = 1 ]; then SC_ALL=0; else SC_ALL=1; fi ;;
+                r) ;;
+                q|x) SC_ACT=quit ;;
+                *) SC_ACT=bad ;;
+            esac ;;
+        *) SC_ACT="connect $1" ;;
+    esac
+}
+
+# 0 when the user may open $1 (read and write), or is in the dialout group.
+sc_can_open() {
+    [ -r "$1" ] && [ -w "$1" ] && return 0
+    return 1
+}
+
+sc_in_dialout() {
+    case " $(id -Gn 2>/dev/null) " in *" dialout "*) return 0 ;; esac
+    return 1
+}
+
+# ---- interactive part ----
+
+sc_pause() {
+    printf 'Press Enter to close. '
+    read -r _x || true
+}
+
+sc_main() {
+    SC_PORT=; SC_BAUD=115200; SC_FRAME=8N1; SC_ECHO=off; SC_ENDING=CR; SC_LOG=off; SC_ALL=0
+    sc_load_conf "$SC_CONF"
+
+    if ! command -v "$SC_PICOCOM" >/dev/null 2>&1; then
+        echo "picocom is not installed."
+        echo "Fix: sudo apt install picocom"
+        sc_pause; exit 1
+    fi
+
+    while :; do
+        _ports=$(sc_list_ports "$SC_BYID_DIR" "$SC_DEV_DIR" "$SC_ALL")
+        printf '\033[H\033[2J'
+        echo "SERIAL CONSOLE  quit: Ctrl-A, Ctrl-X"
+        _i=0; _def=0
+        if [ -z "$_ports" ]; then
+            echo "No serial port. Plug a USB-serial"
+            echo "adapter or board, then r. a: all ports"
+        else
+            _old=$IFS; IFS='
+'
+            for _p in $_ports; do
+                _i=$((_i + 1))
+                _dev=${_p%%|*}; _rest=${_p#*|}; _lab=${_rest%%|*}; _id=${_rest#*|}
+                _mark=" "
+                if [ -n "$SC_PORT" ] && { [ "$SC_PORT" = "$_id" ] || [ "$SC_PORT" = "$_dev" ]; }; then
+                    _mark="*"; _def=$_i
+                fi
+                [ "$_lab" = - ] && _lab=
+                echo "$_i$_mark${_dev##*/} $_lab" | cut -c1-40
+            done
+            IFS=$_old
+            [ "$_i" = 1 ] && [ "$_def" = 0 ] && _def=1
+        fi
+        echo "b$SC_BAUD f$SC_FRAME e:echo $SC_ECHO n:$SC_ENDING l:log $SC_LOG"
+        if [ "$_def" -gt 0 ]; then printf 'No.(Enter=%s) b f e n l a r q> ' "$_def"
+        else printf 'No. b f e n l a r q> '; fi
+        read -r _ans || exit 0
+        sc_apply "$_ans"
+        case $SC_ACT in
+            quit) sc_save_conf "$SC_CONF"; exit 0 ;;
+            refresh|bad|'') continue ;;
+        esac
+        _n=${SC_ACT#connect }
+        [ "$_n" = 0 ] && _n=$_def
+        [ "$_n" -ge 1 ] 2>/dev/null && [ "$_n" -le "$_i" ] || continue
+        _p=$(printf '%s\n' "$_ports" | sed -n "${_n}p")
+        _dev=${_p%%|*}; _rest=${_p#*|}; _id=${_rest#*|}
+        SC_PORT=${_id:-$_dev}
+        sc_save_conf "$SC_CONF"
+
+        if ! sc_can_open "$_dev"; then
+            if ! sc_in_dialout; then
+                echo "No access to $_dev: you are not in"
+                echo "the dialout group. Fix, then reboot:"
+                echo "sudo usermod -aG dialout $(id -un)"
+            else
+                echo "No access to $_dev (in use, or"
+                echo "dialout not active: log in again)."
+            fi
+            sc_pause; continue
+        fi
+
+        _args=$(sc_build_args "$_dev" "$SC_BAUD" "$SC_FRAME" "$SC_ECHO" "$SC_ENDING" "$SC_LOG" \
+            "$SC_LOG_DIR" "$(date +%Y%m%d-%H%M%S)") || continue
+        [ "$SC_LOG" = on ] && mkdir -p "$SC_LOG_DIR"
+        printf '\033[H\033[2J'
+        echo "Ctrl-A then Ctrl-X quits picocom."
+        _old=$IFS; IFS='
+'
+        # shellcheck disable=SC2086
+        set -- $_args
+        IFS=$_old
+        exec "$SC_PICOCOM" "$@"
+    done
+}
+
+[ "${SERIAL_CONSOLE_TEST:-0}" = 1 ] || sc_main

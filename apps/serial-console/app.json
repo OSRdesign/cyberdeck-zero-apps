@@ -1,0 +1,15 @@
+{
+  "share_code": "serial-console",
+  "package": "serial-console",
+  "version": "0.1.0",
+  "title": "Serial Console",
+  "summary": "Talk to a USB-serial adapter or a microcontroller board from the deck's terminal.",
+  "description": "A small numbered menu in the launcher's terminal: pick a serial port (USB-serial adapters and boards on ttyUSB/ttyACM, on-board UARTs on request), the baud rate (1200 to 921600, 115200 by default), the frame (8N1, 7E1, 8E1, 8O1, 7O1, 8N2), local echo, the line ending sent by Enter and an optional log file in ~/serial-logs, then it opens picocom. Ctrl-A then Ctrl-X quits. The last choice is remembered. Works with a keyboard or with the on-screen keyboard (digits pick the port), on every screen size. The user must be in the dialout group.",
+  "categories": ["Tools"],
+  "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
+  "license": "MIT",
+  "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/serial-console",
+  "depends": "picocom",
+  "permissions": {"additional_hardware": true},
+  "draft": true
+}
