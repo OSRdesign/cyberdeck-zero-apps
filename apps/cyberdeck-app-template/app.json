@@ -1,0 +1,15 @@
+{
+  "share_code": "cyberdeck-app-template",
+  "package": "cyberdeck-app-template",
+  "version": "0.1.0",
+  "draft": true,
+  "title": "App Template",
+  "summary": "The starting point of a native full-screen app: every shared widget, the on-screen keyboard rule, a background command.",
+  "description": "A template for developers, not an app for users (it is a draft: never published). A native full-screen app on the launcher's cp0_lvgl: the page header with the shared status strip and the on-screen Esc, a roller with Nav, Toggle, Info and Busy rows, an info table, a text field with the app's own on-screen keyboard (shown only when no physical keyboard is connected, the launcher's rule), a dialog and a background command whose lines arrive live. Everything is laid out from the launcher's design tokens, so it fits 640x480, 800x480, 720x720 and 1280x720. Needs a screen of at least 640x480 and a launcher with full-screen app support.",
+  "categories": ["Tools"],
+  "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
+  "license": "MIT",
+  "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/cyberdeck-app-template",
+  "depends": "libfreetype6, libinput10, libxkbcommon0",
+  "permissions": {}
+}

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=App Template
+Exec=/usr/share/APPLaunch/bin/M5CardputerZero-cyberdeck-app-template
+Terminal=false
+Icon=share/images/cyberdeck-app-template.png
+Type=Application
+X-Fullscreen=true
+X-MinSize=640x480
