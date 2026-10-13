@@ -263,7 +263,7 @@ std::unique_ptr<World> World::from_env()
     const char *name = std::getenv("SERIAL_CONSOLE_DEMO");
     if (!name || !name[0]) return nullptr;
     const std::string s = name;
-    if (s != "empty" && s != "boards" && s != "lost" && s != "noaccess" && s != "identify") {
+    if (s != "empty" && s != "boards" && s != "lost" && s != "noaccess" && s != "identify" && s != "longname") {
         std::fprintf(stderr, "[serial-console] SERIAL_CONSOLE_DEMO=%s: no such scenario (empty, boards, lost, "
                              "noaccess, identify)\n", name);
         return nullptr;
@@ -353,6 +353,59 @@ World::World(const std::string &scenario) : scenario_(scenario)
         boot.interfaces = 2;
         boot.usb_port = 5;
         fake::add_usb_device(roots_, boot);
+    } else if (scenario == "longname") {
+        // long device names (the port row keeps the port name whole and shortens the name) and boards that are silent
+        const auto add = [this](const char *board, fake::UsbTty port) {
+            auto host = std::make_unique<sim::Host>(sim::make_board(board, ""));
+            if (!host->ok()) return;
+            port.node_target = host->path();
+            fake::add_usb_tty(roots_, port);
+            sims_.emplace_back(port.tty, std::move(host));
+        };
+        fake::UsbTty s3;
+        s3.tty = "ttyACM0";
+        s3.vid = 0x303a;
+        s3.pid = 0x4001;
+        s3.manufacturer = "Espressif";
+        s3.product = "ESP32-S3 Dev Module";
+        s3.driver = "cdc_acm";
+        s3.interfaces = 2;
+        s3.by_id = "usb-Espressif_ESP32-S3_Dev_Module-if00";
+        s3.usb_port = 1;
+        add("silent", s3);
+        fake::UsbTty due;
+        due.tty = "ttyACM1";
+        due.vid = 0x2341;
+        due.pid = 0x003d;
+        due.manufacturer = "Arduino";
+        due.driver = "cdc_acm";
+        due.interfaces = 2;
+        due.by_id = "usb-Arduino_Due-if00";
+        due.usb_port = 2;
+        add("silent", due);
+        fake::UsbTty odd;
+        odd.tty = "ttyACM2";
+        odd.vid = 0x1209;
+        odd.pid = 0x0001;
+        odd.manufacturer = "Acme Embedded Systems";
+        odd.product = "Acme Telemetry Gateway Rev C with Dual Radio Front End";
+        odd.serial = "A1B2C3";
+        odd.driver = "cdc_acm";
+        odd.interfaces = 2;
+        odd.by_id = "usb-Acme_Telemetry_Gateway-if00";
+        odd.usb_port = 3;
+        add("silent", odd);
+        fake::UsbTty cp;
+        cp.tty = "ttyUSB0";
+        cp.vid = 0x10c4;
+        cp.pid = 0xea60;
+        cp.manufacturer = "Silicon Labs";
+        cp.product = "CP2102 USB to UART Bridge Controller";
+        cp.serial = "0001";
+        cp.driver = "cp210x";
+        cp.by_id = "usb-Silicon_Labs_CP2102-if00-port0";
+        cp.usb_port = 4;
+        add("silent", cp);
     } else if (scenario == "empty") {
         boards_.push_back(esp_board());
         boards_.back()->plug_at = now + 3000;

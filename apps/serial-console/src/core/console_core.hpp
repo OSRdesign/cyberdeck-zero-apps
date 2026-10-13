@@ -63,6 +63,9 @@ std::vector<std::pair<std::string, std::string>> port_info_items(const PortInfo 
 bool bare_adapter(const PortInfo &port);
 /* two lines of a 640x480 row (an Info row with no value wraps once, then ends with dots) */
 constexpr const char *kAdapterNote = "The adapter cannot tell what is behind it; the probes below ask";
+/* After Listen (or Reset and listen) heard nothing: MicroPython / CircuitPython boards print only when asked */
+constexpr const char *kSilentNote = "Many boards stay silent until asked: try the rows below";
+constexpr const char *kSilentResetNote = "Silent after a reset too: try Ask the device";
 
 /* The recommendation once something was identified: its speed and reason replace the device table's. */
 Recommendation identified_recommendation(const Recommendation &base, const Identity &id);
@@ -79,7 +82,9 @@ struct CardRow {
 /* The result card: Device (the adapter), Behind it, Chip, Firmware, Board, Details, Framing, Confidence, Found,
  * Boot output, Evidence, Recommended, then the actions (Apply settings: the recommended ones; Run again; Copy summary
  * to a log file: the labels are short so that they fit a 640x480 row with their value); for a bare adapter where
- * nothing was identified the adapter note and the other probes. `in_use`: the port's speed now (Apply says "In use"
+ * nothing was identified the adapter note and the other probes; after a Listen or a Reset that heard nothing (any
+ * port) the silent note, "Try Ask the device" (CardAction::Ask: the Ask page, each probe confirmed) and, after Listen,
+ * Reset and listen. `in_use`: the port's speed now (Apply says "In use"
  * when it is the recommended one already). */
 std::vector<CardRow> card_rows(const Identity &id, const PortInfo &port, Probe probe, int in_use);
 /* "Likely (listened)", "Sure (asked)" */

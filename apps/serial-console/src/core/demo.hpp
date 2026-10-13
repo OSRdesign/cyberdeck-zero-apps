@@ -23,6 +23,9 @@
  *             u-blox GPS on a PL2303 cable (ttyUSB1, NMEA at 9600), a Raspberry Pi Pico running MicroPython
  *             (ttyACM0), an Arduino Uno with optiboot (ttyACM1, its sketch at 9600), and an RP2040 in BOOTSEL mode
  *             (a USB drive, no port); their DTR / RTS lines are simulated (lines_for())
+ *   longname  four silent simulated boards with long names (ESP32 native USB, Arduino Due (programming port), a USB
+ *             product string of 55 characters, a CP2102 cable): the port rows' ellipsis, and the card of a board that
+ *             prints nothing when listened to
  *
  * Nothing outside the temporary folder is touched; it is removed when the world goes.
  */

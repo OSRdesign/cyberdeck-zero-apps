@@ -1,4 +1,4 @@
-# Serial Console 0.3.0: board tests
+# Serial Console 0.3.1: board tests
 
 For the Controller and the user (controller-led testing: the Controller deploys and reads logs, the user does the
 physical steps). `deck.py` is `C:\CLAUDE\zero7\launcher\docs\dev\deck\deck.py` (password in `PIPW`; `DECK_HOST=<ip>`
@@ -6,7 +6,7 @@ points it at another board). The app's process name is `serial-console`.
 
 Expected pictures: the contact sheets of `build.sh host` in `\\wsl.localhost\Ubuntu\home\osrde\cdk-build\serial-console\host\out\sheets\`
 (`ports.png`, `empty.png`, `port.png`, `detect.png`, `terminal.png`, `lost.png`, `access.png`, `notice.png`,
-`identify.png`, `identify-more.png`).
+`identify.png`, `identify-more.png`, `longname.png`).
 
 Hardware wanted: a USB-serial board that prints at boot (an ESP32 dev board on CP2102 / CH340 / CH9102 is ideal), and
 if possible a second one (an Arduino Uno, a GPS, an FTDI cable). For the identification (S8 to S12): an ESP32 board,
@@ -18,12 +18,12 @@ Copy summary file in `~/serial-logs`).
 
 ```
 python tools/make_registry.py --only serial-console --out C:/CLAUDE/zero7/pkg-out
-python deck.py put C:/CLAUDE/zero7/pkg-out/serial-console_0.3.0_arm64.deb /tmp/serial-console.deb
+python deck.py put C:/CLAUDE/zero7/pkg-out/serial-console_0.3.1_arm64.deb /tmp/serial-console.deb
 python deck.py sudo 'dpkg -i /tmp/serial-console.deb'
 python deck.py run '/usr/share/APPLaunch/bin/serial-console --version; id -nG'
 ```
 
-`--version`: `Serial Console (serial-console) 0.3.0`, the launcher commit, `cp0_lvgl pinned`. `id -nG` must list
+`--version`: `Serial Console (serial-console) 0.3.1`, the launcher commit, `cp0_lvgl pinned`. `id -nG` must list
 `dialout` (else S6 first). Logs: `python deck.py run 'journalctl --user -n 80 --no-pager | grep -E "cdk|serial-console"'`.
 
 ## S1. Deck (640x480, Bluetooth keyboard): ports, hot-plug, identification
@@ -80,7 +80,7 @@ Connect refused with the dialog *No permission for ttyUSB0*. Restore with `sudo 
 
 ```
 set DECK_HOST=<pi3a ip>
-python deck.py put C:/CLAUDE/zero7/pkg-out/serial-console_0.3.0_arm64.deb /tmp/serial-console.deb
+python deck.py put C:/CLAUDE/zero7/pkg-out/serial-console_0.3.1_arm64.deb /tmp/serial-console.deb
 python deck.py sudo 'dpkg -i /tmp/serial-console.deb'
 ```
 
@@ -102,7 +102,10 @@ The probes' log lines: `python deck.py run 'journalctl --user -n 40 --no-pager |
    the board.
 2. **Listen** (Enter): the row turns *Listening at 115200 (1/11)*; nothing else happens on the board (no reset: its
    program keeps running). A board that logs (ESP-IDF, Meshtastic) gives a card *Behind it: An ESP32 board* or the
-   family, *Likely (listened)*; a silent board: *Nothing heard*. Esc while it listens: *Stopped* at once.
+   family, *Likely (listened)*; a silent board (MicroPython, CircuitPython): *Nothing heard*, the note *Many boards stay silent until asked: try the rows
+   below* and the rows *Try Ask the device* (opens the Ask page, as the port page's row does) and *Reset and listen*; no
+   text may end with dots on the card. Esc while it listens: *Stopped* at once. On the ports page the names are whole
+   (*ESP32 native USB*, *ttyACM0* at the right); a long USB product string ends with dots, never the port name.
 3. **Reset and listen**: the dialog *Reset the board?*; Cancel does nothing. Enter: the board restarts (watch its LED),
    the card says the chip (*ESP32*, *ESP32-S3*...), *Firmware ESP-IDF v...* or *Arduino-ESP32*, *Sure (after a reset)*;
    *Boot output* shows the ROM banner (`ets Jun  8 2016...` or `ESP-ROM:esp32s3-...`) and the boot. Then Connect: the

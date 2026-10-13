@@ -251,6 +251,13 @@ void SerialApp::show_card_rows(int select)
         if (r.key == "Behind it") behind_row = static_cast<int>(i);
         rows.push_back(spec);
     }
+    if (select < 0 && card_id_.kind == Kind::Silent) { /* heard nothing: the highlight is on the next step, Enter asks */
+        for (std::size_t i = 0; i < card_rows_.size(); ++i)
+            if (card_rows_[i].action == CardAction::Ask) {
+                select = static_cast<int>(i);
+                break;
+            }
+    }
     if (select < 0 || select >= static_cast<int>(rows.size())) select = behind_row;
     roller_->set_rows(rows, select, false); /* a table stops at its ends */
     roller_->set_hidden(false);

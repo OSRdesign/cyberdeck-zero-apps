@@ -1,6 +1,6 @@
 # Serial Console
 
-Version 0.3.0 (draft, not published yet), package `serial-console`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.3.1 (draft, not published yet), package `serial-console`. Part of [cyberdeck-zero-apps](../../README.md).
 
 Serial Console talks to a USB-serial adapter or a microcontroller board (Arduino, ESP32, Raspberry Pi Pico, a GPS, a
 router console...) from the deck. It is a full-screen touch app made for the small screen: instead of dropping you into
@@ -47,7 +47,9 @@ adapter), then opens a terminal page.
     first: opening a port restarts an Arduino-style board), and stops at the first speed where something is clearly
     recognised or the text is clean. Never 1200 (the speed whose "touch" reboots some USB boards into their boot
     loader); on a microcontroller's own USB (Pico, ESP32-S3 USB, Leonardo, Teensy...) only one speed, the speed does
-    not matter there. Nothing in 3 s at three speeds: *Nothing heard* (it may print only when it starts).
+    not matter there. Nothing in 3 s at three speeds: *Nothing heard* (it may print only when it starts); the card then says
+    *Many boards stay silent until asked: try the rows below* (MicroPython and CircuitPython boards print only when
+    asked) and offers **Try Ask the device** (the Ask page, every probe confirmed) and **Reset and listen**.
   * **Reset and listen** (level 2, after a confirmation: *This resets the board (DTR/RTS pulse); a running program
     restarts...*). Nothing is sent. The lines: RTS asserted with DTR released for 100 ms (the ESP auto-reset circuit
     pulls EN low with IO0 high), both released 150 ms (the ESP boots its program, IO0 is never low, so never the
@@ -194,6 +196,12 @@ The identification is kept in the port's section of the settings file as `id_*` 
 
 ## Changes
 
+* **0.3.1**: found on the deck at 640x480: a long device name no longer hides behind dots when a shorter one says the
+  same (*ESP32 native USB* instead of *ESP32 native USB (CDC)*, *Due (programming)*, *Uno R4 WiFi*, *ST-LINK/V2-1 VCP*...:
+  the table's names are 18 characters at most, the detail is in the hint and on the port page), and a name that is
+  still too long (a USB product string) ends with dots on its own side, the port name (*ttyACM0*) always whole. The
+  card of a Listen that heard nothing says what to do next (*Many boards stay silent until asked*) and offers *Try Ask
+  the device* and *Reset and listen*, on any port, not only on a bare adapter.
 * **0.3.0**: *What is on the other end?*: Listen, Reset and listen, Ask the device (MicroPython, AT, Marlin, GRBL, the
   Arduino and ESP boot loaders, read-only), the result card with its boot output and evidence, remembered per port and
   used for the recommended speed; the exact USB-serial chip, USB product string, speed and interfaces on the port page;
@@ -231,7 +239,7 @@ python3 tools/make_registry.py --only serial-console --out C:/somewhere/outside/
   silent board): what was sent (nothing for Listen; exactly the listed bytes for Ask), the boot loader commands seen
   (read-only only), the line trace and its restore, the confirmation rule, Esc.
 * `tests/scenes/*.scene` play every page at 640x480, 800x480, 720x720, 1280x720 and 1024x600 in the **demonstration
-  world**: `SERIAL_CONSOLE_DEMO=<empty|boards|lost|noaccess> serial-console` makes the app scan a fake `/sys` and
+  world**: `SERIAL_CONSOLE_DEMO=<empty|boards|lost|noaccess|identify|longname> serial-console` makes the app scan a fake `/sys` and
   `/dev` tree in a temporary folder whose boards are pseudo-terminals (an ESP32 on a CP2102 with a colour boot log, an
   Arduino Uno at 9600, an FT232R cable at 57600, the on-board UART; `lost` unplugs the ESP32 board for 3 s, `noaccess`
   refuses it; `identify` has the simulated boards of `src/core/sim.cpp` with their DTR / RTS: an ESP32-S3 on a CH340, a
