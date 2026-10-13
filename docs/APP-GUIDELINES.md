@@ -163,7 +163,7 @@ Layout of `apps/<id>/` (the template shows every file):
 
 ```
 app.json                         what the registry shows (below)
-icon.png                         about 73x64 px
+icon.png                         100x100 px, square, transparent (see ICON-PALETTE.md)
 build.sh                         calls ../_common/build_app.sh (native apps)
 src/ tests/                      sources; unit tests and headless scenes
 screenshots/*.png                optional; listed in registry.json
@@ -360,3 +360,5 @@ Copy into the pull request and tick.
 | 20 | `tests/BOARD-TESTS.md` written; the owner ran it on the deck (and the other boards that apply) | [ ] |
 | 21 | README complete (section 8) with 640x480 screenshots; repository README table updated | [ ] |
 | 22 | `sh tools/branding/check-branding.sh` clean for the new files | [ ] |
+| 23 | Icon follows [ICON-PALETTE.md](ICON-PALETTE.md): 100x100 square transparent PNG, own hue (not green, not shared), own silhouette, two colours, strokes >= 9 px | [ ] |
+| 24 | Icon checked at 32 px and in greyscale on the review sheet (`python tools/icons/make_icons.py`), distinct from every other tile | [ ] |
