@@ -6,6 +6,8 @@ Source shared by every native app of this repository (report 024 of the launcher
 nothing here is a shared library and there is no ABI to keep: the launcher contract (`docs/APP-CONTRACT.md` in the
 launcher repo) is the interface.
 
+Rules and good practice for every app: [`docs/APP-GUIDELINES.md`](../../docs/APP-GUIDELINES.md).
+
 The starting point of a new app is `apps/cyberdeck-app-template` (a draft that uses every piece).
 
 | File | What |
