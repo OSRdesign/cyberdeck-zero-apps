@@ -8,6 +8,8 @@ An independent hobby project, not affiliated with M5Stack (see the
 [launcher's disclaimer](https://github.com/OSRdesign/cyberdeck-zero-launcher#readme)).
 <!-- branding-allow-end -->
 
+**Writing an app? Read the [app guidelines](docs/APP-GUIDELINES.md) first** (screen sizes, input, packaging, testing, checklist).
+
 This repository is both the **app source** of that menu and a **template**: copy it and you can host your own
 apps for the deck in a few minutes, with nothing but a public GitHub repository.
 

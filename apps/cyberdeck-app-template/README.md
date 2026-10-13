@@ -8,6 +8,8 @@ It is a native `X-Fullscreen=true` app linking the launcher's `cp0_lvgl` (report
 own display backend, keyboard reader, widgets and on-screen keyboard run inside the app's process, so the app looks and
 behaves like the launcher's Settings on every screen from 640x480 up.
 
+Rules and good practice (with a checklist to tick before publishing): [`docs/APP-GUIDELINES.md`](../../docs/APP-GUIDELINES.md).
+
 ## What it shows
 
 | Piece | Where |
