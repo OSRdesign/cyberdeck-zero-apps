@@ -362,3 +362,7 @@ Copy into the pull request and tick.
 | 22 | `sh tools/branding/check-branding.sh` clean for the new files | [ ] |
 | 23 | Icon follows [ICON-PALETTE.md](ICON-PALETTE.md): 100x100 square transparent PNG, own hue (not green, not shared), own silhouette, two colours, strokes >= 9 px | [ ] |
 | 24 | Icon checked at 32 px and in greyscale on the review sheet (`python tools/icons/make_icons.py`), distinct from every other tile | [ ] |
+
+> **Icon upgrades:** the launcher reads an icon's size once and keeps it until it restarts. An app update that ships an icon of a different
+> size can look cropped on its tile until the launcher is restarted. Keep the icon at 100x100 from the first version on.
+
