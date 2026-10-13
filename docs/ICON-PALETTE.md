@@ -1,0 +1,91 @@
+# App icon system
+
+One badge per app, recognised at a glance like a car maker's logo: **one hue, one silhouette, one bold symbol**.
+The generator is [`tools/icons/make_icons.py`](../tools/icons/make_icons.py) (Pillow only); the icons it writes are
+in [`tools/icons/out/`](../tools/icons/out/), the review sheet is [`tools/icons/out/sheet.png`](../tools/icons/out/sheet.png).
+
+## Canonical size: 100x100, square, transparent PNG
+
+- The launcher home grid decodes every icon into a **100x100** buffer (`HomeIconBufferPool::kIconSize = 100`, the size of
+  its own `*_100.png` tiles) and then **stretches it to a square** (`lv_image_set_inner_align(STRETCH)`) of the
+  layout's icon size: 128 px on the 640x480 deck, 88 px on the compact 480x320 preset, computed from the physical
+  tokens elsewhere. A 100x100 source is therefore used without resampling in the pool, and only one smooth scale to the
+  screen follows.
+- A **non-square** icon (73x64) is stretched in one axis: distorted shapes and a different box than the label was
+  placed for. A 64x64 icon is upscaled twice (64 to 100 to 128) and gets soft edges. So: always **100x100**, never
+  non-square.
+- Keep the badge inside about 90x90 (5 px margin) so neighbouring tiles never touch and nothing comes near the two-line
+  label under the icon. Badges are sized to roughly the same ink coverage (47-64 % of the square) so the grid is tidy.
+- "At 64" in the rules below means the icon scaled to 64 px (the old tile estimate); 100 px sources scale down cleanly.
+
+## Rules
+
+1. **One dominant hue per app, never shared.** Green is reserved: it means "OK" (status) and is the launcher's CLI
+   and SSH tiles. No app badge is green.
+2. **Unique silhouette and a bold filled symbol.** Vary the badge: circle, hexagon, shield, squircle, diamond,
+   speech bubble, trapezoid, octagon. Same visual weight and size.
+3. **At most two colours plus the dark tile background** (#1E1E1E): the badge hue and one symbol colour (near-black ink
+   `#14181C` on light hues, white on dark hues). Flat fills, strokes of at least 9 px at 100 px (6 px at 64), no thin
+   lines, no gradients, no text.
+4. **Must read at 32 px and in greyscale**, and be told apart from every other icon in both. Check by rendering both and
+   looking (the sheet does it).
+5. **Transparent PNG, drawn at 8x and reduced** with LANCZOS (the script does it), so edges are clean.
+
+## The palette
+
+| App | Hue (badge) | Symbol colour | Badge shape | Symbol |
+|---|---|---|---|---|
+| LAN Scan (`lanscan`) | cyan `#19D3E6` | ink `#14181C` | circle | radar scope: two range rings, sweep, filled blips |
+| Wi-Fi Survey (`wifi-survey`) | orange `#FF7A1A` | ink `#14181C` | diamond (rotated, soft corners) | dot and two thick arcs |
+| Mesh Hop (`mesh-hop`) | purple `#8E5CF5` | white `#FFFFFF` | hexagon | three linked nodes |
+| MeshZero (`meshzero`) | magenta `#E23BD6` | white `#FFFFFF` | speech bubble | signal-wave bars |
+| Serial Console (`serial-console`) | amber `#FFC21A` | ink `#14181C` | DB9 trapezoid | nine pins |
+| System Monitor (`system-monitor`) | red `#F23B3B` | white `#FFFFFF` | shield | heartbeat line |
+| Viz1090 (`viz1090`) | sky blue `#5BB8FF` | ink `#14181C` | squircle | aircraft, seen from above |
+| App template (`cyberdeck-app-template`) | neutral grey `#8A9099` | ink `#14181C` | octagon | plus (placeholder) |
+
+### Reserved colours: the launcher's own tiles
+
+Approximate dominant hues (hue angle in degrees) of the launcher's built-in tiles. Apps keep their distance.
+
+| Launcher tile | Hue |
+|---|---|
+| CLI, SSH | green (about 120, bright green): reserved, also means "OK" |
+| Python | teal-green plus blue (about 160 and 195) |
+| Snake | teal (about 170) |
+| Settings | indigo / blue-violet (about 245) |
+| Store, Calculator | multicoloured (cyan, yellow, green, pink): avoid rainbow badges |
+| IP Panel | dark orange (about 18) |
+| Files | blue (about 215) |
+| LoRa | azure (about 210) |
+| Music | crimson pink (about 335) |
+| Camera | white, red accent |
+| Claw | red-orange (about 10) |
+| Recorder | yellow and grey |
+
+### Choosing a new hue
+
+1. List the hues in the table above (apps and launcher). Take the **free gap on the hue wheel** with the widest margin: at
+   least about 30 degrees from any listed hue, more when the saturation is similar.
+2. Free ranges today: warm yellow-lime (about 70-90, a "lemon" that is not green or amber), pink-red (about 345-355),
+   violet-blue (about 225-235, only if Settings is far enough in lightness), and any lightness variant is not a new hue.
+   Greys are for placeholders only.
+3. Use a saturated, mid-bright colour (HSV saturation 0.7-0.9, value 0.9-1.0) so it holds on `#1E1E1E`.
+4. If no hue is free, win on silhouette and lightness (a very light or a very dark badge), never on a subtler shade.
+
+## How to make a new icon
+
+1. Pick the hue (above) and a silhouette no other app uses. Add the row to the palette table.
+2. Add a function `icon_<name>(hue, ink)` to `tools/icons/make_icons.py` (draw in 100-unit coordinates, strokes >= 9) and
+   an entry in `ICONS`.
+3. `python tools/icons/make_icons.py` (use `--launcher <checkout>` to include the launcher's built-in tiles in the sheet).
+4. Look at `tools/icons/out/sheet.png`: the icon at 64 px, 32 px and greyscale next to all others and the built-ins.
+   Checks:
+   - [ ] 100x100, RGBA, transparent corners
+   - [ ] one hue, not green, not within about 30 degrees of another hue (or clearly different in silhouette and lightness)
+   - [ ] two colours at most, flat, no text, no stroke under 9 px
+   - [ ] distinct at 32 px and in greyscale from every other icon
+   - [ ] ink coverage 45-65 %, nothing outside the 5 px margin
+5. Copy `out/<id>.png` to `apps/<id>/icon.png` (and the package's `root/usr/share/APPLaunch/share/images/<id>.png`),
+   run `sh tools/branding/check-branding.sh`, tick rows in the [checklist](APP-GUIDELINES.md#13-final-checklist).
+6. Verify on the deck: the icon is not distorted, the label is not covered.

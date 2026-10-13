@@ -196,6 +196,8 @@ The identification is kept in the port's section of the settings file as `id_*` 
 
 ## Changes
 
+* Unreleased (the app is still a draft): a new tile icon, the amber connector badge of the icon system
+  (`docs/ICON-PALETTE.md`), 100x100 so the launcher draws it without stretching.
 * **0.3.1**: found on the deck at 640x480: a long device name no longer hides behind dots when a shorter one says the
   same (*ESP32 native USB* instead of *ESP32 native USB (CDC)*, *Due (programming)*, *Uno R4 WiFi*, *ST-LINK/V2-1 VCP*...:
   the table's names are 18 characters at most, the detail is in the hint and on the port page), and a name that is
