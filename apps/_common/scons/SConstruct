@@ -24,9 +24,11 @@ version_file = local_path.parent.parent / "ext_components" / "cp0_lvgl" / "sdk_v
 version = version_file.read_text(encoding="utf-8")
 static_lib_path = sdk_path / "github_source" / f"static_lib_{version}"
 
+# branding-allow-begin: the launcher tree's own build switch (selects the cross config), a technical token
 if os.environ.get("CardputerZero", '') == 'y':
     os.environ["CONFIG_DEFAULT_FILE"] = "linux_x86_cross_cp0_config_defaults.mk"
 
+# branding-allow-end
 if os.environ.get("CONFIG_DEFAULT_FILE") == None:
     if platform.machine() == 'x86_64':
         os.environ["CONFIG_DEFAULT_FILE"] = "linux_x86_sdl2_config_defaults.mk"
@@ -93,8 +95,10 @@ if cross_package_enabled:
             )
         except AttributeError:
             pass
+        # branding-allow-begin: upstream download URL of the SDK static library (needed when it is not present locally)
         down_url = (
             "https://github.com/CardputerZero/M5CardputerZero-UserDemo/"
             "releases/download/{}/sdk_bsp.tar.gz"
         ).format(version)
+        # branding-allow-end
         check_wget_down(down_url, "static_lib_{}.tar.gz".format(version))

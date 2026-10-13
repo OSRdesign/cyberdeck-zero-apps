@@ -4,9 +4,9 @@ For the Controller and the user (controller-led testing: the Controller deploys 
 physical steps). Commands run from Windows: `deck.py` is `C:\CLAUDE\zero7\launcher\docs\dev\deck\deck.py` (password in
 `PIPW`; `DECK_HOST=<ip>` points it at another board), `board.py` is `C:\CLAUDE\zero7\launcher\tools\boards\board.py`.
 Remote commands are in single quotes (Git Bash and PowerShell pass them unchanged: `$(...)` and `$?` must reach the
-board's shell). Nothing here uses `pkill -f`: the app's process name (`comm`) is `M5CardputerZero`, the same as the
-launcher's, so it is found with `pgrep -f "[M]5CardputerZero-cyberdeck-app-template"` (the brackets keep pgrep from
-matching the ssh shell itself).
+board's shell). Nothing here uses `pkill -f`: the app's process name (`comm`) is its binary name cut to 15 characters,
+`cyberdeck-app-t`, so it is found with `pgrep -x cyberdeck-app-t` (`pgrep -ax cyberdeck-app-t` to see the command
+line). It no longer collides with the launcher, whose binary is now `cyberdeckzero`.
 
 Expected pictures: the contact sheets `\\wsl.localhost\Ubuntu\home\osrde\cdk-build\cyberdeck-app-template\host\out\sheets\`
 (`template.png`: every page at 640x480, 800x480, 720x720, 1280x720, 1024x600; `notice.png`; `nocontract.png`), made by
@@ -24,7 +24,7 @@ Deck (zero7.local; launcher 0.6.0 or later, the user service):
 ```
 python deck.py put C:/CLAUDE/zero7/pkg-out/cyberdeck-app-template_0.1.0_arm64.deb /tmp/cdk-template.deb
 python deck.py sudo 'dpkg -i /tmp/cdk-template.deb'
-python deck.py run '/usr/share/APPLaunch/bin/M5CardputerZero-cyberdeck-app-template --version'
+python deck.py run '/usr/share/APPLaunch/bin/cyberdeck-app-template --version'
 ```
 
 `--version`: `Template (cyberdeck-app-template) 0.1.0`, the launcher commit and `cp0_lvgl pinned` or `same-tree`.
@@ -71,7 +71,7 @@ Before: `python deck.py run 'grep -E "^(w|h|gen)=" /run/user/1000/applaunch/scre
    the watchdog). Log: either `exited with code 0`, or `[process] ESC timeout: SIGTERM` followed by
    `[cdk] cyberdeck-app-template: signal 15, ended cleanly` and no `SIGKILL` line.
 5. SIGTERM directly: open the app, Run a command (Enter on "Run a command"), at once
-   `python deck.py run 'kill -TERM $(pgrep -f "[M]5CardputerZero-cyberdeck-app-template"); sleep 2; pgrep -af "[s]tep .i of 5" || echo no-child-left'`
+   `python deck.py run 'kill -TERM $(pgrep -x cyberdeck-app-t); sleep 2; pgrep -af "[s]tep .i of 5" || echo no-child-left'`
    Expect `no-child-left` and the home grid back.
 6. After: the screen.state command again: `w=640`, `h=480`, `gen` higher than before (the launcher rewrites it after
    every app; the app itself never writes it).
@@ -100,10 +100,10 @@ launcher's restart starts its timers again.
 ```
 python board.py test-start hackberry --env APPLAUNCH_OSK=force        (a staged launcher 0.6.0+ in ~/applaunch-test)
 set DECK_HOST=192.168.68.214
-python deck.py put C:/CLAUDE/zero7/apps-s0/apps/cyberdeck-app-template/root/usr/share/APPLaunch/bin/M5CardputerZero-cyberdeck-app-template applaunch-test/bin/M5CardputerZero-cyberdeck-app-template
+python deck.py put C:/CLAUDE/zero7/apps-s0/apps/cyberdeck-app-template/root/usr/share/APPLaunch/bin/cyberdeck-app-template applaunch-test/bin/cyberdeck-app-template
 python deck.py put C:/CLAUDE/zero7/apps-s0/apps/cyberdeck-app-template/root/usr/share/APPLaunch/applications/cyberdeck-app-template.desktop applaunch-test/applications/cyberdeck-app-template.desktop
 python deck.py put C:/CLAUDE/zero7/apps-s0/apps/cyberdeck-app-template/root/usr/share/APPLaunch/share/images/cyberdeck-app-template.png applaunch-test/share/images/cyberdeck-app-template.png
-python deck.py run 'chmod 755 ~/applaunch-test/bin/M5CardputerZero-cyberdeck-app-template; ~/applaunch-test/bin/M5CardputerZero-cyberdeck-app-template --version'
+python deck.py run 'chmod 755 ~/applaunch-test/bin/cyberdeck-app-template; ~/applaunch-test/bin/cyberdeck-app-template --version'
 ```
 
 (/usr/share/APPLaunch is a link to ~/applaunch-test while test-start runs: do NOT dpkg-install there.)
@@ -127,7 +127,7 @@ python deck.py sudo 'dpkg -i /tmp/cdk-template.deb'
 
 1. Home grid: no "App Template" tile; Settings > Apps does not list it either (X-MinSize=640x480).
 2. Started by hand (an older launcher would show the tile): stop the launcher and run the app with the board profile:
-   `python deck.py run 'systemctl --user stop APPLaunch.service; set -a; . /etc/applaunch/board.conf; set +a; APPLAUNCH_STD_KEYBOARD=1 timeout 60 /usr/share/APPLaunch/bin/M5CardputerZero-cyberdeck-app-template; echo rc=$?'`
+   `python deck.py run 'systemctl --user stop APPLaunch.service; set -a; . /etc/applaunch/board.conf; set +a; APPLAUNCH_STD_KEYBOARD=1 timeout 60 /usr/share/APPLaunch/bin/cyberdeck-app-template; echo rc=$?'`
    The panel (upright) shows "Template needs a screen of at least 640x480. This screen is 480x320. Press any key or
    tap the screen to close." (`notice.png`). A key on the USB keyboard or a tap closes it: `rc=0`.
 3. `python deck.py run 'setsid nohup systemctl --user restart APPLaunch.service > /dev/null 2>&1 < /dev/null &'`,
@@ -140,7 +140,7 @@ With the app open at its root for 10 s, then again after visiting every page (De
 keyboard, the dialog, Run a command):
 
 ```
-python deck.py run 'p=$(pgrep -f "[M]5CardputerZero-cyberdeck-app-template"); grep -E "VmRSS|VmHWM|Threads" /proc/$p/status; top -b -n 2 -d 3 -p $p | tail -2; free -m'
+python deck.py run 'p=$(pgrep -x cyberdeck-app-t); grep -E "VmRSS|VmHWM|Threads" /proc/$p/status; top -b -n 2 -d 3 -p $p | tail -2; free -m'
 ```
 
 Expect VmRSS and VmHWM under 25 MB, %CPU at idle (second `top` sample) a few percent at most, `free -m` with launcher
@@ -149,7 +149,7 @@ and app running leaving well over 250 MB available.
 ## T8. Deck: started over ssh without the launcher's environment
 
 ```
-python deck.py run 'grep -E "^gen=" /run/user/1000/applaunch/screen.state; systemctl --user stop APPLaunch.service; sleep 1; timeout 45 /usr/share/APPLaunch/bin/M5CardputerZero-cyberdeck-app-template; echo rc=$?; grep -E "^gen=" /run/user/1000/applaunch/screen.state'
+python deck.py run 'grep -E "^gen=" /run/user/1000/applaunch/screen.state; systemctl --user stop APPLaunch.service; sleep 1; timeout 45 /usr/share/APPLaunch/bin/cyberdeck-app-template; echo rc=$?; grep -E "^gen=" /run/user/1000/applaunch/screen.state'
 ```
 
 1. The app draws full screen at 640x480 as under the launcher. Its first log line (in the command's output):

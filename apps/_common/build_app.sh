@@ -7,7 +7,7 @@
 #
 #   cross  aarch64 binary for the boards: copies the app (src/), apps/_common and the launcher's LVGL FreeType glue into
 #          a scratch project <launcher tree>/projects/<ProjName>, runs scons there under the shared build lock, strips
-#          the result into <app>/root/usr/share/APPLaunch/bin/M5CardputerZero-<app id> and writes
+#          the result into <app>/root/usr/share/APPLaunch/bin/<app id> and writes
 #          <app>/root/usr/share/doc/<app id>/build-info; prints its size and its NEEDED libraries.
 #   host   the PC side: the app's headless harness and unit tests (make -C apps/_common/headless, LVGL from the
 #          launcher tree's SDK), then every test (test-common, test-<app id>) and every scene of <app>/tests/scenes
@@ -125,7 +125,7 @@ EOF
 
 build_cross() {
     local proj=$LAUNCHER_TREE/projects/$NAME
-    local bin=$APP/root/usr/share/APPLaunch/bin/M5CardputerZero-$ID
+    local bin=$APP/root/usr/share/APPLaunch/bin/$ID
     stamp aarch64
     echo "== cross: $proj"
     mkdir -p "$proj"

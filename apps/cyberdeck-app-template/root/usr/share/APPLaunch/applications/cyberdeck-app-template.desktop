@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=App Template
-Exec=/usr/share/APPLaunch/bin/M5CardputerZero-cyberdeck-app-template
+Exec=/usr/share/APPLaunch/bin/cyberdeck-app-template
 Terminal=false
 Icon=share/images/cyberdeck-app-template.png
 Type=Application

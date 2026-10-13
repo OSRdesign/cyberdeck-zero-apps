@@ -3,12 +3,12 @@ Upstream-Name: App Template
 Upstream-Contact: OSRdesign <https://github.com/OSRdesign/cyberdeck-zero-apps>
 Source: https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/cyberdeck-app-template
 Comment: The application is linked against the LVGL based cp0_lvgl runtime of the
- M5CardputerZero launcher (Copyright M5Stack Technology CO LTD, MIT) and LVGL
+ CardputerZero launcher by M5Stack (Copyright M5Stack Technology CO LTD, MIT) and LVGL
  (Copyright LVGL Kft, MIT), which are part of the binary and are therefore listed in
  its Copyright field below. The fonts it draws with are the launcher's, read at run
  time from /usr/share/APPLaunch/share/font; none is shipped in this package.
 
-Files: usr/share/APPLaunch/bin/M5CardputerZero-cyberdeck-app-template
+Files: usr/share/APPLaunch/bin/cyberdeck-app-template
 Copyright: 2026 OSRdesign
  M5Stack Technology CO LTD (cp0_lvgl runtime linked into the binary)
  LVGL Kft (LVGL, linked into the binary)

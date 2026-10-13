@@ -65,6 +65,8 @@ python3 tools/make_registry.py --only cyberdeck-app-template --out C:/somewhere/
 
 ## Credits and licences
 
+<!-- branding-allow-begin: credit of the cp0_lvgl runtime linked into the binary (MIT) -->
 MIT. The binary contains the launcher's `cp0_lvgl` runtime (M5Stack Technology CO LTD, MIT) and LVGL (LVGL Kft, MIT);
 see `root/usr/share/doc/cyberdeck-app-template/copyright`. The fonts are the launcher's, read at run time; none is
 shipped. The icon is a placeholder.
+<!-- branding-allow-end -->
