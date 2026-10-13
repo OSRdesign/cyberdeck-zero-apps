@@ -1,0 +1,44 @@
+# The Processes page from the overview: the top 15 by CPU, the status line names the highlighted process (pid,
+# state, memory, CPU); Sort by switches to memory (Enter, then back by touch); Esc back.
+title System Monitor: Processes page
+env SYSTEM_MONITOR_FIXTURE pi-zero-2w:busy
+sizes 640x480 800x480 720x720 1280x720 1024x600
+
+wait 400
+key up
+key up
+key up
+wait 400
+expect text "Processes"
+key enter
+wait 1500
+shot processes
+expect text "Sort by"
+expect text "CPU"
+
+key down
+wait 500
+shot processes-first
+expect text "chromium"
+
+key down
+key down
+key down
+wait 500
+shot processes-scroll
+key up
+key up
+key up
+key up
+wait 500
+key enter
+wait 500
+shot processes-memory
+expect text "Memory"
+tap "Memory"
+wait 500
+expect text "CPU"
+key esc
+wait 300
+expect text "Processes"
+expect noquit

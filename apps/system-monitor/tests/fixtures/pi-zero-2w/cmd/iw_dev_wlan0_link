@@ -1,0 +1,12 @@
+Connected to 3c:84:6a:12:34:56 (on wlan0)
+	SSID: DeckNet
+	freq: 2437
+	RX: 98765432 bytes (87654 packets)
+	TX: 1234567 bytes (9876 packets)
+	signal: -52 dBm
+	rx bitrate: 65.0 MBit/s
+	tx bitrate: 72.2 MBit/s MCS 7 short GI
+
+	bss flags:	short-slot-time
+	dtim period:	1
+	beacon int:	100

@@ -1,0 +1,34 @@
+# The Memory page (Pi Zero 2 W at work): RAM and swap history, used / available / cache / buffers / free / shared /
+# swap, the top 5 by memory; entered with Right (Enter's twin), left with Left (Esc's twin).
+title System Monitor: Memory page
+env SYSTEM_MONITOR_FIXTURE pi-zero-2w:busy
+sizes 640x480 800x480 720x720 1280x720 1024x600
+
+wait 400
+key down
+key down
+key down
+key right
+wait 1200
+shot memory
+expect text "Used"
+expect text "Available"
+
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 600
+shot memory-top
+expect text "Top processes by memory"
+expect text "chromium"
+
+key left
+wait 300
+expect text "Memory"
+expect text "Core 0"
+expect noquit

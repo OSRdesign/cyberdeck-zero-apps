@@ -1,0 +1,9 @@
+# Under the app's minimum (640x480): an older launcher ignores X-MinSize, so the app says so and closes on any key.
+title System Monitor: screens under 640x480
+env SYSTEM_MONITOR_FIXTURE pi-zero-2w:busy
+sizes 480x320 800x400 640x400
+
+shot notice
+expect noquit
+key down
+expect quit

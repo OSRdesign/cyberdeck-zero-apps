@@ -1,0 +1,42 @@
+# The overview on the deck's fixture (Pi Zero 2 W at work: tests/fixtures/pi-zero-2w/scenario-busy.conf): the core
+# bars and the status line, then the headline rows; Up / Down through them; a short Esc at the root ends the app.
+title System Monitor: overview (Pi Zero 2 W, power OK)
+env SYSTEM_MONITOR_FIXTURE pi-zero-2w:busy
+sizes 640x480 800x480 720x720 1280x720 1024x600
+
+wait 600
+shot overview
+expect noquit
+expect text "CPU"
+expect text "Core 0"
+expect text "Core 3"
+expect text "Power OK"
+expect text "Temperature"
+
+key down
+key down
+key down
+wait 600
+shot overview-memory
+expect text "Memory"
+
+key down
+key down
+key down
+key down
+key down
+wait 600
+shot overview-power
+expect text "Power"
+
+key down
+key down
+key down
+key down
+wait 600
+shot overview-end
+expect text "Sampling"
+expect text "Every 1 s"
+
+key esc
+expect quit

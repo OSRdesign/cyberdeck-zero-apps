@@ -1,0 +1,39 @@
+# A Pi 5 in a closed case (tests/fixtures/pi-5/scenario-hot.conf): 83 degrees, soft limit and throttling now, the fan at
+# level 2 of 4; the chart shows the climb with the 70 and 80 degree marks; the 5 V input from the PMIC.
+title System Monitor: hot CPU (Pi 5)
+env SYSTEM_MONITOR_FIXTURE pi-5:hot
+sizes 640x480 800x480 720x720 1280x720 1024x600
+
+wait 600
+shot overview-hot
+expect text "Temperature"
+
+key down
+wait 400
+shot overview-hot-row
+key enter
+wait 1200
+shot thermal-hot
+expect text "CPU temperature"
+expect text "Throttled now: the CPU is too hot"
+
+key down
+key down
+wait 600
+expect text "Hot: the Pi slows down"
+key down
+key down
+wait 600
+shot thermal-hot-fan
+expect text "Fan"
+
+key down
+key down
+key down
+key down
+key down
+key down
+wait 600
+shot thermal-hot-end
+expect text "Supply (5 V input)"
+expect noquit

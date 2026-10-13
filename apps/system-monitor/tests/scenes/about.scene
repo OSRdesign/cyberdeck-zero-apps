@@ -1,0 +1,37 @@
+# The System page: model, kernel, OS, hostname, serial, firmware, CPU, RAM, uptime, screen, launcher, app.
+title System Monitor: System page
+env SYSTEM_MONITOR_FIXTURE pi-zero-2w:busy
+sizes 640x480 800x480 720x720 1280x720 1024x600
+
+wait 400
+key up
+key up
+wait 400
+expect text "System"
+key enter
+wait 800
+shot about
+expect text "Model"
+expect text "Raspberry Pi Zero 2 W"
+
+key down
+key down
+key down
+key down
+key down
+wait 600
+shot about-firmware
+expect text "Firmware"
+expect text "2025-03-17 (2ab6c7e)"
+
+key down
+key down
+key down
+key down
+key down
+key down
+wait 600
+shot about-end
+expect text "Screen"
+expect text "Launcher"
+expect noquit

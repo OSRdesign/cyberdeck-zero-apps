@@ -1,0 +1,52 @@
+# The CPU page (Pi Zero 2 W at work): the history chart over each core, the frequency, the load and the top 5
+# processes by CPU; All processes opens the Processes page sorted by CPU; Esc comes back step by step.
+title System Monitor: CPU page, All processes
+env SYSTEM_MONITOR_FIXTURE pi-zero-2w:busy
+sizes 640x480 800x480 720x720 1280x720 1024x600
+
+wait 400
+key enter
+wait 1200
+shot cpu
+expect text "Total"
+expect text "Core 0"
+expect noquit
+
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 600
+shot cpu-top
+expect text "Top processes by CPU"
+@1280x720,720x720,1024x600 expect text "chromium"
+
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 600
+shot cpu-all
+expect text "All processes"
+key enter
+wait 1200
+shot processes-cpu
+expect text "Sort by"
+expect text "chromium"
+
+key esc
+wait 300
+expect text "All processes"
+key esc
+wait 300
+expect text "Core 0"
+expect noquit
+key esc
+expect quit

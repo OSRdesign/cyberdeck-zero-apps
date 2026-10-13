@@ -1,0 +1,48 @@
+# The Pi 3A+ on a weak supply (tests/fixtures/pi-3a-plus/scenario-undervoltage.conf): the overview's status line and
+# Power row say under-voltage now in red; the Temperature and power page has the sentence first, each flag, the raw
+# flags and the core voltage.
+title System Monitor: under-voltage now (Pi 3A+)
+env SYSTEM_MONITOR_FIXTURE pi-3a-plus:undervoltage
+sizes 640x480 800x480 720x720 1280x720 1024x600
+
+wait 600
+shot overview-uv
+expect text "Under-voltage now: check the power supply"
+
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 600
+shot overview-uv-row
+expect text "Under-voltage now"
+key enter
+wait 1200
+shot thermal-uv
+expect text "Under-voltage now: check the power supply"
+expect text "CPU temperature"
+
+key down
+key down
+key down
+key down
+wait 600
+shot thermal-uv-flags
+expect text "Under-voltage"
+expect text "now"
+
+key down
+key down
+key down
+key down
+wait 600
+shot thermal-uv-end
+expect text "Firmware flags"
+key esc
+wait 300
+expect text "Power"
+expect noquit

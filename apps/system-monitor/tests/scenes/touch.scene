@@ -1,0 +1,25 @@
+# Touch only (the Pi 3A+ way): a tap moves the highlight, a tap on the highlighted row opens it, a drag scrolls, the
+# header Esc goes back, and at the overview the header Esc ends the app.
+title System Monitor: touch only
+env SYSTEM_MONITOR_FIXTURE pi-3a-plus:undervoltage
+sizes 640x480 800x480 720x720 1280x720 1024x600
+
+wait 600
+tap "Temperature"
+wait 600
+tap "Temperature"
+wait 1200
+shot touch-thermal
+expect text "CPU temperature"
+drag 0.5 0.85 0.5 0.55
+wait 800
+shot touch-drag
+tap "Esc"
+wait 500
+expect text "Temperature"
+drag 0.5 0.9 0.5 0.5
+wait 800
+shot touch-overview-drag
+expect noquit
+tap "Esc"
+expect quit
