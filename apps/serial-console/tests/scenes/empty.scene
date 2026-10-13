@@ -1,0 +1,15 @@
+# No serial port: the card says what to do; a board plugged in 3 s later appears by itself (hot-plug, scenario "empty").
+title Serial Console: no port, then a board is plugged in
+env SERIAL_CONSOLE_DEMO empty
+sizes 640x480 800x480 720x720 1280x720 1024x600
+
+shot empty
+expect text "No serial adapter found."
+expect text "Show on-board UARTs"
+wait 3500
+shot plugged
+expect text "CP210x USB-serial"
+expect notext "No serial adapter found."
+expect text "ttyUSB0 - 115200 recommended"
+key esc
+expect quit

@@ -1,0 +1,45 @@
+# Find the speed: the FT232R cable talks at 57600, its recommended speed is 115200: 115200 and 9600 give noise,
+# 57600 is found. Then a silent board (the on-board UART): no readable text at any speed.
+title Serial Console: find the speed (found, silent)
+env SERIAL_CONSOLE_DEMO boards
+sizes 640x480 800x480 720x720 1280x720 1024x600
+
+key down
+key down
+key enter
+wait 300
+key up
+key up
+key enter
+wait 1100
+shot detecting
+wait 3000
+shot found
+expect text "Found 57600 - text looks clean"
+expect text "Found 57600"
+expect text "57600 8N1"
+
+# the silent on-board UART
+key esc
+wait 300
+key down
+key enter
+wait 300
+key up
+key enter
+wait 300
+key up
+key up
+key enter
+wait 10500
+shot silent
+expect text "No readable text"
+key enter
+wait 300
+expect text "No text found"
+key esc
+wait 300
+key down
+key enter
+key esc
+expect quit

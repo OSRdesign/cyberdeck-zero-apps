@@ -1,0 +1,51 @@
+# The ports page with three boards of the demonstration world (core/demo.hpp, scenario "boards"): an Arduino Uno on
+# ttyACM0, an ESP32 board on a CP2102 (ttyUSB0), an FT232R cable (ttyUSB1); the on-board UART on request.
+title Serial Console: ports (3 boards), on-board UARTs
+env SERIAL_CONSOLE_DEMO boards
+sizes 640x480 800x480 720x720 1280x720 1024x600
+
+shot ports
+expect noquit
+expect text "Arduino Uno"
+expect text "CP210x USB-serial"
+expect text "FT232R USB-serial"
+expect text "ttyACM0 - 9600 recommended"
+expect notext "No serial adapter found."
+
+key down
+shot ports-esp
+expect text "ttyUSB0 - 115200 recommended"
+
+# the on-board UARTs: the row under the ports turns them on; the UART on GPIO 14/15 comes before it
+key down
+key down
+key enter
+wait 300
+key up
+wait 600
+shot onboard
+expect text "On-board UART"
+expect text "GPIO 14/15"
+expect text "ttyAMA0 - 115200 recommended"
+key down
+key enter
+wait 300
+expect notext "On-board UART"
+
+# touch: a tap moves the highlight, a second tap opens the port; the header Esc comes back
+key up
+key up
+wait 600
+tap "Arduino Uno"
+wait 600
+tap "Arduino Uno"
+wait 300
+expect text "Connect"
+tap "Esc"
+wait 300
+expect text "Arduino Uno"
+expect noquit
+
+# a short Esc at the ports page ends the app
+key esc
+expect quit

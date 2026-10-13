@@ -33,6 +33,7 @@ After the app asks to quit, only `expect` lines are read.
 |---|---|
 | `title TEXT`, `sizes WxH ...` | sheet title; sizes (the command line's `--sizes` wins) |
 | `nocontract` | started by hand: no contract variables and no `input.state` (APP-CONTRACT section 7) |
+| `env NAME VALUE` | an environment variable set before the app starts (an app's own test fixture, e.g. the Serial Console's `SERIAL_CONSOLE_DEMO`) |
 | `wait MS` | run the app for MS ms (real time: background commands are real processes) |
 | `key NAME` | a press and release through cp0_lvgl's keyboard queue: `esc enter up down left right tab backspace delete space home end pgup pgdn`, a letter or a digit |
 | `type TEXT` | the characters, each as a key with its text (`cp0_keyboard_inject_key`, the on-screen keyboard's path) |

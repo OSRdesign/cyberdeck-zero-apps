@@ -1,0 +1,64 @@
+# The terminal page on the ESP32 board (115200): its boot log with colour codes (removed), a line longer than the view
+# (wrapped), a Latin-1 byte (a dot), a progress line rewritten with CR. No keyboard first: the line field and the
+# on-screen keyboard; then a keyboard connects: every key goes to the board.
+title Serial Console: terminal (on-screen keyboard, then a keyboard)
+env SERIAL_CONSOLE_DEMO boards
+sizes 640x480 800x480 720x720 1280x720 1024x600
+
+key down
+key enter
+wait 300
+key enter
+wait 1800
+shot terminal
+expect text "Connected"
+@640x480 expect text "ttyUSB0 115200"
+@800x480,720x720,1280x720,1024x600 expect text "ttyUSB0 115200 8N1"
+expect osk off
+
+# touch only: a tap on the line field brings the on-screen keyboard; Enter sends the line
+tapxy 0.3 0.9
+wait 300
+expect osk on
+shot terminal-osk
+type "help"
+key enter
+wait 600
+shot terminal-sent
+key esc
+wait 300
+expect osk off
+
+# a keyboard connects: no field, every key to the board
+keyboards 1
+wait 1300
+type "ls"
+key enter
+wait 600
+shot terminal-keyboard
+expect notext "Send"
+
+# the toolbar scrolls sideways where it is wider than the screen; pause, a drag back in the text, resume, clear
+drag 0.9 0.9 0.1 0.9
+wait 300
+tap "Pause"
+wait 300
+expect text "Resume"
+check paused
+tap "Resume"
+wait 300
+drag 0.5 0.35 0.5 0.6
+wait 300
+shot scrolled
+expect text "Resume"
+tap "Clear"
+wait 300
+check cleared
+
+# Esc leaves the terminal (the connection closes), then the port page, then the app
+key esc
+wait 300
+expect text "Connect"
+key esc
+key esc
+expect quit

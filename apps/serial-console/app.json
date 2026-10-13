@@ -1,15 +1,15 @@
 {
   "share_code": "serial-console",
   "package": "serial-console",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "title": "Serial Console",
-  "summary": "Talk to a USB-serial adapter or a microcontroller board from the deck's terminal.",
-  "description": "A small numbered menu in the launcher's terminal: pick a serial port (USB-serial adapters and boards on ttyUSB/ttyACM, on-board UARTs on request), the baud rate (1200 to 921600, 115200 by default), the frame (8N1, 7E1, 8E1, 8O1, 7O1, 8N2), local echo, the line ending sent by Enter and an optional log file in ~/serial-logs, then it opens picocom. Ctrl-A then Ctrl-X quits. The last choice is remembered. Works with a keyboard or with the on-screen keyboard (digits pick the port), on every screen size. The user must be in the dialout group.",
+  "summary": "Finds your USB-serial adapters and boards, tells what is plugged in, recommends the settings, and talks to it.",
+  "description": "A full-screen serial console made for the deck's small screen. It lists the serial ports as they are plugged in (USB-serial adapters and boards on ttyUSB/ttyACM, the on-board UARTs on request) and names what is connected from its USB ids: FTDI, CP210x, CH340/CH9102 and PL2303 adapters, Arduino, ESP32 and Raspberry Pi Pico boards, ST-LINK probes, u-blox GPS receivers, a Cisco console cable and more. Each port has a setup page: what is connected and what it typically is, the recommended speed and why, speed (1200 to 921600, 74880 included), frame (8N1, 7E1, 8E1, 8O1, 7O1, 8N2), local echo, what Enter and Backspace send, a log file in ~/serial-logs, and Find the speed, which listens at each speed and picks the one where the text is clean. The settings are remembered per port. The terminal page shows the received text (colour codes removed, never garbage), with RX/TX counters, pause, clear, a toolbar for Ctrl-C, Ctrl-D, Ctrl-Z, Tab, Esc, Enter, the log and a board reset (DTR/RTS pulse), and reconnects by itself when the board is unplugged and plugged in again. With a keyboard every key goes to the board; touch only, a line field with the on-screen keyboard. Needs a screen of at least 640x480, a launcher with full-screen app support, and the user in the dialout group.",
   "categories": ["Tools"],
   "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
   "license": "MIT",
   "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/serial-console",
-  "depends": "picocom",
+  "depends": "libfreetype6, libinput10, libxkbcommon0",
   "permissions": {"additional_hardware": true},
   "draft": true
 }
