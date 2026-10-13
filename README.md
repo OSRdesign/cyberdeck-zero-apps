@@ -1,7 +1,12 @@
 # cyberdeck-zero-apps
 
-Apps for the [cyberdeck-zero-launcher](https://github.com/OSRdesign/cyberdeck-zero-launcher) (the CardputerZero
-launcher on a Raspberry Pi Zero 2W), installable from the deck's **Settings > Apps** menu.
+Apps for the [CyberdeckZero Launcher](https://github.com/OSRdesign/cyberdeck-zero-launcher) (a touch launcher for
+Raspberry Pi cyberdecks), installable from the deck's **Settings > Apps** menu.
+
+<!-- branding-allow-begin: disclaimer -->
+An independent hobby project, not affiliated with M5Stack (see the
+[launcher's disclaimer](https://github.com/OSRdesign/cyberdeck-zero-launcher#readme)).
+<!-- branding-allow-end -->
 
 This repository is both the **app source** of that menu and a **template**: copy it and you can host your own
 apps for the deck in a few minutes, with nothing but a public GitHub repository.
@@ -47,8 +52,8 @@ tools/                        build_deb.py and make_registry.py (pure Python 3, 
 ```
 
 The deck downloads `registry.json`, lists the apps in it, and installs the `.deb` an entry points to after
-checking its MD5. The format is the CardputerZero Store registry format (schema 2), so a source you create here
-also works in the Store app.
+checking its MD5. The format is the registry format (schema 2) of M5Stack's CardputerZero Store, which the
+launcher bundles, so a source you create here also works in the Store app.
 
 ## 1. Create your repository
 
@@ -103,7 +108,7 @@ A program that does not use the SDK works too: the launcher starts any executabl
 Put the files of the app under `apps/<id>/root/`, exactly where they must end up on the device:
 
 ```
-apps/myapp/root/usr/share/APPLaunch/bin/M5CardputerZero-myapp        <- your executable
+apps/myapp/root/usr/share/APPLaunch/bin/myapp                        <- your executable
 apps/myapp/root/usr/share/APPLaunch/applications/myapp.desktop       <- the launcher entry
 apps/myapp/root/usr/share/APPLaunch/share/images/myapp.png           <- the tile icon
 ```
@@ -113,13 +118,15 @@ apps/myapp/root/usr/share/APPLaunch/share/images/myapp.png           <- the tile
 ```ini
 [Desktop Entry]
 Name=My App
-Exec=/usr/share/APPLaunch/bin/M5CardputerZero-myapp
+Exec=/usr/share/APPLaunch/bin/myapp
 Terminal=false
 Icon=share/images/myapp.png
 Type=Application
 ```
 
-`Exec` must be an absolute path to an executable (no shell tricks). `Icon` is relative to
+`Exec` must be an absolute path to an executable (no shell tricks). Name the executable after the app id
+(`share_code`), with no prefix. (Older apps here still carry a prefix inherited from the upstream launcher; they
+drop it at their next version.) `Icon` is relative to
 `/usr/share/APPLaunch/`. Anything else your app needs (data files, fonts) goes in the same tree, under
 `usr/share/APPLaunch/share/<your-app>/` to avoid clashing with other apps. Files under a `bin/` directory
 become executable automatically.
@@ -177,8 +184,8 @@ shows the new version after **Sync my sources** (GitHub's cache can delay it by 
 The repository is MIT. Each app page lists its own credits and licences in full; in short:
 
 * **LAN Scan** and **Wi-Fi Survey** use the IEEE OUI registry (vendor names) published at
-  <https://standards-oui.ieee.org/>. Both run on the LVGL based `cp0_lvgl` runtime of the M5CardputerZero launcher
-  (M5Stack, MIT).
+  <https://standards-oui.ieee.org/>. Both run on the LVGL based `cp0_lvgl` runtime, from the CardputerZero launcher by M5Stack
+  (MIT).
 * **viz1090** bundles viz1090 (BSD), readsb (GPL-3 or later), fonts (SIL OFL 1.1, Font Awesome icons CC BY 4.0) and
   map data (Natural Earth, OurAirports, public domain); see [its page](apps/viz1090/README.md).
 * **Mesh Hop** speaks the MeshCore protocol (MeshCore firmware and protocol, MIT; meshcore_py, MIT, as the

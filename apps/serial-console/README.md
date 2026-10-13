@@ -58,7 +58,7 @@ Ctrl-A then Ctrl-H shows picocom's other commands.
 ## Build from source
 
 Nothing to compile: the app is the shell script
-`root/usr/share/APPLaunch/bin/M5CardputerZero-serial-console`. Host tests (WSL or any Linux):
+`root/usr/share/APPLaunch/bin/serial-console` (named after the app id). Host tests (WSL or any Linux):
 
 ```
 sh apps/serial-console/tests/run_tests.sh

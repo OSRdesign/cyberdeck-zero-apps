@@ -68,12 +68,14 @@ test and an `nmcli` stub). The build runs in WSL (Ubuntu) and needs a checkout o
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/wifi-survey/build/build.sh
 ```
 
+<!-- branding-allow-begin: binary name with the old prefix, remove at the app's next version -->
 [`build/build.sh`](build/build.sh) copies `src/` into the scratch project `projects/WifiSurvey` of the launcher
 checkout (kept out of the launcher's git), runs `scons` under the shared build lock, and installs the binary as
 `root/usr/share/APPLaunch/bin/M5CardputerZero-wifi-survey`. Then, at the root of this repository, run
 `python3 tools/make_registry.py`. Only `root/` goes into the `.deb`; this page, `src/` and `build/` do not.
+<!-- branding-allow-end -->
 
 ## Credits and licence
 
 MIT. Vendor names come from the IEEE OUI registry published at <https://standards-oui.ieee.org/> (the app ships a
-derived `oui.tsv`). The app runs on the LVGL based `cp0_lvgl` runtime of the M5CardputerZero launcher (M5Stack, MIT).
+derived `oui.tsv`). The app runs on the LVGL based `cp0_lvgl` runtime, from the CardputerZero launcher by M5Stack (MIT).

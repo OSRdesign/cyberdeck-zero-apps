@@ -1,5 +1,5 @@
 #!/bin/sh
-# Serial console for the CardputerZero launcher: a small numbered menu, then picocom.
+# Serial console for the CyberdeckZero Launcher: a small numbered menu, then picocom.
 # Runs in the launcher's terminal (Terminal=true). Plain POSIX sh (dash).
 #
 # Tests: SERIAL_CONSOLE_TEST=1 . this-file   defines the functions without running the menu.
@@ -7,7 +7,9 @@
 
 SC_BYID_DIR=${SC_BYID_DIR:-/dev/serial/by-id}
 SC_DEV_DIR=${SC_DEV_DIR:-/dev}
+# branding-allow-begin: the launcher's config folder, a technical name inherited from upstream
 SC_CONF=${SC_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/cardputerzero/serial-console.conf}
+# branding-allow-end
 SC_LOG_DIR=${SC_LOG_DIR:-$HOME/serial-logs}
 SC_PICOCOM=${SC_PICOCOM:-picocom}
 

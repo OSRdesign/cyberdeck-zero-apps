@@ -1,0 +1,35 @@
+# Allow-list of tools/branding/check-branding.sh for this repository (from the launcher's apps template).
+# Run: sh tools/branding/check-branding.sh
+# Format: one git pathspec glob per line ("**" crosses directories); "#" starts a comment (the reason).
+# Credits and derivation statements in READMEs use <!-- branding-allow-begin --> / <!-- branding-allow-end -->.
+
+# --- The check itself ---
+tools/branding/check-branding.sh             # names the brand words it looks for
+tools/branding/branding-allow.txt            # this file
+
+# --- Licence notices ---
+apps/*/root/usr/share/doc/*/copyright        # Debian copyright files: MIT notices and derived-from statements
+
+# --- Upstream build files (copied from the CardputerZero launcher's SDK; MIT, unchanged) ---
+apps/*/src/SConstruct                        # upstream build file: the "CardputerZero=y" build switch and the upstream UserDemo URL
+
+# --- Config folder ~/.config/cardputerzero (technical name inherited from upstream, stays: launcher NAMING.md) ---
+# written as ${XDG_CONFIG_HOME:-$HOME/.config}/cardputerzero, which the check's ".config/cardputerzero" token misses
+apps/viz1090/build/run_viz1090.sh            # config path of viz1090
+apps/viz1090/root/opt/viz1090/run_viz1090.sh # config path of viz1090 (packaged copy)
+apps/viz1090/build/vizsetup.cpp              # config path of viz1090
+
+# --- Old binary prefix of the published apps (report 025 decision 7): binary M5CardputerZero-<app> -> <id> ---
+apps/lanscan/build/build.sh                                         # remove at the app's next version
+apps/lanscan/root/usr/share/APPLaunch/applications/lanscan.desktop  # remove at the app's next version (Exec=)
+apps/wifi-survey/build/build.sh                                     # remove at the app's next version
+apps/wifi-survey/root/usr/share/APPLaunch/applications/wifi-survey.desktop  # remove at the app's next version (Exec=)
+apps/mesh-hop/build/build.sh                                        # remove at the app's next version
+apps/mesh-hop/root/usr/share/APPLaunch/applications/mesh-hop.desktop  # remove at the app's next version (Exec=)
+apps/mesh-hop/src/main/src/main.cpp                                 # remove at the app's next version (usage comment names the binary)
+apps/mesh-hop/src/tests/ui_smoke.sh                                 # remove at the app's next version (usage comment names the binary)
+apps/meshzero/build/build.sh                                        # remove at the app's next version
+apps/meshzero/root/usr/share/APPLaunch/applications/meshzero.desktop  # remove at the app's next version (Exec=)
+
+# --- Generated catalogue ---
+registry.json                                # remove at the next publish: make_registry.py now writes "CyberdeckZero"

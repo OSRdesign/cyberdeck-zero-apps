@@ -5,7 +5,7 @@
 # End-to-end part: a socat PTY pair, the menu driven through stdin, picocom started for real (skipped when socat or
 # picocom are missing; SOCAT=/path PICOCOM=/path point to unpacked binaries).
 HERE=$(cd "$(dirname "$0")" && pwd)
-SCRIPT=$HERE/../root/usr/share/APPLaunch/bin/M5CardputerZero-serial-console
+SCRIPT=$HERE/../root/usr/share/APPLaunch/bin/serial-console
 T=$(mktemp -d)
 trap 'rm -rf "$T"; [ -n "$SOCAT_PID" ] && kill "$SOCAT_PID" 2>/dev/null' EXIT
 FAIL=0; PASS=0
