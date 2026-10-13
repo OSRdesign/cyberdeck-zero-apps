@@ -1,0 +1,34 @@
+# No permission (scenario "noaccess": the user counts as not in dialout and the ESP32 board's node refuses access):
+# the ports page's fix row and its dialog, then Connect refused with the exact fix.
+title Serial Console: no permission
+env SERIAL_CONSOLE_DEMO noaccess
+sizes 640x480 800x480 720x720 1280x720 1024x600
+
+key up
+wait 600
+shot ports-noaccess
+expect text "Serial port access"
+key enter
+wait 300
+shot access-dialog
+expect text "No permission for serial ports"
+key enter
+wait 300
+expect notext "No permission for serial ports"
+
+key down
+key down
+wait 600
+key enter
+wait 300
+key enter
+wait 800
+shot permission-dialog
+expect text "No permission for ttyUSB0"
+tap "OK"
+wait 300
+expect notext "No permission for ttyUSB0"
+expect text "Connect"
+key esc
+key esc
+expect quit

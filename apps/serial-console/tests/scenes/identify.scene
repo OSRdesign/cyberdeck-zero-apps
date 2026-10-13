@@ -1,0 +1,152 @@
+# "What is on the other end?" on an ESP32-S3 board behind a CH340 (scenario "identify": core/sim.hpp boards with
+# simulated DTR / RTS). The ports page's BOOTSEL row; on the port page Listen (nothing sent: its ESP-IDF log), the
+# card and its boot output; Reset and listen (a confirmation first: the ROM banner and the boot); Ask the device, ESP
+# boot loader (a confirmation listing what is sent: the chip and the MAC, then the board back in its program).
+title Serial Console: identify an ESP32-S3 on a CH340
+env SERIAL_CONSOLE_DEMO identify
+sizes 640x480 800x480 720x720 1280x720 1024x600
+
+wait 600
+shot ports
+expect text "CH340 USB-serial"
+
+# the board in BOOTSEL mode: a USB drive, not a serial port; what to do
+key up
+key up
+wait 600
+shot bootsel
+expect text "RP2040 in BOOTSEL mode"
+expect text "A USB drive, not a serial port: replug it without BOOT"
+key enter
+wait 300
+shot bootsel-notice
+expect text "RP2040 in BOOTSEL mode (a USB drive, not a serial port): unplug and replug without the BOOT button."
+key enter
+wait 300
+expect notext "RP2040 in BOOTSEL mode (a USB drive, not a serial port): unplug and replug without the BOOT button."
+
+# the ESP32-S3 board: its port page, the identification rows above the settings
+key up
+key up
+wait 600
+expect text "ttyUSB0 - 115200 recommended"
+key enter
+wait 300
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+wait 600
+shot identify-rows
+expect text "Listen"
+expect text "sends nothing"
+expect text "Listens at each speed; sends nothing, no reset"
+
+# Listen: a Busy row while it listens (Esc stops it), then the card
+key enter
+wait 500
+shot listening
+expect text "Esc stops"
+wait 3500
+shot card-listen
+expect text "Behind it"
+expect text "An ESP32 board"
+expect text "Likely (listened)"
+key down
+key down
+key down
+key down
+wait 600
+shot card-actions
+expect text "Boot output"
+key enter
+wait 600
+shot boot-output
+key down
+key down
+key esc
+wait 300
+expect text "Boot output"
+
+# Reset and listen: never without the confirmation
+key esc
+wait 300
+expect text "Behind it"
+key down
+key down
+key enter
+wait 300
+shot reset-confirm
+expect text "Reset the board?"
+expect text "Reset and listen"
+expect text "Cancel"
+tap "Cancel"
+wait 300
+expect notext "Reset the board?"
+key enter
+wait 300
+key enter
+wait 600
+shot resetting
+expect text "Esc stops"
+wait 4500
+shot card-reset
+expect text "ESP32-S3"
+expect text "ESP-IDF v5.1.2"
+key down
+key down
+key down
+wait 600
+expect text "Sure (after a reset)"
+
+# Ask the device: the ESP boot loader
+key esc
+wait 300
+key down
+key enter
+wait 300
+shot ask
+expect text "MicroPython"
+expect text "Ctrl-C, Ctrl-B"
+key up
+wait 600
+expect text "ESP boot loader"
+expect text "Resets into the ROM; reads the chip and MAC"
+key enter
+wait 300
+shot ask-confirm
+expect text "Ask: ESP boot loader?"
+expect text "Send"
+tap "Send"
+wait 400
+shot asking
+wait 4000
+shot card-esp
+expect text "ESP32-S3"
+expect text "The board was reset into its program"
+key down
+key down
+key down
+key down
+wait 600
+check card-esp-confidence
+expect text "Sure (asked)"
+
+key esc
+wait 300
+expect text "ESP boot loader"
+key esc
+wait 300
+expect text "Ask the device"
+key esc
+wait 300
+expect text "CH340 USB-serial"
+key esc
+expect quit

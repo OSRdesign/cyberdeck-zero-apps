@@ -1,0 +1,15 @@
+## Representative sample, NOT a capture from a particular device: written in the format an ESP8266 boot ROM prints at 74880 baud after a reset (then its program at its own speed) prints
+## (source: the ESP8266 ROM banner, ESP8266 Non-OS SDK documentation (boot messages)). Lines starting with "##" are comments; "\x1b" stands for the ESC byte.
+
+
+ ets Jan  8 2013,rst cause:2, boot mode:(3,6)
+
+load 0x4010f000, len 3460, room 16
+tail 4
+chksum 0xcc
+load 0x3fff20b8, len 40, room 4
+tail 4
+chksum 0xc9
+csum 0xc9
+v00000000
+~ld

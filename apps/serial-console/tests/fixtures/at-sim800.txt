@@ -1,0 +1,20 @@
+## Representative sample, NOT a capture from a particular device: written in the format a SIMCom SIM800L modem (echo on) answers AT then ATI prints
+## (source: SIM800 Series AT Command Manual). Lines starting with "##" are comments; "\x1b" stands for the ESC byte.
+
+RDY
+
++CFUN: 1
+
++CPIN: READY
+
+Call Ready
+
+SMS Ready
+AT
+
+OK
+ATI
+
+SIM800 R14.18
+
+OK

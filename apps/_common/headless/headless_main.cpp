@@ -100,6 +100,7 @@ struct Scene {
     std::vector<Size> sizes;
     std::vector<Line> lines;
     bool nocontract = false; /* started by hand: no contract variables, no input.state (APP-CONTRACT section 7) */
+    std::vector<std::pair<std::string, std::string>> env; /* set before the app starts (an app's test fixture) */
 };
 
 bool load_scene(const std::string &path, Scene &scene)
@@ -143,6 +144,14 @@ bool load_scene(const std::string &path, Scene &scene)
         }
         if (line.words[0] == "nocontract") {
             scene.nocontract = true;
+            continue;
+        }
+        if (line.words[0] == "env") {
+            if (line.words.size() != 3) {
+                std::fprintf(stderr, "%s:%d: env NAME VALUE\n", path.c_str(), number);
+                return false;
+            }
+            scene.env.emplace_back(line.words[1], line.words[2]);
             continue;
         }
         if (line.words[0] == "sizes") {
@@ -370,6 +379,8 @@ int run_size(const Size &size, const Scene &scene, const std::string &out_dir, c
             unsetenv(v);
         std::remove((run.runtime + "/input.state").c_str());
     }
+
+    for (const auto &kv : scene.env) setenv(kv.first.c_str(), kv.second.c_str(), 1);
 
     if (!headless::platform_init(size.w, size.h, default_ppmm(size), resources)) {
         std::fprintf(stderr, "[%s] platform init failed\n", size.name().c_str());

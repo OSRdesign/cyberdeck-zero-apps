@@ -1,0 +1,17 @@
+## Representative sample, NOT a capture from a particular device: written in the format an OpenWrt 23.05 router prints on its serial console after boot (banner and shell) prints
+## (source: OpenWrt /etc/banner and procd messages). Lines starting with "##" are comments; "\x1b" stands for the ESC byte.
+
+[   10.432100] procd: - init complete -
+Please press Enter to activate this console.
+
+BusyBox v1.36.1 (2023-11-14 21:38:11 UTC) built-in shell (ash)
+
+  _______                     ________        __
+ |       |.-----.-----.-----.|  |  |  |.----.|  |_
+ |   -   ||  _  |  -__|     ||  |  |  ||   _||   _|
+ |_______||   __|_____|__|__||________||__|  |____|
+          |__| W I R E L E S S   F R E E D O M
+ -----------------------------------------------------
+ OpenWrt 23.05.2, r23630-842932a63d
+ -----------------------------------------------------
+root@OpenWrt:~#

@@ -1,0 +1,13 @@
+## Representative sample, NOT a capture from a particular device: written in the format MicroPython 1.22 on a Raspberry Pi Pico answers Ctrl-C then Ctrl-B prints
+## (source: MicroPython REPL documentation (docs.micropython.org, "The MicroPython Interactive Interpreter Mode")). Lines starting with "##" are comments; "\x1b" stands for the ESC byte.
+
+temp: 21.4
+Traceback (most recent call last):
+  File "main.py", line 7, in <module>
+KeyboardInterrupt:
+MicroPython v1.22.2 on 2024-02-22; Raspberry Pi Pico with RP2040
+Type "help()" for more information.
+>>>
+MicroPython v1.22.2 on 2024-02-22; Raspberry Pi Pico with RP2040
+Type "help()" for more information.
+>>>

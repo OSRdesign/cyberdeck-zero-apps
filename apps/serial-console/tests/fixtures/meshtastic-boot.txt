@@ -1,0 +1,15 @@
+## Representative sample, NOT a capture from a particular device: written in the format a Meshtastic node (ESP32-S3, Heltec V3) prints after a reset with serial debug on prints
+## (source: the ESP32-S3 ROM banner and the Meshtastic firmware log (src/main.cpp, the "//\ E S H T /\ S T / C" banner)). Lines starting with "##" are comments; "\x1b" stands for the ESC byte.
+
+ESP-ROM:esp32s3-20210327
+Build:Mar 27 2021
+rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)
+entry 0x403c98d0
+
+//\ E S H T /\ S T / C
+
+DEBUG | ??:??:?? 0 Filesystem files:
+INFO  | ??:??:?? 0 S:B:43,2.3.15.deb7c27,heltec-v3,meshtastic/firmware
+INFO  | ??:??:?? 0 Build timestamp: 1718000000
+DEBUG | ??:??:?? 1 [Power] Battery: usbPower=1, isCharging=0, batMv=4200, batPct=100
+INFO  | ??:??:?? 2 [RadioIf] Radio freq=906.875, config.lora.frequency_offset=0.000

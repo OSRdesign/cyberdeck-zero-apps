@@ -1,0 +1,13 @@
+## Representative sample, NOT a capture from a particular device: written in the format Marlin 2.1 prints when the printer starts (opening the port resets an AVR board) prints
+## (source: Marlin Firmware src/MarlinCore.cpp start-up messages, auto-reported temperatures (M155)). Lines starting with "##" are comments; "\x1b" stands for the ESC byte.
+
+start
+echo:Marlin 2.1.2.1
+
+echo: Last Updated: 2023-07-22 | Author: (none, default config)
+echo:Compiled: Jul 22 2023
+echo: Free Memory: 2463  PlannerBufferBytes: 1168
+echo:V87 stored settings retrieved (667 bytes; crc 64395)
+echo:  G21    ; (mm)
+ T:21.50 /0.00 B:20.80 /0.00 @:0 B@:0
+ T:21.50 /0.00 B:20.81 /0.00 @:0 B@:0

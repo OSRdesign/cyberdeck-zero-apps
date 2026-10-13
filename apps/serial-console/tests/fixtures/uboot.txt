@@ -1,0 +1,16 @@
+## Representative sample, NOT a capture from a particular device: written in the format U-Boot 2023.07 prints on a Raspberry Pi 4 serial console prints
+## (source: Das U-Boot board start-up messages). Lines starting with "##" are comments; "\x1b" stands for the ESC byte.
+
+
+U-Boot 2023.07 (Oct 03 2023 - 14:00:00 +0000)
+
+DRAM:  948 MiB (effective 3.9 GiB)
+RPI 4 Model B (0xc03114)
+Model: Raspberry Pi 4 Model B Rev 1.4
+Core:  209 devices, 16 uclasses, devicetree: board
+MMC:   mmcnr@7e300000: 1, mmc@7e340000: 0
+Loading Environment from FAT... OK
+In:    serial,usbkbd
+Out:   serial,vidconsole
+Net:   eth0: ethernet@7d580000
+Hit any key to stop autoboot:  2

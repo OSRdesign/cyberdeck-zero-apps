@@ -1,0 +1,10 @@
+## Representative sample, NOT a capture from a particular device: written in the format GRBL 1.1 prints at reset, then answers $I and ? prints
+## (source: the GRBL 1.1 interface documentation (gnea/grbl doc/markdown/interface.md)). Lines starting with "##" are comments; "\x1b" stands for the ESC byte.
+
+
+Grbl 1.1h ['$' for help]
+[MSG:'$H'|'$X' to unlock]
+[VER:1.1h.20190825:]
+[OPT:V,15,128]
+ok
+<Idle|MPos:0.000,0.000,0.000|FS:0,0|WCO:0.000,0.000,0.000>

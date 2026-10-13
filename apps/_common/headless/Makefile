@@ -148,3 +148,5 @@ clean:
 	rm -rf $(BUILD)
 
 -include $(LVGL_OBJS:.o=.d) $(CP0_OBJS:.o=.d) $(COMMON_OBJS:.o=.d) $(APP_OBJS:.o=.d)
+# the unit tests too: a header of core/ changed recompiles them (else a test links against a stale layout)
+-include $(patsubst %.o,%.d,$(call appobj,$(APP_TEST_SRCS)) $(call commonobj,$(COMMON_TEST_SRCS)))

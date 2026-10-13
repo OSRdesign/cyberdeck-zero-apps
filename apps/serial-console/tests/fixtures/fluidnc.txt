@@ -1,0 +1,7 @@
+## Representative sample, NOT a capture from a particular device: written in the format FluidNC (a GRBL-compatible ESP32 CNC firmware) prints at start prints
+## (source: FluidNC wiki, startup messages). Lines starting with "##" are comments; "\x1b" stands for the ESC byte.
+
+Grbl 3.7.9 [FluidNC v3.7.9 (wifi) '$' for help]
+[MSG:INFO: FluidNC v3.7.9 https://github.com/bdring/FluidNC]
+[MSG:INFO: Compiled with ESP32 SDK:v4.4.4]
+[MSG:INFO: Machine Default (Test Drive no I/O)]

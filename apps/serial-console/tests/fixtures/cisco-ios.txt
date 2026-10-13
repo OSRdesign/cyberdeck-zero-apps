@@ -1,0 +1,10 @@
+## Representative sample, NOT a capture from a particular device: written in the format a Cisco Catalyst switch prints on its console port while it boots IOS prints
+## (source: Cisco IOS boot messages and the console prompt). Lines starting with "##" are comments; "\x1b" stands for the ESC byte.
+
+Cisco IOS Software, C2960 Software (C2960-LANBASEK9-M), Version 15.0(2)SE11, RELEASE SOFTWARE (fc3)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2017 by Cisco Systems, Inc.
+
+Press RETURN to get started!
+
+Switch>

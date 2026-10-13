@@ -1,0 +1,24 @@
+# Unplugged during a session (scenario "lost": the ESP32 board goes 2.5 s after the app first talks to it at its speed
+# and comes back 3 s later): the text stays, the pill says the port is lost, the connection comes back by itself.
+title Serial Console: port lost and back
+env SERIAL_CONSOLE_DEMO lost
+sizes 640x480 800x480 720x720 1280x720 1024x600
+
+key down
+key enter
+wait 300
+key enter
+wait 1500
+shot connected
+expect text "Connected"
+wait 3000
+shot lost
+expect text "Port lost: waiting"
+wait 3800
+shot back
+expect text "Connected"
+key esc
+wait 300
+key esc
+key esc
+expect quit

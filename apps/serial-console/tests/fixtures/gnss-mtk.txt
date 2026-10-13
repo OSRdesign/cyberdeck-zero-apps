@@ -1,0 +1,8 @@
+## Representative sample, NOT a capture from a particular device: written in the format a MediaTek MT3339 GPS module (PA6H type) prints at 9600 after power-up prints
+## (source: the MediaTek PMTK command set, NMEA 0183; checksums computed). Lines starting with "##" are comments; "\x1b" stands for the ESC byte.
+$PMTK011,MTKGPS*08
+$PMTK010,001*2E
+$GPGGA,064951.000,2307.1256,N,12016.4438,E,1,8,0.95,39.9,M,17.8,M,,*63
+$GPGSA,A,3,29,21,26,15,18,09,06,10,,,,,2.32,0.95,2.11*00
+$GPRMC,064951.000,A,2307.1256,N,12016.4438,E,0.03,165.48,260406,3.05,W,A*2C
+$GPVTG,165.48,T,,M,0.03,N,0.06,K,A*36

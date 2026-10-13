@@ -1,0 +1,7 @@
+## Representative sample, NOT a capture from a particular device: written in the format an ESP32 prints when it starts with IO0 (BOOT) held low: the ROM download mode prints
+## (source: the ESP32 ROM banner, esptool documentation "Boot Mode Selection"). Lines starting with "##" are comments; "\x1b" stands for the ESC byte.
+
+ets Jun  8 2016 00:22:57
+
+rst:0x1 (POWERON_RESET),boot:0x3 (DOWNLOAD_BOOT(UART0/UART1/SDIO_REI_REO_V2))
+waiting for download

@@ -1,0 +1,163 @@
+# "What is on the other end?" on the other simulated boards of scenario "identify": a GPS behind a PL2303 cable
+# (Listen finds NMEA at 9600; Apply recommended settings; Copy summary to the log file), a Raspberry Pi Pico with
+# MicroPython (Ask: Ctrl-C, Ctrl-B, by touch) and an Arduino Uno (Ask: its boot loader, the AVR chip).
+title Serial Console: identify a GPS, a MicroPython Pico, an Arduino Uno
+env SERIAL_CONSOLE_DEMO identify
+sizes 640x480 800x480 720x720 1280x720 1024x600
+
+# the GPS on ttyUSB1
+key down
+key down
+key down
+wait 600
+expect text "ttyUSB1 - 115200 recommended"
+key enter
+wait 300
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+wait 600
+expect text "Listen"
+key enter
+wait 1200
+shot gps-listening
+wait 3500
+shot gps-card
+expect text "GPS receiver"
+expect text "u-blox NEO-M8N-0"
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 600
+shot gps-recommended
+expect text "Recommended"
+expect text "9600 8N1"
+key down
+wait 600
+expect text "Apply settings"
+key enter
+wait 300
+shot gps-applied
+expect text "Set: 9600 8N1 for ttyUSB1"
+expect text "In use"
+key down
+key down
+wait 600
+expect text "Copy summary"
+key enter
+wait 300
+check gps-copied
+key up
+key up
+key up
+key up
+wait 600
+expect text "Evidence"
+key enter
+wait 600
+shot gps-evidence
+key esc
+wait 300
+key esc
+wait 300
+key down
+key down
+key down
+key down
+wait 600
+expect text "9600 (recommended)"
+key esc
+wait 600
+expect text "ttyUSB1 - 9600 recommended"
+
+# the Pico (its own USB): Ask, MicroPython, by touch
+key up
+key up
+key up
+wait 600
+expect text "ttyACM0 - 115200 recommended"
+key enter
+wait 300
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+wait 600
+expect text "Ask the device"
+tap "Ask the device"
+wait 300
+shot pico-ask
+tap "MicroPython"
+wait 300
+shot pico-confirm
+expect text "Ask: MicroPython?"
+tap "Send"
+wait 3000
+shot pico-card
+expect text "RP2040"
+expect text "MicroPython v1.22.2"
+key esc
+wait 300
+key esc
+wait 300
+key esc
+wait 300
+
+# the Arduino Uno: Ask, its boot loader
+key down
+wait 300
+expect text "ttyACM1 - 9600 recommended"
+key enter
+wait 300
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+wait 300
+key enter
+wait 300
+key down
+key down
+key down
+key down
+wait 600
+expect text "Arduino boot loader"
+key enter
+wait 300
+shot uno-confirm
+key enter
+wait 3500
+shot uno-card
+expect text "ATmega328P"
+expect text "Optiboot 8.0"
+key esc
+wait 300
+key esc
+wait 300
+key esc
+wait 300
+key esc
+expect quit

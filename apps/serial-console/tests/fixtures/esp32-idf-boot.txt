@@ -1,0 +1,32 @@
+## Representative sample, NOT a capture from a particular device: written in the format an ESP32 (classic) prints after a reset: its ROM, then the ESP-IDF 5.1 boot loader and app start prints
+## (source: the ESP32 ROM banner and ESP-IDF v5.1 boot logs, docs.espressif.com "Application Startup Flow"). Lines starting with "##" are comments; "\x1b" stands for the ESC byte.
+
+ets Jun  8 2016 00:22:57
+
+rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0030,len:7112
+load:0x40078000,len:15624
+load:0x40080400,len:4
+entry 0x40080640
+\x1b[0;32mI (31) boot: ESP-IDF v5.1.2 2nd stage bootloader\x1b[0m
+\x1b[0;32mI (31) boot: compile time Jan 12 2024 10:00:00\x1b[0m
+\x1b[0;32mI (31) boot: Multicore bootloader\x1b[0m
+\x1b[0;32mI (36) boot: chip revision: v3.0\x1b[0m
+\x1b[0;32mI (39) boot.esp32: SPI Speed      : 40MHz\x1b[0m
+\x1b[0;32mI (44) boot.esp32: SPI Mode       : DIO\x1b[0m
+\x1b[0;32mI (101) boot: Loaded app from partition at offset 0x10000\x1b[0m
+\x1b[0;32mI (101) boot: Disabling RNG early entropy source...\x1b[0m
+\x1b[0;32mI (113) cpu_start: Multicore app\x1b[0m
+\x1b[0;32mI (122) cpu_start: Pro cpu start user code\x1b[0m
+\x1b[0;32mI (122) cpu_start: cpu freq: 160000000 Hz\x1b[0m
+\x1b[0;32mI (122) app_init: Application information:\x1b[0m
+\x1b[0;32mI (125) app_init: Project name:     hello_world\x1b[0m
+\x1b[0;32mI (130) app_init: App version:      v5.1.2\x1b[0m
+\x1b[0;32mI (135) app_init: Compile time:     Jan 12 2024 10:00:01\x1b[0m
+\x1b[0;32mI (141) app_init: ELF file SHA256:  a4c6e0e2b8b1f3c9...\x1b[0m
+\x1b[0;32mI (147) app_init: ESP-IDF:          v5.1.2\x1b[0m
+\x1b[0;32mI (290) main_task: Calling app_main()\x1b[0m
+Hello world!

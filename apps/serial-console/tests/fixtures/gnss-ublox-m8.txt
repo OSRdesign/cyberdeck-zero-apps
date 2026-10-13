@@ -1,0 +1,15 @@
+## Representative sample, NOT a capture from a particular device: written in the format a u-blox NEO-M8N GPS module prints at 9600 baud after power-up (TXT lines, then NMEA) prints
+## (source: u-blox M8 receiver description (UBX-13003221), NMEA 0183 sentences; checksums computed). Lines starting with "##" are comments; "\x1b" stands for the ESC byte.
+$GNTXT,01,01,02,u-blox AG - www.u-blox.com*4E
+$GNTXT,01,01,02,HW UBX-M8030 00080000*60
+$GNTXT,01,01,02,ROM CORE 3.01 (107888)*2B
+$GNTXT,01,01,02,FWVER=SPG 3.01*46
+$GNTXT,01,01,02,PROTVER=18.00*11
+$GNTXT,01,01,02,MOD=NEO-M8N-0*67
+$GNRMC,123519.00,A,4807.03812,N,01131.00012,E,0.012,,131026,,,A*65
+$GNVTG,,T,,M,0.012,N,0.022,K,A*3E
+$GNGGA,123519.00,4807.03812,N,01131.00012,E,1,08,1.01,545.4,M,46.9,M,,*4E
+$GNGSA,A,3,10,32,23,24,12,15,,,,,,,1.80,1.01,1.49*19
+$GPGSV,2,1,07,10,63,137,17,12,30,071,33,15,27,295,22,23,31,151,36*70
+$GLGSV,1,1,02,65,34,087,29,72,51,302,31*65
+$GNGLL,4807.03812,N,01131.00012,E,123519.00,A,A*78

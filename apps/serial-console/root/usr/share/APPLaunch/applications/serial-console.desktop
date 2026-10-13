@@ -1,6 +1,8 @@
 [Desktop Entry]
 Name=Serial Console
 Exec=/usr/share/APPLaunch/bin/serial-console
-Terminal=true
+Terminal=false
 Icon=share/images/serial-console.png
 Type=Application
+X-Fullscreen=true
+X-MinSize=640x480
