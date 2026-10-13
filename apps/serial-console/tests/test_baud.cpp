@@ -6,6 +6,9 @@
 #include "check.hpp"
 
 #include "baud.hpp"
+#include "settings.hpp"
+
+#include <algorithm>
 
 #include <cstdint>
 
@@ -59,21 +62,34 @@ void test_baud()
 
     // the order of the speeds
     const std::vector<int> o = detect_order(115200);
-    CHECK(o == (std::vector<int>{115200, 9600, 57600, 38400, 19200, 230400, 460800, 921600, 4800, 2400, 1200}));
+    CHECK(o == (std::vector<int>{115200, 9600, 57600, 38400, 19200, 230400, 460800, 921600, 4800, 2400}));
     const std::vector<int> o9 = detect_order(9600);
-    CHECK(o9.size() == 11 && o9[0] == 9600 && o9[1] == 115200);
+    CHECK(o9.size() == 10 && o9[0] == 9600 && o9[1] == 115200);
     const std::vector<int> o74 = detect_order(74880);
-    CHECK(o74.size() == 12 && o74[0] == 74880 && o74[1] == 115200);
+    CHECK(o74.size() == 11 && o74[0] == 74880 && o74[1] == 115200);
+    // never 1200 (the Arduino / Pico "touch" that reboots a board into its boot loader), whatever is recommended;
+    // it stays in the Speed list for a choice by hand
+    for (const int rec : {0, 1200, 2400, 9600, 57600, 74880, 115200, 921600}) {
+        const std::vector<int> order = detect_order(rec);
+        CHECK(std::find(order.begin(), order.end(), 1200) == order.end());
+        Detector d(rec, true);
+        while (!d.done()) {
+            CHECK(d.rate() != 1200);
+            d.record("");
+        }
+    }
+    CHECK(detect_order(1200).front() == 115200);
+    CHECK(std::find(speed_list().begin(), speed_list().end(), 1200) != speed_list().end());
 
     // a board at 57600, recommended 115200: found at the third speed, nothing more is tried
     {
         Detector d(115200, false);
-        CHECK_EQ(d.progress_text(), std::string("Trying 115200... (1 of 11)"));
+        CHECK_EQ(d.progress_text(), std::string("Trying 115200... (1 of 10)"));
         int listens = 0;
         while (!d.done()) {
             ++listens;
             d.record(d.rate() == 57600 ? text : wrong_speed());
-            if (listens == 1) CHECK_EQ(d.progress_text(), std::string("Trying 9600... (2 of 11)"));
+            if (listens == 1) CHECK_EQ(d.progress_text(), std::string("Trying 9600... (2 of 10)"));
         }
         CHECK_EQ(listens, 3);
         const DetectResult r = d.result();
@@ -91,7 +107,7 @@ void test_baud()
             d.record("");
             ++listens;
         }
-        CHECK_EQ(listens, 11);
+        CHECK_EQ(listens, 10);
         const DetectResult r = d.result();
         CHECK(!r.found && r.baud == 0);
         CHECK_EQ(r.message, std::string("No readable text at any speed; the board may be silent: try Connect and "
@@ -108,8 +124,8 @@ void test_baud()
             d.record("");
             ++listens;
         }
-        CHECK_EQ(listens, 22);
-        CHECK_EQ(with_enter, 11);
+        CHECK_EQ(listens, 20);
+        CHECK_EQ(with_enter, 10);
         CHECK(!d.result().found);
     }
     // a router that only answers Enter (its login prompt), at 9600

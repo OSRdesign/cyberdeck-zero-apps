@@ -84,11 +84,15 @@ bool looks_clean(const TextScore &s)
     return s.bytes >= kMinJudgeBytes && s.score >= kCleanScore;
 }
 
+namespace {
+constexpr int kTouchBaud = 1200; /* the reboot-to-boot-loader "touch" of USB boards: never tried by itself */
+} // namespace
+
 std::vector<int> detect_order(int recommended)
 {
     std::vector<int> order;
-    const int common[] = {115200, 9600, 57600, 38400, 19200, 230400, 460800, 921600, 4800, 2400, 1200};
-    if (recommended > 0) order.push_back(recommended);
+    const int common[] = {115200, 9600, 57600, 38400, 19200, 230400, 460800, 921600, 4800, 2400};
+    if (recommended > 0 && recommended != kTouchBaud) order.push_back(recommended);
     for (const int rate : common)
         if (std::find(order.begin(), order.end(), rate) == order.end()) order.push_back(rate);
     return order;

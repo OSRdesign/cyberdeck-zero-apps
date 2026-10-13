@@ -39,7 +39,9 @@ constexpr double kCleanScore = 0.90;
 bool looks_clean(const TextScore &s);
 
 /* The speeds tried, in order: the recommended one, then 115200, 9600, 57600, 38400, 19200, 230400, 460800, 921600,
- * 4800, 2400, 1200 (each once). */
+ * 4800, 2400 (each once). Never 1200, not even as the recommended one: opening a port at 1200 baud is the "touch"
+ * that reboots an Arduino Leonardo / Zero or a Raspberry Pi Pico into its boot loader (it stays in the Speed list,
+ * to choose by hand). */
 std::vector<int> detect_order(int recommended);
 
 struct DetectResult {
@@ -64,7 +66,7 @@ public:
     void cancel() { done_ = true; cancelled_ = true; }
     bool cancelled() const { return cancelled_; }
     DetectResult result() const;
-    /* "Trying 9600... (2 of 12)", "Trying 9600 with Enter... (2 of 12)" */
+    /* "Trying 9600... (2 of 10)", "Trying 9600 with Enter... (2 of 10)" */
     std::string progress_text() const;
 
 private:

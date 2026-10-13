@@ -11,9 +11,13 @@
  * keyboard). The target of /dev/serial0 is the UART on GPIO 14/15.
  *
  * Identification: from /sys/class/tty/<tty>/device up to the USB device directory (the first one with idVendor):
- * idVendor, idProduct, manufacturer, product, serial; the interface number (bInterfaceNumber) on the way; the bound
- * driver (the basename of device/driver: cp210x, ftdi_sio, ch341, pl2303, cdc_acm). /dev/serial/by-id gives the stable
- * name the settings are kept under.
+ * idVendor, idProduct, manufacturer, product, serial, bcdDevice, bNumInterfaces, speed; the interface number
+ * (bInterfaceNumber) on the way; the bound driver (the basename of device/driver: cp210x, ftdi_sio, ch341, pl2303,
+ * cdc_acm). /dev/serial/by-id gives the stable name the settings are kept under. The exact chip comes from
+ * devices.hpp chip_variant().
+ *
+ * Boot drives: a board in its USB boot loader (RP2040 / RP2350 BOOTSEL, a UF2 boot loader) is a USB drive with no
+ * serial port: scan_boot_drives() finds it on /sys/bus/usb/devices so the ports page can say what to do.
  *
  * Every path is under Roots (default / ): the tests and the demonstration world (demo.hpp) point them at a fake tree.
  */
@@ -41,6 +45,11 @@ struct PortInfo {
     bool gpio = false;        /* the target of /dev/serial0: GPIO 14/15 */
     std::uint16_t vid = 0, pid = 0;
     std::string manufacturer, product, serial, driver, interface;
+    std::uint16_t bcd = 0;    /* bcdDevice (0: unknown) */
+    int interfaces = 0;       /* bNumInterfaces of the USB device */
+    std::string speed;        /* sysfs "speed": "12", "480" (Mbit/s) */
+    std::string usb_dir;      /* the USB device's sysfs directory (real path) */
+    std::string chip;         /* chip_variant(): "FT232R", "CH340", "CP2102N"; "" unknown */
     const DeviceInfo *known = nullptr;
     std::string id;           /* the stable key of its settings (port_id) */
     std::string title;        /* the port list's title (port_title) */
@@ -62,6 +71,15 @@ std::string resolve_port(const Roots &roots, const std::string &id);
 
 /* Same ports, same names (the list does not need redrawing). */
 bool same_port(const PortInfo &a, const PortInfo &b);
+
+struct BootDrive {
+    std::uint16_t vid = 0, pid = 0;
+    std::string product;
+    std::string usb_dir;
+    BootMode mode;
+};
+/* The USB devices in a boot loader that have no serial port among `ports`. */
+std::vector<BootDrive> scan_boot_drives(const Roots &roots, const std::vector<PortInfo> &ports);
 
 /* ---------------------------------------------------------------- permissions */
 

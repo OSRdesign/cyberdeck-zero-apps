@@ -2,11 +2,14 @@
  * SPDX-License-Identifier: MIT
  *
  * Serial Console: the pages' logic without LVGL (unit-tested by tests/test_core.cpp): navigation, and the texts the
- * pages show (row values, the status line of a port, the "What is connected" table, the terminal's title).
+ * pages show (row values, the status line of a port, the "What is connected" table, the terminal's title, the
+ * identification card and the probes' confirmations).
  */
 #pragma once
 
+#include "identify.hpp"
 #include "ports.hpp"
+#include "probe.hpp"
 #include "serial_io.hpp"
 #include "settings.hpp"
 
@@ -23,7 +26,7 @@ constexpr const char *kAppTitle = "Serial Console";
 
 /* ---------------------------------------------------------------- navigation */
 
-enum class View { Ports, Port, Choice, Terminal };
+enum class View { Ports, Port, Choice, Terminal, Ask, Card, Detail };
 enum class Back { Quit, Popped };
 
 class Nav {
@@ -53,6 +56,46 @@ std::string speed_value(int baud, int recommended);
 
 /* "What is connected": key / value rows (rows without a value are left out). */
 std::vector<std::pair<std::string, std::string>> port_info_items(const PortInfo &port, bool access_ok);
+
+/* ---------------------------------------------------------------- "What is on the other end?" */
+
+/* A USB-serial adapter or cable (or a debug probe's serial port): it says nothing about what is wired to it. */
+bool bare_adapter(const PortInfo &port);
+/* two lines of a 640x480 row (an Info row with no value wraps once, then ends with dots) */
+constexpr const char *kAdapterNote = "The adapter cannot tell what is behind it; the probes below ask";
+
+/* The recommendation once something was identified: its speed and reason replace the device table's. */
+Recommendation identified_recommendation(const Recommendation &base, const Identity &id);
+/* What to remember after a probe: a new result that found nothing keeps an earlier one that did; a result about the
+ * same board keeps the chip and board an earlier probe found (the ROM's chip under an ESP-IDF log). */
+Identity remembered_identity(const Identity &old, const Identity &now);
+
+enum class CardAction { None, Boot, Evidence, Apply, Again, Copy, Reset, Ask };
+struct CardRow {
+    std::string key;
+    std::string value;     /* Info: the value ("" = the key alone across the row); a row with an action: its value */
+    CardAction action = CardAction::None;
+};
+/* The result card: Device (the adapter), Behind it, Chip, Firmware, Board, Details, Framing, Confidence, Found,
+ * Boot output, Evidence, Recommended, then the actions (Apply settings: the recommended ones; Run again; Copy summary
+ * to a log file: the labels are short so that they fit a 640x480 row with their value); for a bare adapter where
+ * nothing was identified the adapter note and the other probes. `in_use`: the port's speed now (Apply says "In use"
+ * when it is the recommended one already). */
+std::vector<CardRow> card_rows(const Identity &id, const PortInfo &port, Probe probe, int in_use);
+/* "Likely (listened)", "Sure (asked)" */
+std::string confidence_text(const Identity &id);
+/* "2026-10-13 14:05" (local time; "" when unknown) */
+std::string when_text(std::time_t when);
+
+/* The port page's rows of the identification: their status line. */
+std::string probe_caption(Probe p, ResetStyle style);
+/* The confirmation dialog of a probe that resets the board or sends something. */
+std::string confirm_title(Probe p, ResetStyle style);
+std::string confirm_text(Probe p, ResetStyle style, int baud);
+std::string confirm_button(Probe p, ResetStyle style);
+/* The Ask page: a probe's row value and its status line. */
+std::string ask_value(Probe p);
+std::string ask_caption(Probe p);
 
 /* "ttyUSB0 115200 8N1" */
 std::string terminal_title(const std::string &tty, int baud, const std::string &frame);

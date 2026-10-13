@@ -151,6 +151,19 @@ PortSettings Config::settings(const std::string &id) const
     return it == ports.end() ? PortSettings() : it->second;
 }
 
+Identity Config::identity(const std::string &id) const
+{
+    const auto it = idents.find(id);
+    return it == idents.end() ? Identity() : it->second;
+}
+
+void Config::set_identity(const std::string &id, const Identity &identity)
+{
+    if (!ports.count(id)) ports[id] = PortSettings(); /* its section */
+    if (identity.kind == Kind::None) idents.erase(id);
+    else idents[id] = identity;
+}
+
 std::string Config::serialize() const
 {
     std::ostringstream out;
@@ -169,6 +182,9 @@ std::string Config::serialize() const
         out << "backspace=" << (s.backspace == Backspace::Bs ? "BS" : "DEL") << "\n";
         out << "log=" << (s.log ? "on" : "off") << "\n";
         out << "detect_enter=" << (s.detect_enter ? "on" : "off") << "\n";
+        const auto ident = idents.find(entry.first);
+        if (ident != idents.end())
+            for (const auto &kv : identity_to_keys(ident->second)) out << kv.first << "=" << kv.second << "\n";
     }
     return out.str();
 }
@@ -201,6 +217,11 @@ Config Config::parse(const std::string &text, bool *migrated)
         const std::string key = trim(line.substr(0, eq));
         const std::string value = trim(line.substr(eq + 1));
         if (!section.empty()) {
+            if (key.compare(0, 3, "id_") == 0) {
+                Identity &id = config.idents[section];
+                identity_apply_key(id, key, value);
+                continue;
+            }
             apply_port_key(config.ports[section], key, value);
             continue;
         }
@@ -216,6 +237,10 @@ Config Config::parse(const std::string &text, bool *migrated)
         } else {
             apply_port_key(old, key, value);
         }
+    }
+    for (auto it = config.idents.begin(); it != config.idents.end();) { /* a section with id_ keys but no kind */
+        if (it->second.kind == Kind::None) it = config.idents.erase(it);
+        else ++it;
     }
     if (!v2 && !old_port.empty()) {
         if (old.baud == 115200) old.baud = 0; /* 0.1.0's default, not a choice: follow the recommendation */

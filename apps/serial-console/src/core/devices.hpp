@@ -64,6 +64,26 @@ Recommendation recommend(const DeviceInfo *info, bool onboard);
 /* "10c4:ea60" */
 std::string usb_id_text(std::uint16_t vid, std::uint16_t pid);
 
+/* The USB-serial chip's exact part, where its USB descriptor tells it reliably: FTDI from bcdDevice and the interface
+ * count (the rule of Linux's ftdi_sio: FT232R, FT232H, FT2232C/D, FT2232H, FT4232H, FT-X...), WCH from the product
+ * id (CH340, CH341, CH9102, CH343, CH342), Silicon Labs from the product string when it names the part (CP2102N,
+ * CP2104...: "" when it does not), Espressif's USB-Serial/JTAG. "" when nothing reliable is known. */
+std::string chip_variant(std::uint16_t vid, std::uint16_t pid, std::uint16_t bcd, int interfaces,
+                         const std::string &product);
+/* bcdDevice as a release: 0x0600 -> "6.00" */
+std::string bcd_text(std::uint16_t bcd);
+/* sysfs "speed" (Mbit/s): "12" -> "12 Mbit/s", "480" -> "480 Mbit/s", "5000" -> "5 Gbit/s" */
+std::string usb_speed_text(const std::string &speed);
+
+/* A board in its USB boot loader: a USB drive (mass storage), not a serial port. */
+struct BootMode {
+    std::string title;  /* "RP2040 in BOOTSEL mode" (the row) */
+    std::string hint;   /* the status line: "A USB drive, not a serial port: replug it without BOOT" */
+    std::string advice; /* the whole sentence: what it is and what to do (the notice) */
+};
+/* The boot loader this USB device is in (RP2040 / RP2350 BOOTSEL, a UF2 boot loader), or false. */
+bool boot_mode(std::uint16_t vid, std::uint16_t pid, const std::string &product, BootMode *out);
+
 /* Case-insensitive substring test (ASCII). */
 bool contains_nocase(const std::string &text, const std::string &part);
 

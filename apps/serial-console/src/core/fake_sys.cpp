@@ -38,7 +38,31 @@ std::string hex4(std::uint16_t v)
     return buf;
 }
 
+/* the USB device directory and its bus link */
+bool usb_device(const Roots &roots, const UsbTty &port)
+{
+    const std::string name = "1-" + std::to_string(port.usb_port);
+    const std::string usb = roots.sys + "/devices/usb1/" + name;
+    bool ok = put(usb + "/idVendor", hex4(port.vid)) && put(usb + "/idProduct", hex4(port.pid));
+    if (!port.manufacturer.empty()) ok = ok && put(usb + "/manufacturer", port.manufacturer);
+    if (!port.product.empty()) ok = ok && put(usb + "/product", port.product);
+    if (!port.serial.empty()) ok = ok && put(usb + "/serial", port.serial);
+    if (port.bcd) ok = ok && put(usb + "/bcdDevice", hex4(port.bcd));
+    char ifs[8];
+    std::snprintf(ifs, sizeof(ifs), "%2d", port.interfaces); /* sysfs pads it: " 1" */
+    ok = ok && put(usb + "/bNumInterfaces", ifs);
+    if (!port.speed.empty()) ok = ok && put(usb + "/speed", port.speed);
+    ok = ok && fs::make_dirs(roots.sys + "/bus/usb/devices") &&
+         fs::make_link(usb, roots.sys + "/bus/usb/devices/" + name);
+    return ok;
+}
+
 } // namespace
+
+bool add_usb_device(const Roots &roots, const UsbTty &device)
+{
+    return usb_device(roots, device);
+}
 
 Roots make_roots(const std::string &base)
 {
@@ -55,10 +79,7 @@ bool add_usb_tty(const Roots &roots, const UsbTty &port)
     const std::string usb = roots.sys + "/devices/usb1/1-" + std::to_string(port.usb_port);
     const std::string iface = usb + "/1-" + std::to_string(port.usb_port) + ":1." +
                               std::to_string(std::atoi(port.interface.c_str()));
-    bool ok = put(usb + "/idVendor", hex4(port.vid)) && put(usb + "/idProduct", hex4(port.pid));
-    if (!port.manufacturer.empty()) ok = ok && put(usb + "/manufacturer", port.manufacturer);
-    if (!port.product.empty()) ok = ok && put(usb + "/product", port.product);
-    if (!port.serial.empty()) ok = ok && put(usb + "/serial", port.serial);
+    bool ok = usb_device(roots, port);
     ok = ok && put(iface + "/bInterfaceNumber", port.interface);
     const bool acm = port.tty.compare(0, 6, "ttyACM") == 0;
     std::string device = acm ? iface : iface + "/" + port.tty;

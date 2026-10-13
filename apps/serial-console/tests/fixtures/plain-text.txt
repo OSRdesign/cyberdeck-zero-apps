@@ -1,0 +1,7 @@
+## Representative sample, NOT a capture from a particular device: written in the format an Arduino sketch prints with Serial.println() (nothing a rule knows) prints
+## (source: a typical sensor sketch). Lines starting with "##" are comments; "\x1b" stands for the ESC byte.
+
+Temperature: 21.5 C  Humidity: 40 %
+Temperature: 21.6 C  Humidity: 41 %
+Temperature: 21.6 C  Humidity: 41 %
+Temperature: 21.7 C  Humidity: 42 %

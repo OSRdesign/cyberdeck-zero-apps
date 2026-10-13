@@ -59,3 +59,6 @@ void test_term();
 void test_baud();
 void test_settings();
 void test_serial_pty();
+void test_identify();
+void test_bootproto();
+void test_probe_pty();

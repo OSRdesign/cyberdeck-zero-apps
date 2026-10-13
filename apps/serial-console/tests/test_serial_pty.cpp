@@ -378,10 +378,10 @@ void test_demo_world()
         CHECK(wait_for([&] { return s.status().state == LinkState::Open; }, 2000));
         CHECK(wait_for([&] { return s.status().state == LinkState::Lost; }, 5000));
         CHECK(resolve_port(w.roots(), id).empty());
+        std::string old;
+        s.take(old, 1 << 20); /* what came before the unplug (taken now: the banner may start as soon as it reopens) */
         CHECK(wait_for([&] { return s.status().state == LinkState::Open; }, 6000));
         CHECK_EQ(s.status().reconnects, 1);
-        std::string old;
-        s.take(old, 1 << 20); /* what came before the unplug */
         TermBuffer term; /* the board came back at its speed: its banner again, as after a power-up */
         CHECK(wait_for([&] {
             std::string chunk;

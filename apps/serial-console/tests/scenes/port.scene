@@ -1,4 +1,5 @@
-# The port page of the ESP32 board: what is connected, the recommended settings, the value lists.
+# The port page of the ESP32 board: what is connected, the identification rows, the recommended settings, the value
+# lists.
 title Serial Console: port page, value lists
 env SERIAL_CONSOLE_DEMO boards
 sizes 640x480 800x480 720x720 1280x720 1024x600
@@ -11,7 +12,7 @@ expect text "Connect"
 expect text "115200 8N1"
 expect text "ESP32 boards use 115200; ESP8266 ROM: 74880"
 
-# up to Speed, then to the identification rows (the status line gives way to them)
+# up to Speed, then to the identification rows (each says what it does in the status line)
 key up
 key up
 key up
@@ -23,6 +24,26 @@ key up
 wait 600
 shot port-settings
 expect text "115200 (recommended)"
+key up
+wait 300
+expect text "Ask the device"
+expect text "Asks the device a question you choose"
+key up
+key up
+wait 600
+shot port-identify
+expect text "Listen"
+expect text "sends nothing"
+expect text "Listens at each speed; sends nothing, no reset"
+key up
+key up
+wait 600
+expect text "Identify what is connected"
+expect notext "Listens at each speed; sends nothing, no reset"
+
+# up to the identification of the adapter (the status line gives way to them)
+key up
+key up
 key up
 key up
 key up
@@ -42,6 +63,13 @@ check port-top
 expect text "CP210x USB-serial"
 
 # the Speed list: 115200 is marked recommended and checked; 230400 picked
+key down
+key down
+key down
+key down
+key down
+key down
+key down
 key down
 key down
 key down

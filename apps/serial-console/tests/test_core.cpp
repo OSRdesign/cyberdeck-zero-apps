@@ -84,8 +84,20 @@ static void test_texts()
     const auto items = port_info_items(p, true);
     std::string keys;
     for (const auto &kv : items) keys += kv.first + "=" + kv.second + ";";
-    CHECK_EQ(keys, std::string("Device=CP210x USB-serial;Maker=Silicon Labs;USB ID=10c4:ea60;Driver=cp210x;"
-                               "Serial no=0001;Typically=ESP32, Meshtastic;Recommended=115200 8N1;Port=/dev/ttyUSB0;"));
+    CHECK_EQ(keys, std::string("Device=CP210x USB-serial;Maker=Silicon Labs;Product=CP2102 USB to UART Bridge Controller;"
+                               "USB ID=10c4:ea60;Driver=cp210x;Serial no=0001;Typically=ESP32, Meshtastic;"
+                               "Recommended=115200 8N1;Port=/dev/ttyUSB0;"));
+    // the USB details when sysfs gives them: the exact chip, the speed and the interfaces
+    PortInfo q = p;
+    q.bcd = 0x0100;
+    q.chip = chip_variant(q.vid, q.pid, q.bcd, 1, q.product);
+    q.speed = "12";
+    q.interfaces = 1;
+    std::string qkeys;
+    for (const auto &kv : port_info_items(q, true)) qkeys += kv.first + "=" + kv.second + ";";
+    CHECK(qkeys.find("Chip=CP2102 (rev 1.00);") != std::string::npos);
+    CHECK(qkeys.find("USB=12 Mbit/s, 1 interface;") != std::string::npos);
+    CHECK(bare_adapter(p));
     CHECK(port_row_text(p) == std::make_pair(std::string("CP210x USB-serial"), std::string("ttyUSB0")));
     CHECK(port_info_items(p, false).back().first == "Access");
 
@@ -207,7 +219,11 @@ static void test_package()
     const std::string manifest = read_file(app + "/app.json");
     CHECK(manifest.find("\"share_code\": \"serial-console\"") != std::string::npos);
     CHECK(manifest.find("\"package\": \"serial-console\"") != std::string::npos);
-    CHECK(manifest.find("\"version\": \"0.2.0\"") != std::string::npos);
+    CHECK(manifest.find("\"version\": \"0.3.0\"") != std::string::npos);
+    CHECK(manifest.find("\"draft\": true") != std::string::npos);
+    // the fixtures of the classifier say they are representative samples
+    for (const char *f : {"esp32-idf-boot.txt", "gnss-ublox-m8.txt", "micropython.txt", "marlin-m115.txt"})
+        CHECK(read_file(app + "/tests/fixtures/" + f).find("## Representative sample, NOT a capture") == 0);
     CHECK(manifest.find("\"title\": \"Serial Console\"") != std::string::npos);
     CHECK(manifest.find("\"depends\": \"libfreetype6, libinput10, libxkbcommon0\"") != std::string::npos);
     CHECK(manifest.find("picocom") == std::string::npos);
@@ -229,6 +245,9 @@ int main()
     test_baud();
     test_settings();
     test_serial_pty();
+    test_identify();
+    test_bootproto();
+    test_probe_pty();
     test_package();
     std::printf("test-serial-console: %d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;

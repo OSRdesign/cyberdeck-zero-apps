@@ -17,6 +17,7 @@
 
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
 
 namespace sc {
 namespace {
@@ -174,6 +175,87 @@ std::string usb_id_text(std::uint16_t vid, std::uint16_t pid)
     char buf[16];
     std::snprintf(buf, sizeof(buf), "%04x:%04x", vid, pid);
     return buf;
+}
+
+std::string chip_variant(std::uint16_t vid, std::uint16_t pid, std::uint16_t bcd, int interfaces,
+                         const std::string &product)
+{
+    if (vid == 0x0403 && bcd) { /* Linux ftdi_sio's ftdi_determine_type() */
+        if (interfaces > 1) {
+            if (bcd == 0x0800) return "FT4232H";
+            if (bcd == 0x0700) return "FT2232H";
+            if (bcd == 0x3600) return "FT4232HA";
+            return "FT2232C/D";
+        }
+        if (bcd < 0x0200) return "FTDI SIO";
+        if (bcd < 0x0400) return "FT8U232AM";
+        if (bcd < 0x0600) return "FT232BM";
+        if (bcd < 0x0900) return "FT232R";
+        if (bcd < 0x1000) return "FT232H";
+        return "FT-X (FT231X / FT230X)";
+    }
+    if (vid == 0x1a86) {
+        switch (pid) {
+        case 0x7523: return "CH340";
+        case 0x5523: return "CH341";
+        case 0x55d4: return "CH9102";
+        case 0x55d3: return "CH343";
+        case 0x55d2: return "CH342";
+        default: return std::string();
+        }
+    }
+    if (vid == 0x10c4) {
+        for (const char *part : {"CP2102N", "CP2104", "CP2109", "CP2105", "CP2108", "CP2102"})
+            if (contains_nocase(product, part)) return part;
+        return std::string();
+    }
+    if (vid == 0x303a && pid == 0x1001) return "ESP USB-Serial/JTAG";
+    if (vid == 0x067b && pid == 0x23a3) return "PL2303GC";
+    return std::string();
+}
+
+std::string bcd_text(std::uint16_t bcd)
+{
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "%x.%02x", bcd >> 8, bcd & 0xFF);
+    return buf;
+}
+
+std::string usb_speed_text(const std::string &speed)
+{
+    if (speed.empty()) return std::string();
+    const double mbit = std::atof(speed.c_str());
+    char buf[32];
+    if (mbit >= 1000) std::snprintf(buf, sizeof(buf), "%g Gbit/s", mbit / 1000.0);
+    else std::snprintf(buf, sizeof(buf), "%s Mbit/s", speed.c_str());
+    return buf;
+}
+
+bool boot_mode(std::uint16_t vid, std::uint16_t pid, const std::string &product, BootMode *out)
+{
+    std::string chip;
+    if (vid == 0x2e8a && pid == 0x0003) chip = "RP2040";
+    if (vid == 0x2e8a && pid == 0x000f) chip = "RP2350";
+    if (!chip.empty()) {
+        if (out) {
+            out->title = chip + " in BOOTSEL mode";
+            out->hint = "A USB drive, not a serial port: replug it without BOOT";
+            out->advice = chip + " in BOOTSEL mode (a USB drive, not a serial port): unplug and replug without the "
+                                 "BOOT button";
+        }
+        return true;
+    }
+    if (contains_nocase(product, "UF2")) {
+        if (out) {
+            out->title = "UF2 boot loader";
+            out->hint = "A USB drive, not a serial port: press reset once";
+            out->advice = (product.empty() ? std::string("A board") : product) +
+                          " is in its UF2 boot loader (a USB drive, not a serial port): press its reset button once, "
+                          "or unplug and replug it, to run its program";
+        }
+        return true;
+    }
+    return false;
 }
 
 } // namespace sc

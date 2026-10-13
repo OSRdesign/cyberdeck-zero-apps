@@ -1,0 +1,18 @@
+## Representative sample, NOT a capture from a particular device: written in the format the Arduino-ESP32 core 3.x prints before setup() with Core Debug Level set to Debug prints
+## (source: arduino-esp32 cores/esp32/chip-debug-report.cpp). Lines starting with "##" are comments; "\x1b" stands for the ESC byte.
+
+=========== Before Setup Start ===========
+Chip Info:
+------------------------------------------
+  Model             : ESP32-S3
+  Package           : 0
+  Revision          : 0.02
+  Cores             : 2
+  CPU Frequency     : 240 MHz
+------------------------------------------
+Board Info:
+------------------------------------------
+  Arduino Board     : ESP32S3_DEV
+  Arduino Variant   : esp32s3
+  Arduino FQBN      : esp32:esp32:esp32s3
+============ Before Setup End ============

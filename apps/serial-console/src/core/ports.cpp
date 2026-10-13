@@ -77,6 +77,10 @@ void identify_usb(const std::string &sys_root, const std::string &device_dir, Po
             port.manufacturer = fs::read_line(dir + "/manufacturer");
             port.product = fs::read_line(dir + "/product");
             port.serial = fs::read_line(dir + "/serial");
+            port.bcd = parse_hex16(fs::read_line(dir + "/bcdDevice"));
+            port.interfaces = std::atoi(fs::read_line(dir + "/bNumInterfaces").c_str()); /* " 2" */
+            port.speed = fs::read_line(dir + "/speed");
+            port.usb_dir = dir;
             return;
         }
         dir = fs::parent(dir);
@@ -148,7 +152,10 @@ std::vector<PortInfo> scan_ports(const Roots &roots, bool include_onboard)
         if (usb) identify_usb(roots.sys, cls + "/device", port);
         const auto link = by_id.find(name);
         if (link != by_id.end()) port.by_id = link->second;
-        if (port.vid || port.pid) port.known = lookup_device(port.vid, port.pid, port.product);
+        if (port.vid || port.pid) {
+            port.known = lookup_device(port.vid, port.pid, port.product);
+            port.chip = chip_variant(port.vid, port.pid, port.bcd, port.interfaces, port.product);
+        }
         port.id = port_id(port);
         port.title = port_title(port);
         port.rec = recommend(port.known, port.onboard);
@@ -172,6 +179,27 @@ bool same_port(const PortInfo &a, const PortInfo &b)
 {
     return a.id == b.id && a.tty == b.tty && a.path == b.path && a.title == b.title && a.gpio == b.gpio &&
            a.rec.baud == b.rec.baud;
+}
+
+std::vector<BootDrive> scan_boot_drives(const Roots &roots, const std::vector<PortInfo> &ports)
+{
+    std::vector<BootDrive> drives;
+    const std::string bus = roots.sys + "/bus/usb/devices";
+    for (const std::string &name : fs::list_dir(bus)) {
+        const std::string dir = bus + "/" + name;
+        if (!fs::exists(dir + "/idVendor")) continue; /* an interface, not a device */
+        BootDrive d;
+        d.vid = parse_hex16(fs::read_line(dir + "/idVendor"));
+        d.pid = parse_hex16(fs::read_line(dir + "/idProduct"));
+        d.product = fs::read_line(dir + "/product");
+        if (!boot_mode(d.vid, d.pid, d.product, &d.mode)) continue;
+        d.usb_dir = fs::real_path(dir);
+        const bool has_port = std::any_of(ports.begin(), ports.end(), [&d](const PortInfo &p) {
+            return !p.usb_dir.empty() && p.usb_dir == d.usb_dir;
+        });
+        if (!has_port) drives.push_back(d);
+    }
+    return drives;
 }
 
 GroupState dialout_state()

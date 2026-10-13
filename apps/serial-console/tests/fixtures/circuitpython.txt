@@ -1,0 +1,13 @@
+## Representative sample, NOT a capture from a particular device: written in the format CircuitPython 9 on a Raspberry Pi Pico prints at start, then enters the REPL prints
+## (source: CircuitPython documentation (learn.adafruit.com, "The REPL")). Lines starting with "##" are comments; "\x1b" stands for the ESC byte.
+
+Auto-reload is on. Simply save files over USB to run them or enter REPL to disable.
+code.py output:
+Hello World!
+
+Code done running.
+
+Press any key to enter the REPL. Use CTRL-D to reload.
+
+Adafruit CircuitPython 9.0.0 on 2024-03-19; Raspberry Pi Pico with rp2040
+>>>

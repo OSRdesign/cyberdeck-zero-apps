@@ -1,0 +1,20 @@
+## Representative sample, NOT a capture from a particular device: written in the format an ESP32-S3 prints after a reset: its ROM, then the ESP-IDF boot loader prints
+## (source: the ESP32-S3 ROM banner ("ESP-ROM:esp32s3-20210327") and ESP-IDF v5.1 boot logs). Lines starting with "##" are comments; "\x1b" stands for the ESC byte.
+
+ESP-ROM:esp32s3-20210327
+Build:Mar 27 2021
+rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fce3810,len:0x178c
+load:0x403c9700,len:0x4
+load:0x403c9704,len:0xcb8
+load:0x403cc700,len:0x2d64
+entry 0x403c98d0
+\x1b[0;32mI (27) boot: ESP-IDF v5.1.2 2nd stage bootloader\x1b[0m
+\x1b[0;32mI (27) boot: compile time Jan 12 2024 10:00:00\x1b[0m
+\x1b[0;32mI (28) boot: Multicore bootloader\x1b[0m
+\x1b[0;32mI (31) boot: chip revision: v0.2\x1b[0m
+\x1b[0;32mI (35) boot.esp32s3: Boot SPI Speed : 80MHz\x1b[0m
+\x1b[0;32mI (40) boot.esp32s3: SPI Mode       : DIO\x1b[0m
+\x1b[0;32mI (45) boot.esp32s3: SPI Flash Size : 8MB\x1b[0m

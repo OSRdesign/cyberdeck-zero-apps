@@ -73,14 +73,22 @@ SerialApp::SerialApp(lv_obj_t *screen)
             case View::Ports: activate_ports(row); break;
             case View::Port: activate_port(row); break;
             case View::Choice: activate_choice(row); break;
-            case View::Terminal: break;
+            case View::Ask: activate_ask(row); break;
+            case View::Card: activate_card(row); break;
+            case View::Terminal:
+            case View::Detail: break;
             }
         });
     };
     events.back = [this] { post([this] { back(); }); };
     roller_ = std::make_unique<cp0::ui::Roller>(page_->root(), layout_, std::move(events));
 
-    ports_ = scan_ports(roots_, config_.show_onboard);
+    {
+        std::vector<PortInfo> all = scan_all(true);
+        boots_ = scan_boot_drives(roots_, all);
+        for (PortInfo &p : all)
+            if (!p.onboard || config_.show_onboard) ports_.push_back(std::move(p));
+    }
     next_scan_ = now_ms() + kScanMs;
     show_ports(config_.last_port, false);
     focus(roller_->focus_object());
@@ -94,6 +102,8 @@ SerialApp::~SerialApp()
     lv_async_call_cancel(posted_cb, this);
     term_.reset();   /* the connection closed, its worker joined */
     finder_.reset();
+    prober_.reset(); /* a probe stopped, its lines put back */
+    detail_.reset();
     dialog_.reset();
     roller_.reset();
     page_.reset();   /* the card goes with the page */
@@ -126,6 +136,7 @@ void SerialApp::tick()
 {
     if (term_) term_->tick();
     check_finder();
+    check_probe();
     const std::int64_t now = now_ms();
     if (now >= next_scan_) {
         next_scan_ = now + kScanMs;
@@ -133,6 +144,8 @@ void SerialApp::tick()
     }
     if (nav_.current() == View::Ports && !dialog_) update_ports_caption(false);
     if (nav_.current() == View::Port && !dialog_) update_port_caption(false);
+    if (nav_.current() == View::Ask && !dialog_) update_ask_caption(false);
+    if (nav_.current() == View::Card && !dialog_) update_card_caption(false);
 }
 
 void SerialApp::focus(lv_obj_t *obj)
@@ -149,6 +162,9 @@ void SerialApp::show_title()
     case View::Ports: page_->set_title({kAppTitle}); break;
     case View::Port: page_->set_title({kAppTitle, port_.tty}); break;
     case View::Choice: page_->set_title({kAppTitle, port_.tty, choice_title(static_cast<int>(choice_))}); break;
+    case View::Ask: page_->set_title({kAppTitle, port_.tty, "Ask"}); break;
+    case View::Card: page_->set_title({kAppTitle, port_.tty, "Behind it"}); break;
+    case View::Detail: break; /* open_detail() sets it */
     case View::Terminal: break; /* the terminal view sets "ttyUSB0 115200 8N1" */
     }
 }
@@ -163,6 +179,14 @@ GroupState SerialApp::groups() const
 bool SerialApp::can_open(const PortInfo &port) const
 {
     return access(port.path.c_str(), R_OK | W_OK) == 0;
+}
+
+/* Every port, with the recommendation of what was identified behind it. */
+std::vector<PortInfo> SerialApp::scan_all(bool with_onboard)
+{
+    std::vector<PortInfo> all = scan_ports(roots_, with_onboard);
+    for (PortInfo &p : all) p.rec = identified_recommendation(p.rec, config_.identity(p.id));
+    return all;
 }
 
 void SerialApp::back()
@@ -181,9 +205,25 @@ void SerialApp::back()
         update_port_caption(true);
         return;
     }
+    case View::Detail: close_detail(); return;
+    case View::Card: close_card(); return;
+    case View::Ask:
+        if (prober_) { /* Esc stops the probe; the page stays */
+            prober_->cancel();
+            return;
+        }
+        nav_.back();
+        show_port_rows(port_row_index(PortRow::IdAsk));
+        show_title();
+        update_port_caption(true);
+        return;
     case View::Port:
         if (finder_) { /* Esc stops the detection; the page stays */
             finder_->cancel();
+            return;
+        }
+        if (prober_) {
+            prober_->cancel();
             return;
         }
         nav_.back();
@@ -200,9 +240,10 @@ void SerialApp::scan()
 {
     if (nav_.current() == View::Terminal) return; /* the session follows its own port */
     if (nav_.current() == View::Ports && dialog_) return; /* the rows under a dialog stay as they are */
-    std::vector<PortInfo> all = scan_ports(roots_, true);
+    std::vector<PortInfo> all = scan_all(true);
+    std::vector<BootDrive> boots = scan_boot_drives(roots_, all);
     // the port page's port: still there? (it may come back on another tty number: its path follows)
-    if (nav_.current() == View::Port || nav_.current() == View::Choice) {
+    if (nav_.current() != View::Ports) {
         bool present = false;
         for (const PortInfo &p : all)
             if (p.id == port_.id) {
@@ -220,11 +261,13 @@ void SerialApp::scan()
         if (!p.onboard || config_.show_onboard) found.push_back(std::move(p));
     if (nav_.current() != View::Ports) {
         ports_ = std::move(found);
+        boots_ = std::move(boots);
         list_.clear(); /* show_ports() builds the rows again when the page comes back */
         return;
     }
-    bool same_list = found.size() == ports_.size();
+    bool same_list = found.size() == ports_.size() && boots.size() == boots_.size();
     for (std::size_t i = 0; same_list && i < found.size(); ++i) same_list = found[i].id == ports_[i].id;
+    for (std::size_t i = 0; same_list && i < boots.size(); ++i) same_list = boots[i].usb_dir == boots_[i].usb_dir;
     if (!same_list) { /* plugged or unplugged: the rows again, the highlight stays on its port */
         std::string selected;
         const int sel = roller_->selected();
@@ -242,6 +285,7 @@ void SerialApp::scan()
                 }
             }
         ports_ = std::move(found);
+        boots_ = std::move(boots);
         show_ports(selected, on_toggle && selected.empty());
         return;
     }
@@ -270,6 +314,16 @@ std::vector<cp0::ui::RowSpec> SerialApp::ports_rows()
         spec.kind = cp0::ui::RowKind::Nav;
         spec.label = port_row_text(ports_[i]).first;
         spec.value = port_row_text(ports_[i]).second;
+        rows.push_back(spec);
+    }
+    for (std::size_t i = 0; i < boots_.size(); ++i) { /* a board in its USB boot loader: a drive, not a port */
+        ListRow lr;
+        lr.kind = ListRow::Boot;
+        lr.port = static_cast<int>(i);
+        list_.push_back(lr);
+        cp0::ui::RowSpec spec;
+        spec.kind = cp0::ui::RowKind::Nav;
+        spec.label = boots_[i].mode.title; /* the status line says it is a USB drive */
         rows.push_back(spec);
     }
     ListRow toggle;
@@ -319,11 +373,15 @@ void SerialApp::update_ports_caption(bool force)
     if (valid && list_[static_cast<std::size_t>(sel)].kind == ListRow::Port) {
         const PortInfo &p = ports_[static_cast<std::size_t>(list_[static_cast<std::size_t>(sel)].port)];
         page_->set_caption(port_caption(p, config_.settings(p.id)), cp0::ui::CaptionTone::Normal);
+    } else if (valid && list_[static_cast<std::size_t>(sel)].kind == ListRow::Boot) {
+        const BootDrive &d = boots_[static_cast<std::size_t>(list_[static_cast<std::size_t>(sel)].port)];
+        page_->set_caption(d.mode.hint, cp0::ui::CaptionTone::Warn);
     } else {
         page_->set_caption("", cp0::ui::CaptionTone::Normal);
     }
     // the empty list's card, while nothing else is over the centre row's upper half
-    show_card(ports_.empty() && valid && list_[static_cast<std::size_t>(sel)].kind == ListRow::Onboard);
+    show_card(ports_.empty() && boots_.empty() && valid &&
+              list_[static_cast<std::size_t>(sel)].kind == ListRow::Onboard);
 }
 
 /* The empty list: a card above the centre row, "No serial adapter found." and what to do, at the BODY size (the
@@ -377,11 +435,21 @@ void SerialApp::activate_ports(int row)
     const ListRow lr = list_[static_cast<std::size_t>(row)];
     switch (lr.kind) {
     case ListRow::Port: open_port_page(ports_[static_cast<std::size_t>(lr.port)]); break;
+    case ListRow::Boot: {
+        const BootDrive &d = boots_[static_cast<std::size_t>(lr.port)];
+        Problem notice;
+        notice.title = d.mode.title;
+        notice.text = d.mode.advice + ".";
+        show_problem(notice);
+        break;
+    }
     case ListRow::Onboard: {
         config_.show_onboard = !config_.show_onboard;
         save_config(config_path_, config_);
+        std::vector<PortInfo> all = scan_all(true);
+        boots_ = scan_boot_drives(roots_, all);
         std::vector<PortInfo> found;
-        for (PortInfo &p : scan_ports(roots_, true))
+        for (PortInfo &p : all)
             if (!p.onboard || config_.show_onboard) found.push_back(std::move(p));
         ports_ = std::move(found);
         show_ports(std::string(), true);
@@ -401,6 +469,9 @@ void SerialApp::open_port_page(const PortInfo &port)
     find_value_.clear();
     find_rgb_ = -1;
     port_note_.clear();
+    probe_value_[0].clear();
+    probe_value_[1].clear();
+    ask_value_.clear();
     show_card(false);
     nav_.open(View::Port);
     show_port_rows(-1);
@@ -423,6 +494,40 @@ std::vector<cp0::ui::RowSpec> SerialApp::port_rows()
         spec.label = kv.first;
         spec.value = kv.second;
         add(PortRow::Info, spec);
+    }
+    // "Identify what is connected": a heading, the adapter note, the last result, the three levels
+    const Identity known = port_identity();
+    cp0::ui::RowSpec head;
+    head.kind = cp0::ui::RowKind::Info;
+    head.label = "Identify what is connected";
+    add(PortRow::Info, head);
+    if (bare_adapter(port_) && !known.found()) {
+        cp0::ui::RowSpec note = head;
+        note.label = kAdapterNote;
+        add(PortRow::Info, note);
+    }
+    if (known.kind != Kind::None) {
+        cp0::ui::RowSpec behind;
+        behind.kind = cp0::ui::RowKind::Nav;
+        behind.label = "Behind it";
+        behind.value = behind_text(known);
+        add(PortRow::Behind, behind);
+    }
+    const PortRow level_rows[] = {PortRow::IdListen, PortRow::IdReset, PortRow::IdAsk};
+    for (int i = 0; i < 3; ++i) {
+        cp0::ui::RowSpec spec;
+        const bool busy = prober_ && probe_level(probe_) == i + 1 && i < 2;
+        if (busy) {
+            spec.kind = cp0::ui::RowKind::Busy;
+            spec.label = probe_shown_;
+        } else {
+            spec.kind = cp0::ui::RowKind::Nav;
+            spec.label = i == 0 ? "Listen" : i == 1 ? "Reset and listen" : "Ask the device";
+            const std::string &outcome = i < 2 ? probe_value_[i] : std::string();
+            spec.value = !outcome.empty() ? outcome : i == 0 ? "sends nothing" : i == 1 ? "resets" : "sends";
+            if (outcome == "Stopped" || outcome == "Failed") spec.value_rgb = kErrorRgb;
+        }
+        add(level_rows[i], spec);
     }
     const int baud = effective_baud(settings_, recommended());
     cp0::ui::RowSpec spec;
@@ -510,8 +615,17 @@ void SerialApp::update_port_caption(bool force)
     }
     const bool info = sel >= 0 && sel < static_cast<int>(port_map_.size()) &&
                       port_map_[static_cast<std::size_t>(sel)] == PortRow::Info;
+    const PortRow which = sel >= 0 && sel < static_cast<int>(port_map_.size()) ? port_map_[static_cast<std::size_t>(sel)]
+                                                                               : PortRow::Info;
     if (info) page_->set_caption("", cp0::ui::CaptionTone::Normal);
-    else if (finder_) page_->set_caption("Esc stops", cp0::ui::CaptionTone::Normal);
+    else if (finder_ || prober_) page_->set_caption("Esc stops", cp0::ui::CaptionTone::Normal);
+    else if (which == PortRow::IdListen) page_->set_caption(probe_caption(Probe::Listen, reset_style(port_)), cp0::ui::CaptionTone::Normal);
+    else if (which == PortRow::IdReset) page_->set_caption(probe_caption(Probe::Reset, reset_style(port_)), cp0::ui::CaptionTone::Normal);
+    else if (which == PortRow::IdAsk) page_->set_caption(probe_caption(Probe::At, reset_style(port_)), cp0::ui::CaptionTone::Normal);
+    else if (which == PortRow::Behind) {
+        const Identity known = port_identity();
+        page_->set_caption(confidence_text(known) + ", " + when_text(known.when), cp0::ui::CaptionTone::Normal);
+    }
     else if (!port_note_.empty())
         page_->set_caption(port_note_, port_note_warn_ ? cp0::ui::CaptionTone::Warn : cp0::ui::CaptionTone::Normal);
     else page_->set_caption(port_.rec.reason, cp0::ui::CaptionTone::Normal);
@@ -531,8 +645,22 @@ void SerialApp::activate_port(int row)
         if (which == PortRow::Find) finder_->cancel();
         return;
     }
+    if (prober_) { /* while a probe runs, only its own row (stop) */
+        if ((which == PortRow::IdListen && probe_ == Probe::Listen) || (which == PortRow::IdReset && probe_ == Probe::Reset))
+            prober_->cancel();
+        return;
+    }
     switch (which) {
     case PortRow::Info: break;
+    case PortRow::Behind: {
+        const Identity known = port_identity();
+        card_note_.clear();
+        open_card(known, probe_from_key(known.probe), -1);
+        break;
+    }
+    case PortRow::IdListen: start_probe(Probe::Listen, false); break;
+    case PortRow::IdReset: start_probe(Probe::Reset, false); break;
+    case PortRow::IdAsk: open_ask(0); break;
     case PortRow::Speed: open_choice(Choice::Speed); break;
     case PortRow::Frame: open_choice(Choice::Frame); break;
     case PortRow::Ending: open_choice(Choice::Ending); break;
@@ -746,7 +874,7 @@ void SerialApp::close_dialog()
 {
     if (!dialog_) return;
     dialog_.reset();
-    focus(term_ ? term_->focus_object() : roller_->focus_object());
+    focus(term_ ? term_->focus_object() : detail_ ? detail_->focus_object() : roller_->focus_object());
 }
 
 } // namespace sc

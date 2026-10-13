@@ -1,0 +1,9 @@
+## Representative sample, NOT a capture from a particular device: written in the format a running ESP-IDF program logs (no boot: the board was already running) prints
+## (source: the ESP-IDF logging library format "L (ms) tag: message"). Lines starting with "##" are comments; "\x1b" stands for the ESC byte.
+
+\x1b[0;32mI (120345) wifi:connected with home-ap, aid = 3, channel 6, BW20, bssid = 9c:53:22:aa:bb:cc\x1b[0m
+\x1b[0;32mI (120351) esp_netif_handlers: sta ip: 192.168.1.57, mask: 255.255.255.0, gw: 192.168.1.1\x1b[0m
+\x1b[0;33mW (121002) sensor: retrying read (1)\x1b[0m
+\x1b[0;32mI (121500) app: temperature 21.4 C, humidity 43 %\x1b[0m
+\x1b[0;31mE (122010) mqtt_client: Error transport connect\x1b[0m
+\x1b[0;32mI (122500) app: temperature 21.5 C, humidity 43 %\x1b[0m

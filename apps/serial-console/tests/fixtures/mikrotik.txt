@@ -1,0 +1,15 @@
+## Representative sample, NOT a capture from a particular device: written in the format a MikroTik RouterOS 7 device prints on its serial console prints
+## (source: MikroTik RouterOS console banner and login prompt). Lines starting with "##" are comments; "\x1b" stands for the ESC byte.
+
+
+
+MikroTik 7.12 (stable)
+MikroTik Login: admin
+Password:
+
+  MMM      MMM       KKK                          TTTTTTTTTTT      KKK
+  MMM      MMM       KKK                          TTTTTTTTTTT      KKK
+
+  MikroTik RouterOS 7.12 (c) 1999-2023       https://www.mikrotik.com/
+
+[admin@MikroTik] >

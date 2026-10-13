@@ -263,9 +263,9 @@ std::unique_ptr<World> World::from_env()
     const char *name = std::getenv("SERIAL_CONSOLE_DEMO");
     if (!name || !name[0]) return nullptr;
     const std::string s = name;
-    if (s != "empty" && s != "boards" && s != "lost" && s != "noaccess") {
+    if (s != "empty" && s != "boards" && s != "lost" && s != "noaccess" && s != "identify") {
         std::fprintf(stderr, "[serial-console] SERIAL_CONSOLE_DEMO=%s: no such scenario (empty, boards, lost, "
-                             "noaccess)\n", name);
+                             "noaccess, identify)\n", name);
         return nullptr;
     }
     auto world = std::make_unique<World>(s);
@@ -291,7 +291,69 @@ World::World(const std::string &scenario) : scenario_(scenario)
     fake::add_virtual_tty(roots_, "tty1");
 
     const std::int64_t now = now_ms();
-    if (scenario == "empty") {
+    if (scenario == "identify") {
+        const auto add = [this](const char *board, const char *variant, fake::UsbTty port) {
+            auto host = std::make_unique<sim::Host>(sim::make_board(board, variant));
+            if (!host->ok()) return;
+            port.node_target = host->path();
+            fake::add_usb_tty(roots_, port);
+            sims_.emplace_back(port.tty, std::move(host));
+        };
+        fake::UsbTty esp;
+        esp.tty = "ttyUSB0";
+        esp.vid = 0x1a86;
+        esp.pid = 0x7523;
+        esp.product = "USB Serial";
+        esp.driver = "ch341";
+        esp.bcd = 0x0264;
+        esp.by_id = "usb-1a86_USB_Serial-if00-port0";
+        esp.usb_port = 1;
+        add("esp32", "s3", esp);
+        fake::UsbTty gps;
+        gps.tty = "ttyUSB1";
+        gps.vid = 0x067b;
+        gps.pid = 0x2303;
+        gps.manufacturer = "Prolific Technology Inc.";
+        gps.product = "USB-Serial Controller";
+        gps.driver = "pl2303";
+        gps.bcd = 0x0300;
+        gps.by_id = "usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0";
+        gps.usb_port = 2;
+        add("gps", "", gps);
+        fake::UsbTty pico;
+        pico.tty = "ttyACM0";
+        pico.vid = 0x2e8a;
+        pico.pid = 0x0005;
+        pico.manufacturer = "MicroPython";
+        pico.product = "Board in FS mode";
+        pico.serial = "e6614c311b4a7e2a";
+        pico.driver = "cdc_acm";
+        pico.interfaces = 2;
+        pico.by_id = "usb-MicroPython_Board_in_FS_mode_e6614c311b4a7e2a-if00";
+        pico.usb_port = 3;
+        add("micropython", "", pico);
+        fake::UsbTty uno;
+        uno.tty = "ttyACM1";
+        uno.vid = 0x2341;
+        uno.pid = 0x0043;
+        uno.manufacturer = "Arduino (www.arduino.cc)";
+        uno.serial = "8573531303035171E0A1";
+        uno.driver = "cdc_acm";
+        uno.bcd = 0x0001;
+        uno.interfaces = 2;
+        uno.by_id = "usb-Arduino__www.arduino.cc__0043_8573531303035171E0A1-if00";
+        uno.usb_port = 4;
+        add("arduino", "", uno);
+        fake::UsbTty boot; /* a Pico held in BOOTSEL: a USB drive, no tty */
+        boot.vid = 0x2e8a;
+        boot.pid = 0x0003;
+        boot.manufacturer = "Raspberry Pi";
+        boot.product = "RP2 Boot";
+        boot.serial = "E0C9125B0D9B";
+        boot.interfaces = 2;
+        boot.usb_port = 5;
+        fake::add_usb_device(roots_, boot);
+    } else if (scenario == "empty") {
         boards_.push_back(esp_board());
         boards_.back()->plug_at = now + 3000;
     } else {
@@ -313,10 +375,18 @@ World::World(const std::string &scenario) : scenario_(scenario)
     std::fprintf(stderr, "[serial-console] demonstration world \"%s\" in %s\n", scenario.c_str(), base_.c_str());
 }
 
+LinesFactory World::lines_for(const std::string &tty) const
+{
+    for (const auto &s : sims_)
+        if (s.first == tty) return s.second->factory();
+    return LinesFactory();
+}
+
 World::~World()
 {
     stop_.store(true);
     if (thread_.joinable()) thread_.join();
+    sims_.clear();
     for (auto &b : boards_) close_pty(b->pty);
     close_pty(onboard_);
     if (!base_.empty()) fs::remove_tree(base_);

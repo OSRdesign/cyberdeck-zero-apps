@@ -7,10 +7,14 @@
  * serial-console.conf (the launcher's config folder keeps its upstream name: launcher NAMING.md). Version 0.1.0 wrote
  * one set of key=value lines (port, baud, frame, echo, ending, log, all); version 0.2.0 writes "v=2", the global keys
  * and one [port <id>] section per port, and reads a 0.1.0 file as the settings of its last port (the old default speed
- * 115200 becomes "the recommended speed"). The file is parsed, never executed; bad values are ignored; it is written
- * through a temporary file and a rename.
+ * 115200 becomes "the recommended speed"). Version 0.3.0 adds to a port's section what "What is on the other end?"
+ * found (id_kind, id_chip, id_firmware, id_version, id_board, id_detail, id_framing, id_conf, id_baud, id_level,
+ * id_when, and repeated id_ev / id_boot lines: identify.hpp); 0.2.0 ignores those keys. The file is parsed, never
+ * executed; bad values are ignored; it is written through a temporary file and a rename.
  */
 #pragma once
+
+#include "identify.hpp"
 
 #include <ctime>
 #include <map>
@@ -58,9 +62,13 @@ struct Config {
     bool show_onboard = false;
     std::string last_port;
     std::map<std::string, PortSettings> ports;
+    std::map<std::string, Identity> idents; /* what is behind each port, when it was identified */
 
     PortSettings settings(const std::string &id) const; /* the defaults for a port never saved */
     void set(const std::string &id, const PortSettings &settings) { ports[id] = settings; }
+    /* kind None when never identified */
+    Identity identity(const std::string &id) const;
+    void set_identity(const std::string &id, const Identity &identity);
 
     std::string serialize() const;
     /* migrated: the text was a version 0.1.0 file */

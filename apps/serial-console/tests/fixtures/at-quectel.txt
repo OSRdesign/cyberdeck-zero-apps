@@ -1,0 +1,10 @@
+## Representative sample, NOT a capture from a particular device: written in the format a Quectel EC25 LTE modem answers ATI prints
+## (source: Quectel EC25 AT Commands Manual). Lines starting with "##" are comments; "\x1b" stands for the ESC byte.
+
+ATI
+
+Quectel
+EC25
+Revision: EC25EFAR06A06M4G
+
+OK

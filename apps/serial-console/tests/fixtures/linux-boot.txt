@@ -1,0 +1,16 @@
+## Representative sample, NOT a capture from a particular device: written in the format a Debian 12 Linux (Raspberry Pi) prints on its serial console from kernel start to the login prompt prints
+## (source: the Linux kernel boot log, systemd and getty). Lines starting with "##" are comments; "\x1b" stands for the ESC byte.
+
+[    0.000000] Booting Linux on physical CPU 0x0000000000 [0x410fd083]
+[    0.000000] Linux version 6.1.0-rpi7-rpi-v8 (debian-kernel@lists.debian.org) (gcc-12 (Debian 12.2.0-14) 12.2.0) #1 SMP PREEMPT Debian 1:6.1.63-1+rpt1 (2023-11-24)
+[    0.000000] Machine model: Raspberry Pi 4 Model B Rev 1.4
+[    2.391712] systemd[1]: systemd 252.19-1~deb12u1 running in system mode (+PAM +AUDIT +SELINUX)
+[    2.400000] systemd[1]: Detected architecture arm64.
+
+Welcome to Debian GNU/Linux 12 (bookworm)!
+
+[  OK  ] Started getty@tty1.service - Getty on tty1.
+
+Debian GNU/Linux 12 raspberrypi ttyS0
+
+raspberrypi login:
