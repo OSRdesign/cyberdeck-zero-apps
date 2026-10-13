@@ -51,7 +51,7 @@ LVGL_SRCS := $(filter-out $(addprefix $(LVGL)/src/libs/freetype/,$(LV_OVERRIDE))
                $(shell find $(LVGL)/src -name '*.c' -o -name '*.cpp'))
 LVGL_PRIV := -I$(FT_OVR) -I$(LVGL)/src/libs/freetype
 
-# cp0_lvgl: the widgets, the layout service, the keyboard queue and bridge, the strip renderer (real code).
+# cp0_lvgl: the widgets, the layout service, the keyboard queue and bridge, the status strip and its renderer (real code).
 CP0_SRCS := \
     $(CP0)/src/cp0_app_contract.c \
     $(CP0)/src/cp0_ui_metrics.c \
@@ -67,6 +67,8 @@ CP0_SRCS := \
     $(CP0)/src/cp0_ui_info_widget.cpp \
     $(CP0)/src/cp0_ui_dialog.c \
     $(CP0)/src/cp0_ui_dialog_widget.cpp \
+    $(CP0)/src/cp0_ui_status_strip.c \
+    $(CP0)/src/cp0_ui_status_strip_widget.cpp \
     $(CP0)/src/cp0_keyboard_inject_key.c \
     $(CP0)/src/cp0_keyboard_queue.c \
     $(CP0)/src/cp0_keyboard_text.c \
@@ -79,7 +81,7 @@ CP0_SRCS := \
     $(CP0)/src/cp0_network_api_contract.cpp
 
 # _common without the device runner (platform.cpp needs cp0_lvgl's display backend and keyboard thread).
-COMMON_SRCS := $(filter-out $(COMMON)/platform.cpp,$(wildcard $(COMMON)/*.cpp)) $(wildcard $(COMMON)/stub/*.cpp)
+COMMON_SRCS := $(filter-out $(COMMON)/platform.cpp,$(wildcard $(COMMON)/*.cpp))
 HEADLESS_SRCS := $(wildcard $(HEADLESS)/*.c $(HEADLESS)/*.cpp)
 # The app without its device main.
 APP_SRCS := $(filter-out $(APP_DIR)/src/main.cpp,$(shell find $(APP_DIR)/src -name '*.cpp' -o -name '*.c'))

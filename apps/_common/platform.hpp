@@ -11,7 +11,7 @@
  *      touch come with the backend);
  *   2. every keyboard: cp0_keyboard_set_read_all_keyboards(1) before init (the inherited LV_LINUX_KEYBOARD_DEVICE is
  *      only the Bluetooth keyboard); APPLAUNCH_KEYBOARD_SCAN=0 turns it off, as for the launcher;
- *   3. status strip and title: status_strip.hpp (the single swap point for task L1);
+ *   3. status strip and title: cp0::ui::StatusStrip / add_title (cp0_ui_widgets.hpp) are used directly, nothing here;
  *   4. root exit: app.hpp request_quit() (short Esc / header Esc at the root page), SIGTERM / SIGINT / SIGHUP (the
  *      launcher's 3 s hold-Esc watchdog signals the app's process group) end the run loop cleanly; a screen under
  *      AppSpec min_w x min_h shows the notice (app.hpp) instead of the app.

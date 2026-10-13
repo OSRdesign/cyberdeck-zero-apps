@@ -11,7 +11,6 @@
 #include "cp0_ui_osk.h"
 #include "cp0_ui_roller.h"
 #include "cp0_ui_widgets.hpp"
-#include "status_strip.hpp"
 #include "lvgl/src/core/lv_obj_class_private.h" /* the class name, for the reports */
 #include "lvgl/src/misc/lv_event_private.h"     /* the event filters: what a press does */
 
@@ -208,7 +207,7 @@ CheckResult check_layout(bool notice_expected)
 
     const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
     cp0_ui_roller_page_t page{};
-    cp0_ui_roller_page(m, cdk::status_strip::left(), &page);
+    cp0_ui_roller_page(m, cp0::ui::status_strip_left(), &page);
     const int row = m->tok[CP0_TOK_ROW_H], target = m->tok[CP0_TOK_TARGET];
     const int header_h = page.header_h;
     const int header_rule = std::min(target, header_h - 2 * m->shell.status_top);

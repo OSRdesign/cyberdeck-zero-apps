@@ -13,7 +13,6 @@ The starting point of a new app is `apps/cyberdeck-app-template` (a draft that u
 | `app.{hpp,cpp}` | `AppSpec` (id, title, minimum screen = `X-MinSize`, UI builder), `start()` / `stop()` (what both runners do once the display exists), `request_quit()`, the keypad input group, the "needs WxH" notice for a screen under the minimum (an older launcher ignores `X-MinSize`) |
 | `platform.{hpp,cpp}` | the device runner `cdk::run()`: cp0_lvgl's display backend switched to the native display, every keyboard read, SIGTERM / SIGINT / SIGHUP end the loop cleanly, `--version`; started by hand it still uses the launcher's backend (`APPLAUNCH_DISPLAY=dpi-scaled`) |
 | `osk_policy.{hpp,cpp}` | the app-side on-screen keyboard rule: `cp0_app_osk_allowed()` on `input.state`, looked at once a second at most and parsed again only when the file changed (a new `gen`); without the file `APPLAUNCH_OSK` and the keyboards of `/proc/bus/input/devices` |
-| `status_strip.{hpp,cpp}` | the shared status strip and title. `status_strip.cpp` is the ONE file that calls `cp0::ui::StatusStrip` (launcher task L1); until L1 lands `stub/` stands in for it, drawn with cp0_lvgl's strip renderer (`cp0_statusbar.h`) |
 | `async_run.{hpp,cpp}` | background commands: fork + exec in their own process group, lines and the end delivered on the LVGL thread in order (`lv_async_call` under `lv_lock()`), timeout, cancel, PDEATHSIG, `shutdown()` at exit |
 | `build_info.hpp` | the version stamp (`cdk_build_info.h` from `build_app.sh`) |
 | `build_app.sh` | cross (aarch64, stripped, into the app's `root/`) and host (headless harness, unit tests, scenes, contact sheets) builds in WSL, the launcher pin check, the stamp |
@@ -32,8 +31,10 @@ The starting point of a new app is `apps/cyberdeck-app-template` (a draft that u
 - Build: `build.sh` of the app calls `build_app.sh`; the binary links cp0_lvgl and LVGL statically and needs only
   libinput, libxkbcommon, libfreetype, libstdc++ and libc at run time.
 
-## When task L1 lands
+## Status strip and title
 
-1. Delete `stub/`.
-2. In `status_strip.cpp`, include L1's header and use its names (three calls).
-3. Move `LAUNCHER_REF` to the commit with L1, rebuild every app, compare the header shots with the launcher's.
+Not copied here: apps use the launcher's own `cp0::ui::StatusStrip::add(page->header())`, `cp0::ui::add_title` (the
+`Page` title factory) and `cp0::ui::status_strip_left()` (the `strip_left` of `cp0_ui_roller_page()`) from
+`cp0_ui_widgets.hpp`, pinned by `LAUNCHER_REF`. The strip's default source reads sysfs / procfs; fonts come from the
+launcher's `/usr/share/APPLaunch/share/font`. Moving `LAUNCHER_REF` moves the strip: rebuild every app and compare the
+header shots with the launcher's.

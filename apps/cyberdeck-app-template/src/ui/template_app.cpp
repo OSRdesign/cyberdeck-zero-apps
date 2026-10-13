@@ -8,7 +8,6 @@
 #include "app.hpp"
 #include "build_info.hpp"
 #include "osk_policy.hpp"
-#include "status_strip.hpp"
 
 #include "cp0_app_contract.h"
 #include "cp0_font_service.hpp"
@@ -36,11 +35,11 @@ std::int64_t monotonic_ms()
 
 TemplateApp::TemplateApp(lv_obj_t *screen)
 {
-    cp0_ui_roller_page(cp0_ui_metrics_get(), cdk::status_strip::left(), &layout_);
-    page_ = std::make_unique<cp0::ui::Page>(screen, layout_, cdk::status_strip::title_factory(), [this] {
+    cp0_ui_roller_page(cp0_ui_metrics_get(), cp0::ui::status_strip_left(), &layout_);
+    page_ = std::make_unique<cp0::ui::Page>(screen, layout_, cp0::ui::add_title, [this] {
         post([this] { back(); });
     });
-    cdk::status_strip::attach(page_->header());
+    cp0::ui::StatusStrip::add(page_->header());
 
     cp0::ui::RollerEvents events;
     events.activate = [this](int row) { post([this, row] { activate(row); }); };

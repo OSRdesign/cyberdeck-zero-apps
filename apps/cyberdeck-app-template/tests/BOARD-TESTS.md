@@ -167,7 +167,7 @@ python deck.py run 'grep -E "^gen=" /run/user/1000/applaunch/screen.state; syste
 |---|---|---|
 | I-1 | The fullscreen child gets `APPLAUNCH_DISPLAY=dpi-scaled` and the board profile from the launcher's environment, and its backend opens the framebuffer and the touch device while the launcher keeps them open (no exclusive access) | T1, T4 |
 | I-2 | `cp0_display_set_mode(NATIVE)` after init gives a 1:1 picture of the whole panel, rotation included, and the compat display never draws | T1, T4 |
-| I-3 | The stand-in strip (sysfs / procfs state, `cp0_statusbar_read_state`) matches the home grid's (NetworkManager signal, BlueZ): the Wi-Fi bar count may differ near a threshold; L1 must decide the source | T1 |
+| I-3 | The shared `cp0::ui::StatusStrip` fed by its default source (sysfs / procfs, `cp0_statusbar_read_state`) matches the home grid's (which feeds it NetworkManager signal and BlueZ): the Wi-Fi bar count may differ near a threshold | T1 |
 | I-4 | The app's libinput reads every keyboard while the launcher's is suspended and its Esc watcher reads the nodes raw: no key lost, none doubled (the `/dev/input/bt-keyboard` link and the presence list name the same node) | T2, T3 |
 | I-5 | The launcher, its timers off, does not act on touches made in the app; the touch that closes the app does not click a home tile (`touch_swallow(2)`) | T2.3 |
 | I-6 | The launcher rewrites `input.state` while a fullscreen app runs (its presence watcher is a thread, not an LVGL timer: read in the code) and `APPLAUNCH_STATE_DIR` points at it | T3.5 |

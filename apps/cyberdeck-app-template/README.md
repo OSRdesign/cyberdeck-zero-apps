@@ -12,7 +12,7 @@ behaves like the launcher's Settings on every screen from 640x480 up.
 
 | Piece | Where |
 |---|---|
-| Page with the title, the shared status strip and the on-screen Esc (`cp0::ui::Page`, `_common/status_strip`) | every page |
+| Page with the title, the shared status strip and the on-screen Esc (`cp0::ui::Page`, `cp0::ui::StatusStrip`, `cp0::ui::add_title`, all from cp0_lvgl) | every page |
 | Roller with Nav, Toggle, Info and Busy rows (`cp0::ui::Roller`) | root |
 | InfoTable: what the app learnt from the launcher contract and the layout service | Device info |
 | TextField with the app-side on-screen keyboard (shown only when no physical keyboard is connected, the launcher's rule; `_common/osk_policy`) | Name |

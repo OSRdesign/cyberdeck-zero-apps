@@ -4,7 +4,7 @@
 # The component of a cdk app's scratch project (written by apps/_common/build_app.sh as projects/<Name>/main/SConstruct
 # in the launcher build tree):
 #   main/app/        the app's src/ (main.cpp, ui/, core/)
-#   main/common/     apps/_common/*.{hpp,cpp} + stub/ + cdk_build_info.h (no headless/, no tests/)
+#   main/common/     apps/_common/*.{hpp,cpp} + cdk_build_info.h (no headless/, no tests/)
 #   main/lvgl_ovr/   the launcher's LVGL FreeType files (projects/APPLaunch/main/lvgl), so text renders as in the launcher
 # Links cp0_lvgl (display backend, keyboard thread, widgets) and LVGL statically. -O2 for LVGL, cp0_lvgl and the app:
 # the SDK compiles without optimisation by default and LVGL drawing needs it on a Pi Zero 2W (as Mesh Hop does).
@@ -53,7 +53,7 @@ for component in env['COMPONENTS']:
     if component['target'] == 'cp0_lvgl':
         component['DEFINITIONS_PRIVATE'] = component.get('DEFINITIONS_PRIVATE', []) + ['-O2']
 
-# the status strip renderer (cp0_statusbar.c, through _common/stub until task L1) includes the FreeType headers
+# the status strip renderer (cp0_statusbar.c, behind cp0::ui::StatusStrip) includes the FreeType headers
 PRIVATE_INCLUDE += [os.path.join(toolchain_sysroot, 'usr', 'include', 'freetype2')]
 
 env['COMPONENTS'].append({'target': env['PROJECT_NAME'],
