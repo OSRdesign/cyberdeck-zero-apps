@@ -1,0 +1,22 @@
+# Started by hand (ssh, a script): no launcher contract variables and no input.state (APP-CONTRACT section 7).
+# The app still starts, sizes itself from the layout service and keeps the keyboard rule "auto" with its own probe.
+title Template: started without the launcher
+nocontract
+sizes 640x480 720x720
+
+shot root-nocontract
+key enter
+shot info-nocontract
+key down
+key down
+key down
+key down
+wait 600
+shot info-nocontract-launcher
+expect text "no contract"
+key down
+wait 600
+expect text "no input.state"
+key esc
+key esc
+expect quit

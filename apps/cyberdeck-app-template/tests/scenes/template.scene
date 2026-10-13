@@ -1,0 +1,100 @@
+# The template at every supported size: every widget, keys and touch, the on-screen keyboard by the shared rule.
+# Played by _common/headless (see its README.md). The fixture starts with no physical keyboard and the rule "auto".
+title Template: root, info, form + keyboard, dialog, busy row, exit
+sizes 640x480 800x480 720x720 1280x720 1024x600
+
+shot root
+expect noquit
+
+# Device info (Enter on the first row), back with Esc
+key enter
+shot info
+key esc
+expect noquit
+expect text "Device info"
+
+# the Name form with no keyboard attached: the app's own on-screen keyboard
+key down
+key enter
+expect osk on
+shot form-osk
+type " One"
+key enter
+expect osk off
+expect text "Deck One"
+
+# an empty name: the status line says why, the field keeps editing
+key enter
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key enter
+shot form-error
+key esc
+key esc
+expect text "Deck One"
+
+# a physical keyboard connects: no on-screen keyboard (re-read of input.state within a second)
+keyboards 1
+wait 1200
+key enter
+expect osk off
+shot form-keyboard
+key esc
+key esc
+
+# the switch, the dialog (Cancel by touch, then Reset with Enter)
+key down
+key enter
+shot switch-on
+key down
+key enter
+shot dialog
+tap "Cancel"
+expect notext "Reset the example?"
+key enter
+key enter
+expect text "Deck"
+
+# the busy row: a background command, its lines, its end
+key down
+key enter
+wait 900
+shot busy
+wait 2800
+shot done
+
+# touch: a tap on a row moves the highlight there, a tap on the highlighted row opens it; the header Esc goes back
+key up
+key up
+key up
+wait 600
+tap "Device info"
+wait 400
+tap "Device info"
+wait 300
+expect text "Row / target"
+tap "Esc"
+expect noquit
+
+# the HackBerry case: the keyboard rule forced, a keyboard present
+osk force
+wait 1200
+tap "Name"
+wait 400
+tap "Name"
+wait 300
+expect osk on
+shot form-forced
+tapkey "q"
+key esc
+key esc
+
+# the root: a short Esc ends the app
+key esc
+expect quit
