@@ -147,7 +147,7 @@ def main():
         "schema_version": 2,
         "generated_at": datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat(),
         "registry_id": args.registry_name or repo,
-        "device_targets": ["CardputerZero"],
+        "device_targets": ["CyberdeckZero"],          # informative only: read by neither the Store nor the launcher
         "i18n": {"default_locale": "en", "fallback_locale": "en", "supported_locales": ["en"]},
         "apps": apps,
     }

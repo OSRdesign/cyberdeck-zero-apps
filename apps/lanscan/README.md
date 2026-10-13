@@ -75,11 +75,13 @@ The source is in [`src`](src) (an LVGL application for the launcher's `cp0_lvgl`
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/lanscan/build/build.sh
 ```
 
+<!-- branding-allow-begin: binary name with the old prefix, remove at the app's next version -->
 [`build/build.sh`](build/build.sh) copies `src/` into the scratch project `projects/LanScanBuild` of the launcher
 checkout (kept out of the launcher's git), runs `scons` under the shared build lock, and installs the binary as
 `root/usr/share/APPLaunch/bin/M5CardputerZero-LanScan`. Then, at the root of this repository, run
 `python3 tools/make_registry.py` to build the package and `registry.json`. Only `root/` goes into the `.deb`; this
 page, `src/` and `build/` do not.
+<!-- branding-allow-end -->
 
 `src/tools/make_oui.py` rebuilds `oui.tsv` from the IEEE OUI registry (`python3 tools/make_oui.py`).
 
@@ -87,4 +89,4 @@ page, `src/` and `build/` do not.
 
 MIT. Vendor names come from the IEEE OUI registry published at <https://standards-oui.ieee.org/> (company names are shortened for the small screen; no formal licence is
 given with the listing). The app runs on
-the LVGL based `cp0_lvgl` runtime of the M5CardputerZero launcher (M5Stack, MIT).
+the LVGL based `cp0_lvgl` runtime, from the CardputerZero launcher by M5Stack (MIT).

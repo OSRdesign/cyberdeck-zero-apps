@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Serial Console
+Exec=/usr/share/APPLaunch/bin/serial-console
+Terminal=true
+Icon=share/images/serial-console.png
+Type=Application

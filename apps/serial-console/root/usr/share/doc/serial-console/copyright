@@ -1,0 +1,10 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Serial Console
+Upstream-Contact: OSRdesign <https://github.com/OSRdesign/cyberdeck-zero-apps>
+Source: https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/serial-console
+Comment: A shell menu that starts picocom (installed from Debian as a dependency, GPL-2+);
+ picocom itself is not part of this package.
+
+Files: *
+Copyright: 2026 OSRdesign
+License: MIT

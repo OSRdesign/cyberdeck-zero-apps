@@ -248,8 +248,8 @@ Mesh Hop is MIT (see the `copyright` file of the package).
   of `api.meshcore.nz`.
 * **MeshCore Open** (MIT), **meshcore-gui** (MIT), **wadamesh** (GPL-3.0) and **Meshy** (GPL-3.0-or-later) were looked at as
   feature references only. **No code was copied from the GPL projects.**
-* **LVGL** (MIT), **FreeType** (FreeType License or GPL-2, the system `libfreetype6`) and the status bar renderer of the
-  M5CardputerZero launcher (`cp0_statusbar`, M5Stack, MIT). The launcher's fonts are read at run time (Montserrat, Font Awesome
+* **LVGL** (MIT), **FreeType** (FreeType License or GPL-2, the system `libfreetype6`) and the status bar renderer
+  (`cp0_statusbar`) of the CardputerZero launcher by M5Stack (MIT). The launcher's fonts are read at run time (Montserrat, Font Awesome
   Free, DejaVu Sans: SIL OFL 1.1, CC BY 4.0 for the icons, Bitstream Vera / DejaVu licence); they are not in the package.
 
 ## Build and test

@@ -7,7 +7,7 @@ No dpkg, ar or tar needed, so it runs on Windows, macOS and Linux.
         --description "What my app does" --maintainer "Me <me@example.com>" --out packages
 
 The tree under --root is installed as is: put files where they must end up on the device, e.g.
-    root/usr/share/APPLaunch/bin/M5CardputerZero-myapp           (the executable, aarch64)
+    root/usr/share/APPLaunch/bin/myapp                           (the executable, aarch64, named after the app id)
     root/usr/share/APPLaunch/applications/myapp.desktop          (the launcher entry)
     root/usr/share/APPLaunch/share/images/myapp.png              (the icon)
 """
