@@ -20,6 +20,7 @@ void test_devices()
     for (const DeviceInfo &d : device_table()) {
         CHECK(d.name && d.name[0]);
         CHECK(d.maker && d.maker[0]);
+        CHECK(std::strlen(d.name) <= 18); /* the left of a ports-page row: about 17 characters fit at 640x480 */
         CHECK(d.hint && d.hint[0] && std::strlen(d.hint) <= 22); /* one Info row value at 640x480 */
         CHECK(d.baud >= 1200 && d.baud <= 921600);
         CHECK(keys.insert(std::make_tuple(d.vid, d.pid, std::string(d.product))).second); /* no duplicate */
@@ -32,19 +33,19 @@ void test_devices()
         const char *name;
         int baud;
     } cases[] = {
-        {0x0403, 0x6001, "FT232R USB-serial", 115200},   {0x0403, 0x6010, "FT2232 dual USB-serial", 115200},
+        {0x0403, 0x6001, "FT232R USB-serial", 115200},   {0x0403, 0x6010, "FT2232 dual UART", 115200},
         {0x0403, 0x6014, "FT232H USB-serial", 115200},   {0x0403, 0x6015, "FT231X USB-serial", 115200},
-        {0x067b, 0x2303, "PL2303 USB-serial", 115200},   {0x067b, 0x23a3, "PL2303GC USB-serial", 115200},
-        {0x10c4, 0xea60, "CP210x USB-serial", 115200},   {0x10c4, 0xea70, "CP2105 dual USB-serial", 115200},
+        {0x067b, 0x2303, "PL2303 USB-serial", 115200},   {0x067b, 0x23a3, "PL2303GC serial", 115200},
+        {0x10c4, 0xea60, "CP210x USB-serial", 115200},   {0x10c4, 0xea70, "CP2105 dual UART", 115200},
         {0x1a86, 0x7523, "CH340 USB-serial", 115200},    {0x1a86, 0x5523, "CH341 USB-serial", 115200},
         {0x1a86, 0x55d4, "CH9102 USB-serial", 115200},   {0x2341, 0x0043, "Arduino Uno", 9600},
         {0x2341, 0x0042, "Arduino Mega 2560", 9600},     {0x2341, 0x0058, "Arduino Nano Every", 9600},
-        {0x2341, 0x8036, "Arduino Leonardo", 9600},      {0x2341, 0x003d, "Arduino Due (programming port)", 9600},
-        {0x303a, 0x1001, "ESP32 USB-Serial/JTAG", 115200}, {0x303a, 0x4001, "ESP32 native USB (CDC)", 115200},
-        {0x2e8a, 0x000a, "Raspberry Pi Pico", 115200},   {0x2e8a, 0x0005, "Raspberry Pi Pico (MicroPython)", 115200},
-        {0x0483, 0x374b, "ST-LINK/V2-1 virtual COM", 115200}, {0x0483, 0x3752, "ST-LINK/V2-1 virtual COM", 115200},
-        {0x0483, 0x374e, "STLINK-V3 virtual COM", 115200}, {0x16c0, 0x0483, "Teensy", 115200},
-        {0x1546, 0x01a7, "u-blox 7 GPS receiver", 9600}, {0x1546, 0x01a8, "u-blox 8 GPS receiver", 9600},
+        {0x2341, 0x8036, "Arduino Leonardo", 9600},      {0x2341, 0x003d, "Due (programming)", 9600},
+        {0x303a, 0x1001, "ESP32 USB-JTAG", 115200}, {0x303a, 0x4001, "ESP32 native USB", 115200},
+        {0x2e8a, 0x000a, "Raspberry Pi Pico", 115200},   {0x2e8a, 0x0005, "Pico MicroPython", 115200},
+        {0x0483, 0x374b, "ST-LINK/V2-1 VCP", 115200}, {0x0483, 0x3752, "ST-LINK/V2-1 VCP", 115200},
+        {0x0483, 0x374e, "STLINK-V3 VCP", 115200}, {0x16c0, 0x0483, "Teensy", 115200},
+        {0x1546, 0x01a7, "u-blox 7 GPS", 9600}, {0x1546, 0x01a8, "u-blox 8 GPS", 9600},
         {0x05a6, 0x0009, "Cisco USB console", 9600},
     };
     for (const auto &c : cases) {
@@ -67,7 +68,7 @@ void test_devices()
     const DeviceInfo *flipper = lookup_device(0x0483, 0x5740, "Flipper Kirelo Virtual ComPort");
     CHECK(flipper && std::string(flipper->name) == "Flipper Zero" && flipper->family == Family::Cli);
     const DeviceInfo *stm = lookup_device(0x0483, 0x5740, "STM32 Virtual ComPort");
-    CHECK(stm && std::string(stm->name) == "STM32 virtual COM port");
+    CHECK(stm && std::string(stm->name) == "STM32 USB CDC");
     CHECK(lookup_device(0x0483, 0x5740) == stm);
 
     // unknown devices

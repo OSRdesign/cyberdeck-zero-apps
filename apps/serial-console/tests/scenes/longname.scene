@@ -1,0 +1,70 @@
+# Long device names on the ports page, and the card of a board that prints nothing when listened to (scenario
+# "longname": four silent simulated boards). The port name (ttyACM0...) stays whole at the right of its row, only the
+# name is shortened with dots; after Listen finds nothing the card says what to try next.
+title Serial Console: long names, a silent board
+env SERIAL_CONSOLE_DEMO longname
+sizes 640x480 800x480 720x720 1280x720 1024x600
+
+wait 600
+shot ports
+expect text "ESP32 native USB"
+expect text "ttyACM0"
+expect text "ttyACM2"
+key down
+key down
+wait 400
+shot ports-long-product
+expect text "ttyACM2 - 115200 recommended"
+
+# the port page keeps the full name
+key enter
+wait 300
+shot port-long
+
+key esc
+wait 300
+key up
+key up
+key enter
+wait 300
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+wait 600
+expect text "Listen"
+key enter
+wait 5500
+shot card-silent
+expect text "Try Ask the device"
+expect text "Reset and listen"
+
+# the top of the card: what was heard (nothing)
+key up
+key up
+key up
+wait 400
+shot card-silent-top
+expect text "Nothing heard"
+
+# Enter on "Try Ask the device" opens the Ask page, where each probe asks for its confirmation
+key down
+key down
+key down
+wait 400
+shot card-silent-next
+key enter
+wait 400
+shot card-silent-ask
+expect text "MicroPython"
+key enter
+wait 300
+shot card-silent-confirm
+expect text "Send"

@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <sstream>
 
@@ -100,6 +101,43 @@ static void test_texts()
     CHECK(bare_adapter(p));
     CHECK(port_row_text(p) == std::make_pair(std::string("CP210x USB-serial"), std::string("ttyUSB0")));
     CHECK(port_info_items(p, false).back().first == "Access");
+
+    // the card of a Listen that heard nothing says what to do next, on a bare adapter and on a board's own USB alike
+    const auto find_row = [](const std::vector<CardRow> &rows, const std::string &key) {
+        for (const CardRow &r : rows)
+            if (r.key == key) return &r;
+        return static_cast<const CardRow *>(nullptr);
+    };
+    Identity silent;
+    silent.kind = Kind::Silent;
+    for (const PortInfo *port : {&p, &q}) {
+        const std::vector<CardRow> rows = card_rows(silent, *port, Probe::Listen, 115200);
+        const CardRow *note = find_row(rows, kSilentNote);
+        const CardRow *ask = find_row(rows, "Try Ask the device");
+        const CardRow *reset = find_row(rows, "Reset and listen");
+        CHECK(note && note->action == CardAction::None && ask && ask->action == CardAction::Ask);
+        CHECK(reset && reset->action == CardAction::Reset && find_row(rows, "Run again"));
+        CHECK(find_row(rows, kAdapterNote) == nullptr && find_row(rows, "Ask the device") == nullptr);
+    }
+    PortInfo native; /* ESP32 native USB: not a bare adapter, still offered the next probes */
+    native.usb = true;
+    native.vid = 0x303a;
+    native.pid = 0x4001;
+    native.known = lookup_device(native.vid, native.pid, "");
+    native.title = port_title(native);
+    CHECK(!bare_adapter(native));
+    CHECK(find_row(card_rows(silent, native, Probe::Listen, 115200), "Try Ask the device") != nullptr);
+    // after a reset that heard nothing: no second Reset row, its own note
+    const std::vector<CardRow> after_reset = card_rows(silent, native, Probe::Reset, 115200);
+    CHECK(find_row(after_reset, kSilentResetNote) && find_row(after_reset, "Try Ask the device") &&
+          find_row(after_reset, "Reset and listen") == nullptr);
+    // a found board, or a silent answer to Ask, gets none of it
+    Identity found;
+    found.kind = Kind::MicroPython;
+    CHECK(find_row(card_rows(found, native, Probe::Listen, 115200), "Try Ask the device") == nullptr);
+    CHECK(find_row(card_rows(silent, native, Probe::At, 115200), "Try Ask the device") == nullptr);
+    // the notes fit two lines of a 640x480 row (about 34 characters a line)
+    CHECK(std::strlen(kSilentNote) <= 64 && std::strlen(kSilentResetNote) <= 64);
 
     PortInfo u;
     u.tty = "ttyAMA0";
@@ -219,7 +257,7 @@ static void test_package()
     const std::string manifest = read_file(app + "/app.json");
     CHECK(manifest.find("\"share_code\": \"serial-console\"") != std::string::npos);
     CHECK(manifest.find("\"package\": \"serial-console\"") != std::string::npos);
-    CHECK(manifest.find("\"version\": \"0.3.0\"") != std::string::npos);
+    CHECK(manifest.find("\"version\": \"0.3.1\"") != std::string::npos);
     CHECK(manifest.find("\"draft\": true") != std::string::npos);
     // the fixtures of the classifier say they are representative samples
     for (const char *f : {"esp32-idf-boot.txt", "gnss-ublox-m8.txt", "micropython.txt", "marlin-m115.txt"})

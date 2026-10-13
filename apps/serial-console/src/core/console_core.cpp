@@ -162,7 +162,12 @@ std::vector<CardRow> card_rows(const Identity &id, const PortInfo &port, Probe p
         info("Recommended", settings);
         rows.push_back(CardRow{"Apply settings", baud == in_use ? std::string("In use") : settings, CardAction::Apply});
     }
-    if (!id.found() && bare_adapter(port)) {
+    const bool silent = id.kind == Kind::Silent && probe_level(probe) <= 2;
+    if (silent) { /* MicroPython and CircuitPython boards print nothing until asked: say what to do next */
+        rows.push_back(CardRow{probe == Probe::Reset ? kSilentResetNote : kSilentNote, std::string(), CardAction::None});
+        rows.push_back(CardRow{"Try Ask the device", "sends", CardAction::Ask});
+        if (probe != Probe::Reset) rows.push_back(CardRow{"Reset and listen", "resets", CardAction::Reset});
+    } else if (!id.found() && bare_adapter(port)) {
         rows.push_back(CardRow{kAdapterNote, std::string(), CardAction::None});
         if (probe != Probe::Reset) rows.push_back(CardRow{"Reset and listen", "resets", CardAction::Reset});
         rows.push_back(CardRow{"Ask the device", "sends", CardAction::Ask});
