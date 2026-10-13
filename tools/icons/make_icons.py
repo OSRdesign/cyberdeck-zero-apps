@@ -163,13 +163,16 @@ def icon_meshzero(hue, ink):
 
 
 def icon_serial(hue, ink):
+    """A whole DB9 plug: the mounting flange with its two screw holes, the D-shell and the nine pins."""
     c = Canvas()
-    # DB9 shell: wide top, narrower bottom, soft corners
-    c.polygon([(3, 16), (97, 16), (82, 84), (18, 84)], hue, round_r=9)
-    top = [(22 + 14 * i, 38) for i in range(5)]
-    bot = [(29 + 14 * i, 62) for i in range(4)]
-    for x, y in top + bot:
-        c.circle(x, y, 5.5, ink)
+    c.rrect(4, 19, 96, 81, 8, hue)                       # flange
+    for x in (12, 88):                                   # screw holes
+        c.circle(x, 50, 5, ink)
+    c.polygon([(22, 28), (78, 28), (71, 72), (29, 72)], ink, round_r=4)   # D-shell
+    for x in range(5):
+        c.circle(30 + 10 * x, 41, 4, hue)              # top row of five pins
+    for x in range(4):
+        c.circle(35 + 10 * x, 59, 4, hue)              # bottom row of four pins
     return c.finish()
 
 
@@ -207,7 +210,7 @@ ICONS = [
     ("wifi-survey",          icon_wifi,     "#FF7A1A", INK,   "diamond"),
     ("mesh-hop",             icon_meshhop,  "#8E5CF5", WHITE, "hexagon"),
     ("meshzero",             icon_meshzero, "#E23BD6", WHITE, "speech bubble"),
-    ("serial-console",       icon_serial,   "#FFC21A", INK,   "DB9 trapezoid"),
+    ("serial-console",       icon_serial,   "#FFC21A", INK,   "DB9 plug"),
     ("system-monitor",       icon_sysmon,   "#F23B3B", WHITE, "shield"),
     ("viz1090",              icon_viz,      "#5BB8FF", INK,   "squircle"),
     ("cyberdeck-app-template", icon_template, "#8A9099", INK, "octagon"),
