@@ -103,6 +103,21 @@ adapter), then opens a terminal page.
 * **No permission**: when the user is not in the `dialout` group, the ports page has a *Serial port access - How to
   fix* row, and a refused open shows a dialog with the exact fix (`sudo usermod -aG dialout $USER`, then reboot).
 
+## Screenshots
+
+On the deck (640x480) and on a Pi 3A+ with the Waveshare 4.3" DSI panel (800x480, touch only).
+
+| | |
+|---|---|
+| ![No adapter](screenshots/01-no-adapter-deck.png) | ![Ports](screenshots/02-ports-deck.png) |
+| Nothing plugged in. | An ESP32-S3 identified by its USB descriptor, with the recommended speed. |
+| ![Port page](screenshots/03-port-deck.png) | ![Identified](screenshots/04-identified-deck.png) |
+| The port page: recommended settings and the three ways to identify the board. | After "Ask the device": ESP32-S3 running MicroPython v1.22.0 (M5Stack). |
+| ![Terminal](screenshots/05-terminal-deck.png) | ![Ports on the Pi 3A+](screenshots/06-ports-pi3a.png) |
+| The terminal (MicroPython REPL); a keyboard sends keys straight to the board. | The same list on the 800x480 touch screen. |
+| ![Terminal with the on-screen keyboard](screenshots/07-terminal-keyboard-pi3a.png) | |
+| Touch only: a text line and the on-screen keyboard with Esc, Tab, Ctrl and arrows. | |
+
 ## Keys and touch
 
 | Where | Keyboard | Touch |
