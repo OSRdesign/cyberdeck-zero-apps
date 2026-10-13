@@ -33,7 +33,7 @@ The tile "App Template" appears on the home grid within a few seconds (directory
 Logs while testing (the app's stderr goes to the launcher's journal):
 
 ```
-python deck.py run 'journalctl --user -u APPLaunch.service -n 60 --no-pager | grep -E "cdk|External app|process|ESC"'
+python deck.py run 'journalctl --user -u cyberdeckzero.service -n 60 --no-pager | grep -E "cdk|External app|process|ESC"'
 ```
 
 Remove after the tests: `python deck.py sudo 'dpkg -r cyberdeck-app-template'`.
@@ -82,7 +82,7 @@ The rule treats a Bluetooth keyboard that went away as asleep for 600 s, so swit
 launcher's restart starts its timers again.
 
 1. Bluetooth keyboard OFF, no USB keyboard. Restart the launcher:
-   `python deck.py run 'setsid nohup systemctl --user restart APPLaunch.service > /dev/null 2>&1 < /dev/null &'`;
+   `python deck.py run 'setsid nohup systemctl --user restart cyberdeckzero.service > /dev/null 2>&1 < /dev/null &'`;
    check `python deck.py run 'grep -E "^(keyboards|vkb|gen)=" /run/user/1000/applaunch/input.state'`: `keyboards=0`,
    `vkb=auto`.
 2. Open the app by touch, tap "Name" twice: the Name page, the field editing (blue border, cursor) and the keyboard at
@@ -127,10 +127,10 @@ python deck.py sudo 'dpkg -i /tmp/cdk-template.deb'
 
 1. Home grid: no "App Template" tile; Settings > Apps does not list it either (X-MinSize=640x480).
 2. Started by hand (an older launcher would show the tile): stop the launcher and run the app with the board profile:
-   `python deck.py run 'systemctl --user stop APPLaunch.service; set -a; . /etc/applaunch/board.conf; set +a; APPLAUNCH_STD_KEYBOARD=1 timeout 60 /usr/share/APPLaunch/bin/cyberdeck-app-template; echo rc=$?'`
+   `python deck.py run 'systemctl --user stop cyberdeckzero.service; set -a; . /etc/applaunch/board.conf; set +a; APPLAUNCH_STD_KEYBOARD=1 timeout 60 /usr/share/APPLaunch/bin/cyberdeck-app-template; echo rc=$?'`
    The panel (upright) shows "Template needs a screen of at least 640x480. This screen is 480x320. Press any key or
    tap the screen to close." (`notice.png`). A key on the USB keyboard or a tap closes it: `rc=0`.
-3. `python deck.py run 'setsid nohup systemctl --user restart APPLaunch.service > /dev/null 2>&1 < /dev/null &'`,
+3. `python deck.py run 'setsid nohup systemctl --user restart cyberdeckzero.service > /dev/null 2>&1 < /dev/null &'`,
    then `python deck.py sudo 'dpkg -r cyberdeck-app-template'`.
    (The serial console part of T6 belongs to task A2.)
 
@@ -149,7 +149,7 @@ and app running leaving well over 250 MB available.
 ## T8. Deck: started over ssh without the launcher's environment
 
 ```
-python deck.py run 'grep -E "^gen=" /run/user/1000/applaunch/screen.state; systemctl --user stop APPLaunch.service; sleep 1; timeout 45 /usr/share/APPLaunch/bin/cyberdeck-app-template; echo rc=$?; grep -E "^gen=" /run/user/1000/applaunch/screen.state'
+python deck.py run 'grep -E "^gen=" /run/user/1000/applaunch/screen.state; systemctl --user stop cyberdeckzero.service; sleep 1; timeout 45 /usr/share/APPLaunch/bin/cyberdeck-app-template; echo rc=$?; grep -E "^gen=" /run/user/1000/applaunch/screen.state'
 ```
 
 1. The app draws full screen at 640x480 as under the launcher. Its first log line (in the command's output):
@@ -159,7 +159,7 @@ python deck.py run 'grep -E "^gen=" /run/user/1000/applaunch/screen.state; syste
    expected degrade. With them prefixed to the command, touch is right.
 3. Esc at the root ends it with `rc=0`; left alone, `timeout` ends it after 45 s with SIGTERM (`rc=124`, and
    `signal 15, ended cleanly`). Both `gen=` lines are equal: the app wrote no screen.state.
-4. `python deck.py run 'setsid nohup systemctl --user restart APPLaunch.service > /dev/null 2>&1 < /dev/null &'`
+4. `python deck.py run 'setsid nohup systemctl --user restart cyberdeckzero.service > /dev/null 2>&1 < /dev/null &'`
 
 ## Unverified assumptions (I) the first board run settles
 
