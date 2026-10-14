@@ -7,10 +7,7 @@ sizes 640x480 720x720
 
 wait 600
 shot overview-nocontract
-key up
-key up
-wait 400
-key enter
+tap "System"
 wait 800
 key up
 wait 600

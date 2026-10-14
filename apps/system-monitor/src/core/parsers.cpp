@@ -17,14 +17,17 @@ namespace sm {
 
 namespace {
 
-bool parse_cpu_line(const std::vector<std::string> &f, CpuTimes &t)
+/* the numbers after "cpu" / "cpuN": at least 4 (older kernels have fewer than 8) */
+bool parse_cpu_fields(Fields &f, CpuTimes &t)
 {
-    if (f.size() < 5) return false;
     std::uint64_t v[8] = {};
-    for (std::size_t i = 0; i < 8; ++i) {
-        if (i + 1 >= f.size()) break; /* older kernels: fewer columns */
-        if (!parse_u64(f[i + 1], v[i])) return false;
+    int n = 0;
+    std::string_view field;
+    while (n < 8 && f.next(field)) {
+        if (!to_u64(field, v[n])) return false;
+        ++n;
     }
+    if (n < 4) return false;
     t.user = v[0];
     t.nice = v[1];
     t.system = v[2];
@@ -38,25 +41,38 @@ bool parse_cpu_line(const std::vector<std::string> &f, CpuTimes &t)
 
 } // namespace
 
-StatInfo parse_stat(const std::string &text)
+bool parse_stat_into(const std::string &text, StatInfo &info)
 {
-    StatInfo info;
-    for (const std::string &line : split_lines(text)) {
-        if (!starts_with(line, "cpu")) continue;
-        const std::vector<std::string> f = split_ws(line);
-        if (f.empty()) continue;
+    info.ok = false;
+    info.all = CpuTimes();
+    info.cores.clear();   /* the capacity stays: no allocation once warm */
+    info.core_ids.clear();
+    Lines lines(text);
+    std::string_view line;
+    while (lines.next(line)) {
+        if (line.size() < 4 || line.compare(0, 3, "cpu") != 0) continue;
+        Fields f(line);
+        std::string_view name;
+        if (!f.next(name)) continue;
         CpuTimes t;
-        if (!parse_cpu_line(f, t)) continue;
-        if (f[0] == "cpu") {
+        if (!parse_cpu_fields(f, t)) continue;
+        if (name == "cpu") {
             info.all = t;
             info.ok = true;
         } else {
             std::uint64_t id = 0;
-            if (!parse_u64(f[0].substr(3), id)) continue;
+            if (!to_u64(name.substr(3), id)) continue;
             info.cores.push_back(t);
             info.core_ids.push_back(static_cast<int>(id));
         }
     }
+    return info.ok;
+}
+
+StatInfo parse_stat(const std::string &text)
+{
+    StatInfo info;
+    parse_stat_into(text, info);
     return info;
 }
 
@@ -86,14 +102,16 @@ MemInfo parse_meminfo(const std::string &text)
 {
     MemInfo m;
     bool has_total = false;
-    for (const std::string &line : split_lines(text)) {
+    Lines lines(text);
+    std::string_view line;
+    while (lines.next(line)) {
         const std::size_t colon = line.find(':');
-        if (colon == std::string::npos) continue;
-        const std::string key = line.substr(0, colon);
-        const std::vector<std::string> f = split_ws(line.substr(colon + 1));
-        if (f.empty()) continue;
+        if (colon == std::string_view::npos) continue;
+        const std::string_view key = line.substr(0, colon);
+        Fields f(line.substr(colon + 1));
+        std::string_view first;
         std::uint64_t v = 0;
-        if (!parse_u64(f[0], v)) continue;
+        if (!f.next(first) || !to_u64(first, v)) continue;
         if (key == "MemTotal") {
             m.total = v;
             has_total = true;
@@ -117,13 +135,14 @@ MemInfo parse_meminfo(const std::string &text)
 LoadAvg parse_loadavg(const std::string &text)
 {
     LoadAvg l;
-    const std::vector<std::string> f = split_ws(trim(text));
-    if (f.size() < 4) return l;
-    if (!parse_double(f[0], l.l1) || !parse_double(f[1], l.l5) || !parse_double(f[2], l.l15)) return l;
-    const std::size_t slash = f[3].find('/');
-    if (slash != std::string::npos) {
+    Fields f(trim_view(text));
+    std::string_view a, b, c, d;
+    if (!f.next(a) || !f.next(b) || !f.next(c) || !f.next(d)) return l;
+    if (!to_double(a, l.l1) || !to_double(b, l.l5) || !to_double(c, l.l15)) return l;
+    const std::size_t slash = d.find('/');
+    if (slash != std::string_view::npos) {
         std::uint64_t r = 0, t = 0;
-        if (parse_u64(f[3].substr(0, slash), r) && parse_u64(f[3].substr(slash + 1), t)) {
+        if (to_u64(d.substr(0, slash), r) && to_u64(d.substr(slash + 1), t)) {
             l.running = static_cast<int>(r);
             l.tasks = static_cast<int>(t);
         }
@@ -134,70 +153,99 @@ LoadAvg parse_loadavg(const std::string &text)
 
 bool parse_uptime(const std::string &text, double &uptime_s)
 {
-    const std::vector<std::string> f = split_ws(trim(text));
+    Fields f(trim_view(text));
+    std::string_view first;
     double v = 0;
-    if (f.empty() || !parse_double(f[0], v) || v < 0) return false;
+    if (!f.next(first) || !to_double(first, v) || v < 0) return false;
     uptime_s = v;
     return true;
 }
 
 /* ---------------------------------------------------------------- network */
 
+bool parse_net_dev_into(const std::string &text, std::vector<NetDev> &out)
+{
+    std::size_t n = 0; /* the entries are reused: a name of up to 15 bytes stays in the string's own buffer */
+    Lines lines(text);
+    std::string_view line;
+    while (lines.next(line)) {
+        const std::size_t colon = line.find(':');
+        if (colon == std::string_view::npos) continue;
+        const std::string_view name = trim_view(line.substr(0, colon));
+        if (name.empty() || name.find('|') != std::string_view::npos) continue;
+        Fields f(line.substr(colon + 1));
+        std::string_view v[10];
+        int k = 0;
+        while (k < 10 && f.next(v[k])) ++k;
+        if (k < 10) continue;
+        NetDev d;
+        if (!to_u64(v[0], d.rx_bytes) || !to_u64(v[1], d.rx_packets) || !to_u64(v[8], d.tx_bytes) ||
+            !to_u64(v[9], d.tx_packets))
+            continue;
+        if (n == out.size()) out.emplace_back();
+        NetDev &e = out[n++];
+        e.name.assign(name.data(), name.size());
+        e.rx_bytes = d.rx_bytes;
+        e.rx_packets = d.rx_packets;
+        e.tx_bytes = d.tx_bytes;
+        e.tx_packets = d.tx_packets;
+    }
+    out.resize(n);
+    return n > 0;
+}
+
 std::vector<NetDev> parse_net_dev(const std::string &text)
 {
     std::vector<NetDev> out;
-    for (const std::string &line : split_lines(text)) {
-        const std::size_t colon = line.find(':');
-        if (colon == std::string::npos) continue;
-        const std::string name = trim(line.substr(0, colon));
-        if (name.empty() || name.find('|') != std::string::npos) continue;
-        const std::vector<std::string> f = split_ws(line.substr(colon + 1));
-        if (f.size() < 10) continue;
-        NetDev d;
-        d.name = name;
-        if (!parse_u64(f[0], d.rx_bytes) || !parse_u64(f[1], d.rx_packets) || !parse_u64(f[8], d.tx_bytes) ||
-            !parse_u64(f[9], d.tx_packets))
-            continue;
-        out.push_back(d);
-    }
+    parse_net_dev_into(text, out);
     return out;
 }
 
 std::string parse_default_route(const std::string &text)
 {
-    std::string best;
+    std::string_view best;
     std::uint64_t best_metric = 0;
-    for (const std::string &line : split_lines(text)) {
-        const std::vector<std::string> f = split_ws(line);
-        if (f.size() < 8 || f[0] == "Iface") continue;
+    Lines lines(text);
+    std::string_view line;
+    while (lines.next(line)) {
+        Fields f(line);
+        std::string_view v[8];
+        int k = 0;
+        while (k < 8 && f.next(v[k])) ++k;
+        if (k < 8 || v[0] == "Iface") continue;
         std::uint32_t dest = 1, flags = 0, mask = 1;
-        if (!parse_hex(f[1], dest) || !parse_hex(f[3], flags) || !parse_hex(f[7], mask)) continue;
+        if (!parse_hex(std::string(v[1]), dest) || !parse_hex(std::string(v[3]), flags) ||
+            !parse_hex(std::string(v[7]), mask))
+            continue;
         if (dest != 0 || mask != 0 || !(flags & 0x1)) continue; /* RTF_UP */
         std::uint64_t metric = 0;
-        parse_u64(f[6], metric);
+        to_u64(v[6], metric);
         if (best.empty() || metric < best_metric) {
-            best = f[0];
+            best = v[0];
             best_metric = metric;
         }
     }
-    return best;
+    return std::string(best);
 }
 
 std::vector<WirelessLevel> parse_net_wireless(const std::string &text)
 {
     std::vector<WirelessLevel> out;
-    for (const std::string &line : split_lines(text)) {
+    Lines lines(text);
+    std::string_view line;
+    while (lines.next(line)) {
         const std::size_t colon = line.find(':');
-        if (colon == std::string::npos) continue;
-        const std::string name = trim(line.substr(0, colon));
-        if (name.empty() || name.find('|') != std::string::npos) continue;
-        const std::vector<std::string> f = split_ws(line.substr(colon + 1));
-        if (f.size() < 3) continue;
+        if (colon == std::string_view::npos) continue;
+        const std::string_view name = trim_view(line.substr(0, colon));
+        if (name.empty() || name.find('|') != std::string_view::npos) continue;
+        Fields f(line.substr(colon + 1));
+        std::string_view status, quality, level_text;
+        if (!f.next(status) || !f.next(quality) || !f.next(level_text)) continue;
         WirelessLevel w;
-        w.iface = name;
         double level = 0;
-        if (!parse_double(f[1], w.quality) || !parse_double(f[2], level)) continue;
+        if (!to_double(quality, w.quality) || !to_double(level_text, level)) continue;
         if (level >= 0) continue; /* not dBm (a relative level, or "0" while not associated) */
+        w.iface.assign(name.data(), name.size());
         w.level_dbm = level;
         out.push_back(w);
     }
@@ -237,20 +285,47 @@ IwLink parse_iw_link(const std::string &text)
 
 /* ---------------------------------------------------------------- disks and mounts */
 
+bool find_diskstat(const std::string &text, const std::string &name, DiskStat &out)
+{
+    Lines lines(text);
+    std::string_view line;
+    while (lines.next(line)) {
+        Fields f(line);
+        std::string_view v[10];
+        int k = 0;
+        while (k < 10 && f.next(v[k])) ++k;
+        if (k < 10 || v[2] != name) continue;
+        std::uint64_t major = 0, minor = 0;
+        if (!to_u64(v[0], major) || !to_u64(v[1], minor) || !to_u64(v[3], out.reads) ||
+            !to_u64(v[5], out.sectors_read) || !to_u64(v[7], out.writes) || !to_u64(v[9], out.sectors_written))
+            return false;
+        out.major = static_cast<unsigned>(major);
+        out.minor = static_cast<unsigned>(minor);
+        out.name = name;
+        return true;
+    }
+    return false;
+}
+
 std::vector<DiskStat> parse_diskstats(const std::string &text)
 {
     std::vector<DiskStat> out;
-    for (const std::string &line : split_lines(text)) {
-        const std::vector<std::string> f = split_ws(line);
-        if (f.size() < 10) continue;
+    Lines lines(text);
+    std::string_view line;
+    while (lines.next(line)) {
+        Fields f(line);
+        std::string_view v[10];
+        int k = 0;
+        while (k < 10 && f.next(v[k])) ++k;
+        if (k < 10) continue;
         DiskStat d;
         std::uint64_t major = 0, minor = 0;
-        if (!parse_u64(f[0], major) || !parse_u64(f[1], minor)) continue;
+        if (!to_u64(v[0], major) || !to_u64(v[1], minor)) continue;
         d.major = static_cast<unsigned>(major);
         d.minor = static_cast<unsigned>(minor);
-        d.name = f[2];
-        if (!parse_u64(f[3], d.reads) || !parse_u64(f[5], d.sectors_read) || !parse_u64(f[7], d.writes) ||
-            !parse_u64(f[9], d.sectors_written))
+        d.name.assign(v[2].data(), v[2].size());
+        if (!to_u64(v[3], d.reads) || !to_u64(v[5], d.sectors_read) || !to_u64(v[7], d.writes) ||
+            !to_u64(v[9], d.sectors_written))
             continue;
         out.push_back(d);
     }
@@ -459,20 +534,28 @@ bool vcgencmd_access_denied(const std::string &output)
 
 bool parse_proc_stat(const std::string &text, ProcStat &out)
 {
-    const std::size_t open = text.find('(');
-    const std::size_t close = text.rfind(')');
-    if (open == std::string::npos || close == std::string::npos || close < open) return false;
+    const std::string_view t(text);
+    const std::size_t open = t.find('(');
+    const std::size_t close = t.rfind(')');
+    if (open == std::string_view::npos || close == std::string_view::npos || close < open) return false;
     std::uint64_t pid = 0;
-    if (!parse_u64(text.substr(0, open), pid) || pid == 0) return false;
-    const std::vector<std::string> f = split_ws(trim(text.substr(close + 1)));
-    if (f.size() < 22 || f[0].empty()) return false; /* field 3 (state) .. field 24 (rss) */
-    ProcStat p;
-    p.pid = static_cast<int>(pid);
-    p.comm = text.substr(open + 1, close - open - 1);
-    p.state = f[0][0];
-    if (!parse_u64(f[11], p.utime) || !parse_u64(f[12], p.stime) || !parse_i64(f[21], p.rss_pages)) return false;
-    if (p.rss_pages < 0) p.rss_pages = 0;
-    out = p;
+    if (!to_u64(t.substr(0, open), pid) || pid == 0) return false;
+    // after the name: field 3 (state) .. field 24 (rss); utime 14, stime 15
+    Fields f(t.substr(close + 1));
+    std::string_view v[22];
+    int k = 0;
+    while (k < 22 && f.next(v[k])) ++k;
+    if (k < 22 || v[0].empty()) return false;
+    std::uint64_t utime = 0, stime = 0;
+    std::int64_t rss = 0;
+    if (!to_u64(v[11], utime) || !to_u64(v[12], stime) || !to_i64(v[21], rss)) return false;
+    out.pid = static_cast<int>(pid);
+    const std::string_view comm = t.substr(open + 1, close - open - 1);
+    out.comm.assign(comm.data(), comm.size()); /* up to 15 bytes (the kernel's limit): no allocation */
+    out.state = v[0][0];
+    out.utime = utime;
+    out.stime = stime;
+    out.rss_pages = rss < 0 ? 0 : rss;
     return true;
 }
 

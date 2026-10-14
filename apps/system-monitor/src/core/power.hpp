@@ -22,7 +22,7 @@
 
 namespace sm {
 
-enum class Tone { Normal, Warn, Error };
+enum class Tone { Normal, Warn, Error, Good }; /* Good: the green of a state that is fine (Power OK, a cool CPU) */
 
 /* ---------------------------------------------------------------- temperature */
 
@@ -95,15 +95,8 @@ struct Status {
 };
 
 Status power_status(const PowerInfo &info, bool cpu_hot);
-/* The overview row's value, longest first (the page picks the first that fits): {"OK"}, {"Under-voltage now",
- * "UV now"}, {"Under-voltage since boot", "UV since boot", "UV earlier"}... and its tone. */
-std::vector<std::string> power_values(const PowerInfo &info, Tone &tone);
 /* A flag's row value: {"now"}, {"last 0:41:12 after boot", "last at 0:41:12", "0:41:12"}, {"before the app started",
  * "since boot"}, {"never since boot", "never"} */
 std::vector<std::string> flag_values(const FlagState &flag, bool alarm_only);
-
-/* The overview's status line (under the core bars): the power sentence when power is not OK, else a warm / hot CPU,
- * else "Power OK" (or "" with no power source and a cool CPU). */
-Status overview_status(const PowerInfo &power, bool temp_ok, double temp_c);
 
 } // namespace sm

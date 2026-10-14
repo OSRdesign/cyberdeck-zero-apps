@@ -5,7 +5,8 @@
  * on-screen Esc) and, per page, an optional graphic panel at the top of the body (panels.hpp) with a cp0::ui::Roller
  * under it in the room left, all laid out by cp0_lvgl's layout service:
  *
- *   Overview   the core bars and the status line, then the headline rows (Nav: each opens its page)
+ *   Overview   the tile grid (overview.hpp): Power, CPU, Temperature, Memory, Storage, Network and a footer
+ *              (Processes, System, Sampling); a tile or an item opens its page
  *   CPU, Memory, Temperature and power, Storage, Network
  *              the history chart, then Info rows (and "All processes" on CPU and Memory)
  *   Processes  no panel: "Sort by" and the top 15; the status line names the highlighted process
@@ -19,6 +20,7 @@
 #pragma once
 
 #include "monitor_core.hpp"
+#include "overview.hpp"
 #include "panels.hpp"
 #include "sampler.hpp"
 #include "settings.hpp"
@@ -55,6 +57,7 @@ private:
     void refresh_panel();
     void update_caption(bool force);
     void activate(int row);
+    void open_item(int index);
     std::vector<Row> rows_now() const;
     cp0::ui::RowSpec spec_of(const Row &row) const;
     std::string fit(const std::string &label, const std::vector<std::string> &values) const;
@@ -68,7 +71,7 @@ private:
 
     std::unique_ptr<cp0::ui::Page> page_;
     std::unique_ptr<cp0::ui::Roller> roller_;
-    std::unique_ptr<MetersPanel> meters_;
+    std::unique_ptr<OverviewGrid> grid_;
     std::unique_ptr<HistoryPanel> chart_;
     lv_timer_t *timer_ = nullptr;
     std::vector<std::function<void()>> posted_;

@@ -36,6 +36,11 @@ private:
     std::size_t head_ = 0; /* where the next value goes */
 };
 
+/* The ring's last `span` samples in out.size() points, newest last: each point the mean of its share of samples
+ * (span / points, rounded up), NaN where there is none yet. A sparkline of a few dozen points costs far less to
+ * draw than one point per sample. */
+void bin_history(const Ring &ring, std::size_t span, std::vector<float> &out);
+
 /* Bytes (or anything) per second between two readings of a counter; 0 when the counter went back (a reset, an
  * interface that came again) or no time passed. */
 double counter_rate(std::uint64_t before, std::uint64_t after, double seconds);

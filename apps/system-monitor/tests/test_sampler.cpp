@@ -9,6 +9,7 @@
 #include "monitor_core.hpp"
 #include "sampler.hpp"
 #include "source.hpp"
+#include "text.hpp"
 
 #include <chrono>
 #include <thread>
@@ -143,22 +144,27 @@ void zero()
     CHECK_EQ(snap->hist.rx.size(), static_cast<std::size_t>(1));
     CHECK(!snap->procs_valid);
 
-    // the overview of this snapshot
-    const std::vector<Row> ov = overview_rows(snap.get(), 1);
-    CHECK_EQ(find_row(ov, "CPU")->values[0], std::string("25%"));
-    CHECK_EQ(find_row(ov, "Temperature")->values[0], std::string("48.3 \xC2\xB0" "C"));
-    CHECK(find_row(ov, "Temperature")->tone == Tone::Normal);
-    CHECK_EQ(find_row(ov, "Frequency")->values[0], std::string("1000 / 1000 MHz"));
-    CHECK_EQ(find_row(ov, "Memory")->values[0], std::string("196 / 417 MB"));
-    CHECK_EQ(find_row(ov, "Swap")->values[0], std::string("26 / 512 MB"));
-    CHECK_EQ(find_row(ov, "Load")->values[0], std::string("0.84 0.62 0.48"));
-    CHECK_EQ(find_row(ov, "Uptime")->values[0], std::string("1 d 2 h"));
-    CHECK_EQ(find_row(ov, "Storage")->values[0], std::string("19% of 29 GB"));
-    CHECK_EQ(find_row(ov, "Power")->values[0], std::string("OK"));
-    CHECK_EQ(find_row(ov, "Network")->values[0], std::string("wlan0 192.168.1.23"));
-    CHECK_EQ(find_row(ov, "System")->values[0], std::string("Raspberry Pi Zero 2 W"));
-    CHECK_EQ(find_row(ov, "Sampling")->values[0], std::string("Every 1 s"));
-    CHECK_EQ(overview_status(snap->power, snap->temp.ok, snap->temp.c).text, std::string("Power OK"));
+    // the overview of this snapshot: the six tiles and the footer
+    const std::vector<TileText> ov = overview_tiles(snap.get());
+    CHECK_EQ(ov.size(), static_cast<std::size_t>(kTileCount));
+    CHECK_EQ(ov[kTileCpu].value[0], std::string("25%"));
+    CHECK_EQ(ov[kTileCpu].detail[0], std::string("1000 / 1000 MHz, load 0.84"));
+    CHECK_EQ(ov[kTileCpu].hint, std::string("4 cores"));
+    CHECK_EQ(ov[kTileTemp].value[0], std::string(fmt_temp(48.312)));
+    CHECK(ov[kTileTemp].value_tone == Tone::Good);
+    CHECK_EQ(ov[kTileMem].value[0], std::string("47%"));
+    CHECK_EQ(ov[kTileMem].detail[0], std::string("196 / 417 MB, swap 26 MB"));
+    CHECK_EQ(ov[kTileStorage].value[0], std::string("19%"));
+    CHECK_EQ(ov[kTileStorage].detail[0], std::string("5.2 / 29 GB used"));
+    CHECK_NEAR(ov[kTileStorage].bar_pct, 18.9, 0.1);
+    CHECK_EQ(ov[kTilePower].value[0], std::string("Power OK"));
+    CHECK(ov[kTilePower].frame_tone == Tone::Good);
+    CHECK_EQ(ov[kTileNet].value[0], std::string("192.168.1.23"));
+    CHECK_EQ(ov[kTileNet].hint, std::string("wlan0 -52 dBm"));
+    CHECK_EQ(ov[kTileNet].detail[0], std::string("In 12 kB/s, out 2.0 kB/s"));
+    const std::vector<std::vector<std::string>> foot = overview_footer(snap.get(), 1);
+    CHECK_EQ(foot[kFootPeriod][0], std::string("Every 1 s"));
+    CHECK_EQ(foot[kFootSystem][0], std::string("System"));
 
     // the period: the history starts again
     s.set_period(5);
@@ -185,14 +191,14 @@ void pi3a()
     CHECK_EQ(snap->fs.size(), static_cast<std::size_t>(3));
     CHECK_EQ(snap->fs[2].dir, std::string("/media/pi/USB STICK"));
     CHECK(snap->bt == BtState::Absent);
-    const std::vector<Row> ov = overview_rows(snap.get(), 1);
-    const Row *power = find_row(ov, "Power");
-    CHECK(power != nullptr);
-    CHECK_EQ(power->values[0], std::string("Under-voltage now"));
-    CHECK(power->tone == Tone::Error);
-    CHECK(find_row(ov, "Storage")->tone == Tone::Warn); /* 93 % full */
-    CHECK_EQ(find_row(ov, "Storage")->values[0], std::string("93% of 14 GB"));
-    CHECK_EQ(find_row(ov, "Frequency")->values[0], std::string("600 / 1400 MHz"));
+    const std::vector<TileText> ov = overview_tiles(snap.get());
+    CHECK_EQ(ov[kTilePower].value[0], std::string("Under-voltage"));
+    CHECK_EQ(ov[kTilePower].detail[0], std::string("Now: check the power supply"));
+    CHECK(ov[kTilePower].value_tone == Tone::Error && ov[kTilePower].frame_tone == Tone::Error);
+    CHECK(ov[kTileStorage].value_tone == Tone::Warn); /* 93 % full */
+    CHECK_EQ(ov[kTileStorage].value[0], std::string("93%"));
+    CHECK_EQ(ov[kTileCpu].detail[0], std::string("600 / 1400 MHz, load 4.21"));
+    CHECK_EQ(ov[kTileNet].hint, std::string("wlan0 -69 dBm"));
     const std::vector<Row> th = thermal_rows(snap.get());
     CHECK_EQ(th[0].label, std::string("Under-voltage now: check the power supply"));
     CHECK(th[0].values.empty());
@@ -200,8 +206,6 @@ void pi3a()
     CHECK_EQ(find_row(th, "Throttled")->values[0], std::string("now"));
     CHECK_EQ(find_row(th, "Soft temp limit")->values[0], std::string("never since boot"));
     CHECK_EQ(find_row(th, "Firmware flags")->values[0], std::string("0x50005 (vcgencmd)"));
-    CHECK_EQ(overview_status(snap->power, snap->temp.ok, snap->temp.c).text,
-             std::string("Under-voltage now: check the power supply"));
 }
 
 void pi5()
@@ -264,9 +268,10 @@ void missing_vcgencmd()
         Sampler s(std::move(src), 1);
         const auto snap = two_samples(s, f);
         CHECK(snap->power.source == PowerSource::None);
-        CHECK(find_row(overview_rows(snap.get(), 1), "Power") == nullptr);
+        const std::vector<TileText> ov = overview_tiles(snap.get());
+        CHECK_EQ(ov[kTilePower].value[0], std::string("Unknown"));
+        CHECK(ov[kTilePower].value_dim);
         CHECK(thermal_rows(snap.get())[0].label != std::string("Power OK"));
-        CHECK_EQ(overview_status(snap->power, snap->temp.ok, snap->temp.c).text, std::string(""));
     }
     // vcgencmd refused (not in the video group): said once, with the fix
     {
@@ -278,9 +283,9 @@ void missing_vcgencmd()
         const auto snap = two_samples(s, f);
         CHECK(snap->power.source == PowerSource::NoAccess);
         CHECK_EQ(f->vc_calls, 1);
-        const std::vector<Row> ov = overview_rows(snap.get(), 1);
-        const Row *power = find_row(ov, "Power");
-        CHECK(power && power->values[0] == "Needs the video group" && power->tone == Tone::Warn);
+        const std::vector<TileText> ov = overview_tiles(snap.get());
+        CHECK_EQ(ov[kTilePower].value[0], std::string("No access"));
+        CHECK(ov[kTilePower].frame_tone == Tone::Warn);
         CHECK(thermal_rows(snap.get())[0].label.find("sudo usermod -aG video") != std::string::npos);
     }
 }
@@ -318,9 +323,12 @@ void scenario()
     CHECK(hot && hot->temp.ok && hot->temp.c >= 80);
     if (hot) {
         CHECK(hot->power.flags[kSoftTempLimit].now);
-        CHECK(overview_status(hot->power, true, hot->temp.c).tone == Tone::Error);
-        const std::vector<Row> ov = overview_rows(hot.get(), 1);
-        CHECK(find_row(ov, "Temperature")->tone == Tone::Error);
+        const std::vector<TileText> ov = overview_tiles(hot.get());
+        CHECK(ov[kTileTemp].value_tone == Tone::Error);
+        CHECK_EQ(ov[kTileTemp].detail[0], std::string("Hot: the Pi slows down"));
+        CHECK_EQ(ov[kTileTemp].hint, std::string("fan 3120 rpm"));
+        CHECK_EQ(ov[kTilePower].value[0], std::string("Throttled"));
+        CHECK(ov[kTilePower].frame_tone == Tone::Error);
         CHECK(hot->hist.rx.size() >= kHistory - 1);
     }
 }

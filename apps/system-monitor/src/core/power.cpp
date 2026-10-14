@@ -104,42 +104,6 @@ Status power_status(const PowerInfo &info, bool cpu_hot)
     return {"Power OK", Tone::Normal};
 }
 
-std::vector<std::string> power_values(const PowerInfo &info, Tone &tone)
-{
-    tone = Tone::Normal;
-    if (info.source == PowerSource::None) return {"Unknown"};
-    if (info.source == PowerSource::NoAccess) {
-        tone = Tone::Warn;
-        return {"Needs the video group", "No access"};
-    }
-    const FlagState *f = info.flags;
-    if (f[kUnderVoltage].now) {
-        tone = Tone::Error;
-        return {"Under-voltage now", "UV now"};
-    }
-    if (f[kThrottled].now) {
-        tone = Tone::Error;
-        return {"Throttled now"};
-    }
-    if (f[kSoftTempLimit].now) {
-        tone = Tone::Warn;
-        return {"Temp limit now"};
-    }
-    if (f[kFreqCapped].now) {
-        tone = Tone::Warn;
-        return {"Capped now"};
-    }
-    if (f[kUnderVoltage].occurred) {
-        tone = Tone::Warn;
-        return {"Under-voltage since boot", "UV since boot", "UV earlier"};
-    }
-    if (f[kThrottled].occurred || f[kSoftTempLimit].occurred || f[kFreqCapped].occurred) {
-        tone = Tone::Warn;
-        return {"Throttled since boot", "Slowed earlier"};
-    }
-    return {"OK"};
-}
-
 std::vector<std::string> flag_values(const FlagState &flag, bool alarm_only)
 {
     if (flag.now) return {"now"};
@@ -150,19 +114,6 @@ std::vector<std::string> flag_values(const FlagState &flag, bool alarm_only)
     if (flag.occurred) return {"before the app started", "since boot"};
     if (alarm_only) return {"not seen"};
     return {"never since boot", "never"};
-}
-
-Status overview_status(const PowerInfo &power, bool temp_ok, double temp_c)
-{
-    const bool hot = temp_ok && temp_state(temp_c) == TempState::Hot;
-    const bool warm = temp_ok && temp_state(temp_c) == TempState::Warm;
-    const Status p = power_status(power, hot);
-    if (p.tone == Tone::Error) return p;
-    if (hot) return {"CPU hot: " + fmt_temp_short(temp_c) + ", the Pi slows down from 80 to 85 \xC2\xB0" "C",
-                     Tone::Error};
-    if (p.tone == Tone::Warn) return p;
-    if (warm) return {"CPU warm: " + fmt_temp_short(temp_c) + " (hot from 80 \xC2\xB0" "C)", Tone::Warn};
-    return p;
 }
 
 } // namespace sm

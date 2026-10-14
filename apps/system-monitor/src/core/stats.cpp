@@ -46,6 +46,23 @@ std::vector<float> Ring::values() const
     return out;
 }
 
+void bin_history(const Ring &ring, std::size_t span, std::vector<float> &out)
+{
+    const std::size_t points = out.size();
+    if (points == 0) return;
+    const std::size_t per = std::max<std::size_t>(1, (span + points - 1) / points);
+    const std::size_t n = ring.size();
+    for (std::size_t j = 0; j < points; ++j) { /* j = 0: the newest point (the last one of out) */
+        double sum = 0;
+        std::size_t count = 0;
+        for (std::size_t k = j * per; k < (j + 1) * per && k < n; ++k) {
+            sum += ring.at(n - 1 - k);
+            ++count;
+        }
+        out[points - 1 - j] = count ? static_cast<float>(sum / static_cast<double>(count)) : std::nanf("");
+    }
+}
+
 double counter_rate(std::uint64_t before, std::uint64_t after, double seconds)
 {
     if (!(seconds > 0) || after < before) return 0.0;

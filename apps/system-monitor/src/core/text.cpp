@@ -11,6 +11,88 @@
 
 namespace sm {
 
+bool Lines::next(std::string_view &line)
+{
+    if (rest_.empty()) return false;
+    const std::size_t nl = rest_.find('\n');
+    line = rest_.substr(0, nl);
+    rest_ = nl == std::string_view::npos ? std::string_view() : rest_.substr(nl + 1);
+    if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
+    return true;
+}
+
+bool Fields::next(std::string_view &field)
+{
+    std::size_t a = 0;
+    while (a < rest_.size() && (rest_[a] == ' ' || rest_[a] == '\t')) ++a;
+    if (a == rest_.size()) {
+        rest_ = std::string_view();
+        return false;
+    }
+    std::size_t b = a;
+    while (b < rest_.size() && rest_[b] != ' ' && rest_[b] != '\t') ++b;
+    field = rest_.substr(a, b - a);
+    rest_ = rest_.substr(b);
+    return true;
+}
+
+bool Fields::skip(int n)
+{
+    std::string_view f;
+    for (int i = 0; i < n; ++i)
+        if (!next(f)) return false;
+    return true;
+}
+
+std::string_view trim_view(std::string_view s)
+{
+    const auto blank = [](char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\0'; };
+    while (!s.empty() && blank(s.front())) s.remove_prefix(1);
+    while (!s.empty() && blank(s.back())) s.remove_suffix(1);
+    return s;
+}
+
+bool to_u64(std::string_view s, std::uint64_t &out)
+{
+    s = trim_view(s);
+    if (s.empty()) return false;
+    std::uint64_t v = 0;
+    for (const char c : s) {
+        if (c < '0' || c > '9') return false;
+        const std::uint64_t next = v * 10 + static_cast<std::uint64_t>(c - '0');
+        if (next / 10 != v) return false; /* overflow */
+        v = next;
+    }
+    out = v;
+    return true;
+}
+
+bool to_i64(std::string_view s, std::int64_t &out)
+{
+    s = trim_view(s);
+    if (s.empty()) return false;
+    const bool neg = s[0] == '-';
+    if (neg || s[0] == '+') s.remove_prefix(1);
+    std::uint64_t v = 0;
+    if (!to_u64(s, v) || v > static_cast<std::uint64_t>(INT64_MAX)) return false;
+    out = neg ? -static_cast<std::int64_t>(v) : static_cast<std::int64_t>(v);
+    return true;
+}
+
+bool to_double(std::string_view s, double &out)
+{
+    s = trim_view(s);
+    if (s.empty() || s.size() >= 64) return false;
+    char buf[64]; /* strtod needs a terminated copy: on the stack, no heap */
+    s.copy(buf, s.size());
+    buf[s.size()] = '\0';
+    char *end = nullptr;
+    const double v = std::strtod(buf, &end);
+    if (end == buf || *end != '\0' || !std::isfinite(v)) return false;
+    out = v;
+    return true;
+}
+
 std::vector<std::string> split_lines(const std::string &text)
 {
     std::vector<std::string> lines;
@@ -57,45 +139,9 @@ bool starts_with(const std::string &s, const std::string &prefix)
     return s.size() >= prefix.size() && s.compare(0, prefix.size(), prefix) == 0;
 }
 
-bool parse_u64(const std::string &s, std::uint64_t &out)
-{
-    const std::string t = trim(s);
-    if (t.empty()) return false;
-    std::uint64_t v = 0;
-    for (const char c : t) {
-        if (c < '0' || c > '9') return false;
-        const std::uint64_t next = v * 10 + static_cast<std::uint64_t>(c - '0');
-        if (next / 10 != v) return false; /* overflow */
-        v = next;
-    }
-    out = v;
-    return true;
-}
-
-bool parse_i64(const std::string &s, std::int64_t &out)
-{
-    const std::string t = trim(s);
-    if (t.empty()) return false;
-    const bool neg = t[0] == '-';
-    std::uint64_t v = 0;
-    if (!parse_u64(neg || t[0] == '+' ? t.substr(1) : t, v)) return false;
-    if (v > static_cast<std::uint64_t>(INT64_MAX)) return false;
-    out = neg ? -static_cast<std::int64_t>(v) : static_cast<std::int64_t>(v);
-    return true;
-}
-
-bool parse_double(const std::string &s, double &out)
-{
-    const std::string t = trim(s);
-    if (t.empty()) return false;
-    char *end = nullptr;
-    const double v = std::strtod(t.c_str(), &end);
-    if (end == t.c_str()) return false;
-    if (*end != '\0') return false;
-    if (!std::isfinite(v)) return false;
-    out = v;
-    return true;
-}
+bool parse_u64(const std::string &s, std::uint64_t &out) { return to_u64(s, out); }
+bool parse_i64(const std::string &s, std::int64_t &out) { return to_i64(s, out); }
+bool parse_double(const std::string &s, double &out) { return to_double(s, out); }
 
 bool parse_hex(const std::string &s, std::uint32_t &out)
 {

@@ -83,8 +83,47 @@ std::int64_t mono_ms()
 class SystemSource : public Source {
 public:
     std::string read(const std::string &path, bool *ok) override { return read_path(path, ok); }
+    bool read_into(const std::string &path, std::string &out) override
+    {
+        out.clear();
+        const int fd = open(path.c_str(), O_RDONLY | O_CLOEXEC);
+        if (fd < 0) return false;
+        bool good = true;
+        for (;;) {
+            if (out.capacity() - out.size() < 1024) out.reserve(out.size() + 4096); /* grows once, then stays */
+            const std::size_t room = out.capacity() - out.size();
+            const std::size_t at = out.size();
+            out.resize(out.capacity()); /* within the capacity: no allocation */
+            const ssize_t n = ::read(fd, &out[at], room);
+            if (n < 0) {
+                out.resize(at);
+                if (errno == EINTR) continue;
+                good = false;
+                break;
+            }
+            out.resize(at + static_cast<std::size_t>(n));
+            if (n == 0 || out.size() >= kMaxRead) break;
+        }
+        close(fd);
+        return good;
+    }
     bool exists(const std::string &path) override { return access(path.c_str(), F_OK) == 0; }
     std::vector<std::string> list(const std::string &dir) override { return list_path(dir); }
+    void list_into(const std::string &dir, std::vector<std::string> &out) override
+    {
+        std::size_t n = 0;
+        DIR *d = opendir(dir.c_str());
+        if (d) {
+            while (struct dirent *e = readdir(d)) {
+                if (e->d_name[0] == '.' && (e->d_name[1] == '\0' || (e->d_name[1] == '.' && e->d_name[2] == '\0')))
+                    continue;
+                if (n == out.size()) out.emplace_back();
+                out[n++].assign(e->d_name);
+            }
+            closedir(d);
+        }
+        out.resize(n);
+    }
     CmdResult run(const std::vector<std::string> &argv, int timeout_ms) override
     {
         return run_command(argv, timeout_ms);
@@ -168,6 +207,9 @@ struct Scenario {
     std::vector<Rate> net, disk;
     double mem_wave_mb = 0;
     double uptime0 = 3600;
+    bool no_commands = false; /* no vcgencmd, no iw */
+    bool no_hwmon = false;    /* no rpi_volt alarm, no fan speed */
+    bool offline = false;     /* every interface down, no address, no route */
     std::vector<FakeProc> procs;
 };
 
@@ -242,6 +284,9 @@ Scenario parse_scenario(const std::string &text)
             }
         } else if (key == "mem_wave" && parse_double(v, d)) s.mem_wave_mb = d;
         else if (key == "uptime" && parse_double(v, d)) s.uptime0 = d;
+        else if (key == "no_commands") s.no_commands = v == "1";
+        else if (key == "no_hwmon") s.no_hwmon = v == "1";
+        else if (key == "offline") s.offline = v == "1";
         else if (key == "proc") {
             const std::vector<std::string> f = split_ws(v);
             FakeProc p;
@@ -307,6 +352,7 @@ public:
     }
     std::vector<std::string> list(const std::string &dir) override
     {
+        if (scen_ && sc_.no_hwmon && starts_with(dir, "/sys/class/hwmon")) return {};
         std::vector<std::string> names = dir_list(dir);
         if (scen_ && (dir == "/proc" || dir == "/proc/")) {
             for (const FakeProc &p : sc_.procs) names.push_back(std::to_string(p.pid));
@@ -322,7 +368,7 @@ public:
         for (const std::string &a : argv) name += (name.empty() ? "" : "_") + a;
         bool ok = false;
         std::string text = file("/cmd/" + name, &ok);
-        if (!ok) {
+        if (!ok || (scen_ && sc_.no_commands)) {
             r.error = ENOENT;
             return r;
         }
@@ -359,6 +405,7 @@ public:
     std::map<std::string, std::string> ipv4() override
     {
         std::map<std::string, std::string> out;
+        if (scen_ && sc_.offline) return out;
         for (const std::string &line : split_lines(file("/ipv4", nullptr))) {
             const std::vector<std::string> f = split_ws(line);
             if (f.size() == 2 && !out.count(f[0])) out[f[0]] = f[1];
@@ -462,6 +509,21 @@ private:
 
     bool generate(const std::string &path, std::string &out)
     {
+        if (sc_.offline) { /* every interface down, no route, no Wi-Fi association */
+            if (starts_with(path, "/sys/class/net/") && path.size() > 10 &&
+                path.compare(path.size() - 10, 10, "/operstate") == 0) {
+                out = "down\n";
+                return true;
+            }
+            if (path == "/proc/net/route") {
+                out = "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n";
+                return true;
+            }
+            if (path == "/proc/net/wireless") {
+                out = "Inter-| sta-|   Quality        |   Discarded packets               | Missed | WE\n";
+                return true;
+            }
+        }
         char buf[512];
         if (path == "/proc/stat") {
             Core all;

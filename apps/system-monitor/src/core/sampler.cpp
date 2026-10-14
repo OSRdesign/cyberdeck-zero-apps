@@ -7,6 +7,10 @@
 
 #include "text.hpp"
 
+#include <fcntl.h>
+#include <time.h>
+#include <unistd.h>
+
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -30,6 +34,25 @@ bool all_digits(const std::string &s)
     return true;
 }
 
+std::int64_t real_ms()
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return static_cast<std::int64_t>(ts.tv_sec) * 1000 + ts.tv_nsec / 1000000;
+}
+
+/* A small file of this process (/proc/self/...), always the real one (a fixture run measures itself too). */
+bool read_own(const char *path, char *buf, std::size_t size)
+{
+    const int fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return false;
+    const ssize_t n = read(fd, buf, size - 1);
+    close(fd);
+    if (n <= 0) return false;
+    buf[n] = '\0';
+    return true;
+}
+
 } // namespace
 
 Sampler::Sampler(std::unique_ptr<Source> source, int period_s) : src_(std::move(source))
@@ -38,6 +61,8 @@ Sampler::Sampler(std::unique_ptr<Source> source, int period_s) : src_(std::move(
     source_desc_ = src_->describe();
     period_.store(clamp_period(period_s));
     page_size_ = src_->page_size();
+    clk_tck_ = sysconf(_SC_CLK_TCK) > 0 ? sysconf(_SC_CLK_TCK) : 100;
+    own_page_ = sysconf(_SC_PAGESIZE) > 0 ? sysconf(_SC_PAGESIZE) : 4096;
 
     // the facts that do not change
     facts_.model = parse_model(src_->read("/proc/device-tree/model"));
@@ -135,37 +160,34 @@ void Sampler::stop()
     if (thread_.joinable()) thread_.join();
 }
 
-void Sampler::set_period(int period_s)
+void Sampler::wake()
 {
-    const int p = clamp_period(period_s);
-    if (period_.exchange(p) == p) return;
-    period_changed_.store(true);
     {
         std::lock_guard<std::mutex> lk(mu_);
         wake_ = true;
     }
     cv_.notify_all();
+}
+
+void Sampler::set_period(int period_s)
+{
+    const int p = clamp_period(period_s);
+    if (period_.exchange(p) == p) return;
+    period_changed_.store(true);
+    wake();
 }
 
 void Sampler::set_want_procs(bool want)
 {
     if (want_procs_.exchange(want) == want || !want) return;
     procs_kick_.store(true);
-    {
-        std::lock_guard<std::mutex> lk(mu_);
-        wake_ = true;
-    }
-    cv_.notify_all();
+    wake();
 }
 
 void Sampler::set_want_link(bool want)
 {
     if (want_link_.exchange(want) == want || !want) return;
-    {
-        std::lock_guard<std::mutex> lk(mu_);
-        wake_ = true;
-    }
-    cv_.notify_all();
+    wake();
 }
 
 std::shared_ptr<const Snapshot> Sampler::latest() const
@@ -177,6 +199,7 @@ std::shared_ptr<const Snapshot> Sampler::latest() const
 void Sampler::step()
 {
     if (period_changed_.exchange(false)) hist_ = History();
+    procs_kick_.store(false);
     sample(true);
 }
 
@@ -211,6 +234,13 @@ CmdResult Sampler::vcgencmd(const std::vector<std::string> &args)
     return src_->run(argv, 1000);
 }
 
+bool Sampler::due(std::int64_t &next_ms, std::int64_t now, int every_ms)
+{
+    if (now < next_ms) return false;
+    next_ms = now + every_ms;
+    return true;
+}
+
 void Sampler::sample(bool publish)
 {
     const int period = period_.load();
@@ -220,8 +250,8 @@ void Sampler::sample(bool publish)
 
     auto s = std::make_shared<Snapshot>();
     s->period_s = period;
-    s->uptime_ok = parse_uptime(src_->read("/proc/uptime"), s->uptime_s);
-    read_cpu(*s, dt);
+    s->uptime_ok = src_->read_into("/proc/uptime", buf_) && parse_uptime(buf_, s->uptime_s);
+    read_cpu(*s);
     read_memory(*s);
     read_thermal(*s);
     read_power(*s);
@@ -229,6 +259,7 @@ void Sampler::sample(bool publish)
     read_network(*s, dt);
     read_bluetooth(*s);
     read_procs(*s);
+    read_self(*s);
 
     // the history (a value not known in this sample is left out of its ring)
     if (s->cpu.ok) hist_.cpu.push(static_cast<float>(s->cpu.total));
@@ -263,43 +294,61 @@ void Sampler::sample(bool publish)
     seq_.store(s->seq);
 }
 
-void Sampler::read_cpu(Snapshot &s, double)
+void Sampler::read_cpu(Snapshot &s)
 {
-    const StatInfo stat = parse_stat(src_->read("/proc/stat"));
-    if (stat.ok && prev_stat_.ok) {
-        const double total = busy_pct(prev_stat_.all, stat.all);
-        if (total >= 0) {
-            s.cpu.ok = true;
-            s.cpu.total = total;
-            for (std::size_t i = 0; i < stat.cores.size(); ++i) {
-                double pct = 0;
-                for (std::size_t j = 0; j < prev_stat_.core_ids.size(); ++j)
-                    if (prev_stat_.core_ids[j] == stat.core_ids[i]) pct = std::max(0.0, busy_pct(prev_stat_.cores[j], stat.cores[i]));
-                s.cpu.cores.push_back(pct);
+    if (src_->read_into("/proc/stat", buf_) && parse_stat_into(buf_, cur_stat_)) {
+        if (prev_stat_.ok) {
+            const double total = busy_pct(prev_stat_.all, cur_stat_.all);
+            if (total >= 0) {
+                s.cpu.ok = true;
+                s.cpu.total = total;
+                s.cpu.cores.reserve(cur_stat_.cores.size());
+                for (std::size_t i = 0; i < cur_stat_.cores.size(); ++i) {
+                    double pct = 0;
+                    for (std::size_t j = 0; j < prev_stat_.core_ids.size(); ++j)
+                        if (prev_stat_.core_ids[j] == cur_stat_.core_ids[i])
+                            pct = std::max(0.0, busy_pct(prev_stat_.cores[j], cur_stat_.cores[i]));
+                    s.cpu.cores.push_back(pct);
+                }
             }
         }
+        cur_total_ = cur_stat_.all.total();
+        cur_cores_ = static_cast<int>(cur_stat_.cores.size());
+        std::swap(prev_stat_, cur_stat_); /* the two buffers trade places: no allocation */
     }
-    if (stat.ok) {
-        cur_total_ = stat.all.total();
-        cur_cores_ = static_cast<int>(stat.cores.size());
-        prev_stat_ = stat;
+    // the frequency every sample; its maximum and the governor once in a while (they rarely change)
+    const char *f = "/sys/devices/system/cpu/cpu0/cpufreq/";
+    path_.assign(f).append("scaling_cur_freq");
+    if (src_->read_into(path_, buf_)) parse_khz_as_mhz(buf_, cur_mhz_);
+    if (due(next_cpufreq_ms_, src_->now_ms(), kSlowMs)) {
+        path_.assign(f).append("cpuinfo_max_freq");
+        if (!src_->read_into(path_, buf_) || !parse_khz_as_mhz(buf_, max_mhz_)) {
+            path_.assign(f).append("scaling_max_freq");
+            if (src_->read_into(path_, buf_)) parse_khz_as_mhz(buf_, max_mhz_);
+        }
+        path_.assign(f).append("scaling_governor");
+        governor_ = src_->read_into(path_, buf_) ? trim(buf_) : std::string();
     }
-    const std::string f = "/sys/devices/system/cpu/cpu0/cpufreq/";
-    parse_khz_as_mhz(src_->read(f + "scaling_cur_freq"), s.cpu.cur_mhz);
-    if (!parse_khz_as_mhz(src_->read(f + "cpuinfo_max_freq"), s.cpu.max_mhz))
-        parse_khz_as_mhz(src_->read(f + "scaling_max_freq"), s.cpu.max_mhz);
-    s.cpu.governor = trim(src_->read(f + "scaling_governor"));
-    s.load = parse_loadavg(src_->read("/proc/loadavg"));
+    s.cpu.cur_mhz = cur_mhz_;
+    s.cpu.max_mhz = max_mhz_;
+    s.cpu.governor = governor_;
+    if (src_->read_into("/proc/loadavg", buf_)) s.load = parse_loadavg(buf_);
 }
 
-void Sampler::read_memory(Snapshot &s) { s.mem = parse_meminfo(src_->read("/proc/meminfo")); }
+void Sampler::read_memory(Snapshot &s)
+{
+    if (src_->read_into("/proc/meminfo", buf_)) s.mem = parse_meminfo(buf_);
+}
 
 void Sampler::read_thermal(Snapshot &s)
 {
-    if (!temp_path_.empty()) s.temp.ok = parse_millicelsius(src_->read(temp_path_), s.temp.c);
+    if (!temp_path_.empty() && src_->read_into(temp_path_, buf_)) s.temp.ok = parse_millicelsius(buf_, s.temp.c);
     if (!fan_dev_.empty()) {
         std::int64_t cur = -1, max = -1;
-        if (parse_i64(src_->read(fan_dev_ + "/cur_state"), cur) && parse_i64(src_->read(fan_dev_ + "/max_state"), max)) {
+        path_.assign(fan_dev_).append("/cur_state");
+        const bool c = src_->read_into(path_, buf_) && parse_i64(buf_, cur);
+        path_.assign(fan_dev_).append("/max_state");
+        if (c && src_->read_into(path_, buf_) && parse_i64(buf_, max)) {
             s.fan.present = true;
             s.fan.state = static_cast<int>(cur);
             s.fan.max_state = static_cast<int>(max);
@@ -307,7 +356,7 @@ void Sampler::read_thermal(Snapshot &s)
     }
     if (!fan_rpm_path_.empty()) {
         std::int64_t rpm = -1;
-        if (parse_i64(src_->read(fan_rpm_path_), rpm) && rpm >= 0) {
+        if (src_->read_into(fan_rpm_path_, buf_) && parse_i64(buf_, rpm) && rpm >= 0) {
             s.fan.present = true;
             s.fan.rpm = static_cast<int>(rpm);
         }
@@ -336,15 +385,15 @@ void Sampler::read_power(Snapshot &s)
     bool flags = false;
     if (!throttle_node_.empty()) {
         std::uint32_t bits = 0;
-        if (parse_throttled(src_->read(throttle_node_), bits)) {
+        if (src_->read_into(throttle_node_, buf_) && parse_throttled(buf_, bits)) {
             tracker_.update(bits, up);
             power_.source = PowerSource::Firmware;
             power_.via = "sysfs";
             flags = true;
         }
     }
-    if (!flags && (vc_ == Vc::Unknown || vc_ == Vc::Works) && now >= next_throttle_ms_) {
-        next_throttle_ms_ = now + 2000;
+    // vcgencmd (a process start each time): its answer is kept between the calls, at most one call every 2 s
+    if (!flags && (vc_ == Vc::Unknown || vc_ == Vc::Works) && due(next_throttle_ms_, now, kThrottleMs)) {
         const CmdResult r = vcgencmd({"get_throttled"});
         std::uint32_t bits = 0;
         if (r.not_found()) {
@@ -368,29 +417,28 @@ void Sampler::read_power(Snapshot &s)
         }
     }
     if (power_.source != PowerSource::Firmware) {
-        if (!uv_alarm_path_.empty()) {
-            std::int64_t alarm = 0;
-            if (parse_i64(src_->read(uv_alarm_path_), alarm)) {
-                tracker_.update_alarm(alarm != 0, up);
-                power_.source = PowerSource::Alarm;
-                power_.via = "hwmon";
-            }
-        } else if (vc_ == Vc::Denied) {
+        std::int64_t alarm = 0;
+        if (!uv_alarm_path_.empty() && src_->read_into(uv_alarm_path_, buf_) && parse_i64(buf_, alarm)) {
+            tracker_.update_alarm(alarm != 0, up);
+            power_.source = PowerSource::Alarm;
+            power_.via = "hwmon";
+        } else if (uv_alarm_path_.empty() && vc_ == Vc::Denied) {
             power_.source = PowerSource::NoAccess;
-        } else if (vc_ == Vc::Absent || vc_ == Vc::Failing) {
+        } else if (uv_alarm_path_.empty() && (vc_ == Vc::Absent || vc_ == Vc::Failing)) {
             power_.source = PowerSource::None;
         }
     }
-    if (vc_ == Vc::Works && now >= next_volts_ms_) {
-        next_volts_ms_ = now + 10000;
+    // the voltages: the 5 V input (Pi 5 / CM5) every 10 s, the core voltage every 30 s
+    if (vc_ == Vc::Works && pi5_ && due(next_supply_ms_, now, kSupplyMs)) {
         double v = 0;
-        if (pi5_) {
-            const CmdResult r = vcgencmd({"pmic_read_adc", "EXT5V_V"});
-            if (r.ok() && parse_volts(r.output, v)) {
-                power_.supply_ok = true;
-                power_.supply_v = v;
-            }
+        const CmdResult r = vcgencmd({"pmic_read_adc", "EXT5V_V"});
+        if (r.ok() && parse_volts(r.output, v)) {
+            power_.supply_ok = true;
+            power_.supply_v = v;
         }
+    }
+    if (vc_ == Vc::Works && due(next_core_volts_ms_, now, kCoreVoltsMs)) {
+        double v = 0;
         const CmdResult r = vcgencmd({"measure_volts", "core"});
         if (r.ok() && parse_volts(r.output, v)) {
             power_.core_ok = true;
@@ -403,60 +451,86 @@ void Sampler::read_power(Snapshot &s)
 
 void Sampler::read_storage(Snapshot &s, double dt)
 {
-    const std::vector<Mount> mounts = real_mounts(parse_mounts(src_->read("/proc/self/mounts")));
-    for (const Mount &m : mounts) {
-        FsInfo f;
-        f.dir = m.dir;
-        f.device = m.device;
-        f.type = m.type;
-        if (src_->fs_usage(m.dir, f.total, f.used, f.avail)) s.fs.push_back(f);
-    }
-    if (root_disk_.empty()) return;
-    for (const DiskStat &d : parse_diskstats(src_->read("/proc/diskstats"))) {
-        if (d.name != root_disk_) continue;
-        const std::uint64_t rd = d.sectors_read * 512ull, wr = d.sectors_written * 512ull;
-        s.disk.ok = true;
-        s.disk.name = d.name;
-        s.disk.read_total = rd;
-        s.disk.written_total = wr;
-        if (have_disk_ && dt > 0) {
-            s.disk.read_bps = counter_rate(prev_rd_, rd, dt);
-            s.disk.write_bps = counter_rate(prev_wr_, wr, dt);
+    const std::int64_t now = src_->now_ms();
+    // the list of real filesystems every 10 s (mounts are rare); their use (statvfs) every sample
+    if (due(next_mounts_ms_, now, kSlowMs)) {
+        fs_.clear();
+        for (const Mount &m : real_mounts(parse_mounts(src_->read("/proc/self/mounts")))) {
+            FsInfo f;
+            f.dir = m.dir;
+            f.device = m.device;
+            f.type = m.type;
+            fs_.push_back(f);
         }
-        prev_rd_ = rd;
-        prev_wr_ = wr;
-        have_disk_ = true;
     }
+    for (const FsInfo &f : fs_) {
+        FsInfo u = f;
+        if (src_->fs_usage(f.dir, u.total, u.used, u.avail)) s.fs.push_back(u);
+    }
+    if (root_disk_.empty() || !src_->read_into("/proc/diskstats", buf_)) return;
+    DiskStat d;
+    if (!find_diskstat(buf_, root_disk_, d)) return;
+    const std::uint64_t rd = d.sectors_read * 512ull, wr = d.sectors_written * 512ull;
+    s.disk.ok = true;
+    s.disk.name = root_disk_;
+    s.disk.read_total = rd;
+    s.disk.written_total = wr;
+    if (have_disk_ && dt > 0) {
+        s.disk.read_bps = counter_rate(prev_rd_, rd, dt);
+        s.disk.write_bps = counter_rate(prev_wr_, wr, dt);
+    }
+    prev_rd_ = rd;
+    prev_wr_ = wr;
+    have_disk_ = true;
 }
 
 void Sampler::read_network(Snapshot &s, double dt)
 {
-    const std::vector<NetDev> devs = parse_net_dev(src_->read("/proc/net/dev"));
-    const std::map<std::string, std::string> addrs = src_->ipv4();
-    const std::vector<WirelessLevel> levels = parse_net_wireless(src_->read("/proc/net/wireless"));
-    const std::string route = parse_default_route(src_->read("/proc/net/route"));
     const std::int64_t now = src_->now_ms();
+    if (!src_->read_into("/proc/net/dev", buf_) || !parse_net_dev_into(buf_, devs_)) devs_.clear();
+    // the addresses (getifaddrs) and the default route every 5 s, or when the interfaces change
+    bool changed = devs_.size() != prev_net_.size();
+    for (const NetDev &d : devs_) changed = changed || !prev_net_.count(d.name);
+    if (changed || due(next_addr_ms_, now, kMediumMs)) {
+        addrs_ = src_->ipv4();
+        route_ = src_->read_into("/proc/net/route", buf_) ? parse_default_route(buf_) : std::string();
+    }
+    std::vector<WirelessLevel> levels;
+    if (src_->read_into("/proc/net/wireless", buf_)) levels = parse_net_wireless(buf_);
     const bool want_link = want_link_.load();
     if (!want_link) links_.clear();
     const bool ask_iw = want_link && !iw_absent_ && (links_.empty() || now >= next_link_ms_);
     if (ask_iw) next_link_ms_ = now + 5000;
-    std::map<std::string, std::pair<std::uint64_t, std::uint64_t>> counters;
-    for (const NetDev &d : devs) {
+    for (const NetDev &d : devs_) {
         if (d.name == "lo") continue;
         NetInfo n;
         n.name = d.name;
-        const std::string base = "/sys/class/net/" + d.name;
-        n.state = trim(src_->read(base + "/operstate"));
+        path_.assign("/sys/class/net/").append(d.name);
+        const std::size_t base = path_.size();
+        path_.append("/operstate");
+        n.state = src_->read_into(path_, buf_) ? trim(buf_) : std::string();
         if (n.state.empty()) n.state = "unknown";
-        n.wireless = src_->exists(base + "/wireless") || src_->exists(base + "/phy80211");
+        const auto known = wireless_.find(d.name);
+        if (known != wireless_.end()) {
+            n.wireless = known->second;
+        } else { /* looked up once per interface */
+            path_.resize(base);
+            path_.append("/wireless");
+            bool w = src_->exists(path_);
+            path_.resize(base);
+            path_.append("/phy80211");
+            w = w || src_->exists(path_);
+            wireless_[d.name] = w;
+            n.wireless = w;
+        }
         for (const WirelessLevel &w : levels)
             if (w.iface == d.name) {
                 n.wireless = true;
                 n.has_level = true;
                 n.level_dbm = w.level_dbm;
             }
-        const auto a = addrs.find(d.name);
-        if (a != addrs.end()) n.ipv4 = a->second;
+        const auto a = addrs_.find(d.name);
+        if (a != addrs_.end()) n.ipv4 = a->second;
         n.rx_total = d.rx_bytes;
         n.tx_total = d.tx_bytes;
         const auto p = prev_net_.find(d.name);
@@ -464,7 +538,6 @@ void Sampler::read_network(Snapshot &s, double dt)
             n.rx_bps = counter_rate(p->second.first, d.rx_bytes, dt);
             n.tx_bps = counter_rate(p->second.second, d.tx_bytes, dt);
         }
-        counters[d.name] = {d.rx_bytes, d.tx_bytes};
         if (n.wireless && ask_iw) {
             const CmdResult r = src_->run({"iw", "dev", d.name, "link"}, 1000);
             if (r.not_found()) {
@@ -481,9 +554,10 @@ void Sampler::read_network(Snapshot &s, double dt)
         }
         s.net.push_back(n);
     }
-    prev_net_ = counters;
+    if (changed) prev_net_.clear();
+    for (const NetDev &d : devs_) prev_net_[d.name] = {d.rx_bytes, d.tx_bytes};
     for (const NetInfo &n : s.net)
-        if (n.name == route) s.main_iface = n.name;
+        if (n.name == route_) s.main_iface = n.name;
     if (s.main_iface.empty())
         for (const NetInfo &n : s.net)
             if (n.state == "up" && !n.ipv4.empty()) {
@@ -501,57 +575,126 @@ void Sampler::read_network(Snapshot &s, double dt)
 
 void Sampler::read_bluetooth(Snapshot &s)
 {
-    bool present = false, connected = false;
-    for (const std::string &n : src_->list("/sys/class/bluetooth")) {
-        if (!starts_with(n, "hci")) continue;
-        present = true;
-        if (n.find(':') != std::string::npos) connected = true;
+    if (due(next_bt_ms_, src_->now_ms(), kMediumMs)) { /* sysfs directories: every 5 s */
+        bool present = false, connected = false;
+        for (const std::string &n : src_->list("/sys/class/bluetooth")) {
+            if (!starts_with(n, "hci")) continue;
+            present = true;
+            if (n.find(':') != std::string::npos) connected = true;
+        }
+        bool blocked = false;
+        if (present)
+            for (const std::string &n : src_->list("/sys/class/rfkill")) {
+                const std::string base = "/sys/class/rfkill/" + n;
+                if (trim(src_->read(base + "/type")) != "bluetooth") continue;
+                if (trim(src_->read(base + "/soft")) == "1" || trim(src_->read(base + "/hard")) == "1") blocked = true;
+            }
+        bt_ = !present ? BtState::Absent : blocked ? BtState::Off : connected ? BtState::Connected : BtState::On;
     }
-    if (!present) {
-        s.bt = BtState::Absent;
-        return;
-    }
-    bool blocked = false;
-    for (const std::string &n : src_->list("/sys/class/rfkill")) {
-        const std::string base = "/sys/class/rfkill/" + n;
-        if (trim(src_->read(base + "/type")) != "bluetooth") continue;
-        if (trim(src_->read(base + "/soft")) == "1" || trim(src_->read(base + "/hard")) == "1") blocked = true;
-    }
-    s.bt = blocked ? BtState::Off : connected ? BtState::Connected : BtState::On;
+    s.bt = bt_;
 }
 
 void Sampler::read_procs(Snapshot &s)
 {
-    const std::vector<std::string> names = src_->list("/proc"); /* one directory read: the count for the overview */
-    if (!want_procs_.load()) {
+    const std::int64_t now = src_->now_ms();
+    const bool want = want_procs_.load();
+    if (!want) {
         procs_baseline_ = false;
         prev_proc_ticks_.clear();
-        s.proc_count = static_cast<int>(std::count_if(names.begin(), names.end(), all_digits));
+        last_rows_valid_ = false;
+        // the count for the overview: one directory read every 5 s
+        if (due(next_count_ms_, now, kMediumMs)) {
+            src_->list_into("/proc", names_);
+            proc_count_ = static_cast<int>(std::count_if(names_.begin(), names_.end(), all_digits));
+        }
+        s.proc_count = proc_count_;
         return;
     }
-    std::vector<ProcSample> samples;
-    for (const std::string &n : names) {
-        if (!all_digits(n)) continue;
-        bool ok = false;
-        const std::string text = src_->read("/proc/" + n + "/stat", &ok);
+    // a page shows processes: every /proc/<pid>/stat at most every 2 s (and a second scan soon after the first)
+    const bool scan = !procs_baseline_ || now - last_scan_ms_ >= kProcScanMs ||
+                      (procs_kick_pending_ && now - last_scan_ms_ >= 400);
+    if (scan) {
+        src_->list_into("/proc", names_);
+        std::size_t n = 0;
         ProcStat st;
-        if (ok && parse_proc_stat(text, st)) samples.push_back(proc_sample(st, page_size_));
+        for (const std::string &name : names_) {
+            if (!all_digits(name)) continue;
+            path_.assign("/proc/").append(name).append("/stat");
+            if (!src_->read_into(path_, buf_) || !parse_proc_stat(buf_, st)) continue;
+            if (n == samples_.size()) samples_.emplace_back();
+            ProcSample &p = samples_[n++];
+            p.pid = st.pid;
+            p.name = st.comm;
+            p.state = st.state;
+            p.ticks = st.utime + st.stime;
+            p.rss_bytes = static_cast<std::uint64_t>(st.rss_pages) * static_cast<std::uint64_t>(page_size_);
+        }
+        samples_.resize(n);
+        proc_count_ = static_cast<int>(n);
+        if (procs_baseline_) {
+            const int cores = cur_cores_ > 0 ? cur_cores_ : 1;
+            const double per_core = cur_total_ > prev_proc_total_
+                                        ? static_cast<double>(cur_total_ - prev_proc_total_) / cores
+                                        : 0.0;
+            const std::vector<ProcRow> rows = proc_rows(prev_proc_ticks_, samples_, per_core);
+            last_top_cpu_ = top_n(rows, SortBy::Cpu, 15);
+            last_top_mem_ = top_n(rows, SortBy::Memory, 15);
+            last_rows_valid_ = true;
+            procs_kick_pending_ = false;
+        } else {
+            procs_kick_pending_ = true;
+        }
+        prev_proc_ticks_.clear();
+        for (const ProcSample &p : samples_) prev_proc_ticks_[p.pid] = p.ticks;
+        prev_proc_total_ = cur_total_;
+        procs_baseline_ = true;
+        last_scan_ms_ = now;
     }
-    s.proc_count = static_cast<int>(samples.size());
-    if (procs_baseline_) {
-        const int cores = cur_cores_ > 0 ? cur_cores_ : 1;
-        const double per_core = cur_total_ > prev_proc_total_
-                                    ? static_cast<double>(cur_total_ - prev_proc_total_) / cores
-                                    : 0.0;
-        const std::vector<ProcRow> rows = proc_rows(prev_proc_ticks_, samples, per_core);
-        s.procs_valid = true;
-        s.top_cpu = top_n(rows, SortBy::Cpu, 15);
-        s.top_mem = top_n(rows, SortBy::Memory, 15);
+    s.proc_count = proc_count_;
+    s.procs_valid = last_rows_valid_;
+    if (last_rows_valid_) {
+        s.top_cpu = last_top_cpu_;
+        s.top_mem = last_top_mem_;
     }
-    prev_proc_ticks_.clear();
-    for (const ProcSample &p : samples) prev_proc_ticks_[p.pid] = p.ticks;
-    prev_proc_total_ = cur_total_;
-    procs_baseline_ = true;
+}
+
+/* This app's own cost, from /proc/self: CPU of the last 10 s (its vcgencmd and iw children included) and RSS. */
+void Sampler::read_self(Snapshot &s)
+{
+    char buf[1024];
+    const std::int64_t now = real_ms();
+    if (read_own("/proc/self/stat", buf, sizeof(buf))) {
+        const std::string_view t(buf);
+        const std::size_t close = t.rfind(')');
+        if (close != std::string_view::npos) {
+            Fields f(t.substr(close + 1));
+            std::string_view v[15];
+            int k = 0;
+            while (k < 15 && f.next(v[k])) ++k;
+            std::uint64_t ut = 0, st = 0, cut = 0, cst = 0;
+            if (k == 15 && to_u64(v[11], ut) && to_u64(v[12], st) && to_u64(v[13], cut) && to_u64(v[14], cst)) {
+                self_ms_[self_head_] = now;
+                self_ticks_[self_head_] = ut + st + cut + cst;
+                const int newest = self_head_;
+                self_head_ = (self_head_ + 1) % kSelfWindow;
+                if (self_count_ < kSelfWindow) ++self_count_;
+                const int oldest = (newest - (self_count_ - 1) + kSelfWindow) % kSelfWindow;
+                const std::int64_t span = self_ms_[newest] - self_ms_[oldest];
+                if (self_count_ > 1 && span > 0) {
+                    s.self_ok = true;
+                    s.self_cpu = 100.0 * static_cast<double>(self_ticks_[newest] - self_ticks_[oldest]) /
+                                 static_cast<double>(clk_tck_) / (static_cast<double>(span) / 1000.0);
+                }
+            }
+        }
+    }
+    if (read_own("/proc/self/statm", buf, sizeof(buf))) {
+        Fields f{std::string_view(buf)};
+        std::string_view size, resident;
+        std::uint64_t pages = 0;
+        if (f.next(size) && f.next(resident) && to_u64(resident, pages))
+            s.self_rss = pages * static_cast<std::uint64_t>(own_page_);
+    }
 }
 
 } // namespace sm

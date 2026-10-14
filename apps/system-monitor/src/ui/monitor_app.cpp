@@ -58,7 +58,7 @@ MonitorApp::~MonitorApp()
     lv_async_call_cancel(posted_cb, this);
     sampler_.reset(); /* the thread stopped and joined (a running vcgencmd ends within its 1 s timeout) */
     roller_.reset();
-    meters_.reset();
+    grid_.reset();
     chart_.reset();
     page_.reset();
 }
@@ -128,7 +128,7 @@ void MonitorApp::build_view(int select)
     sampler_->set_want_procs(view_wants_procs(view));
     sampler_->set_want_link(view_wants_link(view));
     roller_.reset();
-    meters_.reset();
+    grid_.reset();
     chart_.reset();
     specs_.clear();
     rows_.clear();
@@ -136,6 +136,15 @@ void MonitorApp::build_view(int select)
     page_->set_caption("", cp0::ui::CaptionTone::Normal);
     page_->set_title(view == View::Overview ? std::vector<std::string>{kAppTitle}
                                             : std::vector<std::string>{kAppTitle, view_title(view)});
+    if (view == View::Overview) { /* the tile grid (overview.hpp): no roller */
+        OverviewGrid::Events events;
+        events.open = [this](int index) { post([this, index] { open_item(index); }); };
+        events.back = [this] { post([this] { back(); }); };
+        grid_ = std::make_unique<OverviewGrid>(page_->root(), layout_, std::move(events), select);
+        grid_->update(snap_.get(), sampler_->period());
+        focus(grid_->focus_object());
+        return;
+    }
 
     const int s = cp0_ui_tok(CP0_TOK_SPACE_S);
     Box box;
@@ -143,10 +152,6 @@ void MonitorApp::build_view(int select)
     box.y = layout_.body_y + s;
     box.w = layout_.roller_w;
     switch (view) {
-    case View::Overview:
-        box.h = MetersPanel::height_for(sampler_->facts().cores, layout_);
-        meters_ = std::make_unique<MetersPanel>(page_->root(), box, sampler_->facts().cores, layout_);
-        break;
     case View::Cpu:
     case View::Memory:
     case View::Thermal:
@@ -189,7 +194,7 @@ std::vector<Row> MonitorApp::rows_now() const
 {
     const Snapshot *s = snap_.get();
     switch (nav_.current()) {
-    case View::Overview: return overview_rows(s, sampler_->period());
+    case View::Overview: return {}; /* the tile grid draws itself */
     case View::Cpu: return cpu_rows(s);
     case View::Memory: return memory_rows(s);
     case View::Thermal: return thermal_rows(s);
@@ -235,14 +240,25 @@ cp0::ui::RowSpec MonitorApp::spec_of(const Row &row) const
     return spec;
 }
 
-/* A new sample: the rows whose text changed, or all of them when the list changed; then the panel. */
+/* A new sample: the rows whose text changed, or all of them when the list changed; then the panel. A row whose texts
+ * did not change keeps its fitted value (no text measuring), and the roller is not touched for it. */
 void MonitorApp::refresh()
 {
+    if (grid_) {
+        grid_->update(snap_.get(), sampler_->period());
+        return;
+    }
     if (!roller_) return;
     std::vector<Row> rows = rows_now();
     std::vector<cp0::ui::RowSpec> specs;
     specs.reserve(rows.size());
-    for (const Row &r : rows) specs.push_back(spec_of(r));
+    for (std::size_t i = 0; i < rows.size(); ++i) {
+        const Row &r = rows[i];
+        const bool same = i < rows_.size() && i < specs_.size() && rows_[i].type == r.type &&
+                          rows_[i].label == r.label && rows_[i].values == r.values && rows_[i].tone == r.tone &&
+                          rows_[i].on == r.on;
+        specs.push_back(same ? specs_[i] : spec_of(r));
+    }
     bool same_shape = specs.size() == specs_.size();
     for (std::size_t i = 0; same_shape && i < specs.size(); ++i) same_shape = specs[i].kind == specs_[i].kind;
     if (!same_shape) {
@@ -265,13 +281,6 @@ void MonitorApp::refresh()
 void MonitorApp::refresh_panel()
 {
     const Snapshot *s = snap_.get();
-    if (meters_) {
-        meters_->set(s && s->cpu.ok ? s->cpu.cores : std::vector<double>());
-        if (s) {
-            const Status st = overview_status(s->power, s->temp.ok, s->temp.c);
-            meters_->set_status(st.text, st.tone);
-        }
-    }
     if (!chart_ || !s) return;
     switch (nav_.current()) {
     case View::Cpu: {
@@ -341,14 +350,19 @@ void MonitorApp::update_caption(bool force)
     page_->set_caption(text, cp0::ui::CaptionTone::Normal);
 }
 
+/* A tile (0 .. kTileCount - 1) or a footer item of the overview: its page; the focus comes back to it. */
+void MonitorApp::open_item(int index)
+{
+    if (nav_.current() != View::Overview) return;
+    if (index == kTileCount + kFootProcs) sort_ = SortBy::Cpu;
+    open(index < kTileCount ? tile_target(index) : footer_target(index - kTileCount), index);
+}
+
 void MonitorApp::activate(int row)
 {
     if (row < 0 || row >= static_cast<int>(rows_.size())) return;
     const Row r = rows_[static_cast<std::size_t>(row)];
     switch (nav_.current()) {
-    case View::Overview:
-        if (r.type == RowType::Nav) open(overview_target(r.id), row);
-        break;
     case View::Cpu:
     case View::Memory:
         if (r.id == kRowAllProcs) {

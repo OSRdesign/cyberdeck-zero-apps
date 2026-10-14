@@ -10,9 +10,38 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace sm {
+
+/* ---------------------------------------------------------------- no-copy scanning (the sampler's parsers) */
+
+/* The lines of a text, "\r" dropped, without copies. */
+class Lines {
+public:
+    explicit Lines(std::string_view text) : rest_(text) {}
+    bool next(std::string_view &line);
+
+private:
+    std::string_view rest_;
+};
+
+/* The blank-separated fields of a line, without copies. */
+class Fields {
+public:
+    explicit Fields(std::string_view line) : rest_(line) {}
+    bool next(std::string_view &field);
+    bool skip(int n); /* n fields; false when the line ends first */
+
+private:
+    std::string_view rest_;
+};
+
+std::string_view trim_view(std::string_view s);
+bool to_u64(std::string_view s, std::uint64_t &out);
+bool to_i64(std::string_view s, std::int64_t &out);
+bool to_double(std::string_view s, double &out);
 
 /* ---------------------------------------------------------------- strings */
 

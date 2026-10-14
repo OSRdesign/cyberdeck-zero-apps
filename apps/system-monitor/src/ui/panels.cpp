@@ -67,94 +67,6 @@ int text_width(const char *t, const lv_font_t *font)
     return size.x;
 }
 
-/* ------------------------------------------------------------------ the core bars */
-
-int MetersPanel::height_for(int cores, const cp0_ui_roller_page_t &l)
-{
-    const int n = std::max(1, cores);
-    const int rows = n == 1 ? 1 : (n + 1) / 2;
-    const int cell = std::max(line_height() + cp0_ui_tok(CP0_TOK_SPACE_S), l.row_h / 2);
-    return rows * cell + cp0_ui_tok(CP0_TOK_SPACE_S) + line_height();
-}
-
-MetersPanel::MetersPanel(lv_obj_t *parent, const Box &box, int cores, const cp0_ui_roller_page_t &l)
-{
-    const int n = std::max(1, cores);
-    const int cols = n == 1 ? 1 : 2;
-    const int s = cp0_ui_tok(CP0_TOK_SPACE_S);
-    const int cell_h = std::max(line_height() + s, l.row_h / 2);
-    const int col_gap = l.gap;
-    const int cell_w = (box.w - (cols - 1) * col_gap) / cols;
-    const lv_font_t *font = caption_font();
-    const int label_w = text_width(n > 10 ? "Core 00" : "Core 0", font);
-    const int value_w = text_width("100%", font);
-    const int bar_w = std::max(s, cell_w - label_w - value_w - 2 * s);
-    const int bar_h = std::max(4, line_height() / 2);
-
-    root_ = plain(parent);
-    lv_obj_set_pos(root_, box.x, box.y);
-    lv_obj_set_size(root_, box.w, box.h);
-    for (int i = 0; i < n; ++i) {
-        const int x = (i % cols) * (cell_w + col_gap);
-        const int y = (i / cols) * cell_h;
-        lv_obj_t *label = text(root_, kRgbLabel);
-        lv_label_set_text(label, ("Core " + std::to_string(i)).c_str());
-        lv_obj_set_pos(label, x, y + (cell_h - line_height()) / 2);
-        lv_obj_t *bar = lv_bar_create(root_);
-        lv_obj_remove_flag(bar, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_set_size(bar, bar_w, bar_h);
-        lv_obj_set_pos(bar, x + label_w + s, y + (cell_h - bar_h) / 2);
-        lv_bar_set_range(bar, 0, 100);
-        lv_bar_set_value(bar, 0, LV_ANIM_OFF);
-        lv_obj_set_style_radius(bar, bar_h / 2, LV_PART_MAIN);
-        lv_obj_set_style_radius(bar, bar_h / 2, LV_PART_INDICATOR);
-        lv_obj_set_style_bg_color(bar, lv_color_hex(kRgbTrack), LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, LV_PART_MAIN);
-        lv_obj_set_style_bg_color(bar, lv_color_hex(kRgbValue), LV_PART_INDICATOR);
-        lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, LV_PART_INDICATOR);
-        lv_obj_set_style_anim_duration(bar, 0, 0);
-        lv_obj_t *value = text(root_, kRgbText);
-        lv_label_set_text(value, "...");
-        lv_obj_set_width(value, value_w);
-        lv_obj_set_style_text_align(value, LV_TEXT_ALIGN_RIGHT, 0);
-        lv_obj_set_pos(value, x + cell_w - value_w, y + (cell_h - line_height()) / 2);
-        bars_.push_back(bar);
-        values_.push_back(value);
-        shown_.push_back(-1);
-    }
-    const int rows = n == 1 ? 1 : (n + 1) / 2;
-    status_ = text(root_, kRgbOk);
-    lv_label_set_long_mode(status_, LV_LABEL_LONG_MODE_DOTS);
-    lv_obj_set_size(status_, box.w, line_height());
-    lv_obj_set_pos(status_, 0, rows * cell_h + s);
-}
-
-MetersPanel::~MetersPanel()
-{
-    if (root_) lv_obj_delete(root_);
-}
-
-void MetersPanel::set(const std::vector<double> &pcts)
-{
-    for (std::size_t i = 0; i < bars_.size(); ++i) {
-        const int v = i < pcts.size() ? static_cast<int>(std::lround(std::clamp(pcts[i], 0.0, 100.0))) : -1;
-        if (v == shown_[i]) continue;
-        shown_[i] = v;
-        lv_bar_set_value(bars_[i], v < 0 ? 0 : v, LV_ANIM_OFF);
-        set_text_if(values_[i], v < 0 ? std::string("...") : std::to_string(v) + "%");
-    }
-}
-
-void MetersPanel::set_status(const std::string &t, Tone tone)
-{
-    if (status_set_ && t == status_text_ && tone == status_tone_) return;
-    status_set_ = true;
-    status_text_ = t;
-    status_tone_ = tone;
-    lv_label_set_text(status_, t.c_str());
-    lv_obj_set_style_text_color(status_, lv_color_hex(tone_rgb(tone, kRgbOk)), 0);
-}
-
 /* ------------------------------------------------------------------ the history chart */
 
 int HistoryPanel::height_for(const cp0_ui_roller_page_t &l)
@@ -241,6 +153,10 @@ void HistoryPanel::layout_title()
 void HistoryPanel::set_text(const std::string &first, std::uint32_t first_rgb, const std::string &second,
                             const std::string &range)
 {
+    if (first == shown_first_ && second == shown_second_ && range == range_text_ && first_rgb == shown_rgb_) return;
+    shown_first_ = first;
+    shown_second_ = second;
+    shown_rgb_ = first_rgb;
     set_text_if(title_[0], first);
     lv_obj_set_style_text_color(title_[0], lv_color_hex(first_rgb), 0);
     set_text_if(title_[1], second);
@@ -254,6 +170,7 @@ void HistoryPanel::set_range(std::int32_t lo, std::int32_t hi)
     if (lo == lo_ && hi == hi_) return;
     lo_ = lo;
     hi_ = hi;
+    dirty_ = true;
     lv_chart_set_axis_range(chart_, LV_CHART_AXIS_PRIMARY_Y, lo, hi);
 }
 
@@ -264,9 +181,14 @@ void HistoryPanel::set_series(int index, const Ring &ring, double scale)
     std::vector<std::int32_t> &d = data_[i];
     const std::size_t n = std::min(ring.size(), d.size());
     const std::size_t pad = d.size() - n;
-    for (std::size_t k = 0; k < pad; ++k) d[k] = LV_CHART_POINT_NONE;
-    for (std::size_t k = 0; k < n; ++k)
-        d[pad + k] = static_cast<std::int32_t>(std::lround(ring.at(ring.size() - n + k) * scale));
+    for (std::size_t k = 0; k < d.size(); ++k) {
+        const std::int32_t v = k < pad ? LV_CHART_POINT_NONE
+                                       : static_cast<std::int32_t>(std::lround(ring.at(ring.size() - n + (k - pad)) * scale));
+        if (d[k] != v) {
+            d[k] = v;
+            dirty_ = true;
+        }
+    }
 }
 
 void HistoryPanel::set_mark(int index, std::int32_t value, std::uint32_t rgb)
@@ -274,9 +196,15 @@ void HistoryPanel::set_mark(int index, std::int32_t value, std::uint32_t rgb)
     if (index < 0 || index >= marks_) return;
     std::vector<std::int32_t> &d = data_[static_cast<std::size_t>(index)];
     std::fill(d.begin(), d.end(), value);
+    dirty_ = true;
     lv_chart_set_series_color(chart_, series_[static_cast<std::size_t>(index)], lv_color_hex(rgb));
 }
 
-void HistoryPanel::refresh() { lv_chart_refresh(chart_); }
+void HistoryPanel::refresh()
+{
+    if (!dirty_) return;
+    dirty_ = false;
+    lv_chart_refresh(chart_);
+}
 
 } // namespace sm

@@ -32,6 +32,8 @@ struct StatInfo {
 };
 
 StatInfo parse_stat(const std::string &text);
+/* The same into `info`, whose vectors keep their capacity (the sampler: no allocation once warm). */
+bool parse_stat_into(const std::string &text, StatInfo &info);
 /* Busy share of the time between two samples, 0..100; -1 when no time passed (or the counters went back). Guest time
  * is part of user time in /proc/stat and is not counted twice. */
 double busy_pct(const CpuTimes &before, const CpuTimes &after);
@@ -70,6 +72,8 @@ struct NetDev {
 };
 
 std::vector<NetDev> parse_net_dev(const std::string &text);
+/* The same into `out`, its entries reused (no allocation once warm for names of up to 15 bytes). */
+bool parse_net_dev_into(const std::string &text, std::vector<NetDev> &out);
 /* The interface of the default route (destination 00000000, the lowest metric), "" when none. */
 std::string parse_default_route(const std::string &text);
 
@@ -105,6 +109,8 @@ struct DiskStat {
 };
 
 std::vector<DiskStat> parse_diskstats(const std::string &text);
+/* One disk's line, found without building the list. */
+bool find_diskstat(const std::string &text, const std::string &name, DiskStat &out);
 /* The disk of a partition name: mmcblk0p2 -> mmcblk0, nvme0n1p2 -> nvme0n1, sda2 -> sda; a disk stays itself. */
 std::string disk_of_partition(const std::string &name);
 

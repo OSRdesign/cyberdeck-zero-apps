@@ -5,9 +5,10 @@
  * Snapshot. A row carries its value as a list of variants, longest first: the screen shows the first one that fits
  * beside the label (so nothing is cut at 640x480), the shortest one otherwise.
  *
- *   Overview     CPU, Temperature, Frequency, Memory, Swap, Load, Uptime, Storage, Power (only when the system
- *                tells it), Network, Processes, System, Sampling: each opens its page
- *   CPU          total, each core, frequency, governor, load, tasks, the top 5 processes by CPU, All processes
+ *   Overview     six tiles (grid.hpp): Power, CPU, Temperature, Memory, Storage, Network, each a title, a big value,
+ *                a small line and a history line or bar; a footer: Processes, System, Sampling. Each opens its page
+ *   CPU          total, each core, frequency, governor, load, tasks, uptime, the top 5 processes by CPU, All
+ *                processes
  *   Memory       used, available, cache, buffers, free, shared, swap, the top 5 by memory, All processes
  *   Thermal      "Temp & power" (temperature and power): the power sentence, temperature, state, highest, fan, each power flag
  *                with the time since boot of its last event, supply / core voltage, the raw flags
@@ -76,17 +77,43 @@ struct Row {
     bool on = false;                 /* Choice: the current one */
 };
 
-/* overview row ids */
-enum OvRow { kOvCpu, kOvTemp, kOvFreq, kOvMem, kOvSwap, kOvLoad, kOvUptime, kOvStorage, kOvPower, kOvNet, kOvProcs,
-             kOvSystem, kOvPeriod };
 /* action ids on the detail pages */
 constexpr int kRowAllProcs = 100;
 constexpr int kRowSort = 101;
 
-View overview_target(int id);
+/* ---------------------------------------------------------------- the overview: tiles and footer */
+
+/* The tiles in grid order (grid.hpp: Power first, Network last, the two that may span the width). */
+enum TileId { kTilePower, kTileCpu, kTileTemp, kTileMem, kTileStorage, kTileNet, kTileCount };
+/* The footer row under them. */
+enum FootId { kFootProcs, kFootSystem, kFootPeriod, kFootCount };
+
+/* What a tile draws beside its big value (when the tile has room): a history line, or a fill bar. */
+enum class Spark { None, Cpu, Temp, Mem, Rx, Bar };
+
+struct TileText {
+    int id = 0;
+    std::string title;               /* top left, small */
+    std::string hint;                /* top right, small, dim ("wlan0 -52 dBm"); "" none */
+    std::vector<std::string> value;  /* the big value, longest first */
+    Tone value_tone = Tone::Normal;  /* Normal white, Good green, Warn amber, Error red */
+    bool value_dim = false;          /* not known ("...", "Unknown"): grey */
+    std::vector<std::string> detail; /* the small line under it, longest first */
+    Tone detail_tone = Tone::Normal;
+    Spark spark = Spark::None;
+    double bar_pct = 0;              /* Spark::Bar */
+    Tone bar_tone = Tone::Normal;
+    bool frame = false;              /* Power: the tile's frame and ground in its state colour */
+    Tone frame_tone = Tone::Normal;
+};
+
+View tile_target(int id);
+View footer_target(int id);
 
 /* s may be null (no sample yet): the values say "..." */
-std::vector<Row> overview_rows(const Snapshot *s, int period_s);
+std::vector<TileText> overview_tiles(const Snapshot *s);
+/* the footer items' texts, longest first: "Processes 143", "System", "Every 1 s" */
+std::vector<std::vector<std::string>> overview_footer(const Snapshot *s, int period_s);
 std::vector<Row> cpu_rows(const Snapshot *s);
 std::vector<Row> memory_rows(const Snapshot *s);
 std::vector<Row> thermal_rows(const Snapshot *s);
@@ -101,6 +128,8 @@ std::vector<Row> period_rows(int period_s);
 /* the Processes page's status line for its highlighted row: "pid 1234, sleeping, 45 MB, 12.3% CPU" */
 std::string process_caption(const ProcRow &p);
 std::string fmt_proc_cpu(double pct); /* "12.3%" */
+/* the System page's "This app" value: "1.2% CPU, 14 MB" (CPU of one core over the last 10 s, resident memory) */
+std::vector<std::string> self_cost_values(const Snapshot &s);
 
 /* ---------------------------------------------------------------- charts */
 

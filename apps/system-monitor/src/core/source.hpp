@@ -33,8 +33,17 @@ public:
     virtual ~Source() = default;
     /* the whole file (capped at 1 MB), "" and ok = false when unreadable */
     virtual std::string read(const std::string &path, bool *ok = nullptr) = 0;
+    /* The same into `out`, reusing its capacity (the sampler's hot reads: no allocation once warm). */
+    virtual bool read_into(const std::string &path, std::string &out)
+    {
+        bool ok = false;
+        out = read(path, &ok);
+        return ok;
+    }
     virtual bool exists(const std::string &path) = 0;
     virtual std::vector<std::string> list(const std::string &dir) = 0; /* names, sorted, without . and .. */
+    /* The names into `out` (unsorted), reusing its entries. */
+    virtual void list_into(const std::string &dir, std::vector<std::string> &out) { out = list(dir); }
     virtual CmdResult run(const std::vector<std::string> &argv, int timeout_ms) = 0;
     /* statvfs of a mount point, bytes (used as df counts it: total - free) */
     virtual bool fs_usage(const std::string &dir, std::uint64_t &total, std::uint64_t &used, std::uint64_t &avail) = 0;

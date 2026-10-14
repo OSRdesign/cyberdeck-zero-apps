@@ -1,14 +1,11 @@
-# The System page: model, kernel, OS, hostname, serial, firmware, CPU, RAM, uptime, screen, launcher, app.
+# The System page from the footer: model, kernel, OS, hostname, serial, firmware, CPU, RAM, uptime, this app's own
+# cost (CPU and memory, from /proc/self), screen, launcher, app.
 title System Monitor: System page
 env SYSTEM_MONITOR_FIXTURE pi-zero-2w:busy
 sizes 640x480 800x480 720x720 1280x720 1024x600
 
 wait 400
-key up
-key up
-wait 400
-expect text "System"
-key enter
+tap "System"
 wait 800
 shot about
 expect text "Model"
@@ -28,10 +25,14 @@ key down
 key down
 key down
 key down
+wait 600
+shot about-self
+expect text "This app"
+
+key down
 key down
 key down
 wait 600
 shot about-end
-expect text "Screen"
 expect text "Launcher"
 expect noquit

@@ -7,6 +7,7 @@
  */
 #include "check.hpp"
 
+#include "grid.hpp"
 #include "monitor_core.hpp"
 #include "text.hpp"
 
@@ -60,36 +61,110 @@ static void test_nav()
     CHECK_EQ(row, 2);
     CHECK(nav.back(&row) == Back::Quit); /* a short Esc at the overview ends the app */
     CHECK_EQ(nav.depth(), 1);
-    CHECK(overview_target(kOvCpu) == View::Cpu);
-    CHECK(overview_target(kOvFreq) == View::Cpu);
-    CHECK(overview_target(kOvLoad) == View::Cpu);
-    CHECK(overview_target(kOvTemp) == View::Thermal);
-    CHECK(overview_target(kOvPower) == View::Thermal);
-    CHECK(overview_target(kOvMem) == View::Memory);
-    CHECK(overview_target(kOvSwap) == View::Memory);
-    CHECK(overview_target(kOvStorage) == View::Storage);
-    CHECK(overview_target(kOvNet) == View::Network);
-    CHECK(overview_target(kOvProcs) == View::Processes);
-    CHECK(overview_target(kOvSystem) == View::About);
-    CHECK(overview_target(kOvUptime) == View::About);
-    CHECK(overview_target(kOvPeriod) == View::Period);
+    CHECK(tile_target(kTilePower) == View::Thermal);
+    CHECK(tile_target(kTileCpu) == View::Cpu);
+    CHECK(tile_target(kTileTemp) == View::Thermal);
+    CHECK(tile_target(kTileMem) == View::Memory);
+    CHECK(tile_target(kTileStorage) == View::Storage);
+    CHECK(tile_target(kTileNet) == View::Network);
+    CHECK(footer_target(kFootProcs) == View::Processes);
+    CHECK(footer_target(kFootSystem) == View::About);
+    CHECK(footer_target(kFootPeriod) == View::Period);
     CHECK(view_wants_procs(View::Processes) && view_wants_procs(View::Cpu) && view_wants_procs(View::Memory));
     CHECK(!view_wants_procs(View::Overview) && !view_wants_procs(View::Network));
     CHECK(view_wants_link(View::Network) && !view_wants_link(View::Overview));
     CHECK_EQ(std::string(view_title(View::Thermal)), std::string("Temp & power"));
 }
 
+/* The overview's grid at the five sizes, with the tokens the layout service gives there (area under the header,
+ * margins SPACE_M, gaps SPACE_S, footer ROW, the smallest tile the fonts need), and the focus moves. */
+static void test_grid()
+{
+    // 640x480: 2 x 3, nothing across
+    GridLayout g = grid_layout(608, 408, 8, 79, kFootCount, kTileCount, 90);
+    CHECK_EQ(g.cols, 2);
+    CHECK_EQ(g.rows, 3);
+    CHECK(!g.wide);
+    CHECK_EQ(g.tiles.size(), static_cast<std::size_t>(6));
+    CHECK_EQ(g.tiles[0].w, 300);
+    CHECK_EQ(g.tiles[0].h, 101);
+    CHECK_EQ(g.tiles[1].x, 308);
+    CHECK_EQ(g.tiles[1].x + g.tiles[1].w, 608);
+    CHECK_EQ(g.tiles[5].y + g.tiles[5].h <= g.footer[0].y - 8, true);
+    CHECK_EQ(g.footer.size(), static_cast<std::size_t>(3));
+    CHECK_EQ(g.footer[0].y, 408 - 79);
+    CHECK_EQ(g.footer[2].x + g.footer[2].w, 608);
+    // 800x480, 1024x600, 1280x720: 3 x 2
+    g = grid_layout(772, 408, 8, 64, kFootCount, kTileCount, 90);
+    CHECK(g.cols == 3 && g.rows == 2 && !g.wide);
+    g = grid_layout(996, 528, 8, 79, kFootCount, kTileCount, 94);
+    CHECK(g.cols == 3 && g.rows == 2 && !g.wide);
+    g = grid_layout(1248, 640, 10, 81, kFootCount, kTileCount, 100);
+    CHECK(g.cols == 3 && g.rows == 2 && !g.wide);
+    // 720x720: Power and Network across, 2 x 2 between them
+    const GridLayout sq = grid_layout(688, 640, 8, 70, kFootCount, kTileCount, 96);
+    CHECK(sq.cols == 2 && sq.rows == 4 && sq.wide);
+    CHECK_EQ(sq.tiles[0].w, 688);
+    CHECK_EQ(sq.tiles[5].w, 688);
+    CHECK_EQ(sq.tiles[1].y, sq.tiles[2].y);
+    CHECK_EQ(sq.tiles[5].y, sq.tiles[3].y + sq.tiles[3].h + 8);
+    // too little room for any: the tallest cells (3 columns), still every tile placed
+    g = grid_layout(608, 300, 8, 79, kFootCount, kTileCount, 400);
+    CHECK(g.cols == 3 && g.tiles.size() == 6);
+    // no footer
+    g = grid_layout(608, 408, 8, 79, 0, kTileCount, 90);
+    CHECK(g.footer.empty() && g.tiles[5].y + g.tiles[5].h <= 408);
+
+    // focus on the 640x480 grid: tiles 0-5 (2 x 3), footer 6-8
+    g = grid_layout(608, 408, 8, 79, kFootCount, kTileCount, 90);
+    std::vector<Rect> r = g.tiles;
+    r.insert(r.end(), g.footer.begin(), g.footer.end());
+    CHECK_EQ(next_focus(r, 0, Dir::Right), 1);
+    CHECK_EQ(next_focus(r, 1, Dir::Left), 0);
+    CHECK_EQ(next_focus(r, 0, Dir::Down), 2);
+    CHECK_EQ(next_focus(r, 2, Dir::Down), 4);
+    CHECK_EQ(next_focus(r, 3, Dir::Up), 1);
+    CHECK_EQ(next_focus(r, 4, Dir::Down), 6);  /* Storage -> Processes (below it) */
+    CHECK_EQ(next_focus(r, 5, Dir::Down), 8);  /* Network -> Sampling (below it) */
+    CHECK_EQ(next_focus(r, 6, Dir::Right), 7);
+    CHECK_EQ(next_focus(r, 8, Dir::Up), 5);
+    CHECK_EQ(next_focus(r, 6, Dir::Up), 4);
+    CHECK_EQ(next_focus(r, 1, Dir::Right), -1); /* the edge: the focus stays */
+    CHECK_EQ(next_focus(r, 0, Dir::Up), -1);
+    CHECK_EQ(next_focus(r, 7, Dir::Down), -1);
+    CHECK_EQ(next_focus(r, 99, Dir::Down), 0);
+    // on the square grid: from Power (across) down to the first of the row under it, and back up
+    r = sq.tiles;
+    r.insert(r.end(), sq.footer.begin(), sq.footer.end());
+    CHECK_EQ(next_focus(r, 0, Dir::Down), 1);
+    CHECK_EQ(next_focus(r, 2, Dir::Up), 0);
+    CHECK_EQ(next_focus(r, 3, Dir::Down), 5);
+    CHECK_EQ(next_focus(r, 4, Dir::Down), 5);
+    CHECK_EQ(next_focus(r, 1, Dir::Right), 2);
+    // on the 3 x 2 grid: Power, CPU, Temperature over Memory, Storage, Network
+    const GridLayout wide = grid_layout(772, 408, 8, 64, kFootCount, kTileCount, 90);
+    r = wide.tiles;
+    r.insert(r.end(), wide.footer.begin(), wide.footer.end());
+    CHECK_EQ(next_focus(r, 0, Dir::Down), 3);
+    CHECK_EQ(next_focus(r, 2, Dir::Right), -1);
+    CHECK_EQ(next_focus(r, 4, Dir::Down), 7);
+}
+
 static void test_pages()
 {
-    // before the first sample: every value waits, every row is there
-    const std::vector<Row> ov = overview_rows(nullptr, 2);
-    CHECK(ov.size() >= 12);
-    CHECK_EQ(ov[0].label, std::string("CPU"));
-    CHECK_EQ(ov[0].values[0], std::string("..."));
-    CHECK(ov[0].type == RowType::Nav);
-    CHECK_EQ(ov.back().label, std::string("Sampling"));
-    CHECK_EQ(ov.back().values[0], std::string("Every 2 s"));
-    CHECK(ov.back().id == kOvPeriod);
+    // before the first sample: every tile is there and waits
+    const std::vector<TileText> ov = overview_tiles(nullptr);
+    CHECK_EQ(ov.size(), static_cast<std::size_t>(kTileCount));
+    CHECK_EQ(ov[kTilePower].title, std::string("Power"));
+    CHECK_EQ(ov[kTileNet].title, std::string("Network"));
+    CHECK_EQ(ov[kTileCpu].value[0], std::string("..."));
+    CHECK(ov[kTileCpu].value_dim);
+    CHECK(ov[kTileCpu].spark == Spark::Cpu && ov[kTileStorage].spark == Spark::Bar);
+    CHECK(ov[kTilePower].frame);
+    const std::vector<std::vector<std::string>> foot = overview_footer(nullptr, 2);
+    CHECK_EQ(foot.size(), static_cast<std::size_t>(kFootCount));
+    CHECK_EQ(foot[kFootPeriod][0], std::string("Every 2 s"));
+    CHECK_EQ(foot[kFootProcs][0], std::string("Processes"));
     CHECK(cpu_rows(nullptr)[0].type == RowType::Busy);
     CHECK(process_rows(nullptr, SortBy::Cpu)[1].type == RowType::Busy);
 
@@ -124,9 +199,18 @@ static void test_pages()
     s.top_cpu = {p};
     s.top_mem = {p};
     for (int i = 0; i < 120; ++i) s.hist.temp.push(70.0f + i * 0.1f);
-    const std::vector<Row> ov2 = overview_rows(&s, 1);
-    CHECK(ov2[1].tone == Tone::Error); /* hot */
-    CHECK_EQ(ov2[1].values[1], std::string("82 \xC2\xB0" "C"));
+    const std::vector<TileText> ov2 = overview_tiles(&s);
+    CHECK(ov2[kTileTemp].value_tone == Tone::Error); /* hot */
+    CHECK_EQ(ov2[kTileTemp].value[1], fmt_temp_short(82.4));
+    CHECK(ov2[kTileNet].value_tone == Tone::Warn); /* no interface */
+    CHECK_EQ(ov2[kTileNet].value[0], std::string("No network"));
+    CHECK(ov2[kTileStorage].spark == Spark::None);
+    s.proc_count = 143;
+    CHECK_EQ(overview_footer(&s, 1)[kFootProcs][0], std::string("Processes 143"));
+    s.self_ok = true;
+    s.self_cpu = 0.84;
+    s.self_rss = 14 * 1048576ull;
+    CHECK_EQ(self_cost_values(s)[0], std::string("0.8% CPU, 14 MB"));
     const std::vector<Row> cpu = cpu_rows(&s);
     CHECK_EQ(cpu[0].values[0], std::string("12%"));
     CHECK_EQ(cpu[1].label, std::string("Core 0"));
@@ -172,7 +256,7 @@ static void test_package()
     const std::string app = CDK_APP_DIR;
     const std::string desktop = read_file(app + "/root/usr/share/APPLaunch/applications/system-monitor.desktop");
     CHECK(!desktop.empty());
-    CHECK(desktop.find("\nName=System Monitor\n") != std::string::npos);
+    CHECK(desktop.find("\nName=Monitor\n") != std::string::npos); /* one line under the home tile's icon */
     CHECK(desktop.find("\nX-Fullscreen=true") != std::string::npos);
     const std::string min = "\nX-MinSize=" + std::to_string(kMinW) + "x" + std::to_string(kMinH);
     CHECK(desktop.find(min) != std::string::npos);
@@ -199,6 +283,7 @@ int main()
 {
     setvbuf(stdout, nullptr, _IOLBF, 0);
     test_nav();
+    test_grid();
     test_pages();
     test_parsers();
     test_format();

@@ -1,12 +1,10 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * System Monitor: the two graphic panels above a page's roller (LVGL thread only). Not interactive: the roller under
+ * System Monitor: the graphic panel above a detail page's roller (LVGL thread only). Not interactive: the roller under
  * them keeps every key and tap. Sizes come from the layout service (the roller page: row, gap, inset; the CAPTION
  * text size; SPACE_S, RADIUS_S); colours from the launcher's palette (APP-GUIDELINES, report 024 section 5).
  *
- *   MetersPanel   the overview's bars: one per CPU core ("Core 0", the bar, "23%"), two columns, half a row high
- *                 each, and one status line under them (the power state, a hot CPU) in the status colours.
  *   HistoryPanel  a detail page's chart: a title line (one coloured text per series, the scale and the time window
  *                 at the right) over an lv_chart line chart of the last 120 samples, newest at the right edge; optional
  *                 constant lines (the 70 / 80 °C marks).
@@ -46,29 +44,6 @@ struct Box {
     int x = 0, y = 0, w = 0, h = 0;
 };
 
-class MetersPanel {
-public:
-    MetersPanel(lv_obj_t *parent, const Box &box, int cores, const cp0_ui_roller_page_t &layout);
-    ~MetersPanel();
-    MetersPanel(const MetersPanel &) = delete;
-    MetersPanel &operator=(const MetersPanel &) = delete;
-
-    /* the height the panel needs for `cores` bars and its status line */
-    static int height_for(int cores, const cp0_ui_roller_page_t &layout);
-    /* per core %, empty: not known yet */
-    void set(const std::vector<double> &pcts);
-    void set_status(const std::string &text, Tone tone);
-
-private:
-    lv_obj_t *root_ = nullptr;
-    std::vector<lv_obj_t *> bars_, values_;
-    std::vector<int> shown_;
-    lv_obj_t *status_ = nullptr;
-    std::string status_text_;
-    Tone status_tone_ = Tone::Normal;
-    bool status_set_ = false;
-};
-
 class HistoryPanel {
 public:
     /* series: 1 or 2 data series (green, then blue); marks: constant lines drawn under them */
@@ -89,6 +64,7 @@ public:
     /* the ring's values x scale; the newest at the right edge, nothing left of the oldest */
     void set_series(int index, const Ring &ring, double scale);
     void set_mark(int index, std::int32_t value, std::uint32_t rgb);
+    /* redraws the chart only when a point or the scale changed */
     void refresh();
 
 private:
@@ -102,8 +78,10 @@ private:
     std::vector<std::vector<std::int32_t>> data_;
     int marks_ = 0;
     int width_ = 0, gap_ = 0;
-    std::string range_text_;
+    std::string range_text_, shown_first_, shown_second_;
+    std::uint32_t shown_rgb_ = 0xFFFFFFFFu;
     std::int32_t lo_ = 0, hi_ = 100;
+    bool dirty_ = true; /* a point or the scale changed since the last refresh() */
 };
 
 } // namespace sm

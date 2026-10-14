@@ -1,21 +1,12 @@
-# The Storage page on the Pi 3A+ (a 93 % full card, the boot partition, a USB stick whose name has a space): each
-# filesystem, the root disk's read / write chart and rates.
+# The Storage page on the Pi 3A+ (a 93 % full card, the boot partition, a USB stick whose name has a space): the
+# tile in amber with its fill bar, then each filesystem, the root disk's read / write chart and rates.
 title System Monitor: Storage page (Pi 3A+)
 env SYSTEM_MONITOR_FIXTURE pi-3a-plus:undervoltage
 sizes 640x480 800x480 720x720 1280x720 1024x600
 
 wait 400
-key down
-key down
-key down
-key down
-key down
-key down
-key down
-wait 400
-shot overview-storage
-expect text "Storage"
-key enter
+expect text "93%"
+tap "Storage"
 wait 1200
 shot storage
 expect text "/boot/firmware"

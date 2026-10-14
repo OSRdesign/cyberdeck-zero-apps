@@ -1,14 +1,11 @@
-# The sampling period: Sampling opens the choice (1, 2 or 5 s, the current one checked); 5 s goes back to the overview
+# The sampling period from the footer: the choice (1, 2 or 5 s, the current one checked); 5 s goes back to the overview
 # with "Every 5 s"; the charts then cover 10 minutes. (A fixture run saves nothing.)
 title System Monitor: sampling period
 env SYSTEM_MONITOR_FIXTURE pi-zero-2w:busy
 sizes 640x480 800x480 720x720 1280x720 1024x600
 
 wait 400
-key up
-wait 400
-expect text "Sampling"
-key enter
+tap "Every 1 s"
 wait 500
 shot period
 expect text "Every second"
@@ -19,9 +16,7 @@ key enter
 wait 800
 shot period-done
 expect text "Every 5 s"
-key down
-wait 600
-key enter
+tap "CPU"
 wait 800
 shot cpu-10min
 expect text "0-100%, last 10 min"

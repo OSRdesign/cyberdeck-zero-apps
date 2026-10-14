@@ -139,86 +139,225 @@ Back Nav::back(int *from_row)
 bool view_wants_procs(View view) { return view == View::Cpu || view == View::Memory || view == View::Processes; }
 bool view_wants_link(View view) { return view == View::Network; }
 
-View overview_target(int id)
+View tile_target(int id)
 {
     switch (id) {
-    case kOvCpu: case kOvFreq: case kOvLoad: return View::Cpu;
-    case kOvTemp: case kOvPower: return View::Thermal;
-    case kOvMem: case kOvSwap: return View::Memory;
-    case kOvStorage: return View::Storage;
-    case kOvNet: return View::Network;
-    case kOvProcs: return View::Processes;
-    case kOvUptime: case kOvSystem: return View::About;
-    case kOvPeriod: return View::Period;
+    case kTilePower: return View::Thermal;
+    case kTileCpu: return View::Cpu;
+    case kTileTemp: return View::Thermal;
+    case kTileMem: return View::Memory;
+    case kTileStorage: return View::Storage;
+    case kTileNet: return View::Network;
+    default: return View::Overview;
+    }
+}
+
+View footer_target(int id)
+{
+    switch (id) {
+    case kFootProcs: return View::Processes;
+    case kFootSystem: return View::About;
+    case kFootPeriod: return View::Period;
     default: return View::Overview;
     }
 }
 
 /* ---------------------------------------------------------------- overview */
 
-std::vector<Row> overview_rows(const Snapshot *s, int period_s)
+namespace {
+
+TileText tile(int id, const char *title)
 {
-    std::vector<Row> rows;
-    if (!s) {
-        for (const auto &p : std::vector<std::pair<const char *, int>>{
-                 {"CPU", kOvCpu}, {"Temperature", kOvTemp}, {"Frequency", kOvFreq}, {"Memory", kOvMem},
-                 {"Swap", kOvSwap}, {"Load", kOvLoad}, {"Uptime", kOvUptime}, {"Storage", kOvStorage},
-                 {"Network", kOvNet}, {"Processes", kOvProcs}, {"System", kOvSystem}})
-            rows.push_back(nav(p.first, {kWait}, p.second));
-    } else {
-        rows.push_back(nav("CPU", {s->cpu.ok ? fmt_pct(s->cpu.total) : kWait}, kOvCpu));
-        if (s->temp.ok) {
-            const TempState st = temp_state(s->temp.c);
-            rows.push_back(nav("Temperature", {fmt_temp(s->temp.c), fmt_temp_short(s->temp.c)}, kOvTemp, temp_tone(st)));
-        } else {
-            rows.push_back(nav("Temperature", {"Unknown"}, kOvTemp));
-        }
-        rows.push_back(nav("Frequency", freq_values(s->cpu), kOvFreq));
-        if (s->mem.ok) {
-            rows.push_back(nav("Memory", {fmt_used_of(s->mem.used() * 1024ull, s->mem.total * 1024ull),
-                                          fmt_kb(s->mem.used())},
-                               kOvMem));
-            if (s->mem.swap_total)
-                rows.push_back(nav("Swap", {fmt_used_of(s->mem.swap_used() * 1024ull, s->mem.swap_total * 1024ull),
-                                            fmt_kb(s->mem.swap_used())},
-                                   kOvSwap));
-            else rows.push_back(nav("Swap", {"Off"}, kOvSwap));
-        } else {
-            rows.push_back(nav("Memory", {"Unknown"}, kOvMem));
-        }
-        rows.push_back(nav("Load", {s->load.ok ? load_text(s->load) : kWait, s->load.ok ? load_short(s->load) : kWait},
-                           kOvLoad));
-        rows.push_back(nav("Uptime", {s->uptime_ok ? fmt_uptime(s->uptime_s) : "Unknown"}, kOvUptime));
-        if (const FsInfo *f = root_fs(*s)) {
-            const std::string pct = fmt_pct(f->pct());
-            rows.push_back(nav("Storage", {pct + " of " + fmt_bytes(f->total), pct}, kOvStorage,
-                               f->pct() >= 95 ? Tone::Error : f->pct() >= 85 ? Tone::Warn : Tone::Normal));
-        } else {
-            rows.push_back(nav("Storage", {"Unknown"}, kOvStorage));
-        }
-        if (s->power.source != PowerSource::None) {
-            Tone tone = Tone::Normal;
-            std::vector<std::string> values = power_values(s->power, tone);
-            rows.push_back(nav("Power", values, kOvPower, tone));
-        }
-        if (const NetInfo *n = main_net(*s)) {
-            if (!n->ipv4.empty())
-                rows.push_back(nav("Network", {n->name + " " + address_only(n->ipv4), address_only(n->ipv4), n->name},
-                                   kOvNet));
-            else rows.push_back(nav("Network", {n->name + " " + n->state, "Not connected", "Off"}, kOvNet, Tone::Warn));
-        } else {
-            rows.push_back(nav("Network", {"No interface", "None"}, kOvNet, Tone::Warn));
-        }
-        rows.push_back(nav("Processes", {s->procs_valid || s->proc_count ? std::to_string(s->proc_count) : kWait},
-                           kOvProcs));
-        const std::string model = model_without_rev(s->sys.model);
-        rows.push_back(nav("System", model.empty() ? std::vector<std::string>{"Linux"}
-                                                   : std::vector<std::string>{model, short_model(s->sys.model)},
-                           kOvSystem));
+    TileText t;
+    t.id = id;
+    t.title = title;
+    t.value = {kWait};
+    t.value_dim = true;
+    return t;
+}
+
+/* Power: the most important tile. Its words: "Power OK" (green), "Under-voltage" now (red) or since boot (amber),
+ * "Throttled", "Temp limit", "Capped"; its frame in the same colour. */
+TileText power_tile(const Snapshot &s)
+{
+    TileText t = tile(kTilePower, "Power");
+    t.frame = true;
+    const PowerInfo &p = s.power;
+    const FlagState *f = p.flags;
+    const bool hot = s.temp.ok && temp_state(s.temp.c) == TempState::Hot;
+    t.value_dim = false;
+    switch (p.source) {
+    case PowerSource::None:
+        t.value = {"Unknown"};
+        t.value_dim = true;
+        t.detail = {"No firmware flags", "Not available"};
+        return t;
+    case PowerSource::NoAccess:
+        t.value = {"No access"};
+        t.value_tone = t.frame_tone = t.detail_tone = Tone::Warn;
+        t.detail = {"Needs the video group", "video group"};
+        return t;
+    default: break;
     }
-    rows.push_back(nav("Sampling", {"Every " + std::to_string(period_s) + " s", std::to_string(period_s) + " s"},
-                       kOvPeriod));
-    return rows;
+    if (f[kUnderVoltage].now) {
+        t.value = {"Under-voltage", "UV now"};
+        t.value_tone = t.frame_tone = t.detail_tone = Tone::Error;
+        t.detail = {"Now: check the power supply", "Check the supply", "Now"};
+    } else if (f[kThrottled].now) {
+        t.value = {"Throttled"};
+        t.value_tone = t.frame_tone = t.detail_tone = Tone::Error;
+        t.detail = {hot ? "Now: the CPU is too hot" : "Now: the CPU runs slower", "Now"};
+    } else if (f[kSoftTempLimit].now) {
+        t.value = {"Temp limit"};
+        t.value_tone = t.frame_tone = t.detail_tone = Tone::Warn;
+        t.detail = {"Now: the CPU runs slower", "Now"};
+    } else if (f[kFreqCapped].now) {
+        t.value = {"Capped"};
+        t.value_tone = t.frame_tone = t.detail_tone = Tone::Warn;
+        t.detail = {"Now: frequency capped", "Now"};
+    } else if (f[kUnderVoltage].occurred) {
+        t.value = {"Under-voltage", "UV earlier"};
+        t.value_tone = t.frame_tone = t.detail_tone = Tone::Warn;
+        const FlagState &uv = f[kUnderVoltage];
+        if (uv.seen && uv.last_s >= 0)
+            t.detail = {"Happened since boot, last " + fmt_since_boot(uv.last_s), "Happened since boot", "Since boot"};
+        else t.detail = {"Happened since boot", "Since boot"};
+    } else if (f[kThrottled].occurred || f[kSoftTempLimit].occurred || f[kFreqCapped].occurred) {
+        t.value = {"Throttled", "Slowed"};
+        t.value_tone = t.frame_tone = t.detail_tone = Tone::Warn;
+        t.detail = {"Happened since boot", "Since boot"};
+    } else {
+        t.value = {"Power OK", "OK"};
+        t.value_tone = t.frame_tone = Tone::Good;
+        const bool alarm = p.source == PowerSource::Alarm;
+        if (p.supply_ok)
+            t.detail = {fmt_volts(p.supply_v) + " input, no flags since boot", fmt_volts(p.supply_v) + " input",
+                        fmt_volts(p.supply_v)};
+        else if (alarm) t.detail = {"No under-voltage alarm", "No alarm"};
+        else t.detail = {"No flags since boot", "No flags"};
+    }
+    return t;
+}
+
+} // namespace
+
+std::vector<TileText> overview_tiles(const Snapshot *s)
+{
+    std::vector<TileText> tiles;
+    tiles.push_back(tile(kTilePower, "Power"));
+    tiles.push_back(tile(kTileCpu, "CPU"));
+    tiles.push_back(tile(kTileTemp, "Temperature"));
+    tiles.push_back(tile(kTileMem, "Memory"));
+    tiles.push_back(tile(kTileStorage, "Storage"));
+    tiles.push_back(tile(kTileNet, "Network"));
+    tiles[kTileCpu].spark = Spark::Cpu;
+    tiles[kTileTemp].spark = Spark::Temp;
+    tiles[kTileMem].spark = Spark::Mem;
+    tiles[kTileStorage].spark = Spark::Bar;
+    tiles[kTileNet].spark = Spark::Rx;
+    tiles[kTilePower].frame = true;
+    if (!s) return tiles;
+
+    tiles[kTilePower] = power_tile(*s);
+
+    TileText &cpu = tiles[kTileCpu];
+    if (s->cpu.ok) {
+        cpu.value = {fmt_pct(s->cpu.total)};
+        cpu.value_dim = false;
+    }
+    if (s->sys.cores > 0) cpu.hint = std::to_string(s->sys.cores) + (s->sys.cores == 1 ? " core" : " cores");
+    {
+        const std::string load = s->load.ok ? "load " + load_short(s->load) : std::string();
+        std::vector<std::string> d;
+        if (s->cpu.cur_mhz > 0 && s->cpu.max_mhz > 0 && !load.empty())
+            d.push_back(std::to_string(s->cpu.cur_mhz) + " / " + fmt_mhz(s->cpu.max_mhz) + ", " + load);
+        if (s->cpu.cur_mhz > 0 && !load.empty()) d.push_back(fmt_mhz(s->cpu.cur_mhz) + ", " + load);
+        if (s->cpu.cur_mhz > 0) d.push_back(fmt_mhz(s->cpu.cur_mhz));
+        else if (!load.empty()) d.push_back(load);
+        cpu.detail = d;
+    }
+
+    TileText &temp = tiles[kTileTemp];
+    if (s->temp.ok) {
+        const TempState st = temp_state(s->temp.c);
+        temp.value = {fmt_temp(s->temp.c), fmt_temp_short(s->temp.c)};
+        temp.value_dim = false;
+        temp.value_tone = st == TempState::Ok ? Tone::Good : temp_tone(st);
+        switch (st) {
+        case TempState::Ok: temp.detail = {"OK, warm from 70 \xC2\xB0" "C", "OK"}; break;
+        case TempState::Warm: temp.detail = {"Warm, hot from 80 \xC2\xB0" "C", "Warm"}; break;
+        case TempState::Hot: temp.detail = {"Hot: the Pi slows down", "Hot"}; break;
+        }
+        temp.detail_tone = st == TempState::Ok ? Tone::Normal : temp_tone(st);
+    } else {
+        temp.value = {"Unknown"};
+        temp.detail = {"No thermal zone"};
+        temp.spark = Spark::None;
+    }
+    if (s->fan.present) {
+        if (s->fan.rpm >= 0) temp.hint = "fan " + std::to_string(s->fan.rpm) + " rpm";
+        else if (s->fan.state >= 0 && s->fan.max_state > 0)
+            temp.hint = "fan " + std::to_string(s->fan.state) + "/" + std::to_string(s->fan.max_state);
+    }
+
+    TileText &mem = tiles[kTileMem];
+    if (s->mem.ok) {
+        const MemInfo &m = s->mem;
+        mem.value = {pct_of(m.used(), m.total)};
+        mem.value_dim = false;
+        const std::string used = fmt_used_of(m.used() * 1024ull, m.total * 1024ull);
+        if (m.swap_total)
+            mem.detail = {used + (m.swap_used() ? ", swap " + fmt_kb(m.swap_used()) : std::string(", swap unused")), used,
+                          fmt_kb(m.used())};
+        else mem.detail = {used + ", no swap", used, fmt_kb(m.used())};
+    }
+
+    TileText &st = tiles[kTileStorage];
+    if (const FsInfo *f = root_fs(*s)) {
+        const double pct = f->pct();
+        st.value = {fmt_pct(pct)};
+        st.value_dim = false;
+        st.value_tone = st.bar_tone = pct >= 95 ? Tone::Error : pct >= 85 ? Tone::Warn : Tone::Normal;
+        st.bar_pct = pct;
+        st.hint = f->dir;
+        st.detail = {fmt_used_of(f->used, f->total) + " used", fmt_used_of(f->used, f->total)};
+    } else {
+        st.value = {"Unknown"};
+        st.spark = Spark::None;
+    }
+
+    TileText &net = tiles[kTileNet];
+    net.value_dim = false;
+    if (const NetInfo *n = main_net(*s)) {
+        net.hint = n->name;
+        if (n->wireless && (n->has_level || (n->link_valid && n->link.has_signal)))
+            net.hint += " " + std::to_string(n->link_valid && n->link.has_signal ? n->link.signal_dbm
+                                                                                 : static_cast<int>(n->level_dbm)) +
+                        " dBm";
+        if (!n->ipv4.empty()) {
+            net.value = {address_only(n->ipv4)};
+        } else {
+            net.value = {"Not connected", "Offline"};
+            net.value_tone = Tone::Warn;
+        }
+        net.detail = {"In " + fmt_rate(n->rx_bps) + ", out " + fmt_rate(n->tx_bps), "In " + fmt_rate(n->rx_bps)};
+    } else {
+        net.value = {"No network", "None"};
+        net.value_tone = Tone::Warn;
+        net.detail = {"No interface"};
+        net.spark = Spark::None;
+    }
+    return tiles;
+}
+
+std::vector<std::vector<std::string>> overview_footer(const Snapshot *s, int period_s)
+{
+    std::vector<std::vector<std::string>> f(kFootCount);
+    if (s && s->proc_count > 0) f[kFootProcs] = {"Processes " + std::to_string(s->proc_count), "Processes"};
+    else f[kFootProcs] = {"Processes"};
+    f[kFootSystem] = {"System"};
+    f[kFootPeriod] = {"Every " + std::to_string(period_s) + " s", std::to_string(period_s) + " s"};
+    return f;
 }
 
 /* ---------------------------------------------------------------- CPU */
@@ -237,6 +376,7 @@ std::vector<Row> cpu_rows(const Snapshot *s)
         rows.push_back(info("Tasks", {std::to_string(s->load.running) + " running of " + std::to_string(s->load.tasks),
                                       std::to_string(s->load.running) + " / " + std::to_string(s->load.tasks)}));
     }
+    if (s->uptime_ok) rows.push_back(info("Uptime", {fmt_uptime(s->uptime_s)}));
     rows.push_back(heading("Top processes by CPU"));
     if (!s->procs_valid) {
         rows.push_back(busy("Reading processes"));
@@ -414,6 +554,15 @@ std::vector<Row> process_rows(const Snapshot *s, SortBy by)
     return rows;
 }
 
+std::vector<std::string> self_cost_values(const Snapshot &s)
+{
+    const std::string mem = s.self_rss ? fmt_bytes(s.self_rss) : std::string("?");
+    if (!s.self_ok) return {"measuring, " + mem, mem};
+    char cpu[16];
+    std::snprintf(cpu, sizeof(cpu), "%.1f%%", s.self_cpu > 0 ? s.self_cpu : 0.0);
+    return {std::string(cpu) + " CPU, " + mem, std::string(cpu) + ", " + mem};
+}
+
 std::string process_caption(const ProcRow &p)
 {
     return "pid " + std::to_string(p.pid) + ", " + proc_state_name(p.state) + ", " + fmt_bytes(p.rss_bytes) + ", " +
@@ -443,6 +592,7 @@ std::vector<Row> about_rows(const Snapshot *s,
         add("CPU", f.cpu);
         if (f.ram_kb) add("RAM", fmt_kb(f.ram_kb));
         if (s->uptime_ok) add("Uptime", fmt_uptime(s->uptime_s));
+        rows.push_back(info("This app", self_cost_values(*s)));
     }
     for (const auto &kv : extra) rows.push_back(info(kv.first, kv.second));
     return rows;

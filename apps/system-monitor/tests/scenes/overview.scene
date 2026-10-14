@@ -1,42 +1,61 @@
-# The overview on the deck's fixture (Pi Zero 2 W at work: tests/fixtures/pi-zero-2w/scenario-busy.conf): the core
-# bars and the status line, then the headline rows; Up / Down through them; a short Esc at the root ends the app.
-title System Monitor: overview (Pi Zero 2 W, power OK)
+# The overview on the deck's fixture (Pi Zero 2 W at work: tests/fixtures/pi-zero-2w/scenario-busy.conf): six tiles
+# (Power, CPU, Temperature, Memory, Storage, Network) and the footer (Processes, System, Sampling), no scrolling.
+# 640x480: 2 x 3; 800x480, 1024x600, 1280x720: 3 x 2; 720x720: Power and Network across. Keyboard: the arrows move the
+# blue ring by position, Enter opens, Esc comes back with the ring where it was; a short Esc at the overview ends the app.
+title System Monitor: overview grid, keys (Pi Zero 2 W, power OK)
 env SYSTEM_MONITOR_FIXTURE pi-zero-2w:busy
 sizes 640x480 800x480 720x720 1280x720 1024x600
 
 wait 600
 shot overview
 expect noquit
-expect text "CPU"
-expect text "Core 0"
-expect text "Core 3"
-expect text "Power OK"
-expect text "Temperature"
-
-key down
-key down
-key down
-wait 600
-shot overview-memory
-expect text "Memory"
-
-key down
-key down
-key down
-key down
-key down
-wait 600
-shot overview-power
 expect text "Power"
-
-key down
-key down
-key down
-key down
-wait 600
-shot overview-end
-expect text "Sampling"
+expect text "Power OK"
+expect text "CPU"
+expect text "Temperature"
+expect text "Memory"
+expect text "Storage"
+expect text "Network"
+expect text "192.168.1.23"
+expect text "System"
 expect text "Every 1 s"
 
+# to CPU (beside Power; under it where Power is across), open, back: the ring stays on CPU
+@640x480,800x480,1024x600,1280x720 key right
+@720x720 key down
+wait 300
+shot focus-cpu
+key enter
+wait 1200
+expect text "Total"
+key esc
+wait 600
+shot back-on-cpu
+expect text "Power OK"
+
+# down from CPU: Memory (2 columns) or Storage (3 columns)
+key down
+wait 300
+key enter
+wait 1200
+@640x480,720x720 expect text "Used"
+@800x480,1024x600,1280x720 expect text "/boot/firmware"
+key esc
+wait 600
+
+# down again to the footer: Sampling (640x480) or System (3 columns; the square's Network is across)
+key down
+@640x480,720x720 key down
+wait 300
+shot focus-footer
+key enter
+wait 800
+@640x480 expect text "Every second"
+@800x480,720x720,1024x600,1280x720 expect text "Model"
+key esc
+wait 500
+expect noquit
+
+# a short Esc at the overview ends the app
 key esc
 expect quit

@@ -59,6 +59,24 @@ static void test_ring()
     CHECK_EQ(big.size(), static_cast<std::size_t>(120));
     CHECK_EQ(big.at(0), 180.0f);
     CHECK_EQ(big.last(), 299.0f);
+    // the sparkline's points: bins of samples, the newest last, nothing where no sample is yet
+    Ring ten(120);
+    for (int i = 0; i < 10; ++i) ten.push(static_cast<float>(i));
+    std::vector<float> bins(4);
+    bin_history(ten, 8, bins);
+    CHECK_NEAR(bins[3], 8.5, 1e-6);
+    CHECK_NEAR(bins[2], 6.5, 1e-6);
+    CHECK_NEAR(bins[0], 2.5, 1e-6);
+    std::vector<float> wide(40);
+    bin_history(ten, 120, wide);
+    CHECK_NEAR(wide[39], 8.0, 1e-6);
+    CHECK_NEAR(wide[38], 5.0, 1e-6);
+    CHECK_NEAR(wide[36], 0.0, 1e-6);
+    CHECK(std::isnan(wide[35]));
+    CHECK(std::isnan(wide[0]));
+    bin_history(big, 120, wide);
+    CHECK_NEAR(wide[39], 298.0, 1e-6);
+    CHECK_NEAR(wide[0], 181.0, 1e-6);
 }
 
 static void test_rates()
@@ -140,6 +158,15 @@ void test_stats()
     test_process_table();
 }
 
+static TileText power_tile_of(const PowerInfo &p, double temp_c = 52)
+{
+    Snapshot s;
+    s.power = p;
+    s.temp.ok = true;
+    s.temp.c = temp_c;
+    return overview_tiles(&s)[kTilePower];
+}
+
 void test_power()
 {
     CHECK(temp_state(69.9) == TempState::Ok);
@@ -160,10 +187,10 @@ void test_power()
     CHECK(!p.flags[kFreqCapped].now && !p.flags[kFreqCapped].occurred);
     CHECK_EQ(power_status(p, false).text, std::string("Under-voltage now: check the power supply"));
     CHECK(power_status(p, false).tone == Tone::Error);
-    Tone tone = Tone::Normal;
-    std::vector<std::string> v = power_values(p, tone);
-    CHECK_EQ(v[0], std::string("Under-voltage now"));
-    CHECK(tone == Tone::Error);
+    TileText tile = power_tile_of(p);
+    CHECK_EQ(tile.value[0], std::string("Under-voltage"));
+    CHECK_EQ(tile.detail[0], std::string("Now: check the power supply"));
+    CHECK(tile.value_tone == Tone::Error && tile.frame_tone == Tone::Error && tile.frame);
     CHECK_EQ(flag_values(p.flags[kUnderVoltage], false)[0], std::string("now"));
 
     // the supply recovers: the sticky bit stays, the time of the last event is the last sample that showed it
@@ -172,9 +199,11 @@ void test_power()
     CHECK(!p.flags[kUnderVoltage].now && p.flags[kUnderVoltage].occurred);
     CHECK_EQ(power_status(p, false).text, std::string("Under-voltage happened since boot"));
     CHECK(power_status(p, false).tone == Tone::Warn);
-    v = power_values(p, tone);
-    CHECK_EQ(v[0], std::string("Under-voltage since boot"));
-    CHECK_EQ(v.back(), std::string("UV earlier"));
+    tile = power_tile_of(p);
+    CHECK_EQ(tile.value[0], std::string("Under-voltage"));
+    CHECK_EQ(tile.value.back(), std::string("UV earlier"));
+    CHECK_EQ(tile.detail[0], std::string("Happened since boot, last 0:41:11"));
+    CHECK(tile.value_tone == Tone::Warn && tile.frame_tone == Tone::Warn);
     CHECK_EQ(flag_values(p.flags[kUnderVoltage], false)[0], std::string("last 0:41:11 after boot"));
     CHECK_EQ(flag_values(p.flags[kSoftTempLimit], false)[0], std::string("never since boot"));
 
@@ -193,13 +222,22 @@ void test_power()
     ok.update(0, 50);
     ok.fill(p);
     CHECK_EQ(power_status(p, false).text, std::string("Power OK"));
-    CHECK_EQ(power_values(p, tone)[0], std::string("OK"));
-    CHECK(tone == Tone::Normal);
+    tile = power_tile_of(p);
+    CHECK_EQ(tile.value[0], std::string("Power OK"));
+    CHECK_EQ(tile.detail[0], std::string("No flags since boot"));
+    CHECK(tile.value_tone == Tone::Good && tile.frame_tone == Tone::Good);
+    p.supply_ok = true;
+    p.supply_v = 5.13;
+    CHECK_EQ(power_tile_of(p).detail[0], std::string("5.13 V input, no flags since boot"));
+    p.supply_ok = false;
     // soft limit and throttling on a hot Pi 5
     ThrottleTracker hot;
     hot.update(0xC000C, 900);
     hot.fill(p);
     CHECK_EQ(power_status(p, true).text, std::string("Throttled now: the CPU is too hot"));
+    tile = power_tile_of(p, 83);
+    CHECK_EQ(tile.value[0], std::string("Throttled"));
+    CHECK_EQ(tile.detail[0], std::string("Now: the CPU is too hot"));
     // the hwmon alarm only
     ThrottleTracker alarm;
     alarm.update_alarm(true, 60);
@@ -218,19 +256,19 @@ void test_power()
     PowerInfo none;
     CHECK(power_status(none, false).text.empty());
 
-    // the overview's status line: power first, then a hot CPU, then a warm one
-    CHECK_EQ(overview_status(none, true, 52).text, std::string(""));
-    CHECK(overview_status(none, true, 82).tone == Tone::Error);
-    CHECK_EQ(overview_status(none, true, 82).text, std::string("CPU hot: 82 \xC2\xB0" "C, the Pi slows down from 80 to 85 \xC2\xB0" "C"));
-    CHECK(overview_status(none, true, 72).tone == Tone::Warn);
-    ThrottleTracker uv;
-    uv.update(0x50005, 10);
-    PowerInfo u;
-    u.source = PowerSource::Firmware;
-    uv.fill(u);
-    CHECK_EQ(overview_status(u, true, 82).text, std::string("Under-voltage now: check the power supply"));
-    ok.fill(u);
-    CHECK_EQ(overview_status(u, true, 52).text, std::string("Power OK"));
+    // the Power tile without a source, refused, alarm only
+    tile = power_tile_of(none);
+    CHECK_EQ(tile.value[0], std::string("Unknown"));
+    CHECK(tile.value_dim && tile.frame_tone == Tone::Normal);
+    tile = power_tile_of(denied);
+    CHECK_EQ(tile.value[0], std::string("No access"));
+    CHECK_EQ(tile.detail[0], std::string("Needs the video group"));
+    ThrottleTracker quiet;
+    quiet.update_alarm(false, 5);
+    PowerInfo q;
+    q.source = PowerSource::Alarm;
+    quiet.fill(q);
+    CHECK_EQ(power_tile_of(q).detail[0], std::string("No under-voltage alarm"));
 }
 
 void test_settings()
