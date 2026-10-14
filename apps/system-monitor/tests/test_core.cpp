@@ -165,8 +165,15 @@ static void test_pages()
     CHECK_EQ(foot.size(), static_cast<std::size_t>(kFootCount));
     CHECK_EQ(foot[kFootPeriod][0], std::string("Every 2 s"));
     CHECK_EQ(foot[kFootProcs][0], std::string("Processes"));
-    CHECK(cpu_rows(nullptr)[0].type == RowType::Busy);
-    CHECK(process_rows(nullptr, SortBy::Cpu)[1].type == RowType::Busy);
+    // no sample yet: no row, the list says what it waits for
+    CHECK(cpu_rows(nullptr).empty() && memory_rows(nullptr).empty() && thermal_rows(nullptr).empty());
+    CHECK(storage_rows(nullptr).empty() && network_rows(nullptr).empty());
+    CHECK(process_rows(nullptr, SortBy::Cpu).empty());
+    CHECK_EQ(std::string(view_empty_text(View::Cpu)), std::string("Reading..."));
+    CHECK_EQ(std::string(view_empty_text(View::Processes)), std::string("Reading processes..."));
+    CHECK(view_read_only(View::Thermal) && view_read_only(View::Storage) && view_read_only(View::Network));
+    CHECK(view_read_only(View::About));
+    CHECK(!view_read_only(View::Cpu) && !view_read_only(View::Memory) && !view_read_only(View::Processes));
 
     // the period page
     const std::vector<Row> per = period_rows(5);
@@ -213,27 +220,64 @@ static void test_pages()
     CHECK_EQ(self_cost_values(s)[0], std::string("0.8% CPU, 14 MB"));
     const std::vector<Row> cpu = cpu_rows(&s);
     CHECK_EQ(cpu[0].values[0], std::string("12%"));
+    CHECK(cpu[0].type == RowType::Item && cpu[0].tone == Tone::Normal);
     CHECK_EQ(cpu[1].label, std::string("Core 0"));
     CHECK_EQ(cpu[2].values[0], std::string("20%"));
     bool top = false;
     for (const Row &r : cpu) top |= r.label == "chromium" && r.values[0] == "31.3%";
     CHECK(top);
     CHECK_EQ(cpu.back().id, kRowAllProcs);
+    CHECK_EQ(cpu.back().label, std::string("All processes"));
+    std::size_t heading = 0;
+    while (heading < cpu.size() && cpu[heading].type != RowType::Section) ++heading;
+    CHECK(heading < cpu.size() && cpu[heading].label == "Top processes by CPU" && cpu[heading].values.empty());
+    CHECK(heading + 1 < cpu.size() && cpu[heading + 1].label == "chromium");
+    // a busy CPU: amber from 80 %, red from 95 % (the total and each core)
+    s.cpu.total = 85;
+    s.cpu.cores = {99, 20, 80, 79.9};
+    const std::vector<Row> busy_cpu = cpu_rows(&s);
+    CHECK(busy_cpu[0].tone == Tone::Warn);
+    CHECK(busy_cpu[1].tone == Tone::Error && busy_cpu[2].tone == Tone::Normal);
+    CHECK(busy_cpu[3].tone == Tone::Warn && busy_cpu[4].tone == Tone::Normal);
+    s.cpu.total = 12.4;
+    s.cpu.cores = {10, 20, 5, 15};
     const std::vector<Row> mem = memory_rows(&s);
     CHECK_EQ(mem[0].values[0], std::string("196 MB of 417 MB (47%)"));
     CHECK_EQ(mem[0].values.back(), std::string("196 MB"));
+    CHECK(mem[0].tone == Tone::Normal);
+    bool mem_heading = false;
+    for (const Row &r : mem) mem_heading |= r.type == RowType::Section && r.label == "Top processes by memory";
+    CHECK(mem_heading);
+    s.mem.available = 30000; /* 93 % used: amber */
+    CHECK(memory_rows(&s)[0].tone == Tone::Warn);
+    s.mem.available = 10000; /* 98 %: red */
+    CHECK(memory_rows(&s)[0].tone == Tone::Error);
+    s.mem.available = 226760;
     const std::vector<Row> th = thermal_rows(&s);
-    CHECK_EQ(th[0].label, std::string("CPU temperature")); /* no power source: no sentence */
+    CHECK_EQ(th[0].label, std::string("CPU temperature")); /* no power source: no Power row */
+    CHECK(th[0].tone == Tone::Error);                      /* 82.4 °C: hot, red */
     CHECK_EQ(th[1].values[0], std::string("Hot: the Pi slows down"));
+    CHECK(th[1].tone == Tone::Error);
     CHECK_EQ(th[2].values[0], std::string("81.9 \xC2\xB0" "C in 2 min"));
+    CHECK(th[2].tone == Tone::Error);
+    s.temp.c = 72;
+    CHECK(thermal_rows(&s)[0].tone == Tone::Warn);
+    s.temp.c = 52;
+    CHECK(thermal_rows(&s)[0].tone == Tone::Normal && thermal_rows(&s)[1].tone == Tone::Normal);
+    s.temp.c = 82.4;
     const std::vector<Row> pr = process_rows(&s, SortBy::Memory);
     CHECK_EQ(pr[0].values[0], std::string("Memory"));
+    CHECK_EQ(pr[0].id, kRowSort);
     CHECK_EQ(pr[1].label, std::string("chromium"));
     CHECK_EQ(pr[1].values[0], std::string("31.3%  82 MB"));
     CHECK_EQ(pr[1].values[1], std::string("82 MB"));
+    CHECK_EQ(pr[1].id, 0);
     CHECK_EQ(process_rows(&s, SortBy::Cpu)[1].values[1], std::string("31.3%"));
+    CHECK_EQ(process_caption(p), std::string("pid 1203, running, 82 MB, 31.3% CPU"));
+    CHECK_EQ(process_summary(s), std::string("Top 1 of 143 processes, %CPU of one core"));
     const std::vector<Row> ab = about_rows(&s, {{"Screen", {"640x480 standard", "640x480"}}});
     CHECK_EQ(ab.back().label, std::string("Screen"));
+    for (const Row &r : ab) CHECK(r.type == RowType::Item);
 
     // the charts' texts
     CHECK_EQ(cpu_chart(s).title[0], std::string("CPU 12%"));
@@ -248,6 +292,74 @@ static void test_pages()
     CHECK_EQ(memory_chart(s).range, std::string("0-100%, last 10 min"));
     CHECK_EQ(memory_chart(s).title[1], std::string("Swap off"));
     CHECK_EQ(storage_chart(s, 20480).range, std::string("0-20 kB/s, last 10 min"));
+}
+
+/* What the list shows: the value variant that leaves the label whole, sections without a value, the cache of a live
+ * refresh (rows that did not change are not measured again). Widths: 15 px per label character, 13 per value
+ * character (about the deck's compact list: 28 px bold labels, 26 px values), a 528 px room, an 8 px gap. */
+static void test_list_rows()
+{
+    int measured = 0;
+    const TextWidth width = [&measured](const std::string &t, bool value) {
+        ++measured;
+        return static_cast<int>(t.size()) * (value ? 13 : 15);
+    };
+    const int room = 528, gap = 8;
+    // "Power" (75) + gap + 41 chars (533): too wide; "Under-voltage now" (221): fits
+    CHECK_EQ(fit_value("Power", {"Under-voltage now: check the power supply", "Under-voltage now", "UV now"}, room, gap,
+                       width),
+             std::string("Under-voltage now"));
+    // nothing fits beside a long label: the shortest; no variant: no value
+    CHECK_EQ(fit_value(std::string(40, 'x'), {"a long value", "short"}, room, gap, width), std::string("short"));
+    CHECK_EQ(fit_value("Label", {}, room, gap, width), std::string());
+    // the whole first variant when there is room (a wide screen)
+    CHECK_EQ(fit_value("Power", {"Under-voltage now: check the power supply", "UV now"}, 1000, gap, width),
+             std::string("Under-voltage now: check the power supply"));
+    // exactly the room: fits (label + gap + value <= room)
+    CHECK_EQ(fit_value("ab", {std::string(38, 'v'), "v"}, 30 + 8 + 38 * 13, gap, width), std::string(38, 'v'));
+    CHECK_EQ(fit_value("ab", {std::string(38, 'v'), "v"}, 30 + 8 + 38 * 13 - 1, gap, width), std::string("v"));
+
+    // rows -> items
+    Row sec;
+    sec.type = RowType::Section;
+    sec.label = "Top processes by CPU";
+    Row item;
+    item.label = "Used";
+    item.values = {"196 MB of 417 MB (47%)", "196 / 417 MB", "196 MB"};
+    item.tone = Tone::Warn;
+    item.id = 7;
+    Row choice;
+    choice.type = RowType::Choice;
+    choice.label = "Every second";
+    choice.values = {"ignored"};
+    const std::vector<Row> rows{sec, item, choice};
+    measured = 0;
+    const std::vector<ListItem> items = list_items(rows, room, gap, width);
+    CHECK_EQ(items.size(), static_cast<std::size_t>(3));
+    CHECK(items[0].section && items[0].label == "Top processes by CPU" && items[0].value.empty());
+    CHECK(!items[1].section && items[1].value == "196 MB of 417 MB (47%)");
+    CHECK(items[1].tone == Tone::Warn && items[1].id == 7);
+    CHECK(!items[2].section && items[2].value.empty());
+    CHECK(measured >= 2); /* the label and one value at least */
+    // a live refresh: unchanged rows keep their items unmeasured; a changed value is measured again
+    measured = 0;
+    CHECK(list_items(rows, rows, items, room, gap, width) == items);
+    CHECK_EQ(measured, 0);
+    std::vector<Row> next = rows;
+    next[1].values = {"300 MB of 417 MB (72%)", "300 / 417 MB", "300 MB"};
+    const std::vector<ListItem> after = list_items(next, rows, items, room, gap, width);
+    CHECK_EQ(after[1].value, std::string("300 MB of 417 MB (72%)"));
+    CHECK(after[0] == items[0] && after[2] == items[2]);
+    CHECK(measured >= 2);
+    // fewer rows than before, more rows than before: the extra ones are new items
+    CHECK_EQ(list_items({sec}, rows, items, room, gap, width).size(), static_cast<std::size_t>(1));
+    std::vector<Row> more = rows;
+    more.push_back(item);
+    const std::vector<ListItem> more_items = list_items(more, rows, items, room, gap, width);
+    CHECK(more_items.size() == 4 && more_items[3] == items[1]);
+    // the use tones
+    CHECK(use_tone(79.9, 80, 95) == Tone::Normal && use_tone(80, 80, 95) == Tone::Warn);
+    CHECK(use_tone(95, 80, 95) == Tone::Error && use_tone(0, 85, 95) == Tone::Normal);
 }
 
 /* The package: X-MinSize equal to the app's minimum, Exec and Icon in root/, app.json complete and a draft. */
@@ -270,7 +382,7 @@ static void test_package()
     const std::string manifest = read_file(app + "/app.json");
     CHECK(manifest.find("\"share_code\": \"system-monitor\"") != std::string::npos);
     CHECK(manifest.find("\"package\": \"system-monitor\"") != std::string::npos);
-    CHECK(manifest.find("\"version\": \"0.1.0\"") != std::string::npos);
+    CHECK(manifest.find("\"version\": \"0.2.0\"") != std::string::npos);
     CHECK(manifest.find("\"title\": \"System Monitor\"") != std::string::npos);
     CHECK(manifest.find("\"draft\": true") != std::string::npos);
     CHECK(manifest.find("\"license\": \"MIT\"") != std::string::npos);
@@ -285,6 +397,7 @@ int main()
     test_nav();
     test_grid();
     test_pages();
+    test_list_rows();
     test_parsers();
     test_format();
     test_stats();

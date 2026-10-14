@@ -16,35 +16,37 @@ namespace {
 
 constexpr const char *kWait = "...";
 
-Row info(const std::string &label, std::vector<std::string> values)
+/* use thresholds (%) */
+constexpr double kCpuWarn = 80, kCpuError = 95;
+constexpr double kFullWarn = 85, kFullError = 95; /* memory, swap, filesystems (the Storage tile's) */
+
+Row info(const std::string &label, std::vector<std::string> values, Tone tone = Tone::Normal)
 {
     Row r;
-    r.type = RowType::Info;
+    r.type = RowType::Item;
     r.label = label;
     r.values = std::move(values);
-    return r;
-}
-
-Row heading(const std::string &label) { return info(label, {}); }
-
-Row nav(const std::string &label, std::vector<std::string> values, int id, Tone tone = Tone::Normal)
-{
-    Row r;
-    r.type = RowType::Nav;
-    r.label = label;
-    r.values = std::move(values);
-    r.id = id;
     r.tone = tone;
     return r;
 }
 
-Row busy(const std::string &label)
+Row section(const std::string &label)
 {
     Row r;
-    r.type = RowType::Busy;
+    r.type = RowType::Section;
     r.label = label;
     return r;
 }
+
+Row nav(const std::string &label, std::vector<std::string> values, int id)
+{
+    Row r = info(label, std::move(values));
+    r.id = id;
+    return r;
+}
+
+/* the processes are read only while a page shows them: their place says so until the first table */
+Row reading_processes() { return info("Reading processes", {kWait}); }
 
 std::string address_only(const std::string &cidr)
 {
@@ -109,7 +111,95 @@ const char *bt_text(BtState b)
     }
 }
 
+double pct_value(std::uint64_t part, std::uint64_t whole)
+{
+    return whole ? 100.0 * static_cast<double>(part) / static_cast<double>(whole) : 0.0;
+}
+
+/* The Temp & power page's power row: the power_status() sentence first, then shorter wordings for a narrow row.
+ * Under-voltage now: the short state only; the advice is a row of its own under it (thermal_rows). */
+Row power_row(const PowerInfo &p, bool hot)
+{
+    const Status st = power_status(p, hot);
+    const FlagState *f = p.flags;
+    std::vector<std::string> v{st.text};
+    if (p.source == PowerSource::NoAccess) v = {"No access: needs the video group", "No access"};
+    else if (f[kUnderVoltage].now) v = {"Under-voltage now", "UV now"};
+    else if (f[kThrottled].now) v.insert(v.end(), {hot ? "Throttled now: too hot" : "Throttled now", "Throttled now"});
+    else if (f[kSoftTempLimit].now) v.insert(v.end(), {"Temp limit now"});
+    else if (f[kFreqCapped].now) v.insert(v.end(), {"Capped now"});
+    else if (f[kUnderVoltage].occurred) v.insert(v.end(), {"Under-voltage since boot", "UV since boot"});
+    else if (f[kThrottled].occurred) v.insert(v.end(), {"Throttled since boot"});
+    else if (f[kSoftTempLimit].occurred) v.insert(v.end(), {"Temp limit since boot"});
+    else if (f[kFreqCapped].occurred) v.insert(v.end(), {"Capped since boot"});
+    else v = {"OK"};
+    return info("Power", v, st.tone == Tone::Normal ? Tone::Good : st.tone);
+}
+
+/* A power flag's value colour: now red (under-voltage, throttled) or amber (capped, soft limit); seen or since boot
+ * amber; never light green. */
+Tone flag_tone(int flag, const FlagState &s)
+{
+    if (s.now) return flag == kUnderVoltage || flag == kThrottled ? Tone::Error : Tone::Warn;
+    if (s.occurred || s.seen) return Tone::Warn;
+    return Tone::Good;
+}
+
 } // namespace
+
+/* ---------------------------------------------------------------- list rows */
+
+std::string fit_value(const std::string &label, const std::vector<std::string> &values, int room, int gap,
+                      const TextWidth &width)
+{
+    if (values.empty()) return std::string();
+    if (!width) return values.front();
+    const int label_w = width(label, false);
+    for (const std::string &v : values)
+        if (label_w + gap + width(v, true) <= room) return v;
+    return values.back();
+}
+
+std::vector<ListItem> list_items(const std::vector<Row> &rows, int room, int gap, const TextWidth &width)
+{
+    return list_items(rows, {}, {}, room, gap, width);
+}
+
+std::vector<ListItem> list_items(const std::vector<Row> &rows, const std::vector<Row> &old_rows,
+                                 const std::vector<ListItem> &old_items, int room, int gap, const TextWidth &width)
+{
+    std::vector<ListItem> items;
+    items.reserve(rows.size());
+    for (std::size_t i = 0; i < rows.size(); ++i) {
+        const Row &r = rows[i];
+        if (i < old_rows.size() && i < old_items.size() && old_rows[i] == r) {
+            items.push_back(old_items[i]);
+            continue;
+        }
+        ListItem it;
+        it.section = r.type == RowType::Section;
+        it.label = r.label;
+        it.tone = r.tone;
+        it.id = r.id;
+        if (r.type == RowType::Item) it.value = fit_value(r.label, r.values, room, gap, width);
+        items.push_back(it);
+    }
+    return items;
+}
+
+Tone use_tone(double pct, double warn, double error)
+{
+    if (pct >= error) return Tone::Error;
+    if (pct >= warn) return Tone::Warn;
+    return Tone::Normal;
+}
+
+const char *view_empty_text(View view) { return view == View::Processes ? "Reading processes..." : "Reading..."; }
+
+bool view_read_only(View view)
+{
+    return view == View::Thermal || view == View::Storage || view == View::Network || view == View::About;
+}
 
 /* ---------------------------------------------------------------- navigation */
 
@@ -365,10 +455,12 @@ std::vector<std::vector<std::string>> overview_footer(const Snapshot *s, int per
 std::vector<Row> cpu_rows(const Snapshot *s)
 {
     std::vector<Row> rows;
-    if (!s) return {busy("Reading")};
-    rows.push_back(info("Total", {s->cpu.ok ? fmt_pct(s->cpu.total) : kWait}));
+    if (!s) return rows;
+    rows.push_back(info("Total", {s->cpu.ok ? fmt_pct(s->cpu.total) : kWait},
+                        s->cpu.ok ? use_tone(s->cpu.total, kCpuWarn, kCpuError) : Tone::Normal));
     for (std::size_t i = 0; i < s->cpu.cores.size(); ++i)
-        rows.push_back(info("Core " + std::to_string(i), {fmt_pct(s->cpu.cores[i])}));
+        rows.push_back(info("Core " + std::to_string(i), {fmt_pct(s->cpu.cores[i])},
+                            use_tone(s->cpu.cores[i], kCpuWarn, kCpuError)));
     rows.push_back(info("Frequency", freq_values(s->cpu)));
     if (!s->cpu.governor.empty()) rows.push_back(info("Governor", {s->cpu.governor}));
     if (s->load.ok) {
@@ -377,9 +469,9 @@ std::vector<Row> cpu_rows(const Snapshot *s)
                                       std::to_string(s->load.running) + " / " + std::to_string(s->load.tasks)}));
     }
     if (s->uptime_ok) rows.push_back(info("Uptime", {fmt_uptime(s->uptime_s)}));
-    rows.push_back(heading("Top processes by CPU"));
+    rows.push_back(section("Top processes by CPU"));
     if (!s->procs_valid) {
-        rows.push_back(busy("Reading processes"));
+        rows.push_back(reading_processes());
     } else {
         for (std::size_t i = 0; i < s->top_cpu.size() && i < static_cast<std::size_t>(kTopDetail); ++i)
             rows.push_back(info(s->top_cpu[i].name, {fmt_proc_cpu(s->top_cpu[i].cpu_pct)}));
@@ -393,25 +485,27 @@ std::vector<Row> cpu_rows(const Snapshot *s)
 std::vector<Row> memory_rows(const Snapshot *s)
 {
     std::vector<Row> rows;
-    if (!s) return {busy("Reading")};
+    if (!s) return rows;
     if (s->mem.ok) {
         const MemInfo &m = s->mem;
         std::vector<std::string> used = used_of_values(m.used(), m.total);
         used.insert(used.begin(), fmt_kb(m.used()) + " of " + fmt_kb(m.total) + " (" + pct_of(m.used(), m.total) + ")");
-        rows.push_back(info("Used", used));
+        rows.push_back(info("Used", used, use_tone(pct_value(m.used(), m.total), kFullWarn, kFullError)));
         rows.push_back(info("Available", {fmt_kb(m.has_available ? m.available : m.free + m.cache() + m.buffers)}));
         rows.push_back(info("Cache", {fmt_kb(m.cache())}));
         rows.push_back(info("Buffers", {fmt_kb(m.buffers)}));
         rows.push_back(info("Free", {fmt_kb(m.free)}));
         rows.push_back(info("Shared", {fmt_kb(m.shmem)}));
-        if (m.swap_total) rows.push_back(info("Swap", used_of_values(m.swap_used(), m.swap_total)));
+        if (m.swap_total)
+            rows.push_back(info("Swap", used_of_values(m.swap_used(), m.swap_total),
+                                use_tone(pct_value(m.swap_used(), m.swap_total), kFullWarn, kFullError)));
         else rows.push_back(info("Swap", {"Off"}));
     } else {
         rows.push_back(info("Memory", {"Unknown"}));
     }
-    rows.push_back(heading("Top processes by memory"));
+    rows.push_back(section("Top processes by memory"));
     if (!s->procs_valid) {
-        rows.push_back(busy("Reading processes"));
+        rows.push_back(reading_processes());
     } else {
         for (std::size_t i = 0; i < s->top_mem.size() && i < static_cast<std::size_t>(kTopDetail); ++i)
             rows.push_back(info(s->top_mem[i].name, {fmt_bytes(s->top_mem[i].rss_bytes)}));
@@ -425,21 +519,26 @@ std::vector<Row> memory_rows(const Snapshot *s)
 std::vector<Row> thermal_rows(const Snapshot *s)
 {
     std::vector<Row> rows;
-    if (!s) return {busy("Reading")};
+    if (!s) return rows;
     const bool hot = s->temp.ok && temp_state(s->temp.c) == TempState::Hot;
-    const Status p = power_status(s->power, hot);
-    if (!p.text.empty()) rows.push_back(heading(p.text));
+    if (s->power.source != PowerSource::None) rows.push_back(power_row(s->power, hot));
+    if (s->power.source != PowerSource::None && s->power.source != PowerSource::NoAccess &&
+        s->power.flags[kUnderVoltage].now)
+        rows.push_back(info("Check the power supply", {})); /* the advice the short Power value leaves out */
+    if (s->power.source == PowerSource::NoAccess) rows.push_back(info("Fix", {"sudo usermod -aG video $USER"}));
     if (s->temp.ok) {
         const TempState st = temp_state(s->temp.c);
-        rows.push_back(info("CPU temperature", {fmt_temp(s->temp.c)}));
+        const Tone tone = temp_tone(st);
+        rows.push_back(info("CPU temperature", {fmt_temp(s->temp.c)}, tone));
         switch (st) {
         case TempState::Ok: rows.push_back(info("State", {"OK (warm from 70 \xC2\xB0" "C)", "OK"})); break;
-        case TempState::Warm: rows.push_back(info("State", {"Warm (hot from 80 \xC2\xB0" "C)", "Warm"})); break;
-        case TempState::Hot: rows.push_back(info("State", {"Hot: the Pi slows down", "Hot"})); break;
+        case TempState::Warm: rows.push_back(info("State", {"Warm (hot from 80 \xC2\xB0" "C)", "Warm"}, tone)); break;
+        case TempState::Hot: rows.push_back(info("State", {"Hot: the Pi slows down", "Hot"}, tone)); break;
         }
         if (s->hist.temp.size() > 1) {
             const std::string window = fmt_window(static_cast<int>(s->hist.temp.size()), s->period_s);
-            rows.push_back(info("Highest", {fmt_temp(s->hist.temp.max()) + " in " + window, fmt_temp(s->hist.temp.max())}));
+            const double top = s->hist.temp.max();
+            rows.push_back(info("Highest", {fmt_temp(top) + " in " + window, fmt_temp(top)}, temp_tone(temp_state(top))));
         }
     } else {
         rows.push_back(info("CPU temperature", {"Unknown"}));
@@ -457,9 +556,11 @@ std::vector<Row> thermal_rows(const Snapshot *s)
         rows.push_back(info("Fan", v));
     }
     if (s->power.source == PowerSource::Firmware) {
-        for (int f = 0; f < kFlagCount; ++f) rows.push_back(info(flag_name(f), flag_values(s->power.flags[f], false)));
+        for (int f = 0; f < kFlagCount; ++f)
+            rows.push_back(info(flag_name(f), flag_values(s->power.flags[f], false), flag_tone(f, s->power.flags[f])));
     } else if (s->power.source == PowerSource::Alarm) {
-        rows.push_back(info(flag_name(kUnderVoltage), flag_values(s->power.flags[kUnderVoltage], true)));
+        const FlagState &uv = s->power.flags[kUnderVoltage];
+        rows.push_back(info(flag_name(kUnderVoltage), flag_values(uv, true), flag_tone(kUnderVoltage, uv)));
     }
     if (s->power.supply_ok) rows.push_back(info("Supply (5 V input)", {fmt_volts(s->power.supply_v)}));
     if (s->power.core_ok) rows.push_back(info("Core voltage", {fmt_volts(s->power.core_v)}));
@@ -478,11 +579,11 @@ std::vector<Row> thermal_rows(const Snapshot *s)
 std::vector<Row> storage_rows(const Snapshot *s)
 {
     std::vector<Row> rows;
-    if (!s) return {busy("Reading")};
+    if (!s) return rows;
     for (const FsInfo &f : s->fs) {
         const std::string pct = fmt_pct(f.pct());
         const std::string used = fmt_used_of(f.used, f.total);
-        rows.push_back(info(f.dir, {used + " (" + pct + ")", used, pct}));
+        rows.push_back(info(f.dir, {used + " (" + pct + ")", used, pct}, use_tone(f.pct(), kFullWarn, kFullError)));
     }
     if (s->fs.empty()) rows.push_back(info("Filesystems", {"None found"}));
     if (s->disk.ok) {
@@ -500,9 +601,9 @@ std::vector<Row> storage_rows(const Snapshot *s)
 std::vector<Row> network_rows(const Snapshot *s)
 {
     std::vector<Row> rows;
-    if (!s) return {busy("Reading")};
+    if (!s) return rows;
     for (const NetInfo &n : s->net) {
-        rows.push_back(heading(n.name + (n.wireless ? " (Wi-Fi)" : "")));
+        rows.push_back(section(n.name + (n.wireless ? " (Wi-Fi)" : "")));
         rows.push_back(info("State", {n.state}));
         rows.push_back(info("Address", {n.ipv4.empty() ? "None" : n.ipv4}));
         if (n.wireless) {
@@ -538,11 +639,8 @@ std::string fmt_proc_cpu(double pct)
 std::vector<Row> process_rows(const Snapshot *s, SortBy by)
 {
     std::vector<Row> rows;
+    if (!s || !s->procs_valid) return rows;
     rows.push_back(nav("Sort by", {by == SortBy::Cpu ? "CPU" : "Memory"}, kRowSort));
-    if (!s || !s->procs_valid) {
-        rows.push_back(busy("Reading processes"));
-        return rows;
-    }
     const std::vector<ProcRow> &list = by == SortBy::Cpu ? s->top_cpu : s->top_mem;
     for (std::size_t i = 0; i < list.size() && i < static_cast<std::size_t>(kTopProcs); ++i) {
         const ProcRow &p = list[i];
@@ -567,6 +665,12 @@ std::string process_caption(const ProcRow &p)
 {
     return "pid " + std::to_string(p.pid) + ", " + proc_state_name(p.state) + ", " + fmt_bytes(p.rss_bytes) + ", " +
            fmt_proc_cpu(p.cpu_pct) + " CPU";
+}
+
+std::string process_summary(const Snapshot &s)
+{
+    return "Top " + std::to_string(std::min<std::size_t>(kTopProcs, s.top_cpu.size())) + " of " +
+           std::to_string(s.proc_count) + " processes, %CPU of one core";
 }
 
 /* ---------------------------------------------------------------- about, period */

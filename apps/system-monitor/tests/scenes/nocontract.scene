@@ -9,7 +9,8 @@ wait 600
 shot overview-nocontract
 tap "System"
 wait 800
-key up
+# a read-only list: End scrolls to the last rows
+key end
 wait 600
 shot about-nocontract
 expect text "no contract"

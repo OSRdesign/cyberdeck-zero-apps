@@ -21,7 +21,7 @@ key down
 key down
 wait 600
 shot memory-top
-expect text "Top processes by memory"
+expect text "TOP PROCESSES BY MEMORY"
 expect text "chromium"
 
 key left
