@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  *
  * System Monitor: the app's screen (see monitor_app.hpp). Layout from the layout service only (the roller page, the
- * tokens and the text sizes); the texts and the logic are in core/.
+ * list layout, the tokens and the text sizes); the texts and the logic are in core/.
  */
 #include "monitor_app.hpp"
 
@@ -22,6 +22,16 @@ namespace {
 
 constexpr int kTickMs = 200;
 
+cp0::ui::ValueTone value_tone(Tone tone)
+{
+    switch (tone) {
+    case Tone::Good: return cp0::ui::ValueTone::Ok;
+    case Tone::Warn: return cp0::ui::ValueTone::Warn;
+    case Tone::Error: return cp0::ui::ValueTone::Bad;
+    default: return cp0::ui::ValueTone::Normal;
+    }
+}
+
 } // namespace
 
 MonitorApp::MonitorApp(lv_obj_t *screen)
@@ -35,15 +45,16 @@ MonitorApp::MonitorApp(lv_obj_t *screen)
     sampler_ = std::make_unique<Sampler>(std::move(source), settings_.period_s);
 
     cp0_ui_roller_page(cp0_ui_metrics_get(), cp0::ui::status_strip_left(), &layout_);
-    label_font_ = cp0_fonts().get("Montserrat-Bold.ttf", static_cast<uint16_t>(layout_.text_px));
-    value_font_ = cp0_fonts().get("Montserrat-Medium.ttf", static_cast<uint16_t>(layout_.value_px));
-    if (!label_font_) label_font_ = cp0_ui_font_px(layout_.text_px);
-    if (!value_font_) value_font_ = cp0_ui_font_px(layout_.value_px);
+    // the compact list's text sizes and insets (the same on every page): the fonts the values are fitted with
+    cp0_ui_list_page_layout(cp0_ui_metrics_get(), &layout_, CP0_UI_LIST_COMPACT, &list_layout_);
+    label_font_ = cp0_fonts().get("Montserrat-Bold.ttf", static_cast<uint16_t>(list_layout_.text_px));
+    value_font_ = cp0_fonts().get("Montserrat-Medium.ttf", static_cast<uint16_t>(list_layout_.value_px));
+    if (!label_font_) label_font_ = cp0_ui_font_px(list_layout_.text_px);
+    if (!value_font_) value_font_ = cp0_ui_font_px(list_layout_.value_px);
     page_ = std::make_unique<cp0::ui::Page>(screen, layout_, cp0::ui::add_title, [this] {
         post([this] { back(); });
     });
     cp0::ui::StatusStrip::add(page_->header());
-    page_->set_caption_wrap(true); /* the Processes page's line: up to 3 lines above the centre row, never dots */
 
     std::fprintf(stderr, "[system-monitor] %s, every %d s, screen %dx%d\n", sampler_->describe().c_str(),
                  settings_.period_s, layout_.w, layout_.h);
@@ -57,9 +68,11 @@ MonitorApp::~MonitorApp()
     if (timer_) lv_timer_delete(timer_);
     lv_async_call_cancel(posted_cb, this);
     sampler_.reset(); /* the thread stopped and joined (a running vcgencmd ends within its 1 s timeout) */
+    list_.reset();
     roller_.reset();
     grid_.reset();
     chart_.reset();
+    status_.reset();
     page_.reset();
 }
 
@@ -72,7 +85,7 @@ void MonitorApp::posted_cb(void *data)
     for (auto &fn : fns) fn();
 }
 
-/* Roller and Esc callbacks run inside an LVGL event of the roller: what replaces the roller runs after it. */
+/* List, roller and Esc callbacks run inside an LVGL event of the widget: what replaces the widget runs after it. */
 void MonitorApp::post(std::function<void()> fn)
 {
     posted_.push_back(std::move(fn));
@@ -88,12 +101,10 @@ void MonitorApp::tick_cb(lv_timer_t *timer)
 void MonitorApp::tick()
 {
     const std::uint64_t seq = sampler_->seq();
-    if (seq != shown_seq_) {
-        shown_seq_ = seq;
-        snap_ = sampler_->latest();
-        refresh();
-    }
-    update_caption(false);
+    if (seq == shown_seq_) return;
+    shown_seq_ = seq;
+    snap_ = sampler_->latest();
+    refresh();
 }
 
 void MonitorApp::focus(lv_obj_t *obj)
@@ -120,23 +131,24 @@ void MonitorApp::open(View view, int from_row)
     build_view(0);
 }
 
-/* The current page: the panel at the top of the body (none on Processes, System, Sampling), the roller in the room
- * under it, the rows of the last sample. */
+/* The current page: the panel at the top of the body (the chart on the detail pages, the status line on Processes,
+ * none on System), the list in the whole room under it, the rows of the last sample; Sampling: the roller. */
 void MonitorApp::build_view(int select)
 {
     const View view = nav_.current();
     sampler_->set_want_procs(view_wants_procs(view));
     sampler_->set_want_link(view_wants_link(view));
+    list_.reset();
     roller_.reset();
     grid_.reset();
     chart_.reset();
-    specs_.clear();
+    status_.reset();
     rows_.clear();
-    caption_row_ = -2;
+    items_.clear();
     page_->set_caption("", cp0::ui::CaptionTone::Normal);
     page_->set_title(view == View::Overview ? std::vector<std::string>{kAppTitle}
                                             : std::vector<std::string>{kAppTitle, view_title(view)});
-    if (view == View::Overview) { /* the tile grid (overview.hpp): no roller */
+    if (view == View::Overview) { /* the tile grid (overview.hpp) */
         OverviewGrid::Events events;
         events.open = [this](int index) { post([this, index] { open_item(index); }); };
         events.back = [this] { post([this] { back(); }); };
@@ -145,7 +157,26 @@ void MonitorApp::build_view(int select)
         focus(grid_->focus_object());
         return;
     }
+    if (view == View::Period) { /* a choice of three: the roller (the Settings look, a check on the current one) */
+        cp0::ui::RollerEvents events;
+        events.activate = [this](int row) { post([this, row] { activate(row); }); };
+        events.back = [this] { post([this] { back(); }); };
+        roller_ = std::make_unique<cp0::ui::Roller>(page_->root(), layout_, std::move(events));
+        rows_ = rows_now();
+        std::vector<cp0::ui::RowSpec> specs;
+        for (const Row &r : rows_) {
+            cp0::ui::RowSpec spec;
+            spec.kind = cp0::ui::RowKind::Choice;
+            spec.label = r.label;
+            spec.on = r.on;
+            specs.push_back(spec);
+        }
+        roller_->set_rows(specs, std::clamp(select, 0, std::max(0, static_cast<int>(specs.size()) - 1)), false);
+        focus(roller_->focus_object());
+        return;
+    }
 
+    // the panel on top: the chart (detail pages) or the status line (Processes)
     const int s = cp0_ui_tok(CP0_TOK_SPACE_S);
     Box box;
     box.x = layout_.roller_x;
@@ -166,28 +197,39 @@ void MonitorApp::build_view(int select)
         }
         break;
     }
+    case View::Processes:
+        box.h = StatusLine::height();
+        status_ = std::make_unique<StatusLine>(page_->root(), box);
+        break;
     default: box.h = 0; break;
     }
 
-    cp0_ui_roller_page_t sub = layout_;
+    // the list: the room under the panel (the whole body without one), top-aligned
+    cp0_ui_list_layout_t l{};
     if (box.h > 0) {
-        sub.body_y = box.y + box.h + s;
-        sub.body_h = layout_.body_y + layout_.body_h - sub.body_y;
-        sub.edge_pad = cp0_ui_roller_edge_pad(sub.body_h, sub.row_h);
-        sub.list_h = sub.row_h + 2 * sub.edge_pad;
+        const int y = box.y + box.h + s;
+        cp0_ui_list_layout(cp0_ui_metrics_get(), CP0_UI_LIST_COMPACT, layout_.roller_x, y, layout_.roller_w,
+                           layout_.body_y + layout_.body_h - y, &l);
+    } else {
+        cp0_ui_list_page_layout(cp0_ui_metrics_get(), &layout_, CP0_UI_LIST_COMPACT, &l);
     }
-    cp0::ui::RollerEvents events;
-    events.activate = [this](int row) { post([this, row] { activate(row); }); };
+    cp0::ui::CompactListEvents events;
+    events.activate = [this](int index, std::intptr_t) { post([this, index] { activate(index); }); };
+    events.selected = [this](int) { update_status(); };
     events.back = [this] { post([this] { back(); }); };
-    roller_ = std::make_unique<cp0::ui::Roller>(page_->root(), sub, std::move(events));
+    cp0::ui::CompactListOptions options;
+    options.read_only = view_read_only(view);
+    options.empty_text = view_empty_text(view);
+    list_ = std::make_unique<cp0::ui::CompactList>(page_->root(), l, std::move(events), options);
 
     rows_ = rows_now();
-    for (const Row &r : rows_) specs_.push_back(spec_of(r));
-    roller_->set_rows(specs_, std::clamp(select, 0, std::max(0, static_cast<int>(specs_.size()) - 1)),
-                      view != View::Period);
+    items_ = list_items(rows_, l.w - 2 * l.inset, l.gap, [this](const std::string &t, bool value) {
+        return text_width(t.c_str(), value ? value_font_ : label_font_);
+    });
+    list_->reset_rows(list_rows(), select);
     refresh_panel();
-    update_caption(true);
-    focus(roller_->focus_object());
+    update_status();
+    focus(list_->focus_object());
 }
 
 std::vector<Row> MonitorApp::rows_now() const
@@ -207,75 +249,34 @@ std::vector<Row> MonitorApp::rows_now() const
     return {};
 }
 
-/* The first value that fits beside the label on the centre row (the roller's own fonts), else the shortest. */
-std::string MonitorApp::fit(const std::string &label, const std::vector<std::string> &values) const
+std::vector<cp0::ui::ListRow> MonitorApp::list_rows() const
 {
-    if (values.empty()) return std::string();
-    const int room = layout_.roller_w - 2 * layout_.inset - layout_.gap - text_width(label.c_str(), label_font_);
-    for (const std::string &v : values)
-        if (text_width(v.c_str(), value_font_) <= room) return v;
-    return values.back();
+    std::vector<cp0::ui::ListRow> rows;
+    rows.reserve(items_.size());
+    for (const ListItem &it : items_)
+        rows.push_back(it.section ? cp0::ui::ListRow::section(it.label)
+                                  : cp0::ui::ListRow::item(it.label, it.value, value_tone(it.tone), it.id));
+    return rows;
 }
 
-cp0::ui::RowSpec MonitorApp::spec_of(const Row &row) const
-{
-    cp0::ui::RowSpec spec;
-    spec.label = row.label;
-    switch (row.type) {
-    case RowType::Nav:
-        spec.kind = cp0::ui::RowKind::Nav;
-        spec.value = fit(row.label, row.values);
-        spec.value_rgb = row.tone == Tone::Normal ? -1 : static_cast<int>(tone_rgb(row.tone, kRgbValue));
-        break;
-    case RowType::Info:
-        spec.kind = cp0::ui::RowKind::Info;
-        spec.value = fit(row.label, row.values);
-        break;
-    case RowType::Choice:
-        spec.kind = cp0::ui::RowKind::Choice;
-        spec.on = row.on;
-        break;
-    case RowType::Busy: spec.kind = cp0::ui::RowKind::Busy; break;
-    }
-    return spec;
-}
-
-/* A new sample: the rows whose text changed, or all of them when the list changed; then the panel. A row whose texts
- * did not change keeps its fitted value (no text measuring), and the roller is not touched for it. */
+/* A new sample: the rows again; a row whose texts did not change keeps its fitted value (no text measuring), and the
+ * list touches only what changed (set_rows: scroll offset and highlight kept). Then the panel. */
 void MonitorApp::refresh()
 {
     if (grid_) {
         grid_->update(snap_.get(), sampler_->period());
         return;
     }
-    if (!roller_) return;
+    if (!list_) return; /* Sampling: nothing live */
     std::vector<Row> rows = rows_now();
-    std::vector<cp0::ui::RowSpec> specs;
-    specs.reserve(rows.size());
-    for (std::size_t i = 0; i < rows.size(); ++i) {
-        const Row &r = rows[i];
-        const bool same = i < rows_.size() && i < specs_.size() && rows_[i].type == r.type &&
-                          rows_[i].label == r.label && rows_[i].values == r.values && rows_[i].tone == r.tone &&
-                          rows_[i].on == r.on;
-        specs.push_back(same ? specs_[i] : spec_of(r));
-    }
-    bool same_shape = specs.size() == specs_.size();
-    for (std::size_t i = 0; same_shape && i < specs.size(); ++i) same_shape = specs[i].kind == specs_[i].kind;
-    if (!same_shape) {
-        const int sel = roller_->selected();
-        roller_->set_rows(specs, std::clamp(sel, 0, std::max(0, static_cast<int>(specs.size()) - 1)),
-                          nav_.current() != View::Period);
-    } else {
-        for (std::size_t i = 0; i < specs.size(); ++i) {
-            const cp0::ui::RowSpec &a = specs[i], &b = specs_[i];
-            if (a.label != b.label || a.value != b.value || a.value_rgb != b.value_rgb || a.on != b.on)
-                roller_->update_row(static_cast<int>(i), a);
-        }
-    }
+    const cp0_ui_list_layout_t &l = list_->layout();
+    items_ = list_items(rows, rows_, items_, l.w - 2 * l.inset, l.gap, [this](const std::string &t, bool value) {
+        return text_width(t.c_str(), value ? value_font_ : label_font_);
+    });
     rows_ = std::move(rows);
-    specs_ = std::move(specs);
+    list_->set_rows(list_rows());
     refresh_panel();
-    update_caption(true);
+    update_status();
 }
 
 void MonitorApp::refresh_panel()
@@ -331,23 +332,19 @@ void MonitorApp::refresh_panel()
 }
 
 /* The Processes page's status line: the highlighted process (pid, state, memory, CPU), or what the list is. */
-void MonitorApp::update_caption(bool force)
+void MonitorApp::update_status()
 {
-    if (nav_.current() != View::Processes || !roller_) return;
-    const int sel = roller_->selected();
-    if (!force && sel == caption_row_) return;
-    caption_row_ = sel;
+    if (!status_ || !list_) return;
     const Snapshot *s = snap_.get();
+    const int sel = list_->selected();
     std::string text;
-    if (s && s->procs_valid && sel >= 0 && sel < static_cast<int>(rows_.size()) && rows_[sel].type == RowType::Info) {
-        const std::vector<ProcRow> &list = sort_ == SortBy::Cpu ? s->top_cpu : s->top_mem;
-        const int i = rows_[sel].id;
-        if (i >= 0 && i < static_cast<int>(list.size())) text = process_caption(list[static_cast<std::size_t>(i)]);
-    } else if (s && s->procs_valid) {
-        text = "Top " + std::to_string(std::min<std::size_t>(kTopProcs, s->top_cpu.size())) + " of " +
-               std::to_string(s->proc_count) + " processes, %CPU of one core";
+    if (s && s->procs_valid) {
+        const std::vector<ProcRow> &procs = sort_ == SortBy::Cpu ? s->top_cpu : s->top_mem;
+        const int i = sel >= 0 && sel < static_cast<int>(rows_.size()) ? rows_[static_cast<std::size_t>(sel)].id : -1;
+        if (i >= 0 && i < static_cast<int>(procs.size())) text = process_caption(procs[static_cast<std::size_t>(i)]);
+        else text = process_summary(*s);
     }
-    page_->set_caption(text, cp0::ui::CaptionTone::Normal);
+    status_->set_text(text);
 }
 
 /* A tile (0 .. kTileCount - 1) or a footer item of the overview: its page; the focus comes back to it. */

@@ -207,4 +207,23 @@ void HistoryPanel::refresh()
     lv_chart_refresh(chart_);
 }
 
+/* ------------------------------------------------------------------ the status line */
+
+int StatusLine::height() { return line_height(); }
+
+StatusLine::StatusLine(lv_obj_t *parent, const Box &box)
+{
+    label_ = text(parent, kRgbOk);
+    lv_label_set_long_mode(label_, LV_LABEL_LONG_MODE_DOTS);
+    lv_obj_set_pos(label_, box.x, box.y);
+    lv_obj_set_size(label_, box.w, line_height()); /* one line: dots, never a wrap */
+}
+
+StatusLine::~StatusLine()
+{
+    if (label_) lv_obj_delete(label_);
+}
+
+void StatusLine::set_text(const std::string &t) { set_text_if(label_, t); }
+
 } // namespace sm

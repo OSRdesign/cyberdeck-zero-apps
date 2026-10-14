@@ -1,13 +1,16 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * System Monitor: the graphic panel above a detail page's roller (LVGL thread only). Not interactive: the roller under
- * them keeps every key and tap. Sizes come from the layout service (the roller page: row, gap, inset; the CAPTION
- * text size; SPACE_S, RADIUS_S); colours from the launcher's palette (APP-GUIDELINES, report 024 section 5).
+ * System Monitor: the panels above a detail page's list (LVGL thread only). Not interactive: the list under them keeps
+ * every key and tap. Sizes come from the layout service (the roller page: row, gap, inset; the CAPTION text size;
+ * SPACE_S, RADIUS_S); colours from the launcher's palette (APP-GUIDELINES, report 024 section 5).
  *
  *   HistoryPanel  a detail page's chart: a title line (one coloured text per series, the scale and the time window
  *                 at the right) over an lv_chart line chart of the last 120 samples, newest at the right edge; optional
  *                 constant lines (the 70 / 80 °C marks).
+ *   StatusLine    the Processes page's line over its list (the highlighted process): one line of CAPTION text in the
+ *                 page status line's green, as wide as the list, cut with dots. It has its own band: the list starts
+ *                 under it, so nothing is drawn over a row.
  */
 #pragma once
 
@@ -52,8 +55,8 @@ public:
     HistoryPanel(const HistoryPanel &) = delete;
     HistoryPanel &operator=(const HistoryPanel &) = delete;
 
-    /* the panel's height for a body (under the header) of body_h: two rows, up to 2/5 of the body, leaving the
-     * roller at least three rows */
+    /* the panel's height for a body (under the header) of body_h: two ROW tokens, up to 2/5 of the body, leaving
+     * at least three ROW tokens under it (four or more rows of the compact list) */
     static int height_for(const cp0_ui_roller_page_t &layout);
 
     /* titles: one per series ("" hides the second); range: "0-100%, last 2 min" (shortened to "0-100%" when the
@@ -82,6 +85,20 @@ private:
     std::uint32_t shown_rgb_ = 0xFFFFFFFFu;
     std::int32_t lo_ = 0, hi_ = 100;
     bool dirty_ = true; /* a point or the scale changed since the last refresh() */
+};
+
+class StatusLine {
+public:
+    StatusLine(lv_obj_t *parent, const Box &box);
+    ~StatusLine();
+    StatusLine(const StatusLine &) = delete;
+    StatusLine &operator=(const StatusLine &) = delete;
+
+    static int height(); /* one line of the CAPTION text */
+    void set_text(const std::string &text); /* only when it changed */
+
+private:
+    lv_obj_t *label_ = nullptr;
 };
 
 } // namespace sm

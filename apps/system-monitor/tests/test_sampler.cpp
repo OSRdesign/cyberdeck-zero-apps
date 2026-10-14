@@ -166,6 +166,36 @@ void zero()
     CHECK_EQ(foot[kFootPeriod][0], std::string("Every 1 s"));
     CHECK_EQ(foot[kFootSystem][0], std::string("System"));
 
+    // the pages' rows of this snapshot (what the lists show)
+    const std::vector<Row> cpu = cpu_rows(snap.get());
+    CHECK_EQ(cpu[0].label, std::string("Total"));
+    CHECK_EQ(cpu[0].values[0], std::string("25%"));
+    CHECK(cpu[3].label == "Core 2" && cpu[3].tone == Tone::Normal); /* 55 % */
+    const Row *heading = find_row(cpu, "Top processes by CPU");
+    CHECK(heading && heading->type == RowType::Section);
+    CHECK(find_row(cpu, "Reading processes") != nullptr); /* no process table yet: it says so */
+    CHECK_EQ(cpu.back().id, kRowAllProcs);
+    CHECK(process_rows(snap.get(), SortBy::Cpu).empty()); /* the list shows "Reading processes..." */
+    const std::vector<Row> th = thermal_rows(snap.get());
+    CHECK_EQ(th[0].label, std::string("Power"));
+    CHECK_EQ(th[0].values[0], std::string("OK"));
+    CHECK(th[0].tone == Tone::Good);
+    CHECK(find_row(th, "Check the power supply") == nullptr); /* only while under-voltage now */
+    CHECK(find_row(th, "CPU temperature")->tone == Tone::Normal); /* 48 °C */
+    CHECK(find_row(th, "Under-voltage")->tone == Tone::Good);     /* never since boot */
+    const std::vector<Row> st = storage_rows(snap.get());
+    CHECK(st[0].label == "/" && st[0].tone == Tone::Normal);      /* 19 % */
+    CHECK_EQ(st[0].values[0], std::string("5.2 / 29 GB (19%)"));
+    const std::vector<Row> net = network_rows(snap.get());
+    CHECK(net[0].type == RowType::Section && net[0].label == "wlan0 (Wi-Fi)");
+    CHECK_EQ(find_row(net, "Network")->values[0], std::string("DeckNet"));
+    CHECK_EQ(net.back().label, std::string("Bluetooth"));
+    // what the list shows at the deck's 640x480 (about 15 px per label character, 13 per value character, 528 px)
+    const TextWidth deck = [](const std::string &t, bool value) { return static_cast<int>(t.size()) * (value ? 13 : 15); };
+    const std::vector<ListItem> items = list_items(th, 528, 8, deck);
+    CHECK_EQ(items.size(), th.size());
+    CHECK(items[0].label == "Power" && items[0].value == "OK" && items[0].tone == Tone::Good);
+
     // the period: the history starts again
     s.set_period(5);
     s.step();
@@ -200,12 +230,33 @@ void pi3a()
     CHECK_EQ(ov[kTileCpu].detail[0], std::string("600 / 1400 MHz, load 4.21"));
     CHECK_EQ(ov[kTileNet].hint, std::string("wlan0 -69 dBm"));
     const std::vector<Row> th = thermal_rows(snap.get());
-    CHECK_EQ(th[0].label, std::string("Under-voltage now: check the power supply"));
-    CHECK(th[0].values.empty());
+    CHECK_EQ(th[0].label, std::string("Power"));
+    CHECK_EQ(th[0].values[0], std::string("Under-voltage now"));
+    CHECK(th[0].tone == Tone::Error);
+    // the advice: an item of its own right under the Power row, no value
+    CHECK(th[1].type == RowType::Item && th[1].label == "Check the power supply" && th[1].values.empty());
     CHECK_EQ(find_row(th, "Under-voltage")->values[0], std::string("now"));
+    CHECK(find_row(th, "Under-voltage")->tone == Tone::Error);
     CHECK_EQ(find_row(th, "Throttled")->values[0], std::string("now"));
+    CHECK(find_row(th, "Throttled")->tone == Tone::Error);
     CHECK_EQ(find_row(th, "Soft temp limit")->values[0], std::string("never since boot"));
+    CHECK(find_row(th, "Soft temp limit")->tone == Tone::Good);
     CHECK_EQ(find_row(th, "Firmware flags")->values[0], std::string("0x50005 (vcgencmd)"));
+    // the 93 % full card: amber; the boot partition: not
+    const std::vector<Row> st = storage_rows(snap.get());
+    CHECK(st[0].label == "/" && st[0].tone == Tone::Warn);
+    CHECK(find_row(st, "/boot/firmware") && find_row(st, "/boot/firmware")->tone == Tone::Normal);
+    CHECK(find_row(st, "/media/pi/USB STICK") != nullptr);
+    // the deck's row: the power state shortened so that "Power" stays whole, in red
+    const TextWidth deck = [](const std::string &t, bool value) { return static_cast<int>(t.size()) * (value ? 13 : 15); };
+    const std::vector<ListItem> items = list_items(th, 528, 8, deck);
+    CHECK_EQ(items[0].value, std::string("Under-voltage now"));
+    CHECK(items[0].tone == Tone::Error);
+    // the advice row fits the deck's row whole ("Check the power supply": 22 x 15 = 330 of 528 px)
+    CHECK(items[1].label == "Check the power supply" && items[1].value.empty());
+    CHECK(deck(items[1].label, false) <= 528);
+    // a wide screen: the same short state (the advice is its own row)
+    CHECK_EQ(list_items(th, 1000, 8, deck)[0].value, std::string("Under-voltage now"));
 }
 
 void pi5()
@@ -232,11 +283,16 @@ void pi5()
     CHECK(snap->bt == BtState::Off);
     CHECK_EQ(snap->sys.firmware, std::string("2025-03-10 (2bb2ae6)"));
     const std::vector<Row> th = thermal_rows(snap.get());
-    CHECK_EQ(th[0].label, std::string("Power OK"));
+    CHECK_EQ(th[0].label, std::string("Power"));
+    CHECK_EQ(th[0].values[0], std::string("OK"));
     CHECK_EQ(find_row(th, "Fan")->values[0], std::string("Level 2 of 4, 3120 rpm"));
     CHECK_EQ(find_row(th, "Supply (5 V input)")->values[0], std::string("5.13 V"));
     const std::vector<Row> net = network_rows(snap.get());
     CHECK_EQ(net[0].label, std::string("eth0"));
+    CHECK(net[0].type == RowType::Section);
+    int sections = 0;
+    for (const Row &r : net) sections += r.type == RowType::Section;
+    CHECK_EQ(sections, 2); /* eth0, wlan0 */
     CHECK_EQ(find_row(net, "Bluetooth")->values[0], std::string("Off"));
 }
 
@@ -255,8 +311,11 @@ void missing_vcgencmd()
         CHECK(snap->sys.firmware.empty());
         CHECK_EQ(f->vc_calls, 1); /* asked once, never again */
         const std::vector<Row> th = thermal_rows(snap.get());
-        CHECK_EQ(th[0].label, std::string("Under-voltage now: check the power supply"));
+        CHECK_EQ(th[0].label, std::string("Power"));
+        CHECK_EQ(th[0].values[0], std::string("Under-voltage now"));
+        CHECK_EQ(th[1].label, std::string("Check the power supply"));
         CHECK(find_row(th, "Throttled") == nullptr);
+        CHECK(find_row(th, "Under-voltage")->tone == Tone::Error);
         CHECK_EQ(find_row(th, "Source")->values[0], std::string("rpi_volt alarm only"));
     }
     // neither vcgencmd nor the alarm: silently no power row
@@ -271,7 +330,7 @@ void missing_vcgencmd()
         const std::vector<TileText> ov = overview_tiles(snap.get());
         CHECK_EQ(ov[kTilePower].value[0], std::string("Unknown"));
         CHECK(ov[kTilePower].value_dim);
-        CHECK(thermal_rows(snap.get())[0].label != std::string("Power OK"));
+        CHECK(find_row(thermal_rows(snap.get()), "Power") == nullptr);
     }
     // vcgencmd refused (not in the video group): said once, with the fix
     {
@@ -286,7 +345,11 @@ void missing_vcgencmd()
         const std::vector<TileText> ov = overview_tiles(snap.get());
         CHECK_EQ(ov[kTilePower].value[0], std::string("No access"));
         CHECK(ov[kTilePower].frame_tone == Tone::Warn);
-        CHECK(thermal_rows(snap.get())[0].label.find("sudo usermod -aG video") != std::string::npos);
+        const std::vector<Row> th = thermal_rows(snap.get());
+        CHECK_EQ(th[0].label, std::string("Power"));
+        CHECK_EQ(th[0].values[0], std::string("No access: needs the video group"));
+        CHECK(th[0].tone == Tone::Warn);
+        CHECK_EQ(find_row(th, "Fix")->values[0], std::string("sudo usermod -aG video $USER"));
     }
 }
 
@@ -314,6 +377,20 @@ void scenario()
     CHECK_EQ(pr[0].label, std::string("Sort by"));
     CHECK_EQ(pr[1].label, std::string("stress-ng"));
     CHECK(pr.size() == 9); /* Sort by + the 8 processes of the scenario */
+    for (std::size_t i = 1; i < pr.size(); ++i) CHECK_EQ(pr[i].id, static_cast<int>(i - 1));
+    // the CPU page: the section, then the top 5 by CPU, then All processes
+    const std::vector<Row> cpu = cpu_rows(snap.get());
+    std::size_t at = 0;
+    while (at < cpu.size() && cpu[at].type != RowType::Section) ++at;
+    CHECK(at + 7 == cpu.size()); /* section, 5 processes, All processes */
+    if (at + 7 == cpu.size()) {
+        CHECK_EQ(cpu[at + 1].label, std::string("stress-ng"));
+        CHECK(cpu[at + 6].id == kRowAllProcs);
+    }
+    CHECK(cpu[0].tone == use_tone(snap->cpu.total, 80, 95));
+    const std::vector<Row> mem = memory_rows(snap.get());
+    CHECK_EQ(find_row(mem, "Top processes by memory")->type == RowType::Section, true);
+    CHECK(find_row(mem, "applaunch") != nullptr);
     // the hot Pi 5
     Sampler h(make_fixture_source(fixture_dir("pi-5"), "hot"), 1);
     h.start();
@@ -330,6 +407,19 @@ void scenario()
         CHECK_EQ(ov[kTilePower].value[0], std::string("Throttled"));
         CHECK(ov[kTilePower].frame_tone == Tone::Error);
         CHECK(hot->hist.rx.size() >= kHistory - 1);
+        // Temp & power: red temperature and state, the throttled sentence shortened on the deck
+        const std::vector<Row> th = thermal_rows(hot.get());
+        CHECK_EQ(th[0].values[0], std::string("Throttled now: the CPU is too hot"));
+        CHECK(th[0].tone == Tone::Error);
+        CHECK(find_row(th, "Check the power supply") == nullptr);
+        CHECK(find_row(th, "CPU temperature")->tone == Tone::Error);
+        CHECK(find_row(th, "State")->tone == Tone::Error);
+        CHECK(find_row(th, "Soft temp limit")->tone == Tone::Warn);
+        const TextWidth deck = [](const std::string &t, bool value) {
+            return static_cast<int>(t.size()) * (value ? 13 : 15);
+        };
+        CHECK_EQ(list_items(th, 528, 8, deck)[0].value, std::string("Throttled now: the CPU is too hot"));
+        CHECK_EQ(list_items(th, 480, 8, deck)[0].value, std::string("Throttled now: too hot")); /* a narrower row */
     }
 }
 

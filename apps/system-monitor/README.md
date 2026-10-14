@@ -1,6 +1,6 @@
 # System Monitor
 
-Version 0.1.0 (draft, not published yet), package `system-monitor`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.2.0 (draft, not published yet), package `system-monitor`. Part of [cyberdeck-zero-apps](../../README.md).
 
 System Monitor is a live, read-only look at the Raspberry Pi it runs on: CPU load per core, temperature, frequency,
 memory, storage, network, processes and the **power supply** (under-voltage and throttling from the firmware's flags,
@@ -39,8 +39,8 @@ To be added from the deck and the Pi 3A+ (640x480 and 800x480). Until then the h
   the governor, the load average, running / total tasks, the uptime, the top 5 processes by CPU and *All processes*.
 * **Memory**: a chart of RAM (green) and swap (blue) use; used (with %), available, cache, buffers, free, shared,
   swap; the top 5 processes by memory and *All processes*. "Used" is counted as `free` counts it: total minus available.
-* **Temp & power**: a chart of the CPU temperature with the 70 °C (amber) and 80 °C (red) marks; the power sentence
-  first; temperature, state (OK / warm / hot), the highest value of the chart; the fan (level of the cooling device and
+* **Temp & power**: a chart of the CPU temperature with the 70 °C (amber) and 80 °C (red) marks; the power state
+  first (*Under-voltage now* in red with the row *Check the power supply* right under it, only in that state); temperature, state (OK / warm / hot), the highest value of the chart; the fan (level of the cooling device and
   speed in rpm) when there is one; then each firmware flag (*Under-voltage*, *Frequency capped*, *Throttled*, *Soft temp
   limit*) with *now*, the time since boot of the last event the app saw (*last 0:41:12 after boot*), *before the app
   started* (the firmware's "has occurred" bit with no event seen) or *never since boot*; the 5 V input on a Pi 5 /
@@ -61,8 +61,14 @@ To be added from the deck and the Pi 3A+ (640x480 and 800x480). Until then the h
 * **Sampling**: every second, 2 or 5 seconds; remembered. Changing it starts the charts again (their samples would no
   longer be evenly spaced); at 5 s a chart covers 10 minutes.
 
-Values refresh once per period on a thread of their own; the screen never waits for them. Rates and percentages need
-two samples: they appear a third of a second after the start.
+The pages' lists are the launcher's `cp0::ui::CompactList`: top-aligned dense rows under the chart, a label on the left
+and its value on the right; the list scrolls only when the highlight reaches the bottom of the screen, with a thin
+scrollbar at the right edge that hides itself when the list stops. Section headings (*TOP PROCESSES BY CPU*, an
+interface's name) are drawn in grey capitals and are not selectable.
+
+Values refresh once per period on a thread of their own; the screen never waits for them, and a refresh changes only
+the texts that changed (the scroll and the highlight stay). Rates and percentages need two samples: they appear a
+third of a second after the start.
 
 ## Keys and touch
 
@@ -70,14 +76,16 @@ two samples: they appear a third of a second after the start.
 |---|---|---|
 | Overview: move the blue ring between the tiles and the footer items | the arrows, by position (Left / Right in a row, Up / Down across rows and down to the footer) | |
 | Overview: open a tile's page or a footer item | Enter | **one tap** on the tile or the item (a tile is a large target: no first tap to highlight) |
-| A page: move through the rows | Up / Down | a tap on a row highlights it; drag to scroll |
-| A page: open a row, switch Sort by, choose a period | Enter or Right | a tap on the highlighted row |
+| A page: move the highlight (CPU, Memory, Processes) | Up / Down | a tap on a row highlights it; swipe to scroll |
+| A read-only page (Temp & power, Storage, Network, System): scroll | Up / Down, one row per press | swipe |
+| A page: open *All processes*, switch *Sort by*, choose a period | Enter or Right | a tap on the highlighted row |
 | Back one page (the ring comes back to the tile you opened) | Esc (or Left on a page) | the header's Esc |
 | Quit (at the overview) | a short Esc | the header's Esc |
 | Stop a stuck app | hold Esc 3 s (the launcher's watchdog) | |
 
-On the overview Left / Right move the ring, so going back is Esc only. The charts and history lines are not touch
-targets: every function is a tile, a footer item or a row.
+On the overview Left / Right move the ring, so going back is Esc only. Read-only pages have no highlight and Enter
+does nothing there; on the other pages Enter on a plain value row does nothing either. The charts and history lines
+are not touch targets: every function is a tile, a footer item or a row.
 
 On the home grid the tile is named **Monitor** (`Name=` of the `.desktop` file): the launcher's tile label has one line
 of 176 px at 24 px on the deck, and "System Monitor" (about 192 px) wraps onto the icon. The app's title, the page
@@ -106,7 +114,7 @@ From **Settings > Apps** once published (the app is a draft for now). By hand:
 
 ```sh
 python3 tools/make_registry.py --only system-monitor --out <a folder outside packages/>
-sudo dpkg -i system-monitor_0.1.0_arm64.deb      # remove: sudo dpkg -r system-monitor
+sudo dpkg -i system-monitor_0.2.0_arm64.deb      # remove: sudo dpkg -r system-monitor
 ```
 
 ## Files the app keeps
@@ -170,9 +178,10 @@ python3 tools/make_registry.py --only system-monitor --out <a folder outside pac
   overview's tile placement and the focus moves, pure geometry), `source` (the system, or a fixture folder),
   `command` (one command with a timeout), `sampler` (the thread), `settings`, `monitor_core` (navigation, the tiles'
   and every page's texts).
-* `src/ui/`: `monitor_app` (pages on `cp0::ui::Page` and `cp0::ui::Roller`), `overview` (the tile grid), `panels`
-  (the detail pages' `lv_chart` history chart).
-* `tests/`: unit tests (`test-system-monitor`, 587 checks) on `tests/fixtures/<board>/` (recorded `/proc` and `/sys`
+* `src/ui/`: `monitor_app` (pages on `cp0::ui::Page`, their lists on `cp0::ui::CompactList`, Sampling on
+  `cp0::ui::Roller`), `overview` (the tile grid), `panels` (the detail pages' `lv_chart` history chart and the
+  Processes status line).
+* `tests/`: unit tests (`test-system-monitor`, 700 checks) on `tests/fixtures/<board>/` (recorded `/proc` and `/sys`
   files of a Pi Zero 2 W, a Pi 3A+ with `throttled=0x50005`, a Pi 5 with a fan, NVMe and 16 kB pages; two snapshots
   one second apart; a process table; a missing and a refused `vcgencmd`; the grid at the five sizes and every focus
   move); headless scenes in `tests/scenes` on the same fixtures with a scenario that makes the counters move
@@ -186,6 +195,10 @@ The same fixture variable works on a board, for screenshots of a state that is h
 
 ## Changes
 
+* 0.2.0 (draft): the pages' lists move to the launcher's `cp0::ui::CompactList` (top-aligned dense rows, scrolling
+  only at the bottom edge, a thin auto-hiding scrollbar, headings in capitals that are not selectable; read-only pages
+  scroll one row per key press). On Temp & power the Power row says *Under-voltage now* and the row *Check the power
+  supply* follows it. Built against the launcher main after #47.
 * 0.1.0 (draft): first version. After the first board look: the overview became a tile grid with a prominent Power
   tile, the home tile is named *Monitor*, the sampler and the screen redraw less (and the System page shows the app's
   own cost).

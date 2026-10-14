@@ -11,7 +11,7 @@ expect text "Warm, hot from 80 °C"
 tap "Network"
 wait 1200
 shot network-offline
-expect text "wlan0 (Wi-Fi)"
+expect text "WLAN0 (WI-FI)"
 key down
 key down
 wait 600

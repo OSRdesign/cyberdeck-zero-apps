@@ -59,6 +59,8 @@ CP0_SRCS := \
     $(CP0)/src/cp0_ui_overlay.c \
     $(CP0)/src/cp0_ui_roller.c \
     $(CP0)/src/cp0_ui_roller_widget.cpp \
+    $(CP0)/src/cp0_ui_list.c \
+    $(CP0)/src/cp0_ui_list_widget.cpp \
     $(CP0)/src/cp0_ui_page.cpp \
     $(CP0)/src/cp0_ui_osk.c \
     $(CP0)/src/cp0_ui_osk_widget.cpp \

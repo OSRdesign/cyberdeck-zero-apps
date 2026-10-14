@@ -209,6 +209,9 @@ CheckResult check_layout(bool notice_expected)
     cp0_ui_roller_page_t page{};
     cp0_ui_roller_page(m, cp0::ui::status_strip_left(), &page);
     const int row = m->tok[CP0_TOK_ROW_H], target = m->tok[CP0_TOK_TARGET];
+    // a row of a scrolling list may be the LIST_ROW token: cp0::ui::CompactList's compact density (cp0_ui_list.h), under
+    // the ROW rule on purpose, because a tap there only moves the highlight (activation needs a second tap)
+    const int list_row = std::min(row, m->tok[CP0_TOK_LIST_ROW_H]);
     const int header_h = page.header_h;
     const int header_rule = std::min(target, header_h - 2 * m->shell.status_top);
 
@@ -223,7 +226,7 @@ CheckResult check_layout(bool notice_expected)
     const bool osk_up = cp0::ui::osk::visible();
     lv_area_t osk_area{0, 0, -1, -1};
     int min_key_h = 1 << 20;
-    int min_row = 1 << 20, min_button = 1 << 20, min_header = 1 << 20;
+    int min_row = 1 << 20, min_button = 1 << 20, min_header = 1 << 20, min_list_row = 1 << 20;
     for (const Leaf &leaf : walk.leaves) {
         const int h = leaf.coords.y2 - leaf.coords.y1 + 1;
         const std::string what = describe(leaf.obj) + " " + area_text(leaf.coords);
@@ -255,8 +258,18 @@ CheckResult check_layout(bool notice_expected)
             if (h < target)
                 result.failures.push_back("size: button " + what + " is under TARGET " + std::to_string(target) + " px");
         } else {
-            min_row = std::min(min_row, h);
-            if (h < row) result.failures.push_back("size: " + what + " is under ROW " + std::to_string(row) + " px");
+            lv_obj_t *parent = lv_obj_get_parent(leaf.obj);
+            const bool in_list = parent && lv_obj_has_flag(parent, LV_OBJ_FLAG_SCROLLABLE) &&
+                                 (lv_obj_get_scroll_dir(parent) & LV_DIR_VER);
+            if (in_list && h < row) {
+                min_list_row = std::min(min_list_row, h);
+                if (h < list_row)
+                    result.failures.push_back("size: list row " + what + " is under LIST_ROW " + std::to_string(list_row) +
+                                              " px");
+            } else {
+                min_row = std::min(min_row, h);
+                if (h < row) result.failures.push_back("size: " + what + " is under ROW " + std::to_string(row) + " px");
+            }
         }
     }
     if (osk_up) {
@@ -282,6 +295,10 @@ CheckResult check_layout(bool notice_expected)
                   result.interactive, min_row == (1 << 20) ? 0 : min_row, row, min_button == (1 << 20) ? 0 : min_button,
                   target, min_header == (1 << 20) ? 0 : min_header, header_rule, osk_up ? "up" : "off");
     result.notes.push_back(note);
+    if (min_list_row != (1 << 20)) {
+        std::snprintf(note, sizeof(note), "compact list rows min %d (LIST_ROW %d)", min_list_row, list_row);
+        result.notes.push_back(note);
+    }
     std::snprintf(note, sizeof(note), "header %d px, strip from x %d, Esc %dx%d@(%d,%d)", header_h, page.strip_left,
                   page.esc_w, page.esc_h, page.esc_x, page.esc_y);
     result.notes.push_back(note);

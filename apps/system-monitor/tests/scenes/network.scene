@@ -9,10 +9,10 @@ expect text "wlan0 -52 dBm"
 tap "Network"
 wait 1500
 shot network
-expect text "wlan0 (Wi-Fi)"
+expect text "WLAN0 (WI-FI)"
 expect text "State"
 
-key down
+# a read-only list: each Down scrolls one row (Network is the 4th row)
 key down
 key down
 key down
@@ -21,6 +21,7 @@ shot network-wifi
 expect text "DeckNet"
 expect text "Bit rate"
 
+key down
 key down
 key down
 key down

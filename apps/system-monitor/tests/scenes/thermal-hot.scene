@@ -13,7 +13,8 @@ tap "Temperature"
 wait 1200
 shot thermal-hot
 expect text "CPU temperature"
-expect text "Throttled now: the CPU is too hot"
+@640x480,1024x600 expect text "Throttled now: too hot"
+@800x480,720x720,1280x720 expect text "Throttled now: the CPU is too hot"
 
 key down
 key down

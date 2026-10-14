@@ -24,7 +24,7 @@ key down
 key down
 wait 600
 shot cpu-top
-expect text "Top processes by CPU"
+expect text "TOP PROCESSES BY CPU"
 
 key down
 key down
