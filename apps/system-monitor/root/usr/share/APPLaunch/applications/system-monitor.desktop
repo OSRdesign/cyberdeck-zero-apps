@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Monitor
+Exec=/usr/share/APPLaunch/bin/system-monitor
+Terminal=false
+Icon=share/images/system-monitor.png
+Type=Application
+X-Fullscreen=true
+X-MinSize=640x480

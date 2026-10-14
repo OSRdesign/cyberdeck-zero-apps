@@ -1,0 +1,16 @@
+# No vcgencmd and no rpi_volt alarm (tests/fixtures/pi-zero-2w/scenario-novc.conf): the Power tile says "Unknown" in
+# grey, no error anywhere; the rest works.
+title System Monitor: no power information (no vcgencmd, no alarm)
+env SYSTEM_MONITOR_FIXTURE pi-zero-2w:novc
+sizes 640x480 800x480 720x720 1280x720 1024x600
+
+wait 600
+shot overview-novc
+expect text "Unknown"
+expect text "No firmware flags"
+tap "Power"
+wait 1200
+shot thermal-novc
+expect text "CPU temperature"
+expect notext "Firmware flags"
+expect noquit

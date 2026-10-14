@@ -1,0 +1,37 @@
+# The Pi 3A+ on a weak supply (tests/fixtures/pi-3a-plus/scenario-undervoltage.conf): the Power tile says
+# "Under-voltage" / "Now: check the power supply" in red with a red frame; a tap opens Temp & power, which has the
+# sentence first, each flag, the raw flags and the core voltage.
+title System Monitor: under-voltage now (Pi 3A+)
+env SYSTEM_MONITOR_FIXTURE pi-3a-plus:undervoltage
+sizes 640x480 800x480 720x720 1280x720 1024x600
+
+wait 600
+shot overview-uv
+expect text "Under-voltage"
+@640x480,720x720 expect text "Now: check the power supply"
+tap "Power"
+wait 1200
+shot thermal-uv
+expect text "Under-voltage now: check the power supply"
+expect text "CPU temperature"
+
+key down
+key down
+key down
+key down
+wait 600
+shot thermal-uv-flags
+expect text "Under-voltage"
+expect text "now"
+
+key down
+key down
+key down
+key down
+wait 600
+shot thermal-uv-end
+expect text "Firmware flags"
+key esc
+wait 300
+@640x480,720x720 expect text "Now: check the power supply"
+expect noquit

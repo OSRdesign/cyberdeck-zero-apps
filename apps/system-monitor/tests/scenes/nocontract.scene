@@ -1,0 +1,18 @@
+# Started by hand (ssh, a script): no launcher contract and no input.state (APP-CONTRACT section 7). The app starts,
+# sizes itself from the layout service and the System page says "no contract".
+title System Monitor: started without the launcher
+nocontract
+env SYSTEM_MONITOR_FIXTURE pi-zero-2w:busy
+sizes 640x480 720x720
+
+wait 600
+shot overview-nocontract
+tap "System"
+wait 800
+key up
+wait 600
+shot about-nocontract
+expect text "no contract"
+key esc
+key esc
+expect quit

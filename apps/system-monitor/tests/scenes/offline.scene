@@ -1,0 +1,19 @@
+# Wi-Fi off (tests/fixtures/pi-zero-2w/scenario-offline.conf): the Network tile says "Not connected" in amber, the
+# CPU is warm (amber), power OK; the Network page shows the interface down with no address.
+title System Monitor: no network, a warm CPU
+env SYSTEM_MONITOR_FIXTURE pi-zero-2w:offline
+sizes 640x480 800x480 720x720 1280x720 1024x600
+
+wait 600
+shot overview-offline
+expect text "Not connected"
+expect text "Warm, hot from 80 °C"
+tap "Network"
+wait 1200
+shot network-offline
+expect text "wlan0 (Wi-Fi)"
+key down
+key down
+wait 600
+expect text "None"
+expect noquit

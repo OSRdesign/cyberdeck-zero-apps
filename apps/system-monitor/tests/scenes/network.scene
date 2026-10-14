@@ -1,0 +1,33 @@
+# The Network page on the deck, opened by a tap on its tile: Wi-Fi with its name, signal and bit rate (from iw), the
+# address, the rates and the totals, Bluetooth.
+title System Monitor: Network page
+env SYSTEM_MONITOR_FIXTURE pi-zero-2w:busy
+sizes 640x480 800x480 720x720 1280x720 1024x600
+
+wait 400
+expect text "wlan0 -52 dBm"
+tap "Network"
+wait 1500
+shot network
+expect text "wlan0 (Wi-Fi)"
+expect text "State"
+
+key down
+key down
+key down
+key down
+wait 600
+shot network-wifi
+expect text "DeckNet"
+expect text "Bit rate"
+
+key down
+key down
+key down
+key down
+key down
+key down
+wait 600
+shot network-end
+expect text "Bluetooth"
+expect noquit
