@@ -32,6 +32,25 @@ cp0::ui::ValueTone value_tone(Tone tone)
     }
 }
 
+/* The detail pages' column (chart, its caption line, the list): the full width less the deck's side margin, not the
+ * roller's narrow centred column (capped at 560 px, so 120 px margins at 800 wide). 640x480 keeps its column exactly:
+ * the roller's margin there, 40 px, is the margin everywhere (never wider than the roller's own on a narrow screen).
+ * Wider than 960 px (1280x720) the column stops at 960, centred: a label and its value stay within one glance. */
+constexpr int kDetailMarginPx = 40;
+constexpr int kDetailCapW = 960;
+
+struct Column {
+    int x;
+    int w;
+};
+
+Column detail_column(const cp0_ui_roller_page_t &l)
+{
+    const int margin = std::min(l.roller_x, kDetailMarginPx);
+    const int w = std::max(1, std::min(kDetailCapW, l.w - 2 * margin));
+    return {(l.w - w) / 2, w};
+}
+
 } // namespace
 
 MonitorApp::MonitorApp(lv_obj_t *screen)
@@ -178,10 +197,11 @@ void MonitorApp::build_view(int select)
 
     // the panel on top: the chart (detail pages) or the status line (Processes)
     const int s = cp0_ui_tok(CP0_TOK_SPACE_S);
+    const Column col = detail_column(layout_);
     Box box;
-    box.x = layout_.roller_x;
+    box.x = col.x;
     box.y = layout_.body_y + s;
-    box.w = layout_.roller_w;
+    box.w = col.w;
     switch (view) {
     case View::Cpu:
     case View::Memory:
@@ -206,13 +226,9 @@ void MonitorApp::build_view(int select)
 
     // the list: the room under the panel (the whole body without one), top-aligned
     cp0_ui_list_layout_t l{};
-    if (box.h > 0) {
-        const int y = box.y + box.h + s;
-        cp0_ui_list_layout(cp0_ui_metrics_get(), CP0_UI_LIST_COMPACT, layout_.roller_x, y, layout_.roller_w,
-                           layout_.body_y + layout_.body_h - y, &l);
-    } else {
-        cp0_ui_list_page_layout(cp0_ui_metrics_get(), &layout_, CP0_UI_LIST_COMPACT, &l);
-    }
+    const int list_y = box.h > 0 ? box.y + box.h + s : layout_.body_y;
+    cp0_ui_list_layout(cp0_ui_metrics_get(), CP0_UI_LIST_COMPACT, col.x, list_y, col.w,
+                       layout_.body_y + layout_.body_h - list_y, &l);
     cp0::ui::CompactListEvents events;
     events.activate = [this](int index, std::intptr_t) { post([this, index] { activate(index); }); };
     events.selected = [this](int) { update_status(); };

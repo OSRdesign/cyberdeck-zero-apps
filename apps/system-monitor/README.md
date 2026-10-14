@@ -198,7 +198,8 @@ The same fixture variable works on a board, for screenshots of a state that is h
 * 0.2.0 (draft): the pages' lists move to the launcher's `cp0::ui::CompactList` (top-aligned dense rows, scrolling
   only at the bottom edge, a thin auto-hiding scrollbar, headings in capitals that are not selectable; read-only pages
   scroll one row per key press). On Temp & power the Power row says *Under-voltage now* and the row *Check the power
-  supply* follows it. Built against the launcher main after #47.
+  supply* follows it. Built against the launcher main after #47. The detail pages' chart and list fill the screen
+  width (40 px side margins as on the deck, capped at 960 px centred on 1280x720) instead of the roller's 560 px column.
 * 0.1.0 (draft): first version. After the first board look: the overview became a tile grid with a prominent Power
   tile, the home tile is named *Monitor*, the sampler and the screen redraw less (and the System page shows the app's
   own cost).
