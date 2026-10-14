@@ -38,7 +38,7 @@ expect text "Listens at each speed; sends nothing, no reset"
 key up
 key up
 wait 600
-expect text "Identify what is connected"
+expect text "IDENTIFY WHAT IS CONNECTED"
 expect notext "Listens at each speed; sends nothing, no reset"
 
 # up to the identification of the adapter (the status line gives way to them)
@@ -57,13 +57,11 @@ expect text "cp210x"
 expect notext "ESP32 boards use 115200; ESP8266 ROM: 74880"
 key up
 key up
-key up
 wait 600
 check port-top
 expect text "CP210x USB-serial"
 
-# the Speed list: 115200 is marked recommended and checked; 230400 picked
-key down
+# the Speed list (14 rows down from the first one, the sections are skipped): 115200 is marked recommended and checked; 230400 picked
 key down
 key down
 key down

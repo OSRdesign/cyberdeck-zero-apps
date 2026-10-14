@@ -3,7 +3,7 @@
  *
  * Serial Console: the pages of "What is on the other end?" (see serial_app.hpp): the probes' rows and confirmations,
  * the Ask page, the result card and its detail pages. The probes run in core/probe.hpp (a worker thread); this file
- * only shows them. Layout from the layout service only (the roller page, the widgets, the text sizes).
+ * only shows them. Layout from the layout service only (the list page, the widgets, the text sizes).
  */
 #include "serial_app.hpp"
 
@@ -21,7 +21,8 @@
 namespace sc {
 namespace {
 
-constexpr int kErrorRgb = 0xFF6666; /* the shell's error colour (failed values) */
+
+cp0::ui::ValueTone tone_of(bool bad) { return bad ? cp0::ui::ValueTone::Bad : cp0::ui::ValueTone::Normal; }
 
 int level_index(Probe p)
 {
@@ -54,6 +55,7 @@ void SerialApp::show_confirm(const std::string &title, const std::string &text, 
     dialog_ = std::make_unique<cp0::ui::Dialog>(page_->root(), layout_, std::move(spec));
     dialog_->add_text(text);
     dialog_->relayout();
+    update_chrome(); /* the band gives way to the dialog */
     focus(dialog_->focus_object());
 }
 
@@ -87,7 +89,7 @@ void SerialApp::start_probe(Probe probe, bool confirmed)
                  port_.path.c_str());
     if (probe_level(probe) <= 2) {
         probe_value_[level_index(probe)].clear();
-        show_port_rows(port_row_index(probe == Probe::Listen ? PortRow::IdListen : PortRow::IdReset));
+        show_port_rows(port_row_index(probe == Probe::Listen ? PortRow::IdListen : PortRow::IdReset), true);
         update_port_caption(true);
     } else {
         ask_probe_ = probe;
@@ -104,14 +106,12 @@ void SerialApp::check_probe()
     if (!p.done) {
         if (p.text == probe_shown_) return;
         probe_shown_ = p.text;
-        cp0::ui::RowSpec spec;
-        spec.kind = cp0::ui::RowKind::Busy;
-        spec.label = probe_shown_;
-        if (probe_level(probe_) <= 2 && nav_.current() == View::Port)
-            roller_->update_row(port_row_index(probe_ == Probe::Listen ? PortRow::IdListen : PortRow::IdReset), spec);
-        if (probe_level(probe_) == 3 && nav_.current() == View::Ask) {
+        const cp0::ui::ListRow row = cp0::ui::ListRow::item(probe_shown_, "Stop", cp0::ui::ValueTone::Warn);
+        if (probe_level(probe_) <= 2 && nav_.current() == View::Port && list_)
+            list_->update_row(port_row_index(probe_ == Probe::Listen ? PortRow::IdListen : PortRow::IdReset), row);
+        if (probe_level(probe_) == 3 && nav_.current() == View::Ask && list_) {
             const auto it = std::find(ask_map_.begin(), ask_map_.end(), probe_);
-            if (it != ask_map_.end()) roller_->update_row(static_cast<int>(it - ask_map_.begin()), spec);
+            if (it != ask_map_.end()) list_->update_row(static_cast<int>(it - ask_map_.begin()), row);
         }
         return;
     }
@@ -154,7 +154,8 @@ void SerialApp::probe_done(const ProbeProgress &p, Probe probe)
     if (nav_.current() == View::Port) {
         show_port_rows(port_row_index(probe == Probe::Listen ? PortRow::IdListen
                                       : probe == Probe::Reset ? PortRow::IdReset
-                                                              : PortRow::IdAsk));
+                                                              : PortRow::IdAsk),
+                       true);
         update_port_caption(true);
     } else if (nav_.current() == View::Ask) {
         const auto it = std::find(ask_map_.begin(), ask_map_.end(), probe);
@@ -166,22 +167,20 @@ void SerialApp::probe_done(const ProbeProgress &p, Probe probe)
 
 /* ------------------------------------------------------------------ the Ask page */
 
-std::vector<cp0::ui::RowSpec> SerialApp::ask_rows()
+std::vector<cp0::ui::ListRow> SerialApp::ask_rows()
 {
     ask_map_ = ask_probes();
-    std::vector<cp0::ui::RowSpec> rows;
+    row_full_.clear();
+    std::vector<cp0::ui::ListRow> rows;
     for (const Probe p : ask_map_) {
-        cp0::ui::RowSpec spec;
         if (prober_ && probe_ == p) {
-            spec.kind = cp0::ui::RowKind::Busy;
-            spec.label = probe_shown_;
-        } else {
-            spec.kind = cp0::ui::RowKind::Nav;
-            spec.label = probe_name(p);
-            spec.value = p == ask_probe_ && !ask_value_.empty() ? ask_value_ : ask_value(p);
-            if (p == ask_probe_ && (ask_value_ == "Stopped" || ask_value_ == "Failed")) spec.value_rgb = kErrorRgb;
+            rows.push_back(cp0::ui::ListRow::item(probe_shown_, "Stop", cp0::ui::ValueTone::Warn));
+            row_full_.emplace_back();
+            continue;
         }
-        rows.push_back(spec);
+        const std::string value = p == ask_probe_ && !ask_value_.empty() ? ask_value_ : ask_value(p);
+        add_rows(rows, row_full_, Density::Comfortable, probe_name(p), value,
+                 tone_of(p == ask_probe_ && (ask_value_ == "Stopped" || ask_value_ == "Failed")), false);
     }
     return rows;
 }
@@ -189,9 +188,11 @@ std::vector<cp0::ui::RowSpec> SerialApp::ask_rows()
 void SerialApp::open_ask(int select)
 {
     if (nav_.current() != View::Ask) nav_.open(View::Ask);
-    const std::vector<cp0::ui::RowSpec> rows = ask_rows();
-    roller_->set_rows(rows, std::max(0, std::min(select, static_cast<int>(rows.size()) - 1)), true);
-    roller_->set_hidden(false);
+    const std::vector<cp0::ui::ListRow> rows = ask_rows();
+    ensure_list(Density::Comfortable, true);
+    list_->reset_rows(rows, std::max(0, std::min(select, static_cast<int>(rows.size()) - 1)));
+    if (!dialog_) focus(list_->focus_object());
+    update_chrome();
     caption_row_ = -2;
     show_title();
     update_ask_caption(true);
@@ -210,13 +211,13 @@ void SerialApp::activate_ask(int row)
 
 void SerialApp::update_ask_caption(bool force)
 {
-    const int sel = roller_->selected();
-    if (!force && sel == caption_row_) return;
-    caption_row_ = sel;
-    if (prober_) page_->set_caption("Esc stops", cp0::ui::CaptionTone::Normal);
-    else if (sel >= 0 && sel < static_cast<int>(ask_map_.size()))
-        page_->set_caption(ask_caption(ask_map_[static_cast<std::size_t>(sel)]), cp0::ui::CaptionTone::Normal);
-    else page_->set_caption("", cp0::ui::CaptionTone::Normal);
+    const int row = sel();
+    if (!force && row == caption_row_) return;
+    caption_row_ = row;
+    if (prober_) say("Esc stops", cp0::ui::CaptionTone::Normal);
+    else if (row >= 0 && row < static_cast<int>(ask_map_.size()))
+        say(ask_caption(ask_map_[static_cast<std::size_t>(row)]), cp0::ui::CaptionTone::Normal);
+    else say("", cp0::ui::CaptionTone::Normal);
 }
 
 /* ------------------------------------------------------------------ the result card */
@@ -231,6 +232,14 @@ void SerialApp::open_card(const Identity &id, Probe probe, int select)
     update_card_caption(true);
 }
 
+/* The list row of card row `card_index` (its first line when the row took more than one). */
+int SerialApp::card_list_row(int card_index) const
+{
+    for (std::size_t i = 0; i < card_map_.size(); ++i)
+        if (card_map_[i] == card_index) return static_cast<int>(i);
+    return 0;
+}
+
 void SerialApp::show_card_rows(int select)
 {
     card_rows_ = card_rows(card_id_, port_, card_probe_, effective_baud(settings_, recommended()));
@@ -240,16 +249,16 @@ void SerialApp::show_card_rows(int select)
         card_rows_.insert(behind == card_rows_.end() ? card_rows_.end() : behind + 1,
                           CardRow{card_note_, std::string(), CardAction::None});
     }
-    std::vector<cp0::ui::RowSpec> rows;
+    std::vector<cp0::ui::ListRow> rows;
+    card_map_.clear();
+    row_full_.clear();
     int behind_row = 0;
     for (std::size_t i = 0; i < card_rows_.size(); ++i) {
         const CardRow &r = card_rows_[i];
-        cp0::ui::RowSpec spec;
-        spec.kind = r.action == CardAction::None ? cp0::ui::RowKind::Info : cp0::ui::RowKind::Nav;
-        spec.label = r.key;
-        spec.value = r.value;
+        add_rows(rows, row_full_, Density::Compact, r.key, r.value, cp0::ui::ValueTone::Normal,
+                 r.value.empty() && r.action == CardAction::None); /* a note: grey rows, never selected */
+        while (card_map_.size() < rows.size()) card_map_.push_back(static_cast<int>(i));
         if (r.key == "Behind it") behind_row = static_cast<int>(i);
-        rows.push_back(spec);
     }
     if (select < 0 && card_id_.kind == Kind::Silent) { /* heard nothing: the highlight is on the next step, Enter asks */
         for (std::size_t i = 0; i < card_rows_.size(); ++i)
@@ -258,25 +267,29 @@ void SerialApp::show_card_rows(int select)
                 break;
             }
     }
-    if (select < 0 || select >= static_cast<int>(rows.size())) select = behind_row;
-    roller_->set_rows(rows, select, false); /* a table stops at its ends */
-    roller_->set_hidden(false);
+    if (select < 0 || select >= static_cast<int>(card_rows_.size())) select = behind_row;
+    ensure_list(Density::Compact, false); /* a table stops at its ends */
+    list_->reset_rows(rows, card_list_row(select));
+    if (!dialog_) focus(list_->focus_object());
+    update_chrome();
     caption_row_ = -2;
 }
 
 void SerialApp::update_card_caption(bool force)
 {
-    const int sel = roller_->selected();
-    if (!force && sel == caption_row_) return;
-    caption_row_ = sel;
-    if (sel < 0 || sel >= static_cast<int>(card_rows_.size())) {
-        page_->set_caption("", cp0::ui::CaptionTone::Normal);
+    const int row = sel();
+    if (!force && row == caption_row_) return;
+    caption_row_ = row;
+    if (row < 0 || row >= static_cast<int>(card_map_.size())) {
+        say("", cp0::ui::CaptionTone::Normal);
         return;
     }
-    const CardRow &r = card_rows_[static_cast<std::size_t>(sel)];
+    const CardRow &r = card_rows_[static_cast<std::size_t>(card_map_[static_cast<std::size_t>(row)])];
     std::string text;
     switch (r.action) {
-    case CardAction::None: break; /* over the table it would cover the rows above */
+    case CardAction::None: /* a value cut to fit says its whole text */
+        if (row < static_cast<int>(row_full_.size())) text = row_full_[static_cast<std::size_t>(row)];
+        break;
     case CardAction::Boot: text = "The first lines it printed"; break;
     case CardAction::Evidence: text = "The lines that told what it is"; break;
     case CardAction::Apply: text = "Sets this speed for " + port_.tty + "; Connect uses it"; break;
@@ -287,7 +300,7 @@ void SerialApp::update_card_caption(bool force)
     case CardAction::Reset: text = probe_caption(Probe::Reset, reset_style(port_)); break;
     case CardAction::Ask: text = probe_caption(Probe::At, reset_style(port_)); break;
     }
-    page_->set_caption(text, cp0::ui::CaptionTone::Normal);
+    say(text, cp0::ui::CaptionTone::Normal);
 }
 
 void SerialApp::close_card()
@@ -302,13 +315,15 @@ void SerialApp::close_card()
     if (card_probe_ == Probe::Listen && !port_identity().found()) row = PortRow::IdListen;
     if (card_probe_ == Probe::Reset) row = PortRow::IdReset;
     show_port_rows(port_row_index(row));
+    update_chrome();
     show_title();
     update_port_caption(true);
 }
 
-void SerialApp::activate_card(int row)
+void SerialApp::activate_card(int list_row)
 {
-    if (row < 0 || row >= static_cast<int>(card_rows_.size())) return;
+    if (list_row < 0 || list_row >= static_cast<int>(card_map_.size())) return;
+    const int row = card_map_[static_cast<std::size_t>(list_row)];
     const CardRow r = card_rows_[static_cast<std::size_t>(row)];
     switch (r.action) {
     case CardAction::None: break;
@@ -322,8 +337,8 @@ void SerialApp::activate_card(int row)
         settings_.frame = "8N1";
         save_port();
         show_card_rows(row);
-        page_->set_caption("Set: " + std::to_string(baud) + " 8N1 for " + port_.tty, cp0::ui::CaptionTone::Normal);
-        caption_row_ = row;
+        say("Set: " + std::to_string(baud) + " 8N1 for " + port_.tty, cp0::ui::CaptionTone::Normal);
+        caption_row_ = sel();
         break;
     }
     case CardAction::Copy: {
@@ -331,9 +346,9 @@ void SerialApp::activate_card(int row)
         const std::string path = log_dir_ + "/" + name.substr(0, name.size() - 4) + ".txt";
         const bool ok = fs::make_dirs(log_dir_) &&
                         fs::write_atomic(path, identity_summary(card_id_, port_.title, port_.tty));
-        page_->set_caption(ok ? "Saved " + fs::base_name(path) : "Could not write " + log_dir_,
-                           ok ? cp0::ui::CaptionTone::Normal : cp0::ui::CaptionTone::Error);
-        caption_row_ = row;
+        say(ok ? "Saved " + fs::base_name(path) : "Could not write " + log_dir_,
+            ok ? cp0::ui::CaptionTone::Normal : cp0::ui::CaptionTone::Error);
+        caption_row_ = sel();
         break;
     }
     case CardAction::Again: {
@@ -377,8 +392,7 @@ void SerialApp::open_detail(const std::string &title, const std::vector<std::str
     const lv_font_t *mono = cp0_fonts().get("JetBrainsMono-Regular.ttf", static_cast<uint16_t>(px));
     if (!mono) mono = cp0_ui_font_px(px);
     nav_.open(View::Detail);
-    roller_->set_hidden(true);
-    page_->set_caption("", cp0::ui::CaptionTone::Normal);
+    update_chrome(); /* the list and the band give way to the text */
     detail_ = std::make_unique<cp0::ui::TextBlock>(page_->root(), layout_, text, mono, [this] { post([this] { back(); }); });
     page_->set_title({kAppTitle, port_.tty, title});
     focus(detail_->focus_object());
@@ -388,9 +402,9 @@ void SerialApp::close_detail()
 {
     detail_.reset();
     nav_.back();
-    roller_->set_hidden(false);
+    update_chrome();
     show_title();
-    focus(roller_->focus_object());
+    focus(focus_target());
     caption_row_ = -2;
     update_card_caption(true);
 }

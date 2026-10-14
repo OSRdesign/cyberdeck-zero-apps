@@ -1,6 +1,6 @@
 # Serial Console
 
-Version 0.3.1 (draft, not published yet), package `serial-console`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.4.0 (draft, not published yet), package `serial-console`. Part of [cyberdeck-zero-apps](../../README.md).
 
 Serial Console talks to a USB-serial adapter or a microcontroller board (Arduino, ESP32, Raspberry Pi Pico, a GPS, a
 router console...) from the deck. It is a full-screen touch app made for the small screen: instead of dropping you into
@@ -11,26 +11,37 @@ adapter), then opens a terminal page.
 ## What it does
 
 * **Ports page.** Every USB serial port (`ttyUSB*`, `ttyACM*`) as soon as it is plugged in, refreshed every second
-  (plug and unplug a board: the list follows, only the rows that changed are redrawn). Each row names the device
+  (plug and unplug a board: the list follows, only the texts that changed are redrawn; the scroll and the highlight
+  stay). Each row names the device
   (for example *CP210x USB-serial*, *Arduino Uno*, *FT232R USB-serial*, or the USB product string of a device the app
-  does not know) with its tty at the right; the status line under the title says `ttyUSB0 - 115200 recommended` for
-  the highlighted one. **Show on-board UARTs** adds the board's own UARTs: the one on GPIO 14/15 (`/dev/serial0`) shows
+  does not know) with its tty at the right; the status band under the title says `ttyUSB0 - 115200 recommended` for
+  the highlighted one. **Show on-board UARTs** (value *On* / *Off*) adds the board's own UARTs: the one on GPIO 14/15 (`/dev/serial0`) shows
   as *On-board UART - GPIO 14/15*. Empty 8250 slots (`ttyS*` with no UART behind) and the Raspberry Pi's Bluetooth UART
-  (`/dev/serial1`) are never listed. With no port at all, a card says what to do. A board in its USB boot loader is a
+  (`/dev/serial1`) are never listed. With no port at all, a card under the rows says what to do. A board in its USB boot loader is a
   USB drive, not a serial port: an RP2040 / RP2350 in BOOTSEL mode (`2e8a:0003`, `2e8a:000f`) or a board in a UF2 boot
   loader gets a row (*RP2040 in BOOTSEL mode*; the status line: *A USB drive, not a serial port: replug it without
   BOOT*; Enter: *RP2040 in BOOTSEL mode (a USB drive, not a serial port): unplug and replug without the BOOT button*).
-* **Port page** (Enter on a port). *What is connected*: device name, the exact chip where the USB descriptor tells it
+* **Port page** (Enter on a port). The section *What is connected*: device name, the exact chip where the USB descriptor tells it
   reliably (FTDI FT232R / FT232H / FT2232C/D / FT2232H / FT4232H / FT-X from bcdDevice and the interface count, as
   Linux's `ftdi_sio` decides; WCH CH340 / CH341 / CH9102 / CH343 / CH342 from the product id; Silicon Labs CP2102 /
   CP2102N / CP2104... only when the product string names it), with its release (bcdDevice), maker, the USB product
   string, USB id, USB speed and interface count, driver, serial number, what it typically is (*ESP32, Meshtastic*;
-  *Arduino sketches*; *GPS: NMEA sentences*...), the recommended settings and the `/dev` node; the status line explains
-  the recommendation (*ESP32 boards use 115200; ESP8266 ROM: 74880*). Then **Identify what is connected** (next
-  section). Then the settings, kept per port (by its `/dev/serial/by-id` name, else USB id and serial number): **Speed** 1200 to 921600
-  (74880 included, the recommended one marked), **Frame** (8N1, 7E1, 8E1, 8O1, 7O1, 8N2), **Local echo**, **Enter
-  sends** (CR, LF, CR LF), **Backspace sends** (DEL 0x7F or BS 0x08), **Log to file**, **Find the speed**, **Send Enter
-  while finding**, and **Connect** (highlighted when the page opens).
+  *Arduino sketches*; *GPS: NMEA sentences*...), the recommended settings and the `/dev` node; a value too long for
+  its row ends with dots and the status band says the whole of it when the row is highlighted; the status band
+  explains the recommendation (*ESP32 boards use 115200; ESP8266 ROM: 74880*). Then the section **Identify what is
+  connected** (next section). Then the section *Settings*, kept per port (by its `/dev/serial/by-id` name, else USB id and serial number): **Speed** 1200 to 921600
+  (74880 included, the recommended one marked), **Frame** (8N1, 7E1, 8E1, 8O1, 7O1, 8N2), **Local echo**
+  (*On* / *Off*), **Enter sends** (CR, LF, CR LF), **Backspace sends** (DEL 0x7F or BS 0x08), **Log to file** (*On* /
+  *Off*), **Find the speed**, **Send Enter while finding** (*On* / *Off*), and **Connect** (highlighted when the page
+  opens). Speed, Frame, Enter sends and Backspace sends open a short pick-one list (a check on the current value).
+* **The lists.** The ports, port, Ask and result pages are the launcher's `CompactList`: top-aligned rows in the
+  deck's full-width column, a label on the left and its value on the right, scrolling only when the highlight reaches
+  the bottom, a thin scrollbar at the right edge that hides itself, headings in grey capitals that are never selected
+  (*WHAT IS CONNECTED*, *IDENTIFY WHAT IS CONNECTED*, *SETTINGS*; a long note such as *The adapter cannot tell what is
+  behind it; the probes below ask* is a heading too, on as many rows as it needs). The ports and Ask pages, which have
+  a few rows that act, use the roomy row height; the port page and the result card, long tables, the compact one. The
+  status band over the list (two lines) says what the highlighted row means. The speed and the other values are
+  picked on the launcher's roller list, the Settings look with a check mark on the current value.
 * **Find the speed.** Listens about 0.7 s at each speed (the recommended one first, then 115200, 9600, 57600, 38400,
   19200, 230400, 460800, 921600, 4800, 2400), shows *Trying 9600... (2 of 10)* and scores what comes: clean
   text wins (*Found 57600 - text looks clean*, the speed is set), noise (NUL, 0xFF, bytes that are not text) loses. It
@@ -41,7 +52,8 @@ adapter), then opens a terminal page.
   into its boot loader; 1200 stays in the Speed list to choose by hand.
 * **What is on the other end?** A USB-serial adapter (CH340, CP210x, FTDI, PL2303) says nothing about what is wired
   to it: the port page says so (*The adapter cannot tell what is behind it; the probes below ask*) and
-  offers three probes, each its own row; Esc (or a tap on its Busy row) stops one at once:
+  offers three probes, each its own row; while one runs its row says the progress with the value *Stop*; Esc (or a tap
+  on the row) stops it at once:
   * **Listen** (level 1, safe: nothing is sent, the DTR / RTS lines are not touched). It listens at the port's speed,
     then 115200, 9600, 74880, 57600, 38400, 19200, 230400, 250000, 460800, 921600, 4800 (about 1 s each, 2 s for the
     first: opening a port restarts an Arduino-style board), and stops at the first speed where something is clearly
@@ -124,8 +136,8 @@ On the deck (640x480) and on a Pi 3A+ with the Waveshare 4.3" DSI panel (800x480
 
 | Where | Keyboard | Touch |
 | --- | --- | --- |
-| Lists | Up / Down move, Enter or Right opens, Esc or Left goes back | a tap highlights a row, a second tap opens it; a drag scrolls |
-| A probe or Find the speed running | Esc stops it (the page stays) | a tap on its Busy row stops it |
+| Lists | Up / Down move (a heading is skipped; on the ports, port and Ask pages the first and last rows are joined), Enter or Right opens or switches, Esc or Left goes back | a tap highlights a row, a second tap opens it; a drag scrolls |
+| A probe or Find the speed running | Esc stops it (the page stays) | a tap on its row (value *Stop*) stops it |
 | Confirmations | Enter is the action (*Reset and listen*, *Send*), Esc is Cancel | both buttons |
 | Boot output, Evidence | Up / Down, Page Up / Down, Home / End scroll; Esc or Left goes back | a drag scrolls; the header's Esc |
 | Terminal, keyboard connected | every key goes to the board: Enter sends the line ending, Backspace DEL or BS, Ctrl+letter its control code, arrows / Home / End / Page Up / Down / F1-F12 their ANSI sequences | toolbar keys |
@@ -196,6 +208,13 @@ The identification is kept in the port's section of the settings file as `id_*` 
 
 ## Changes
 
+* **0.4.0**: the ports, port, Ask and result pages move to the launcher's `cp0::ui::CompactList` (top-aligned dense
+  rows in the full-width column, scrolling only at the bottom edge, a thin auto-hiding scrollbar, headings that are
+  not selectable). Hot-plug and a running probe or speed search change only the texts that changed: the scroll and
+  the highlight stay. The status line is a two-line band over the list; a value cut with dots says its whole text
+  there. The switches say *On* / *Off*, a running probe or search says *Stop*, long notes are headings. The values of
+  Speed, Frame, Enter sends and Backspace sends stay on the roller (a pick-one list with a check mark); the terminal is
+  unchanged. Built against the launcher main after #47.
 * Unreleased (the app is still a draft): a new tile icon, the amber connector badge of the icon system
   (`docs/ICON-PALETTE.md`), 100x100 so the launcher draws it without stretching.
 * **0.3.1**: found on the deck at 640x480: a long device name no longer hides behind dots when a shorter one says the

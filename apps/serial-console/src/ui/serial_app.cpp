@@ -8,6 +8,7 @@
 
 #include "app.hpp"
 
+#include "cp0_font_service.hpp"
 #include "cp0_ui_metrics_lvgl.h"
 
 #include <unistd.h>
@@ -15,6 +16,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstdio>
+#include <cctype>
 #include <cstdlib>
 #include <utility>
 
@@ -23,11 +25,20 @@ namespace {
 
 constexpr int kTickMs = 50;
 constexpr int kScanMs = 1000;
-constexpr int kErrorRgb = 0xFF6666;       /* the shell's error colour (failed values) */
+constexpr int kBandLines = 2;                    /* the status band: two lines of CAPTION text */
+constexpr int kErrorRgb = 0xFF6666;              /* the shell error colour (failed values) */
+constexpr std::uint32_t kBandNormal = 0x66CC88;  /* the shell's status line colours (cp0::ui::Page's) */
+constexpr std::uint32_t kBandWarn = 0xF0B400;
+constexpr std::uint32_t kBandError = 0xFF6666;
 constexpr std::uint32_t kCardBg = 0x1C1C1C;     /* the text fields' colours */
 constexpr std::uint32_t kCardBorder = 0x3A3A3A;
 constexpr std::uint32_t kCardTitle = 0xFFFFFF;
 constexpr std::uint32_t kCardText = 0xE0E0E0;
+/* The lists' column: the full width less the deck's side margin, not the roller's narrow centred column (capped at
+ * 560 px, so 120 px margins at 800 wide). 640x480 keeps the roller's own margin, 40 px. Wider than 960 px the column
+ * stops at 960, centred: a label and its value stay within one glance. */
+constexpr int kListMarginPx = 40;
+constexpr int kListCapW = 960;
 
 const char *choice_title(int which)
 {
@@ -38,6 +49,41 @@ const char *choice_title(int which)
     default: return "Backspace sends";
     }
 }
+
+int tw(const std::string &text, const lv_font_t *font)
+{
+    if (text.empty() || !font) return 0;
+    lv_point_t size{};
+    lv_text_get_size(&size, text.c_str(), font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    return size.x;
+}
+
+/* The text broken at spaces into lines of at most `room` px as `width` measures them (a word wider than the room
+ * stays whole on its line). */
+std::vector<std::string> wrap_lines(const std::string &text, const std::function<int(const std::string &)> &width,
+                                    int room)
+{
+    std::vector<std::string> lines;
+    std::string line;
+    std::size_t pos = 0;
+    while (pos < text.size()) {
+        std::size_t end = text.find(' ', pos);
+        if (end == std::string::npos) end = text.size();
+        const std::string word = text.substr(pos, end - pos);
+        const std::string joined = line.empty() ? word : line + " " + word;
+        if (!line.empty() && width(joined) > room) {
+            lines.push_back(line);
+            line = word;
+        } else {
+            line = joined;
+        }
+        pos = end + 1;
+    }
+    if (!line.empty()) lines.push_back(line);
+    return lines;
+}
+
+cp0::ui::ValueTone tone_of(bool bad) { return bad ? cp0::ui::ValueTone::Bad : cp0::ui::ValueTone::Normal; }
 
 } // namespace
 
@@ -63,25 +109,37 @@ SerialApp::SerialApp(lv_obj_t *screen)
         post([this] { back(); });
     });
     cp0::ui::StatusStrip::add(page_->header());
-    page_->set_caption_wrap(true); /* the status line takes up to 3 lines over the rows above the centre */
 
-    cp0::ui::RollerEvents events;
-    events.activate = [this](int row) {
-        post([this, row] {
-            if (dialog_) return;
-            switch (nav_.current()) {
-            case View::Ports: activate_ports(row); break;
-            case View::Port: activate_port(row); break;
-            case View::Choice: activate_choice(row); break;
-            case View::Ask: activate_ask(row); break;
-            case View::Card: activate_card(row); break;
-            case View::Terminal:
-            case View::Detail: break;
-            }
-        });
-    };
-    events.back = [this] { post([this] { back(); }); };
-    roller_ = std::make_unique<cp0::ui::Roller>(page_->root(), layout_, std::move(events));
+    // the column, the status band (two lines) and the list under it, for both densities
+    const int s = cp0_ui_tok(CP0_TOK_SPACE_S);
+    const int margin = std::min(layout_.roller_x, kListMarginPx);
+    const int col_w = std::max(1, std::min(kListCapW, layout_.w - 2 * margin));
+    const int col_x = (layout_.w - col_w) / 2;
+    const lv_font_t *band_font = cp0_ui_font_px(layout_.caption_px);
+    const int line_h = band_font ? lv_font_get_line_height(band_font) : layout_.caption_px;
+    const int band_y = layout_.body_y + s;
+    const int list_y = band_y + kBandLines * line_h + s;
+    const int list_h = layout_.body_y + layout_.body_h - list_y;
+    for (const Density d : {Density::Compact, Density::Comfortable}) {
+        const int i = static_cast<int>(d);
+        cp0_ui_list_layout(cp0_ui_metrics_get(), static_cast<cp0_ui_list_density_t>(i), col_x, list_y, col_w, list_h,
+                           &lay_[i]);
+        note_font_[i] = cp0_fonts().get("Montserrat-Medium.ttf", static_cast<uint16_t>(lay_[i].section_px));
+        if (!note_font_[i]) note_font_[i] = cp0_ui_font_px(lay_[i].section_px);
+        label_font_[i] = cp0_fonts().get("Montserrat-Bold.ttf", static_cast<uint16_t>(lay_[i].text_px));
+        value_font_[i] = cp0_fonts().get("Montserrat-Medium.ttf", static_cast<uint16_t>(lay_[i].value_px));
+        if (!label_font_[i]) label_font_[i] = cp0_ui_font_px(lay_[i].text_px);
+        if (!value_font_[i]) value_font_[i] = cp0_ui_font_px(lay_[i].value_px);
+    }
+    band_ = lv_label_create(page_->root());
+    lv_obj_remove_flag(band_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_remove_flag(band_, LV_OBJ_FLAG_CLICKABLE);
+    lv_label_set_long_mode(band_, LV_LABEL_LONG_MODE_DOTS); /* wraps in the height of its lines, dots after the last */
+    if (band_font) lv_obj_set_style_text_font(band_, band_font, 0);
+    lv_obj_set_style_text_color(band_, lv_color_hex(kBandNormal), 0);
+    lv_obj_set_pos(band_, col_x + lay_[0].inset, band_y);
+    lv_obj_set_size(band_, std::max(1, col_w - 2 * lay_[0].inset), kBandLines * line_h);
+    lv_label_set_text(band_, "");
 
     {
         std::vector<PortInfo> all = scan_all(true);
@@ -91,7 +149,6 @@ SerialApp::SerialApp(lv_obj_t *screen)
     }
     next_scan_ = now_ms() + kScanMs;
     show_ports(config_.last_port, false);
-    focus(roller_->focus_object());
     show_title();
     timer_ = lv_timer_create(tick_cb, kTickMs, this);
 }
@@ -105,9 +162,11 @@ SerialApp::~SerialApp()
     prober_.reset(); /* a probe stopped, its lines put back */
     detail_.reset();
     dialog_.reset();
+    list_.reset();
     roller_.reset();
-    page_.reset();   /* the card goes with the page */
+    page_.reset();   /* the card and the band go with the page */
     card_ = nullptr;
+    band_ = nullptr;
     world_.reset();
 }
 
@@ -156,6 +215,151 @@ void SerialApp::focus(lv_obj_t *obj)
     lv_group_focus_obj(obj);
 }
 
+lv_obj_t *SerialApp::focus_target() const
+{
+    if (term_) return term_->focus_object();
+    if (detail_) return detail_->focus_object();
+    if (list_) return list_->focus_object();
+    if (roller_) return roller_->focus_object();
+    return nullptr;
+}
+
+/* The list and its status band belong to the four list pages (Ports, Port, Ask, Card): the Choice page has its
+ * roller, the terminal and the detail page their own views. A dialog hides the band (the page under it gives way). */
+void SerialApp::update_chrome()
+{
+    const View view = nav_.current();
+    const bool pages = view == View::Ports || view == View::Port || view == View::Ask || view == View::Card;
+    if (list_) {
+        list_->set_hidden(!pages);
+    }
+    if (band_) {
+        if (pages && !dialog_) lv_obj_remove_flag(band_, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(band_, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+/* The status band: what the highlighted row means (two lines, dots after them). */
+void SerialApp::say(const std::string &text, cp0::ui::CaptionTone tone)
+{
+    if (!band_) return;
+    lv_label_set_text(band_, text.c_str());
+    const std::uint32_t rgb = tone == cp0::ui::CaptionTone::Error  ? kBandError
+                              : tone == cp0::ui::CaptionTone::Warn ? kBandWarn
+                                                                   : kBandNormal;
+    lv_obj_set_style_text_color(band_, lv_color_hex(rgb), 0);
+}
+
+/* The list of the page the app is on, in the density that suits it (the same column and top for both): one list
+ * serves the pages of a density, a pick-one Roller serves the Choice page. */
+void SerialApp::build_list(Density density, bool wrap)
+{
+    roller_.reset();
+    list_.reset();
+    cp0::ui::CompactListEvents events;
+    events.activate = [this](int index, std::intptr_t) {
+        post([this, index] {
+            if (dialog_) return;
+            dispatch_activate(index);
+        });
+    };
+    events.back = [this] { post([this] { back(); }); };
+    cp0::ui::CompactListOptions options;
+    options.wrap = wrap;
+    list_ = std::make_unique<cp0::ui::CompactList>(page_->root(), lay_[static_cast<int>(density)], std::move(events),
+                                                    options);
+    list_density_ = density;
+    list_wrap_ = wrap;
+    update_chrome();
+    if (!dialog_) focus(list_->focus_object());
+}
+
+void SerialApp::ensure_list(Density density, bool wrap)
+{
+    if (!list_ || list_density_ != density || list_wrap_ != wrap) build_list(density, wrap);
+}
+
+void SerialApp::make_roller()
+{
+    list_.reset();
+    cp0::ui::RollerEvents events;
+    events.activate = [this](int row) {
+        post([this, row] {
+            if (dialog_) return;
+            if (nav_.current() == View::Choice) activate_choice(row);
+        });
+    };
+    events.back = [this] { post([this] { back(); }); };
+    roller_ = std::make_unique<cp0::ui::Roller>(page_->root(), layout_, std::move(events));
+    if (!dialog_) focus(roller_->focus_object());
+}
+
+void SerialApp::dispatch_activate(int row)
+{
+    switch (nav_.current()) {
+    case View::Ports: activate_ports(row); break;
+    case View::Port: activate_port(row); break;
+    case View::Choice: activate_choice(row); break;
+    case View::Ask: activate_ask(row); break;
+    case View::Card: activate_card(row); break;
+    case View::Terminal:
+    case View::Detail: break;
+    }
+}
+
+/* A row for the lists. A value too wide for its row is cut with dots (the label keeps at least a third of the row),
+ * and the whole "label: value" goes to `full` for the status band. A label with no value is cut by the list, or, with
+ * `note`, is a note: section rows (grey capitals, never selected), as many as its text needs. `full` gets one entry
+ * per row added. */
+void SerialApp::add_rows(std::vector<cp0::ui::ListRow> &rows, std::vector<std::string> &full, Density density,
+                         const std::string &label, const std::string &value, cp0::ui::ValueTone tone, bool note) const
+{
+    const int i = static_cast<int>(density);
+    const cp0_ui_list_layout_t &l = lay_[i];
+    const int room = std::max(1, l.w - 2 * l.inset);
+    if (value.empty()) {
+        if (note) {
+            const auto width = [this, i](const std::string &t) { /* the list draws sections in capitals, 1 px apart */
+                std::string up = t;
+                for (char &c : up) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                return tw(up, note_font_[i]) + static_cast<int>(up.size());
+            };
+            for (const std::string &line : wrap_lines(label, width, room)) {
+                rows.push_back(cp0::ui::ListRow::section(line));
+                full.emplace_back();
+            }
+        } else {
+            rows.push_back(cp0::ui::ListRow::item(label));
+            full.push_back(tw(label, label_font_[i]) <= room ? std::string() : label);
+        }
+        return;
+    }
+    const int label_w = tw(label, label_font_[i]);
+    const int value_w = tw(value, value_font_[i]);
+    std::string shown = value;
+    std::string whole;
+    if (label_w + l.gap + value_w > room) {
+        const int most = std::min(value_w, std::max(room - l.gap - label_w, room * 2 / 3));
+        if (value_w > most) shown = fit_text(value, value_font_[i], most);
+        whole = label + ": " + value;
+    }
+    rows.push_back(cp0::ui::ListRow::item(label, shown, tone));
+    full.push_back(whole);
+}
+
+/* The text cut (at a UTF-8 character) with "..." to fit `room` px. */
+std::string SerialApp::fit_text(const std::string &text, const lv_font_t *font, int room) const
+{
+    if (tw(text, font) <= room) return text;
+    std::string cut = text;
+    while (!cut.empty()) {
+        do cut.pop_back();
+        while (!cut.empty() && (static_cast<unsigned char>(cut.back()) & 0xC0) == 0x80);
+        if (tw(cut + "...", font) <= room) break;
+    }
+    return cut + "...";
+}
+
 void SerialApp::show_title()
 {
     switch (nav_.current()) {
@@ -199,6 +403,7 @@ void SerialApp::back()
     case View::Terminal: close_terminal(); return;
     case View::Choice: {
         nav_.back();
+        roller_.reset();
         const PortRow rows[] = {PortRow::Speed, PortRow::Frame, PortRow::Ending, PortRow::Backspace};
         show_port_rows(port_row_index(rows[static_cast<int>(choice_)]));
         show_title();
@@ -262,7 +467,7 @@ void SerialApp::scan()
     if (nav_.current() != View::Ports) {
         ports_ = std::move(found);
         boots_ = std::move(boots);
-        list_.clear(); /* show_ports() builds the rows again when the page comes back */
+        ports_map_.clear(); /* show_ports() builds the rows again when the page comes back */
         return;
     }
     bool same_list = found.size() == ports_.size() && boots.size() == boots_.size();
@@ -270,11 +475,12 @@ void SerialApp::scan()
     for (std::size_t i = 0; same_list && i < boots.size(); ++i) same_list = boots[i].usb_dir == boots_[i].usb_dir;
     if (!same_list) { /* plugged or unplugged: the rows again, the highlight stays on its port */
         std::string selected;
-        const int sel = roller_->selected();
-        if (sel >= 0 && sel < static_cast<int>(list_.size()) && list_[static_cast<std::size_t>(sel)].kind == ListRow::Port)
-            selected = ports_[static_cast<std::size_t>(list_[static_cast<std::size_t>(sel)].port)].id;
-        const bool on_toggle = sel >= 0 && sel < static_cast<int>(list_.size()) &&
-                               list_[static_cast<std::size_t>(sel)].kind == ListRow::Onboard;
+        const int sel_row = sel();
+        if (sel_row >= 0 && sel_row < static_cast<int>(ports_map_.size()) &&
+            ports_map_[static_cast<std::size_t>(sel_row)].kind == PortsRow::Port)
+            selected = ports_[static_cast<std::size_t>(ports_map_[static_cast<std::size_t>(sel_row)].port)].id;
+        const bool on_toggle = sel_row >= 0 && sel_row < static_cast<int>(ports_map_.size()) &&
+                               ports_map_[static_cast<std::size_t>(sel_row)].kind == PortsRow::Onboard;
         if (selected.empty()) /* the highlight was not on a port: it goes to a port just plugged in */
             for (const PortInfo &p : found) {
                 const bool is_new = std::none_of(ports_.begin(), ports_.end(),
@@ -286,116 +492,113 @@ void SerialApp::scan()
             }
         ports_ = std::move(found);
         boots_ = std::move(boots);
-        show_ports(selected, on_toggle && selected.empty());
+        show_ports(selected, on_toggle && selected.empty(), true);
         return;
     }
+    bool changed = false;
     for (std::size_t i = 0; i < found.size(); ++i) { /* only the rows that changed */
         if (same_port(found[i], ports_[i])) continue;
         ports_[i] = found[i];
-        cp0::ui::RowSpec spec;
-        spec.kind = cp0::ui::RowKind::Nav;
-        spec.label = port_row_text(ports_[i]).first;
-        spec.value = port_row_text(ports_[i]).second;
-        roller_->update_row(static_cast<int>(i), spec);
+        changed = true;
+    }
+    if (changed && list_) {
+        list_->set_rows(ports_rows()); /* the list touches only the texts that changed */
         caption_row_ = -2;
     }
 }
 
-std::vector<cp0::ui::RowSpec> SerialApp::ports_rows()
+std::vector<cp0::ui::ListRow> SerialApp::ports_rows()
 {
-    list_.clear();
-    std::vector<cp0::ui::RowSpec> rows;
+    ports_map_.clear();
+    row_full_.clear();
+    std::vector<cp0::ui::ListRow> rows;
+    const auto mapped = [this, &rows](PortsRow::Kind kind, int port) {
+        while (ports_map_.size() < rows.size()) {
+            PortsRow lr;
+            lr.kind = kind;
+            lr.port = port;
+            ports_map_.push_back(lr);
+        }
+    };
     for (std::size_t i = 0; i < ports_.size(); ++i) {
-        ListRow lr;
-        lr.kind = ListRow::Port;
-        lr.port = static_cast<int>(i);
-        list_.push_back(lr);
-        cp0::ui::RowSpec spec;
-        spec.kind = cp0::ui::RowKind::Nav;
-        spec.label = port_row_text(ports_[i]).first;
-        spec.value = port_row_text(ports_[i]).second;
-        rows.push_back(spec);
+        add_rows(rows, row_full_, Density::Comfortable, port_row_text(ports_[i]).first, port_row_text(ports_[i]).second,
+                 cp0::ui::ValueTone::Normal, false);
+        mapped(PortsRow::Port, static_cast<int>(i));
     }
     for (std::size_t i = 0; i < boots_.size(); ++i) { /* a board in its USB boot loader: a drive, not a port */
-        ListRow lr;
-        lr.kind = ListRow::Boot;
-        lr.port = static_cast<int>(i);
-        list_.push_back(lr);
-        cp0::ui::RowSpec spec;
-        spec.kind = cp0::ui::RowKind::Nav;
-        spec.label = boots_[i].mode.title; /* the status line says it is a USB drive */
-        rows.push_back(spec);
+        add_rows(rows, row_full_, Density::Comfortable, boots_[i].mode.title, std::string(), cp0::ui::ValueTone::Normal,
+                 false); /* the status line says it is a USB drive */
+        mapped(PortsRow::Boot, static_cast<int>(i));
     }
-    ListRow toggle;
-    toggle.kind = ListRow::Onboard;
-    list_.push_back(toggle);
-    cp0::ui::RowSpec onboard;
-    onboard.kind = cp0::ui::RowKind::Toggle;
-    onboard.label = "Show on-board UARTs";
-    onboard.on = config_.show_onboard;
-    rows.push_back(onboard);
+    rows.push_back(cp0::ui::ListRow::item("Show on-board UARTs", config_.show_onboard ? "On" : "Off",
+                                          config_.show_onboard ? cp0::ui::ValueTone::Ok : cp0::ui::ValueTone::Normal));
+    row_full_.emplace_back();
+    mapped(PortsRow::Onboard, -1);
     if (!group_ok(groups())) {
-        ListRow access_row;
-        access_row.kind = ListRow::Access;
-        list_.push_back(access_row);
-        cp0::ui::RowSpec fix;
-        fix.kind = cp0::ui::RowKind::Nav;
-        fix.label = "Serial port access";
-        fix.value = "How to fix";
-        fix.value_rgb = kErrorRgb;
-        rows.push_back(fix);
+        rows.push_back(cp0::ui::ListRow::item("Serial port access", "How to fix", cp0::ui::ValueTone::Bad));
+        row_full_.emplace_back();
+        mapped(PortsRow::Access, -1);
     }
     return rows;
 }
 
-void SerialApp::show_ports(const std::string &select_id, bool select_toggle)
+/* keep: the page is already shown (a hot-plug, the on-board toggle): the rows follow in place, the scroll stays and
+ * the highlight goes where it is asked (nowhere asked: it stays where it was). */
+void SerialApp::show_ports(const std::string &select_id, bool select_toggle, bool keep)
 {
-    const std::vector<cp0::ui::RowSpec> rows = ports_rows();
-    int select = 0;
-    for (std::size_t i = 0; i < list_.size(); ++i) {
-        const ListRow &lr = list_[i];
-        if (select_toggle && lr.kind == ListRow::Onboard) select = static_cast<int>(i);
-        if (!select_toggle && lr.kind == ListRow::Port && ports_[static_cast<std::size_t>(lr.port)].id == select_id)
+    if (keep && (!list_ || list_density_ != Density::Comfortable)) keep = false;
+    ensure_list(Density::Comfortable, true);
+    const std::vector<cp0::ui::ListRow> rows = ports_rows();
+    int select = -1;
+    for (std::size_t i = 0; i < ports_map_.size(); ++i) {
+        const PortsRow &lr = ports_map_[i];
+        if (select_toggle && lr.kind == PortsRow::Onboard) select = static_cast<int>(i);
+        if (!select_toggle && lr.kind == PortsRow::Port && ports_[static_cast<std::size_t>(lr.port)].id == select_id)
             select = static_cast<int>(i);
     }
-    roller_->set_rows(rows, select, true);
-    roller_->set_hidden(false);
+    if (keep) {
+        list_->set_rows(rows);
+        if (select >= 0 && select != list_->selected()) list_->select(select, false);
+    } else {
+        list_->reset_rows(rows, std::max(0, select));
+    }
+    if (!dialog_) focus(list_->focus_object());
     caption_row_ = -2;
     update_ports_caption(true);
 }
 
 void SerialApp::update_ports_caption(bool force)
 {
-    const int sel = roller_->selected();
-    if (!force && sel == caption_row_) return;
-    caption_row_ = sel;
-    const bool valid = sel >= 0 && sel < static_cast<int>(list_.size());
-    if (valid && list_[static_cast<std::size_t>(sel)].kind == ListRow::Port) {
-        const PortInfo &p = ports_[static_cast<std::size_t>(list_[static_cast<std::size_t>(sel)].port)];
-        page_->set_caption(port_caption(p, config_.settings(p.id)), cp0::ui::CaptionTone::Normal);
-    } else if (valid && list_[static_cast<std::size_t>(sel)].kind == ListRow::Boot) {
-        const BootDrive &d = boots_[static_cast<std::size_t>(list_[static_cast<std::size_t>(sel)].port)];
-        page_->set_caption(d.mode.hint, cp0::ui::CaptionTone::Warn);
+    const int row = sel();
+    if (!force && row == caption_row_) return;
+    caption_row_ = row;
+    const bool valid = row >= 0 && row < static_cast<int>(ports_map_.size());
+    if (valid && ports_map_[static_cast<std::size_t>(row)].kind == PortsRow::Port) {
+        const PortInfo &p = ports_[static_cast<std::size_t>(ports_map_[static_cast<std::size_t>(row)].port)];
+        say(port_caption(p, config_.settings(p.id)), cp0::ui::CaptionTone::Normal);
+    } else if (valid && ports_map_[static_cast<std::size_t>(row)].kind == PortsRow::Boot) {
+        const BootDrive &d = boots_[static_cast<std::size_t>(ports_map_[static_cast<std::size_t>(row)].port)];
+        say(d.mode.hint, cp0::ui::CaptionTone::Warn);
     } else {
-        page_->set_caption("", cp0::ui::CaptionTone::Normal);
+        say("", cp0::ui::CaptionTone::Normal);
     }
-    // the empty list's card, while nothing else is over the centre row's upper half
-    show_card(ports_.empty() && boots_.empty() && valid &&
-              list_[static_cast<std::size_t>(sel)].kind == ListRow::Onboard);
+    show_empty_card(ports_.empty() && boots_.empty());
 }
 
-/* The empty list: a card above the centre row, "No serial adapter found." and what to do, at the BODY size (the
- * CAPTION size when that does not fit). */
-void SerialApp::show_card(bool show)
+/* The empty list: a card under the rows, "No serial adapter found." and what to do, at the BODY size (the CAPTION
+ * size when that does not fit). */
+void SerialApp::show_empty_card(bool show)
 {
-    if (!show) {
+    if (!show || nav_.current() != View::Ports) {
         if (card_) lv_obj_add_flag(card_, LV_OBJ_FLAG_HIDDEN);
         return;
     }
+    const cp0_ui_list_layout_t &l = lay_[static_cast<int>(Density::Comfortable)];
+    const int s = cp0_ui_tok(CP0_TOK_SPACE_S);
+    const int pad = layout_.gap;
+    const int top = l.y + static_cast<int>(ports_map_.size()) * l.row_h + layout_.gap;
+    const int room = l.y + l.h - top;
     if (!card_) {
-        const int s = cp0_ui_tok(CP0_TOK_SPACE_S);
-        const int pad = layout_.gap;
-        const int room = layout_.edge_pad - 2 * layout_.gap; /* above the centre row, a gap each side */
         card_ = lv_obj_create(page_->root());
         lv_obj_remove_style_all(card_);
         lv_obj_remove_flag(card_, LV_OBJ_FLAG_SCROLLABLE);
@@ -408,7 +611,7 @@ void SerialApp::show_card(bool show)
         lv_obj_set_style_pad_all(card_, pad, 0);
         lv_obj_set_style_pad_row(card_, s, 0);
         lv_obj_set_flex_flow(card_, LV_FLEX_FLOW_COLUMN);
-        lv_obj_set_width(card_, layout_.roller_w);
+        lv_obj_set_width(card_, l.w);
         lv_obj_set_height(card_, LV_SIZE_CONTENT);
         lv_obj_t *title = lv_label_create(card_);
         lv_label_set_text(title, kEmptyTitle);
@@ -416,7 +619,7 @@ void SerialApp::show_card(bool show)
         lv_obj_t *text = lv_label_create(card_);
         lv_label_set_text(text, kEmptyText);
         lv_label_set_long_mode(text, LV_LABEL_LONG_MODE_WRAP);
-        lv_obj_set_width(text, layout_.roller_w - 2 * pad);
+        lv_obj_set_width(text, l.w - 2 * pad);
         lv_obj_set_style_text_color(text, lv_color_hex(kCardText), 0);
         for (const cp0_ui_text_t size : {CP0_TEXT_BODY, CP0_TEXT_CAPTION}) {
             lv_obj_set_style_text_font(title, cp0_ui_font(size), 0);
@@ -424,18 +627,18 @@ void SerialApp::show_card(bool show)
             lv_obj_update_layout(card_);
             if (lv_obj_get_height(card_) <= room) break;
         }
-        lv_obj_set_pos(card_, layout_.roller_x, layout_.body_y + layout_.gap);
     }
+    lv_obj_set_pos(card_, l.x, top);
     lv_obj_remove_flag(card_, LV_OBJ_FLAG_HIDDEN);
 }
 
 void SerialApp::activate_ports(int row)
 {
-    if (row < 0 || row >= static_cast<int>(list_.size())) return;
-    const ListRow lr = list_[static_cast<std::size_t>(row)];
+    if (row < 0 || row >= static_cast<int>(ports_map_.size())) return;
+    const PortsRow lr = ports_map_[static_cast<std::size_t>(row)];
     switch (lr.kind) {
-    case ListRow::Port: open_port_page(ports_[static_cast<std::size_t>(lr.port)]); break;
-    case ListRow::Boot: {
+    case PortsRow::Port: open_port_page(ports_[static_cast<std::size_t>(lr.port)]); break;
+    case PortsRow::Boot: {
         const BootDrive &d = boots_[static_cast<std::size_t>(lr.port)];
         Problem notice;
         notice.title = d.mode.title;
@@ -443,7 +646,7 @@ void SerialApp::activate_ports(int row)
         show_problem(notice);
         break;
     }
-    case ListRow::Onboard: {
+    case PortsRow::Onboard: {
         config_.show_onboard = !config_.show_onboard;
         save_config(config_path_, config_);
         std::vector<PortInfo> all = scan_all(true);
@@ -452,10 +655,10 @@ void SerialApp::activate_ports(int row)
         for (PortInfo &p : all)
             if (!p.onboard || config_.show_onboard) found.push_back(std::move(p));
         ports_ = std::move(found);
-        show_ports(std::string(), true);
+        show_ports(std::string(), true, true);
         break;
     }
-    case ListRow::Access: show_problem(group_problem(groups())); break;
+    case PortsRow::Access: show_problem(group_problem(groups())); break;
     }
 }
 
@@ -472,7 +675,7 @@ void SerialApp::open_port_page(const PortInfo &port)
     probe_value_[0].clear();
     probe_value_[1].clear();
     ask_value_.clear();
-    show_card(false);
+    show_empty_card(false);
     nav_.open(View::Port);
     show_port_rows(-1);
     show_port_rows(port_row_index(PortRow::Connect));
@@ -480,97 +683,64 @@ void SerialApp::open_port_page(const PortInfo &port)
     update_port_caption(true);
 }
 
-std::vector<cp0::ui::RowSpec> SerialApp::port_rows()
+std::vector<cp0::ui::ListRow> SerialApp::port_rows()
 {
+    using cp0::ui::ListRow;
+    using cp0::ui::ValueTone;
     port_map_.clear();
-    std::vector<cp0::ui::RowSpec> rows;
-    const auto add = [&](PortRow which, cp0::ui::RowSpec spec) {
-        port_map_.push_back(which);
-        rows.push_back(std::move(spec));
+    row_full_.clear();
+    std::vector<ListRow> rows;
+    const auto synced = [this, &rows](PortRow which) { /* every row added since the last call is `which` */
+        while (port_map_.size() < rows.size()) port_map_.push_back(which);
     };
+    const auto add = [&](PortRow which, ListRow row) {
+        rows.push_back(std::move(row));
+        row_full_.emplace_back();
+        synced(which);
+    };
+    const auto toggle = [&](PortRow which, const char *label, bool on) {
+        add(which, ListRow::item(label, on ? "On" : "Off", on ? ValueTone::Ok : ValueTone::Normal));
+    };
+    add(PortRow::Info, ListRow::section("What is connected"));
     for (const auto &kv : port_info_items(port_, can_open(port_) && group_ok(groups()))) {
-        cp0::ui::RowSpec spec;
-        spec.kind = cp0::ui::RowKind::Info;
-        spec.label = kv.first;
-        spec.value = kv.second;
-        add(PortRow::Info, spec);
+        add_rows(rows, row_full_, Density::Compact, kv.first, kv.second, ValueTone::Normal, false);
+        synced(PortRow::Info);
     }
     // "Identify what is connected": a heading, the adapter note, the last result, the three levels
     const Identity known = port_identity();
-    cp0::ui::RowSpec head;
-    head.kind = cp0::ui::RowKind::Info;
-    head.label = "Identify what is connected";
-    add(PortRow::Info, head);
+    add(PortRow::Info, ListRow::section("Identify what is connected"));
     if (bare_adapter(port_) && !known.found()) {
-        cp0::ui::RowSpec note = head;
-        note.label = kAdapterNote;
-        add(PortRow::Info, note);
+        add_rows(rows, row_full_, Density::Compact, kAdapterNote, std::string(), ValueTone::Normal, true);
+        synced(PortRow::Info);
     }
     if (known.kind != Kind::None) {
-        cp0::ui::RowSpec behind;
-        behind.kind = cp0::ui::RowKind::Nav;
-        behind.label = "Behind it";
-        behind.value = behind_text(known);
-        add(PortRow::Behind, behind);
+        add_rows(rows, row_full_, Density::Compact, "Behind it", behind_text(known), ValueTone::Normal, false);
+        synced(PortRow::Behind);
     }
     const PortRow level_rows[] = {PortRow::IdListen, PortRow::IdReset, PortRow::IdAsk};
     for (int i = 0; i < 3; ++i) {
-        cp0::ui::RowSpec spec;
         const bool busy = prober_ && probe_level(probe_) == i + 1 && i < 2;
         if (busy) {
-            spec.kind = cp0::ui::RowKind::Busy;
-            spec.label = probe_shown_;
-        } else {
-            spec.kind = cp0::ui::RowKind::Nav;
-            spec.label = i == 0 ? "Listen" : i == 1 ? "Reset and listen" : "Ask the device";
-            const std::string &outcome = i < 2 ? probe_value_[i] : std::string();
-            spec.value = !outcome.empty() ? outcome : i == 0 ? "sends nothing" : i == 1 ? "resets" : "sends";
-            if (outcome == "Stopped" || outcome == "Failed") spec.value_rgb = kErrorRgb;
+            add(level_rows[i], ListRow::item(probe_shown_, "Stop", ValueTone::Warn));
+            continue;
         }
-        add(level_rows[i], spec);
+        const std::string label = i == 0 ? "Listen" : i == 1 ? "Reset and listen" : "Ask the device";
+        const std::string &outcome = i < 2 ? probe_value_[i] : std::string();
+        const std::string value = !outcome.empty() ? outcome : i == 0 ? "sends nothing" : i == 1 ? "resets" : "sends";
+        add(level_rows[i], ListRow::item(label, value, tone_of(outcome == "Stopped" || outcome == "Failed")));
     }
+    add(PortRow::Info, ListRow::section("Settings"));
     const int baud = effective_baud(settings_, recommended());
-    cp0::ui::RowSpec spec;
-    spec.kind = cp0::ui::RowKind::Nav;
-    spec.label = "Speed";
-    spec.value = speed_value(baud, recommended());
-    add(PortRow::Speed, spec);
-    spec.label = "Frame";
-    spec.value = settings_.frame;
-    add(PortRow::Frame, spec);
-    cp0::ui::RowSpec echo;
-    echo.kind = cp0::ui::RowKind::Toggle;
-    echo.label = "Local echo";
-    echo.on = settings_.echo;
-    add(PortRow::Echo, echo);
-    spec.label = "Enter sends";
-    spec.value = ending_name(settings_.ending);
-    add(PortRow::Ending, spec);
-    spec.label = "Backspace sends";
-    spec.value = backspace_name(settings_.backspace);
-    add(PortRow::Backspace, spec);
-    cp0::ui::RowSpec log = echo;
-    log.label = "Log to file";
-    log.on = settings_.log;
-    add(PortRow::Log, log);
-    cp0::ui::RowSpec find;
-    if (finder_) {
-        find.kind = cp0::ui::RowKind::Busy;
-        find.label = finder_shown_;
-    } else {
-        find.kind = cp0::ui::RowKind::Nav;
-        find.label = "Find the speed";
-        find.value = find_value_;
-        find.value_rgb = find_rgb_;
-    }
-    add(PortRow::Find, find);
-    cp0::ui::RowSpec enter = echo;
-    enter.label = "Send Enter while finding";
-    enter.on = settings_.detect_enter;
-    add(PortRow::FindEnter, enter);
-    spec.label = "Connect";
-    spec.value = std::to_string(baud) + " " + settings_.frame;
-    add(PortRow::Connect, spec);
+    add(PortRow::Speed, ListRow::item("Speed", speed_value(baud, recommended())));
+    add(PortRow::Frame, ListRow::item("Frame", settings_.frame));
+    toggle(PortRow::Echo, "Local echo", settings_.echo);
+    add(PortRow::Ending, ListRow::item("Enter sends", ending_name(settings_.ending)));
+    add(PortRow::Backspace, ListRow::item("Backspace sends", backspace_name(settings_.backspace)));
+    toggle(PortRow::Log, "Log to file", settings_.log);
+    if (finder_) add(PortRow::Find, ListRow::item(finder_shown_, "Stop", ValueTone::Warn));
+    else add(PortRow::Find, ListRow::item("Find the speed", find_value_, tone_of(find_rgb_ != -1)));
+    toggle(PortRow::FindEnter, "Send Enter while finding", settings_.detect_enter);
+    add(PortRow::Connect, ListRow::item("Connect", std::to_string(baud) + " " + settings_.frame));
     return rows;
 }
 
@@ -581,54 +751,61 @@ int SerialApp::port_row_index(PortRow which) const
     return 0;
 }
 
-/* select < 0: the rows are only mapped (port_map_), nothing is shown */
-void SerialApp::show_port_rows(int select)
+/* select < 0: the rows are only mapped (port_map_), nothing is shown. keep: the page is on screen already (a probe or
+ * the speed finder started or ended): the rows follow in place, the scroll stays. */
+void SerialApp::show_port_rows(int select, bool keep)
 {
-    const std::vector<cp0::ui::RowSpec> rows = port_rows();
+    const std::vector<cp0::ui::ListRow> rows = port_rows();
     if (select < 0) return;
-    roller_->set_rows(rows, select, true);
-    roller_->set_hidden(false);
+    if (keep && (!list_ || list_density_ != Density::Compact || nav_.current() != View::Port)) keep = false;
+    ensure_list(Density::Compact, true);
+    if (keep) {
+        list_->set_rows(rows);
+        if (select != list_->selected()) list_->select(select, false);
+    } else {
+        list_->reset_rows(rows, select);
+    }
+    if (!dialog_) focus(list_->focus_object());
 }
 
 void SerialApp::update_port_row(PortRow which)
 {
-    const std::vector<cp0::ui::RowSpec> rows = port_rows();
+    const std::vector<cp0::ui::ListRow> rows = port_rows();
     const int index = port_row_index(which);
-    roller_->update_row(index, rows[static_cast<std::size_t>(index)]);
+    list_->update_row(index, rows[static_cast<std::size_t>(index)]);
     if (which == PortRow::Speed || which == PortRow::Frame) { /* Connect shows them too */
         const int connect = port_row_index(PortRow::Connect);
-        roller_->update_row(connect, rows[static_cast<std::size_t>(connect)]);
+        list_->update_row(connect, rows[static_cast<std::size_t>(connect)]);
     }
 }
 
-/* The port page's status line: why the recommended settings, or the result of Find the speed. It shows while the
- * highlight is on a setting (not over the "What is connected" rows, which it would cover); a port that went away is
- * said whatever the highlight. */
+/* The port page's status band: why the recommended settings, or the result of Find the speed. A row cut to fit says
+ * its whole text; a port that went away is said whatever the highlight. */
 void SerialApp::update_port_caption(bool force)
 {
-    const int sel = roller_->selected();
-    if (!force && sel == caption_row_) return;
-    caption_row_ = sel;
+    const int row = sel();
+    if (!force && row == caption_row_) return;
+    caption_row_ = row;
     if (!port_present_) {
-        page_->set_caption(port_.tty + " is unplugged: plug it in again", cp0::ui::CaptionTone::Warn);
+        say(port_.tty + " is unplugged: plug it in again", cp0::ui::CaptionTone::Warn);
         return;
     }
-    const bool info = sel >= 0 && sel < static_cast<int>(port_map_.size()) &&
-                      port_map_[static_cast<std::size_t>(sel)] == PortRow::Info;
-    const PortRow which = sel >= 0 && sel < static_cast<int>(port_map_.size()) ? port_map_[static_cast<std::size_t>(sel)]
-                                                                               : PortRow::Info;
-    if (info) page_->set_caption("", cp0::ui::CaptionTone::Normal);
-    else if (finder_ || prober_) page_->set_caption("Esc stops", cp0::ui::CaptionTone::Normal);
-    else if (which == PortRow::IdListen) page_->set_caption(probe_caption(Probe::Listen, reset_style(port_)), cp0::ui::CaptionTone::Normal);
-    else if (which == PortRow::IdReset) page_->set_caption(probe_caption(Probe::Reset, reset_style(port_)), cp0::ui::CaptionTone::Normal);
-    else if (which == PortRow::IdAsk) page_->set_caption(probe_caption(Probe::At, reset_style(port_)), cp0::ui::CaptionTone::Normal);
+    const bool mapped = row >= 0 && row < static_cast<int>(port_map_.size());
+    const bool info = mapped && port_map_[static_cast<std::size_t>(row)] == PortRow::Info;
+    const PortRow which = mapped ? port_map_[static_cast<std::size_t>(row)] : PortRow::Info;
+    if (info) say(row < static_cast<int>(row_full_.size()) ? row_full_[static_cast<std::size_t>(row)] : std::string(),
+                  cp0::ui::CaptionTone::Normal);
+    else if (finder_ || prober_) say("Esc stops", cp0::ui::CaptionTone::Normal);
+    else if (which == PortRow::IdListen) say(probe_caption(Probe::Listen, reset_style(port_)), cp0::ui::CaptionTone::Normal);
+    else if (which == PortRow::IdReset) say(probe_caption(Probe::Reset, reset_style(port_)), cp0::ui::CaptionTone::Normal);
+    else if (which == PortRow::IdAsk) say(probe_caption(Probe::At, reset_style(port_)), cp0::ui::CaptionTone::Normal);
     else if (which == PortRow::Behind) {
         const Identity known = port_identity();
-        page_->set_caption(confidence_text(known) + ", " + when_text(known.when), cp0::ui::CaptionTone::Normal);
+        say(confidence_text(known) + ", " + when_text(known.when), cp0::ui::CaptionTone::Normal);
     }
     else if (!port_note_.empty())
-        page_->set_caption(port_note_, port_note_warn_ ? cp0::ui::CaptionTone::Warn : cp0::ui::CaptionTone::Normal);
-    else page_->set_caption(port_.rec.reason, cp0::ui::CaptionTone::Normal);
+        say(port_note_, port_note_warn_ ? cp0::ui::CaptionTone::Warn : cp0::ui::CaptionTone::Normal);
+    else say(port_.rec.reason, cp0::ui::CaptionTone::Normal);
 }
 
 void SerialApp::save_port()
@@ -697,7 +874,7 @@ void SerialApp::start_finder()
     finder_->start();
     finder_shown_ = finder_->progress().text;
     port_note_.clear();
-    show_port_rows(port_row_index(PortRow::Find)); /* the row turns Busy: its kind changes, so all rows again */
+    show_port_rows(port_row_index(PortRow::Find), true); /* the row says the progress */
     update_port_caption(true);
 }
 
@@ -706,13 +883,10 @@ void SerialApp::check_finder()
     if (!finder_) return;
     const FinderProgress p = finder_->progress();
     if (!p.done) {
-        if (p.text != finder_shown_ && nav_.current() == View::Port) {
+        if (p.text != finder_shown_ && nav_.current() == View::Port && list_) {
             finder_shown_ = p.text;
             const int index = port_row_index(PortRow::Find);
-            cp0::ui::RowSpec spec;
-            spec.kind = cp0::ui::RowKind::Busy;
-            spec.label = finder_shown_;
-            roller_->update_row(index, spec);
+            list_->update_row(index, cp0::ui::ListRow::item(finder_shown_, "Stop", cp0::ui::ValueTone::Warn));
         }
         return;
     }
@@ -744,7 +918,7 @@ void SerialApp::check_finder()
         notice.text = p.result.message;
     }
     if (nav_.current() == View::Port) {
-        show_port_rows(port_row_index(PortRow::Find));
+        show_port_rows(port_row_index(PortRow::Find), true);
         update_port_caption(true);
     }
     if (!notice.title.empty()) show_problem(notice);
@@ -791,8 +965,9 @@ void SerialApp::open_choice(Choice which)
         break;
     }
     nav_.open(View::Choice);
+    make_roller(); /* a pick-one list with a check on the current value: the Settings look */
     roller_->set_rows(rows, current, true);
-    page_->set_caption("", cp0::ui::CaptionTone::Normal);
+    update_chrome();
     show_title();
 }
 
@@ -838,8 +1013,7 @@ void SerialApp::connect()
         });
     };
     nav_.open(View::Terminal);
-    roller_->set_hidden(true);
-    page_->set_caption("", cp0::ui::CaptionTone::Normal);
+    update_chrome(); /* the list and the band give way to the terminal */
     term_ = std::make_unique<TerminalView>(*page_, layout_, std::move(spec)); /* it sets the page title */
     focus(term_->focus_object());
 }
@@ -848,11 +1022,11 @@ void SerialApp::close_terminal()
 {
     term_.reset();
     nav_.back();
-    roller_->set_hidden(false);
+    update_chrome();
     show_title();
     update_port_caption(true);
     next_scan_ = 0; /* the port may have gone meanwhile */
-    focus(roller_->focus_object());
+    focus(focus_target());
 }
 
 /* ------------------------------------------------------------------ dialogs */
@@ -867,6 +1041,7 @@ void SerialApp::show_problem(const Problem &problem)
     dialog_ = std::make_unique<cp0::ui::Dialog>(page_->root(), layout_, std::move(spec));
     dialog_->add_text(problem.text);
     dialog_->relayout();
+    update_chrome(); /* the band gives way to the dialog */
     focus(dialog_->focus_object());
 }
 
@@ -874,7 +1049,8 @@ void SerialApp::close_dialog()
 {
     if (!dialog_) return;
     dialog_.reset();
-    focus(term_ ? term_->focus_object() : detail_ ? detail_->focus_object() : roller_->focus_object());
+    update_chrome();
+    focus(focus_target());
 }
 
 } // namespace sc
