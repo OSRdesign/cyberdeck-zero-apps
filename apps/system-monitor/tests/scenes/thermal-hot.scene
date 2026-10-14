@@ -13,8 +13,9 @@ tap "Temperature"
 wait 1200
 shot thermal-hot
 expect text "CPU temperature"
-@640x480,1024x600 expect text "Throttled now: too hot"
-@800x480,720x720,1280x720 expect text "Throttled now: the CPU is too hot"
+# the full-width list (0.2.0): at 1024x600 the long text now fits too; only the deck's 640 px keeps the short one
+@640x480 expect text "Throttled now: too hot"
+@800x480,720x720,1280x720,1024x600 expect text "Throttled now: the CPU is too hot"
 
 key down
 key down
