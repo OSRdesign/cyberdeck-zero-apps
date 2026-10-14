@@ -1,6 +1,6 @@
 # System Monitor
 
-Version 0.2.0 (draft, not published yet), package `system-monitor`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.2.0, package `system-monitor`. Part of [cyberdeck-zero-apps](../../README.md).
 
 System Monitor is a live, read-only look at the Raspberry Pi it runs on: CPU load per core, temperature, frequency,
 memory, storage, network, processes and the **power supply** (under-voltage and throttling from the firmware's flags,
@@ -110,7 +110,7 @@ header and Settings > Apps keep "System Monitor".
 
 ## Install
 
-From **Settings > Apps** once published (the app is a draft for now). By hand:
+From **Settings > Apps**. By hand:
 
 ```sh
 python3 tools/make_registry.py --only system-monitor --out <a folder outside packages/>
@@ -168,7 +168,7 @@ In WSL (the launcher build tree `~/zero7/launcher` with its SDK; see `../_common
 ```sh
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/system-monitor/build.sh host           # tests + scenes
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/system-monitor/build.sh all --strict   # + aarch64 binary
-python3 tools/make_registry.py --only system-monitor --out <a folder outside packages/>       # the .deb (draft)
+python3 tools/make_registry.py --only system-monitor --out <a folder outside packages/>       # a local .deb
 ```
 
 * `src/core/`: no LVGL. `parsers` (stat, meminfo, loadavg, uptime, net/dev, route, wireless, `iw` link, diskstats,
@@ -195,7 +195,7 @@ The same fixture variable works on a board, for screenshots of a state that is h
 
 ## Changes
 
-* 0.2.0 (draft): the pages' lists move to the launcher's `cp0::ui::CompactList` (top-aligned dense rows, scrolling
+* 0.2.0: the pages' lists move to the launcher's `cp0::ui::CompactList` (top-aligned dense rows, scrolling
   only at the bottom edge, a thin auto-hiding scrollbar, headings in capitals that are not selectable; read-only pages
   scroll one row per key press). On Temp & power the Power row says *Under-voltage now* and the row *Check the power
   supply* follows it. Built against the launcher main after #47. The detail pages' chart and list fill the screen
