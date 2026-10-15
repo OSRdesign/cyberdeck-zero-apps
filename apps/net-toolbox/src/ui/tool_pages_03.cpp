@@ -601,11 +601,11 @@ std::vector<ui::RichRow> ToolboxApp::ble_list()
         }
         rows.push_back(ui::RichRow::section(ui::ble_row_label(*dev)));
         for (const ui::RowDef &d : ui::ble_detail_rows(*dev, clock_ms())) rows.push_back(rich_row(d));
+        rows.push_back(ui::RichRow::text("The rings show signal strength, not distance: walls and bodies change it.", ui::Tone::Normal, true, true));
         rows.push_back(ui::RichRow::text("Esc closes the details.", ui::Tone::Normal, true, true));
         return rows;
     }
     if (s && !s->devices.empty()) {
-        rows.push_back(ui::RichRow::text(ui::kBleLegendLine, ui::Tone::Normal, false, true));
         const int inset = rich_->layout().inset, w = rich_->layout().w;
         const std::size_t n = s->devices.size();
         if (machine_views_.size() > n) machine_views_.resize(n);
