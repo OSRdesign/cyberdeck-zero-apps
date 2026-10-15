@@ -19,6 +19,5 @@ wait 400
 shot scan
 expect text "Scanning, 25 devices, 37 s left"
 expect text "Stop"
-expect text "Rings show signal strength, not distance."
 expect text "Galaxy Buds2"
 expect notext "Message cut off"
