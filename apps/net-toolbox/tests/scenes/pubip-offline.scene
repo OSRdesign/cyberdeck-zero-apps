@@ -1,0 +1,16 @@
+# Public IP, no internet
+title Net Toolbox: Public IP, no internet
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO pubip=offline
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+shot result
+expect text "Not reachable: no connection to Cloudflare"
+expect notext "Message cut off"

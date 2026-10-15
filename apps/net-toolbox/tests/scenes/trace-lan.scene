@@ -1,0 +1,21 @@
+# Traceroute, the gateway as the target
+title Net Toolbox: Traceroute, the gateway as the target
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO trace=starting
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key enter
+shot idle
+expect text "Press Start to trace Gateway 192.168.68.1"
+key enter
+shot running
+key tab
+key enter
+shot stopped
+key right
+key right
+key enter
+shot saved
+expect notext "Message cut off"

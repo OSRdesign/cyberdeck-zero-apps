@@ -25,12 +25,16 @@ expect text "Start"
 tap "Esc"
 expect text "Diagnose my connection"
 tap "Port check"
+# the first tap scrolls the half-hidden row into view: the second one waits for it
+wait 400
 tap "Port check"
 tap "Run"
 shot port
 expect text "Open"
 tap "Esc"
-tap "Interfaces"
+# Interfaces is the ninth row, below the fold: End scrolls to it and selects it, so one tap acts
+key end
+wait 400
 tap "Interfaces"
 expect text "Signal"
 tap "Esc"

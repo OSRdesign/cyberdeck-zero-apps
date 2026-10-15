@@ -6,9 +6,11 @@
 #include "settings.hpp"
 
 #include "dns.hpp"
+#include "httpcheck.hpp"
 #include "netaddr.hpp"
 #include "portcheck.hpp"
 #include "text.hpp"
+#include "whois.hpp"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -88,6 +90,10 @@ std::string Settings::serialize() const
     if (!port_host.empty()) out += "port_host=" + port_host + "\n";
     out += "port=" + std::to_string(port) + "\n";
     if (!port_preset.empty()) out += "port_preset=" + port_preset + "\n";
+    if (!trace_target.empty()) out += "trace_target=" + trace_target + "\n";
+    if (!http_url.empty()) out += "http_url=" + http_url + "\n";
+    out += std::string("http_insecure=") + (http_insecure ? "1" : "0") + "\n";
+    if (!whois_query.empty()) out += "whois_query=" + whois_query + "\n";
     return out;
 }
 
@@ -128,6 +134,17 @@ Settings Settings::parse(const std::string &text)
         } else if (key == "port_preset") {
             for (const PortPreset &p : port_presets())
                 if (value == p.label) s.port_preset = value;
+        } else if (key == "trace_target") {
+            if (host_ok(value)) s.trace_target = value;
+        } else if (key == "http_url") {
+            HttpTarget t;
+            if (parse_http_target(value, t)) s.http_url = value;
+        } else if (key == "http_insecure") {
+            if (value == "0" || value == "1") s.http_insecure = value == "1";
+        } else if (key == "whois_query") {
+            std::string object;
+            bool is_ip = false;
+            if (parse_whois_query(value, object, is_ip)) s.whois_query = value;
         }
     }
     return s;

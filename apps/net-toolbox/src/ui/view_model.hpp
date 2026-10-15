@@ -6,6 +6,9 @@
  *
  *   Home band, Interfaces rows (Wi-Fi signal words), the Diagnosis ladder's words and message, the Ping headline,
  *   statistics line, packet cells and graph scale, the DNS status line and result rows, the Port check summary.
+ *   0.2: the traceroute chain (hop looks, names, loss tags, bar lengths, the status line and the verdict, the details of
+ *   a hop), the HTTP check (status badge, waterfall segments, certificate badge and rows), the public address rows and
+ *   the whois summary rows, with the "days left" wording they share.
  *
  * A tone is a status (Ok green, Warn amber, Bad red); the pages never show it without the words or a shape.
  */
@@ -16,8 +19,13 @@
 #include "interfaces.hpp"
 #include "ping.hpp"
 #include "portcheck.hpp"
+#include "httpcheck.hpp"
+#include "publicip.hpp"
+#include "traceroute.hpp"
+#include "whois.hpp"
 
 #include <cstdint>
+#include <ctime>
 #include <string>
 #include <vector>
 
@@ -27,7 +35,7 @@ namespace ui {
 enum class Tone { Normal, Ok, Warn, Bad };
 
 /* the mark of a state (a shape, not only a colour) */
-enum class Mark { None, Check, Cross, Dash, Bang };
+enum class Mark { None, Check, Cross, Dash, Bang, Arrow };
 
 /* one row of a list page: a heading (section) or a label with a value */
 struct RowDef {
@@ -119,6 +127,138 @@ PortSummary port_summary(const PortSnapshot &s);
 
 /* "Web 80, 443" for a preset, "443 (https)" for one port */
 std::string port_choice_text(const std::string &preset, int port);
+
+/* ---------------------------------------------------------------- shared: days left, sizes */
+
+/* "expires in 83 days", "expires in 1 day", "expires today", "expired 1 day ago", "expired 12 days ago" */
+std::string days_words(int days);
+/* green from 30 days, amber under 30, red under 7 and once expired */
+Tone days_tone(int days);
+
+/* "0 bytes", "812 bytes", "1.2 kB", "3.4 MB" */
+std::string size_text(std::uint64_t bytes);
+
+/* ---------------------------------------------------------------- Traceroute */
+
+/* What a hop's node looks like (a shape and a colour, never the colour alone):
+ *   Pending      the first probes are still out: a thin hollow ring
+ *   Ok           a filled green circle
+ *   Slow         an amber circle with a notch: loss of 1 to 20 %, or an average over 150 ms
+ *   Lossy        a red circle with an X: more than 20 % loss that later hops share (real loss)
+ *   Silent       a hollow dotted circle: nothing ever answered (normal: many routers do not)
+ *   RateLimited  a grey ring: loss at this hop only, later hops are clean (probably the router limiting its answers) */
+enum class HopLook { Pending, Ok, Slow, Lossy, Silent, RateLimited };
+
+constexpr double kHopSlowAvgMs = 150.0;
+constexpr double kHopLossBadPct = 20.0;
+
+HopLook hop_look(const TraceHop &h);
+/* "ok", "slow or some loss", "real loss", "no reply", "probably rate limiting", "waiting" */
+const char *hop_look_word(HopLook look);
+
+struct HopTexts {
+    HopLook look = HopLook::Pending;
+    bool destination = false;     /* double ring, and the word "reached" */
+    std::string number;           /* "7" */
+    std::string name;             /* the reverse name when known, else the address, else "" */
+    std::string ip;               /* the address beside a name ("" when the name is the address) */
+    std::string avg;              /* "43 ms", "" when nothing answered */
+    std::string loss;             /* "30 %" when something was lost and the hop is not silent */
+    std::string bar_word;         /* in the bar's place: "no reply", "waiting" */
+    std::string note;             /* "reached", "probably rate limiting", a router's "host unreachable" */
+    Tone note_tone = Tone::Normal;
+    Tone loss_tone = Tone::Normal;
+    bool has_bar = false;
+    double avg_ms = 0, best_ms = 0, worst_ms = 0;
+};
+HopTexts hop_texts(const TraceHop &h);
+
+/* "30 %" (at least "1 %" for any loss); "" for no loss, a silent or a waiting hop */
+std::string loss_tag(const TraceHop &h);
+
+/* the shared scale: the largest average of the first `shown` hops, at least 1 ms */
+double chain_scale_ms(const std::vector<TraceHop> &hops, std::size_t shown);
+/* a bar of `ms` on `scale_ms` over full_px: never under stub_px for a value above 0, never over full_px */
+int bar_px(double ms, double scale_ms, int full_px, int stub_px);
+
+/* "to example.com 93.184.215.14, round 3, 9 hops" (with_address false: "to example.com, round 3, 9 hops") */
+std::string trace_progress(const TraceSnapshot &s, bool with_address = true);
+/* "Reached in 9 hops, 43 ms" / "Did not reach the destination: no answer after hop 6" / "... unreachable at hop 5" */
+std::string trace_verdict(const TraceSnapshot &s);
+/* the page's status line: Press Start, Finding, the progress, the verdict (green reached, amber not reached, red
+ * unreachable or failed). idle_target: what Start will trace, for the idle line. */
+Band trace_band(const TraceSnapshot &s, const std::string &idle_target, bool with_address = true);
+
+/* The lines of a hop's details (the row opened in place). */
+struct HopDetail {
+    std::string addresses; /* "62.1.2.3 core-b.example, 30 answers; 62.1.2.9, 2 answers" */
+    std::string timing;    /* "last 42 ms  avg 43 ms  best 38 ms  worst 52 ms  jitter 2.1 ms" */
+    std::string counts;    /* "sent 30  received 29  lost 1 (3 %)" */
+    std::string note;      /* the plain-words reading of the node */
+};
+HopDetail hop_detail(const TraceHop &h);
+
+/* ---------------------------------------------------------------- HTTP check */
+
+/* The big badge: "200 OK" (green check), "301 moved" (amber arrow), "404 Not Found" / "500 ..." (red cross), an error
+ * (red cross, the problem's name, the plain words in detail), Checking..., Stopped. host: the address asked. */
+PortSummary http_badge(const HttpCheckSnapshot &s);
+Band http_band(const HttpCheckSnapshot &s);
+
+enum class WaterPart { Dns, Connect, Tls, Wait, Transfer };
+struct WaterSeg {
+    WaterPart part = WaterPart::Dns;
+    const char *name = "";    /* "DNS", "Connect", "TLS", "Waiting", "Transfer" */
+    double ms = 0;
+    int x = 0, w = 0;         /* in the bar; w is 0 only for a segment of 0 ms */
+};
+/* The segments that happened (DNS always; Connect when connected; TLS for https; Waiting and Transfer once the answer
+ * began) on one scale over width_px; a segment above 0 ms is at least min_px wide; the widths add up to width_px. */
+std::vector<WaterSeg> waterfall(const HttpTimings &t, int width_px, int min_px = 2);
+/* "Total 183 ms" */
+std::string waterfall_total(const HttpTimings &t);
+/* "DNS 12 ms" */
+std::string water_label(const WaterSeg &seg);
+
+struct CertBadge {
+    std::string word;      /* "expires in 83 days", "expired 12 days ago", "no certificate", "not read" */
+    std::string detail;    /* the subject, or why there is none */
+    Tone tone = Tone::Normal;
+    Mark mark = Mark::None;
+    bool has_days = false;
+    int days = 0;
+};
+CertBadge cert_badge(const HttpCheckResult &r);
+
+/* the rows around the blocks: "Final URL" (when it differs); the certificate's Subject, Issuer, Valid until; Remote IP,
+ * HTTP version, Size, Redirects. Rows with nothing to say are left out. */
+std::vector<RowDef> http_final_rows(const HttpCheckResult &r);
+std::vector<RowDef> http_cert_rows(const HttpCheckResult &r);
+std::vector<RowDef> http_info_rows(const HttpCheckResult &r);
+
+/* ---------------------------------------------------------------- Public IP */
+
+/* "Switzerland (CH)" for the codes in the table, else the code as given */
+std::string country_text(const std::string &code);
+/* The note for carrier-grade NAT ("" for anything else). */
+std::string nat_note(const std::string &interface_ip, const PublicIpResult &r);
+/* Public IPv4, Public IPv6 ("none" is normal), Country, Cloudflare data centre, Local address */
+std::vector<RowDef> publicip_rows(const PublicIpSnapshot &s, const std::string &interface_ip);
+Band publicip_band(const PublicIpSnapshot &s);
+/* the address for "Whois of this address": the IPv4, else the IPv6, else "" */
+std::string publicip_address(const PublicIpSnapshot &s);
+
+/* ---------------------------------------------------------------- Whois */
+
+/* "2026-08-13", "13-aug-2026", "2026.08.13", "2026/08/13", an ISO time: the day as UTC seconds (noon) and as YYYY-MM-DD */
+bool whois_day(const std::string &text, std::int64_t &epoch, std::string *iso = nullptr);
+/* the summary rows: domain (Registrar, Created, Updated, Expires with the days left in words, Status, Name server...) or
+ * address (Net name, Organisation, Country, Range, AS number, Abuse contact); an empty field is not a row */
+std::vector<RowDef> whois_rows(const WhoisResult &r, std::time_t now);
+/* the raw answers as lines: "-- whois.arin.net --" before each answer, then its lines; at most max_lines (the rest is
+ * counted in *more) */
+std::vector<std::string> whois_raw(const WhoisResult &r, std::size_t max_lines, std::size_t *more = nullptr);
+Band whois_band(const WhoisSnapshot &s);
 
 /* ---------------------------------------------------------------- the status line after Save log */
 

@@ -1,0 +1,30 @@
+# Whois, an address (ARIN style)
+title Net Toolbox: Whois, an address (ARIN style)
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO whois=arin,whois_query=8.8.8.8
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+shot idle
+expect text "Type a domain or an address and press Run"
+key down
+key enter
+shot result
+key down
+key down
+key down
+key down
+key down
+shot summary
+expect text "Google LLC"
+expect text "8.8.8.0/24"
+key end
+shot raw-end
+expect notext "Message cut off"

@@ -1,0 +1,25 @@
+# HTTP check, 200 OK on HTTPS
+title Net Toolbox: HTTP check, 200 OK on HTTPS
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO http=ok,http_url=https://example.com
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key enter
+shot idle
+expect text "Press Run to check an address"
+key enter
+shot result
+expect text "200 OK"
+expect text "expires in 83 days"
+expect text "DNS 12 ms"
+expect text "Total 183 ms"
+key down
+key end
+shot bottom
+key home
+expect notext "Message cut off"

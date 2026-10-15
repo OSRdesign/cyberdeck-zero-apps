@@ -17,6 +17,11 @@
  *   port_host=...
  *   port=443             1 .. 65535
  *   port_preset=Web      the label of a preset, "" for one port
+ *   trace_target=...     0.2: the last traceroute target
+ *   http_url=...         0.2: the last HTTP check address (as typed; it must pass parse_http_target)
+ *   http_insecure=0      0.2: 1 = ignore certificate errors (curl -k); off unless the user turned it on
+ *   whois_query=...      0.2: the last whois query (a domain or an address)
+ * A 0.1 file (without the 0.2 keys) reads with their defaults; 0.1 ignores the 0.2 keys.
  * Parsed, never executed; unknown keys and bad values (a host that is not a valid name or address) are ignored;
  * written through a temporary file and a rename.
  */
@@ -42,6 +47,10 @@ struct Settings {
     std::string port_host;
     int port = 443;
     std::string port_preset;
+    std::string trace_target;
+    std::string http_url;
+    bool http_insecure = false;
+    std::string whois_query;
 
     /* a saved target: added at the end (moved there when already saved; the oldest goes past kMaxTargets); false
      * for an invalid host */

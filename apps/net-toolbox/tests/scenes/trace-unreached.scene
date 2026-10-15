@@ -1,0 +1,16 @@
+# Traceroute, the destination does not answer
+title Net Toolbox: Traceroute, the destination does not answer
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO trace=unreached,trace_target=example.com
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key enter
+key enter
+shot running
+expect text "to example.com 93.184.215.14, round 14, 6 hops"
+key enter
+shot stopped
+expect text "Did not reach the destination: no answer after hop 6"
+expect notext "Message cut off"

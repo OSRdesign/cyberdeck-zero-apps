@@ -1,0 +1,22 @@
+# Whois, typing the query
+title Net Toolbox: Whois, typing the query
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO whois=domain
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+key enter
+shot field
+expect osk on
+type bad name
+key enter
+shot refused
+type x
+key enter

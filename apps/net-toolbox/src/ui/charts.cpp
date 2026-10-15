@@ -89,6 +89,16 @@ void glyph(lv_layer_t *layer, int cx, int cy, int r, Mark mark, std::uint32_t rg
         at(-0.38, 0.38, x2, y2);
         line(layer, x1, y1, x2, y2, rgb, w, true);
         break;
+    case Mark::Arrow: /* a right arrow: the shaft and the head */
+        at(-0.50, 0, x1, y1);
+        at(0.48, 0, x2, y2);
+        line(layer, x1, y1, x2, y2, rgb, w, true);
+        at(0.02, -0.46, x1, y1);
+        at(0.50, 0, x2, y2);
+        at(0.02, 0.46, x3, y3);
+        line(layer, x1, y1, x2, y2, rgb, w, true);
+        line(layer, x3, y3, x2, y2, rgb, w, true);
+        break;
     case Mark::Dash:
         at(-0.48, 0, x1, y1);
         at(0.48, 0, x2, y2);
@@ -109,6 +119,33 @@ int space_s() { return cp0_ui_tok(CP0_TOK_SPACE_S); }
 int space_m() { return cp0_ui_tok(CP0_TOK_SPACE_M); }
 
 } // namespace
+
+/* ---------------------------------------------------------------- the drawing primitives (for chain.cpp) */
+
+void paint_fill(lv_layer_t *layer, const lv_area_t &a, std::uint32_t rgb, int radius, int opa)
+{
+    fill_rect(layer, a, rgb, radius, opa);
+}
+
+void paint_ring(lv_layer_t *layer, const lv_area_t &a, std::uint32_t rgb, int width, int radius)
+{
+    ring_rect(layer, a, rgb, width, radius);
+}
+
+void paint_line(lv_layer_t *layer, int x1, int y1, int x2, int y2, std::uint32_t rgb, int width, bool round)
+{
+    line(layer, x1, y1, x2, y2, rgb, width, round);
+}
+
+void paint_dot(lv_layer_t *layer, int cx, int cy, int r, std::uint32_t rgb)
+{
+    dot(layer, cx, cy, r, rgb);
+}
+
+void paint_glyph(lv_layer_t *layer, int cx, int cy, int r, Mark mark, std::uint32_t rgb)
+{
+    glyph(layer, cx, cy, r, mark, rgb);
+}
 
 /* ---------------------------------------------------------------- Owned, Painter */
 

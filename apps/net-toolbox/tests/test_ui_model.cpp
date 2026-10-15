@@ -8,6 +8,7 @@
 #include "check.hpp"
 
 #include "../src/ui/view_model.cpp"
+#include "../src/ui/view_model_02.cpp"
 
 using namespace nt;
 using namespace nt::ui;

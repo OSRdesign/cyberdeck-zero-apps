@@ -1,0 +1,16 @@
+# Public IP, asking
+title Net Toolbox: Public IP, asking
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO pubip=running
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+shot asking
+expect text "Asking Cloudflare for the IPv4 address..."
+expect notext "Message cut off"

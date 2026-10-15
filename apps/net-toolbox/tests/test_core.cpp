@@ -114,13 +114,14 @@ static void test_package()
     const std::string manifest = read_file(app + "/app.json");
     CHECK(manifest.find("\"share_code\": \"net-toolbox\"") != std::string::npos);
     CHECK(manifest.find("\"package\": \"net-toolbox\"") != std::string::npos);
-    CHECK(manifest.find("\"version\": \"0.1.0\"") != std::string::npos);
+    CHECK(manifest.find("\"version\": \"0.2.0\"") != std::string::npos);
     CHECK(manifest.find("\"title\": \"Net Toolbox\"") != std::string::npos);
     CHECK(manifest.find("\"draft\": true") != std::string::npos);
     CHECK(manifest.find("\"license\": \"MIT\"") != std::string::npos);
     CHECK(manifest.find("\"categories\": [\"Tools\"]") != std::string::npos);
     CHECK(manifest.find("\"permissions\": {\"network\": true}") != std::string::npos);
-    CHECK(manifest.find("\"depends\": \"libfreetype6, libinput10, libxkbcommon0\"") != std::string::npos);
+    CHECK(manifest.find("\"depends\": \"libfreetype6, libinput10, libxkbcommon0, curl, ca-certificates\"") !=
+          std::string::npos);
     CHECK(manifest.find("libc6") == std::string::npos);
     CHECK(std::string(kAppId) == "net-toolbox");
     CHECK(std::string(kAppTitle) == "Net Toolbox");
@@ -274,6 +275,23 @@ void test_settings()
     if (xdg) setenv("XDG_CONFIG_HOME", xdg, 1);
     else unsetenv("XDG_CONFIG_HOME");
     remove_dir(dir);
+
+    // 0.2: the traceroute target, the HTTP address and its certificate flag, the whois query
+    const std::string v01 = "v=1\ntarget=1.1.1.1\nping_target=8.8.8.8\ndns_type=MX\nport=22\n"; /* a 0.1 file */
+    Settings old = Settings::parse(v01);
+    CHECK(old.trace_target.empty() && old.http_url.empty() && !old.http_insecure && old.whois_query.empty());
+    CHECK(old.ping_target == "8.8.8.8" && old.dns_type == "MX" && old.port == 22);
+    Settings n = Settings::parse(v01 + "trace_target=example.com\nhttp_url=https://example.com/a?b=1&c=2\n"
+                                       "http_insecure=1\nwhois_query=2001:db8::1\n");
+    CHECK(n.trace_target == "example.com" && n.http_url == "https://example.com/a?b=1&c=2" && n.http_insecure);
+    CHECK(n.whois_query == "2001:db8::1");
+    const Settings round = Settings::parse(n.serialize());
+    CHECK(round.trace_target == n.trace_target && round.http_url == n.http_url && round.http_insecure &&
+          round.whois_query == n.whois_query && round.ping_target == "8.8.8.8");
+    const Settings bad = Settings::parse("trace_target=bad host\nhttp_url=file:///etc/passwd\nhttp_insecure=yes\n"
+                                         "whois_query=-h\n");
+    CHECK(bad.trace_target.empty() && bad.http_url.empty() && !bad.http_insecure && bad.whois_query.empty());
+    CHECK(Settings().serialize().find("http_insecure=0\n") != std::string::npos); /* off by default */
 }
 
 void test_worker()
@@ -366,6 +384,15 @@ int main()
     test_settings();
     test_worker();
     test_ui_model();
+    test_ui_model_02();
+    test_cmdrun();
+    test_httpcheck();
+    test_publicip();
+    test_whois();
+    test_trace_engine();
+    test_trace_rdns();
+    test_trace_real();
+    test_netlog_02();
     test_package();
     std::printf("test-net-toolbox: %d passed, %d failed, %d skipped\n", g_pass, g_fail, g_skip);
     return g_fail ? 1 : 0;

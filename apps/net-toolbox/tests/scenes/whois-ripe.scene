@@ -1,0 +1,29 @@
+# Whois, an address (RIPE style)
+title Net Toolbox: Whois, an address (RIPE style)
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO whois=ripe,whois_query=193.0.6.139
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+shot idle
+expect text "Type a domain or an address and press Run"
+key down
+key enter
+shot result
+key down
+key down
+key down
+key down
+key down
+shot summary
+expect text "RIPE-NCC"
+key end
+shot raw-end
+expect notext "Message cut off"

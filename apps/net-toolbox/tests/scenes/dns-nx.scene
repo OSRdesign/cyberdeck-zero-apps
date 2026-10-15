@@ -5,6 +5,7 @@ env NET_TOOLBOX_FIXTURE deck
 env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
 key down
 key down
+key down
 key enter
 key enter
 shot nxdomain

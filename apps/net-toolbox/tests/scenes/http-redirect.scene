@@ -1,0 +1,17 @@
+# HTTP check, a redirect that was followed
+title Net Toolbox: HTTP check, a redirect that was followed
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO http=redirect,http_url=http://example.com
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key enter
+key enter
+shot result
+expect text "https://www.example.com/"
+expect text "Final URL"
+expect notext "Message cut off"

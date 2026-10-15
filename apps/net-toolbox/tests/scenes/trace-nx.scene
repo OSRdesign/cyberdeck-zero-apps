@@ -1,0 +1,13 @@
+# Traceroute, a name that does not exist
+title Net Toolbox: Traceroute, a name that does not exist
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO trace=healthy,trace_target=nx-example.com
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key enter
+key enter
+shot failed
+expect text "Cannot find nx-example.com: no such name (NXDOMAIN)"
+expect notext "Message cut off"

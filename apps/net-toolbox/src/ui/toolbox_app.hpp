@@ -18,6 +18,13 @@
  *   DNS lookup   the actions Look up, Compare resolvers, Name, Type, Resolver, Save log, then the result rows; the band
  *                is the status line (response code in words, time, resolver)
  *   Port check   the result badge over Run, Host, Port, Save log
+ *   Traceroute   the actions Start / Stop, Target, Save log as a row of large cells, over the chain: one row per hop (node,
+ *                number, name, latency bar, ms, loss tag); Enter or a tap on the selected hop opens its details in place
+ *   HTTP check   Run, then the result right under it (the status badge, the final URL, the waterfall, the certificate badge
+ *                and its rows, Remote IP, HTTP version, Size, Redirects), then URL, Method, Ignore certificate errors, Save log
+ *   Public IP    asks by itself on entry: Public IPv4 / IPv6, Country, Cloudflare data centre, Local address, the carrier-grade
+ *                NAT note, then Run again, Whois of this address, Save log
+ *   Whois        Query, Run, Save log, then the summary rows, then the raw answer as compact rows
  *   Choice       a Roller of Choice rows (the target, the type, the resolver, the port)
  *   Typed        a TextField (a host, a name, a resolver address, a port number)
  *
@@ -27,7 +34,9 @@
 #pragma once
 
 #include "backend.hpp"
+#include "chain.hpp"
 #include "charts.hpp"
+#include "rich_list.hpp"
 #include "settings.hpp"
 #include "view_model.hpp"
 #include "wifi_link.hpp"
@@ -55,7 +64,7 @@ public:
     ToolboxApp &operator=(const ToolboxApp &) = delete;
 
 private:
-    enum class View { Home, Interfaces, Diagnosis, Ping, Dns, Port, Choice, Typed };
+    enum class View { Home, Interfaces, Diagnosis, Ping, Dns, Port, Trace, Http, PublicIp, Whois, Choice, Typed };
     struct Frame {
         View view = View::Home;
         int select = 0;
@@ -77,9 +86,11 @@ private:
     };
     /* the row ids of the lists */
     enum RowId {
-        kHomeDiag = 1, kHomePing, kHomeDns, kHomePort, kHomeIfaces,
-        kRun = 10, kRunAgain, kSaveLog, kTarget, kSaveTarget, kName, kType, kResolver, kCompare, kHost, kPortRow,
-        kResult = 100
+        kHomeDiag = 1, kHomePing, kHomeDns, kHomePort, kHomeIfaces, kHomeTrace, kHomeHttp, kHomePublicIp, kHomeWhois,
+        kRun = 10, kRunAgain, kSaveLog, kTarget, kSaveTarget, kName, kType, kResolver, kCompare, kHost, kPortRow, kUrl,
+        kMethod, kInsecure, kWhoisOf, kQuery,
+        kResult = 100,
+        kHop = 200
     };
 
     /* the column and the sizes the pages are built from (the layout service's tokens and the CAPTION font) */
@@ -158,6 +169,32 @@ private:
     void start_port();
     void open_port_choice();
 
+    /* the 0.2 pages (tool_pages_02.cpp) */
+    void build_trace();
+    void poll_trace(bool force);
+    void activate_trace(std::intptr_t id);
+    void start_trace();
+    void open_trace_target();
+    std::string trace_target_text() const;
+    void build_http(int select);
+    void poll_http(bool force);
+    void activate_http(std::intptr_t id);
+    std::vector<ui::RichRow> http_list();
+    void start_http();
+    void build_publicip();
+    void poll_publicip(bool force);
+    void activate_publicip(std::intptr_t id);
+    std::vector<ui::RichRow> publicip_list() const;
+    std::string local_address() const;
+    void build_whois(int select);
+    void poll_whois(bool force);
+    void activate_whois(std::intptr_t id);
+    std::vector<ui::RichRow> whois_list() const;
+    void start_whois();
+    void build_rich(int y, int h);
+    void focus_group(const std::vector<lv_obj_t *> &objs);
+    ui::RichRow rich_row(const ui::RowDef &def, int id = 0) const;
+
     cp0_ui_roller_page_t layout_{};
     ui::Backend backend_;
     Settings settings_;
@@ -165,6 +202,8 @@ private:
 
     std::unique_ptr<cp0::ui::Page> page_;
     std::unique_ptr<cp0::ui::CompactList> list_;
+    std::unique_ptr<ui::RichList> rich_;
+    std::unique_ptr<ui::ActionBar> bar_;
     std::unique_ptr<cp0::ui::Roller> roller_;
     std::unique_ptr<cp0::ui::TextField> field_;
     std::unique_ptr<ui::HealthLadder> ladder_;
@@ -201,6 +240,22 @@ private:
     std::string port_preset_;
     int port_ = 443;
     bool msg_cut_ = false;           /* demonstrations: the diagnosis message did not fit its block */
+    bool band_check_ = false;        /* demonstrations: a status line of a 0.2 page must fit (never an ellipsis) */
+    bool layout_cut_ = false;        /* demonstrations: a 0.2 page's text or chain did not fit */
+    ui::ChainStyle chain_style_;
+    std::vector<std::shared_ptr<ui::HopRowView>> hop_views_;
+    int hop_open_ = -1;              /* the hop shown in detail, -1 none */
+    std::string trace_target_;       /* "" = the gateway */
+    std::string trace_typed_;        /* the host typed last: the "last used" entry of the target list */
+    std::string http_url_;
+    bool http_head_ = false;
+    bool http_insecure_ = false;
+    std::shared_ptr<ui::BadgeBlock> http_badge_;
+    std::shared_ptr<ui::WaterfallBlock> http_water_;
+    std::shared_ptr<ui::CertBlock> http_cert_;
+    std::uint64_t http_blocks_seq_ = 0;
+    std::string whois_query_;
+    bool whois_autorun_ = false;     /* Whois of this address: the page runs the query at once */
     std::string saved_note_;
     ui::Tone saved_tone_ = ui::Tone::Normal;
     std::int64_t saved_until_ = 0;

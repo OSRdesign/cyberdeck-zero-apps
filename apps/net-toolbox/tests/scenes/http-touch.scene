@@ -1,0 +1,23 @@
+# HTTP check by touch
+title Net Toolbox: HTTP check by touch
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO http=ok,http_url=https://example.com
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+wait 400
+tap "HTTP check"
+shot page
+wait 400
+@640x480 tapxy 0.5 0.254
+@800x480 tapxy 0.5 0.24
+@720x720 tapxy 0.5 0.18
+@1024x600 tapxy 0.5 0.20
+@1280x720 tapxy 0.5 0.19
+shot result
+expect text "200 OK"
+tap "Esc"

@@ -5,6 +5,8 @@
  */
 #include "backend.hpp"
 
+#include "demo_data.hpp"
+#include "flow_runner.hpp"
 #include "netaddr.hpp"
 #include "text.hpp"
 
@@ -356,6 +358,41 @@ Backend make_demo_backend(const std::string &spec, std::shared_ptr<const Source>
         });
     b.dns = std::make_unique<FixedRunner<DnsRequest, DnsSnapshot>>([](const DnsRequest &req) { return demo_dns(req); });
     b.port = std::make_unique<FixedRunner<PortRequest, PortSnapshot>>([](const PortRequest &req) { return demo_port(req); });
+    const std::string trace = get("trace", "healthy"), http = get("http", "ok"), pubip = get("pubip", "both"),
+                      whois = get("whois", "domain");
+    b.trace = std::make_unique<FixedRunner<TraceConfig, TraceSnapshot>>(
+        [trace](const TraceConfig &cfg) { return demo_trace(trace, cfg); },
+        [](const TraceSnapshot &now) {
+            TraceSnapshot s = now;
+            if (s.running()) s.state = TraceSnapshot::State::Cancelled;
+            return s;
+        });
+    b.http = std::make_unique<FixedRunner<HttpCheckRequest, HttpCheckSnapshot>>(
+        [http](const HttpCheckRequest &req) { return demo_http(http, req); },
+        [](const HttpCheckSnapshot &now) {
+            HttpCheckSnapshot s = now;
+            if (s.running()) {
+                s.state = HttpCheckSnapshot::State::Cancelled;
+                s.step.clear();
+            }
+            return s;
+        });
+    b.pubip = std::make_unique<FixedRunner<NoRequest, PublicIpSnapshot>>(
+        [pubip](const NoRequest &) { return demo_pubip(pubip); },
+        [](const PublicIpSnapshot &now) {
+            PublicIpSnapshot s = now;
+            if (s.running()) s.state = PublicIpSnapshot::State::Cancelled;
+            return s;
+        });
+    b.whois = std::make_unique<FixedRunner<WhoisRequest, WhoisSnapshot>>(
+        [whois](const WhoisRequest &req) { return demo_whois(whois, req); },
+        [](const WhoisSnapshot &now) {
+            WhoisSnapshot s = now;
+            if (s.running()) s.state = WhoisSnapshot::State::Cancelled;
+            return s;
+        });
+    b.wall_clock = [] { return demo_now(); };
+    b.local_ip = get("local", pubip == "cgnat" ? "100.64.8.3" : "");
     b.ping_available = [ping] {
         PingAvailability a;
         if (ping == "unavailable") {
@@ -366,7 +403,8 @@ Backend make_demo_backend(const std::string &spec, std::shared_ptr<const Source>
         a.ipv4 = a.ipv6 = true;
         return a;
     };
-    for (const char *key : {"ping_target", "dns_name", "dns_type", "dns_resolver", "port_host", "port", "port_preset"}) {
+    for (const char *key : {"ping_target", "dns_name", "dns_type", "dns_resolver", "port_host", "port", "port_preset", "trace_target",
+                            "http_url", "http_method", "http_insecure", "whois_query"}) {
         const auto it = opt.find(key);
         if (it != opt.end()) b.seeds[key] = it->second;
     }
@@ -400,6 +438,11 @@ Backend make_backend()
     b.ping = std::make_unique<RealRunner<PingSession, PingConfig, PingSnapshot>>();
     b.dns = std::make_unique<RealRunner<DnsSession, DnsRequest, DnsSnapshot>>();
     b.port = std::make_unique<RealRunner<PortSession, PortRequest, PortSnapshot>>();
+    b.trace = std::make_unique<RealRunner<TraceSession, TraceConfig, TraceSnapshot>>();
+    b.http = std::make_unique<AsyncHttpRunner>();
+    b.pubip = std::make_unique<AsyncPublicIpRunner>();
+    b.whois = std::make_unique<RealRunner<WhoisSession, WhoisRequest, WhoisSnapshot>>();
+    b.wall_clock = [] { return std::time(nullptr); };
     b.ping_available = [] { return ping_available(); };
     return b;
 }

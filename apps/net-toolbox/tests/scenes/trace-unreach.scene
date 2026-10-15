@@ -1,0 +1,22 @@
+# Traceroute, a router says unreachable
+title Net Toolbox: Traceroute, a router says unreachable
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO trace=unreach,trace_target=example.com
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key enter
+key enter
+shot running
+key enter
+shot stopped
+expect text "Did not reach the destination: unreachable at hop 5"
+key down
+key down
+key down
+key down
+key down
+shot hop
+expect text "Host unreachable"
+expect notext "Message cut off"
