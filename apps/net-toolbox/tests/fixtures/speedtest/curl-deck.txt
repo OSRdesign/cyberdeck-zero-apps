@@ -1,0 +1,15 @@
+=== latency (4 requests)
+NTSPEED|L|200|0|1|0.042860|0.188855|0.189160|0.241651|0.241854|0|0|CDG|||cfSpeedEdge;dur=4, cfSpeedWorker;dur=28
+NTSPEED|L|200|0|0|0.000000|0.000000|0.000543|0.070425|0.070600|0|0|CDG|||cfSpeedEdge;dur=6, cfSpeedWorker;dur=22
+NTSPEED|L|200|0|0|0.000000|0.000000|0.000272|0.031559|0.031729|0|0|CDG|||cfSpeedEdge;dur=3, cfSpeedWorker;dur=19
+NTSPEED|L|200|0|0|0.000000|0.000000|0.000345|0.047034|0.047182|0|0|CDG|||cfSpeedEdge;dur=4, cfSpeedWorker;dur=29
+=== download (2 x 2 MB)
+NTSPEED|D|200|0|1|0.049487|0.173013|0.173337|0.230921|0.878715|2000000|0|CDG|||cfSpeedEdge;dur=7, cfSpeedWorker;dur=34
+NTSPEED|D|200|0|0|0.000000|0.000000|0.000274|0.059891|1.275287|2000000|0|CDG|||cfSpeedEdge;dur=6, cfSpeedWorker;dur=41
+=== download refused (100 000 000 bytes)
+NTSPEED|D|403|0|1|0.022510|0.149674|0.149924|0.161556|0.161720|1|0||||cfSpeedEdge;dur=1, cfSpeedWorker;dur=0
+=== upload (3 MB on stdin)
+NTSPEED|U|200|0|1|0.029372|0.155534|0.156995|0.990846|0.990984|0|3000396||CDG|3000000|cfSpeedEdge;dur=5, cfSpeedWorker;dur=810
+=== unknown host (DNS failure)
+curl: (6) Could not resolve host: speed.cloudflare.invalid
+NTSPEED|L|000|6|0|0.000000|0.000000|0.000000|0.000000|0.015797|0|0||||

@@ -1,0 +1,23 @@
+title Net Toolbox: Speed test, stopped in the middle
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO speed=stopped
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+key enter
+wait 450
+shot running
+expect text "Stop"
+key enter
+wait 450
+shot stopped
+expect text "Stopped"
+expect text "Start"
+expect text "Stopped before a speed was measured."
+expect notext "Message cut off"

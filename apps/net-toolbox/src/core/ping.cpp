@@ -226,6 +226,11 @@ std::unique_ptr<EchoSocket> open_icmp_echo(const Address &target, int payload_by
         if (err) *err = -fd;
         return nullptr;
     }
+    if (const int be = bind_to_active_device(fd)) { /* the chosen network (sock.hpp) */
+        close(fd);
+        if (err) *err = be;
+        return nullptr;
+    }
     if (err) *err = 0;
     return std::make_unique<IcmpEcho>(fd, target, std::min(1400, std::max(8, payload_bytes)));
 }

@@ -1,0 +1,25 @@
+# The setting stays: plug the adapter in again and it is used again. Until then the tools run on Automatic and say it.
+title Net Toolbox: the chosen adapter is gone, Automatic is used
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy,ping=mixed,interface=wlan1
+env NET_TOOLBOX_FIXTURE pi-3a-plus
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+shot home
+expect text "Automatic (wlan0)"
+key up
+key enter
+shot choice
+expect text "Automatic (wlan0)"
+expect text "wlan0  192.168.68.170"
+key esc
+key down
+key enter
+shot diagnosis
+expect text "Everything works"
+expect notext "(via wlan1)"
+key esc
+key down
+key enter
+shot ping
+expect text "Press Start to ping Gateway 192.168.68.1"
+expect notext "(via wlan1)"

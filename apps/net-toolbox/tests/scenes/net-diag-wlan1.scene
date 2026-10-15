@@ -1,0 +1,13 @@
+title Net Toolbox: Diagnosis through wlan1 (the phone hotspot)
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy,interface=wlan1
+env NET_TOOLBOX_FIXTURE pi-3a-plus-dongle
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key enter
+shot passed
+expect text "Everything works"
+expect text "wlan1"
+expect text "172.20.10.1, 3.0 ms"
+expect text "via 172.20.10.1, 12 ms"
+expect text "DNS asked 172.20.10.1 (via wlan1)"
+expect notext "Message cut off"

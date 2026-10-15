@@ -1,0 +1,11 @@
+title Net Toolbox: Diagnosis through Ethernet with the cable out
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy,interface=enx00e04c680a12
+env NET_TOOLBOX_FIXTURE eth-down
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key enter
+shot no-link
+expect text "Link up failed"
+expect text "enx00e04c680a12 no link"
+expect text "enx00e04c680a12 has no link: the cable is unplugged or the other end is off. Check the cable, the hub and the router."
+expect notext "Message cut off"

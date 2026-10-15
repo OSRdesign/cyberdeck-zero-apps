@@ -47,22 +47,55 @@ std::string capital(std::string s)
 
 Band home_band(const NetState &st)
 {
+    return home_band(st, NetScope());
+}
+
+Band home_band(const NetState &st, const NetScope &scope)
+{
     Band b;
-    const Iface *main = st.main();
+    const Iface *main = scope.automatic() ? st.main() : st.find(scope.iface);
     if (!main || !main->connected()) {
-        b.text = "No network";
+        b.text = main && !scope.automatic() ? main->name + ": not connected" : std::string("No network");
         b.tone = Tone::Warn;
-        return b;
+    } else {
+        const std::string ip = main->first_ipv4();
+        if (ip.empty()) {
+            b.text = main->name + ": no address yet";
+            b.tone = Tone::Warn;
+        } else {
+            b.text = main->name + ": " + ip;
+            b.tone = Tone::Ok;
+        }
     }
-    const std::string ip = main->first_ipv4();
-    if (ip.empty()) {
-        b.text = main->name + ": no address yet";
+    if (scope.missing) {
+        b.text = scope.note() + " (" + b.text + ")";
         b.tone = Tone::Warn;
-        return b;
     }
-    b.text = main->name + ": " + ip;
-    b.tone = Tone::Ok;
     return b;
+}
+
+std::string network_value(const NetScope &scope)
+{
+    if (!scope.automatic()) return scope.iface;
+    return scope.main.empty() ? std::string("Automatic") : "Automatic (" + scope.main + ")";
+}
+
+NetworkChoices network_choices(const NetState &st, const NetScope &scope)
+{
+    NetworkChoices c;
+    c.labels.push_back(network_value(NetScope{"", "", scope.main, false}));
+    c.names.push_back("");
+    for (const Iface &i : st.ifaces) {
+        if (i.loopback) continue;
+        std::string label = i.name + "  ";
+        if (!i.connected()) label += i.wireless ? "not connected" : "no link"; /* short: a USB adapter's name has 15 letters */
+        else if (i.first_ipv4().empty()) label += "no address";
+        else label += i.first_ipv4();
+        if (i.name == scope.iface) c.current = static_cast<int>(c.labels.size());
+        c.labels.push_back(label);
+        c.names.push_back(i.name);
+    }
+    return c;
 }
 
 const char *signal_word(double dbm)
@@ -87,9 +120,21 @@ std::string signal_text(double dbm)
 
 std::vector<RowDef> interface_rows(const NetState &st)
 {
+    return interface_rows(st, NetScope());
+}
+
+std::vector<RowDef> interface_rows(const NetState &st, const NetScope &scope)
+{
     std::vector<RowDef> rows;
+    std::size_t real = 0;
+    for (const Iface &i : st.ifaces)
+        if (!i.loopback) ++real;
     for (const Iface &i : st.ifaces) {
-        rows.push_back(heading(i.name));
+        std::string mark;
+        if (!scope.automatic() && i.name == scope.iface) mark = "in use";
+        if (real > 1 && !i.loopback && i.name == st.main_iface && st.route.ok && st.route.iface == i.name)
+            mark += (mark.empty() ? "" : ", ") + std::string("default route");
+        rows.push_back(heading(mark.empty() ? i.name : i.name + " (" + mark + ")"));
         if (i.connected()) rows.push_back(item("State", "Connected", Tone::Ok));
         else if (i.loopback) rows.push_back(item("State", i.up ? "Up" : "Down"));
         else if (i.up) rows.push_back(item("State", i.wireless ? "Not connected" : "No link", Tone::Warn));
@@ -105,18 +150,18 @@ std::vector<RowDef> interface_rows(const NetState &st)
             rows.push_back(item("Speed", speed.empty() ? "unknown" : speed));
             continue;
         }
-        if (i.link_valid) {
+        if (i.link_valid && i.connected()) {
             if (i.link.connected) rows.push_back(item("Network", printable(i.link.ssid)));
             else rows.push_back(item("Network", "Not connected", Tone::Warn));
         }
-        const bool associated = !i.link_valid || i.link.connected;
+        const bool associated = i.connected() && (!i.link_valid || i.link.connected);
         if (associated) {
             if (i.link_valid && i.link.has_signal)
                 rows.push_back(item("Signal", signal_text(i.link.signal_dbm), signal_tone(i.link.signal_dbm)));
             else if (i.has_level)
                 rows.push_back(item("Signal", signal_text(i.level_dbm), signal_tone(i.level_dbm)));
         }
-        if (i.link_valid && i.link.connected && i.link.has_bitrate)
+        if (i.link_valid && i.connected() && i.link.connected && i.link.has_bitrate)
             rows.push_back(item("Bit rate", fmt_mbit(i.link.tx_mbit)));
     }
     rows.push_back(heading("Network"));
@@ -313,11 +358,11 @@ Band ping_band(const PingSnapshot &s)
 
 /* ---------------------------------------------------------------- DNS lookup */
 
-std::string resolver_label(const std::string &server, const std::string &system_server)
+std::string resolver_label(const std::string &server, const std::string &system_server, const std::string &system_name)
 {
     for (const ResolverPreset &p : resolver_presets())
         if (p.address[0] && server == p.address) return std::string(p.label) + " " + server;
-    if (!system_server.empty() && server == system_server) return "System " + server;
+    if (!system_server.empty() && server == system_server) return system_name + " " + server;
     return server;
 }
 
@@ -375,7 +420,7 @@ Band dns_status(const DnsSnapshot &s)
     return b;
 }
 
-std::vector<RowDef> dns_rows(const DnsSnapshot &s, const std::string &system_server)
+std::vector<RowDef> dns_rows(const DnsSnapshot &s, const std::string &system_server, const std::string &system_name)
 {
     std::vector<RowDef> rows;
     if (s.state == DnsSnapshot::State::Idle || s.state == DnsSnapshot::State::Failed) return rows;
@@ -383,7 +428,7 @@ std::vector<RowDef> dns_rows(const DnsSnapshot &s, const std::string &system_ser
     if (s.compare()) {
         rows.push_back(heading("Compare: " + what));
         for (std::size_t k = 0; k < s.servers.size(); ++k) {
-            const std::string label = resolver_label(s.servers[k], system_server);
+            const std::string label = resolver_label(s.servers[k], system_server, system_name);
             if (k >= s.results.size()) {
                 const bool asking = k == s.results.size() && s.state == DnsSnapshot::State::Running;
                 rows.push_back(item(label, asking ? "asking..." : "waiting"));

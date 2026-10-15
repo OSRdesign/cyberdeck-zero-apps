@@ -27,7 +27,7 @@ ReverseNames::ReverseNames(const std::string &server, std::uint16_t port, int ti
     sockaddr_storage ss;
     const socklen_t sl = a.to_sockaddr(port, ss);
     Fd fd(socket(a.family, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0));
-    if (!fd.valid() || connect(fd.get(), reinterpret_cast<const sockaddr *>(&ss), sl) != 0) return;
+    if (!fd.valid() || bind_to_active_device(fd.get()) != 0 || connect(fd.get(), reinterpret_cast<const sockaddr *>(&ss), sl) != 0) return;
     fd_ = std::move(fd);
 }
 

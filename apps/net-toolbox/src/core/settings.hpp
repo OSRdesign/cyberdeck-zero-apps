@@ -21,11 +21,24 @@
  *   http_url=...         0.2: the last HTTP check address (as typed; it must pass parse_http_target)
  *   http_insecure=0      0.2: 1 = ignore certificate errors (curl -k); off unless the user turned it on
  *   whois_query=...      0.2: the last whois query (a domain or an address)
- * A 0.1 file (without the 0.2 keys) reads with their defaults; 0.1 ignores the 0.2 keys.
+ *   wol=name|mac|host|broadcast|port   0.3: a saved Wake-on-LAN machine (repeated, in order, at most kMaxWolMachines;
+ *                        host and broadcast may be empty; see wol.hpp)
+ *   wol_iface=           0.3: the interface to send on, "" = every interface that is up with an IPv4 address
+ *   wol_watch=1          0.3: ping the machine after sending (when it has a host)
+ *   speed_ping=1.1.1.1   0.3: the latency-under-load target of the speed test: a host, "gateway" (the UI puts the
+ *                        default gateway in) or "off"
+ *   ble_seconds=60       0.3: the length of one BLE scan (5 .. 60)
+ *   interface=wlan1      0.3: the chosen network (scope.hpp); absent or empty = Automatic (the system's route). The name is
+ *                        kept while that adapter is unplugged (the tools then use Automatic and say so). "auto" and
+ *                        "automatic" read as Automatic; an invalid name is ignored.
+ * A 0.1 file (without the 0.2 keys) reads with their defaults; 0.1 ignores the 0.2 keys. Likewise for the 0.3 keys: a
+ * 0.2 file reads with their defaults (no machine saved), 0.2 ignores them (unknown keys).
  * Parsed, never executed; unknown keys and bad values (a host that is not a valid name or address) are ignored;
  * written through a temporary file and a rename.
  */
 #pragma once
+
+#include "wol.hpp"
 
 #include <cstdint>
 #include <string>
@@ -35,6 +48,7 @@ namespace nt {
 
 struct Settings {
     static constexpr std::size_t kMaxTargets = 8;
+    static constexpr int kBleSecondsMin = 5, kBleSecondsMax = 60;
 
     std::vector<std::string> targets;
     std::string ping_target;
@@ -51,11 +65,23 @@ struct Settings {
     std::string http_url;
     bool http_insecure = false;
     std::string whois_query;
+    /* 0.3 */
+    std::vector<WolMachine> wol_machines; /* in their stored form (normalize_machine) */
+    std::string wol_iface;
+    bool wol_watch = true;
+    std::string speed_ping = "1.1.1.1";
+    int ble_seconds = 60;
+    std::string interface;      /* "" = Automatic; else an interface name (valid_iface_name) */
 
     /* a saved target: added at the end (moved there when already saved; the oldest goes past kMaxTargets); false
      * for an invalid host */
     bool add_target(const std::string &host);
     bool remove_target(const std::string &host);
+    /* 0.3: a machine is saved under its name (the same name, in any case, replaces it in place); a new one when 20
+     * are saved, or an invalid one, is refused with words in *why */
+    bool save_machine(const WolMachine &m, std::string *why = nullptr);
+    bool remove_machine(const std::string &name);
+    const WolMachine *find_machine(const std::string &name) const;
 
     std::string serialize() const;
     static Settings parse(const std::string &text);

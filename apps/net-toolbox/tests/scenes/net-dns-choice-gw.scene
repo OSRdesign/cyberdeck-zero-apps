@@ -1,0 +1,11 @@
+title Net Toolbox: DNS of an interface that has no DNS of its own, the gateway is asked
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy,interface=wlan1
+env NET_TOOLBOX_FIXTURE pi-eth-two-wifi
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key enter
+shot dns
+expect text "wlan1's DNS 172.20.10.1"

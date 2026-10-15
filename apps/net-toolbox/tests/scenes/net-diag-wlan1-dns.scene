@@ -1,0 +1,10 @@
+title Net Toolbox: Diagnosis through wlan1, its DNS does not answer
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=dns-fail,interface=wlan1
+env NET_TOOLBOX_FIXTURE pi-3a-plus-dongle
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key enter
+shot dns-fails
+expect text "DNS failed"
+expect text "The gateway of wlan1 answers but DNS does not (172.20.10.1 timed out). Try another resolver, for example 1.1.1.1, in DNS lookup."
+expect notext "Message cut off"

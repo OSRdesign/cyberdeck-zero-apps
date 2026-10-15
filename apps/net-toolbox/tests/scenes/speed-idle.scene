@@ -1,0 +1,19 @@
+# The gauge at rest: the note on data use is there before a run, the Start cell is in reach without scrolling.
+title Net Toolbox: Speed test, before a run
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO speed=down-mid
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+shot idle
+expect text "Press Start to test your connection"
+expect text "Uses up to about 150 MB each way. Start it yourself; on a phone hotspot that is mobile data."
+expect text "Start"
+expect text "Ready"
+expect notext "Message cut off"

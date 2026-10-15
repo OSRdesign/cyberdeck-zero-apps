@@ -21,6 +21,7 @@
 #include "portcheck.hpp"
 #include "httpcheck.hpp"
 #include "publicip.hpp"
+#include "scope.hpp"
 #include "traceroute.hpp"
 #include "whois.hpp"
 
@@ -55,6 +56,23 @@ struct Band {
 
 /* "wlan0: 192.168.68.121" (Ok) or "No network" (Warn) */
 Band home_band(const NetState &st);
+/* 0.3, with the chosen network: the effective interface and its address ("wlan1: 172.20.10.2"; "wlan1: not connected" and
+ * "wlan1: no address yet" in amber). A chosen interface that is gone: "wlan1 not found: using Automatic (wlan0:
+ * 192.168.68.170)" in amber. Automatic = the one above. */
+Band home_band(const NetState &st, const NetScope &scope);
+
+/* The Home row "Network": "Automatic (wlan0)", "Automatic" when there is no main interface, "wlan1" */
+std::string network_value(const NetScope &scope);
+/* The choice page: [0] "Automatic (wlan0)", then every interface but the loopback as "wlan1  172.20.10.2",
+ * "wlan1  not connected" (Wi-Fi), "enx00e04c680a12  no link" (a cable that is out): a down one is listed, selectable;
+ * the speed is on the Interfaces page. names[k] is the interface
+ * of labels[k], "" for Automatic. current: the row of the interface in use (0 = Automatic). */
+struct NetworkChoices {
+    std::vector<std::string> labels;
+    std::vector<std::string> names;
+    int current = 0;
+};
+NetworkChoices network_choices(const NetState &st, const NetScope &scope);
 
 /* Wi-Fi signal: Excellent from -50 dBm, Good from -60, Fair from -70, else Weak */
 const char *signal_word(double dbm);
@@ -65,6 +83,10 @@ std::string signal_text(double dbm);
 /* A heading per interface (State, IPv4, IPv6, MAC, Speed; Wi-Fi: Network, Signal, Bit rate), then the heading "Network"
  * with the gateway, the DNS servers in resolv.conf order (the first marked) and the search domains. */
 std::vector<RowDef> interface_rows(const NetState &st);
+/* 0.3: the headings mark the chosen interface "wlan1 (in use)" and the system's main one "wlan0 (default route)" (both:
+ * "wlan0 (in use, default route)"); a Wi-Fi interface that is not connected says so and has no Network, Signal or Bit rate
+ * row. Automatic marks only the default route, and only when there is more than one interface to tell apart. */
+std::vector<RowDef> interface_rows(const NetState &st, const NetScope &scope);
 
 /* ---------------------------------------------------------------- Diagnosis */
 
@@ -108,10 +130,12 @@ Band ping_band(const PingSnapshot &s);
 /* ---------------------------------------------------------------- DNS lookup */
 
 /* "System 192.168.1.1" for the first system server, "Cloudflare 1.1.1.1" for a preset, else the address */
-std::string resolver_label(const std::string &server, const std::string &system_server);
+std::string resolver_label(const std::string &server, const std::string &system_server,
+                           const std::string &system_name = "System");
 Band dns_status(const DnsSnapshot &s);
 /* the result list: a heading, then a row per answer (data, with "TYPE ttl" at the right) or per resolver (compare) */
-std::vector<RowDef> dns_rows(const DnsSnapshot &s, const std::string &system_server);
+std::vector<RowDef> dns_rows(const DnsSnapshot &s, const std::string &system_server,
+                             const std::string &system_name = "System");
 
 /* ---------------------------------------------------------------- Port check */
 

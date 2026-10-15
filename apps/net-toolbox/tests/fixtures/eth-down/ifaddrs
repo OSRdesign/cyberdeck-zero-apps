@@ -1,0 +1,4 @@
+lo inet 127.0.0.1/8
+lo inet6 ::1/128
+wlan0 inet 192.168.1.41/24
+wlan0 inet6 fe80::2ecf:67ff:fe0a:5e14/64

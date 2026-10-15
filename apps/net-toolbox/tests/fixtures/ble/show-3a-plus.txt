@@ -1,0 +1,23 @@
+Controller B8:27:EB:00:00:01 (public)
+	Manufacturer: 0x0131 (305)
+	Version: 0x09 (9)
+	Name: PI3A
+	Alias: PI3A
+	Class: 0x00400000 (4194304)
+	Powered: yes
+	PowerState: on
+	Discoverable: no
+	DiscoverableTimeout: 0x000000b4 (180)
+	Pairable: yes
+	Modalias: usb:v1D6Bp0246d0552
+	Discovering: no
+	Roles: central
+	Roles: peripheral
+Advertising Features:
+	ActiveInstances: 0x00 (0)
+	SupportedInstances: 0x05 (5)
+	SupportedIncludes: tx-power
+	SupportedIncludes: appearance
+	SupportedIncludes: local-name
+	SupportedCapabilities.MaxAdvLen: 0x1f (31)
+	SupportedCapabilities.MaxScnRspLen: 0x1f (31)

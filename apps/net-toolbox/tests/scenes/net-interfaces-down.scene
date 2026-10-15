@@ -1,0 +1,20 @@
+# Not connected: no Network, Signal or Bit rate rows under wlan1; wlan0 still has its own.
+title Net Toolbox: Interfaces, a Wi-Fi adapter that is not connected
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy,interface=wlan1
+env NET_TOOLBOX_FIXTURE pi-3a-plus-dongle-off
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+shot top
+key pgdn
+shot middle
+key end
+shot bottom

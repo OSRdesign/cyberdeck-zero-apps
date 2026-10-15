@@ -1,0 +1,41 @@
+# Name, MAC (a bad one is refused in plain words; dashes are accepted), the address to watch.
+title Net Toolbox: Wake-on-LAN, adding a machine
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO wol=awake
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+key enter
+shot name
+expect text "Name"
+type "Desk PC"
+key enter
+shot mac
+expect text "MAC"
+type zz:12
+key enter
+shot mac-invalid
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+type B8-27-EB-11-22-33
+key enter
+shot host
+expect text "Address"
+type 192.168.68.30
+key enter
+shot saved
+expect text "Desk PC"
+expect text "Saved Desk PC"
+expect notext "Message cut off"

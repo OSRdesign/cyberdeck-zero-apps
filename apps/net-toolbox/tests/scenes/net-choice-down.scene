@@ -1,0 +1,15 @@
+# The dongle is plugged in but joined to nothing: listed, selectable, said not connected.
+title Net Toolbox: the choice lists an adapter that is not connected
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy
+env NET_TOOLBOX_FIXTURE pi-3a-plus-dongle-off
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key up
+key enter
+shot choice
+expect text "wlan1  not connected"
+key down
+key down
+key enter
+shot home-wlan1-down
+expect text "wlan1: not connected"

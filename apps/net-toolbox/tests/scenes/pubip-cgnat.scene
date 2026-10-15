@@ -10,6 +10,7 @@ key down
 key down
 key down
 key down
+key down
 key enter
 shot result
 expect text "Your provider shares one public address between customers (carrier-grade NAT): you cannot receive inbound connections"

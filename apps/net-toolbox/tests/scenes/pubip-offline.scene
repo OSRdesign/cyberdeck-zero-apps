@@ -10,6 +10,7 @@ key down
 key down
 key down
 key down
+key down
 key enter
 shot result
 expect text "Not reachable: no connection to Cloudflare"

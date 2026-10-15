@@ -1,0 +1,35 @@
+# Results card: the list scrolled to it when the run ended; End shows the bottom.
+title Net Toolbox: Speed test, results, grade F
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO speed=done-f
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+key enter
+wait 450
+shot result
+expect text "Download"
+expect text "Upload"
+expect text "Start"
+expect notext "Message cut off"
+key down
+key down
+key down
+key down
+key down
+wait 300
+shot middle
+expect text "Latency while downloading"
+expect text "Server"
+key end
+wait 300
+shot bottom
+expect text "F: latency explodes under load: heavy buffering in the router"
+expect text "Bufferbloat grade"
+expect notext "Message cut off"

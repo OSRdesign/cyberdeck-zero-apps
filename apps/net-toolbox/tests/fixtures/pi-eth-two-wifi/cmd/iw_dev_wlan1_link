@@ -1,0 +1,12 @@
+Connected to de:ad:be:ef:00:01 (on wlan1)
+	SSID: iPhone pro OSR
+	freq: 2412.0
+	RX: 9933105 bytes (12077 packets)
+	TX: 801233 bytes (4410 packets)
+	signal: -52 dBm
+	rx bitrate: 144.4 MBit/s
+	tx bitrate: 130.0 MBit/s
+
+	bss flags:	short-slot-time
+	dtim period:	3
+	beacon int:	100

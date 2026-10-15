@@ -1,11 +1,17 @@
-# Focus order and Esc: Up / Down move the highlight, Enter opens, Esc / Left go back one level, Esc at Home quits.
+# Focus order and Esc: Up / Down move the highlight, Enter opens, Esc / Left go back one level (stopping the tool), Esc at Home quits.
 title Net Toolbox: keys, Esc and Left
 sizes 640x480 800x480 720x720 1024x600 1280x720
-env NET_TOOLBOX_DEMO diag=healthy,ping=mixed
+env NET_TOOLBOX_DEMO "diag=healthy,ping=mixed,speed=down-mid,wol=awake,wol_machines=3,ble=scan6"
 env NET_TOOLBOX_FIXTURE deck
 env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
-# Up at the first row stays; Down walks the nine tools (the list scrolls)
+# The page starts on Diagnose my connection, under the Network row; Up at the first row stays; Down walks the twelve tools
+# (the list scrolls)
 key up
+key up
+key down
+key down
+key down
+key down
 key down
 key down
 key down
@@ -17,6 +23,9 @@ key down
 shot last-row
 expect text "Interfaces"
 # Ping: Esc goes back to Home with the highlight on Ping
+key up
+key up
+key up
 key up
 key up
 key up
@@ -46,6 +55,78 @@ key esc
 expect text "Start"
 key esc
 expect text "Diagnose my connection"
+expect noquit
+# Speed test (Home row 8): Start, then Esc stops it and goes back to Home
+key down
+key down
+key down
+key down
+key down
+key enter
+expect text "Press Start to test your connection"
+key enter
+wait 300
+expect text "Downloading, 4 s of 8 s"
+expect text "Stop"
+key esc
+wait 200
+expect text "wlan0: 192.168.68.121"
+expect noquit
+key enter
+wait 200
+expect text "Press Start to test your connection"
+key esc
+wait 250
+# Wake-on-LAN: a machine's page, the typed pages, Esc one level at a time
+key down
+key down
+key down
+wait 300
+shot before-wol
+key enter
+wait 250
+expect text "Add a machine"
+key enter
+wait 250
+expect text "Name"
+key esc
+key esc
+wait 250
+expect text "Add a machine"
+key down
+key enter
+wait 250
+expect text "Wake now"
+key enter
+wait 300
+expect text "Awake after 22 s"
+key esc
+wait 200
+expect text "Add a machine"
+expect noquit
+key esc
+wait 200
+expect text "wlan0: 192.168.68.121"
+expect noquit
+# Bluetooth radar: Esc closes the details of a device first, then leaves
+key down
+key enter
+wait 250
+key enter
+wait 300
+expect text "Scanning, 6 devices, 37 s left"
+key down
+key down
+key enter
+wait 200
+expect text "Address"
+key esc
+wait 200
+expect text "Scanning, 6 devices, 37 s left"
+expect noquit
+key esc
+wait 200
+expect text "wlan0: 192.168.68.121"
 expect noquit
 key left
 expect quit

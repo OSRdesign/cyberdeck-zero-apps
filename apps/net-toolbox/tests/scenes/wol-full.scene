@@ -1,0 +1,22 @@
+title Net Toolbox: Wake-on-LAN, twenty machines
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO wol=awake,wol_machines=20
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+shot full
+expect text "list full"
+expect text "20 machines saved"
+key enter
+shot refused
+expect text "You can save up to 20 machines: delete one first."
+expect notext "Message cut off"

@@ -1,0 +1,34 @@
+# The second press deletes; any other action first disarms it.
+title Net Toolbox: Wake-on-LAN, deleting a machine
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO wol=awake,wol_machines=3
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+key down
+key enter
+key down
+key down
+key down
+key down
+key down
+key down
+shot delete
+expect text "Delete"
+key enter
+shot confirm
+expect text "Press again to delete"
+key enter
+wait 300
+shot gone
+expect text "Deleted Desk PC"
+expect notext "Message cut off"

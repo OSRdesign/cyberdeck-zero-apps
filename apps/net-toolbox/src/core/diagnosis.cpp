@@ -5,7 +5,10 @@
  */
 #include "diagnosis.hpp"
 
+#include "cmdrun.hpp"
 #include "ping.hpp"
+#include "scope.hpp"
+#include "sock.hpp"
 #include "text.hpp"
 
 #include <algorithm>
@@ -58,6 +61,25 @@ public:
         if (source_) return read_net_state(*source_);
         const std::unique_ptr<Source> sys = make_system_source();
         return read_net_state(*sys);
+    }
+    bool nmcli_dns(const std::string &iface, std::string &text) override
+    {
+        if (!valid_iface_name(iface)) return false;
+        if (source_) { /* a fixture board: the recorded answer */
+            bool ok = false;
+            text = source_->read("/cmd/nmcli_dns_" + iface, &ok);
+            return ok;
+        }
+        CommandSpec spec;
+        spec.argv = nmcli_dns_argv(iface);
+        spec.timeout_ms = kNmcliTimeoutMs;
+        spec.max_output = 16 * 1024;
+        DirectRunner runner;
+        const CancelToken none;
+        const CommandResult r = runner.run(spec, none);
+        if (!r.ok()) return false;
+        text = r.output;
+        return true;
     }
     bool can_ping() override { return ping_available().ipv4; }
     bool ping(const Address &ip, int timeout_ms, const CancelToken &cancel, double *rtt_ms) override
@@ -119,12 +141,15 @@ public:
         emit();
         if (!link() || !address() || !gateway() || !dns() || !internet() || !portal()) return r_;
         r_.state = DiagReport::State::Passed;
-        r_.explanation = "Your connection works: link, address, gateway, DNS and internet, and no sign-in page.";
+        r_.explanation = scoped() ? "Your connection through " + opt_.iface +
+                                        " works: link, address, gateway, DNS and internet, and no sign-in page."
+                                  : "Your connection works: link, address, gateway, DNS and internet, and no sign-in page.";
         emit();
         return r_;
     }
 
 private:
+    bool scoped() const { return !opt_.iface.empty(); }
     DiagStep &at(Step s) { return r_.steps[static_cast<std::size_t>(s)]; }
     void emit()
     {
@@ -191,6 +216,7 @@ private:
         begin(Step::Link);
         st_ = probe_.state();
         if (stopped()) return false;
+        if (scoped()) return link_scoped();
         main_ = st_.main();
         if (!main_ || !main_->connected())
             for (const Iface &i : st_.ifaces)
@@ -220,6 +246,32 @@ private:
                     "No network link: the cable is unplugged or the other end is off. Check the cable and the router.");
     }
 
+    /* a chosen network: that interface, and nothing else */
+    bool link_scoped()
+    {
+        const std::string &name = opt_.iface;
+        r_.iface = name;
+        const Iface *i = st_.find(name);
+        if (!i || i->loopback)
+            return fail(Step::Link, name + " not found",
+                        name + " was not found: a USB adapter may be unplugged. Plug it in, or choose Automatic or another "
+                               "network in Home > Network.");
+        main_ = i;
+        if (i->connected()) {
+            std::string detail = name;
+            if (i->link_valid && !i->link.ssid.empty()) detail += " " + i->link.ssid;
+            else if (!i->wireless && i->speed_mbps > 0) detail += " " + fmt_speed(i->speed_mbps);
+            return pass(Step::Link, detail);
+        }
+        if (i->wireless)
+            return fail(Step::Link, name + " not connected",
+                        name + " is not connected to a network. Connect it to one, or choose another network in "
+                               "Home > Network.");
+        return fail(Step::Link, name + " no link",
+                    name + " has no link: the cable is unplugged or the other end is off. Check the cable, the hub and "
+                           "the router.");
+    }
+
     bool address()
     {
         begin(Step::Address);
@@ -231,8 +283,8 @@ private:
                         "if it lasts, restart the router.");
         if (is_ipv4_link_local(a))
             return fail(Step::Address, ip,
-                        "Only a self-assigned address (" + ip + "): the router did not answer the address request "
-                        "(DHCP). Reconnect, or restart the router.");
+                        "Only a self-assigned address (" + ip + (scoped() ? ") on " + main_->name : std::string(")")) +
+                            ": the router did not answer the address request (DHCP). Reconnect, or restart the router.");
         return pass(Step::Address, ip);
     }
 
@@ -241,11 +293,14 @@ private:
         begin(Step::Gateway);
         ping_ok_ = probe_.can_ping();
         if (!ping_ok_) r_.notes.push_back("Ping is not allowed for this user: the checks used TCP connections instead.");
-        if (!st_.route.ok)
+        const Route route = scoped() ? st_.route_of(opt_.iface) : st_.route;
+        if (!route.ok)
             return fail(Step::Gateway, "no gateway",
-                        "There is an address but no gateway (default route): this network gives no way out. "
-                        "Reconnect, or check the router.");
-        const std::string gw = st_.route.gateway;
+                        scoped() ? opt_.iface + " has an address but no gateway (default route): this network gives no way "
+                                               "out. Reconnect, or check the router."
+                                 : "There is an address but no gateway (default route): this network gives no way out. "
+                                   "Reconnect, or check the router.");
+        const std::string gw = route.gateway;
         Address a;
         if (!parse_ip(gw, a)) return fail(Step::Gateway, gw, "The default route names no usable gateway address.");
         std::string how;
@@ -254,8 +309,9 @@ private:
         if (stopped()) return false;
         if (!ok)
             return fail(Step::Gateway, gw + " silent",
-                        "The gateway " + gw + " does not answer: the link may be too weak or the router is stuck. "
-                        "Move closer, or restart the router.");
+                        (scoped() ? "The gateway of " + opt_.iface + " (" + gw + ")" : "The gateway " + gw) +
+                            " does not answer: the link may be too weak or the router is stuck. "
+                            "Move closer, or restart the router.");
         if (how != "ping" && ping_ok_) r_.notes.push_back("The gateway ignores ping; it answered on " + how + ".");
         return pass(Step::Gateway, gw + ", " + fmt_ms(rtt));
     }
@@ -264,14 +320,29 @@ private:
     {
         begin(Step::Dns);
         std::vector<std::string> servers;
-        if (!opt_.resolver.empty()) servers.push_back(opt_.resolver);
-        else
+        if (!opt_.resolver.empty()) {
+            servers.push_back(opt_.resolver);
+        } else if (scoped()) {
+            std::string text;
+            const bool ran = probe_.nmcli_dns(opt_.iface, text);
+            const ScopeDns sd = scope_dns(resolve_scope(opt_.iface, st_), st_, text, ran);
+            for (const std::string &s : sd.servers)
+                if (is_ip(s) && servers.size() < 3) servers.push_back(s);
+            if (sd.from == ScopeDns::From::Gateway)
+                r_.notes.push_back("The DNS servers of " + opt_.iface + " could not be read: its gateway was asked.");
+            else if (sd.from == ScopeDns::From::SystemFallback)
+                r_.notes.push_back("The DNS servers of " + opt_.iface + " are not known: the system's were asked, which "
+                                   "may not be reachable through it.");
+        } else {
             for (const std::string &s : st_.dns.servers)
                 if (is_ip(s) && servers.size() < 3) servers.push_back(s);
+        }
         if (servers.empty())
             return fail(Step::Dns, "no DNS server",
-                        "No DNS server is set (resolv.conf lists none). Reconnect, or pick a resolver such as 1.1.1.1 "
-                        "in DNS lookup.");
+                        scoped() ? "No DNS server is known for " + opt_.iface + ". Reconnect it, or pick a resolver such as "
+                                   "1.1.1.1 in DNS lookup."
+                                 : "No DNS server is set (resolv.conf lists none). Reconnect, or pick a resolver such as "
+                                   "1.1.1.1 in DNS lookup.");
         r_.resolver = servers.front();
         std::vector<std::string> silent;
         DnsResult answer;
@@ -300,11 +371,14 @@ private:
             if (stopped()) return false;
             if (internet)
                 return fail(Step::Dns, servers.front() + " silent",
-                            "The gateway answers but DNS does not (" + list + "). Try another resolver, for example "
-                            "1.1.1.1, in DNS lookup.");
+                            std::string(scoped() ? "The gateway of " + opt_.iface + " answers" : "The gateway answers") +
+                            " but DNS does not (" + list + "). Try another resolver, for example 1.1.1.1, in DNS lookup.");
             return fail(Step::Dns, servers.front() + " silent",
-                        "Nothing answers past the gateway (DNS: " + list + "): the router's internet connection "
-                        "seems down. Check the modem or the router, or restart it.");
+                        std::string(scoped() ? "Nothing answers past the gateway of " + opt_.iface
+                                             : "Nothing answers past the gateway") +
+                            " (DNS: " + list + "): the router's internet connection seems down. " +
+                            (scoped() ? "Check the modem, the hotspot or the router, or restart it."
+                                      : "Check the modem or the router, or restart it."));
         }
         if (!silent.empty()) r_.notes.push_back("DNS: " + silent.front() + "; " + r_.resolver + " answered.");
         const bool has_address = !answer.addresses(dns::kA).empty();
@@ -347,8 +421,11 @@ private:
         std::string list;
         for (const std::string &t : opt_.internet) list += (list.empty() ? "" : " and ") + t;
         return fail(Step::Internet, "no answer",
-                    "The router answers but the internet does not (" + list + " are silent). The router's internet "
-                    "connection may be down: check the modem, or wait and run again.");
+                    scoped() ? "The gateway of " + opt_.iface + " answers but the internet does not (" + list +
+                                   " are silent). The internet connection behind it may be down: check the modem or the "
+                                   "hotspot, or wait and run again."
+                             : "The router answers but the internet does not (" + list + " are silent). The router's internet "
+                               "connection may be down: check the modem, or wait and run again.");
     }
 
     bool portal()

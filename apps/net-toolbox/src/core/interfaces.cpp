@@ -15,9 +15,9 @@
 
 namespace nt {
 
-Route parse_default_route(const std::string &text)
+std::vector<Route> parse_default_routes(const std::string &text)
 {
-    Route best;
+    std::vector<Route> all;
     for (const std::string &line : split_lines(text)) {
         const std::vector<std::string> f = split_ws(line);
         if (f.size() < 8 || f[0] == "Iface") continue;
@@ -27,7 +27,6 @@ Route parse_default_route(const std::string &text)
         if (dest != 0 || mask != 0 || !(flags & 0x1) || !(flags & 0x2)) continue; /* RTF_UP, RTF_GATEWAY */
         std::uint64_t metric = 0;
         if (!parse_u64(f[6], metric) || metric > 0xFFFFFFFFu) metric = 0xFFFFFFFFu;
-        if (best.ok && metric >= best.metric) continue;
         /* the kernel prints the address as the hex of its 32-bit value in host order (little endian on the Pi):
          * 0144A8C0 = bytes C0 A8 44 01 in memory = 192.168.68.1 */
         const std::uint8_t b[4] = {static_cast<std::uint8_t>(gateway & 0xFF), static_cast<std::uint8_t>((gateway >> 8) & 0xFF),
@@ -35,12 +34,21 @@ Route parse_default_route(const std::string &text)
                                    static_cast<std::uint8_t>((gateway >> 24) & 0xFF)};
         char buf[20];
         std::snprintf(buf, sizeof(buf), "%u.%u.%u.%u", b[0], b[1], b[2], b[3]);
-        best.ok = true;
-        best.iface = f[0];
-        best.gateway = buf;
-        best.metric = static_cast<std::uint32_t>(metric);
+        Route r;
+        r.ok = true;
+        r.iface = f[0];
+        r.gateway = buf;
+        r.metric = static_cast<std::uint32_t>(metric);
+        all.push_back(r);
     }
-    return best;
+    std::stable_sort(all.begin(), all.end(), [](const Route &a, const Route &b) { return a.metric < b.metric; });
+    return all;
+}
+
+Route parse_default_route(const std::string &text)
+{
+    const std::vector<Route> all = parse_default_routes(text);
+    return all.empty() ? Route() : all.front();
 }
 
 ResolvConf parse_resolv_conf(const std::string &text)
@@ -137,6 +145,14 @@ std::string Iface::first_ipv4() const
     return ipv4.front().substr(0, ipv4.front().find('/'));
 }
 
+Route NetState::route_of(const std::string &name) const
+{
+    if (!name.empty())
+        for (const Route &r : default_routes)
+            if (r.iface == name) return r;
+    return Route();
+}
+
 const Iface *NetState::find(const std::string &name) const
 {
     if (name.empty()) return nullptr;
@@ -148,7 +164,8 @@ const Iface *NetState::find(const std::string &name) const
 NetState read_net_state(const Source &src)
 {
     NetState st;
-    st.route = parse_default_route(src.read("/proc/net/route"));
+    st.default_routes = parse_default_routes(src.read("/proc/net/route"));
+    if (!st.default_routes.empty()) st.route = st.default_routes.front();
     st.dns = parse_resolv_conf(src.read("/etc/resolv.conf"));
     const std::vector<WirelessLevel> levels = parse_net_wireless(src.read("/proc/net/wireless"));
     const std::vector<IfAddr> addrs = src.addresses();

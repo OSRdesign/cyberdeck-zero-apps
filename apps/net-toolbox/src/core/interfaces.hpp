@@ -37,6 +37,9 @@ struct Route {
 
 /* /proc/net/route: the default route (destination 0, mask 0, RTF_UP and RTF_GATEWAY) with the lowest metric */
 Route parse_default_route(const std::string &text);
+/* 0.3: every default route, the lowest metric first (equal metrics keep the file's order): one per interface that has a
+ * gateway (wlan0 metric 600 and wlan1 metric 601 on a Pi with two Wi-Fi adapters) */
+std::vector<Route> parse_default_routes(const std::string &text);
 
 struct ResolvConf {
     std::vector<std::string> servers; /* "nameserver" lines in order, at most 8 */
@@ -105,12 +108,15 @@ struct Iface {
 
 struct NetState {
     std::vector<Iface> ifaces; /* the main interface first, then the others by name, lo last */
-    Route route;
+    Route route;               /* the system's default route: the first of default_routes */
+    std::vector<Route> default_routes; /* every default route, the best first (0.3) */
     ResolvConf dns;
     std::string main_iface;    /* the default route's, else the first connected one with an IPv4, else "" */
 
     const Iface *find(const std::string &name) const;
     const Iface *main() const { return find(main_iface); }
+    /* 0.3: the default route through that interface (its own gateway), ok = false when it has none */
+    Route route_of(const std::string &name) const;
 };
 
 NetState read_net_state(const Source &src);

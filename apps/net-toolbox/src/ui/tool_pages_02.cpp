@@ -64,7 +64,7 @@ ui::RichRow ToolboxApp::rich_row(const ui::RowDef &def, int id) const
 std::string ToolboxApp::local_address() const
 {
     if (!backend_.local_ip.empty()) return backend_.local_ip;
-    const Iface *main = net_.main();
+    const Iface *main = net_.find(scope_.effective());
     return main ? main->first_ipv4() : std::string();
 }
 
@@ -82,7 +82,7 @@ std::string ToolboxApp::trace_target_text() const
 void ToolboxApp::build_trace()
 {
     const Geo g = geo();
-    net_ = backend_.read_state();
+    read_net();
     band_check_ = true;
     const int y = build_band();
     const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
@@ -179,7 +179,7 @@ void ToolboxApp::start_trace()
     TraceConfig cfg;
     cfg.target = host;
     cfg.reverse_dns = true;
-    cfg.resolve.server = pick_resolver("", net_.dns.servers);
+    cfg.resolve.server = pick_resolver("", dns_servers());
     hop_views_.clear();
     hop_open_ = -1;
     backend_.trace->start(cfg);
@@ -256,7 +256,7 @@ void ToolboxApp::activate_trace(std::intptr_t id)
 
 void ToolboxApp::build_http(int select)
 {
-    net_ = backend_.read_state();
+    read_net();
     band_check_ = true;
     const Geo g = geo();
     const int y = build_band();
@@ -393,7 +393,7 @@ void ToolboxApp::activate_http(std::intptr_t id)
 
 void ToolboxApp::build_publicip()
 {
-    net_ = backend_.read_state();
+    read_net();
     band_check_ = true;
     const Geo g = geo();
     const int y = build_band();
@@ -459,7 +459,7 @@ void ToolboxApp::activate_publicip(std::intptr_t id)
 
 void ToolboxApp::build_whois(int select)
 {
-    net_ = backend_.read_state();
+    read_net();
     band_check_ = true;
     const Geo g = geo();
     const int y = build_band();
@@ -525,7 +525,7 @@ void ToolboxApp::start_whois()
     }
     WhoisRequest req;
     req.query = whois_query_;
-    req.resolve.server = pick_resolver("", net_.dns.servers);
+    req.resolve.server = pick_resolver("", dns_servers());
     backend_.whois->start(req);
     fresh_ = true;
     shown_seq_ = 0;

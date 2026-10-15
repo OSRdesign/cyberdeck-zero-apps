@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include "ble.hpp"
 #include "diagnosis.hpp"
 #include "dns_client.hpp"
 #include "httpcheck.hpp"
@@ -17,8 +18,10 @@
 #include "ping.hpp"
 #include "portcheck.hpp"
 #include "publicip.hpp"
+#include "speedtest.hpp"
 #include "traceroute.hpp"
 #include "whois.hpp"
+#include "wol.hpp"
 
 #include <ctime>
 #include <string>
@@ -51,5 +54,9 @@ std::string format_httpcheck(const HttpCheckResult &r);
 /* interface_ip: the board's address on the default route ("" when unknown), for the NAT line */
 std::string format_publicip(const PublicIpResult &r, const std::string &interface_ip = "");
 std::string format_whois(const WhoisResult &r);
+/* 0.3 */
+std::string format_speedtest(const SpeedSnapshot &s);
+std::string format_wol(const WolSnapshot &s);
+std::string format_ble(const BleSnapshot &s);
 
 } // namespace nt

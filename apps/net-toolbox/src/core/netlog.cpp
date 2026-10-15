@@ -254,6 +254,7 @@ std::string format_ports(const PortSnapshot &s)
 std::string format_diagnosis(const DiagReport &r)
 {
     std::string out;
+    if (!r.iface.empty()) out += "Interface: " + r.iface + " (chosen)\n";
     for (const DiagStep &s : r.steps) {
         out += std::string(step_title(s.id)) + ": " + step_state_name(s.state);
         if (!s.detail.empty()) out += " (" + s.detail + ")";
@@ -415,6 +416,137 @@ std::string format_whois(const WhoisResult &r)
         for (const std::string &line : a.lines) out += line + "\n";
     }
     if (r.lines_truncated) out += "--- (cut at " + std::to_string(kWhoisMaxLines) + " lines)\n";
+    return out;
+}
+
+/* ---------------------------------------------------------------- 0.3 */
+
+namespace {
+
+std::string fmt_mb(std::uint64_t bytes)
+{
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%.1f MB", static_cast<double>(bytes) / 1e6);
+    return buf;
+}
+
+std::string fmt_s(double s)
+{
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%.1f s", s);
+    return buf;
+}
+
+std::string latency_line(const LatencyStats &l)
+{
+    if (!l.ok) return "no reply (" + std::to_string(l.lost) + " lost)";
+    return "median " + fmt_ms(l.median_ms) + ", min " + fmt_ms(l.min_ms) + ", max " + fmt_ms(l.max_ms) + ", jitter " +
+           fmt_ms(l.jitter_ms) + ", " + std::to_string(l.received) + " replies, " + fmt_pct(l.loss_pct()) + " loss";
+}
+
+void direction_text(std::string &out, const char *title, const SpeedDirection &d, bool upload)
+{
+    if (!d.tried) return;
+    out += std::string(title) + ": ";
+    if (!d.measured) {
+        out += d.error.empty() ? std::string("not measured\n") : d.error + "\n";
+    } else {
+        out += fmt_mbit(d.mbps) + " (" + fmt_mb(d.bytes) + " in " + fmt_s(d.seconds) + (d.capped ? ", every byte allowed moved" : "") + ")\n";
+        if (upload && d.has_server_bytes) out += "  received by the server: " + fmt_mb(d.server_bytes) + "\n";
+        if (!d.note.empty()) out += "  note: " + d.note + "\n";
+    }
+    if (d.loaded.sent) out += "  latency under load: " + latency_line(d.loaded) + "\n";
+    if (d.has_increase) out += "  increase: " + fmt_ms(d.increase_ms) + ", grade " + grade_letter(d.grade) + "\n";
+    else if (d.grade != BloatGrade::Unknown) out += "  grade " + std::string(grade_letter(d.grade)) + "\n";
+    if (!d.grade_note.empty()) out += "  " + d.grade_note + "\n";
+    if (!d.history.empty()) {
+        out += "  samples (s, Mbit/s):";
+        for (const SpeedSample &s : d.history) {
+            char buf[48];
+            std::snprintf(buf, sizeof(buf), " %.1f/%.1f", s.t_s, s.mbps);
+            out += buf;
+        }
+        out += "\n";
+    }
+}
+
+const char *wol_state_name(WolSnapshot::State s)
+{
+    switch (s) {
+    case WolSnapshot::State::Sending: return "sending";
+    case WolSnapshot::State::Watching: return "watching";
+    case WolSnapshot::State::Done: return "done";
+    case WolSnapshot::State::Failed: return "failed";
+    case WolSnapshot::State::Cancelled: return "stopped";
+    case WolSnapshot::State::Idle: break;
+    }
+    return "idle";
+}
+
+} // namespace
+
+std::string format_speedtest(const SpeedSnapshot &s)
+{
+    const SpeedResult &r = s.result;
+    std::string out = std::string("Server: ") + kSpeedHost;
+    if (!r.colo.empty()) out += " (Cloudflare site " + r.colo + ")";
+    out += "\n";
+    if (s.state == SpeedSnapshot::State::Cancelled) out += "Stopped before the end.\n";
+    if (!s.error.empty()) out += "Error: " + s.error + "\n";
+    if (r.latency_ok)
+        out += "Latency: " + fmt_ms(r.latency_ms) + " (median of " + std::to_string(r.latency_samples) + "), jitter " +
+               fmt_ms(r.jitter_ms) + ", min " + fmt_ms(r.latency_min_ms) + ", max " + fmt_ms(r.latency_max_ms) +
+               "; connection setup " + fmt_ms(r.setup_ms) + "\n";
+    if (!r.ping_target.empty() && r.ping_target != "off") {
+        out += "Ping target: " + r.ping_target;
+        if (!r.ping_address.empty() && r.ping_address != r.ping_target) out += " (" + r.ping_address + ")";
+        out += "\n";
+    }
+    if (r.idle.sent) out += "Latency idle (ping): " + latency_line(r.idle) + "\n";
+    direction_text(out, "Download", r.down, false);
+    direction_text(out, "Upload", r.up, true);
+    if (r.grade != BloatGrade::Unknown)
+        out += "Bufferbloat grade: " + std::string(grade_letter(r.grade)) + " - " + grade_words(r.grade) + "\n";
+    if (!r.ping_note.empty()) out += "Note: " + r.ping_note + "\n";
+    if (!s.detail.empty()) out += "curl: " + s.detail + "\n";
+    return out;
+}
+
+std::string format_wol(const WolSnapshot &s)
+{
+    std::string out = "Machine: " + printable(s.machine);
+    if (!s.mac.empty()) out += " (" + s.mac + ")";
+    out += "\nState: " + std::string(wol_state_name(s.state)) + "\n";
+    if (!s.error.empty()) out += "Error: " + s.error + "\n";
+    if (!s.send.summary.empty()) out += "Sent: " + s.send.summary + "\n";
+    for (const WolPacket &p : s.send.packets) out += "  " + p.dest.label() + ": " + p.words + "\n";
+    if (s.watch) {
+        out += "Watch: " + s.watch_target;
+        if (!s.watch_address.empty() && s.watch_address != s.watch_target) out += " (" + s.watch_address + ")";
+        out += ", " + std::to_string(s.attempts) + " pings: " + s.watch_words + "\n";
+    }
+    if (!s.hint.empty()) out += "Note: " + s.hint + "\n";
+    return out;
+}
+
+std::string format_ble(const BleSnapshot &s)
+{
+    std::string out;
+    if (!s.adapter.empty()) out += "Adapter: " + s.adapter + "\n";
+    if (!s.error.empty()) out += "Error: " + s.error + "\n";
+    out += "Scan: " + fmt_s(s.elapsed_s) + " of " + std::to_string(s.seconds) + " s; " + std::to_string(s.live) +
+           " devices in range, " + std::to_string(s.seen) + " seen in all\n";
+    if (!s.stop_note.empty()) out += s.stop_note + "\n";
+    if (s.other_discovery) out += "Note: another program was scanning too.\n";
+    if (!s.devices.empty()) out += "Address  Type  RSSI (smoothed)  Distance  TX  Vendor  Name\n";
+    for (const BleDevice &d : s.devices) {
+        char rssi[48];
+        std::snprintf(rssi, sizeof(rssi), "%d dBm (%.0f)", d.rssi_dbm, d.smooth_dbm);
+        out += d.address + "  " + (d.address_type.empty() ? "-" : d.address_type) + "  " + rssi + "  " +
+               distance_words(d.distance) + "  " + (d.has_tx ? std::to_string(d.tx_dbm) + " dBm" : "-") + "  " +
+               (d.vendor.empty() ? "-" : d.vendor) + "  " + (d.name.empty() ? "-" : printable(d.name)) + "\n";
+    }
+    out += std::string("Distance: ") + kBleDistanceCaveat + "\n";
     return out;
 }
 

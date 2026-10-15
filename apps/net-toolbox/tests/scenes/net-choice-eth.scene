@@ -1,0 +1,31 @@
+# A wired interface is a normal one: its speed beside its address, marked in use on the Interfaces page.
+title Net Toolbox: Ethernet and Wi-Fi in the choice
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy
+env NET_TOOLBOX_FIXTURE eth-wifi
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key up
+key enter
+shot choice
+expect text "Automatic (end0)"
+expect text "end0  192.168.1.20"
+expect text "wlan0  192.168.1.41"
+key down
+key enter
+shot home-end0
+expect text "end0: 192.168.1.20"
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+shot interfaces
+expect text "END0 (IN USE, DEFAULT ROUTE)"

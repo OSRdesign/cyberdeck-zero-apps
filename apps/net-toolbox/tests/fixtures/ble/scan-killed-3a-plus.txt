@@ -1,0 +1,300 @@
+Waiting to connect to bluetoothd...[0;94m[bluetoothctl]> [0m        menu scan
+[1;39mMenu scan:[0m
+[1;39mAvailable commands:[0m
+[1;39m-------------------[0m
+[1;39muuids [all/uuid1 uuid2 ...]                       [0mSet/Get UUIDs filter
+[1;39mrssi [rssi]                                       [0mSet/Get RSSI filter, and clears pathloss
+[1;39mpathloss [pathloss]                               [0mSet/Get Pathloss filter, and clears RSSI
+[1;39mtransport [transport]                             [0mSet/Get transport filter
+[1;39mduplicate-data [on/off]                           [0mSet/Get duplicate data filter
+[1;39mdiscoverable [on/off]                             [0mSet/Get discoverable filter
+[1;39mpattern [value]                                   [0mSet/Get pattern filter
+[1;39mclear [uuids/rssi/pathloss/transport/duplicate-data/discoverable/pattern] [0mClears discovery filter.
+[1;39mback                                              [0mReturn to main menu
+[1;39mversion                                           [0mDisplay version
+[1;39mquit                                              [0mQuit program
+[1;39mexit                                              [0mQuit program
+[1;39mhelp                                              [0mDisplay help about this program
+[1;39mexport                                            [0mPrint environment variables
+[1;39mscript <filename>                                 [0mRun script
+[0;94m[bluetoothctl]> [0mduplicate-data on
+[0;94m[bluetoothctl]> [0mtransport le
+[0;94m[bluetoothctl]> [0mback
+[1;39mMenu main:[0m
+[1;39mAvailable commands:[0m
+[1;39m-------------------[0m
+[0;94madvertise                                         [0mAdvertise Options Submenu
+[0;94mmonitor                                           [0mAdvertisement Monitor Options Submenu
+[0;94mscan                                              [0mScan Options Submenu
+[0;94mgatt                                              [0mGeneric Attribute Submenu
+[0;94madmin                                             [0mAdmin Policy Submenu
+[0;94mplayer                                            [0mMedia Player Submenu
+[0;94mendpoint                                          [0mMedia Endpoint Submenu
+[0;94mtransport                                         [0mMedia Transport Submenu
+[0;94mmgmt                                              [0mManagement Submenu
+[0;94mmonitor                                           [0mAdvertisement Monitor Submenu
+[0;94massistant                                         [0mMedia Assistant Submenu
+[0;94mhci                                               [0mHCI Submenu
+[1;39mlist                                              [0mList available controllers
+[1;39mshow [ctrl]                                       [0mController information
+[1;39mselect <ctrl>                                     [0mSelect default controller
+[1;39mdevices [Paired/Bonded/Trusted/Connected]         [0mList available devices, with an optional property as the filter
+[1;39msystem-alias <name>                               [0mSet controller alias
+[1;39mreset-alias                                       [0mReset controller alias
+[1;39mpower <on/off>                                    [0mSet controller power
+[1;39mpairable <on/off>                                 [0mSet controller pairable mode
+[1;39mdiscoverable <on/off>                             [0mSet controller discoverable mode
+[1;39mdiscoverable-timeout [value]                      [0mSet discoverable timeout
+[1;39magent <on/off/auto/capability>                    [0mEnable/disable agent with given capability
+[1;39mdefault-agent                                     [0mSet agent as the default one
+[1;39madvertise <on/off/type>                           [0mEnable/disable advertising with given type
+[1;39mset-alias <alias>                                 [0mSet device alias
+[1;39mscan <on/off/bredr/le>                            [0mScan for devices
+[1;39minfo [dev/set]                                    [0mDevice/Set information
+[1;39mpair [dev]                                        [0mPair with device
+[1;39mcancel-pairing [dev]                              [0mCancel pairing with device
+[1;39mtrust [dev]                                       [0mTrust device
+[1;39muntrust [dev]                                     [0mUntrust device
+[1;39mblock [dev]                                       [0mBlock device
+[1;39munblock [dev]                                     [0mUnblock device
+[1;39mremove <dev>                                      [0mRemove device
+[1;39mconnect <dev> [uuid]                              [0mConnect a device and all its profiles or optionally connect a single profile only
+[1;39mdisconnect [dev] [uuid]                           [0mDisconnect a device or optionally disconnect a single profile only
+[1;39mwake [dev] [on/off]                               [0mGet/Set wake support
+[1;39mbearer <dev> [last-seen/bredr/le]                 [0mGet/Set preferred bearer
+[1;39mmenu <name>                                       [0mSelect submenu
+[1;39mversion                                           [0mDisplay version
+[1;39mquit                                              [0mQuit program
+[1;39mexit                                              [0mQuit program
+[1;39mhelp                                              [0mDisplay help about this program
+[1;39mexport                                            [0mPrint environment variables
+[1;39mscript <filename>                                 [0mRun script
+[0;94m[bluetoothctl]> [0mscan on
+[0;94m[bluetoothctl]> [0m                                                                               Agent registered
+[0;94m[bluetoothctl]> [0m                                                                               SetDiscoveryFilter success
+[0;94m[bluetoothctl]> [0m                                                                               Discovery started
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Controller B8:27:EB:00:00:01 Discovering: yes
+[0;94m[bluetoothctl]> [0m                                                                               [[0;92mNEW[0m] Device 0A:00:00:00:00:02 Meshtastic_0a0a
+[0;94m[bluetoothctl]> [0m                                                                               [[0;92mNEW[0m] Device CA:00:00:00:00:03 S0000aaaa0000bbbbC
+[0;94m[bluetoothctl]> [0m                                                                               [[0;92mNEW[0m] [1;30mDevice 0A:00:00:00:00:04 0A-00-00-00-00-04[0m
+[0;94m[bluetoothctl]> [0m                                                                               [[0;92mNEW[0m] [1;30mDevice 8A:00:00:00:00:05 8A-00-00-00-00-05[0m
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 RSSI: 0xffffffa3 (-93)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 UUIDs: 00001122-0000-1000-8000-00805f9b34fb
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 ManufacturerData.Key: 0x004c (76)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00                             .......         
+[0;94m[bluetoothctl]> [0m                                                                               [[0;92mNEW[0m] Device 4A:00:00:00:00:06 4A-00-00-00-00-06
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:02 RSSI: 0xffffffb0 (-80)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 RSSI: 0xffffffd0 (-48)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Key: 0x0006 (6)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00                 ...........     
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 RSSI: 0xffffffa4 (-92)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 ManufacturerData.Key: 0x004c (76)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00                             .......         
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:02 RSSI: 0xffffffa8 (-88)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 RSSI: 0xffffffd2 (-46)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Key: 0x0006 (6)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00                 ...........     
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:02 RSSI: 0xffffffb9 (-71)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;92mNEW[0m] Device CA:00:00:00:00:07 🦤_0b0b
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 RSSI: 0xffffffd0 (-48)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Key: 0x0006 (6)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00                 ...........     
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:06 RSSI: 0xffffffba (-70)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:06 ManufacturerData.Key: 0x004c (76)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:06 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00                       .........       
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:02 RSSI: 0xffffffb8 (-72)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;92mNEW[0m] Device 4A:00:00:00:00:08 4A-00-00-00-00-08
+[0;94m[bluetoothctl]> [0m                                                                               [[0;92mNEW[0m] Device 8A:00:00:00:00:09 TY
+[0;94m[bluetoothctl]> [0m                                                                               [[0;92mNEW[0m] [1;30mDevice CA:00:00:00:00:0A CA-00-00-00-00-0A[0m
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 RSSI: 0xffffffa4 (-92)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 ManufacturerData.Key: 0x004c (76)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00                             .......         
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 RSSI: 0xffffffd2 (-46)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Key: 0x0006 (6)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00                 ...........     
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:02 RSSI: 0xffffffb0 (-80)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;92mNEW[0m] Device 4A:00:00:00:00:0B 4A-00-00-00-00-0B
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:02 RSSI: 0xffffffb0 (-80)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 RSSI: 0xffffffdc (-36)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Key: 0x0006 (6)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00                 ...........     
+[0;94m[bluetoothctl]> [0m                                                                               [[0;92mNEW[0m] Device 0A:00:00:00:00:0C 0A-00-00-00-00-0C
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:06 RSSI: 0xffffffbd (-67)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:06 ManufacturerData.Key: 0x004c (76)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:06 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00                       .........       
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 RSSI: 0xffffffdd (-35)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Key: 0x0006 (6)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00                 ...........     
+[0;94m[bluetoothctl]> [0m                                                                               [[0;92mNEW[0m] [1;30mDevice 0A:00:00:00:00:0D 0A-00-00-00-00-0D[0m
+[0;94m[bluetoothctl]> [0m                                                                               [[0;92mNEW[0m] [1;30mDevice 0A:00:00:00:00:0E 0A-00-00-00-00-0E[0m
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:07 RSSI: 0xffffffb8 (-72)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;92mNEW[0m] Device 4A:00:00:00:00:0F [TV] Living Room (55)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 RSSI: 0xffffffd2 (-46)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Key: 0x0006 (6)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00                 ...........     
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:0E RSSI: 0xffffffa1 (-95)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:0E ManufacturerData.Key: 0x0006 (6)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:0E ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00                 ...........     
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:02 RSSI: 0xffffffb8 (-72)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:06 RSSI: 0xffffffbd (-67)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:06 ManufacturerData.Key: 0x004c (76)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:06 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00                       .........       
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:02 RSSI: 0xffffffb9 (-71)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 RSSI: 0xffffffa2 (-94)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 ManufacturerData.Key: 0x004c (76)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00                             .......         
+[0;94m[bluetoothctl]> [0m                                                                               [[0;92mNEW[0m] Device 4A:00:00:00:00:10 LE-Speaker Mini2
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 RSSI: 0xffffffcf (-49)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Key: 0x0006 (6)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00                 ...........     
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:0F RSSI: 0xffffffa4 (-92)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:0F ManufacturerData.Key: 0x0075 (117)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:0F ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00                          ........        
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:02 RSSI: 0xffffffb1 (-79)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:0B RSSI: 0xffffffa5 (-91)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:0B ManufacturerData.Key: 0x004c (76)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:0B ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00                          ........        
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 RSSI: 0xffffffcf (-49)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Key: 0x0006 (6)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00                 ...........     
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:02 RSSI: 0xffffffb1 (-79)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:07 RSSI: 0xffffffba (-70)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 RSSI: 0xffffffdc (-36)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Key: 0x0006 (6)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00                 ...........     
+[0;94m[bluetoothctl]> [0m                                                                               [[0;92mNEW[0m] [1;30mDevice CA:00:00:00:00:11 CA-00-00-00-00-11[0m
+[0;94m[bluetoothctl]> [0m                                                                               [[0;92mNEW[0m] [1;30mDevice CA:00:00:00:00:12 CA-00-00-00-00-12[0m
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:02 RSSI: 0xffffffab (-85)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;92mNEW[0m] Device 4A:00:00:00:00:13 4A-00-00-00-00-13
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 RSSI: 0xffffffa3 (-93)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 ManufacturerData.Key: 0x004c (76)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00                             .......         
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 RSSI: 0xffffffce (-50)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Key: 0x0006 (6)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00                 ...........     
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:0E RSSI: 0xffffff9e (-98)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:0E ManufacturerData.Key: 0x0006 (6)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:0E ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00                 ...........     
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:0D RSSI: 0xffffffaa (-86)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:0D ManufacturerData.Key: 0x0006 (6)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:0D ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00                 ...........     
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:02 RSSI: 0xffffffac (-84)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:0F RSSI: 0xffffffa8 (-88)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:0F ManufacturerData.Key: 0x0075 (117)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:0F ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00                          ........        
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:02 RSSI: 0xffffffac (-84)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;92mNEW[0m] [1;30mDevice CA:00:00:00:00:14 CA-00-00-00-00-14[0m
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:0D RSSI: 0xffffffa8 (-88)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:0D ManufacturerData.Key: 0x0006 (6)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:0D ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00                 ...........     
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:02 RSSI: 0xffffffb8 (-72)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 RSSI: 0xffffffa1 (-95)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 ManufacturerData.Key: 0x004c (76)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00                             .......         
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:06 RSSI: 0xffffffc1 (-63)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:06 ManufacturerData.Key: 0x004c (76)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:06 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00                       .........       
+[0;94m[bluetoothctl]> [0m                                                                               [[0;92mNEW[0m] Device 0A:00:00:00:00:15 Video_Cam_Test
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 RSSI: 0xffffff9f (-97)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 ManufacturerData.Key: 0x004c (76)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00                             .......         
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:02 RSSI: 0xffffffb8 (-72)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:10 RSSI: 0xffffffb8 (-72)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:10 ManufacturerData.Key: 0x0c01 (3073)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:10 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00                             .......         
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:07 RSSI: 0xffffffb8 (-72)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:02 RSSI: 0xffffffb8 (-72)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 RSSI: 0xffffff9b (-101)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 ManufacturerData.Key: 0x004c (76)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00                             .......         
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:02 RSSI: 0xffffffb9 (-71)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 RSSI: 0xffffffa3 (-93)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 ManufacturerData.Key: 0x004c (76)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00                             .......         
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:02 RSSI: 0xffffffb7 (-73)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 RSSI: 0xffffff9c (-100)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 ManufacturerData.Key: 0x004c (76)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00                             .......         
+[0;94m[bluetoothctl]> [0m                                                                               [[0;92mNEW[0m] [1;30mDevice CA:00:00:00:00:16 CA-00-00-00-00-16[0m
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:06 RSSI: 0xffffffc3 (-61)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:06 ManufacturerData.Key: 0x004c (76)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:06 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00                       .........       
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:02 RSSI: 0xffffffaf (-81)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 RSSI: 0xffffff98 (-104)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 ManufacturerData.Key: 0x004c (76)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device CA:00:00:00:00:03 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00                             .......         
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:15 RSSI: 0xffffffab (-85)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:15 ManufacturerData.Key: 0x4554 (17748)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:15 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00                                      ....            
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 RSSI: 0xffffffdd (-35)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Key: 0x0006 (6)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 0A:00:00:00:00:04 ManufacturerData.Value:
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+[0;94m[bluetoothctl]> [0m                                                                                 00 00 00 00 00 00 00 00 00 00 00                 ...........     
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:08 RSSI: 0xffffffb4 (-76)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:08 ManufacturerData.Key: 0x012d (301)
+[0;94m[bluetoothctl]> [0m                                                                               [[0;93mCHG[0m] Device 4A:00:00:00:00:08 ManufacturerData.Value:

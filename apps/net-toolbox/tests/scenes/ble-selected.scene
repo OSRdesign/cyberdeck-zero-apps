@@ -1,0 +1,34 @@
+title Net Toolbox: Bluetooth radar, a device selected, its details
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO ble=scan25
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+key enter
+wait 400
+key down
+key down
+key down
+wait 200
+shot selected
+expect text "Pixel 8"
+key enter
+wait 200
+shot details
+expect text "Address"
+expect text "6C:A1:00:3F:22:9E"
+key esc
+wait 200
+shot back
+expect noquit
+expect notext "Message cut off"

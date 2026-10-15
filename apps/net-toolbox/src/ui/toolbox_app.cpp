@@ -8,6 +8,7 @@
 
 #include "app.hpp"
 #include "build_info.hpp"
+#include "demo_data_03.hpp"
 #include "style.hpp"
 #include "toolbox.hpp"
 
@@ -15,6 +16,7 @@
 #include "cp0_ui_metrics_lvgl.h"
 
 #include "netlog.hpp"
+#include "sock.hpp"
 #include "text.hpp"
 
 #include <algorithm>
@@ -64,6 +66,7 @@ ToolboxApp::ToolboxApp(lv_obj_t *screen)
     http_url_ = settings_.http_url.empty() ? "https://example.com" : settings_.http_url;
     http_insecure_ = settings_.http_insecure;
     whois_query_ = settings_.whois_query;
+    iface_choice_ = settings_.interface;
     for (const auto &kv : backend_.seeds) { /* a demonstration starts with the values its scene names */
         if (kv.first == "ping_target") ping_target_ = kv.second;
         else if (kv.first == "dns_name") dns_name_ = kv.second;
@@ -77,6 +80,38 @@ ToolboxApp::ToolboxApp(lv_obj_t *screen)
         else if (kv.first == "http_method") http_head_ = kv.second == "HEAD";
         else if (kv.first == "http_insecure") http_insecure_ = kv.second == "1";
         else if (kv.first == "whois_query") whois_query_ = kv.second;
+        else if (kv.first == "interface") iface_choice_ = valid_iface_name(kv.second) ? kv.second : std::string();
+        else if (kv.first == "wol_machines") {
+            for (const WolMachine &m : ui::demo_wol_machines(std::atoi(kv.second.c_str()))) settings_.save_machine(m);
+        }
+    }
+    for (const auto &kv : backend_.seeds) { /* wol_last=Desk PC:awake+NAS:sent+Laptop:noanswer, after the machines exist */
+        if (kv.first != "wol_last") continue;
+        std::size_t pos = 0;
+        const std::string &spec = kv.second;
+        while (pos < spec.size()) {
+            std::size_t end = spec.find('+', pos);
+            if (end == std::string::npos) end = spec.size();
+            const std::string part = spec.substr(pos, end - pos);
+            const std::size_t colon = part.rfind(':');
+            if (colon != std::string::npos) {
+                ui::WakeLast last;
+                last.sent_at = backend_.wall_clock ? backend_.wall_clock() : 0;
+                const std::string kind = part.substr(colon + 1);
+                if (kind == "awake") {
+                    last.kind = ui::WakeKind::Awake;
+                    last.seconds = 22;
+                } else if (kind == "sent") {
+                    last.kind = ui::WakeKind::Sent;
+                } else if (kind == "noanswer") {
+                    last.kind = ui::WakeKind::NoAnswer;
+                } else if (kind == "failed") {
+                    last.kind = ui::WakeKind::Failed;
+                }
+                wol_last_[lower(part.substr(0, colon))] = last;
+            }
+            pos = end + 1;
+        }
     }
 
     cp0_ui_roller_page(cp0_ui_metrics_get(), cp0::ui::status_strip_left(), &layout_);
@@ -86,8 +121,8 @@ ToolboxApp::ToolboxApp(lv_obj_t *screen)
     cp0::ui::StatusStrip::add(page_->header());
     std::fprintf(stderr, "[%s] %s, screen %dx%d\n", kAppId, backend_.description.c_str(), layout_.w, layout_.h);
 
-    stack_.push_back(Frame{View::Home, 0});
-    show(View::Home, 0);
+    stack_.push_back(Frame{View::Home, 1}); /* on Diagnose my connection: Network is the row above it */
+    show(View::Home, 1);
     timer_ = lv_timer_create(tick_cb, 100, this);
     const char *selftest_env = std::getenv("NET_TOOLBOX_SELFTEST");
     if (selftest_env && selftest_env[0]) {
@@ -107,6 +142,8 @@ ToolboxApp::~ToolboxApp()
     if (timer_) lv_timer_delete(timer_);
     lv_async_call_cancel(posted_cb, this);
     if (iw_job_) cdk::async_run::cancel(iw_job_);
+    if (nmcli_job_) cdk::async_run::cancel(nmcli_job_);
+    set_active_interface(""); /* the sockets and curl of this process go back to the system routing */
     stop_tools(); /* the workers stopped and joined with the runners */
     teardown();
     page_.reset();
@@ -163,6 +200,12 @@ void ToolboxApp::tick()
     case View::Http: poll_http(false); break;
     case View::PublicIp: poll_publicip(false); break;
     case View::Whois: poll_whois(false); break;
+    case View::Speed: poll_speed(false); break;
+    case View::Machine:
+        poll_machine(false);
+        if (wake_block_) wake_block_->tick(now);
+        break;
+    case View::Ble: poll_ble(false); break;
     default: break;
     }
 }
@@ -171,6 +214,11 @@ void ToolboxApp::tick()
 
 void ToolboxApp::back()
 {
+    if (stack_.back().view == View::Ble && ble_detail_) { /* the details of a device close first */
+        ble_detail_ = false;
+        poll_ble(true);
+        return;
+    }
     if (stack_.size() <= 1) {
         cdk::request_quit(0); /* a short Esc at Home ends the app (report 024, Controller decision) */
         return;
@@ -215,6 +263,10 @@ void ToolboxApp::show(View view, int select)
     case View::Http: build_http(select); break;
     case View::PublicIp: build_publicip(); break;
     case View::Whois: build_whois(select); break;
+    case View::Speed: build_speed(); break;
+    case View::Wol: build_wol(select); break;
+    case View::Machine: build_machine(select); break;
+    case View::Ble: build_ble(); break;
     case View::Choice: build_choice(); break;
     case View::Typed: build_typed(); break;
     }
@@ -224,11 +276,22 @@ void ToolboxApp::show(View view, int select)
 void ToolboxApp::teardown()
 {
     stop_tools();
+    iw_round_left_ = 0;
     if (iw_job_) {
         cdk::async_run::cancel(iw_job_);
         iw_job_ = 0;
     }
     rich_.reset(); /* the rows' views let go of their objects first */
+    speed_live_.reset();
+    speed_big_.reset();
+    speed_grade_.reset();
+    machine_views_.clear();
+    wake_block_.reset();
+    radar_.reset();
+    if (info_) lv_obj_delete(info_);
+    info_ = nullptr;
+    wol_delete_armed_ = false;
+    ble_detail_ = ble_detail_shown_ = false;
     bar_.reset();
     hop_views_.clear();
     http_badge_.reset();
@@ -262,13 +325,20 @@ void ToolboxApp::stop_tools()
     if (backend_.http) backend_.http->stop();
     if (backend_.pubip) backend_.pubip->stop();
     if (backend_.whois) backend_.whois->stop();
+    if (backend_.speed) backend_.speed->stop();
+    if (backend_.wol) backend_.wol->stop();
+    if (backend_.ble) backend_.ble->stop(); /* the scan ends: discovery off, bluetoothctl closed (the core's farewell) */
 }
 
 void ToolboxApp::show_title()
 {
     std::vector<std::string> path{kAppTitle};
-    const auto tool_name = [](View v) -> const char * {
+    const auto tool_name = [this](View v) -> std::string {
         switch (v) {
+        case View::Speed: return "Speed test";
+        case View::Wol: return "Wake-on-LAN";
+        case View::Machine: return wol_current_;
+        case View::Ble: return "Bluetooth radar";
         case View::Interfaces: return "Interfaces";
         case View::Diagnosis: return "Diagnosis";
         case View::Ping: return "Ping";
@@ -283,8 +353,12 @@ void ToolboxApp::show_title()
     };
     const View v = stack_.back().view;
     if (v == View::Choice || v == View::Typed) {
-        if (stack_.size() >= 2) path.push_back(tool_name(stack_[stack_.size() - 2].view));
+        if (stack_.size() >= 2 && stack_[stack_.size() - 2].view != View::Home)
+            path.push_back(tool_name(stack_[stack_.size() - 2].view));
         path.push_back(v == View::Choice ? choice_.title : typed_.title);
+    } else if (v == View::Machine) {
+        path.push_back("Wake-on-LAN");
+        path.push_back(wol_current_);
     } else if (v != View::Home) {
         path.push_back(tool_name(v));
     }
@@ -321,7 +395,7 @@ int ToolboxApp::build_band()
 }
 
 /* The band shows `dflt` unless a note (Saved ..., an error of Save) is still fresh. */
-void ToolboxApp::show_band(const ui::Band &dflt)
+void ToolboxApp::show_band(const ui::Band &dflt, bool via)
 {
     if (!band_) return;
     ui::Band b = dflt;
@@ -330,6 +404,8 @@ void ToolboxApp::show_band(const ui::Band &dflt)
         b.text = saved_note_;
         b.tone = saved_tone_;
         noted = true; /* a note carries a path: it may be cut with dots */
+    } else if (via && !scope_.automatic()) {
+        b.text = with_scope(b.text);
     }
     if (band_check_ && backend_.demo && !noted) { /* the scenes: the status line of a 0.2 page is never cut (no ellipsis) */
         if (ui::text_width(b.text.c_str(), ui::caption_font()) > lv_obj_get_width(band_)) {
@@ -343,6 +419,32 @@ void ToolboxApp::show_band(const ui::Band &dflt)
     }
     ui::set_text_if(band_, b.text);
     ui::set_color_if(band_, ui::tone_rgb(b.tone, ui::kLabel));
+}
+
+/* "... (via wlan1)": where the traffic goes. The words of the page give way to it when the line is too narrow (cut at a
+ * space, "..." before the suffix), never the other way round. */
+std::string ToolboxApp::with_scope(const std::string &text) const
+{
+    const std::string suffix = "(" + scope_.via() + ")";
+    if (text.empty()) return scope_.via();
+    const lv_font_t *font = ui::caption_font();
+    const int room = band_ ? lv_obj_get_width(band_) : 0;
+    std::string base = text;
+    if (room > 0 && ui::text_width((base + " " + suffix).c_str(), font) > room) {
+        for (;;) {
+            std::size_t cut = base.find_last_of(' ');
+            if (cut == std::string::npos || cut == 0) {
+                base.clear();
+                break;
+            }
+            base.erase(cut);
+            if (ui::text_width((base + "... " + suffix).c_str(), font) <= room) {
+                base += "...";
+                break;
+            }
+        }
+    }
+    return base.empty() ? scope_.via() : base + " " + suffix;
 }
 
 void ToolboxApp::note(const ui::Band &b)
@@ -383,28 +485,121 @@ void ToolboxApp::build_list(cp0_ui_list_density_t density, int y, int h, bool re
 void ToolboxApp::build_home(int select)
 {
     const Geo g = geo();
-    net_ = backend_.read_state();
+    read_net();
     const int y = build_band();
+    build_list(CP0_UI_LIST_COMFORTABLE, y, g.bottom - y, false, home_rows(), select);
+    show_band(ui::home_band(net_, scope_), false);
+    next_state_ms_ = now_ms() + 2000;
+}
+
+std::vector<cp0::ui::ListRow> ToolboxApp::home_rows() const
+{
     std::vector<cp0::ui::ListRow> rows;
+    rows.push_back(cp0::ui::ListRow::item("Network", ui::network_value(scope_), cp0::ui::ValueTone::Normal, kHomeNet));
     rows.push_back(cp0::ui::ListRow::item("Diagnose my connection", "", cp0::ui::ValueTone::Normal, kHomeDiag));
     rows.push_back(cp0::ui::ListRow::item("Ping", "", cp0::ui::ValueTone::Normal, kHomePing));
     rows.push_back(cp0::ui::ListRow::item("Traceroute", "", cp0::ui::ValueTone::Normal, kHomeTrace));
     rows.push_back(cp0::ui::ListRow::item("DNS lookup", "", cp0::ui::ValueTone::Normal, kHomeDns));
     rows.push_back(cp0::ui::ListRow::item("Port check", "", cp0::ui::ValueTone::Normal, kHomePort));
     rows.push_back(cp0::ui::ListRow::item("HTTP check", "", cp0::ui::ValueTone::Normal, kHomeHttp));
+    rows.push_back(cp0::ui::ListRow::item("Speed test", "", cp0::ui::ValueTone::Normal, kHomeSpeed));
     rows.push_back(cp0::ui::ListRow::item("Public IP", "", cp0::ui::ValueTone::Normal, kHomePublicIp));
     rows.push_back(cp0::ui::ListRow::item("Whois", "", cp0::ui::ValueTone::Normal, kHomeWhois));
+    rows.push_back(cp0::ui::ListRow::item("Wake-on-LAN", "", cp0::ui::ValueTone::Normal, kHomeWol));
+    rows.push_back(cp0::ui::ListRow::item("Bluetooth radar", "", cp0::ui::ValueTone::Normal, kHomeBle));
     rows.push_back(cp0::ui::ListRow::item("Interfaces", "", cp0::ui::ValueTone::Normal, kHomeIfaces));
-    build_list(CP0_UI_LIST_COMFORTABLE, y, g.bottom - y, false, std::move(rows), select);
-    show_band(ui::home_band(net_));
-    next_state_ms_ = now_ms() + 2000;
+    return rows;
 }
 
 void ToolboxApp::refresh_home(bool force)
 {
     next_state_ms_ = now_ms() + 2000;
-    if (!force || !band_) net_ = backend_.read_state();
-    show_band(ui::home_band(net_));
+    if (!force || !band_) read_net();
+    show_band(ui::home_band(net_, scope_), false);
+    if (list_ && ui::network_value(scope_) != home_net_value_) { /* an adapter came or went */
+        home_net_value_ = ui::network_value(scope_);
+        list_->set_rows(home_rows());
+    }
+}
+
+/* ---------------------------------------------------------------- the chosen network */
+
+/* net_ from the backend; the scope (the chosen interface, found or not) follows it */
+void ToolboxApp::read_net()
+{
+    net_ = backend_.read_state();
+    update_scope();
+}
+
+/* The chosen interface against the interfaces there are now. The tools bind to it through sock.hpp / cmdrun.hpp (not for
+ * a fixture board: its interface names do not exist on this machine). Its own DNS servers are asked for when it changed. */
+void ToolboxApp::update_scope()
+{
+    scope_ = resolve_scope(iface_choice_, net_);
+    if (!backend_.source) set_active_interface(scope_.iface);
+    request_scope_dns(false);
+}
+
+/* nmcli DNS servers of the chosen interface, kept for 20 s (one job at a time; a fixture board gives its recorded text) */
+void ToolboxApp::request_scope_dns(bool force)
+{
+    if (scope_.automatic()) return;
+    const std::string iface = scope_.iface;
+    if (backend_.source) {
+        if (iface == nmcli_iface_ && !force) return;
+        nmcli_iface_ = iface;
+        nmcli_ran_ = backend_.fixture_nmcli(iface, nmcli_text_);
+        return;
+    }
+    if (nmcli_job_) return;
+    if (!force && iface == nmcli_iface_ && now_ms() - nmcli_at_ms_ < 20000) return;
+    const std::shared_ptr<bool> alive = alive_;
+    nmcli_job_ = request_nmcli_dns(iface, [this, alive, iface](const std::string &text, bool ran) {
+        if (!*alive) return;
+        nmcli_job_ = 0;
+        nmcli_iface_ = iface;
+        nmcli_text_ = text;
+        nmcli_ran_ = ran;
+        nmcli_at_ms_ = now_ms();
+    });
+}
+
+ScopeDns ToolboxApp::scoped_dns() const
+{
+    const bool known = !scope_.automatic() && nmcli_iface_ == scope_.iface;
+    return scope_dns(scope_, net_, known ? nmcli_text_ : std::string(), known && nmcli_ran_);
+}
+
+std::vector<std::string> ToolboxApp::dns_servers() const
+{
+    return scoped_dns().servers;
+}
+
+std::string ToolboxApp::system_name() const
+{
+    const ScopeDns d = scoped_dns();
+    return d.from == ScopeDns::From::Interface || d.from == ScopeDns::From::Gateway ? d.label : std::string("System");
+}
+
+/* The Network page: Automatic, then every interface but the loopback with its state; the one in use is checked. */
+void ToolboxApp::open_network_choice()
+{
+    read_net();
+    const ui::NetworkChoices nc = ui::network_choices(net_, scope_);
+    Choice c;
+    c.title = "Network";
+    c.labels = nc.labels;
+    c.current = nc.current;
+    const std::vector<std::string> names = nc.names;
+    c.chosen = [this, names](int i) {
+        if (i < 0 || i >= static_cast<int>(names.size())) return;
+        iface_choice_ = names[static_cast<std::size_t>(i)];
+        fresh_ = false;
+        read_net();
+        request_scope_dns(true);
+        save_settings_now();
+    };
+    open_choice(std::move(c));
 }
 
 /* ---------------------------------------------------------------- Choice and Typed */
@@ -520,7 +715,8 @@ void ToolboxApp::activate(int, std::intptr_t id)
 {
     switch (stack_.back().view) {
     case View::Home:
-        if (id == kHomeDiag) open(View::Diagnosis);
+        if (id == kHomeNet) open_network_choice();
+        else if (id == kHomeDiag) open(View::Diagnosis);
         else if (id == kHomePing) open(View::Ping);
         else if (id == kHomeDns) open(View::Dns);
         else if (id == kHomePort) open(View::Port);
@@ -529,6 +725,9 @@ void ToolboxApp::activate(int, std::intptr_t id)
         else if (id == kHomeHttp) open(View::Http);
         else if (id == kHomePublicIp) open(View::PublicIp);
         else if (id == kHomeWhois) open(View::Whois);
+        else if (id == kHomeSpeed) open(View::Speed);
+        else if (id == kHomeWol) open(View::Wol);
+        else if (id == kHomeBle) open(View::Ble);
         break;
     case View::Diagnosis: activate_diagnosis(id); break;
     case View::Ping: activate_ping(id); break;
@@ -538,6 +737,10 @@ void ToolboxApp::activate(int, std::intptr_t id)
     case View::Http: activate_http(id); break;
     case View::PublicIp: activate_publicip(id); break;
     case View::Whois: activate_whois(id); break;
+    case View::Speed: activate_speed(id); break;
+    case View::Wol: activate_wol(id); break;
+    case View::Machine: activate_machine(id); break;
+    case View::Ble: activate_ble(id); break;
     default: break;
     }
 }
@@ -614,6 +817,33 @@ void ToolboxApp::save_result()
             have = true;
         }
         break;
+    case View::Speed:
+        if (fresh_ && backend_.speed->latest() && backend_.speed->latest()->state != SpeedSnapshot::State::Idle &&
+            backend_.speed->latest()->state != SpeedSnapshot::State::Running) {
+            tool = "speedtest";
+            title = "Speed test";
+            body = format_speedtest(*backend_.speed->latest());
+            have = true;
+        }
+        break;
+    case View::Machine:
+        if (fresh_ && backend_.wol->latest() && backend_.wol->latest()->state != WolSnapshot::State::Idle) {
+            tool = "wol";
+            title = "Wake-on-LAN";
+            body = format_wol(*backend_.wol->latest());
+            have = true;
+        }
+        break;
+    case View::Ble:
+        if (fresh_ && backend_.ble->latest() &&
+            (backend_.ble->latest()->state == BleSnapshot::State::Done || backend_.ble->latest()->state == BleSnapshot::State::Cancelled ||
+             backend_.ble->latest()->state == BleSnapshot::State::Failed)) {
+            tool = "ble";
+            title = "Bluetooth radar";
+            body = format_ble(*backend_.ble->latest());
+            have = true;
+        }
+        break;
     default: break;
     }
     if (!have) {
@@ -649,18 +879,20 @@ void ToolboxApp::save_settings_now()
     settings_.http_url = http_url_;
     settings_.http_insecure = http_insecure_;
     settings_.whois_query = whois_query_;
+    settings_.interface = iface_choice_;
     if (config_path_.empty()) return;
     if (!save_settings(config_path_, settings_)) std::fprintf(stderr, "[%s] cannot save %s\n", kAppId, config_path_.c_str());
 }
 
 std::string ToolboxApp::system_resolver() const
 {
-    return net_.dns.servers.empty() ? std::string() : net_.dns.servers[0];
+    const std::vector<std::string> servers = dns_servers();
+    return servers.empty() ? std::string() : servers[0];
 }
 
 std::string ToolboxApp::gateway() const
 {
-    return net_.route.ok ? net_.route.gateway : std::string();
+    return scope_gateway(scope_, net_);
 }
 
 /* ---------------------------------------------------------------- the page-switch check */
@@ -672,13 +904,18 @@ std::string ToolboxApp::selftest()
     const auto snapshot = [this] { return std::make_pair(ui::count_objects(page_->root()), ui::count_timers()); };
     const auto base = snapshot();
     const View tools[] = {View::Interfaces, View::Diagnosis, View::Ping, View::Dns, View::Port, View::Trace, View::Http,
-                          View::PublicIp, View::Whois};
+                          View::PublicIp, View::Whois, View::Speed, View::Wol, View::Machine, View::Ble};
     for (int round = 0; round < 3; ++round) {
         for (const View v : tools) {
             stack_.assign(1, Frame{View::Home, 0});
+            if (v == View::Machine) {
+                if (settings_.wol_machines.empty()) continue;
+                wol_current_ = settings_.wol_machines.front().name;
+                stack_.push_back(Frame{View::Wol, 0});
+            }
             open(v);
             if (v == View::Ping || v == View::Dns || v == View::Port || v == View::Trace || v == View::Http ||
-                v == View::Whois) {
+                v == View::Whois || v == View::Wol || v == View::Machine) {
                 Choice c;
                 c.title = "Test";
                 c.labels = {"One", "Two"};

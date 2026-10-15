@@ -103,6 +103,12 @@ public:
     int rows_in_view() const;
     const cp0_ui_list_layout_t &layout() const { return layout_; }
     lv_obj_t *focus_object() const { return list_; }
+    /* the fonts an Item's label and value are drawn with (a page that cuts its own labels measures with them) */
+    struct Fonts {
+        const lv_font_t *label = nullptr;
+        const lv_font_t *value = nullptr;
+    };
+    Fonts fonts() const { return {label_font(), value_font()}; }
 
 private:
     struct Row {

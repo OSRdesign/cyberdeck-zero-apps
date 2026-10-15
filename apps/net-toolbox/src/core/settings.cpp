@@ -9,6 +9,7 @@
 #include "httpcheck.hpp"
 #include "netaddr.hpp"
 #include "portcheck.hpp"
+#include "sock.hpp"
 #include "text.hpp"
 #include "whois.hpp"
 
@@ -56,7 +57,58 @@ bool int_in(const std::string &value, int lo, int hi, int &out)
     return true;
 }
 
+/* an interface name as the kernel allows it (at most 15 bytes, no blank, no '/') */
+bool iface_ok(const std::string &s)
+{
+    if (s.empty() || s.size() > 15) return false;
+    for (const char c : s)
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '-' ||
+              c == '_' || c == '@' || c == ':'))
+            return false;
+    return true;
+}
+
+bool speed_ping_ok(const std::string &s)
+{
+    return s == "gateway" || s == "off" || host_ok(s);
+}
+
 } // namespace
+
+bool Settings::save_machine(const WolMachine &input, std::string *why)
+{
+    WolMachine m = input;
+    if (!normalize_machine(m, why)) return false;
+    for (WolMachine &old : wol_machines)
+        if (lower(old.name) == lower(m.name)) {
+            old = m;
+            return true;
+        }
+    if (wol_machines.size() >= kMaxWolMachines) {
+        if (why) *why = "At most 20 machines can be saved: remove one first.";
+        return false;
+    }
+    wol_machines.push_back(m);
+    return true;
+}
+
+bool Settings::remove_machine(const std::string &name)
+{
+    const std::string key = lower(trim(name));
+    const std::size_t before = wol_machines.size();
+    wol_machines.erase(std::remove_if(wol_machines.begin(), wol_machines.end(),
+                                      [&](const WolMachine &m) { return lower(m.name) == key; }),
+                       wol_machines.end());
+    return wol_machines.size() != before;
+}
+
+const WolMachine *Settings::find_machine(const std::string &name) const
+{
+    const std::string key = lower(trim(name));
+    for (const WolMachine &m : wol_machines)
+        if (lower(m.name) == key) return &m;
+    return nullptr;
+}
 
 bool Settings::add_target(const std::string &input)
 {
@@ -94,6 +146,12 @@ std::string Settings::serialize() const
     if (!http_url.empty()) out += "http_url=" + http_url + "\n";
     out += std::string("http_insecure=") + (http_insecure ? "1" : "0") + "\n";
     if (!whois_query.empty()) out += "whois_query=" + whois_query + "\n";
+    for (const WolMachine &m : wol_machines) out += "wol=" + machine_to_setting(m) + "\n";
+    if (!wol_iface.empty()) out += "wol_iface=" + wol_iface + "\n";
+    out += std::string("wol_watch=") + (wol_watch ? "1" : "0") + "\n";
+    out += "speed_ping=" + speed_ping + "\n";
+    out += "ble_seconds=" + std::to_string(ble_seconds) + "\n";
+    if (!interface.empty()) out += "interface=" + interface + "\n";
     return out;
 }
 
@@ -145,6 +203,22 @@ Settings Settings::parse(const std::string &text)
             std::string object;
             bool is_ip = false;
             if (parse_whois_query(value, object, is_ip)) s.whois_query = value;
+        } else if (key == "wol") {
+            WolMachine m;
+            if (machine_from_setting(value, m) && !s.find_machine(m.name) && s.wol_machines.size() < kMaxWolMachines)
+                s.wol_machines.push_back(m);
+        } else if (key == "wol_iface") {
+            if (value.empty() || iface_ok(value)) s.wol_iface = value;
+        } else if (key == "wol_watch") {
+            if (value == "0" || value == "1") s.wol_watch = value == "1";
+        } else if (key == "speed_ping") {
+            if (speed_ping_ok(value)) s.speed_ping = value;
+        } else if (key == "ble_seconds") {
+            int_in(value, kBleSecondsMin, kBleSecondsMax, s.ble_seconds);
+        } else if (key == "interface") {
+            const std::string v = lower(value);
+            if (value.empty() || v == "auto" || v == "automatic") s.interface.clear();
+            else if (valid_iface_name(value)) s.interface = value;
         }
     }
     return s;

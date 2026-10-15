@@ -1,0 +1,23 @@
+title Net Toolbox: Bluetooth radar, scanning with 0 devices
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO ble=scan0
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+key enter
+wait 400
+shot scan
+expect text "Scanning, 0 devices, 37 s left"
+expect text "Stop"
+expect text "No device heard yet."
+expect notext "Message cut off"

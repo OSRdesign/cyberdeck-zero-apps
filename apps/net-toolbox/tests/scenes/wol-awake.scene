@@ -1,0 +1,25 @@
+title Net Toolbox: Wake-on-LAN, a machine, awake
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO wol=awake,wol_machines=3
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+key down
+key enter
+shot idle
+expect text "Not sent yet"
+expect text "Wake now"
+key enter
+wait 400
+shot awake
+expect text "Awake after 22 s"
+expect notext "Message cut off"
