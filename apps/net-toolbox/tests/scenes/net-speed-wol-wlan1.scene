@@ -1,0 +1,36 @@
+title Net Toolbox: the speed test and Wake-on-LAN say "via wlan1"
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO speed=down-mid,wol=awake,wol_machines=3,interface=wlan1
+env NET_TOOLBOX_FIXTURE pi-3a-plus-dongle
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+shot speed-idle
+expect text "Press Start to test your connection (via wlan1)"
+expect notext "Message cut off"
+key enter
+wait 450
+shot speed-running
+expect text "Downloading, 4 s of 8 s (via wlan1)"
+expect notext "Message cut off"
+key esc
+key down
+key down
+key down
+key enter
+shot wol-list
+expect text "3 machines saved (via wlan1)"
+key down
+key enter
+shot machine-idle
+expect text "Press Wake now to send the magic packet (via wlan1)"
+key enter
+wait 400
+shot machine-awake
+expect text "192.168.68.20 answers after 22 s (via wlan1)"
+expect notext "Message cut off"

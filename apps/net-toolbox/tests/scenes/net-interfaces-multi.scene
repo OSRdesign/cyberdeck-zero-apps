@@ -1,0 +1,28 @@
+# Each Wi-Fi heading has its own Network, Signal and Bit rate; the chosen interface is marked in use.
+title Net Toolbox: Interfaces with Ethernet and two Wi-Fi adapters
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy,interface=wlan1
+env NET_TOOLBOX_FIXTURE pi-eth-two-wifi
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+shot top
+expect text "END0 (DEFAULT ROUTE)"
+key pgdn
+shot middle
+key pgdn
+shot lower
+key pgdn
+shot lower2
+key end
+shot bottom

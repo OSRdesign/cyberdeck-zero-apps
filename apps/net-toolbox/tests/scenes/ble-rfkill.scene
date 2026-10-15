@@ -1,0 +1,23 @@
+title Net Toolbox: Bluetooth radar, bluetooth is blocked by rfkill
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO ble=rfkill
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+key enter
+wait 300
+shot problem
+expect text "Bluetooth is blocked by rfkill"
+expect text "Turn Bluetooth on in Settings > Bluetooth"
+expect text "Start"
+expect notext "Message cut off"

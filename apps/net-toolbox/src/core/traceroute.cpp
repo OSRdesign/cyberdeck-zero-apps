@@ -280,6 +280,10 @@ std::unique_ptr<ProbeSocket> open_probe_socket(const Address &target, ProbeMetho
     if (method == ProbeMethod::Icmp) proto = v6 ? static_cast<int>(IPPROTO_ICMPV6) : static_cast<int>(IPPROTO_ICMP);
     const int fd = socket(target.family, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, proto);
     if (fd < 0) return fail(errno);
+    if (const int be = bind_to_active_device(fd)) { /* the chosen network (sock.hpp) */
+        close(fd);
+        return fail(be);
+    }
     const int one = 1;
     const int rc = v6 ? setsockopt(fd, SOL_IPV6, IPV6_RECVERR, &one, sizeof(one))
                       : setsockopt(fd, SOL_IP, IP_RECVERR, &one, sizeof(one));

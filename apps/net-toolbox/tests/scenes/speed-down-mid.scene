@@ -1,0 +1,22 @@
+# the dial stepped up to 0-50
+title Net Toolbox: Speed test, download (down-mid)
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO speed=down-mid
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+key enter
+wait 450
+shot download
+expect text "Downloading, 4 s of 8 s"
+expect text "Download"
+expect text "Stop"
+expect text "50"
+expect text "50 Mbit/s"
+expect notext "Message cut off"

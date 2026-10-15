@@ -1,0 +1,27 @@
+title Net Toolbox: Wake-on-LAN, three machines
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO "wol=awake,wol_machines=3,wol_last=Desk PC:awake+NAS:sent+Living room TV:noanswer"
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+shot list
+expect text "Desk PC"
+expect text "NAS"
+expect text "Living room TV"
+expect text "Awake after 22 s"
+expect text "No answer yet"
+expect text "3 machines saved"
+expect notext "Message cut off"
+key end
+wait 300
+shot bottom
+expect notext "Message cut off"

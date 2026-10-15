@@ -1,0 +1,64 @@
+# Every tool page that sends traffic shows the scope in its status line (not on Automatic).
+title Net Toolbox: the tools say 'via wlan1'
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy,ping=mixed,trace=healthy,http=ok,pubip=both,whois=domain,trace_target=example.com,http_url=https://example.com,whois_query=example.com,interface=wlan1
+env NET_TOOLBOX_FIXTURE pi-3a-plus-dongle
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key enter
+shot ping-idle
+expect text "Press Start to ping Gateway 172.20.10.1 (via wlan1)"
+key enter
+shot ping-running
+key esc
+key down
+key enter
+shot trace-idle
+expect text "Press Start to trace example.com (via wlan1)"
+expect notext "Message cut off"
+key enter
+shot trace-running
+expect notext "Message cut off"
+key esc
+key down
+key enter
+shot dns-idle
+expect text "Type a name and press Look up (via wlan1)"
+expect text "wlan1's DNS 172.20.10.1"
+key enter
+shot dns-answer
+key esc
+key down
+key enter
+shot port-idle
+key enter
+shot port-result
+key esc
+key down
+key enter
+shot http-idle
+expect text "Press Run to check an address (via wlan1)"
+expect notext "Message cut off"
+key enter
+shot http-result
+expect notext "Message cut off"
+key esc
+key down
+key enter
+shot speed-idle
+expect text "Press Start to test your connection (via wlan1)"
+expect notext "Message cut off"
+key esc
+key down
+key enter
+shot pubip-result
+expect notext "Message cut off"
+key esc
+key down
+key enter
+shot whois-idle
+expect notext "Message cut off"
+key down
+key enter
+shot whois-result
+expect notext "Message cut off"

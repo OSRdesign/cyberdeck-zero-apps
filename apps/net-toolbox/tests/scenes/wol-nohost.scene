@@ -1,0 +1,26 @@
+title Net Toolbox: Wake-on-LAN, a machine without an address to watch
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO wol=sent,wol_machines=3
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+key down
+key down
+key down
+key enter
+shot idle
+expect text "Add an address to watch to see when it wakes up"
+key enter
+wait 400
+shot sent
+expect text "Sent"
+expect notext "Message cut off"

@@ -1,0 +1,20 @@
+title Net Toolbox: Wake-on-LAN, nothing saved yet
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO wol=awake
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+shot empty
+expect text "Add a machine"
+expect text "No machine saved yet. Add one to wake it from here."
+expect text "The target must have Wake-on-LAN switched on; it usually works over Ethernet, rarely over Wi-Fi."
+expect notext "Message cut off"

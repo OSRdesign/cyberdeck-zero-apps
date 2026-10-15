@@ -210,3 +210,135 @@ Compare with `curl -sS -o /dev/null -w '%{json}' <url>` on the PC.
    and the reason as a row. Nothing hangs; Esc leaves at once.
 6. Save log on each: `~/net-logs/publicip-...txt`, `whois-...txt`.
 7. `ss -tnp | grep net-toolbox` shows nothing left open after leaving a page; `pgrep curl` shows none.
+
+## B11. Pi 3A+ with the Wi-Fi dongle (0.3): the network chooser
+
+The board: wlan0 on the home network (default route), a USB Wi-Fi dongle (Realtek RTL8822BU) as wlan1 on a phone hotspot.
+Do not change the connections for this test; join the hotspot first with Settings > Wi-Fi of the launcher or
+`nmcli device wifi connect ... ifname wlan1`.
+
+1. Home: the first row is **Network**, value `Automatic (wlan0)`; the page starts on Diagnose my connection; the band says
+   `wlan0: 192.168.68.xxx`.
+2. **Interfaces**: both `WLAN0 (DEFAULT ROUTE)` and `WLAN1` show State, IPv4, IPv6, MAC, **Network** (the SSID), Signal and
+   **Bit rate**; wlan1's has the hotspot's name. Compare with `iw dev wlan1 link`. If wlan1 shows no Network and no Bit rate
+   row, its driver may not speak nl80211: note what `iw dev wlan1 link` prints.
+3. Network row, Enter: Automatic, wlan0, wlan1 with their addresses, Automatic checked. Pick **wlan1**: the Home value reads
+   `wlan1`, the band `wlan1: 172.20.10.x`. Leave and start the app again: wlan1 is still chosen (`~/.config/cyberdeckzero/
+   net-toolbox.conf` has `interface=wlan1`).
+4. **Public IP**: the address is the hotspot's carrier address (compare `curl --interface wlan1 https://www.cloudflare.com/cdn-cgi/trace`
+   and the same with `--interface wlan0`: two different `ip=` lines); its status line ends `(via wlan1)`. Back on Automatic
+   it shows the home line's address again.
+5. **Ping** (target Gateway = 172.20.10.1, then 1.1.1.1): answers, `(via wlan1)`. While it runs, on a PC ping the board's wlan0
+   address: nothing changes. **Traceroute** to 1.1.1.1: the first hop is 172.20.10.1, not the home router.
+6. **DNS lookup**: the Resolver row reads `wlan1's DNS 172.20.10.1` (`nmcli -g IP4.DNS,IP6.DNS device show wlan1` shows the
+   server); Look up works; Compare lists it first.
+7. **Port check** to a host on the home LAN (the router 192.168.68.1 port 80): No answer or Unreachable over wlan1 (it is
+   another network), Open on Automatic. **HTTP check** `https://example.com`: 200 over wlan1.
+8. **Diagnosis** on wlan1: all six rungs green; the Link rung says `wlan1`, the gateway 172.20.10.1, DNS `via 172.20.10.1`.
+   Switch the hotspot off on the phone: Link up fails with `wlan1 is not connected to a network ...` (or the gateway
+   silent), never a hang.
+9. Unplug the dongle with wlan1 chosen: within 2 s Home says `wlan1 not found: using Automatic (wlan0: ...)` in amber, the
+   Network row `Automatic (wlan0)`; every tool works on wlan0 and the status lines have no `(via ...)`. Plug it in again
+   and rejoin: wlan1 is used again by itself.
+10. `ss -tnp | grep net-toolbox` and `pgrep curl`: nothing left after leaving a page.
+
+## B12. Ethernet adapter on a hub (0.3)
+
+A USB Ethernet adapter on the board's hub (name `enx<mac>` or `eth0`), cable to the router; Wi-Fi also connected.
+
+1. Network row: the adapter is listed (`enx00e04c680a12  192.168.1.xx`); the long name may be cut with dots on the
+   smallest screen. Interfaces: its heading with State Connected, Speed (`1 Gbit/s` or `100 Mbit/s`), no Network row.
+2. Choose it: Diagnosis, Ping, DNS lookup, Public IP run with `(via enx...)`; the rung Link up shows the name and the speed.
+3. Pull the cable out: within 2 s the Network list says `no link` for it; Diagnosis on it fails at Link up with
+   `... has no link: the cable is unplugged ...`; on Automatic the diagnosis still passes over Wi-Fi.
+4. Plug the cable in again: it works at once. Unplug the adapter from the hub with it chosen: the `not found` note, Automatic.
+5. Wake-on-LAN (when its page exists): the magic packet leaves by the wired interface (`sudo tcpdump -ni enx... udp port 9`
+   on the board).
+
+## B13. Speed test (0.3): the deck and the Pi 3A+
+
+Home, **Speed test** (row 8). The note `Uses up to about 150 MB each way. Start it yourself; on a phone hotspot that is mobile
+data.` is under the cells before the first press; nothing is sent until Start. Do this on Wi-Fi at home, not on a hotspot,
+unless the step says so.
+
+1. Start. The gauge reads **Latency** (the needle stays at 0), then **Download**: the needle swings up and settles in about
+   a fifth of a second per update, the big value and the chart follow, the thin bar counts `1 s of 8 s` to `8 s of 8 s`.
+   Then **Upload** the same. The dial's scale steps up (0-10, 0-25, 0-50, 0-100 ...) with the highest value and never goes
+   back down during the run; the numbers fade and come back with the new scale. Nothing flickers (the rest of the page does
+   not redraw), the keys and taps still answer while it runs.
+2. Expected speeds measured by the core worker on the same Wi-Fi: the **deck (Zero 2 W)** 22 to 35 Mbit/s down and 30 to 36
+   up; the **Pi 3A+** about 100 or more down and up. A deck far under 15 Mbit/s or a 3A+ under 60 is worth a note (the
+   Wi-Fi, the position, `iw dev wlan0 link`).
+3. The result card replaces the gauge: Download and Upload as large values with `Mbit/s`, Latency (idle) and Jitter, Latency
+   while downloading and while uploading with the difference (`52 ms (+34 ms)`), the grade badge with its letter and its plain
+   line, `Cloudflare, <colo>`. On a home router with SQM a grade A or B is normal; a grade F shows heavy buffering (try the
+   same run while another device is downloading). Save log writes `~/net-logs/speedtest-<date>-<time>.txt`.
+4. **Stop** in the middle of the download and of the upload: the page says `Stopped` within about a second, shows the card of
+   what was measured, `pgrep curl` shows nothing a second later, and Start runs again.
+5. Esc / Left during a run: back to Home at once, `pgrep curl` shows nothing, no traffic afterwards (`ss -tnp`).
+6. Wi-Fi off, then Start: `No connection`, the plain words in red under the cells (no hang); Wi-Fi on again, Start works.
+7. With a second adapter chosen under Network (B11), the status line ends `(via wlan1)` and `curl` uses that interface
+   (`ss -tnp | grep curl` while it runs shows the wlan1 address).
+8. **Mobile data**: on a phone hotspot one run moves up to about 50 MB each way on a 25 Mbit/s link and never more than 150 MB
+   each way. Only run it when the data plan allows it; the note says so before you press.
+9. At 640x480 the Start cell, the note and the whole dial are on screen without scrolling; the numbers 0 to 10 (or to 1000)
+   do not touch each other or the big value. The same on an 800x480 or 1024x600 screen.
+10. Memory: `ps -o rss= -C net-toolbox` during a run is under 25 MB; the CPU of the app (not curl) stays low (`top`).
+
+## B14. Wake-on-LAN (0.3)
+
+Needs one machine that can be woken (a PC with Wake-on-LAN switched on in its BIOS and network card settings, on Ethernet)
+and a second one that is already on.
+
+1. Home, **Wake-on-LAN**: `No machine saved yet`, the note about Wake-on-LAN. **Add a machine**: Name, then MAC (`ip link`
+   on the target, or its label), then an address to watch (the target's IP, optional). A bad MAC (`zz:12`) is refused with
+   `Not a MAC address: type 12 hex digits, like aa:bb:cc:dd:ee:ff` under the field; `aa:bb:cc:dd:ee:ff`, `AA-BB-...` and
+   `aabbcc...` are accepted and shown as `aa:bb:cc:dd:ee:ff`. A name already saved is refused. The machine appears with `Not
+   woken yet` and its MAC and address; leave and start the app again: it is still there
+   (`~/.config/cyberdeckzero/net-toolbox.conf` has a `wol=` line).
+2. Open the machine: the ring says `Not sent yet`. **Wake now** on the machine that is **on**: `Packet sent on wlan0` (the
+   interfaces that are up), then within a second `Already awake` (green check): it answered the first ping. The strip is
+   green from the first cell.
+3. **Wake now** on the machine that is **off** (shut down, not suspended): the ring spins with `Waking... N s`, the strip
+   fills grey one cell a second; when it boots: `Awake after N s` (green check), the strip turns green from that second. On
+   the target `sudo tcpdump -ni <if> udp port 9` (or the router's log) shows the packet.
+4. The machine does not wake (Wake-on-LAN off in its BIOS, or it is on Wi-Fi): after 120 s the ring says `No answer yet`
+   (amber dash), the strip is all grey, the status line says `No answer from <address> after 120 s`. **Stop** during the
+   watch: `Watch stopped`, nothing more is sent (`tcpdump` shows no more pings).
+5. A machine without an address to watch: Wake now says `Sent` (arrow disc) and the strip is replaced by `Add an address to
+   watch to see when it wakes up`. **Watch after waking** Off: the same with an address.
+6. With a chosen network (B11/B12) the packet leaves by that interface only (`sudo tcpdump -ni wlan1 udp port 9`), and the
+   status line ends `(via wlan1)`; on Automatic by every interface that is up (`Packet sent on wlan0, wlan1`).
+7. Edit each of Name, MAC address, Watch address (the rows of the machine page): the change is kept; renaming keeps the last
+   status. **Delete**: the row asks `Press again to delete`; any other action disarms it; the second press removes it. Add
+   machines until 20 are saved: `list full`, and Add says `You can save up to 20 machines: delete one first.`
+8. Esc from the page while it watches: back to the list at once, no more pings (`tcpdump`).
+9. Save log on a machine page: `~/net-logs/wol-<date>-<time>.txt`.
+
+## B15. Bluetooth radar (0.3): the Pi 3A+ only
+
+**Never start a BLE scan on the deck during tests unless the owner decides**: the deck's Bluetooth keyboard shares the radio.
+Run this on the Pi 3A+ (bluez installed, `hci0` powered).
+
+1. Home, **Bluetooth radar**: the first-use note beside the radar, the permanent line `Wi-Fi and Bluetooth share one radio: a
+   Bluetooth keyboard may stutter while scanning.`, the radar with its three labelled rings, no sweep, nothing scanning
+   (`bluetoothctl show` says `Discovering: no`).
+2. With a phone advertising (a Bluetooth settings page open on it, or a BLE beacon app): Start. The status line counts
+   `Scanning, N devices, S s left` down from 60; the sweep turns once in about 3 s with a faint trailing wedge; blips appear
+   and pulse when the sweep passes them; the phone is in the near or medium ring; walking away with it moves the blip
+   outwards to the far ring and, once it is out of range for 20 s, it fades and leaves the list. The list shows the
+   strongest first with `-54 dBm, near`; the highlight follows the keys and the radar rings that device and names it.
+3. Enter on a device (or a tap, then a second tap): the details open in place: Name, Address, Address type, Vendor, Signal,
+   Smoothed signal, TX power, Last seen, Heard. Esc closes them, the next Esc leaves the page.
+4. Stop (or the 60 s are up): the sweep stops, the radar keeps its blips still, the line says `Stopped, N devices seen` or
+   `Finished, N devices seen`; `bluetoothctl show` says `Discovering: no` within a second.
+5. Esc / Left in the middle of a scan, and leaving the app by Esc at Home: `Discovering: no` within a second and `pgrep
+   bluetoothctl` shows nothing.
+6. With a Bluetooth keyboard paired and typing in another window (or `evtest` on it): note whether it stutters while the scan
+   runs (the page says it may); it must be fine again as soon as the scan stops.
+7. Bluetooth off (`sudo rfkill block bluetooth`): Start says `Bluetooth is blocked by rfkill` with `Turn Bluetooth on in
+   Settings > Bluetooth`; `bluetoothctl power off`: `Bluetooth is switched off`; unblock and power on again, Start works.
+8. Memory and CPU: `ps -o rss= -C net-toolbox` before and during a scan with 20 or more devices around: the page adds under
+   3 MB; the CPU stays modest (the sweep redraws a 250 px circle ten times a second only while scanning; `top` shows well
+   under 10 % of one core on the 3A+).
+9. Save log after a scan: `~/net-logs/ble-<date>-<time>.txt`.

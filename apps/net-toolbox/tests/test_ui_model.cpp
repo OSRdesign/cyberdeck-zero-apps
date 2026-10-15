@@ -308,3 +308,166 @@ void test_ui_model()
     CHECK_EQ(save_band(true, "/tmp/x/ping.txt").text, std::string("Saved /tmp/x/ping.txt"));
     CHECK(save_band(false, "Cannot write").tone == Tone::Bad);
 }
+
+/* ---------------------------------------------------------------- 0.3: the chosen network on the pages */
+
+namespace {
+
+/* the recorded boards with iw's answer for every wireless interface that has one */
+NetState board_iw(const char *name)
+{
+    const auto src = make_fixture_source(fixture_dir(name));
+    NetState st = read_net_state(*src);
+    for (const Iface &i : st.ifaces) {
+        if (!i.wireless || !i.connected()) continue;
+        const std::string text = fixture(name, ("cmd/iw_dev_" + i.name + "_link").c_str());
+        if (!text.empty()) apply_iw_link(st, i.name, parse_iw_link(text));
+    }
+    return st;
+}
+
+/* the rows of one interface: those after its heading up to the next heading */
+std::vector<RowDef> section_of(const std::vector<RowDef> &rows, const std::string &heading_start)
+{
+    std::vector<RowDef> out;
+    bool in = false;
+    for (const RowDef &r : rows) {
+        if (r.section) in = r.label.rfind(heading_start, 0) == 0;
+        else if (in) out.push_back(r);
+    }
+    return out;
+}
+
+const RowDef *row_in(const std::vector<RowDef> &rows, const char *label)
+{
+    for (const RowDef &r : rows)
+        if (r.label == label) return &r;
+    return nullptr;
+}
+
+std::string headings(const std::vector<RowDef> &rows)
+{
+    std::string out;
+    for (const RowDef &r : rows)
+        if (r.section) out += (out.empty() ? "" : "|") + r.label;
+    return out;
+}
+
+} // namespace
+
+void test_ui_scope()
+{
+    // Home: the row's value and the band
+    {
+        const NetState deck = board("deck", false);
+        CHECK_EQ(network_value(resolve_scope("", deck)), std::string("Automatic (wlan0)"));
+        CHECK_EQ(network_value(resolve_scope("wlan0", deck)), std::string("wlan0"));
+        CHECK_EQ(network_value(resolve_scope("wlan1", deck)), std::string("Automatic (wlan0)")); /* gone: Automatic */
+        CHECK_EQ(network_value(resolve_scope("", board("deck-offline", false))), std::string("Automatic"));
+        // Automatic: the band is what it was
+        CHECK_EQ(home_band(deck, resolve_scope("", deck)).text, home_band(deck).text);
+        // the chosen interface and its address
+        const NetState two = board("pi-3a-plus-dongle", false);
+        Band b = home_band(two, resolve_scope("wlan1", two));
+        CHECK_EQ(b.text, std::string("wlan1: 172.20.10.2"));
+        CHECK(b.tone == Tone::Ok);
+        CHECK_EQ(home_band(two, resolve_scope("", two)).text, std::string("wlan0: 192.168.68.170"));
+        // chosen but not connected, and the interface that is gone
+        const NetState off = board("pi-3a-plus-dongle-off", false);
+        b = home_band(off, resolve_scope("wlan1", off));
+        CHECK(b.text == "wlan1: not connected" && b.tone == Tone::Warn);
+        const NetState without = board("pi-3a-plus", false);
+        b = home_band(without, resolve_scope("wlan1", without));
+        CHECK_EQ(b.text, std::string("wlan1 not found: using Automatic (wlan0: 192.168.68.170)"));
+        CHECK(b.tone == Tone::Warn);
+        const NetState none = board("deck-offline", false);
+        CHECK_EQ(home_band(none, resolve_scope("wlan1", none)).text,
+                 std::string("wlan1 not found: using Automatic (No network)"));
+    }
+    // the choice page
+    {
+        const NetState two = board("pi-3a-plus-dongle", false);
+        NetworkChoices c = network_choices(two, resolve_scope("", two));
+        CHECK((c.labels == std::vector<std::string>{"Automatic (wlan0)", "wlan0  192.168.68.170", "wlan1  172.20.10.2"}));
+        CHECK((c.names == std::vector<std::string>{"", "wlan0", "wlan1"}) && c.current == 0);
+        c = network_choices(two, resolve_scope("wlan1", two));
+        CHECK(c.current == 2 && c.labels[0] == "Automatic (wlan0)"); /* the one in use is checked */
+        // a down interface is listed, selectable, with the words
+        const NetState off = board("pi-3a-plus-dongle-off", false);
+        c = network_choices(off, resolve_scope("wlan1", off));
+        CHECK(c.labels.size() == 3 && c.labels[2] == "wlan1  not connected" && c.names[2] == "wlan1" && c.current == 2);
+        // Ethernet: speed beside the address; a cable that is out says so
+        const NetState eth = board("eth-wifi", false);
+        c = network_choices(eth, resolve_scope("end0", eth));
+        CHECK(c.labels[0] == "Automatic (end0)" && c.labels[1] == "end0  192.168.1.20" &&
+              c.labels[2] == "wlan0  192.168.1.41");
+        CHECK(c.current == 1);
+        const NetState cable = board("eth-down", false);
+        c = network_choices(cable, resolve_scope("", cable));
+        CHECK(c.labels.size() == 3 && c.labels[0] == "Automatic (wlan0)" && c.labels[1] == "wlan0  192.168.1.41" &&
+              c.labels[2] == "enx00e04c680a12  no link");
+        // the loopback is never listed; the chosen one that is gone: Automatic is checked
+        for (const std::string &n : c.names) CHECK(n != "lo");
+        const NetState without = board("pi-3a-plus", false);
+        c = network_choices(without, resolve_scope("wlan1", without));
+        CHECK(c.current == 0 && c.labels.size() == 2);
+    }
+    // the Interfaces page: marks, and the Wi-Fi rows of every wireless interface
+    {
+        const NetState two = board_iw("pi-3a-plus-dongle");
+        std::vector<RowDef> rows = interface_rows(two, resolve_scope("wlan1", two));
+        CHECK_EQ(headings(rows), std::string("wlan0 (default route)|wlan1 (in use)|lo|Network"));
+        const std::vector<RowDef> w0 = section_of(rows, "wlan0"), w1 = section_of(rows, "wlan1");
+        CHECK(row_in(w0, "Network") && row_in(w0, "Network")->value == "FantaCitron");
+        CHECK(row_in(w1, "Network") && row_in(w1, "Network")->value == "iPhone pro OSR");
+        CHECK(row_in(w0, "Bit rate") && row_in(w0, "Bit rate")->value == "72.2 Mbit/s");
+        CHECK(row_in(w1, "Bit rate") && row_in(w1, "Bit rate")->value == "130 Mbit/s");
+        CHECK(row_in(w1, "Signal") && row_in(w1, "Signal")->value == "-52 dBm, Good"); /* iw's, over /proc/net/wireless */
+        CHECK(row_in(w1, "IPv4") && row_in(w1, "IPv4")->value == "172.20.10.2/28");
+        // Automatic: only the default route is marked
+        rows = interface_rows(two, resolve_scope("", two));
+        CHECK_EQ(headings(rows), std::string("wlan0 (default route)|wlan1|lo|Network"));
+        // the chosen one is also the default route
+        rows = interface_rows(two, resolve_scope("wlan0", two));
+        CHECK_EQ(headings(rows), std::string("wlan0 (in use, default route)|wlan1|lo|Network"));
+        // one interface only: no marks to tell apart; the old overload is Automatic
+        CHECK_EQ(headings(interface_rows(board("deck", true))), std::string("wlan0|lo|Network"));
+        // a Wi-Fi interface that is not connected: "Not connected", no Network, Signal or Bit rate rows
+        const NetState off = board_iw("pi-3a-plus-dongle-off");
+        rows = interface_rows(off, resolve_scope("wlan1", off));
+        const std::vector<RowDef> d1 = section_of(rows, "wlan1");
+        CHECK(row_in(d1, "State") && row_in(d1, "State")->value == "Not connected");
+        CHECK(!row_in(d1, "Network") && !row_in(d1, "Signal") && !row_in(d1, "Bit rate"));
+        CHECK(row_in(section_of(rows, "wlan0"), "Network")); /* the other one still has its own */
+        // a stale answer for an interface that is no longer connected is not shown
+        NetState stale = board("pi-3a-plus-dongle-off", false);
+        apply_iw_link(stale, "wlan1", parse_iw_link(fixture("pi-3a-plus-dongle", "cmd/iw_dev_wlan1_link")));
+        rows = interface_rows(stale, resolve_scope("", stale));
+        CHECK(!row_in(section_of(rows, "wlan1"), "Network") && !row_in(section_of(rows, "wlan1"), "Bit rate"));
+    }
+    {
+        // wired and Wi-Fi, wired chosen; the cable out
+        const NetState eth = board_iw("eth-wifi");
+        std::vector<RowDef> rows = interface_rows(eth, resolve_scope("end0", eth));
+        CHECK_EQ(headings(rows), std::string("end0 (in use, default route)|wlan0|lo|Network"));
+        const std::vector<RowDef> e = section_of(rows, "end0");
+        CHECK(row_in(e, "State") && row_in(e, "State")->value == "Connected");
+        CHECK(row_in(e, "Speed") && row_in(e, "Speed")->value == "1 Gbit/s" && !row_in(e, "Network"));
+        const NetState cable = board_iw("eth-down");
+        rows = interface_rows(cable, resolve_scope("enx00e04c680a12", cable));
+        CHECK_EQ(headings(rows), std::string("wlan0 (default route)|enx00e04c680a12 (in use)|lo|Network"));
+        const std::vector<RowDef> u = section_of(rows, "enx00e04c680a12");
+        CHECK(row_in(u, "State") && row_in(u, "State")->value == "No link" && row_in(u, "State")->tone == Tone::Warn);
+        CHECK(row_in(u, "Speed") && row_in(u, "Speed")->value == "unknown");
+        // three interfaces, two of them Wi-Fi
+        const NetState all = board_iw("pi-eth-two-wifi");
+        rows = interface_rows(all, resolve_scope("wlan1", all));
+        CHECK_EQ(headings(rows), std::string("end0 (default route)|wlan0|wlan1 (in use)|lo|Network"));
+        CHECK(row_in(section_of(rows, "wlan1"), "Network")->value == "iPhone pro OSR");
+        CHECK(row_in(section_of(rows, "wlan0"), "Network")->value == "FantaCitron");
+    }
+    // the DNS rows name whose servers they are
+    CHECK_EQ(resolver_label("172.20.10.1", "172.20.10.1", "wlan1's DNS"), std::string("wlan1's DNS 172.20.10.1"));
+    CHECK_EQ(resolver_label("172.20.10.1", "172.20.10.1"), std::string("System 172.20.10.1"));
+    CHECK_EQ(resolver_label("1.1.1.1", "1.1.1.1", "wlan1's DNS"), std::string("Cloudflare 1.1.1.1")); /* presets keep their name */
+}

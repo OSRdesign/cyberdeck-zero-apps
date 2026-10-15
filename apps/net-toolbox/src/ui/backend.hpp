@@ -19,7 +19,17 @@
  *       pubip=both | v4 | cgnat | offline | running        the public address page (local=<address> sets the local address)
  *       whois=domain | arin | ripe | notfound | long | offline | running        the whois page
  *       trace_target=, http_url=, http_method=GET|HEAD, http_insecure=1, whois_query=   the values those pages start with
- *   NET_TOOLBOX_FIXTURE   a folder of tests/fixtures (deck, deck-offline, pi-3a-plus, pi-5): the interfaces come from
+ *       speed=latency | down-low | down-mid | down-high | up | done-a | done-b | done-c | done-d | done-f | stopped |
+ *             e-network | e-tls | e-refused | e-ping       0.3: the speed test (Start shows the state, Stop gives Cancelled for
+ *                                                          stopped; "idle" before Start)
+ *       wol=sent | waking | awake | once | noanswer | failed       0.3: what Wake now does (a machine without a host to
+ *             watch always gives "sent"); wol_machines=0..20 saved machines; wol_last=name:kind+name:kind the list's last status
+ *       ble=idle | scan0 | scan6 | scan25 | done25 | stopped | off | rfkill | none | bluez       0.3: the radar (Start shows the
+ *             state; stopped: Stop gives Cancelled)
+ *       interface=wlan1      0.3: the chosen network (an interface of the fixture; one it does not have shows the "not found"
+ *                            note); the diagnosis then checks that interface (the fixture's cmd/nmcli_dns_<if> is its DNS)
+ *   NET_TOOLBOX_FIXTURE   a folder of tests/fixtures (deck, deck-offline, pi-3a-plus, pi-5, and the 0.3 boards with several
+ *       interfaces: pi-3a-plus-dongle, pi-3a-plus-dongle-off, eth-wifi, eth-down): the interfaces come from
  *       it (also with the real tools). Demonstrations use "deck" unless it names another.
  *   DNS and port check answer by what is typed: a name starting "nx" does not exist, "slow" or "timeout" never
  *   answers; port 22 is closed, 25 gives no answer, 3389 is unreachable, the others are open.
@@ -31,6 +41,9 @@
 #include "httpcheck.hpp"
 #include "interfaces.hpp"
 #include "ping.hpp"
+#include "ble.hpp"
+#include "speedtest.hpp"
+#include "wol.hpp"
 #include "portcheck.hpp"
 #include "publicip.hpp"
 #include "source.hpp"
@@ -67,6 +80,9 @@ using TraceRunner = Runner<TraceConfig, TraceSnapshot>;
 using HttpRunner = Runner<HttpCheckRequest, HttpCheckSnapshot>;
 using PublicIpRunner = Runner<NoRequest, PublicIpSnapshot>;
 using WhoisRunner = Runner<WhoisRequest, WhoisSnapshot>;
+using SpeedRunner = Runner<SpeedConfig, SpeedSnapshot>; /* 0.3: the core sessions have their own worker threads */
+using WolRunner = Runner<WolRequest, WolSnapshot>;
+using BleRunner = Runner<BleConfig, BleSnapshot>;
 
 /* a core session as a Runner */
 template <class Session, class Req, class Snap> class SessionRunner : public Runner<Req, Snap> {
@@ -123,20 +139,26 @@ struct Backend {
     std::unique_ptr<HttpRunner> http;
     std::unique_ptr<PublicIpRunner> pubip;
     std::unique_ptr<WhoisRunner> whois;
+    std::unique_ptr<SpeedRunner> speed;
+    std::unique_ptr<WolRunner> wol;
+    std::unique_ptr<BleRunner> ble;
     std::function<PingAvailability()> ping_available;
+    std::function<std::int64_t()> clock_ms;   /* the monotonic clock of the BLE table's times: a demonstration fixes it */
     std::function<std::time_t()> wall_clock;  /* the days left are counted from it: a demonstration fixes it */
     std::string local_ip;                     /* a demonstration's local address for the public address page ( = the board's) */
     bool demo = false;
     std::vector<std::string> saved_targets; /* a demonstration's saved ping targets */
     std::map<std::string, std::string> seeds; /* a demonstration's starting values: ping_target, dns_name, dns_type,
                                                  dns_resolver, port_host, port, port_preset, trace_target, http_url,
-                                                 http_method, http_insecure, whois_query */
+                                                 http_method, http_insecure, whois_query, wol_machines, wol_last */
     std::string description;                /* for the log line at start */
 
     /* the interfaces, gateway and resolvers now (the fixture or the system) */
     NetState read_state() const;
     /* `iw dev <iface> link` from the fixture's recorded output: true and the link when the fixture has it */
     bool fixture_link(const std::string &iface, IwLink &link) const;
+    /* 0.3: the fixture's recorded `nmcli -g IP4.DNS,IP6.DNS device show <iface>` (cmd/nmcli_dns_<iface>) */
+    bool fixture_nmcli(const std::string &iface, std::string &text) const;
 };
 
 /* by the environment (see the top of this file) */

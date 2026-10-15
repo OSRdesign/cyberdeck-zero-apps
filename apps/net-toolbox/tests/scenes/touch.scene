@@ -1,7 +1,7 @@
 # Every action by tap: the first tap on a row selects it, a tap on the selected row acts. The header's Esc goes back.
 title Net Toolbox: touch
 sizes 640x480 800x480 720x720 1024x600 1280x720
-env NET_TOOLBOX_DEMO diag=healthy,ping=mixed
+env NET_TOOLBOX_DEMO "diag=healthy,ping=mixed,speed=down-mid,wol=awake,wol_machines=3,ble=scan6"
 env NET_TOOLBOX_FIXTURE deck
 env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
 tap "Diagnose my connection"
@@ -24,8 +24,10 @@ tap "Stop"
 expect text "Start"
 tap "Esc"
 expect text "Diagnose my connection"
-tap "Port check"
-# the first tap scrolls the half-hidden row into view: the second one waits for it
+# Port check is the sixth row, below the fold on the small screens: Down scrolls to it and selects it, so one tap acts
+key down
+key down
+key down
 wait 400
 tap "Port check"
 tap "Run"
@@ -38,6 +40,73 @@ wait 400
 tap "Interfaces"
 expect text "Signal"
 tap "Esc"
+expect noquit
+# the speed test: Start, Stop, Save log by tap
+key home
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 400
+tap "Speed test"
+wait 250
+expect text "Press Start to test your connection"
+tap "Start"
+wait 450
+shot speed-running
+expect text "Stop"
+tap "Stop"
+wait 300
+shot speed-stopped
+tap "Save log"
+shot speed-saved
+tap "Esc"
+wait 250
+# Wake-on-LAN: the list opens by tap and Esc goes back (the machines are by position: see wol-touch.scene)
+key end
+key up
+key up
+wait 400
+tap "Wake-on-LAN"
+wait 250
+expect text "Add a machine"
+tap "Esc"
+wait 250
+expect noquit
+# Bluetooth radar: Start by tap, the second device by position (a tap selects it, a second tap opens the details), Esc closes them
+key end
+key up
+wait 400
+tap "Bluetooth radar"
+wait 250
+tap "Start"
+wait 400
+shot ble-scanning
+@640x480 tapxy 0.75 0.927
+@800x480 tapxy 0.75 0.767
+@720x720 tapxy 0.75 0.949
+@1024x600 tapxy 0.75 0.583
+@1280x720 tapxy 0.75 0.582
+wait 200
+@640x480 tapxy 0.75 0.927
+@800x480 tapxy 0.75 0.767
+@720x720 tapxy 0.75 0.949
+@1024x600 tapxy 0.75 0.583
+@1280x720 tapxy 0.75 0.582
+wait 300
+shot ble-details
+expect text "Address"
+tap "Esc"
+wait 250
+expect noquit
+tap "Stop"
+wait 300
+expect text "Start"
+tap "Esc"
+wait 250
 expect noquit
 tap "Esc"
 expect quit

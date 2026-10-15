@@ -6,8 +6,10 @@
 #include "backend.hpp"
 
 #include "demo_data.hpp"
+#include "demo_data_03.hpp"
 #include "flow_runner.hpp"
 #include "netaddr.hpp"
+#include "sock.hpp"
 #include "text.hpp"
 
 #include <cerrno>
@@ -33,6 +35,14 @@ bool Backend::fixture_link(const std::string &iface, IwLink &link) const
     if (!ok) return false;
     link = parse_iw_link(text);
     return true;
+}
+
+bool Backend::fixture_nmcli(const std::string &iface, std::string &text) const
+{
+    if (!source || !valid_iface_name(iface)) return false;
+    bool ok = false;
+    text = source->read("/cmd/nmcli_dns_" + iface, &ok);
+    return ok;
 }
 
 namespace {
@@ -74,11 +84,24 @@ public:
     {
     }
     NetState state() override { return read_net_state(*source_); }
+    bool nmcli_dns(const std::string &iface, std::string &text) override
+    {
+        if (!valid_iface_name(iface)) return false;
+        bool ok = false;
+        text = source_->read("/cmd/nmcli_dns_" + iface, &ok);
+        return ok;
+    }
     bool can_ping() override { return true; }
+    static bool is_gateway(const NetState &st, const Address &ip)
+    {
+        for (const Route &r : st.default_routes)
+            if (ip.text() == r.gateway) return true;
+        return false;
+    }
     bool ping(const Address &ip, int, const CancelToken &, double *rtt) override
     {
         const NetState st = state();
-        const bool gateway = st.route.ok && ip.text() == st.route.gateway;
+        const bool gateway = is_gateway(st, ip);
         if (gateway && scenario_ == "notes") return false; /* a router that ignores ping but answers on TCP */
         if (rtt) *rtt = gateway ? 3.0 : ip.text() == "1.1.1.1" ? 14.0 : 19.0;
         return true;
@@ -113,7 +136,7 @@ public:
         PortResult r;
         r.port = port;
         const NetState st = state();
-        const bool gateway = st.route.ok && ip.text() == st.route.gateway;
+        const bool gateway = is_gateway(st, ip);
         if (gateway && scenario_ == "notes" && port == 53) {
             r.state = PortState::Open;
             r.connect_ms = 4;
@@ -142,12 +165,12 @@ private:
     std::string scenario_;
 };
 
-DiagReport demo_diag(const std::shared_ptr<const Source> &source, const std::string &scenario)
+DiagReport demo_diag(const std::shared_ptr<const Source> &source, const std::string &scenario, const DiagOptions &opt)
 {
     DemoProbe probe(source, scenario);
     std::vector<DiagReport> frames;
     const CancelToken none;
-    const DiagReport last = run_diagnosis(probe, DiagOptions(), none, [&](const DiagReport &r) { frames.push_back(r); });
+    const DiagReport last = run_diagnosis(probe, opt, none, [&](const DiagReport &r) { frames.push_back(r); });
     if (scenario == "running") /* the frame where the DNS rung is being checked */
         for (const DiagReport &f : frames)
             if (f.step(Step::Dns).state == StepState::Running) return f;
@@ -343,7 +366,7 @@ Backend make_demo_backend(const std::string &spec, std::shared_ptr<const Source>
     const std::string ping = get("ping", "mixed");
     const std::shared_ptr<const Source> src = b.source;
     b.diag = std::make_unique<FixedRunner<DiagOptions, DiagReport>>(
-        [src, diag](const DiagOptions &) { return demo_diag(src, diag); },
+        [src, diag](const DiagOptions &opt) { return demo_diag(src, diag, opt); },
         [](const DiagReport &now) {
             DiagReport r = now;
             r.state = DiagReport::State::Cancelled;
@@ -391,6 +414,15 @@ Backend make_demo_backend(const std::string &spec, std::shared_ptr<const Source>
             if (s.running()) s.state = WhoisSnapshot::State::Cancelled;
             return s;
         });
+    const std::string speed = get("speed", "idle"), wol = get("wol", "awake"), ble = get("ble", "scan25");
+    b.speed = std::make_unique<FixedRunner<SpeedConfig, SpeedSnapshot>>(
+        [speed](const SpeedConfig &cfg) { return demo_speed(speed, cfg); },
+        [](const SpeedSnapshot &now) { return demo_speed_stop(now); });
+    b.wol = std::make_unique<FixedRunner<WolRequest, WolSnapshot>>(
+        [wol](const WolRequest &req) { return demo_wol(wol, req); }, [](const WolSnapshot &now) { return demo_wol_stop(now); });
+    b.ble = std::make_unique<FixedRunner<BleConfig, BleSnapshot>>(
+        [ble](const BleConfig &cfg) { return demo_ble(ble, cfg); }, [](const BleSnapshot &now) { return demo_ble_stop(now); });
+    b.clock_ms = [] { return kDemoClockMs; };
     b.wall_clock = [] { return demo_now(); };
     b.local_ip = get("local", pubip == "cgnat" ? "100.64.8.3" : "");
     b.ping_available = [ping] {
@@ -404,7 +436,8 @@ Backend make_demo_backend(const std::string &spec, std::shared_ptr<const Source>
         return a;
     };
     for (const char *key : {"ping_target", "dns_name", "dns_type", "dns_resolver", "port_host", "port", "port_preset", "trace_target",
-                            "http_url", "http_method", "http_insecure", "whois_query"}) {
+                            "http_url", "http_method", "http_insecure", "whois_query", "interface", "wol_machines",
+                            "wol_last"}) {
         const auto it = opt.find(key);
         if (it != opt.end()) b.seeds[key] = it->second;
     }
@@ -442,6 +475,10 @@ Backend make_backend()
     b.http = std::make_unique<AsyncHttpRunner>();
     b.pubip = std::make_unique<AsyncPublicIpRunner>();
     b.whois = std::make_unique<RealRunner<WhoisSession, WhoisRequest, WhoisSnapshot>>();
+    b.speed = std::make_unique<RealRunner<SpeedTestSession, SpeedConfig, SpeedSnapshot>>();
+    b.wol = std::make_unique<RealRunner<WolSession, WolRequest, WolSnapshot>>();
+    b.ble = std::make_unique<RealRunner<BleSession, BleConfig, BleSnapshot>>();
+    b.clock_ms = [] { return now_ms(); };
     b.wall_clock = [] { return std::time(nullptr); };
     b.ping_available = [] { return ping_available(); };
     return b;

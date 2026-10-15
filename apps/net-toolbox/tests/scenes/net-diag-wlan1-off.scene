@@ -1,0 +1,10 @@
+title Net Toolbox: Diagnosis through wlan1, not connected
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy,interface=wlan1
+env NET_TOOLBOX_FIXTURE pi-3a-plus-dongle-off
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key enter
+shot link-fails
+expect text "Link up failed"
+expect text "wlan1 is not connected to a network. Connect it to one, or choose another network in Home > Network."
+expect notext "Message cut off"

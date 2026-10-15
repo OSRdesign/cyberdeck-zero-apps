@@ -1,0 +1,25 @@
+# Network > Automatic, every interface with its address; the one in use is checked; Esc comes back without a change.
+title Net Toolbox: choosing the network (wlan0, wlan1, Automatic)
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy
+env NET_TOOLBOX_FIXTURE pi-3a-plus-dongle
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key up
+key enter
+shot choice
+expect text "Automatic (wlan0)"
+expect text "wlan0  192.168.68.170"
+expect text "wlan1  172.20.10.2"
+key down
+key down
+shot wlan1-highlighted
+key enter
+shot home-wlan1
+expect text "wlan1: 172.20.10.2"
+expect notext "Automatic"
+key enter
+shot choice-again
+expect text "wlan1  172.20.10.2"
+key esc
+expect text "Diagnose my connection"
+expect noquit

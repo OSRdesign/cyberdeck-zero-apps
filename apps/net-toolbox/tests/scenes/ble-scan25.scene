@@ -1,0 +1,24 @@
+title Net Toolbox: Bluetooth radar, scanning with 25 devices
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO ble=scan25
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+key enter
+wait 400
+shot scan
+expect text "Scanning, 25 devices, 37 s left"
+expect text "Stop"
+expect text "Rings show signal strength, not distance."
+expect text "Galaxy Buds2"
+expect notext "Message cut off"

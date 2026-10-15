@@ -1,0 +1,20 @@
+# 'System default' is the interface's own DNS server here, and the label says whose.
+title Net Toolbox: the DNS resolver of the chosen interface
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy,interface=wlan1
+env NET_TOOLBOX_FIXTURE pi-3a-plus-dongle
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key enter
+shot dns
+expect text "wlan1's DNS 172.20.10.1"
+key down
+key down
+key down
+key down
+key enter
+shot resolver-choice
+expect text "wlan1's DNS 172.20.10.1"
+expect text "Cloudflare 1.1.1.1"

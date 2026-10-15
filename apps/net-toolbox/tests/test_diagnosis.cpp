@@ -8,6 +8,7 @@
 #include "check.hpp"
 
 #include "diagnosis.hpp"
+#include "netlog.hpp"
 
 #include <chrono>
 #include <map>
@@ -34,13 +35,23 @@ public:
     bool block_ping = false;                               /* ping waits for the cancel */
     std::vector<std::string> asked_dns;
     int pings = 0;
+    std::string board_name;                                /* the fixture folder (nmcli answers come from its cmd/) */
+    bool nmcli_ok = true;                                  /* false: nmcli could not run */
+    std::vector<std::string> nmcli_asked;
 
-    explicit FakeNet(const char *board = "deck")
+    explicit FakeNet(const char *board = "deck") : board_name(board)
     {
         const auto src = make_fixture_source(fixture_dir(board));
         st = read_net_state(*src);
     }
     NetState state() override { return st; }
+    bool nmcli_dns(const std::string &iface, std::string &text) override
+    {
+        nmcli_asked.push_back(iface);
+        if (!nmcli_ok) return false;
+        text = fixture(board_name.c_str(), ("cmd/nmcli_dns_" + iface).c_str());
+        return true;
+    }
     bool can_ping() override { return ping_allowed; }
     bool ping(const Address &ip, int, const CancelToken &cancel, double *rtt) override
     {
@@ -139,6 +150,8 @@ bool has(const std::string &text, const char *part)
 }
 
 } // namespace
+
+void test_diagnosis_scope();
 
 void test_diagnosis()
 {
@@ -362,5 +375,207 @@ void test_diagnosis()
         net->block_ping = false;
         CHECK(s.start() && s.wait(2000));
         CHECK(s.latest()->state == DiagReport::State::Passed);
+    }
+    test_diagnosis_scope();
+}
+
+/* ---------------------------------------------------------------- 0.3: a chosen network */
+
+namespace {
+
+DiagOptions via(const char *iface)
+{
+    DiagOptions o;
+    o.iface = iface;
+    return o;
+}
+
+/* the 3A+ with a Wi-Fi dongle: wlan1 answers its own gateway (the phone) and the internet through it */
+void dongle_net(FakeNet &net)
+{
+    net.ping_answers = {"172.20.10.1", "1.1.1.1", "8.8.8.8"};
+}
+
+} // namespace
+
+void test_diagnosis_scope()
+{
+    // wlan1 on the phone hotspot: every step is about wlan1
+    {
+        FakeNet net("pi-3a-plus-dongle");
+        dongle_net(net);
+        const DiagReport r = run(net, via("wlan1"));
+        CHECK_EQ(ladder(r), std::string("PPPPPP"));
+        CHECK_EQ(r.iface, std::string("wlan1"));
+        CHECK_EQ(r.step(Step::Link).detail, std::string("wlan1"));
+        CHECK_EQ(r.step(Step::Address).detail, std::string("172.20.10.2"));
+        CHECK_EQ(r.step(Step::Gateway).detail, std::string("172.20.10.1, 14 ms")); /* ITS gateway, not 192.168.68.1 */
+        CHECK_EQ(r.step(Step::Dns).detail, std::string("via 172.20.10.1, 12 ms")); /* nmcli's server of wlan1 */
+        CHECK_EQ(r.resolver, std::string("172.20.10.1"));
+        CHECK(has(r.explanation, "through wlan1") && r.notes.empty());
+        CHECK(net.nmcli_asked.size() == 1 && net.nmcli_asked[0] == "wlan1");
+        CHECK(net.asked_dns.size() == 2 && net.asked_dns[0] == "172.20.10.1 example.com");
+        CHECK(has(format_diagnosis(r), "Interface: wlan1 (chosen)"));
+    }
+    // the same board on Automatic: the system's route, as before (wlan0, 192.168.68.1, resolv.conf's first server)
+    {
+        FakeNet net("pi-3a-plus-dongle");
+        const DiagReport r = run(net);
+        CHECK_EQ(ladder(r), std::string("PPPPPP"));
+        CHECK(r.iface.empty() && net.nmcli_asked.empty());
+        CHECK_EQ(r.step(Step::Link).detail, std::string("wlan0"));
+        CHECK_EQ(r.step(Step::Gateway).detail, std::string("192.168.68.1, 3.0 ms"));
+        CHECK_EQ(r.step(Step::Dns).detail, std::string("via 192.168.1.1, 12 ms"));
+        CHECK(has(r.explanation, "Your connection works:") && !has(format_diagnosis(r), "Interface:"));
+    }
+    // wlan0 chosen explicitly on the same board: its own gateway, its own DNS list (the first of nmcli's)
+    {
+        FakeNet net("pi-3a-plus-dongle");
+        const DiagReport r = run(net, via("wlan0"));
+        CHECK_EQ(ladder(r), std::string("PPPPPP"));
+        CHECK_EQ(r.step(Step::Gateway).detail, std::string("192.168.68.1, 3.0 ms"));
+        CHECK_EQ(r.step(Step::Dns).detail, std::string("via 192.168.1.1, 12 ms"));
+    }
+    // each failure point, named after the interface
+    {
+        FakeNet net("pi-3a-plus-dongle-off"); /* the dongle is plugged in, joined to nothing */
+        const DiagReport r = run(net, via("wlan1"));
+        CHECK_EQ(ladder(r), std::string("FSSSSS"));
+        CHECK_EQ(r.step(Step::Link).detail, std::string("wlan1 not connected"));
+        CHECK(has(r.explanation, "wlan1 is not connected to a network") && has(r.explanation, "Home > Network"));
+        CHECK(net.pings == 0 && net.asked_dns.empty());
+    }
+    {
+        FakeNet net("pi-3a-plus"); /* no wlan1 at all (unplugged) */
+        const DiagReport r = run(net, via("wlan1"));
+        CHECK_EQ(ladder(r), std::string("FSSSSS"));
+        CHECK_EQ(r.step(Step::Link).detail, std::string("wlan1 not found"));
+        CHECK(has(r.explanation, "wlan1 was not found") && has(r.explanation, "unplugged"));
+    }
+    {
+        FakeNet net("pi-3a-plus-dongle");
+        for (Iface &i : net.st.ifaces)
+            if (i.name == "wlan1") i.ipv4.clear();
+        const DiagReport r = run(net, via("wlan1"));
+        CHECK_EQ(ladder(r), std::string("PFSSSS"));
+        CHECK(has(r.explanation, "Connected to wlan1 but no address"));
+    }
+    {
+        FakeNet net("pi-3a-plus-dongle");
+        for (Iface &i : net.st.ifaces)
+            if (i.name == "wlan1") i.ipv4 = {"169.254.7.9/16"};
+        const DiagReport r = run(net, via("wlan1"));
+        CHECK_EQ(ladder(r), std::string("PFSSSS"));
+        CHECK(has(r.explanation, "self-assigned address (169.254.7.9) on wlan1"));
+    }
+    {
+        FakeNet net("pi-3a-plus-dongle"); /* wlan1 has an address, its default route is gone */
+        std::vector<Route> keep;
+        for (const Route &r : net.st.default_routes)
+            if (r.iface != "wlan1") keep.push_back(r);
+        net.st.default_routes = keep;
+        dongle_net(net);
+        const DiagReport r = run(net, via("wlan1"));
+        CHECK_EQ(ladder(r), std::string("PPFSSS"));
+        CHECK_EQ(r.step(Step::Gateway).detail, std::string("no gateway"));
+        CHECK(has(r.explanation, "wlan1 has an address but no gateway"));
+        FakeNet auto_net("pi-3a-plus-dongle"); /* the same state on Automatic does not care about wlan1 */
+        auto_net.st.default_routes = keep;
+        CHECK_EQ(ladder(run(auto_net)), std::string("PPPPPP"));
+    }
+    {
+        FakeNet net("pi-3a-plus-dongle"); /* the phone does not answer */
+        net.ping_answers = {"192.168.68.1", "1.1.1.1"};
+        const DiagReport r = run(net, via("wlan1"));
+        CHECK_EQ(ladder(r), std::string("PPFSSS"));
+        CHECK_EQ(r.step(Step::Gateway).detail, std::string("172.20.10.1 silent"));
+        CHECK(has(r.explanation, "The gateway of wlan1 (172.20.10.1) does not answer"));
+    }
+    {
+        FakeNet net("pi-3a-plus-dongle");
+        dongle_net(net);
+        net.dns_silent = {"172.20.10.1"};
+        const DiagReport r = run(net, via("wlan1"));
+        CHECK_EQ(ladder(r), std::string("PPPFSS"));
+        CHECK(has(r.explanation, "The gateway of wlan1 answers but DNS does not (172.20.10.1 timed out)"));
+        CHECK(net.asked_dns.size() == 1 && net.asked_dns[0] == "172.20.10.1 example.com"); /* never the other network's resolver */
+    }
+    {
+        FakeNet net("pi-3a-plus-dongle");
+        net.ping_answers = {"172.20.10.1"};
+        net.dns_silent = {"172.20.10.1"};
+        const DiagReport r = run(net, via("wlan1"));
+        CHECK_EQ(ladder(r), std::string("PPPFSS"));
+        CHECK(has(r.explanation, "Nothing answers past the gateway of wlan1") && has(r.explanation, "hotspot"));
+    }
+    {
+        FakeNet net("pi-3a-plus-dongle");
+        net.ping_answers = {"172.20.10.1"};
+        const DiagReport r = run(net, via("wlan1"));
+        CHECK_EQ(ladder(r), std::string("PPPPFS"));
+        CHECK(has(r.explanation, "The gateway of wlan1 answers but the internet does not"));
+    }
+    {
+        FakeNet net("pi-3a-plus-dongle");
+        dongle_net(net);
+        net.http_status = 302;
+        net.http_location = "http://login.phone.example/";
+        const DiagReport r = run(net, via("wlan1"));
+        CHECK_EQ(ladder(r), std::string("PPPPPF"));
+        CHECK(has(r.explanation, "captive portal"));
+    }
+    // DNS: nmcli missing = the interface's gateway (with a note); a resolver the user chose wins
+    {
+        FakeNet net("pi-3a-plus-dongle");
+        dongle_net(net);
+        net.nmcli_ok = false;
+        const DiagReport r = run(net, via("wlan1"));
+        CHECK_EQ(ladder(r), std::string("PPPPPP"));
+        CHECK_EQ(r.resolver, std::string("172.20.10.1"));
+        CHECK(r.notes.size() == 1 && has(r.notes[0], "could not be read"));
+    }
+    {
+        FakeNet net("pi-3a-plus-dongle");
+        dongle_net(net);
+        DiagOptions o = via("wlan1");
+        o.resolver = "1.1.1.1";
+        const DiagReport r = run(net, o);
+        CHECK_EQ(r.resolver, std::string("1.1.1.1"));
+        CHECK(net.nmcli_asked.empty());
+    }
+    // Ethernet: wired and Wi-Fi both up, a wired one chosen
+    {
+        FakeNet net("eth-wifi");
+        net.ping_answers = {"192.168.1.1", "1.1.1.1"};
+        const DiagReport r = run(net, via("end0"));
+        CHECK_EQ(ladder(r), std::string("PPPPPP"));
+        CHECK(has(r.step(Step::Link).detail, "end0") && has(r.step(Step::Link).detail, "1 Gbit"));
+        CHECK_EQ(r.step(Step::Address).detail, std::string("192.168.1.20"));
+        CHECK_EQ(r.step(Step::Gateway).detail, std::string("192.168.1.1, 14 ms"));
+        CHECK_EQ(r.step(Step::Dns).detail, std::string("via 192.168.1.1, 12 ms"));
+        CHECK(net.nmcli_asked.size() == 1 && net.nmcli_asked[0] == "end0");
+        const DiagReport w = run(net, via("wlan0")); /* and the Wi-Fi one, with its own address */
+        CHECK_EQ(ladder(w), std::string("PPPPPP"));
+        CHECK_EQ(w.step(Step::Address).detail, std::string("192.168.1.41"));
+    }
+    // Ethernet with the cable out: the Link step fails with the cable wording, Automatic passes over Wi-Fi
+    {
+        FakeNet net("eth-down");
+        const DiagReport r = run(net, via("enx00e04c680a12"));
+        CHECK_EQ(ladder(r), std::string("FSSSSS"));
+        CHECK_EQ(r.step(Step::Link).detail, std::string("enx00e04c680a12 no link"));
+        CHECK(has(r.explanation, "enx00e04c680a12 has no link") && has(r.explanation, "cable is unplugged"));
+        CHECK(net.pings == 0);
+        FakeNet auto_net("eth-down");
+        auto_net.ping_answers = {"192.168.1.1", "1.1.1.1"};
+        const DiagReport a = run(auto_net);
+        CHECK_EQ(ladder(a), std::string("PPPPPP"));
+        CHECK_EQ(a.step(Step::Link).detail, std::string("wlan0"));
+    }
+    // a chosen name that is the loopback or not a name at all is "not found", never a crash
+    {
+        FakeNet net("deck");
+        CHECK_EQ(ladder(run(net, via("lo"))), std::string("FSSSSS"));
+        CHECK_EQ(ladder(run(net, via("no such"))), std::string("FSSSSS"));
     }
 }

@@ -33,57 +33,87 @@ cp0::ui::ListRow action(const std::string &label, const std::string &value, std:
 
 /* ---------------------------------------------------------------- Interfaces */
 
+/* The answers of `iw` go on the Wi-Fi interfaces that are connected; the answer of one that is not (any more) is dropped, a
+ * stale network name must not show. */
 void ToolboxApp::apply_links()
 {
-    for (const auto &kv : links_)
-        if (net_.find(kv.first)) apply_iw_link(net_, kv.first, kv.second);
+    for (auto it = links_.begin(); it != links_.end();) {
+        const Iface *i = net_.find(it->first);
+        if (!i || !i->wireless || !i->connected()) it = links_.erase(it);
+        else {
+            apply_iw_link(net_, it->first, it->second);
+            ++it;
+        }
+    }
 }
 
-/* The Wi-Fi network name and bit rate: the fixture's recorded `iw` output, or `iw` itself through async_run (one job at
- * a time, never waited for). */
-void ToolboxApp::request_links()
+/* The Wi-Fi network name and bit rate of every connected wireless interface: the fixture's recorded `iw` output, or `iw`
+ * itself through async_run. One job at a time, never waited for: the page asks every interface once when it opens (one
+ * after the other), then one interface per refresh in turn, so a second adapter costs one more `iw` every other refresh,
+ * never a pile-up. */
+void ToolboxApp::request_links(bool full_round)
 {
-    for (const Iface &i : net_.ifaces) {
-        if (!i.wireless || !i.connected()) continue;
-        if (backend_.source) {
+    std::vector<std::string> names;
+    for (const Iface &i : net_.ifaces)
+        if (i.wireless && i.connected()) names.push_back(i.name);
+    if (backend_.source) {
+        for (const std::string &n : names) {
             IwLink link;
-            if (backend_.fixture_link(i.name, link)) links_[i.name] = link;
-            else links_.erase(i.name);
-            continue;
+            if (backend_.fixture_link(n, link)) links_[n] = link;
+            else links_.erase(n);
         }
-        if (iw_job_) break;
-        const std::string name = i.name;
-        const std::shared_ptr<bool> alive = alive_;
-        iw_job_ = request_wifi_link(name, [this, alive, name](const IwLink &link, bool ran) {
-            if (!*alive) return;
-            iw_job_ = 0;
-            if (ran) links_[name] = link;
-            else links_.erase(name);
-            if (stack_.back().view != View::Interfaces || !list_) return;
-            apply_links();
-            list_->set_rows(to_rows(ui::interface_rows(net_)));
-        });
-        break;
+        return;
     }
+    if (iw_job_ || names.empty()) return;
+    iw_round_left_ = full_round ? static_cast<int>(names.size()) : 1;
+    ask_link();
+}
+
+void ToolboxApp::ask_link()
+{
+    std::vector<std::string> names;
+    for (const Iface &i : net_.ifaces)
+        if (i.wireless && i.connected()) names.push_back(i.name);
+    if (iw_job_ || names.empty() || iw_round_left_ <= 0) return;
+    const std::string name = names[iw_cursor_ % names.size()];
+    ++iw_cursor_;
+    --iw_round_left_;
+    const std::shared_ptr<bool> alive = alive_;
+    const auto finished = std::make_shared<bool>(false);
+    const cdk::async_run::JobId id = request_wifi_link(name, [this, alive, finished, name](const IwLink &link, bool ran) {
+        if (!*alive) return;
+        *finished = true;
+        iw_job_ = 0;
+        if (ran) links_[name] = link;
+        else links_.erase(name);
+        if (stack_.back().view != View::Interfaces || !list_) {
+            iw_round_left_ = 0;
+            return;
+        }
+        apply_links();
+        list_->set_rows(to_rows(ui::interface_rows(net_, scope_)));
+        ask_link(); /* the next interface of the round */
+    });
+    if (!*finished) iw_job_ = id;
 }
 
 void ToolboxApp::build_interfaces()
 {
     const Geo g = geo();
-    net_ = backend_.read_state();
-    request_links();
+    read_net();
+    request_links(true);
     apply_links();
-    build_list(CP0_UI_LIST_COMPACT, g.top, g.bottom - g.top, true, to_rows(ui::interface_rows(net_)), 0);
+    build_list(CP0_UI_LIST_COMPACT, g.top, g.bottom - g.top, true, to_rows(ui::interface_rows(net_, scope_)), 0);
     next_state_ms_ = now_ms() + 2000;
 }
 
 void ToolboxApp::refresh_interfaces()
 {
     next_state_ms_ = now_ms() + 2000;
-    net_ = backend_.read_state();
-    request_links();
+    read_net();
+    request_links(false);
     apply_links();
-    if (list_) list_->set_rows(to_rows(ui::interface_rows(net_)));
+    if (list_) list_->set_rows(to_rows(ui::interface_rows(net_, scope_)));
 }
 
 /* ---------------------------------------------------------------- Diagnosis */
@@ -121,9 +151,17 @@ void ToolboxApp::build_diagnosis()
 
     const int list_y = msg_y + msg_h + g.s;
     build_list(density, list_y, g.bottom - list_y, false, diag_rows(), 0);
-    backend_.diag->start(DiagOptions()); /* by itself on entry */
+    backend_.diag->start(diag_options()); /* by itself on entry */
     fresh_ = true;
     poll_diagnosis(true);
+}
+
+/* the diagnosis checks the chosen network (Automatic: the main interface, as before) */
+DiagOptions ToolboxApp::diag_options() const
+{
+    DiagOptions opt;
+    opt.iface = scope_.iface;
+    return opt;
 }
 
 std::vector<cp0::ui::ListRow> ToolboxApp::diag_rows() const
@@ -183,7 +221,7 @@ void ToolboxApp::poll_diagnosis(bool force)
 void ToolboxApp::activate_diagnosis(std::intptr_t id)
 {
     if (id == kRunAgain) {
-        backend_.diag->start(DiagOptions());
+        backend_.diag->start(diag_options());
         fresh_ = true;
         shown_seq_ = 0;
     } else if (id == kSaveLog) {
@@ -203,7 +241,7 @@ std::string ToolboxApp::ping_target_text() const
 void ToolboxApp::build_ping(int select)
 {
     const Geo g = geo();
-    net_ = backend_.read_state();
+    read_net();
     const PingAvailability avail_ping = backend_.ping_available();
     ping_ok_ = avail_ping.ipv4;
     ping_why_ = avail_ping.why;
@@ -272,7 +310,7 @@ void ToolboxApp::start_ping()
     cfg.interval_ms = settings_.ping_interval_ms;
     cfg.timeout_ms = settings_.ping_timeout_ms;
     cfg.count = settings_.ping_count;
-    cfg.resolve.server = pick_resolver("", net_.dns.servers);
+    cfg.resolve.server = pick_resolver("", dns_servers());
     backend_.ping->start(cfg);
     fresh_ = true;
     shown_seq_ = 0;
@@ -353,17 +391,20 @@ void ToolboxApp::activate_ping(std::intptr_t id)
 
 /* ---------------------------------------------------------------- DNS lookup */
 
+/* "System default 192.168.1.1"; with a chosen network the label says whose servers they are: "wlan1's DNS 172.20.10.1",
+ * "wlan1's gateway 172.20.10.1", "System default (not wlan1's) 192.168.1.1" */
 std::string ToolboxApp::dns_resolver_label() const
 {
     const std::string sys = system_resolver();
-    if (dns_resolver_.empty()) return sys.empty() ? std::string("System default (none)") : "System default " + sys;
-    return ui::resolver_label(dns_resolver_, sys);
+    const std::string name = scoped_dns().label;
+    if (dns_resolver_.empty()) return sys.empty() ? name + " (none)" : name + " " + sys;
+    return ui::resolver_label(dns_resolver_, sys, system_name());
 }
 
 void ToolboxApp::build_dns(int select)
 {
     const Geo g = geo();
-    net_ = backend_.read_state();
+    read_net();
     const int y = build_band();
     const int h = g.bottom - y;
     build_list(h >= 10 * g.row ? CP0_UI_LIST_COMFORTABLE : CP0_UI_LIST_COMPACT, y, h, false, dns_list(), select);
@@ -378,7 +419,7 @@ std::vector<cp0::ui::ListRow> ToolboxApp::dns_list() const
     rows.push_back(action("Look up", running ? "asking..." : "", kRun));
     rows.push_back(action("Compare resolvers", "", kCompare));
     if (s) { /* the answers right under the two actions, the settings below them */
-        std::vector<ui::RowDef> defs = ui::dns_rows(*s, system_resolver());
+        std::vector<ui::RowDef> defs = ui::dns_rows(*s, system_resolver(), system_name());
         int k = 0;
         for (ui::RowDef &d : defs)
             if (!d.section) d.id = kResult + k++;
@@ -414,9 +455,9 @@ void ToolboxApp::start_dns(bool compare)
         };
         add(sys);
         for (const ResolverPreset &p : resolver_presets()) add(p.address);
-        add(pick_resolver(dns_resolver_, net_.dns.servers));
+        add(pick_resolver(dns_resolver_, dns_servers()));
     } else {
-        const std::string server = pick_resolver(dns_resolver_, net_.dns.servers);
+        const std::string server = pick_resolver(dns_resolver_, dns_servers());
         if (server.empty()) {
             note({"No resolver: the system has none, pick one", ui::Tone::Warn});
             return;
@@ -453,7 +494,7 @@ void ToolboxApp::open_dns_resolver()
     const std::string sys = system_resolver();
     const std::vector<ResolverPreset> &presets = resolver_presets();
     for (const ResolverPreset &p : presets) {
-        if (!p.address[0]) c.labels.push_back(sys.empty() ? "System default (none)" : "System default " + sys);
+        if (!p.address[0]) c.labels.push_back(sys.empty() ? scoped_dns().label + " (none)" : scoped_dns().label + " " + sys);
         else c.labels.push_back(std::string(p.label) + " " + p.address);
     }
     c.labels.push_back("Type an address...");
@@ -531,7 +572,7 @@ void ToolboxApp::activate_dns(std::intptr_t id)
 void ToolboxApp::build_port(int select)
 {
     const Geo g = geo();
-    net_ = backend_.read_state();
+    read_net();
     const int y = build_band();
     const lv_font_t *caption = ui::caption_font();
     const lv_font_t *big = ui::font_bold(cp0_ui_metrics_get()->text_px[CP0_TEXT_TITLE]);
@@ -575,7 +616,7 @@ void ToolboxApp::start_port()
     if (!port_preset_.empty())
         for (const PortPreset &p : port_presets())
             if (port_preset_ == p.label) req.ports = p.ports;
-    req.resolve.server = pick_resolver("", net_.dns.servers);
+    req.resolve.server = pick_resolver("", dns_servers());
     backend_.port->start(req);
     fresh_ = true;
     shown_seq_ = 0;

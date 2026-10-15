@@ -105,3 +105,12 @@ void test_trace_engine();
 void test_trace_rdns();
 void test_trace_real();
 void test_netlog_02();
+/* 0.3 */
+void test_stream_runner();
+void test_speedtest();
+void test_wol();
+void test_ble();
+void test_netlog_03();
+void test_scope();
+void test_ui_scope();
+void test_ui_model_03();

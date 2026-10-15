@@ -1,0 +1,55 @@
+# Wake-on-LAN by touch. The machines and the rows of a machine's page live in one scrolling list that resolves a tap by its
+# position (as the traceroute chain does), so these taps are by position: the row of NAS, then the row Wake now, per screen.
+title Net Toolbox: Wake-on-LAN by touch
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO "wol=awake,wol_machines=3"
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 400
+tap "Wake-on-LAN"
+wait 300
+expect text "Add a machine"
+@640x480 tapxy 0.5 0.523
+@800x480 tapxy 0.5 0.475
+@720x720 tapxy 0.5 0.347
+@1024x600 tapxy 0.5 0.410
+@1280x720 tapxy 0.5 0.378
+wait 300
+shot first-tap
+@640x480 tapxy 0.5 0.523
+@800x480 tapxy 0.5 0.475
+@720x720 tapxy 0.5 0.347
+@1024x600 tapxy 0.5 0.410
+@1280x720 tapxy 0.5 0.378
+wait 300
+shot machine
+expect text "Wake now"
+@640x480 tapxy 0.5 0.558
+@800x480 tapxy 0.5 0.548
+@720x720 tapxy 0.5 0.392
+@1024x600 tapxy 0.5 0.447
+@1280x720 tapxy 0.5 0.419
+@640x480 tapxy 0.5 0.558
+@800x480 tapxy 0.5 0.548
+@720x720 tapxy 0.5 0.392
+@1024x600 tapxy 0.5 0.447
+@1280x720 tapxy 0.5 0.419
+wait 400
+shot awake
+expect text "Awake after 22 s"
+tap "Esc"
+wait 300
+expect text "Add a machine"
+shot back
+tap "Esc"
+wait 300
+expect noquit

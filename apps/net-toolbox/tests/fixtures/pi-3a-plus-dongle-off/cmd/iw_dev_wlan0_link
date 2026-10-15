@@ -1,0 +1,12 @@
+Connected to aa:bb:cc:11:22:33 (on wlan0)
+	SSID: FantaCitron
+	freq: 2437.0
+	RX: 9933105 bytes (12077 packets)
+	TX: 801233 bytes (4410 packets)
+	signal: -60 dBm
+	rx bitrate: 65.0 MBit/s
+	tx bitrate: 72.2 MBit/s
+
+	bss flags:	short-slot-time
+	dtim period:	3
+	beacon int:	100

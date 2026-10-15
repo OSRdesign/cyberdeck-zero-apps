@@ -114,7 +114,7 @@ static void test_package()
     const std::string manifest = read_file(app + "/app.json");
     CHECK(manifest.find("\"share_code\": \"net-toolbox\"") != std::string::npos);
     CHECK(manifest.find("\"package\": \"net-toolbox\"") != std::string::npos);
-    CHECK(manifest.find("\"version\": \"0.2.0\"") != std::string::npos);
+    CHECK(manifest.find("\"version\": \"0.3.0\"") != std::string::npos);
     CHECK(manifest.find("\"title\": \"Net Toolbox\"") != std::string::npos);
     CHECK(manifest.find("\"license\": \"MIT\"") != std::string::npos);
     CHECK(manifest.find("\"categories\": [\"Tools\"]") != std::string::npos);
@@ -392,6 +392,14 @@ int main()
     test_trace_rdns();
     test_trace_real();
     test_netlog_02();
+    test_stream_runner();
+    test_speedtest();
+    test_wol();
+    test_ble();
+    test_netlog_03();
+    test_scope();
+    test_ui_scope();
+    test_ui_model_03();
     test_package();
     std::printf("test-net-toolbox: %d passed, %d failed, %d skipped\n", g_pass, g_fail, g_skip);
     return g_fail ? 1 : 0;

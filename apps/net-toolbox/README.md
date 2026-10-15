@@ -1,6 +1,6 @@
 # Net Toolbox
 
-Version 0.2.0, package `net-toolbox`. Part of
+Version 0.3.0 (draft), package `net-toolbox`. Part of
 [cyberdeck-zero-apps](../../README.md).
 
 Net Toolbox gathers the tools you reach for when a network misbehaves: a step-by-step **diagnosis** ("why is my
@@ -21,6 +21,14 @@ The plan and the measured facts behind it are in the launcher's report 027 (`doc
 DNS lookup, Port check, HTTP check, Public IP, Whois, Interfaces) are written; the unit tests and the headless scenes
 pass; the pages ran on the deck (Zero 2 W); the board tests (`tests/BOARD-TESTS.md`) are still to be run on the Pi 3A+. The core of the four new
 tools is described in [0.2.0: the new tools' core](#020-the-new-tools-core).
+
+**0.3.0 (draft, in development):** three more tools with their pages: a **speed test** (a needle gauge, the live
+throughput chart, download, upload, latency and the latency under load graded A to F for bufferbloat), **Wake-on-LAN**
+with saved machines and a wake watch, and a **Bluetooth radar** (the devices around as blips on three rings: near, medium,
+far). The core is described in [0.3.0 (draft): the new tools' core](#030-draft-the-new-tools-core), the pages in
+[The 0.3 pages](#the-03-pages). Also 0.3: the **interface chooser** for boards with several ways out (a second Wi-Fi
+adapter, Ethernet): see [The network chooser](#the-network-chooser-03). The new pages have run in the headless scenes
+only: the board steps (`tests/BOARD-TESTS.md`, B13 to B15) are still to be run.
 
 ## Screenshots
 
@@ -51,7 +59,7 @@ and by keys.
 
 | Page | What it shows | Actions (rows) |
 |---|---|---|
-| **Home** | a line with the active interface and its address (or **No network**, amber), refreshed every 2 s | Diagnose my connection, Ping, Traceroute, DNS lookup, Port check, HTTP check, Public IP, Whois, Interfaces (nine rows: the list scrolls) |
+| **Home** | a line with the effective interface and its address (or **No network**, amber; or the `wlan1 not found: using Automatic` note), refreshed every 2 s | **Network** (value `Automatic (wlan0)` or `wlan1`: opens the choice page), Diagnose my connection (the page starts on this row), Ping, Traceroute, DNS lookup, Port check, HTTP check, Speed test, Public IP, Whois, Wake-on-LAN, Bluetooth radar, Interfaces (thirteen rows: the list scrolls) |
 | **Interfaces** | read-only, refreshed every 2 s: a heading per interface with State, IPv4, IPv6, MAC, Speed (Wi-Fi: Network, Signal `-58 dBm, Good`, Bit rate), then Network: Gateway and the DNS servers in `resolv.conf` order, the first marked | one row scrolls per key press |
 | **Diagnosis** | starts by itself: the **health ladder**, six rungs (Link up, Address, Gateway, DNS, Internet, Captive portal), each a mark and a word: hollow circle *waiting*, spinning amber arc *checking...*, green disc with a check (the detail: `3 ms`, the address, the resolver), red disc with a cross, a dash *skipped*; under it the first failure in plain words or **Everything works** with the core's notes | Run again, Save log |
 | **Ping** | the latency **line graph** of the last 120 packets (time on x, ms on y with an automatic scale, the **jitter band** (average plus and minus the jitter) shaded behind the line, a lost packet a red tick on the baseline and a gap, a slow one an amber dot), the **packet strip** (one cell per packet: short green *ok*, medium amber *slow*, tall red *lost*, small grey *waiting*) with its legend, and the statistics (sent, lost and loss %, min / avg / max, jitter). When ICMP sockets are not allowed a notice says why and how to fix it | Start / Stop, Target (Roller: Gateway, 1.1.1.1, 8.8.8.8, the saved targets, Type a host...), Save log, Save target |
@@ -61,6 +69,8 @@ and by keys.
 | **HTTP check** | Run, then right under it: the status **badge** (`200 OK` green check, `301 moved` amber arrow, `404 Not Found` / `500 ...` red cross, an error in plain words with the same red cross), the final URL when it differs, the **waterfall** (one bar split into DNS, Connect, TLS, Waiting, Transfer on one scale, each segment in its own tone and named below with its milliseconds, a segment above 0 ms at least 2 px wide, the total), the **certificate badge** (`expires in 83 days` green from 30 days, amber under 30, red under 7 or `expired 12 days ago`) with Subject, Issuer, Valid until, then Remote IP, HTTP version, Size, Redirects | Run / Stop (curl is ended), URL (typed), Method (GET, HEAD), Ignore certificate errors (On / Off; On shows a warning), Save log |
 | **Public IP** | asks by itself on entry: Public IPv4, Public IPv6 (`none` is normal and neutral), Country, Cloudflare data centre, Local address; behind carrier-grade NAT (a local address in 100.64.0.0/10) a note says `Your provider shares one public address between customers (carrier-grade NAT): you cannot receive inbound connections` | Run again, Whois of this address (opens Whois with it and runs it), Save log |
 | **Whois** | a summary of the answer (domain: Registrar, Created, Updated, Expires with the days left in words, Status, Name servers; address: Net name, Organisation, Country, Range, AS number, Abuse contact; an empty field is not shown, a value is never cut: it wraps) and under the heading Raw answer the raw lines as compact rows (cut with dots, the first 200 lines; Save log has them all) | Query (typed), Run / Stop, Save log (placed under Run so that it stays in reach) |
+
+The three 0.3 pages are described under [The 0.3 pages](#the-03-pages).
 
 Typed values (a host, a name, a resolver address, a port number) open a text field page: a physical keyboard types at
 once; with none connected the launcher's on-screen keyboard shows (the rule of `input.state`, never summoned by hand);
@@ -82,6 +92,9 @@ background (a cancel ends a probe within 50 ms). The page changes were checked f
 | HTTP check | one `GET` or `HEAD` request through `curl` (never a shell); a TLS handshake read by `openssl s_client` only when curl refused the certificate | the address you typed, nothing else |
 | Public IP | two `curl` requests (IPv4, IPv6) to `https://www.cloudflare.com/cdn-cgi/trace` | Cloudflare |
 | Whois | the query over TCP 43 | `whois.iana.org`, then the registry or regional registry it names (ARIN, RIPE NCC, APNIC, LACNIC, AFRINIC, a TLD registry) and a registrar server when the registry names one, at most three referrals |
+| Speed test (0.3) | HTTPS requests through `curl`: 11 small ones (latency), then about 8 s of download and 8 s of upload, **at most 150 MB each way** per run (on a 25 Mbit/s link about 25 MB each way); pings beside it, one every 0.2 s | `speed.cloudflare.com` (Cloudflare); the pings to 1.1.1.1 (Cloudflare) or to your gateway |
+| Wake-on-LAN (0.3) | one 102-byte UDP datagram per destination (4 on one interface: 255.255.255.255 and the subnet's broadcast, ports 9 and 7); then, when the machine has a host to watch, one ping a second for up to 120 s | your local network (broadcast), or the broadcast address you saved; the machine's address |
+| BLE scan (0.3) | nothing: the adapter listens (an active LE scan sends scan requests to the devices it hears, as any phone does) | the Bluetooth devices around |
 
 Everything starts when you press Run or Start, except the diagnosis (0.1) and the public address, which asks when you
 open its page.
@@ -227,6 +240,178 @@ exercised from the build PC (WSL, UDP probes through its NAT; whois over the int
 `certs` of a redirect chain describe the last server only; a hop that answers from more than four addresses keeps
 the others as a count; reverse names come from the resolver in `resolv.conf` (or the one chosen), over UDP only.
 
+## 0.3.0 (draft): the new tools' core
+
+The core (`src/core/`, no LVGL) of three more tools; their pages are not written yet. Same rules as before: one worker
+thread per running tool (256 kB stack), every wait a `poll()` slice of at most 50 ms, immutable snapshots under a mutex
+that the screen polls, nothing leaves the board until you start a tool. The methods were chosen on the deck and the Pi
+3A+ on 2026-10-15 (the measures are below).
+
+* **The stream runner** (`cmdrun`: `StreamRunner`, `DirectStreamRunner`): the speed test and the BLE scan run a program
+  whose output is a stream, which the shared `async_run` cannot carry (it hands lines to the screen's thread). The
+  runner (posix_spawn, no shell, its own process group, `LC_ALL=C`, as the 0.2 runner) counts and drops curl's body on
+  stdout (it is never kept: the memory stays flat), reads stderr (or stdout and stderr together) as lines, and feeds
+  stdin with zero bytes (an upload) or text (bluetoothctl's commands). The tool sees each line and a tick after each
+  wake-up and can send more text, close stdin or stop the program. A stop, a cancel or the timeout first writes a
+  farewell to stdin (bluetoothctl: `scan off`, `quit`) and waits its grace, then SIGTERM, then SIGKILL, to the whole
+  group. Writing to a program that is gone gives EPIPE, never SIGPIPE.
+* **Speed test** (`speedtest`): Cloudflare's open speed endpoints, no account, through `curl` (8.14.1 on the boards):
+  * *Latency*: one curl, 11 requests of `https://speed.cloudflare.com/__down?bytes=0` on one kept-alive connection. The
+    first sets the connection up (its DNS, TCP and TLS time is shown as *connection setup*), the 10 others give round
+    trips: first byte minus request sent, less the server's own time from its `Server-Timing` header (Cloudflare's
+    worker takes 20 to 35 ms). Median and jitter (as ping). Beside it, 10 pings of the ping target (the idle latency).
+  * *Download*: one curl asks for `__down?bytes=N` several times on the same connection (50 MB each; the server refuses
+    100 000 000 bytes and more), the sizes adding up to the cap (150 MB): the body is counted and dropped. It stops 8 s
+    after the first byte, or when every byte came (*capped*).
+  * *Upload*: one curl, `-X POST -T -` (chunked) with `Expect:` off: the runner writes zero bytes on its stdin, at most
+    the cap; 8 s after curl took the first byte, stdin is closed, curl ends the body and reads the answer, whose
+    `cf-meta-upload-bytes` header says what the server received. If the answer does not come within 6 s, curl is
+    stopped and the speed is what it sent (with a note).
+  * *Figures*: a sample every 0.5 s (the live figure and the chart, Mbit/s = bytes x 8 / seconds / 10^6); the result
+    leaves out the first second (TCP's slow start): (bytes at the end - bytes at 1 s) / (time between); a phase shorter
+    than 2 s is taken whole. An upload is measured as the bytes handed to curl at both ends, so what waits in the
+    buffers drops out of the difference.
+  * *Latency under load and bufferbloat*: the ping module pings the target (1.1.1.1, or your gateway, or none:
+    setting `speed_ping`) every 0.2 s from the first byte of each direction to its end. The increase is the loaded
+    median minus the idle median: **A** under 30 ms, **B** under 60 ms, **C** under 200 ms, **D** under 400 ms, **F**
+    from 400 ms (the steps of the Waveform bufferbloat test, without its A+); every ping lost under load is an F with
+    that said. The grade shown is the worse direction. Without ping (not allowed, no target) the speeds are measured,
+    the grade is not.
+  * *Server*: the Cloudflare site that answered (an airport code, `colo`).
+  * *Errors in plain words*: no curl, no DNS, no connection, TLS failed, the certificate refused (*is the board's clock
+    right?*), HTTP 403 / 429 (*too many tests: wait a minute*) / 5xx, the connection broke (measured over what came when
+    it lasted at least 1 s), too slow. curl's own message is kept for the log.
+  * *Why this way*: on the deck one connection gave 22 to 27 Mbit/s down and two at once 24 Mbit/s together; on the Pi
+    3A+ (5 GHz) one gave 110 to 113 Mbit/s and two 107: one connection fills the link. The CPUs have no AES
+    instructions (openssl speed: AES-256-GCM 22.6 MB/s on the deck, 30 MB/s on the 3A+; ChaCha20-Poly1305 162 and 233
+    MB/s), and curl at full speed took 21 % of a core with AES-256-GCM against 11 % with ChaCha20 on the deck, so
+    ChaCha20-Poly1305 is asked first (`--tls13-ciphers`, AES kept as a fallback); HTTP/1.1 (`--http1.1`). Upload: 32
+    to 36 Mbit/s on the deck, about 106 Mbit/s on the 3A+; curl's own memory while uploading from stdin stayed at 15
+    MB (a separate process), the app's does not grow.
+* **Wake-on-LAN** (`wol`): the magic packet (6 bytes 0xFF, then the MAC address 16 times: 102 bytes) in a UDP datagram
+  with `SO_BROADCAST`, no root. MAC addresses as `aa:bb:cc:dd:ee:ff`, `aa-bb-cc-dd-ee-ff` or `aabbccddeeff`; refused
+  with words: other forms, a character that is not hex, the all-zero, the broadcast and multicast addresses. Where it
+  goes: on each interface that is up with an IPv4 address (or the one chosen, setting `wol_iface`), to
+  255.255.255.255 and to the subnet's directed broadcast (192.168.71.255 for 192.168.68.121/22), on port 9 and also
+  7 (or the machine's own port); the socket is bound to the interface's address, which makes Linux send the broadcast
+  out of that interface. A machine with a saved broadcast address (another subnet's) gets its packets there instead,
+  routed by the system. The result: packets sent and errors, each in words. **Wake watch** (setting `wol_watch`):
+  when the machine has a host to watch, it is pinged once a second for up to 120 s: *answers after 23 s*, *no answer
+  yet (41 s)*, *no answer after 120 s*; an answer to the very first ping means it was probably awake already. Up to
+  20 saved machines (name, MAC, host to watch, broadcast address, port).
+  **Wake-on-LAN works only when the machine is set up for it** (in its BIOS or UEFI and in its network card's
+  settings), usually over **wired Ethernet**; machines on **Wi-Fi rarely wake up**. A machine that is fully off (not
+  asleep) may need its power supply on (some lose Wake-on-LAN after a power cut).
+* **BLE scan** (`ble`), the data of the radar: BlueZ's `bluetoothctl` (5.82 on the boards), run by the stream runner
+  with `menu scan`, `duplicate-data on`, `transport le`, `back`, `scan on` written on its stdin. With duplicate data on,
+  BlueZ reports every advertisement it hears: one `[CHG] Device <addr> RSSI: 0xffffffb8 (-72)` line each time (busy
+  devices several a second, others about once a second or less, as often as they advertise). On the Pi 3A+, 8 s gave
+  about 200 RSSI lines from about 20 devices. Each new device gets one `info <addr>`, whose answer gives its address
+  type (public or random). Why not another way: a plain `bluetoothctl --timeout 10 scan on` gave no RSSI line at all;
+  a discovery started with `busctl call` ends with the call (BlueZ ties a discovery to the D-Bus client that started
+  it: `Discovering: no` one second later); a D-Bus client inside the app (sd-bus) would need libsystemd in the shared
+  build. The table: address, address type, name (or an alias that is not just the address), RSSI raw and smoothed
+  (exponential, 0.3), the time of the last reading, TX power, the company of the manufacturer data (a short table of
+  common Bluetooth SIG ids: Apple, Microsoft, Samsung, Google, Espressif, Nordic ...; else *company 0x1234*; the app
+  ships no OUI table and random addresses have none), first and last seen. A device unheard for 20 s leaves the live
+  list; *seen* counts every device heard in the run. **Distance**: near from -60 dBm, medium from -80 dBm, far below,
+  from the smoothed RSSI only: a rough guess, not metres. Before scanning, plain words instead of a failure: no
+  adapter, Bluetooth blocked by rfkill (soft or hard), BlueZ missing (no `bluetoothctl`), bluetoothd not running,
+  the adapter powered off. A scan lasts 60 s at most (setting `ble_seconds`, 5 to 60); run it again to go on. **It
+  always turns discovery off**: at the end of the time (`scan off`, `quit`), on Stop, when the page or the app goes,
+  when BlueZ refuses, on the runner's timeout (the farewell, then SIGTERM and SIGKILL); BlueZ also ends the discovery
+  of a client that goes away (on the Pi 3A+, `Discovering: no` 0.5 s after a SIGKILL of bluetoothctl in the middle of
+  a scan). **Wi-Fi and Bluetooth share one radio chip**: a Bluetooth keyboard or mouse may hiccup while the scan runs
+  (the snapshot carries that warning for the page).
+* **Saved results** (`netlog`): `format_speedtest`, `format_wol`, `format_ble`, same text style. **Settings**: `wol=`
+  lines (the saved machines), `wol_iface`, `wol_watch`, `speed_ping`, `ble_seconds`; a 0.2 file reads with their
+  defaults and 0.2 ignores them.
+
+Limits of the 0.3 core: the speed test measures one connection to the nearest Cloudflare site, not your line's
+contract; on a link faster than about 150 Mbit/s the 150 MB cap ends a direction before 8 s (the Pi 5 on gigabit:
+about 1.2 s; the result is then the whole transfer); the speed itself costs data (up to 300 MB a run). Phones and
+watches change their random Bluetooth address every few minutes (privacy), so one phone can show as several devices
+over a long session; devices that do not advertise (a connected keyboard) are not seen. bluetoothctl's output format
+is BlueZ 5.82's (5.6x lines such as `RSSI: -72` are read too). Measured on the boards with the shell (curl,
+bluetoothctl); the app's own sessions were exercised on the build PC (the real speed test against Cloudflare, a fake
+bluetoothctl) but not yet on a board.
+
+## The 0.3 pages
+
+Same frame as the others (status line, large cells or rows, Esc / Left back, a tap selects and a second tap acts), same
+rule: nothing starts until you press Start, Wake now or Start on the radar, and leaving the page (Esc, Left, the header's
+Esc) or the app stops the tool and its worker thread or child process first. The speed test and Wake-on-LAN pages say `(via
+wlan1)` in the status line when a network other than Automatic is chosen; the radar does not use the network and says nothing.
+
+| Page | What it shows | Actions |
+|---|---|---|
+| **Speed test** | the cells **Start / Stop** and **Save log**, then a note that is always there, before and after a run: `Uses up to about 150 MB each way. Start it yourself; on a phone hotspot that is mobile data.` (the number is the core's byte cap). Then **the gauge**: a 220 degree dial with ticks and six numbers, an arc in the accent blue filled up to the value, a tapered needle with a hub that eases to each new value in about 180 ms, the phase (Latency, Download, Upload) and the big value with its unit under the hub. The scale steps 10, 25, 50, 100, 250, 500, 1000 Mbit/s with the highest value seen and never comes back down during a run; the numbers cross-fade when it steps. Beside it (at 640x480, 800x480, 1024x600, 1280x720) or under it (720x720) the **throughput chart** of the phase in progress on the same scale, and a thin **progress bar** with `4 s of 8 s`. When the run ends the gauge gives way to the **result card**: Download and Upload as large values with the unit, Latency (idle) and Jitter, Latency while downloading and while uploading with the difference (`138 ms (+120 ms)`), the **bufferbloat grade** as a badge (a disc for A and B, a triangle for C, a square for D and F, with the letter) and one plain line (`A: latency stays flat under load` ... `F: latency explodes under load: heavy buffering in the router`), the server (`Cloudflare, CDG`), and the notes (no ping target, a direction that broke). Errors in plain words (no connection, the TLS connection failed, Cloudflare refused the request). Stopping ends the test within about a second and keeps what was measured | Start / Stop, Save log |
+| **Wake-on-LAN** | a list: **Add a machine**, then each saved machine (name, MAC and the address to watch, and its last wake in this run: `Sent 14:02`, `Awake after 22 s`, `No answer yet`, `Not sent`, `Not woken yet`), and the note `The target must have Wake-on-LAN switched on; it usually works over Ethernet, rarely over Wi-Fi.` At most 20 machines (the row says `list full`) | Add a machine (typed pages: Name, MAC address, Watch address, the address optional), a machine opens its page |
+| **A machine** | the **wake watch**: a ring with a shape and a word (hollow ring `Not sent yet`, arrow disc `Sent`, spinning arc `Waking... 37 s`, green check `Awake after 22 s`, amber dash `No answer yet`, red cross `Not sent`), the line under it (`Packet sent on wlan0, wlan1`), and a strip of 120 one-second cells (grey while waiting, green from the first answer, dark for the seconds to come; only when the machine has an address to watch) | Wake now / Stop (sends through the chosen network: every interface that is up, or the one chosen; then pings the address once a second for up to 120 s, cancellable), Name, MAC address, Watch address (each opens its typed page: a bad MAC or a name already saved is refused in plain words under the field; `aa:bb:cc:dd:ee:ff`, `aa-bb-...` and `aabbcc...` are accepted), Watch after waking (On / Off), Save log, **Delete** (the row asks `Press again to delete`; any other action disarms it) |
+| **Bluetooth radar** | the status line (`Scanning, 14 devices, 37 s left`, `Stopped, 23 devices seen`, `Finished, 29 devices seen`, or the reason: `Bluetooth is switched off`, `Bluetooth is blocked by rfkill`, `No Bluetooth adapter`, `Bluetooth is not installed`, with the one-line fix such as `Turn Bluetooth on in Settings > Bluetooth`), the cells Start / Stop and Save log, the permanent line `Wi-Fi and Bluetooth share one radio: a Bluetooth keyboard may stutter while scanning.`, then **the radar** and the list of devices side by side (stacked on a tall screen like 720x720). The radar: three rings (near, medium, far: signal strength, not distance), a crosshair, a sweep line that turns once in 3 s with a faint trailing wedge (only while scanning; stopped, the radar is still), the devices as blips (the angle is a stable hash of the address, so a device keeps its place; the ring comes from the smoothed signal; the blip pulses when the sweep passes it and fades with the time since it was heard, and is gone after 20 s), the highlighted device ringed and named. The list: name or address, smoothed dBm and the class word (`-54 dBm, near`), strongest first, the highlight following the list | Start / Stop (scans at most 60 s, stops by itself), Save log, Enter or a second tap on a device opens its **details** in place (name, address and type, vendor, signal raw and smoothed, TX power, last seen, times heard); Esc or Enter closes them, the next Esc leaves the page |
+
+What was chosen at 640x480 (the deck): the speed test puts the dial (radius about 150 px) beside the chart, the Start
+cell and the note above them without scrolling; the radar is a 250 px circle with the list (four rows) at its right. At
+720x720 the dial sits over a wide chart and the radar (300 px) over the list. The BLE list is a `RichList` (the same look
+and keys as CompactList's compact density, with rows of two lines and a way up to the cells), the highlight is polled every
+100 ms.
+
+What the speed test sends, to whom and how much is in the table above (Cloudflare's `speed.cloudflare.com`, one HTTPS
+connection at a time, at most 150 MB each way: on a 25 Mbit/s line about 25 MB each way, and on a phone hotspot that is
+mobile data). The latency under load pings 1.1.1.1 (`speed_ping` in the settings: a host, `gateway` or `off`).
+
+## The network chooser (0.3)
+
+A board can have several ways out: its Wi-Fi, a second Wi-Fi adapter (a USB dongle on a phone hotspot), an Ethernet
+adapter on a hub. Before 0.3 every tool followed the system's default route. Home's first row, **Network**, picks the
+interface the tools use; the choice page lists **Automatic (wlan0)** (the system's route, as before; the brackets
+name the main interface now) and every interface but the loopback as `name  address`, or `name  not connected` for a
+Wi-Fi adapter and `name  no link` for a cable that is out (listed and selectable, not hidden); the one in use is
+checked. The choice is the setting `interface=` (absent = Automatic; a file of an older version reads as Automatic).
+
+What the choice does, `scope.hpp` (`NetScope`, resolved against the interfaces every time they are read):
+
+* **Chosen interface found**: the tools go out of it. **Not found** (adapter unplugged): the scope falls back to
+  Automatic, Home says `wlan1 not found: using Automatic (wlan0: ...)` in amber, the setting is kept, and the adapter
+  plugged in again is used again. Never an error.
+* **Sockets**: `SO_BINDTODEVICE` with the interface name, one helper in `sock.hpp` (`bind_to_device`), no root on a
+  kernel 5.7 or later (the boards run 6.18; on a Pi 3A+ an ICMP datagram socket and a TCP connect bound to `wlan0` go
+  out of `wlan0`, and a name that does not exist fails with `ENODEV`, shown as "network interface not found"). It
+  covers the ICMP echo (ping, the speed test's latency, the wake watch), the traceroute probes and their reverse-name
+  socket, DNS over UDP and over TCP, the TCP port check, whois and the captive-portal HTTP of the diagnosis. The choice
+  is process-wide state (`set_active_interface`), set by the UI, so no tool needs a parameter.
+* **curl**: `--interface <name>` is added in the one place that starts a command (`spawn_child`, and the UI's flow
+  driver), to `curl` only, with the name checked (`[A-Za-z0-9_.:-]`, 1 to 15 bytes, no leading `-`, not an address); the
+  argv stays an array. It covers the HTTP check, the public address and the speed test.
+* **DNS**: the system's resolver may not be reachable over the chosen interface (resolv.conf holds the servers of the
+  main network). With a chosen interface the "System default" resolver is that interface's own: first the servers
+  NetworkManager knows (`nmcli -g IP4.DNS,IP6.DNS device show <if>`, through the command runner, read again after 20 s),
+  else the interface's gateway, else (nothing known) the system's list. The resolver label says which: `wlan1's DNS
+  172.20.10.1`, `wlan1's gateway 172.20.10.1`, `System default (not wlan1's) 192.168.1.1`. A resolver you type or pick
+  (Cloudflare ...) is used as it is, over the chosen interface.
+* **Gateway**: the default route through that interface (`/proc/net/route` has one per interface; the metric picks the
+  system's), used by the diagnosis and by the "Gateway" targets of ping, traceroute and the rest.
+* **Diagnosis**: the six steps check that interface: Link up (a Wi-Fi adapter that is not connected, a cable that is out,
+  an adapter that is gone), its address, its gateway, DNS through its servers, the internet and the portal through
+  bound sockets; the explanations name it ("wlan1 is not connected ...", "The gateway of wlan1 (172.20.10.1) does not
+  answer ..."). Automatic is the 0.2 behaviour, word for word.
+* **Wake-on-LAN** is per interface by nature: each magic packet is planned for one interface and now also bound to it
+  (`SO_BINDTODEVICE`; an older kernel's refusal is ignored, the source address still steers it).
+* **Pages**: the status line of every tool that sends traffic ends with `(via wlan1)` when a network is chosen (the
+  words of the page give way to it on a narrow screen, cut at a space with `...`); the Interfaces page marks the heading
+  `WLAN1 (IN USE)` and the main one `(DEFAULT ROUTE)` (only when there is more than one interface); the Wi-Fi
+  details (Network, Signal, Bit rate) come for **every** connected wireless interface, asked from `iw` one at a time
+  (all of them when the page opens, then one per 2 s refresh in turn, 1.5 s timeout, never two at once); a Wi-Fi
+  interface that is not connected says so and has none of those rows.
+* **The next pages** (speed gauge, Wake-on-LAN, BLE radar) ask `ToolboxApp::scope()` (`iface`, `effective()`,
+  `note()`) and `dns_servers()`; the sockets and curl follow by themselves.
+
+Limits: `openssl s_client` (the certificate read when curl refuses a certificate) has no interface option and is not
+bound; curl's own name lookup uses the system resolver (the connection itself goes out of the chosen interface); the
+nmcli answer needs NetworkManager (the boards have it); an Ethernet adapter's name is any (`eth0`, `end0`, `enx<mac>`)
+and the long ones are cut with dots in the choice list on the smallest screen; Bluetooth is not an interface and is
+not affected; a fixture board (`NET_TOOLBOX_FIXTURE`) never binds anything.
+
 ## Requirements
 
 * A screen of at least **640x480** (`X-MinSize=640x480`; under it the app says so and closes on any key) and a
@@ -237,10 +422,14 @@ the others as a count; reverse names come from the resolver in `resolv.conf` (or
 * `depends` = the template's `libfreetype6, libinput10, libxkbcommon0` and, from 0.2, `curl, ca-certificates` (the
   HTTP check and the public address); no root. The `openssl` program (installed on both boards) reads the dates of a
   certificate curl refused; without it that certificate shows no dates.
+* From 0.3: the speed test uses `curl` too (already in `depends`); the BLE scan needs BlueZ's `bluetoothctl` (package
+  `bluez`, installed on Raspberry Pi OS) and a running `bluetoothd`; it stays optional (not in `depends`): without it
+  the scan says so. Wake-on-LAN needs nothing more (its wake watch uses the ping socket, as ping).
 * Network: the tests talk to the hosts you name; the diagnosis contacts your gateway, your DNS servers, 1.1.1.1
   (Cloudflare), 8.8.8.8 (Google) and `connectivitycheck.gstatic.com` (Google), only when you start it. From 0.2: the
   public address asks `www.cloudflare.com` (Cloudflare), whois asks `whois.iana.org` and the servers it names, only
-  when you start them.
+  when you start them. From 0.3: the speed test talks to `speed.cloudflare.com` (Cloudflare) and pings 1.1.1.1 or
+  your gateway, only when you start it.
 
 ## Install
 
@@ -255,7 +444,7 @@ sudo dpkg -i net-toolbox_0.1.0_arm64.deb      # remove: sudo dpkg -r net-toolbox
 
 | Path | What |
 |---|---|
-| `${XDG_CONFIG_HOME:-~/.config}/cyberdeckzero/net-toolbox.conf` | saved ping targets and the last values of each tool (`key=value`); written through a temporary file and a rename. Delete it to reset. `NET_TOOLBOX_CONFIG` names another file |
+| `${XDG_CONFIG_HOME:-~/.config}/cyberdeckzero/net-toolbox.conf` | saved ping targets, the saved Wake-on-LAN machines (0.3, at most 20) and the last values of each tool (`key=value`); written through a temporary file and a rename. Delete it to reset. `NET_TOOLBOX_CONFIG` names another file |
 | `~/net-logs/<tool>-<YYYYmmdd-HHMMSS>.txt` | a result you saved (only when you ask). `NET_TOOLBOX_LOG_DIR` names another folder |
 
 Logs go to stderr with the tag `[net-toolbox]` (the launcher's journal).
@@ -264,6 +453,12 @@ Logs go to stderr with the tag `[net-toolbox]` (the launcher's journal).
 
 * **Not yet run on a board**: the tools are unit-tested on fixtures and on loopback and the pages on headless scenes;
   the board protocol (`tests/BOARD-TESTS.md`) is still to be run.
+* 0.3 (draft): the network chooser is unit-tested and shown in headless scenes; the dongle (wlan1) and an Ethernet
+  adapter on a hub are still to be tried on a board (`tests/BOARD-TESTS.md`, B11 and B12).
+* 0.3 (draft): the speed test, Wake-on-LAN and Bluetooth radar pages run in the headless scenes on scripted answers only;
+  the core was measured with curl and bluetoothctl from a shell, the pages are not yet run on a board (B13 to B15). The
+  last wake status of a machine is kept while the app runs, not in the settings file. A BLE scan is never started on the
+  deck during tests without the owner's say (the Bluetooth keyboard shares the radio).
 * Ping has Start and Stop, no Pause: Start begins a new series.
 * IPv4 first: the gateway is the IPv4 default route; an IPv6-only network is not diagnosed yet.
 * Names ending in `.local` (mDNS) are not resolved; use the address.
@@ -282,7 +477,12 @@ is not shipped or modified. The ping, DNS (RFC 1035, EDNS0 of RFC 6891), TCP and
 The captive-portal check uses Google's `generate_204` address; the internet check uses Cloudflare's 1.1.1.1 and
 Google's 8.8.8.8. From 0.2 the app also runs `curl` (curl licence, MIT-style) and, when installed, `openssl`
 (Apache 2.0) as separate programs, not shipped or modified; the traceroute, the whois client (RFC 3912) and the JSON
-reader are the app's own code; the public address comes from Cloudflare's `/cdn-cgi/trace` page.
+reader are the app's own code; the public address comes from Cloudflare's `/cdn-cgi/trace` page. From 0.3 the speed
+test uses Cloudflare's speed endpoints (`speed.cloudflare.com/__down` and `/__up`, the ones behind
+speed.cloudflare.com), the BLE scan runs BlueZ's `bluetoothctl` (GPL-2.0) as a separate program, not shipped or
+modified; the Wake-on-LAN sender and the speed and Bluetooth readers are the app's own code. The company names of the
+BLE scan come from the Bluetooth SIG's assigned numbers (company identifiers); the bufferbloat grade steps follow
+Waveform's bufferbloat test.
 
 ## Build and test
 
@@ -302,7 +502,10 @@ python3 tools/make_registry.py --only net-toolbox --out <a folder outside packag
   and their text), `settings`, `text`. From 0.2: `traceroute` (the probe socket, the rounds, the hop statistics, the
   session), `rdns` (reverse names without blocking), `cmdrun` (the command runner interface, the direct runner, the
   step flows), `httpcheck` (the address rules, the curl and openssl command lines and parsers, the flow, the session),
-  `minijson` (curl's report), `publicip`, `whois`.
+  `minijson` (curl's report), `publicip`, `whois`. From 0.3: `cmdrun` also has the stream runner, `speedtest` (the
+  command lines, curl's report, the meter, the grades, the engine with the ping beside it, the session), `wol` (MAC
+  addresses, the packet, the plan, the sender, the wake watch, the session), `ble` (bluetoothctl's lines, `show`,
+  `/sys`, the device table, the scan, the session).
 * `src/ui/`: `toolbox_app` + `tool_pages` (the frame: navigation, the band, the Choice and Typed pages, saving; the five
   tool pages), `view_model` (every text, tone and number a page shows, from the core's snapshots: no LVGL, unit-tested),
   `charts` (the health ladder, the ping graph and strip, the result badge: drawn with LVGL's draw API), `backend`
@@ -339,9 +542,41 @@ python3 tools/make_registry.py --only net-toolbox --out <a folder outside packag
   ARIN, RIPE NCC and APNIC (`tests/fixtures/whois`), and the client against fake whois servers on 127.0.0.2 and up
   (referral chains, ARIN's `n +`, the parent-domain retry, a referral loop, the referral limit, an oversized answer,
   garbage bytes, a silent server, a refused connection, cancel); the 0.2 log texts and settings.
+* `tests/` from 0.3 (about 1900 checks in all; `stream_fakes.*` holds a scripted stream runner on a fake clock, a
+  scripted command runner and a scripted ping): `test_stream.cpp` the stream runner on real `sh` commands (the body
+  counted and never kept, zero bytes on stdin whole or ended early, text in and out, the farewell on a cancel, the
+  group ended on a stop, SIGKILL after the grace, the timeout, a missing program, no SIGPIPE, long lines);
+  `test_speedtest.cpp` curl's report lines recorded on the deck (`tests/fixtures/speedtest`), Server-Timing, the
+  command lines (the cap never exceeded, no request the server refuses), the meter (Mbit/s, the ramp left out, short
+  phases), the grade table, the error words, the whole test on the scripted runner (phases, live figures, the cap, the
+  time target, an unconfirmed upload, DNS / 429 / TLS / no curl / 403 / a broken connection, no ping, every ping lost,
+  cancel), the real ping module beside a scripted load (a fake echo socket that answers slower under load), the session
+  on fake `curl` programs run by the real runner (the uploaded zero bytes counted by the fake server, Stop ends curl's
+  process group); `test_wol.cpp` the MAC parser (about 25 hostile inputs), the packet's bytes, directed broadcasts, the
+  packets planned on the recorded boards, the saved form, a fake sender and a real UDP send on loopback, the wake watch
+  on a fake echo socket (answers, at once, never, cancel, ping not allowed, a name that cannot be found);
+  `test_ble.cpp` bluetoothctl's output recorded on the Pi 3A+ (`tests/fixtures/ble`, sanitized: see its README), the
+  line cleaner and parser (every RSSI line of the recording), hostile lines, `show` and `/sys` in plain words, the
+  device table on a fake clock (smoothing, expiry, seen, names, the `info` answer, companies, distance, the 256 bound),
+  the scan replayed with discovery turned off on every exit path, and a fake bluetoothctl program run by the real
+  runner (the time up, Stop, the session destroyed); `test_netlog03.cpp` the 0.3 texts and settings.
 
 ## Changes
 
+* 0.3.0 (draft): the **network chooser** (Home row Network, `interface=` setting): sockets bound with SO_BINDTODEVICE, curl
+  with --interface, the interface's own gateway and DNS, the diagnosis of a chosen interface, `(via wlan1)` in the status
+  lines, Wi-Fi details for every wireless interface on the Interfaces page, Ethernet as a normal interface. Home has ten
+  rows and starts on Diagnose my connection.
+* 0.3.0 (draft): the **pages** of the speed test (needle gauge with a scale that steps up, live throughput chart, progress
+  bar, result card with the bufferbloat grade), Wake-on-LAN (the list of saved machines, the typed Add / Edit pages, the
+  wake watch with its ring and one-second strip, Delete with a second press) and the Bluetooth radar (rings, sweep, blips,
+  the device list and its details); Home has thirteen rows; the scripted demonstration backend (`speed=`, `wol=`, `ble=`) and
+  the scenes for every state; the unit tests of the new wording and maths (`test_ui_model_03.cpp`).
+* 0.3.0 (draft, in development): the core of the speed test (Cloudflare through curl, one connection, ChaCha20
+  first, 8 s and at most 150 MB each way, the latency under load and a bufferbloat grade), Wake-on-LAN (saved machines,
+  the packets on every interface or one, the wake watch) and the BLE scan (bluetoothctl with duplicate data on, the
+  device table, distance classes, discovery always turned off), the stream runner they share, their saved texts and
+  settings, the unit tests.
 * 0.2.0, the pages: Home has nine rows; **Traceroute** with the chain of hops (node shapes and colours, latency
   bars on one scale, loss tags, details in place), **HTTP check** (status badge, waterfall, certificate badge, rows;
   curl runs on the shared `async_run` and Stop ends it), **Public IP** (asks on entry, the carrier-grade NAT note, Whois

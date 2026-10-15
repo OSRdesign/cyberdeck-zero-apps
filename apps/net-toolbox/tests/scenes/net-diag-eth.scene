@@ -1,0 +1,11 @@
+title Net Toolbox: Diagnosis through Ethernet
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy,interface=end0
+env NET_TOOLBOX_FIXTURE eth-wifi
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key enter
+shot passed
+expect text "Everything works"
+expect text "end0 1 Gbit/s"
+expect text "192.168.1.1, 3.0 ms"
+expect notext "Message cut off"

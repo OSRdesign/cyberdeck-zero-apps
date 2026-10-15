@@ -54,6 +54,7 @@ int udp_exchange(const Address &server, std::uint16_t port, const std::vector<st
     if (!sl) return EAFNOSUPPORT;
     Fd fd(socket(server.family, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0));
     if (!fd.valid()) return errno;
+    if (const int be = bind_to_active_device(fd.get())) return be; /* the chosen network (sock.hpp) */
     /* connected: the kernel drops datagrams from anyone else, and a closed port comes back as ECONNREFUSED */
     if (connect(fd.get(), reinterpret_cast<const sockaddr *>(&ss), sl) != 0) return errno;
     std::vector<std::uint8_t> buf(4096);

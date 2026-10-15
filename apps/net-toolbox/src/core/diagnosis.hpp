@@ -16,6 +16,10 @@
  *                   443 of the same addresses counts (with a note)
  *   Captive portal  a plain HTTP GET of http://connectivitycheck.gstatic.com/generate_204: 204 = no portal; any other
  *                   answer = a portal is suspected (it shows its own page)
+ * With a chosen network (scope.hpp, DiagOptions::iface) the steps check THAT interface: Link up for it (a Wi-Fi adapter
+ * that is not connected, a cable that is unplugged), its own address, ITS gateway (the default route through it, not the
+ * system's), DNS through its own servers (nmcli, else its gateway, else the system's), and the internet and the portal
+ * through sockets bound to it (sock.hpp). The explanations name the interface. Automatic: as described above.
  * Each step has a state, a short detail ("192.168.68.1, 3 ms") and the failed one a plain-words explanation with what to
  * do. All network access goes through a DiagProbe (the system, or a fake in the tests).
  */
@@ -57,6 +61,7 @@ struct DiagReport {
     int failed = -1;                 /* the index of the failed step */
     std::string explanation;         /* the failure in plain words and what to do; or the all-good line */
     std::string resolver;            /* the DNS server that answered (or the first one asked) */
+    std::string iface;               /* a chosen network: the interface checked ("" = Automatic) */
     std::vector<std::string> notes;  /* things worth knowing that did not fail a step */
 
     DiagReport();
@@ -64,7 +69,8 @@ struct DiagReport {
 };
 
 struct DiagOptions {
-    std::string resolver;                         /* "" = the system's servers; else this address */
+    std::string resolver;                         /* "" = the system's servers (or the interface's); else this address */
+    std::string iface;                            /* 0.3: the chosen network's interface ("" = Automatic: the main one) */
     std::string dns_name = "example.com";
     std::string portal_host = "connectivitycheck.gstatic.com";
     std::string portal_path = "/generate_204";
@@ -82,6 +88,13 @@ class DiagProbe {
 public:
     virtual ~DiagProbe() = default;
     virtual NetState state() = 0;
+    /* 0.3: `nmcli -g IP4.DNS,IP6.DNS device show <iface>` output; false when it could not run (no NetworkManager) */
+    virtual bool nmcli_dns(const std::string &iface, std::string &text)
+    {
+        (void)iface;
+        (void)text;
+        return false;
+    }
     virtual bool can_ping() = 0;
     /* one echo: true with the round trip */
     virtual bool ping(const Address &ip, int timeout_ms, const CancelToken &cancel, double *rtt_ms) = 0;

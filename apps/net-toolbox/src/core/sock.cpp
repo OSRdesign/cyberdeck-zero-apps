@@ -13,8 +13,54 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstring>
+#include <mutex>
 
 namespace nt {
+
+namespace {
+
+std::mutex g_iface_mu;
+std::string g_iface;
+
+} // namespace
+
+bool valid_iface_name(const std::string &name)
+{
+    if (name.empty() || name.size() > 15) return false;
+    if (name[0] == '-') return false; /* never an option for a command */
+    if (name.find_first_not_of("0123456789.") == std::string::npos) return false; /* an address, not a name (curl would read it as one) */
+    for (const char c : name)
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '.' ||
+              c == ':' || c == '-'))
+            return false;
+    return true;
+}
+
+int bind_to_device(int fd, const std::string &iface)
+{
+    if (iface.empty()) return 0;
+    if (!valid_iface_name(iface)) return EINVAL;
+    if (setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, iface.c_str(), static_cast<socklen_t>(iface.size() + 1)) != 0)
+        return errno;
+    return 0;
+}
+
+void set_active_interface(const std::string &iface)
+{
+    const std::lock_guard<std::mutex> lock(g_iface_mu);
+    g_iface = valid_iface_name(iface) ? iface : std::string();
+}
+
+std::string active_interface()
+{
+    const std::lock_guard<std::mutex> lock(g_iface_mu);
+    return g_iface;
+}
+
+int bind_to_active_device(int fd)
+{
+    return bind_to_device(fd, active_interface());
+}
 
 void Fd::reset(int fd)
 {
@@ -45,6 +91,7 @@ Fd tcp_connect(const Address &addr, std::uint16_t port, std::int64_t deadline_ms
     if (!e) {
         fd.reset(socket(addr.family, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, IPPROTO_TCP));
         if (!fd.valid()) e = errno;
+        else e = bind_to_active_device(fd.get());
     }
     if (!e && connect(fd.get(), reinterpret_cast<const sockaddr *>(&ss), sl) != 0) {
         if (errno != EINPROGRESS) {
@@ -112,6 +159,7 @@ std::string errno_words(int err)
     case ENETUNREACH: return "network unreachable";
     case EHOSTUNREACH: return "no route to host";
     case EHOSTDOWN: return "host is down";
+    case ENODEV: return "network interface not found";
     case EACCES:
     case EPERM: return "not allowed";
     case EADDRNOTAVAIL: return "address not available";

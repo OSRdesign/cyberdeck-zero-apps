@@ -5,6 +5,8 @@
  */
 #include "wifi_link.hpp"
 
+#include "sock.hpp"
+
 #include <memory>
 #include <utility>
 
@@ -29,6 +31,25 @@ cdk::async_run::JobId request_wifi_link(const std::string &iface,
             return;
         }
         done(parse_iw_link(*text), true);
+    };
+    return cdk::async_run::run(std::move(spec));
+}
+
+cdk::async_run::JobId request_nmcli_dns(const std::string &iface, std::function<void(const std::string &text, bool ran)> done)
+{
+    if (!valid_iface_name(iface)) return 0;
+    auto text = std::make_shared<std::string>();
+    cdk::async_run::Spec spec;
+    spec.argv = nmcli_dns_argv(iface);
+    spec.timeout_ms = kNmcliTimeoutMs;
+    spec.merge_stderr = false;
+    spec.max_line = 1024;
+    spec.on_line = [text](const std::string &line) {
+        if (text->size() < 8192) *text += line + "\n";
+    };
+    spec.on_done = [text, done = std::move(done)](const cdk::async_run::Result &r) {
+        if (!done) return;
+        done(*text, r.ok());
     };
     return cdk::async_run::run(std::move(spec));
 }
