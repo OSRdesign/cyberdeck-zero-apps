@@ -186,11 +186,12 @@ std::vector<ui::RichRow> ToolboxApp::speed_list()
                         r.up.measured ? ui::speed_value_text(r.up.mbps) : std::string("--"));
         rows.push_back(ui::RichRow::custom(speed_big_, speed_big_->height(), true, kSpeedBig));
     }
-    for (const ui::RowDef &d : ui::speed_rows(*s)) rows.push_back(rich_row(d));
+    /* the grade is the verdict: it sits right under the two big numbers, not below the detail rows */
     if (s->state == SpeedSnapshot::State::Done) {
         speed_grade_->set(ui::speed_grade(r));
         rows.push_back(ui::RichRow::custom(speed_grade_, speed_grade_->height(), true, kSpeedGrade));
     }
+    for (const ui::RowDef &d : ui::speed_rows(*s)) rows.push_back(rich_row(d));
     for (const std::string &n : ui::speed_notes(*s)) rows.push_back(ui::RichRow::text(n, ui::Tone::Normal, true, true));
     return rows;
 }
