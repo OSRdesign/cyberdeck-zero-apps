@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-10-15T11:29:52+00:00",
+  "generated_at": "2026-10-15T16:36:26+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CardputerZero"
@@ -137,20 +137,20 @@
       "uuid": "978c39c5-fff8-5414-af97-bc3b78da75a5",
       "share_code": "net-toolbox",
       "title": "Net Toolbox",
-      "summary": "The tools you reach for when the network misbehaves: a step-by-step diagnosis, ping, DNS lookup, port check and the interfaces.",
-      "description": "A full-screen network toolbox made for the deck's small screen and for touch. Diagnosis answers 'why is my internet broken?' in plain words, step by step: link, address, gateway, DNS, internet and a captive-portal check (a plain HTTP request to connectivitycheck.gstatic.com/generate_204). Ping shows every packet (ok, slow or lost), the loss, min/avg/max and the jitter; it needs no root (an unprivileged ICMP socket, allowed by net.ipv4.ping_group_range on Raspberry Pi OS). DNS lookup asks for A, AAAA, MX, TXT, NS or PTR records through the system's resolver, a typed one or 1.1.1.1, 8.8.8.8 and 9.9.9.9, and shows the CNAME chain, the answer time and the response code. Port check tells whether a TCP port of a host is open, closed or filtered, with presets for web, mail, SSH, DNS and remote desktop. Interfaces lists each adapter with its state, addresses, MAC, speed, the gateway, the DNS servers and the Wi-Fi network. Every result can be saved as text to ~/net-logs. Nothing leaves the board until you start a test. Works on the Pi Zero 2 W, Pi 3A+, Pi 5 and CM5. Needs a screen of at least 640x480 and a launcher with full-screen app support.",
+      "summary": "The tools you reach for when the network misbehaves: a step-by-step diagnosis, ping, traceroute, DNS lookup, port check, HTTP check, public IP, whois and the interfaces.",
+      "description": "A full-screen network toolbox made for the deck's small screen and for touch. Diagnosis answers 'why is my internet broken?' in plain words, step by step: link, address, gateway, DNS, internet and a captive-portal check (a plain HTTP request to connectivitycheck.gstatic.com/generate_204). Ping shows every packet (ok, slow or lost), the loss, min/avg/max and the jitter; it needs no root (an unprivileged ICMP socket, allowed by net.ipv4.ping_group_range on Raspberry Pi OS). DNS lookup asks for A, AAAA, MX, TXT, NS or PTR records through the system's resolver, a typed one or 1.1.1.1, 8.8.8.8 and 9.9.9.9, and shows the CNAME chain, the answer time and the response code. Port check tells whether a TCP port of a host is open, closed or filtered, with presets for web, mail, SSH, DNS and remote desktop. Traceroute draws the path to a host as a chain of hops with a latency bar and a loss tag each, in rounds like mtr, with no root (a silent hop is shown as normal, a hop that only limits its answers is told apart from real loss). HTTP check makes one request with curl and shows the status, the timing as a waterfall (DNS, connect, TLS, waiting, transfer) and the days left of the site's certificate; ignoring certificate errors is an explicit switch. Public IP shows the address the internet sees (through Cloudflare's trace page) and says when your provider shares it between customers. Whois asks IANA and the registry it names (TCP port 43) and summarises the answer. Interfaces lists each adapter with its state, addresses, MAC, speed, the gateway, the DNS servers and the Wi-Fi network. Every result can be saved as text to ~/net-logs. Nothing leaves the board until you start a test. Works on the Pi Zero 2 W, Pi 3A+, Pi 5 and CM5. Needs a screen of at least 640x480 and a launcher with full-screen app support.",
       "locales": {
         "en": {
           "title": "Net Toolbox",
-          "summary": "The tools you reach for when the network misbehaves: a step-by-step diagnosis, ping, DNS lookup, port check and the interfaces.",
-          "description": "A full-screen network toolbox made for the deck's small screen and for touch. Diagnosis answers 'why is my internet broken?' in plain words, step by step: link, address, gateway, DNS, internet and a captive-portal check (a plain HTTP request to connectivitycheck.gstatic.com/generate_204). Ping shows every packet (ok, slow or lost), the loss, min/avg/max and the jitter; it needs no root (an unprivileged ICMP socket, allowed by net.ipv4.ping_group_range on Raspberry Pi OS). DNS lookup asks for A, AAAA, MX, TXT, NS or PTR records through the system's resolver, a typed one or 1.1.1.1, 8.8.8.8 and 9.9.9.9, and shows the CNAME chain, the answer time and the response code. Port check tells whether a TCP port of a host is open, closed or filtered, with presets for web, mail, SSH, DNS and remote desktop. Interfaces lists each adapter with its state, addresses, MAC, speed, the gateway, the DNS servers and the Wi-Fi network. Every result can be saved as text to ~/net-logs. Nothing leaves the board until you start a test. Works on the Pi Zero 2 W, Pi 3A+, Pi 5 and CM5. Needs a screen of at least 640x480 and a launcher with full-screen app support."
+          "summary": "The tools you reach for when the network misbehaves: a step-by-step diagnosis, ping, traceroute, DNS lookup, port check, HTTP check, public IP, whois and the interfaces.",
+          "description": "A full-screen network toolbox made for the deck's small screen and for touch. Diagnosis answers 'why is my internet broken?' in plain words, step by step: link, address, gateway, DNS, internet and a captive-portal check (a plain HTTP request to connectivitycheck.gstatic.com/generate_204). Ping shows every packet (ok, slow or lost), the loss, min/avg/max and the jitter; it needs no root (an unprivileged ICMP socket, allowed by net.ipv4.ping_group_range on Raspberry Pi OS). DNS lookup asks for A, AAAA, MX, TXT, NS or PTR records through the system's resolver, a typed one or 1.1.1.1, 8.8.8.8 and 9.9.9.9, and shows the CNAME chain, the answer time and the response code. Port check tells whether a TCP port of a host is open, closed or filtered, with presets for web, mail, SSH, DNS and remote desktop. Traceroute draws the path to a host as a chain of hops with a latency bar and a loss tag each, in rounds like mtr, with no root (a silent hop is shown as normal, a hop that only limits its answers is told apart from real loss). HTTP check makes one request with curl and shows the status, the timing as a waterfall (DNS, connect, TLS, waiting, transfer) and the days left of the site's certificate; ignoring certificate errors is an explicit switch. Public IP shows the address the internet sees (through Cloudflare's trace page) and says when your provider shares it between customers. Whois asks IANA and the registry it names (TCP port 43) and summarises the answer. Interfaces lists each adapter with its state, addresses, MAC, speed, the gateway, the DNS servers and the Wi-Fi network. Every result can be saved as text to ~/net-logs. Nothing leaves the board until you start a test. Works on the Pi Zero 2 W, Pi 3A+, Pi 5 and CM5. Needs a screen of at least 640x480 and a launcher with full-screen app support."
         }
       },
       "i18n": {
         "en": {
           "title": "Net Toolbox",
-          "summary": "The tools you reach for when the network misbehaves: a step-by-step diagnosis, ping, DNS lookup, port check and the interfaces.",
-          "description": "A full-screen network toolbox made for the deck's small screen and for touch. Diagnosis answers 'why is my internet broken?' in plain words, step by step: link, address, gateway, DNS, internet and a captive-portal check (a plain HTTP request to connectivitycheck.gstatic.com/generate_204). Ping shows every packet (ok, slow or lost), the loss, min/avg/max and the jitter; it needs no root (an unprivileged ICMP socket, allowed by net.ipv4.ping_group_range on Raspberry Pi OS). DNS lookup asks for A, AAAA, MX, TXT, NS or PTR records through the system's resolver, a typed one or 1.1.1.1, 8.8.8.8 and 9.9.9.9, and shows the CNAME chain, the answer time and the response code. Port check tells whether a TCP port of a host is open, closed or filtered, with presets for web, mail, SSH, DNS and remote desktop. Interfaces lists each adapter with its state, addresses, MAC, speed, the gateway, the DNS servers and the Wi-Fi network. Every result can be saved as text to ~/net-logs. Nothing leaves the board until you start a test. Works on the Pi Zero 2 W, Pi 3A+, Pi 5 and CM5. Needs a screen of at least 640x480 and a launcher with full-screen app support."
+          "summary": "The tools you reach for when the network misbehaves: a step-by-step diagnosis, ping, traceroute, DNS lookup, port check, HTTP check, public IP, whois and the interfaces.",
+          "description": "A full-screen network toolbox made for the deck's small screen and for touch. Diagnosis answers 'why is my internet broken?' in plain words, step by step: link, address, gateway, DNS, internet and a captive-portal check (a plain HTTP request to connectivitycheck.gstatic.com/generate_204). Ping shows every packet (ok, slow or lost), the loss, min/avg/max and the jitter; it needs no root (an unprivileged ICMP socket, allowed by net.ipv4.ping_group_range on Raspberry Pi OS). DNS lookup asks for A, AAAA, MX, TXT, NS or PTR records through the system's resolver, a typed one or 1.1.1.1, 8.8.8.8 and 9.9.9.9, and shows the CNAME chain, the answer time and the response code. Port check tells whether a TCP port of a host is open, closed or filtered, with presets for web, mail, SSH, DNS and remote desktop. Traceroute draws the path to a host as a chain of hops with a latency bar and a loss tag each, in rounds like mtr, with no root (a silent hop is shown as normal, a hop that only limits its answers is told apart from real loss). HTTP check makes one request with curl and shows the status, the timing as a waterfall (DNS, connect, TLS, waiting, transfer) and the days left of the site's certificate; ignoring certificate errors is an explicit switch. Public IP shows the address the internet sees (through Cloudflare's trace page) and says when your provider shares it between customers. Whois asks IANA and the registry it names (TCP port 43) and summarises the answer. Interfaces lists each adapter with its state, addresses, MAC, speed, the gateway, the DNS servers and the Wi-Fi network. Every result can be saved as text to ~/net-logs. Nothing leaves the board until you start a test. Works on the Pi Zero 2 W, Pi 3A+, Pi 5 and CM5. Needs a screen of at least 640x480 and a launcher with full-screen app support."
         }
       },
       "categories": [
@@ -160,9 +160,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.1.0",
+      "version": "0.2.0",
       "published_at": "2026-10-15T11:29:52+00:00",
-      "updated_at": "2026-10-15T11:29:52+00:00",
+      "updated_at": "2026-10-15T16:36:26+00:00",
       "review": {
         "status": "approved"
       },
@@ -171,12 +171,12 @@
       "download": {
         "type": "deb",
         "package": "net-toolbox",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/net-toolbox_0.1.0_arm64.deb",
-        "md5": "84f1ebbb230daaec4627ebbc53907f1c",
-        "sha256": "4311422e3036c6950215313d38ef3708fb8be642adc5031ff367a75550682875",
-        "size": 1488132
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/net-toolbox_0.2.0_arm64.deb",
+        "md5": "250244e350bb24bdc954cf6cc5814d0f",
+        "sha256": "1940ce04ca122243448ed9586dbab7af995215215c451e540af48d11770109a1",
+        "size": 1734848
       },
-      "depends": "libfreetype6, libinput10, libxkbcommon0",
+      "depends": "libfreetype6, libinput10, libxkbcommon0, curl, ca-certificates",
       "permissions": {
         "camera": false,
         "microphone": false,
