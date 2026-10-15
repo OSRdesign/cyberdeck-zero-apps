@@ -1,6 +1,6 @@
 # Net Toolbox
 
-Version 0.2.0 (draft; 0.1.0 is the published one), package `net-toolbox`. Part of
+Version 0.2.0, package `net-toolbox`. Part of
 [cyberdeck-zero-apps](../../README.md).
 
 Net Toolbox gathers the tools you reach for when a network misbehaves: a step-by-step **diagnosis** ("why is my
@@ -17,10 +17,10 @@ are not installed on the boards, and their output does not fit the small screen.
 
 The plan and the measured facts behind it are in the launcher's report 027 (`docs/dev/reports/027-net-toolbox.md`).
 
-**State of this version (0.2.0, draft):** the core and the pages of all nine tools (Home, Diagnosis, Ping, Traceroute,
+**State of this version (0.2.0):** the core and the pages of all nine tools (Home, Diagnosis, Ping, Traceroute,
 DNS lookup, Port check, HTTP check, Public IP, Whois, Interfaces) are written; the unit tests and the headless scenes
-pass; the board tests (`tests/BOARD-TESTS.md`) are still to be run on the deck and the Pi 3A+. The core of the four new
-tools is described in [0.2.0 (draft): the new tools' core](#020-draft-the-new-tools-core).
+pass; the pages ran on the deck (Zero 2 W); the board tests (`tests/BOARD-TESTS.md`) are still to be run on the Pi 3A+. The core of the four new
+tools is described in [0.2.0: the new tools' core](#020-the-new-tools-core).
 
 ## Pages and keys
 
@@ -131,7 +131,7 @@ open its page.
   addresses, `/proc/net/route`, `/etc/resolv.conf`, `/proc/net/wireless`; `/usr/sbin/iw dev <if> link` (full path:
   `/usr/sbin` is not in every PATH) through the shared `async_run` with a 1.5 s timeout, optional.
 
-## 0.2.0 (draft): the new tools' core
+## 0.2.0: the new tools' core
 
 The core (`src/core/`, no LVGL) of four more tools; their pages are described above (the screen code is in `src/ui/`:
 `rich_list.*` the list of rows of any height and the action cells, `chain.*` the hop rows, the badge, the waterfall and
@@ -328,14 +328,14 @@ python3 tools/make_registry.py --only net-toolbox --out <a folder outside packag
 
 ## Changes
 
-* 0.2.0 (draft), the pages: Home has nine rows; **Traceroute** with the chain of hops (node shapes and colours, latency
+* 0.2.0, the pages: Home has nine rows; **Traceroute** with the chain of hops (node shapes and colours, latency
   bars on one scale, loss tags, details in place), **HTTP check** (status badge, waterfall, certificate badge, rows;
   curl runs on the shared `async_run` and Stop ends it), **Public IP** (asks on entry, the carrier-grade NAT note, Whois
   of this address) and **Whois** (a summary that is never cut, the raw answer as compact rows); the scripted demonstration
   backend and the headless scenes for each state, the unit tests of the new wording (verdicts, days left, loss tags, node
   classes, waterfall scaling), the board steps.
 
-* 0.2.0 (draft): the core of traceroute / MTR (in-app, unprivileged, in rounds), the HTTP check (curl, certificate
+* 0.2.0: the core of traceroute / MTR (in-app, unprivileged, in rounds), the HTTP check (curl, certificate
   dates through curl or openssl), the public address (Cloudflare's trace) and whois (TCP 43 with referrals), their
   saved texts and settings, the unit tests; `depends` gains `curl, ca-certificates`.
 * 0.1.0: first version: interfaces, diagnosis with the health ladder, ping with the latency graph, jitter band
