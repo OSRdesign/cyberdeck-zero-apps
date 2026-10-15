@@ -1,6 +1,6 @@
 # Net Toolbox
 
-Version 0.1.0 (draft, not published), package `net-toolbox`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.1.0, package `net-toolbox`. Part of [cyberdeck-zero-apps](../../README.md).
 
 Net Toolbox gathers the tools you reach for when a network misbehaves: a step-by-step **diagnosis** ("why is my
 internet broken?") in plain words, **ping** with loss and jitter, a **DNS lookup** with a resolver you choose, a TCP
@@ -122,7 +122,7 @@ The contact sheets of the headless scenes (`build.sh host`, folder in *Build and
 
 ## Install
 
-From **Settings > Apps** once it is published. By hand:
+From **Settings > Apps**. By hand:
 
 ```sh
 python3 tools/make_registry.py --only net-toolbox --out <a folder outside packages/>
@@ -200,6 +200,6 @@ python3 tools/make_registry.py --only net-toolbox --out <a folder outside packag
 
 ## Changes
 
-* 0.1.0 (draft): first version: interfaces, diagnosis with the health ladder, ping with the latency graph, jitter band
+* 0.1.0: first version: interfaces, diagnosis with the health ladder, ping with the latency graph, jitter band
   and packet strip, DNS lookup and compare, port check, saved results and settings; the pages for touch and keys, the unit
   tests and the headless scenes. Board tests still to run.
