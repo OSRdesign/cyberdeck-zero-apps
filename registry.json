@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-10-15T16:36:26+00:00",
+  "generated_at": "2026-10-15T20:03:43+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CardputerZero"
@@ -188,10 +188,40 @@
       },
       "assets": {
         "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/icon.png",
-        "screenshots": []
+        "screenshots": [
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/01-home-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/02-diagnosis-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/03-ping-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/04-traceroute-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/05-http-check-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/06-dns-lookup-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/07-dns-compare-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/08-port-check-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/09-interfaces-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/10-diagnosis-pi3a.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/11-ping-pi3a.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/12-traceroute-pi3a.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/13-traceroute-720x720.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/14-http-check-1280x720.png"
+        ]
       },
       "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/icon.png",
-      "screenshots": []
+      "screenshots": [
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/01-home-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/02-diagnosis-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/03-ping-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/04-traceroute-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/05-http-check-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/06-dns-lookup-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/07-dns-compare-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/08-port-check-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/09-interfaces-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/10-diagnosis-pi3a.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/11-ping-pi3a.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/12-traceroute-pi3a.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/13-traceroute-720x720.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/14-http-check-1280x720.png"
+      ]
     },
     {
       "uuid": "2d352197-d45d-50d1-9f6f-75387ab6d9e8",
@@ -249,23 +279,23 @@
       "assets": {
         "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/icon.png",
         "screenshots": [
-          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/01-no-adapter-deck.png",
-          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/02-ports-deck.png",
-          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/03-port-deck.png",
-          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/04-identified-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/01-ports-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/02-port-800x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/03-behind-it-720x720.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/04-find-speed-1024x600.png",
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/05-terminal-deck.png",
-          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/06-ports-pi3a.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/06-gps-card-1280x720.png",
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/07-terminal-keyboard-pi3a.png"
         ]
       },
       "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/icon.png",
       "screenshots": [
-        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/01-no-adapter-deck.png",
-        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/02-ports-deck.png",
-        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/03-port-deck.png",
-        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/04-identified-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/01-ports-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/02-port-800x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/03-behind-it-720x720.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/04-find-speed-1024x600.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/05-terminal-deck.png",
-        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/06-ports-pi3a.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/06-gps-card-1280x720.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/07-terminal-keyboard-pi3a.png"
       ]
     },
@@ -324,10 +354,28 @@
       },
       "assets": {
         "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/icon.png",
-        "screenshots": []
+        "screenshots": [
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/01-overview-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/02-cpu-800x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/03-memory-720x720.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/04-network-1024x600.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/05-power-warning-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/06-temp-power-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/07-processes-800x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/08-storage-1280x720.png"
+        ]
       },
       "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/icon.png",
-      "screenshots": []
+      "screenshots": [
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/01-overview-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/02-cpu-800x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/03-memory-720x720.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/04-network-1024x600.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/05-power-warning-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/06-temp-power-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/07-processes-800x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/08-storage-1280x720.png"
+      ]
     },
     {
       "uuid": "b316a757-7d69-5f51-8ba3-1f47e9b229b6",

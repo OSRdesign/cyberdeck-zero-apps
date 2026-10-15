@@ -362,7 +362,7 @@ static void test_list_rows()
     CHECK(use_tone(95, 80, 95) == Tone::Error && use_tone(0, 85, 95) == Tone::Normal);
 }
 
-/* The package: X-MinSize equal to the app's minimum, Exec and Icon in root/, app.json complete and a draft. */
+/* The package: X-MinSize equal to the app's minimum, Exec and Icon in root/, app.json complete (a draft or published: the flag is not checked). */
 static void test_package()
 {
     const std::string app = CDK_APP_DIR;
@@ -384,7 +384,6 @@ static void test_package()
     CHECK(manifest.find("\"package\": \"system-monitor\"") != std::string::npos);
     CHECK(manifest.find("\"version\": \"0.2.0\"") != std::string::npos);
     CHECK(manifest.find("\"title\": \"System Monitor\"") != std::string::npos);
-    CHECK(manifest.find("\"draft\": true") != std::string::npos);
     CHECK(manifest.find("\"license\": \"MIT\"") != std::string::npos);
     CHECK(manifest.find("\"depends\": \"libfreetype6, libinput10, libxkbcommon0\"") != std::string::npos);
     CHECK(manifest.find("libc6") == std::string::npos);

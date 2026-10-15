@@ -96,7 +96,7 @@ void test_text_helpers()
     CHECK_EQ(printable(std::string("a\x01" "b", 3)), std::string("a\\x01b"));
 }
 
-/* The package: X-MinSize equal to the app's minimum, Exec in root/, app.json complete and a draft. */
+/* The package: X-MinSize equal to the app's minimum, Exec in root/, app.json complete (a draft or published: the flag is not checked). */
 static void test_package()
 {
     const std::string app = CDK_APP_DIR;
@@ -116,7 +116,6 @@ static void test_package()
     CHECK(manifest.find("\"package\": \"net-toolbox\"") != std::string::npos);
     CHECK(manifest.find("\"version\": \"0.3.0\"") != std::string::npos);
     CHECK(manifest.find("\"title\": \"Net Toolbox\"") != std::string::npos);
-    CHECK(manifest.find("\"draft\": true") != std::string::npos);
     CHECK(manifest.find("\"license\": \"MIT\"") != std::string::npos);
     CHECK(manifest.find("\"categories\": [\"Tools\"]") != std::string::npos);
     CHECK(manifest.find("\"permissions\": {\"network\": true}") != std::string::npos);

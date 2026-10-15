@@ -83,6 +83,24 @@ launcher component ([`LAUNCHER_REF`](../apps/_common/LAUNCHER_REF)). The header 
 Colours and fonts come from the widgets (black ground, Montserrat from `/usr/share/APPLaunch/share/font`, read at run
 time; do not bundle fonts that the launcher has).
 
+### Lists: Roller or CompactList
+
+Two list widgets, same keys and touch rule (a tap selects a row, a tap on the selected row acts); API and use in the
+launcher's [`docs/cp0_lvgl.en.md`](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/cp0_lvgl.en.md),
+"Lists" (decision 2026-10-14).
+
+| Use | For |
+|---|---|
+| `cp0::ui::Roller` | few big items you pick from: a choice list with a check on the current value, as in Settings |
+| `cp0::ui::CompactList` | data and app lists (System Monitor, Serial Console, Net Toolbox): top-aligned rows, scrolling only when the highlight reaches the bottom edge, a thin scrollbar that hides itself, section headings in grey capitals that are never selected |
+
+- `ListDensity::Compact` (5.0 mm rows) for dense data, where a tap only moves the highlight; `Comfortable` (7 mm) for
+  any list whose rows trigger an action.
+- Live data: `set_rows()` changes only the texts that changed and keeps the scroll and the highlight; `reset_rows()`
+  for new content.
+- **Status is never shown by colour alone.** Green, amber and red (`ValueTone` Ok / Warn / Bad) always come with a
+  word or a shape (*Power OK*, *Under-voltage*; a check, a cross, a dash).
+
 ### Touch and keyboard: both complete
 
 A touch-only board (Pi 3A+) and a keyboard-only use must each reach **every** function.
@@ -207,6 +225,9 @@ X-MinSize=640x480
 - **arm64 only.** A binary for another CPU installs and does not run.
 - **Version bumps.** Change `version`, rebuild (`python3 tools/make_registry.py`), commit the new `.deb` and `registry.json`. After an upgrade the
   tile keeps its place on the grid only if the `.desktop` file name is unchanged: **never rename it**.
+- **Publish the package you tested.** Put the exact `.deb` that passed the board tests in `packages/`, remove `draft`,
+  and write the registry with `python3 tools/make_registry.py --no-build` (a fresh build is not byte-identical). Check
+  that only that app's entry (and `generated_at`) changed; every other entry, and `device_targets`, stay as on `main`.
 - **Installing.** Settings > Apps asks for the deck user's **sudo password** (the `.deb` is installed as root; there are no root-free installs) for install,
   update and removal, up to three tries. Do not write a postinst that needs interaction, network or more than a few seconds; a failed
   maintainer script shows as `dpkg error`. The package must be removable cleanly: `prerm` stops your own processes, `postrm` leaves the user's data in `~`.
@@ -310,7 +331,8 @@ Add the app to the table in the repository [README](../README.md) (name, version
 
 The first apps predate the template. They are not wrong, but they do not all meet today's rules; do not copy their
 gaps. Known gaps (also tracked in their READMEs): LAN Scan and Wi-Fi Survey draw 320x170 (compat) and have no on-screen
-keyboard; Mesh Hop types with a physical keyboard only and does not declare `X-MinSize`; viz1090 reads its framebuffer through its own
+keyboard; Mesh Hop types with a physical keyboard only, and its published 0.3.0 does not declare `X-MinSize` (the
+source does since apps PR #11); viz1090 reads its framebuffer through its own
 shim; some still carry the old binary prefix, to be dropped at their next version (decision 7 of report 025). Fix these when you next
 release the app, not as a drive-by.
 
@@ -362,7 +384,9 @@ Copy into the pull request and tick.
 | 22 | `sh tools/branding/check-branding.sh` clean for the new files | [ ] |
 | 23 | Icon follows [ICON-PALETTE.md](ICON-PALETTE.md): 100x100 square transparent PNG, own hue (not green, not shared), own silhouette, two colours, strokes >= 9 px | [ ] |
 | 24 | Icon checked at 32 px and in greyscale on the review sheet (`python tools/icons/make_icons.py`), distinct from every other tile | [ ] |
+| 25 | Data and app lists on `CompactList`; no status shown by colour alone | [ ] |
 
-> **Icon upgrades:** the launcher reads an icon's size once and keeps it until it restarts. An app update that ships an icon of a different
-> size can look cropped on its tile until the launcher is restarted. Keep the icon at 100x100 from the first version on.
+> **Icon upgrades:** a launcher older than PR #46 (2026-10-14) reads an icon's size once and keeps it until it restarts, so an app
+> update that ships an icon of a different size can look cropped on its tile; a current launcher reloads the tile within about 3 s
+> when the icon file changes. Keep the icon at 100x100 from the first version on.
 

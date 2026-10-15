@@ -30,6 +30,25 @@ far). The core is described in [0.3.0 (draft): the new tools' core](#030-draft-t
 adapter, Ethernet): see [The network chooser](#the-network-chooser-03). The new pages have run in the headless scenes
 only: the board steps (`tests/BOARD-TESTS.md`, B13 to B15) are still to be run.
 
+## Screenshots
+
+Shots 01 to 12 are real captures of the app running on the boards: the deck (Pi Zero 2 W, 640x480) and a Pi 3A+ with
+the Waveshare 4.3" DSI panel (800x480), on a home network. Shots 13 and 14 are rendered by the app's headless harness
+(`build.sh host`) with fixture data at other screen sizes, **not photographs of a panel**; the contact sheets of the headless scenes
+(folder in *Build and test*) show every page at 640x480, 800x480, 720x720, 1024x600 and 1280x720.
+
+| | |
+|---|---|
+| ![Home](screenshots/01-home-deck.png) 640x480, deck. Home: the active interface and its address on top, then the tools | ![Diagnosis](screenshots/02-diagnosis-deck.png) 640x480, deck. Diagnosis: the six rungs all green, *Everything works* |
+| ![Ping](screenshots/03-ping-deck.png) 640x480, deck. Ping 1.1.1.1: the latency graph with one slow spike (amber dot), the packet strip and the statistics | ![Traceroute](screenshots/04-traceroute-deck.png) 640x480, deck. Traceroute to 8.8.8.8: the chain of hops, two silent ones (*no reply*), a bar per hop |
+| ![HTTP check](screenshots/05-http-check-deck.png) 640x480, deck. HTTP check of example.com: *200 OK*, the timing waterfall (DNS, Connect, TLS, Waiting, Transfer) and the certificate's days left | ![DNS lookup](screenshots/06-dns-lookup-deck.png) 640x480, deck. DNS lookup: the answer for github.com A, its TTL and the resolver used |
+| ![Compare resolvers](screenshots/07-dns-compare-deck.png) 640x480, deck. Compare resolvers: the system's, Cloudflare, Google and Quad9 with their times | ![Port check](screenshots/08-port-check-deck.png) 640x480, deck. Port check of the router's web ports: *Open*, with each port's connect time |
+| ![Interfaces](screenshots/09-interfaces-deck.png) 640x480, deck. Interfaces: wlan0 with its state, addresses, MAC, network and signal | ![Diagnosis on the Pi 3A+](screenshots/10-diagnosis-pi3a.png) 800x480, Pi 3A+. The same diagnosis on the wider screen |
+| ![Ping on the Pi 3A+](screenshots/11-ping-pi3a.png) 800x480, Pi 3A+. Ping 8.8.8.8 with the jitter band shaded behind the line | ![Traceroute on the Pi 3A+](screenshots/12-traceroute-pi3a.png) 800x480, Pi 3A+. Traceroute scrolled to the end: hop 10, *dns.google*, reached |
+| ![Traceroute render](screenshots/13-traceroute-720x720.png) 720x720 render, HackBerry size (square). The whole chain of nine hops fits on the square screen | ![HTTP check render](screenshots/14-http-check-1280x720.png) 1280x720 render, larger screen. The HTTP check with the certificate's subject, issuer and expiry |
+
+The screens above come from several screen sizes: the app adapts to the screen it runs on.
+
 ## Pages and keys
 
 Every page is a column under the shared header (title, the on-screen Esc, the status strip), laid out by the launcher's
@@ -64,11 +83,6 @@ Traceroute to the chain and back.
 
 Leaving a page, and leaving the app, stops its worker thread and ends its curl (Stop does the same): nothing runs in the
 background (a cancel ends a probe within 50 ms). The page changes were checked for leaks (`tests/scenes/leak.scene`).
-
-## Screenshots
-
-The contact sheets of the headless scenes (`build.sh host`, folder in *Build and test*) show every page at 640x480,
-800x480, 720x720, 1024x600 and 1280x720. Photos from the deck and the Pi 3A+ are to be added after the board tests.
 
 ## What each tool sends, and to whom
 
