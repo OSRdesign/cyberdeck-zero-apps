@@ -8,6 +8,22 @@ a raw terminal it first shows the serial ports it finds, says what is plugged in
 can find the speed by itself, can find out **what is on the other end** (the board or firmware behind a USB-serial
 adapter), then opens a terminal page.
 
+## Screenshots
+
+The ports, port, result and Find the speed pages are rendered by the app's headless harness (`build.sh host`, the
+demonstration world's simulated boards) with fixture data at the deck's size and at other screen sizes, **not
+photographs of the panel**. The two terminal shots are real captures, from the deck (640x480) and from a Pi 3A+ with the
+Waveshare 4.3" DSI panel (800x480, touch only); the terminal page did not change in 0.4.0.
+
+| | |
+|---|---|
+| ![Ports](screenshots/01-ports-640x480.png) 640x480 render, deck size. The ports list: each board named from its USB descriptor, its tty on the right, the recommended speed in the status band | ![Port page](screenshots/02-port-800x480.png) 800x480 render, Pi 3A+ size. The port page's *What is connected* rows: the exact chip, maker, USB product string, id, speed, driver and what it typically is |
+| ![Behind it](screenshots/03-behind-it-720x720.png) 720x720 render, HackBerry size (square). The result card after Ask the device: an ESP32-S3 behind a CH340 adapter, its firmware, MAC and confidence | ![Find the speed](screenshots/04-find-speed-1024x600.png) 1024x600 render, larger screen. Find the speed found 57600 on an FT232R cable and set it |
+| ![Terminal](screenshots/05-terminal-deck.png) 640x480, deck (real capture). The terminal on a MicroPython REPL; a keyboard sends keys straight to the board | ![GPS card](screenshots/06-gps-card-1280x720.png) 1280x720 render, larger screen. A u-blox GPS receiver found by Listen behind a PL2303 cable, recommended 9600 |
+| ![Terminal with the on-screen keyboard](screenshots/07-terminal-keyboard-pi3a.png) 800x480, Pi 3A+ (real capture). Touch only: a text line and the on-screen keyboard with Esc, Tab, Ctrl and arrows | |
+
+The screens above come from several screen sizes: the app adapts to the screen it runs on.
+
 ## What it does
 
 * **Ports page.** Every USB serial port (`ttyUSB*`, `ttyACM*`) as soon as it is plugged in, refreshed every second
@@ -116,21 +132,6 @@ adapter), then opens a terminal page.
   itself, with the same settings, when the same board comes back (even on another ttyUSB number).
 * **No permission**: when the user is not in the `dialout` group, the ports page has a *Serial port access - How to
   fix* row, and a refused open shows a dialog with the exact fix (`sudo usermod -aG dialout $USER`, then reboot).
-
-## Screenshots
-
-On the deck (640x480) and on a Pi 3A+ with the Waveshare 4.3" DSI panel (800x480, touch only).
-
-| | |
-|---|---|
-| ![No adapter](screenshots/01-no-adapter-deck.png) | ![Ports](screenshots/02-ports-deck.png) |
-| Nothing plugged in. | An ESP32-S3 identified by its USB descriptor, with the recommended speed. |
-| ![Port page](screenshots/03-port-deck.png) | ![Identified](screenshots/04-identified-deck.png) |
-| The port page: recommended settings and the three ways to identify the board. | After "Ask the device": an ESP32-S3 board running MicroPython v1.22.0. |
-| ![Terminal](screenshots/05-terminal-deck.png) | ![Ports on the Pi 3A+](screenshots/06-ports-pi3a.png) |
-| The terminal (MicroPython REPL); a keyboard sends keys straight to the board. | The same list on the 800x480 touch screen. |
-| ![Terminal with the on-screen keyboard](screenshots/07-terminal-keyboard-pi3a.png) | |
-| Touch only: a text line and the on-screen keyboard with Esc, Tab, Ctrl and arrows. | |
 
 ## Keys and touch
 
