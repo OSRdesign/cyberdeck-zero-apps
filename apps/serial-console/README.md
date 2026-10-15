@@ -1,6 +1,6 @@
 # Serial Console
 
-Version 0.4.0 (draft, not published yet), package `serial-console`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.4.0, package `serial-console`. Part of [cyberdeck-zero-apps](../../README.md).
 
 Serial Console talks to a USB-serial adapter or a microcontroller board (Arduino, ESP32, Raspberry Pi Pico, a GPS, a
 router console...) from the deck. It is a full-screen touch app made for the small screen: instead of dropping you into
@@ -215,7 +215,7 @@ The identification is kept in the port's section of the settings file as `id_*` 
   there. The switches say *On* / *Off*, a running probe or search says *Stop*, long notes are headings. The values of
   Speed, Frame, Enter sends and Backspace sends stay on the roller (a pick-one list with a check mark); the terminal is
   unchanged. Built against the launcher main after #47.
-* Unreleased (the app is still a draft): a new tile icon, the amber connector badge of the icon system
+* 0.4.0 (published): a new tile icon, the amber connector badge of the icon system
   (`docs/ICON-PALETTE.md`), 100x100 so the launcher draws it without stretching.
 * **0.3.1**: found on the deck at 640x480: a long device name no longer hides behind dots when a shorter one says the
   same (*ESP32 native USB* instead of *ESP32 native USB (CDC)*, *Due (programming)*, *Uno R4 WiFi*, *ST-LINK/V2-1 VCP*...:

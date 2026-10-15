@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-10-14T23:13:05+00:00",
+  "generated_at": "2026-10-15T00:04:47+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CardputerZero"
@@ -132,6 +132,82 @@
       },
       "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mesh-hop/icon.png",
       "screenshots": []
+    },
+    {
+      "uuid": "2d352197-d45d-50d1-9f6f-75387ab6d9e8",
+      "share_code": "serial-console",
+      "title": "Serial Console",
+      "summary": "Finds your USB-serial adapters and boards, tells what is plugged in and what is behind it, recommends the settings, and talks to it.",
+      "description": "A full-screen serial console made for the deck's small screen. It lists the serial ports as they are plugged in (USB-serial adapters and boards on ttyUSB/ttyACM, the on-board UARTs on request) and names what is connected from its USB ids: FTDI (the exact chip), CP210x, CH340/CH341/CH9102 and PL2303 adapters, Arduino, ESP32 and Raspberry Pi Pico boards, ST-LINK probes, u-blox GPS receivers, a Cisco console cable and more; an RP2040 in BOOTSEL mode is shown as the USB drive it is. 'What is on the other end?' finds the board or firmware behind an adapter: Listen (nothing sent) recognises ESP-IDF and Arduino-ESP32 programs, the ESP32 and ESP8266 boot ROMs, Meshtastic, MicroPython and CircuitPython, Marlin, GRBL, Klipper, U-Boot, Linux, OpenWrt, MikroTik and Cisco consoles, AT modems, GPS receivers (NMEA, UBX) and more; Reset and listen (after a confirmation) restarts the board with DTR/RTS and reads its boot; Ask the device (each probe confirmed, listing what it sends) asks MicroPython, an AT modem, Marlin, GRBL, the Arduino boot loader (the AVR chip) or the ESP boot loader (the chip and MAC), read-only. The result card (chip, firmware, version, boot output, evidence) is remembered per port and sets the recommended speed. Each port has a setup page: what is connected and what it typically is, the recommended speed and why, speed (1200 to 921600, 74880 included), frame (8N1, 7E1, 8E1, 8O1, 7O1, 8N2), local echo, what Enter and Backspace send, a log file in ~/serial-logs, and Find the speed, which listens at each speed and picks the one where the text is clean. The settings are remembered per port. The terminal page shows the received text (colour codes removed, never garbage), with RX/TX counters, pause, clear, a toolbar for Ctrl-C, Ctrl-D, Ctrl-Z, Tab, Esc, Enter, the log and a board reset (DTR/RTS pulse), and reconnects by itself when the board is unplugged and plugged in again. With a keyboard every key goes to the board; touch only, a line field with the on-screen keyboard. Needs a screen of at least 640x480, a launcher with full-screen app support, and the user in the dialout group.",
+      "locales": {
+        "en": {
+          "title": "Serial Console",
+          "summary": "Finds your USB-serial adapters and boards, tells what is plugged in and what is behind it, recommends the settings, and talks to it.",
+          "description": "A full-screen serial console made for the deck's small screen. It lists the serial ports as they are plugged in (USB-serial adapters and boards on ttyUSB/ttyACM, the on-board UARTs on request) and names what is connected from its USB ids: FTDI (the exact chip), CP210x, CH340/CH341/CH9102 and PL2303 adapters, Arduino, ESP32 and Raspberry Pi Pico boards, ST-LINK probes, u-blox GPS receivers, a Cisco console cable and more; an RP2040 in BOOTSEL mode is shown as the USB drive it is. 'What is on the other end?' finds the board or firmware behind an adapter: Listen (nothing sent) recognises ESP-IDF and Arduino-ESP32 programs, the ESP32 and ESP8266 boot ROMs, Meshtastic, MicroPython and CircuitPython, Marlin, GRBL, Klipper, U-Boot, Linux, OpenWrt, MikroTik and Cisco consoles, AT modems, GPS receivers (NMEA, UBX) and more; Reset and listen (after a confirmation) restarts the board with DTR/RTS and reads its boot; Ask the device (each probe confirmed, listing what it sends) asks MicroPython, an AT modem, Marlin, GRBL, the Arduino boot loader (the AVR chip) or the ESP boot loader (the chip and MAC), read-only. The result card (chip, firmware, version, boot output, evidence) is remembered per port and sets the recommended speed. Each port has a setup page: what is connected and what it typically is, the recommended speed and why, speed (1200 to 921600, 74880 included), frame (8N1, 7E1, 8E1, 8O1, 7O1, 8N2), local echo, what Enter and Backspace send, a log file in ~/serial-logs, and Find the speed, which listens at each speed and picks the one where the text is clean. The settings are remembered per port. The terminal page shows the received text (colour codes removed, never garbage), with RX/TX counters, pause, clear, a toolbar for Ctrl-C, Ctrl-D, Ctrl-Z, Tab, Esc, Enter, the log and a board reset (DTR/RTS pulse), and reconnects by itself when the board is unplugged and plugged in again. With a keyboard every key goes to the board; touch only, a line field with the on-screen keyboard. Needs a screen of at least 640x480, a launcher with full-screen app support, and the user in the dialout group."
+        }
+      },
+      "i18n": {
+        "en": {
+          "title": "Serial Console",
+          "summary": "Finds your USB-serial adapters and boards, tells what is plugged in and what is behind it, recommends the settings, and talks to it.",
+          "description": "A full-screen serial console made for the deck's small screen. It lists the serial ports as they are plugged in (USB-serial adapters and boards on ttyUSB/ttyACM, the on-board UARTs on request) and names what is connected from its USB ids: FTDI (the exact chip), CP210x, CH340/CH341/CH9102 and PL2303 adapters, Arduino, ESP32 and Raspberry Pi Pico boards, ST-LINK probes, u-blox GPS receivers, a Cisco console cable and more; an RP2040 in BOOTSEL mode is shown as the USB drive it is. 'What is on the other end?' finds the board or firmware behind an adapter: Listen (nothing sent) recognises ESP-IDF and Arduino-ESP32 programs, the ESP32 and ESP8266 boot ROMs, Meshtastic, MicroPython and CircuitPython, Marlin, GRBL, Klipper, U-Boot, Linux, OpenWrt, MikroTik and Cisco consoles, AT modems, GPS receivers (NMEA, UBX) and more; Reset and listen (after a confirmation) restarts the board with DTR/RTS and reads its boot; Ask the device (each probe confirmed, listing what it sends) asks MicroPython, an AT modem, Marlin, GRBL, the Arduino boot loader (the AVR chip) or the ESP boot loader (the chip and MAC), read-only. The result card (chip, firmware, version, boot output, evidence) is remembered per port and sets the recommended speed. Each port has a setup page: what is connected and what it typically is, the recommended speed and why, speed (1200 to 921600, 74880 included), frame (8N1, 7E1, 8E1, 8O1, 7O1, 8N2), local echo, what Enter and Backspace send, a log file in ~/serial-logs, and Find the speed, which listens at each speed and picks the one where the text is clean. The settings are remembered per port. The terminal page shows the received text (colour codes removed, never garbage), with RX/TX counters, pause, clear, a toolbar for Ctrl-C, Ctrl-D, Ctrl-Z, Tab, Esc, Enter, the log and a board reset (DTR/RTS pulse), and reconnects by itself when the board is unplugged and plugged in again. With a keyboard every key goes to the board; touch only, a line field with the on-screen keyboard. Needs a screen of at least 640x480, a launcher with full-screen app support, and the user in the dialout group."
+        }
+      },
+      "categories": [
+        "Tools"
+      ],
+      "author": {
+        "github": "OSRdesign",
+        "display_name": "OSRdesign"
+      },
+      "version": "0.4.0",
+      "published_at": "2026-10-15T00:04:47+00:00",
+      "updated_at": "2026-10-15T00:04:47+00:00",
+      "review": {
+        "status": "approved"
+      },
+      "license": "MIT",
+      "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/serial-console",
+      "download": {
+        "type": "deb",
+        "package": "serial-console",
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/serial-console_0.4.0_arm64.deb",
+        "md5": "5e1b2abc75e0d312b783ebe3eb8cd895",
+        "sha256": "9f86d6fdcb869dfb76cd936326eb55f21a4ac058f282aff1ebfd7cde5b90657a",
+        "size": 1507546
+      },
+      "depends": "libfreetype6, libinput10, libxkbcommon0",
+      "permissions": {
+        "camera": false,
+        "microphone": false,
+        "imu": false,
+        "network": false,
+        "additional_hardware": true,
+        "background_service": false,
+        "external_display": false
+      },
+      "assets": {
+        "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/icon.png",
+        "screenshots": [
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/01-no-adapter-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/02-ports-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/03-port-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/04-identified-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/05-terminal-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/06-ports-pi3a.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/07-terminal-keyboard-pi3a.png"
+        ]
+      },
+      "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/icon.png",
+      "screenshots": [
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/01-no-adapter-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/02-ports-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/03-port-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/04-identified-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/05-terminal-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/06-ports-pi3a.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/07-terminal-keyboard-pi3a.png"
+      ]
     },
     {
       "uuid": "2ac794f7-c2d8-572f-a0bb-1a895856db77",

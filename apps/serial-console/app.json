@@ -10,6 +10,5 @@
   "license": "MIT",
   "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/serial-console",
   "depends": "libfreetype6, libinput10, libxkbcommon0",
-  "permissions": {"additional_hardware": true},
-  "draft": true
+  "permissions": {"additional_hardware": true}
 }
