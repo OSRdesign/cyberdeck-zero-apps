@@ -1,0 +1,16 @@
+# HTTP check, the name cannot be found
+title Net Toolbox: HTTP check, the name cannot be found
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO http=e-resolve,http_url=https://nx.example
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key enter
+key enter
+shot result
+expect text "Name not found"
+expect notext "Message cut off"

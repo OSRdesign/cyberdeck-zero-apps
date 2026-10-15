@@ -1,0 +1,21 @@
+# Public IP, IPv4 and IPv6
+title Net Toolbox: Public IP, IPv4 and IPv6
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO pubip=both
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+shot result
+expect text "203.0.113.7"
+expect text "2001:db8:1f2:a3::7"
+expect text "Switzerland (CH)"
+expect text "ZRH"
+key end
+shot actions
+expect notext "Message cut off"

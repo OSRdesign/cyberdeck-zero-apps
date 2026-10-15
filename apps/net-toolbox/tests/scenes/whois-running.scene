@@ -1,0 +1,23 @@
+# Whois, busy, then stopped
+title Net Toolbox: Whois, busy, then stopped
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO whois=running,whois_query=example.com
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+key down
+key enter
+shot busy
+expect text "Asking whois.iana.org..."
+expect text "Stop"
+key enter
+shot stopped
+expect text "Stopped"
+expect notext "Message cut off"

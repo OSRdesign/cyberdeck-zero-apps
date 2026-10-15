@@ -65,6 +65,14 @@ private:
     Draw draw_;
 };
 
+/* the drawing primitives of charts.cpp, for the other panels (chain.cpp): a filled or ringed rectangle (radius
+ * LV_RADIUS_CIRCLE for a disc), a line, a dot, the glyph of a mark in a disc of radius r */
+void paint_fill(lv_layer_t *layer, const lv_area_t &a, std::uint32_t rgb, int radius = 0, int opa = LV_OPA_COVER);
+void paint_ring(lv_layer_t *layer, const lv_area_t &a, std::uint32_t rgb, int width, int radius);
+void paint_line(lv_layer_t *layer, int x1, int y1, int x2, int y2, std::uint32_t rgb, int width, bool round = false);
+void paint_dot(lv_layer_t *layer, int cx, int cy, int r, std::uint32_t rgb);
+void paint_glyph(lv_layer_t *layer, int cx, int cy, int r, Mark mark, std::uint32_t rgb);
+
 /* a state mark drawn in a w x w box: a disc of `rgb` with the glyph of `mark` in ink, or (Mark::None) a ring */
 void draw_mark(lv_layer_t *layer, int cx, int cy, int r, Mark mark, std::uint32_t rgb, int flash = 0);
 /* a spinning arc of `rgb` in a ring of the track colour; phase in degrees */

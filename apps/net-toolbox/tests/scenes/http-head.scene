@@ -1,0 +1,26 @@
+# HTTP check, HEAD
+title Net Toolbox: HTTP check, HEAD
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO http=head,http_method=HEAD,http_url=https://example.com
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key enter
+key enter
+shot result
+key end
+shot settings
+expect text "HEAD"
+key up
+key up
+key up
+key up
+key up
+key up
+shot size
+expect text "none (HEAD asks for the headers only)"
+expect notext "Message cut off"

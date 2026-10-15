@@ -265,4 +265,157 @@ std::string format_diagnosis(const DiagReport &r)
     return out;
 }
 
+std::string format_trace(const TraceSnapshot &s)
+{
+    std::string out = "Target: " + s.target;
+    if (!s.address.empty() && s.address != s.target) out += " (" + s.address + ")";
+    out += "\n";
+    if (!s.resolved_by.empty()) out += "Resolved by: " + s.resolved_by + "\n";
+    if (!s.method.empty()) out += "Probes: " + s.method + (s.method_note.empty() ? "" : " (" + s.method_note + ")") + "\n";
+    if (!s.error.empty()) out += "Error: " + s.error + "\n";
+    out += "Rounds: " + std::to_string(s.rounds) + "\n";
+    if (s.reached) out += "Destination reached at hop " + std::to_string(s.dest_hop) + "\n";
+    else if (s.unreachable && s.dest_hop > 0 && s.dest_hop <= static_cast<int>(s.hops.size()))
+        out += "Unreachable at hop " + std::to_string(s.dest_hop) + " (" + s.hops[s.dest_hop - 1].unreachable + ")\n";
+    else if (s.state != TraceSnapshot::State::Failed)
+        out += "Destination not reached (" + std::to_string(s.max_hops) + " hops at most)\n";
+    if (s.shown) out += "Hop  Address  Loss  Sent  Last  Avg  Best  Worst  Jitter\n";
+    for (std::size_t i = 0; i < s.shown && i < s.hops.size(); ++i) {
+        const TraceHop &h = s.hops[i];
+        out += (h.ttl < 10 ? " " : "") + std::to_string(h.ttl) + "  ";
+        if (h.addresses.empty()) {
+            out += h.silent ? "no answer (silent hop)\n" : "waiting\n";
+            continue;
+        }
+        out += h.addresses[0].address;
+        if (!h.addresses[0].name.empty()) out += " (" + printable(h.addresses[0].name) + ")";
+        const PingStats &st = h.stats;
+        out += "  " + fmt_pct(st.loss_pct()) + "  " + std::to_string(st.transmitted);
+        if (st.received)
+            out += "  " + fmt_ms(st.last_ms) + "  " + fmt_ms(st.avg_ms()) + "  " + fmt_ms(st.min_ms) + "  " +
+                   fmt_ms(st.max_ms) + "  " + fmt_ms(st.jitter_ms());
+        if (h.destination) out += "  destination";
+        if (!h.unreachable.empty()) out += "  " + h.unreachable;
+        out += "\n";
+        if (h.loss_only_here) out += "    loss only at this hop: likely ICMP rate limiting, not a real problem\n";
+        for (std::size_t k = 1; k < h.addresses.size(); ++k) {
+            out += "    also " + h.addresses[k].address;
+            if (!h.addresses[k].name.empty()) out += " (" + printable(h.addresses[k].name) + ")";
+            out += ", " + std::to_string(h.addresses[k].count) + " answers\n";
+        }
+        if (h.other_answers) out += "    and " + std::to_string(h.other_answers) + " answers from other addresses\n";
+    }
+    if (!s.reached && !s.unreachable && s.shown < s.hops.size())
+        out += "Hops " + std::to_string(s.shown + 1) + " to " + std::to_string(s.hops.size()) + " did not answer\n";
+    return out;
+}
+
+std::string format_httpcheck(const HttpCheckResult &r)
+{
+    std::string out = "URL: " + r.url + (r.head ? " (HEAD)" : "") + (r.insecure ? " (certificate errors ignored)" : "") +
+                      "\n";
+    if (r.answered) {
+        out += "Status: " + std::to_string(r.status) + (r.reason.empty() ? "" : " " + r.reason);
+        if (!r.http_version.empty()) out += ", " + r.http_version;
+        out += "\n";
+    }
+    if (!r.final_url.empty() && r.final_url != r.url && r.final_url != r.url + "/")
+        out += "Final URL: " + r.final_url + "\n";
+    if (r.redirects) out += "Redirects: " + std::to_string(r.redirects) + "\n";
+    if (!r.redirect_url.empty()) out += "Redirects to: " + r.redirect_url + " (not followed)\n";
+    if (!r.remote_ip.empty()) out += "Server: " + r.remote_ip + " port " + std::to_string(r.remote_port) + "\n";
+    if (r.answered && !r.head) out += "Size: " + std::to_string(r.size_bytes) + " bytes\n";
+    const HttpTimings &t = r.timings;
+    if (t.valid) {
+        out += "Timing: DNS " + fmt_ms(t.dns_ms);
+        if (t.connected) out += ", connect " + fmt_ms(t.connect_ms);
+        if (t.tls) out += ", TLS " + fmt_ms(t.tls_ms);
+        if (t.first_byte) out += ", wait " + fmt_ms(t.wait_ms) + ", transfer " + fmt_ms(t.transfer_ms);
+        if (t.redirect_ms > 0) out += ", redirects " + fmt_ms(t.redirect_ms);
+        out += ", total " + fmt_ms(t.total_ms) + "\n";
+    }
+    const CertInfo &c = r.cert;
+    if (c.present) {
+        out += "Certificate: " + printable(c.subject) + "\n";
+        if (!c.issuer.empty()) out += "  issued by " + printable(c.issuer) + "\n";
+        if (!c.not_before.empty() || !c.not_after.empty())
+            out += "  valid from " + c.not_before + " to " + c.not_after + "\n";
+        if (c.has_days) {
+            if (c.expired) out += "  expired " + std::to_string(-c.days_left) + " days ago\n";
+            else out += "  " + std::to_string(c.days_left) + " days left\n";
+        }
+        if (c.not_yet_valid) out += "  not valid yet\n";
+        out += "  (read by " + c.source + ")\n";
+    }
+    if (r.problem != HttpProblem::None) out += "Problem: " + r.problem_words + "\n";
+    if (!r.curl_message.empty() && r.problem != HttpProblem::None) out += "curl: " + printable(r.curl_message) + "\n";
+    if (!r.cert_note.empty()) out += "Note: " + r.cert_note + "\n";
+    return out;
+}
+
+std::string format_publicip(const PublicIpResult &r, const std::string &interface_ip)
+{
+    std::string out;
+    const auto family = [&](const char *label, const PublicIpFamily &f) {
+        out += label;
+        if (!f.tried) out += ": not asked\n";
+        else if (!f.ok) out += ": " + f.error + "\n";
+        else {
+            out += ": " + f.trace.ip + " (" + ip_class_name(f.cls) + ")";
+            if (!f.trace.loc.empty()) out += ", country " + f.trace.loc;
+            if (!f.trace.colo.empty()) out += ", Cloudflare site " + f.trace.colo;
+            out += "\n";
+        }
+    };
+    family("IPv4", r.v4);
+    family("IPv6", r.v6);
+    if (!interface_ip.empty()) {
+        out += "Board address: " + interface_ip;
+        switch (nat_kind(interface_ip, r.v4.ok ? r.v4.trace.ip : std::string())) {
+        case NatKind::Direct: out += " (the public address itself)\n"; break;
+        case NatKind::Nat: out += " (behind a router: NAT)\n"; break;
+        case NatKind::Cgnat: out += " (behind carrier-grade NAT: the provider shares the public address)\n"; break;
+        case NatKind::Unknown: out += "\n"; break;
+        }
+    }
+    return out;
+}
+
+std::string format_whois(const WhoisResult &r)
+{
+    std::string out = "Query: " + r.object + (r.is_ip ? " (address)" : " (domain)") + "\n";
+    const WhoisSummary &s = r.summary;
+    const auto field = [&](const char *label, const std::string &v) {
+        if (!v.empty()) out += std::string(label) + ": " + v + "\n";
+    };
+    const auto list = [&](const char *label, const std::vector<std::string> &v) {
+        if (v.empty()) return;
+        out += std::string(label) + ":";
+        for (const std::string &x : v) out += " " + x;
+        out += "\n";
+    };
+    field("Registrar", s.registrar);
+    field("Created", s.created);
+    field("Updated", s.updated);
+    field("Expires", s.expires);
+    list("Status", s.status);
+    list("Name servers", s.name_servers);
+    field("Network", s.netname);
+    field("Organisation", s.organisation);
+    field("Country", s.country);
+    field("Range", s.cidr);
+    field("AS", s.as_number);
+    field("Abuse contact", s.abuse);
+    if (!r.note.empty()) out += "Note: " + r.note + "\n";
+    for (const WhoisAnswer &a : r.answers) {
+        out += "--- " + a.server + " (asked \"" + a.query + "\")";
+        if (!a.ok) out += ": " + a.error;
+        else if (a.truncated) out += ", cut at 64 kB";
+        out += "\n";
+        for (const std::string &line : a.lines) out += line + "\n";
+    }
+    if (r.lines_truncated) out += "--- (cut at " + std::to_string(kWhoisMaxLines) + " lines)\n";
+    return out;
+}
+
 } // namespace nt

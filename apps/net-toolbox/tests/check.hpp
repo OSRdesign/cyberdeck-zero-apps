@@ -95,3 +95,13 @@ void test_netlog();
 void test_settings();
 void test_worker();
 void test_ui_model();
+void test_ui_model_02();
+/* 0.2 */
+void test_cmdrun();
+void test_httpcheck();
+void test_publicip();
+void test_whois();
+void test_trace_engine();
+void test_trace_rdns();
+void test_trace_real();
+void test_netlog_02();

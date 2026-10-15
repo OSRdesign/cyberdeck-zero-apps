@@ -12,6 +12,13 @@
  *       ping=mixed | unavailable | failed | stopped | lost                the ping page
  *       saved=a.example+b.example                                        saved ping targets
  *       ping_target=, dns_name=, dns_type=, dns_resolver=, port_host=, port=, port_preset=   the values the pages start with
+ *       trace=healthy | silent | ratelimit | loss | unreached | unreach | starting | resolving   the traceroute chain (Start
+ *             shows it as running, then Stop gives the verdict)
+ *       http=ok | redirect | moved | 404 | 500 | head | plain | running | e-resolve | e-refused | e-timeout | cert-expired |
+ *             cert-self | cert-mismatch | cert5 | cert20 | cert-ignored      the HTTP check, answered at once
+ *       pubip=both | v4 | cgnat | offline | running        the public address page (local=<address> sets the local address)
+ *       whois=domain | arin | ripe | notfound | long | offline | running        the whois page
+ *       trace_target=, http_url=, http_method=GET|HEAD, http_insecure=1, whois_query=   the values those pages start with
  *   NET_TOOLBOX_FIXTURE   a folder of tests/fixtures (deck, deck-offline, pi-3a-plus, pi-5): the interfaces come from
  *       it (also with the real tools). Demonstrations use "deck" unless it names another.
  *   DNS and port check answer by what is typed: a name starting "nx" does not exist, "slow" or "timeout" never
@@ -21,12 +28,17 @@
 
 #include "diagnosis.hpp"
 #include "dns_client.hpp"
+#include "httpcheck.hpp"
 #include "interfaces.hpp"
 #include "ping.hpp"
 #include "portcheck.hpp"
+#include "publicip.hpp"
 #include "source.hpp"
+#include "traceroute.hpp"
+#include "whois.hpp"
 
 #include <cstdint>
+#include <ctime>
 #include <functional>
 #include <map>
 #include <memory>
@@ -50,6 +62,11 @@ using DiagRunner = Runner<DiagOptions, DiagReport>;
 using PingRunner = Runner<PingConfig, PingSnapshot>;
 using DnsRunner = Runner<DnsRequest, DnsSnapshot>;
 using PortRunner = Runner<PortRequest, PortSnapshot>;
+struct NoRequest {};
+using TraceRunner = Runner<TraceConfig, TraceSnapshot>;
+using HttpRunner = Runner<HttpCheckRequest, HttpCheckSnapshot>;
+using PublicIpRunner = Runner<NoRequest, PublicIpSnapshot>;
+using WhoisRunner = Runner<WhoisRequest, WhoisSnapshot>;
 
 /* a core session as a Runner */
 template <class Session, class Req, class Snap> class SessionRunner : public Runner<Req, Snap> {
@@ -102,11 +119,18 @@ struct Backend {
     std::unique_ptr<PingRunner> ping;
     std::unique_ptr<DnsRunner> dns;
     std::unique_ptr<PortRunner> port;
+    std::unique_ptr<TraceRunner> trace;
+    std::unique_ptr<HttpRunner> http;
+    std::unique_ptr<PublicIpRunner> pubip;
+    std::unique_ptr<WhoisRunner> whois;
     std::function<PingAvailability()> ping_available;
+    std::function<std::time_t()> wall_clock;  /* the days left are counted from it: a demonstration fixes it */
+    std::string local_ip;                     /* a demonstration's local address for the public address page ( = the board's) */
     bool demo = false;
     std::vector<std::string> saved_targets; /* a demonstration's saved ping targets */
     std::map<std::string, std::string> seeds; /* a demonstration's starting values: ping_target, dns_name, dns_type,
-                                                 dns_resolver, port_host, port, port_preset */
+                                                 dns_resolver, port_host, port, port_preset, trace_target, http_url,
+                                                 http_method, http_insecure, whois_query */
     std::string description;                /* for the log line at start */
 
     /* the interfaces, gateway and resolvers now (the fixture or the system) */

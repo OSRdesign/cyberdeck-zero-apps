@@ -59,6 +59,11 @@ ToolboxApp::ToolboxApp(lv_obj_t *screen)
     port_ = settings_.port;
     port_preset_ = settings_.port_preset;
     ping_target_ = settings_.ping_target;
+    trace_target_ = settings_.trace_target;
+    if (trace_target_ != "1.1.1.1" && trace_target_ != "8.8.8.8") trace_typed_ = trace_target_;
+    http_url_ = settings_.http_url.empty() ? "https://example.com" : settings_.http_url;
+    http_insecure_ = settings_.http_insecure;
+    whois_query_ = settings_.whois_query;
     for (const auto &kv : backend_.seeds) { /* a demonstration starts with the values its scene names */
         if (kv.first == "ping_target") ping_target_ = kv.second;
         else if (kv.first == "dns_name") dns_name_ = kv.second;
@@ -67,6 +72,11 @@ ToolboxApp::ToolboxApp(lv_obj_t *screen)
         else if (kv.first == "port_host") port_host_ = kv.second;
         else if (kv.first == "port") port_ = std::atoi(kv.second.c_str());
         else if (kv.first == "port_preset") port_preset_ = kv.second;
+        else if (kv.first == "trace_target") trace_target_ = kv.second;
+        else if (kv.first == "http_url") http_url_ = kv.second;
+        else if (kv.first == "http_method") http_head_ = kv.second == "HEAD";
+        else if (kv.first == "http_insecure") http_insecure_ = kv.second == "1";
+        else if (kv.first == "whois_query") whois_query_ = kv.second;
     }
 
     cp0_ui_roller_page(cp0_ui_metrics_get(), cp0::ui::status_strip_left(), &layout_);
@@ -149,6 +159,10 @@ void ToolboxApp::tick()
     case View::Ping: poll_ping(false); break;
     case View::Dns: poll_dns(false); break;
     case View::Port: poll_port(false); break;
+    case View::Trace: poll_trace(false); break;
+    case View::Http: poll_http(false); break;
+    case View::PublicIp: poll_publicip(false); break;
+    case View::Whois: poll_whois(false); break;
     default: break;
     }
 }
@@ -168,6 +182,7 @@ void ToolboxApp::back()
 void ToolboxApp::open(View view)
 {
     if (list_) stack_.back().select = std::max(0, list_->selected());
+    else if (rich_) stack_.back().select = rich_->selected_id(); /* the pages of rows of any height remember the row's id */
     if (view != View::Choice && view != View::Typed) fresh_ = false;
     stack_.push_back(Frame{view, 0});
     show(view, 0);
@@ -196,6 +211,10 @@ void ToolboxApp::show(View view, int select)
     case View::Ping: build_ping(select); break;
     case View::Dns: build_dns(select); break;
     case View::Port: build_port(select); break;
+    case View::Trace: build_trace(); break;
+    case View::Http: build_http(select); break;
+    case View::PublicIp: build_publicip(); break;
+    case View::Whois: build_whois(select); break;
     case View::Choice: build_choice(); break;
     case View::Typed: build_typed(); break;
     }
@@ -209,6 +228,14 @@ void ToolboxApp::teardown()
         cdk::async_run::cancel(iw_job_);
         iw_job_ = 0;
     }
+    rich_.reset(); /* the rows' views let go of their objects first */
+    bar_.reset();
+    hop_views_.clear();
+    http_badge_.reset();
+    http_water_.reset();
+    http_cert_.reset();
+    http_blocks_seq_ = 0;
+    band_check_ = layout_cut_ = false;
     list_.reset();
     roller_.reset();
     field_.reset(); /* stops editing: the input context, the keypad intercept and the keyboard request come back */
@@ -231,6 +258,10 @@ void ToolboxApp::stop_tools()
     if (backend_.ping) backend_.ping->stop();
     if (backend_.dns) backend_.dns->stop();
     if (backend_.port) backend_.port->stop();
+    if (backend_.trace) backend_.trace->stop();
+    if (backend_.http) backend_.http->stop();
+    if (backend_.pubip) backend_.pubip->stop();
+    if (backend_.whois) backend_.whois->stop();
 }
 
 void ToolboxApp::show_title()
@@ -243,6 +274,10 @@ void ToolboxApp::show_title()
         case View::Ping: return "Ping";
         case View::Dns: return "DNS lookup";
         case View::Port: return "Port check";
+        case View::Trace: return "Traceroute";
+        case View::Http: return "HTTP check";
+        case View::PublicIp: return "Public IP";
+        case View::Whois: return "Whois";
         default: return "";
         }
     };
@@ -290,9 +325,21 @@ void ToolboxApp::show_band(const ui::Band &dflt)
 {
     if (!band_) return;
     ui::Band b = dflt;
+    bool noted = false;
     if (saved_until_ > now_ms() && !saved_note_.empty()) {
         b.text = saved_note_;
         b.tone = saved_tone_;
+        noted = true; /* a note carries a path: it may be cut with dots */
+    }
+    if (band_check_ && backend_.demo && !noted) { /* the scenes: the status line of a 0.2 page is never cut (no ellipsis) */
+        if (ui::text_width(b.text.c_str(), ui::caption_font()) > lv_obj_get_width(band_)) {
+            std::fprintf(stderr, "[%s] the status line does not fit: %s\n", kAppId, b.text.c_str());
+            layout_cut_ = true;
+        }
+        if (layout_cut_) {
+            b.text = "Message cut off";
+            b.tone = ui::Tone::Bad;
+        }
     }
     ui::set_text_if(band_, b.text);
     ui::set_color_if(band_, ui::tone_rgb(b.tone, ui::kLabel));
@@ -341,8 +388,12 @@ void ToolboxApp::build_home(int select)
     std::vector<cp0::ui::ListRow> rows;
     rows.push_back(cp0::ui::ListRow::item("Diagnose my connection", "", cp0::ui::ValueTone::Normal, kHomeDiag));
     rows.push_back(cp0::ui::ListRow::item("Ping", "", cp0::ui::ValueTone::Normal, kHomePing));
+    rows.push_back(cp0::ui::ListRow::item("Traceroute", "", cp0::ui::ValueTone::Normal, kHomeTrace));
     rows.push_back(cp0::ui::ListRow::item("DNS lookup", "", cp0::ui::ValueTone::Normal, kHomeDns));
     rows.push_back(cp0::ui::ListRow::item("Port check", "", cp0::ui::ValueTone::Normal, kHomePort));
+    rows.push_back(cp0::ui::ListRow::item("HTTP check", "", cp0::ui::ValueTone::Normal, kHomeHttp));
+    rows.push_back(cp0::ui::ListRow::item("Public IP", "", cp0::ui::ValueTone::Normal, kHomePublicIp));
+    rows.push_back(cp0::ui::ListRow::item("Whois", "", cp0::ui::ValueTone::Normal, kHomeWhois));
     rows.push_back(cp0::ui::ListRow::item("Interfaces", "", cp0::ui::ValueTone::Normal, kHomeIfaces));
     build_list(CP0_UI_LIST_COMFORTABLE, y, g.bottom - y, false, std::move(rows), select);
     show_band(ui::home_band(net_));
@@ -474,11 +525,19 @@ void ToolboxApp::activate(int, std::intptr_t id)
         else if (id == kHomeDns) open(View::Dns);
         else if (id == kHomePort) open(View::Port);
         else if (id == kHomeIfaces) open(View::Interfaces);
+        else if (id == kHomeTrace) open(View::Trace);
+        else if (id == kHomeHttp) open(View::Http);
+        else if (id == kHomePublicIp) open(View::PublicIp);
+        else if (id == kHomeWhois) open(View::Whois);
         break;
     case View::Diagnosis: activate_diagnosis(id); break;
     case View::Ping: activate_ping(id); break;
     case View::Dns: activate_dns(id); break;
     case View::Port: activate_port(id); break;
+    case View::Trace: activate_trace(id); break;
+    case View::Http: activate_http(id); break;
+    case View::PublicIp: activate_publicip(id); break;
+    case View::Whois: activate_whois(id); break;
     default: break;
     }
 }
@@ -522,6 +581,39 @@ void ToolboxApp::save_result()
             have = true;
         }
         break;
+    case View::Trace:
+        if (fresh_ && backend_.trace->latest() && backend_.trace->latest()->state != TraceSnapshot::State::Idle &&
+            backend_.trace->latest()->state != TraceSnapshot::State::Resolving) {
+            tool = "traceroute";
+            title = "Traceroute";
+            body = format_trace(*backend_.trace->latest());
+            have = true;
+        }
+        break;
+    case View::Http:
+        if (fresh_ && backend_.http->latest() && backend_.http->latest()->state == HttpCheckSnapshot::State::Done) {
+            tool = "http";
+            title = "HTTP check";
+            body = format_httpcheck(backend_.http->latest()->result);
+            have = true;
+        }
+        break;
+    case View::PublicIp:
+        if (fresh_ && backend_.pubip->latest() && backend_.pubip->latest()->state == PublicIpSnapshot::State::Done) {
+            tool = "publicip";
+            title = "Public IP";
+            body = format_publicip(backend_.pubip->latest()->result, local_address());
+            have = true;
+        }
+        break;
+    case View::Whois:
+        if (fresh_ && backend_.whois->latest() && backend_.whois->latest()->state == WhoisSnapshot::State::Done) {
+            tool = "whois";
+            title = "Whois";
+            body = format_whois(backend_.whois->latest()->result);
+            have = true;
+        }
+        break;
     default: break;
     }
     if (!have) {
@@ -553,6 +645,10 @@ void ToolboxApp::save_settings_now()
     settings_.port_host = port_host_;
     settings_.port = port_;
     settings_.port_preset = port_preset_;
+    settings_.trace_target = trace_target_;
+    settings_.http_url = http_url_;
+    settings_.http_insecure = http_insecure_;
+    settings_.whois_query = whois_query_;
     if (config_path_.empty()) return;
     if (!save_settings(config_path_, settings_)) std::fprintf(stderr, "[%s] cannot save %s\n", kAppId, config_path_.c_str());
 }
@@ -575,12 +671,14 @@ std::string ToolboxApp::selftest()
 {
     const auto snapshot = [this] { return std::make_pair(ui::count_objects(page_->root()), ui::count_timers()); };
     const auto base = snapshot();
-    const View tools[] = {View::Interfaces, View::Diagnosis, View::Ping, View::Dns, View::Port};
+    const View tools[] = {View::Interfaces, View::Diagnosis, View::Ping, View::Dns, View::Port, View::Trace, View::Http,
+                          View::PublicIp, View::Whois};
     for (int round = 0; round < 3; ++round) {
         for (const View v : tools) {
             stack_.assign(1, Frame{View::Home, 0});
             open(v);
-            if (v == View::Ping || v == View::Dns || v == View::Port) {
+            if (v == View::Ping || v == View::Dns || v == View::Port || v == View::Trace || v == View::Http ||
+                v == View::Whois) {
                 Choice c;
                 c.title = "Test";
                 c.labels = {"One", "Two"};

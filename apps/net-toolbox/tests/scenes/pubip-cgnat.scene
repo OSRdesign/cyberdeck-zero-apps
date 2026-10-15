@@ -1,0 +1,18 @@
+# Public IP, behind carrier-grade NAT
+title Net Toolbox: Public IP, behind carrier-grade NAT
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO pubip=cgnat
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+shot result
+expect text "Your provider shares one public address between customers (carrier-grade NAT): you cannot receive inbound connections"
+key end
+shot actions
+expect notext "Message cut off"

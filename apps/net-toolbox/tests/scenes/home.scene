@@ -1,4 +1,4 @@
-# Home on the deck: the band, the five tools, Esc at Home ends the app.
+# Home on the deck: the band, the nine tools (the list scrolls), Esc at Home ends the app.
 title Net Toolbox: Home
 sizes 640x480 800x480 720x720 1024x600 1280x720
 env NET_TOOLBOX_DEMO diag=healthy
@@ -11,8 +11,12 @@ expect text "wlan0: 192.168.68.121"
 key down
 key down
 shot third-row
-key up
-key up
+key end
+wait 400
+shot last-row
+expect text "Interfaces"
+key home
+wait 400
 expect noquit
 key esc
 expect quit

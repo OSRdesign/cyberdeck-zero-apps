@@ -1,0 +1,49 @@
+# Whois, a long raw answer
+title Net Toolbox: Whois, a long raw answer
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO whois=long,whois_query=google.com
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+shot idle
+expect text "Type a domain or an address and press Run"
+key down
+key enter
+shot result
+key down
+key down
+key down
+key down
+key down
+shot summary
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+shot raw-middle
+key end
+shot raw-end
+expect notext "Message cut off"

@@ -1,0 +1,16 @@
+# HTTP check, 404 Not Found
+title Net Toolbox: HTTP check, 404 Not Found
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO http=404,http_url=https://example.com/missing
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key enter
+key enter
+shot result
+expect text "404 Not Found"
+expect notext "Message cut off"

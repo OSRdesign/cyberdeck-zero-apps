@@ -1,0 +1,108 @@
+Connecting to 104.154.89.105
+depth=2 C=GB, ST=Greater Manchester, L=Salford, O=COMODO CA Limited, CN=COMODO RSA Certification Authority
+verify return:1
+depth=1 C=GB, ST=Greater Manchester, L=Salford, O=COMODO CA Limited, CN=COMODO RSA Domain Validation Secure Server CA
+verify return:1
+depth=0 OU=Domain Control Validated, OU=PositiveSSL Wildcard, CN=*.badssl.com
+verify error:num=10:certificate has expired
+notAfter=Apr 12 23:59:59 2015 GMT
+verify return:1
+depth=0 OU=Domain Control Validated, OU=PositiveSSL Wildcard, CN=*.badssl.com
+notAfter=Apr 12 23:59:59 2015 GMT
+verify return:1
+CONNECTED(00000003)
+---
+Certificate chain
+ 0 s:OU=Domain Control Validated, OU=PositiveSSL Wildcard, CN=*.badssl.com
+   i:C=GB, ST=Greater Manchester, L=Salford, O=COMODO CA Limited, CN=COMODO RSA Domain Validation Secure Server CA
+   a:PKEY: RSA, 2048 (bit); sigalg: sha256WithRSAEncryption
+   v:NotBefore: Apr  9 00:00:00 2015 GMT; NotAfter: Apr 12 23:59:59 2015 GMT
+ 1 s:C=GB, ST=Greater Manchester, L=Salford, O=COMODO CA Limited, CN=COMODO RSA Domain Validation Secure Server CA
+   i:C=GB, ST=Greater Manchester, L=Salford, O=COMODO CA Limited, CN=COMODO RSA Certification Authority
+   a:PKEY: RSA, 2048 (bit); sigalg: sha384WithRSAEncryption
+   v:NotBefore: Feb 12 00:00:00 2014 GMT; NotAfter: Feb 11 23:59:59 2029 GMT
+ 2 s:C=GB, ST=Greater Manchester, L=Salford, O=COMODO CA Limited, CN=COMODO RSA Certification Authority
+   i:C=SE, O=AddTrust AB, OU=AddTrust External TTP Network, CN=AddTrust External CA Root
+   a:PKEY: RSA, 4096 (bit); sigalg: sha384WithRSAEncryption
+   v:NotBefore: May 30 10:48:38 2000 GMT; NotAfter: May 30 10:48:38 2020 GMT
+---
+Server certificate
+-----BEGIN CERTIFICATE-----
+MIIFSzCCBDOgAwIBAgIQSueVSfqavj8QDxekeOFpCTANBgkqhkiG9w0BAQsFADCB
+kDELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdyZWF0ZXIgTWFuY2hlc3RlcjEQMA4G
+A1UEBxMHU2FsZm9yZDEaMBgGA1UEChMRQ09NT0RPIENBIExpbWl0ZWQxNjA0BgNV
+BAMTLUNPTU9ETyBSU0EgRG9tYWluIFZhbGlkYXRpb24gU2VjdXJlIFNlcnZlciBD
+QTAeFw0xNTA0MDkwMDAwMDBaFw0xNTA0MTIyMzU5NTlaMFkxITAfBgNVBAsTGERv
+bWFpbiBDb250cm9sIFZhbGlkYXRlZDEdMBsGA1UECxMUUG9zaXRpdmVTU0wgV2ls
+ZGNhcmQxFTATBgNVBAMUDCouYmFkc3NsLmNvbTCCASIwDQYJKoZIhvcNAQEBBQAD
+ggEPADCCAQoCggEBAMIE7PiM7gTCs9hQ1XBYzJMY61yoaEmwIrX5lZ6xKyx2PmzA
+S2BMTOqytMAPgLaw+XLJhgL5XEFdEyt/ccRLvOmULlA3pmccYYz2QULFRtMWhyef
+dOsKnRFSJiFzbIRMeVXk0WvoBj1IFVKtsyjbqv9u/2CVSndrOfEk0TG23U3AxPxT
+uW1CrbV8/q71FdIzSOciccfCFHpsKOo3St/qbLVytH5aohbcabFXRNsKEqveww9H
+dFxBIuGa+RuT5q0iBikusbpJHAwnnqP7i/dAcgCskgjZjFeEU4EFy+b+a1SYQCeF
+xxC7c3DvaRhBB0VVfPlkPz0sw6l865MaTIbRyoUCAwEAAaOCAdUwggHRMB8GA1Ud
+IwQYMBaAFJCvajqUWgvYkOoSVnPfQ7Q6KNrnMB0GA1UdDgQWBBSd7sF7gQs6R2lx
+GH0RN5O8pRs/+zAOBgNVHQ8BAf8EBAMCBaAwDAYDVR0TAQH/BAIwADAdBgNVHSUE
+FjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwTwYDVR0gBEgwRjA6BgsrBgEEAbIxAQIC
+BzArMCkGCCsGAQUFBwIBFh1odHRwczovL3NlY3VyZS5jb21vZG8uY29tL0NQUzAI
+BgZngQwBAgEwVAYDVR0fBE0wSzBJoEegRYZDaHR0cDovL2NybC5jb21vZG9jYS5j
+b20vQ09NT0RPUlNBRG9tYWluVmFsaWRhdGlvblNlY3VyZVNlcnZlckNBLmNybDCB
+hQYIKwYBBQUHAQEEeTB3ME8GCCsGAQUFBzAChkNodHRwOi8vY3J0LmNvbW9kb2Nh
+LmNvbS9DT01PRE9SU0FEb21haW5WYWxpZGF0aW9uU2VjdXJlU2VydmVyQ0EuY3J0
+MCQGCCsGAQUFBzABhhhodHRwOi8vb2NzcC5jb21vZG9jYS5jb20wIwYDVR0RBBww
+GoIMKi5iYWRzc2wuY29tggpiYWRzc2wuY29tMA0GCSqGSIb3DQEBCwUAA4IBAQBq
+evHa/wMHcnjFZqFPRkMOXxQhjHUa6zbgH6QQFezaMyV8O7UKxwE4PSf9WNnM6i1p
+OXy+l+8L1gtY54x/v7NMHfO3kICmNnwUW+wHLQI+G1tjWxWrAPofOxkt3+IjEBEH
+fnJ/4r+3ABuYLyw/zoWaJ4wQIghBK4o+gk783SHGVnRwpDTysUCeK1iiWQ8dSO/r
+ET7BSp68ZVVtxqPv1dSWzfGuJ/ekVxQ8lEEFeouhN0fX9X3c+s5vMaKwjOrMEpsi
+8TRwz311SotoKQwe6Zaoz7ASH1wq7mcvf71z81oBIgxw+s1F73hczg36TuHvzmWf
+RwxPuzZEaFZcVlmtqoq8
+-----END CERTIFICATE-----
+subject=OU=Domain Control Validated, OU=PositiveSSL Wildcard, CN=*.badssl.com
+issuer=C=GB, ST=Greater Manchester, L=Salford, O=COMODO CA Limited, CN=COMODO RSA Domain Validation Secure Server CA
+---
+No client certificate CA names sent
+Peer signing digest: SHA512
+Peer signature type: rsa_pkcs1_sha512
+Peer Temp Key: ECDH, prime256v1, 256 bits
+---
+SSL handshake has read 5003 bytes and written 1686 bytes
+Verification error: certificate has expired
+---
+New, TLSv1.2, Cipher is ECDHE-RSA-AES128-GCM-SHA256
+Protocol: TLSv1.2
+Server public key is 2048 bit
+Secure Renegotiation IS supported
+Compression: NONE
+Expansion: NONE
+No ALPN negotiated
+SSL-Session:
+    Protocol  : TLSv1.2
+    Cipher    : ECDHE-RSA-AES128-GCM-SHA256
+    Session-ID: 63558AB201C953CB5FD2D28B016A4F626C9DB2E5439B9D6393EB9C735802ECC4
+    Session-ID-ctx: 
+    Master-Key: AA14DEE6EADD70581F5F40539DF0ACEA49A02046B49463BD855584661AD10EC0C9FCCD0426C90E8BE92DC742E6DADF27
+    PSK identity: None
+    PSK identity hint: None
+    SRP username: None
+    TLS session ticket lifetime hint: 300 (seconds)
+    TLS session ticket:
+    0000 - a0 4d b2 93 26 f2 79 f7-62 d5 df b2 57 0f 10 aa   .M..&.y.b...W...
+    0010 - 6b 66 01 7d bc 69 78 cb-c6 15 dc 4a f8 ab 1d 0c   kf.}.ix....J....
+    0020 - ea 36 5a dd f7 7f 40 2d-01 ad b5 f3 12 31 bb a9   .6Z...@-.....1..
+    0030 - 6e f2 38 30 32 e0 b1 f8-c6 26 d0 97 5d 2e 93 e8   n.802....&..]...
+    0040 - 3b 0d dc 5e 84 d0 2b 44-83 76 72 3a bf dd 90 70   ;..^..+D.vr:...p
+    0050 - 3f ba 43 33 2c b4 6f 92-bf e4 85 96 9e 1c b7 3f   ?.C3,.o........?
+    0060 - 1e 3a ba 29 38 ca c3 89-32 cb 31 60 8e 90 98 d8   .:.)8...2.1`....
+    0070 - 0d b7 f1 29 71 e3 d8 3a-6b d5 4f 0f 72 0d 91 1f   ...)q..:k.O.r...
+    0080 - be 5d bf 43 eb 22 45 bb-19 d6 26 27 bd 96 ac 4c   .].C."E...&'...L
+    0090 - 88 1c 0a 22 7b 79 31 4c-72 79 bf e5 b9 c1 8b e8   ..."{y1Lry......
+    00a0 - e1 97 56 19 a0 61 c6 00-fc ec 47 83 65 dd 21 62   ..V..a....G.e.!b
+    00b0 - a4 f2 77 e5 9a 1e 15 01-f6 ce 72 61 f7 b8 1e cb   ..w.......ra....
+
+    Start Time: 1792064697
+    Timeout   : 7200 (sec)
+    Verify return code: 10 (certificate has expired)
+    Extended master secret: no
+---
+DONE

@@ -1,0 +1,29 @@
+# Whois, not found
+title Net Toolbox: Whois, not found
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO whois=notfound,whois_query=www.google.com
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+shot idle
+expect text "Type a domain or an address and press Run"
+key down
+key enter
+shot result
+key down
+key down
+key down
+key down
+key down
+shot summary
+expect text "No match for www.google.com at whois.verisign-grs.com"
+key end
+shot raw-end
+expect notext "Message cut off"

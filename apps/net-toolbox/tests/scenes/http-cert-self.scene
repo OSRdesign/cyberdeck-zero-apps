@@ -1,0 +1,16 @@
+# HTTP check, self-signed certificate
+title Net Toolbox: HTTP check, self-signed certificate
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO http=cert-self,http_url=https://self-signed.badssl.com
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key enter
+key enter
+shot result
+expect text "Self-signed certificate"
+expect notext "Message cut off"

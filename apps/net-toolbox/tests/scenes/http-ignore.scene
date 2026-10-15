@@ -1,0 +1,19 @@
+# HTTP check, ignoring certificate errors
+title Net Toolbox: HTTP check, ignoring certificate errors
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO http=cert-ignored,http_url=https://expired.badssl.com,http_insecure=1
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key enter
+shot idle
+expect text "Warning: the connection is not checked for who it talks to. Use it to look at a site whose certificate is wrong, not for anything private."
+key enter
+shot result
+expect text "200 OK"
+expect text "expired 12 days ago"
+expect notext "Message cut off"

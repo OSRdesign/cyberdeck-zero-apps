@@ -1,0 +1,30 @@
+# Whois, a domain
+title Net Toolbox: Whois, a domain
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO whois=domain,whois_query=example.com
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+shot idle
+expect text "Type a domain or an address and press Run"
+key down
+key enter
+shot result
+key down
+key down
+key down
+key down
+key down
+shot summary
+expect text "RESERVED-Internet Assigned Numbers Authority"
+expect text "2027-01-06 (expires in 83 days)"
+key end
+shot raw-end
+expect notext "Message cut off"

@@ -1,0 +1,20 @@
+# HTTP check, busy, then stopped
+title Net Toolbox: HTTP check, busy, then stopped
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO http=running,http_url=https://example.com
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key enter
+key enter
+shot busy
+expect text "Checking..."
+expect text "Stop"
+key enter
+shot stopped
+expect text "Stopped"
+expect notext "Message cut off"

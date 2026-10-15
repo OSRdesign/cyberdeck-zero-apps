@@ -12,9 +12,13 @@
 
 #include "diagnosis.hpp"
 #include "dns_client.hpp"
+#include "httpcheck.hpp"
 #include "interfaces.hpp"
 #include "ping.hpp"
 #include "portcheck.hpp"
+#include "publicip.hpp"
+#include "traceroute.hpp"
+#include "whois.hpp"
 
 #include <ctime>
 #include <string>
@@ -41,5 +45,11 @@ std::string format_ping(const PingSnapshot &s);
 std::string format_dns(const DnsSnapshot &s);
 std::string format_ports(const PortSnapshot &s);
 std::string format_diagnosis(const DiagReport &r);
+/* 0.2: the hops of a summary (up to the destination, trailing silent hops dropped) */
+std::string format_trace(const TraceSnapshot &s);
+std::string format_httpcheck(const HttpCheckResult &r);
+/* interface_ip: the board's address on the default route ("" when unknown), for the NAT line */
+std::string format_publicip(const PublicIpResult &r, const std::string &interface_ip = "");
+std::string format_whois(const WhoisResult &r);
 
 } // namespace nt

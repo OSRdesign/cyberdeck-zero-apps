@@ -1,0 +1,16 @@
+# HTTP check, certificate expires in 5 days
+title Net Toolbox: HTTP check, certificate expires in 5 days
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO http=cert5,http_url=https://example.com
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key enter
+key enter
+shot result
+expect text "expires in 5 days"
+expect notext "Message cut off"

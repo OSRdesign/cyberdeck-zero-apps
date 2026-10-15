@@ -8,6 +8,10 @@ key down
 key down
 key down
 key down
+key down
+key down
+key down
+key down
 key enter
 shot top
 expect text "Signal"
@@ -19,5 +23,5 @@ key end
 shot bottom
 expect text "192.168.1.1 (asked first)"
 key esc
-expect text "Diagnose my connection"
+expect text "Interfaces"
 expect noquit

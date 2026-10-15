@@ -1,0 +1,24 @@
+# Traceroute, one router limits its answers
+title Net Toolbox: Traceroute, one router limits its answers
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO trace=ratelimit,trace_target=example.com
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key enter
+key enter
+shot running
+expect text "probably rate limiting"
+key down
+key down
+key down
+key down
+key down
+key enter
+shot details
+key tab
+key enter
+shot stopped
+expect text "Reached in 9 hops, 43 ms"
+expect notext "Message cut off"
