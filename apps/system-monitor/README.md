@@ -13,8 +13,18 @@ pages, live charts and must be complete by touch and by keys; no existing progra
 
 ## Screenshots
 
-To be added from the deck and the Pi 3A+ (640x480 and 800x480). Until then the headless contact sheets of
-`build.sh host` show every page at the five sizes (see [Build and test](#build-and-test)).
+Rendered by the app's headless harness (`build.sh host`) with fixture data from a Pi Zero 2 W, at the deck's size and
+at other screen sizes, **not photographs of the panel**. The contact sheets of `build.sh host` show every page at the
+five sizes (see [Build and test](#build-and-test)).
+
+| | |
+|---|---|
+| ![Overview](screenshots/01-overview-640x480.png) 640x480 render, deck size. The overview: six tiles (Power, CPU, Temperature, Memory, Storage, Network) with their history lines, and the footer row | ![CPU](screenshots/02-cpu-800x480.png) 800x480 render, Pi 3A+ size. The CPU page: the total load over the last 2 minutes and each core's % |
+| ![Memory](screenshots/03-memory-720x720.png) 720x720 render, HackBerry size (square). The Memory page: RAM (green) and swap (blue) chart, used, available, cache, buffers, free, swap | ![Network](screenshots/04-network-1024x600.png) 1024x600 render, larger screen. The Network page: in / out rates of wlan0, its address, Wi-Fi network, signal and bit rate |
+| ![Power warning](screenshots/05-power-warning-640x480.png) 640x480 render, deck size. Under-voltage now: the Power tile turns red with *Now: check the power supply*; storage at 93 % in amber | ![Temp and power](screenshots/06-temp-power-640x480.png) 640x480 render, deck size. The Temp & power page during the same under-voltage: the temperature chart with its 70 and 80 °C lines, the power state in plain words |
+| ![Processes](screenshots/07-processes-800x480.png) 800x480 render, Pi 3A+ size. Processes sorted by CPU, with their memory | ![Storage](screenshots/08-storage-1280x720.png) 1280x720 render, larger screen. The Storage page: read / write chart, each mounted file system with its fill, the disk's rates |
+
+The screens above come from several screen sizes: the app adapts to the screen it runs on.
 
 ## What it does
 
