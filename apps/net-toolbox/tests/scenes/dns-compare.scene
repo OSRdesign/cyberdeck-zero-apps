@@ -1,0 +1,12 @@
+title Net Toolbox: DNS lookup, compare resolvers
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key enter
+key down
+key enter
+shot compare
+expect text "Compared 4 resolvers, fastest 1.1.1.1 9 ms"

@@ -1,0 +1,43 @@
+# Focus order and Esc: Up / Down move the highlight, Enter opens, Esc / Left go back one level, Esc at Home quits.
+title Net Toolbox: keys, Esc and Left
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy,ping=mixed
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+# Up at the first row stays; Down walks the five tools
+key up
+key down
+key down
+key down
+key down
+key down
+shot last-row
+# Ping: Esc goes back to Home with the highlight on Ping
+key up
+key up
+key up
+key enter
+expect text "Start"
+key left
+expect text "Diagnose my connection"
+expect noquit
+# Diagnosis: Esc goes back
+key up
+key enter
+expect text "Everything works"
+key esc
+expect text "Diagnose my connection"
+expect noquit
+# a sub page: Esc goes back to the tool, then to Home
+key down
+key enter
+key down
+key enter
+expect text "1.1.1.1 Cloudflare"
+key esc
+expect text "Start"
+key esc
+expect text "Diagnose my connection"
+expect noquit
+key left
+expect quit

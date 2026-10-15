@@ -1,0 +1,12 @@
+# The DNS rung is being checked (spinner), the first three passed, the last two wait.
+title Net Toolbox: Diagnosis, in progress
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=running
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key enter
+shot running
+expect text "Checking your connection..."
+expect text "checking..."
+expect text "waiting"
+expect notext "Message cut off"

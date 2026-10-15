@@ -1,0 +1,23 @@
+# Type a host...: the text field with the on-screen keyboard (no physical keyboard).
+title Net Toolbox: Ping, a typed host
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO ping=mixed
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key enter
+key down
+key enter
+key down
+key down
+key down
+key enter
+shot field
+expect osk on
+type nas.local
+key enter
+shot back
+expect text "nas.local"
+key up
+key enter
+shot started

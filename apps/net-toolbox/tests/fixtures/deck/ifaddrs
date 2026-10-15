@@ -1,0 +1,5 @@
+# what getifaddrs gives on the deck
+lo inet 127.0.0.1/8
+lo inet6 ::1/128
+wlan0 inet 192.168.68.121/22
+wlan0 inet6 fe80::7c3e:1d5a:93b2:4f10/64

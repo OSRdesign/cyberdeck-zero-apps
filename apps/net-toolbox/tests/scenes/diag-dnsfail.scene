@@ -1,0 +1,13 @@
+# DNS fails: the explanation names the resolver; Save log answers in the band.
+title Net Toolbox: Diagnosis, DNS does not answer
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=dns-fail
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key enter
+shot dns-fails
+expect text "DNS failed"
+key down
+key enter
+shot saved
+expect notext "Message cut off"

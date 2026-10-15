@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Net Toolbox
+Exec=/usr/share/APPLaunch/bin/net-toolbox
+Terminal=false
+Icon=share/images/net-toolbox.png
+Type=Application
+X-Fullscreen=true
+X-MinSize=640x480

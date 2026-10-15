@@ -1,0 +1,23 @@
+# Interfaces read-only: a row scrolls per key press; the Wi-Fi rows come from the recorded iw output.
+title Net Toolbox: Interfaces on the deck
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key enter
+shot top
+expect text "Signal"
+expect text "-58 dBm, Good"
+key down
+key down
+shot scrolled
+key end
+shot bottom
+expect text "192.168.1.1 (asked first)"
+key esc
+expect text "Diagnose my connection"
+expect noquit

@@ -204,6 +204,22 @@ def icon_template(hue, ink):
     return c.finish()
 
 
+def icon_nettoolbox(hue, ink):
+    """Pentagon (point up, soft corners) with two thick horizontal arrows: traffic both ways, upper right, lower left."""
+    c = Canvas()
+    pent = [polar(50, 53, 49, -90 + 72 * i) for i in range(5)]
+    c.polygon(pent, hue, round_r=6)
+
+    def arrow(y, x0, x1):
+        d = 1 if x1 > x0 else -1
+        c.line([(x0, y), (x1 - d * 12, y)], 10, ink)                                  # shaft
+        c.polygon([(x1, y), (x1 - d * 20, y - 10.5), (x1 - d * 20, y + 10.5)], ink, round_r=1.5)  # head
+
+    arrow(46, 23, 77)    # out
+    arrow(70, 77, 23)    # back
+    return c.finish()
+
+
 # id, function, badge hue, symbol colour, badge name
 ICONS = [
     ("lanscan",              icon_lanscan,  "#19D3E6", INK,   "circle"),
@@ -213,6 +229,7 @@ ICONS = [
     ("serial-console",       icon_serial,   "#FFC21A", INK,   "DB9 plug"),
     ("system-monitor",       icon_sysmon,   "#F23B3B", WHITE, "shield"),
     ("viz1090",              icon_viz,      "#5BB8FF", INK,   "squircle"),
+    ("net-toolbox",          icon_nettoolbox, "#FF5C93", INK, "pentagon"),
     ("cyberdeck-app-template", icon_template, "#8A9099", INK, "octagon"),
 ]
 

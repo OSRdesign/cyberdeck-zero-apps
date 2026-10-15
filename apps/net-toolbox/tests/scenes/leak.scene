@@ -1,0 +1,9 @@
+# No widget leak on page switches: the app opens and leaves every page (and its Choice and Typed pages) three times at
+# start (NET_TOOLBOX_SELFTEST); the objects and timers of Home are counted before and after.
+title Net Toolbox: page switches leak nothing
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy,ping=mixed
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_SELFTEST 1
+shot home
+expect text "leak check ok"

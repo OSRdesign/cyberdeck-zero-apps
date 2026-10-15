@@ -1,0 +1,13 @@
+# Starts by itself on entry: six rungs, all green with a check.
+title Net Toolbox: Diagnosis, everything works
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key enter
+shot healthy
+expect text "Everything works"
+expect text "Link up"
+expect text "Captive portal"
+expect text "Run again"
+expect notext "Message cut off"

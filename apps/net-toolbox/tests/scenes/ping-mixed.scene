@@ -1,0 +1,20 @@
+# Start shows the graph with the jitter band, the strip and the statistics; Stop keeps them.
+title Net Toolbox: Ping with ok, slow and lost packets
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO ping=mixed
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key enter
+shot idle
+expect text "Press Start to ping Gateway 192.168.68.1"
+key enter
+shot running
+expect text "Stop"
+key enter
+shot stopped
+expect text "Start"
+key down
+key down
+key enter
+shot saved
