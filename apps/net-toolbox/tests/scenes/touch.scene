@@ -1,0 +1,39 @@
+# Every action by tap: the first tap on a row selects it, a tap on the selected row acts. The header's Esc goes back.
+title Net Toolbox: touch
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy,ping=mixed
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+tap "Diagnose my connection"
+expect text "Everything works"
+tap "Save log"
+tap "Save log"
+shot saved
+tap "Run again"
+tap "Run again"
+expect text "Everything works"
+tap "Esc"
+expect noquit
+tap "Ping"
+tap "Ping"
+expect text "Start"
+tap "Start"
+shot running
+expect text "Stop"
+tap "Stop"
+expect text "Start"
+tap "Esc"
+expect text "Diagnose my connection"
+tap "Port check"
+tap "Port check"
+tap "Run"
+shot port
+expect text "Open"
+tap "Esc"
+tap "Interfaces"
+tap "Interfaces"
+expect text "Signal"
+tap "Esc"
+expect noquit
+tap "Esc"
+expect quit

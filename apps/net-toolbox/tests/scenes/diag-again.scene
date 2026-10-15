@@ -1,0 +1,16 @@
+title Net Toolbox: Diagnosis, Run again and Esc
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key enter
+shot first
+key enter
+shot again
+expect text "Everything works"
+key esc
+expect text "Diagnose my connection"
+expect noquit
+key esc
+expect quit
+expect notext "Message cut off"

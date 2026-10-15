@@ -1,0 +1,13 @@
+title Net Toolbox: Interfaces on a Pi 5 (Ethernet, Wi-Fi off)
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy
+env NET_TOOLBOX_FIXTURE pi-5
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key enter
+shot top
+key end
+shot bottom

@@ -1,0 +1,10 @@
+# All pass; the core's note says how the gateway was reached.
+title Net Toolbox: Diagnosis, a gateway that ignores ping
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=notes
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key enter
+shot notes
+expect text "Everything works"
+expect notext "Message cut off"

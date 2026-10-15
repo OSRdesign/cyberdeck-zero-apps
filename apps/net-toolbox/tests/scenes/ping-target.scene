@@ -1,0 +1,26 @@
+# The Roller of targets (gateway, 1.1.1.1, 8.8.8.8, saved, Type a host...); a saved one is picked, then Type a host.
+title Net Toolbox: Ping, choosing the target
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO ping=mixed,saved=nas.local+printer.lan
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key enter
+key down
+key enter
+shot choice
+expect text "Gateway 192.168.68.1"
+key down
+key down
+key down
+key enter
+shot picked-saved
+expect text "nas.local"
+key enter
+key down
+key down
+shot type-a-host
+expect text "Type a host..."
+key enter
+shot typed
+expect osk on

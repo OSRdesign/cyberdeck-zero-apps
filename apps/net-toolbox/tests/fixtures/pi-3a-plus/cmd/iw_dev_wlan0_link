@@ -1,0 +1,12 @@
+Connected to 5c:62:8b:a1:07:3f (on wlan0)
+	SSID: DeckNet-5G
+	freq: 5180.0
+	RX: 9933105 bytes (12077 packets)
+	TX: 801233 bytes (4410 packets)
+	signal: -67 dBm
+	rx bitrate: 200.0 MBit/s VHT-MCS 9 40MHz short GI VHT-NSS 1
+	tx bitrate: 150.0 MBit/s VHT-MCS 7 40MHz short GI VHT-NSS 1
+
+	bss flags:	short-slot-time
+	dtim period:	3
+	beacon int:	100

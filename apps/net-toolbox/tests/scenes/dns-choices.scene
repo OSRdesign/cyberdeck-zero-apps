@@ -1,0 +1,29 @@
+title Net Toolbox: DNS lookup, type and resolver
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key enter
+key down
+key down
+key down
+key enter
+shot type
+expect text "AAAA"
+key down
+key enter
+shot type-picked
+expect text "AAAA"
+key down
+key enter
+key down
+key down
+key down
+key down
+shot resolvers
+expect text "Type an address..."
+key enter
+shot resolver-field
+expect osk on

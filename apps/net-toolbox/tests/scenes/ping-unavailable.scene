@@ -1,0 +1,12 @@
+# A notice with the reason and the fix, not a crash; Start only repeats it in the band.
+title Net Toolbox: Ping without an ICMP socket
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO ping=unavailable
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key enter
+shot notice
+expect text "Ping is not available here"
+key enter
+shot refused

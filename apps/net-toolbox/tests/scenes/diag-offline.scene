@@ -1,0 +1,10 @@
+# The first rung fails, the rest are skipped (a dash).
+title Net Toolbox: Diagnosis, no link
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy
+env NET_TOOLBOX_FIXTURE deck-offline
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key enter
+shot link-down
+expect text "Link up failed"
+expect notext "Message cut off"

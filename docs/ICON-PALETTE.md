@@ -42,6 +42,7 @@ in [`tools/icons/out/`](../tools/icons/out/), the review sheet is [`tools/icons/
 | Serial Console (`serial-console`) | amber `#FFC21A` | ink `#14181C` | DB9 trapezoid | nine pins |
 | System Monitor (`system-monitor`) | red `#F23B3B` | white `#FFFFFF` | shield | heartbeat line |
 | Viz1090 (`viz1090`) | sky blue `#5BB8FF` | ink `#14181C` | squircle | aircraft, seen from above |
+| Net Toolbox (`net-toolbox`) | rose `#FF5C93` (hue about 340) | ink `#14181C` | pentagon (point up, soft corners) | two thick horizontal arrows, opposite ways: traffic both ways |
 | App template (`cyberdeck-app-template`) | neutral grey `#8A9099` | ink `#14181C` | octagon | plus (placeholder) |
 
 ### Reserved colours: the launcher's own tiles

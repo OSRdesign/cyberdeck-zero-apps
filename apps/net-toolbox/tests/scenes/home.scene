@@ -1,0 +1,18 @@
+# Home on the deck: the band, the five tools, Esc at Home ends the app.
+title Net Toolbox: Home
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO diag=healthy
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+shot home
+expect text "Net Toolbox"
+expect text "Diagnose my connection"
+expect text "wlan0: 192.168.68.121"
+key down
+key down
+shot third-row
+key up
+key up
+expect noquit
+key esc
+expect quit
