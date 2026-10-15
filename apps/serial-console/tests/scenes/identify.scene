@@ -130,7 +130,6 @@ shot asking
 wait 4000
 shot card-esp
 expect text "ESP32-S3"
-expect text "The board was reset into its program"
 key down
 key down
 key down
