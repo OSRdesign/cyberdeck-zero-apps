@@ -330,20 +330,22 @@ void VizApp::prepare_fonts()
         const_cast<lv_font_t *>(value)->fallback = builtin;
 }
 
-std::string VizApp::fit_value(const RowText &text) const
+std::string VizApp::fit_value(const RowText &text, cp0::ui::RowAffordance aff) const
 {
     if (text.values.empty()) return std::string();
     const lv_font_t *label = face("Montserrat-Bold.ttf", list_layout_.text_px); /* the selected row's label */
     const lv_font_t *value = face("Montserrat-Medium.ttf", list_layout_.value_px);
-    const int room = list_layout_.w - 2 * list_layout_.inset - list_layout_.gap - text_width(text.label, label);
+    /* a chevron or a dot keeps its slot free at the right (the C enum has the same order as RowAffordance) */
+    const int trail = cp0_ui_list_trail_w(&list_layout_, static_cast<cp0_ui_list_affordance_t>(aff));
+    const int room = list_layout_.w - 2 * list_layout_.inset - trail - list_layout_.gap - text_width(text.label, label);
     for (const std::string &v : text.values)
         if (text_width(v, value) <= room) return v;
     return text.values.back();
 }
 
-cp0::ui::ListRow VizApp::list_row(const RowText &text, std::intptr_t id) const
+cp0::ui::ListRow VizApp::list_row(const RowText &text, std::intptr_t id, cp0::ui::RowAffordance aff) const
 {
-    return cp0::ui::ListRow::item(text.label, fit_value(text), value_tone(text.tone), id);
+    return cp0::ui::ListRow::item(text.label, fit_value(text, aff), value_tone(text.tone), id, aff);
 }
 
 /* ---------------------------------------------------------------- root */
@@ -395,7 +397,11 @@ void VizApp::build_root(int select)
 
 std::vector<cp0::ui::ListRow> VizApp::root_rows() const
 {
-    return {list_row(sdr_row(sdr_), kSdr), list_row(gps_row(gps_shown_), kGps), list_row(position_row(setup_), kPosition)};
+    using cp0::ui::RowAffordance;
+    /* SDR and GPS: a tap looks again / takes the fix as the position (an action, its result in the value);
+     * Position opens its page */
+    return {list_row(sdr_row(sdr_), kSdr, RowAffordance::Action), list_row(gps_row(gps_shown_), kGps, RowAffordance::Action),
+            list_row(position_row(setup_), kPosition, RowAffordance::Open)};
 }
 
 void VizApp::refresh_root(bool force)
@@ -559,11 +565,14 @@ void VizApp::build_position(int select)
 
 std::vector<cp0::ui::ListRow> VizApp::position_rows() const
 {
-    std::vector<cp0::ui::ListRow> rows{list_row(latitude_row(setup_), kLat), list_row(longitude_row(setup_), kLon)};
+    using cp0::ui::RowAffordance;
+    /* Latitude and Longitude open a text editor (Edit); a Recent place is applied and the root comes back (Action) */
+    std::vector<cp0::ui::ListRow> rows{list_row(latitude_row(setup_), kLat, RowAffordance::Edit),
+                                       list_row(longitude_row(setup_), kLon, RowAffordance::Edit)};
     if (!recent_.empty()) {
         rows.push_back(cp0::ui::ListRow::section("Recent"));
         for (std::size_t i = 0; i < recent_.size(); ++i)
-            rows.push_back(list_row(recent_row(recent_[i]), kRecent + static_cast<std::intptr_t>(i)));
+            rows.push_back(list_row(recent_row(recent_[i]), kRecent + static_cast<std::intptr_t>(i), RowAffordance::Action));
     }
     return rows;
 }

@@ -1,6 +1,6 @@
 # viz1090
 
-Version 0.2.0, package `viz1090`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.2.1, package `viz1090`. Part of [cyberdeck-zero-apps](../../README.md).
 
 The real [viz1090](https://github.com/nmatsuda/viz1090) ADS-B display (by Nathan Matsuda) on the deck, full screen,
 with its own RTL-SDR decoder, an intro screen and a world map. The intro screen shows whether the SDR dongle and a
@@ -122,7 +122,7 @@ half the longer side, so the window covers the whole screen, square or wide, at 
 On the deck: **Settings > Apps > Sources > + Add a GitHub source**, enter `OSRdesign/cyberdeck-zero-apps`, go to the
 **Apps** tab, pick **viz1090** and press Enter. Installing asks for the deck user's sudo password; the package depends on
 the libraries it needs. See the [repository README](../../README.md) for details. If an older version is installed,
-the deck offers 0.2.0 as an update in the same menu. By hand: `sudo dpkg -i viz1090_0.2.0_arm64.deb` (then
+the deck offers 0.2.1 as an update in the same menu. By hand: `sudo dpkg -i viz1090_0.2.1_arm64.deb` (then
 `sudo apt-get -f install` for missing libraries).
 
 ## Files the app keeps
@@ -195,6 +195,8 @@ scripts. `build/make_world.py` builds the world map from open data (it needs a P
 
 ## Changes
 
+* **0.2.1**: rows show what can be tapped: a chevron opens a page or changes a value, grey text is information, a dot
+  runs something (looks at the receiver again, uses the GPS fix or a recent place). Rebuilt on launcher 9912361.
 * **0.2.0**: runs on every screen from 640x480 up instead of only 640x480, and the intro screen is new.
   * The intro screen is now a native app of the launcher's `cp0_lvgl` (it was an SDL program drawn through the
     bridge): the launcher's header with the on-screen Esc and the status strip, its lists and rows (every touch

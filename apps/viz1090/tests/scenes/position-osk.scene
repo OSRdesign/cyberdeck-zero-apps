@@ -41,6 +41,8 @@ expect text "Latitude"
 # the header's Esc goes back to the root (the typed code is not applied), there it ends the app
 tap "Esc"
 expect noquit
-expect text "CDG  49.0097, 2.5478"
+# the Position row ends in a chevron now: on the narrower lists (640x480, 1024x600) the value falls back to the code
+@800x480,720x720,1280x720 expect text "CDG  49.0097, 2.5478"
+@640x480,1024x600 expect text "CDG"
 tap "Esc"
 expect quit

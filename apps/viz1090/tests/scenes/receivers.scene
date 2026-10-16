@@ -9,7 +9,9 @@ env VIZ_CONF_SEED tests/fixtures/conf/cdg.conf
 env VIZ_PROGRAM /bin/sh
 wait 1200
 shot root-ready
-expect text "CDG  49.0097, 2.5478"
+# the Position row ends in a chevron now: on the narrower lists (640x480, 1024x600) the value falls back to the code
+@800x480,720x720,1280x720 expect text "CDG  49.0097, 2.5478"
+@640x480,1024x600 expect text "CDG"
 # the labels are never cut: a value too long for the row gives way to a shorter form of it
 expect text "SDR receiver"
 expect text "GPS receiver"
