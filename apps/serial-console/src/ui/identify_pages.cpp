@@ -106,7 +106,7 @@ void SerialApp::check_probe()
     if (!p.done) {
         if (p.text == probe_shown_) return;
         probe_shown_ = p.text;
-        const cp0::ui::ListRow row = cp0::ui::ListRow::item(probe_shown_, "Stop", cp0::ui::ValueTone::Warn);
+        const cp0::ui::ListRow row = cp0::ui::ListRow::item(probe_shown_, "Stop", cp0::ui::ValueTone::Warn, 0, Aff::ActionRunning);
         if (probe_level(probe_) <= 2 && nav_.current() == View::Port && list_)
             list_->update_row(port_row_index(probe_ == Probe::Listen ? PortRow::IdListen : PortRow::IdReset), row);
         if (probe_level(probe_) == 3 && nav_.current() == View::Ask && list_) {
@@ -174,13 +174,13 @@ std::vector<cp0::ui::ListRow> SerialApp::ask_rows()
     std::vector<cp0::ui::ListRow> rows;
     for (const Probe p : ask_map_) {
         if (prober_ && probe_ == p) {
-            rows.push_back(cp0::ui::ListRow::item(probe_shown_, "Stop", cp0::ui::ValueTone::Warn));
+            rows.push_back(cp0::ui::ListRow::item(probe_shown_, "Stop", cp0::ui::ValueTone::Warn, 0, Aff::ActionRunning));
             row_full_.emplace_back();
             continue;
         }
         const std::string value = p == ask_probe_ && !ask_value_.empty() ? ask_value_ : ask_value(p);
         add_rows(rows, row_full_, Density::Comfortable, probe_name(p), value,
-                 tone_of(p == ask_probe_ && (ask_value_ == "Stopped" || ask_value_ == "Failed")), false);
+                 tone_of(p == ask_probe_ && (ask_value_ == "Stopped" || ask_value_ == "Failed")), false, Aff::Action);
     }
     return rows;
 }
@@ -256,7 +256,8 @@ void SerialApp::show_card_rows(int select)
     for (std::size_t i = 0; i < card_rows_.size(); ++i) {
         const CardRow &r = card_rows_[i];
         add_rows(rows, row_full_, Density::Compact, r.key, r.value, cp0::ui::ValueTone::Normal,
-                 r.value.empty() && r.action == CardAction::None); /* a note: grey rows, never selected */
+                 r.value.empty() && r.action == CardAction::None, /* a note: grey rows, never selected */
+                 to_affordance(card_action_kind(r.action)));
         while (card_map_.size() < rows.size()) card_map_.push_back(static_cast<int>(i));
         if (r.key == "Behind it") behind_row = static_cast<int>(i);
     }

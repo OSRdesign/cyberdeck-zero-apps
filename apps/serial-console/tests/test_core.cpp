@@ -136,6 +136,14 @@ static void test_texts()
     found.kind = Kind::MicroPython;
     CHECK(find_row(card_rows(found, native, Probe::Listen, 115200), "Try Ask the device") == nullptr);
     CHECK(find_row(card_rows(silent, native, Probe::At, 115200), "Try Ask the device") == nullptr);
+    // row kinds (chevron / grey / blue): read-outs are Info, pages Open, in-place performers Action
+    CHECK(card_action_kind(CardAction::None) == RowKind::Info);
+    CHECK(card_action_kind(CardAction::Boot) == RowKind::Open && card_action_kind(CardAction::Evidence) == RowKind::Open);
+    CHECK(card_action_kind(CardAction::Ask) == RowKind::Open);
+    for (const CardAction a : {CardAction::Apply, CardAction::Again, CardAction::Copy, CardAction::Reset})
+        CHECK(card_action_kind(a) == RowKind::Action);
+    for (const CardRow &r : card_rows(silent, native, Probe::Listen, 115200))
+        CHECK((r.action == CardAction::None) == (card_action_kind(r.action) == RowKind::Info));
     // the notes fit two lines of a 640x480 row (about 34 characters a line)
     CHECK(std::strlen(kSilentNote) <= 64 && std::strlen(kSilentResetNote) <= 64);
 
@@ -257,7 +265,7 @@ static void test_package()
     const std::string manifest = read_file(app + "/app.json");
     CHECK(manifest.find("\"share_code\": \"serial-console\"") != std::string::npos);
     CHECK(manifest.find("\"package\": \"serial-console\"") != std::string::npos);
-    CHECK(manifest.find("\"version\": \"0.4.0\"") != std::string::npos);
+    CHECK(manifest.find("\"version\": \"0.4.1\"") != std::string::npos);
     // the fixtures of the classifier say they are representative samples
     for (const char *f : {"esp32-idf-boot.txt", "gnss-ublox-m8.txt", "micropython.txt", "marlin-m115.txt"})
         CHECK(read_file(app + "/tests/fixtures/" + f).find("## Representative sample, NOT a capture") == 0);
