@@ -1,12 +1,20 @@
 // SPDX-License-Identifier: MIT
 //
-// vizsetup: the intro screen of viz1090 on the cyberdeck (640x480, touch and keyboard).
+// vizsetup: the intro screen of viz1090 on the cyberdeck (any screen from 640x480 up, touch and keyboard).
 //
 // Shows whether the RTL-SDR dongle and a GPS receiver are connected, takes the position (the code of the
 // nearest airport typed on the keyboard, the GPS, or latitude / longitude on a touch keypad), saves it to
 // ~/.config/cardputerzero/viz1090.conf and exits with 0 (start viz1090) or 1 (cancelled).
+// The layout is the 640x480 one, stretched to the screen: positions and heights follow the screen height, the
+// left column takes the extra width, text and keys grow with the smaller of the two ratios. Below 640x480 it only
+// shows a "needs 640x480" notice.
+//
+//   vizsetup            the intro screen (the window is the screen, see viz_screen.h)
+//   vizsetup --screen   prints "W H UISCALE PPMM_X100 SOURCE" for run_viz1090.sh, and exits
 //
 // Runs through the same display / input bridge as viz1090 (libviz_fb.so, SDL_VIDEODRIVER=offscreen).
+// Environment for tests: VIZ_PROGRAM (the viz1090 binary that must exist, default /opt/viz1090/viz1090),
+// VIZ_WORLD, VIZ_FONT, VIZ_LAYOUT_REPORT=1 (prints every touch target and its size in mm once).
 // Build: g++ -O2 -std=c++11 vizsetup.cpp -o vizsetup -lSDL2 -lSDL2_ttf -lSDL2_gfx -lpthread
 
 #include <SDL2/SDL.h>
@@ -37,6 +45,8 @@
 #include <sys/stat.h>
 #include <termios.h>
 #include <unistd.h>
+
+#include "viz_screen.h"
 
 namespace {
 
@@ -365,6 +375,14 @@ enum Id2 {
 };
 enum class Field { Airport, Lat, Lon };
 
+const char *id_name(int id)
+{
+    static const char *names[] = {"key 0", "key 1", "key 2", "key 3", "key 4", "key 5", "key 6", "key 7", "key 8",
+                                  "key 9", "key +/-", "key .", "key backspace", "key Next", "airport field",
+                                  "latitude field", "longitude field", "GPS panel", "Back", "Start", "none"};
+    return id >= 0 && id <= None ? names[id] : "?";
+}
+
 struct Hit { Rect rect; int id; };
 
 class Setup {
@@ -379,6 +397,13 @@ private:
     std::vector<Hit> hits_;
     int pressed_ = None;
 
+    // the screen, and the scales of the 640x480 design: horizontal, vertical, sizes (text, radii, keys)
+    viz_screen_t screen_{};
+    int w_ = 640, h_ = 480;
+    float sx_ = 1, sy_ = 1, s_ = 1;
+    bool too_small_ = false;
+    bool reported_ = false;
+
     std::string lat_, lon_, airport_, picked_;
     Field field_ = Field::Airport;
     std::vector<Airport> airports_;
@@ -390,12 +415,23 @@ private:
     bool done_ = false;
     int result_ = 1;
 
+    int S(float v) const { return static_cast<int>(std::lround(v * s_)); }   // a size of the design
+    int Y(float v) const { return static_cast<int>(std::lround(v * sy_)); }  // a row of the design
+    // offset of a line inside a box that was `design_h` high and is `actual_h` now: scaled, and centred in the extra
+    int inside(float design_off, float design_h, int actual_h) const
+    {
+        return static_cast<int>(std::lround(design_off * s_ + (actual_h - design_h * s_) / 2));
+    }
+
     TTF_Font *font(int px);
     void text(const std::string &value, int px, SDL_Color color, int x, int y, int max_width = 0, bool right = false);
     int text_width(const std::string &value, int px);
-    void panel(Rect r, SDL_Color color, int radius = 12);
-    void button(Rect r, const std::string &label, int px, SDL_Color color, SDL_Color text_color, int id);
+    void panel(Rect r, SDL_Color color, int radius);
+    void outline(Rect r, SDL_Color color);
+    void button(Rect r, const std::string &label, int px, SDL_Color color, SDL_Color text_color, int id, Rect hit);
     void draw();
+    void draw_notice();
+    void report_layout();
     void activate(int id);
     void type_char(char ch);
     void type_airport(char ch);
@@ -469,14 +505,23 @@ void Setup::panel(Rect r, SDL_Color color, int radius)
     roundedBoxRGBA(renderer_, r.x, r.y, r.x + r.w - 1, r.y + r.h - 1, radius, color.r, color.g, color.b, 255);
 }
 
-void Setup::button(Rect r, const std::string &label, int px, SDL_Color color, SDL_Color text_color, int id)
+// The focus frame of a field: 3 px on the deck.
+void Setup::outline(Rect r, SDL_Color color)
+{
+    const int thickness = std::max(2, S(3));
+    for (int i = 0; i < thickness; ++i)
+        rectangleRGBA(renderer_, r.x + i, r.y + i, r.x + r.w - 1 - i, r.y + r.h - 1 - i, color.r, color.g, color.b, 255);
+}
+
+// A button; `hit` is the area a tap selects it in (the button and its share of the gaps around it).
+void Setup::button(Rect r, const std::string &label, int px, SDL_Color color, SDL_Color text_color, int id, Rect hit)
 {
     if (pressed_ == id) color = SDL_Color{0x70, 0x70, 0x70, 255};
-    panel(r, color, 14);
+    panel(r, color, S(14));
     const int w = text_width(label, px);
     const int h = font(px) ? TTF_FontHeight(font(px)) : px;
     text(label, px, text_color, r.x + (r.w - w) / 2, r.y + (r.h - h) / 2);
-    hits_.push_back({r, id});
+    hits_.push_back({hit, id});
 }
 
 bool Setup::position(double &lat, double &lon) const
@@ -484,21 +529,32 @@ bool Setup::position(double &lat, double &lon) const
     return parse_degrees(lat_, 90.0, lat) && parse_degrees(lon_, 180.0, lon);
 }
 
+// Every number below is the 640x480 design: S() scales a size, Y() a row; the left column takes the extra width.
 void Setup::draw()
 {
     SDL_SetRenderDrawColor(renderer_, kBg.r, kBg.g, kBg.b, 255);
     SDL_RenderClear(renderer_);
     hits_.clear();
 
-    text("viz1090", 28, kGold, 16, 6);
+    // keypad on the right (3 columns of 88 + 8 on the deck), the left column in the rest
+    const int key_pitch = S(96), key_w = S(88), key_gap = key_pitch - key_w;
+    const int keypad_w = 2 * key_pitch + key_w;
+    const int keypad_x = w_ - S(20) - keypad_w;
+    const int left = S(16);
+    const int column = keypad_x - S(20) - left;      // 304 on the deck
+
+    text("viz1090", S(28), kGold, left, S(6));
     // SDR
     static std::string sdr;
     static Uint32 last_scan = 0;
     if (SDL_GetTicks() - last_scan > 1000 || last_scan == 0) { sdr = find_sdr(); last_scan = SDL_GetTicks(); }
-    panel({16, 52, 304, 56}, kPanel);
-    filledCircleRGBA(renderer_, 32, 80, 9, sdr.empty() ? kRed.r : kGreen.r, sdr.empty() ? kRed.g : kGreen.g, sdr.empty() ? kRed.b : kGreen.b, 255);
-    text("SDR receiver", 14, kMuted, 52, 55);
-    text(sdr.empty() ? "Not found: plug it in" : sdr, 20, sdr.empty() ? kRed : kWhite, 52, 74, 256);
+    const Rect sdr_box{left, Y(52), column, Y(56)};
+    panel(sdr_box, kPanel, S(12));
+    const SDL_Color sdr_color = sdr.empty() ? kRed : kGreen;
+    filledCircleRGBA(renderer_, left + S(16), sdr_box.y + sdr_box.h / 2, S(9), sdr_color.r, sdr_color.g, sdr_color.b, 255);
+    text("SDR receiver", S(14), kMuted, left + S(36), sdr_box.y + inside(3, 56, sdr_box.h));
+    text(sdr.empty() ? "Not found: plug it in" : sdr, S(20), sdr.empty() ? kRed : kWhite, left + S(36),
+         sdr_box.y + inside(22, 56, sdr_box.h), column - S(48));
 
     // GPS (tap the panel to use its position)
     int state = 0, sats = 0;
@@ -512,52 +568,62 @@ void Setup::draw()
         gps_fix_ = state == 2;
         if (gps_fix_) { gps_lat_ = gps_->lat; gps_lon_ = gps_->lon; }
     }
-    panel({16, 114, 304, 56}, kPanel);
+    const Rect gps_box{left, Y(114), column, Y(56)};
+    panel(gps_box, kPanel, S(12));
     SDL_Color gps_color = state == 2 ? kGreen : state == 1 ? kAmber : kMuted;
-    filledCircleRGBA(renderer_, 32, 142, 9, gps_color.r, gps_color.g, gps_color.b, 255);
-    text("GPS receiver (tap to use)", 14, kMuted, 52, 117);
+    filledCircleRGBA(renderer_, left + S(16), gps_box.y + gps_box.h / 2, S(9), gps_color.r, gps_color.g, gps_color.b, 255);
+    text("GPS receiver (tap to use)", S(14), kMuted, left + S(36), gps_box.y + inside(3, 56, gps_box.h));
     char line[96];
     if (state == 0) std::snprintf(line, sizeof(line), "None detected");
     else if (state == 1) std::snprintf(line, sizeof(line), "%s: waiting for a fix", name.empty() ? port.c_str() : name.c_str());
     else std::snprintf(line, sizeof(line), "Fix %.4f, %.4f (%d sats)", gps_lat_, gps_lon_, sats);
-    text(line, 20, state == 0 ? kMuted : state == 1 ? kAmber : kWhite, 52, 136, 256);
-    hits_.push_back({{16, 114, 304, 56}, GpsPanel});
+    text(line, S(20), state == 0 ? kMuted : state == 1 ? kAmber : kWhite, left + S(36),
+         gps_box.y + inside(22, 56, gps_box.h), column - S(48));
+    hits_.push_back({{left, Y(111), column, Y(176) - Y(111)}, GpsPanel});   // down to the label below
 
     // airport code
-    text("Nearest airport code", 14, kMuted, 16, 179);
-    panel({16, 200, 150, 56}, kPanel);
-    if (field_ == Field::Airport) rectangleRGBA(renderer_, 16, 200, 165, 255, kBlue.r, kBlue.g, kBlue.b, 255);
-    if (field_ == Field::Airport) rectangleRGBA(renderer_, 17, 201, 164, 254, kBlue.r, kBlue.g, kBlue.b, 255);
-    if (field_ == Field::Airport) rectangleRGBA(renderer_, 18, 202, 163, 253, kBlue.r, kBlue.g, kBlue.b, 255);
-    text(airport_.empty() ? "CDG" : airport_, 32, airport_.empty() ? kDim : kWhite, 30, 208);
-    hits_.push_back({{16, 200, 150, 56}, FieldAirport});
-    if (airports_.empty()) text("no airport list", 20, kMuted, 178, 216);
-    else if (!picked_.empty() && picked_ == airport_) text("found", 20, kGreen, 178, 216);
-    else if (airport_.size() >= 3) text("unknown code", 20, kRed, 178, 216);
+    const Rect airport_box{left, Y(200), S(150), Y(56)};
+    text("Nearest airport code", S(14), kMuted, left, airport_box.y - S(21));
+    panel(airport_box, kPanel, S(12));
+    if (field_ == Field::Airport) outline(airport_box, kBlue);
+    text(airport_.empty() ? "CDG" : airport_, S(32), airport_.empty() ? kDim : kWhite, left + S(14),
+         airport_box.y + inside(8, 56, airport_box.h));
+    hits_.push_back({{left, Y(176), column, Y(260) - Y(176)}, FieldAirport});   // label, field and the line beside it
+    const int beside = airport_box.x + airport_box.w + S(12), beside_y = airport_box.y + inside(16, 56, airport_box.h);
+    if (airports_.empty()) text("no airport list", S(20), kMuted, beside, beside_y);
+    else if (!picked_.empty() && picked_ == airport_) text("found", S(20), kGreen, beside, beside_y);
+    else if (airport_.size() >= 3) text("unknown code", S(20), kRed, beside, beside_y);
 
     // latitude / longitude
-    text("Latitude", 14, kMuted, 16, 267);
-    text("Longitude", 14, kMuted, 172, 267);
-    const Rect lat_box{16, 288, 148, 50}, lon_box{172, 288, 148, 50};
-    panel(lat_box, kPanel);
-    panel(lon_box, kPanel);
-    for (int i = 0; i < 3; ++i) {
-        if (field_ == Field::Lat) rectangleRGBA(renderer_, lat_box.x + i, lat_box.y + i, lat_box.x + lat_box.w - 1 - i, lat_box.y + lat_box.h - 1 - i, kBlue.r, kBlue.g, kBlue.b, 255);
-        if (field_ == Field::Lon) rectangleRGBA(renderer_, lon_box.x + i, lon_box.y + i, lon_box.x + lon_box.w - 1 - i, lon_box.y + lon_box.h - 1 - i, kBlue.r, kBlue.g, kBlue.b, 255);
-    }
-    text(lat_.empty() ? "--" : lat_, 20, lat_.empty() ? kDim : kWhite, lat_box.x + 12, lat_box.y + 12, 124);
-    text(lon_.empty() ? "--" : lon_, 20, lon_.empty() ? kDim : kWhite, lon_box.x + 12, lon_box.y + 12, 124);
-    hits_.push_back({lat_box, FieldLat});
-    hits_.push_back({lon_box, FieldLon});
+    const int half = (column - S(8)) / 2;
+    const Rect lat_box{left, Y(288), half, Y(50)}, lon_box{left + half + S(8), Y(288), half, Y(50)};
+    text("Latitude", S(14), kMuted, lat_box.x, lat_box.y - S(21));
+    text("Longitude", S(14), kMuted, lon_box.x, lon_box.y - S(21));
+    panel(lat_box, kPanel, S(12));
+    panel(lon_box, kPanel, S(12));
+    if (field_ == Field::Lat) outline(lat_box, kBlue);
+    if (field_ == Field::Lon) outline(lon_box, kBlue);
+    text(lat_.empty() ? "--" : lat_, S(20), lat_.empty() ? kDim : kWhite, lat_box.x + S(12),
+         lat_box.y + inside(12, 50, lat_box.h), lat_box.w - S(24));
+    text(lon_.empty() ? "--" : lon_, S(20), lon_.empty() ? kDim : kWhite, lon_box.x + S(12),
+         lon_box.y + inside(12, 50, lon_box.h), lon_box.w - S(24));
+    const int field_top = Y(263), field_h = Y(342) - Y(263);                   // with the labels above
+    hits_.push_back({{lat_box.x, field_top, lat_box.w + S(4), field_h}, FieldLat});
+    hits_.push_back({{lon_box.x - S(4), field_top, lon_box.w + S(4), field_h}, FieldLon});
 
     double la, lo;
     const bool ready = installed_ && position(la, lo);
     std::string note = message_;
     if (note.empty()) note = !installed_ ? "viz1090 is not installed on this deck." : (!ready ? "Type an airport code, or enter the position." : "");
-    text(note, 14, kAmber, 16, 347, 304);
+    text(note, S(14), kAmber, left, Y(347), column);
 
-    button({16, 420, 130, 52}, "Back", 28, kKey, kWhite, BtnBack);
-    button({158, 420, 162, 52}, "Start", 32, ready ? kGold : SDL_Color{0x4A, 0x4A, 0x4A, 255}, kBlack, BtnStart);
+    const int buttons_y = Y(420), buttons_h = Y(52), hit_top = Y(400);
+    const int back_w = static_cast<int>(std::lround((column - S(12)) * 130.0 / 292.0));
+    const Rect back{left, buttons_y, back_w, buttons_h};
+    const Rect go{left + back_w + S(12), buttons_y, column - back_w - S(12), buttons_h};
+    button(back, "Back", S(28), kKey, kWhite, BtnBack, {back.x, hit_top, back.w + S(6), h_ - hit_top});
+    button(go, "Start", S(32), ready ? kGold : SDL_Color{0x4A, 0x4A, 0x4A, 255}, kBlack, BtnStart,
+           {go.x - S(6), hit_top, go.w + S(6), h_ - hit_top});
 
     // numeric keypad on the right
     struct Cell { int id; const char *label; int col, row, span; };
@@ -568,20 +634,64 @@ void Setup::draw()
         {KSign, "+/-", 0, 3, 1}, {K0, "0", 1, 3, 1}, {KDot, ".", 2, 3, 1},
         {KBack, "", 0, 4, 2}, {KNext, "Next", 2, 4, 1},
     };
+    const int row_pitch = Y(80), key_h = Y(72);
     for (const Cell &c : cells) {
-        const Rect r{340 + c.col * 96, 56 + c.row * 80, c.span * 88 + (c.span - 1) * 8, 72};
+        const Rect r{keypad_x + c.col * key_pitch, Y(56) + c.row * row_pitch, c.span * key_w + (c.span - 1) * key_gap, key_h};
+        const Rect hit{r.x - key_gap / 2, r.y - (row_pitch - key_h) / 2, r.w + key_gap, row_pitch};   // the gaps too
         const bool digit = c.id <= K9 || c.id == KDot || c.id == K0;
-        button(r, c.label, c.id == KNext ? 20 : 32, digit ? kKey : kKey2, kWhite, c.id);
+        button(r, c.label, c.id == KNext ? S(20) : S(32), digit ? kKey : kKey2, kWhite, c.id, hit);
         if (c.id == KBack) {                      // backspace symbol: an arrow-shaped key with a cross
             const int cx = r.x + r.w / 2, cy = r.y + r.h / 2;
-            const Sint16 vx[5] = {(Sint16)(cx - 22), (Sint16)(cx - 8), (Sint16)(cx + 22), (Sint16)(cx + 22), (Sint16)(cx - 8)};
-            const Sint16 vy[5] = {(Sint16)cy, (Sint16)(cy - 14), (Sint16)(cy - 14), (Sint16)(cy + 14), (Sint16)(cy + 14)};
-            polygonRGBA(renderer_, vx, vy, 5, 255, 255, 255, 255);
-            lineRGBA(renderer_, cx - 2, cy - 6, cx + 12, cy + 6, 255, 255, 255, 255);
-            lineRGBA(renderer_, cx - 2, cy + 6, cx + 12, cy - 6, 255, 255, 255, 255);
+            for (int t = 0; t < std::max(1, S(1)); ++t) {   // 1 px on the deck, thicker on bigger screens
+                const Sint16 vx[5] = {(Sint16)(cx - S(22) + t), (Sint16)(cx - S(8)), (Sint16)(cx + S(22) - t),
+                                      (Sint16)(cx + S(22) - t), (Sint16)(cx - S(8))};
+                const Sint16 vy[5] = {(Sint16)cy, (Sint16)(cy - S(14) + t), (Sint16)(cy - S(14) + t),
+                                      (Sint16)(cy + S(14) - t), (Sint16)(cy + S(14) - t)};
+                polygonRGBA(renderer_, vx, vy, 5, 255, 255, 255, 255);
+                lineRGBA(renderer_, cx - S(2) + t, cy - S(6), cx + S(12) + t, cy + S(6), 255, 255, 255, 255);
+                lineRGBA(renderer_, cx - S(2) + t, cy + S(6), cx + S(12) + t, cy - S(6), 255, 255, 255, 255);
+            }
         }
     }
+    report_layout();
     SDL_RenderPresent(renderer_);
+}
+
+// Smaller than 640x480 (the 3.5" panel of the Pi 3A+): a plain notice and a way out.
+void Setup::draw_notice()
+{
+    SDL_SetRenderDrawColor(renderer_, kBg.r, kBg.g, kBg.b, 255);
+    SDL_RenderClear(renderer_);
+    hits_.clear();
+    const int body = std::max(16, std::min(w_, h_) / 16), margin = std::max(8, w_ / 40);
+    text("viz1090", body * 7 / 5, kGold, margin, margin);
+    text("viz1090 needs a 640x480 screen.", body, kWhite, margin, margin + body * 3, w_ - 2 * margin);
+    char line[96];
+    std::snprintf(line, sizeof(line), "This screen is %dx%d.", w_, h_);
+    text(line, body, kMuted, margin, margin + body * 5, w_ - 2 * margin);
+    const int bh = std::max(48, h_ / 6);
+    const Rect back{margin, h_ - margin - bh, w_ - 2 * margin, bh};
+    button(back, "Back", body * 7 / 5, kKey, kWhite, BtnBack, {0, back.y - margin, w_, h_ - back.y + margin});
+    SDL_RenderPresent(renderer_);
+}
+
+// VIZ_LAYOUT_REPORT=1: every touch target once, with its size in mm (density of the screen), for the layout check.
+void Setup::report_layout()
+{
+    if (reported_) return;
+    reported_ = true;
+    const char *v = std::getenv("VIZ_LAYOUT_REPORT");
+    if (!v || !v[0] || v[0] == '0') return;
+    const double ppmm = screen_.ppmm_x100 / 100.0;
+    double smallest = 1e9;
+    for (const Hit &hit : hits_) {
+        const double wmm = hit.rect.w / ppmm, hmm = hit.rect.h / ppmm;
+        smallest = std::min(smallest, std::min(wmm, hmm));
+        const bool inside_screen = hit.rect.x >= 0 && hit.rect.y >= 0 && hit.rect.x + hit.rect.w <= w_ && hit.rect.y + hit.rect.h <= h_;
+        std::fprintf(stderr, "[vizsetup] target %-16s %4d,%-4d %4dx%-4d px  %5.1f x %4.1f mm%s\n", id_name(hit.id),
+                     hit.rect.x, hit.rect.y, hit.rect.w, hit.rect.h, wmm, hmm, inside_screen ? "" : "  OFF SCREEN");
+    }
+    std::fprintf(stderr, "[vizsetup] %dx%d at %.2f px/mm: smallest target side %.1f mm\n", w_, h_, ppmm, smallest);
 }
 
 void Setup::type_char(char ch)
@@ -644,7 +754,7 @@ void Setup::use_gps()
 void Setup::start()
 {
     double lat = 0, lon = 0;
-    if (!installed_ || !position(lat, lon)) return;
+    if (too_small_ || !installed_ || !position(lat, lon)) return;
     if (!save_position(degrees_text(lat), degrees_text(lon), picked_)) {
         message_ = "Could not save the position.";
         return;
@@ -682,11 +792,11 @@ void Setup::handle(const SDL_Event &event)
         result_ = 1;
         done_ = true;
         break;
-    case SDL_FINGERDOWN:
-        pressed_ = hit_id(hits_, static_cast<int>(event.tfinger.x * 640), static_cast<int>(event.tfinger.y * 480));
+    case SDL_FINGERDOWN:       // finger positions are 0..1 of the window
+        pressed_ = hit_id(hits_, static_cast<int>(event.tfinger.x * w_), static_cast<int>(event.tfinger.y * h_));
         break;
     case SDL_FINGERUP: {
-        const int id = hit_id(hits_, static_cast<int>(event.tfinger.x * 640), static_cast<int>(event.tfinger.y * 480));
+        const int id = hit_id(hits_, static_cast<int>(event.tfinger.x * w_), static_cast<int>(event.tfinger.y * h_));
         if (id != None && id == pressed_) activate(id);
         pressed_ = None;
         break;
@@ -694,7 +804,10 @@ void Setup::handle(const SDL_Event &event)
     case SDL_KEYDOWN:
         switch (event.key.keysym.sym) {
         case SDLK_ESCAPE: result_ = 1; done_ = true; break;
-        case SDLK_RETURN: case SDLK_KP_ENTER: start(); break;
+        case SDLK_RETURN: case SDLK_KP_ENTER:
+            if (too_small_) { result_ = 1; done_ = true; }
+            else start();
+            break;
         case SDLK_TAB: case SDLK_DOWN: next_field(1); break;
         case SDLK_UP: next_field(-1); break;
         case SDLK_BACKSPACE: backspace(); break;
@@ -702,6 +815,7 @@ void Setup::handle(const SDL_Event &event)
         }
         break;
     case SDL_TEXTINPUT: {
+        if (too_small_) break;
         const char ch = event.text.text[0];
         if (field_ == Field::Airport) {
             if (std::isalpha(static_cast<unsigned char>(ch))) type_airport(ch);
@@ -720,24 +834,38 @@ void Setup::handle(const SDL_Event &event)
 
 int Setup::run()
 {
+    viz_screen_detect(&screen_);
+    w_ = screen_.w;
+    h_ = screen_.h;
+    sx_ = w_ / 640.0f;
+    sy_ = h_ / 480.0f;
+    s_ = std::min(sx_, sy_);
+    too_small_ = w_ < 640 || h_ < 480;
+    std::fprintf(stderr, "[vizsetup] screen %dx%d (%s), %d.%02d px/mm%s\n", w_, h_, screen_.source,
+                 screen_.ppmm_x100 / 100, screen_.ppmm_x100 % 100, too_small_ ? ": too small, notice only" : "");
+
     if (SDL_Init(SDL_INIT_VIDEO) < 0 || TTF_Init() < 0) return 2;
-    window_ = SDL_CreateWindow("viz1090", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 640, 480, 0);
+    window_ = SDL_CreateWindow("viz1090", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w_, h_, 0);
     if (!window_) return 2;
     renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED);
     if (!renderer_) renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_SOFTWARE);
     if (!renderer_) return 2;
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
 
-    installed_ = access("/opt/viz1090/viz1090", X_OK) == 0;
-    load_position(lat_, lon_, airport_);
-    airports_ = load_airports();
-    picked_ = airport_;
-    std::thread(gps_worker, gps_).detach();
+    if (!too_small_) {
+        const char *program = std::getenv("VIZ_PROGRAM");
+        installed_ = access(program && program[0] ? program : "/opt/viz1090/viz1090", X_OK) == 0;
+        load_position(lat_, lon_, airport_);
+        airports_ = load_airports();
+        picked_ = airport_;
+        std::thread(gps_worker, gps_).detach();
+    }
 
     while (!done_) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) handle(event);
-        draw();
+        if (too_small_) draw_notice();
+        else draw();
         SDL_Delay(50);
     }
     gps_->stop = true;
@@ -749,8 +877,14 @@ int Setup::run()
 
 } // namespace
 
-int main()
+int main(int argc, char **argv)
 {
+    if (argc > 1 && std::strcmp(argv[1], "--screen") == 0) {   // for run_viz1090.sh: the screen and viz1090's uiscale
+        viz_screen_t screen;
+        viz_screen_detect(&screen);
+        std::printf("%d %d %d %d %s\n", screen.w, screen.h, viz_screen_uiscale(&screen), screen.ppmm_x100, screen.source);
+        return 0;
+    }
     Setup setup;
     return setup.run();
 }
