@@ -1,0 +1,34 @@
+# Local devices, done
+title Net Toolbox: Local devices, done
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO devices=done
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 250
+key enter
+wait 300
+shot done
+expect text "Done: 14 devices on 192.168.68.0/24"
+expect text "Rescan"
+expect text "router"
+expect text "nas"
+expect text "laptop-olivier"
+key down
+key end
+wait 300
+shot bottom
+expect text "Vendor unknown  00:00:5e:00:53:01"
+expect text "192.168.68.200"
+expect notext "Message cut off"

@@ -17,8 +17,10 @@
 
 namespace nt {
 
-ReverseNames::ReverseNames(const std::string &server, std::uint16_t port, int timeout_ms)
-    : timeout_ms_(std::max(100, timeout_ms)), next_id_(0)
+ReverseNames::ReverseNames(const std::string &server, std::uint16_t port, int timeout_ms, std::size_t max_entries,
+                           std::size_t max_pending)
+    : timeout_ms_(std::max(100, timeout_ms)), max_entries_(std::max<std::size_t>(1, max_entries)),
+      max_pending_(std::max<std::size_t>(1, max_pending)), next_id_(0)
 {
     if (getrandom(&next_id_, sizeof(next_id_), GRND_NONBLOCK) != static_cast<ssize_t>(sizeof(next_id_)))
         next_id_ = static_cast<std::uint16_t>(now_us() ^ getpid());
@@ -33,7 +35,7 @@ ReverseNames::ReverseNames(const std::string &server, std::uint16_t port, int ti
 
 void ReverseNames::want(const Address &a)
 {
-    if (!fd_.valid() || !a.valid() || entries_.size() >= kMaxEntries) return;
+    if (!fd_.valid() || !a.valid() || entries_.size() >= max_entries_) return;
     for (const Entry &e : entries_)
         if (e.addr == a) return;
     Entry e;
@@ -93,7 +95,7 @@ void ReverseNames::service()
         if (e.state == State::Sent) ++pending;
     }
     for (Entry &e : entries_) {
-        if (pending >= kMaxPending) break;
+        if (pending >= max_pending_) break;
         if (e.state != State::Queued) continue;
         send(e);
         if (e.state == State::Sent) ++pending;

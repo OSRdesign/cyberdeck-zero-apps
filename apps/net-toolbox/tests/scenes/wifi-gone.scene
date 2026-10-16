@@ -1,0 +1,47 @@
+# Wi-Fi networks, a network that disappeared
+title Net Toolbox: Wi-Fi networks, a network that disappeared
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO wifi=vanish
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 400
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 100
+key enter
+wait 300
+shot before
+expect text "In range"
+key end
+key up
+key enter
+wait 300
+key home
+wait 200
+shot gone
+expect text "Gone: not in the last scan"
+expect text "Gone: not in the last scan, last values shown"
+expect text "-74 dBm, Weak"
+key esc
+wait 300
+shot list
+expect notext "CafeGuest"
+expect notext "Message cut off"

@@ -1,0 +1,50 @@
+# Wi-Fi walk test, the weak-zone setting
+title Net Toolbox: Wi-Fi walk test, the weak-zone setting
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO walk=run
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 300
+key down
+wait 100
+key enter
+wait 300
+shot minus80
+expect text "-80 dBm"
+key enter
+wait 200
+expect text "-70 dBm"
+key enter
+wait 200
+expect text "-75 dBm"
+key enter
+wait 200
+expect text "-80 dBm"
+key up
+wait 100
+key enter
+wait 400
+shot running
+expect text "Dashed line: -80 dBm. Squares: weak. Ticks: access point changes."
+key enter
+wait 400
+key down
+key end
+wait 300
+shot bottom
+expect text "Dips under -80 dBm"
+expect notext "Message cut off"

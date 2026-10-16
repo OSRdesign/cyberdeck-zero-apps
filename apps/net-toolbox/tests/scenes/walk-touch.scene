@@ -1,0 +1,40 @@
+# Wi-Fi walk test by touch
+title Net Toolbox: Wi-Fi walk test by touch
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO walk=run
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key end
+key up
+wait 400
+tap "Wi-Fi walk test"
+wait 300
+tap "Start"
+wait 400
+shot running
+expect text "Stop"
+tap "Stop"
+wait 400
+shot stopped
+expect text "Stopped: 01:23, weakest -82 dBm"
+@640x480 tapxy 0.5 0.923
+@800x480 tapxy 0.5 0.935
+@720x720 tapxy 0.5 0.718
+@1024x600 tapxy 0.5 0.765
+@1280x720 tapxy 0.5 0.713
+
+wait 300
+shot weak
+expect text "-80 dBm, next walk"
+tap "Save log"
+tap "Save log"
+shot saved
+tap "Reset"
+wait 300
+expect text "Ready"
+tap "Esc"
+wait 300
+expect noquit
+tap "Esc"
+expect quit
+expect notext "Message cut off"

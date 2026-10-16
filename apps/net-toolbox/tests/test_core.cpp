@@ -114,12 +114,12 @@ static void test_package()
     const std::string manifest = read_file(app + "/app.json");
     CHECK(manifest.find("\"share_code\": \"net-toolbox\"") != std::string::npos);
     CHECK(manifest.find("\"package\": \"net-toolbox\"") != std::string::npos);
-    CHECK(manifest.find("\"version\": \"0.3.0\"") != std::string::npos);
+    CHECK(manifest.find("\"version\": \"0.4.0\"") != std::string::npos);
     CHECK(manifest.find("\"title\": \"Net Toolbox\"") != std::string::npos);
     CHECK(manifest.find("\"license\": \"MIT\"") != std::string::npos);
     CHECK(manifest.find("\"categories\": [\"Tools\"]") != std::string::npos);
     CHECK(manifest.find("\"permissions\": {\"network\": true}") != std::string::npos);
-    CHECK(manifest.find("\"depends\": \"libfreetype6, libinput10, libxkbcommon0, curl, ca-certificates\"") !=
+    CHECK(manifest.find("\"depends\": \"libfreetype6, libinput10, libxkbcommon0, curl, ca-certificates, network-manager\"") !=
           std::string::npos);
     CHECK(manifest.find("libc6") == std::string::npos);
     CHECK(std::string(kAppId) == "net-toolbox");
@@ -400,6 +400,20 @@ int main()
     test_scope();
     test_ui_scope();
     test_ui_model_03();
+    test_subnet_math();
+    test_arp_parser();
+    test_oui();
+    test_lannames();
+    test_devices_engine();
+    test_devices_guards();
+    test_devices_rescan();
+    test_devices_failed();
+    test_devices_session_cancel();
+    test_devscan();
+    test_netlog_04();
+    test_wifiscan();
+    test_walktest();
+    test_ui_model_04();
     test_package();
     std::printf("test-net-toolbox: %d passed, %d failed, %d skipped\n", g_pass, g_fail, g_skip);
     return g_fail ? 1 : 0;

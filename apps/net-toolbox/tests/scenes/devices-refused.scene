@@ -1,0 +1,26 @@
+# Local devices, a public address is refused
+title Net Toolbox: Local devices, a public address is refused
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO devices=refused
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 250
+key enter
+wait 300
+shot refused
+expect text "Only private networks can be scanned"
+expect text "8.8.8.8 is not a private address: Local devices only scans your own private network."
+expect text "Connect to your home network, or choose another one under Network."
+expect notext "Message cut off"

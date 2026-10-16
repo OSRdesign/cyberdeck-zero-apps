@@ -1,15 +1,18 @@
 # Net Toolbox
 
-Version 0.3.0, package `net-toolbox`. Part of
+Version 0.4.0 (draft), package `net-toolbox`. Part of
 [cyberdeck-zero-apps](../../README.md).
 
 Net Toolbox gathers the tools you reach for when a network misbehaves: a step-by-step **diagnosis** ("why is my
 internet broken?") in plain words, **ping** with loss and jitter, a **DNS lookup** with a resolver you choose, a TCP
 **port check**, the **interfaces** of the board and, from 0.2, a **traceroute** drawn as a chain of hops, an **HTTP check**
 with a timing waterfall and the certificate's days left, your **public IP** and **whois**. It is a full-screen touch app made for the deck's small screen
-(Pi Zero 2 W, 640x480) and meant to work the same on the Pi 3A+, the Pi 5 and the CM5. It does not repeat
-[LAN Scan](../lanscan/README.md) (devices and their ports) or [Wi-Fi Survey](../wifi-survey/README.md) (channels).
-Nothing leaves the board until you start a test.
+(Pi Zero 2 W, 640x480) and meant to work the same on the Pi 3A+, the Pi 5 and the CM5. From 0.4 it also **replaces
+[LAN Scan](../lanscan/README.md) and [Wi-Fi Survey](../wifi-survey/README.md)**: **Local devices** (the devices on your network
+and the open ports of one of them), **Wi-Fi networks** (the networks around, their channels and the least crowded one) and a
+**Wi-Fi walk test** (the signal against time while you walk with the board). LAN Scan and Wi-Fi Survey remain installable
+for now. Nothing leaves the board until you start a test (the Wi-Fi list is read by NetworkManager's own scan as soon as its
+page opens, as the diagnosis and the public address start when you open them).
 
 Kind: a native `cp0_lvgl` app (kind A of the [guidelines](../../docs/APP-GUIDELINES.md)), because it has its own
 pages, live results and must be complete by touch and by keys; the usual command-line tools (`dig`, `traceroute`)
@@ -30,6 +33,16 @@ far). The core is described in [0.3.0: the new tools' core](#030-the-new-tools-c
 adapter, Ethernet): see [The network chooser](#the-network-chooser-03). The speed test and the Bluetooth radar
 have run on the deck (Zero 2 W) and the Pi 3A+; Wake-on-LAN and the interface chooser with a second adapter are still to be
 tried on a board (`tests/BOARD-TESTS.md`, B11 to B15).
+
+**0.4.0 (draft):** three more tools with their pages, folding in LAN Scan and Wi-Fi Survey. **Local devices** discovers the
+devices on your network (their address, MAC, vendor and name), marks this device and the router, and scans the open TCP ports
+of one device you pick (its page also pings it, checks a port, saves it for Wake-on-LAN). **Wi-Fi networks** lists the networks
+around (signal bars, channel, band, security), a Channels view with the least crowded channel, and a page per network that
+follows it by its BSSID. The **Wi-Fi walk test** draws the signal against time with a weak-zone line and ends with a summary
+card. The cores are described in [Local devices (0.4): the core](#local-devices-04-the-core) and [Wi-Fi networks and walk
+test (0.4): the cores](#wi-fi-networks-and-walk-test-04-the-cores), the pages in [The 0.4 pages](#the-04-pages). The pages ran
+in the headless scenes only; the board steps B16 to B19 (`tests/BOARD-TESTS.md`) are still to be run. Local devices scans only
+the chosen interface's own private network (never a public address), without root.
 
 ## Screenshots
 
@@ -60,7 +73,7 @@ and by keys.
 
 | Page | What it shows | Actions (rows) |
 |---|---|---|
-| **Home** | a line with the effective interface and its address (or **No network**, amber; or the `wlan1 not found: using Automatic` note), refreshed every 2 s | **Network** (value `Automatic (wlan0)` or `wlan1`: opens the choice page), Diagnose my connection (the page starts on this row), Ping, Traceroute, DNS lookup, Port check, HTTP check, Speed test, Public IP, Whois, Wake-on-LAN, Bluetooth radar, Interfaces (thirteen rows: the list scrolls) |
+| **Home** | a line with the effective interface and its address (or **No network**, amber; or the `wlan1 not found: using Automatic` note), refreshed every 2 s | **Network** (value `Automatic (wlan0)` or `wlan1`: opens the choice page), Diagnose my connection (the page starts on this row), Ping, Traceroute, DNS lookup, Port check, HTTP check, Speed test, Public IP, Whois, Wake-on-LAN, Bluetooth radar, **Local devices**, **Wi-Fi networks**, **Wi-Fi walk test**, Interfaces (sixteen rows: the list scrolls) |
 | **Interfaces** | read-only, refreshed every 2 s: a heading per interface with State, IPv4, IPv6, MAC, Speed (Wi-Fi: Network, Signal `-58 dBm, Good`, Bit rate), then Network: Gateway and the DNS servers in `resolv.conf` order, the first marked | one row scrolls per key press |
 | **Diagnosis** | starts by itself: the **health ladder**, six rungs (Link up, Address, Gateway, DNS, Internet, Captive portal), each a mark and a word: hollow circle *waiting*, spinning amber arc *checking...*, green disc with a check (the detail: `3 ms`, the address, the resolver), red disc with a cross, a dash *skipped*; under it the first failure in plain words or **Everything works** with the core's notes | Run again, Save log |
 | **Ping** | the latency **line graph** of the last 120 packets (time on x, ms on y with an automatic scale, the **jitter band** (average plus and minus the jitter) shaded behind the line, a lost packet a red tick on the baseline and a gap, a slow one an amber dot), the **packet strip** (one cell per packet: short green *ok*, medium amber *slow*, tall red *lost*, small grey *waiting*) with its legend, and the statistics (sent, lost and loss %, min / avg / max, jitter). When ICMP sockets are not allowed a notice says why and how to fix it | Start / Stop, Target (Roller: Gateway, 1.1.1.1, 8.8.8.8, the saved targets, Type a host...), Save log, Save target |
@@ -71,7 +84,7 @@ and by keys.
 | **Public IP** | asks by itself on entry: Public IPv4, Public IPv6 (`none` is normal and neutral), Country, Cloudflare data centre, Local address; behind carrier-grade NAT (a local address in 100.64.0.0/10) a note says `Your provider shares one public address between customers (carrier-grade NAT): you cannot receive inbound connections` | Run again, Whois of this address (opens Whois with it and runs it), Save log |
 | **Whois** | a summary of the answer (domain: Registrar, Created, Updated, Expires with the days left in words, Status, Name servers; address: Net name, Organisation, Country, Range, AS number, Abuse contact; an empty field is not shown, a value is never cut: it wraps) and under the heading Raw answer the raw lines as compact rows (cut with dots, the first 200 lines; Save log has them all) | Query (typed), Run / Stop, Save log (placed under Run so that it stays in reach) |
 
-The three 0.3 pages are described under [The 0.3 pages](#the-03-pages).
+The three 0.3 pages are described under [The 0.3 pages](#the-03-pages), the three 0.4 pages under [The 0.4 pages](#the-04-pages).
 
 Typed values (a host, a name, a resolver address, a port number) open a text field page: a physical keyboard types at
 once; with none connected the launcher's on-screen keyboard shows (the rule of `input.state`, never summoned by hand);
@@ -96,6 +109,9 @@ background (a cancel ends a probe within 50 ms). The page changes were checked f
 | Speed test (0.3) | HTTPS requests through `curl`: 11 small ones (latency), then about 8 s of download and 8 s of upload, **at most 150 MB each way** per run (on a 25 Mbit/s link about 25 MB each way); pings beside it, one every 0.2 s | `speed.cloudflare.com` (Cloudflare); the pings to 1.1.1.1 (Cloudflare) or to your gateway |
 | Wake-on-LAN (0.3) | one 102-byte UDP datagram per destination (4 on one interface: 255.255.255.255 and the subnet's broadcast, ports 9 and 7); then, when the machine has a host to watch, one ping a second for up to 120 s | your local network (broadcast), or the broadcast address you saved; the machine's address |
 | BLE scan (0.3) | nothing: the adapter listens (an active LE scan sends scan requests to the devices it hears, as any phone does) | the Bluetooth devices around |
+| Local devices (0.4) | an ICMP echo and a few one-packet TCP connect probes (ports 80, 443, 22, 445, 62078, 8080) to each address of your subnet, to make the kernel learn its MAC; then a name query per device (mDNS on UDP 5353, NetBIOS on UDP 137, reverse DNS to your resolver); a port scan sends TCP connects to one device you pick | the addresses of your own private subnet (the chosen interface's /24 at most); the device you pick for the port scan |
+| Wi-Fi networks (0.4) | nothing of its own: it asks NetworkManager for its scan results (`nmcli device wifi list`, every 5 s; the adapter's probe requests are NetworkManager's own scan, as any phone's) | the networks around; it never connects |
+| Wi-Fi walk test (0.4) | nothing: it reads `/proc/net/wireless` and runs `iw dev <if> link` once a second | the board's own adapter |
 
 Everything starts when you press Run or Start, except the diagnosis (0.1) and the public address, which asks when you
 open its page.
@@ -337,6 +353,69 @@ is BlueZ 5.82's (5.6x lines such as `RSSI: -72` are read too). Measured on the b
 bluetoothctl); the app's own sessions were exercised on the build PC (the real speed test against Cloudflare, a fake
 bluetoothctl) but not yet on a board.
 
+## Local devices (0.4): the core
+
+The core (`src/core/`, no LVGL) of a LAN scanner, folding in what [LAN Scan](../lanscan/README.md) did, written in Net
+Toolbox's style: one worker thread per running tool (256 kB stack), every wait a `poll()` slice of at most 50 ms (a
+stop ends it within that time), immutable snapshots under a mutex that the screen polls, nothing on the network until
+you start it, no root. Its pages ([The 0.4 pages](#the-04-pages)) are made from the snapshots below.
+
+* **The network** (`subnet`): the subnet to scan is the chosen interface's own IPv4 address and mask (the 0.3
+  interface chooser, `scope.hpp`; `scan_range_of(NetState, iface)`). `ScanRange` is the first and last usable host of
+  that range in host byte order. The range is **capped at a /24** (254 hosts): a wider mask (a /16, a /22) is narrowed
+  to the /24 around the address; a /25 to /30 keeps its own hosts; **/31 and /32** have none and refuse. The scan is
+  **refused with plain words** (`ScanRange::problem`, shown as a `Failed` state like the other tools) when the address
+  is not private (RFC 1918: 10/8, 172.16/12, 192.168/16, or link-local 169.254/16) — a public address is never swept —
+  or when the interface has **no IPv4 address** ("No network").
+* **Discovery** (`devices`, `DevicesSession`, `run_devices`): the subnet is swept with unprivileged **ICMP echo** (the
+  same datagram socket as ping, no root) and a few **non-blocking TCP connect probes** (ports 80, 443, 22, 445, 62078,
+  8080), which makes the kernel **ARP-resolve** every live host; `/proc/net/arp` then gives the MAC of the hosts that
+  are there (**complete entries only**, flag `0x2`; incomplete entries, other interfaces and the all-zero MAC are
+  dropped — `arp_neighbours`). The ICMP round trip is recorded when a host answers a ping. Bounded: the probe sockets
+  are capped (about 64 TCP in flight), every wait is a poll slice, and the whole run has a total budget (a /24 in about
+  10 s on the Zero 2 W). Everything is bound to the chosen interface (`SO_BINDTODEVICE`). This device and the default
+  gateway (`ip route` / `/proc/net/route` as the other tools) are marked. Devices **appear in the snapshot as they are
+  found** (a live list). **Rescan** keeps the devices already known and refreshes them.
+* **Names** (`lannames`), best first, per device: **mDNS** (a reverse PTR query to the host over UDP 5353 with the QU
+  bit, the DNS wire format of `dns.hpp`), **NetBIOS** (an NBSTAT node-status request over UDP 137), then **reverse
+  DNS** (the resolver, reusing `rdns.hpp`). `best_name()` picks the first non-empty, and a trailing `.local` / `.lan`
+  and the like are dropped. All of it is bounded and cancellable and never blocks the discovery.
+* **Vendor** (`oui`): the IEEE OUI registry ships with the app as `net-toolbox-oui.tsv`
+  (`root/usr/share/APPLaunch/share/`, built by `tools/make_oui.py`); `lookup_vendor()` maps a MAC's first three bytes
+  to a company. A MAC whose first byte has the **locally-administered bit** (`0x02`) set — the random addresses phones
+  and watches use for privacy — is shown as a **private (random) address** with no vendor guess.
+* **Port scan of one device** (`devices`, `PortScanSession`, `run_port_scan`): a TCP **connect** scan of one private
+  address on the chosen interface, two modes: the **common ports** (a curated list with service names, `local_common_ports`)
+  or **1-1024**. Non-blocking, bounded concurrency (~64), a per-connect timeout of about 700 ms for the LAN, progress
+  counters (scanned / total / open) and the open list with its service name; cancellable. Only ever the one device you
+  pick: **the engine itself** refuses (state Failed, *Only devices on your own network can be scanned.*) any target that
+  is not a private or link-local IPv4 host inside the scanned subnet — a public address, 0.0.0.0, loopback, multicast,
+  255.255.255.255, the subnet's own network and broadcast addresses, another subnet (`scan_target_problem`) — before
+  any socket is made.
+* **Where the probes go**: the `Prober` and `NameLookup` base classes hold the guard, so every implementation obeys
+  it: a poke or a name question reaches only an address inside the scan range, never this device, and nothing at all
+  before the range is set (fail closed). The mDNS and NetBIOS questions go unicast to that host only; no multicast is
+  sent. The reverse-DNS question goes to your resolver, as in the other tools.
+* **The snapshot API** (for the pages worker). `DevicesSnapshot`: `state` (Idle, Scanning, Done, Cancelled, Failed),
+  `error`, `interface`, `subnet` (`192.168.68.0/24`), `gateway`, `range` (the `ScanRange` scanned, to hand to the port
+  scan), the counts `total` / `probed` / `found`, a `naming` flag, and `vector<Device>` **sorted by IP numeric**, each `Device` with `ip`, `ip_order`, `mac`, `vendor`,
+  `vendor_private`, `name`, `name_source` (mDNS / NetBIOS / reverse DNS), `has_rtt` + `rtt_ms`, `is_gateway`,
+  `is_self`. `PortScanSnapshot`: `state`, `error`, `address`, `full_range`, the counts `total` / `scanned` /
+  `open_count`, and `vector<OpenPort>{port, service, connect_ms}` sorted by port. The sessions follow the house
+  pattern: `start(...)`, `stop()`, `running()`, `seq()`, `latest()`. `DevicesSession::start(net, iface, resolver,
+  rescan)` picks the subnet, reads the MAC and gateway and runs the scan; a rescan keeps the known devices.
+  `PortScanSession::start(address, full_range, range)` needs the `DevicesSnapshot`'s `range` (without one it refuses
+  with *No network*) and refuses any address outside it. The sockets follow the chosen network through
+  `set_active_interface` as every other tool. The probing is injectable (`Prober`, `NeighbourReader`, `NameLookup`) so the tests drive the engine
+  on loopback fakes.
+* **Saved results** (`netlog`): `format_devices` and `format_portscan`, same text style as the other tools. No new
+  settings key is needed.
+
+Limits of the 0.4 core: the discovery and the port scan were unit-tested on fixtures and on loopback fakes and loopback
+listeners; the real ICMP / ARP sweep and the mDNS / NetBIOS answers were not yet run on a board (`tests/BOARD-TESTS.md`).
+A host that answers neither ICMP, a TCP SYN nor ARP (fully firewalled, or off) is not seen. mDNS names end in `.local`
+and are shown without that suffix; a device that changes its random MAC between scans shows as a new device.
+
 ## The 0.3 pages
 
 Same frame as the others (status line, large cells or rows, Esc / Left back, a tap selects and a second tap acts), same
@@ -360,6 +439,36 @@ and keys as CompactList's compact density, with rows of two lines and a way up t
 What the speed test sends, to whom and how much is in the table above (Cloudflare's `speed.cloudflare.com`, one HTTPS
 connection at a time, at most 150 MB each way: on a 25 Mbit/s line about 25 MB each way, and on a phone hotspot that is
 mobile data). The latency under load pings 1.1.1.1 (`speed_ping` in the settings: a host, `gateway` or `off`).
+
+## The 0.4 pages
+
+Same frame as the others (a status line, large cells or rows, Esc / Left back, a tap selects and a second tap acts), and the
+same rule: leaving a page (Esc, Left, the header's Esc) or the app stops its scan and its worker thread first. The pages say
+`(via wlan1)` in the status line of Local devices when a network other than Automatic is chosen; the Wi-Fi pages name the
+interface they read (`on wlan0`). Nothing starts until you press **Scan** (Local devices), **Start** (the walk test) or one of the
+port scan's rows; the Wi-Fi list starts when its page opens (it only asks NetworkManager for its own scan). The Local devices
+scan and the port scan bind their sockets to the chosen interface (`scope.effective()`), as every other tool does.
+
+| Page | What it shows | Actions |
+|---|---|---|
+| **Local devices** | the status line (`Press Scan to look for devices on your network`; `Scanning 192.168.68.0/24: 112 of 254, 9 found`; `Done: 14 devices on 192.168.68.0/24`; `Stopped: ...`; the core's refusal in plain words: `No network` with `Connect to a network first, or choose another one under Network.`), the cells **Scan / Rescan / Stop** and **Save log**, the hint `Scans only your own network. Use it on networks you own or are allowed to test.` before the first scan, then **a row per device, found as it is found and sorted by address**: line 1 the name (the address when there is none) with the address at the right, line 2 the vendor (`Private (random) address` for a random MAC, `Vendor unknown`), the MAC and the round trip (`2 ms`); the router carries a diamond and the word `router`, this device a disc and `this device` (a shape and a word). The highlight follows the device, not the row, while the list grows | Scan / Rescan (keeps the devices already known) / Stop, Save log, Enter or a tap on a device |
+| **A device** | IP address, Name (and where it came from: mDNS, NetBIOS, reverse DNS), MAC address, Vendor (`Private (random) address: the vendor cannot be known`), Round trip, Role (`Router: the gateway of this network`, `This device`, `Another device`); the status line `192.168.68.1, router`; under the actions the **open ports as the scan finds them**: `Port 22  ssh  open` (open ports only), with the status `Scanning 24 of 81: 2 open`, `Done: 4 open ports among 1024`, `No open port found among the common ones`, or `Only devices on your own network can be scanned.` | **Ping this device** (opens Ping with the address as its target and starts it), **Check a port** (opens Port check with the address as Host, not started), **Scan common ports** (81 usual LAN services), **Scan ports 1-1024**, **Stop the port scan** while it runs (Esc stops it too), **Save for Wake-on-LAN** (only for a device with a MAC: adds a saved machine with the name, the MAC and the address to watch; a name already saved gets ` 2`, a MAC already saved says `Already saved as <name>`, twenty machines say `You can save up to 20 machines: delete one first.`), Save log (the devices and the port scan) |
+| **Wi-Fi networks** | the status line (`11 networks on wlan0, scanned 3 s ago`; `Scanning wlan0`; `Wi-Fi is switched off`; `No Wi-Fi adapter on end0: choose wlan0 under Network`; `nmcli is missing: the scan needs NetworkManager` with the package to install), the cells **View** (Networks or Channels), **Rescan** and **Save log**. **Networks view**: a row per network sorted by signal: the name (`(hidden)` for a hidden one), the signal bars (1 to 4 bars for Weak, Fair, Good, Excellent) and `-48 dBm`, a check and `connected` on the one in use, and `ch 36, 5 GHz, WPA2` under it (amber for Open and WEP). **Channels view**: the sentence `Least crowded: channel 11 (2.4 GHz), channel 44 (5 GHz)`, the bars of the 2.4 GHz channels 1 to 13 (the height counts the neighbouring channels too, the number over a bar the networks on that channel) and of the 5 GHz channels seen plus the usual ones, the channel numbers under the bars, the busiest named (`Busiest: channel 6, 2 networks`); the two bands side by side on a wide screen (800 px and over) or one over the other; a board with no 5 GHz says so (`No 5 GHz network seen: this adapter may be 2.4 GHz only`); one small note says channels 149 to 165 are not allowed in every country | View, Rescan (a fresh scan now), Save log, Enter or a tap on a network |
+| **A network** | followed by its BSSID across the scans: Status (`Connected`, `In range`, `Gone: not in the last scan`, the last values stay), Network name, BSSID, Vendor (from the OUI table; a virtual or random BSSID says it has none), Signal (`-48 dBm, Excellent`), Channel, Frequency, Band, Bit rate, Security with a one-line meaning under it (`Open: anyone near can read your traffic.`, `WPA2: encrypted, a password is needed.`) | Scan now, Save log |
+| **Wi-Fi walk test** | the status line (`Press Start, then walk around`, `Walking: 01:23, weakest -78 dBm`, `... in a weak spot ...`, `Stopped: 01:23, weakest -78 dBm`), the cells **Start / Stop**, **Reset**, **Save log**, the caption `Walk slowly and keep the deck in your hand; stop at the dead spot to read the numbers.`, then **the live block**: the big reading (`-64 dBm`) with its word (Excellent, Good, Fair, Weak) and a shape (check, exclamation mark, cross), the line `Below -75 dBm: the weak zone` when it is, the network and the interface, the elapsed time; and **the chart of the last 2.5 minutes** (time on x, dBm on y; the weak threshold as a dashed amber line; the readings under it drawn amber and thicker **and** marked with small squares; a red tick at the bottom for a second without link; a tick with a diamond at the top for each access point change) with its legend. The row **Weak below -75 dBm**. When it is stopped the chart shows the whole walk and a **summary card** follows: Duration, Readings, Weakest (and when), Average, Strongest (and when), Time in the weak zone (`12 s (14 %)`), Dips under the line, Without link, Access point changes with the time and the new BSSID of each (`not known: iw is missing` without iw) | Start / Stop, Reset (forgets the walk), Save log, Weak below (Enter cycles -70, -75, -80 dBm; kept in the settings, applied at the next Start) |
+
+What was chosen at 640x480 (the deck): the Local devices rows are two lines of the list's text size (four devices in view),
+the tag sits on the second line left of the round trip so that a long name keeps its room; the Channels bars are drawn with
+the count of networks over each bar and the channel numbers under it (every second number when the 5 GHz bars are narrow, the
+least crowded one always); the walk page puts the reading at the left and the chart at the right (the reading over the chart on
+a tall screen such as 720x720), with the caption, the legend and the `Weak below` row all in view. The long lists
+are rows of the same `RichList` as the 0.3 pages (a tap selects, a second tap acts; the keys move the highlight; every action
+is a row or a cell, so touch alone does it all).
+
+Wi-Fi vendors and device vendors come from `net-toolbox-oui.tsv`, read once on first use (about 1 MB in memory), the same table
+for both. Saved texts: `devices-...txt` (the devices, and on a device's page the port scan too), `wifi-...txt`,
+`wifi-network-...txt`, `walktest-...txt`. The walk's threshold is the only value of these pages kept in the settings
+(`walk_weak_dbm`); `wifi_rescan_ms` sets the list's interval.
 
 ## The network chooser (0.3)
 
@@ -413,6 +522,83 @@ nmcli answer needs NetworkManager (the boards have it); an Ethernet adapter's na
 and the long ones are cut with dots in the choice list on the smallest screen; Bluetooth is not an interface and is
 not affected; a fixture board (`NET_TOOLBOX_FIXTURE`) never binds anything.
 
+## Wi-Fi networks and walk test (0.4): the cores
+
+The core (`src/core/`, no LVGL) of two tools that 0.4 brings in: **Wi-Fi networks** (the networks around, their
+channels and the least crowded one; a port of [Wi-Fi Survey](../wifi-survey/README.md)'s scanner, MIT, our own code) and
+the **Wi-Fi walk test** (the signal against time while you walk with the board). Their pages are described in
+[The 0.4 pages](#the-04-pages). Same rules as the other tools: one worker thread per running tool, every wait a slice of at most 50 ms, immutable snapshots
+the screen polls (`latest()`, `seq()`), commands through the shared command runner (`cmdrun`: no shell, its own process
+group, `LC_ALL=C`, a timeout, ended by Stop), no root.
+
+**What they read and send.** Neither connects to anything or sends traffic of its own:
+
+* *Wi-Fi networks* asks NetworkManager for its scan results:
+  `nmcli -t -e yes -f IN-USE,BSSID,SSID,MODE,CHAN,FREQ,RATE,SIGNAL,SECURITY device wifi list ifname <if> --rescan <m>`.
+  The scan itself is NetworkManager's: the adapter sends probe requests on each channel, as any phone's scan does. The
+  first list of a run asks `--rescan yes` (a fresh scan, which nmcli waits for), the next ones every 5 s (setting
+  `wifi_rescan_ms`, 2 to 60 s) ask `--rescan auto` (nmcli scans again only when NetworkManager's list is older than about
+  30 s, else reads it at once: 63 ms on the Pi 3A+); a manual rescan asks `yes` again. When NetworkManager refuses a
+  fresh scan (one ran a moment ago, the adapter is busy), its last results are read with `--rescan no` and the snapshot
+  says so (`cached`). An empty list is checked with `nmcli -t -f WIFI-HW,WIFI radio` (Wi-Fi switched off).
+* *The walk test* reads `/proc/net/wireless` once a second (any user, no command; a fresh value at each read: -62, -64,
+  -65, -65, -66 dBm on the Pi 3A+ standing still) and runs `/usr/sbin/iw dev <if> link` each second when `iw` is
+  installed (1.5 s timeout): its BSSID shows when the board moves to another access point, and its `signal:` line is the
+  level when the proc file lacks the interface.
+
+**Wi-Fi networks** (`wifiscan.hpp`): per network the SSID (`(hidden)` for a hidden one; bytes that are not UTF-8 and
+control characters shown as `?`), the BSSID (and whether it is locally administered: a virtual or random address, never
+looked up), the signal in % and an estimate in dBm, the channel, the band (2.4, 5 or 6 GHz, from the frequency), the
+frequency, the bit rate, the security in plain words (Open, Enhanced Open, WEP, WPA, WPA2, WPA3, Enterprise; transition
+modes as `WPA/WPA2`, `WPA2/WPA3`; Open and WEP are flagged weak), ad-hoc, and the network the interface is connected to
+(`in_use`). Sorted strongest first (equal signals: in use, then by name, hidden last). The vendor comes from an injected
+lookup (`VendorLookup`, the pages wire the OUI table of Local devices), asked once per OUI and run. The dBm estimate
+inverts NetworkManager's own conversion (`pct = 100 - 100 x |dBm + 40| / 60`, -40 dBm and stronger is 100 %): dBm = -40 -
+0.6 x (100 - pct). On the Pi 3A+ nmcli said 57 % for the network `iw` read at -65 dBm: -66 by this formula (Wi-Fi Survey's
+`pct / 2 - 100` gave -72, now corrected). **Channels summary**: networks per channel on each band and the least crowded
+channel, Wi-Fi Survey's rule kept: on 2.4 GHz a network weighs 5 on its channel and 4, 3, 2, 1 on the channels 1 to 4
+away (they overlap); the lowest weight among 1 to 13 wins, ties going to 1, 6 or 11, then the lowest. On 5 GHz the
+channels seen plus 36, 40, 44, 48, 149, 153, 157, 161, 165, on 6 GHz the channels seen plus the preferred scanning
+channels (5, 21, ... 229): the fewest networks wins (ties: the lowest). A 5 or 6 GHz band where nothing was seen gets no
+recommendation (the adapter may lack it: the Pi Zero 2 W is 2.4 GHz only). **The detail** (`WifiFollower`) follows one
+network by its BSSID: each new list refreshes it wherever it moved in the list; a list without it marks it *gone* with
+its last values; a failed scan changes nothing. **The interface**: the network chooser's (`interface=`;
+`wifi_scan_iface()`: for Automatic the main interface when it is Wi-Fi, else the first Wi-Fi one). An interface that is
+not a Wi-Fi adapter, or is not there, is a failure in plain words, `No Wi-Fi adapter on wlan1` (the run tries again every
+interval: an adapter plugged in again is used again). Other failures in words: nmcli missing (package `network-manager`),
+NetworkManager not running, Wi-Fi switched off, no answer in time (the last list stays, with the reason).
+
+**Walk test** (`walktest.hpp`): Start begins a walk, Stop ends it and keeps everything, Reset forgets it. A sample a second
+on a fixed schedule (a late one does not make the next ones bunch up). The chart keeps the last 10 minutes (a ring of 600
+samples); the summary covers the whole walk: duration, samples, weakest dBm and when (seconds from the start), average
+(mean of the dBm readings), strongest and when, the time in the **weak zone** (below -75 dBm, setting `walk_weak_dbm`, -95
+to -40; a sample without link counts as weak and is also counted apart) in seconds and in %, the **dips** (a dip starts at
+the first weak sample and ends once the signal has been back at or above the threshold for 2 s, so a signal hovering at
+the threshold makes one dip, not ten; each with its start, end and lowest level, at most 64 listed, all counted), and the
+**access point changes** (roaming: when and from which BSSID to which; unknown without `iw`).
+
+**The API** (for the pages):
+
+| Tool | Session | Snapshot | Pure helpers |
+|---|---|---|---|
+| Wi-Fi networks | `WifiScanSession`: `start(WifiScanConfig{iface, interval_ms, vendor})`, `stop()` (the list stays), `rescan()`, `latest()`, `seq()`, `running()` | `WifiSnapshot{state (Idle, Scanning, Ready, Failed, Stopped), iface, error, busy, cached, rescan, networks, channels {g24, g5, g6: networks, channels, recommended}, lists, list_at_ms, interval_ms}` | `wifi_scan_iface`, `parse_nmcli_wifi_list`, `summarize_channels`, `WifiFollower`, `band_words`, `security_weak` |
+| Walk test | `WalkSession`: `start(WalkConfig{iface, weak_dbm, interval_ms, hysteresis_ms})`, `stop()`, `reset()`, `latest()`, `seq()`, `running()` | `WalkSnapshot{state (Idle, Running, Stopped, Failed), iface, error, weak_dbm, samples (t_ms, linked, dbm, weak), dropped, summary, dips, roams, in_dip, linked, dbm, bssid, ssid, source, iw_missing, elapsed_s}` | `WalkRecorder`, `proc_wireless_dbm`, `read_walk_signal` |
+
+Saved results (`netlog_wifi`): `format_wifi_networks`, `format_wifi_network` (the detail, gone or not), `format_walktest`
+(the settings, the summary, the dips, the access point changes and every sample kept), same style as the others.
+**Settings**: `wifi_rescan_ms` (5000), `walk_weak_dbm` (-75); a 0.3 file reads with their defaults. From 0.4 `depends`
+also has `network-manager` (its `nmcli`, GPL-2.0-or-later, runs as a separate program, not shipped or modified;
+installed on Raspberry Pi OS). Tests: `tests/test_wifiscan.cpp`, `tests/test_walktest.cpp`
+on nmcli, iw and `/proc/net/wireless` output recorded on the Pi 3A+ (`tests/fixtures/wifi`, sanitized: see its README),
+made-up lines for the rare cases, a fake clock and a fake runner, and a fake nmcli program run by the real runner.
+
+Limits of the 0.4 cores: the dBm of a network is NetworkManager's percentage turned back into dBm (whole dB, -40 dBm and
+stronger all read as 100 %), and its value is as old as NetworkManager's last scan (up to about 30 s with `auto`); the
+walk test's level is the link's (the access point it is connected to), not the other networks'; nmcli does not give a
+network's channel width, so a 40 or 80 MHz network counts on its main channel only; the 5 GHz candidates include 149 to
+165, which some countries do not allow for Wi-Fi; a hidden network appears without a name; the cores ran on the build PC
+(fixtures, fakes) and the commands were run by hand on the Pi 3A+, but the sessions have not run on a board yet.
+
 ## Requirements
 
 * A screen of at least **640x480** (`X-MinSize=640x480`; under it the app says so and closes on any key) and a
@@ -454,6 +640,11 @@ Logs go to stderr with the tag `[net-toolbox]` (the launcher's journal).
 
 * **Not yet run on a board**: the tools are unit-tested on fixtures and on loopback and the pages on headless scenes;
   the board protocol (`tests/BOARD-TESTS.md`) is still to be run.
+* 0.4 (draft): the Local devices, Wi-Fi networks and Wi-Fi walk test pages have only run in the headless scenes; the board steps
+  B16 to B19 are still to be run. A host that answers neither ICMP, a TCP SYN nor ARP is not listed; the Wi-Fi list is
+  NetworkManager's (its signal is a percentage turned back into dBm, up to about 30 s old); the walk test needs a Wi-Fi link
+  and, for the access point changes, `iw`. Leaving a device's page stops its port scan; leaving Local devices or Wi-Fi networks
+  stops their scans (the results are not kept).
 * 0.3: the network chooser is unit-tested and shown in headless scenes; the dongle (wlan1) and an Ethernet
   adapter on a hub are still to be tried on a board (`tests/BOARD-TESTS.md`, B11 and B12).
 * 0.3: the speed test and the Bluetooth radar pages ran on the deck and the Pi 3A+ (speed test about 19 to 115 Mbit/s
@@ -483,7 +674,11 @@ test uses Cloudflare's speed endpoints (`speed.cloudflare.com/__down` and `/__up
 speed.cloudflare.com), the BLE scan runs BlueZ's `bluetoothctl` (GPL-2.0) as a separate program, not shipped or
 modified; the Wake-on-LAN sender and the speed and Bluetooth readers are the app's own code. The company names of the
 BLE scan come from the Bluetooth SIG's assigned numbers (company identifiers); the bufferbloat grade steps follow
-Waveform's bufferbloat test.
+Waveform's bufferbloat test. From 0.4 the Local devices tool ships `net-toolbox-oui.tsv`, a shortened, abridged
+derivative of the IEEE Registration Authority's public OUI listing (<https://standards-oui.ieee.org/>; the company
+names are shortened for the small screen, no formal licence is given with the listing, no endorsement by the IEEE is
+implied); see `root/usr/share/doc/net-toolbox/copyright`. The ICMP / TCP discovery, the mDNS and NetBIOS name queries
+and the port scanner are the app's own code.
 
 ## Build and test
 
@@ -506,7 +701,14 @@ python3 tools/make_registry.py --only net-toolbox --out <a folder outside packag
   `minijson` (curl's report), `publicip`, `whois`. From 0.3: `cmdrun` also has the stream runner, `speedtest` (the
   command lines, curl's report, the meter, the grades, the engine with the ping beside it, the session), `wol` (MAC
   addresses, the packet, the plan, the sender, the wake watch, the session), `ble` (bluetoothctl's lines, `show`,
-  `/sys`, the device table, the scan, the session).
+  `/sys`, the device table, the scan, the session). From 0.4: `subnet` (the scan range with the /24 cap and the
+  private checks, the `/proc/net/arp` reader), `oui` (the IEEE OUI table parse and the vendor lookup with the
+  random-MAC rule), `lannames` (the mDNS and NetBIOS packets, the reverse-name priority, the non-blocking resolver),
+  `devices` (the discovery engine, the real prober / ARP reader / name lookup, the sessions) and `devscan` (the
+  one-device TCP connect port scan).
+* `src/ui/` from 0.4: `tool_pages_04` (the five pages), `view_model_04` (their words, tones and layouts), `widgets_04` (the device
+  row, the network row, the channel bars, the walk's reading and chart), `demo_data_04` (the scripted answers), `oui_vendor` (the
+  OUI lookup of the Wi-Fi pages, apart because `oui.hpp` and `wifiscan.hpp` both name a `VendorLookup`).
 * `src/ui/`: `toolbox_app` + `tool_pages` (the frame: navigation, the band, the Choice and Typed pages, saving; the five
   tool pages), `view_model` (every text, tone and number a page shows, from the core's snapshots: no LVGL, unit-tested),
   `charts` (the health ladder, the ping graph and strip, the result badge: drawn with LVGL's draw API), `backend`
@@ -562,8 +764,34 @@ python3 tools/make_registry.py --only net-toolbox --out <a folder outside packag
   the scan replayed with discovery turned off on every exit path, and a fake bluetoothctl program run by the real
   runner (the time up, Stop, the session destroyed); `test_netlog03.cpp` the 0.3 texts and settings.
 
+* `tests/` from 0.4 (5493 checks in all): `test_ui_model_04.cpp` the pages' words and numbers (the device rows and tags, the
+  status lines, the port scan words, the machine saved for Wake-on-LAN, the network rows, the problems and their fixes, the
+  detail rows, the channels view and layouts, the walk's reading, window, scale, summary and weak-zone cycle) on the scripted
+  snapshots of `demo_data_04.cpp`; the headless scenes (193 in all, each at five sizes) add `devices-*` (idle, scanning, done,
+  stopped, empty, no network, refused, a chosen network, a device's page, its port scans running, done, empty and refused,
+  Save for Wake-on-LAN, Ping and Check a port from it, touch, Esc), `wifi-*` (the list, a long list, empty, off, no
+  NetworkManager, no Wi-Fi adapter, a network's page, an open network, a random BSSID, a network that disappeared, Rescan,
+  Channels, a 2.4 GHz-only board, touch) and `walk-*` (idle, walking, the summary, a long walk, no link, no iw, no adapter, the
+  weak-zone setting, Reset, touch).
+
 ## Changes
 
+* 0.4.0 (draft): the **pages** of Local devices (the list that grows as devices are found, two-line rows with the router and
+  this-device tags, the Device page with ping, port check, a live TCP port scan and Save for Wake-on-LAN), Wi-Fi networks (the
+  list with signal bars, the Channels view with the least crowded channel, a page per network followed by its BSSID) and the
+  Wi-Fi walk test (the big reading, the 2.5-minute chart with the weak-zone line, the summary card, the weak-zone setting);
+  Home has sixteen rows; the OUI table feeds both vendor lookups; the scripted demonstration backend (`devices=`, `ports=`,
+  `wifi=`, `walk=`), the unit tests of the new wording (`test_ui_model_04.cpp`) and the headless scenes. The app now replaces
+  LAN Scan and Wi-Fi Survey, which remain installable for now. Only headless scenes so far: the board steps B16 to B19 are
+  still to be run.
+* 0.4.0 (draft): the core of **Local devices**, a LAN scanner folded in from LAN Scan. Discovery
+  without root (ICMP echo and TCP connect probes to prime ARP, `/proc/net/arp` for the MAC, the chosen interface's
+  own private /24 only), names best-first (mDNS, NetBIOS, reverse DNS), OUI vendor lookup with the shipped
+  `net-toolbox-oui.tsv` (a locally-administered MAC shown as a private address), this device and the gateway marked, a
+  live list and a rescan that keeps the known devices; a TCP connect port scan of one device (common ports or 1-1024,
+  bounded concurrency, progress); the `DevicesSnapshot` / `PortScanSnapshot` API for the pages, saved texts through
+  `netlog` and the unit tests (subnet maths, ARP parser, OUI, mDNS / NetBIOS packets, the scan state machine on
+  loopback fakes, the port scan on loopback listeners).
 * 0.3.0: the **network chooser** (Home row Network, `interface=` setting): sockets bound with SO_BINDTODEVICE, curl
   with --interface, the interface's own gateway and DNS, the diagnosis of a chosen interface, `(via wlan1)` in the status
   lines, Wi-Fi details for every wireless interface on the Interfaces page, Ethernet as a normal interface. Home has ten

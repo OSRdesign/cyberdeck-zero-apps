@@ -1,0 +1,37 @@
+# Local devices, Check a port
+title Net Toolbox: Local devices, Check a port
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO devices=done
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 250
+key enter
+wait 300
+key down
+wait 100
+key enter
+wait 300
+key down
+key enter
+wait 300
+shot port
+expect text "192.168.68.1"
+expect text "Host"
+expect text "Run"
+key esc
+wait 300
+expect text "Check a port"
+expect noquit
+expect notext "Message cut off"

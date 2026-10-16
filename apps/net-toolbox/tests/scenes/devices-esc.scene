@@ -1,0 +1,51 @@
+# Local devices, Esc and Left at every level
+title Net Toolbox: Local devices, Esc and Left at every level
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO "devices=scan,ports=scan"
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 250
+key enter
+wait 300
+expect text "Stop"
+key left
+wait 250
+expect text "Local devices"
+expect noquit
+key enter
+wait 250
+key enter
+wait 300
+key down
+wait 100
+key enter
+wait 300
+expect text "Ping this device"
+key down
+key down
+key enter
+wait 300
+expect text "Stop the port scan"
+key esc
+wait 300
+expect text "Stop"
+expect noquit
+key esc
+wait 300
+expect noquit
+key left
+wait 300
+expect quit
+expect notext "Message cut off"

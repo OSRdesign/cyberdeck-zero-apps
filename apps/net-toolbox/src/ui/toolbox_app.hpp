@@ -39,6 +39,16 @@
  *                Watch after waking, Save log, Delete (twice), the note on what Wake-on-LAN needs
  *   Bluetooth radar (0.3) the cells Start / Stop and Save log, the permanent warning about the shared radio, the radar and the
  *                list of devices (side by side, stacked on a tall screen); Enter on a device opens its details in place
+ *   Local devices (0.4) the cells Scan / Rescan / Stop and Save log, then the devices found as they are found (two-line rows:
+ *                name or address, vendor, MAC, round trip, the router / this device tag); Enter on a device opens its page
+ *   Device       (0.4) the device's info rows, then Ping this device, Check a port, Scan common ports, Scan ports 1-1024 (Stop while
+ *                it runs), Save for Wake-on-LAN, Save log, then the open ports as the scan finds them
+ *   Wi-Fi networks (0.4) the cells View (Networks / Channels), Rescan, Save log, then the networks sorted by signal or the
+ *                bars of the channels with the least crowded ones; Enter on a network opens its page
+ *   Network      (0.4) a Wi-Fi network followed by its BSSID: name, BSSID, vendor, signal, channel, frequency, band, bit rate,
+ *                security with its meaning; Scan now, Save log
+ *   Wi-Fi walk test (0.4) the cells Start / Stop, Reset, Save log, the big reading with the live chart, the weak-zone setting,
+ *                then the summary card when a walk is stopped
  *   Choice       a Roller of Choice rows (the target, the type, the resolver, the port)
  *   Typed        a TextField (a host, a name, a resolver address, a port number)
  *
@@ -55,7 +65,9 @@
 #include "settings.hpp"
 #include "view_model.hpp"
 #include "view_model_03.hpp"
+#include "view_model_04.hpp"
 #include "widgets_03.hpp"
+#include "widgets_04.hpp"
 #include "wifi_link.hpp"
 
 #include "async_run.hpp"
@@ -89,7 +101,7 @@ public:
     std::vector<std::string> dns_servers() const;
 
 private:
-    enum class View { Home, Interfaces, Diagnosis, Ping, Dns, Port, Trace, Http, PublicIp, Whois, Speed, Wol, Machine, Ble, Choice, Typed };
+    enum class View { Home, Interfaces, Diagnosis, Ping, Dns, Port, Trace, Http, PublicIp, Whois, Speed, Wol, Machine, Ble, Devices, Device, Wifi, WifiDetail, Walk, Choice, Typed };
     struct Frame {
         View view = View::Home;
         int select = 0;
@@ -112,14 +124,18 @@ private:
     /* the row ids of the lists */
     enum RowId {
         kHomeDiag = 1, kHomePing, kHomeDns, kHomePort, kHomeIfaces, kHomeTrace, kHomeHttp, kHomePublicIp, kHomeWhois,
-        kHomeNet = 90, kHomeSpeed, kHomeWol, kHomeBle,
+        kHomeNet = 90, kHomeSpeed, kHomeWol, kHomeBle, kHomeDevices, kHomeWifi, kHomeWalk,
         kRun = 10, kRunAgain, kSaveLog, kTarget, kSaveTarget, kName, kType, kResolver, kCompare, kHost, kPortRow, kUrl,
         kMethod, kInsecure, kWhoisOf, kQuery,
         kResult = 100, kSpeedBig, kSpeedGrade,
         kHop = 200,
         kWolAdd = 280, kWolName, kWolMac, kWolHost, kWolWatch, kWolDelete,
         kMachine = 300, /* + the index of the machine */
-        kBleDev = 1000  /* + the index of the device in the list */
+        kBleDev = 1000, /* + the index of the device in the list */
+        kView = 330, kRescan, kReset, kWalkWeak, kActPing, kActPort, kActScanCommon, kActScanAll, kActStopScan, kActSaveWol,
+        kDevice = 2000, /* + the index of the device in the list */
+        kNetRow = 3000, /* + the index of the network in the list */
+        kOpenPort = 4000
     };
 
     /* the column and the sizes the pages are built from (the layout service's tokens and the CAPTION font) */
@@ -264,6 +280,36 @@ private:
     std::string fit_label(const std::string &text, const lv_font_t *font, int max_w) const;
     ui::RichRow rich_row(const ui::RowDef &def, int id = 0) const;
 
+    /* the 0.4 pages (tool_pages_04.cpp) */
+    void apply_bind();
+    std::string wifi_hint() const;
+    void build_devices(int select);
+    std::vector<ui::RichRow> devices_list();
+    void poll_devices(bool force);
+    void start_devices();
+    void activate_devices(std::intptr_t id);
+    bool find_device(const std::string &ip, Device &out) const;
+    void build_device(int select);
+    std::vector<ui::RichRow> device_list();
+    void poll_device(bool force);
+    void start_port_scan(bool full);
+    void save_device_for_wol();
+    void activate_device(std::intptr_t id);
+    void build_wifi(int select);
+    void start_wifi();
+    std::vector<ui::RichRow> wifi_list();
+    void poll_wifi(bool force);
+    void activate_wifi(std::intptr_t id);
+    void build_wifi_detail(int select);
+    std::vector<ui::RichRow> wifi_detail_list();
+    void poll_wifi_detail(bool force);
+    void activate_wifi_detail(std::intptr_t id);
+    void build_walk();
+    std::vector<ui::RichRow> walk_list();
+    void poll_walk(bool force);
+    void start_walk();
+    void activate_walk(std::intptr_t id);
+
     cp0_ui_roller_page_t layout_{};
     ui::Backend backend_;
     Settings settings_;
@@ -362,6 +408,32 @@ private:
     bool ble_detail_shown_ = false;                    /* the list shows the details now */
     std::vector<std::string> ble_addrs_;               /* the device of each list row, by the row's id */
     ui::BleLayout ble_box_;
+    /* 0.4 */
+    bool scan_bound_ = false;           /* the Local devices tool is on screen: its sockets go out of scope.effective() */
+    bool keep_devices_ = false, keep_ports_ = false, keep_wifi_ = false; /* the page being built keeps these tools going */
+    bool dev_fresh_ = false;            /* the devices snapshot belongs to this visit */
+    bool port_fresh_ = false;
+    bool port_results_shown_ = false;
+    std::vector<std::shared_ptr<ui::DeviceRowView>> device_views_;
+    std::vector<std::string> device_ips_;               /* the device of each list row, by the row's id */
+    std::string dev_selected_ip_;                       /* the highlighted device (the list grows while it scans) */
+    std::string device_current_;                        /* the Device page's address */
+    Device device_;                                     /* its last values */
+    std::uint64_t shown_dev_seq_ = 0;
+    std::vector<std::shared_ptr<ui::WifiRowView>> wifi_views_;
+    std::shared_ptr<ui::ChannelsBlock> channels_block_;
+    std::vector<std::string> wifi_bssids_;              /* the network of each list row, by the row's id */
+    std::string wifi_selected_;
+    bool wifi_channels_ = false;                        /* the Channels view */
+    bool wifi_channels_shown_ = false;
+    bool wifi_live_ = false;                            /* the Wi-Fi scan runs for this visit */
+    std::string wifi_current_;
+    std::string wifi_title_;
+    WifiFollower wifi_follower_;
+    std::shared_ptr<ui::WalkLiveBlock> walk_block_;
+    bool walk_fresh_ = false;
+    bool walk_summary_shown_ = false;
+    int walk_full_h_ = 0;
     std::string saved_note_;
     ui::Tone saved_tone_ = ui::Tone::Normal;
     std::int64_t saved_until_ = 0;

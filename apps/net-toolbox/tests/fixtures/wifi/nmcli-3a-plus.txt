@@ -1,0 +1,4 @@
+*:B0\:4E\:26\:00\:00\:01:HomeNet:Infra:9:2452 MHz:270 Mbit/s:57:WPA2
+ :B6\:4E\:26\:00\:00\:01::Infra:9:2452 MHz:270 Mbit/s:55:WPA2
+ :C8\:7F\:2B\:00\:00\:02:Neighbour-0002:Infra:1:2412 MHz:130 Mbit/s:37:WPA2
+ :B6\:4E\:26\:00\:00\:03::Infra:36:5180 MHz:270 Mbit/s:32:WPA2

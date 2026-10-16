@@ -1,0 +1,52 @@
+# Wi-Fi networks, a network's page
+title Net Toolbox: Wi-Fi networks, a network's page
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO wifi=list
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 400
+key down
+wait 100
+key enter
+wait 300
+shot detail
+expect text "Status"
+expect text "Connected"
+expect text "Network name"
+expect text "BSSID"
+expect text "b0:4e:26:00:00:01"
+expect text "Vendor"
+expect text "TP-Link"
+expect text "Signal"
+expect text "-48 dBm, Excellent"
+expect text "Channel"
+key end
+wait 200
+shot bottom
+expect text "Frequency"
+expect text "5180 MHz"
+expect text "Band"
+expect text "Bit rate"
+expect text "540 Mbit/s"
+expect text "Security"
+expect text "WPA2: encrypted, a password is needed."
+expect text "Scan now"
+expect text "Save log"
+key esc
+wait 300
+expect text "11 networks on wlan0, scanned 3 s ago"
+expect noquit
+expect notext "Message cut off"

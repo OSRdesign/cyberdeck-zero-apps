@@ -1,0 +1,11 @@
+Connected to b0:4e:26:00:00:01 (on wlan0)
+	SSID: HomeNet
+	freq: 2452.0
+	RX: 10421807 bytes (17433 packets)
+	TX: 12036907 bytes (12927 packets)
+	signal: -65 dBm
+	rx bitrate: 58.5 MBit/s
+	tx bitrate: 72.2 MBit/s
+	bss flags: short-preamble short-slot-time
+	dtim period: 1
+	beacon int: 100

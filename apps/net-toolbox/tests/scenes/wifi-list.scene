@@ -1,0 +1,44 @@
+# Wi-Fi networks, the list
+title Net Toolbox: Wi-Fi networks, the list
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO wifi=list
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 400
+shot list
+expect text "11 networks on wlan0, scanned 3 s ago"
+expect text "HomeNet"
+expect text "connected"
+expect text "-48 dBm"
+expect text "ch 36, 5 GHz, "
+expect text "WPA2"
+expect text "View"
+expect text "Networks"
+expect text "Rescan"
+expect text "Save log"
+key down
+key down
+key down
+key down
+key down
+wait 200
+shot middle
+expect text "(hidden)"
+key end
+wait 300
+shot bottom
+expect text "Office"
+expect notext "Message cut off"

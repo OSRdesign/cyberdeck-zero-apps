@@ -1,0 +1,34 @@
+# Local devices, twenty machines are saved
+title Net Toolbox: Local devices, twenty machines are saved
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO "devices=done,wol_machines=20"
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 250
+key enter
+wait 300
+key down
+wait 100
+key enter
+wait 300
+key down
+key down
+key down
+key down
+key enter
+wait 300
+shot full
+expect text "You can save up to 20 machines: delete one first."
+expect notext "Message cut off"

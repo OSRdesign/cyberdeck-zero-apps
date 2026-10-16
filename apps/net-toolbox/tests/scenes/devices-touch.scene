@@ -1,0 +1,57 @@
+# Local devices by touch
+title Net Toolbox: Local devices by touch
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO "devices=done,ports=done"
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key end
+key up
+key up
+key up
+wait 400
+tap "Local devices"
+wait 250
+tap "Scan"
+wait 300
+shot done
+expect text "Done: 14 devices on 192.168.68.0/24"
+@640x480 tapxy 0.5 0.585
+@640x480 tapxy 0.5 0.585
+@800x480 tapxy 0.5 0.529
+@800x480 tapxy 0.5 0.529
+@720x720 tapxy 0.5 0.386
+@720x720 tapxy 0.5 0.386
+@1024x600 tapxy 0.5 0.462
+@1024x600 tapxy 0.5 0.462
+@1280x720 tapxy 0.5 0.424
+@1280x720 tapxy 0.5 0.424
+
+wait 300
+shot detail
+expect text "Ping this device"
+@640x480 tapxy 0.5 0.779
+@640x480 tapxy 0.5 0.779
+@800x480 tapxy 0.5 0.665
+@800x480 tapxy 0.5 0.665
+@720x720 tapxy 0.5 0.735
+@720x720 tapxy 0.5 0.735
+@1024x600 tapxy 0.5 0.673
+@1024x600 tapxy 0.5 0.673
+@1280x720 tapxy 0.5 0.718
+@1280x720 tapxy 0.5 0.718
+
+wait 300
+shot scanned
+expect text "Done: 2 open ports among 76"
+tap "Esc"
+wait 300
+expect text "Rescan"
+tap "Save log"
+tap "Save log"
+shot saved
+tap "Esc"
+wait 300
+expect noquit
+tap "Esc"
+expect quit
+expect notext "Message cut off"

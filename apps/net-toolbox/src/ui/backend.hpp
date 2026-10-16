@@ -26,6 +26,12 @@
  *             watch always gives "sent"); wol_machines=0..20 saved machines; wol_last=name:kind+name:kind the list's last status
  *       ble=idle | scan0 | scan6 | scan25 | done25 | stopped | off | rfkill | none | bluez       0.3: the radar (Start shows the
  *             state; stopped: Stop gives Cancelled)
+ *       devices=idle | scan | done | few | empty | refused    0.4: Local devices (Start shows the state; Stop gives Cancelled for
+ *             scan; a board without a usable address gives the core's own refusal whatever the scenario)
+ *       ports=scan | done | empty | refused      0.4: the port scan of one device (an address outside the range is refused)
+ *       wifi=list | many | g24 | empty | off | nonm | vanish      0.4: Wi-Fi networks (a rescan gives the next list; vanish: the
+ *             second list lacks CafeGuest); an interface that is not wlan* fails with "No Wi-Fi adapter on <if>"
+ *       walk=run | long | stopped | nolink | noiw | fail      0.4: the walk test (Start shows 83 s of walking, Stop the summary)
  *       interface=wlan1      0.3: the chosen network (an interface of the fixture; one it does not have shows the "not found"
  *                            note); the diagnosis then checks that interface (the fixture's cmd/nmcli_dns_<if> is its DNS)
  *   NET_TOOLBOX_FIXTURE   a folder of tests/fixtures (deck, deck-offline, pi-3a-plus, pi-5, and the 0.3 boards with several
@@ -42,7 +48,10 @@
 #include "interfaces.hpp"
 #include "ping.hpp"
 #include "ble.hpp"
+#include "devices.hpp"
 #include "speedtest.hpp"
+#include "walktest.hpp"
+#include "wifiscan.hpp"
 #include "wol.hpp"
 #include "portcheck.hpp"
 #include "publicip.hpp"
@@ -83,6 +92,29 @@ using WhoisRunner = Runner<WhoisRequest, WhoisSnapshot>;
 using SpeedRunner = Runner<SpeedConfig, SpeedSnapshot>; /* 0.3: the core sessions have their own worker threads */
 using WolRunner = Runner<WolRequest, WolSnapshot>;
 using BleRunner = Runner<BleConfig, BleSnapshot>;
+
+/* 0.4 */
+struct DevicesRequest {
+    NetState net;
+    std::string iface;     /* scope.effective() */
+    std::string resolver;  /* for the reverse names */
+    bool rescan = false;   /* keeps the devices already known */
+};
+struct PortScanRequest {
+    Address address;
+    bool full_range = false; /* 1-1024, else the common ports */
+    ScanRange range;         /* the DevicesSnapshot's */
+};
+using DevicesRunner = Runner<DevicesRequest, DevicesSnapshot>;
+using PortScanRunner = Runner<PortScanRequest, PortScanSnapshot>;
+class WifiRunner : public Runner<WifiScanConfig, WifiSnapshot> {
+public:
+    virtual void rescan() = 0; /* a fresh scan now */
+};
+class WalkRunner : public Runner<WalkConfig, WalkSnapshot> {
+public:
+    virtual void reset() = 0; /* stops and forgets */
+};
 
 /* a core session as a Runner */
 template <class Session, class Req, class Snap> class SessionRunner : public Runner<Req, Snap> {
@@ -142,6 +174,10 @@ struct Backend {
     std::unique_ptr<SpeedRunner> speed;
     std::unique_ptr<WolRunner> wol;
     std::unique_ptr<BleRunner> ble;
+    std::unique_ptr<DevicesRunner> devices; /* 0.4 */
+    std::unique_ptr<PortScanRunner> ports;
+    std::unique_ptr<WifiRunner> wifi;
+    std::unique_ptr<WalkRunner> walk;
     std::function<PingAvailability()> ping_available;
     std::function<std::int64_t()> clock_ms;   /* the monotonic clock of the BLE table's times: a demonstration fixes it */
     std::function<std::time_t()> wall_clock;  /* the days left are counted from it: a demonstration fixes it */

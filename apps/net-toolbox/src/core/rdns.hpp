@@ -24,9 +24,13 @@ class ReverseNames {
 public:
     static constexpr std::size_t kMaxEntries = 64;
     static constexpr std::size_t kMaxPending = 4;
+    /* 0.4 Local devices: a whole /24 (254 hosts), more questions in flight so a silent resolver stays within budget */
+    static constexpr std::size_t kMaxEntriesLan = 256;
+    static constexpr std::size_t kMaxPendingLan = 16;
 
-    /* server: an IP literal ("" = no lookups) */
-    explicit ReverseNames(const std::string &server, std::uint16_t port = 53, int timeout_ms = 1500);
+    /* server: an IP literal ("" = no lookups); the defaults are the traceroute's */
+    explicit ReverseNames(const std::string &server, std::uint16_t port = 53, int timeout_ms = 1500,
+                          std::size_t max_entries = kMaxEntries, std::size_t max_pending = kMaxPending);
     /* asks for a's name once (ignored when the cache is full or there is no server) */
     void want(const Address &a);
     /* never blocks: reads the answers that came, sends what waits, drops what timed out */
@@ -52,6 +56,8 @@ private:
     void send(Entry &e);
     Fd fd_;
     int timeout_ms_;
+    std::size_t max_entries_;
+    std::size_t max_pending_;
     std::uint16_t next_id_;
     std::uint64_t changes_ = 0;
     std::vector<Entry> entries_;

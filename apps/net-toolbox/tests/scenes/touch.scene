@@ -69,6 +69,9 @@ wait 250
 key end
 key up
 key up
+key up
+key up
+key up
 wait 400
 tap "Wake-on-LAN"
 wait 250
@@ -78,6 +81,9 @@ wait 250
 expect noquit
 # Bluetooth radar: Start by tap, the second device by position (a tap selects it, a second tap opens the details), Esc closes them
 key end
+key up
+key up
+key up
 key up
 wait 400
 tap "Bluetooth radar"

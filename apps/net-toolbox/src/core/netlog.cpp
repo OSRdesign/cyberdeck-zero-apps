@@ -529,6 +529,50 @@ std::string format_wol(const WolSnapshot &s)
     return out;
 }
 
+/* ---------------------------------------------------------------- 0.4 */
+
+std::string format_devices(const DevicesSnapshot &s)
+{
+    std::string out = "Interface: " + s.interface + "\n";
+    if (!s.subnet.empty()) out += "Subnet: " + s.subnet + "\n";
+    if (!s.gateway.empty()) out += "Gateway: " + s.gateway + "\n";
+    if (!s.error.empty()) out += "Error: " + s.error + "\n";
+    out += "Probed " + std::to_string(s.probed) + " of " + std::to_string(s.total) + " addresses; " +
+           std::to_string(s.found) + " devices found\n";
+    for (const Device &d : s.devices) {
+        out += "  " + d.ip;
+        if (d.is_self) out += " (this device)";
+        if (d.is_gateway) out += " (gateway)";
+        out += "\n";
+        if (!d.mac.empty()) out += "    MAC " + d.mac + "\n";
+        if (d.vendor_private) out += "    private (random) address\n";
+        else if (!d.vendor.empty()) out += "    vendor " + d.vendor + "\n";
+        if (!d.name.empty()) {
+            out += "    name " + printable(d.name);
+            const char *src = name_source_label(d.name_source);
+            if (src[0]) out += std::string(" (") + src + ")";
+            out += "\n";
+        }
+        if (d.has_rtt) out += "    round trip " + fmt_ms(d.rtt_ms) + "\n";
+    }
+    return out;
+}
+
+std::string format_portscan(const PortScanSnapshot &s)
+{
+    std::string out = "Device: " + s.address + "\n";
+    out += std::string("Ports: ") + (s.full_range ? "1-1024" : "common") + "\n";
+    if (!s.error.empty()) out += "Error: " + s.error + "\n";
+    out += "Scanned " + std::to_string(s.scanned) + " of " + std::to_string(s.total) + "; " +
+           std::to_string(s.open_count) + " open\n";
+    for (const OpenPort &p : s.open) {
+        out += "  " + std::to_string(p.port);
+        if (!p.service.empty()) out += " (" + p.service + ")";
+        out += ": open, " + std::to_string(p.connect_ms) + " ms\n";
+    }
+    return out;
+}
+
 std::string format_ble(const BleSnapshot &s)
 {
     std::string out;
