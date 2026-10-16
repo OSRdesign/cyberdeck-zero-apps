@@ -101,6 +101,35 @@ launcher's [`docs/cp0_lvgl.en.md`](https://github.com/OSRdesign/cyberdeck-zero-l
 - **Status is never shown by colour alone.** Green, amber and red (`ValueTone` Ok / Warn / Bad) always come with a
   word or a shape (*Power OK*, *Under-voltage*; a check, a cross, a dash).
 
+#### Row kinds: what can be tapped
+
+A touch-only board (the Pi 3A+) has no focus highlight, so the user must see all the time which rows do something. The
+launcher's list widgets draw that cue from one optional tag per row, `cp0::ui::RowAffordance` (the last argument of
+`ListRow::item(label, value, tone, id, affordance)`); the table of the tags is in the launcher's
+[`docs/cp0_lvgl.en.md`](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/cp0_lvgl.en.md), "Row
+affordances" (decision 2026-10-16). It is purely visual: keys, taps and row heights do not change.
+
+| Kind (tag) | Example | Look |
+|---|---|---|
+| **Open** | *All processes*, *Diagnose my connection*: the row opens another page | a chevron `›` at the right edge |
+| **Edit** | *Sort by*, *Network*, *Latitude*: the row changes a value, in place or through a picker or editor | the value keeps its tone, then the chevron |
+| **Action** | *Save log*, *Listen*: the row does something right there | normal label and a dot in the chevron's slot, white when idle |
+| **Action, running** (`ActionRunning`) | the same *Listen* row, or a *Stop* row, while it runs | the dot turns blue (`#5AAAFF`) |
+| **Info** | *MAC address*, a reading: read-only | no marker; a plain value is drawn grey (Muted); an explicit Ok / Warn / Bad tone keeps its colour |
+
+- **Every list row of a native app is tagged.** An untagged row (`Unspecified`) still draws as before, but it tells the
+  user nothing; do not leave one. Do not colour a label (blue, underline, accent) to mean "tappable": the marker is the
+  only cue, and colour stays for status (see above).
+- **Running state** is the same row with another tag. Give the row `Action` or `ActionRunning` from your state each time
+  you build the rows and hand them to the normal refresh (`set_rows()`, or `update_row()` / `set_value()`): only the
+  dot's colour changes, the scroll and the selection stay.
+- **A list of your own** (rows of any height, wrapped text, a chain of hops) uses the shared helpers of
+  `cp0_ui_list.h` (`cp0_ui_list_has_chevron()`, `_has_dot()`, `_label_rgb()`, `_value_rgb()`, `_dot_rgb()`,
+  `_trail_w()`, `_chevron_y()`) so that it looks the same as `CompactList`; reserve the trailing width only for rows
+  that carry a marker, and make the value text fit beside the marker (it is never cut under it).
+- **Not lists:** a bar of buttons (Start / Stop / Save cells) and a tile grid are controls that look tappable by
+  themselves; they carry no row marker.
+
 ### Touch and keyboard: both complete
 
 A touch-only board (Pi 3A+) and a keyboard-only use must each reach **every** function.
@@ -385,6 +414,7 @@ Copy into the pull request and tick.
 | 23 | Icon follows [ICON-PALETTE.md](ICON-PALETTE.md): 100x100 square transparent PNG, own hue (not green, not shared), own silhouette, two colours, strokes >= 9 px | [ ] |
 | 24 | Icon checked at 32 px and in greyscale on the review sheet (`python tools/icons/make_icons.py`), distinct from every other tile | [ ] |
 | 25 | Data and app lists on `CompactList`; no status shown by colour alone | [ ] |
+| 26 | List rows tagged Open / Edit / Action / Info; no marker on pure read-outs ([row kinds](#row-kinds-what-can-be-tapped)) | [ ] |
 
 > **Icon upgrades:** a launcher older than PR #46 (2026-10-14) reads an icon's size once and keeps it until it restarts, so an app
 > update that ships an icon of a different size can look cropped on its tile; a current launcher reloads the tile within about 3 s
