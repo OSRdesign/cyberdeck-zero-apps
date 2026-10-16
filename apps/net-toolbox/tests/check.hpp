@@ -114,3 +114,15 @@ void test_netlog_03();
 void test_scope();
 void test_ui_scope();
 void test_ui_model_03();
+/* 0.4 */
+void test_subnet_math();
+void test_arp_parser();
+void test_oui();
+void test_lannames();
+void test_devices_engine();
+void test_devices_guards();
+void test_devices_rescan();
+void test_devices_failed();
+void test_devices_session_cancel();
+void test_devscan();
+void test_netlog_04();

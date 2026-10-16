@@ -1,14 +1,14 @@
 # Net Toolbox
 
-Version 0.3.0, package `net-toolbox`. Part of
+Version 0.4.0 (draft), package `net-toolbox`. Part of
 [cyberdeck-zero-apps](../../README.md).
 
 Net Toolbox gathers the tools you reach for when a network misbehaves: a step-by-step **diagnosis** ("why is my
 internet broken?") in plain words, **ping** with loss and jitter, a **DNS lookup** with a resolver you choose, a TCP
 **port check**, the **interfaces** of the board and, from 0.2, a **traceroute** drawn as a chain of hops, an **HTTP check**
 with a timing waterfall and the certificate's days left, your **public IP** and **whois**. It is a full-screen touch app made for the deck's small screen
-(Pi Zero 2 W, 640x480) and meant to work the same on the Pi 3A+, the Pi 5 and the CM5. It does not repeat
-[LAN Scan](../lanscan/README.md) (devices and their ports) or [Wi-Fi Survey](../wifi-survey/README.md) (channels).
+(Pi Zero 2 W, 640x480) and meant to work the same on the Pi 3A+, the Pi 5 and the CM5. From 0.4 it folds in a
+**Local devices** scanner (what [LAN Scan](../lanscan/README.md) did: the devices on your network and their open ports).
 Nothing leaves the board until you start a test.
 
 Kind: a native `cp0_lvgl` app (kind A of the [guidelines](../../docs/APP-GUIDELINES.md)), because it has its own
@@ -30,6 +30,12 @@ far). The core is described in [0.3.0: the new tools' core](#030-the-new-tools-c
 adapter, Ethernet): see [The network chooser](#the-network-chooser-03). The speed test and the Bluetooth radar
 have run on the deck (Zero 2 W) and the Pi 3A+; Wake-on-LAN and the interface chooser with a second adapter are still to be
 tried on a board (`tests/BOARD-TESTS.md`, B11 to B15).
+
+**0.4.0 (draft, in development):** a new **Local devices** tool, a LAN scanner that folds in what
+[LAN Scan](../lanscan/README.md) did: it discovers the devices on your network (their address, MAC, vendor and name),
+marks this device and the gateway, and scans the open TCP ports of one device you pick. The core is described in
+[Local devices (0.4): the core](#local-devices-04-the-core); its pages are written by a later step and the board steps
+are still to be run. It scans only the chosen interface's own private network (never a public address), without root.
 
 ## Screenshots
 
@@ -96,6 +102,7 @@ background (a cancel ends a probe within 50 ms). The page changes were checked f
 | Speed test (0.3) | HTTPS requests through `curl`: 11 small ones (latency), then about 8 s of download and 8 s of upload, **at most 150 MB each way** per run (on a 25 Mbit/s link about 25 MB each way); pings beside it, one every 0.2 s | `speed.cloudflare.com` (Cloudflare); the pings to 1.1.1.1 (Cloudflare) or to your gateway |
 | Wake-on-LAN (0.3) | one 102-byte UDP datagram per destination (4 on one interface: 255.255.255.255 and the subnet's broadcast, ports 9 and 7); then, when the machine has a host to watch, one ping a second for up to 120 s | your local network (broadcast), or the broadcast address you saved; the machine's address |
 | BLE scan (0.3) | nothing: the adapter listens (an active LE scan sends scan requests to the devices it hears, as any phone does) | the Bluetooth devices around |
+| Local devices (0.4) | an ICMP echo and a few one-packet TCP connect probes (ports 80, 443, 22, 445, 62078, 8080) to each address of your subnet, to make the kernel learn its MAC; then a name query per device (mDNS on UDP 5353, NetBIOS on UDP 137, reverse DNS to your resolver); a port scan sends TCP connects to one device you pick | the addresses of your own private subnet (the chosen interface's /24 at most); the device you pick for the port scan |
 
 Everything starts when you press Run or Start, except the diagnosis (0.1) and the public address, which asks when you
 open its page.
@@ -337,6 +344,69 @@ is BlueZ 5.82's (5.6x lines such as `RSSI: -72` are read too). Measured on the b
 bluetoothctl); the app's own sessions were exercised on the build PC (the real speed test against Cloudflare, a fake
 bluetoothctl) but not yet on a board.
 
+## Local devices (0.4): the core
+
+The core (`src/core/`, no LVGL) of a LAN scanner, folding in what [LAN Scan](../lanscan/README.md) did, written in Net
+Toolbox's style: one worker thread per running tool (256 kB stack), every wait a `poll()` slice of at most 50 ms (a
+stop ends it within that time), immutable snapshots under a mutex that the screen polls, nothing on the network until
+you start it, no root. Its pages are written by a later step from the snapshots below.
+
+* **The network** (`subnet`): the subnet to scan is the chosen interface's own IPv4 address and mask (the 0.3
+  interface chooser, `scope.hpp`; `scan_range_of(NetState, iface)`). `ScanRange` is the first and last usable host of
+  that range in host byte order. The range is **capped at a /24** (254 hosts): a wider mask (a /16, a /22) is narrowed
+  to the /24 around the address; a /25 to /30 keeps its own hosts; **/31 and /32** have none and refuse. The scan is
+  **refused with plain words** (`ScanRange::problem`, shown as a `Failed` state like the other tools) when the address
+  is not private (RFC 1918: 10/8, 172.16/12, 192.168/16, or link-local 169.254/16) — a public address is never swept —
+  or when the interface has **no IPv4 address** ("No network").
+* **Discovery** (`devices`, `DevicesSession`, `run_devices`): the subnet is swept with unprivileged **ICMP echo** (the
+  same datagram socket as ping, no root) and a few **non-blocking TCP connect probes** (ports 80, 443, 22, 445, 62078,
+  8080), which makes the kernel **ARP-resolve** every live host; `/proc/net/arp` then gives the MAC of the hosts that
+  are there (**complete entries only**, flag `0x2`; incomplete entries, other interfaces and the all-zero MAC are
+  dropped — `arp_neighbours`). The ICMP round trip is recorded when a host answers a ping. Bounded: the probe sockets
+  are capped (about 64 TCP in flight), every wait is a poll slice, and the whole run has a total budget (a /24 in about
+  10 s on the Zero 2 W). Everything is bound to the chosen interface (`SO_BINDTODEVICE`). This device and the default
+  gateway (`ip route` / `/proc/net/route` as the other tools) are marked. Devices **appear in the snapshot as they are
+  found** (a live list). **Rescan** keeps the devices already known and refreshes them.
+* **Names** (`lannames`), best first, per device: **mDNS** (a reverse PTR query to the host over UDP 5353 with the QU
+  bit, the DNS wire format of `dns.hpp`), **NetBIOS** (an NBSTAT node-status request over UDP 137), then **reverse
+  DNS** (the resolver, reusing `rdns.hpp`). `best_name()` picks the first non-empty, and a trailing `.local` / `.lan`
+  and the like are dropped. All of it is bounded and cancellable and never blocks the discovery.
+* **Vendor** (`oui`): the IEEE OUI registry ships with the app as `net-toolbox-oui.tsv`
+  (`root/usr/share/APPLaunch/share/`, built by `tools/make_oui.py`); `lookup_vendor()` maps a MAC's first three bytes
+  to a company. A MAC whose first byte has the **locally-administered bit** (`0x02`) set — the random addresses phones
+  and watches use for privacy — is shown as a **private (random) address** with no vendor guess.
+* **Port scan of one device** (`devices`, `PortScanSession`, `run_port_scan`): a TCP **connect** scan of one private
+  address on the chosen interface, two modes: the **common ports** (a curated list with service names, `local_common_ports`)
+  or **1-1024**. Non-blocking, bounded concurrency (~64), a per-connect timeout of about 700 ms for the LAN, progress
+  counters (scanned / total / open) and the open list with its service name; cancellable. Only ever the one device you
+  pick: **the engine itself** refuses (state Failed, *Only devices on your own network can be scanned.*) any target that
+  is not a private or link-local IPv4 host inside the scanned subnet — a public address, 0.0.0.0, loopback, multicast,
+  255.255.255.255, the subnet's own network and broadcast addresses, another subnet (`scan_target_problem`) — before
+  any socket is made.
+* **Where the probes go**: the `Prober` and `NameLookup` base classes hold the guard, so every implementation obeys
+  it: a poke or a name question reaches only an address inside the scan range, never this device, and nothing at all
+  before the range is set (fail closed). The mDNS and NetBIOS questions go unicast to that host only; no multicast is
+  sent. The reverse-DNS question goes to your resolver, as in the other tools.
+* **The snapshot API** (for the pages worker). `DevicesSnapshot`: `state` (Idle, Scanning, Done, Cancelled, Failed),
+  `error`, `interface`, `subnet` (`192.168.68.0/24`), `gateway`, `range` (the `ScanRange` scanned, to hand to the port
+  scan), the counts `total` / `probed` / `found`, a `naming` flag, and `vector<Device>` **sorted by IP numeric**, each `Device` with `ip`, `ip_order`, `mac`, `vendor`,
+  `vendor_private`, `name`, `name_source` (mDNS / NetBIOS / reverse DNS), `has_rtt` + `rtt_ms`, `is_gateway`,
+  `is_self`. `PortScanSnapshot`: `state`, `error`, `address`, `full_range`, the counts `total` / `scanned` /
+  `open_count`, and `vector<OpenPort>{port, service, connect_ms}` sorted by port. The sessions follow the house
+  pattern: `start(...)`, `stop()`, `running()`, `seq()`, `latest()`. `DevicesSession::start(net, iface, resolver,
+  rescan)` picks the subnet, reads the MAC and gateway and runs the scan; a rescan keeps the known devices.
+  `PortScanSession::start(address, full_range, range)` needs the `DevicesSnapshot`'s `range` (without one it refuses
+  with *No network*) and refuses any address outside it. The sockets follow the chosen network through
+  `set_active_interface` as every other tool. The probing is injectable (`Prober`, `NeighbourReader`, `NameLookup`) so the tests drive the engine
+  on loopback fakes.
+* **Saved results** (`netlog`): `format_devices` and `format_portscan`, same text style as the other tools. No new
+  settings key is needed.
+
+Limits of the 0.4 core: the discovery and the port scan were unit-tested on fixtures and on loopback fakes and loopback
+listeners; the real ICMP / ARP sweep and the mDNS / NetBIOS answers were not yet run on a board (`tests/BOARD-TESTS.md`).
+A host that answers neither ICMP, a TCP SYN nor ARP (fully firewalled, or off) is not seen. mDNS names end in `.local`
+and are shown without that suffix; a device that changes its random MAC between scans shows as a new device.
+
 ## The 0.3 pages
 
 Same frame as the others (status line, large cells or rows, Esc / Left back, a tap selects and a second tap acts), same
@@ -483,7 +553,11 @@ test uses Cloudflare's speed endpoints (`speed.cloudflare.com/__down` and `/__up
 speed.cloudflare.com), the BLE scan runs BlueZ's `bluetoothctl` (GPL-2.0) as a separate program, not shipped or
 modified; the Wake-on-LAN sender and the speed and Bluetooth readers are the app's own code. The company names of the
 BLE scan come from the Bluetooth SIG's assigned numbers (company identifiers); the bufferbloat grade steps follow
-Waveform's bufferbloat test.
+Waveform's bufferbloat test. From 0.4 the Local devices tool ships `net-toolbox-oui.tsv`, a shortened, abridged
+derivative of the IEEE Registration Authority's public OUI listing (<https://standards-oui.ieee.org/>; the company
+names are shortened for the small screen, no formal licence is given with the listing, no endorsement by the IEEE is
+implied); see `root/usr/share/doc/net-toolbox/copyright`. The ICMP / TCP discovery, the mDNS and NetBIOS name queries
+and the port scanner are the app's own code.
 
 ## Build and test
 
@@ -506,7 +580,11 @@ python3 tools/make_registry.py --only net-toolbox --out <a folder outside packag
   `minijson` (curl's report), `publicip`, `whois`. From 0.3: `cmdrun` also has the stream runner, `speedtest` (the
   command lines, curl's report, the meter, the grades, the engine with the ping beside it, the session), `wol` (MAC
   addresses, the packet, the plan, the sender, the wake watch, the session), `ble` (bluetoothctl's lines, `show`,
-  `/sys`, the device table, the scan, the session).
+  `/sys`, the device table, the scan, the session). From 0.4: `subnet` (the scan range with the /24 cap and the
+  private checks, the `/proc/net/arp` reader), `oui` (the IEEE OUI table parse and the vendor lookup with the
+  random-MAC rule), `lannames` (the mDNS and NetBIOS packets, the reverse-name priority, the non-blocking resolver),
+  `devices` (the discovery engine, the real prober / ARP reader / name lookup, the sessions) and `devscan` (the
+  one-device TCP connect port scan).
 * `src/ui/`: `toolbox_app` + `tool_pages` (the frame: navigation, the band, the Choice and Typed pages, saving; the five
   tool pages), `view_model` (every text, tone and number a page shows, from the core's snapshots: no LVGL, unit-tested),
   `charts` (the health ladder, the ping graph and strip, the result badge: drawn with LVGL's draw API), `backend`
@@ -564,6 +642,14 @@ python3 tools/make_registry.py --only net-toolbox --out <a folder outside packag
 
 ## Changes
 
+* 0.4.0 (draft, in development): the core of **Local devices**, a LAN scanner folded in from LAN Scan. Discovery
+  without root (ICMP echo and TCP connect probes to prime ARP, `/proc/net/arp` for the MAC, the chosen interface's
+  own private /24 only), names best-first (mDNS, NetBIOS, reverse DNS), OUI vendor lookup with the shipped
+  `net-toolbox-oui.tsv` (a locally-administered MAC shown as a private address), this device and the gateway marked, a
+  live list and a rescan that keeps the known devices; a TCP connect port scan of one device (common ports or 1-1024,
+  bounded concurrency, progress); the `DevicesSnapshot` / `PortScanSnapshot` API for the pages, saved texts through
+  `netlog` and the unit tests (subnet maths, ARP parser, OUI, mDNS / NetBIOS packets, the scan state machine on
+  loopback fakes, the port scan on loopback listeners). The pages are a later step.
 * 0.3.0: the **network chooser** (Home row Network, `interface=` setting): sockets bound with SO_BINDTODEVICE, curl
   with --interface, the interface's own gateway and DNS, the diagnosis of a chosen interface, `(via wlan1)` in the status
   lines, Wi-Fi details for every wireless interface on the Interfaces page, Ethernet as a normal interface. Home has ten

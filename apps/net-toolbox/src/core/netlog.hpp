@@ -11,6 +11,7 @@
 #pragma once
 
 #include "ble.hpp"
+#include "devices.hpp"
 #include "diagnosis.hpp"
 #include "dns_client.hpp"
 #include "httpcheck.hpp"
@@ -58,5 +59,8 @@ std::string format_whois(const WhoisResult &r);
 std::string format_speedtest(const SpeedSnapshot &s);
 std::string format_wol(const WolSnapshot &s);
 std::string format_ble(const BleSnapshot &s);
+/* 0.4 */
+std::string format_devices(const DevicesSnapshot &s);
+std::string format_portscan(const PortScanSnapshot &s);
 
 } // namespace nt
