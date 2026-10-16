@@ -51,6 +51,15 @@ Column detail_column(const cp0_ui_roller_page_t &l)
     return {(l.w - w) / 2, w};
 }
 
+cp0::ui::RowAffordance row_affordance(Aff aff)
+{
+    switch (aff) {
+    case Aff::Open: return cp0::ui::RowAffordance::Open;
+    case Aff::Edit: return cp0::ui::RowAffordance::Edit;
+    default: return cp0::ui::RowAffordance::Info;
+    }
+}
+
 } // namespace
 
 MonitorApp::MonitorApp(lv_obj_t *screen)
@@ -271,7 +280,7 @@ std::vector<cp0::ui::ListRow> MonitorApp::list_rows() const
     rows.reserve(items_.size());
     for (const ListItem &it : items_)
         rows.push_back(it.section ? cp0::ui::ListRow::section(it.label)
-                                  : cp0::ui::ListRow::item(it.label, it.value, value_tone(it.tone), it.id));
+                                  : cp0::ui::ListRow::item(it.label, it.value, value_tone(it.tone), it.id, row_affordance(it.aff)));
     return rows;
 }
 

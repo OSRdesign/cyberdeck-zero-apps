@@ -38,10 +38,12 @@ Row section(const std::string &label)
     return r;
 }
 
+/* a row that opens another page (All processes) */
 Row nav(const std::string &label, std::vector<std::string> values, int id)
 {
     Row r = info(label, std::move(values));
     r.id = id;
+    r.aff = Aff::Open;
     return r;
 }
 
@@ -181,6 +183,7 @@ std::vector<ListItem> list_items(const std::vector<Row> &rows, const std::vector
         it.label = r.label;
         it.tone = r.tone;
         it.id = r.id;
+        it.aff = r.aff;
         if (r.type == RowType::Item) it.value = fit_value(r.label, r.values, room, gap, width);
         items.push_back(it);
     }
@@ -640,7 +643,9 @@ std::vector<Row> process_rows(const Snapshot *s, SortBy by)
 {
     std::vector<Row> rows;
     if (!s || !s->procs_valid) return rows;
-    rows.push_back(nav("Sort by", {by == SortBy::Cpu ? "CPU" : "Memory"}, kRowSort));
+    Row sort = nav("Sort by", {by == SortBy::Cpu ? "CPU" : "Memory"}, kRowSort);
+    sort.aff = Aff::Edit; /* changes its own value in place */
+    rows.push_back(sort);
     const std::vector<ProcRow> &list = by == SortBy::Cpu ? s->top_cpu : s->top_mem;
     for (std::size_t i = 0; i < list.size() && i < static_cast<std::size_t>(kTopProcs); ++i) {
         const ProcRow &p = list[i];

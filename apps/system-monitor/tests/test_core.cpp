@@ -228,6 +228,8 @@ static void test_pages()
     CHECK(top);
     CHECK_EQ(cpu.back().id, kRowAllProcs);
     CHECK_EQ(cpu.back().label, std::string("All processes"));
+    CHECK(cpu.back().aff == Aff::Open);                    /* opens the Processes page: a chevron */
+    for (const Row &r : cpu) CHECK(r.id == kRowAllProcs || r.aff == Aff::Info); /* every other row only shows */
     std::size_t heading = 0;
     while (heading < cpu.size() && cpu[heading].type != RowType::Section) ++heading;
     CHECK(heading < cpu.size() && cpu[heading].label == "Top processes by CPU" && cpu[heading].values.empty());
@@ -268,6 +270,11 @@ static void test_pages()
     const std::vector<Row> pr = process_rows(&s, SortBy::Memory);
     CHECK_EQ(pr[0].values[0], std::string("Memory"));
     CHECK_EQ(pr[0].id, kRowSort);
+    CHECK(pr[0].aff == Aff::Edit);                         /* Sort by changes its value in place */
+    for (std::size_t i = 1; i < pr.size(); ++i) CHECK(pr[i].aff == Aff::Info); /* a process row only shows */
+    for (const Row &r : thermal_rows(&s)) CHECK(r.aff == Aff::Info);
+    for (const Row &r : storage_rows(&s)) CHECK(r.aff == Aff::Info);
+    for (const Row &r : network_rows(&s)) CHECK(r.aff == Aff::Info);
     CHECK_EQ(pr[1].label, std::string("chromium"));
     CHECK_EQ(pr[1].values[0], std::string("31.3%  82 MB"));
     CHECK_EQ(pr[1].values[1], std::string("82 MB"));
@@ -382,7 +389,7 @@ static void test_package()
     const std::string manifest = read_file(app + "/app.json");
     CHECK(manifest.find("\"share_code\": \"system-monitor\"") != std::string::npos);
     CHECK(manifest.find("\"package\": \"system-monitor\"") != std::string::npos);
-    CHECK(manifest.find("\"version\": \"0.2.1\"") != std::string::npos);
+    CHECK(manifest.find("\"version\": \"0.2.2\"") != std::string::npos);
     CHECK(manifest.find("\"title\": \"System Monitor\"") != std::string::npos);
     CHECK(manifest.find("\"license\": \"MIT\"") != std::string::npos);
     CHECK(manifest.find("\"depends\": \"libfreetype6, libinput10, libxkbcommon0\"") != std::string::npos);
