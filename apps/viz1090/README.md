@@ -76,6 +76,10 @@ Start **viz1090** from the launcher. The intro screen comes first.
 | Leave the map (back to the launcher) | Esc | the header's Esc |
 | End a stuck app | hold Esc 3 s (the launcher's watchdog) | - |
 
+What a row tells you, on the setup page: a chevron at the right edge opens a page (*Position*) or changes a value
+(*Latitude*, *Longitude*); a white dot runs something right there (*SDR receiver*, *GPS receiver*, *Recent places*); grey
+text is information only. The dot is drawn on a touch-only screen too, where no row shows a highlight.
+
 ## Screens
 
 The screen comes from the launcher's app contract (`APPLAUNCH_CANVAS`, `APPLAUNCH_SCREEN_*`), else the launcher's
