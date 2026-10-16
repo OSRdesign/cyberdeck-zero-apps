@@ -48,6 +48,18 @@ cp0::ui::ValueTone value_tone(ui::Tone t)
 
 } // namespace
 
+cp0::ui::RowAffordance row_affordance(ui::Aff aff)
+{
+    switch (aff) {
+    case ui::Aff::Info: return cp0::ui::RowAffordance::Info;
+    case ui::Aff::Open: return cp0::ui::RowAffordance::Open;
+    case ui::Aff::Edit: return cp0::ui::RowAffordance::Edit;
+    case ui::Aff::Action: return cp0::ui::RowAffordance::Action;
+    case ui::Aff::ActionRunning: return cp0::ui::RowAffordance::ActionRunning;
+    default: return cp0::ui::RowAffordance::Unspecified;
+    }
+}
+
 ToolboxApp::ToolboxApp(lv_obj_t *screen)
 {
     backend_ = ui::make_backend();
@@ -505,7 +517,7 @@ std::vector<cp0::ui::ListRow> ToolboxApp::to_rows(const std::vector<ui::RowDef> 
     rows.reserve(defs.size());
     for (const ui::RowDef &d : defs)
         rows.push_back(d.section ? cp0::ui::ListRow::section(d.label)
-                                 : cp0::ui::ListRow::item(d.label, d.value, value_tone(d.tone), d.id));
+                                 : cp0::ui::ListRow::item(d.label, d.value, value_tone(d.tone), d.id, row_affordance(d.aff)));
     return rows;
 }
 
@@ -540,22 +552,22 @@ void ToolboxApp::build_home(int select)
 std::vector<cp0::ui::ListRow> ToolboxApp::home_rows() const
 {
     std::vector<cp0::ui::ListRow> rows;
-    rows.push_back(cp0::ui::ListRow::item("Network", ui::network_value(scope_), cp0::ui::ValueTone::Normal, kHomeNet));
-    rows.push_back(cp0::ui::ListRow::item("Diagnose my connection", "", cp0::ui::ValueTone::Normal, kHomeDiag));
-    rows.push_back(cp0::ui::ListRow::item("Ping", "", cp0::ui::ValueTone::Normal, kHomePing));
-    rows.push_back(cp0::ui::ListRow::item("Traceroute", "", cp0::ui::ValueTone::Normal, kHomeTrace));
-    rows.push_back(cp0::ui::ListRow::item("DNS lookup", "", cp0::ui::ValueTone::Normal, kHomeDns));
-    rows.push_back(cp0::ui::ListRow::item("Port check", "", cp0::ui::ValueTone::Normal, kHomePort));
-    rows.push_back(cp0::ui::ListRow::item("HTTP check", "", cp0::ui::ValueTone::Normal, kHomeHttp));
-    rows.push_back(cp0::ui::ListRow::item("Speed test", "", cp0::ui::ValueTone::Normal, kHomeSpeed));
-    rows.push_back(cp0::ui::ListRow::item("Public IP", "", cp0::ui::ValueTone::Normal, kHomePublicIp));
-    rows.push_back(cp0::ui::ListRow::item("Whois", "", cp0::ui::ValueTone::Normal, kHomeWhois));
-    rows.push_back(cp0::ui::ListRow::item("Wake-on-LAN", "", cp0::ui::ValueTone::Normal, kHomeWol));
-    rows.push_back(cp0::ui::ListRow::item("Bluetooth radar", "", cp0::ui::ValueTone::Normal, kHomeBle));
-    rows.push_back(cp0::ui::ListRow::item("Local devices", "", cp0::ui::ValueTone::Normal, kHomeDevices));
-    rows.push_back(cp0::ui::ListRow::item("Wi-Fi networks", "", cp0::ui::ValueTone::Normal, kHomeWifi));
-    rows.push_back(cp0::ui::ListRow::item("Wi-Fi walk test", "", cp0::ui::ValueTone::Normal, kHomeWalk));
-    rows.push_back(cp0::ui::ListRow::item("Interfaces", "", cp0::ui::ValueTone::Normal, kHomeIfaces));
+    rows.push_back(cp0::ui::ListRow::item("Network", ui::network_value(scope_), cp0::ui::ValueTone::Normal, kHomeNet, row_affordance(ui::Aff::Edit)));
+    rows.push_back(cp0::ui::ListRow::item("Diagnose my connection", "", cp0::ui::ValueTone::Normal, kHomeDiag, row_affordance(ui::Aff::Open)));
+    rows.push_back(cp0::ui::ListRow::item("Ping", "", cp0::ui::ValueTone::Normal, kHomePing, row_affordance(ui::Aff::Open)));
+    rows.push_back(cp0::ui::ListRow::item("Traceroute", "", cp0::ui::ValueTone::Normal, kHomeTrace, row_affordance(ui::Aff::Open)));
+    rows.push_back(cp0::ui::ListRow::item("DNS lookup", "", cp0::ui::ValueTone::Normal, kHomeDns, row_affordance(ui::Aff::Open)));
+    rows.push_back(cp0::ui::ListRow::item("Port check", "", cp0::ui::ValueTone::Normal, kHomePort, row_affordance(ui::Aff::Open)));
+    rows.push_back(cp0::ui::ListRow::item("HTTP check", "", cp0::ui::ValueTone::Normal, kHomeHttp, row_affordance(ui::Aff::Open)));
+    rows.push_back(cp0::ui::ListRow::item("Speed test", "", cp0::ui::ValueTone::Normal, kHomeSpeed, row_affordance(ui::Aff::Open)));
+    rows.push_back(cp0::ui::ListRow::item("Public IP", "", cp0::ui::ValueTone::Normal, kHomePublicIp, row_affordance(ui::Aff::Open)));
+    rows.push_back(cp0::ui::ListRow::item("Whois", "", cp0::ui::ValueTone::Normal, kHomeWhois, row_affordance(ui::Aff::Open)));
+    rows.push_back(cp0::ui::ListRow::item("Wake-on-LAN", "", cp0::ui::ValueTone::Normal, kHomeWol, row_affordance(ui::Aff::Open)));
+    rows.push_back(cp0::ui::ListRow::item("Bluetooth radar", "", cp0::ui::ValueTone::Normal, kHomeBle, row_affordance(ui::Aff::Open)));
+    rows.push_back(cp0::ui::ListRow::item("Local devices", "", cp0::ui::ValueTone::Normal, kHomeDevices, row_affordance(ui::Aff::Open)));
+    rows.push_back(cp0::ui::ListRow::item("Wi-Fi networks", "", cp0::ui::ValueTone::Normal, kHomeWifi, row_affordance(ui::Aff::Open)));
+    rows.push_back(cp0::ui::ListRow::item("Wi-Fi walk test", "", cp0::ui::ValueTone::Normal, kHomeWalk, row_affordance(ui::Aff::Open)));
+    rows.push_back(cp0::ui::ListRow::item("Interfaces", "", cp0::ui::ValueTone::Normal, kHomeIfaces, row_affordance(ui::Aff::Open)));
     return rows;
 }
 

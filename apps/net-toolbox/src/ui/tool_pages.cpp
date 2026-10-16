@@ -24,9 +24,11 @@ namespace {
 
 constexpr int kMsgLines = 4; /* lines of the explanation under the ladder */
 
-cp0::ui::ListRow action(const std::string &label, const std::string &value, std::intptr_t id)
+/* a row of a CompactList page: Action (does it right here; ActionRunning while it runs), Edit (changes a value, in place
+ * or through a picker) or Open (another page) */
+cp0::ui::ListRow action(const std::string &label, const std::string &value, std::intptr_t id, ui::Aff aff)
 {
-    return cp0::ui::ListRow::item(label, value, cp0::ui::ValueTone::Normal, id);
+    return cp0::ui::ListRow::item(label, value, cp0::ui::ValueTone::Normal, id, row_affordance(aff));
 }
 
 } // namespace
@@ -168,7 +170,8 @@ std::vector<cp0::ui::ListRow> ToolboxApp::diag_rows() const
 {
     const std::shared_ptr<const DiagReport> r = fresh_ ? backend_.diag->latest() : nullptr;
     const bool running = r && r->state == DiagReport::State::Running;
-    return {action("Run again", running ? "Checking..." : "", kRunAgain), action("Save log", "", kSaveLog)};
+    return {action("Run again", running ? "Checking..." : "", kRunAgain, ui::action_aff(running)),
+            action("Save log", "", kSaveLog, ui::Aff::Action)};
 }
 
 void ToolboxApp::poll_diagnosis(bool force)
@@ -268,9 +271,9 @@ std::vector<cp0::ui::ListRow> ToolboxApp::ping_rows() const
 {
     const std::shared_ptr<const PingSnapshot> s = fresh_ ? backend_.ping->latest() : nullptr;
     const bool running = s && s->running();
-    return {action(running ? "Stop" : "Start", running ? "pinging" : "", kRun),
-            action("Target", ping_target_text(), kTarget), action("Save log", "", kSaveLog),
-            action("Save target", "", kSaveTarget)};
+    return {action(running ? "Stop" : "Start", running ? "pinging" : "", kRun, ui::action_aff(running)),
+            action("Target", ping_target_text(), kTarget, ui::Aff::Edit), action("Save log", "", kSaveLog, ui::Aff::Action),
+            action("Save target", "", kSaveTarget, ui::Aff::Action)};
 }
 
 void ToolboxApp::poll_ping(bool force)
@@ -416,8 +419,8 @@ std::vector<cp0::ui::ListRow> ToolboxApp::dns_list() const
     const std::shared_ptr<const DnsSnapshot> s = fresh_ ? backend_.dns->latest() : nullptr;
     const bool running = s && s->state == DnsSnapshot::State::Running;
     std::vector<cp0::ui::ListRow> rows;
-    rows.push_back(action("Look up", running ? "asking..." : "", kRun));
-    rows.push_back(action("Compare resolvers", "", kCompare));
+    rows.push_back(action("Look up", running ? "asking..." : "", kRun, ui::action_aff(running)));
+    rows.push_back(action("Compare resolvers", "", kCompare, ui::Aff::Action));
     if (s) { /* the answers right under the two actions, the settings below them */
         std::vector<ui::RowDef> defs = ui::dns_rows(*s, system_resolver(), system_name());
         int k = 0;
@@ -425,10 +428,10 @@ std::vector<cp0::ui::ListRow> ToolboxApp::dns_list() const
             if (!d.section) d.id = kResult + k++;
         for (cp0::ui::ListRow &r : to_rows(defs)) rows.push_back(std::move(r));
     }
-    rows.push_back(action("Name", dns_name_, kName));
-    rows.push_back(action("Type", dns_type_, kType));
-    rows.push_back(action("Resolver", dns_resolver_label(), kResolver));
-    rows.push_back(action("Save log", "", kSaveLog));
+    rows.push_back(action("Name", dns_name_, kName, ui::Aff::Edit));
+    rows.push_back(action("Type", dns_type_, kType, ui::Aff::Edit));
+    rows.push_back(action("Resolver", dns_resolver_label(), kResolver, ui::Aff::Edit));
+    rows.push_back(action("Save log", "", kSaveLog, ui::Aff::Action));
     return rows;
 }
 
@@ -588,8 +591,9 @@ std::vector<cp0::ui::ListRow> ToolboxApp::port_list() const
 {
     const std::shared_ptr<const PortSnapshot> s = fresh_ ? backend_.port->latest() : nullptr;
     const bool running = s && (s->state == PortSnapshot::State::Running || s->state == PortSnapshot::State::Resolving);
-    return {action("Run", running ? "checking..." : "", kRun), action("Host", port_host_, kHost),
-            action("Port", ui::port_choice_text(port_preset_, port_), kPortRow), action("Save log", "", kSaveLog)};
+    return {action("Run", running ? "checking..." : "", kRun, ui::action_aff(running)), action("Host", port_host_, kHost, ui::Aff::Edit),
+            action("Port", ui::port_choice_text(port_preset_, port_), kPortRow, ui::Aff::Edit),
+            action("Save log", "", kSaveLog, ui::Aff::Action)};
 }
 
 void ToolboxApp::poll_port(bool force)

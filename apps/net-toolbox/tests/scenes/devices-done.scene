@@ -20,6 +20,7 @@ wait 250
 key enter
 wait 300
 shot done
+expect text "›"
 expect text "Done: 14 devices on 192.168.68.0/24"
 expect text "Rescan"
 expect text "router"

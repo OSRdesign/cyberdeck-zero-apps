@@ -1,6 +1,6 @@
 # Net Toolbox
 
-Version 0.4.0 (draft), package `net-toolbox`. Part of
+Version 0.4.1, package `net-toolbox`. Part of
 [cyberdeck-zero-apps](../../README.md).
 
 Net Toolbox gathers the tools you reach for when a network misbehaves: a step-by-step **diagnosis** ("why is my
@@ -776,6 +776,10 @@ python3 tools/make_registry.py --only net-toolbox --out <a folder outside packag
 
 ## Changes
 
+* 0.4.1: rows show what can be tapped, by the launcher's row rule: a chevron opens a page or changes a value, read-outs are
+  grey information (a status colour is kept), and a row that does something right there (Run, Stop, Save log, Scan) carries
+  a dot that is white when idle and blue while it runs; the values line up in one column. Net Toolbox's own two-line rows
+  (devices, Wi-Fi networks, Bluetooth devices, saved machines) draw the same markers. Rebuilt on launcher 9912361.
 * 0.4.0 (draft): the **pages** of Local devices (the list that grows as devices are found, two-line rows with the router and
   this-device tags, the Device page with ping, port check, a live TCP port scan and Save for Wake-on-LAN), Wi-Fi networks (the
   list with signal bars, the Channels view with the least crowded channel, a page per network followed by its BSSID) and the

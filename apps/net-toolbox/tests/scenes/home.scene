@@ -5,6 +5,7 @@ env NET_TOOLBOX_DEMO diag=healthy
 env NET_TOOLBOX_FIXTURE deck
 env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
 shot home
+expect text "›"
 expect text "Net Toolbox"
 expect text "Diagnose my connection"
 expect text "wlan0: 192.168.68.121"

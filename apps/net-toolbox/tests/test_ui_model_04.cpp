@@ -916,10 +916,33 @@ void test_walk_demo()
     CHECK(!walk_layout(640, 500, 20, 14, 40, 8).side);
 }
 
+/* 0.4.1, the row-affordance rule: a row of the view model is a read-out (Info: grey value, no marker) unless a page says
+ * otherwise; an action row is white when idle and blue while it runs; Aff::Unspecified is not what any row defaults to. */
+void test_row_affordance()
+{
+    CHECK(RowDef().aff == Aff::Info);
+    CHECK(action_aff(false) == Aff::Action);
+    CHECK(action_aff(true) == Aff::ActionRunning);
+    CHECK(Aff::Info != Aff::Unspecified);
+    const auto all_info = [](const std::vector<RowDef> &rows) {
+        CHECK(!rows.empty());
+        for (const RowDef &r : rows) CHECK(r.aff == Aff::Info);
+    };
+    const DevicesSnapshot d = devices("done");
+    all_info(device_info_rows(*device_named(d, "router")));
+    all_info(device_info_rows(*device_named(d, "cyberdeck")));
+    const WifiSnapshot w = demo_wifi("list", wifi_cfg(), 0);
+    all_info(wifi_detail_rows(*network_named(w, "HomeNet", 36), false));
+    all_info(wifi_detail_rows(*network_named(w, "CafeGuest"), true));
+    CHECK(open_port_row(OpenPort{22, "ssh"}).aff == Aff::Info);
+    CHECK(open_port_row(OpenPort{22, "ssh"}).tone == Tone::Ok); /* an explicit tone is kept: the list draws it as given */
+}
+
 } // namespace
 
 void test_ui_model_04()
 {
+    test_row_affordance();
     test_device_rows();
     test_devices_status();
     test_device_page();

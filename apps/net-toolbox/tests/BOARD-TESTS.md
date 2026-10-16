@@ -1,4 +1,4 @@
-# Net Toolbox 0.4.0: board tests
+# Net Toolbox 0.4.1: board tests
 
 For the Controller and the user (controller-led testing: the Controller deploys and reads logs, the user does the
 physical steps). `deck.py` is `C:\CLAUDE\zero7\launcher\docs\dev\deck\deck.py` (password in `PIPW`; `DECK_HOST=<ip>`
@@ -54,6 +54,11 @@ python deck.py run '/usr/share/APPLaunch/bin/net-toolbox --version; cat /proc/sy
    (watch the signal change when you cover the antenna). Esc comes back to Home with the highlight on Interfaces.
 4. Touch only (Pi 3A+): one tap on a Home row selects it, a second tap opens it; the header Esc goes back; a drag
    scrolls the lists.
+5. (0.4.1) Row markers on every page: a grey chevron at the right edge on rows that open a page or change a value (Home,
+   Target / Host / Port / Resolver / Query / URL, the device and Wi-Fi network rows), a dot on rows that run something
+   (Run, Start, Stop, Look up, Scan, Save log): white when idle, blue while it runs (the Stop row of a running ping, scan or
+   walk). Read-outs (Interfaces, results, a device's facts) are grey with no marker; Ok / Warn / Bad values keep their
+   colour. The values end in one column; a long device or network name is cut with dots before the marker.
 
 ## B2. Deck: Diagnosis
 

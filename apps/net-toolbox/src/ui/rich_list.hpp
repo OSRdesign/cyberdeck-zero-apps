@@ -45,6 +45,11 @@ public:
     virtual void resized(int w, int h) { (void)w; (void)h; }
 };
 
+/* The row-affordance rule of the launcher (cp0_ui_list.h) for Aff, and the tone of a value: the same mapping CompactList
+ * draws by, so a RichList row and a CompactList row look and measure alike. */
+cp0_ui_list_affordance_t c_affordance(Aff aff);
+cp0_ui_list_tone_t c_tone(Tone tone);
+
 struct RichRow {
     enum class Kind { Item, Section, Text, Custom };
     Kind kind = Kind::Item;
@@ -56,12 +61,16 @@ struct RichRow {
     bool cut = false;       /* Text: one line, cut with dots */
     int height = 0;         /* Custom */
     std::shared_ptr<RowView> view;
+    /* Item, Custom: what activating the row does (a chevron, a dot, a grey read-out); Unspecified draws the row as it was
+     * before the rule (no marker, the width untouched). A Custom view is attached to the width left of the marker. */
+    Aff aff = Aff::Unspecified;
 
-    static RichRow item(std::string label, std::string value, Tone tone = Tone::Normal, int id = 0);
+    static RichRow item(std::string label, std::string value, Tone tone = Tone::Normal, int id = 0, Aff aff = Aff::Unspecified);
     static RichRow section(std::string label);
     static RichRow text(std::string text, Tone tone = Tone::Normal, bool selectable = false, bool small = false,
                         bool cut = false);
-    static RichRow custom(std::shared_ptr<RowView> view, int height, bool selectable = false, int id = 0);
+    static RichRow custom(std::shared_ptr<RowView> view, int height, bool selectable = false, int id = 0,
+                          Aff aff = Aff::Unspecified);
 };
 
 struct RichListEvents {
@@ -109,6 +118,8 @@ public:
         const lv_font_t *value = nullptr;
     };
     Fonts fonts() const { return {label_font(), value_font()}; }
+    /* what a row of this Aff keeps free at its right (0 for no marker): a page that cuts its own labels takes it off its width */
+    int trail_w(Aff aff) const { return cp0_ui_list_trail_w(&layout_, c_affordance(aff)); }
 
 private:
     struct Row {
@@ -116,6 +127,8 @@ private:
         lv_obj_t *host = nullptr;
         lv_obj_t *label = nullptr;
         lv_obj_t *value = nullptr;
+        lv_obj_t *chevron = nullptr; /* the marker of an Open / Edit row, hidden when the row has none */
+        lv_obj_t *dot = nullptr;     /* the marker of an Action row */
         int h = 0;
         bool wrapped = false;
     };
@@ -126,6 +139,8 @@ private:
     void build_host(Row &row, int top);
     void destroy_host(Row &row);
     void fill_texts(Row &row);
+    void place_marker(Row &row);
+    int trail_of(const RichRow &spec) const;
     void relayout();
     void restyle();
     cp0_ui_list_state_t state() const;

@@ -25,9 +25,10 @@ namespace {
 
 constexpr int kChainMinRows = 7; /* the chain shows at least this many hops at once on a 640x480 screen */
 
-ui::RichRow action_row(const std::string &label, const std::string &value, std::intptr_t id)
+/* a row that does something (Action / ActionRunning), changes a value (Edit) or opens a page (Open) */
+ui::RichRow action_row(const std::string &label, const std::string &value, std::intptr_t id, ui::Aff aff)
 {
-    return ui::RichRow::item(label, value, ui::Tone::Normal, static_cast<int>(id));
+    return ui::RichRow::item(label, value, ui::Tone::Normal, static_cast<int>(id), aff);
 }
 
 } // namespace
@@ -58,7 +59,7 @@ void ToolboxApp::build_rich(int y, int h)
 ui::RichRow ToolboxApp::rich_row(const ui::RowDef &def, int id) const
 {
     if (def.section) return ui::RichRow::section(def.label);
-    return ui::RichRow::item(def.label, def.value, def.tone, id);
+    return ui::RichRow::item(def.label, def.value, def.tone, id, def.aff);
 }
 
 std::string ToolboxApp::local_address() const
@@ -141,7 +142,7 @@ void ToolboxApp::poll_trace(bool force)
             const std::shared_ptr<ui::HopRowView> &v = hop_views_[i];
             v->set_expanded(static_cast<int>(i) == hop_open_);
             v->set(snap->hops[i], scale, i == 0, i + 1 == shown);
-            rows.push_back(ui::RichRow::custom(v, v->height(), true, kHop + static_cast<int>(i)));
+            rows.push_back(ui::RichRow::custom(v, v->height(), true, kHop + static_cast<int>(i), ui::Aff::Info)); /* opens in place: no page, no marker */
         }
         if (rows.empty() && snap && snap->state == TraceSnapshot::State::Failed)
             rows.push_back(ui::RichRow::text(snap->error, ui::Tone::Bad, false));
@@ -275,7 +276,7 @@ std::vector<ui::RichRow> ToolboxApp::http_list()
     const std::shared_ptr<const HttpCheckSnapshot> s = fresh_ ? backend_.http->latest() : nullptr;
     const bool running = s && s->running();
     std::vector<ui::RichRow> rows;
-    rows.push_back(action_row(running ? "Stop" : "Run", running ? "checking..." : "", kRun));
+    rows.push_back(action_row(running ? "Stop" : "Run", running ? "checking..." : "", kRun, ui::action_aff(running)));
     if (s && s->state != HttpCheckSnapshot::State::Idle) {
         http_badge_->set(ui::http_badge(*s));
         rows.push_back(ui::RichRow::custom(http_badge_, http_badge_->height(), false));
@@ -307,16 +308,16 @@ std::vector<ui::RichRow> ToolboxApp::http_list()
             }
         }
     }
-    rows.push_back(action_row("URL", http_url_, kUrl));
-    rows.push_back(action_row("Method", http_head_ ? "HEAD" : "GET", kMethod));
+    rows.push_back(action_row("URL", http_url_, kUrl, ui::Aff::Edit));
+    rows.push_back(action_row("Method", http_head_ ? "HEAD" : "GET", kMethod, ui::Aff::Edit));
     ui::RichRow insecure = ui::RichRow::item("Ignore certificate errors", http_insecure_ ? "On" : "Off",
-                                             http_insecure_ ? ui::Tone::Warn : ui::Tone::Normal, kInsecure);
+                                             http_insecure_ ? ui::Tone::Warn : ui::Tone::Normal, kInsecure, ui::Aff::Edit);
     rows.push_back(insecure);
     if (http_insecure_)
         rows.push_back(ui::RichRow::text("Warning: the connection is not checked for who it talks to. Use it to look at a site "
                                          "whose certificate is wrong, not for anything private.",
                                          ui::Tone::Warn, false, true));
-    rows.push_back(action_row("Save log", "", kSaveLog));
+    rows.push_back(action_row("Save log", "", kSaveLog, ui::Aff::Action));
     return rows;
 }
 
@@ -414,9 +415,9 @@ std::vector<ui::RichRow> ToolboxApp::publicip_list() const
         for (const ui::RowDef &d : ui::publicip_rows(*s, local_address())) rows.push_back(rich_row(d));
     const std::string note = s ? ui::nat_note(local_address(), s->result) : std::string();
     if (!note.empty()) rows.push_back(ui::RichRow::text(note, ui::Tone::Warn, false));
-    rows.push_back(action_row("Run again", running ? "asking Cloudflare..." : "", kRunAgain));
-    rows.push_back(action_row("Whois of this address", s ? ui::publicip_address(*s) : std::string(), kWhoisOf));
-    rows.push_back(action_row("Save log", "", kSaveLog));
+    rows.push_back(action_row("Run again", running ? "asking Cloudflare..." : "", kRunAgain, ui::action_aff(running)));
+    rows.push_back(action_row("Whois of this address", s ? ui::publicip_address(*s) : std::string(), kWhoisOf, ui::Aff::Open));
+    rows.push_back(action_row("Save log", "", kSaveLog, ui::Aff::Action));
     return rows;
 }
 
@@ -480,9 +481,9 @@ std::vector<ui::RichRow> ToolboxApp::whois_list() const
     const std::shared_ptr<const WhoisSnapshot> s = fresh_ ? backend_.whois->latest() : nullptr;
     const bool running = s && s->running();
     std::vector<ui::RichRow> rows;
-    rows.push_back(action_row("Query", whois_query_.empty() ? "none" : whois_query_, kQuery));
-    rows.push_back(action_row(running ? "Stop" : "Run", running ? "asking " + (s->asking.empty() ? std::string(kWhoisIana) : s->asking) + "..." : "", kRun));
-    rows.push_back(action_row("Save log", "", kSaveLog));
+    rows.push_back(action_row("Query", whois_query_.empty() ? "none" : whois_query_, kQuery, ui::Aff::Edit));
+    rows.push_back(action_row(running ? "Stop" : "Run", running ? "asking " + (s->asking.empty() ? std::string(kWhoisIana) : s->asking) + "..." : "", kRun, ui::action_aff(running)));
+    rows.push_back(action_row("Save log", "", kSaveLog, ui::Aff::Action));
     if (s && s->state == WhoisSnapshot::State::Done) {
         const std::time_t now = backend_.wall_clock ? backend_.wall_clock() : std::time(nullptr);
         const std::vector<ui::RowDef> summary = ui::whois_rows(s->result, now);

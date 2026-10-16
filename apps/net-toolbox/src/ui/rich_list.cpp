@@ -34,16 +34,6 @@ cp0_ui_list_key_t list_key(std::uint32_t key)
     }
 }
 
-std::uint32_t value_rgb(Tone tone)
-{
-    switch (tone) {
-    case Tone::Ok: return CP0_UI_LIST_OK_RGB;
-    case Tone::Warn: return CP0_UI_LIST_WARN_RGB;
-    case Tone::Bad: return CP0_UI_LIST_BAD_RGB;
-    default: return CP0_UI_LIST_VALUE_RGB;
-    }
-}
-
 constexpr std::uint32_t kKeyTab = 15; /* the keyboard bridge hands Tab over as its evdev code (KEY_TAB): LVGL's own focus step is not used */
 
 std::string upper(std::string s)
@@ -57,7 +47,29 @@ std::string upper(std::string s)
 
 /* ---------------------------------------------------------------- rows */
 
-RichRow RichRow::item(std::string label, std::string value, Tone tone, int id)
+cp0_ui_list_affordance_t c_affordance(Aff aff)
+{
+    switch (aff) {
+    case Aff::Info: return CP0_UI_LIST_AFFORDANCE_INFO;
+    case Aff::Open: return CP0_UI_LIST_AFFORDANCE_OPEN;
+    case Aff::Edit: return CP0_UI_LIST_AFFORDANCE_EDIT;
+    case Aff::Action: return CP0_UI_LIST_AFFORDANCE_ACTION;
+    case Aff::ActionRunning: return CP0_UI_LIST_AFFORDANCE_ACTION_RUNNING;
+    default: return CP0_UI_LIST_AFFORDANCE_UNSPECIFIED;
+    }
+}
+
+cp0_ui_list_tone_t c_tone(Tone tone)
+{
+    switch (tone) {
+    case Tone::Ok: return CP0_UI_LIST_TONE_OK;
+    case Tone::Warn: return CP0_UI_LIST_TONE_WARN;
+    case Tone::Bad: return CP0_UI_LIST_TONE_BAD;
+    default: return CP0_UI_LIST_TONE_NORMAL;
+    }
+}
+
+RichRow RichRow::item(std::string label, std::string value, Tone tone, int id, Aff aff)
 {
     RichRow r;
     r.kind = Kind::Item;
@@ -65,6 +77,7 @@ RichRow RichRow::item(std::string label, std::string value, Tone tone, int id)
     r.value = std::move(value);
     r.tone = tone;
     r.id = id;
+    r.aff = aff;
     return r;
 }
 
@@ -89,7 +102,7 @@ RichRow RichRow::text(std::string text, Tone tone, bool selectable, bool small, 
     return r;
 }
 
-RichRow RichRow::custom(std::shared_ptr<RowView> view, int height, bool selectable, int id)
+RichRow RichRow::custom(std::shared_ptr<RowView> view, int height, bool selectable, int id, Aff aff)
 {
     RichRow r;
     r.kind = Kind::Custom;
@@ -97,6 +110,7 @@ RichRow RichRow::custom(std::shared_ptr<RowView> view, int height, bool selectab
     r.height = height;
     r.selectable = selectable;
     r.id = id;
+    r.aff = aff;
     return r;
 }
 
@@ -145,7 +159,7 @@ const lv_font_t *RichList::small_font() const { return font_medium(std::max(10, 
 int RichList::measure(const RichRow &spec, bool &wrapped) const
 {
     wrapped = false;
-    const int avail = std::max(1, layout_.w - 2 * layout_.inset);
+    const int avail = std::max(1, layout_.w - 2 * layout_.inset - trail_of(spec));
     switch (spec.kind) {
     case RichRow::Kind::Section: return layout_.section_h;
     case RichRow::Kind::Custom: return std::max(1, spec.height);
@@ -170,11 +184,83 @@ int RichList::measure(const RichRow &spec, bool &wrapped) const
     return layout_.row_h;
 }
 
+/* What a row keeps free at its right for its chevron / dot (0 for Info, Unspecified, sections and paragraphs). */
+int RichList::trail_of(const RichRow &spec) const
+{
+    if (spec.kind != RichRow::Kind::Item && spec.kind != RichRow::Kind::Custom) return 0;
+    return cp0_ui_list_trail_w(&layout_, c_affordance(spec.aff));
+}
+
 void RichList::destroy_host(Row &row)
 {
     if (row.spec.view) row.spec.view->detach();
     if (row.host) lv_obj_delete(row.host);
-    row.host = row.label = row.value = nullptr;
+    row.host = row.label = row.value = row.chevron = row.dot = nullptr;
+}
+
+/* The row's chevron (Open / Edit) or dot (Action), drawn as CompactList draws them: the glyph right-aligned in the slot
+ * whose right edge is the inset from the row's edge, the dot centred in the same slot, both centred on the row's middle
+ * whatever its height (a two-line row too). Made the first time a row needs one; a change of affordance shows, hides or
+ * recolours. */
+void RichList::place_marker(Row &row)
+{
+    if (!row.host) return;
+    const cp0_ui_list_affordance_t aff = c_affordance(row.spec.aff);
+    const bool carries = row.spec.kind == RichRow::Kind::Item || row.spec.kind == RichRow::Kind::Custom;
+    const bool chevron = carries && cp0_ui_list_has_chevron(aff);
+    const bool dot = carries && cp0_ui_list_has_dot(aff);
+    if (chevron) {
+        const lv_font_t *font = font_medium(cp0_ui_list_chevron_px(&layout_));
+        const int box_w = cp0_ui_list_chevron_w(&layout_);
+        if (!row.chevron) {
+            row.chevron = lv_label_create(row.host);
+            lv_obj_remove_flag(row.chevron, LV_OBJ_FLAG_CLICKABLE);
+            lv_label_set_long_mode(row.chevron, LV_LABEL_LONG_MODE_CLIP);
+            lv_obj_set_style_text_color(row.chevron, lv_color_hex(CP0_UI_LIST_CHEVRON_RGB), 0);
+            lv_obj_set_style_text_align(row.chevron, LV_TEXT_ALIGN_RIGHT, 0);
+            if (font) lv_obj_set_style_text_font(row.chevron, font, 0);
+            const char *text = CP0_UI_LIST_CHEVRON_TEXT;
+            lv_font_glyph_dsc_t glyph{};
+            if (font && !lv_font_get_glyph_dsc(font, &glyph, CP0_UI_LIST_CHEVRON_CODEPOINT, 0)) text = CP0_UI_LIST_CHEVRON_FALLBACK;
+            lv_label_set_text(row.chevron, text);
+        }
+        int line_h = row.h, ink_top = 0, ink_h = row.h;
+        if (font) {
+            lv_font_glyph_dsc_t glyph{};
+            uint32_t cp = CP0_UI_LIST_CHEVRON_CODEPOINT;
+            if (!lv_font_get_glyph_dsc(font, &glyph, cp, 0)) {
+                cp = static_cast<uint32_t>(CP0_UI_LIST_CHEVRON_FALLBACK[0]);
+                lv_font_get_glyph_dsc(font, &glyph, cp, 0);
+            }
+            line_h = lv_font_get_line_height(font);
+            ink_top = (line_h - font->base_line) - glyph.box_h - glyph.ofs_y;
+            ink_h = glyph.box_h;
+        }
+        lv_obj_set_size(row.chevron, box_w, line_h);
+        lv_obj_set_pos(row.chevron, layout_.w - layout_.inset - box_w, cp0_ui_list_chevron_y(row.h, ink_top, ink_h));
+        lv_obj_remove_flag(row.chevron, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(row.chevron);
+    } else if (row.chevron) {
+        lv_obj_add_flag(row.chevron, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (dot) {
+        const int d = cp0_ui_list_dot_px(&layout_);
+        if (!row.dot) {
+            row.dot = lv_obj_create(row.host);
+            lv_obj_remove_style_all(row.dot);
+            lv_obj_remove_flag(row.dot, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_remove_flag(row.dot, LV_OBJ_FLAG_SCROLLABLE);
+            lv_obj_set_style_radius(row.dot, LV_RADIUS_CIRCLE, 0);
+            lv_obj_set_style_bg_opa(row.dot, LV_OPA_COVER, 0);
+        }
+        lv_obj_set_size(row.dot, d, d);
+        lv_obj_set_pos(row.dot, cp0_ui_list_dot_x(&layout_, layout_.w), cp0_ui_list_chevron_y(row.h, 0, d));
+        lv_obj_set_style_bg_color(row.dot, lv_color_hex(cp0_ui_list_dot_rgb(aff)), 0);
+        lv_obj_remove_flag(row.dot, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(row.dot);
+    } else if (row.dot) {
+        lv_obj_add_flag(row.dot, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 /* The texts of an Item, a Section or a Text, and where they sit. */
@@ -192,34 +278,38 @@ void RichList::fill_texts(Row &row)
     }
     case RichRow::Kind::Item: {
         const lv_font_t *lf = label_font(), *vf = value_font();
+        const cp0_ui_list_affordance_t aff = c_affordance(row.spec.aff);
+        const int trail = cp0_ui_list_trail_w(&layout_, aff);
+        const int avail_item = std::max(1, avail - trail);
         set_text_if(row.label, row.spec.label);
         set_text_if(row.value, row.spec.value);
-        set_color_if(row.value, value_rgb(row.spec.tone));
+        set_color_if(row.value, cp0_ui_list_value_rgb(c_tone(row.spec.tone), aff));
         if (row.wrapped) {
             lv_obj_set_style_text_font(row.label, section_font(), 0);
             lv_obj_set_style_text_color(row.label, lv_color_hex(CP0_UI_LIST_SECTION_RGB), 0);
             lv_label_set_long_mode(row.label, LV_LABEL_LONG_MODE_DOTS);
             lv_obj_set_pos(row.label, layout_.inset, pad_);
-            lv_obj_set_size(row.label, avail, line_height(section_font()));
+            lv_obj_set_size(row.label, avail_item, line_height(section_font()));
             lv_label_set_long_mode(row.value, LV_LABEL_LONG_MODE_WRAP);
             lv_point_t size{};
-            lv_text_get_size(&size, row.spec.value.c_str(), vf, 0, 0, avail, LV_TEXT_FLAG_NONE);
+            lv_text_get_size(&size, row.spec.value.c_str(), vf, 0, 0, avail_item, LV_TEXT_FLAG_NONE);
             lv_obj_set_pos(row.value, layout_.inset, pad_ + line_height(section_font()) + 2);
-            lv_obj_set_size(row.value, avail, size.y);
+            lv_obj_set_size(row.value, avail_item, size.y);
             lv_obj_set_style_text_align(row.value, LV_TEXT_ALIGN_LEFT, 0);
         } else {
             lv_obj_set_style_text_font(row.label, lf, 0);
-            lv_obj_set_style_text_color(row.label, lv_color_hex(CP0_UI_LIST_TEXT_RGB), 0);
+            lv_obj_set_style_text_color(row.label, lv_color_hex(cp0_ui_list_label_rgb(aff)), 0);
             lv_label_set_long_mode(row.label, LV_LABEL_LONG_MODE_DOTS);
             lv_label_set_long_mode(row.value, LV_LABEL_LONG_MODE_CLIP);
             const int vw = text_width(row.spec.value.c_str(), vf);
-            const int room = cp0_ui_list_label_w(layout_.w, layout_.inset, layout_.gap, vw);
+            const int room = cp0_ui_list_label_w(layout_.w - trail, layout_.inset, layout_.gap, vw);
             lv_obj_set_pos(row.label, layout_.inset, (row.h - line_height(lf)) / 2);
             lv_obj_set_size(row.label, std::max(1, room), line_height(lf));
             lv_obj_set_style_text_align(row.value, LV_TEXT_ALIGN_RIGHT, 0);
-            lv_obj_set_pos(row.value, layout_.w - layout_.inset - vw - 1, (row.h - line_height(vf)) / 2);
+            lv_obj_set_pos(row.value, layout_.w - layout_.inset - trail - vw - 1, (row.h - line_height(vf)) / 2);
             lv_obj_set_size(row.value, vw + 1, line_height(vf));
         }
+        place_marker(row);
         break;
     }
     case RichRow::Kind::Text: {
@@ -271,7 +361,8 @@ void RichList::build_host(Row &row, int top)
         fill_texts(row);
         break;
     case RichRow::Kind::Custom:
-        if (row.spec.view) row.spec.view->attach(host, layout_.w, row.h);
+        if (row.spec.view) row.spec.view->attach(host, layout_.w - trail_of(row.spec), row.h);
+        place_marker(row);
         break;
     }
 }
@@ -347,7 +438,7 @@ void RichList::set_rows(const std::vector<RichRow> &rows)
         Row &r = rows_[i];
         const bool custom = rows[i].kind == RichRow::Kind::Custom;
         if (r.spec.kind != rows[i].kind || (custom && r.spec.view != rows[i].view) || (!custom && r.wrapped != wrapped) ||
-            (!custom && r.h != h)) {
+            (!custom && r.h != h) || trail_of(r.spec) != trail_of(rows[i])) {
             destroy_host(r);
             r.spec = rows[i];
             r.h = h;
@@ -355,16 +446,20 @@ void RichList::set_rows(const std::vector<RichRow> &rows)
             continue;
         }
         if (custom) {
+            const bool marked = r.spec.aff != rows[i].aff;
             r.spec = rows[i];
             if (r.h != h) {
                 r.h = h;
                 if (r.host) lv_obj_set_height(r.host, h);
-                if (r.spec.view) r.spec.view->resized(layout_.w, h);
+                if (r.spec.view) r.spec.view->resized(layout_.w - trail_of(r.spec), h);
+                place_marker(r);
+            } else if (marked) {
+                place_marker(r);
             }
             continue;
         }
         const bool changed = r.spec.label != rows[i].label || r.spec.value != rows[i].value || r.spec.tone != rows[i].tone ||
-                             r.spec.small != rows[i].small || r.spec.cut != rows[i].cut;
+                             r.spec.small != rows[i].small || r.spec.cut != rows[i].cut || r.spec.aff != rows[i].aff;
         r.spec = rows[i];
         if (changed && r.host) fill_texts(r);
     }
