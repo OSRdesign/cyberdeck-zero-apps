@@ -2,6 +2,8 @@
 
 Version 0.1.2, package `lanscan`. Part of [cyberdeck-zero-apps](../../README.md).
 
+> **Net Toolbox replaces it.** Net Toolbox 0.4.0 has the same feature as "Local devices", on a full-screen layout. This app stays available for now.
+
 LAN Scan lists the devices on the Wi-Fi network the deck is connected to (IP, MAC, vendor, name) and scans the
 open ports of the one you select.
 
