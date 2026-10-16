@@ -1,5 +1,5 @@
 // Host tests of the protocol, model, store and client layers (no LVGL, no hardware).
-//   see run_tests.sh:  g++ -std=c++17 -I../main/core test_core.cpp ../main/core/*.cpp -o test_core && ./test_core
+//   see run_tests.sh:  g++ -std=c++17 -I../../src/core test_core.cpp ../../src/core/*.cpp -o test_core && ./test_core
 #include "client.hpp"
 #include "frame.hpp"
 #include "model.hpp"

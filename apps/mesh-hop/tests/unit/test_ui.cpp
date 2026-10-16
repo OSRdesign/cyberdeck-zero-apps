@@ -1,5 +1,6 @@
 // Host tests of the UI-independent logic of Mesh Hop (ui/ui_logic.*): keys, editor filters, formatting, chat rows, contact
 // sorting and filtering, popups, the Settings layout, settings edits and the Back rule. No LVGL.
+#include "key_bridge.hpp"
 #include "png_writer.hpp"
 #include "ui_logic.hpp"
 
@@ -103,6 +104,58 @@ static void test_keys_fr()
     CHECK(layout_from_name("us") == Layout::US && layout_from_name("") == Layout::US && layout_from_name("de") == Layout::US);
     CHECK(xkb_layout_from_text("XKBMODEL=\"pc105\"\nXKBLAYOUT=\"fr\"\nXKBVARIANT=\"\"\n") == "fr");
     CHECK(xkb_layout_from_text("XKBMODEL=\"pc105\"\n") == "");
+}
+
+/* The shared platform's key_items (stage.hpp) to KeyEvents: a keyboard's keys (xkb keysym set) through the translator,
+ * queued keys (keysym 0: the on-screen keyboard, the scripted tests) with their own modifiers and text. */
+static void test_key_bridge()
+{
+    using B = KeyBridge;
+    const uint32_t sym = 0x61;                    // any keysym: a key read from a keyboard
+    KeyEvent e;
+    {   // a US keyboard: the old evdev path, modifiers tracked from the modifier keys
+        B b(Layout::US);
+        CHECK(b.feed(30, B::kPressed, 0, sym, "a", e) && e.key == Key::Char && e.text == "a" && !e.ctrl);
+        CHECK(!b.feed(30, B::kReleased, 0, sym, "a", e));                         // a release is never a key
+        CHECK(!b.feed(29, B::kPressed, B::kModCtrl, 0xffe3, "", e));              // Ctrl down: nothing to act on
+        CHECK(b.feed(24, B::kPressed, B::kModCtrl, 0x6f, "\x0f", e) && e.key == Key::Char && e.ctrl && e.text == "o");   // Ctrl+O
+        CHECK(!b.feed(29, B::kReleased, 0, 0xffe3, "", e));
+        CHECK(b.feed(50, B::kPressed, 0, 0x6d, "m", e) && !e.ctrl && e.text == "m");
+        CHECK(!b.feed(42, B::kPressed, B::kModShift, 0xffe1, "", e));
+        CHECK(b.feed(15, B::kPressed, B::kModShift, 0xfe20, "\t", e) && e.key == Key::BackTab);
+        CHECK(b.feed(30, B::kPressed, B::kModShift, 0x41, "A", e) && e.text == "A");
+        CHECK(!b.feed(42, B::kReleased, 0, 0xffe1, "", e));
+        CHECK(b.feed(1, B::kPressed, 0, 0xff1b, "\x1b", e) && e.key == Key::Esc && !e.repeat);
+        CHECK(b.feed(1, B::kRepeated, 0, 0xff1b, "\x1b", e) && e.key == Key::Esc && e.repeat);
+        CHECK(b.feed(28, B::kPressed, 0, 0xff0d, "\r", e) && e.key == Key::Enter);
+        CHECK(b.feed(103, B::kPressed, 0, 0xff52, "\033[A", e) && e.key == Key::Up);
+        CHECK(b.feed(33, B::kPressed, 0, 0x66, "f", e) && e.key == Key::Char && e.text == "f");   // F is a letter here, never an arrow
+        CHECK(b.feed(86, B::kPressed, 0, 0x3c, "<", e) && e.key == Key::Char && e.text == "<");   // the ISO key: xkb's text
+        CHECK(!b.feed(113, B::kPressed, 0, 0x1008ff12, "", e));                   // a key that types nothing (mute)
+    }
+    {   // an AZERTY keyboard: cp0_lvgl's xkb map is "us" (q, w, 2), the app's FR table gives a, z, e acute
+        B b(Layout::FR);
+        CHECK(b.feed(16, B::kPressed, 0, 0x71, "q", e) && e.text == "a");
+        CHECK(b.feed(3, B::kPressed, 0, 0x32, "2", e) && e.text == "\xC3\xA9");
+        CHECK(!b.feed(29, B::kPressed, B::kModCtrl, 0xffe3, "", e));
+        CHECK(b.feed(16, B::kPressed, B::kModCtrl, 0x71, "\x11", e) && e.ctrl && e.text == "a");    // Ctrl+A where A is
+        CHECK(!b.feed(29, B::kReleased, 0, 0xffe3, "", e));
+        CHECK(!b.feed(100, B::kPressed, B::kModAlt, 0xffea, "", e));              // AltGr (xkb "us": plain Alt)
+        CHECK(b.feed(11, B::kPressed, B::kModAlt, 0x30, "0", e) && e.text == "@" && !e.alt);
+        CHECK(!b.feed(100, B::kReleased, 0, 0xffea, "", e));
+    }
+    {   // queued keys: the text and the modifiers come with the key
+        B b(Layout::FR);
+        CHECK(b.feed(35, B::kPressed, 0, 0, "H", e) && e.text == "H");             // the given text and its case win
+        CHECK(!b.feed(35, B::kReleased, 0, 0, "H", e));
+        CHECK(b.feed(16, B::kPressed, 0, 0, "q", e) && e.text == "q");             // not the FR table: the text typed
+        CHECK(b.feed(0, B::kPressed, 0, 0, "\xC3\xA8", e) && e.key == Key::Char && e.text == "\xC3\xA8");   // no key code
+        CHECK(b.feed(24, B::kPressed, B::kModCtrl, 0, "o", e) && e.ctrl && e.text == "o");
+        CHECK(b.feed(15, B::kPressed, B::kModShift, 0, "", e) && e.key == Key::BackTab);
+        CHECK(b.feed(1, B::kPressed, 0, 0, "", e) && e.key == Key::Esc);
+        CHECK(!b.feed(0, B::kPressed, 0, 0, "", e));                               // nothing at all
+        CHECK(!b.feed(0, B::kPressed, 0, 0, "\x7f", e));                           // a control character types nothing
+    }
 }
 
 static void test_filters()
@@ -988,6 +1041,7 @@ int main()
     test_png();
     test_keys_us();
     test_keys_fr();
+    test_key_bridge();
     test_filters();
     test_format();
     test_chat_rows();

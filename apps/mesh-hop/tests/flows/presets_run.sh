@@ -2,13 +2,13 @@
 # The headless run of the preset list refresh: a local web server stands in for api.meshcore.nz (MESHHOP_PRESETS_URL), the "online" test is
 # forced with MESHHOP_ONLINE. Cases: online and fetched, offline with the saved copy, offline first start, server down, refused list,
 # curl missing, and (0.2.0) the retry 60 s after a failure. Needs the host build. Output: the log and the state line of each case, screenshots in $SHOTS/<case>/.
-#   wsl -e sh -c 'SHOTS=/mnt/c/.../presets sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/src/tests/presets_run.sh'
+#   wsl -e sh -c 'SHOTS=/mnt/c/.../presets sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/tests/flows/presets_run.sh'
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=${SHOTS:-/tmp/mesh-hop-presets}
 FEED=$HOME/mesh-hop-feed
 rm -rf "$FEED"
 mkdir -p "$FEED/ok" "$FEED/odd"
-python3 - "$HERE/data/meshcore_config.json" "$FEED" <<'PY'
+python3 - "$HERE/../data/meshcore_config.json" "$FEED" <<'PY'
 import json, sys
 src, out = sys.argv[1], sys.argv[2]
 d = json.load(open(src))

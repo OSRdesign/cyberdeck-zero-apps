@@ -1,7 +1,7 @@
 #!/bin/sh
 # The headless history run: seeds a data folder with messages of every age, runs history.script against the simulated board and prints
 # what is left on disk. Needs the host build (build.sh host).
-#   wsl -e sh -c 'SHOTS=/mnt/c/.../history sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/src/tests/history_run.sh'
+#   wsl -e sh -c 'SHOTS=/mnt/c/.../history sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/tests/flows/history_run.sh'
 HERE=$(cd "$(dirname "$0")" && pwd)
 export MESHHOP_ONLINE=${MESHHOP_ONLINE:-0}
 export DATA=${DATA:-$HOME/mesh-hop-history-data}

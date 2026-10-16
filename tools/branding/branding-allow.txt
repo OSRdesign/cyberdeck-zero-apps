@@ -23,10 +23,6 @@ apps/lanscan/build/build.sh                                         # remove at 
 apps/lanscan/root/usr/share/APPLaunch/applications/lanscan.desktop  # remove at the app's next version (Exec=)
 apps/wifi-survey/build/build.sh                                     # remove at the app's next version
 apps/wifi-survey/root/usr/share/APPLaunch/applications/wifi-survey.desktop  # remove at the app's next version (Exec=)
-apps/mesh-hop/build/build.sh                                        # remove at the app's next version
-apps/mesh-hop/root/usr/share/APPLaunch/applications/mesh-hop.desktop  # remove at the app's next version (Exec=)
-apps/mesh-hop/src/main/src/main.cpp                                 # remove at the app's next version (usage comment names the binary)
-apps/mesh-hop/src/tests/ui_smoke.sh                                 # remove at the app's next version (usage comment names the binary)
 apps/meshzero/build/build.sh                                        # remove at the app's next version
 apps/meshzero/root/usr/share/APPLaunch/applications/meshzero.desktop  # remove at the app's next version (Exec=)
 

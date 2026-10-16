@@ -3,7 +3,8 @@
  *
  * Mesh Hop: the full-screen 640x480 MeshCore messenger. The screens (Chats, Map, Contacts, Terminal, Settings), the popups, the
  * status footer and the text editor, written with LVGL over the core/ layer (client, model, store). Input comes from the Platform
- * as KeyEvents and LVGL pointer events; nothing here talks to the radio except through meshzero::Client.
+ * as KeyEvents and LVGL pointer events; nothing here talks to the radio except through meshzero::Client. The UI is built in the
+ * Platform's 640x480 stage (stage.hpp), centred on any screen.
  */
 
 #pragma once
@@ -12,9 +13,9 @@
 #include "deck_clock.hpp"
 #include "log.hpp"
 #include "model.hpp"
-#include "platform.hpp"
 #include "preset_feed.hpp"
 #include "serial_transport.hpp"
+#include "stage.hpp"
 #include "store.hpp"
 #include "ui_logic.hpp"
 
