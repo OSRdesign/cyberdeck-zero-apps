@@ -38,13 +38,27 @@ enum class Tone { Normal, Ok, Warn, Bad };
 /* the mark of a state (a shape, not only a colour) */
 enum class Mark { None, Check, Cross, Dash, Bang, Arrow };
 
-/* one row of a list page: a heading (section) or a label with a value */
+/* What a row does when it is activated, shown by its look (the launcher's row-affordance rule, cp0_ui_list.h):
+ *   Info           a read-out: grey value, no marker (an explicit Ok / Warn / Bad tone keeps its colour)
+ *   Open           opens another page: a chevron at the right edge
+ *   Edit           changes a value (in place or through a picker): the value in its tone, then the chevron
+ *   Action         does something right there (start, stop, save, send): a white dot in the chevron's slot
+ *   ActionRunning  that action is in progress: the dot in the accent blue
+ *   Unspecified    drawn as before affordances existed (paragraphs, blocks that are only scrolled to) */
+enum class Aff { Unspecified, Info, Open, Edit, Action, ActionRunning };
+
+/* the dot of an action row: blue while the action runs (a Stop row), white while it is available */
+inline Aff action_aff(bool running) { return running ? Aff::ActionRunning : Aff::Action; }
+
+/* one row of a list page: a heading (section) or a label with a value; a view-model row is a read-out (Info) unless the
+ * page says otherwise */
 struct RowDef {
     bool section = false;
     std::string label;
     std::string value;
     Tone tone = Tone::Normal;
     int id = 0;
+    Aff aff = Aff::Info;
 };
 
 /* ---------------------------------------------------------------- Home, Interfaces */

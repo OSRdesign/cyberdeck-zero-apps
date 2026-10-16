@@ -85,6 +85,9 @@
 
 namespace nt {
 
+/* a ui::Aff as the toolkit's CompactList knows it (RichList draws the same markers with the C mapping of cp0_ui_list.h) */
+cp0::ui::RowAffordance row_affordance(ui::Aff aff);
+
 class ToolboxApp {
 public:
     explicit ToolboxApp(lv_obj_t *screen);

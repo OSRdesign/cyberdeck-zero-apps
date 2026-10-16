@@ -19,6 +19,7 @@ key down
 key enter
 wait 400
 shot list
+expect text "›"
 expect text "11 networks on wlan0, scanned 3 s ago"
 expect text "HomeNet"
 expect text "connected"

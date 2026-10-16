@@ -32,9 +32,10 @@ namespace nt {
 
 namespace {
 
-ui::RichRow action_row(const std::string &label, const std::string &value, std::intptr_t id)
+/* a row that does something (Action / ActionRunning), changes a value (Edit) or opens a page (Open) */
+ui::RichRow action_row(const std::string &label, const std::string &value, std::intptr_t id, ui::Aff aff)
 {
-    return ui::RichRow::item(label, value, ui::Tone::Normal, static_cast<int>(id));
+    return ui::RichRow::item(label, value, ui::Tone::Normal, static_cast<int>(id), aff);
 }
 
 constexpr int kMaxNetworkRows = 256;
@@ -105,7 +106,7 @@ std::vector<ui::RichRow> ToolboxApp::devices_list()
     std::vector<ui::RichRow> rows;
     device_ips_.clear();
     if (s && !s->devices.empty()) {
-        const int inset = rich_->layout().inset, w = rich_->layout().w;
+        const int inset = rich_->layout().inset, w = rich_->layout().w - rich_->trail_w(ui::Aff::Open);
         const std::size_t n = s->devices.size();
         if (device_views_.size() > n) device_views_.resize(n);
         while (device_views_.size() < n)
@@ -115,7 +116,7 @@ std::vector<ui::RichRow> ToolboxApp::devices_list()
             const Device &d = s->devices[i];
             device_ips_.push_back(d.ip);
             device_views_[i]->set(ui::device_row_texts(d));
-            rows.push_back(ui::RichRow::custom(device_views_[i], device_views_[i]->height(), true, kDevice + static_cast<int>(i)));
+            rows.push_back(ui::RichRow::custom(device_views_[i], device_views_[i]->height(), true, kDevice + static_cast<int>(i), ui::Aff::Open));
         }
         return rows;
     }
@@ -225,16 +226,16 @@ std::vector<ui::RichRow> ToolboxApp::device_list()
     const bool scanning = p && p->running();
     std::vector<ui::RichRow> rows;
     for (const ui::RowDef &d : ui::device_info_rows(device_)) rows.push_back(rich_row(d));
-    rows.push_back(action_row(ui::kActPing, "", kActPing));
-    rows.push_back(action_row(ui::kActPort, "", kActPort));
+    rows.push_back(action_row(ui::kActPing, "", kActPing, ui::Aff::Open));
+    rows.push_back(action_row(ui::kActPort, "", kActPort, ui::Aff::Open));
     if (scanning) {
-        rows.push_back(action_row(ui::kActStopScan, p->full_range ? "ports 1-1024" : "common ports", kActStopScan));
+        rows.push_back(action_row(ui::kActStopScan, p->full_range ? "ports 1-1024" : "common ports", kActStopScan, ui::Aff::ActionRunning));
     } else {
-        rows.push_back(action_row(ui::kActScanCommon, "", kActScanCommon));
-        rows.push_back(action_row(ui::kActScanAll, "", kActScanAll));
+        rows.push_back(action_row(ui::kActScanCommon, "", kActScanCommon, ui::Aff::Action));
+        rows.push_back(action_row(ui::kActScanAll, "", kActScanAll, ui::Aff::Action));
     }
-    if (!device_.mac.empty()) rows.push_back(action_row(ui::kActSaveWol, "", kActSaveWol));
-    rows.push_back(action_row("Save log", "", kSaveLog));
+    if (!device_.mac.empty()) rows.push_back(action_row(ui::kActSaveWol, "", kActSaveWol, ui::Aff::Action));
+    rows.push_back(action_row("Save log", "", kSaveLog, ui::Aff::Action));
     if (p && p->state != PortScanSnapshot::State::Idle) {
         rows.push_back(ui::RichRow::section("Open ports"));
         for (std::size_t i = 0; i < p->open.size(); ++i) rows.push_back(rich_row(ui::open_port_row(p->open[i]), kOpenPort + static_cast<int>(i)));
@@ -422,7 +423,7 @@ std::vector<ui::RichRow> ToolboxApp::wifi_list()
         if (ui::channels_have_149(parts[1])) rows.push_back(ui::RichRow::text(ui::kChannelNote149, ui::Tone::Normal, true, true));
         return rows;
     }
-    const int inset = rich_->layout().inset, w = rich_->layout().w;
+    const int inset = rich_->layout().inset, w = rich_->layout().w - rich_->trail_w(ui::Aff::Open);
     const std::size_t n = std::min<std::size_t>(s->networks.size(), kMaxNetworkRows);
     if (wifi_views_.size() > n) wifi_views_.resize(n);
     while (wifi_views_.size() < n)
@@ -431,7 +432,7 @@ std::vector<ui::RichRow> ToolboxApp::wifi_list()
     for (std::size_t i = 0; i < n; ++i) {
         wifi_bssids_.push_back(s->networks[i].bssid);
         wifi_views_[i]->set(ui::wifi_row_texts(s->networks[i]));
-        rows.push_back(ui::RichRow::custom(wifi_views_[i], wifi_views_[i]->height(), true, kNetRow + static_cast<int>(i)));
+        rows.push_back(ui::RichRow::custom(wifi_views_[i], wifi_views_[i]->height(), true, kNetRow + static_cast<int>(i), ui::Aff::Open));
     }
     return rows;
 }
@@ -521,8 +522,10 @@ std::vector<ui::RichRow> ToolboxApp::wifi_detail_list()
         rows.push_back(rich_row(d));
         if (d.label == "Security") rows.push_back(ui::RichRow::text(ui::security_meaning(n.security), security_weak(n.security) ? ui::Tone::Warn : ui::Tone::Normal, true, true));
     }
-    rows.push_back(action_row("Scan now", "", kRescan));
-    rows.push_back(action_row("Save log", "", kSaveLog));
+    const std::shared_ptr<const WifiSnapshot> live = backend_.wifi->latest();
+    const bool scanning = live && live->state == WifiSnapshot::State::Scanning;
+    rows.push_back(action_row("Scan now", "", kRescan, ui::action_aff(scanning)));
+    rows.push_back(action_row("Save log", "", kSaveLog, ui::Aff::Action));
     return rows;
 }
 
@@ -606,11 +609,11 @@ std::vector<ui::RichRow> ToolboxApp::walk_list()
         const ui::WifiProblem p = ui::wifi_problem(s->error, wifi_hint());
         rows.push_back(ui::RichRow::text(p.words, ui::Tone::Warn, true));
         if (!p.fix.empty()) rows.push_back(ui::RichRow::text(p.fix, ui::Tone::Normal, true, true));
-        rows.push_back(action_row("Weak below", value, kWalkWeak));
+        rows.push_back(action_row("Weak below", value, kWalkWeak, ui::Aff::Edit));
         return rows;
     }
     rows.push_back(ui::RichRow::custom(walk_block_, walk_block_->height(), false));
-    rows.push_back(action_row("Weak below", value, kWalkWeak));
+    rows.push_back(action_row("Weak below", value, kWalkWeak, ui::Aff::Edit));
     if (s && s->state == WalkSnapshot::State::Stopped && s->summary.samples > 0) {
         rows.push_back(ui::RichRow::section("Summary"));
         for (const ui::RowDef &d : ui::walk_summary_rows(*s)) rows.push_back(rich_row(d));

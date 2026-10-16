@@ -7,6 +7,7 @@ env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
 key end
 key enter
 shot top
+expect notext "›"
 expect text "Signal"
 expect text "-58 dBm, Good"
 key down

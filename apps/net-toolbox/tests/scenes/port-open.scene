@@ -9,6 +9,7 @@ key down
 key down
 key enter
 shot idle
+expect text "›"
 key enter
 shot open
 expect text "Open"

@@ -7,6 +7,7 @@ env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
 key down
 key enter
 shot idle
+expect text "›"
 expect text "Press Start to ping Gateway 192.168.68.1"
 key enter
 shot running

@@ -14,6 +14,7 @@ key down
 key down
 key enter
 shot list
+expect text "›"
 expect text "Desk PC"
 expect text "NAS"
 expect text "Living room TV"

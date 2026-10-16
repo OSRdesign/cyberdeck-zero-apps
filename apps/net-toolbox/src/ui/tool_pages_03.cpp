@@ -26,9 +26,10 @@ namespace nt {
 
 namespace {
 
-ui::RichRow action_row(const std::string &label, const std::string &value, std::intptr_t id)
+/* a row that does something (Action / ActionRunning), changes a value (Edit) or opens a page (Open) */
+ui::RichRow action_row(const std::string &label, const std::string &value, std::intptr_t id, ui::Aff aff)
 {
-    return ui::RichRow::item(label, value, ui::Tone::Normal, static_cast<int>(id));
+    return ui::RichRow::item(label, value, ui::Tone::Normal, static_cast<int>(id), aff);
 }
 
 constexpr int kBleExpiryMs = 20000; /* the core's default: a device not heard for this long leaves the list */
@@ -184,12 +185,12 @@ std::vector<ui::RichRow> ToolboxApp::speed_list()
     if (any) {
         speed_big_->set(r.down.measured ? ui::speed_value_text(r.down.mbps) : std::string("--"),
                         r.up.measured ? ui::speed_value_text(r.up.mbps) : std::string("--"));
-        rows.push_back(ui::RichRow::custom(speed_big_, speed_big_->height(), true, kSpeedBig));
+        rows.push_back(ui::RichRow::custom(speed_big_, speed_big_->height(), true, kSpeedBig, ui::Aff::Info));
     }
     /* the grade is the verdict: it sits right under the two big numbers, not below the detail rows */
     if (s->state == SpeedSnapshot::State::Done) {
         speed_grade_->set(ui::speed_grade(r));
-        rows.push_back(ui::RichRow::custom(speed_grade_, speed_grade_->height(), true, kSpeedGrade));
+        rows.push_back(ui::RichRow::custom(speed_grade_, speed_grade_->height(), true, kSpeedGrade, ui::Aff::Info));
     }
     for (const ui::RowDef &d : ui::speed_rows(*s)) rows.push_back(rich_row(d));
     for (const std::string &n : ui::speed_notes(*s)) rows.push_back(ui::RichRow::text(n, ui::Tone::Normal, true, true));
@@ -278,8 +279,8 @@ std::vector<ui::RichRow> ToolboxApp::wol_list()
     const std::vector<WolMachine> &machines = settings_.wol_machines;
     const bool full = machines.size() >= kMaxWolMachines;
     std::vector<ui::RichRow> rows;
-    rows.push_back(action_row("Add a machine", full ? "list full" : "", kWolAdd));
-    const int inset = rich_->layout().inset, w = rich_->layout().w;
+    rows.push_back(action_row("Add a machine", full ? "list full" : "", kWolAdd, ui::Aff::Open));
+    const int inset = rich_->layout().inset, w = rich_->layout().w - rich_->trail_w(ui::Aff::Open);
     if (machine_views_.size() > machines.size()) machine_views_.resize(machines.size());
     while (machine_views_.size() < machines.size())
         machine_views_.push_back(std::make_shared<ui::MachineRowView>(
@@ -289,7 +290,7 @@ std::vector<ui::RichRow> ToolboxApp::wol_list()
         const auto it = wol_last_.find(lower(m.name));
         const ui::WakeLast last = it == wol_last_.end() ? ui::WakeLast() : it->second;
         machine_views_[i]->set(m.name, m.host.empty() ? m.mac : m.mac + "  " + m.host, ui::wake_last_text(last), ui::wake_last_tone(last));
-        rows.push_back(ui::RichRow::custom(machine_views_[i], machine_views_[i]->height(), true, kMachine + static_cast<int>(i)));
+        rows.push_back(ui::RichRow::custom(machine_views_[i], machine_views_[i]->height(), true, kMachine + static_cast<int>(i), ui::Aff::Open));
     }
     if (machines.empty())
         rows.push_back(ui::RichRow::text("No machine saved yet. Add one to wake it from here.", ui::Tone::Normal, false));
@@ -447,15 +448,15 @@ std::vector<ui::RichRow> ToolboxApp::machine_list()
     const bool running = s && s->running();
     std::vector<ui::RichRow> rows;
     rows.push_back(ui::RichRow::custom(wake_block_, wake_block_->height(), false));
-    rows.push_back(action_row(running ? "Stop" : "Wake now", running ? (s->state == WolSnapshot::State::Sending ? "sending" : "watching") : "", kRun));
+    rows.push_back(action_row(running ? "Stop" : "Wake now", running ? (s->state == WolSnapshot::State::Sending ? "sending" : "watching") : "", kRun, ui::action_aff(running)));
     if (!m) return rows;
-    rows.push_back(action_row("Name", m->name, kWolName));
-    rows.push_back(action_row("MAC address", m->mac, kWolMac));
-    rows.push_back(action_row("Watch address", m->host.empty() ? "none" : m->host, kWolHost));
-    rows.push_back(action_row("Watch after waking", m->host.empty() ? "needs an address" : (settings_.wol_watch ? "On" : "Off"), kWolWatch));
-    rows.push_back(action_row("Save log", "", kSaveLog));
+    rows.push_back(action_row("Name", m->name, kWolName, ui::Aff::Edit));
+    rows.push_back(action_row("MAC address", m->mac, kWolMac, ui::Aff::Edit));
+    rows.push_back(action_row("Watch address", m->host.empty() ? "none" : m->host, kWolHost, ui::Aff::Edit));
+    rows.push_back(action_row("Watch after waking", m->host.empty() ? "needs an address" : (settings_.wol_watch ? "On" : "Off"), kWolWatch, ui::Aff::Edit));
+    rows.push_back(action_row("Save log", "", kSaveLog, ui::Aff::Action));
     ui::RichRow del = ui::RichRow::item(wol_delete_armed_ ? "Press again to delete" : "Delete", wol_delete_armed_ ? "this cannot be undone" : "",
-                                        wol_delete_armed_ ? ui::Tone::Bad : ui::Tone::Normal, kWolDelete);
+                                        wol_delete_armed_ ? ui::Tone::Bad : ui::Tone::Normal, kWolDelete, ui::Aff::Action);
     rows.push_back(del);
     rows.push_back(ui::RichRow::text(ui::kWolNote, ui::Tone::Normal, true, true));
     return rows;
@@ -606,7 +607,7 @@ std::vector<ui::RichRow> ToolboxApp::ble_list()
         return rows;
     }
     if (s && !s->devices.empty()) {
-        const int inset = rich_->layout().inset, w = rich_->layout().w;
+        const int inset = rich_->layout().inset, w = rich_->layout().w - rich_->trail_w(ui::Aff::Open);
         const std::size_t n = s->devices.size();
         if (machine_views_.size() > n) machine_views_.resize(n);
         while (machine_views_.size() < n)
@@ -616,7 +617,7 @@ std::vector<ui::RichRow> ToolboxApp::ble_list()
             const BleDevice &d = s->devices[i];
             ble_addrs_.push_back(d.address);
             machine_views_[i]->set(ui::ble_row_label(d), ui::ble_row_value(d), "", ui::Tone::Normal);
-            rows.push_back(ui::RichRow::custom(machine_views_[i], machine_views_[i]->height(), true, kBleDev + static_cast<int>(i)));
+            rows.push_back(ui::RichRow::custom(machine_views_[i], machine_views_[i]->height(), true, kBleDev + static_cast<int>(i), ui::Aff::Open));
         }
         return rows;
     }
