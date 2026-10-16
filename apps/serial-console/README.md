@@ -1,6 +1,6 @@
 # Serial Console
 
-Version 0.4.0, package `serial-console`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.4.1, package `serial-console`. Part of [cyberdeck-zero-apps](../../README.md).
 
 Serial Console talks to a USB-serial adapter or a microcontroller board (Arduino, ESP32, Raspberry Pi Pico, a GPS, a
 router console...) from the deck. It is a full-screen touch app made for the small screen: instead of dropping you into
@@ -209,6 +209,7 @@ The identification is kept in the port's section of the settings file as `id_*` 
 
 ## Changes
 
+* 0.4.1: rebuilt on launcher 9ad4215 (shared toolkit: Muted tone, Wi-Fi status line); no layout change.
 * **0.4.0**: the ports, port, Ask and result pages move to the launcher's `cp0::ui::CompactList` (top-aligned dense
   rows in the full-width column, scrolling only at the bottom edge, a thin auto-hiding scrollbar, headings that are
   not selectable). Hot-plug and a running probe or speed search change only the texts that changed: the scroll and
