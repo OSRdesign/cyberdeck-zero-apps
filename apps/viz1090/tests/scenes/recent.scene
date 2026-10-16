@@ -16,7 +16,10 @@ key down
 key down
 shot recent-scrolled
 expect text "JFK"
+# the first tap selects the row and the list scrolls it into view with an animation (at 640x480 the row is cut at the bottom:
+# about 11 px); a finger needs longer than that to tap again, a tap inside the animation is not a tap on the row
 tap "JFK"
+wait 500
 tap "JFK"
 shot root-recent-jfk
 expect text "Position set: JFK  40.6394, -73.7793"
