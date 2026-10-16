@@ -1,8 +1,9 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * viz_screen.h: which screen viz1090 runs on. Shared by the display bridge (viz_fb_shim.c) and the intro screen
- * (vizsetup.cpp, also `vizsetup --screen` for run_viz1090.sh), so all three agree on the size.
+ * viz_screen.h: which screen viz1090 runs on. Shared by the display bridge (build/viz_fb_shim.c, built with
+ * -I src/core) and the intro screen's `vizsetup --screen` for run_viz1090.sh (src/main.cpp), so the map, the bridge and
+ * the script agree on the size. (The intro screen itself sizes from the launcher's layout service.)
  *
  * Order (the launcher's app contract, docs/APP-CONTRACT.md of cyberdeck-zero-launcher, section 7):
  *   size    VIZ_SCREEN=WxH (manual override) > APPLAUNCH_CANVAS (contract 1, fullscreen: the logical panel)

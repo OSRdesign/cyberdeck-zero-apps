@@ -1,0 +1,43 @@
+# Latitude and Longitude on a touch-only board: each a one-field page (the on-screen keyboard by the shared rule, the
+# field above it), digits, '-' and '.' kept (letters dropped), the range checked on Enter; Enter applies and goes back to
+# the Position page; Esc there goes back to the root, which then has the typed position; Start ends the app.
+title viz1090: Latitude / Longitude pages
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env VIZ_USB_DIR tests/fixtures/usb-sdr
+env VIZ_DEV_DIR tests/fixtures/dev-gps-none
+env VIZ_WORLD root/opt/viz1090/world-map.bin
+env VIZ_PROGRAM /bin/sh
+wait 600
+tap "Position"
+tap "Position"
+tap "Latitude"
+tap "Latitude"
+expect osk on
+shot latitude-osk
+expect text "From -90 to 90, south is negative"
+type "9x5"
+key enter
+shot latitude-error
+expect text "Not a latitude: from -90 to 90"
+expect osk on
+key backspace
+key backspace
+type "-33.9461"
+key enter
+expect osk off
+shot position-latitude
+expect text "-33.9461"
+tap "Longitude"
+tap "Longitude"
+expect osk on
+type "151.1772"
+shot longitude-osk
+key enter
+shot position-both
+expect text "151.1772"
+key esc
+shot root-typed
+expect text "-33.9461, 151.1772"
+expect text "Start opens the map around -33.9461, 151.1772"
+tap "Start"
+expect quit

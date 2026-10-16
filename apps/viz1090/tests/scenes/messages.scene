@@ -1,0 +1,28 @@
+# The status lines that only show in odd cases, at every size (each must fit its line, never cut): a saved position but
+# no dongle, Enter on the SDR and GPS rows with nothing plugged in, and a broken install without the airport list.
+title viz1090: messages (no dongle, no GPS, no airport list)
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env VIZ_USB_DIR tests/fixtures/usb-none
+env VIZ_DEV_DIR tests/fixtures/dev-gps-none
+env VIZ_WORLD /nonexistent/world-map.bin
+env VIZ_CONF_SEED tests/fixtures/conf/cdg.conf
+env VIZ_PROGRAM /bin/sh
+wait 1200
+shot no-dongle
+expect text "No SDR receiver: plug the dongle into a USB port"
+key down
+key enter
+expect text "No SDR receiver: plug the dongle into a USB port"
+key down
+key enter
+shot no-gps
+expect text "No GPS receiver: plug in a USB GPS (NMEA)"
+key down
+key enter
+shot no-airport-list
+expect text "No airport list: use Latitude and Longitude"
+expect text "Latitude"
+key esc
+key esc
+key esc
+expect quit

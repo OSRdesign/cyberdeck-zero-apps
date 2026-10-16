@@ -1,0 +1,48 @@
+# The Position page with a physical keyboard (keyboards 1): no on-screen keyboard, the airport code field edits at
+# once; lower-case letters become upper case; live feedback; Enter on a known code sets the position and goes back.
+# Keys only: Down to the list, Enter opens, Start with Enter.
+title viz1090: Position page, physical keyboard
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env VIZ_USB_DIR tests/fixtures/usb-sdr
+env VIZ_DEV_DIR tests/fixtures/dev-gps-none
+env VIZ_WORLD root/opt/viz1090/world-map.bin
+env VIZ_CONF_SEED tests/fixtures/conf/old-0.1.conf
+env VIZ_PROGRAM /bin/sh
+keyboards 1
+wait 1200
+shot root-0.1-position
+expect text "48.8566, 2.3522"
+
+key down
+key down
+key down
+key enter
+expect osk off
+shot position-empty
+expect text "IATA code of the nearest airport, e.g. CDG"
+expect text "Latitude"
+expect text "48.8566"
+
+type "zz"
+key z
+shot code-unknown
+expect text "ZZZ"
+expect text "not in the list"
+# Enter on an unknown code: refused, the field keeps editing
+key enter
+expect text "not in the list"
+key backspace
+key backspace
+key backspace
+type "jfk"
+shot code-found
+expect text "found: JFK"
+expect osk off
+
+key enter
+shot root-jfk
+expect text "Position set: JFK  40.6394, -73.7793"
+expect text "JFK  40.6394, -73.7793"
+expect noquit
+key enter
+expect quit

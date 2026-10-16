@@ -1,0 +1,25 @@
+# Recent places: the last places started with (RECENT1..RECENT5 in viz1090.conf) under the fields of the Position page,
+# so that a touch-only user picks a place without typing: a tap selects, a tap again sets it and goes back to the root.
+title viz1090: Recent pick list
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env VIZ_USB_DIR tests/fixtures/usb-sdr
+env VIZ_DEV_DIR tests/fixtures/dev-gps-none
+env VIZ_WORLD root/opt/viz1090/world-map.bin
+env VIZ_CONF_SEED tests/fixtures/conf/cdg.conf
+env VIZ_PROGRAM /bin/sh
+wait 600
+tap "Position"
+tap "Position"
+shot recent-list
+key down
+key down
+key down
+shot recent-scrolled
+expect text "JFK"
+tap "JFK"
+tap "JFK"
+shot root-recent-jfk
+expect text "Position set: JFK  40.6394, -73.7793"
+expect noquit
+key enter
+expect quit

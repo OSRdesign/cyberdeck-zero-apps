@@ -2,6 +2,7 @@
 # viz1090 tile: the intro screen (position, receivers), then viz1090 full screen.
 # Your position and options: ~/.config/cardputerzero/viz1090.conf (written by the intro screen)
 #     LAT=48.8566  LON=2.3522  UISCALE=2  METRIC=1  RADIUS=500
+# (AIRPORT= and RECENT1= .. RECENT5= are the intro screen's: the airport of the position, the last places used.)
 # Without UISCALE in the file, viz1090's text size follows the screen's density: 1 below 7.5 px/mm, 2 up to
 # 14 px/mm (the deck), 3 above (and never more than 1 per 240 screen rows).
 export SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy VIZ_STATUS_BAR=1
@@ -13,8 +14,9 @@ set -- $(/opt/viz1090/vizsetup --screen 2>/dev/null)
 VIZ_W=${1:-640} VIZ_H=${2:-480} AUTO_UISCALE=${3:-2}
 echo "[viz1090] screen ${VIZ_W}x${VIZ_H} (${5:-fallback}), density ${4:-1130} (px/mm x100), uiscale ${AUTO_UISCALE}" >&2
 
-# intro screen: exits 0 to start, 1 when cancelled (or on a screen smaller than 640x480: a notice only)
-LD_PRELOAD=$BRIDGE /opt/viz1090/vizsetup || exit 0
+# intro screen (a native app: it draws the panel itself, without the bridge): exits 0 to start, 1 when cancelled
+# (or on a screen smaller than 640x480: a notice only)
+/opt/viz1090/vizsetup || exit 0
 
 CONF="${XDG_CONFIG_HOME:-$HOME/.config}/cardputerzero/viz1090.conf"
 [ -f "$CONF" ] && . "$CONF"

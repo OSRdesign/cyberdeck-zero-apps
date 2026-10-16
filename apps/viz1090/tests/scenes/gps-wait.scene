@@ -1,0 +1,19 @@
+# A GPS receiver that talks NMEA but has no fix yet (indoors): the row says that it waits, in amber with the words
+# (where it is too, when the row is wide enough); Enter on it says which port and why the position cannot come from it
+# yet. The dongle is there.
+title viz1090: GPS waiting for a fix
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env VIZ_USB_DIR tests/fixtures/usb-sdr
+env VIZ_DEV_DIR tests/fixtures/dev-gps-wait
+env VIZ_WORLD root/opt/viz1090/world-map.bin
+env VIZ_PROGRAM /bin/sh
+wait 1200
+shot gps-waiting
+expect text "GPS receiver"
+key down
+key down
+key enter
+shot gps-no-fix
+expect text "GPS on /dev/ttyACM0: no fix yet, it needs open sky"
+expect text "Not set"
+expect noquit

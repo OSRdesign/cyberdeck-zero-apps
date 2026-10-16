@@ -3,13 +3,14 @@
 # stages them in ../root/, ready for  python3 tools/make_registry.py  at the root of this repository.
 #
 #     sh build_on_pi.sh                 everything
-#     sh build_on_pi.sh --bridge-only   only the display bridge, the intro screen and the scripts (viz1090 and
-#                                       readsb in ../root/ stay as they are; needs the SDL2 and FreeType -dev packages)
+#     sh build_on_pi.sh --bridge-only   only the display bridge and the scripts (viz1090 and readsb in ../root/
+#                                       stay as they are; needs the SDL2 and FreeType -dev packages)
 #
 # Builds from their upstream repositories, at the commits the package was tested with:
 #   viz1090 (BSD)   https://github.com/nmatsuda/viz1090    fb7bf016d5d95ddca5b27f260e871484864b5c96
 #   readsb  (GPL-3) https://github.com/wiedehopf/readsb     094720939c01943de82b14df6f42f67fff1cd514
-# and the display bridge (libviz_fb.so) and intro screen (vizsetup) from this folder.
+# and the display bridge (libviz_fb.so) from this folder (with ../src/core/viz_screen.h).
+# The intro screen (vizsetup) is a native app of the launcher's cp0_lvgl, cross-built in WSL by ../build.sh.
 set -eu
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -42,19 +43,18 @@ if [ "$BRIDGE_ONLY" = 0 ]; then
     ( cd "$WORK/viz1090" && make -j2 )
 fi
 
-# display bridge (with the launcher's framebuffer output stage and status bar) and intro screen
+# display bridge (with the launcher's framebuffer output stage and status bar)
 gcc -shared -fPIC -O2 -Wall "$HERE/viz_fb_shim.c" "$HERE/cp0_fb_output.c" "$HERE/cp0_statusbar.c" -I"$HERE" \
-    $(sdl2-config --cflags) $(pkg-config --cflags --libs freetype2) -lSDL2_ttf -ldl -lm -o "$WORK/libviz_fb.so"
-g++ -O2 -std=c++11 -Wall "$HERE/vizsetup.cpp" -I"$HERE" -o "$WORK/vizsetup" \
-    $(sdl2-config --cflags) -lSDL2 -lSDL2_ttf -lSDL2_gfx -lpthread
+    -I"$HERE/../src/core" $(sdl2-config --cflags) $(pkg-config --cflags --libs freetype2) -lSDL2_ttf -ldl -lm \
+    -o "$WORK/libviz_fb.so"
 
 mkdir -p "$ROOT/font"
 if [ "$BRIDGE_ONLY" = 0 ]; then
     cp "$WORK/viz1090/viz1090" "$WORK/readsb/readsb" "$ROOT/"
     cp "$WORK/viz1090/font/"*.ttf "$ROOT/font/"
 fi
-cp "$WORK/libviz_fb.so" "$WORK/vizsetup" "$ROOT/"
+cp "$WORK/libviz_fb.so" "$ROOT/"
 cp "$HERE/Montserrat-Medium.ttf" "$HERE/FontAwesome5-Solid+Brands+Regular.woff" "$ROOT/font/"
 cp "$HERE/run_viz1090.sh" "$HERE/extract_map.py" "$ROOT/"
 [ -f "$HERE/world-map.bin" ] && cp "$HERE/world-map.bin" "$ROOT/"      # produced by make_world.py on a PC
-echo "staged in $ROOT - now run: python3 tools/make_registry.py"
+echo "staged in $ROOT - the intro screen (vizsetup) comes from ../build.sh cross (WSL); then: python3 tools/make_registry.py"

@@ -1,0 +1,31 @@
+# The HackBerry case: a keyboard is connected but the rule is forced (APPLAUNCH_OSK=force, vkb=force in input.state).
+# The Position page opens on its list; Up goes to the field, which edits with the on-screen keyboard; Esc stops
+# editing (the keyboard goes), Esc again goes back, Esc at the root ends the app.
+title viz1090: Position page, keyboard rule forced
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env VIZ_USB_DIR tests/fixtures/usb-none
+env VIZ_DEV_DIR tests/fixtures/dev-gps-none
+env VIZ_WORLD root/opt/viz1090/world-map.bin
+env VIZ_PROGRAM /bin/sh
+keyboards 1
+osk force
+wait 1200
+key down
+key down
+key down
+key enter
+expect osk off
+shot forced-list
+key up
+expect osk on
+shot forced-osk
+type "ory"
+shot forced-ory
+expect text "found: ORY"
+key esc
+expect osk off
+key esc
+expect noquit
+expect text "Not set"
+key esc
+expect quit

@@ -5,3 +5,4 @@ Terminal=false
 Icon=share/images/viz1090.png
 Type=Application
 X-Fullscreen=true
+X-MinSize=640x480

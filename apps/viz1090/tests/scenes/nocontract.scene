@@ -1,0 +1,22 @@
+# Started by hand (ssh, a script, an older launcher): no launcher contract variables and no input.state. The app still
+# starts, sizes itself from the layout service, keeps the keyboard rule "auto" with its own probe, and ends with Esc.
+title viz1090: started without the launcher
+nocontract
+sizes 640x480 720x720
+env VIZ_USB_DIR tests/fixtures/usb-sdr
+env VIZ_DEV_DIR tests/fixtures/dev-gps-fix
+env VIZ_WORLD root/opt/viz1090/world-map.bin
+env VIZ_CONF_SEED tests/fixtures/conf/cdg.conf
+env VIZ_PROGRAM /bin/sh
+wait 1200
+shot root-nocontract
+expect text "CDG  49.0097, 2.5478"
+key down
+key down
+key down
+key enter
+shot position-nocontract
+key esc
+key esc
+key esc
+expect quit
