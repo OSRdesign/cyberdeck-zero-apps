@@ -382,19 +382,19 @@
       "share_code": "viz1090",
       "title": "viz1090",
       "summary": "Full-screen ADS-B display: live aircraft from an RTL-SDR dongle on a world map.",
-      "description": "The real viz1090 (by Nathan Matsuda) on the deck, full screen, with its own decoder (readsb with RTL-SDR support), an intro screen (type the nearest airport code, or use a GPS) and a world map. Needs an RTL-SDR dongle with a 1090 MHz antenna and a launcher with full-screen support (X-Fullscreen in .desktop files). Map data: Natural Earth and OurAirports. viz1090: BSD licence; readsb: GPL-3 (source: https://github.com/wiedehopf/readsb).",
+      "description": "The real viz1090 (by Nathan Matsuda) on the deck, full screen, with its own decoder (readsb with RTL-SDR support), an intro screen (whether the SDR and a USB GPS are found; your position from the nearest airport code, the GPS, latitude and longitude, or a recent place; by touch or keyboard) and a world map. Needs an RTL-SDR dongle with a 1090 MHz antenna, a screen of at least 640x480 and a launcher with full-screen support (X-Fullscreen in .desktop files). Map data: Natural Earth and OurAirports. viz1090: BSD licence; readsb: GPL-3 (source: https://github.com/wiedehopf/readsb); the intro screen and the display bridge: MIT.",
       "locales": {
         "en": {
           "title": "viz1090",
           "summary": "Full-screen ADS-B display: live aircraft from an RTL-SDR dongle on a world map.",
-          "description": "The real viz1090 (by Nathan Matsuda) on the deck, full screen, with its own decoder (readsb with RTL-SDR support), an intro screen (type the nearest airport code, or use a GPS) and a world map. Needs an RTL-SDR dongle with a 1090 MHz antenna and a launcher with full-screen support (X-Fullscreen in .desktop files). Map data: Natural Earth and OurAirports. viz1090: BSD licence; readsb: GPL-3 (source: https://github.com/wiedehopf/readsb)."
+          "description": "The real viz1090 (by Nathan Matsuda) on the deck, full screen, with its own decoder (readsb with RTL-SDR support), an intro screen (whether the SDR and a USB GPS are found; your position from the nearest airport code, the GPS, latitude and longitude, or a recent place; by touch or keyboard) and a world map. Needs an RTL-SDR dongle with a 1090 MHz antenna, a screen of at least 640x480 and a launcher with full-screen support (X-Fullscreen in .desktop files). Map data: Natural Earth and OurAirports. viz1090: BSD licence; readsb: GPL-3 (source: https://github.com/wiedehopf/readsb); the intro screen and the display bridge: MIT."
         }
       },
       "i18n": {
         "en": {
           "title": "viz1090",
           "summary": "Full-screen ADS-B display: live aircraft from an RTL-SDR dongle on a world map.",
-          "description": "The real viz1090 (by Nathan Matsuda) on the deck, full screen, with its own decoder (readsb with RTL-SDR support), an intro screen (type the nearest airport code, or use a GPS) and a world map. Needs an RTL-SDR dongle with a 1090 MHz antenna and a launcher with full-screen support (X-Fullscreen in .desktop files). Map data: Natural Earth and OurAirports. viz1090: BSD licence; readsb: GPL-3 (source: https://github.com/wiedehopf/readsb)."
+          "description": "The real viz1090 (by Nathan Matsuda) on the deck, full screen, with its own decoder (readsb with RTL-SDR support), an intro screen (whether the SDR and a USB GPS are found; your position from the nearest airport code, the GPS, latitude and longitude, or a recent place; by touch or keyboard) and a world map. Needs an RTL-SDR dongle with a 1090 MHz antenna, a screen of at least 640x480 and a launcher with full-screen support (X-Fullscreen in .desktop files). Map data: Natural Earth and OurAirports. viz1090: BSD licence; readsb: GPL-3 (source: https://github.com/wiedehopf/readsb); the intro screen and the display bridge: MIT."
         }
       },
       "categories": [
@@ -404,23 +404,23 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.1.1",
+      "version": "0.2.0",
       "published_at": "2026-10-04T19:29:31+00:00",
-      "updated_at": "2026-10-04T19:29:31+00:00",
+      "updated_at": "2026-10-16T09:03:10+00:00",
       "review": {
         "status": "approved"
       },
-      "license": "BSD-3-Clause AND GPL-3.0-or-later",
+      "license": "MIT AND BSD-3-Clause AND GPL-3.0-or-later",
       "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/viz1090",
       "download": {
         "type": "deb",
         "package": "viz1090",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/viz1090_0.1.1_arm64.deb",
-        "md5": "7f197fef8a3aaa6ba500feb144e0ca7f",
-        "sha256": "7cfec4ca69af1653a3ff99672d1a4a9f07cfa7dc6104813e153e849e3c51c458",
-        "size": 5482718
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/viz1090_0.2.0_arm64.deb",
+        "md5": "ddefb890c5872cd219b8094d9034359b",
+        "sha256": "5154ca885ccfb6a0630006569681e02435f6ed7c51b252a5a1e12a8ae35ec3e1",
+        "size": 6733830
       },
-      "depends": "libsdl2-2.0-0, libsdl2-ttf-2.0-0, libsdl2-gfx-1.0-0, librtlsdr0, libusb-1.0-0, libfreetype6, libncurses6, libzstd1, zlib1g, python3",
+      "depends": "libsdl2-2.0-0, libsdl2-ttf-2.0-0, libsdl2-gfx-1.0-0, librtlsdr0, libusb-1.0-0, libfreetype6, libinput10, libxkbcommon0, libncurses6, libzstd1, zlib1g, python3",
       "permissions": {
         "camera": false,
         "microphone": false,
