@@ -44,6 +44,7 @@ std::uint32_t band_rgb(Tone tone)
     case Tone::Ok: return kOkRgb;
     case Tone::Warn: return kWarnRgb;
     case Tone::Bad: return kBadRgb;
+    case Tone::Muted: return kGreyRgb; /* the same grey as Normal: a status line stays readable */
     default: return kGreyRgb;
     }
 }
@@ -54,6 +55,7 @@ cp0::ui::ValueTone value_tone(Tone tone)
     case Tone::Ok: return cp0::ui::ValueTone::Ok;
     case Tone::Warn: return cp0::ui::ValueTone::Warn;
     case Tone::Bad: return cp0::ui::ValueTone::Bad;
+    case Tone::Muted: return cp0::ui::ValueTone::Muted;
     default: return cp0::ui::ValueTone::Normal;
     }
 }

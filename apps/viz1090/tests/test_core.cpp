@@ -532,6 +532,7 @@ static void test_model()
     viz::GpsSnapshot g;
     const viz::RowText none = viz::gps_row(g);
     CHECK(none.label == "GPS receiver" && none.values[0] == "None detected");
+    CHECK(none.tone == viz::Tone::Muted); /* an absent optional receiver: grey, the words say it */
     g.denied = "ttyACM0";
     const viz::RowText denied = viz::gps_row(g);
     CHECK(denied.values[0] == std::string(viz::kCross) + " No access to /dev/ttyACM0" && denied.tone == viz::Tone::Bad);
@@ -562,6 +563,11 @@ static void test_model()
     CHECK(viz::position_row(viz::Setup()).values[0] == "Not set" && viz::position_row(viz::Setup()).tone == viz::Tone::Warn);
     CHECK(viz::latitude_row(cdg).values[0] == "49.0097" && viz::longitude_row(cdg).values[0] == "2.5478");
     CHECK(viz::latitude_row(viz::Setup()).values[0] == "Not set");
+    /* values that are set: grey; Not set stays amber (a call to act) */
+    CHECK(viz::position_row(cdg).tone == viz::Tone::Muted && viz::position_row(bare).tone == viz::Tone::Muted);
+    CHECK(viz::latitude_row(cdg).tone == viz::Tone::Muted && viz::longitude_row(cdg).tone == viz::Tone::Muted);
+    CHECK(viz::latitude_row(viz::Setup()).tone == viz::Tone::Warn && viz::longitude_row(viz::Setup()).tone == viz::Tone::Warn);
+    CHECK(viz::recent_row(viz::Place{"JFK", 40.6394, -73.7793}).tone == viz::Tone::Muted);
     CHECK(viz::recent_row(viz::Place{"JFK", 40.6394, -73.7793}).label == "JFK");
     CHECK(viz::recent_row(viz::Place{"JFK", 40.6394, -73.7793}).values[0] == "40.6394, -73.7793");
     CHECK(viz::recent_row(viz::Place{"", 1, 2}).label == "1.0000, 2.0000");

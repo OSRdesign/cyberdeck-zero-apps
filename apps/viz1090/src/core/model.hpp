@@ -28,7 +28,8 @@ constexpr const char *kAppTitle = "viz1090";
 constexpr int kMinW = 640; /* = X-MinSize of root/usr/share/APPLaunch/applications/viz1090.desktop (tests check it) */
 constexpr int kMinH = 480;
 
-enum class Tone { Normal, Ok, Warn, Bad };
+/* Muted: grey, for an absent thing or a plain setting (never the only signal of status) */
+enum class Tone { Normal, Ok, Warn, Bad, Muted };
 
 /* LVGL's LV_SYMBOL_OK and LV_SYMBOL_CLOSE (U+F00C, U+F00D: the check and the cross of the built-in fonts) */
 extern const char *const kCheck;

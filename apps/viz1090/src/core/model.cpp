@@ -90,7 +90,7 @@ RowText gps_row(const GpsSnapshot &gps)
             r.tone = Tone::Bad;
         } else {
             r.values = {"None detected"};
-            r.tone = Tone::Normal;
+            r.tone = Tone::Muted;
         }
         break;
     case GpsState::Waiting: {
@@ -120,7 +120,7 @@ RowText position_row(const Setup &setup)
         r.values = {place_text(p)};
         if (!p.code.empty()) r.values.push_back(p.code);
         else r.values.push_back(coords_text(p.lat, p.lon, 2));
-        r.tone = Tone::Normal;
+        r.tone = Tone::Muted;
     } else {
         r.values = {"Not set"};
         r.tone = Tone::Warn;
@@ -137,7 +137,7 @@ RowText degrees_row(const char *label, const std::string &text, double limit)
     double v = 0;
     if (parse_degrees(text, limit, v)) {
         r.values = {short_degrees(v)};
-        r.tone = Tone::Normal;
+        r.tone = Tone::Muted;
     } else {
         r.values = {"Not set"};
         r.tone = Tone::Warn;
@@ -167,7 +167,7 @@ RowText recent_row(const Place &place)
         r.label = place.code;
         r.values = {coords_text(place.lat, place.lon)};
     }
-    r.tone = Tone::Normal;
+    r.tone = Tone::Muted;
     return r;
 }
 
