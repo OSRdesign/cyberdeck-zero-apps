@@ -1,6 +1,6 @@
 # Net Toolbox
 
-Version 0.3.0 (draft), package `net-toolbox`. Part of
+Version 0.3.0, package `net-toolbox`. Part of
 [cyberdeck-zero-apps](../../README.md).
 
 Net Toolbox gathers the tools you reach for when a network misbehaves: a step-by-step **diagnosis** ("why is my
@@ -22,13 +22,14 @@ DNS lookup, Port check, HTTP check, Public IP, Whois, Interfaces) are written; t
 pass; the pages ran on the deck (Zero 2 W); the board tests (`tests/BOARD-TESTS.md`) are still to be run on the Pi 3A+. The core of the four new
 tools is described in [0.2.0: the new tools' core](#020-the-new-tools-core).
 
-**0.3.0 (draft, in development):** three more tools with their pages: a **speed test** (a needle gauge, the live
+**0.3.0:** three more tools with their pages: a **speed test** (a needle gauge, the live
 throughput chart, download, upload, latency and the latency under load graded A to F for bufferbloat), **Wake-on-LAN**
 with saved machines and a wake watch, and a **Bluetooth radar** (the devices around as blips on three rings: near, medium,
-far). The core is described in [0.3.0 (draft): the new tools' core](#030-draft-the-new-tools-core), the pages in
+far). The core is described in [0.3.0: the new tools' core](#030-the-new-tools-core), the pages in
 [The 0.3 pages](#the-03-pages). Also 0.3: the **interface chooser** for boards with several ways out (a second Wi-Fi
-adapter, Ethernet): see [The network chooser](#the-network-chooser-03). The new pages have run in the headless scenes
-only: the board steps (`tests/BOARD-TESTS.md`, B13 to B15) are still to be run.
+adapter, Ethernet): see [The network chooser](#the-network-chooser-03). The speed test and the Bluetooth radar
+have run on the deck (Zero 2 W) and the Pi 3A+; Wake-on-LAN and the interface chooser with a second adapter are still to be
+tried on a board (`tests/BOARD-TESTS.md`, B11 to B15).
 
 ## Screenshots
 
@@ -240,7 +241,7 @@ exercised from the build PC (WSL, UDP probes through its NAT; whois over the int
 `certs` of a redirect chain describe the last server only; a hop that answers from more than four addresses keeps
 the others as a count; reverse names come from the resolver in `resolv.conf` (or the one chosen), over UDP only.
 
-## 0.3.0 (draft): the new tools' core
+## 0.3.0: the new tools' core
 
 The core (`src/core/`, no LVGL) of three more tools; their pages are not written yet. Same rules as before: one worker
 thread per running tool (256 kB stack), every wait a `poll()` slice of at most 50 ms, immutable snapshots under a mutex
@@ -453,12 +454,12 @@ Logs go to stderr with the tag `[net-toolbox]` (the launcher's journal).
 
 * **Not yet run on a board**: the tools are unit-tested on fixtures and on loopback and the pages on headless scenes;
   the board protocol (`tests/BOARD-TESTS.md`) is still to be run.
-* 0.3 (draft): the network chooser is unit-tested and shown in headless scenes; the dongle (wlan1) and an Ethernet
+* 0.3: the network chooser is unit-tested and shown in headless scenes; the dongle (wlan1) and an Ethernet
   adapter on a hub are still to be tried on a board (`tests/BOARD-TESTS.md`, B11 and B12).
-* 0.3 (draft): the speed test, Wake-on-LAN and Bluetooth radar pages run in the headless scenes on scripted answers only;
-  the core was measured with curl and bluetoothctl from a shell, the pages are not yet run on a board (B13 to B15). The
-  last wake status of a machine is kept while the app runs, not in the settings file. A BLE scan is never started on the
-  deck during tests without the owner's say (the Bluetooth keyboard shares the radio).
+* 0.3: the speed test and the Bluetooth radar pages ran on the deck and the Pi 3A+ (speed test about 19 to 115 Mbit/s
+  down on the two boards' Wi-Fi, grade B; the radar heard 17 to 23 devices); the Wake-on-LAN page ran in the headless scenes
+  only (B14 is still to be run). The last wake status of a machine is kept while the app runs, not in the settings file. A
+  BLE scan is never started on the deck during tests without the owner's say (the Bluetooth keyboard shares the radio).
 * Ping has Start and Stop, no Pause: Start begins a new series.
 * IPv4 first: the gateway is the IPv4 default route; an IPv6-only network is not diagnosed yet.
 * Names ending in `.local` (mDNS) are not resolved; use the address.
@@ -563,16 +564,16 @@ python3 tools/make_registry.py --only net-toolbox --out <a folder outside packag
 
 ## Changes
 
-* 0.3.0 (draft): the **network chooser** (Home row Network, `interface=` setting): sockets bound with SO_BINDTODEVICE, curl
+* 0.3.0: the **network chooser** (Home row Network, `interface=` setting): sockets bound with SO_BINDTODEVICE, curl
   with --interface, the interface's own gateway and DNS, the diagnosis of a chosen interface, `(via wlan1)` in the status
   lines, Wi-Fi details for every wireless interface on the Interfaces page, Ethernet as a normal interface. Home has ten
   rows and starts on Diagnose my connection.
-* 0.3.0 (draft): the **pages** of the speed test (needle gauge with a scale that steps up, live throughput chart, progress
+* 0.3.0: the **pages** of the speed test (needle gauge with a scale that steps up, live throughput chart, progress
   bar, result card with the bufferbloat grade), Wake-on-LAN (the list of saved machines, the typed Add / Edit pages, the
   wake watch with its ring and one-second strip, Delete with a second press) and the Bluetooth radar (rings, sweep, blips,
   the device list and its details); Home has thirteen rows; the scripted demonstration backend (`speed=`, `wol=`, `ble=`) and
   the scenes for every state; the unit tests of the new wording and maths (`test_ui_model_03.cpp`).
-* 0.3.0 (draft, in development): the core of the speed test (Cloudflare through curl, one connection, ChaCha20
+* 0.3.0: the core of the speed test (Cloudflare through curl, one connection, ChaCha20
   first, 8 s and at most 150 MB each way, the latency under load and a bufferbloat grade), Wake-on-LAN (saved machines,
   the packets on every interface or one, the wake watch) and the BLE scan (bluetoothctl with duplicate data on, the
   device table, distance classes, discovery always turned off), the stream runner they share, their saved texts and
