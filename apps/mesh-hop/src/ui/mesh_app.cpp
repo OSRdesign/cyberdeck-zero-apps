@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "app.hpp"
+#include "mesh_app.hpp"
 
 #include "clock_policy.hpp"
 #include "input_state.hpp"
@@ -144,6 +144,14 @@ void trampoline_button(lv_event_t *e)
     g_app->button_clicked(static_cast<int>(reinterpret_cast<intptr_t>(lv_event_get_user_data(e))));
 }
 
+/* The point of the event's indev in stage coordinates (the 640x480 layout the hit tests by x and the hold use). */
+lv_point_t event_point(lv_event_t *e)
+{
+    lv_point_t p = {0, 0};
+    if (lv_indev_t *indev = lv_event_get_indev(e)) lv_indev_get_point(indev, &p);
+    return stage_point(p);
+}
+
 void trampoline_row(lv_event_t *e)
 {
     if (!g_app) return;
@@ -151,8 +159,7 @@ void trampoline_row(lv_event_t *e)
     lv_obj_t *target = lv_event_get_target_obj(e);
     auto *list = static_cast<RowList *>(lv_event_get_user_data(e));
     const int index = static_cast<int>(reinterpret_cast<intptr_t>(lv_obj_get_user_data(target)));
-    lv_point_t p = {0, 0};
-    if (lv_indev_t *indev = lv_event_get_indev(e)) lv_indev_get_point(indev, &p);
+    const lv_point_t p = event_point(e);
     switch (code) {
     case LV_EVENT_CLICKED: g_app->row_clicked(list, index, p.x); break;
     case LV_EVENT_PRESSED: g_app->hold_event(0, list, index, p.x, p.y); break;
@@ -168,8 +175,7 @@ void trampoline_title(lv_event_t *e)
 {
     if (!g_app) return;
     const lv_event_code_t code = lv_event_get_code(e);
-    lv_point_t p = {0, 0};
-    if (lv_indev_t *indev = lv_event_get_indev(e)) lv_indev_get_point(indev, &p);
+    const lv_point_t p = event_point(e);
     switch (code) {
     case LV_EVENT_CLICKED: g_app->button_clicked(kTagTitleHold); break;
     case LV_EVENT_PRESSED: g_app->hold_event(0, nullptr, 0, p.x, p.y); break;
@@ -559,7 +565,7 @@ App::~App()
 
 void App::build_screen()
 {
-    screen_ = lv_screen_active();
+    screen_ = plat_.stage();                       // the 640x480 stage, centred on the screen (stage.hpp)
     lv_obj_set_style_bg_color(screen_, lv_color_hex(kBackground), 0);
     lv_obj_set_style_bg_opa(screen_, LV_OPA_COVER, 0);
     lv_obj_remove_flag(screen_, LV_OBJ_FLAG_SCROLLABLE);

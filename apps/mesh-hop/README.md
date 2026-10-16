@@ -255,22 +255,25 @@ Mesh Hop is MIT (see the `copyright` file of the package).
 ## Build and test
 
 ```
-wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/build/build.sh          # aarch64, into root/usr/share/APPLaunch/bin
-wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/build/build.sh host     # x86-64 PC build, headless mode (~/mesh-hop-host/mesh-hop)
-wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/src/tests/run_tests.sh  # unit tests (core, simulator, UI logic)
-wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/src/tests/ui_smoke.sh   # scripted run + screenshots against the simulator
+wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/build.sh cross        # aarch64, into root/usr/share/APPLaunch/bin/mesh-hop
+wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/build.sh host         # PC: shared harness + scenes, mesh-hop-script, unit tests
+wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/build.sh flows [WxH]  # the 20 simulator flows (tests/flows), about 15 minutes
+wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/build.sh flows stage  # stage.script at the five screen sizes
 ```
 
-Both builds use the launcher's SDK (LVGL, toolchain) through a scratch project under `projects/` of the launcher tree that is
-kept out of git; nothing of this app is added to the launcher repository. `tools/meshcore_sim.py` simulates a board
+Mesh Hop is a native fullscreen app on the shared app platform (`apps/_common`, see `apps/_common/build_app.sh -h`): it links
+the launcher's `cp0_lvgl` (pinned by `apps/_common/LAUNCHER_REF`) for the display (rotation, 16 / 32 bpp), the touch, the
+keyboards and the status bar renderer, through a scratch project under `projects/` of the launcher build tree. The whole UI is
+still laid out for 640x480: it is built in a 640x480 stage centred on the screen (`src/ui/stage.*`). `tools/meshcore_sim.py` simulates a board
 (options: `--contacts N`, `--chan-reply ok|msgsent|odd|none`, `--old-firmware`, `--no-gps-var`; 0.2.0: `--fw-level N`, `--manual-add`,
 `--new-nodes N`, `--max-contacts N`, `--repeat-ranges`, `--slow-remove SEC`, `--no-autoadd`, `--old-autoadd`, `--old-other-params`,
 `--no-discover`, `--discover-reply`, `--no-stats`, `--old-stats`, `--no-factory-reset`, `--strict-reset-word`; 0.2.2: `--identity A|B` (a second
 board with its own key, contacts and channels), `--reset-format-delay SEC`, `--reset-no-ok`; stdin commands `newnode`, `reboot`, `swap` (exchange the
-board on the cable)). The scripts in `src/tests/` (`smoke.script`, `bigcontacts.script`, `chan-silent.script`, `firmware.script`, `offline.script`)
-drive the headless mode (`mesh-hop --headless --script f --shot-dir d`: renders into memory, takes keys and taps from a script,
-writes PNG screenshots, `bench <key> <n>` times key presses, `hold <x> <y> <ms> [shot]` keeps a finger down); it also runs on the deck, over ssh,
-without touching the panel. `history_run.sh` seeds a history of every age and runs `history.script`; `presets_run.sh` (a local web
+board on the cable)). The scripts in `tests/flows/` (`smoke.script`, `bigcontacts.script`, `chan-silent.script`, `firmware.script`, `offline.script`)
+drive `mesh-hop-script` (`--script f --shot-dir d [--size WxH]`: the shared headless harness's display at any size, keys through the
+shared keyboard queue, taps at the 640x480 coordinates moved to the stage, PNG screenshots, `bench <key> <n>` times key presses,
+`hold <x> <y> <ms> [shot]` keeps a finger down, `tap "label"`, `stage`, `check`, `expect text`); `run_flows.sh` runs all of them.
+The shared harness's scenes are in `tests/scenes/`, the unit tests in `tests/unit/`. `history_run.sh` seeds a history of every age and runs `history.script`; `presets_run.sh` (a local web
 server stands in for `api.meshcore.nz`; `MESHHOP_ONLINE=0|1` forces the online test, `MESHHOP_PRESETS_URL` and `MESHHOP_CURL` replace the address and
 the program) now also runs the retry case. 0.2.0 adds `p2_run.sh` (seeded history, the words `@D60@` in a script become the date 60 days
 ago) with `p2-contacts.script`, `p2-nearby.script`, `p2-search.script`, `p2-settings.script` and `p2-oldfw.script`; the first line of each
@@ -285,9 +288,10 @@ traffic. `heard-back.script` (`--heard-back 2 --heard-back-direct`) and `packet-
 
 | Path | What |
 | --- | --- |
-| `src/main/core/` | transport, protocol, client, model, store, clock policy, presets (`radio_presets.inc` is the dated data file), preset feed (strict parser, saved copy, background curl, download schedule), channel keys, firmware features, contact groups, message archive search, log, the radio log parser and echo tracker (`logdata.*`), the packet log ring (`packet_log.*`) (no LVGL; unit tested) |
-| `src/main/ui/ui_logic.*`, `ui_phase2.cpp` | keys, editor filters, formatting, chat and contact rows, filters and sort state, selection, groups, details, Nearby rows, search rows, statistics view, popup logic, Settings layout, Back rule (no LVGL; unit tested) |
-| `src/main/ui/platform.*` | framebuffer, touch and keyboard (evdev), headless mode |
-| `src/main/ui/app.*` | the screens, the virtual row list, the popups |
-| `src/main/ui/cp0_statusbar.[ch]` | the launcher's shared top bar, copied from `cyberdeck-zero-launcher/ext_components/cp0_lvgl` (keep in sync) |
-| `src/main/src/main.cpp` | start-up, signals, the script runner of the headless mode |
+| `src/core/` | transport, protocol, client, model, store, clock policy, presets (`radio_presets.inc` is the dated data file), preset feed (strict parser, saved copy, background curl, download schedule), channel keys, firmware features, contact groups, message archive search, log, the radio log parser and echo tracker (`logdata.*`), the packet log ring (`packet_log.*`) (no LVGL; unit tested) |
+| `src/ui/ui_logic.*`, `ui_phase2.cpp` | keys, editor filters, formatting, chat and contact rows, filters and sort state, selection, groups, details, Nearby rows, search rows, statistics view, popup logic, Settings layout, Back rule (no LVGL; unit tested) |
+| `src/ui/key_bridge.*` | the shared platform's keys (cp0_lvgl key_item) to the app's key events (no LVGL; unit tested) |
+| `src/ui/stage.*`, `session.hpp`, `app_spec.cpp` | the 640x480 stage centred on the screen, the keyboard bridge, the tick timer, the app's spec for the shared runners |
+| `src/ui/mesh_app.*` | the screens, the virtual row list, the popups |
+| `src/main.cpp` | `cdk::run` (apps/_common: display, touch, keyboards, signals, the "needs 640x480" notice) |
+| `tests/flows/`, `tests/scenes/`, `tests/unit/` | the simulator flows and `mesh-hop-script`, the shared harness's scenes, the unit tests |

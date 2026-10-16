@@ -1,0 +1,59 @@
+# Mesh Hop P1 (platform and stage): the main pages at any size, the default simulated board (4 contacts, a GPS board).
+# Run at each size:   SIZE=1280x720 SCRIPT=stage.script sh ui_smoke.sh      (run_flows.sh stage runs the five)
+# Coordinates are the 640x480 layout's: mesh-hop-script moves them to where the stage is. `stage` checks that it is
+# centred; `check` runs the shared layout checks and fails only on the on-screen rule (nothing cut by the screen edge).
+wait 3500
+stage
+say == chats (expect tab=Chats link=Connected contacts=4 conv=c:0)
+dump
+shot s01-chats
+check chats
+
+# a popup: the "Add channel" row of the chat list (by its 640x480 place)
+tap 100 192
+wait 300
+say == add channel menu (expect popup=menu)
+dump
+shot s02-popup
+check popup
+key esc
+wait 200
+
+# the Contacts tab by its place; the "i" box of the first row (x >= 584: a hit test by x) opens the details
+tap 211 28
+wait 600
+say == contacts (expect tab=Contacts shown=4)
+dump
+shot s03-contacts
+check contacts
+tap 610 188
+wait 300
+say == the "i" box of the first row (expect detail=1)
+dump
+shot s04-contact-detail
+key esc
+wait 200
+
+# the Settings tab by its label; the Position box (Enter on the first row)
+tap "Settings"
+wait 800
+say == settings (expect tab=Settings)
+dump
+shot s05-settings
+check settings
+key home
+key enter
+wait 800
+say == the Position box (expect pos_box=1 pos_gps_row=1)
+dump
+shot s06-position-box
+check position
+key esc
+wait 300
+
+# a drag scrolls the Settings list (inside the stage) and a key moves the selection
+drag 320 400 320 150
+wait 300
+key down
+shot s07-settings-scrolled
+check scrolled

@@ -1,0 +1,52 @@
+# Mesh Hop (P1, platform and stage): the whole 640x480 UI on a stage centred on the screen, at the five sizes, no board
+# (the app offline). A tap at the place a control has in the 640x480 layout, moved by the stage's offset, reaches that
+# control; a tap on its label does too; a tap beside the stage does nothing; the keys come through the shared keyboard
+# bridge. No shot or layout check here: the shared size rules (rows 7 mm, buttons 9 mm) fail on every control until the
+# pages are converted (P2, P3); mesh-hop-script `check` (tests/flows/stage.script) reports the on-screen rule alone.
+title Mesh Hop: the stage at five sizes
+env MESHHOP_DATA /tmp/mesh-hop-scene-data
+env MESHHOP_PORT /nonexistent/ttyMH
+env MESHHOP_ONLINE 0
+sizes 640x480 800x480 720x720 1024x600 1280x720
+
+wait 900
+expect text "Chats"
+expect noquit
+
+# the Terminal tab of the 640x480 layout: x 256-338, y 8-48, its middle (297, 28) + the stage's place
+@640x480 tapxy 0.4654 0.0593
+@800x480 tapxy 0.4723 0.0593
+@720x720 tapxy 0.4693 0.2064
+@1024x600 tapxy 0.4784 0.1476
+@1280x720 tapxy 0.4827 0.2064
+expect text "A meshcore-cli style command line comes in a later version."
+
+# beside the stage (the letterbox): nothing happens
+@800x480 tapxy 0.03 0.5
+@720x720 tapxy 0.5 0.05
+@1024x600 tapxy 0.05 0.5
+@1280x720 tapxy 0.05 0.5
+expect text "A meshcore-cli style command line comes in a later version."
+
+# by its label: the Settings tab, then a row of its list at its 640x480 place (Packet log: x 0-640, y 206-246 of the
+# page, middle (320, 226)) opens the packet log
+tap "Settings"
+expect text "Node name"
+@640x480 tapxy 0.5008 0.4718
+@800x480 tapxy 0.5006 0.4718
+@720x720 tapxy 0.5008 0.4812
+@1024x600 tapxy 0.5005 0.4775
+@1280x720 tapxy 0.5004 0.4812
+expect text "Clear"
+key esc
+expect notext "Clear"
+
+# the keys through cp0_lvgl's queue and the app's key bridge: Tab walks the tabs (Settings -> Chats -> Map -> Contacts)
+key tab
+key tab
+key tab
+expect text "Zero-hop"
+# a short Esc at the root never quits (unchanged in P1): it says how to leave
+key esc
+expect text "Hold Esc 3 s to exit"
+expect noquit

@@ -1,0 +1,13 @@
+# Under the app's minimum (640x480, X-MinSize): an older launcher ignores X-MinSize, so the shared runner shows the
+# "needs 640x480" notice instead of the app, which closes on any key. 480x800 is a portrait panel the backend did not
+# rotate (the harness has no rotation of its own: a rotated board gives the app its landscape size).
+title Mesh Hop: screens under 640x480
+env MESHHOP_DATA /tmp/mesh-hop-scene-data
+env MESHHOP_PORT /nonexistent/ttyMH
+env MESHHOP_ONLINE 0
+sizes 480x320 800x400 640x400 480x800
+
+shot notice
+expect noquit
+key down
+expect quit

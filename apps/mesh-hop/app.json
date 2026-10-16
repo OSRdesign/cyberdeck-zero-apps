@@ -9,6 +9,6 @@
   "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
   "license": "MIT",
   "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/mesh-hop",
-  "depends": "libfreetype6, curl",
+  "depends": "libfreetype6, libinput10, libxkbcommon0, curl",
   "permissions": {"network": true, "additional_hardware": true}
 }
