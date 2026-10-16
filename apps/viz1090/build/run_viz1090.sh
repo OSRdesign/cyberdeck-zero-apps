@@ -5,7 +5,9 @@
 # (AIRPORT= and RECENT1= .. RECENT5= are the intro screen's: the airport of the position, the last places used.)
 # Without UISCALE in the file, viz1090's text size follows the screen's density: 1 below 7.5 px/mm, 2 up to
 # 14 px/mm (the deck), 3 above (and never more than 1 per 240 screen rows).
-export SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy VIZ_STATUS_BAR=1
+# VIZ_TITLE: the display bridge draws the app header above the map (title, the Esc button, the status strip), as the
+# intro screen and every native page have it.
+export SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy VIZ_TITLE=viz1090
 BRIDGE=/opt/viz1090/libviz_fb.so
 
 # The screen, from the launcher's app contract (else screen.state, else the framebuffer; 640x480 as the last resort):
@@ -35,10 +37,17 @@ fi
 ln -sfn /opt/viz1090/font "$CACHE/font"
 cd "$CACHE" || exit 1
 
+# The map's window: the screen under the header (its height comes from the launcher's layout service; the bridge
+# computes it and prints "width height header" without starting viz1090).
+set -- $(VIZ_PRINT_MAP=1 LD_PRELOAD=$BRIDGE /opt/viz1090/viz1090 2>/dev/null)
+MAP_W=${1:-$VIZ_W} MAP_H=${2:-$((VIZ_H - 56))}
+echo "[viz1090] map ${MAP_W}x${MAP_H} under a ${3:-56} px header" >&2
+
 # the decoder runs only while viz1090 is on screen
 /opt/viz1090/readsb --device-type rtlsdr --gain auto --quiet --net --net-bo-port 30005 \
     --net-ri-port 0 --net-ro-port 0 --net-sbs-port 0 --net-bi-port 0 --net-api-port 0 >/dev/null 2>&1 &
 DECODER=$!
-trap 'kill $DECODER 2>/dev/null' EXIT INT TERM
-VIZ_CLOSE_BUTTON=1 LD_PRELOAD=$BRIDGE /opt/viz1090/viz1090 --screensize "$VIZ_W" "$VIZ_H" --uiscale "$UISCALE" \
+trap 'kill $DECODER 2>/dev/null' EXIT INT TERM HUP
+# viz1090 ends on the header's Esc button, the Esc key, SIGTERM (the launcher's hold-Esc), SIGINT or SIGHUP
+LD_PRELOAD=$BRIDGE /opt/viz1090/viz1090 --screensize "$MAP_W" "$MAP_H" --uiscale "$UISCALE" \
     --lat "$LAT" --lon "$LON" ${METRIC:+--metric}

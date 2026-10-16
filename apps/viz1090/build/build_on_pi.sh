@@ -43,8 +43,9 @@ if [ "$BRIDGE_ONLY" = 0 ]; then
     ( cd "$WORK/viz1090" && make -j2 )
 fi
 
-# display bridge (with the launcher's framebuffer output stage and status bar)
-gcc -shared -fPIC -O2 -Wall "$HERE/viz_fb_shim.c" "$HERE/cp0_fb_output.c" "$HERE/cp0_statusbar.c" -I"$HERE" \
+# display bridge (with the launcher's framebuffer output stage, status strip and layout service)
+gcc -shared -fPIC -O2 -Wall "$HERE/viz_fb_shim.c" "$HERE/cp0_fb_output.c" "$HERE/cp0_statusbar.c" \
+    "$HERE/cp0_ui_metrics.c" "$HERE/cp0_ui_roller.c" "$HERE/cp0_ui_status_strip.c" -I"$HERE" \
     -I"$HERE/../src/core" $(sdl2-config --cflags) $(pkg-config --cflags --libs freetype2) -lSDL2_ttf -ldl -lm \
     -o "$WORK/libviz_fb.so"
 

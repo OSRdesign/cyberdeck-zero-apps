@@ -5,21 +5,29 @@
  *   - SDL_CreateRenderer is forced to the software renderer (SDL_VIDEODRIVER=offscreen has no GPU),
  *   - every SDL_RenderPresent copies the finished frame to the panel's framebuffer, turned by the panel's rotation
  *     and converted to its depth (16 or 32 bpp) by cp0_fb_output.c (the launcher's own output stage),
+ *   - with VIZ_TITLE set, the app header of the launcher's native pages is drawn above it (title, the on-screen Esc
+ *     button, the status strip), with the geometry of the launcher's layout service; the program's window goes under
+ *     it,
  *   - SDL_PollEvent also reads the touch screen and a keyboard through evdev and turns them into the SDL
- *     events viz1090 handles (finger drag = pan, two-finger pinch = zoom, tap, + / - keys); the X button (top right) and Esc quit.
+ *     events viz1090 handles (finger drag = pan, two-finger pinch = zoom, tap, + / - keys); the header's Esc button,
+ *     the Esc key and SIGTERM / SIGINT / SIGHUP quit.
  *
  * The screen (size, rotation, density, devices) comes from the launcher's app contract, see viz_screen.h. The program
- * draws a window of any size (viz1090 --screensize W H, vizsetup: the screen size); it is centred on the panel when
- * smaller and cut at the right and bottom when bigger.
+ * draws a window of any size; it is centred in its area (the screen under the header) when smaller and cut at the
+ * right and bottom when bigger. Its area: VIZ_PRINT_MAP=1 LD_PRELOAD=libviz_fb.so <the program> prints
+ * "WIDTH HEIGHT HEADER" (px) and exits before the program starts (run_viz1090.sh asks it for --screensize).
  *
- * Use:  SDL_VIDEODRIVER=offscreen LD_PRELOAD=libviz_fb.so ./viz1090 --screensize W H ...
- * Environment: VIZ_TOUCH (default: APPLAUNCH_SCREEN_TOUCH, else found by scanning /dev/input/event*), VIZ_KEYBOARD
+ * Use:  SDL_VIDEODRIVER=offscreen VIZ_TITLE=viz1090 LD_PRELOAD=libviz_fb.so ./viz1090 --screensize W H ...
+ * Environment: VIZ_TITLE (the header and its title; unset: no header, the window fills the screen), VIZ_FONT and
+ *              VIZ_ICON_FONT (Montserrat-Medium.ttf and the FontAwesome font of the launcher; default /opt/viz1090/font),
+ *              VIZ_TOUCH (default: APPLAUNCH_SCREEN_TOUCH, else found by scanning /dev/input/event*), VIZ_KEYBOARD
  *              (default /dev/input/bt-keyboard), APPLAUNCH_TOUCH_ORIENT=buffer (touch axes follow the framebuffer)
  *              or APPLAUNCH_TOUCH_SWAP_XY / _INVERT_X / _INVERT_Y (as for the launcher), VIZ_FB (overrides the
- *              framebuffer), VIZ_STATUS_BAR=1 (the launcher's top bar), VIZ_CLOSE_BUTTON=1 (the X).
+ *              framebuffer).
  * Test only (never set by the package): VIZ_FAKE_FB=WxHxBPP draws into memory instead of a device, VIZ_FAKE_TAPS="x,y;x,y"
- *              plays taps at logical pixels through the touch mapping, VIZ_DUMP=file.bmp writes the framebuffer (as
- *              the panel stores it, before any rotation is undone) after VIZ_DUMP_FRAME frames (default 5) and exits.
+ *              plays taps at logical pixels (header included) through the touch mapping, VIZ_DUMP=file.bmp writes the
+ *              framebuffer (as the panel stores it, before any rotation is undone) after VIZ_DUMP_FRAME frames
+ *              (default 5) and exits.
  */
 #define _GNU_SOURCE
 #include <SDL2/SDL.h>
@@ -29,6 +37,7 @@
 #include <linux/fb.h>
 #include <linux/input.h>
 #include <math.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,8 +47,14 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <ft2build.h>
+#include FT_FREETYPE_H
+
 #include "cp0_fb_output.h"
 #include "cp0_statusbar.h"
+#include "cp0_ui_metrics.h"
+#include "cp0_ui_roller.h"
+#include "cp0_ui_status_strip.h"
 #include "viz_screen.h"
 
 /* ------------------------------------------------------------ framebuffer */
@@ -120,89 +135,426 @@ static void fb_init(void)
                 screen.w, screen.h, screen.rot, fb_out.lw, fb_out.lh);
 }
 
-/* Design scale of the overlays: 1 on the deck (640x480), more on bigger screens, less on smaller ones. */
-static float overlay_scale(void)
+/* ---------------------------------------------------------------- the app header */
+
+/* The header of the launcher's native pages (cp0::ui::Page in cp0_lvgl, as the intro screen of this app draws it):
+ * the title at the home grid's place, size and colour, the on-screen Esc button, the shared status strip. Every number
+ * comes from the launcher's layout service for this canvas and density (cp0_ui_metrics_compute + cp0_ui_roller_page,
+ * the calls the toolkit makes; copied files, see README.md), the strip from its renderer (cp0_statusbar.c). */
+#define HDR_GOLD 0xF0B400u        /* the home grid's title (cp0_ui_page.cpp kGold) */
+#define HDR_KEY_BG 0x2A2A2Au      /* the Esc button (kKeyBg) ... */
+#define HDR_KEY_PRESSED 0x2D9CDBu /* ... while it is held (kKeyPressed) */
+#define HDR_KEY_TEXT 0xFFFFFFu
+
+static int layout_ready;
+static int header_on;                 /* VIZ_TITLE is set and the screen has room for the header */
+static cp0_ui_metrics_t metrics;      /* the layout service's numbers for the canvas */
+static cp0_ui_roller_page_t page;     /* the native page: header_h, title_*, esc_*, strip_* */
+static cp0_ui_status_strip_geom_t strip;
+static int area_y, area_h;            /* the program's area: full width, from area_y to the bottom */
+
+static const char *title_text(void)
 {
-    const float sx = frame_w / 640.0f, sy = frame_h / 480.0f;
-    const float s = sx < sy ? sx : sy;
-    return s < 0.5f ? 0.5f : (s > 3.0f ? 3.0f : s);
+    const char *t = getenv("VIZ_TITLE");
+    return t && t[0] ? t : NULL;
 }
 
-/* close button (top right): drawn into every frame; a tap on it quits. 56 px with a 6 px margin on the deck. */
-static int btn_size(void) { const int b = (int)lroundf(56 * overlay_scale()); return b < 40 ? 40 : b; }
-static int btn_margin(void) { return (int)lroundf(6 * overlay_scale()); }
-
-static int close_button_enabled(void)
+static const char *font_file(const char *env, const char *fallback)
 {
-    static int enabled = -1;
-    if (enabled < 0) {
-        const char *v = getenv("VIZ_CLOSE_BUTTON");
-        enabled = v && v[0] && v[0] != '0';
-    }
-    return enabled;
+    const char *v = getenv(env);
+    return v && v[0] ? v : fallback;
 }
 
-static void draw_close_button(uint8_t *pixels, int w, int h)
-{
-    if (!close_button_enabled()) return;
-    uint32_t *p = (uint32_t *)pixels;
-    const int size = btn_size();
-    const int x0 = w - size - btn_margin(), y0 = btn_margin();
-    if (x0 < 0 || y0 + size > h) return;
-    const int border = size / 28 > 2 ? size / 28 : 2;
-    for (int y = 0; y < size; ++y)
-        for (int x = 0; x < size; ++x) {
-            const int edge = x < border || y < border || x >= size - border || y >= size - border;
-            p[(size_t)(y0 + y) * w + x0 + x] = edge ? 0xFFB0B0B0u : 0xFF1C1C1Cu;
-        }
-    const int inset = size * 12 / 56, half = size / 28 > 2 ? size / 28 : 2;   /* the X: two diagonals, 4 px thick on the deck */
-    for (int i = inset; i < size - inset; ++i)
-        for (int t = -half; t < half; ++t) {
-            p[(size_t)(y0 + i) * w + x0 + i + t] = 0xFFFFFFFFu;
-            p[(size_t)(y0 + i) * w + x0 + (size - 1 - i) + t] = 0xFFFFFFFFu;
-        }
-}
-
-/* The status bar is the launcher's own (cp0_statusbar.c, shared with the launcher's native screens). */
+/* The status strip's renderer (the launcher's own), made on first use. */
 static cp0_statusbar_t *status_bar;
-static cp0_statusbar_state_t status_state;
-static Uint32 status_read_at;
 static int status_failed;
 
-static int status_bar_enabled(void)
+static cp0_statusbar_t *strip_renderer(void)
 {
-    static int enabled = -1;
-    if (enabled < 0) {
-        const char *v = getenv("VIZ_STATUS_BAR");
-        enabled = v && v[0] && v[0] != '0';
+    if (!status_bar && !status_failed) {
+        status_bar = cp0_statusbar_create(font_file("VIZ_FONT", "/opt/viz1090/font/Montserrat-Medium.ttf"),
+                                          font_file("VIZ_ICON_FONT", "/opt/viz1090/font/FontAwesome5-Solid+Brands+Regular.woff"));
+        if (!status_bar) {
+            status_failed = 1;
+            fprintf(stderr, "[viz_fb] no status strip: the fonts (VIZ_FONT, VIZ_ICON_FONT) do not load\n");
+        }
     }
-    return enabled && !status_failed;
+    return status_bar;
 }
 
-static void draw_status_bar(uint8_t *pixels, int w, int h, int shift_left, int top)
+/* cp0::ui::status_strip_left(): the strip drawn in its fullest state (Bluetooth glyph, every bar, a clock) into a
+ * scratch canvas; its first column holding a pixel is the leftmost pixel the strip can draw. */
+static int strip_left_px(void)
 {
-    if (!status_bar_enabled()) return;
-    if (!status_bar) {
-        const char *text_font = getenv("VIZ_FONT");
-        const char *icon_font = getenv("VIZ_ICON_FONT");
-        status_bar = cp0_statusbar_create(text_font && text_font[0] ? text_font : "/opt/viz1090/font/Montserrat-Medium.ttf",
-                                          icon_font && icon_font[0] ? icon_font : "/opt/viz1090/font/FontAwesome5-Solid+Brands+Regular.woff");
-        if (!status_bar) { status_failed = 1; return; }
+    cp0_statusbar_t *bar = strip_renderer();
+    if (!bar || strip.w <= 0) return strip.x;
+    const int rows = strip.rows + 16;
+    uint32_t *pixels = calloc((size_t)strip.w * rows, sizeof(uint32_t));
+    if (!pixels) return strip.x;
+    cp0_statusbar_state_t full;
+    memset(&full, 0, sizeof(full));
+    full.wifi_up = 1;
+    full.wifi_pct = 100;
+    full.bt_on = 1;
+    full.bt_connected = 1;
+    snprintf(full.clock, sizeof(full.clock), "%s", "00:00");
+    cp0_statusbar_render_scaled(bar, pixels, strip.w, strip.w, 0, strip.top, 0, &full, strip.pct);
+    const int first = cp0_ui_status_first_column(pixels, strip.w, rows);
+    free(pixels);
+    return strip.x + (first < strip.w ? first : 0);
+}
+
+static void layout_init(void)
+{
+    if (layout_ready) return;
+    layout_ready = 1;
+    fb_init();
+    const int w = canvas_w(), h = canvas_h();
+    area_y = 0;
+    area_h = h;
+    if (!title_text()) return;
+    if (cp0_ui_metrics_compute(w, h, screen.rot, screen.ppmm_x100, CP0_UI_DENSITY_PANEL_MM, 0, &metrics) != 0) return;
+    cp0_ui_status_strip_geom(&metrics, w, &strip);
+    if (cp0_ui_roller_page(&metrics, strip_left_px(), &page) != 0) {
+        fprintf(stderr, "[viz_fb] %dx%d has no room for the header: none\n", w, h);
+        return;
     }
+    header_on = 1;
+    area_y = page.header_h;
+    area_h = h - page.header_h;
+    frame_w = w;                                    /* until the first frame says otherwise */
+    frame_h = area_h;
+    frame_y = area_y;
+    fprintf(stderr, "[viz_fb] header %d px (%s class), title at %d,%d %d px, Esc %dx%d at %d,%d, strip from x %d; "
+            "the program's area %dx%d at 0,%d\n", page.header_h, cp0_ui_class_name(metrics.cls), page.title_x,
+            page.title_y, page.title_px, page.esc_w, page.esc_h, page.esc_x, page.esc_y, page.strip_left, w, area_h,
+            area_y);
+}
+
+/* Text of the header in the look of the launcher's builtin Montserrat (LVGL lv_font_montserrat_N, made by lv_font_conv
+ * from the same Montserrat-Medium.ttf with FreeType's light autohinting at 4 bpp): the same glyph rendering, LVGL's
+ * advances (the unhinted width plus the pair kerning, in 1/16 px, rounded to whole pixels) and the line height and
+ * baseline of the builtin size, so that a label's text lands on the pixels LVGL draws. */
+static const struct { uint8_t px, line_h, base; } k_builtin[] = {
+    {8, 10, 2},   {10, 11, 2},  {12, 15, 3},  {14, 16, 3},  {16, 18, 3},  {18, 21, 4},  {20, 22, 4},
+    {22, 24, 4},  {24, 27, 5},  {26, 29, 5},  {28, 30, 5},  {30, 33, 6},  {32, 35, 6},  {34, 38, 7},
+    {36, 40, 7},  {38, 41, 7},  {40, 44, 8},  {42, 46, 8},  {44, 49, 9},  {46, 50, 9},  {48, 52, 9},
+};
+
+static FT_Library text_lib;
+static FT_Face text_face;
+static int text_failed;
+
+/* The font's GPOS table: lv_font_conv takes the kerning from its 'kern' feature (FreeType reads only the old 'kern'
+ * table, which Montserrat does not have). */
+static uint8_t *font_bytes;
+static const uint8_t *gpos;
+static uint32_t gpos_len;
+
+static uint32_t be(const uint8_t *p, int n) { uint32_t v = 0; while (n--) v = (v << 8) | *p++; return v; }
+
+static void gpos_load(const char *path)
+{
+    FILE *file = fopen(path, "rb");
+    if (!file) return;
+    long size = -1;
+    if (fseek(file, 0, SEEK_END) == 0) size = ftell(file);
+    if (size >= 12 && size < 32L * 1024 * 1024 && fseek(file, 0, SEEK_SET) == 0 && (font_bytes = malloc((size_t)size)) &&
+        fread(font_bytes, 1, (size_t)size, file) == (size_t)size) {
+        const uint32_t tables = be(font_bytes + 4, 2);
+        for (uint32_t i = 0; i < tables && 12 + 16 * (i + 1) <= (uint32_t)size; ++i) {
+            const uint8_t *rec = font_bytes + 12 + 16 * i;
+            const uint32_t off = be(rec + 8, 4), len = be(rec + 12, 4);
+            if (memcmp(rec, "GPOS", 4) == 0 && off < (uint32_t)size && len <= (uint32_t)size - off) {
+                gpos = font_bytes + off;
+                gpos_len = len;
+            }
+        }
+    }
+    fclose(file);
+}
+
+static uint32_t g16(uint32_t o) { return o <= gpos_len && gpos_len - o >= 2 ? be(gpos + o, 2) : 0; }
+
+static int coverage_index(uint32_t cov, uint32_t glyph)
+{
+    const uint32_t fmt = g16(cov), count = g16(cov + 2);
+    for (uint32_t i = 0; i < count; ++i) {
+        if (fmt == 1 && g16(cov + 4 + 2 * i) == glyph) return (int)i;
+        if (fmt == 2 && glyph >= g16(cov + 4 + 6 * i) && glyph <= g16(cov + 6 + 6 * i))
+            return (int)(g16(cov + 8 + 6 * i) + glyph - g16(cov + 4 + 6 * i));
+        if (fmt != 1 && fmt != 2) break;
+    }
+    return -1;
+}
+
+static uint32_t glyph_class(uint32_t def, uint32_t glyph)
+{
+    const uint32_t fmt = g16(def);
+    if (fmt == 1) {
+        const uint32_t first = g16(def + 2), count = g16(def + 4);
+        return glyph >= first && glyph < first + count ? g16(def + 6 + 2 * (glyph - first)) : 0;
+    }
+    for (uint32_t i = 0, count = fmt == 2 ? g16(def + 2) : 0; i < count; ++i)
+        if (glyph >= g16(def + 4 + 6 * i) && glyph <= g16(def + 6 + 6 * i)) return g16(def + 8 + 6 * i);
+    return 0;
+}
+
+static uint32_t value_size(uint32_t format) { return 2 * (uint32_t)__builtin_popcount(format & 0xFF); }
+
+static int x_advance(uint32_t value, uint32_t format)   /* the XAdvance of a ValueRecord, font units */
+{
+    return format & 4 ? (int16_t)g16(value + 2 * (uint32_t)__builtin_popcount(format & 3)) : 0;
+}
+
+/* Kerning of a glyph pair in font units, as opentype.js finds it: the first pair-positioning subtable of the 'kern'
+ * lookups whose coverage holds the left glyph decides. */
+static int gpos_kern(uint32_t left, uint32_t right)
+{
+    if (!gpos || !left || !right) return 0;
+    const uint32_t features = g16(6), lookups = g16(8);
+    for (uint32_t f = 0, nf = g16(features); f < nf; ++f) {
+        const uint32_t rec = features + 2 + 6 * f;
+        if (rec + 6 > gpos_len || memcmp(gpos + rec, "kern", 4) != 0) continue;
+        const uint32_t feature = features + g16(rec + 4);
+        for (uint32_t l = 0, nl = g16(feature + 2); l < nl; ++l) {
+            const uint32_t lookup = lookups + g16(lookups + 2 + 2 * g16(feature + 4 + 2 * l));
+            for (uint32_t t = 0, nt = g16(lookup + 4); t < nt; ++t) {
+                uint32_t sub = lookup + g16(lookup + 6 + 2 * t), type = g16(lookup);
+                if (type == 9) {                    /* extension: the real subtable further on */
+                    type = g16(sub + 2);
+                    sub += (g16(sub + 4) << 16) | g16(sub + 6);
+                }
+                if (type != 2) continue;
+                const int index = coverage_index(sub + g16(sub + 2), left);
+                if (index < 0) continue;
+                const uint32_t vf1 = g16(sub + 4), size = value_size(vf1) + value_size(g16(sub + 6));
+                if (g16(sub) == 1) {                /* pairs, glyph by glyph */
+                    if ((uint32_t)index >= g16(sub + 8)) continue;
+                    const uint32_t set = sub + g16(sub + 10 + 2 * (uint32_t)index);
+                    for (uint32_t i = 0, n = g16(set); i < n; ++i)
+                        if (g16(set + 2 + i * (2 + size)) == right) return x_advance(set + 4 + i * (2 + size), vf1);
+                    continue;
+                }
+                if (g16(sub) == 2) {                /* pairs of classes */
+                    const uint32_t c1 = glyph_class(sub + g16(sub + 8), left), c2 = glyph_class(sub + g16(sub + 10), right);
+                    const uint32_t n1 = g16(sub + 12), n2 = g16(sub + 14);
+                    return c1 < n1 && c2 < n2 ? x_advance(sub + 16 + (c1 * n2 + c2) * size, vf1) : 0;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+/* The face at the builtin size LVGL would use for px (cp0_ui_font_px: even, 8..48); line height and baseline. */
+static FT_Face text_font(int px, int *line_h, int *base)
+{
+    const int snapped = cp0_ui_font_snap(px);
+    *line_h = snapped + snapped / 8;
+    *base = snapped / 5;
+    for (size_t i = 0; i < sizeof(k_builtin) / sizeof(k_builtin[0]); ++i)
+        if (k_builtin[i].px == snapped) { *line_h = k_builtin[i].line_h; *base = k_builtin[i].base; }
+    if (!text_face && !text_failed) {
+        const char *path = font_file("VIZ_FONT", "/opt/viz1090/font/Montserrat-Medium.ttf");
+        if (FT_Init_FreeType(&text_lib) != 0 || FT_New_Face(text_lib, path, 0, &text_face) != 0) {
+            text_failed = 1;
+            text_face = NULL;
+            fprintf(stderr, "[viz_fb] %s does not load: the header has no text\n", path);
+        } else {
+            gpos_load(path);
+        }
+    }
+    if (text_face) FT_Set_Pixel_Sizes(text_face, 0, (FT_UInt)snapped);
+    return text_face;
+}
+
+/* Next code point of a UTF-8 string (a stray byte stands for itself). */
+static unsigned long utf8_next(const char **s)
+{
+    const unsigned char *p = (const unsigned char *)*s;
+    unsigned long c = *p++;
+    int more = c >= 0xF0 ? 3 : c >= 0xE0 ? 2 : c >= 0xC0 ? 1 : 0;
+    if (more) c &= 0x3F >> more;
+    while (more-- > 0 && (*p & 0xC0) == 0x80) c = (c << 6) | (*p++ & 0x3F);
+    *s = (const char *)p;
+    return c;
+}
+
+/* LVGL's advance of glyph c followed by next (0: none): (width + kerning) in 1/16 px, rounded to whole pixels. */
+static int glyph_advance(FT_Face face, unsigned long c, unsigned long next)
+{
+    if (FT_Load_Char(face, c, FT_LOAD_NO_HINTING) != 0) return 0;
+    long adv16 = (face->glyph->linearHoriAdvance * 16 + 32768) >> 16;
+    const int kern = next ? gpos_kern(FT_Get_Char_Index(face, c), FT_Get_Char_Index(face, next)) : 0;
+    if (kern && face->units_per_EM)
+        adv16 += (long)floor(kern * 16.0 * face->size->metrics.x_ppem / face->units_per_EM + 0.5);
+    return (int)((adv16 + 8) >> 4);
+}
+
+#define TEXT_MAX 64   /* code points of a header text */
+
+/* The code points of a text and their advances; returns the count. */
+static int text_layout(FT_Face face, const char *text, unsigned long *cps, int *advs)
+{
+    int n = 0;
+    while (*text && n < TEXT_MAX) cps[n++] = utf8_next(&text);
+    for (int i = 0; i < n; ++i) advs[i] = glyph_advance(face, cps[i], i + 1 < n ? cps[i + 1] : 0);
+    return n;
+}
+
+static int text_width(FT_Face face, const char *text)
+{
+    unsigned long cps[TEXT_MAX];
+    int advs[TEXT_MAX], w = 0;
+    const int n = text_layout(face, text, cps, advs);
+    for (int i = 0; i < n; ++i) w += advs[i];
+    return w;
+}
+
+static void blend_opaque(uint32_t *d, uint32_t rgb, int a)
+{
+    if (a <= 0) return;
+    if (a >= 255) { *d = 0xFF000000u | rgb; return; }
+    uint32_t out = 0xFF000000u;
+    for (int shift = 0; shift <= 16; shift += 8) {
+        const uint32_t s = (rgb >> shift) & 255, b = (*d >> shift) & 255;
+        out |= ((s * a + b * (255 - a) + 127) / 255) << shift;
+    }
+    *d = out;
+}
+
+static void draw_glyph_at(uint32_t *p, int stride, int rows, int clip_w, int pen, int baseline, FT_Face face,
+                          unsigned long c, uint32_t rgb)
+{
+    if (FT_Load_Char(face, c, FT_LOAD_RENDER | FT_LOAD_FORCE_AUTOHINT | FT_LOAD_TARGET_LIGHT) != 0) return;
+    const FT_GlyphSlot g = face->glyph;
+    for (unsigned row = 0; row < g->bitmap.rows; ++row)
+        for (unsigned col = 0; col < g->bitmap.width; ++col) {
+            const int x = pen + g->bitmap_left + (int)col, y = baseline - g->bitmap_top + (int)row;
+            if (x < 0 || y < 0 || x >= clip_w || y >= rows) continue;
+            const int a = g->bitmap.buffer[row * g->bitmap.pitch + col];
+            blend_opaque(&p[(size_t)y * stride + x], rgb, (a * 15 + 127) / 255 * 17);   /* 4 bpp, as the builtin fonts */
+        }
+}
+
+/* Draws text from pen x (the label's left edge) on a baseline; cut with dots when it would pass x_max. */
+static void draw_text(uint32_t *p, int stride, int rows, int clip_w, int pen, int baseline, int x_max, FT_Face face,
+                      const char *text, uint32_t rgb)
+{
+    unsigned long cps[TEXT_MAX];
+    int advs[TEXT_MAX], width = 0;
+    int n = text_layout(face, text, cps, advs);
+    for (int i = 0; i < n; ++i) width += advs[i];
+    int dots = 0;
+    if (pen + width > x_max) {                      /* LVGL's dots mode: as many glyphs as fit with "..." */
+        const int dot = glyph_advance(face, '.', '.');
+        int w = 0, keep = 0;
+        while (keep < n && pen + w + advs[keep] + 3 * dot <= x_max) w += advs[keep++];
+        n = keep;
+        dots = 3;
+    }
+    for (int i = 0; i < n; ++i) {
+        draw_glyph_at(p, stride, rows, clip_w, pen, baseline, face, cps[i], rgb);
+        pen += advs[i];
+    }
+    for (int i = 0; i < dots; ++i) {
+        draw_glyph_at(p, stride, rows, clip_w, pen, baseline, face, '.', rgb);
+        pen += glyph_advance(face, '.', '.');
+    }
+}
+
+/* Anti-aliased rounded rectangle on an opaque buffer (cp0_statusbar's corner sampling, 4x4). */
+static void fill_round_rect(uint32_t *p, int stride, int rows, int x0, int y0, int w, int h, int r, uint32_t rgb)
+{
+    if (r > w / 2) r = w / 2;
+    if (r > h / 2) r = h / 2;
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            const int px = x0 + x, py = y0 + y;
+            if (px < 0 || py < 0 || px >= stride || py >= rows) continue;
+            const int cx = x < r ? r : (x >= w - r ? w - r - 1 : -1);
+            const int cy = y < r ? r : (y >= h - r ? h - r - 1 : -1);
+            int coverage = 16;
+            if (cx >= 0 && cy >= 0) {
+                coverage = 0;
+                for (int sy = 0; sy < 4; ++sy)
+                    for (int sx = 0; sx < 4; ++sx) {
+                        const float fx = x + (sx + 0.5f) / 4 - (cx + 0.5f);
+                        const float fy = y + (sy + 0.5f) / 4 - (cy + 0.5f);
+                        if (fx * fx + fy * fy <= (float)r * r) ++coverage;
+                    }
+            }
+            blend_opaque(&p[(size_t)py * stride + px], rgb, 255 * coverage / 16);
+        }
+}
+
+static uint32_t *hdr;                 /* the header's pixels, ARGB8888, opaque: canvas width x hdr_rows */
+static int hdr_w, hdr_rows;
+static int esc_pressed;               /* a finger holds the Esc button */
+static int shown_pressed = -1;
+static cp0_statusbar_state_t status_state, shown_state;
+static Uint32 status_read_at;
+
+/* Brings the header's pixels up to date (status every 2 s, the clock every frame); 1 when they changed. */
+static int header_update(void)
+{
     const Uint32 now = SDL_GetTicks();
-    if (!status_read_at || now - status_read_at > 2000) {
-        cp0_statusbar_read_state(&status_state);
-        status_read_at = now;
-    } else {                                   /* the clock follows the system time every frame */
-        const time_t t = time(NULL);
-        strftime(status_state.clock, sizeof(status_state.clock), "%H:%M", localtime(&t));
+    if (!status_read_at || now - status_read_at >= 2000) {   /* the strip's own source: sysfs / procfs */
+        cp0_statusbar_state_t read;
+        cp0_statusbar_read_state(&read);
+        cp0_ui_status_set_wifi(&status_state, read.wifi_up, read.wifi_pct);
+        status_state.bt_on = read.bt_on;
+        status_state.bt_connected = read.bt_connected;
+        status_read_at = now ? now : 1;
     }
-    uint32_t *p = (uint32_t *)pixels;
-    for (int i = 0; i < w * CP0_STATUSBAR_HEIGHT && i < w * h; ++i) p[i] |= 0xFF000000u;   /* the strip is opaque */
-    /* the home grid's size from 480 rows up (as the launcher); scaled down on a shorter screen.
-     * A dim backing only over the map (next to the close button); plain screens look exactly like the home grid */
-    const int pct = h >= 480 ? 100 : (h * 100 / 480 < 50 ? 50 : h * 100 / 480);
-    cp0_statusbar_render_scaled(status_bar, p, w, w, shift_left, top, close_button_enabled() ? 0x99 : 0, &status_state, pct);
+    const time_t t = time(NULL);
+    struct tm local;
+    localtime_r(&t, &local);
+    strftime(status_state.clock, sizeof(status_state.clock), "%H:%M", &local);
+    if (hdr && shown_pressed == esc_pressed && memcmp(&shown_state, &status_state, sizeof(status_state)) == 0) return 0;
+
+    if (!hdr) {
+        hdr_w = canvas_w();
+        hdr_rows = page.header_h > CP0_STATUSBAR_HEIGHT + 16 ? page.header_h : CP0_STATUSBAR_HEIGHT + 16;   /* the strip's reach */
+        hdr = malloc((size_t)hdr_w * hdr_rows * sizeof(uint32_t));
+        if (!hdr) { header_on = 0; return 0; }
+    }
+    for (size_t i = 0; i < (size_t)hdr_w * hdr_rows; ++i) hdr[i] = 0xFF000000u;
+    int line_h, base;
+    FT_Face face = text_font(page.title_px, &line_h, &base);
+    if (face)                                       /* a label at title_x, title_y */
+        draw_text(hdr, hdr_w, hdr_rows, hdr_w, page.title_x, page.title_y + line_h - base, page.title_x + page.title_max_w,
+                  face, title_text(), HDR_GOLD);
+    fill_round_rect(hdr, hdr_w, hdr_rows, page.esc_x, page.esc_y, page.esc_w, page.esc_h, page.esc_radius,
+                    esc_pressed ? HDR_KEY_PRESSED : HDR_KEY_BG);
+    face = text_font(page.esc_text_px, &line_h, &base);
+    if (face) {                                     /* "Esc" centred in the button as lv_obj_center does */
+        const int x = page.esc_x + page.esc_w / 2 - text_width(face, "Esc") / 2;
+        const int y = page.esc_y + page.esc_h / 2 - line_h / 2;
+        draw_text(hdr, hdr_w, hdr_rows, page.esc_x + page.esc_w, x, y + line_h - base, page.esc_x + page.esc_w, face,
+                  "Esc", HDR_KEY_TEXT);
+    }
+    cp0_statusbar_t *bar = strip_renderer();
+    if (bar && strip.x >= 0 && strip.x < hdr_w)     /* the strip's canvas: strip.w wide at strip.x */
+        cp0_statusbar_render_scaled(bar, hdr + strip.x, hdr_w - strip.x < strip.w ? hdr_w - strip.x : strip.w, hdr_w, 0,
+                                    strip.top, 0, &status_state, strip.pct);
+    shown_state = status_state;
+    shown_pressed = esc_pressed;
+    return 1;
+}
+
+/* run_viz1090.sh asks for the program's window size before starting it:
+ *   VIZ_TITLE=viz1090 VIZ_PRINT_MAP=1 LD_PRELOAD=libviz_fb.so /opt/viz1090/viz1090  ->  "WIDTH HEIGHT HEADER"
+ * (the area under the header and the header's height, px), printed before the program's main() runs. */
+__attribute__((constructor)) static void print_map_area(void)
+{
+    const char *v = getenv("VIZ_PRINT_MAP");
+    if (!v || !v[0] || v[0] == '0') return;
+    layout_init();
+    printf("%d %d %d\n", canvas_w(), area_h, header_on ? page.header_h : 0);
+    fflush(stdout);
+    _exit(0);
 }
 
 /* ------------------------------------------------------------------ test dump */
@@ -252,9 +604,16 @@ static void dump_framebuffer(const char *path)
     fprintf(stderr, "[viz_fb] dump: %s (%dx%d buffer, window %dx%d at %d,%d)\n", path, w, h, frame_w, frame_h, frame_x, frame_y);
 }
 
+/* Copies a logical block of ARGB8888 pixels to the framebuffer in its depth. */
+static void put_block(int x, int y, int w, int h, const uint8_t *argb, int stride)
+{
+    if (fb_out.bpp == 4) cp0_fbo_blit(&fb_out, x, y, w, h, argb, stride);
+    else cp0_fbo_blit_xrgb_scaled(&fb_out, x, y, w, h, argb, stride, 1, 0, 0, 0, 0, scratch, sizeof(scratch));
+}
+
 static void present_to_fb(SDL_Renderer *renderer)
 {
-    fb_init();
+    layout_init();
     int w = 0, h = 0;
     if (SDL_GetRendererOutputSize(renderer, &w, &h) != 0 || w <= 0 || h <= 0) return;
     const size_t need = (size_t)w * h * 4;
@@ -267,21 +626,23 @@ static void present_to_fb(SDL_Renderer *renderer)
     if (SDL_RenderReadPixels(renderer, NULL, SDL_PIXELFORMAT_ARGB8888, frame, w * 4) != 0) return;
     frame_w = w;
     frame_h = h;
-    if (close_button_enabled())                       /* beside the close button, centred on it */
-        draw_status_bar(frame, w, h, btn_size() + btn_margin() - 4, btn_margin() + (btn_size() - 40) / 2);
-    else draw_status_bar(frame, w, h, 0, 8);
-    draw_close_button(frame, w, h);
     if (!fb_ok) return;
-    /* centred when smaller than the canvas; cut at the right and bottom when bigger */
+    /* in its area (under the header): centred when smaller, cut at the right and bottom when bigger */
     frame_x = w < fb_out.lw ? (fb_out.lw - w) / 2 : 0;
-    frame_y = h < fb_out.lh ? (fb_out.lh - h) / 2 : 0;
+    frame_y = area_y + (h < area_h ? (area_h - h) / 2 : 0);
     if (w != placed_w || h != placed_h) {             /* new window size: clear what it does not cover */
-        if (w < fb_out.lw || h < fb_out.lh) cp0_fbo_fill_black(&fb_out, 0, 0, fb_out.lw, fb_out.lh);
+        if (w < fb_out.lw || h < area_h) cp0_fbo_fill_black(&fb_out, 0, area_y, fb_out.lw, area_h);
         placed_w = w;
         placed_h = h;
+        if (header_on && h > area_h)
+            fprintf(stderr, "[viz_fb] the window is %d px tall, its area under the header %d: the bottom is cut\n", h,
+                    area_h);
     }
-    if (fb_out.bpp == 4) cp0_fbo_blit(&fb_out, frame_x, frame_y, w, h, frame, w * 4);
-    else cp0_fbo_blit_xrgb_scaled(&fb_out, frame_x, frame_y, w, h, frame, w * 4, 1, 0, 0, 0, 0, scratch, sizeof(scratch));
+    put_block(frame_x, frame_y, w, h, frame, w * 4);
+    if (header_on) {                                  /* opaque, every frame */
+        header_update();
+        if (hdr) put_block(0, 0, hdr_w, page.header_h, (const uint8_t *)hdr, hdr_w * 4);
+    }
 
     ++presented;
     if (dump_frame < 0) {
@@ -339,9 +700,19 @@ static void push_key(SDL_Keycode sym, SDL_Scancode scan)
     push(&e);
 }
 
+static void push_quit(const char *why)
+{
+    SDL_Event e;
+    memset(&e, 0, sizeof(e));
+    e.type = SDL_QUIT;
+    fprintf(stderr, "[viz_fb] %s: quit\n", why);
+    push(&e);
+}
+
 /* touch */
 #define SLOTS 5
-typedef struct { int active; int x, y; float nx, ny; } slot_t;
+typedef struct { int active; int x, y; float lx, ly; float nx, ny; } slot_t;   /* raw, logical, window 0..1 */
+enum { OWNER_NONE = 0, OWNER_MAP, OWNER_HEADER };
 static int touch_fd = -1;
 static slot_t slots[SLOTS], prev_slots[SLOTS];
 static int cur_slot;
@@ -349,8 +720,8 @@ static int min_x, max_x, min_y, max_y;
 static int swap_xy, inv_x, inv_y;
 static int buffer_axes;             /* APPLAUNCH_TOUCH_ORIENT=buffer: the axes follow the framebuffer */
 static float pinch_prev = -1;
-static int fingers_down;
-static int on_button[SLOTS];        /* the finger went down on the close button */
+static int owner[SLOTS];            /* where the finger went down: the program's window or the header */
+static int on_esc[SLOTS];           /* ... on the Esc button */
 
 static float norm(int v, int lo, int hi)
 {
@@ -422,7 +793,7 @@ static void touch_open(void)
     const time_t now = time(NULL);
     if (now == touch_retry) return;                 /* try at most once a second, and only while it is missing */
     touch_retry = now;
-    fb_init();                                      /* the rotation maps buffer-oriented touch */
+    layout_init();                                  /* the rotation maps buffer-oriented touch; the header */
     const char *path = getenv("VIZ_TOUCH");
     if (path && path[0]) {
         touch_fd = open(path, O_RDONLY | O_NONBLOCK);   /* explicit override */
@@ -437,7 +808,9 @@ static void touch_open(void)
     if (touch_fd < 0) { touch_fd = -1; return; }
     memset(slots, 0, sizeof(slots));
     memset(prev_slots, 0, sizeof(prev_slots));
-    memset(on_button, 0, sizeof(on_button));
+    memset(owner, 0, sizeof(owner));
+    memset(on_esc, 0, sizeof(on_esc));
+    esc_pressed = 0;
     pinch_prev = -1;
     struct input_absinfo info;
     if (ioctl(touch_fd, EVIOCGABS(ABS_MT_POSITION_X), &info) == 0) { min_x = info.minimum; max_x = info.maximum; }
@@ -446,18 +819,18 @@ static void touch_open(void)
     fprintf(stderr, "[viz_fb] touch screen opened (%s axes)\n", buffer_axes ? "buffer" : "legacy");
 }
 
-static int button_hit(float nx, float ny)
+/* The Esc button's touch area: the button's columns widened by SPACE_S on each side, the header's full height. */
+static int esc_hit(float lx, float ly)
 {
-    if (!close_button_enabled()) return 0;
-    const float px = nx * frame_w, py = ny * frame_h;
-    const int pad = btn_size() * 10 / 56;
-    return px >= frame_w - btn_size() - btn_margin() - pad && py <= btn_size() + btn_margin() + pad;
+    if (!header_on) return 0;
+    const int slack = metrics.tok[CP0_TOK_SPACE_S];
+    return ly >= 0 && ly < page.header_h && lx >= page.esc_x - slack && lx < page.esc_x + page.esc_w + slack;
 }
 
-/* A raw touch position -> the program's window, 0..1 on each axis. */
-static void touch_to_window(const slot_t *s, float *nx, float *ny)
+/* A raw touch position -> logical canvas pixels, and the program's window, 0..1 on each axis. */
+static void touch_map(slot_t *s)
 {
-    float lx, ly;                                   /* logical canvas pixels */
+    float lx, ly;
     if (buffer_axes && fb_ok) {
         int X = 0, Y = 0;
         cp0_fbo_touch_to_logical(&fb_out, s->x, s->y, min_x, max_x, min_y, max_y, &X, &Y);
@@ -469,30 +842,37 @@ static void touch_to_window(const slot_t *s, float *nx, float *ny)
         lx = (inv_x ? 1 - rx : rx) * canvas_w();
         ly = (inv_y ? 1 - ry : ry) * canvas_h();
     }
-    *nx = frame_w > 0 ? clamp01((lx - frame_x) / frame_w) : 0;
-    *ny = frame_h > 0 ? clamp01((ly - frame_y) / frame_h) : 0;
+    s->lx = lx;
+    s->ly = ly;
+    s->nx = frame_w > 0 ? clamp01((lx - frame_x) / frame_w) : 0;
+    s->ny = frame_h > 0 ? clamp01((ly - frame_y) / frame_h) : 0;
 }
 
 static void touch_report(void)
 {
     for (int i = 0; i < SLOTS; ++i)
-        if (slots[i].active) touch_to_window(&slots[i], &slots[i].nx, &slots[i].ny);
-    int down = 0;
+        if (slots[i].active) touch_map(&slots[i]);
+    int pressed = 0;
     for (int i = 0; i < SLOTS; ++i) {
         const slot_t *s = &slots[i], *p = &prev_slots[i];
         SDL_Event e;
         memset(&e, 0, sizeof(e));
         e.tfinger.touchId = 1;
         e.tfinger.fingerId = i;
-        if (s->active && !p->active) on_button[i] = button_hit(s->nx, s->ny);
-        if (on_button[i]) {               /* the close button: the map never sees this touch */
-            if (!s->active && p->active) {
-                on_button[i] = 0;
-                if (button_hit(p->nx, p->ny)) { e.type = SDL_QUIT; push(&e); }
+        if (s->active && !p->active) {    /* a new finger: the header's when it lands there */
+            owner[i] = header_on && s->ly < area_y ? OWNER_HEADER : OWNER_MAP;
+            on_esc[i] = owner[i] == OWNER_HEADER && esc_hit(s->lx, s->ly);
+        }
+        if (owner[i] == OWNER_HEADER) {   /* the program never sees it; Esc: a click when let go on the button */
+            if (s->active) {
+                if (on_esc[i] && esc_hit(s->lx, s->ly)) pressed = 1;
+            } else if (p->active) {
+                if (on_esc[i] && esc_hit(p->lx, p->ly)) push_quit("Esc button");
+                owner[i] = OWNER_NONE;
+                on_esc[i] = 0;
             }
             continue;
         }
-        if (s->active) ++down;
         if (s->active && !p->active) {
             e.type = SDL_FINGERDOWN;
             e.tfinger.x = s->nx; e.tfinger.y = s->ny;
@@ -506,12 +886,14 @@ static void touch_report(void)
             e.type = SDL_FINGERUP;
             e.tfinger.x = p->nx; e.tfinger.y = p->ny;
             push(&e);
+            owner[i] = OWNER_NONE;
         }
     }
-    /* two fingers: pinch */
+    esc_pressed = pressed;
+    /* two fingers on the map: pinch */
     int a = -1, b = -1;
     for (int i = 0; i < SLOTS; ++i)
-        if (slots[i].active) { if (a < 0) a = i; else if (b < 0) b = i; }
+        if (slots[i].active && owner[i] == OWNER_MAP) { if (a < 0) a = i; else if (b < 0) b = i; }
     if (a >= 0 && b >= 0) {
         const float dist = hypotf(slots[a].nx - slots[b].nx, slots[a].ny - slots[b].ny);
         if (pinch_prev >= 0 && dist != pinch_prev) {
@@ -529,7 +911,6 @@ static void touch_report(void)
     } else {
         pinch_prev = -1;
     }
-    fingers_down = down;
     memcpy(prev_slots, slots, sizeof(slots));
 }
 
@@ -549,7 +930,7 @@ static int fake_tap_step(void)
         const char *v = getenv("VIZ_FAKE_TAPS");
         if (!v || !v[0]) return 0;
         fake_taps = v;
-        fb_init();
+        layout_init();
         touch_axes();
         min_x = min_y = 0;
         max_x = (fb_ok ? fb_out.pw : screen.w) - 1;
@@ -583,6 +964,11 @@ static int fake_tap_step(void)
     slots[0].y = ry;
     fake_down = 1;
     touch_report();
+    if (owner[0] == OWNER_HEADER)
+        fprintf(stderr, "[viz_fb] test tap at %d,%d: %s\n", X, Y, on_esc[0] ? "the Esc button" : "the header");
+    else
+        fprintf(stderr, "[viz_fb] test tap at %d,%d: the program, finger at %.3f,%.3f of its %dx%d window\n", X, Y,
+                slots[0].nx, slots[0].ny, frame_w, frame_h);
     return 1;
 }
 
@@ -670,7 +1056,10 @@ static void kbd_poll(void)
         if (ev.code == KEY_LEFTSHIFT || ev.code == KEY_RIGHTSHIFT) { shift_down = ev.value != 0; continue; }
         if (ev.value == 0) continue;                     /* key releases are not needed */
         switch (ev.code) {
-        case KEY_ESC: push_key(SDLK_ESCAPE, SDL_SCANCODE_ESCAPE); continue;
+        case KEY_ESC:                                    /* viz1090 quits on Esc (a short press is enough) */
+            if (ev.value == 1) fprintf(stderr, "[viz_fb] Esc key: quit\n");
+            push_key(SDLK_ESCAPE, SDL_SCANCODE_ESCAPE);
+            continue;
         case KEY_ENTER: case KEY_KPENTER: if (ev.value == 1) push_key(SDLK_RETURN, SDL_SCANCODE_RETURN); continue;
         case KEY_BACKSPACE: push_key(SDLK_BACKSPACE, SDL_SCANCODE_BACKSPACE); continue;
         case KEY_TAB: if (ev.value == 1) push_key(SDLK_TAB, SDL_SCANCODE_TAB); continue;
@@ -692,14 +1081,50 @@ static void kbd_poll(void)
     if (n < 0 && errno != EAGAIN && errno != EINTR) { close(kbd_fd); kbd_fd = -1; }
 }
 
+/* SIGTERM (the launcher's hold-Esc watchdog, sent to the whole group), SIGINT and SIGHUP end the program by its own
+ * way out (viz1090: SDL_QUIT -> exit(0)). SDL2 already turns SIGTERM into SDL_QUIT; viz1090 resets SIGINT to the
+ * default after its start: the signals still at their default when events are first read get a handler here, one
+ * shot (a second signal ends the program at once). */
+static volatile sig_atomic_t quit_signal;
+static int quit_sent;
+
+static void on_quit_signal(int sig) { quit_signal = sig; }
+
+static void signals_install(void)
+{
+    static int done;
+    if (done) return;
+    done = 1;
+    const int sigs[] = {SIGTERM, SIGINT, SIGHUP};
+    for (size_t i = 0; i < sizeof(sigs) / sizeof(sigs[0]); ++i) {
+        struct sigaction old;
+        if (sigaction(sigs[i], NULL, &old) != 0 || (old.sa_flags & SA_SIGINFO) || old.sa_handler != SIG_DFL) continue;
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = on_quit_signal;
+        sigemptyset(&sa.sa_mask);
+        sa.sa_flags = SA_RESETHAND;
+        sigaction(sigs[i], &sa, NULL);
+    }
+}
+
 int SDL_PollEvent(SDL_Event *event)
 {
     if (!real_poll) real_poll = dlsym(RTLD_NEXT, "SDL_PollEvent");
+    signals_install();
+    if (quit_signal && !quit_sent) {
+        quit_sent = 1;
+        char why[32];
+        snprintf(why, sizeof(why), "signal %d", (int)quit_signal);
+        push_quit(why);
+    }
     touch_poll();
     kbd_poll();
     if (q_head != q_tail) {
-        *event = queue[q_head];
-        q_head = (q_head + 1) % QUEUE;
+        if (event) {
+            *event = queue[q_head];
+            q_head = (q_head + 1) % QUEUE;
+        }
         return 1;
     }
     return real_poll(event);

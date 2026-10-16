@@ -37,8 +37,8 @@ This package bundles several programs and data sets, each under its own licence.
 3. The display bridge and the intro screen (/opt/viz1090/libviz_fb.so, /opt/viz1090/vizsetup, run_viz1090.sh,
    extract_map.py)  - MIT licence (text below), Copyright 2026 OSRdesign, sources in apps/viz1090/build/ and
    apps/viz1090/src/ of the packager's repository.
-   libviz_fb.so: cp0_statusbar.[ch] and cp0_fb_output.[ch] come from
-   https://github.com/OSRdesign/cyberdeck-zero-launcher (MIT).
+   libviz_fb.so: cp0_statusbar.[ch], cp0_fb_output.[ch], cp0_ui_metrics.[ch], cp0_ui_roller.[ch] and
+   cp0_ui_status_strip.[ch] come from https://github.com/OSRdesign/cyberdeck-zero-launcher (MIT).
    vizsetup (the intro screen) is linked against the LVGL based cp0_lvgl runtime of the
    CardputerZero launcher by M5Stack (Copyright M5Stack Technology CO LTD, MIT) and LVGL (Copyright LVGL Kft,
    MIT), which are part of the binary; its action bar follows Net Toolbox's (same repository, MIT). The fonts it draws with are the launcher's,

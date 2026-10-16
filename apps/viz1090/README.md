@@ -25,7 +25,8 @@ the keyboard away, its Latitude / Longitude rows and the Recent places:
 ![viz1090, Position page with the on-screen keyboard](../../docs/screenshots/viz1090-position.png)
 ![viz1090, Position page with the Recent places](../../docs/screenshots/viz1090-recent.png)
 
-The map with aircraft, the status line and the close button:
+The map under the app header (title, the on-screen Esc, the status strip), with aircraft and viz1090's status line
+(640x480, drawn by the bridge into a test framebuffer, with synthetic traffic from a test feeder):
 
 ![viz1090, map](../../docs/screenshots/viz1090-map.png)
 
@@ -52,8 +53,9 @@ Start **viz1090** from the launcher. The intro screen comes first.
   the HackBerry), while a field is being edited; it goes away within about a second when a keyboard connects. With a
   physical keyboard the airport code field edits at once; without one the Position page opens on its list and a tap on
   the field brings the keyboard. While it is up the page shows only the field and its line.
-* **Map**: touch pans (one finger) and zooms (two fingers), tried with a finger on the deck; the close button (X) or
-  Esc returns to the launcher; `=` zooms in with the keyboard.
+* **Map**: it sits under the same header as the intro screen (title, the on-screen **Esc**, the status strip). Touch
+  pans (one finger) and zooms (two fingers), tried with a finger on the deck; the header's Esc or the Esc key returns
+  to the launcher; `=` zooms in with the keyboard.
 
 ## Keys and touch
 
@@ -69,6 +71,9 @@ Start **viz1090** from the launcher. The intro screen comes first.
 | Stop typing (keyboard away) | Esc | the keyboard's Esc |
 | Back one page | Esc or Left | the header's Esc |
 | Leave (back to the launcher) | Esc on the first page | the header's Esc on the first page |
+| Zoom the map in / out | `=` / `-`, Up / Down, PageUp / PageDown | pinch with two fingers |
+| Pan the map | - | drag one finger |
+| Leave the map (back to the launcher) | Esc | the header's Esc |
 | End a stuck app | hold Esc 3 s (the launcher's watchdog) | - |
 
 ## Screens
@@ -77,9 +82,12 @@ The screen comes from the launcher's app contract (`APPLAUNCH_CANVAS`, `APPLAUNC
 `screen.state`, else the framebuffer itself (640x480 when nothing answers). The intro screen lays itself out with the
 launcher's design tokens (header, row and button heights in millimetres, text sizes), like every native app; under
 640x480 it only shows a "needs a screen of at least 640x480" notice and goes back to the launcher on any key or tap.
-The tile itself is hidden on such a screen (`X-MinSize=640x480`). The map (`viz1090 --screensize`), the top bar and
-the close button use the screen size; the picture is turned and converted for rotated panels and 16 bpp framebuffers
-as the launcher does (`APPLAUNCH_SCREEN_ROTATE`, `APPLAUNCH_TOUCH_ORIENT=buffer`).
+The tile itself is hidden on such a screen (`X-MinSize=640x480`). On the map the bridge draws the native pages'
+header with the launcher's layout service (header height, title, Esc button and status strip exactly where the intro
+screen has them: a 56 px header on the deck and the 800x480 / 1024x600 screens, 64 px on 720x720 and 1280x720), and
+viz1090 gets the rest (`--screensize`: the screen's width, its height minus the header); the picture is turned and
+converted for rotated panels and 16 bpp framebuffers as the launcher does (`APPLAUNCH_SCREEN_ROTATE`,
+`APPLAUNCH_TOUCH_ORIENT=buffer`).
 
 | Screen | Map text (`UISCALE`) |
 | --- | --- |
@@ -135,8 +143,10 @@ the deck offers 0.2.0 as an update in the same menu. By hand: `sudo dpkg -i viz1
 * The latitude and longitude fields use the on-screen keyboard's letter page (its number pad has neither `-` nor
   `.`): the digits are on its `123` page.
 * The map side: the keyboard is read from `/dev/input/bt-keyboard` (or `VIZ_KEYBOARD`) only, so a keyboard without
-  that name (a USB keyboard, the HackBerry's built-in one) does not reach the map; touch and the close button still
-  work. (The intro screen reads every keyboard, as the launcher does.)
+  that name (a USB keyboard, the HackBerry's built-in one) does not reach the map; touch and the header's Esc button
+  still work. (The intro screen reads every keyboard, as the launcher does.)
+* The header's Esc button takes the header's height (56 px, 5 mm on the deck) by the button's width (9 mm) plus a
+  small margin; like the native pages, it does not reach into the map.
 * Not yet tested on a board with an SDR dongle and a GPS receiver plugged in.
 
 ## Credits and licence
@@ -151,8 +161,9 @@ package's `copyright` file, [`root/usr/share/doc/viz1090/copyright`](root/usr/sh
   commit `094720939c01943de82b14df6f42f67fff1cd514`, built unmodified with `make RTLSDR=yes`. To get the source
   from the packager as well, open an issue at <https://github.com/OSRdesign/cyberdeck-zero-apps>.
 * **Display bridge, intro screen and scripts** (`libviz_fb.so`, `vizsetup`, `run_viz1090.sh`, `extract_map.py`): MIT,
-  2026 OSRdesign, sources in [`build`](build) and [`src`](src). `cp0_statusbar.[ch]` and `cp0_fb_output.[ch]` come
-  from [cyberdeck-zero-launcher](https://github.com/OSRdesign/cyberdeck-zero-launcher) (MIT). The intro screen links
+  2026 OSRdesign, sources in [`build`](build) and [`src`](src). `cp0_statusbar.[ch]`, `cp0_fb_output.[ch]`,
+  `cp0_ui_metrics.[ch]`, `cp0_ui_roller.[ch]` and `cp0_ui_status_strip.[ch]` come from
+  [cyberdeck-zero-launcher](https://github.com/OSRdesign/cyberdeck-zero-launcher) (MIT). The intro screen links
   the launcher's `cp0_lvgl` runtime and LVGL (both MIT) through [`apps/_common`](../_common/README.md), and draws
   with the launcher's fonts at run time (none bundled for it).
 * **Fonts** of the map and the bridge: Terminus TTF, Montserrat and the Font Awesome 5 Free font files are under the
@@ -193,7 +204,9 @@ scripts. `build/make_world.py` builds the world map from open data (it needs a P
     Bluetooth one). It keeps the same settings file and the same contract with `run_viz1090.sh` (exit 0 = start).
   * The screen size, rotation, depth and density come from the launcher's app contract (or `screen.state`, or the
     framebuffer); viz1090 gets `--screensize` and a `--uiscale` chosen from the density (a `UISCALE=` line in the
-    config still wins); the top bar and close button follow the window; rotated panels (90/180/270) and 16 bpp
+    config still wins); the map sits under the launcher's app header (title, the on-screen Esc, the status strip, as
+    on the intro screen and every native page) instead of a status bar and an X drawn over it, and the Esc button,
+    the Esc key, SIGTERM, SIGINT and SIGHUP end it; rotated panels (90/180/270) and 16 bpp
     framebuffers are drawn through the launcher's own output stage (`cp0_fb_output.c`), and buffer-oriented touch
     (`APPLAUNCH_TOUCH_ORIENT=buffer`) is mapped through the rotation. The touch device named by the launcher
     (`APPLAUNCH_SCREEN_TOUCH`) is tried before the scan. Below 640x480 the tile is hidden (`X-MinSize=640x480`) and

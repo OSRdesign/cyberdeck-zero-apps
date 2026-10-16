@@ -40,8 +40,12 @@ python deck.py run 'journalctl --user -u cyberdeckzero.service -n 80 --no-pager 
 1. BT keyboard Esc at the intro: back to the home grid, no map, no `readsb` left (`pgrep -x readsb` prints nothing).
 2. Open again, header Esc by touch: the same.
 3. Open, Down Down Down Enter (Position), Esc: back on the intro; Esc: home grid.
-4. Open, Start (Enter or a tap) with a position: the map comes (`viz1090` and `readsb` running), centred on it.
-   Close it with its X: home grid.
+4. Open, Start (Enter or a tap) with a position: the map comes (`viz1090` and `readsb` running), centred on it,
+   under the same header as the intro (gold "viz1090", the grey Esc button, the strip in the same places; compare
+   `docs/screenshots/viz1090-map.png`); log `[viz1090] map 640x424 under a 56 px header`. Nothing of the map is drawn
+   over the header; one-finger drag pans, two fingers zoom. Tap the header's Esc (it turns blue while held): home
+   grid, no `readsb` left. Open, Start, BT keyboard Esc on the map: the same. Open, Start, hold Esc 3 s on the map:
+   the watchdog ends it, home grid, no `viz1090` or `readsb` left.
 5. Hold Esc 3 s on the intro: the launcher's watchdog ends it; log `[cdk] viz1090: signal 15, ended cleanly`; the map
    does not start; home grid intact.
 
