@@ -77,6 +77,10 @@ bool view_wants_link(View view);
  * never selected); Choice: the Sampling page's rows (a check mark on the current one). */
 enum class RowType { Item, Section, Choice };
 
+/* What activating a row does (the launcher's row affordance rule): Info: a read-out, nothing happens (grey value, no
+ * marker); Open: opens another page (chevron); Edit: changes the value in place (value, then chevron). */
+enum class Aff { Info, Open, Edit };
+
 struct Row {
     RowType type = RowType::Item;
     std::string label;
@@ -84,10 +88,12 @@ struct Row {
     Tone tone = Tone::Normal;        /* the value's colour */
     int id = -1;                     /* what the row is: an action (kRowAllProcs, kRowSort), a process, a period */
     bool on = false;                 /* Choice: the current one */
+    Aff aff = Aff::Info;             /* what a tap does (Item rows) */
 
     bool operator==(const Row &o) const
     {
-        return type == o.type && label == o.label && values == o.values && tone == o.tone && id == o.id && on == o.on;
+        return type == o.type && label == o.label && values == o.values && tone == o.tone && id == o.id && on == o.on &&
+               aff == o.aff;
     }
     bool operator!=(const Row &o) const { return !(*this == o); }
 };
@@ -103,10 +109,12 @@ struct ListItem {
     std::string value;
     Tone tone = Tone::Normal;
     int id = -1;
+    Aff aff = Aff::Info;
 
     bool operator==(const ListItem &o) const
     {
-        return section == o.section && label == o.label && value == o.value && tone == o.tone && id == o.id;
+        return section == o.section && label == o.label && value == o.value && tone == o.tone && id == o.id &&
+               aff == o.aff;
     }
     bool operator!=(const ListItem &o) const { return !(*this == o); }
 };

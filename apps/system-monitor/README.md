@@ -1,6 +1,6 @@
 # System Monitor
 
-Version 0.2.1, package `system-monitor`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.2.2, package `system-monitor`. Part of [cyberdeck-zero-apps](../../README.md).
 
 System Monitor is a live, read-only look at the Raspberry Pi it runs on: CPU load per core, temperature, frequency,
 memory, storage, network, processes and the **power supply** (under-voltage and throttling from the firmware's flags,
@@ -124,7 +124,7 @@ From **Settings > Apps**. By hand:
 
 ```sh
 python3 tools/make_registry.py --only system-monitor --out <a folder outside packages/>
-sudo dpkg -i system-monitor_0.2.1_arm64.deb      # remove: sudo dpkg -r system-monitor
+sudo dpkg -i system-monitor_0.2.2_arm64.deb      # remove: sudo dpkg -r system-monitor
 ```
 
 ## Files the app keeps
@@ -205,6 +205,9 @@ The same fixture variable works on a board, for screenshots of a state that is h
 
 ## Changes
 
+* 0.2.2: rows show what can be tapped: chevron opens or changes, grey information, a dot for actions; rebuilt on launcher 9912361.
+  Here: *All processes* opens (chevron), *Sort by* changes in place (value and chevron), every other row is information
+  (grey). No row of this app runs an action, so no dot. The overview tiles are not a list and are unchanged.
 * 0.2.1: rebuilt on launcher 9ad4215 (shared toolkit: Muted tone, Wi-Fi status line); no layout change.
 * 0.2.0: the pages' lists move to the launcher's `cp0::ui::CompactList` (top-aligned dense rows, scrolling
   only at the bottom edge, a thin auto-hiding scrollbar, headings in capitals that are not selectable; read-only pages
