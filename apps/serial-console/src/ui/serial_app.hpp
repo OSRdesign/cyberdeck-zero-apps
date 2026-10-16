@@ -55,7 +55,7 @@
 
 namespace sc {
 
-/* The list's row affordance (chevron, grey information, blue actions) of a row kind. */
+/* The list's row affordance (chevron, grey information, a dot for actions: white idle, blue while running) of a row kind. */
 using Aff = cp0::ui::RowAffordance;
 inline Aff to_affordance(RowKind kind)
 {

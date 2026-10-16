@@ -723,7 +723,7 @@ std::vector<cp0::ui::ListRow> SerialApp::port_rows()
     for (int i = 0; i < 3; ++i) {
         const bool busy = prober_ && probe_level(probe_) == i + 1 && i < 2;
         if (busy) {
-            add(level_rows[i], ListRow::item(probe_shown_, "Stop", ValueTone::Warn, 0, Aff::Action));
+            add(level_rows[i], ListRow::item(probe_shown_, "Stop", ValueTone::Warn, 0, Aff::ActionRunning));
             continue;
         }
         const std::string label = i == 0 ? "Listen" : i == 1 ? "Reset and listen" : "Ask the device";
@@ -740,7 +740,7 @@ std::vector<cp0::ui::ListRow> SerialApp::port_rows()
     add(PortRow::Ending, ListRow::item("Enter sends", ending_name(settings_.ending), ValueTone::Normal, 0, Aff::Edit));
     add(PortRow::Backspace, ListRow::item("Backspace sends", backspace_name(settings_.backspace), ValueTone::Normal, 0, Aff::Edit));
     toggle(PortRow::Log, "Log to file", settings_.log);
-    if (finder_) add(PortRow::Find, ListRow::item(finder_shown_, "Stop", ValueTone::Warn, 0, Aff::Action));
+    if (finder_) add(PortRow::Find, ListRow::item(finder_shown_, "Stop", ValueTone::Warn, 0, Aff::ActionRunning));
     else add(PortRow::Find, ListRow::item("Find the speed", find_value_, tone_of(find_rgb_ != -1), 0, Aff::Action));
     toggle(PortRow::FindEnter, "Send Enter while finding", settings_.detect_enter);
     add(PortRow::Connect, ListRow::item("Connect", std::to_string(baud) + " " + settings_.frame, ValueTone::Normal, 0,
@@ -890,7 +890,7 @@ void SerialApp::check_finder()
         if (p.text != finder_shown_ && nav_.current() == View::Port && list_) {
             finder_shown_ = p.text;
             const int index = port_row_index(PortRow::Find);
-            list_->update_row(index, cp0::ui::ListRow::item(finder_shown_, "Stop", cp0::ui::ValueTone::Warn, 0, Aff::Action));
+            list_->update_row(index, cp0::ui::ListRow::item(finder_shown_, "Stop", cp0::ui::ValueTone::Warn, 0, Aff::ActionRunning));
         }
         return;
     }

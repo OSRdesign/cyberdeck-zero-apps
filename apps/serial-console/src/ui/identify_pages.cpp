@@ -106,7 +106,7 @@ void SerialApp::check_probe()
     if (!p.done) {
         if (p.text == probe_shown_) return;
         probe_shown_ = p.text;
-        const cp0::ui::ListRow row = cp0::ui::ListRow::item(probe_shown_, "Stop", cp0::ui::ValueTone::Warn, 0, Aff::Action);
+        const cp0::ui::ListRow row = cp0::ui::ListRow::item(probe_shown_, "Stop", cp0::ui::ValueTone::Warn, 0, Aff::ActionRunning);
         if (probe_level(probe_) <= 2 && nav_.current() == View::Port && list_)
             list_->update_row(port_row_index(probe_ == Probe::Listen ? PortRow::IdListen : PortRow::IdReset), row);
         if (probe_level(probe_) == 3 && nav_.current() == View::Ask && list_) {
@@ -174,7 +174,7 @@ std::vector<cp0::ui::ListRow> SerialApp::ask_rows()
     std::vector<cp0::ui::ListRow> rows;
     for (const Probe p : ask_map_) {
         if (prober_ && probe_ == p) {
-            rows.push_back(cp0::ui::ListRow::item(probe_shown_, "Stop", cp0::ui::ValueTone::Warn, 0, Aff::Action));
+            rows.push_back(cp0::ui::ListRow::item(probe_shown_, "Stop", cp0::ui::ValueTone::Warn, 0, Aff::ActionRunning));
             row_full_.emplace_back();
             continue;
         }
