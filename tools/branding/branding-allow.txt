@@ -17,7 +17,6 @@ apps/*/src/SConstruct                        # upstream build file: the "Cardput
 # written as ${XDG_CONFIG_HOME:-$HOME/.config}/cardputerzero, which the check's ".config/cardputerzero" token misses
 apps/viz1090/build/run_viz1090.sh            # config path of viz1090
 apps/viz1090/root/opt/viz1090/run_viz1090.sh # config path of viz1090 (packaged copy)
-apps/viz1090/build/vizsetup.cpp              # config path of viz1090
 
 # --- Old binary prefix of the published apps (report 025 decision 7): binary M5CardputerZero-<app> -> <id> ---
 apps/lanscan/build/build.sh                                         # remove at the app's next version

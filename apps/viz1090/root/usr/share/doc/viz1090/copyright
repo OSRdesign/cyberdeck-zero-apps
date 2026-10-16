@@ -34,9 +34,15 @@ This package bundles several programs and data sets, each under its own licence.
    The corresponding source code is available at the address above (that exact commit); to obtain it from the
    packager as well, open an issue at https://github.com/OSRdesign/cyberdeck-zero-apps.
 
-3. The display bridge and intro screen (/opt/viz1090/libviz_fb.so, /opt/viz1090/vizsetup, run_viz1090.sh,
-   extract_map.py)  - MIT licence, sources in apps/viz1090/build/ of the packager's repository.
-   cp0_statusbar.[ch] come from https://github.com/OSRdesign/cyberdeck-zero-launcher (MIT).
+3. The display bridge and the intro screen (/opt/viz1090/libviz_fb.so, /opt/viz1090/vizsetup, run_viz1090.sh,
+   extract_map.py)  - MIT licence (text below), Copyright 2026 OSRdesign, sources in apps/viz1090/build/ and
+   apps/viz1090/src/ of the packager's repository.
+   libviz_fb.so: cp0_statusbar.[ch], cp0_fb_output.[ch], cp0_ui_metrics.[ch], cp0_ui_roller.[ch] and
+   cp0_ui_status_strip.[ch] come from https://github.com/OSRdesign/cyberdeck-zero-launcher (MIT).
+   vizsetup (the intro screen) is linked against the LVGL based cp0_lvgl runtime of the
+   CardputerZero launcher by M5Stack (Copyright M5Stack Technology CO LTD, MIT) and LVGL (Copyright LVGL Kft,
+   MIT), which are part of the binary; its action bar follows Net Toolbox's (same repository, MIT). The fonts it draws with are the launcher's,
+   read at run time from /usr/share/APPLaunch/share/font; it ships none of its own.
 
 4. Fonts (/opt/viz1090/font)
    Terminus TTF, Montserrat and the Font Awesome 5 Free font files are distributed under the SIL Open Font
@@ -46,3 +52,19 @@ This package bundles several programs and data sets, each under its own licence.
 5. Map data (/opt/viz1090/world-map.bin)
    Natural Earth (public domain, https://www.naturalearthdata.com/) and OurAirports (public domain,
    https://ourairports.com/data/), converted by apps/viz1090/build/make_world.py.
+
+MIT licence (part 3):
+   Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+   documentation files (the "Software"), to deal in the Software without restriction, including without
+   limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the
+   Software, and to permit persons to whom the Software is furnished to do so, subject to the following
+   conditions:
+
+   The above copyright notice and this permission notice shall be included in all copies or substantial portions
+   of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+   TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+   THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+   CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.

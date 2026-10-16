@@ -1,0 +1,46 @@
+# The Position page on a touch-only board (no keyboard, rule auto: the input.state fixture). The page opens on its list
+# (Latitude, Longitude, Recent in view, no keyboard); a tap on the field starts editing and the app's on-screen keyboard
+# comes by the shared rule: the page is then the header, the field and its line, above the keyboard. A keyboard that
+# connects hides it within about a second. The header's Esc goes back.
+title viz1090: Position page, on-screen keyboard (touch only)
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env VIZ_USB_DIR tests/fixtures/usb-sdr
+env VIZ_DEV_DIR tests/fixtures/dev-gps-none
+env VIZ_WORLD root/opt/viz1090/world-map.bin
+env VIZ_CONF_SEED tests/fixtures/conf/cdg.conf
+env VIZ_PROGRAM /bin/sh
+wait 600
+tap "Position"
+tap "Position"
+expect osk off
+shot position-touch
+expect text "found: CDG"
+expect text "Latitude"
+
+# a tap on the field (it shows CDG): editing, the keyboard comes
+tap "CDG"
+expect osk on
+shot position-osk
+expect text "found: CDG"
+key backspace
+key backspace
+key backspace
+tapkey "j"
+tapkey "f"
+tapkey "k"
+shot position-osk-jfk
+expect text "found: JFK"
+
+# a keyboard connects: the on-screen keyboard goes within about a second, the list comes back
+keyboards 1
+wait 1200
+expect osk off
+shot position-keyboard-came
+expect text "Latitude"
+
+# the header's Esc goes back to the root (the typed code is not applied), there it ends the app
+tap "Esc"
+expect noquit
+expect text "CDG  49.0097, 2.5478"
+tap "Esc"
+expect quit

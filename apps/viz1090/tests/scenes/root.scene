@@ -1,0 +1,37 @@
+# The root page on a touch-only board (no keyboard, rule auto): no SDR dongle, no GPS, no saved position.
+# Start refuses with a line in the status area; Esc at the root ends the app (exit 1: cancelled).
+title viz1090: root, nothing plugged in, Start refused, Esc
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env VIZ_USB_DIR tests/fixtures/usb-none
+env VIZ_DEV_DIR tests/fixtures/dev-gps-none
+env VIZ_WORLD root/opt/viz1090/world-map.bin
+env VIZ_PROGRAM /bin/sh
+wait 600
+shot root-empty
+expect text "viz1090"
+expect text "Esc"
+expect text "SDR receiver"
+expect text "None detected"
+expect text "Not set"
+expect text "Choose your position under Position, then Start"
+
+# Start without a position: refused politely, the app stays
+key enter
+shot start-refused
+expect noquit
+expect text "No position yet: choose one under Position first"
+tap "Start"
+expect noquit
+
+# Down goes to the list, Up from its first row back to Start
+key down
+key down
+shot gps-row
+key up
+key up
+key up
+expect noquit
+
+# Esc at the root: the app ends (cancelled)
+key esc
+expect quit

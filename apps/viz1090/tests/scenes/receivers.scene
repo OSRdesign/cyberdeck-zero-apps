@@ -1,0 +1,35 @@
+# The root with both receivers: the RTL-SDR dongle found (check), the GPS with a fix over Paris, the position saved last
+# time (CDG). Enter or a tap on the GPS row takes the GPS position; Start (a tap) saves it and ends the app (exit 0).
+title viz1090: SDR found, GPS fix, GPS position used, Start
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env VIZ_USB_DIR tests/fixtures/usb-sdr
+env VIZ_DEV_DIR tests/fixtures/dev-gps-fix
+env VIZ_WORLD root/opt/viz1090/world-map.bin
+env VIZ_CONF_SEED tests/fixtures/conf/cdg.conf
+env VIZ_PROGRAM /bin/sh
+wait 1200
+shot root-ready
+expect text "CDG  49.0097, 2.5478"
+# the labels are never cut: a value too long for the row gives way to a shorter form of it
+expect text "SDR receiver"
+expect text "GPS receiver"
+expect text "Position"
+expect text "Start opens the map around CDG"
+
+# the SDR row: a tap selects it, a tap again checks again and names the dongle
+tap "SDR receiver"
+tap "SDR receiver"
+expect text "SDR receiver: RTL2838UHIDIR"
+
+# the GPS row: a tap selects it, a tap again uses the fix
+tap "GPS receiver"
+shot gps-selected
+tap "GPS receiver"
+shot gps-used
+expect text "Position set from the GPS: 48.8566, 2.3522"
+expect text "48.8566, 2.3522"
+expect noquit
+
+# Start: the position is saved, the app ends with 0 (run_viz1090.sh then starts the map)
+tap "Start"
+expect quit

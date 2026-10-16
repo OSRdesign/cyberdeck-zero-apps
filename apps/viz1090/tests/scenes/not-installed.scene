@@ -1,0 +1,16 @@
+# viz1090 itself missing (a broken install): the status line says so in red with the words, Start is refused.
+title viz1090: viz1090 not installed
+sizes 640x480 1280x720
+env VIZ_USB_DIR tests/fixtures/usb-sdr
+env VIZ_DEV_DIR tests/fixtures/dev-gps-none
+env VIZ_WORLD root/opt/viz1090/world-map.bin
+env VIZ_CONF_SEED tests/fixtures/conf/cdg.conf
+env VIZ_PROGRAM /nonexistent/viz1090
+wait 600
+shot not-installed
+expect text "viz1090 is not installed on this deck"
+key enter
+expect noquit
+expect text "viz1090 is not installed on this deck"
+key esc
+expect quit
