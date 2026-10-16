@@ -10,6 +10,6 @@
   "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
   "license": "MIT",
   "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/net-toolbox",
-  "depends": "libfreetype6, libinput10, libxkbcommon0, curl, ca-certificates",
+  "depends": "libfreetype6, libinput10, libxkbcommon0, curl, ca-certificates, network-manager",
   "permissions": {"network": true}
 }

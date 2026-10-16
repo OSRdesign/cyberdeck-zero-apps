@@ -126,3 +126,6 @@ void test_devices_failed();
 void test_devices_session_cancel();
 void test_devscan();
 void test_netlog_04();
+/* 0.4: Wi-Fi networks and the walk test */
+void test_wifiscan();
+void test_walktest();

@@ -12,6 +12,9 @@ Comment: The application is linked against the LVGL based cp0_lvgl runtime of th
  The captive-portal check requests http://connectivitycheck.gstatic.com/generate_204
  (a Google service) and the internet check sends ICMP echo requests to 1.1.1.1
  (Cloudflare) and 8.8.8.8 (Google), only when the user starts a diagnosis.
+ From 0.4 the Wi-Fi networks tool runs nmcli (NetworkManager, GPL-2.0-or-later) and
+ the walk test reads /proc/net/wireless and runs iw; nmcli is not shipped in this
+ package.
 
 Files: usr/share/APPLaunch/bin/net-toolbox
 Copyright: 2026 OSRdesign

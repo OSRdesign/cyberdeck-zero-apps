@@ -483,6 +483,83 @@ nmcli answer needs NetworkManager (the boards have it); an Ethernet adapter's na
 and the long ones are cut with dots in the choice list on the smallest screen; Bluetooth is not an interface and is
 not affected; a fixture board (`NET_TOOLBOX_FIXTURE`) never binds anything.
 
+## Wi-Fi networks and walk test (0.4): the cores
+
+The core (`src/core/`, no LVGL) of two tools that 0.4 brings in: **Wi-Fi networks** (the networks around, their
+channels and the least crowded one; a port of [Wi-Fi Survey](../wifi-survey/README.md)'s scanner, MIT, our own code) and
+the **Wi-Fi walk test** (the signal against time while you walk with the board). Their pages are not written yet. Same
+rules as the other tools: one worker thread per running tool, every wait a slice of at most 50 ms, immutable snapshots
+the screen polls (`latest()`, `seq()`), commands through the shared command runner (`cmdrun`: no shell, its own process
+group, `LC_ALL=C`, a timeout, ended by Stop), no root.
+
+**What they read and send.** Neither connects to anything or sends traffic of its own:
+
+* *Wi-Fi networks* asks NetworkManager for its scan results:
+  `nmcli -t -e yes -f IN-USE,BSSID,SSID,MODE,CHAN,FREQ,RATE,SIGNAL,SECURITY device wifi list ifname <if> --rescan <m>`.
+  The scan itself is NetworkManager's: the adapter sends probe requests on each channel, as any phone's scan does. The
+  first list of a run asks `--rescan yes` (a fresh scan, which nmcli waits for), the next ones every 5 s (setting
+  `wifi_rescan_ms`, 2 to 60 s) ask `--rescan auto` (nmcli scans again only when NetworkManager's list is older than about
+  30 s, else reads it at once: 63 ms on the Pi 3A+); a manual rescan asks `yes` again. When NetworkManager refuses a
+  fresh scan (one ran a moment ago, the adapter is busy), its last results are read with `--rescan no` and the snapshot
+  says so (`cached`). An empty list is checked with `nmcli -t -f WIFI-HW,WIFI radio` (Wi-Fi switched off).
+* *The walk test* reads `/proc/net/wireless` once a second (any user, no command; a fresh value at each read: -62, -64,
+  -65, -65, -66 dBm on the Pi 3A+ standing still) and runs `/usr/sbin/iw dev <if> link` each second when `iw` is
+  installed (1.5 s timeout): its BSSID shows when the board moves to another access point, and its `signal:` line is the
+  level when the proc file lacks the interface.
+
+**Wi-Fi networks** (`wifiscan.hpp`): per network the SSID (`(hidden)` for a hidden one; bytes that are not UTF-8 and
+control characters shown as `?`), the BSSID (and whether it is locally administered: a virtual or random address, never
+looked up), the signal in % and an estimate in dBm, the channel, the band (2.4, 5 or 6 GHz, from the frequency), the
+frequency, the bit rate, the security in plain words (Open, Enhanced Open, WEP, WPA, WPA2, WPA3, Enterprise; transition
+modes as `WPA/WPA2`, `WPA2/WPA3`; Open and WEP are flagged weak), ad-hoc, and the network the interface is connected to
+(`in_use`). Sorted strongest first (equal signals: in use, then by name, hidden last). The vendor comes from an injected
+lookup (`VendorLookup`, the pages wire the OUI table of Local devices), asked once per OUI and run. The dBm estimate
+inverts NetworkManager's own conversion (`pct = 100 - 100 x |dBm + 40| / 60`, -40 dBm and stronger is 100 %): dBm = -40 -
+0.6 x (100 - pct). On the Pi 3A+ nmcli said 57 % for the network `iw` read at -65 dBm: -66 by this formula (Wi-Fi Survey's
+`pct / 2 - 100` gave -72, now corrected). **Channels summary**: networks per channel on each band and the least crowded
+channel, Wi-Fi Survey's rule kept: on 2.4 GHz a network weighs 5 on its channel and 4, 3, 2, 1 on the channels 1 to 4
+away (they overlap); the lowest weight among 1 to 13 wins, ties going to 1, 6 or 11, then the lowest. On 5 GHz the
+channels seen plus 36, 40, 44, 48, 149, 153, 157, 161, 165, on 6 GHz the channels seen plus the preferred scanning
+channels (5, 21, ... 229): the fewest networks wins (ties: the lowest). A 5 or 6 GHz band where nothing was seen gets no
+recommendation (the adapter may lack it: the Pi Zero 2 W is 2.4 GHz only). **The detail** (`WifiFollower`) follows one
+network by its BSSID: each new list refreshes it wherever it moved in the list; a list without it marks it *gone* with
+its last values; a failed scan changes nothing. **The interface**: the network chooser's (`interface=`;
+`wifi_scan_iface()`: for Automatic the main interface when it is Wi-Fi, else the first Wi-Fi one). An interface that is
+not a Wi-Fi adapter, or is not there, is a failure in plain words, `No Wi-Fi adapter on wlan1` (the run tries again every
+interval: an adapter plugged in again is used again). Other failures in words: nmcli missing (package `network-manager`),
+NetworkManager not running, Wi-Fi switched off, no answer in time (the last list stays, with the reason).
+
+**Walk test** (`walktest.hpp`): Start begins a walk, Stop ends it and keeps everything, Reset forgets it. A sample a second
+on a fixed schedule (a late one does not make the next ones bunch up). The chart keeps the last 10 minutes (a ring of 600
+samples); the summary covers the whole walk: duration, samples, weakest dBm and when (seconds from the start), average
+(mean of the dBm readings), strongest and when, the time in the **weak zone** (below -75 dBm, setting `walk_weak_dbm`, -95
+to -40; a sample without link counts as weak and is also counted apart) in seconds and in %, the **dips** (a dip starts at
+the first weak sample and ends once the signal has been back at or above the threshold for 2 s, so a signal hovering at
+the threshold makes one dip, not ten; each with its start, end and lowest level, at most 64 listed, all counted), and the
+**access point changes** (roaming: when and from which BSSID to which; unknown without `iw`).
+
+**The API** (for the pages):
+
+| Tool | Session | Snapshot | Pure helpers |
+|---|---|---|---|
+| Wi-Fi networks | `WifiScanSession`: `start(WifiScanConfig{iface, interval_ms, vendor})`, `stop()` (the list stays), `rescan()`, `latest()`, `seq()`, `running()` | `WifiSnapshot{state (Idle, Scanning, Ready, Failed, Stopped), iface, error, busy, cached, rescan, networks, channels {g24, g5, g6: networks, channels, recommended}, lists, list_at_ms, interval_ms}` | `wifi_scan_iface`, `parse_nmcli_wifi_list`, `summarize_channels`, `WifiFollower`, `band_words`, `security_weak` |
+| Walk test | `WalkSession`: `start(WalkConfig{iface, weak_dbm, interval_ms, hysteresis_ms})`, `stop()`, `reset()`, `latest()`, `seq()`, `running()` | `WalkSnapshot{state (Idle, Running, Stopped, Failed), iface, error, weak_dbm, samples (t_ms, linked, dbm, weak), dropped, summary, dips, roams, in_dip, linked, dbm, bssid, ssid, source, iw_missing, elapsed_s}` | `WalkRecorder`, `proc_wireless_dbm`, `read_walk_signal` |
+
+Saved results (`netlog_wifi`): `format_wifi_networks`, `format_wifi_network` (the detail, gone or not), `format_walktest`
+(the settings, the summary, the dips, the access point changes and every sample kept), same style as the others.
+**Settings**: `wifi_rescan_ms` (5000), `walk_weak_dbm` (-75); a 0.3 file reads with their defaults. From 0.4 `depends`
+also has `network-manager` (its `nmcli`, GPL-2.0-or-later, runs as a separate program, not shipped or modified;
+installed on Raspberry Pi OS). Tests: `tests/test_wifiscan.cpp`, `tests/test_walktest.cpp`
+on nmcli, iw and `/proc/net/wireless` output recorded on the Pi 3A+ (`tests/fixtures/wifi`, sanitized: see its README),
+made-up lines for the rare cases, a fake clock and a fake runner, and a fake nmcli program run by the real runner.
+
+Limits of the 0.4 cores: the dBm of a network is NetworkManager's percentage turned back into dBm (whole dB, -40 dBm and
+stronger all read as 100 %), and its value is as old as NetworkManager's last scan (up to about 30 s with `auto`); the
+walk test's level is the link's (the access point it is connected to), not the other networks'; nmcli does not give a
+network's channel width, so a 40 or 80 MHz network counts on its main channel only; the 5 GHz candidates include 149 to
+165, which some countries do not allow for Wi-Fi; a hidden network appears without a name; the cores ran on the build PC
+(fixtures, fakes) and the commands were run by hand on the Pi 3A+, but the sessions have not run on a board yet.
+
 ## Requirements
 
 * A screen of at least **640x480** (`X-MinSize=640x480`; under it the app says so and closes on any key) and a

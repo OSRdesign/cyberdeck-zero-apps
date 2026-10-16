@@ -1,0 +1,17 @@
+*:AA\:BB\:CC\:00\:00\:01:Home\:Net:Infra:6:2437 MHz:130 Mbit/s:82:WPA2
+ :02\:11\:22\:00\:00\:02::Infra:11:2462 MHz:54 Mbit/s:40:WPA2 WPA3
+ :B8\:27\:EB\:00\:00\:03:Cafe:Infra:1:2412 MHz:54 Mbit/s:30:
+ :DC\:A6\:32\:00\:00\:04:Office:Infra:149:5745 MHz:270 Mbit/s:55:WPA2 802.1X
+ :DC\:A6\:32\:00\:00\:05:Office:Infra:36:5180 MHz:540 Mbit/s:70:WPA2 802.1X
+ :28\:6F\:B9\:00\:00\:06:Six:Infra:37:6135 MHz:1201 Mbit/s:48:WPA3
+ :28\:6F\:B9\:00\:00\:07:Back\\slash:Infra:13:2472 MHz:65 Mbit/s:20:WPA1 WPA2
+ :28\:6F\:B9\:00\:00\:08:Old:Ad-Hoc:3:2422 MHz:11 Mbit/s:15:WEP
+ :28\:6F\:B9\:00\:00\:09:Guest:Infra:44:5220 MHz:270 Mbit/s:62:OWE
+ :28\:6F\:B9\:00\:00\:0A:--:Infra:6:2437 MHz:130 Mbit/s:10:--
+ :AA\:BB\:CC\:00\:00\:01:Home\:Net:Infra:6:2437 MHz:130 Mbit/s:60:WPA2
+ :28\:6F\:B9\:00\:00\:0B:Colon:in:Infra:1:2412 MHz:54 Mbit/s:5:WPA2
+Error: Scanning not allowed immediately following previous scan.
+
+ :ZZ\:6F\:B9\:00\:00\:0C:BadBssid:Infra:1:2412 MHz:54 Mbit/s:5:WPA2
+ :28\:6F\:B9\:00\:00\:0D:NoFrequency:Infra:::0 Mbit/s:5:WPA2
+ :28\:6F\:B9\:00\:00\:0E:Short:Infra:1
