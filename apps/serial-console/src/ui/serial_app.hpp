@@ -55,6 +55,19 @@
 
 namespace sc {
 
+/* The list's row affordance (chevron, grey information, blue actions) of a row kind. */
+using Aff = cp0::ui::RowAffordance;
+inline Aff to_affordance(RowKind kind)
+{
+    switch (kind) {
+    case RowKind::Open: return Aff::Open;
+    case RowKind::Edit: return Aff::Edit;
+    case RowKind::Action: return Aff::Action;
+    case RowKind::Info: break;
+    }
+    return Aff::Info;
+}
+
 class SerialApp {
 public:
     explicit SerialApp(lv_obj_t *screen);
@@ -92,7 +105,8 @@ private:
     /* a row; a value too wide is cut (the whole "label: value" goes to full); with note, a label with no value is a
      * note: section rows (grey capitals, never selected), as many as its text needs (full is "" for each) */
     void add_rows(std::vector<cp0::ui::ListRow> &rows, std::vector<std::string> &full, Density density,
-                  const std::string &label, const std::string &value, cp0::ui::ValueTone tone, bool note) const;
+                  const std::string &label, const std::string &value, cp0::ui::ValueTone tone, bool note,
+                  cp0::ui::RowAffordance aff = cp0::ui::RowAffordance::Unspecified) const;
     std::string fit_text(const std::string &text, const lv_font_t *font, int room) const;
     void show_empty_card(bool show);
 

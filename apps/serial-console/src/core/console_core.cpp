@@ -125,6 +125,21 @@ std::string when_text(std::time_t when)
     return buf;
 }
 
+RowKind card_action_kind(CardAction action)
+{
+    switch (action) {
+    case CardAction::None: return RowKind::Info;
+    case CardAction::Boot:
+    case CardAction::Evidence:
+    case CardAction::Ask: return RowKind::Open;
+    case CardAction::Apply:
+    case CardAction::Again:
+    case CardAction::Copy:
+    case CardAction::Reset: return RowKind::Action;
+    }
+    return RowKind::Info;
+}
+
 std::string confidence_text(const Identity &id)
 {
     const char *how = id.level == 3 ? "asked" : id.level == 2 ? "after a reset" : "listened";

@@ -312,7 +312,8 @@ void SerialApp::dispatch_activate(int row)
  * `note`, is a note: section rows (grey capitals, never selected), as many as its text needs. `full` gets one entry
  * per row added. */
 void SerialApp::add_rows(std::vector<cp0::ui::ListRow> &rows, std::vector<std::string> &full, Density density,
-                         const std::string &label, const std::string &value, cp0::ui::ValueTone tone, bool note) const
+                         const std::string &label, const std::string &value, cp0::ui::ValueTone tone, bool note,
+                         cp0::ui::RowAffordance aff) const
 {
     const int i = static_cast<int>(density);
     const cp0_ui_list_layout_t &l = lay_[i];
@@ -329,7 +330,7 @@ void SerialApp::add_rows(std::vector<cp0::ui::ListRow> &rows, std::vector<std::s
                 full.emplace_back();
             }
         } else {
-            rows.push_back(cp0::ui::ListRow::item(label));
+            rows.push_back(cp0::ui::ListRow::item(label, std::string(), cp0::ui::ValueTone::Normal, 0, aff));
             full.push_back(tw(label, label_font_[i]) <= room ? std::string() : label);
         }
         return;
@@ -343,7 +344,7 @@ void SerialApp::add_rows(std::vector<cp0::ui::ListRow> &rows, std::vector<std::s
         if (value_w > most) shown = fit_text(value, value_font_[i], most);
         whole = label + ": " + value;
     }
-    rows.push_back(cp0::ui::ListRow::item(label, shown, tone));
+    rows.push_back(cp0::ui::ListRow::item(label, shown, tone, 0, aff));
     full.push_back(whole);
 }
 
@@ -522,20 +523,21 @@ std::vector<cp0::ui::ListRow> SerialApp::ports_rows()
     };
     for (std::size_t i = 0; i < ports_.size(); ++i) {
         add_rows(rows, row_full_, Density::Comfortable, port_row_text(ports_[i]).first, port_row_text(ports_[i]).second,
-                 cp0::ui::ValueTone::Normal, false);
+                 cp0::ui::ValueTone::Normal, false, Aff::Open);
         mapped(PortsRow::Port, static_cast<int>(i));
     }
     for (std::size_t i = 0; i < boots_.size(); ++i) { /* a board in its USB boot loader: a drive, not a port */
         add_rows(rows, row_full_, Density::Comfortable, boots_[i].mode.title, std::string(), cp0::ui::ValueTone::Normal,
-                 false); /* the status line says it is a USB drive */
+                 false, Aff::Info); /* the status line says it is a USB drive; a tap only explains */
         mapped(PortsRow::Boot, static_cast<int>(i));
     }
     rows.push_back(cp0::ui::ListRow::item("Show on-board UARTs", config_.show_onboard ? "On" : "Off",
-                                          config_.show_onboard ? cp0::ui::ValueTone::Ok : cp0::ui::ValueTone::Normal));
+                                          config_.show_onboard ? cp0::ui::ValueTone::Ok : cp0::ui::ValueTone::Normal,
+                                          0, Aff::Edit));
     row_full_.emplace_back();
     mapped(PortsRow::Onboard, -1);
     if (!group_ok(groups())) {
-        rows.push_back(cp0::ui::ListRow::item("Serial port access", "How to fix", cp0::ui::ValueTone::Bad));
+        rows.push_back(cp0::ui::ListRow::item("Serial port access", "How to fix", cp0::ui::ValueTone::Bad, 0, Aff::Open));
         row_full_.emplace_back();
         mapped(PortsRow::Access, -1);
     }
@@ -699,11 +701,11 @@ std::vector<cp0::ui::ListRow> SerialApp::port_rows()
         synced(which);
     };
     const auto toggle = [&](PortRow which, const char *label, bool on) {
-        add(which, ListRow::item(label, on ? "On" : "Off", on ? ValueTone::Ok : ValueTone::Normal));
+        add(which, ListRow::item(label, on ? "On" : "Off", on ? ValueTone::Ok : ValueTone::Normal, 0, Aff::Edit));
     };
     add(PortRow::Info, ListRow::section("What is connected"));
     for (const auto &kv : port_info_items(port_, can_open(port_) && group_ok(groups()))) {
-        add_rows(rows, row_full_, Density::Compact, kv.first, kv.second, ValueTone::Normal, false);
+        add_rows(rows, row_full_, Density::Compact, kv.first, kv.second, ValueTone::Normal, false, Aff::Info);
         synced(PortRow::Info);
     }
     // "Identify what is connected": a heading, the adapter note, the last result, the three levels
@@ -714,33 +716,35 @@ std::vector<cp0::ui::ListRow> SerialApp::port_rows()
         synced(PortRow::Info);
     }
     if (known.kind != Kind::None) {
-        add_rows(rows, row_full_, Density::Compact, "Behind it", behind_text(known), ValueTone::Normal, false);
+        add_rows(rows, row_full_, Density::Compact, "Behind it", behind_text(known), ValueTone::Normal, false, Aff::Open);
         synced(PortRow::Behind);
     }
     const PortRow level_rows[] = {PortRow::IdListen, PortRow::IdReset, PortRow::IdAsk};
     for (int i = 0; i < 3; ++i) {
         const bool busy = prober_ && probe_level(probe_) == i + 1 && i < 2;
         if (busy) {
-            add(level_rows[i], ListRow::item(probe_shown_, "Stop", ValueTone::Warn));
+            add(level_rows[i], ListRow::item(probe_shown_, "Stop", ValueTone::Warn, 0, Aff::Action));
             continue;
         }
         const std::string label = i == 0 ? "Listen" : i == 1 ? "Reset and listen" : "Ask the device";
         const std::string &outcome = i < 2 ? probe_value_[i] : std::string();
         const std::string value = !outcome.empty() ? outcome : i == 0 ? "sends nothing" : i == 1 ? "resets" : "sends";
-        add(level_rows[i], ListRow::item(label, value, tone_of(outcome == "Stopped" || outcome == "Failed")));
+        add(level_rows[i], ListRow::item(label, value, tone_of(outcome == "Stopped" || outcome == "Failed"), 0,
+                                         i == 2 ? Aff::Open : Aff::Action)); /* Ask opens the Ask page */
     }
     add(PortRow::Info, ListRow::section("Settings"));
     const int baud = effective_baud(settings_, recommended());
-    add(PortRow::Speed, ListRow::item("Speed", speed_value(baud, recommended())));
-    add(PortRow::Frame, ListRow::item("Frame", settings_.frame));
+    add(PortRow::Speed, ListRow::item("Speed", speed_value(baud, recommended()), ValueTone::Normal, 0, Aff::Edit));
+    add(PortRow::Frame, ListRow::item("Frame", settings_.frame, ValueTone::Normal, 0, Aff::Edit));
     toggle(PortRow::Echo, "Local echo", settings_.echo);
-    add(PortRow::Ending, ListRow::item("Enter sends", ending_name(settings_.ending)));
-    add(PortRow::Backspace, ListRow::item("Backspace sends", backspace_name(settings_.backspace)));
+    add(PortRow::Ending, ListRow::item("Enter sends", ending_name(settings_.ending), ValueTone::Normal, 0, Aff::Edit));
+    add(PortRow::Backspace, ListRow::item("Backspace sends", backspace_name(settings_.backspace), ValueTone::Normal, 0, Aff::Edit));
     toggle(PortRow::Log, "Log to file", settings_.log);
-    if (finder_) add(PortRow::Find, ListRow::item(finder_shown_, "Stop", ValueTone::Warn));
-    else add(PortRow::Find, ListRow::item("Find the speed", find_value_, tone_of(find_rgb_ != -1)));
+    if (finder_) add(PortRow::Find, ListRow::item(finder_shown_, "Stop", ValueTone::Warn, 0, Aff::Action));
+    else add(PortRow::Find, ListRow::item("Find the speed", find_value_, tone_of(find_rgb_ != -1), 0, Aff::Action));
     toggle(PortRow::FindEnter, "Send Enter while finding", settings_.detect_enter);
-    add(PortRow::Connect, ListRow::item("Connect", std::to_string(baud) + " " + settings_.frame));
+    add(PortRow::Connect, ListRow::item("Connect", std::to_string(baud) + " " + settings_.frame, ValueTone::Normal, 0,
+                                  Aff::Action));
     return rows;
 }
 
@@ -886,7 +890,7 @@ void SerialApp::check_finder()
         if (p.text != finder_shown_ && nav_.current() == View::Port && list_) {
             finder_shown_ = p.text;
             const int index = port_row_index(PortRow::Find);
-            list_->update_row(index, cp0::ui::ListRow::item(finder_shown_, "Stop", cp0::ui::ValueTone::Warn));
+            list_->update_row(index, cp0::ui::ListRow::item(finder_shown_, "Stop", cp0::ui::ValueTone::Warn, 0, Aff::Action));
         }
         return;
     }

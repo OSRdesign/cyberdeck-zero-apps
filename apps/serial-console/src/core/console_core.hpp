@@ -87,6 +87,12 @@ struct CardRow {
  * Reset and listen. `in_use`: the port's speed now (Apply says "In use"
  * when it is the recommended one already). */
 std::vector<CardRow> card_rows(const Identity &id, const PortInfo &port, Probe probe, int in_use);
+/* What tapping a row does, for the list's row look (chevron, grey, blue): Info = nothing (a read-out), Open = a page,
+ * Edit = changes a value, Action = performs something at once. */
+enum class RowKind { Info, Open, Edit, Action };
+/* The kind of a card row: the read-outs (None) are Info; Boot output and Evidence open a page; the Ask row opens the
+ * Ask page; Apply settings, Run again, Copy summary and Reset and listen perform at once. */
+RowKind card_action_kind(CardAction action);
 /* "Likely (listened)", "Sure (asked)" */
 std::string confidence_text(const Identity &id);
 /* "2026-10-13 14:05" (local time; "" when unknown) */

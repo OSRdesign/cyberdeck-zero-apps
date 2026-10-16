@@ -1,5 +1,5 @@
-9ad42159c291078819c48a42ea84921859bfaad4
-# The launcher commit (cyberdeck-zero-launcher main after #52/#54: Wi-Fi status line fix #52, ValueTone::Muted #54) every cdk app is built against:
+0c74a1e7564db76171bb4f449a881024fdd39517
+# The launcher commit (cyberdeck-zero-launcher main after #52/#54/#55: Wi-Fi status line fix #52, ValueTone::Muted #54, row affordance #55) every cdk app is built against:
 # its ext_components/cp0_lvgl (display backend, keyboard, widgets, layout service), its LVGL FreeType glue
 # (projects/APPLaunch/main/lvgl) and its LVGL configuration. build_app.sh compares the launcher checkout with it and
 # stamps the result into --version and usr/share/doc/<app>/build-info. Move it deliberately, then rebuild every app.

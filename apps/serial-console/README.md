@@ -209,7 +209,7 @@ The identification is kept in the port's section of the settings file as `id_*` 
 
 ## Changes
 
-* 0.4.1: rebuilt on launcher 9ad4215 (shared toolkit: Muted tone, Wi-Fi status line); no layout change.
+* 0.4.1: rebuilt on launcher 0c74a1e (shared toolkit: Muted tone, Wi-Fi status line, row affordance). Rows now show what can be tapped: a chevron on rows that open a page or change a value, grey information, blue actions.
 * **0.4.0**: the ports, port, Ask and result pages move to the launcher's `cp0::ui::CompactList` (top-aligned dense
   rows in the full-width column, scrolling only at the bottom edge, a thin auto-hiding scrollbar, headings that are
   not selectable). Hot-plug and a running probe or speed search change only the texts that changed: the scroll and
