@@ -1,0 +1,28 @@
+# Local devices, before the first scan
+title Net Toolbox: Local devices, before the first scan
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO devices=done
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 250
+shot idle
+expect text "Scan"
+expect text "Save log"
+expect text "Press Scan to look for devices on your network"
+expect text "Scans only your own network. Use it on networks you own or are allowed to test."
+tap "Save log"
+tap "Save log"
+expect text "Nothing to save yet: run it first"
+expect notext "Message cut off"

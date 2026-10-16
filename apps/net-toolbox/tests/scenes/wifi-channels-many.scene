@@ -1,0 +1,25 @@
+# Wi-Fi networks, a crowded 2.4 GHz band
+title Net Toolbox: Wi-Fi networks, a crowded 2.4 GHz band
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO wifi=many
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 400
+key enter
+wait 300
+shot channels
+expect text "Channels"
+expect notext "Message cut off"

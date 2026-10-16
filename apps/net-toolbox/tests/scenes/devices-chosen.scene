@@ -1,0 +1,24 @@
+# Local devices, with a chosen network (via wlan1)
+title Net Toolbox: Local devices, with a chosen network (via wlan1)
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO "devices=done,interface=wlan1"
+env NET_TOOLBOX_FIXTURE pi-3a-plus-dongle
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 250
+key enter
+wait 300
+shot done
+expect text "Done: 14 devices on 172.20.10.0/28 (via wlan1)"
+expect notext "Message cut off"

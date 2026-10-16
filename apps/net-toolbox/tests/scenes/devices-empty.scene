@@ -1,0 +1,26 @@
+# Local devices, only this device
+title Net Toolbox: Local devices, only this device
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO devices=empty
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 250
+key enter
+wait 300
+shot done
+expect text "Done: 1 device on 192.168.68.0/24"
+expect text "this device"
+expect text "cyberdeck"
+expect notext "Message cut off"

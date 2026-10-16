@@ -7,6 +7,7 @@
 
 #include "demo_data.hpp"
 #include "demo_data_03.hpp"
+#include "demo_data_04.hpp"
 #include "flow_runner.hpp"
 #include "netaddr.hpp"
 #include "sock.hpp"
@@ -349,6 +350,121 @@ PortSnapshot demo_port(const PortRequest &req)
     return s;
 }
 
+/* ---------------------------------------------------------------- 0.4: the real runners that are not a plain session */
+
+class RealDevicesRunner : public DevicesRunner {
+public:
+    bool start(const DevicesRequest &r) override { return s_.start(r.net, r.iface, r.resolver, r.rescan); }
+    void stop() override { s_.stop(); }
+    bool running() const override { return s_.running(); }
+    std::uint64_t seq() const override { return s_.seq(); }
+    std::shared_ptr<const DevicesSnapshot> latest() const override { return s_.latest(); }
+
+private:
+    DevicesSession s_;
+};
+
+class RealPortScanRunner : public PortScanRunner {
+public:
+    bool start(const PortScanRequest &r) override { return s_.start(r.address, r.full_range, r.range); }
+    void stop() override { s_.stop(); }
+    bool running() const override { return s_.running(); }
+    std::uint64_t seq() const override { return s_.seq(); }
+    std::shared_ptr<const PortScanSnapshot> latest() const override { return s_.latest(); }
+
+private:
+    PortScanSession s_;
+};
+
+class RealWifiRunner : public WifiRunner {
+public:
+    bool start(const WifiScanConfig &c) override { return s_.start(c); }
+    void stop() override { s_.stop(); }
+    void rescan() override { s_.rescan(); }
+    bool running() const override { return s_.running(); }
+    std::uint64_t seq() const override { return s_.seq(); }
+    std::shared_ptr<const WifiSnapshot> latest() const override { return s_.latest(); }
+
+private:
+    WifiScanSession s_;
+};
+
+class RealWalkRunner : public WalkRunner {
+public:
+    bool start(const WalkConfig &c) override { return s_.start(c); }
+    void stop() override { s_.stop(); }
+    void reset() override { s_.reset(); }
+    bool running() const override { return s_.running(); }
+    std::uint64_t seq() const override { return s_.seq(); }
+    std::shared_ptr<const WalkSnapshot> latest() const override { return s_.latest(); }
+
+private:
+    WalkSession s_;
+};
+
+/* ---------------------------------------------------------------- 0.4: the demonstration runners */
+
+class DemoWifiRunner : public WifiRunner {
+public:
+    explicit DemoWifiRunner(std::string scenario) : scenario_(std::move(scenario)) { channel_.begin(0, WifiSnapshot()); }
+    bool start(const WifiScanConfig &c) override
+    {
+        cfg_ = c;
+        stage_ = 0;
+        channel_.begin(++gen_, demo_wifi(scenario_, cfg_, stage_));
+        return true;
+    }
+    void stop() override
+    {
+        const std::shared_ptr<const WifiSnapshot> now = channel_.latest();
+        if (!now || now->state == WifiSnapshot::State::Idle) return;
+        WifiSnapshot s = *now;
+        if (s.state == WifiSnapshot::State::Ready || s.state == WifiSnapshot::State::Scanning) s.state = WifiSnapshot::State::Stopped;
+        channel_.begin(++gen_, s);
+    }
+    void rescan() override
+    {
+        const std::shared_ptr<const WifiSnapshot> now = channel_.latest();
+        if (!now || now->state == WifiSnapshot::State::Idle || now->state == WifiSnapshot::State::Stopped) return;
+        ++stage_;
+        channel_.begin(++gen_, demo_wifi(scenario_, cfg_, stage_));
+    }
+    bool running() const override { return false; }
+    std::uint64_t seq() const override { return channel_.seq(); }
+    std::shared_ptr<const WifiSnapshot> latest() const override { return channel_.latest(); }
+
+private:
+    std::string scenario_;
+    WifiScanConfig cfg_;
+    int stage_ = 0;
+    Channel<WifiSnapshot> channel_;
+    std::uint64_t gen_ = 0;
+};
+
+class DemoWalkRunner : public WalkRunner {
+public:
+    explicit DemoWalkRunner(std::string scenario) : scenario_(std::move(scenario)) { channel_.begin(0, WalkSnapshot()); }
+    bool start(const WalkConfig &c) override
+    {
+        channel_.begin(++gen_, demo_walk(scenario_, c));
+        return true;
+    }
+    void stop() override
+    {
+        const std::shared_ptr<const WalkSnapshot> now = channel_.latest();
+        if (now && now->state == WalkSnapshot::State::Running) channel_.begin(++gen_, demo_walk_stop(*now));
+    }
+    void reset() override { channel_.begin(++gen_, WalkSnapshot()); }
+    bool running() const override { return false; }
+    std::uint64_t seq() const override { return channel_.seq(); }
+    std::shared_ptr<const WalkSnapshot> latest() const override { return channel_.latest(); }
+
+private:
+    std::string scenario_;
+    Channel<WalkSnapshot> channel_;
+    std::uint64_t gen_ = 0;
+};
+
 } // namespace
 
 Backend make_demo_backend(const std::string &spec, std::shared_ptr<const Source> source)
@@ -422,6 +538,13 @@ Backend make_demo_backend(const std::string &spec, std::shared_ptr<const Source>
         [wol](const WolRequest &req) { return demo_wol(wol, req); }, [](const WolSnapshot &now) { return demo_wol_stop(now); });
     b.ble = std::make_unique<FixedRunner<BleConfig, BleSnapshot>>(
         [ble](const BleConfig &cfg) { return demo_ble(ble, cfg); }, [](const BleSnapshot &now) { return demo_ble_stop(now); });
+    const std::string devices = get("devices", "done"), ports = get("ports", "done"), wifi = get("wifi", "list"), walk = get("walk", "run");
+    b.devices = std::make_unique<FixedRunner<DevicesRequest, DevicesSnapshot>>(
+        [devices](const DevicesRequest &req) { return demo_devices(devices, req); }, [](const DevicesSnapshot &now) { return demo_devices_stop(now); });
+    b.ports = std::make_unique<FixedRunner<PortScanRequest, PortScanSnapshot>>(
+        [ports](const PortScanRequest &req) { return demo_portscan(ports, req); }, [](const PortScanSnapshot &now) { return demo_portscan_stop(now); });
+    b.wifi = std::make_unique<DemoWifiRunner>(wifi);
+    b.walk = std::make_unique<DemoWalkRunner>(walk);
     b.clock_ms = [] { return kDemoClockMs; };
     b.wall_clock = [] { return demo_now(); };
     b.local_ip = get("local", pubip == "cgnat" ? "100.64.8.3" : "");
@@ -478,6 +601,10 @@ Backend make_backend()
     b.speed = std::make_unique<RealRunner<SpeedTestSession, SpeedConfig, SpeedSnapshot>>();
     b.wol = std::make_unique<RealRunner<WolSession, WolRequest, WolSnapshot>>();
     b.ble = std::make_unique<RealRunner<BleSession, BleConfig, BleSnapshot>>();
+    b.devices = std::make_unique<RealDevicesRunner>();
+    b.ports = std::make_unique<RealPortScanRunner>();
+    b.wifi = std::make_unique<RealWifiRunner>();
+    b.walk = std::make_unique<RealWalkRunner>();
     b.clock_ms = [] { return now_ms(); };
     b.wall_clock = [] { return std::time(nullptr); };
     b.ping_available = [] { return ping_available(); };

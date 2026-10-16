@@ -1,0 +1,29 @@
+# Wi-Fi networks, a 2.4 GHz-only board
+title Net Toolbox: Wi-Fi networks, a 2.4 GHz-only board
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO wifi=g24
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 400
+shot list
+expect text "7 networks on wlan0, scanned 3 s ago"
+key enter
+wait 300
+shot channels
+expect text "No 5 GHz network seen: this adapter may be 2.4 GHz only"
+expect text "Least crowded: channel 13 (2.4 GHz)"
+expect notext "Channels 149 to 165 are not allowed for Wi-Fi in every country."
+expect notext "Message cut off"

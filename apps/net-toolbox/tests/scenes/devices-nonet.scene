@@ -1,0 +1,26 @@
+# Local devices, no network
+title Net Toolbox: Local devices, no network
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO devices=done
+env NET_TOOLBOX_FIXTURE deck-offline
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 250
+key enter
+wait 300
+shot nonet
+expect text "No network"
+expect text "Connect to a network first, or choose another one under Network."
+expect text "Scan"
+expect notext "Message cut off"

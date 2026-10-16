@@ -413,6 +413,7 @@ int main()
     test_netlog_04();
     test_wifiscan();
     test_walktest();
+    test_ui_model_04();
     test_package();
     std::printf("test-net-toolbox: %d passed, %d failed, %d skipped\n", g_pass, g_fail, g_skip);
     return g_fail ? 1 : 0;

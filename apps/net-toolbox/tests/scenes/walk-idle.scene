@@ -1,0 +1,31 @@
+# Wi-Fi walk test, before Start
+title Net Toolbox: Wi-Fi walk test, before Start
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO walk=run
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 300
+shot idle
+expect text "Press Start, then walk around"
+expect text "Start"
+expect text "Reset"
+expect text "Save log"
+expect text "Walk slowly and keep the deck in your hand; stop at the dead spot to read the numbers."
+expect text "Weak below"
+expect text "-75 dBm"
+expect text "Ready"
+expect notext "Message cut off"

@@ -16,6 +16,7 @@
 #include "cp0_ui_metrics_lvgl.h"
 
 #include "netlog.hpp"
+#include "netlog_wifi.hpp"
 #include "sock.hpp"
 #include "text.hpp"
 
@@ -144,6 +145,7 @@ ToolboxApp::~ToolboxApp()
     if (iw_job_) cdk::async_run::cancel(iw_job_);
     if (nmcli_job_) cdk::async_run::cancel(nmcli_job_);
     set_active_interface(""); /* the sockets and curl of this process go back to the system routing */
+    keep_devices_ = keep_ports_ = keep_wifi_ = false;
     stop_tools(); /* the workers stopped and joined with the runners */
     teardown();
     page_.reset();
@@ -206,6 +208,11 @@ void ToolboxApp::tick()
         if (wake_block_) wake_block_->tick(now);
         break;
     case View::Ble: poll_ble(false); break;
+    case View::Devices: poll_devices(false); break;
+    case View::Device: poll_device(false); break;
+    case View::Wifi: poll_wifi(false); break;
+    case View::WifiDetail: poll_wifi_detail(false); break;
+    case View::Walk: poll_walk(false); break;
     default: break;
     }
 }
@@ -232,6 +239,12 @@ void ToolboxApp::open(View view)
     if (list_) stack_.back().select = std::max(0, list_->selected());
     else if (rich_) stack_.back().select = rich_->selected_id(); /* the pages of rows of any height remember the row's id */
     if (view != View::Choice && view != View::Typed) fresh_ = false;
+    if (view == View::Devices) {
+        dev_fresh_ = false;
+        dev_selected_ip_.clear();
+    } else if (view == View::Walk) {
+        walk_fresh_ = false;
+    }
     stack_.push_back(Frame{view, 0});
     show(view, 0);
 }
@@ -248,7 +261,12 @@ void ToolboxApp::finish_sub(const std::function<void()> &action)
 
 void ToolboxApp::show(View view, int select)
 {
+    keep_devices_ = view == View::Devices || view == View::Device; /* the list's scan goes on under a device's page */
+    keep_ports_ = view == View::Device;
+    keep_wifi_ = view == View::Wifi || view == View::WifiDetail;
+    scan_bound_ = keep_devices_;
     teardown();
+    apply_bind();
     shown_seq_ = 0;
     next_state_ms_ = 0;
     show_title();
@@ -267,6 +285,11 @@ void ToolboxApp::show(View view, int select)
     case View::Wol: build_wol(select); break;
     case View::Machine: build_machine(select); break;
     case View::Ble: build_ble(); break;
+    case View::Devices: build_devices(select); break;
+    case View::Device: build_device(select); break;
+    case View::Wifi: build_wifi(select); break;
+    case View::WifiDetail: build_wifi_detail(select); break;
+    case View::Walk: build_walk(); break;
     case View::Choice: build_choice(); break;
     case View::Typed: build_typed(); break;
     }
@@ -282,6 +305,10 @@ void ToolboxApp::teardown()
         iw_job_ = 0;
     }
     rich_.reset(); /* the rows' views let go of their objects first */
+    device_views_.clear();
+    wifi_views_.clear();
+    channels_block_.reset();
+    walk_block_.reset();
     speed_live_.reset();
     speed_big_.reset();
     speed_grade_.reset();
@@ -328,6 +355,13 @@ void ToolboxApp::stop_tools()
     if (backend_.speed) backend_.speed->stop();
     if (backend_.wol) backend_.wol->stop();
     if (backend_.ble) backend_.ble->stop(); /* the scan ends: discovery off, bluetoothctl closed (the core's farewell) */
+    if (backend_.devices && !keep_devices_) backend_.devices->stop();
+    if (backend_.ports && !keep_ports_) backend_.ports->stop();
+    if (backend_.wifi && !keep_wifi_) {
+        backend_.wifi->stop();
+        wifi_live_ = false;
+    }
+    if (backend_.walk) backend_.walk->stop();
 }
 
 void ToolboxApp::show_title()
@@ -339,6 +373,11 @@ void ToolboxApp::show_title()
         case View::Wol: return "Wake-on-LAN";
         case View::Machine: return wol_current_;
         case View::Ble: return "Bluetooth radar";
+        case View::Devices: return "Local devices";
+        case View::Device: return "Local devices";
+        case View::Wifi: return "Wi-Fi networks";
+        case View::WifiDetail: return "Wi-Fi networks";
+        case View::Walk: return "Wi-Fi walk test";
         case View::Interfaces: return "Interfaces";
         case View::Diagnosis: return "Diagnosis";
         case View::Ping: return "Ping";
@@ -359,6 +398,12 @@ void ToolboxApp::show_title()
     } else if (v == View::Machine) {
         path.push_back("Wake-on-LAN");
         path.push_back(wol_current_);
+    } else if (v == View::Device) {
+        path.push_back("Local devices");
+        path.push_back(device_.ip.empty() ? device_current_ : ui::device_title(device_));
+    } else if (v == View::WifiDetail) {
+        path.push_back("Wi-Fi networks");
+        path.push_back(wifi_title_);
     } else if (v != View::Home) {
         path.push_back(tool_name(v));
     }
@@ -507,6 +552,9 @@ std::vector<cp0::ui::ListRow> ToolboxApp::home_rows() const
     rows.push_back(cp0::ui::ListRow::item("Whois", "", cp0::ui::ValueTone::Normal, kHomeWhois));
     rows.push_back(cp0::ui::ListRow::item("Wake-on-LAN", "", cp0::ui::ValueTone::Normal, kHomeWol));
     rows.push_back(cp0::ui::ListRow::item("Bluetooth radar", "", cp0::ui::ValueTone::Normal, kHomeBle));
+    rows.push_back(cp0::ui::ListRow::item("Local devices", "", cp0::ui::ValueTone::Normal, kHomeDevices));
+    rows.push_back(cp0::ui::ListRow::item("Wi-Fi networks", "", cp0::ui::ValueTone::Normal, kHomeWifi));
+    rows.push_back(cp0::ui::ListRow::item("Wi-Fi walk test", "", cp0::ui::ValueTone::Normal, kHomeWalk));
     rows.push_back(cp0::ui::ListRow::item("Interfaces", "", cp0::ui::ValueTone::Normal, kHomeIfaces));
     return rows;
 }
@@ -536,7 +584,7 @@ void ToolboxApp::read_net()
 void ToolboxApp::update_scope()
 {
     scope_ = resolve_scope(iface_choice_, net_);
-    if (!backend_.source) set_active_interface(scope_.iface);
+    apply_bind();
     request_scope_dns(false);
 }
 
@@ -728,6 +776,9 @@ void ToolboxApp::activate(int, std::intptr_t id)
         else if (id == kHomeSpeed) open(View::Speed);
         else if (id == kHomeWol) open(View::Wol);
         else if (id == kHomeBle) open(View::Ble);
+        else if (id == kHomeDevices) open(View::Devices);
+        else if (id == kHomeWifi) open(View::Wifi);
+        else if (id == kHomeWalk) open(View::Walk);
         break;
     case View::Diagnosis: activate_diagnosis(id); break;
     case View::Ping: activate_ping(id); break;
@@ -741,6 +792,11 @@ void ToolboxApp::activate(int, std::intptr_t id)
     case View::Wol: activate_wol(id); break;
     case View::Machine: activate_machine(id); break;
     case View::Ble: activate_ble(id); break;
+    case View::Devices: activate_devices(id); break;
+    case View::Device: activate_device(id); break;
+    case View::Wifi: activate_wifi(id); break;
+    case View::WifiDetail: activate_wifi_detail(id); break;
+    case View::Walk: activate_walk(id); break;
     default: break;
     }
 }
@@ -844,6 +900,42 @@ void ToolboxApp::save_result()
             have = true;
         }
         break;
+    case View::Devices:
+    case View::Device:
+        if (dev_fresh_ && backend_.devices->latest() && backend_.devices->latest()->state != DevicesSnapshot::State::Idle) {
+            tool = "devices";
+            title = "Local devices";
+            body = format_devices(*backend_.devices->latest());
+            const std::shared_ptr<const PortScanSnapshot> p = port_fresh_ ? backend_.ports->latest() : nullptr;
+            if (view == View::Device && p && p->state != PortScanSnapshot::State::Idle) body += "\n" + format_portscan(*p);
+            have = true;
+        }
+        break;
+    case View::Wifi:
+        if (wifi_live_ && backend_.wifi->latest() && backend_.wifi->latest()->state == WifiSnapshot::State::Ready) {
+            tool = "wifi";
+            title = "Wi-Fi networks";
+            body = format_wifi_networks(*backend_.wifi->latest());
+            have = true;
+        }
+        break;
+    case View::WifiDetail:
+        if (wifi_follower_.active()) {
+            tool = "wifi-network";
+            title = "Wi-Fi network";
+            body = format_wifi_network(wifi_follower_.network(), wifi_follower_.gone());
+            have = true;
+        }
+        break;
+    case View::Walk:
+        if (walk_fresh_ && backend_.walk->latest() && backend_.walk->latest()->summary.samples > 0 &&
+            (backend_.walk->latest()->state == WalkSnapshot::State::Stopped || backend_.walk->latest()->state == WalkSnapshot::State::Running)) {
+            tool = "walktest";
+            title = "Wi-Fi walk test";
+            body = format_walktest(*backend_.walk->latest());
+            have = true;
+        }
+        break;
     default: break;
     }
     if (!have) {
@@ -904,7 +996,8 @@ std::string ToolboxApp::selftest()
     const auto snapshot = [this] { return std::make_pair(ui::count_objects(page_->root()), ui::count_timers()); };
     const auto base = snapshot();
     const View tools[] = {View::Interfaces, View::Diagnosis, View::Ping, View::Dns, View::Port, View::Trace, View::Http,
-                          View::PublicIp, View::Whois, View::Speed, View::Wol, View::Machine, View::Ble};
+                          View::PublicIp, View::Whois, View::Speed, View::Wol, View::Machine, View::Ble, View::Devices, View::Wifi,
+                          View::Walk};
     for (int round = 0; round < 3; ++round) {
         for (const View v : tools) {
             stack_.assign(1, Frame{View::Home, 0});

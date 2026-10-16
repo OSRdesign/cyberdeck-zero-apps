@@ -1,0 +1,55 @@
+# Local devices, the router's page
+title Net Toolbox: Local devices, the router's page
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO "devices=done,ports=done"
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 250
+key enter
+wait 300
+key down
+wait 100
+key enter
+wait 300
+shot detail
+expect text "Ping this device"
+expect text "192.168.68.1, router"
+key home
+wait 200
+shot top
+expect text "IP address"
+expect text "192.168.68.1"
+expect text "Name"
+expect text "router  (from reverse DNS)"
+expect text "MAC address"
+expect text "b0:4e:26:00:00:01"
+expect text "Vendor"
+expect text "TP-Link"
+expect text "Round trip"
+expect text "2 ms"
+expect text "Role"
+key end
+wait 200
+shot bottom
+expect text "Scan common ports"
+expect text "Scan ports 1-1024"
+expect text "Save for Wake-on-LAN"
+expect text "Save log"
+expect notext "Message cut off"
+key esc
+wait 300
+expect text "Done: 14 devices on 192.168.68.0/24"
+expect text "router"
+expect noquit

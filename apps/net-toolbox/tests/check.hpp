@@ -129,3 +129,5 @@ void test_netlog_04();
 /* 0.4: Wi-Fi networks and the walk test */
 void test_wifiscan();
 void test_walktest();
+/* 0.4: the pages' words and numbers */
+void test_ui_model_04();

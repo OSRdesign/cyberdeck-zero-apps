@@ -1,0 +1,55 @@
+# Local devices, save for Wake-on-LAN
+title Net Toolbox: Local devices, save for Wake-on-LAN
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO devices=done
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 250
+key enter
+wait 300
+key down
+wait 100
+key enter
+wait 300
+key down
+key down
+key down
+key down
+shot row
+key enter
+wait 300
+shot saved
+expect text "Saved router for Wake-on-LAN"
+key enter
+wait 300
+shot again
+expect text "Already saved as router"
+key esc
+wait 300
+key esc
+wait 300
+key end
+key up
+key up
+key up
+key up
+key up
+wait 300
+key enter
+wait 300
+shot list
+expect text "router"
+expect text "b0:4e:26:00:00:01  192.168.68.1"
+expect notext "Message cut off"

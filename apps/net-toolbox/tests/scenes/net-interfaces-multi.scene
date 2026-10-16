@@ -4,17 +4,7 @@ sizes 640x480 800x480 720x720 1024x600 1280x720
 env NET_TOOLBOX_DEMO diag=healthy,interface=wlan1
 env NET_TOOLBOX_FIXTURE pi-eth-two-wifi
 env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
-key down
-key down
-key down
-key down
-key down
-key down
-key down
-key down
-key down
-key down
-key down
+key end
 key enter
 shot top
 expect text "END0 (DEFAULT ROUTE)"

@@ -1,0 +1,28 @@
+# Wi-Fi walk test, the chosen network is not Wi-Fi
+title Net Toolbox: Wi-Fi walk test, the chosen network is not Wi-Fi
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO "walk=run,interface=end0"
+env NET_TOOLBOX_FIXTURE eth-wifi
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 300
+key enter
+wait 400
+shot noadapter
+expect text "No Wi-Fi adapter on end0: choose wlan0 under Network"
+expect text "No Wi-Fi adapter on end0"
+expect text "Start"
+expect notext "Message cut off"

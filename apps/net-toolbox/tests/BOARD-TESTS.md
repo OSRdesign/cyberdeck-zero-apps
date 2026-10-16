@@ -1,4 +1,4 @@
-# Net Toolbox 0.2.0: board tests
+# Net Toolbox 0.4.0: board tests
 
 For the Controller and the user (controller-led testing: the Controller deploys and reads logs, the user does the
 physical steps). `deck.py` is `C:\CLAUDE\zero7\launcher\docs\dev\deck\deck.py` (password in `PIPW`; `DECK_HOST=<ip>`
@@ -44,7 +44,7 @@ python deck.py run '/usr/share/APPLaunch/bin/net-toolbox --version; cat /proc/sy
 
 1. The home tile reads **Net Toolbox** under a rose pentagon with two arrows. Open it: the title, a green line `wlan0:
    <address>` (the address of `ip -4 addr show wlan0`), then Diagnose my connection, Ping, Traceroute, DNS
-   lookup, Port check, HTTP check, Public IP, Whois, Interfaces (nine rows: the list scrolls, End goes to the last). Keys: Down / Up move the highlight, Enter opens, Esc / Left go back.
+   lookup, Port check, HTTP check, Public IP, Whois, Speed test, Wake-on-LAN, Bluetooth radar, Local devices, Wi-Fi networks, Wi-Fi walk test, Interfaces (sixteen rows with Network: the list scrolls, End goes to the last). Keys: Down / Up move the highlight, Enter opens, Esc / Left go back.
 2. Switch the deck's Wi-Fi off in Settings. Within 2 s the Home line turns
    amber **No network**; switch it on: the green line returns.
 3. **Interfaces** (Enter on it): `WLAN0` State Connected, IPv4 (with /prefix), IPv6, MAC (`ip link show wlan0`), Network
@@ -342,3 +342,121 @@ Run this on the Pi 3A+ (bluez installed, `hci0` powered).
    3 MB; the CPU stays modest (the sweep redraws a 250 px circle ten times a second only while scanning; `top` shows well
    under 10 % of one core on the 3A+).
 9. Save log after a scan: `~/net-logs/ble-<date>-<time>.txt`.
+
+## B16. Local devices (0.4): the Pi 3A+ and the deck on a real LAN
+
+Needs a home network with a router whose client list you can read (its web page, or `arp -a` on a PC), a phone with Wi-Fi on
+(an iPhone or an Android with private addresses switched on) and, if possible, a NAS, a printer or a TV that has a name.
+Nothing is sent before you press **Scan**.
+
+1. Home, **Local devices** (the 13th row; End then Up x3 reaches it): the status line says `Press Scan to look for devices on
+   your network`, under the cells the hint `Scans only your own network. Use it on networks you own or are allowed to test.`
+   The cells read **Scan** and **Save log**. `tcpdump -ni wlan0 icmp or arp` shows nothing yet.
+2. **Scan**: the cell turns to **Stop**; the line counts `Scanning 192.168.x.0/24: 112 of 254, 9 found` and the devices
+   appear one by one, sorted by address, without the highlight jumping (move it with Down while it runs: it stays on the
+   device, not on the row). A scan of a /24 takes about 10 s on the 3A+ and a little longer on the deck; the line ends
+   `Done: N devices on 192.168.x.0/24`, the cell reads **Rescan**. `tcpdump -ni wlan0 icmp or arp` shows ICMP echoes and ARP
+   requests to the addresses of your own subnet only, and nothing to a public address.
+3. **Count against the router**: N is within 1 or 2 of the clients the router lists (a sleeping phone may not answer; a host
+   that ignores ping, TCP and ARP is never seen). Every row has the name or the address, the address at the right, the vendor
+   and the MAC (compare with `arp -a` and the router's list), `N ms` for a device that answered a ping. The router carries the
+   diamond tag `router`, this board the disc tag `this device` (a shape and a word). The phone with private addresses on shows
+   `Private (random) address` where the vendor would be; the same phone with the option off shows its maker.
+4. Names: a NAS or a Mac shows its mDNS name, a Windows PC its NetBIOS name, others the reverse-DNS name from the router, else
+   the address. The Device page (B17) says where each name came from.
+5. **Stop** in the middle: `Stopped: N devices on ...`, the devices found stay; **Rescan** keeps them and refreshes them (a
+   device that left stays listed until the app is left; a device that came shows up).
+6. With a second adapter chosen under Network (B11), the line ends `(via wlan1)` and the scan covers wlan1's own subnet. With an
+   Ethernet adapter on a hub chosen (B12): its subnet. With no address (cable out): `No network` and `Connect to a network
+   first, or choose another one under Network.` On a phone hotspot (`172.20.10.x`) the scan works; on an interface with a
+   public address it refuses: `... is not a private address: Local devices only scans your own private network.`
+7. Esc / Left during a scan: back to Home at once, no more packets (`tcpdump`). Leaving the app: the same.
+8. **Save log** after a scan: `~/net-logs/devices-<date>-<time>.txt` with the interface, the subnet, the gateway and every
+   device (address, MAC, vendor or private address, name and its source, round trip).
+9. Memory and CPU: `ps -o rss= -C net-toolbox` before and during a scan: the page adds under 3 MB (the OUI table is read
+   once, on the first scan: about 1 MB); `top` shows the app well under 50 % of one core on the 3A+ while it scans.
+
+## B17. A device's page (0.4): ping, ports, Wake-on-LAN
+
+On the Pi 3A+ or the deck, after B16 (Enter or a second tap on a device opens its page). The router is the best target.
+
+1. The page lists IP address, Name (and where it came from), MAC address, Vendor (a random address says `Private (random)
+   address: the vendor cannot be known`), Round trip, Role (`Router: the gateway of this network`, `This device`, `Another
+   device`), then the actions **Ping this device**, **Check a port**, **Scan common ports**, **Scan ports 1-1024**, **Save for
+   Wake-on-LAN** (only for a device with a MAC) and **Save log**. The status line says `192.168.x.y, router`.
+2. **Ping this device**: the Ping page opens with the address as its target and starts at once; Esc comes back to the device.
+   **Check a port**: the Port check page opens with the address in Host, nothing started; Esc comes back.
+3. **Scan common ports** on the router: the line counts `Scanning 24 of 81: 2 open`, the action turns to **Stop the port scan**,
+   and under `OPEN PORTS` the rows `Port 80  http  open` appear as they are found (compare with `nmap -p 21,22,23,53,80,443
+   <router>` from a PC: the same open ports); it ends `Done: N open ports among 81`. A device with nothing open says `No open
+   port found among the common ones`. **Scan ports 1-1024** takes a few seconds on a LAN (up to about 30 s when many ports
+   time out). `tcpdump -ni wlan0 host <router>` shows TCP SYNs to that address only.
+4. **Stop the port scan**, or Esc: the scan ends within a second (`Stopped at N of 81: 2 open`); leaving the page stops it.
+5. Only a device of the list can be scanned from here: there is no field to type an address, and the engine refuses a public
+   address or one outside the subnet (`Only devices on your own network can be scanned.`: unit-tested, not reachable from the page).
+6. **Save for Wake-on-LAN** on a PC you can wake: `Saved <name> for Wake-on-LAN`; Home, Wake-on-LAN lists the machine with its
+   MAC and address; **Wake now** on it works as in B14. Pressing the action again says `Already saved as <name>`; with 20
+   machines saved it says `You can save up to 20 machines: delete one first.`
+7. **Save log** on the page: `~/net-logs/devices-<date>-<time>.txt` with the devices and the port scan under them.
+
+## B18. Wi-Fi networks (0.4): the Pi 3A+ (5 GHz) and the deck (2.4 GHz only)
+
+Compare with `nmcli -f IN-USE,BSSID,SSID,CHAN,FREQ,SIGNAL,SECURITY device wifi list --rescan yes` run on the board.
+
+1. Home, **Wi-Fi networks**: the first list takes a few seconds (a fresh scan); the status line reads `N networks on wlan0,
+   scanned 3 s ago` and the age counts up, then drops when the list is read again (the list is asked every 5 s; NetworkManager
+   scans again when its list is older than about 30 s). The rows are sorted by signal; each has the name (`(hidden)` for a
+   hidden network), the signal bars (1 to 4) with `-NN dBm` at the right, and `ch 36, 5 GHz, WPA2` under it; the network you
+   are connected to carries the green check and `connected`. The count, the channels and the security words match `nmcli`;
+   the dBm is NetworkManager's percentage turned back into dBm (within about 5 dB of `iw dev wlan0 link`). Open and WEP networks
+   show their security word in amber.
+2. **Rescan** asks a fresh scan (the line says `scanning again` for a moment). Walk away from a network or switch an access
+   point off: after a scan or two it leaves the list.
+3. **View: Channels**: the bars of the 2.4 GHz channels 1 to 13 (the height counts the networks on neighbouring channels too,
+   the number over a bar the networks on that channel), the busiest named, and under the 5 GHz title the channels that were seen
+   plus the usual ones; the sentence `Least crowded: channel 11 (2.4 GHz), channel 44 (5 GHz)` names one channel per band. On the
+   deck (2.4 GHz only) the 5 GHz part says `No 5 GHz network seen: this adapter may be 2.4 GHz only`. Check the choice by hand
+   against the list. The note about channels 149 to 165 shows when a 5 GHz network uses them.
+4. Enter or a second tap on a network opens its page: Status, Network name, BSSID, Vendor (a virtual or random BSSID says it has
+   none), Signal with its word, Channel, Frequency, Band, Bit rate, Security with a one-line meaning (`Open: anyone near can
+   read your traffic.`). It refreshes with each scan; **Scan now** reads again. Switch that access point off (or take a phone
+   hotspot away) and scan: `Gone: not in the last scan, last values shown`; switch it on again: it comes back. Esc goes back
+   to the list, which keeps scanning.
+5. Wi-Fi switched off (`nmcli radio wifi off`): `Wi-Fi is switched off` with `Turn Wi-Fi on, then try again.`; on again: the
+   list returns within the interval. With Ethernet chosen under Network (B12): `No Wi-Fi adapter on end0: choose wlan0 under
+   Network`. Without NetworkManager (`sudo systemctl stop NetworkManager`): `NetworkManager is not running`.
+6. Esc / Left: back to Home, `pgrep nmcli` shows nothing a moment later. The scan sends only NetworkManager's own probe
+   requests (any phone does the same); it never connects to anything (watch a `ping` running in another window: a scan on the
+   deck may add a latency spike, as any scan does).
+7. **Save log**: `~/net-logs/wifi-<date>-<time>.txt` (every network, the channels summary) and, on a network's page,
+   `wifi-network-<date>-<time>.txt`.
+
+## B19. Wi-Fi walk test (0.4): around the room, and between two access points
+
+Needs the deck or the Pi 3A+ in your hand and a room or a flat with a weak corner; for the roaming step, two access points
+with the same network name (a mesh, or a repeater).
+
+1. Home, **Wi-Fi walk test**: `Press Start, then walk around`, the reading `--` with `Ready`, an empty chart with the dashed
+   weak line at `-75 dBm`, the caption `Walk slowly and keep the deck in your hand; stop at the dead spot to read the numbers.`
+   and the row `Weak below -75 dBm`. Enter on that row cycles -70, -75, -80; the dashed line follows at the next Start.
+2. **Start**: the line reads `Walking: 00:12, weakest -NN dBm`, the big number follows `cat /proc/net/wireless` (the level
+   column, once a second), with its word (Excellent from -50, Good from -60, Fair from -70, else Weak) and a shape (check,
+   exclamation mark, cross); the chart draws the last 2.5 minutes with the time at the bottom (`-02:30` to `now`).
+3. Walk away from the router to the weakest corner and back, slowly: the line goes down; below the dashed line the readings
+   turn amber **and** are marked with small squares (not colour alone); the line says `in a weak spot` while it is down there;
+   the number says `Below -75 dBm: the weak zone`. Stop at the dead spot: the number holds the level of that spot.
+4. With two access points of one network: walking from one to the other draws a tick with a diamond at the top of the chart at
+   the moment the board's access point changes (`iw dev wlan0 link` shows the new BSSID), and the summary lists `At 01:02,
+   moved to <BSSID>`. Without `iw` installed (`sudo mv /usr/sbin/iw /usr/sbin/iw.off` for the test): the legend says `Access
+   point changes need iw.` and the summary says `not known: iw is missing`; put it back.
+5. **Stop**: `Stopped: 01:23, weakest -NN dBm`; the chart shows the whole walk and the summary card is under it: Duration,
+   Readings, Weakest (with its time), Average, Strongest, Time in the weak zone (seconds and %), Dips under the line, Access
+   point changes. A signal that hovers at the line counts as one dip, not ten. **Start** again begins a new walk; **Reset**
+   forgets the walk. A pause with no link (`sudo ip link set wlan0 down` for 4 s, then up again): a red tick at the bottom of
+   the chart and the row `Without link`.
+6. A walk of more than 10 minutes keeps the last 10 minutes in the chart and the whole walk in the summary. The weak-zone
+   setting is kept in `~/.config/cyberdeckzero/net-toolbox.conf` (`walk_weak_dbm=`); the walk itself is not.
+7. Esc / Left during a walk: back to Home, nothing keeps running (`pgrep iw`). Save log: `~/net-logs/walktest-<date>-<time>.txt`
+   with the settings, the summary, the dips, the access point changes and every reading.
+8. At 640x480 the cells, the caption, the reading, the chart with its legend and the `Weak below` row are on screen at once,
+   and touch alone does everything (Start, Stop, Reset, the setting row, scrolling the summary by dragging).

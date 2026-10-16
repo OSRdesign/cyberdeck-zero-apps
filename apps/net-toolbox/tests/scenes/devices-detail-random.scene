@@ -1,0 +1,37 @@
+# Local devices, a phone with a private address
+title Net Toolbox: Local devices, a phone with a private address
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO devices=done
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 250
+key enter
+wait 300
+key down
+wait 100
+key down
+key down
+key down
+wait 100
+key enter
+wait 300
+key home
+wait 200
+shot detail
+expect text "192.168.68.31"
+expect text "Private (random) address: the vendor cannot be known"
+expect text "none found"
+expect text "Another device"
+expect notext "Message cut off"

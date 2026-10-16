@@ -4,7 +4,7 @@ sizes 640x480 800x480 720x720 1024x600 1280x720
 env NET_TOOLBOX_DEMO "diag=healthy,ping=mixed,speed=down-mid,wol=awake,wol_machines=3,ble=scan6"
 env NET_TOOLBOX_FIXTURE deck
 env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
-# The page starts on Diagnose my connection, under the Network row; Up at the first row stays; Down walks the twelve tools
+# The page starts on Diagnose my connection, under the Network row; Up at the first row stays; Down walks the fifteen tools
 # (the list scrolls)
 key up
 key up
@@ -20,9 +20,15 @@ key down
 key down
 key down
 key down
+key down
+key down
+key down
 shot last-row
 expect text "Interfaces"
 # Ping: Esc goes back to Home with the highlight on Ping
+key up
+key up
+key up
 key up
 key up
 key up
@@ -124,6 +130,32 @@ key esc
 wait 200
 expect text "Scanning, 6 devices, 37 s left"
 expect noquit
+key esc
+wait 200
+expect text "wlan0: 192.168.68.121"
+expect noquit
+# Local devices: nothing runs until Scan; Esc goes back
+key down
+key enter
+wait 250
+expect text "Press Scan to look for devices on your network"
+expect text "Scans only your own network. Use it on networks you own or are allowed to test."
+key esc
+wait 200
+expect noquit
+# Wi-Fi networks: the scan starts by itself; Esc goes back
+key down
+key enter
+wait 300
+expect text "11 networks on wlan0, scanned 3 s ago"
+key esc
+wait 200
+expect noquit
+# Wi-Fi walk test: nothing runs until Start; Esc goes back
+key down
+key enter
+wait 250
+expect text "Press Start, then walk around"
 key esc
 wait 200
 expect text "wlan0: 192.168.68.121"

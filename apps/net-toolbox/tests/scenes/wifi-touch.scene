@@ -1,0 +1,51 @@
+# Wi-Fi networks by touch
+title Net Toolbox: Wi-Fi networks by touch
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO wifi=vanish
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key end
+key up
+key up
+wait 400
+tap "Wi-Fi networks"
+wait 400
+shot list
+expect text "11 networks on wlan0, scanned 3 s ago"
+tap "View"
+wait 300
+shot channels
+expect text "Channels"
+tap "View"
+wait 300
+expect text "Networks"
+tap "Rescan"
+wait 300
+shot rescanned
+expect text "10 networks on wlan0, scanned 3 s ago"
+@640x480 tapxy 0.5 0.725
+@640x480 tapxy 0.5 0.725
+@800x480 tapxy 0.5 0.652
+@800x480 tapxy 0.5 0.652
+@720x720 tapxy 0.5 0.475
+@720x720 tapxy 0.5 0.475
+@1024x600 tapxy 0.5 0.568
+@1024x600 tapxy 0.5 0.568
+@1280x720 tapxy 0.5 0.522
+@1280x720 tapxy 0.5 0.522
+
+wait 300
+shot detail
+expect text "In range"
+shot detail-top
+tap "Esc"
+wait 300
+expect text "10 networks on wlan0, scanned 3 s ago"
+tap "Save log"
+shot saved-list
+tap "Esc"
+wait 300
+expect noquit
+tap "Esc"
+expect quit
+expect notext "Message cut off"

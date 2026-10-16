@@ -1,0 +1,36 @@
+# Local devices, scanning (the list grows)
+title Net Toolbox: Local devices, scanning (the list grows)
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO devices=scan
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 250
+key enter
+wait 300
+shot scanning
+expect text "Scanning 192.168.68.0/24: 96 of 254, 11 found"
+expect text "Stop"
+expect text "router"
+expect text "192.168.68.1"
+expect text "TP-Link  b0:4e:26:00:00:01"
+expect text "2 ms"
+expect text "Private (random) address  da:a1:19:7e:44:90"
+key down
+key end
+wait 300
+shot end
+expect text "this device"
+expect text "cyberdeck"
+expect notext "Message cut off"

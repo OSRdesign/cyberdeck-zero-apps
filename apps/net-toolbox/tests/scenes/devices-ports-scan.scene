@@ -1,0 +1,48 @@
+# Local devices, a port scan running
+title Net Toolbox: Local devices, a port scan running
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO "devices=done,ports=scan"
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 250
+key enter
+wait 300
+key down
+wait 100
+key enter
+wait 300
+key down
+key down
+key enter
+wait 300
+shot scanning
+expect text "Scanning 22 of 76: 2 open"
+expect text "Stop the port scan"
+expect text "common ports"
+expect text "OPEN PORTS"
+expect text "Port 22  ssh"
+expect text "open"
+key down
+key down
+wait 200
+shot rows
+expect notext "Message cut off"
+key up
+key up
+key enter
+wait 300
+shot stopped
+expect text "Stopped at 22 of 76: 2 open"
+expect text "Scan common ports"

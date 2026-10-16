@@ -1,0 +1,36 @@
+# Wi-Fi networks, an open network
+title Net Toolbox: Wi-Fi networks, an open network
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO wifi=list
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 400
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 100
+key enter
+wait 300
+key end
+wait 200
+shot detail
+expect text "Open: anyone near can read your traffic."
+expect text "Open"
+expect notext "Message cut off"

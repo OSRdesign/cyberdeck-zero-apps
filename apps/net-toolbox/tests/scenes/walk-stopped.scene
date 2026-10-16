@@ -1,0 +1,57 @@
+# Wi-Fi walk test, the summary
+title Net Toolbox: Wi-Fi walk test, the summary
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO walk=run
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 300
+key enter
+wait 400
+key enter
+wait 400
+shot stopped
+expect text "Stopped: 01:23, weakest -82 dBm"
+expect text "Start"
+key down
+key down
+key down
+key down
+wait 200
+shot summary
+expect text "Duration"
+expect text "01:23"
+expect text "Readings"
+key down
+key down
+wait 200
+shot weakest
+expect text "Weakest"
+key down
+key down
+wait 200
+shot middle
+expect text "Average"
+expect text "Strongest"
+key end
+wait 300
+shot bottom
+expect text "Time in the weak zone"
+expect text "Dips under -75 dBm"
+expect text "Access point changes"
+expect text "At 01:02, moved to"
+expect text "b0:4e:26:00:00:02"
+expect notext "Message cut off"

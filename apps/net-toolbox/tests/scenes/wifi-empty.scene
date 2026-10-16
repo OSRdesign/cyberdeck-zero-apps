@@ -1,0 +1,24 @@
+# Wi-Fi networks, none in range
+title Net Toolbox: Wi-Fi networks, none in range
+sizes 640x480 800x480 720x720 1024x600 1280x720
+env NET_TOOLBOX_DEMO wifi=empty
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 400
+shot empty
+expect text "No network found on wlan0, scanned 3 s ago"
+expect text "No Wi-Fi network found. Move closer to an access point; the list refreshes by itself."
+expect notext "Message cut off"
