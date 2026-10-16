@@ -107,8 +107,10 @@ private:
 
     /* lists */
     void build_list(int y, int h, std::vector<cp0::ui::ListRow> rows, int select);
-    cp0::ui::ListRow list_row(const RowText &text, std::intptr_t id) const;
-    std::string fit_value(const RowText &text) const;
+    cp0::ui::ListRow list_row(const RowText &text, std::intptr_t id,
+                             cp0::ui::RowAffordance aff = cp0::ui::RowAffordance::Unspecified) const;
+    std::string fit_value(const RowText &text,
+                          cp0::ui::RowAffordance aff = cp0::ui::RowAffordance::Unspecified) const;
     void prepare_fonts();
 
     cp0_ui_roller_page_t layout_{};

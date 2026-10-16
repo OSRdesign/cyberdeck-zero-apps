@@ -42,7 +42,9 @@ expect osk off
 key enter
 shot root-jfk
 expect text "Position set: JFK  40.6394, -73.7793"
-expect text "JFK  40.6394, -73.7793"
+# the Position row ends in a chevron now: on the narrower lists (640x480, 1024x600) the value falls back to the code
+@800x480,720x720,1280x720 expect text "JFK  40.6394, -73.7793"
+@640x480,1024x600 expect text "JFK"
 expect noquit
 key enter
 expect quit
