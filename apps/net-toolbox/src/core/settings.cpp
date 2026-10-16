@@ -11,6 +11,7 @@
 #include "portcheck.hpp"
 #include "sock.hpp"
 #include "text.hpp"
+#include "walktest.hpp"
 #include "whois.hpp"
 
 #include <errno.h>
@@ -152,6 +153,8 @@ std::string Settings::serialize() const
     out += "speed_ping=" + speed_ping + "\n";
     out += "ble_seconds=" + std::to_string(ble_seconds) + "\n";
     if (!interface.empty()) out += "interface=" + interface + "\n";
+    out += "wifi_rescan_ms=" + std::to_string(wifi_rescan_ms) + "\n";
+    out += "walk_weak_dbm=" + std::to_string(walk_weak_dbm) + "\n";
     return out;
 }
 
@@ -219,6 +222,10 @@ Settings Settings::parse(const std::string &text)
             const std::string v = lower(value);
             if (value.empty() || v == "auto" || v == "automatic") s.interface.clear();
             else if (valid_iface_name(value)) s.interface = value;
+        } else if (key == "wifi_rescan_ms") {
+            int_in(value, kWifiIntervalMinMs, kWifiIntervalMaxMs, s.wifi_rescan_ms);
+        } else if (key == "walk_weak_dbm") {
+            int_in(value, kWalkWeakMinDbm, kWalkWeakMaxDbm, s.walk_weak_dbm);
         }
     }
     return s;

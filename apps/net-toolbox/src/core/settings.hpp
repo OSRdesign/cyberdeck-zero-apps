@@ -31,6 +31,8 @@
  *   interface=wlan1      0.3: the chosen network (scope.hpp); absent or empty = Automatic (the system's route). The name is
  *                        kept while that adapter is unplugged (the tools then use Automatic and say so). "auto" and
  *                        "automatic" read as Automatic; an invalid name is ignored.
+ *   wifi_rescan_ms=5000  0.4: the Wi-Fi networks list's interval (2000 .. 60000 ms)
+ *   walk_weak_dbm=-75    0.4: the walk test's weak zone: below this level (-95 .. -40 dBm)
  * A 0.1 file (without the 0.2 keys) reads with their defaults; 0.1 ignores the 0.2 keys. Likewise for the 0.3 keys: a
  * 0.2 file reads with their defaults (no machine saved), 0.2 ignores them (unknown keys).
  * Parsed, never executed; unknown keys and bad values (a host that is not a valid name or address) are ignored;
@@ -72,6 +74,8 @@ struct Settings {
     std::string speed_ping = "1.1.1.1";
     int ble_seconds = 60;
     std::string interface;      /* "" = Automatic; else an interface name (valid_iface_name) */
+    int wifi_rescan_ms = 5000;  /* 0.4: wifi_rescan_ms=, the Wi-Fi list's interval (2000 .. 60000, wifiscan.hpp) */
+    int walk_weak_dbm = -75;    /* 0.4: walk_weak_dbm=, the walk test's weak zone threshold (-95 .. -40, walktest.hpp) */
 
     /* a saved target: added at the end (moved there when already saved; the oldest goes past kMaxTargets); false
      * for an invalid host */

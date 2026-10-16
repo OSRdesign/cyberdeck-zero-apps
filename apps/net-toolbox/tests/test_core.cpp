@@ -119,7 +119,7 @@ static void test_package()
     CHECK(manifest.find("\"license\": \"MIT\"") != std::string::npos);
     CHECK(manifest.find("\"categories\": [\"Tools\"]") != std::string::npos);
     CHECK(manifest.find("\"permissions\": {\"network\": true}") != std::string::npos);
-    CHECK(manifest.find("\"depends\": \"libfreetype6, libinput10, libxkbcommon0, curl, ca-certificates\"") !=
+    CHECK(manifest.find("\"depends\": \"libfreetype6, libinput10, libxkbcommon0, curl, ca-certificates, network-manager\"") !=
           std::string::npos);
     CHECK(manifest.find("libc6") == std::string::npos);
     CHECK(std::string(kAppId) == "net-toolbox");
@@ -400,6 +400,8 @@ int main()
     test_scope();
     test_ui_scope();
     test_ui_model_03();
+    test_wifiscan();
+    test_walktest();
     test_package();
     std::printf("test-net-toolbox: %d passed, %d failed, %d skipped\n", g_pass, g_fail, g_skip);
     return g_fail ? 1 : 0;

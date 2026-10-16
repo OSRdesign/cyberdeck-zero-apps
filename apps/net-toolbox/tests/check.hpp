@@ -114,3 +114,6 @@ void test_netlog_03();
 void test_scope();
 void test_ui_scope();
 void test_ui_model_03();
+/* 0.4: Wi-Fi networks and the walk test */
+void test_wifiscan();
+void test_walktest();
