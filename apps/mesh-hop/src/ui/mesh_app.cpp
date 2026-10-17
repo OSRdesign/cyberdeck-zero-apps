@@ -28,7 +28,7 @@ namespace meshhop {
 
 namespace {
 
-constexpr const char *kVersion = "0.3.0";
+constexpr const char *kVersion = "0.4.0";
 
 // ---- the colours: the launcher's (cp0_ui_list.h and cp0_ui_osk.h), not an own palette. Green, amber and red are the
 // status tones (ValueTone Ok / Warn / Bad), the accent blue marks what is selected, focused or unread.
