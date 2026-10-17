@@ -4,6 +4,8 @@
 # of the send and what the board sent back.
 wait 3500
 key enter
+wait 300
+key enter
 type hello channel
 key enter
 wait 1500

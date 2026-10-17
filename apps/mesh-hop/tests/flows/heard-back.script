@@ -4,6 +4,8 @@
 #   SIMARGS="--heard-back 2 --heard-back-direct" SCRIPT=heard-back.script sh ui_smoke.sh
 wait 3500
 key enter
+wait 300
+key enter
 type hello mesh, who hears me?
 key enter
 wait 700

@@ -160,7 +160,11 @@ private:
     void build_placeholder(lv_obj_t **page, const char *title, const char *text);
     void build_popup();
     void build_hint_line();
-    void build_tabs();
+    void build_home();
+    void render_home();
+    void key_home(const KeyEvent &e);
+    void open_page(Tab t);
+    void go_home();
     void build_stage();
     void build_shell();
     void layout_body();                  // sizes and places what depends on the height under the shell (page_h_, panel_h_)
@@ -176,7 +180,6 @@ private:
 
     // rendering
     void render();
-    void render_tabs();
     void render_chats();
     void render_chat_messages(bool force);
     void render_contacts();
@@ -461,19 +464,17 @@ private:
     // the shell: the page (header, caption), the tab row, the key hint line, the stage with the page bodies
     cp0_ui_roller_page_t layout_{};
     std::unique_ptr<cp0::ui::Page> shell_;
-    int tabs_y_ = 0, tab_h_ = 0, hint_h_ = 0, stage_x_ = 0;
+    int tabs_y_ = 0, tab_h_ = 0, hint_h_ = 0, stage_x_ = 0;   // tabs_y_: the top of the stage and of Home, under the caption line (no tab row: tab_h_ is 0)
+    bool at_home_ = true;                // Home: the main menu (Chats, Contacts, Settings); a page is open otherwise
+    std::unique_ptr<cp0::ui::CompactList> home_list_;
     int panel_h_ = 400, page_h_ = 320;   // the height of a sub-page (it covers the tab row) and of a main page, in the stage
     std::string title_key_, cap_text_;
     int cap_tone_ = -1;
     std::vector<std::function<void()>> posted_;
-    lv_obj_t *tabs_ = nullptr, *hint_box_ = nullptr, *hint_label_ = nullptr;
+    lv_obj_t *hint_box_ = nullptr, *hint_label_ = nullptr;
 
     // widgets
     lv_obj_t *screen_ = nullptr;          // the stage
-    lv_obj_t *tab_btn_[5] = {};
-    lv_obj_t *tab_label_[5] = {};
-    lv_obj_t *tab_bar_line_[5] = {};
-    lv_obj_t *tab_badge_ = nullptr, *tab_badge_label_ = nullptr;
     lv_obj_t *page_[5] = {};
     // chats
     RowList chat_list_;

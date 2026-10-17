@@ -2,6 +2,8 @@
 # history:   SIMCTL=1 sh p2_run.sh b-swap.script
 # Each board keeps its own messages, read marks, mute flags, groups, ignored nodes and advert schedule; the old files are moved to the first board.
 wait 3500
+key enter
+wait 300
 say == board A connected, the seeded old-layout history was moved to it (expect board=a0a1a2a3a4a5 epoch=1 board_dir=a0a1a2a3a4a5 all_msgs=12)
 dump
 shot b01-chats-A

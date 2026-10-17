@@ -3,6 +3,8 @@
 # Selectable Settings rows in order: Position, Board GPS, Statistics, Packet log, Node name, Preset, Frequency, Bandwidth, SF, CR, TX power, Path hash size,
 # Repeat, Message tries, Forget the route, Advert every, Advert type, Add nodes by itself, Still added by itself, Sync clock, ... Reboot, Factory reset, Undo, Save.
 wait 3500
+key enter
+wait 300
 key tab
 key tab
 wait 800

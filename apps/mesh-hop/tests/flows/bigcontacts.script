@@ -1,6 +1,8 @@
 # Mesh Hop with 161 contacts (the user's list): the speed of the keys, the sort kept, the tapped row opens.
 #   SIMARGS="--contacts 157" SCRIPT=bigcontacts.script sh ui_smoke.sh
 wait 6000
+key enter
+wait 300
 key tab
 wait 600
 say == 161 contacts (expect contacts=161 shown=161, live_rows at most 11: only the visible rows are widgets)
@@ -43,7 +45,7 @@ wait 400
 say == tapped the first visible row after the drag: its detail or conversation opens (compare with the screenshot 33b)
 dump
 key esc
-tap "Contacts"
+key tab
 wait 300
 # the tapped row is the one that opens, in this order (and the sort is still there afterwards)
 tap 200 188
@@ -51,7 +53,7 @@ wait 400
 say == tapped the first row of this order: its conversation or detail opens (see conv_title / detail_name, expect the first= name)
 dump
 key esc
-tap "Contacts"
+key tab
 wait 400
 say == back on Contacts after a tour of the tabs: the sort and the filters are kept (expect sort=name(rev) shown=161)
 dump

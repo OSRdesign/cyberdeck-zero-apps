@@ -65,7 +65,7 @@ uint32_t loading_min_ms()
 constexpr int kContactRowH = 44;
 
 enum Tag {
-    kTagTab = 0,           // 0..4
+    kTagTab = 0,           // (the tab row is gone: Home is the menu)
     kTagSend = 10, kTagMuteChan, kTagAdvertFlood, kTagAdvertZero, kTagRefresh, kTagSort, kTagDetailMsg, kTagDetailClose, kTagEdOk,
     kTagEdCancel, kTagCompose,
     kTagHdr = 30,          // 30..35: the column titles of the contacts table
@@ -623,7 +623,7 @@ void App::build_shell()
     const int cap_lh = lv_font_get_line_height(cp0_ui_font_px(layout_.caption_px));
     layout_.caption_y = layout_.body_y + m->tok[CP0_TOK_SPACE_S] / 4;      // right under the header, the tab row follows it
     tabs_y_ = layout_.caption_y + cap_lh + m->tok[CP0_TOK_SPACE_S] / 2;
-    tab_h_ = layout_.row_h;
+    tab_h_ = 0;                                     // no tab row: Home is a list, the pages have the whole room
     stage_x_ = std::max(0, (layout_.w - kScreenW) / 2);
     hint_h_ = lv_font_get_line_height(f_caption_) + m->tok[CP0_TOK_SPACE_S];
     panel_h_ = layout_.h - tabs_y_;                 // the largest room (no hint line): the lists are made for it
@@ -634,8 +634,7 @@ void App::build_shell()
     shell_->set_title({"Mesh Hop", "Chats"});
 }
 
-/* The stage: a 640 px column under the caption line that holds the page bodies and the sub-pages; made after the tab row,
- * so that a sub-page (and the "Loading..." box) lies over it. */
+/* The stage: a 640 px column under the caption line that holds the page bodies and the sub-pages. */
 void App::build_stage()
 {
     lv_obj_t *stage = lv_obj_create(shell_->root());
@@ -649,51 +648,23 @@ void App::build_stage()
     screen_ = stage;
 }
 
-/* The tab row: Chats, Contacts, Settings (Map and Terminal come back when they exist), ROW high, over the top of the stage. */
-void App::build_tabs()
+/* Home: the main menu, a CompactList (Comfortable rows, chevrons) on the width of the stage: Chats, Contacts, Settings
+ * (Map and Terminal come back when they exist). The value of a row is a short state in grey. */
+void App::build_home()
 {
-    const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
-    tabs_ = make_box(shell_->root(), stage_x_, tabs_y_, kScreenW, tab_h_);
-    lv_obj_remove_flag(tabs_, LV_OBJ_FLAG_CLICKABLE);
-    static const Tab shown[3] = {Tab::Chats, Tab::Contacts, Tab::Settings};
-    const int w = kScreenW / 3;
-    const int lh = static_cast<int>(lv_font_get_line_height(f_body_));
-    const int bar_h = std::max(3, m->tok[CP0_TOK_SPACE_S] / 2);
-    for (int k = 0; k < 3; ++k) {
-        const int i = static_cast<int>(shown[k]);
-        const int bw = k == 2 ? kScreenW - 2 * w : w;
-        lv_obj_t *b = make_box(tabs_, k * w, 0, bw, tab_h_);
-        lv_obj_add_flag(b, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_set_style_bg_color(b, lv_color_hex(kPressed), LV_STATE_PRESSED);
-        lv_obj_set_style_bg_opa(b, LV_OPA_COVER, LV_STATE_PRESSED);
-        lv_obj_add_event_cb(b, trampoline_button, LV_EVENT_CLICKED, reinterpret_cast<void *>(static_cast<intptr_t>(kTagTab + i)));
-        tab_btn_[i] = b;
-        tab_label_[i] = make_label(b, f_body_, kMuted, 0, (tab_h_ - lh) / 2, bw, lh, LV_TEXT_ALIGN_LEFT);
-        lv_obj_remove_flag(tab_label_[i], LV_OBJ_FLAG_CLICKABLE);
-        tab_bar_line_[i] = make_box(b, m->tok[CP0_TOK_SPACE_M], tab_h_ - bar_h, bw - 2 * m->tok[CP0_TOK_SPACE_M], bar_h);
-        lv_obj_set_style_bg_color(tab_bar_line_[i], lv_color_hex(kAccent), 0);
-        lv_obj_set_style_bg_opa(tab_bar_line_[i], LV_OPA_COVER, 0);
-        set_hidden(tab_bar_line_[i], true);
-    }
-    // the unread total on the "Chats" tab: a pill with the number next to the word
-    const int bh = static_cast<int>(lv_font_get_line_height(f_caption_)) + m->tok[CP0_TOK_SPACE_S];
-    tab_badge_ = make_box(tab_btn_[0], 0, (tab_h_ - bh) / 2, bh, bh);
-    lv_obj_remove_flag(tab_badge_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_radius(tab_badge_, bh / 2, 0);
-    lv_obj_set_style_bg_color(tab_badge_, lv_color_hex(kAccent), 0);
-    lv_obj_set_style_bg_opa(tab_badge_, LV_OPA_COVER, 0);
-    tab_badge_label_ = lv_label_create(tab_badge_);
-    lv_obj_set_style_text_font(tab_badge_label_, f_caption_, 0);
-    lv_obj_set_style_text_color(tab_badge_label_, lv_color_hex(kOnAccent), 0);
-    lv_label_set_text(tab_badge_label_, "");
-    lv_obj_center(tab_badge_label_);
-    set_hidden(tab_badge_, true);
+    cp0_ui_list_layout_t l{};
+    cp0_ui_list_layout(cp0_ui_metrics_get(), CP0_UI_LIST_COMFORTABLE, stage_x_, tabs_y_, kScreenW, panel_h_, &l);
+    cp0::ui::CompactListEvents ev;
+    ev.activate = [this](int, std::intptr_t id) { post([this, id] { open_page(id == 0 ? Tab::Chats : id == 1 ? Tab::Contacts : Tab::Settings); }); };
+    ev.back = [this] { header_back(); };
+    home_list_ = std::make_unique<cp0::ui::CompactList>(shell_->root(), l, ev);
+    render_home();
+    home_list_->select(0, false);
 }
 
 void App::build_screen()
 {
     build_shell();
-    build_tabs();
     build_stage();
     for (int i = 0; i < 5; ++i) page_[i] = make_box(screen_, 0, tab_h_, kScreenW, page_h_);
     build_chats();
@@ -701,6 +672,7 @@ void App::build_screen()
     build_contacts();
     build_placeholder(&page_[static_cast<int>(Tab::Terminal)], "Terminal", "A meshcore-cli style command line comes in a later version.");
     build_settings();
+    build_home();
     build_hint_line();
     build_popup();
     layout_body();
@@ -1101,8 +1073,7 @@ lv_point_t App::script_origin() const
 {
     lv_area_t a;
     lv_obj_get_coords(screen_, &a);
-    const bool sub = nav_.search_open || nav_.nearby_open || nav_.detail_open || nav_.stats_open || nav_.packet_log_open;
-    return {a.x1, a.y1 + (sub ? -56 : tab_h_ - 56)};
+    return {a.x1, a.y1 - 56};
 }
 
 void App::build_popup()
@@ -1144,7 +1115,7 @@ std::string App::debug_state() const
                 break;
             }
     }
-    std::string s = std::string("state tab=") + tab_name(nav_.tab) + " link=" + client_->link_text() + " conv=" + conv_ +
+    std::string s = std::string("state tab=") + tab_name(nav_.tab) + " home=" + (at_home_ ? "1" : "0") + " link=" + client_->link_text() + " conv=" + conv_ +
                     " msgs=" + std::to_string(conv_.empty() ? 0 : model_.messages(conv_).size()) + " unread=" + std::to_string(model_.unread_total()) +
                     " contacts=" + std::to_string(model_.contact_count()) + " chat_rows=" + std::to_string(chat_rows_.size()) +
                     " chat_sel=" + std::to_string(chat_sel_) + " compose_focus=" + (nav_.compose_focus ? "1" : "0") + " compose='" + compose + "'" +
@@ -1247,7 +1218,7 @@ void App::set_page_visible()
 void App::update_title()
 {
     std::vector<std::string> path = {"Mesh Hop"};
-    switch (nav_.tab) {
+    switch (at_home_ ? Tab::Map : nav_.tab) {
     case Tab::Chats:
         path.push_back("Chats");
         if (nav_.search_open) path.push_back("Search");
@@ -1266,7 +1237,7 @@ void App::update_title()
         if (nav_.stats_open) path.push_back("Statistics");
         else if (nav_.packet_log_open) path.push_back("Packet log");
         break;
-    default: path.push_back(tab_name(nav_.tab)); break;
+    default: break;                                          // Home: "Mesh Hop"
     }
     std::string key;
     for (const std::string &s : path) key += s + "\x1f";
@@ -1507,7 +1478,7 @@ void App::hold_event(int what, RowList *list, int index, int x, int y)
                                   chat_rows_[static_cast<size_t>(chat_sel_)].kind == ChatRow::Add;
         if (!add_selected && (conv_.rfind("c:", 0) == 0 || conv_.rfind("d:", 0) == 0)) target = conv_;
     }
-    if (target.empty() || nav_.popup_open || editor_open_ || view_pending_ || nav_.tab != Tab::Chats) {
+    if (target.empty() || nav_.popup_open || editor_open_ || view_pending_ || nav_.tab != Tab::Chats || at_home_) {
         hold_.cancel();
         hold_.take_swallow();
         return;
@@ -1522,7 +1493,7 @@ void App::hold_tick(uint64_t now)
         if (hold_box_ && !lv_obj_has_flag(hold_box_, LV_OBJ_FLAG_HIDDEN)) set_hidden(hold_box_, true);
         return;
     }
-    if (nav_.popup_open || editor_open_ || nav_.tab != Tab::Chats || lv_obj_get_scroll_y(chat_list_.obj()) != hold_scroll_y_) {
+    if (nav_.popup_open || editor_open_ || nav_.tab != Tab::Chats || at_home_ || lv_obj_get_scroll_y(chat_list_.obj()) != hold_scroll_y_) {
         hold_.cancel();                                  // a scroll of the list, or something else took over
         set_hidden(hold_box_, true);
         return;
@@ -1668,7 +1639,7 @@ void App::tick()
                         format_local_datetime(now_unix()));
         }
     }
-    if (nav_.tab == Tab::Chats && !conv_.empty()) model_.mark_read(conv_);
+    if (nav_.tab == Tab::Chats && !at_home_ && !conv_.empty()) model_.mark_read(conv_);
     if (need) render();
 }
 
@@ -1678,9 +1649,11 @@ void App::render()
     last_revision_ = model_.revision();
     last_link_ = static_cast<uint32_t>(client_->link());
     dirty_ = false;
-    set_page_visible();
-    render_tabs();
-    switch (nav_.tab) {
+    set_hidden(screen_, at_home_);
+    home_list_->set_hidden(!at_home_);
+    if (at_home_) render_home();
+    else set_page_visible();
+    switch (at_home_ ? Tab::Map : nav_.tab) {
     case Tab::Chats:
         render_chats();
         set_hidden(search_panel_, !nav_.search_open);
@@ -1698,54 +1671,88 @@ void App::render()
     }
     position_refresh();
     render_footer();
-    const bool sub = nav_.search_open || nav_.nearby_open || nav_.detail_open || nav_.stats_open || nav_.packet_log_open;
-    set_hidden(tabs_, sub);                                  // a sub-page covers the tab row
     update_title();
 }
 
-void App::render_tabs()
+/* The rows of Home: what is new in Chats, how many contacts, the board. */
+void App::render_home()
 {
-    const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
+    using cp0::ui::ListRow;
+    using cp0::ui::RowAffordance;
+    using cp0::ui::ValueTone;
     const int unread = model_.unread_total();
-    static const Tab shown[3] = {Tab::Chats, Tab::Contacts, Tab::Settings};
-    for (const Tab t : shown) {
-        const int i = static_cast<int>(t);
-        const bool active = t == nav_.tab;
-        const char *name = tab_name(t);
-        lv_label_set_text(tab_label_[i], name);
-        set_color(tab_label_[i], active ? kAccent : kMuted);
-        lv_obj_set_style_bg_opa(tab_btn_[i], active ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
-        lv_obj_set_style_bg_color(tab_btn_[i], lv_color_hex(kPanel), 0);
-        set_hidden(tab_bar_line_[i], !active);
-        // the word, and next to it the unread total of Chats (a pill with the number, 99+ above 99), centred together
-        lv_point_t sz = {0, 0};
-        lv_text_get_size(&sz, name, f_body_, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-        const int tab_w = lv_obj_get_width(tab_btn_[i]);
-        int total = sz.x;
-        int badge_w = 0;
-        if (t == Tab::Chats && unread > 0) {
-            const std::string text = fmt_count_badge(unread);
-            lv_point_t bs = {0, 0};
-            lv_text_get_size(&bs, text.c_str(), f_caption_, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-            const int bh = lv_obj_get_height(tab_badge_);
-            badge_w = std::max(bh, bs.x + bh / 2);
-            lv_label_set_text(tab_badge_label_, text.c_str());
-            total += m->tok[CP0_TOK_SPACE_S] + badge_w;
-        }
-        const int x0 = std::max(0, (tab_w - total) / 2);
-        lv_obj_set_width(tab_label_[i], sz.x + 4);
-        lv_obj_set_x(tab_label_[i], x0);
-        if (t == Tab::Chats) {
-            if (badge_w) {
-                lv_obj_set_width(tab_badge_, badge_w);
-                lv_obj_set_x(tab_badge_, x0 + sz.x + m->tok[CP0_TOK_SPACE_S]);
-                lv_obj_center(tab_badge_label_);
-                set_hidden(tab_badge_, false);
-            } else {
-                set_hidden(tab_badge_, true);
-            }
-        }
+    const std::string chats = unread > 0 ? std::to_string(unread) + " unread" : "no new";
+    const size_t n = model_.contact_count();
+    const std::string contacts = std::to_string(n) + (n == 1 ? " contact" : " contacts");
+    std::string board;
+    ValueTone board_tone = ValueTone::Muted;
+    switch (client_->link()) {
+    case Link::Ready: {
+        const auto &dev = model_.device();
+        board = dev && !dev->model.empty() ? dev->model : std::string("connected");
+        break;
     }
+    case Link::Handshake: board = "connecting"; board_tone = ValueTone::Warn; break;
+    case Link::Searching: board = "no board"; board_tone = ValueTone::Warn; break;
+    case Link::Denied: board = "no permission"; board_tone = ValueTone::Bad; break;
+    case Link::Busy: board = "port busy"; board_tone = ValueTone::Bad; break;
+    case Link::Error: board = "port error"; board_tone = ValueTone::Bad; break;
+    case Link::NotCompanion: board = "wrong firmware"; board_tone = ValueTone::Bad; break;
+    }
+    std::vector<ListRow> rows;
+    rows.push_back(ListRow::item("Chats", chats, ValueTone::Muted, 0, RowAffordance::Open));
+    rows.push_back(ListRow::item("Contacts", contacts, ValueTone::Muted, 1, RowAffordance::Open));
+    rows.push_back(ListRow::item("Settings", truncate_ellipsis(board, 22), board_tone, 2, RowAffordance::Open));
+    if (home_list_->count() == 0) home_list_->reset_rows(rows, 0);
+    else home_list_->set_rows(rows);
+    // unread messages in the accent blue (the list's tones have none): the value label of that row
+    if (unread > 0) {
+        std::function<void(lv_obj_t *)> tint = [&](lv_obj_t *o) {
+            if (lv_obj_check_type(o, &lv_label_class)) {
+                const char *t = lv_label_get_text(o);
+                if (t && chats == t) set_color(o, kAccent);
+            }
+            for (uint32_t i = 0; i < lv_obj_get_child_count(o); ++i) tint(lv_obj_get_child(o, static_cast<int32_t>(i)));
+        };
+        tint(home_list_->focus_object());
+    }
+}
+
+void App::open_page(Tab t)
+{
+    if (nav_.popup_open || editor_open_ || view_pending_) return;
+    at_home_ = false;
+    select_tab(t);
+    invalidate();
+}
+
+/* Back to Home from the root of a page (Esc, the header's Esc button). The page keeps its state. */
+void App::go_home()
+{
+    at_home_ = true;
+    nav_.compose_focus = false;
+    hold_.cancel();
+    const int idx = nav_.tab == Tab::Contacts ? 1 : nav_.tab == Tab::Settings ? 2 : 0;
+    home_list_->select(idx, false);
+    invalidate();
+}
+
+void App::key_home(const KeyEvent &e)
+{
+    const int n = home_list_->count();
+    int sel = std::max(0, home_list_->selected());
+    switch (e.key) {
+    case Key::Up: sel = std::max(0, sel - 1); break;
+    case Key::Down: sel = std::min(n - 1, sel + 1); break;
+    case Key::Home: sel = 0; break;
+    case Key::End: sel = n - 1; break;
+    case Key::Enter:
+    case Key::Right:
+        if (!e.repeat) open_page(sel == 0 ? Tab::Chats : sel == 1 ? Tab::Contacts : Tab::Settings);
+        return;
+    default: return;
+    }
+    home_list_->select(sel, false);
 }
 
 void App::update_compose_style()
@@ -2364,6 +2371,7 @@ std::string App::hint_text() const
         }
     }
     if (editor_open_) return edit_kind_ == EditKind::Position ? "Tab: next field   Enter: OK   Esc: cancel" : "Type with the keyboard   Enter: OK   Esc: cancel";
+    if (at_home_) return "Up/Down: choose   Enter: open   Hold Esc 3 s: leave";
     switch (nav_.tab) {
     case Tab::Chats:
         return nav_.search_open ? "Type  Up/Down  Enter: open  Ctrl+K D R: filters"
@@ -4380,10 +4388,6 @@ void App::button_clicked(int tag)
         return;
     }
     if (nav_.popup_open || view_pending_) return;
-    if (tag >= kTagTab && tag < kTagTab + 5) {
-        if (!editor_open_) select_tab(static_cast<Tab>(tag - kTagTab));
-        return;
-    }
     if (tag >= kTagHdr && tag < kTagHdr + 6) {
         static const SortKey keys[6] = {SortKey::Name, SortKey::Type, SortKey::Heard, SortKey::Snr, SortKey::Hops, SortKey::Distance};
         ContactView v = cview_;
@@ -4550,18 +4554,21 @@ void App::back()
         nav_.compose_focus = false;
         invalidate();
         break;
-    case BackAction::ExitHint: notice("Hold Esc 3 s to exit", true); break;
+    case BackAction::ExitHint:
+        if (at_home_) notice("Hold Esc 3 s to exit", true);      // Home is the root; a page root goes back to Home
+        else go_home();
+        break;
     }
 }
 
-/* The Esc button of the page header (touch): Back inside a sub-page, a detail, a box or an editor; at the root it asks first,
+/* The Esc button of the page header (touch): Back inside a sub-page, a detail, a box or an editor, from the root of a page to Home; at Home it asks first,
  * so that a touch-only board can leave the app, and a tap beside the button cannot close a running radio session. */
 void App::header_back()
 {
     post([this] {
         if (view_pending_) return;
         if (mono_ms() - start_ms_ < kStartGuardMs) return;
-        if (back_action(nav_) == BackAction::ExitHint) ask_quit();
+        if (back_action(nav_) == BackAction::ExitHint && at_home_) ask_quit();
         else back();
     });
 }
@@ -4778,7 +4785,11 @@ void App::on_key(const KeyEvent &e)
         if (!e.repeat) back();
         return;
     }
-    // Tab walks the tabs in a loop (Shift+Tab backwards); touch goes straight to a tab. No other tab keys.
+    // On a page, Tab goes to the next page in a loop over Chats, Contacts, Settings (Shift+Tab backwards); Home is the other way to a page.
+    if (at_home_) {
+        key_home(e);
+        return;
+    }
     if (e.key == Key::Tab || e.key == Key::BackTab) {
         if (!e.repeat) {
             const int dir = e.key == Key::Tab ? 1 : -1;

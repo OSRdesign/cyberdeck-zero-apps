@@ -2,6 +2,8 @@
 # Screenshots go to the --shot-dir, `dump` prints the state. Keys and taps are the real ones: tab bar taps, list rows, buttons, popups,
 # drag-scroll. Coordinates are screen pixels (640x480; the page starts at y=56).
 wait 3500
+key enter
+wait 300
 say == chats (expect tab=Chats link=Connected contacts=4 conv=c:0 unread=1: the unread total of Alice's message is on the Chats tab)
 dump
 shot 01-chats
@@ -234,13 +236,25 @@ wait 100
 say == Tab loop: three presses are a full turn (expect tab=Settings)
 dump
 
-# touch tabs
-tap "Chats"
-say == tap Chats tab (expect tab=Chats)
+# Tab: the next page
+key tab
+say == Tab: Chats (expect tab=Chats)
 dump
-tap "Contacts"
-say == tap Contacts tab (expect tab=Contacts)
+key tab
+say == Tab: Contacts (expect tab=Contacts)
+dump
+# Esc at the root of a page goes back to Home (a Home row by touch: the first tap selects, the second opens)
+key esc
+wait 300
+say == Esc on a page: Home (expect home=1)
+dump
+tap "Settings"
+tap "Settings"
+wait 600
+say == Settings opened by touch from Home (expect home=0 tab=Settings)
 dump
 key esc
-say == Esc on a top-level screen: only a hint, the app keeps running
+wait 300
+key esc
+say == Esc at Home: only a hint, the app keeps running (expect home=1)
 dump

@@ -1,10 +1,11 @@
-# Mesh Hop (P2, the shell): the header with the Esc button, the tab row (Chats, Contacts, Settings), the caption line and the
-# Quit question are the launcher's widgets and follow the screen; the page bodies are still a 640 px column (the stage)
-# centred under them. At the five sizes, no board (the app offline). Taps go by label, a tap beside the stage does nothing,
-# the keys come through the shared keyboard bridge. No shot or layout check here: the shared size rules (rows 7 mm, buttons
-# 9 mm) fail on every control of the page bodies until the pages are converted (P3, P4); mesh-hop-script `check`
+# Mesh Hop (P2b, the shell): Home is a list (Chats, Contacts, Settings, with a chevron and a short state each), the header has the
+# Esc button, the caption line says the board and the notices; a page has the same header and its Esc goes back to Home, where it
+# asks "Quit Mesh Hop?". The page bodies are still a 640 px column (the stage) centred under the shell. At the five sizes, no
+# board (the app offline). Taps go by label (a first tap on a Home row selects it, the second opens it), a tap beside the stage does
+# nothing, the keys come through the shared keyboard bridge. No shot or layout check here: the shared size rules (rows 7 mm,
+# buttons 9 mm) fail on every control of the page bodies until the pages are converted; mesh-hop-script `check`
 # (tests/flows/shell.script) holds the shell, which is outside the stage, to them.
-title Mesh Hop: the shell at five sizes
+title Mesh Hop: Home and the shell at five sizes
 env MESHHOP_DATA /tmp/mesh-hop-scene-data
 env MESHHOP_PORT /nonexistent/ttyMH
 env MESHHOP_ONLINE 0
@@ -17,39 +18,54 @@ expect text "Settings"
 expect text "Esc"
 expect notext "Map"
 expect notext "Terminal"
+expect notext "Zero-hop"
 expect noquit
 
-# the Contacts tab by its label
+# Contacts from Home: a first tap selects the row, the second opens it
 tap "Contacts"
+tap "Contacts"
+wait 400
 expect text "Zero-hop"
 
 # beside the stage (the letterbox): nothing happens
 @800x480 tapxy 0.03 0.5
-@720x720 tapxy 0.5 0.9
+@720x720 tapxy 0.5 0.95
 @1024x600 tapxy 0.05 0.5
 @1280x720 tapxy 0.05 0.5
 expect text "Zero-hop"
 
-# the Settings tab, then a row of its list opens the packet log (a sub-page that covers the tab row); the header Esc goes back
+# the Esc button of a page goes back to Home
+tap "Esc"
+wait 400
+expect notext "Zero-hop"
+expect text "Settings"
+
+# Settings, a row of its list opens the packet log (a sub-page); the header Esc goes back to Settings, then Home
 tap "Settings"
+tap "Settings"
+wait 400
 expect text "Node name"
 tap "Packet log"
+wait 300
 expect text "Clear"
 tap "Esc"
 wait 400
 expect notext "Clear"
 expect text "Node name"
 
-# the keys through cp0_lvgl's queue and the app's key bridge: Tab walks the tabs that are shown (Settings -> Chats -> Contacts)
+# the keys through cp0_lvgl's queue and the app's key bridge: Tab goes to the next page (Settings -> Chats -> Contacts)
 key tab
 key tab
 expect text "Zero-hop"
-# a short Esc of the keyboard at the root never quits: it says how to leave (in the caption line)
+# Esc of the keyboard goes back to Home; a second short Esc at Home never quits: it says how to leave (in the caption line)
+key esc
+wait 300
+expect notext "Zero-hop"
 key esc
 expect text "Hold Esc 3 s to exit"
 expect noquit
 
-# the header's Esc at the root asks first: Cancel stays, Quit leaves (a touch-only board has no other way out)
+# the header's Esc at Home asks first: Cancel stays, Quit leaves (a touch-only board has no other way out)
 tap "Esc"
 wait 600
 expect text "Quit Mesh Hop?"

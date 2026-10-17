@@ -1,6 +1,8 @@
 # Mesh Hop 0.1.2: options of a conversation (Ctrl+O and the 3 s hold), mute a contact, delete a conversation, delete by age, delete all.
 # Run with a seeded history (see history_run.sh): 10 messages, from 100 days to 1 hour old, in Public, #test, Alice and Bob.
 wait 3500
+key enter
+wait 300
 say == start (expect all_msgs=12: the 10 seeded messages and 2 from the simulator, conv=c:0)
 dump
 shot h01-chats

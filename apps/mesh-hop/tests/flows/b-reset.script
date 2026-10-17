@@ -1,6 +1,8 @@
 # Mesh Hop 0.2.2: factory reset of the board. The simulator formats for 4 s before it answers (--reset-format-delay 4), then restarts with a new
 # identity.   sh p2_run.sh b-reset.script "--reset-format-delay 4"
 wait 3500
+key enter
+wait 300
 say == before (expect board=a0a1a2a3a4a5 contacts=4 all_msgs=12)
 dump
 key tab

@@ -9,7 +9,7 @@ nRF52840 and a spare XIAO S3 WIO, MeshCore firmware v1.15.0, a board swap includ
 
 A full-screen client for [MeshCore](https://github.com/meshcore-dev/MeshCore) LoRa mesh networks. The radio is a
 separate **companion radio board** plugged into the deck's USB port (MeshCore *companion radio, USB* firmware); the deck is
-its screen and keyboard. It needs a 640x480 screen at least. The shell (the page header with the Esc button, the status line, the tab row, the
+its screen and keyboard. It needs a 640x480 screen at least. The shell (Home, the page header with the Esc button, the status line, the
 dialogs) follows the screen (tested in the simulator at 640x480, 800x480, 720x720, 1024x600 and 1280x720); the page bodies are still laid out for a
 640 px wide column, centred under the shell, until they are converted one by one. Mesh Hop replaces the 320x170 UI of [MeshZero](../meshzero/README.md) with a UI made for messaging and keeps everything below
 it: the serial transport, the protocol, the client, the model and the history store (`src/main/core/`, a copy of the
@@ -120,11 +120,12 @@ deck's panel**. The real screen shows the same 640x480 picture.
 * **Firmware check**: a feature the board's firmware lacks (custom variables, channel commands, path hash mode, repeat, statistics,
   auto-add filter, discover, factory reset) is switched off with the notice "Firmware too old for this feature"; a board without
   GPS shows no GPS row.
-* **Map** and **Terminal**: not there yet, so their tabs are not shown (the packet log lives in Settings, next to the statistics).
-* **Header, status line, tabs, hints**: the page header has the title ("Mesh Hop > Chats", one more part inside a sub-page), the **Esc** button and the
-  launcher's shared strip (clock, Wi-Fi, Bluetooth). The line under it says the board (model and state) or, for a few seconds, a notice. Under that
-  the tab row: Chats (with the unread total), Contacts, Settings. A sub-page (a contact's details, Nearby, search, statistics, packet log) covers the tab row.
-  The key hints of the screen are a line at the bottom, shown only while a keyboard is connected. Popups, questions, menus and editors are the
+* **Map** and **Terminal**: not there yet, so they are not on Home (the packet log lives in Settings, next to the statistics).
+* **Home, header, status line, hints**: the app opens on **Home**, a list with a chevron on each row: **Chats** (the unread total in blue, or "no new"),
+  **Contacts** (the number of contacts) and **Settings** (the board). There is no tab row. A page has the standard header: the title ("Chats", or
+  "Mesh Hop > Chats" where it fits; one more part inside a sub-page such as a contact's details, Nearby, search, statistics, packet log), the **Esc**
+  button and the launcher's shared strip (clock, Wi-Fi, Bluetooth). The line under the header says the board (model and state) or, for a few seconds, a
+  notice. The key hints of the screen are a line at the bottom, shown only while a keyboard is connected. Popups, questions, menus and editors are the
   launcher's dialogs, and the Position box is one.
 * **Per board (0.2.2).** The app knows the board by its public key (SELF_INFO). The history, read marks, the contact and channel caches,
   muted conversations, groups, ignored nodes and the advert schedule of each board are kept in
@@ -143,21 +144,22 @@ deck's panel**. The real screen shows the same 640x480 picture.
 
 * Text is typed with the **Bluetooth keyboard only**. There is no on-screen keyboard. With no keyboard awake an editor says
   "Keyboard needed: wake the Bluetooth keyboard" and the entry box shows the same hint.
-* A short **Esc on the keyboard is Back** and never quits (at the top level it says "Hold Esc 3 s to exit"); **holding Esc for
-  3 s** ends the app: the launcher does that. The **Esc button of the header** (touch) goes Back the same way and, at the top level, asks
-  **Quit Mesh Hop?** (Cancel / Quit), so a touch-only board can leave the app. Esc closes the newest layer first: box, editor, search, statistics,
+* A short **Esc on the keyboard is Back** and never quits (from the root of a page it goes to Home, at Home it says "Hold Esc 3 s to exit"); **holding Esc for
+  3 s** ends the app: the launcher does that. The **Esc button of the header** (touch) goes Back the same way; from the root of a page it goes
+  to Home, and at Home it asks **Quit Mesh Hop?** (Cancel / Quit), so a touch-only board can leave the app. Esc closes the newest layer first: box, editor, search, statistics,
   packet log, details, Nearby, select mode.
-* Everything is reachable by touch: tap rows, tabs, chips, arrows and buttons, drag to scroll lists and conversations.
+* Everything is reachable by touch: tap rows, Home rows, chips, arrows and buttons, drag to scroll lists and conversations.
   There is no swipe gesture. The controls of the shell are at least 7 mm (rows) and 9 mm (buttons); the controls inside the page bodies are 44 px
   high until those pages are converted.
 
 | Key | Action |
 | --- | --- |
-| Tab / Shift+Tab | next / previous tab, in a loop (there are no other tab keys) |
+| Up / Down, Enter | Home: choose a page, open it |
+| Tab / Shift+Tab | on a page: the next / previous page (Chats, Contacts, Settings), in a loop |
 | Up / Down | Chats: select a conversation (list) or scroll (entry); Contacts, Settings, Nearby, results: move |
 | Enter, or typing | Chats list: write; entry: send; Contacts: open (select mode: mark); Settings: change / do |
 | Left / Right | Settings: step the value of the row; entry: move the cursor; choice box: previous / next value |
-| Esc | Back (box to nothing, entry to list, close detail, Nearby, search, statistics or select mode); the header's Esc button too, and at the top level it asks "Quit Mesh Hop?" |
+| Esc | Back (box to nothing, entry to list, close detail, Nearby, search, statistics or select mode); the header's Esc button too; from the root of a page it goes to Home, at Home it asks "Quit Mesh Hop?" |
 | Ctrl+M | Chats: mute / unmute the conversation (plain letters start a message); Settings, channel row: `M` |
 | Ctrl+O | Chats: options of the conversation (mute, delete); the touch way is the Options button, or a 3 s hold on its name |
 | Ctrl+F | Chats: search the messages (then Ctrl+K chat, Ctrl+D dates, Ctrl+R direction, Enter opens the result) |
@@ -234,7 +236,7 @@ All in `~/.local/share/mesh-hop`. The log holds no message text.
 
 ## Known limits
 
-* There is no **Map** and no **Terminal** yet: their tabs are not shown (no map tiles, no command line yet).
+* There is no **Map** and no **Terminal** yet: they are not on Home (no map tiles, no command line yet).
 * **USB only**: no Bluetooth LE connection to the board yet (planned; the deck's Bluetooth is also used by the keyboard).
 * A **channel message has no delivery acknowledgement** in MeshCore: it ends at "sent" (or "sent (unconfirmed)" if the board does
   not answer within 5 s), never "delivered". Direct messages do get "delivered" or "no ack".
@@ -265,7 +267,7 @@ Mesh Hop is MIT (see the `copyright` file of the package).
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/build.sh cross        # aarch64, into root/usr/share/APPLaunch/bin/mesh-hop
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/build.sh host         # PC: shared harness + scenes, mesh-hop-script, unit tests
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/build.sh flows [WxH]  # the 20 simulator flows (tests/flows), about 15 minutes
-wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/build.sh flows stage  # shell.script (the shell and its dialogs) at the five screen sizes
+wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/build.sh flows stage  # shell.script (Home, the pages, the dialogs) at the five screen sizes
 ```
 
 Mesh Hop is a native fullscreen app on the shared app platform (`apps/_common`, see `apps/_common/build_app.sh -h`): it links
@@ -300,6 +302,6 @@ traffic. `heard-back.script` (`--heard-back 2 --heard-back-direct`) and `packet-
 | `src/ui/ui_logic.*`, `ui_phase2.cpp` | keys, editor filters, formatting, chat and contact rows, filters and sort state, selection, groups, details, Nearby rows, search rows, statistics view, popup logic, Settings layout, Back rule (no LVGL; unit tested) |
 | `src/ui/key_bridge.*` | the shared platform's keys (cp0_lvgl key_item) to the app's key events (no LVGL; unit tested) |
 | `src/ui/stage.*`, `session.hpp`, `app_spec.cpp` | the stage (the 640 px column of the page bodies), the keyboard bridge, the tick timer, the app's spec for the shared runners |
-| `src/ui/mesh_app.*` | the shell (header, status line, tab row, hint line, dialogs), the screens, the virtual row list |
+| `src/ui/mesh_app.*` | the shell (Home, header, status line, hint line, dialogs), the screens, the virtual row list |
 | `src/main.cpp` | `cdk::run` (apps/_common: display, touch, keyboards, signals, the "needs 640x480" notice) |
 | `tests/flows/`, `tests/scenes/`, `tests/unit/` | the simulator flows and `mesh-hop-script`, the shared harness's scenes, the unit tests |

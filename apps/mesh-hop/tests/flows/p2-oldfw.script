@@ -1,6 +1,8 @@
 # Mesh Hop 0.2.0 phase 2 on an old firmware: every feature the board lacks is switched off with the "Firmware too old" notice.
 # Run with:  SIMARGS="--fw-level 8 --no-autoadd --no-stats --no-discover --no-factory-reset"   (level 8: no repeat, no path hash mode)
 wait 3500
+key enter
+wait 300
 key tab
 key tab
 wait 800
