@@ -47,8 +47,10 @@ constexpr uint32_t kOkGreen = CP0_UI_OSK_ENTER_RGB;      // the primary button: 
 constexpr uint32_t kDangerRed = 0x7A2E24;
 constexpr uint32_t kOnAccent = 0x101010;                  // the text on an accent blue pill
 
-// ---- layout: the stage is 640 px wide (kScreenW); its height is what is left under the shell (App::layout_body)
+// ---- layout: the stage of Chats is 640 px wide (kScreenW); its height is what is left under the shell (App::layout_body). The
+// pages of P3 take the page column (ui_pages.hpp page_column), never wider than Net Toolbox's column.
 constexpr int kListW = 204;                // the left pane of Chats
+constexpr int kColumnCapW = 960;
 constexpr uint32_t kStartGuardMs = 600;    // the tap or Enter that started the app must not act
 constexpr uint32_t kNoticeMs = 4000;
 constexpr int kMaxShownMessages = 60;
@@ -62,15 +64,13 @@ uint32_t loading_min_ms()
     }();
     return v;
 }
-constexpr int kContactRowH = 44;
-
 enum Tag {
     kTagTab = 0,           // (the tab row is gone: Home is the menu)
     kTagSend = 10, kTagMuteChan, kTagAdvertFlood, kTagAdvertZero, kTagRefresh, kTagSort, kTagDetailMsg, kTagDetailClose, kTagEdOk,
     kTagEdCancel, kTagCompose,
-    kTagHdr = 30,          // 30..35: the column titles of the contacts table
-    kTagTypeChip = 40,     // 40..44
-    kTagAgeChip = 50,      // 50..53
+    kTagHdr = 30,          // 30..53: the column titles and the filter chips of 0.3.0 (gone in P3: the Filter and Sort dialogs)
+    kTagTypeChip = 40,
+    kTagAgeChip = 50,
     kTagPopLeft = 60, kTagPopRight, kTagPopOk, kTagPopCancel, kTagPopYes, kTagPopNo,
     kTagPopItem = 70,      // 70..79
     kTagTitleHold = 80,    // the title of the open conversation (hold 3 s: options)
@@ -83,6 +83,8 @@ enum Tag {
     kTagPosOk, kTagPosCancel, kTagPosClear, kTagPosGps, kTagPosLat, kTagPosLon,
     // phase 3: the packet log
     kTagLogToggle, kTagLogClear, kTagLogClose,
+    // P3: the action bars of the pages that follow the screen
+    kTagFilter, kTagSortMenu, kTagMore, kTagNearbyAdd, kTagNearbyIgnore,
 };
 
 App *g_app = nullptr;
@@ -214,21 +216,46 @@ std::string join_lines(const std::vector<std::string> &v)
 
 /* ================================================================== RowList */
 
+static void style_list_scrollbar(lv_obj_t *obj);
+
+/* The font of the markers (the launcher's Montserrat: the chevron U+203A; ">" in a font without it). */
+static const lv_font_t *mark_font(int px)
+{
+    if (const lv_font_t *f = cp0_fonts().get("Montserrat-Medium.ttf", static_cast<uint16_t>(px))) return f;
+    return cp0_ui_font_px(px);
+}
+
 void RowList::create(lv_obj_t *parent, int x, int y, int w, int h, const Config &cfg)
 {
     cfg_ = cfg;
     w_ = w;
     h_ = h;
+    const lv_font_t *chev_font = cfg.marks ? mark_font(cp0_ui_list_chevron_px(&cfg.mark_layout)) : nullptr;
+    const char *chev_text = CP0_UI_LIST_CHEVRON_TEXT;
+    if (chev_font) {
+        lv_font_glyph_dsc_t glyph{};
+        if (!lv_font_get_glyph_dsc(chev_font, &glyph, CP0_UI_LIST_CHEVRON_CODEPOINT, 0)) {
+            chev_text = CP0_UI_LIST_CHEVRON_FALLBACK;
+            lv_font_get_glyph_dsc(chev_font, &glyph, static_cast<uint32_t>(CP0_UI_LIST_CHEVRON_FALLBACK[0]), 0);
+        }
+        chev_line_h_ = static_cast<int>(lv_font_get_line_height(chev_font));
+        chev_ink_top_ = (chev_line_h_ - chev_font->base_line) - glyph.box_h - glyph.ofs_y;
+        chev_ink_h_ = glyph.box_h;
+    }
     cont_ = lv_obj_create(parent);
     lv_obj_remove_style_all(cont_);
     lv_obj_set_pos(cont_, x, y);
     lv_obj_set_size(cont_, w, h);
     lv_obj_set_scroll_dir(cont_, LV_DIR_VER);
     lv_obj_remove_flag(cont_, LV_OBJ_FLAG_SCROLL_ELASTIC);
-    lv_obj_set_scrollbar_mode(cont_, LV_SCROLLBAR_MODE_ACTIVE);
-    lv_obj_set_style_bg_color(cont_, lv_color_hex(kMuted), LV_PART_SCROLLBAR);
-    lv_obj_set_style_bg_opa(cont_, LV_OPA_70, LV_PART_SCROLLBAR);
-    lv_obj_set_style_width(cont_, 4, LV_PART_SCROLLBAR);
+    if (cfg.flat) {
+        style_list_scrollbar(cont_);                    // the pages of P3: shown whenever the rows do not all fit
+    } else {
+        lv_obj_set_scrollbar_mode(cont_, LV_SCROLLBAR_MODE_ACTIVE);
+        lv_obj_set_style_bg_color(cont_, lv_color_hex(kMuted), LV_PART_SCROLLBAR);
+        lv_obj_set_style_bg_opa(cont_, LV_OPA_70, LV_PART_SCROLLBAR);
+        lv_obj_set_style_width(cont_, 4, LV_PART_SCROLLBAR);
+    }
     lv_obj_add_event_cb(cont_, trampoline_scroll, LV_EVENT_SCROLL, this);
     spacer_ = make_box(cont_, 0, 0, w, 1);
     lv_obj_remove_flag(spacer_, LV_OBJ_FLAG_CLICKABLE);
@@ -241,6 +268,7 @@ void RowList::create(lv_obj_t *parent, int x, int y, int w, int h, const Config 
         lv_obj_set_style_bg_color(s.row, lv_color_hex(kPressed), LV_STATE_PRESSED);
         lv_obj_set_style_border_side(s.row, LV_BORDER_SIDE_BOTTOM, 0);
         lv_obj_set_style_border_color(s.row, lv_color_hex(0x1E1E1E), 0);
+        if (cfg.flat) lv_obj_set_style_border_width(s.row, 0, 0);
         for (lv_event_code_t code : {LV_EVENT_CLICKED, LV_EVENT_PRESSED, LV_EVENT_PRESSING, LV_EVENT_RELEASED, LV_EVENT_PRESS_LOST})
             lv_obj_add_event_cb(s.row, trampoline_row, code, this);
         for (int k = 0; k < cfg.max_boxes; ++k) {
@@ -272,8 +300,39 @@ void RowList::create(lv_obj_t *parent, int x, int y, int w, int h, const Config 
         lv_obj_set_style_text_font(s.pill_label, &lv_font_montserrat_14, 0);
         lv_obj_set_style_text_color(s.pill_label, lv_color_hex(kOnAccent), 0);
         set_hidden(s.pill, true);
+        if (cfg.marks) {                                                  // the row kinds' markers (cp0_ui_list.h), drawn as CompactList draws them
+            s.chevron = lv_label_create(s.row);
+            lv_obj_remove_flag(s.chevron, LV_OBJ_FLAG_CLICKABLE);
+            lv_label_set_long_mode(s.chevron, LV_LABEL_LONG_MODE_CLIP);
+            lv_label_set_text(s.chevron, chev_text);
+            if (chev_font) lv_obj_set_style_text_font(s.chevron, chev_font, 0);
+            lv_obj_set_style_text_color(s.chevron, lv_color_hex(CP0_UI_LIST_CHEVRON_RGB), 0);
+            lv_obj_set_style_text_align(s.chevron, LV_TEXT_ALIGN_RIGHT, 0);
+            lv_obj_set_size(s.chevron, cp0_ui_list_chevron_w(&cfg.mark_layout), std::max(1, chev_line_h_));
+            set_hidden(s.chevron, true);
+            const int d = cp0_ui_list_dot_px(&cfg.mark_layout);
+            s.dot = make_box(s.row, 0, 0, d, d);
+            lv_obj_remove_flag(s.dot, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_set_style_radius(s.dot, LV_RADIUS_CIRCLE, 0);
+            lv_obj_set_style_bg_opa(s.dot, LV_OPA_COVER, 0);
+            set_hidden(s.dot, true);
+        }
         hide(s);
     }
+}
+
+void RowList::set_y(int y)
+{
+    if (cont_) lv_obj_set_y(cont_, y);
+}
+
+void RowList::scroll_by(int dy)
+{
+    if (!cont_) return;
+    const int max_scroll = std::max(0, total_ - h_);
+    const int to = std::clamp(static_cast<int>(lv_obj_get_scroll_y(cont_)) + dy, 0, max_scroll);
+    lv_obj_scroll_to_y(cont_, to, LV_ANIM_OFF);
+    update_window();
 }
 
 void RowList::resize(int h)
@@ -314,10 +373,10 @@ void RowList::bind(Slot &s, int i)
     const bool sel = i == selected_;
     lv_obj_set_style_bg_opa(s.row, (sel || r.header) ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
     lv_obj_set_style_bg_color(s.row, lv_color_hex(r.header ? kPanel : sel ? (focused_ ? kSelected : kSelectedDim) : kBackground), 0);
-    lv_obj_set_style_border_width(s.row, r.header ? 0 : 1, 0);
+    lv_obj_set_style_border_width(s.row, r.header || cfg_.flat ? 0 : 1, 0);
     if (r.selectable) lv_obj_add_flag(s.row, LV_OBJ_FLAG_CLICKABLE);
     else lv_obj_remove_flag(s.row, LV_OBJ_FLAG_CLICKABLE);
-    if (sel && focused_) {
+    if (sel && focused_ && !cfg_.flat) {
         lv_obj_set_size(s.bar, 4, r.h);
         set_hidden(s.bar, false);
     } else {
@@ -345,11 +404,26 @@ void RowList::bind(Slot &s, int i)
         lv_obj_set_style_text_font(l, f, 0);
         set_color(l, c.color);
         lv_obj_set_style_text_align(l, align, 0);
+        lv_label_set_long_mode(l, c.lines > 1 ? LV_LABEL_LONG_MODE_WRAP : LV_LABEL_LONG_MODE_DOTS);
         lv_obj_set_width(l, c.w);
-        lv_obj_set_height(l, lh);
+        lv_obj_set_height(l, lh * std::max(1, c.lines));
         lv_obj_set_pos(l, c.x, ly);
         lv_label_set_text(l, c.text.c_str());
         set_hidden(l, false);
+    }
+    if (cfg_.marks) {
+        const cp0_ui_list_layout_t &ml = cfg_.mark_layout;
+        const bool chev = r.aff == Aff::Open || r.aff == Aff::Edit;
+        const bool dot = r.aff == Aff::Action || r.aff == Aff::Running;
+        if (chev) lv_obj_set_pos(s.chevron, w_ - ml.inset - cp0_ui_list_chevron_w(&ml), cp0_ui_list_chevron_y(r.h, chev_ink_top_, chev_ink_h_));
+        set_hidden(s.chevron, !chev);
+        if (dot) {
+            const int d = cp0_ui_list_dot_px(&ml);
+            lv_obj_set_pos(s.dot, cp0_ui_list_dot_x(&ml, w_), cp0_ui_list_chevron_y(r.h, 0, d));
+            lv_obj_set_style_bg_color(s.dot, lv_color_hex(cp0_ui_list_dot_rgb(r.aff == Aff::Running ? CP0_UI_LIST_AFFORDANCE_ACTION_RUNNING
+                                                                                                      : CP0_UI_LIST_AFFORDANCE_ACTION)), 0);
+        }
+        set_hidden(s.dot, !dot);
     }
     for (size_t k = used_l; k < s.labels.size(); ++k) set_hidden(s.labels[k], true);
     for (size_t k = used_b; k < s.boxes.size(); ++k) set_hidden(s.boxes[k], true);
@@ -459,6 +533,90 @@ int RowList::bound_rows() const
     return n;
 }
 
+/* ================================================================== ActionBar */
+
+void ActionBar::create(lv_obj_t *parent, int x, int y, int w, int h, const lv_font_t *label_font, const lv_font_t *value_font)
+{
+    root_ = make_box(parent, x, y, w, h);
+    lv_obj_remove_flag(root_, LV_OBJ_FLAG_CLICKABLE);
+    w_ = w;
+    h_ = h;
+    label_font_ = label_font;
+    value_font_ = value_font;
+}
+
+void ActionBar::set_y(int y)
+{
+    if (root_) lv_obj_set_y(root_, y);
+}
+
+void ActionBar::place(Cell &c, int index, int n)
+{
+    const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
+    const int gap = m->tok[CP0_TOK_SPACE_S], pad = m->tok[CP0_TOK_SPACE_S];
+    const int cw = n > 0 ? std::max(1, (w_ - (n - 1) * gap) / n) : w_;
+    const int this_w = index == n - 1 ? std::max(1, w_ - index * (cw + gap)) : cw;   // the last cell takes the rounding
+    lv_obj_set_pos(c.obj, index * (cw + gap), 0);
+    lv_obj_set_size(c.obj, this_w, h_);
+    const int lh = static_cast<int>(lv_font_get_line_height(label_font_)), vh = static_cast<int>(lv_font_get_line_height(value_font_));
+    const bool two = !c.spec.value.empty();
+    const int top = std::max(0, (h_ - (two ? lh + vh : lh)) / 2);
+    const int tw = std::max(1, this_w - 2 * pad);
+    lv_label_set_text(c.label, c.spec.label.c_str());
+    lv_obj_set_pos(c.label, pad, top);
+    lv_obj_set_size(c.label, tw, lh);
+    lv_label_set_text(c.value, c.spec.value.c_str());
+    lv_obj_set_pos(c.value, pad, top + lh);
+    lv_obj_set_size(c.value, tw, vh);
+    set_hidden(c.value, !two);
+}
+
+void ActionBar::set_cells(const std::vector<CellSpec> &cells)
+{
+    if (!root_) return;
+    bool same = cells.size() == cells_.size();
+    for (size_t i = 0; same && i < cells.size(); ++i) same = cells[i].tag == cells_[i].spec.tag;
+    const int n = static_cast<int>(cells.size());
+    if (same) {
+        for (size_t i = 0; i < cells.size(); ++i) {
+            Cell &c = cells_[i];
+            if (c.spec.label == cells[i].label && c.spec.value == cells[i].value) continue;
+            c.spec = cells[i];
+            place(c, static_cast<int>(i), n);
+        }
+        return;
+    }
+    lv_obj_clean(root_);
+    cells_.clear();
+    const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
+    for (int i = 0; i < n; ++i) {
+        Cell c;
+        c.spec = cells[static_cast<size_t>(i)];
+        c.obj = make_box(root_, 0, 0, 10, 10);
+        lv_obj_add_flag(c.obj, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_remove_flag(c.obj, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+        lv_obj_set_style_radius(c.obj, m->tok[CP0_TOK_RADIUS_S], 0);
+        lv_obj_set_style_bg_opa(c.obj, LV_OPA_COVER, 0);
+        lv_obj_set_style_bg_color(c.obj, lv_color_hex(kSelected), 0);
+        lv_obj_set_style_bg_color(c.obj, lv_color_hex(kPressed), LV_STATE_PRESSED);
+        lv_obj_add_event_cb(c.obj, trampoline_button, LV_EVENT_CLICKED, reinterpret_cast<void *>(static_cast<intptr_t>(c.spec.tag)));
+        c.label = lv_label_create(c.obj);
+        lv_obj_remove_flag(c.label, LV_OBJ_FLAG_CLICKABLE);
+        lv_label_set_long_mode(c.label, LV_LABEL_LONG_MODE_DOTS);
+        lv_obj_set_style_text_font(c.label, label_font_, 0);
+        set_color(c.label, kText);
+        lv_obj_set_style_text_align(c.label, LV_TEXT_ALIGN_CENTER, 0);
+        c.value = lv_label_create(c.obj);
+        lv_obj_remove_flag(c.value, LV_OBJ_FLAG_CLICKABLE);
+        lv_label_set_long_mode(c.value, LV_LABEL_LONG_MODE_DOTS);
+        lv_obj_set_style_text_font(c.value, value_font_, 0);
+        set_color(c.value, kMuted);
+        lv_obj_set_style_text_align(c.value, LV_TEXT_ALIGN_CENTER, 0);
+        cells_.push_back(c);
+        place(cells_.back(), i, n);
+    }
+}
+
 /* ================================================================== construction */
 
 namespace {
@@ -515,6 +673,13 @@ void App::load_fonts()
     f_title_ = token_font(m->text_px[CP0_TEXT_HEADING], true);
     f_field_ = load_ttf(dirs, "DejaVuSans.ttf", m->text_px[CP0_TEXT_BODY], f_body_);
     if (!f_field_) f_field_ = f_body_;
+    // the pages that follow the screen (P3): values and tables at 90 % of BODY; the labels of Settings and Statistics halfway
+    // between BODY and HEADING (26 px on the deck), their values at BODY (24 px); the packet bytes in DejaVu at the CAPTION size
+    f_value_ = token_font(cp0_ui_roller_font_px((m->text_px[CP0_TEXT_BODY] * 9 + 5) / 10), false);
+    label_px_ = cp0_ui_roller_font_px((m->text_px[CP0_TEXT_BODY] + m->text_px[CP0_TEXT_HEADING]) / 2);
+    value_px_ = m->text_px[CP0_TEXT_BODY];
+    f_mono_ = load_ttf(dirs, "DejaVuSans.ttf", m->text_px[CP0_TEXT_CAPTION], f_caption_);
+    if (!f_mono_) f_mono_ = f_caption_;
 }
 
 lv_obj_t *App::make_label(lv_obj_t *parent, const lv_font_t *font, uint32_t color, int x, int y, int w, int h, lv_text_align_t align)
@@ -634,7 +799,8 @@ void App::build_shell()
     shell_->set_title({"Mesh Hop", "Chats"});
 }
 
-/* The stage: a 640 px column under the caption line that holds the page bodies and the sub-pages. */
+/* The stage: a 640 px column under the caption line that holds Chats (until P4 converts it). The other pages and the search
+ * live in wide_, the full width under the caption line (P3). */
 void App::build_stage()
 {
     lv_obj_t *stage = lv_obj_create(shell_->root());
@@ -646,27 +812,79 @@ void App::build_stage()
     lv_obj_set_size(stage, kScreenW, panel_h_);
     plat_.adopt_stage(stage);
     screen_ = stage;
+    // the pages of P3: the full width under the caption line (their own containers inside, each opaque where it covers)
+    wide_ = lv_obj_create(shell_->root());
+    lv_obj_remove_style_all(wide_);
+    lv_obj_remove_flag(wide_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_remove_flag(wide_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(wide_, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+    lv_obj_set_pos(wide_, 0, tabs_y_);
+    lv_obj_set_size(wide_, layout_.w, panel_h_);
+    // a page's own line in the caption's place, grey (the shell's caption is the board's state: green, amber or red)
+    cap_alt_ = make_label(shell_->root(), f_caption_, kMuted, layout_.caption_x, layout_.caption_y, std::max(1, layout_.caption_w),
+                          static_cast<int>(lv_font_get_line_height(f_caption_)));
+    lv_obj_remove_flag(cap_alt_, LV_OBJ_FLAG_CLICKABLE);
+    set_hidden(cap_alt_, true);
 }
 
-/* Home: the main menu, a CompactList (Comfortable rows, chevrons) on the width of the stage: Chats, Contacts, Settings
- * (Map and Terminal come back when they exist). The value of a row is a short state in grey. */
+App::Geo App::geo() const
+{
+    const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
+    Geo g;
+    g.w = layout_.w;
+    g.inset = m->tok[CP0_TOK_SPACE_L];
+    g.s = m->tok[CP0_TOK_SPACE_S];
+    g.m = m->tok[CP0_TOK_SPACE_M];
+    const PageColumn c = page_column(layout_.w, g.inset, kScreenW, kColumnCapW);
+    g.x = c.x;
+    g.cw = c.w;
+    g.lx = g.x - g.inset;
+    g.lw = g.cw + 2 * g.inset;
+    g.h = panel_h_;
+    g.row = m->tok[CP0_TOK_ROW_H];
+    g.list_row = m->tok[CP0_TOK_LIST_ROW_H];
+    g.target = m->tok[CP0_TOK_TARGET];
+    // the heights follow the text too: the ROW token is 7 mm, the text sizes come from the class, so on a panel of low density
+    // (the HackBerry: about 6.7 px/mm) a cell with a label and a value line needs more than ROW
+    g.bar = std::max(g.row, static_cast<int>(lv_font_get_line_height(f_body_) + lv_font_get_line_height(f_caption_)) + g.s);
+    g.field = std::max(g.list_row, static_cast<int>(lv_font_get_line_height(f_field_)) + g.s);
+    g.wide = m->cls == CP0_UI_WIDE || m->cls == CP0_UI_LARGE;
+    return g;
+}
+
+/* Home: the main menu, a CompactList with the rows of Settings (settings_list_layout: the same height, label and value sizes,
+ * chevron, and the page column): Chats, Contacts, Settings (Map and Terminal come back when they exist). The value of a row
+ * is a short state in grey. (Before P3c it was the Comfortable list of the ROW token on the 640 stage: its text is 43 % of
+ * a 7 mm row, so on a panel of low density, the HackBerry, it came out smaller than the pages.) */
 void App::build_home()
 {
-    cp0_ui_list_layout_t l{};
-    cp0_ui_list_layout(cp0_ui_metrics_get(), CP0_UI_LIST_COMFORTABLE, stage_x_, tabs_y_, kScreenW, panel_h_, &l);
+    // made again when the room changes (the key hint line came or went: a CompactList keeps its height), in the same place among
+    // the shell's objects (under the hint line and the dialogs) and on the same row
+    int sel = 0, at = -1;
+    if (home_list_) {
+        sel = std::max(0, home_list_->selected());
+        at = static_cast<int>(lv_obj_get_index(home_list_->focus_object()));
+        home_list_.reset();
+    }
+    const cp0_ui_list_layout_t l = settings_list_layout(tabs_y_, panel_h_);
     cp0::ui::CompactListEvents ev;
     ev.activate = [this](int, std::intptr_t id) { post([this, id] { open_page(id == 0 ? Tab::Chats : id == 1 ? Tab::Contacts : Tab::Settings); }); };
     ev.back = [this] { header_back(); };
     home_list_ = std::make_unique<cp0::ui::CompactList>(shell_->root(), l, ev);
+    if (at >= 0) lv_obj_move_to_index(home_list_->focus_object(), at);
     render_home();
-    home_list_->select(0, false);
+    home_list_->select(sel, false);
+    home_list_->set_hidden(!at_home_);
 }
 
 void App::build_screen()
 {
     build_shell();
     build_stage();
-    for (int i = 0; i < 5; ++i) page_[i] = make_box(screen_, 0, tab_h_, kScreenW, page_h_);
+    for (int i = 0; i < 5; ++i) {
+        const bool full = i == static_cast<int>(Tab::Contacts) || i == static_cast<int>(Tab::Settings);   // P3: the full width
+        page_[i] = full ? make_box(wide_, 0, 0, layout_.w, panel_h_) : make_box(screen_, 0, tab_h_, kScreenW, page_h_);
+    }
     build_chats();
     build_placeholder(&page_[static_cast<int>(Tab::Map)], "Map", "The map of the nodes with a position comes in phase 3.\nUntil then the Contacts tab shows the distances.");
     build_contacts();
@@ -768,146 +986,127 @@ void App::build_chats()
     build_search();
 }
 
+namespace {
+
+int text_w(const char *text, const lv_font_t *font)
+{
+    if (!text || !*text || !font) return 0;
+    lv_point_t sz{};
+    lv_text_get_size(&sz, text, font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    return sz.x;
+}
+
+int line_h(const lv_font_t *f)
+{
+    return static_cast<int>(lv_font_get_line_height(f));
+}
+
+/* An opaque sub-page of the full width: it covers the page under it and takes the taps meant for it. */
+lv_obj_t *make_panel(lv_obj_t *parent, int w, int h)
+{
+    lv_obj_t *p = make_box(parent, 0, 0, w, h);
+    lv_obj_set_style_bg_color(p, lv_color_hex(kBackground), 0);
+    lv_obj_set_style_bg_opa(p, LV_OPA_COVER, 0);
+    lv_obj_add_flag(p, LV_OBJ_FLAG_CLICKABLE);
+    return p;
+}
+
+} // namespace
+
+/* The layout of the lists of the pages: CompactList's compact one (cp0_ui_list.h) in the list area, with the label of the
+ * Settings / Statistics size (label_px_, value_px_): the markers' sizes and the rows' height (LIST_ROW, 5 mm: a tap first
+ * moves the highlight, the second acts). */
+cp0_ui_list_layout_t App::settings_list_layout(int y, int h) const
+{
+    const Geo g = geo();
+    cp0_ui_list_layout_t l{};
+    cp0_ui_list_layout(cp0_ui_metrics_get(), CP0_UI_LIST_COMPACT, g.lx, y, g.lw, std::max(1, h), &l);
+    l.text_px = label_px_;
+    l.value_px = value_px_;
+    l.section_px = cp0_ui_roller_font_px((label_px_ * CP0_UI_LIST_SECTION_PCT + 50) / 100);
+    l.row_h = std::max(l.row_h, line_h(token_font(label_px_, false)) + g.s);
+    return l;
+}
+
+/* Contacts (P3): the line under the title says what is shown (the shell's caption place, page_caption), one action bar of
+ * three cells (Filter, Sort, More; the select mode has its own), then the contacts in two-line rows: the name, and under it
+ * the type, when it was heard, the hops (and the SNR on the Wide and Large screens); at the right the distance and the
+ * chevron. A tap selects a row, a tap on the selected row opens the contact's details. */
 void App::build_contacts()
 {
+    const Geo g = geo();
     lv_obj_t *p = page_[static_cast<int>(Tab::Contacts)];
-    // the toolbar (every button 44 px high): normal, and the one of the select mode
-    tb_normal_ = make_box(p, 0, 0, 640, 44);
-    make_button(tb_normal_, 4, 0, 72, 44, "Advert", kTagAdvertFlood);
-    make_button(tb_normal_, 80, 0, 84, 44, "Zero-hop", kTagAdvertZero);
-    make_button(tb_normal_, 168, 0, 72, 44, "Refresh", kTagRefresh);
-    nearby_btn_ = make_button(tb_normal_, 244, 0, 88, 44, "Nearby", kTagNearby, &nearby_btn_label_);
-    make_button(tb_normal_, 336, 0, 72, 44, "Select", kTagSelect);
-    make_button(tb_normal_, 412, 0, 128, 44, "Group: All", kTagGroup, &group_btn_label_);
-    make_button(tb_normal_, 544, 0, 92, 44, "Sort", kTagSort, &sort_label_);
-    tb_select_ = make_box(p, 0, 0, 640, 44);
-    make_button(tb_select_, 4, 0, 76, 44, "Done", kTagSelDone);
-    make_button(tb_select_, 84, 0, 104, 44, "Select...", kTagSelMenu);
-    del_btn_ = make_button(tb_select_, 192, 0, 132, 44, "Delete", kTagSelDelete, &del_btn_label_);
-    make_button(tb_select_, 328, 0, 104, 44, "Group...", kTagSelGroup);
-    sel_count_ = make_label(tb_select_, f_small_, kMuted, 436, 12, 196, 20, LV_TEXT_ALIGN_RIGHT);
-    set_hidden(tb_select_, true);
-
-    // the filters (C2): node type, and time since the node was last heard. Each chip is a 44 px high touch target.
-    static const int type_x[5] = {8, 66, 130, 222, 288}, type_w[5] = {54, 60, 88, 62, 76};
-    static const int age_x[4] = {380, 460, 514, 574}, age_w[4] = {76, 50, 56, 50};
-    for (int i = 0; i < 5; ++i) {
-        lv_obj_t *c = make_box(p, type_x[i], 44, type_w[i] + 4, 44);
-        lv_obj_add_flag(c, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_add_event_cb(c, trampoline_button, LV_EVENT_CLICKED, reinterpret_cast<void *>(static_cast<intptr_t>(kTagTypeChip + i)));
-        lv_obj_t *pill = make_box(c, 0, 5, type_w[i], 34);
-        lv_obj_set_style_radius(pill, 17, 0);
-        lv_obj_set_style_bg_opa(pill, LV_OPA_COVER, 0);
-        lv_obj_set_style_bg_color(pill, lv_color_hex(kPressed), LV_STATE_PRESSED);
-        type_chip_[i] = pill;
-        type_chip_label_[i] = make_label(pill, f_small_, kMuted, 2, 8, type_w[i] - 4, 18, LV_TEXT_ALIGN_CENTER);
-        lv_label_set_text(type_chip_label_[i], type_filter_name(static_cast<TypeFilter>(i)));
-        lv_obj_remove_flag(pill, LV_OBJ_FLAG_CLICKABLE);
-    }
-    for (int i = 0; i < 4; ++i) {
-        lv_obj_t *c = make_box(p, age_x[i], 44, age_w[i] + 4, 44);
-        lv_obj_add_flag(c, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_add_event_cb(c, trampoline_button, LV_EVENT_CLICKED, reinterpret_cast<void *>(static_cast<intptr_t>(kTagAgeChip + i)));
-        lv_obj_t *pill = make_box(c, 0, 5, age_w[i], 34);
-        lv_obj_set_style_radius(pill, 17, 0);
-        lv_obj_set_style_bg_opa(pill, LV_OPA_COVER, 0);
-        lv_obj_remove_flag(pill, LV_OBJ_FLAG_CLICKABLE);
-        age_chip_[i] = pill;
-        age_chip_label_[i] = make_label(pill, f_small_, kMuted, 2, 8, age_w[i] - 4, 18, LV_TEXT_ALIGN_CENTER);
-        lv_label_set_text(age_chip_label_[i], age_filter_name(static_cast<AgeFilter>(i)));
-    }
-    lv_obj_t *sep = make_box(p, 372, 52, 1, 28);
-    lv_obj_set_style_bg_color(sep, lv_color_hex(kSelected), 0);
-    lv_obj_set_style_bg_opa(sep, LV_OPA_COVER, 0);
-
-    static const char *const names[6] = {"Name", "Type", "Heard", "SNR", "Hops", "Distance"};
-    static const int xs[6] = {12, 212, 292, 360, 432, 484};
-    static const int ws[6] = {196, 76, 66, 70, 48, 100};
-    lv_obj_t *hdr = make_box(p, 0, 88, 640, 22);
-    lv_obj_set_style_bg_color(hdr, lv_color_hex(kPanel), 0);
-    lv_obj_set_style_bg_opa(hdr, LV_OPA_COVER, 0);
-    for (int i = 0; i < 6; ++i) {
-        lv_obj_t *b = make_box(hdr, xs[i] - 6, 0, ws[i] + 6, 22);
-        lv_obj_add_flag(b, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_add_event_cb(b, trampoline_button, LV_EVENT_CLICKED, reinterpret_cast<void *>(static_cast<intptr_t>(kTagHdr + i)));
-        col_hdr_[i] = make_label(b, f_small_, kMuted, 6, 2, ws[i], 18);
-        lv_obj_remove_flag(col_hdr_[i], LV_OBJ_FLAG_CLICKABLE);
-        lv_label_set_text(col_hdr_[i], names[i]);
-    }
-    contacts_count_ = make_label(hdr, f_small_, kMuted, 80, 2, 124, 18, LV_TEXT_ALIGN_RIGHT);     // "12 of 161", over the Name title (not clickable)
+    const int bar_y = g.s / 2, list_y = bar_y + g.bar + g.s;
+    contacts_bar_.create(p, g.x, bar_y, g.cw, g.bar, f_body_, f_caption_);
     RowList::Config cfg;
-    cfg.max_cells = 8;
-    cfg.max_boxes = 2;
-    cfg.min_row_h = kContactRowH;
-    contact_list_.create(p, 0, 110, 640, page_h_ - 110, cfg);
+    cfg.max_cells = 4;
+    cfg.max_boxes = 1;
+    cfg.min_row_h = std::max(g.list_row, line_h(f_body_) + line_h(f_caption_) + 2 * std::max(4, g.s / 2));
+    cfg.flat = true;
+    cfg.marks = true;
+    cfg.mark_layout = settings_list_layout(list_y, g.h - list_y);
+    cfg.mark_layout.text_px = cp0_ui_metrics_get()->text_px[CP0_TEXT_BODY];
+    contact_list_.create(p, g.lx, list_y, g.lw, std::max(1, g.h - list_y), cfg);
 
-    // the detail panel of a contact (C8): a sub-page over the table and the tab row, static facts and large buttons
-    detail_ = make_box(screen_, 0, 0, 640, panel_h_);
-    lv_obj_set_style_bg_color(detail_, lv_color_hex(kBackground), 0);
-    lv_obj_set_style_bg_opa(detail_, LV_OPA_COVER, 0);
-    lv_obj_add_flag(detail_, LV_OBJ_FLAG_CLICKABLE);                  // swallows taps meant for the table below
-    detail_title_ = make_label(detail_, f_big_, kText, 16, 6, 600, 26);
-    static const char *const keys[10] = {"Name", "Type", "Groups", "Public key", "Route", "Last advert", "Heard here", "Position", "Distance", "Last SNR"};
-    static const int ys[10] = {38, 64, 90, 116, 164, 190, 216, 242, 268, 294};
-    for (int i = 0; i < 10; ++i) {
-        lv_obj_t *k = make_label(detail_, f_small_, kMuted, 16, ys[i] + 4, 110, 20);
-        lv_label_set_text(k, keys[i]);
-        detail_val_[i] = make_label(detail_, i == 3 ? f_text_small_ : f_text_, kText, 132, ys[i], 496, i == 3 ? 44 : 24);
-        if (i == 3 || i == 4) lv_label_set_long_mode(detail_val_[i], LV_LABEL_LONG_MODE_WRAP);
-    }
-    detail_msg_btn_ = detail_btn_[0] = make_button(detail_, 8, 352, 148, 44, "Message", kTagDetailMsg);
-    detail_btn_[1] = make_button(detail_, 160, 352, 148, 44, "Groups", kTagDetailGroups);
-    detail_btn_[2] = make_button(detail_, 312, 352, 148, 44, "Delete", kTagDetailDelete);
-    lv_obj_set_style_bg_color(detail_btn_[2], lv_color_hex(kDangerRed), 0);
-    detail_btn_[3] = make_button(detail_, 464, 352, 164, 44, "Close", kTagDetailClose);
+    // a contact's details (C8): a sub-page over the list, its actions on top, its facts under them
+    detail_ = make_panel(wide_, g.w, g.h);
+    detail_bar_.create(detail_, g.x, bar_y, g.cw, g.bar, f_body_, f_caption_);
+    RowList::Config dcfg;
+    dcfg.max_cells = 3;
+    dcfg.max_boxes = 0;
+    dcfg.min_row_h = g.list_row;
+    dcfg.flat = true;
+    detail_list_.create(detail_, g.lx, list_y, g.lw, std::max(1, g.h - list_y), dcfg);
     set_hidden(detail_, true);
     build_nearby();
 }
 
-/* The Nearby list (C4): adverts heard, pending contacts of the manual add mode and the answers to a zero-hop scan, with Add / Ignore. */
+/* The Nearby list (C4): adverts heard, pending contacts of the manual add mode and the answers to a zero-hop scan. The bar acts
+ * on the selected node (Add, Ignore or Restore), starts a scan, shows the ignored nodes; a tap on the selected row adds it
+ * (or restores it) as Enter does. */
 void App::build_nearby()
 {
-    nearby_ = make_box(screen_, 0, 0, 640, panel_h_);
-    lv_obj_set_style_bg_color(nearby_, lv_color_hex(kBackground), 0);
-    lv_obj_set_style_bg_opa(nearby_, LV_OPA_COVER, 0);
-    lv_obj_add_flag(nearby_, LV_OBJ_FLAG_CLICKABLE);
-    nearby_title_ = make_label(nearby_, f_big_, kText, 12, 10, 330, 26);
-    make_button(nearby_, 346, 0, 92, 44, "Scan", kTagNearbyScan, &nearby_scan_label_);
-    make_button(nearby_, 442, 0, 96, 44, "Ignored", kTagNearbyIgnored, &nearby_ign_label_);
-    make_button(nearby_, 542, 0, 94, 44, "Close", kTagNearbyClose);
+    const Geo g = geo();
+    const int bar_y = g.s / 2, list_y = bar_y + g.bar + g.s;
+    nearby_ = make_panel(wide_, g.w, g.h);
+    nearby_bar_.create(nearby_, g.x, bar_y, g.cw, g.bar, f_body_, f_caption_);
     RowList::Config cfg;
-    cfg.max_cells = 6;
-    cfg.max_boxes = 2;
-    cfg.min_row_h = 56;
-    nearby_list_.create(nearby_, 0, 48, 640, panel_h_ - 48, cfg);
-    nearby_empty_ = make_label(nearby_, f_ui_, kMuted, 30, 150, 580, 100, LV_TEXT_ALIGN_CENTER);
+    cfg.max_cells = 4;
+    cfg.max_boxes = 0;
+    cfg.min_row_h = std::max(g.list_row, line_h(f_body_) + line_h(f_caption_) + 2 * std::max(4, g.s / 2));
+    cfg.flat = true;
+    cfg.marks = true;
+    cfg.mark_layout = settings_list_layout(list_y, g.h - list_y);
+    cfg.mark_layout.text_px = cp0_ui_metrics_get()->text_px[CP0_TEXT_BODY];
+    nearby_list_.create(nearby_, g.lx, list_y, g.lw, std::max(1, g.h - list_y), cfg);
+    nearby_empty_ = make_label(nearby_, f_body_, kMuted, g.x, list_y + g.s, g.cw, 4 * line_h(f_body_));
     lv_label_set_long_mode(nearby_empty_, LV_LABEL_LONG_MODE_WRAP);
     set_hidden(nearby_, true);
 }
 
-/* Search in the message archive (M7): a sub-page over the Chats page and the tab row. */
+/* Search in the message archive (M7): a sub-page over Chats. The words typed (the keyboard), the three filters (chat, dates,
+ * direction) as an action bar, the results in two-line rows (who and when, then the text around the match). */
 void App::build_search()
 {
-    search_panel_ = make_box(screen_, 0, 0, 640, panel_h_);
-    lv_obj_set_style_bg_color(search_panel_, lv_color_hex(kBackground), 0);
-    lv_obj_set_style_bg_opa(search_panel_, LV_OPA_COVER, 0);
-    lv_obj_add_flag(search_panel_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_t *t = make_label(search_panel_, f_big_, kText, 12, 10, 400, 26);
-    lv_label_set_text(t, "Search messages");
-    make_button(search_panel_, 540, 0, 96, 44, "Close", kTagSearchClose);
+    const Geo g = geo();
+    search_panel_ = make_panel(wide_, g.w, g.h);
+    const int field_y = g.s / 2, field_h = g.field;
     sr_query_ = lv_textarea_create(search_panel_);
-    lv_obj_set_pos(sr_query_, 8, 48);
-    lv_obj_set_size(sr_query_, 624, 44);
+    if (lv_obj_get_group(sr_query_)) lv_group_remove_obj(sr_query_);
     lv_textarea_set_one_line(sr_query_, true);
+    lv_obj_set_pos(sr_query_, g.x, field_y);
+    lv_obj_set_size(sr_query_, g.cw, field_h);
+    lv_obj_remove_flag(sr_query_, LV_OBJ_FLAG_CLICKABLE);              // typed with the keyboard only (a tap does nothing)
     lv_obj_set_scrollbar_mode(sr_query_, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_set_style_text_font(sr_query_, f_text_, 0);
+    lv_obj_set_style_text_font(sr_query_, f_field_, 0);
     lv_obj_set_style_text_color(sr_query_, lv_color_hex(kText), 0);
-    lv_obj_set_style_bg_color(sr_query_, lv_color_hex(kPanel), 0);
+    lv_obj_set_style_bg_color(sr_query_, lv_color_hex(kBackground), 0);
     lv_obj_set_style_bg_opa(sr_query_, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(sr_query_, 6, 0);
+    lv_obj_set_style_radius(sr_query_, cp0_ui_metrics_get()->tok[CP0_TOK_RADIUS_S], 0);
     lv_obj_set_style_border_width(sr_query_, 2, 0);
     lv_obj_set_style_border_color(sr_query_, lv_color_hex(kAccent), 0);
-    lv_obj_set_style_pad_all(sr_query_, 8, 0);
+    lv_obj_set_style_pad_hor(sr_query_, g.s, 0);
+    lv_obj_set_style_pad_ver(sr_query_, std::max(0, (field_h - 4 - line_h(f_field_)) / 2), 0);
     lv_obj_set_style_text_color(sr_query_, lv_color_hex(kMuted), LV_PART_TEXTAREA_PLACEHOLDER);
     lv_obj_set_style_bg_opa(sr_query_, LV_OPA_TRANSP, LV_PART_CURSOR);
     lv_obj_set_style_border_side(sr_query_, LV_BORDER_SIDE_LEFT, LV_PART_CURSOR | LV_STATE_FOCUSED);
@@ -915,98 +1114,185 @@ void App::build_search()
     lv_obj_set_style_border_color(sr_query_, lv_color_hex(kAccent), LV_PART_CURSOR | LV_STATE_FOCUSED);
     lv_textarea_set_max_length(sr_query_, 60);
     lv_obj_add_state(sr_query_, LV_STATE_FOCUSED);
-    lv_textarea_set_placeholder_text(sr_query_, "Type the words to find (Bluetooth keyboard)");
-    make_button(search_panel_, 8, 96, 200, 44, "", kTagSearchConv, &sr_conv_label_);
-    make_button(search_panel_, 212, 96, 232, 44, "", kTagSearchDate, &sr_date_label_);
-    make_button(search_panel_, 448, 96, 184, 44, "", kTagSearchDir, &sr_dir_label_);
-    sr_count_ = make_label(search_panel_, f_small_, kMuted, 12, 146, 616, 18);
+    lv_textarea_set_placeholder_text(sr_query_, "Type the words to find (keyboard)");
+    const int bar_y = field_y + field_h + g.s, list_y = bar_y + g.bar + g.s;
+    search_bar_.create(search_panel_, g.x, bar_y, g.cw, g.bar, f_body_, f_caption_);
     RowList::Config cfg;
-    cfg.max_cells = 3;
+    cfg.max_cells = 2;
     cfg.max_boxes = 0;
-    cfg.min_row_h = 56;
-    search_list_.create(search_panel_, 0, 166, 640, panel_h_ - 166, cfg);
+    cfg.min_row_h = std::max(g.list_row, line_h(f_body_) + line_h(f_caption_) + 2 * std::max(4, g.s / 2));
+    cfg.flat = true;
+    cfg.marks = true;
+    cfg.mark_layout = settings_list_layout(list_y, g.h - list_y);
+    cfg.mark_layout.text_px = cp0_ui_metrics_get()->text_px[CP0_TEXT_BODY];
+    search_list_.create(search_panel_, g.lx, list_y, g.lw, std::max(1, g.h - list_y), cfg);
     set_hidden(search_panel_, true);
 }
 
-/* The statistics screen (D9): a sub-page over the Settings page and the tab row. */
+/* The statistics screen (D9): a sub-page over Settings. Refresh and the automatic refresh on the bar, the figures in a
+ * read-only list (the keys scroll it); when they were read and what is missing is the line under the title. */
 void App::build_stats()
 {
-    stats_panel_ = make_box(screen_, 0, 0, 640, panel_h_);
-    lv_obj_set_style_bg_color(stats_panel_, lv_color_hex(kBackground), 0);
-    lv_obj_set_style_bg_opa(stats_panel_, LV_OPA_COVER, 0);
-    lv_obj_add_flag(stats_panel_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_t *t = make_label(stats_panel_, f_big_, kText, 12, 10, 290, 26);
-    lv_label_set_text(t, "Statistics");
-    make_button(stats_panel_, 304, 0, 104, 44, "Refresh", kTagStatsRefresh);
-    make_button(stats_panel_, 412, 0, 120, 44, "", kTagStatsAuto, &st_auto_label_);
-    make_button(stats_panel_, 540, 0, 96, 44, "Close", kTagStatsClose);
-    for (int i = 0; i < 10; ++i) {
-        st_label_[0][i] = make_label(stats_panel_, f_ui_, kMuted, 12, 56 + i * 28, 130, 22);
-        st_value_[0][i] = make_label(stats_panel_, f_text_, kText, 146, 56 + i * 28, 176, 22);
-        st_label_[1][i] = make_label(stats_panel_, f_ui_, kMuted, 336, 56 + i * 28, 150, 22);
-        st_value_[1][i] = make_label(stats_panel_, f_text_, kText, 490, 56 + i * 28, 140, 22);
-    }
-    st_updated_ = make_label(stats_panel_, f_small_, kMuted, 12, panel_h_ - 26, 400, 18);
-    st_note_ = make_label(stats_panel_, f_small_, kMuted, 336, panel_h_ - 26, 296, 18, LV_TEXT_ALIGN_RIGHT);
+    const Geo g = geo();
+    stats_panel_ = make_panel(wide_, g.w, g.h);
+    stats_bar_.create(stats_panel_, g.x, g.s / 2, g.cw, g.bar, f_body_, f_caption_);
     set_hidden(stats_panel_, true);
 }
 
+/* Settings: the full width, the rows tagged by kind (a read-out, a page, a value, an action) and drawn as the launcher's
+ * CompactList draws them (its sizes, colours and markers), in the app's virtual list: a note (a firmware too old, a frequency
+ * that does not allow repeat) wraps over the lines it needs under its label, and the read-outs and notes are never selected (by a
+ * tap or by the keys: the highlight only lands on a row that does something). */
 void App::build_settings()
 {
+    const Geo g = geo();
     RowList::Config cfg;
-    cfg.max_cells = 6;
-    cfg.max_boxes = 3;
-    cfg.min_row_h = 28;
-    settings_list_.create(page_[static_cast<int>(Tab::Settings)], 0, 0, 640, page_h_, cfg);
+    cfg.max_cells = 2;
+    cfg.max_boxes = 0;
+    cfg.flat = true;
+    cfg.marks = true;
+    cfg.mark_layout = settings_list_layout(0, g.h);
+    cfg.min_row_h = cfg.mark_layout.section_h;
+    settings_list_.create(page_[static_cast<int>(Tab::Settings)], g.lx, 0, g.lw, std::max(1, g.h), cfg);
     build_stats();
     build_packet_log();
 }
 
-namespace {
-// the columns of the packet log (x, width): time, route, type, hops, SNR, RSSI, payload size, channel
-constexpr int kLogCol[8][2] = {{12, 66}, {80, 70}, {152, 90}, {244, 42}, {288, 50}, {340, 44}, {386, 40}, {428, 204}};
-constexpr int kLogRowH = 28;
-} // namespace
-
-/* The packet log (D8): a sub-page over the Settings page, like the statistics. The rows on top, the bytes of the selected row below. */
+/* The packet log (D8): a sub-page over Settings, like the statistics. Start / Stop and Clear on the bar; the packets in a table
+ * whose columns are chosen by the width (the time and the type always, then the route, the hops, the SNR, the channel, the
+ * RSSI and the size while they fit); the path and the bytes of the selected packet under the table, or at its right on the
+ * Wide and Large screens. */
 void App::build_packet_log()
 {
-    log_panel_ = make_box(screen_, 0, 0, 640, panel_h_);
-    lv_obj_set_style_bg_color(log_panel_, lv_color_hex(kBackground), 0);
-    lv_obj_set_style_bg_opa(log_panel_, LV_OPA_COVER, 0);
-    lv_obj_add_flag(log_panel_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_t *t = make_label(log_panel_, f_big_, kText, 12, 10, 130, 26);
-    lv_label_set_text(t, "Packet log");
-    log_status_ = make_label(log_panel_, f_small_, kMuted, 144, 14, 222, 18);
-    log_toggle_ = make_button(log_panel_, 370, 0, 92, 44, "", kTagLogToggle, &log_toggle_label_);
-    make_button(log_panel_, 466, 0, 80, 44, "Clear", kTagLogClear);
-    make_button(log_panel_, 550, 0, 86, 44, "Close", kTagLogClose);
+    const Geo g = geo();
+    log_panel_ = make_panel(wide_, g.w, g.h);
+    log_bar_.create(log_panel_, g.x, g.s / 2, g.cw, g.bar, f_body_, f_caption_);
+    log_side_ = g.wide;
+    // the bytes' panel: three groups of 4 bytes on a line ("15416364 d9eb430a 01020304")
+    const int hex_w = text_w("15416364 d9eb430a 01020304", f_mono_) + 4;
+    const int table_w = log_side_ ? std::max(1, g.cw - hex_w - g.m) : g.cw;
+    // the columns: PacketRow fields 0 time, 1 route, 2 type, 3 hops, 4 SNR, 5 RSSI, 6 size, 7 channel; widths from the
+    // widest text each one shows (or its title)
     static const char *const titles[8] = {"Time", "Route", "Type", "Hops", "SNR", "RSSI", "Size", "Channel"};
-    for (int i = 0; i < 8; ++i) {
-        lv_obj_t *h = make_label(log_panel_, f_small_, kMuted, kLogCol[i][0], 50, kLogCol[i][1], 18);
-        lv_label_set_text(h, titles[i]);
+    static const char *const samples[8] = {"88:88:88", "T-DIRECT", "RAW_CUSTOM", "64", "-12.25", "-120", "184", "d9 Public"};
+    int widths[8];
+    for (int i = 0; i < 8; ++i) widths[i] = std::max(text_w(samples[i], f_value_), text_w(titles[i], f_caption_)) + 2;
+    static const int priority[8] = {0, 2, 1, 3, 4, 7, 5, 6};
+    std::vector<int> pw;
+    for (int f : priority) pw.push_back(widths[f]);
+    std::vector<int> kept;
+    for (int k : fit_columns(pw, g.m, table_w)) kept.push_back(priority[k]);
+    std::sort(kept.begin(), kept.end());
+    log_cols_ = kept;
+    log_col_x_.clear();
+    log_col_w_.clear();
+    int x = g.inset, used = 0;
+    for (int f : kept) used += widths[f];
+    used += g.m * static_cast<int>(kept.empty() ? 0 : kept.size() - 1);
+    const int extra = std::max(0, table_w - used);
+    for (size_t i = 0; i < kept.size(); ++i) {
+        const int f = kept[i];
+        const int w = widths[f] + (f == 7 || (i + 1 == kept.size() && std::find(kept.begin(), kept.end(), 7) == kept.end()) ? extra : 0);
+        log_col_x_.push_back(x);
+        log_col_w_.push_back(w);
+        x += w + g.m;
+    }
+    const int head_y = g.s / 2 + g.bar + g.s, head_h = line_h(f_caption_) + g.s / 2;
+    const int area_w = table_w + g.inset + (log_side_ ? g.m / 2 : g.inset);      // the table's area: up to the bytes' divider at the side
+    log_head_ = make_box(log_panel_, g.lx, head_y, area_w, head_h);
+    lv_obj_remove_flag(log_head_, LV_OBJ_FLAG_CLICKABLE);
+    for (size_t i = 0; i < kept.size(); ++i) {
+        lv_obj_t *h = make_label(log_head_, f_caption_, kMuted, log_col_x_[i], 0, log_col_w_[i], line_h(f_caption_));
+        lv_label_set_text(h, titles[kept[i]]);
     }
     RowList::Config cfg;
     cfg.max_cells = 8;
     cfg.max_boxes = 0;
-    cfg.min_row_h = kLogRowH;
-    log_list_.create(log_panel_, 0, 70, 640, panel_h_ - 184, cfg);
-    log_div_ = make_box(log_panel_, 0, panel_h_ - 112, 640, 1);
+    cfg.min_row_h = g.list_row;
+    cfg.flat = true;
+    const int list_y = head_y + head_h;
+    log_list_.create(log_panel_, g.lx, list_y, area_w, std::max(1, g.h - list_y), cfg);
+    log_div_ = make_box(log_panel_, g.x, 0, log_side_ ? 1 : g.cw, 1);
     lv_obj_set_style_bg_color(log_div_, lv_color_hex(kSelected), 0);
     lv_obj_set_style_bg_opa(log_div_, LV_OPA_COVER, 0);
-    log_detail_ = make_label(log_panel_, f_small_, kMuted, 12, panel_h_ - 106, 616, 18);
-    log_hex_ = make_label(log_panel_, f_text_small_, kText, 12, panel_h_ - 86, 616, 85);     // up to 5 lines; the dots mode cuts a longer packet
+    lv_obj_remove_flag(log_div_, LV_OBJ_FLAG_CLICKABLE);
+    log_detail_ = make_label(log_panel_, f_caption_, kMuted, g.x, 0, log_side_ ? hex_w : g.cw, line_h(f_caption_));
+    log_hex_ = make_label(log_panel_, f_mono_, kText, g.x, 0, log_side_ ? hex_w : g.cw, line_h(f_mono_));
+    lv_label_set_long_mode(log_detail_, LV_LABEL_LONG_MODE_WRAP);
+    lv_label_set_long_mode(log_hex_, LV_LABEL_LONG_MODE_WRAP);
     set_hidden(log_panel_, true);
+}
+
+/* The pages of the full width after a change of the room under the caption line (the key hint line came or went). */
+void App::layout_wide()
+{
+    const Geo g = geo();
+    lv_obj_set_size(wide_, layout_.w, panel_h_);
+    for (int i : {static_cast<int>(Tab::Contacts), static_cast<int>(Tab::Settings)}) lv_obj_set_size(page_[i], layout_.w, panel_h_);
+    for (lv_obj_t *panel : {search_panel_, nearby_, detail_, stats_panel_, log_panel_}) lv_obj_set_size(panel, layout_.w, panel_h_);
+    const int list_y = g.s / 2 + g.bar + g.s;
+    contact_list_.resize(std::max(1, g.h - list_y));
+    detail_list_.resize(std::max(1, g.h - list_y));
+    nearby_list_.resize(std::max(1, g.h - list_y));
+    const int search_y = g.s / 2 + g.field + g.s + g.bar + g.s;
+    search_list_.resize(std::max(1, g.h - search_y));
+    // the packet log: the table and the bytes of the selected packet (under it: one line of path, four of bytes)
+    const int log_y = g.s / 2 + g.bar + g.s + line_h(f_caption_) + g.s / 2;
+    const int detail_h = log_side_ ? 0 : g.s + line_h(f_caption_) + 4 * line_h(f_mono_);
+    log_list_.resize(std::max(1, g.h - log_y - detail_h));
+    if (log_side_) {
+        const int hex_w = text_w("15416364 d9eb430a 01020304", f_mono_) + 4;
+        const int hx = g.x + g.cw - hex_w;
+        const int top = log_y - line_h(f_caption_) - g.s / 2;           // the top of the table's titles
+        lv_obj_set_pos(log_div_, hx - g.m / 2, top);
+        lv_obj_set_size(log_div_, 1, std::max(1, g.h - top));
+        lv_obj_set_pos(log_detail_, hx, top);
+        lv_label_set_long_mode(log_detail_, LV_LABEL_LONG_MODE_WRAP);       // the path and the sizes over three lines
+        lv_obj_set_height(log_detail_, 3 * line_h(f_caption_));
+        const int hy = top + 3 * line_h(f_caption_) + g.s;
+        lv_obj_set_pos(log_hex_, hx, hy);
+        lv_obj_set_height(log_hex_, std::max(1, g.h - hy));
+    } else {
+        const int dy = g.h - detail_h;
+        lv_obj_set_y(log_div_, dy);
+        lv_obj_set_y(log_detail_, dy + g.s / 2);
+        lv_label_set_long_mode(log_detail_, LV_LABEL_LONG_MODE_DOTS);       // one line under the table
+        lv_obj_set_height(log_detail_, line_h(f_caption_));
+        lv_obj_set_y(log_hex_, dy + g.s / 2 + line_h(f_caption_));
+        lv_obj_set_height(log_hex_, 4 * line_h(f_mono_));
+    }
+    settings_list_.resize(std::max(1, g.h));
+    // the CompactList of the statistics has no height of its own to change: made again for the new room (rows at the next render)
+    {
+        cp0::ui::CompactListEvents ev;
+        ev.back = [this] { header_back(); };
+        cp0::ui::CompactListOptions opt;
+        opt.read_only = true;
+        stats_list_.reset();
+        stats_list_ = std::make_unique<cp0::ui::CompactList>(stats_panel_, settings_list_layout(list_y, g.h - list_y), ev, opt);
+        stats_rows_sig_ = 0;
+    }
+    lv_obj_set_size(loading_, layout_.w, panel_h_);
 }
 
 /* The key hint line at the bottom of the screen: shown only while a keyboard is there (the touch has its buttons). */
 void App::build_hint_line()
 {
     const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
-    hint_box_ = make_box(shell_->root(), stage_x_, layout_.h - hint_h_, kScreenW, hint_h_);
+    // the whole width under the pages (the bodies end above it: layout_body), opaque, a hairline on top: the end of the list above is
+    // plainly the end of the list, never a row that goes on behind the hints; the text in the page column
+    const Geo g = geo();
+    hint_box_ = make_box(shell_->root(), 0, layout_.h - hint_h_, layout_.w, hint_h_);
     lv_obj_remove_flag(hint_box_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_color(hint_box_, lv_color_hex(kBackground), 0);
+    lv_obj_set_style_bg_opa(hint_box_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_side(hint_box_, LV_BORDER_SIDE_TOP, 0);
+    lv_obj_set_style_border_width(hint_box_, 1, 0);
+    lv_obj_set_style_border_color(hint_box_, lv_color_hex(CP0_UI_LIST_SECTION_RGB), 0);
+    lv_obj_set_style_border_opa(hint_box_, LV_OPA_50, 0);
     const int lh = static_cast<int>(lv_font_get_line_height(f_caption_));
-    hint_label_ = make_label(hint_box_, f_caption_, kMuted, m->tok[CP0_TOK_SPACE_S], (hint_h_ - lh) / 2, kScreenW - 2 * m->tok[CP0_TOK_SPACE_S], lh);
+    hint_label_ = make_label(hint_box_, f_caption_, kMuted, g.x, (hint_h_ - lh) / 2, g.cw, lh);
+    (void)m;
 
     // the cue of a touch held on a conversation name: a bar that fills over 3 s (never clickable: it must not take the touch)
     hold_box_ = make_box(screen_, 215, panel_h_ - 114, 420, 56);
@@ -1039,7 +1325,8 @@ void App::layout_body()
     page_h_ = panel_h_ - tab_h_;
     lv_obj_set_pos(screen_, stage_x_, tabs_y_);
     lv_obj_set_size(screen_, kScreenW, panel_h_);
-    for (int i = 0; i < 5; ++i) lv_obj_set_pos(page_[i], 0, tab_h_), lv_obj_set_size(page_[i], kScreenW, page_h_);
+    for (int i : {static_cast<int>(Tab::Chats), static_cast<int>(Tab::Map), static_cast<int>(Tab::Terminal)})
+        lv_obj_set_pos(page_[i], 0, tab_h_), lv_obj_set_size(page_[i], kScreenW, page_h_);
     // Chats: the list and its Search button, the conversation and the entry line at the bottom
     chat_list_.resize(page_h_ - 44);
     lv_obj_set_y(search_btn_, page_h_ - 44);
@@ -1048,24 +1335,11 @@ void App::layout_body()
     lv_obj_set_y(chat_line2_, page_h_ - 56);
     lv_obj_set_y(compose_, page_h_ - 50);
     lv_obj_set_y(send_btn_, page_h_ - 47);
-    contact_list_.resize(page_h_ - 110);
-    settings_list_.resize(page_h_);
-    // the sub-pages cover the tab row too
-    for (lv_obj_t *panel : {search_panel_, nearby_, detail_, stats_panel_, log_panel_}) lv_obj_set_size(panel, kScreenW, panel_h_);
-    search_list_.resize(panel_h_ - 166);
-    nearby_list_.resize(panel_h_ - 48);
-    log_list_.resize(panel_h_ - 184);
-    lv_obj_set_y(log_div_, panel_h_ - 112);
-    lv_obj_set_y(log_detail_, panel_h_ - 106);
-    lv_obj_set_y(log_hex_, panel_h_ - 86);
-    lv_obj_set_height(log_hex_, 85);
-    lv_obj_set_y(st_updated_, panel_h_ - 26);
-    lv_obj_set_y(st_note_, panel_h_ - 26);
-    for (lv_obj_t *b : detail_btn_) lv_obj_set_y(b, panel_h_ - 48);
     lv_obj_set_y(hold_box_, panel_h_ - 114);
-    lv_obj_set_size(loading_, kScreenW, panel_h_);
+    layout_wide();                                           // the pages of the full width
+    if (home_list_) build_home();                            // Home ends above the key hint line too
     set_hidden(hint_box_, !hint);
-    lv_obj_set_pos(hint_box_, stage_x_, layout_.h - hint_h_);
+    lv_obj_set_pos(hint_box_, 0, layout_.h - hint_h_);
     invalidate();
 }
 
@@ -1078,9 +1352,9 @@ lv_point_t App::script_origin() const
 
 void App::build_popup()
 {
-    // "Loading..." while the contacts are sorted or filtered: a small box in the middle of the stage
+    // "Loading..." while the contacts are sorted or filtered: a small box in the middle of the page
     const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
-    loading_ = make_box(screen_, 0, 0, kScreenW, panel_h_);
+    loading_ = make_box(wide_, 0, 0, layout_.w, panel_h_);
     lv_obj_set_style_bg_color(loading_, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(loading_, LV_OPA_50, 0);
     lv_obj_add_flag(loading_, LV_OBJ_FLAG_CLICKABLE);
@@ -1098,6 +1372,13 @@ void App::build_popup()
     loading_label_ = make_label(lp, f_title_, kText, pad, pad, sz.x + 2, lh, LV_TEXT_ALIGN_LEFT);
     lv_label_set_text(loading_label_, "Loading...");
     set_hidden(loading_, true);
+}
+
+void App::body_lists(std::vector<lv_obj_t *> &roots, lv_obj_t *&hint) const
+{
+    roots = {screen_, wide_};
+    if (home_list_) roots.push_back(home_list_->focus_object());
+    hint = hint_box_;
 }
 
 std::string App::debug_state() const
@@ -1131,6 +1412,8 @@ std::string App::debug_state() const
                     " last_status='" + last_status + "'" +
                     " retry=" + std::to_string(model_.retry().attempts) + "/" + std::to_string(model_.retry().reset_after) +
                     " live_rows=" + std::to_string(contact_list_.bound_rows()) + " notice='" + notice_text_ + "'" +
+                    " contacts_scroll=" + std::to_string(contact_list_.obj() ? lv_obj_get_scroll_y(contact_list_.obj()) : 0) + " contacts_builds=" + std::to_string(contacts_builds_) +
+                    " settings_scroll=" + std::to_string(settings_list_.obj() ? lv_obj_get_scroll_y(settings_list_.obj()) : 0) + " settings_builds=" + std::to_string(settings_builds_) +
                     " presets=" + (presets_origin() == PresetOrigin::Fetched ? "fetched" : presets_origin() == PresetOrigin::Cached ? "cached" : "bundled") + "/" +
                     std::to_string(radio_presets().size()) + "/" + presets_list_date() + " all_msgs=" + std::to_string(model_.message_count()) +
                     " popup_title='" + (pop_.kind == Popup::None ? std::string() : pop_.title) + "'" + " muted_conv=" + (conv_.empty() ? "-" : model_.is_muted(conv_) ? "1" : "0");
@@ -1225,6 +1508,7 @@ void App::update_title()
         break;
     case Tab::Contacts:
         path.push_back("Contacts");
+        if (nav_.select_mode && !nav_.detail_open && !nav_.nearby_open) path.push_back("Manage contacts");     // the select mode
         if (nav_.detail_open) {
             const ContactRec *r = model_.find_contact(detail_key_);
             path.push_back(r ? truncate_ellipsis(r->c.name, 24) : std::string("Contact"));
@@ -1649,7 +1933,10 @@ void App::render()
     last_revision_ = model_.revision();
     last_link_ = static_cast<uint32_t>(client_->link());
     dirty_ = false;
-    set_hidden(screen_, at_home_);
+    // the stage holds Chats only (P4 converts it); the full width holds the other pages and the search over Chats
+    const bool on_stage = !at_home_ && nav_.tab == Tab::Chats && !nav_.search_open;
+    set_hidden(screen_, !on_stage);
+    set_hidden(wide_, at_home_ || on_stage);
     home_list_->set_hidden(!at_home_);
     if (at_home_) render_home();
     else set_page_visible();
@@ -1948,40 +2235,90 @@ void App::render_chat_messages(bool force)
     else lv_obj_scroll_to_y(msgs_, old_scroll, LV_ANIM_OFF);
 }
 
+namespace {
+
+const char *const kDownMark = " \xE2\x96\xBC";       // " ▼" (U+25BC, in the launcher's Montserrat): the cell opens a dialog
+
+/* The marker layout of a page list (the chevron's and the dot's sizes from the size of the row's main text). */
+int trail_of(const cp0_ui_list_layout_t &l, Aff aff)
+{
+    switch (aff) {
+    case Aff::Open: return cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_OPEN);
+    case Aff::Edit: return cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_EDIT);
+    case Aff::Action: return cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_ACTION);
+    case Aff::Running: return cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_ACTION_RUNNING);
+    default: return 0;
+    }
+}
+
+cp0::ui::RowAffordance list_aff(Aff a)
+{
+    switch (a) {
+    case Aff::Info: return cp0::ui::RowAffordance::Info;
+    case Aff::Open: return cp0::ui::RowAffordance::Open;
+    case Aff::Edit: return cp0::ui::RowAffordance::Edit;
+    case Aff::Action: return cp0::ui::RowAffordance::Action;
+    case Aff::Running: return cp0::ui::RowAffordance::ActionRunning;
+    default: return cp0::ui::RowAffordance::Unspecified;
+    }
+}
+
+/* The number of lines `text` takes in `font` at `w` px (at least 1). */
+int lines_of(const std::string &text, const lv_font_t *font, int w)
+{
+    if (text.empty()) return 1;
+    lv_point_t sz{};
+    lv_text_get_size(&sz, text.c_str(), font, 0, 0, std::max(1, w), LV_TEXT_FLAG_NONE);
+    const int lh = line_h(font);
+    return std::max(1, (static_cast<int>(sz.y) + lh - 1) / lh);
+}
+
+} // namespace
+
 /* ---- contacts */
 
+/* The rows of the list from the current snapshot and selection (no new sort): two lines (the name; the type, when it was
+ * heard, the hops, the SNR on the Wide and Large screens), the distance and the chevron at the right; in the select mode a
+ * check box at the left and no chevron (a tap marks the row). */
 void App::build_contact_specs()
 {
+    const Geo g = geo();
+    cp0_ui_list_layout_t ml = settings_list_layout(0, g.h);
+    ml.text_px = cp0_ui_metrics_get()->text_px[CP0_TEXT_BODY];
+    const int lh1 = line_h(f_body_), lh2 = line_h(f_caption_), lhv = line_h(f_value_);
+    const int row_h = std::max(g.list_row, lh1 + lh2 + 2 * std::max(4, g.s / 2));
+    const int top = std::max(0, (row_h - lh1 - lh2) / 2);
+    const bool select = nav_.select_mode;
+    const int trail = select ? 0 : trail_of(ml, Aff::Open);
+    const int box = lh1;                                            // the check box of the select mode: as high as the name line
+    const int nx = g.inset + (select ? box + g.m : 0);
+    const int right = g.lw - g.inset - trail;                       // where the distance ends (the marker's slot after it)
+    const lv_font_t *sym = cp0_ui_font_px(cp0_ui_metrics_get()->text_px[CP0_TEXT_CAPTION]);   // the builtin face: LV_SYMBOL_OK
     std::vector<RowSpec> specs;
     specs.reserve(csnap_.rows.size());
-    const bool select = nav_.select_mode;
     for (const ContactRow &r : csnap_.rows) {
         RowSpec s;
-        s.h = kContactRowH;
+        s.h = row_h;
         s.id = r.key_hex;
-        const uint32_t type_color = r.type == advtype::kRepeater ? kBlue : r.type == advtype::kChat ? kText : kAccent;
-        const int y = centre(kContactRowH, f_ui_);
+        s.aff = select ? Aff::None : Aff::Open;
         const bool marked = select && csel_.contains(r.key_hex);
-        if (select) {                                       // a check box at the left; the whole row is the touch target
-            s.cells.push_back({marked ? LV_SYMBOL_OK : " ", marked ? kOnAccent : kText, 8, 28, LV_TEXT_ALIGN_CENTER, f_ui_, 8, marked ? kAccent : kSelected});
-        }
-        const int nx = select ? 44 : 12;
-        s.cells.push_back({truncate_ellipsis(r.name, select ? 18 : 22), marked ? kAccent : kText, nx, select ? 164 : 196, LV_TEXT_ALIGN_LEFT, f_text_, y});
-        s.cells.push_back({r.type_name, type_color, 212, 76, LV_TEXT_ALIGN_LEFT, f_ui_, y});
-        s.cells.push_back({fmt_age_coarse(r.heard), kMuted, 292, 66, LV_TEXT_ALIGN_LEFT, f_ui_, y});
-        s.cells.push_back({fmt_snr(r.has_snr, r.snr), kMuted, 360, 70, LV_TEXT_ALIGN_LEFT, f_ui_, y});
-        s.cells.push_back({r.hops < 0 ? "-" : std::to_string(r.hops), kMuted, 432, 48, LV_TEXT_ALIGN_LEFT, f_ui_, y});
-        s.cells.push_back({r.has_dist ? fmt_distance(r.dist_km) : "-", kMuted, 484, select ? 150 : 98, LV_TEXT_ALIGN_LEFT, f_ui_, y});
-        if (!select) s.cells.push_back({"i", kText, 590, 44, LV_TEXT_ALIGN_CENTER, f_ui_, 4, kSelected});   // the details of this contact (a 44 px target)
+        if (select) s.cells.push_back({marked ? LV_SYMBOL_OK : " ", marked ? kOnAccent : kText, g.inset, box, LV_TEXT_ALIGN_CENTER, sym, (row_h - box) / 2, marked ? kAccent : kSelected});
+        const std::string dist = contact_row_distance(r);
+        const int dw = text_w(dist.c_str(), f_value_) + 2;
+        s.cells.push_back({r.name, marked ? kAccent : kText, nx, std::max(1, right - dw - g.m - nx), LV_TEXT_ALIGN_LEFT, f_body_, top});
+        s.cells.push_back({contact_row_caption(r, g.wide), kMuted, nx, std::max(1, right - nx), LV_TEXT_ALIGN_LEFT, f_caption_, top + lh1});
+        s.cells.push_back({dist, kMuted, right - dw, dw, LV_TEXT_ALIGN_RIGHT, f_value_, top + lh1 - lhv});
         specs.push_back(std::move(s));
     }
     if (specs.empty()) {
         RowSpec s;
-        s.h = 60;
+        s.h = 2 * lh1 + 2 * g.s;
         s.selectable = false;
         const bool filtered = (cview_.filter.active() || !cview_.group.empty()) && model_.contact_count() > 0;
-        s.cells.push_back({filtered ? "No contact matches the filters." : client_->ready() ? "No contacts yet. Send an advert and wait for the others." : "No contacts cached. Connect the radio board.",
-                           kMuted, 12, 616, LV_TEXT_ALIGN_LEFT, f_ui_, 20});
+        Cell c{filtered ? "No contact matches the filters." : client_->ready() ? "No contacts yet. Send an advert and wait for the others." : "No contacts cached. Connect the radio board.",
+               kMuted, g.inset, g.lw - 2 * g.inset, LV_TEXT_ALIGN_LEFT, f_body_, g.s};
+        c.lines = 2;
+        s.cells.push_back(c);
         specs.push_back(std::move(s));
     }
     int sel = csnap_.index_of(contact_sel_key_);
@@ -1989,7 +2326,8 @@ void App::build_contact_specs()
     if (csnap_.rows.empty()) sel = -1;
     contact_sel_ = std::max(sel, 0);
     contact_sel_key_ = csnap_.key_at(sel);
-    contact_list_.set(std::move(specs), sel, true);
+    contact_list_.set(std::move(specs), sel, true);                      // (the scroll offset stays)
+    ++contacts_builds_;
 }
 
 void App::rebuild_contact_snapshot()
@@ -2009,47 +2347,25 @@ void App::rebuild_contact_snapshot()
     build_contact_specs();
 }
 
-void App::render_contact_toolbar()
+/* The action bar: Filter, Sort and More (the waiting nodes of Nearby under More); in the select mode Done, Select..., Delete n,
+ * Group... (the line under the title counts the marked contacts). */
+void App::render_contacts_bar()
 {
     const ContactView &v = view_pending_ ? view_next_ : cview_;
-    static const SortKey sort_keys[6] = {SortKey::Name, SortKey::Type, SortKey::Heard, SortKey::Snr, SortKey::Hops, SortKey::Distance};
-    static const char *const names[6] = {"Name", "Type", "Heard", "SNR", "Hops", "Distance"};
-    for (int i = 0; i < 6; ++i) {
-        const bool on = sort_keys[i] == v.sort;
-        lv_label_set_text(col_hdr_[i], (std::string(names[i]) + (on ? (v.reverse ? " ^" : " v") : "")).c_str());
-        set_color(col_hdr_[i], on ? kAccent : kMuted);
-    }
-    for (int i = 0; i < 5; ++i) {
-        const bool on = static_cast<int>(v.filter.type) == i;
-        lv_obj_set_style_bg_color(type_chip_[i], lv_color_hex(on ? kAccent : kSelected), 0);
-        set_color(type_chip_label_[i], on ? kOnAccent : kText);
-    }
-    for (int i = 0; i < 4; ++i) {
-        const bool on = static_cast<int>(v.filter.age) == i;
-        lv_obj_set_style_bg_color(age_chip_[i], lv_color_hex(on ? kAccent : kSelected), 0);
-        set_color(age_chip_label_[i], on ? kOnAccent : kText);
-    }
-    const size_t total = model_.contact_count();
-    std::string cnt = csnap_.rows.size() == total ? std::to_string(total) + (total == 1 ? " contact" : " contacts")
-                                                  : std::to_string(csnap_.rows.size()) + " of " + std::to_string(total);
-    lv_label_set_text(contacts_count_, cnt.c_str());
-    set_hidden(tb_normal_, nav_.select_mode);
-    set_hidden(tb_select_, !nav_.select_mode);
-    lv_label_set_text(group_btn_label_, v.group.empty() ? "Group: All" : ("Group: " + truncate_ellipsis(v.group, 8)).c_str());
-    lv_obj_set_style_bg_color(lv_obj_get_parent(group_btn_label_), lv_color_hex(v.group.empty() ? kSelected : kAccent), 0);
-    set_color(group_btn_label_, v.group.empty() ? kText : kOnAccent);
-    const size_t pending = model_.pending_count();
-    lv_label_set_text(nearby_btn_label_, pending ? ("Nearby " + std::to_string(pending)).c_str() : "Nearby");
-    lv_obj_set_style_bg_color(nearby_btn_, lv_color_hex(pending ? kAccent : kSelected), 0);
-    set_color(nearby_btn_label_, pending ? kOnAccent : kText);
+    std::vector<ActionBar::CellSpec> cells;
     if (nav_.select_mode) {
         const size_t n = csel_.shown_selected(csnap_.rows).size();
-        lv_label_set_text(del_btn_label_, n ? ("Delete " + std::to_string(n)).c_str() : "Delete");
-        lv_obj_set_style_bg_color(del_btn_, lv_color_hex(n ? kDangerRed : kSelectedDim), 0);
-        std::string c = std::to_string(n) + (n == 1 ? " contact marked" : " contacts marked");
-        if (const size_t hidden = csel_.hidden_count(csnap_.rows)) c += " (+" + std::to_string(hidden) + " hidden)";
-        lv_label_set_text(sel_count_, c.c_str());
+        cells.push_back({kTagSelDone, "Done", ""});
+        cells.push_back({kTagSelMenu, "Select...", ""});
+        cells.push_back({kTagSelDelete, n ? "Delete " + std::to_string(n) : std::string("Delete"), ""});
+        cells.push_back({kTagSelGroup, "Group...", ""});
+    } else {
+        const size_t pending = model_.pending_count();
+        cells.push_back({kTagFilter, std::string("Filter") + kDownMark, ""});
+        cells.push_back({kTagSortMenu, sort_button_text(v) + kDownMark, ""});
+        cells.push_back({kTagMore, "More", pending ? std::to_string(pending) + " nearby waiting" : std::string()});
     }
+    contacts_bar_.set_cells(cells);
 }
 
 void App::render_contacts()
@@ -2058,12 +2374,13 @@ void App::render_contacts()
     const uint32_t minute = now_unix() / 60;
     const bool stale = !csnap_valid_ || model_.revision() != csnap_rev_ || minute != csnap_minute_;
     if (stale && !view_pending_ && !plat_.touching()) rebuild_contact_snapshot();
-    render_contact_toolbar();
+    render_contacts_bar();
     set_hidden(detail_, !nav_.detail_open);
     if (nav_.detail_open) render_detail();
     set_hidden(nearby_, !nav_.nearby_open);
     if (nav_.nearby_open) render_nearby();
 }
+
 void App::change_contact_view(const ContactView &next)
 {
     if (next == (view_pending_ ? view_next_ : cview_)) return;
@@ -2101,32 +2418,63 @@ void App::move_contact_selection(int delta, bool absolute)
     contact_list_.set_selected(contact_sel_, true, true);        // two rows re-bound and a scroll: no rebuild of the list
 }
 
+/* A contact's details: the actions on the bar (Message for a chat node, Groups, Delete), the facts in the list (read-only rows:
+ * the label at the left, the value in grey at the right, or under the label when both do not fit on one line). */
 void App::render_detail()
 {
     const ContactDetail d = build_contact_detail(model_, detail_key_);
-    if (!d.found) {
-        lv_label_set_text(detail_title_, "(gone)");
-        for (auto *v : detail_val_) lv_label_set_text(v, "");
-        set_hidden(detail_msg_btn_, true);
-        return;
+    std::vector<ActionBar::CellSpec> cells;
+    if (d.found) {
+        if (d.chat) cells.push_back({kTagDetailMsg, "Message", ""});
+        cells.push_back({kTagDetailGroups, "Groups", ""});
+        cells.push_back({kTagDetailDelete, "Delete", ""});
     }
-    lv_label_set_text(detail_title_, d.title.c_str());
-    lv_label_set_text(detail_val_[0], d.name.c_str());
-    lv_label_set_text(detail_val_[1], d.type.c_str());
-    lv_label_set_text(detail_val_[2], d.groups.c_str());
-    lv_label_set_text(detail_val_[3], (d.key1 + "\n" + d.key2).c_str());
-    lv_label_set_text(detail_val_[4], d.route.c_str());
-    lv_label_set_text(detail_val_[5], d.last_advert.c_str());
-    lv_label_set_text(detail_val_[6], d.heard.c_str());
-    lv_label_set_text(detail_val_[7], d.position.c_str());
-    lv_label_set_text(detail_val_[8], d.distance.c_str());
-    lv_label_set_text(detail_val_[9], d.snr.c_str());
-    set_hidden(detail_msg_btn_, !d.chat);
+    detail_bar_.set_cells(cells);
+    std::vector<std::pair<std::string, std::string>> facts;
+    if (d.found) {
+        facts = {{"Name", d.name}, {"Type", d.type}, {"Groups", d.groups}, {"Public key", d.key1 + "\n" + d.key2}, {"Route", d.route},
+                 {"Last advert", d.last_advert}, {"Heard here", d.heard}, {"Position", d.position}, {"Distance", d.distance}, {"Last SNR", d.snr}};
+    } else {
+        facts = {{"This contact is gone from the board.", ""}};
+    }
+    uint32_t sig = 0;
+    for (const auto &f : facts) sig = fnv(fnv(sig, f.first), f.second);
+    if (sig == detail_sig_ || plat_.touching()) return;
+    detail_sig_ = sig;
+    const Geo g = geo();
+    const int lh1 = line_h(f_body_), lhv = line_h(f_value_), pad = std::max(4, g.s / 2), tw = g.lw - 2 * g.inset;
+    std::vector<RowSpec> specs;
+    for (const auto &f : facts) {
+        RowSpec s;
+        s.aff = Aff::Info;
+        const int lw = text_w(f.first.c_str(), f_body_) + 2, vw = text_w(f.second.c_str(), f_value_) + 2;
+        if (f.second.find('\n') == std::string::npos && lw + g.m + vw <= tw) {       // one line: the label, the value at the right
+            s.h = g.list_row;
+            s.cells.push_back({f.first, kText, g.inset, std::max(1, tw - vw - g.m), LV_TEXT_ALIGN_LEFT, f_body_, (s.h - lh1) / 2});
+            if (!f.second.empty()) s.cells.push_back({f.second, kMuted, g.inset + tw - vw, vw, LV_TEXT_ALIGN_RIGHT, f_value_, (s.h - lhv) / 2});
+        } else {                                                                     // the value under the label, wrapped
+            const int n = lines_of(f.second, f_value_, tw);
+            s.h = std::max(g.list_row, lh1 + n * lhv + 2 * pad);
+            s.cells.push_back({f.first, kText, g.inset, tw, LV_TEXT_ALIGN_LEFT, f_body_, pad});
+            Cell v{f.second, kMuted, g.inset, tw, LV_TEXT_ALIGN_LEFT, f_value_, pad + lh1};
+            v.lines = n;
+            s.cells.push_back(v);
+        }
+        specs.push_back(std::move(s));
+    }
+    detail_sel_ = std::clamp(detail_sel_, 0, static_cast<int>(specs.size()) - 1);
+    detail_list_.set(std::move(specs), detail_sel_, true);
 }
+
 /* ---- settings */
 
+/* The rows of Settings in the launcher's CompactList, each tagged by its kind (settings_row_aff): a read-out (grey value, no
+ * marker; an explicit tone keeps its colour: Connected in green), a page or a menu (chevron), a value edited by a choice, an
+ * editor or a switch (the value in its tone, then the chevron), an action (dot). An unsaved radio value is amber with a "*". */
 void App::render_settings()
 {
+    using cp0::ui::ListRow;
+    using cp0::ui::ValueTone;
     const bool connected = client_->ready();
     const RadioSettings cur = model_.radio_settings();
     const DeviceInfo *dev = model_.device() ? &*model_.device() : nullptr;
@@ -2149,45 +2497,6 @@ void App::render_settings()
     for (const ChannelEntry &e : entries) ctx.channels.push_back(e.idx);
     std::vector<SRowSpec> layout = settings_layout(ctx);
 
-    std::vector<RowSpec> specs;
-    auto id_of = [&](size_t i) { return std::to_string(i); };
-    auto header = [&](int section) {
-        RowSpec s;
-        s.h = 28;
-        s.header = true;
-        s.selectable = false;
-        std::string t = settings_section_title(section);
-        if (section == 1 && dirty_radio_) t += "   (unsaved: see the end of the list)";
-        s.cells.push_back({t, section == 1 && dirty_radio_ ? kWarn : kMuted, 12, 600, LV_TEXT_ALIGN_LEFT, f_small_, centre(28, f_small_)});
-        return s;
-    };
-    auto info = [&](const char *label, const std::string &value, uint32_t color = kText) {
-        RowSpec s;
-        s.h = 30;
-        s.selectable = false;
-        s.cells.push_back({label, kMuted, 12, 200, LV_TEXT_ALIGN_LEFT, f_ui_, centre(30, f_ui_)});
-        s.cells.push_back({value, color, 220, 408, LV_TEXT_ALIGN_LEFT, f_text_, centre(30, f_text_)});
-        return s;
-    };
-    // a "firmware too old" or "not allowed" line: the reason in the small font, in gold
-    auto notice_row = [&](const char *label, const std::string &text) {
-        RowSpec s;
-        s.h = 34;
-        s.selectable = false;
-        s.cells.push_back({label, kMuted, 12, 200, LV_TEXT_ALIGN_LEFT, f_ui_, centre(34, f_ui_)});
-        s.cells.push_back({text, kWarn, 220, 408, LV_TEXT_ALIGN_LEFT, f_text_small_, centre(34, f_text_small_)});
-        return s;
-    };
-    // a row that does something: label, value, and a ">" when it opens a popup
-    auto row = [&](const std::string &label, const std::string &value, uint32_t value_color, uint32_t label_color, bool chevron, bool changed) {
-        RowSpec s;
-        s.h = 44;
-        s.cells.push_back({std::string(changed ? "* " : "") + label, label_color, 12, 200, LV_TEXT_ALIGN_LEFT, f_ui_, centre(44, f_ui_)});
-        s.cells.push_back({value, value_color, 220, chevron ? 360 : 400, LV_TEXT_ALIGN_LEFT, f_text_, centre(44, f_text_)});
-        if (chevron) s.cells.push_back({">", kMuted, 596, 30, LV_TEXT_ALIGN_CENTER, f_big_, centre(44, f_big_)});
-        return s;
-    };
-
     const bool changed_freq = connected && std::fabs(edit_.freq_mhz - cur.freq_mhz) > 0.0004;
     const bool changed_bw = connected && std::fabs(edit_.bw_khz - cur.bw_khz) > 0.0004;
     const bool changed_sf = connected && edit_.sf != cur.sf, changed_cr = connected && edit_.cr != cur.cr;
@@ -2196,162 +2505,200 @@ void App::render_settings()
     const bool changed_radio = changed_freq || changed_bw || changed_sf || changed_cr;
     const RetrySettings retry = model_.retry();
 
+    std::vector<ListRow> rows;
     for (size_t i = 0; i < layout.size(); ++i) {
         const SRowSpec &r = layout[i];
-        RowSpec s;
+        const cp0::ui::RowAffordance aff = list_aff(settings_row_aff(r.kind));
+        const std::intptr_t id = static_cast<std::intptr_t>(i);
+        // an edited value: amber, "*" before the label until it is saved
+        auto value = [&](const std::string &label, const std::string &v, bool changed, ValueTone tone = ValueTone::Normal) {
+            return ListRow::item(std::string(changed ? "* " : "") + label, v, changed ? ValueTone::Warn : tone, id, aff);
+        };
+        auto item = [&](const std::string &label, const std::string &v, ValueTone tone) { return ListRow::item(label, v, tone, id, aff); };
         switch (r.kind) {
-        case SRowKind::Header: s = header(r.arg); break;
+        case SRowKind::Header: {
+            std::string t = settings_section_title(r.arg);
+            if (r.arg == 1 && dirty_radio_) t += "  \xC2\xB7  unsaved: Save is at the end";
+            rows.push_back(ListRow::section(t));
+            break;
+        }
         case SRowKind::Info:
             if (r.arg == 0) {
                 std::string v = client_->link_text();
                 if (connected && dev) v += "   " + dev->model;
                 else if (!client_->link_hint().empty()) v += "   " + client_->link_hint();
-                s = info("Board", v, connected ? kGreen : kMuted);
+                rows.push_back(item("Board", v, connected ? ValueTone::Ok : ValueTone::Muted));
             } else if (r.arg == 1) {
-                s = info("Firmware", connected ? firmware_text(dev) : "-", connected ? kText : kMuted);
+                rows.push_back(item("Firmware", connected ? firmware_text(dev) : "-", connected ? ValueTone::Normal : ValueTone::Muted));
             } else if (r.arg == 2) {
                 if (const auto &bat = model_.battery()) {
                     const int mv = bat->millivolts;
                     const int pct = std::clamp((mv - 3300) * 100 / 900, 0, 100);     // rough: 3.3 V empty, 4.2 V full
                     char b[48];
                     std::snprintf(b, sizeof(b), "%.2f V  (about %d%%)", mv / 1000.0, pct);
-                    s = info("Battery", b);
+                    rows.push_back(item("Battery", b, ValueTone::Normal));
                 } else {
-                    s = info("Battery", "-", kMuted);
+                    rows.push_back(item("Battery", "-", ValueTone::Muted));
                 }
             } else {
                 if (connected) {
                     const ClockInfo &ci = model_.clock();
-                    s = info("Clock", std::string(clock_source_name(ci.source)) + "   " + format_local_datetime(now_unix()),
-                             ci.source == ClockSource::NotSet ? kWarn : kText);
+                    rows.push_back(item("Clock", std::string(clock_source_name(ci.source)) + "   " + format_local_datetime(now_unix()),
+                                        ci.source == ClockSource::NotSet ? ValueTone::Warn : ValueTone::Normal));
                 } else {
-                    s = info("Clock", "-", kMuted);
+                    rows.push_back(item("Clock", "-", ValueTone::Muted));
                 }
             }
             break;
         case SRowKind::Position: {
             const auto &self = model_.self();
             const bool has = self && !(self->lat == 0 && self->lon == 0);
-            s = row("Position", has ? fmt_position(true, self->lat, self->lon) : "not set", has ? kText : kMuted, kText, true, false);   // ">": opens the Position box
+            rows.push_back(item("Position", has ? fmt_position(true, self->lat, self->lon) : "not set", has ? ValueTone::Normal : ValueTone::Muted));
             break;
         }
-        case SRowKind::Stats: s = row("Statistics", "packets, airtime, errors", kMuted, kText, true, false); break;
-        case SRowKind::StatsNotice: s = notice_row("Statistics", ctx.stats.notice); break;
+        case SRowKind::Stats: rows.push_back(item("Statistics", "", ValueTone::Normal)); break;
+        case SRowKind::StatsNotice: rows.push_back(item("Statistics", ctx.stats.notice, ValueTone::Warn)); break;
         case SRowKind::PacketLog: {
             const PacketLog &pl = client_->packet_log();
-            s = row("Packet log", pl.capturing() ? "capturing, " + std::to_string(pl.size()) + " packets" : pl.size() ? "stopped, " + std::to_string(pl.size()) + " packets" : "off: the radio packets heard",
-                    pl.capturing() ? kAccent : kMuted, kText, true, false);
+            rows.push_back(item("Packet log", pl.capturing() ? "capturing, " + std::to_string(pl.size()) : pl.size() ? "stopped, " + std::to_string(pl.size()) : "off",
+                                pl.capturing() ? ValueTone::Ok : ValueTone::Muted));
             break;
         }
         case SRowKind::PathHash: {
             const int mode = dev ? dev->path_hash_mode : -1;
-            s = row("Path hash size", mode >= 0 ? path_hash_text(mode) : "unknown", kText, kText, true, false);
+            rows.push_back(item("Path hash size", mode >= 0 ? path_hash_text(mode) : "unknown", mode >= 0 ? ValueTone::Normal : ValueTone::Muted));
             break;
         }
-        case SRowKind::PathHashNotice: s = notice_row("Path hash size", ctx.path_hash.notice); break;
+        case SRowKind::PathHashNotice: rows.push_back(item("Path hash size", ctx.path_hash.notice, ValueTone::Warn)); break;
         case SRowKind::Repeat:
-            s = row("Repeat", dev && dev->repeat ? "On: this board forwards packets" : "Off", dev && dev->repeat ? kAccent : kText, kText, false, false);
-            s.cells.push_back({dev && dev->repeat ? "tap to switch off" : "tap to switch on", kMuted, 450, 170, LV_TEXT_ALIGN_RIGHT, f_small_, centre(44, f_small_)});
+            rows.push_back(item("Repeat", dev && dev->repeat ? "On: this board forwards packets" : "Off", dev && dev->repeat ? ValueTone::Normal : ValueTone::Muted));
             break;
-        case SRowKind::RepeatNotice: s = notice_row("Repeat", ctx.repeat.note); break;
         case SRowKind::AdvertEvery: {
             const AdvertSchedule sc = model_.advert_schedule();
-            s = row("Advert every", sc.interval_hours ? std::to_string(sc.interval_hours) + " h" : "Off", sc.interval_hours ? kAccent : kText, kText, true, false);
+            rows.push_back(item("Advert every", sc.interval_hours ? std::to_string(sc.interval_hours) + " h" : "Off", sc.interval_hours ? ValueTone::Normal : ValueTone::Muted));
             break;
         }
         case SRowKind::AdvertKind:
-            s = row("Advert type", model_.advert_schedule().flood ? "Flood (whole mesh)" : "Zero-hop (neighbours)", kText, model_.advert_schedule().interval_hours ? kText : kMuted, true, false);
+            rows.push_back(item("Advert type", model_.advert_schedule().flood ? "Flood (whole mesh)" : "Zero-hop (neighbours)",
+                                model_.advert_schedule().interval_hours ? ValueTone::Normal : ValueTone::Muted));
             break;
         case SRowKind::ManualAdd: {
             const bool manual = model_.self() && model_.self()->manual_add_contacts;
-            s = row("Add nodes by itself", manual ? "Off: new nodes wait in Nearby" : "On: the board adds new nodes", manual ? kAccent : kText, kText, false, false);
-            s.cells.push_back({"tap to switch", kMuted, 480, 140, LV_TEXT_ALIGN_RIGHT, f_small_, centre(44, f_small_)});
+            rows.push_back(item("Add nodes by itself", manual ? "Off: they wait in Nearby" : "On", ValueTone::Normal));
             break;
         }
         case SRowKind::AutoAddTypes:
-            s = row("Still added by itself", model_.caps().autoadd_known ? autoadd_summary(model_.caps().autoadd_config) : "-", kText, kText, true, false);
+            rows.push_back(item("Still added by itself", model_.caps().autoadd_known ? autoadd_summary(model_.caps().autoadd_config) : "-",
+                                model_.caps().autoadd_known ? ValueTone::Normal : ValueTone::Muted));
             break;
-        case SRowKind::AutoAddNotice: s = notice_row("Auto-add types", ctx.autoadd.notice); break;
-        case SRowKind::Reboot: s = row("Reboot the board", "restarts it, nothing is erased", kMuted, kText, true, false); break;
-        case SRowKind::FactoryReset: s = row("Factory reset the board", "erases its keys, contacts, channels", kRed, kRed, true, false); break;
+        case SRowKind::AutoAddNotice: rows.push_back(item("Auto-add types", ctx.autoadd.notice, ValueTone::Warn)); break;
+        case SRowKind::Reboot: rows.push_back(item("Reboot the board", "nothing is erased", ValueTone::Muted)); break;
+        case SRowKind::FactoryReset: rows.push_back(item("Factory reset the board", "erases its keys", ValueTone::Bad)); break;
         case SRowKind::BoardGps:
-            s = row("Board GPS", model_.caps().gps_on ? "On" : "Off", model_.caps().gps_on ? kGreen : kText, kText, false, false);
-            s.cells.push_back({model_.caps().gps_on ? "tap to switch off" : "tap to switch on", kMuted, 450, 170, LV_TEXT_ALIGN_RIGHT, f_small_, centre(44, f_small_)});
+            rows.push_back(item("Board GPS", model_.caps().gps_on ? "On" : "Off", model_.caps().gps_on ? ValueTone::Ok : ValueTone::Muted));
             break;
-        case SRowKind::GpsNotice:
-            s = info("Board GPS", "Firmware too old for this feature", kWarn);
-            break;
-        case SRowKind::Name: s = row("Node name", edit_.name.empty() ? "-" : edit_.name, changed_name ? kAccent : kText, kText, false, changed_name); break;
+        case SRowKind::GpsNotice: rows.push_back(item("Board GPS", "Firmware too old for this feature", ValueTone::Warn)); break;
+        case SRowKind::Name: rows.push_back(value("Node name", edit_.name.empty() ? "-" : edit_.name, changed_name)); break;
         case SRowKind::Preset: {
             const int p = connected ? find_preset(edit_.freq_mhz, edit_.bw_khz, edit_.sf, edit_.cr) : -1;
-            std::string v = !connected ? "-" : p >= 0 ? radio_presets()[static_cast<size_t>(p)].name : "Custom";
-            s = row("Preset", v, changed_radio ? kAccent : kText, connected ? kText : kMuted, true, false);
+            const std::string v = !connected ? "-" : p >= 0 ? radio_presets()[static_cast<size_t>(p)].name : "Custom";
+            rows.push_back(value("Preset", v, changed_radio, connected ? ValueTone::Normal : ValueTone::Muted));
             break;
         }
-        case SRowKind::Freq: s = row("Frequency", connected ? fmt_freq(edit_.freq_mhz) : "-", changed_freq ? kAccent : kText, kText, false, changed_freq); break;
-        case SRowKind::Bw: s = row("Bandwidth", connected ? fmt_bw(edit_.bw_khz) : "-", changed_bw ? kAccent : kText, kText, true, changed_bw); break;
-        case SRowKind::Sf: s = row("Spreading factor", connected ? "SF" + std::to_string(edit_.sf) : "-", changed_sf ? kAccent : kText, kText, true, changed_sf); break;
-        case SRowKind::Cr: s = row("Coding rate", connected ? "4/" + std::to_string(edit_.cr) : "-", changed_cr ? kAccent : kText, kText, true, changed_cr); break;
-        case SRowKind::Tx: s = row("TX power", connected ? std::to_string(edit_.tx_power) + " dBm" : "-", changed_tx ? kAccent : kText, kText, true, changed_tx); break;
+        case SRowKind::Freq: rows.push_back(value("Frequency", connected ? fmt_freq(edit_.freq_mhz) : "-", changed_freq, connected ? ValueTone::Normal : ValueTone::Muted)); break;
+        case SRowKind::Bw: rows.push_back(value("Bandwidth", connected ? fmt_bw(edit_.bw_khz) : "-", changed_bw, connected ? ValueTone::Normal : ValueTone::Muted)); break;
+        case SRowKind::Sf: rows.push_back(value("Spreading factor", connected ? "SF" + std::to_string(edit_.sf) : "-", changed_sf, connected ? ValueTone::Normal : ValueTone::Muted)); break;
+        case SRowKind::Cr: rows.push_back(value("Coding rate", connected ? "4/" + std::to_string(edit_.cr) : "-", changed_cr, connected ? ValueTone::Normal : ValueTone::Muted)); break;
+        case SRowKind::Tx: rows.push_back(value("TX power", connected ? std::to_string(edit_.tx_power) + " dBm" : "-", changed_tx, connected ? ValueTone::Normal : ValueTone::Muted)); break;
         case SRowKind::RetryAttempts:
-            s = row("Message tries", retry.attempts == 1 ? "1 (no retry)" : std::to_string(retry.attempts), kText, kText, true, false);
+            rows.push_back(item("Message tries", retry.attempts == 1 ? "1 (no retry)" : std::to_string(retry.attempts), ValueTone::Normal));
             break;
         case SRowKind::ResetAfter:
-            s = row("Forget the route", retry.reset_after == 0 ? "Never" : "Before try " + std::to_string(retry.reset_after + 1), kText, kText, true, false);
+            rows.push_back(item("Forget the route", retry.reset_after == 0 ? "Never" : "Before try " + std::to_string(retry.reset_after + 1), ValueTone::Normal));
             break;
-        case SRowKind::SyncClock:
-            s = row("Sync clock now", connected ? clock_source_name(model_.clock().source) : "", kMuted, connected ? kText : kMuted, false, false);
-            break;
+        case SRowKind::SyncClock: rows.push_back(item("Sync clock now", connected ? clock_source_name(model_.clock().source) : "", ValueTone::Muted)); break;
         case SRowKind::Channel: {
             const ChannelEntry *e = nullptr;
             for (const ChannelEntry &x : entries)
                 if (x.idx == r.arg) e = &x;
-            s.h = 48;
-            if (!e) break;
-            s.cells.push_back({truncate_ellipsis(e->name, 20), e->muted ? kMuted : kText, 12, 220, LV_TEXT_ALIGN_LEFT, f_text_, centre(48, f_text_)});
-            s.cells.push_back({std::string(channel_kind_name(e->kind)) + (e->muted ? ", muted" : ""), kMuted, 236, 100, LV_TEXT_ALIGN_LEFT, f_small_, centre(48, f_small_)});
-            s.cells.push_back({e->muted ? "Unmute" : "Mute", kText, 344, 90, LV_TEXT_ALIGN_CENTER, f_ui_, 5, kSelected});
-            s.cells.push_back({"Key", e->has_key ? kText : kMuted, 440, 70, LV_TEXT_ALIGN_CENTER, f_ui_, 5, e->has_key ? kSelected : kSelectedDim});
-            s.cells.push_back({"Remove", connected ? kRed : kMuted, 516, 104, LV_TEXT_ALIGN_CENTER, f_ui_, 5, connected ? kSelected : kSelectedDim});
+            rows.push_back(item(e ? e->name : std::string("?"), e ? std::string(channel_kind_name(e->kind)) + (e->muted ? ", muted" : "") : std::string(), ValueTone::Muted));
             break;
         }
-        case SRowKind::AddChannel: s = row("+ Add channel", "hashtag or private", kMuted, kBlue, true, false); break;
-        case SRowKind::AddPublic: s = row("Add the Public channel", "slot 0 is empty", kMuted, kText, false, false); break;
-        case SRowKind::ChannelsNotice: s = info("Channels", "Firmware too old for this feature", kWarn); break;
-        case SRowKind::HistoryAll: {
-            const size_t n = model_.message_count();
-            s = row("Delete all messages", fmt_message_count(n), n ? kText : kMuted, kText, true, false);
-            break;
+        case SRowKind::AddChannel: rows.push_back(item("Add channel", "hashtag or private", ValueTone::Muted)); break;
+        case SRowKind::AddPublic: rows.push_back(item("Add the Public channel", "slot 0 is empty", ValueTone::Muted)); break;
+        case SRowKind::ChannelsNotice: rows.push_back(item("Channels", "Firmware too old for this feature", ValueTone::Warn)); break;
+        case SRowKind::HistoryAll: rows.push_back(item("Delete all messages", fmt_message_count(model_.message_count()), ValueTone::Muted)); break;
+        case SRowKind::HistoryOlder: rows.push_back(item("Delete older than", "7, 30 or 90 days", ValueTone::Muted)); break;
+        case SRowKind::HistoryForget: rows.push_back(item("Forget this board's data", "messages, groups", ValueTone::Muted)); break;
+        case SRowKind::HistoryOthers: rows.push_back(item("Other boards' data", fmt_boards(other_boards_n_) + ", " + fmt_bytes(other_boards_bytes_), ValueTone::Muted)); break;
+        case SRowKind::Undo: rows.push_back(item("Undo changes", dirty_radio_ ? "discard the edits" : "no changes", ValueTone::Muted)); break;
+        case SRowKind::Save: rows.push_back(item("Save to radio", dirty_radio_ ? "unsaved changes" : "no changes", dirty_radio_ ? ValueTone::Warn : ValueTone::Muted)); break;
         }
-        case SRowKind::HistoryOlder: s = row("Delete older than", "7, 30 or 90 days", kMuted, kText, true, false); break;
-        case SRowKind::HistoryNote: s = info("One conversation", "Chats: hold its name 3 s, or Ctrl+O", kMuted); break;
-        case SRowKind::HistoryForget: s = row("Forget this board's data", "history, groups, mute flags", kMuted, kText, true, false); break;
-        case SRowKind::HistoryOthers: s = row("Other boards' data", fmt_boards(other_boards_n_) + ", " + fmt_bytes(other_boards_bytes_), kMuted, kText, true, false); break;
-        case SRowKind::Undo:
-            s = row("Undo changes", dirty_radio_ ? "discard the unsaved edits" : "no changes", kMuted, dirty_radio_ ? kText : kMuted, false, false);
-            break;
-        case SRowKind::Save:
-            s = row("Save to radio", dirty_radio_ ? "unsaved changes" : "no changes", dirty_radio_ ? kWarn : kMuted, dirty_radio_ && connected ? kGreen : kMuted, false, false);
-            break;
+    }
+
+    // the rows as the virtual list draws them: a section (grey capitals), a note (its label, then the reason in amber at the CAPTION
+    // size, wrapped), an item (the label at the left, the value at the right never cut, the marker of its kind)
+    const Geo g = geo();
+    const cp0_ui_list_layout_t l = settings_list_layout(0, g.h);
+    const lv_font_t *lf = token_font(label_px_, false), *vf = token_font(value_px_, false), *sf = token_font(l.section_px, false);
+    const int lhl = line_h(lf), lhv = line_h(vf), lhs = line_h(sf), lhc = line_h(f_caption_);
+    const int tw = g.lw - 2 * g.inset, pad = std::max(4, g.s / 2);
+    std::vector<RowSpec> specs;
+    for (size_t i = 0; i < rows.size() && i < layout.size(); ++i) {
+        const ListRow &r = rows[i];
+        const SRowKind kind = layout[i].kind;
+        RowSpec s;
+        s.id = std::to_string(i);
+        if (r.kind == cp0::ui::ListRowKind::Section) {
+            s.h = l.section_h;
+            s.selectable = false;
+            std::string up = r.label;
+            for (char &c : up)
+                if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
+            s.cells.push_back({up, CP0_UI_LIST_SECTION_RGB, g.inset, tw, LV_TEXT_ALIGN_LEFT, sf, (s.h - lhs) / 2});
+        } else if (settings_row_aff(kind) == Aff::Info && !settings_row_selectable(kind) && r.tone == ValueTone::Warn && kind != SRowKind::Info) {
+            // a note: why a feature is not there (a firmware too old, repeat not allowed on this frequency)
+            const int n = lines_of(r.value, f_caption_, tw);
+            s.h = std::max(l.row_h, pad + lhl + n * lhc + pad);
+            s.selectable = false;
+            s.cells.push_back({r.label, CP0_UI_LIST_TEXT_RGB, g.inset, tw, LV_TEXT_ALIGN_LEFT, lf, pad});
+            Cell c{r.value, kWarn, g.inset, tw, LV_TEXT_ALIGN_LEFT, f_caption_, pad + lhl};
+            c.lines = n;
+            s.cells.push_back(c);
+        } else {
+            const Aff aff = settings_row_aff(kind);
+            s.h = l.row_h;
+            s.aff = aff;
+            s.selectable = settings_row_selectable(kind);            // a read-out is never selected
+            const cp0_ui_list_affordance_t ca = aff == Aff::Info ? CP0_UI_LIST_AFFORDANCE_INFO : aff == Aff::Open ? CP0_UI_LIST_AFFORDANCE_OPEN
+                                                : aff == Aff::Edit ? CP0_UI_LIST_AFFORDANCE_EDIT : aff == Aff::Action ? CP0_UI_LIST_AFFORDANCE_ACTION
+                                                : CP0_UI_LIST_AFFORDANCE_UNSPECIFIED;
+            const cp0_ui_list_tone_t tone = r.tone == ValueTone::Ok ? CP0_UI_LIST_TONE_OK : r.tone == ValueTone::Warn ? CP0_UI_LIST_TONE_WARN
+                                            : r.tone == ValueTone::Bad ? CP0_UI_LIST_TONE_BAD : r.tone == ValueTone::Muted ? CP0_UI_LIST_TONE_MUTED
+                                            : CP0_UI_LIST_TONE_NORMAL;
+            const int trail = trail_of(l, aff);
+            const int vw = r.value.empty() ? 0 : std::min(text_w(r.value.c_str(), vf) + 2, std::max(1, tw - trail));
+            s.cells.push_back({r.label, cp0_ui_list_label_rgb(ca), g.inset, std::max(1, tw - trail - (vw ? vw + l.gap : 0)), LV_TEXT_ALIGN_LEFT, lf, (s.h - lhl) / 2});
+            if (vw) s.cells.push_back({r.value, cp0_ui_list_value_rgb(tone, ca), g.inset + tw - trail - vw, vw, LV_TEXT_ALIGN_RIGHT, vf, (s.h - lhv) / 2});
         }
-        s.id = id_of(i);
         specs.push_back(std::move(s));
     }
 
-    // never replace the rows under the finger; the rows and the row list stay a matching pair
+    // never replace the rows under the finger; the rows and the layout stay a matching pair
     uint32_t sig = 0;
     for (const RowSpec &s : specs) {
         for (const Cell &c : s.cells) sig = fnv(sig, c.text);
-        sig = fnv_int(sig, static_cast<int>(s.h));
+        sig = fnv_int(fnv_int(sig, s.h), static_cast<int>(s.aff));
     }
     std::vector<bool> ok;
-    for (const RowSpec &s : specs) ok.push_back(s.selectable);
+    for (const SRowSpec &r : layout) ok.push_back(settings_row_selectable(r.kind));
     if (sig != settings_sig_ && !plat_.touching()) {
         settings_sig_ = sig;
+        settings_sel_ = keep_selected_row(srows_, settings_sel_, layout);   // the same row, never back to the top (see ui_pages.hpp)
         srows_ = layout;
         settings_channels_ = entries;
-        settings_sel_ = step_selectable(ok, settings_sel_, 0);
-        settings_list_.set(std::move(specs), settings_sel_, true);
+        settings_list_.set(std::move(specs), settings_sel_, true);          // (the scroll offset stays)
+        ++settings_builds_;
     } else if (settings_list_.count() == static_cast<int>(srows_.size())) {
         settings_list_.set_selected(settings_sel_, true, false);
     }
@@ -2381,7 +2728,7 @@ std::string App::hint_text() const
         return nav_.detail_open ? "Enter: message   G: groups   D: delete   Esc: back"
                : nav_.nearby_open ? "Enter: add   I: ignore   S: scan   V: ignored   Esc: back"
                : nav_.select_mode ? "Space: mark  A all  N none  I invert  M menu  D delete  G group"
-                                  : "Enter: open  I: info  X: select  N: nearby  G: group";
+                                  : "Enter: open  I: info  X: manage  N: nearby  G: group";
     case Tab::Settings:
         return nav_.stats_open ? "R: refresh   A: auto refresh   Esc: back"
                : nav_.packet_log_open ? "Up/Down: select  Space: start/stop  C: clear  Esc: back"
@@ -2392,9 +2739,54 @@ std::string App::hint_text() const
 
 /* The caption line under the header: a notice for a few seconds, else the state of the board (the words say it, the colour only repeats it);
  * and the key hint line at the bottom of the screen. */
+/* What a page says in the caption's place while the board is fine and no notice is up: Contacts what it shows (or the marked
+ * contacts, or the nodes of Nearby), the search how many messages match, the statistics when they were read, the packet log its
+ * capture. Grey: the shell's caption stays the board's line (green, amber, red). */
+bool App::page_caption(std::string &text) const
+{
+    if (at_home_) return false;
+    switch (nav_.tab) {
+    case Tab::Contacts:
+        if (nav_.detail_open) return false;
+        if (nav_.nearby_open) {
+            text = nearby_summary(nearby_rows_.size(), model_.pending_count(), nearby_show_ignored_);
+            return true;
+        }
+        if (nav_.select_mode) {
+            text = contact_marked_summary(csel_.shown_selected(csnap_.rows).size(), csel_.hidden_count(csnap_.rows));
+            return true;
+        }
+        text = contact_view_summary(csnap_.rows.size(), model_.contact_count(), view_pending_ ? view_next_ : cview_);
+        return true;
+    case Tab::Chats:
+        if (!nav_.search_open) return false;
+        if (search_.query(now_unix()).empty()) text = std::to_string(search_total_) + (search_total_ == 1 ? " message" : " messages") + " in the archive";
+        else if (search_total_ == 0) text = "No message matches";
+        else text = std::to_string(search_total_) + (search_total_ == 1 ? " message matches" : " messages match") +
+                    (search_total_ > search_rows_.size() ? ", the newest " + std::to_string(search_rows_.size()) + " are listed" : std::string());
+        return true;
+    case Tab::Settings:
+        if (nav_.stats_open) {
+            const StatsView v = build_stats_view(model_.stats());
+            text = v.updated;
+            if (model_.caps().stats == Cap::No) text = "Firmware too old for this feature: Statistics";
+            else if (!client_->ready()) text += "  \xC2\xB7  not connected";
+            else if (client_->stats_busy()) text += "  \xC2\xB7  reading...";
+            else if (!v.any) text += "  \xC2\xB7  no answer yet";
+            return true;
+        }
+        if (nav_.packet_log_open) {
+            text = packet_log_status(client_->packet_log());
+            return true;
+        }
+        return false;
+    default: return false;
+    }
+}
+
 void App::render_footer()
 {
-    std::string text;
+    std::string text, own;
     cp0::ui::CaptionTone tone = cp0::ui::CaptionTone::Normal;
     if (!notice_text_.empty()) {
         text = notice_text_;
@@ -2403,6 +2795,15 @@ void App::render_footer()
         const BoardLine bl = board_line(*client_, model_);
         text = bl.text;
         tone = bl.tone == Tone::Green ? cp0::ui::CaptionTone::Normal : bl.tone == Tone::Red ? cp0::ui::CaptionTone::Error : cp0::ui::CaptionTone::Warn;
+        if (bl.tone == Tone::Green && page_caption(own)) text.clear();      // the board is fine: the page's own line instead
+    }
+    if (cap_alt_) {
+        if (own.empty()) {
+            set_hidden(cap_alt_, true);
+        } else {
+            if (own != lv_label_get_text(cap_alt_)) lv_label_set_text(cap_alt_, own.c_str());
+            set_hidden(cap_alt_, false);
+        }
     }
     if (text != cap_text_ || static_cast<int>(tone) != cap_tone_) {
         cap_text_ = text;
@@ -2498,12 +2899,15 @@ void App::open_confirm(const std::string &title, const std::string &body, std::f
     popup_begin(std::move(p));
 }
 
-void App::open_list(const std::string &title, const std::vector<std::string> &items, int focus, std::function<void(int)> on_pick)
+void App::open_list(const std::string &title, const std::vector<std::string> &items, int focus, std::function<void(int)> on_pick,
+                    const std::vector<std::string> &values, const std::vector<Aff> &affs)
 {
     Popup p;
     p.kind = Popup::List;
     p.title = title;
     p.items = items;
+    p.values = values;
+    p.affs = affs;
     p.focus = std::clamp(focus, 0, std::max(0, static_cast<int>(items.size()) - 1));
     p.on_accept = std::move(on_pick);
     popup_begin(std::move(p));
@@ -2517,12 +2921,15 @@ void App::open_progress(const std::string &title)
     popup_begin(std::move(p));
 }
 
-void App::open_menu(const std::string &title, const std::vector<std::string> &items, std::function<void(int)> on_pick)
+void App::open_menu(const std::string &title, const std::vector<std::string> &items, std::function<void(int)> on_pick,
+                    const std::vector<std::string> &values, const std::vector<Aff> &affs)
 {
     Popup p;
     p.kind = Popup::Menu;
     p.title = title;
     p.items = items;
+    p.values = values;
+    p.affs = affs;
     p.focus = 0;
     p.on_accept = std::move(on_pick);
     popup_begin(std::move(p));
@@ -2565,30 +2972,70 @@ lv_obj_t *App::dialog_label(cp0::ui::Dialog &d, const std::string &text, bool sm
     return l;
 }
 
-/* A row of a menu or a pick list in a dialog: the ROW token high, the label, and at the right the action dot (a tap picks it). */
-lv_obj_t *App::dialog_row(cp0::ui::Dialog &d, const std::string &text, int index)
+/* The dots of a pick list: the value in use (current, or every index with in_use set) blue (the ActionRunning dot, the accent
+ * #5AAAFF), the other choices white. -1 / an empty vector: none is in use. */
+static std::vector<Aff> pick_marks(size_t n, int current, const std::vector<bool> &in_use)
+{
+    std::vector<Aff> a(n, Aff::Action);
+    for (size_t i = 0; i < n; ++i)
+        if (static_cast<int>(i) == current || (i < in_use.size() && in_use[i])) a[i] = Aff::Running;
+    return a;
+}
+
+/* A row of a menu or a pick list in a dialog: the ROW token high, the label, a value in grey at the right (optional), and the row's
+ * marker: the action dot (the default), a chevron (a row that opens something), or none (a choice of a pick list). A tap picks it. */
+lv_obj_t *App::dialog_row(cp0::ui::Dialog &d, const std::string &text, const std::string &value, Aff aff, int index)
 {
     const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
     const int w = d.geometry().content_w, h = layout_.row_h;
     cp0_ui_list_layout_t l{};
     cp0_ui_list_layout(m, CP0_UI_LIST_COMFORTABLE, 0, 0, w, h, &l);
+    l.text_px = m->text_px[CP0_TEXT_BODY];               // the chevron and the dot sized from the row's label, as on the pages
     lv_obj_t *row = make_box(d.body(), 0, 0, w, h);
     lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_remove_flag(row, LV_OBJ_FLAG_CLICK_FOCUSABLE);
     lv_obj_set_style_radius(row, m->tok[CP0_TOK_RADIUS_S], 0);
     lv_obj_set_style_bg_color(row, lv_color_hex(kPressed), LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(row, LV_OPA_COVER, LV_STATE_PRESSED);
-    const int trail = cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_ACTION);
-    const int lh = static_cast<int>(lv_font_get_line_height(f_body_));
-    lv_obj_t *label = make_label(row, f_body_, kText, l.inset, (h - lh) / 2, std::max(10, w - 2 * l.inset - trail), lh);
+    const cp0_ui_list_affordance_t ca = aff == Aff::Open || aff == Aff::Edit ? CP0_UI_LIST_AFFORDANCE_OPEN
+                                        : aff == Aff::Action || aff == Aff::Running ? CP0_UI_LIST_AFFORDANCE_ACTION : CP0_UI_LIST_AFFORDANCE_UNSPECIFIED;
+    const int trail = cp0_ui_list_trail_w(&l, ca);
+    const int lh = static_cast<int>(lv_font_get_line_height(f_body_)), vh = static_cast<int>(lv_font_get_line_height(f_value_));
+    lv_point_t vs{};
+    if (!value.empty()) lv_text_get_size(&vs, value.c_str(), f_value_, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    const int vw = value.empty() ? 0 : std::min(static_cast<int>(vs.x) + 2, (w - 2 * l.inset - trail) / 2);
+    lv_obj_t *label = make_label(row, f_body_, kText, l.inset, (h - lh) / 2, std::max(10, w - 2 * l.inset - trail - (vw ? vw + l.gap : 0)), lh);
     lv_obj_remove_flag(label, LV_OBJ_FLAG_CLICKABLE);
     lv_label_set_text(label, text.c_str());
-    const int dpx = cp0_ui_list_dot_px(&l);
-    lv_obj_t *dot = make_box(row, cp0_ui_list_dot_x(&l, w), (h - dpx) / 2, dpx, dpx);
-    lv_obj_remove_flag(dot, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_bg_color(dot, lv_color_hex(cp0_ui_list_dot_rgb(CP0_UI_LIST_AFFORDANCE_ACTION)), 0);
-    lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
+    if (vw) {
+        lv_obj_t *v = make_label(row, f_value_, kMuted, w - l.inset - trail - vw, (h - vh) / 2, vw, vh, LV_TEXT_ALIGN_RIGHT);
+        lv_obj_remove_flag(v, LV_OBJ_FLAG_CLICKABLE);
+        lv_label_set_text(v, value.c_str());
+    }
+    if (ca == CP0_UI_LIST_AFFORDANCE_ACTION) {
+        const int dpx = cp0_ui_list_dot_px(&l);
+        lv_obj_t *dot = make_box(row, cp0_ui_list_dot_x(&l, w), (h - dpx) / 2, dpx, dpx);
+        lv_obj_remove_flag(dot, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_color(dot, lv_color_hex(cp0_ui_list_dot_rgb(aff == Aff::Running ? CP0_UI_LIST_AFFORDANCE_ACTION_RUNNING
+                                                                                         : CP0_UI_LIST_AFFORDANCE_ACTION)), 0);
+        lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
+    } else if (ca == CP0_UI_LIST_AFFORDANCE_OPEN) {
+        const lv_font_t *cf = mark_font(cp0_ui_list_chevron_px(&l));
+        lv_obj_t *chev = lv_label_create(row);
+        lv_obj_remove_flag(chev, LV_OBJ_FLAG_CLICKABLE);
+        lv_font_glyph_dsc_t glyph{};
+        const bool has = lv_font_get_glyph_dsc(cf, &glyph, CP0_UI_LIST_CHEVRON_CODEPOINT, 0);
+        if (!has) lv_font_get_glyph_dsc(cf, &glyph, static_cast<uint32_t>(CP0_UI_LIST_CHEVRON_FALLBACK[0]), 0);
+        lv_label_set_text(chev, has ? CP0_UI_LIST_CHEVRON_TEXT : CP0_UI_LIST_CHEVRON_FALLBACK);
+        lv_obj_set_style_text_font(chev, cf, 0);
+        lv_obj_set_style_text_color(chev, lv_color_hex(CP0_UI_LIST_CHEVRON_RGB), 0);
+        lv_obj_set_style_text_align(chev, LV_TEXT_ALIGN_RIGHT, 0);
+        const int clh = static_cast<int>(lv_font_get_line_height(cf));
+        const int ink_top = (clh - cf->base_line) - glyph.box_h - glyph.ofs_y;
+        lv_obj_set_size(chev, cp0_ui_list_chevron_w(&l), clh);
+        lv_obj_set_pos(chev, w - l.inset - cp0_ui_list_chevron_w(&l), cp0_ui_list_chevron_y(h, ink_top, glyph.box_h));
+    }
     lv_obj_add_event_cb(row, trampoline_popitem, LV_EVENT_CLICKED, reinterpret_cast<void *>(static_cast<intptr_t>(index)));
     return row;
 }
@@ -2706,7 +3153,12 @@ void App::popup_build()
         break;
     case Popup::List:
     case Popup::Menu:
-        for (size_t i = 0; i < pop_.items.size(); ++i) pop_items_.push_back(dialog_row(d, pop_.items[i], static_cast<int>(i)));
+        lv_obj_set_style_pad_row(d.body(), 0, 0);       // the rows of a list touch (as in a list): 3 menu rows fit at 640x480
+        for (size_t i = 0; i < pop_.items.size(); ++i) {
+            const std::string value = i < pop_.values.size() ? pop_.values[i] : std::string();
+            const Aff aff = i < pop_.affs.size() ? pop_.affs[i] : Aff::Action;          // (P2: the action dot on every row)
+            pop_items_.push_back(dialog_row(d, pop_.items[i], value, aff, static_cast<int>(i)));
+        }
         break;
     case Popup::Progress: {
         pop_progress_ = dialog_label(d, "", false, kText);
@@ -2731,6 +3183,31 @@ void App::popup_build()
     case Popup::None: break;
     }
     d.relayout();
+    add_scroll_cue(d);
+}
+
+/* The scrollbar of a list (Net Toolbox's RichList: the launcher list's sizes and grey, LV_SCROLLBAR_MODE_AUTO: drawn at the right
+ * edge whenever the content is taller than its box, so a list that goes on below says so). */
+static void style_list_scrollbar(lv_obj_t *obj)
+{
+    cp0_ui_list_layout_t l{};
+    cp0_ui_list_layout(cp0_ui_metrics_get(), CP0_UI_LIST_COMPACT, 0, 0, 100, 100, &l);
+    lv_obj_set_scrollbar_mode(obj, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_style_width(obj, l.scrollbar_w, LV_PART_SCROLLBAR);
+    lv_obj_set_style_pad_right(obj, l.scrollbar_pad, LV_PART_SCROLLBAR);
+    lv_obj_set_style_pad_top(obj, l.scrollbar_pad, LV_PART_SCROLLBAR);
+    lv_obj_set_style_pad_bottom(obj, l.scrollbar_pad, LV_PART_SCROLLBAR);
+    lv_obj_set_style_bg_color(obj, lv_color_hex(CP0_UI_LIST_SCROLLBAR_RGB), LV_PART_SCROLLBAR);
+    lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, LV_PART_SCROLLBAR);
+    lv_obj_set_style_radius(obj, LV_RADIUS_CIRCLE, LV_PART_SCROLLBAR);
+}
+
+/* A dialog whose body is taller than the room it has (a menu or a pick list of 5 choices on a 480 px high screen, a long text):
+ * the body scrolls (a drag, or the keys move the highlight), and its scrollbar shows it. The toolkit's Dialog keeps the
+ * scrollbar of its body off (pinned launcher 9912361): it is set on the body's viewport here. */
+void App::add_scroll_cue(cp0::ui::Dialog &d)
+{
+    if (lv_obj_t *vp = lv_obj_get_parent(d.body())) style_list_scrollbar(vp);
 }
 
 void App::popup_refresh()
@@ -2910,6 +3387,7 @@ void App::open_editor(EditKind kind, const std::string &title, const std::string
         lv_textarea_set_text(ed_ta_, initial.c_str());
         lv_textarea_set_cursor_pos(ed_ta_, LV_TEXTAREA_CURSOR_LAST);
         ed_dialog_->relayout();
+        add_scroll_cue(*ed_dialog_);
     }
     editor_open_ = true;
     nav_.editor_open = true;
@@ -3118,6 +3596,7 @@ void App::open_position_box()
         }
         pos_hint_ = dialog_label(d, "", true, kMuted);
         pos_clear_ = dialog_button(d, 1);
+        add_scroll_cue(d);
     }
     lv_textarea_set_text(pos_ta_[0], has ? fmt_coordinate(self->lat).c_str() : "");
     lv_textarea_set_text(pos_ta_[1], has ? fmt_coordinate(self->lon).c_str() : "");
@@ -3335,6 +3814,9 @@ void App::send_message()
 void App::open_detail(const std::string &key_hex)
 {
     detail_key_ = key_hex;
+    detail_sel_ = 0;
+    detail_sig_ = 0;                                 // the facts are built again (and the list back at its top)
+    detail_list_.scroll_to_top();
     nav_.detail_open = true;
     invalidate();
 }
@@ -3420,7 +3902,7 @@ void App::add_channel_menu()
                   if (i == 0) open_editor(EditKind::Channel, "New hashtag channel", "Type the name, for example #hamradio (no spaces).", "#");
                   else if (i == 1) open_editor(EditKind::PrivName, "New private channel", "Name of the channel (up to 31 bytes). Its 32-hex key is asked next.", "");
                   else open_editor(EditKind::RandName, "New private channel", "Name of the channel. A random key is made and shown, to share as text.", "");
-              });
+              }, {}, {Aff::Open, Aff::Open, Aff::Open});                // each opens an editor
 }
 
 void App::show_channel_key(int idx)
@@ -3461,10 +3943,18 @@ void App::channel_menu(int idx)
         else if (i == 1) show_channel_key(idx);
         else if (i == 2) confirm_delete_conversation(Model::conv_channel(idx));
         else confirm_remove_channel(idx);
-    });
+    }, {}, {Aff::Action, Aff::Open, Aff::Action, Aff::Action});
 }
 
-void App::settings_activate(int index, int x)
+/* The highlight of Settings (keys, a tap): the list's own, kept in settings_sel_. */
+void App::settings_select(int index, bool scroll)
+{
+    if (index < 0 || index >= static_cast<int>(srows_.size())) return;
+    settings_sel_ = index;
+    settings_list_.set_selected(index, true, scroll);
+}
+
+void App::settings_activate(int index)
 {
     if (index < 0 || index >= static_cast<int>(srows_.size())) return;
     const SRowSpec r = srows_[static_cast<size_t>(index)];
@@ -3475,7 +3965,6 @@ void App::settings_activate(int index, int x)
     case SRowKind::GpsNotice:
     case SRowKind::StatsNotice:
     case SRowKind::PathHashNotice:
-    case SRowKind::RepeatNotice:
     case SRowKind::AutoAddNotice:
     case SRowKind::ChannelsNotice: break;
     case SRowKind::Position:
@@ -3509,19 +3998,11 @@ void App::settings_activate(int index, int x)
     }
     case SRowKind::BoardGps: client_->set_board_gps(!model_.caps().gps_on); break;
     case SRowKind::SyncClock: client_->sync_clock(); break;
-    case SRowKind::Channel: {
-        // a tap on a button of the row acts at once; a tap on the name (or Enter) opens the menu of the channel
-        if (x >= 344 && x < 434) toggle_mute(Model::conv_channel(r.arg));
-        else if (x >= 440 && x < 510) show_channel_key(r.arg);
-        else if (x >= 516) confirm_remove_channel(r.arg);
-        else channel_menu(r.arg);
-        break;
-    }
+    case SRowKind::Channel: channel_menu(r.arg); break;      // Mute, Show the key, Delete messages, Remove (M, K, Del from the keys)
     case SRowKind::AddChannel: add_channel_menu(); break;
     case SRowKind::AddPublic: client_->add_public_channel(); break;
     case SRowKind::HistoryAll: confirm_delete_all(); break;
     case SRowKind::HistoryOlder: choose_delete_older(); break;
-    case SRowKind::HistoryNote: break;
     case SRowKind::HistoryForget: confirm_forget_board(); break;
     case SRowKind::HistoryOthers: confirm_forget_others(); break;
     case SRowKind::Undo: request_undo(); break;
@@ -3644,10 +4125,106 @@ void App::open_group_filter()
                             }
                         }, "Delete");
                     }
-                });
-            });
+                }, {}, {Aff::Open, Aff::Action});                        // Rename: an editor; Delete: asks first
+            }, {}, std::vector<Aff>(model_.groups().groups().size(), Aff::Open));   // each group opens its menu
         }
-    });
+    }, {}, [&] {
+        std::vector<Aff> a = pick_marks(labels.size(), focus, {});       // the group shown: the blue dot
+        a[n_groups + 1] = Aff::Open;                                     // "+ New group...": an editor
+        if (n_groups) a.back() = Aff::Open;                              // "Rename or delete a group...": a list, then a menu
+        return a;
+    }());
+}
+
+/* Filter (the bar of Contacts): the type, the time since heard and the group, each a row with its value that opens its pick list
+ * (the keys T, H and G do the same without the dialog). */
+void App::open_filter_dialog()
+{
+    const ContactView &v = cview_;
+    const std::string group = v.group.empty() ? std::string("All") : truncate_ellipsis(v.group, 16);
+    open_menu("Filter", {"Type", "Heard", "Group"},
+              [this](int i) {
+                  if (i == 0) {
+                      std::vector<std::string> labels;
+                      for (int t = 0; t <= static_cast<int>(TypeFilter::Sensor); ++t) labels.push_back(type_filter_label(static_cast<TypeFilter>(t)));
+                      const int cur = static_cast<int>(cview_.filter.type);
+                      open_list("Show which type?", labels, cur, [this](int k) {
+                          if (k < 0 || k > static_cast<int>(TypeFilter::Sensor)) return;
+                          ContactView n = cview_;
+                          n.filter.type = static_cast<TypeFilter>(k);
+                          change_contact_view(n);
+                      }, {}, pick_marks(labels.size(), cur, {}));
+                  } else if (i == 1) {
+                      std::vector<std::string> labels;
+                      for (int a = 0; a <= static_cast<int>(AgeFilter::Week); ++a) labels.push_back(age_filter_label(static_cast<AgeFilter>(a)));
+                      const int cur = static_cast<int>(cview_.filter.age);
+                      open_list("Heard when?", labels, cur, [this](int k) {
+                          if (k < 0 || k > static_cast<int>(AgeFilter::Week)) return;
+                          ContactView n = cview_;
+                          n.filter.age = static_cast<AgeFilter>(k);
+                          change_contact_view(n);
+                      }, {}, pick_marks(labels.size(), cur, {}));
+                  } else if (i == 2) {
+                      open_group_filter();
+                  }
+              },
+              {type_filter_label(v.filter.type), age_filter_label(v.filter.age), group}, {Aff::Edit, Aff::Edit, Aff::Edit});
+}
+
+/* Sort (the bar of Contacts): the six column titles of 0.3.0; the active one says its direction and choosing it again reverses
+ * it (the keys S and R do the same without the dialog). */
+void App::open_sort_dialog()
+{
+    const std::vector<SortKey> &keys = sort_menu_keys();
+    std::vector<std::string> labels, values;
+    int focus = 0;
+    for (size_t i = 0; i < keys.size(); ++i) {
+        labels.push_back(sort_field_name(keys[i]));
+        values.push_back(keys[i] == cview_.sort ? sort_direction_text(keys[i], cview_.reverse) : std::string());
+        if (keys[i] == cview_.sort) focus = static_cast<int>(i);
+    }
+    open_list("Sort by", labels, focus, [this, keys](int i) {
+        if (i < 0 || i >= static_cast<int>(keys.size())) return;
+        ContactView n = cview_;
+        n.tap_column(keys[static_cast<size_t>(i)]);
+        change_contact_view(n);
+    }, values, pick_marks(labels.size(), focus, {}));
+}
+
+/* More (the bar of Contacts): an advert and the other views of the page (keys A and D send an advert at once, N, X; U still asks the
+ * board for its contacts again): Send advert and Nearby open something (a chevron), Manage contacts (the select mode) acts at once
+ * (a dot). */
+void App::open_more_menu()
+{
+    const size_t pending = model_.pending_count();
+    open_menu("More", {"Send advert", "Nearby", "Manage contacts"},
+              [this](int i) {
+                  switch (i) {
+                  case 0: open_send_advert(); break;
+                  case 1: open_nearby(); break;
+                  case 2: enter_select_mode(); break;
+                  default: break;
+                  }
+              },
+              {"", pending ? std::to_string(pending) + " waiting" : std::string(), ""},
+              {Aff::Open, Aff::Open, Aff::Action});
+}
+
+/* Send advert: one action, two scopes, in the arrow choice of Settings (Left / Right or the arrows, OK sends, Cancel closes). */
+void App::open_send_advert()
+{
+    Popup p;
+    p.kind = Popup::Choice;
+    p.choice = make_send_advert_choice(last_advert_flood_);
+    p.title = p.choice.title;
+    p.on_accept = [this](int idx) { send_advert(idx == 0); };
+    popup_begin(std::move(p));
+}
+
+void App::send_advert(bool flood)
+{
+    last_advert_flood_ = flood;
+    client_->send_advert(flood);
 }
 
 void App::ask_new_group(const std::vector<std::string> &keys)
@@ -3664,9 +4241,11 @@ void App::open_group_assign()
         return;
     }
     const GroupMenu m = group_assign_menu(model_.groups(), keys.size());
+    std::vector<Aff> marks;
+    for (GroupAction a : m.actions) marks.push_back(a == GroupAction::RemoveAll ? Aff::Action : Aff::Open);
     open_menu("Groups", m.labels, [this, m](int i) {
         if (i >= 0 && i < static_cast<int>(m.actions.size())) group_pick(m.actions[static_cast<size_t>(i)]);
-    });
+    }, {}, marks);
 }
 
 void App::group_pick(GroupAction a)
@@ -3703,8 +4282,11 @@ void App::group_toggle_for(const std::string &key_hex)
 {
     const ContactGroups &g = model_.groups();
     std::vector<std::string> labels;
-    for (const ContactGroup &grp : g.groups())
+    std::vector<bool> member;
+    for (const ContactGroup &grp : g.groups()) {
         labels.push_back(std::string(g.is_member(grp.name, key_hex) ? "[x] " : "[ ] ") + truncate_ellipsis(grp.name, 24));
+        member.push_back(g.is_member(grp.name, key_hex));
+    }
     labels.push_back("+ New group with this contact...");
     group_focus_ = std::clamp(group_focus_, 0, static_cast<int>(labels.size()) - 1);
     const size_t n = g.groups().size();
@@ -3720,7 +4302,11 @@ void App::group_toggle_for(const std::string &key_hex)
         } else {
             ask_new_group({key_hex});
         }
-    });
+    }, {}, [&] {
+        std::vector<Aff> a = pick_marks(labels.size(), -1, member);     // the groups it is in: blue
+        a.back() = Aff::Open;                                            // "+ New group with this contact...": an editor
+        return a;
+    }());
 }
 
 void App::open_contact_info(const std::string &key_hex)
@@ -3758,6 +4344,7 @@ void App::open_nearby()
     nearby_sel_ = 0;
     nearby_sel_key_.clear();
     nearby_sig_ = 0;
+    nearby_list_.scroll_to_top();
     invalidate();
 }
 
@@ -3771,13 +4358,6 @@ void App::close_nearby()
 void App::render_nearby()
 {
     nearby_rows_ = build_nearby_rows(model_, nearby_show_ignored_);
-    const size_t pending = model_.pending_count();
-    std::string title = "Nearby nodes (" + std::to_string(nearby_rows_.size()) + ")";
-    if (pending) title += "  " + std::to_string(pending) + " waiting";
-    lv_label_set_text(nearby_title_, title.c_str());
-    lv_label_set_text(nearby_scan_label_, client_->discover().active ? "Scanning" : "Scan");
-    const size_t ign = ignored_nearby_count(model_);
-    lv_label_set_text(nearby_ign_label_, nearby_show_ignored_ ? "Hide ign." : ign ? ("Ignored " + std::to_string(ign)).c_str() : "Ignored");
     // keep the selection on the same node while the list changes
     int sel = -1;
     for (size_t i = 0; i < nearby_rows_.size(); ++i)
@@ -3785,6 +4365,16 @@ void App::render_nearby()
     if (sel < 0) sel = nearby_rows_.empty() ? -1 : std::clamp(nearby_sel_, 0, static_cast<int>(nearby_rows_.size()) - 1);
     nearby_sel_ = std::max(sel, 0);
     nearby_sel_key_ = sel >= 0 ? nearby_rows_[static_cast<size_t>(sel)].key_hex : std::string();
+
+    // the bar acts on the selected node
+    const NearbyRow *cur = sel >= 0 ? &nearby_rows_[static_cast<size_t>(sel)] : nullptr;
+    const size_t ign = ignored_nearby_count(model_);
+    std::vector<ActionBar::CellSpec> cells;
+    cells.push_back({kTagNearbyAdd, "Add", ""});
+    cells.push_back({kTagNearbyIgnore, cur && cur->state == NearbyState::Ignored ? "Restore" : "Ignore", ""});
+    cells.push_back({kTagNearbyScan, client_->discover().active ? "Scanning" : "Scan", ""});
+    cells.push_back({kTagNearbyIgnored, "Ignored", nearby_show_ignored_ ? std::string("shown") : ign ? std::to_string(ign) + " hidden" : std::string()});
+    nearby_bar_.set_cells(cells);
 
     uint32_t sig = fnv_int(0, sel);
     sig = fnv_int(sig, nearby_show_ignored_ ? 1 : 0);
@@ -3797,22 +4387,26 @@ void App::render_nearby()
     }
     if (sig != nearby_sig_ && !plat_.touching()) {
         nearby_sig_ = sig;
+        const Geo g = geo();
+        cp0_ui_list_layout_t ml = settings_list_layout(0, g.h);
+        ml.text_px = cp0_ui_metrics_get()->text_px[CP0_TEXT_BODY];
+        const int lh1 = line_h(f_body_), lh2 = line_h(f_caption_), lhv = line_h(f_value_);
+        const int row_h = std::max(g.list_row, lh1 + lh2 + 2 * std::max(4, g.s / 2));
+        const int top = std::max(0, (row_h - lh1 - lh2) / 2);
         std::vector<RowSpec> specs;
         for (const NearbyRow &r : nearby_rows_) {
             RowSpec s;
-            s.h = 56;
+            s.h = row_h;
             s.id = r.key_hex;
+            // a tap on the selected row does what Enter does: adds the node (or restores an ignored one)
+            s.aff = r.state == NearbyState::Ignored || r.can_add ? Aff::Action : Aff::Info;
+            const int right = g.lw - g.inset - trail_of(ml, s.aff);
+            const std::string state = nearby_state_name(r.state);
+            const int sw = text_w(state.c_str(), f_value_) + 2;
             const uint32_t state_color = r.state == NearbyState::Pending ? kAccent : r.state == NearbyState::New ? kBlue : kMuted;
-            s.cells.push_back({r.title, r.state == NearbyState::Ignored ? kMuted : r.state == NearbyState::Pending ? kAccent : kText, 12, 290, LV_TEXT_ALIGN_LEFT, f_text_, 6});
-            s.cells.push_back({r.type_name, r.type == advtype::kRepeater ? kBlue : kMuted, 306, 84, LV_TEXT_ALIGN_LEFT, f_small_, 10});
-            s.cells.push_back({nearby_state_name(r.state), state_color, 392, 76, LV_TEXT_ALIGN_LEFT, f_small_, 10});
-            s.cells.push_back({r.detail, kMuted, 12, 456, LV_TEXT_ALIGN_LEFT, f_small_, 34});
-            if (r.state == NearbyState::Ignored) {
-                s.cells.push_back({"Restore", kText, 472, 160, LV_TEXT_ALIGN_CENTER, f_ui_, 6, kSelected});
-            } else if (r.state != NearbyState::Contact) {
-                if (r.can_add) s.cells.push_back({"Add", kText, 472, 76, LV_TEXT_ALIGN_CENTER, f_ui_, 6, kOkGreen});
-                s.cells.push_back({"Ignore", kText, 552, 80, LV_TEXT_ALIGN_CENTER, f_ui_, 6, kSelected});
-            }
+            s.cells.push_back({r.title, r.state == NearbyState::Ignored ? kMuted : kText, g.inset, std::max(1, right - sw - g.m - g.inset), LV_TEXT_ALIGN_LEFT, f_body_, top});
+            s.cells.push_back({state, state_color, right - sw, sw, LV_TEXT_ALIGN_RIGHT, f_value_, top + lh1 - lhv});
+            s.cells.push_back({nearby_row_caption(r), kMuted, g.inset, std::max(1, right - g.inset), LV_TEXT_ALIGN_LEFT, f_caption_, top + lh1});
             specs.push_back(std::move(s));
         }
         nearby_list_.set(std::move(specs), sel, true);
@@ -3820,7 +4414,7 @@ void App::render_nearby()
     if (nearby_rows_.empty()) {
         lv_label_set_text(nearby_empty_, !client_->ready() ? "Connect the radio board to hear nodes."
                           : nearby_show_ignored_ ? "Nothing here."
-                          : "No node heard yet. Nodes that advertise in range show up here by themselves. Press Scan to ask the nodes in direct radio range to answer.");
+                          : "No node heard yet. Nodes that advertise in range show up here by themselves. Scan asks the nodes in direct radio range to answer.");
         set_hidden(nearby_empty_, false);
     } else {
         set_hidden(nearby_empty_, true);
@@ -3831,24 +4425,35 @@ void App::nearby_ignore(const std::string &key_hex)
 {
     const bool now_ignored = !model_.is_ignored(key_hex);
     model_.set_ignored(key_hex, now_ignored);
-    notice(now_ignored ? "Ignored: hidden from this list (the Ignored button shows them)" : "Restored", true);
+    notice(now_ignored ? "Ignored: hidden from this list (Ignored shows them)" : "Restored", true);
     nearby_sig_ = 0;
     invalidate();
 }
 
-void App::nearby_activate(int index, int x)
+/* Add (or restore) the selected node: the Add cell, Enter, a tap on the selected row. */
+void App::nearby_add_selected()
+{
+    if (nearby_rows_.empty()) return;
+    const NearbyRow &r = nearby_rows_[static_cast<size_t>(std::clamp(nearby_sel_, 0, static_cast<int>(nearby_rows_.size()) - 1))];
+    if (r.state == NearbyState::Ignored) nearby_ignore(r.key_hex);
+    else if (r.can_add) client_->add_nearby(r.key_hex);
+    else notice(r.state == NearbyState::Contact ? "Already a contact" : "Cannot be added yet: wait for its next advert", r.state == NearbyState::Contact);
+    nearby_sig_ = 0;
+    invalidate();
+}
+
+/* A tap on a row: the first selects it, a tap on the selected row adds the node (as Enter). */
+void App::nearby_activate(int index)
 {
     if (index < 0 || index >= static_cast<int>(nearby_rows_.size())) return;
-    const NearbyRow &r = nearby_rows_[static_cast<size_t>(index)];
+    const bool again = index == nearby_sel_ && nearby_rows_[static_cast<size_t>(index)].key_hex == nearby_sel_key_;
     nearby_sel_ = index;
-    nearby_sel_key_ = r.key_hex;
-    if (r.state == NearbyState::Ignored) {
-        if (x >= 472) nearby_ignore(r.key_hex);
-    } else if (r.state != NearbyState::Contact) {
-        if (x >= 552) nearby_ignore(r.key_hex);
-        else if (x >= 472 && r.can_add) client_->add_nearby(r.key_hex);
+    nearby_sel_key_ = nearby_rows_[static_cast<size_t>(index)].key_hex;
+    if (again) {
+        nearby_add_selected();
+        return;
     }
-    nearby_sig_ = 0;
+    nearby_list_.set_selected(index, true, false);
     invalidate();
 }
 
@@ -3860,6 +4465,7 @@ void App::key_nearby(const KeyEvent &e)
         nearby_sel_ = std::clamp(to, 0, n - 1);
         nearby_sel_key_ = nearby_rows_[static_cast<size_t>(nearby_sel_)].key_hex;
         nearby_list_.set_selected(nearby_sel_, true, true);
+        invalidate();
     };
     switch (e.key) {
     case Key::Up: move(nearby_sel_ - 1); break;
@@ -3869,15 +4475,7 @@ void App::key_nearby(const KeyEvent &e)
     case Key::Home: move(0); break;
     case Key::End: move(n - 1); break;
     case Key::Enter:
-        if (e.repeat || n == 0) break;
-        {
-            const NearbyRow &r = nearby_rows_[static_cast<size_t>(nearby_sel_)];
-            if (r.state == NearbyState::Ignored) nearby_ignore(r.key_hex);
-            else if (r.can_add) client_->add_nearby(r.key_hex);
-            else notice(r.state == NearbyState::Contact ? "Already a contact" : "Cannot be added yet: wait for its next advert", r.state == NearbyState::Contact);
-        }
-        nearby_sig_ = 0;
-        invalidate();
+        if (!e.repeat) nearby_add_selected();
         break;
     case Key::Char: {
         if (e.ctrl || e.alt || e.repeat) break;
@@ -3897,6 +4495,21 @@ void App::key_nearby(const KeyEvent &e)
 
 void App::key_detail(const KeyEvent &e)
 {
+    const int n = detail_list_.count();
+    auto move = [&](int to) {
+        if (n == 0) return;
+        detail_sel_ = std::clamp(to, 0, n - 1);
+        detail_list_.set_selected(detail_sel_, true, true);
+    };
+    switch (e.key) {
+    case Key::Up: move(detail_sel_ - 1); return;
+    case Key::Down: move(detail_sel_ + 1); return;
+    case Key::PageUp: move(detail_sel_ - 4); return;
+    case Key::PageDown: move(detail_sel_ + 4); return;
+    case Key::Home: move(0); return;
+    case Key::End: move(n - 1); return;
+    default: break;
+    }
     if (e.repeat) return;
     if (e.key == Key::Enter) {
         const ContactRec *r = model_.find_contact(detail_key_);
@@ -3936,15 +4549,28 @@ void App::close_search()
 
 void App::refresh_search_results(bool to_top)
 {
+    // the highlight stays on the same message when new ones come in (newest first: the indexes move)
+    const uint32_t sel_seq = !to_top && search_sel_ >= 0 && search_sel_ < static_cast<int>(search_rows_.size()) ? search_rows_[static_cast<size_t>(search_sel_)].seq : 0;
     search_rows_ = build_search_rows(model_, search_, &search_total_);
+    if (sel_seq)
+        for (size_t i = 0; i < search_rows_.size(); ++i)
+            if (search_rows_[i].seq == sel_seq) search_sel_ = static_cast<int>(i);
     search_sig_ = model_.next_seq() * 2654435761u ^ static_cast<uint32_t>(model_.message_count());
+    const Geo g = geo();
+    cp0_ui_list_layout_t ml = settings_list_layout(0, g.h);
+    ml.text_px = cp0_ui_metrics_get()->text_px[CP0_TEXT_BODY];
+    const int lh1 = line_h(f_body_), lh2 = line_h(f_caption_);
+    const int row_h = std::max(g.list_row, lh1 + lh2 + 2 * std::max(4, g.s / 2));
+    const int top = std::max(0, (row_h - lh1 - lh2) / 2);
+    const int tw = std::max(1, g.lw - 2 * g.inset - trail_of(ml, Aff::Open));
     std::vector<RowSpec> specs;
     for (const SearchRow &r : search_rows_) {
         RowSpec s;
-        s.h = 56;
+        s.h = row_h;
         s.id = std::to_string(r.seq);
-        s.cells.push_back({r.head, r.outgoing ? kGreen : kBlue, 12, 610, LV_TEXT_ALIGN_LEFT, f_small_, 6});
-        s.cells.push_back({r.snippet, kText, 12, 610, LV_TEXT_ALIGN_LEFT, f_text_, 26});
+        s.aff = Aff::Open;                                       // a tap on the selected row opens the conversation there
+        s.cells.push_back({r.head, r.outgoing ? kGreen : kBlue, g.inset, tw, LV_TEXT_ALIGN_LEFT, f_caption_, top});
+        s.cells.push_back({r.snippet, kText, g.inset, tw, LV_TEXT_ALIGN_LEFT, f_body_, top + lh2});
         specs.push_back(std::move(s));
     }
     search_sel_ = search_rows_.empty() ? -1 : std::clamp(search_sel_, 0, static_cast<int>(search_rows_.size()) - 1);
@@ -3952,26 +4578,15 @@ void App::refresh_search_results(bool to_top)
     if (to_top) search_list_.scroll_to_top();
 }
 
+/* The filters on the bar (the chat, the dates, the direction: each a label and its value), the count in the line under the title. */
 void App::render_search()
 {
-    lv_label_set_text(sr_conv_label_, ("Chat: " + search_.conv_label(model_)).c_str());
-    lv_label_set_text(sr_date_label_, search_.date_label().c_str());
-    lv_label_set_text(sr_dir_label_, (std::string("Show: ") + search_dir_name(search_.dir)).c_str());
+    std::vector<ActionBar::CellSpec> cells;
+    cells.push_back({kTagSearchConv, "Chat", search_.conv_label(model_)});
+    cells.push_back({kTagSearchDate, "Dates", search_.date_label()});
+    cells.push_back({kTagSearchDir, "Show", search_dir_name(search_.dir)});
+    search_bar_.set_cells(cells);
     if (search_sig_ != (model_.next_seq() * 2654435761u ^ static_cast<uint32_t>(model_.message_count()))) refresh_search_results(false);   // a message arrived or was deleted
-    std::string c;
-    if (search_.query(now_unix()).empty()) c = std::to_string(search_total_) + (search_total_ == 1 ? " message" : " messages") + " in the archive";
-    else if (search_total_ == 0) c = "No message matches";
-    else c = std::to_string(search_total_) + (search_total_ == 1 ? " message matches" : " messages match") +
-             (search_total_ > search_rows_.size() ? ", the newest " + std::to_string(search_rows_.size()) + " are listed" : std::string());
-    lv_label_set_text(sr_count_, c.c_str());
-    // an active filter shows in gold
-    auto tint = [&](lv_obj_t *label, bool on) {
-        lv_obj_set_style_bg_color(lv_obj_get_parent(label), lv_color_hex(on ? kAccent : kSelected), 0);
-        set_color(label, on ? kOnAccent : kText);
-    };
-    tint(sr_conv_label_, !search_.conv.empty());
-    tint(sr_date_label_, search_.date != DatePreset::Any);
-    tint(sr_dir_label_, search_.dir != SearchDir::Any);
 }
 
 void App::search_open_hit(int index)
@@ -4000,7 +4615,7 @@ void App::search_pick_conv()
         search_.conv = i <= 0 || i > static_cast<int>(convs.size()) ? std::string() : convs[static_cast<size_t>(i) - 1].first;
         refresh_search_results();
         invalidate();
-    });
+    }, {}, pick_marks(labels.size(), focus, {}));
 }
 
 void App::search_pick_date()
@@ -4008,6 +4623,8 @@ void App::search_pick_date()
     std::vector<std::string> labels;
     for (DatePreset p : {DatePreset::Any, DatePreset::Day, DatePreset::Week, DatePreset::Month, DatePreset::Quarter, DatePreset::Custom}) labels.push_back(date_preset_name(p));
     labels.back() = "Custom range...";
+    std::vector<Aff> marks = pick_marks(labels.size(), static_cast<int>(search_.date), {});
+    if (search_.date != DatePreset::Custom) marks.back() = Aff::Open;      // "Custom range...": an editor (blue when a range is in use)
     open_list("Which dates?", labels, static_cast<int>(search_.date), [this](int i) {
         static const DatePreset presets[6] = {DatePreset::Any, DatePreset::Day, DatePreset::Week, DatePreset::Month, DatePreset::Quarter, DatePreset::Custom};
         if (i < 0 || i > 5) return;
@@ -4022,7 +4639,7 @@ void App::search_pick_date()
         search_.date = presets[i];
         refresh_search_results();
         invalidate();
-    });
+    }, {}, marks);
 }
 
 void App::search_edit(const KeyEvent &e)
@@ -4100,6 +4717,8 @@ void App::open_stats()
     nav_.stats_open = true;
     stats_ms_ = mono_ms();
     stats_sig_ = 0;
+    stats_at_ = 0;
+    if (stats_list_ && stats_list_->count() > 0) stats_list_->select(0, false);
     client_->refresh_stats();
     invalidate();
 }
@@ -4111,31 +4730,52 @@ void App::close_stats()
     invalidate();
 }
 
+/* The figures in a read-only list (two sections: the board and its radio, the packets), Refresh and the automatic refresh on the
+ * bar; when they were read is the line under the title (page_caption). */
 void App::render_stats()
 {
+    using cp0::ui::ListRow;
     const StatsView v = build_stats_view(model_.stats());
-    for (int col = 0; col < 2; ++col) {
-        const std::vector<StatLine> &lines = col == 0 ? v.left : v.right;
-        for (int i = 0; i < 10; ++i) {
-            const bool have = i < static_cast<int>(lines.size());
-            lv_label_set_text(st_label_[col][i], have ? lines[static_cast<size_t>(i)].label.c_str() : "");
-            lv_label_set_text(st_value_[col][i], have ? lines[static_cast<size_t>(i)].value.c_str() : "");
-        }
-    }
-    lv_label_set_text(st_updated_, v.updated.c_str());
-    lv_label_set_text(st_auto_label_, stats_auto_ ? "Auto: 5 s" : "Auto: off");
-    lv_obj_set_style_bg_color(lv_obj_get_parent(st_auto_label_), lv_color_hex(stats_auto_ ? kOkGreen : kSelected), 0);
-    std::string note;
-    if (model_.caps().stats == Cap::No) note = "Firmware too old for this feature: Statistics";
-    else if (!client_->ready()) note = "Not connected";
-    else if (client_->stats_busy()) note = "Reading...";
-    else if (!v.any) note = "No answer yet";
-    lv_label_set_text(st_note_, note.c_str());
-    set_color(st_note_, model_.caps().stats == Cap::No ? kWarn : kMuted);
+    std::vector<ActionBar::CellSpec> cells;
+    cells.push_back({kTagStatsRefresh, "Refresh", ""});
+    cells.push_back({kTagStatsAuto, "Auto refresh", stats_auto_ ? "every 5 s" : "off"});
+    stats_bar_.set_cells(cells);
+    std::vector<ListRow> rows;
+    if (!v.left.empty()) rows.push_back(ListRow::section("Board and radio"));
+    for (const StatLine &l : v.left) rows.push_back(ListRow::item(l.label, l.value, cp0::ui::ValueTone::Normal, 0, cp0::ui::RowAffordance::Info));
+    if (!v.right.empty()) rows.push_back(ListRow::section("Packets"));
+    for (const StatLine &l : v.right) rows.push_back(ListRow::item(l.label, l.value, cp0::ui::ValueTone::Normal, 0, cp0::ui::RowAffordance::Info));
+    uint32_t sig = 0;
+    for (const ListRow &r : rows) sig = fnv(fnv(sig, r.label), r.value);
+    if (!stats_list_ || sig == stats_rows_sig_ || plat_.touching()) return;
+    const bool fresh = stats_rows_sig_ == 0 || static_cast<int>(rows.size()) != stats_list_->count();
+    stats_rows_sig_ = sig;
+    stats_list_->set_empty_text(model_.caps().stats == Cap::No ? "Firmware too old for this feature" : "Not read yet");
+    if (fresh) stats_list_->reset_rows(rows, 0);
+    else stats_list_->set_rows(rows);
 }
 
 void App::key_stats(const KeyEvent &e)
 {
+    if (stats_list_ && stats_list_->count() > 0) {           // a read-only list: the keys scroll it (its select() brings a row into view)
+        const int n = stats_list_->count();
+        int to = stats_at_;
+        bool scroll = true;
+        switch (e.key) {
+        case Key::Up: to = stats_at_ - 1; break;
+        case Key::Down: to = stats_at_ + 1; break;
+        case Key::PageUp: to = stats_at_ - 5; break;
+        case Key::PageDown: to = stats_at_ + 5; break;
+        case Key::Home: to = 0; break;
+        case Key::End: to = n - 1; break;
+        default: scroll = false; break;
+        }
+        if (scroll) {
+            stats_at_ = std::clamp(to, 0, n - 1);
+            stats_list_->select(stats_at_, false);
+            return;
+        }
+    }
     if (e.repeat) return;
     const char c = e.key == Key::Char && !e.ctrl && !e.alt && e.text.size() == 1 ? static_cast<char>(std::tolower(static_cast<unsigned char>(e.text[0]))) : 0;
     if (e.key == Key::Enter || c == 'r') {
@@ -4162,11 +4802,15 @@ void App::autoadd_menu()
     const AutoaddConfig cfg = model_.caps().autoadd_config;
     const std::vector<AutoAddItem> items = autoadd_items(cfg);
     std::vector<std::string> labels;
-    for (const AutoAddItem &i : items) labels.push_back(std::string(i.on ? "[x] " : "[ ] ") + i.label);
+    std::vector<bool> on;
+    for (const AutoAddItem &i : items) {
+        labels.push_back(std::string(i.on ? "[x] " : "[ ] ") + i.label);
+        on.push_back(i.on);
+    }
     open_list("Added by itself in manual mode", labels, 0, [this, items, cfg](int i) {
         if (i < 0 || i >= static_cast<int>(items.size())) return;
         client_->set_autoadd_flags(autoadd_toggled(cfg.config, items[static_cast<size_t>(i)].flag));
-    });
+    }, {}, pick_marks(labels.size(), -1, on));
 }
 
 void App::ask_reboot()
@@ -4304,10 +4948,10 @@ void App::packet_log_select(int64_t abs_index)
 void App::render_packet_log()
 {
     const PacketLog &pl = client_->packet_log();
-    lv_label_set_text(log_status_, packet_log_status(pl).c_str());
-    set_color(log_status_, pl.capturing() ? kAccent : kMuted);
-    lv_label_set_text(log_toggle_label_, pl.capturing() ? "Stop" : "Start");
-    lv_obj_set_style_bg_color(log_toggle_, lv_color_hex(pl.capturing() ? kOkGreen : kSelected), 0);
+    std::vector<ActionBar::CellSpec> cells;
+    cells.push_back({kTagLogToggle, pl.capturing() ? "Stop" : "Start", ""});
+    cells.push_back({kTagLogClear, "Clear", ""});
+    log_bar_.set_cells(cells);
 
     const int64_t first = static_cast<int64_t>(pl.dropped());
     if (log_sel_abs_ >= 0 && (log_sel_abs_ < first || log_sel_abs_ >= first + static_cast<int64_t>(pl.size()))) log_sel_abs_ = -1;
@@ -4316,26 +4960,33 @@ void App::render_packet_log()
     if (pl.revision() != log_rev_) {
         if (plat_.touching()) return;                     // never rebuild a list under the finger
         log_rev_ = pl.revision();
+        const Geo g = geo();
+        const int row_h = g.list_row, y = centre(row_h, f_value_);
         std::vector<RowSpec> specs;
         specs.reserve(pl.size());
-        const int y = centre(kLogRowH, f_small_);
         for (size_t i = 0; i < pl.size(); ++i) {
             const PacketRow r = build_packet_row(model_, pl.at(i));
             RowSpec s;
-            s.h = kLogRowH;
+            s.h = row_h;
             s.id = std::to_string(first + static_cast<int64_t>(i));
             const std::string *v[8] = {&r.time, &r.route, &r.type, &r.hops, &r.snr, &r.rssi, &r.size, &r.channel};
-            for (int c = 0; c < 8; ++c)
-                s.cells.push_back({*v[c], c == 2 || c == 7 ? kText : kMuted, kLogCol[c][0], kLogCol[c][1], LV_TEXT_ALIGN_LEFT, f_small_, y});
+            for (size_t c = 0; c < log_cols_.size(); ++c) {
+                const int f = log_cols_[c];
+                s.cells.push_back({*v[f], f == 2 || f == 7 ? kText : kMuted, log_col_x_[c], log_col_w_[c], LV_TEXT_ALIGN_LEFT, f_value_, y});
+            }
             specs.push_back(std::move(s));
         }
         if (specs.empty()) {
             RowSpec s;
-            s.h = 60;
+            const int lh1 = line_h(f_body_), lh2 = line_h(f_caption_);
+            s.h = lh1 + 2 * lh2 + 2 * g.s;
             s.selectable = false;
-            s.cells.push_back({pl.capturing() ? "Capturing: waiting for the board to hear a packet..." : "Not capturing. Space or Start records the packets the board hears.",
-                               kMuted, 12, 616, LV_TEXT_ALIGN_LEFT, f_ui_, 8});
-            s.cells.push_back({"Off at every start; kept in memory only, the last 500. Nothing is written to disk.", kMuted, 12, 616, LV_TEXT_ALIGN_LEFT, f_small_, 34});
+            const int tw = std::max(1, log_list_.width() - 2 * g.inset);
+            s.cells.push_back({pl.capturing() ? "Capturing: waiting for the board to hear a packet..." : "Not capturing. Start (or Space) records the packets the board hears.",
+                               kMuted, g.inset, tw, LV_TEXT_ALIGN_LEFT, f_body_, g.s});
+            Cell c{"Off at every start; kept in memory only, the last 500. Nothing is written to disk.", kMuted, g.inset, tw, LV_TEXT_ALIGN_LEFT, f_caption_, g.s + lh1};
+            c.lines = 2;
+            s.cells.push_back(c);
             specs.push_back(std::move(s));
         }
         log_list_.set(std::move(specs), sel, true);
@@ -4388,25 +5039,6 @@ void App::button_clicked(int tag)
         return;
     }
     if (nav_.popup_open || view_pending_) return;
-    if (tag >= kTagHdr && tag < kTagHdr + 6) {
-        static const SortKey keys[6] = {SortKey::Name, SortKey::Type, SortKey::Heard, SortKey::Snr, SortKey::Hops, SortKey::Distance};
-        ContactView v = cview_;
-        v.tap_column(keys[tag - kTagHdr]);
-        change_contact_view(v);
-        return;
-    }
-    if (tag >= kTagTypeChip && tag < kTagTypeChip + 5) {
-        ContactView v = cview_;
-        v.filter.type = static_cast<TypeFilter>(tag - kTagTypeChip);
-        change_contact_view(v);
-        return;
-    }
-    if (tag >= kTagAgeChip && tag < kTagAgeChip + 4) {
-        ContactView v = cview_;
-        v.filter.age = static_cast<AgeFilter>(tag - kTagAgeChip);
-        change_contact_view(v);
-        return;
-    }
     switch (tag) {
     case kTagSend: send_message(); break;
     case kTagCompose:
@@ -4416,8 +5048,8 @@ void App::button_clicked(int tag)
         }
         break;
     case kTagTitleHold: hold_.take_swallow(); break;       // a tap on the name does nothing
-    case kTagAdvertFlood: client_->send_advert(true); break;
-    case kTagAdvertZero: client_->send_advert(false); break;
+    case kTagAdvertFlood: send_advert(true); break;
+    case kTagAdvertZero: send_advert(false); break;
     case kTagRefresh: client_->refresh_contacts(); break;
     case kTagSort: {
         ContactView v = cview_;
@@ -4435,6 +5067,9 @@ void App::button_clicked(int tag)
         nav_.detail_open = false;
         invalidate();
         break;
+    case kTagFilter: open_filter_dialog(); break;
+    case kTagSortMenu: open_sort_dialog(); break;
+    case kTagMore: open_more_menu(); break;
     case kTagNearby: open_nearby(); break;
     case kTagSelect: enter_select_mode(); break;
     case kTagGroup: open_group_filter(); break;
@@ -4464,6 +5099,10 @@ void App::button_clicked(int tag)
         break;
     }
     case kTagNearbyClose: close_nearby(); break;
+    case kTagNearbyAdd: nearby_add_selected(); break;
+    case kTagNearbyIgnore:
+        if (!nearby_rows_.empty()) nearby_ignore(nearby_rows_[static_cast<size_t>(std::clamp(nearby_sel_, 0, static_cast<int>(nearby_rows_.size()) - 1))].key_hex);
+        break;
     case kTagNearbyScan: client_->start_discover(); break;
     case kTagNearbyIgnored:
         nearby_show_ignored_ = !nearby_show_ignored_;
@@ -4508,6 +5147,7 @@ void App::button_clicked(int tag)
 
 void App::row_clicked(RowList *list, int index, int x)
 {
+    (void)x;
     if (mono_ms() - start_ms_ < kStartGuardMs || editor_open_ || nav_.popup_open || view_pending_) return;
     if (list == &chat_list_) {
         if (hold_.take_swallow()) return;                 // the release of a completed 3 s hold is not a tap
@@ -4518,17 +5158,34 @@ void App::row_clicked(RowList *list, int index, int x)
         // the row that was tapped, whatever the order it is shown in: its id is the contact key of THIS row
         const std::string key = contact_list_.id_at(index);
         if (!key.empty()) {
-            if (nav_.select_mode) toggle_selected(key);                   // select mode: a tap marks the row
-            else if (x >= 584) open_contact_info(key);                    // the "i" box at the right of the row: the details
-            else activate_contact(key);
+            const bool again = index == contact_sel_ && key == contact_sel_key_;
+            contact_sel_ = index;
+            contact_sel_key_ = key;
+            if (nav_.select_mode) {                                       // select mode: a tap marks the row (a check box)
+                toggle_selected(key);
+            } else if (again) {                                           // a tap on the selected row: the details (the key I)
+                open_contact_info(key);
+            } else {                                                      // the first tap selects the row
+                contact_list_.set_selected(index, true, false);
+                invalidate();
+            }
         }
     } else if (list == &nearby_list_) {
-        nearby_activate(index, x);
-    } else if (list == &search_list_) {
-        search_open_hit(index);
+        nearby_activate(index);
     } else if (list == &settings_list_) {
-        settings_activate(index, x);
+        if (index == settings_sel_) settings_activate(index);       // a tap on the selected row acts
+        else settings_select(index, false);                         // the first tap selects it
         invalidate();
+    } else if (list == &detail_list_) {
+        detail_sel_ = index;
+        detail_list_.set_selected(index, true, false);
+    } else if (list == &search_list_) {
+        if (index == search_sel_) {
+            search_open_hit(index);
+        } else {
+            search_sel_ = index;
+            search_list_.set_selected(index, true, false);
+        }
     } else if (list == &log_list_) {
         const std::string &id = log_list_.id_at(index);
         if (!id.empty()) packet_log_select(std::atoll(id.c_str()));
@@ -4710,8 +5367,8 @@ void App::key_contacts(const KeyEvent &e)
         else if (c == 'r') { v.toggle_reverse(); change_contact_view(v); }
         else if (c == 't') { v.filter.type = next_type_filter(v.filter.type); change_contact_view(v); }
         else if (c == 'h') { v.filter.age = next_age_filter(v.filter.age); change_contact_view(v); }
-        else if (!sel && c == 'a') client_->send_advert(true);
-        else if (!sel && c == 'd') client_->send_advert(false);
+        else if (!sel && c == 'a') send_advert(true);
+        else if (!sel && c == 'd') send_advert(false);
         else if (!sel && c == 'u') client_->refresh_contacts();
         else if (!sel && c == 'x') enter_select_mode();
         else if (!sel && c == 'g') open_group_filter();
@@ -4736,16 +5393,13 @@ void App::key_settings(const KeyEvent &e)
         const int d = e.key == Key::Up ? -1 : e.key == Key::Down ? 1 : e.key == Key::PageUp ? -6 : e.key == Key::PageDown ? 6
                       : e.key == Key::Home ? -1000 : 1000;
         const int next = step_selectable(ok, settings_sel_, d);
-        if (next >= 0) {
-            settings_sel_ = next;
-            settings_list_.set_selected(next, true, true);        // no rebuild of the list for a key press
-        }
+        if (next >= 0) settings_select(next, true);              // no rebuild of the list for a key press
         break;
     }
     case Key::Left: settings_step(settings_sel_, -1); break;
     case Key::Right: settings_step(settings_sel_, 1); break;
     case Key::Enter:
-        if (!e.repeat) settings_activate(settings_sel_, 0);
+        if (!e.repeat) settings_activate(settings_sel_);
         break;
     case Key::Delete:
         if (!e.repeat && settings_sel_ >= 0 && settings_sel_ < static_cast<int>(srows_.size()) && srows_[static_cast<size_t>(settings_sel_)].kind == SRowKind::Channel)
@@ -4757,7 +5411,7 @@ void App::key_settings(const KeyEvent &e)
         const bool on_channel = settings_sel_ >= 0 && settings_sel_ < static_cast<int>(srows_.size()) && srows_[static_cast<size_t>(settings_sel_)].kind == SRowKind::Channel;
         if (c == 's') request_save();
         else if (c == 'v') request_undo();
-        else if (c == 'a') client_->send_advert(true);
+        else if (c == 'a') send_advert(true);
         else if (c == 'm' && on_channel) toggle_mute(Model::conv_channel(srows_[static_cast<size_t>(settings_sel_)].arg));
         else if (c == 'k' && on_channel) show_channel_key(srows_[static_cast<size_t>(settings_sel_)].arg);
         break;

@@ -1,6 +1,6 @@
 # Mesh Hop 0.1.1 / 0.2.0 scripted run (headless) against tools/meshcore_sim.py (default case: 4 contacts, GPS variable listed, channel send answered OK).
-# Screenshots go to the --shot-dir, `dump` prints the state. Keys and taps are the real ones: tab bar taps, list rows, buttons, popups,
-# drag-scroll. Coordinates are screen pixels (640x480; the page starts at y=56).
+# Screenshots go to the --shot-dir, `dump` prints the state. Keys and taps are the real ones: list rows, buttons, popups, drag-scroll.
+# Coordinates (Chats only: the 640 px stage) are the 640x480 layout's (the page starts at y=56); the other pages are tapped by label.
 wait 3500
 key enter
 wait 300
@@ -98,13 +98,15 @@ shot 12-loading
 wait 800
 say == sorted by name (expect sort=name first='Alice')
 dump
-tap 70 155
+tap "Sort: Name ▼"
 wait 600
-say == tap the Name title again: reversed (expect sort=name(rev) first='Weather room')
+tap "Name"
+wait 600
+say == Sort dialog, Name again: reversed (expect sort=name(rev) first='Weather room')
 dump
 shot 13-sorted-reversed
-# the tapped row opens: the first row of THIS order, not the first row of the default order
-tap 200 188
+# the tapped row opens: the first row of THIS order, not the first row of the default order (it is selected: one tap opens it)
+tap "Weather room"
 wait 300
 say == the tapped row opens (expect detail=1 detail_name='Weather room')
 dump
@@ -113,19 +115,35 @@ key esc
 say == esc closes the detail, the sort is kept (expect detail=0 sort=name(rev))
 dump
 
-# filters by touch chips: type Repeater, then heard within 1 h
-tap 160 122
+# filters by touch, the Filter dialog: type Repeater, then heard within 1 h
+tap "Filter ▼"
+wait 600
+tap "Type"
+wait 600
+tap "Repeater"
 wait 700
 say == type filter Repeater (expect shown=1 filter=Repeater/Any time)
 dump
-tap 484 122
+tap "Filter ▼"
+wait 600
+tap "Heard"
+wait 600
+tap "Last hour"
 wait 700
 say == plus heard within 1 h (expect filter=Repeater/1 h)
 dump
 shot 15-filtered
-tap 35 122
+tap "Filter ▼"
+wait 600
+tap "Type"
+wait 600
+tap "All types"
 wait 700
-tap 418 122
+tap "Filter ▼"
+wait 600
+tap "Heard"
+wait 600
+tap "Any time"
 wait 700
 say == all types again, any time again (expect shown=4 filter=All/Any time)
 dump

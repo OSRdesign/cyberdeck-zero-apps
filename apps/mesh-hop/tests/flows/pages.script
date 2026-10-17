@@ -1,0 +1,233 @@
+# Simulator options: --contacts 193 --manual-add --new-nodes 3 --heard-back 2
+# Mesh Hop P3: the pages that fill the width (Contacts, a contact's details, Nearby, Settings, Statistics, the packet log, the message
+# search) with 193 contacts, at any size (run_flows.sh stage runs it at the five sizes). Shots of each page, of the Filter, Sort and
+# More dialogs, of a filter and of the select mode; `check` holds everything outside the stage of Chats to the size rules.
+wait 4000
+keyboard off
+say == Contacts from Home (expect home=0 tab=Contacts contacts=197)
+key down
+key enter
+wait 1500
+dump
+shot p01-contacts
+check contacts
+key down
+key down
+wait 300
+shot p02-contacts-selected
+keyboard on
+say == with a keyboard: the key hint line at the bottom, the lists shorter
+shot p02b-contacts-keyboard
+check contacts-keyboard
+keyboard off
+
+say == the Filter dialog: type, heard, group (expect popup=menu)
+tap "Filter ▼"
+wait 700
+dump
+shot p03-filter-dialog
+check filter-dialog
+tap "Type"
+wait 700
+say == the type list (expect popup=list)
+dump
+shot p04-filter-type
+tap "Repeater"
+wait 1500
+say == only the repeaters (expect filter=Repeater/Any popup=none)
+dump
+shot p05-contacts-filtered
+check contacts-filtered
+tap "Filter ▼"
+wait 600
+tap "Type"
+wait 700
+say == the type list again: the type in use (Repeater) has the blue dot, the others white (expect popup=list popup_title='Show which type?')
+dump
+shot p05b-filter-type-in-use
+check filter-type-in-use
+key down
+key down
+wait 300
+say == Sensor, the last type, under the fold: the keys (or a drag) bring it in, the scrollbar says there is more
+shot p05c-filter-type-sensor
+key esc
+wait 400
+type t
+wait 800
+type t
+wait 800
+type t
+wait 1500
+say == all types again (expect filter=All/Any)
+dump
+
+say == the Sort dialog: the six fields, the active one with its direction (expect popup=list)
+tap "Sort: Heard ▼"
+wait 700
+dump
+shot p06-sort-dialog
+check sort-dialog
+tap "Name"
+wait 1500
+say == sorted by name (expect sort=name)
+dump
+shot p07-contacts-by-name
+key pgdn
+key pgdn
+key pgdn
+wait 300
+mark
+say == a row far down selected; U asks the board for its contacts again and the list is built again: the same contact stays selected (its index may move when rows above it change), the scroll stays
+type u
+wait 4000
+expect more contacts_builds
+expect same sel_key
+expect same contacts_scroll
+dump
+key home
+wait 300
+
+say == More: Send advert, Nearby, Manage contacts: the three rows fit at 640x480 (expect popup=menu)
+tap "More"
+wait 700
+dump
+shot p08-more-menu
+check more-menu
+tap "Send advert"
+wait 700
+say == Send advert: the arrow choice of the scope, Flood first (expect popup=choice popup_title='Send advert' popup_value='Flood (whole mesh)')
+dump
+shot p08b-send-advert
+check send-advert
+tap "<right>"
+wait 300
+say == Zero-hop chosen (expect popup_value='Zero-hop (neighbours)')
+dump
+shot p08c-send-advert-zero-hop
+tap "OK"
+wait 800
+say == sent: a zero-hop advert (expect popup=none and a notice)
+dump
+tap "More"
+wait 700
+tap "Send advert"
+wait 700
+say == the next time it starts on the scope used last (expect popup=choice popup_value='Zero-hop (neighbours)')
+dump
+tap "Cancel"
+wait 400
+say == Cancel sends nothing (expect popup=none)
+dump
+tap "More"
+wait 700
+tap "Manage contacts"
+wait 700
+type a
+wait 400
+key down
+key enter
+wait 400
+say == Manage contacts (the select mode), all marked but one (expect select=1)
+dump
+shot p09-select-mode
+check select-mode
+key esc
+wait 400
+
+say == the details of the selected contact (key I; a tap on the selected row does the same) (expect detail=1)
+type i
+wait 800
+dump
+shot p10-contact-detail
+check contact-detail
+key down
+key down
+key down
+key down
+key down
+key down
+wait 300
+shot p11-contact-detail-scrolled
+key esc
+wait 400
+
+say == Nearby (key N) (expect nearby_open=1)
+type n
+wait 1500
+dump
+shot p12-nearby
+check nearby
+key esc
+wait 400
+
+say == Settings (Tab) (expect tab=Settings)
+key tab
+wait 1000
+dump
+shot p13-settings
+check settings
+keyboard on
+shot p13b-settings-keyboard
+check settings-keyboard
+keyboard off
+key pgdn
+key pgdn
+wait 300
+shot p14-settings-scrolled
+key pgdn
+key pgdn
+key pgdn
+wait 300
+shot p15-settings-end
+key home
+wait 300
+
+say == Statistics (a first tap selects the row, the second opens it) (expect stats_open=1)
+tap "Statistics"
+tap "Statistics"
+wait 2500
+dump
+shot p16-statistics
+check statistics
+key esc
+wait 400
+
+say == the packet log, capturing (expect log_open=1 log_capture=1)
+tap "Packet log"
+tap "Packet log"
+wait 500
+type s
+wait 16000
+dump
+shot p17-packet-log
+check packet-log
+key up
+key up
+wait 300
+shot p18-packet-log-selected
+key esc
+wait 400
+key end
+wait 400
+mark
+say == Settings at its end while the capture runs: the Packet log row changes, the list is built again; the highlight (Save) and the scroll stay
+wait 9000
+expect more settings_builds
+expect same settings_sel
+expect same settings_scroll
+dump
+shot p20-settings-after-refresh
+
+say == the message search over Chats (Tab, Ctrl+F) (expect search_open=1)
+key tab
+wait 600
+key ctrl-f
+wait 600
+type e
+wait 600
+dump
+shot p19-search
+check search
+key esc
+wait 400

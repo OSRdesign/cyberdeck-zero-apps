@@ -358,9 +358,9 @@ MenuResult menu_key(const KeyEvent &e, int &selected, int count);
 /* ---- the Settings list. Save to radio and Undo changes are the LAST rows; the fixed Public channel (slot 0) is not listed. */
 enum class SRowKind {
     Header, Info, Name, Preset, Freq, Bw, Sf, Cr, Tx, RetryAttempts, ResetAfter, SyncClock, BoardGps, GpsNotice, Channel, AddChannel,
-    AddPublic, ChannelsNotice, HistoryAll, HistoryOlder, HistoryNote, Undo, Save,
+    AddPublic, ChannelsNotice, HistoryAll, HistoryOlder, Undo, Save,
     // phase 2 (0.2.0)
-    Position, Stats, StatsNotice, PathHash, PathHashNotice, Repeat, RepeatNotice, AdvertEvery, AdvertKind, ManualAdd, AutoAddTypes,
+    Position, Stats, StatsNotice, PathHash, PathHashNotice, Repeat, AdvertEvery, AdvertKind, ManualAdd, AutoAddTypes,
     AutoAddNotice, Reboot, FactoryReset,
     // 0.2.2: the data kept per board
     HistoryForget, HistoryOthers,

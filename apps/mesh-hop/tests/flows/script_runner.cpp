@@ -6,7 +6,8 @@
  * keyboard queue and bridge, a pointer, the layout checks) with the app started by its own AppSpec (cdk::start, as on
  * a board). Built by tests/flows/runner.mk (build.sh host).
  *
- *   mesh-hop-script --script FILE [--shot-dir DIR] [--size WxH] [--resources DIR]
+ *   mesh-hop-script --script FILE [--shot-dir DIR] [--size WxH] [--ppmm N] [--resources DIR]
+ *   (--ppmm: the panel density in px/mm x100, as a board's screen.state gives it; default the harness's for the size)
  *
  * Coordinates in a script are the 640x480 layout's of the page bodies (the stage of 0.3.0: the header 56 px, then the body
  * at y 56): at any size they are moved to where the body is now (App::script_origin: under the shell, or, in a sub-page,
@@ -22,10 +23,13 @@
  *   stage                        the stage's place: centred, under the shell, inside the screen (a failure otherwise)
  *   keyboard on|off              a keyboard is there (the key hint line shows) or not
  *   check <name>                 the shared layout checks: "on-screen" (nothing cut by the screen edge) fails the run;
- *                                the size and header rules of the stage's own controls are counted only (the page
- *                                bodies are not converted yet); the shell's controls (everything outside the stage:
- *                                the header, the tab row, the dialogs) must meet them: a failure otherwise
+ *                                the size and header rules of the stage's own controls (Chats, until P4) are counted
+ *                                only; everything outside the stage (the header, the dialogs, and the pages of P3 that
+ *                                fill the width) must meet them: a failure otherwise
  *   expect text "T" | notext "T" a visible label with exactly this text (or none)
+ *   mark                         remembers the app's state line (what `dump` prints)
+ *   expect same KEY | changed KEY | more KEY   KEY= of the state line now equals / differs from / is larger than at `mark`
+ *                                (a refresh keeps the selection and the scroll: expect same settings_sel ...)
  *   key names: esc enter tab backtab up down left right pgup pgdn home end bksp del, ctrl-<letter>
  */
 
@@ -49,6 +53,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -198,12 +203,13 @@ bool pressable(lv_obj_t *obj)
 }
 
 struct ShellStats {
-    int controls = 0, failures = 0, min_row = 1 << 20, min_button = 1 << 20, min_header = 1 << 20;
+    int controls = 0, failures = 0, min_row = 1 << 20, min_button = 1 << 20, min_header = 1 << 20, min_list_row = 1 << 20;
 };
 
-/* Every pressable control outside the stage (the shell: the header's Esc, the tab row, a dialog and its buttons, the keys)
- * meets the shared size rules: the header's Esc the header rule, a button TARGET, anything else ROW. A control that does
- * not hold a pressable child of its own counts (a row with a button inside is the button). */
+/* Every pressable control outside the stage (the shell: the header's Esc, a dialog and its buttons, the keys; the pages of P3)
+ * meets the shared size rules: the header's Esc the header rule, a button TARGET, a row of a vertically scrolling list
+ * LIST_ROW (a tap there only moves the highlight: CompactList's compact rows, the virtual lists of the pages), anything else
+ * ROW. A control that does not hold a pressable child of its own counts (a row with a button inside is the button). */
 void shell_walk(lv_obj_t *obj, lv_obj_t *stage, const cp0_ui_metrics_t *m, int header_rule, int header_h, ShellStats &st)
 {
     if (!obj || obj == stage) return;
@@ -225,8 +231,21 @@ void shell_walk(lv_obj_t *obj, lv_obj_t *stage, const cp0_ui_metrics_t *m, int h
         st.min_button = std::min(st.min_button, h);
         if (h < m->tok[CP0_TOK_TARGET]) ++st.failures;
     } else {
-        st.min_row = std::min(st.min_row, h);
-        if (h < m->tok[CP0_TOK_ROW_H]) ++st.failures;
+        lv_obj_t *parent = lv_obj_get_parent(obj);
+        const bool in_list = parent && lv_obj_has_flag(parent, LV_OBJ_FLAG_SCROLLABLE) && (lv_obj_get_scroll_dir(parent) & LV_DIR_VER);
+        if (in_list && h < m->tok[CP0_TOK_ROW_H]) {
+            st.min_list_row = std::min(st.min_list_row, h);
+            if (h < std::min(m->tok[CP0_TOK_ROW_H], m->tok[CP0_TOK_LIST_ROW_H])) {
+                ++st.failures;
+                std::printf("  under LIST_ROW: %dx%d at (%d,%d)\n", static_cast<int>(a.x2 - a.x1 + 1), h, static_cast<int>(a.x1), static_cast<int>(a.y1));
+            }
+        } else {
+            st.min_row = std::min(st.min_row, h);
+            if (h < m->tok[CP0_TOK_ROW_H]) {
+                ++st.failures;
+                std::printf("  under ROW: %dx%d at (%d,%d)\n", static_cast<int>(a.x2 - a.x1 + 1), h, static_cast<int>(a.x1), static_cast<int>(a.y1));
+            }
+        }
     }
 }
 
@@ -243,6 +262,21 @@ lv_obj_t *find_last_label(lv_obj_t *obj, const std::string &text)
     for (uint32_t i = 0; i < lv_obj_get_child_count(obj); ++i)
         if (lv_obj_t *f = find_last_label(lv_obj_get_child(obj, static_cast<int32_t>(i)), text)) found = f;
     return found;
+}
+
+/* The value of KEY= in a state line (debug_state): up to the next space, or between quotes when it starts with one. */
+std::string state_value(const std::string &state, const std::string &key)
+{
+    const std::string pat = " " + key + "=";
+    size_t at = state.find(pat);
+    if (at == std::string::npos) return "<none>";
+    at += pat.size();
+    if (at < state.size() && state[at] == '\'') {
+        const size_t end = state.find('\'', at + 1);
+        return state.substr(at + 1, end == std::string::npos ? std::string::npos : end - at - 1);
+    }
+    const size_t end = state.find(' ', at);
+    return state.substr(at, end == std::string::npos ? std::string::npos : end - at);
 }
 
 bool save_shot(const std::string &shot_dir, const std::string &name)
@@ -263,7 +297,7 @@ int run_script(const std::string &file, const std::string &shot_dir)
         std::fprintf(stderr, "mesh-hop: cannot read the script %s\n", file.c_str());
         return 2;
     }
-    std::string line;
+    std::string line, marked;
     int lineno = 0, failures = 0;
     while (std::getline(in, line) && !g_quit.load()) {
         ++lineno;
@@ -385,6 +419,9 @@ int run_script(const std::string &file, const std::string &shot_dir)
             ss >> state;
             Platform::set_keyboard_assumed(state == "on");
             run_for(1300);                                    // the app looks for a keyboard once a second
+        } else if (cmd == "mark") {
+            run_for(60);
+            marked = session ? session->app().debug_state() : std::string();
         } else if (cmd == "dump") {
             run_for(60);
             if (session) std::printf("%s\n", session->app().debug_state().c_str());
@@ -440,14 +477,47 @@ int run_script(const std::string &file, const std::string &shot_dir)
                 const int header_rule = std::min(m->tok[CP0_TOK_TARGET], page.header_h - 2 * m->shell.status_top);
                 shell_walk(lv_screen_active(), session->platform().stage(), m, header_rule, page.header_h, sh);
             }
-            std::printf("check %s %s: on-screen %d failure(s); %d size/header finding(s) in the page bodies (not converted yet)", name.c_str(),
+            std::printf("check %s %s: on-screen %d failure(s); %d size/header finding(s) in all (the stage of Chats included: not converted yet)", name.c_str(),
                         onscreen ? "FAIL" : "PASS", onscreen, other);
             for (const std::string &n : r.notes) std::printf(" | %s", n.c_str());
             std::printf("\n");
-            std::printf("shell %s %s: %d controls outside the stage, %d under the size rules (rows min %d, buttons min %d, header min %d)\n", name.c_str(),
+            std::printf("shell %s %s: %d controls outside the stage, %d under the size rules (rows min %d, list rows min %d, buttons min %d, header min %d)\n", name.c_str(),
                         sh.failures ? "FAIL" : "PASS", sh.controls, sh.failures, sh.min_row == (1 << 20) ? 0 : sh.min_row,
-                        sh.min_button == (1 << 20) ? 0 : sh.min_button, sh.min_header == (1 << 20) ? 0 : sh.min_header);
+                        sh.min_list_row == (1 << 20) ? 0 : sh.min_list_row, sh.min_button == (1 << 20) ? 0 : sh.min_button, sh.min_header == (1 << 20) ? 0 : sh.min_header);
             failures += onscreen + sh.failures;
+            // the key hint line (shown while a keyboard is there): the bodies and their lists end above it
+            if (session) {
+                std::vector<lv_obj_t *> roots;
+                lv_obj_t *hint = nullptr;
+                session->app().body_lists(roots, hint);
+                int under = 0, lists = 0;
+                if (hint && shown(hint)) {
+                    lv_area_t ha;
+                    lv_obj_get_coords(hint, &ha);
+                    std::function<void(lv_obj_t *)> walk = [&](lv_obj_t *o) {
+                        if (!o || !shown(o)) return;
+                        const bool list = lv_obj_has_flag(o, LV_OBJ_FLAG_SCROLLABLE) && (lv_obj_get_scroll_dir(o) & LV_DIR_VER);
+                        lv_area_t a;
+                        lv_obj_get_coords(o, &a);
+                        if (list || std::find(roots.begin(), roots.end(), o) != roots.end()) {
+                            ++lists;
+                            if (a.y2 >= ha.y1) {
+                                ++under;
+                                std::printf("  under the hint line: %dx%d at (%d,%d), the hints from y %d\n", static_cast<int>(a.x2 - a.x1 + 1),
+                                            static_cast<int>(a.y2 - a.y1 + 1), static_cast<int>(a.x1), static_cast<int>(a.y1), static_cast<int>(ha.y1));
+                            }
+                        }
+                        if (list) return;                      // the rows of a list scroll inside it: its own box is what counts
+                        for (uint32_t i = 0; i < lv_obj_get_child_count(o); ++i) walk(lv_obj_get_child(o, static_cast<int32_t>(i)));
+                    };
+                    for (lv_obj_t *r : roots) walk(r);
+                    std::printf("hint %s %s: %d bodies and lists above the key hint line, %d reaching under it\n", name.c_str(), under ? "FAIL" : "PASS",
+                                lists - under, under);
+                } else {
+                    std::printf("hint %s PASS: no key hint line\n", name.c_str());
+                }
+                failures += under;
+            }
         } else if (cmd == "expect") {
             std::string rest;
             std::getline(ss, rest);
@@ -455,13 +525,18 @@ int run_script(const std::string &file, const std::string &shot_dir)
             const std::string what = w.empty() ? std::string() : w[0], arg = w.size() > 1 ? w[1] : std::string();
             run_for(60);
             bool ok = true;
+            std::string detail;
             if (what == "text") ok = headless::find_label(arg, false) != nullptr;
             else if (what == "notext") ok = headless::find_label(arg, false) == nullptr;
-            else {
-                std::fprintf(stderr, "script:%d: expect text|notext \"T\"\n", lineno);
+            else if ((what == "same" || what == "changed" || what == "more") && session) {
+                const std::string was = state_value(marked, arg), now = state_value(session->app().debug_state(), arg);
+                ok = what == "same" ? was == now : what == "changed" ? was != now : std::atoll(now.c_str()) > std::atoll(was.c_str());
+                detail = " (" + was + " -> " + now + ")";
+            } else {
+                std::fprintf(stderr, "script:%d: expect text|notext \"T\", expect same|changed|more KEY\n", lineno);
                 ok = false;
             }
-            std::printf("expect %s \"%s\": %s\n", what.c_str(), arg.c_str(), ok ? "PASS" : "FAIL");
+            std::printf("expect %s \"%s\"%s: %s\n", what.c_str(), arg.c_str(), detail.c_str(), ok ? "PASS" : "FAIL");
             if (!ok) ++failures;
         } else {
             std::fprintf(stderr, "script:%d: unknown command %s\n", lineno, cmd.c_str());
@@ -499,6 +574,7 @@ void mkdirs(const std::string &path)
 int main(int argc, char *argv[])
 {
     std::string script, shot_dir, resources;
+    int ppmm = 0;
     if (const char *e = std::getenv("CDK_HEADLESS_RESOURCES")) resources = e;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -506,13 +582,14 @@ int main(int argc, char *argv[])
         else if (a == "--script" && i + 1 < argc) script = argv[++i];
         else if (a == "--shot-dir" && i + 1 < argc) shot_dir = argv[++i];
         else if (a == "--resources" && i + 1 < argc) resources = argv[++i];
+        else if (a == "--ppmm" && i + 1 < argc) ppmm = std::atoi(argv[++i]);
         else if (a == "--size" && i + 1 < argc) {
             if (std::sscanf(argv[++i], "%dx%d", &g_w, &g_h) != 2 || g_w <= 0 || g_h <= 0) {
                 std::fprintf(stderr, "--size WxH\n");
                 return 2;
             }
         } else {
-            std::fprintf(stderr, "usage: %s --script file [--shot-dir dir] [--size WxH] [--resources dir]\n", argv[0]);
+            std::fprintf(stderr, "usage: %s --script file [--shot-dir dir] [--size WxH] [--ppmm N] [--resources dir]\n", argv[0]);
             return a == "--help" ? 0 : 2;
         }
     }
@@ -538,7 +615,7 @@ int main(int argc, char *argv[])
     setenv("APPLAUNCH_CANVAS", size.c_str(), 1);
     setenv("APPLAUNCH_CANVAS_SCALE", "1", 1);
 
-    if (!headless::platform_init(g_w, g_h, ppmm_for(g_w, g_h), resources)) {
+    if (!headless::platform_init(g_w, g_h, ppmm > 0 ? ppmm : ppmm_for(g_w, g_h), resources)) {
         std::fprintf(stderr, "mesh-hop-script: platform init failed\n");
         return 1;
     }

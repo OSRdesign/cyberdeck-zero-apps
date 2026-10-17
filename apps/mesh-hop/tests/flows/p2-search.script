@@ -1,6 +1,6 @@
 # Mesh Hop 0.2.0 phase 2: search in the message archive (M7): text, conversation, dates, direction, open the conversation at the message.
 # Run with p2_run.sh (seeded history: 10 messages, 100 days to 1 hour old, plus the 2 of the simulator).
-# Touch (page at y=56): the filter buttons are at y=174 (chat x=108, dates x=328, direction x=540), Close at (588,78), result rows centre y=250+56*i.
+# Touch: the filters are the cells of the bar (Chat, Dates, Show), tapped by label; the first result row is at y=250 of the 640x480 layout.
 wait 3500
 key enter
 wait 300
@@ -17,22 +17,22 @@ dump
 shot s02-hits
 
 # direction by touch: received, sent, all
-tap 540 174
+tap "Show"
 wait 300
 say == received only (expect search_hits=3)
 dump
-tap 540 174
+tap "Show"
 wait 300
 say == sent only (expect search_hits=1)
 dump
 shot s03-sent
-tap 540 174
+tap "Show"
 wait 300
 say == all again (expect search_hits=4)
 dump
 
 # dates by touch: the list, then the last 7 days
-tap 328 174
+tap "Dates"
 wait 500
 say == the date list (expect popup=list popup_title='Which dates?')
 dump

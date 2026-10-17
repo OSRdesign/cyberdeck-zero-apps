@@ -31,7 +31,7 @@ if [ -z "$NOSIM" ]; then
 else
     export MESHHOP_PORT=/nonexistent/ttyMH
 fi
-"$BIN" --script "${SCRIPT:-$HERE/smoke.script}" --shot-dir "$SHOTS" --size "${SIZE:-640x480}" | tee "$SHOTS/dump.txt"
+"$BIN" --script "${SCRIPT:-$HERE/smoke.script}" --shot-dir "$SHOTS" --size "${SIZE:-640x480}" ${PPMM:+--ppmm $PPMM} | tee "$SHOTS/dump.txt"
 RC=$?
 if [ -f "$DATA/mesh-hop.log" ]; then echo "== the app log (mesh-hop.log) =="; cat "$DATA/mesh-hop.log"; fi
 [ -n "$SIMPID" ] && kill $SIMPID 2>/dev/null

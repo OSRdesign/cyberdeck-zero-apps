@@ -996,7 +996,8 @@ std::vector<SRowSpec> settings_layout(const SettingsContext &ctx)
     add(SRowKind::Tx);
     if (ctx.path_hash.available) add(SRowKind::PathHash);
     else if (!ctx.path_hash.notice.empty()) add(SRowKind::PathHashNotice);
-    if (ctx.repeat.shown) add(ctx.repeat.available ? SRowKind::Repeat : SRowKind::RepeatNotice);
+    // repeat (P3): the row only while it can be used (or while it is on: the way to switch it off); no note when it cannot
+    if (ctx.repeat.shown && (ctx.repeat.available || ctx.repeat.on)) add(SRowKind::Repeat);
     add(SRowKind::Header, 2);                       // MESSAGES
     add(SRowKind::RetryAttempts);
     add(SRowKind::ResetAfter);
@@ -1019,8 +1020,7 @@ std::vector<SRowSpec> settings_layout(const SettingsContext &ctx)
     if (ctx.connected && ctx.slot0_empty && ctx.channel_admin.available) add(SRowKind::AddPublic);
     add(SRowKind::Header, 6);                       // HISTORY (local messages only: contacts, channels and settings are never touched)
     add(SRowKind::HistoryAll);
-    add(SRowKind::HistoryOlder);
-    add(SRowKind::HistoryNote);
+    add(SRowKind::HistoryOlder);                    // (P3: the "One conversation" hint row is gone: the Options button of Chats says it)
     if (ctx.board_known) add(SRowKind::HistoryForget);        // this board's saved app data (the history is kept per board)
     if (ctx.other_boards > 0) add(SRowKind::HistoryOthers);   // the saved data of boards that are not connected
     if (ctx.connected) {
@@ -1036,8 +1036,8 @@ std::vector<SRowSpec> settings_layout(const SettingsContext &ctx)
 
 bool settings_row_selectable(SRowKind k)
 {
-    return k != SRowKind::Header && k != SRowKind::Info && k != SRowKind::GpsNotice && k != SRowKind::ChannelsNotice && k != SRowKind::HistoryNote &&
-           k != SRowKind::StatsNotice && k != SRowKind::PathHashNotice && k != SRowKind::RepeatNotice && k != SRowKind::AutoAddNotice;
+    return k != SRowKind::Header && k != SRowKind::Info && k != SRowKind::GpsNotice && k != SRowKind::ChannelsNotice &&
+           k != SRowKind::StatsNotice && k != SRowKind::PathHashNotice && k != SRowKind::AutoAddNotice;
 }
 std::vector<ChannelEntry> build_channel_entries(const Model &model)
 {
