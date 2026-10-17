@@ -41,21 +41,25 @@ say == after the drag (nothing opened: detail=0)
 dump
 shot 33b-after-drag
 tap 200 188
-wait 400
-say == tapped the first visible row after the drag: its detail or conversation opens (compare with the screenshot 33b)
-dump
-key esc
-key tab
-wait 300
-# the tapped row is the one that opens, in this order (and the sort is still there afterwards)
 tap 200 188
 wait 400
-say == tapped the first row of this order: its conversation or detail opens (see conv_title / detail_name, expect the first= name)
+say == tapped twice the first visible row after the drag: the first tap selects it, the second opens its details (expect detail=1; compare detail_name with the screenshot 33b)
+dump
+key esc
+wait 300
+key home
+wait 300
+# the tapped row is the one that opens, in this order (and the sort is still there afterwards): after Home the first row is selected
+tap 200 188
+wait 400
+say == tapped the first row of this order: its details open (expect detail=1, detail_name = the first= name)
 dump
 key esc
 key tab
+key tab
+key tab
 wait 400
-say == back on Contacts after a tour of the tabs: the sort and the filters are kept (expect sort=name(rev) shown=161)
+say == back on Contacts after a tour of the pages: the sort and the filters are kept (expect sort=name(rev) shown=161)
 dump
 
 # the filters of the 161 contacts

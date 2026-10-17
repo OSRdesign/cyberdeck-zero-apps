@@ -53,7 +53,7 @@ wait 200
 say == Up: an older row selected, its bytes below (expect log_sel>=0)
 dump
 shot packet-log-5-selected
-tap 300 160
+tap 300 200
 wait 200
 say == a tap selects the row under the finger
 dump
@@ -63,7 +63,7 @@ say == End: back on the newest row, following again (expect log_sel=-1)
 dump
 
 # stop, clear, close
-tap 416 78
+tap "Stop"
 wait 300
 say == Stop tapped (expect log_capture=0)
 dump

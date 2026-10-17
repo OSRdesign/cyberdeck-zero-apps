@@ -1,24 +1,27 @@
 # Mesh Hop 0.2.0 phase 2: contact details, groups, select mode, bulk delete (C8, C1, C3).
 # Run with:  SIMARGS="--contacts 8 --manual-add --new-nodes 3 --slow-remove 0.4"  (12 contacts, manual add mode, 3 strangers advert, slow deletes)
-# Touch coordinates are screen pixels (page at y=56): toolbar centres y=78, row i centre y=188+44*i, the "i" box at x>=584.
+# P3: the page is tapped by label (the action bar's cells, the dialogs' rows, the contacts' names); sorted by name first, so the
+# first rows are Alice, Bob, Hilltop repeater, Node 000 Alice ...
 wait 6500
 key enter
 wait 300
 key tab
 wait 600
-say == contacts (expect tab=Contacts contacts=12 shown=12 pending=3 select=0 groups=0)
+type s
+wait 900
+say == contacts (expect tab=Contacts contacts=12 shown=12 pending=3 select=0 groups=0 sort=name first='Alice')
 dump
 shot p01-contacts-toolbar
 
-# the details of a chat contact by touch (the "i" box of the first row)
-tap 612 188
+# the details of a chat contact by touch: the first row is selected, a tap on it opens its details
+tap "Alice"
 wait 400
-say == details of the first row (expect detail=1)
+say == details of the first row (expect detail=1 detail_name='Alice')
 dump
 shot p02-detail
 
 # groups of this contact: there is none yet, so the list offers a new group
-tap "Groups" last
+tap "Groups"
 wait 500
 say == groups pick list (expect popup=list popup_title='Groups of this contact')
 dump
@@ -34,21 +37,28 @@ dump
 key esc
 wait 300
 
-# select mode: mark three rows by touch, the toolbar changes, Delete shows the count
-tap 372 78
+# select mode (More > Select: the fifth row of the menu, under the fold at 640x480): mark three rows by touch, the bar changes,
+# Delete shows the count
+tap "More"
+wait 500
+key down
+key down
+key down
+key down
+key enter
 wait 400
 say == select mode (expect select=1 selected=0)
 dump
-tap 100 188
-tap 100 232
-tap 100 276
+tap "Alice"
+tap "Bob"
+tap "Hilltop repeater"
 wait 300
 say == three marked (expect select=1 selected=3)
 dump
 shot p05-select-marked
 
 # the Select... menu: not heard for 7 days or more
-tap 136 78
+tap "Select..."
 wait 400
 say == the select list (expect popup=list popup_title='Select contacts')
 dump
@@ -57,7 +67,7 @@ key esc
 wait 300
 
 # the Group... button: a new group with the marked contacts, typed name
-tap 380 78
+tap "Group..."
 wait 400
 say == the group menu (expect popup=menu popup_title='Groups')
 dump
@@ -72,8 +82,10 @@ wait 500
 say == a second group with 3 contacts, select mode left (expect groups=2 select=0)
 dump
 
-# the group filter: only Hikers
-tap 476 78
+# the group filter (Filter > Group): only Hikers
+tap "Filter ▼"
+wait 500
+tap "Group"
 wait 400
 say == the group pick list (expect popup=list popup_title='Show which group?')
 dump
@@ -85,7 +97,9 @@ wait 900
 say == Hikers shown (expect shown=3 group='Hikers')
 dump
 shot p09-group-shown
-tap 476 78
+tap "Filter ▼"
+wait 500
+tap "Group"
 wait 400
 key home
 key enter
@@ -125,8 +139,10 @@ say == deleted one by one, select mode left (expect contacts=9 select=0 popup=no
 dump
 shot p12-after-delete
 
-# the details of a contact, then Delete from the detail panel: Yes / No first
-tap 612 188
+# the details of a contact (the first row, selected after Home: one tap), then Delete from its bar: Yes / No first
+key home
+wait 300
+tap "Node 000 Alice"
 wait 400
 say == details (expect detail=1)
 dump

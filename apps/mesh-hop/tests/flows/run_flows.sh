@@ -4,8 +4,8 @@
 # retry). About 15 minutes. Needs python3 and the host build (../../build.sh host).
 #   sh run_flows.sh [RUNNER] [OUT] [WxH | stage]
 #   RUNNER default ~/cdk-build/mesh-hop/host/mesh-hop-script, OUT default /tmp/mesh-hop-flows, WxH default 640x480;
-#   "stage": shell.script only (the shell: Home, header, caption, hint line, dialogs), at 640x480, 800x480, 720x720, 1024x600
-#   and 1280x720 (about 2 minutes).
+#   "stage": shell.script (the shell: Home, header, caption, hint line, dialogs) and pages.script (P3: the pages that fill the
+#   width, with 193 contacts) at 640x480, 800x480, 720x720, 1024x600 and 1280x720 (about 6 minutes).
 # Output: OUT/<flow>/*.png and dump.txt, OUT/<flow>.out (the run's stdout and stderr), a summary at the end: the shots
 # (145 `shot` lines + 4 shots at the end of a hold at 640x480, the preset flow counted once) and every line a runner
 # reported as a failure.
@@ -28,6 +28,8 @@ if [ "$SIZE" = stage ]; then
     for s in 640x480 800x480 720x720 1024x600 1280x720; do
         one "stage-$s" SIZE=$s SHOTS="$OUT/stage-$s" SCRIPT="$T/shell.script" sh "$T/ui_smoke.sh"
         grep -h "^stage \|^check \|^shell \|^expect \|^script:" "$OUT/stage-$s.out" | sed "s/^/  /"
+        one "pages-$s" SIZE=$s SHOTS="$OUT/pages-$s" SIMARGS="--contacts 193 --manual-add --new-nodes 3 --heard-back 2" SCRIPT="$T/pages.script" sh "$T/ui_smoke.sh"
+        grep -h "^check \|^shell \|^expect \|^script:" "$OUT/pages-$s.out" | grep -v " PASS" | sed "s/^/  /"
     done
     echo "== done in $(($(date +%s) - t0)) s: $(find "$OUT" -name '*.png' | wc -l) shots"
     exit 0

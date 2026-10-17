@@ -22,9 +22,9 @@
  *   stage                        the stage's place: centred, under the shell, inside the screen (a failure otherwise)
  *   keyboard on|off              a keyboard is there (the key hint line shows) or not
  *   check <name>                 the shared layout checks: "on-screen" (nothing cut by the screen edge) fails the run;
- *                                the size and header rules of the stage's own controls are counted only (the page
- *                                bodies are not converted yet); the shell's controls (everything outside the stage:
- *                                the header, the tab row, the dialogs) must meet them: a failure otherwise
+ *                                the size and header rules of the stage's own controls (Chats, until P4) are counted
+ *                                only; everything outside the stage (the header, the dialogs, and the pages of P3 that
+ *                                fill the width) must meet them: a failure otherwise
  *   expect text "T" | notext "T" a visible label with exactly this text (or none)
  *   key names: esc enter tab backtab up down left right pgup pgdn home end bksp del, ctrl-<letter>
  */
@@ -198,12 +198,13 @@ bool pressable(lv_obj_t *obj)
 }
 
 struct ShellStats {
-    int controls = 0, failures = 0, min_row = 1 << 20, min_button = 1 << 20, min_header = 1 << 20;
+    int controls = 0, failures = 0, min_row = 1 << 20, min_button = 1 << 20, min_header = 1 << 20, min_list_row = 1 << 20;
 };
 
-/* Every pressable control outside the stage (the shell: the header's Esc, the tab row, a dialog and its buttons, the keys)
- * meets the shared size rules: the header's Esc the header rule, a button TARGET, anything else ROW. A control that does
- * not hold a pressable child of its own counts (a row with a button inside is the button). */
+/* Every pressable control outside the stage (the shell: the header's Esc, a dialog and its buttons, the keys; the pages of P3)
+ * meets the shared size rules: the header's Esc the header rule, a button TARGET, a row of a vertically scrolling list
+ * LIST_ROW (a tap there only moves the highlight: CompactList's compact rows, the virtual lists of the pages), anything else
+ * ROW. A control that does not hold a pressable child of its own counts (a row with a button inside is the button). */
 void shell_walk(lv_obj_t *obj, lv_obj_t *stage, const cp0_ui_metrics_t *m, int header_rule, int header_h, ShellStats &st)
 {
     if (!obj || obj == stage) return;
@@ -225,8 +226,21 @@ void shell_walk(lv_obj_t *obj, lv_obj_t *stage, const cp0_ui_metrics_t *m, int h
         st.min_button = std::min(st.min_button, h);
         if (h < m->tok[CP0_TOK_TARGET]) ++st.failures;
     } else {
-        st.min_row = std::min(st.min_row, h);
-        if (h < m->tok[CP0_TOK_ROW_H]) ++st.failures;
+        lv_obj_t *parent = lv_obj_get_parent(obj);
+        const bool in_list = parent && lv_obj_has_flag(parent, LV_OBJ_FLAG_SCROLLABLE) && (lv_obj_get_scroll_dir(parent) & LV_DIR_VER);
+        if (in_list && h < m->tok[CP0_TOK_ROW_H]) {
+            st.min_list_row = std::min(st.min_list_row, h);
+            if (h < std::min(m->tok[CP0_TOK_ROW_H], m->tok[CP0_TOK_LIST_ROW_H])) {
+                ++st.failures;
+                std::printf("  under LIST_ROW: %dx%d at (%d,%d)\n", static_cast<int>(a.x2 - a.x1 + 1), h, static_cast<int>(a.x1), static_cast<int>(a.y1));
+            }
+        } else {
+            st.min_row = std::min(st.min_row, h);
+            if (h < m->tok[CP0_TOK_ROW_H]) {
+                ++st.failures;
+                std::printf("  under ROW: %dx%d at (%d,%d)\n", static_cast<int>(a.x2 - a.x1 + 1), h, static_cast<int>(a.x1), static_cast<int>(a.y1));
+            }
+        }
     }
 }
 
@@ -440,13 +454,13 @@ int run_script(const std::string &file, const std::string &shot_dir)
                 const int header_rule = std::min(m->tok[CP0_TOK_TARGET], page.header_h - 2 * m->shell.status_top);
                 shell_walk(lv_screen_active(), session->platform().stage(), m, header_rule, page.header_h, sh);
             }
-            std::printf("check %s %s: on-screen %d failure(s); %d size/header finding(s) in the page bodies (not converted yet)", name.c_str(),
+            std::printf("check %s %s: on-screen %d failure(s); %d size/header finding(s) in all (the stage of Chats included: not converted yet)", name.c_str(),
                         onscreen ? "FAIL" : "PASS", onscreen, other);
             for (const std::string &n : r.notes) std::printf(" | %s", n.c_str());
             std::printf("\n");
-            std::printf("shell %s %s: %d controls outside the stage, %d under the size rules (rows min %d, buttons min %d, header min %d)\n", name.c_str(),
+            std::printf("shell %s %s: %d controls outside the stage, %d under the size rules (rows min %d, list rows min %d, buttons min %d, header min %d)\n", name.c_str(),
                         sh.failures ? "FAIL" : "PASS", sh.controls, sh.failures, sh.min_row == (1 << 20) ? 0 : sh.min_row,
-                        sh.min_button == (1 << 20) ? 0 : sh.min_button, sh.min_header == (1 << 20) ? 0 : sh.min_header);
+                        sh.min_list_row == (1 << 20) ? 0 : sh.min_list_row, sh.min_button == (1 << 20) ? 0 : sh.min_button, sh.min_header == (1 << 20) ? 0 : sh.min_header);
             failures += onscreen + sh.failures;
         } else if (cmd == "expect") {
             std::string rest;
