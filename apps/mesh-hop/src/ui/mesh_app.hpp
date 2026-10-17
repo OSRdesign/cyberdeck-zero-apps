@@ -316,6 +316,8 @@ private:
     void open_filter_dialog();
     void open_sort_dialog();
     void open_more_menu();
+    void open_send_advert();             // More > Send advert: the arrow choice of the scope, OK sends
+    void send_advert(bool flood);        // (and remembers the scope for the next choice)
     void nearby_ignore(const std::string &key_hex);
     void key_nearby(const KeyEvent &e);
     void key_detail(const KeyEvent &e);
@@ -352,7 +354,8 @@ private:
     void open_menu(const std::string &title, const std::vector<std::string> &items, std::function<void(int)> on_pick,
                    const std::vector<std::string> &values = {}, const std::vector<Aff> &affs = {});
     void open_list(const std::string &title, const std::vector<std::string> &items, int focus, std::function<void(int)> on_pick,
-                   const std::vector<std::string> &values = {});
+                   const std::vector<std::string> &values = {}, const std::vector<Aff> &affs = {});
+    void add_scroll_cue(cp0::ui::Dialog &d);   // a dialog's body taller than its room: the list scrollbar at its right
     void open_progress(const std::string &title);
     lv_obj_t *dialog_button(cp0::ui::Dialog &d, size_t index) const;
     lv_obj_t *dialog_label(cp0::ui::Dialog &d, const std::string &text, bool small, uint32_t color);
@@ -502,7 +505,8 @@ private:
     uint64_t hold_ms_ = 0;
     std::vector<SRowSpec> srows_;
     int settings_sel_ = -1;
-    bool settings_fresh_ = true;         // the list was (re)made: the next rows reset it
+    uint32_t settings_builds_ = 0, contacts_builds_ = 0;
+    bool last_advert_flood_ = true;      // the scope of the last advert sent by hand: where Send advert starts   // the lists built again (scripted tests: a refresh happened)
     std::vector<ChannelEntry> settings_channels_;
     ChoiceField choice_field_ = ChoiceField::Bandwidth;
 
@@ -588,7 +592,7 @@ private:
     std::vector<int> log_cols_, log_col_x_, log_col_w_;       // the packet columns shown (PacketRow fields 0..7), their x and width
     bool log_side_ = false;                                    // the bytes at the right of the table
     // settings
-    std::unique_ptr<cp0::ui::CompactList> settings_cl_;
+    RowList settings_list_;              // the virtual list in the CompactList look: notes that wrap, read-outs the cursor skips
     // dialogs (cp0::ui::Dialog): the popups, and the editor / Position box
     std::unique_ptr<cp0::ui::Dialog> dialog_, ed_dialog_;
     // popup

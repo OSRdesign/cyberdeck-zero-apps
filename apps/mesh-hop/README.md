@@ -55,15 +55,20 @@ deck's panel**. The real screen shows the same 640x480 picture.
   7, 30 or 90 days, or a typed day or range like `2026-09-01 2026-09-30`) and **direction** (Ctrl+R: all, received, sent). The
   results are listed newest first with the time, the chat, the sender and the text around the match; a tap (or Enter) opens the
   conversation at that message, framed in blue. It searches what the deck keeps (200 messages per conversation, 1500 in all).
-* **Contacts**: table of name, type, last heard, SNR, hops and distance (when both positions are known). Tap a column title
-  or press `S` to sort (`R` reverses); a "Loading..." box shows while a long list is re-sorted or filtered, the chosen order
-  is kept, and the row you tap is the row that opens. **Filter chips** by node type and by time since last heard; keys `T` and
-  `H` cycle them. The list is virtual: only the rows in view are widgets, so Up/Down on 161 contacts is as quick as a touch
-  scroll. Enter opens the chat of a chat node, or the detail of a repeater, room or sensor. New in 0.2.0:
-  * **Details** (the **i** box at the right of a row, key `I`): name, type, groups, the whole public key, the route (flood, direct,
-    or the hops with their hash size and the hashes), last advert, when we heard it, position, distance, SNR; large buttons
-    Message, Groups, Delete, Close.
-  * **Select** (key `X`): a check box on every row; a tap or Space / Enter marks, **Select...** offers all shown, none, not heard
+* **Contacts**: a row per contact on two lines: the name, then the type, when it was heard and the hops (and the SNR on the
+  wider screens); the distance at the right (when both positions are known). The line under the title says what is shown
+  (how many, which type, heard when). The bar above the list: **Filter** (the type, the time since heard, the group: a pick
+  list each; keys `T` and `H` cycle the first two, `G` opens the groups), **Sort** (name, heard, type, SNR, hops, distance;
+  the field in use again reverses it; `S` and `R`) and **More**: **Send advert** (flood or zero-hop in an arrow choice that
+  starts on the scope used last; the keys `A` and `D` send them at once), **Nearby** (`N`) and **Manage contacts** (`X`);
+  `U` asks the board for its contacts again (it sends them by itself when it connects). A "Loading..." box shows while a long list is re-sorted or filtered, and the chosen order is kept. A tap selects a
+  row, a tap on the selected row opens its details; Enter opens the chat of a chat node, or the detail of a repeater, room or
+  sensor. The list is virtual: only the rows in view are widgets, so Up/Down on 161 contacts is as quick as a touch scroll.
+  New in 0.2.0:
+  * **Details** (a tap on the selected row, key `I`): name, type, groups, the whole public key, the route (flood, direct,
+    or the hops with their hash size and the hashes), last advert, when we heard it, position, distance, SNR; Message,
+    Groups and Delete on the bar (the header's Esc closes them).
+  * **Manage contacts** (More, key `X`): a check box on every row; a tap or Space / Enter marks, **Select...** offers all shown, none, not heard
     for 7 or 30 days or more, never heard, invert; **Delete n** asks Yes / No with the count (and says what hidden-by-filter marks
     stay), then deletes **one by one on the board** with a progress box and a Stop button. **Group...** adds the marked contacts to
     a group, takes them out, or makes a new group with them.
@@ -94,7 +99,7 @@ deck's panel**. The real screen shows the same 640x480 picture.
     (DEVICE_INFO, firmware level 10 and up), set with SET_PATH_HASH_MODE and read back; an older firmware shows the
     "Firmware too old for this feature" notice instead of the row. Repeaters on firmware 1.12 or older only know 1-byte hashes.
   * **Repeat** on or off (the companion's client repeat, firmware level 9 and up): only on the frequencies the board lists
-    (GET_ALLOWED_REPEAT_FREQ), otherwise the row says why not; switching it on asks Yes / No.
+    (GET_ALLOWED_REPEAT_FREQ); otherwise there is no row (it stays while repeat is on, to switch it off); switching it on asks Yes / No.
   * **Scheduled advert**: off (default), every 1, 3, 6 or 12 h, flood or zero-hop. The board has no advert timer of its own: the
     app sends the advert while it runs and the board is connected.
   * **Contacts**: **Add nodes by itself** switches the manual add mode (off: new nodes wait in Nearby until you add them) and
@@ -117,9 +122,9 @@ deck's panel**. The real screen shows the same 640x480 picture.
     (shows the key as text) and Remove (asks Yes / No); a **History** section (*Delete all messages*, *Delete messages older than*
     7, 30 or 90 days); **Undo changes** and **Save to radio** are the last rows and each asks Yes / No.
   The board clock follows the deck policy of MeshZero (deck NTP, board GPS, or a typed start time).
-* **Firmware check**: a feature the board's firmware lacks (custom variables, channel commands, path hash mode, repeat, statistics,
-  auto-add filter, discover, factory reset) is switched off with the notice "Firmware too old for this feature"; a board without
-  GPS shows no GPS row.
+* **Firmware check**: a feature the board's firmware lacks (custom variables, channel commands, path hash mode, statistics,
+  auto-add filter, discover, factory reset) is switched off with the notice "Firmware too old for this feature"; repeat then has
+  no row at all; a board without GPS shows no GPS row.
 * **Map** and **Terminal**: not there yet, so they are not on Home (the packet log lives in Settings, next to the statistics).
 * **Home, header, status line, hints**: the app opens on **Home**, a list with a chevron on each row: **Chats** (the unread total in blue, or "no new"),
   **Contacts** (the number of contacts) and **Settings** (the board). There is no tab row. A page has the standard header: the title ("Chats", or
@@ -164,7 +169,7 @@ deck's panel**. The real screen shows the same 640x480 picture.
 | Ctrl+O | Chats: options of the conversation (mute, delete); the touch way is the Options button, or a 3 s hold on its name |
 | Ctrl+F | Chats: search the messages (then Ctrl+K chat, Ctrl+D dates, Ctrl+R direction, Enter opens the result) |
 | `S` `R` `T` `H` `A` `D` `U` | Contacts: sort, reverse, type filter, heard filter, advert, zero-hop advert, refresh |
-| `X` `G` `N` `I` | Contacts: select mode, group filter, Nearby, details of the selected contact |
+| `X` `G` `N` `I` | Contacts: manage contacts (marks for delete / groups), group filter, Nearby, details of the selected contact |
 | Space / Enter, `A` `N` `I` `M` `D` `G` | Contacts, select mode: mark, all, none, invert, select menu, delete, group |
 | Enter, `I`, `S`, `V` | Nearby: add, ignore (or restore), scan, show / hide the ignored |
 | `G` `D` | Contact details: groups, delete |

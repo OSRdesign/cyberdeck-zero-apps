@@ -38,6 +38,11 @@ std::vector<int> fit_columns(const std::vector<int> &widths, int gap, int avail)
  * something right there, maybe after a question: a dot), Running (that action is in progress: the dot in blue). */
 enum class Aff { None, Info, Open, Edit, Action, Running };
 Aff settings_row_aff(SRowKind k);
+/* The row the highlight of Settings keeps when the rows are built again (a value changed: the clock, the battery, a capture count):
+ * the same row (its kind and argument) wherever it is now; if it went, the selectable row nearest to where it was (the next one
+ * first); with nothing selected yet, the first selectable row; -1 when no row is selectable. Never "back to the top" because the
+ * old row was not selectable (the cause of a Settings list that jumped to Position by itself in 0.3.0 P3). */
+int keep_selected_row(const std::vector<SRowSpec> &before, int selected, const std::vector<SRowSpec> &after);
 
 /* ------------------------------------------------------------------ Contacts */
 
@@ -50,13 +55,18 @@ const char *type_filter_label(TypeFilter t);                  // "All types", "C
 const char *age_filter_label(AgeFilter a);                    // "Any time", "Last hour", "Last 24 h", "Last 7 days"
 /* The line under the title: "193 contacts  ·  All types  ·  Any time", "12 of 193  ·  Repeater  ·  Last 24 h  ·  Group Friends". */
 std::string contact_view_summary(size_t shown, size_t total, const ContactView &v);
-/* The select mode's line: "3 contacts marked", "3 contacts marked (+1 hidden by the filters)". */
+/* The line of the select mode (More > Manage contacts): "Manage contacts: 3 selected", "... (+1 hidden by the filters)". */
 std::string contact_marked_summary(size_t marked, size_t hidden);
 /* The second line of a contact row: "Repeater  ·  heard 47 min  ·  3 hops", hops left out while unknown, "  ·  SNR 5.5 dB"
  * added when with_snr and the SNR is known. */
 std::string contact_row_caption(const ContactRow &r, bool with_snr);
 /* The distance at the right of a contact row: "6.2 km", or an en dash when unknown. */
 std::string contact_row_distance(const ContactRow &r);
+
+/* More > Send advert: the arrow choice of its scope, in the words of the Settings row "Advert type" ("Flood (whole mesh)",
+ * "Zero-hop (neighbours)"), the details and the note of the scheduled advert's choice; it starts on the scope used last
+ * (last_flood), index 0 flood, 1 zero-hop. */
+Choice make_send_advert_choice(bool last_flood);
 
 /* ------------------------------------------------------------------ Nearby */
 

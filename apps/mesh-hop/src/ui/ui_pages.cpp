@@ -45,10 +45,8 @@ Aff settings_row_aff(SRowKind k)
     case SRowKind::GpsNotice:
     case SRowKind::StatsNotice:
     case SRowKind::PathHashNotice:
-    case SRowKind::RepeatNotice:
     case SRowKind::AutoAddNotice:
-    case SRowKind::ChannelsNotice:
-    case SRowKind::HistoryNote: return Aff::Info;
+    case SRowKind::ChannelsNotice: return Aff::Info;
     case SRowKind::Position:
     case SRowKind::Stats:
     case SRowKind::PacketLog:
@@ -82,6 +80,28 @@ Aff settings_row_aff(SRowKind k)
     case SRowKind::Save: return Aff::Action;
     }
     return Aff::None;
+}
+
+int keep_selected_row(const std::vector<SRowSpec> &before, int selected, const std::vector<SRowSpec> &after)
+{
+    const int n = static_cast<int>(after.size());
+    std::vector<bool> ok;
+    for (const SRowSpec &r : after) ok.push_back(settings_row_selectable(r.kind));
+    if (selected < 0 || selected >= static_cast<int>(before.size())) {
+        for (int i = 0; i < n; ++i)
+            if (ok[static_cast<size_t>(i)]) return i;
+        return -1;
+    }
+    const SRowSpec &was = before[static_cast<size_t>(selected)];
+    for (int i = 0; i < n; ++i)
+        if (ok[static_cast<size_t>(i)] && after[static_cast<size_t>(i)].kind == was.kind && after[static_cast<size_t>(i)].arg == was.arg) return i;
+    if (n == 0) return -1;
+    const int at = std::min(selected, n - 1);
+    for (int d = 0; d < n; ++d) {
+        if (at + d < n && ok[static_cast<size_t>(at + d)]) return at + d;
+        if (at - d >= 0 && ok[static_cast<size_t>(at - d)]) return at - d;
+    }
+    return -1;
 }
 
 const std::vector<SortKey> &sort_menu_keys()
@@ -151,7 +171,7 @@ std::string contact_view_summary(size_t shown, size_t total, const ContactView &
 
 std::string contact_marked_summary(size_t marked, size_t hidden)
 {
-    std::string s = std::to_string(marked) + (marked == 1 ? " contact marked" : " contacts marked");
+    std::string s = "Manage contacts: " + std::to_string(marked) + " selected";
     if (hidden) s += " (+" + std::to_string(hidden) + " hidden by the filters)";
     return s;
 }
@@ -169,6 +189,16 @@ std::string contact_row_caption(const ContactRow &r, bool with_snr)
 std::string contact_row_distance(const ContactRow &r)
 {
     return r.has_dist ? fmt_distance(r.dist_km) : std::string(kDash);
+}
+
+Choice make_send_advert_choice(bool last_flood)
+{
+    ChoiceExtra extra;
+    Choice c = make_choice(ChoiceField::AdvertKind, meshzero::RadioSettings(), meshzero::RetrySettings(), &extra);
+    c.title = "Send advert";
+    c.labels = {"Flood (whole mesh)", "Zero-hop (neighbours)"};
+    c.index = c.initial = last_flood ? 0 : 1;
+    return c;
 }
 
 std::string nearby_summary(size_t shown, size_t pending, bool showing_ignored)

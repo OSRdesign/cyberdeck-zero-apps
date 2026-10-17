@@ -26,6 +26,9 @@
  *                                only; everything outside the stage (the header, the dialogs, and the pages of P3 that
  *                                fill the width) must meet them: a failure otherwise
  *   expect text "T" | notext "T" a visible label with exactly this text (or none)
+ *   mark                         remembers the app's state line (what `dump` prints)
+ *   expect same KEY | changed KEY | more KEY   KEY= of the state line now equals / differs from / is larger than at `mark`
+ *                                (a refresh keeps the selection and the scroll: expect same settings_sel ...)
  *   key names: esc enter tab backtab up down left right pgup pgdn home end bksp del, ctrl-<letter>
  */
 
@@ -259,6 +262,21 @@ lv_obj_t *find_last_label(lv_obj_t *obj, const std::string &text)
     return found;
 }
 
+/* The value of KEY= in a state line (debug_state): up to the next space, or between quotes when it starts with one. */
+std::string state_value(const std::string &state, const std::string &key)
+{
+    const std::string pat = " " + key + "=";
+    size_t at = state.find(pat);
+    if (at == std::string::npos) return "<none>";
+    at += pat.size();
+    if (at < state.size() && state[at] == '\'') {
+        const size_t end = state.find('\'', at + 1);
+        return state.substr(at + 1, end == std::string::npos ? std::string::npos : end - at - 1);
+    }
+    const size_t end = state.find(' ', at);
+    return state.substr(at, end == std::string::npos ? std::string::npos : end - at);
+}
+
 bool save_shot(const std::string &shot_dir, const std::string &name)
 {
     const std::string path = (shot_dir.empty() ? std::string(".") : shot_dir) + "/" + name + ".png";
@@ -277,7 +295,7 @@ int run_script(const std::string &file, const std::string &shot_dir)
         std::fprintf(stderr, "mesh-hop: cannot read the script %s\n", file.c_str());
         return 2;
     }
-    std::string line;
+    std::string line, marked;
     int lineno = 0, failures = 0;
     while (std::getline(in, line) && !g_quit.load()) {
         ++lineno;
@@ -399,6 +417,9 @@ int run_script(const std::string &file, const std::string &shot_dir)
             ss >> state;
             Platform::set_keyboard_assumed(state == "on");
             run_for(1300);                                    // the app looks for a keyboard once a second
+        } else if (cmd == "mark") {
+            run_for(60);
+            marked = session ? session->app().debug_state() : std::string();
         } else if (cmd == "dump") {
             run_for(60);
             if (session) std::printf("%s\n", session->app().debug_state().c_str());
@@ -469,13 +490,18 @@ int run_script(const std::string &file, const std::string &shot_dir)
             const std::string what = w.empty() ? std::string() : w[0], arg = w.size() > 1 ? w[1] : std::string();
             run_for(60);
             bool ok = true;
+            std::string detail;
             if (what == "text") ok = headless::find_label(arg, false) != nullptr;
             else if (what == "notext") ok = headless::find_label(arg, false) == nullptr;
-            else {
-                std::fprintf(stderr, "script:%d: expect text|notext \"T\"\n", lineno);
+            else if ((what == "same" || what == "changed" || what == "more") && session) {
+                const std::string was = state_value(marked, arg), now = state_value(session->app().debug_state(), arg);
+                ok = what == "same" ? was == now : what == "changed" ? was != now : std::atoll(now.c_str()) > std::atoll(was.c_str());
+                detail = " (" + was + " -> " + now + ")";
+            } else {
+                std::fprintf(stderr, "script:%d: expect text|notext \"T\", expect same|changed|more KEY\n", lineno);
                 ok = false;
             }
-            std::printf("expect %s \"%s\": %s\n", what.c_str(), arg.c_str(), ok ? "PASS" : "FAIL");
+            std::printf("expect %s \"%s\"%s: %s\n", what.c_str(), arg.c_str(), detail.c_str(), ok ? "PASS" : "FAIL");
             if (!ok) ++failures;
         } else {
             std::fprintf(stderr, "script:%d: unknown command %s\n", lineno, cmd.c_str());

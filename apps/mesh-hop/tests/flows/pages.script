@@ -38,6 +38,21 @@ say == only the repeaters (expect filter=Repeater/Any popup=none)
 dump
 shot p05-contacts-filtered
 check contacts-filtered
+tap "Filter ▼"
+wait 600
+tap "Type"
+wait 700
+say == the type list again: the type in use (Repeater) has the blue dot, the others white (expect popup=list popup_title='Show which type?')
+dump
+shot p05b-filter-type-in-use
+check filter-type-in-use
+key down
+key down
+wait 300
+say == Sensor, the last type, under the fold: the keys (or a drag) bring it in, the scrollbar says there is more
+shot p05c-filter-type-sensor
+key esc
+wait 400
 type t
 wait 800
 type t
@@ -58,25 +73,62 @@ wait 1500
 say == sorted by name (expect sort=name)
 dump
 shot p07-contacts-by-name
+key pgdn
+key pgdn
+key pgdn
+wait 300
+mark
+say == a row far down selected; U asks the board for its contacts again and the list is built again: the same contact stays selected (its index may move when rows above it change), the scroll stays
+type u
+wait 4000
+expect more contacts_builds
+expect same sel_key
+expect same contacts_scroll
+dump
+key home
+wait 300
 
-say == More: Advert, Zero-hop, Refresh, Nearby, Select (expect popup=menu)
+say == More: Send advert, Nearby, Manage contacts: the three rows fit at 640x480 (expect popup=menu)
 tap "More"
 wait 700
 dump
 shot p08-more-menu
 check more-menu
-key down
-key down
-key down
-key down
-key enter
+tap "Send advert"
+wait 700
+say == Send advert: the arrow choice of the scope, Flood first (expect popup=choice popup_title='Send advert' popup_value='Flood (whole mesh)')
+dump
+shot p08b-send-advert
+check send-advert
+tap "<right>"
+wait 300
+say == Zero-hop chosen (expect popup_value='Zero-hop (neighbours)')
+dump
+shot p08c-send-advert-zero-hop
+tap "OK"
+wait 800
+say == sent: a zero-hop advert (expect popup=none and a notice)
+dump
+tap "More"
+wait 700
+tap "Send advert"
+wait 700
+say == the next time it starts on the scope used last (expect popup=choice popup_value='Zero-hop (neighbours)')
+dump
+tap "Cancel"
+wait 400
+say == Cancel sends nothing (expect popup=none)
+dump
+tap "More"
+wait 700
+tap "Manage contacts"
 wait 700
 type a
 wait 400
 key down
-type
+key enter
 wait 400
-say == the select mode, all marked but one (expect select=1)
+say == Manage contacts (the select mode), all marked but one (expect select=1)
 dump
 shot p09-select-mode
 check select-mode
@@ -154,9 +206,18 @@ key up
 key up
 wait 300
 shot p18-packet-log-selected
-type s
 key esc
 wait 400
+key end
+wait 400
+mark
+say == Settings at its end while the capture runs: the Packet log row changes, the list is built again; the highlight (Save) and the scroll stay
+wait 9000
+expect more settings_builds
+expect same settings_sel
+expect same settings_scroll
+dump
+shot p20-settings-after-refresh
 
 say == the message search over Chats (Tab, Ctrl+F) (expect search_open=1)
 key tab

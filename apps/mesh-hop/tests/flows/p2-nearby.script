@@ -8,10 +8,7 @@ key tab
 wait 600
 tap "More"
 wait 500
-key down
-key down
-key down
-key enter
+tap "Nearby"
 wait 600
 say == the Nearby list (expect nearby_open=1 nearby=3/3 pending=3 contacts=4)
 dump

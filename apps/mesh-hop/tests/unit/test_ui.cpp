@@ -991,22 +991,22 @@ static void test_history_ui()
     CHECK(history_day_options() == std::vector<int>({7, 30, 90}));
     CHECK(history_cutoff(kNow, 30) == kNow - 30 * 86400 && history_cutoff(kNow, 7) == kNow - 7 * 86400 && history_cutoff(50, 7) == 0 && history_cutoff(kNow, 0) == 0);
 
-    // the Settings list has a History section before the last two rows; its rows are selectable except the note
+    // the Settings list has a History section before the last two rows; every row of it is selectable (P3: no hint row)
     SettingsContext ctx;
     ctx.connected = true;
     ctx.channels = {0, 1};
     const auto layout = settings_layout(ctx);
-    int all_at = -1, older_at = -1, note_at = -1, undo_at = -1, header_at = -1;
+    int all_at = -1, older_at = -1, undo_at = -1, header_at = -1;
     for (size_t i = 0; i < layout.size(); ++i) {
         if (layout[i].kind == SRowKind::HistoryAll) all_at = static_cast<int>(i);
         if (layout[i].kind == SRowKind::HistoryOlder) older_at = static_cast<int>(i);
-        if (layout[i].kind == SRowKind::HistoryNote) note_at = static_cast<int>(i);
         if (layout[i].kind == SRowKind::Undo) undo_at = static_cast<int>(i);
         if (layout[i].kind == SRowKind::Header && layout[i].arg == 6) header_at = static_cast<int>(i);
     }
-    CHECK(header_at > 0 && all_at == header_at + 1 && older_at == all_at + 1 && note_at == older_at + 1 && undo_at > note_at);
+    CHECK(header_at > 0 && all_at == header_at + 1 && older_at == all_at + 1 && undo_at > older_at);
+    CHECK(older_at + 1 < static_cast<int>(layout.size()) && layout[static_cast<size_t>(older_at) + 1].kind == SRowKind::Header);   // the next section
     CHECK(layout.back().kind == SRowKind::Save && layout[layout.size() - 2].kind == SRowKind::Undo);
-    CHECK(settings_row_selectable(SRowKind::HistoryAll) && settings_row_selectable(SRowKind::HistoryOlder) && !settings_row_selectable(SRowKind::HistoryNote) &&
+    CHECK(settings_row_selectable(SRowKind::HistoryAll) && settings_row_selectable(SRowKind::HistoryOlder) &&
           !settings_row_selectable(SRowKind::Header) && settings_row_selectable(SRowKind::Save) && settings_row_selectable(SRowKind::Channel));
 
     // the 3 s hold on a name

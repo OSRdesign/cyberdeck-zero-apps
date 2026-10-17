@@ -34,8 +34,8 @@ static void test_pages_ui()
     // the row kinds of Settings: read-outs carry nothing, pages a chevron, values a chevron after the value, actions a dot
     {
         CHECK(settings_row_aff(SRowKind::Header) == Aff::None);
-        for (SRowKind k : {SRowKind::Info, SRowKind::GpsNotice, SRowKind::StatsNotice, SRowKind::PathHashNotice, SRowKind::RepeatNotice,
-                           SRowKind::AutoAddNotice, SRowKind::ChannelsNotice, SRowKind::HistoryNote})
+        for (SRowKind k : {SRowKind::Info, SRowKind::GpsNotice, SRowKind::StatsNotice, SRowKind::PathHashNotice,
+                           SRowKind::AutoAddNotice, SRowKind::ChannelsNotice})
             CHECK(settings_row_aff(k) == Aff::Info);
         for (SRowKind k : {SRowKind::Position, SRowKind::Stats, SRowKind::PacketLog, SRowKind::Channel, SRowKind::AddChannel})
             CHECK(settings_row_aff(k) == Aff::Open);
@@ -53,6 +53,44 @@ static void test_pages_ui()
             if (k == SRowKind::Header) continue;
             CHECK(settings_row_selectable(k) == (a == Aff::Open || a == Aff::Edit || a == Aff::Action));
         }
+    }
+
+    // a refresh of Settings keeps the highlight on the same row (kind and argument), never back to the top
+    {
+        SettingsContext ctx;
+        ctx.connected = true;
+        ctx.have_self = true;
+        ctx.board_known = true;
+        ctx.channels = {0, 1, 2};
+        ctx.channel_admin.available = true;
+        const std::vector<SRowSpec> before = settings_layout(ctx);
+        int save = -1, ch2 = -1, first = -1;
+        for (size_t i = 0; i < before.size(); ++i) {
+            if (before[i].kind == SRowKind::Save) save = static_cast<int>(i);
+            if (before[i].kind == SRowKind::Channel && before[i].arg == 2) ch2 = static_cast<int>(i);
+            if (first < 0 && settings_row_selectable(before[i].kind)) first = static_cast<int>(i);
+        }
+        CHECK(save > 0 && ch2 > 0 && first >= 0);
+        CHECK(keep_selected_row(before, save, before) == save);                 // nothing changed: the same row
+        CHECK(keep_selected_row(before, -1, before) == first);                  // nothing selected yet: the first row that acts
+        ctx.other_boards = 2;                                                   // a row appears above Save: Save moves down, the highlight with it
+        const std::vector<SRowSpec> more = settings_layout(ctx);
+        CHECK(more.size() == before.size() + 1 && more[static_cast<size_t>(keep_selected_row(before, save, more))].kind == SRowKind::Save);
+        ctx.other_boards = 0;
+        ctx.channels = {0, 1};                                                  // the selected channel went: the nearest row that acts, not the top
+        const std::vector<SRowSpec> fewer = settings_layout(ctx);
+        const int kept = keep_selected_row(before, ch2, fewer);
+        CHECK(kept > first && settings_row_selectable(fewer[static_cast<size_t>(kept)].kind) && std::abs(kept - ch2) <= 2);
+        const int info = 1;                                                     // a read-out (Board) was selected: the nearest row that acts
+        CHECK(before[info].kind == SRowKind::Info && keep_selected_row(before, info, before) == first);
+        CHECK(keep_selected_row(before, save, {}) == -1);
+    }
+
+    // More > Send advert: the arrow choice of the scope, in the words of the Settings row, starting on the scope used last
+    {
+        const Choice f = make_send_advert_choice(true), z = make_send_advert_choice(false);
+        CHECK(f.title == "Send advert" && f.labels.size() == 2 && f.labels[0] == "Flood (whole mesh)" && f.labels[1] == "Zero-hop (neighbours)");
+        CHECK(f.index == 0 && f.initial == 0 && z.index == 1 && z.initial == 1 && f.details.size() == 2 && !f.note.empty());
     }
 
     // the Sort dialog: the six column titles of 0.3.0, a direction for each
@@ -80,8 +118,8 @@ static void test_pages_ui()
         v.group = "Friends";
         CHECK(contact_view_summary(12, 193, v) == "12 of 193  \xC2\xB7  Repeater  \xC2\xB7  Last 24 h  \xC2\xB7  Group Friends");
         CHECK(std::string(type_filter_label(TypeFilter::All)) == "All types" && std::string(age_filter_label(AgeFilter::Week)) == "Last 7 days");
-        CHECK(contact_marked_summary(1, 0) == "1 contact marked");
-        CHECK(contact_marked_summary(3, 1) == "3 contacts marked (+1 hidden by the filters)");
+        CHECK(contact_marked_summary(1, 0) == "Manage contacts: 1 selected");
+        CHECK(contact_marked_summary(3, 1) == "Manage contacts: 3 selected (+1 hidden by the filters)");
     }
 
     // a contact row's second line and its distance

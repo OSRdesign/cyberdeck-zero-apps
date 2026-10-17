@@ -37,15 +37,10 @@ dump
 key esc
 wait 300
 
-# select mode (More > Select: the fifth row of the menu, under the fold at 640x480): mark three rows by touch, the bar changes,
-# Delete shows the count
+# select mode (More > Manage contacts, the third row of the menu): mark three rows by touch, the bar changes, Delete shows the count
 tap "More"
 wait 500
-key down
-key down
-key down
-key down
-key enter
+tap "Manage contacts"
 wait 400
 say == select mode (expect select=1 selected=0)
 dump

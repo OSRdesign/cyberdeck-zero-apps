@@ -26,16 +26,24 @@ tap "Contacts"
 tap "Contacts"
 wait 400
 expect text "More"
-expect notext "Zero-hop"
+expect notext "Send advert"
 check contacts
-# More opens the menu with the board's actions; Cancel closes it
+# More opens the menu with the board's actions; Send advert opens the arrow choice of its scope (Flood, Zero-hop); Cancel closes both
 tap "More"
 wait 400
-expect text "Zero-hop"
+expect text "Send advert"
+expect text "Manage contacts"
 check more-menu
+shot more-menu
+tap "Send advert"
+wait 400
+expect text "Flood (whole mesh)"
+check send-advert
+shot send-advert
 tap "Cancel"
 wait 300
-expect notext "Zero-hop"
+expect notext "Flood (whole mesh)"
+expect notext "Send advert"
 
 # the Esc button of a page goes back to Home
 tap "Esc"
