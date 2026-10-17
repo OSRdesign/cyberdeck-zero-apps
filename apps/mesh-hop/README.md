@@ -41,6 +41,12 @@ Made with the simulator (`mesh-hop-script`, a simulated board with invented name
 | ![Statistics](../../docs/screenshots/mesh-hop-statistics.png) Statistics of the board | ![Chats at 800x480](../../docs/screenshots/mesh-hop-chats-800.png) 800x480: Chats in two panes, the conversation follows the selected chat |
 | ![Contacts at 800x480](../../docs/screenshots/mesh-hop-contacts-800.png) 800x480: Contacts, with the SNR on the rows | |
 
+**On real boards** (0.4.0 build, 2026-10-18, Home list with a connected radio board; nothing personal on these pages):
+
+| | | |
+| --- | --- | --- |
+| ![Deck, 640x480](../../docs/screenshots/mesh-hop-home-deck.png) Deck (Pi Zero 2 W), 640x480 | ![Pi 3A+, 800x480](../../docs/screenshots/mesh-hop-home-3a.png) Pi 3A+ with the Waveshare 4.3" DSI, 800x480, touch only | ![HackBerry, 720x720](../../docs/screenshots/mesh-hop-home-hackberry.png) HackBerry CM5, 720x720, with its hint line |
+
 ## Screens and sizes
 
 * The screen must be at least **640x480** (`X-MinSize=640x480`; a smaller one shows a notice and a way out).

@@ -51,7 +51,7 @@ Choose by this order: **A** unless the program already exists (then **C**) or is
 ### Sizes: tokens, never pixels
 
 The launcher publishes its design tokens for the current panel (`screen.state` and `cp0_ui_metrics_get()`): spacing
-s/m/l, radius s/m/l, `header`, `row` (7 mm), `target` (9 mm), `dialog_max_w`, text sizes title/heading/body/caption.
+s/m/l, radius s/m/l, `header`, `row` (7 mm), `target` (7 mm, the same size as `row`), `dialog_max_w`, text sizes title/heading/body/caption.
 The deck (640x480, 11.3 px/mm) values, for orientation only:
 
 | Token | Deck 640x480 | Meaning |
@@ -59,7 +59,7 @@ The deck (640x480, 11.3 px/mm) values, for orientation only:
 | `space` s/m/l | 8 / 16 / 20 | gaps and margins |
 | `header` | 56 | the page header (title, Esc, status strip) |
 | `row` | 79 | a list or form row (at least 7 mm) |
-| `target` | 102 | a button or touch target (at least 9 mm) |
+| `target` | 79 | a button or touch target (at least 7 mm; 102 px / 9 mm with a launcher before 550465f) |
 | `text` title/heading/body/caption | 32 / 28 / 24 / 18 | font sizes |
 
 Rules:
@@ -288,7 +288,7 @@ deploys; the **owner runs the physical steps** from a written protocol.
 | Layer | What | Where |
 |---|---|---|
 | **1. Unit tests** | the app's logic without LVGL (`core/`): navigation, parsers (fixtures of `/proc`, `/sys` and command output), rules, state machines; plus the package files: the `.desktop` has `X-Fullscreen`, `X-MinSize` equal to `AppSpec`, `Exec` and `Icon` resolve to files of `root/`, `app.json` is complete | `tests/test_core.cpp` in the template; `build.sh host` runs it |
-| **2. Headless scenes** | the real UI on a plain LVGL display at 640x480, 800x480, 720x720, 1280x720 and 1024x600 (480x320 for the "needs 640x480" notice): scripted keys and taps, PNG shots, layout checks (nothing off-screen, rows and targets at least 7 and 9 mm, nothing under the header or the on-screen keyboard), one contact sheet per scene | `tests/scenes/*.scene`; [`_common/headless/README.md`](../apps/_common/headless/README.md) |
+| **2. Headless scenes** | the real UI on a plain LVGL display at 640x480, 800x480, 720x720, 1280x720 and 1024x600 (480x320 for the "needs 640x480" notice): scripted keys and taps, PNG shots, layout checks (nothing off-screen, rows and targets at least 5/7 mm, nothing under the header or the on-screen keyboard), one contact sheet per scene | `tests/scenes/*.scene`; [`_common/headless/README.md`](../apps/_common/headless/README.md) |
 | **3. Board protocol** | a written `tests/BOARD-TESTS.md` in the style of the template's: numbered steps with the exact command, the expected picture or log line, the cleanup | [`BOARD-TESTS.md`](../apps/cyberdeck-app-template/tests/BOARD-TESTS.md) |
 
 Scenes every app has: each page; the form with the on-screen keyboard (`keyboards 0`, then `keyboards 1`, then `osk force`); an error line; a dialog;
