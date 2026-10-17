@@ -1,0 +1,118 @@
+# Mesh Hop (P2b, the shell; P3, the pages; P4, Chats and the on-screen keyboard): Home is a list (Chats, Contacts, Settings, with a
+# chevron and a short state each), the header has the Esc button, the caption line says the board and the notices; a page has the same
+# header and its Esc goes back to Home, where it asks "Quit Mesh Hop?". Every page fills the width of the screen (no 640 px stage any
+# more): Chats is one pane at 640x480 and two on the other sizes (the bar over the list). At the five sizes, no board (the app
+# offline). Taps go by label (a first tap on a row selects it, the second opens it), the keys come through the shared keyboard bridge.
+# The harness's input.state says "no keyboard" (keyboards 0): the shared rule lets the on-screen keyboard show for a field that is
+# typed into (the search words here), and `keyboards 1` (a keyboard connects) puts it away. `check` runs the shared layout checks
+# (rows 7 mm, list rows 5 mm, buttons 9 mm, nothing off the screen or under the header, the field above the on-screen keyboard and
+# nothing to press under it). Mesh Hop's own buttons are 7 mm (ROW, the user's decision for this app: Send, the arrows of a choice,
+# the buttons of its dialogs): the screens that show them are checked by tests/flows (run_flows.sh sizes, the same five sizes)
+# with that rule, not here, where the shared rule wants 9 mm.
+title Mesh Hop: Home, the shell, the pages and the on-screen keyboard at five sizes
+env MESHHOP_DATA /tmp/mesh-hop-scene-data
+env MESHHOP_PORT /nonexistent/ttyMH
+env MESHHOP_ONLINE 0
+sizes 640x480 800x480 720x720 1024x600 1280x720
+
+wait 900
+expect text "Chats"
+expect text "Contacts"
+expect text "Settings"
+expect text "Esc"
+expect notext "Map"
+expect notext "Terminal"
+expect notext "More"
+expect noquit
+
+# Contacts from Home: a first tap selects the row, the second opens it. One action bar: Filter, Sort, More
+tap "Contacts"
+tap "Contacts"
+wait 400
+expect text "More"
+expect notext "Send advert"
+check contacts
+# More opens the menu with the board's actions; Send advert opens the arrow choice of its scope (Flood, Zero-hop); Cancel closes both
+tap "More"
+wait 400
+expect text "Send advert"
+expect text "Manage contacts"
+tap "Send advert"
+wait 400
+expect text "Flood (whole mesh)"
+tap "Cancel"
+wait 300
+expect notext "Flood (whole mesh)"
+expect notext "Send advert"
+
+# the Esc button of a page goes back to Home
+tap "Esc"
+wait 400
+expect notext "More"
+expect text "Settings"
+
+# Settings, a row of its list opens the packet log (a sub-page: a first tap selects the row, the second opens it); the header Esc
+# goes back to Settings, then Home
+tap "Settings"
+tap "Settings"
+wait 400
+expect text "Node name"
+check settings
+tap "Packet log"
+tap "Packet log"
+wait 300
+expect text "Clear"
+check packet-log
+tap "Esc"
+wait 400
+expect notext "Clear"
+expect text "Node name"
+
+# the keys through cp0_lvgl's queue and the app's key bridge: Tab goes to the next page (Settings -> Chats -> Contacts). Chats without
+# a board: the bar (Search, Add channel: 7 mm cells) and the empty list
+key tab
+wait 300
+expect text "Search"
+expect text "Add channel"
+check chats
+shot chats
+# the search: its words take the keys, and without a keyboard the on-screen keyboard comes; only the field stays above it at 640x480
+tap "Search"
+wait 1200
+expect osk on
+check search-osk
+shot search-osk
+# a keyboard connects: the on-screen keyboard goes within about a second, the filters and the results come back
+keyboards 1
+wait 1500
+expect osk off
+check search-keyboard
+key esc
+wait 400
+expect osk off
+expect text "Add channel"
+key tab
+expect text "More"
+# Esc of the keyboard goes back to Home; a second short Esc at Home never quits: it says how to leave (in the caption line)
+key esc
+wait 300
+expect notext "More"
+key esc
+expect text "Hold Esc 3 s to exit"
+expect noquit
+
+# the header's Esc at Home asks first: Cancel stays, Quit leaves (a touch-only board has no other way out)
+tap "Esc"
+wait 600
+expect text "Quit Mesh Hop?"
+expect noquit
+tap "Cancel"
+wait 400
+expect notext "Quit Mesh Hop?"
+expect noquit
+tap "Esc"
+wait 600
+expect text "Quit Mesh Hop?"
+tap "Quit"
+wait 400
+expect quit

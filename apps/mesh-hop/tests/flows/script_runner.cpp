@@ -9,24 +9,30 @@
  *   mesh-hop-script --script FILE [--shot-dir DIR] [--size WxH] [--ppmm N] [--resources DIR]
  *   (--ppmm: the panel density in px/mm x100, as a board's screen.state gives it; default the harness's for the size)
  *
- * Coordinates in a script are the 640x480 layout's of the page bodies (the stage of 0.3.0: the header 56 px, then the body
- * at y 56): at any size they are moved to where the body is now (App::script_origin: under the shell, or, in a sub-page,
- * under the caption line), so the same script runs at every size. The shell (header, tab row, dialogs) is tapped by its
- * labels: tap "Contacts", tap "Esc", tap "Quit". Keys go through cp0_lvgl's keyboard queue and the app's key bridge
- * (stage.hpp), as on a board; `bench` calls the app's key handler directly (the app's own cost per key).
+ * Coordinates in a script are the 640x480 layout's of the page bodies (0.3.0: the header 56 px, then the body at y 56): at
+ * any size they are moved to where the body is now (App::script_origin: under the caption line, a 640 px column centred on a
+ * wider screen), so the few coordinates left land where they did at 640x480. The pages are tapped by their labels: tap
+ * "Contacts", tap "Esc", tap "Quit". Keys go through cp0_lvgl's keyboard queue and the app's key bridge (stage.hpp), as on a
+ * board; `bench` calls the app's key handler directly (the app's own cost per key).
  *
  * Script (one command per line, # starts a comment):
  *   wait <ms>   key <name>   type <text>   tap <x> <y>   tap "label" (or "<left>", "<right>": the arrows of a choice)
  *   tap "label" last (the last label of that text: a table's key label comes before its button)
- *   hold <x> <y> <ms> [shot]   drag <x1> <y1> <x2> <y2>
+ *   tapkey "label"               a key of the on-screen keyboard (its labels first: the top layer)
+ *   tapfield <n>                 the n-th text field shown (1: the first): the compose entry, the search words, a field of a dialog
+ *   @panes1 <command>            the command only while Chats is one pane (@panes2: two panes; the state line's panes=)
+ *   hold <x> <y> <ms> [shot]   hold "label" <ms> [shot]   drag <x1> <y1> <x2> <y2>
  *   bench <key> <n>   shot <name>   dump   sim <line>   say <text>
- *   stage                        the stage's place: centred, under the shell, inside the screen (a failure otherwise)
- *   keyboard on|off              a keyboard is there (the key hint line shows) or not
- *   check <name>                 the shared layout checks: "on-screen" (nothing cut by the screen edge) fails the run;
- *                                the size and header rules of the stage's own controls (Chats, until P4) are counted
- *                                only; everything outside the stage (the header, the dialogs, and the pages of P3 that
- *                                fill the width) must meet them: a failure otherwise
+ *   fill                         the page bodies fill the width of the screen (P4: no 640 px stage any more; a failure otherwise)
+ *   keyboard on|off              a keyboard is there (the key hint line shows, the on-screen keyboard may not show) or not
+ *                                (no hint line; the launcher's input.state says no keyboard: the shared rule lets the
+ *                                on-screen keyboard show for a field that is typed into)
+ *   check <name>                 the shared layout checks (nothing cut by the screen edge, rows 7 mm and list rows 5 mm,
+ *                                buttons 9 mm, nothing under the header, the field being typed into above the on-screen
+ *                                keyboard and nothing to press under it) and the size rules of every control: a failure
+ *                                otherwise; and nothing of a page body under the key hint line
  *   expect text "T" | notext "T" a visible label with exactly this text (or none)
+ *   expect osk on|off            the on-screen keyboard is up (or not)
  *   mark                         remembers the app's state line (what `dump` prints)
  *   expect same KEY | changed KEY | more KEY   KEY= of the state line now equals / differs from / is larger than at `mark`
  *                                (a refresh keeps the selection and the scroll: expect same settings_sel ...)
@@ -64,6 +70,21 @@ namespace {
 
 std::atomic<bool> g_quit{false};
 int g_w = 640, g_h = 480;
+std::string g_runtime;               // APPLAUNCH_STATE_DIR: the launcher's input.state for the on-screen keyboard's rule
+unsigned g_input_gen = 0;
+
+/* What the launcher writes about the keyboards (input.state, APP-CONTRACT section 10): `keyboard on` one keyboard, `keyboard off`
+ * none (the shared rule then lets the on-screen keyboard show for a field that asks). */
+void write_input_state(int keyboards)
+{
+    if (g_runtime.empty()) return;
+    const std::string path = g_runtime + "/input.state", tmp = path + ".tmp";
+    {
+        std::ofstream f(tmp);
+        f << "v=1\nkeyboards=" << keyboards << "\nlast_seen=0\nbt_keyboards=0\nkb_gone=0\nbt_gone=0\nvkb=auto\ngen=" << ++g_input_gen << "\n";
+    }
+    std::rename(tmp.c_str(), path.c_str());
+}
 
 void on_signal(int)
 {
@@ -76,7 +97,7 @@ void run_for(int ms)
 }
 
 /* The screen place of the 640x480 layout's (0, 0), where the flows' coordinates start (0, 0 without an app: the notice). */
-lv_point_t stage_origin()
+lv_point_t body_origin()
 {
     if (Session *s = running_session()) return s->app().script_origin();
     return {0, 0};
@@ -84,7 +105,7 @@ lv_point_t stage_origin()
 
 void touch(bool pressed, int x, int y)
 {
-    const lv_point_t o = stage_origin();
+    const lv_point_t o = body_origin();
     headless::platform_touch(pressed, x + o.x, y + o.y);
 }
 
@@ -206,15 +227,30 @@ struct ShellStats {
     int controls = 0, failures = 0, min_row = 1 << 20, min_button = 1 << 20, min_header = 1 << 20, min_list_row = 1 << 20;
 };
 
-/* Every pressable control outside the stage (the shell: the header's Esc, a dialog and its buttons, the keys; the pages of P3)
+/* Every pressable control of the screen (the shell: the header's Esc, a dialog and its buttons; the pages; `skip`: a subtree left out)
  * meets the shared size rules: the header's Esc the header rule, a button TARGET, a row of a vertically scrolling list
  * LIST_ROW (a tap there only moves the highlight: CompactList's compact rows, the virtual lists of the pages), anything else
  * ROW. A control that does not hold a pressable child of its own counts (a row with a button inside is the button). */
-void shell_walk(lv_obj_t *obj, lv_obj_t *stage, const cp0_ui_metrics_t *m, int header_rule, int header_h, ShellStats &st)
+/* Mesh Hop's buttons are ROW high (7 mm, the user's decision for this app): a finding of the shared checks "size: button ... WxH@(x,y)
+ * is under TARGET" is no finding here when H reaches ROW. Every other finding stays. */
+bool button_meets_row(const std::string &finding, int row)
 {
-    if (!obj || obj == stage) return;
+    if (finding.rfind("size: button ", 0) != 0) return false;
+    const size_t end = finding.rfind(" is under TARGET ");
+    if (end == std::string::npos || end == 0) return false;
+    const size_t sp = finding.rfind(' ', end - 1);
+    if (sp == std::string::npos) return false;
+    const std::string area = finding.substr(sp + 1, end - sp - 1);          // "WxH@(x,y)"
+    const size_t x = area.find('x'), at = area.find('@');
+    if (x == std::string::npos || at == std::string::npos || at <= x + 1) return false;
+    return std::atoi(area.substr(x + 1, at - x - 1).c_str()) >= row;
+}
+
+void shell_walk(lv_obj_t *obj, lv_obj_t *skip, const cp0_ui_metrics_t *m, int header_rule, int header_h, ShellStats &st)
+{
+    if (!obj || obj == skip) return;
     if (lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN) || lv_obj_get_style_opa(obj, LV_PART_MAIN) == LV_OPA_TRANSP) return;
-    for (uint32_t i = 0; i < lv_obj_get_child_count(obj); ++i) shell_walk(lv_obj_get_child(obj, static_cast<int32_t>(i)), stage, m, header_rule, header_h, st);
+    for (uint32_t i = 0; i < lv_obj_get_child_count(obj); ++i) shell_walk(lv_obj_get_child(obj, static_cast<int32_t>(i)), skip, m, header_rule, header_h, st);
     if (!pressable(obj) || !shown(obj)) return;
     for (uint32_t i = 0; i < lv_obj_get_child_count(obj); ++i) {          // a pressable child counts instead of its parent
         lv_obj_t *c = lv_obj_get_child(obj, static_cast<int32_t>(i));
@@ -228,8 +264,12 @@ void shell_walk(lv_obj_t *obj, lv_obj_t *stage, const cp0_ui_metrics_t *m, int h
         st.min_header = std::min(st.min_header, h);
         if (h < header_rule) ++st.failures;
     } else if (lv_obj_check_type(obj, &lv_button_class)) {
+        // Mesh Hop's buttons are ROW high (7 mm, the user's decision for this app), like its rows: not the shared TARGET (9 mm)
         st.min_button = std::min(st.min_button, h);
-        if (h < m->tok[CP0_TOK_TARGET]) ++st.failures;
+        if (h < m->tok[CP0_TOK_ROW_H]) {
+            ++st.failures;
+            std::printf("  button under ROW: %dx%d at (%d,%d)\n", static_cast<int>(a.x2 - a.x1 + 1), h, static_cast<int>(a.x1), static_cast<int>(a.y1));
+        }
     } else {
         lv_obj_t *parent = lv_obj_get_parent(obj);
         const bool in_list = parent && lv_obj_has_flag(parent, LV_OBJ_FLAG_SCROLLABLE) && (lv_obj_get_scroll_dir(parent) & LV_DIR_VER);
@@ -303,6 +343,13 @@ int run_script(const std::string &file, const std::string &shot_dir)
         ++lineno;
         if (!line.empty() && line.back() == '\r') line.pop_back();
         if (line.empty() || line[0] == '#') continue;
+        // @panes1 / @panes2: a step for one layout of Chats only (one pane at 640x480 and 720x720, two on the wider screens)
+        if (line.rfind("@panes", 0) == 0 && line.size() > 7) {
+            Session *s = running_session();
+            const std::string want = line.substr(6, 1);
+            if (!s || state_value(s->app().debug_state(), "panes") != want) continue;
+            line = line.substr(line.find(' ') + 1);
+        }
         std::istringstream ss(line);
         std::string cmd;
         ss >> cmd;
@@ -364,15 +411,82 @@ int run_script(const std::string &file, const std::string &shot_dir)
                 touch(false, x, y);
                 run_for(80);
             }
+        } else if (cmd == "tapfield") {
+            // tapfield <n>: the n-th text field shown on the screen (1: the first, in the order of the objects), at its middle
+            int n = 1;
+            ss >> n;
+            std::vector<lv_obj_t *> fields;
+            std::function<void(lv_obj_t *)> walk = [&](lv_obj_t *o) {
+                if (!o || !shown(o)) return;
+                if (lv_obj_check_type(o, &lv_textarea_class)) {
+                    const lv_area_t a = headless::visible_area(o);
+                    if (a.x2 >= a.x1 && a.y2 >= a.y1) fields.push_back(o);
+                    return;
+                }
+                for (uint32_t i = 0; i < lv_obj_get_child_count(o); ++i) walk(lv_obj_get_child(o, static_cast<int32_t>(i)));
+            };
+            walk(lv_screen_active());
+            if (n < 1 || n > static_cast<int>(fields.size())) {
+                std::fprintf(stderr, "script:%d: no text field %d to tap (%d shown)\n", lineno, n, static_cast<int>(fields.size()));
+                ++failures;
+                continue;
+            }
+            const lv_area_t a = headless::visible_area(fields[static_cast<size_t>(n - 1)]);
+            const int x = (a.x1 + a.x2) / 2, y = (a.y1 + a.y2) / 2;
+            headless::platform_touch(true, x, y);
+            run_for(80);
+            headless::platform_touch(false, x, y);
+            run_for(80);
+        } else if (cmd == "tapkey") {
+            std::string rest;
+            std::getline(ss, rest);
+            const std::vector<std::string> w = words_of(rest);
+            lv_obj_t *label = w.empty() ? nullptr : headless::find_label(w[0], true);
+            if (!label) {
+                std::fprintf(stderr, "script:%d: no key labelled \"%s\" to tap\n", lineno, w.empty() ? "" : w[0].c_str());
+                ++failures;
+                continue;
+            }
+            const lv_area_t a = headless::visible_area(headless::clickable_of(label));
+            const int x = (a.x1 + a.x2) / 2, y = (a.y1 + a.y2) / 2;
+            headless::platform_touch(true, x, y);
+            run_for(60);
+            headless::platform_touch(false, x, y);
+            run_for(120);
         } else if (cmd == "hold") {
-            // hold <x> <y> <ms> [shot-name]: a finger kept down; with a name, a screenshot is taken at the end of the hold (before the release)
+            // hold <x> <y> <ms> [shot-name] or hold "label" <ms> [shot-name]: a finger kept down; with a name, a screenshot is taken at
+            // the end of the hold (before the release)
+            std::string rest;
+            std::getline(ss, rest);
+            const std::vector<std::string> w = words_of(rest);
             int x = 0, y = 0, ms = 0;
             std::string shot;
-            ss >> x >> y >> ms >> shot;
-            touch(true, x, y);
+            bool screen = false;
+            if (!w.empty() && !w[0].empty() && (w[0][0] < '0' || w[0][0] > '9')) {      // a label
+                lv_obj_t *label = headless::find_label(w[0], false);
+                if (!label) {
+                    std::fprintf(stderr, "script:%d: nothing labelled \"%s\" to hold\n", lineno, w[0].c_str());
+                    ++failures;
+                    continue;
+                }
+                const lv_area_t a = headless::visible_area(headless::clickable_of(label));
+                x = (a.x1 + a.x2) / 2;
+                y = (a.y1 + a.y2) / 2;
+                ms = w.size() > 1 ? std::atoi(w[1].c_str()) : 0;
+                if (w.size() > 2) shot = w[2];
+                screen = true;
+            } else {
+                x = w.size() > 0 ? std::atoi(w[0].c_str()) : 0;
+                y = w.size() > 1 ? std::atoi(w[1].c_str()) : 0;
+                ms = w.size() > 2 ? std::atoi(w[2].c_str()) : 0;
+                if (w.size() > 3) shot = w[3];
+            }
+            if (screen) headless::platform_touch(true, x, y);
+            else touch(true, x, y);
             run_for(ms);
             if (!shot.empty() && !save_shot(shot_dir, shot)) ++failures;
-            touch(false, x, y);
+            if (screen) headless::platform_touch(false, x, y);
+            else touch(false, x, y);
             run_for(150);
         } else if (cmd == "drag") {
             int x1 = 0, y1 = 0, x2 = 0, y2 = 0;
@@ -418,6 +532,7 @@ int run_script(const std::string &file, const std::string &shot_dir)
             std::string state;
             ss >> state;
             Platform::set_keyboard_assumed(state == "on");
+            write_input_state(state == "on" ? 1 : 0);
             run_for(1300);                                    // the app looks for a keyboard once a second
         } else if (cmd == "mark") {
             run_for(60);
@@ -443,48 +558,47 @@ int run_script(const std::string &file, const std::string &shot_dir)
             std::string text;
             std::getline(ss, text);
             std::printf("%s\n", text.c_str() + (text.empty() ? 0 : 1));
-        } else if (cmd == "stage") {
+        } else if (cmd == "fill") {
             run_for(60);
             lv_area_t sa{0, 0, -1, -1};
-            if (session && session->platform().stage()) lv_obj_get_coords(session->platform().stage(), &sa);
-            const int want_x = (g_w - kScreenW) / 2;
+            if (session && session->app().body_root()) lv_obj_get_coords(session->app().body_root(), &sa);
             cp0_ui_roller_page_t page{};
             cp0_ui_roller_page(cp0_ui_metrics_get(), cp0::ui::status_strip_left(), &page);
-            const bool ok = session && sa.x1 == want_x && sa.x2 - sa.x1 + 1 == kScreenW && sa.y1 >= page.header_h && sa.y2 <= g_h - 1;
-            std::printf("stage %s: %dx%d at (%d,%d) on %dx%d, centred at x %d, under the header (%d px)\n", ok ? "PASS" : "FAIL", static_cast<int>(sa.x2 - sa.x1 + 1),
-                        static_cast<int>(sa.y2 - sa.y1 + 1), static_cast<int>(sa.x1), static_cast<int>(sa.y1), g_w, g_h, want_x, page.header_h);
+            const bool ok = session && sa.x1 == 0 && sa.x2 == g_w - 1 && sa.y1 >= page.header_h && sa.y2 <= g_h - 1;
+            std::printf("fill %s: the page bodies %dx%d at (%d,%d) on %dx%d: the whole width, under the header (%d px)\n", ok ? "PASS" : "FAIL",
+                        static_cast<int>(sa.x2 - sa.x1 + 1), static_cast<int>(sa.y2 - sa.y1 + 1), static_cast<int>(sa.x1), static_cast<int>(sa.y1),
+                        g_w, g_h, page.header_h);
             if (!ok) ++failures;
         } else if (cmd == "check") {
             std::string name;
             ss >> name;
             run_for(250);
-            const headless::CheckResult r = headless::check_layout(!session);
-            int onscreen = 0, other = 0;
-            for (const std::string &f : r.failures) {
-                if (f.rfind("on-screen", 0) == 0) {
-                    ++onscreen;
-                    std::printf("check %s FAIL %s\n", name.c_str(), f.c_str());
-                } else {
-                    ++other;
-                }
+            headless::CheckResult r = headless::check_layout(!session);
+            {   // Mesh Hop's rule for buttons: ROW (the shared one is TARGET); the rest of the shared findings stay
+                const int row = cp0_ui_metrics_get()->tok[CP0_TOK_ROW_H];
+                std::vector<std::string> kept;
+                for (const std::string &f : r.failures)
+                    if (!button_meets_row(f, row)) kept.push_back(f);
+                r.failures.swap(kept);
             }
-            // the shell (everything outside the stage) must meet the size rules; the stage's own controls are only counted
+            for (const std::string &f : r.failures) std::printf("check %s FAIL %s\n", name.c_str(), f.c_str());
+            // every control of the screen (the shell, the pages, the dialogs) meets the size rules too
             ShellStats sh;
-            if (session && session->platform().stage()) {
+            if (session) {
                 const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
                 cp0_ui_roller_page_t page{};
                 cp0_ui_roller_page(m, cp0::ui::status_strip_left(), &page);
                 const int header_rule = std::min(m->tok[CP0_TOK_TARGET], page.header_h - 2 * m->shell.status_top);
-                shell_walk(lv_screen_active(), session->platform().stage(), m, header_rule, page.header_h, sh);
+                shell_walk(lv_screen_active(), nullptr, m, header_rule, page.header_h, sh);
             }
-            std::printf("check %s %s: on-screen %d failure(s); %d size/header finding(s) in all (the stage of Chats included: not converted yet)", name.c_str(),
-                        onscreen ? "FAIL" : "PASS", onscreen, other);
+            std::printf("check %s %s: %d finding(s) of the shared layout checks", name.c_str(), r.failures.empty() ? "PASS" : "FAIL",
+                        static_cast<int>(r.failures.size()));
             for (const std::string &n : r.notes) std::printf(" | %s", n.c_str());
             std::printf("\n");
-            std::printf("shell %s %s: %d controls outside the stage, %d under the size rules (rows min %d, list rows min %d, buttons min %d, header min %d)\n", name.c_str(),
+            std::printf("shell %s %s: %d controls, %d under the size rules (rows min %d, list rows min %d, buttons min %d, header min %d)\n", name.c_str(),
                         sh.failures ? "FAIL" : "PASS", sh.controls, sh.failures, sh.min_row == (1 << 20) ? 0 : sh.min_row,
                         sh.min_list_row == (1 << 20) ? 0 : sh.min_list_row, sh.min_button == (1 << 20) ? 0 : sh.min_button, sh.min_header == (1 << 20) ? 0 : sh.min_header);
-            failures += onscreen + sh.failures;
+            failures += static_cast<int>(r.failures.size()) + sh.failures;
             // the key hint line (shown while a keyboard is there): the bodies and their lists end above it
             if (session) {
                 std::vector<lv_obj_t *> roots;
@@ -528,6 +642,7 @@ int run_script(const std::string &file, const std::string &shot_dir)
             std::string detail;
             if (what == "text") ok = headless::find_label(arg, false) != nullptr;
             else if (what == "notext") ok = headless::find_label(arg, false) == nullptr;
+            else if (what == "osk") ok = cp0::ui::osk::visible() == (arg == "on");
             else if ((what == "same" || what == "changed" || what == "more") && session) {
                 const std::string was = state_value(marked, arg), now = state_value(session->app().debug_state(), arg);
                 ok = what == "same" ? was == now : what == "changed" ? was != now : std::atoll(now.c_str()) > std::atoll(was.c_str());
@@ -608,6 +723,9 @@ int main(int argc, char *argv[])
     const std::string runtime = (shot_dir.empty() ? std::string("/tmp") : shot_dir) + "/.runtime/applaunch";
     mkdirs(runtime);
     setenv("APPLAUNCH_STATE_DIR", runtime.c_str(), 1);
+    unsetenv("APPLAUNCH_OSK");
+    g_runtime = runtime;
+    write_input_state(1);                                     // a keyboard, as the old headless mode (`keyboard off`: none)
     const std::string size = std::to_string(g_w) + "x" + std::to_string(g_h);
     setenv("APPLAUNCH_CONTRACT", "1", 1);
     setenv("APPLAUNCH_APP_MODE", "fullscreen", 1);

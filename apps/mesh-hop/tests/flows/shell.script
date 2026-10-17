@@ -4,11 +4,10 @@
 # simulated board. There is no tab row: the Esc button of a page goes back to Home, the one of Home asks "Quit Mesh Hop?".
 # Run at each size:   SIZE=1280x720 SCRIPT=shell.script sh ui_smoke.sh      (run_flows.sh stage runs the five)
 # Coordinates (rare) are the 640x480 layout's of the page bodies: mesh-hop-script moves them to where the body is. The shell is
-# tapped by its labels. `stage` checks that the stage is centred under the shell; `check` runs the shared layout checks: the
-# on-screen rule fails the run, and the controls OUTSIDE the stage (Home, the header, the dialogs) must meet the ROW / TARGET
-# sizes (the line "shell ..."); the controls of the page bodies are only counted until the pages are converted.
+# tapped by its labels. `fill` checks that the page bodies fill the width (P4: no 640 px stage any more); `check` runs the shared
+# layout checks and the size rules on every control (Home, the header, the pages, the dialogs): any finding fails the run.
 wait 3500
-stage
+fill
 say == Home with a keyboard (the hint line at the bottom) (expect home=1)
 dump
 shot h01-home-keyboard
@@ -31,31 +30,53 @@ shot h03b-chats-keyboard
 check chats-keyboard
 keyboard off
 
-# a direct conversation: the head of the conversation has Details and Options
+# a direct conversation: a first tap on its row selects it, a 3 s hold on it opens the Chats menu for it (Search messages, Add
+# channel, then its options and Details), the second tap opens it (one pane: its page, no bar there; two panes, the entry takes the
+# keys, the keyboard's here)
+keyboard on
+tap "Alice"
+wait 400
+hold "Alice" 3400
+wait 500
+say == the Chats menu for Alice (expect popup=menu popup_title='Options for Alice')
+expect text "Search messages"
+expect text "Mute this contact"
+dump
+shot h05-options-dialog
+check options-dialog
+key down
 key down
 key down
 key down
 wait 300
-say == a direct conversation (expect conv=d:...)
+expect text "Details"
+check options-dialog-end
+key esc
+wait 300
+tap "Alice"
+wait 600
+say == a direct conversation (expect conv=d:... conv_open=1; one pane: chat_bar=0)
 dump
 shot h04-conversation-options
 check conversation
 
-# the Options button opens the options of the conversation (a menu in a dialog)
-tap "Options"
+# Ctrl+O opens the same menu for the open conversation (a menu in a dialog)
+key ctrl-o
 wait 800
-say == the options (expect popup=menu)
+say == the menu (expect popup=menu)
 dump
-shot h05-options-dialog
-check options-dialog
+check options-dialog-keys
 key esc
 wait 300
 say == popup closed (expect popup=none)
 dump
 
-# back to Home, then Contacts (a Home row: the selection is on Chats, Down moves to Contacts)
+# back to Home (one pane: the list first; two panes: the list's keys first), then Contacts (a Home row: the selection is on Chats,
+# Down moves to Contacts)
+key esc
 key esc
 wait 400
+keyboard off
 say == Home again (expect home=1)
 dump
 key down

@@ -3,10 +3,12 @@
  *
  * Mesh Hop: the full-screen MeshCore messenger. The shell (page header with the Esc button and the status strip, the
  * caption line with the board state and the notices, the key hint line, the dialogs) is built from the launcher's widgets
- * (cp0::ui::Page, Dialog) and follows the screen. So do the pages of phase P3 (Contacts with a contact's details and
- * Nearby, Settings with the statistics and the packet log, the message search): they fill the width of the screen with the
- * margins of the page column (ui_pages.hpp page_column), every size from the layout service's tokens. Only Chats is still
- * laid out for a 640 px wide column, the stage (stage.hpp), centred under the shell (phase P4). Written with LVGL over the
+ * (cp0::ui::Page, Dialog) and follows the screen. So do the pages (P3: Contacts with a contact's details and Nearby,
+ * Settings with the statistics and the packet log, the message search; P4: Chats, the conversation and the compose view):
+ * they fill the width of the screen with the margins of the page column (ui_pages.hpp page_column), every size from the
+ * layout service's tokens. Chats is one pane on a Standard screen (640x480: the list, then the conversation) and two on
+ * the others when both fit (the list at the left, the conversation at the right); the text fields ask for the shared
+ * on-screen keyboard (the launcher's rule: no physical keyboard) while they are typed into. Written with LVGL over the
  * core/ layer (client, model, store). Input comes from the Platform as KeyEvents and LVGL pointer events; nothing here
  * talks to the radio except through meshzero::Client.
  */
@@ -126,6 +128,8 @@ public:
     /* New cells: rebuilt when the tags changed, else only the texts that changed. Never from inside a cell's own event. */
     void set_cells(const std::vector<CellSpec> &cells);
     void set_y(int y);
+    /* A new place and size (the cells are placed again). */
+    void set_area(int x, int y, int w, int h);
     lv_obj_t *root() const { return root_; }
     int height() const { return h_; }
 
@@ -134,7 +138,10 @@ private:
         CellSpec spec;
         lv_obj_t *obj = nullptr, *label = nullptr, *value = nullptr;
     };
-    void place(Cell &c, int index, int n);
+    /* The cells share the width equally; when a label would be cut that way, the width goes by the labels' own widths
+     * (each cell keeps at least its label, the rest is shared out). */
+    void place_all();
+    void place(Cell &c, int x, int w);
 
     lv_obj_t *root_ = nullptr;
     std::vector<Cell> cells_;
@@ -161,13 +168,16 @@ public:
     meshzero::Model &model() { return model_; }
     void select_tab(Tab t);
     /* The screen place of the (0, 0) of the 640x480 layout the scripted flows (tests/flows) give their coordinates in:
-     * the page bodies sit 56 px under the top of that layout. */
+     * the page bodies sit 56 px under the top of that layout, a 640 px column centred on a wider screen (the few
+     * coordinates the flows still tap land where they did at 640x480). */
     lv_point_t script_origin() const;
     /* One line with the state of the app (scripted tests). */
     std::string debug_state() const;
-    /* The containers of the page bodies (the stage, the full width, Home's list) and the key hint line (scripted layout checks:
+    /* The containers of the page bodies (the full width, Home's list) and the key hint line (scripted layout checks:
      * nothing of a body reaches under the hints). */
     void body_lists(std::vector<lv_obj_t *> &roots, lv_obj_t *&hint) const;
+    /* The page bodies' container (scripted checks: it fills the width of the screen). */
+    lv_obj_t *body_root() const { return wide_; }
 
     // LVGL callbacks (public for the static trampolines)
     void button_clicked(int tag);
@@ -218,7 +228,6 @@ private:
     void build_stats();
     void build_packet_log();
     void build_settings();
-    void build_placeholder(lv_obj_t **page, const char *title, const char *text);
     void build_popup();
     void build_hint_line();
     void build_home();
@@ -226,10 +235,12 @@ private:
     void key_home(const KeyEvent &e);
     void open_page(Tab t);
     void go_home();
-    void build_stage();
+    void build_body();
     void build_shell();
-    void layout_body();                  // sizes and places what depends on the height under the shell (page_h_, panel_h_)
+    void layout_body();                  // sizes and places what depends on the height under the shell (panel_h_)
     void layout_wide();                  // ... for the pages of the full width
+    void layout_chats();                 // ... for Chats: one or two panes, the compose view (chat_mode_)
+    void layout_search();                // ... for the search: the field, and the filters and results while they fit
     cp0_ui_list_layout_t settings_list_layout(int y, int h) const;
     void update_title();
     void update_caption();
@@ -244,6 +255,7 @@ private:
     // rendering
     void render();
     void render_chats();
+    void render_chat_list();
     void render_chat_messages(bool force);
     void render_contacts();
     void render_contacts_bar();
@@ -258,15 +270,46 @@ private:
     std::string hint_text() const;
     void update_compose_style();
     void set_page_visible();
+    /* The text of the conversation's caption line: "N left" while writing, "muted", or the nodes heard in the last hour. */
+    std::string conversation_info() const;
+    /* The compose view's line in the caption's place: the last message of the conversation, "Sender: text". */
+    std::string last_message_line() const;
+
+    // the on-screen keyboard (cp0::ui::osk, the shared rule: it shows only while no physical keyboard is there)
+    /* May it show now (cdk::osk_policy)? */
+    bool osk_may_show() const;
+    /* The field the state says is being typed into (the compose entry, an editor's field, the search words, a field of the
+     * Position box) asks for the keyboard; the one before gives it back. From render() and after every change of that
+     * state: the keyboard follows, by the rule (with a physical keyboard nothing shows). */
+    void sync_osk();
+    void release_osk();                  // before the field that has it is deleted
+    void on_osk_inset(int inset);        // the keyboard came or went: the room under the shell changes
+    bool compose_view() const;           // the keyboard is up for the compose entry: Chats is the compose view
+    /* A one-line text field drawn as the toolkit's cp0::ui::TextField (its colours, border, cursor and height); the app
+     * types into it itself (the key bridge: the US or FR layout, the editors' filters). tag: its click (0: none). */
+    lv_obj_t *make_text_field(lv_obj_t *parent, int tag, size_t max_len, int h);
+    void style_field(lv_obj_t *ta, bool editing);
 
     // state changes
     void invalidate() { dirty_ = true; }
     void notice(const std::string &text, bool ok);
     bool keyboard_ready() const;
     void select_chat_row(int index);
+    /* One pane: the conversation of the selected row as its own page (compose: the entry has the keys). Two panes: the
+     * entry gets the keys. */
+    void chat_activate(int index, bool compose);
+    void close_conversation();           // one pane: back to the list
+    bool conversation_visible() const;   // two panes, or the conversation page of one pane
     void open_conversation(const std::string &conv, bool focus_compose);
     void toggle_mute(const std::string &conv);
-    void open_conversation_options(const std::string &conv);
+    /* The Chats menu (a 3 s hold on a row, Ctrl+O): Search messages, Add channel, then the options of the selected
+     * conversation (mute, delete) and Details for a direct chat with a known contact. */
+    void open_chats_menu();
+    void open_contact_of_conversation();     // Details: the contact of the selected direct chat, in Contacts
+    int chat_list_top() const;               // the top of the list (and of two panes) in the page: under the bar
+    /* Mesh Hop's tap targets are ROW high (7 mm): the toolkit's Dialog makes its buttons TARGET high; after its layout they are
+     * made ROW high, the room going to a scrolling body, else the box gets shorter. Idempotent (cheap from the tick). */
+    void compact_dialog(cp0::ui::Dialog &d);
     void confirm_delete_conversation(const std::string &conv);
     void confirm_delete_all();
     void choose_delete_older();
@@ -396,6 +439,7 @@ private:
 
     // keys per screen
     void key_chats(const KeyEvent &e);
+    void key_chat_list(const KeyEvent &e);        // one pane, the list
     void key_contacts(const KeyEvent &e);
     void key_settings(const KeyEvent &e);
     void compose_edit(const KeyEvent &e);
@@ -423,7 +467,7 @@ private:
     uint64_t preset_poll_ms_ = 0;
     int days_choice_ = 30;
 
-    // fonts: the page bodies (the stage) keep their own sizes; the shell and the dialogs take the token sizes
+    // fonts: the token sizes of the layout service (and the builtin Montserrat of 0.3.0 for the few fixed sizes left)
     const lv_font_t *f_small_ = nullptr, *f_ui_ = nullptr, *f_big_ = nullptr;     // Montserrat 14 / 16 / 18
     const lv_font_t *f_value_small_ = nullptr;                                    // Montserrat 22: the "Loading..." box
     const lv_font_t *f_text_ = nullptr, *f_text_small_ = nullptr;                 // message text (DejaVu when available)
@@ -449,12 +493,22 @@ private:
     uint64_t other_boards_bytes_ = 0, other_cache_ms_ = 0;
 
     // chats
-    std::vector<ChatRow> chat_rows_;
+    std::vector<ChatRow> chat_rows_;     // the rows of the list (build_chat_rows without its "+ Add channel" row: the bar has it)
     std::string chat_sel_key_;
     int chat_sel_ = -1;
-    std::string conv_;                   // the conversation shown on the right
+    std::string conv_;                   // the conversation shown (two panes: at the right; one pane: on its page), or the selected one
     std::string built_conv_;
     uint32_t built_sig_ = 0;
+    bool conv_open_ = false;             // one pane: the conversation page is shown (not the list)
+    bool two_pane_fit_ = false;          // the screen has room for both panes at the token sizes (build_chats)
+    uint32_t chat_mode_ = ~0u;           // what layout_chats last laid out (panes, page, compose view, the room)
+    int msg_w_ = 0;                      // the width of a message in the conversation
+    // the on-screen keyboard
+    int osk_inset_ = 0;                  // its height while it is up (cp0::ui::osk), 0 otherwise
+    int inset_listener_ = 0;
+    lv_obj_t *osk_field_ = nullptr;      // the field that asked for it (sync_osk)
+    bool search_typing_ = false;         // the search words take the keys (without a physical keyboard: until Enter or Esc)
+    bool pos_typing_ = false;            // the Position box: the focused field takes the keys (without a physical keyboard: after a tap)
 
     // contacts
     ContactView cview_;                  // what the user chose: kept while the screen is left and re-entered
@@ -546,29 +600,28 @@ private:
     bool pop_dirty_ = false;             // the widgets of pop_ are built in the next tick
     bool pop_built_ = false;
 
-    // the shell: the page (header, caption), the tab row, the key hint line, the stage with the page bodies
+    // the shell: the page (header, caption), the key hint line, the page bodies under the caption line
     cp0_ui_roller_page_t layout_{};
     std::unique_ptr<cp0::ui::Page> shell_;
-    int tabs_y_ = 0, tab_h_ = 0, hint_h_ = 0, stage_x_ = 0;   // tabs_y_: the top of the stage and of Home, under the caption line (no tab row: tab_h_ is 0)
+    int tabs_y_ = 0, hint_h_ = 0;        // tabs_y_: the top of the page bodies and of Home, under the caption line
     bool at_home_ = true;                // Home: the main menu (Chats, Contacts, Settings); a page is open otherwise
     std::unique_ptr<cp0::ui::CompactList> home_list_;
-    lv_obj_t *wide_ = nullptr;           // the pages of the full width (P3), under the caption line, as high as the stage
+    lv_obj_t *wide_ = nullptr;           // the page bodies: the full width under the caption line, down to the hint line or the keyboard
     lv_obj_t *cap_alt_ = nullptr;        // a page's own grey line in the caption's place (the filter summary of Contacts...)
-    int panel_h_ = 400, page_h_ = 320;   // the height of a sub-page (it covers the tab row) and of a main page, in the stage
+    int panel_h_ = 400;                  // the height of the page bodies
     std::string title_key_, cap_text_;
     int cap_tone_ = -1;
     std::vector<std::function<void()>> posted_;
     lv_obj_t *hint_box_ = nullptr, *hint_label_ = nullptr;
 
     // widgets
-    lv_obj_t *screen_ = nullptr;          // the stage
     lv_obj_t *page_[5] = {};
-    // chats
+    // chats: the bar over the list (Search, Add channel; two panes: across both), the list, the conversation (its messages,
+    // the entry and Send)
+    ActionBar chat_bar_;
     RowList chat_list_;
-    lv_obj_t *chat_title_ = nullptr, *chat_info_ = nullptr, *msgs_ = nullptr, *compose_ = nullptr;
-    lv_obj_t *title_hold_ = nullptr, *chat_div_ = nullptr, *chat_line2_ = nullptr;
+    lv_obj_t *msgs_ = nullptr, *compose_ = nullptr, *chat_div_ = nullptr;
     lv_obj_t *send_btn_ = nullptr, *send_label_ = nullptr;
-    lv_obj_t *search_btn_ = nullptr, *details_btn_ = nullptr, *options_btn_ = nullptr;
     // contacts: the action bar (Filter, Sort, More; Done, Select..., Delete, Group... in the select mode) and the two-line rows
     ActionBar contacts_bar_;
     RowList contact_list_;
@@ -612,7 +665,8 @@ private:
     lv_obj_t *pos_now_ = nullptr, *pos_gps_ = nullptr, *pos_gps_label_ = nullptr;
     lv_obj_t *pos_label_[2] = {}, *pos_ta_[2] = {}, *pos_hint_ = nullptr;
     lv_obj_t *pos_clear_ = nullptr;
-    lv_obj_t *hold_box_ = nullptr, *hold_bar_ = nullptr, *hold_label_ = nullptr;
+    lv_obj_t *hold_box_ = nullptr, *hold_bar_ = nullptr, *hold_label_ = nullptr, *hold_track_ = nullptr;
+    int hold_track_w_ = 0;
     lv_obj_t *loading_label_ = nullptr;
 };
 

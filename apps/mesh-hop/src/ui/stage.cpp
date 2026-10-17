@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The stage and the keyboard bridge of Mesh Hop on the shared app platform (see stage.hpp).
+ * The keyboard bridge of Mesh Hop on the shared app platform (see stage.hpp).
  */
 
 #include "stage.hpp"
@@ -52,33 +52,15 @@ Platform::Platform(lv_obj_t *screen) : screen_(screen), keys_(detect_layout())
 
 Platform::~Platform()
 {
-    close_stage();
+    close();
     cp0_keyboard_set_lvgl_keypad_intercept(saved_intercept_);
     if (LV_EVENT_KEYBOARD != 0) lv_obj_remove_event_cb_with_user_data(screen_, keyboard_cb, this);
     if (current_ == this) current_ = nullptr;
 }
 
-void Platform::close_stage()
+void Platform::close()
 {
     on_key = nullptr;
-    if (stage_) lv_obj_delete(stage_);        /* (deleted with its page too: the app resets stage_ through adopt_stage) */
-    stage_ = nullptr;
-}
-
-lv_point_t Platform::to_stage(lv_point_t p) const
-{
-    if (!stage_) return p;
-    lv_area_t a;
-    lv_obj_get_coords(stage_, &a);
-    p.x -= a.x1;
-    p.y -= a.y1;
-    return p;
-}
-
-lv_point_t stage_point(lv_point_t screen_point)
-{
-    const Platform *p = Platform::current();
-    return p ? p->to_stage(screen_point) : screen_point;
 }
 
 bool Platform::touching() const

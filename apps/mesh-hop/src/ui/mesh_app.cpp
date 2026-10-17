@@ -9,6 +9,7 @@
 #include "cp0_font_service.hpp"
 #include "cp0_ui_metrics_lvgl.h"
 #include "input_state.hpp"
+#include "osk_policy.hpp"
 #include "position.hpp"
 #include "protocol.hpp"
 #include "sha256.hpp"
@@ -47,10 +48,12 @@ constexpr uint32_t kOkGreen = CP0_UI_OSK_ENTER_RGB;      // the primary button: 
 constexpr uint32_t kDangerRed = 0x7A2E24;
 constexpr uint32_t kOnAccent = 0x101010;                  // the text on an accent blue pill
 
-// ---- layout: the stage of Chats is 640 px wide (kScreenW); its height is what is left under the shell (App::layout_body). The
-// pages of P3 take the page column (ui_pages.hpp page_column), never wider than Net Toolbox's column.
-constexpr int kListW = 204;                // the left pane of Chats
+// ---- layout: the pages take the page column (ui_pages.hpp page_column), never wider than Net Toolbox's column; their height is
+// what is left under the shell (App::layout_body). Chats in two panes: the list takes about 35 % of the column's area.
 constexpr int kColumnCapW = 960;
+constexpr int kChatListPct = 35;
+constexpr int kListMinChars = 10;          // the narrowest list pane: a name of 10 average characters, the count and the chevron
+constexpr int kConvMinChars = 28;          // the narrowest conversation: a line of 28 average characters of the message text
 constexpr uint32_t kStartGuardMs = 600;    // the tap or Enter that started the app must not act
 constexpr uint32_t kNoticeMs = 4000;
 constexpr int kMaxShownMessages = 60;
@@ -73,11 +76,11 @@ enum Tag {
     kTagAgeChip = 50,
     kTagPopLeft = 60, kTagPopRight, kTagPopOk, kTagPopCancel, kTagPopYes, kTagPopNo,
     kTagPopItem = 70,      // 70..79
-    kTagTitleHold = 80,    // the title of the open conversation (hold 3 s: options)
+    kTagTitleHold = 80,    // (0.3.0: the title of the open conversation; the title is the header's now, the rows of the list keep the hold)
     // phase 2
     kTagNearby = 90, kTagSelect, kTagGroup, kTagSelDone, kTagSelMenu, kTagSelDelete, kTagSelGroup,
-    kTagDetailGroups, kTagDetailDelete, kTagChatDetails, kTagChatOptions, kTagNearbyClose, kTagNearbyScan, kTagNearbyIgnored,
-    kTagSearchOpen, kTagSearchClose, kTagSearchConv, kTagSearchDate, kTagSearchDir, kTagSearchBox,
+    kTagDetailGroups, kTagDetailDelete, kTagNearbyClose, kTagNearbyScan, kTagNearbyIgnored,
+    kTagSearchClose, kTagSearchConv, kTagSearchDate, kTagSearchDir, kTagSearchBox,
     kTagStatsClose, kTagStatsRefresh, kTagStatsAuto,
     // the Position box
     kTagPosOk, kTagPosCancel, kTagPosClear, kTagPosGps, kTagPosLat, kTagPosLon,
@@ -85,6 +88,8 @@ enum Tag {
     kTagLogToggle, kTagLogClear, kTagLogClose,
     // P3: the action bars of the pages that follow the screen
     kTagFilter, kTagSortMenu, kTagMore, kTagNearbyAdd, kTagNearbyIgnore,
+    // P4: Chats, the search field, the bar over the list
+    kTagSearchField, kTagSearchOpen, kTagChatAdd,
 };
 
 App *g_app = nullptr;
@@ -147,12 +152,12 @@ void trampoline_button(lv_event_t *e)
     g_app->button_clicked(static_cast<int>(reinterpret_cast<intptr_t>(lv_event_get_user_data(e))));
 }
 
-/* The point of the event's indev in stage coordinates (the 640x480 layout the hit tests by x and the hold use). */
+/* The point of the event's indev on the screen (the hold on a row follows the finger from there). */
 lv_point_t event_point(lv_event_t *e)
 {
     lv_point_t p = {0, 0};
     if (lv_indev_t *indev = lv_event_get_indev(e)) lv_indev_get_point(indev, &p);
-    return stage_point(p);
+    return p;
 }
 
 void trampoline_row(lv_event_t *e)
@@ -178,22 +183,6 @@ void trampoline_popitem(lv_event_t *e)
 {
     if (!g_app || lv_event_get_code(e) != LV_EVENT_CLICKED) return;
     g_app->popup_pick(static_cast<int>(reinterpret_cast<intptr_t>(lv_event_get_user_data(e))));
-}
-
-/* the title of the open conversation: a tap does nothing, a 3 s hold opens the options */
-void trampoline_title(lv_event_t *e)
-{
-    if (!g_app) return;
-    const lv_event_code_t code = lv_event_get_code(e);
-    const lv_point_t p = event_point(e);
-    switch (code) {
-    case LV_EVENT_CLICKED: g_app->button_clicked(kTagTitleHold); break;
-    case LV_EVENT_PRESSED: g_app->hold_event(0, nullptr, 0, p.x, p.y); break;
-    case LV_EVENT_PRESSING: g_app->hold_event(1, nullptr, 0, p.x, p.y); break;
-    case LV_EVENT_RELEASED:
-    case LV_EVENT_PRESS_LOST: g_app->hold_event(2, nullptr, 0, p.x, p.y); break;
-    default: break;
-    }
 }
 
 void trampoline_scroll(lv_event_t *e)
@@ -550,18 +539,27 @@ void ActionBar::set_y(int y)
     if (root_) lv_obj_set_y(root_, y);
 }
 
-void ActionBar::place(Cell &c, int index, int n)
+void ActionBar::set_area(int x, int y, int w, int h)
+{
+    if (!root_) return;
+    lv_obj_set_pos(root_, x, y);
+    lv_obj_set_size(root_, w, h);
+    if (w == w_ && h == h_) return;
+    w_ = w;
+    h_ = h;
+    place_all();
+}
+
+void ActionBar::place(Cell &c, int x, int w)
 {
     const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
-    const int gap = m->tok[CP0_TOK_SPACE_S], pad = m->tok[CP0_TOK_SPACE_S];
-    const int cw = n > 0 ? std::max(1, (w_ - (n - 1) * gap) / n) : w_;
-    const int this_w = index == n - 1 ? std::max(1, w_ - index * (cw + gap)) : cw;   // the last cell takes the rounding
-    lv_obj_set_pos(c.obj, index * (cw + gap), 0);
-    lv_obj_set_size(c.obj, this_w, h_);
+    const int pad = m->tok[CP0_TOK_SPACE_S];
+    lv_obj_set_pos(c.obj, x, 0);
+    lv_obj_set_size(c.obj, w, h_);
     const int lh = static_cast<int>(lv_font_get_line_height(label_font_)), vh = static_cast<int>(lv_font_get_line_height(value_font_));
     const bool two = !c.spec.value.empty();
     const int top = std::max(0, (h_ - (two ? lh + vh : lh)) / 2);
-    const int tw = std::max(1, this_w - 2 * pad);
+    const int tw = std::max(1, w - 2 * pad);
     lv_label_set_text(c.label, c.spec.label.c_str());
     lv_obj_set_pos(c.label, pad, top);
     lv_obj_set_size(c.label, tw, lh);
@@ -571,6 +569,39 @@ void ActionBar::place(Cell &c, int index, int n)
     set_hidden(c.value, !two);
 }
 
+void ActionBar::place_all()
+{
+    const int n = static_cast<int>(cells_.size());
+    if (n == 0) return;
+    const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
+    const int gap = m->tok[CP0_TOK_SPACE_S], pad = m->tok[CP0_TOK_SPACE_S];
+    const int room = std::max(n, w_ - (n - 1) * gap);
+    // what each cell needs for its label (and its value line) without dots
+    std::vector<int> need(static_cast<size_t>(n));
+    int total = 0;
+    bool cut = false;
+    for (int i = 0; i < n; ++i) {
+        const Cell &c = cells_[static_cast<size_t>(i)];
+        lv_point_t a{}, b{};
+        lv_text_get_size(&a, c.spec.label.c_str(), label_font_, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        if (!c.spec.value.empty()) lv_text_get_size(&b, c.spec.value.c_str(), value_font_, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        need[static_cast<size_t>(i)] = std::max(a.x, b.x) + 2 * pad + 2;
+        total += need[static_cast<size_t>(i)];
+        if (need[static_cast<size_t>(i)] > room / n) cut = true;
+    }
+    std::vector<int> w(static_cast<size_t>(n), room / n);
+    if (cut && total <= room) {                     // by the labels: each its own width, the rest shared out equally
+        const int extra = (room - total) / n;
+        for (int i = 0; i < n; ++i) w[static_cast<size_t>(i)] = need[static_cast<size_t>(i)] + extra;
+    }
+    int x = 0;
+    for (int i = 0; i < n; ++i) {
+        const int this_w = i == n - 1 ? std::max(1, w_ - x) : w[static_cast<size_t>(i)];   // the last cell takes the rounding
+        place(cells_[static_cast<size_t>(i)], x, this_w);
+        x += this_w + gap;
+    }
+}
+
 void ActionBar::set_cells(const std::vector<CellSpec> &cells)
 {
     if (!root_) return;
@@ -578,12 +609,14 @@ void ActionBar::set_cells(const std::vector<CellSpec> &cells)
     for (size_t i = 0; same && i < cells.size(); ++i) same = cells[i].tag == cells_[i].spec.tag;
     const int n = static_cast<int>(cells.size());
     if (same) {
+        bool changed = false;
         for (size_t i = 0; i < cells.size(); ++i) {
             Cell &c = cells_[i];
             if (c.spec.label == cells[i].label && c.spec.value == cells[i].value) continue;
             c.spec = cells[i];
-            place(c, static_cast<int>(i), n);
+            changed = true;
         }
+        if (changed) place_all();
         return;
     }
     lv_obj_clean(root_);
@@ -613,8 +646,8 @@ void ActionBar::set_cells(const std::vector<CellSpec> &cells)
         set_color(c.value, kMuted);
         lv_obj_set_style_text_align(c.value, LV_TEXT_ALIGN_CENTER, 0);
         cells_.push_back(c);
-        place(cells_.back(), i, n);
     }
+    place_all();
 }
 
 /* ================================================================== construction */
@@ -744,19 +777,17 @@ App::App(Platform &plat) : plat_(plat), serial_(Store::default_dir())
     kbd_ok_ = keyboard_ready();                 // the key hint line takes room only while a keyboard is there
     build_screen();
     edit_ = model_.radio_settings();
-    chat_rows_ = build_chat_rows(model_, conv_.rfind("d:", 0) == 0 ? conv_ : std::string());
-    chat_sel_ = first_selectable(chat_rows_);
-    if (chat_sel_ >= 0 && chat_rows_[static_cast<size_t>(chat_sel_)].kind != ChatRow::Add) {
-        chat_sel_key_ = chat_rows_[static_cast<size_t>(chat_sel_)].key;
-        conv_ = chat_sel_key_;
-    }
     plat_.on_key = [this](const KeyEvent &e) { on_key(e); };
+    inset_listener_ = cp0::ui::osk::add_inset_listener([this](int inset) { on_osk_inset(inset); });
     render();
 }
 
 App::~App()
 {
     plat_.on_key = nullptr;
+    if (inset_listener_) cp0::ui::osk::remove_inset_listener(inset_listener_);
+    inset_listener_ = 0;
+    release_osk();
     dialog_.reset();
     ed_dialog_.reset();
     shell_.reset();
@@ -779,40 +810,27 @@ void App::run_posted()
 }
 
 /* The shell: cp0::ui::Page (the header with the title, the Esc button and the shared status strip, and under it the
- * caption line: the board and the notices), the tab row, and the stage (a 640 px column centred under them) that holds
- * the page bodies. Nothing here is a pixel constant: the sizes come from the layout service. */
+ * caption line: the board and the notices) and, under them, the page bodies. Nothing here is a pixel constant: the sizes
+ * come from the layout service. */
 void App::build_shell()
 {
     const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
     cp0_ui_roller_page(m, cp0::ui::status_strip_left(), &layout_);
     const int cap_lh = lv_font_get_line_height(cp0_ui_font_px(layout_.caption_px));
-    layout_.caption_y = layout_.body_y + m->tok[CP0_TOK_SPACE_S] / 4;      // right under the header, the tab row follows it
+    layout_.caption_y = layout_.body_y + m->tok[CP0_TOK_SPACE_S] / 4;      // right under the header, the page bodies follow it
     tabs_y_ = layout_.caption_y + cap_lh + m->tok[CP0_TOK_SPACE_S] / 2;
-    tab_h_ = 0;                                     // no tab row: Home is a list, the pages have the whole room
-    stage_x_ = std::max(0, (layout_.w - kScreenW) / 2);
     hint_h_ = lv_font_get_line_height(f_caption_) + m->tok[CP0_TOK_SPACE_S];
     panel_h_ = layout_.h - tabs_y_;                 // the largest room (no hint line): the lists are made for it
-    page_h_ = panel_h_ - tab_h_;
 
     shell_ = std::make_unique<cp0::ui::Page>(plat_.screen(), layout_, cp0::ui::add_title, [this] { header_back(); });
     cp0::ui::StatusStrip::add(shell_->header());
     shell_->set_title({"Mesh Hop", "Chats"});
 }
 
-/* The stage: a 640 px column under the caption line that holds Chats (until P4 converts it). The other pages and the search
- * live in wide_, the full width under the caption line (P3). */
-void App::build_stage()
+/* The page bodies: wide_, the full width under the caption line (each page and sub-page its own container inside, each opaque
+ * where it covers), and the page's own grey line in the caption's place. */
+void App::build_body()
 {
-    lv_obj_t *stage = lv_obj_create(shell_->root());
-    lv_obj_remove_style_all(stage);
-    lv_obj_remove_flag(stage, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_remove_flag(stage, LV_OBJ_FLAG_CLICKABLE);                // the tab row under its top part must stay tappable
-    lv_obj_remove_flag(stage, LV_OBJ_FLAG_CLICK_FOCUSABLE);
-    lv_obj_set_pos(stage, stage_x_, tabs_y_);
-    lv_obj_set_size(stage, kScreenW, panel_h_);
-    plat_.adopt_stage(stage);
-    screen_ = stage;
-    // the pages of P3: the full width under the caption line (their own containers inside, each opaque where it covers)
     wide_ = lv_obj_create(shell_->root());
     lv_obj_remove_style_all(wide_);
     lv_obj_remove_flag(wide_, LV_OBJ_FLAG_SCROLLABLE);
@@ -880,110 +898,17 @@ void App::build_home()
 void App::build_screen()
 {
     build_shell();
-    build_stage();
-    for (int i = 0; i < 5; ++i) {
-        const bool full = i == static_cast<int>(Tab::Contacts) || i == static_cast<int>(Tab::Settings);   // P3: the full width
-        page_[i] = full ? make_box(wide_, 0, 0, layout_.w, panel_h_) : make_box(screen_, 0, tab_h_, kScreenW, page_h_);
-    }
+    build_body();
+    // every page fills the width (Map and Terminal are not on Home and never shown: empty until they exist)
+    for (int i = 0; i < 5; ++i) page_[i] = make_box(wide_, 0, 0, layout_.w, panel_h_);
     build_chats();
-    build_placeholder(&page_[static_cast<int>(Tab::Map)], "Map", "The map of the nodes with a position comes in phase 3.\nUntil then the Contacts tab shows the distances.");
     build_contacts();
-    build_placeholder(&page_[static_cast<int>(Tab::Terminal)], "Terminal", "A meshcore-cli style command line comes in a later version.");
     build_settings();
     build_home();
     build_hint_line();
     build_popup();
     layout_body();
     update_title();
-}
-
-void App::build_placeholder(lv_obj_t **page, const char *title, const char *text)
-{
-    lv_obj_t *t = make_label(*page, f_big_, kText, 20, 150, 600, 28, LV_TEXT_ALIGN_CENTER);
-    lv_label_set_text(t, title);
-    lv_obj_t *l = lv_label_create(*page);
-    lv_obj_set_style_text_font(l, f_ui_, 0);
-    set_color(l, kMuted);
-    lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_width(l, 520);
-    lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_WRAP);
-    lv_label_set_text(l, text);
-    lv_obj_set_pos(l, 60, 190);
-}
-
-void App::build_chats()
-{
-    lv_obj_t *p = page_[static_cast<int>(Tab::Chats)];
-    RowList::Config cfg;
-    cfg.max_cells = 3;
-    cfg.max_boxes = 0;
-    cfg.min_row_h = 26;
-    chat_list_.create(p, 0, 0, kListW, page_h_ - 44, cfg);
-    search_btn_ = make_button(p, 4, page_h_ - 44, kListW - 8, 44, "Search messages", kTagSearchOpen);
-    chat_div_ = make_box(p, kListW, 0, 1, page_h_);
-    lv_obj_set_style_bg_color(chat_div_, lv_color_hex(kSelected), 0);
-    lv_obj_set_style_bg_opa(chat_div_, LV_OPA_COVER, 0);
-
-    const int rx = kListW + 1;                    // the right pane
-    // the head of the conversation: its name with a line under it (the count left to type, muted, the nodes heard), and at
-    // the right the buttons: Details (a direct chat) and Options (the 3 s hold on the name and Ctrl+O stay as shortcuts)
-    chat_title_ = make_label(p, f_text_, kText, rx + 10, 3, 200, 22);
-    chat_info_ = make_label(p, f_small_, kMuted, rx + 10, 25, 200, 18);
-    options_btn_ = make_button(p, kScreenW - 104, 0, 98, 44, "Options", kTagChatOptions);
-    set_hidden(options_btn_, true);
-    details_btn_ = make_button(p, kScreenW - 206, 0, 98, 44, "Details", kTagChatDetails);
-    set_hidden(details_btn_, true);
-    // the name of the open conversation: hold it for 3 s to open the options (a tap does nothing)
-    title_hold_ = make_box(p, rx, 0, 240, 44);
-    lv_obj_add_flag(title_hold_, LV_OBJ_FLAG_CLICKABLE);
-    for (lv_event_code_t code : {LV_EVENT_CLICKED, LV_EVENT_PRESSED, LV_EVENT_PRESSING, LV_EVENT_RELEASED, LV_EVENT_PRESS_LOST})
-        lv_obj_add_event_cb(title_hold_, trampoline_title, code, nullptr);
-    set_hidden(title_hold_, true);
-    lv_obj_t *line = make_box(p, rx, 44, kScreenW - rx, 1);
-    lv_obj_set_style_bg_color(line, lv_color_hex(kSelected), 0);
-    lv_obj_set_style_bg_opa(line, LV_OPA_COVER, 0);
-
-    msgs_ = lv_obj_create(p);
-    lv_obj_remove_style_all(msgs_);
-    lv_obj_set_pos(msgs_, rx, 46);
-    lv_obj_set_size(msgs_, kScreenW - rx, page_h_ - 104);
-    lv_obj_set_flex_flow(msgs_, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_scroll_dir(msgs_, LV_DIR_VER);
-    lv_obj_remove_flag(msgs_, LV_OBJ_FLAG_SCROLL_ELASTIC);
-    lv_obj_set_style_pad_all(msgs_, 6, 0);
-    lv_obj_set_style_pad_row(msgs_, 4, 0);
-    lv_obj_set_scrollbar_mode(msgs_, LV_SCROLLBAR_MODE_ACTIVE);
-    lv_obj_set_style_bg_color(msgs_, lv_color_hex(kMuted), LV_PART_SCROLLBAR);
-    lv_obj_set_style_bg_opa(msgs_, LV_OPA_70, LV_PART_SCROLLBAR);
-    lv_obj_set_style_width(msgs_, 4, LV_PART_SCROLLBAR);
-
-    chat_line2_ = make_box(p, rx, page_h_ - 56, kScreenW - rx, 1);
-    lv_obj_set_style_bg_color(chat_line2_, lv_color_hex(kSelected), 0);
-    lv_obj_set_style_bg_opa(chat_line2_, LV_OPA_COVER, 0);
-
-    compose_ = lv_textarea_create(p);
-    lv_obj_set_pos(compose_, rx + 6, page_h_ - 50);
-    lv_obj_set_size(compose_, kScreenW - rx - 6 - 96, 46);
-    lv_textarea_set_one_line(compose_, false);
-    lv_obj_set_scrollbar_mode(compose_, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_set_style_text_font(compose_, f_text_, 0);
-    lv_obj_set_style_text_color(compose_, lv_color_hex(kText), 0);
-    lv_obj_set_style_bg_color(compose_, lv_color_hex(kPanel), 0);
-    lv_obj_set_style_bg_opa(compose_, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(compose_, 6, 0);
-    lv_obj_set_style_border_width(compose_, 2, 0);
-    lv_obj_set_style_border_color(compose_, lv_color_hex(kSelected), 0);
-    lv_obj_set_style_pad_all(compose_, 6, 0);
-    lv_obj_set_style_text_color(compose_, lv_color_hex(kMuted), LV_PART_TEXTAREA_PLACEHOLDER);
-    lv_obj_set_style_bg_opa(compose_, LV_OPA_TRANSP, LV_PART_CURSOR);
-    lv_obj_set_style_border_side(compose_, LV_BORDER_SIDE_LEFT, LV_PART_CURSOR | LV_STATE_FOCUSED);
-    lv_obj_set_style_border_width(compose_, 2, LV_PART_CURSOR | LV_STATE_FOCUSED);
-    lv_obj_set_style_border_color(compose_, lv_color_hex(kAccent), LV_PART_CURSOR | LV_STATE_FOCUSED);
-    lv_textarea_set_max_length(compose_, 400);
-    lv_obj_add_event_cb(compose_, trampoline_button, LV_EVENT_CLICKED, reinterpret_cast<void *>(static_cast<intptr_t>(kTagCompose)));
-    send_btn_ = make_button(p, kScreenW - 90, page_h_ - 47, 84, 40, "Send", kTagSend, &send_label_);
-    lv_obj_set_style_bg_color(send_btn_, lv_color_hex(kOkGreen), 0);
-    build_search();
 }
 
 namespace {
@@ -1012,6 +937,292 @@ lv_obj_t *make_panel(lv_obj_t *parent, int w, int h)
 }
 
 } // namespace
+
+namespace {
+
+const char *const kDownMark = " \xE2\x96\xBC";       // " ▼" (U+25BC, in the launcher's Montserrat): the cell opens a dialog
+
+/* The marker layout of a page list (the chevron's and the dot's sizes from the size of the row's main text). */
+int trail_of(const cp0_ui_list_layout_t &l, Aff aff)
+{
+    switch (aff) {
+    case Aff::Open: return cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_OPEN);
+    case Aff::Edit: return cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_EDIT);
+    case Aff::Action: return cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_ACTION);
+    case Aff::Running: return cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_ACTION_RUNNING);
+    default: return 0;
+    }
+}
+
+cp0::ui::RowAffordance list_aff(Aff a)
+{
+    switch (a) {
+    case Aff::Info: return cp0::ui::RowAffordance::Info;
+    case Aff::Open: return cp0::ui::RowAffordance::Open;
+    case Aff::Edit: return cp0::ui::RowAffordance::Edit;
+    case Aff::Action: return cp0::ui::RowAffordance::Action;
+    case Aff::Running: return cp0::ui::RowAffordance::ActionRunning;
+    default: return cp0::ui::RowAffordance::Unspecified;
+    }
+}
+
+/* The number of lines `text` takes in `font` at `w` px (at least 1). */
+int lines_of(const std::string &text, const lv_font_t *font, int w)
+{
+    if (text.empty()) return 1;
+    lv_point_t sz{};
+    lv_text_get_size(&sz, text.c_str(), font, 0, 0, std::max(1, w), LV_TEXT_FLAG_NONE);
+    const int lh = line_h(font);
+    return std::max(1, (static_cast<int>(sz.y) + lh - 1) / lh);
+}
+
+
+} // namespace
+
+/* ---- the text fields: drawn as the toolkit's cp0::ui::TextField (cp0_ui_text_field.cpp: its colours, the 2 px border that turns
+ * blue while the field is typed into, the steady cursor, the ROW token's height); the app types into them itself. */
+
+namespace {
+
+constexpr uint32_t kFieldBg = 0x1C1C1C;
+constexpr uint32_t kFieldBorder = 0x3A3A3A;
+constexpr uint32_t kFieldEditing = 0x2D9CDB;
+constexpr uint32_t kFieldText = 0xEEEEEE;
+constexpr uint32_t kFieldPlaceholder = 0x666666;
+
+} // namespace
+
+lv_obj_t *App::make_text_field(lv_obj_t *parent, int tag, size_t max_len, int h)
+{
+    const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
+    lv_obj_t *ta = lv_textarea_create(parent);
+    if (lv_obj_get_group(ta)) lv_group_remove_obj(ta);
+    lv_obj_remove_flag(ta, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+    lv_obj_remove_flag(ta, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_textarea_set_one_line(ta, true);                       // (sets the height to its content: the height comes after)
+    lv_obj_set_height(ta, h);
+    lv_obj_set_scrollbar_mode(ta, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_style_text_font(ta, f_field_, 0);
+    lv_obj_set_style_text_color(ta, lv_color_hex(kFieldText), 0);
+    lv_obj_set_style_bg_color(ta, lv_color_hex(kFieldBg), 0);
+    lv_obj_set_style_bg_opa(ta, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(ta, m->tok[CP0_TOK_RADIUS_S], 0);
+    lv_obj_set_style_border_width(ta, 2, 0);
+    lv_obj_set_style_border_color(ta, lv_color_hex(kFieldBorder), 0);
+    lv_obj_set_style_border_opa(ta, LV_OPA_COVER, 0);
+    lv_obj_set_style_pad_hor(ta, std::max(layout_.gap, h / 5), 0);
+    lv_obj_set_style_pad_ver(ta, std::max(0, (h - 4 - static_cast<int>(lv_font_get_line_height(f_field_))) / 2), 0);   // the text on the middle line
+    lv_obj_set_style_text_color(ta, lv_color_hex(kFieldPlaceholder), LV_PART_TEXTAREA_PLACEHOLDER);
+    lv_obj_set_style_bg_opa(ta, LV_OPA_TRANSP, LV_PART_CURSOR);
+    lv_obj_set_style_border_side(ta, LV_BORDER_SIDE_LEFT, LV_PART_CURSOR | LV_STATE_FOCUSED);
+    lv_obj_set_style_border_width(ta, 2, LV_PART_CURSOR | LV_STATE_FOCUSED);
+    lv_obj_set_style_border_color(ta, lv_color_hex(kFieldEditing), LV_PART_CURSOR | LV_STATE_FOCUSED);
+    lv_obj_set_style_anim_duration(ta, 0, LV_PART_CURSOR);    // a steady cursor, no blink
+    lv_textarea_set_max_length(ta, static_cast<uint32_t>(max_len));
+    if (tag) lv_obj_add_event_cb(ta, trampoline_button, LV_EVENT_CLICKED, reinterpret_cast<void *>(static_cast<intptr_t>(tag)));
+    return ta;
+}
+
+void App::style_field(lv_obj_t *ta, bool editing)
+{
+    if (!ta) return;
+    lv_obj_set_style_border_color(ta, lv_color_hex(editing ? kFieldEditing : kFieldBorder), 0);
+    if (editing) lv_obj_add_state(ta, LV_STATE_FOCUSED);
+    else lv_obj_remove_state(ta, LV_STATE_FOCUSED);
+}
+
+/* ---- Chats */
+
+/* Chats (P4): a slim bar over the list (Search, Add channel: ROW high), the conversations in two-line rows (the name; the last
+ * message and its time; at the right the unread count in blue and the chevron), and the conversation: its messages and, at the
+ * bottom, the entry and Send. The options of a conversation are in the Chats menu (open_chats_menu: a 3 s hold on its row, or
+ * Ctrl+O). A Standard screen (640x480) shows one pane: the list, then the conversation as its own page (the header, the caption
+ * line, the messages, the entry: no bar; the header's Esc goes back to the list). The Wide, Square and Large screens show both
+ * side by side when both fit at the token sizes (two_pane_fit_: the list takes 35 % of the column's area and still holds a name of
+ * kListMinChars characters beside the unread count and the chevron, the conversation a line of kConvMinChars characters of the
+ * message text); then the bar runs across both and the header's Esc leaves Chats for Home. While the on-screen keyboard is up
+ * there is one pane: for the entry, the compose view (layout_chats). */
+void App::build_chats()
+{
+    const Geo g = geo();
+    const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
+    lv_obj_t *p = page_[static_cast<int>(Tab::Chats)];
+    // two panes? (the classes of the layout service: one pane on a Standard screen, and on the small and portrait ones)
+    {
+        const bool roomy = m->cls == CP0_UI_WIDE || m->cls == CP0_UI_SQUARE || m->cls == CP0_UI_LARGE;
+        const int left = g.lw * kChatListPct / 100, right = g.lw - left - 1;
+        static const char *const kAlphabet = "abcdefghijklmnopqrstuvwxyz";
+        const int avg_name = std::max(1, text_w(kAlphabet, f_body_) / 26), avg_text = std::max(1, text_w(kAlphabet, f_field_) / 26);
+        cp0_ui_list_layout_t ml = settings_list_layout(0, g.h);
+        ml.text_px = m->text_px[CP0_TEXT_BODY];
+        const int list_need = 2 * g.inset + kListMinChars * avg_name + g.m + text_w("99+", f_value_) + trail_of(ml, Aff::Open);
+        const int conv_need = 2 * g.inset + kConvMinChars * avg_text;
+        two_pane_fit_ = roomy && left >= list_need && right >= conv_need;
+        if (log_)
+            log_->line("chats: " + std::string(two_pane_fit_ ? "two panes" : "one pane") + " (" + cp0_ui_class_name(m->cls) + "; list " + std::to_string(left) +
+                       " px for " + std::to_string(list_need) + ", conversation " + std::to_string(right) + " px for " + std::to_string(conv_need) + ")");
+    }
+    const int list_w = two_pane_fit_ ? g.lw * kChatListPct / 100 : g.lw;
+    const int top = chat_list_top();
+    chat_bar_.create(p, g.x, g.s / 2, g.cw, g.row, f_body_, f_caption_);
+    chat_bar_.set_cells({{kTagSearchOpen, "Search", ""}, {kTagChatAdd, "Add channel", ""}});
+    if (log_) log_->line("chats: the bar " + std::to_string(g.row) + " px (ROW), the list from y " + std::to_string(tabs_y_ + top));
+    RowList::Config cfg;
+    cfg.max_cells = 4;
+    cfg.max_boxes = 0;
+    cfg.flat = true;
+    cfg.marks = true;
+    cfg.mark_layout = settings_list_layout(top, g.h - top);
+    cfg.mark_layout.text_px = m->text_px[CP0_TEXT_BODY];
+    cfg.min_row_h = std::min(cfg.mark_layout.section_h, std::max(g.list_row, line_h(f_body_) + line_h(f_caption_) + 2 * std::max(4, g.s / 2)));
+    chat_list_.create(p, g.lx, top, list_w, std::max(1, g.h - top), cfg);
+    chat_div_ = make_box(p, g.lx + list_w, top, 1, std::max(1, g.h - top));
+    lv_obj_remove_flag(chat_div_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_color(chat_div_, lv_color_hex(kSelected), 0);
+    lv_obj_set_style_bg_opa(chat_div_, LV_OPA_COVER, 0);
+
+    // the messages: a column that scrolls (the list's scrollbar), the newest at the bottom
+    msgs_ = lv_obj_create(p);
+    lv_obj_remove_style_all(msgs_);
+    lv_obj_set_flex_flow(msgs_, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_scroll_dir(msgs_, LV_DIR_VER);
+    lv_obj_remove_flag(msgs_, LV_OBJ_FLAG_SCROLL_ELASTIC);
+    lv_obj_remove_flag(msgs_, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+    lv_obj_set_style_pad_hor(msgs_, g.inset, 0);
+    lv_obj_set_style_pad_ver(msgs_, g.s / 2, 0);
+    lv_obj_set_style_pad_row(msgs_, g.s, 0);
+    style_list_scrollbar(msgs_);
+
+    // the entry and Send (the primary button: the keyboard's Enter blue); the entry asks for the on-screen keyboard while it has the keys
+    compose_ = make_text_field(p, kTagCompose, 400, g.row);
+    send_btn_ = lv_button_create(p);
+    if (lv_obj_get_group(send_btn_)) lv_group_remove_obj(send_btn_);
+    lv_obj_remove_flag(send_btn_, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+    lv_obj_set_style_radius(send_btn_, layout_.esc_radius, 0);
+    lv_obj_set_style_bg_color(send_btn_, lv_color_hex(kOkGreen), 0);
+    lv_obj_set_style_bg_opa(send_btn_, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(send_btn_, lv_color_hex(CP0_UI_OSK_ENTER_PRESSED_RGB), LV_STATE_PRESSED);
+    lv_obj_set_style_shadow_width(send_btn_, 0, 0);
+    lv_obj_set_style_border_width(send_btn_, 0, 0);
+    lv_obj_add_event_cb(send_btn_, trampoline_button, LV_EVENT_CLICKED, reinterpret_cast<void *>(static_cast<intptr_t>(kTagSend)));
+    send_label_ = lv_label_create(send_btn_);
+    lv_label_set_text(send_label_, "Send");
+    lv_obj_set_style_text_font(send_label_, f_body_, 0);
+    lv_obj_set_style_text_color(send_label_, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_center(send_label_);
+
+    // the cue of a touch held on a conversation of the list: a bar that fills over 3 s (never clickable: it must not take the touch)
+    hold_box_ = make_box(p, g.x, 0, 10, 10);
+    lv_obj_remove_flag(hold_box_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_color(hold_box_, lv_color_hex(kPanel), 0);
+    lv_obj_set_style_bg_opa(hold_box_, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(hold_box_, m->tok[CP0_TOK_RADIUS_M], 0);
+    lv_obj_set_style_border_width(hold_box_, 2, 0);
+    lv_obj_set_style_border_color(hold_box_, lv_color_hex(kAccent), 0);
+    hold_label_ = make_label(hold_box_, f_caption_, kText, 0, 0, 10, line_h(f_caption_), LV_TEXT_ALIGN_CENTER);
+    hold_track_ = make_box(hold_box_, 0, 0, 10, 10);
+    lv_obj_remove_flag(hold_track_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_color(hold_track_, lv_color_hex(kSelected), 0);
+    lv_obj_set_style_bg_opa(hold_track_, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(hold_track_, LV_RADIUS_CIRCLE, 0);
+    hold_bar_ = make_box(hold_track_, 0, 0, 1, 10);
+    lv_obj_remove_flag(hold_bar_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_color(hold_bar_, lv_color_hex(kAccent), 0);
+    lv_obj_set_style_bg_opa(hold_bar_, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(hold_bar_, LV_RADIUS_CIRCLE, 0);
+    set_hidden(hold_box_, true);
+    chat_mode_ = ~0u;
+    build_search();
+}
+
+bool App::compose_view() const
+{
+    return osk_inset_ > 0 && osk_field_ && osk_field_ == compose_;
+}
+
+bool App::conversation_visible() const
+{
+    return (two_pane_fit_ && osk_inset_ == 0) || conv_open_ || compose_view();
+}
+
+/* The top of the list in the page: under the bar (Search, Add channel: ROW high). */
+int App::chat_list_top() const
+{
+    const Geo g = geo();
+    return g.s / 2 + g.row + g.s;
+}
+
+/* The panes for the state: two side by side (the room is there and the on-screen keyboard is down), else one: the list, or the
+ * conversation's page, or the compose view (the keyboard is up for the entry: the header, the last message in the caption's place,
+ * the entry and Send right under it, the keyboard below; nothing else of the page, nothing under the keyboard). Send is ROW high
+ * (Mesh Hop's tap targets: 7 mm); where the room above the keyboard is less, the entry is alone and the keyboard's Enter sends, as
+ * the buttons of a dialog go while the keyboard is up (cp0_ui_dialog.h). The bar shows over the list (one pane, the list; two
+ * panes: across both, both panes under it); a conversation's page has none: its messages start right under the caption line.
+ * Cheap when nothing changed. */
+void App::layout_chats()
+{
+    if (!page_[static_cast<int>(Tab::Chats)]) return;
+    const Geo g = geo();
+    const bool compose = compose_view();
+    const bool two = two_pane_fit_ && osk_inset_ == 0;
+    const bool show_list = !compose && (two || !conv_open_);
+    const bool show_conv = compose || two || conv_open_;
+    const int h = panel_h_;
+    uint32_t mode = fnv_int(0, (two ? 1 : 0) | (show_list ? 2 : 0) | (show_conv ? 4 : 0) | (compose ? 8 : 0) | (conv_.empty() ? 16 : 0));
+    mode = fnv_int(mode, h);
+    if (mode == chat_mode_) return;
+    chat_mode_ = mode;
+
+    const int list_w = chat_list_.width();
+    const int rx = two ? g.lx + list_w + 1 : g.lx, rw = two ? g.lw - list_w - 1 : g.lw;
+    const int list_top = chat_list_top();
+    const int top = two ? list_top : g.s / 2;             // the messages: under the bar (two panes), else under the caption line
+    set_hidden(chat_bar_.root(), !show_list);
+    chat_bar_.set_area(g.x, g.s / 2, g.cw, g.row);
+    set_hidden(chat_list_.obj(), !show_list);
+    chat_list_.resize(std::max(1, h - list_top));
+    set_hidden(chat_div_, !(two && !compose));
+    lv_obj_set_height(chat_div_, std::max(1, h - list_top));
+
+    // the entry and Send at the bottom of the conversation (the compose view: right under the caption line)
+    const int send_w = std::max(g.row, text_w("Send", f_body_) + 2 * g.m);
+    const bool send = !compose || h >= g.row + g.s;
+    const int cy = compose ? g.s / 2 : std::max(0, h - g.row - g.s / 2);
+    const int fx = rx + g.inset, fw = std::max(g.row, rw - 2 * g.inset - (send ? send_w + g.s : 0));
+    lv_obj_set_pos(compose_, fx, cy);
+    lv_obj_set_size(compose_, fw, g.row);
+    lv_obj_set_pos(send_btn_, rx + rw - g.inset - send_w, cy);
+    lv_obj_set_size(send_btn_, send_w, g.row);
+    const bool entry = show_conv && !conv_.empty();          // no conversation (no board yet): no entry
+    set_hidden(compose_, !entry);
+    set_hidden(send_btn_, !entry || !send);
+
+    // the messages down to the entry
+    const int mh = std::max(1, cy - g.s / 2 - top);
+    if (log_ && show_conv && !compose)
+        log_->line("chats: the messages " + std::to_string(mh) + " px high (" + (two ? "two panes" : "one pane") + ", page " + std::to_string(h) + " px)");
+    lv_obj_set_pos(msgs_, rx, top);
+    lv_obj_set_size(msgs_, rw, mh);
+    set_hidden(msgs_, !show_conv || compose);
+    const int mw = std::max(1, rw - 2 * g.inset);
+    if (mw != msg_w_) {
+        msg_w_ = mw;
+        built_conv_.clear();                       // the messages are laid out again for the new width
+    }
+
+    // the hold cue at the bottom of the list
+    const int lh = line_h(f_caption_), pad = g.s;
+    const int cue_w = std::max(1, (two ? list_w : g.lw) - 2 * g.inset), cue_h = pad + lh + pad / 2 + pad + pad;
+    lv_obj_set_pos(hold_box_, g.lx + g.inset, std::max(list_top, h - cue_h - g.s));
+    lv_obj_set_size(hold_box_, cue_w, cue_h);
+    lv_obj_set_pos(hold_label_, pad, pad - 2);
+    lv_obj_set_size(hold_label_, std::max(1, cue_w - 2 * pad - 4), lh);
+    hold_track_w_ = std::max(1, cue_w - 2 * pad - 4);
+    lv_obj_set_pos(hold_track_, pad, pad + lh + pad / 2 - 2);
+    lv_obj_set_size(hold_track_, hold_track_w_, pad);
+    lv_obj_set_height(hold_bar_, pad);
+    invalidate();
+}
 
 /* The layout of the lists of the pages: CompactList's compact one (cp0_ui_list.h) in the list area, with the label of the
  * Settings / Statistics size (label_px_, value_px_): the markers' sizes and the rows' height (LIST_ROW, 5 mm: a tap first
@@ -1084,37 +1295,19 @@ void App::build_nearby()
     set_hidden(nearby_, true);
 }
 
-/* Search in the message archive (M7): a sub-page over Chats. The words typed (the keyboard), the three filters (chat, dates,
- * direction) as an action bar, the results in two-line rows (who and when, then the text around the match). */
+/* Search in the message archive (M7): a sub-page over Chats. The words (a text field: a tap gives it the keys, and the on-screen
+ * keyboard by the shared rule), the three filters (chat, dates, direction) as an action bar, the results in two-line rows (who and
+ * when, then the text around the match). While the keyboard is up only what fits above it shows (layout_search). */
 void App::build_search()
 {
     const Geo g = geo();
     search_panel_ = make_panel(wide_, g.w, g.h);
-    const int field_y = g.s / 2, field_h = g.field;
-    sr_query_ = lv_textarea_create(search_panel_);
-    if (lv_obj_get_group(sr_query_)) lv_group_remove_obj(sr_query_);
-    lv_textarea_set_one_line(sr_query_, true);
+    const int field_y = g.s / 2, field_h = g.row;
+    sr_query_ = make_text_field(search_panel_, kTagSearchField, 60, field_h);
     lv_obj_set_pos(sr_query_, g.x, field_y);
-    lv_obj_set_size(sr_query_, g.cw, field_h);
-    lv_obj_remove_flag(sr_query_, LV_OBJ_FLAG_CLICKABLE);              // typed with the keyboard only (a tap does nothing)
-    lv_obj_set_scrollbar_mode(sr_query_, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_set_style_text_font(sr_query_, f_field_, 0);
-    lv_obj_set_style_text_color(sr_query_, lv_color_hex(kText), 0);
-    lv_obj_set_style_bg_color(sr_query_, lv_color_hex(kBackground), 0);
-    lv_obj_set_style_bg_opa(sr_query_, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(sr_query_, cp0_ui_metrics_get()->tok[CP0_TOK_RADIUS_S], 0);
-    lv_obj_set_style_border_width(sr_query_, 2, 0);
-    lv_obj_set_style_border_color(sr_query_, lv_color_hex(kAccent), 0);
-    lv_obj_set_style_pad_hor(sr_query_, g.s, 0);
-    lv_obj_set_style_pad_ver(sr_query_, std::max(0, (field_h - 4 - line_h(f_field_)) / 2), 0);
-    lv_obj_set_style_text_color(sr_query_, lv_color_hex(kMuted), LV_PART_TEXTAREA_PLACEHOLDER);
-    lv_obj_set_style_bg_opa(sr_query_, LV_OPA_TRANSP, LV_PART_CURSOR);
-    lv_obj_set_style_border_side(sr_query_, LV_BORDER_SIDE_LEFT, LV_PART_CURSOR | LV_STATE_FOCUSED);
-    lv_obj_set_style_border_width(sr_query_, 2, LV_PART_CURSOR | LV_STATE_FOCUSED);
-    lv_obj_set_style_border_color(sr_query_, lv_color_hex(kAccent), LV_PART_CURSOR | LV_STATE_FOCUSED);
-    lv_textarea_set_max_length(sr_query_, 60);
-    lv_obj_add_state(sr_query_, LV_STATE_FOCUSED);
-    lv_textarea_set_placeholder_text(sr_query_, "Type the words to find (keyboard)");
+    lv_obj_set_width(sr_query_, g.cw);
+    lv_textarea_set_placeholder_text(sr_query_, "Type the words to find");
+    style_field(sr_query_, true);
     const int bar_y = field_y + field_h + g.s, list_y = bar_y + g.bar + g.s;
     search_bar_.create(search_panel_, g.x, bar_y, g.cw, g.bar, f_body_, f_caption_);
     RowList::Config cfg;
@@ -1223,19 +1416,19 @@ void App::build_packet_log()
     set_hidden(log_panel_, true);
 }
 
-/* The pages of the full width after a change of the room under the caption line (the key hint line came or went). */
+/* The pages after a change of the room under the caption line (the key hint line or the on-screen keyboard came or went). */
 void App::layout_wide()
 {
     const Geo g = geo();
     lv_obj_set_size(wide_, layout_.w, panel_h_);
-    for (int i : {static_cast<int>(Tab::Contacts), static_cast<int>(Tab::Settings)}) lv_obj_set_size(page_[i], layout_.w, panel_h_);
+    for (int i = 0; i < 5; ++i) lv_obj_set_size(page_[i], layout_.w, panel_h_);
     for (lv_obj_t *panel : {search_panel_, nearby_, detail_, stats_panel_, log_panel_}) lv_obj_set_size(panel, layout_.w, panel_h_);
     const int list_y = g.s / 2 + g.bar + g.s;
     contact_list_.resize(std::max(1, g.h - list_y));
     detail_list_.resize(std::max(1, g.h - list_y));
     nearby_list_.resize(std::max(1, g.h - list_y));
-    const int search_y = g.s / 2 + g.field + g.s + g.bar + g.s;
-    search_list_.resize(std::max(1, g.h - search_y));
+    layout_search();
+    layout_chats();
     // the packet log: the table and the bytes of the selected packet (under it: one line of path, four of bytes)
     const int log_y = g.s / 2 + g.bar + g.s + line_h(f_caption_) + g.s / 2;
     const int detail_h = log_side_ ? 0 : g.s + line_h(f_caption_) + 4 * line_h(f_mono_);
@@ -1293,61 +1486,41 @@ void App::build_hint_line()
     const int lh = static_cast<int>(lv_font_get_line_height(f_caption_));
     hint_label_ = make_label(hint_box_, f_caption_, kMuted, g.x, (hint_h_ - lh) / 2, g.cw, lh);
     (void)m;
-
-    // the cue of a touch held on a conversation name: a bar that fills over 3 s (never clickable: it must not take the touch)
-    hold_box_ = make_box(screen_, 215, panel_h_ - 114, 420, 56);
-    lv_obj_remove_flag(hold_box_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_bg_color(hold_box_, lv_color_hex(kPanel), 0);
-    lv_obj_set_style_bg_opa(hold_box_, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(hold_box_, 8, 0);
-    lv_obj_set_style_border_width(hold_box_, 2, 0);
-    lv_obj_set_style_border_color(hold_box_, lv_color_hex(kAccent), 0);
-    hold_label_ = make_label(hold_box_, f_small_, kText, 12, 8, 392, 18, LV_TEXT_ALIGN_CENTER);
-    lv_obj_t *track = make_box(hold_box_, 12, 34, 392, 10);
-    lv_obj_remove_flag(track, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_bg_color(track, lv_color_hex(kSelected), 0);
-    lv_obj_set_style_bg_opa(track, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(track, 5, 0);
-    hold_bar_ = make_box(track, 0, 0, 1, 10);
-    lv_obj_remove_flag(hold_bar_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_bg_color(hold_bar_, lv_color_hex(kAccent), 0);
-    lv_obj_set_style_bg_opa(hold_bar_, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(hold_bar_, 5, 0);
-    set_hidden(hold_box_, true);
 }
 
-/* What depends on the room under the shell: the stage and the page bodies take the height left by the shell and, while
- * a keyboard is there, by the key hint line. The lists, the entry line of Chats, the buttons at the bottom of a sub-page. */
+/* What depends on the room under the shell: the page bodies take the height left by the shell and, while a keyboard is there,
+ * by the key hint line, while the on-screen keyboard is up, by the keyboard (nothing of a page lies under it: the field being
+ * typed into and what fits above it stay; a dialog keeps itself above it). The lists, the entry of Chats, the panels. */
 void App::layout_body()
 {
     const bool hint = kbd_ok_;
-    panel_h_ = layout_.h - tabs_y_ - (hint ? hint_h_ : 0);
-    page_h_ = panel_h_ - tab_h_;
-    lv_obj_set_pos(screen_, stage_x_, tabs_y_);
-    lv_obj_set_size(screen_, kScreenW, panel_h_);
-    for (int i : {static_cast<int>(Tab::Chats), static_cast<int>(Tab::Map), static_cast<int>(Tab::Terminal)})
-        lv_obj_set_pos(page_[i], 0, tab_h_), lv_obj_set_size(page_[i], kScreenW, page_h_);
-    // Chats: the list and its Search button, the conversation and the entry line at the bottom
-    chat_list_.resize(page_h_ - 44);
-    lv_obj_set_y(search_btn_, page_h_ - 44);
-    lv_obj_set_height(chat_div_, page_h_);
-    lv_obj_set_height(msgs_, page_h_ - 104);
-    lv_obj_set_y(chat_line2_, page_h_ - 56);
-    lv_obj_set_y(compose_, page_h_ - 50);
-    lv_obj_set_y(send_btn_, page_h_ - 47);
-    lv_obj_set_y(hold_box_, panel_h_ - 114);
-    layout_wide();                                           // the pages of the full width
+    panel_h_ = std::max(1, layout_.h - tabs_y_ - std::max(hint ? hint_h_ : 0, osk_inset_));
+    lv_obj_set_pos(wide_, 0, tabs_y_);
+    layout_wide();
     if (home_list_) build_home();                            // Home ends above the key hint line too
     set_hidden(hint_box_, !hint);
     lv_obj_set_pos(hint_box_, 0, layout_.h - hint_h_);
     invalidate();
 }
 
+/* The search: the field at the top, then the filters and the results while they fit above the on-screen keyboard (with it up at
+ * 640x480 only the field shows; Enter or Esc puts the keyboard away and the results come back). */
+void App::layout_search()
+{
+    if (!search_panel_) return;
+    const Geo g = geo();
+    const int field_y = g.s / 2, bar_y = field_y + g.row + g.s, list_y = bar_y + g.bar + g.s;
+    const bool bar = bar_y + g.bar <= g.h;
+    const int list_h = g.h - list_y;
+    const bool list = bar && list_h >= g.list_row;
+    set_hidden(search_bar_.root(), !bar);
+    set_hidden(search_list_.obj(), !list);
+    search_list_.resize(std::max(1, list_h));
+}
+
 lv_point_t App::script_origin() const
 {
-    lv_area_t a;
-    lv_obj_get_coords(screen_, &a);
-    return {a.x1, a.y1 - 56};
+    return {std::max(0, (layout_.w - kScreenW) / 2), tabs_y_ - 56};
 }
 
 void App::build_popup()
@@ -1376,7 +1549,7 @@ void App::build_popup()
 
 void App::body_lists(std::vector<lv_obj_t *> &roots, lv_obj_t *&hint) const
 {
-    roots = {screen_, wide_};
+    roots = {wide_};
     if (home_list_) roots.push_back(home_list_->focus_object());
     hint = hint_box_;
 }
@@ -1452,6 +1625,13 @@ std::string App::debug_state() const
              " log_capture=" + (pl.capturing() ? "1" : "0") + " log_n=" + std::to_string(pl.size()) + " log_sel=" + std::to_string(log_sel_abs_) +
              " log_row='" + (sel ? pr.route + " " + pr.type + " " + pr.hops + " " + pr.size + " " + pr.channel : std::string()) + "'";
     }
+    // P4: the panes of Chats, the on-screen keyboard and the field it is up for
+    const char *typing = !osk_field_ ? "-" : osk_field_ == compose_ ? "compose" : osk_field_ == sr_query_ ? "search"
+                         : osk_field_ == ed_ta_ ? "editor" : osk_field_ == pos_ta_[0] ? "latitude" : osk_field_ == pos_ta_[1] ? "longitude" : "?";
+    s += std::string(" panes=") + (two_pane_fit_ && osk_inset_ == 0 ? "2" : "1") + " conv_open=" + (conv_open_ ? "1" : "0") +
+         " osk=" + (cp0::ui::osk::visible() ? "up" : "down") + " osk_h=" + std::to_string(osk_inset_) + " typing=" + typing +
+         " compose_view=" + (compose_view() ? "1" : "0") + " search_typing=" + (search_typing_ ? "1" : "0") +
+         " chat_bar=" + (chat_bar_.root() && !lv_obj_has_flag(chat_bar_.root(), LV_OBJ_FLAG_HIDDEN) ? "1" : "0");
     return s;
 }
 
@@ -1468,6 +1648,46 @@ void App::notice(const std::string &text, bool ok)
 bool App::keyboard_ready() const
 {
     return plat_.keyboard_connected() || keyboard_present();
+}
+
+/* ---- the on-screen keyboard: cp0::ui::osk with the shared rule (cdk::osk_policy: no physical keyboard, Settings, APPLAUNCH_OSK) */
+
+bool App::osk_may_show() const
+{
+    cdk::osk_policy::Policy *policy = cdk::osk_policy::installed();
+    return policy && policy->allowed(static_cast<std::int64_t>(mono_ms()));
+}
+
+void App::release_osk()
+{
+    if (osk_field_) cp0::ui::osk::release(osk_field_);
+    osk_field_ = nullptr;
+}
+
+void App::sync_osk()
+{
+    lv_obj_t *want = nullptr;
+    if (editor_open_) {
+        if (edit_kind_ != EditKind::Position) want = ed_ta_;
+        else if (pos_typing_ && (pos_focus_ == kPosLat || pos_focus_ == kPosLon)) want = pos_ta_[pos_focus_];
+    } else if (!nav_.popup_open && !at_home_ && nav_.tab == Tab::Chats) {
+        if (nav_.search_open) want = search_typing_ ? sr_query_ : nullptr;
+        else if (nav_.compose_focus && !conv_.empty() && conversation_visible()) want = compose_;
+    }
+    if (want == osk_field_) return;
+    release_osk();
+    osk_field_ = want;
+    if (want) cp0::ui::osk::request(want, cp0::ui::TextType::Text, false);   // Text: the number pad has neither '-' nor '.'
+    chat_mode_ = ~0u;                                                         // the compose view follows
+    invalidate();
+}
+
+void App::on_osk_inset(int inset)
+{
+    if (inset == osk_inset_) return;
+    osk_inset_ = inset;
+    chat_mode_ = ~0u;
+    layout_body();                                  // the page bodies end above the keyboard (or take the room back); drawn at the next tick
 }
 
 void App::select_tab(Tab t)
@@ -1505,6 +1725,7 @@ void App::update_title()
     case Tab::Chats:
         path.push_back("Chats");
         if (nav_.search_open) path.push_back("Search");
+        else if (conversation_visible() && !conv_.empty()) path.push_back(truncate_ellipsis(model_.conv_title(conv_), 24));
         break;
     case Tab::Contacts:
         path.push_back("Contacts");
@@ -1545,25 +1766,64 @@ void App::toggle_mute(const std::string &conv)
 
 /* ---- options of a conversation, deleting history (phase 1b) */
 
-void App::open_conversation_options(const std::string &conv)
+/* The Chats menu: Search messages and Add channel (each opens its page or menu: a chevron), then, when a conversation is selected
+ * (the row of the list, or the conversation open), its options (mute or unmute, delete: they act there, a dot; delete asks first)
+ * and Details for a direct chat with a known contact (the contact's page: a chevron). The title names the conversation the options
+ * act on ("Options for # Public"); with none (an empty list) the menu has the first two only, under the page's name. */
+void App::open_chats_menu()
 {
-    if (conv.size() < 3 || editor_open_ || nav_.popup_open) return;
+    if (editor_open_ || nav_.popup_open) return;
+    const std::string conv = conv_;
+    bool has_conv = false;
     if (conv.rfind("c:", 0) == 0) {
         const ChannelRec *c = model_.find_channel(std::atoi(conv.c_str() + 2));
-        if (!c || c->empty) return;
-    } else if (conv.rfind("d:", 0) != 0) {
-        return;
+        has_conv = c && !c->empty;
+    } else {
+        has_conv = conv.size() >= 3 && conv.rfind("d:", 0) == 0;
     }
-    const ConvOptions o = conversation_options(model_, conv);
-    open_menu(o.title, o.labels, [this, conv, o](int i) {
-        if (i < 0 || i >= static_cast<int>(o.actions.size())) return;
-        switch (o.actions[static_cast<size_t>(i)]) {
+    std::vector<std::string> labels = {"Search messages", "Add channel"};
+    std::vector<Aff> affs = {Aff::Open, Aff::Open};
+    constexpr int kFirst = 2;                                   // the conversation's entries start here
+    ConvOptions o;
+    bool details = false;
+    if (has_conv) {
+        o = conversation_options(model_, conv);
+        for (const std::string &l : o.labels) {
+            labels.push_back(l);
+            affs.push_back(Aff::Action);
+        }
+        KeyPrefix dp{};
+        details = conv.size() == 14 && conv.rfind("d:", 0) == 0 && from_hex(conv.substr(2), dp.data(), 6) && model_.find_by_prefix(dp) != nullptr;
+        if (details) {
+            labels.push_back("Details");
+            affs.push_back(Aff::Open);
+        }
+    }
+    std::string name = o.title;                                 // as the list names it: "# Public", "Alice"
+    if (conv.rfind("c:", 0) == 0) name = "# " + (!name.empty() && name[0] == '#' ? name.substr(1) : name);
+    const std::string title = has_conv ? "Options for " + name : std::string("Chats");
+    open_menu(title, labels, [this, conv, o, details](int i) {
+        if (i == 0) {
+            open_search();
+            return;
+        }
+        if (i == 1) {
+            add_channel_menu();
+            return;
+        }
+        const int k = i - kFirst;
+        if (details && k == static_cast<int>(o.actions.size())) {    // Details
+            if (conv == conv_) open_contact_of_conversation();
+            return;
+        }
+        if (k < 0 || k >= static_cast<int>(o.actions.size())) return;
+        switch (o.actions[static_cast<size_t>(k)]) {
         case ConvAction::Mute:
         case ConvAction::Unmute: toggle_mute(conv); break;
         case ConvAction::DeleteConversation:
         case ConvAction::DeleteMessages: confirm_delete_conversation(conv); break;
         }
-    });
+    }, {}, affs);
 }
 
 void App::after_deletion()
@@ -1572,6 +1832,7 @@ void App::after_deletion()
     if (conv_.rfind("d:", 0) == 0 && model_.message_count_in(conv_) == 0) {
         if (chat_sel_key_ == conv_) chat_sel_key_.clear();
         conv_.clear();
+        conv_open_ = false;
         nav_.compose_focus = false;
         lv_textarea_set_text(compose_, "");
     }
@@ -1605,6 +1866,7 @@ void App::on_board_changed()
     conv_.clear();
     chat_sel_key_.clear();
     chat_sel_ = -1;
+    conv_open_ = false;
     nav_.compose_focus = false;
     if (compose_) lv_textarea_set_text(compose_, "");
     focus_conv_.clear();
@@ -1757,10 +2019,6 @@ void App::hold_event(int what, RowList *list, int index, int x, int y)
     if (list == &chat_list_) {
         const std::string &id = chat_list_.id_at(index);
         if (id.rfind("c:", 0) == 0 || id.rfind("d:", 0) == 0) target = id;
-    } else if (list == nullptr) {
-        const bool add_selected = chat_sel_ >= 0 && chat_sel_ < static_cast<int>(chat_rows_.size()) &&
-                                  chat_rows_[static_cast<size_t>(chat_sel_)].kind == ChatRow::Add;
-        if (!add_selected && (conv_.rfind("c:", 0) == 0 || conv_.rfind("d:", 0) == 0)) target = conv_;
     }
     if (target.empty() || nav_.popup_open || editor_open_ || view_pending_ || nav_.tab != Tab::Chats || at_home_) {
         hold_.cancel();
@@ -1784,12 +2042,16 @@ void App::hold_tick(uint64_t now)
     }
     if (hold_.poll(now)) {
         set_hidden(hold_box_, true);
-        open_conversation_options(hold_.target());
+        const int idx = find_chat_row(chat_rows_, hold_.target());       // the held row is selected: the menu's options act on it
+        if (idx >= 0) {
+            select_chat_row(idx);
+            open_chats_menu();
+        }
         return;
     }
     if (hold_.visible(now)) {
         lv_label_set_text(hold_label_, ("Keep holding: options for " + truncate_ellipsis(model_.conv_title(hold_.target()), 26)).c_str());
-        lv_obj_set_width(hold_bar_, std::max(1, static_cast<int>(hold_.progress(now) * 392)));
+        lv_obj_set_width(hold_bar_, std::max(1, static_cast<int>(hold_.progress(now) * hold_track_w_)));
         set_hidden(hold_box_, false);
     }
 }
@@ -1915,7 +2177,7 @@ void App::tick()
     }
     if (client_->clock_prompt_pending() && !editor_open_ && !nav_.popup_open && (prompt_ms_ == 0 || now - prompt_ms_ >= 500)) {
         prompt_ms_ = now;
-        if (!keyboard_ready()) {
+        if (!keyboard_ready() && !osk_may_show()) {
             client_->clock_skip();
             notice("Keyboard needed to set the board clock: Settings > Sync clock now", false);
         } else {
@@ -1923,8 +2185,12 @@ void App::tick()
                         format_local_datetime(now_unix()));
         }
     }
-    if (nav_.tab == Tab::Chats && !at_home_ && !conv_.empty()) model_.mark_read(conv_);
+    if (nav_.tab == Tab::Chats && !at_home_ && !conv_.empty() && !nav_.search_open && conversation_visible()) model_.mark_read(conv_);
     if (need) render();
+    // the buttons of the dialogs at Mesh Hop's ROW height, after any layout of theirs (the toolkit's own on a change of the
+    // on-screen keyboard included)
+    if (dialog_) compact_dialog(*dialog_);
+    if (ed_dialog_) compact_dialog(*ed_dialog_);
 }
 
 void App::render()
@@ -1933,10 +2199,7 @@ void App::render()
     last_revision_ = model_.revision();
     last_link_ = static_cast<uint32_t>(client_->link());
     dirty_ = false;
-    // the stage holds Chats only (P4 converts it); the full width holds the other pages and the search over Chats
-    const bool on_stage = !at_home_ && nav_.tab == Tab::Chats && !nav_.search_open;
-    set_hidden(screen_, !on_stage);
-    set_hidden(wide_, at_home_ || on_stage);
+    set_hidden(wide_, at_home_);
     home_list_->set_hidden(!at_home_);
     if (at_home_) render_home();
     else set_page_visible();
@@ -1959,6 +2222,7 @@ void App::render()
     position_refresh();
     render_footer();
     update_title();
+    sync_osk();
 }
 
 /* The rows of Home: what is new in Chats, how many contacts, the board. */
@@ -2044,120 +2308,174 @@ void App::key_home(const KeyEvent &e)
 
 void App::update_compose_style()
 {
-    const bool focus = nav_.compose_focus && nav_.tab == Tab::Chats && !editor_open_;
-    if (focus) lv_obj_add_state(compose_, LV_STATE_FOCUSED);
-    else lv_obj_remove_state(compose_, LV_STATE_FOCUSED);
-    lv_obj_set_style_border_color(compose_, lv_color_hex(focus ? kAccent : kSelected), 0);
-    lv_textarea_set_placeholder_text(compose_, !kbd_ok_ ? "Wake the Bluetooth keyboard to type" : conv_.empty() ? "" : "Type a message (keyboard)");
+    const bool focus = nav_.compose_focus && nav_.tab == Tab::Chats && !editor_open_ && !nav_.popup_open;
+    style_field(compose_, focus);
+    const bool osk = osk_may_show();
+    lv_textarea_set_placeholder_text(compose_, conv_.empty() ? "" : osk && !focus ? "Tap to write a message" : focus ? "Type a message, Enter sends" : "Type a message");
+    lv_obj_set_style_bg_opa(send_btn_, focus || lv_textarea_get_text(compose_)[0] ? LV_OPA_COVER : LV_OPA_70, 0);
 }
 
-void App::render_chats()
+namespace {
+
+/* One line of a message: the text with its line breaks as spaces. */
+std::string one_line(const std::string &text)
 {
-    // the left list: a title and the number of unread messages (no last message), "muted" for a muted channel
-    // before the first SELF_INFO no board is known: an empty list (the conversations of the last board are not shown as if they were this one's)
-    const std::vector<ChatRow> rows = model_.board_known() ? build_chat_rows(model_, conv_.rfind("d:", 0) == 0 ? conv_ : std::string()) : std::vector<ChatRow>();
+    std::string s = text;
+    for (char &c : s)
+        if (c == '\n' || c == '\r' || c == '\t') c = ' ';
+    return s;
+}
+
+/* What the list and the compose view show of a message: "Alice: text" in a channel, "You: text" for ours, the text alone from the
+ * contact of a direct chat. */
+std::string message_line(const Message &m, bool channel)
+{
+    if (m.dir == Dir::Out) return "You: " + one_line(m.text);
+    if (channel && !m.sender.empty() && m.sender != "?") return m.sender + ": " + one_line(m.text);
+    return one_line(m.text);
+}
+
+} // namespace
+
+std::string App::last_message_line() const
+{
+    if (conv_.empty()) return std::string();
+    const auto msgs = model_.messages(conv_);
+    if (msgs.empty()) return "No messages yet in " + model_.conv_title(conv_);
+    return message_line(*msgs.back(), conv_.rfind("c:", 0) == 0);
+}
+
+std::string App::conversation_info() const
+{
+    if (conv_.empty()) return std::string();
+    if (nav_.compose_focus) {
+        const char *cur = lv_textarea_get_text(compose_);
+        const int left = max_compose_bytes() - static_cast<int>(cur ? std::strlen(cur) : 0);
+        return std::to_string(std::max(0, left)) + " left";
+    }
+    if (model_.is_muted(conv_)) return "muted";
+    int heard = 0;
+    const uint32_t now = now_unix();
+    for (const ContactRec *r : model_.contacts_sorted())
+        if (r->last_heard() && now >= r->last_heard() && now - r->last_heard() < 3600) ++heard;
+    return std::to_string(heard) + (heard == 1 ? " node heard" : " nodes heard") + " (1 h)";
+}
+
+/* The list: CHANNELS, then DIRECT (the grey capitals of a section), each conversation on two lines: the name, and the last message
+ * with its time at the right; the unread count in blue (or "muted") at the right of the name, then the chevron. Before the first
+ * SELF_INFO no board is known: an empty list (the conversations of the last board are not shown as if they were this one's). */
+void App::render_chat_list()
+{
+    std::vector<ChatRow> rows = model_.board_known() ? build_chat_rows(model_, conv_.rfind("d:", 0) == 0 ? conv_ : std::string()) : std::vector<ChatRow>();
+    rows.erase(std::remove_if(rows.begin(), rows.end(), [](const ChatRow &r) { return r.kind == ChatRow::Add; }), rows.end());   // the menu has it
     chat_rows_ = rows;
     chat_sel_ = chat_sel_key_.empty() ? -1 : find_chat_row(chat_rows_, chat_sel_key_);
-    if (chat_sel_ < 0 && chat_sel_key_ != "+") chat_sel_ = first_selectable(chat_rows_);
-    if (chat_sel_ >= 0 && chat_rows_[static_cast<size_t>(chat_sel_)].kind != ChatRow::Add) {
+    if (chat_sel_ < 0) chat_sel_ = first_selectable(chat_rows_);
+    if (chat_sel_ >= 0) {
         chat_sel_key_ = chat_rows_[static_cast<size_t>(chat_sel_)].key;
         if (conv_.empty() || find_chat_row(chat_rows_, conv_) < 0) conv_ = chat_sel_key_;
+    } else {
+        chat_sel_key_.clear();
+        if (!model_.board_known()) conv_.clear();
     }
+
+    const Geo g = geo();
+    cp0_ui_list_layout_t l = settings_list_layout(0, g.h);
+    l.text_px = cp0_ui_metrics_get()->text_px[CP0_TEXT_BODY];
+    const cp0_ui_list_layout_t sl = settings_list_layout(0, g.h);
+    const lv_font_t *sf = token_font(sl.section_px, false);
+    const int lw = chat_list_.width();
+    const int lh1 = line_h(f_body_), lh2 = line_h(f_caption_), lhv = line_h(f_value_), lhs = line_h(sf);
+    const int row_h = std::max(g.list_row, lh1 + lh2 + 2 * std::max(4, g.s / 2));
+    const int top = std::max(0, (row_h - lh1 - lh2) / 2);
+    const int right = lw - g.inset - trail_of(l, Aff::Open);
     std::vector<RowSpec> specs;
     for (const ChatRow &r : chat_rows_) {
         RowSpec s;
         s.id = r.key;
         if (r.kind == ChatRow::Header) {
-            s.h = 26;
-            s.header = true;
+            s.h = sl.section_h;
             s.selectable = false;
-            s.cells.push_back({r.title, kMuted, 12, 180, LV_TEXT_ALIGN_LEFT, f_small_, centre(26, f_small_)});
-        } else if (r.kind == ChatRow::Add) {
-            s.h = 44;
-            s.cells.push_back({r.title, kBlue, 12, 188, LV_TEXT_ALIGN_LEFT, f_ui_, centre(44, f_ui_)});
-        } else {
-            s.h = 44;
-            s.badge = r.unread;
-            std::string title = r.title;
-            if (r.kind == ChatRow::Channel && !title.empty() && title[0] == '#') title = title.substr(1);
-            if (r.kind == ChatRow::Channel) title = "# " + title;
-            const bool tail = r.unread > 0 || r.muted;
-            s.cells.push_back({title, r.unread > 0 ? kAccent : kText, 12, tail ? 124 : 180, LV_TEXT_ALIGN_LEFT, f_text_, centre(44, f_text_)});
-            if (r.muted) s.cells.push_back({"muted", kMuted, 136, 60, LV_TEXT_ALIGN_RIGHT, f_small_, centre(44, f_small_)});
+            s.cells.push_back({r.title, CP0_UI_LIST_SECTION_RGB, g.inset, std::max(1, lw - 2 * g.inset), LV_TEXT_ALIGN_LEFT, sf, (s.h - lhs) / 2});
+            specs.push_back(std::move(s));
+            continue;
         }
-        specs.push_back(s);
+        s.h = row_h;
+        s.aff = Aff::Open;
+        std::string title = r.title;
+        if (r.kind == ChatRow::Channel && !title.empty() && title[0] == '#') title = title.substr(1);
+        if (r.kind == ChatRow::Channel) title = "# " + title;
+        const std::string count = r.unread > 0 ? fmt_count_badge(r.unread) : r.muted ? std::string("muted") : std::string();
+        const int cw = count.empty() ? 0 : text_w(count.c_str(), f_value_) + 2;
+        s.cells.push_back({title, kText, g.inset, std::max(1, right - g.inset - (cw ? cw + g.m : 0)), LV_TEXT_ALIGN_LEFT, f_body_, top});
+        if (cw) s.cells.push_back({count, r.unread > 0 ? kAccent : kMuted, right - cw, cw, LV_TEXT_ALIGN_RIGHT, f_value_, top + lh1 - lhv});
+        // the second line: the last message (cut with dots), its time at the right
+        std::string preview, when;
+        const auto msgs = model_.messages(r.key);
+        if (!msgs.empty()) {
+            preview = message_line(*msgs.back(), r.kind == ChatRow::Channel);
+            when = fmt_when(msgs.back()->ts);
+            if (when.size() > 5) when = when.substr(0, 5);    // before today: the day only ("10-16"), the preview keeps the room
+        } else {
+            preview = "No messages yet";
+        }
+        const int ww = when.empty() ? 0 : text_w(when.c_str(), f_caption_) + 2;
+        s.cells.push_back({preview, kMuted, g.inset, std::max(1, right - g.inset - (ww ? ww + g.s : 0)), LV_TEXT_ALIGN_LEFT, f_caption_, top + lh1});
+        if (ww) s.cells.push_back({when, kMuted, right - ww, ww, LV_TEXT_ALIGN_RIGHT, f_caption_, top + lh1});
+        specs.push_back(std::move(s));
     }
+    if (!model_.board_known()) {
+        RowSpec s;
+        s.selectable = false;
+        const std::string text = "No board yet. Plug in a MeshCore board: its own conversations appear here.";
+        const int tw = std::max(1, lw - 2 * g.inset), n = lines_of(text, f_body_, tw);
+        s.h = n * lh1 + 2 * g.s;
+        Cell c{text, kMuted, g.inset, tw, LV_TEXT_ALIGN_LEFT, f_body_, g.s};
+        c.lines = n;
+        s.cells.push_back(c);
+        specs.push_back(std::move(s));
+    }
+    const bool focused = !nav_.compose_focus || !two_pane_fit_ || osk_inset_ > 0;
     uint32_t sig = fnv_int(0, chat_sel_);
-    sig = fnv_int(sig, nav_.compose_focus ? 1 : 0);
+    sig = fnv_int(sig, focused ? 1 : 0);
     for (const RowSpec &s : specs) {
         for (const Cell &c : s.cells) sig = fnv(sig, c.text);
-        sig = fnv_int(sig, s.badge);
+        sig = fnv_int(sig, s.h);
     }
     if (sig != chat_sig_ && !plat_.touching()) {         // never rebuild a list under the finger: the tap or drag would be lost
         chat_sig_ = sig;
-        chat_list_.set(std::move(specs), chat_sel_, !nav_.compose_focus);
+        chat_list_.set(std::move(specs), chat_sel_, focused);
+        chat_list_.scroll_to_selected();
     }
-    if (nav_.compose_focus) chat_list_.scroll_to_selected();
-
-    // the right pane
-    const bool add_selected = chat_sel_ >= 0 && chat_rows_[static_cast<size_t>(chat_sel_)].kind == ChatRow::Add;
-    std::string title;
-    if (add_selected) title = "New channel";
-    else if (!conv_.empty()) title = model_.conv_title(conv_);
-    else title = "No conversation";
-    const bool is_channel = conv_.rfind("c:", 0) == 0 && !add_selected;
-    bool has_details = false;                                   // a direct chat with a contact we know: the Details button (touch)
-    if (!add_selected && conv_.rfind("d:", 0) == 0 && conv_.size() == 14) {
-        KeyPrefix dp{};
-        has_details = from_hex(conv_.substr(2), dp.data(), 6) && model_.find_by_prefix(dp) != nullptr;
-    }
-    const bool side_button = has_details;
-    set_hidden(details_btn_, !has_details);
-    set_hidden(options_btn_, add_selected || conv_.empty());
-    set_hidden(title_hold_, add_selected || conv_.empty());
-    const int btn_left = side_button ? kScreenW - 206 : kScreenW - 104;      // the name and the line under it end before the buttons
-    lv_obj_set_width(chat_title_, btn_left - 6 - (kListW + 11));
-    lv_obj_set_width(chat_info_, btn_left - 6 - (kListW + 11));
-    lv_obj_set_width(title_hold_, btn_left - kListW - 5);
-    lv_label_set_text(chat_title_, truncate_ellipsis(title, side_button ? 22 : 32).c_str());
-    std::string info;
-    if (nav_.compose_focus && !conv_.empty()) {
-        const char *cur = lv_textarea_get_text(compose_);
-        const int left = max_compose_bytes() - static_cast<int>(cur ? std::strlen(cur) : 0);
-        info = std::to_string(std::max(0, left)) + " left";
-    } else if (!add_selected && !conv_.empty() && model_.is_muted(conv_)) {
-        info = "muted";
-    } else {
-        int heard = 0;
-        const uint32_t now = now_unix();
-        for (const ContactRec *r : model_.contacts_sorted())
-            if (r->last_heard() && now >= r->last_heard() && now - r->last_heard() < 3600) ++heard;
-        info = std::to_string(heard) + (heard == 1 ? " node heard" : " nodes heard") + " (1 h)";
-    }
-    lv_label_set_text(chat_info_, info.c_str());
-    render_chat_messages(false);
-    update_compose_style();
-    set_hidden(compose_, add_selected || conv_.empty());
-    set_hidden(send_btn_, add_selected || conv_.empty());
-    lv_obj_set_style_bg_opa(send_btn_, nav_.compose_focus ? LV_OPA_COVER : LV_OPA_70, 0);
 }
 
+void App::render_chats()
+{
+    render_chat_list();
+    if (conv_open_ && conv_.empty()) conv_open_ = false;  // the conversation went (deleted, another board): back to the list
+    layout_chats();
+    render_chat_messages(false);
+    update_compose_style();
+}
+
+/* The conversation: each message is the sender and the time (blue, ours green) with its status at the right (sending, sent,
+ * delivered, heard back by N repeaters, no ack...), then the text (the message size: the BODY text, wrapped). The newest at the
+ * bottom; the last kMaxShownMessages, or the window around a message found by the search (framed in blue). */
 void App::render_chat_messages(bool force)
 {
-    const bool add_selected = chat_sel_ >= 0 && chat_rows_[static_cast<size_t>(chat_sel_)].kind == ChatRow::Add;
-    const auto msgs = conv_.empty() || add_selected ? std::vector<const Message *>() : model_.messages(conv_);
+    const auto msgs = conv_.empty() ? std::vector<const Message *>() : model_.messages(conv_);
     uint32_t sig = fnv(0, conv_);
     sig = fnv_int(sig, model_.board_known() ? 1 : 0);
-    sig = fnv_int(sig, add_selected ? 1 : 0);
     sig = fnv_int(sig, static_cast<int>(msgs.size()));
     sig = fnv_int(sig, conv_ == focus_conv_ ? static_cast<int>(focus_seq_) : 0);
+    sig = fnv_int(sig, msg_w_);
     for (const Message *m : msgs) {
         sig = fnv_int(sig, static_cast<int>(m->seq));
         sig = fnv_int(sig, static_cast<int>(m->state));
         sig = fnv(sig, m->note);
         sig = fnv_int(sig, m->heard_back);
     }
-    // the clock of the "HH:MM" does not move; the footer and the list carry the ages
+    // the clock of the "HH:MM" does not move; the caption line and the list carry the ages
     if (!force && built_sig_ == sig && built_conv_ == conv_) return;
     if (!force && built_conv_ == conv_ && plat_.touching()) return;       // not under a finger that scrolls the conversation
     const bool first = built_conv_ != conv_;
@@ -2167,17 +2485,16 @@ void App::render_chat_messages(bool force)
     built_conv_ = conv_;
     lv_obj_clean(msgs_);
     lv_obj_t *last = nullptr;
-    const int inner_w = 640 - (kListW + 1) - 12;
-    if (add_selected || msgs.empty()) {
+    const Geo g = geo();
+    const int inner_w = std::max(1, msg_w_);
+    const int pad = std::max(4, g.s / 2);
+    if (msgs.empty() && model_.board_known()) {              // (no board yet: the list says it)
         lv_obj_t *l = lv_label_create(msgs_);
         lv_obj_set_width(l, inner_w);
         lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_WRAP);
-        lv_obj_set_style_text_font(l, f_ui_, 0);
+        lv_obj_set_style_text_font(l, f_body_, 0);
         set_color(l, kMuted);
-        lv_label_set_text(l, add_selected ? "Press Enter or tap the row to add a channel:\na hashtag channel (#name), or a private channel with its own key."
-                          : !model_.board_known() ? "No board yet.\nPlug in a MeshCore board: its own conversations appear here."
-                          : conv_.empty() ? "Select a channel or a contact on the left."
-                                          : "No messages yet. Type a message with the keyboard and press Enter,\nor tap the entry box.");
+        lv_label_set_text(l, conv_.empty() ? "No conversation yet." : "No messages yet. Write the first one below.");
         last = l;
     }
     size_t start = msgs.size() > static_cast<size_t>(kMaxShownMessages) ? msgs.size() - kMaxShownMessages : 0;
@@ -2192,39 +2509,51 @@ void App::render_chat_messages(bool force)
     }
     lv_obj_t *focus_item = nullptr;
     const bool channel = conv_.rfind("c:", 0) == 0;
+    const int hdr_h = line_h(f_mono_), text_w_in = std::max(1, inner_w - 2 * pad);
     for (size_t i = start; i < end; ++i) {
         const Message &m = *msgs[i];
         lv_obj_t *item = lv_obj_create(msgs_);
         lv_obj_remove_style_all(item);
         lv_obj_remove_flag(item, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_remove_flag(item, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_set_size(item, inner_w, LV_SIZE_CONTENT);
         lv_obj_set_flex_flow(item, LV_FLEX_FLOW_COLUMN);
-        lv_obj_set_style_pad_all(item, 5, 0);
-        lv_obj_set_style_pad_row(item, 1, 0);
-        lv_obj_set_style_radius(item, 6, 0);
+        lv_obj_set_style_pad_all(item, pad, 0);
+        lv_obj_set_style_pad_row(item, 2, 0);
+        lv_obj_set_style_radius(item, cp0_ui_metrics_get()->tok[CP0_TOK_RADIUS_S], 0);
         if (m.dir == Dir::Out) {
             lv_obj_set_style_bg_color(item, lv_color_hex(kPanel), 0);
             lv_obj_set_style_bg_opa(item, LV_OPA_COVER, 0);
         }
-        if (want_seq && m.seq == want_seq) {                                 // the found message: a gold frame
+        if (want_seq && m.seq == want_seq) {                                 // the found message: a blue frame
             focus_item = item;
             lv_obj_set_style_border_width(item, 2, 0);
             lv_obj_set_style_border_color(item, lv_color_hex(kAccent), 0);
         }
-        lv_obj_t *hdr = make_box(item, 0, 0, inner_w - 10, 20);
-        lv_obj_t *who = make_label(hdr, f_text_small_, m.dir == Dir::Out ? kGreen : kBlue, 0, 0, 200, 20);
-        lv_label_set_text(who, (m.sender + "   " + fmt_clock(m.ts)).c_str());
+        // the head: who and when at the left, the status of ours at the right (never cut: the name gives way)
         const StatusText st = message_status(m, channel);
+        std::string status;
         if (!st.text.empty()) {
-            std::string mark = m.state == MsgState::Delivered && !channel ? (dejavu_ ? "\xE2\x9C\x93\xE2\x9C\x93 " : "") :
-                               (m.state == MsgState::Sent || (m.state == MsgState::Delivered && channel)) && (m.note.empty() || (channel && m.heard_back > 0)) ? (dejavu_ ? "\xE2\x9C\x93 " : "") : "";
-            lv_obj_t *sl = make_label(hdr, f_text_small_, tone_color(st.tone), inner_w - 10 - 230, 0, 230, 20, LV_TEXT_ALIGN_RIGHT);
-            lv_label_set_text(sl, (mark + st.text).c_str());
+            const std::string mark = m.state == MsgState::Delivered && !channel ? (dejavu_ ? "\xE2\x9C\x93\xE2\x9C\x93 " : "") :
+                                     (m.state == MsgState::Sent || (m.state == MsgState::Delivered && channel)) && (m.note.empty() || (channel && m.heard_back > 0)) ? (dejavu_ ? "\xE2\x9C\x93 " : "") : "";
+            status = mark + st.text;
+        }
+        // the status takes the room it needs as long as the sender and the time keep theirs (else at least half the line)
+        const std::string who_text = m.sender + "   " + fmt_clock(m.ts);
+        const int who_w = text_w(who_text.c_str(), f_mono_) + 2;
+        const int sw = status.empty() ? 0 : std::min(text_w(status.c_str(), f_mono_) + 2, std::max(text_w_in / 2, text_w_in - who_w - g.s));
+        lv_obj_t *hdr = make_box(item, 0, 0, text_w_in, hdr_h);
+        lv_obj_remove_flag(hdr, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_t *who = make_label(hdr, f_mono_, m.dir == Dir::Out ? kGreen : kBlue, 0, 0, std::max(1, text_w_in - (sw ? sw + g.s : 0)), hdr_h);
+        lv_label_set_text(who, who_text.c_str());
+        if (sw) {
+            lv_obj_t *sl = make_label(hdr, f_mono_, tone_color(st.tone), text_w_in - sw, 0, sw, hdr_h, LV_TEXT_ALIGN_RIGHT);
+            lv_label_set_text(sl, status.c_str());
         }
         lv_obj_t *body = lv_label_create(item);
-        lv_obj_set_width(body, inner_w - 10);
+        lv_obj_set_width(body, text_w_in);
         lv_label_set_long_mode(body, LV_LABEL_LONG_MODE_WRAP);
-        lv_obj_set_style_text_font(body, f_text_, 0);
+        lv_obj_set_style_text_font(body, f_field_, 0);
         set_color(body, kText);
         lv_label_set_text(body, m.text.c_str());
         last = item;
@@ -2234,46 +2563,6 @@ void App::render_chat_messages(bool force)
     else if (at_bottom && last && !want_seq) lv_obj_scroll_to_view(last, LV_ANIM_OFF);
     else lv_obj_scroll_to_y(msgs_, old_scroll, LV_ANIM_OFF);
 }
-
-namespace {
-
-const char *const kDownMark = " \xE2\x96\xBC";       // " ▼" (U+25BC, in the launcher's Montserrat): the cell opens a dialog
-
-/* The marker layout of a page list (the chevron's and the dot's sizes from the size of the row's main text). */
-int trail_of(const cp0_ui_list_layout_t &l, Aff aff)
-{
-    switch (aff) {
-    case Aff::Open: return cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_OPEN);
-    case Aff::Edit: return cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_EDIT);
-    case Aff::Action: return cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_ACTION);
-    case Aff::Running: return cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_ACTION_RUNNING);
-    default: return 0;
-    }
-}
-
-cp0::ui::RowAffordance list_aff(Aff a)
-{
-    switch (a) {
-    case Aff::Info: return cp0::ui::RowAffordance::Info;
-    case Aff::Open: return cp0::ui::RowAffordance::Open;
-    case Aff::Edit: return cp0::ui::RowAffordance::Edit;
-    case Aff::Action: return cp0::ui::RowAffordance::Action;
-    case Aff::Running: return cp0::ui::RowAffordance::ActionRunning;
-    default: return cp0::ui::RowAffordance::Unspecified;
-    }
-}
-
-/* The number of lines `text` takes in `font` at `w` px (at least 1). */
-int lines_of(const std::string &text, const lv_font_t *font, int w)
-{
-    if (text.empty()) return 1;
-    lv_point_t sz{};
-    lv_text_get_size(&sz, text.c_str(), font, 0, 0, std::max(1, w), LV_TEXT_FLAG_NONE);
-    const int lh = line_h(font);
-    return std::max(1, (static_cast<int>(sz.y) + lh - 1) / lh);
-}
-
-} // namespace
 
 /* ---- contacts */
 
@@ -2720,10 +3009,13 @@ std::string App::hint_text() const
     if (editor_open_) return edit_kind_ == EditKind::Position ? "Tab: next field   Enter: OK   Esc: cancel" : "Type with the keyboard   Enter: OK   Esc: cancel";
     if (at_home_) return "Up/Down: choose   Enter: open   Hold Esc 3 s: leave";
     switch (nav_.tab) {
-    case Tab::Chats:
-        return nav_.search_open ? "Type  Up/Down  Enter: open  Ctrl+K D R: filters"
-               : nav_.compose_focus ? "Enter: send  Esc: list  Up/Down: scroll  Ctrl+O: options"
-                                    : "Enter: write  Ctrl+O: options  Ctrl+F: find";
+    case Tab::Chats: {
+        if (nav_.search_open) return "Type  Up/Down  Enter: open  Ctrl+K D R: filters";
+        const bool two = two_pane_fit_ && osk_inset_ == 0;
+        if (nav_.compose_focus) return two ? "Enter: send  Esc: list  Up/Down: scroll  Ctrl+O: options" : "Enter: send  Esc: back  Up/Down: scroll  Ctrl+O: options";
+        if (!two && conv_open_) return "Enter: write  Up/Down: scroll  Esc: back  Ctrl+O: options";
+        return two ? "Enter: write  Ctrl+O: options  Ctrl+F: find" : "Up/Down: choose  Enter: write  Ctrl+O: options  Ctrl+F: find";
+    }
     case Tab::Contacts:
         return nav_.detail_open ? "Enter: message   G: groups   D: delete   Esc: back"
                : nav_.nearby_open ? "Enter: add   I: ignore   S: scan   V: ignored   Esc: back"
@@ -2759,7 +3051,12 @@ bool App::page_caption(std::string &text) const
         text = contact_view_summary(csnap_.rows.size(), model_.contact_count(), view_pending_ ? view_next_ : cview_);
         return true;
     case Tab::Chats:
-        if (!nav_.search_open) return false;
+        if (!nav_.search_open) {
+            if (compose_view()) text = last_message_line();               // the compose view: the last message over the entry
+            else if (conversation_visible()) text = conversation_info();
+            else if (!kbd_ok_ && !chat_rows_.empty()) text = "Hold a chat: options";    // the list by touch (a keyboard: the hint line)
+            return !text.empty();
+        }
         if (search_.query(now_unix()).empty()) text = std::to_string(search_total_) + (search_total_ == 1 ? " message" : " messages") + " in the archive";
         else if (search_total_ == 0) text = "No message matches";
         else text = std::to_string(search_total_) + (search_total_ == 1 ? " message matches" : " messages match") +
@@ -2960,6 +3257,35 @@ lv_obj_t *App::dialog_button(cp0::ui::Dialog &d, size_t index) const
     return nullptr;
 }
 
+/* Mesh Hop's tap targets are ROW high (7 mm, the user's decision for this app; the toolkit's Dialog makes its buttons TARGET,
+ * 9 mm, high). After each layout of the dialog (its own, on a change of the on-screen keyboard, or the app's) its buttons are
+ * made ROW high: a body that scrolls gets the room (the buttons move down), else the box gets shorter and stays centred. Nothing
+ * when the buttons are already ROW high, or gone (the on-screen keyboard's Enter and Esc act for them). */
+void App::compact_dialog(cp0::ui::Dialog &d)
+{
+    const cp0_ui_dialog_t &g = d.geometry();
+    const int row = cp0_ui_metrics_get()->tok[CP0_TOK_ROW_H];
+    const int diff = g.button_h - row;
+    if (g.buttons <= 0 || diff <= 0) return;
+    lv_obj_t *first = dialog_button(d, 0);
+    if (!first || lv_obj_get_style_height(first, LV_PART_MAIN) != g.button_h) return;     // done already
+    lv_obj_t *viewport = lv_obj_get_parent(d.body());
+    lv_obj_t *box = viewport ? lv_obj_get_parent(viewport) : nullptr;
+    if (!box) return;
+    for (int i = 0; i < g.buttons; ++i) {
+        lv_obj_t *b = dialog_button(d, static_cast<size_t>(i));
+        if (!b) continue;
+        lv_obj_set_height(b, row);
+        if (g.scrolls) lv_obj_set_y(b, g.button_y + diff);
+    }
+    if (g.scrolls) {
+        lv_obj_set_height(viewport, g.body_h + diff);
+    } else {
+        lv_obj_set_height(box, g.h - diff);
+        lv_obj_set_y(box, g.y + diff / 2);
+    }
+}
+
 /* A line of text in the body of a dialog: the BODY size, or the CAPTION size for a small muted line. */
 lv_obj_t *App::dialog_label(cp0::ui::Dialog &d, const std::string &text, bool small, uint32_t color)
 {
@@ -3040,32 +3366,13 @@ lv_obj_t *App::dialog_row(cp0::ui::Dialog &d, const std::string &text, const std
     return row;
 }
 
-/* A one-line field in a dialog (the app types into it: the keys come from the app's bridge): the ROW token high, the DejaVu face when there is one. */
+/* A one-line field in a dialog (the app types into it: the keys come from the app's bridge), drawn as the toolkit's TextField:
+ * the ROW token high, the DejaVu face when there is one, the border blue while it is typed into. */
 lv_obj_t *App::make_field(lv_obj_t *parent, int tag, size_t max_len)
 {
-    const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
-    lv_obj_t *ta = lv_textarea_create(parent);
-    if (lv_obj_get_group(ta)) lv_group_remove_obj(ta);
-    lv_textarea_set_one_line(ta, true);                       // (sets the height to its content: the height comes after)
+    lv_obj_t *ta = make_text_field(parent, tag, max_len, layout_.row_h);
     lv_obj_set_width(ta, LV_PCT(100));
-    lv_obj_set_height(ta, layout_.row_h);
-    lv_obj_set_scrollbar_mode(ta, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_set_style_text_font(ta, f_field_, 0);
-    lv_obj_set_style_text_color(ta, lv_color_hex(kText), 0);
-    lv_obj_set_style_bg_color(ta, lv_color_hex(kBackground), 0);
-    lv_obj_set_style_bg_opa(ta, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(ta, m->tok[CP0_TOK_RADIUS_S], 0);
-    lv_obj_set_style_border_width(ta, 2, 0);
-    lv_obj_set_style_border_color(ta, lv_color_hex(kAccent), 0);
-    lv_obj_set_style_pad_hor(ta, m->tok[CP0_TOK_SPACE_S], 0);
-    lv_obj_set_style_pad_ver(ta, std::max(0, (layout_.row_h - 4 - static_cast<int>(lv_font_get_line_height(f_field_))) / 2), 0);   // the text on the middle line
-    lv_obj_set_style_bg_opa(ta, LV_OPA_TRANSP, LV_PART_CURSOR);
-    lv_obj_set_style_border_side(ta, LV_BORDER_SIDE_LEFT, LV_PART_CURSOR | LV_STATE_FOCUSED);
-    lv_obj_set_style_border_width(ta, 2, LV_PART_CURSOR | LV_STATE_FOCUSED);
-    lv_obj_set_style_border_color(ta, lv_color_hex(kAccent), LV_PART_CURSOR | LV_STATE_FOCUSED);
-    lv_textarea_set_max_length(ta, static_cast<uint32_t>(max_len));
-    lv_obj_add_state(ta, LV_STATE_FOCUSED);
-    if (tag) lv_obj_add_event_cb(ta, trampoline_button, LV_EVENT_CLICKED, reinterpret_cast<void *>(static_cast<intptr_t>(tag)));
+    style_field(ta, true);
     return ta;
 }
 
@@ -3104,20 +3411,20 @@ void App::popup_build()
     const int cw = d.geometry().content_w;
     switch (pop_.kind) {
     case Popup::Choice: {
-        // the value in the middle, a TARGET sized arrow on each side (touch), Left / Right keys do the same
-        const int target = m->tok[CP0_TOK_TARGET], gap = m->tok[CP0_TOK_SPACE_M];
+        // the value in the middle, an arrow on each side (touch: ROW square, Mesh Hop's 7 mm), Left / Right keys do the same
+        const int side = m->tok[CP0_TOK_ROW_H], gap = m->tok[CP0_TOK_SPACE_M];
         lv_obj_t *row = lv_obj_create(d.body());
         lv_obj_remove_style_all(row);
         lv_obj_remove_flag(row, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_remove_flag(row, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_set_size(row, cw, target);
+        lv_obj_set_size(row, cw, side);
         lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         auto arrow = [&](const char *symbol, int tag) {
             lv_obj_t *b = lv_button_create(row);
             if (lv_obj_get_group(b)) lv_group_remove_obj(b);
             lv_obj_remove_flag(b, LV_OBJ_FLAG_CLICK_FOCUSABLE);
-            lv_obj_set_size(b, target, target);
+            lv_obj_set_size(b, side, side);
             lv_obj_set_style_radius(b, layout_.esc_radius, 0);
             lv_obj_set_style_bg_color(b, lv_color_hex(kSelected), 0);
             lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
@@ -3134,7 +3441,7 @@ void App::popup_build()
         pop_left_ = arrow(LV_SYMBOL_LEFT, kTagPopLeft);
         pop_value_ = lv_label_create(row);
         lv_label_set_long_mode(pop_value_, LV_LABEL_LONG_MODE_WRAP);
-        lv_obj_set_width(pop_value_, std::max(10, cw - 2 * target - 2 * gap));
+        lv_obj_set_width(pop_value_, std::max(10, cw - 2 * side - 2 * gap));
         lv_obj_set_style_text_align(pop_value_, LV_TEXT_ALIGN_CENTER, 0);
         set_color(pop_value_, kText);
         pop_right_ = arrow(LV_SYMBOL_RIGHT, kTagPopRight);
@@ -3183,6 +3490,7 @@ void App::popup_build()
     case Popup::None: break;
     }
     d.relayout();
+    compact_dialog(d);
     add_scroll_cue(d);
 }
 
@@ -3226,6 +3534,7 @@ void App::popup_refresh()
         lv_obj_set_style_bg_color(pop_left_, lv_color_hex(prev ? kSelected : kSelectedDim), 0);
         lv_obj_set_style_bg_color(pop_right_, lv_color_hex(next ? kSelected : kSelectedDim), 0);
         if (dialog_) dialog_->relayout();
+        if (dialog_) compact_dialog(*dialog_);
         break;
     }
     case Popup::Confirm: {
@@ -3363,11 +3672,6 @@ void App::open_editor(EditKind kind, const std::string &title, const std::string
 {
     if (editor_open_) return;
     if (mono_ms() - start_ms_ < kStartGuardMs) return;
-    if (!keyboard_ready()) {                       // no dead editor: say what is missing
-        notice("Keyboard needed: wake the Bluetooth keyboard", false);
-        if (kind == EditKind::Clock) client_->clock_skip();
-        return;
-    }
     edit_kind_ = kind;
     edit_row_ = row;
     edit_mode_ = kind == EditKind::Number ? EditMode::Number : kind == EditKind::Clock || kind == EditKind::DateRange ? EditMode::Clock
@@ -3387,6 +3691,7 @@ void App::open_editor(EditKind kind, const std::string &title, const std::string
         lv_textarea_set_text(ed_ta_, initial.c_str());
         lv_textarea_set_cursor_pos(ed_ta_, LV_TEXTAREA_CURSOR_LAST);
         ed_dialog_->relayout();
+        compact_dialog(*ed_dialog_);
         add_scroll_cue(*ed_dialog_);
     }
     editor_open_ = true;
@@ -3394,6 +3699,9 @@ void App::open_editor(EditKind kind, const std::string &title, const std::string
     edit_open_ms_ = mono_ms();
     edit_fresh_ = kind == EditKind::Number || kind == EditKind::Clock;
     if (kind == EditKind::PrivKey) editor_note("0 of 32 hex characters");
+    // the field asks for the on-screen keyboard (sync_osk): it shows when no physical keyboard is there; with neither, say what is missing
+    if (!keyboard_ready() && !osk_may_show()) editor_error("Keyboard needed: wake the Bluetooth keyboard");
+    sync_osk();
     invalidate();
 }
 
@@ -3486,6 +3794,7 @@ void App::close_editor(bool accept)
     } else if (edit_kind_ == EditKind::GroupNew) {
         group_keys_.clear();
     }
+    release_osk();                                  // before its field goes with the dialog
     editor_open_ = false;
     nav_.editor_open = false;
     ed_ta_ = nullptr;
@@ -3561,7 +3870,7 @@ void App::open_position_box()
         pos_gps_ = lv_button_create(d.body());
         if (lv_obj_get_group(pos_gps_)) lv_group_remove_obj(pos_gps_);
         lv_obj_remove_flag(pos_gps_, LV_OBJ_FLAG_CLICK_FOCUSABLE);
-        lv_obj_set_size(pos_gps_, cw, m->tok[CP0_TOK_TARGET]);
+        lv_obj_set_size(pos_gps_, cw, m->tok[CP0_TOK_ROW_H]);           // (Mesh Hop's tap targets: ROW, 7 mm)
         lv_obj_set_style_radius(pos_gps_, layout_.esc_radius, 0);
         lv_obj_set_style_bg_color(pos_gps_, lv_color_hex(kSelected), 0);
         lv_obj_set_style_bg_opa(pos_gps_, LV_OPA_COVER, 0);
@@ -3610,9 +3919,14 @@ void App::open_position_box()
     pos_err_text_.clear();
     position_layout(pos_gps_shown_);
     position_focus(kPosLat, false);
-    // no keyboard: the box still opens (the GPS switch and Clear work by touch), and says what is missing to type
-    position_error(keyboard_ready() ? "" : "Keyboard needed: wake the Bluetooth keyboard", true);
+    // without a physical keyboard the box opens with its GPS switch, Clear and the buttons in view: a tap on a field types (the
+    // on-screen keyboard comes, the dialog keeps the field above it); with neither, it says what is missing
+    const bool osk = osk_may_show();
+    pos_typing_ = !osk;
+    position_focus(kPosLat, false);                      // (the field's look follows pos_typing_)
+    position_error(osk || keyboard_ready() ? "" : "Keyboard needed: wake the Bluetooth keyboard", true);
     position_refresh();
+    sync_osk();
     invalidate();
 }
 
@@ -3621,6 +3935,7 @@ void App::position_layout(bool gps)
 {
     set_hidden(pos_gps_, !gps);
     if (ed_dialog_) ed_dialog_->relayout();
+    if (ed_dialog_) compact_dialog(*ed_dialog_);
     if (!gps && pos_focus_ == kPosGps) position_focus(kPosClear);
 }
 
@@ -3644,18 +3959,14 @@ void App::position_refresh()
                                               : " Other nodes see this position when this node sends an advert.";
     lv_label_set_text(pos_hint_, hint.c_str());
     if (ed_dialog_) ed_dialog_->relayout();
+    if (ed_dialog_) compact_dialog(*ed_dialog_);
 }
 
 /* Focus: a field (accent border and the cursor) or a button (a ring, as in the popups). */
 void App::position_focus(int focus, bool scroll)
 {
     pos_focus_ = focus;
-    for (int i = 0; i < 2; ++i) {
-        const bool f = focus == i;
-        lv_obj_set_style_border_color(pos_ta_[i], lv_color_hex(f ? kAccent : kPressed), 0);
-        if (f) lv_obj_add_state(pos_ta_[i], LV_STATE_FOCUSED);
-        else lv_obj_remove_state(pos_ta_[i], LV_STATE_FOCUSED);
-    }
+    for (int i = 0; i < 2; ++i) style_field(pos_ta_[i], focus == i && pos_typing_);   // without a keyboard: blue once tapped
     lv_obj_set_style_border_width(pos_gps_, focus == kPosGps ? 3 : 0, 0);
     lv_obj_set_style_border_color(pos_gps_, lv_color_hex(kText), 0);
     if (pos_clear_) {
@@ -3664,6 +3975,7 @@ void App::position_focus(int focus, bool scroll)
     }
     lv_obj_t *target = focus == kPosLat ? pos_ta_[0] : focus == kPosLon ? pos_ta_[1] : focus == kPosGps ? pos_gps_ : nullptr;
     if (scroll && target && !lv_obj_has_flag(target, LV_OBJ_FLAG_HIDDEN)) lv_obj_scroll_to_view_recursive(target, LV_ANIM_OFF);
+    sync_osk();
 }
 
 void App::position_error(const std::string &text, bool error)
@@ -3686,8 +3998,10 @@ void App::close_position_box(bool apply)
         }
         if (!client_->set_position(lat, lon)) { position_error(client_->notice().text, true); return; }
     }
+    release_osk();                                  // before its fields go with the dialog
     editor_open_ = false;
     nav_.editor_open = false;
+    pos_typing_ = false;
     pos_now_ = pos_gps_ = pos_gps_label_ = pos_hint_ = pos_clear_ = nullptr;
     pos_label_[0] = pos_label_[1] = pos_ta_[0] = pos_ta_[1] = nullptr;
     ed_dialog_.reset();
@@ -3760,21 +4074,49 @@ void App::select_chat_row(int index)
 {
     if (index < 0 || index >= static_cast<int>(chat_rows_.size())) return;
     const ChatRow &r = chat_rows_[static_cast<size_t>(index)];
-    if (r.kind == ChatRow::Header) return;
+    if (r.kind == ChatRow::Header || r.kind == ChatRow::Add) return;
     chat_sel_ = index;
     chat_sel_key_ = r.key;
-    if (r.kind != ChatRow::Add) {
-        if (r.key != conv_) focus_seq_ = 0;
-        conv_ = r.key;
-        model_.mark_read(conv_);
-    }
+    if (r.key != conv_) focus_seq_ = 0;
+    conv_ = r.key;
+    if (conversation_visible()) model_.mark_read(conv_);     // one pane: read once its page opens
+    invalidate();
+}
+
+void App::chat_activate(int index, bool compose)
+{
+    if (index < 0 || index >= static_cast<int>(chat_rows_.size()) || chat_rows_[static_cast<size_t>(index)].kind == ChatRow::Header) return;
+    if (chat_rows_[static_cast<size_t>(index)].key != conv_) built_conv_.clear();     // a new conversation opens at its end
+    select_chat_row(index);
+    conv_open_ = true;
+    nav_.compose_focus = compose;
+    model_.mark_read(conv_);
+    invalidate();
+}
+
+void App::open_contact_of_conversation()
+{
+    KeyPrefix dp{};
+    const ContactRec *dc = conv_.size() == 14 && conv_.rfind("d:", 0) == 0 && from_hex(conv_.substr(2), dp.data(), 6) ? model_.find_by_prefix(dp) : nullptr;
+    if (!dc) return;
+    const std::string key = dc->key_hex();
+    select_tab(Tab::Contacts);
+    open_detail(key);
+}
+
+void App::close_conversation()
+{
+    conv_open_ = false;
+    nav_.compose_focus = false;
+    hold_.cancel();
     invalidate();
 }
 
 void App::open_conversation(const std::string &conv, bool focus_compose)
 {
     select_tab(Tab::Chats);
-    chat_rows_ = build_chat_rows(model_, conv_.rfind("d:", 0) == 0 ? conv_ : std::string());
+    chat_rows_ = build_chat_rows(model_, conv.rfind("d:", 0) == 0 ? conv : std::string());
+    chat_rows_.erase(std::remove_if(chat_rows_.begin(), chat_rows_.end(), [](const ChatRow &r) { return r.kind == ChatRow::Add; }), chat_rows_.end());
     int idx = find_chat_row(chat_rows_, conv);
     if (idx < 0) {                                  // a contact without messages yet: shown in the list once it has some
         conv_ = conv;
@@ -3784,7 +4126,9 @@ void App::open_conversation(const std::string &conv, bool focus_compose)
         select_chat_row(idx);
     }
     conv_ = conv;
+    conv_open_ = true;                               // one pane: its page (two panes: at the right)
     nav_.compose_focus = focus_compose;
+    model_.mark_read(conv_);
     invalidate();
 }
 
@@ -3806,7 +4150,8 @@ void App::send_message()
         return;
     }
     lv_textarea_set_text(compose_, "");
-    nav_.compose_focus = true;
+    // a physical keyboard keeps writing; the on-screen keyboard goes after a Send (the conversation shows the message going out)
+    nav_.compose_focus = !compose_view();
     focus_seq_ = 0;                                  // a new message: the conversation shows its end again
     invalidate();
 }
@@ -3926,6 +4271,7 @@ void App::confirm_remove_channel(int idx)
                      if (client_->remove_channel(idx) && conv_ == Model::conv_channel(idx)) {
                          conv_.clear();
                          chat_sel_key_.clear();
+                         conv_open_ = false;
                          nav_.compose_focus = false;
                      }
                      invalidate();
@@ -4534,6 +4880,7 @@ void App::open_search()
     if (nav_.popup_open || editor_open_ || nav_.search_open || nav_.tab != Tab::Chats) return;
     nav_.search_open = true;
     nav_.compose_focus = false;
+    search_typing_ = true;                           // the words take the keys (the on-screen keyboard by the shared rule)
     lv_textarea_set_text(sr_query_, search_.text.c_str());
     search_sel_ = 0;
     refresh_search_results();
@@ -4543,6 +4890,7 @@ void App::open_search()
 void App::close_search()
 {
     nav_.search_open = false;
+    search_typing_ = false;
     set_hidden(search_panel_, true);
     invalidate();
 }
@@ -4586,6 +4934,7 @@ void App::render_search()
     cells.push_back({kTagSearchDate, "Dates", search_.date_label()});
     cells.push_back({kTagSearchDir, "Show", search_dir_name(search_.dir)});
     search_bar_.set_cells(cells);
+    style_field(sr_query_, search_typing_);                  // blue while the words take the keys
     if (search_sig_ != (model_.next_seq() * 2654435761u ^ static_cast<uint32_t>(model_.message_count()))) refresh_search_results(false);   // a message arrived or was deleted
 }
 
@@ -4674,6 +5023,14 @@ void App::key_search(const KeyEvent &e)
         search_sel_ = std::clamp(to, 0, n - 1);
         search_list_.set_selected(search_sel_, true, true);
     };
+    // the on-screen keyboard is up for the words: its Enter puts it away (the results come back), the next Enter opens one
+    if (e.key == Key::Enter && search_typing_ && osk_inset_ > 0 && osk_field_ == sr_query_) {
+        if (!e.repeat) {
+            search_typing_ = false;
+            invalidate();
+        }
+        return;
+    }
     if (e.key == Key::Char && e.ctrl && !e.alt && e.text.size() == 1) {
         const char c = static_cast<char>(std::tolower(static_cast<unsigned char>(e.text[0])));
         if (e.repeat) return;
@@ -5040,14 +5397,22 @@ void App::button_clicked(int tag)
     }
     if (nav_.popup_open || view_pending_) return;
     switch (tag) {
-    case kTagSend: send_message(); break;
-    case kTagCompose:
-        if (!conv_.empty()) {
+    case kTagSend:
+        if (!editor_open_) send_message();
+        break;
+    case kTagCompose:                                       // a tap on the entry: it takes the keys (and the on-screen keyboard comes)
+        if (!conv_.empty() && !editor_open_) {
             nav_.compose_focus = true;
+            conv_open_ = true;
             invalidate();
         }
         break;
-    case kTagTitleHold: hold_.take_swallow(); break;       // a tap on the name does nothing
+    case kTagSearchField:                                  // a tap on the words: they take the keys again
+        if (nav_.search_open && !editor_open_) {
+            search_typing_ = true;
+            invalidate();
+        }
+        break;
     case kTagAdvertFlood: send_advert(true); break;
     case kTagAdvertZero: send_advert(false); break;
     case kTagRefresh: client_->refresh_contacts(); break;
@@ -5082,22 +5447,8 @@ void App::button_clicked(int tag)
         group_toggle_for(detail_key_);
         break;
     case kTagDetailDelete: delete_detail_contact(); break;
-    case kTagChatOptions:
-        if (conv_.empty() || (chat_sel_ >= 0 && chat_sel_ < static_cast<int>(chat_rows_.size()) && chat_rows_[static_cast<size_t>(chat_sel_)].kind == ChatRow::Add))
-            notice("Select a conversation first", false);
-        else
-            open_conversation_options(conv_);
-        break;
-    case kTagChatDetails: {
-        KeyPrefix dp{};
-        const ContactRec *dc = conv_.size() == 14 && from_hex(conv_.substr(2), dp.data(), 6) ? model_.find_by_prefix(dp) : nullptr;
-        if (dc) {
-            const std::string key = dc->key_hex();
-            select_tab(Tab::Contacts);
-            open_detail(key);
-        }
-        break;
-    }
+    case kTagChatAdd: add_channel_menu(); break;
+    case kTagSearchOpen: open_search(); break;
     case kTagNearbyClose: close_nearby(); break;
     case kTagNearbyAdd: nearby_add_selected(); break;
     case kTagNearbyIgnore:
@@ -5109,8 +5460,7 @@ void App::button_clicked(int tag)
         nearby_sig_ = 0;
         invalidate();
         break;
-    case kTagSearchOpen: open_search(); break;
-    case kTagSearchClose: close_search(); break;
+    case kTagSearchClose:close_search(); break;
     case kTagSearchConv: search_pick_conv(); break;
     case kTagSearchDate: search_pick_date(); break;
     case kTagSearchDir:
@@ -5138,8 +5488,11 @@ void App::button_clicked(int tag)
         }
         break;
     case kTagPosLat:
-    case kTagPosLon:
-        if (editor_open_ && edit_kind_ == EditKind::Position) position_focus(tag == kTagPosLat ? kPosLat : kPosLon);
+    case kTagPosLon:                                        // a tap on a field types into it (the on-screen keyboard comes by the rule)
+        if (editor_open_ && edit_kind_ == EditKind::Position) {
+            pos_typing_ = true;
+            position_focus(tag == kTagPosLat ? kPosLat : kPosLon);
+        }
         break;
     default: break;
     }
@@ -5151,9 +5504,15 @@ void App::row_clicked(RowList *list, int index, int x)
     if (mono_ms() - start_ms_ < kStartGuardMs || editor_open_ || nav_.popup_open || view_pending_) return;
     if (list == &chat_list_) {
         if (hold_.take_swallow()) return;                 // the release of a completed 3 s hold is not a tap
-        select_chat_row(index);
-        nav_.compose_focus = false;
-        if (index >= 0 && index < static_cast<int>(chat_rows_.size()) && chat_rows_[static_cast<size_t>(index)].kind == ChatRow::Add) add_channel_menu();
+        index = find_chat_row(chat_rows_, chat_list_.id_at(index));       // the row that was tapped, by its key (never a stale index)
+        if (index < 0) return;
+        const bool again = index == chat_sel_ && chat_rows_[static_cast<size_t>(index)].key == chat_sel_key_;
+        if (again) {                                      // a tap on the selected row: one pane opens the conversation, two panes write in it
+            chat_activate(index, two_pane_fit_ && osk_inset_ == 0);
+        } else {                                          // the first tap selects it (two panes: its conversation shows at the right)
+            select_chat_row(index);
+            nav_.compose_focus = false;
+        }
     } else if (list == &contact_list_) {
         // the row that was tapped, whatever the order it is shown in: its id is the contact key of THIS row
         const std::string key = contact_list_.id_at(index);
@@ -5180,6 +5539,10 @@ void App::row_clicked(RowList *list, int index, int x)
         detail_sel_ = index;
         detail_list_.set_selected(index, true, false);
     } else if (list == &search_list_) {
+        if (search_typing_ && osk_inset_ > 0) {           // a tap on the results puts the on-screen keyboard away
+            search_typing_ = false;
+            invalidate();
+        }
         if (index == search_sel_) {
             search_open_hit(index);
         } else {
@@ -5195,6 +5558,24 @@ void App::row_clicked(RowList *list, int index, int x)
 void App::back()
 {
     const BackAction a = back_action(nav_);
+    if (!at_home_ && nav_.tab == Tab::Chats) {
+        // the on-screen keyboard is up for the entry or the words: it goes first, the conversation (the search) stays
+        if (a == BackAction::FocusList && compose_view()) {
+            nav_.compose_focus = false;
+            invalidate();
+            return;
+        }
+        if (a == BackAction::CloseSearch && search_typing_ && osk_inset_ > 0 && osk_field_ == sr_query_) {
+            search_typing_ = false;
+            invalidate();
+            return;
+        }
+        // one pane: the conversation's page goes back to the list (from the entry too: the keyboard's "Esc: list")
+        if ((a == BackAction::FocusList || a == BackAction::ExitHint) && conv_open_ && !(two_pane_fit_ && osk_inset_ == 0)) {
+            close_conversation();
+            return;
+        }
+    }
     switch (a) {
     case BackAction::ClosePopup: popup_cancel(); break;
     case BackAction::CancelEditor: close_editor(false); break;
@@ -5225,7 +5606,10 @@ void App::header_back()
     post([this] {
         if (view_pending_) return;
         if (mono_ms() - start_ms_ < kStartGuardMs) return;
-        if (back_action(nav_) == BackAction::ExitHint && at_home_) ask_quit();
+        const BackAction a = back_action(nav_);
+        if (a == BackAction::ExitHint && at_home_) ask_quit();
+        // two panes: the header's Esc leaves Chats for Home (from the entry too)
+        else if (!at_home_ && nav_.tab == Tab::Chats && two_pane_fit_ && osk_inset_ == 0 && (a == BackAction::FocusList || a == BackAction::ExitHint)) go_home();
         else back();
     });
 }
@@ -5237,9 +5621,11 @@ void App::ask_quit()
                  [] { cdk::request_quit(0); }, "Quit", "Cancel");
 }
 
+/* dy > 0: towards the older messages (Up, PgUp), < 0: towards the newest; never past the first or the last (an unbounded scroll
+ * left the conversation blank past its end). */
 void App::scroll_messages(int dy)
 {
-    lv_obj_scroll_by(msgs_, 0, -dy, LV_ANIM_OFF);
+    lv_obj_scroll_by_bounded(msgs_, 0, dy, LV_ANIM_OFF);
 }
 
 void App::compose_edit(const KeyEvent &e)
@@ -5265,23 +5651,24 @@ void App::compose_edit(const KeyEvent &e)
 
 void App::key_chats(const KeyEvent &e)
 {
-    const bool add_selected = chat_sel_ >= 0 && chat_sel_ < static_cast<int>(chat_rows_.size()) &&
-                              chat_rows_[static_cast<size_t>(chat_sel_)].kind == ChatRow::Add;
     // Ctrl+M mutes / unmutes the channel (plain letters start a message, so the shortcut needs Ctrl)
     if (e.key == Key::Char && e.ctrl && !e.alt && (e.text == "m" || e.text == "M")) {
-        if (!e.repeat && !add_selected && !conv_.empty()) toggle_mute(conv_);
+        if (!e.repeat && !conv_.empty()) toggle_mute(conv_);
         return;
     }
-    // Ctrl+O opens the options of the conversation (mute, delete): the keyboard way of the 3 s hold on its name
+    // Ctrl+O opens the Chats menu for the selected (or open) conversation: the keyboard way of the 3 s hold on its row
     if (e.key == Key::Char && e.ctrl && !e.alt && (e.text == "o" || e.text == "O")) {
-        if (e.repeat) return;
-        if (add_selected || conv_.empty()) notice("Select a conversation first", false);
-        else open_conversation_options(conv_);
+        if (!e.repeat) open_chats_menu();
         return;
     }
     // Ctrl+F opens the search in the message archive
     if (e.key == Key::Char && e.ctrl && !e.alt && (e.text == "f" || e.text == "F")) {
         if (!e.repeat) open_search();
+        return;
+    }
+    const bool two = two_pane_fit_ && osk_inset_ == 0;
+    if (!two && !conv_open_ && !compose_view()) {           // one pane, the list
+        key_chat_list(e);
         return;
     }
     if (nav_.compose_focus) {
@@ -5296,7 +5683,28 @@ void App::key_chats(const KeyEvent &e)
         default: compose_edit(e); return;
         }
     }
-    switch (e.key) {
+    if (!two) {                                              // one pane, the conversation's page: the keys scroll it, Enter writes
+        switch (e.key) {
+        case Key::Up: scroll_messages(40); break;
+        case Key::Down: scroll_messages(-40); break;
+        case Key::PageUp: scroll_messages(240); break;
+        case Key::PageDown: scroll_messages(-240); break;
+        case Key::Enter:
+        case Key::Right:
+            if (e.repeat || conv_.empty()) break;
+            nav_.compose_focus = true;
+            invalidate();
+            break;
+        case Key::Char:
+            if (e.ctrl || e.alt || conv_.empty()) break;
+            nav_.compose_focus = true;                       // typing starts the message
+            compose_edit(e);
+            break;
+        default: break;
+        }
+        return;
+    }
+    switch (e.key) {                                         // two panes, the list has the keys (the conversation follows it)
     case Key::Up:
     case Key::Down: {
         const int next = step_selection(chat_rows_, chat_sel_, e.key == Key::Up ? -1 : 1);
@@ -5307,20 +5715,51 @@ void App::key_chats(const KeyEvent &e)
     case Key::PageDown: scroll_messages(-240); break;
     case Key::Enter:
     case Key::Right:
-        if (e.repeat) break;
-        if (add_selected) {
-            add_channel_menu();
-        } else if (!conv_.empty()) {
-            nav_.compose_focus = true;
-            invalidate();
-        }
+        if (e.repeat || conv_.empty()) break;
+        nav_.compose_focus = true;
+        conv_open_ = true;
+        invalidate();
         break;
     case Key::Char: {
-        if (e.ctrl || e.alt || add_selected || conv_.empty()) break;
+        if (e.ctrl || e.alt || conv_.empty()) break;
         nav_.compose_focus = true;                  // typing starts the message
+        conv_open_ = true;
         compose_edit(e);
         break;
     }
+    default: break;
+    }
+}
+
+/* One pane, the list: Up / Down (PgUp / PgDn: five rows, Home / End) move the highlight, Enter or Right opens the conversation with
+ * the entry taking the keys ("Enter: write"), and a letter starts the message there, as in two panes. */
+void App::key_chat_list(const KeyEvent &e)
+{
+    auto move = [&](int delta) {
+        int at = chat_sel_;
+        for (int i = 0; i < std::abs(delta); ++i) {
+            const int next = step_selection(chat_rows_, at, delta < 0 ? -1 : 1);
+            if (next < 0 || next == at) break;
+            at = next;
+        }
+        if (at >= 0 && at != chat_sel_) select_chat_row(at);
+    };
+    switch (e.key) {
+    case Key::Up: move(-1); break;
+    case Key::Down: move(1); break;
+    case Key::PageUp: move(-5); break;
+    case Key::PageDown: move(5); break;
+    case Key::Home: move(-1000); break;
+    case Key::End: move(1000); break;
+    case Key::Enter:
+    case Key::Right:
+        if (!e.repeat) chat_activate(chat_sel_, true);
+        break;
+    case Key::Char:
+        if (e.ctrl || e.alt || chat_sel_ < 0) break;
+        chat_activate(chat_sel_, true);
+        compose_edit(e);
+        break;
     default: break;
     }
 }

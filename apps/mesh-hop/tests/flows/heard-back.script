@@ -28,7 +28,6 @@ shot heard-back-4-final
 key esc
 key down
 key down
-key down
 wait 300
 key enter
 type direct one

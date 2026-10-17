@@ -7,14 +7,14 @@ say == start (expect all_msgs=12: the 10 seeded messages and 2 from the simulato
 dump
 shot h01-chats
 
-# Alice (first direct row), Ctrl+O: the options box
-tap 100 262
+# Alice (first direct row, selected by a tap), Ctrl+O: the Chats menu (Search messages, Add channel, then Alice's options and Details)
+tap "Alice"
 wait 300
 say == Alice open (expect conv_title='Alice')
 dump
 key ctrl-o
 wait 400
-say == options box of a direct chat (expect popup=menu popup_title='Alice')
+say == the menu of a direct chat (expect popup=menu popup_title='Options for Alice')
 dump
 shot h02-options-direct
 # Esc closes the box
@@ -23,9 +23,11 @@ wait 300
 say == Esc closes the box and does not leave Chats (expect popup=none tab=Chats)
 dump
 
-# mute the contact from the box
+# mute the contact from the box (its third entry, after Search messages and Add channel)
 key ctrl-o
 wait 400
+key down
+key down
 key enter
 wait 400
 say == muted (expect muted_conv=1 notice 'muted')
@@ -49,6 +51,8 @@ dump
 key ctrl-o
 wait 400
 key down
+key down
+key down
 key enter
 wait 500
 say == delete confirmation names the count (expect popup=confirm popup_title='Delete conversation?')
@@ -61,6 +65,8 @@ dump
 key ctrl-o
 wait 400
 key down
+key down
+key down
 key enter
 wait 500
 type y
@@ -70,25 +76,27 @@ dump
 shot h06-after-delete
 
 # a long press on the Bob row (3 s) with its progress cue, then the options box
-hold 100 262 1700 h07-hold-progress
+hold "Bob" 1700 h07-hold-progress
 wait 300
 say == the hold was released early: no box (expect popup=none)
 dump
-hold 100 262 3400 h08-hold-fired
+hold "Bob" 3400 h08-hold-fired
 wait 300
-say == the 3 s hold opened the options of Bob (expect popup=menu popup_title='Bob')
+say == the 3 s hold selected Bob and opened the menu (expect popup=menu popup_title='Options for Bob' conv=d:...)
 dump
 key esc
 wait 300
 say == no tap was triggered by the release (expect popup=none)
 dump
 
-# the same on a channel row (#test) and on the name in the header
-hold 100 148 3400 h09-hold-channel
+# the same on a channel row (#test); then Ctrl+O on the open conversation's page (no bar there)
+hold "# test" 3400 h09-hold-channel
 wait 300
-say == options of a channel (expect popup=menu popup_title='#test')
+say == options of a channel (expect popup=menu popup_title='Options for # test')
 dump
 shot h10-options-channel
+key down
+key down
 key down
 key enter
 wait 500
@@ -99,18 +107,29 @@ type y
 wait 500
 say == #test cleared and still listed (expect all_msgs=6 chat_rows=6 notice 'Deleted 2 messages')
 dump
-hold 300 70 3400 h12-hold-title
+tap "# test"
 wait 300
-say == the header name opens the options of the open conversation (expect popup=menu)
+say == the hold selected the row: this tap opens it (expect conv=c:1 conv_open=1 chat_bar=0)
+dump
+key enter
+wait 500
+key ctrl-o
+wait 500
+say == Ctrl+O on the conversation's page opens the same menu (expect popup=menu popup_title='Options for # test')
 dump
 key esc
 wait 300
+key esc
+wait 300
+say == back to the list (expect conv_open=0)
+dump
 
-# Settings > History
+# Settings > History (the rows end: Delete all, Delete older than, Forget this board's data, Reboot, Factory reset, Undo, Save)
 key tab
 key tab
 wait 300
 key end
+key up
 key up
 key up
 key up
@@ -160,6 +179,6 @@ dump
 shot h17-all-deleted
 key tab
 wait 300
-say == chats after the deletion: the channels and the add row stay, no direct row (expect tab=Chats chat_rows=4)
+say == chats after the deletion: the channels stay (the bar has Add channel), no direct row (expect tab=Chats chat_rows=3)
 dump
 shot h18-chats-empty

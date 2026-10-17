@@ -219,7 +219,8 @@ expect same settings_scroll
 dump
 shot p20-settings-after-refresh
 
-say == the message search over Chats (Tab, Ctrl+F) (expect search_open=1)
+say == the message search over Chats (Tab, Ctrl+F) with a keyboard (chats.script has it with the on-screen keyboard) (expect search_open=1)
+keyboard on
 key tab
 wait 600
 key ctrl-f

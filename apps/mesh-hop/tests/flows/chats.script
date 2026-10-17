@@ -1,0 +1,235 @@
+# Simulator options: (default). Run it with chats_run.sh: the history of seed_chats.py (short and long messages, none read yet).
+# Mesh Hop P4: Chats at any size (run_flows.sh sizes runs it at the five sizes): the conversations (one pane at 640x480: the list
+# under its slim bar, Search and Add channel, then the conversation as its own page, no bar there; two panes on the other sizes, the
+# bar across both), the tap rule, the Chats menu (Search messages, Add channel, the selected conversation's options, Details; the 3 s
+# hold on a row, Ctrl+O), writing with a keyboard, the on-screen keyboard without one (the compose view, the search, an editor, the
+# Position box). `check` holds every page to the shared layout checks with Mesh Hop's rule for buttons (rows and buttons 7 mm, the
+# field above the on-screen keyboard and nothing to press under it, nothing under the key hint line). The steps are the same at every size; where one pane and two differ the `say` lines say so.
+wait 4000
+fill
+keyboard off
+key enter
+wait 1000
+say == Chats: the bar (Search, Add channel), the list under it: CHANNELS and DIRECT, the last message and its time, the unread count in blue; by touch the line under the title says "Hold a chat: options" (expect tab=Chats chat_bar=1 panes=1 at 640x480, 2 elsewhere)
+dump
+shot c01-chats
+check chats
+keyboard on
+say == with a keyboard: the key hint line at the bottom
+shot c01b-chats-keyboard
+check chats-keyboard
+say == two panes: PgUp scrolls the conversation at the right: our message heard back by 2 repeaters, its status whole
+@panes2 key pgup
+@panes2 key pgup
+@panes2 key pgup
+@panes2 shot c01c-heard-back
+
+# the Chats menu with a channel selected (# Public, the first row), by Ctrl+O: Search messages, Add channel (chevrons), then the
+# channel's options (dots); its title names the channel
+key ctrl-o
+wait 700
+say == the menu, a channel selected (expect popup=menu popup_title='Options for # Public')
+expect text "Search messages"
+expect text "Add channel"
+expect text "Mute this channel"
+expect notext "Details"
+dump
+shot c01d-menu-channel
+check menu-channel
+key esc
+wait 400
+
+# the tap rule: the first tap selects (two panes: the conversation shows at the right), a 3 s hold on a row selects it and opens the
+# menu (its options act on that row), a second tap on the selected row acts (one pane: its page; two panes: the entry takes the keys,
+# here the keyboard's)
+tap "Alice"
+wait 600
+say == Alice selected (expect conv=d:101112131415 conv_open=0)
+dump
+shot c02-alice-selected
+check alice-selected
+hold "Alice" 3400
+wait 500
+say == the menu, a direct chat selected: its options and Details (expect popup=menu popup_title='Options for Alice')
+expect text "Search messages"
+expect text "Mute this contact"
+dump
+shot c02b-menu-direct
+check menu-direct
+key down
+key down
+key down
+key down
+wait 300
+say == Down to the last entry: the menu scrolls where it is longer than its room, Details at its end (a chevron)
+expect text "Details"
+shot c02c-menu-direct-end
+key esc
+wait 400
+tap "Alice"
+wait 900
+say == Alice's conversation: short and long messages, ours with their state; one pane: no bar, the messages from the line under the title down to the entry and Send, ROW high (expect conv_open=1 osk=down; one pane: chat_bar=0)
+dump
+shot c03-conversation
+check conversation
+
+say == Ctrl+O: the same menu for the open conversation (expect popup=menu popup_title='Options for Alice')
+key ctrl-o
+wait 700
+expect text "Search messages"
+expect text "Mute this contact"
+dump
+shot c04-options
+check options
+key esc
+wait 400
+
+# writing with a keyboard: Enter writes (two panes: already writing), the count of bytes left in the caption line, Enter sends
+key enter
+type See you there
+wait 300
+say == writing with a keyboard (expect compose_focus=1 compose='See you there' typing=compose osk=down)
+dump
+shot c05-writing-keyboard
+check writing-keyboard
+key enter
+wait 1500
+say == sent: the entry is empty and keeps the keys (expect compose='' compose_focus=1)
+dump
+shot c06-sent-keyboard
+
+# the keyboard goes while writing: the on-screen keyboard comes for the entry, the compose view (the header, the last message in the
+# caption's place, the entry, Send where it fits above the keyboard)
+keyboard off
+wait 1000
+expect osk on
+say == the compose view (expect osk=up typing=compose compose_view=1 panes=1)
+dump
+shot c07-compose-osk
+check compose-osk
+key esc
+wait 800
+say == Esc: the on-screen keyboard goes, the conversation stays (expect osk=down compose_focus=0 conv_open=1)
+expect osk off
+dump
+shot c08-conversation-touch
+check conversation-touch
+tapfield 1
+wait 900
+say == a tap on the entry: it takes the keys, the on-screen keyboard comes (expect osk=up compose_view=1)
+expect osk on
+dump
+type On my way
+wait 300
+shot c09-compose-osk-typed
+check compose-osk-typed
+key enter
+wait 1500
+say == the keyboard's Enter sends, then the keyboard goes (expect osk=down compose='' compose_focus=0)
+expect osk off
+dump
+shot c10-sent-touch
+check sent-touch
+
+# the search from anywhere in Chats (Ctrl+F; Search on the bar, Search messages in the menu): its words take the keys, the on-screen keyboard comes
+key ctrl-f
+wait 900
+say == the search with the on-screen keyboard: only what fits above it (expect search_open=1 osk=up typing=search)
+expect osk on
+dump
+shot c11-search-osk
+check search-osk
+type bridge
+wait 600
+shot c12-search-typed
+key enter
+wait 800
+say == Enter puts the keyboard away, the results come back (expect osk=down search_typing=0)
+expect osk off
+dump
+shot c13-search-results
+check search-results
+key esc
+wait 400
+
+# back to the list (one pane: the conversation's page first), then Home, then Chats again
+key esc
+key esc
+key esc
+wait 400
+key enter
+wait 800
+say == Add channel on the bar: its menu (expect popup=menu popup_title='Add a channel')
+tap "Add channel"
+wait 800
+dump
+shot c14-add-channel
+check add-channel
+tap "Hashtag channel (#name)"
+wait 900
+say == the editor of a hashtag channel: a dialog over the on-screen keyboard, its buttons go (the keyboard's Enter and Esc act) (expect editor=1 osk=up typing=editor)
+expect osk on
+dump
+shot c15-editor-osk
+check editor-osk
+type hamradio
+wait 300
+key enter
+wait 1500
+say == the channel is added (expect editor=0 osk=down)
+expect osk off
+dump
+shot c16-channel-added
+check channel-added
+
+# Settings: the Position box (a tap on a field types) and the node name's editor
+key tab
+key tab
+wait 900
+key home
+key enter
+wait 900
+say == the Position box without a keyboard: the GPS switch, Clear and the buttons in view (expect pos_box=1 osk=down)
+dump
+shot c17-position
+check position
+tapfield 1
+wait 900
+say == a tap on the latitude: the on-screen keyboard comes, the dialog keeps the field above it (expect osk=up typing=latitude)
+expect osk on
+dump
+shot c18-position-osk
+check position-osk
+key esc
+wait 600
+say == the keyboard's Esc is the dialog's Cancel (expect pos_box=0 osk=down)
+expect osk off
+dump
+key home
+key down
+key down
+key down
+key down
+key enter
+wait 900
+say == the node name's editor with the on-screen keyboard (expect editor=1 osk=up)
+expect osk on
+dump
+shot c19-name-editor-osk
+check name-editor-osk
+key esc
+wait 600
+expect osk off
+
+# back in Chats: a 3 s hold on a row selects it and opens the menu (the cue fills over the list)
+key tab
+wait 900
+hold "# Public" 1700 c20-hold-progress
+wait 300
+hold "# Public" 3400 c21-hold-fired
+wait 600
+say == the menu for the Public channel by the hold (expect popup=menu popup_title='Options for # Public' conv=c:0)
+dump
+check hold-options
+key esc
+wait 300
