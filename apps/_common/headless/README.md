@@ -52,7 +52,7 @@ or click, and has no such object inside it (a scroll area that only drags is not
 | Check | Rule |
 |---|---|
 | on-screen | no object is cut by the screen edge (only a scrolling container may hide part of an object) |
-| size | page rows and fields >= ROW (7 mm), buttons >= TARGET (9 mm), the header's Esc >= min(TARGET, header - 2 x status_top) (the layout service's header rule), keys of the on-screen keyboard >= `CP0_UI_OSK_KEY_MIN_PX`; a row inside a vertically scrolling list may be LIST_ROW (5 mm: `cp0::ui::CompactList`'s compact density, where a tap only moves the highlight) |
+| size | page rows and fields >= ROW (7 mm), buttons >= TARGET (7 mm), the header's Esc >= min(TARGET, header - 2 x status_top) (the layout service's header rule), keys of the on-screen keyboard >= `CP0_UI_OSK_KEY_MIN_PX`; a row inside a vertically scrolling list may be LIST_ROW (5 mm: `cp0::ui::CompactList`'s compact density, where a tap only moves the highlight) |
 | header | no interactive element of the body reaches under the header |
 | keyboard | while the on-screen keyboard is up, the field it is for is visible above it and no element of the page lies under it |
 | notice | under the app's minimum screen, the notice is the only thing to press |
