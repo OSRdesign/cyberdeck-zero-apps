@@ -4,8 +4,6 @@
 wait 3500
 key tab
 key tab
-key tab
-key tab
 wait 800
 key home
 key down
@@ -36,8 +34,6 @@ key enter
 type packet log test
 key enter
 wait 4000
-key tab
-key tab
 key tab
 key tab
 wait 500

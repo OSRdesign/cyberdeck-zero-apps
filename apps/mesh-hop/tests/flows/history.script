@@ -38,7 +38,7 @@ wait 300
 # unmute by tapping the first item
 key ctrl-o
 wait 400
-tap 320 216
+tap "Unmute this contact"
 wait 400
 say == unmuted by touch (expect muted_conv=0)
 dump
@@ -105,8 +105,6 @@ key esc
 wait 300
 
 # Settings > History
-key tab
-key tab
 key tab
 key tab
 wait 300

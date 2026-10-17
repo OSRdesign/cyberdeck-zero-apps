@@ -1,0 +1,159 @@
+# Mesh Hop P2 (the shell): the header (title, Esc button, status strip), the caption line (the board and the notices), the tab
+# row (Chats, Contacts, Settings), the key hint line (only while a keyboard is there), the dialogs (Quit, a menu, a question,
+# a choice, an editor, the Position box) and the sub-pages that cover the tab row, at any size, the default simulated board.
+# Run at each size:   SIZE=1280x720 SCRIPT=shell.script sh ui_smoke.sh      (run_flows.sh stage runs the five)
+# Coordinates (rare) are the 640x480 layout's of the page bodies: mesh-hop-script moves them to where the body is. The shell is
+# tapped by its labels. `stage` checks that the stage is centred under the shell; `check` runs the shared layout checks: the
+# on-screen rule fails the run, and the controls OUTSIDE the stage (the shell, the dialogs) must meet the ROW / TARGET sizes
+# (the line "shell ..."); the controls of the page bodies are only counted until the pages are converted.
+wait 3500
+stage
+say == Chats at the root, with a keyboard (the hint line at the bottom) (expect tab=Chats link=Connected conv=c:0)
+dump
+shot h01-chats-keyboard
+check chats-keyboard
+keyboard off
+say == the same without a keyboard: no hint line, the body takes its room
+shot h02-chats
+check chats
+
+# a direct conversation: the head of the conversation has Details and Options
+key down
+key down
+key down
+wait 300
+say == a direct conversation (expect conv=d:...)
+dump
+shot h03-conversation-options
+check conversation
+
+# the Options button opens the options of the conversation (a menu in a dialog)
+tap "Options"
+wait 800
+say == the options (expect popup=menu)
+dump
+shot h04-options-dialog
+check options-dialog
+key esc
+wait 300
+say == popup closed (expect popup=none)
+dump
+
+tap "Contacts"
+wait 600
+say == Contacts (expect tab=Contacts shown=4)
+dump
+shot h05-contacts
+check contacts
+keyboard on
+say == Contacts with a keyboard: the hint line at the bottom
+shot h05b-contacts-keyboard
+check contacts-keyboard
+
+tap "Settings"
+wait 800
+say == Settings (expect tab=Settings)
+dump
+shot h06-settings-keyboard
+check settings-keyboard
+keyboard off
+say == Settings without a keyboard
+shot h06b-settings
+check settings
+
+# a question: Reboot the board (the last rows of Settings: Reboot, Factory reset, Undo, Save)
+keyboard on
+key end
+key up
+key up
+key up
+key enter
+wait 800
+say == a question in a dialog (expect popup=confirm)
+dump
+shot h07-confirm-dialog
+check confirm-dialog
+key esc
+wait 300
+
+# a choice with arrows: Bandwidth
+key home
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 800
+say == a choice (expect popup=choice)
+dump
+shot h08-choice-dialog
+check choice-dialog
+key esc
+wait 300
+
+# an editor: the node name
+key home
+key down
+key down
+key down
+key down
+key enter
+wait 800
+say == the editor (expect editor=1)
+dump
+shot h09-editor-dialog
+check editor-dialog
+key esc
+wait 300
+
+# the Position box
+key home
+key enter
+wait 800
+say == the Position box (expect pos_box=1)
+dump
+shot h10-position-dialog
+check position-dialog
+key esc
+wait 300
+
+# a sub-page: it covers the tab row, the title has one more part
+key home
+key down
+key down
+key down
+key enter
+wait 600
+say == the packet log (expect log_open=1)
+dump
+shot h11-subpage
+check subpage
+tap "Esc"
+wait 400
+
+# the notice of a short Esc at the root is in the caption line
+key esc
+wait 300
+tap "Chats"
+wait 300
+key esc
+wait 300
+say == the caption line says how to leave
+shot h12-caption-notice
+check caption-notice
+
+# Quit?
+tap "Esc"
+wait 800
+say == the question of the Esc button at the root (expect popup=confirm popup_title='Quit Mesh Hop?')
+dump
+shot h13-quit-dialog
+check quit-dialog
+tap "Cancel"
+wait 400
+say == Cancel stays (expect popup=none)
+dump
+expect notext "Quit Mesh Hop?"

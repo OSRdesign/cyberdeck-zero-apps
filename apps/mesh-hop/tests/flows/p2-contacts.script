@@ -3,7 +3,6 @@
 # Touch coordinates are screen pixels (page at y=56): toolbar centres y=78, row i centre y=188+44*i, the "i" box at x>=584.
 wait 6500
 key tab
-key tab
 wait 600
 say == contacts (expect tab=Contacts contacts=12 shown=12 pending=3 select=0 groups=0)
 dump
@@ -17,7 +16,7 @@ dump
 shot p02-detail
 
 # groups of this contact: there is none yet, so the list offers a new group
-tap 234 430
+tap "Groups" last
 wait 500
 say == groups pick list (expect popup=list popup_title='Groups of this contact')
 dump
@@ -129,7 +128,7 @@ tap 612 188
 wait 400
 say == details (expect detail=1)
 dump
-tap 386 430
+tap "Delete"
 wait 400
 say == the delete box of one contact (expect popup=confirm popup_title='Delete contact?')
 dump

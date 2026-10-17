@@ -5,8 +5,6 @@ say == the list in use (see presets=origin/entries/date)
 dump
 key tab
 key tab
-key tab
-key tab
 wait 300
 key down
 key down

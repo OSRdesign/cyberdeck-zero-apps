@@ -5,10 +5,8 @@ say == no board yet (expect board=- chat_rows=0 all_msgs=0 contacts=0 unread=0 l
 dump
 shot n01-chats-no-board
 key tab
-key tab
 wait 300
 shot n02-contacts-no-board
-key tab
 key tab
 wait 600
 shot n03-settings-no-board

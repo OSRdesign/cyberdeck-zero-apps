@@ -4,7 +4,10 @@
 
 #include "mesh_app.hpp"
 
+#include "app.hpp"
 #include "clock_policy.hpp"
+#include "cp0_font_service.hpp"
+#include "cp0_ui_metrics_lvgl.h"
 #include "input_state.hpp"
 #include "position.hpp"
 #include "protocol.hpp"
@@ -26,27 +29,25 @@ namespace {
 
 constexpr const char *kVersion = "0.3.0";
 
-// ---- the colours of the launcher and of MeshZero 0.1.0
-constexpr uint32_t kBackground = 0x101214;
-constexpr uint32_t kPanel = 0x1A1D20;
-constexpr uint32_t kSelected = 0x2A2F35;
-constexpr uint32_t kSelectedDim = 0x20252A;
-constexpr uint32_t kPressed = 0x3A4048;
-constexpr uint32_t kText = 0xF4F4F5;
-constexpr uint32_t kMuted = 0x8A929B;
-constexpr uint32_t kGold = 0xF0B400;
-constexpr uint32_t kGreen = 0x33CC33;
-constexpr uint32_t kBlue = 0x3B9DFF;
-constexpr uint32_t kRed = 0xE5604D;
-constexpr uint32_t kOkGreen = 0x1F5E2A;
+// ---- the colours: the launcher's (cp0_ui_list.h and cp0_ui_osk.h), not an own palette. Green, amber and red are the
+// status tones (ValueTone Ok / Warn / Bad), the accent blue marks what is selected, focused or unread.
+constexpr uint32_t kBackground = 0x000000;
+constexpr uint32_t kPanel = CP0_UI_OSK_KEY_RGB;
+constexpr uint32_t kSelected = CP0_UI_LIST_BAR_RGB;
+constexpr uint32_t kSelectedDim = 0x202020;
+constexpr uint32_t kPressed = CP0_UI_OSK_KEY_PRESSED_RGB;
+constexpr uint32_t kText = CP0_UI_LIST_TEXT_RGB;
+constexpr uint32_t kMuted = CP0_UI_LIST_MUTED_RGB;
+constexpr uint32_t kAccent = CP0_UI_LIST_ACCENT_RGB;
+constexpr uint32_t kWarn = CP0_UI_LIST_WARN_RGB;
+constexpr uint32_t kGreen = CP0_UI_LIST_OK_RGB;
+constexpr uint32_t kBlue = CP0_UI_LIST_ACCENT_RGB;
+constexpr uint32_t kRed = CP0_UI_LIST_BAD_RGB;
+constexpr uint32_t kOkGreen = CP0_UI_OSK_ENTER_RGB;      // the primary button: the keyboard's Enter blue
 constexpr uint32_t kDangerRed = 0x7A2E24;
+constexpr uint32_t kOnAccent = 0x101010;                  // the text on an accent blue pill
 
-// ---- layout (640x480): the shared top bar (56), the page (400), the footer (24)
-constexpr int kBarH = CP0_STATUSBAR_HEIGHT;
-constexpr int kPageY = kBarH;
-constexpr int kPageH = 400;
-constexpr int kFooterY = kPageY + kPageH;
-constexpr int kFooterH = 24;
+// ---- layout: the stage is 640 px wide (kScreenW); its height is what is left under the shell (App::layout_body)
 constexpr int kListW = 204;                // the left pane of Chats
 constexpr uint32_t kStartGuardMs = 600;    // the tap or Enter that started the app must not act
 constexpr uint32_t kNoticeMs = 4000;
@@ -75,7 +76,7 @@ enum Tag {
     kTagTitleHold = 80,    // the title of the open conversation (hold 3 s: options)
     // phase 2
     kTagNearby = 90, kTagSelect, kTagGroup, kTagSelDone, kTagSelMenu, kTagSelDelete, kTagSelGroup,
-    kTagDetailGroups, kTagDetailDelete, kTagChatDetails, kTagNearbyClose, kTagNearbyScan, kTagNearbyIgnored,
+    kTagDetailGroups, kTagDetailDelete, kTagChatDetails, kTagChatOptions, kTagNearbyClose, kTagNearbyScan, kTagNearbyIgnored,
     kTagSearchOpen, kTagSearchClose, kTagSearchConv, kTagSearchDate, kTagSearchDir, kTagSearchBox,
     kTagStatsClose, kTagStatsRefresh, kTagStatsAuto,
     // the Position box
@@ -91,7 +92,7 @@ uint32_t tone_color(Tone t)
     switch (t) {
     case Tone::Normal: return kText;
     case Tone::Muted: return kMuted;
-    case Tone::Gold: return kGold;
+    case Tone::Gold: return kWarn;
     case Tone::Green: return kGreen;
     case Tone::Blue: return kBlue;
     case Tone::Red: return kRed;
@@ -170,6 +171,13 @@ void trampoline_row(lv_event_t *e)
     }
 }
 
+/* a row of a menu or a pick list in a dialog */
+void trampoline_popitem(lv_event_t *e)
+{
+    if (!g_app || lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    g_app->popup_pick(static_cast<int>(reinterpret_cast<intptr_t>(lv_event_get_user_data(e))));
+}
+
 /* the title of the open conversation: a tap does nothing, a 3 s hold opens the options */
 void trampoline_title(lv_event_t *e)
 {
@@ -232,7 +240,7 @@ void RowList::create(lv_obj_t *parent, int x, int y, int w, int h, const Config 
         lv_obj_set_style_bg_opa(s.row, LV_OPA_COVER, LV_STATE_PRESSED);
         lv_obj_set_style_bg_color(s.row, lv_color_hex(kPressed), LV_STATE_PRESSED);
         lv_obj_set_style_border_side(s.row, LV_BORDER_SIDE_BOTTOM, 0);
-        lv_obj_set_style_border_color(s.row, lv_color_hex(0x1E2226), 0);
+        lv_obj_set_style_border_color(s.row, lv_color_hex(0x1E1E1E), 0);
         for (lv_event_code_t code : {LV_EVENT_CLICKED, LV_EVENT_PRESSED, LV_EVENT_PRESSING, LV_EVENT_RELEASED, LV_EVENT_PRESS_LOST})
             lv_obj_add_event_cb(s.row, trampoline_row, code, this);
         for (int k = 0; k < cfg.max_boxes; ++k) {
@@ -252,20 +260,31 @@ void RowList::create(lv_obj_t *parent, int x, int y, int w, int h, const Config 
         }
         s.bar = make_box(s.row, 0, 0, 4, 10);
         lv_obj_remove_flag(s.bar, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_set_style_bg_color(s.bar, lv_color_hex(kGold), 0);
+        lv_obj_set_style_bg_color(s.bar, lv_color_hex(kAccent), 0);
         lv_obj_set_style_bg_opa(s.bar, LV_OPA_COVER, 0);
         set_hidden(s.bar, true);
         s.pill = make_box(s.row, 0, 0, 34, 22);
         lv_obj_remove_flag(s.pill, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_set_style_radius(s.pill, 11, 0);
-        lv_obj_set_style_bg_color(s.pill, lv_color_hex(kGold), 0);
+        lv_obj_set_style_bg_color(s.pill, lv_color_hex(kAccent), 0);
         lv_obj_set_style_bg_opa(s.pill, LV_OPA_COVER, 0);
         s.pill_label = lv_label_create(s.pill);
         lv_obj_set_style_text_font(s.pill_label, &lv_font_montserrat_14, 0);
-        lv_obj_set_style_text_color(s.pill_label, lv_color_hex(0x101214), 0);
+        lv_obj_set_style_text_color(s.pill_label, lv_color_hex(kOnAccent), 0);
         set_hidden(s.pill, true);
         hide(s);
     }
+}
+
+void RowList::resize(int h)
+{
+    if (!cont_ || h == h_) return;
+    h_ = h;
+    lv_obj_set_height(cont_, h);
+    lv_obj_update_layout(cont_);
+    const int max_scroll = std::max(0, total_ - h_);
+    if (lv_obj_get_scroll_y(cont_) > max_scroll) lv_obj_scroll_to_y(cont_, max_scroll, LV_ANIM_OFF);
+    update_window();
 }
 
 void RowList::reset()
@@ -470,12 +489,18 @@ std::vector<std::string> font_dirs()
 
 } // namespace
 
+/* The token text sizes: Montserrat from the launcher's font folder (the dialogs' and the status line's face), else the builtin one. */
+static const lv_font_t *token_font(int px, bool bold)
+{
+    if (const lv_font_t *f = cp0_fonts().get(bold ? "Montserrat-Bold.ttf" : "Montserrat-Medium.ttf", static_cast<uint16_t>(px))) return f;
+    return cp0_ui_font_px(px);
+}
+
 void App::load_fonts()
 {
     f_small_ = &lv_font_montserrat_14;
     f_ui_ = &lv_font_montserrat_16;
     f_big_ = &lv_font_montserrat_18;
-    f_value_ = &lv_font_montserrat_28;
     f_value_small_ = &lv_font_montserrat_22;
     const auto dirs = font_dirs();
     f_text_ = load_ttf(dirs, "DejaVuSans.ttf", 16, f_ui_);
@@ -483,6 +508,13 @@ void App::load_fonts()
     dejavu_ = f_text_ != nullptr;
     if (!f_text_) f_text_ = f_ui_;
     if (!f_text_small_) f_text_small_ = f_small_;
+    // the shell and the dialogs: the token text sizes of the layout service
+    const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
+    f_body_ = token_font(m->text_px[CP0_TEXT_BODY], false);
+    f_caption_ = token_font(m->text_px[CP0_TEXT_CAPTION], false);
+    f_title_ = token_font(m->text_px[CP0_TEXT_HEADING], true);
+    f_field_ = load_ttf(dirs, "DejaVuSans.ttf", m->text_px[CP0_TEXT_BODY], f_body_);
+    if (!f_field_) f_field_ = f_body_;
 }
 
 lv_obj_t *App::make_label(lv_obj_t *parent, const lv_font_t *font, uint32_t color, int x, int y, int w, int h, lv_text_align_t align)
@@ -544,6 +576,7 @@ App::App(Platform &plat) : plat_(plat), serial_(Store::default_dir())
     deck_clock_.refresh();                      // is the deck clock NTP synchronised? answered by a worker thread
 
     load_fonts();
+    kbd_ok_ = keyboard_ready();                 // the key hint line takes room only while a keyboard is there
     build_screen();
     edit_ = model_.radio_settings();
     chat_rows_ = build_chat_rows(model_, conv_.rfind("d:", 0) == 0 ? conv_ : std::string());
@@ -559,83 +592,119 @@ App::App(Platform &plat) : plat_(plat), serial_(Store::default_dir())
 App::~App()
 {
     plat_.on_key = nullptr;
-    if (bar_) cp0_statusbar_destroy(bar_);
+    dialog_.reset();
+    ed_dialog_.reset();
+    shell_.reset();
     g_app = nullptr;
 }
 
-void App::build_screen()
+void App::post(std::function<void()> fn)
 {
-    screen_ = plat_.stage();                       // the 640x480 stage, centred on the screen (stage.hpp)
-    lv_obj_set_style_bg_color(screen_, lv_color_hex(kBackground), 0);
-    lv_obj_set_style_bg_opa(screen_, LV_OPA_COVER, 0);
-    lv_obj_remove_flag(screen_, LV_OBJ_FLAG_SCROLLABLE);
+    posted_.push_back(std::move(fn));
+}
 
-    // tabs in the left part of the top bar (the clock, Wi-Fi and Bluetooth of the shared bar are on the right)
-    static const int widths[5] = {100, 54, 82, 82, 78};
-    int x = 8;
-    for (int i = 0; i < 5; ++i) {
-        lv_obj_t *b = make_box(screen_, x, 8, widths[i], 40);
+/* What a widget's event asked for and cannot do itself (it would delete the widget that is running): run at the start of the next tick. */
+void App::run_posted()
+{
+    while (!posted_.empty()) {
+        std::vector<std::function<void()>> now;
+        now.swap(posted_);
+        for (auto &fn : now) fn();
+    }
+}
+
+/* The shell: cp0::ui::Page (the header with the title, the Esc button and the shared status strip, and under it the
+ * caption line: the board and the notices), the tab row, and the stage (a 640 px column centred under them) that holds
+ * the page bodies. Nothing here is a pixel constant: the sizes come from the layout service. */
+void App::build_shell()
+{
+    const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
+    cp0_ui_roller_page(m, cp0::ui::status_strip_left(), &layout_);
+    const int cap_lh = lv_font_get_line_height(cp0_ui_font_px(layout_.caption_px));
+    layout_.caption_y = layout_.body_y + m->tok[CP0_TOK_SPACE_S] / 4;      // right under the header, the tab row follows it
+    tabs_y_ = layout_.caption_y + cap_lh + m->tok[CP0_TOK_SPACE_S] / 2;
+    tab_h_ = layout_.row_h;
+    stage_x_ = std::max(0, (layout_.w - kScreenW) / 2);
+    hint_h_ = lv_font_get_line_height(f_caption_) + m->tok[CP0_TOK_SPACE_S];
+    panel_h_ = layout_.h - tabs_y_;                 // the largest room (no hint line): the lists are made for it
+    page_h_ = panel_h_ - tab_h_;
+
+    shell_ = std::make_unique<cp0::ui::Page>(plat_.screen(), layout_, cp0::ui::add_title, [this] { header_back(); });
+    cp0::ui::StatusStrip::add(shell_->header());
+    shell_->set_title({"Mesh Hop", "Chats"});
+}
+
+/* The stage: a 640 px column under the caption line that holds the page bodies and the sub-pages; made after the tab row,
+ * so that a sub-page (and the "Loading..." box) lies over it. */
+void App::build_stage()
+{
+    lv_obj_t *stage = lv_obj_create(shell_->root());
+    lv_obj_remove_style_all(stage);
+    lv_obj_remove_flag(stage, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_remove_flag(stage, LV_OBJ_FLAG_CLICKABLE);                // the tab row under its top part must stay tappable
+    lv_obj_remove_flag(stage, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+    lv_obj_set_pos(stage, stage_x_, tabs_y_);
+    lv_obj_set_size(stage, kScreenW, panel_h_);
+    plat_.adopt_stage(stage);
+    screen_ = stage;
+}
+
+/* The tab row: Chats, Contacts, Settings (Map and Terminal come back when they exist), ROW high, over the top of the stage. */
+void App::build_tabs()
+{
+    const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
+    tabs_ = make_box(shell_->root(), stage_x_, tabs_y_, kScreenW, tab_h_);
+    lv_obj_remove_flag(tabs_, LV_OBJ_FLAG_CLICKABLE);
+    static const Tab shown[3] = {Tab::Chats, Tab::Contacts, Tab::Settings};
+    const int w = kScreenW / 3;
+    const int lh = static_cast<int>(lv_font_get_line_height(f_body_));
+    const int bar_h = std::max(3, m->tok[CP0_TOK_SPACE_S] / 2);
+    for (int k = 0; k < 3; ++k) {
+        const int i = static_cast<int>(shown[k]);
+        const int bw = k == 2 ? kScreenW - 2 * w : w;
+        lv_obj_t *b = make_box(tabs_, k * w, 0, bw, tab_h_);
         lv_obj_add_flag(b, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_set_style_radius(b, 6, 0);
         lv_obj_set_style_bg_color(b, lv_color_hex(kPressed), LV_STATE_PRESSED);
         lv_obj_set_style_bg_opa(b, LV_OPA_COVER, LV_STATE_PRESSED);
         lv_obj_add_event_cb(b, trampoline_button, LV_EVENT_CLICKED, reinterpret_cast<void *>(static_cast<intptr_t>(kTagTab + i)));
         tab_btn_[i] = b;
-        tab_label_[i] = make_label(b, f_ui_, kMuted, 0, 10, widths[i], 20, LV_TEXT_ALIGN_CENTER);
+        tab_label_[i] = make_label(b, f_body_, kMuted, 0, (tab_h_ - lh) / 2, bw, lh, LV_TEXT_ALIGN_LEFT);
         lv_obj_remove_flag(tab_label_[i], LV_OBJ_FLAG_CLICKABLE);
-        tab_bar_line_[i] = make_box(b, 8, 36, widths[i] - 16, 3);
-        lv_obj_set_style_bg_color(tab_bar_line_[i], lv_color_hex(kGold), 0);
+        tab_bar_line_[i] = make_box(b, m->tok[CP0_TOK_SPACE_M], tab_h_ - bar_h, bw - 2 * m->tok[CP0_TOK_SPACE_M], bar_h);
+        lv_obj_set_style_bg_color(tab_bar_line_[i], lv_color_hex(kAccent), 0);
         lv_obj_set_style_bg_opa(tab_bar_line_[i], LV_OPA_COVER, 0);
         set_hidden(tab_bar_line_[i], true);
-        x += widths[i] + 4;
     }
-    // the unread total on the "Chats" tab title: a gold pill next to the word
-    tab_badge_ = make_box(tab_btn_[0], widths[0] - 40, 9, 34, 22);
-    lv_obj_set_style_radius(tab_badge_, 11, 0);
-    lv_obj_set_style_bg_color(tab_badge_, lv_color_hex(kGold), 0);
+    // the unread total on the "Chats" tab: a pill with the number next to the word
+    const int bh = static_cast<int>(lv_font_get_line_height(f_caption_)) + m->tok[CP0_TOK_SPACE_S];
+    tab_badge_ = make_box(tab_btn_[0], 0, (tab_h_ - bh) / 2, bh, bh);
+    lv_obj_remove_flag(tab_badge_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_radius(tab_badge_, bh / 2, 0);
+    lv_obj_set_style_bg_color(tab_badge_, lv_color_hex(kAccent), 0);
     lv_obj_set_style_bg_opa(tab_badge_, LV_OPA_COVER, 0);
     tab_badge_label_ = lv_label_create(tab_badge_);
-    lv_obj_set_style_text_font(tab_badge_label_, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(tab_badge_label_, lv_color_hex(0x101214), 0);
+    lv_obj_set_style_text_font(tab_badge_label_, f_caption_, 0);
+    lv_obj_set_style_text_color(tab_badge_label_, lv_color_hex(kOnAccent), 0);
     lv_label_set_text(tab_badge_label_, "");
     lv_obj_center(tab_badge_label_);
     set_hidden(tab_badge_, true);
+}
 
-    for (int i = 0; i < 5; ++i) {
-        page_[i] = make_box(screen_, 0, kPageY, 640, kPageH);
-    }
+void App::build_screen()
+{
+    build_shell();
+    build_tabs();
+    build_stage();
+    for (int i = 0; i < 5; ++i) page_[i] = make_box(screen_, 0, tab_h_, kScreenW, page_h_);
     build_chats();
     build_placeholder(&page_[static_cast<int>(Tab::Map)], "Map", "The map of the nodes with a position comes in phase 3.\nUntil then the Contacts tab shows the distances.");
     build_contacts();
     build_placeholder(&page_[static_cast<int>(Tab::Terminal)], "Terminal", "A meshcore-cli style command line comes in a later version.");
     build_settings();
-    build_footer();
-    build_editor();
-    build_position_box();
+    build_hint_line();
     build_popup();
-
-    // the shared top bar of the launcher, drawn over the right part of the strip
-    const auto dirs = font_dirs();
-    std::string text_font, icon_font;
-    for (const std::string &d : dirs) {
-        if (text_font.empty() && ::access((d + "/Montserrat-Medium.ttf").c_str(), R_OK) == 0) text_font = d + "/Montserrat-Medium.ttf";
-        if (icon_font.empty() && ::access((d + "/FontAwesome5-Solid+Brands+Regular.woff").c_str(), R_OK) == 0)
-            icon_font = d + "/FontAwesome5-Solid+Brands+Regular.woff";
-    }
-    if (!text_font.empty()) bar_ = cp0_statusbar_create(text_font.c_str(), icon_font.empty() ? nullptr : icon_font.c_str());
-    bar_px_.assign(static_cast<size_t>(640) * kBarH, 0);
-    bar_dsc_.header.magic = LV_IMAGE_HEADER_MAGIC;
-    bar_dsc_.header.cf = LV_COLOR_FORMAT_ARGB8888;
-    bar_dsc_.header.w = 640;
-    bar_dsc_.header.h = kBarH;
-    bar_dsc_.header.stride = 640 * 4;
-    bar_dsc_.data_size = static_cast<uint32_t>(bar_px_.size() * 4);
-    bar_dsc_.data = reinterpret_cast<const uint8_t *>(bar_px_.data());
-    bar_img_ = lv_image_create(screen_);
-    lv_obj_set_pos(bar_img_, 0, 0);
-    lv_obj_remove_flag(bar_img_, LV_OBJ_FLAG_CLICKABLE);
-    lv_image_set_src(bar_img_, &bar_dsc_);
-    update_statusbar(true);
+    layout_body();
+    update_title();
 }
 
 void App::build_placeholder(lv_obj_t **page, const char *title, const char *text)
@@ -659,16 +728,20 @@ void App::build_chats()
     cfg.max_cells = 3;
     cfg.max_boxes = 0;
     cfg.min_row_h = 26;
-    chat_list_.create(p, 0, 0, kListW, kPageH - 44, cfg);
-    search_btn_ = make_button(p, 4, kPageH - 44, kListW - 8, 44, "Search messages", kTagSearchOpen);
-    lv_obj_t *div = make_box(p, kListW, 0, 1, kPageH);
-    lv_obj_set_style_bg_color(div, lv_color_hex(kSelected), 0);
-    lv_obj_set_style_bg_opa(div, LV_OPA_COVER, 0);
+    chat_list_.create(p, 0, 0, kListW, page_h_ - 44, cfg);
+    search_btn_ = make_button(p, 4, page_h_ - 44, kListW - 8, 44, "Search messages", kTagSearchOpen);
+    chat_div_ = make_box(p, kListW, 0, 1, page_h_);
+    lv_obj_set_style_bg_color(chat_div_, lv_color_hex(kSelected), 0);
+    lv_obj_set_style_bg_opa(chat_div_, LV_OPA_COVER, 0);
 
     const int rx = kListW + 1;                    // the right pane
-    chat_title_ = make_label(p, f_text_, kGold, rx + 10, 10, 290, 24);
-    chat_info_ = make_label(p, f_small_, kMuted, rx + 250, 12, 170, 20, LV_TEXT_ALIGN_RIGHT);
-    details_btn_ = make_button(p, 640 - 104, 0, 98, 44, "Details", kTagChatDetails);
+    // the head of the conversation: its name with a line under it (the count left to type, muted, the nodes heard), and at
+    // the right the buttons: Details (a direct chat) and Options (the 3 s hold on the name and Ctrl+O stay as shortcuts)
+    chat_title_ = make_label(p, f_text_, kText, rx + 10, 3, 200, 22);
+    chat_info_ = make_label(p, f_small_, kMuted, rx + 10, 25, 200, 18);
+    options_btn_ = make_button(p, kScreenW - 104, 0, 98, 44, "Options", kTagChatOptions);
+    set_hidden(options_btn_, true);
+    details_btn_ = make_button(p, kScreenW - 206, 0, 98, 44, "Details", kTagChatDetails);
     set_hidden(details_btn_, true);
     // the name of the open conversation: hold it for 3 s to open the options (a tap does nothing)
     title_hold_ = make_box(p, rx, 0, 240, 44);
@@ -676,14 +749,14 @@ void App::build_chats()
     for (lv_event_code_t code : {LV_EVENT_CLICKED, LV_EVENT_PRESSED, LV_EVENT_PRESSING, LV_EVENT_RELEASED, LV_EVENT_PRESS_LOST})
         lv_obj_add_event_cb(title_hold_, trampoline_title, code, nullptr);
     set_hidden(title_hold_, true);
-    lv_obj_t *line = make_box(p, rx, 44, 640 - rx, 1);
+    lv_obj_t *line = make_box(p, rx, 44, kScreenW - rx, 1);
     lv_obj_set_style_bg_color(line, lv_color_hex(kSelected), 0);
     lv_obj_set_style_bg_opa(line, LV_OPA_COVER, 0);
 
     msgs_ = lv_obj_create(p);
     lv_obj_remove_style_all(msgs_);
     lv_obj_set_pos(msgs_, rx, 46);
-    lv_obj_set_size(msgs_, 640 - rx, 296);
+    lv_obj_set_size(msgs_, kScreenW - rx, page_h_ - 104);
     lv_obj_set_flex_flow(msgs_, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_scroll_dir(msgs_, LV_DIR_VER);
     lv_obj_remove_flag(msgs_, LV_OBJ_FLAG_SCROLL_ELASTIC);
@@ -694,13 +767,13 @@ void App::build_chats()
     lv_obj_set_style_bg_opa(msgs_, LV_OPA_70, LV_PART_SCROLLBAR);
     lv_obj_set_style_width(msgs_, 4, LV_PART_SCROLLBAR);
 
-    lv_obj_t *line2 = make_box(p, rx, 344, 640 - rx, 1);
-    lv_obj_set_style_bg_color(line2, lv_color_hex(kSelected), 0);
-    lv_obj_set_style_bg_opa(line2, LV_OPA_COVER, 0);
+    chat_line2_ = make_box(p, rx, page_h_ - 56, kScreenW - rx, 1);
+    lv_obj_set_style_bg_color(chat_line2_, lv_color_hex(kSelected), 0);
+    lv_obj_set_style_bg_opa(chat_line2_, LV_OPA_COVER, 0);
 
     compose_ = lv_textarea_create(p);
-    lv_obj_set_pos(compose_, rx + 6, 350);
-    lv_obj_set_size(compose_, 640 - rx - 6 - 96, 46);
+    lv_obj_set_pos(compose_, rx + 6, page_h_ - 50);
+    lv_obj_set_size(compose_, kScreenW - rx - 6 - 96, 46);
     lv_textarea_set_one_line(compose_, false);
     lv_obj_set_scrollbar_mode(compose_, LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_style_text_font(compose_, f_text_, 0);
@@ -715,10 +788,10 @@ void App::build_chats()
     lv_obj_set_style_bg_opa(compose_, LV_OPA_TRANSP, LV_PART_CURSOR);
     lv_obj_set_style_border_side(compose_, LV_BORDER_SIDE_LEFT, LV_PART_CURSOR | LV_STATE_FOCUSED);
     lv_obj_set_style_border_width(compose_, 2, LV_PART_CURSOR | LV_STATE_FOCUSED);
-    lv_obj_set_style_border_color(compose_, lv_color_hex(kGold), LV_PART_CURSOR | LV_STATE_FOCUSED);
+    lv_obj_set_style_border_color(compose_, lv_color_hex(kAccent), LV_PART_CURSOR | LV_STATE_FOCUSED);
     lv_textarea_set_max_length(compose_, 400);
     lv_obj_add_event_cb(compose_, trampoline_button, LV_EVENT_CLICKED, reinterpret_cast<void *>(static_cast<intptr_t>(kTagCompose)));
-    send_btn_ = make_button(p, 640 - 90, 353, 84, 40, "Send", kTagSend, &send_label_);
+    send_btn_ = make_button(p, kScreenW - 90, page_h_ - 47, 84, 40, "Send", kTagSend, &send_label_);
     lv_obj_set_style_bg_color(send_btn_, lv_color_hex(kOkGreen), 0);
     build_search();
 }
@@ -794,27 +867,27 @@ void App::build_contacts()
     cfg.max_cells = 8;
     cfg.max_boxes = 2;
     cfg.min_row_h = kContactRowH;
-    contact_list_.create(p, 0, 110, 640, 290, cfg);
+    contact_list_.create(p, 0, 110, 640, page_h_ - 110, cfg);
 
-    // the detail panel of a contact (C8), over the table: static facts and large buttons
-    detail_ = make_box(p, 0, 0, 640, kPageH);
+    // the detail panel of a contact (C8): a sub-page over the table and the tab row, static facts and large buttons
+    detail_ = make_box(screen_, 0, 0, 640, panel_h_);
     lv_obj_set_style_bg_color(detail_, lv_color_hex(kBackground), 0);
     lv_obj_set_style_bg_opa(detail_, LV_OPA_COVER, 0);
     lv_obj_add_flag(detail_, LV_OBJ_FLAG_CLICKABLE);                  // swallows taps meant for the table below
-    detail_title_ = make_label(detail_, f_big_, kGold, 16, 8, 600, 26);
+    detail_title_ = make_label(detail_, f_big_, kText, 16, 6, 600, 26);
     static const char *const keys[10] = {"Name", "Type", "Groups", "Public key", "Route", "Last advert", "Heard here", "Position", "Distance", "Last SNR"};
-    static const int ys[10] = {44, 72, 100, 128, 172, 200, 228, 256, 284, 312};
+    static const int ys[10] = {38, 64, 90, 116, 164, 190, 216, 242, 268, 294};
     for (int i = 0; i < 10; ++i) {
         lv_obj_t *k = make_label(detail_, f_small_, kMuted, 16, ys[i] + 4, 110, 20);
         lv_label_set_text(k, keys[i]);
         detail_val_[i] = make_label(detail_, i == 3 ? f_text_small_ : f_text_, kText, 132, ys[i], 496, i == 3 ? 44 : 24);
         if (i == 3 || i == 4) lv_label_set_long_mode(detail_val_[i], LV_LABEL_LONG_MODE_WRAP);
     }
-    detail_msg_btn_ = make_button(detail_, 8, 352, 148, 44, "Message", kTagDetailMsg);
-    make_button(detail_, 160, 352, 148, 44, "Groups", kTagDetailGroups);
-    lv_obj_t *dd = make_button(detail_, 312, 352, 148, 44, "Delete", kTagDetailDelete);
-    lv_obj_set_style_bg_color(dd, lv_color_hex(kDangerRed), 0);
-    make_button(detail_, 464, 352, 164, 44, "Close", kTagDetailClose);
+    detail_msg_btn_ = detail_btn_[0] = make_button(detail_, 8, 352, 148, 44, "Message", kTagDetailMsg);
+    detail_btn_[1] = make_button(detail_, 160, 352, 148, 44, "Groups", kTagDetailGroups);
+    detail_btn_[2] = make_button(detail_, 312, 352, 148, 44, "Delete", kTagDetailDelete);
+    lv_obj_set_style_bg_color(detail_btn_[2], lv_color_hex(kDangerRed), 0);
+    detail_btn_[3] = make_button(detail_, 464, 352, 164, 44, "Close", kTagDetailClose);
     set_hidden(detail_, true);
     build_nearby();
 }
@@ -822,12 +895,11 @@ void App::build_contacts()
 /* The Nearby list (C4): adverts heard, pending contacts of the manual add mode and the answers to a zero-hop scan, with Add / Ignore. */
 void App::build_nearby()
 {
-    lv_obj_t *p = page_[static_cast<int>(Tab::Contacts)];
-    nearby_ = make_box(p, 0, 0, 640, kPageH);
+    nearby_ = make_box(screen_, 0, 0, 640, panel_h_);
     lv_obj_set_style_bg_color(nearby_, lv_color_hex(kBackground), 0);
     lv_obj_set_style_bg_opa(nearby_, LV_OPA_COVER, 0);
     lv_obj_add_flag(nearby_, LV_OBJ_FLAG_CLICKABLE);
-    nearby_title_ = make_label(nearby_, f_big_, kGold, 12, 10, 330, 26);
+    nearby_title_ = make_label(nearby_, f_big_, kText, 12, 10, 330, 26);
     make_button(nearby_, 346, 0, 92, 44, "Scan", kTagNearbyScan, &nearby_scan_label_);
     make_button(nearby_, 442, 0, 96, 44, "Ignored", kTagNearbyIgnored, &nearby_ign_label_);
     make_button(nearby_, 542, 0, 94, 44, "Close", kTagNearbyClose);
@@ -835,21 +907,20 @@ void App::build_nearby()
     cfg.max_cells = 6;
     cfg.max_boxes = 2;
     cfg.min_row_h = 56;
-    nearby_list_.create(nearby_, 0, 48, 640, kPageH - 48, cfg);
+    nearby_list_.create(nearby_, 0, 48, 640, panel_h_ - 48, cfg);
     nearby_empty_ = make_label(nearby_, f_ui_, kMuted, 30, 150, 580, 100, LV_TEXT_ALIGN_CENTER);
     lv_label_set_long_mode(nearby_empty_, LV_LABEL_LONG_MODE_WRAP);
     set_hidden(nearby_, true);
 }
 
-/* Search in the message archive (M7): a panel over the Chats page. */
+/* Search in the message archive (M7): a sub-page over the Chats page and the tab row. */
 void App::build_search()
 {
-    lv_obj_t *p = page_[static_cast<int>(Tab::Chats)];
-    search_panel_ = make_box(p, 0, 0, 640, kPageH);
+    search_panel_ = make_box(screen_, 0, 0, 640, panel_h_);
     lv_obj_set_style_bg_color(search_panel_, lv_color_hex(kBackground), 0);
     lv_obj_set_style_bg_opa(search_panel_, LV_OPA_COVER, 0);
     lv_obj_add_flag(search_panel_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_t *t = make_label(search_panel_, f_big_, kGold, 12, 10, 400, 26);
+    lv_obj_t *t = make_label(search_panel_, f_big_, kText, 12, 10, 400, 26);
     lv_label_set_text(t, "Search messages");
     make_button(search_panel_, 540, 0, 96, 44, "Close", kTagSearchClose);
     sr_query_ = lv_textarea_create(search_panel_);
@@ -863,13 +934,13 @@ void App::build_search()
     lv_obj_set_style_bg_opa(sr_query_, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(sr_query_, 6, 0);
     lv_obj_set_style_border_width(sr_query_, 2, 0);
-    lv_obj_set_style_border_color(sr_query_, lv_color_hex(kGold), 0);
+    lv_obj_set_style_border_color(sr_query_, lv_color_hex(kAccent), 0);
     lv_obj_set_style_pad_all(sr_query_, 8, 0);
     lv_obj_set_style_text_color(sr_query_, lv_color_hex(kMuted), LV_PART_TEXTAREA_PLACEHOLDER);
     lv_obj_set_style_bg_opa(sr_query_, LV_OPA_TRANSP, LV_PART_CURSOR);
     lv_obj_set_style_border_side(sr_query_, LV_BORDER_SIDE_LEFT, LV_PART_CURSOR | LV_STATE_FOCUSED);
     lv_obj_set_style_border_width(sr_query_, 2, LV_PART_CURSOR | LV_STATE_FOCUSED);
-    lv_obj_set_style_border_color(sr_query_, lv_color_hex(kGold), LV_PART_CURSOR | LV_STATE_FOCUSED);
+    lv_obj_set_style_border_color(sr_query_, lv_color_hex(kAccent), LV_PART_CURSOR | LV_STATE_FOCUSED);
     lv_textarea_set_max_length(sr_query_, 60);
     lv_obj_add_state(sr_query_, LV_STATE_FOCUSED);
     lv_textarea_set_placeholder_text(sr_query_, "Type the words to find (Bluetooth keyboard)");
@@ -881,19 +952,18 @@ void App::build_search()
     cfg.max_cells = 3;
     cfg.max_boxes = 0;
     cfg.min_row_h = 56;
-    search_list_.create(search_panel_, 0, 166, 640, kPageH - 166, cfg);
+    search_list_.create(search_panel_, 0, 166, 640, panel_h_ - 166, cfg);
     set_hidden(search_panel_, true);
 }
 
-/* The statistics screen (D9): a panel over the Settings page. */
+/* The statistics screen (D9): a sub-page over the Settings page and the tab row. */
 void App::build_stats()
 {
-    lv_obj_t *p = page_[static_cast<int>(Tab::Settings)];
-    stats_panel_ = make_box(p, 0, 0, 640, kPageH);
+    stats_panel_ = make_box(screen_, 0, 0, 640, panel_h_);
     lv_obj_set_style_bg_color(stats_panel_, lv_color_hex(kBackground), 0);
     lv_obj_set_style_bg_opa(stats_panel_, LV_OPA_COVER, 0);
     lv_obj_add_flag(stats_panel_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_t *t = make_label(stats_panel_, f_big_, kGold, 12, 10, 290, 26);
+    lv_obj_t *t = make_label(stats_panel_, f_big_, kText, 12, 10, 290, 26);
     lv_label_set_text(t, "Statistics");
     make_button(stats_panel_, 304, 0, 104, 44, "Refresh", kTagStatsRefresh);
     make_button(stats_panel_, 412, 0, 120, 44, "", kTagStatsAuto, &st_auto_label_);
@@ -904,8 +974,8 @@ void App::build_stats()
         st_label_[1][i] = make_label(stats_panel_, f_ui_, kMuted, 336, 56 + i * 28, 150, 22);
         st_value_[1][i] = make_label(stats_panel_, f_text_, kText, 490, 56 + i * 28, 140, 22);
     }
-    st_updated_ = make_label(stats_panel_, f_small_, kMuted, 12, 372, 400, 18);
-    st_note_ = make_label(stats_panel_, f_small_, kMuted, 336, 372, 296, 18, LV_TEXT_ALIGN_RIGHT);
+    st_updated_ = make_label(stats_panel_, f_small_, kMuted, 12, panel_h_ - 26, 400, 18);
+    st_note_ = make_label(stats_panel_, f_small_, kMuted, 336, panel_h_ - 26, 296, 18, LV_TEXT_ALIGN_RIGHT);
     set_hidden(stats_panel_, true);
 }
 
@@ -915,7 +985,7 @@ void App::build_settings()
     cfg.max_cells = 6;
     cfg.max_boxes = 3;
     cfg.min_row_h = 28;
-    settings_list_.create(page_[static_cast<int>(Tab::Settings)], 0, 0, 640, kPageH, cfg);
+    settings_list_.create(page_[static_cast<int>(Tab::Settings)], 0, 0, 640, page_h_, cfg);
     build_stats();
     build_packet_log();
 }
@@ -926,15 +996,14 @@ constexpr int kLogCol[8][2] = {{12, 66}, {80, 70}, {152, 90}, {244, 42}, {288, 5
 constexpr int kLogRowH = 28;
 } // namespace
 
-/* The packet log (D8): a panel over the Settings page, like the statistics. The rows on top, the bytes of the selected row below. */
+/* The packet log (D8): a sub-page over the Settings page, like the statistics. The rows on top, the bytes of the selected row below. */
 void App::build_packet_log()
 {
-    lv_obj_t *p = page_[static_cast<int>(Tab::Settings)];
-    log_panel_ = make_box(p, 0, 0, 640, kPageH);
+    log_panel_ = make_box(screen_, 0, 0, 640, panel_h_);
     lv_obj_set_style_bg_color(log_panel_, lv_color_hex(kBackground), 0);
     lv_obj_set_style_bg_opa(log_panel_, LV_OPA_COVER, 0);
     lv_obj_add_flag(log_panel_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_t *t = make_label(log_panel_, f_big_, kGold, 12, 10, 130, 26);
+    lv_obj_t *t = make_label(log_panel_, f_big_, kText, 12, 10, 130, 26);
     lv_label_set_text(t, "Packet log");
     log_status_ = make_label(log_panel_, f_small_, kMuted, 144, 14, 222, 18);
     log_toggle_ = make_button(log_panel_, 370, 0, 92, 44, "", kTagLogToggle, &log_toggle_label_);
@@ -949,33 +1018,32 @@ void App::build_packet_log()
     cfg.max_cells = 8;
     cfg.max_boxes = 0;
     cfg.min_row_h = kLogRowH;
-    log_list_.create(log_panel_, 0, 70, 640, 216, cfg);
-    lv_obj_t *div = make_box(log_panel_, 0, 288, 640, 1);
-    lv_obj_set_style_bg_color(div, lv_color_hex(kSelected), 0);
-    lv_obj_set_style_bg_opa(div, LV_OPA_COVER, 0);
-    log_detail_ = make_label(log_panel_, f_small_, kMuted, 12, 294, 616, 18);
-    log_hex_ = make_label(log_panel_, f_text_small_, kText, 12, 314, 616, 85);     // up to 5 lines; the dots mode cuts a longer packet
+    log_list_.create(log_panel_, 0, 70, 640, panel_h_ - 184, cfg);
+    log_div_ = make_box(log_panel_, 0, panel_h_ - 112, 640, 1);
+    lv_obj_set_style_bg_color(log_div_, lv_color_hex(kSelected), 0);
+    lv_obj_set_style_bg_opa(log_div_, LV_OPA_COVER, 0);
+    log_detail_ = make_label(log_panel_, f_small_, kMuted, 12, panel_h_ - 106, 616, 18);
+    log_hex_ = make_label(log_panel_, f_text_small_, kText, 12, panel_h_ - 86, 616, 85);     // up to 5 lines; the dots mode cuts a longer packet
     set_hidden(log_panel_, true);
 }
-void App::build_footer()
+
+/* The key hint line at the bottom of the screen: shown only while a keyboard is there (the touch has its buttons). */
+void App::build_hint_line()
 {
-    lv_obj_t *f = make_box(screen_, 0, kFooterY, 640, kFooterH);
-    lv_obj_set_style_bg_color(f, lv_color_hex(kPanel), 0);
-    lv_obj_set_style_bg_opa(f, LV_OPA_COVER, 0);
-    foot_left_ = make_label(f, f_small_, kMuted, 8, 3, 396, 18);
-    foot_right_ = make_label(f, f_small_, kMuted, 404, 3, 208, 18, LV_TEXT_ALIGN_RIGHT);
-    foot_dot_ = make_box(f, 620, 8, 9, 9);
-    lv_obj_set_style_radius(foot_dot_, 5, 0);
-    lv_obj_set_style_bg_opa(foot_dot_, LV_OPA_COVER, 0);
+    const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
+    hint_box_ = make_box(shell_->root(), stage_x_, layout_.h - hint_h_, kScreenW, hint_h_);
+    lv_obj_remove_flag(hint_box_, LV_OBJ_FLAG_CLICKABLE);
+    const int lh = static_cast<int>(lv_font_get_line_height(f_caption_));
+    hint_label_ = make_label(hint_box_, f_caption_, kMuted, m->tok[CP0_TOK_SPACE_S], (hint_h_ - lh) / 2, kScreenW - 2 * m->tok[CP0_TOK_SPACE_S], lh);
 
     // the cue of a touch held on a conversation name: a bar that fills over 3 s (never clickable: it must not take the touch)
-    hold_box_ = make_box(screen_, 215, kPageY + 286, 420, 56);
+    hold_box_ = make_box(screen_, 215, panel_h_ - 114, 420, 56);
     lv_obj_remove_flag(hold_box_, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_style_bg_color(hold_box_, lv_color_hex(kPanel), 0);
     lv_obj_set_style_bg_opa(hold_box_, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(hold_box_, 8, 0);
     lv_obj_set_style_border_width(hold_box_, 2, 0);
-    lv_obj_set_style_border_color(hold_box_, lv_color_hex(kGold), 0);
+    lv_obj_set_style_border_color(hold_box_, lv_color_hex(kAccent), 0);
     hold_label_ = make_label(hold_box_, f_small_, kText, 12, 8, 392, 18, LV_TEXT_ALIGN_CENTER);
     lv_obj_t *track = make_box(hold_box_, 12, 34, 392, 10);
     lv_obj_remove_flag(track, LV_OBJ_FLAG_CLICKABLE);
@@ -984,139 +1052,87 @@ void App::build_footer()
     lv_obj_set_style_radius(track, 5, 0);
     hold_bar_ = make_box(track, 0, 0, 1, 10);
     lv_obj_remove_flag(hold_bar_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_bg_color(hold_bar_, lv_color_hex(kGold), 0);
+    lv_obj_set_style_bg_color(hold_bar_, lv_color_hex(kAccent), 0);
     lv_obj_set_style_bg_opa(hold_bar_, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(hold_bar_, 5, 0);
     set_hidden(hold_box_, true);
 }
 
-void App::build_editor()
+/* What depends on the room under the shell: the stage and the page bodies take the height left by the shell and, while
+ * a keyboard is there, by the key hint line. The lists, the entry line of Chats, the buttons at the bottom of a sub-page. */
+void App::layout_body()
 {
-    ed_overlay_ = make_box(screen_, 0, kPageY, 640, kPageH);
-    lv_obj_set_style_bg_color(ed_overlay_, lv_color_hex(0x000000), 0);
-    lv_obj_set_style_bg_opa(ed_overlay_, LV_OPA_80, 0);
-    lv_obj_add_flag(ed_overlay_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_t *panel = make_box(ed_overlay_, 50, 70, 540, 250);
-    lv_obj_set_style_bg_color(panel, lv_color_hex(kPanel), 0);
-    lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(panel, 8, 0);
-    lv_obj_set_style_border_width(panel, 2, 0);
-    lv_obj_set_style_border_color(panel, lv_color_hex(kGold), 0);
-    ed_title_ = make_label(panel, f_big_, kGold, 20, 14, 500, 26);
-    ed_hint_ = make_label(panel, f_small_, kMuted, 20, 46, 500, 36);
-    lv_label_set_long_mode(ed_hint_, LV_LABEL_LONG_MODE_WRAP);
-    ed_ta_ = lv_textarea_create(panel);
-    lv_obj_set_pos(ed_ta_, 20, 92);
-    lv_obj_set_size(ed_ta_, 500, 48);
-    lv_textarea_set_one_line(ed_ta_, true);
-    lv_obj_set_scrollbar_mode(ed_ta_, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_set_style_text_font(ed_ta_, f_text_, 0);
-    lv_obj_set_style_text_color(ed_ta_, lv_color_hex(kText), 0);
-    lv_obj_set_style_bg_color(ed_ta_, lv_color_hex(kBackground), 0);
-    lv_obj_set_style_bg_opa(ed_ta_, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(ed_ta_, 2, 0);
-    lv_obj_set_style_border_color(ed_ta_, lv_color_hex(kGold), 0);
-    lv_obj_set_style_pad_all(ed_ta_, 8, 0);
-    lv_obj_set_style_bg_opa(ed_ta_, LV_OPA_TRANSP, LV_PART_CURSOR);
-    lv_obj_set_style_border_side(ed_ta_, LV_BORDER_SIDE_LEFT, LV_PART_CURSOR | LV_STATE_FOCUSED);
-    lv_obj_set_style_border_width(ed_ta_, 2, LV_PART_CURSOR | LV_STATE_FOCUSED);
-    lv_obj_set_style_border_color(ed_ta_, lv_color_hex(kGold), LV_PART_CURSOR | LV_STATE_FOCUSED);
-    lv_textarea_set_max_length(ed_ta_, 200);
-    lv_obj_add_state(ed_ta_, LV_STATE_FOCUSED);
-    ed_err_ = make_label(panel, f_small_, kRed, 20, 148, 500, 20);
-    make_button(panel, 20, 188, 160, 44, "Cancel", kTagEdCancel);
-    lv_obj_t *ok = make_button(panel, 360, 188, 160, 44, "OK", kTagEdOk);
-    lv_obj_set_style_bg_color(ok, lv_color_hex(kOkGreen), 0);
-    set_hidden(ed_overlay_, true);
+    const bool hint = kbd_ok_;
+    panel_h_ = layout_.h - tabs_y_ - (hint ? hint_h_ : 0);
+    page_h_ = panel_h_ - tab_h_;
+    lv_obj_set_pos(screen_, stage_x_, tabs_y_);
+    lv_obj_set_size(screen_, kScreenW, panel_h_);
+    for (int i = 0; i < 5; ++i) lv_obj_set_pos(page_[i], 0, tab_h_), lv_obj_set_size(page_[i], kScreenW, page_h_);
+    // Chats: the list and its Search button, the conversation and the entry line at the bottom
+    chat_list_.resize(page_h_ - 44);
+    lv_obj_set_y(search_btn_, page_h_ - 44);
+    lv_obj_set_height(chat_div_, page_h_);
+    lv_obj_set_height(msgs_, page_h_ - 104);
+    lv_obj_set_y(chat_line2_, page_h_ - 56);
+    lv_obj_set_y(compose_, page_h_ - 50);
+    lv_obj_set_y(send_btn_, page_h_ - 47);
+    contact_list_.resize(page_h_ - 110);
+    settings_list_.resize(page_h_);
+    // the sub-pages cover the tab row too
+    for (lv_obj_t *panel : {search_panel_, nearby_, detail_, stats_panel_, log_panel_}) lv_obj_set_size(panel, kScreenW, panel_h_);
+    search_list_.resize(panel_h_ - 166);
+    nearby_list_.resize(panel_h_ - 48);
+    log_list_.resize(panel_h_ - 184);
+    lv_obj_set_y(log_div_, panel_h_ - 112);
+    lv_obj_set_y(log_detail_, panel_h_ - 106);
+    lv_obj_set_y(log_hex_, panel_h_ - 86);
+    lv_obj_set_height(log_hex_, 85);
+    lv_obj_set_y(st_updated_, panel_h_ - 26);
+    lv_obj_set_y(st_note_, panel_h_ - 26);
+    for (lv_obj_t *b : detail_btn_) lv_obj_set_y(b, panel_h_ - 48);
+    lv_obj_set_y(hold_box_, panel_h_ - 114);
+    lv_obj_set_size(loading_, kScreenW, panel_h_);
+    set_hidden(hint_box_, !hint);
+    lv_obj_set_pos(hint_box_, stage_x_, layout_.h - hint_h_);
+    invalidate();
 }
 
-/* The Position box: the panel, title, field and buttons of the editor (same colours, fonts and sizes), with two fields side by side,
- * the board GPS switch (a board that lists the "gps" variable only) and Clear. position_layout() places the rows. */
-void App::build_position_box()
+lv_point_t App::script_origin() const
 {
-    pos_overlay_ = make_box(screen_, 0, kPageY, 640, kPageH);
-    lv_obj_set_style_bg_color(pos_overlay_, lv_color_hex(0x000000), 0);
-    lv_obj_set_style_bg_opa(pos_overlay_, LV_OPA_80, 0);
-    lv_obj_add_flag(pos_overlay_, LV_OBJ_FLAG_CLICKABLE);
-    pos_panel_ = make_box(pos_overlay_, 50, 35, 540, 330);
-    lv_obj_set_style_bg_color(pos_panel_, lv_color_hex(kPanel), 0);
-    lv_obj_set_style_bg_opa(pos_panel_, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(pos_panel_, 8, 0);
-    lv_obj_set_style_border_width(pos_panel_, 2, 0);
-    lv_obj_set_style_border_color(pos_panel_, lv_color_hex(kGold), 0);
-    lv_obj_t *title = make_label(pos_panel_, f_big_, kGold, 20, 14, 500, 26);
-    lv_label_set_text(title, "Position");
-    pos_now_ = make_label(pos_panel_, f_small_, kMuted, 20, 44, 500, 20);
-    pos_gps_ = make_button(pos_panel_, 20, 70, 500, 44, "", kTagPosGps, &pos_gps_label_);
-    static const char *const names[2] = {"Latitude", "Longitude"};
-    for (int i = 0; i < 2; ++i) {
-        pos_label_[i] = make_label(pos_panel_, f_small_, kMuted, 20 + i * 260, 124, 240, 20);
-        lv_label_set_text(pos_label_[i], names[i]);
-        // the same field as the editor's
-        lv_obj_t *ta = lv_textarea_create(pos_panel_);
-        lv_obj_set_pos(ta, 20 + i * 260, 146);
-        lv_obj_set_size(ta, 240, 48);
-        lv_textarea_set_one_line(ta, true);
-        lv_obj_set_scrollbar_mode(ta, LV_SCROLLBAR_MODE_OFF);
-        lv_obj_set_style_text_font(ta, f_text_, 0);
-        lv_obj_set_style_text_color(ta, lv_color_hex(kText), 0);
-        lv_obj_set_style_bg_color(ta, lv_color_hex(kBackground), 0);
-        lv_obj_set_style_bg_opa(ta, LV_OPA_COVER, 0);
-        lv_obj_set_style_border_width(ta, 2, 0);
-        lv_obj_set_style_border_color(ta, lv_color_hex(kGold), 0);
-        lv_obj_set_style_pad_all(ta, 8, 0);
-        lv_obj_set_style_bg_opa(ta, LV_OPA_TRANSP, LV_PART_CURSOR);
-        lv_obj_set_style_border_side(ta, LV_BORDER_SIDE_LEFT, LV_PART_CURSOR | LV_STATE_FOCUSED);
-        lv_obj_set_style_border_width(ta, 2, LV_PART_CURSOR | LV_STATE_FOCUSED);
-        lv_obj_set_style_border_color(ta, lv_color_hex(kGold), LV_PART_CURSOR | LV_STATE_FOCUSED);
-        lv_textarea_set_max_length(ta, 24);
-        lv_obj_add_event_cb(ta, trampoline_button, LV_EVENT_CLICKED, reinterpret_cast<void *>(static_cast<intptr_t>(i == 0 ? kTagPosLat : kTagPosLon)));
-        pos_ta_[i] = ta;
-    }
-    pos_hint_ = make_label(pos_panel_, f_small_, kMuted, 20, 202, 500, 36);
-    lv_label_set_long_mode(pos_hint_, LV_LABEL_LONG_MODE_WRAP);
-    pos_err_ = make_label(pos_panel_, f_small_, kRed, 20, 242, 500, 20);
-    pos_cancel_ = make_button(pos_panel_, 20, 272, 150, 44, "Cancel", kTagPosCancel);
-    pos_clear_ = make_button(pos_panel_, 195, 272, 150, 44, "Clear", kTagPosClear);
-    pos_ok_ = make_button(pos_panel_, 370, 272, 150, 44, "OK", kTagPosOk);
-    lv_obj_set_style_bg_color(pos_ok_, lv_color_hex(kOkGreen), 0);
-    set_hidden(pos_overlay_, true);
+    lv_area_t a;
+    lv_obj_get_coords(screen_, &a);
+    const bool sub = nav_.search_open || nav_.nearby_open || nav_.detail_open || nav_.stats_open || nav_.packet_log_open;
+    return {a.x1, a.y1 + (sub ? -56 : tab_h_ - 56)};
 }
 
 void App::build_popup()
 {
-    pop_overlay_ = make_box(screen_, 0, kPageY, 640, kPageH);
-    lv_obj_set_style_bg_color(pop_overlay_, lv_color_hex(0x000000), 0);
-    lv_obj_set_style_bg_opa(pop_overlay_, LV_OPA_80, 0);
-    lv_obj_add_flag(pop_overlay_, LV_OBJ_FLAG_CLICKABLE);          // swallows the taps meant for the screen below
-    pop_panel_ = make_box(pop_overlay_, 40, 24, 560, 352);
-    lv_obj_set_style_bg_color(pop_panel_, lv_color_hex(kPanel), 0);
-    lv_obj_set_style_bg_opa(pop_panel_, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(pop_panel_, 8, 0);
-    lv_obj_set_style_border_width(pop_panel_, 2, 0);
-    lv_obj_set_style_border_color(pop_panel_, lv_color_hex(kGold), 0);
-    set_hidden(pop_overlay_, true);
-
-    // "Loading..." while the contacts are sorted or filtered
-    loading_ = make_box(screen_, 0, kPageY, 640, kPageH);
+    // "Loading..." while the contacts are sorted or filtered: a small box in the middle of the stage
+    const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
+    loading_ = make_box(screen_, 0, 0, kScreenW, panel_h_);
     lv_obj_set_style_bg_color(loading_, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(loading_, LV_OPA_50, 0);
     lv_obj_add_flag(loading_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_t *lp = make_box(loading_, 190, 140, 260, 90);
+    const int lh = static_cast<int>(lv_font_get_line_height(f_title_));
+    lv_point_t sz = {0, 0};
+    lv_text_get_size(&sz, "Loading...", f_title_, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    const int pad = m->tok[CP0_TOK_SPACE_L];
+    lv_obj_t *lp = make_box(loading_, 0, 0, sz.x + 2 * pad, lh + 2 * pad);
+    lv_obj_align(lp, LV_ALIGN_CENTER, 0, 0);
     lv_obj_set_style_bg_color(lp, lv_color_hex(kPanel), 0);
     lv_obj_set_style_bg_opa(lp, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(lp, 8, 0);
-    lv_obj_set_style_border_width(lp, 2, 0);
-    lv_obj_set_style_border_color(lp, lv_color_hex(kGold), 0);
-    lv_obj_t *ll = make_label(lp, f_value_small_, kText, 0, 28, 260, 32, LV_TEXT_ALIGN_CENTER);
-    lv_label_set_text(ll, "Loading...");
+    lv_obj_set_style_radius(lp, m->tok[CP0_TOK_RADIUS_M], 0);
+    lv_obj_set_style_border_width(lp, 1, 0);
+    lv_obj_set_style_border_color(lp, lv_color_hex(CP0_UI_OSK_BORDER_RGB), 0);
+    loading_label_ = make_label(lp, f_title_, kText, pad, pad, sz.x + 2, lh, LV_TEXT_ALIGN_LEFT);
+    lv_label_set_text(loading_label_, "Loading...");
     set_hidden(loading_, true);
 }
 
 std::string App::debug_state() const
 {
     const char *compose = compose_ ? lv_textarea_get_text(compose_) : "";
-    const char *editor = ed_ta_ ? lv_textarea_get_text(ed_ta_) : "";
+    const char *editor = ed_ta_ && editor_open_ ? lv_textarea_get_text(ed_ta_) : "";
     const char *pk = pop_.kind == Popup::Choice ? "choice" : pop_.kind == Popup::Confirm ? "confirm" : pop_.kind == Popup::Menu ? "menu"
                      : pop_.kind == Popup::Info ? "info" : pop_.kind == Popup::List ? "list" : pop_.kind == Popup::Progress ? "progress" : "none";
     std::string last_status;
@@ -1168,7 +1184,7 @@ std::string App::debug_state() const
     const bool pos_box = editor_open_ && edit_kind_ == EditKind::Position;
     s += std::string(" pos_box=") + (pos_box ? "1" : "0") + " pos_focus=" + std::to_string(pos_box ? pos_focus_ : -1) +
          " pos_fields='" + (pos_box ? std::string(lv_textarea_get_text(pos_ta_[0])) + "|" + lv_textarea_get_text(pos_ta_[1]) : std::string()) + "'" +
-         " pos_gps_row=" + (pos_box && pos_gps_shown_ ? "1" : "0") + " pos_err='" + (pos_box ? std::string(lv_label_get_text(pos_err_)) : std::string()) + "'" +
+         " pos_gps_row=" + (pos_box && pos_gps_shown_ ? "1" : "0") + " pos_err='" + (pos_box ? pos_err_text_ : std::string()) + "'" +
          " self_pos='" + (model_.self() ? fmt_position(position_is_set(model_.self()->lat, model_.self()->lon), model_.self()->lat, model_.self()->lon) : std::string("-")) + "'" +
          " gps=" + (model_.caps().gps_listed ? (model_.caps().gps_on ? "on" : "off") : "-");
     // phase 3: heard back, the packet log
@@ -1227,18 +1243,36 @@ void App::set_page_visible()
     for (int i = 0; i < 5; ++i) set_hidden(page_[i], i != static_cast<int>(nav_.tab));
 }
 
-void App::update_statusbar(bool force)
+/* The page title of the header: "Mesh Hop > Chats", and one more part inside a sub-page (a contact, Nearby, Search...). */
+void App::update_title()
 {
-    if (!bar_ || !bar_img_) return;
-    const uint64_t now = mono_ms();
-    if (!force && now - last_bar_ms_ < 2000) return;
-    last_bar_ms_ = now;
-    cp0_statusbar_state_t st;
-    std::memset(&st, 0, sizeof(st));
-    cp0_statusbar_read_state(&st);
-    std::fill(bar_px_.begin(), bar_px_.end(), 0u);
-    cp0_statusbar_render(bar_, bar_px_.data(), 640, 640, 0, 8, 0, &st);
-    lv_obj_invalidate(bar_img_);
+    std::vector<std::string> path = {"Mesh Hop"};
+    switch (nav_.tab) {
+    case Tab::Chats:
+        path.push_back("Chats");
+        if (nav_.search_open) path.push_back("Search");
+        break;
+    case Tab::Contacts:
+        path.push_back("Contacts");
+        if (nav_.detail_open) {
+            const ContactRec *r = model_.find_contact(detail_key_);
+            path.push_back(r ? truncate_ellipsis(r->c.name, 24) : std::string("Contact"));
+        } else if (nav_.nearby_open) {
+            path.push_back("Nearby");
+        }
+        break;
+    case Tab::Settings:
+        path.push_back("Settings");
+        if (nav_.stats_open) path.push_back("Statistics");
+        else if (nav_.packet_log_open) path.push_back("Packet log");
+        break;
+    default: path.push_back(tab_name(nav_.tab)); break;
+    }
+    std::string key;
+    for (const std::string &s : path) key += s + "\x1f";
+    if (key == title_key_) return;
+    title_key_ = key;
+    shell_->set_title(path);
 }
 
 int App::max_compose_bytes() const
@@ -1564,6 +1598,7 @@ void App::presets_tick(uint64_t now)
 
 void App::tick()
 {
+    run_posted();
     const uint64_t now = mono_ms();
     if (now - last_poll_ms_ >= 20) {
         last_poll_ms_ = now;
@@ -1574,7 +1609,6 @@ void App::tick()
         popup_build();
         popup_refresh();
         pop_dirty_ = false;
-        set_hidden(pop_overlay_, pop_.kind == Popup::None);
     }
     if (view_pending_ && now - view_ms_ >= loading_min_ms()) apply_contact_view();
     hold_tick(now);
@@ -1612,6 +1646,7 @@ void App::tick()
         const bool k = keyboard_ready();
         if (k != kbd_ok_) {
             kbd_ok_ = k;
+            layout_body();                                   // the key hint line comes or goes: the page bodies take the room
             need = true;
         }
     }
@@ -1634,7 +1669,6 @@ void App::tick()
         }
     }
     if (nav_.tab == Tab::Chats && !conv_.empty()) model_.mark_read(conv_);
-    update_statusbar(false);
     if (need) render();
 }
 
@@ -1664,32 +1698,53 @@ void App::render()
     }
     position_refresh();
     render_footer();
+    const bool sub = nav_.search_open || nav_.nearby_open || nav_.detail_open || nav_.stats_open || nav_.packet_log_open;
+    set_hidden(tabs_, sub);                                  // a sub-page covers the tab row
+    update_title();
 }
 
 void App::render_tabs()
 {
+    const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
     const int unread = model_.unread_total();
-    for (int i = 0; i < 5; ++i) {
-        const bool active = i == static_cast<int>(nav_.tab);
-        lv_label_set_text(tab_label_[i], tab_name(static_cast<Tab>(i)));
-        set_color(tab_label_[i], active ? kGold : kMuted);
+    static const Tab shown[3] = {Tab::Chats, Tab::Contacts, Tab::Settings};
+    for (const Tab t : shown) {
+        const int i = static_cast<int>(t);
+        const bool active = t == nav_.tab;
+        const char *name = tab_name(t);
+        lv_label_set_text(tab_label_[i], name);
+        set_color(tab_label_[i], active ? kAccent : kMuted);
         lv_obj_set_style_bg_opa(tab_btn_[i], active ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
         lv_obj_set_style_bg_color(tab_btn_[i], lv_color_hex(kPanel), 0);
         set_hidden(tab_bar_line_[i], !active);
-    }
-    // the unread total on the Chats title: "Chats" and a gold pill with the number (99+ above 99)
-    if (unread > 0) {
-        const std::string t = fmt_count_badge(unread);
-        const int w = t.size() >= 3 ? 40 : 30;
-        lv_obj_set_size(tab_badge_, w, 22);
-        lv_obj_set_pos(tab_badge_, 100 - w - 6, 9);
-        lv_label_set_text(tab_badge_label_, t.c_str());
-        lv_obj_center(tab_badge_label_);
-        set_hidden(tab_badge_, false);
-        lv_obj_set_width(tab_label_[0], 100 - w - 4);
-    } else {
-        set_hidden(tab_badge_, true);
-        lv_obj_set_width(tab_label_[0], 100);
+        // the word, and next to it the unread total of Chats (a pill with the number, 99+ above 99), centred together
+        lv_point_t sz = {0, 0};
+        lv_text_get_size(&sz, name, f_body_, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        const int tab_w = lv_obj_get_width(tab_btn_[i]);
+        int total = sz.x;
+        int badge_w = 0;
+        if (t == Tab::Chats && unread > 0) {
+            const std::string text = fmt_count_badge(unread);
+            lv_point_t bs = {0, 0};
+            lv_text_get_size(&bs, text.c_str(), f_caption_, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+            const int bh = lv_obj_get_height(tab_badge_);
+            badge_w = std::max(bh, bs.x + bh / 2);
+            lv_label_set_text(tab_badge_label_, text.c_str());
+            total += m->tok[CP0_TOK_SPACE_S] + badge_w;
+        }
+        const int x0 = std::max(0, (tab_w - total) / 2);
+        lv_obj_set_width(tab_label_[i], sz.x + 4);
+        lv_obj_set_x(tab_label_[i], x0);
+        if (t == Tab::Chats) {
+            if (badge_w) {
+                lv_obj_set_width(tab_badge_, badge_w);
+                lv_obj_set_x(tab_badge_, x0 + sz.x + m->tok[CP0_TOK_SPACE_S]);
+                lv_obj_center(tab_badge_label_);
+                set_hidden(tab_badge_, false);
+            } else {
+                set_hidden(tab_badge_, true);
+            }
+        }
     }
 }
 
@@ -1698,7 +1753,7 @@ void App::update_compose_style()
     const bool focus = nav_.compose_focus && nav_.tab == Tab::Chats && !editor_open_;
     if (focus) lv_obj_add_state(compose_, LV_STATE_FOCUSED);
     else lv_obj_remove_state(compose_, LV_STATE_FOCUSED);
-    lv_obj_set_style_border_color(compose_, lv_color_hex(focus ? kGold : kSelected), 0);
+    lv_obj_set_style_border_color(compose_, lv_color_hex(focus ? kAccent : kSelected), 0);
     lv_textarea_set_placeholder_text(compose_, !kbd_ok_ ? "Wake the Bluetooth keyboard to type" : conv_.empty() ? "" : "Type a message (keyboard)");
 }
 
@@ -1733,7 +1788,7 @@ void App::render_chats()
             if (r.kind == ChatRow::Channel && !title.empty() && title[0] == '#') title = title.substr(1);
             if (r.kind == ChatRow::Channel) title = "# " + title;
             const bool tail = r.unread > 0 || r.muted;
-            s.cells.push_back({title, r.unread > 0 ? kGold : kText, 12, tail ? 124 : 180, LV_TEXT_ALIGN_LEFT, f_text_, centre(44, f_text_)});
+            s.cells.push_back({title, r.unread > 0 ? kAccent : kText, 12, tail ? 124 : 180, LV_TEXT_ALIGN_LEFT, f_text_, centre(44, f_text_)});
             if (r.muted) s.cells.push_back({"muted", kMuted, 136, 60, LV_TEXT_ALIGN_RIGHT, f_small_, centre(44, f_small_)});
         }
         specs.push_back(s);
@@ -1764,9 +1819,13 @@ void App::render_chats()
     }
     const bool side_button = has_details;
     set_hidden(details_btn_, !has_details);
+    set_hidden(options_btn_, add_selected || conv_.empty());
     set_hidden(title_hold_, add_selected || conv_.empty());
-    lv_obj_set_width(chat_title_, side_button ? 190 : 290);
-    lv_label_set_text(chat_title_, truncate_ellipsis(title, side_button ? 17 : 30).c_str());
+    const int btn_left = side_button ? kScreenW - 206 : kScreenW - 104;      // the name and the line under it end before the buttons
+    lv_obj_set_width(chat_title_, btn_left - 6 - (kListW + 11));
+    lv_obj_set_width(chat_info_, btn_left - 6 - (kListW + 11));
+    lv_obj_set_width(title_hold_, btn_left - kListW - 5);
+    lv_label_set_text(chat_title_, truncate_ellipsis(title, side_button ? 22 : 32).c_str());
     std::string info;
     if (nav_.compose_focus && !conv_.empty()) {
         const char *cur = lv_textarea_get_text(compose_);
@@ -1782,8 +1841,6 @@ void App::render_chats()
         info = std::to_string(heard) + (heard == 1 ? " node heard" : " nodes heard") + " (1 h)";
     }
     lv_label_set_text(chat_info_, info.c_str());
-    lv_obj_set_pos(chat_info_, kListW + 1 + (side_button ? 120 : 250), 12);
-    lv_obj_set_width(chat_info_, side_button ? 205 : 170);
     render_chat_messages(false);
     update_compose_style();
     set_hidden(compose_, add_selected || conv_.empty());
@@ -1858,7 +1915,7 @@ void App::render_chat_messages(bool force)
         if (want_seq && m.seq == want_seq) {                                 // the found message: a gold frame
             focus_item = item;
             lv_obj_set_style_border_width(item, 2, 0);
-            lv_obj_set_style_border_color(item, lv_color_hex(kGold), 0);
+            lv_obj_set_style_border_color(item, lv_color_hex(kAccent), 0);
         }
         lv_obj_t *hdr = make_box(item, 0, 0, inner_w - 10, 20);
         lv_obj_t *who = make_label(hdr, f_text_small_, m.dir == Dir::Out ? kGreen : kBlue, 0, 0, 200, 20);
@@ -1895,14 +1952,14 @@ void App::build_contact_specs()
         RowSpec s;
         s.h = kContactRowH;
         s.id = r.key_hex;
-        const uint32_t type_color = r.type == advtype::kRepeater ? kBlue : r.type == advtype::kChat ? kText : kGold;
+        const uint32_t type_color = r.type == advtype::kRepeater ? kBlue : r.type == advtype::kChat ? kText : kAccent;
         const int y = centre(kContactRowH, f_ui_);
         const bool marked = select && csel_.contains(r.key_hex);
         if (select) {                                       // a check box at the left; the whole row is the touch target
-            s.cells.push_back({marked ? LV_SYMBOL_OK : " ", marked ? 0x101214u : kText, 8, 28, LV_TEXT_ALIGN_CENTER, f_ui_, 8, marked ? kGold : kSelected});
+            s.cells.push_back({marked ? LV_SYMBOL_OK : " ", marked ? kOnAccent : kText, 8, 28, LV_TEXT_ALIGN_CENTER, f_ui_, 8, marked ? kAccent : kSelected});
         }
         const int nx = select ? 44 : 12;
-        s.cells.push_back({truncate_ellipsis(r.name, select ? 18 : 22), marked ? kGold : kText, nx, select ? 164 : 196, LV_TEXT_ALIGN_LEFT, f_text_, y});
+        s.cells.push_back({truncate_ellipsis(r.name, select ? 18 : 22), marked ? kAccent : kText, nx, select ? 164 : 196, LV_TEXT_ALIGN_LEFT, f_text_, y});
         s.cells.push_back({r.type_name, type_color, 212, 76, LV_TEXT_ALIGN_LEFT, f_ui_, y});
         s.cells.push_back({fmt_age_coarse(r.heard), kMuted, 292, 66, LV_TEXT_ALIGN_LEFT, f_ui_, y});
         s.cells.push_back({fmt_snr(r.has_snr, r.snr), kMuted, 360, 70, LV_TEXT_ALIGN_LEFT, f_ui_, y});
@@ -1953,17 +2010,17 @@ void App::render_contact_toolbar()
     for (int i = 0; i < 6; ++i) {
         const bool on = sort_keys[i] == v.sort;
         lv_label_set_text(col_hdr_[i], (std::string(names[i]) + (on ? (v.reverse ? " ^" : " v") : "")).c_str());
-        set_color(col_hdr_[i], on ? kGold : kMuted);
+        set_color(col_hdr_[i], on ? kAccent : kMuted);
     }
     for (int i = 0; i < 5; ++i) {
         const bool on = static_cast<int>(v.filter.type) == i;
-        lv_obj_set_style_bg_color(type_chip_[i], lv_color_hex(on ? kGold : kSelected), 0);
-        set_color(type_chip_label_[i], on ? 0x101214 : kText);
+        lv_obj_set_style_bg_color(type_chip_[i], lv_color_hex(on ? kAccent : kSelected), 0);
+        set_color(type_chip_label_[i], on ? kOnAccent : kText);
     }
     for (int i = 0; i < 4; ++i) {
         const bool on = static_cast<int>(v.filter.age) == i;
-        lv_obj_set_style_bg_color(age_chip_[i], lv_color_hex(on ? kGold : kSelected), 0);
-        set_color(age_chip_label_[i], on ? 0x101214 : kText);
+        lv_obj_set_style_bg_color(age_chip_[i], lv_color_hex(on ? kAccent : kSelected), 0);
+        set_color(age_chip_label_[i], on ? kOnAccent : kText);
     }
     const size_t total = model_.contact_count();
     std::string cnt = csnap_.rows.size() == total ? std::to_string(total) + (total == 1 ? " contact" : " contacts")
@@ -1972,12 +2029,12 @@ void App::render_contact_toolbar()
     set_hidden(tb_normal_, nav_.select_mode);
     set_hidden(tb_select_, !nav_.select_mode);
     lv_label_set_text(group_btn_label_, v.group.empty() ? "Group: All" : ("Group: " + truncate_ellipsis(v.group, 8)).c_str());
-    lv_obj_set_style_bg_color(lv_obj_get_parent(group_btn_label_), lv_color_hex(v.group.empty() ? kSelected : kGold), 0);
-    set_color(group_btn_label_, v.group.empty() ? kText : 0x101214);
+    lv_obj_set_style_bg_color(lv_obj_get_parent(group_btn_label_), lv_color_hex(v.group.empty() ? kSelected : kAccent), 0);
+    set_color(group_btn_label_, v.group.empty() ? kText : kOnAccent);
     const size_t pending = model_.pending_count();
     lv_label_set_text(nearby_btn_label_, pending ? ("Nearby " + std::to_string(pending)).c_str() : "Nearby");
-    lv_obj_set_style_bg_color(nearby_btn_, lv_color_hex(pending ? kGold : kSelected), 0);
-    set_color(nearby_btn_label_, pending ? 0x101214 : kText);
+    lv_obj_set_style_bg_color(nearby_btn_, lv_color_hex(pending ? kAccent : kSelected), 0);
+    set_color(nearby_btn_label_, pending ? kOnAccent : kText);
     if (nav_.select_mode) {
         const size_t n = csel_.shown_selected(csnap_.rows).size();
         lv_label_set_text(del_btn_label_, n ? ("Delete " + std::to_string(n)).c_str() : "Delete");
@@ -2094,7 +2151,7 @@ void App::render_settings()
         s.selectable = false;
         std::string t = settings_section_title(section);
         if (section == 1 && dirty_radio_) t += "   (unsaved: see the end of the list)";
-        s.cells.push_back({t, section == 1 && dirty_radio_ ? kGold : kMuted, 12, 600, LV_TEXT_ALIGN_LEFT, f_small_, centre(28, f_small_)});
+        s.cells.push_back({t, section == 1 && dirty_radio_ ? kWarn : kMuted, 12, 600, LV_TEXT_ALIGN_LEFT, f_small_, centre(28, f_small_)});
         return s;
     };
     auto info = [&](const char *label, const std::string &value, uint32_t color = kText) {
@@ -2111,7 +2168,7 @@ void App::render_settings()
         s.h = 34;
         s.selectable = false;
         s.cells.push_back({label, kMuted, 12, 200, LV_TEXT_ALIGN_LEFT, f_ui_, centre(34, f_ui_)});
-        s.cells.push_back({text, kGold, 220, 408, LV_TEXT_ALIGN_LEFT, f_text_small_, centre(34, f_text_small_)});
+        s.cells.push_back({text, kWarn, 220, 408, LV_TEXT_ALIGN_LEFT, f_text_small_, centre(34, f_text_small_)});
         return s;
     };
     // a row that does something: label, value, and a ">" when it opens a popup
@@ -2159,7 +2216,7 @@ void App::render_settings()
                 if (connected) {
                     const ClockInfo &ci = model_.clock();
                     s = info("Clock", std::string(clock_source_name(ci.source)) + "   " + format_local_datetime(now_unix()),
-                             ci.source == ClockSource::NotSet ? kGold : kText);
+                             ci.source == ClockSource::NotSet ? kWarn : kText);
                 } else {
                     s = info("Clock", "-", kMuted);
                 }
@@ -2176,7 +2233,7 @@ void App::render_settings()
         case SRowKind::PacketLog: {
             const PacketLog &pl = client_->packet_log();
             s = row("Packet log", pl.capturing() ? "capturing, " + std::to_string(pl.size()) + " packets" : pl.size() ? "stopped, " + std::to_string(pl.size()) + " packets" : "off: the radio packets heard",
-                    pl.capturing() ? kGold : kMuted, kText, true, false);
+                    pl.capturing() ? kAccent : kMuted, kText, true, false);
             break;
         }
         case SRowKind::PathHash: {
@@ -2186,13 +2243,13 @@ void App::render_settings()
         }
         case SRowKind::PathHashNotice: s = notice_row("Path hash size", ctx.path_hash.notice); break;
         case SRowKind::Repeat:
-            s = row("Repeat", dev && dev->repeat ? "On: this board forwards packets" : "Off", dev && dev->repeat ? kGold : kText, kText, false, false);
+            s = row("Repeat", dev && dev->repeat ? "On: this board forwards packets" : "Off", dev && dev->repeat ? kAccent : kText, kText, false, false);
             s.cells.push_back({dev && dev->repeat ? "tap to switch off" : "tap to switch on", kMuted, 450, 170, LV_TEXT_ALIGN_RIGHT, f_small_, centre(44, f_small_)});
             break;
         case SRowKind::RepeatNotice: s = notice_row("Repeat", ctx.repeat.note); break;
         case SRowKind::AdvertEvery: {
             const AdvertSchedule sc = model_.advert_schedule();
-            s = row("Advert every", sc.interval_hours ? std::to_string(sc.interval_hours) + " h" : "Off", sc.interval_hours ? kGold : kText, kText, true, false);
+            s = row("Advert every", sc.interval_hours ? std::to_string(sc.interval_hours) + " h" : "Off", sc.interval_hours ? kAccent : kText, kText, true, false);
             break;
         }
         case SRowKind::AdvertKind:
@@ -2200,7 +2257,7 @@ void App::render_settings()
             break;
         case SRowKind::ManualAdd: {
             const bool manual = model_.self() && model_.self()->manual_add_contacts;
-            s = row("Add nodes by itself", manual ? "Off: new nodes wait in Nearby" : "On: the board adds new nodes", manual ? kGold : kText, kText, false, false);
+            s = row("Add nodes by itself", manual ? "Off: new nodes wait in Nearby" : "On: the board adds new nodes", manual ? kAccent : kText, kText, false, false);
             s.cells.push_back({"tap to switch", kMuted, 480, 140, LV_TEXT_ALIGN_RIGHT, f_small_, centre(44, f_small_)});
             break;
         }
@@ -2215,20 +2272,20 @@ void App::render_settings()
             s.cells.push_back({model_.caps().gps_on ? "tap to switch off" : "tap to switch on", kMuted, 450, 170, LV_TEXT_ALIGN_RIGHT, f_small_, centre(44, f_small_)});
             break;
         case SRowKind::GpsNotice:
-            s = info("Board GPS", "Firmware too old for this feature", kGold);
+            s = info("Board GPS", "Firmware too old for this feature", kWarn);
             break;
-        case SRowKind::Name: s = row("Node name", edit_.name.empty() ? "-" : edit_.name, changed_name ? kGold : kText, kText, false, changed_name); break;
+        case SRowKind::Name: s = row("Node name", edit_.name.empty() ? "-" : edit_.name, changed_name ? kAccent : kText, kText, false, changed_name); break;
         case SRowKind::Preset: {
             const int p = connected ? find_preset(edit_.freq_mhz, edit_.bw_khz, edit_.sf, edit_.cr) : -1;
             std::string v = !connected ? "-" : p >= 0 ? radio_presets()[static_cast<size_t>(p)].name : "Custom";
-            s = row("Preset", v, changed_radio ? kGold : kText, connected ? kText : kMuted, true, false);
+            s = row("Preset", v, changed_radio ? kAccent : kText, connected ? kText : kMuted, true, false);
             break;
         }
-        case SRowKind::Freq: s = row("Frequency", connected ? fmt_freq(edit_.freq_mhz) : "-", changed_freq ? kGold : kText, kText, false, changed_freq); break;
-        case SRowKind::Bw: s = row("Bandwidth", connected ? fmt_bw(edit_.bw_khz) : "-", changed_bw ? kGold : kText, kText, true, changed_bw); break;
-        case SRowKind::Sf: s = row("Spreading factor", connected ? "SF" + std::to_string(edit_.sf) : "-", changed_sf ? kGold : kText, kText, true, changed_sf); break;
-        case SRowKind::Cr: s = row("Coding rate", connected ? "4/" + std::to_string(edit_.cr) : "-", changed_cr ? kGold : kText, kText, true, changed_cr); break;
-        case SRowKind::Tx: s = row("TX power", connected ? std::to_string(edit_.tx_power) + " dBm" : "-", changed_tx ? kGold : kText, kText, true, changed_tx); break;
+        case SRowKind::Freq: s = row("Frequency", connected ? fmt_freq(edit_.freq_mhz) : "-", changed_freq ? kAccent : kText, kText, false, changed_freq); break;
+        case SRowKind::Bw: s = row("Bandwidth", connected ? fmt_bw(edit_.bw_khz) : "-", changed_bw ? kAccent : kText, kText, true, changed_bw); break;
+        case SRowKind::Sf: s = row("Spreading factor", connected ? "SF" + std::to_string(edit_.sf) : "-", changed_sf ? kAccent : kText, kText, true, changed_sf); break;
+        case SRowKind::Cr: s = row("Coding rate", connected ? "4/" + std::to_string(edit_.cr) : "-", changed_cr ? kAccent : kText, kText, true, changed_cr); break;
+        case SRowKind::Tx: s = row("TX power", connected ? std::to_string(edit_.tx_power) + " dBm" : "-", changed_tx ? kAccent : kText, kText, true, changed_tx); break;
         case SRowKind::RetryAttempts:
             s = row("Message tries", retry.attempts == 1 ? "1 (no retry)" : std::to_string(retry.attempts), kText, kText, true, false);
             break;
@@ -2253,7 +2310,7 @@ void App::render_settings()
         }
         case SRowKind::AddChannel: s = row("+ Add channel", "hashtag or private", kMuted, kBlue, true, false); break;
         case SRowKind::AddPublic: s = row("Add the Public channel", "slot 0 is empty", kMuted, kText, false, false); break;
-        case SRowKind::ChannelsNotice: s = info("Channels", "Firmware too old for this feature", kGold); break;
+        case SRowKind::ChannelsNotice: s = info("Channels", "Firmware too old for this feature", kWarn); break;
         case SRowKind::HistoryAll: {
             const size_t n = model_.message_count();
             s = row("Delete all messages", fmt_message_count(n), n ? kText : kMuted, kText, true, false);
@@ -2267,7 +2324,7 @@ void App::render_settings()
             s = row("Undo changes", dirty_radio_ ? "discard the unsaved edits" : "no changes", kMuted, dirty_radio_ ? kText : kMuted, false, false);
             break;
         case SRowKind::Save:
-            s = row("Save to radio", dirty_radio_ ? "unsaved changes" : "no changes", dirty_radio_ ? kGold : kMuted, dirty_radio_ && connected ? kGreen : kMuted, false, false);
+            s = row("Save to radio", dirty_radio_ ? "unsaved changes" : "no changes", dirty_radio_ ? kWarn : kMuted, dirty_radio_ && connected ? kGreen : kMuted, false, false);
             break;
         }
         s.id = id_of(i);
@@ -2293,53 +2350,63 @@ void App::render_settings()
     }
 }
 
-void App::render_footer()
+/* The key hints of the screen (only shown while a keyboard is there). */
+std::string App::hint_text() const
 {
-    std::string left;
-    uint32_t color = kMuted;
-    if (!notice_text_.empty()) {
-        left = notice_text_;
-        color = notice_ok_ ? kGreen : kRed;
-    } else if (nav_.popup_open) {
+    if (nav_.popup_open) {
         switch (pop_.kind) {
-        case Popup::Choice: left = "Left/Right: change   Enter: accept   Esc: cancel"; break;
-        case Popup::Confirm: left = "Y: yes   N: no   Left/Right: choose   Enter   Esc: no"; break;
-        case Popup::Menu: left = "Up/Down: choose   Enter: select   Esc: cancel"; break;
-        case Popup::List: left = "Up/Down: choose   Enter: select   Esc: cancel"; break;
-        case Popup::Progress: left = "Esc or Enter: stop after the contact in progress"; break;
-        default: left = "Enter or Esc: close"; break;
-        }
-    } else if (editor_open_) {
-        left = edit_kind_ == EditKind::Position ? "Tab: next field   Enter: OK   Esc: cancel" : "Type with the keyboard   Enter: OK   Esc: cancel";
-    } else {
-        switch (nav_.tab) {
-        case Tab::Chats:
-            left = nav_.search_open ? "Type  Up/Down  Enter: open  Ctrl+K D R: filters"
-                   : nav_.compose_focus ? "Enter: send  Esc: list  Up/Down: scroll  Ctrl+O: options"
-                                        : "Enter: write  Ctrl+O: options  Ctrl+F: find";
-            break;
-        case Tab::Contacts:
-            left = nav_.detail_open ? "Enter: message   G: groups   D: delete   Esc: back"
-                   : nav_.nearby_open ? "Enter: add   I: ignore   S: scan   V: ignored   Esc: back"
-                   : nav_.select_mode ? "Space: mark  A all  N none  I invert  M menu  D delete  G group"
-                                      : "Enter: open  I: info  X: select  N: nearby  G: group";
-            break;
-        case Tab::Settings:
-            left = nav_.stats_open ? "R: refresh   A: auto refresh   Esc: back"
-                   : nav_.packet_log_open ? "Up/Down: select  Space: start/stop  C: clear  Esc: back"
-                                          : "Enter: change   Left/Right: step   S: save   V: undo";
-            break;
-        default: left = "Tab: next tab   Esc: back"; break;
+        case Popup::Choice: return "Left/Right: change   Enter: accept   Esc: cancel";
+        case Popup::Confirm: return "Y: yes   N: no   Left/Right: choose   Enter   Esc: no";
+        case Popup::Menu:
+        case Popup::List: return "Up/Down: choose   Enter: select   Esc: cancel";
+        case Popup::Progress: return "Esc or Enter: stop after the contact in progress";
+        default: return "Enter or Esc: close";
         }
     }
-    lv_label_set_text(foot_left_, left.c_str());
-    set_color(foot_left_, color);
-    const BoardLine bl = board_line(*client_, model_);
-    lv_label_set_text(foot_right_, bl.text.c_str());
-    lv_obj_set_style_bg_color(foot_dot_, lv_color_hex(tone_color(bl.tone)), 0);
+    if (editor_open_) return edit_kind_ == EditKind::Position ? "Tab: next field   Enter: OK   Esc: cancel" : "Type with the keyboard   Enter: OK   Esc: cancel";
+    switch (nav_.tab) {
+    case Tab::Chats:
+        return nav_.search_open ? "Type  Up/Down  Enter: open  Ctrl+K D R: filters"
+               : nav_.compose_focus ? "Enter: send  Esc: list  Up/Down: scroll  Ctrl+O: options"
+                                    : "Enter: write  Ctrl+O: options  Ctrl+F: find";
+    case Tab::Contacts:
+        return nav_.detail_open ? "Enter: message   G: groups   D: delete   Esc: back"
+               : nav_.nearby_open ? "Enter: add   I: ignore   S: scan   V: ignored   Esc: back"
+               : nav_.select_mode ? "Space: mark  A all  N none  I invert  M menu  D delete  G group"
+                                  : "Enter: open  I: info  X: select  N: nearby  G: group";
+    case Tab::Settings:
+        return nav_.stats_open ? "R: refresh   A: auto refresh   Esc: back"
+               : nav_.packet_log_open ? "Up/Down: select  Space: start/stop  C: clear  Esc: back"
+                                      : "Enter: change   Left/Right: step   S: save   V: undo";
+    default: return "Tab: next tab   Esc: back";
+    }
 }
 
-/* ================================================================== popups */
+/* The caption line under the header: a notice for a few seconds, else the state of the board (the words say it, the colour only repeats it);
+ * and the key hint line at the bottom of the screen. */
+void App::render_footer()
+{
+    std::string text;
+    cp0::ui::CaptionTone tone = cp0::ui::CaptionTone::Normal;
+    if (!notice_text_.empty()) {
+        text = notice_text_;
+        tone = notice_ok_ ? cp0::ui::CaptionTone::Normal : cp0::ui::CaptionTone::Error;
+    } else {
+        const BoardLine bl = board_line(*client_, model_);
+        text = bl.text;
+        tone = bl.tone == Tone::Green ? cp0::ui::CaptionTone::Normal : bl.tone == Tone::Red ? cp0::ui::CaptionTone::Error : cp0::ui::CaptionTone::Warn;
+    }
+    if (text != cap_text_ || static_cast<int>(tone) != cap_tone_) {
+        cap_text_ = text;
+        cap_tone_ = static_cast<int>(tone);
+        shell_->set_caption(text, tone);
+        if (dialog_) dialog_->raise();                       // the caption is moved above the page: the dialogs stay over it
+        if (ed_dialog_) ed_dialog_->raise();
+    }
+    if (kbd_ok_ && hint_label_) lv_label_set_text(hint_label_, hint_text().c_str());
+}
+
+/* ================================================================== popups (cp0::ui::Dialog) */
 
 void App::popup_begin(Popup p)
 {
@@ -2358,7 +2425,10 @@ void App::close_popup()
     pop_.on_cancel = nullptr;
     nav_.popup_open = false;
     pop_dirty_ = false;
-    set_hidden(pop_overlay_, true);
+    pop_items_.clear();
+    pop_value_ = pop_detail_ = pop_pos_ = pop_left_ = pop_right_ = pop_yes_ = pop_no_ = nullptr;
+    pop_bar_ = pop_bar_fill_ = pop_progress_ = nullptr;
+    dialog_.reset();
     invalidate();
 }
 
@@ -2460,120 +2530,199 @@ void App::open_info(const std::string &title, const std::string &body, const std
     popup_begin(std::move(p));
 }
 
+/* The buttons of a dialog (the toolkit does not hand them out): the buttons of its box, in order. */
+lv_obj_t *App::dialog_button(cp0::ui::Dialog &d, size_t index) const
+{
+    lv_obj_t *backdrop = d.root();
+    if (!backdrop || lv_obj_get_child_count(backdrop) < 2) return nullptr;
+    lv_obj_t *box = lv_obj_get_child(backdrop, 1);
+    size_t n = 0;
+    for (uint32_t i = 0; i < lv_obj_get_child_count(box); ++i) {
+        lv_obj_t *c = lv_obj_get_child(box, static_cast<int32_t>(i));
+        if (!lv_obj_check_type(c, &lv_button_class)) continue;
+        if (n++ == index) return c;
+    }
+    return nullptr;
+}
+
+/* A line of text in the body of a dialog: the BODY size, or the CAPTION size for a small muted line. */
+lv_obj_t *App::dialog_label(cp0::ui::Dialog &d, const std::string &text, bool small, uint32_t color)
+{
+    lv_obj_t *l = lv_label_create(d.body());
+    lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_WRAP);
+    lv_obj_set_width(l, d.geometry().content_w);
+    lv_obj_set_style_text_font(l, small ? f_caption_ : f_body_, 0);
+    set_color(l, color);
+    lv_label_set_text(l, text.c_str());
+    return l;
+}
+
+/* A row of a menu or a pick list in a dialog: the ROW token high, the label, and at the right the action dot (a tap picks it). */
+lv_obj_t *App::dialog_row(cp0::ui::Dialog &d, const std::string &text, int index)
+{
+    const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
+    const int w = d.geometry().content_w, h = layout_.row_h;
+    cp0_ui_list_layout_t l{};
+    cp0_ui_list_layout(m, CP0_UI_LIST_COMFORTABLE, 0, 0, w, h, &l);
+    lv_obj_t *row = make_box(d.body(), 0, 0, w, h);
+    lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(row, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+    lv_obj_set_style_radius(row, m->tok[CP0_TOK_RADIUS_S], 0);
+    lv_obj_set_style_bg_color(row, lv_color_hex(kPressed), LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(row, LV_OPA_COVER, LV_STATE_PRESSED);
+    const int trail = cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_ACTION);
+    const int lh = static_cast<int>(lv_font_get_line_height(f_body_));
+    lv_obj_t *label = make_label(row, f_body_, kText, l.inset, (h - lh) / 2, std::max(10, w - 2 * l.inset - trail), lh);
+    lv_obj_remove_flag(label, LV_OBJ_FLAG_CLICKABLE);
+    lv_label_set_text(label, text.c_str());
+    const int dpx = cp0_ui_list_dot_px(&l);
+    lv_obj_t *dot = make_box(row, cp0_ui_list_dot_x(&l, w), (h - dpx) / 2, dpx, dpx);
+    lv_obj_remove_flag(dot, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(dot, lv_color_hex(cp0_ui_list_dot_rgb(CP0_UI_LIST_AFFORDANCE_ACTION)), 0);
+    lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
+    lv_obj_add_event_cb(row, trampoline_popitem, LV_EVENT_CLICKED, reinterpret_cast<void *>(static_cast<intptr_t>(index)));
+    return row;
+}
+
+/* A one-line field in a dialog (the app types into it: the keys come from the app's bridge): the ROW token high, the DejaVu face when there is one. */
+lv_obj_t *App::make_field(lv_obj_t *parent, int tag, size_t max_len)
+{
+    const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
+    lv_obj_t *ta = lv_textarea_create(parent);
+    if (lv_obj_get_group(ta)) lv_group_remove_obj(ta);
+    lv_textarea_set_one_line(ta, true);                       // (sets the height to its content: the height comes after)
+    lv_obj_set_width(ta, LV_PCT(100));
+    lv_obj_set_height(ta, layout_.row_h);
+    lv_obj_set_scrollbar_mode(ta, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_style_text_font(ta, f_field_, 0);
+    lv_obj_set_style_text_color(ta, lv_color_hex(kText), 0);
+    lv_obj_set_style_bg_color(ta, lv_color_hex(kBackground), 0);
+    lv_obj_set_style_bg_opa(ta, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(ta, m->tok[CP0_TOK_RADIUS_S], 0);
+    lv_obj_set_style_border_width(ta, 2, 0);
+    lv_obj_set_style_border_color(ta, lv_color_hex(kAccent), 0);
+    lv_obj_set_style_pad_hor(ta, m->tok[CP0_TOK_SPACE_S], 0);
+    lv_obj_set_style_pad_ver(ta, std::max(0, (layout_.row_h - 4 - static_cast<int>(lv_font_get_line_height(f_field_))) / 2), 0);   // the text on the middle line
+    lv_obj_set_style_bg_opa(ta, LV_OPA_TRANSP, LV_PART_CURSOR);
+    lv_obj_set_style_border_side(ta, LV_BORDER_SIDE_LEFT, LV_PART_CURSOR | LV_STATE_FOCUSED);
+    lv_obj_set_style_border_width(ta, 2, LV_PART_CURSOR | LV_STATE_FOCUSED);
+    lv_obj_set_style_border_color(ta, lv_color_hex(kAccent), LV_PART_CURSOR | LV_STATE_FOCUSED);
+    lv_textarea_set_max_length(ta, static_cast<uint32_t>(max_len));
+    lv_obj_add_state(ta, LV_STATE_FOCUSED);
+    if (tag) lv_obj_add_event_cb(ta, trampoline_button, LV_EVENT_CLICKED, reinterpret_cast<void *>(static_cast<intptr_t>(tag)));
+    return ta;
+}
+
+/* The widgets of the pending popup, built from the tick (never inside an event of a popup button): a cp0::ui::Dialog, which follows the
+ * on-screen keyboard and keeps the header free. The buttons post their answer: the dialog is deleted after the event that pressed it. */
 void App::popup_build()
 {
-    lv_obj_clean(pop_panel_);
-    pop_list_.reset();
+    dialog_.reset();
     pop_items_.clear();
     pop_value_ = pop_detail_ = pop_pos_ = pop_left_ = pop_right_ = pop_yes_ = pop_no_ = nullptr;
     pop_bar_ = pop_bar_fill_ = pop_progress_ = nullptr;
-    auto title = [&](int x, int w) {
-        lv_obj_t *t = make_label(pop_panel_, f_big_, kGold, x, 14, w, 26);
-        lv_label_set_text(t, pop_.title.c_str());
-    };
-    auto panel_at = [&](int x, int y, int w, int h) {
-        lv_obj_set_pos(pop_panel_, x, y);
-        lv_obj_set_size(pop_panel_, w, h);
-    };
+    if (pop_.kind == Popup::None) return;
+    using cp0::ui::ButtonRole;
+    const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
+    auto tapped = [this](int tag) { return [this, tag] { post([this, tag] { if (nav_.popup_open) popup_click(tag); }); }; };
+    cp0::ui::DialogSpec spec;
+    spec.title = pop_.title;
+    spec.page = shell_.get();
     switch (pop_.kind) {
+    case Popup::Choice:
+        spec.buttons.push_back({"Cancel", ButtonRole::Cancel, tapped(kTagPopCancel)});
+        spec.buttons.push_back({"OK", ButtonRole::Primary, tapped(kTagPopOk)});
+        break;
+    case Popup::Confirm:
+        spec.buttons.push_back({pop_.no_text, ButtonRole::Cancel, tapped(kTagPopNo)});
+        spec.buttons.push_back({confirm_yes_text(pop_.yes_text, confirm_wait_left(pop_.opened_ms, mono_ms(), pop_.yes_delay_ms)), ButtonRole::Primary, tapped(kTagPopYes)});
+        break;
+    case Popup::List:
+    case Popup::Menu: spec.buttons.push_back({"Cancel", ButtonRole::Cancel, tapped(kTagPopCancel)}); break;
+    case Popup::Progress: spec.buttons.push_back({"Stop", ButtonRole::Cancel, tapped(kTagPopCancel)}); break;
+    case Popup::Info: spec.buttons.push_back({pop_.ok_text, ButtonRole::Primary, tapped(kTagPopOk)}); break;
     case Popup::None: break;
+    }
+    dialog_ = std::make_unique<cp0::ui::Dialog>(shell_->root(), layout_, std::move(spec));
+    cp0::ui::Dialog &d = *dialog_;
+    const int cw = d.geometry().content_w;
+    switch (pop_.kind) {
     case Popup::Choice: {
-        panel_at(40, 24, 560, 352);
-        title(20, 520);
-        // the value in the middle, a large arrow button on each side (touch), Left / Right keys do the same
-        pop_left_ = make_button(pop_panel_, 20, 62, 100, 100, LV_SYMBOL_LEFT, kTagPopLeft);
-        pop_right_ = make_button(pop_panel_, 440, 62, 100, 100, LV_SYMBOL_RIGHT, kTagPopRight);
-        for (lv_obj_t *b : {pop_left_, pop_right_}) {
-            lv_obj_t *l = lv_obj_get_child(b, 0);
-            lv_obj_set_style_text_font(l, &lv_font_montserrat_40, 0);
-            lv_obj_set_height(l, static_cast<int>(lv_font_get_line_height(&lv_font_montserrat_40)));
-            lv_obj_set_pos(l, 4, (100 - static_cast<int>(lv_font_get_line_height(&lv_font_montserrat_40))) / 2);
-        }
-        pop_value_ = make_label(pop_panel_, f_value_, kText, 128, 62, 304, 100, LV_TEXT_ALIGN_CENTER);
+        // the value in the middle, a TARGET sized arrow on each side (touch), Left / Right keys do the same
+        const int target = m->tok[CP0_TOK_TARGET], gap = m->tok[CP0_TOK_SPACE_M];
+        lv_obj_t *row = lv_obj_create(d.body());
+        lv_obj_remove_style_all(row);
+        lv_obj_remove_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_remove_flag(row, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_size(row, cw, target);
+        lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        auto arrow = [&](const char *symbol, int tag) {
+            lv_obj_t *b = lv_button_create(row);
+            if (lv_obj_get_group(b)) lv_group_remove_obj(b);
+            lv_obj_remove_flag(b, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+            lv_obj_set_size(b, target, target);
+            lv_obj_set_style_radius(b, layout_.esc_radius, 0);
+            lv_obj_set_style_bg_color(b, lv_color_hex(kSelected), 0);
+            lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
+            lv_obj_set_style_bg_color(b, lv_color_hex(kPressed), LV_STATE_PRESSED);
+            lv_obj_set_style_shadow_width(b, 0, 0);
+            lv_obj_set_style_border_width(b, 0, 0);
+            lv_obj_add_event_cb(b, trampoline_button, LV_EVENT_CLICKED, reinterpret_cast<void *>(static_cast<intptr_t>(tag)));
+            lv_obj_t *l = lv_label_create(b);
+            lv_label_set_text(l, symbol);
+            lv_obj_set_style_text_font(l, cp0_ui_font(CP0_TEXT_SYMBOL), 0);
+            lv_obj_center(l);
+            return b;
+        };
+        pop_left_ = arrow(LV_SYMBOL_LEFT, kTagPopLeft);
+        pop_value_ = lv_label_create(row);
         lv_label_set_long_mode(pop_value_, LV_LABEL_LONG_MODE_WRAP);
-        pop_detail_ = make_label(pop_panel_, f_text_, kText, 20, 168, 520, 24, LV_TEXT_ALIGN_CENTER);
-        pop_pos_ = make_label(pop_panel_, f_small_, kMuted, 20, 194, 520, 20, LV_TEXT_ALIGN_CENTER);
-        lv_obj_t *note = make_label(pop_panel_, f_small_, kMuted, 20, 220, 520, 56, LV_TEXT_ALIGN_CENTER);
-        lv_label_set_long_mode(note, LV_LABEL_LONG_MODE_WRAP);
-        lv_label_set_text(note, pop_.choice.note.c_str());
-        make_button(pop_panel_, 20, 292, 170, 48, "Cancel", kTagPopCancel);
-        lv_obj_t *ok = make_button(pop_panel_, 370, 292, 170, 48, "OK", kTagPopOk);
-        lv_obj_set_style_bg_color(ok, lv_color_hex(kOkGreen), 0);
+        lv_obj_set_width(pop_value_, std::max(10, cw - 2 * target - 2 * gap));
+        lv_obj_set_style_text_align(pop_value_, LV_TEXT_ALIGN_CENTER, 0);
+        set_color(pop_value_, kText);
+        pop_right_ = arrow(LV_SYMBOL_RIGHT, kTagPopRight);
+        pop_detail_ = dialog_label(d, "", false, kText);
+        pop_pos_ = dialog_label(d, "", true, kMuted);
+        lv_obj_set_style_text_align(pop_detail_, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_align(pop_pos_, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_t *note = dialog_label(d, pop_.choice.note, true, kMuted);
+        lv_obj_set_style_text_align(note, LV_TEXT_ALIGN_CENTER, 0);
         break;
     }
-    case Popup::Confirm: {
-        panel_at(60, 70, 520, 270);
-        title(20, 480);
-        lv_obj_t *body = make_label(pop_panel_, f_text_, kText, 20, 52, 480, 120);
-        lv_label_set_long_mode(body, LV_LABEL_LONG_MODE_WRAP);
-        lv_label_set_text(body, pop_.body.c_str());
-        pop_no_ = make_button(pop_panel_, 30, 194, 200, 56, pop_.no_text.c_str(), kTagPopNo);
-        pop_yes_ = make_button(pop_panel_, 290, 194, 200, 56, confirm_yes_text(pop_.yes_text, confirm_wait_left(pop_.opened_ms, mono_ms(), pop_.yes_delay_ms)).c_str(), kTagPopYes);
-        lv_obj_set_style_bg_color(pop_yes_, lv_color_hex(pop_.yes_text == "Remove" || pop_.yes_text.rfind("Delete", 0) == 0 || pop_.yes_delay_ms > 0 || pop_.danger ? kDangerRed : kOkGreen), 0);
+    case Popup::Confirm:
+        d.add_text(pop_.body);
+        pop_no_ = dialog_button(d, 0);
+        pop_yes_ = dialog_button(d, 1);
         break;
-    }
-    case Popup::List: {
-        panel_at(40, 24, 560, 352);
-        title(20, 520);
-        RowList::Config cfg;
-        cfg.max_cells = 2;
-        cfg.max_boxes = 0;
-        cfg.min_row_h = 48;
-        pop_list_.create(pop_panel_, 10, 52, 540, 236, cfg);
-        std::vector<RowSpec> rows;
-        for (size_t i = 0; i < pop_.items.size(); ++i) {
-            RowSpec s;
-            s.h = 48;
-            s.id = std::to_string(i);
-            s.cells.push_back({pop_.items[i], kText, 14, 510, LV_TEXT_ALIGN_LEFT, f_text_, centre(48, f_text_)});
-            rows.push_back(std::move(s));
-        }
-        pop_list_.set(std::move(rows), pop_.focus, true);
-        pop_list_.scroll_to_selected();
-        make_button(pop_panel_, 170, 296, 220, 48, "Cancel", kTagPopCancel);
+    case Popup::List:
+    case Popup::Menu:
+        for (size_t i = 0; i < pop_.items.size(); ++i) pop_items_.push_back(dialog_row(d, pop_.items[i], static_cast<int>(i)));
         break;
-    }
     case Popup::Progress: {
-        panel_at(80, 90, 480, 220);
-        title(20, 440);
-        pop_progress_ = make_label(pop_panel_, f_value_small_, kText, 20, 56, 440, 32, LV_TEXT_ALIGN_CENTER);
-        pop_bar_ = make_box(pop_panel_, 30, 104, 420, 16);
+        pop_progress_ = dialog_label(d, "", false, kText);
+        lv_obj_set_style_text_align(pop_progress_, LV_TEXT_ALIGN_CENTER, 0);
+        const int bar_h = m->tok[CP0_TOK_SPACE_M];
+        pop_bar_ = make_box(d.body(), 0, 0, cw, bar_h);
         lv_obj_set_style_bg_color(pop_bar_, lv_color_hex(kSelected), 0);
         lv_obj_set_style_bg_opa(pop_bar_, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(pop_bar_, 8, 0);
-        pop_bar_fill_ = make_box(pop_bar_, 0, 0, 1, 16);
-        lv_obj_set_style_bg_color(pop_bar_fill_, lv_color_hex(kGold), 0);
+        lv_obj_set_style_radius(pop_bar_, bar_h / 2, 0);
+        pop_bar_fill_ = make_box(pop_bar_, 0, 0, 1, bar_h);
+        lv_obj_set_style_bg_color(pop_bar_fill_, lv_color_hex(kAccent), 0);
         lv_obj_set_style_bg_opa(pop_bar_fill_, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(pop_bar_fill_, 8, 0);
-        make_button(pop_panel_, 140, 140, 200, 56, "Stop", kTagPopCancel);
-        break;
-    }
-    case Popup::Menu: {
-        const int n = static_cast<int>(pop_.items.size());
-        const int h = 56 + n * 58 + 64;
-        panel_at(80, std::max(10, (kPageH - h) / 2), 480, h);
-        title(20, 440);
-        for (int i = 0; i < n && i < 10; ++i) {
-            lv_obj_t *b = make_button(pop_panel_, 20, 52 + i * 58, 440, 52, pop_.items[static_cast<size_t>(i)].c_str(), kTagPopItem + i);
-            pop_items_.push_back(b);
-        }
-        make_button(pop_panel_, 140, 52 + n * 58 + 4, 200, 48, "Cancel", kTagPopCancel);
+        lv_obj_set_style_radius(pop_bar_fill_, bar_h / 2, 0);
+        pop_bar_w_ = cw;
         break;
     }
     case Popup::Info: {
-        panel_at(40, 50, 560, 300);
-        title(20, 520);
-        lv_obj_t *body = make_label(pop_panel_, f_big_, kText, 20, 56, 520, 60, LV_TEXT_ALIGN_CENTER);
-        lv_label_set_long_mode(body, LV_LABEL_LONG_MODE_WRAP);
-        lv_label_set_text(body, pop_.body.c_str());
-        lv_obj_t *small = make_label(pop_panel_, f_small_, kMuted, 20, 130, 520, 100, LV_TEXT_ALIGN_CENTER);
-        lv_label_set_long_mode(small, LV_LABEL_LONG_MODE_WRAP);
-        lv_label_set_text(small, pop_.items.empty() ? "" : pop_.items[0].c_str());
-        lv_obj_t *ok = make_button(pop_panel_, 190, 236, 180, 52, pop_.ok_text.c_str(), kTagPopOk);
-        lv_obj_set_style_bg_color(ok, lv_color_hex(kOkGreen), 0);
+        d.add_text(pop_.body);
+        if (!pop_.items.empty() && !pop_.items[0].empty()) dialog_label(d, pop_.items[0], true, kMuted);
         break;
     }
+    case Popup::None: break;
     }
+    d.relayout();
 }
 
 void App::popup_refresh()
@@ -2582,12 +2731,8 @@ void App::popup_refresh()
     case Popup::Choice: {
         if (!pop_value_) return;
         const std::string &label = pop_.choice.label();
-        const lv_font_t *f = label.size() > 14 ? f_value_small_ : f_value_;
-        lv_obj_set_style_text_font(pop_value_, f, 0);
+        lv_obj_set_style_text_font(pop_value_, label.size() > 14 ? f_body_ : f_title_, 0);
         lv_label_set_text(pop_value_, label.c_str());
-        lv_point_t sz = {0, 0};
-        lv_text_get_size(&sz, label.c_str(), f, 0, 0, 304, LV_TEXT_FLAG_NONE);
-        lv_obj_set_y(pop_value_, 62 + std::max(0, (100 - sz.y) / 2));
         lv_label_set_text(pop_detail_, pop_.choice.detail().c_str());
         lv_label_set_text(pop_pos_, pop_.choice.position().c_str());
         const bool prev = pop_.choice.can_prev(), next = pop_.choice.can_next();
@@ -2595,21 +2740,28 @@ void App::popup_refresh()
         set_color(lv_obj_get_child(pop_right_, 0), next ? kText : kPressed);
         lv_obj_set_style_bg_color(pop_left_, lv_color_hex(prev ? kSelected : kSelectedDim), 0);
         lv_obj_set_style_bg_color(pop_right_, lv_color_hex(next ? kSelected : kSelectedDim), 0);
+        if (dialog_) dialog_->relayout();
         break;
     }
-    case Popup::Confirm:
+    case Popup::Confirm: {
         if (!pop_yes_ || !pop_no_) return;
         lv_obj_set_style_border_width(pop_yes_, pop_.focus == 1 ? 3 : 0, 0);
         lv_obj_set_style_border_width(pop_no_, pop_.focus == 0 ? 3 : 0, 0);
-        lv_obj_set_style_border_color(pop_yes_, lv_color_hex(kGold), 0);
-        lv_obj_set_style_border_color(pop_no_, lv_color_hex(kGold), 0);
+        lv_obj_set_style_border_color(pop_yes_, lv_color_hex(kText), 0);
+        lv_obj_set_style_border_color(pop_no_, lv_color_hex(kText), 0);
+        const bool red = pop_.yes_text == "Remove" || pop_.yes_text.rfind("Delete", 0) == 0 || pop_.yes_delay_ms > 0 || pop_.danger;
+        const int left = confirm_wait_left(pop_.opened_ms, mono_ms(), pop_.yes_delay_ms);
+        if (red || left) lv_obj_set_style_bg_color(pop_yes_, lv_color_hex(left ? kSelectedDim : kDangerRed), 0);
         break;
+    }
     case Popup::Menu:
+    case Popup::List:
         for (size_t i = 0; i < pop_items_.size(); ++i) {
             const bool sel = static_cast<int>(i) == pop_.focus;
-            lv_obj_set_style_border_width(pop_items_[i], sel ? 3 : 0, 0);
-            lv_obj_set_style_border_color(pop_items_[i], lv_color_hex(kGold), 0);
+            lv_obj_set_style_bg_color(pop_items_[i], lv_color_hex(kSelected), 0);
+            lv_obj_set_style_bg_opa(pop_items_[i], sel ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
         }
+        if (pop_.focus >= 0 && pop_.focus < static_cast<int>(pop_items_.size())) lv_obj_scroll_to_view_recursive(pop_items_[static_cast<size_t>(pop_.focus)], LV_ANIM_OFF);
         break;
     default: break;
     }
@@ -2663,7 +2815,7 @@ void App::popup_key(const KeyEvent &e)
     case Popup::List: {
         const ListResult r = list_key(e, pop_.focus, static_cast<int>(pop_.items.size()));
         if (r == ListResult::Moved) {
-            pop_list_.set_selected(pop_.focus, true, true);
+            popup_refresh();
         } else if (r == ListResult::Accept) {
             popup_accept();
         } else if (r == ListResult::Cancel) {
@@ -2707,13 +2859,17 @@ void App::popup_click(int tag)
     case kTagPopYes:
         if (confirm_wait_left(pop_.opened_ms, mono_ms(), pop_.yes_delay_ms) == 0) popup_yes();
         break;
-    default:
-        if (tag >= kTagPopItem && tag < kTagPopItem + 10 && pop_.kind == Popup::Menu) {
-            pop_.focus = tag - kTagPopItem;
-            popup_accept();
-        }
-        break;
+    default: break;
     }
+}
+
+/* A tap on a row of a menu or a pick list: it is the answer. */
+void App::popup_pick(int index)
+{
+    if (!nav_.popup_open || pop_dirty_ || (pop_.kind != Popup::Menu && pop_.kind != Popup::List)) return;
+    if (mono_ms() - pop_.opened_ms < 150 || index < 0 || index >= static_cast<int>(pop_.items.size())) return;
+    pop_.focus = index;
+    popup_accept();
 }
 
 /* ================================================================== editor */
@@ -2733,30 +2889,36 @@ void App::open_editor(EditKind kind, const std::string &title, const std::string
                  : kind == EditKind::Channel ? EditMode::Channel : kind == EditKind::PrivKey ? EditMode::HexKey : EditMode::Name;
     edit_limit_ = kind == EditKind::Name || kind == EditKind::PrivName || kind == EditKind::RandName ? 31 : kind == EditKind::Channel ? 30
                   : kind == EditKind::PrivKey ? 39 : kind == EditKind::GroupNew || kind == EditKind::GroupRename ? 24 : kind == EditKind::DateRange ? 21 : 16;
-    lv_label_set_text(ed_title_, title.c_str());
-    lv_label_set_text(ed_hint_, hint.c_str());
-    lv_label_set_text(ed_err_, "");
-    lv_textarea_set_text(ed_ta_, initial.c_str());
-    lv_textarea_set_cursor_pos(ed_ta_, LV_TEXTAREA_CURSOR_LAST);
+    {   // the dialog: title, the hint, the field and a status line (an error or a note), Cancel and OK
+        cp0::ui::DialogSpec spec;
+        spec.title = title;
+        spec.page = shell_.get();
+        spec.message_line = true;
+        spec.buttons.push_back({"Cancel", cp0::ui::ButtonRole::Cancel, [this] { post([this] { if (editor_open_) close_editor(false); }); }});
+        spec.buttons.push_back({"OK", cp0::ui::ButtonRole::Primary, [this] { post([this] { if (editor_open_) close_editor(true); }); }});
+        ed_dialog_ = std::make_unique<cp0::ui::Dialog>(shell_->root(), layout_, std::move(spec));
+        if (!hint.empty()) dialog_label(*ed_dialog_, hint, true, kMuted);
+        ed_ta_ = make_field(ed_dialog_->body(), 0, 200);
+        lv_textarea_set_text(ed_ta_, initial.c_str());
+        lv_textarea_set_cursor_pos(ed_ta_, LV_TEXTAREA_CURSOR_LAST);
+        ed_dialog_->relayout();
+    }
     editor_open_ = true;
     nav_.editor_open = true;
     edit_open_ms_ = mono_ms();
     edit_fresh_ = kind == EditKind::Number || kind == EditKind::Clock;
-    set_hidden(ed_overlay_, false);
     if (kind == EditKind::PrivKey) editor_note("0 of 32 hex characters");
     invalidate();
 }
 
 void App::editor_error(const std::string &text)
 {
-    set_color(ed_err_, kRed);
-    lv_label_set_text(ed_err_, text.c_str());
+    if (ed_dialog_) ed_dialog_->set_message(text, true);
 }
 
 void App::editor_note(const std::string &text)
 {
-    set_color(ed_err_, kMuted);
-    lv_label_set_text(ed_err_, text.c_str());
+    if (ed_dialog_) ed_dialog_->set_message(text, false);
 }
 
 void App::close_editor(bool accept)
@@ -2840,7 +3002,8 @@ void App::close_editor(bool accept)
     }
     editor_open_ = false;
     nav_.editor_open = false;
-    set_hidden(ed_overlay_, true);
+    ed_ta_ = nullptr;
+    ed_dialog_.reset();
     invalidate();
     if (chain_key) {
         open_editor(EditKind::PrivKey, "Key of " + pending_name_, "Type the 32 hex characters of the key (0-9, a-f). Spaces and dashes are ignored.", "");
@@ -2875,7 +3038,7 @@ void App::editor_key(const KeyEvent &e)
             edit_fresh_ = false;
             lv_textarea_add_text(ed_ta_, add.c_str());
         }
-        lv_label_set_text(ed_err_, "");
+        if (ed_dialog_) ed_dialog_->set_message("", false);
         break;
     }
     default: break;
@@ -2896,6 +3059,58 @@ void App::open_position_box()
     client_->refresh_self();                                  // the position as the board holds it now (the box shows it when it comes)
     const auto &self = model_.self();
     const bool has = self && position_is_set(self->lat, self->lon);
+    const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
+    {   // the dialog: the position on the board, the GPS switch, the latitude and the longitude side by side, the privacy line, a status line
+        cp0::ui::DialogSpec spec;
+        spec.title = "Position";
+        spec.page = shell_.get();
+        spec.message_line = true;
+        spec.buttons.push_back({"Cancel", cp0::ui::ButtonRole::Cancel, [this] { post([this] { if (editor_open_) close_position_box(false); }); }});
+        spec.buttons.push_back({"Clear", cp0::ui::ButtonRole::Normal, [this] { post([this] { if (editor_open_ && edit_kind_ == EditKind::Position) position_clear(); }); }});
+        spec.buttons.push_back({"OK", cp0::ui::ButtonRole::Primary, [this] { post([this] { if (editor_open_) close_position_box(true); }); }});
+        ed_dialog_ = std::make_unique<cp0::ui::Dialog>(shell_->root(), layout_, std::move(spec));
+        cp0::ui::Dialog &d = *ed_dialog_;
+        const int cw = d.geometry().content_w, gap = m->tok[CP0_TOK_SPACE_M];
+        pos_now_ = dialog_label(d, "", true, kMuted);
+        pos_gps_ = lv_button_create(d.body());
+        if (lv_obj_get_group(pos_gps_)) lv_group_remove_obj(pos_gps_);
+        lv_obj_remove_flag(pos_gps_, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+        lv_obj_set_size(pos_gps_, cw, m->tok[CP0_TOK_TARGET]);
+        lv_obj_set_style_radius(pos_gps_, layout_.esc_radius, 0);
+        lv_obj_set_style_bg_color(pos_gps_, lv_color_hex(kSelected), 0);
+        lv_obj_set_style_bg_opa(pos_gps_, LV_OPA_COVER, 0);
+        lv_obj_set_style_bg_color(pos_gps_, lv_color_hex(kPressed), LV_STATE_PRESSED);
+        lv_obj_set_style_shadow_width(pos_gps_, 0, 0);
+        lv_obj_add_event_cb(pos_gps_, trampoline_button, LV_EVENT_CLICKED, reinterpret_cast<void *>(static_cast<intptr_t>(kTagPosGps)));
+        pos_gps_label_ = lv_label_create(pos_gps_);
+        lv_obj_set_style_text_font(pos_gps_label_, f_body_, 0);
+        lv_label_set_text(pos_gps_label_, "");
+        lv_obj_center(pos_gps_label_);
+        lv_obj_t *cols = lv_obj_create(d.body());
+        lv_obj_remove_style_all(cols);
+        lv_obj_remove_flag(cols, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_remove_flag(cols, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_size(cols, cw, LV_SIZE_CONTENT);
+        lv_obj_set_flex_flow(cols, LV_FLEX_FLOW_ROW);
+        lv_obj_set_style_pad_column(cols, gap, 0);
+        static const char *const names[2] = {"Latitude", "Longitude"};
+        for (int i = 0; i < 2; ++i) {
+            lv_obj_t *col = lv_obj_create(cols);
+            lv_obj_remove_style_all(col);
+            lv_obj_remove_flag(col, LV_OBJ_FLAG_SCROLLABLE);
+            lv_obj_remove_flag(col, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_set_size(col, (cw - gap) / 2, LV_SIZE_CONTENT);
+            lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+            lv_obj_set_style_pad_row(col, m->tok[CP0_TOK_SPACE_S], 0);
+            pos_label_[i] = lv_label_create(col);
+            lv_obj_set_style_text_font(pos_label_[i], f_caption_, 0);
+            set_color(pos_label_[i], kMuted);
+            lv_label_set_text(pos_label_[i], names[i]);
+            pos_ta_[i] = make_field(col, i == 0 ? kTagPosLat : kTagPosLon, 24);
+        }
+        pos_hint_ = dialog_label(d, "", true, kMuted);
+        pos_clear_ = dialog_button(d, 1);
+    }
     lv_textarea_set_text(pos_ta_[0], has ? fmt_coordinate(self->lat).c_str() : "");
     lv_textarea_set_text(pos_ta_[1], has ? fmt_coordinate(self->lon).c_str() : "");
     for (lv_obj_t *ta : pos_ta_) lv_textarea_set_cursor_pos(ta, LV_TEXTAREA_CURSOR_LAST);
@@ -2905,30 +3120,20 @@ void App::open_position_box()
     nav_.editor_open = true;
     edit_open_ms_ = mono_ms();
     pos_gps_shown_ = position_box_has_gps(model_.device() ? &*model_.device() : nullptr, model_.caps());
+    pos_err_text_.clear();
     position_layout(pos_gps_shown_);
-    position_focus(kPosLat);
+    position_focus(kPosLat, false);
     // no keyboard: the box still opens (the GPS switch and Clear work by touch), and says what is missing to type
-    position_error(keyboard_ready() ? "" : "Keyboard needed to type a position: wake the Bluetooth keyboard", false);
+    position_error(keyboard_ready() ? "" : "Keyboard needed: wake the Bluetooth keyboard", true);
     position_refresh();
-    set_hidden(pos_overlay_, false);
     invalidate();
 }
 
-/* The rows of the box; without the GPS switch the rest moves up and the panel is shorter. */
+/* The rows of the box; without the GPS switch its row is gone and the rest moves up. */
 void App::position_layout(bool gps)
 {
-    const int dy = gps ? 0 : -54;
     set_hidden(pos_gps_, !gps);
-    for (int i = 0; i < 2; ++i) {
-        lv_obj_set_y(pos_label_[i], 124 + dy);
-        lv_obj_set_y(pos_ta_[i], 146 + dy);
-    }
-    lv_obj_set_y(pos_hint_, 202 + dy);
-    lv_obj_set_y(pos_err_, 242 + dy);
-    for (lv_obj_t *b : {pos_cancel_, pos_clear_, pos_ok_}) lv_obj_set_y(b, 272 + dy);
-    const int h = 330 + dy;
-    lv_obj_set_pos(pos_panel_, 50, (kPageH - h) / 2);
-    lv_obj_set_size(pos_panel_, 540, h);
+    if (ed_dialog_) ed_dialog_->relayout();
     if (!gps && pos_focus_ == kPosGps) position_focus(kPosClear);
 }
 
@@ -2945,34 +3150,39 @@ void App::position_refresh()
     const bool has = self && position_is_set(self->lat, self->lon);
     lv_label_set_text(pos_now_, ("On the board: " + (has ? fmt_position(true, self->lat, self->lon) : std::string("not set"))).c_str());
     const bool on = gps && model_.caps().gps_on;
-    if (gps) lv_label_set_text(pos_gps_label_, on ? "Board GPS: On    tap to switch off" : "Board GPS: Off    tap to switch on");
+    if (gps) lv_label_set_text(pos_gps_label_, on ? "Board GPS: On, tap to switch off" : "Board GPS: Off, tap to switch on");
     // the privacy line: setting the position sends no advert; the board puts it into its adverts only when its location policy shares it
     std::string hint = on ? "The board GPS is on: its fix replaces a typed position." : "Decimal degrees (48.8566 or 48,8566).";
     hint += self && self->adv_loc_policy == 0 ? " The board keeps its position out of its adverts (location sharing off)."
                                               : " Other nodes see this position when this node sends an advert.";
     lv_label_set_text(pos_hint_, hint.c_str());
+    if (ed_dialog_) ed_dialog_->relayout();
 }
 
-/* Focus: a field (gold border and the cursor) or a button (the gold ring of the popups). */
-void App::position_focus(int focus)
+/* Focus: a field (accent border and the cursor) or a button (a ring, as in the popups). */
+void App::position_focus(int focus, bool scroll)
 {
     pos_focus_ = focus;
     for (int i = 0; i < 2; ++i) {
         const bool f = focus == i;
-        lv_obj_set_style_border_color(pos_ta_[i], lv_color_hex(f ? kGold : kPressed), 0);
+        lv_obj_set_style_border_color(pos_ta_[i], lv_color_hex(f ? kAccent : kPressed), 0);
         if (f) lv_obj_add_state(pos_ta_[i], LV_STATE_FOCUSED);
         else lv_obj_remove_state(pos_ta_[i], LV_STATE_FOCUSED);
     }
     lv_obj_set_style_border_width(pos_gps_, focus == kPosGps ? 3 : 0, 0);
-    lv_obj_set_style_border_color(pos_gps_, lv_color_hex(kGold), 0);
-    lv_obj_set_style_border_width(pos_clear_, focus == kPosClear ? 3 : 0, 0);
-    lv_obj_set_style_border_color(pos_clear_, lv_color_hex(kGold), 0);
+    lv_obj_set_style_border_color(pos_gps_, lv_color_hex(kText), 0);
+    if (pos_clear_) {
+        lv_obj_set_style_border_width(pos_clear_, focus == kPosClear ? 3 : 0, 0);
+        lv_obj_set_style_border_color(pos_clear_, lv_color_hex(kText), 0);
+    }
+    lv_obj_t *target = focus == kPosLat ? pos_ta_[0] : focus == kPosLon ? pos_ta_[1] : focus == kPosGps ? pos_gps_ : nullptr;
+    if (scroll && target && !lv_obj_has_flag(target, LV_OBJ_FLAG_HIDDEN)) lv_obj_scroll_to_view_recursive(target, LV_ANIM_OFF);
 }
 
 void App::position_error(const std::string &text, bool error)
 {
-    set_color(pos_err_, error ? kRed : kMuted);
-    lv_label_set_text(pos_err_, text.c_str());
+    pos_err_text_ = text;
+    if (ed_dialog_) ed_dialog_->set_message(text, error);
 }
 
 /* OK / Enter (apply: checked first, nothing is sent on a bad value), Cancel / Esc (apply false), or Clear (0, 0). */
@@ -2991,14 +3201,16 @@ void App::close_position_box(bool apply)
     }
     editor_open_ = false;
     nav_.editor_open = false;
-    set_hidden(pos_overlay_, true);
+    pos_now_ = pos_gps_ = pos_gps_label_ = pos_hint_ = pos_clear_ = nullptr;
+    pos_label_[0] = pos_label_[1] = pos_ta_[0] = pos_ta_[1] = nullptr;
+    ed_dialog_.reset();
     invalidate();
 }
 
 void App::position_clear()
 {
     const auto &self = model_.self();
-    if (!self || !position_is_set(self->lat, self->lon)) { position_error("No position to clear: the board has none", false); return; }
+    if (!self || !position_is_set(self->lat, self->lon)) { position_error("No position to clear: the board has none", true); return; }
     if (!client_->set_position(0, 0)) { position_error(client_->notice().text, true); return; }
     close_position_box(false);
 }
@@ -3582,8 +3794,8 @@ void App::render_nearby()
             RowSpec s;
             s.h = 56;
             s.id = r.key_hex;
-            const uint32_t state_color = r.state == NearbyState::Pending ? kGold : r.state == NearbyState::New ? kBlue : kMuted;
-            s.cells.push_back({r.title, r.state == NearbyState::Ignored ? kMuted : r.state == NearbyState::Pending ? kGold : kText, 12, 290, LV_TEXT_ALIGN_LEFT, f_text_, 6});
+            const uint32_t state_color = r.state == NearbyState::Pending ? kAccent : r.state == NearbyState::New ? kBlue : kMuted;
+            s.cells.push_back({r.title, r.state == NearbyState::Ignored ? kMuted : r.state == NearbyState::Pending ? kAccent : kText, 12, 290, LV_TEXT_ALIGN_LEFT, f_text_, 6});
             s.cells.push_back({r.type_name, r.type == advtype::kRepeater ? kBlue : kMuted, 306, 84, LV_TEXT_ALIGN_LEFT, f_small_, 10});
             s.cells.push_back({nearby_state_name(r.state), state_color, 392, 76, LV_TEXT_ALIGN_LEFT, f_small_, 10});
             s.cells.push_back({r.detail, kMuted, 12, 456, LV_TEXT_ALIGN_LEFT, f_small_, 34});
@@ -3746,8 +3958,8 @@ void App::render_search()
     lv_label_set_text(sr_count_, c.c_str());
     // an active filter shows in gold
     auto tint = [&](lv_obj_t *label, bool on) {
-        lv_obj_set_style_bg_color(lv_obj_get_parent(label), lv_color_hex(on ? kGold : kSelected), 0);
-        set_color(label, on ? 0x101214 : kText);
+        lv_obj_set_style_bg_color(lv_obj_get_parent(label), lv_color_hex(on ? kAccent : kSelected), 0);
+        set_color(label, on ? kOnAccent : kText);
     };
     tint(sr_conv_label_, !search_.conv.empty());
     tint(sr_date_label_, search_.date != DatePreset::Any);
@@ -3911,7 +4123,7 @@ void App::render_stats()
     else if (client_->stats_busy()) note = "Reading...";
     else if (!v.any) note = "No answer yet";
     lv_label_set_text(st_note_, note.c_str());
-    set_color(st_note_, model_.caps().stats == Cap::No ? kGold : kMuted);
+    set_color(st_note_, model_.caps().stats == Cap::No ? kWarn : kMuted);
 }
 
 void App::key_stats(const KeyEvent &e)
@@ -3995,7 +4207,7 @@ void App::tick_phase2(uint64_t now)
         const Client::BulkProgress &b = client_->bulk();
         const size_t handled = b.done + b.failed;
         lv_label_set_text(pop_progress_, (std::to_string(handled) + " of " + std::to_string(b.total) + (b.cancelled && b.active ? "  (stopping)" : "")).c_str());
-        lv_obj_set_width(pop_bar_fill_, b.total ? std::max<int>(1, static_cast<int>(420 * handled / b.total)) : 1);
+        lv_obj_set_width(pop_bar_fill_, b.total ? std::max<int>(1, static_cast<int>(pop_bar_w_ * handled / b.total)) : 1);
         if (!b.active) {                                                // done: the notice says what happened
             close_popup();
             if (nav_.select_mode) leave_select_mode();
@@ -4085,7 +4297,7 @@ void App::render_packet_log()
 {
     const PacketLog &pl = client_->packet_log();
     lv_label_set_text(log_status_, packet_log_status(pl).c_str());
-    set_color(log_status_, pl.capturing() ? kGold : kMuted);
+    set_color(log_status_, pl.capturing() ? kAccent : kMuted);
     lv_label_set_text(log_toggle_label_, pl.capturing() ? "Stop" : "Start");
     lv_obj_set_style_bg_color(log_toggle_, lv_color_hex(pl.capturing() ? kOkGreen : kSelected), 0);
 
@@ -4164,7 +4376,7 @@ void App::button_clicked(int tag)
 {
     if (mono_ms() - start_ms_ < kStartGuardMs) return;
     if (tag >= kTagPopLeft && tag < kTagPopItem + 10) {
-        if (nav_.popup_open) popup_click(tag);
+        post([this, tag] { if (nav_.popup_open) popup_click(tag); });       // the dialog may be deleted by the answer: after this event
         return;
     }
     if (nav_.popup_open || view_pending_) return;
@@ -4231,6 +4443,12 @@ void App::button_clicked(int tag)
         group_toggle_for(detail_key_);
         break;
     case kTagDetailDelete: delete_detail_contact(); break;
+    case kTagChatOptions:
+        if (conv_.empty() || (chat_sel_ >= 0 && chat_sel_ < static_cast<int>(chat_rows_.size()) && chat_rows_[static_cast<size_t>(chat_sel_)].kind == ChatRow::Add))
+            notice("Select a conversation first", false);
+        else
+            open_conversation_options(conv_);
+        break;
     case kTagChatDetails: {
         KeyPrefix dp{};
         const ContactRec *dc = conv_.size() == 14 && from_hex(conv_.substr(2), dp.data(), 6) ? model_.find_by_prefix(dp) : nullptr;
@@ -4269,14 +4487,7 @@ void App::button_clicked(int tag)
     case kTagLogToggle: packet_log_toggle(); break;
     case kTagLogClear: packet_log_clear(); break;
     case kTagLogClose: close_packet_log(); break;
-    case kTagEdOk: close_editor(true); break;
-    case kTagEdCancel: close_editor(false); break;
-    // the Position box (its buttons only act while it is open)
-    case kTagPosOk: close_position_box(true); break;
-    case kTagPosCancel: close_position_box(false); break;
-    case kTagPosClear:
-        if (editor_open_ && edit_kind_ == EditKind::Position) position_clear();
-        break;
+    // the Position box (its widgets only act while it is open; its buttons are the dialog's)
     case kTagPosGps:
         if (editor_open_ && edit_kind_ == EditKind::Position) {
             position_focus(kPosGps);
@@ -4293,13 +4504,6 @@ void App::button_clicked(int tag)
 
 void App::row_clicked(RowList *list, int index, int x)
 {
-    if (list == &pop_list_) {                           // a row of a pick-list box
-        if (nav_.popup_open && pop_.kind == Popup::List && !pop_dirty_ && mono_ms() - pop_.opened_ms >= 150 && index >= 0 && index < static_cast<int>(pop_.items.size())) {
-            pop_.focus = index;
-            popup_accept();
-        }
-        return;
-    }
     if (mono_ms() - start_ms_ < kStartGuardMs || editor_open_ || nav_.popup_open || view_pending_) return;
     if (list == &chat_list_) {
         if (hold_.take_swallow()) return;                 // the release of a completed 3 s hold is not a tap
@@ -4348,6 +4552,25 @@ void App::back()
         break;
     case BackAction::ExitHint: notice("Hold Esc 3 s to exit", true); break;
     }
+}
+
+/* The Esc button of the page header (touch): Back inside a sub-page, a detail, a box or an editor; at the root it asks first,
+ * so that a touch-only board can leave the app, and a tap beside the button cannot close a running radio session. */
+void App::header_back()
+{
+    post([this] {
+        if (view_pending_) return;
+        if (mono_ms() - start_ms_ < kStartGuardMs) return;
+        if (back_action(nav_) == BackAction::ExitHint) ask_quit();
+        else back();
+    });
+}
+
+void App::ask_quit()
+{
+    if (nav_.popup_open || editor_open_) return;
+    open_confirm("Quit Mesh Hop?", "The connection to the board closes and the scheduled advert stops. Messages and settings are kept.",
+                 [] { cdk::request_quit(0); }, "Quit", "Cancel");
 }
 
 void App::scroll_messages(int dy)
@@ -4549,14 +4772,20 @@ void App::on_key(const KeyEvent &e)
         return;
     }
     if (mono_ms() - start_ms_ < kStartGuardMs && (e.key == Key::Enter || e.key == Key::Esc)) return;
-    // a short Esc is Back, never quit: the launcher ends the app itself after a 3 s hold. The auto-repeat of a held Esc is ignored.
+    // a short Esc of the keyboard is Back, never quit: the launcher ends the app itself after a 3 s hold (the header's Esc button
+    // asks "Quit Mesh Hop?" at the root). The auto-repeat of a held Esc is ignored.
     if (e.key == Key::Esc) {
         if (!e.repeat) back();
         return;
     }
-    // Tab walks the five tabs in a loop (Shift+Tab backwards); touch goes straight to a tab. No other tab keys.
+    // Tab walks the tabs in a loop (Shift+Tab backwards); touch goes straight to a tab. No other tab keys.
     if (e.key == Key::Tab || e.key == Key::BackTab) {
-        if (!e.repeat) select_tab(step_tab(nav_.tab, e.key == Key::Tab ? 1 : -1));
+        if (!e.repeat) {
+            const int dir = e.key == Key::Tab ? 1 : -1;
+            Tab next = step_tab(nav_.tab, dir);
+            while (next == Tab::Map || next == Tab::Terminal) next = step_tab(next, dir);       // not shown until they exist
+            select_tab(next);
+        }
         return;
     }
     switch (nav_.tab) {

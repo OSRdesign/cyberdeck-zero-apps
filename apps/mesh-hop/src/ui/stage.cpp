@@ -31,17 +31,9 @@ uint64_t mono_ms()
 Platform::Platform(lv_obj_t *screen) : screen_(screen), keys_(detect_layout())
 {
     current_ = this;
-    lv_obj_set_style_bg_color(screen_, lv_color_hex(kStageOutside), 0);
+    lv_obj_set_style_bg_color(screen_, lv_color_hex(0x000000), 0);     /* the launcher's black ground */
     lv_obj_set_style_bg_opa(screen_, LV_OPA_COVER, 0);
     lv_obj_remove_flag(screen_, LV_OBJ_FLAG_SCROLLABLE);
-
-    stage_ = lv_obj_create(screen_);
-    lv_obj_remove_style_all(stage_);
-    lv_obj_set_size(stage_, kScreenW, kScreenH);
-    lv_obj_align(stage_, LV_ALIGN_CENTER, 0, 0);            /* (W - 640) / 2, (H - 480) / 2; kept centred if the screen changes */
-    lv_obj_remove_flag(stage_, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_remove_flag(stage_, LV_OBJ_FLAG_CLICK_FOCUSABLE);
-    lv_obj_update_layout(stage_);                            /* its coordinates are needed before the first refresh */
 
     /* the drag feel of the app's own touch reader, kept: a scroll starts after 12 px, a flick throws less far */
     for (lv_indev_t *indev = lv_indev_get_next(nullptr); indev; indev = lv_indev_get_next(indev))
@@ -69,7 +61,7 @@ Platform::~Platform()
 void Platform::close_stage()
 {
     on_key = nullptr;
-    if (stage_) lv_obj_delete(stage_);
+    if (stage_) lv_obj_delete(stage_);        /* (deleted with its page too: the app resets stage_ through adopt_stage) */
     stage_ = nullptr;
 }
 

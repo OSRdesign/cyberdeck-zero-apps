@@ -5,8 +5,6 @@
 wait 3500
 key tab
 key tab
-key tab
-key tab
 wait 800
 key home
 key enter
@@ -75,7 +73,7 @@ wait 600
 say == opened again on a cleared position: empty fields (expect pos_box=1 pos_fields='|')
 dump
 shot position-box-empty
-tap 120 380
+tap "Cancel"
 wait 300
 say == Cancel tapped (expect pos_box=0)
 dump

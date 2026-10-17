@@ -3,8 +3,6 @@
 wait 3500
 key tab
 key tab
-key tab
-key tab
 wait 800
 key home
 key enter

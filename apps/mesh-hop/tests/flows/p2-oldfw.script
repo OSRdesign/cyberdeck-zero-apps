@@ -3,8 +3,6 @@
 wait 3500
 key tab
 key tab
-key tab
-key tab
 wait 800
 say == settings on an old firmware (expect tab=Settings path_hash=- repeat=-)
 dump
@@ -45,7 +43,6 @@ say == the reset was refused (expect notice='Firmware too old for this feature: 
 dump
 shot o04-reset-refused
 # the Nearby scan on a board without it
-key tab
 key tab
 key tab
 wait 400

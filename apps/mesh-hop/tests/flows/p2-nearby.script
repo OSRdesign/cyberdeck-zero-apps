@@ -3,7 +3,6 @@
 # Touch coordinates (page at y=56): toolbar centres y=78; Nearby panel buttons y=78 (Scan x=392, Ignored x=490, Close x=589); rows of 56 px start at y=104.
 wait 6800
 key tab
-key tab
 wait 600
 tap 288 78
 wait 600

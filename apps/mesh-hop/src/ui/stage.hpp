@@ -5,11 +5,12 @@
  * rotation, the 16 / 32 bpp framebuffer and the touch of the launcher contract, every keyboard, the signals, the
  * "needs 640x480" notice), the headless harness on the PC. What the app itself needs from it is here:
  *
- *   the stage     the whole UI is still laid out for 640x480: it is built inside a plain 640x480 container centred on
- *                 the screen (a letterbox), the rest of the screen in the app's background colour. At 640x480 the stage
- *                 is the screen. LVGL hit-tests touches in screen coordinates, so a tap reaches the control under the
- *                 finger at any size; the few places that read the raw point (rows hit-tested by x) go through
- *                 to_stage().
+ *   the stage     the shell of the app (header, tab row, caption, hint line, dialogs) is built from the launcher's
+ *                 widgets and follows the screen. The BODY of the pages is still laid out for a 640-wide column: the
+ *                 app builds it in a plain 640 px wide container (the stage) centred under the shell and gives it to
+ *                 the platform with adopt_stage(). LVGL hit-tests touches in screen coordinates, so a tap reaches the
+ *                 control under the finger at any size; the few places that read the raw point (rows hit-tested by x)
+ *                 go through to_stage().
  *   the keys      cp0_lvgl's key_item (LV_EVENT_KEYBOARD on the screen, the LVGL keypad path intercepted) is turned
  *                 into the app's KeyEvent by KeyBridge (key_bridge.hpp): the same KeyTranslator as before (US or FR
  *                 layout, Ctrl / Alt / AltGr / Caps, Tab and Shift+Tab, the arrows) on the evdev codes, the given text
@@ -29,24 +30,26 @@
 
 namespace meshhop {
 
-/* The size the UI is laid out for: the stage. */
+/* The smallest screen (X-MinSize) and the width of the page bodies: the stage. */
 constexpr int kScreenW = 640;
 constexpr int kScreenH = 480;
-/* The screen around the stage: the background colour of the app's palette (mesh_app.cpp kBackground). */
-constexpr uint32_t kStageOutside = 0x101214;
 
 class Platform {
 public:
-    /* The stage on `screen` (the active screen cdk::start gives the app) and the keyboard bridge. LVGL thread. */
+    /* The keyboard bridge on `screen` (the active screen cdk::start gives the app). LVGL thread. */
     explicit Platform(lv_obj_t *screen);
     ~Platform();
     Platform(const Platform &) = delete;
     Platform &operator=(const Platform &) = delete;
 
-    /* The 640x480 container the app builds its UI in. */
+    /* The screen the app builds on. */
+    lv_obj_t *screen() const { return screen_; }
+    /* The container the page bodies are built in (NULL until the app gives it). */
     lv_obj_t *stage() const { return stage_; }
+    /* The app's stage container (a child of its page); the platform deletes it with close_stage(). */
+    void adopt_stage(lv_obj_t *stage) { stage_ = stage; }
     /* Deletes the stage and everything in it, and stops the keys: the app's end, while the app object still exists
-     * (its widgets point into it, e.g. the status bar image). Also done by the destructor. */
+     * (its widgets point into it, e.g. the lists). Also done by the destructor. */
     void close_stage();
     /* A point of the screen (an indev point) in stage coordinates. */
     lv_point_t to_stage(lv_point_t p) const;

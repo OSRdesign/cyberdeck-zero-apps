@@ -10,11 +10,9 @@ wait 300
 say == the first channel is muted on A (expect muted_conv=1)
 dump
 key tab
-key tab
 wait 400
 shot b02-contacts-A
 # Settings: the board status has no extra hint on the position row and no path hash line (it is in the Radio section)
-key tab
 key tab
 wait 800
 say == Settings top (expect tab=Settings board=a0a1a2a3a4a5)
@@ -40,10 +38,8 @@ say == board B: its own conversations, contacts and flags (expect board=b0b1b2b3
 dump
 shot b06-chats-B
 key tab
-key tab
 wait 500
 shot b07-contacts-B
-key tab
 key tab
 wait 800
 key end
@@ -61,8 +57,6 @@ wait 9500
 say == board A is back with everything (expect board=a0a1a2a3a4a5 epoch=3 contacts=4 all_msgs>=12 muted_conv=1 others=1)
 dump
 shot b09-chats-A-again
-key tab
-key tab
 key tab
 key tab
 wait 600

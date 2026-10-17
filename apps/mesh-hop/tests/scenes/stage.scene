@@ -1,9 +1,10 @@
-# Mesh Hop (P1, platform and stage): the whole 640x480 UI on a stage centred on the screen, at the five sizes, no board
-# (the app offline). A tap at the place a control has in the 640x480 layout, moved by the stage's offset, reaches that
-# control; a tap on its label does too; a tap beside the stage does nothing; the keys come through the shared keyboard
-# bridge. No shot or layout check here: the shared size rules (rows 7 mm, buttons 9 mm) fail on every control until the
-# pages are converted (P2, P3); mesh-hop-script `check` (tests/flows/stage.script) reports the on-screen rule alone.
-title Mesh Hop: the stage at five sizes
+# Mesh Hop (P2, the shell): the header with the Esc button, the tab row (Chats, Contacts, Settings), the caption line and the
+# Quit question are the launcher's widgets and follow the screen; the page bodies are still a 640 px column (the stage)
+# centred under them. At the five sizes, no board (the app offline). Taps go by label, a tap beside the stage does nothing,
+# the keys come through the shared keyboard bridge. No shot or layout check here: the shared size rules (rows 7 mm, buttons
+# 9 mm) fail on every control of the page bodies until the pages are converted (P3, P4); mesh-hop-script `check`
+# (tests/flows/shell.script) holds the shell, which is outside the stage, to them.
+title Mesh Hop: the shell at five sizes
 env MESHHOP_DATA /tmp/mesh-hop-scene-data
 env MESHHOP_PORT /nonexistent/ttyMH
 env MESHHOP_ONLINE 0
@@ -11,42 +12,55 @@ sizes 640x480 800x480 720x720 1024x600 1280x720
 
 wait 900
 expect text "Chats"
+expect text "Contacts"
+expect text "Settings"
+expect text "Esc"
+expect notext "Map"
+expect notext "Terminal"
 expect noquit
 
-# the Terminal tab of the 640x480 layout: x 256-338, y 8-48, its middle (297, 28) + the stage's place
-@640x480 tapxy 0.4654 0.0593
-@800x480 tapxy 0.4723 0.0593
-@720x720 tapxy 0.4693 0.2064
-@1024x600 tapxy 0.4784 0.1476
-@1280x720 tapxy 0.4827 0.2064
-expect text "A meshcore-cli style command line comes in a later version."
+# the Contacts tab by its label
+tap "Contacts"
+expect text "Zero-hop"
 
 # beside the stage (the letterbox): nothing happens
 @800x480 tapxy 0.03 0.5
-@720x720 tapxy 0.5 0.05
+@720x720 tapxy 0.5 0.9
 @1024x600 tapxy 0.05 0.5
 @1280x720 tapxy 0.05 0.5
-expect text "A meshcore-cli style command line comes in a later version."
+expect text "Zero-hop"
 
-# by its label: the Settings tab, then a row of its list at its 640x480 place (Packet log: x 0-640, y 206-246 of the
-# page, middle (320, 226)) opens the packet log
+# the Settings tab, then a row of its list opens the packet log (a sub-page that covers the tab row); the header Esc goes back
 tap "Settings"
 expect text "Node name"
-@640x480 tapxy 0.5008 0.4718
-@800x480 tapxy 0.5006 0.4718
-@720x720 tapxy 0.5008 0.4812
-@1024x600 tapxy 0.5005 0.4775
-@1280x720 tapxy 0.5004 0.4812
+tap "Packet log"
 expect text "Clear"
-key esc
+tap "Esc"
+wait 400
 expect notext "Clear"
+expect text "Node name"
 
-# the keys through cp0_lvgl's queue and the app's key bridge: Tab walks the tabs (Settings -> Chats -> Map -> Contacts)
-key tab
+# the keys through cp0_lvgl's queue and the app's key bridge: Tab walks the tabs that are shown (Settings -> Chats -> Contacts)
 key tab
 key tab
 expect text "Zero-hop"
-# a short Esc at the root never quits (unchanged in P1): it says how to leave
+# a short Esc of the keyboard at the root never quits: it says how to leave (in the caption line)
 key esc
 expect text "Hold Esc 3 s to exit"
 expect noquit
+
+# the header's Esc at the root asks first: Cancel stays, Quit leaves (a touch-only board has no other way out)
+tap "Esc"
+wait 600
+expect text "Quit Mesh Hop?"
+expect noquit
+tap "Cancel"
+wait 400
+expect notext "Quit Mesh Hop?"
+expect noquit
+tap "Esc"
+wait 600
+expect text "Quit Mesh Hop?"
+tap "Quit"
+wait 400
+expect quit
