@@ -1,10 +1,12 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * Mesh Hop: the full-screen 640x480 MeshCore messenger. The screens (Chats, Map, Contacts, Terminal, Settings), the popups, the
- * status footer and the text editor, written with LVGL over the core/ layer (client, model, store). Input comes from the Platform
- * as KeyEvents and LVGL pointer events; nothing here talks to the radio except through meshzero::Client. The UI is built in the
- * Platform's 640x480 stage (stage.hpp), centred on any screen.
+ * Mesh Hop: the full-screen MeshCore messenger. The shell (page header with the Esc button and the status strip, the
+ * caption line with the board state and the notices, the tab row, the key hint line, the dialogs) is built from the
+ * launcher's widgets (cp0::ui::Page, Dialog) and follows the screen; the screens under it (Chats, Contacts, Settings, and
+ * the sub-pages) are still laid out for a 640 px wide column, the stage (stage.hpp), centred under the shell. Written with
+ * LVGL over the core/ layer (client, model, store). Input comes from the Platform as KeyEvents and LVGL pointer events;
+ * nothing here talks to the radio except through meshzero::Client.
  */
 
 #pragma once
@@ -24,9 +26,7 @@
 #include <string>
 #include <vector>
 
-extern "C" {
-#include "cp0_statusbar.h"
-}
+#include "cp0_ui_widgets.hpp"
 
 namespace meshhop {
 
@@ -60,6 +60,8 @@ public:
         int min_row_h = 40;              // the smallest row height: sizes the pool
     };
     void create(lv_obj_t *parent, int x, int y, int w, int h, const Config &cfg);
+    /* A new height (the room under the shell changed). The pool of widgets was sized at create() for its h. */
+    void resize(int h);
     /* Replaces all rows. Keeps the scroll position. */
     void set(std::vector<RowSpec> rows, int selected, bool focused);
     /* Moves the selection only (cheap). scroll: bring the selected row into view. */
@@ -105,7 +107,7 @@ public:
     /* From the main loop, every few milliseconds: polls the radio client, refreshes what changed. */
     void tick();
     void on_key(const KeyEvent &e);
-    /* A short Esc: Back. Never quits. */
+    /* A short Esc: Back. Never quits (the header's Esc button asks "Quit Mesh Hop?" at the root: header_back()). */
     void back();
 
     // for the scripted tests and the screenshots
@@ -113,12 +115,17 @@ public:
     meshzero::Client &client() { return *client_; }
     meshzero::Model &model() { return model_; }
     void select_tab(Tab t);
+    /* The screen place of the (0, 0) of the 640x480 layout the scripted flows (tests/flows) give their coordinates in:
+     * the page bodies sit 56 px under the top of that layout. */
+    lv_point_t script_origin() const;
     /* One line with the state of the app (scripted tests). */
     std::string debug_state() const;
 
     // LVGL callbacks (public for the static trampolines)
     void button_clicked(int tag);
     void row_clicked(RowList *list, int index, int x);
+    /* A row of a menu or a pick list in a dialog was chosen by a tap. */
+    void popup_pick(int index);
     /* A press on a name that can be held for 3 s (header title or a row of the chat list): what = 0 pressed, 1 moved, 2 ended. */
     void hold_event(int what, RowList *list, int index, int x, int y);
 
@@ -151,16 +158,28 @@ private:
     void build_packet_log();
     void build_settings();
     void build_placeholder(lv_obj_t **page, const char *title, const char *text);
-    void build_editor();
     void build_popup();
-    void build_footer();
+    void build_hint_line();
+    void build_home();
+    void render_home();
+    void key_home(const KeyEvent &e);
+    void open_page(Tab t);
+    void go_home();
+    void build_stage();
+    void build_shell();
+    void layout_body();                  // sizes and places what depends on the height under the shell (page_h_, panel_h_)
+    void update_title();
+    void update_caption();
+    void header_back();                  // the Esc button of the header: Back, and at the root the Quit question
+    void ask_quit();
+    void post(std::function<void()> fn);
+    void run_posted();
     lv_obj_t *make_button(lv_obj_t *parent, int x, int y, int w, int h, const char *text, int tag, lv_obj_t **label_out = nullptr);
     lv_obj_t *make_label(lv_obj_t *parent, const lv_font_t *font, uint32_t color, int x, int y, int w, int h,
                          lv_text_align_t align = LV_TEXT_ALIGN_LEFT);
 
     // rendering
     void render();
-    void render_tabs();
     void render_chats();
     void render_chat_messages(bool force);
     void render_contacts();
@@ -171,8 +190,8 @@ private:
     void render_stats();
     void render_packet_log();
     void render_settings();
-    void render_footer();
-    void update_statusbar(bool force);
+    void render_footer();                // the caption line and the key hints
+    std::string hint_text() const;
     void update_compose_style();
     void set_page_visible();
 
@@ -269,6 +288,10 @@ private:
     void open_menu(const std::string &title, const std::vector<std::string> &items, std::function<void(int)> on_pick);
     void open_list(const std::string &title, const std::vector<std::string> &items, int focus, std::function<void(int)> on_pick);
     void open_progress(const std::string &title);
+    lv_obj_t *dialog_button(cp0::ui::Dialog &d, size_t index) const;
+    lv_obj_t *dialog_label(cp0::ui::Dialog &d, const std::string &text, bool small, uint32_t color);
+    lv_obj_t *dialog_row(cp0::ui::Dialog &d, const std::string &text, int tag);
+    lv_obj_t *make_field(lv_obj_t *parent, int tag, size_t max_len);
     void open_info(const std::string &title, const std::string &body, const std::string &small);
     void popup_begin(Popup p);
     void popup_build();                  // the widgets of the pending popup (from tick, never from an event of a popup button)
@@ -288,14 +311,13 @@ private:
     void editor_note(const std::string &text);
     // the Position box (D6): an editor with two fields (latitude, longitude), the board GPS switch and Clear. It counts as the open
     // editor (editor_open_, edit_kind_ == EditKind::Position), so every guard of the editor holds for it too.
-    void build_position_box();
     void open_position_box();
     void close_position_box(bool apply);
     void position_clear();
     void position_key(const KeyEvent &e);
     void position_layout(bool gps);
     void position_refresh();
-    void position_focus(int focus);
+    void position_focus(int focus, bool scroll = true);
     void position_error(const std::string &text, bool error);
 
     // keys per screen
@@ -327,10 +349,12 @@ private:
     uint64_t preset_poll_ms_ = 0;
     int days_choice_ = 30;
 
-    // fonts
+    // fonts: the page bodies (the stage) keep their own sizes; the shell and the dialogs take the token sizes
     const lv_font_t *f_small_ = nullptr, *f_ui_ = nullptr, *f_big_ = nullptr;     // Montserrat 14 / 16 / 18
-    const lv_font_t *f_value_ = nullptr, *f_value_small_ = nullptr;               // Montserrat 28 / 22: the value of a choice popup
+    const lv_font_t *f_value_small_ = nullptr;                                    // Montserrat 22: the "Loading..." box
     const lv_font_t *f_text_ = nullptr, *f_text_small_ = nullptr;                 // message text (DejaVu when available)
+    const lv_font_t *f_body_ = nullptr, *f_caption_ = nullptr, *f_title_ = nullptr; // the BODY / CAPTION / TITLE text sizes (tokens)
+    const lv_font_t *f_field_ = nullptr;                                          // the text of a dialog's field (DejaVu at the BODY size when available)
     bool dejavu_ = false;
 
     // state
@@ -422,6 +446,7 @@ private:
     // the Position box
     enum PosFocus { kPosLat = 0, kPosLon, kPosGps, kPosClear };
     int pos_focus_ = kPosLat;
+    std::string pos_err_text_;             // the status line of the Position box (shown by the dialog's message line)
     bool pos_fresh_[2] = {false, false};   // the prefilled value is replaced by the first typed character (like the number editor)
     bool pos_gps_shown_ = false;
 
@@ -436,26 +461,34 @@ private:
     bool pop_dirty_ = false;             // the widgets of pop_ are built in the next tick
     bool pop_built_ = false;
 
+    // the shell: the page (header, caption), the tab row, the key hint line, the stage with the page bodies
+    cp0_ui_roller_page_t layout_{};
+    std::unique_ptr<cp0::ui::Page> shell_;
+    int tabs_y_ = 0, tab_h_ = 0, hint_h_ = 0, stage_x_ = 0;   // tabs_y_: the top of the stage and of Home, under the caption line (no tab row: tab_h_ is 0)
+    bool at_home_ = true;                // Home: the main menu (Chats, Contacts, Settings); a page is open otherwise
+    std::unique_ptr<cp0::ui::CompactList> home_list_;
+    int panel_h_ = 400, page_h_ = 320;   // the height of a sub-page (it covers the tab row) and of a main page, in the stage
+    std::string title_key_, cap_text_;
+    int cap_tone_ = -1;
+    std::vector<std::function<void()>> posted_;
+    lv_obj_t *hint_box_ = nullptr, *hint_label_ = nullptr;
+
     // widgets
-    lv_obj_t *screen_ = nullptr;
-    lv_obj_t *tab_btn_[5] = {};
-    lv_obj_t *tab_label_[5] = {};
-    lv_obj_t *tab_bar_line_[5] = {};
-    lv_obj_t *tab_badge_ = nullptr, *tab_badge_label_ = nullptr;
+    lv_obj_t *screen_ = nullptr;          // the stage
     lv_obj_t *page_[5] = {};
-    lv_obj_t *bar_img_ = nullptr;
     // chats
     RowList chat_list_;
     lv_obj_t *chat_title_ = nullptr, *chat_info_ = nullptr, *msgs_ = nullptr, *compose_ = nullptr;
-    lv_obj_t *title_hold_ = nullptr;
+    lv_obj_t *title_hold_ = nullptr, *chat_div_ = nullptr, *chat_line2_ = nullptr;
     lv_obj_t *send_btn_ = nullptr, *send_label_ = nullptr;
-    lv_obj_t *search_btn_ = nullptr, *details_btn_ = nullptr;
+    lv_obj_t *search_btn_ = nullptr, *details_btn_ = nullptr, *options_btn_ = nullptr;
     // contacts
     RowList contact_list_;
     lv_obj_t *contacts_count_ = nullptr, *sort_label_ = nullptr;
     lv_obj_t *col_hdr_[6] = {};
     lv_obj_t *type_chip_[5] = {}, *type_chip_label_[5] = {}, *age_chip_[4] = {}, *age_chip_label_[4] = {};
     lv_obj_t *detail_ = nullptr, *detail_title_ = nullptr, *detail_val_[10] = {}, *detail_msg_btn_ = nullptr;
+    lv_obj_t *detail_btn_[4] = {};
     lv_obj_t *loading_ = nullptr;
     lv_obj_t *tb_normal_ = nullptr, *tb_select_ = nullptr;                 // the two toolbars (normal, select mode)
     lv_obj_t *nearby_btn_ = nullptr, *nearby_btn_label_ = nullptr, *group_btn_label_ = nullptr, *del_btn_ = nullptr, *del_btn_label_ = nullptr, *sel_count_ = nullptr;
@@ -468,32 +501,26 @@ private:
     // statistics panel (over the Settings page)
     lv_obj_t *stats_panel_ = nullptr, *st_label_[2][10] = {}, *st_value_[2][10] = {}, *st_updated_ = nullptr, *st_auto_label_ = nullptr, *st_note_ = nullptr;
     // packet log panel (over the Settings page)
-    lv_obj_t *log_panel_ = nullptr, *log_status_ = nullptr, *log_toggle_ = nullptr, *log_toggle_label_ = nullptr, *log_detail_ = nullptr, *log_hex_ = nullptr;
+    lv_obj_t *log_panel_ = nullptr, *log_status_ = nullptr, *log_toggle_ = nullptr, *log_toggle_label_ = nullptr, *log_detail_ = nullptr, *log_hex_ = nullptr, *log_div_ = nullptr;
     RowList log_list_;
     // settings
     RowList settings_list_;
-    // popup list and progress
-    RowList pop_list_;
-    lv_obj_t *pop_bar_ = nullptr, *pop_bar_fill_ = nullptr, *pop_progress_ = nullptr;
-    // editor
-    lv_obj_t *ed_overlay_ = nullptr, *ed_title_ = nullptr, *ed_hint_ = nullptr, *ed_ta_ = nullptr, *ed_err_ = nullptr;
-    // the Position box
-    lv_obj_t *pos_overlay_ = nullptr, *pos_panel_ = nullptr, *pos_now_ = nullptr, *pos_gps_ = nullptr, *pos_gps_label_ = nullptr;
-    lv_obj_t *pos_label_[2] = {}, *pos_ta_[2] = {}, *pos_hint_ = nullptr, *pos_err_ = nullptr;
-    lv_obj_t *pos_cancel_ = nullptr, *pos_clear_ = nullptr, *pos_ok_ = nullptr;
+    // dialogs (cp0::ui::Dialog): the popups, and the editor / Position box
+    std::unique_ptr<cp0::ui::Dialog> dialog_, ed_dialog_;
     // popup
-    lv_obj_t *pop_overlay_ = nullptr, *pop_panel_ = nullptr;
+    lv_obj_t *pop_bar_ = nullptr, *pop_bar_fill_ = nullptr, *pop_progress_ = nullptr;
     lv_obj_t *pop_value_ = nullptr, *pop_detail_ = nullptr, *pop_pos_ = nullptr, *pop_left_ = nullptr, *pop_right_ = nullptr;
     lv_obj_t *pop_yes_ = nullptr, *pop_no_ = nullptr;
-    lv_obj_t *hold_box_ = nullptr, *hold_bar_ = nullptr, *hold_label_ = nullptr;
     std::vector<lv_obj_t *> pop_items_;
-    // footer
-    lv_obj_t *foot_left_ = nullptr, *foot_right_ = nullptr, *foot_dot_ = nullptr;
-
-    // top bar
-    cp0_statusbar_t *bar_ = nullptr;
-    std::vector<uint32_t> bar_px_;
-    lv_image_dsc_t bar_dsc_{};
+    int pop_bar_w_ = 0;
+    // editor
+    lv_obj_t *ed_ta_ = nullptr;
+    // the Position box
+    lv_obj_t *pos_now_ = nullptr, *pos_gps_ = nullptr, *pos_gps_label_ = nullptr;
+    lv_obj_t *pos_label_[2] = {}, *pos_ta_[2] = {}, *pos_hint_ = nullptr;
+    lv_obj_t *pos_clear_ = nullptr;
+    lv_obj_t *hold_box_ = nullptr, *hold_bar_ = nullptr, *hold_label_ = nullptr;
+    lv_obj_t *loading_label_ = nullptr;
 };
 
 } // namespace meshhop

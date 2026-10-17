@@ -2,6 +2,8 @@
 # Screenshots go to the --shot-dir, `dump` prints the state. Keys and taps are the real ones: tab bar taps, list rows, buttons, popups,
 # drag-scroll. Coordinates are screen pixels (640x480; the page starts at y=56).
 wait 3500
+key enter
+wait 300
 say == chats (expect tab=Chats link=Connected contacts=4 conv=c:0 unread=1: the unread total of Alice's message is on the Chats tab)
 dump
 shot 01-chats
@@ -19,15 +21,21 @@ key esc
 say == esc (expect compose_focus=0)
 dump
 
-# touch: the second conversation row, then the Mute button of the channel header
+# touch: the second conversation row, then the Options button of the conversation head: Mute, and Unmute
 tap 100 150
 say == tap row (expect conv=c:1)
 dump
-tap 585 78
-say == muted by touch (expect notice about muted)
+tap "Options"
+wait 600
+tap "Mute this channel"
+wait 300
+say == muted by touch through the Options button (expect notice about muted)
 dump
 shot 04-muted
-tap 585 78
+tap "Options"
+wait 600
+tap "Unmute this channel"
+wait 300
 say == unmuted
 key ctrl-m
 say == Ctrl+M mutes the selected channel too (expect notice 'muted')
@@ -75,9 +83,7 @@ wait 300
 say == info closed (expect popup=none)
 dump
 
-# the other tabs by Tab (Tab cycles in a loop, there are no other tab keys)
-key tab
-shot 10-map
+# the other tabs by Tab (Tab cycles in a loop over the tabs that are shown: Chats, Contacts, Settings; there are no other tab keys)
 key tab
 wait 300
 say == contacts (expect tab=Contacts shown=4 sort=last heard)
@@ -138,8 +144,6 @@ key esc
 # settings by Tab, the choice popup by touch on the Preset row
 key tab
 key tab
-key tab
-key tab
 wait 300
 say == settings (expect tab=Settings)
 dump
@@ -155,12 +159,12 @@ wait 400
 say == preset popup (expect popup=choice popup_value='EU/UK (Deprecated)')
 dump
 shot 17-preset-popup
-tap 530 192
+tap "<right>"
 wait 200
 say == one step to the right with the touch arrow (expect popup_value='Czech Republic (Narrow)')
 dump
 shot 18-preset-next
-tap 495 396
+tap "OK"
 wait 400
 say == accepted: the preset filled frequency, bandwidth, SF, CR (expect freq=869.432 MHz bw=62.5 kHz sf=7 cr=5 radio_dirty=1)
 dump
@@ -228,19 +232,29 @@ dump
 key tab
 key tab
 key tab
-key tab
-key tab
 wait 100
-say == Tab loop: five presses are a full turn (expect tab=Settings)
+say == Tab loop: three presses are a full turn (expect tab=Settings)
 dump
 
-# touch tabs
-tap 40 28
-say == tap Chats tab (expect tab=Chats)
+# Tab: the next page
+key tab
+say == Tab: Chats (expect tab=Chats)
 dump
-tap 211 28
-say == tap Contacts tab (expect tab=Contacts)
+key tab
+say == Tab: Contacts (expect tab=Contacts)
+dump
+# Esc at the root of a page goes back to Home (a Home row by touch: the first tap selects, the second opens)
+key esc
+wait 300
+say == Esc on a page: Home (expect home=1)
+dump
+tap "Settings"
+tap "Settings"
+wait 600
+say == Settings opened by touch from Home (expect home=0 tab=Settings)
 dump
 key esc
-say == Esc on a top-level screen: only a hint, the app keeps running
+wait 300
+key esc
+say == Esc at Home: only a hint, the app keeps running (expect home=1)
 dump

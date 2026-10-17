@@ -2,6 +2,8 @@
 # Run with p2_run.sh (seeded history: 10 messages, 100 days to 1 hour old, plus the 2 of the simulator).
 # Touch (page at y=56): the filter buttons are at y=174 (chat x=108, dates x=328, direction x=540), Close at (588,78), result rows centre y=250+56*i.
 wait 3500
+key enter
+wait 300
 key ctrl-f
 wait 500
 say == the search opens on the whole archive (expect search_open=1 search_hits=12 tab=Chats)

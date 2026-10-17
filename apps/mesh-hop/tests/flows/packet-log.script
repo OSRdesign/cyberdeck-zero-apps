@@ -2,8 +2,8 @@
 # button) starts and stops it, C (or Clear) empties it, Up/Down select a row (its bytes below), Esc closes. At most 500 packets, in memory.
 #   SIMARGS="--heard-back 2 --new-nodes 2" SCRIPT=packet-log.script sh ui_smoke.sh
 wait 3500
-key tab
-key tab
+key enter
+wait 300
 key tab
 key tab
 wait 800
@@ -36,8 +36,6 @@ key enter
 type packet log test
 key enter
 wait 4000
-key tab
-key tab
 key tab
 key tab
 wait 500

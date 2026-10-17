@@ -3,8 +3,8 @@
 #   SIMARGS="--no-gps-var"    SCRIPT=firmware.script sh ui_smoke.sh   a board without GPS: no GPS row at all
 #   (default simulator)       SCRIPT=firmware.script sh ui_smoke.sh   a GPS board: the row switches gps:0 / gps:1
 wait 3500
-key tab
-key tab
+key enter
+wait 300
 key tab
 key tab
 wait 500
@@ -23,7 +23,7 @@ key end
 wait 300
 shot 52-settings-end
 # the Chats list: the "+ Add channel" row opens the menu, or says the firmware is too old (tap at the row just under CHANNELS)
-tap 40 28
+key tab
 wait 300
 tap 100 100
 wait 200

@@ -1,8 +1,8 @@
 # The Position box on a board without GPS (like board A, the nRF52840): no GPS switch, the box is shorter, Tab goes from the two
 # fields to Clear.   SIMARGS="--no-gps-var --share-location" SCRIPT=position-nogps.script sh ui_smoke.sh
 wait 3500
-key tab
-key tab
+key enter
+wait 300
 key tab
 key tab
 wait 800

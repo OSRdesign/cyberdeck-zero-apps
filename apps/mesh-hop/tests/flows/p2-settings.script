@@ -3,8 +3,8 @@
 # Selectable Settings rows in order: Position, Board GPS, Statistics, Packet log, Node name, Preset, Frequency, Bandwidth, SF, CR, TX power, Path hash size,
 # Repeat, Message tries, Forget the route, Advert every, Advert type, Add nodes by itself, Still added by itself, Sync clock, ... Reboot, Factory reset, Undo, Save.
 wait 3500
-key tab
-key tab
+key enter
+wait 300
 key tab
 key tab
 wait 800
@@ -42,11 +42,11 @@ wait 500
 say == the path hash popup starts on the board's mode (expect popup=choice popup_value='2 bytes')
 dump
 shot t03-path-hash
-tap 530 192
+tap "<right>"
 wait 300
 say == one step right with the touch arrow (expect popup_value='3 bytes')
 dump
-tap 495 396
+tap "OK"
 wait 800
 say == written to the board and read back (expect path_hash=2 popup=none notice='Path hash size set to 3 bytes')
 dump

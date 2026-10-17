@@ -1,8 +1,8 @@
 # Mesh Hop 0.2.0 phase 2 on an old firmware: every feature the board lacks is switched off with the "Firmware too old" notice.
 # Run with:  SIMARGS="--fw-level 8 --no-autoadd --no-stats --no-discover --no-factory-reset"   (level 8: no repeat, no path hash mode)
 wait 3500
-key tab
-key tab
+key enter
+wait 300
 key tab
 key tab
 wait 800
@@ -45,7 +45,6 @@ say == the reset was refused (expect notice='Firmware too old for this feature: 
 dump
 shot o04-reset-refused
 # the Nearby scan on a board without it
-key tab
 key tab
 key tab
 wait 400

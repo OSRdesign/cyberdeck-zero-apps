@@ -3,8 +3,8 @@
 #   SCRIPT=position.script sh ui_smoke.sh                                       a GPS board (gps:0)
 #   SIMARGS="--no-gps-var --share-location" SCRIPT=position-nogps.script sh ui_smoke.sh   a board without GPS (like board A)
 wait 3500
-key tab
-key tab
+key enter
+wait 300
 key tab
 key tab
 wait 800
@@ -75,7 +75,7 @@ wait 600
 say == opened again on a cleared position: empty fields (expect pos_box=1 pos_fields='|')
 dump
 shot position-box-empty
-tap 120 380
+tap "Cancel"
 wait 300
 say == Cancel tapped (expect pos_box=0)
 dump
