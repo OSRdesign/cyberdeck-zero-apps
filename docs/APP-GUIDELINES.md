@@ -360,10 +360,15 @@ Add the app to the table in the repository [README](../README.md) (name, version
 
 The first apps predate the template. They are not wrong, but they do not all meet today's rules; do not copy their
 gaps. Known gaps (also tracked in their READMEs): LAN Scan and Wi-Fi Survey draw 320x170 (compat) and have no on-screen
-keyboard; Mesh Hop types with a physical keyboard only, and its published 0.3.0 does not declare `X-MinSize` (the
-source does since apps PR #11); viz1090 reads its framebuffer through its own
+keyboard; viz1090 reads its framebuffer through its own
 shim; some still carry the old binary prefix, to be dropped at their next version (decision 7 of report 025). Fix these when you next
 release the app, not as a drive-by.
+
+Mesh Hop (0.4.0) follows these rules, the on-screen keyboard rule included, with these exceptions, kept on purpose: its own
+virtual row list for the long contact and message lists (only the rows in view are widgets) instead of `CompactList`; its
+own key bridge typing into the launcher's text fields instead of `cp0::ui::TextField` (its US and AZERTY tables and the
+editors' filters); buttons at the 7 mm `row` height instead of `target`; a chat's options by a 3 s hold on its row (or
+Ctrl+O); a short Esc of the keyboard at Home says "Hold Esc 3 s to exit" (the header's Esc there asks *Quit Mesh Hop?*).
 
 ## 12. When NOT to build it
 
