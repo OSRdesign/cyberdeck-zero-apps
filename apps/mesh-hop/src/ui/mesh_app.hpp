@@ -165,6 +165,9 @@ public:
     lv_point_t script_origin() const;
     /* One line with the state of the app (scripted tests). */
     std::string debug_state() const;
+    /* The containers of the page bodies (the stage, the full width, Home's list) and the key hint line (scripted layout checks:
+     * nothing of a body reaches under the hints). */
+    void body_lists(std::vector<lv_obj_t *> &roots, lv_obj_t *&hint) const;
 
     // LVGL callbacks (public for the static trampolines)
     void button_clicked(int tag);
@@ -199,6 +202,8 @@ private:
     struct Geo {
         int w = 0, x = 0, cw = 0, lx = 0, lw = 0, inset = 0, s = 0, m = 0, h = 0;
         int row = 0, list_row = 0, target = 0;
+        int bar = 0;                     // an action bar: ROW, or more when a label and a value line need it (a low density panel)
+        int field = 0;                   // a one-line field: LIST_ROW, or more for the BODY text
         bool wide = false;               // the Wide and Large classes (800x480, 1024x600, 1280x720): more on a line
     };
     Geo geo() const;

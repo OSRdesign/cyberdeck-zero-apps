@@ -6,7 +6,8 @@
  * keyboard queue and bridge, a pointer, the layout checks) with the app started by its own AppSpec (cdk::start, as on
  * a board). Built by tests/flows/runner.mk (build.sh host).
  *
- *   mesh-hop-script --script FILE [--shot-dir DIR] [--size WxH] [--resources DIR]
+ *   mesh-hop-script --script FILE [--shot-dir DIR] [--size WxH] [--ppmm N] [--resources DIR]
+ *   (--ppmm: the panel density in px/mm x100, as a board's screen.state gives it; default the harness's for the size)
  *
  * Coordinates in a script are the 640x480 layout's of the page bodies (the stage of 0.3.0: the header 56 px, then the body
  * at y 56): at any size they are moved to where the body is now (App::script_origin: under the shell, or, in a sub-page,
@@ -52,6 +53,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -483,6 +485,39 @@ int run_script(const std::string &file, const std::string &shot_dir)
                         sh.failures ? "FAIL" : "PASS", sh.controls, sh.failures, sh.min_row == (1 << 20) ? 0 : sh.min_row,
                         sh.min_list_row == (1 << 20) ? 0 : sh.min_list_row, sh.min_button == (1 << 20) ? 0 : sh.min_button, sh.min_header == (1 << 20) ? 0 : sh.min_header);
             failures += onscreen + sh.failures;
+            // the key hint line (shown while a keyboard is there): the bodies and their lists end above it
+            if (session) {
+                std::vector<lv_obj_t *> roots;
+                lv_obj_t *hint = nullptr;
+                session->app().body_lists(roots, hint);
+                int under = 0, lists = 0;
+                if (hint && shown(hint)) {
+                    lv_area_t ha;
+                    lv_obj_get_coords(hint, &ha);
+                    std::function<void(lv_obj_t *)> walk = [&](lv_obj_t *o) {
+                        if (!o || !shown(o)) return;
+                        const bool list = lv_obj_has_flag(o, LV_OBJ_FLAG_SCROLLABLE) && (lv_obj_get_scroll_dir(o) & LV_DIR_VER);
+                        lv_area_t a;
+                        lv_obj_get_coords(o, &a);
+                        if (list || std::find(roots.begin(), roots.end(), o) != roots.end()) {
+                            ++lists;
+                            if (a.y2 >= ha.y1) {
+                                ++under;
+                                std::printf("  under the hint line: %dx%d at (%d,%d), the hints from y %d\n", static_cast<int>(a.x2 - a.x1 + 1),
+                                            static_cast<int>(a.y2 - a.y1 + 1), static_cast<int>(a.x1), static_cast<int>(a.y1), static_cast<int>(ha.y1));
+                            }
+                        }
+                        if (list) return;                      // the rows of a list scroll inside it: its own box is what counts
+                        for (uint32_t i = 0; i < lv_obj_get_child_count(o); ++i) walk(lv_obj_get_child(o, static_cast<int32_t>(i)));
+                    };
+                    for (lv_obj_t *r : roots) walk(r);
+                    std::printf("hint %s %s: %d bodies and lists above the key hint line, %d reaching under it\n", name.c_str(), under ? "FAIL" : "PASS",
+                                lists - under, under);
+                } else {
+                    std::printf("hint %s PASS: no key hint line\n", name.c_str());
+                }
+                failures += under;
+            }
         } else if (cmd == "expect") {
             std::string rest;
             std::getline(ss, rest);
@@ -539,6 +574,7 @@ void mkdirs(const std::string &path)
 int main(int argc, char *argv[])
 {
     std::string script, shot_dir, resources;
+    int ppmm = 0;
     if (const char *e = std::getenv("CDK_HEADLESS_RESOURCES")) resources = e;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -546,13 +582,14 @@ int main(int argc, char *argv[])
         else if (a == "--script" && i + 1 < argc) script = argv[++i];
         else if (a == "--shot-dir" && i + 1 < argc) shot_dir = argv[++i];
         else if (a == "--resources" && i + 1 < argc) resources = argv[++i];
+        else if (a == "--ppmm" && i + 1 < argc) ppmm = std::atoi(argv[++i]);
         else if (a == "--size" && i + 1 < argc) {
             if (std::sscanf(argv[++i], "%dx%d", &g_w, &g_h) != 2 || g_w <= 0 || g_h <= 0) {
                 std::fprintf(stderr, "--size WxH\n");
                 return 2;
             }
         } else {
-            std::fprintf(stderr, "usage: %s --script file [--shot-dir dir] [--size WxH] [--resources dir]\n", argv[0]);
+            std::fprintf(stderr, "usage: %s --script file [--shot-dir dir] [--size WxH] [--ppmm N] [--resources dir]\n", argv[0]);
             return a == "--help" ? 0 : 2;
         }
     }
@@ -578,7 +615,7 @@ int main(int argc, char *argv[])
     setenv("APPLAUNCH_CANVAS", size.c_str(), 1);
     setenv("APPLAUNCH_CANVAS_SCALE", "1", 1);
 
-    if (!headless::platform_init(g_w, g_h, ppmm_for(g_w, g_h), resources)) {
+    if (!headless::platform_init(g_w, g_h, ppmm > 0 ? ppmm : ppmm_for(g_w, g_h), resources)) {
         std::fprintf(stderr, "mesh-hop-script: platform init failed\n");
         return 1;
     }

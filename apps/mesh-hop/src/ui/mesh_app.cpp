@@ -844,22 +844,37 @@ App::Geo App::geo() const
     g.row = m->tok[CP0_TOK_ROW_H];
     g.list_row = m->tok[CP0_TOK_LIST_ROW_H];
     g.target = m->tok[CP0_TOK_TARGET];
+    // the heights follow the text too: the ROW token is 7 mm, the text sizes come from the class, so on a panel of low density
+    // (the HackBerry: about 6.7 px/mm) a cell with a label and a value line needs more than ROW
+    g.bar = std::max(g.row, static_cast<int>(lv_font_get_line_height(f_body_) + lv_font_get_line_height(f_caption_)) + g.s);
+    g.field = std::max(g.list_row, static_cast<int>(lv_font_get_line_height(f_field_)) + g.s);
     g.wide = m->cls == CP0_UI_WIDE || m->cls == CP0_UI_LARGE;
     return g;
 }
 
-/* Home: the main menu, a CompactList (Comfortable rows, chevrons) on the width of the stage: Chats, Contacts, Settings
- * (Map and Terminal come back when they exist). The value of a row is a short state in grey. */
+/* Home: the main menu, a CompactList with the rows of Settings (settings_list_layout: the same height, label and value sizes,
+ * chevron, and the page column): Chats, Contacts, Settings (Map and Terminal come back when they exist). The value of a row
+ * is a short state in grey. (Before P3c it was the Comfortable list of the ROW token on the 640 stage: its text is 43 % of
+ * a 7 mm row, so on a panel of low density, the HackBerry, it came out smaller than the pages.) */
 void App::build_home()
 {
-    cp0_ui_list_layout_t l{};
-    cp0_ui_list_layout(cp0_ui_metrics_get(), CP0_UI_LIST_COMFORTABLE, stage_x_, tabs_y_, kScreenW, panel_h_, &l);
+    // made again when the room changes (the key hint line came or went: a CompactList keeps its height), in the same place among
+    // the shell's objects (under the hint line and the dialogs) and on the same row
+    int sel = 0, at = -1;
+    if (home_list_) {
+        sel = std::max(0, home_list_->selected());
+        at = static_cast<int>(lv_obj_get_index(home_list_->focus_object()));
+        home_list_.reset();
+    }
+    const cp0_ui_list_layout_t l = settings_list_layout(tabs_y_, panel_h_);
     cp0::ui::CompactListEvents ev;
     ev.activate = [this](int, std::intptr_t id) { post([this, id] { open_page(id == 0 ? Tab::Chats : id == 1 ? Tab::Contacts : Tab::Settings); }); };
     ev.back = [this] { header_back(); };
     home_list_ = std::make_unique<cp0::ui::CompactList>(shell_->root(), l, ev);
+    if (at >= 0) lv_obj_move_to_index(home_list_->focus_object(), at);
     render_home();
-    home_list_->select(0, false);
+    home_list_->select(sel, false);
+    home_list_->set_hidden(!at_home_);
 }
 
 void App::build_screen()
@@ -1021,8 +1036,8 @@ void App::build_contacts()
 {
     const Geo g = geo();
     lv_obj_t *p = page_[static_cast<int>(Tab::Contacts)];
-    const int bar_y = g.s / 2, list_y = bar_y + g.row + g.s;
-    contacts_bar_.create(p, g.x, bar_y, g.cw, g.row, f_body_, f_caption_);
+    const int bar_y = g.s / 2, list_y = bar_y + g.bar + g.s;
+    contacts_bar_.create(p, g.x, bar_y, g.cw, g.bar, f_body_, f_caption_);
     RowList::Config cfg;
     cfg.max_cells = 4;
     cfg.max_boxes = 1;
@@ -1035,7 +1050,7 @@ void App::build_contacts()
 
     // a contact's details (C8): a sub-page over the list, its actions on top, its facts under them
     detail_ = make_panel(wide_, g.w, g.h);
-    detail_bar_.create(detail_, g.x, bar_y, g.cw, g.row, f_body_, f_caption_);
+    detail_bar_.create(detail_, g.x, bar_y, g.cw, g.bar, f_body_, f_caption_);
     RowList::Config dcfg;
     dcfg.max_cells = 3;
     dcfg.max_boxes = 0;
@@ -1052,9 +1067,9 @@ void App::build_contacts()
 void App::build_nearby()
 {
     const Geo g = geo();
-    const int bar_y = g.s / 2, list_y = bar_y + g.row + g.s;
+    const int bar_y = g.s / 2, list_y = bar_y + g.bar + g.s;
     nearby_ = make_panel(wide_, g.w, g.h);
-    nearby_bar_.create(nearby_, g.x, bar_y, g.cw, g.row, f_body_, f_caption_);
+    nearby_bar_.create(nearby_, g.x, bar_y, g.cw, g.bar, f_body_, f_caption_);
     RowList::Config cfg;
     cfg.max_cells = 4;
     cfg.max_boxes = 0;
@@ -1075,7 +1090,7 @@ void App::build_search()
 {
     const Geo g = geo();
     search_panel_ = make_panel(wide_, g.w, g.h);
-    const int field_y = g.s / 2, field_h = g.list_row;
+    const int field_y = g.s / 2, field_h = g.field;
     sr_query_ = lv_textarea_create(search_panel_);
     if (lv_obj_get_group(sr_query_)) lv_group_remove_obj(sr_query_);
     lv_textarea_set_one_line(sr_query_, true);
@@ -1100,8 +1115,8 @@ void App::build_search()
     lv_textarea_set_max_length(sr_query_, 60);
     lv_obj_add_state(sr_query_, LV_STATE_FOCUSED);
     lv_textarea_set_placeholder_text(sr_query_, "Type the words to find (keyboard)");
-    const int bar_y = field_y + field_h + g.s, list_y = bar_y + g.row + g.s;
-    search_bar_.create(search_panel_, g.x, bar_y, g.cw, g.row, f_body_, f_caption_);
+    const int bar_y = field_y + field_h + g.s, list_y = bar_y + g.bar + g.s;
+    search_bar_.create(search_panel_, g.x, bar_y, g.cw, g.bar, f_body_, f_caption_);
     RowList::Config cfg;
     cfg.max_cells = 2;
     cfg.max_boxes = 0;
@@ -1120,7 +1135,7 @@ void App::build_stats()
 {
     const Geo g = geo();
     stats_panel_ = make_panel(wide_, g.w, g.h);
-    stats_bar_.create(stats_panel_, g.x, g.s / 2, g.cw, g.row, f_body_, f_caption_);
+    stats_bar_.create(stats_panel_, g.x, g.s / 2, g.cw, g.bar, f_body_, f_caption_);
     set_hidden(stats_panel_, true);
 }
 
@@ -1151,7 +1166,7 @@ void App::build_packet_log()
 {
     const Geo g = geo();
     log_panel_ = make_panel(wide_, g.w, g.h);
-    log_bar_.create(log_panel_, g.x, g.s / 2, g.cw, g.row, f_body_, f_caption_);
+    log_bar_.create(log_panel_, g.x, g.s / 2, g.cw, g.bar, f_body_, f_caption_);
     log_side_ = g.wide;
     // the bytes' panel: three groups of 4 bytes on a line ("15416364 d9eb430a 01020304")
     const int hex_w = text_w("15416364 d9eb430a 01020304", f_mono_) + 4;
@@ -1182,7 +1197,7 @@ void App::build_packet_log()
         log_col_w_.push_back(w);
         x += w + g.m;
     }
-    const int head_y = g.s / 2 + g.row + g.s, head_h = line_h(f_caption_) + g.s / 2;
+    const int head_y = g.s / 2 + g.bar + g.s, head_h = line_h(f_caption_) + g.s / 2;
     const int area_w = table_w + g.inset + (log_side_ ? g.m / 2 : g.inset);      // the table's area: up to the bytes' divider at the side
     log_head_ = make_box(log_panel_, g.lx, head_y, area_w, head_h);
     lv_obj_remove_flag(log_head_, LV_OBJ_FLAG_CLICKABLE);
@@ -1215,14 +1230,14 @@ void App::layout_wide()
     lv_obj_set_size(wide_, layout_.w, panel_h_);
     for (int i : {static_cast<int>(Tab::Contacts), static_cast<int>(Tab::Settings)}) lv_obj_set_size(page_[i], layout_.w, panel_h_);
     for (lv_obj_t *panel : {search_panel_, nearby_, detail_, stats_panel_, log_panel_}) lv_obj_set_size(panel, layout_.w, panel_h_);
-    const int list_y = g.s / 2 + g.row + g.s;
+    const int list_y = g.s / 2 + g.bar + g.s;
     contact_list_.resize(std::max(1, g.h - list_y));
     detail_list_.resize(std::max(1, g.h - list_y));
     nearby_list_.resize(std::max(1, g.h - list_y));
-    const int search_y = g.s / 2 + g.list_row + g.s + g.row + g.s;
+    const int search_y = g.s / 2 + g.field + g.s + g.bar + g.s;
     search_list_.resize(std::max(1, g.h - search_y));
     // the packet log: the table and the bytes of the selected packet (under it: one line of path, four of bytes)
-    const int log_y = g.s / 2 + g.row + g.s + line_h(f_caption_) + g.s / 2;
+    const int log_y = g.s / 2 + g.bar + g.s + line_h(f_caption_) + g.s / 2;
     const int detail_h = log_side_ ? 0 : g.s + line_h(f_caption_) + 4 * line_h(f_mono_);
     log_list_.resize(std::max(1, g.h - log_y - detail_h));
     if (log_side_) {
@@ -1264,10 +1279,20 @@ void App::layout_wide()
 void App::build_hint_line()
 {
     const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
-    hint_box_ = make_box(shell_->root(), stage_x_, layout_.h - hint_h_, kScreenW, hint_h_);
+    // the whole width under the pages (the bodies end above it: layout_body), opaque, a hairline on top: the end of the list above is
+    // plainly the end of the list, never a row that goes on behind the hints; the text in the page column
+    const Geo g = geo();
+    hint_box_ = make_box(shell_->root(), 0, layout_.h - hint_h_, layout_.w, hint_h_);
     lv_obj_remove_flag(hint_box_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_color(hint_box_, lv_color_hex(kBackground), 0);
+    lv_obj_set_style_bg_opa(hint_box_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_side(hint_box_, LV_BORDER_SIDE_TOP, 0);
+    lv_obj_set_style_border_width(hint_box_, 1, 0);
+    lv_obj_set_style_border_color(hint_box_, lv_color_hex(CP0_UI_LIST_SECTION_RGB), 0);
+    lv_obj_set_style_border_opa(hint_box_, LV_OPA_50, 0);
     const int lh = static_cast<int>(lv_font_get_line_height(f_caption_));
-    hint_label_ = make_label(hint_box_, f_caption_, kMuted, m->tok[CP0_TOK_SPACE_S], (hint_h_ - lh) / 2, kScreenW - 2 * m->tok[CP0_TOK_SPACE_S], lh);
+    hint_label_ = make_label(hint_box_, f_caption_, kMuted, g.x, (hint_h_ - lh) / 2, g.cw, lh);
+    (void)m;
 
     // the cue of a touch held on a conversation name: a bar that fills over 3 s (never clickable: it must not take the touch)
     hold_box_ = make_box(screen_, 215, panel_h_ - 114, 420, 56);
@@ -1312,8 +1337,9 @@ void App::layout_body()
     lv_obj_set_y(send_btn_, page_h_ - 47);
     lv_obj_set_y(hold_box_, panel_h_ - 114);
     layout_wide();                                           // the pages of the full width
+    if (home_list_) build_home();                            // Home ends above the key hint line too
     set_hidden(hint_box_, !hint);
-    lv_obj_set_pos(hint_box_, stage_x_, layout_.h - hint_h_);
+    lv_obj_set_pos(hint_box_, 0, layout_.h - hint_h_);
     invalidate();
 }
 
@@ -1346,6 +1372,13 @@ void App::build_popup()
     loading_label_ = make_label(lp, f_title_, kText, pad, pad, sz.x + 2, lh, LV_TEXT_ALIGN_LEFT);
     lv_label_set_text(loading_label_, "Loading...");
     set_hidden(loading_, true);
+}
+
+void App::body_lists(std::vector<lv_obj_t *> &roots, lv_obj_t *&hint) const
+{
+    roots = {screen_, wide_};
+    if (home_list_) roots.push_back(home_list_->focus_object());
+    hint = hint_box_;
 }
 
 std::string App::debug_state() const
@@ -2957,6 +2990,7 @@ lv_obj_t *App::dialog_row(cp0::ui::Dialog &d, const std::string &text, const std
     const int w = d.geometry().content_w, h = layout_.row_h;
     cp0_ui_list_layout_t l{};
     cp0_ui_list_layout(m, CP0_UI_LIST_COMFORTABLE, 0, 0, w, h, &l);
+    l.text_px = m->text_px[CP0_TEXT_BODY];               // the chevron and the dot sized from the row's label, as on the pages
     lv_obj_t *row = make_box(d.body(), 0, 0, w, h);
     lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_remove_flag(row, LV_OBJ_FLAG_CLICK_FOCUSABLE);
