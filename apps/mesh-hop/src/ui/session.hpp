@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  *
  * What the shared runners build for Mesh Hop (app_spec.cpp; cdk::start on the board and in the headless harness): the
- * stage and the keyboard bridge (stage.hpp), the app (mesh_app.hpp) and the LVGL timer that runs App::tick every
+ * keyboard bridge (stage.hpp), the app (mesh_app.hpp) and the LVGL timer that runs App::tick every
  * kTickMs (the radio client's poll, the scheduled adverts, the heard-back windows, the redraws). Before, the app's
  * own loop called App::tick between two LVGL passes, at most 15 ms apart.
  */
@@ -31,7 +31,7 @@ public:
 private:
     static void tick_cb(lv_timer_t *timer);
 
-    Platform plat_;                   // first: the app builds its UI in the stage
+    Platform plat_;                   // first: the keys reach the app through it
     App app_;
     lv_timer_t *timer_ = nullptr;
 };

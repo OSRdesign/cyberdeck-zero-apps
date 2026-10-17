@@ -1,6 +1,6 @@
 # Mesh Hop 0.1.1 / 0.2.0 scripted run (headless) against tools/meshcore_sim.py (default case: 4 contacts, GPS variable listed, channel send answered OK).
 # Screenshots go to the --shot-dir, `dump` prints the state. Keys and taps are the real ones: list rows, buttons, popups, drag-scroll.
-# Coordinates (Chats only: the 640 px stage) are the 640x480 layout's (the page starts at y=56); the other pages are tapped by label.
+# Every page is tapped by label (P4: Chats too). At 640x480 Chats is one pane: the list, then the conversation as its own page.
 wait 3500
 key enter
 wait 300
@@ -8,7 +8,8 @@ say == chats (expect tab=Chats link=Connected contacts=4 conv=c:0 unread=1: the 
 dump
 shot 01-chats
 
-# write in the first channel with the keyboard, send with Enter: a channel message ends at "sent", never "delivered"
+# write in the first channel with the keyboard (Enter opens it, the entry has the keys), send with Enter: a channel message ends at
+# "sent", never "delivered"
 key enter
 type hello from Mesh Hop
 shot 02-compose
@@ -18,12 +19,15 @@ say == channel message sent (expect msgs=3 compose_focus=1 compose='' last_statu
 dump
 shot 03-channel-sent
 key esc
-say == esc (expect compose_focus=0)
+say == esc: back to the list (expect compose_focus=0 conv_open=0)
 dump
 
-# touch: the second conversation row, then the Options button of the conversation head: Mute, and Unmute
-tap 100 150
-say == tap row (expect conv=c:1)
+# touch: the second conversation row (a first tap selects it, the second opens it), then the Options button of the conversation's
+# bar: Mute, and Unmute
+tap "# test"
+tap "# test"
+wait 300
+say == tap row (expect conv=c:1 conv_open=1)
 dump
 tap "Options"
 wait 600
@@ -44,8 +48,10 @@ key ctrl-m
 say == and unmutes (expect notice 'unmuted')
 dump
 
-# add channel menu by touch (the row after the channels), private channel with a typed key
-tap 100 192
+# add channel menu by touch (the Add channel cell of the list's bar), private channel with a typed key
+key esc
+wait 300
+tap "Add channel"
 wait 300
 say == add channel menu (expect popup=menu)
 dump
@@ -66,7 +72,7 @@ dump
 shot 08-club-added
 
 # a private channel with a random key: the key is shown once the board has the channel
-tap 100 236
+tap "Add channel"
 wait 300
 key down
 key down

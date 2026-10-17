@@ -2,10 +2,12 @@
 # The 20 scripted simulator flows of Mesh Hop, one after the other (the simulator's link /tmp/ttyMHSIM is shared), each
 # with the simulator options its header names; the preset flows through presets_run.sh (its cases 1-7 and the 60 s
 # retry). About 15 minutes. Needs python3 and the host build (../../build.sh host).
-#   sh run_flows.sh [RUNNER] [OUT] [WxH | stage]
+#   sh run_flows.sh [RUNNER] [OUT] [WxH | sizes]
 #   RUNNER default ~/cdk-build/mesh-hop/host/mesh-hop-script, OUT default /tmp/mesh-hop-flows, WxH default 640x480;
-#   "stage": shell.script (the shell: Home, header, caption, hint line, dialogs) and pages.script (P3: the pages that fill the
-#   width, with 193 contacts) at 640x480, 800x480, 720x720, 1024x600 and 1280x720 (about 6 minutes).
+#   "sizes" (or "stage", its name before P4): shell.script (the shell: Home, header, caption, hint line, dialogs), pages.script
+#   (P3: the pages with 193 contacts) and chats.script (P4: Chats, the conversation, the on-screen keyboard; chats_run.sh) at
+#   640x480, 800x480, 720x720, 1024x600 and 1280x720, and the three at 720x720 with the HackBerry's density (PPMM 670) (about 12
+#   minutes).
 # Output: OUT/<flow>/*.png and dump.txt, OUT/<flow>.out (the run's stdout and stderr), a summary at the end: the shots
 # (145 `shot` lines + 4 shots at the end of a hold at 640x480, the preset flow counted once) and every line a runner
 # reported as a failure.
@@ -24,12 +26,20 @@ one() { # name, then environment assignments and the command
     echo "== $n ($(($(date +%s) - t0)) s)"
     env "$@" > "$OUT/$n.out" 2>&1
 }
-if [ "$SIZE" = stage ]; then
-    for s in 640x480 800x480 720x720 1024x600 1280x720; do
-        one "stage-$s" SIZE=$s SHOTS="$OUT/stage-$s" SCRIPT="$T/shell.script" sh "$T/ui_smoke.sh"
-        grep -h "^stage \|^check \|^shell \|^expect \|^script:" "$OUT/stage-$s.out" | sed "s/^/  /"
-        one "pages-$s" SIZE=$s SHOTS="$OUT/pages-$s" SIMARGS="--contacts 193 --manual-add --new-nodes 3 --heard-back 2" SCRIPT="$T/pages.script" sh "$T/ui_smoke.sh"
-        grep -h "^check \|^shell \|^expect \|^script:" "$OUT/pages-$s.out" | grep -v " PASS" | sed "s/^/  /"
+if [ "$SIZE" = stage ] || [ "$SIZE" = sizes ]; then
+    for s in 640x480 800x480 720x720 1024x600 1280x720 720x720@670; do
+        size=${s%@*}
+        ppmm=
+        [ "$s" != "$size" ] && ppmm=${s#*@}
+        c=$size${ppmm:+-ppmm$ppmm}       # (not n: one() sets n)
+        one "shell-$c" SIZE=$size PPMM=$ppmm SHOTS="$OUT/shell-$c" SCRIPT="$T/shell.script" sh "$T/ui_smoke.sh"
+        grep -h "^fill \|^check \|^shell \|^hint \|^expect \|^script:" "$OUT/shell-$c.out" | grep -v " PASS" | sed "s/^/  /"
+        one "pages-$c" SIZE=$size PPMM=$ppmm SHOTS="$OUT/pages-$c" SIMARGS="--contacts 193 --manual-add --new-nodes 3 --heard-back 2" SCRIPT="$T/pages.script" sh "$T/ui_smoke.sh"
+        grep -h "^check \|^shell \|^hint \|^expect \|^script:" "$OUT/pages-$c.out" | grep -v " PASS" | sed "s/^/  /"
+        one "chats-$c" SIZE=$size PPMM=$ppmm SHOTS="$OUT/chats-$c" DATA="$OUT/chats-data" sh "$T/chats_run.sh"
+        grep -h "^fill \|^check \|^shell \|^hint \|^expect \|^script:" "$OUT/chats-$c.out" | grep -v " PASS" | sed "s/^/  /"
+        rm -rf "$OUT/chats-data"
+        echo "  $(grep -h ' PASS' "$OUT/shell-$c.out" "$OUT/pages-$c.out" "$OUT/chats-$c.out" | wc -l) PASS lines, $(grep -h ' FAIL\|^script:' "$OUT/shell-$c.out" "$OUT/pages-$c.out" "$OUT/chats-$c.out" | wc -l) failures"
     done
     echo "== done in $(($(date +%s) - t0)) s: $(find "$OUT" -name '*.png' | wc -l) shots"
     exit 0

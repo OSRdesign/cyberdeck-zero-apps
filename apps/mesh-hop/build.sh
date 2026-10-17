@@ -3,10 +3,11 @@
 #   wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/build.sh [cross|host|all] [--strict] [--sync]
 #   wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/build.sh flows [WxH]
 #   cross: the aarch64 binary into root/usr/share/APPLaunch/bin/mesh-hop;
-#   host:  the shared headless harness and its scenes (tests/scenes: the stage at five sizes, the notice), then
+#   host:  the shared headless harness and its scenes (tests/scenes: the shell and the pages at five sizes, the notice), then
 #          Mesh Hop's scripted runner (mesh-hop-script, tests/flows/runner.mk) and the unit tests (tests/unit);
 #   flows: the 20 simulator flows of tests/flows with mesh-hop-script (about 15 minutes; needs python3 and a host
-#          build), at 640x480 or at WxH; shots in ${CDK_BUILD:-~/cdk-build/mesh-hop}/flows-<WxH>.
+#          build), at 640x480 or at WxH ("sizes": the shell, pages and chats scripts at the five sizes and at the HackBerry's
+#          density); shots in ${CDK_BUILD:-~/cdk-build/mesh-hop}/flows-<WxH>.
 # Then the package: python3 tools/make_registry.py --only mesh-hop --out <dir outside packages/>
 set -e
 here=$(cd "$(dirname "$0")" && pwd)

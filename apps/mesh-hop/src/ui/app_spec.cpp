@@ -25,7 +25,7 @@ Session::~Session()
     if (g_session == this) g_session = nullptr;
     if (timer_) lv_timer_delete(timer_);
     timer_ = nullptr;
-    plat_.close_stage();            // the widgets go while the app (their images, their lists) still exists
+    plat_.close();                  // no key reaches the app while it goes (its destructor deletes the shell and the pages)
 }
 
 void Session::tick_cb(lv_timer_t *timer)
