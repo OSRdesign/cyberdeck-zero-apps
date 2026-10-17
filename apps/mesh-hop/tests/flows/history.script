@@ -89,7 +89,7 @@ wait 300
 say == no tap was triggered by the release (expect popup=none)
 dump
 
-# the same on a channel row (#test); then Ctrl+O on the open conversation's page (no menu button there)
+# the same on a channel row (#test); then Ctrl+O on the open conversation's page (no bar there)
 hold "# test" 3400 h09-hold-channel
 wait 300
 say == options of a channel (expect popup=menu popup_title='Options for # test')
@@ -109,7 +109,7 @@ say == #test cleared and still listed (expect all_msgs=6 chat_rows=6 notice 'Del
 dump
 tap "# test"
 wait 300
-say == the hold selected the row: this tap opens it (expect conv=c:1 conv_open=1 menu_btn=0)
+say == the hold selected the row: this tap opens it (expect conv=c:1 conv_open=1 chat_bar=0)
 dump
 key enter
 wait 500
@@ -179,6 +179,6 @@ dump
 shot h17-all-deleted
 key tab
 wait 300
-say == chats after the deletion: the channels stay (the menu has Add channel), no direct row (expect tab=Chats chat_rows=3)
+say == chats after the deletion: the channels stay (the bar has Add channel), no direct row (expect tab=Chats chat_rows=3)
 dump
 shot h18-chats-empty

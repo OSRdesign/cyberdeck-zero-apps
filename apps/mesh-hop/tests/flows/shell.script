@@ -30,14 +30,14 @@ shot h03b-chats-keyboard
 check chats-keyboard
 keyboard off
 
-# a direct conversation: a first tap on its row selects it, the menu button over the list (at the right of the line under the
-# title) opens the Chats menu for it (Search messages, Add channel, then its options and Details), the second tap opens it (one pane:
-# its page, no button there; two panes, the entry takes the keys, the keyboard's here)
+# a direct conversation: a first tap on its row selects it, a 3 s hold on it opens the Chats menu for it (Search messages, Add
+# channel, then its options and Details), the second tap opens it (one pane: its page, no bar there; two panes, the entry takes the
+# keys, the keyboard's here)
 keyboard on
 tap "Alice"
 wait 400
-tapicon
-wait 800
+hold "Alice" 3400
+wait 500
 say == the Chats menu for Alice (expect popup=menu popup_title='Options for Alice')
 expect text "Search messages"
 expect text "Mute this contact"
@@ -55,7 +55,7 @@ key esc
 wait 300
 tap "Alice"
 wait 600
-say == a direct conversation (expect conv=d:... conv_open=1; one pane: menu_btn=0)
+say == a direct conversation (expect conv=d:... conv_open=1; one pane: chat_bar=0)
 dump
 shot h04-conversation-options
 check conversation

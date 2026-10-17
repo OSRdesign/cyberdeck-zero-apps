@@ -302,11 +302,14 @@ private:
     bool conversation_visible() const;   // two panes, or the conversation page of one pane
     void open_conversation(const std::string &conv, bool focus_compose);
     void toggle_mute(const std::string &conv);
-    /* The Chats menu (the menu button over the list, Ctrl+O, a 3 s hold on a row): Search messages, Add channel, then the
-     * options of the selected conversation (mute, delete) and Details for a direct chat with a known contact. */
+    /* The Chats menu (a 3 s hold on a row, Ctrl+O): Search messages, Add channel, then the options of the selected
+     * conversation (mute, delete) and Details for a direct chat with a known contact. */
     void open_chats_menu();
     void open_contact_of_conversation();     // Details: the contact of the selected direct chat, in Contacts
-    int chat_list_top() const;               // the top of the list (and of two panes) in the page: under the menu button's row
+    int chat_list_top() const;               // the top of the list (and of two panes) in the page: under the bar
+    /* Mesh Hop's tap targets are ROW high (7 mm): the toolkit's Dialog makes its buttons TARGET high; after its layout they are
+     * made ROW high, the room going to a scrolling body, else the box gets shorter. Idempotent (cheap from the tick). */
+    void compact_dialog(cp0::ui::Dialog &d);
     void confirm_delete_conversation(const std::string &conv);
     void confirm_delete_all();
     void choose_delete_older();
@@ -490,7 +493,7 @@ private:
     uint64_t other_boards_bytes_ = 0, other_cache_ms_ = 0;
 
     // chats
-    std::vector<ChatRow> chat_rows_;     // the rows of the list (build_chat_rows without its "+ Add channel" row: the menu has it)
+    std::vector<ChatRow> chat_rows_;     // the rows of the list (build_chat_rows without its "+ Add channel" row: the bar has it)
     std::string chat_sel_key_;
     int chat_sel_ = -1;
     std::string conv_;                   // the conversation shown (two panes: at the right; one pane: on its page), or the selected one
@@ -613,13 +616,11 @@ private:
 
     // widgets
     lv_obj_t *page_[5] = {};
-    // chats: the list, the conversation (its messages, the entry and Send)
+    // chats: the bar over the list (Search, Add channel; two panes: across both), the list, the conversation (its messages,
+    // the entry and Send)
+    ActionBar chat_bar_;
     RowList chat_list_;
     lv_obj_t *msgs_ = nullptr, *compose_ = nullptr, *chat_div_ = nullptr;
-    // over the list (one pane, the list; two panes): the menu button (three lines, TARGET square) at the right of the caption
-    // line, the list right under its row (its menu: Search messages, Add channel, the selected conversation's options, Details)
-    lv_obj_t *menu_btn_ = nullptr;
-    bool menu_shown_ = false;
     lv_obj_t *send_btn_ = nullptr, *send_label_ = nullptr;
     // contacts: the action bar (Filter, Sort, More; Done, Select..., Delete, Group... in the select mode) and the two-line rows
     ActionBar contacts_bar_;

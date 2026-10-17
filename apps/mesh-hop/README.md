@@ -11,7 +11,7 @@ A full-screen client for [MeshCore](https://github.com/meshcore-dev/MeshCore) Lo
 separate **companion radio board** plugged into the deck's USB port (MeshCore *companion radio, USB* firmware); the deck is
 its screen and keyboard. It needs a 640x480 screen at least. Everything follows the screen (tested in the simulator at 640x480, 800x480,
 720x720, 1024x600 and 1280x720): the shell (Home, the page header with the Esc button, the status line, the dialogs) and every page, sized from the
-launcher's layout tokens (rows 7 mm, buttons 9 mm, the Settings text size). Mesh Hop replaces the 320x170 UI of [MeshZero](../meshzero/README.md) with a UI made for messaging and keeps everything below
+launcher's layout tokens (rows and buttons 7 mm, the Settings text size). Mesh Hop replaces the 320x170 UI of [MeshZero](../meshzero/README.md) with a UI made for messaging and keeps everything below
 it: the serial transport, the protocol, the client, the model and the history store (`src/main/core/`, a copy of the
 MeshZero core with unit tests). `apps/meshzero` stays as it is until Mesh Hop is accepted.
 
@@ -35,16 +35,16 @@ deck's panel**. The real screen shows the same 640x480 picture.
   Chats is one pane**: the list, then the conversation as its own page (its name is the header's title; the header's Esc goes back to
   the list). **On the wider screens both panes show side by side when both fit at the text sizes** (800x480, 1024x600 and 1280x720 in the
   simulator; a square 720x720 stays one pane: its list would be too narrow): the list takes about 35 % of the width, the conversation
-  follows the selected row, a tap on the selected row puts the keys in the entry, and the header's Esc leaves Chats for Home. Over
-  the list (and over both panes) one **menu button** (three lines) sits at the right of the line under the title, the list right under
-  its row: its menu, titled with the selected conversation ("Options for # Public"), has **Search messages** and **Add channel**, then
-  the options of the selected conversation and, for a direct chat with a known contact, **Details**; with no conversation (an empty
-  list) only the first two. Select a row first (one tap), then open the menu. A conversation's own page (one pane) has no bar and no
-  button: the header, the line under it, the messages, the entry (Ctrl+O opens the same menu there). The conversation shows the sender and time of each message (blue, yours green), the status of
+  follows the selected row, a tap on the selected row puts the keys in the entry, and the header's Esc leaves Chats for Home. A slim
+  bar over the list (across both panes) has **Search** and **Add channel**. **Hold a chat** (a finger 3 s on its row; Ctrl+O with a
+  keyboard) for the **Chats menu**, titled with that conversation ("Options for # Public"): **Search messages**, **Add channel**, then
+  the options of the conversation and, for a direct chat with a known contact, **Details**; by touch the line under the title says
+  "Hold a chat: options". A conversation's own page (one pane) has no bar: the header, the line under it, the messages, the entry and
+  Send (Ctrl+O opens the same menu there). The conversation shows the sender and time of each message (blue, yours green), the status of
   yours and the text in the large size, the line under the title says the nodes heard in the last hour (or "muted", or the bytes left
   while you write); the message entry and a **Send** button are at the bottom. **Without a keyboard** a tap on the entry brings the
   on-screen keyboard and Chats becomes the **compose view**: the header, the last message in the line under it, the entry (and Send
-  where it fits: at 640x480 the keyboard's Enter sends), the keyboard below. After a Send, or Esc, the keyboard goes. A channel
+  where it fits; the keyboard's Enter sends too), the keyboard below. After a Send, or Esc, the keyboard goes. A channel
   message ends at **sent** when the board accepts it (a channel has no acknowledgement, so never "delivered"; if the board
   does not answer within 5 s it shows "sent (unconfirmed)"); a direct message goes sending, sent, delivered or no ack.
   **Heard back by N repeaters** (phase 3): the board reports every radio packet it hears (PUSH_LOG_RX_DATA, no command needed). When
@@ -55,14 +55,13 @@ deck's panel**. The real screen shows the same 640x480 picture.
   another person's message of the same size on the same channel in the same minute can be taken for yours. It needs the channel key
   read from the board in this session (done at connect; a firmware without channel commands gets no count). Direct messages keep their
   acks and are not counted.
-  **Mute** (Ctrl+M, or the menu: the menu button, Ctrl+O or a 3 s hold on its row) silences a channel or a contact: no unread count, not counted in Home's total, "muted" in the list.
-  **Options of a conversation** (in the menu, after Search messages and Add channel: the menu button over the list acts on the
-  selected row, Ctrl+O on the selected or open conversation, a finger held 3 s on a row selects it and opens the menu; a bar shows the
-  hold filling): a direct chat offers *Mute / Unmute this contact* and *Delete conversation*; a channel offers *Mute / Unmute* and
+  **Mute** (Ctrl+M, or the menu: a 3 s hold on its row, or Ctrl+O) silences a channel or a contact: no unread count, not counted in Home's total, "muted" in the list.
+  **Options of a conversation** (in the menu, after Search messages and Add channel: a finger held 3 s on a row selects it and opens
+  the menu, a bar shows the hold filling; Ctrl+O on the selected or open conversation): a direct chat offers *Mute / Unmute this contact* and *Delete conversation*; a channel offers *Mute / Unmute* and
   *Delete messages*. Deleting asks Yes / No first with the number of messages, removes them from memory and from the history
   file, and a deleted direct conversation leaves the list (the contact stays in Contacts and on the board; a new message
   starts the conversation again; a channel stays, only its history is cleared).
-  **Add channel** (in the menu) opens a menu: a hashtag channel (`#name`), a private channel with a key typed as 32 hex characters, or a
+  **Add channel** (the bar, or the menu) opens a menu: a hashtag channel (`#name`), a private channel with a key typed as 32 hex characters, or a
   private channel with a random key (shown as text to share). A direct chat has **Details** in the menu (the contact's details).
 * **Search messages** (new in 0.2.0; in the menu, or Ctrl+F): type the words (they are matched in the text and
   in the sender's name, upper and lower case alike) and narrow the result by **chat** (Ctrl+K), **dates** (Ctrl+D: any date, last 24 h,
@@ -177,7 +176,9 @@ deck's panel**. The real screen shows the same 640x480 picture.
   the on-screen keyboard of the entry or of the search words, search, statistics, packet log, details, Nearby, select mode, a conversation's page
   (one pane; with two panes the header's Esc goes to Home).
 * Everything is reachable by touch: tap rows, Home rows, bar cells, arrows and buttons, drag to scroll lists and conversations.
-  There is no swipe gesture. Rows and bar cells are at least 7 mm high (the rows of a list where a tap only selects: 5 mm), buttons 9 mm.
+  There is no swipe gesture. Rows, bar cells and buttons (Send, the arrows of a choice, the buttons of the dialogs) are at least 7 mm
+  high (the user's choice for Mesh Hop: the shared toolkit's dialogs give 9 mm buttons, Mesh Hop makes them 7 mm; the rows of a list
+  where a tap only selects: 5 mm); the header's Esc stays as the toolkit gives it.
 
 | Key | Action |
 | --- | --- |
@@ -188,7 +189,7 @@ deck's panel**. The real screen shows the same 640x480 picture.
 | Left / Right | Settings: step the value of the row; entry: move the cursor; choice box: previous / next value |
 | Esc | Back (box to nothing, entry to list, a conversation's page to the list, close detail, Nearby, search, statistics or select mode; the on-screen keyboard first when it is up); the header's Esc button too; from the root of a page it goes to Home, at Home it asks "Quit Mesh Hop?" |
 | Ctrl+M | Chats: mute / unmute the conversation (plain letters start a message); Settings, channel row: `M` |
-| Ctrl+O | Chats: the menu (Search messages, Add channel, the options of the selected or open conversation, Details); the touch way is the menu button over the list, or a 3 s hold on a row |
+| Ctrl+O | Chats: the menu (Search messages, Add channel, the options of the selected or open conversation, Details); the touch way is a 3 s hold on a row |
 | Ctrl+F | Chats: search the messages (then Ctrl+K chat, Ctrl+D dates, Ctrl+R direction, Enter opens the result) |
 | `S` `R` `T` `H` `A` `D` `U` | Contacts: sort, reverse, type filter, heard filter, advert, zero-hop advert, refresh |
 | `X` `G` `N` `I` | Contacts: manage contacts (marks for delete / groups), group filter, Nearby, details of the selected contact |
@@ -310,9 +311,10 @@ board with its own key, contacts and channels), `--reset-format-delay SEC`, `--r
 board on the cable)). The scripts in `tests/flows/` (`smoke.script`, `bigcontacts.script`, `chan-silent.script`, `firmware.script`, `offline.script`)
 drive `mesh-hop-script` (`--script f --shot-dir d [--size WxH] [--ppmm N]`: the shared headless harness's display at any size, keys through the
 shared keyboard queue, taps at the 640x480 coordinates of the page bodies moved to where the body is (most taps are by label), PNG screenshots, `bench <key> <n>` times key presses,
-`hold <x> <y> <ms> [shot]` or `hold "label" <ms> [shot]` keeps a finger down, `tap "label"`, `tapfield <n>` (the n-th text field shown), `tapicon` (a button without text), `tapkey "label"` (a key of the
+`hold <x> <y> <ms> [shot]` or `hold "label" <ms> [shot]` keeps a finger down, `tap "label"`, `tapfield <n>` (the n-th text field shown), `tapkey "label"` (a key of the
 on-screen keyboard), `@panes1` / `@panes2` before a command (only with one / two panes of Chats), `keyboard on|off` (also the launcher's `input.state`: off lets the on-screen keyboard show), `fill` (the pages fill the width),
-`check` (the shared layout checks, the field above the on-screen keyboard included, and the size rules of every control: any finding fails), `expect text|osk`); `run_flows.sh` runs all of them.
+`check` (the shared layout checks, the field above the on-screen keyboard included, and the size rules of every control, buttons at
+Mesh Hop's 7 mm: any finding fails), `expect text|osk`); `run_flows.sh` runs all of them.
 The shared harness's scenes are in `tests/scenes/`, the unit tests in `tests/unit/`. `history_run.sh` seeds a history of every age and runs `history.script`; `presets_run.sh` (a local web
 server stands in for `api.meshcore.nz`; `MESHHOP_ONLINE=0|1` forces the online test, `MESHHOP_PRESETS_URL` and `MESHHOP_CURL` replace the address and
 the program) now also runs the retry case. 0.2.0 adds `p2_run.sh` (seeded history, the words `@D60@` in a script become the date 60 days
@@ -324,7 +326,7 @@ Phase 3: `--heard-back N` makes the simulator send our own channel messages back
 (`--heard-back-direct` adds a copy with an empty path), and its radio log every 3 s alternates random bytes with well formed packets of other
 traffic. `heard-back.script` (`--heard-back 2 --heard-back-direct`) and `packet-log.script` (`--heard-back 2 --new-nodes 2`) cover both features.
 P4: `chats_run.sh` seeds a history of short and long messages, none read (`seed_chats.py`; `BIG=N` adds N to the Public channel), and runs
-`chats.script`: the list and its menu (a channel, then a direct chat selected), the tap rule, a conversation's page (no bar, no button; Ctrl+O), writing with a keyboard, the compose view with the on-screen keyboard, the search,
+`chats.script`: the list under its bar and the Chats menu (a channel by Ctrl+O, then a direct chat by the hold), the tap rule, a conversation's page (no bar; Ctrl+O), writing with a keyboard, the compose view with the on-screen keyboard, the search,
 an editor and the Position box with it, the 3 s hold; `run_flows.sh sizes` runs it with `shell.script` and `pages.script` at the five sizes.
 
 ## Layout of the sources

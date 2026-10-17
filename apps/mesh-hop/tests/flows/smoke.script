@@ -1,6 +1,6 @@
 # Mesh Hop 0.1.1 / 0.2.0 scripted run (headless) against tools/meshcore_sim.py (default case: 4 contacts, GPS variable listed, channel send answered OK).
 # Screenshots go to the --shot-dir, `dump` prints the state. Keys and taps are the real ones: list rows, buttons, popups, drag-scroll.
-# Every page is tapped by label (P4: Chats too). At 640x480 Chats is one pane: the list (the menu button over it), then the
+# Every page is tapped by label (P4: Chats too). At 640x480 Chats is one pane: the list (its bar: Search, Add channel), then the
 # conversation as its own page.
 wait 3500
 key enter
@@ -23,21 +23,21 @@ key esc
 say == esc: back to the list (expect compose_focus=0 conv_open=0)
 dump
 
-# touch: the second conversation row (a first tap selects it), then the menu button over the list (its options act on the selected
+# touch: the second conversation row (a first tap selects it), then a 3 s hold on it opens the Chats menu (its options act on that
 # row): Mute, and Unmute
 tap "# test"
 wait 300
-say == tap row: selected (expect conv=c:1 conv_open=0 menu_btn=1)
+say == tap row: selected (expect conv=c:1 conv_open=0 chat_bar=1)
 dump
-tapicon
-wait 600
+hold "# test" 3400
+wait 500
 tap "Mute this channel"
 wait 300
-say == muted by touch through the menu button (expect notice about muted)
+say == muted by touch through the menu of the hold (expect notice about muted)
 dump
 shot 04-muted
-tapicon
-wait 600
+hold "# test" 3400
+wait 500
 tap "Unmute this channel"
 wait 300
 say == unmuted
@@ -48,9 +48,7 @@ key ctrl-m
 say == and unmutes (expect notice 'unmuted')
 dump
 
-# add channel menu by touch (the menu button, then Add channel), private channel with a typed key
-tapicon
-wait 600
+# add channel menu by touch (Add channel on the bar), private channel with a typed key
 tap "Add channel"
 wait 400
 say == add channel menu (expect popup=menu)
@@ -67,13 +65,11 @@ type 00112233445566778899aabbccddeeff
 shot 07-private-key
 key enter
 wait 1500
-say == Club added (expect chat_rows=6: the headers and the conversations, the add row is in the menu)
+say == Club added (expect chat_rows=6: the headers and the conversations, the add row is on the bar)
 dump
 shot 08-club-added
 
 # a private channel with a random key: the key is shown once the board has the channel
-tapicon
-wait 600
 tap "Add channel"
 wait 400
 key down

@@ -20,7 +20,6 @@
  *   tap "label" last (the last label of that text: a table's key label comes before its button)
  *   tapkey "label"               a key of the on-screen keyboard (its labels first: the top layer)
  *   tapfield <n>                 the n-th text field shown (1: the first): the compose entry, the search words, a field of a dialog
- *   tapicon                      the first button shown that has no text (an icon: the menu button of a conversation's page)
  *   @panes1 <command>            the command only while Chats is one pane (@panes2: two panes; the state line's panes=)
  *   hold <x> <y> <ms> [shot]   hold "label" <ms> [shot]   drag <x1> <y1> <x2> <y2>
  *   bench <key> <n>   shot <name>   dump   sim <line>   say <text>
@@ -232,6 +231,21 @@ struct ShellStats {
  * meets the shared size rules: the header's Esc the header rule, a button TARGET, a row of a vertically scrolling list
  * LIST_ROW (a tap there only moves the highlight: CompactList's compact rows, the virtual lists of the pages), anything else
  * ROW. A control that does not hold a pressable child of its own counts (a row with a button inside is the button). */
+/* Mesh Hop's buttons are ROW high (7 mm, the user's decision for this app): a finding of the shared checks "size: button ... WxH@(x,y)
+ * is under TARGET" is no finding here when H reaches ROW. Every other finding stays. */
+bool button_meets_row(const std::string &finding, int row)
+{
+    if (finding.rfind("size: button ", 0) != 0) return false;
+    const size_t end = finding.rfind(" is under TARGET ");
+    if (end == std::string::npos || end == 0) return false;
+    const size_t sp = finding.rfind(' ', end - 1);
+    if (sp == std::string::npos) return false;
+    const std::string area = finding.substr(sp + 1, end - sp - 1);          // "WxH@(x,y)"
+    const size_t x = area.find('x'), at = area.find('@');
+    if (x == std::string::npos || at == std::string::npos || at <= x + 1) return false;
+    return std::atoi(area.substr(x + 1, at - x - 1).c_str()) >= row;
+}
+
 void shell_walk(lv_obj_t *obj, lv_obj_t *skip, const cp0_ui_metrics_t *m, int header_rule, int header_h, ShellStats &st)
 {
     if (!obj || obj == skip) return;
@@ -250,8 +264,12 @@ void shell_walk(lv_obj_t *obj, lv_obj_t *skip, const cp0_ui_metrics_t *m, int he
         st.min_header = std::min(st.min_header, h);
         if (h < header_rule) ++st.failures;
     } else if (lv_obj_check_type(obj, &lv_button_class)) {
+        // Mesh Hop's buttons are ROW high (7 mm, the user's decision for this app), like its rows: not the shared TARGET (9 mm)
         st.min_button = std::min(st.min_button, h);
-        if (h < m->tok[CP0_TOK_TARGET]) ++st.failures;
+        if (h < m->tok[CP0_TOK_ROW_H]) {
+            ++st.failures;
+            std::printf("  button under ROW: %dx%d at (%d,%d)\n", static_cast<int>(a.x2 - a.x1 + 1), h, static_cast<int>(a.x1), static_cast<int>(a.y1));
+        }
     } else {
         lv_obj_t *parent = lv_obj_get_parent(obj);
         const bool in_list = parent && lv_obj_has_flag(parent, LV_OBJ_FLAG_SCROLLABLE) && (lv_obj_get_scroll_dir(parent) & LV_DIR_VER);
@@ -419,36 +437,6 @@ int run_script(const std::string &file, const std::string &shot_dir)
             run_for(80);
             headless::platform_touch(false, x, y);
             run_for(80);
-        } else if (cmd == "tapicon") {
-            // the first visible button (lv_button) with no visible label inside: an icon button
-            lv_obj_t *found = nullptr;
-            std::function<bool(lv_obj_t *)> has_label = [&](lv_obj_t *o) {
-                if (lv_obj_check_type(o, &lv_label_class) && shown(o)) return true;
-                for (uint32_t i = 0; i < lv_obj_get_child_count(o); ++i)
-                    if (has_label(lv_obj_get_child(o, static_cast<int32_t>(i)))) return true;
-                return false;
-            };
-            std::function<void(lv_obj_t *)> walk = [&](lv_obj_t *o) {
-                if (found || !o || !shown(o)) return;
-                if (lv_obj_check_type(o, &lv_button_class)) {
-                    const lv_area_t a = headless::visible_area(o);
-                    if (a.x2 >= a.x1 && a.y2 >= a.y1 && !has_label(o)) found = o;
-                    return;
-                }
-                for (uint32_t i = 0; i < lv_obj_get_child_count(o); ++i) walk(lv_obj_get_child(o, static_cast<int32_t>(i)));
-            };
-            walk(lv_screen_active());
-            if (!found) {
-                std::fprintf(stderr, "script:%d: no icon button to tap\n", lineno);
-                ++failures;
-                continue;
-            }
-            const lv_area_t a = headless::visible_area(found);
-            const int x = (a.x1 + a.x2) / 2, y = (a.y1 + a.y2) / 2;
-            headless::platform_touch(true, x, y);
-            run_for(80);
-            headless::platform_touch(false, x, y);
-            run_for(80);
         } else if (cmd == "tapkey") {
             std::string rest;
             std::getline(ss, rest);
@@ -585,7 +573,14 @@ int run_script(const std::string &file, const std::string &shot_dir)
             std::string name;
             ss >> name;
             run_for(250);
-            const headless::CheckResult r = headless::check_layout(!session);
+            headless::CheckResult r = headless::check_layout(!session);
+            {   // Mesh Hop's rule for buttons: ROW (the shared one is TARGET); the rest of the shared findings stay
+                const int row = cp0_ui_metrics_get()->tok[CP0_TOK_ROW_H];
+                std::vector<std::string> kept;
+                for (const std::string &f : r.failures)
+                    if (!button_meets_row(f, row)) kept.push_back(f);
+                r.failures.swap(kept);
+            }
             for (const std::string &f : r.failures) std::printf("check %s FAIL %s\n", name.c_str(), f.c_str());
             // every control of the screen (the shell, the pages, the dialogs) meets the size rules too
             ShellStats sh;
