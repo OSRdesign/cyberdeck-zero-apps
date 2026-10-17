@@ -1,7 +1,7 @@
 # Mesh Hop (P2b, the shell; P3, the pages; P4, Chats and the on-screen keyboard): Home is a list (Chats, Contacts, Settings, with a
 # chevron and a short state each), the header has the Esc button, the caption line says the board and the notices; a page has the same
 # header and its Esc goes back to Home, where it asks "Quit Mesh Hop?". Every page fills the width of the screen (no 640 px stage any
-# more): Chats is one pane at 640x480 and two on the other sizes (the action bar over both). At the five sizes, no board (the app
+# more): Chats is one pane at 640x480 and two on the other sizes (the menu button over the list). At the five sizes, no board (the app
 # offline). Taps go by label (a first tap on a row selects it, the second opens it), the keys come through the shared keyboard bridge.
 # The harness's input.state says "no keyboard" (keyboards 0): the shared rule lets the on-screen keyboard show for a field that is
 # typed into (the search words here), and `keyboards 1` (a keyboard connects) puts it away. `check` runs the shared layout checks
@@ -71,15 +71,28 @@ expect notext "Clear"
 expect text "Node name"
 
 # the keys through cp0_lvgl's queue and the app's key bridge: Tab goes to the next page (Settings -> Chats -> Contacts). Chats without
-# a board: the bar (Search, Add channel) and the empty list
+# a board: the empty list and, at the right of the line under the title, the menu button (three drawn lines, no label: the scene taps
+# it where it is at each size, its centre)
 key tab
 wait 300
-expect text "Search"
-expect text "Add channel"
+expect notext "Search messages"
 check chats
 shot chats
-# the search: its words take the keys, and without a keyboard the on-screen keyboard comes; only the field stays above it at 640x480
-tap "Search"
+# its menu without a conversation (no board): Search messages and Add channel only
+@640x480 tapxy 0.890 0.223
+@800x480 tapxy 0.899 0.203
+@720x720 tapxy 0.872 0.152
+@1024x600 tapxy 0.912 0.179
+@1280x720 tapxy 0.834 0.161
+wait 600
+expect text "Search messages"
+expect text "Add channel"
+expect notext "Details"
+check chats-menu
+shot chats-menu
+# Search messages: its words take the keys, and without a keyboard the on-screen keyboard comes; only the field stays above it at
+# 640x480
+tap "Search messages"
 wait 1200
 expect osk on
 check search-osk
@@ -92,7 +105,8 @@ check search-keyboard
 key esc
 wait 400
 expect osk off
-expect text "Add channel"
+expect notext "Search messages"
+check chats-again
 key tab
 expect text "More"
 # Esc of the keyboard goes back to Home; a second short Esc at Home never quits: it says how to leave (in the caption line)

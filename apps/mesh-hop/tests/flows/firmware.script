@@ -22,9 +22,11 @@ key esc
 key end
 wait 300
 shot 52-settings-end
-# the Chats list: the Add channel cell of the bar opens the menu, or says the firmware is too old
+# the Chats list: Add channel in the menu (the menu button over the list) opens its menu, or says the firmware is too old
 key tab
 wait 300
+tapicon
+wait 600
 tap "Add channel"
 wait 400
 say == Chats list add row (an old firmware: notice 'Firmware too old for this feature: Channel management'; a recent one: the add menu, popup=menu)

@@ -30,24 +30,42 @@ shot h03b-chats-keyboard
 check chats-keyboard
 keyboard off
 
-# a direct conversation (a first tap on its row selects it, the second opens it: one pane, its page; two panes, the entry takes the
-# keys, the keyboard's here): the bar has Options and Details
+# a direct conversation: a first tap on its row selects it, the menu button over the list (at the right of the line under the
+# title) opens the Chats menu for it (Search messages, Add channel, then its options and Details), the second tap opens it (one pane:
+# its page, no button there; two panes, the entry takes the keys, the keyboard's here)
 keyboard on
 tap "Alice"
+wait 400
+tapicon
+wait 800
+say == the Chats menu for Alice (expect popup=menu popup_title='Options for Alice')
+expect text "Search messages"
+expect text "Mute this contact"
+dump
+shot h05-options-dialog
+check options-dialog
+key down
+key down
+key down
+key down
+wait 300
+expect text "Details"
+check options-dialog-end
+key esc
+wait 300
 tap "Alice"
 wait 600
-say == a direct conversation (expect conv=d:... conv_open=1)
+say == a direct conversation (expect conv=d:... conv_open=1; one pane: menu_btn=0)
 dump
 shot h04-conversation-options
 check conversation
 
-# the Options button opens the options of the conversation (a menu in a dialog)
-tap "Options"
+# Ctrl+O opens the same menu for the open conversation (a menu in a dialog)
+key ctrl-o
 wait 800
-say == the options (expect popup=menu)
+say == the menu (expect popup=menu)
 dump
-shot h05-options-dialog
-check options-dialog
+check options-dialog-keys
 key esc
 wait 300
 say == popup closed (expect popup=none)

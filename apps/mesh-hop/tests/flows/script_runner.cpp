@@ -20,6 +20,8 @@
  *   tap "label" last (the last label of that text: a table's key label comes before its button)
  *   tapkey "label"               a key of the on-screen keyboard (its labels first: the top layer)
  *   tapfield <n>                 the n-th text field shown (1: the first): the compose entry, the search words, a field of a dialog
+ *   tapicon                      the first button shown that has no text (an icon: the menu button of a conversation's page)
+ *   @panes1 <command>            the command only while Chats is one pane (@panes2: two panes; the state line's panes=)
  *   hold <x> <y> <ms> [shot]   hold "label" <ms> [shot]   drag <x1> <y1> <x2> <y2>
  *   bench <key> <n>   shot <name>   dump   sim <line>   say <text>
  *   fill                         the page bodies fill the width of the screen (P4: no 640 px stage any more; a failure otherwise)
@@ -323,6 +325,13 @@ int run_script(const std::string &file, const std::string &shot_dir)
         ++lineno;
         if (!line.empty() && line.back() == '\r') line.pop_back();
         if (line.empty() || line[0] == '#') continue;
+        // @panes1 / @panes2: a step for one layout of Chats only (one pane at 640x480 and 720x720, two on the wider screens)
+        if (line.rfind("@panes", 0) == 0 && line.size() > 7) {
+            Session *s = running_session();
+            const std::string want = line.substr(6, 1);
+            if (!s || state_value(s->app().debug_state(), "panes") != want) continue;
+            line = line.substr(line.find(' ') + 1);
+        }
         std::istringstream ss(line);
         std::string cmd;
         ss >> cmd;
@@ -405,6 +414,36 @@ int run_script(const std::string &file, const std::string &shot_dir)
                 continue;
             }
             const lv_area_t a = headless::visible_area(fields[static_cast<size_t>(n - 1)]);
+            const int x = (a.x1 + a.x2) / 2, y = (a.y1 + a.y2) / 2;
+            headless::platform_touch(true, x, y);
+            run_for(80);
+            headless::platform_touch(false, x, y);
+            run_for(80);
+        } else if (cmd == "tapicon") {
+            // the first visible button (lv_button) with no visible label inside: an icon button
+            lv_obj_t *found = nullptr;
+            std::function<bool(lv_obj_t *)> has_label = [&](lv_obj_t *o) {
+                if (lv_obj_check_type(o, &lv_label_class) && shown(o)) return true;
+                for (uint32_t i = 0; i < lv_obj_get_child_count(o); ++i)
+                    if (has_label(lv_obj_get_child(o, static_cast<int32_t>(i)))) return true;
+                return false;
+            };
+            std::function<void(lv_obj_t *)> walk = [&](lv_obj_t *o) {
+                if (found || !o || !shown(o)) return;
+                if (lv_obj_check_type(o, &lv_button_class)) {
+                    const lv_area_t a = headless::visible_area(o);
+                    if (a.x2 >= a.x1 && a.y2 >= a.y1 && !has_label(o)) found = o;
+                    return;
+                }
+                for (uint32_t i = 0; i < lv_obj_get_child_count(o); ++i) walk(lv_obj_get_child(o, static_cast<int32_t>(i)));
+            };
+            walk(lv_screen_active());
+            if (!found) {
+                std::fprintf(stderr, "script:%d: no icon button to tap\n", lineno);
+                ++failures;
+                continue;
+            }
+            const lv_area_t a = headless::visible_area(found);
             const int x = (a.x1 + a.x2) / 2, y = (a.y1 + a.y2) / 2;
             headless::platform_touch(true, x, y);
             run_for(80);

@@ -1,7 +1,8 @@
 # Simulator options: (default). Run it with chats_run.sh: the history of seed_chats.py (short and long messages, none read yet).
-# Mesh Hop P4: Chats at any size (run_flows.sh stage runs it at the five sizes): the conversations (one pane at 640x480: the list, then
-# the conversation as its own page; two panes on the other sizes), the tap rule, the conversation's bar (Options, Details), writing with
-# a keyboard, the on-screen keyboard without one (the compose view, the search, an editor, the Position box). `check` holds every page
+# Mesh Hop P4: Chats at any size (run_flows.sh sizes runs it at the five sizes): the conversations (one pane at 640x480: the list
+# with the menu button over it, then the conversation as its own page, no button there; two panes on the other sizes, both under the
+# button's row), the tap rule, the Chats menu (Search messages, Add channel, the selected conversation's options, Details; Ctrl+O, the
+# 3 s hold), writing with a keyboard, the on-screen keyboard without one (the compose view, the search, an editor, the Position box). `check` holds every page
 # to the shared layout checks (rows 7 mm, buttons 9 mm, the field above the on-screen keyboard and nothing to press under it, nothing
 # under the key hint line). The steps are the same at every size; where one pane and two differ the `say` lines say so.
 wait 4000
@@ -9,7 +10,7 @@ fill
 keyboard off
 key enter
 wait 1000
-say == Chats: CHANNELS and DIRECT, the last message and its time, the unread count in blue (expect tab=Chats panes=1 at 640x480, 2 elsewhere)
+say == Chats: the menu button at the right of the line under the title, the list right under it: CHANNELS and DIRECT, the last message and its time, the unread count in blue (expect tab=Chats menu_btn=1 panes=1 at 640x480, 2 elsewhere)
 dump
 shot c01-chats
 check chats
@@ -17,27 +18,65 @@ keyboard on
 say == with a keyboard: the key hint line at the bottom
 shot c01b-chats-keyboard
 check chats-keyboard
+say == two panes: PgUp scrolls the conversation at the right: our message heard back by 2 repeaters, its status whole
+@panes2 key pgup
+@panes2 key pgup
+@panes2 key pgup
+@panes2 shot c01c-heard-back
 
-# the tap rule: the first tap selects (two panes: the conversation shows at the right), a second tap on the selected row acts (one pane:
-# its page; two panes: the entry takes the keys, here the keyboard's)
+# the Chats menu with a channel selected (# Public, the first row): Search messages, Add channel (chevrons), then the channel's
+# options (dots); its title names the channel
+tapicon
+wait 700
+say == the menu, a channel selected (expect popup=menu popup_title='Options for # Public')
+expect text "Search messages"
+expect text "Add channel"
+expect text "Mute this channel"
+expect notext "Details"
+dump
+shot c01d-menu-channel
+check menu-channel
+key esc
+wait 400
+
+# the tap rule: the first tap selects (two panes: the conversation shows at the right), the menu acts on the selected row, a second
+# tap on the selected row acts (one pane: its page; two panes: the entry takes the keys, here the keyboard's)
 tap "Alice"
 wait 600
 say == Alice selected (expect conv=d:101112131415 conv_open=0)
 dump
 shot c02-alice-selected
 check alice-selected
+tapicon
+wait 700
+say == the menu, a direct chat selected: its options and Details (expect popup=menu popup_title='Options for Alice')
+expect text "Search messages"
+expect text "Mute this contact"
+dump
+shot c02b-menu-direct
+check menu-direct
+key down
+key down
+key down
+key down
+wait 300
+say == Down to the last entry: the menu scrolls where it is longer than its room, Details at its end (a chevron)
+expect text "Details"
+shot c02c-menu-direct-end
+key esc
+wait 400
 tap "Alice"
 wait 900
-say == Alice's conversation: short and long messages, ours with their state (expect conv_open=1 osk=down)
+say == Alice's conversation: short and long messages, ours with their state; one pane: no bar, no button, the messages from the line under the title down to the entry (expect conv_open=1 osk=down; one pane: menu_btn=0)
 dump
 shot c03-conversation
 check conversation
-expect text "Options"
-expect text "Details"
 
-say == the options of the conversation: a menu in a dialog (expect popup=menu)
-tap "Options"
+say == Ctrl+O: the same menu for the open conversation (expect popup=menu popup_title='Options for Alice')
+key ctrl-o
 wait 700
+expect text "Search messages"
+expect text "Mute this contact"
 dump
 shot c04-options
 check options
@@ -91,7 +130,7 @@ dump
 shot c10-sent-touch
 check sent-touch
 
-# the search from anywhere in Chats (Ctrl+F; the Search cell of the bar): its words take the keys, the on-screen keyboard comes
+# the search from anywhere in Chats (Ctrl+F; Search messages in the menu): its words take the keys, the on-screen keyboard comes
 key ctrl-f
 wait 900
 say == the search with the on-screen keyboard: only what fits above it (expect search_open=1 osk=up typing=search)
@@ -119,7 +158,9 @@ key esc
 wait 400
 key enter
 wait 800
-say == Add channel on the bar: a menu (expect popup=menu)
+say == Add channel in the menu: its own menu (expect popup=menu popup_title='Add a channel')
+tapicon
+wait 700
 tap "Add channel"
 wait 800
 dump
@@ -181,14 +222,14 @@ key esc
 wait 600
 expect osk off
 
-# back in Chats: a 3 s hold on a row opens its options (the cue fills over the list)
+# back in Chats: a 3 s hold on a row selects it and opens the menu (the cue fills over the list)
 key tab
 wait 900
 hold "# Public" 1700 c20-hold-progress
 wait 300
 hold "# Public" 3400 c21-hold-fired
 wait 600
-say == the options of the Public channel by the hold (expect popup=menu)
+say == the menu for the Public channel by the hold (expect popup=menu popup_title='Options for # Public' conv=c:0)
 dump
 check hold-options
 key esc
