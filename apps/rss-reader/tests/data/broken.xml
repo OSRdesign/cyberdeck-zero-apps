@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<rss version="2.0">
+<channel>
+<title>Broken & Proud</title>
+<link>https://broken.example.com/</link>
+<item>
+<title>Fine item</title>
+<link>https://broken.example.com/1</link>
+<description>Has a stray < sign and an &nbsp; entity &unknown; and AT&T</description>
+<pubDate>Mon, 12 Oct 2026 10:00:00 GMT</pubDate>
+</item>
+<item>
+<title>Mismatched <b>tags</i></title>
+<link>https://broken.example.com/2</link>
+<pubDate>garbage date</pubDate>
+</item>
+<item>
+<title>Truncated item
+<link>https://broken.example.com/3</link>
+<description>Cut here

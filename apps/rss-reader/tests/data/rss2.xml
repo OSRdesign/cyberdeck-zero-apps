@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/"
+     xmlns:media="http://search.yahoo.com/mrss/" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Example &amp; Sons News</title>
+    <link>https://news.example.com/</link>
+    <description>All the news &amp;amp; more</description>
+    <language>en-GB</language>
+    <atom:link href="https://news.example.com/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>First story: caf&#233; &amp; &#8220;quotes&#8221;</title>
+      <link>https://news.example.com/2026/10/first</link>
+      <guid isPermaLink="false">post-1001</guid>
+      <pubDate>Sat, 18 Oct 2026 15:10:05 +0200</pubDate>
+      <dc:creator><![CDATA[Jane Doe]]></dc:creator>
+      <description><![CDATA[<p>Short summary with <b>bold</b>.</p>]]></description>
+      <content:encoded><![CDATA[<h2>Heading</h2><p>Full text <a href="/about">link</a> and an image:</p><img src="/img/photo.jpg" alt="A photo" width="600"><img src="https://tracker.example.net/pixel.gif" width="1" height="1"><script>alert(1)</script>]]></content:encoded>
+      <enclosure url="https://cdn.example.com/cover.png" length="1234" type="image/png"/>
+      <media:content url="https://cdn.example.com/media1.jpg" medium="image"/>
+      <media:thumbnail url="https://cdn.example.com/thumb1.jpg"/>
+    </item>
+    <item>
+      <title>Second story</title>
+      <link>/2026/10/second</link>
+      <guid>https://news.example.com/2026/10/second</guid>
+      <pubDate>Fri, 17 Oct 2026 08:00:00 GMT</pubDate>
+      <author>editor@example.com (John Smith)</author>
+      <description>Plain &lt;em&gt;escaped&lt;/em&gt; description</description>
+      <enclosure url="https://cdn.example.com/podcast.mp3" length="99" type="audio/mpeg"/>
+    </item>
+    <item>
+      <title>No date, no guid</title>
+      <link>https://news.example.com/2026/10/nodate</link>
+      <description>Nothing about time.</description>
+    </item>
+  </channel>
+</rss>
