@@ -1,0 +1,82 @@
+# The storage cap (phase 3): with the saved articles at the cap (10 MB here, 10.2 MB of it used), saving one more is refused
+# with a plain message; then Download images = Off and a larger cap: an article never opened shows "Images are off" in its
+# placeholders (pictures already in the image cache still show) and is saved without its pictures, the notice says so.
+seed pin us-ars-technica
+seed refresh
+seed refresh_on_open off
+seed hint seen
+seed cap 10
+seed filler 10200
+wait 900
+key enter
+wait 400
+key enter
+wait 800
+key down
+key enter
+wait 1500
+expect state page reader
+expect state images RR
+key ctrl-o
+wait 400
+tap "Save for offline"
+wait 1500
+expect state popup info
+expect text "^Saved articles use 10 of 10 MB. Delete some or raise the limit in Settings."
+expect state is_saved 0
+shot 01-refused
+check refused
+key enter
+wait 300
+key esc
+wait 300
+key esc
+wait 300
+key esc
+wait 300
+key end
+key enter
+wait 500
+expect state page settings
+key down
+key down
+wait 200
+expect state settings_sel 3
+key enter
+wait 300
+expect text "Off"
+key down
+key down
+wait 200
+expect state settings_sel 7
+key enter
+wait 400
+expect state popup choice
+expect state popup_value "50 MB"
+key enter
+wait 300
+expect text "50 MB"
+shot 02-settings
+key esc
+wait 300
+key home
+key enter
+wait 500
+key enter
+wait 800
+key down
+key down
+key enter
+wait 1000
+expect state reader_idx 2
+expect state images OOOOOONN
+expect text "Images are off"
+shot 03-images-off
+check images-off
+key ctrl-o
+wait 400
+tap "Save for offline"
+wait 1000
+expect state is_saved 1
+expect text "Saved without images: they are off in Settings"
+shot 04-saved-text-only

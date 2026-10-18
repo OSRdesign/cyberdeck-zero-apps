@@ -132,6 +132,8 @@ build_cross() {
     rm -rf "$proj/main"
     mkdir -p "$proj/main/app" "$proj/main/common" "$proj/main/lvgl_ovr"
     cp -r "$APP/src/." "$proj/main/app/"
+    # vendored sources an app includes as ../../third_party/... from its src/ (a header-only library: not compiled by itself)
+    if [[ -d $APP/third_party ]]; then mkdir -p "$proj/main/third_party"; cp -r "$APP/third_party/." "$proj/main/third_party/"; fi
     cp "$COMMON"/*.hpp "$COMMON"/*.cpp "$proj/main/common/"
     cp "$GEN/cdk_build_info.h" "$proj/main/common/"
     cp "$LAUNCHER_TREE"/projects/APPLaunch/main/lvgl/lv_freetype* "$proj/main/lvgl_ovr/"

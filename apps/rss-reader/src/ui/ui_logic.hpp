@@ -142,8 +142,9 @@ struct FavRow {
     std::string right;        /* "5 new" or "" */
     bool unread = false;      /* the blue dot at the left, the name bold and white; else the name grey */
 };
-/* The group shown on a favorite's second line: the catalog topic ("Technology"), else the country of its catalog entry,
- * else the OPML folder, else the site's host ("korben.info"). */
+/* The group shown on a favorite's second line, one rule: a catalog feed shows its topic ("Technology", "General"; never
+ * its country), a feed added by its address shows its site's host ("korben.info", without "www."). A feed the catalog no
+ * longer knows shows the topic it was pinned with, else its host. */
 std::string favorite_group(const rssreader::Subscription &s, const rssreader::Catalog *catalog);
 FavRow favorite_row(const rssreader::Subscription &s, const rssreader::Catalog *catalog, std::int64_t now);
 
@@ -167,9 +168,10 @@ struct ArticleRow {
 };
 ArticleRow article_row(const rssreader::StoredArticle &a, bool saved, std::int64_t now);
 
-/* The options of an article of the list: Mark as read or Mark as unread, Mark all read, Refresh this feed, Article info. */
-enum class ArticleOption { MarkRead, MarkUnread, MarkAllRead, Refresh, Info };
-std::vector<ArticleOption> article_options(bool read);
+/* The options of an article of the list: Mark as read or Mark as unread, Save for offline or Remove from saved, Mark all
+ * read, Refresh this feed, Article info. */
+enum class ArticleOption { MarkRead, MarkUnread, Save, Unsave, MarkAllRead, Refresh, Info };
+std::vector<ArticleOption> article_options(bool read, bool saved = false);
 const char *article_option_label(ArticleOption o);
 /* The Article info box: title, author, date, link, size of the text, images. */
 std::string article_info(const rssreader::Article &a, const std::string &feed_name, std::int64_t now);
@@ -223,5 +225,57 @@ std::string block_text(const rssreader::Block &b);
 std::string reader_caption(const std::string &feed_name, const rssreader::Article &a, std::int64_t now);
 /* Up to max_blocks blocks are shown; the rest is cut ("The rest of this article is not shown."). */
 constexpr std::size_t kReaderMaxBlocks = 400;
+
+/* ------------------------------------------------------------------ images (phase 3) */
+
+/* At most this many images of an article are downloaded (the others show "Not loaded"). */
+constexpr std::size_t kMaxReaderImages = 6;
+
+/* The pictures that are not content: WordPress emoji, share and comment counters, feed flare, statistics pixels. */
+bool junk_image_url(const std::string &url);
+
+/* An image the reader shows: the image blocks of the text in their order (junk left out), or, when the text has none,
+ * the first image of the feed's own media (an enclosure, media:content or media:thumbnail) shown under the title: the
+ * "lead" (block -1). `fetch`: one of the first kMaxReaderImages different addresses. */
+struct ArticleImage {
+    std::string url, alt;
+    int block = -1;              /* index in the blocks, -1 for the lead image */
+    bool fetch = true;
+};
+std::vector<ArticleImage> article_images(const std::vector<rssreader::Block> &blocks, const rssreader::Article &a,
+                                         std::size_t max_fetch = kMaxReaderImages);
+
+/* Where an image of the reader is. */
+enum class ImageState { Loading, Downloading, Ready, Unavailable, TooLarge, Unsupported, Off, NotLoaded, Hidden };
+/* The grey line of a placeholder: "Loading...", "Downloading...", "Image unavailable", "Too large to show", "Format not
+ * supported", "Images are off", "Not loaded"; "" for Ready and Hidden. */
+std::string image_caption(ImageState s);
+/* One letter per state for the scripted tests: L D R U T S O N H. */
+char image_state_letter(ImageState s);
+/* The image nearest to the middle of the view (top .. top + height), among those at least half in view: its index in
+ * `tiles` (top and bottom of each, in the same coordinates; a tile with bottom <= top is not shown), or -1. */
+int nearest_image(const std::vector<std::pair<int, int>> &tiles, int view_top, int view_h);
+/* The full-screen view's line: "Esc or tap to close  ·  1 / 2". */
+std::string viewer_caption(int index, int count);
+
+/* ------------------------------------------------------------------ saved articles (phase 3) */
+
+/* The refusal when the cap would be passed: "Saved articles use 198 of 200 MB. Delete some or raise the limit in Settings." */
+std::string save_refusal_text(std::uint64_t used, int cap_mb);
+/* What a save did: "Saved for offline  ·  1.2 MB", "Saved without images: they are off in Settings", "Saved for offline,
+ * 1 image could not be downloaded". */
+std::string save_result_text(std::uint64_t bytes, int images_saved, int images_failed, bool images_off);
+/* A saved article's second line: "Ars Technica  ·  saved 2 h  ·  1.2 MB". */
+std::string saved_row_line2(const rssreader::SavedSummary &s, std::int64_t now);
+/* The line at the bottom of Saved articles: "3 articles, 4.2 MB of 200 MB". */
+std::string saved_footer(std::size_t count, std::uint64_t bytes, int cap_mb);
+/* The options of a saved article (Saved articles): Remove from saved, Article info. */
+enum class SavedOption { Remove, Info };
+std::vector<SavedOption> saved_options();
+const char *saved_option_label(SavedOption o);
+/* The first-run hint under the titles until the options were opened once. */
+std::string options_hint();
+/* Settings > Clear image cache: its value, "3.4 MB" ("empty" when nothing is cached). */
+std::string image_cache_text(std::uint64_t bytes);
 
 } // namespace rssui

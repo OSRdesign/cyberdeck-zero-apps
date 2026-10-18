@@ -10,8 +10,9 @@ feed content only: the app fetches the feeds, never the web pages behind them (t
 page fetcher would plug in). A native app (kind A of the [guidelines](../../docs/APP-GUIDELINES.md)): its own screens,
 lists and forms on the launcher's `cp0_lvgl`.
 
-**Status: phase 2 of 3.** Phase 1: the core library (feeds, catalog, store, refresh, OPML). Phase 2 (this version): the app,
-every page and a minimal reader. Phase 3: the full reader (images, a full-screen image view) and Save for offline.
+**Status: phase 3 of 3** (still a draft: not in the registry). Phase 1: the core library (feeds, catalog, store, refresh,
+OPML). Phase 2: the app, every page and a minimal reader. Phase 3 (this version): the images in the reader, the full-screen
+image, Save for offline and the Saved articles page.
 
 ## Screenshots
 
@@ -28,13 +29,18 @@ fills while you hold), or press **Ctrl+O** (the launcher's pointer navigation gi
 | Page | What |
 |---|---|
 | Home | Favorites (the count of new articles in blue), Browse feeds, Saved articles (their count), Add a feed, Settings. Esc asks "Quit RSS Reader?" |
-| Favorites | the Refresh bar ("Refresh all", or "Stop" while it runs; under it "Updating 3/6..." or "Updated 2 min ago"), then your feeds in your order: a blue dot and a bold name while a feed has unread articles, "N new", the topic (or the country) and the age of its newest article; a feed that could not be updated says why in amber. Options: Move up, Move down, Unpin (asked first), Mark all read, Refresh this feed, Details. With **Refresh when opening** (Settings) the page updates every feed as it opens (at most every 10 minutes); leaving the page or Stop cancels |
-| Articles | a feed's articles, newest first: unread ones with the blue dot and a bright title, read ones grey; the age; "saved" in blue for a saved one. Options: Mark as read / unread, Mark all read, Refresh this feed, Article info. A feed never fetched (just pinned or imported) is fetched when it opens |
-| Reader | the article's title, the source and the date in the grey line, then its text: headings, paragraphs, lists, quotes, preformatted text; an image shows as "[image: its description]" in this version; the article's link at the end. The column takes the whole width of the screen. Opening an article marks it read. Options: Text size (Small, Medium, Large), Mark as unread, Article info |
+| Favorites | the Refresh bar ("Refresh all", or "Stop" while it runs; under it "Updating 3/6..." or "Updated 2 min ago"), then your feeds in your order: a blue dot and a bold name while a feed has unread articles, "N new", the topic (or, for a feed added by its address, its site) and the age of its newest article; a feed that could not be updated says why in amber. Options: Move up, Move down, Unpin (asked first), Mark all read, Refresh this feed, Details. With **Refresh when opening** (Settings) the page updates every feed as it opens (at most every 10 minutes); leaving the page or Stop cancels |
+| Articles | a feed's articles, newest first: unread ones with the blue dot and a bright title, read ones grey; the age; "saved" in blue for a saved one. Options: Mark as read / unread, Save for offline / Remove from saved, Mark all read, Refresh this feed, Article info. A feed never fetched (just pinned or imported) is fetched when it opens |
+| Reader | the article's title, the source and the date in the grey line, then its text: headings, paragraphs, lists, quotes, preformatted text, and its pictures where they stand (an article whose text has none shows the feed's own picture under the title); the article's link at the end. The column takes the whole width of the screen. Opening an article marks it read. The first six pictures of an article are downloaded (Download images = Always) and shown as thumbnails (the column's width, a third of the screen's height at most); until then, or when one cannot be shown, a tile with its description says why: Downloading..., Image unavailable, Too large to show, Format not supported, Images are off, Not loaded. A tap on a picture, or Enter, shows it full screen. Options: Text size (Small, Medium, Large), Save for offline / Remove from saved (asked first), Mark as unread, Article info |
+| Full-screen picture | black, the picture fitted to the screen, no header; "Esc or tap to close · 1 / 2" at the bottom fades after 2 s and comes back with any key. Esc or a tap closes; Left / Right or a swipe show the previous / next picture of the article; no zoom. Works offline for a saved article |
 | Browse feeds | the countries (International first, the languages of each), a country's topics, a topic's feeds with what they carry (full text or a summary) and the favorite toggle at the end: a blue dot when pinned, an empty ring when not; a tap on the selected feed pins or unpins it. The search field above the countries finds a feed by its name, its site or its topic in the whole catalog. Podcasts are not shown. The title follows the path ("Browse > France > Technology", shortened in the middle when it would reach Esc) |
-| Saved articles | the articles saved for offline reading (saving comes in phase 3), newest first; one opens in the reader |
+| Saved articles | the articles saved for offline reading, newest saved first: the title, the feed, when it was saved, its size; a line at the bottom: "3 articles, 4.2 MB of 200 MB". The chevron opens the saved copy (text and pictures, without the network). Options: Remove from saved (asked first), Article info. Saving keeps the article and its pictures (2 MB each at most) until removed: a refresh of its feed or unpinning the feed does not touch it. Saving is refused when it would pass the storage cap: "Saved articles use 198 of 200 MB. Delete some or raise the limit in Settings." With Download images = Off only the text is saved, and the notice says so |
 | Add a feed | an address (a site, `example.com`, or a feed's own address), Find feed (Enter): "Found: title · N articles" with Pin and Cancel, or why nothing was found: no network, timed out, not a web address, no feed on that page |
-| Settings | Text size, Refresh when opening (On / Off), Download images (Always / Off: kept for phase 3), Storage used and Storage cap for saved articles (50, 100, 200 or 500 MB), Clear read history (asked first), Export favorites (to `~/rss-reader-favorites.opml`), Import favorites (an `.opml` file of your home folder: what is missing is added), About (version, catalog, launcher pin, data folder) |
+| Settings | Text size, Refresh when opening (On / Off), Download images (Always / Off: Off downloads nothing, pictures already kept still show), Clear image cache (its size), Storage used and Storage cap for saved articles (50, 100, 200 or 500 MB), Clear read history (asked first), Export favorites (to `~/rss-reader-favorites.opml`), Import favorites (an `.opml` file of your home folder: what is missing is added), About (version, catalog, launcher pin, data folder) |
+
+Until the options were opened once, a grey line under the title of the reader and of the article lists says "Hold or press
+Ctrl+O for options". Favorites: the second line of a feed is its topic and the age of its newest article ("Technology · 1 h";
+"General" for a general feed, never its country), or for a feed added by its address its site ("korben.info · 1 h").
 
 Rows show what a tap does (the [row kinds](../../docs/APP-GUIDELINES.md#row-kinds-what-can-be-tapped)): a chevron opens
 something or changes a value, a white dot acts right there, a grey value without a marker is a read-out. The blue dots are
@@ -51,6 +57,8 @@ states: unread (at the left of a row), pinned (the favorite toggle), the value i
 | Options of a row or of the article | Ctrl+O | hold 3 s on the row or the text |
 | Refresh all (Favorites) | Ctrl+R or F5 | the Refresh bar |
 | Scroll an article | Up / Down, Page Up / Page Down, Space, Home / End; the wheel | drag |
+| A picture of the article | a ring marks the picture nearest the middle of the screen (it moves as the text scrolls); Enter (or a pointer click) shows it full screen; Tab / Shift+Tab bring the next / previous picture to the middle | a tap on it |
+| The full-screen picture | Left / Right the previous / next one, Esc closes, any other key shows the line again | a swipe; a tap closes |
 | Previous / next article | Left / Right | Options, or back to the list |
 | Type (search, an address) | the keyboard; letters at Browse start the search | a tap on the field: the launcher's on-screen keyboard while no keyboard is connected |
 | A dialog | Left / Right (the choices), Up / Down (the rows), Enter, Esc | the arrows, the rows, the buttons |
@@ -74,16 +82,19 @@ Settings > Apps once it is published. By hand: `sudo dpkg -i rss-reader_0.1.0_ar
 
 | Path | What |
 |---|---|
-| `~/.local/share/rss-reader/` (or `$RSSREADER_DATA`) | `subscriptions.json` (your favourites), `settings.json`, `cache/` (the articles of each feed), `read/` (what you read), `saved/` (saved articles); the formats are documented in `src/core/store.hpp` |
+| `~/.local/share/rss-reader/` (or `$RSSREADER_DATA`) | `subscriptions.json` (your favourites), `settings.json`, `cache/` (the articles of each feed), `read/` (what you read), `saved/` (saved articles with their pictures, under the storage cap); the formats are documented in `src/core/store.hpp` |
+| `~/.cache/rss-reader/images/` (or `$RSSREADER_CACHE`) | the downloaded pictures, 50 MB at most (the least recently used go first); Settings > Clear image cache empties it ([docs/IMAGES.md](docs/IMAGES.md)) |
 | `~/rss-reader-favorites.opml` | written by Settings > Export favorites |
 
-Reset: close the app and remove `~/.local/share/rss-reader`.
+Reset: close the app and remove `~/.local/share/rss-reader` and `~/.cache/rss-reader`.
 
 ## Known limits (this version)
 
-- Images are placeholders; there is no Save for offline yet (phase 3). The saved-articles list and storage settings exist for
-  phase 3.
-- Articles show what the feed carries: a feed that gives only a summary shows only the summary.
+- Pictures: JPEG (baseline and progressive), PNG, GIF (the first frame only: GIFs do not move) and BMP, decoded by
+  stb_image (see [docs/IMAGES.md](docs/IMAGES.md)). WebP, SVG and AVIF show "Format not supported"; a JPEG over 16 MP
+  (progressive: 8 MP) or a PNG, GIF or BMP over 4.2 MP shows "Too large to show"; a photo turned by its EXIF tag is shown
+  as stored, not turned; at most six pictures per article, 2 MB each. No zoom in the full-screen view.
+- Articles show what the feed carries: a feed that gives only a summary shows only the summary (and only its pictures).
 - Article titles are one line in the lists, cut with dots.
 - The lists and the key bridge are copies of Mesh Hop's (a shared one in `apps/_common` is a follow-up).
 - Untested on a board so far: see [tests/BOARD-TESTS.md](tests/BOARD-TESTS.md).
@@ -93,12 +104,14 @@ Reset: close the app and remove `~/.local/share/rss-reader`.
 | Path | What |
 |---|---|
 | `src/core/` | plain C++17, namespace `rssreader`, no LVGL: the XML and feed parsers (RSS 2.0 / 0.9x, RDF, Atom), HTML to text blocks, feed discovery, HTTP through the `curl` command, the catalog, the store, the refresh, OPML (phase 1; see the headers) |
-| `src/ui/` | namespace `rssui`: `ui_logic` (the rows' texts, the rules of the dialogs, the 3 s hold, the title that fits; no LVGL), `keys` and `key_bridge` (the keys), `jobs` (the worker threads), `row_list` (the virtual list), `rss_app*` and `page_*` (the pages), `app_spec` (the `cdk::AppSpec`, minimum 640x480) |
+| `src/ui/` | namespace `rssui`: `ui_logic` (the rows' texts, the rules of the dialogs, the 3 s hold, the title that fits, which pictures an article shows; no LVGL), `keys` and `key_bridge` (the keys), `jobs` (the worker threads), `row_list` (the virtual list), `image_codecs.c` and `image_decode` (stb_image, `third_party/stb`, off the UI thread, scaled to the thumbnail), `rss_app*` and `page_*` (the pages; `page_viewer` the full-screen picture), `app_spec` (the `cdk::AppSpec`, minimum 640x480) |
 | `data/catalog.json` | 269 feeds (see `data/CATALOG-SOURCES.md`); the package installs a copy in `/usr/share/APPLaunch/share/rss-reader/` |
-| `tests/unit/` | host tests of the core (about 9200 checks) and of the UI logic and the package files (`ui_tests.cpp`, about 470) |
-| `tests/flows/` | the scripted runner (`rss-reader-script`: a fake network answering from `tests/data/ui` by `routes.txt`, a fixed clock, a seeded store) and nine flows |
+| `tests/unit/` | host tests of the core (about 10000 checks, with the image headers, the image cache and the read marks made during a refresh), of the UI logic and the package files (`ui_tests.cpp`, about 520), and of the decoding (`img_tests.cpp`: `rss-reader-imgtest`, with LVGL, a mutation test of the decoders; `--bench` measures one picture) |
+| `tests/flows/` | the scripted runner (`rss-reader-script`: a fake network answering from `tests/data/ui` by `routes.txt`, pictures in `tests/data/ui/img`, a fixed clock, a seeded store) and thirteen flows |
 | `tests/scenes/` | scenes of the shared headless harness (Home, Browse, Add a feed with the on-screen keyboard, Settings, the quit question, the notice under 640x480, a start without the launcher) |
 | `tools/fetch_smoke.cpp` | optional: fetches three real feeds with the real curl client (not part of the tests) |
+| `tools/make_img_fixtures.py` | makes the picture fixtures and the large pictures of the measurements (Python with Pillow; not part of the tests) |
+| `docs/IMAGES.md` | the decoders of the pinned launcher, what the app uses, the memory and time measured |
 
 ## Build and test
 
@@ -108,7 +121,7 @@ In WSL, from Windows (the launcher checkout and its build tree as for every app:
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/rss-reader/build.sh all --strict   # the arm64 binary and the host build
 wsl -e sh .../apps/rss-reader/build.sh test      # unit tests only (core + UI logic)
 wsl -e sh .../apps/rss-reader/build.sh asan      # the same under AddressSanitizer + UBSan
-wsl -e sh .../apps/rss-reader/build.sh sim       # the nine flows against the fake network at 640x480 (or: sim 800x480)
+wsl -e sh .../apps/rss-reader/build.sh sim       # the thirteen flows against the fake network at 640x480 (or: sim 800x480)
 wsl -e sh .../apps/rss-reader/build.sh ui        # the flows at the five sizes (about 3 minutes, the sizes side by side)
 python tools/make_registry.py --only rss-reader --out <a folder outside packages/>   # the .deb (app.json is a draft)
 ```
@@ -122,12 +135,17 @@ board protocol is [tests/BOARD-TESTS.md](tests/BOARD-TESTS.md).
 
 Our code: MIT, 2026 OSRdesign. The binary links the launcher's `cp0_lvgl` runtime and LVGL (MIT); the fonts are the
 launcher's, read at run time (Montserrat and Noto Sans CJK: SIL OFL 1.1; DejaVu: the Bitstream Vera / DejaVu licence).
-HTTP goes through the `curl` program (curl licence). The catalog lists the publishers' own feed addresses
+HTTP goes through the `curl` program (curl licence). Pictures are decoded by stb_image v2.30 (Sean Barrett and the stb contributors,
+public domain or MIT at your choice; `third_party/stb`, one header compiled into the binary). The catalog lists the publishers' own feed addresses
 ([CATALOG-SOURCES.md](data/CATALOG-SOURCES.md)); the feeds' content belongs to their publishers and is only fetched and
 shown on the device. Details in `root/usr/share/doc/rss-reader/copyright`.
 
 ## Changes
 
+- 0.1.0 (phase 3): the pictures in the reader (downloaded on worker threads into a 50 MB image cache, decoded off the UI
+  thread, placeholders that say why), the full-screen picture, Save for offline with the pictures and the Saved articles
+  page (sizes, the use of the cap, remove, info), Settings > Clear image cache; the first-run hint; the Favorites' second
+  line is the topic (or the site); a hairline under the lists' top; read marks made during a refresh are kept by the store.
 - 0.1.0 (phase 2): the app: Home, Favorites with the background refresh, the article list, a minimal reader, Browse with
   the search, Add a feed, Settings with OPML export and import, the saved-articles list; options by a 3 s hold or Ctrl+O.
 - phase 1: the core library, the catalog and their host tests.

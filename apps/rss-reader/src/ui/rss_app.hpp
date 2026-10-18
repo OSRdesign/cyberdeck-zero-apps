@@ -7,11 +7,14 @@
  *
  *   Home        Favorites (N new), Browse feeds, Saved articles (count), Add a feed, Settings; Esc asks "Quit RSS Reader?"
  *   Favorites   the Refresh bar (Refresh all / Stop, the status), the pinned feeds (unread dot, "N new", chevron)
- *   Articles    the articles of a feed (unread dot, age, "saved"); options: read / unread, mark all read, refresh, info
- *   Reader      the article's text (minimal reader: headings, paragraphs, lists, quotes, image placeholders);
- *               Left / Right the previous / next article; options: text size, article info
+ *   Articles    the articles of a feed (unread dot, age, "saved"); options: read / unread, save for offline / remove from
+ *               saved, mark all read, refresh, info
+ *   Reader      the article's text (headings, paragraphs, lists, quotes) and its images (downloaded on worker threads into
+ *               the image cache, decoded off the UI thread: image_decode.hpp); a tap or Enter on an image opens it full
+ *               screen (page_viewer.cpp); Left / Right the previous / next article; options: text size, save / remove,
+ *               mark as unread, article info
  *   Browse      country > topic > feed, the favorite toggle at the end of a feed's row; a search over the whole catalog
- *   Saved       the saved articles (store.list_saved; saving itself comes in phase 3)
+ *   Saved       the saved articles, newest saved first, with their size and the use of the cap; options: remove, info
  *   Add a feed  an address, Find feed, Pin
  *   Settings    text size, refresh when opening, images, storage, clear read history, export / import OPML, about
  *
@@ -22,6 +25,8 @@
 
 #include "catalog.hpp"
 #include "fetch.hpp"
+#include "image_cache.hpp"
+#include "image_decode.hpp"
 #include "jobs.hpp"
 #include "refresh.hpp"
 #include "row_list.hpp"
@@ -64,6 +69,10 @@ public:
     PageId page() const { return stack_.back(); }
     std::string debug_state() const;
     lv_obj_t *body_root() const { return body_; }
+    lv_obj_t *image_tile(int index) const
+    {
+        return index >= 0 && index < static_cast<int>(rimgs_.size()) ? rimgs_[static_cast<std::size_t>(index)].tile : nullptr;
+    }
 
     /* LVGL callbacks */
     void row_clicked(RowList *list, int index);
@@ -71,6 +80,8 @@ public:
     void button_clicked(int tag);
     void popup_pick(int index);
     void reader_pressed(int what, int x, int y);
+    void image_tapped(int index);
+    void viewer_pressed(int what, int x, int y);
 
 private:
     struct Geo {
@@ -167,6 +178,15 @@ private:
     void render_saved();
     void key_saved(const KeyEvent &e);
     void saved_activate(int index);
+    void saved_row_options(int index);
+    /* the first-run hint ("Hold or press Ctrl+O for options") above a list, and the hairline the rows scroll under */
+    void place_list(RowList &list, lv_obj_t *hint, lv_obj_t *rule, int top, int bottom);
+    bool hint_shown();
+    void options_opened();                 /* the hint goes for good (settings.json options_seen) */
+
+    /* ---- Save for offline (pages_lists.cpp) */
+    void save_offline(const rssreader::Article &a, const std::string &feed_id, const std::string &feed_name);
+    void ask_remove_saved(const std::string &id, const std::string &title, std::function<void()> after);
 
     /* ---- the reader (page_reader.cpp) */
     void build_reader();
@@ -177,6 +197,42 @@ private:
     void reader_scroll(int dy);
     void reader_options();
     int reader_px() const;
+
+    /* ---- the images of the reader (page_reader.cpp) */
+    struct ReaderImage {
+        ArticleImage src;
+        ImageState state = ImageState::Loading;
+        std::shared_ptr<DecodedImage> pix;        /* the thumbnail (RGB565), shared with nothing once posted */
+        lv_image_dsc_t dsc{};
+        lv_obj_t *tile = nullptr;
+    };
+    void reader_images_stop();             /* cancels the article's image jobs, frees every picture */
+    void start_reader_images();
+    void on_image(unsigned seq, int index, ImageState st, std::shared_ptr<DecodedImage> pix);
+    lv_obj_t *make_image_tile(lv_obj_t *parent, int index);
+    void style_image_tile(int index);
+    void update_image_focus();
+    void focus_image_step(int dir);
+    int thumb_max_w() const;
+    int thumb_max_h() const;
+    /* The bytes of an image without the network: the saved copy of the article (saved_id, file), else the image cache. Any
+     * thread. */
+    static bool local_image(rssreader::Store *store, rssreader::ImageCache *cache, const std::string &saved_id, const std::string &file,
+                            const std::string &url, std::string &bytes, std::string &type);
+    /* Downloads an image (fetch_image: 2 MB at most, 15 s) into the image cache. Any thread. */
+    static bool fetch_to_cache(rssreader::HttpClient *http, rssreader::ImageCache *cache, const std::string &url, const std::atomic<bool> *cancel,
+                               std::string &bytes, std::string &type, rssreader::FetchError &error);
+
+    /* ---- the full-screen image (page_viewer.cpp) */
+    void build_viewer();
+    void open_viewer(int index);
+    void close_viewer();
+    void viewer_show(int index);
+    void viewer_step(int dir);
+    void viewer_key(const KeyEvent &e);
+    void viewer_tick(std::uint64_t now);
+    bool viewer_open() const { return viewer_idx_ >= 0; }
+    std::vector<int> viewer_list() const;  /* the images that can be shown full screen (Ready), in their order */
 
     /* ---- Browse (page_browse.cpp) */
     void build_browse();
@@ -286,10 +342,10 @@ private:
     int refresh_failed_ = 0, refresh_new_ = 0;
     bool refresh_quiet_ = false;          /* a feed just pinned: no notice of its first update */
     std::int64_t last_auto_refresh_ = 0;
-    std::set<std::string> read_marks_;     /* "feed\narticle" read in this session: re-applied after a refresh of that feed */
 
     /* Articles */
     RowList art_list_;
+    lv_obj_t *art_hint_ = nullptr, *art_rule_ = nullptr, *fav_rule_ = nullptr;
     rssreader::Subscription art_feed_;
     std::shared_ptr<std::vector<rssreader::StoredArticle>> arts_ = std::make_shared<std::vector<rssreader::StoredArticle>>();
     bool arts_loading_ = false;
@@ -302,14 +358,38 @@ private:
     RowList saved_list_;
     std::vector<rssreader::SavedSummary> saved_;
     int saved_sel_ = 0;
+    lv_obj_t *saved_hint_ = nullptr, *saved_rule_ = nullptr, *saved_footer_ = nullptr;
+    int saved_footer_h_ = 0;
+    Jobs::Ptr save_job_;
+    std::string saving_id_;
+    int hint_seen_ = -1;                   /* settings.options_seen, read once (-1: not yet) */
 
     /* the reader */
     lv_obj_t *reader_ = nullptr;
     ReaderSource reader_src_;
     rssreader::Article reader_art_;        /* the article shown */
-    std::string reader_feed_name_;
+    std::string reader_feed_name_, reader_feed_id_;
     int reader_idx_ = -1;
     int reader_built_px_ = 0;
+    std::string reader_saved_id_;          /* the article has a saved copy: its images come from there */
+    std::map<std::string, std::string> reader_saved_files_;   /* image URL -> file of the saved copy */
+    rssreader::ImageCache image_cache_{rssreader::ImageCache::default_dir()};
+    std::vector<ReaderImage> rimgs_;
+    std::vector<Jobs::Ptr> img_jobs_;
+    unsigned img_seq_ = 0;                 /* the article's generation: results for an older one are dropped */
+    int img_focus_ = -1;                   /* the image the keys act on (the ring), -1 none */
+    bool reader_keys_ = false;             /* the last input of the reader was a key: the ring shows */
+
+    /* the full-screen image */
+    lv_obj_t *viewer_ = nullptr, *viewer_img_ = nullptr, *viewer_cap_ = nullptr;
+    int viewer_idx_ = -1;                  /* the index in rimgs_ shown, -1 closed */
+    std::shared_ptr<DecodedImage> viewer_pix_;   /* the one full-size decode alive */
+    lv_image_dsc_t viewer_dsc_{};
+    Jobs::Ptr viewer_job_;
+    unsigned viewer_seq_ = 0;
+    std::uint64_t viewer_cap_ms_ = 0;
+    int viewer_px_ = 0, viewer_py_ = 0;
+    bool viewer_down_ = false;
 
     /* Browse */
     enum class BrowseLevel { Countries, Topics, Feeds };

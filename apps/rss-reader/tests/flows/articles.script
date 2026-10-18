@@ -1,6 +1,7 @@
 # The article list of a feed: unread articles with the blue dot and a bright title, read ones grey without a dot, the age
 # under the title and "saved" in the accent for a saved one; the options by a 3 s hold or Ctrl+O: Mark as read / unread,
-# Mark all read, Refresh this feed, Article info.
+# Save for offline / Remove from saved, Mark all read, Refresh this feed, Article info (five rows: the dialog scrolls at
+# 640x480, so the last rows are reached by the keys). The first-run hint above the list until the options are opened.
 seed pin us-ars-technica
 seed refresh
 seed read us-ars-technica 4
@@ -14,17 +15,20 @@ wait 800
 expect state page articles
 expect state arts 12
 expect text "8 unread  ·  12 articles"
+expect text "Hold or press Ctrl+O for options"
 shot 01-articles
 check articles
 hold "^Your phone charger" 3400
 wait 400
 expect state popup menu
 expect text "Mark as read"
+expect text "Save for offline"
 shot 02-options
 check article-options
 tap "Mark as read"
 wait 400
 expect text "7 unread  ·  12 articles"
+expect notext "Hold or press Ctrl+O for options"
 shot 03-marked-read
 key ctrl-o
 wait 400
@@ -52,7 +56,9 @@ expect text "0 unread  ·  12 articles"
 shot 05-all-read
 key ctrl-o
 wait 400
-tap "Refresh this feed"
+key end
+key up
+key enter
 wait 1200
 shot 06-refreshed
 key end

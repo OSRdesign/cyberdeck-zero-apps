@@ -14,14 +14,16 @@
  *
  * Script (one command per line, # starts a comment; "quoted words"):
  *   seed pin <catalog id> | seed refresh | seed read <feed id> <n oldest> | seed save <feed id> <index> | seed file <fixture> <name in HOME>
- *                         | seed text_size small|medium|large | seed refresh_on_open on|off
+ *                         | seed text_size small|medium|large | seed refresh_on_open on|off | seed images always|off | seed cap <MB>
+ *                         | seed filler <KB> (a saved article of that size) | seed hint seen (the options were opened before)
  *                         run before the app starts, in the order written (the store is seeded through the core's API)
  *   (a label: its exact text, or ^ and the start of it)
- *   wait <ms>   key <name>   type <text>   tap "label" [last]   tapat <fx> <fy>   tapfield <n>   tapkey "label"
+ *   wait <ms>   key <name>   type <text>   tap "label" [last]   tapat <fx> <fy>   tapfield <n>   tapkey "label"   tapimage <n>
  *   hold "label" <ms> [shot]   holdat <fx> <fy> <ms> [shot]   drag <fx1> <fy1> <fx2> <fy2>   (fractions of the screen)
  *   net online | offline | slow <ms>      the fake network: answers / every request fails with "no network" / each answer late
  *   keyboard on|off             input.state says a keyboard is there (no on-screen keyboard) or not
- *   shot <name>   check <name>   dump   mark   say <text>
+ *   shot <name>   check <name> [fullscreen]   dump   mark   say <text>   (fullscreen: the header rule is left out, for the
+ *                         full-screen image that covers the header on purpose)
  *   expect text "T" | notext "T" | osk on|off | quit | noquit | state KEY VALUE | same KEY | changed KEY
  *   key names: esc enter tab backtab up down left right pgup pgdn home end bksp del space, ctrl-<letter>
  */
@@ -151,7 +153,12 @@ public:
         }
         r.status = 200;
         const std::string ext = target.substr(target.rfind('.') + 1);
-        r.content_type = ext == "html" ? "text/html" : ext == "atom" ? "application/atom+xml" : "application/rss+xml";
+        r.content_type = ext == "html" ? "text/html" : ext == "atom" ? "application/atom+xml" : ext == "png" ? "image/png"
+                         : ext == "jpg" ? "image/jpeg" : ext == "gif" ? "image/gif" : ext == "webp" ? "image/webp" : "application/rss+xml";
+        if (r.body.size() > req.max_bytes) {
+            r.error = rssreader::FetchError::TooLarge;
+            r.body.clear();
+        }
         return r;
     }
     int requests() const { return requests_; }
@@ -436,6 +443,28 @@ int seed(const std::vector<std::string> &lines)
             rssreader::Settings s = store.settings();
             s.refresh_on_open = w[2] == "on";
             ok = store.set_settings(s);
+        } else if (what == "images" && w.size() > 2) {
+            rssreader::Settings s = store.settings();
+            s.image_download = w[2] == "off" ? rssreader::ImageDownload::Off : rssreader::ImageDownload::Always;
+            ok = store.set_settings(s);
+        } else if (what == "cap" && w.size() > 2) {
+            rssreader::Settings s = store.settings();
+            s.storage_cap_mb = std::atoi(w[2].c_str());
+            ok = store.set_settings(s);
+        } else if (what == "hint" && w.size() > 2) {
+            rssreader::Settings s = store.settings();
+            s.options_seen = w[2] == "seen";
+            ok = store.set_settings(s);
+        } else if (what == "filler" && w.size() > 2) {       // a saved article of about that many KB (its "image" is filler bytes)
+            rssreader::Article a;
+            a.id = "filler0000000000";
+            a.title = "An old saved article that fills the storage";
+            a.summary_html = "<p>Filler.</p>";
+            rssreader::SavedImage im;
+            im.url = "https://example.com/filler.jpg";
+            im.content_type = "image/jpeg";
+            im.bytes.assign(static_cast<std::size_t>(std::atoi(w[2].c_str())) * 1024, 'x');
+            ok = store.save_article(a, "us-ars-technica", "Ars Technica", {im}, now_epoch() - 86400) == rssreader::StoreError::Ok;
         } else {
             ok = false;
         }
@@ -511,6 +540,17 @@ int run_script(const std::vector<std::string> &lines, const std::string &shot_di
                 continue;
             }
             const lv_area_t a = headless::visible_area(headless::clickable_of(label));
+            tap_screen((a.x1 + a.x2) / 2, (a.y1 + a.y2) / 2);
+        } else if (cmd == "tapimage") {                  // the n-th image tile of the reader (0 first)
+            int n = 0;
+            ss >> n;
+            lv_obj_t *t = session ? session->app().image_tile(n) : nullptr;
+            const lv_area_t a = t ? headless::visible_area(t) : lv_area_t{0, 0, -1, -1};
+            if (!t || a.x2 < a.x1 || a.y2 < a.y1) {
+                std::printf("script:%d: FAIL no image %d in view to tap\n", lineno, n);
+                ++failures;
+                continue;
+            }
             tap_screen((a.x1 + a.x2) / 2, (a.y1 + a.y2) / 2);
         } else if (cmd == "tapat") {
             double fx = 0, fy = 0;
@@ -611,10 +651,19 @@ int run_script(const std::vector<std::string> &lines, const std::string &shot_di
             std::getline(ss, text);
             std::printf("%s\n", text.c_str() + (text.empty() ? 0 : 1));
         } else if (cmd == "check") {
-            std::string name;
-            ss >> name;
+            std::string name, mode;
+            ss >> name >> mode;
             headless::run_for(250);
-            const headless::CheckResult r = headless::check_layout(!session);
+            headless::CheckResult r = headless::check_layout(!session);
+            if (mode == "fullscreen") {
+                // the full-screen image covers the header on purpose (the design: no header there); every other rule holds
+                std::vector<std::string> kept;
+                for (const std::string &f : r.failures)
+                    if (f.rfind("header: ", 0) != 0) kept.push_back(f);
+                    else std::printf("check %s note (full-screen layer) %s\n", name.c_str(), f.c_str());
+                r.failures = kept;
+                r.notes.push_back("full-screen layer: the header rule does not apply");
+            }
             for (const std::string &f : r.failures) std::printf("check %s FAIL %s\n", name.c_str(), f.c_str());
             ShellStats sh;
             if (session) {

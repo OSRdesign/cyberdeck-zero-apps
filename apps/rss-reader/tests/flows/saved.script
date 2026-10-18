@@ -1,5 +1,5 @@
-# The saved articles (saving itself comes in phase 3; the store holds two here): the list, then one opened in the reader;
-# Left / Right walk the saved list.
+# The saved articles (two saved through the core's API, without their pictures): the list, then one opened in the reader;
+# Left / Right walk the saved list. Saving from the app: offline.script; the page itself: savedpage.script.
 seed pin us-ars-technica
 seed refresh
 seed save us-ars-technica 1

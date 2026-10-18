@@ -11,12 +11,20 @@ Comment: The application is linked against the LVGL based cp0_lvgl runtime of th
  package. At run time it runs curl (curl licence, MIT-style) to fetch the feeds; curl
  is not shipped in this package. The feed parser, the HTML to text conversion and the
  store are the app's own code. Feed content belongs to its publishers: it is fetched
- and shown on the device only, never mirrored or re-hosted.
+ and shown on the device only, never mirrored or re-hosted; the pictures of the
+ articles are kept on the device only (an image cache, the saved articles).
+ .
+ Pictures (JPEG, PNG, GIF, BMP) are decoded by stb_image v2.30 (Copyright 2017 Sean
+ Barrett and the stb contributors; public domain / MIT, either at your choice), one
+ header compiled into the binary. LVGL's own lodepng (Copyright Lode Vandevenne, zlib
+ licence) is also linked into the binary but the app does not use it.
 
 Files: usr/share/APPLaunch/bin/rss-reader
 Copyright: 2026 OSRdesign
  M5Stack Technology CO LTD (cp0_lvgl runtime linked into the binary)
  LVGL Kft (LVGL, linked into the binary)
+ Lode Vandevenne (lodepng, in LVGL: zlib licence)
+ 2017 Sean Barrett and the stb contributors (stb_image: public domain / MIT)
 License: MIT
 
 Files: usr/share/APPLaunch/applications/rss-reader.desktop

@@ -11,6 +11,7 @@
 <guid isPermaLink="false">ars-1</guid>
 <pubDate>Sun, 18 Oct 2026 14:00:00 +0000</pubDate>
 <description><![CDATA[<p>The company says a valve in the second stage failed a pressure test.</p>]]></description>
+<enclosure url="https://cdn.arstechnica.net/2026/10/rocket.jpg" type="image/jpeg" length="27070"/>
 </item>
 <item>
 <title>New Linux kernel fixes the long-standing scheduler stall on small boards</title>
@@ -31,6 +32,8 @@ takes a lock-free path in that case:</p>
 <h3>How to try it</h3>
 <ol><li>Build 6.18-rc2 or later.</li><li>Boot with the default scheduler.</li><li>Run a benchmark such as cyclictest.</li></ol>
 <pre>cyclictest -m -p 80 -i 1000 -l 100000</pre>
+<img src="https://cdn.arstechnica.net/2026/10/board.jpg" alt="The test board, a Pi Zero 2 W on a breadboard">
+<img src="https://s.w.org/images/core/emoji/15.0.3/72x72/1f600.png" alt="smile">
 <hr>
 <p>The fix will be back-ported to the 6.12 long-term branch, according to the stable team. Distributions that ship 6.12 should pick it up
 in a few weeks. Several readers asked whether the change affects battery life on laptops; the developers expect a small gain, since an idle
@@ -43,6 +46,19 @@ CPU now goes back to sleep sooner, but no measurement has been published yet.</p
 <guid isPermaLink="false">ars-3</guid>
 <pubDate>Sun, 18 Oct 2026 10:00:00 +0000</pubDate>
 <description><![CDATA[<p>Cheap chargers have improved a lot.</p>]]></description>
+<content:encoded><![CDATA[<p>Cheap chargers have improved a lot, say the labs that test them. The pictures of this story are the image test
+gallery of the RSS Reader flows: each one fails in its own way.</p>
+<img src="https://cdn.arstechnica.net/2026/10/progressive.jpg" alt="A progressive JPEG, shown like any other">
+<p>The lab's logo, a PNG with transparency:</p>
+<img src="https://cdn.arstechnica.net/2026/10/logo.png" alt="The lab's logo">
+<img src="https://cdn.arstechnica.net/2026/10/huge.jpg" alt="A photo whose header says 20000 x 20000 pixels">
+<img src="https://cdn.arstechnica.net/2026/10/notimage.jpg" alt="A missing picture: the server answers a web page">
+<img src="https://cdn.arstechnica.net/2026/10/corrupt.png" alt="A PNG whose data is broken">
+<img src="https://cdn.arstechnica.net/2026/10/pic.webp" alt="A WebP picture">
+<p>Two more pictures: an article loads its first six.</p>
+<img src="https://cdn.arstechnica.net/2026/10/anim.gif" alt="An animated GIF">
+<img src="https://cdn.arstechnica.net/2026/10/missing.jpg" alt="A picture the server does not have">
+<p>The tests found that 9 chargers out of 10 deliver what their label says.</p>]]></content:encoded>
 </item>
 <item>
 <title>Review: a keyboard with a trackpoint, and why it matters</title>

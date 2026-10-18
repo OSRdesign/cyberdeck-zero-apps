@@ -1,0 +1,103 @@
+# Images in the reader (phase 3): the placeholder while the pictures download (a slow network), then the thumbnails where
+# they stand in the text; the keys' ring (Up / Down scroll and the image nearest the middle has the ring, Tab jumps, Enter
+# opens); the full-screen view (Left / Right, the line that fades, Esc; a tap opens, a swipe goes on, a tap closes); the
+# gallery article: a progressive JPEG and a PNG that show, and the pictures that fail each in its own way (a 20000 x 20000
+# header, a web page served as a JPEG, a broken PNG, WebP; the 7th and 8th are not loaded); an article whose text has no
+# picture shows the feed's own.
+seed pin us-ars-technica
+seed refresh
+seed refresh_on_open off
+seed hint seen
+net slow 1500
+wait 900
+key enter
+wait 400
+key enter
+wait 800
+key down
+key enter
+wait 400
+expect state page reader
+expect state images DD
+expect text "Downloading…"
+shot 01-downloading
+check downloading
+wait 2600
+expect state images RR
+expect state decode_peak 1
+shot 02-thumbnail
+check thumbnail
+net slow 0
+# the keys: Down scrolls the text, the ring marks the image nearest the middle
+key down
+wait 200
+expect state ring 1
+expect state img_focus 0
+shot 03-ring
+key tab
+wait 300
+expect state img_focus 1
+shot 04-tab-next
+key enter
+wait 800
+expect state viewer 1
+expect state viewer_hd 1
+expect text "Esc or tap to close  ·  2 / 2"
+shot 05-viewer
+check viewer fullscreen
+key left
+wait 800
+expect state viewer 0
+expect state viewer_hd 1
+expect text "Esc or tap to close  ·  1 / 2"
+shot 06-viewer-first
+wait 2800
+shot 07-line-faded
+key right
+wait 600
+expect state viewer 1
+key esc
+wait 300
+expect state viewer -1
+expect state viewer_hd 0
+expect state page reader
+# touch: a tap on a picture opens it, a swipe to the left shows the next one, a tap closes
+key home
+wait 200
+tapimage 0
+wait 800
+expect state viewer 0
+drag 0.8 0.5 0.2 0.5
+wait 800
+expect state viewer 1
+tapat 0.5 0.5
+wait 400
+expect state viewer -1
+expect state page reader
+# the gallery: every way a picture can fail, and the six-per-article limit; a tap on a failed one says why
+key right
+wait 2500
+expect state reader_idx 2
+expect state images RRTUUSNN
+shot 08-gallery-top
+check gallery
+key pgdn
+wait 200
+expect text "Too large to show"
+tapimage 2
+wait 300
+expect state viewer -1
+expect text "Too large to show"
+shot 09-gallery-more
+key pgdn
+wait 200
+shot 10-gallery-end
+# the lead image: the feed's own picture under the title when the text has none
+key esc
+wait 400
+key home
+key enter
+wait 2000
+expect state reader_idx 0
+expect state images R
+shot 11-lead-image

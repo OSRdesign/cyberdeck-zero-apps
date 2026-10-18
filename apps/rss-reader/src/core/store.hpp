@@ -8,15 +8,19 @@
  *                        last_attempt,last_error,added,unread,total,newest}]}  the favourites, in order (the catalog ones and the
  *                        user's own), with each feed's conditional-GET validators, fetch state and unread / total counts
  *   settings.json        {"version":1,"text_size":"small|medium|large","image_download":"always|off","storage_cap_mb":200,
- *                        "refresh_on_open":true}
+ *                        "refresh_on_open":true,"options_seen":false}
  *   cache/<feed id>.json {"version":1,"feed":id,"articles":[{id,guid,title,link,published,dated,author,summary,content,
  *                        images,full}]}  at most 200 articles per feed (oldest dropped, saved ones kept)
  *   read/<feed id>.json  {"version":1,"read":[article id, ...]}  the READ STATE, a small file apart from the cache so that
  *                        marking one article read rewrites 4 KB, not the whole cache; pruned with the articles on every
- *                        store_articles() (so it is bounded by 250 ids per feed) and deleted with the subscription
+ *                        store_articles() (so it is bounded by 250 ids per feed) and deleted with the subscription. A refresh
+ *                        writes the articles it fetched with store_fetched_articles(), which takes the read state from this
+ *                        file as it is at that moment: a mark made while the feed was being fetched is never written over
  *   saved/<article id>/  article.json (the article, its feed, when it was saved, and its images: url, file, type, bytes)
  *                        and images/001.jpg ... : the bytes exactly as fetched. Nothing is evicted automatically: saving
- *                        is refused (CapExceeded) when it would take the saved articles over the storage cap
+ *                        is refused (CapExceeded) when it would take the saved articles over the storage cap. The files of
+ *                        a save are written without holding the store's lock (saves take turns among themselves), so the UI
+ *                        reads the store while a large article is being written
  *
  * Rules for every file: written atomically (temp file + fsync + rename); carries a schema version; a file that cannot be
  * parsed, or whose version is newer than this code knows, is renamed to "<name>.bad" (replacing an older .bad) and the
@@ -48,6 +52,7 @@ struct Settings {
     ImageDownload image_download = ImageDownload::Always;
     int storage_cap_mb = 200;          /* clamped to 10..4096 */
     bool refresh_on_open = true;
+    bool options_seen = false;         /* the options dialog was opened once: the first-run hint is no longer shown */
 };
 
 struct Subscription {
@@ -138,8 +143,12 @@ public:
     /* ---- articles of a feed */
     std::vector<StoredArticle> load_articles(const std::string &feed_id);
     /* Replaces the cache (newest first is expected): keeps the first 200 plus the saved ones (up to 50 more); updates the
-     * subscription's unread / total. */
+     * subscription's unread / total. The articles' read flags become the read state. */
     bool store_articles(const std::string &feed_id, std::vector<StoredArticle> articles);
+    /* The same for the articles a refresh merged (Refresher): the read flags are NOT taken from `articles` but from the read
+     * state on disk at the moment of the write (under the lock), so the marks made while the feed was fetched (read,
+     * unread, mark all read, clear the history) stay; an article the read state does not know is unread. */
+    bool store_fetched_articles(const std::string &feed_id, std::vector<StoredArticle> articles);
     bool set_read(const std::string &feed_id, const std::string &article_id, bool read);
     bool mark_all_read(const std::string &feed_id);
     /* Forgets every read mark (every feed's read/ file goes): all cached articles are unread again. */
@@ -171,11 +180,13 @@ private:
     bool save_settings();
     std::vector<StoredArticle> load_articles_locked(const std::string &feed_id);
     bool store_articles_locked(const std::string &feed_id, std::vector<StoredArticle> articles);
+    std::set<std::string> read_state_locked(const std::string &feed_id);
     bool read_json_or_quarantine(const std::string &path, Json &out, bool &existed);
     void scan_saved();
 
     std::string root_;
     std::mutex mu_;
+    std::mutex save_mu_;               /* saves and deletes of saved articles take turns (their files are written outside mu_) */
     bool opened_ = false, open_ok_ = false;
     Settings settings_;
     std::vector<Subscription> subs_;
