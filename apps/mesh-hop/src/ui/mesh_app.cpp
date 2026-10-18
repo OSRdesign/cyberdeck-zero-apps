@@ -3257,8 +3257,8 @@ lv_obj_t *App::dialog_button(cp0::ui::Dialog &d, size_t index) const
     return nullptr;
 }
 
-/* Mesh Hop's tap targets are ROW high (7 mm, the user's decision for this app; the toolkit's Dialog makes its buttons TARGET,
- * 9 mm, high). After each layout of the dialog (its own, on a change of the on-screen keyboard, or the app's) its buttons are
+/* Mesh Hop's tap targets are ROW high (7 mm, the user's decision for this app; the toolkit's Dialog makes its buttons TARGET
+ * high, also 7 mm since launcher #57, so the two can differ only by rounding). After each layout of the dialog (its own, on a change of the on-screen keyboard, or the app's) its buttons are
  * made ROW high: a body that scrolls gets the room (the buttons move down), else the box gets shorter and stays centred. Nothing
  * when the buttons are already ROW high, or gone (the on-screen keyboard's Enter and Esc act for them). */
 void App::compact_dialog(cp0::ui::Dialog &d)

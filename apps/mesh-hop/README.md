@@ -15,8 +15,8 @@ store (`src/core/`, with unit tests).
 
 ## What changed in 0.4.1
 
-* Built on the launcher's newer `cp0_lvgl` (commit `119a283`): its buttons and the header Esc use the shared 7 mm minimum tap
-  target, as Mesh Hop's own controls already did.
+* Built on the launcher's newer `cp0_lvgl` (commit `f35c2d6`): its buttons use the shared 7 mm minimum tap target, as Mesh
+  Hop's own controls already did. The header Esc keeps its 9 mm size (it is not on the 7 mm target).
 * **Pointer navigation**: with Settings > System > Pointer navigation on (off by default), a trackpoint, trackball or mouse moves
   through Mesh Hop like the arrow keys, a click is Enter and a held click is Ctrl+O (a chat's options).
 
