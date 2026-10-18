@@ -160,9 +160,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.4.1",
+      "version": "0.4.2",
       "published_at": "2026-10-15T11:29:52+00:00",
-      "updated_at": "2026-10-16T19:30:55+00:00",
+      "updated_at": "2026-10-18T22:58:10+00:00",
       "review": {
         "status": "approved"
       },
@@ -171,10 +171,10 @@
       "download": {
         "type": "deb",
         "package": "net-toolbox",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/net-toolbox_0.4.1_arm64.deb",
-        "md5": "3cda1b360c04e6615c290aedf2d5722e",
-        "sha256": "d8ba0b2c4dbe163bad0a1107430c56ee04f62216b1e12e2278bd6f51b78a62fe",
-        "size": 2579610
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/net-toolbox_0.4.2_arm64.deb",
+        "md5": "6d1cc28aec2cb48b043d65602835bdae",
+        "sha256": "b00739fd08a84476c80bfe220d834c1ee948fed93f7cfc69e3726bdfdf15c5b9",
+        "size": 2589114
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0, curl, ca-certificates, network-manager",
       "permissions": {
