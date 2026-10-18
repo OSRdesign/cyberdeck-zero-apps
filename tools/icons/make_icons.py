@@ -220,6 +220,18 @@ def icon_nettoolbox(hue, ink):
     return c.finish()
 
 
+def icon_rssreader(hue, ink):
+    """A page with its top right corner turned down, the feed symbol on it: a dot and two thick quarter arcs."""
+    c = Canvas()
+    c.polygon([(15, 5), (63, 5), (85, 27), (85, 95), (15, 95)], hue, round_r=6)     # the page, its corner cut
+    c.polygon([(63, 5), (63, 27), (85, 27)], ink, round_r=1.5)                       # the corner turned down
+    ox, oy = 33, 77
+    c.circle(ox, oy, 7.5, ink)
+    c.arc(ox, oy, 22, 9.5, 270, 360, ink)
+    c.arc(ox, oy, 37, 9.5, 270, 360, ink)
+    return c.finish()
+
+
 # id, function, badge hue, symbol colour, badge name
 ICONS = [
     ("lanscan",              icon_lanscan,  "#19D3E6", INK,   "circle"),
@@ -230,6 +242,7 @@ ICONS = [
     ("system-monitor",       icon_sysmon,   "#F23B3B", WHITE, "shield"),
     ("viz1090",              icon_viz,      "#5BB8FF", INK,   "squircle"),
     ("net-toolbox",          icon_nettoolbox, "#FF5C93", INK, "pentagon"),
+    ("rss-reader",           icon_rssreader, "#FFA11C", INK, "page, corner turned"),
     ("cyberdeck-app-template", icon_template, "#8A9099", INK, "octagon"),
 ]
 
