@@ -88,8 +88,9 @@ python deck.py sudo 'dpkg -i /tmp/serial-console.deb'
 2. Plug a board: it appears; tap it twice: the port page; tap Connect twice.
 3. No keyboard: the terminal page has the line field and Send. Tap the field: the on-screen keyboard; the field stays
    above it; type `help` and its Enter: the line goes to the board, the keyboard stays; its Esc closes it.
-4. On-screen Ctrl then C: Ctrl-C reaches the board. Toolbar keys by touch. The header Esc leaves; the header Esc again
-   twice ends the app.
+4. On-screen Ctrl then C: Ctrl-C reaches the board. Toolbar keys by touch: they are as high as the header Esc (the
+   9 mm toolbar key, taller than Send) and the received text above them is not covered. The header Esc leaves; the
+   header Esc again twice ends the app.
 
 ## S8. Identify an ESP32 board (deck, BT keyboard)
 

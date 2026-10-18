@@ -42,6 +42,7 @@ After the app asks to quit, only `expect` lines are read.
 | `keyboards N`, `osk auto\|off\|force` | rewrite `input.state` (gen + 1): physical keyboards present, the keyboard rule |
 | `shot NAME` / `check NAME` | settle 250 ms, save the PNG (shot only), run the layout checks |
 | `expect quit\|noquit`, `expect osk on\|off`, `expect text "T"`, `expect notext "T"` | assertions |
+| `expect key "T" toolbar\|target` | the button labelled T is exactly the 9 mm toolbar key (`cp0_ui_toolbar_key_px`) / TARGET high and at least as wide; its size goes in the report |
 | `say TEXT` | a line in the log |
 
 ## Layout checks (after every shot)

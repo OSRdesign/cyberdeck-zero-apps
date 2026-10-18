@@ -2,7 +2,8 @@
  * SPDX-License-Identifier: MIT
  *
  * Serial Console: the terminal page (see terminal_view.hpp). Geometry from the layout service only: the page layout,
- * the SPACE / ROW / TARGET tokens, the text sizes and the fonts' own metrics.
+ * the SPACE / ROW / TARGET tokens, the toolbar key size (cp0_ui_toolbar_key_px), the text sizes and the fonts' own
+ * metrics.
  */
 #include "terminal_view.hpp"
 
@@ -54,6 +55,13 @@ int text_width(const char *text, const lv_font_t *font)
 int caption_px()
 {
     return cp0_ui_metrics_get()->text_px[CP0_TEXT_CAPTION];
+}
+
+/* The key bar's keys: the launcher's 9 mm toolbar key (as the header Esc, the stock-app toolbars and the on-screen
+ * keyboard), not TARGET (7 mm), which the line field's Send keeps. */
+int toolbar_key()
+{
+    return cp0_ui_toolbar_key_px(cp0_ui_metrics_get()->ppmm_x100);
 }
 
 /* What local echo shows for bytes sent: a line end as a new line, DEL / BS as an erase. */
@@ -131,19 +139,18 @@ void TerminalView::box_delete_cb(lv_event_t *event)
     self->tools_.clear();
 }
 
-int TerminalView::button_w(const char *text) const
+int TerminalView::button_w(const char *text, int key) const
 {
-    return std::max(cp0_ui_tok(CP0_TOK_TARGET), text_width(text, cp0_ui_font_px(layout_.esc_text_px)) + 2 * layout_.gap);
+    return std::max(key, text_width(text, cp0_ui_font_px(layout_.esc_text_px)) + 2 * layout_.gap);
 }
 
-lv_obj_t *TerminalView::make_button(lv_obj_t *parent, const char *text, bool primary)
+lv_obj_t *TerminalView::make_button(lv_obj_t *parent, const char *text, bool primary, int key)
 {
-    const int target = cp0_ui_tok(CP0_TOK_TARGET);
     const lv_font_t *font = cp0_ui_font_px(layout_.esc_text_px);
     lv_obj_t *button = lv_button_create(parent);
     if (lv_obj_get_group(button)) lv_group_remove_obj(button); /* touch only: the keyboard has its own keys */
     lv_obj_remove_flag(button, LV_OBJ_FLAG_CLICK_FOCUSABLE);   /* a tap never takes the focus from the field */
-    lv_obj_set_size(button, button_w(text), target);
+    lv_obj_set_size(button, button_w(text, key), key);
     lv_obj_set_style_radius(button, layout_.esc_radius, 0);
     lv_obj_set_style_bg_color(button, lv_color_hex(primary ? kPrimary : kKey), 0);
     lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
@@ -196,8 +203,9 @@ void TerminalView::build()
     lv_obj_set_scroll_dir(bar_, LV_DIR_HOR);
     lv_obj_set_scrollbar_mode(bar_, LV_SCROLLBAR_MODE_OFF);
     lv_obj_remove_flag(bar_, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    const int key = toolbar_key();
     for (int i = 0; i <= static_cast<int>(Tool::Reset); ++i) {
-        lv_obj_t *button = make_button(bar_, tool_label(static_cast<Tool>(i)).c_str(), false);
+        lv_obj_t *button = make_button(bar_, tool_label(static_cast<Tool>(i)).c_str(), false, key);
         lv_obj_set_user_data(button, reinterpret_cast<void *>(static_cast<intptr_t>(i)));
         lv_obj_add_event_cb(button, tool_event_cb, LV_EVENT_CLICKED, this);
         tools_.push_back(button);
@@ -260,11 +268,11 @@ void TerminalView::set_mode(Mode mode)
     if (mode == Mode::Raw) raw_keys(true);
     if (mode == Mode::Field && box_) {
         input_ = plain(box_);
-        send_ = make_button(input_, "Send", true);
+        send_ = make_button(input_, "Send", true, cp0_ui_tok(CP0_TOK_TARGET));
         lv_obj_add_event_cb(send_, send_event_cb, LV_EVENT_CLICKED, this);
         // the field: the label column is a single pixel (no label: the page says what the line is for), the field
         // takes the row up to Send
-        const int field_w = layout_.w - 2 * layout_.gap - button_w("Send") - cp0_ui_tok(CP0_TOK_SPACE_S);
+        const int field_w = layout_.w - 2 * layout_.gap - button_w("Send", cp0_ui_tok(CP0_TOK_TARGET)) - cp0_ui_tok(CP0_TOK_SPACE_S);
         cp0_ui_roller_page_t field_layout = layout_;
         field_layout.roller_w = std::max(layout_.row_h, field_w) + 1 + layout_.gap;
         cp0::ui::TextFieldSpec spec;
@@ -287,6 +295,7 @@ void TerminalView::relayout()
     const int m = layout_.gap;
     const int s = cp0_ui_tok(CP0_TOK_SPACE_S);
     const int target = cp0_ui_tok(CP0_TOK_TARGET);
+    const int key = toolbar_key();
     const int row = layout_.row_h;
     const int h = std::max(0, layout_.h - layout_.body_y - cp0::ui::osk::bottom_inset());
     const bool ed = editing();
@@ -322,7 +331,7 @@ void TerminalView::relayout()
             lv_obj_add_flag(send_, LV_OBJ_FLAG_HIDDEN);
         } else {
             lv_obj_remove_flag(send_, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_set_pos(send_, w - m - button_w("Send"), (input_h - target) / 2);
+            lv_obj_set_pos(send_, w - m - button_w("Send", target), (input_h - target) / 2);
         }
         bottom = std::max(0, input_y);
     }
@@ -330,9 +339,9 @@ void TerminalView::relayout()
         lv_obj_add_flag(bar_, LV_OBJ_FLAG_HIDDEN);
     } else {
         lv_obj_remove_flag(bar_, LV_OBJ_FLAG_HIDDEN);
-        const int bar_y = bottom - target - s;
+        const int bar_y = bottom - key - s;
         lv_obj_set_pos(bar_, m, std::max(0, bar_y));
-        lv_obj_set_size(bar_, w - 2 * m, target);
+        lv_obj_set_size(bar_, w - 2 * m, key);
         bottom = std::max(0, bar_y);
     }
 

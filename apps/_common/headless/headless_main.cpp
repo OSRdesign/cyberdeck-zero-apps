@@ -12,6 +12,7 @@
 #include "headless.hpp"
 
 #include "app.hpp"
+#include "cp0_ui_metrics_lvgl.h"
 #include "cp0_ui_widgets.hpp"
 #include "keyboard_input.h"
 
@@ -341,6 +342,27 @@ void play(Run &run, const Scene &scene)
                 fail(run, line, "no visible text \"" + arg(2) + "\"");
             } else if (what == "notext" && headless::find_label(arg(2), false)) {
                 fail(run, line, "text \"" + arg(2) + "\" is visible");
+            } else if (what == "key") {
+                /* expect key "TEXT" toolbar|target: the button labelled TEXT is exactly that high and at least that
+                 * wide (toolbar = cp0_ui_toolbar_key_px, the 9 mm toolbar key; target = TARGET) */
+                const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
+                const bool toolbar = arg(3) == "toolbar";
+                const int want = toolbar ? cp0_ui_toolbar_key_px(m->ppmm_x100) : m->tok[CP0_TOK_TARGET];
+                lv_obj_t *label = headless::find_label(arg(2), false);
+                if (arg(3) != "toolbar" && arg(3) != "target") {
+                    fail(run, line, "expect key: toolbar or target, not \"" + arg(3) + "\"");
+                } else if (!label) {
+                    fail(run, line, "no visible text \"" + arg(2) + "\"");
+                } else {
+                    lv_obj_t *button = headless::clickable_of(label);
+                    const int bw = lv_obj_get_width(button), bh = lv_obj_get_height(button);
+                    run.report << "key \"" << arg(2) << "\" " << bw << "x" << bh << " (" << arg(3) << " " << want
+                               << ", toolbar " << cp0_ui_toolbar_key_px(m->ppmm_x100) << ", target "
+                               << m->tok[CP0_TOK_TARGET] << ")\n";
+                    if (bh != want || bw < want)
+                        fail(run, line, "key \"" + arg(2) + "\" is " + std::to_string(bw) + "x" + std::to_string(bh) +
+                                            ", expected " + std::to_string(want) + " high and at least as wide");
+                }
             }
             run.report << "expect " << what << (arg(2).empty() ? "" : " " + arg(2)) << "\n";
         } else if (cmd == "say") {
