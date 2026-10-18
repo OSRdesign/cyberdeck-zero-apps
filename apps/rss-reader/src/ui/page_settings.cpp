@@ -5,7 +5,8 @@
  * value then a chevron; a row that acts right there has the dot; a read-out is grey, without a marker, and the
  * selection skips it.
  *
- *   READING         Text size (choice), Refresh when opening (On / Off), Download images (Always / Off: kept for phase 3)
+ *   READING         Text size (choice), Refresh when opening (On / Off), Download images (Always / Off), Clear image cache
+ *                   (its size; at once: it is only a cache)
  *   SAVED ARTICLES  Storage used (read-out), Storage cap (choice: 50 / 100 / 200 / 500 MB)
  *   FAVORITES       Clear read history (asked first), Export favorites (~/rss-reader-favorites.opml), Import favorites
  *                   (the .opml files of the home folder)
@@ -30,7 +31,7 @@ namespace rssui {
 namespace {
 
 enum SetKind {
-    kSecReading, kTextSize, kRefreshOpen, kImages, kSecSaved, kStorageUsed, kStorageCap, kSecFavorites, kClearRead, kExport, kImport,
+    kSecReading, kTextSize, kRefreshOpen, kImages, kImageCache, kSecSaved, kStorageUsed, kStorageCap, kSecFavorites, kClearRead, kExport, kImport,
     kSecAbout, kVersion, kCatalog, kLauncher, kDataDir,
 };
 
@@ -87,6 +88,7 @@ void App::render_settings()
     item(kTextSize, "Text size", text_size_label(st.text_size), kValue, Mark::Chevron);
     item(kRefreshOpen, "Refresh when opening", st.refresh_on_open ? "On" : "Off", kValue, Mark::Chevron);
     item(kImages, "Download images", st.image_download == ImageDownload::Off ? "Off" : "Always", kValue, Mark::Chevron);
+    item(kImageCache, "Clear image cache", image_cache_text(image_cache_.usage()), kMuted, Mark::Dot);
     section(kSecSaved, "SAVED ARTICLES");
     item(kStorageUsed, "Storage used", storage_text(store_.saved_usage_bytes(), st.storage_cap_mb), kMuted, Mark::None, false);
     item(kStorageCap, "Storage cap", std::to_string(st.storage_cap_mb) + " MB", kValue, Mark::Chevron);
@@ -171,8 +173,14 @@ void App::settings_activate(int index)
     case kImages:
         st.image_download = st.image_download == ImageDownload::Off ? ImageDownload::Always : ImageDownload::Off;
         store_.set_settings(st);
-        notice(st.image_download == ImageDownload::Off ? "Images will not be downloaded" : "Images will be downloaded with saved articles");
+        notice(st.image_download == ImageDownload::Off ? "Images are not downloaded (saved ones still show)" : "Images are downloaded when you open an article");
         break;
+    case kImageCache: {
+        const std::uint64_t had = image_cache_.usage();
+        if (image_cache_.clear()) notice(had ? "Image cache cleared: " + fmt_bytes(had) + " freed" : std::string("The image cache is empty"));
+        else notice("Could not clear the image cache", false);
+        break;
+    }
     case kStorageCap:
         open_choice(storage_cap_choice(st.storage_cap_mb), [this](int idx) {
             Settings s = store_.settings();
@@ -184,7 +192,6 @@ void App::settings_activate(int index)
     case kClearRead:
         open_confirm("Clear read history?", "Every article of your favorites shows as unread again.", [this] {
             if (store_.clear_read_history()) {
-                read_marks_.clear();
                 for (StoredArticle &a : *arts_) a.read = false;
                 notice("Read history cleared");
             } else {

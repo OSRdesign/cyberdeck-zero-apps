@@ -2,8 +2,8 @@
  * SPDX-License-Identifier: MIT
  *
  * RSS Reader: the shell (header, the grey line, the page bodies), the navigation, the keys, the 3 s hold, the on-screen
- * keyboard and the dialogs. The pages are in pages_lists.cpp, page_reader.cpp, page_browse.cpp, page_add.cpp and
- * page_settings.cpp.
+ * keyboard and the dialogs. The pages are in pages_lists.cpp, page_reader.cpp (with page_viewer.cpp, the full-screen
+ * image), page_browse.cpp, page_add.cpp and page_settings.cpp.
  */
 #include "rss_app.hpp"
 
@@ -140,6 +140,8 @@ App::~App()
     jobs_.cancel_all();
     jobs_.join_all();
     jobs_.clear_posted();
+    if (viewer_) lv_obj_delete(viewer_);       // the full-screen layer is the screen's child, not the shell's
+    viewer_ = viewer_img_ = viewer_cap_ = nullptr;
     if (inset_listener_) cp0::ui::osk::remove_inset_listener(inset_listener_);
     inset_listener_ = 0;
     release_osk();
@@ -370,8 +372,9 @@ void App::layout_pages()
     for (auto &kv : pages_) lv_obj_set_height(kv.second, panel_h_);
     home_list_.resize(panel_h_);
     fav_list_.resize(std::max(1, panel_h_ - lv_obj_get_y(fav_list_.obj())));
-    art_list_.resize(panel_h_);
-    saved_list_.resize(panel_h_);
+    art_list_.resize(std::max(1, panel_h_ - lv_obj_get_y(art_list_.obj())));
+    saved_list_.resize(std::max(1, panel_h_ - saved_footer_h_ - lv_obj_get_y(saved_list_.obj())));
+    if (saved_footer_) lv_obj_set_y(saved_footer_, panel_h_ - saved_footer_h_);
     settings_list_.resize(panel_h_);
     browse_list_.resize(std::max(1, panel_h_ - lv_obj_get_y(browse_list_.obj())));
     lv_obj_set_height(reader_, panel_h_);
@@ -419,6 +422,7 @@ void App::open(PageId p)
         saved_sel_ = 0;
         saved_list_.scroll_to_top();
         break;
+    case PageId::Reader: reader_keys_ = false; break;
     case PageId::Settings:
         settings_sel_ = 0;
         settings_list_.scroll_to_top();
@@ -445,10 +449,18 @@ void App::go_up()
         add_typing_ = false;
         break;
     case PageId::Browse: search_typing_ = false; break;
+    case PageId::Reader:
+        if (viewer_open()) close_viewer();
+        reader_images_stop();              // the downloads stop, the thumbnails are freed
+        break;
     default: break;
     }
     stack_.pop_back();
     if (page() == PageId::Favorites) subs_ = store_.subscriptions();
+    if (page() == PageId::Saved) {
+        saved_ = store_.list_saved();
+        saved_sel_ = std::clamp(saved_sel_, 0, std::max(0, static_cast<int>(saved_.size()) - 1));
+    }
     invalidate();
 }
 
@@ -572,6 +584,7 @@ void App::tick()
         popup_refresh();
     }
     hold_tick(now);
+    viewer_tick(now);
     if (!notice_text_.empty() && now > notice_ms_ && now - notice_ms_ >= kNoticeMs) {
         notice_text_.clear();
         dirty_ = true;
@@ -659,6 +672,10 @@ bool App::field_key(lv_obj_t *ta, const KeyEvent &e, std::size_t max_len)
 void App::on_key(const KeyEvent &e)
 {
     if (e.key == Key::None) return;
+    if (viewer_open()) {                   // the full-screen image takes every key (Esc closes it)
+        viewer_key(e);
+        return;
+    }
     if (popup_open()) {
         popup_key(e);
         return;
@@ -687,15 +704,42 @@ void App::on_key(const KeyEvent &e)
 /* The options of what the page shows (Ctrl+O, or a 3 s hold on a row or on the text). */
 void App::open_options()
 {
-    if (popup_open()) return;
+    if (popup_open() || viewer_open()) return;
     switch (page()) {
     case PageId::Favorites:
         if (!subs_.empty()) favorite_options(fav_sel_);
         break;
     case PageId::Articles: article_options(art_sel_); break;
     case PageId::Reader: reader_options(); break;
+    case PageId::Saved:
+        if (!saved_.empty()) saved_row_options(saved_sel_);
+        break;
     default: break;
     }
+    if (popup_open()) options_opened();
+}
+
+/* The first-run hint shows until the options were opened once (any page): settings.json keeps it. */
+bool App::hint_shown()
+{
+    if (hint_seen_ < 0) hint_seen_ = store_.settings().options_seen ? 1 : 0;
+    return hint_seen_ == 0;
+}
+
+void App::options_opened()
+{
+    if (!hint_shown()) return;
+    hint_seen_ = 1;
+    rssreader::Settings s = store_.settings();
+    s.options_seen = true;
+    store_.set_settings(s);
+    if (page() == PageId::Reader && reader_idx_ >= 0) {      // the hint line of the article goes, the reading position stays
+        const int y = lv_obj_get_scroll_y(reader_);
+        render_reader_text();
+        lv_obj_scroll_to_y(reader_, y, LV_ANIM_OFF);
+        update_image_focus();
+    }
+    invalidate();
 }
 
 void App::row_pressed(RowList *list, int what, int index, int x, int y)
@@ -709,7 +753,8 @@ void App::row_pressed(RowList *list, int what, int index, int x, int y)
         hold_.cancel();
         return;
     }
-    const bool holdable = (list == &fav_list_ && page() == PageId::Favorites) || (list == &art_list_ && page() == PageId::Articles);
+    const bool holdable = (list == &fav_list_ && page() == PageId::Favorites) || (list == &art_list_ && page() == PageId::Articles) ||
+                          (list == &saved_list_ && page() == PageId::Saved);
     if (!holdable || popup_open() || list->id_at(index).empty()) {
         hold_.cancel();
         hold_.take_swallow();
@@ -732,7 +777,11 @@ void App::reader_pressed(int what, int x, int y)
         hold_.cancel();
         return;
     }
-    if (popup_open() || page() != PageId::Reader) return;
+    if (popup_open() || page() != PageId::Reader || viewer_open()) return;
+    if (reader_keys_) {                    // the touch leads now: no ring
+        reader_keys_ = false;
+        update_image_focus();
+    }
     hold_list_ = nullptr;
     hold_index_ = -1;
     hold_scroll_y_ = lv_obj_get_scroll_y(reader_);
@@ -761,6 +810,9 @@ void App::hold_tick(std::uint64_t now)
             art_sel_ = hold_index_;
             art_sel_id_ = art_list_.id_at(hold_index_);
             art_list_.set_selected(art_sel_, false);
+        } else if (hold_list_ == &saved_list_) {
+            saved_sel_ = hold_index_;
+            saved_list_.set_selected(saved_sel_, false);
         }
         open_options();
         return;
@@ -1275,11 +1327,20 @@ std::string App::debug_state() const
                      : pop_.kind == Popup::Info ? "info" : pop_.kind == Popup::List ? "list" : "none";
     int unread = 0;
     for (const rssreader::Subscription &s : subs_) unread += s.unread;
+    std::string images;
+    for (const ReaderImage &r : rimgs_) images += image_state_letter(r.state);
+    if (images.empty()) images = "-";
     std::string s = std::string("state page=") + page_key(page()) + " depth=" + std::to_string(stack_.size()) + " home_sel=" + std::to_string(home_sel_) +
                     " subs=" + std::to_string(subs_.size()) + " unread=" + std::to_string(unread) + " fav_sel=" + std::to_string(fav_sel_) +
                     " refreshing=" + (refreshing_ ? "1" : "0") + " refresh=" + std::to_string(refresh_done_) + "/" + std::to_string(refresh_total_) +
                     " arts=" + std::to_string(arts_->size()) + " art_sel=" + std::to_string(art_sel_) + " loading=" + (arts_loading_ ? "1" : "0") +
                     " reader_idx=" + std::to_string(reader_idx_) + " reader_px=" + std::to_string(reader_built_px_) + " text_size=" + rssreader::text_size_name(const_cast<rssreader::Store &>(store_).settings().text_size) +
+                    " images=" + images + " img_focus=" + std::to_string(img_focus_) + " ring=" + (reader_keys_ ? "1" : "0") +
+                    " viewer=" + std::to_string(viewer_idx_) + " viewer_full=" + (viewer_pix_ ? std::to_string(viewer_pix_->width) + "x" + std::to_string(viewer_pix_->height) : std::string("-")) +
+                    " viewer_hd=" + (viewer_pix_ ? "1" : "0") +
+                    " saving=" + (save_job_ ? "1" : "0") + " is_saved=" + (reader_idx_ >= 0 && const_cast<rssreader::Store &>(store_).is_saved(reader_art_.id) ? "1" : "0") +
+                    " hint=" + (hint_seen_ == 0 ? "1" : hint_seen_ == 1 ? "0" : "?") + " decodes=" + std::to_string(decodes_done()) + " decode_peak=" + std::to_string(decodes_peak_parallel()) +
+                    " img_cache=" + std::to_string(const_cast<rssreader::ImageCache &>(image_cache_).count()) +
                     " reader_scroll=" + std::to_string(reader_ ? lv_obj_get_scroll_y(reader_) : 0) +
                     " blevel=" + std::to_string(static_cast<int>(blevel_)) + " country=" + bcountry_ + " topic=" + btopic_ + " search='" + search_text_ +
                     "' browse_rows=" + std::to_string(browse_list_.count()) + " browse_sel=" + std::to_string(browse_sel_) +

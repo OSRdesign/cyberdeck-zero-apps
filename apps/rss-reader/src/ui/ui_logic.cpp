@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <map>
 
@@ -375,10 +376,11 @@ std::string refresh_status(bool running, std::size_t done, std::size_t total, co
 
 std::string favorite_group(const Subscription &s, const Catalog *catalog)
 {
-    if (catalog && !s.custom) {
-        if (const CatalogFeed *f = catalog->find(s.id)) return f->topic == "general" ? country_name(f->country) : topic_label(f->topic);
+    if (!s.custom) {
+        if (catalog)
+            if (const CatalogFeed *f = catalog->find(s.id)) return topic_label(f->topic);
+        if (!s.group.empty()) return topic_label(s.group);
     }
-    if (!s.group.empty()) return topic_label(s.group);
     const std::string host = url_host(s.site.empty() ? s.url : s.site);
     return host.rfind("www.", 0) == 0 ? host.substr(4) : host;
 }
@@ -465,9 +467,10 @@ ArticleRow article_row(const StoredArticle &a, bool saved, std::int64_t now)
     return r;
 }
 
-std::vector<ArticleOption> article_options(bool read)
+std::vector<ArticleOption> article_options(bool read, bool saved)
 {
-    return {read ? ArticleOption::MarkUnread : ArticleOption::MarkRead, ArticleOption::MarkAllRead, ArticleOption::Refresh, ArticleOption::Info};
+    return {read ? ArticleOption::MarkUnread : ArticleOption::MarkRead, saved ? ArticleOption::Unsave : ArticleOption::Save, ArticleOption::MarkAllRead,
+            ArticleOption::Refresh, ArticleOption::Info};
 }
 
 const char *article_option_label(ArticleOption o)
@@ -475,6 +478,8 @@ const char *article_option_label(ArticleOption o)
     switch (o) {
     case ArticleOption::MarkRead: return "Mark as read";
     case ArticleOption::MarkUnread: return "Mark as unread";
+    case ArticleOption::Save: return "Save for offline";
+    case ArticleOption::Unsave: return "Remove from saved";
     case ArticleOption::MarkAllRead: return "Mark all read";
     case ArticleOption::Refresh: return "Refresh this feed";
     case ArticleOption::Info: return "Article info";
@@ -672,5 +677,162 @@ std::string reader_caption(const std::string &feed_name, const Article &a, std::
     if (a.dated && a.published > 0) s += (s.empty() ? "" : kDot) + fmt_datetime(a.published, now);
     return s;
 }
+
+/* ------------------------------------------------------------------ images */
+
+bool junk_image_url(const std::string &url)
+{
+    const std::string u = lower_ascii(url);
+    static const char *const parts[] = {"/images/core/emoji/", "s.w.org/images/", "feeds.feedburner.com/~", "feeds.wordpress.com/1.0/",
+                                        "pixel.wp.com/", "stats.wordpress.com/", "/wp-includes/images/smilies/", "gravatar.com/avatar/",
+                                        "feedblitz.com/", "/share-button", "addtoany.com/"};
+    for (const char *p : parts)
+        if (u.find(p) != std::string::npos) return true;
+    return false;
+}
+
+std::vector<ArticleImage> article_images(const std::vector<Block> &blocks, const Article &a, std::size_t max_fetch)
+{
+    std::vector<ArticleImage> out;
+    std::vector<std::string> fetched;
+    auto fetch_slot = [&](const std::string &url) {
+        if (std::find(fetched.begin(), fetched.end(), url) != fetched.end()) return true;
+        if (fetched.size() >= max_fetch) return false;
+        fetched.push_back(url);
+        return true;
+    };
+    const std::size_t n = std::min(blocks.size(), kReaderMaxBlocks);
+    for (std::size_t i = 0; i < n; ++i) {
+        const Block &b = blocks[i];
+        if (b.type != BlockType::Image || b.url.empty() || junk_image_url(b.url)) continue;
+        ArticleImage im;
+        im.url = b.url;
+        im.alt = b.alt;
+        im.block = static_cast<int>(i);
+        im.fetch = fetch_slot(b.url);
+        out.push_back(std::move(im));
+    }
+    if (out.empty()) {
+        for (const std::string &u : a.images) {
+            if (u.empty() || junk_image_url(u)) continue;
+            ArticleImage im;
+            im.url = u;
+            im.block = -1;
+            im.fetch = fetch_slot(u);
+            out.push_back(std::move(im));
+            break;
+        }
+    }
+    return out;
+}
+
+std::string image_caption(ImageState s)
+{
+    switch (s) {
+    case ImageState::Loading: return "Loading\xE2\x80\xA6";
+    case ImageState::Downloading: return "Downloading\xE2\x80\xA6";
+    case ImageState::Unavailable: return "Image unavailable";
+    case ImageState::TooLarge: return "Too large to show";
+    case ImageState::Unsupported: return "Format not supported";
+    case ImageState::Off: return "Images are off";
+    case ImageState::NotLoaded: return "Not loaded";
+    case ImageState::Ready:
+    case ImageState::Hidden: break;
+    }
+    return "";
+}
+
+char image_state_letter(ImageState s)
+{
+    switch (s) {
+    case ImageState::Loading: return 'L';
+    case ImageState::Downloading: return 'D';
+    case ImageState::Ready: return 'R';
+    case ImageState::Unavailable: return 'U';
+    case ImageState::TooLarge: return 'T';
+    case ImageState::Unsupported: return 'S';
+    case ImageState::Off: return 'O';
+    case ImageState::NotLoaded: return 'N';
+    case ImageState::Hidden: return 'H';
+    }
+    return '?';
+}
+
+int nearest_image(const std::vector<std::pair<int, int>> &tiles, int view_top, int view_h)
+{
+    const long centre = view_top + view_h / 2;
+    int best = -1;
+    long best_d = 0;
+    for (std::size_t i = 0; i < tiles.size(); ++i) {
+        const int top = tiles[i].first, bottom = tiles[i].second;
+        if (bottom <= top) continue;
+        const int vis = std::min(bottom, view_top + view_h) - std::max(top, view_top);
+        if (vis * 2 < std::min(bottom - top, view_h)) continue;          // less than half of it in view
+        const long d = std::labs((top + bottom) / 2 - centre);
+        if (best < 0 || d < best_d) {
+            best = static_cast<int>(i);
+            best_d = d;
+        }
+    }
+    return best;
+}
+
+std::string viewer_caption(int index, int count)
+{
+    std::string s = "Esc or tap to close";
+    if (count > 1) s += kDot + std::to_string(index + 1) + " / " + std::to_string(count);
+    return s;
+}
+
+/* ------------------------------------------------------------------ saved articles */
+
+namespace {
+std::string whole_mb(std::uint64_t bytes)
+{
+    return std::to_string((bytes + 512 * 1024) / (1024 * 1024));
+}
+} // namespace
+
+std::string save_refusal_text(std::uint64_t used, int cap_mb)
+{
+    return "Saved articles use " + whole_mb(used) + " of " + std::to_string(cap_mb) + " MB. Delete some or raise the limit in Settings.";
+}
+
+std::string save_result_text(std::uint64_t bytes, int images_saved, int images_failed, bool images_off)
+{
+    if (images_off) return "Saved without images: they are off in Settings";
+    if (images_failed > 0)
+        return "Saved for offline, " + plural(images_failed, "image", "images") + " could not be downloaded";
+    (void)images_saved;
+    return "Saved for offline" + kDot + fmt_bytes(bytes);
+}
+
+std::string saved_row_line2(const SavedSummary &s, std::int64_t now)
+{
+    std::string t = s.feed_name.empty() ? std::string("Saved") : s.feed_name + kDot + "saved";
+    const std::string age = fmt_age(s.saved_at, now);
+    if (!age.empty()) t += " " + age;
+    return t + kDot + fmt_bytes(s.bytes);
+}
+
+std::string saved_footer(std::size_t count, std::uint64_t bytes, int cap_mb)
+{
+    return plural(static_cast<long>(count), "article", "articles") + ", " + fmt_bytes(bytes) + " of " + std::to_string(cap_mb) + " MB";
+}
+
+std::vector<SavedOption> saved_options() { return {SavedOption::Remove, SavedOption::Info}; }
+
+const char *saved_option_label(SavedOption o)
+{
+    switch (o) {
+    case SavedOption::Remove: return "Remove from saved";
+    case SavedOption::Info: return "Article info";
+    }
+    return "";
+}
+
+std::string options_hint() { return "Hold or press Ctrl+O for options"; }
+
+std::string image_cache_text(std::uint64_t bytes) { return bytes == 0 ? std::string("empty") : fmt_bytes(bytes); }
 
 } // namespace rssui
