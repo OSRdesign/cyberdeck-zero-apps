@@ -18,12 +18,12 @@ Copy summary file in `~/serial-logs`).
 
 ```
 python tools/make_registry.py --only serial-console --out C:/CLAUDE/zero7/pkg-out
-python deck.py put C:/CLAUDE/zero7/pkg-out/serial-console_0.4.0_arm64.deb /tmp/serial-console.deb
+python deck.py put C:/CLAUDE/zero7/pkg-out/serial-console_0.4.2_arm64.deb /tmp/serial-console.deb
 python deck.py sudo 'dpkg -i /tmp/serial-console.deb'
 python deck.py run '/usr/share/APPLaunch/bin/serial-console --version; id -nG'
 ```
 
-`--version`: `Serial Console (serial-console) 0.4.0`, the launcher commit, `cp0_lvgl pinned`. `id -nG` must list
+`--version`: `Serial Console (serial-console) 0.4.2`, the launcher commit, `cp0_lvgl pinned`. `id -nG` must list
 `dialout` (else S6 first). Logs: `python deck.py run 'journalctl --user -n 80 --no-pager | grep -E "cdk|serial-console"'`.
 
 ## S1. Deck (640x480, Bluetooth keyboard): ports, hot-plug, identification
@@ -80,7 +80,7 @@ Connect refused with the dialog *No permission for ttyUSB0*. Restore with `sudo 
 
 ```
 set DECK_HOST=<pi3a ip>
-python deck.py put C:/CLAUDE/zero7/pkg-out/serial-console_0.4.0_arm64.deb /tmp/serial-console.deb
+python deck.py put C:/CLAUDE/zero7/pkg-out/serial-console_0.4.2_arm64.deb /tmp/serial-console.deb
 python deck.py sudo 'dpkg -i /tmp/serial-console.deb'
 ```
 

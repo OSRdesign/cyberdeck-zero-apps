@@ -1,12 +1,19 @@
 # Serial Console
 
-Version 0.4.1, package `serial-console`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.4.2, package `serial-console`. Part of [cyberdeck-zero-apps](../../README.md).
 
 Serial Console talks to a USB-serial adapter or a microcontroller board (Arduino, ESP32, Raspberry Pi Pico, a GPS, a
 router console...) from the deck. It is a full-screen touch app made for the small screen: instead of dropping you into
 a raw terminal it first shows the serial ports it finds, says what is plugged into each one and recommends the settings,
 can find the speed by itself, can find out **what is on the other end** (the board or firmware behind a USB-serial
 adapter), then opens a terminal page.
+
+## What changed in 0.4.2
+
+* Built on the launcher's newer `cp0_lvgl` (commit `f35c2d6`): its buttons and rows use the shared 7 mm minimum tap
+  target (it was 9 mm). The header Esc keeps its 9 mm size (it is not on the 7 mm target).
+* **Pointer navigation**: with Settings > System > Pointer navigation on (off by default), a trackpoint, trackball or
+  mouse moves through Serial Console like the arrow keys, a click is Enter and a held click is Ctrl+O.
 
 ## Screenshots
 
@@ -209,6 +216,8 @@ The identification is kept in the port's section of the settings file as `id_*` 
 
 ## Changes
 
+* 0.4.2: rebuilt on launcher f35c2d6 (7 mm minimum tap target for buttons and rows, header Esc stays 9 mm, pointer
+  navigation when Settings > System > Pointer navigation is on).
 * 0.4.1: rebuilt on launcher 9912361 (shared toolkit: Muted tone, Wi-Fi status line, row affordance, action dot). Rows show what can be tapped: a chevron to open or change, grey information, a dot for actions that runs blue while running.
 * **0.4.0**: the ports, port, Ask and result pages move to the launcher's `cp0::ui::CompactList` (top-aligned dense
   rows in the full-width column, scrolling only at the bottom edge, a thin auto-hiding scrollbar, headings that are
