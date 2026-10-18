@@ -21,7 +21,7 @@ Each app has its own page with the full description, keys, requirements, known l
 | App | Version | What it does |
 | --- | --- | --- |
 | [**LAN Scan**](apps/lanscan/README.md) (`lanscan`) | 0.1.3 | Lists the devices on your Wi-Fi network (IP, MAC, vendor, name) and scans the open ports of one of them. |
-| [**Mesh Hop**](apps/mesh-hop/README.md) (`mesh-hop`) | 0.4.0 | Full-screen client for MeshCore LoRa mesh networks: chats, contacts, nearby nodes, radio settings, packet log and position, with a MeshCore companion radio board on USB, by touch or keyboard, on any screen from 640x480 up. |
+| [**Mesh Hop**](apps/mesh-hop/README.md) (`mesh-hop`) | 0.4.1 | Full-screen client for MeshCore LoRa mesh networks: chats, contacts, nearby nodes, radio settings, packet log and position, with a MeshCore companion radio board on USB, by touch or keyboard, on any screen from 640x480 up. |
 | [**Net Toolbox**](apps/net-toolbox/README.md) (`net-toolbox`) | 0.4.1 | The tools you reach for when the network misbehaves: a step-by-step diagnosis, ping, traceroute, DNS lookup, port check, HTTP check, public IP, whois and the interfaces, a speed test with a bufferbloat grade, Wake-on-LAN, a Bluetooth radar, a local device scanner, Wi-Fi networks with their channels and a Wi-Fi walk test. It replaces LAN Scan and Wi-Fi Survey. |
 | [**Serial Console**](apps/serial-console/README.md) (`serial-console`) | 0.4.1 | Finds your USB-serial adapters and boards, tells what is plugged in and what is behind it, recommends the settings, and talks to it. |
 | [**System Monitor**](apps/system-monitor/README.md) (`system-monitor`) | 0.2.2 | A live look at the Raspberry Pi it runs on: CPU, temperature, memory, storage, network, processes and the power supply. |
