@@ -56,6 +56,7 @@ void probe_jpeg(const std::string &b, ImageProbe &p)
             p.height = static_cast<int>(be16(b, pos + 3));
             p.width = static_cast<int>(be16(b, pos + 5));
             p.components = static_cast<int>(at(b, pos + 7));
+            p.precision = static_cast<int>(precision);
             p.baseline = m == 0xC0 && precision == 8;
             return;
         }

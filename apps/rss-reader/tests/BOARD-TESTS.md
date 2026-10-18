@@ -122,8 +122,9 @@ Settings > Download images = Always. Feeds with pictures among the favorites (Ar
    with a key; Left / Right (or a swipe) the other pictures of the article; Esc or a tap closes, back where you were. The
    sharper picture replaces the thumbnail within a second or two on the deck: ____ s. [ ] pass
 5. A tile that failed says why (Image unavailable, Format not supported, Too large to show); a tap on it says the same in
-   the grey line, nothing opens. Note here the real feeds whose pictures show "Format not supported" (progressive JPEG,
-   WebP, GIF): ______. [ ] pass
+   the grey line, nothing opens. Progressive JPEGs, GIFs and BMPs now show as pictures; note here the real feeds whose pictures
+   still show "Format not supported" (WebP, SVG, AVIF) or "Too large to show", and any that take more than 3 s to appear on
+   the deck: ______. [ ] pass
 6. Download images = Off: a new article shows "Images are off" in its tiles, nothing is downloaded (pictures already in
    the cache still show). [ ] pass
 7. Settings > Clear image cache shows the size, empties it ("Image cache cleared: N MB freed"), then "empty":

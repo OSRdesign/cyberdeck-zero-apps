@@ -14,19 +14,17 @@ Comment: The application is linked against the LVGL based cp0_lvgl runtime of th
  and shown on the device only, never mirrored or re-hosted; the pictures of the
  articles are kept on the device only (an image cache, the saved articles).
  .
- Pictures are decoded by code of LVGL's source tree linked into the binary: lodepng
- (Copyright Lode Vandevenne, zlib licence) for PNG, and TJpgDec R0.03 for JPEG
- (Copyright (C) 2021 ChaN, all right reserved; "The TJpgDec module is a free software
- and there is NO WARRANTY. No restriction on use. You can use, modify and redistribute
- it for personal, non-profit or commercial products UNDER YOUR RESPONSIBILITY.
- Redistributions of source code must retain the above copyright notice.").
+ Pictures (JPEG, PNG, GIF, BMP) are decoded by stb_image v2.30 (Copyright 2017 Sean
+ Barrett and the stb contributors; public domain / MIT, either at your choice), one
+ header compiled into the binary. LVGL's own lodepng (Copyright Lode Vandevenne, zlib
+ licence) is also linked into the binary but the app does not use it.
 
 Files: usr/share/APPLaunch/bin/rss-reader
 Copyright: 2026 OSRdesign
  M5Stack Technology CO LTD (cp0_lvgl runtime linked into the binary)
  LVGL Kft (LVGL, linked into the binary)
  Lode Vandevenne (lodepng, in LVGL: zlib licence)
- 2021 ChaN (TJpgDec, in LVGL's tree: see the Comment above)
+ 2017 Sean Barrett and the stb contributors (stb_image: public domain / MIT)
 License: MIT
 
 Files: usr/share/APPLaunch/applications/rss-reader.desktop

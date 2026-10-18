@@ -13,13 +13,17 @@ UI=$APP/src/ui
 OUT=${OUT:-$HOME/cdk-build/rss-reader/unit}
 mkdir -p "$OUT"
 FLAGS="-std=c++17 -Wall -Wextra -O1 -g"
+CFLAGS_C="-std=gnu11 -Wall -Wextra -O1 -g"
 if [ -n "${SANITIZE:-}" ]; then
     FLAGS="$FLAGS -fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer"
+    CFLAGS_C="$CFLAGS_C -fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer"
     BIN=$OUT/test_core_asan
     UIBIN=$OUT/test_ui_asan
+    IMGBIN=$OUT/test_img_asan
 else
     BIN=$OUT/test_core
     UIBIN=$OUT/test_ui
+    IMGBIN=$OUT/test_img
 fi
 # shellcheck disable=SC2086
 g++ $FLAGS -DTEST_DATA_DIR="\"$HERE/../data\"" -DCATALOG_PATH="\"$APP/data/catalog.json\"" -I"$CORE" -I"$HERE" \
@@ -27,6 +31,12 @@ g++ $FLAGS -DTEST_DATA_DIR="\"$HERE/../data\"" -DCATALOG_PATH="\"$APP/data/catal
 # shellcheck disable=SC2086
 g++ $FLAGS -DTEST_DATA_DIR="\"$HERE/../data\"" -DAPP_DIR="\"$APP\"" -I"$CORE" -I"$UI" -I"$HERE" "$HERE/ui_tests.cpp" \
     "$UI/ui_logic.cpp" "$UI/keys.cpp" "$UI/key_bridge.cpp" "$UI/jobs.cpp" "$CORE"/*.cpp -lpthread -o "$UIBIN"
+# the image decoding (stb_image through image_codecs.c, the resampler): no LVGL needed; the fuzz of 600 files per format
+# shellcheck disable=SC2086
+gcc $CFLAGS_C -c "$UI/image_codecs.c" -o "$OUT/image_codecs.o"
+# shellcheck disable=SC2086
+g++ $FLAGS -DTEST_DATA_DIR="\"$HERE/../data\"" -I"$CORE" -I"$UI" -I"$HERE" "$HERE/img_tests.cpp" "$UI/image_decode.cpp" \
+    "$OUT/image_codecs.o" "$CORE"/*.cpp -lpthread -o "$IMGBIN"
 
 SERVER_PID=
 if command -v python3 >/dev/null 2>&1 && command -v curl >/dev/null 2>&1; then
@@ -41,4 +51,5 @@ fi
 rc=0
 "$BIN" || rc=1
 "$UIBIN" || rc=1
+"$IMGBIN" || rc=1
 exit $rc

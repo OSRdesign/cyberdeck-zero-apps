@@ -1,8 +1,9 @@
 # Images in the reader (phase 3): the placeholder while the pictures download (a slow network), then the thumbnails where
 # they stand in the text; the keys' ring (Up / Down scroll and the image nearest the middle has the ring, Tab jumps, Enter
 # opens); the full-screen view (Left / Right, the line that fades, Esc; a tap opens, a swipe goes on, a tap closes); the
-# gallery article where each picture fails its own way (progressive JPEG, a 20000 x 20000 header, a web page served as a
-# JPEG, a cut file, WebP; the 7th and 8th are not loaded); an article whose text has no picture shows the feed's own.
+# gallery article: a progressive JPEG and a PNG that show, and the pictures that fail each in its own way (a 20000 x 20000
+# header, a web page served as a JPEG, a broken PNG, WebP; the 7th and 8th are not loaded); an article whose text has no
+# picture shows the feed's own.
 seed pin us-ars-technica
 seed refresh
 seed refresh_on_open off
@@ -77,15 +78,16 @@ expect state page reader
 key right
 wait 2500
 expect state reader_idx 2
-expect state images SRTUUSNN
+expect state images RRTUUSNN
 shot 08-gallery-top
 check gallery
-tapimage 0
-wait 300
-expect state viewer -1
-expect text "Format not supported"
 key pgdn
 wait 200
+expect text "Too large to show"
+tapimage 2
+wait 300
+expect state viewer -1
+expect text "Too large to show"
 shot 09-gallery-more
 key pgdn
 wait 200

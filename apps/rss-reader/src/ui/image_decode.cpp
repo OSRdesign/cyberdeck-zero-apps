@@ -164,12 +164,13 @@ int sink_rows(void *user, unsigned left, unsigned top, unsigned right, unsigned 
     return 1;
 }
 
-std::uint64_t pixel_limit(ImageFormat f)
+std::uint64_t pixel_limit(const ImageProbe &p)
 {
-    switch (f) {
-    case ImageFormat::Jpeg: return kMaxJpegPixels;
+    switch (p.format) {
+    case ImageFormat::Jpeg: return p.progressive ? kMaxProgressiveJpegPixels : kMaxJpegPixels;
     case ImageFormat::Png: return kMaxPngPixels;
     case ImageFormat::Gif: return kMaxGifPixels;
+    case ImageFormat::Bmp: return kMaxBmpPixels;
     default: return 0;
     }
 }
@@ -213,18 +214,19 @@ DecodeStatus decode_check(const ImageProbe &p)
     if (p.format == ImageFormat::Unknown) return DecodeStatus::Broken;
     switch (p.format) {
     case ImageFormat::Jpeg:
-        if (!rss_jpeg_available() || (p.jpeg_sof >= 0 && !p.baseline) || p.components == 4) return DecodeStatus::Unsupported;
+        // stb_image reads SOF0 / SOF1 (sequential) and SOF2 (progressive), 8-bit, Huffman: not arithmetic, lossless, 12-bit
+        if (p.jpeg_sof >= 0 && (p.jpeg_sof > 0xC2 || p.precision != 8)) return DecodeStatus::Unsupported;
+        if (p.components != 0 && p.components != 1 && p.components != 3 && p.components != 4) return DecodeStatus::Unsupported;
         break;
     case ImageFormat::Png:
-        if (!rss_png_available()) return DecodeStatus::Unsupported;
-        break;
     case ImageFormat::Gif:
-        if (!rss_gif_available() || p.width > rss_gif_max_width()) return DecodeStatus::Unsupported;
-        break;
-    default: return DecodeStatus::Unsupported;     // WebP, BMP, SVG, AVIF: no decoder in the pin
+    case ImageFormat::Bmp: break;
+    default: return DecodeStatus::Unsupported;     // WebP, SVG, AVIF: no decoder
     }
     if (p.width <= 0 || p.height <= 0) return DecodeStatus::Broken;
-    return p.pixels() > pixel_limit(p.format) ? DecodeStatus::TooLarge : DecodeStatus::Ok;
+    if (static_cast<unsigned>(p.width) > rss_image_max_dimension() || static_cast<unsigned>(p.height) > rss_image_max_dimension())
+        return DecodeStatus::TooLarge;
+    return p.pixels() > pixel_limit(p) ? DecodeStatus::TooLarge : DecodeStatus::Ok;
 }
 
 DecodeStatus decode_image(const std::string &bytes, int max_w, int max_h, std::uint32_t bg, DecodedImage &out, const std::atomic<bool> *cancel)
@@ -245,24 +247,20 @@ DecodeStatus decode_image(const std::string &bytes, int max_w, int max_h, std::u
     Job j;
     j.max_w = max_w;
     j.max_h = max_h;
-    j.max_pixels = pixel_limit(p.format);
+    j.max_pixels = pixel_limit(p);
     j.bg = bg;
     j.cancel = cancel;
     j.out = &out;
     const rss_img_sink sink{&j, sink_begin, sink_rows};
     const auto *data = reinterpret_cast<const unsigned char *>(bytes.data());
-    int rc = RSS_IMG_BROKEN;
-    switch (p.format) {
-    case ImageFormat::Jpeg: rc = rss_jpeg_decode(data, bytes.size(), &sink); break;
-    case ImageFormat::Png: rc = rss_png_decode(data, bytes.size(), &sink); break;
-    case ImageFormat::Gif: rc = rss_gif_decode(data, bytes.size(), &sink); break;
-    default: break;
-    }
+    // JPEG has no alpha: 3 bytes a pixel; PNG, GIF and BMP come as R G B A
+    const int rc = rss_image_decode(data, bytes.size(), p.format == ImageFormat::Jpeg ? 3 : 4, kDecodeMemCeiling, &sink);
     DecodeStatus st = DecodeStatus::Broken;
     if (j.cancelled()) st = DecodeStatus::Cancelled;
     else if (rc == RSS_IMG_OK) st = j.ready ? DecodeStatus::Ok : DecodeStatus::Broken;
     else if (rc == RSS_IMG_STOPPED) st = j.too_large ? DecodeStatus::TooLarge : DecodeStatus::Broken;
     else if (rc == RSS_IMG_UNSUPPORTED || rc == RSS_IMG_NO_DECODER) st = DecodeStatus::Unsupported;
+    else if (rc == RSS_IMG_TOO_LARGE) st = DecodeStatus::TooLarge;
     if (st == DecodeStatus::Ok) {
         try {
             j.rs.finish(out.rgb565);

@@ -2,8 +2,8 @@
  * SPDX-License-Identifier: MIT
  *
  * RSS Reader core: what an image is, from its first bytes, before anything decodes it. The format (PNG, JPEG, GIF, WebP,
- * BMP, SVG, AVIF), the size its header declares and, for a JPEG, whether it is baseline (the decoder the app has) or
- * progressive / arithmetic / lossless (it has none). Reads the headers only (a JPEG's markers up to its frame header),
+ * BMP, SVG, AVIF), the size its header declares and, for a JPEG, its frame type (baseline, progressive, arithmetic,
+ * lossless: stb_image reads the first two), precision and components. Reads the headers only (a JPEG's markers up to its frame header),
  * never more than the bytes given, never throws: the app refuses an image here before a decoder allocates anything
  * (docs/IMAGES.md: the pixel limits).
  */
@@ -19,7 +19,8 @@ enum class ImageFormat { Unknown, Png, Jpeg, Gif, Webp, Bmp, Svg, Avif };
 struct ImageProbe {
     ImageFormat format = ImageFormat::Unknown;
     int width = 0, height = 0;        /* as the header declares them; 0 when it does not say (or the bytes stop first) */
-    bool baseline = false;            /* JPEG: a baseline frame (SOF0), what the app's decoder reads */
+    bool baseline = false;            /* JPEG: a baseline frame (SOF0), 8-bit */
+    int precision = 0;                /* JPEG: bits per sample of the frame header (8 or 12) */
     bool progressive = false;         /* JPEG: SOF2 (or another non-baseline frame type: see jpeg_sof) */
     int jpeg_sof = -1;                /* JPEG: the frame marker (0xC0..0xCF), -1 when none was found */
     int components = 0;               /* JPEG: 1 grey, 3 colour, 4 CMYK */

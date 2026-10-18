@@ -2,13 +2,15 @@
  * SPDX-License-Identifier: MIT
  *
  * RSS Reader: image bytes to pixels the reader can show, off the UI thread. What the pinned launcher's LVGL offers and
- * what it costs is in docs/IMAGES.md; in short:
+ * what it costs is in docs/IMAGES.md; in short: one decoder, stb_image (third_party/stb, via image_codecs.h), for
  *
- *   JPEG  baseline only, through TJpgDec (image_codecs.h): streamed block by block, so the memory is the size of the
- *         result, never the size of the photo;
- *   PNG   the LVGL build's lodepng: the whole picture decoded first (about 8 bytes a pixel at the peak), then scaled;
- *   GIF   the LVGL build's AnimatedGIF is not safe on a broken file: off (Unsupported) unless built with RSS_USE_ANIMATEDGIF;
- *   WebP, BMP, SVG, AVIF, progressive JPEG: no decoder in the pin -> Unsupported.
+ *   JPEG  baseline and progressive (8-bit Huffman); arithmetic, lossless, 12-bit -> Unsupported
+ *   PNG   all colour types, interlaced or not
+ *   GIF   the first frame only
+ *   BMP   the common variants
+ *
+ * stb_image decodes a picture whole, so the memory is a few bytes a pixel (the pixel limits below keep it under
+ * kDecodeMemCeiling, which the decoder's allocator enforces); WebP, SVG, AVIF -> Unsupported.
  *
  * The header is read first (core/image_probe.hpp): a picture over its format's pixel limit is refused before anything is
  * allocated. The result is scaled down (an area average, never up) to fit a box and kept as RGB565 (the panels' 16-bit
@@ -27,9 +29,12 @@
 namespace rssui {
 
 /* The pixel limits (width x height from the header), measured on the host harness: docs/IMAGES.md. */
-constexpr std::uint64_t kMaxJpegPixels = 16u * 1000 * 1000;   /* streamed: costs time, not memory (about 1.5 s per 10 MP on a Zero 2W, estimated) */
-constexpr std::uint64_t kMaxPngPixels = 4200u * 1000;         /* lodepng holds about 8 bytes a pixel: 34 MB at the limit */
-constexpr std::uint64_t kMaxGifPixels = 4u * 1000 * 1000;    /* and at most 480 wide: AnimatedGIF's MAX_WIDTH in the pin */
+constexpr std::uint64_t kMaxJpegPixels = 16u * 1000 * 1000;             /* baseline: 4.4 bytes a pixel at the peak (4:2:0), 5.9 (4:4:4): 70 to 94 MB at the limit */
+constexpr std::uint64_t kMaxProgressiveJpegPixels = 6u * 1000 * 1000;   /* progressive keeps every DCT coefficient: 7.3 bytes a pixel (4:2:0), 11.7 (4:4:4): 44 to 70 MB at the limit */
+constexpr std::uint64_t kMaxPngPixels = 4200u * 1000;                   /* about 8 bytes a pixel: 34 MB at the limit */
+constexpr std::uint64_t kMaxGifPixels = 4200u * 1000;                   /* 8.8 bytes a pixel (canvas, background, history): 37 MB at the limit */
+constexpr std::uint64_t kMaxBmpPixels = 4200u * 1000;                   /* 4 bytes a pixel: 17 MB at the limit */
+constexpr std::size_t kDecodeMemCeiling = 96u * 1024 * 1024;            /* the decoder's allocator refuses past this: TooLarge (a 16 MP 4:4:4 JPEG is 94 MB: just under) */
 
 enum class DecodeStatus { Ok, Unsupported, TooLarge, Broken, Cancelled };
 const char *decode_status_name(DecodeStatus s);               /* "ok", "unsupported", "too large", "broken", "cancelled" */

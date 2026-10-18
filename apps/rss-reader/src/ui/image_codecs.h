@@ -1,21 +1,22 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * RSS Reader: the image decoders of the pinned launcher's LVGL tree, behind one small C interface (their headers are C and
- * do not mix with C++: image_codecs.c is the only file that includes them). See docs/IMAGES.md.
+ * RSS Reader: the image decoder behind one small C interface: stb_image (public domain / MIT, third_party/stb, one header,
+ * compiled into image_codecs.c only). See docs/IMAGES.md.
  *
- *   JPEG  TJpgDec (ChaN), lvgl/src/libs/tjpgd: in the pin's source tree but left out by its configuration (LV_USE_TJPGD 0);
- *         image_codecs.c compiles that file, unmodified, for this translation unit (-DRSS_NO_TJPGD leaves it out: every
- *         JPEG is then "not supported"). Baseline only (SOF0, 8-bit, grey or YCbCr); streamed block by block (an MCU,
- *         8x8 to 16x16 pixels) with 8 KB of work memory whatever the size of the picture.
- *   PNG   lodepng, lvgl/src/libs/lodepng (LV_USE_LODEPNG 1 in the pin): the whole picture is inflated, then converted
- *         into an ARGB8888-sized buffer (LVGL's modification), handed out row by row, then freed.
- *   GIF   AnimatedGIF, lvgl/src/libs/gif (LV_USE_GIF 1 in the pin): only with -DRSS_USE_ANIMATEDGIF (it is not safe on a
- *         broken file: image_codecs.c); then the first frame, line by line (8-bit indices through the palette, transparent
- *         pixels with alpha 0), canvases wider than 480 pixels refused (its MAX_WIDTH).
+ *   JPEG  baseline and progressive, 8-bit, Huffman (grey, YCbCr, CMYK/YCCK); arithmetic, lossless and 12-bit are refused
+ *   PNG   every colour type and bit depth, interlaced or not
+ *   GIF   the first frame only (transparency kept as alpha 0)
+ *   BMP   the common variants (stb_image's reader)
+ *   Everything else stb_image reads (PSD, TGA, HDR, PIC, PNM) is compiled out (STBI_ONLY_*).
  *
- * The decoders call `begin` with the picture's size (return 0 to stop there: too large, or cancelled), then `rows` with
- * rectangles of pixels, 3 bytes (R G B) or 4 (R G B A) each, `stride` bytes from one row to the next (return 0 to stop).
+ * The picture is decoded whole (stb_image has no streaming API), then handed out in bands of rows. Every allocation of
+ * the decoder goes through a counter with a hard ceiling (`mem_limit`): a picture that would need more is refused
+ * (RSS_IMG_TOO_LARGE) instead of exhausting a small board. Not thread safe: the app decodes one picture at a time.
+ *
+ * `begin` is called with the picture's size from its header (return 0 to stop there: too large, or cancelled), then
+ * `rows` with rectangles of pixels, 3 bytes (R G B) or 4 (R G B A) each, `stride` bytes from one row to the next
+ * (return 0 to stop).
  */
 #pragma once
 
@@ -35,22 +36,24 @@ typedef struct rss_img_sink {
 enum {
     RSS_IMG_OK = 0,
     RSS_IMG_STOPPED = 1,         /* a callback returned 0 */
-    RSS_IMG_UNSUPPORTED = 2,     /* a variant this decoder does not read (progressive JPEG, a GIF over 480 wide ...) */
+    RSS_IMG_UNSUPPORTED = 2,     /* a variant the decoder does not read */
     RSS_IMG_BROKEN = 3,          /* not that format, or broken */
-    RSS_IMG_NO_DECODER = 4,      /* this build has no decoder for the format */
+    RSS_IMG_NO_DECODER = 4,      /* this build has no decoder */
+    RSS_IMG_TOO_LARGE = 5,       /* over the decoder's dimension limit or the memory ceiling */
 };
 
-int rss_jpeg_decode(const unsigned char *data, size_t size, const rss_img_sink *sink);
-int rss_png_decode(const unsigned char *data, size_t size, const rss_img_sink *sink);
-int rss_gif_decode(const unsigned char *data, size_t size, const rss_img_sink *sink);
-/* The width and height of a PNG from lodepng's own header check (0 on failure). */
-int rss_png_inspect(const unsigned char *data, size_t size, unsigned *width, unsigned *height);
+/* Decodes a JPEG, PNG, GIF (first frame) or BMP. `bytes_per_pixel`: 3 (R G B, for JPEG) or 4 (R G B A). `mem_limit`: the
+ * ceiling in bytes for all the decoder's allocations together (0: none). */
+int rss_image_decode(const unsigned char *data, size_t size, int bytes_per_pixel, size_t mem_limit, const rss_img_sink *sink);
 
-int rss_jpeg_available(void);
-int rss_png_available(void);
-int rss_gif_available(void);
-/* AnimatedGIF's widest canvas (480 in the pin). */
-int rss_gif_max_width(void);
+/* The size the header declares (stb_image's own header reader); 1 when it reads it, else 0 and 0 x 0. */
+int rss_image_info(const unsigned char *data, size_t size, unsigned *width, unsigned *height);
+
+/* The most the decoder had allocated at one time during the last rss_image_decode (bytes): for the measurements. */
+size_t rss_image_last_peak(void);
+
+/* The longest side stb_image accepts (STBI_MAX_DIMENSIONS). */
+unsigned rss_image_max_dimension(void);
 
 #ifdef __cplusplus
 }

@@ -90,10 +90,10 @@ Reset: close the app and remove `~/.local/share/rss-reader` and `~/.cache/rss-re
 
 ## Known limits (this version)
 
-- Pictures: baseline JPEG and PNG only (what the pinned launcher's LVGL provides, see [docs/IMAGES.md](docs/IMAGES.md)).
-  Progressive JPEG, GIF (the pin's decoder is not safe on a broken file), WebP, SVG and AVIF show "Format not supported";
-  a JPEG over 16 MP or a PNG over 4.2 MP shows "Too large to show"; at most six pictures per article, 2 MB each. No zoom
-  in the full-screen view; GIFs do not move.
+- Pictures: JPEG (baseline and progressive), PNG, GIF (the first frame only: GIFs do not move) and BMP, decoded by
+  stb_image (see [docs/IMAGES.md](docs/IMAGES.md)). WebP, SVG and AVIF show "Format not supported"; a JPEG over 16 MP
+  (progressive: 8 MP) or a PNG, GIF or BMP over 4.2 MP shows "Too large to show"; a photo turned by its EXIF tag is shown
+  as stored, not turned; at most six pictures per article, 2 MB each. No zoom in the full-screen view.
 - Articles show what the feed carries: a feed that gives only a summary shows only the summary (and only its pictures).
 - Article titles are one line in the lists, cut with dots.
 - The lists and the key bridge are copies of Mesh Hop's (a shared one in `apps/_common` is a follow-up).
@@ -104,7 +104,7 @@ Reset: close the app and remove `~/.local/share/rss-reader` and `~/.cache/rss-re
 | Path | What |
 |---|---|
 | `src/core/` | plain C++17, namespace `rssreader`, no LVGL: the XML and feed parsers (RSS 2.0 / 0.9x, RDF, Atom), HTML to text blocks, feed discovery, HTTP through the `curl` command, the catalog, the store, the refresh, OPML (phase 1; see the headers) |
-| `src/ui/` | namespace `rssui`: `ui_logic` (the rows' texts, the rules of the dialogs, the 3 s hold, the title that fits, which pictures an article shows; no LVGL), `keys` and `key_bridge` (the keys), `jobs` (the worker threads), `row_list` (the virtual list), `image_codecs.c` and `image_decode` (the pin's TJpgDec and lodepng off the UI thread, scaled to the thumbnail), `rss_app*` and `page_*` (the pages; `page_viewer` the full-screen picture), `app_spec` (the `cdk::AppSpec`, minimum 640x480) |
+| `src/ui/` | namespace `rssui`: `ui_logic` (the rows' texts, the rules of the dialogs, the 3 s hold, the title that fits, which pictures an article shows; no LVGL), `keys` and `key_bridge` (the keys), `jobs` (the worker threads), `row_list` (the virtual list), `image_codecs.c` and `image_decode` (stb_image, `third_party/stb`, off the UI thread, scaled to the thumbnail), `rss_app*` and `page_*` (the pages; `page_viewer` the full-screen picture), `app_spec` (the `cdk::AppSpec`, minimum 640x480) |
 | `data/catalog.json` | 269 feeds (see `data/CATALOG-SOURCES.md`); the package installs a copy in `/usr/share/APPLaunch/share/rss-reader/` |
 | `tests/unit/` | host tests of the core (about 10000 checks, with the image headers, the image cache and the read marks made during a refresh), of the UI logic and the package files (`ui_tests.cpp`, about 520), and of the decoding (`img_tests.cpp`: `rss-reader-imgtest`, with LVGL, a mutation test of the decoders; `--bench` measures one picture) |
 | `tests/flows/` | the scripted runner (`rss-reader-script`: a fake network answering from `tests/data/ui` by `routes.txt`, pictures in `tests/data/ui/img`, a fixed clock, a seeded store) and thirteen flows |
@@ -135,9 +135,8 @@ board protocol is [tests/BOARD-TESTS.md](tests/BOARD-TESTS.md).
 
 Our code: MIT, 2026 OSRdesign. The binary links the launcher's `cp0_lvgl` runtime and LVGL (MIT); the fonts are the
 launcher's, read at run time (Montserrat and Noto Sans CJK: SIL OFL 1.1; DejaVu: the Bitstream Vera / DejaVu licence).
-HTTP goes through the `curl` program (curl licence). JPEG pictures are decoded by TJpgDec (ChaN, its own permissive licence:
-"no restriction on use", the copyright notice kept), compiled from the launcher's LVGL tree; PNG by LVGL's lodepng (zlib
-licence). The catalog lists the publishers' own feed addresses
+HTTP goes through the `curl` program (curl licence). Pictures are decoded by stb_image v2.30 (Sean Barrett and the stb contributors,
+public domain or MIT at your choice; `third_party/stb`, one header compiled into the binary). The catalog lists the publishers' own feed addresses
 ([CATALOG-SOURCES.md](data/CATALOG-SOURCES.md)); the feeds' content belongs to their publishers and is only fetched and
 shown on the device. Details in `root/usr/share/doc/rss-reader/copyright`.
 

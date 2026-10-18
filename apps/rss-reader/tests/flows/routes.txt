@@ -21,6 +21,6 @@ https://cdn.arstechnica.net/2026/10/logo.png img/logo.png
 https://cdn.arstechnica.net/2026/10/progressive.jpg img/progressive.jpg
 https://cdn.arstechnica.net/2026/10/huge.jpg img/huge.jpg
 https://cdn.arstechnica.net/2026/10/notimage.jpg img/notimage.jpg
-https://cdn.arstechnica.net/2026/10/truncated.jpg img/truncated.jpg
+https://cdn.arstechnica.net/2026/10/corrupt.png img/corrupt.png
 https://cdn.arstechnica.net/2026/10/pic.webp img/pic.webp
 https://cdn.arstechnica.net/2026/10/anim.gif img/anim.gif
