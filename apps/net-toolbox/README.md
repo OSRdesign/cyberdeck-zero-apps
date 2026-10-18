@@ -1,6 +1,6 @@
 # Net Toolbox
 
-Version 0.4.1, package `net-toolbox`. Part of
+Version 0.4.2, package `net-toolbox`. Part of
 [cyberdeck-zero-apps](../../README.md).
 
 Net Toolbox gathers the tools you reach for when a network misbehaves: a step-by-step **diagnosis** ("why is my
@@ -43,6 +43,13 @@ card. The cores are described in [Local devices (0.4): the core](#local-devices-
 test (0.4): the cores](#wi-fi-networks-and-walk-test-04-the-cores), the pages in [The 0.4 pages](#the-04-pages). The pages ran
 in the headless scenes only; the board steps B16 to B19 (`tests/BOARD-TESTS.md`) are still to be run. Local devices scans only
 the chosen interface's own private network (never a public address), without root.
+
+## What changed in 0.4.2
+
+* Built on the launcher's newer `cp0_lvgl` (commit `f35c2d6`): its buttons and rows use the shared 7 mm minimum tap target.
+  The header Esc keeps its 9 mm size (it is not on the 7 mm target).
+* **Pointer navigation**: with Settings > System > Pointer navigation on (off by default), a trackpoint, trackball or mouse moves
+  through Net Toolbox like the arrow keys, a click is Enter and a held click is Ctrl+O.
 
 ## Screenshots
 
@@ -776,6 +783,8 @@ python3 tools/make_registry.py --only net-toolbox --out <a folder outside packag
 
 ## Changes
 
+* 0.4.2: rebuilt on launcher f35c2d6: the toolkit's 7 mm minimum tap target for buttons and rows (the header Esc
+  keeps 9 mm) and pointer navigation (Settings > System > Pointer navigation); no change in Net Toolbox's own code.
 * 0.4.1: rows show what can be tapped, by the launcher's row rule: a chevron opens a page or changes a value, read-outs are
   grey information (a status colour is kept), and a row that does something right there (Run, Stop, Save log, Scan) carries
   a dot that is white when idle and blue while it runs; the values line up in one column. Net Toolbox's own two-line rows

@@ -114,7 +114,7 @@ static void test_package()
     const std::string manifest = read_file(app + "/app.json");
     CHECK(manifest.find("\"share_code\": \"net-toolbox\"") != std::string::npos);
     CHECK(manifest.find("\"package\": \"net-toolbox\"") != std::string::npos);
-    CHECK(manifest.find("\"version\": \"0.4.1\"") != std::string::npos);
+    CHECK(manifest.find("\"version\": \"0.4.2\"") != std::string::npos);
     CHECK(manifest.find("\"title\": \"Net Toolbox\"") != std::string::npos);
     CHECK(manifest.find("\"license\": \"MIT\"") != std::string::npos);
     CHECK(manifest.find("\"categories\": [\"Tools\"]") != std::string::npos);
