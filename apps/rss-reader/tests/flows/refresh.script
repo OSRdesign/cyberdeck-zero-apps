@@ -1,0 +1,64 @@
+# The refresh: Refresh when opening (On) starts it as Favorites opens, on a worker thread, one feed after the other; the bar
+# says "Updating 3/6...", the feed in flight says so on its row. One feed fails (HTTP 503), one times out: their rows say why
+# in the warn tone, the others are updated. Offline: every feed fails, "No network", the cached articles stay. Stop, and
+# leaving the page, cancel it.
+seed pin us-ars-technica
+seed pin gb-bbc-news-top-stories
+seed pin fr-korben
+seed pin jp-nhk
+seed pin us-lwn-net
+seed pin int-hacker-news-front-page-hnrss
+seed refresh_on_open on
+wait 900
+net slow 500
+key enter
+wait 700
+expect state refreshing 1
+shot 01-updating
+check updating
+wait 1100
+shot 02-updating-more
+wait 3500
+expect state refreshing 0
+expect state refresh 6/6
+shot 03-updated-partial
+check updated
+key end
+wait 300
+expect text "Not updated: Server error (HTTP 503)"
+expect text "Not updated: Timed out"
+shot 03b-failed-rows
+key home
+net slow 0
+# offline: Refresh all fails everywhere, the articles stay
+net offline
+tap "Refresh all"
+wait 1500
+expect state refreshing 0
+shot 04-offline
+expect text "Not updated: No network  ·  2 h"
+expect text "Not updated: No network  ·  14 min"
+net online
+key ctrl-r
+wait 1500
+shot 05-online-again
+# Stop on the bar
+net slow 800
+tap "Refresh all"
+wait 300
+expect state refreshing 1
+expect text "Stop"
+shot 06-stop-button
+tap "Stop"
+wait 1500
+expect state refreshing 0
+shot 07-stopped
+# leaving the page cancels too
+tap "Refresh all"
+wait 300
+key esc
+wait 1500
+expect state page home
+expect state refreshing 0
+shot 08-left-page
+net slow 0

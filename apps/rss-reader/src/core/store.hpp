@@ -5,7 +5,7 @@
  * $XDG_DATA_HOME/rss-reader; injectable for the tests):
  *
  *   subscriptions.json   {"version":1,"feeds":[{id,name,url,site,group,lang,custom,etag,last_modified,last_fetch,
- *                        last_attempt,last_error,added,unread,total}]}  the favourites, in order (the catalog ones and the
+ *                        last_attempt,last_error,added,unread,total,newest}]}  the favourites, in order (the catalog ones and the
  *                        user's own), with each feed's conditional-GET validators, fetch state and unread / total counts
  *   settings.json        {"version":1,"text_size":"small|medium|large","image_download":"always|off","storage_cap_mb":200,
  *                        "refresh_on_open":true}
@@ -66,6 +66,7 @@ struct Subscription {
     std::string last_error;            /* "" after a success */
     int unread = 0;
     int total = 0;
+    std::int64_t newest = 0;           /* `published` of the newest cached article (0: none), kept by store_articles() */
 };
 
 struct StoredArticle {
@@ -141,6 +142,8 @@ public:
     bool store_articles(const std::string &feed_id, std::vector<StoredArticle> articles);
     bool set_read(const std::string &feed_id, const std::string &article_id, bool read);
     bool mark_all_read(const std::string &feed_id);
+    /* Forgets every read mark (every feed's read/ file goes): all cached articles are unread again. */
+    bool clear_read_history();
     int unread_count(const std::string &feed_id);
     int total_unread();
 

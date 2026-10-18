@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<channel>
+<title>Korben</title>
+<link>https://korben.info</link>
+<description>Upgrade your mind</description>
+<language>fr-FR</language>
+<item>
+<title>Un clavier mécanique à 30 € qui tient la route</title>
+<link>https://korben.info/article-1.html</link>
+<guid isPermaLink="false">korben-1</guid>
+<pubDate>Sun, 18 Oct 2026 14:30:00 +0000</pubDate>
+<dc:creator><![CDATA[Korben]]></dc:creator>
+<description><![CDATA[<p>J'ai testé ce petit clavier pendant une semaine.</p>]]></description>
+<content:encoded><![CDATA[<p>J'ai testé ce petit clavier pendant une semaine.</p><p>Les touches sont agréables et le rétroéclairage est sobre. À ce prix, c'est une très bonne affaire.</p>]]></content:encoded>
+</item>
+<item>
+<title>Comment chiffrer une clé USB en deux minutes</title>
+<link>https://korben.info/article-2.html</link>
+<guid isPermaLink="false">korben-2</guid>
+<pubDate>Sun, 18 Oct 2026 09:20:00 +0000</pubDate>
+<dc:creator><![CDATA[Korben]]></dc:creator>
+<description><![CDATA[<p>Un tutoriel pas à pas, sans logiciel payant.</p>]]></description>
+<content:encoded><![CDATA[<p>Un tutoriel pas à pas, sans logiciel payant.</p><p>On utilise l'outil intégré au système : rien à installer, et ça marche aussi sur Linux.</p>]]></content:encoded>
+</item>
+<item>
+<title>Les « dark patterns » expliqués à ma grand-mère</title>
+<link>https://korben.info/article-3.html</link>
+<guid isPermaLink="false">korben-3</guid>
+<pubDate>Sat, 17 Oct 2026 18:20:00 +0000</pubDate>
+<dc:creator><![CDATA[Korben]]></dc:creator>
+<description><![CDATA[<p>Ces interfaces qui vous poussent à cliquer là où il ne faut pas.</p>]]></description>
+<content:encoded><![CDATA[<p>Ces interfaces qui vous poussent à cliquer là où il ne faut pas.</p><p>Quelques exemples, et comment les repérer avant qu'il ne soit trop tard.</p>]]></content:encoded>
+</item>
+<item>
+<title>Raspberry Pi : un écran de 4 pouces pour moins de 20 €</title>
+<link>https://korben.info/article-4.html</link>
+<guid isPermaLink="false">korben-4</guid>
+<pubDate>Fri, 16 Oct 2026 15:40:00 +0000</pubDate>
+<dc:creator><![CDATA[Korben]]></dc:creator>
+<description><![CDATA[<p>Parfait pour un petit tableau de bord.</p>]]></description>
+<content:encoded><![CDATA[<p>Parfait pour un petit tableau de bord.</p><p>L'écran est tactile et se branche directement sur les broches GPIO.</p>]]></content:encoded>
+</item>
+</channel>
+</rss>

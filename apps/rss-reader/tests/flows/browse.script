@@ -1,0 +1,90 @@
+# Browse: the countries (International first; the languages; the counts without the podcasts), the topics of a country,
+# the feeds of a topic with the favorite toggle (a tap on the selected row pins or unpins it: blue dot, empty ring); the
+# title follows the path and is shortened in the middle when it would reach the Esc button; the search over the whole
+# catalog (typed with a keyboard, or with the on-screen keyboard while none is connected).
+seed refresh_on_open off
+wait 900
+key down
+key enter
+wait 500
+expect state page browse
+expect text "International"
+expect notext "Podcasts"
+shot 01-countries
+check countries
+tap "France"
+tap "France"
+wait 400
+expect state blevel 1
+shot 02-topics
+check topics
+expect notext "Podcasts"
+tap "Technology"
+tap "Technology"
+wait 400
+expect state blevel 2
+shot 03-feeds
+check feeds
+tap "Korben"
+wait 500
+expect state pinned 1
+shot 04-pinned
+tap "Korben"
+wait 500
+expect state pinned 0
+shot 05-unpinned
+tap "Korben"
+wait 500
+expect state pinned 1
+key esc
+wait 300
+expect state blevel 1
+key esc
+wait 300
+expect state blevel 0
+key up
+key up
+key enter
+wait 400
+tap "Technology"
+tap "Technology"
+wait 400
+shot 06-int-technology
+key esc
+wait 200
+key esc
+wait 200
+# the search with a keyboard: letters go to the field
+type linux
+wait 400
+expect state search linux
+shot 07-search
+check search
+key down
+key enter
+wait 500
+expect state pinned 2
+shot 08-search-pinned
+key esc
+wait 300
+expect state search ""
+# without a keyboard: a tap on the field brings the on-screen keyboard
+keyboard off
+tapfield 1
+wait 600
+expect osk on
+expect state typing search
+shot 09-search-osk
+check search-osk
+type nasa
+wait 300
+key enter
+wait 600
+expect osk off
+shot 10-search-results
+keyboard on
+key esc
+wait 300
+key esc
+wait 300
+expect state page home

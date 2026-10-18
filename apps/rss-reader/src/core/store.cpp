@@ -87,6 +87,7 @@ Json subscription_to_json(const Subscription &s)
     j.set("added", Json::number(static_cast<double>(s.added)));
     j.set("unread", Json::number(s.unread));
     j.set("total", Json::number(s.total));
+    j.set("newest", Json::number(static_cast<double>(s.newest)));
     return j;
 }
 
@@ -110,6 +111,7 @@ bool subscription_from_json(const Json &j, Subscription &s)
     s.added = j.get_int("added");
     s.unread = static_cast<int>(std::max<std::int64_t>(0, j.get_int("unread")));
     s.total = static_cast<int>(std::max<std::int64_t>(0, j.get_int("total")));
+    s.newest = std::max<std::int64_t>(0, j.get_int("newest"));
     return true;
 }
 
@@ -374,10 +376,12 @@ bool Store::store_articles_locked(const std::string &feed_id, std::vector<Stored
     Json arts = Json::array();
     Json read = Json::array();
     int unread = 0;
+    std::int64_t newest = 0;
     for (const StoredArticle &sa : kept) {
         arts.push(article_to_json(sa.article));
         if (sa.read) read.push(Json::string(sa.article.id));
         else ++unread;
+        newest = std::max(newest, sa.article.published);
     }
     Json c = Json::object();
     c.set("version", Json::number(kSchemaVersion));
@@ -392,6 +396,7 @@ bool Store::store_articles_locked(const std::string &feed_id, std::vector<Stored
         if (s.id == feed_id) {
             s.total = static_cast<int>(kept.size());
             s.unread = unread;
+            s.newest = newest;
             return save_subscriptions();
         }
     return true;
@@ -436,6 +441,17 @@ bool Store::mark_all_read(const std::string &feed_id)
     std::vector<StoredArticle> arts = load_articles_locked(feed_id);
     for (StoredArticle &a : arts) a.read = true;
     return store_articles_locked(feed_id, std::move(arts));
+}
+
+bool Store::clear_read_history()
+{
+    std::lock_guard<std::mutex> g(mu_);
+    if (!ensure_open()) return false;
+    bool ok = true;
+    for (const std::string &name : list_dir(root_ + "/read"))
+        if (!remove_tree(root_ + "/read/" + name)) ok = false;
+    for (Subscription &s : subs_) s.unread = s.total;
+    return save_subscriptions() && ok;
 }
 
 int Store::unread_count(const std::string &feed_id)

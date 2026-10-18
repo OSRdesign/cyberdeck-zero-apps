@@ -1,0 +1,88 @@
+# Favorites with six pinned catalog feeds fetched from the fake network (LWN.net answers HTTP 503): unread feeds with the
+# blue dot, the bold name and "N new"; all-read feeds grey; the failing one with its problem in the warn tone. The options
+# of a feed by a 3 s hold on its row and by Ctrl+O: Move down, Details, Mark all read, Unpin (asked first).
+seed pin us-ars-technica
+seed pin gb-bbc-news-top-stories
+seed pin fr-korben
+seed pin jp-nhk
+seed pin us-nasa-news-releases
+seed pin us-lwn-net
+seed refresh
+seed read gb-bbc-news-top-stories 8
+seed read us-nasa-news-releases 3
+seed refresh_on_open off
+wait 900
+expect text "Favorites"
+shot 01-home
+key enter
+wait 500
+expect state page favorites
+expect state subs 6
+expect text "Refresh all"
+expect text "12 new"
+shot 02-favorites
+check favorites
+key down
+key down
+wait 200
+expect state fav_sel 2
+shot 03-selected
+# a 3 s hold: the cue after half a second, the options at 3 s
+hold "Korben" 1500 04-hold-cue
+wait 200
+expect state popup none
+hold "Korben" 3400
+wait 400
+expect state popup menu
+expect text "Move down"
+expect text "Unpin"
+shot 05-options
+check options
+tap "Move down"
+wait 500
+expect state popup none
+expect state fav_sel 3
+shot 06-moved
+# Ctrl+O: the options of the selected feed
+key ctrl-o
+wait 400
+expect state popup menu
+key end
+key enter
+wait 400
+expect state popup info
+shot 07-details
+check details
+key enter
+wait 300
+key ctrl-o
+wait 400
+key down
+key down
+key down
+wait 200
+shot 07b-options-scrolled
+key enter
+wait 400
+expect state popup none
+shot 08-marked-read
+key ctrl-o
+wait 400
+key down
+key down
+key enter
+wait 400
+expect state popup confirm
+expect text "Unpin this feed?"
+shot 09-unpin-confirm
+tap "Unpin"
+wait 500
+expect state subs 5
+shot 10-unpinned
+# the problem of a feed that failed, in plain words
+key end
+wait 300
+expect text "Not updated: Server error (HTTP 503)"
+key esc
+wait 300
+expect state page home

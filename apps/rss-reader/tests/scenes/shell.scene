@@ -1,0 +1,86 @@
+# RSS Reader in the shared headless harness (apps/_common/headless) at the five sizes, with its shared layout checks: Home,
+# the Browse levels, Add a feed with the on-screen keyboard (no keyboard, then one connects, then the rule forced), an error
+# line, Settings and a dialog, the quit question. The network is not used here (no favorites; the address typed is not one:
+# the error comes before any fetch). The scripted flows (tests/flows, build.sh sim / ui) cover the rest with a fake network.
+title RSS Reader: Home, Browse, Add a feed with the on-screen keyboard, Settings, quit
+env RSSREADER_DATA /tmp/rss-reader-scene-data
+sizes 640x480 800x480 720x720 1024x600 1280x720
+
+wait 900
+shot home
+expect text "Favorites"
+expect text "No favorites yet"
+expect noquit
+
+# Browse: countries, a country's topics, a topic's feeds (a tap selects, a tap on the selected row acts)
+key down
+key enter
+wait 500
+shot browse-countries
+expect text "International"
+key down
+key down
+key down
+key down
+key enter
+wait 400
+shot browse-topics
+key enter
+wait 400
+shot browse-feeds
+key esc
+key esc
+key esc
+wait 300
+expect text "Browse feeds"
+
+# Add a feed: no keyboard connected, the on-screen keyboard shows for the field
+key down
+key down
+key enter
+wait 600
+expect osk on
+shot add-osk
+type notanaddress
+key enter
+wait 600
+expect osk off
+expect text "That is not a web address. Type a site (example.com) or the address of its feed."
+shot add-error
+# a keyboard connects: no on-screen keyboard while typing
+keyboards 1
+type x
+wait 1200
+expect osk off
+shot add-keyboard
+# the rule forced (the HackBerry): it shows even with a keyboard
+osk force
+wait 1300
+expect osk on
+shot add-osk-forced
+osk auto
+keyboards 0
+key esc
+key esc
+wait 300
+
+# Settings and a dialog
+key down
+key enter
+wait 500
+shot settings
+key enter
+wait 400
+shot settings-text-size
+key esc
+key esc
+wait 300
+
+# the quit question of Esc at Home, then Quit
+key esc
+wait 300
+shot quit
+expect text "Quit RSS Reader?"
+key right
+key enter
+expect quit

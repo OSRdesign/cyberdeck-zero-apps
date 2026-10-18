@@ -547,3 +547,46 @@ void test_store_threads()
     Store again(t.path + "/d");
     CHECK_EQ(again.total_unread(), 0);
 }
+
+/* Phase 2: the newest article's date kept on the subscription (the Favorites rows show its age) and Clear read history. */
+void test_store_newest_and_clear_read()
+{
+    TempDir t;
+    Store st(t.path);
+    CHECK(st.add_subscription(sub("a")) == StoreError::Ok);
+    CHECK(st.add_subscription(sub("b")) == StoreError::Ok);
+    Subscription s;
+    CHECK(st.find_subscription("a", s) && s.newest == 0);
+    std::vector<StoredArticle> v = arts(1, 5);
+    v[1].read = true;
+    v[3].read = true;
+    CHECK(st.store_articles("a", v));
+    CHECK(st.store_articles("b", arts(10, 12)));
+    CHECK(st.find_subscription("a", s) && s.newest == 1700000005 && s.unread == 3 && s.total == 5);
+    CHECK(st.find_subscription("b", s) && s.newest == 1700000012);
+    {   // kept across a reload of subscriptions.json
+        Store again(t.path);
+        CHECK(again.find_subscription("a", s) && s.newest == 1700000005);
+    }
+    CHECK(st.set_read("b", v[0].article.id, true));    // an id the cache of b does not hold: harmless
+    CHECK(st.mark_all_read("b"));
+    CHECK(st.unread_count("b") == 0);
+    CHECK(st.clear_read_history());
+    CHECK(st.unread_count("a") == 5);
+    CHECK(st.unread_count("b") == 3);
+    CHECK(st.total_unread() == 8);
+    for (const StoredArticle &sa : st.load_articles("a")) CHECK(!sa.read);
+    CHECK(list_dir(t.path + "/read").empty());
+    {
+        Store again(t.path);
+        CHECK(again.unread_count("a") == 5);
+        CHECK(again.load_articles("b").size() == 3);
+    }
+    // reading again after the clear works as before
+    CHECK(st.set_read("a", v[2].article.id, true));
+    CHECK(st.unread_count("a") == 4);
+    // an empty store: nothing to clear, still fine
+    TempDir t2;
+    Store empty(t2.path);
+    CHECK(empty.clear_read_history());
+}

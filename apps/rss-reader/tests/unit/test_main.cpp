@@ -35,6 +35,7 @@ void test_store_cap();
 void test_store_recovery();
 void test_store_saved_kept_in_cache();
 void test_store_threads();
+void test_store_newest_and_clear_read();
 void test_merge();
 void test_refresh_feed();
 void test_refresh_edge();
@@ -87,6 +88,7 @@ int main()
     RUN(test_store_recovery);
     RUN(test_store_saved_kept_in_cache);
     RUN(test_store_threads);
+    RUN(test_store_newest_and_clear_read);
     RUN(test_merge);
     RUN(test_refresh_feed);
     RUN(test_refresh_edge);

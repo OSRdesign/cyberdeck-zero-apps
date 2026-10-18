@@ -43,6 +43,7 @@ in [`tools/icons/out/`](../tools/icons/out/), the review sheet is [`tools/icons/
 | System Monitor (`system-monitor`) | red `#F23B3B` | white `#FFFFFF` | shield | heartbeat line |
 | Viz1090 (`viz1090`) | sky blue `#5BB8FF` | ink `#14181C` | squircle | aircraft, seen from above |
 | Net Toolbox (`net-toolbox`) | rose `#FF5C93` (hue about 340) | ink `#14181C` | pentagon (point up, soft corners) | two thick horizontal arrows, opposite ways: traffic both ways |
+| RSS Reader (`rss-reader`) | amber-orange `#FFA11C` (hue about 35) | ink `#14181C` | portrait page, top right corner turned down | the feed symbol: a dot and two thick quarter arcs from the lower left. The hue is the feed icon's usual orange, between Wi-Fi Survey (25) and Serial Console (44): told apart by the page silhouette (a tall rectangle, not a diamond or a plug) and the corner arcs |
 | App template (`cyberdeck-app-template`) | neutral grey `#8A9099` | ink `#14181C` | octagon | plus (placeholder) |
 
 ### Reserved colours: the launcher's own tiles
