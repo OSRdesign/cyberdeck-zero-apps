@@ -42,6 +42,11 @@ void test_refresh_edge();
 void test_refresh_all();
 void test_add_custom_feed();
 void test_opml();
+void test_image_probe();
+void test_image_cache();
+void test_store_fetched_race();
+void test_store_options_seen();
+void test_store_saves_take_turns();
 
 #define RUN(fn)                                                         \
     do {                                                                \
@@ -95,6 +100,11 @@ int main()
     RUN(test_refresh_all);
     RUN(test_add_custom_feed);
     RUN(test_opml);
+    RUN(test_image_probe);
+    RUN(test_image_cache);
+    RUN(test_store_fetched_race);
+    RUN(test_store_options_seen);
+    RUN(test_store_saves_take_turns);
     std::printf("%d checks, %d failed\n", g_checks, g_fail);
     return g_fail ? 1 : 0;
 }

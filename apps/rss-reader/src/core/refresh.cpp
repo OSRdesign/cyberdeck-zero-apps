@@ -114,7 +114,7 @@ RefreshResult Refresher::refresh_feed(const Subscription &sub, const std::atomic
     }
     int fresh_count = 0;
     std::vector<StoredArticle> merged = merge_articles(cached, feed.articles, fresh_count);
-    if (!store_.store_articles(sub.id, std::move(merged))) {
+    if (!store_.store_fetched_articles(sub.id, std::move(merged))) {     // the read state as it is now, not as it was loaded
         res.message = "could not save the articles";
         store_.record_fetch(sub.id, now, false, "", "", res.message);
         return res;

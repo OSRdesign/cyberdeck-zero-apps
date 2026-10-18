@@ -171,6 +171,7 @@ bool Store::ensure_open()
         settings_.image_download = im == "off" ? ImageDownload::Off : ImageDownload::Always;
         settings_.storage_cap_mb = static_cast<int>(std::min<std::int64_t>(4096, std::max<std::int64_t>(10, j.get_int("storage_cap_mb", 200))));
         settings_.refresh_on_open = j.get_bool("refresh_on_open", true);
+        settings_.options_seen = j.get_bool("options_seen", false);
     }
     subs_.clear();
     if (read_json_or_quarantine(subscriptions_path(), j, existed)) {
@@ -194,6 +195,7 @@ bool Store::save_settings()
     j.set("image_download", Json::string(image_download_name(settings_.image_download)));
     j.set("storage_cap_mb", Json::number(settings_.storage_cap_mb));
     j.set("refresh_on_open", Json::boolean(settings_.refresh_on_open));
+    j.set("options_seen", Json::boolean(settings_.options_seen));
     return write_file_atomic(settings_path(), json_dump(j, true));
 }
 
@@ -409,6 +411,23 @@ bool Store::store_articles(const std::string &feed_id, std::vector<StoredArticle
     return store_articles_locked(feed_id, std::move(articles));
 }
 
+std::set<std::string> Store::read_state_locked(const std::string &feed_id)
+{
+    Json rj;
+    bool existed;
+    if (read_json_or_quarantine(root_ + "/read/" + safe_name(feed_id) + ".json", rj, existed)) return read_ids(rj);
+    return {};
+}
+
+bool Store::store_fetched_articles(const std::string &feed_id, std::vector<StoredArticle> articles)
+{
+    std::lock_guard<std::mutex> g(mu_);
+    if (!ensure_open() || !valid_file_id(feed_id)) return false;
+    const std::set<std::string> read = read_state_locked(feed_id);
+    for (StoredArticle &sa : articles) sa.read = read.count(sa.article.id) != 0;
+    return store_articles_locked(feed_id, std::move(articles));
+}
+
 bool Store::set_read(const std::string &feed_id, const std::string &article_id, bool read)
 {
     std::lock_guard<std::mutex> g(mu_);
@@ -514,8 +533,13 @@ void Store::scan_saved()
 StoreError Store::save_article(const Article &a, const std::string &feed_id, const std::string &feed_name, const std::vector<SavedImage> &images,
                                std::int64_t now)
 {
-    std::lock_guard<std::mutex> g(mu_);
-    if (!ensure_open()) return StoreError::IoError;
+    std::lock_guard<std::mutex> turn(save_mu_);       // saves take turns; the store's lock is held only for its state
+    std::uint64_t cap_bytes = 0;
+    {
+        std::lock_guard<std::mutex> g(mu_);
+        if (!ensure_open()) return StoreError::IoError;
+        cap_bytes = static_cast<std::uint64_t>(settings_.storage_cap_mb) * 1024 * 1024;
+    }
     if (!valid_file_id(a.id)) return StoreError::BadArgument;
 
     Json imgs = Json::array();
@@ -551,7 +575,7 @@ StoreError Store::save_article(const Article &a, const std::string &feed_id, con
     std::uint64_t existing = path_exists(final_dir) ? tree_size(final_dir) : 0;
     std::uint64_t usage = tree_size(dir);
     usage = usage > existing ? usage - existing : 0;
-    if (usage + bytes > static_cast<std::uint64_t>(settings_.storage_cap_mb) * 1024 * 1024) return StoreError::CapExceeded;
+    if (usage + bytes > cap_bytes) return StoreError::CapExceeded;
 
     const std::string stage = dir + "/.tmp-" + a.id;
     remove_tree(stage);
@@ -559,6 +583,7 @@ StoreError Store::save_article(const Article &a, const std::string &feed_id, con
     for (std::size_t k = 0; ok && k < files.size(); ++k) ok = write_file_atomic(stage + "/" + files[k].first, files[k].second->bytes);
     ok = ok && write_file_atomic(stage + "/article.json", meta_text);
     if (ok) {
+        std::lock_guard<std::mutex> g(mu_);           // the swap into place: a reader never sees a half-written folder
         const std::string old = dir + "/.old-" + a.id;
         bool had = path_exists(final_dir);
         remove_tree(old);
@@ -580,6 +605,7 @@ StoreError Store::save_article(const Article &a, const std::string &feed_id, con
     s.saved_at = now;
     s.image_count = index;
     s.bytes = tree_size(final_dir);
+    std::lock_guard<std::mutex> g(mu_);
     saved_[s.id] = s;
     return StoreError::Ok;
 }
@@ -640,6 +666,7 @@ bool Store::read_saved_image(const std::string &id, const std::string &file, std
 
 bool Store::delete_saved(const std::string &id)
 {
+    std::lock_guard<std::mutex> turn(save_mu_);
     std::lock_guard<std::mutex> g(mu_);
     if (!ensure_open() || !valid_file_id(id) || !saved_.count(id)) return false;
     if (!remove_tree(saved_dir(id))) return false;

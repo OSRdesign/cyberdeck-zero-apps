@@ -383,7 +383,9 @@ HttpResponse fetch_image(HttpClient &client, const std::string &url, const std::
     HttpRequest req;
     req.url = url;
     req.max_bytes = kMaxImageBytes;
-    req.accept = "image/webp,image/png,image/jpeg,image/gif,image/*;q=0.8";
+    // what the app decodes (docs/IMAGES.md): no image/webp or image/avif, so a server that picks the format by this header
+    // (image CDNs do) sends a JPEG or a PNG
+    req.accept = "image/jpeg,image/png,image/gif;q=0.9,image/*;q=0.5";
     req.cancel = cancel;
     HttpResponse res = client.get(req);
     if (!res.ok()) {
