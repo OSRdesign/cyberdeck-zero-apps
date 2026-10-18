@@ -11,7 +11,7 @@ RUNNER=${1:-${CDK_BUILD:-$HOME/cdk-build/rss-reader}/host/rss-reader-script}
 OUT=${2:-/tmp/rss-reader-flows}
 SIZE=${3:-640x480}
 [ $# -gt 3 ] && shift 3 || set --
-FLOWS=${*:-"home favorites refresh browse add articles reader settings saved"}
+FLOWS=${*:-"home favorites refresh browse add articles reader settings saved images offline savedpage capfull"}
 export CDK_HEADLESS_RESOURCES=${CDK_HEADLESS_RESOURCES:-$HOME/zero7/launcher/projects/APPLaunch/APPLaunch}
 export RSS_FAKE_ROUTES=$HERE/routes.txt RSS_FAKE_ROOT=$APP/tests/data/ui RSS_TEST_NOW=1792339200 TZ=UTC RSSREADER_KEYMAP=us
 export RSSREADER_CATALOG=$APP/data/catalog.json

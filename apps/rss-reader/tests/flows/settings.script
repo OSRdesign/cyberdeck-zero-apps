@@ -34,10 +34,18 @@ tap "Download images"
 tap "Download images"
 wait 300
 shot 03-switched
-# down to the storage rows: the read-out is skipped
+# Clear image cache (empty: nothing was opened), then down to the storage rows: the heading and the read-out are skipped
 key down
 wait 200
-expect state settings_sel 6
+expect state settings_sel 4
+expect text "Clear image cache"
+expect text "empty"
+key enter
+wait 300
+expect state notice "The image cache is empty"
+key down
+wait 200
+expect state settings_sel 7
 shot 04-storage-rows
 key enter
 wait 400
@@ -50,7 +58,7 @@ wait 300
 expect text "100 MB"
 key down
 wait 200
-expect state settings_sel 8
+expect state settings_sel 9
 key enter
 wait 400
 expect state popup confirm

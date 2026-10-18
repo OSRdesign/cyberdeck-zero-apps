@@ -1,0 +1,104 @@
+# Save for offline from the reader (phase 3): the first-run hint under the title until the options are opened, Save for
+# offline (the text and its two pictures), the "saved" mark in the list; then no network and an empty image cache: the
+# saved copy opens from Saved articles with its pictures, full screen too; Remove from saved (asked first) from the reader
+# goes back to the list, now empty.
+seed pin us-ars-technica
+seed refresh
+seed refresh_on_open off
+wait 900
+key enter
+wait 400
+key enter
+wait 800
+key down
+key enter
+wait 1500
+expect state page reader
+expect state images RR
+expect state hint 1
+expect text "Hold or press Ctrl+O for options"
+shot 01-reader-hint
+key ctrl-o
+wait 400
+expect state popup menu
+expect text "Save for offline"
+expect state hint 0
+shot 02-options
+check reader-options
+tap "Save for offline"
+wait 1500
+expect state saving 0
+expect state is_saved 1
+expect text "^Saved for offline"
+expect notext "Hold or press Ctrl+O for options"
+shot 03-saved
+key esc
+wait 400
+expect state page articles
+expect text "^  ·  saved"
+shot 04-list-saved-mark
+# the options of the row say so too
+key ctrl-o
+wait 400
+expect text "Remove from saved"
+key esc
+wait 300
+# no network, the image cache emptied (Settings): the saved copy has all it needs
+net offline
+key esc
+wait 300
+key esc
+wait 300
+key end
+key enter
+wait 500
+expect state page settings
+key down
+key down
+key down
+wait 200
+expect state settings_sel 4
+key enter
+wait 300
+expect state img_cache 0
+expect text "^Image cache cleared"
+key esc
+wait 300
+key up
+key up
+key enter
+wait 500
+expect state page saved
+expect state saved 1
+expect text "^1 article, "
+shot 05-saved-list
+check saved-list
+key enter
+wait 1500
+expect state page reader
+expect state images RR
+expect state img_cache 0
+shot 06-offline-reader
+check offline-reader
+tapimage 0
+wait 800
+expect state viewer 0
+expect state viewer_hd 1
+shot 07-offline-viewer
+key esc
+wait 300
+# remove from saved, from the reader: asked first, then back to the list
+key ctrl-o
+wait 400
+expect text "Remove from saved"
+tap "Remove from saved"
+wait 400
+expect state popup confirm
+shot 08-remove-confirm
+check remove-confirm
+tap "Remove"
+wait 500
+expect state page saved
+expect state saved 0
+expect text "^No saved articles yet"
+shot 09-saved-empty

@@ -13,3 +13,14 @@ https://feeds.example.net/releases.atom direct.atom
 https://nofeed.example.com nofeed.html
 https://slow.example.com !timeout
 http://slow.example.com !timeout
+# the images (tests/data/ui/img; the content type follows the file's extension: notimage.jpg is a web page served as JPEG)
+https://cdn.arstechnica.net/2026/10/scheduler.jpg img/graph.jpg
+https://cdn.arstechnica.net/2026/10/board.jpg img/wide.jpg
+https://cdn.arstechnica.net/2026/10/rocket.jpg img/wide.jpg
+https://cdn.arstechnica.net/2026/10/logo.png img/logo.png
+https://cdn.arstechnica.net/2026/10/progressive.jpg img/progressive.jpg
+https://cdn.arstechnica.net/2026/10/huge.jpg img/huge.jpg
+https://cdn.arstechnica.net/2026/10/notimage.jpg img/notimage.jpg
+https://cdn.arstechnica.net/2026/10/truncated.jpg img/truncated.jpg
+https://cdn.arstechnica.net/2026/10/pic.webp img/pic.webp
+https://cdn.arstechnica.net/2026/10/anim.gif img/anim.gif

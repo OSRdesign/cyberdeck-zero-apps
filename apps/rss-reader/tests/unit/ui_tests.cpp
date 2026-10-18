@@ -230,18 +230,31 @@ void test_favorites()
     s.last_error = "network error: Could not resolve host";
     r = favorite_row(s, &cat, kNow);
     CHECK(r.warn && r.line2 == "Not updated: No network  \xC2\xB7  1 h");
-    // a general feed shows its country; a custom one its folder or its host
+    // one rule (phase 3): a catalog feed shows its topic, never its country ("General" for a general one); a feed added by
+    // its address shows its site's host, whatever its OPML folder
     Subscription g;
     g.id = "gb-bbc-news-top-stories";
     g.name = "BBC News";
-    CHECK_EQ(favorite_group(g, &cat), std::string("United Kingdom"));
+    CHECK_EQ(favorite_group(g, &cat), std::string("General"));
+    g.newest = kNow - 14 * 60;
+    CHECK_EQ(favorite_row(g, &cat, kNow).line2, std::string("General  \xC2\xB7  14 min"));
     Subscription c;
     c.id = "c-0123";
     c.custom = true;
     c.url = "https://www.example.org/feed.xml";
     CHECK_EQ(favorite_group(c, &cat), std::string("example.org"));
     c.group = "Tech / Linux";
-    CHECK_EQ(favorite_group(c, &cat), std::string("Tech / Linux"));
+    CHECK_EQ(favorite_group(c, &cat), std::string("example.org"));
+    c.site = "https://korben.info/";
+    CHECK_EQ(favorite_group(c, &cat), std::string("korben.info"));
+    Subscription gone;                                  // pinned from the catalog, no longer in it: the topic it was pinned with
+    gone.id = "xx-removed-feed";
+    gone.url = "https://removed.example.net/rss";
+    gone.group = "science";
+    CHECK_EQ(favorite_group(gone, &cat), std::string("Science"));
+    gone.group.clear();
+    CHECK_EQ(favorite_group(gone, &cat), std::string("removed.example.net"));
+    g.newest = 0;
     r = favorite_row(c, &cat, kNow);
     CHECK(r.line2.find("not updated yet") != std::string::npos);
     std::vector<Subscription> subs = {s, g};
@@ -287,9 +300,11 @@ void test_articles()
     CHECK_EQ(articles_caption(0, 0, false, false), std::string("No articles yet"));
     CHECK_EQ(articles_caption(0, 0, true, false), std::string("Loading\xE2\x80\xA6"));
     std::vector<ArticleOption> o = article_options(false);
-    CHECK(o.size() == 4 && o[0] == ArticleOption::MarkRead && o[3] == ArticleOption::Info);
-    o = article_options(true);
-    CHECK(o[0] == ArticleOption::MarkUnread);
+    CHECK(o.size() == 5 && o[0] == ArticleOption::MarkRead && o[1] == ArticleOption::Save && o[4] == ArticleOption::Info);
+    o = article_options(true, true);
+    CHECK(o[0] == ArticleOption::MarkUnread && o[1] == ArticleOption::Unsave);
+    CHECK_EQ(std::string(article_option_label(ArticleOption::Save)), std::string("Save for offline"));
+    CHECK_EQ(std::string(article_option_label(ArticleOption::Unsave)), std::string("Remove from saved"));
     Article art;
     art.title = "Kernel fix";
     art.author = "Jon";
@@ -375,6 +390,88 @@ void test_reader_blocks()
     CHECK_EQ(t[6], std::string("[image]"));
     CHECK_EQ(t[7], std::string(""));
     CHECK_EQ(t[8], std::string("end"));
+}
+
+/* Phase 3: which images an article shows, their states, the keys' image, the full-screen line. */
+void test_images()
+{
+    CHECK(junk_image_url("https://s.w.org/images/core/emoji/15.0.3/72x72/1f600.png"));
+    CHECK(junk_image_url("https://feeds.feedburner.com/~ff/Example?d=yIl2AUoC8zA"));
+    CHECK(junk_image_url("https://pixel.wp.com/b.gif?x=1"));
+    CHECK(!junk_image_url("https://cdn.arstechnica.net/2026/10/scheduler.jpg"));
+    const std::string html = "<p>a</p><img src='https://x.org/1.jpg' alt='One'><p>b</p><img src='https://s.w.org/images/core/emoji/x.png'>"
+                             "<img src='https://x.org/2.png'><img src='https://x.org/1.jpg' alt='One again'><img src='https://x.org/3.jpg'>"
+                             "<img src='https://x.org/4.jpg'><img src='https://x.org/5.jpg'><img src='https://x.org/6.jpg'><img src='https://x.org/7.jpg'>";
+    Article a;
+    a.images = {"https://x.org/lead.jpg"};
+    const std::vector<Block> blocks = html_to_blocks(html, "https://x.org/");
+    std::vector<ArticleImage> im = article_images(blocks, a);
+    CHECK_EQ(im.size(), std::size_t(8));               // the emoji left out; the same address twice is two tiles
+    if (im.size() == 8) {
+        CHECK(im[0].url == "https://x.org/1.jpg" && im[0].alt == "One" && im[0].fetch && blocks[static_cast<std::size_t>(im[0].block)].type == BlockType::Image);
+        CHECK(im[2].url == "https://x.org/1.jpg" && im[2].fetch);                     // a repeat: no new download slot
+        CHECK(im[6].url == "https://x.org/6.jpg" && im[6].fetch);                     // the sixth different address
+        CHECK(im[7].url == "https://x.org/7.jpg" && !im[7].fetch);                    // the seventh: not loaded
+    }
+    // no picture in the text: the feed's own (enclosure, media), under the title
+    im = article_images(html_to_blocks("<p>text only</p>"), a);
+    CHECK(im.size() == 1 && im[0].block == -1 && im[0].url == "https://x.org/lead.jpg" && im[0].fetch);
+    a.images = {"https://s.w.org/images/core/emoji/x.png", "https://x.org/second.jpg"};
+    im = article_images(html_to_blocks("<p>text only</p>"), a);
+    CHECK(im.size() == 1 && im[0].url == "https://x.org/second.jpg");
+    a.images.clear();
+    CHECK(article_images(html_to_blocks("<p>none</p>"), a).empty());
+    CHECK(article_images(blocks, a, 2)[2].fetch && !article_images(blocks, a, 2)[3].fetch);
+    // the captions and the letters of the tests
+    CHECK_EQ(image_caption(ImageState::Downloading), std::string("Downloading\xE2\x80\xA6"));
+    CHECK_EQ(image_caption(ImageState::Unavailable), std::string("Image unavailable"));
+    CHECK_EQ(image_caption(ImageState::TooLarge), std::string("Too large to show"));
+    CHECK_EQ(image_caption(ImageState::Unsupported), std::string("Format not supported"));
+    CHECK_EQ(image_caption(ImageState::Off), std::string("Images are off"));
+    CHECK_EQ(image_caption(ImageState::NotLoaded), std::string("Not loaded"));
+    CHECK(image_caption(ImageState::Ready).empty());
+    std::string letters;
+    for (ImageState st : {ImageState::Loading, ImageState::Downloading, ImageState::Ready, ImageState::Unavailable, ImageState::TooLarge,
+                          ImageState::Unsupported, ImageState::Off, ImageState::NotLoaded, ImageState::Hidden})
+        letters += image_state_letter(st);
+    CHECK_EQ(letters, std::string("LDRUTSONH"));
+    // the image nearest the middle of the view (0..400: the middle is 200), at least half in view
+    CHECK_EQ(nearest_image({{0, 100}, {150, 250}, {300, 500}}, 0, 400), 1);
+    CHECK_EQ(nearest_image({{0, 100}, {150, 250}, {300, 500}}, 200, 400), 2);
+    CHECK_EQ(nearest_image({{-300, -100}, {0, 0}}, 0, 400), -1);             // above the view; a hidden tile
+    CHECK_EQ(nearest_image({{350, 700}}, 0, 400), -1);                        // less than half in view
+    CHECK_EQ(nearest_image({{-100, 900}}, 0, 400), 0);                        // taller than the view: half of the view counts
+    CHECK_EQ(nearest_image({}, 0, 400), -1);
+    CHECK_EQ(viewer_caption(0, 2), std::string("Esc or tap to close  \xC2\xB7  1 / 2"));
+    CHECK_EQ(viewer_caption(0, 1), std::string("Esc or tap to close"));
+}
+
+/* Phase 3: the texts of Save for offline and of Saved articles. */
+void test_saved_texts()
+{
+    CHECK_EQ(save_refusal_text(198ull * 1024 * 1024 + 300 * 1024, 200),
+             std::string("Saved articles use 198 of 200 MB. Delete some or raise the limit in Settings."));
+    CHECK_EQ(save_refusal_text(9ull * 1024 * 1024 + 900 * 1024, 10), std::string("Saved articles use 10 of 10 MB. Delete some or raise the limit in Settings."));
+    CHECK_EQ(save_result_text(1258291, 2, 0, false), std::string("Saved for offline  \xC2\xB7  1.2 MB"));
+    CHECK_EQ(save_result_text(2048, 0, 0, true), std::string("Saved without images: they are off in Settings"));
+    CHECK_EQ(save_result_text(2048, 1, 1, false), std::string("Saved for offline, 1 image could not be downloaded"));
+    CHECK_EQ(save_result_text(2048, 0, 3, false), std::string("Saved for offline, 3 images could not be downloaded"));
+    SavedSummary s;
+    s.feed_name = "Ars Technica";
+    s.saved_at = kNow - 2 * 3600;
+    s.bytes = 1258291;
+    CHECK_EQ(saved_row_line2(s, kNow), std::string("Ars Technica  \xC2\xB7  saved 2 h  \xC2\xB7  1.2 MB"));
+    s.feed_name.clear();
+    s.saved_at = 0;
+    CHECK_EQ(saved_row_line2(s, kNow), std::string("Saved  \xC2\xB7  1.2 MB"));
+    CHECK_EQ(saved_footer(3, 4404019, 200), std::string("3 articles, 4.2 MB of 200 MB"));
+    CHECK_EQ(saved_footer(1, 2048, 50), std::string("1 article, 2 KB of 50 MB"));
+    const std::vector<SavedOption> o = saved_options();
+    CHECK(o.size() == 2 && o[0] == SavedOption::Remove && o[1] == SavedOption::Info);
+    CHECK_EQ(std::string(saved_option_label(SavedOption::Remove)), std::string("Remove from saved"));
+    CHECK_EQ(options_hint(), std::string("Hold or press Ctrl+O for options"));
+    CHECK_EQ(image_cache_text(0), std::string("empty"));
+    CHECK_EQ(image_cache_text(3565158), std::string("3.4 MB"));
 }
 
 void test_jobs()
@@ -467,6 +564,8 @@ int main()
     RUN(test_browse);
     RUN(test_settings_rules);
     RUN(test_reader_blocks);
+    RUN(test_images);
+    RUN(test_saved_texts);
     RUN(test_jobs);
     RUN(test_package);
     std::printf("ui: %d checks, %d failed\n", g_checks, g_fail);

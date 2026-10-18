@@ -1,0 +1,73 @@
+# Saved articles (phase 3): saved articles stay when their feed is unpinned; the page lists them newest saved first,
+# each with its feed, when it was saved and its size, and a line at the bottom (how many, how much of the cap); the options
+# by a 3 s hold or Ctrl+O: Article info (when it was saved, its size), Remove from saved (asked first: Cancel keeps it);
+# the one left opens in the reader from its copy. (No first-run hint here: the options of Favorites were opened first.)
+seed pin us-ars-technica
+seed refresh
+seed save us-ars-technica 1
+seed save us-ars-technica 4
+seed refresh_on_open off
+wait 900
+key enter
+wait 500
+expect state page favorites
+key ctrl-o
+wait 400
+tap "Unpin"
+wait 400
+expect state popup confirm
+tap "Unpin"
+wait 600
+expect state subs 0
+key esc
+wait 300
+key down
+key down
+key enter
+wait 500
+expect state page saved
+expect state saved 2
+expect text "^2 articles, "
+shot 01-saved
+check saved
+hold "^What the new memory" 3400
+wait 400
+expect state popup menu
+expect text "Remove from saved"
+expect text "Article info"
+shot 02-options
+check saved-options
+tap "Article info"
+wait 400
+expect state popup info
+expect text "^Saved "
+shot 03-info
+check saved-info
+key enter
+wait 300
+expect notext "Hold or press Ctrl+O for options"
+key ctrl-o
+wait 400
+tap "Remove from saved"
+wait 400
+expect state popup confirm
+tap "Cancel"
+wait 300
+expect state saved 2
+key ctrl-o
+wait 400
+tap "Remove from saved"
+wait 400
+tap "Remove"
+wait 500
+expect state saved 1
+expect text "Removed from saved"
+expect text "^1 article, "
+shot 04-removed-one
+key home
+key enter
+wait 800
+expect state page reader
+expect state is_saved 1
+expect text "New Linux kernel fixes the long-standing scheduler stall on small boards"
+shot 05-reader-saved

@@ -6,7 +6,7 @@
 #          root/usr/share/APPLaunch/share/rss-reader); --strict stops when the launcher is not the pinned one
 #          (apps/_common/LAUNCHER_REF);
 #   host:  the shared headless harness and its scenes (tests/scenes), RSS Reader's scripted runner (rss-reader-script,
-#          tests/flows/runner.mk) and the unit tests;
+#          tests/flows/runner.mk), the image decoding tests (rss-reader-imgtest, the same makefile) and the unit tests;
 #   test:  the unit tests only (tests/unit/run_tests.sh: the core and the UI logic, about a minute);  asan: the same under
 #          AddressSanitizer + UBSan;
 #   sim:   the scripted flows against the fake network (tests/flows/*.script, fixtures in tests/data/ui, a fixed clock) at
@@ -40,6 +40,9 @@ if [ "$mode" != cross ]; then
     flock /tmp/wsl-build.lock make -f "$here/tests/flows/runner.mk" -j"$(nproc)" APP="$here" LAUNCHER="$tree" \
         BUILD="$build/host" GEN="$build/gen" > "$build/runner-make.log" 2>&1 || { tail -n 40 "$build/runner-make.log"; exit 1; }
     echo "== $build/host/rss-reader-script"
+    echo "== host: image decoding tests (rss-reader-imgtest)"
+    if "$build/host/rss-reader-imgtest" > "$build/imgtest.log" 2>&1; then tail -n 1 "$build/imgtest.log"
+    else tail -n 20 "$build/imgtest.log"; rc=1; fi
     echo "== host: unit tests (tests/unit/run_tests.sh)"
     if OUT="$build/unit" sh "$here/tests/unit/run_tests.sh" > "$build/unit.log" 2>&1; then
         grep -E "checks|FAIL" "$build/unit.log" | tail -n 6
