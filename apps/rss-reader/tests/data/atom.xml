@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="fr">
+  <title type="text">Le Blog d'Exemple</title>
+  <subtitle>Carnet de notes</subtitle>
+  <link rel="self" href="https://blog.example.org/atom.xml"/>
+  <link rel="alternate" type="text/html" href="https://blog.example.org/"/>
+  <id>tag:blog.example.org,2026:feed</id>
+  <updated>2026-10-18T12:00:00Z</updated>
+  <entry>
+    <title type="html">Un &lt;i&gt;bel&lt;/i&gt; article</title>
+    <link rel="alternate" type="text/html" href="/posts/un-bel-article"/>
+    <link rel="enclosure" type="image/jpeg" href="https://blog.example.org/img/hero.jpg"/>
+    <link rel="replies" href="https://blog.example.org/posts/un-bel-article/comments"/>
+    <id>tag:blog.example.org,2026:post-1</id>
+    <published>2026-10-18T10:30:00+02:00</published>
+    <updated>2026-10-18T11:00:00+02:00</updated>
+    <author><name>Marie Curie</name><email>marie@example.org</email></author>
+    <summary>Résumé court</summary>
+    <content type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml"><p>Texte <b>complet</b> de l'article.</p><img src="images/fig1.png" alt="Figure 1"/></div></content>
+  </entry>
+  <entry>
+    <title>Plain text entry &amp; more</title>
+    <link href="https://blog.example.org/posts/plain"/>
+    <id>urn:uuid:60a76c80-d399-11d9-b93C-0003939e0af6</id>
+    <updated>2026-10-16T09:00:00Z</updated>
+    <content type="text">Line one
+
+Line two with &lt;angle&gt; brackets.</content>
+  </entry>
+</feed>
