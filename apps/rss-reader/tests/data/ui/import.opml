@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0"><head><title>Feeds from another reader</title></head><body>
+<outline text="Tech"><outline type="rss" text="Ars Technica" xmlUrl="https://feeds.arstechnica.com/arstechnica/index" htmlUrl="https://arstechnica.com"/>
+<outline type="rss" text="An Example Blog" xmlUrl="https://blog.example.org/feed.xml" htmlUrl="https://blog.example.org/"/></outline>
+<outline type="rss" text="NASA" xmlUrl="https://www.nasa.gov/news-release/feed/"/>
+</body></opml>

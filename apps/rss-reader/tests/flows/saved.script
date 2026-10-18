@@ -1,0 +1,29 @@
+# The saved articles (saving itself comes in phase 3; the store holds two here): the list, then one opened in the reader;
+# Left / Right walk the saved list.
+seed pin us-ars-technica
+seed refresh
+seed save us-ars-technica 1
+seed save us-ars-technica 4
+seed refresh_on_open off
+wait 900
+key down
+key down
+wait 200
+expect text "2"
+key enter
+wait 500
+expect state page saved
+expect state saved 2
+shot 01-saved
+check saved
+key enter
+wait 600
+expect state page reader
+shot 02-saved-reader
+key right
+wait 400
+expect state reader_idx 1
+shot 03-next-saved
+key esc
+wait 300
+expect state page saved

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+<title>Example Releases</title>
+<link rel="alternate" href="https://feeds.example.net/"/>
+<id>https://feeds.example.net/</id>
+<updated>2026-10-18T16:00:00Z</updated>
+<entry>
+<title>Release 2.0 is out</title>
+<link rel="alternate" href="https://feeds.example.net/releases/0"/>
+<id>rel-0</id>
+<updated>2026-10-18T15:10:00Z</updated>
+<summary type="html">&lt;p&gt;With a new parser.&lt;/p&gt;</summary>
+</entry>
+<entry>
+<title>Release 1.9</title>
+<link rel="alternate" href="https://feeds.example.net/releases/1"/>
+<id>rel-1</id>
+<updated>2026-10-15T04:40:00Z</updated>
+<summary type="html">&lt;p&gt;Bug fixes.&lt;/p&gt;</summary>
+</entry>
+<entry>
+<title>Release 1.8</title>
+<link rel="alternate" href="https://feeds.example.net/releases/2"/>
+<id>rel-2</id>
+<updated>2026-10-12T10:00:00Z</updated>
+<summary type="html">&lt;p&gt;Speed-ups.&lt;/p&gt;</summary>
+</entry>
+</feed>

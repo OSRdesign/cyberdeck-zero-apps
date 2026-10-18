@@ -1,0 +1,102 @@
+# Settings: the rows and their kinds (values with a chevron, actions with a dot, grey read-outs that the selection skips),
+# the Text size and Storage cap choices, the switches in place, Clear read history (asked first), Export favorites to
+# ~/rss-reader-favorites.opml and Import favorites from an OPML file of the home folder (a round trip: the import of a list
+# adds what is missing; the exported file reads back with nothing new).
+seed pin us-ars-technica
+seed refresh
+seed file import.opml my-feeds.opml
+seed refresh_on_open on
+wait 900
+key end
+key enter
+wait 500
+expect state page settings
+expect state settings_sel 1
+expect text "Text size"
+expect text "Medium"
+shot 01-settings
+check settings
+# the selected row acts at the first tap
+tap "Text size"
+wait 400
+expect state popup choice
+shot 02-text-size
+check text-size
+tap "<right>"
+tap "OK"
+wait 400
+expect text "Large"
+tap "Refresh when opening"
+tap "Refresh when opening"
+wait 300
+expect text "Off"
+tap "Download images"
+tap "Download images"
+wait 300
+shot 03-switched
+# down to the storage rows: the read-out is skipped
+key down
+wait 200
+expect state settings_sel 6
+shot 04-storage-rows
+key enter
+wait 400
+expect state popup choice
+expect state popup_value "200 MB"
+shot 05-storage-cap
+key left
+key enter
+wait 300
+expect text "100 MB"
+key down
+wait 200
+expect state settings_sel 8
+key enter
+wait 400
+expect state popup confirm
+shot 06-clear-confirm
+tap "Clear"
+wait 400
+key down
+key enter
+wait 400
+expect state popup info
+expect text "^Exported 1 feed to"
+shot 07-exported
+check exported
+key enter
+wait 300
+key down
+key enter
+wait 400
+expect state popup list
+expect text "my-feeds.opml"
+expect text "rss-reader-favorites.opml"
+shot 08-import-list
+check import-list
+tap "my-feeds.opml"
+wait 500
+expect state popup info
+expect text "Imported 2 feeds, 1 already in your favorites."
+shot 09-imported
+key enter
+wait 300
+key end
+wait 300
+shot 10-about
+# the round trip: the file written by Export is read back by Import (nothing new to add)
+key enter
+wait 400
+key down
+key enter
+wait 500
+expect text "Imported 0 feeds, 1 already in your favorites."
+key enter
+wait 300
+key esc
+wait 300
+key home
+key enter
+wait 600
+expect state subs 3
+shot 11-favorites-after-import

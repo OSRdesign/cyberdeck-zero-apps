@@ -1,0 +1,15 @@
+# The fake network of the flows (script_runner.cpp): URL, then the file of tests/data/ui that answers it, or how it fails
+# (!network, !timeout, !tls, !404, !503). Any other URL answers 404.
+https://feeds.arstechnica.com/arstechnica/index ars.xml
+https://feeds.bbci.co.uk/news/rss.xml bbc.xml
+https://korben.info/feed korben.xml
+https://www3.nhk.or.jp/rss/news/cat0.xml nhk.xml
+https://www.nasa.gov/news-release/feed/ nasa.xml
+https://lwn.net/headlines/rss !503
+https://hnrss.org/frontpage !timeout
+https://blog.example.org blog.html
+https://blog.example.org/feed.xml blog-feed.xml
+https://feeds.example.net/releases.atom direct.atom
+https://nofeed.example.com nofeed.html
+https://slow.example.com !timeout
+http://slow.example.com !timeout

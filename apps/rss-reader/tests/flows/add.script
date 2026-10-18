@@ -1,0 +1,110 @@
+# Add a feed: the address field with the on-screen keyboard (no physical keyboard: the shared rule), Find feed on a site's
+# address (the feed is discovered from its page), Pin; a feed's own address; the failures in plain words: a page with no
+# feed, a site that does not answer, no network, something that is not an address; Stop while it looks.
+seed refresh_on_open off
+keyboard off
+wait 900
+key down
+key down
+key down
+key enter
+wait 700
+expect state page add
+expect osk on
+expect state typing add
+shot 01-add-osk
+check add-osk
+type blog.example.org
+wait 200
+shot 02-typed
+key enter
+wait 900
+expect osk off
+expect state add_state 2
+expect text "Found: An Example Blog  ·  5 articles"
+shot 03-found
+check found
+tap "Pin"
+wait 600
+expect state add_state 4
+expect text "Added to your favorites: An Example Blog"
+shot 04-pinned
+type feeds.example.net/releases.atom
+key enter
+wait 900
+expect text "Found: Example Releases  ·  3 articles"
+shot 05-direct-feed
+tap "Cancel"
+wait 400
+expect state add_state 0
+key esc
+wait 300
+key esc
+wait 300
+expect state page home
+key enter
+wait 600
+type nofeed.example.com
+key enter
+wait 1200
+expect state add_state 3
+shot 06-no-feed
+check no-feed
+# a failure leaves the keyboard down: one Esc leaves the page
+key esc
+wait 300
+expect state page home
+key enter
+wait 600
+type slow.example.com
+key enter
+wait 900
+expect text "Timed out: the site did not answer."
+shot 07-timed-out
+key esc
+wait 300
+net offline
+key enter
+wait 600
+type blog.example.org
+key enter
+wait 900
+expect text "No network: check the Wi-Fi and try again."
+shot 08-offline
+net online
+key esc
+wait 300
+key enter
+wait 600
+type nothing
+key enter
+wait 600
+expect text "That is not a web address. Type a site (example.com) or the address of its feed."
+shot 09-not-an-address
+key esc
+wait 300
+# with a keyboard: no on-screen keyboard, the field has the keys at once
+keyboard on
+key enter
+wait 600
+expect osk off
+type korben.info/feed
+shot 10-keyboard
+net slow 3000
+key enter
+wait 300
+expect state add_state 1
+shot 11-looking
+key esc
+wait 800
+expect state add_state 3
+expect text "Stopped."
+shot 12-stopped
+net slow 0
+key esc
+wait 300
+key home
+key enter
+wait 600
+expect state page favorites
+shot 13-favorites-with-added

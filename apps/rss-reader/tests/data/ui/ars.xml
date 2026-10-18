@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<channel>
+<title>Ars Technica</title>
+<link>https://arstechnica.com</link>
+<description>Serving the Technologist since 1998.</description>
+<language>en-US</language>
+<item>
+<title>Rocket Lab's next Neutron test slips to the spring after a valve problem</title>
+<link>https://arstechnica.com/2026/10/story-1/</link>
+<guid isPermaLink="false">ars-1</guid>
+<pubDate>Sun, 18 Oct 2026 14:00:00 +0000</pubDate>
+<description><![CDATA[<p>The company says a valve in the second stage failed a pressure test.</p>]]></description>
+</item>
+<item>
+<title>New Linux kernel fixes the long-standing scheduler stall on small boards</title>
+<link>https://arstechnica.com/2026/10/story-2/</link>
+<guid isPermaLink="false">ars-2</guid>
+<pubDate>Sun, 18 Oct 2026 12:00:00 +0000</pubDate>
+<dc:creator><![CDATA[Jon Brodkin]]></dc:creator>
+<description><![CDATA[<p>The change removes a lock that kept the scheduler waiting.</p>]]></description>
+<content:encoded><![CDATA[<p>The change landed in the 6.18 merge window and removes a lock that kept the scheduler waiting under heavy I/O.
+Maintainers say desktop latency drops noticeably on small boards, and the patch itself is small.</p>
+<img src="https://cdn.arstechnica.net/2026/10/scheduler.jpg" alt="A graph of scheduler latency before and after the patch" width="640">
+<h2>What changed</h2>
+<p>Until now a task woken by a finished read had to wait for the run-queue lock even when the CPU was idle. The new code
+takes a lock-free path in that case:</p>
+<ul><li>wake-ups on an idle CPU no longer touch the shared lock;</li><li>the balancer runs less often on systems with four cores or fewer;</li>
+<li>nothing changes for real-time tasks.</li></ul>
+<blockquote><p>On a Raspberry Pi Zero 2 W the worst-case wake-up latency went from 9 ms to under 2 ms.</p></blockquote>
+<h3>How to try it</h3>
+<ol><li>Build 6.18-rc2 or later.</li><li>Boot with the default scheduler.</li><li>Run a benchmark such as cyclictest.</li></ol>
+<pre>cyclictest -m -p 80 -i 1000 -l 100000</pre>
+<hr>
+<p>The fix will be back-ported to the 6.12 long-term branch, according to the stable team. Distributions that ship 6.12 should pick it up
+in a few weeks. Several readers asked whether the change affects battery life on laptops; the developers expect a small gain, since an idle
+CPU now goes back to sleep sooner, but no measurement has been published yet.</p>
+<p>More details are in the merge request and in the discussion on the kernel mailing list, which runs to more than two hundred messages.</p>]]></content:encoded>
+</item>
+<item>
+<title>Your phone charger is probably fine, say the people who test them</title>
+<link>https://arstechnica.com/2026/10/story-3/</link>
+<guid isPermaLink="false">ars-3</guid>
+<pubDate>Sun, 18 Oct 2026 10:00:00 +0000</pubDate>
+<description><![CDATA[<p>Cheap chargers have improved a lot.</p>]]></description>
+</item>
+<item>
+<title>Review: a keyboard with a trackpoint, and why it matters</title>
+<link>https://arstechnica.com/2026/10/story-4/</link>
+<guid isPermaLink="false">ars-4</guid>
+<pubDate>Sat, 17 Oct 2026 14:00:00 +0000</pubDate>
+<description><![CDATA[<p>A small keyboard that does not need a mouse.</p>]]></description>
+</item>
+<item>
+<title>What the new memory prices mean for single-board computers</title>
+<link>https://arstechnica.com/2026/10/story-5/</link>
+<guid isPermaLink="false">ars-5</guid>
+<pubDate>Sat, 17 Oct 2026 10:00:00 +0000</pubDate>
+<description><![CDATA[<p>Memory went up by 30 % this year.</p>]]></description>
+</item>
+<item>
+<title>NASA picks sites for the next lander</title>
+<link>https://arstechnica.com/2026/10/story-6/</link>
+<guid isPermaLink="false">ars-6</guid>
+<pubDate>Fri, 16 Oct 2026 14:00:00 +0000</pubDate>
+<description><![CDATA[<p>Three sites near the south pole made the list.</p>]]></description>
+</item>
+<item>
+<title>The best e-readers for people who read in the sun</title>
+<link>https://arstechnica.com/2026/10/story-7/</link>
+<guid isPermaLink="false">ars-7</guid>
+<pubDate>Thu, 15 Oct 2026 18:00:00 +0000</pubDate>
+<description><![CDATA[<p>E-ink screens keep getting better.</p>]]></description>
+</item>
+<item>
+<title>Why your Wi-Fi gets slower at night</title>
+<link>https://arstechnica.com/2026/10/story-8/</link>
+<guid isPermaLink="false">ars-8</guid>
+<pubDate>Thu, 15 Oct 2026 08:00:00 +0000</pubDate>
+<description><![CDATA[<p>Your neighbours are online too.</p>]]></description>
+</item>
+<item>
+<title>A tiny solar panel powers a weather station for a year</title>
+<link>https://arstechnica.com/2026/10/story-9/</link>
+<guid isPermaLink="false">ars-9</guid>
+<pubDate>Wed, 14 Oct 2026 12:00:00 +0000</pubDate>
+<description><![CDATA[<p>A hobby project that worked.</p>]]></description>
+</item>
+<item>
+<title>Open-source firmware comes to another family of routers</title>
+<link>https://arstechnica.com/2026/10/story-10/</link>
+<guid isPermaLink="false">ars-10</guid>
+<pubDate>Tue, 13 Oct 2026 06:00:00 +0000</pubDate>
+<description><![CDATA[<p>The vendor published the sources.</p>]]></description>
+</item>
+<item>
+<title>How a single typo took down a cloud region for an hour</title>
+<link>https://arstechnica.com/2026/10/story-11/</link>
+<guid isPermaLink="false">ars-11</guid>
+<pubDate>Sun, 11 Oct 2026 14:00:00 +0000</pubDate>
+<description><![CDATA[<p>The post-mortem is out.</p>]]></description>
+</item>
+<item>
+<title>Ten years of LoRa: what the radio is good for</title>
+<link>https://arstechnica.com/2026/10/story-12/</link>
+<guid isPermaLink="false">ars-12</guid>
+<pubDate>Fri, 09 Oct 2026 12:00:00 +0000</pubDate>
+<description><![CDATA[<p>Long range, low power, little data.</p>]]></description>
+</item>
+</channel>
+</rss>

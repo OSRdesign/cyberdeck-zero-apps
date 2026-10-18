@@ -1,0 +1,15 @@
+# Started by hand (ssh, a script): no launcher contract variables and no input.state (APP-CONTRACT section 7). The app
+# still starts, sizes itself from the layout service and keeps the keyboard rule "auto" with its own probe.
+title RSS Reader: started without the launcher
+nocontract
+env RSSREADER_DATA /tmp/rss-reader-scene-data
+sizes 640x480 720x720
+
+wait 900
+shot home-nocontract
+expect text "Browse feeds"
+key esc
+wait 300
+key right
+key enter
+expect quit

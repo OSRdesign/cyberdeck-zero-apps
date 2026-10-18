@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<channel>
+<title>NHKニュース</title>
+<link>https://www3.nhk.or.jp/news/</link>
+<description>Test feed</description>
+<language>ja</language>
+<item>
+<title>台風10号 西日本で大雨のおそれ</title>
+<link>https://www3.nhk.or.jp/news/html/20261010/k0.html</link>
+<guid isPermaLink="false">nhk-1</guid>
+<pubDate>Sun, 18 Oct 2026 15:30:00 +0000</pubDate>
+<description><![CDATA[<p>気象庁は警戒を呼びかけています。</p>]]></description>
+</item>
+<item>
+<title>新しい宇宙望遠鏡 初めての画像を公開</title>
+<link>https://www3.nhk.or.jp/news/html/20261011/k1.html</link>
+<guid isPermaLink="false">nhk-2</guid>
+<pubDate>Sun, 18 Oct 2026 12:40:00 +0000</pubDate>
+<description><![CDATA[<p>遠い銀河の姿がとらえられました。</p>]]></description>
+</item>
+<item>
+<title>東京で今年いちばんの冷え込み</title>
+<link>https://www3.nhk.or.jp/news/html/20261012/k2.html</link>
+<guid isPermaLink="false">nhk-3</guid>
+<pubDate>Sun, 18 Oct 2026 04:20:00 +0000</pubDate>
+<description><![CDATA[<p>朝の最低気温は5度でした。</p>]]></description>
+</item>
+<item>
+<title>鉄道の新路線 来年春に開業へ</title>
+<link>https://www3.nhk.or.jp/news/html/20261013/k3.html</link>
+<guid isPermaLink="false">nhk-4</guid>
+<pubDate>Sat, 17 Oct 2026 11:40:00 +0000</pubDate>
+<description><![CDATA[<p>所要時間が20分短くなります。</p>]]></description>
+</item>
+</channel>
+</rss>

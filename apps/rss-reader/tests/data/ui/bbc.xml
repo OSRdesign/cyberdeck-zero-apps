@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<channel>
+<title>BBC News</title>
+<link>https://www.bbc.co.uk/news</link>
+<description>Test feed</description>
+<language>en-GB</language>
+<item>
+<title>Storm warning for the west coast as winds reach 90 mph</title>
+<link>https://www.bbc.co.uk/news/articles/0001</link>
+<guid isPermaLink="false">bbc-1</guid>
+<pubDate>Sun, 18 Oct 2026 15:46:00 +0000</pubDate>
+<description><![CDATA[<p>Forecasters expect the strongest gusts overnight.</p>]]></description>
+</item>
+<item>
+<title>Election results: what we know so far</title>
+<link>https://www.bbc.co.uk/news/articles/0002</link>
+<guid isPermaLink="false">bbc-2</guid>
+<pubDate>Sun, 18 Oct 2026 15:05:00 +0000</pubDate>
+<description><![CDATA[<p>Counting continues in several areas.</p>]]></description>
+</item>
+<item>
+<title>Scientists find a new species of deep-sea fish</title>
+<link>https://www.bbc.co.uk/news/articles/0003</link>
+<guid isPermaLink="false">bbc-3</guid>
+<pubDate>Sun, 18 Oct 2026 13:00:00 +0000</pubDate>
+<description><![CDATA[<p>The fish lives more than 7,000 m down.</p>]]></description>
+</item>
+<item>
+<title>Train strikes called off after a late-night deal</title>
+<link>https://www.bbc.co.uk/news/articles/0004</link>
+<guid isPermaLink="false">bbc-4</guid>
+<pubDate>Sun, 18 Oct 2026 11:00:00 +0000</pubDate>
+<description><![CDATA[<p>Services return to normal on Monday.</p>]]></description>
+</item>
+<item>
+<title>The town that runs on geothermal heat</title>
+<link>https://www.bbc.co.uk/news/articles/0005</link>
+<guid isPermaLink="false">bbc-5</guid>
+<pubDate>Sun, 18 Oct 2026 06:00:00 +0000</pubDate>
+<description><![CDATA[<p>Every house is warmed by the ground.</p>]]></description>
+</item>
+<item>
+<title>Football: late goal settles the derby</title>
+<link>https://www.bbc.co.uk/news/articles/0006</link>
+<guid isPermaLink="false">bbc-6</guid>
+<pubDate>Sun, 18 Oct 2026 01:00:00 +0000</pubDate>
+<description><![CDATA[<p>The winner came in the 94th minute.</p>]]></description>
+</item>
+<item>
+<title>How to spot a fake parcel text</title>
+<link>https://www.bbc.co.uk/news/articles/0007</link>
+<guid isPermaLink="false">bbc-7</guid>
+<pubDate>Sat, 17 Oct 2026 15:00:00 +0000</pubDate>
+<description><![CDATA[<p>Scam messages are on the rise.</p>]]></description>
+</item>
+<item>
+<title>Museum returns a 3,000-year-old statue</title>
+<link>https://www.bbc.co.uk/news/articles/0008</link>
+<guid isPermaLink="false">bbc-8</guid>
+<pubDate>Fri, 16 Oct 2026 22:20:00 +0000</pubDate>
+<description><![CDATA[<p>The statue goes home after a century.</p>]]></description>
+</item>
+</channel>
+</rss>

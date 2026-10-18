@@ -1,0 +1,111 @@
+# The minimal reader: the title, the source and the date, the text (headings, paragraphs, lists, a quote, an image
+# placeholder, preformatted text, a rule); scrolling by keys and by a drag; Left / Right the previous / next article;
+# opening marks it read; the options (Text size with arrows and OK / Cancel, Article info) by a 3 s hold on the text and by
+# Ctrl+O. Accents (Korben) and Japanese (NHK) through the font fallbacks.
+seed pin us-ars-technica
+seed pin fr-korben
+seed pin jp-nhk
+seed refresh
+seed refresh_on_open off
+wait 900
+key enter
+wait 400
+key enter
+wait 800
+key down
+key enter
+wait 600
+expect state page reader
+expect state reader_idx 1
+expect text "New Linux kernel fixes the long-standing scheduler stall on small boards"
+shot 01-reader
+check reader
+key down
+key down
+key down
+wait 200
+shot 02-scrolled
+key pgdn
+wait 200
+shot 03-page-down
+drag 0.5 0.8 0.5 0.35
+wait 300
+shot 04-dragged
+key end
+wait 300
+shot 05-end
+key right
+wait 400
+expect state reader_idx 2
+shot 06-next
+key left
+wait 400
+expect state reader_idx 1
+key home
+holdat 0.5 0.6 3400
+wait 400
+expect state popup menu
+expect text "Text size"
+shot 07-options
+check reader-options
+tap "Text size"
+wait 400
+expect state popup choice
+expect state popup_value Medium
+shot 08-text-size
+check text-size
+tap "<right>"
+wait 200
+expect state popup_value Large
+tap "OK"
+wait 500
+expect state text_size large
+shot 09-large
+key ctrl-o
+wait 400
+tap "Text size"
+wait 400
+key left
+key left
+key enter
+wait 500
+expect state text_size small
+shot 10-small
+key ctrl-o
+wait 400
+tap "Article info"
+wait 400
+shot 11-info
+key esc
+wait 300
+key ctrl-o
+wait 400
+tap "Text size"
+wait 400
+key right
+key enter
+wait 400
+expect state text_size medium
+key esc
+wait 400
+expect state page articles
+shot 12-list-after-reading
+key esc
+wait 300
+key down
+key enter
+wait 600
+key enter
+wait 600
+expect state page reader
+shot 13-korben-accents
+key esc
+wait 300
+key esc
+wait 300
+key down
+key enter
+wait 600
+key enter
+wait 600
+shot 14-nhk-japanese

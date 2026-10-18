@@ -1,0 +1,70 @@
+# Home on a first start (no favorites: nothing preselected), its rows, and the quit question of Esc (the header's button and
+# the key). Then Settings and back, Tab does nothing harmful.
+wait 900
+expect text "Favorites"
+expect text "Browse feeds"
+expect text "Saved articles"
+expect text "Add a feed"
+expect text "Settings"
+expect text "No favorites yet"
+expect state page home
+shot 01-home
+check home
+key down
+key down
+shot 02-home-selected
+# the key Esc at Home asks first
+key esc
+wait 300
+expect state popup confirm
+expect text "Quit RSS Reader?"
+shot 03-quit-dialog
+check quit-dialog
+key esc
+wait 300
+expect state popup none
+expect noquit
+# the header's Esc button asks too; Cancel keeps the app
+tap "Esc"
+wait 300
+expect text "Quit RSS Reader?"
+tap "Cancel"
+wait 300
+expect noquit
+# a page and back: the header's Esc goes back to Home
+tap "Settings"
+tap "Settings"
+wait 300
+expect state page settings
+tap "Esc"
+wait 300
+expect state page home
+# the empty pages: Favorites (no preselected feeds) and Saved articles
+key up
+key up
+key up
+key up
+key enter
+wait 400
+expect state page favorites
+expect text "No favorites yet. Browse feeds or add one by its address."
+expect notext "Refresh all"
+shot 04-favorites-empty
+check favorites-empty
+key esc
+wait 300
+tap "Saved articles"
+tap "Saved articles"
+wait 400
+expect state page saved
+expect text "No saved articles yet. Open an article and choose Save for offline in its options."
+shot 05-saved-empty
+check saved-empty
+key esc
+wait 300
+# quit for real
+tap "Esc"
+wait 300
+tap "Quit"
+wait 300
+expect quit

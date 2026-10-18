@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<channel>
+<title>An Example Blog</title>
+<link>https://blog.example.org/</link>
+<description>Test feed</description>
+<language>en</language>
+<item>
+<title>Building a cyberdeck from spare parts</title>
+<link>https://blog.example.org/posts/1/</link>
+<guid isPermaLink="false">blog-1</guid>
+<pubDate>Sun, 18 Oct 2026 14:20:00 +0000</pubDate>
+<description><![CDATA[<p>Part one: the case.</p>]]></description>
+</item>
+<item>
+<title>A week with a 640x480 screen</title>
+<link>https://blog.example.org/posts/2/</link>
+<guid isPermaLink="false">blog-2</guid>
+<pubDate>Sat, 17 Oct 2026 23:20:00 +0000</pubDate>
+<description><![CDATA[<p>Small screens make you focus.</p>]]></description>
+</item>
+<item>
+<title>Notes on reading feeds offline</title>
+<link>https://blog.example.org/posts/3/</link>
+<guid isPermaLink="false">blog-3</guid>
+<pubDate>Fri, 16 Oct 2026 14:00:00 +0000</pubDate>
+<description><![CDATA[<p>Why RSS is still the best way to follow sites.</p>]]></description>
+</item>
+<item>
+<title>Soldering a battery holder</title>
+<link>https://blog.example.org/posts/4/</link>
+<guid isPermaLink="false">blog-4</guid>
+<pubDate>Thu, 15 Oct 2026 04:40:00 +0000</pubDate>
+<description><![CDATA[<p>Mind the polarity.</p>]]></description>
+</item>
+<item>
+<title>Welcome to the blog</title>
+<link>https://blog.example.org/posts/5/</link>
+<guid isPermaLink="false">blog-5</guid>
+<pubDate>Mon, 12 Oct 2026 10:00:00 +0000</pubDate>
+<description><![CDATA[<p>First post.</p>]]></description>
+</item>
+</channel>
+</rss>
