@@ -404,9 +404,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.2.1",
+      "version": "0.2.2",
       "published_at": "2026-10-04T19:29:31+00:00",
-      "updated_at": "2026-10-16T21:07:56+00:00",
+      "updated_at": "2026-10-18T23:00:08+00:00",
       "review": {
         "status": "approved"
       },
@@ -415,10 +415,10 @@
       "download": {
         "type": "deb",
         "package": "viz1090",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/viz1090_0.2.1_arm64.deb",
-        "md5": "46fbe5c6e092b7c1a833380f7a6c5878",
-        "sha256": "3d3e6cda75b02f56cbef691713b2c987f9f5018d2bebac47a673ac0c61295375",
-        "size": 6734894
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/viz1090_0.2.2_arm64.deb",
+        "md5": "3bed70e3d2a7dd329ad23076be9b0f07",
+        "sha256": "6eabd1b1bd4c796a937f041313aa262fa0aa24009b7647c1ec0b98a3ca5bd690",
+        "size": 6745288
       },
       "depends": "libsdl2-2.0-0, libsdl2-ttf-2.0-0, libsdl2-gfx-1.0-0, librtlsdr0, libusb-1.0-0, libfreetype6, libinput10, libxkbcommon0, libncurses6, libzstd1, zlib1g, python3",
       "permissions": {

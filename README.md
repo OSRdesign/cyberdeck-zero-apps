@@ -25,7 +25,7 @@ Each app has its own page with the full description, keys, requirements, known l
 | [**Net Toolbox**](apps/net-toolbox/README.md) (`net-toolbox`) | 0.4.2 | The tools you reach for when the network misbehaves: a step-by-step diagnosis, ping, traceroute, DNS lookup, port check, HTTP check, public IP, whois and the interfaces, a speed test with a bufferbloat grade, Wake-on-LAN, a Bluetooth radar, a local device scanner, Wi-Fi networks with their channels and a Wi-Fi walk test. It replaces LAN Scan and Wi-Fi Survey. |
 | [**Serial Console**](apps/serial-console/README.md) (`serial-console`) | 0.4.1 | Finds your USB-serial adapters and boards, tells what is plugged in and what is behind it, recommends the settings, and talks to it. |
 | [**System Monitor**](apps/system-monitor/README.md) (`system-monitor`) | 0.2.3 | A live look at the Raspberry Pi it runs on: CPU, temperature, memory, storage, network, processes and the power supply. |
-| [**viz1090**](apps/viz1090/README.md) (`viz1090`) | 0.2.1 | The real viz1090 ADS-B display, full screen on any supported screen, fed by an RTL-SDR dongle, with an intro screen, the app header (Esc) and a world map. Needs the dongle and a launcher with full-screen app support. |
+| [**viz1090**](apps/viz1090/README.md) (`viz1090`) | 0.2.2 | The real viz1090 ADS-B display, full screen on any supported screen, fed by an RTL-SDR dongle, with an intro screen, the app header (Esc) and a world map. Needs the dongle and a launcher with full-screen app support. |
 | [**Wi-Fi Survey**](apps/wifi-survey/README.md) (`wifi-survey`) | 0.1.1 | Shows the Wi-Fi networks around the deck and a chart that points out the least crowded channel. Passive only, reads the scan results of NetworkManager. |
 
 
