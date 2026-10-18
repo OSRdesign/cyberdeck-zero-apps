@@ -1,6 +1,6 @@
 # System Monitor
 
-Version 0.2.2, package `system-monitor`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.2.3, package `system-monitor`. Part of [cyberdeck-zero-apps](../../README.md).
 
 System Monitor is a live, read-only look at the Raspberry Pi it runs on: CPU load per core, temperature, frequency,
 memory, storage, network, processes and the **power supply** (under-voltage and throttling from the firmware's flags,
@@ -10,6 +10,13 @@ no writes except its own one-line settings file.
 
 Kind: a native `cp0_lvgl` app (kind A of the [guidelines](../../docs/APP-GUIDELINES.md)), because it has its own
 pages, live charts and must be complete by touch and by keys; no existing program fits the small screen.
+
+## What changed in 0.2.3
+
+* Built on the launcher's newer `cp0_lvgl` (commit `f35c2d6`): its buttons and rows use the shared 7 mm minimum tap
+  target; the header Esc keeps its 9 mm size.
+* **Pointer navigation**: with Settings > System > Pointer navigation on (off by default), a trackpoint, trackball or
+  mouse moves through the System Monitor like the arrow keys, a click is Enter and a held click is Ctrl+O (the System Monitor has no Ctrl+O action, so it does nothing here).
 
 ## Screenshots
 
@@ -124,7 +131,7 @@ From **Settings > Apps**. By hand:
 
 ```sh
 python3 tools/make_registry.py --only system-monitor --out <a folder outside packages/>
-sudo dpkg -i system-monitor_0.2.2_arm64.deb      # remove: sudo dpkg -r system-monitor
+sudo dpkg -i system-monitor_0.2.3_arm64.deb      # remove: sudo dpkg -r system-monitor
 ```
 
 ## Files the app keeps
@@ -205,6 +212,8 @@ The same fixture variable works on a board, for screenshots of a state that is h
 
 ## Changes
 
+* 0.2.3: rebuilt on launcher f35c2d6 (7 mm tap target, header Esc 9 mm, pointer navigation; see
+  [What changed in 0.2.3](#what-changed-in-023)).
 * 0.2.2: rows show what can be tapped: chevron opens or changes, grey information, a dot for actions; rebuilt on launcher 9912361.
   Here: *All processes* opens (chevron), *Sort by* changes in place (value and chevron), every other row is information
   (grey). No row of this app runs an action, so no dot. The overview tiles are not a list and are unchanged.

@@ -72,7 +72,7 @@ python deck.py run '/usr/share/APPLaunch/bin/system-monitor --version; id -nG; c
    highlighted pid (`ps -p <pid> -o comm,rss,stat`); the list refreshes every 2 s without losing the highlight's place.
 7. **System** (footer): kernel `uname -r`, OS `grep PRETTY /etc/os-release`, hostname, serial = the last 8 of
    `cat /proc/device-tree/serial-number`, firmware date = `vcgencmd version` (first line), *This app* (B5), Screen
-   `640x480 standard, 11.3 px/mm`, Launcher `contract 1, fullscreen`.
+   `640x480, 11.3 px/mm` (the short form: the long one with the size class does not fit at 640x480), Launcher `contract 1, fullscreen`.
 8. **Sampling** (footer): choose *Every 5 seconds*: the footer says *Every 5 s*, values change every 5 s, the CPU chart
    says *last 10 min*. Quit and open again: still 5 s; `cat ~/.config/cyberdeckzero/system-monitor.conf` shows `period=5`.
    Set it back to 1 s.
