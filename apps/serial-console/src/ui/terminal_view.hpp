@@ -68,8 +68,9 @@ private:
     static void box_delete_cb(lv_event_t *event);
 
     void build();
-    int button_w(const char *text) const;
-    lv_obj_t *make_button(lv_obj_t *parent, const char *text, bool primary);
+    /* key = the button's height and minimum width: the 9 mm toolbar key for the key bar, TARGET (7 mm) for Send */
+    int button_w(const char *text, int key) const;
+    lv_obj_t *make_button(lv_obj_t *parent, const char *text, bool primary, int key);
     void set_mode(Mode mode);
     void raw_keys(bool on);
     void relayout();

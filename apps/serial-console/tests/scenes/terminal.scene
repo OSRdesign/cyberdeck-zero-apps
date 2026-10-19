@@ -15,6 +15,11 @@ expect text "Connected"
 @640x480 expect text "ttyUSB0 115200"
 @800x480,720x720,1280x720,1024x600 expect text "ttyUSB0 115200 8N1"
 expect osk off
+# the key bar's keys are 9 mm toolbar keys (as the header Esc and the on-screen keyboard), the line field's Send TARGET
+expect key "Ctrl-C" toolbar
+expect key "Ctrl-D" toolbar
+expect key "Tab" toolbar
+expect key "Send" target
 
 # touch only: a tap on the line field brings the on-screen keyboard; Enter sends the line
 tapxy 0.3 0.9
@@ -37,6 +42,8 @@ key enter
 wait 600
 shot terminal-keyboard
 expect notext "Send"
+expect key "Ctrl-C" toolbar
+expect key "Ctrl-Z" toolbar
 
 # the toolbar scrolls sideways where it is wider than the screen; pause, a drag back in the text, resume, clear
 drag 0.9 0.9 0.1 0.9

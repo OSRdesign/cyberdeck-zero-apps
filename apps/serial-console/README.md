@@ -11,7 +11,9 @@ adapter), then opens a terminal page.
 ## What changed in 0.4.2
 
 * Built on the launcher's newer `cp0_lvgl` (commit `f35c2d6`): its buttons and rows use the shared 7 mm minimum tap
-  target (it was 9 mm). The header Esc keeps its 9 mm size (it is not on the 7 mm target).
+  target (it was 9 mm). The header Esc and the terminal's key bar (Ctrl-C, Ctrl-D, Ctrl-Z, Tab, Send Esc, Enter...)
+  keep the 9 mm toolbar key size, as the stock apps' toolbar keys and the on-screen keyboard; the line field's Send is
+  on the 7 mm target and the received text takes the rest of the page.
 * **Pointer navigation**: with Settings > System > Pointer navigation on (off by default), a trackpoint, trackball or
   mouse moves through Serial Console like the arrow keys, a click is Enter and a held click is Ctrl+O.
 
@@ -216,7 +218,8 @@ The identification is kept in the port's section of the settings file as `id_*` 
 
 ## Changes
 
-* 0.4.2: rebuilt on launcher f35c2d6 (7 mm minimum tap target for buttons and rows, header Esc stays 9 mm, pointer
+* 0.4.2: rebuilt on launcher f35c2d6 (7 mm minimum tap target for buttons and rows, header Esc and the terminal's key
+  bar stay 9 mm toolbar keys, pointer
   navigation when Settings > System > Pointer navigation is on).
 * 0.4.1: rebuilt on launcher 9912361 (shared toolkit: Muted tone, Wi-Fi status line, row affordance, action dot). Rows show what can be tapped: a chevron to open or change, grey information, a dot for actions that runs blue while running.
 * **0.4.0**: the ports, port, Ask and result pages move to the launcher's `cp0::ui::CompactList` (top-aligned dense
