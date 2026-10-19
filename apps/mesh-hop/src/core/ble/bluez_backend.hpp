@@ -49,6 +49,7 @@ public:
     void answer_passkey(bool ok, uint32_t passkey) override;
     void cancel_pairing(const std::string &address) override;
     void disconnect(const std::string &address) override;
+    void remove_device(const std::string &address) override;
     void open_gatt(const std::string &address) override;
     void close_gatt() override;
     void write(const Bytes &frame) override;

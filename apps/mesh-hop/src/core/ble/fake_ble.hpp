@@ -191,6 +191,11 @@ public:
         auto it = devs.find(address);
         if (it != devs.end()) it->second.connected = it->second.services_resolved = false;
     }
+    void remove_device(const std::string &address) override
+    {
+        calls.push_back("remove " + address);
+        if (devs.erase(address)) result(BleEvent::Kind::DeviceRemoved, address, true);
+    }
     void open_gatt(const std::string &address) override
     {
         calls.push_back("gatt " + address);

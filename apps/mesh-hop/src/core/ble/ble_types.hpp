@@ -117,6 +117,8 @@ public:
     virtual void answer_passkey(bool ok, uint32_t passkey) = 0;    // reply to the waiting PasskeyRequest (ok false: cancel)
     virtual void cancel_pairing(const std::string &address) = 0;   // Device1.CancelPairing
     virtual void disconnect(const std::string &address) = 0;       // Device1.Disconnect (the bond stays)
+    /* Adapter1.RemoveDevice: BlueZ forgets the device and its bond (only on the user's "Forget this node"). */
+    virtual void remove_device(const std::string &address) = 0;
 
     /* Finds the NUS characteristics of the connected device and subscribes to the TX one (AcquireNotify, else StartNotify);
      * answers with GattResult. */

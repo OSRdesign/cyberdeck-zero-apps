@@ -31,6 +31,9 @@ public:
 
     BleTransport(std::unique_ptr<IBleBackend> backend, std::string address, std::string name = "", Clock clock = {},
                  BleTimings timings = {});
+    /* Over a link the app keeps (the start page scans with it and the connection uses it): the transport owns neither the
+     * link nor its backend; shutdown() ends the link's connection, the backend stays. */
+    BleTransport(BleLink &link, std::string address, std::string name = "", Clock clock = {});
     ~BleTransport() override;
 
     OpenStatus open() override;
@@ -42,7 +45,7 @@ public:
     const LinkInfo &info() const override { return info_; }
     std::string last_error() const override { return error_; }
 
-    void poll();
+    void poll() override;
     void shutdown();
     BleLink &link() { return link_; }
     const BleLink &link() const { return link_; }
@@ -53,7 +56,8 @@ private:
     std::string state_text() const;
 
     std::unique_ptr<IBleBackend> backend_;
-    BleLink link_;
+    std::unique_ptr<BleLink> own_link_;
+    BleLink &link_;
     Clock clock_;
     std::string address_;
     LinkInfo info_;

@@ -1012,6 +1012,15 @@ void BluezBackend::disconnect(const std::string &address)
     d.call(device_path(d.adapter, address), kDevice, "Disconnect", Impl::Op::Ignore, address, nullptr, 10 * kSec);
 }
 
+void BluezBackend::remove_device(const std::string &address)
+{
+    Impl &d = *d_;
+    if (d.adapter.empty()) return;
+    const std::string path = device_path(d.adapter, address);
+    d.call(d.adapter, kAdapter, "RemoveDevice", Impl::Op::Ignore, address,
+           [&d, &path](sd::message *m) { return d.api.append_basic(m, 'o', path.c_str()) >= 0; }, 10 * kSec);
+}
+
 void BluezBackend::open_gatt(const std::string &address)
 {
     Impl &d = *d_;

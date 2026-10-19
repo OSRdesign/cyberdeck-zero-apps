@@ -11,7 +11,16 @@ namespace meshzero::ble {
 
 BleTransport::BleTransport(std::unique_ptr<IBleBackend> backend, std::string address, std::string name, Clock clock,
                            BleTimings timings)
-    : backend_(std::move(backend)), link_(*backend_, timings), clock_(std::move(clock)), address_(std::move(address))
+    : backend_(std::move(backend)), own_link_(std::make_unique<BleLink>(*backend_, timings)), link_(*own_link_),
+      clock_(std::move(clock)), address_(std::move(address))
+{
+    info_.path = "ble:" + address_;
+    info_.product = std::move(name);
+    info_.board_guess = "MeshCore companion over Bluetooth LE";
+}
+
+BleTransport::BleTransport(BleLink &link, std::string address, std::string name, Clock clock)
+    : link_(link), clock_(std::move(clock)), address_(std::move(address))
 {
     info_.path = "ble:" + address_;
     info_.product = std::move(name);

@@ -1,9 +1,9 @@
 # Mesh Hop over Bluetooth LE
 
 Stage A of "BLE first" (2026-10-19): the link to a MeshCore **BLE companion** board, behind the app's existing transport
-interface, with its tests and a probe for the deck. **Nothing in the app uses it yet** (no UI, no change of behaviour: the
-app still opens the USB port). Stage B is the UI (section 5.6). Not tried on a real board yet: section 7 is the protocol for
-the first test.
+interface, with its tests and a probe for the deck. Stage B (0.5.0, the same day): the start page **Choose a node** uses it
+(see [`CONNECT.md`](CONNECT.md), which also covers TCP); section 5.6 below says what was built of the proposal. Not tried on a
+real board yet: section 7 is the protocol for the first test (and `tests/BOARD-TESTS.md` N1-N10 for the app).
 
 Markers used below: **[V]** verified in the source named next to it, **[D]** read on the deck (zero7.local, 2026-10-19,
 read-only), **[I]** inferred (not verified; the reason is given).
@@ -201,14 +201,21 @@ for small MTUs (Bluefruit cuts at MTU - 3; nothing in MeshCore marks the end of 
   (`boards/<12 hex>/link.txt`, the address that reached this board last) so the list can name known boards and "Other
   boards' data" can say "Bluetooth: MeshCore-OSR T1000".
 
-### 5.5 Stage B code (small)
+### 5.5 Stage B code (built in 0.5.0)
 
-The app owns the transport (`std::unique_ptr<ITransport>`, built from the `link` file) and rebuilds the Client with it when
-the user switches; it calls `BleTransport::poll()` before `Client::poll()`; `shutdown()` at exit. The Client's texts become
-transport-aware (`link_hint()` says "Plug the board into the USB port" today): "Turn the board on; it reconnects by
-itself", the PIN and the failure reasons from `BleStatus`. `OpenStatus` may get `Pending` then (today `NotFound`).
+The app owns the transport (`std::unique_ptr<ITransport>`: a `NullTransport` until a node is chosen, then a `SerialTransport`,
+a `BleTransport` over the app's own `BleLink`, or a `TcpTransport`) and rebuilds the Client with it when the user chooses
+another node. `ITransport::poll()` (a no-op for USB) moves a pairing or a TCP connect on, called before `Client::poll()`; the
+app ticks the `BleLink` too (the scan of the start page). What is remembered is `nodes.txt` (CONNECT.md), not the `link` file
+proposed below. Not changed: `OpenStatus` (BLE still answers `NotFound` while on its way) and the Client's own texts (the
+start page shows the BLE states from `BleStatus` itself).
 
-### 5.6 Stage B UI (a proposal from the app's patterns; the open points are the owner's)
+### 5.6 Stage B UI (the proposal of stage A; what was built instead is in CONNECT.md section 2)
+
+The owner chose a start page instead of a Settings > Connection page: one list of USB, Bluetooth and IP nodes, no
+auto-connect, the scan only while the page is shown after a first-use warning, a Home row Node to come back. Kept from the
+proposal below: the PIN box, the Forget action (the only `RemoveDevice`), the row affordance, the status of the step on the
+row and the line under the title.
 
 * Settings > BOARD gets a **Connection** row (chevron, value "USB" or "Bluetooth: MeshCore-OSR T1000") that opens a
   **Connection** page with the standard header: a row per way (USB cable; each remembered or paired MeshCore board) where a

@@ -85,10 +85,17 @@ public:
     void cancel_pairing();
     /* Ends the link (Device1.Disconnect, the bond stays) and stops every timer: Idle. */
     void disconnect();
+    /* The user's "Forget this node": the link to it ends and BlueZ forgets the device and its bond (Adapter1.RemoveDevice). */
+    void forget(const std::string &address);
 
     void tick(uint64_t now_ms);
 
     const BleStatus &status() const { return st_; }
+    /* Why Bluetooth cannot be used here ("" while it can, or before it was tried): the start failed, or BlueZ answered without
+     * an adapter or is not running. */
+    const std::string &unavailable() const { return unavailable_; }
+    /* The reason of the last failed try (kept while the link tries again; "" once connected). */
+    const std::string &last_failure() const { return last_failure_; }
     bool connected() const { return st_.state == BleState::Connected; }
     /* Grows each time a Connected link ends (lost or disconnect()): the transport reports the loss once per value. */
     uint32_t generation() const { return generation_; }
@@ -133,6 +140,7 @@ private:
     bool bonded_target_ = false;
     int auth_errors_ = 0;
     uint32_t generation_ = 0;
+    std::string unavailable_, last_failure_;
 
     NotifyAssembler assembler_;
     std::deque<Bytes> tx_;

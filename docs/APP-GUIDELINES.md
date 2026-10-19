@@ -245,6 +245,7 @@ X-MinSize=640x480
 | `title`, `summary`, `description` | what Settings > Apps shows; the description states needs (hardware, groups, network, minimum screen) |
 | `license` | SPDX expression of everything shipped (`MIT`, or `BSD-3-Clause AND GPL-3.0-or-later`) |
 | `depends` | Debian packages `apt` must add: **only what the binary links dynamically** (native apps: `libfreetype6, libinput10, libxkbcommon0`), plus tools you run (`curl`, `picocom`). Check the names exist on Debian 13 arm64 |
+| `recommends` | optional: Debian packages a feature uses when they are there (apt installs them by default; the app must work without them), e.g. Mesh Hop's `bluez` |
 | `permissions` | `network`, `additional_hardware`, `camera`, `microphone`, `imu`, `background_service`, `external_display` (honest: they are shown to the user) |
 | `draft` | `true` keeps the app out of the registry (`make_registry.py` skips it); build a local `.deb` with `--only <id> --out <dir outside packages/>` |
 | `categories`, `author`, `source_repo` | shown in the catalogue |

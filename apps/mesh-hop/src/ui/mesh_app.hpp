@@ -15,15 +15,19 @@
 
 #pragma once
 
+#include "ble/ble_link.hpp"
 #include "client.hpp"
 #include "deck_clock.hpp"
 #include "log.hpp"
 #include "model.hpp"
+#include "node_demo.hpp"
+#include "nodes.hpp"
 #include "preset_feed.hpp"
 #include "serial_transport.hpp"
 #include "stage.hpp"
 #include "store.hpp"
 #include "ui_logic.hpp"
+#include "ui_nodes.hpp"
 #include "ui_pages.hpp"
 
 #include <functional>
@@ -54,6 +58,8 @@ struct RowSpec {
     std::string id;                      // what the row stands for (a contact key, a conversation, a settings row): taps resolve it from here
     std::vector<Cell> cells;
     Aff aff = Aff::None;                 // a list with markers (Config::marks): the chevron (Open, Edit) or the dot (Action, Running) at the right
+    int bars = -1;                       // a list with bars (Config::bars): 0..4 signal bars lit, ending at bars_right; -1: none
+    int bars_right = 0;
 };
 
 /* A scrollable list of rows (touch: drag to scroll, tap a row; keys: the selection). It is virtual: the data of every row is kept,
@@ -71,6 +77,8 @@ public:
         bool flat = false;               // the CompactList look
         bool marks = false;              // draw RowSpec::aff with mark_layout's sizes (cp0_ui_list_layout of this list's area)
         cp0_ui_list_layout_t mark_layout{};
+        int bars_glyph = 0;              // not 0: rows may show RowSpec::bars, the four signal bars of the launcher's Wi-Fi rows
+                                         // (the status bar's look) sized for a text of this many px
     };
     void create(lv_obj_t *parent, int x, int y, int w, int h, const Config &cfg);
     /* A new height (the room under the shell changed). The pool of widgets was sized at create() for its h. */
@@ -97,6 +105,7 @@ private:
     struct Slot {
         lv_obj_t *row = nullptr, *bar = nullptr, *pill = nullptr, *pill_label = nullptr;
         lv_obj_t *chevron = nullptr, *dot = nullptr;
+        lv_obj_t *bars[4] = {};
         std::vector<lv_obj_t *> labels, boxes;
         int index = -1;
     };
@@ -188,7 +197,8 @@ public:
     void hold_event(int what, RowList *list, int index, int x, int y);
 
 private:
-    enum class EditKind { Name, Number, Channel, Clock, PrivName, PrivKey, RandName, GroupNew, GroupRename, DateRange, Position };
+    enum class EditKind { Name, Number, Channel, Clock, PrivName, PrivKey, RandName, GroupNew, GroupRename, DateRange, Position,
+                          BlePin, IpAddress, IpName };
 
     struct Popup {
         enum Kind { None, Choice, Confirm, Menu, Info, List, Progress } kind = None;
@@ -233,6 +243,29 @@ private:
     void build_home();
     void render_home();
     void key_home(const KeyEvent &e);
+    // the start page "Choose a node" (USB, Bluetooth LE, IP): shown at the start (no auto-connect) and from Home > Node
+    void build_nodes();
+    void render_nodes();
+    NodePageState node_state() const;
+    NodePhase node_phase(std::string *text) const;
+    void open_nodes(bool from_home);
+    void leave_nodes(bool connected);    // to Home after a connection, else back where the page was opened from
+    void nodes_select(int index, bool scroll);
+    void nodes_activate(int index);
+    void key_nodes(const KeyEvent &e);
+    void nodes_tick(uint64_t now);
+    std::vector<meshzero::SerialCandidate> usb_candidates() const;
+    void connect_node(const std::string &key);
+    void disconnect_node();              // the node in use is forgotten or removed: no transport any more
+    void use_transport(std::unique_ptr<meshzero::ITransport> t, bool ble);
+    void make_client();
+    bool ensure_ble();                   // the Bluetooth backend and link (BlueZ, or the demo's FakeBle); false: not available
+    void start_ble_scan();
+    void ask_ble_scan();                 // the first-use question before the first scan ever
+    void open_node_options();
+    void open_node_info(const NodeRow &r);
+    void open_add_ip();
+    void place_hold_cue(bool nodes);
     void open_page(Tab t);
     void go_home();
     void build_body();
@@ -450,7 +483,14 @@ private:
     meshzero::Model model_;
     std::unique_ptr<meshzero::Store> store_;
     std::unique_ptr<meshzero::FileLog> log_;
-    meshzero::SerialTransport serial_;
+    // the ways to reach a node: the Bluetooth backend and link (made when the start page first needs them; they outlive the
+    // transport, a BleTransport only borrows the link), then the transport of the node chosen, then the client over it
+    std::unique_ptr<meshzero::NodeBook> nodes_book_;
+    std::unique_ptr<meshzero::NodeDemo> demo_;
+    std::unique_ptr<meshzero::ble::IBleBackend> ble_backend_;
+    std::unique_ptr<meshzero::ble::BleLink> ble_link_;
+    std::unique_ptr<meshzero::ITransport> transport_;
+    bool transport_ble_ = false;
     meshzero::DeckClockProbe deck_clock_;
     std::unique_ptr<meshzero::Client> client_;
     std::unique_ptr<meshzero::PresetFetcher> fetcher_;
@@ -604,7 +644,27 @@ private:
     cp0_ui_roller_page_t layout_{};
     std::unique_ptr<cp0::ui::Page> shell_;
     int tabs_y_ = 0, hint_h_ = 0;        // tabs_y_: the top of the page bodies and of Home, under the caption line
-    bool at_home_ = true;                // Home: the main menu (Chats, Contacts, Settings); a page is open otherwise
+    bool at_home_ = true;                // Home: the main menu (Chats, Contacts, Settings, Node); a page is open otherwise
+    // the start page "Choose a node" (over Home and the pages while it is shown)
+    bool at_nodes_ = true;
+    bool nodes_from_home_ = false;       // opened from Home > Node: its Esc goes back there (at the start it is the root)
+    RowList nodes_list_;
+    std::vector<NodeRow> node_rows_;
+    int nodes_sel_ = 0;
+    std::string nodes_sel_key_;
+    bool nodes_user_sel_ = false;        // the user moved the selection in this visit (else it follows the node in use / chosen last)
+    uint32_t nodes_sig_ = 0;
+    std::vector<meshzero::SerialCandidate> usb_now_;
+    uint64_t usb_check_ms_ = 0, nodes_render_ms_ = 0;
+    std::string active_key_;             // the node chosen (in use, or being connected)
+    uint64_t connect_ms_ = 0;            // when it was chosen
+    bool connect_pending_ = false;       // chosen on the page and not connected yet: the page goes to Home once it is
+    bool ble_scanned_visit_ = false;     // the scan of this visit of the page was started
+    bool ble_scan_asked_ = false;        // the first-use question is up (or was answered this run)
+    std::string ble_why_;                // why Bluetooth cannot be used ("" while it can, or before it was tried)
+    std::string pending_ip_host_;        // Add a node by IP: the address typed, while its name is asked
+    int pending_ip_port_ = 0;
+    RowList *hold_list_ = nullptr;       // the list a 3 s hold is on (Chats, or the start page)
     std::unique_ptr<cp0::ui::CompactList> home_list_;
     lv_obj_t *wide_ = nullptr;           // the page bodies: the full width under the caption line, down to the hint line or the keyboard
     lv_obj_t *cap_alt_ = nullptr;        // a page's own grey line in the caption's place (the filter summary of Contacts...)

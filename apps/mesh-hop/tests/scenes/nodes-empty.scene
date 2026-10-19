@@ -1,0 +1,23 @@
+# Mesh Hop 0.5, the start page "Choose a node" with nothing to reach: no USB port, Bluetooth on and nothing heard yet (the scan
+# question answered Scan). MESHHOP_DEMO plays the world (no /dev, no BlueZ). The app opens on this page: no auto-connect.
+title Mesh Hop: Choose a node, nothing found
+env MESHHOP_DATA /tmp/mesh-hop-scene-nodes
+env MESHHOP_DEMO empty
+env MESHHOP_ONLINE 0
+sizes 640x480 800x480 720x720 1024x600 1280x720
+
+wait 1500
+expect text "Add a node by IP address"
+expect text "Scanning for Bluetooth nodes..."
+expect text "Nothing heard yet"
+expect notext "Chats"
+expect noquit
+shot empty
+check empty
+# the header's Esc at the root asks to quit, as at Home
+tap "Esc"
+wait 600
+expect text "Quit Mesh Hop?"
+tap "Cancel"
+wait 400
+expect notext "Quit Mesh Hop?"

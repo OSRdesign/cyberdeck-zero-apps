@@ -1,17 +1,31 @@
 # Mesh Hop
 
-Version 0.4.1, package `mesh-hop`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.5.0, package `mesh-hop`. Part of [cyberdeck-zero-apps](../../README.md).
 
 **Status: early release.** 0.2.2 and 0.3.0 were tested on the deck by the owner with real boards (Seeed XIAO nRF52840 and a
 spare XIAO S3 WIO, MeshCore firmware v1.15.0, a board swap included). 0.4.0 is the responsive, touch-complete version; its board
 tests are in [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md). The GPS switch of the Position box is not tested on a real board yet.
-Several MeshCore features are not there yet (see [Known limits](#known-limits)).
+0.5.0 adds Bluetooth LE and Wi-Fi (TCP) nodes: tested with a simulated BlueZ, a simulated board and the simulator over TCP, **not
+yet on a real board** (section N of the board tests). Several MeshCore features are not there yet (see [Known limits](#known-limits)).
 
 A full-screen client for [MeshCore](https://github.com/meshcore-dev/MeshCore) LoRa mesh networks. The radio is a separate
-**companion radio board** plugged into the deck's USB port (MeshCore *companion radio, USB* firmware); the deck is its screen and
-keyboard. Everything works **by touch or by keyboard**, on any screen from **640x480** up. Mesh Hop replaces the 320x170 UI of
+**companion radio board** (a *node*) reached over the deck's USB port, over **Bluetooth LE** or over **Wi-Fi** (MeshCore's
+companion firmware for USB, BLE or Wi-Fi); the deck is its screen and keyboard. Everything works **by touch or by keyboard**, on any screen from **640x480** up. Mesh Hop replaces the 320x170 UI of
 [MeshZero](../meshzero/README.md) and keeps its core: the serial transport, the protocol, the client, the model and the history
 store (`src/core/`, with unit tests).
+
+## What changed in 0.5.0
+
+* **Choose a node**: the app opens on one list of every way to reach a node: the **USB** boards plugged in, the **Bluetooth LE**
+  nodes a short scan hears (with their signal as bars), and the nodes **added by IP address** (MeshCore's Wi-Fi interface, TCP
+  port 5000). **Nothing connects by itself**: the node chosen last is highlighted, a tap on it (or Enter) connects, then Home.
+  Home has a fourth row, **Node** (the node in use and how it is reached), that opens the page again.
+* **Bluetooth LE**: pairing with the node's PIN (a box asks it when the node asks), the deck's Bluetooth keyboard keeps working
+  (Mesh Hop never takes the launcher's pairing role), the link comes back by itself when the node does. The first scan asks
+  first (Bluetooth shares the radio with the keyboard and Wi-Fi); scans run only while the page is open.
+* **Wi-Fi (TCP)**: add a node by its IP address (and port when not 5000); never a hang: a node that does not answer is reported
+  after 5 s.
+* The package recommends `bluez` (without it, USB and IP work and the page says Bluetooth is not available).
 
 ## What changed in 0.4.1
 
@@ -64,8 +78,25 @@ Made with the simulator (`mesh-hop-script`, a simulated board with invented name
 
 ## Using it
 
-**Home and the header.** The app opens on **Home**: **Chats** (the unread total in blue, or "no new"), **Contacts** (the number of
-contacts) and **Settings** (the board). Every page has the standard header: the title (with the sub-page where it fits, e.g.
+**Choose a node.** The app opens on **Choose a node** (the header's title): one list with, for each node, an icon (USB, Bluetooth,
+Wi-Fi), its name and a second line (`ttyACM0 · T1000-E`, `BLE · paired`, `192.168.1.20:5000`); Bluetooth nodes heard by the scan
+show their signal as bars (4 from -60 dBm, 3 from -70, 2 from -85, 1 above -100: the launcher's rule). Then a Bluetooth row
+(Scanning..., Rescan, or a grey note when Bluetooth is off or missing) and **Add a node by IP address**. A tap selects a row, a tap
+on the selected row connects (Enter too); the row says Connecting..., Pairing..., Type the PIN, Connected, or Failed with the
+reason and "tap to retry"; once connected the app goes to Home. Nothing connects by itself: the node chosen last is only
+highlighted. **O** (or Ctrl+O, or a 3 s hold on the row): Forget this node (a paired Bluetooth node: the deck forgets the
+pairing), Remove IP node, Info. **S** scans, **A** adds by IP. The header's Esc asks **Quit Mesh Hop?** here; opened from
+Home > Node it goes back to Home.
+
+* **Bluetooth**: the first time, a box asks before the first scan (Bluetooth shares the radio with the keyboard and Wi-Fi: a
+  Bluetooth keyboard may lag briefly during a scan): **Scan** or **Not now** (a row starts it later); asked once. A scan lasts
+  10 s, runs only while the page is open, stops on a connect. A node not paired yet asks for its PIN: the 6 digits on its screen,
+  or 123456 when it has none (the on-screen keyboard's number pad without a keyboard).
+* **Add a node by IP address**: the address or name of a MeshCore node on Wi-Fi, with `:port` when not 5000, then an optional
+  name; wrong input is refused in the box. The nodes added are always listed.
+
+**Home and the header.** After a connection the app shows **Home**: **Chats** (the unread total in blue, or "no new"), **Contacts** (the number of
+contacts), **Settings** (the board) and **Node** (the node in use and how; it opens Choose a node). Every page has the standard header: the title (with the sub-page where it fits, e.g.
 "Mesh Hop > Contacts > Nearby"), the **Esc** button and the launcher's status strip. The line under the header says the board (model
 and state) or, for a few seconds, a notice. The key hints are a line at the bottom, shown only while a keyboard is connected.
 The header's Esc goes back one step; from the root of a page it goes to Home; at Home it asks **Quit Mesh Hop?** (Cancel / Quit).
@@ -185,11 +216,13 @@ Letters typed into a field are text, not shortcuts. The keyboard layout is US by
 
 ## Install and requirements
 
-* A **MeshCore companion radio board** with the *companion radio, USB* firmware, plugged into the deck's USB port. Path hash size
-  needs firmware level 10 and up, repeat level 9 and up; statistics, discover and factory reset need their commands.
+* A **MeshCore companion radio board** with a *companion radio* firmware: the USB build plugged into the deck's USB port, the BLE
+  build (paired with its PIN), or a Wi-Fi build on the deck's network (its IP address). Path hash size needs firmware level 10 and
+  up, repeat level 9 and up; statistics, discover and factory reset need their commands.
 * A screen of at least 640x480 and a launcher with **full-screen app support** (`X-Fullscreen=true` in the `.desktop` file).
 * A keyboard is optional: without one the launcher's on-screen keyboard is used.
-* The user must be in the `dialout` group (the Raspberry Pi OS default user is).
+* For USB, the user must be in the `dialout` group (the Raspberry Pi OS default user is). For Bluetooth, BlueZ (`bluez`,
+  recommended by the package; any user may use it through D-Bus).
 * `curl` (for the preset list; without it the app keeps the saved or built-in list), `libfreetype6`, `libinput10`,
   `libxkbcommon0` (the package depends on them).
 
@@ -203,11 +236,12 @@ update in the same menu.
 python tools/make_registry.py --only mesh-hop --out <a folder outside packages/>
 ```
 
-Copy the `mesh-hop_0.4.1_arm64.deb` it writes to the deck and run `sudo apt install ./mesh-hop_0.4.1_arm64.deb` there. Remove it
+Copy the `mesh-hop_0.5.0_arm64.deb` it writes to the deck and run `sudo apt install ./mesh-hop_0.5.0_arm64.deb` there. Remove it
 with `sudo apt remove mesh-hop`.
 
-The board is found by itself (`/dev/ttyACM*`, `/dev/ttyUSB*`, by USB id); to force a port put its path in
-`~/.local/share/mesh-hop/port` or start the app with `MESHHOP_PORT=/dev/...`. The app reads the launcher's fonts in
+The USB boards are listed by themselves (`/dev/ttyACM*`, `/dev/ttyUSB*`, with their USB names); a path in
+`~/.local/share/mesh-hop/port` is listed too. `MESHHOP_PORT=/dev/...` is a choice made already: the app connects to that port at
+once and opens on Home (the simulator, the scripted runs). The app reads the launcher's fonts in
 `/usr/share/APPLaunch/share/font`.
 
 ## Reboot and factory reset: read this
@@ -229,13 +263,16 @@ its public key); plugging the first back restores them. The log holds no message
 | `boards/<first 12 hex digits of the board key>/` | per board: `messages.jsonl` (history: 200 messages per conversation, 1500 in all), `read.txt`, `contacts.jsonl` and `channels.jsonl` (caches), `groups.jsonl` (and `groups.bak`), `prefs.txt` (mute flags, ignored nodes, advert schedule) |
 | `prefs.txt` | global: the direct message retry settings |
 | `presets.jsonl` | the last good copy of the radio preset list |
-| `port` | optional: the serial port to use |
+| `nodes.txt` | the nodes added by IP address, the node chosen last, the answer to the Bluetooth scan question, the node names learned (0.5.0) |
+| `port` | optional: a serial port to list on the start page |
 | `mesh-hop.log` | debug log, size bounded (`MESHHOP_DEBUG=1` logs every frame) |
 | `*.pre-boards.bak` | the files of 0.2.1 and before, kept after they moved into the first board's folder |
 
 ## Known limits
 
-* No **Map**, no **Terminal** and no **Bluetooth LE** link to the board yet (USB only).
+* No **Map** and no **Terminal** yet. Bluetooth LE and Wi-Fi (TCP) are new in 0.5.0 and not yet tested with a real node.
+* Pairing is done by Mesh Hop itself (its own BlueZ agent); a node paired in another program works too. Forgetting a node is
+  done on the start page (or `bluetoothctl remove`).
 * A **channel message has no delivery acknowledgement** in MeshCore: it ends at "sent", never "delivered". "Heard back by N
   repeaters" is an approximation (distinct routes, matched by channel hash and size).
 * **Emoji and other characters the launcher's fonts lack** show as empty boxes (in messages and names from other clients).
@@ -265,7 +302,7 @@ Mesh Hop is MIT (see the `copyright` file of the package).
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/build.sh cross        # aarch64, into root/usr/share/APPLaunch/bin/mesh-hop
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/build.sh host         # PC: shared harness + scenes, mesh-hop-script, unit tests
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/build.sh all --strict # both, warnings as errors
-wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/build.sh flows [WxH]  # the 20 simulator flows (tests/flows), about 15 minutes
+wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/build.sh flows [WxH]  # the 21 simulator flows (tests/flows), about 15 minutes
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/build.sh flows sizes  # shell, pages and chats at the five sizes and at the HackBerry's density
 ```
 
@@ -276,7 +313,9 @@ service's tokens (`mesh_app.cpp` `layout_body()`, `layout_chats()`).
 
 * **Simulator**: `tools/meshcore_sim.py` simulates a board on a pseudo-terminal (`--contacts N`, `--manual-add`, `--new-nodes N`,
   `--fw-level N`, `--old-firmware`, `--no-gps-var`, `--heard-back N`, `--identity A|B`, `--reset-format-delay SEC` and more: see its
-  header; stdin commands `newnode`, `reboot`, `swap`). Its names (Alice, Bob, Zed...) are invented.
+  header; stdin commands `newnode`, `reboot`, `swap`); `--tcp PORT` serves a TCP client instead (a node on Wi-Fi). Its names
+  (Alice, Bob, Zed...) are invented. `MESHHOP_DEMO=<scenario>` plays the start page with pretend USB ports and Bluetooth
+  (`src/core/node_demo.hpp`).
 * **Flows**: the scripts in `tests/flows/` drive `mesh-hop-script` (`--script f --shot-dir d [--size WxH] [--ppmm N]`: the shared
   headless harness at any size and density). Commands: `key`, `type`, `tap "label"`, `tapfield n`, `tapkey "label"` (a key of the
   on-screen keyboard), `hold`, `keyboard on|off`, `shot`, `dump`, `bench`, `sim <line>`, `@panes1` / `@panes2`, `fill`, `check` (the
@@ -289,7 +328,9 @@ service's tokens (`mesh_app.cpp` `layout_body()`, `layout_chats()`).
 | Path | What |
 | --- | --- |
 | `src/core/` | transport, protocol, client, model, store, clock policy, presets (`radio_presets.inc` is the dated data file), preset feed, channel keys, firmware features, contact groups, message search, log, the radio log parser and echo tracker, the packet log (no LVGL; unit tested) |
-| `src/core/ble/` | the Bluetooth LE link to a BLE companion board (not used by the app yet): BlueZ over sd-bus loaded at run time, the link state machine, an `ITransport`, a fake for the tests; see [`docs/BLE.md`](docs/BLE.md) |
+| `src/core/ble/` | the Bluetooth LE link to a BLE companion board: BlueZ over sd-bus loaded at run time, the link state machine, an `ITransport`, a fake for the tests; see [`docs/BLE.md`](docs/BLE.md) |
+| `src/core/tcp_transport.*`, `nodes.*`, `node_demo.*` | the TCP transport (and the "no node chosen" one), what the deck remembers about the nodes (`nodes.txt`), the start page's demo worlds; see [`docs/CONNECT.md`](docs/CONNECT.md) |
+| `src/ui/ui_nodes.*` | the rows of the start page "Choose a node" (no LVGL; unit tested) |
 | `tools/ble_probe.cpp`, `tests/ble/` | the BLE probe to run on the deck (`tools/build_ble_probe.sh`) and its test against a mock BlueZ on a private D-Bus (`tests/ble/run_mock.sh`) |
 | `src/ui/ui_logic.*`, `ui_phase2.cpp`, `ui_pages.*` | keys, editor filters, formatting, chat and contact rows, filters and sort, selection, groups, details, Nearby, search, statistics, popups, the Settings layout, the Back rule (no LVGL; unit tested) |
 | `src/ui/key_bridge.*` | the platform's keys to the app's key events, with the US / FR tables (no LVGL; unit tested) |

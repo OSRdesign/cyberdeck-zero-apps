@@ -147,6 +147,7 @@ def main():
     parser.add_argument("--homepage", default="")
     parser.add_argument("--depends", default="", help="Debian Depends: field, e.g. 'curl, libfreetype6' "
                         "(" + LIBC_FLOOR + " is always added)")
+    parser.add_argument("--recommends", default="", help="Debian Recommends: field (installed with the app by default, not required), e.g. 'bluez'")
     parser.add_argument("--section", default="APPLaunch")
     parser.add_argument("--scripts", help="directory with maintainer scripts (preinst, postinst, prerm, postrm)")
     parser.add_argument("--out", default=".", help="output directory")
@@ -182,6 +183,8 @@ def main():
         "Priority: optional",
     ]
     control.append("Depends: " + merge_depends(args.depends))
+    if args.recommends.strip():
+        control.append("Recommends: " + args.recommends.strip())
     if args.homepage:
         control.append("Homepage: " + args.homepage)
     control.append("Description: " + args.description)

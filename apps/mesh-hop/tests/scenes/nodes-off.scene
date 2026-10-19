@@ -1,0 +1,12 @@
+# Mesh Hop 0.5, Bluetooth switched off on the deck: a grey note instead of the scan (never an error box); USB and IP stay usable.
+title Mesh Hop: Choose a node, Bluetooth off
+env MESHHOP_DATA /tmp/mesh-hop-scene-nodes
+env MESHHOP_DEMO off
+env MESHHOP_ONLINE 0
+sizes 640x480 800x480 720x720 1024x600 1280x720
+
+wait 1500
+expect text "Bluetooth is off"
+expect notext "Scan for Bluetooth nodes?"
+shot bt-off
+check bt-off

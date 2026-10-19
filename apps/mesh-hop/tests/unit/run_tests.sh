@@ -12,8 +12,8 @@ mkdir -p "$OUT"
 g++ -std=c++17 -Wall -Wextra -O1 -DTEST_DATA_DIR="\"$HERE/../data\"" -I"$CORE" "$HERE/test_core.cpp" "$CORE"/*.cpp "$CORE"/ble/*.cpp \
     -lpthread -o "$OUT/test_core"
 "$OUT/test_core"
-g++ -std=c++17 -Wall -Wextra -O1 -I"$CORE" "$HERE/test_sim.cpp" "$CORE"/*.cpp -lpthread -o "$OUT/test_sim"
+g++ -std=c++17 -Wall -Wextra -O1 -I"$CORE" "$HERE/test_sim.cpp" "$CORE"/*.cpp "$CORE"/ble/*.cpp -lpthread -o "$OUT/test_sim"
 MESHHOP_SIM="$HERE/../../tools/meshcore_sim.py" "$OUT/test_sim"
 g++ -std=c++17 -Wall -Wextra -O1 -I"$CORE" -I"$UI" "$HERE/test_ui.cpp" "$UI/ui_logic.cpp" "$UI/ui_phase2.cpp" "$UI/ui_pages.cpp" "$UI/png_writer.cpp" \
-    "$UI/key_bridge.cpp" "$CORE"/*.cpp -lpthread -o "$OUT/test_ui"
+    "$UI/key_bridge.cpp" "$UI/ui_nodes.cpp" "$CORE"/*.cpp "$CORE"/ble/*.cpp -lpthread -o "$OUT/test_ui"
 "$OUT/test_ui"

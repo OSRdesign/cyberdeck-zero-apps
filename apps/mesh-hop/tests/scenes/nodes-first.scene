@@ -1,0 +1,27 @@
+# Mesh Hop 0.5, the first-use warning before the first Bluetooth scan ever: Bluetooth shares the radio with the keyboard and
+# Wi-Fi. "Not now" keeps USB and IP usable and leaves a row to scan later; the answer is kept (asked once).
+title Mesh Hop: Choose a node, the first Bluetooth scan
+env MESHHOP_DATA /tmp/mesh-hop-scene-nodes
+env MESHHOP_DEMO first
+env MESHHOP_ONLINE 0
+sizes 640x480 800x480 720x720 1024x600 1280x720
+
+wait 1800
+expect text "Scan for Bluetooth nodes?"
+expect text "Scan"
+expect text "Not now"
+shot first-warning
+check first-warning
+tap "Not now"
+wait 500
+expect notext "Scan for Bluetooth nodes?"
+expect text "Scan for Bluetooth nodes"
+expect text "XIAO nRF52840"
+shot first-not-now
+check first-not-now
+# the row starts it later (a first tap selects it, the second scans)
+tap "Scan for Bluetooth nodes"
+tap "Scan for Bluetooth nodes"
+wait 700
+expect text "Scanning for Bluetooth nodes..."
+shot first-scanning

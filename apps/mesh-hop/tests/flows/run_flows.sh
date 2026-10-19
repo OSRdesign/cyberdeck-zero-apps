@@ -1,5 +1,5 @@
 #!/bin/sh
-# The 20 scripted simulator flows of Mesh Hop, one after the other (the simulator's link /tmp/ttyMHSIM is shared), each
+# The 21 scripted simulator flows of Mesh Hop (0.5: nodes, the start page over TCP), one after the other (the simulator's link /tmp/ttyMHSIM is shared), each
 # with the simulator options its header names; the preset flows through presets_run.sh (its cases 1-7 and the 60 s
 # retry). About 15 minutes. Needs python3 and the host build (../../build.sh host).
 #   sh run_flows.sh [RUNNER] [OUT] [WxH | sizes]
@@ -64,6 +64,7 @@ one b-noboard SHOTS="$OUT/b-noboard" NOSIM=1 sh "$T/p2_run.sh" b-noboard.script
 one b-reset SHOTS="$OUT/b-reset" sh "$T/p2_run.sh" b-reset.script "--reset-format-delay 4"
 one b-swap SHOTS="$OUT/b-swap" SIMCTL=1 sh "$T/p2_run.sh" b-swap.script
 one presets SHOTS="$OUT/presets" sh "$T/presets_run.sh"
+one nodes SHOTS="$OUT/nodes" sh "$T/nodes_run.sh"
 echo "== done in $(($(date +%s) - t0)) s at $SIZE"
 main=0
 for d in "$OUT"/*/; do

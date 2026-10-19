@@ -80,7 +80,9 @@ void BleLink::set_state(BleState s, const std::string &detail)
 bool BleLink::ensure_backend(std::string &why)
 {
     if (be_.started()) return true;
-    return be_.start(why);
+    if (be_.start(why)) return true;
+    unavailable_ = why;
+    return false;
 }
 
 uint64_t BleLink::backoff(int attempt) const
@@ -151,6 +153,7 @@ void BleLink::connect(const std::string &address, uint64_t now_ms)
     st_ = BleStatus{};
     st_.scanning = scanning;
     st_.address = upper(address);
+    last_failure_.clear();
     ever_connected_ = false;
     bonded_target_ = false;
     auth_errors_ = 0;
@@ -239,6 +242,7 @@ void BleLink::attempt_failed(const std::string &why)
     ++st_.attempt;
     st_.retry_at_ms = now_ + backoff(st_.attempt);
     st_.mtu = 0;
+    last_failure_ = why;
     set_state(BleState::Reconnecting, why);
 }
 
@@ -266,6 +270,7 @@ void BleLink::fail(BleFail f, const std::string &why)
         if (!st_.address.empty() && be_.find(st_.address, d) && d.connected) be_.disconnect(st_.address);
     }
     st_.mtu = 0;
+    last_failure_ = why;
     set_state(BleState::Failed, why);
     st_.fail = f;
 }
@@ -315,6 +320,17 @@ void BleLink::disconnect()
     set_state(BleState::Idle, "");
 }
 
+void BleLink::forget(const std::string &address)
+{
+    const std::string a = upper(address);
+    if (!valid_address(a)) return;
+    if (a == st_.address) disconnect();
+    std::string why;
+    if (!ensure_backend(why)) return;
+    be_.remove_device(a);
+    log("forgot " + a);
+}
+
 /* ------------------------------------------------------------------ events */
 
 void BleLink::handle(const BleEvent &e)
@@ -322,6 +338,7 @@ void BleLink::handle(const BleEvent &e)
     using K = BleEvent::Kind;
     switch (e.kind) {
     case K::Ready:
+        unavailable_ = e.ok ? std::string() : e.error;
         if (!e.ok) {
             list_scan_until_ = 0;
             st_.scanning = false;
@@ -428,6 +445,7 @@ void BleLink::handle(const BleEvent &e)
             ever_connected_ = true;
             auth_errors_ = 0;
             ++stats_.connects;
+            last_failure_.clear();
             set_state(BleState::Connected, "MTU " + std::to_string(st_.mtu));
             pump_writes();
         } else if (e.not_companion) {

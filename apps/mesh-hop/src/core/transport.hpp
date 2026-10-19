@@ -46,9 +46,13 @@ public:
     /* Queues bytes for the device. False when the link is closed or the queue is full. */
     virtual bool write(const uint8_t *data, size_t len) = 0;
 
-    virtual std::string kind() const = 0;                  // "USB serial", later "Bluetooth LE"
+    virtual std::string kind() const = 0;                  // "USB serial", "Bluetooth LE", "Network (TCP)"
     virtual const LinkInfo &info() const = 0;
     virtual std::string last_error() const = 0;            // text for the last failed open / lost link
+
+    /* Moves an asynchronous transport on while the Client does not call it (a Bluetooth pairing, a TCP connect): the app
+     * calls it from its timer before Client::poll. Nothing for the USB port. */
+    virtual void poll() {}
 };
 
 } // namespace meshzero

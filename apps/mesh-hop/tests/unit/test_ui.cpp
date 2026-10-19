@@ -1033,6 +1033,7 @@ static void test_history_ui()
 
 #include "test_phase2_ui.inc"
 #include "test_pages_ui.inc"
+#include "test_nodes_ui.inc"
 
 int main()
 {
@@ -1063,6 +1064,7 @@ int main()
     test_hex_key_editor();
     test_describe_changes();
     test_pages_ui();
+    test_node_rows();
     std::printf("ui: %d checks, %d failed\n", g_checks, g_fail);
     return g_fail ? 1 : 0;
 }
