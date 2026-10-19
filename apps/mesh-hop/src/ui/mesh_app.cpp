@@ -5,7 +5,10 @@
 #include "mesh_app.hpp"
 
 #include "app.hpp"
+#include "ble/ble_transport.hpp"
+#include "ble/bluez_backend.hpp"
 #include "clock_policy.hpp"
+#include "tcp_transport.hpp"
 #include "cp0_font_service.hpp"
 #include "cp0_ui_metrics_lvgl.h"
 #include "input_state.hpp"
@@ -28,7 +31,7 @@ namespace meshhop {
 
 namespace {
 
-constexpr const char *kVersion = "0.4.1";
+constexpr const char *kVersion = "0.5.0";
 
 // ---- the colours: the launcher's (cp0_ui_list.h and cp0_ui_osk.h), not an own palette. Green, amber and red are the
 // status tones (ValueTone Ok / Warn / Bad), the accent blue marks what is selected, focused or unread.
@@ -47,6 +50,29 @@ constexpr uint32_t kRed = CP0_UI_LIST_BAD_RGB;
 constexpr uint32_t kOkGreen = CP0_UI_OSK_ENTER_RGB;      // the primary button: the keyboard's Enter blue
 constexpr uint32_t kDangerRed = 0x7A2E24;
 constexpr uint32_t kOnAccent = 0x101010;                  // the text on an accent blue pill
+
+// ---- the signal bars of a Bluetooth node: the launcher's Wi-Fi rows (cp0_ui_roller_widget.cpp network_glyphs, the status
+// bar's look: four rounded bars of 8 / 12 / 3 px for a 28 px block, heights 9, 15, 21, 28, scaled to the row's text size;
+// cp0_statusbar.c BAR_ON / BAR_OFF). The count lit comes from meshzero::signal_bars (the strip's thresholds).
+constexpr uint32_t kBarOn = 0x33CC33;
+constexpr uint32_t kBarOff = 0x4D4D4D;
+struct BarGeo {
+    int glyph = 0, bar_w = 0, pitch = 0, radius = 0, block_w = 0;
+    int bar_h[4] = {};
+};
+BarGeo bar_geo(int glyph_px)
+{
+    static constexpr int kDesignH = 28, kDesign[4] = {9, 15, 21, 28};
+    auto scaled = [](int design, int glyph) { return (design * glyph + kDesignH / 2) / kDesignH; };
+    BarGeo g;
+    g.glyph = std::max(8, glyph_px);
+    g.bar_w = std::max(2, scaled(8, g.glyph));
+    g.pitch = std::max(g.bar_w + 1, scaled(12, g.glyph));
+    g.radius = std::max(1, scaled(3, g.glyph));
+    for (int i = 0; i < 4; ++i) g.bar_h[i] = std::max(2, scaled(kDesign[i], g.glyph));
+    g.block_w = 3 * g.pitch + g.bar_w;
+    return g;
+}
 
 // ---- layout: the pages take the page column (ui_pages.hpp page_column), never wider than Net Toolbox's column; their height is
 // what is left under the shell (App::layout_body). Chats in two panes: the list takes about 35 % of the column's area.
@@ -306,6 +332,16 @@ void RowList::create(lv_obj_t *parent, int x, int y, int w, int h, const Config 
             lv_obj_set_style_bg_opa(s.dot, LV_OPA_COVER, 0);
             set_hidden(s.dot, true);
         }
+        if (cfg.bars_glyph > 0) {                                         // the signal bars of the launcher's Wi-Fi rows
+            const BarGeo bg = bar_geo(cfg.bars_glyph);
+            for (int i = 0; i < 4; ++i) {
+                s.bars[i] = make_box(s.row, 0, 0, bg.bar_w, bg.bar_h[i]);
+                lv_obj_remove_flag(s.bars[i], LV_OBJ_FLAG_CLICKABLE);
+                lv_obj_set_style_radius(s.bars[i], bg.radius, 0);
+                lv_obj_set_style_bg_opa(s.bars[i], LV_OPA_COVER, 0);
+                set_hidden(s.bars[i], true);
+            }
+        }
         hide(s);
     }
 }
@@ -413,6 +449,19 @@ void RowList::bind(Slot &s, int i)
                                                                                                       : CP0_UI_LIST_AFFORDANCE_ACTION)), 0);
         }
         set_hidden(s.dot, !dot);
+    }
+    if (cfg_.bars_glyph > 0) {
+        const BarGeo bg = bar_geo(cfg_.bars_glyph);
+        const int x0 = r.bars_right - bg.block_w, mid = r.h / 2;
+        for (int i = 0; i < 4; ++i) {
+            if (r.bars < 0) {
+                set_hidden(s.bars[i], true);
+                continue;
+            }
+            lv_obj_set_pos(s.bars[i], x0 + i * bg.pitch, mid + bg.glyph / 2 - bg.bar_h[i]);
+            lv_obj_set_style_bg_color(s.bars[i], lv_color_hex(i < r.bars ? kBarOn : kBarOff), 0);
+            set_hidden(s.bars[i], false);
+        }
     }
     for (size_t k = used_l; k < s.labels.size(); ++k) set_hidden(s.labels[k], true);
     for (size_t k = used_b; k < s.boxes.size(); ++k) set_hidden(s.boxes[k], true);
@@ -745,7 +794,7 @@ lv_obj_t *App::make_button(lv_obj_t *parent, int x, int y, int w, int h, const c
     return b;
 }
 
-App::App(Platform &plat) : plat_(plat), serial_(Store::default_dir())
+App::App(Platform &plat) : plat_(plat)
 {
     g_app = this;
     start_ms_ = mono_ms();
@@ -767,10 +816,26 @@ App::App(Platform &plat) : plat_(plat), serial_(Store::default_dir())
         fetcher_ = std::make_unique<PresetFetcher>(store_->dir());
         preset_sched_ = std::make_unique<PresetSchedule>(start_ms_);
     }
-    client_ = std::make_unique<Client>(serial_, model_);
-    client_->set_log([this](const std::string &s) { if (log_) log_->line(s); });
-    if (const char *d = std::getenv("MESHHOP_DEBUG"); d && *d && *d != '0') client_->options().log_frames = true;
-    client_->set_deck_clock([this] { return deck_clock_.state(); }, [this] { deck_clock_.refresh(); });
+    // the ways to reach a node: no connection until the user chooses one on the start page, except when MESHHOP_PORT names a
+    // port (the simulator, the scripted runs, a udev alias): that is a choice made already, the app connects to it at once
+    nodes_book_ = std::make_unique<NodeBook>(store_->dir());
+    demo_ = node_demo_from_env();
+    if (!demo_) nodes_book_->load();                    // a demo starts from its own world, never from what a run before kept
+    if (demo_) {
+        nodes_book_->set_ble_scan(demo_->scan);
+        for (const IpNode &n : demo_->ip) nodes_book_->add_ip(n.host, n.port, n.name);
+        if (!demo_->last.empty()) nodes_book_->set_last(demo_->last);
+        log_->line("demo: the start page plays MESHHOP_DEMO=" + demo_->name + " (no USB, no BlueZ)");
+    }
+    const char *forced = std::getenv("MESHHOP_PORT");
+    if (forced && *forced && !demo_) {
+        transport_ = std::make_unique<SerialTransport>(store_->dir());      // as before 0.5: the port of MESHHOP_PORT
+        active_key_ = node_key(NodeKind::Usb, forced);
+        at_nodes_ = false;
+    } else {
+        transport_ = std::make_unique<NullTransport>();
+    }
+    make_client();
     deck_clock_.refresh();                      // is the deck clock NTP synchronised? answered by a worker thread
 
     load_fonts();
@@ -791,7 +856,23 @@ App::~App()
     dialog_.reset();
     ed_dialog_.reset();
     shell_.reset();
+    // the client before its transport, the transport before the Bluetooth link it may borrow (its end disconnects the node)
+    client_.reset();
+    transport_.reset();
+    if (ble_link_) {
+        ble_link_->stop_scan();
+        ble_link_->disconnect();
+    }
+    if (ble_backend_ && ble_backend_->started()) ble_backend_->stop();
     g_app = nullptr;
+}
+
+void App::make_client()
+{
+    client_ = std::make_unique<Client>(*transport_, model_);
+    client_->set_log([this](const std::string &s) { if (log_) log_->line(s); });
+    if (const char *d = std::getenv("MESHHOP_DEBUG"); d && *d && *d != '0') client_->options().log_frames = true;
+    client_->set_deck_clock([this] { return deck_clock_.state(); }, [this] { deck_clock_.refresh(); });
 }
 
 void App::post(std::function<void()> fn)
@@ -871,7 +952,7 @@ App::Geo App::geo() const
 }
 
 /* Home: the main menu, a CompactList with the rows of Settings (settings_list_layout: the same height, label and value sizes,
- * chevron, and the page column): Chats, Contacts, Settings (Map and Terminal come back when they exist). The value of a row
+ * chevron, and the page column): Chats, Contacts, Settings, Node (0.5: the start page; Map and Terminal come back when they exist). The value of a row
  * is a short state in grey. (Before P3c it was the Comfortable list of the ROW token on the 640 stage: its text is 43 % of
  * a 7 mm row, so on a panel of low density, the HackBerry, it came out smaller than the pages.) */
 void App::build_home()
@@ -886,7 +967,12 @@ void App::build_home()
     }
     const cp0_ui_list_layout_t l = settings_list_layout(tabs_y_, panel_h_);
     cp0::ui::CompactListEvents ev;
-    ev.activate = [this](int, std::intptr_t id) { post([this, id] { open_page(id == 0 ? Tab::Chats : id == 1 ? Tab::Contacts : Tab::Settings); }); };
+    ev.activate = [this](int, std::intptr_t id) {
+        post([this, id] {
+            if (id == 3) open_nodes(true);
+            else open_page(id == 0 ? Tab::Chats : id == 1 ? Tab::Contacts : Tab::Settings);
+        });
+    };
     ev.back = [this] { header_back(); };
     home_list_ = std::make_unique<cp0::ui::CompactList>(shell_->root(), l, ev);
     if (at >= 0) lv_obj_move_to_index(home_list_->focus_object(), at);
@@ -905,6 +991,7 @@ void App::build_screen()
     build_contacts();
     build_settings();
     build_home();
+    build_nodes();
     build_hint_line();
     build_popup();
     layout_body();
@@ -1498,6 +1585,11 @@ void App::layout_body()
     lv_obj_set_pos(wide_, 0, tabs_y_);
     layout_wide();
     if (home_list_) build_home();                            // Home ends above the key hint line too
+    if (nodes_list_.obj()) {                                 // so does the start page
+        lv_obj_set_y(nodes_list_.obj(), tabs_y_);
+        nodes_list_.resize(panel_h_);
+        nodes_sig_ = 0;
+    }
     set_hidden(hint_box_, !hint);
     lv_obj_set_pos(hint_box_, 0, layout_.h - hint_h_);
     invalidate();
@@ -1551,6 +1643,7 @@ void App::body_lists(std::vector<lv_obj_t *> &roots, lv_obj_t *&hint) const
 {
     roots = {wide_};
     if (home_list_) roots.push_back(home_list_->focus_object());
+    if (nodes_list_.obj()) roots.push_back(nodes_list_.obj());
     hint = hint_box_;
 }
 
@@ -1632,6 +1725,10 @@ std::string App::debug_state() const
          " osk=" + (cp0::ui::osk::visible() ? "up" : "down") + " osk_h=" + std::to_string(osk_inset_) + " typing=" + typing +
          " compose_view=" + (compose_view() ? "1" : "0") + " search_typing=" + (search_typing_ ? "1" : "0") +
          " chat_bar=" + (chat_bar_.root() && !lv_obj_has_flag(chat_bar_.root(), LV_OBJ_FLAG_HIDDEN) ? "1" : "0");
+    // 0.5: the start page
+    s += std::string(" nodes=") + (at_nodes_ ? "1" : "0") + " node_rows=" + std::to_string(node_rows_.size()) + " node_sel='" + nodes_sel_key_ + "'" +
+         " active='" + active_key_ + "' transport='" + transport_->kind() + "'" +
+         " ble=" + (ble_link_ ? ble::state_name(ble_link_->status().state) : "-");
     return s;
 }
 
@@ -1677,7 +1774,8 @@ void App::sync_osk()
     if (want == osk_field_) return;
     release_osk();
     osk_field_ = want;
-    if (want) cp0::ui::osk::request(want, cp0::ui::TextType::Text, false);   // Text: the number pad has neither '-' nor '.'
+    const bool digits = editor_open_ && edit_kind_ == EditKind::BlePin;
+    if (want) cp0::ui::osk::request(want, digits ? cp0::ui::TextType::Number : cp0::ui::TextType::Text, false);   // Text: the number pad has neither '-' nor '.'
     chat_mode_ = ~0u;                                                         // the compose view follows
     invalidate();
 }
@@ -1721,7 +1819,8 @@ void App::set_page_visible()
 void App::update_title()
 {
     std::vector<std::string> path = {"Mesh Hop"};
-    switch (at_home_ ? Tab::Map : nav_.tab) {
+    if (at_nodes_) path.push_back("Choose a node");
+    switch (at_nodes_ || at_home_ ? Tab::Map : nav_.tab) {
     case Tab::Chats:
         path.push_back("Chats");
         if (nav_.search_open) path.push_back("Search");
@@ -2014,19 +2113,51 @@ void App::hold_event(int what, RowList *list, int index, int x, int y)
         hold_.cancel();
         return;
     }
-    // pressed: is this a name that has options?
+    // pressed: is this a name that has options? (a chat of the list, or a node of the start page)
     std::string target;
-    if (list == &chat_list_) {
+    const bool chats = list == &chat_list_ && nav_.tab == Tab::Chats && !at_home_ && !at_nodes_;
+    const bool nodes = list == &nodes_list_ && at_nodes_;
+    if (chats) {
         const std::string &id = chat_list_.id_at(index);
         if (id.rfind("c:", 0) == 0 || id.rfind("d:", 0) == 0) target = id;
+    } else if (nodes) {
+        const int i = find_node_row(node_rows_, nodes_list_.id_at(index));
+        if (i >= 0 && node_rows_[static_cast<size_t>(i)].type == NodeRowType::Node) target = node_rows_[static_cast<size_t>(i)].key;
     }
-    if (target.empty() || nav_.popup_open || editor_open_ || view_pending_ || nav_.tab != Tab::Chats || at_home_) {
+    if (target.empty() || nav_.popup_open || editor_open_ || view_pending_ || !(chats || nodes)) {
         hold_.cancel();
         hold_.take_swallow();
         return;
     }
-    hold_scroll_y_ = lv_obj_get_scroll_y(chat_list_.obj());
+    hold_list_ = list;
+    hold_scroll_y_ = lv_obj_get_scroll_y(list->obj());
+    place_hold_cue(nodes);
     hold_.begin(target, x, y, mono_ms());
+}
+
+/* The cue of a 3 s hold (a bar that fills): at the bottom of the chat list, or of the start page's list. */
+void App::place_hold_cue(bool nodes)
+{
+    if (!hold_box_) return;
+    lv_obj_t *want = nodes ? shell_->root() : page_[static_cast<int>(Tab::Chats)];
+    if (lv_obj_get_parent(hold_box_) == want) return;
+    lv_obj_set_parent(hold_box_, want);
+    if (nodes) {
+        const Geo g = geo();
+        const int lh = line_h(f_caption_), pad = g.s;
+        const int cue_w = std::max(1, g.lw - 2 * g.inset), cue_h = pad + lh + pad / 2 + pad + pad;
+        lv_obj_set_pos(hold_box_, g.lx + g.inset, tabs_y_ + std::max(0, panel_h_ - cue_h - g.s));
+        lv_obj_set_size(hold_box_, cue_w, cue_h);
+        lv_obj_set_pos(hold_label_, pad, pad - 2);
+        lv_obj_set_size(hold_label_, std::max(1, cue_w - 2 * pad - 4), lh);
+        hold_track_w_ = std::max(1, cue_w - 2 * pad - 4);
+        lv_obj_set_pos(hold_track_, pad, pad + lh + pad / 2 - 2);
+        lv_obj_set_size(hold_track_, hold_track_w_, pad);
+        lv_obj_set_height(hold_bar_, pad);
+        lv_obj_move_foreground(hold_box_);
+    } else {
+        chat_mode_ = ~0u;                                     // layout_chats places it again in the chat list
+    }
 }
 
 void App::hold_tick(uint64_t now)
@@ -2035,13 +2166,24 @@ void App::hold_tick(uint64_t now)
         if (hold_box_ && !lv_obj_has_flag(hold_box_, LV_OBJ_FLAG_HIDDEN)) set_hidden(hold_box_, true);
         return;
     }
-    if (nav_.popup_open || editor_open_ || nav_.tab != Tab::Chats || at_home_ || lv_obj_get_scroll_y(chat_list_.obj()) != hold_scroll_y_) {
+    const bool nodes = hold_list_ == &nodes_list_;
+    RowList &held = nodes ? nodes_list_ : chat_list_;
+    const bool context = nodes ? at_nodes_ : (nav_.tab == Tab::Chats && !at_home_ && !at_nodes_);
+    if (nav_.popup_open || editor_open_ || !context || lv_obj_get_scroll_y(held.obj()) != hold_scroll_y_) {
         hold_.cancel();                                  // a scroll of the list, or something else took over
         set_hidden(hold_box_, true);
         return;
     }
     if (hold_.poll(now)) {
         set_hidden(hold_box_, true);
+        if (nodes) {                                     // the held node is selected: its options act on it
+            const int idx = find_node_row(node_rows_, hold_.target());
+            if (idx >= 0) {
+                nodes_select(idx, false);
+                open_node_options();
+            }
+            return;
+        }
         const int idx = find_chat_row(chat_rows_, hold_.target());       // the held row is selected: the menu's options act on it
         if (idx >= 0) {
             select_chat_row(idx);
@@ -2050,7 +2192,14 @@ void App::hold_tick(uint64_t now)
         return;
     }
     if (hold_.visible(now)) {
-        lv_label_set_text(hold_label_, ("Keep holding: options for " + truncate_ellipsis(model_.conv_title(hold_.target()), 26)).c_str());
+        std::string who;
+        if (nodes) {
+            const int idx = find_node_row(node_rows_, hold_.target());
+            if (idx >= 0) who = node_rows_[static_cast<size_t>(idx)].title;
+        } else {
+            who = model_.conv_title(hold_.target());
+        }
+        lv_label_set_text(hold_label_, ("Keep holding: options for " + truncate_ellipsis(who, 26)).c_str());
         lv_obj_set_width(hold_bar_, std::max(1, static_cast<int>(hold_.progress(now) * hold_track_w_)));
         set_hidden(hold_box_, false);
     }
@@ -2119,8 +2268,11 @@ void App::tick()
     const uint64_t now = mono_ms();
     if (now - last_poll_ms_ >= 20) {
         last_poll_ms_ = now;
+        if (ble_link_) ble_link_->tick(now);            // the Bluetooth scan of the start page and the link it may carry
+        transport_->poll();                             // a pairing or a TCP connect moves on while the client waits
         client_->poll(now);
     }
+    nodes_tick(now);
     if (model_.board_epoch() != seen_epoch_) on_board_changed();
     if (pop_dirty_) {                                   // the widgets of a new popup are built here, never inside the click of another
         popup_build();
@@ -2185,7 +2337,7 @@ void App::tick()
                         format_local_datetime(now_unix()));
         }
     }
-    if (nav_.tab == Tab::Chats && !at_home_ && !conv_.empty() && !nav_.search_open && conversation_visible()) model_.mark_read(conv_);
+    if (nav_.tab == Tab::Chats && !at_home_ && !at_nodes_ && !conv_.empty() && !nav_.search_open && conversation_visible()) model_.mark_read(conv_);
     if (need) render();
     // the buttons of the dialogs at Mesh Hop's ROW height, after any layout of theirs (the toolkit's own on a change of the
     // on-screen keyboard included)
@@ -2199,11 +2351,13 @@ void App::render()
     last_revision_ = model_.revision();
     last_link_ = static_cast<uint32_t>(client_->link());
     dirty_ = false;
-    set_hidden(wide_, at_home_);
-    home_list_->set_hidden(!at_home_);
-    if (at_home_) render_home();
+    set_hidden(wide_, at_home_ || at_nodes_);
+    home_list_->set_hidden(!at_home_ || at_nodes_);
+    set_hidden(nodes_list_.obj(), !at_nodes_);
+    if (at_nodes_) render_nodes();
+    else if (at_home_) render_home();
     else set_page_visible();
-    switch (at_home_ ? Tab::Map : nav_.tab) {
+    switch (at_home_ || at_nodes_ ? Tab::Map : nav_.tab) {
     case Tab::Chats:
         render_chats();
         set_hidden(search_panel_, !nav_.search_open);
@@ -2254,6 +2408,18 @@ void App::render_home()
     rows.push_back(ListRow::item("Chats", chats, ValueTone::Muted, 0, RowAffordance::Open));
     rows.push_back(ListRow::item("Contacts", contacts, ValueTone::Muted, 1, RowAffordance::Open));
     rows.push_back(ListRow::item("Settings", truncate_ellipsis(board, 22), board_tone, 2, RowAffordance::Open));
+    {   // 0.5: the node in use and how it is reached; opens the start page "Choose a node"
+        std::string node = "none";
+        NodeKind k = NodeKind::Usb;
+        std::string id;
+        if (!active_key_.empty() && parse_node_key(active_key_, k, id)) {
+            const std::string learned = nodes_book_->name_of(active_key_);
+            node = (model_.self() && !model_.self()->name.empty() ? model_.self()->name : !learned.empty() ? learned : std::string());
+            const char *how = k == NodeKind::Usb ? "USB" : k == NodeKind::Ble ? "Bluetooth" : "IP";
+            node = node.empty() ? std::string(how) : truncate_ellipsis(node, 16) + " \xC2\xB7 " + how;
+        }
+        rows.push_back(ListRow::item("Node", node, client_->ready() ? ValueTone::Ok : ValueTone::Muted, 3, RowAffordance::Open));
+    }
     if (home_list_->count() == 0) home_list_->reset_rows(rows, 0);
     else home_list_->set_rows(rows);
     // unread messages in the accent blue (the list's tones have none): the value label of that row
@@ -2299,11 +2465,596 @@ void App::key_home(const KeyEvent &e)
     case Key::End: sel = n - 1; break;
     case Key::Enter:
     case Key::Right:
-        if (!e.repeat) open_page(sel == 0 ? Tab::Chats : sel == 1 ? Tab::Contacts : Tab::Settings);
+        if (e.repeat) return;
+        if (sel == 3) open_nodes(true);
+        else open_page(sel == 0 ? Tab::Chats : sel == 1 ? Tab::Contacts : Tab::Settings);
         return;
     default: return;
     }
     home_list_->select(sel, false);
+}
+
+/* ================================================================== the start page "Choose a node" (0.5) */
+
+namespace {
+
+/* A reason short enough for a row: without BlueZ's error prefix and the port or address in front of it. */
+std::string short_reason(std::string s)
+{
+    const std::string pre = "org.bluez.Error.";
+    if (s.rfind(pre, 0) == 0) s = s.substr(pre.size());
+    const size_t colon = s.find(": ");
+    if (colon != std::string::npos && colon + 2 < s.size()) s = s.substr(colon + 2);
+    return truncate_ellipsis(s, 48);
+}
+
+std::string read_first_line_of(const std::string &file)
+{
+    FILE *f = std::fopen(file.c_str(), "rb");
+    if (!f) return "";
+    char buf[256] = {};
+    const bool ok = std::fgets(buf, sizeof(buf), f) != nullptr;
+    std::fclose(f);
+    if (!ok) return "";
+    std::string line = buf;
+    while (!line.empty() && (line.back() == '\n' || line.back() == '\r' || line.back() == ' ')) line.pop_back();
+    return line;
+}
+
+} // namespace
+
+/* The list of the start page: the app's virtual list in the CompactList look (the page column, the markers of the row kinds),
+ * two-line rows of the ROW height (a node acts: 7 mm), the transport icon at the left and, for a Bluetooth node the scan hears,
+ * the signal bars of the launcher's Wi-Fi rows before the marker. */
+void App::build_nodes()
+{
+    const Geo g = geo();
+    RowList::Config cfg;
+    cfg.max_cells = 4;
+    cfg.max_boxes = 0;
+    cfg.flat = true;
+    cfg.marks = true;
+    cfg.mark_layout = settings_list_layout(tabs_y_, panel_h_);
+    cfg.mark_layout.text_px = cp0_ui_metrics_get()->text_px[CP0_TEXT_BODY];
+    cfg.min_row_h = std::max(g.row, line_h(f_body_) + line_h(f_caption_) + 2 * std::max(4, g.s / 2));
+    cfg.bars_glyph = cp0_ui_metrics_get()->text_px[CP0_TEXT_BODY];
+    nodes_list_.create(shell_->root(), g.lx, tabs_y_, g.lw, std::max(1, panel_h_), cfg);
+    set_hidden(nodes_list_.obj(), !at_nodes_);
+}
+
+std::vector<SerialCandidate> App::usb_candidates() const
+{
+    if (demo_) return demo_->usb;
+    std::vector<SerialCandidate> v = list_serial_ports();
+    // the port file (a udev alias, the simulator's pty) is listed too
+    const std::string forced = read_first_line_of(store_->dir() + "/port");
+    if (!forced.empty() && std::none_of(v.begin(), v.end(), [&](const SerialCandidate &c) { return c.path == forced; })) {
+        SerialCandidate c;
+        c.path = forced;
+        c.product = "port file";
+        v.insert(v.begin(), c);
+    }
+    return v;
+}
+
+NodePhase App::node_phase(std::string *text) const
+{
+    if (active_key_.empty()) return NodePhase::None;
+    if (client_->ready()) return NodePhase::Connected;
+    auto say = [&](const std::string &t) {
+        if (text) *text = short_reason(t);
+    };
+    if (transport_ble_ && ble_link_) {
+        const ble::BleStatus &b = ble_link_->status();
+        switch (b.state) {
+        case ble::BleState::Pairing: return b.pin_needed ? NodePhase::PinNeeded : NodePhase::Pairing;
+        case ble::BleState::Scanning:
+        case ble::BleState::Connecting:
+            if (b.attempt > 0 && !ble_link_->last_failure().empty()) {       // trying again: the last reason stays
+                say(ble_link_->last_failure());
+                return NodePhase::Failed;
+            }
+            return NodePhase::Connecting;
+        case ble::BleState::Reconnecting:
+            say(ble_link_->last_failure());
+            return NodePhase::Failed;
+        case ble::BleState::Failed:
+            say(std::string(ble::fail_text(b.fail)));
+            return NodePhase::Failed;
+        case ble::BleState::Idle: return connect_pending_ ? NodePhase::Connecting : NodePhase::None;
+        case ble::BleState::Connected: break;                                  // the client's handshake decides
+        }
+    }
+    switch (client_->link()) {
+    case Link::Ready: return NodePhase::Connected;
+    case Link::Handshake: return NodePhase::Connecting;
+    case Link::NotCompanion: say("not a MeshCore companion (firmware?)"); return NodePhase::Failed;
+    case Link::Denied: say("no permission (dialout group)"); return NodePhase::Failed;
+    case Link::Busy: say("the port is in use"); return NodePhase::Failed;
+    case Link::Error:
+    case Link::Searching: {
+        if (const auto *tcp = dynamic_cast<const TcpTransport *>(transport_.get())) {
+            if (!tcp->last_failure().empty()) {
+                say(tcp->last_failure());
+                return NodePhase::Failed;
+            }
+            return NodePhase::Connecting;
+        }
+        if (transport_ble_) return NodePhase::Connecting;
+        if (client_->link() == Link::Searching && mono_ms() - connect_ms_ < 2500) return NodePhase::Connecting;
+        const std::string e = transport_->last_error();
+        if (e.empty()) return NodePhase::Connecting;
+        say(e);
+        return NodePhase::Failed;
+    }
+    }
+    return NodePhase::None;
+}
+
+NodePageState App::node_state() const
+{
+    NodePageState s;
+    s.usb = usb_now_;
+    s.book = nodes_book_.get();
+    s.ip = nodes_book_->ip_nodes();
+    s.scan_answer = nodes_book_->ble_scan();
+    const std::string why = !ble_why_.empty() ? ble_why_ : ble_link_ ? ble_link_->unavailable() : std::string();
+    if (!why.empty()) {
+        s.bt = NodePageState::Bt::Missing;
+        s.bt_why = why;
+    } else if (ble_link_ && ble_backend_ && ble_backend_->started()) {
+        if (!ble_backend_->ready()) s.bt = NodePageState::Bt::Unknown;
+        else if (!ble_backend_->adapter_powered()) s.bt = NodePageState::Bt::Off;
+        else s.bt = NodePageState::Bt::Ready;
+        s.ble = ble_link_->candidates();
+        s.scanning = ble_link_->status().scanning;
+    }
+    s.active = active_key_;
+    s.phase = node_phase(&s.phase_text);
+    return s;
+}
+
+void App::render_nodes()
+{
+    const NodePageState st = node_state();
+    std::vector<NodeRow> rows = build_node_rows(st);
+    // the selection follows its key (rows come and go). Until the user moves it in this visit: the node in use, else the node
+    // chosen last (highlighted, never connected by itself), else the first node, else the first row that can be chosen
+    int sel = find_node_row(rows, nodes_sel_key_);
+    if (!nodes_user_sel_) {
+        int pref = active_key_.empty() ? -1 : find_node_row(rows, active_key_);
+        if (pref < 0 && !nodes_book_->last().empty()) pref = find_node_row(rows, nodes_book_->last());
+        for (size_t i = 0; i < rows.size() && pref < 0; ++i)
+            if (rows[i].type == NodeRowType::Node) pref = static_cast<int>(i);
+        if (pref >= 0) sel = pref;
+    }
+    if (sel < 0 || !rows[static_cast<size_t>(sel)].selectable) {
+        sel = -1;
+        for (size_t i = 0; i < rows.size() && sel < 0; ++i)
+            if (rows[i].selectable) sel = static_cast<int>(i);
+    }
+    uint32_t sig = 2166136261u;
+    for (const NodeRow &r : rows) {
+        sig = fnv(fnv(fnv(sig, r.key), r.title), r.detail);
+        sig = fnv_int(fnv_int(fnv_int(sig, r.bars), static_cast<int>(r.aff)), static_cast<int>(r.tone));
+    }
+    sig = fnv_int(fnv_int(sig, sel), panel_h_);
+    node_rows_ = std::move(rows);
+    nodes_sel_ = std::max(sel, 0);
+    nodes_sel_key_ = sel >= 0 ? node_rows_[static_cast<size_t>(sel)].key : std::string();
+    if (sig == nodes_sig_) return;
+    nodes_sig_ = sig;
+
+    const Geo g = geo();
+    cp0_ui_list_layout_t ml = settings_list_layout(0, g.h);
+    ml.text_px = cp0_ui_metrics_get()->text_px[CP0_TEXT_BODY];
+    const int lh1 = line_h(f_body_), lh2 = line_h(f_caption_);
+    const int row_h = std::max(g.row, lh1 + lh2 + 2 * std::max(4, g.s / 2));
+    const int top = std::max(0, (row_h - lh1 - lh2) / 2);
+    const lv_font_t *sym = cp0_ui_font_px(cp0_ui_metrics_get()->text_px[CP0_TEXT_BODY]);     // the builtin face: LV_SYMBOL_*
+    const int icon_w = line_h(sym) + g.s / 2;
+    const int tx = g.inset + icon_w + g.m;
+    const BarGeo bg = bar_geo(cp0_ui_metrics_get()->text_px[CP0_TEXT_BODY]);
+    std::vector<RowSpec> specs;
+    for (const NodeRow &r : node_rows_) {
+        RowSpec s;
+        s.h = row_h;
+        s.id = r.key;
+        s.aff = r.aff;
+        s.selectable = r.selectable;
+        const int trail = trail_of(ml, r.aff);
+        const int right = g.lw - g.inset - trail - (trail ? g.s : 0);
+        int text_right = right;
+        if (r.bars >= 0) {
+            s.bars = r.bars;
+            s.bars_right = right;
+            text_right = right - bg.block_w - g.m;
+        }
+        const bool note = r.type == NodeRowType::Note;
+        const char *icon = r.type == NodeRowType::AddIp ? LV_SYMBOL_PLUS : r.type == NodeRowType::Scan ? LV_SYMBOL_REFRESH : node_icon(r.kind);
+        s.cells.push_back({icon, note ? kMuted : kText, g.inset, icon_w, LV_TEXT_ALIGN_CENTER, sym, (row_h - line_h(sym)) / 2});
+        s.cells.push_back({r.title, note ? kMuted : kText, tx, std::max(1, text_right - tx), LV_TEXT_ALIGN_LEFT, f_body_, top});
+        s.cells.push_back({r.detail, tone_color(r.tone), tx, std::max(1, text_right - tx), LV_TEXT_ALIGN_LEFT, f_caption_, top + lh1});
+        specs.push_back(std::move(s));
+    }
+    nodes_list_.set(std::move(specs), sel, true);
+    if (sel >= 0) nodes_list_.scroll_to_selected();
+}
+
+void App::open_nodes(bool from_home)
+{
+    if (nav_.popup_open || editor_open_) return;
+    at_nodes_ = true;
+    nodes_from_home_ = from_home;
+    ble_scanned_visit_ = false;
+    nodes_sel_key_ = active_key_.empty() ? nodes_book_->last() : active_key_;
+    nodes_user_sel_ = false;
+    nodes_sig_ = 0;
+    usb_check_ms_ = 0;
+    hold_.cancel();
+    if (log_) log_->line(std::string("nodes: the start page") + (from_home ? " (from Home)" : ""));
+    invalidate();
+}
+
+void App::leave_nodes(bool connected)
+{
+    if (ble_link_) ble_link_->stop_scan();                 // the scan runs only while the page is shown
+    at_nodes_ = false;
+    hold_.cancel();
+    set_hidden(hold_box_, true);
+    place_hold_cue(false);
+    at_home_ = true;                                       // after a connection, or back from Home > Node
+    home_list_->select(connected || !nodes_from_home_ ? 0 : 3, false);
+    nodes_from_home_ = false;
+    invalidate();
+}
+
+void App::nodes_select(int index, bool scroll)
+{
+    if (index < 0 || index >= static_cast<int>(node_rows_.size())) return;
+    nodes_sel_ = index;
+    nodes_sel_key_ = node_rows_[static_cast<size_t>(index)].key;
+    nodes_user_sel_ = true;
+    nodes_list_.set_selected(index, true, scroll);
+    nodes_sig_ = 0;
+    invalidate();
+}
+
+void App::nodes_activate(int index)
+{
+    if (index < 0 || index >= static_cast<int>(node_rows_.size())) return;
+    const NodeRow r = node_rows_[static_cast<size_t>(index)];
+    switch (r.type) {
+    case NodeRowType::Note: break;
+    case NodeRowType::AddIp: open_add_ip(); break;
+    case NodeRowType::Scan:
+        if (ble_link_ && ble_link_->status().scanning) break;
+        if (nodes_book_->ble_scan() != NodeBook::Scan::Yes) {      // a scan started by hand is the answer to the question
+            nodes_book_->set_ble_scan(NodeBook::Scan::Yes);
+            nodes_book_->save();
+        }
+        start_ble_scan();
+        break;
+    case NodeRowType::Node:
+        if (r.key == active_key_ && client_->ready()) {             // the node in use: back to the app
+            leave_nodes(true);
+            break;
+        }
+        if (r.key == active_key_) {                                 // on its way: a tap does not start it again (failed: it does)
+            const NodePhase p = node_phase(nullptr);
+            if (p == NodePhase::Connecting || p == NodePhase::Pairing || p == NodePhase::PinNeeded) break;
+        }
+        connect_node(r.key);
+        break;
+    }
+}
+
+bool App::ensure_ble()
+{
+    if (!ble_link_) {
+        if (demo_) {
+            ble_backend_ = demo_->make_backend();
+        } else {
+            auto be = std::make_unique<ble::BluezBackend>();
+            be->set_log([this](const std::string &l) { if (log_) log_->line(l); });
+            ble_backend_ = std::move(be);
+        }
+        ble_link_ = std::make_unique<ble::BleLink>(*ble_backend_);
+        ble_link_->set_log([this](const std::string &l) { if (log_) log_->line(l); });
+    }
+    if (ble_backend_->started()) return true;
+    std::string why;
+    if (!ble_backend_->start(why)) {
+        ble_why_ = why;
+        if (log_) log_->line("bluetooth: " + why);
+        return false;
+    }
+    ble_why_.clear();
+    return true;
+}
+
+void App::start_ble_scan()
+{
+    if (!ensure_ble()) {
+        invalidate();
+        return;
+    }
+    std::string why;
+    if (!ble_link_->start_scan(mono_ms(), &why)) ble_why_ = why;
+    ble_scanned_visit_ = true;
+    nodes_sig_ = 0;
+    invalidate();
+}
+
+/* The first scan ever asks first: Bluetooth shares the radio with the keyboard and Wi-Fi. The answer is kept (nodes.txt), so it
+ * is asked once; Not now leaves USB and IP as they are and a row to scan later. */
+void App::ask_ble_scan()
+{
+    ble_scan_asked_ = true;
+    Popup p;
+    p.kind = Popup::Confirm;
+    p.title = "Scan for Bluetooth nodes?";
+    p.body = "Mesh Hop looks for MeshCore nodes over Bluetooth while this page is open. Bluetooth shares the radio with the keyboard "
+             "and Wi-Fi: a Bluetooth keyboard may lag briefly during a scan. This is asked once.";
+    p.yes_text = "Scan";
+    p.no_text = "Not now";
+    p.focus = 0;                                          // the safe answer is the default, as in every question
+    p.on_yes = [this] {
+        nodes_book_->set_ble_scan(NodeBook::Scan::Yes);
+        nodes_book_->save();
+        start_ble_scan();
+    };
+    p.on_cancel = [this] {
+        nodes_book_->set_ble_scan(NodeBook::Scan::No);
+        nodes_book_->save();
+        nodes_sig_ = 0;
+        invalidate();
+    };
+    popup_begin(std::move(p));
+}
+
+void App::connect_node(const std::string &key)
+{
+    NodeKind k = NodeKind::Usb;
+    std::string id;
+    if (!parse_node_key(key, k, id)) return;
+    const int idx = find_node_row(node_rows_, key);
+    const std::string title = idx >= 0 ? node_rows_[static_cast<size_t>(idx)].title : id;
+    std::unique_ptr<ITransport> t;
+    bool ble = false;
+    switch (k) {
+    case NodeKind::Usb: t = std::make_unique<SerialTransport>(store_->dir(), id); break;
+    case NodeKind::Ble:
+        if (!ensure_ble()) {
+            notice("Bluetooth is not available: " + ble_why_, false);
+            return;
+        }
+        t = std::make_unique<ble::BleTransport>(*ble_link_, id, title);
+        ble = true;
+        break;
+    case NodeKind::Ip: {
+        const IpNode *n = nodes_book_->find_ip(key);
+        if (!n) return;
+        t = std::make_unique<TcpTransport>(n->host, n->port, n->name);
+        break;
+    }
+    }
+    if (ble_link_) ble_link_->stop_scan();                 // the scan stops on connect
+    active_key_ = key;
+    connect_ms_ = mono_ms();
+    connect_pending_ = true;
+    nodes_book_->set_last(key);
+    nodes_book_->save();
+    if (log_) log_->line("node: connecting to " + key);
+    use_transport(std::move(t), ble);
+    nodes_sig_ = 0;
+}
+
+void App::use_transport(std::unique_ptr<ITransport> t, bool ble)
+{
+    std::unique_ptr<ITransport> old = std::move(transport_);
+    client_.reset();                                       // the client goes first: it holds the old transport
+    transport_ = std::move(t);
+    transport_ble_ = ble;
+    make_client();
+    old.reset();                                           // a Bluetooth transport ends its connection here
+    model_.clear_device();
+    last_link_ = 0xFFFF;
+    invalidate();
+}
+
+void App::disconnect_node()
+{
+    active_key_.clear();
+    connect_pending_ = false;
+    use_transport(std::make_unique<NullTransport>(), false);
+}
+
+void App::open_add_ip()
+{
+    if (nav_.popup_open || editor_open_) return;
+    open_editor(EditKind::IpAddress, "Add a node by IP address",
+                "The node's IP address or name, with :port when it is not 5000 (MeshCore's Wi-Fi port). The deck must be on the same network.",
+                "");
+}
+
+void App::open_node_options()
+{
+    if (nav_.popup_open || editor_open_ || nodes_sel_ < 0 || nodes_sel_ >= static_cast<int>(node_rows_.size())) return;
+    const NodeRow r = node_rows_[static_cast<size_t>(nodes_sel_)];
+    const std::vector<std::string> opts = node_options(r, node_state());
+    if (opts.empty()) return;
+    std::vector<Aff> affs;
+    for (const std::string &o : opts) affs.push_back(o == "Info" ? Aff::Open : Aff::Action);
+    open_menu("Options for " + truncate_ellipsis(r.title, 24), opts, [this, r, opts](int i) {
+        if (i < 0 || i >= static_cast<int>(opts.size())) return;
+        const std::string &o = opts[static_cast<size_t>(i)];
+        if (o == "Forget this node") {
+            open_confirm("Forget " + r.title + "?",
+                         "The deck forgets its pairing with this Bluetooth node. To use it again, scan and pair it with its PIN.",
+                         [this, r] {
+                             NodeKind k;
+                             std::string id;
+                             if (!parse_node_key(r.key, k, id)) return;
+                             if (r.key == active_key_) disconnect_node();
+                             if (ensure_ble()) ble_link_->forget(id);
+                             nodes_book_->forget_name(r.key);
+                             if (nodes_book_->last() == r.key) nodes_book_->set_last("");
+                             nodes_book_->save();
+                             notice("Forgot " + r.title, true);
+                             nodes_sig_ = 0;
+                         },
+                         "Forget", "Cancel", 0, true);
+        } else if (o == "Remove IP node") {
+            open_confirm("Remove " + r.title + "?", "It leaves the list. Add it again with Add a node by IP address.",
+                         [this, r] {
+                             if (r.key == active_key_) disconnect_node();
+                             nodes_book_->remove_ip(r.key);
+                             nodes_book_->save();
+                             notice("Removed " + r.title, true);
+                             nodes_sig_ = 0;
+                         },
+                         "Remove", "Cancel");
+        } else {
+            open_node_info(r);
+        }
+    }, {}, affs);
+}
+
+void App::open_node_info(const NodeRow &r)
+{
+    std::vector<std::string> lines;
+    NodeKind k = NodeKind::Usb;
+    std::string id;
+    parse_node_key(r.key, k, id);
+    if (k == NodeKind::Usb) {
+        lines.push_back("USB port " + id);
+        for (const SerialCandidate &c : usb_now_)
+            if (c.path == id) {
+                if (!c.product.empty() || !c.vendor.empty()) lines.push_back(c.vendor + (c.vendor.empty() ? "" : " ") + c.product);
+                if (c.vid) {
+                    char ids[32];
+                    std::snprintf(ids, sizeof(ids), "USB id %04x:%04x", c.vid, c.pid);
+                    lines.push_back(ids);
+                }
+            }
+    } else if (k == NodeKind::Ble) {
+        lines.push_back("Bluetooth LE " + id);
+        if (ble_link_)
+            for (const ble::BleDevice &d : ble_link_->candidates())
+                if (d.address == id) {
+                    lines.push_back(std::string(d.paired || d.bonded ? "Paired" : "Not paired: it asks for its PIN") + (d.name.empty() ? "" : ", advertised as " + d.name));
+                    if (d.has_rssi) lines.push_back("Signal " + std::to_string(d.rssi) + " dBm");
+                }
+    } else if (const IpNode *n = nodes_book_->find_ip(r.key)) {
+        lines.push_back("Network (TCP) " + n->address());
+    }
+    const std::string learned = nodes_book_->name_of(r.key);
+    if (!learned.empty()) lines.push_back("Node name " + learned);
+    lines.push_back(r.detail);
+    open_info(r.title, join_lines(lines), r.key == active_key_ ? "The node in use." : "");
+}
+
+void App::key_nodes(const KeyEvent &e)
+{
+    if (e.key == Key::Char && e.ctrl && !e.alt && (e.text == "o" || e.text == "O")) {
+        if (!e.repeat) open_node_options();
+        return;
+    }
+    std::vector<bool> ok;
+    for (const NodeRow &r : node_rows_) ok.push_back(r.selectable);
+    switch (e.key) {
+    case Key::Up:
+    case Key::Down:
+    case Key::PageUp:
+    case Key::PageDown:
+    case Key::Home:
+    case Key::End: {
+        const int d = e.key == Key::Up ? -1 : e.key == Key::Down ? 1 : e.key == Key::PageUp ? -5 : e.key == Key::PageDown ? 5
+                      : e.key == Key::Home ? -1000 : 1000;
+        const int next = step_selectable(ok, nodes_sel_, d);
+        if (next >= 0) nodes_select(next, true);
+        break;
+    }
+    case Key::Enter:
+    case Key::Right:
+        if (!e.repeat) nodes_activate(nodes_sel_);
+        break;
+    case Key::Char: {
+        if (e.ctrl || e.alt || e.repeat) break;
+        const char c = e.text.size() == 1 ? static_cast<char>(std::tolower(static_cast<unsigned char>(e.text[0]))) : 0;
+        if (c == 'a') open_add_ip();
+        else if (c == 'o') open_node_options();
+        else if (c == 'i' && nodes_sel_ >= 0 && nodes_sel_ < static_cast<int>(node_rows_.size()) &&
+                 node_rows_[static_cast<size_t>(nodes_sel_)].type == NodeRowType::Node)
+            open_node_info(node_rows_[static_cast<size_t>(nodes_sel_)]);
+        else if (c == 's') {
+            const int i = find_node_row(node_rows_, "scan");
+            if (i >= 0) nodes_activate(i);
+        }
+        break;
+    }
+    default: break;
+    }
+}
+
+void App::nodes_tick(uint64_t now)
+{
+    // the node answered: its name is learned (a port or an address has none), and a connection made on the page goes to Home
+    if (!active_key_.empty() && client_->ready() && model_.self() && !model_.self()->name.empty() &&
+        nodes_book_->name_of(active_key_) != model_.self()->name) {
+        nodes_book_->set_name(active_key_, model_.self()->name);
+        nodes_book_->save();
+        nodes_sig_ = 0;
+    }
+    if (connect_pending_ && client_->ready()) {
+        connect_pending_ = false;
+        if (at_nodes_ && !nav_.popup_open && !editor_open_) {
+            notice("Connected to " + (model_.self() ? model_.self()->name : std::string("the node")), true);
+            leave_nodes(true);
+            return;
+        }
+    }
+    // the PIN of a Bluetooth pairing: asked when BlueZ asks (our agent), put away when it stops waiting
+    if (ble_link_) {
+        const bool need = ble_link_->status().pin_needed;
+        if (need && !editor_open_ && !nav_.popup_open) {
+            const int row = find_node_row(node_rows_, active_key_);
+            const std::string who = row >= 0 ? node_rows_[static_cast<size_t>(row)].title
+                                    : ble_link_->status().name.empty() ? ble_link_->status().address : ble_link_->status().name;
+            open_editor(EditKind::BlePin, "Pair with " + truncate_ellipsis(who, 24),
+                        "Type the node's PIN: the 6 digits on its screen, or 123456 when it has no screen.", "");
+        } else if (!need && editor_open_ && edit_kind_ == EditKind::BlePin) {
+            close_editor(false);
+        }
+    }
+    if (!at_nodes_) return;
+    // the USB ports, once a second
+    if (now - usb_check_ms_ >= 1000) {
+        usb_check_ms_ = now;
+        std::vector<SerialCandidate> c = usb_candidates();
+        const bool same = c.size() == usb_now_.size() &&
+                          std::equal(c.begin(), c.end(), usb_now_.begin(), [](const SerialCandidate &a, const SerialCandidate &b) { return a.path == b.path; });
+        if (!same) {
+            usb_now_ = std::move(c);
+            invalidate();
+        }
+    }
+    // Bluetooth: the paired nodes are listed from BlueZ (no radio); the scan runs while the page is shown, once per visit
+    // (Rescan for more), only after the first-use question was answered Scan
+    if (!ble_link_ || !ble_backend_->started()) {
+        if (ble_why_.empty() && now - start_ms_ >= kStartGuardMs) ensure_ble();
+    }
+    const bool usable = ble_link_ && ble_backend_->started() && ble_backend_->ready() && ble_backend_->adapter_powered() &&
+                        ble_link_->unavailable().empty();
+    if (usable && nodes_book_->ble_scan() == NodeBook::Scan::Ask && !ble_scan_asked_ && !nav_.popup_open && !editor_open_)
+        ask_ble_scan();
+    if (usable && nodes_book_->ble_scan() == NodeBook::Scan::Yes && !ble_scanned_visit_ && !connect_pending_) start_ble_scan();
+    // the rows follow the scan, the pairing and the connection (render_nodes rebuilds only what changed)
+    if (now - nodes_render_ms_ >= 300) {
+        nodes_render_ms_ = now;
+        invalidate();
+    }
 }
 
 void App::update_compose_style()
@@ -3007,6 +3758,7 @@ std::string App::hint_text() const
         }
     }
     if (editor_open_) return edit_kind_ == EditKind::Position ? "Tab: next field   Enter: OK   Esc: cancel" : "Type with the keyboard   Enter: OK   Esc: cancel";
+    if (at_nodes_) return "Up/Down: choose  Enter: connect  O: options  S: scan  A: add by IP";
     if (at_home_) return "Up/Down: choose   Enter: open   Hold Esc 3 s: leave";
     switch (nav_.tab) {
     case Tab::Chats: {
@@ -3088,6 +3840,8 @@ void App::render_footer()
     if (!notice_text_.empty()) {
         text = notice_text_;
         tone = notice_ok_ ? cp0::ui::CaptionTone::Normal : cp0::ui::CaptionTone::Error;
+    } else if (at_nodes_) {
+        own = node_page_caption(node_state(), !kbd_ok_);      // the start page says what it does (the rows say each node's state)
     } else {
         const BoardLine bl = board_line(*client_, model_);
         text = bl.text;
@@ -3674,10 +4428,12 @@ void App::open_editor(EditKind kind, const std::string &title, const std::string
     if (mono_ms() - start_ms_ < kStartGuardMs) return;
     edit_kind_ = kind;
     edit_row_ = row;
-    edit_mode_ = kind == EditKind::Number ? EditMode::Number : kind == EditKind::Clock || kind == EditKind::DateRange ? EditMode::Clock
-                 : kind == EditKind::Channel ? EditMode::Channel : kind == EditKind::PrivKey ? EditMode::HexKey : EditMode::Name;
+    edit_mode_ = kind == EditKind::Number || kind == EditKind::BlePin ? EditMode::Number : kind == EditKind::Clock || kind == EditKind::DateRange ? EditMode::Clock
+                 : kind == EditKind::Channel ? EditMode::Channel : kind == EditKind::PrivKey ? EditMode::HexKey
+                 : kind == EditKind::IpAddress || kind == EditKind::IpName ? EditMode::Free : EditMode::Name;
     edit_limit_ = kind == EditKind::Name || kind == EditKind::PrivName || kind == EditKind::RandName ? 31 : kind == EditKind::Channel ? 30
-                  : kind == EditKind::PrivKey ? 39 : kind == EditKind::GroupNew || kind == EditKind::GroupRename ? 24 : kind == EditKind::DateRange ? 21 : 16;
+                  : kind == EditKind::PrivKey ? 39 : kind == EditKind::GroupNew || kind == EditKind::GroupRename ? 24 : kind == EditKind::DateRange ? 21
+                  : kind == EditKind::BlePin ? 6 : kind == EditKind::IpAddress ? 64 : kind == EditKind::IpName ? 96 : 16;
     {   // the dialog: title, the hint, the field and a status line (an error or a note), Cancel and OK
         cp0::ui::DialogSpec spec;
         spec.title = title;
@@ -3689,6 +4445,8 @@ void App::open_editor(EditKind kind, const std::string &title, const std::string
         if (!hint.empty()) dialog_label(*ed_dialog_, hint, true, kMuted);
         ed_ta_ = make_field(ed_dialog_->body(), 0, 200);
         lv_textarea_set_text(ed_ta_, initial.c_str());
+        if (kind == EditKind::BlePin) lv_textarea_set_placeholder_text(ed_ta_, "123456");
+        else if (kind == EditKind::IpAddress) lv_textarea_set_placeholder_text(ed_ta_, "192.168.1.20");
         lv_textarea_set_cursor_pos(ed_ta_, LV_TEXTAREA_CURSOR_LAST);
         ed_dialog_->relayout();
         compact_dialog(*ed_dialog_);
@@ -3723,7 +4481,7 @@ void App::close_editor(bool accept)
         return;
     }
     const std::string text = lv_textarea_get_text(ed_ta_);
-    bool chain_key = false;
+    bool chain_key = false, chain_ip_name = false;
     if (accept) {
         if (edit_kind_ == EditKind::Name) {
             const std::string bad = validate_name(text);
@@ -3780,6 +4538,35 @@ void App::close_editor(bool accept)
             model_.groups_changed();
             notice("Group renamed to " + text, true);
             csnap_valid_ = false;
+        } else if (edit_kind_ == EditKind::BlePin) {
+            if (text.size() != 6 || text.find_first_not_of("0123456789") != std::string::npos) { editor_error("The PIN is 6 digits"); return; }
+            if (ble_link_) ble_link_->submit_pin(static_cast<uint32_t>(std::atol(text.c_str())));
+        } else if (edit_kind_ == EditKind::IpAddress) {
+            std::string host;
+            int port = kMeshcoreTcpPort;
+            std::string bad = parse_ip_input(text, kMeshcoreTcpPort, host, port);
+            IpNode probe;
+            probe.host = host;
+            probe.port = port;
+            if (bad.empty() && nodes_book_->find_ip(probe.key())) bad = "This node is in the list already";
+            if (!bad.empty()) { editor_error(bad); return; }
+            pending_ip_host_ = host;
+            pending_ip_port_ = port;
+            chain_ip_name = true;                                // the name is asked next
+        } else if (edit_kind_ == EditKind::IpName) {
+            std::string name = text;
+            while (!name.empty() && name.back() == ' ') name.pop_back();
+            while (!name.empty() && name.front() == ' ') name.erase(0, 1);
+            const std::string bad = nodes_book_->add_ip(pending_ip_host_, pending_ip_port_, name);
+            if (!bad.empty()) { editor_error(bad); return; }
+            nodes_book_->save();
+            IpNode n;
+            n.host = pending_ip_host_;
+            n.port = pending_ip_port_;
+            nodes_sel_key_ = n.key();                          // the new row is selected: a tap on it connects
+            nodes_user_sel_ = true;
+            nodes_sig_ = 0;
+            notice("Added " + (name.empty() ? n.address() : name) + ": tap it again to connect", true);
         } else if (edit_kind_ == EditKind::DateRange) {
             uint32_t from = 0, to = 0;
             const std::string bad = parse_date_range(text, from, to);
@@ -3789,6 +4576,8 @@ void App::close_editor(bool accept)
             search_.to = to;
             refresh_search_results();
         }
+    } else if (edit_kind_ == EditKind::BlePin) {
+        if (ble_link_ && ble_link_->status().pin_needed) ble_link_->cancel_pairing();     // Esc: no PIN, no pairing
     } else if (edit_kind_ == EditKind::Clock) {
         client_->clock_skip();                      // Esc: the board clock stays as it is
     } else if (edit_kind_ == EditKind::GroupNew) {
@@ -3802,6 +4591,12 @@ void App::close_editor(bool accept)
     invalidate();
     if (chain_key) {
         open_editor(EditKind::PrivKey, "Key of " + pending_name_, "Type the 32 hex characters of the key (0-9, a-f). Spaces and dashes are ignored.", "");
+    }
+    if (chain_ip_name) {
+        IpNode n;
+        n.host = pending_ip_host_;
+        n.port = pending_ip_port_;
+        open_editor(EditKind::IpName, "Name of " + n.address(), "Optional: a name to list it by. Leave it empty to show the address.", "");
     }
 }
 
@@ -5502,6 +6297,14 @@ void App::row_clicked(RowList *list, int index, int x)
 {
     (void)x;
     if (mono_ms() - start_ms_ < kStartGuardMs || editor_open_ || nav_.popup_open || view_pending_) return;
+    if (list == &nodes_list_) {
+        if (hold_.take_swallow() || !at_nodes_) return;         // the release of a completed 3 s hold is not a tap
+        const int i = find_node_row(node_rows_, nodes_list_.id_at(index));
+        if (i < 0 || !node_rows_[static_cast<size_t>(i)].selectable) return;
+        if (i == nodes_sel_ && node_rows_[static_cast<size_t>(i)].key == nodes_sel_key_) nodes_activate(i);   // a tap on the selected row acts
+        else nodes_select(i, false);                                                                      // the first tap selects it
+        return;
+    }
     if (list == &chat_list_) {
         if (hold_.take_swallow()) return;                 // the release of a completed 3 s hold is not a tap
         index = find_chat_row(chat_rows_, chat_list_.id_at(index));       // the row that was tapped, by its key (never a stale index)
@@ -5558,6 +6361,11 @@ void App::row_clicked(RowList *list, int index, int x)
 void App::back()
 {
     const BackAction a = back_action(nav_);
+    if (at_nodes_ && a != BackAction::ClosePopup && a != BackAction::CancelEditor) {
+        if (nodes_from_home_) leave_nodes(false);                // opened from Home > Node: back there
+        else notice("Hold Esc 3 s to exit", true);               // the start page is the root, as Home is
+        return;
+    }
     if (!at_home_ && nav_.tab == Tab::Chats) {
         // the on-screen keyboard is up for the entry or the words: it goes first, the conversation (the search) stays
         if (a == BackAction::FocusList && compose_view()) {
@@ -5607,6 +6415,11 @@ void App::header_back()
         if (view_pending_) return;
         if (mono_ms() - start_ms_ < kStartGuardMs) return;
         const BackAction a = back_action(nav_);
+        if (at_nodes_ && a != BackAction::ClosePopup && a != BackAction::CancelEditor) {
+            if (nodes_from_home_) leave_nodes(false);
+            else ask_quit();                                     // the root: the same question as at Home
+            return;
+        }
         if (a == BackAction::ExitHint && at_home_) ask_quit();
         // two panes: the header's Esc leaves Chats for Home (from the entry too)
         else if (!at_home_ && nav_.tab == Tab::Chats && two_pane_fit_ && osk_inset_ == 0 && (a == BackAction::FocusList || a == BackAction::ExitHint)) go_home();
@@ -5876,6 +6689,10 @@ void App::on_key(const KeyEvent &e)
     // asks "Quit Mesh Hop?" at the root). The auto-repeat of a held Esc is ignored.
     if (e.key == Key::Esc) {
         if (!e.repeat) back();
+        return;
+    }
+    if (at_nodes_) {
+        key_nodes(e);
         return;
     }
     // On a page, Tab goes to the next page in a loop over Chats, Contacts, Settings (Shift+Tab backwards); Home is the other way to a page.

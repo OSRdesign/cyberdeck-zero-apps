@@ -1,0 +1,57 @@
+# Mesh Hop 0.5, nodes added by IP address (MeshCore's Wi-Fi interface, TCP port 5000): always listed. "Add a node by IP address"
+# asks the address (with :port when not 5000), checks it, then an optional name. O (a 3 s hold, Ctrl+O): Remove IP node, Info.
+# 192.0.2.20 (TEST-NET) never answers: the connect gives up after 5 s and says so, never a hang.
+title Mesh Hop: Choose a node, IP nodes
+env MESHHOP_DATA /tmp/mesh-hop-scene-nodes
+env MESHHOP_DEMO ip
+env MESHHOP_ONLINE 0
+sizes 640x480 800x480 720x720 1024x600 1280x720
+
+wait 1500
+expect text "Kitchen node"
+expect text "127.0.0.1:9"
+shot ip-saved
+check ip-saved
+tap "Add a node by IP address"
+tap "Add a node by IP address"
+wait 700
+expect text "Add a node by IP address"
+shot ip-dialog
+check ip-dialog
+type 192.168.1
+key enter
+wait 400
+expect text "Not an IP address or host name: 192.168.1"
+shot ip-error-host
+type .30:70000
+key enter
+wait 400
+expect text "The port is a number from 1 to 65535"
+shot ip-error-port
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key enter
+wait 600
+@800x480,720x720,1024x600,1280x720 expect text "Name of 192.168.1.30:5000"
+type Garage
+key enter
+wait 600
+expect text "Garage"
+expect text "192.168.1.30:5000"
+shot ip-added
+check ip-added
+key o
+wait 500
+expect text "Remove IP node"
+shot ip-options
+key esc
+wait 400
+tap "Kitchen node"
+tap "Kitchen node"
+wait 6500
+expect text "Could not connect to Kitchen node: no answer in 5 s"
+shot ip-failed

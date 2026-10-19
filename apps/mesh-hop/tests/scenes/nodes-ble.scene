@@ -1,0 +1,28 @@
+# Mesh Hop 0.5, Bluetooth nodes heard by the scan of the start page: the signal bars of the launcher's Wi-Fi rows (-45 and -54 dBm:
+# four bars, -68: three, -84: two, -96: one), the paired node first and highlighted (nothing connects by itself). O (a 3 s hold,
+# Ctrl+O) on the highlighted node: its options.
+title Mesh Hop: Choose a node, Bluetooth scan
+env MESHHOP_DATA /tmp/mesh-hop-scene-nodes
+env MESHHOP_DEMO ble
+env MESHHOP_ONLINE 0
+sizes 640x480 800x480 720x720 1024x600 1280x720
+
+wait 3200
+expect text "OSR T1000"
+expect text "OSR wio"
+expect text "Far away"
+expect text "Scanning for Bluetooth nodes..."
+shot ble-scan
+check ble-scan
+key o
+wait 500
+expect text "Options for OSR T1000"
+expect text "Forget this node"
+shot ble-options
+check ble-options
+tap "Forget this node"
+wait 500
+expect text "Forget OSR T1000?"
+shot ble-forget
+tap "Cancel"
+wait 400

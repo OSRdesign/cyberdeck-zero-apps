@@ -1,11 +1,12 @@
-# Mesh Hop 0.4.0: board tests
+# Mesh Hop 0.4.0 / 0.5.0: board tests
 
 For the Controller and the owner (controller-led testing: the Controller deploys and reads logs, the owner does the
 physical steps and ticks the boxes). Commands run from Windows: `deck.py` is
 `C:\CLAUDE\zero7\launcher\docs\dev\deck\deck.py` (password in `PIPW`; `DECK_HOST=<ip>` points it at another board).
 The app's process name is `mesh-hop` (`pgrep -x mesh-hop`; never `pkill -f`).
 
-Boards: **deck** (Pi Zero 2 W, 640x480, Bluetooth keyboard), **Pi 3A+** (800x480 touch, no keyboard: the on-screen
+0.5.0 (the start page "Choose a node", Bluetooth LE and IP nodes): section **N**; the app now opens on that page (D1 starts
+there). Boards: **deck** (Pi Zero 2 W, 640x480, Bluetooth keyboard), **Pi 3A+** (800x480 touch, no keyboard: the on-screen
 keyboard), **HackBerry** (CM5, 720x720 square touch, built-in USB keyboard). Radio: a MeshCore companion radio board on USB
 (board A: Seeed XIAO nRF52840; board B: XIAO S3 WIO, MeshCore v1.15.0), and for R1-R3 a second MeshCore node in radio range
 (a phone with the MeshCore app, or the other board on another host) and, for heard-back, a repeater in range.
@@ -21,7 +22,7 @@ Nearby, Settings, Statistics, packet log), `chats-<size>/c*.png` (Chats, convers
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/build.sh all --strict
 python tools/make_registry.py --only mesh-hop --out C:/CLAUDE/zero7/pkg-out
 set DECK_HOST=<board ip>        (deck: leave it unset)
-python deck.py put C:/CLAUDE/zero7/pkg-out/mesh-hop_0.4.0_arm64.deb /tmp/mesh-hop.deb
+python deck.py put C:/CLAUDE/zero7/pkg-out/mesh-hop_0.5.0_arm64.deb /tmp/mesh-hop.deb
 python deck.py sudo 'dpkg -i /tmp/mesh-hop.deb || apt-get -f install -y'
 python deck.py run '/usr/share/APPLaunch/bin/mesh-hop --version; id -nG; ls /dev/ttyACM* /dev/ttyUSB* 2>/dev/null'
 ```
@@ -55,7 +56,8 @@ keyboard has been shown (Pi 3A+) and after a search.
 
 ## D1. Deck (640x480, BT keyboard): Home and Quit
 
-1. Open Mesh Hop from the launcher. Expect Home (compare `shell-640x480/h01-home-keyboard.png`): header "Mesh Hop" with the Esc
+1. Open Mesh Hop from the launcher (0.5.0: first the start page, section N1; choose the USB board there). Expect Home (compare
+   `shell-640x480/h01-home-keyboard.png`): header "Mesh Hop" with the Esc
    button and the status strip, the board line under it, the rows **Chats** (unread total in blue, or "no new"), **Contacts**
    (the count) and **Settings**, each with a chevron; the key hint line at the bottom.
 2. Up / Down move the highlight, Enter opens the page; on a page Tab / Shift+Tab go Chats > Contacts > Settings in a loop.
@@ -141,6 +143,44 @@ keyboard has been shown (Pi 3A+) and after a search.
 
 [ ] pass  [ ] fail  Notes:
 
+## N. 0.5.0: Choose a node (deck; N7 also on the Pi 3A+ by touch)
+
+Nodes: board A on USB; **MeshCore-OSR T1000** (EC:EB:45:39:28:2D, Seeed T1000-E, BLE companion firmware, no screen: PIN
+**123456** unless one was set) and **MeshCore-OSR wio** (D7:C5:07:5B:55:EB, BLE companion: its PIN is on its screen if it has
+one, else 123456); both were heard by the deck on 2026-10-19. No phone may be connected to a BLE node (it takes one central at a
+time). The renders to compare: `scratchpad\mhble\<size>\nodes-*.png` and the sheets in `scratchpad\mhble\sheets`.
+Logs: `tail -n 60 ~/.local/share/mesh-hop/mesh-hop.log` (lines `node:`, `ble:`, `bluez:`).
+
+1. **N1 Start page, no auto-connect (USB)**: plug board A, open the app: the page **Choose a node**, the USB row
+   (`ttyACM0 · ...`), highlighted when it was the node chosen last; nothing connects (the board line does not say Connected).
+   Tap it twice (or Enter): Connecting..., then Home. Quit and open again: the page again, the row highlighted, not connected.
+2. **N2 USB list**: on the page, unplug board A: its row goes within about a second; plug it: it comes back.
+3. **N3 First-use warning**: with no `~/.local/share/mesh-hop/nodes.txt` (rename it first), open the app: the box
+   **Scan for Bluetooth nodes?** (the keyboard and Wi-Fi warning), **Not now** focused. Not now: a row "Scan for Bluetooth
+   nodes", USB still usable. Quit, open: not asked again. Tap the row twice: it scans (10 s, "Scanning for Bluetooth nodes...",
+   then "Rescan").
+4. **N4 Scan**: the T1000 and the wio appear with bars (move one away: fewer bars on a Rescan); Meshtastic nodes are not listed.
+   **Type on the M4 during a scan**: note any lag (seconds, how often).
+5. **N5 Pair the T1000**: tap it twice: Pairing..., the PIN box ("Pair with OSR T1000", 123456 as the hint); type `111111`, OK:
+   "Failed: Pairing failed (wrong PIN?) · tap to retry". Tap it again, type `123456`: Connecting..., then Home, the board line
+   connected; Home's **Node** row says its name and "Bluetooth". The M4 keeps typing. `bluetoothctl info EC:EB:45:39:28:2D`
+   (another terminal) shows Paired: yes. The log shows `bluez: RequestPasskey` (Mesh Hop's agent asked, not the launcher's).
+6. **N6 Reconnect**: on Home, switch the T1000 off for 20 s, then on: "Board disconnected", then connected again by itself
+   (note the time). Quit and open the app: the T1000 highlighted, a tap connects without a PIN.
+7. **N7 IP node**: with a MeshCore Wi-Fi node, or the simulator on a PC on the same network
+   (`python3 tools/meshcore_sim.py --tcp 5000 --tcp-host 0.0.0.0`): **Add a node by IP address**, type `192.168.1` (refused:
+   "Not an IP address..."), then `<the address>` (and `:port` if not 5000), a name: the row appears and stays after a restart.
+   Tap it twice: connected, Home. Add `192.0.2.1`: tap twice: "Failed: no answer in 5 s · tap to retry", the app never hangs.
+8. **N8 Options**: on the T1000 row: **O** (or Ctrl+O, or a 3 s hold by touch): Forget this node, Info. Info: the address,
+   "Paired". Forget: asks; Forget: the row says not paired (or goes when out of range); `bluetoothctl devices` no longer lists it.
+   On an IP node: Remove IP node (asks), Info.
+9. **N9 From Home**: Home > **Node** (the fourth row, a chevron) opens the page with the node in use connected (green); its Esc
+   goes back to Home; choosing another node there switches (the old one disconnects) and goes to Home.
+10. **N10 Bluetooth off / missing**: launcher Settings > Bluetooth off, open the page: a grey "Bluetooth is off" row, no error
+   box, USB still works. Bluetooth on again: reopen the page, the scan works.
+
+[ ] pass  [ ] fail  Notes:
+
 ## P. Pi 3A+ (800x480, touch only, on-screen keyboard)
 
 1. The tile shows; open by touch. Home as `shell-800x480/h02-home.png`; no key hint line. Every row and button reacts where it
@@ -187,6 +227,7 @@ keyboard has been shown (Pi 3A+) and after a search.
 | Touch accuracy, rotation (P1 / H4) | n/a | [ ] | [ ] |
 | Memory under 25 MB (M) | [ ] | [ ] | [ ] |
 | Radio: send, heard back, advert, replug (R) | [ ] | | |
+| 0.5.0 Choose a node: USB, first scan, BLE pair / reconnect / forget, IP (N1-N10) | [ ] | [ ] (N7 by touch) | |
 
 ## Unverified until a board run
 
@@ -197,3 +238,7 @@ keyboard has been shown (Pi 3A+) and after a search.
 | U-3 | The 3 s hold is reliable on the Pi 3A+ and HackBerry touch panels (no early release from a small finger move) |
 | U-4 | The on-screen keyboard goes within about a second when a Bluetooth keyboard connects or wakes |
 | U-5 | The HackBerry's built-in keyboard counts as a keyboard for the shared on-screen keyboard rule |
+| U-6 | 0.5.0: BlueZ 5.82 on the deck asks Mesh Hop's agent (not the launcher's default one) for the PIN of a pairing Mesh Hop starts, and a real MeshCore BLE node answers DEVICE_QUERY / APP_START over the Nordic UART service (shown with a simulated BlueZ only) |
+| U-7 | 0.5.0: a 10 s LE scan and a BLE node link do not make the M4 (a Bluetooth Classic keyboard) lag enough to matter; Wi-Fi keeps working |
+| U-8 | 0.5.0: a real MeshCore Wi-Fi companion talks over TCP as the simulator does (same framing, port 5000) |
+| U-9 | 0.5.0: the bar thresholds (4 bars from -60 dBm ... 1 above -100) read sensibly for nodes at 1, 5 and 20 m |

@@ -1,0 +1,30 @@
+# Mesh Hop 0.5, the start page with two USB boards (the Bluetooth question answered Not now: a row starts a scan later). The board
+# chosen last is highlighted, nothing connects by itself. A tap on the highlighted row connects; the port does not exist here, so
+# the row says why and offers to retry. O (or Ctrl+O, or a 3 s hold): the options of the row (Info for a USB port).
+title Mesh Hop: Choose a node, USB only
+env MESHHOP_DATA /tmp/mesh-hop-scene-nodes
+env MESHHOP_DEMO usb
+env MESHHOP_ONLINE 0
+sizes 640x480 800x480 720x720 1024x600 1280x720
+
+wait 1500
+expect text "XIAO nRF52840"
+expect text "USB Single Serial"
+expect text "Scan for Bluetooth nodes"
+expect notext "Scanning for Bluetooth nodes..."
+shot usb
+check usb
+tap "XIAO nRF52840"
+wait 3500
+expect text "Could not connect to XIAO nRF52840: No such file or directory"
+shot usb-failed
+key o
+wait 500
+expect text "Options for XIAO nRF52840"
+shot usb-options
+check usb-options
+tap "Info"
+wait 500
+shot usb-info
+key esc
+wait 400

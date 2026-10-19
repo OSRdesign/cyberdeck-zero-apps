@@ -32,6 +32,8 @@ board does not have, a transport route), for the packet log (D8).
     python3 meshcore_sim.py                      # creates the port /tmp/ttyMC0 (a symlink to the pty)
     python3 meshcore_sim.py --link /tmp/ttyMC1 --chatter 20 --echo
     echo /tmp/ttyMC0 > ~/.local/share/mesh-hop/port     # tell the app to use it (or: MESHHOP_PORT=/tmp/ttyMC0)
+    python3 meshcore_sim.py --tcp 5000           # 0.5: a node on Wi-Fi instead (TCP, the same framing): the app's
+                                                 # "Add a node by IP address" with 127.0.0.1 (or the PC's address and --tcp-host 0.0.0.0)
 
 Commands typed on the simulator's stdin (when it has one):
     msg <text>            a direct message from the first contact (Alice)
@@ -52,6 +54,7 @@ import hashlib
 import os
 import random
 import select
+import socket
 import struct
 import sys
 import termios
@@ -579,11 +582,65 @@ class Port:
             return
         os.write(self.master, b">" + struct.pack("<H", len(payload)) + payload)
 
+    listen_fd = None              # a pty has no listening socket (TcpPort has one)
+
+    def accept(self):
+        pass
+
+    def closed(self):
+        pass
+
+
+class TcpPort:
+    """--tcp PORT: a TCP server like the firmware's Wi-Fi interface (SerialWifiInterface: the same '<' / '>' framing as USB,
+    one client at a time, a new connection replaces the old one). unplug / plug close and reopen the server (the Wi-Fi goes)."""
+
+    def __init__(self, host, port):
+        self.addr, self.server, self.conn, self.master, self.listen_fd = (host, port), None, None, None, None
+
+    def plug(self):
+        self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.server.bind(self.addr)
+        self.server.listen(2)
+        self.listen_fd = self.server.fileno()
+        print(f"meshcore_sim: TCP server on {self.addr[0]}:{self.addr[1]}", flush=True)
+
+    def accept(self):
+        conn, peer = self.server.accept()
+        if self.conn is not None:          # the firmware drops the old client for the new one
+            self.conn.close()
+        self.conn, self.master = conn, conn.fileno()
+        print(f"meshcore_sim: TCP client {peer[0]}:{peer[1]}", flush=True)
+
+    def closed(self):
+        if self.conn is not None:
+            self.conn.close()
+        self.conn = self.master = None
+        print("meshcore_sim: TCP client gone", flush=True)
+
+    def unplug(self):
+        self.closed()
+        if self.server is not None:
+            self.server.close()
+        self.server = self.listen_fd = None
+        print("meshcore_sim: unplugged (TCP server closed)", flush=True)
+
+    def send(self, payload):
+        if self.conn is None:
+            return
+        try:
+            self.conn.sendall(b">" + struct.pack("<H", len(payload)) + payload)
+        except OSError:
+            self.closed()
+
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--link", default="/tmp/ttyMC0", help="symlink to create for the pty (default /tmp/ttyMC0)")
     ap.add_argument("--device", help="use this existing character device instead of creating a pty (a socat pair end)")
+    ap.add_argument("--tcp", type=int, default=0, metavar="PORT", help="a TCP server on PORT instead of the pty (MeshCore's Wi-Fi interface: port 5000 on a board)")
+    ap.add_argument("--tcp-host", default="127.0.0.1", help="the address the TCP server listens on (default 127.0.0.1)")
     ap.add_argument("--chatter", type=float, default=0, metavar="SEC", help="every SEC seconds push a random message / log frame")
     ap.add_argument("--echo", action="store_true", help="contacts answer your messages a second after the ACK")
     ap.add_argument("--ack-delay", type=float, default=0.6, help="seconds before the ACK push (default 0.6)")
@@ -630,7 +687,7 @@ def main():
     radio = Radio(args)
     if args.identity == "B":
         radio.swap_identity()
-    port = Port(args.link, args.device)
+    port = TcpPort(args.tcp_host, args.tcp) if args.tcp else Port(args.link, args.device)
     radio.port = port
     port.plug()
     buf = b""
@@ -652,17 +709,24 @@ def main():
         fds = []
         if port.master is not None:
             fds.append(port.master)
+        if port.listen_fd is not None:
+            fds.append(port.listen_fd)
         if stdin_ok and stdin_open:
             fds.append(0)
         r, _, _ = select.select(fds, [], [], 0.1)
         now = time.time()
+        if port.listen_fd is not None and port.listen_fd in r:
+            port.accept()
+            buf = b""
         if port.master is not None and port.master in r:
             try:
                 data = os.read(port.master, 4096)
             except OSError as e:
                 data = b""
-                if e.errno not in (errno.EIO, errno.EAGAIN):
+                if e.errno not in (errno.EIO, errno.EAGAIN, errno.ECONNRESET):
                     raise
+            if not data and isinstance(port, TcpPort):
+                port.closed()                   # the app closed the connection
             buf += data
             while True:
                 i = buf.find(b"<")

@@ -1,0 +1,50 @@
+# Mesh Hop 0.5: the start page "Choose a node" against the simulator over TCP (nodes_run.sh: tools/meshcore_sim.py --tcp 15007;
+# MESHHOP_DEMO=nobt: no USB port, no Bluetooth). Add a node by IP address, connect with a tap, the app goes to Home; Home > Node
+# opens the page again, a 3 s hold on the node gives its options, Esc goes back to Home.
+wait 1500
+say == the start page, nothing connected (expect nodes=1 active='' transport='none')
+dump
+shot 01-start
+check start
+tap "Add a node by IP address"
+tap "Add a node by IP address"
+wait 600
+type 127.0.0.1:15007
+key enter
+wait 500
+type Sim over TCP
+key enter
+wait 600
+expect text "Sim over TCP"
+expect text "127.0.0.1:15007"
+shot 02-added
+check added
+say == the new node is selected: one tap connects
+tap "Sim over TCP"
+wait 6000
+say == connected over TCP, the app went to Home (expect nodes=0 home=1 link=Connected transport='Network (TCP)' contacts=4)
+dump
+expect text "Chats"
+shot 03-home
+expect text "Node"
+shot 04-home-node
+key down
+key down
+key down
+key enter
+wait 600
+expect text "Add a node by IP address"
+say == the page again from Home > Node, the node in use is connected (expect nodes=1 active='ip:127.0.0.1:15007')
+dump
+shot 05-page-connected
+hold "Sim over TCP" 3400
+wait 500
+expect text "Remove IP node"
+shot 06-options
+key esc
+wait 300
+key esc
+wait 500
+say == Esc of the page opened from Home goes back there (expect nodes=0 home=1)
+dump
+expect text "Chats"

@@ -1,0 +1,27 @@
+# Mesh Hop 0.5, a Bluetooth node not paired yet: a tap on its highlighted row pairs it, BlueZ asks Mesh Hop's own agent for the
+# PIN and the PIN box comes (with the on-screen keyboard's number pad when no keyboard is there). A wrong length is refused.
+title Mesh Hop: Choose a node, Bluetooth PIN
+env MESHHOP_DATA /tmp/mesh-hop-scene-nodes
+env MESHHOP_DEMO pin
+env MESHHOP_ONLINE 0
+sizes 640x480 800x480 720x720 1024x600 1280x720
+
+wait 1500
+expect text "OSR T1000"
+tap "OSR T1000"
+tap "OSR T1000"
+wait 1200
+@800x480,720x720,1024x600,1280x720 expect text "Pair with OSR T1000"
+expect osk on
+shot pin-prompt
+check pin-prompt
+type 1234
+key enter
+wait 400
+expect text "The PIN is 6 digits"
+shot pin-short
+type 56
+key enter
+wait 1200
+expect osk off
+shot pin-connecting

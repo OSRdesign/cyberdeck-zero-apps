@@ -102,6 +102,7 @@ def main():
                 "--maintainer", meta.get("maintainer", "%s <noreply@users.noreply.github.com>" % owner),
                 "--homepage", meta.get("source_repo", ""),
                 "--depends", meta.get("depends", ""),
+                "--recommends", meta.get("recommends", ""),
                 "--out", args.out or os.path.join(REPO, "packages")] + (["--scripts", scripts] if os.path.isdir(scripts) else []))
         if not os.path.isfile(package_path):
             sys.exit("package not found: " + package_path)

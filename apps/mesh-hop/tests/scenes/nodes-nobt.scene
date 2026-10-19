@@ -1,0 +1,12 @@
+# Mesh Hop 0.5, no Bluetooth service at all (no system bus, no BlueZ): a grey note with the reason; USB and IP stay usable.
+title Mesh Hop: Choose a node, no Bluetooth
+env MESHHOP_DATA /tmp/mesh-hop-scene-nodes
+env MESHHOP_DEMO nobt
+env MESHHOP_ONLINE 0
+sizes 640x480 800x480 720x720 1024x600 1280x720
+
+wait 1500
+expect text "Bluetooth is not available"
+expect text "no system D-Bus (demo)"
+shot bt-missing
+check bt-missing

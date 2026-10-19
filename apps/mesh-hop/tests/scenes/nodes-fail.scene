@@ -1,0 +1,22 @@
+# Mesh Hop 0.5, connections that fail: a paired Bluetooth node out of reach (BlueZ answers le-connection-abort-by-local) and a
+# USB port that is gone. The row says why and "tap to retry"; the link tries again by itself meanwhile.
+title Mesh Hop: Choose a node, failures
+env MESHHOP_DATA /tmp/mesh-hop-scene-nodes
+env MESHHOP_DEMO fail
+env MESHHOP_ONLINE 0
+sizes 640x480 800x480 720x720 1024x600 1280x720
+
+wait 1500
+tap "OSR wio"
+tap "OSR wio"
+wait 300
+shot ble-connecting
+wait 1500
+expect text "Could not connect to OSR wio: le-connection-abort-by-local"
+shot ble-failed
+check ble-failed
+tap "XIAO nRF52840"
+tap "XIAO nRF52840"
+wait 3500
+shot usb-failed
+check usb-failed
