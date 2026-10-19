@@ -289,6 +289,8 @@ service's tokens (`mesh_app.cpp` `layout_body()`, `layout_chats()`).
 | Path | What |
 | --- | --- |
 | `src/core/` | transport, protocol, client, model, store, clock policy, presets (`radio_presets.inc` is the dated data file), preset feed, channel keys, firmware features, contact groups, message search, log, the radio log parser and echo tracker, the packet log (no LVGL; unit tested) |
+| `src/core/ble/` | the Bluetooth LE link to a BLE companion board (not used by the app yet): BlueZ over sd-bus loaded at run time, the link state machine, an `ITransport`, a fake for the tests; see [`docs/BLE.md`](docs/BLE.md) |
+| `tools/ble_probe.cpp`, `tests/ble/` | the BLE probe to run on the deck (`tools/build_ble_probe.sh`) and its test against a mock BlueZ on a private D-Bus (`tests/ble/run_mock.sh`) |
 | `src/ui/ui_logic.*`, `ui_phase2.cpp`, `ui_pages.*` | keys, editor filters, formatting, chat and contact rows, filters and sort, selection, groups, details, Nearby, search, statistics, popups, the Settings layout, the Back rule (no LVGL; unit tested) |
 | `src/ui/key_bridge.*` | the platform's keys to the app's key events, with the US / FR tables (no LVGL; unit tested) |
 | `src/ui/stage.*`, `session.hpp`, `app_spec.cpp` | the keyboard bridge, the tick timer, the app's spec for the shared runners |

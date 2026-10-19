@@ -2038,6 +2038,7 @@ static void test_preset_feed()
 
 #include "test_phase2.inc"
 #include "test_boards.inc"
+#include "test_ble.inc"
 
 static Bytes hex_sp(std::string s)
 {
@@ -2516,6 +2517,7 @@ int main()
     test_logdata();
     test_heard_back();
     test_packet_log();
+    test_ble();
     std::printf("%d checks, %d failed\n", g_checks, g_fail);
     return g_fail ? 1 : 0;
 }
