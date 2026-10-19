@@ -1,6 +1,6 @@
 # RSS Reader
 
-Package `rss-reader`, title "RSS Reader", version 0.1.0 (a draft: not in the registry yet). Part of
+Package `rss-reader`, title "RSS Reader", version 0.1.0. Part of
 [cyberdeck-zero-apps](../../README.md).
 
 A text-feed reader for the CyberdeckZero handheld: pin your favourite news, tech and science feeds from a bundled catalog
@@ -10,7 +10,7 @@ feed content only: the app fetches the feeds, never the web pages behind them (t
 page fetcher would plug in). A native app (kind A of the [guidelines](../../docs/APP-GUIDELINES.md)): its own screens,
 lists and forms on the launcher's `cp0_lvgl`.
 
-**Status: phase 3 of 3** (still a draft: not in the registry). Phase 1: the core library (feeds, catalog, store, refresh,
+**Status: phase 3 of 3**, published. Phase 1: the core library (feeds, catalog, store, refresh,
 OPML). Phase 2: the app, every page and a minimal reader. Phase 3 (this version): the images in the reader, the full-screen
 image, Save for offline and the Saved articles page.
 
@@ -76,7 +76,7 @@ The launcher's 3 s Esc hold ends any app.
 
 ## Install
 
-Settings > Apps once it is published. By hand: `sudo dpkg -i rss-reader_0.1.0_arm64.deb`.
+Settings > Apps. By hand: `sudo dpkg -i rss-reader_0.1.0_arm64.deb`.
 
 ## Files the app keeps
 
@@ -123,7 +123,7 @@ wsl -e sh .../apps/rss-reader/build.sh test      # unit tests only (core + UI lo
 wsl -e sh .../apps/rss-reader/build.sh asan      # the same under AddressSanitizer + UBSan
 wsl -e sh .../apps/rss-reader/build.sh sim       # the thirteen flows against the fake network at 640x480 (or: sim 800x480)
 wsl -e sh .../apps/rss-reader/build.sh ui        # the flows at the five sizes (about 3 minutes, the sizes side by side)
-python tools/make_registry.py --only rss-reader --out <a folder outside packages/>   # the .deb (app.json is a draft)
+python tools/make_registry.py --only rss-reader --out <a folder outside packages/>   # the .deb
 ```
 
 `cross` writes `root/usr/share/APPLaunch/bin/rss-reader`, the catalog copy and `root/usr/share/doc/rss-reader/build-info`;
