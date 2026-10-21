@@ -2337,7 +2337,19 @@ void App::tick()
                         format_local_datetime(now_unix()));
         }
     }
-    if (nav_.tab == Tab::Chats && !at_home_ && !at_nodes_ && !conv_.empty() && !nav_.search_open && conversation_visible()) model_.mark_read(conv_);
+    // multitasking (X-Background=run): hidden, the radio and the model keep going (the work above) but nothing is shown, so
+    // no page is rebuilt and nothing counts as read; back in front, one render shows what came meanwhile, the unread
+    // counts included (the open conversation is then read as usual)
+    const bool hidden = cdk::hidden();
+    if (hidden) {
+        was_hidden_ = true;
+        dirty_ = dirty_ || need;
+        need = false;
+    } else if (was_hidden_) {
+        was_hidden_ = false;
+        need = true;
+    }
+    if (!hidden && nav_.tab == Tab::Chats && !at_home_ && !at_nodes_ && !conv_.empty() && !nav_.search_open && conversation_visible()) model_.mark_read(conv_);
     if (need) render();
     // the buttons of the dialogs at Mesh Hop's ROW height, after any layout of theirs (the toolkit's own on a change of the
     // on-screen keyboard included)

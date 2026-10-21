@@ -1,12 +1,20 @@
 # Serial Console
 
-Version 0.4.2, package `serial-console`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.4.3, package `serial-console`. Part of [cyberdeck-zero-apps](../../README.md).
 
 Serial Console talks to a USB-serial adapter or a microcontroller board (Arduino, ESP32, Raspberry Pi Pico, a GPS, a
 router console...) from the deck. It is a full-screen touch app made for the small screen: instead of dropping you into
 a raw terminal it first shows the serial ports it finds, says what is plugged into each one and recommends the settings,
 can find the speed by itself, can find out **what is on the other end** (the board or firmware behind a USB-serial
 adapter), then opens a terminal page.
+
+## What changed in 0.4.3
+
+* **Multitasking** (`X-Background=run`; APP-CONTRACT section 13 of the launcher; [guidelines](../../docs/APP-GUIDELINES.md#multitasking-hidden-and-shown-again-x-background)): under a launcher with multitasking on, Super, Alt+Tab or three
+  fingers held leave Serial Console open in the background **still connected**: it keeps reading the port and writing
+  the log file while hidden (a stopped app would let the kernel's small serial buffer overflow within seconds at
+  115200 baud, and it holds the port opened exclusive anyway), draws nothing and ignores keys; its card in the
+  switcher brings it back with what came meanwhile. An older launcher, or multitasking off: as before.
 
 ## What changed in 0.4.2
 
@@ -218,6 +226,8 @@ The identification is kept in the port's section of the settings file as `id_*` 
 
 ## Changes
 
+* 0.4.3: multitasking, `X-Background=run` (keeps reading and logging the port while hidden; see
+  [What changed in 0.4.3](#what-changed-in-043)).
 * 0.4.2: rebuilt on launcher f35c2d6 (7 mm minimum tap target for buttons and rows, header Esc and the terminal's key
   bar stay 9 mm toolbar keys, pointer
   navigation when Settings > System > Pointer navigation is on).

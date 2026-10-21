@@ -521,6 +521,7 @@ private:
     // state
     NavState nav_;
     bool dirty_ = true;
+    bool was_hidden_ = false;   // multitasking: the launcher had the app hidden at the last tick (cdk::hidden)
     uint64_t start_ms_ = 0, last_poll_ms_ = 0, last_render_ms_ = 0, last_bar_ms_ = 0, kbd_check_ms_ = 0, prompt_ms_ = 0;
     uint32_t last_revision_ = 0, last_link_ = 0xFFFF, last_notice_id_ = 0;
     std::string notice_text_;

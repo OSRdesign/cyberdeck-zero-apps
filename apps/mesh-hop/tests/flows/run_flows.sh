@@ -1,5 +1,5 @@
 #!/bin/sh
-# The 21 scripted simulator flows of Mesh Hop (0.5: nodes, the start page over TCP), one after the other (the simulator's link /tmp/ttyMHSIM is shared), each
+# The 22 scripted simulator flows of Mesh Hop (0.5: nodes, the start page over TCP; 0.5.1: hidden and shown again), one after the other (the simulator's link /tmp/ttyMHSIM is shared), each
 # with the simulator options its header names; the preset flows through presets_run.sh (its cases 1-7 and the 60 s
 # retry). About 15 minutes. Needs python3 and the host build (../../build.sh host).
 #   sh run_flows.sh [RUNNER] [OUT] [WxH | sizes]
@@ -65,6 +65,7 @@ one b-reset SHOTS="$OUT/b-reset" sh "$T/p2_run.sh" b-reset.script "--reset-forma
 one b-swap SHOTS="$OUT/b-swap" SIMCTL=1 sh "$T/p2_run.sh" b-swap.script
 one presets SHOTS="$OUT/presets" sh "$T/presets_run.sh"
 one nodes SHOTS="$OUT/nodes" sh "$T/nodes_run.sh"
+one lifecycle SHOTS="$OUT/lifecycle" SIMCTL=1 SCRIPT="$T/lifecycle.script" sh "$T/ui_smoke.sh"
 echo "== done in $(($(date +%s) - t0)) s at $SIZE"
 main=0
 for d in "$OUT"/*/; do
@@ -72,6 +73,6 @@ for d in "$OUT"/*/; do
     main=$((main + $(ls "$d" | grep -c '\.png$')))
 done
 p1=$(ls "$OUT/presets/1-online-fetched" 2> /dev/null | grep -c '\.png$')
-echo "shots: $((main + p1)) ($main in 18 flows + $p1 of the preset flow's first case); preset cases in all: $(find "$OUT/presets" -name '*.png' | wc -l)"
+echo "shots: $((main + p1)) ($main in 19 flows + $p1 of the preset flow's first case); preset cases in all: $(find "$OUT/presets" -name '*.png' | wc -l)"
 echo "failures reported by the runner:"
 grep -H "^script:\|FAIL\|cannot write\|platform init failed" "$OUT"/*.out | grep -v "^.*: *#" || echo "  none"

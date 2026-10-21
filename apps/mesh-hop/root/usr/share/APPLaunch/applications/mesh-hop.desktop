@@ -6,3 +6,4 @@ Icon=share/images/mesh-hop.png
 Type=Application
 X-Fullscreen=true
 X-MinSize=640x480
+X-Background=run

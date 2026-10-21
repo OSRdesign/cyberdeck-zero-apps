@@ -1,0 +1,47 @@
+# Multitasking (X-Background=freeze; the launcher's APP-CONTRACT section 13): the harness plays the launcher with the
+# toolkit's helper (apps/_common, cp0_app_lifecycle_lvgl.h). Hidden: not one flush, keys and taps ignored (Esc at Home
+# would ask "Quit RSS Reader?"); what was typed while frozen is dropped at show; shown: the whole screen repainted, Home
+# as it was; close ends the app through its normal exit (favorites, read marks and settings saved as on Quit). On a board
+# a frozen app's refresh in flight simply waits (its curl is stopped with it) and goes on, or fails and is retried.
+title RSS Reader: hidden, shown, stale input, close
+env RSSREADER_DATA /tmp/rss-reader-lifecycle-data
+lifecycle
+sizes 640x480 1280x720
+
+wait 900
+shot before
+expect visible
+expect text "Favorites"
+
+hide
+expect hidden
+key esc
+key enter
+tapxy 0.5 0.4
+wait 400
+expect nowrite
+expect noquit
+
+stale esc
+stale down
+stale enter
+show
+expect visible
+wait 400
+expect repaint
+expect noquit
+expect notext "Quit RSS Reader?"
+expect text "Favorites"
+shot after
+
+# Home still works: Esc asks, Cancel stays
+key esc
+wait 300
+expect text "Quit RSS Reader?"
+key esc
+wait 300
+expect notext "Quit RSS Reader?"
+expect noquit
+
+close
+expect quit

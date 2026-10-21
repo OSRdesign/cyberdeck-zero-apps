@@ -1,6 +1,6 @@
 # RSS Reader
 
-Package `rss-reader`, title "RSS Reader", version 0.1.0. Part of
+Package `rss-reader`, title "RSS Reader", version 0.1.1. Part of
 [cyberdeck-zero-apps](../../README.md).
 
 A text-feed reader for the CyberdeckZero handheld: pin your favourite news, tech and science feeds from a bundled catalog
@@ -76,7 +76,7 @@ The launcher's 3 s Esc hold ends any app.
 
 ## Install
 
-Settings > Apps. By hand: `sudo dpkg -i rss-reader_0.1.0_arm64.deb`.
+Settings > Apps. By hand: `sudo dpkg -i rss-reader_0.1.1_arm64.deb`.
 
 ## Files the app keeps
 
@@ -142,6 +142,9 @@ shown on the device. Details in `root/usr/share/doc/rss-reader/copyright`.
 
 ## Changes
 
+- 0.1.1: multitasking, `X-Background=freeze` (APP-CONTRACT section 13 of the launcher; [guidelines](../../docs/APP-GUIDELINES.md#multitasking-hidden-and-shown-again-x-background)): under a launcher with multitasking on, Super, Alt+Tab or
+  three fingers held leave the reader open in the background, stopped; a refresh in flight waits with it (its curl is
+  stopped too) and goes on, or fails and is retried at the next refresh. An older launcher: as before.
 - 0.1.0 (phase 3): the pictures in the reader (downloaded on worker threads into a 50 MB image cache, decoded off the UI
   thread, placeholders that say why), the full-screen picture, Save for offline with the pictures and the Saved articles
   page (sizes, the use of the cap, remove, info), Settings > Clear image cache; the first-run hint; the Favorites' second
