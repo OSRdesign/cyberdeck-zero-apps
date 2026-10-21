@@ -1,8 +1,5 @@
-6bdb44a39f03399c4aafe912b83214c526ad7818
-# TEMPORARY PIN (multitasking P-e, not merged): the launcher branch multitasking-pe (cyberdeck-zero-launcher, its draft PR)
-# on main dc43a6d (#63 P-b, #64 P-c, #65 P-d), which adds the app side of the lifecycle (cp0_app_lifecycle*.h). Move it
-# to that PR's merge commit on main before this branch is merged, then rebuild every app (build.sh cross).
-# The launcher commit every cdk app is built against:
+45d99a9eeaaf084b324ce1a2112fe113e7f35f2d
+# The launcher commit (cyberdeck-zero-launcher main after #67: multitasking P-e, the app side of the lifecycle in cp0_lvgl (cp0_app_lifecycle*.h), APP-CONTRACT section 13 final; on #63 P-b, #64 P-c, #65 P-d) every cdk app is built against:
 # its ext_components/cp0_lvgl (display backend, keyboard, widgets, layout service), its LVGL FreeType glue
 # (projects/APPLaunch/main/lvgl) and its LVGL configuration. build_app.sh compares the launcher checkout with it and
 # stamps the result into --version and usr/share/doc/<app>/build-info. Move it deliberately, then rebuild every app.
