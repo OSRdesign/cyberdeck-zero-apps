@@ -386,9 +386,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.2.3",
+      "version": "0.2.4",
       "published_at": "2026-10-14T23:13:05+00:00",
-      "updated_at": "2026-10-18T23:00:07+00:00",
+      "updated_at": "2026-10-21T10:09:21+00:00",
       "review": {
         "status": "approved"
       },
@@ -397,10 +397,10 @@
       "download": {
         "type": "deb",
         "package": "system-monitor",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/system-monitor_0.2.3_arm64.deb",
-        "md5": "cde4a9bb5a20ecd9b75f312000ff4bf7",
-        "sha256": "1d756175571d0696eb6b98266a5114d43ad3966c235844dd2f5d1406ec62eca2",
-        "size": 1408430
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/system-monitor_0.2.4_arm64.deb",
+        "md5": "19c5449046dbd6eed6b301d5e3bf50e8",
+        "sha256": "0dfaf446d9b46dbfb47a8f1fa96a06c264fb74fbaea9e1d86eefe91f34b711f0",
+        "size": 1423642
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0",
       "permissions": {
