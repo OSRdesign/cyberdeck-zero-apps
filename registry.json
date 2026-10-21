@@ -310,9 +310,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.4.2",
+      "version": "0.4.3",
       "published_at": "2026-10-15T00:04:47+00:00",
-      "updated_at": "2026-10-19T18:30:53+00:00",
+      "updated_at": "2026-10-21T10:09:22+00:00",
       "review": {
         "status": "approved"
       },
@@ -321,10 +321,10 @@
       "download": {
         "type": "deb",
         "package": "serial-console",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/serial-console_0.4.2_arm64.deb",
-        "md5": "32a7f6aaac3a8a281bab6ff8a8abbb47",
-        "sha256": "c4c05153afaa7cce52407e7ce3cbba05e3005f524c2cd82e4198eb7aa3b165a6",
-        "size": 1516056
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/serial-console_0.4.3_arm64.deb",
+        "md5": "a90e32da61546d8fa0521a6ed8d86434",
+        "sha256": "366d1332d33d00f85ee11225159d1fde91033c7fb44ca8d84a9f108e41b9203d",
+        "size": 1532676
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0",
       "permissions": {
