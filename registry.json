@@ -250,9 +250,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.1.0",
+      "version": "0.1.1",
       "published_at": "2026-10-19T23:21:29+00:00",
-      "updated_at": "2026-10-19T23:21:29+00:00",
+      "updated_at": "2026-10-21T10:09:24+00:00",
       "review": {
         "status": "approved"
       },
@@ -261,10 +261,10 @@
       "download": {
         "type": "deb",
         "package": "rss-reader",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/rss-reader_0.1.0_arm64.deb",
-        "md5": "7b9e8a7bf9da754a8c549bf0688f034d",
-        "sha256": "d681b819d7e33491c9dc1207fc199b479442c69e4f003148739bcfb125acbea6",
-        "size": 1678260
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/rss-reader_0.1.1_arm64.deb",
+        "md5": "68546a0eac2a0a66a0efbd42b1b17ccd",
+        "sha256": "6dede0afa43a4e9dd77724009b6e5137af126f3fc2cc854df2a7e13e271bddf4",
+        "size": 1692536
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0, curl, ca-certificates",
       "permissions": {
