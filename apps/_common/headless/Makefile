@@ -51,9 +51,12 @@ LVGL_SRCS := $(filter-out $(addprefix $(LVGL)/src/libs/freetype/,$(LV_OVERRIDE))
                $(shell find $(LVGL)/src -name '*.c' -o -name '*.cpp'))
 LVGL_PRIV := -I$(FT_OVR) -I$(LVGL)/src/libs/freetype
 
-# cp0_lvgl: the widgets, the layout service, the keyboard queue and bridge, the status strip and its renderer (real code).
+# cp0_lvgl: the widgets, the layout service, the keyboard queue and bridge, the status strip and its renderer, the app side
+# of the multitasking lifecycle (real code).
 CP0_SRCS := \
     $(CP0)/src/cp0_app_contract.c \
+    $(CP0)/src/cp0_app_lifecycle.c \
+    $(CP0)/src/cp0_app_lifecycle_lvgl.c \
     $(CP0)/src/cp0_ui_metrics.c \
     $(CP0)/src/cp0_ui_metrics_lvgl.c \
     $(CP0)/src/cp0_ui_overlay.c \

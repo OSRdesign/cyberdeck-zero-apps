@@ -44,6 +44,12 @@ After the app asks to quit, only `expect` lines are read.
 | `expect quit\|noquit`, `expect osk on\|off`, `expect text "T"`, `expect notext "T"` | assertions |
 | `expect key "T" toolbar\|target` | the button labelled T is exactly the 9 mm toolbar key (`cp0_ui_toolbar_key_px`) / TARGET high and at least as wide; its size goes in the report |
 | `say TEXT` | a line in the log |
+| `lifecycle` | (scene option, like `nocontract`) the harness plays a multitasking launcher: a control socket in `APPLAUNCH_LIFECYCLE` / `APPLAUNCH_CONTROL_FD` and the toolkit's helper (`cp0_app_lifecycle_lvgl.h`) on the harness's display and pointer |
+| `hide`, `show`, `close` | the launcher's message; `hide` / `show` must be answered within 300 ms (the time goes in the report), `close` must make the app quit within 300 ms |
+| `stale KEY` | a press and release queued without running the app: what was typed while it was frozen (the next `show` must drop it) |
+| `expect hidden\|visible` | the app's lifecycle state (`cdk::hidden()`) |
+| `expect nowrite` | no flush at all while the app was hidden (the helper turns LVGL's invalidation off; the harness writes nothing then anyway) |
+| `expect repaint` | every pixel of the screen was flushed since the last `show` (run a `wait` first) |
 
 ## Layout checks (after every shot)
 

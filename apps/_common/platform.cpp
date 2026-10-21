@@ -8,6 +8,7 @@
 #include "build_info.hpp"
 
 #include "cp0_app_contract.h"
+#include "cp0_app_lifecycle_lvgl.h"
 #include "cp0_display.h"
 #include "cp0_lvgl_app_runner.hpp"
 #include "keyboard_input.h"
@@ -100,10 +101,17 @@ int run(const AppSpec &spec, int argc, char **argv)
                      static_cast<int>(lv_display_get_vertical_resolution(display)),
                      cp0_display_available() ? "dpi-scaled" : "fbdev");
         start(spec, screen);
+        /* glue 5, multitasking (APP-CONTRACT section 13): only when the launcher gave a control socket (X-Background in
+         * the .desktop file, a multitasking launcher); its "close" quits as a short Esc at the root does */
+        if (cp0_app_lifecycle_device_start([] { request_quit(0); }))
+            std::fprintf(stderr, "[cdk] %s: can stay in the background (lifecycle on)\n", spec.id);
         return true;
     };
     options.should_quit = [] { return g_signal != 0 || quit_requested(); };
-    options.teardown = [] { stop(); };
+    options.teardown = [] {
+        cp0_app_lifecycle_device_stop();
+        stop();
+    };
     const int rc = cp0_lvgl_run(std::move(options));
     if (g_signal) std::fprintf(stderr, "[cdk] %s: signal %d, ended cleanly\n", spec.id, static_cast<int>(g_signal));
     return rc != 0 ? rc : quit_code();

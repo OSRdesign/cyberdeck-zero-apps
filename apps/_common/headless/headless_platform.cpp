@@ -3,19 +3,26 @@
  *
  * Headless harness: a plain LVGL display at W x H in memory, the layout service's metrics for it, the keyboard bridge,
  * a scripted pointer and the services the widgets ask for (font and resource paths). No framebuffer, no evdev, no
- * launcher: the app's own code and cp0_lvgl's widgets run unchanged on top.
+ * launcher: the app's own code and cp0_lvgl's widgets run unchanged on top. For the multitasking scenes the harness
+ * plays the launcher's side of the lifecycle socket and gives the toolkit's helper its port (lifecycle_begin).
  */
 #include "headless.hpp"
 
+#include "app.hpp"
+#include "cp0_app_lifecycle_lvgl.h"
 #include "cp0_lvgl_app.h"
 #include "cp0_ui_metrics.h"
 #include "hal_lvgl_bsp.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
+#include <sys/socket.h>
 #include <thread>
 #include <time.h>
+#include <unistd.h>
 #include <unordered_map>
 
 namespace headless {
@@ -30,6 +37,14 @@ struct {
 std::vector<uint8_t> g_draw_buf;
 cp0_ui_metrics_t g_metrics;
 
+/* the lifecycle (P-e): the helper's port, the coverage of the flushes since the output came back, the launcher's end */
+OutputStats g_out;
+std::vector<uint8_t> g_cover;
+bool g_input_on = true;
+int g_launcher_fd = -1;
+uint32_t g_lc_n = 0;
+std::vector<std::string> g_heard;
+
 uint32_t tick_cb(void)
 {
     struct timespec ts;
@@ -40,13 +55,24 @@ uint32_t tick_cb(void)
 void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
 {
     Platform &p = g_platform;
+    if (!g_out.on) { /* hidden: the board's display writes nothing either (cp0_display_suspend) */
+        ++g_out.flushes_while_off;
+        lv_display_flush_ready(disp);
+        return;
+    }
     const int aw = lv_area_get_width(area);
     const auto *src = reinterpret_cast<const uint32_t *>(px_map);
     for (int y = area->y1; y <= area->y2; ++y) {
         if (y < 0 || y >= p.h) continue;
         for (int x = area->x1; x <= area->x2; ++x)
-            if (x >= 0 && x < p.w)
-                p.shadow[static_cast<size_t>(y) * p.w + x] = src[static_cast<size_t>(y - area->y1) * aw + (x - area->x1)];
+            if (x >= 0 && x < p.w) {
+                const size_t i = static_cast<size_t>(y) * p.w + x;
+                p.shadow[i] = src[static_cast<size_t>(y - area->y1) * aw + (x - area->x1)];
+                if (!g_cover.empty() && !g_cover[i]) {
+                    g_cover[i] = 1;
+                    ++g_out.pixels_since_on;
+                }
+            }
     }
     lv_display_flush_ready(disp);
 }
@@ -55,7 +81,41 @@ void pointer_read(lv_indev_t *, lv_indev_data_t *data)
 {
     data->point.x = g_touch.x;
     data->point.y = g_touch.y;
-    data->state = g_touch.pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+    data->state = g_touch.pressed && g_input_on ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+}
+
+/* the harness's port of the helper: output = the flush above, input = the scripted pointer */
+void port_output(int on)
+{
+    g_out.on = on != 0;
+    if (on) {
+        std::fill(g_cover.begin(), g_cover.end(), 0);
+        g_out.pixels_since_on = 0;
+    }
+}
+
+void port_input(int on)
+{
+    g_input_on = on != 0;
+    if (on) g_touch.pressed = false; /* what was touched while hidden is gone (the board reads its contacts back) */
+}
+
+const cp0_app_lifecycle_port_t kPort = {port_output, port_input};
+
+/* the app's messages besides the answers go to g_heard; the answer "ack <n>" is reported */
+bool read_launcher_end(uint32_t want_ack)
+{
+    bool acked = false;
+    char buf[128];
+    for (;;) {
+        const ssize_t r = recv(g_launcher_fd, buf, sizeof(buf) - 1, MSG_DONTWAIT);
+        if (r <= 0) break;
+        buf[r] = '\0';
+        const std::string msg(buf);
+        if (msg == "ack " + std::to_string(want_ack)) acked = true;
+        else g_heard.push_back(msg);
+    }
+    return acked;
 }
 
 /* What /usr/share/APPLaunch/<path> is in the launcher tree: fonts by name (Montserrat-Bold.ttf) and share/... paths. */
@@ -79,6 +139,7 @@ bool platform_init(int w, int h, int ppmm_x100, const std::string &resource_root
     p.w = w;
     p.h = h;
     p.shadow.assign(static_cast<size_t>(w) * h, 0);
+    g_cover.assign(static_cast<size_t>(w) * h, 0);
 
     lv_init();
     lv_tick_set_cb(tick_cb);
@@ -134,9 +195,58 @@ void run_for(int ms)
     const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
     do {
         lv_timer_handler();
+        cp0_app_lifecycle_lvgl_service(); /* the device runner's loop hook (nothing without a lifecycle) */
         std::this_thread::sleep_for(std::chrono::milliseconds(4));
     } while (std::chrono::steady_clock::now() < end);
 }
+
+bool lifecycle_begin()
+{
+    if (g_launcher_fd >= 0) return true;
+    int sv[2];
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sv) != 0) return false;
+    setenv("APPLAUNCH_LIFECYCLE", "1", 1);
+    setenv("APPLAUNCH_CONTROL_FD", std::to_string(sv[1]).c_str(), 1);
+    if (!cp0_app_lifecycle_lvgl_start(&kPort, [] { cdk::request_quit(0); })) {
+        close(sv[0]);
+        close(sv[1]);
+        return false;
+    }
+    g_launcher_fd = sv[0];
+    return true;
+}
+
+int lifecycle_send(const std::string &word, int deadline_ms)
+{
+    if (g_launcher_fd < 0) return -1;
+    const uint32_t n = ++g_lc_n;
+    const std::string msg = word + " " + std::to_string(n);
+    if (send(g_launcher_fd, msg.data(), msg.size(), MSG_NOSIGNAL) != static_cast<ssize_t>(msg.size())) return -1;
+    const bool close_msg = word == "close";
+    const auto t0 = std::chrono::steady_clock::now();
+    const auto elapsed = [&] {
+        return static_cast<int>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count());
+    };
+    while (elapsed() <= deadline_ms) {
+        cp0_app_lifecycle_lvgl_service();
+        if (read_launcher_end(n) && !close_msg) return elapsed();
+        if (close_msg && cdk::quit_requested()) return elapsed();
+        lv_timer_handler();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return -1;
+}
+
+std::vector<std::string> lifecycle_heard()
+{
+    if (g_launcher_fd >= 0) (void)read_launcher_end(0xFFFFFFFFu);
+    std::vector<std::string> out;
+    out.swap(g_heard);
+    return out;
+}
+
+const OutputStats &output_stats() { return g_out; }
 
 Image screenshot()
 {

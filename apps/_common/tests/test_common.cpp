@@ -3,11 +3,13 @@
  *
  * Unit tests of _common: the on-screen keyboard policy (input.state re-read rules, the no-file fallback), the
  * background command runner (lines in order on the LVGL thread, exit codes, timeout, cancel, the process group,
- * shutdown) and the minimum-size rule. Built with LVGL (async_run delivers through lv_async_call) on a small headless
- * display. Run by ../build_app.sh host.
+ * shutdown), the minimum-size rule and the multitasking lifecycle (off without the launcher's socket; hide / show
+ * answered with one). Built with LVGL (async_run delivers through lv_async_call) on a small headless display. Run by
+ * ../build_app.sh host.
  */
 #include "app.hpp"
 #include "async_run.hpp"
+#include "cp0_app_lifecycle_lvgl.h"
 #include "headless.hpp"
 #include "osk_policy.hpp"
 
@@ -18,6 +20,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <string>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <thread>
 #include <unistd.h>
@@ -265,6 +268,46 @@ void test_min_size()
     std::printf("%s", version.c_str());
 }
 
+/* Multitasking: without the launcher's control socket nothing is on (the app as before); with one, the toolkit's helper
+ * answers hide / show on the LVGL loop and cdk::hidden() follows. LVGL up (platform_init) first. */
+void test_lifecycle()
+{
+    unsetenv("APPLAUNCH_LIFECYCLE");
+    unsetenv("APPLAUNCH_CONTROL_FD");
+    CHECK(!cdk::hidden());
+    CHECK(!cdk::leave_to_home());
+    CHECK(cp0_app_lifecycle_lvgl_start(nullptr, nullptr) == 0);
+    CHECK(!cp0_app_lifecycle_lvgl_active());
+    setenv("APPLAUNCH_LIFECYCLE", "1", 1);
+    setenv("APPLAUNCH_CONTROL_FD", "0", 1); /* stdin: not a socket */
+    CHECK(cp0_app_lifecycle_lvgl_start(nullptr, nullptr) == 0);
+
+    int sv[2];
+    CHECK(socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sv) == 0);
+    setenv("APPLAUNCH_CONTROL_FD", std::to_string(sv[1]).c_str(), 1);
+    CHECK(cp0_app_lifecycle_lvgl_start(nullptr, nullptr) == 1);
+    CHECK(cp0_app_lifecycle_lvgl_active() && !cdk::hidden());
+    char buf[32];
+    CHECK(send(sv[0], "hide 1", 6, MSG_NOSIGNAL) == 6);
+    headless::run_for(20);
+    CHECK(cdk::hidden());
+    ssize_t r = recv(sv[0], buf, sizeof(buf) - 1, MSG_DONTWAIT);
+    CHECK(r == 5 && std::string(buf, 5) == "ack 1");
+    CHECK(send(sv[0], "show 2", 6, MSG_NOSIGNAL) == 6);
+    headless::run_for(20);
+    CHECK(!cdk::hidden());
+    r = recv(sv[0], buf, sizeof(buf) - 1, MSG_DONTWAIT);
+    CHECK(r == 5 && std::string(buf, 5) == "ack 2");
+    CHECK(cdk::leave_to_home());
+    r = recv(sv[0], buf, sizeof(buf) - 1, MSG_DONTWAIT);
+    CHECK(r == 4 && std::string(buf, 4) == "home");
+    cp0_app_lifecycle_lvgl_stop();
+    CHECK(!cp0_app_lifecycle_lvgl_active() && !cdk::leave_to_home());
+    close(sv[0]);
+    unsetenv("APPLAUNCH_LIFECYCLE");
+    unsetenv("APPLAUNCH_CONTROL_FD");
+}
+
 } // namespace
 
 int main()
@@ -279,6 +322,7 @@ int main()
     test_min_size();
     headless::platform_init(320, 240, 0, "/nonexistent"); /* LVGL for lv_async_call */
     test_async_run();
+    test_lifecycle();
     std::string cmd = "rm -rf " + g_dir;
     if (std::system(cmd.c_str()) != 0) std::fprintf(stderr, "could not remove %s\n", g_dir.c_str());
     std::printf("test-common: %d passed, %d failed\n", g_pass, g_fail);

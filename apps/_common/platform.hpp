@@ -14,7 +14,10 @@
  *   3. status strip and title: cp0::ui::StatusStrip / add_title (cp0_ui_widgets.hpp) are used directly, nothing here;
  *   4. root exit: app.hpp request_quit() (short Esc / header Esc at the root page), SIGTERM / SIGINT / SIGHUP (the
  *      launcher's 3 s hold-Esc watchdog signals the app's process group) end the run loop cleanly; a screen under
- *      AppSpec min_w x min_h shows the notice (app.hpp) instead of the app.
+ *      AppSpec min_w x min_h shows the notice (app.hpp) instead of the app;
+ *   5. multitasking: when the launcher gives a control socket (X-Background=run|freeze in the .desktop file, a
+ *      multitasking launcher), the toolkit's cp0_app_lifecycle_device_start() answers hide / show / close from the run
+ *      loop (APP-CONTRACT section 13); close = request_quit(0). Without the socket nothing changes.
  * Started by hand (ssh, no launcher environment): APPLAUNCH_DISPLAY is set to dpi-scaled if missing, so the same
  * backend probes the framebuffer (APP-CONTRACT section 7); a board profile can be loaded first with
  *   set -a; . /etc/applaunch/board.conf; set +a

@@ -9,6 +9,7 @@
 #include "build_info.hpp"
 #include "osk_policy.hpp"
 
+#include "cp0_app_lifecycle_lvgl.h"
 #include "cp0_ui_metrics_lvgl.h"
 #include "cp0_ui_widgets.hpp"
 #include "keyboard_input.h"
@@ -113,6 +114,8 @@ void request_quit(int code)
 
 bool quit_requested() { return g_quit.load(); }
 int quit_code() { return g_quit_code.load(); }
+bool hidden() { return cp0_app_lifecycle_lvgl_hidden() != 0; }
+bool leave_to_home() { return cp0_app_lifecycle_lvgl_send("home") == 0; }
 lv_group_t *input_group() { return g_group; }
 int screen_w() { return g_w; }
 int screen_h() { return g_h; }
