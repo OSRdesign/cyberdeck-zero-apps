@@ -36,6 +36,9 @@
  *   mark                         remembers the app's state line (what `dump` prints)
  *   expect same KEY | changed KEY | more KEY   KEY= of the state line now equals / differs from / is larger than at `mark`
  *                                (a refresh keeps the selection and the scroll: expect same settings_sel ...)
+ *   lifecycle                    the runner plays a multitasking launcher (apps/_common/headless lifecycle_begin: the control
+ *                                socket and the toolkit's helper); then hide / show (answered within 300 ms) and
+ *                                expect hidden | visible | nowrite (no flush while hidden) | repaint (the whole screen since show)
  *   key names: esc enter tab backtab up down left right pgup pgdn home end bksp del, ctrl-<letter>
  */
 
@@ -632,6 +635,16 @@ int run_script(const std::string &file, const std::string &shot_dir)
                 }
                 failures += under;
             }
+        } else if (cmd == "lifecycle") {
+            // multitasking: the runner plays the launcher (the shared harness's control socket and the toolkit's helper)
+            const bool ok = headless::lifecycle_begin();
+            std::printf("lifecycle %s\n", ok ? "on" : "FAIL: the helper did not start");
+            if (!ok) ++failures;
+        } else if (cmd == "hide" || cmd == "show") {
+            // the launcher's message: answered within 300 ms (APP-CONTRACT section 13)
+            const int ms = headless::lifecycle_send(cmd, 300);
+            std::printf("%s %s (%d ms)\n", cmd.c_str(), ms >= 0 ? "PASS answered" : "FAIL no answer", ms);
+            if (ms < 0) ++failures;
         } else if (cmd == "expect") {
             std::string rest;
             std::getline(ss, rest);
@@ -640,7 +653,15 @@ int run_script(const std::string &file, const std::string &shot_dir)
             run_for(60);
             bool ok = true;
             std::string detail;
-            if (what == "text") ok = headless::find_label(arg, false) != nullptr;
+            if (what == "hidden") ok = cdk::hidden();
+            else if (what == "visible") ok = !cdk::hidden();
+            else if (what == "nowrite") {
+                ok = headless::output_stats().flushes_while_off == 0;
+                detail = " (" + std::to_string(headless::output_stats().flushes_while_off) + " flushes while hidden)";
+            } else if (what == "repaint") {
+                ok = headless::output_stats().pixels_since_on >= static_cast<long>(g_w) * g_h;
+                detail = " (" + std::to_string(headless::output_stats().pixels_since_on) + " pixels)";
+            } else if (what == "text") ok = headless::find_label(arg, false) != nullptr;
             else if (what == "notext") ok = headless::find_label(arg, false) == nullptr;
             else if (what == "osk") ok = cp0::ui::osk::visible() == (arg == "on");
             else if ((what == "same" || what == "changed" || what == "more") && session) {
@@ -648,7 +669,8 @@ int run_script(const std::string &file, const std::string &shot_dir)
                 ok = what == "same" ? was == now : what == "changed" ? was != now : std::atoll(now.c_str()) > std::atoll(was.c_str());
                 detail = " (" + was + " -> " + now + ")";
             } else {
-                std::fprintf(stderr, "script:%d: expect text|notext \"T\", expect same|changed|more KEY\n", lineno);
+                std::fprintf(stderr, "script:%d: expect text|notext \"T\", expect same|changed|more KEY, expect "
+                                     "hidden|visible|nowrite|repaint\n", lineno);
                 ok = false;
             }
             std::printf("expect %s \"%s\"%s: %s\n", what.c_str(), arg.c_str(), detail.c_str(), ok ? "PASS" : "FAIL");

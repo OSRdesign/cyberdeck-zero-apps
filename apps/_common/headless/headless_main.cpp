@@ -101,6 +101,7 @@ struct Scene {
     std::vector<Size> sizes;
     std::vector<Line> lines;
     bool nocontract = false; /* started by hand: no contract variables, no input.state (APP-CONTRACT section 7) */
+    bool lifecycle = false;  /* a multitasking launcher: the control socket (APP-CONTRACT section 13) */
     std::vector<std::pair<std::string, std::string>> env; /* set before the app starts (an app's test fixture) */
 };
 
@@ -145,6 +146,10 @@ bool load_scene(const std::string &path, Scene &scene)
         }
         if (line.words[0] == "nocontract") {
             scene.nocontract = true;
+            continue;
+        }
+        if (line.words[0] == "lifecycle") {
+            scene.lifecycle = true;
             continue;
         }
         if (line.words[0] == "env") {
@@ -283,6 +288,21 @@ void play(Run &run, const Scene &scene)
             const uint32_t code = key_code(arg(1), utf8);
             if (!code && utf8.empty()) fail(run, line, "unknown key " + arg(1));
             else press(code, utf8);
+        } else if (cmd == "stale") {
+            /* a key typed while the app was frozen: press and release queued, LVGL not run (the show must drop them) */
+            std::string utf8;
+            const uint32_t code = key_code(arg(1), utf8);
+            if (!code && utf8.empty()) {
+                fail(run, line, "unknown key " + arg(1));
+            } else {
+                cp0_keyboard_inject_key(code, KBD_KEY_PRESSED, 0, utf8.empty() ? nullptr : utf8.c_str());
+                cp0_keyboard_inject_key(code, KBD_KEY_RELEASED, 0, utf8.empty() ? nullptr : utf8.c_str());
+            }
+        } else if (cmd == "hide" || cmd == "show" || cmd == "close") {
+            /* the launcher's message; hide and show must be answered within 300 ms, close must make the app quit */
+            const int ms = headless::lifecycle_send(cmd, 300);
+            if (ms < 0) fail(run, line, cmd + (cmd == "close" ? ": the app did not quit" : ": no answer") + " within 300 ms");
+            else run.report << cmd << " answered in " << ms << " ms\n";
         } else if (cmd == "type") {
             const std::string text = arg(1);
             for (size_t i = 0; i < text.size();) {
@@ -338,6 +358,17 @@ void play(Run &run, const Scene &scene)
             else if (what == "osk") {
                 const bool want = arg(2) == "on";
                 if (cp0::ui::osk::visible() != want) fail(run, line, "expected the on-screen keyboard " + arg(2));
+            } else if (what == "hidden" && !cdk::hidden()) {
+                fail(run, line, "expected the app hidden");
+            } else if (what == "visible" && cdk::hidden()) {
+                fail(run, line, "expected the app visible");
+            } else if (what == "nowrite" && headless::output_stats().flushes_while_off != 0) {
+                /* the helper turned invalidation off: not one flush while hidden (none would be written anyway) */
+                fail(run, line, std::to_string(headless::output_stats().flushes_while_off) + " flush(es) while hidden");
+            } else if (what == "repaint" &&
+                       headless::output_stats().pixels_since_on < static_cast<long>(run.size.w) * run.size.h) {
+                fail(run, line, "the show repainted " + std::to_string(headless::output_stats().pixels_since_on) +
+                                    " of " + std::to_string(run.size.w * run.size.h) + " pixels");
             } else if (what == "text" && !headless::find_label(arg(2), false)) {
                 fail(run, line, "no visible text \"" + arg(2) + "\"");
             } else if (what == "notext" && headless::find_label(arg(2), false)) {
@@ -411,6 +442,14 @@ int run_size(const Size &size, const Scene &scene, const std::string &out_dir, c
     const cdk::AppSpec &spec = cdk::app_spec();
     run.notice = !cdk::screen_fits(spec, size.w, size.h);
     cdk::start(spec, lv_screen_active());
+    if (scene.lifecycle) {
+        if (headless::lifecycle_begin()) {
+            run.report << "lifecycle on (the harness plays the launcher)\n";
+        } else {
+            ++run.failures;
+            run.report << "FAIL lifecycle: the helper did not start\n";
+        }
+    }
     headless::run_for(300);
     play(run, scene);
     cdk::stop();

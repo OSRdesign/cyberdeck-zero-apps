@@ -382,6 +382,7 @@ static void test_package()
     CHECK(desktop.find("\nExec=/usr/share/APPLaunch/bin/system-monitor\n") != std::string::npos);
     CHECK(desktop.find("\nIcon=share/images/system-monitor.png") != std::string::npos);
     CHECK(desktop.find("\nTerminal=false") != std::string::npos);
+    CHECK(desktop.find("\nX-Background=freeze\n") != std::string::npos); /* multitasking: stopped while hidden */
     CHECK(!read_file(app + "/root/usr/share/APPLaunch/share/images/system-monitor.png").empty());
     CHECK(read_file(app + "/root/usr/share/APPLaunch/share/images/system-monitor.png") == read_file(app + "/icon.png"));
     const std::string copyright = read_file(app + "/root/usr/share/doc/system-monitor/copyright");
@@ -389,7 +390,7 @@ static void test_package()
     const std::string manifest = read_file(app + "/app.json");
     CHECK(manifest.find("\"share_code\": \"system-monitor\"") != std::string::npos);
     CHECK(manifest.find("\"package\": \"system-monitor\"") != std::string::npos);
-    CHECK(manifest.find("\"version\": \"0.2.3\"") != std::string::npos);
+    CHECK(manifest.find("\"version\": \"0.2.4\"") != std::string::npos);
     CHECK(manifest.find("\"title\": \"System Monitor\"") != std::string::npos);
     CHECK(manifest.find("\"license\": \"MIT\"") != std::string::npos);
     CHECK(manifest.find("\"depends\": \"libfreetype6, libinput10, libxkbcommon0\"") != std::string::npos);

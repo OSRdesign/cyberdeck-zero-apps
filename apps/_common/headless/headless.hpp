@@ -48,8 +48,29 @@ Platform &platform();
  * keyboard queue + bridge, a pointer indev, the filesystem service answering font and resource paths. */
 bool platform_init(int w, int h, int ppmm_x100, const std::string &resource_root);
 void platform_touch(bool pressed, int x, int y);
+/* Runs LVGL (and the app's lifecycle service, when on) for ms of real time. */
 void run_for(int ms);
 Image screenshot();
+
+/* ------------------------------------------------------------------ the launcher's lifecycle (multitasking P-e) */
+
+/* The harness plays a multitasking launcher (APP-CONTRACT section 13): a SOCK_SEQPACKET pair, the app's end in
+ * APPLAUNCH_LIFECYCLE / APPLAUNCH_CONTROL_FD, the toolkit's helper started with the harness's port
+ * (cp0_app_lifecycle_lvgl_start: output = the display's flush, input = the scripted pointer); close calls
+ * cdk::request_quit(0) as the device runner does. After platform_init and cdk::start. False when it cannot start. */
+bool lifecycle_begin();
+/* "hide" / "show" / "close": sends "<word> <n>" and runs the app until its answer "ack <n>" (hide, show) or until it asks
+ * to quit (close), at most deadline_ms. The answer's time in ms, or -1 when none came. */
+int lifecycle_send(const std::string &word, int deadline_ms = 300);
+/* What the app sent the launcher meanwhile besides its answers ("home", "switcher"), oldest first; emptied by the call. */
+std::vector<std::string> lifecycle_heard();
+
+struct OutputStats {
+    bool on = true;             /* the helper's port says the framebuffer may be written */
+    long flushes_while_off = 0; /* flushes LVGL made while it was off (nothing written): rendering while hidden */
+    long pixels_since_on = 0;   /* distinct screen pixels flushed since it was last turned on */
+};
+const OutputStats &output_stats();
 
 /* ------------------------------------------------------------------ layout checks (layout_check.cpp) */
 

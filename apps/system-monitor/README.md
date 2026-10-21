@@ -1,6 +1,6 @@
 # System Monitor
 
-Version 0.2.3, package `system-monitor`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.2.4, package `system-monitor`. Part of [cyberdeck-zero-apps](../../README.md).
 
 System Monitor is a live, read-only look at the Raspberry Pi it runs on: CPU load per core, temperature, frequency,
 memory, storage, network, processes and the **power supply** (under-voltage and throttling from the firmware's flags,
@@ -10,6 +10,13 @@ no writes except its own one-line settings file.
 
 Kind: a native `cp0_lvgl` app (kind A of the [guidelines](../../docs/APP-GUIDELINES.md)), because it has its own
 pages, live charts and must be complete by touch and by keys; no existing program fits the small screen.
+
+## What changed in 0.2.4
+
+* **Multitasking** (`X-Background=freeze`; APP-CONTRACT section 13 of the launcher; [guidelines](../../docs/APP-GUIDELINES.md#multitasking-hidden-and-shown-again-x-background)): under a launcher with multitasking on, Super, Alt+Tab or three
+  fingers held leave System Monitor open in the background, stopped (no CPU), and its card in the switcher brings it
+  back as it was; sampling simply goes on from there (the first rates after a long pause are averages over it). An
+  older launcher, or multitasking off: as before. Built on the launcher's `cp0_lvgl` with the app-side helper.
 
 ## What changed in 0.2.3
 
@@ -131,7 +138,7 @@ From **Settings > Apps**. By hand:
 
 ```sh
 python3 tools/make_registry.py --only system-monitor --out <a folder outside packages/>
-sudo dpkg -i system-monitor_0.2.3_arm64.deb      # remove: sudo dpkg -r system-monitor
+sudo dpkg -i system-monitor_0.2.4_arm64.deb      # remove: sudo dpkg -r system-monitor
 ```
 
 ## Files the app keeps
@@ -212,6 +219,8 @@ The same fixture variable works on a board, for screenshots of a state that is h
 
 ## Changes
 
+* 0.2.4: multitasking, `X-Background=freeze` (stopped while hidden; see
+  [What changed in 0.2.4](#what-changed-in-024)).
 * 0.2.3: rebuilt on launcher f35c2d6 (7 mm tap target, header Esc 9 mm, pointer navigation; see
   [What changed in 0.2.3](#what-changed-in-023)).
 * 0.2.2: rows show what can be tapped: chevron opens or changes, grey information, a dot for actions; rebuilt on launcher 9912361.

@@ -1,0 +1,51 @@
+# Multitasking (X-Background=run; the launcher's APP-CONTRACT section 13): the harness plays the launcher with the
+# toolkit's helper (apps/_common, cp0_app_lifecycle_lvgl.h). The terminal connects to the demonstration ESP32 board and
+# the app is hidden at once: the port stays open and its boot log is read while hidden (the worker thread and the log
+# file never stop), but not one flush happens; keys and taps are ignored (a short Esc at the port list would end the
+# app); what was typed while hidden is dropped at show; shown, the whole screen is repainted, still connected; close
+# ends it through its normal exit (the connection closed, the settings saved).
+title Serial Console: hidden while connected, shown, stale input, close
+env SERIAL_CONSOLE_DEMO boards
+lifecycle
+sizes 640x480 1280x720
+
+shot before
+expect visible
+expect text "Arduino Uno"
+
+# the ESP32 board's terminal, then hidden while its boot log comes in
+key down
+key enter
+wait 300
+key enter
+wait 200
+hide
+expect hidden
+key esc
+key esc
+tapxy 0.5 0.5
+wait 2000
+expect nowrite
+expect noquit
+
+stale esc
+stale esc
+show
+expect visible
+wait 400
+expect repaint
+expect noquit
+expect text "Connected"
+shot after
+
+# the terminal still leaves as before: Esc to the port page, Esc to the list
+key esc
+wait 300
+expect text "Connect"
+key esc
+wait 300
+expect text "Arduino Uno"
+expect noquit
+
+close
+expect quit

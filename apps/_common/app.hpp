@@ -56,6 +56,16 @@ void request_quit(int code = 0);
 bool quit_requested();
 int quit_code();
 
+/* Multitasking (the launcher's APP-CONTRACT section 13; the toolkit's cp0_app_lifecycle_lvgl.h does the work): with
+ * X-Background=run|freeze in its .desktop file and a launcher that gives it a control socket, the app can be hidden and
+ * shown again; the launcher's "close" quits it as request_quit(0) does. Without the socket nothing changes.
+ * hidden(): true between hide and show. Nothing is drawn then; a run app's own timers keep going: skip the work that
+ * only feeds the screen while it is true, and bring the screen up to date when it turns false. LVGL thread. */
+bool hidden();
+/* Leave to the launcher's home grid, the app staying open (the message "home"); false without a control socket. No
+ * page uses it today: a short Esc at the root quits (owner decision D5). LVGL thread. */
+bool leave_to_home();
+
 /* After the display (and the keypad indev) exist, LVGL thread. Returns true when the app's UI was built, false when
  * the notice is shown instead (the app then quits on any key or a tap). */
 bool start(const AppSpec &spec, lv_obj_t *screen);

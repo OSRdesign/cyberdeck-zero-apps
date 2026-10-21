@@ -1,0 +1,49 @@
+# Multitasking (X-Background=run; the launcher's APP-CONTRACT section 13): the harness plays the launcher with the
+# toolkit's helper (apps/_common, cp0_app_lifecycle_lvgl.h), no board (offline). Hidden: not one flush (the pages are not
+# rebuilt either: cdk::hidden), keys and taps ignored (Esc at Home would show "Hold Esc 3 s to exit"); what was typed
+# while frozen is dropped at show; shown: the whole screen repainted; close ends the app through its normal exit (its
+# history saved). Receiving while hidden, with the simulated board: tests/flows/lifecycle.script.
+title Mesh Hop: hidden, shown, stale input, close
+env MESHHOP_DATA /tmp/mesh-hop-lifecycle-data
+env MESHHOP_PORT /nonexistent/ttyMH
+env MESHHOP_ONLINE 0
+lifecycle
+sizes 640x480 1280x720
+
+wait 900
+shot before
+expect visible
+expect text "Chats"
+
+hide
+expect hidden
+key esc
+key enter
+tapxy 0.5 0.4
+wait 1500
+expect nowrite
+expect noquit
+
+stale esc
+stale enter
+show
+expect visible
+wait 400
+expect repaint
+expect noquit
+expect notext "Hold Esc 3 s to exit"
+expect notext "Quit Mesh Hop?"
+expect text "Chats"
+expect text "Contacts"
+shot after
+
+# Home still works: the header's Esc asks, Cancel stays
+tap "Esc"
+wait 600
+expect text "Quit Mesh Hop?"
+tap "Cancel"
+wait 400
+expect noquit
+
+close
+expect quit

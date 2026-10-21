@@ -1,7 +1,7 @@
 {
   "share_code": "cyberdeck-app-template",
   "package": "cyberdeck-app-template",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "draft": true,
   "title": "App Template",
   "summary": "The starting point of a native full-screen app: every shared widget, the on-screen keyboard rule, a background command.",

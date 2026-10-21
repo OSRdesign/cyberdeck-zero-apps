@@ -169,6 +169,7 @@ Full text: [APP-CONTRACT.md](https://github.com/OSRdesign/cyberdeck-zero-launche
 | `APPLAUNCH_STATE_DIR` | directory of `screen.state` (tokens, `gen`) and `input.state` (keyboards, `vkb=auto/off/force`); written **only** by the launcher, re-read when `gen` changes (at most once a second) |
 | `.desktop` `X-Fullscreen=true` | the app owns the panel until it exits |
 | `.desktop` `X-MinSize=WxH` | the tile is hidden (also in Settings > Apps) on a smaller screen; a malformed value means no restriction |
+| `.desktop` `X-Background=freeze\|run` | multitasking: the app can be hidden and shown again instead of owning the panel until it exits (below) |
 
 - An app **never writes** `screen.state` or `input.state`. The launcher rewrites `screen.state` after every app exits.
 - Ignore unknown keys and variables; names and units never change within contract 1.
@@ -180,6 +181,39 @@ Rule: **degrade to your own probe, never crash**. `cp0_app_env_read()` returns -
 the framebuffer size and 11.3 px/mm. Log one line saying so (the template: `no launcher contract (started by hand ...)`),
 keep keyboard working, touch axes may be transposed (they come from the service's environment). A headless tool or
 daemon part of your app must also run with no display (`--version`, `--help`, a `--headless` or `--report` mode) so it can be unit-tested.
+
+### Multitasking: hidden and shown again (`X-Background`)
+
+A launcher with multitasking on (APP-CONTRACT section 13) can hide an app that declares `X-Background` (Super, Alt+Tab,
+three fingers held 1 s, a long-press on the clock) and bring it back from its switcher. **Opting in is one line** in the
+`.desktop` file, once the app is built against a `cp0_lvgl` that has the helper (`_common/LAUNCHER_REF`): `_common`
+starts it (`platform.cpp`), and it does the protocol, no drawing while hidden, the input drop and the full repaint on
+return, the launcher's `close` (= your normal exit, as Esc at the root). Without the launcher's control socket (an older
+launcher, multitasking off, started by hand) nothing changes.
+
+| Mode | While hidden | Choose it when |
+|---|---|---|
+| `X-Background=freeze` | the whole process group is **stopped** (no CPU; memory kept; timers jump on return) | the default: nothing must go on (a monitor, a reader, a form) |
+| `X-Background=run` | the app **keeps running**, nothing is drawn, input is ignored | work that must not stop: reading a serial port (a stopped tty overflows its kernel buffer in seconds), receiving radio messages |
+| none | (today) the app owns the panel until it exits; three fingers offer "Close <app>?" | wrapped apps, an app whose results a pause would falsify and that has no hook for it yet |
+
+What an opted-in app must (and must not) do:
+
+- **Never write the framebuffer yourself while hidden.** On `cp0_lvgl` nothing to do: the helper suspends the display and
+  turns LVGL's invalidation off (nothing is rendered). An app that draws by itself (a shim) stops its copies on `hide`.
+- **`run`: only your own work while hidden.** Use `cdk::hidden()` to skip what only feeds the screen (rebuilding a page,
+  formatting a list) and refresh it when it turns false; keep timers at their usual rate or lower; no new polling. Mesh
+  Hop: the radio and the model go on, no page is rebuilt and nothing counts as read while hidden.
+- **Hardware.** A frozen app still holds what it opened (a serial port opened exclusive, an SDR). Either `run` and keep
+  using it, or close it on hide and open it on show (no app does that today).
+- **Save state on exit, and as you go.** The launcher closes hidden apps under memory pressure (frozen ones first) and
+  at its cap of four; `close` gives you your normal exit, the kernel's OOM killer gives nothing.
+- **A pause must not lie.** A measurement that spans a freeze (a speed test, ping timings, a walk test) is wrong after it:
+  such an app stays without `X-Background` until it can cancel or mark the measurement (Net Toolbox today).
+- **Esc at the root still quits** (owner decision D5); `cdk::leave_to_home()` exists for an app that wants a "minimise"
+  control, none has one.
+- **Test it** with a `lifecycle` scene ([`_common/headless/README.md`](../apps/_common/headless/README.md)): hide, keys and
+  taps while hidden, `expect nowrite`, `stale` keys, show, `expect repaint`, `close`, `expect quit`.
 
 ## 4. Naming, branding, credits, licences
 
@@ -233,7 +267,10 @@ Icon=share/images/my-app.png
 Type=Application
 X-Fullscreen=true
 X-MinSize=640x480
+X-Background=freeze
 ```
+
+(`X-Background`: section 3, multitasking; leave it out for an app that must not be paused.)
 
 `app.json` (checked by `tools/make_registry.py`; `share_code`, `package`, `version`, `title`, `summary` are required):
 
@@ -421,6 +458,7 @@ Copy into the pull request and tick.
 | 24 | Icon checked at 32 px and in greyscale on the review sheet (`python tools/icons/make_icons.py`), distinct from every other tile | [ ] |
 | 25 | Data and app lists on `CompactList`; no status shown by colour alone | [ ] |
 | 26 | List rows tagged Open / Edit / Action / Info; no marker on pure read-outs ([row kinds](#row-kinds-what-can-be-tapped)) | [ ] |
+| 27 | Multitasking chosen and written in the README: `X-Background=freeze`, `run` (and why), or none (and why); a `lifecycle` scene passes ([section 3](#multitasking-hidden-and-shown-again-x-background)) | [ ] |
 
 > **Icon upgrades:** a launcher older than PR #46 (2026-10-14) reads an icon's size once and keeps it until it restarts, so an app
 > update that ships an icon of a different size can look cropped on its tile; a current launcher reloads the tile within about 3 s

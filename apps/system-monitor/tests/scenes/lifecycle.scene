@@ -1,0 +1,45 @@
+# Multitasking (X-Background=freeze; the launcher's APP-CONTRACT section 13): the harness plays the launcher with the
+# toolkit's helper (apps/_common, cp0_app_lifecycle_lvgl.h). Hidden: not one flush (the live tiles change, nothing is
+# rendered), keys and taps ignored (a short Esc at the overview would end the app); what was typed while frozen is
+# dropped at show; shown: the whole screen repainted with fresh values; close ends it through its normal exit (its
+# settings saved as on Esc). On a board a freeze app is stopped while hidden: sampling simply resumes on show.
+title System Monitor: hidden, shown, stale input, close
+env SYSTEM_MONITOR_FIXTURE pi-zero-2w:busy
+lifecycle
+sizes 640x480 1280x720
+
+wait 600
+shot before
+expect visible
+expect text "Power OK"
+
+hide
+expect hidden
+key esc
+key enter
+tapxy 0.3 0.4
+wait 1500
+expect nowrite
+expect noquit
+
+stale esc
+stale enter
+show
+expect visible
+wait 400
+expect repaint
+expect noquit
+expect text "Power OK"
+expect text "System"
+shot after
+
+# the overview still works: open the tile with the ring, come back
+key enter
+wait 1200
+key esc
+wait 300
+expect text "Power OK"
+expect noquit
+
+close
+expect quit

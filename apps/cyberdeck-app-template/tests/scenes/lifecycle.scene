@@ -1,0 +1,47 @@
+# Multitasking (X-Background=freeze; the launcher's APP-CONTRACT section 13): the harness plays the launcher with the
+# toolkit's helper (apps/_common, cp0_app_lifecycle_lvgl.h). Hidden: not one flush, keys and taps ignored (a short Esc
+# at the root would end the app); what was typed while frozen is dropped at show; shown: the whole screen repainted, the
+# app as it was; close ends it through its normal exit (as Esc at the root). Without `lifecycle` nothing of this runs:
+# the other scenes are the app as before.
+title Template: hidden, shown, stale input, close
+lifecycle
+sizes 640x480 1280x720
+
+shot before
+expect visible
+expect text "Device info"
+
+# hidden: Esc, Enter and a tap reach nothing, nothing is drawn
+hide
+expect hidden
+key esc
+key enter
+tapxy 0.5 0.5
+wait 400
+expect nowrite
+expect noquit
+
+# typed while frozen (still queued when it comes back): dropped by the show
+stale esc
+stale enter
+show
+expect visible
+wait 300
+expect repaint
+expect noquit
+expect text "Device info"
+shot after
+
+# the app works as before: Enter opens Device info, Esc comes back
+key enter
+expect text "Row / target"
+key esc
+expect noquit
+
+# a second round trip, then the launcher's close: the app ends as with Esc at its root
+hide
+show
+wait 300
+expect repaint
+close
+expect quit

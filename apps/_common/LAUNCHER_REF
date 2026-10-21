@@ -1,5 +1,5 @@
-f35c2d6fd2f9fba9864bd154378c105d74c6d510
-# The launcher commit (cyberdeck-zero-launcher main after #57/#58/#59/#60: touch target 9 mm -> 7 mm #57, Calculator fill #58, pointer navigation (trackpoint/mouse as arrows, select and options, off by default) #59, header Esc back to 9 mm (not on the 7 mm target) #60) every cdk app is built against:
+45d99a9eeaaf084b324ce1a2112fe113e7f35f2d
+# The launcher commit (cyberdeck-zero-launcher main after #67: multitasking P-e, the app side of the lifecycle in cp0_lvgl (cp0_app_lifecycle*.h), APP-CONTRACT section 13 final; on #63 P-b, #64 P-c, #65 P-d) every cdk app is built against:
 # its ext_components/cp0_lvgl (display backend, keyboard, widgets, layout service), its LVGL FreeType glue
 # (projects/APPLaunch/main/lvgl) and its LVGL configuration. build_app.sh compares the launcher checkout with it and
 # stamps the result into --version and usr/share/doc/<app>/build-info. Move it deliberately, then rebuild every app.

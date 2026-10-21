@@ -151,6 +151,7 @@ static void test_package()
     CHECK(desktop.find(min) != std::string::npos);
     CHECK(desktop.find("\nExec=/usr/share/APPLaunch/bin/cyberdeck-app-template") != std::string::npos);
     CHECK(desktop.find("\nIcon=share/images/cyberdeck-app-template.png") != std::string::npos);
+    CHECK(desktop.find("\nX-Background=freeze\n") != std::string::npos); /* multitasking: the cheap default */
     CHECK(!read_file(app + "/root/usr/share/APPLaunch/share/images/cyberdeck-app-template.png").empty());
     CHECK(!read_file(app + "/root/usr/share/doc/cyberdeck-app-template/copyright").empty());
     const std::string manifest = read_file(app + "/app.json");

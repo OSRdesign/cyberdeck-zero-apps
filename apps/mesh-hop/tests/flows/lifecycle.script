@@ -1,0 +1,53 @@
+# Mesh Hop 0.5.1, multitasking (X-Background=run; the launcher's APP-CONTRACT section 13): the runner plays the launcher. Run with
+# SIMCTL=1 (run_flows.sh does): `sim msg` is a direct message from Alice. Hidden, the radio link and the model keep going but nothing is
+# drawn (not one flush) and nothing counts as read, even in the conversation that is open; shown again, the whole screen is repainted
+# with what came meanwhile.
+lifecycle
+wait 3500
+key enter
+wait 500
+say == Chats, connected (expect tab=Chats link=Connected)
+dump
+
+# the list in front: a message while hidden is counted and shown on return
+mark
+hide
+expect hidden
+sim msg first while hidden
+wait 2500
+say == hidden: the message came in (unread one more), not one flush
+dump
+expect more unread
+expect nowrite
+show
+wait 500
+expect visible
+expect repaint
+say == shown: the list with the new unread count
+dump
+expect more unread
+shot 01-list-after
+
+# Alice's conversation open: a message while hidden stays unread until the app is in front again, then it is read
+tap "Alice"
+tap "Alice"
+wait 800
+say == Alice's conversation open
+dump
+mark
+hide
+sim msg second while hidden
+wait 2500
+say == hidden: one more message, unread (nobody saw it)
+dump
+expect more msgs
+expect more unread
+expect nowrite
+show
+wait 600
+expect repaint
+say == shown: the conversation shows it and it is read
+dump
+expect more msgs
+expect same unread
+shot 02-conversation-after

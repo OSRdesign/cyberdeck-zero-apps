@@ -57,6 +57,13 @@ python3 tools/make_registry.py --only cyberdeck-app-template --out C:/somewhere/
 `--version` of the binary prints the app version, the launcher commit it was built against and whether that matches
 `apps/_common/LAUNCHER_REF`.
 
+## Multitasking
+
+The template declares `X-Background=freeze` (0.1.1), the cheap default: under a launcher with multitasking on it can be
+left open in the background, stopped, and brought back as it was; `_common` does the rest (APP-CONTRACT section 13 of the launcher; [guidelines](../../docs/APP-GUIDELINES.md#multitasking-hidden-and-shown-again-x-background)).
+`tests/scenes/lifecycle.scene` plays the launcher. Choose `run` only for work that must go on while hidden, and none
+for an app a pause would falsify.
+
 ## Making a new app from it
 
 1. Copy the folder to `apps/<id>`, rename the `.desktop` file, the icon and the doc folder after `<id>`, and set
