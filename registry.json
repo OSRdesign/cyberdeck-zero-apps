@@ -100,9 +100,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.5.0",
+      "version": "0.5.1",
       "published_at": "2026-10-08T22:37:18+00:00",
-      "updated_at": "2026-10-19T21:56:36+00:00",
+      "updated_at": "2026-10-21T10:09:23+00:00",
       "review": {
         "status": "approved"
       },
@@ -111,10 +111,10 @@
       "download": {
         "type": "deb",
         "package": "mesh-hop",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/mesh-hop_0.5.0_arm64.deb",
-        "md5": "fc66989cd011faf49a96404104b5f81c",
-        "sha256": "11115824b6b163a5f07d00fb2857708f6dbe565856ddcd75b95823c2618624d9",
-        "size": 1878690
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/mesh-hop_0.5.1_arm64.deb",
+        "md5": "2261e7d0feb386312445eb47025e24e4",
+        "sha256": "02eb39261f8f2691ff229c78517dddbc5b4675c7b19908bbb9e9a7ad2026e505",
+        "size": 1895174
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0, curl",
       "permissions": {
