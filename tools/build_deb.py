@@ -10,6 +10,14 @@ The tree under --root is installed as is: put files where they must end up on th
     root/usr/share/APPLaunch/bin/myapp                           (the executable, aarch64, named after the app id)
     root/usr/share/APPLaunch/applications/myapp.desktop          (the launcher entry)
     root/usr/share/APPLaunch/share/images/myapp.png              (the icon)
+
+--overlay DIR (repeatable) lays another tree over --root: a file at the same path replaces the root's, a new path is
+added. That is how a package for another architecture is made from one app folder (tools/make_registry.py):
+
+    python3 tools/build_deb.py --root apps/myapp/root --overlay apps/myapp/root.amd64 --arch amd64 ...
+
+Every ELF file of the package must be built for --arch (arm64: aarch64, amd64: x86-64): an aarch64 binary of root/
+without its replacement in the overlay stops the build instead of landing in an amd64 package.
 """
 import argparse
 import gzip
@@ -17,6 +25,7 @@ import hashlib
 import io
 import os
 import stat
+import struct
 import sys
 import tarfile
 import time
@@ -74,19 +83,51 @@ def merge_depends(depends):
     return ", ".join(out)
 
 
-def collect(root):
-    """Yield (relative path with forward slashes, absolute path, is_dir)."""
-    entries = []
-    for base, dirs, files in os.walk(root):
-        dirs.sort()
-        rel_base = os.path.relpath(base, root).replace(os.sep, "/")
-        if rel_base != ".":
-            entries.append((rel_base, base, True))
-        for name in sorted(files):
-            path = os.path.join(base, name)
-            rel = (name if rel_base == "." else rel_base + "/" + name)
-            entries.append((rel, path, False))
+# The ELF e_machine of each Debian architecture a package may name (others are not checked).
+ELF_MACHINES = {"arm64": (183, "aarch64"), "amd64": (62, "x86-64"), "armhf": (40, "arm"), "i386": (3, "i386")}
+
+
+def _order(rel, is_dir):
+    """Sort key giving os.walk's top-down order with sorted names: in a directory its files, then its directories,
+    each directory entry just before its contents."""
+    parts = rel.split("/")
+    return [(1, part) for part in parts[:-1]] + [(1 if is_dir else 0, parts[-1])]
+
+
+def collect(root, overlays=()):
+    """Return [(relative path with forward slashes, absolute path, is_dir)] of root, in os.walk order. A file of an
+    overlay replaces the one at the same relative path (the last overlay wins); new paths are added."""
+    files, dirs = {}, {}
+    for tree in [root] + list(overlays):
+        for base, _, names in os.walk(tree):
+            rel_base = os.path.relpath(base, tree).replace(os.sep, "/")
+            if rel_base != ".":
+                dirs.setdefault(rel_base, base)
+            for name in names:
+                files[name if rel_base == "." else rel_base + "/" + name] = os.path.join(base, name)
+    clash = sorted(set(files) & set(dirs))
+    if clash:
+        sys.exit("a file in one tree is a directory in another: " + ", ".join(clash))
+    entries = [(rel, path, True) for rel, path in dirs.items()] + [(rel, path, False) for rel, path in files.items()]
+    entries.sort(key=lambda entry: _order(entry[0], entry[2]))
     return entries
+
+
+def elf_machine(data):
+    """The e_machine of an ELF file's bytes, None when it is not an ELF file."""
+    if len(data) < 20 or data[:4] != b"\x7fELF":
+        return None
+    return struct.unpack("<H" if data[5] == 1 else ">H", data[18:20])[0]
+
+
+def check_elf_arch(rel, data, arch):
+    """Stop when an ELF file is not built for the package's architecture."""
+    machine = elf_machine(data)
+    if machine is None or arch not in ELF_MACHINES or machine == ELF_MACHINES[arch][0]:
+        return
+    names = {number: name for number, name in ELF_MACHINES.values()}
+    sys.exit("%s: an ELF file for %s (e_machine %d) in an %s package (an arm64 binary of root/ without its "
+             "root.%s/ replacement?)" % (rel, names.get(machine, "another CPU"), machine, arch, arch))
 
 
 def file_mode(rel, path):
@@ -139,6 +180,8 @@ def ar_member(name, data, mtime):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--root", required=True, help="directory tree to install")
+    parser.add_argument("--overlay", action="append", default=[],
+                        help="a tree laid over --root: its files replace the root's at the same path (repeatable)")
     parser.add_argument("--package", required=True, help="package name (lowercase letters, digits, + - .)")
     parser.add_argument("--version", required=True)
     parser.add_argument("--arch", default="arm64")
@@ -153,9 +196,10 @@ def main():
     parser.add_argument("--out", default=".", help="output directory")
     args = parser.parse_args()
 
-    if not os.path.isdir(args.root):
-        sys.exit("root directory not found: " + args.root)
-    entries = collect(args.root)
+    for tree in [args.root] + args.overlay:
+        if not os.path.isdir(tree):
+            sys.exit("root directory not found: " + tree)
+    entries = collect(args.root, args.overlay)
     if not any(not is_dir for _, _, is_dir in entries):
         sys.exit("the root directory is empty")
     mtime = int(os.environ.get("SOURCE_DATE_EPOCH", time.time()))
@@ -169,6 +213,7 @@ def main():
             continue
         with open(path, "rb") as handle:
             data = handle.read()
+        check_elf_arch(rel, data, args.arch)
         data_members.append(("./" + rel, data, file_mode(rel, path)))
         md5_lines.append("%s  %s\n" % (hashlib.md5(data).hexdigest(), rel))
         installed_size += len(data)

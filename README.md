@@ -42,6 +42,9 @@ go to the **Apps** tab, pick an app and press Enter to install. Installing asks 
 (The Store app can use the same repository: add the registry URL
 `https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/registry.json` in its settings.)
 
+On an x86-64 PC (amd64) running the launcher, the apps built for it are in a registry of their own,
+`https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/registry-amd64.json` (see [amd64](#amd64-x86-64-pcs)).
+
 ---
 
 # Host your own apps
@@ -56,6 +59,11 @@ apps/<id>/icon.png            optional icon, 100x100 square transparent PNG (see
 apps/<id>/screenshots/*.png   optional screenshots at the real screen size (640x480 deck, or 800x480)
 apps/<id>/root/...            the files of the app, laid out as they must be on the device
 tools/                        build_deb.py and make_registry.py (pure Python 3, no other dependencies)
+
+and, for apps also built for x86-64 PCs (optional, see amd64 below):
+registry-amd64.json           the catalogue of the amd64 packages
+packages/<name>_<ver>_amd64.deb
+apps/<id>/root.amd64/...      the amd64 files (the binary) that replace those of root/ in the amd64 package
 ```
 
 The deck downloads `registry.json`, lists the apps in it, and installs the `.deb` an entry points to after
@@ -114,6 +122,8 @@ A program that does not use the runtime works too: the launcher starts any execu
 * `draft` – optional. `"draft": true` keeps an unfinished app out of the store: `tools/make_registry.py` skips it (no
   `.deb`, no registry entry). To build a local package of a draft anyway, without publishing, run
   `python tools/make_registry.py --only <id> --out <folder outside packages/>`; it writes only that `.deb`.
+* `arch` – optional, the architectures the app is packaged for: `["arm64"]` when left out (the decks),
+  `["arm64", "amd64"]` for an app also built for x86-64 PCs ([amd64](#amd64-x86-64-pcs)).
 
 ## 4. Lay out the files
 
@@ -155,7 +165,8 @@ python3 tools/make_registry.py
 This builds `packages/myapp_0.1.0_arm64.deb` from `apps/myapp/root/`, computes its MD5/SHA-256/size and writes
 `registry.json` with raw.githubusercontent.com URLs (owner and repository are read from your git remote; pass
 `--owner` / `--repo` if needed). It prints the registry address, for example
-`https://raw.githubusercontent.com/you/your-apps/main/registry.json`.
+`https://raw.githubusercontent.com/you/your-apps/main/registry.json`. Apps that also list amd64 get their amd64
+package and `registry-amd64.json` in the same run ([amd64](#amd64-x86-64-pcs)).
 
 Check a package without installing it, on Linux: `dpkg-deb -I packages/myapp_0.1.0_arm64.deb` and
 `dpkg-deb -c ...`.
@@ -183,6 +194,21 @@ shows the new version after **Sync my sources** (GitHub's cache can delay it by 
 publishes the exact `.deb` that passed the board tests and writes its entry with `--no-build`
 ([app guidelines](docs/APP-GUIDELINES.md#5-packaging-and-registry), section 5).
 
+## amd64 (x86-64 PCs)
+
+The launcher also runs on x86-64 PCs (the Panasonic FZ-M1 tablet is the reference). An app is offered there when its
+`app.json` lists `"arch": ["arm64", "amd64"]`, from one app folder and one version number:
+
+* `apps/<id>/root/` keeps the arm64 files (the aarch64 binary); `apps/<id>/root.amd64/` holds what differs on amd64,
+  at the same paths: `usr/share/APPLaunch/bin/<id>` (the x86-64 binary) and `usr/share/doc/<id>/build-info`. A native
+  app writes both with `build.sh cross --arch amd64` (see [`apps/_common`](apps/_common/README.md#amd64)).
+* `tools/make_registry.py` builds `packages/<pkg>_<ver>_amd64.deb` from `root/` with `root.amd64/` laid over it (a
+  file of the overlay replaces the one of `root/`; an aarch64 binary left without its replacement stops the build)
+  and writes `registry-amd64.json`, the same format as `registry.json`, listing only the apps that name amd64.
+  `registry.json` (arm64) stays as it was. `--arch amd64` builds only the amd64 packages and `registry-amd64.json`;
+  `--only <id> --arch amd64 --out <folder>` builds one local amd64 package and writes no registry.
+* The binaries need glibc 2.38 or newer, as the arm64 ones (Debian 13, Ubuntu 24.04 and later).
+
 ## Good to know
 
 * **Trust.** Installing a package runs it as root (`dpkg`), and an app runs with your user's rights. Only add
@@ -192,7 +218,8 @@ publishes the exact `.deb` that passed the board tests and writes its entry with
   because you are the reviewer of your own repository.
 * **Updates need a new version number.** The deck compares versions; re-uploading a `.deb` with the same
   version is not seen as an update.
-* **Architecture.** Packages are `arm64` (aarch64); a binary built for another CPU installs but does not run.
+* **Architecture.** Packages are `arm64` (aarch64) unless the app also lists amd64 ([amd64](#amd64-x86-64-pcs));
+  a binary built for another CPU installs but does not run.
 * **Several sources** can be enabled at once; an app with the same `share_code` in two sources is shown once
   (the source listed last wins).
 
