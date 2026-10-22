@@ -1,12 +1,17 @@
 # Serial Console
 
-Version 0.4.3, package `serial-console`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.4.4, package `serial-console`. Part of [cyberdeck-zero-apps](../../README.md).
 
 Serial Console talks to a USB-serial adapter or a microcontroller board (Arduino, ESP32, Raspberry Pi Pico, a GPS, a
 router console...) from the deck. It is a full-screen touch app made for the small screen: instead of dropping you into
 a raw terminal it first shows the serial ports it finds, says what is plugged into each one and recommends the settings,
 can find the speed by itself, can find out **what is on the other end** (the board or firmware behind a USB-serial
 adapter), then opens a terminal page.
+
+## What changed in 0.4.4
+
+* Rebuilt on launcher v0.8.1 (`2b1a070`), no behaviour change intended. The toolkit changed under it: upstream
+  decoupling, time zone and Settings work, the x86 port; nothing the app uses was removed.
 
 ## What changed in 0.4.3
 
@@ -226,6 +231,8 @@ The identification is kept in the port's section of the settings file as `id_*` 
 
 ## Changes
 
+* 0.4.4: rebuilt on launcher v0.8.1 (2b1a070), no behaviour change intended; the toolkit changed under it: upstream decoupling, time zone/Settings work, x86 port; nothing the app uses was removed
+  (see [What changed in 0.4.4](#what-changed-in-044)).
 * 0.4.3: multitasking, `X-Background=run` (keeps reading and logging the port while hidden; see
   [What changed in 0.4.3](#what-changed-in-043)).
 * 0.4.2: rebuilt on launcher f35c2d6 (7 mm minimum tap target for buttons and rows, header Esc and the terminal's key

@@ -534,7 +534,7 @@ void test_package()
     Json j;
     CHECK(json_parse(manifest, j));
     CHECK(j.get_string("share_code") == "rss-reader" && j.get_string("package") == "rss-reader" && j.get_string("title") == "RSS Reader");
-    CHECK(j.get_string("version") == "0.1.1" && !j.get_string("summary").empty() && !j.get_string("description").empty());
+    CHECK(j.get_string("version") == "0.1.2" && !j.get_string("summary").empty() && !j.get_string("description").empty());
     CHECK(j.get_string("depends") == "libfreetype6, libinput10, libxkbcommon0, curl, ca-certificates");
     CHECK(j.get_string("depends").find("libc6") == std::string::npos);
     std::string copyright;
