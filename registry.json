@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-10-19T23:21:29+00:00",
+  "generated_at": "2026-10-22T09:05:56+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CardputerZero"
@@ -100,9 +100,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.5.1",
+      "version": "0.5.2",
       "published_at": "2026-10-08T22:37:18+00:00",
-      "updated_at": "2026-10-21T10:09:23+00:00",
+      "updated_at": "2026-10-22T09:05:56+00:00",
       "review": {
         "status": "approved"
       },
@@ -111,10 +111,10 @@
       "download": {
         "type": "deb",
         "package": "mesh-hop",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/mesh-hop_0.5.1_arm64.deb",
-        "md5": "2261e7d0feb386312445eb47025e24e4",
-        "sha256": "02eb39261f8f2691ff229c78517dddbc5b4675c7b19908bbb9e9a7ad2026e505",
-        "size": 1895174
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/mesh-hop_0.5.2_arm64.deb",
+        "md5": "b6fb76e22dd9a553d94bb2975288fe7a",
+        "sha256": "ad82f0bece9ab4071e4172e5e7904b63ef60be53a63cd75605d7891a798e1e84",
+        "size": 1891382
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0, curl",
       "permissions": {
@@ -250,9 +250,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.1.1",
+      "version": "0.1.2",
       "published_at": "2026-10-19T23:21:29+00:00",
-      "updated_at": "2026-10-21T10:09:24+00:00",
+      "updated_at": "2026-10-22T09:05:56+00:00",
       "review": {
         "status": "approved"
       },
@@ -261,10 +261,10 @@
       "download": {
         "type": "deb",
         "package": "rss-reader",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/rss-reader_0.1.1_arm64.deb",
-        "md5": "68546a0eac2a0a66a0efbd42b1b17ccd",
-        "sha256": "6dede0afa43a4e9dd77724009b6e5137af126f3fc2cc854df2a7e13e271bddf4",
-        "size": 1692536
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/rss-reader_0.1.2_arm64.deb",
+        "md5": "4af5098c2112c0da32d486cede04abe4",
+        "sha256": "a6b3bbace8aad21effe86ef0d031482ea1d24830b266351435d1d964bf39d9f0",
+        "size": 1688522
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0, curl, ca-certificates",
       "permissions": {
@@ -310,9 +310,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.4.3",
+      "version": "0.4.4",
       "published_at": "2026-10-15T00:04:47+00:00",
-      "updated_at": "2026-10-21T10:09:22+00:00",
+      "updated_at": "2026-10-22T09:05:56+00:00",
       "review": {
         "status": "approved"
       },
@@ -321,10 +321,10 @@
       "download": {
         "type": "deb",
         "package": "serial-console",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/serial-console_0.4.3_arm64.deb",
-        "md5": "a90e32da61546d8fa0521a6ed8d86434",
-        "sha256": "366d1332d33d00f85ee11225159d1fde91033c7fb44ca8d84a9f108e41b9203d",
-        "size": 1532676
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/serial-console_0.4.4_arm64.deb",
+        "md5": "5fcd24e7160aa6928a672c97b42378c9",
+        "sha256": "d15270b98757bfee050d8c4f508ddc1ce7ca3ee776fa5d4ce312099279e687c2",
+        "size": 1530166
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0",
       "permissions": {
@@ -386,9 +386,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.2.4",
+      "version": "0.2.5",
       "published_at": "2026-10-14T23:13:05+00:00",
-      "updated_at": "2026-10-21T10:09:21+00:00",
+      "updated_at": "2026-10-22T09:05:56+00:00",
       "review": {
         "status": "approved"
       },
@@ -397,10 +397,10 @@
       "download": {
         "type": "deb",
         "package": "system-monitor",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/system-monitor_0.2.4_arm64.deb",
-        "md5": "19c5449046dbd6eed6b301d5e3bf50e8",
-        "sha256": "0dfaf446d9b46dbfb47a8f1fa96a06c264fb74fbaea9e1d86eefe91f34b711f0",
-        "size": 1423642
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/system-monitor_0.2.5_arm64.deb",
+        "md5": "ce38d9e9e065a3390f9d8070b163fda5",
+        "sha256": "5255ea39bc3ad53bbdd1c29c50e95b27f91917a3e2e6af3965a52a7ab2478fa7",
+        "size": 1419146
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0",
       "permissions": {
