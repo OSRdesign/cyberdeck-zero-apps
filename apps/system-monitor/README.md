@@ -1,6 +1,6 @@
 # System Monitor
 
-Version 0.2.4, package `system-monitor`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.2.5, package `system-monitor`. Part of [cyberdeck-zero-apps](../../README.md).
 
 System Monitor is a live, read-only look at the Raspberry Pi it runs on: CPU load per core, temperature, frequency,
 memory, storage, network, processes and the **power supply** (under-voltage and throttling from the firmware's flags,
@@ -10,6 +10,11 @@ no writes except its own one-line settings file.
 
 Kind: a native `cp0_lvgl` app (kind A of the [guidelines](../../docs/APP-GUIDELINES.md)), because it has its own
 pages, live charts and must be complete by touch and by keys; no existing program fits the small screen.
+
+## What changed in 0.2.5
+
+* Rebuilt on launcher v0.8.1 (`2b1a070`), no behaviour change intended. The toolkit changed under it: upstream
+  decoupling, time zone and Settings work, the x86 port; nothing the app uses was removed.
 
 ## What changed in 0.2.4
 
@@ -138,7 +143,7 @@ From **Settings > Apps**. By hand:
 
 ```sh
 python3 tools/make_registry.py --only system-monitor --out <a folder outside packages/>
-sudo dpkg -i system-monitor_0.2.4_arm64.deb      # remove: sudo dpkg -r system-monitor
+sudo dpkg -i system-monitor_0.2.5_arm64.deb      # remove: sudo dpkg -r system-monitor
 ```
 
 ## Files the app keeps
@@ -219,6 +224,8 @@ The same fixture variable works on a board, for screenshots of a state that is h
 
 ## Changes
 
+* 0.2.5: rebuilt on launcher v0.8.1 (2b1a070), no behaviour change intended; the toolkit changed under it: upstream decoupling, time zone/Settings work, x86 port; nothing the app uses was removed
+  (see [What changed in 0.2.5](#what-changed-in-025)).
 * 0.2.4: multitasking, `X-Background=freeze` (stopped while hidden; see
   [What changed in 0.2.4](#what-changed-in-024)).
 * 0.2.3: rebuilt on launcher f35c2d6 (7 mm tap target, header Esc 9 mm, pointer navigation; see
