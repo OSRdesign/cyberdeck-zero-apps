@@ -73,6 +73,8 @@ The launcher's 3 s Esc hold ends any app.
   stays readable offline).
 - The launcher's fonts in `/usr/share/APPLaunch/share/font` (Montserrat; DejaVu Sans and Noto Sans CJK for accents and
   Japanese).
+- x86-64 PCs: an amd64 package, `rss-reader_0.1.2_amd64.deb`, is in the amd64 registry
+  ([amd64](../../README.md#amd64-x86-64-pcs)) for a PC running the launcher. It has had no board test on a PC yet.
 
 ## Install
 

@@ -238,6 +238,8 @@ Letters typed into a field are text, not shortcuts. The keyboard layout is US by
   recommended by the package; any user may use it through D-Bus).
 * `curl` (for the preset list; without it the app keeps the saved or built-in list), `libfreetype6`, `libinput10`,
   `libxkbcommon0` (the package depends on them).
+* **x86-64 PCs:** an amd64 package, `mesh-hop_0.5.2_amd64.deb`, is in the amd64 registry
+  ([amd64](../../README.md#amd64-x86-64-pcs)) for a PC running the launcher. It has had no board test on a PC yet.
 
 **Install from the deck:** Settings > Apps > Sources > + Add a GitHub source `OSRdesign/cyberdeck-zero-apps` (if not added yet),
 then Apps > Mesh Hop > Enter (it asks for the sudo password). If an older version is installed, the deck offers the new one as an

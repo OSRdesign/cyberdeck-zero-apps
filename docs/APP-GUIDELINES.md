@@ -19,6 +19,7 @@ The starting point of a native app: [`apps/cyberdeck-app-template`](../apps/cybe
 | Pi 3A+ + Waveshare 4.3" DSI | 800x480 | touch only (USB keyboard optional) | the touch-only reference. Its earlier 480x320 SPI panel is best effort only |
 | HackBerry CM5 | 720x720 square, desktop session | built-in keyboard + touch | the on-screen keyboard rule is forced |
 | Pi 5 + HyperPixel 4" | 800x480, rotated | touch (+ keyboard) | rotation and 16/32 bpp handled by the launcher's display backend |
+| Panasonic FZ-M1 tablet (x86-64 PC, amd64) | 1280x800, desktop session (XFCE) | touch + USB or Bluetooth keyboard | the PC reference; runs only apps with an amd64 package ([README](../README.md#amd64-x86-64-pcs)); the touch panel reports at most 2 contacts (no three-finger gesture) |
 
 **Owner decision (2026-10-13): new work targets 640x480 as the minimum screen.** 480x320 is best effort. A new native
 app declares `X-MinSize=640x480` and is hidden on a smaller screen. If fitting a smaller screen would cost heavy rework,
@@ -67,7 +68,7 @@ Rules:
 | Do | Don't |
 |---|---|
 | lay out from `cp0_ui_metrics_get()`, `cp0_ui_roller_page()` and the `cp0::ui` widgets | write `lv_obj_set_size(x, 120, 48)` or any pixel constant |
-| size things in millimetres (`ppmm`) when you must draw your own | assume 11.3 px/mm; the HyperPixel is 9.2, the HackBerry 10.0 |
+| size things in millimetres (`ppmm`) when you must draw your own | assume 11.3 px/mm; the HyperPixel is 9.2, the HackBerry 10.0, the FZ-M1 tablet 8.6 |
 | read the canvas from `APPLAUNCH_CANVAS`, or `screen.state`, or the framebuffer | hard-code 640x480, 320x170 or `/dev/fb0` |
 | support all of 640x480 (standard), 800x480 (wide), 720x720 (square), 1280x720 (large), plus 1024x600 | design only for the deck |
 | keep every interactive element at least `row` high (buttons `target`) | squeeze controls to fit; scroll instead |
@@ -348,6 +349,7 @@ check is fixed in the layout, never by loosening the check.
 | VmRSS under 25 MB, idle CPU low, `free -m` | deck |
 | Started over ssh without the launcher: degrades cleanly | deck |
 | Your own hardware and permission cases (device absent, group missing, no network) | the board that has it |
+| An app that lists amd64: the amd64 package installs from Settings > Apps, opens, and the main path works by touch and keys | FZ-M1 tablet |
 
 Do not run commands that kill by pattern (`pkill -f`); the board tests name processes exactly. Remove test installs
 afterwards (`dpkg -r <id>`). A change to a board that is not yours (launcher, Store, other apps) is out of scope for your tests.
