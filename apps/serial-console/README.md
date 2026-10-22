@@ -201,6 +201,8 @@ The identification is kept in the port's section of the settings file as `id_*` 
   app says it needs 640x480) and a launcher with full-screen app support.
 * The user in the `dialout` group: `sudo usermod -aG dialout $USER`, then reboot.
 * Packages: `libfreetype6`, `libinput10`, `libxkbcommon0` (picocom is no longer used).
+* x86-64 PCs: an amd64 package, `serial-console_0.4.4_amd64.deb`, is in the amd64 registry
+  ([amd64](../../README.md#amd64-x86-64-pcs)) for a PC running the launcher. It has had no board test on a PC yet.
 
 ## Known limits
 

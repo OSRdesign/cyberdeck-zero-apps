@@ -624,6 +624,8 @@ network's channel width, so a 40 or 80 MHz network counts on its main channel on
   public address asks `www.cloudflare.com` (Cloudflare), whois asks `whois.iana.org` and the servers it names, only
   when you start them. From 0.3: the speed test talks to `speed.cloudflare.com` (Cloudflare) and pings 1.1.1.1 or
   your gateway, only when you start it.
+* **x86-64 PCs:** an amd64 package, `net-toolbox_0.4.2_amd64.deb`, is in the amd64 registry
+  ([amd64](../../README.md#amd64-x86-64-pcs)) for a PC running the launcher. It has had no board test on a PC yet.
 
 ## Install
 
@@ -631,7 +633,7 @@ From **Settings > Apps**. By hand:
 
 ```sh
 python3 tools/make_registry.py --only net-toolbox --out <a folder outside packages/>
-sudo dpkg -i net-toolbox_0.1.0_arm64.deb      # remove: sudo dpkg -r net-toolbox
+sudo dpkg -i net-toolbox_0.4.2_arm64.deb      # remove: sudo dpkg -r net-toolbox
 ```
 
 ## Files the app keeps
