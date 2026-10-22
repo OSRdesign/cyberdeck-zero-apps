@@ -118,6 +118,29 @@ double pct_value(std::uint64_t part, std::uint64_t whole)
     return whole ? 100.0 * static_cast<double>(part) / static_cast<double>(whole) : 0.0;
 }
 
+std::string fmt_watts(double w)
+{
+    char buf[24];
+    std::snprintf(buf, sizeof(buf), "%.1f W", w);
+    return buf;
+}
+
+std::string fmt_hm(int minutes)
+{
+    char buf[24];
+    std::snprintf(buf, sizeof(buf), "%d:%02d", minutes / 60, minutes % 60);
+    return buf;
+}
+
+/* The battery's colour: green while charging, full or well charged, amber under 20 %, red under 10 % (not charging). */
+Tone battery_tone(const BatteryInfo &b)
+{
+    if (b.charging() || b.status == "Full" || b.status == "Not charging" || b.percent < 0) return Tone::Good;
+    if (b.percent < 10) return Tone::Error;
+    if (b.percent < 20) return Tone::Warn;
+    return Tone::Good;
+}
+
 /* The Temp & power page's power row: the power_status() sentence first, then shorter wordings for a narrow row.
  * Under-voltage now: the short state only; the advice is a row of its own under it (thermal_rows). */
 Row power_row(const PowerInfo &p, bool hot)
@@ -279,6 +302,28 @@ TileText power_tile(const Snapshot &s)
     const FlagState *f = p.flags;
     const bool hot = s.temp.ok && temp_state(s.temp.c) == TempState::Hot;
     t.value_dim = false;
+    if (!s.sys.pi && p.source == PowerSource::None) { /* a PC: the battery, else nothing to say */
+        const BatteryInfo &b = s.battery;
+        if (!b.present) {
+            t.value = {"No battery", "None"};
+            t.value_dim = true;
+            t.detail = {"Mains power", "Mains"};
+            return t;
+        }
+        const std::string pct = b.percent >= 0 ? std::to_string(b.percent) + "%" : std::string("?");
+        t.value = {"Battery " + pct, pct};
+        t.value_tone = t.frame_tone = battery_tone(b);
+        std::vector<std::string> d;
+        const std::string what = b.status.empty() ? std::string("Battery") : b.status;
+        const std::string w = b.has_power ? fmt_watts(b.power_w) : std::string();
+        const std::string left = b.minutes >= 0 ? fmt_hm(b.minutes) + (b.charging() ? " to full" : " left") : std::string();
+        if (!w.empty() && !left.empty()) d.push_back(what + ", " + w + ", " + left);
+        if (!w.empty()) d.push_back(what + ", " + w);
+        d.push_back(what);
+        t.detail = d;
+        t.detail_tone = t.value_tone == Tone::Good ? Tone::Normal : t.value_tone;
+        return t;
+    }
     switch (p.source) {
     case PowerSource::None:
         t.value = {"Unknown"};
@@ -379,7 +424,7 @@ std::vector<TileText> overview_tiles(const Snapshot *s)
         switch (st) {
         case TempState::Ok: temp.detail = {"OK, warm from 70 \xC2\xB0" "C", "OK"}; break;
         case TempState::Warm: temp.detail = {"Warm, hot from 80 \xC2\xB0" "C", "Warm"}; break;
-        case TempState::Hot: temp.detail = {"Hot: the Pi slows down", "Hot"}; break;
+        case TempState::Hot: temp.detail = {s->sys.pi ? "Hot: the Pi slows down" : "Hot: the CPU slows down", "Hot"}; break;
         }
         temp.detail_tone = st == TempState::Ok ? Tone::Normal : temp_tone(st);
     } else {
@@ -529,6 +574,17 @@ std::vector<Row> thermal_rows(const Snapshot *s)
         s->power.flags[kUnderVoltage].now)
         rows.push_back(info("Check the power supply", {})); /* the advice the short Power value leaves out */
     if (s->power.source == PowerSource::NoAccess) rows.push_back(info("Fix", {"sudo usermod -aG video $USER"}));
+    if (s->battery.present) { /* laptops, tablets: only when there is a battery */
+        const BatteryInfo &b = s->battery;
+        const std::string pct = b.percent >= 0 ? std::to_string(b.percent) + "%" : std::string("Unknown");
+        std::vector<std::string> v;
+        if (!b.status.empty()) v.push_back(pct + ", " + (b.status == "Not charging" ? "not charging" : b.status == "Full"
+                                                           ? "full" : b.charging() ? "charging" : "discharging"));
+        v.push_back(pct);
+        rows.push_back(info("Battery", v, battery_tone(b)));
+        if (b.has_power) rows.push_back(info(b.charging() ? "Charging power" : "Power draw", {fmt_watts(b.power_w)}));
+        if (b.minutes >= 0) rows.push_back(info(b.charging() ? "Time to full" : "Time left", {fmt_hm(b.minutes)}));
+    }
     if (s->temp.ok) {
         const TempState st = temp_state(s->temp.c);
         const Tone tone = temp_tone(st);
@@ -536,7 +592,9 @@ std::vector<Row> thermal_rows(const Snapshot *s)
         switch (st) {
         case TempState::Ok: rows.push_back(info("State", {"OK (warm from 70 \xC2\xB0" "C)", "OK"})); break;
         case TempState::Warm: rows.push_back(info("State", {"Warm (hot from 80 \xC2\xB0" "C)", "Warm"}, tone)); break;
-        case TempState::Hot: rows.push_back(info("State", {"Hot: the Pi slows down", "Hot"}, tone)); break;
+        case TempState::Hot:
+            rows.push_back(info("State", {s->sys.pi ? "Hot: the Pi slows down" : "Hot: the CPU slows down", "Hot"}, tone));
+            break;
         }
         if (s->hist.temp.size() > 1) {
             const std::string window = fmt_window(static_cast<int>(s->hist.temp.size()), s->period_s);

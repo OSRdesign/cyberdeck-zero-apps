@@ -7,7 +7,8 @@
  * Kept cheap (the app's own cost is shown on the System page): every file is read into one reused buffer and parsed
  * in place (no allocation per sample once warm).
  *   each sample      /proc/stat, meminfo, loadavg, uptime, net/dev, net/wireless, diskstats, the CPU temperature and
- *                    frequency, the fan, the rpi_volt alarm, statvfs of the real filesystems, /proc/self
+ *                    frequency, the fan, the rpi_volt alarm, the battery (when there is one), statvfs of the real
+ *                    filesystems, /proc/self
  *   every 5 s        the interfaces' addresses (getifaddrs) and the default route (at once when an interface comes
  *                    or goes), Bluetooth in sysfs, the number of processes (one directory read)
  *   every 10 s       the mount list, the maximum frequency and the governor
@@ -86,10 +87,23 @@ struct NetInfo {
 
 enum class BtState { Absent, Off, On, Connected };
 
+/* The first battery of /sys/class/power_supply (type Battery, not a device's own such as a mouse): laptops and tablets. */
+struct BatteryInfo {
+    bool present = false;
+    int percent = -1;          /* 0-100, -1 unknown */
+    std::string status;        /* "Charging", "Discharging", "Full", "Not charging", "" */
+    bool has_power = false;
+    double power_w = 0;        /* what flows in or out, watts (always positive) */
+    int minutes = -1;          /* to empty (discharging) or to full (charging), -1 unknown */
+    bool charging() const { return status == "Charging"; }
+    bool discharging() const { return status == "Discharging"; }
+};
+
 struct SystemFacts {
     std::string model, kernel, os, hostname, serial, firmware, cpu;
     std::uint64_t ram_kb = 0;
     int cores = 0;
+    bool pi = true; /* a Raspberry Pi (its device-tree model says so): vcgencmd, firmware flags, "the Pi slows down" */
 };
 
 struct History {
@@ -107,6 +121,7 @@ struct Snapshot {
     MemInfo mem;
     TempInfo temp;
     PowerInfo power;
+    BatteryInfo battery;
     FanInfo fan;
     std::vector<FsInfo> fs;
     DiskInfo disk;
@@ -165,6 +180,9 @@ private:
     void read_memory(Snapshot &s);
     void read_thermal(Snapshot &s);
     void read_power(Snapshot &s);
+    void read_battery(Snapshot &s);
+    void find_battery();
+    void find_thermal_pc();
     void read_storage(Snapshot &s, double dt);
     void read_network(Snapshot &s, double dt);
     void read_bluetooth(Snapshot &s);
@@ -237,8 +255,12 @@ private:
     std::string uv_alarm_path_;    /* rpi_volt in0_lcrit_alarm, "" */
     std::string fan_dev_;          /* thermal cooling device of a fan, "" */
     std::string fan_rpm_path_;     /* hwmon fan1_input, "" */
+    std::string bat_dir_;          /* /sys/class/power_supply/<battery>, "" */
+    bool bat_failed_ = false;      /* the last read of it failed: look again at the next slow tick */
+    std::int64_t next_bat_scan_ms_ = 0;
     std::string root_disk_;        /* diskstats name of the root disk */
     bool pi5_ = false;
+    bool pi_ = true;               /* a Raspberry Pi: the firmware tools are asked only then */
     enum class Vc { Unknown, Works, Absent, Denied, Failing } vc_ = Vc::Unknown;
     int vc_failures_ = 0;
     bool iw_absent_ = false;

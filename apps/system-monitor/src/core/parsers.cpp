@@ -599,6 +599,62 @@ std::string short_model(const std::string &model)
     return m;
 }
 
+bool is_raspberry_model(const std::string &dt_model)
+{
+    return dt_model.find("Raspberry") != std::string::npos || dt_model.find("Compute Module") != std::string::npos;
+}
+
+namespace {
+
+std::string lower_ascii(std::string s)
+{
+    for (char &c : s)
+        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+    return s;
+}
+
+bool dmi_placeholder(const std::string &v)
+{
+    const std::string l = lower_ascii(v);
+    static const char *const bad[] = {"to be filled by o.e.m.", "to be filled by oem", "system product name",
+                                      "system manufacturer",     "default string",       "not specified",
+                                      "not applicable",          "unknown",              "none",
+                                      "o.e.m.",                  "oem",                  "type1productconfigid"};
+    for (const char *b : bad)
+        if (l == b) return true;
+    return l.empty();
+}
+
+} // namespace
+
+std::string dmi_model(const std::string &vendor, const std::string &product)
+{
+    std::string v = trim(vendor), p = trim(product);
+    if (dmi_placeholder(v)) v.clear();
+    if (dmi_placeholder(p)) p.clear();
+    // "Panasonic Corporation" -> "Panasonic", "Dell Inc." -> "Dell", "ASUSTeK COMPUTER INC." -> "ASUSTeK"
+    static const char *const tails[] = {" co., ltd.", " co.,ltd.", " co., ltd", " corporation", " computer inc.", " computer",
+                                        " corp.",     " corp",     " inc.",     " inc",          " ltd.",          " ltd",
+                                        " gmbh",      " ag"};
+    for (bool again = true; again && !v.empty();) {
+        again = false;
+        const std::string l = lower_ascii(v);
+        for (const char *t : tails) {
+            const std::string tail = t;
+            if (l.size() > tail.size() && l.compare(l.size() - tail.size(), tail.size(), tail) == 0) {
+                v = trim(v.substr(0, v.size() - tail.size()));
+                again = true;
+                break;
+            }
+        }
+    }
+    if (p.empty()) return v;
+    if (v.empty() || v.size() > 14) return p;
+    const std::string lp = lower_ascii(p), lv = lower_ascii(v);
+    if (lp.compare(0, lv.size(), lv) == 0) return p; // "Dell XPS" with vendor "Dell"
+    return v + " " + p;
+}
+
 std::string os_pretty_name(const std::string &os_release)
 {
     for (const std::string &line : split_lines(os_release)) {
@@ -625,23 +681,41 @@ std::string serial_tail(const std::string &dt_serial, const std::string &cpuinfo
     return s;
 }
 
+namespace {
+
+/* "Intel(R) Core(TM) m5-6Y57 CPU @ 1.10GHz" -> "Intel Core m5-6Y57" */
+std::string x86_cpu_name(std::string n)
+{
+    for (const char *drop : {"(R)", "(TM)", "(tm)", "(r)"})
+        for (std::size_t at; (at = n.find(drop)) != std::string::npos;) n.erase(at, std::string(drop).size());
+    const std::size_t clock = n.find(" @ ");
+    if (clock != std::string::npos) n.erase(clock);
+    for (const char *drop : {" CPU", " Processor"})
+        for (std::size_t at; (at = n.find(drop)) != std::string::npos;) n.erase(at, std::string(drop).size());
+    return trim(n);
+}
+
+} // namespace
+
 std::string cpu_description(const std::string &cpuinfo, int cores)
 {
     static const std::map<std::string, std::string> parts = {
         {"0xb76", "ARM1176"},    {"0xc07", "Cortex-A7"},  {"0xd03", "Cortex-A53"}, {"0xd04", "Cortex-A35"},
         {"0xd05", "Cortex-A55"}, {"0xd07", "Cortex-A57"}, {"0xd08", "Cortex-A72"}, {"0xd0b", "Cortex-A76"}};
-    std::string name;
+    std::string name, model_name;
     int processors = 0;
     for (const std::string &line : split_lines(cpuinfo)) {
         const std::size_t colon = line.find(':');
         if (colon == std::string::npos) continue;
         const std::string key = trim(line.substr(0, colon));
         if (key == "processor") ++processors;
+        if (key == "model name" && model_name.empty()) model_name = x86_cpu_name(trim(line.substr(colon + 1)));
         if (key == "CPU part" && name.empty()) {
             const auto it = parts.find(trim(line.substr(colon + 1)));
             if (it != parts.end()) name = it->second;
         }
     }
+    if (name.empty()) name = model_name; /* x86: "Intel Core m5-6Y57" */
     const int n = cores > 0 ? cores : processors;
     if (n <= 0) return name;
     if (name.empty()) return std::to_string(n) + (n == 1 ? " core" : " cores");

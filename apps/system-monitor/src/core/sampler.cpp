@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 
 namespace sm {
@@ -65,7 +66,15 @@ Sampler::Sampler(std::unique_ptr<Source> source, int period_s) : src_(std::move(
     own_page_ = sysconf(_SC_PAGESIZE) > 0 ? sysconf(_SC_PAGESIZE) : 4096;
 
     // the facts that do not change
-    facts_.model = parse_model(src_->read("/proc/device-tree/model"));
+    // the model: the device tree's (a Pi, another ARM board), else the PC's DMI name
+    const std::string dt_model = parse_model(src_->read("/proc/device-tree/model"));
+    pi_ = is_raspberry_model(dt_model);
+    facts_.pi = pi_;
+    facts_.model = dt_model;
+    if (dt_model.empty())
+        facts_.model = dmi_model(first_line(src_->read("/sys/class/dmi/id/sys_vendor")),
+                                 first_line(src_->read("/sys/class/dmi/id/product_name")));
+    if (!pi_) vc_ = Vc::Absent; // no vcgencmd, no firmware flags, no error about it: not asked at all
     facts_.kernel = trim(src_->read("/proc/sys/kernel/osrelease"));
     bool ok = false;
     std::string os = src_->read("/etc/os-release", &ok);
@@ -83,6 +92,7 @@ Sampler::Sampler(std::unique_ptr<Source> source, int period_s) : src_(std::move(
     pi5_ = m.find("Raspberry Pi 5") != std::string::npos || m.find("Compute Module 5") != std::string::npos ||
            m.find("Raspberry Pi 500") != std::string::npos;
     discover();
+    find_battery();
 }
 
 Sampler::~Sampler() { stop(); }
@@ -90,6 +100,7 @@ Sampler::~Sampler() { stop(); }
 void Sampler::discover()
 {
     // the CPU's thermal zone (cpu-thermal), else the first one; a fan among the cooling devices
+    // (a PC: find_thermal_pc() chooses among the zones and the hwmon temperatures)
     std::string first_zone;
     for (const std::string &n : src_->list("/sys/class/thermal")) {
         const std::string base = "/sys/class/thermal/" + n;
@@ -103,6 +114,7 @@ void Sampler::discover()
         }
     }
     if (temp_path_.empty() && !first_zone.empty()) temp_path_ = first_zone + "/temp";
+    if (!pi_) find_thermal_pc();
     // hwmon: the under-voltage alarm (rpi_volt), a fan's speed
     for (const std::string &n : src_->list("/sys/class/hwmon")) {
         const std::string base = "/sys/class/hwmon/" + n;
@@ -139,6 +151,58 @@ void Sampler::discover()
             for (const DiskStat &d : disks)
                 if (d.name == disk) root_disk_ = disk;
         }
+    }
+}
+
+/* A PC: the CPU's temperature from the package sensor (thermal zone x86_pkg_temp), else a zone with "cpu" in its type,
+ * else the hwmon coretemp / k10temp (temp1_input), else acpitz, else the hottest zone that reads sensibly. */
+void Sampler::find_thermal_pc()
+{
+    struct Cand {
+        int rank;
+        double c;
+        std::string path;
+    };
+    std::vector<Cand> cands;
+    const auto sane = [this](const std::string &path, double &c) {
+        std::string text;
+        return src_->read_into(path, text) && parse_millicelsius(text, c) && c > 0.0 && c < 130.0;
+    };
+    for (const std::string &n : src_->list("/sys/class/thermal")) {
+        if (!starts_with(n, "thermal_zone")) continue;
+        const std::string base = "/sys/class/thermal/" + n;
+        const std::string type = trim(src_->read(base + "/type"));
+        double c = 0;
+        if (!sane(base + "/temp", c)) continue;
+        int rank = 4;
+        if (type == "x86_pkg_temp") rank = 0;
+        else if (type.find("cpu") != std::string::npos) rank = 1;
+        else if (type == "acpitz") rank = 3;
+        cands.push_back({rank, c, base + "/temp"});
+    }
+    for (const std::string &n : src_->list("/sys/class/hwmon")) {
+        const std::string base = "/sys/class/hwmon/" + n;
+        const std::string name = trim(src_->read(base + "/name"));
+        double c = 0;
+        if ((name == "coretemp" || name == "k10temp") && sane(base + "/temp1_input", c))
+            cands.push_back({2, c, base + "/temp1_input"});
+    }
+    const Cand *best = nullptr;
+    for (const Cand &c : cands)
+        if (!best || c.rank < best->rank || (c.rank == best->rank && c.rank == 4 && c.c > best->c)) best = &c;
+    if (best) temp_path_ = best->path;
+}
+
+/* The first real battery: type Battery (a device's own battery, scope Device, is not the machine's). */
+void Sampler::find_battery()
+{
+    bat_dir_.clear();
+    for (const std::string &n : src_->list("/sys/class/power_supply")) {
+        const std::string base = "/sys/class/power_supply/" + n;
+        if (trim(src_->read(base + "/type")) != "Battery") continue;
+        if (trim(src_->read(base + "/scope")) == "Device") continue;
+        bat_dir_ = base;
+        break;
     }
 }
 
@@ -255,6 +319,7 @@ void Sampler::sample(bool publish)
     read_memory(*s);
     read_thermal(*s);
     read_power(*s);
+    read_battery(*s);
     read_storage(*s, dt);
     read_network(*s, dt);
     read_bluetooth(*s);
@@ -447,6 +512,50 @@ void Sampler::read_power(Snapshot &s)
     }
     tracker_.fill(power_);
     s.power = power_;
+}
+
+/* The battery: percent, state, power and the time left. Looked for again every 10 s while there is none (a battery
+ * can be swapped) or its files stopped answering. */
+void Sampler::read_battery(Snapshot &s)
+{
+    if ((bat_dir_.empty() || bat_failed_) && due(next_bat_scan_ms_, src_->now_ms(), kSlowMs)) {
+        find_battery();
+        bat_failed_ = false;
+    }
+    if (bat_dir_.empty()) return;
+    const auto num = [&](const char *file, std::int64_t &v) {
+        path_.assign(bat_dir_).append("/").append(file);
+        return src_->read_into(path_, buf_) && parse_i64(trim(buf_), v);
+    };
+    BatteryInfo &b = s.battery;
+    std::int64_t cap = -1, e_now = -1, e_full = -1, p_now = -1, v_now = -1, i_now = -1;
+    path_.assign(bat_dir_).append("/status");
+    if (!src_->read_into(path_, buf_)) {
+        bat_failed_ = true;
+        return;
+    }
+    b.present = true;
+    b.status = trim(buf_);
+    if (b.status == "Unknown") b.status.clear();
+    const bool have_cap = num("capacity", cap);
+    const bool have_e = num("energy_now", e_now) && num("energy_full", e_full);
+    if (have_cap && cap >= 0 && cap <= 100) b.percent = static_cast<int>(cap);
+    else if (have_e && e_full > 0) b.percent = static_cast<int>(std::min<std::int64_t>(100, 100 * e_now / e_full));
+    // power: power_now (uW), else current_now (uA) x voltage_now (uV)
+    if (num("power_now", p_now) && p_now > 0) {
+        b.has_power = true;
+        b.power_w = static_cast<double>(p_now) / 1e6;
+    } else if (num("current_now", i_now) && num("voltage_now", v_now) && i_now != 0 && v_now > 0) {
+        b.has_power = true;
+        b.power_w = std::abs(static_cast<double>(i_now)) * static_cast<double>(v_now) / 1e12;
+    }
+    // the time left (energy in uWh over power in uW), only with a draw that means something
+    if (have_e && b.has_power && b.power_w >= 0.3) {
+        double hours = -1;
+        if (b.discharging()) hours = static_cast<double>(e_now) / 1e6 / b.power_w;
+        else if (b.charging() && e_full > e_now) hours = static_cast<double>(e_full - e_now) / 1e6 / b.power_w;
+        if (hours >= 0 && hours < 100) b.minutes = static_cast<int>(hours * 60.0 + 0.5);
+    }
 }
 
 void Sampler::read_storage(Snapshot &s, double dt)
