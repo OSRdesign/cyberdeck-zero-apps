@@ -1,0 +1,381 @@
+{
+  "schema_version": 2,
+  "generated_at": "2026-10-22T11:02:04+00:00",
+  "registry_id": "cyberdeck-zero-apps",
+  "device_targets": [
+    "CyberdeckZero"
+  ],
+  "i18n": {
+    "default_locale": "en",
+    "fallback_locale": "en",
+    "supported_locales": [
+      "en"
+    ]
+  },
+  "apps": [
+    {
+      "uuid": "9d3fef69-7f03-5d37-8734-b7e984998822",
+      "share_code": "mesh-hop",
+      "title": "Mesh Hop",
+      "summary": "Full-screen MeshCore messenger for the deck: chats, contacts, nearby nodes and radio settings, with the node on USB, Bluetooth LE or Wi-Fi, by touch or keyboard, on any screen from 640x480 up.",
+      "description": "A full-screen client for MeshCore LoRa mesh networks. The deck controls a MeshCore companion radio board (the radio is on the board, the deck is the screen and keyboard), reached over USB, Bluetooth LE (paired with its PIN) or Wi-Fi (by its IP address). It opens on Choose a node: one list of the USB boards plugged in, the Bluetooth nodes a short scan hears (with their signal) and the nodes added by IP address; nothing connects by itself, the node chosen last is highlighted. Then a Home list (Chats, Contacts, Settings, and Node to choose another node); each page has a header with an Esc button. Chats (one pane on 640x480: the list, then the conversation; two side by side on the wider screens; channels and direct conversations with their last message and unread counts, a Search / Add channel bar, the options of a chat (mute, delete, details) by a 3 s hold on its row or Ctrl+O, search in the whole message archive by words, chat, dates and direction), a Contacts list you can filter by type, time since heard and group and sort by name, heard, type, SNR, hops or distance, a More menu (send an advert, flood or zero-hop; Nearby; Manage contacts with bulk delete one by one with a progress box and groups), contact details (key, route, last advert, position) and a Nearby list of the nodes heard (adverts, pending contacts, an active zero-hop scan, Add and Ignore). Settings: board status with its position (a Position box sets it by hand or with the board GPS switch), a statistics screen, a packet log of the radio packets heard (kept in memory only), node name, radio presets (26 built in, refreshed from api.meshcore.nz in the background when the deck is online), bandwidth, spreading factor, coding rate, TX power and the path hash size (1, 2 or 3 bytes) chosen in a popup with arrows, repeat on or off where the board allows it, a scheduled advert, manual add mode and the auto-add types, direct message retries, board clock, board GPS switch, hashtag and private channels, reboot and factory reset of the board (double confirmation), a History section. Your channel messages show \"heard back by N repeaters\" when they come back from the mesh. Messages, contacts, groups and flags are kept between runs, separately for each board (by its public key), in ~/.local/share/mesh-hop. Everything works by touch or by keyboard. Text is typed with a Bluetooth or USB keyboard, or with the launcher's on-screen keyboard while none is connected (tap the field); the Esc button of a page goes back to Home, the one of Home asks to quit, and Tab goes to the next page. The layout follows the screen (tested at 640x480, 800x480, 720x720, 1024x600 and 1280x720). The board must run a MeshCore companion radio firmware (USB, BLE or Wi-Fi build); for USB the user must be in the dialout group; Bluetooth needs BlueZ (recommended by the package). Needs a screen of at least 640x480 and a launcher with full-screen app support (X-Fullscreen in .desktop files).",
+      "locales": {
+        "en": {
+          "title": "Mesh Hop",
+          "summary": "Full-screen MeshCore messenger for the deck: chats, contacts, nearby nodes and radio settings, with the node on USB, Bluetooth LE or Wi-Fi, by touch or keyboard, on any screen from 640x480 up.",
+          "description": "A full-screen client for MeshCore LoRa mesh networks. The deck controls a MeshCore companion radio board (the radio is on the board, the deck is the screen and keyboard), reached over USB, Bluetooth LE (paired with its PIN) or Wi-Fi (by its IP address). It opens on Choose a node: one list of the USB boards plugged in, the Bluetooth nodes a short scan hears (with their signal) and the nodes added by IP address; nothing connects by itself, the node chosen last is highlighted. Then a Home list (Chats, Contacts, Settings, and Node to choose another node); each page has a header with an Esc button. Chats (one pane on 640x480: the list, then the conversation; two side by side on the wider screens; channels and direct conversations with their last message and unread counts, a Search / Add channel bar, the options of a chat (mute, delete, details) by a 3 s hold on its row or Ctrl+O, search in the whole message archive by words, chat, dates and direction), a Contacts list you can filter by type, time since heard and group and sort by name, heard, type, SNR, hops or distance, a More menu (send an advert, flood or zero-hop; Nearby; Manage contacts with bulk delete one by one with a progress box and groups), contact details (key, route, last advert, position) and a Nearby list of the nodes heard (adverts, pending contacts, an active zero-hop scan, Add and Ignore). Settings: board status with its position (a Position box sets it by hand or with the board GPS switch), a statistics screen, a packet log of the radio packets heard (kept in memory only), node name, radio presets (26 built in, refreshed from api.meshcore.nz in the background when the deck is online), bandwidth, spreading factor, coding rate, TX power and the path hash size (1, 2 or 3 bytes) chosen in a popup with arrows, repeat on or off where the board allows it, a scheduled advert, manual add mode and the auto-add types, direct message retries, board clock, board GPS switch, hashtag and private channels, reboot and factory reset of the board (double confirmation), a History section. Your channel messages show \"heard back by N repeaters\" when they come back from the mesh. Messages, contacts, groups and flags are kept between runs, separately for each board (by its public key), in ~/.local/share/mesh-hop. Everything works by touch or by keyboard. Text is typed with a Bluetooth or USB keyboard, or with the launcher's on-screen keyboard while none is connected (tap the field); the Esc button of a page goes back to Home, the one of Home asks to quit, and Tab goes to the next page. The layout follows the screen (tested at 640x480, 800x480, 720x720, 1024x600 and 1280x720). The board must run a MeshCore companion radio firmware (USB, BLE or Wi-Fi build); for USB the user must be in the dialout group; Bluetooth needs BlueZ (recommended by the package). Needs a screen of at least 640x480 and a launcher with full-screen app support (X-Fullscreen in .desktop files)."
+        }
+      },
+      "i18n": {
+        "en": {
+          "title": "Mesh Hop",
+          "summary": "Full-screen MeshCore messenger for the deck: chats, contacts, nearby nodes and radio settings, with the node on USB, Bluetooth LE or Wi-Fi, by touch or keyboard, on any screen from 640x480 up.",
+          "description": "A full-screen client for MeshCore LoRa mesh networks. The deck controls a MeshCore companion radio board (the radio is on the board, the deck is the screen and keyboard), reached over USB, Bluetooth LE (paired with its PIN) or Wi-Fi (by its IP address). It opens on Choose a node: one list of the USB boards plugged in, the Bluetooth nodes a short scan hears (with their signal) and the nodes added by IP address; nothing connects by itself, the node chosen last is highlighted. Then a Home list (Chats, Contacts, Settings, and Node to choose another node); each page has a header with an Esc button. Chats (one pane on 640x480: the list, then the conversation; two side by side on the wider screens; channels and direct conversations with their last message and unread counts, a Search / Add channel bar, the options of a chat (mute, delete, details) by a 3 s hold on its row or Ctrl+O, search in the whole message archive by words, chat, dates and direction), a Contacts list you can filter by type, time since heard and group and sort by name, heard, type, SNR, hops or distance, a More menu (send an advert, flood or zero-hop; Nearby; Manage contacts with bulk delete one by one with a progress box and groups), contact details (key, route, last advert, position) and a Nearby list of the nodes heard (adverts, pending contacts, an active zero-hop scan, Add and Ignore). Settings: board status with its position (a Position box sets it by hand or with the board GPS switch), a statistics screen, a packet log of the radio packets heard (kept in memory only), node name, radio presets (26 built in, refreshed from api.meshcore.nz in the background when the deck is online), bandwidth, spreading factor, coding rate, TX power and the path hash size (1, 2 or 3 bytes) chosen in a popup with arrows, repeat on or off where the board allows it, a scheduled advert, manual add mode and the auto-add types, direct message retries, board clock, board GPS switch, hashtag and private channels, reboot and factory reset of the board (double confirmation), a History section. Your channel messages show \"heard back by N repeaters\" when they come back from the mesh. Messages, contacts, groups and flags are kept between runs, separately for each board (by its public key), in ~/.local/share/mesh-hop. Everything works by touch or by keyboard. Text is typed with a Bluetooth or USB keyboard, or with the launcher's on-screen keyboard while none is connected (tap the field); the Esc button of a page goes back to Home, the one of Home asks to quit, and Tab goes to the next page. The layout follows the screen (tested at 640x480, 800x480, 720x720, 1024x600 and 1280x720). The board must run a MeshCore companion radio firmware (USB, BLE or Wi-Fi build); for USB the user must be in the dialout group; Bluetooth needs BlueZ (recommended by the package). Needs a screen of at least 640x480 and a launcher with full-screen app support (X-Fullscreen in .desktop files)."
+        }
+      },
+      "categories": [
+        "Radio"
+      ],
+      "author": {
+        "github": "OSRdesign",
+        "display_name": "OSRdesign"
+      },
+      "version": "0.5.2",
+      "published_at": "2026-10-22T11:01:59+00:00",
+      "updated_at": "2026-10-22T11:01:59+00:00",
+      "review": {
+        "status": "approved"
+      },
+      "license": "MIT",
+      "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/mesh-hop",
+      "download": {
+        "type": "deb",
+        "package": "mesh-hop",
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/mesh-hop_0.5.2_amd64.deb",
+        "md5": "73ff50ae3da53b409e8bd7923b5b014a",
+        "sha256": "c88db5453217e00f6e69edada84cdc9c5bcb57364c59722e8dc57ab7367a23c7",
+        "size": 2007386
+      },
+      "depends": "libfreetype6, libinput10, libxkbcommon0, curl",
+      "permissions": {
+        "camera": false,
+        "microphone": false,
+        "imu": false,
+        "network": true,
+        "additional_hardware": true,
+        "background_service": false,
+        "external_display": false
+      },
+      "assets": {
+        "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mesh-hop/icon.png",
+        "screenshots": []
+      },
+      "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mesh-hop/icon.png",
+      "screenshots": []
+    },
+    {
+      "uuid": "978c39c5-fff8-5414-af97-bc3b78da75a5",
+      "share_code": "net-toolbox",
+      "title": "Net Toolbox",
+      "summary": "The tools you reach for when the network misbehaves: a step-by-step diagnosis, ping, traceroute, DNS lookup, port check, HTTP check, a speed test with a needle gauge, public IP, whois, Wake-on-LAN, a Bluetooth radar, Local devices (a LAN scanner), Wi-Fi networks with their channels, a Wi-Fi walk test and the interfaces.",
+      "description": "A full-screen network toolbox made for the deck's small screen and for touch. Diagnosis answers 'why is my internet broken?' in plain words, step by step: link, address, gateway, DNS, internet and a captive-portal check (a plain HTTP request to connectivitycheck.gstatic.com/generate_204). Ping shows every packet (ok, slow or lost), the loss, min/avg/max and the jitter; it needs no root (an unprivileged ICMP socket, allowed by net.ipv4.ping_group_range on Raspberry Pi OS). DNS lookup asks for A, AAAA, MX, TXT, NS or PTR records through the system's resolver, a typed one or 1.1.1.1, 8.8.8.8 and 9.9.9.9, and shows the CNAME chain, the answer time and the response code. Port check tells whether a TCP port of a host is open, closed or filtered, with presets for web, mail, SSH, DNS and remote desktop. Traceroute draws the path to a host as a chain of hops with a latency bar and a loss tag each, in rounds like mtr, with no root (a silent hop is shown as normal, a hop that only limits its answers is told apart from real loss). HTTP check makes one request with curl and shows the status, the timing as a waterfall (DNS, connect, TLS, waiting, transfer) and the days left of the site's certificate; ignoring certificate errors is an explicit switch. Public IP shows the address the internet sees (through Cloudflare's trace page) and says when your provider shares it between customers. Whois asks IANA and the registry it names (TCP port 43) and summarises the answer. Speed test measures download, upload, latency and jitter against Cloudflare's speed.cloudflare.com on a needle gauge with a live throughput chart, then grades the latency under load from A to F (bufferbloat); it uses at most 150 MB each way, only when you press Start, and says so (on a phone hotspot that is mobile data). Wake-on-LAN keeps up to 20 saved machines, sends the magic packet through the network you chose and watches the machine's address for up to two minutes, showing in a ring and a strip of seconds when it wakes up. Bluetooth radar scans for the devices around with BlueZ and draws them as blips on near, medium and far rings (signal strength, not distance) with a list and the details of each device; Wi-Fi and Bluetooth share one radio, so a Bluetooth keyboard may stutter while it scans, and it needs the bluez package. Local devices (it replaces LAN Scan) scans your own network without root and lists what answers, as it is found: the address, the name (mDNS, NetBIOS or reverse DNS), the MAC, the vendor (a random address is shown as private), the round trip, the router and this device marked; a device's page pings it, checks a port, scans its common ports or ports 1 to 1024 (only devices of your own network can be scanned) and saves it for Wake-on-LAN. Wi-Fi networks (it replaces Wi-Fi Survey) lists the networks around with signal bars, channel, band and security in plain words, a page per network with its vendor and what its security means, and a Channels view that names the least crowded channel of 2.4 and 5 GHz; it asks NetworkManager for its own scan and never connects to anything, so it needs the network-manager package. The Wi-Fi walk test draws the signal against time while you walk with the board, with a weak-zone line you can set (-70, -75 or -80 dBm), marks the weak readings and the access point changes, and ends with a summary: the weakest spot and when, the average, the time in the weak zone, the dips. Interfaces lists each adapter with its state, addresses, MAC, speed, the gateway, the DNS servers and the Wi-Fi network. Every result can be saved as text to ~/net-logs. Nothing leaves the board until you start a test. Works on the Pi Zero 2 W, Pi 3A+, Pi 5 and CM5. Rows show what can be tapped: a chevron opens or changes, a dot runs. Needs a screen of at least 640x480 and a launcher with full-screen app support.",
+      "locales": {
+        "en": {
+          "title": "Net Toolbox",
+          "summary": "The tools you reach for when the network misbehaves: a step-by-step diagnosis, ping, traceroute, DNS lookup, port check, HTTP check, a speed test with a needle gauge, public IP, whois, Wake-on-LAN, a Bluetooth radar, Local devices (a LAN scanner), Wi-Fi networks with their channels, a Wi-Fi walk test and the interfaces.",
+          "description": "A full-screen network toolbox made for the deck's small screen and for touch. Diagnosis answers 'why is my internet broken?' in plain words, step by step: link, address, gateway, DNS, internet and a captive-portal check (a plain HTTP request to connectivitycheck.gstatic.com/generate_204). Ping shows every packet (ok, slow or lost), the loss, min/avg/max and the jitter; it needs no root (an unprivileged ICMP socket, allowed by net.ipv4.ping_group_range on Raspberry Pi OS). DNS lookup asks for A, AAAA, MX, TXT, NS or PTR records through the system's resolver, a typed one or 1.1.1.1, 8.8.8.8 and 9.9.9.9, and shows the CNAME chain, the answer time and the response code. Port check tells whether a TCP port of a host is open, closed or filtered, with presets for web, mail, SSH, DNS and remote desktop. Traceroute draws the path to a host as a chain of hops with a latency bar and a loss tag each, in rounds like mtr, with no root (a silent hop is shown as normal, a hop that only limits its answers is told apart from real loss). HTTP check makes one request with curl and shows the status, the timing as a waterfall (DNS, connect, TLS, waiting, transfer) and the days left of the site's certificate; ignoring certificate errors is an explicit switch. Public IP shows the address the internet sees (through Cloudflare's trace page) and says when your provider shares it between customers. Whois asks IANA and the registry it names (TCP port 43) and summarises the answer. Speed test measures download, upload, latency and jitter against Cloudflare's speed.cloudflare.com on a needle gauge with a live throughput chart, then grades the latency under load from A to F (bufferbloat); it uses at most 150 MB each way, only when you press Start, and says so (on a phone hotspot that is mobile data). Wake-on-LAN keeps up to 20 saved machines, sends the magic packet through the network you chose and watches the machine's address for up to two minutes, showing in a ring and a strip of seconds when it wakes up. Bluetooth radar scans for the devices around with BlueZ and draws them as blips on near, medium and far rings (signal strength, not distance) with a list and the details of each device; Wi-Fi and Bluetooth share one radio, so a Bluetooth keyboard may stutter while it scans, and it needs the bluez package. Local devices (it replaces LAN Scan) scans your own network without root and lists what answers, as it is found: the address, the name (mDNS, NetBIOS or reverse DNS), the MAC, the vendor (a random address is shown as private), the round trip, the router and this device marked; a device's page pings it, checks a port, scans its common ports or ports 1 to 1024 (only devices of your own network can be scanned) and saves it for Wake-on-LAN. Wi-Fi networks (it replaces Wi-Fi Survey) lists the networks around with signal bars, channel, band and security in plain words, a page per network with its vendor and what its security means, and a Channels view that names the least crowded channel of 2.4 and 5 GHz; it asks NetworkManager for its own scan and never connects to anything, so it needs the network-manager package. The Wi-Fi walk test draws the signal against time while you walk with the board, with a weak-zone line you can set (-70, -75 or -80 dBm), marks the weak readings and the access point changes, and ends with a summary: the weakest spot and when, the average, the time in the weak zone, the dips. Interfaces lists each adapter with its state, addresses, MAC, speed, the gateway, the DNS servers and the Wi-Fi network. Every result can be saved as text to ~/net-logs. Nothing leaves the board until you start a test. Works on the Pi Zero 2 W, Pi 3A+, Pi 5 and CM5. Rows show what can be tapped: a chevron opens or changes, a dot runs. Needs a screen of at least 640x480 and a launcher with full-screen app support."
+        }
+      },
+      "i18n": {
+        "en": {
+          "title": "Net Toolbox",
+          "summary": "The tools you reach for when the network misbehaves: a step-by-step diagnosis, ping, traceroute, DNS lookup, port check, HTTP check, a speed test with a needle gauge, public IP, whois, Wake-on-LAN, a Bluetooth radar, Local devices (a LAN scanner), Wi-Fi networks with their channels, a Wi-Fi walk test and the interfaces.",
+          "description": "A full-screen network toolbox made for the deck's small screen and for touch. Diagnosis answers 'why is my internet broken?' in plain words, step by step: link, address, gateway, DNS, internet and a captive-portal check (a plain HTTP request to connectivitycheck.gstatic.com/generate_204). Ping shows every packet (ok, slow or lost), the loss, min/avg/max and the jitter; it needs no root (an unprivileged ICMP socket, allowed by net.ipv4.ping_group_range on Raspberry Pi OS). DNS lookup asks for A, AAAA, MX, TXT, NS or PTR records through the system's resolver, a typed one or 1.1.1.1, 8.8.8.8 and 9.9.9.9, and shows the CNAME chain, the answer time and the response code. Port check tells whether a TCP port of a host is open, closed or filtered, with presets for web, mail, SSH, DNS and remote desktop. Traceroute draws the path to a host as a chain of hops with a latency bar and a loss tag each, in rounds like mtr, with no root (a silent hop is shown as normal, a hop that only limits its answers is told apart from real loss). HTTP check makes one request with curl and shows the status, the timing as a waterfall (DNS, connect, TLS, waiting, transfer) and the days left of the site's certificate; ignoring certificate errors is an explicit switch. Public IP shows the address the internet sees (through Cloudflare's trace page) and says when your provider shares it between customers. Whois asks IANA and the registry it names (TCP port 43) and summarises the answer. Speed test measures download, upload, latency and jitter against Cloudflare's speed.cloudflare.com on a needle gauge with a live throughput chart, then grades the latency under load from A to F (bufferbloat); it uses at most 150 MB each way, only when you press Start, and says so (on a phone hotspot that is mobile data). Wake-on-LAN keeps up to 20 saved machines, sends the magic packet through the network you chose and watches the machine's address for up to two minutes, showing in a ring and a strip of seconds when it wakes up. Bluetooth radar scans for the devices around with BlueZ and draws them as blips on near, medium and far rings (signal strength, not distance) with a list and the details of each device; Wi-Fi and Bluetooth share one radio, so a Bluetooth keyboard may stutter while it scans, and it needs the bluez package. Local devices (it replaces LAN Scan) scans your own network without root and lists what answers, as it is found: the address, the name (mDNS, NetBIOS or reverse DNS), the MAC, the vendor (a random address is shown as private), the round trip, the router and this device marked; a device's page pings it, checks a port, scans its common ports or ports 1 to 1024 (only devices of your own network can be scanned) and saves it for Wake-on-LAN. Wi-Fi networks (it replaces Wi-Fi Survey) lists the networks around with signal bars, channel, band and security in plain words, a page per network with its vendor and what its security means, and a Channels view that names the least crowded channel of 2.4 and 5 GHz; it asks NetworkManager for its own scan and never connects to anything, so it needs the network-manager package. The Wi-Fi walk test draws the signal against time while you walk with the board, with a weak-zone line you can set (-70, -75 or -80 dBm), marks the weak readings and the access point changes, and ends with a summary: the weakest spot and when, the average, the time in the weak zone, the dips. Interfaces lists each adapter with its state, addresses, MAC, speed, the gateway, the DNS servers and the Wi-Fi network. Every result can be saved as text to ~/net-logs. Nothing leaves the board until you start a test. Works on the Pi Zero 2 W, Pi 3A+, Pi 5 and CM5. Rows show what can be tapped: a chevron opens or changes, a dot runs. Needs a screen of at least 640x480 and a launcher with full-screen app support."
+        }
+      },
+      "categories": [
+        "Tools"
+      ],
+      "author": {
+        "github": "OSRdesign",
+        "display_name": "OSRdesign"
+      },
+      "version": "0.4.2",
+      "published_at": "2026-10-22T11:02:01+00:00",
+      "updated_at": "2026-10-22T11:02:01+00:00",
+      "review": {
+        "status": "approved"
+      },
+      "license": "MIT",
+      "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/net-toolbox",
+      "download": {
+        "type": "deb",
+        "package": "net-toolbox",
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/net-toolbox_0.4.2_amd64.deb",
+        "md5": "92dc3a403a4b002bd5b95700a73d6c6f",
+        "sha256": "049cde9700151e3deba9b071d5f8cb1b950242fb7edb551acb0dec083257b930",
+        "size": 2814596
+      },
+      "depends": "libfreetype6, libinput10, libxkbcommon0, curl, ca-certificates, network-manager",
+      "permissions": {
+        "camera": false,
+        "microphone": false,
+        "imu": false,
+        "network": true,
+        "additional_hardware": false,
+        "background_service": false,
+        "external_display": false
+      },
+      "assets": {
+        "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/icon.png",
+        "screenshots": [
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/01-home-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/02-diagnosis-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/03-ping-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/04-traceroute-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/05-http-check-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/06-dns-lookup-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/07-dns-compare-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/08-port-check-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/09-interfaces-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/10-diagnosis-pi3a.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/11-ping-pi3a.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/12-traceroute-pi3a.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/13-traceroute-720x720.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/14-http-check-1280x720.png"
+        ]
+      },
+      "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/icon.png",
+      "screenshots": [
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/01-home-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/02-diagnosis-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/03-ping-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/04-traceroute-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/05-http-check-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/06-dns-lookup-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/07-dns-compare-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/08-port-check-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/09-interfaces-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/10-diagnosis-pi3a.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/11-ping-pi3a.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/12-traceroute-pi3a.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/13-traceroute-720x720.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/14-http-check-1280x720.png"
+      ]
+    },
+    {
+      "uuid": "f90b6c76-fefd-5369-b039-151ae201bcc0",
+      "share_code": "rss-reader",
+      "title": "RSS Reader",
+      "summary": "A text-feed reader for the deck: pin your favorite news, tech and science feeds from a catalog of about 260 by country and topic, or add any site by its address, then read the articles full screen, by touch or keyboard, on any screen from 640x480 up.",
+      "description": "A full-screen reader of RSS and Atom feeds (text feeds only: no podcasts or video). It opens on a Home list (Favorites with the count of new articles, Browse feeds, Saved articles, Add a feed, Settings); each page has a header with an Esc button. Browse feeds walks a bundled catalog of about 260 hand-checked feeds by country (or International), then topic, then feed, each with its language and whether it carries the full text or a summary; a search finds a feed by name, site or topic across the whole catalog, and a tap on a selected feed pins it to your favorites (a blue dot) or unpins it. Add a feed takes a site's address (example.com) or a feed's: the feed is found for you, then you pin it. Favorites lists your feeds in your order with their unread counts and the age of their newest article; Refresh all updates them one after the other in the background (only what changed is downloaded), and they can be updated each time you open the page. A feed's articles show unread ones with a blue dot; opening one shows its title, source, date, text (headings, paragraphs, lists, quotes) and pictures (JPEG, PNG, GIF and BMP, downloaded in the background and kept in a 50 MB cache; a tap shows one full screen) in the text size you choose, Left and Right go to the previous and next article. Save for offline keeps an article with its pictures, readable without the network, under a storage cap you choose. The options of a feed (move, unpin, mark all read, refresh, details) or of an article (read or unread, save for offline, article info, text size) open with a 3 s hold on its row or on the text, or Ctrl+O. Settings: text size, refresh when opening, the storage cap for saved articles, clear the read history, export and import your favorites as an OPML file in your home folder. Only the feeds themselves are fetched (with curl), never the web pages behind them; nothing is sent anywhere else. Favorites, read marks and settings are kept in ~/.local/share/rss-reader. Text is typed with a Bluetooth or USB keyboard, or with the launcher's on-screen keyboard while none is connected. Needs the network to update the feeds (what was fetched stays readable offline), a screen of at least 640x480 and a launcher with full-screen app support (X-Fullscreen in .desktop files).",
+      "locales": {
+        "en": {
+          "title": "RSS Reader",
+          "summary": "A text-feed reader for the deck: pin your favorite news, tech and science feeds from a catalog of about 260 by country and topic, or add any site by its address, then read the articles full screen, by touch or keyboard, on any screen from 640x480 up.",
+          "description": "A full-screen reader of RSS and Atom feeds (text feeds only: no podcasts or video). It opens on a Home list (Favorites with the count of new articles, Browse feeds, Saved articles, Add a feed, Settings); each page has a header with an Esc button. Browse feeds walks a bundled catalog of about 260 hand-checked feeds by country (or International), then topic, then feed, each with its language and whether it carries the full text or a summary; a search finds a feed by name, site or topic across the whole catalog, and a tap on a selected feed pins it to your favorites (a blue dot) or unpins it. Add a feed takes a site's address (example.com) or a feed's: the feed is found for you, then you pin it. Favorites lists your feeds in your order with their unread counts and the age of their newest article; Refresh all updates them one after the other in the background (only what changed is downloaded), and they can be updated each time you open the page. A feed's articles show unread ones with a blue dot; opening one shows its title, source, date, text (headings, paragraphs, lists, quotes) and pictures (JPEG, PNG, GIF and BMP, downloaded in the background and kept in a 50 MB cache; a tap shows one full screen) in the text size you choose, Left and Right go to the previous and next article. Save for offline keeps an article with its pictures, readable without the network, under a storage cap you choose. The options of a feed (move, unpin, mark all read, refresh, details) or of an article (read or unread, save for offline, article info, text size) open with a 3 s hold on its row or on the text, or Ctrl+O. Settings: text size, refresh when opening, the storage cap for saved articles, clear the read history, export and import your favorites as an OPML file in your home folder. Only the feeds themselves are fetched (with curl), never the web pages behind them; nothing is sent anywhere else. Favorites, read marks and settings are kept in ~/.local/share/rss-reader. Text is typed with a Bluetooth or USB keyboard, or with the launcher's on-screen keyboard while none is connected. Needs the network to update the feeds (what was fetched stays readable offline), a screen of at least 640x480 and a launcher with full-screen app support (X-Fullscreen in .desktop files)."
+        }
+      },
+      "i18n": {
+        "en": {
+          "title": "RSS Reader",
+          "summary": "A text-feed reader for the deck: pin your favorite news, tech and science feeds from a catalog of about 260 by country and topic, or add any site by its address, then read the articles full screen, by touch or keyboard, on any screen from 640x480 up.",
+          "description": "A full-screen reader of RSS and Atom feeds (text feeds only: no podcasts or video). It opens on a Home list (Favorites with the count of new articles, Browse feeds, Saved articles, Add a feed, Settings); each page has a header with an Esc button. Browse feeds walks a bundled catalog of about 260 hand-checked feeds by country (or International), then topic, then feed, each with its language and whether it carries the full text or a summary; a search finds a feed by name, site or topic across the whole catalog, and a tap on a selected feed pins it to your favorites (a blue dot) or unpins it. Add a feed takes a site's address (example.com) or a feed's: the feed is found for you, then you pin it. Favorites lists your feeds in your order with their unread counts and the age of their newest article; Refresh all updates them one after the other in the background (only what changed is downloaded), and they can be updated each time you open the page. A feed's articles show unread ones with a blue dot; opening one shows its title, source, date, text (headings, paragraphs, lists, quotes) and pictures (JPEG, PNG, GIF and BMP, downloaded in the background and kept in a 50 MB cache; a tap shows one full screen) in the text size you choose, Left and Right go to the previous and next article. Save for offline keeps an article with its pictures, readable without the network, under a storage cap you choose. The options of a feed (move, unpin, mark all read, refresh, details) or of an article (read or unread, save for offline, article info, text size) open with a 3 s hold on its row or on the text, or Ctrl+O. Settings: text size, refresh when opening, the storage cap for saved articles, clear the read history, export and import your favorites as an OPML file in your home folder. Only the feeds themselves are fetched (with curl), never the web pages behind them; nothing is sent anywhere else. Favorites, read marks and settings are kept in ~/.local/share/rss-reader. Text is typed with a Bluetooth or USB keyboard, or with the launcher's on-screen keyboard while none is connected. Needs the network to update the feeds (what was fetched stays readable offline), a screen of at least 640x480 and a launcher with full-screen app support (X-Fullscreen in .desktop files)."
+        }
+      },
+      "categories": [
+        "Internet"
+      ],
+      "author": {
+        "github": "OSRdesign",
+        "display_name": "OSRdesign"
+      },
+      "version": "0.1.2",
+      "published_at": "2026-10-22T11:02:02+00:00",
+      "updated_at": "2026-10-22T11:02:02+00:00",
+      "review": {
+        "status": "approved"
+      },
+      "license": "MIT",
+      "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/rss-reader",
+      "download": {
+        "type": "deb",
+        "package": "rss-reader",
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/rss-reader_0.1.2_amd64.deb",
+        "md5": "564ccb0d3d77a483390923226c9542d9",
+        "sha256": "1a799b4116118a46043e2f3ea01da9eab8ace7196c33ad2ef5a6e879b710f6ce",
+        "size": 1783258
+      },
+      "depends": "libfreetype6, libinput10, libxkbcommon0, curl, ca-certificates",
+      "permissions": {
+        "camera": false,
+        "microphone": false,
+        "imu": false,
+        "network": true,
+        "additional_hardware": false,
+        "background_service": false,
+        "external_display": false
+      },
+      "assets": {
+        "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/rss-reader/icon.png",
+        "screenshots": []
+      },
+      "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/rss-reader/icon.png",
+      "screenshots": []
+    },
+    {
+      "uuid": "2d352197-d45d-50d1-9f6f-75387ab6d9e8",
+      "share_code": "serial-console",
+      "title": "Serial Console",
+      "summary": "Finds your USB-serial adapters and boards, tells what is plugged in and what is behind it, recommends the settings, and talks to it.",
+      "description": "A full-screen serial console made for the deck's small screen. It lists the serial ports as they are plugged in (USB-serial adapters and boards on ttyUSB/ttyACM, the on-board UARTs on request) and names what is connected from its USB ids: FTDI (the exact chip), CP210x, CH340/CH341/CH9102 and PL2303 adapters, Arduino, ESP32 and Raspberry Pi Pico boards, ST-LINK probes, u-blox GPS receivers, a Cisco console cable and more; an RP2040 in BOOTSEL mode is shown as the USB drive it is. 'What is on the other end?' finds the board or firmware behind an adapter: Listen (nothing sent) recognises ESP-IDF and Arduino-ESP32 programs, the ESP32 and ESP8266 boot ROMs, Meshtastic, MicroPython and CircuitPython, Marlin, GRBL, Klipper, U-Boot, Linux, OpenWrt, MikroTik and Cisco consoles, AT modems, GPS receivers (NMEA, UBX) and more; Reset and listen (after a confirmation) restarts the board with DTR/RTS and reads its boot; Ask the device (each probe confirmed, listing what it sends) asks MicroPython, an AT modem, Marlin, GRBL, the Arduino boot loader (the AVR chip) or the ESP boot loader (the chip and MAC), read-only. The result card (chip, firmware, version, boot output, evidence) is remembered per port and sets the recommended speed. Each port has a setup page: what is connected and what it typically is, the recommended speed and why, speed (1200 to 921600, 74880 included), frame (8N1, 7E1, 8E1, 8O1, 7O1, 8N2), local echo, what Enter and Backspace send, a log file in ~/serial-logs, and Find the speed, which listens at each speed and picks the one where the text is clean. The settings are remembered per port. The terminal page shows the received text (colour codes removed, never garbage), with RX/TX counters, pause, clear, a toolbar for Ctrl-C, Ctrl-D, Ctrl-Z, Tab, Esc, Enter, the log and a board reset (DTR/RTS pulse), and reconnects by itself when the board is unplugged and plugged in again. With a keyboard every key goes to the board; touch only, a line field with the on-screen keyboard. Needs a screen of at least 640x480, a launcher with full-screen app support, and the user in the dialout group.",
+      "locales": {
+        "en": {
+          "title": "Serial Console",
+          "summary": "Finds your USB-serial adapters and boards, tells what is plugged in and what is behind it, recommends the settings, and talks to it.",
+          "description": "A full-screen serial console made for the deck's small screen. It lists the serial ports as they are plugged in (USB-serial adapters and boards on ttyUSB/ttyACM, the on-board UARTs on request) and names what is connected from its USB ids: FTDI (the exact chip), CP210x, CH340/CH341/CH9102 and PL2303 adapters, Arduino, ESP32 and Raspberry Pi Pico boards, ST-LINK probes, u-blox GPS receivers, a Cisco console cable and more; an RP2040 in BOOTSEL mode is shown as the USB drive it is. 'What is on the other end?' finds the board or firmware behind an adapter: Listen (nothing sent) recognises ESP-IDF and Arduino-ESP32 programs, the ESP32 and ESP8266 boot ROMs, Meshtastic, MicroPython and CircuitPython, Marlin, GRBL, Klipper, U-Boot, Linux, OpenWrt, MikroTik and Cisco consoles, AT modems, GPS receivers (NMEA, UBX) and more; Reset and listen (after a confirmation) restarts the board with DTR/RTS and reads its boot; Ask the device (each probe confirmed, listing what it sends) asks MicroPython, an AT modem, Marlin, GRBL, the Arduino boot loader (the AVR chip) or the ESP boot loader (the chip and MAC), read-only. The result card (chip, firmware, version, boot output, evidence) is remembered per port and sets the recommended speed. Each port has a setup page: what is connected and what it typically is, the recommended speed and why, speed (1200 to 921600, 74880 included), frame (8N1, 7E1, 8E1, 8O1, 7O1, 8N2), local echo, what Enter and Backspace send, a log file in ~/serial-logs, and Find the speed, which listens at each speed and picks the one where the text is clean. The settings are remembered per port. The terminal page shows the received text (colour codes removed, never garbage), with RX/TX counters, pause, clear, a toolbar for Ctrl-C, Ctrl-D, Ctrl-Z, Tab, Esc, Enter, the log and a board reset (DTR/RTS pulse), and reconnects by itself when the board is unplugged and plugged in again. With a keyboard every key goes to the board; touch only, a line field with the on-screen keyboard. Needs a screen of at least 640x480, a launcher with full-screen app support, and the user in the dialout group."
+        }
+      },
+      "i18n": {
+        "en": {
+          "title": "Serial Console",
+          "summary": "Finds your USB-serial adapters and boards, tells what is plugged in and what is behind it, recommends the settings, and talks to it.",
+          "description": "A full-screen serial console made for the deck's small screen. It lists the serial ports as they are plugged in (USB-serial adapters and boards on ttyUSB/ttyACM, the on-board UARTs on request) and names what is connected from its USB ids: FTDI (the exact chip), CP210x, CH340/CH341/CH9102 and PL2303 adapters, Arduino, ESP32 and Raspberry Pi Pico boards, ST-LINK probes, u-blox GPS receivers, a Cisco console cable and more; an RP2040 in BOOTSEL mode is shown as the USB drive it is. 'What is on the other end?' finds the board or firmware behind an adapter: Listen (nothing sent) recognises ESP-IDF and Arduino-ESP32 programs, the ESP32 and ESP8266 boot ROMs, Meshtastic, MicroPython and CircuitPython, Marlin, GRBL, Klipper, U-Boot, Linux, OpenWrt, MikroTik and Cisco consoles, AT modems, GPS receivers (NMEA, UBX) and more; Reset and listen (after a confirmation) restarts the board with DTR/RTS and reads its boot; Ask the device (each probe confirmed, listing what it sends) asks MicroPython, an AT modem, Marlin, GRBL, the Arduino boot loader (the AVR chip) or the ESP boot loader (the chip and MAC), read-only. The result card (chip, firmware, version, boot output, evidence) is remembered per port and sets the recommended speed. Each port has a setup page: what is connected and what it typically is, the recommended speed and why, speed (1200 to 921600, 74880 included), frame (8N1, 7E1, 8E1, 8O1, 7O1, 8N2), local echo, what Enter and Backspace send, a log file in ~/serial-logs, and Find the speed, which listens at each speed and picks the one where the text is clean. The settings are remembered per port. The terminal page shows the received text (colour codes removed, never garbage), with RX/TX counters, pause, clear, a toolbar for Ctrl-C, Ctrl-D, Ctrl-Z, Tab, Esc, Enter, the log and a board reset (DTR/RTS pulse), and reconnects by itself when the board is unplugged and plugged in again. With a keyboard every key goes to the board; touch only, a line field with the on-screen keyboard. Needs a screen of at least 640x480, a launcher with full-screen app support, and the user in the dialout group."
+        }
+      },
+      "categories": [
+        "Tools"
+      ],
+      "author": {
+        "github": "OSRdesign",
+        "display_name": "OSRdesign"
+      },
+      "version": "0.4.4",
+      "published_at": "2026-10-22T11:02:03+00:00",
+      "updated_at": "2026-10-22T11:02:03+00:00",
+      "review": {
+        "status": "approved"
+      },
+      "license": "MIT",
+      "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/serial-console",
+      "download": {
+        "type": "deb",
+        "package": "serial-console",
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/serial-console_0.4.4_amd64.deb",
+        "md5": "9939c93b688a5cc691adbe4d586c7320",
+        "sha256": "348f8c5fc80329409a052fc64a43eb0411edcc5c9906279c6063f13a64454a36",
+        "size": 1599772
+      },
+      "depends": "libfreetype6, libinput10, libxkbcommon0",
+      "permissions": {
+        "camera": false,
+        "microphone": false,
+        "imu": false,
+        "network": false,
+        "additional_hardware": true,
+        "background_service": false,
+        "external_display": false
+      },
+      "assets": {
+        "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/icon.png",
+        "screenshots": [
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/01-ports-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/02-port-800x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/03-behind-it-720x720.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/04-find-speed-1024x600.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/05-terminal-deck.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/06-gps-card-1280x720.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/07-terminal-keyboard-pi3a.png"
+        ]
+      },
+      "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/icon.png",
+      "screenshots": [
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/01-ports-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/02-port-800x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/03-behind-it-720x720.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/04-find-speed-1024x600.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/05-terminal-deck.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/06-gps-card-1280x720.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/07-terminal-keyboard-pi3a.png"
+      ]
+    },
+    {
+      "uuid": "2ac794f7-c2d8-572f-a0bb-1a895856db77",
+      "share_code": "system-monitor",
+      "title": "System Monitor",
+      "summary": "A live look at the Raspberry Pi it runs on: CPU, temperature, memory, storage, network, processes and the power supply.",
+      "description": "A full-screen monitor of the board it runs on, made for the deck's small screen and for touch. The overview is a grid of six tiles that fills the screen: Power first, in plain words and colours (Power OK in green; under-voltage now in red with 'check the power supply'; under-voltage, throttling or frequency capping since boot in amber, with the time since boot of the last event), CPU load, temperature (amber from 70 °C, red from 80 °C, where the Pi starts to slow down), memory, the space used on the system disk and the network (address, in and out rates, Wi-Fi signal), each with a history line of the last two minutes. A tap on a tile (or Enter on the tile with the ring) opens its page with a live chart and the details: each core, frequency, load and the top processes by CPU; memory with the top processes by memory; temperature and power (each firmware flag, the fan, the 5 V input on a Pi 5); every disk and its read/write rate; every network interface with its address, rates and Wi-Fi signal. A Processes page lists the top 15 by CPU or by memory; a System page names the model, kernel, OS and firmware and shows the app's own CPU and memory. Values refresh every 1, 2 or 5 seconds (remembered). Rows show what can be tapped: a chevron opens or changes, a dot runs. Read-only: it changes nothing on the system. Works on the Pi Zero 2 W, Pi 3A+, Pi 5 and CM5; the firmware flags need vcgencmd and the video group (without them the rest works). Needs a screen of at least 640x480 and a launcher with full-screen app support.",
+      "locales": {
+        "en": {
+          "title": "System Monitor",
+          "summary": "A live look at the Raspberry Pi it runs on: CPU, temperature, memory, storage, network, processes and the power supply.",
+          "description": "A full-screen monitor of the board it runs on, made for the deck's small screen and for touch. The overview is a grid of six tiles that fills the screen: Power first, in plain words and colours (Power OK in green; under-voltage now in red with 'check the power supply'; under-voltage, throttling or frequency capping since boot in amber, with the time since boot of the last event), CPU load, temperature (amber from 70 °C, red from 80 °C, where the Pi starts to slow down), memory, the space used on the system disk and the network (address, in and out rates, Wi-Fi signal), each with a history line of the last two minutes. A tap on a tile (or Enter on the tile with the ring) opens its page with a live chart and the details: each core, frequency, load and the top processes by CPU; memory with the top processes by memory; temperature and power (each firmware flag, the fan, the 5 V input on a Pi 5); every disk and its read/write rate; every network interface with its address, rates and Wi-Fi signal. A Processes page lists the top 15 by CPU or by memory; a System page names the model, kernel, OS and firmware and shows the app's own CPU and memory. Values refresh every 1, 2 or 5 seconds (remembered). Rows show what can be tapped: a chevron opens or changes, a dot runs. Read-only: it changes nothing on the system. Works on the Pi Zero 2 W, Pi 3A+, Pi 5 and CM5; the firmware flags need vcgencmd and the video group (without them the rest works). Needs a screen of at least 640x480 and a launcher with full-screen app support."
+        }
+      },
+      "i18n": {
+        "en": {
+          "title": "System Monitor",
+          "summary": "A live look at the Raspberry Pi it runs on: CPU, temperature, memory, storage, network, processes and the power supply.",
+          "description": "A full-screen monitor of the board it runs on, made for the deck's small screen and for touch. The overview is a grid of six tiles that fills the screen: Power first, in plain words and colours (Power OK in green; under-voltage now in red with 'check the power supply'; under-voltage, throttling or frequency capping since boot in amber, with the time since boot of the last event), CPU load, temperature (amber from 70 °C, red from 80 °C, where the Pi starts to slow down), memory, the space used on the system disk and the network (address, in and out rates, Wi-Fi signal), each with a history line of the last two minutes. A tap on a tile (or Enter on the tile with the ring) opens its page with a live chart and the details: each core, frequency, load and the top processes by CPU; memory with the top processes by memory; temperature and power (each firmware flag, the fan, the 5 V input on a Pi 5); every disk and its read/write rate; every network interface with its address, rates and Wi-Fi signal. A Processes page lists the top 15 by CPU or by memory; a System page names the model, kernel, OS and firmware and shows the app's own CPU and memory. Values refresh every 1, 2 or 5 seconds (remembered). Rows show what can be tapped: a chevron opens or changes, a dot runs. Read-only: it changes nothing on the system. Works on the Pi Zero 2 W, Pi 3A+, Pi 5 and CM5; the firmware flags need vcgencmd and the video group (without them the rest works). Needs a screen of at least 640x480 and a launcher with full-screen app support."
+        }
+      },
+      "categories": [
+        "Tools"
+      ],
+      "author": {
+        "github": "OSRdesign",
+        "display_name": "OSRdesign"
+      },
+      "version": "0.2.5",
+      "published_at": "2026-10-22T11:02:04+00:00",
+      "updated_at": "2026-10-22T11:02:04+00:00",
+      "review": {
+        "status": "approved"
+      },
+      "license": "MIT",
+      "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/system-monitor",
+      "download": {
+        "type": "deb",
+        "package": "system-monitor",
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/system-monitor_0.2.5_amd64.deb",
+        "md5": "a80a4a701aa07f85ed3bf81a6624854c",
+        "sha256": "8e2bc4adff90ad3995c813fc6e6b0fc837753b0ceb71d19ad3c8e43e6f454885",
+        "size": 1472692
+      },
+      "depends": "libfreetype6, libinput10, libxkbcommon0",
+      "permissions": {
+        "camera": false,
+        "microphone": false,
+        "imu": false,
+        "network": false,
+        "additional_hardware": false,
+        "background_service": false,
+        "external_display": false
+      },
+      "assets": {
+        "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/icon.png",
+        "screenshots": [
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/01-overview-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/02-cpu-800x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/03-memory-720x720.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/04-network-1024x600.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/05-power-warning-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/06-temp-power-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/07-processes-800x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/08-storage-1280x720.png"
+        ]
+      },
+      "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/icon.png",
+      "screenshots": [
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/01-overview-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/02-cpu-800x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/03-memory-720x720.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/04-network-1024x600.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/05-power-warning-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/06-temp-power-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/07-processes-800x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/08-storage-1280x720.png"
+      ]
+    }
+  ]
+}
