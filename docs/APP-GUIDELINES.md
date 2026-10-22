@@ -285,11 +285,14 @@ X-Background=freeze
 | `recommends` | optional: Debian packages a feature uses when they are there (apt installs them by default; the app must work without them), e.g. Mesh Hop's `bluez` |
 | `permissions` | `network`, `additional_hardware`, `camera`, `microphone`, `imu`, `background_service`, `external_display` (honest: they are shown to the user) |
 | `draft` | `true` keeps the app out of the registry (`make_registry.py` skips it); build a local `.deb` with `--only <id> --out <dir outside packages/>` |
+| `arch` | optional, default `["arm64"]`; `["arm64", "amd64"]` also packages the app for x86-64 PCs from `root.amd64/` into `registry-amd64.json` (README, amd64) |
 | `categories`, `author`, `source_repo` | shown in the catalogue |
 
 - **libc6 floor.** `tools/build_deb.py` adds `libc6 (>= 2.38)` to every package (the binaries are built for Debian 13); do not
   repeat it in `depends`, and never lower it. Build on the pinned toolchain (`build_app.sh`), not on an older system.
-- **arm64 only.** A binary for another CPU installs and does not run.
+- **arm64 first.** A binary for another CPU installs and does not run. An amd64 package is optional and comes from the
+  same app folder: `"arch": ["arm64", "amd64"]` and the x86-64 binary in `root.amd64/` (`build.sh cross --arch amd64`;
+  README, amd64). `build_deb.py` refuses a package holding an ELF file of the wrong architecture.
 - **Version bumps.** Change `version`, rebuild (`python3 tools/make_registry.py`), commit the new `.deb` and `registry.json`. After an upgrade the
   tile keeps its place on the grid only if the `.desktop` file name is unchanged: **never rename it**.
 - **Publish the package you tested.** Put the exact `.deb` that passed the board tests in `packages/`, remove `draft`,
@@ -415,7 +418,7 @@ Do not start (or stop, and say so) when:
 - **It needs heavy rework to fit 640x480.** A dense desktop UI (many columns, tiny controls, a mouse-only editor, a
   map with hover) is not squeezed in. Redesign it into the roller/page model or leave it. The same holds for 480x320: not worth
   heavy rework; declare `X-MinSize=640x480`.
-- **It is x86-only** (binary blobs, a vendor driver, a Wine app). Packages are arm64; the x86 port of the whole stack is a separate project.
+- **It is x86-only** (binary blobs, a vendor driver, a Wine app). Every app runs on the decks (arm64); an amd64 build for PCs comes in addition, never instead.
 - **It is GPU-heavy** (3D, video decode at high resolution, a browser, an emulator). The Zero 2 W has a software-drawn LVGL
   screen, 512 MB RAM and a thermal limit; the rule is idle CPU a few percent and VmRSS under 25 MB.
 - **It needs root at run time**, or a root-free install. The launcher installs with sudo; the app runs as the deck user.

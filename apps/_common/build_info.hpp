@@ -24,5 +24,5 @@
 #define CDK_BUILD_DATE "unknown"
 #endif
 #ifndef CDK_BUILD_TARGET
-#define CDK_BUILD_TARGET "unknown" /* aarch64 | host */
+#define CDK_BUILD_TARGET "unknown" /* aarch64 | x86_64 | host */
 #endif

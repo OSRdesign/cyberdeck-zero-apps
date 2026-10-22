@@ -3,20 +3,28 @@
 #
 # build_app.sh: build one cdk app (a native fullscreen app on the launcher's cp0_lvgl) in WSL.
 #
-#   apps/_common/build_app.sh --name ProjName <app dir> [cross|host|all] [--strict] [--sync]
+#   apps/_common/build_app.sh --name ProjName <app dir> [cross|host|all] [--arch arm64|amd64] [--strict] [--sync]
 #
-#   cross  aarch64 binary for the boards: copies the app (src/), apps/_common and the launcher's LVGL FreeType glue into
-#          a scratch project <launcher tree>/projects/<ProjName>, runs scons there under the shared build lock, strips
-#          the result into <app>/root/usr/share/APPLaunch/bin/<app id> and writes
-#          <app>/root/usr/share/doc/<app id>/build-info; prints its size and its NEEDED libraries.
+#   cross  the device binary: copies the app (src/), apps/_common and the launcher's LVGL FreeType glue into a scratch
+#          project <launcher tree>/projects/<ProjName>, runs scons there under the shared build lock, strips the result
+#          into <app>/<root>/usr/share/APPLaunch/bin/<app id> and writes <app>/<root>/usr/share/doc/<app id>/build-info
+#          (with the architecture); prints its size and its NEEDED libraries. By --arch:
+#            arm64 (default)  aarch64 for the boards, cross-built with the SDK sysroot; <root> = root
+#            amd64            x86-64 for PCs (report 028), a native build in the launcher's amd64 tree with the host gcc
+#                             and the build box's -dev packages (pkg-config: libinput xkbcommon libudev dbus-1 gio-2.0
+#                             freetype2); <root> = root.amd64, the overlay tools/make_registry.py lays over root/
 #   host   the PC side: the app's headless harness and unit tests (make -C apps/_common/headless, LVGL from the
 #          launcher tree's SDK), then every test (test-common, test-<app id>) and every scene of <app>/tests/scenes
-#          (PNG shots, layout checks, contact sheets in ~/cdk-build/<app id>/host/out/sheets).
+#          (PNG shots, layout checks, contact sheets in ~/cdk-build/<app id>/host/out/sheets). The same for both
+#          architectures (it always uses LAUNCHER_TREE).
 #   all    both (default).
 #
 # The launcher: LAUNCHER_SRC (default /mnt/c/CLAUDE/zero7/launcher) is the git checkout the pin is checked against;
 # LAUNCHER_TREE (default ~/zero7/<its folder name>) is its WSL build tree, whose SDK/ holds LVGL and the aarch64
-# sysroot (tools/dev/wsl-build.sh of the launcher keeps it in sync and seeds it).
+# sysroot (tools/dev/wsl-build.sh of the launcher keeps it in sync and seeds it); LAUNCHER_TREE_AMD64 (default
+# ~/zero7/<its folder name>-amd64, the tree of tools/dev/wsl-build.sh --arch amd64) is the one of the amd64 builds.
+# Without the -dev packages installed, a private root of them works through PKG_CONFIG_PATH and CONFIG_TOOLCHAIN_FLAGS
+# (-isystem <root>/usr/include ... -L<root>/usr/lib/x86_64-linux-gnu -Wl,-rpath-link,...) in the environment.
 #   pin       apps/_common/LAUNCHER_REF. "pinned" = the checkout's HEAD is that commit; "same-tree" = another commit
 #             with identical ext_components/cp0_lvgl, projects/APPLaunch/main/lvgl and the render harness LVGL config;
 #             "differs" = a warning (an error with --strict). Uncommitted changes in the checkout are not looked at
@@ -32,11 +40,13 @@ COMMON=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 NAME=""
 APP=""
 MODE=all
+ARCH=arm64
 STRICT=0
 SYNC=0
 while (($#)); do
     case $1 in
         --name) NAME=${2:?--name needs a project name}; shift 2 ;;
+        --arch) ARCH=${2:?--arch needs arm64 or amd64}; shift 2 ;;
         --strict) STRICT=1; shift ;;
         --sync) SYNC=1; shift ;;
         cross | host | all) MODE=$1; shift ;;
@@ -47,20 +57,46 @@ while (($#)); do
 done
 [[ -n $APP && -n $NAME ]] || { usage >&2; exit 2; }
 [[ $NAME =~ ^[A-Za-z][A-Za-z0-9_]*$ ]] || { echo "--name: letters, digits and _ only (a scons project)" >&2; exit 2; }
+case $ARCH in
+    arm64 | amd64) ;;
+    *) echo "--arch $ARCH: arm64 or amd64" >&2; exit 2 ;;
+esac
 APP=$(cd -- "$APP" && pwd)
 ID=$(basename -- "$APP")
 [[ -f $APP/app.json && -d $APP/src ]] || { echo "$APP: no app.json or src/" >&2; exit 2; }
 
 LAUNCHER_SRC=${LAUNCHER_SRC:-/mnt/c/CLAUDE/zero7/launcher}
 LAUNCHER_TREE=${LAUNCHER_TREE:-$HOME/zero7/$(basename -- "$LAUNCHER_SRC")}
+LAUNCHER_TREE_AMD64=${LAUNCHER_TREE_AMD64:-$HOME/zero7/$(basename -- "$LAUNCHER_SRC")-amd64}
 VENV=${VENV:-$HOME/zero7/venv}
 LOCK=/tmp/wsl-build.lock
 BUILD=${CDK_BUILD:-$HOME/cdk-build/$ID}
 GEN=$BUILD/gen
-[[ -d $LAUNCHER_TREE/SDK/github_source/lvgl/lvgl_9_5 ]] || {
-    echo "no LVGL in $LAUNCHER_TREE/SDK: build the launcher once there (tools/dev/wsl-build.sh)" >&2
-    exit 2
-}
+# the trees this run uses: the device build's (by --arch) and the host build's (always LAUNCHER_TREE)
+DEVICE_TREE=$LAUNCHER_TREE
+[[ $ARCH == amd64 ]] && DEVICE_TREE=$LAUNCHER_TREE_AMD64
+TREES=()
+if [[ $MODE != host ]]; then TREES+=("$DEVICE_TREE"); fi
+if [[ $MODE != cross && $DEVICE_TREE != "$LAUNCHER_TREE" || $MODE == host ]]; then TREES+=("$LAUNCHER_TREE"); fi
+for tree in "${TREES[@]}"; do
+    if [[ ! -d $tree/SDK/github_source/lvgl/lvgl_9_5 ]]; then
+        hint=
+        if [[ $tree == "$DEVICE_TREE" && $ARCH == amd64 ]]; then hint=" --arch amd64"; fi
+        echo "no LVGL in $tree/SDK: build the launcher once there (tools/dev/wsl-build.sh$hint)" >&2
+        exit 2
+    fi
+done
+if [[ $ARCH == amd64 && $MODE != host ]]; then
+    [[ $(uname -m) == x86_64 ]] || { echo "--arch amd64 builds natively: run it on an x86_64 host" >&2; exit 1; }
+    MODS="libinput xkbcommon libudev dbus-1 gio-2.0 freetype2"
+    # shellcheck disable=SC2086
+    if ! command -v gcc > /dev/null || ! command -v g++ > /dev/null || ! pkg-config --exists $MODS 2> /dev/null; then
+        echo "--arch amd64: gcc, g++, pkg-config and the -dev packages are needed (pkg-config: $MODS):" >&2
+        echo "  sudo apt install gcc g++ pkg-config libinput-dev libxkbcommon-dev libudev-dev libdbus-1-dev" \
+            "libglib2.0-dev libfreetype-dev" >&2
+        exit 1
+    fi
+fi
 
 VERSION=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$APP/app.json")
 
@@ -86,26 +122,28 @@ if [[ $PIN == differs || $PIN == unchecked ]]; then
     ((STRICT)) && { echo "--strict: stopping" >&2; exit 1; }
 fi
 
-# the build tree must hold the checkout's cp0_lvgl and FreeType glue
-tree_differs() {
-    ! diff -rq -x build -x dist "$LAUNCHER_SRC/ext_components/cp0_lvgl" "$LAUNCHER_TREE/ext_components/cp0_lvgl" > /dev/null 2>&1 ||
-        ! diff -rq "$LAUNCHER_SRC/projects/APPLaunch/main/lvgl" "$LAUNCHER_TREE/projects/APPLaunch/main/lvgl" > /dev/null 2>&1
+# each build tree used must hold the checkout's cp0_lvgl and FreeType glue
+tree_differs() { # tree
+    ! diff -rq -x build -x dist "$LAUNCHER_SRC/ext_components/cp0_lvgl" "$1/ext_components/cp0_lvgl" > /dev/null 2>&1 ||
+        ! diff -rq "$LAUNCHER_SRC/projects/APPLaunch/main/lvgl" "$1/projects/APPLaunch/main/lvgl" > /dev/null 2>&1
 }
-if [[ -d $LAUNCHER_SRC/ext_components ]] && tree_differs; then
-    if ((SYNC)); then
-        echo "== sync $LAUNCHER_SRC -> $LAUNCHER_TREE (the launcher's tools/dev/lib.sh, under the build lock)"
-        (
-            # shellcheck disable=SC1091
-            . "$LAUNCHER_SRC/tools/dev/lib.sh"
-            take_build_lock
-            sync_tree "$LAUNCHER_SRC" "$LAUNCHER_TREE"
-        )
-    else
-        echo "ERROR: $LAUNCHER_TREE does not hold the checkout's cp0_lvgl: run the launcher's tools/dev/wsl-build.sh" \
-            "or pass --sync" >&2
-        exit 1
+for tree in "${TREES[@]}"; do
+    if [[ -d $LAUNCHER_SRC/ext_components ]] && tree_differs "$tree"; then
+        if ((SYNC)); then
+            echo "== sync $LAUNCHER_SRC -> $tree (the launcher's tools/dev/lib.sh, under the build lock)"
+            (
+                # shellcheck disable=SC1091
+                . "$LAUNCHER_SRC/tools/dev/lib.sh"
+                take_build_lock
+                sync_tree "$LAUNCHER_SRC" "$tree"
+            )
+        else
+            echo "ERROR: $tree does not hold the checkout's cp0_lvgl: run the launcher's tools/dev/wsl-build.sh" \
+                "or pass --sync" >&2
+            exit 1
+        fi
     fi
-fi
+done
 
 # ---------------------------------------------------------------- version stamp
 mkdir -p "$GEN"
@@ -124,10 +162,16 @@ EOF
 }
 
 build_cross() {
-    local proj=$LAUNCHER_TREE/projects/$NAME
-    local bin=$APP/root/usr/share/APPLaunch/bin/$ID
-    stamp aarch64
-    echo "== cross: $proj"
+    local proj=$DEVICE_TREE/projects/$NAME
+    local root=root target=aarch64 config=linux_x86_cross_cp0_config_defaults.mk tools=aarch64-linux-gnu-
+    if [[ $ARCH == amd64 ]]; then
+        # native: the cross configuration without the toolchain prefix and the NEON lines, under a name without
+        # "cross" (SConstruct then uses no sysroot), as the launcher's linux_x86_64_native_cp0_config_defaults.mk
+        root=root.amd64 target=x86_64 config=linux_x86_64_native_cp0_config_defaults.mk tools=
+    fi
+    local bin=$APP/$root/usr/share/APPLaunch/bin/$ID
+    stamp "$target"
+    echo "== cross ($ARCH, $target): $proj"
     mkdir -p "$proj"
     rm -rf "$proj/main"
     mkdir -p "$proj/main/app" "$proj/main/common" "$proj/main/lvgl_ovr"
@@ -136,31 +180,36 @@ build_cross() {
     if [[ -d $APP/third_party ]]; then mkdir -p "$proj/main/third_party"; cp -r "$APP/third_party/." "$proj/main/third_party/"; fi
     cp "$COMMON"/*.hpp "$COMMON"/*.cpp "$proj/main/common/"
     cp "$GEN/cdk_build_info.h" "$proj/main/common/"
-    cp "$LAUNCHER_TREE"/projects/APPLaunch/main/lvgl/lv_freetype* "$proj/main/lvgl_ovr/"
+    cp "$DEVICE_TREE"/projects/APPLaunch/main/lvgl/lv_freetype* "$proj/main/lvgl_ovr/"
     cp "$COMMON/scons/SConstruct" "$proj/SConstruct"
     cp "$COMMON/scons/main.SConstruct" "$proj/main/SConstruct"
-    cp "$COMMON/scons/cross_config_defaults.mk" "$proj/linux_x86_cross_cp0_config_defaults.mk"
+    if [[ $ARCH == amd64 ]]; then
+        sed 's/\r$//' "$COMMON/scons/cross_config_defaults.mk" |
+            grep -v -e '^CONFIG_TOOLCHAIN_PREFIX=' -e 'LV_DRAW_SW_ASM_NEON' -e 'LV_USE_DRAW_SW_ASM' > "$proj/$config"
+    else
+        cp "$COMMON/scons/cross_config_defaults.mk" "$proj/$config"
+    fi
     (
         cd "$proj"
         # shellcheck disable=SC1091
         [[ -f $VENV/bin/activate ]] && . "$VENV/bin/activate"
-        export APPLAUNCH_HW=pizero2w CONFIG_REPO_AUTOMATION=y CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk
+        export APPLAUNCH_HW=pizero2w CONFIG_REPO_AUTOMATION=y CONFIG_DEFAULT_FILE=$config
         flock "$LOCK" scons -j"$(nproc)"
     )
     mkdir -p "$(dirname "$bin")"
     cp "$proj/dist/$NAME" "$bin"
-    aarch64-linux-gnu-strip "$bin"
+    "${tools}strip" "$bin"
     chmod 755 "$bin"
-    local doc=$APP/root/usr/share/doc/$ID
+    local doc=$APP/$root/usr/share/doc/$ID
     mkdir -p "$doc"
     {
         echo "$ID $VERSION"
         echo "launcher $HEAD ($PIN against $REF)"
-        echo "built $(date -u +%F) aarch64"
+        echo "built $(date -u +%F) $target"
     } > "$doc/build-info"
     echo "== $bin: $(stat -c %s "$bin") bytes stripped"
     file "$bin" 2> /dev/null || true
-    aarch64-linux-gnu-readelf -d "$bin" | grep NEEDED || true
+    "${tools}readelf" -d "$bin" | grep NEEDED || true
 }
 
 build_host() {

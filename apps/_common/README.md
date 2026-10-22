@@ -17,7 +17,7 @@ The starting point of a new app is `apps/cyberdeck-app-template` (a draft that u
 | `osk_policy.{hpp,cpp}` | the app-side on-screen keyboard rule: `cp0_app_osk_allowed()` on `input.state`, looked at once a second at most and parsed again only when the file changed (a new `gen`); without the file `APPLAUNCH_OSK` and the keyboards of `/proc/bus/input/devices` |
 | `async_run.{hpp,cpp}` | background commands: fork + exec in their own process group, lines and the end delivered on the LVGL thread in order (`lv_async_call` under `lv_lock()`), timeout, cancel, PDEATHSIG, `shutdown()` at exit |
 | `build_info.hpp` | the version stamp (`cdk_build_info.h` from `build_app.sh`) |
-| `build_app.sh` | cross (aarch64, stripped, into the app's `root/`) and host (headless harness, unit tests, scenes, contact sheets) builds in WSL, the launcher pin check, the stamp |
+| `build_app.sh` | cross (aarch64, stripped, into the app's `root/`; with `--arch amd64` x86-64, native, into `root.amd64/`) and host (headless harness, unit tests, scenes, contact sheets) builds in WSL, the launcher pin check, the stamp |
 | `LAUNCHER_REF` | the launcher commit the apps build against |
 | `scons/` | the scratch project's scons files: the SDK's project `SConstruct`, the component (`main.SConstruct`: cp0_lvgl + LVGL static, the launcher's FreeType glue, `-O2`, `--as-needed`) and the cross configuration (cp0_lvgl with the filesystem service only) |
 | `headless/` | the PC harness (see its README): a plain LVGL display at any size, scripted keys and taps, PNG shots, layout checks, contact sheets |
@@ -34,6 +34,29 @@ The starting point of a new app is `apps/cyberdeck-app-template` (a draft that u
   file, or nothing (the app owns the panel until it exits); the choice and its reason in the README.
 - Build: `build.sh` of the app calls `build_app.sh`; the binary links cp0_lvgl and LVGL statically and needs only
   libinput, libxkbcommon, libfreetype, libstdc++ and libc at run time.
+
+## amd64
+
+The same source builds for x86-64 PCs (report 028 of the launcher docs, X8): `build.sh cross --arch amd64` (or
+`build.sh --arch amd64` for the host tests as well).
+
+- **Where.** A native build in the launcher's amd64 WSL tree (`LAUNCHER_TREE_AMD64`, default
+  `~/zero7/<launcher folder>-amd64`, which the launcher's `tools/dev/wsl-build.sh --arch amd64` syncs and seeds), with
+  the cross configuration minus the toolchain prefix and the NEON lines (written as
+  `linux_x86_64_native_cp0_config_defaults.mk` in the scratch project, as the launcher's own native configuration).
+- **Needs.** gcc, g++ and the -dev packages found by pkg-config (`sudo apt install libinput-dev libxkbcommon-dev
+  libudev-dev libdbus-1-dev libglib2.0-dev libfreetype-dev`). A private root of them works too: `PKG_CONFIG_PATH` and
+  `CONFIG_TOOLCHAIN_FLAGS` (`-isystem <root>/usr/include ... -L<root>/usr/lib/x86_64-linux-gnu
+  -Wl,-rpath-link,<root>/usr/lib/x86_64-linux-gnu`) in the environment.
+- **Output.** The stripped binary in `<app>/root.amd64/usr/share/APPLaunch/bin/<app id>` and
+  `<app>/root.amd64/usr/share/doc/<app id>/build-info` (`built <date> x86_64`; `--version` says `x86_64 build`).
+  `root/` keeps the arm64 binary. `tools/make_registry.py` lays `root.amd64/` over `root/` for the amd64 package
+  when `app.json` lists `"arch": ["arm64", "amd64"]` (the repository README, section amd64).
+- **Same pin, same tests.** One `LAUNCHER_REF` for both architectures; the host build (harness, unit tests, scenes)
+  is the same whatever `--arch` says (it always uses `LAUNCHER_TREE`). The binary needs glibc 2.38 or newer and the
+  same libraries as on arm64.
+- **Check before marking an app amd64.** Nothing Pi-only on its main path (vcgencmd, `/proc/device-tree`, GPIO, the
+  Pi's UARTs): such a source must be optional, as System Monitor's firmware flags are.
 
 ## Status strip and title
 
