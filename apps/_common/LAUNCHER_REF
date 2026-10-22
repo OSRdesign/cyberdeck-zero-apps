@@ -1,5 +1,5 @@
-45d99a9eeaaf084b324ce1a2112fe113e7f35f2d
-# The launcher commit (cyberdeck-zero-launcher main after #67: multitasking P-e, the app side of the lifecycle in cp0_lvgl (cp0_app_lifecycle*.h), APP-CONTRACT section 13 final; on #63 P-b, #64 P-c, #65 P-d) every cdk app is built against:
+2b1a0708b042129095bac4c06040b8f7121466e4
+# The launcher commit (cyberdeck-zero-launcher v0.8.1, main after #76: the x86 port, the time zone picker, the same Settings on every board, upstream decoupling; before it 45d99a9 = v0.8.0 multitasking P-e) every cdk app is built against:
 # its ext_components/cp0_lvgl (display backend, keyboard, widgets, layout service), its LVGL FreeType glue
 # (projects/APPLaunch/main/lvgl) and its LVGL configuration. build_app.sh compares the launcher checkout with it and
 # stamps the result into --version and usr/share/doc/<app>/build-info. Move it deliberately, then rebuild every app.
