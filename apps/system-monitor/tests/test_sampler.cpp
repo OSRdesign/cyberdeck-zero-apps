@@ -68,10 +68,17 @@ public:
 
     int vc_mode = 0;          /* 0 the fixture's, 1 missing, 2 refused */
     bool no_hwmon = false;    /* hide /sys/class/hwmon (no rpi_volt alarm) */
+    bool no_battery = false;  /* hide /sys/class/power_supply */
+    bool no_thermal = false;  /* hide /sys/class/thermal and the hwmon temperatures */
     int vc_calls = 0;
 
 private:
-    bool hide(const std::string &path) const { return no_hwmon && path.find("/sys/class/hwmon") == 0; }
+    bool hide(const std::string &path) const
+    {
+        return (no_hwmon && path.find("/sys/class/hwmon") == 0) ||
+               (no_battery && path.find("/sys/class/power_supply") == 0) ||
+               (no_thermal && (path.find("/sys/class/thermal") == 0 || path.find("/sys/class/hwmon") == 0));
+    }
     std::string dir_;
     std::unique_ptr<Source> inner_;
     bool flipped_ = false;
@@ -296,6 +303,122 @@ void pi5()
     CHECK_EQ(find_row(net, "Bluetooth")->values[0], std::string("Off"));
 }
 
+void x86()
+{
+    // the FZ-M1 tablet's tree (tests/fixtures/x86-fz-m1): DMI model, ACPI battery, x86_pkg_temp, no Pi firmware
+    {
+        auto src = std::make_unique<Flipping>("x86-fz-m1");
+        Flipping *f = src.get();
+        Sampler s(std::move(src), 1);
+        CHECK_EQ(s.facts().model, std::string("Panasonic FZ-M1CDEAAVJ"));
+        CHECK(!s.facts().pi);
+        CHECK_EQ(s.facts().cpu, std::string("4 x Intel Core m5-6Y57"));
+        CHECK_EQ(s.facts().os, std::string("Ubuntu 26.04 LTS"));
+        CHECK(s.facts().serial.empty());
+        s.step();
+        const auto first = s.latest();
+        // the thermal zone: x86_pkg_temp (51 degrees), not acpitz (27.8) nor the Wi-Fi's zone
+        CHECK(first->temp.ok);
+        CHECK_NEAR(first->temp.c, 51.0, 1e-6);
+        // the battery of the machine (BAT1), not the mouse's (scope Device, sorted before it)
+        CHECK(first->battery.present);
+        CHECK_EQ(first->battery.percent, 76);
+        CHECK_EQ(first->battery.status, std::string("Discharging"));
+        CHECK(first->battery.has_power);
+        CHECK_NEAR(first->battery.power_w, 8.2, 1e-9);
+        CHECK_EQ(first->battery.minutes, 146); /* 20 Wh at 8.2 W */
+        // no firmware, no error: the Pi's power source is never asked
+        CHECK(first->power.source == PowerSource::None);
+        CHECK(first->sys.firmware.empty());
+        CHECK_EQ(f->vc_calls, 0);
+        const std::vector<TileText> ov = overview_tiles(first.get());
+        CHECK_EQ(ov[kTilePower].value[0], std::string("Battery 76%"));
+        CHECK_EQ(ov[kTilePower].detail[0], std::string("Discharging, 8.2 W, 2:26 left"));
+        CHECK(ov[kTilePower].value_tone == Tone::Good && !ov[kTilePower].value_dim);
+        CHECK_EQ(ov[kTileCpu].hint, std::string("4 cores"));
+        std::vector<Row> th = thermal_rows(first.get());
+        CHECK_EQ(th[0].label, std::string("Battery"));
+        CHECK_EQ(th[0].values[0], std::string("76%, discharging"));
+        CHECK_EQ(find_row(th, "Power draw")->values[0], std::string("8.2 W"));
+        CHECK_EQ(find_row(th, "Time left")->values[0], std::string("2:26"));
+        CHECK(find_row(th, "Power") == nullptr && find_row(th, "Firmware flags") == nullptr);
+        CHECK(find_row(th, "Under-voltage") == nullptr && find_row(th, "Fix") == nullptr);
+        CHECK(find_row(th, "CPU temperature") != nullptr);
+        const std::vector<Row> about = about_rows(first.get(), {});
+        CHECK_EQ(find_row(about, "Model")->values[0], std::string("Panasonic FZ-M1CDEAAVJ"));
+        CHECK(find_row(about, "Firmware") == nullptr && find_row(about, "Serial (last 8)") == nullptr);
+        // a second sample: the tablet is plugged in (status-1s, power_now-1s, capacity-1s of the fixture)
+        f->flip();
+        s.step();
+        const auto second = s.latest();
+        CHECK(second->battery.charging());
+        CHECK_EQ(second->battery.percent, 77);
+        CHECK_NEAR(second->battery.power_w, 15.5, 1e-9);
+        CHECK_EQ(second->battery.minutes, 24); /* 6.3 Wh to full at 15.5 W */
+        const std::vector<TileText> ov2 = overview_tiles(second.get());
+        CHECK_EQ(ov2[kTilePower].detail[0], std::string("Charging, 15.5 W, 0:24 to full"));
+        th = thermal_rows(second.get());
+        CHECK_EQ(find_row(th, "Charging power")->values[0], std::string("15.5 W"));
+        CHECK_EQ(find_row(th, "Time to full")->values[0], std::string("0:24"));
+    }
+    // no battery (a mini PC): no battery row, the Power tile says so quietly
+    {
+        auto src = std::make_unique<Flipping>("x86-fz-m1");
+        src->no_battery = true;
+        Flipping *f = src.get();
+        Sampler s(std::move(src), 1);
+        const auto snap = two_samples(s, f);
+        CHECK(!snap->battery.present);
+        const std::vector<TileText> ov = overview_tiles(snap.get());
+        CHECK_EQ(ov[kTilePower].value[0], std::string("No battery"));
+        CHECK(ov[kTilePower].value_dim);
+        CHECK(ov[kTilePower].frame_tone == Tone::Normal);
+        const std::vector<Row> th = thermal_rows(snap.get());
+        CHECK(find_row(th, "Battery") == nullptr && find_row(th, "Power draw") == nullptr);
+        CHECK_EQ(th[0].label, std::string("CPU temperature"));
+    }
+    // no x86_pkg_temp zone: the coretemp hwmon, then acpitz, then the hottest sane zone
+    {
+        auto src = std::make_unique<Flipping>("x86-fz-m1");
+        src->no_thermal = true;
+        Sampler s(std::move(src), 1);
+        s.step();
+        CHECK(!s.latest()->temp.ok); /* nothing to read: Unknown, no crash */
+        const std::vector<TileText> ov = overview_tiles(s.latest().get());
+        CHECK_EQ(ov[kTileTemp].value[0], std::string("Unknown"));
+    }
+    // the Pi: untouched (no battery, its own wording, the first cpu zone)
+    {
+        auto src = std::make_unique<Flipping>("pi-zero-2w");
+        Flipping *f = src.get();
+        Sampler s(std::move(src), 1);
+        CHECK(s.facts().pi);
+        const auto snap = two_samples(s, f);
+        CHECK(!snap->battery.present);
+        const std::vector<TileText> ov = overview_tiles(snap.get());
+        CHECK_EQ(ov[kTilePower].value[0], std::string("Power OK"));
+        CHECK(find_row(thermal_rows(snap.get()), "Battery") == nullptr);
+    }
+    // the hot wording is the Pi's only on a Pi
+    {
+        Snapshot hot;
+        hot.temp.ok = true;
+        hot.temp.c = 85;
+        hot.sys.pi = false;
+        CHECK_EQ(find_row(thermal_rows(&hot), "State")->values[0], std::string("Hot: the CPU slows down"));
+        CHECK_EQ(overview_tiles(&hot)[kTileTemp].detail[0], std::string("Hot: the CPU slows down"));
+        hot.sys.pi = true;
+        CHECK_EQ(find_row(thermal_rows(&hot), "State")->values[0], std::string("Hot: the Pi slows down"));
+    }
+    // the scenario of the fixture (the scenes): the temperature follows the x86_pkg_temp zone
+    {
+        Sampler s(make_fixture_source(fixture_dir("x86-fz-m1"), "busy"), 1);
+        s.step();
+        CHECK(s.latest()->temp.ok && s.latest()->temp.c >= 49 && s.latest()->temp.c <= 55);
+        CHECK(s.latest()->battery.present);
+    }
+}
+
 void missing_vcgencmd()
 {
     // vcgencmd not installed: the rpi_volt alarm still tells under-voltage
@@ -430,6 +553,7 @@ void test_sampler()
     zero();
     pi3a();
     pi5();
+    x86();
     missing_vcgencmd();
     scenario();
 }

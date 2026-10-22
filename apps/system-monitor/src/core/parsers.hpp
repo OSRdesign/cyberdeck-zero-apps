@@ -162,6 +162,12 @@ const char *proc_state_name(char state);
 std::string parse_model(const std::string &text);           /* /proc/device-tree/model: NUL and newline removed */
 std::string short_model(const std::string &model);          /* "Raspberry Pi Zero 2 W Rev 1.0" -> "Pi Zero 2 W" */
 std::string model_without_rev(const std::string &model);    /* -> "Raspberry Pi Zero 2 W" */
+/* A Raspberry Pi (or Compute Module) by its device-tree model; x86 PCs and other boards have no such model. */
+bool is_raspberry_model(const std::string &dt_model);
+/* The model of a PC from DMI (/sys/class/dmi/id/sys_vendor and product_name, one line each): "Panasonic FZ-M1CDEAAVJ".
+ * The vendor is added when it is short (a trailing "Corporation", "Inc." ... removed) and the product does not start with
+ * it; placeholders ("To Be Filled By O.E.M.", "Default string") count as empty. "" when there is nothing usable. */
+std::string dmi_model(const std::string &vendor, const std::string &product);
 std::string os_pretty_name(const std::string &os_release);  /* PRETTY_NAME of /etc/os-release, quotes removed */
 /* the board's serial number, last 8 hex digits: device-tree serial-number, else the cpuinfo "Serial" line */
 std::string serial_tail(const std::string &dt_serial, const std::string &cpuinfo);

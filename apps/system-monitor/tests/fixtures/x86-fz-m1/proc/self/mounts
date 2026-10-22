@@ -1,0 +1,5 @@
+/dev/sda2 / ext4 rw,relatime,errors=remount-ro 0 0
+sysfs /sys sysfs rw,nosuid,nodev,noexec,relatime 0 0
+proc /proc proc rw,nosuid,nodev,noexec,relatime 0 0
+tmpfs /run tmpfs rw,nosuid,nodev,noexec,relatime,size=800000k,mode=755 0 0
+/dev/sda1 /boot/efi vfat rw,relatime,fmask=0077,dmask=0077,codepage=437,iocharset=iso8859-1 0 0

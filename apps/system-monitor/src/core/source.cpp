@@ -554,7 +554,10 @@ private:
             out = buf;
             return true;
         }
-        if (path == "/sys/class/thermal/thermal_zone0/temp") {
+        if (starts_with(path, "/sys/class/thermal/thermal_zone") && path.size() > 5 &&
+            path.compare(path.size() - 5, 5, "/temp") == 0 &&
+            (trim(file(path.substr(0, path.size() - 5) + "/type", nullptr)) == "cpu-thermal" ||
+             trim(file(path.substr(0, path.size() - 5) + "/type", nullptr)) == "x86_pkg_temp")) {
             const double t = static_cast<double>(tick_);
             const double c = sc_.temp_start + (sc_.temp_end - sc_.temp_start) * std::min(1.0, t / sc_.ramp) +
                              0.4 * std::sin(t / 5.0);

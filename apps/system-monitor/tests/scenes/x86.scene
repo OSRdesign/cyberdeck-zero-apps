@@ -1,0 +1,30 @@
+# An x86 tablet (Panasonic FZ-M1, tests/fixtures/x86-fz-m1/scenario-busy.conf): no Pi firmware, so the Power tile is the
+# battery (76 %, discharging, 8.2 W, 2:26 left), the model is the DMI name, the temperature the package sensor. A tap
+# on the Power tile opens Temp & power: the battery rows first, no firmware flags, no "the Pi" wording.
+title System Monitor: x86 tablet (battery, DMI model, package temperature)
+env SYSTEM_MONITOR_FIXTURE x86-fz-m1:busy
+sizes 640x480 800x480 1024x600
+
+wait 600
+shot overview-x86
+expect noquit
+expect text "Battery 76%"
+@640x480 expect text "Discharging, 8.2 W, 2:26 left"
+expect text "Temperature"
+expect text "192.168.1.23"
+tap "Power"
+wait 1200
+shot thermal-x86
+expect text "Battery"
+expect text "76%, discharging"
+expect text "Power draw"
+expect text "Time left"
+expect text "CPU temperature"
+key esc
+wait 300
+tap "System"
+wait 800
+shot about-x86
+expect text "Panasonic FZ-M1CDEAAVJ"
+expect text "Ubuntu 26.04 LTS"
+expect text "4 x Intel Core m5-6Y57"

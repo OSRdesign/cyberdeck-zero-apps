@@ -224,6 +224,26 @@ static void test_facts()
     CHECK_EQ(cpu_description(fixture("pi-zero-2w", "proc/cpuinfo"), 4), std::string("4 x Cortex-A53"));
     CHECK_EQ(cpu_description(fixture("pi-5", "proc/cpuinfo"), 0), std::string("4 x Cortex-A76"));
     CHECK_EQ(cpu_description("processor : 0\n", 0), std::string("1 core"));
+    // x86: the model name, cleaned
+    CHECK_EQ(cpu_description(fixture("x86-fz-m1", "proc/cpuinfo"), 4), std::string("4 x Intel Core m5-6Y57"));
+    CHECK_EQ(cpu_description("processor : 0\nmodel name : 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz\n", 8),
+             std::string("8 x 11th Gen Intel Core i5-1135G7"));
+    CHECK_EQ(cpu_description("processor : 0\nmodel name : AMD Ryzen 5 5600U with Radeon Graphics\n", 0),
+             std::string("1 x AMD Ryzen 5 5600U with Radeon Graphics"));
+    // the model of a PC from DMI
+    CHECK(is_raspberry_model("Raspberry Pi 5 Model B Rev 1.0") && is_raspberry_model("Raspberry Pi Compute Module 5"));
+    CHECK(!is_raspberry_model("") && !is_raspberry_model("Some Board"));
+    CHECK_EQ(dmi_model("Panasonic Corporation", "FZ-M1CDEAAVJ"), std::string("Panasonic FZ-M1CDEAAVJ"));
+    CHECK_EQ(dmi_model("Dell Inc.", "XPS 13 9310"), std::string("Dell XPS 13 9310"));
+    CHECK_EQ(dmi_model("Dell Inc.", "Dell Pro 14"), std::string("Dell Pro 14")); /* the product has it */
+    CHECK_EQ(dmi_model("ASUSTeK COMPUTER INC.", "UX305"), std::string("ASUSTeK UX305"));
+    CHECK_EQ(dmi_model("LENOVO", "20XW0055GE\n"), std::string("LENOVO 20XW0055GE"));
+    CHECK_EQ(dmi_model("To Be Filled By O.E.M.", "To Be Filled By O.E.M."), std::string());
+    CHECK_EQ(dmi_model("System manufacturer", "System Product Name"), std::string());
+    CHECK_EQ(dmi_model("Default string", "MiniPC N100"), std::string("MiniPC N100"));
+    CHECK_EQ(dmi_model("Micro-Star International Co., Ltd.", "MS-7C94"), std::string("MS-7C94")); /* long vendor */
+    CHECK_EQ(dmi_model("QEMU", ""), std::string("QEMU"));
+    CHECK_EQ(dmi_model("", ""), std::string());
 }
 
 void test_parsers()
