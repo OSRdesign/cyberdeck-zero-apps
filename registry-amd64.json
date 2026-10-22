@@ -303,20 +303,20 @@
       "uuid": "2ac794f7-c2d8-572f-a0bb-1a895856db77",
       "share_code": "system-monitor",
       "title": "System Monitor",
-      "summary": "A live look at the Raspberry Pi it runs on: CPU, temperature, memory, storage, network, processes and the power supply.",
-      "description": "A full-screen monitor of the board it runs on, made for the deck's small screen and for touch. The overview is a grid of six tiles that fills the screen: Power first, in plain words and colours (Power OK in green; under-voltage now in red with 'check the power supply'; under-voltage, throttling or frequency capping since boot in amber, with the time since boot of the last event), CPU load, temperature (amber from 70 °C, red from 80 °C, where the Pi starts to slow down), memory, the space used on the system disk and the network (address, in and out rates, Wi-Fi signal), each with a history line of the last two minutes. A tap on a tile (or Enter on the tile with the ring) opens its page with a live chart and the details: each core, frequency, load and the top processes by CPU; memory with the top processes by memory; temperature and power (each firmware flag, the fan, the 5 V input on a Pi 5); every disk and its read/write rate; every network interface with its address, rates and Wi-Fi signal. A Processes page lists the top 15 by CPU or by memory; a System page names the model, kernel, OS and firmware and shows the app's own CPU and memory. Values refresh every 1, 2 or 5 seconds (remembered). Rows show what can be tapped: a chevron opens or changes, a dot runs. Read-only: it changes nothing on the system. Works on the Pi Zero 2 W, Pi 3A+, Pi 5 and CM5; the firmware flags need vcgencmd and the video group (without them the rest works). Needs a screen of at least 640x480 and a launcher with full-screen app support.",
+      "summary": "A live look at the board or PC it runs on: CPU, temperature, memory, storage, network, processes, and the power supply or battery.",
+      "description": "A full-screen monitor of the board it runs on, made for the deck's small screen and for touch. The overview is a grid of six tiles that fills the screen: Power first, in plain words and colours (Power OK in green; under-voltage now in red with 'check the power supply'; under-voltage, throttling or frequency capping since boot in amber, with the time since boot of the last event), CPU load, temperature (amber from 70 °C, red from 80 °C, where the Pi starts to slow down), memory, the space used on the system disk and the network (address, in and out rates, Wi-Fi signal), each with a history line of the last two minutes. A tap on a tile (or Enter on the tile with the ring) opens its page with a live chart and the details: each core, frequency, load and the top processes by CPU; memory with the top processes by memory; temperature and power (each firmware flag, the fan, the 5 V input on a Pi 5); every disk and its read/write rate; every network interface with its address, rates and Wi-Fi signal. A Processes page lists the top 15 by CPU or by memory; a System page names the model, kernel, OS and firmware and shows the app's own CPU and memory. Values refresh every 1, 2 or 5 seconds (remembered). Rows show what can be tapped: a chevron opens or changes, a dot runs. Read-only: it changes nothing on the system. Works on the Pi Zero 2 W, Pi 3A+, Pi 5 and CM5 (the firmware flags need vcgencmd and the video group; without them the rest works) and on x86-64 PCs and tablets: the model from the firmware's DMI name, the CPU package temperature, and the battery (charge, state, power, time left) in the Power tile when there is one. Needs a screen of at least 640x480 and a launcher with full-screen app support.",
       "locales": {
         "en": {
           "title": "System Monitor",
-          "summary": "A live look at the Raspberry Pi it runs on: CPU, temperature, memory, storage, network, processes and the power supply.",
-          "description": "A full-screen monitor of the board it runs on, made for the deck's small screen and for touch. The overview is a grid of six tiles that fills the screen: Power first, in plain words and colours (Power OK in green; under-voltage now in red with 'check the power supply'; under-voltage, throttling or frequency capping since boot in amber, with the time since boot of the last event), CPU load, temperature (amber from 70 °C, red from 80 °C, where the Pi starts to slow down), memory, the space used on the system disk and the network (address, in and out rates, Wi-Fi signal), each with a history line of the last two minutes. A tap on a tile (or Enter on the tile with the ring) opens its page with a live chart and the details: each core, frequency, load and the top processes by CPU; memory with the top processes by memory; temperature and power (each firmware flag, the fan, the 5 V input on a Pi 5); every disk and its read/write rate; every network interface with its address, rates and Wi-Fi signal. A Processes page lists the top 15 by CPU or by memory; a System page names the model, kernel, OS and firmware and shows the app's own CPU and memory. Values refresh every 1, 2 or 5 seconds (remembered). Rows show what can be tapped: a chevron opens or changes, a dot runs. Read-only: it changes nothing on the system. Works on the Pi Zero 2 W, Pi 3A+, Pi 5 and CM5; the firmware flags need vcgencmd and the video group (without them the rest works). Needs a screen of at least 640x480 and a launcher with full-screen app support."
+          "summary": "A live look at the board or PC it runs on: CPU, temperature, memory, storage, network, processes, and the power supply or battery.",
+          "description": "A full-screen monitor of the board it runs on, made for the deck's small screen and for touch. The overview is a grid of six tiles that fills the screen: Power first, in plain words and colours (Power OK in green; under-voltage now in red with 'check the power supply'; under-voltage, throttling or frequency capping since boot in amber, with the time since boot of the last event), CPU load, temperature (amber from 70 °C, red from 80 °C, where the Pi starts to slow down), memory, the space used on the system disk and the network (address, in and out rates, Wi-Fi signal), each with a history line of the last two minutes. A tap on a tile (or Enter on the tile with the ring) opens its page with a live chart and the details: each core, frequency, load and the top processes by CPU; memory with the top processes by memory; temperature and power (each firmware flag, the fan, the 5 V input on a Pi 5); every disk and its read/write rate; every network interface with its address, rates and Wi-Fi signal. A Processes page lists the top 15 by CPU or by memory; a System page names the model, kernel, OS and firmware and shows the app's own CPU and memory. Values refresh every 1, 2 or 5 seconds (remembered). Rows show what can be tapped: a chevron opens or changes, a dot runs. Read-only: it changes nothing on the system. Works on the Pi Zero 2 W, Pi 3A+, Pi 5 and CM5 (the firmware flags need vcgencmd and the video group; without them the rest works) and on x86-64 PCs and tablets: the model from the firmware's DMI name, the CPU package temperature, and the battery (charge, state, power, time left) in the Power tile when there is one. Needs a screen of at least 640x480 and a launcher with full-screen app support."
         }
       },
       "i18n": {
         "en": {
           "title": "System Monitor",
-          "summary": "A live look at the Raspberry Pi it runs on: CPU, temperature, memory, storage, network, processes and the power supply.",
-          "description": "A full-screen monitor of the board it runs on, made for the deck's small screen and for touch. The overview is a grid of six tiles that fills the screen: Power first, in plain words and colours (Power OK in green; under-voltage now in red with 'check the power supply'; under-voltage, throttling or frequency capping since boot in amber, with the time since boot of the last event), CPU load, temperature (amber from 70 °C, red from 80 °C, where the Pi starts to slow down), memory, the space used on the system disk and the network (address, in and out rates, Wi-Fi signal), each with a history line of the last two minutes. A tap on a tile (or Enter on the tile with the ring) opens its page with a live chart and the details: each core, frequency, load and the top processes by CPU; memory with the top processes by memory; temperature and power (each firmware flag, the fan, the 5 V input on a Pi 5); every disk and its read/write rate; every network interface with its address, rates and Wi-Fi signal. A Processes page lists the top 15 by CPU or by memory; a System page names the model, kernel, OS and firmware and shows the app's own CPU and memory. Values refresh every 1, 2 or 5 seconds (remembered). Rows show what can be tapped: a chevron opens or changes, a dot runs. Read-only: it changes nothing on the system. Works on the Pi Zero 2 W, Pi 3A+, Pi 5 and CM5; the firmware flags need vcgencmd and the video group (without them the rest works). Needs a screen of at least 640x480 and a launcher with full-screen app support."
+          "summary": "A live look at the board or PC it runs on: CPU, temperature, memory, storage, network, processes, and the power supply or battery.",
+          "description": "A full-screen monitor of the board it runs on, made for the deck's small screen and for touch. The overview is a grid of six tiles that fills the screen: Power first, in plain words and colours (Power OK in green; under-voltage now in red with 'check the power supply'; under-voltage, throttling or frequency capping since boot in amber, with the time since boot of the last event), CPU load, temperature (amber from 70 °C, red from 80 °C, where the Pi starts to slow down), memory, the space used on the system disk and the network (address, in and out rates, Wi-Fi signal), each with a history line of the last two minutes. A tap on a tile (or Enter on the tile with the ring) opens its page with a live chart and the details: each core, frequency, load and the top processes by CPU; memory with the top processes by memory; temperature and power (each firmware flag, the fan, the 5 V input on a Pi 5); every disk and its read/write rate; every network interface with its address, rates and Wi-Fi signal. A Processes page lists the top 15 by CPU or by memory; a System page names the model, kernel, OS and firmware and shows the app's own CPU and memory. Values refresh every 1, 2 or 5 seconds (remembered). Rows show what can be tapped: a chevron opens or changes, a dot runs. Read-only: it changes nothing on the system. Works on the Pi Zero 2 W, Pi 3A+, Pi 5 and CM5 (the firmware flags need vcgencmd and the video group; without them the rest works) and on x86-64 PCs and tablets: the model from the firmware's DMI name, the CPU package temperature, and the battery (charge, state, power, time left) in the Power tile when there is one. Needs a screen of at least 640x480 and a launcher with full-screen app support."
         }
       },
       "categories": [
@@ -326,9 +326,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.2.5",
+      "version": "0.2.6",
       "published_at": "2026-10-22T11:02:04+00:00",
-      "updated_at": "2026-10-22T11:02:04+00:00",
+      "updated_at": "2026-10-22T15:45:41+00:00",
       "review": {
         "status": "approved"
       },
@@ -337,10 +337,10 @@
       "download": {
         "type": "deb",
         "package": "system-monitor",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/system-monitor_0.2.5_amd64.deb",
-        "md5": "a80a4a701aa07f85ed3bf81a6624854c",
-        "sha256": "8e2bc4adff90ad3995c813fc6e6b0fc837753b0ceb71d19ad3c8e43e6f454885",
-        "size": 1472692
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/system-monitor_0.2.6_amd64.deb",
+        "md5": "dd475e9d8de409606a75411c563a65c6",
+        "sha256": "4fef08572d79c20ba00dc41fd73d402295c94b3d270d0f4828bb364f52209770",
+        "size": 1477570
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0",
       "permissions": {
@@ -362,7 +362,9 @@
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/05-power-warning-640x480.png",
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/06-temp-power-640x480.png",
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/07-processes-800x480.png",
-          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/08-storage-1280x720.png"
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/08-storage-1280x720.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/09-x86-overview-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/10-x86-temp-battery-640x480.png"
         ]
       },
       "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/icon.png",
@@ -374,7 +376,9 @@
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/05-power-warning-640x480.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/06-temp-power-640x480.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/07-processes-800x480.png",
-        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/08-storage-1280x720.png"
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/08-storage-1280x720.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/09-x86-overview-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/10-x86-temp-battery-640x480.png"
       ]
     }
   ]
