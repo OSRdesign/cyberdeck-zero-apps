@@ -5,8 +5,10 @@ deck first. Read it before you start, tick the [checklist](#13-final-checklist) 
 reference documents instead of copying them; when a number here and the launcher disagree, the launcher wins (read the
 tokens at run time, never copy them).
 
-The app contract (environment variables, state files, `.desktop` keys) is specified in the launcher repository:
-[APP-CONTRACT.md](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/APP-CONTRACT.md). Hosting and
+The app contract (environment variables, state files, `.desktop` keys, requests to the launcher) is specified in the
+launcher repository, and that text is normative:
+[APP-CONTRACT.md](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/APP-CONTRACT.md); what the
+launcher gives apps as of v0.8.6 is summarised in [section 3](#3-the-launcher-contract). Hosting and
 the Settings > Apps flow: [HOSTING-APPS.md](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/HOSTING-APPS.md).
 The starting point of a native app: [`apps/cyberdeck-app-template`](../apps/cyberdeck-app-template/README.md) on the shared code in
 [`apps/_common`](../apps/_common/README.md). Repository overview: [README](../README.md).
@@ -83,6 +85,14 @@ your own clock, Wi-Fi or Bluetooth icons and never keep a copy of the strip or t
 launcher component ([`LAUNCHER_REF`](../apps/_common/LAUNCHER_REF)). The header has the on-screen **Esc** button; keep it.
 Colours and fonts come from the widgets (black ground, Montserrat from `/usr/share/APPLaunch/share/font`, read at run
 time; do not bundle fonts that the launcher has).
+
+- **What the strip shows.** The clock, the Wi-Fi bars, the Bluetooth glyph and, on a board that has one, the battery
+  (level glyph and percent, green while charging) exactly as the home grid shows them. Where the values come from, and
+  which change needs a rebuild: [section 3, the status strip](#the-status-strip-data-and-drawing).
+- **Keep your header controls left of `cp0::ui::status_strip_left()`** (the `strip_left` argument of
+  `cp0_ui_roller_page()`; the template and every app here do it). Never assume a strip width: the battery makes the
+  strip wider on a board that has one (the HackBerry, the FZ-M1 tablet), and the strip is measured once, at the first
+  call, with the battery the app itself can read (below).
 
 ### Lists: Roller or CompactList
 
@@ -167,7 +177,8 @@ Full text: [APP-CONTRACT.md](https://github.com/OSRdesign/cyberdeck-zero-launche
 | `APPLAUNCH_CONTRACT=1`, `APPLAUNCH_APP_MODE` (`compat` / `fullscreen`) | set per launch on the app's command line; absent = started without a contract launcher |
 | `APPLAUNCH_WINDOW`, `APPLAUNCH_CANVAS`, `APPLAUNCH_CANVAS_SCALE` | where and how many pixels you draw (fullscreen: the whole logical panel, scale 1) |
 | `APPLAUNCH_SCREEN_W/H/ROTATE/PPMM/CLASS/FB/TOUCH` | the panel, process-wide; density of your canvas = `PPMM / CANVAS_SCALE` |
-| `APPLAUNCH_STATE_DIR` | directory of `screen.state` (tokens, `gen`) and `input.state` (keyboards, `vkb=auto/off/force`); written **only** by the launcher, re-read when `gen` changes (at most once a second) |
+| `APPLAUNCH_STATE_DIR` | directory of the state files `screen.state`, `input.state`, `status.state` and `board.state` (below); written **only** by the launcher, re-read when `gen` changes (at most once a second); without it `$XDG_RUNTIME_DIR/applaunch/` |
+| `$XDG_RUNTIME_DIR/applaunch/launcher.sock` | requests to the launcher (beep, toast, volume, brightness, dim), from launcher 0.8.6 ([below](#asking-the-launcher-launchersock)) |
 | `.desktop` `X-Fullscreen=true` | the app owns the panel until it exits |
 | `.desktop` `X-MinSize=WxH` | the tile is hidden (also in Settings > Apps) on a smaller screen; a malformed value means no restriction |
 | `.desktop` `X-Background=freeze\|run` | multitasking: the app can be hidden and shown again instead of owning the panel until it exits (below) |
@@ -175,6 +186,140 @@ Full text: [APP-CONTRACT.md](https://github.com/OSRdesign/cyberdeck-zero-launche
 - An app **never writes** `screen.state` or `input.state`. The launcher rewrites `screen.state` after every app exits.
 - Ignore unknown keys and variables; names and units never change within contract 1.
 - The C reader (`cp0_app_contract.h`, no LVGL) is copy-ready; a native app already uses it through `cp0_lvgl`.
+- An app **never writes** `status.state` or `board.state` either, and never creates `launcher.sock`.
+
+APP-CONTRACT.md is the normative text; the sections below summarise what changed for apps up to launcher **v0.8.6**
+and how to use it. A native app gets a feature only when it is built against a launcher commit that has it
+([launcher versions](#launcher-versions-and-what-each-added-for-apps)).
+
+### What an app can read
+
+| Source | Keys | Since | On an older launcher, or with no launcher |
+|---|---|---|---|
+| per-launch environment (`APPLAUNCH_CONTRACT`, `APPLAUNCH_APP_MODE`, `APPLAUNCH_WINDOW`, `APPLAUNCH_CANVAS`, `APPLAUNCH_CANVAS_SCALE`, `APPLAUNCH_STATE_DIR`) and panel environment (`APPLAUNCH_SCREEN_*`) | above; contract section 3 | contract 1 | absent: `cp0_app_env_read()` returns -1, use your own probe ([below](#started-without-the-launcher-ssh-a-script-an-older-launcher)) |
+| board profile environment (`APPLAUNCH_BOARD`, `APPLAUNCH_GAUGE`, `APPLAUNCH_BACKLIGHT`, `APPLAUNCH_HINT_*`, `APPLAUNCH_TOUCH_*`) | the board's `board.conf`, inherited by every child of the launcher service | - | values of the board, not computed by the launcher; absent over ssh |
+| `screen.state` | `w`, `h`, `rot`, `ppmm`, `class`, `compat`, `scale`, `fb`, `bpp`, `touch`, the tokens, `gen`; `touch_slots` (multitasking) | contract 1 | missing: `cp0_app_screen_compute()` gives the same tokens from a size and a density |
+| `input.state` | `keyboards`, `bt_keyboards`, `last_seen`, `kb_gone`, `bt_gone`, `vkb`, `pointer`, `gen` | contract 1 | no `vkb` = `auto`, no `pointer` = `off` |
+| `status.state` | `pid`, `gen`, `wifi`, `wifi_pct`, `eth`, `bt` (`off` / `on` / `connected`), `battery` (-1 = none), `battery_state` | **0.8.5** | `cp0_app_status_read()` returns -1: read sysfs yourself (the strip does, below) |
+| `status.state` | `volume` (-1 = no sound output), `mute`, `brightness_pct` (-1 = no backlight to drive) | **0.8.6** | key missing: the reader gives -1 (`mute` 0); show no level bar |
+| `board.state` | `pid`, `gen`, `launcher` (version), `board`, `arch`, `ram_mb`, `battery` (0 none, 1 present, 2 not set up), `battery_source` (`power_supply:<name>` or `gauge:max17048`), `backlight` (`none` / `onoff` / `levels`), `backlight_steps`, `sound` (0 / 1 / 2), `sound_kind` (`alsa` / `server` / `bluetooth`), `sound_guess` (1 = `bluetooth` guessed from the sink's name), `requests` (the verbs `launcher.sock` answers on this board), `battery_note`, `backlight_note`, `sound_note` (hint text) | **0.8.6** | `cp0_app_board_read()` returns -1: assume nothing, hide what depends on it (no sound option, no beeps) |
+
+Rules for every row: **a missing key means its default** (the readers fill -1 or `""`), unknown keys and variables
+are ignored, and in `board.state` a fact the launcher does not know is an **absent key, never `0`** (right after the
+launcher starts, `sound` can be absent until its first sound-server probe). `status.state` and `board.state` are
+trusted only while their `pid` (the launcher) is alive (`kill(pid, 0)`; the readers check it): a launcher that crashed
+leaves a file nobody should believe. The launcher writes `status.state` only when a shown value changes (checked every
+2 s); re-read it on a new `gen`, at most once a second. Readers: `cp0_app_contract.h` (`cp0_app_status_read()`,
+`cp0_app_board_read()`, `cp0_app_board_has_request()`), plain C, part of `cp0_lvgl` and copy-ready for an app without
+it. Contract sections 4, 5, 5b, 5c.
+
+### The status strip: data and drawing
+
+`cp0::ui::StatusStrip` is part of `cp0_lvgl`, compiled **statically** into your binary from the pinned launcher commit,
+together with its renderer (`cp0_statusbar.c`) and its reading code. Every 2 s while its screen is active, a strip added
+without a source of its own:
+
+1. reads the battery itself (`cp0_power_supply_battery()`): a Linux `power_supply` battery (pin of 0.8.3 or later),
+   else the fuel gauge that `$APPLAUNCH_GAUGE` names (the HackBerry's MAX17048 over i2c, pin of 0.8.4 or later; the
+   app inherits the variable from the board profile);
+2. reads the launcher's feed (`cp0_app_status_read()` on `status.state`, pin of 0.8.5 or later): Wi-Fi, Bluetooth
+   powered / connected as the launcher's BlueZ sees it, and the battery when the feed has one;
+3. without a good feed (no file, or its `pid` gone): sysfs and procfs (`cp0_statusbar_read_state()`), which since 0.8.5
+   finds the Wi-Fi interface under any name (`wlan0`, `wlp2s0`, `wlx...`) instead of assuming `wlan0`. sysfs cannot
+   tell "Bluetooth powered", so the glyph can differ from the home grid's on that path only.
+
+What an app **must** do: add the strip with no source (`StatusStrip::add(page->header())`) and keep its header
+controls left of `status_strip_left()`. What it **need not** do: read Wi-Fi, Bluetooth or the battery for the strip,
+or read `status.state` for it. What it **must not** do: draw its own clock or icons, pass its own source without a
+reason, keep a copy of the strip.
+
+**Battery width.** `status_strip_left()` is measured once, at its first call, by drawing the strip in its fullest state
+with the battery the app's own `cp0_power_supply_battery()` sees (not the feed's). So lay the header out from it, never
+from a fixed width. From the source (not seen on a board): an app started where it cannot read the battery itself but
+the launcher's feed has one (over ssh, without the board profile's `$APPLAUNCH_GAUGE`) draws the battery without having
+reserved its width, and the strip can overlap the header's controls.
+
+**What reaches a published app without a rebuild, and what does not:**
+
+| Change in the launcher | Reaches an app |
+|---|---|
+| a value the feed already carries (Wi-Fi, Bluetooth, battery: a new battery source, a fixed Bluetooth state) | **at once**, no rebuild, for an app pinned at v0.8.5 or later |
+| a new key of the feed, or a new reading rule in the strip | only after a re-pin and rebuild |
+| the strip's **drawing** (`cp0_statusbar.c`: layout, glyphs, colours, sizes) | only after a re-pin and rebuild of **every** app, then a publish |
+
+Checklist line for whoever changes the strip's drawing in the launcher: **open an apps re-pin** (move
+[`LAUNCHER_REF`](../apps/_common/LAUNCHER_REF), rebuild every native app on both architectures, compare the header shots
+with the launcher's home grid, raise the versions, publish). A non-LVGL app that draws its own bar (viz1090's map shim,
+`apps/viz1090/build`) keeps a copy of `cp0_statusbar.[ch]`; the launcher's `docs/dev/deck/check_statusbar_drift.py`
+compares those copies with the launcher's tree (exit 0 identical, 1 drifted or a copy inside an app that links
+`cp0_lvgl`, 2 a file or the apps repository missing) and is a step of the launcher's release checklist. An LVGL app
+never has a copy.
+
+### Asking the launcher (`launcher.sock`)
+
+From launcher **0.8.6** an app asks the launcher for what the launcher owns (volume, backlight, sounds, notices)
+through one Unix stream socket, `$XDG_RUNTIME_DIR/applaunch/launcher.sock` (mode 0600, the launcher's user; no `/tmp`
+fallback). One request line, one reply line, at most 254 bytes. Replies are `ok ...` or `err <word>` (`unknown`, `bad`,
+`nosound`, `absent`, `limit`, `busy`; `denied` reserved). Contract section 14.
+
+| Request | Does |
+|---|---|
+| `hello 1` | `ok 1 launcher=<version> app=<process name> verbs=<list>` |
+| `caps` | `ok sound=... backlight=... dim=... verbs=...` |
+| `beep [notify\|done\|warn]` | a short built-in sound at the volume in force; `err nosound` on a board without sound output |
+| `toast <text>` | the launcher's own toast (cut at 160 characters); it waits and **shows when the launcher is in front again** (after your app exits or is hidden), at most 4 waiting |
+| `volume get\|up\|down\|mute\|unmute\|set N` | as the volume keys; for media apps only (`get` is in `status.state` already) |
+| `brightness get\|set N` | levels backlights only; `err absent` otherwise |
+| `dim allow\|deny` | lets the launcher dim the idle panel while your app is in front (battery boards with brightness levels); ends when the launcher takes the panel back: send it again after a `show` |
+
+- **Client.** `cp0_app_client.h` / `cp0_app_client.c` (plain C, part of `cp0_lvgl` at a v0.8.6 pin and copy-ready):
+  `cp0_app_client_call()`, `cp0_app_beep()`, `cp0_app_toast()`. They return 0 for `ok`, 1 for `err`, -1 for no service,
+  within 200 ms, and print nothing.
+- **Degrade.** No socket (an older launcher, no launcher, no `XDG_RUNTIME_DIR`) = `-1` at once: skip the beep or the
+  toast silently, show no error. **Never block more than about 200 ms**, and **never call it on the LVGL thread**: use a
+  worker, and remember a failure for a few seconds instead of retrying per event.
+- **Check before offering.** Show a sound option only when `board.state` says `sound=1` and `requests` has `beep`
+  (`cp0_app_board_has_request()`); a `beep` on a board with `sound=0` answers `err nosound`.
+- **Limits.** Per client process: `beep` and `toast` one per second, `volume`, `brightness` and `dim` ten per second,
+  the rest fifty (`err limit`). Every request is logged by the launcher with the process name.
+- **Permissions.** None per app yet: every process of the user may ask. `X-Permissions` in the `.desktop` file is
+  **reserved** (a later launcher may answer `err denied` to undeclared verbs); do not rely on it staying open.
+- **Test from ssh** with `cyberdeckzero-ctl` (installed by the launcher in `/usr/share/APPLaunch/bin`, linked in
+  `/usr/local/bin`): `cyberdeckzero-ctl hello`, `beep done`, `toast "2 new messages"`, `volume get`, `board` (prints
+  `board.state`); exit status 0 ok, 1 refused, 2 usage, 3 no launcher service. A terminal app or a script uses the same
+  command.
+
+### Sound, volume and brightness
+
+- **Sounds.** The launcher's own interface sounds are off and there is no setting for app beeps. An app may ask for a
+  `beep` (above); it plays at the current volume, so a muted or very quiet volume is silent: that is the user's choice.
+  Without sound output (`board.state` `sound=0`) expect `err nosound`.
+- **The volume, mute and brightness keys are the launcher's** while your app is in front (`KEY_VOLUMEUP`,
+  `KEY_VOLUMEDOWN`, `KEY_MUTE`, `KEY_BRIGHTNESSUP`, `KEY_BRIGHTNESSDOWN`; launcher 0.8.6, no rebuild of the app needed).
+  The keys still reach the app: **do not act on them too**, or the step doubles.
+- **Showing the level.** The launcher draws nothing over a fullscreen app. An app that wants to show the level draws
+  its own bar from `status.state` (`volume`, `mute`, `brightness_pct`), polled with the rest of the status, not through
+  `launcher.sock`.
+- Not verified on boards (launcher 0.8.6 notes): the keys inside apps and `dim allow`. `board.state`, `beep` and
+  `toast` were checked over ssh on the HackBerry and the FZ-M1 tablet.
+
+### Launcher versions and what each added for apps
+
+The apps build against one launcher commit, [`apps/_common/LAUNCHER_REF`](../apps/_common/LAUNCHER_REF) (today the
+**v0.8.5** commit `d0cb456`). Launcher features that live in the launcher process (the feed's values, the media keys,
+the socket's server) work with any build; features that live in `cp0_lvgl` (the strip's drawing and reading, the
+readers, the client) reach an app only at a pin that has them. **Using a 0.8.6 feature from `cp0_lvgl` needs a re-pin
+to the v0.8.6 commit `aef009b`** (and then the rebuild of every app, as above); an app can also copy the plain-C
+files of the contract and the client.
+
+| Launcher | Added for apps | Reaches an app |
+|---|---|---|
+| 0.8.1 (`2b1a070`, the previous pin) | amd64 launcher; the apps' amd64 builds use the same pin | - |
+| 0.8.2 | Settings > Apps reads `registry-amd64.json` on a PC | no rebuild |
+| 0.8.3 | the strip shows a `power_supply` battery | re-pin |
+| 0.8.4 | the strip reads a fuel gauge (`$APPLAUNCH_GAUGE`, HackBerry MAX17048); the launcher detects battery, backlight and sound at run time | re-pin |
+| 0.8.5 (`d0cb456`, **the current pin**) | `status.state` (`wifi`, `wifi_pct`, `eth`, `bt`, `battery`, `battery_state`) and `cp0_app_status_read()`; the strip reads the feed; Wi-Fi interface found under any name | re-pin (done: the six apps rebuilt at 0.8.5) |
+| 0.8.6 (`aef009b`) | `board.state`; `status.state` gains `volume`, `mute`, `brightness_pct`; `launcher.sock`, `cp0_app_client.[ch]`, `cyberdeckzero-ctl`; volume and brightness keys acted on by the launcher while an app is in front; `X-Permissions` reserved | the files and the keys: no rebuild; the readers and the client in `cp0_lvgl`: re-pin. The strip did not change, so no forced re-pin |
 
 ### Started without the launcher (ssh, a script, an older launcher)
 
@@ -384,6 +529,7 @@ Add the app to the table in the repository [README](../README.md) (name, version
 | let Esc go back and, at the root, quit | trap the user in a page; swallow Esc |
 | show an on-screen keyboard only by the shared rule | add a "keyboard" button |
 | run commands through `async_run` with timeout and cancel | block the LVGL thread |
+| ask the launcher for a beep or a toast from a worker, and carry on without it | drive the volume or the backlight yourself (`pactl`, sysfs), or act on their keys |
 | write one line of log per event, with the reason | log secrets or flood the journal |
 | name the binary after the app id, ship licences, credit upstream | borrow the stock device's name, logo or prefix |
 | raise `version` for every release | re-upload a `.deb` under the same version |
@@ -464,6 +610,9 @@ Copy into the pull request and tick.
 | 25 | Data and app lists on `CompactList`; no status shown by colour alone | [ ] |
 | 26 | List rows tagged Open / Edit / Action / Info; no marker on pure read-outs ([row kinds](#row-kinds-what-can-be-tapped)) | [ ] |
 | 27 | Multitasking chosen and written in the README: `X-Background=freeze`, `run` (and why), or none (and why); a `lifecycle` scene passes ([section 3](#multitasking-hidden-and-shown-again-x-background)) | [ ] |
+| 28 | Header controls left of `status_strip_left()`, nothing placed from a fixed strip width; the app does not act on the volume, mute or brightness keys ([section 3](#sound-volume-and-brightness)) | [ ] |
+| 29 | Launcher requests (if any) off the LVGL thread, at most about 200 ms, silent without the socket; sound options only with `board.state` `sound=1`; a missing state key means its default ([section 3](#asking-the-launcher-launchersock)) | [ ] |
+| 30 | Built against the current [`LAUNCHER_REF`](../apps/_common/LAUNCHER_REF) (`--version` says it matches); a launcher change to the strip's drawing means a re-pin and rebuild of every app ([section 3](#the-status-strip-data-and-drawing)) | [ ] |
 
 > **Icon upgrades:** a launcher older than PR #46 (2026-10-14) reads an icon's size once and keeps it until it restarts, so an app
 > update that ships an icon of a different size can look cropped on its tile; a current launcher reloads the tile within about 3 s

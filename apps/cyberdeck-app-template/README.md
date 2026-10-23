@@ -64,6 +64,15 @@ left open in the background, stopped, and brought back as it was; `_common` does
 `tests/scenes/lifecycle.scene` plays the launcher. Choose `run` only for work that must go on while hidden, and none
 for an app a pause would falsify.
 
+## What the launcher gives the app
+
+The status strip comes from `cp0_lvgl` at the pin (`apps/_common/LAUNCHER_REF`) with Wi-Fi, Bluetooth and the battery,
+read from the launcher's `status.state` feed (the template sets no source; its header keeps its controls left of
+`status_strip_left()`). The template uses nothing else of what launcher v0.8.6 added (`board.state`, the level keys of
+`status.state`, beeps and toasts over `launcher.sock`); an app that wants them reads
+[guidelines, section 3](../../docs/APP-GUIDELINES.md#3-the-launcher-contract) (the launcher's APP-CONTRACT.md is the
+normative text) and needs a pin at the v0.8.6 commit or later for the `cp0_lvgl` readers and client.
+
 ## Making a new app from it
 
 1. Copy the folder to `apps/<id>`, rename the `.desktop` file, the icon and the doc folder after `<id>`, and set

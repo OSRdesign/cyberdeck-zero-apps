@@ -18,7 +18,7 @@ The starting point of a new app is `apps/cyberdeck-app-template` (a draft that u
 | `async_run.{hpp,cpp}` | background commands: fork + exec in their own process group, lines and the end delivered on the LVGL thread in order (`lv_async_call` under `lv_lock()`), timeout, cancel, PDEATHSIG, `shutdown()` at exit |
 | `build_info.hpp` | the version stamp (`cdk_build_info.h` from `build_app.sh`) |
 | `build_app.sh` | cross (aarch64, stripped, into the app's `root/`; with `--arch amd64` x86-64, native, into `root.amd64/`) and host (headless harness, unit tests, scenes, contact sheets) builds in WSL, the launcher pin check, the stamp |
-| `LAUNCHER_REF` | the launcher commit the apps build against |
+| `LAUNCHER_REF` | the launcher commit the apps build against ([the launcher pin](#the-launcher-pin)) |
 | `scons/` | the scratch project's scons files: the SDK's project `SConstruct`, the component (`main.SConstruct`: cp0_lvgl + LVGL static, the launcher's FreeType glue, `-O2`, `--as-needed`) and the cross configuration (cp0_lvgl with the filesystem service only) |
 | `headless/` | the PC harness (see its README): a plain LVGL display at any size, scripted keys and taps, PNG shots, layout checks, contact sheets |
 | `tests/test_common.cpp` | unit tests of the keyboard rule, the command runner, the minimum-size rule and the lifecycle (off without a socket) |
@@ -62,9 +62,25 @@ The same source builds for x86-64 PCs (report 028 of the launcher docs, X8): `bu
 
 Not copied here: apps use the launcher's own `cp0::ui::StatusStrip::add(page->header())`, `cp0::ui::add_title` (the
 `Page` title factory) and `cp0::ui::status_strip_left()` (the `strip_left` of `cp0_ui_roller_page()`) from
-`cp0_ui_widgets.hpp`, pinned by `LAUNCHER_REF`. The strip's default source reads the launcher's `status.state` feed while the launcher runs (from v0.8.5: Wi-Fi, Bluetooth and battery as the home grid shows them), else sysfs / procfs (the Wi-Fi interface whatever its name); the battery comes from `/sys/class/power_supply`; fonts come from the
-launcher's `/usr/share/APPLaunch/share/font`. Moving `LAUNCHER_REF` moves the strip: rebuild every app and compare the
-header shots with the launcher's.
+`cp0_ui_widgets.hpp`, pinned by `LAUNCHER_REF`. The strip reads the battery itself (a `/sys/class/power_supply`
+battery, else the fuel gauge named by `$APPLAUNCH_GAUGE`, the HackBerry's MAX17048), then the launcher's `status.state`
+feed while the launcher process is alive (from v0.8.5: Wi-Fi, Bluetooth and battery as the home grid shows them), else
+sysfs / procfs (the Wi-Fi interface whatever its name, not only `wlan0`); fonts come from the launcher's
+`/usr/share/APPLaunch/share/font`. Header controls stay left of `status_strip_left()`: the battery widens the strip.
+
+The strip's drawing and reading code are compiled into each binary at the pin, so **values the feed carries reach the
+apps without a rebuild, a change to the drawing does not**: moving `LAUNCHER_REF` moves the strip; rebuild every app
+and compare the header shots with the launcher's. Details, and what else the launcher publishes for apps
+(`board.state`, `launcher.sock`, the volume and brightness keys):
+[guidelines, section 3](../../docs/APP-GUIDELINES.md#3-the-launcher-contract).
+
+## The launcher pin
+
+`LAUNCHER_REF` is the **v0.8.5** commit `d0cb456`. The launcher-process side of v0.8.6 (`board.state`, the new
+`status.state` keys, `launcher.sock`, the volume and brightness keys inside apps) works for apps built at this pin
+without a rebuild; using the v0.8.6 readers or the socket client of `cp0_lvgl` (`cp0_app_board_read()`,
+`cp0_app_client.h`) needs a re-pin to the v0.8.6 commit `aef009b`, then a rebuild of every app on both architectures.
+`_common` has no launcher-request wrapper yet.
 
 ## Multitasking (hidden and shown again)
 
