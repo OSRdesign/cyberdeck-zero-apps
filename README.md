@@ -9,7 +9,10 @@ An independent hobby project, not affiliated with M5Stack (see the
 <!-- branding-allow-end -->
 
 **Writing an app? Read the [app guidelines](docs/APP-GUIDELINES.md) first** (screen sizes, input, packaging, testing, checklist). List rows must show what can be tapped: see
-[row kinds](docs/APP-GUIDELINES.md#row-kinds-what-can-be-tapped).
+[row kinds](docs/APP-GUIDELINES.md#row-kinds-what-can-be-tapped). What the launcher gives an app (the status strip,
+the state files, requests such as a beep or a toast, the launcher versions and the pin):
+[section 3](docs/APP-GUIDELINES.md#3-the-launcher-contract) of the guidelines; the normative text is the launcher's
+[APP-CONTRACT.md](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/APP-CONTRACT.md).
 
 This repository is both the **app source** of that menu and a **template**: copy it and you can host your own
 apps for the deck in a few minutes, with nothing but a public GitHub repository.
@@ -84,7 +87,9 @@ Your app is a normal **aarch64 Linux executable**. **New apps are native full-sc
 [`apps/cyberdeck-app-template`](apps/cyberdeck-app-template/README.md) on the launcher's LVGL based `cp0_lvgl`
 runtime: they fill the whole screen, **640x480 and up** (the minimum screen for new apps; `X-MinSize=640x480` in the
 `.desktop` file), and take keys and touch directly. The [app guidelines](docs/APP-GUIDELINES.md) give the screen
-sizes, the input rules, the packaging and the tests.
+sizes, the input rules, the packaging and the tests. Native apps build against one launcher commit,
+[`apps/_common/LAUNCHER_REF`](apps/_common/LAUNCHER_REF) (today launcher v0.8.5); what each launcher version adds for
+apps, and when it needs a rebuild: [launcher versions](docs/APP-GUIDELINES.md#launcher-versions-and-what-each-added-for-apps).
 
 Wrapped (compat) apps, such as the first ones here ([LAN Scan](apps/lanscan/README.md),
 [Wi-Fi Survey](apps/wifi-survey/README.md)), still work: such an app draws a fixed 320x170 picture into the
