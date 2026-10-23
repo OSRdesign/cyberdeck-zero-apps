@@ -45,7 +45,8 @@ fi
 
 # display bridge (with the launcher's framebuffer output stage, status strip and layout service)
 gcc -shared -fPIC -O2 -Wall "$HERE/viz_fb_shim.c" "$HERE/cp0_fb_output.c" "$HERE/cp0_statusbar.c" \
-    "$HERE/cp0_ui_metrics.c" "$HERE/cp0_ui_roller.c" "$HERE/cp0_ui_status_strip.c" -I"$HERE" \
+    "$HERE/cp0_ui_metrics.c" "$HERE/cp0_ui_roller.c" "$HERE/cp0_ui_status_strip.c" "$HERE/cp0_power_supply.c" \
+    "$HERE/cp0_app_contract.c" -I"$HERE" \
     -I"$HERE/../src/core" $(sdl2-config --cflags) $(pkg-config --cflags --libs freetype2) -lSDL2_ttf -ldl -lm \
     -o "$WORK/libviz_fb.so"
 

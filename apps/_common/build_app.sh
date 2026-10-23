@@ -217,6 +217,10 @@ build_host() {
     echo "== host: make -C $COMMON/headless (build $BUILD)"
     flock "$LOCK" make -C "$COMMON/headless" -j"$(nproc)" APP="$APP" LAUNCHER="$LAUNCHER_TREE" BUILD="$BUILD/host" \
         GEN="$GEN" > "$BUILD/host-make.log" 2>&1 || { tail -n 40 "$BUILD/host-make.log"; exit 1; }
+    # the host's own battery (a PC has one) must not change the header the scenes see: an empty power_supply tree unless the
+    # caller points APPLAUNCH_POWER_SUPPLY_ROOT at another (v0.8.3 toolkit: the strip reads it; a battery widens the strip)
+    export APPLAUNCH_POWER_SUPPLY_ROOT=${APPLAUNCH_POWER_SUPPLY_ROOT-$BUILD/power_supply}
+    mkdir -p "$APPLAUNCH_POWER_SUPPLY_ROOT"
     local failed=0 t s
     for t in "$BUILD/host/test-common" "$BUILD/host/test-$ID"; do
         [[ -x $t ]] || continue

@@ -1,6 +1,6 @@
 # Serial Console
 
-Version 0.4.4, package `serial-console`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.4.5, package `serial-console`. Part of [cyberdeck-zero-apps](../../README.md).
 
 Serial Console talks to a USB-serial adapter or a microcontroller board (Arduino, ESP32, Raspberry Pi Pico, a GPS, a
 router console...) from the deck. It is a full-screen touch app made for the small screen: instead of dropping you into
@@ -201,7 +201,7 @@ The identification is kept in the port's section of the settings file as `id_*` 
   app says it needs 640x480) and a launcher with full-screen app support.
 * The user in the `dialout` group: `sudo usermod -aG dialout $USER`, then reboot.
 * Packages: `libfreetype6`, `libinput10`, `libxkbcommon0` (picocom is no longer used).
-* x86-64 PCs: an amd64 package, `serial-console_0.4.4_amd64.deb`, is in the amd64 registry
+* x86-64 PCs: an amd64 package, `serial-console_0.4.5_amd64.deb`, is in the amd64 registry
   ([amd64](../../README.md#amd64-x86-64-pcs)) for a PC running the launcher. It has had no board test on a PC yet.
 
 ## Known limits
@@ -233,6 +233,7 @@ The identification is kept in the port's section of the settings file as `id_*` 
 
 ## Changes
 
+* 0.4.5: rebuilt against launcher v0.8.5: battery in the header, Wi-Fi interface lookup, status feed; no other change.
 * 0.4.4: rebuilt on launcher v0.8.1 (2b1a070), no behaviour change intended; the toolkit changed under it: upstream decoupling, time zone/Settings work, x86 port; nothing the app uses was removed
   (see [What changed in 0.4.4](#what-changed-in-044)).
 * 0.4.3: multitasking, `X-Background=run` (keeps reading and logging the port while hidden; see

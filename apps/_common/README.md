@@ -62,7 +62,7 @@ The same source builds for x86-64 PCs (report 028 of the launcher docs, X8): `bu
 
 Not copied here: apps use the launcher's own `cp0::ui::StatusStrip::add(page->header())`, `cp0::ui::add_title` (the
 `Page` title factory) and `cp0::ui::status_strip_left()` (the `strip_left` of `cp0_ui_roller_page()`) from
-`cp0_ui_widgets.hpp`, pinned by `LAUNCHER_REF`. The strip's default source reads sysfs / procfs; fonts come from the
+`cp0_ui_widgets.hpp`, pinned by `LAUNCHER_REF`. The strip's default source reads the launcher's `status.state` feed while the launcher runs (from v0.8.5: Wi-Fi, Bluetooth and battery as the home grid shows them), else sysfs / procfs (the Wi-Fi interface whatever its name); the battery comes from `/sys/class/power_supply`; fonts come from the
 launcher's `/usr/share/APPLaunch/share/font`. Moving `LAUNCHER_REF` moves the strip: rebuild every app and compare the
 header shots with the launcher's.
 

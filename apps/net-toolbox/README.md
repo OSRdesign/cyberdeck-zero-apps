@@ -1,6 +1,6 @@
 # Net Toolbox
 
-Version 0.4.2, package `net-toolbox`. Part of
+Version 0.4.3, package `net-toolbox`. Part of
 [cyberdeck-zero-apps](../../README.md).
 
 Net Toolbox gathers the tools you reach for when a network misbehaves: a step-by-step **diagnosis** ("why is my
@@ -624,7 +624,7 @@ network's channel width, so a 40 or 80 MHz network counts on its main channel on
   public address asks `www.cloudflare.com` (Cloudflare), whois asks `whois.iana.org` and the servers it names, only
   when you start them. From 0.3: the speed test talks to `speed.cloudflare.com` (Cloudflare) and pings 1.1.1.1 or
   your gateway, only when you start it.
-* **x86-64 PCs:** an amd64 package, `net-toolbox_0.4.2_amd64.deb`, is in the amd64 registry
+* **x86-64 PCs:** an amd64 package, `net-toolbox_0.4.3_amd64.deb`, is in the amd64 registry
   ([amd64](../../README.md#amd64-x86-64-pcs)) for a PC running the launcher. It has had no board test on a PC yet.
 
 ## Install
@@ -633,7 +633,7 @@ From **Settings > Apps**. By hand:
 
 ```sh
 python3 tools/make_registry.py --only net-toolbox --out <a folder outside packages/>
-sudo dpkg -i net-toolbox_0.4.2_arm64.deb      # remove: sudo dpkg -r net-toolbox
+sudo dpkg -i net-toolbox_0.4.3_arm64.deb      # remove: sudo dpkg -r net-toolbox
 ```
 
 ## Files the app keeps
@@ -785,6 +785,7 @@ python3 tools/make_registry.py --only net-toolbox --out <a folder outside packag
 
 ## Changes
 
+* 0.4.3: rebuilt against launcher v0.8.5: battery in the header, Wi-Fi interface lookup, status feed; no other change.
 * 0.4.2: rebuilt on launcher f35c2d6: the toolkit's 7 mm minimum tap target for buttons and rows (the header Esc
   keeps 9 mm) and pointer navigation (Settings > System > Pointer navigation); no change in Net Toolbox's own code.
 * 0.4.1: rows show what can be tapped, by the launcher's row rule: a chevron opens a page or changes a value, read-outs are

@@ -1,3 +1,3 @@
-mesh-hop 0.5.2
-launcher 60a0a401a1a7091c6d2e855311b1d750e306c57e (same-tree against 2b1a0708b042129095bac4c06040b8f7121466e4)
-built 2026-10-22 x86_64
+mesh-hop 0.5.3
+launcher d0cb456eb842d507e6e2e9a3c08fd613a0b6fa3c (pinned against d0cb456eb842d507e6e2e9a3c08fd613a0b6fa3c)
+built 2026-10-23 x86_64

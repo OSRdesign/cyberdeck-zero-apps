@@ -22,7 +22,7 @@ Nearby, Settings, Statistics, packet log), `chats-<size>/c*.png` (Chats, convers
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/build.sh all --strict
 python tools/make_registry.py --only mesh-hop --out C:/CLAUDE/zero7/pkg-out
 set DECK_HOST=<board ip>        (deck: leave it unset)
-python deck.py put C:/CLAUDE/zero7/pkg-out/mesh-hop_0.5.2_arm64.deb /tmp/mesh-hop.deb
+python deck.py put C:/CLAUDE/zero7/pkg-out/mesh-hop_0.5.3_arm64.deb /tmp/mesh-hop.deb
 python deck.py sudo 'dpkg -i /tmp/mesh-hop.deb || apt-get -f install -y'
 python deck.py run '/usr/share/APPLaunch/bin/mesh-hop --version; id -nG; ls /dev/ttyACM* /dev/ttyUSB* 2>/dev/null'
 ```

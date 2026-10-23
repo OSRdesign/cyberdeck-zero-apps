@@ -1,6 +1,6 @@
 # System Monitor
 
-Version 0.2.6, package `system-monitor`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.2.7, package `system-monitor`. Part of [cyberdeck-zero-apps](../../README.md).
 
 System Monitor is a live, read-only look at the board or PC it runs on: CPU load per core, temperature, frequency,
 memory, storage, network, processes and the **power supply** (on a Raspberry Pi: under-voltage and throttling from the
@@ -169,7 +169,7 @@ From **Settings > Apps**. By hand:
 
 ```sh
 python3 tools/make_registry.py --only system-monitor --out <a folder outside packages/>
-sudo dpkg -i system-monitor_0.2.6_arm64.deb      # amd64 for PCs: system-monitor_0.2.6_amd64.deb; remove: sudo dpkg -r system-monitor
+sudo dpkg -i system-monitor_0.2.7_arm64.deb      # amd64 for PCs: system-monitor_0.2.7_amd64.deb; remove: sudo dpkg -r system-monitor
 ```
 
 ## Files the app keeps
@@ -256,6 +256,7 @@ The same fixture variable works on a board, for screenshots of a state that is h
 
 ## Changes
 
+* 0.2.7: rebuilt against launcher v0.8.5: battery in the header, Wi-Fi interface lookup, status feed; no other change.
 * 0.2.6: x86 PCs and tablets: the model from DMI, the CPU temperature from `x86_pkg_temp` (else coretemp, acpitz, the
   hottest sane zone), a battery tile and rows (percent, state, power, time left) when there is a battery, no `vcgencmd`
   and no Pi firmware rows or wording on a PC; the Pi is unchanged (see [What changed in 0.2.6](#what-changed-in-026)).
