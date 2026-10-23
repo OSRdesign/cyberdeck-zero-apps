@@ -18,7 +18,7 @@ Copy summary file in `~/serial-logs`).
 
 ```
 python tools/make_registry.py --only serial-console --out C:/CLAUDE/zero7/pkg-out
-python deck.py put C:/CLAUDE/zero7/pkg-out/serial-console_0.4.4_arm64.deb /tmp/serial-console.deb
+python deck.py put C:/CLAUDE/zero7/pkg-out/serial-console_0.4.5_arm64.deb /tmp/serial-console.deb
 python deck.py sudo 'dpkg -i /tmp/serial-console.deb'
 python deck.py run '/usr/share/APPLaunch/bin/serial-console --version; id -nG'
 ```
@@ -80,7 +80,7 @@ Connect refused with the dialog *No permission for ttyUSB0*. Restore with `sudo 
 
 ```
 set DECK_HOST=<pi3a ip>
-python deck.py put C:/CLAUDE/zero7/pkg-out/serial-console_0.4.4_arm64.deb /tmp/serial-console.deb
+python deck.py put C:/CLAUDE/zero7/pkg-out/serial-console_0.4.5_arm64.deb /tmp/serial-console.deb
 python deck.py sudo 'dpkg -i /tmp/serial-console.deb'
 ```
 

@@ -1,6 +1,6 @@
 # Mesh Hop
 
-Version 0.5.2, package `mesh-hop`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.5.3, package `mesh-hop`. Part of [cyberdeck-zero-apps](../../README.md).
 
 **Status: early release.** 0.2.2 and 0.3.0 were tested on the deck by the owner with real boards (Seeed XIAO nRF52840 and a
 spare XIAO S3 WIO, MeshCore firmware v1.15.0, a board swap included). 0.4.0 is the responsive, touch-complete version; its board
@@ -13,6 +13,11 @@ A full-screen client for [MeshCore](https://github.com/meshcore-dev/MeshCore) Lo
 companion firmware for USB, BLE or Wi-Fi); the deck is its screen and keyboard. Everything works **by touch or by keyboard**, on any screen from **640x480** up. Mesh Hop replaces the 320x170 UI of
 [MeshZero](../meshzero/README.md) and keeps its core: the serial transport, the protocol, the client, the model and the history
 store (`src/core/`, with unit tests).
+
+## What changed in 0.5.3
+
+* Rebuilt against launcher v0.8.5 (`d0cb456`): battery in the header, Wi-Fi interface lookup (not only `wlan0`), the
+  launcher's status feed. No other change.
 
 ## What changed in 0.5.2
 
@@ -238,7 +243,7 @@ Letters typed into a field are text, not shortcuts. The keyboard layout is US by
   recommended by the package; any user may use it through D-Bus).
 * `curl` (for the preset list; without it the app keeps the saved or built-in list), `libfreetype6`, `libinput10`,
   `libxkbcommon0` (the package depends on them).
-* **x86-64 PCs:** an amd64 package, `mesh-hop_0.5.2_amd64.deb`, is in the amd64 registry
+* **x86-64 PCs:** an amd64 package, `mesh-hop_0.5.3_amd64.deb`, is in the amd64 registry
   ([amd64](../../README.md#amd64-x86-64-pcs)) for a PC running the launcher. It has had no board test on a PC yet.
 
 **Install from the deck:** Settings > Apps > Sources > + Add a GitHub source `OSRdesign/cyberdeck-zero-apps` (if not added yet),
@@ -251,7 +256,7 @@ update in the same menu.
 python tools/make_registry.py --only mesh-hop --out <a folder outside packages/>
 ```
 
-Copy the `mesh-hop_0.5.2_arm64.deb` it writes to the deck and run `sudo apt install ./mesh-hop_0.5.2_arm64.deb` there. Remove it
+Copy the `mesh-hop_0.5.3_arm64.deb` it writes to the deck and run `sudo apt install ./mesh-hop_0.5.3_arm64.deb` there. Remove it
 with `sudo apt remove mesh-hop`.
 
 The USB boards are listed by themselves (`/dev/ttyACM*`, `/dev/ttyUSB*`, with their USB names); a path in

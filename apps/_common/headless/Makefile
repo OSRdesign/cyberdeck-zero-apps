@@ -73,6 +73,7 @@ CP0_SRCS := \
     $(CP0)/src/cp0_ui_dialog.c \
     $(CP0)/src/cp0_ui_dialog_widget.cpp \
     $(CP0)/src/cp0_ui_status_strip.c \
+    $(CP0)/src/cp0_power_supply.c \
     $(CP0)/src/cp0_ui_status_strip_widget.cpp \
     $(CP0)/src/cp0_keyboard_inject_key.c \
     $(CP0)/src/cp0_keyboard_queue.c \

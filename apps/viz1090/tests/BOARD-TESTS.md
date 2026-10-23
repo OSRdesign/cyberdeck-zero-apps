@@ -1,4 +1,4 @@
-# viz1090 0.2.2: board tests of the intro screen
+# viz1090 0.2.3: board tests of the intro screen
 
 For the Controller and the owner (controller-led testing: the Controller deploys and reads logs, the owner does the
 physical steps). Commands run from Windows: `deck.py` is `C:\CLAUDE\zero7\launcher\docs\dev\deck\deck.py` (password in
@@ -15,12 +15,12 @@ Expected pictures: the contact sheets of `build.sh host` in `\\wsl.localhost\Ubu
 ```
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/viz1090/build.sh all --strict
 python tools/make_registry.py --only viz1090 --out C:/CLAUDE/zero7/pkg-out
-python deck.py put C:/CLAUDE/zero7/pkg-out/viz1090_0.2.2_arm64.deb /tmp/viz1090.deb
+python deck.py put C:/CLAUDE/zero7/pkg-out/viz1090_0.2.3_arm64.deb /tmp/viz1090.deb
 python deck.py sudo 'dpkg -i /tmp/viz1090.deb || apt-get -f install -y'
 python deck.py run '/opt/viz1090/vizsetup --version; /opt/viz1090/vizsetup --screen'
 ```
 
-`--version`: `viz1090 (viz1090) 0.2.2`, the launcher commit and `cp0_lvgl pinned` or `same-tree`. `--screen`: the
+`--version`: `viz1090 (viz1090) 0.2.3`, the launcher commit and `cp0_lvgl pinned` or `same-tree`. `--screen`: the
 panel, e.g. `640 480 2 1130 screen.state` on the deck. Logs while testing:
 
 ```
@@ -32,7 +32,7 @@ python deck.py run 'journalctl --user -u cyberdeckzero.service -n 80 --no-pager 
 1. Open viz1090 from the home grid. Expect the intro: gold title "viz1090", the grey Esc button, the clock / Wi-Fi /
    Bluetooth strip where the home grid has it, a grey status line, a wide Start button, then SDR receiver, GPS
    receiver and Position rows (compare `receivers.png` / `root.png`, column 640x480).
-2. Log: `[cdk] viz1090 0.2.2: launcher contract 1, mode fullscreen, canvas 640x480` and
+2. Log: `[cdk] viz1090 0.2.3: launcher contract 1, mode fullscreen, canvas 640x480` and
    `[viz1090] intro: position ..., SDR ..., viz1090 installed, settings /home/<user>/.config/cardputerzero/viz1090.conf`.
 
 ## T2. Esc from every source, Start, the contract with run_viz1090.sh

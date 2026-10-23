@@ -1,4 +1,4 @@
-# Net Toolbox 0.4.2: board tests
+# Net Toolbox 0.4.3: board tests
 
 For the Controller and the user (controller-led testing: the Controller deploys and reads logs, the user does the
 physical steps). `deck.py` is `C:\CLAUDE\zero7\launcher\docs\dev\deck\deck.py` (password in `PIPW`; `DECK_HOST=<ip>`

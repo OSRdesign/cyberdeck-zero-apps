@@ -1,6 +1,6 @@
 # viz1090
 
-Version 0.2.2, package `viz1090`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.2.3, package `viz1090`. Part of [cyberdeck-zero-apps](../../README.md).
 
 The real [viz1090](https://github.com/nmatsuda/viz1090) ADS-B display (by Nathan Matsuda) on the deck, full screen,
 with its own RTL-SDR decoder, an intro screen and a world map. The intro screen shows whether the SDR dongle and a
@@ -126,7 +126,7 @@ half the longer side, so the window covers the whole screen, square or wide, at 
 On the deck: **Settings > Apps > Sources > + Add a GitHub source**, enter `OSRdesign/cyberdeck-zero-apps`, go to the
 **Apps** tab, pick **viz1090** and press Enter. Installing asks for the deck user's sudo password; the package depends on
 the libraries it needs. See the [repository README](../../README.md) for details. If an older version is installed,
-the deck offers 0.2.2 as an update in the same menu. By hand: `sudo dpkg -i viz1090_0.2.2_arm64.deb` (then
+the deck offers 0.2.3 as an update in the same menu. By hand: `sudo dpkg -i viz1090_0.2.3_arm64.deb` (then
 `sudo apt-get -f install` for missing libraries).
 
 ## Files the app keeps
@@ -166,7 +166,7 @@ package's `copyright` file, [`root/usr/share/doc/viz1090/copyright`](root/usr/sh
   from the packager as well, open an issue at <https://github.com/OSRdesign/cyberdeck-zero-apps>.
 * **Display bridge, intro screen and scripts** (`libviz_fb.so`, `vizsetup`, `run_viz1090.sh`, `extract_map.py`): MIT,
   2026 OSRdesign, sources in [`build`](build) and [`src`](src). `cp0_statusbar.[ch]`, `cp0_fb_output.[ch]`,
-  `cp0_ui_metrics.[ch]`, `cp0_ui_roller.[ch]` and `cp0_ui_status_strip.[ch]` come from
+  `cp0_ui_metrics.[ch]`, `cp0_ui_roller.[ch]`, `cp0_ui_status_strip.[ch]`, `cp0_power_supply.[ch]` and `cp0_app_contract.[ch]` come from
   [cyberdeck-zero-launcher](https://github.com/OSRdesign/cyberdeck-zero-launcher) (MIT). The intro screen links
   the launcher's `cp0_lvgl` runtime and LVGL (both MIT) through [`apps/_common`](../_common/README.md), and draws
   with the launcher's fonts at run time (none bundled for it).
@@ -199,6 +199,7 @@ scripts. `build/make_world.py` builds the world map from open data (it needs a P
 
 ## Changes
 
+* **0.2.3**: rebuilt against launcher v0.8.5: battery in the header, Wi-Fi interface lookup, status feed; the map's header (the display bridge) has the launcher's status strip too, so it shows the battery and finds the Wi-Fi interface (the bridge `libviz_fb.so` is rebuilt from the refreshed copies on a Pi, see `build/build_on_pi.sh`); the viz1090 and readsb binaries are unchanged.
 * **0.2.2**: built on the newer toolkit (launcher f35c2d6). Buttons and rows of the intro screen use the shared 7 mm
   minimum tap target (was 9 mm for buttons), and the header's Esc keeps its 9 mm on the intro screen and on the map.
   Pointer navigation (a trackpoint or mouse as arrows, a click as Enter, a held click as Ctrl+O) works on the intro

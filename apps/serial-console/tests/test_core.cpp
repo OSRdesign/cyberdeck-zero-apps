@@ -266,7 +266,7 @@ static void test_package()
     const std::string manifest = read_file(app + "/app.json");
     CHECK(manifest.find("\"share_code\": \"serial-console\"") != std::string::npos);
     CHECK(manifest.find("\"package\": \"serial-console\"") != std::string::npos);
-    CHECK(manifest.find("\"version\": \"0.4.4\"") != std::string::npos);
+    CHECK(manifest.find("\"version\": \"0.4.5\"") != std::string::npos);
     // the fixtures of the classifier say they are representative samples
     for (const char *f : {"esp32-idf-boot.txt", "gnss-ublox-m8.txt", "micropython.txt", "marlin-m115.txt"})
         CHECK(read_file(app + "/tests/fixtures/" + f).find("## Representative sample, NOT a capture") == 0);

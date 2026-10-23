@@ -50,7 +50,9 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
+#include "cp0_app_contract.h"
 #include "cp0_fb_output.h"
+#include "cp0_power_supply.h"
 #include "cp0_statusbar.h"
 #include "cp0_ui_metrics.h"
 #include "cp0_ui_roller.h"
@@ -198,6 +200,11 @@ static int strip_left_px(void)
     full.bt_on = 1;
     full.bt_connected = 1;
     snprintf(full.clock, sizeof(full.clock), "%s", "00:00");
+    cp0_power_battery_t battery;
+    if (cp0_power_supply_battery(&battery)) {       /* a battery at 100 % when the board has one now */
+        battery.percent = 100;
+        cp0_ui_status_set_battery(&full, &battery);
+    }
     cp0_statusbar_render_scaled(bar, pixels, strip.w, strip.w, 0, strip.top, 0, &full, strip.pct);
     const int first = cp0_ui_status_first_column(pixels, strip.w, rows);
     free(pixels);
@@ -500,12 +507,29 @@ static Uint32 status_read_at;
 static int header_update(void)
 {
     const Uint32 now = SDL_GetTicks();
-    if (!status_read_at || now - status_read_at >= 2000) {   /* the strip's own source: sysfs / procfs */
-        cp0_statusbar_state_t read;
-        cp0_statusbar_read_state(&read);
-        cp0_ui_status_set_wifi(&status_state, read.wifi_up, read.wifi_pct);
-        status_state.bt_on = read.bt_on;
-        status_state.bt_connected = read.bt_connected;
+    if (!status_read_at || now - status_read_at >= 2000) {
+        /* what cp0::ui::StatusStrip does (cp0_ui_status_strip_widget.cpp): the battery from power_supply, then the
+         * launcher's status.state while its process is alive (Wi-Fi, Bluetooth, battery as the home grid shows them),
+         * else sysfs / procfs */
+        cp0_power_battery_t battery;
+        cp0_ui_status_set_battery(&status_state, cp0_power_supply_battery(&battery) ? &battery : NULL);
+        cp0_app_status_t feed;
+        if (cp0_app_status_read(NULL, &feed) == 0) {
+            cp0_ui_status_set_wifi(&status_state, feed.wifi, feed.wifi_pct);
+            status_state.bt_on = feed.bt != CP0_APP_BT_OFF;
+            status_state.bt_connected = feed.bt == CP0_APP_BT_CONNECTED;
+            if (feed.battery >= 0) {
+                status_state.battery = 1;
+                status_state.battery_pct = feed.battery > 100 ? 100 : feed.battery;
+                status_state.battery_charging = feed.battery_charging;
+            }
+        } else {
+            cp0_statusbar_state_t read;
+            cp0_statusbar_read_state(&read);
+            cp0_ui_status_set_wifi(&status_state, read.wifi_up, read.wifi_pct);
+            status_state.bt_on = read.bt_on;
+            status_state.bt_connected = read.bt_connected;
+        }
         status_read_at = now ? now : 1;
     }
     const time_t t = time(NULL);

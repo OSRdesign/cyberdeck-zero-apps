@@ -37,9 +37,17 @@
 #define BT_CONNECTED 0x3B9DFFu  /* kBtConnected */
 #define BT_IDLE 0x5A5A5Au       /* kBtIdle */
 #define BT_CODEPOINT 0xF293     /* LV_SYMBOL_BLUETOOTH */
+/* ---- the battery (decision X12): fits in the 320 px strip left of the Bluetooth glyph's place, "100%" included */
+#define BATT_GAP 12             /* between the battery and the Bluetooth glyph's place */
+#define BATT_TEXT_GAP 3         /* between the percentage and the level glyph */
+#define BATT_TEXT_PX 18         /* the percentage: the caption size beside the 28 px clock */
+#define BATT_COLOR 0xFFFFFFu    /* the clock's text; BAR_ON while charging */
 
 static const int kBarHeights[4] = {9, 15, 21, 28};
 static const int kBarThresholds[4] = {1, 30, 60, 80};
+/* LV_SYMBOL_BATTERY_FULL, _3, _2, _1, _EMPTY: the level glyph from this charge in percent up */
+static const unsigned long kBatteryGlyphs[5] = {0xF240, 0xF241, 0xF242, 0xF243, 0xF244};
+static const int kBatteryGlyphFrom[5] = {88, 63, 38, 13, 0};
 
 struct cp0_statusbar {
     FT_Library library;
@@ -83,26 +91,69 @@ static int read_first_line(const char *path, char *out, size_t size)
     return ok;
 }
 
+/* path = $APPLAUNCH_STATUS_SYSFS_ROOT (test hook: a fake tree) + rel; rel when the variable is unset */
+static const char *rooted(const char *rel, char *buf, size_t size)
+{
+    const char *root = getenv("APPLAUNCH_STATUS_SYSFS_ROOT");
+    if (!root || !root[0]) return rel;
+    snprintf(buf, size, "%s%s", root, rel);
+    return buf;
+}
+
+static int iface_is_up(const char *name)
+{
+    char rel[160], path[480], line[32];
+    snprintf(rel, sizeof(rel), "/sys/class/net/%.100s/operstate", name);
+    return read_first_line(rooted(rel, path, sizeof(path)), line, sizeof(line)) && strncmp(line, "up", 2) == 0;
+}
+
+/* The Wi-Fi interface, whatever the kernel named it (wlan0, wlp2s0, wlx...): the entries of /proc/net/wireless (it lists
+ * wireless interfaces only), else the /sys/class/net/<if>/wireless directories; the first one whose operstate is up.
+ * The signal comes from its /proc/net/wireless line (0 when it has none). */
+static void read_wifi(cp0_statusbar_state_t *state)
+{
+    char line[160], path[480];
+    FILE *file = fopen(rooted("/proc/net/wireless", path, sizeof(path)), "r");
+    while (file && fgets(line, sizeof(line), file)) {
+        char *colon = strchr(line, ':');
+        if (!colon) continue;                                             /* the two header lines have none */
+        *colon = '\0';
+        const char *name = line;
+        while (*name == ' ') ++name;
+        float link = 0, level = 0;
+        if (!*name || !iface_is_up(name)) continue;
+        state->wifi_up = 1;
+        if (sscanf(colon + 1, "%*s %f %f", &link, &level) == 2) {
+            int pct = (int)(level < 0 ? 2 * (level + 100) : level);       /* dBm -> percent, as native_ui does */
+            state->wifi_pct = pct < 0 ? 0 : (pct > 100 ? 100 : pct);
+        }
+        break;
+    }
+    if (file) fclose(file);
+    if (state->wifi_up) return;
+    DIR *dir = opendir(rooted("/sys/class/net", path, sizeof(path)));
+    struct dirent *entry;
+    while (dir && (entry = readdir(dir))) {
+        char rel[160], probe[480];
+        if (entry->d_name[0] == '.') continue;
+        snprintf(rel, sizeof(rel), "/sys/class/net/%.100s/wireless", entry->d_name);
+        DIR *wireless = opendir(rooted(rel, probe, sizeof(probe)));
+        if (!wireless) continue;
+        closedir(wireless);
+        if (iface_is_up(entry->d_name)) {
+            state->wifi_up = 1;
+            break;
+        }
+    }
+    if (dir) closedir(dir);
+}
+
 void cp0_statusbar_read_state(cp0_statusbar_state_t *state)
 {
     memset(state, 0, sizeof(*state));
-    char line[160];
-    if (read_first_line("/sys/class/net/wlan0/operstate", line, sizeof(line)) && strncmp(line, "up", 2) == 0)
-        state->wifi_up = 1;
-    if (state->wifi_up) {
-        FILE *file = fopen("/proc/net/wireless", "r");
-        while (file && fgets(line, sizeof(line), file)) {
-            const char *colon = strstr(line, "wlan0:");
-            float link = 0, level = 0;
-            if (colon && sscanf(colon + 6, "%*s %f %f", &link, &level) == 2) {
-                int pct = (int)(level < 0 ? 2 * (level + 100) : level);    /* dBm -> percent, as native_ui does */
-                state->wifi_pct = pct < 0 ? 0 : (pct > 100 ? 100 : pct);
-                break;
-            }
-        }
-        if (file) fclose(file);
-    }
-    DIR *dir = opendir("/sys/class/bluetooth");
+    char path[480];
+    read_wifi(state);
+    DIR *dir = opendir(rooted("/sys/class/bluetooth", path, sizeof(path)));
     if (dir) {
         struct dirent *entry;
         while ((entry = readdir(dir))) {
@@ -113,14 +164,16 @@ void cp0_statusbar_read_state(cp0_statusbar_state_t *state)
         closedir(dir);
     }
     if (state->bt_on) {                                                   /* switched off in rfkill? */
-        DIR *rf = opendir("/sys/class/rfkill");
+        DIR *rf = opendir(rooted("/sys/class/rfkill", path, sizeof(path)));
         struct dirent *entry;
         while (rf && (entry = readdir(rf))) {
-            char path[320], kind[32] = "", soft[8] = "1";
-            snprintf(path, sizeof(path), "/sys/class/rfkill/%.200s/type", entry->d_name);
-            if (!read_first_line(path, kind, sizeof(kind)) || strncmp(kind, "bluetooth", 9) != 0) continue;
-            snprintf(path, sizeof(path), "/sys/class/rfkill/%.200s/soft", entry->d_name);
-            if (read_first_line(path, soft, sizeof(soft)) && soft[0] != '0') state->bt_on = 0;
+            char rel[320], full[480], kind[32] = "", soft[8] = "1";
+            snprintf(rel, sizeof(rel), "/sys/class/rfkill/%.200s/type", entry->d_name);
+            if (!read_first_line(rooted(rel, full, sizeof(full)), kind, sizeof(kind)) ||
+                strncmp(kind, "bluetooth", 9) != 0)
+                continue;
+            snprintf(rel, sizeof(rel), "/sys/class/rfkill/%.200s/soft", entry->d_name);
+            if (read_first_line(rooted(rel, full, sizeof(full)), soft, sizeof(soft)) && soft[0] != '0') state->bt_on = 0;
         }
         if (rf) closedir(rf);
     }
@@ -192,6 +245,38 @@ static int text_advance(FT_Face face, const char *text)
     return total;
 }
 
+/* Where the battery goes: [percentage][level glyph], right to left from the Bluetooth glyph's place. */
+typedef struct {
+    unsigned long glyph; /* the level glyph */
+    int glyph_x;         /* its pen x */
+    char text[16];       /* "85%" */
+    int text_x;          /* the percentage's pen x: the battery's left edge */
+} battery_place_t;
+
+static unsigned long battery_glyph(int percent)
+{
+    for (int i = 0; i < 4; ++i)
+        if (percent >= kBatteryGlyphFrom[i]) return kBatteryGlyphs[i];
+    return kBatteryGlyphs[4];
+}
+
+/* The icon face at the strip's size; the text face measured at text_px, then set back to font_px. */
+static int battery_place(cp0_statusbar_t *bar, const cp0_statusbar_state_t *state, int bt_right, int gap, int text_gap,
+                         int text_px, int font_px, battery_place_t *out)
+{
+    if (!bar->icon_face || FT_Load_Char(bar->icon_face, BT_CODEPOINT, FT_LOAD_DEFAULT) != 0) return 0;
+    const int bt_left = bt_right - (int)(bar->icon_face->glyph->advance.x >> 6);
+    const int percent = state->battery_pct < 0 ? 0 : state->battery_pct > 100 ? 100 : state->battery_pct;
+    out->glyph = battery_glyph(percent);
+    if (FT_Load_Char(bar->icon_face, out->glyph, FT_LOAD_DEFAULT) != 0) return 0;
+    out->glyph_x = bt_left - gap - (int)(bar->icon_face->glyph->advance.x >> 6);
+    snprintf(out->text, sizeof(out->text), "%d%%", percent);
+    FT_Set_Pixel_Sizes(bar->text_face, 0, text_px);
+    out->text_x = out->glyph_x - text_gap - text_advance(bar->text_face, out->text);
+    FT_Set_Pixel_Sizes(bar->text_face, 0, font_px);
+    return 1;
+}
+
 /* Scales a design pixel value by pct percent (exact at 100). */
 #define SC(v) (((v) * pct + 50) / 100)
 
@@ -211,10 +296,16 @@ void cp0_statusbar_render_scaled(cp0_statusbar_t *bar, uint32_t *argb, int width
     const int wifi_x = pill_x - SC(WIFI_GAP) - SC(WIFI_W);
     const int wifi_y = pill_y + SC(WIFI_Y_OFFSET);
     const int bt_right = wifi_x - SC(BT_GAP);
+    battery_place_t battery = {0};
+    const int has_battery = state->battery && battery_place(bar, state, bt_right, SC(BATT_GAP), SC(BATT_TEXT_GAP),
+                                                            SC(BATT_TEXT_PX), SC(FONT_PX), &battery);
 
-    if (backing_alpha > 0)
-        round_rect(argb, width, stride_px, bt_right - SC(34), pill_y - SC(2), pill_x + pill_w + SC(6) - (bt_right - SC(34)),
-                   pill_h + SC(4), SC(12), 0x000000u, backing_alpha);
+    if (backing_alpha > 0) {
+        int left = bt_right - SC(34);
+        if (has_battery && battery.text_x - SC(6) < left) left = battery.text_x - SC(6);
+        round_rect(argb, width, stride_px, left, pill_y - SC(2), pill_x + pill_w + SC(6) - left, pill_h + SC(4), SC(12),
+                   0x000000u, backing_alpha);
+    }
 
     /* clock pill with the time centred like an lv_label (line height = ascender - descender) */
     round_rect(argb, width, stride_px, pill_x, pill_y, pill_w, pill_h, SC(PILL_RADIUS), PILL_COLOR, 255);
@@ -242,6 +333,26 @@ void cp0_statusbar_render_scaled(cp0_statusbar_t *bar, uint32_t *argb, int width
             draw_glyph(bar->icon_face, BT_CODEPOINT, argb, width, stride_px, bt_right - advance, label_top + ascent,
                        state->bt_connected ? BT_CONNECTED : BT_IDLE);
         }
+    }
+
+    /* Battery: the level glyph on the Bluetooth glyph's baseline, the percentage's digits centred on the glyph */
+    if (has_battery) {
+        const uint32_t rgb = state->battery_charging ? BAR_ON : BATT_COLOR;
+        const int icon_baseline = pill_y + SC(BT_Y_OFFSET) + ascent;
+        int middle = icon_baseline - SC(11);
+        if (FT_Load_Char(bar->icon_face, battery.glyph, FT_LOAD_DEFAULT) == 0) {
+            const FT_Glyph_Metrics *gm = &bar->icon_face->glyph->metrics;
+            middle = icon_baseline - (int)((gm->horiBearingY - gm->height / 2 + 32) >> 6);
+        }
+        draw_glyph(bar->icon_face, battery.glyph, argb, width, stride_px, battery.glyph_x, icon_baseline, rgb);
+        FT_Set_Pixel_Sizes(bar->text_face, 0, SC(BATT_TEXT_PX));
+        int digit_h = SC(13);
+        if (FT_Load_Char(bar->text_face, '0', FT_LOAD_DEFAULT) == 0)
+            digit_h = (int)((bar->text_face->glyph->metrics.horiBearingY + 32) >> 6);
+        int x = battery.text_x;
+        for (const char *c = battery.text; *c; ++c)
+            x += draw_glyph(bar->text_face, (unsigned char)*c, argb, width, stride_px, x, middle + digit_h / 2, rgb);
+        FT_Set_Pixel_Sizes(bar->text_face, 0, SC(FONT_PX));
     }
     if (pct != 100) {
         FT_Set_Pixel_Sizes(bar->text_face, 0, FONT_PX);

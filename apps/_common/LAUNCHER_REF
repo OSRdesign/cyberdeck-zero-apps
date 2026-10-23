@@ -1,5 +1,5 @@
-2b1a0708b042129095bac4c06040b8f7121466e4
-# The launcher commit (cyberdeck-zero-launcher v0.8.1, main after #76: the x86 port, the time zone picker, the same Settings on every board, upstream decoupling; before it 45d99a9 = v0.8.0 multitasking P-e) every cdk app is built against:
+d0cb456eb842d507e6e2e9a3c08fd613a0b6fa3c
+# The launcher commit (cyberdeck-zero-launcher v0.8.5: the status strip of every app finds the Wi-Fi interface whatever its name, reads the launcher's status.state feed and shows the battery; before it 2b1a070 = v0.8.1) every cdk app is built against:
 # its ext_components/cp0_lvgl (display backend, keyboard, widgets, layout service), its LVGL FreeType glue
 # (projects/APPLaunch/main/lvgl) and its LVGL configuration. build_app.sh compares the launcher checkout with it and
 # stamps the result into --version and usr/share/doc/<app>/build-info. Move it deliberately, then rebuild every app.
