@@ -34,6 +34,18 @@ wait 800
 say == reversed (expect sort=name(rev))
 dump
 shot 33-sorted-reversed
+# 0.7.0: a tap opens a contact by its type (a repeater or room its Repeater page, a chat its conversation, a sensor its details):
+# the sensors only (T four times: Chat, Repeater, Room, Sensor), so the tapped row opens its details here
+type t
+wait 800
+type t
+wait 800
+type t
+wait 800
+type t
+wait 800
+say == the sensors (expect filter=Sensor/Any time)
+dump
 # drag-scroll with a finger (touch): the rows follow, then the row under the finger is the one that opens
 drag 300 330 300 130
 wait 800
@@ -55,11 +67,15 @@ wait 400
 say == tapped the first row of this order: its details open (expect detail=1, detail_name = the first= name)
 dump
 key esc
+wait 300
+type t
+wait 800
+key tab
 key tab
 key tab
 key tab
 wait 400
-say == back on Contacts after a tour of the pages: the sort and the filters are kept (expect sort=name(rev) shown=161)
+say == back on Contacts after a tour of the pages (Tools, Settings, Chats, Contacts): the sort and the filters are kept (expect sort=name(rev) filter=All/Any time shown=161)
 dump
 
 # the filters of the 161 contacts

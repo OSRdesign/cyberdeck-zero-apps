@@ -109,6 +109,15 @@ void Client::try_open()
 void Client::drop_link(const std::string &why, uint64_t retry_in_ms)
 {
     const bool was_ready = link_ == Link::Ready;
+    if (relay_active()) {                                  // the console loses the node too: its session ends now (the reconnect re-reads all)
+        if (relay_scope_set_) scope_reset_pending_ = true;
+        relay_.close();
+        relay_hold_.clear();
+        relay_state_ = RelayState::Off;
+        relay_end_reason_ = "the link to the node was lost";
+        ++relay_ended_id_;
+        log("console relay: session ended, the link to the node was lost");
+    }
     transport_.close();
     parser_.reset();
     // abort what is waiting; callbacks may set states, so detach first
@@ -120,6 +129,8 @@ void Client::drop_link(const std::string &why, uint64_t retry_in_ms)
     normal_.clear();
     for (auto &r : aborted)
         if (r.done) r.done(Outcome::Aborted, nullptr, -1);
+    end_remote(RemoteError::LinkLost);                     // a remote wait ends with the link (a pending command ended above)
+    sessions_.clear();                                     // what we knew of our logins belongs to this connection (report 036)
     for (const Outgoing &o : outgoing_) model_.set_state(o.seq, MsgState::NoAck, "board disconnected");
     outgoing_.clear();
     chan_pending_.clear();
@@ -216,6 +227,7 @@ void Client::after_ready()
                                       : "Restarted with the same keys: not reset");
         notice_hold_until_ = now_ + 8000;                       // the clock notices of the new connection must not wipe it at once
     }
+    if (scope_reset_pending_) reset_flood_scope();          // a console session set a flood scope, then the link went before it was undone
     start_clock_sync();
     Request b;
     b.payload = build_battery();
@@ -439,7 +451,7 @@ void Client::enqueue(Request r, bool urgent)
 
 void Client::pump_queue()
 {
-    if (inflight_ || !transport_.is_open()) return;
+    if (inflight_ || !transport_.is_open() || relay_active()) return;      // a console session holds Mesh Hop's commands
     std::deque<Request> &q = !urgent_.empty() ? urgent_ : normal_;
     if (q.empty()) return;
     inflight_ = std::make_unique<Request>(std::move(q.front()));
@@ -450,6 +462,8 @@ void Client::pump_queue()
         return;
     }
     deadline_ = now_ + inflight_->timeout_ms;
+    if (!inflight_->payload.empty() && inflight_->payload[0] == cmd::kSendLogin && inflight_->payload.size() > 33)
+        std::fill(inflight_->payload.begin() + 33, inflight_->payload.end(), 0);      // the password is on its way: no copy stays here
     if (inflight_->no_reply) finish(Outcome::Ok, nullptr, 0);       // the board answers nothing (reboot)
 }
 
@@ -473,15 +487,37 @@ void Client::on_frame(const Bytes &frame)
 {
     ++frames_rx_;
     consecutive_timeouts_ = 0;
+    const uint8_t code = packet_code(frame);
+    // ---- the CLI relay: the console gets every frame of the node as it is (pushes only while Mesh Hop's last command is answered)
+    if (relay_state_ == RelayState::Passthrough || (relay_state_ == RelayState::Draining && is_push(code))) {
+        if (relay_.connected()) {
+            relay_.send(frame);
+            ++relay_to_console_;
+            if (options_.log_frames) log("relay rx " + code_text(code) + " len=" + std::to_string(frame.size()) + " -> console");
+        }
+    }
     const auto parsed = parse_packet(frame);
     if (!parsed) { ++bad_frames_; return; }
     const Packet &p = *parsed;
-    const uint8_t code = packet_code(frame);
     if (!is_push(code)) last_head_ = to_hex(frame.data(), std::min<size_t>(frame.size(), 16));
+    // While the console owns the node, an answer (not a push) belongs to one of ITS commands: Mesh Hop applies only the messages it
+    // pulled (Chats keep working), never its contacts, channels, self info... (an incremental contact list would wipe Mesh Hop's).
+    const bool console_owns = relay_state_ == RelayState::Passthrough || relay_state_ == RelayState::Settling;
+    if (console_owns && !is_push(code)) {
+        if (relay_state_ == RelayState::Settling) relay_settle_until_ = now_ + kRelaySettleMs;
+        if (!std::holds_alternative<IncomingMessage>(p)) return;
+    }
 
     // ---- effects on the model, whatever command is in flight
     if (const auto *m = std::get_if<IncomingMessage>(&p)) {
-        model_.add_incoming(*m, now_unix());
+        // A repeater's or room server's answer to a remote CLI command (text type CLI_DATA, report 033 section 2.3) is console output for
+        // the program that sent the command, never a chat message: no Chats entry, no unread count, no notice. Type 2 (signed, a room
+        // server's posts) stays a message.
+        if (!m->channel && m->txt_type == txttype::kCliData) {
+            if (options_.log_frames) log("rx CLI reply (text type 1) from " + to_hex(m->prefix) + ", " + std::to_string(m->text.size()) + " bytes: kept out of Chats");
+        } else {
+            model_.add_incoming(*m, now_unix());
+        }
     } else if (const auto *s = std::get_if<SelfInfo>(&p)) {
         model_.set_self(*s);
     } else if (const auto *d = std::get_if<DeviceInfo>(&p)) {
@@ -521,7 +557,7 @@ void Client::on_frame(const Bytes &frame)
             o.name = kc->c.name;
             model_.note_nearby(o, now_unix());
         }
-        if (ready() && !key_lookup_queued_ && normal_.size() < 8) {    // fetch the new name / position
+        if (ready() && !relay_active() && !key_lookup_queued_ && normal_.size() < 8) {    // fetch the new name / position
             key_lookup_queued_ = true;
             Request r;
             r.payload = build_get_contact_by_key(adv->key);
@@ -569,10 +605,16 @@ void Client::on_frame(const Bytes &frame)
     } else if (std::get_if<ContactsFull>(&p)) {
         set_notice(false, "The radio's contact list is full");
     } else if (std::get_if<MessagesWaiting>(&p)) {
-        want_sync_ = true;
-        sync_burst_ = 0;
+        if (!console_owns) {                                   // during a console session the console fetches; Mesh Hop reads along
+            want_sync_ = true;
+            sync_burst_ = 0;
+        }
     } else if (const auto *ack = std::get_if<Ack>(&p)) {
         handle_ack(*ack);
+    } else if (const auto *ls = std::get_if<LoginSuccess>(&p)) {
+        on_login_reply(ls->prefix, ls);                        // report 036: the remote node's verdict on a pending login
+    } else if (const auto *lf = std::get_if<LoginFail>(&p)) {
+        on_login_reply(lf->prefix, nullptr);
     }
 
     // ---- diagnostics: what the board sends while a channel message waits for its answer
@@ -625,9 +667,11 @@ void Client::poll(uint64_t now_ms)
     }
     if (inflight_ && now_ > deadline_) finish(Outcome::Timeout, nullptr, 0);
     if (!transport_.is_open()) return;
+    tick_remote();                                     // a remote wait is a timer, not a command in flight
+    if (relay_active()) tick_relay();
     pump_queue();
     if (link_ == Link::NotCompanion) return;
-    if (ready()) {
+    if (ready() && !relay_active()) {                  // the timers that send stop while a console session runs
         tick_outgoing();
         tick_clock();
         tick_discover();
@@ -662,6 +706,423 @@ void Client::maybe_sync_and_poll()
         b.done = [](Outcome, const Packet *, int) {};
         enqueue(std::move(b));
     }
+}
+
+/* ------------------------------------------------------------------ the CLI relay (report 033, P3) */
+
+int Client::start_relay()
+{
+    if (!ready()) { set_notice(false, "Not connected to a radio"); return 0; }
+    if (relay_active()) { set_notice(false, "A console session is already running"); return 0; }
+    const int port = relay_.open();
+    if (port == 0) {
+        log("console relay: " + relay_.error());
+        set_notice(false, "The console could not start: " + relay_.error());
+        return 0;
+    }
+    end_remote(RemoteError::Cancelled);                       // the console's requests would clear the companion's pending one (report 036)
+    relay_state_ = inflight_ ? RelayState::Draining : RelayState::Passthrough;
+    relay_hold_.clear();
+    relay_scope_set_ = false;
+    relay_to_node_ = relay_to_console_ = 0;
+    relay_end_reason_.clear();
+    relay_started_ms_ = now_;
+    relay_accept_until_ = now_ + kRelayAcceptTimeoutMs;
+    log("console relay: listening on 127.0.0.1:" + std::to_string(port) + ", Mesh Hop's own commands wait" +
+        (inflight_ ? " (command " + std::to_string(inflight_->payload.empty() ? 0 : inflight_->payload[0]) + " still in flight)" : std::string()));
+    model_.touch();
+    return port;
+}
+
+void Client::stop_relay()
+{
+    if (relay_state_ == RelayState::Draining || relay_state_ == RelayState::Passthrough) end_relay("closed by Mesh Hop");
+}
+
+/* One frame of the console to the node, framed as the Client frames its own (every transport takes '<' + length + payload). The length is not
+ * limited to Mesh Hop's own kMaxTxFrame: the console may know newer commands, the firmware decides. */
+void Client::relay_to_node(const Bytes &payload)
+{
+    if (payload.empty()) return;
+    if (payload[0] == cmd::kSetFloodScope) relay_scope_set_ = true;
+    Bytes f = {kFrameToDevice, static_cast<uint8_t>(payload.size() & 0xFF), static_cast<uint8_t>(payload.size() >> 8)};
+    f.insert(f.end(), payload.begin(), payload.end());
+    const bool ok = transport_.write(f.data(), f.size());
+    ++relay_to_node_;
+    if (options_.log_frames || !ok)
+        log("relay tx command " + std::to_string(payload[0]) + " len=" + std::to_string(payload.size()) + (ok ? " -> node" : ": the link refused it"));
+}
+
+void Client::tick_relay()
+{
+    std::vector<Bytes> frames;
+    const RelayServer::Io io = relay_.poll(frames);           // sends what is queued for the console, reads what it sent
+    if (relay_state_ == RelayState::Settling) {
+        if (now_ >= relay_settle_until_ || now_ >= relay_settle_cap_) finish_relay();
+        return;
+    }
+    if (io == RelayServer::Io::Gone) {                         // what it sent with its goodbye is dropped: nobody would read the answers
+        end_relay("the console closed its connection");
+        return;
+    }
+    if (io == RelayServer::Io::Idle && now_ >= relay_accept_until_) {
+        end_relay("the console did not connect");
+        return;
+    }
+    if (relay_state_ == RelayState::Draining) {
+        relay_hold_.insert(relay_hold_.end(), frames.begin(), frames.end());
+        if (inflight_) return;
+        relay_state_ = RelayState::Passthrough;                // Mesh Hop's last command is answered: the node is the console's now
+        log("console relay: passthrough" + (relay_hold_.empty() ? std::string() : ", " + std::to_string(relay_hold_.size()) + " frames of the console were waiting"));
+        frames.swap(relay_hold_);
+        relay_hold_.clear();
+        model_.touch();
+    }
+    for (const Bytes &f : frames) relay_to_node(f);
+}
+
+void Client::end_relay(const std::string &why)
+{
+    relay_.close();
+    relay_hold_.clear();
+    relay_end_reason_ = why;
+    if (relay_to_node_ == 0) {                                 // nothing of the console reached the node: no answer to wait for
+        finish_relay();
+        return;
+    }
+    relay_state_ = RelayState::Settling;
+    relay_settle_until_ = now_ + kRelaySettleMs;
+    relay_settle_cap_ = now_ + kRelaySettleMaxMs;
+    model_.touch();
+}
+
+void Client::finish_relay()
+{
+    const uint64_t paused = now_ > relay_started_ms_ ? now_ - relay_started_ms_ : 0;
+    const bool touched = relay_to_node_ > 0;
+    relay_state_ = RelayState::Off;
+    relay_.close();
+    ++relay_ended_id_;
+    log("console relay: session ended (" + relay_end_reason_ + ") after " + std::to_string(paused / 1000) + " s, " + std::to_string(relay_to_node_) +
+        " frames to the node, " + std::to_string(relay_to_console_) + " to the console; Mesh Hop resumes" + (touched ? " and reads the node again" : ""));
+    // the timers of what Mesh Hop sent before the session start again where they stopped
+    for (Outgoing &o : outgoing_)
+        if (o.awaiting) o.ack_deadline += paused;
+    for (ChannelSend &c : chan_pending_) c.deadline += paused;
+    if (ready() && touched) {
+        // the console may have changed the node under Mesh Hop: scope, name, radio, contacts, channels, variables, protocol level
+        if (relay_scope_set_) reset_flood_scope();
+        read_device_info();                                    // urgent: the console sent its own DEVICE_QUERY (the level the node answers in)
+        refresh_self();                                        // urgent
+        refresh_contacts();
+        const int max_channels = model_.device() && model_.device()->max_channels ? model_.device()->max_channels : 8;
+        queue_channels(std::min(max_channels, 40));
+        read_custom_vars();
+        refresh_autoadd();
+    }
+    relay_scope_set_ = false;
+    want_sync_ = true;                                         // what the console left on the node
+    sync_burst_ = 0;
+    model_.touch();
+    pump_queue();
+}
+
+void Client::reset_flood_scope()
+{
+    scope_reset_pending_ = false;
+    Request r;
+    r.payload = build_reset_flood_scope();
+    r.accept = {resp::kOk};
+    r.done = [this](Outcome o, const Packet *, int err) { log("flood scope reset: " + answer_text(static_cast<int>(o), err)); };
+    enqueue(std::move(r), true);
+}
+
+/* ------------------------------------------------------------------ remote administration (report 036, slice S1) */
+
+namespace {
+Client::RemoteError remote_error_of(int err)
+{
+    switch (err) {
+    case err::kNotFound: return Client::RemoteError::NotFound;
+    case err::kTableFull: return Client::RemoteError::TableFull;
+    case err::kUnsupported:
+    case -1: return Client::RemoteError::Unsupported;       // an old firmware answers an unknown command with a bare error frame
+    default: return Client::RemoteError::Failed;
+    }
+}
+
+const char *remote_error_name(Client::RemoteError e)
+{
+    switch (e) {
+    case Client::RemoteError::None: return "ok";
+    case Client::RemoteError::Timeout: return "no answer";
+    case Client::RemoteError::NotFound: return "not a contact on the board";
+    case Client::RemoteError::TableFull: return "the board's send queue is full";
+    case Client::RemoteError::Unsupported: return "unsupported by the board";
+    case Client::RemoteError::Failed: return "error";
+    case Client::RemoteError::Refused: return "refused (LOGIN_FAIL)";
+    case Client::RemoteError::Busy: return "refused: a CLI session holds the node";
+    case Client::RemoteError::NotConnected: return "refused: not connected";
+    case Client::RemoteError::BadPassword: return "refused: password longer than 15 bytes or with a NUL";
+    case Client::RemoteError::Cancelled: return "cancelled";
+    case Client::RemoteError::LinkLost: return "the link to the board was lost";
+    }
+    return "?";
+}
+
+const char *remote_op_name(Client::RemoteOp op)
+{
+    return op == Client::RemoteOp::Login ? "login" : op == Client::RemoteOp::Logout ? "logout" : "request";
+}
+
+Client::RemoteRole role_of_acl(uint8_t acl)
+{
+    switch (acl & 0x03) {                                      // ClientACL.h PERM_ACL_ROLE_MASK
+    case 0: return Client::RemoteRole::Guest;
+    case 1: return Client::RemoteRole::ReadOnly;
+    case 2: return Client::RemoteRole::ReadWrite;
+    default: return Client::RemoteRole::Admin;
+    }
+}
+
+const char *role_name(Client::RemoteRole r)
+{
+    switch (r) {
+    case Client::RemoteRole::Guest: return "guest";
+    case Client::RemoteRole::ReadOnly: return "read only";
+    case Client::RemoteRole::ReadWrite: return "read-write";
+    case Client::RemoteRole::Admin: return "admin";
+    default: return "none";
+    }
+}
+} // namespace
+
+uint32_t Client::remote_wait_ms(uint32_t est_timeout_ms)
+{
+    if (est_timeout_ms == 0) return kRemoteDefaultWaitMs;
+    const double w = static_cast<double>(est_timeout_ms) * kRemoteWaitFactor;
+    if (w < kRemoteMinWaitMs) return kRemoteMinWaitMs;
+    if (w > kRemoteMaxWaitMs) return kRemoteMaxWaitMs;
+    return static_cast<uint32_t>(w);
+}
+
+const Client::RemoteSession *Client::remote_session(const PubKey &key) const
+{
+    for (const RemoteSession &s : sessions_)
+        if (s.key == key) return &s;
+    return nullptr;
+}
+
+void Client::publish_remote(RemoteResult r)
+{
+    r.id = remote_result_.id + 1;
+    remote_result_ = std::move(r);
+    model_.touch();
+}
+
+Client::RemoteResult Client::refuse_remote(RemoteOp op, const PubKey &key, RemoteError e)
+{
+    RemoteResult r;
+    r.op = op;
+    r.key = key;
+    r.error = e;
+    log(std::string("remote ") + remote_op_name(op) + " " + to_hex(key).substr(0, 8) + ": " + remote_error_name(e));
+    publish_remote(r);
+    return remote_result_;
+}
+
+void Client::wipe_remote_password()
+{
+    for (char &c : remote_password_) *static_cast<volatile char *>(&c) = 0;
+    remote_password_.clear();
+    remote_password_.shrink_to_fit();
+    remote_remember_ = false;
+}
+
+void Client::drop_queued_remote(uint32_t req)
+{
+    if (req == 0) return;
+    for (std::deque<Request> *q : {&urgent_, &normal_})
+        q->erase(std::remove_if(q->begin(), q->end(), [req](const Request &r) { return r.remote_req == req; }), q->end());
+}
+
+void Client::end_remote(RemoteError e, int err_code)
+{
+    if (remote_.phase == RemoteState::Phase::Idle) return;
+    const RemoteState st = remote_;
+    remote_ = RemoteState();
+    drop_queued_remote(st.req);                               // not sent yet: it never goes out
+    wipe_remote_password();
+    RemoteResult r;
+    r.req = st.req;
+    r.op = st.op;
+    r.key = st.key;
+    r.error = e;
+    r.err_code = err_code;
+    r.sent = st.phase == RemoteState::Phase::Waiting;
+    r.flood = st.flood;
+    r.waited_ms = static_cast<uint32_t>(now_ > st.since_ms ? now_ - st.since_ms : 0);
+    log(std::string("remote ") + remote_op_name(st.op) + " " + to_hex(st.key).substr(0, 8) + ": " + remote_error_name(e) +
+        (err_code >= 0 && (e == RemoteError::Failed || e == RemoteError::Unsupported) ? " (error " + std::to_string(err_code) + ")" : std::string()) +
+        " after " + std::to_string(r.waited_ms) + " ms");
+    publish_remote(r);
+}
+
+void Client::cancel_remote()
+{
+    end_remote(RemoteError::Cancelled);
+}
+
+uint32_t Client::start_login(const PubKey &key, const std::string &password_in, bool guest, bool remember)
+{
+    if (!ready()) { refuse_remote(RemoteOp::Login, key, RemoteError::NotConnected); return 0; }
+    if (relay_active()) { refuse_remote(RemoteOp::Login, key, RemoteError::Busy); return 0; }
+    const std::string password = guest ? std::string() : password_in;
+    if (password.size() > kMaxLoginPassword || password.find('\0') != std::string::npos) {
+        refuse_remote(RemoteOp::Login, key, RemoteError::BadPassword);
+        return 0;
+    }
+    if (remote_busy()) end_remote(RemoteError::Cancelled);     // one at a time: the companion forgets the older one as well
+    const uint32_t req = ++remote_req_counter_;
+    remote_ = RemoteState();
+    remote_.phase = RemoteState::Phase::Sending;
+    remote_.op = RemoteOp::Login;
+    remote_.req = req;
+    remote_.key = key;
+    remote_.since_ms = now_;
+    remote_remember_ = remember && !password.empty();
+    if (remote_remember_) remote_password_ = password;
+    log("remote login " + to_hex(key).substr(0, 8) + ": " + (password.empty() ? "blank password (guest)" : "with a password") +
+        (remote_remember_ ? ", remember it" : ""));
+    Request r;
+    r.payload = build_send_login(key, password);
+    r.accept = {resp::kMsgSent};
+    r.remote_req = req;
+    r.done = [this, req](Outcome o, const Packet *p, int err) {
+        if (remote_.req != req || remote_.phase != RemoteState::Phase::Sending) return;     // cancelled meanwhile, or answered already
+        if (o == Outcome::Ok) {
+            if (const auto *s = pkt_as<MsgSent>(p)) {
+                remote_.phase = RemoteState::Phase::Waiting;
+                remote_.flood = s->type == 1;
+                remote_.est_timeout_ms = s->suggested_timeout_ms;
+                const uint32_t wait = remote_wait_ms(s->suggested_timeout_ms);
+                remote_.deadline_ms = now_ + wait;
+                log("remote login " + to_hex(remote_.key).substr(0, 8) + ": sent " + (remote_.flood ? "by flood" : "direct") + ", est_timeout " +
+                    std::to_string(s->suggested_timeout_ms) + " ms, waiting up to " + std::to_string(wait) + " ms");
+                model_.touch();
+                return;
+            }
+            end_remote(RemoteError::Failed);
+        } else if (o == Outcome::Error) {
+            end_remote(remote_error_of(err), err);
+        } else if (o == Outcome::Timeout) {
+            end_remote(RemoteError::Timeout);                  // the board did not even confirm the send (sent = false)
+        } else {
+            end_remote(RemoteError::LinkLost);
+        }
+    };
+    enqueue(std::move(r), true);
+    model_.touch();
+    return req;
+}
+
+/* The verdict of the remote node (0x85, or 0x86 when s is null): it ends the pending login when it is from that node. */
+void Client::on_login_reply(const KeyPrefix &prefix, const LoginSuccess *s)
+{
+    const bool pending = remote_.phase != RemoteState::Phase::Idle && remote_.op == RemoteOp::Login &&
+                         std::equal(prefix.begin(), prefix.end(), remote_.key.begin());
+    if (!pending) {
+        if (!relay_active()) log("remote login answer from " + to_hex(prefix) + " ignored: no login to that node is pending");
+        return;
+    }
+    if (!s) {
+        end_remote(RemoteError::Refused);
+        return;
+    }
+    const RemoteState st = remote_;
+    RemoteResult r;
+    r.req = st.req;
+    r.op = RemoteOp::Login;
+    r.key = st.key;
+    r.ok = true;
+    r.sent = true;
+    r.flood = st.flood;
+    r.waited_ms = static_cast<uint32_t>(now_ > st.since_ms ? now_ - st.since_ms : 0);
+    r.has_acl = s->has_acl;
+    r.permissions = s->has_acl ? s->acl : s->permissions;
+    r.role = s->has_acl ? role_of_acl(s->acl) : ((s->permissions & 1) ? RemoteRole::Admin : RemoteRole::Guest);   // meshcore_py: is_admin = bit 0
+    r.has_clock = s->has_clock;
+    r.clock = s->clock;
+    r.deck_time = deck_unix();
+    r.has_fw_level = s->has_fw_level;
+    r.fw_level = s->fw_level;
+    if (remote_remember_) {
+        if (!passwords_) {
+            r.password = PasswordSave::Failed;
+        } else {
+            switch (passwords_->save(to_hex(st.key), remote_password_)) {
+            case PasswordStore::SaveResult::Saved: r.password = PasswordSave::Saved; break;
+            case PasswordStore::SaveResult::IoError: r.password = PasswordSave::Failed; break;
+            default: r.password = PasswordSave::Skipped; break;
+            }
+        }
+    }
+    remote_ = RemoteState();
+    wipe_remote_password();
+    drop_queued_remote(st.req);
+    RemoteSession ses;
+    ses.key = st.key;
+    ses.role = r.role;
+    ses.permissions = r.permissions;
+    ses.since = r.deck_time;
+    ses.has_clock = r.has_clock;
+    ses.clock = r.clock;
+    ses.deck_time = r.deck_time;
+    ses.has_fw_level = r.has_fw_level;
+    ses.fw_level = r.fw_level;
+    const auto it = std::find_if(sessions_.begin(), sessions_.end(), [&](const RemoteSession &x) { return x.key == st.key; });
+    if (it != sessions_.end()) *it = ses;
+    else sessions_.push_back(ses);
+    log("remote login " + to_hex(st.key).substr(0, 8) + ": " + role_name(r.role) + " after " + std::to_string(r.waited_ms) + " ms" +
+        (r.has_fw_level ? ", remote firmware level " + std::to_string(r.fw_level) : std::string(", legacy answer")) +
+        (r.password == PasswordSave::Saved ? ", password saved" : r.password == PasswordSave::Failed ? ", password NOT saved" :
+         r.password == PasswordSave::Skipped ? ", password not storable" : ""));
+    publish_remote(r);
+}
+
+void Client::tick_remote()
+{
+    if (remote_.phase == RemoteState::Phase::Waiting && now_ >= remote_.deadline_ms) end_remote(RemoteError::Timeout);
+}
+
+uint32_t Client::logout(const PubKey &key)
+{
+    if (!ready()) { refuse_remote(RemoteOp::Logout, key, RemoteError::NotConnected); return 0; }
+    if (relay_active()) { refuse_remote(RemoteOp::Logout, key, RemoteError::Busy); return 0; }
+    if (remote_busy() && remote_.key == key) end_remote(RemoteError::Cancelled);
+    sessions_.erase(std::remove_if(sessions_.begin(), sessions_.end(), [&](const RemoteSession &s) { return s.key == key; }), sessions_.end());
+    const uint32_t req = ++remote_req_counter_;
+    const uint64_t since = now_;
+    log("remote logout " + to_hex(key).substr(0, 8) + ": the session here is forgotten (the node keeps its access list)");
+    Request r;
+    r.payload = build_logout(key);
+    r.accept = {resp::kOk};
+    r.done = [this, req, key, since](Outcome o, const Packet *, int err) {
+        RemoteResult res;
+        res.req = req;
+        res.op = RemoteOp::Logout;
+        res.key = key;
+        res.ok = o == Outcome::Ok;
+        res.sent = o == Outcome::Ok;
+        res.error = o == Outcome::Ok ? RemoteError::None : o == Outcome::Error ? remote_error_of(err) : o == Outcome::Timeout ? RemoteError::Timeout : RemoteError::LinkLost;
+        res.err_code = o == Outcome::Error ? err : -1;
+        res.waited_ms = static_cast<uint32_t>(now_ > since ? now_ - since : 0);
+        log("remote logout " + to_hex(key).substr(0, 8) + ": " + answer_text(static_cast<int>(o), err));
+        publish_remote(res);
+    };
+    enqueue(std::move(r), true);
+    model_.touch();
+    return req;
 }
 
 /* ------------------------------------------------------------------ sending */
@@ -780,15 +1241,64 @@ void Client::tick_outgoing()
         model_.set_state(o.seq, MsgState::Pending, "retry " + std::to_string(o.attempt));
         const ContactRec *c = model_.find_contact(to_hex(o.key));
         if (rs.reset_after > 0 && o.attempt == rs.reset_after && c && c->c.out_path_len != kPathFlood) {
-            // the stored route may be dead: fall back to flooding from this attempt on
-            Request rp;
-            rp.payload = build_reset_path(o.key);
-            rp.accept = {resp::kOk};
-            rp.done = [](Outcome, const Packet *, int) {};
-            enqueue(std::move(rp), true);
+            // the stored route may be dead: fall back to flooding from this attempt on (the same command as "Reset path")
+            queue_reset_path(o.key, {});
         }
         transmit(o.seq);
     }
+}
+
+void Client::queue_reset_path(const PubKey &key, std::function<void(Outcome, int)> then)
+{
+    Request rp;
+    rp.payload = build_reset_path(key);
+    rp.accept = {resp::kOk};
+    rp.done = [this, key, then](Outcome o, const Packet *, int err) {
+        log("reset path " + to_hex(key.data(), 4) + ": " + answer_text(static_cast<int>(o), err));
+        if (o == Outcome::Ok) {
+            if (const ContactRec *c = model_.find_contact(to_hex(key))) {
+                Contact flood = c->c;                            // the board forgot the route: flood from now on
+                flood.out_path_len = kPathFlood;
+                flood.out_path.fill(0);
+                model_.upsert_contact(flood);
+            }
+            Request g;                                           // and its record read back (what the board holds now)
+            g.payload = build_get_contact_by_key(key);
+            g.accept = {resp::kContact};
+            g.done = [](Outcome, const Packet *, int) {};
+            enqueue(std::move(g));
+        }
+        if (then) then(o, err);
+    };
+    enqueue(std::move(rp), true);
+}
+
+void Client::publish_path_reset(const PubKey &key, bool ok, PathResetError e, int err_code)
+{
+    PathResetResult r;
+    r.id = path_reset_result_.id + 1;
+    r.key = key;
+    r.ok = ok;
+    r.error = e;
+    r.err_code = err_code;
+    path_reset_result_ = r;
+}
+
+bool Client::reset_path(const PubKey &key)
+{
+    if (!ready()) { publish_path_reset(key, false, PathResetError::NotConnected); return false; }
+    if (relay_active() || path_reset_busy_) { publish_path_reset(key, false, PathResetError::Busy); return false; }
+    path_reset_busy_ = true;
+    queue_reset_path(key, [this, key](Outcome o, int err) {
+        path_reset_busy_ = false;
+        switch (o) {
+        case Outcome::Ok: publish_path_reset(key, true, PathResetError::None); break;
+        case Outcome::Error: publish_path_reset(key, false, err == err::kNotFound ? PathResetError::NotFound : PathResetError::Failed, err); break;
+        case Outcome::Timeout: publish_path_reset(key, false, PathResetError::Timeout); break;
+        case Outcome::Aborted: publish_path_reset(key, false, PathResetError::LinkLost); break;
+        }
+    });
+    return true;
 }
 
 void Client::handle_ack(const Ack &a)

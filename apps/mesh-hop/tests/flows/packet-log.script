@@ -1,5 +1,6 @@
-# The packet log (D8): Settings > Packet log, a panel over the Settings page. Capture is off at every start; S (or Space, or the Start
-# button) starts and stops it, C (or Clear) empties it, Up/Down select a row (its bytes below), Esc closes. At most 500 packets, in memory.
+# The packet log (D8): Tools > Packet log (0.7.0; Settings before), a panel over the Tools page. Capture is off at every start; S (or
+# Space, or the Start button) starts and stops it, C (or Clear) empties it, Up/Down select a row (its bytes below), Esc closes. At most
+# 500 packets, in memory.
 #   SIMARGS="--heard-back 2 --new-nodes 2" SCRIPT=packet-log.script sh ui_smoke.sh
 wait 3500
 key enter
@@ -9,10 +10,8 @@ key tab
 wait 800
 key home
 key down
-key down
-key down
 wait 300
-say == Settings: the Packet log row is selected (expect tab=Settings log_open=0 log_capture=0)
+say == Tools: the Packet log row is selected (expect tab=Tools tools_sel=1 log_open=0 log_capture=0)
 dump
 shot packet-log-0-settings
 key enter
@@ -29,7 +28,8 @@ say == the board's radio log fills the rows (expect log_n>=1: the simulator push
 dump
 shot packet-log-2-capturing
 
-# a channel message: the panel closes with the tab, the capture goes on; its echoes are in the log
+# a channel message: the panel closes with the tab, the capture goes on; its echoes are in the log (Tools to Chats: Tab twice)
+key tab
 key tab
 wait 300
 key enter
@@ -39,7 +39,7 @@ wait 4000
 key tab
 key tab
 wait 500
-say == Settings again: the row tells the capture is on
+say == Tools again: the row tells the capture is on
 dump
 shot packet-log-3-row
 key enter
@@ -75,5 +75,5 @@ dump
 shot packet-log-7-cleared
 key esc
 wait 300
-say == Esc closes the panel, not the app (expect log_open=0 tab=Settings)
+say == Esc closes the panel, not the app (expect log_open=0 tab=Tools)
 dump

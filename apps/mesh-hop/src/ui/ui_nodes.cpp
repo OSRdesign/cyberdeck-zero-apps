@@ -77,7 +77,8 @@ std::vector<NodeRow> build_node_rows(const NodePageState &s)
         NodeRow r;
         r.kind = NodeKind::Usb;
         r.key = node_key(NodeKind::Usb, c.path);
-        const std::string learned = s.book ? s.book->name_of(r.key) : "";
+        // the name learned on this port, only while the same USB device is behind it (another board: its product string)
+        const std::string learned = s.book ? s.book->name_for(r.key, usb_identity(c)) : "";
         r.title = !learned.empty() ? learned : !c.product.empty() ? c.product : "USB board";
         r.detail = port_short(c.path);
         if (!c.product.empty() && c.product != r.title) r.detail += kDot + c.product;

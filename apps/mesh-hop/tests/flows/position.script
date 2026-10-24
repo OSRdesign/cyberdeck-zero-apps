@@ -1,3 +1,4 @@
+# (0.7.0: Settings is the page before Chats (Shift+Tab); Position is its third selectable row, after MY CONTACT's Name and Public key)
 # The Position box (D6): Settings > Position opens a box with the board GPS switch (a board that lists "gps" only), the latitude and
 # longitude typed on the keyboard (Tab: next field, Enter: OK, Esc: cancel), Clear (0, 0).
 #   SCRIPT=position.script sh ui_smoke.sh                                       a GPS board (gps:0)
@@ -5,10 +6,11 @@
 wait 3500
 key enter
 wait 300
-key tab
-key tab
+key backtab
 wait 800
 key home
+key down
+key down
 key enter
 wait 800
 say == the box opens on the board's position, the latitude field has the focus (expect pos_box=1 pos_focus=0 pos_fields='48.8566|2.3522' pos_gps_row=1)

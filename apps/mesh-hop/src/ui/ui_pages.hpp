@@ -53,8 +53,11 @@ std::string sort_direction_text(SortKey k, bool reverse);     // "newest first",
 std::string sort_button_text(const ContactView &v);           // "Sort: Heard"
 const char *type_filter_label(TypeFilter t);                  // "All types", "Chat", "Repeater", "Room", "Sensor"
 const char *age_filter_label(AgeFilter a);                    // "Any time", "Last hour", "Last 24 h", "Last 7 days"
-/* The line under the title: "193 contacts  ·  All types  ·  Any time", "12 of 193  ·  Repeater  ·  Last 24 h  ·  Group Friends". */
+/* The line under the title: "193 contacts  ·  All types  ·  Any time", "12 of 193  ·  Repeater  ·  Last 24 h  ·  Group Friends",
+ * and the Search (0.7.0) at the end: "3 of 193  ·  All types  ·  Any time  ·  "hill" in the name" or "...  ·  key 9a3f...". */
 std::string contact_view_summary(size_t shown, size_t total, const ContactView &v);
+/* The Search part of that line: "\"hill\" in the name", "key 9a3f...", "any key" (a lone '<'). */
+std::string contact_search_summary(const std::string &query);
 /* The line of the select mode (More > Manage contacts): "Manage contacts: 3 selected", "... (+1 hidden by the filters)". */
 std::string contact_marked_summary(size_t marked, size_t hidden);
 /* The second line of a contact row: "Repeater  ·  heard 47 min  ·  3 hops", hops left out while unknown, "  ·  SNR 5.5 dB"

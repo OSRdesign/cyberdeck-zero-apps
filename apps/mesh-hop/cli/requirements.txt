@@ -1,0 +1,42 @@
+# The meshcore-cli bundle of Mesh Hop's CLI page (report 033, packaging K1): exact pins, one sha256 per accepted file.
+# cli/vendor.sh fetches them with  pip download --require-hashes --no-deps --only-binary=:all:  for each package
+# architecture (arm64: manylinux2014_aarch64, amd64: manylinux2014_x86_64; CPython >= 3.10, abi3) and unpacks them into
+# root/opt/mesh-hop/cli/py (arm64) and root.amd64/opt/mesh-hop/cli/py (what differs on amd64: pycryptodome's .so files).
+# Every wheel is pure Python (py3-none-any) except pycryptodome (cp39-abi3: one build for every CPython 3 >= 3.9).
+# Bump deliberately: change a pin and its hashes (https://pypi.org/pypi/<name>/<version>/json), run build.sh cli (the
+# smoke flow), note the bump in the README.
+#
+# Not bundled, and why:
+#   bleak, dbus-fast    Bluetooth LE in Python: never used, meshcore-cli reaches the node through Mesh Hop's TCP relay;
+#                       both upstream imports are guarded (meshcore_cli.py:28-33, meshcore/ble_cx.py:11-21), and
+#                       mccli.py blocks bleak so a system copy is not loaded either
+#   requests            imported at start, used only by upload_card / upload_contact: the Debian package
+#                       python3-requests (depends; keeps certifi, MPL-2.0, out of this package)
+#   pyserial            imported at start (serial.tools.list_ports; serial_asyncio_fast needs it), unused on the TCP
+#                       relay: the Debian package python3-serial (depends), the same 3.5 as PyPI's last release, whose
+#                       wheel carries no licence file
+#   async-timeout, typing-extensions   bleak's backports for Python < 3.11 / 3.12
+
+# meshcore-cli 1.6.6 (2026-10-14, MIT): the console; commands meshcli / meshcore-cli
+meshcore-cli==1.6.6 \
+    --hash=sha256:9010fa1eeee05677e200eb9f6e379a01f7bad0aff6ca5d9096ef351fed775a04
+# meshcore (meshcore_py) 2.3.17 (2026-10-16, MIT): the companion protocol library
+meshcore==2.3.17 \
+    --hash=sha256:d8ba29b7eeecd7c6e7a4036bdcbbcf8533cb925dc884985ac664026830535357
+# meshcore's dependencies
+pycayennelpp==2.4.0 \
+    --hash=sha256:a3e69ea4da9e2971a44d1e275d5555617b2345eea752325f28c0356f64901d62
+pyserial-asyncio-fast==0.16 \
+    --hash=sha256:88939d94e341a04c0c8bc3c1ed4e874439cb5a1e21ccfb0fd7315a8e45df1687
+# pycryptodome 4.1.0 (2026-10-19): the Crypto namespace meshcore imports (Debian's python3-pycryptodome only ships
+# Cryptodome). abi3 wheels: aarch64, then x86_64
+pycryptodome==4.1.0 \
+    --hash=sha256:993bedeb0b375f2a2668cfe1670497f97dded0c057fb389e6a991db3ff954207 \
+    --hash=sha256:f282f3f30725e4889a70543efeaa1ad67f8ca52329aa3b5fa1cd2575dc8c3cfc
+# meshcore-cli's prompt (bundled, not Debian's: the CLI page's line console relies on its dumb-terminal behaviour, so
+# the exact version is pinned; Ubuntu 24.04's 3.0.43 is below meshcore-cli's minimum 3.0.50)
+prompt-toolkit==3.0.53 \
+    --hash=sha256:01c0891d7f9237d5e339f7d3e42cdae80b7534abb1c7c0e3352efba6231492f2
+# the pure-Python wheel (the compiled ones are an optional speed-up)
+wcwidth==0.9.3 \
+    --hash=sha256:e3c9069c54a2da0bf4f6c7e65a735cb1da0f47601a15cb5fef7e4b6ffca4cf60

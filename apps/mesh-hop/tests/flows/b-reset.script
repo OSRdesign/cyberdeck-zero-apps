@@ -5,8 +5,7 @@ key enter
 wait 300
 say == before (expect board=a0a1a2a3a4a5 contacts=4 all_msgs=12)
 dump
-key tab
-key tab
+key backtab
 wait 600
 key end
 key up

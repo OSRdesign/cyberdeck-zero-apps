@@ -4,7 +4,8 @@
  * Mesh Hop: the full-screen MeshCore messenger. The shell (page header with the Esc button and the status strip, the
  * caption line with the board state and the notices, the key hint line, the dialogs) is built from the launcher's widgets
  * (cp0::ui::Page, Dialog) and follows the screen. So do the pages (P3: Contacts with a contact's details and Nearby,
- * Settings with the statistics and the packet log, the message search; P4: Chats, the conversation and the compose view):
+ * Settings, the statistics and the packet log (0.7.0: on Tools), the message search; P4: Chats, the conversation and the compose
+ * view; 0.7.0: Tools, the Search of Contacts, the Repeater page and its login box in repeater_page.cpp):
  * they fill the width of the screen with the margins of the page column (ui_pages.hpp page_column), every size from the
  * layout service's tokens. Chats is one pane on a Standard screen (640x480: the list, then the conversation) and two on
  * the others when both fit (the list at the left, the conversation at the right); the text fields ask for the shared
@@ -26,9 +27,11 @@
 #include "serial_transport.hpp"
 #include "stage.hpp"
 #include "store.hpp"
+#include "passwords.hpp"
 #include "ui_logic.hpp"
 #include "ui_nodes.hpp"
 #include "ui_pages.hpp"
+#include "ui_repeater.hpp"
 
 #include <functional>
 #include <memory>
@@ -38,6 +41,12 @@
 #include "cp0_ui_widgets.hpp"
 
 namespace meshhop {
+
+struct CliState;                         // the CLI page (cli_page.hpp)
+
+/* 0.7.0: the button tags of the Repeater page's bar and of its login box (repeater_page.cpp builds them; App::button_clicked acts),
+ * after mesh_app.cpp's own tags. */
+enum RepTag { kTagRepLogin = 200, kTagRepRefresh, kTagRepMore, kTagLoginField, kTagLoginRemember, kTagLoginResetPath };
 
 struct Cell {
     std::string text;
@@ -132,6 +141,7 @@ public:
     struct CellSpec {
         int tag = 0;
         std::string label, value;
+        bool dim = false;                // 0.7.0: drawn grey (an action not there yet: a tap only explains why); same place and size
     };
     void create(lv_obj_t *parent, int x, int y, int w, int h, const lv_font_t *label_font, const lv_font_t *value_font);
     /* New cells: rebuilt when the tags changed, else only the texts that changed. Never from inside a cell's own event. */
@@ -195,10 +205,14 @@ public:
     void popup_pick(int index);
     /* A press on a name that can be held for 3 s (header title or a row of the chat list): what = 0 pressed, 1 moved, 2 ended. */
     void hold_event(int what, RowList *list, int index, int x, int y);
+    /* The CLI page's widgets (cli_page.cpp): a tap on the entry or Help, a drag on the output (arg: the move in px). */
+    void cli_event(int what, int arg);
+    /* The CLI's output, every line kept (scripted tests). */
+    std::string cli_text() const;
 
 private:
     enum class EditKind { Name, Number, Channel, Clock, PrivName, PrivKey, RandName, GroupNew, GroupRename, DateRange, Position,
-                          BlePin, IpAddress, IpName };
+                          BlePin, IpAddress, IpName, Login };
 
     struct Popup {
         enum Kind { None, Choice, Confirm, Menu, Info, List, Progress } kind = None;
@@ -255,6 +269,8 @@ private:
     void key_nodes(const KeyEvent &e);
     void nodes_tick(uint64_t now);
     std::vector<meshzero::SerialCandidate> usb_candidates() const;
+    /* The identity of the USB device behind a port: the one the start page lists, else read from sysfs (a demo: none). */
+    std::string usb_ident_of(const std::string &path, bool fresh) const;
     void connect_node(const std::string &key);
     void disconnect_node();              // the node in use is forgotten or removed: no transport any more
     void use_transport(std::unique_ptr<meshzero::ITransport> t, bool ble);
@@ -265,7 +281,8 @@ private:
     void open_node_options();
     void open_node_info(const NodeRow &r);
     void open_add_ip();
-    void place_hold_cue(bool nodes);
+    enum class HoldWhere { Chats, Nodes, Contacts };
+    void place_hold_cue(HoldWhere where);
     void open_page(Tab t);
     void go_home();
     void build_body();
@@ -274,6 +291,7 @@ private:
     void layout_wide();                  // ... for the pages of the full width
     void layout_chats();                 // ... for Chats: one or two panes, the compose view (chat_mode_)
     void layout_search();                // ... for the search: the field, and the filters and results while they fit
+    void layout_contacts();              // ... for Contacts: the bar, the Search field while it is shown, the list (0.7.0)
     cp0_ui_list_layout_t settings_list_layout(int y, int h) const;
     void update_title();
     void update_caption();
@@ -427,6 +445,79 @@ private:
     void packet_log_toggle();
     void packet_log_clear();
     void packet_log_select(int64_t abs_index);
+
+    // 0.7.0: the Tools page (Nearby, Packet log, Statistics, CLI: the sub-pages it opens are the panels of Contacts and of 0.6's Settings)
+    void build_tools();
+    void render_tools();
+    void key_tools(const KeyEvent &e);
+    void tools_select(int index, bool scroll);
+    void tools_activate(int index);
+    // 0.7.0: Contacts: the Search, what a tap opens (by type), the Options of a contact (a 3 s hold or I)
+    void open_contact_search();
+    void close_contact_search();
+    void set_contact_search(const std::string &text);
+    void contact_search_key(const KeyEvent &e);
+    void open_contact(const std::string &key_hex);
+    void open_contact_options(const std::string &key_hex);
+    void delete_contact(const std::string &key_hex);
+    // 0.7.0: the Repeater page of a repeater or room (repeater_page.cpp, report 036 slice S1) and its login box
+    void build_repeater();
+    void layout_repeater();
+    void render_repeater();
+    void open_repeater(const std::string &key_hex, bool auto_login);
+    void close_repeater();
+    void key_repeater(const KeyEvent &e);
+    void repeater_more();
+    void repeater_login_or_out();
+    void repeater_tick(uint64_t now);
+    bool repeater_caption(std::string &text) const;
+    std::string repeater_debug() const;
+    void open_login_box();
+    void close_login_box();
+    void login_cancel();
+    void login_submit(bool guest);
+    void login_key(const KeyEvent &e);
+    void login_refresh();
+    void login_message(const std::string &text, bool error);
+    void login_prefill();
+    /* 0.7.2: Reset path (the login box's button or Ctrl+R, the page's More or R): Client::reset_path, the answer in the box's
+     * message line or the page's notice; the route lines follow the contact (flood). */
+    void repeater_reset_path();
+    void show_path_reset(const meshzero::Client::PathResetResult &r);
+    void login_route_refresh();
+    void login_note_text(const std::string &text, uint32_t rgb);
+    // the CLI page (report 033 P5, cli_page.cpp): meshcore-cli on a pty through the loopback relay (Client::start_relay)
+    void build_cli();
+    void layout_cli();
+    void render_cli();
+    void open_cli();                     // Tools > CLI: the page and a new session; not connected: a box says why
+    /* The Repeater page's More > Open in CLI: the page, and `to <its full key>` goes to meshcore-cli at its first prompt (once); the
+     * CLI's Esc goes back to that Repeater page. */
+    void open_cli_for(const std::string &key_hex);
+    void cli_leave();                    // the CLI's Esc at its root: the session ends, back to Tools or the Repeater page it came from
+    void cli_send_to(const std::string &key_hex);   // `to <key>` now (at the prompt) or at the first prompt
+    void cli_tick(uint64_t now);
+    void key_cli(const KeyEvent &e);
+    void cli_back();                     // Esc on the page: All commands -> Help -> the console; the keyboard first; then Home
+    void cli_stop();                     // the session ends (leaving the page, another node, the app's end): no process, no relay
+    void cli_shutdown();                 // the app ends: every process killed now
+    void cli_end(const std::string &text, bool error);   // the session ended by itself: the reason in the output and the caption
+    void cli_spawn();
+    void cli_warmup();
+    void cli_send_line();
+    void cli_entry_key(const KeyEvent &e);
+    void cli_draw(bool force);
+    void cli_scroll(int delta);
+    void cli_set_entry(const std::string &text);
+    void cli_open_help();
+    void cli_render_help();
+    void cli_help_activate(int index);
+    void cli_open_usage();
+    void cli_render_usage();
+    bool cli_caption(std::string &text) const;
+    std::string cli_home_value(cp0::ui::ValueTone &tone) const;
+    std::string cli_path() const;
+    bool cli_keys_to_entry() const;      // the console is shown and takes the keys
 
     // popups
     void open_choice(ChoiceField f);
@@ -645,7 +736,7 @@ private:
     cp0_ui_roller_page_t layout_{};
     std::unique_ptr<cp0::ui::Page> shell_;
     int tabs_y_ = 0, hint_h_ = 0;        // tabs_y_: the top of the page bodies and of Home, under the caption line
-    bool at_home_ = true;                // Home: the main menu (Chats, Contacts, Settings, Node); a page is open otherwise
+    bool at_home_ = true;                // Home: the main menu (Chats, Contacts, Tools, Settings, Node); a page is open otherwise
     // the start page "Choose a node" (over Home and the pages while it is shown)
     bool at_nodes_ = true;
     bool nodes_from_home_ = false;       // opened from Home > Node: its Esc goes back there (at the start it is the root)
@@ -658,6 +749,7 @@ private:
     std::vector<meshzero::SerialCandidate> usb_now_;
     uint64_t usb_check_ms_ = 0, nodes_render_ms_ = 0;
     std::string active_key_;             // the node chosen (in use, or being connected)
+    std::string active_ident_;           // USB: the identity of the device behind its port (usb_identity; "" for the other kinds)
     uint64_t connect_ms_ = 0;            // when it was chosen
     bool connect_pending_ = false;       // chosen on the page and not connected yet: the page goes to Home once it is
     bool ble_scanned_visit_ = false;     // the scan of this visit of the page was started
@@ -676,7 +768,7 @@ private:
     lv_obj_t *hint_box_ = nullptr, *hint_label_ = nullptr;
 
     // widgets
-    lv_obj_t *page_[5] = {};
+    lv_obj_t *page_[kTabCount] = {};
     // chats: the bar over the list (Search, Add channel; two panes: across both), the list, the conversation (its messages,
     // the entry and Send)
     ActionBar chat_bar_;
@@ -729,6 +821,45 @@ private:
     lv_obj_t *hold_box_ = nullptr, *hold_bar_ = nullptr, *hold_label_ = nullptr, *hold_track_ = nullptr;
     int hold_track_w_ = 0;
     lv_obj_t *loading_label_ = nullptr;
+    // the CLI page
+    std::unique_ptr<CliState> cli_;
+
+    // 0.7.0: the passwords of repeaters and rooms (meshcore-cli's own files: the page and the CLI's login share them)
+    std::unique_ptr<meshzero::PasswordStore> passwords_;
+    // 0.7.0: the Tools page
+    RowList tools_list_;
+    std::vector<ToolRow> tools_rows_;
+    int tools_sel_ = 0;
+    uint32_t tools_sig_ = 0;
+    uint32_t tools_builds_ = 0;          // the rows built again (scripted tests: a refresh keeps the highlight)
+    // 0.7.0: the Search of Contacts (a field under the bar while it is shown)
+    lv_obj_t *cs_field_ = nullptr;
+    bool cs_typing_ = false;             // the field takes the keys (without a physical keyboard: after a tap, until the keyboard's Enter)
+    // 0.7.0: the Repeater page
+    lv_obj_t *rep_panel_ = nullptr;
+    ActionBar rep_bar_;
+    RowList rep_list_;
+    std::string rep_key_;                // the repeater or room shown
+    uint32_t rep_sig_ = 0;
+    uint32_t rep_req_ = 0;               // the login this page asked (Client::start_login), 0: none
+    uint32_t rep_seen_result_ = 0;       // Client::remote_result().id handled
+    // the login box (an editor: editor_open_ with edit_kind_ == EditKind::Login)
+    lv_obj_t *login_ta_ = nullptr, *login_check_ = nullptr, *login_check_mark_ = nullptr, *login_check_row_ = nullptr;
+    lv_obj_t *login_note_ = nullptr;     // the line under Remember: the guest hint, or why the last try failed (red, wrapped)
+    lv_obj_t *login_route_ = nullptr, *login_reset_btn_ = nullptr;   // 0.7.2: the Route line, the Reset path button
+    bool rep_reset_asked_ = false;       // a Reset path of this page waits for its answer
+    uint32_t rep_seen_reset_ = 0;        // Client::path_reset_result().id handled
+    bool login_remember_ = true;         // "Remember on this deck" (default on)
+    bool login_fresh_ = false;           // the saved password is in the field: the first character typed replaces it
+    bool login_prefilled_ = false;       // (the debug line: never the password, only where it came from)
+    bool login_typing_ = false;          // the field takes the keys (without a physical keyboard: after a tap)
+    bool login_waiting_ = false;         // a login of this box is on its way
+    int login_focus_ = 0;                // 0 the field, 1 Remember (Tab)
+    std::string login_msg_;              // the box's message line (the wait, an error)
+    uint64_t login_msg_ms_ = 0;
+    // 0.7.0: the CLI's Open in CLI (0.7.2: the To... picker is gone)
+    std::string cli_to_pending_;         // a key: `to <key>` goes to meshcore-cli at its first prompt
+    std::string cli_back_rep_;           // the Repeater page the CLI was opened from (its Esc goes back there); empty: Tools
 };
 
 } // namespace meshhop

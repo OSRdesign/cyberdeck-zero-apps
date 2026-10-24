@@ -1,5 +1,6 @@
 #!/bin/sh
-# The 22 scripted simulator flows of Mesh Hop (0.5: nodes, the start page over TCP; 0.5.1: hidden and shown again), one after the other (the simulator's link /tmp/ttyMHSIM is shared), each
+# The 23 scripted simulator flows of Mesh Hop (0.5: nodes, the start page over TCP; 0.5.1: hidden and shown again; 0.7.0: repeater_run.sh,
+# the Repeater page and the regrouped Home at 640x480 and 800x480), one after the other (the simulator's link /tmp/ttyMHSIM is shared), each
 # with the simulator options its header names; the preset flows through presets_run.sh (its cases 1-7 and the 60 s
 # retry). About 15 minutes. Needs python3 and the host build (../../build.sh host).
 #   sh run_flows.sh [RUNNER] [OUT] [WxH | sizes]
@@ -66,11 +67,17 @@ one b-swap SHOTS="$OUT/b-swap" SIMCTL=1 sh "$T/p2_run.sh" b-swap.script
 one presets SHOTS="$OUT/presets" sh "$T/presets_run.sh"
 one nodes SHOTS="$OUT/nodes" sh "$T/nodes_run.sh"
 one lifecycle SHOTS="$OUT/lifecycle" SIMCTL=1 SCRIPT="$T/lifecycle.script" sh "$T/ui_smoke.sh"
+# 0.7.0: the Repeater page, the Search of Contacts, Tools, MY CONTACT (repeater_run.sh: a keyboard and touch only, always at 640x480
+# and 800x480); its shots in OUT/repeater/repeater-<WxH> and OUT/repeater/repeater-touch-<WxH>
+one repeater sh "$T/repeater_run.sh" "$MESHHOP_BIN" "$OUT/repeater"
+# 0.6: the CLI page with the real bundled meshcore-cli (cli_run.sh: a keyboard and touch only), when MESHHOP_MESHCLI names its mccli
+# (build.sh cli installs one in $CDK_BUILD/cli-smoke); its shots in OUT/cli/cli-<WxH> and OUT/cli/cli-touch-<WxH>
+if [ -n "$MESHHOP_MESHCLI" ]; then one cli sh "$T/cli_run.sh" "$MESHHOP_BIN" "$OUT/cli" "$MESHHOP_MESHCLI" "$SIZE"; fi
 echo "== done in $(($(date +%s) - t0)) s at $SIZE"
 main=0
 for d in "$OUT"/*/; do
     [ "$(basename "$d")" = presets ] && continue
-    main=$((main + $(ls "$d" | grep -c '\.png$')))
+    main=$((main + $(find "$d" -name '*.png' | wc -l)))
 done
 p1=$(ls "$OUT/presets/1-online-fetched" 2> /dev/null | grep -c '\.png$')
 echo "shots: $((main + p1)) ($main in 19 flows + $p1 of the preset flow's first case); preset cases in all: $(find "$OUT/presets" -name '*.png' | wc -l)"

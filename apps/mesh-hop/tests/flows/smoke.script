@@ -87,7 +87,7 @@ wait 300
 say == info closed (expect popup=none)
 dump
 
-# the other tabs by Tab (Tab cycles in a loop over the tabs that are shown: Chats, Contacts, Settings; there are no other tab keys)
+# the other tabs by Tab (Tab cycles in a loop over the pages: Chats, Contacts, Tools, Settings (0.7.0); there are no other tab keys)
 key tab
 wait 300
 say == contacts (expect tab=Contacts shown=4 sort=last heard)
@@ -109,14 +109,19 @@ wait 600
 say == Sort dialog, Name again: reversed (expect sort=name(rev) first='Weather room')
 dump
 shot 13-sorted-reversed
-# the tapped row opens: the first row of THIS order, not the first row of the default order (it is selected: one tap opens it)
+# the tapped row opens: the first row of THIS order, not the first row of the default order (it is selected: one tap opens it);
+# 0.7.0: a room opens its Repeater page, and its login box by itself
 tap "Weather room"
-wait 300
-say == the tapped row opens (expect detail=1 detail_name='Weather room')
+wait 600
+say == the tapped row opens: the Repeater page of the room, the login box (expect rep=1 rep_name='Weather room' login=1)
 dump
+expect text "Log in to Weather room"
 shot 14-detail
 key esc
-say == esc closes the detail, the sort is kept (expect detail=0 sort=name(rev))
+wait 300
+key esc
+wait 300
+say == Esc closes the box, Esc again the page; the sort is kept (expect rep=0 login=0 sort=name(rev))
 dump
 
 # filters by touch, the Filter dialog: type Repeater, then heard within 1 h
@@ -163,14 +168,14 @@ say == chat opened from Contacts (expect tab=Chats conv=d:... compose_focus=1)
 dump
 key esc
 
-# settings by Tab, the choice popup by touch on the Preset row
-key tab
-key tab
+# settings by Shift+Tab (the page before Chats), the choice popup by touch on the Preset row
+key backtab
 wait 300
 say == settings (expect tab=Settings)
 dump
 shot 16-settings
-# the Preset row is the fifth selectable row (Position, Board GPS, Statistics, Packet log, Node name, Preset): keys, the list is longer than the page now
+# the Preset row is the sixth selectable row (0.7.0: Name and Public key of MY CONTACT, Position, Board GPS, Node name, Preset): keys,
+# the list is longer than the page
 key down
 key down
 key down
@@ -254,8 +259,9 @@ dump
 key tab
 key tab
 key tab
+key tab
 wait 100
-say == Tab loop: three presses are a full turn (expect tab=Settings)
+say == Tab loop: four presses are a full turn (expect tab=Settings)
 dump
 
 # Tab: the next page

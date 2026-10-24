@@ -17,6 +17,8 @@ key esc
 key tab
 shot 22-offline-contacts
 key tab
+shot 22b-offline-tools
+key tab
 shot 23-offline-settings
 # the editors of the radio values need a board; the node name does not
 key enter

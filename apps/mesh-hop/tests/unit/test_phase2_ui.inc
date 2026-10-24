@@ -334,9 +334,13 @@ static void test_p2_settings_and_choices()
         return static_cast<int>(std::find(v.begin(), v.end(), k) - v.begin());
     };
     auto rows = settings_layout(ctx);
-    CHECK(has(rows, SRowKind::Position) && has(rows, SRowKind::Stats) && has(rows, SRowKind::PathHash) && has(rows, SRowKind::Repeat) && has(rows, SRowKind::AdvertEvery) &&
+    CHECK(has(rows, SRowKind::Position) && has(rows, SRowKind::PathHash) && has(rows, SRowKind::Repeat) && has(rows, SRowKind::AdvertEvery) &&
           has(rows, SRowKind::AdvertKind) && has(rows, SRowKind::ManualAdd) && has(rows, SRowKind::AutoAddTypes) && has(rows, SRowKind::Reboot) && has(rows, SRowKind::FactoryReset));
     CHECK(!has(rows, SRowKind::PathHashNotice) && !has(rows, SRowKind::StatsNotice) && !has(rows, SRowKind::AutoAddNotice));
+    // 0.7.0: Statistics and the Packet log moved to Tools; MY CONTACT is the first section (Name, Public key) once the node is known
+    CHECK(!has(rows, SRowKind::Stats) && !has(rows, SRowKind::PacketLog));
+    CHECK(rows[0].kind == SRowKind::Header && rows[0].arg == 10 && rows[1].kind == SRowKind::MyName && rows[2].kind == SRowKind::MyKey &&
+          rows[3].kind == SRowKind::Header && rows[3].arg == 0);
     CHECK(pos(rows, SRowKind::Tx) < pos(rows, SRowKind::PathHash) && pos(rows, SRowKind::PathHash) < pos(rows, SRowKind::Repeat) && pos(rows, SRowKind::Repeat) < pos(rows, SRowKind::RetryAttempts));
     CHECK(pos(rows, SRowKind::AdvertEvery) + 1 == pos(rows, SRowKind::AdvertKind) && pos(rows, SRowKind::ManualAdd) + 1 == pos(rows, SRowKind::AutoAddTypes));
     CHECK(pos(rows, SRowKind::HistoryOlder) < pos(rows, SRowKind::Reboot) && pos(rows, SRowKind::Reboot) + 1 == pos(rows, SRowKind::FactoryReset) && pos(rows, SRowKind::FactoryReset) < pos(rows, SRowKind::Undo));
@@ -356,8 +360,14 @@ static void test_p2_settings_and_choices()
     ctx.repeat.available = false;
     ctx.repeat.note = "Not allowed on this frequency";
     rows = settings_layout(ctx);
-    CHECK(!has(rows, SRowKind::PathHash) && has(rows, SRowKind::PathHashNotice) && !has(rows, SRowKind::Stats) && has(rows, SRowKind::StatsNotice) &&
+    CHECK(!has(rows, SRowKind::PathHash) && has(rows, SRowKind::PathHashNotice) && !has(rows, SRowKind::Stats) && !has(rows, SRowKind::StatsNotice) &&
           !has(rows, SRowKind::AutoAddTypes) && has(rows, SRowKind::AutoAddNotice) && !has(rows, SRowKind::Repeat) && has(rows, SRowKind::ManualAdd));
+    {   // the statistics' notice is on the Tools row now
+        ToolsContext tc;
+        tc.stats = ctx.stats;
+        const std::vector<ToolRow> tr = tools_rows(tc);
+        CHECK(tr[2].item == ToolItem::Statistics && tr[2].caption == "Firmware too old for this feature: Statistics" && tr[2].tone == Tone::Gold);
+    }
     // P3: repeat that cannot be used leaves no row (no note); while it is on, the row stays: the way to switch it off
     ctx.repeat.on = true;
     CHECK(has(settings_layout(ctx), SRowKind::Repeat));
@@ -381,8 +391,10 @@ static void test_p2_settings_and_choices()
     CHECK(!has(rows, SRowKind::PathHash) && !has(rows, SRowKind::PathHashNotice) && !has(rows, SRowKind::Stats) && !has(rows, SRowKind::StatsNotice) && !has(rows, SRowKind::Repeat) &&
           !has(rows, SRowKind::ManualAdd) && !has(rows, SRowKind::Reboot) && !has(rows, SRowKind::FactoryReset) && !has(rows, SRowKind::Position));
     CHECK(has(rows, SRowKind::AdvertEvery) && has(rows, SRowKind::AdvertKind) && rows.back().kind == SRowKind::Save);
-    for (int s = 0; s < 10; ++s) CHECK(std::string(settings_section_title(s)).size() > 3);
-    CHECK(std::string(settings_section_title(7)) == "SCHEDULED ADVERT" && std::string(settings_section_title(10)).empty() && std::string(settings_section_title(5)) == "RADIO CHANGES");
+    CHECK(!has(rows, SRowKind::MyName) && !has(rows, SRowKind::MyKey) && rows[0].kind == SRowKind::Header && rows[0].arg == 0);   // no node known: no MY CONTACT
+    for (int s = 0; s < 11; ++s) CHECK(std::string(settings_section_title(s)).size() > 3);
+    CHECK(std::string(settings_section_title(7)) == "SCHEDULED ADVERT" && std::string(settings_section_title(10)) == "MY CONTACT" &&
+          std::string(settings_section_title(11)).empty() && std::string(settings_section_title(5)) == "RADIO CHANGES");
 
     // the path hash choice: 1 / 2 / 3 bytes, starts on the board's mode, one line of explanation
     ChoiceExtra extra;
@@ -436,6 +448,16 @@ static void test_p2_settings_and_choices()
     NavState top;
     top.tab = Tab::Contacts;
     CHECK(back_action(top) == BackAction::ExitHint);                                                              // a short Esc never quits
+    // 0.7.0: the Search of Contacts is the last layer before the page's root; the Repeater page closes after a details panel over it
+    top.contact_search = true;
+    CHECK(back_action(top) == BackAction::CloseContactSearch);
+    top.select_mode = true;
+    CHECK(back_action(top) == BackAction::ExitSelect);
+    top.select_mode = false;
+    top.repeater_open = true;
+    CHECK(back_action(top) == BackAction::CloseRepeater);
+    top.detail_open = true;
+    CHECK(back_action(top) == BackAction::CloseDetail);
 }
 
 static void test_phase2_ui()

@@ -3,10 +3,11 @@
 wait 3500
 key enter
 wait 300
-key tab
-key tab
+key backtab
 wait 800
 key home
+key down
+key down
 key enter
 wait 800
 say == no GPS switch (expect pos_box=1 pos_gps_row=0)

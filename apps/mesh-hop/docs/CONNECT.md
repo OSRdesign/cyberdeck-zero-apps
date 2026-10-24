@@ -83,7 +83,9 @@ stops: a node not heard has no bars.
 ### What is kept (`~/.local/share/mesh-hop/nodes.txt`, `src/core/nodes.*`)
 
 The nodes added by IP address (address, port, name), the node chosen last (`last`), the answer to the scan question
-(`ble_scan yes|no`) and the node names learned once a node answered (`name usb:/dev/ttyACM0 OSR wio`). One file for the deck,
+(`ble_scan yes|no`) and the node names learned once a node answered (`name usb:/dev/ttyACM0 OSR wio`; a USB name also records
+the identity of the device that answered, `vid:pid/serial` from sysfs, and is shown only while that device is on the port: a line
+without it, from an older version, is not trusted for a USB device with known ids). One file for the deck,
 next to the per-board folders; the per-board data stays keyed by the board's public key, so a board reached over USB one day
 and Bluetooth the next keeps its chats.
 

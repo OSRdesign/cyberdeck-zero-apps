@@ -1,4 +1,4 @@
-# Mesh Hop 0.4.0 / 0.5.0: board tests
+# Mesh Hop 0.4.0 / 0.5.0 / 0.6.0 / 0.7.0 / 0.7.2: board tests
 
 For the Controller and the owner (controller-led testing: the Controller deploys and reads logs, the owner does the
 physical steps and ticks the boxes). Commands run from Windows: `deck.py` is
@@ -6,7 +6,9 @@ physical steps and ticks the boxes). Commands run from Windows: `deck.py` is
 The app's process name is `mesh-hop` (`pgrep -x mesh-hop`; never `pkill -f`).
 
 0.5.0 (the start page "Choose a node", Bluetooth LE and IP nodes): section **N**; the app now opens on that page (D1 starts
-there). Boards: **deck** (Pi Zero 2 W, 640x480, Bluetooth keyboard), **Pi 3A+** (800x480 touch, no keyboard: the on-screen
+there). 0.6.0 (the CLI page, meshcore-cli inside Mesh Hop): section **10**. 0.7.0 (Home regrouped: Tools; the Repeater page, the
+Search and Options of Contacts, MY CONTACT; 0.7.2: the route in the login box, Reset path, More's order, no To… in the CLI):
+section **11**; D1, D4, D5, 10, P and H follow the new places. Boards: **deck** (Pi Zero 2 W, 640x480, Bluetooth keyboard), **Pi 3A+** (800x480 touch, no keyboard: the on-screen
 keyboard), **HackBerry** (CM5, 720x720 square touch, built-in USB keyboard). Radio: a MeshCore companion radio board on USB
 (board A: Seeed XIAO nRF52840; board B: XIAO S3 WIO, MeshCore v1.15.0), and for R1-R3 a second MeshCore node in radio range
 (a phone with the MeshCore app, or the other board on another host) and, for heard-back, a repeater in range.
@@ -22,7 +24,7 @@ Nearby, Settings, Statistics, packet log), `chats-<size>/c*.png` (Chats, convers
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/mesh-hop/build.sh all --strict
 python tools/make_registry.py --only mesh-hop --out C:/CLAUDE/zero7/pkg-out
 set DECK_HOST=<board ip>        (deck: leave it unset)
-python deck.py put C:/CLAUDE/zero7/pkg-out/mesh-hop_0.5.3_arm64.deb /tmp/mesh-hop.deb
+python deck.py put C:/CLAUDE/zero7/pkg-out/mesh-hop_0.7.0_arm64.deb /tmp/mesh-hop.deb
 python deck.py sudo 'dpkg -i /tmp/mesh-hop.deb || apt-get -f install -y'
 python deck.py run '/usr/share/APPLaunch/bin/mesh-hop --version; id -nG; ls /dev/ttyACM* /dev/ttyUSB* 2>/dev/null'
 ```
@@ -59,8 +61,9 @@ keyboard has been shown (Pi 3A+) and after a search.
 1. Open Mesh Hop from the launcher (0.5.0: first the start page, section N1; choose the USB board there). Expect Home (compare
    `shell-640x480/h01-home-keyboard.png`): header "Mesh Hop" with the Esc
    button and the status strip, the board line under it, the rows **Chats** (unread total in blue, or "no new"), **Contacts**
-   (the count) and **Settings**, each with a chevron; the key hint line at the bottom.
-2. Up / Down move the highlight, Enter opens the page; on a page Tab / Shift+Tab go Chats > Contacts > Settings in a loop.
+   (the count), **Tools** (0.7.0; "N nearby waiting" in amber when nodes wait), **Settings** and **Node**, each with a chevron;
+   the key hint line at the bottom.
+2. Up / Down move the highlight, Enter opens the page; on a page Tab / Shift+Tab go Chats > Contacts > Tools > Settings in a loop.
 3. A short Esc on the keyboard on a page: back to Home. At Home: the notice "Hold Esc 3 s to exit", the app stays.
 4. Tap the header's Esc at Home: the dialog **Quit Mesh Hop?** with Cancel and Quit. Cancel: nothing. Again, Quit: the app ends,
    the launcher is back. Open it again. Hold Esc 3 s on the keyboard: the app ends.
@@ -97,23 +100,26 @@ keyboard has been shown (Pi 3A+) and after a search.
 
 ## D4. Deck: Contacts
 
-1. Contacts (`pages-640x480/p01-contacts.png`): the bar **Filter**, **Sort**, **More**; two lines per row (name; type, heard,
-   hops), the distance at the right when both positions are known.
+1. Contacts (`pages-640x480/p01-contacts.png`): the bar **Search** (0.7.0), **Filter**, **Sort**, **More**; two lines per row (name;
+   type, heard, hops), the distance at the right when both positions are known.
 2. **Filter**: Type, Heard, Group, each a pick list; the line under the title says what is shown. `T` and `H` cycle them.
 3. **Sort**: name, heard, type, SNR, hops, distance; the field in use again reverses. `S`, `R`. Restart the app: the order is kept.
 4. **More > Send advert**: the arrow choice Flood / Zero-hop (starts on the one used last); OK sends (the log has the advert).
    **More > Nearby**: the nodes heard with Add / Ignore, Scan (8 s), Ignored. **More > Manage contacts**: check boxes, Select...,
    Delete n (asks first, one by one with a progress box and Stop: test on a contact you do not need, or say No), Group..., Done.
-5. Tap a row, tap again: the **details** (key, route, last advert, position, distance, SNR), Message / Groups / Delete on its bar;
-   Esc (or the header's Esc) closes them. With 100+ contacts, Down held through the list stays quick.
+5. 0.7.0: tap a row, tap again: it opens **by its type** (a repeater or room: its Repeater page, section 11; a chat contact: its
+   conversation; a sensor: its details). The **details** (key, route, last advert, position, distance, SNR, Message / Groups /
+   Delete on its bar) come from a 3 s hold on the row (or `I`) > Details; Esc (or the header's Esc) closes them. With 100+
+   contacts, Down held through the list stays quick.
 
 [ ] pass  [ ] fail  Notes:
 
-## D5. Deck: Settings, Statistics, Packet log
+## D5. Deck: Settings, Tools (Statistics, Packet log)
 
-1. Settings (`pages-640x480/p13-settings.png`): BOARD (connection, firmware, battery, clock as grey information), Position,
-   Board GPS (only with a GPS board), Statistics, Packet log; RADIO; DIRECT MESSAGES; SCHEDULED ADVERT; CONTACTS; CLOCK;
-   CHANNELS; HISTORY; BOARD ACTIONS; RADIO CHANGES. Every row has a chevron, a dot or no marker (information).
+1. Settings (`pages-640x480/p13-settings.png`): MY CONTACT (0.7.0: Name, Public key), BOARD (connection, firmware, battery,
+   clock as grey information), Position, Board GPS (only with a GPS board); RADIO; DIRECT MESSAGES; SCHEDULED ADVERT; CONTACTS;
+   CLOCK; CHANNELS; HISTORY; BOARD ACTIONS; RADIO CHANGES. Every row has a chevron, a dot or no marker (information). Statistics
+   and the Packet log are on **Tools** (Home > Tools, or Tab from Contacts).
 2. **Position**: the box with latitude and longitude; type `48.85` / `2.35` (',' works too), OK: the row shows it after the
    read-back; a wrong value (`95`) is refused in the box. **Clear**: "not set". A GPS board: the **Board GPS** switch in the box and
    on its row; on, the board's fix replaces the typed position (note whether it does: never tested on a real board).
@@ -122,10 +128,10 @@ keyboard has been shown (Pi 3A+) and after a search.
    Yes / No). Do not **Save to radio** unless you mean to change the board's radio.
 4. **History**: Delete messages older than 90 days (asks first); Forget this board's data / Other boards' data show their size
    and ask first (say No).
-5. **Statistics**: battery, uptime, noise floor, RSSI, SNR, airtime, packet counters; refreshes every 5 s; `R` refreshes, `A`
-   switches the automatic refresh. Esc back.
-6. **Packet log**: capture off at the start; Start (or `S`): rows appear as the board hears packets; Up / Down select, the path and
-   hex bytes below; Clear (`C`); Esc back. Restart the app: it is off and empty again.
+5. **Tools > Statistics**: battery, uptime, noise floor, RSSI, SNR, airtime, packet counters; refreshes every 5 s; `R` refreshes,
+   `A` switches the automatic refresh. Esc back to Tools.
+6. **Tools > Packet log**: capture off at the start; Start (or `S`): rows appear as the board hears packets; Up / Down select, the
+   path and hex bytes below; Clear (`C`); Esc back to Tools. Restart the app: it is off and empty again.
 
 [ ] pass  [ ] fail  Notes:
 
@@ -181,6 +187,96 @@ Logs: `tail -n 60 ~/.local/share/mesh-hop/mesh-hop.log` (lines `node:`, `ble:`, 
 
 [ ] pass  [ ] fail  Notes:
 
+## 10. CLI (0.6.0; deck, about 15 min; the touch pass on the Pi 3A+)
+
+Needs board A connected (USB, or a BLE / IP node), **your own repeater** in radio range with its admin password at hand, and
+a second node (phone) to send one message. Logs: `tail -n 60 ~/.local/share/mesh-hop/mesh-hop.log` (lines `cli:` and `console relay:`).
+Before: `python deck.py run 'python3 --version; dpkg -l python3-requests python3-serial | tail -n 2'` (Python 3.10 or newer).
+
+1. **10.1 Open**: Tools > **CLI** (0.7.0; a row with a chevron; without a node it says "not connected" and a tap says to connect
+   first).
+   The page says "Starting meshcore-cli...", then meshcore-cli's prompt. **Record the time from the tap to the prompt** on the
+   Pi Zero 2 W, the first start after the install (unmeasured so far; it compiles the Python files once) and a second start:
+   first ____ s, second ____ s.
+2. **10.2 Own node**: `infos` (the node's name, key, radio), `ver` (its firmware). Up / Down bring back the lines typed.
+3. **10.3 Repeater login**: `to <your repeater>`, then `login`: a password prompt, the entry says "(hidden)" and shows `*` as you
+   type; Enter. Expect a login success line. (Do not type `login <password>` on one line: it shows the password.)
+4. **10.4 Repeater commands**: `ver`, `get name`, `clock`, `rs` (status: uptime, battery, counters). Each answers within a few
+   seconds (over LoRa; note any that time out).
+5. **10.5 Saved password**: Esc, open CLI again, `to <your repeater>`, `login`: no password asked, logged in.
+   `python deck.py run 'ls -l ~/.local/share/mesh-hop/cli/.config/meshcore/'`: one `<key>.pass`, mode `-rw-------`.
+6. **10.6 Message during a session**: while the CLI is open, send a message to the deck's node from the phone (direct or a
+   channel). It shows in the console. Leave the CLI (Esc): the message is in **Chats** too (with its unread count).
+7. **10.7 No repeater reply in Chats**: Chats has nothing from the repeater's replies of 10.4 (no new direct chat with it, no
+   lines like the `ver` or `rs` answers).
+8. **10.8 After leaving**: the header's Esc (or Esc) leaves, Tools is back (0.7.0), the board line says connected. Send a message in a
+   chat: sent (and delivered for a direct one) as before the session. A scheduled advert or retry that was due resumes.
+9. **10.9 Ctrl+C**: open CLI, Ctrl+C at the prompt: meshcore-cli ends, the page says so; Esc, CLI again: a new prompt.
+10. **10.10 Help**: Ctrl+H (or the **Help** button): the sections How it works, Your node, Repeaters and rooms, Careful (the
+    warnings in their colour), All commands; Enter on an item (e.g. `infos`) puts it into the entry; Esc back to the console.
+
+**Touch-only pass (Pi 3A+, no keyboard; or the deck with the keyboard off)**: Tools > CLI by touch; tap the entry: the on-screen
+keyboard opens and the entry stays above it; type `ver`, the keyboard's Enter sends it and the answer shows; tap **Help**, tap
+`infos`: it is inserted into the entry; Enter sends it. The header's Esc leaves.
+
+[ ] pass  [ ] fail  First-start time: ____ s  Notes:
+
+## 11. Repeater page and regrouped Home (0.7.0; deck, about 15 min; the touch pass on the Pi 3A+)
+
+Needs board A connected (USB, or a BLE / IP node), **your own repeater** in radio range with its admin password at hand, and **a
+repeater you do not own** (in range, or heard on the mesh). The pictures to compare: `C:\CLAUDE\zero7\apps-s1-shots` (640x480 and
+800x480: Home, Tools, the Search, the Repeater page, the login box, More, MY CONTACT; 0.7.2: `C:\CLAUDE\zero7\apps-s2-shots`, the
+route and Reset path in the login box, More's new order, the CLI bar without To…). Logs:
+`tail -n 60 ~/.local/share/mesh-hop/mesh-hop.log` (lines `remote login`, `repeater page:`, `cli:`). Before:
+`python deck.py run 'ls -l ~/.local/share/mesh-hop/cli/.config/meshcore/'` (a `.pass` file of your repeater from section 10 may be
+there: then the login box of 11.3 shows it, as dots; clear the field first).
+
+1. **11.1 Home and Tools**: Home lists Chats, Contacts, **Tools**, Settings, Node; on a page Tab goes Chats > Contacts > Tools >
+   Settings. Tools: Nearby, Packet log, Statistics, CLI; Statistics and the Packet log open from there (as D5.5, D5.6), Settings no
+   longer has them.
+2. **11.2 Search**: Contacts > **Search** (or `/`): type a part of your repeater's name: only the matching rows, the line under the
+   title says `"..." in the name`. Clear it, type `<` and the first 4 hex digits of its key (its details show the key): only it. Esc:
+   every contact again.
+3. **11.3 Wrong password**: tap your repeater (selected), tap again: its **Repeater page** ("Repeater · direct, N hops" or "flood"
+   · "heard ..."), and the login box by itself; under its title (0.7.2) "Route: direct, N hops" (or "Route: flood: the login goes to the whole mesh"),
+   the same route as the page's line. Type a wrong password, Enter: "Waiting… up to N s" (N: ____), then "No answer. Wrong
+   password, or <name> is out of reach." Nothing is retried by itself.
+4. **11.4 Admin, remembered**: type the admin password (dots), Remember on (the default), **Log in**: the box closes, "Logged in to
+   <name> as admin, password saved"; the page: "Admin since hh:mm", "password saved", "Clock at login" with its gap to the deck
+   (____; amber with a warning when more than a minute ahead). Time from Log in to the answer: ____ s.
+   `python deck.py run 'ls -l ~/.local/share/mesh-hop/cli/.config/meshcore/'`: its `<key>.pass`, mode `-rw-------`.
+5. **11.5 Open in CLI**: **More** (0.7.2 order: Details, Open in CLI, Reset path, Forget password last) > **Open in CLI**: the CLI
+   starts and types the repeater's full key by itself, once (the output shows "to <name> <its first 6 key digits>", not the 64
+   digits); the prompt shows the repeater. `ver` answers **with no `login` typed**; `get name`, `clock` too. Esc: back to the Repeater page, still admin.
+6. **11.6 Leave, Log out, the saved password**: Esc (the page), open the repeater again: no box (still logged in on this
+   connection). **Log out** (the bar, or L): "Logged out on this deck"; the note says the repeater keeps the deck as admin until
+   `setperm`. Open it again: the box has the saved password (dots): Log in (or Enter) with nothing typed: admin.
+7. **11.7 A repeater you do not own**: open it from Contacts, tap **Guest**: "Guest since hh:mm", or the timeout text (its owner
+   set a guest password, or it is out of reach: note which). Without a known route the box says "Route: flood: the login goes to the
+   whole mesh" (note
+   whether it answered). Log out.
+8. **11.8 Reset path (0.7.2)**: on a repeater with a known route (the page says "direct, N hops"), log out if logged in, open it
+   again: the login box shows "Route: direct, N hops" and **Reset path** at the right of Remember on this deck. Tap it (or Ctrl+R): "Path reset: the next
+   message goes by flood", the route line says "Route: flood: the login goes to the whole mesh"; Cancel: the page's line says "flood". Log in: it works
+   by flood (time: ____ s), and afterwards the page shows a route again (direct, N hops) once the node learned one. Then **More >
+   Reset path** (or `R`) on the page: the same notice in the status line, the line under the title says "flood". No confirmation
+   box either way. Tools > CLI: the bar is the entry and **Help** only (no To…); before you type, the status line says "Contacts > a
+   repeater > More > Open in CLI, or type: to <name>".
+9. **11.9 Options, the tap rule**: hold your repeater 3 s (or `I`): "Options for <name>": Manage, Details, Groups, Delete; Manage
+   opens its page. Hold a chat contact: Message, Details, Groups, Delete; a tap on a selected chat contact opens its conversation
+   in Chats. A sensor (if any): a tap opens its details.
+10. **11.10 MY CONTACT**: Settings starts with MY CONTACT: Name (Enter takes the highlight to RADIO > Node name), Public key
+    (grouped; Enter shows the 64 hex digits: compare with the deck's node in the phone app).
+
+**Touch-only pass (Pi 3A+, no keyboard; or the deck with the keyboard off)**: Contacts > Search: the on-screen keyboard comes; type
+a part of the repeater's name, the keyboard's Enter: the keyboard goes. Tap the repeater: the page and the box, **no keyboard yet**.
+Tap the password field: the keyboard (dots on its echo line), type, its Enter logs in. (0.7.2) In the box, the **Reset path** button
+(beside Remember on this deck) works by one tap and is easy to hit (not under the finger meant for the field). Log out, **Log in** on the bar: the saved
+password is in the box, tap **Log in**: nothing typed. A 3 s hold on a contact: its Options. Tools > Statistics by taps; the
+header's Esc goes back each time.
+
+[ ] pass  [ ] fail  Login answer time: ____ s  Clock gap: ____  Notes:
+
 ## P. Pi 3A+ (800x480, touch only, on-screen keyboard)
 
 1. The tile shows; open by touch. Home as `shell-800x480/h02-home.png`; no key hint line. Every row and button reacts where it
@@ -193,7 +289,7 @@ Logs: `tail -n 60 ~/.local/share/mesh-hop/mesh-hop.log` (lines `node:`, `ble:`, 
    sending. No way to summon the keyboard by hand exists (correct).
 5. Contacts: Filter / Sort / More / Manage contacts / a contact's details, all by touch (as D4); the SNR shows on the rows.
 6. Settings: the Position box by touch, its fields bring the on-screen keyboard and the box stays above it; an arrow choice
-   (Bandwidth) by its arrows; Statistics and Packet log open and close by the header's Esc.
+   (Bandwidth) by its arrows; Tools > Statistics and Packet log open and close by the header's Esc.
 7. Home: the header's Esc asks **Quit Mesh Hop?**, Quit ends the app. Connect a Bluetooth keyboard while Chats is open: the
    on-screen keyboard goes within about a second, the hint line appears.
 8. Memory (M).
@@ -209,7 +305,7 @@ Logs: `tail -n 60 ~/.local/share/mesh-hop/mesh-hop.log` (lines `node:`, `ble:`, 
    keyboard is there (unless the board's keyboard setting forces it; note which).
 4. Touch: rows, bars, the header's Esc, a 3 s hold on a chat; taps land where the finger is (rotation / touch accuracy: the four
    corners and the centre).
-5. Contacts, Settings (Position, a radio arrow choice), Statistics, Packet log as on the deck; the Quit dialog at Home.
+5. Contacts, Settings (Position, a radio arrow choice), Tools (Statistics, Packet log) as on the deck; the Quit dialog at Home.
 6. With a radio board plugged in: R1 Send on this board.
 7. Memory (M).
 
@@ -223,11 +319,13 @@ Logs: `tail -n 60 ~/.local/share/mesh-hop/mesh-hop.log` (lines `node:`, `ble:`, 
 | Chats list, hold, options, Search, Add channel (D2 / P2, P3 / H2) | [ ] | [ ] | [ ] |
 | Conversation, send (D3, R1 / P4 / H3, H6) | [ ] | [ ] | [ ] |
 | Contacts (D4 / P5 / H5) | [ ] | [ ] | [ ] |
-| Settings, Statistics, Packet log (D5 / P6 / H5) | [ ] | [ ] | [ ] |
+| Settings, Tools: Statistics, Packet log (D5 / P6 / H5) | [ ] | [ ] | [ ] |
 | Touch accuracy, rotation (P1 / H4) | n/a | [ ] | [ ] |
 | Memory under 25 MB (M) | [ ] | [ ] | [ ] |
 | Radio: send, heard back, advert, replug (R) | [ ] | | |
 | 0.5.0 Choose a node: USB, first scan, BLE pair / reconnect / forget, IP (N1-N10) | [ ] | [ ] (N7 by touch) | |
+| 0.6.0 CLI: prompt, repeater login, saved password, messages, Help (10.1-10.10) / touch pass | [ ] | [ ] (touch pass) | |
+| 0.7.0 / 0.7.2 Repeater page, regrouped Home: your repeater, one you do not own, Open in CLI, Reset path, Search, Options, MY CONTACT (11.1-11.10) / touch pass | [ ] | [ ] (touch pass) | |
 
 ## Unverified until a board run
 
@@ -242,3 +340,8 @@ Logs: `tail -n 60 ~/.local/share/mesh-hop/mesh-hop.log` (lines `node:`, `ble:`, 
 | U-7 | 0.5.0: a 10 s LE scan and a BLE node link do not make the M4 (a Bluetooth Classic keyboard) lag enough to matter; Wi-Fi keeps working |
 | U-8 | 0.5.0: a real MeshCore Wi-Fi companion talks over TCP as the simulator does (same framing, port 5000) |
 | U-9 | 0.5.0: the bar thresholds (4 bars from -60 dBm ... 1 above -100) read sensibly for nodes at 1, 5 and 20 m |
+| U-10 | 0.6.0: meshcore-cli's first start on the Pi Zero 2 W (Python compiling the bundle once) takes an acceptable time; not measured yet |
+| U-11 | 0.6.0: a real repeater answers `login`, `ver`, `get name`, `clock`, `rs` through the relay as the simulator does, and its replies never reach Chats (shown with the simulator only) |
+| U-12 | 0.7.0: a real repeater's login answer (LOGIN_SUCCESS with its clock and ACL byte) reads as the simulator's, and the wait (est_timeout x 1.25) is long enough over LoRa, flood included |
+| U-13 | 0.7.0: meshcore-cli 1.6.6 takes `to <64 hex key>` for a real contact, and the repeater accepts admin commands after the page's login with no `login` in the CLI (the simulator does) |
+| U-14 | 0.7.0: LOGOUT (29) is answered OK by the real companion and changes nothing on the repeater |

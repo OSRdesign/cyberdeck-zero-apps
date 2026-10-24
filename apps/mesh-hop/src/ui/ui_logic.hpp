@@ -123,22 +123,31 @@ struct ContactRow {
     bool has_dist = false;
     double dist_km = 0;
 };
-/* Filters of the contacts table (C2): by node type and by time since the node was last heard. */
-enum class TypeFilter { All, Chat, Repeater, Room, Sensor };
+/* Filters of the contacts table (C2): by node type and by time since the node was last heard. RepeaterRoom (0.7.0) is the
+ * preset of the CLI's To... picker: repeaters and rooms together; the Filter dialog and the T key never offer it. */
+enum class TypeFilter { All, Chat, Repeater, Room, Sensor, RepeaterRoom };
 enum class AgeFilter { Any, Hour, Day, Week };
-const char *type_filter_name(TypeFilter t);         // "All", "Chat", "Repeater", "Room", "Sensor"
+const char *type_filter_name(TypeFilter t);         // "All", "Chat", "Repeater", "Room", "Sensor", "Repeater + Room"
 const char *age_filter_name(AgeFilter a);           // "Any time", "1 h", "24 h", "7 d"
-TypeFilter next_type_filter(TypeFilter t);
+TypeFilter next_type_filter(TypeFilter t);          // All .. Sensor in a loop (never RepeaterRoom)
 AgeFilter next_age_filter(AgeFilter a);
 uint32_t age_filter_seconds(AgeFilter a);           // 0 for Any
 bool type_matches(TypeFilter f, int contact_type);
 struct ContactFilter {
     TypeFilter type = TypeFilter::All;
     AgeFilter age = AgeFilter::Any;
-    bool active() const { return type != TypeFilter::All || age != AgeFilter::Any; }
+    /* 0.7.0, the Search of Contacts (ui_repeater.hpp contact_matches_search): a part of the name (any case), or '<' and the
+     * first hex digits of the key; empty = every contact. */
+    std::string search;
+    bool active() const { return type != TypeFilter::All || age != AgeFilter::Any || !search.empty(); }
 };
 /* Does a row pass? `now` is the app clock; a node never heard (heard == 0) fails any time filter. */
 bool passes_filter(const ContactRow &r, const ContactFilter &f, uint32_t now);
+/* The Search of Contacts (0.7.0, as the official app): a query that is '<' followed by hex digits only (none: every key) looks at the
+ * start of the key (*hex: those digits in lower case); anything else is a part of the name, any case (ASCII letters folded; the
+ * spaces count, at the ends too). An empty query matches everything. */
+bool search_key_prefix(const std::string &query, std::string *hex = nullptr);
+bool contact_matches_search(const std::string &name, const std::string &key_hex, const std::string &query);
 
 /* Sort, direction and filters of the table: what the user chose, kept while the screen is shown, left, re-entered. */
 struct ContactView {
@@ -152,7 +161,8 @@ struct ContactView {
     void toggle_reverse() { reverse = !reverse; }
     bool operator==(const ContactView &o) const
     {
-        return sort == o.sort && reverse == o.reverse && filter.type == o.filter.type && filter.age == o.filter.age && group == o.group;
+        return sort == o.sort && reverse == o.reverse && filter.type == o.filter.type && filter.age == o.filter.age &&
+               filter.search == o.filter.search && group == o.group;
     }
     bool operator!=(const ContactView &o) const { return !(*this == o); }
 };
@@ -364,8 +374,10 @@ enum class SRowKind {
     AutoAddNotice, Reboot, FactoryReset,
     // 0.2.2: the data kept per board
     HistoryForget, HistoryOthers,
-    // phase 3: the packet log (D8)
+    // phase 3: the packet log (D8; 0.7.0: on the Tools page, no longer a Settings row)
     PacketLog,
+    // 0.7.0: MY CONTACT, the first section: the node's name (a link to RADIO > Node name) and its public key (shown whole on Enter)
+    MyName, MyKey,
 };
 struct SRowSpec {
     SRowKind kind = SRowKind::Info;
@@ -385,7 +397,7 @@ struct SettingsContext {
     bool board_known = false;               // SELF_INFO was seen: there is a board whose saved data can be forgotten
     size_t other_boards = 0;                // folders of other boards that are saved on the deck
 };
-/* The header titles of the Settings sections, by the number the layout gives them. */
+/* The header titles of the Settings sections, by the number the layout gives them (10: MY CONTACT, 0.7.0). */
 const char *settings_section_title(int section);
 std::vector<SRowSpec> settings_layout(const SettingsContext &ctx);
 /* True for the rows the selection can rest on (everything except headers, info lines and notices). */
@@ -473,7 +485,10 @@ constexpr double kEu868PresetMhz = 869.525;
 
 /* ------------------------------------------------------------------ navigation */
 
-enum class Tab { Chats, Map, Contacts, Terminal, Settings };
+/* Map: not shown yet; Tools (0.7.0): Nearby, Packet log, Statistics, CLI; Cli: Tools > CLI (or a Repeater page's Open in CLI),
+ * Tab never goes there. The page loop of Tab / Shift+Tab is next_page (ui_repeater.hpp): Chats, Contacts, Tools, Settings. */
+enum class Tab { Chats, Map, Contacts, Tools, Cli, Settings };
+constexpr int kTabCount = 6;
 const char *tab_name(Tab t);
 Tab step_tab(Tab t, int delta);
 
@@ -483,13 +498,16 @@ struct NavState {
     bool editor_open = false;       // the modal text editor (settings values, channel name, clock)
     bool detail_open = false;       // the contact detail panel
     bool compose_focus = false;     // Chats: the keyboard types into the message entry
-    bool nearby_open = false;       // Contacts: the Nearby list
+    bool nearby_open = false;       // Contacts or Tools: the Nearby list
     bool search_open = false;       // Chats: the message search
-    bool stats_open = false;        // Settings: the statistics screen
-    bool packet_log_open = false;   // Settings: the packet log (D8)
+    bool stats_open = false;        // Tools: the statistics screen (Settings before 0.7.0)
+    bool packet_log_open = false;   // Tools: the packet log (D8; Settings before 0.7.0)
     bool select_mode = false;       // Contacts: marking contacts for a bulk delete or a group
+    bool repeater_open = false;     // Contacts: the Repeater page of a repeater or room (0.7.0)
+    bool contact_search = false;    // Contacts: the Search field is shown (0.7.0)
 };
-enum class BackAction { ClosePopup, CancelEditor, CloseSearch, CloseStats, CloseDetail, CloseNearby, ExitSelect, FocusList, ExitHint, ClosePacketLog };
+enum class BackAction { ClosePopup, CancelEditor, CloseSearch, CloseStats, CloseDetail, CloseNearby, ExitSelect, FocusList, ExitHint, ClosePacketLog,
+                        CloseRepeater, CloseContactSearch };
 /* A short Esc and every Back button. Never quits: only the launcher's 3 s hold ends the app. */
 BackAction back_action(const NavState &s);
 

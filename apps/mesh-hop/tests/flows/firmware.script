@@ -5,16 +5,18 @@
 wait 3500
 key enter
 wait 300
-key tab
-key tab
+key backtab
 wait 500
 say == settings (expect tab=Settings)
 dump
 shot 50-settings-board
-# the first selectable row is the GPS switch on a GPS board (Enter toggles it), else the node name
+# the third selectable row (0.7.0: after MY CONTACT's Name and Public key) is Position: its box, with the GPS switch on a GPS board
+# only; Esc closes it
+key down
+key down
 key enter
 wait 1500
-say == after Enter on the first row (a GPS board: notice 'Board GPS switched on'; otherwise the node name editor opens)
+say == after Enter on the Position row (expect pos_box=1; pos_gps_row=1 on a GPS board, 0 otherwise)
 dump
 shot 51-after-enter
 key esc

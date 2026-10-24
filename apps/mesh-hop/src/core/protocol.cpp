@@ -442,6 +442,33 @@ std::optional<Packet> parse_packet(const Bytes &f)
         return ContactDeleted{r.arr<32>()};
     }
     case resp::kContactsFull: return ContactsFull{};
+    case resp::kLoginSuccess: {
+        // meshcore_py reader.py gates every field on the length; without the key prefix the push cannot be matched to a login
+        if (f.size() < 8) return std::nullopt;
+        LoginSuccess s;
+        s.permissions = r.u8();
+        s.prefix = r.arr<6>();
+        if (f.size() >= 12) {
+            s.has_clock = true;
+            s.clock = r.u32();
+        }
+        if (f.size() >= 13) {
+            s.has_acl = true;
+            s.acl = r.u8();
+        }
+        if (f.size() >= 14) {
+            s.has_fw_level = true;
+            s.fw_level = r.u8();
+        }
+        return s;
+    }
+    case resp::kLoginFail: {
+        if (f.size() < 8) return std::nullopt;
+        LoginFail lf;
+        r.u8();                                     // reserved
+        lf.prefix = r.arr<6>();
+        return lf;
+    }
     default: {
         Unknown u;
         u.code = code;
@@ -649,6 +676,13 @@ Bytes build_set_path_hash_mode(int mode)
     return {cmd::kSetPathHashMode, 0, static_cast<uint8_t>(mode)};
 }
 
+Bytes build_reset_flood_scope()
+{
+    Bytes b = {cmd::kSetFloodScope, 0};
+    b.resize(2 + 16, 0);
+    return b;
+}
+
 Bytes build_discover_request(uint8_t type_filter, uint32_t tag, bool prefix_only)
 {
     Bytes b = {cmd::kSendControlData, static_cast<uint8_t>(0x80 | (prefix_only ? 1 : 0)), type_filter};
@@ -721,6 +755,21 @@ Bytes build_set_tx_power(int dbm)
 {
     Bytes b = {cmd::kSetTxPower};
     put_u32(b, static_cast<uint32_t>(dbm));
+    return b;
+}
+
+Bytes build_send_login(const PubKey &key, const std::string &password)
+{
+    Bytes b = {cmd::kSendLogin};
+    b.insert(b.end(), key.begin(), key.end());
+    b.insert(b.end(), password.begin(), password.end());
+    return b;
+}
+
+Bytes build_logout(const PubKey &key)
+{
+    Bytes b = {cmd::kLogout};
+    b.insert(b.end(), key.begin(), key.end());
     return b;
 }
 

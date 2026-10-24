@@ -111,6 +111,42 @@ int main()
     say("msg unsolicited text");
     CHECK(wait_for(client, [&] { return model.message_count() > before; }, 3000));
 
+    // ---- report 036: logins over the real serial path. The simulator's remote nodes have the firmware's EMPTY guest password and the
+    //      admin password "password"; a verdict comes 0.8 s after SENT (est_timeout 1600 ms: the wait is 2 s); "drop 1" loses one answer.
+    {
+        PasswordStore pw(data);
+        client.set_password_store(&pw);
+        PubKey hill{};
+        for (const ContactRec *r : model.contacts_sorted())
+            if (r->c.name == "Hilltop repeater") hill = r->c.key;
+        const std::string hex = to_hex(hill);
+        auto login = [&](const std::string &password, bool guest, bool remember) {
+            const uint32_t id = client.remote_result().id;
+            const uint32_t req = client.start_login(hill, password, guest, remember);
+            return req != 0 && wait_for(client, [&] { return client.remote_result().id == id + 1; }, 5000) && client.remote_result().req == req;
+        };
+        CHECK(login("", true, true));
+        CHECK(client.remote_result().ok && client.remote_result().role == Client::RemoteRole::Guest && client.remote_result().has_fw_level &&
+              client.remote_result().fw_level == 2 && client.remote_result().has_clock && !client.remote_result().flood && !pw.read(hex));
+        CHECK(login("password", false, true));
+        CHECK(client.remote_result().ok && client.remote_result().role == Client::RemoteRole::Admin && client.remote_result().password == Client::PasswordSave::Saved);
+        CHECK(pw.read(hex) && *pw.read(hex) == "password" && client.remote_session(hill) && client.remote_session(hill)->role == Client::RemoteRole::Admin);
+        CHECK(login("nope", false, true));                                     // a wrong password: no answer at all
+        CHECK(client.remote_result().error == Client::RemoteError::Timeout && client.remote_result().sent && client.remote_result().waited_ms >= 2000);
+        say("drop 1");
+        CHECK(login("password", false, false));                                // the right one, its answer lost on the air
+        CHECK(client.remote_result().error == Client::RemoteError::Timeout);
+        say("remote-reboot");                                                  // the node restarts: an admin stays in its list
+        CHECK(login("", true, false));
+        CHECK(client.remote_result().ok && client.remote_result().role == Client::RemoteRole::Admin);
+        const uint32_t id = client.remote_result().id;
+        CHECK(client.logout(hill) != 0 && !client.remote_session(hill));
+        CHECK(wait_for(client, [&] { return client.remote_result().id == id + 1; }, 3000));
+        CHECK(client.remote_result().op == Client::RemoteOp::Logout && client.remote_result().ok);
+        CHECK(pw.forget(hex) && !pw.read(hex));
+        client.set_password_store(nullptr);
+    }
+
     // settings round trip
     RadioSettings e = model.radio_settings();
     e.freq_mhz = 868.1;

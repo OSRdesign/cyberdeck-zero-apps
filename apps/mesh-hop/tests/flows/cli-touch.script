@@ -1,0 +1,65 @@
+# Report 033, phase P5: the CLI page by touch only (no keyboard: the launcher's input.state says none, the shared rule lets the
+# on-screen keyboard show for the entry once it is tapped). The real bundled meshcore-cli (MESHHOP_MESHCLI) on Mesh Hop's relay
+# against the simulated board. Tools > CLI by taps (0.7.0), a tap on the entry brings the keyboard (at 640x480 only the entry stays
+# above it, the caption shows the line meshcore-cli is on), its keys type, Enter sends and the keyboard goes (the answer shows),
+# Help by its button, a command row tapped twice goes into the entry; 0.7.2: no To... button (the entry has its room); the header's
+# Esc leaves (Tools is back), again: Home. Run by cli_run.sh.
+keyboard off
+wait 6000
+expect text "Tools"
+tap "Tools"
+tap "Tools"
+wait 800
+expect text "CLI"
+tap "CLI"
+tap "CLI"
+waitstate cli running 40000
+waitcli "SimNode> " 5000
+say == the console by touch (expect cli=running cli_typing=0 osk=down)
+dump
+shot clit01-prompt
+check cli-touch
+tapfield 1
+wait 900
+expect osk on
+say == the entry with the on-screen keyboard (expect osk=up typing=cli; at 640x480 cli_out=0: only the entry above it)
+dump
+shot clit02-keyboard
+check cli-keyboard
+tapkey "v"
+tapkey "e"
+tapkey "r"
+waitstate cli_entry ver 1000
+shot clit03-typed
+key enter
+wait 900
+expect osk off
+waitcli "Version: v1.15.0" 15000
+say == sent: the keyboard went, the answer shows (expect osk=down cli_typing=0 cli_out=1)
+dump
+shot clit04-answer
+check cli-answer
+# Help by its button; a command row: the first tap selects it, the second puts it into the entry
+tap "Help"
+waitstate cli_help 1 2000
+shot clit05-help
+check cli-help-touch
+tap "to <name>"
+tap "to <name>"
+waitstate cli_help 0 2000
+waitstate cli_entry "to " 1000
+shot clit06-inserted
+# 0.7.2: no To... button any more: the bar is the entry and Help (a repeater is picked in Contacts > it > More > Open in CLI)
+expect notext "Toâ¦"
+shot clit06b-no-to-button
+check cli-bar-touch
+# the header's Esc: back to Tools (the session ends, Mesh Hop resumes), again: Home
+tap "Esc"
+waitstate tab Tools 3000
+waitstate cli off 2000
+waitstate relay off 8000
+dump
+tap "Esc"
+waitstate home 1 3000
+dump
+shot clit07-home-after

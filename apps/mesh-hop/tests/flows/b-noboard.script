@@ -11,6 +11,9 @@ wait 300
 shot n02-contacts-no-board
 key tab
 wait 600
+shot n02b-tools-no-board
+key tab
+wait 600
 shot n03-settings-no-board
 key tab
 wait 300

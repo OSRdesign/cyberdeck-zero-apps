@@ -546,6 +546,16 @@ public:
     bool reset_answers = true;           // false: the board formats and restarts without ever sending the OK frame
     uint8_t key_seed = 0xA0;             // the public key of the board is key_seed + 0..31
     int reboots = 0, resets = 0;
+    // report 036: SEND_LOGIN (26) and LOGOUT (29) as the companion and a remote repeater answer them (test_remote.inc)
+    bool login_supported = true;
+    bool login_table_full = false;
+    uint32_t login_est = 1600;           // est_timeout in SENT (0: none)
+    std::string admin_pw = "password", guest_pw;    // the remote nodes' passwords (the firmware's default guest password is empty)
+    int login_mode = 0;                  // 0 the verdict at once, 1 dropped (out of reach), 2 held in held_login, 3 legacy 8 byte success, 4 LOGIN_FAIL for a wrong password
+    std::vector<Bytes> held_login;
+    std::map<std::string, uint8_t> acl;  // node key hex -> this board's role in that node's access list
+    int logouts = 0;
+    bool reset_path_silent = false;      // 0.7.2: RESET_PATH gets no answer
 
     FakePeer()
     {
@@ -722,7 +732,58 @@ private:
             push({resp::kOk});
             break;
         }
-        case cmd::kSendAdvert: case cmd::kSetName: case cmd::kSetTxPower: case cmd::kResetPath: push({resp::kOk}); break;
+        case cmd::kSendLogin: {
+            if (!login_supported) { push({resp::kError, err::kUnsupported}); break; }
+            if (c.size() < 33) { push({resp::kError, err::kIllegalArg}); break; }
+            PubKey k{};
+            std::copy(c.begin() + 1, c.begin() + 33, k.begin());
+            const std::string pw(c.begin() + 33, c.end());
+            const auto it = std::find_if(contacts.begin(), contacts.end(), [&](const Contact &x) { return x.key == k; });
+            if (it == contacts.end()) { push({resp::kError, err::kNotFound}); break; }
+            if (login_table_full) { push({resp::kError, err::kTableFull}); break; }
+            Bytes sent = {resp::kMsgSent, static_cast<uint8_t>(it->out_path_len == kPathFlood ? 1 : 0), k[0], k[1], k[2], k[3]};
+            put32(sent, login_est);
+            push(sent);
+            // the remote node (simple_repeater handleLoginReq): a blank password from a key in its list gives the role back
+            const std::string kh = to_hex(k);
+            int role = -1;
+            if (pw.empty() && acl.count(kh)) role = acl[kh];
+            else if (pw == admin_pw) role = 3;
+            else if (pw == guest_pw) role = 0;
+            Bytes verdict;
+            if (role < 0) {
+                if (login_mode == 4) verdict = {resp::kLoginFail, 0, k[0], k[1], k[2], k[3], k[4], k[5]};
+            } else {
+                acl[kh] = static_cast<uint8_t>(role);
+                verdict = {resp::kLoginSuccess, static_cast<uint8_t>(role == 3 ? 1 : 0), k[0], k[1], k[2], k[3], k[4], k[5]};
+                if (login_mode != 3) {
+                    put32(verdict, 1790000500);
+                    verdict.push_back(static_cast<uint8_t>(role));
+                    verdict.push_back(2);                                // the repeater's FIRMWARE_VER_LEVEL
+                }
+            }
+            if (verdict.empty() || login_mode == 1) break;
+            if (login_mode == 2) held_login.push_back(verdict);
+            else push(verdict);
+            break;
+        }
+        case cmd::kLogout:
+            if (!login_supported) { push({resp::kError, err::kUnsupported}); break; }
+            ++logouts;
+            push({resp::kOk});
+            break;
+        case cmd::kSendAdvert: case cmd::kSetName: case cmd::kSetTxPower: push({resp::kOk}); break;
+        case cmd::kResetPath: {                                        // 0.7.2: as companion_radio: the route forgotten, or not found
+            if (reset_path_silent) break;
+            PubKey k{};
+            std::copy(c.begin() + 1, c.begin() + 33, k.begin());
+            const auto it = std::find_if(contacts.begin(), contacts.end(), [&](const Contact &x) { return x.key == k; });
+            if (it == contacts.end()) { push({resp::kError, err::kNotFound}); break; }
+            it->out_path_len = kPathFlood;
+            it->out_path.fill(0);
+            push({resp::kOk});
+            break;
+        }
         case cmd::kSetRadio:
             if (fail_set_radio) { push({resp::kError, err::kIllegalArg}); break; }
             self.freq_khz = c[1] | (c[2] << 8) | (c[3] << 16) | (static_cast<uint32_t>(c[4]) << 24);
@@ -2040,6 +2101,9 @@ static void test_preset_feed()
 #include "test_boards.inc"
 #include "test_ble.inc"
 #include "test_nodes.inc"
+#include "test_relay.inc"
+#include "test_pty.inc"
+#include "test_remote.inc"
 
 static Bytes hex_sp(std::string s)
 {
@@ -2520,6 +2584,15 @@ int main()
     test_packet_log();
     test_ble();
     test_nodes();
+    test_cli_reply_not_a_message();
+    test_relay_server();
+    test_relay();
+    test_pty_process();
+    test_remote_protocol();
+    test_remote_login();
+    test_remote_relay_and_link();
+    test_passwords();
+    test_reset_path();
     std::printf("%d checks, %d failed\n", g_checks, g_fail);
     return g_fail ? 1 : 0;
 }

@@ -1,33 +1,51 @@
 # Mesh Hop 0.2.0 phase 2: the statistics screen, the path hash size, repeat, the scheduled advert, manual add and the auto-add types,
 # the position row, reboot and factory reset (D2, D5, D6, D9, the path hash mode).  Default simulator (firmware level 11, mode 1 = 2 byte hashes).
-# Selectable Settings rows in order: Position, Board GPS, Statistics, Packet log, Node name, Preset, Frequency, Bandwidth, SF, CR, TX power, Path hash size,
-# Repeat, Message tries, Forget the route, Advert every, Advert type, Add nodes by itself, Still added by itself, Sync clock, ... Reboot, Factory reset, Undo, Save.
+# Selectable Settings rows in order (0.7.0): Name, Public key (MY CONTACT), Position, Board GPS, Node name, Preset, Frequency, Bandwidth, SF, CR,
+# TX power, Path hash size, Repeat, Message tries, Forget the route, Advert every, Advert type, Add nodes by itself, Still added by itself, Sync
+# clock, ... Reboot, Factory reset, Undo, Save. The statistics are on Tools (Nearby, Packet log, Statistics, CLI).
 wait 3500
 key enter
 wait 300
-key tab
-key tab
+key backtab
 wait 800
-say == settings: the board status shows the position (nothing else on its row); the path hash size is only in the Radio section (expect tab=Settings path_hash=1)
+say == settings: MY CONTACT first (Name, Public key); the board status shows the position (nothing else on its row); the path hash size is only in the Radio section (expect tab=Settings path_hash=1)
 dump
 shot t00-settings-top
 
-# the statistics screen, refreshed by itself every 5 s
+# the public key, whole, in a box (Down, Enter), then back
+key down
+key enter
+wait 600
+say == the public key box (expect popup=info popup_title='Public key')
+dump
+shot t00b-public-key
+key enter
+wait 300
+key up
+
+# the statistics screen on Tools (Shift+Tab, the third row), refreshed by itself every 5 s
+key backtab
+wait 600
+key home
 key down
 key down
 key enter
 wait 1500
-say == statistics (expect stats_open=1 stats=core+radio+packets)
+say == statistics (expect tab=Tools stats_open=1 stats=core+radio+packets)
 dump
 shot t01-stats
 wait 6500
 shot t02-stats-refreshed
 key esc
 wait 300
-say == Esc closes the statistics, not the app (expect stats_open=0 tab=Settings)
+say == Esc closes the statistics, not the app (expect stats_open=0 tab=Tools)
 dump
+key tab
+wait 600
 
-# the path hash size: a box with a large arrow each side, the one line of explanation, 3 bytes (Packet log, then the radio rows)
+# the path hash size: a box with a large arrow each side, the one line of explanation, 3 bytes (from Name: the radio rows)
+key down
+key down
 key down
 key down
 key down
@@ -120,8 +138,10 @@ key down
 key down
 shot t08-settings-contacts
 
-# the position row opens the Position box (it reads the board again); position.script tests the box itself
+# the position row opens the Position box (it reads the board again); position.script tests the box itself (the third row)
 key home
+key down
+key down
 key enter
 wait 600
 say == the Position box (expect pos_box=1)

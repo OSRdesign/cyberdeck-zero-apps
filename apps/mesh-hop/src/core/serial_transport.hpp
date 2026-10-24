@@ -23,6 +23,7 @@ struct SerialCandidate {
     uint16_t pid = 0;
     std::string vendor;
     std::string product;
+    std::string serial;          // the USB serial number string ("1C:DB:D4:A8:9A:70"), "" when the device has none
 };
 
 /* Family of boards behind a USB id, or "" when unknown (informational only). */
@@ -30,6 +31,12 @@ std::string guess_board(uint16_t vid, uint16_t pid);
 /* Lists the serial ports under dev_dir (ttyACM*, ttyUSB*) with ids from sys_class_tty. */
 std::vector<SerialCandidate> list_serial_ports(const std::string &dev_dir = "/dev",
                                                const std::string &sys_class_tty = "/sys/class/tty");
+/* The device behind one port (a udev alias such as /dev/serial/by-id/... is resolved first): its USB ids and strings from
+ * sys_class_tty; no ids for a port that is not a USB device (a pty). path is kept as given. */
+SerialCandidate describe_port(const std::string &path, const std::string &sys_class_tty = "/sys/class/tty");
+/* Which USB device this is, to tell two boards on the same port apart: "303a:1001/1C:DB:D4:A8:9A:70" (vid:pid/serial),
+ * "1a86:7523" for a device without a serial number, "" when the USB ids are unknown. */
+std::string usb_identity(const SerialCandidate &c);
 /* Picks one candidate (see the file comment); nullptr when the list is empty. last_ids is "vid:pid" or "". */
 const SerialCandidate *choose_port(const std::vector<SerialCandidate> &list, const std::string &last_ids);
 
