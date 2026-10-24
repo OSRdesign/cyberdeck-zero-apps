@@ -1,14 +1,14 @@
 # App guidelines for CyberdeckZero Launcher
 
 How to write an app that installs from **Settings > Apps** and runs on every board of the project, on the Pi Zero 2 W
-deck first. Read it before you start, tick the [checklist](#13-final-checklist) before you publish. It links the
+deck first. Read it before you start, tick the [checklist](#13-final-checklist) before you publish; [section 14](#14-lessons-learned) has what went wrong on the deck. It links the
 reference documents instead of copying them; when a number here and the launcher disagree, the launcher wins (read the
 tokens at run time, never copy them).
 
 The app contract (environment variables, state files, `.desktop` keys, requests to the launcher) is specified in the
 launcher repository, and that text is normative:
 [APP-CONTRACT.md](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/APP-CONTRACT.md); what the
-launcher gives apps as of v0.8.6 is summarised in [section 3](#3-the-launcher-contract). Hosting and
+launcher gives apps as of v0.8.7 is summarised in [section 3](#3-the-launcher-contract). Hosting and
 the Settings > Apps flow: [HOSTING-APPS.md](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/HOSTING-APPS.md).
 The starting point of a native app: [`apps/cyberdeck-app-template`](../apps/cyberdeck-app-template/README.md) on the shared code in
 [`apps/_common`](../apps/_common/README.md). Repository overview: [README](../README.md).
@@ -148,7 +148,7 @@ A touch-only board (Pi 3A+) and a keyboard-only use must each reach **every** fu
 | Rule | Detail |
 |---|---|
 | Keyboard first | Up/Down move, Enter or Right opens, Esc or Left goes back, Tab between fields |
-| Touch is complete | tap = move highlight, tap on the highlighted row = open, drag = scroll; no gesture-only action, no hover, no long-press-only action |
+| Touch is complete | tap = move highlight, tap on the highlighted row = open, drag = scroll; no gesture-only action, no hover, no long-press-only action (a 3 s hold that opens a box listing every action is allowed: [section 14](#14-lessons-learned)) |
 | Esc / back everywhere | at a sub-page it goes back; at the root a **short Esc quits the app** (owner decision 2026-10-13; touch-only users need it), by key or by the header's Esc button |
 | Hold Esc 3 s | the launcher's watchdog kills a stuck app (SIGTERM, then SIGKILL after a grace). Handle SIGTERM/SIGINT/SIGHUP and exit cleanly; `cdk::run()` does |
 | Letter shortcuts | compare the physical key code, not ASCII (W, E, R, T share evdev codes with the arrows); never make a letter the only way to a function |
@@ -188,7 +188,7 @@ Full text: [APP-CONTRACT.md](https://github.com/OSRdesign/cyberdeck-zero-launche
 - The C reader (`cp0_app_contract.h`, no LVGL) is copy-ready; a native app already uses it through `cp0_lvgl`.
 - An app **never writes** `status.state` or `board.state` either, and never creates `launcher.sock`.
 
-APP-CONTRACT.md is the normative text; the sections below summarise what changed for apps up to launcher **v0.8.6**
+APP-CONTRACT.md is the normative text; the sections below summarise what changed for apps up to launcher **v0.8.7**
 and how to use it. A native app gets a feature only when it is built against a launcher commit that has it
 ([launcher versions](#launcher-versions-and-what-each-added-for-apps)).
 
@@ -297,16 +297,26 @@ fallback). One request line, one reply line, at most 254 bytes. Replies are `ok 
 - **The volume, mute and brightness keys are the launcher's** while your app is in front (`KEY_VOLUMEUP`,
   `KEY_VOLUMEDOWN`, `KEY_MUTE`, `KEY_BRIGHTNESSUP`, `KEY_BRIGHTNESSDOWN`; launcher 0.8.6, no rebuild of the app needed).
   The keys still reach the app: **do not act on them too**, or the step doubles.
+- **Media-key devices (launcher 0.8.7).** The launcher also reads input devices that carry these five keys but cannot
+  type (on the FZ-M1 tablet "Panasonic Laptop Support", "Video Bus" and "Intel Virtual Buttons"; the nodes read on other
+  boards are listed in the launcher's 0.8.7 release notes), and acts on them while an app is in front. Only those five
+  keys are taken from such a device; it never counts as a keyboard (`input.state` and the on-screen keyboard rule do not
+  change), is never grabbed, and a press seen on two devices counts once. No rebuild of the app is needed.
+- **The Windows (Super) key is the launcher's too** (contract sections 5 and 13). A tap alone goes home (hides the
+  app); from 0.8.7 a double tap (second press within 0.45 s) or a hold of 0.6 s opens the app switcher. Give Super no
+  meaning of your own. `KEY_F14` is reserved (the FZ-M1's rotation-lock button sends Super+F14 in one BIOS mode): do not
+  use it either.
 - **Showing the level.** The launcher draws nothing over a fullscreen app. An app that wants to show the level draws
   its own bar from `status.state` (`volume`, `mute`, `brightness_pct`), polled with the rest of the status, not through
   `launcher.sock`.
 - Not verified on boards (launcher 0.8.6 notes): the keys inside apps and `dim allow`. `board.state`, `beep` and
-  `toast` were checked over ssh on the HackBerry and the FZ-M1 tablet.
+  `toast` were checked over ssh on the HackBerry and the FZ-M1 tablet. Launcher 0.8.7 notes: on the FZ-M1 the owner
+  checked the volume buttons and the Windows key double tap; the new devices on the HackBerry and the deck were not.
 
 ### Launcher versions and what each added for apps
 
 The apps build against one launcher commit, [`apps/_common/LAUNCHER_REF`](../apps/_common/LAUNCHER_REF) (today the
-**v0.8.5** commit `d0cb456`). Launcher features that live in the launcher process (the feed's values, the media keys,
+**v0.8.5** commit `d0cb456`; the launcher itself is at **v0.8.7**, which changed nothing an app is built with). Launcher features that live in the launcher process (the feed's values, the media keys,
 the socket's server) work with any build; features that live in `cp0_lvgl` (the strip's drawing and reading, the
 readers, the client) reach an app only at a pin that has them. **Using a 0.8.6 feature from `cp0_lvgl` needs a re-pin
 to the v0.8.6 commit `aef009b`** (and then the rebuild of every app, as above); an app can also copy the plain-C
@@ -319,7 +329,13 @@ files of the contract and the client.
 | 0.8.3 | the strip shows a `power_supply` battery | re-pin |
 | 0.8.4 | the strip reads a fuel gauge (`$APPLAUNCH_GAUGE`, HackBerry MAX17048); the launcher detects battery, backlight and sound at run time | re-pin |
 | 0.8.5 (`d0cb456`, **the current pin**) | `status.state` (`wifi`, `wifi_pct`, `eth`, `bt`, `battery`, `battery_state`) and `cp0_app_status_read()`; the strip reads the feed; Wi-Fi interface found under any name | re-pin (done: the six apps rebuilt at 0.8.5) |
-| 0.8.6 (`aef009b`) | `board.state`; `status.state` gains `volume`, `mute`, `brightness_pct`; `launcher.sock`, `cp0_app_client.[ch]`, `cyberdeckzero-ctl`; volume and brightness keys acted on by the launcher while an app is in front; `X-Permissions` reserved | the files and the keys: no rebuild; the readers and the client in `cp0_lvgl`: re-pin. The strip did not change, so no forced re-pin |
+| 0.8.6 (`aef009b`) | `board.state`; `status.state` gains `volume`, `mute`, `brightness_pct`; `launcher.sock`, `cp0_app_client.[ch]`, `cyberdeckzero-ctl`; volume and brightness keys of keyboards acted on by the launcher while an app is in front; `X-Permissions` reserved | the files and the keys: no rebuild; the readers and the client in `cp0_lvgl`: re-pin. The strip did not change, so no forced re-pin |
+| 0.8.7 ([release page](https://github.com/OSRdesign/cyberdeck-zero-launcher/releases/tag/v0.8.7)) | the five media keys are also read from input devices that are not keyboards and act while an app is in front; the Windows key double tap or a 0.6 s hold opens the app switcher (apps give it no meaning); `KEY_F14` reserved; fix of a launcher crash at start (sound-player race, also in 0.8.6). Apps do not change | nothing to rebuild, no new pin (the strip's drawing did not change) |
+
+**What needs a re-pin, in short.** An app pins a launcher commit. A change to the **drawing** of the shared widgets (the
+status strip) needs a re-pin and a rebuild of every app. A change to the **data** the launcher publishes (state-file
+values) or to the **keys** the launcher reads (media keys, Super) lives in the launcher process and reaches every app
+at once. A new reader or client in `cp0_lvgl` reaches an app only at a pin that has it.
 
 ### Started without the launcher (ssh, a script, an older launcher)
 
@@ -617,4 +633,75 @@ Copy into the pull request and tick.
 > **Icon upgrades:** a launcher older than PR #46 (2026-10-14) reads an icon's size once and keeps it until it restarts, so an app
 > update that ships an icon of a different size can look cropped on its tile; a current launcher reloads the tile within about 3 s
 > when the icon file changes. Keep the icon at 100x100 from the first version on.
+
+## 14. Lessons learned
+
+Problems met on the deck, 2026-10-22 to 2026-10-25 (Mesh Hop 0.7.x, Markdown Notes 0.1.x). Each one is a rule now.
+
+### The on-screen keyboard: the rule, and showing its state
+
+Physical keyboard first, never summoned by hand ([section 2](#on-screen-keyboard)). For 600 s after a Bluetooth keyboard
+goes away the on-screen keyboard stays off (the keyboard is probably asleep); after that it shows by itself in the field
+being typed into. To test it: **Settings > System > On-screen keyboard**, and `input.state` in `$APPLAUNCH_STATE_DIR`
+(`keyboards`, `bt_gone`, `vkb`); in the headless harness the scene commands `keyboards 0|1` and `osk force`. An app with
+text fields should show the rule's state in its own Settings, so that a user who sees no keyboard can tell why. Markdown
+Notes has an *On-screen keyboard* line there ("allowed: no", "a keyboard is connected", "Bluetooth keyboard asleep 8 min
+more") and is the pattern to copy. A tap on a field asks for the keyboard each time; the shared rule still decides.
+
+### Options by a 3 s hold, instead of a toolbar
+
+On 640x480 a bar of 7 mm buttons costs rows of the page. Mesh Hop (a chat's or a contact's options) and Markdown Notes
+(the preview and the editor) open instead a message box listing **every action** after a 3 s hold on a row or on the
+text (a bar fills while the finger is down), and show each action's Ctrl key in grey for keyboard users.
+
+| Use a bar when | Use the hold box when |
+|---|---|
+| a few actions are used all the time (Send, Save) | many actions, each used now and then |
+| the page is a form or a list that needs all its height anyway | the page is text to read or write, and its height is the point |
+
+The trade-off: a hold is slow and not discoverable, and the rule of section 2 is *no long-press-only action*. The owner
+decided it for the Notes app (2026-10-24): all the actions are in the box, so touch reaches every one, and keyboards have a
+Ctrl key for each. Keep to that: a hold is **never the only way for an essential action** unless the box lists all of them;
+a line under the title tells how to open it ("Hold 3 s: options" without a keyboard, "Ctrl+O: options" with one); a tap
+and a drag keep their normal meaning (a hold never moves the cursor); Esc closes the box.
+
+### No heavy work at start on a Pi Zero 2 W
+
+Do not start CPU-heavy background work (Python bytecode compilation, hashing, indexing, a cache build) when the app
+connects to hardware. Mesh Hop 0.6.0 and 0.7.0 ran the CLI's warm-up (`meshcore-cli -v`, Python compiling its files for
+10-20 s) as soon as a node connected on USB, and the whole deck reset; 0.5.3, without it, connected fine. Why the board
+reset under that load (power, USB or both) is not known. So: start such work **on demand**, when the page that needs it
+opens; at idle priority (`nice`, `ionice`); and with an **environment switch that turns it off** for diagnostics
+(`MESHHOP_NO_WARMUP=1`). A board that resets right after a connect: try the switch first.
+
+### After a hard reset, do not trust the last log lines
+
+An app logs to stderr and nothing is fsynced. When the board resets hard (power, brown-out), the last seconds before the
+reset are usually missing from the log, so its last lines are **not** where it went wrong. Look at what started in the
+20 to 30 s before them, and test again with the suspected work switched off.
+
+### Learned names and keys: the device, not the port
+
+What an app remembers about a USB device (the name the board answered with, a setting, a key) is stored with the device's
+identity (USB id and serial number), never with the port path (`/dev/ttyACM0`): the same path is another board tomorrow.
+Show the remembered value only while that device is plugged in. Mesh Hop 0.7.1 fixed a node list that showed the name of
+the board that had been on the port before.
+
+### Text size: LVGL's textarea lays the whole text out again at every key
+
+`lv_textarea` (and `cp0::ui::TextField` with `multiline`) sets the whole text and lays it out again on every key, so the
+cost grows with the note. Markdown Notes caps the editor at **128 KB** and reads **1 MB** in the preview only; larger files
+are not opened. The cap is to be tuned on the board (the typing speed in a large note on the Zero 2 W is its board test
+B4); a custom editor on a line buffer is the fallback if it lags. Cap every text you edit, and write the cap in the README.
+
+### Building and publishing the packages
+
+- **The amd64 binary.** Rebuild it with every release (the arm64 build does not touch `root.amd64/`). The steps, with a
+  private root of the -dev packages when `sudo apt install` is not possible, are in the
+  [Mesh Hop README](../apps/mesh-hop/README.md), paragraph *Building the amd64 package*.
+- **Publishing.** Use `python3 tools/make_registry.py --no-build` to ship the `.deb` files that were tested, and splice
+  only your own entry into `registry.json` and `registry-amd64.json`: a plain run rebuilds every package and rewrites every
+  `updated_at` (section 5).
+- **File modes.** Packaging from WSL on `/mnt/c` gives mode 755 to every file. Package with **Windows Python** from the
+  checkout, so that the files get 644 and the binaries 755.
 
