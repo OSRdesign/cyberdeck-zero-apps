@@ -1,0 +1,127 @@
+# Markdown help (0.1.2): from the editor with an edit not saved yet (Ctrl+H) and back (Esc): the text, the cursor and the
+# scroll as they were, nothing saved while the help showed, the autosave after; the header's Esc and Ctrl+H close it too.
+# From the preview by the options box (a 3 s hold) and back: the same scroll. The help is read only: a tap on an example
+# box or link touches no note. It follows the text size (Settings > Text size: Large).
+seed big "Big.md" 20
+seed note "Packing.md" tasks.md
+wait 900
+# ---- from the editor, an edit not saved yet
+key ctrl-p
+type big
+key enter
+wait 800
+expect state page preview
+key ctrl-e
+wait 800
+expect state page editor
+key ctrl-end
+type  Typed before the help.
+expect state dirty 1
+# (the textarea scrolls to the cursor with an animation: settled before the mark)
+wait 700
+mark
+key ctrl-h
+wait 500
+expect state page help
+expect state title "Markdown help"
+expect text "What you type, then how it looks"
+shot 01-help-top
+check help
+wait 2000
+expect state dirty 1
+expect file "Big.md" lacks "Typed before the help."
+key pgdn
+wait 200
+shot 02-help-lists
+key pgdn
+key pgdn
+wait 200
+shot 03-help-links
+key end
+wait 300
+expect span "Ctrl+H: this help"
+shot 04-help-keys
+key esc
+wait 500
+expect state page editor
+expect same cursor
+expect same ed_scroll
+# the edit, unsaved under the help, is saved now (the autosave was waiting for the editor)
+wait 1900
+expect state dirty 0
+expect state last_save ok
+expect file "Big.md" contains "Typed before the help."
+# the header's Esc goes back too; Ctrl+H in the help closes it
+key ctrl-h
+wait 400
+expect state page help
+tap "Esc"
+wait 500
+expect state page editor
+key ctrl-h
+wait 400
+key ctrl-h
+wait 400
+expect state page editor
+# ---- from the preview: the options box (a 3 s hold), Markdown help, back at the same scroll
+key ctrl-e
+wait 800
+expect state page preview
+key pgdn
+key pgdn
+wait 300
+mark
+holdat 0.5 0.5 3300
+wait 400
+expect state popup menu
+expect text "Markdown help"
+expect text "Ctrl+H"
+shot 05-preview-options
+tap "Markdown help"
+wait 600
+expect state page help
+# read only: an example's box and link do nothing to any note (Tab rings the first box: it comes into view)
+key tab
+wait 300
+taptask 0
+wait 300
+expect state notice "An example: in your notes a tap on it acts"
+expect state page help
+key tab
+key tab
+key tab
+wait 300
+tapspan "Another note"
+wait 400
+expect state page help
+expect file "Another note.md" missing
+key esc
+wait 800
+expect state page preview
+expect state note "Big.md"
+expect same scroll
+# ---- the text size: Large in Settings, the help follows it
+key esc
+wait 400
+key end
+key enter
+wait 500
+expect state page settings
+key enter
+wait 400
+key right
+key enter
+wait 400
+expect state text_size large
+key esc
+wait 400
+key ctrl-p
+type packing
+key enter
+wait 600
+mark
+key ctrl-h
+wait 600
+expect state page help
+expect same preview_px
+shot 06-help-large

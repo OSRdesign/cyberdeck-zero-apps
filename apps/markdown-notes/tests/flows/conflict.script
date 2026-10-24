@@ -1,0 +1,53 @@
+# Flow 7, a conflict on disk: the note changes on disk (another device's sync) while it is edited; the autosave finds it
+# and asks "Changed on disk: Keep mine / Keep theirs"; the version not kept is written beside the note as
+# "<name> (deck 2026-10-24 1403).md". Then the same on leaving (Esc).
+seed note "Field log.md" field.md
+seed setting open_in editor
+wait 900
+key ctrl-p
+type field log
+key enter
+wait 500
+expect state page editor
+key ctrl-end
+type Added on the deck.
+disk write "Field log.md" theirs.md
+wait 1800
+expect state popup confirm
+expect state popup_title "Changed on disk"
+expect state last_save conflict
+shot 01-conflict
+check conflict
+tap "Keep mine"
+wait 400
+expect state last_save kept-mine
+expect state dirty 0
+expect file "Field log.md" contains "First line.\nAdded on the deck."
+expect copy "Field log.md" contains "Written on the laptop meanwhile."
+shot 02-kept-mine
+# Keep theirs: the note is read again, ours goes beside it
+key ctrl-end
+type  Second edit.
+disk text "Field log.md" "# Field log\n\nThe laptop again.\n"
+wait 1800
+expect state popup confirm
+tap "Keep theirs"
+wait 400
+expect state last_save kept-theirs
+expect file "Field log.md" contains "The laptop again."
+expect file "Field log.md" lacks "Second edit."
+expect copy "Field log.md" contains "Added on the deck. Second edit."
+shot 03-kept-theirs
+# on leaving: Esc saves, finds the change, asks; the answer then goes back
+key ctrl-end
+type Third edit.
+disk text "Field log.md" "# Field log\n\nA third device.\n"
+key esc
+wait 400
+expect state popup confirm
+expect state page editor
+tap "Keep mine"
+wait 500
+expect state page home
+expect file "Field log.md" contains "Third edit."
+expect copy "Field log.md" contains "A third device."

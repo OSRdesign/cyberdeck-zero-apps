@@ -1,0 +1,67 @@
+# Flow 6, delete: a 3 s hold on a note's row (the cue, then the options), Delete note, Yes: the note moves to the vault's
+# .trash folder and leaves the list; Delete from the editor's More keeps the text as typed; Ctrl+O is the hold's key.
+seed vault
+wait 900
+tap "All notes"
+tap "All notes"
+wait 300
+tap "Projects"
+tap "Projects"
+wait 400
+key end
+wait 200
+hold "Parts list" 1500 01-hold-cue
+wait 300
+expect state popup none
+hold "Parts list" 3300
+wait 400
+expect state popup menu
+shot 02-options
+tap "Delete note"
+wait 400
+expect state popup confirm
+expect text "Parts list moves to the .trash folder of the vault."
+shot 03-confirm
+check confirm
+tap "Yes"
+wait 500
+expect state popup none
+expect file "Projects/Parts list.md" missing
+expect file ".trash/Parts list.md" exists
+expect notext "Parts list"
+shot 04-deleted
+# from the editor: More > Delete note (the last note of the folder)
+key end
+key enter
+wait 500
+key ctrl-e
+wait 400
+key ctrl-end
+type  Last words.
+# the options box by a 3 s hold on the text (no bars); its last row, Delete note
+holdat 0.5 0.5 3300
+wait 400
+expect state popup menu
+key end
+key enter
+wait 400
+expect state popup confirm
+tap "Yes"
+wait 500
+expect state page folder
+expect file "Projects/Antenna ideas.md" missing
+expect file ".trash/Antenna ideas.md" contains "Last words."
+# Ctrl+O on a note, No keeps it
+key esc
+wait 300
+key end
+key ctrl-o
+wait 400
+expect state popup menu
+key enter
+wait 400
+expect state popup confirm
+key enter
+wait 300
+expect state popup none
+expect file "Welcome.md" exists

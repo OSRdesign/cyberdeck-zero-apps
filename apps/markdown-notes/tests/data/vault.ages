@@ -1,0 +1,12 @@
+# The ages of the fixture vault's notes (seconds before the test clock, or before now for the scenes): newest first
+# in the lists. Read by tests/flows/script_runner.cpp (seed vault) and by build.sh (the scenes' copy).
+Deck build log.md 7200
+Welcome.md 86400
+Shopping list.md 259200
+Projects/Antenna ideas.md 90000
+Projects/Parts list.md 270000
+Projects/Cyberdeck/Mesh Hop notes.md 3600
+Projects/Cyberdeck/Battery.md 400000
+Projects/Mesh/Mesh antenna ideas.md 172800
+Projects/Mesh/Meshtastic vs MeshCore.md 600000
+Journal/2026-10-23.md 100000

@@ -1,0 +1,52 @@
+# Markdown Notes: the editor at the four sizes (the whole body is the text: no bar; owner decision 2026-10-24), a note
+# opened straight into it (this settings folder says open_in=editor: build.sh writes it), the line under the title
+# ending with the way to the options: "Ctrl+O: options" with a keyboard, "Hold 3 s: options" without one; the options
+# box reached by touch alone (the on-screen keyboard's Ctrl, then o), the Markdown help (Ctrl, then h) and back.
+# Nothing is typed (every size shares the vault).
+title Markdown Notes: the editor, its options box
+env NOTES_VAULT /tmp/markdown-notes-scene-vault
+env XDG_CONFIG_HOME /tmp/markdown-notes-scene-config-editor
+sizes 640x480 800x480 720x720 1280x800
+
+keyboards 1
+wait 700
+key down
+key enter
+wait 400
+key end
+key up
+key up
+key enter
+wait 700
+expect text "Editor  ·  400 bytes  ·  Ctrl+O: options"
+expect osk off
+shot editor
+keyboards 0
+wait 1500
+expect osk on
+shot editor-touch
+tapkey "Ctrl"
+tapkey "o"
+wait 600
+expect text "Preview"
+expect text "Tick task on this line"
+expect text "Ctrl+Enter"
+shot editor-options
+key esc
+wait 600
+# the Markdown help by touch alone: the keyboard's Ctrl, then h; Esc comes back to the editor
+tapkey "Ctrl"
+tapkey "h"
+wait 800
+expect text "Markdown help"
+expect text "What you type, then how it looks"
+shot help
+key esc
+wait 600
+expect text "Editor  ·  400 bytes  ·  Hold 3 s: options"
+tap "Esc"
+wait 400
+tap "Esc"
+wait 400
+tap "Esc"
+expect quit

@@ -1,0 +1,161 @@
+# Every screen of the approved mock-ups, for the README and the review: Home, a folder, Open or create, the preview (the
+# showcase note too: headings, bold, the synthetic italic, lists, tasks, links, quotes, code, accents and CJK), the
+# editor, More, Settings, a choice, New note, a note's options, Note info. The fixture vault (tests/data/vault).
+seed vault
+wait 900
+expect state page home
+expect text "Notes"
+expect text "Open or create…"
+expect text "Ctrl+P"
+expect text "2026-10-24"
+shot 01-home
+check home
+# All notes: the vault root (New note here, FOLDERS, NOTES newest first)
+tap "All notes"
+tap "All notes"
+wait 400
+expect state page folder
+expect text "All notes"
+expect text "FOLDERS"
+expect text "NOTES"
+expect text "edited 2 h ago"
+shot 02-all-notes
+check all-notes
+tap "Projects"
+tap "Projects"
+wait 400
+expect state folder Projects
+expect state title "Notes > Projects"
+expect text "2 notes  ·  2 folders"
+shot 03-folder
+check folder
+key esc
+wait 300
+# the preview of the mock-up's note
+tap "Deck build log"
+tap "Deck build log"
+wait 600
+expect state page preview
+expect state title "Deck build log"
+expect has "Ctrl+O: options"
+shot 04-preview
+check preview
+key tab
+wait 200
+expect state ring 0
+shot 05-preview-ring
+key end
+wait 200
+shot 06-preview-end
+# the options box of the preview: a 3 s hold on the note (the cue shows after half a second)
+holdat 0.5 0.6 1500 06b-preview-hold-cue
+wait 300
+holdat 0.5 0.6 3300
+wait 400
+expect state popup menu
+expect state popup_title "Options for Deck build log"
+expect text "Edit"
+expect text "Ctrl+E"
+shot 06c-preview-options
+check preview-options
+# the editor
+tap "Edit"
+wait 500
+expect state page editor
+expect has "Ctrl+O: options"
+shot 07-editor
+check editor
+holdat 0.5 0.5 3300
+wait 400
+expect state popup menu
+expect text "Preview"
+expect text "Tick task on this line"
+expect text "Ctrl+Enter"
+shot 08-editor-options
+check editor-options
+key down
+key down
+key down
+key enter
+wait 400
+expect state popup info
+shot 09-note-info
+key esc
+wait 300
+key esc
+wait 400
+expect state page folder
+# the showcase note
+key home
+key end
+tap "Welcome"
+tap "Welcome"
+wait 600
+expect state page preview
+shot 10-showcase
+key pgdn
+wait 200
+shot 11-showcase-2
+key pgdn
+wait 200
+shot 12-showcase-3
+key pgdn
+wait 200
+shot 13-showcase-4
+key esc
+wait 300
+# a note's options (Ctrl+O on the selected note)
+key ctrl-o
+wait 400
+expect state popup menu
+shot 14-note-options
+key esc
+wait 300
+key esc
+wait 300
+# Open or create
+key ctrl-p
+wait 400
+expect state page open
+type mesh ant
+wait 300
+expect text "Create “mesh ant”"
+expect text "Mesh antenna ideas"
+shot 15-open
+check open
+key esc
+wait 300
+# New note
+key ctrl-n
+wait 400
+expect state page new
+shot 16-new-note
+check new-note
+type bad:name
+key enter
+wait 300
+shot 17-new-note-refused
+key esc
+wait 300
+# Settings and a choice
+key end
+key enter
+wait 400
+expect state page settings
+expect text "Folder"
+expect text "Text size"
+expect text "Open notes in"
+expect text "0.1.2"
+shot 18-settings
+check settings
+key enter
+wait 400
+expect state popup choice
+shot 19-text-size
+key esc
+wait 300
+key esc
+wait 300
+expect state page home
+key esc
+expect quit

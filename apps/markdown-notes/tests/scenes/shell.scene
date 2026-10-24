@@ -1,0 +1,23 @@
+# Markdown Notes: Home at every supported size, on a copy of the fixture vault (build.sh puts tests/data/vault in
+# /tmp/markdown-notes-scene-vault; the scenes only read it) and a settings folder of their own (XDG_CONFIG_HOME), so a
+# scene never touches ~/Notes. The header title check: Home says "Notes" whole at every size (the shared header cuts
+# longer titles at 640x480: "Markdown Notes" would show as "Markdown..."). Esc at Home ends the app.
+title Markdown Notes: Home, the header title, Esc quits
+env NOTES_VAULT /tmp/markdown-notes-scene-vault
+env XDG_CONFIG_HOME /tmp/markdown-notes-scene-config
+sizes 640x480 800x480 720x720 1024x600 1280x720 1280x800
+
+wait 700
+expect text "Notes"
+expect notext "Markdown..."
+expect text "Esc"
+expect text "Open or create…"
+expect text "All notes"
+expect text "Recent"
+shot home
+expect noquit
+key down
+expect noquit
+# a short Esc at Home ends the app (owner decision 2026-10-13)
+key esc
+expect quit

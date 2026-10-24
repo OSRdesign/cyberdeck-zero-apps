@@ -1,0 +1,54 @@
+# The caps (report 037 section 2.4): a 100 KB note opens in the preview (at most 400 blocks, then the muted "Preview
+# truncated" line) and in the editor (under the 128 KB cap), and what is typed at its end is saved; a 200 KB note opens
+# read-only in the preview (Edit says why); a file that is not UTF-8 opens read-only too, its bytes never rewritten.
+seed big "Big 100.md" 100
+seed big "Big 200.md" 200
+seed text "Latin1.md" "# Caf\xe9\n\nNot UTF-8.\n"
+wait 900
+key ctrl-p
+type big 100
+key enter
+wait 1500
+expect state page preview
+expect state truncated 1
+expect state blocks 400
+key end
+wait 400
+expect text "^Preview truncated"
+shot 01-truncated
+key ctrl-e
+wait 1500
+expect state page editor
+key ctrl-end
+type The end.
+wait 1900
+expect state last_save ok
+expect file "Big 100.md" contains "a plain item\n\nThe end."
+shot 02-big-editor
+key esc
+wait 600
+key ctrl-p
+type big 200
+key enter
+wait 1500
+expect state page preview
+expect state caption "Preview  ·  read only, over 128 KB  ·  Ctrl+O: options"
+shot 03-read-only
+key ctrl-e
+wait 300
+expect state page preview
+expect state notice "Read only: notes over 128 KB are not edited here"
+key esc
+wait 400
+key ctrl-p
+type latin1
+key enter
+# (the notice of Edit stays 4 s in the grey line)
+wait 4000
+expect state page preview
+expect state caption "Preview  ·  read only, not UTF-8  ·  Ctrl+O: options"
+shot 04-not-utf8
+key ctrl-e
+wait 300
+expect state page preview
+expect file "Latin1.md" contains "Caf\xe9"

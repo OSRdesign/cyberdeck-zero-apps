@@ -1,0 +1,55 @@
+# Flow 3, preview and tick: task boxes ticked in the preview by Tab + Enter and by a tap (one byte changes, the atomic
+# save, the preview drawn again in place), a nested task too; in the editor by Ctrl+Enter on the cursor's line and by
+# More > Tick task on this line.
+seed note "Packing.md" tasks.md
+wait 900
+key ctrl-p
+type packing
+key enter
+wait 500
+expect state page preview
+expect state boxes 4
+shot 01-preview
+check preview
+key tab
+wait 200
+expect state ring 0
+key enter
+wait 300
+expect state last_save ok
+expect file "Packing.md" contains "- [x] Charger"
+expect state ring 0
+shot 02-ticked-by-keys
+taptask 1
+wait 300
+expect file "Packing.md" contains "- [x] Spare keyboard"
+taptask 2
+wait 300
+expect file "Packing.md" contains "- [ ] Deck"
+taptask 3
+wait 300
+expect file "Packing.md" contains "  - [x] Nested task under the deck"
+shot 03-ticked-by-taps
+# the editor: Ctrl+Enter on the line of the cursor
+key ctrl-e
+wait 400
+expect state page editor
+key down
+key down
+key ctrl-enter
+wait 1700
+expect file "Packing.md" contains "- [ ] Charger"
+shot 04-editor-ctrl-enter
+key ctrl-o
+wait 400
+expect state popup menu
+tap "Tick task on this line"
+wait 1700
+expect file "Packing.md" contains "- [x] Charger"
+# not a task line: a notice
+key ctrl-home
+key ctrl-enter
+wait 200
+expect state notice "No task box or link here"
+key esc
+wait 300

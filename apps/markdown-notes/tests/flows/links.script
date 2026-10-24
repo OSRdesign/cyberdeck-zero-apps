@@ -1,0 +1,70 @@
+# Flow 4, links: in the preview a wikilink to a missing note creates it and opens it in the editor; one to an existing
+# note follows it (the preview of that note); a web address shows in a box (no browser); Tab rings the links and Enter
+# follows; in the editor Ctrl+Enter follows the link under the cursor.
+seed note "Hub.md" hub.md
+seed note "Target.md" target.md
+wait 900
+key ctrl-p
+type hub
+key enter
+wait 500
+expect state page preview
+expect state note Hub.md
+shot 01-hub
+tapspan "Missing note"
+wait 600
+expect state page editor
+expect state note "Missing note.md"
+expect file "Missing note.md" exists
+shot 02-created
+type Made from a link.
+key esc
+wait 500
+expect state page preview
+expect state note Hub.md
+expect file "Missing note.md" contains "Made from a link."
+tapspan "the target"
+wait 600
+expect state page preview
+expect state note Target.md
+shot 03-followed
+key esc
+wait 400
+expect state note Hub.md
+tapspan "https://example.org/news"
+wait 400
+expect state popup info
+expect state popup_title "Web address"
+expect text "https://example.org/news"
+shot 04-web-address
+check web-address
+key esc
+wait 300
+# keys: Tab, Tab (the second link), Enter
+key tab
+key tab
+wait 200
+expect state ring 1
+shot 05-ring-link
+key enter
+wait 600
+expect state note Target.md
+key esc
+wait 400
+# the editor: Ctrl+Enter inside [[Missing note]]
+key ctrl-e
+wait 400
+key down
+key down
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key ctrl-enter
+wait 600
+expect state page preview
+expect state note "Missing note.md"
