@@ -1,0 +1,164 @@
+# The on-screen keyboard when the physical keyboard goes away while a field is open (the owner's case on the deck, 0.1.0),
+# through the app's real policy: input.state written as the launcher writes it (a new file, a new gen), read by
+# _common's osk_policy on the monotonic clock, the shared rule (cp0_app_osk_allowed). For the editor, Open or create and
+# New note: a field asks for the keyboard while a keyboard is there (nothing shows, the request is held: osk_req); the
+# keyboard goes away: the on-screen keyboard shows by itself within about 1.5 s; a keyboard comes back: it goes. A
+# Bluetooth keyboard that went away 2 min ago counts as asleep for 10 min (the shared rule: every app the same): nothing
+# shows, a tap on the field asks again (still nothing), Settings > On-screen keyboard says why; gone 700 s ago: it shows.
+seed note "Field log.md" field.md
+wait 900
+# ---- the editor
+key ctrl-p
+type field log
+key enter
+wait 500
+expect state page preview
+key ctrl-e
+wait 500
+expect state page editor
+expect osk_allowed no
+expect osk off
+expect state osk_req editor
+expect state kbd 1
+keyboard off gone 30
+wait 400
+expect osk_allowed yes
+expect osk on
+expect state kbd 0
+expect has "Hold 3 s: options"
+shot 01-editor-keyboard-gone
+check editor-keyboard-gone
+keyboard on
+wait 400
+expect osk off
+expect state osk_req editor
+expect state kbd 1
+# a Bluetooth keyboard gone 2 min ago: asleep; a tap on the text asks again: still nothing
+keyboard off btgone 120
+wait 400
+expect osk_allowed no
+expect osk off
+tapat 0.5 0.4
+wait 600
+expect osk off
+expect state osk_req editor
+# its 10 minutes are over (gone 700 s ago): the keyboard shows by itself
+keyboard off btgone 700
+wait 400
+expect osk_allowed yes
+expect osk on
+# a 3 s hold on the text with the keyboard up: the options box (the keyboard goes for it, and comes back after it); the
+# cursor does not move
+mark
+holdat 0.5 0.25 3300
+wait 400
+expect state popup menu
+expect same cursor
+key esc
+wait 600
+expect state popup none
+expect osk on
+# the keyboard's Esc puts it away (the request goes); a tap on the text asks again
+tapkey "Esc"
+wait 500
+expect osk off
+expect state osk_req -
+tapat 0.5 0.3
+wait 600
+expect osk on
+expect state osk_req editor
+tap "Esc"
+wait 600
+expect state page home
+expect osk off
+# ---- Open or create
+keyboard on
+wait 300
+key home
+key enter
+wait 500
+expect state page open
+expect osk off
+expect state osk_req open
+keyboard off gone 30
+wait 400
+expect osk on
+shot 02-open-keyboard-gone
+check open-keyboard-gone
+keyboard on
+wait 400
+expect osk off
+expect state osk_req open
+# its Enter put the keyboard away; a tap on the field asks again
+keyboard off gone 30
+wait 400
+expect osk on
+tapkey "<enter>"
+wait 500
+expect osk off
+tapfield 1
+wait 600
+expect osk on
+expect state osk_req open
+tap "Esc"
+wait 500
+expect state page home
+# ---- New note
+keyboard on
+wait 300
+key home
+key down
+key down
+key down
+key down
+key enter
+wait 500
+expect state page new
+expect osk off
+expect state osk_req new
+keyboard off gone 30
+wait 400
+expect osk on
+shot 03-new-keyboard-gone
+check new-keyboard-gone
+keyboard on
+wait 400
+expect osk off
+keyboard off btgone 120
+wait 400
+expect osk off
+tapfield 1
+wait 600
+expect osk off
+expect state osk_req new
+keyboard off gone 30
+wait 400
+expect osk on
+tap "Esc"
+wait 500
+expect state page home
+# ---- Settings > On-screen keyboard says what the rule says, and why
+keyboard on
+wait 300
+key end
+key enter
+wait 500
+expect state page settings
+key end
+key end
+wait 300
+expect text "On-screen keyboard"
+expect text "allowed: no"
+expect text "^a keyboard is connected"
+shot 04-settings-keyboard-there
+keyboard off btgone 120
+wait 1200
+expect text "allowed: no"
+expect text "^Bluetooth keyboard asleep 8 min more"
+shot 05-settings-bluetooth-asleep
+check settings-osk
+keyboard off gone 30
+wait 1200
+expect text "allowed: yes"
+expect text "input.state keyboards=0 vkb=auto"
+shot 06-settings-allowed

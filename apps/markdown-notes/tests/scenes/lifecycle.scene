@@ -1,0 +1,56 @@
+# Multitasking (X-Background=freeze; the launcher's APP-CONTRACT section 13): the harness plays the launcher with the
+# toolkit's helper (apps/_common, cp0_app_lifecycle_lvgl.h). Hidden: not one flush, keys and taps ignored (a short Esc
+# at Home would end the app); what was typed while frozen is dropped at show; shown: the whole screen repainted, the page
+# as it was; close ends the app through its normal exit (as Esc at Home), which saves an editor's text. The save of a
+# note being typed into on hide and at the end: tests/flows (the autosave, Esc, the header's Esc).
+title Markdown Notes: hidden, shown, stale input, close
+lifecycle
+env NOTES_VAULT /tmp/markdown-notes-scene-vault
+env XDG_CONFIG_HOME /tmp/markdown-notes-scene-config
+sizes 640x480 1280x720
+
+wait 600
+shot before
+expect visible
+expect text "Notes"
+expect text "Esc"
+
+hide
+expect hidden
+key esc
+key enter
+tapxy 0.5 0.4
+wait 400
+expect nowrite
+expect noquit
+
+stale esc
+stale down
+show
+expect visible
+wait 300
+expect repaint
+expect noquit
+expect text "Notes"
+expect text "Open or create…"
+shot after
+
+# a note open in the preview: hidden and shown, it is still there
+key down
+key enter
+wait 400
+key end
+key enter
+wait 600
+expect text "Preview  ·  edited 3 days ago  ·  Hold 3 s: options"
+hide
+expect hidden
+show
+expect visible
+wait 300
+expect repaint
+expect text "Preview  ·  edited 3 days ago  ·  Hold 3 s: options"
+shot preview-after
+
+close
+expect quit

@@ -1,0 +1,66 @@
+# Markdown Notes: the pages of the approved mock-ups at the four sizes (the deck, the Pi 3A+'s 800x480, the HackBerry's
+# 720x720, the FZ-M1 tablet's 1280x800): a folder, the preview (the whole body: no bar), Recent, Open or create,
+# Settings (nothing typed: every size reads the same vault at once). The editor: editor.scene. Every shot runs the
+# shared layout checks.
+title Markdown Notes: folder, preview, Recent, Open, Settings
+env NOTES_VAULT /tmp/markdown-notes-scene-vault
+env XDG_CONFIG_HOME /tmp/markdown-notes-scene-config
+sizes 640x480 800x480 720x720 1280x800
+
+# a keyboard is there: no on-screen keyboard (that is scenes/keyboard.scene)
+keyboards 1
+wait 700
+key down
+key enter
+wait 400
+expect text "All notes"
+expect text "FOLDERS"
+shot all-notes
+key down
+key down
+key enter
+wait 400
+expect text "Cyberdeck"
+shot folder
+key esc
+wait 300
+key end
+key up
+key up
+key enter
+wait 600
+expect text "Preview  ·  edited 2 h ago  ·  Ctrl+O: options"
+shot preview
+key tab
+wait 200
+shot preview-ring
+key esc
+wait 400
+key esc
+wait 300
+# back at Home, All notes still selected: Recent is the next row
+key down
+key enter
+wait 400
+expect text "The 10 notes edited last"
+shot recent
+key esc
+wait 300
+key home
+key enter
+wait 400
+type mesh
+wait 300
+expect text "Mesh antenna ideas"
+shot open
+key esc
+wait 300
+key end
+key enter
+wait 400
+expect text "Text size"
+shot settings
+key esc
+wait 300
+key esc
+expect quit

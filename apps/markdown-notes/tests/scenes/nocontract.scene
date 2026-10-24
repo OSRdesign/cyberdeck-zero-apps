@@ -1,0 +1,15 @@
+# Started by hand (ssh, a script): no launcher contract variables and no input.state (APP-CONTRACT section 7). The app
+# still starts, sizes itself from the layout service and opens its vault.
+title Markdown Notes: started without the launcher
+nocontract
+env NOTES_VAULT /tmp/markdown-notes-scene-vault
+env XDG_CONFIG_HOME /tmp/markdown-notes-scene-config
+sizes 640x480 720x720
+
+wait 600
+shot home-nocontract
+expect text "Notes"
+expect text "Esc"
+expect noquit
+key esc
+expect quit

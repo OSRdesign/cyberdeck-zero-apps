@@ -1,0 +1,79 @@
+# Flow 2, Esc back and reopen: a note of the vault opens in the preview (the default), Edit, a line typed, Esc at once
+# (before the autosave): the save on the way back; opened again it shows the line; Ctrl+P finds it by name; with the
+# setting "Open notes in: Editor" it opens in the editor; the header's Esc saves too.
+seed vault
+wait 900
+tap "All notes"
+tap "All notes"
+wait 400
+tap "Deck build log"
+tap "Deck build log"
+wait 500
+expect state page preview
+key ctrl-e
+wait 400
+expect state page editor
+key ctrl-end
+key enter
+type Reopened on the deck.
+key esc
+wait 400
+expect state page folder
+expect state last_save ok
+expect file "Deck build log.md" contains "three screws. Notes from the forum: <https://example.org/hinge>\n\nReopened on the deck."
+shot 01-back-in-folder
+key enter
+wait 500
+expect state page preview
+expect state note "Deck build log.md"
+key end
+wait 200
+expect span "Reopened on the deck."
+shot 02-reopened
+key esc
+wait 300
+key esc
+wait 300
+# by name
+key ctrl-p
+wait 300
+type deck bu
+wait 200
+expect state sel_id create
+key down
+expect state sel_id "note:Deck build log.md"
+shot 03-by-name
+key enter
+wait 500
+expect state page preview
+expect state depth 2
+key esc
+wait 300
+# Settings > Open notes in: Editor
+key end
+key enter
+wait 300
+key down
+key down
+key enter
+wait 300
+expect state popup choice
+key right
+key enter
+wait 300
+expect state open_in editor
+key esc
+wait 300
+key ctrl-p
+type shopping list
+key enter
+wait 500
+expect state page editor
+expect state note "Shopping list.md"
+type Added.
+wait 100
+# the header's Esc saves and goes back
+tap "Esc"
+wait 500
+expect state page home
+expect file "Shopping list.md" contains "Added.# Shopping list"

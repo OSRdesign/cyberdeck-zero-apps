@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Notes
+Exec=/usr/share/APPLaunch/bin/markdown-notes
+Terminal=false
+Icon=share/images/markdown-notes.png
+Type=Application
+X-Fullscreen=true
+X-MinSize=640x480
+X-Background=freeze

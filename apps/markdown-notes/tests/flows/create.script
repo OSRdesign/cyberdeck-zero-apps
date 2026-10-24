@@ -1,0 +1,54 @@
+# Flow 1, create and type (report 037 section 6): Home > New note, a name, Enter: the note is made empty and opens in the
+# editor; what is typed is saved 1.5 s after the last key (the title's dot goes); Tab writes a real tab; Ctrl+S saves now;
+# Esc goes back.
+wait 900
+tap "New note"
+tap "New note"
+wait 400
+expect state page new
+expect text "Create"
+shot 01-new-note
+check new-note
+type Antenna ideas
+wait 100
+shot 02-name
+key enter
+wait 500
+expect state page editor
+expect state note "Antenna ideas.md"
+expect file "Antenna ideas.md" exists
+expect state title "Antenna ideas"
+type # Antenna ideas
+key enter
+key enter
+type A folding dipole on the lid.
+key enter
+type - [ ] measure the SWR
+wait 200
+expect state dirty 1
+expect state title "Antenna ideas ●"
+shot 03-typing
+check typing
+wait 1700
+expect state dirty 0
+expect state last_save ok
+expect state title "Antenna ideas"
+expect file "Antenna ideas.md" contains "# Antenna ideas\n\nA folding dipole on the lid.\n- [ ] measure the SWR"
+shot 04-saved
+# Tab at the start of the line: a real tab in the file (shown as a glyph); Ctrl+S saves at once
+key home
+key tab
+key ctrl-s
+wait 300
+expect state notice Saved
+expect file "Antenna ideas.md" contains "\n\t- [ ] measure the SWR"
+shot 05-tab
+# Shift+Tab takes it off again
+key backtab
+key ctrl-s
+wait 300
+expect file "Antenna ideas.md" contains "\n- [ ] measure the SWR"
+key esc
+wait 400
+expect state page home
+expect state notes 1

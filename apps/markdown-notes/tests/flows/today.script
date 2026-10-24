@@ -1,0 +1,36 @@
+# Flow 5, Today: Home > Today's note makes 2026-10-24.md at the vault root (the test clock) and opens it in the editor;
+# Ctrl+T inserts the date and time; Ctrl+D later opens the same note again; More > Insert date and time.
+wait 900
+expect text "2026-10-24"
+tap "Today’s note"
+tap "Today’s note"
+wait 500
+expect state page editor
+expect state note 2026-10-24.md
+expect file "2026-10-24.md" exists
+type Market at 9.
+key enter
+key ctrl-t
+wait 1700
+expect file "2026-10-24.md" contains "Market at 9.\n2026-10-24 14:03"
+shot 01-today
+key esc
+wait 400
+expect state page home
+expect state notes 1
+key ctrl-d
+wait 500
+expect state page editor
+expect state note 2026-10-24.md
+key ctrl-end
+key enter
+key ctrl-o
+wait 400
+key down
+key down
+key enter
+wait 1700
+expect file "2026-10-24.md" contains "2026-10-24 14:03\n2026-10-24 14:03"
+shot 02-stamp-from-more
+key esc
+wait 300

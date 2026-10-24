@@ -1,0 +1,104 @@
+# Flow 8, typing with the on-screen keyboard (no physical keyboard: input.state says none): a touch-only pass. New note by
+# taps, the name on the keyboard's keys, its Enter creates; the editor with the keyboard up (the bar hidden), text typed
+# (as the keyboard injects it); the keyboard's Esc puts it away (the bar comes back); Preview, Edit by taps; the header's
+# Esc saves and goes back with the keyboard up; Open or create: only the field above the keyboard, its Enter shows the
+# matches; a keyboard connecting takes it away.
+keyboard off
+wait 900
+tap "New note"
+tap "New note"
+wait 600
+expect state page new
+expect osk on
+shot 01-new-osk
+check new-osk
+tapkey "d"
+tapkey "e"
+tapkey "c"
+tapkey "k"
+wait 100
+shot 02-name-osk
+tapkey "<enter>"
+wait 600
+expect state page editor
+expect file "deck.md" exists
+expect osk on
+expect state kbd 0
+expect has "Hold 3 s: options"
+shot 03-editor-osk
+check editor-osk
+tapkey "h"
+tapkey "i"
+tapkey "<space>"
+type typed on the screen.
+wait 1800
+expect file "deck.md" contains "hi typed on the screen."
+shot 04-typed
+tapkey "Esc"
+wait 500
+expect osk off
+expect state page editor
+shot 05-keyboard-away
+check editor-keyboard-away
+# the options by a 3 s hold on the text (the cue, then the box): Preview
+holdat 0.5 0.5 1500 05b-hold-cue
+wait 300
+expect state popup none
+holdat 0.5 0.5 3300
+wait 400
+expect state popup menu
+expect text "Preview"
+shot 05c-editor-options
+tap "Preview"
+wait 600
+expect state page preview
+expect osk off
+expect has "Hold 3 s: options"
+shot 06-preview
+holdat 0.5 0.6 3300
+wait 400
+expect state popup menu
+expect text "Edit"
+shot 06b-preview-options
+tap "Edit"
+wait 600
+expect state page editor
+expect osk on
+type More
+key enter
+tap "Esc"
+wait 600
+expect state page home
+expect osk off
+expect file "deck.md" contains "More\nhi typed on the screen."
+drag 0.5 0.35 0.5 0.9
+# Open or create: the field alone above the keyboard; its Enter puts the keyboard away and shows the matches
+tap "Open or create…"
+tap "Open or create…"
+wait 600
+expect state page open
+expect osk on
+shot 07-open-osk
+check open-osk
+tapkey "d"
+tapkey "e"
+tapkey "<enter>"
+wait 500
+expect osk off
+expect state page open
+expect text "deck"
+shot 08-open-matches
+tap "deck"
+tap "deck"
+wait 600
+expect state page preview
+# a keyboard connects: no on-screen keyboard in the editor any more
+keyboard on
+key ctrl-e
+wait 600
+expect state page editor
+expect osk off
+expect state kbd 1
+expect has "Ctrl+O: options"
+key esc
+wait 400
