@@ -14,6 +14,10 @@ the state files, requests such as a beep or a toast, the launcher versions and t
 [section 3](docs/APP-GUIDELINES.md#3-the-launcher-contract) of the guidelines; the normative text is the launcher's
 [APP-CONTRACT.md](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/APP-CONTRACT.md).
 
+For developers: the guidelines end with [lessons learned on the deck](docs/APP-GUIDELINES.md#14-lessons-learned) (the
+on-screen keyboard rule, options by a hold, heavy work at start, logs after a reset, text size, building the packages),
+and the shared code of the native apps is described in [`apps/_common`](apps/_common/README.md).
+
 This repository is both the **app source** of that menu and a **template**: copy it and you can host your own
 apps for the deck in a few minutes, with nothing but a public GitHub repository.
 
@@ -89,7 +93,7 @@ Your app is a normal **aarch64 Linux executable**. **New apps are native full-sc
 runtime: they fill the whole screen, **640x480 and up** (the minimum screen for new apps; `X-MinSize=640x480` in the
 `.desktop` file), and take keys and touch directly. The [app guidelines](docs/APP-GUIDELINES.md) give the screen
 sizes, the input rules, the packaging and the tests. Native apps build against one launcher commit,
-[`apps/_common/LAUNCHER_REF`](apps/_common/LAUNCHER_REF) (today launcher v0.8.5); what each launcher version adds for
+[`apps/_common/LAUNCHER_REF`](apps/_common/LAUNCHER_REF) (today the v0.8.5 commit; the launcher itself is at v0.8.7, which needs no re-pin); what each launcher version adds for
 apps, and when it needs a rebuild: [launcher versions](docs/APP-GUIDELINES.md#launcher-versions-and-what-each-added-for-apps).
 
 Wrapped (compat) apps, such as the first ones here ([LAN Scan](apps/lanscan/README.md),

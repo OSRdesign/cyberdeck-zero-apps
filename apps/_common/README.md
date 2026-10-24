@@ -14,7 +14,7 @@ The starting point of a new app is `apps/cyberdeck-app-template` (a draft that u
 |---|---|
 | `app.{hpp,cpp}` | `AppSpec` (id, title, minimum screen = `X-MinSize`, UI builder), `start()` / `stop()` (what both runners do once the display exists), `request_quit()`, the keypad input group, the "needs WxH" notice for a screen under the minimum (an older launcher ignores `X-MinSize`), `hidden()` / `leave_to_home()` (multitasking) |
 | `platform.{hpp,cpp}` | the device runner `cdk::run()`: cp0_lvgl's display backend switched to the native display, every keyboard read, SIGTERM / SIGINT / SIGHUP end the loop cleanly, `--version`; started by hand it still uses the launcher's backend (`APPLAUNCH_DISPLAY=dpi-scaled`); with the launcher's control socket, the multitasking lifecycle (`cp0_app_lifecycle_device_start()`: hide / show / close, below) |
-| `osk_policy.{hpp,cpp}` | the app-side on-screen keyboard rule: `cp0_app_osk_allowed()` on `input.state`, looked at once a second at most and parsed again only when the file changed (a new `gen`); without the file `APPLAUNCH_OSK` and the keyboards of `/proc/bus/input/devices` |
+| `osk_policy.{hpp,cpp}` | the app-side on-screen keyboard rule: `cp0_app_osk_allowed()` on `input.state`, looked at once a second at most and parsed again only when the file changed (a new `gen`); never shown by hand, and off for 600 s after a Bluetooth keyboard went away (tests and the Settings line to show the rule: [guidelines, section 14](../../docs/APP-GUIDELINES.md#14-lessons-learned)); without the file `APPLAUNCH_OSK` and the keyboards of `/proc/bus/input/devices` |
 | `async_run.{hpp,cpp}` | background commands: fork + exec in their own process group, lines and the end delivered on the LVGL thread in order (`lv_async_call` under `lv_lock()`), timeout, cancel, PDEATHSIG, `shutdown()` at exit |
 | `build_info.hpp` | the version stamp (`cdk_build_info.h` from `build_app.sh`) |
 | `build_app.sh` | cross (aarch64, stripped, into the app's `root/`; with `--arch amd64` x86-64, native, into `root.amd64/`) and host (headless harness, unit tests, scenes, contact sheets) builds in WSL, the launcher pin check, the stamp |
@@ -81,6 +81,11 @@ and compare the header shots with the launcher's. Details, and what else the lau
 without a rebuild; using the v0.8.6 readers or the socket client of `cp0_lvgl` (`cp0_app_board_read()`,
 `cp0_app_client.h`) needs a re-pin to the v0.8.6 commit `aef009b`, then a rebuild of every app on both architectures.
 `_common` has no launcher-request wrapper yet.
+
+Launcher **v0.8.7** (media keys of non-keyboard devices, the Windows key opening the app switcher, the sound-player
+crash fix) lives in the launcher process: it needs no re-pin and no rebuild, and `LAUNCHER_REF` stays at `d0cb456`.
+What needs a re-pin is a change to the drawing of the shared widgets (the status strip), not a change to the data or the
+keys the launcher publishes ([guidelines, launcher versions](../../docs/APP-GUIDELINES.md#launcher-versions-and-what-each-added-for-apps)).
 
 ## Multitasking (hidden and shown again)
 
