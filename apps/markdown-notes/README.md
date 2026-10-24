@@ -1,6 +1,6 @@
 # Markdown Notes
 
-Package `markdown-notes`, title "Markdown Notes", version 0.1.2 (a draft: not published yet). Part of
+Package `markdown-notes`, title "Markdown Notes", version 0.1.2. Part of
 [cyberdeck-zero-apps](../../README.md).
 
 Notes as plain Markdown files in one folder on the deck, the **vault** (`~/Notes` by default): write them, read them
@@ -10,8 +10,8 @@ git ([Sync](#sync)); the app does not sync by itself. A native app (kind A of th
 its own screens on the launcher's `cp0_lvgl`, every function by touch and by keyboard. Design and decisions: launcher
 report 037 (`docs/dev/reports/037-notes-app.md`), slice N1 "write and read notes".
 
-**Status: draft, slice N1 complete in the headless harness** (unit tests, scenes at four sizes, ten scripted flows);
-not yet tested on a board ([`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md)).
+**Status: first release, slice N1** (unit tests, scenes at four sizes and ten scripted flows in the headless harness;
+board test plan: [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md).
 
 ## Screenshots
 
@@ -168,7 +168,7 @@ wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/markdown-notes/build.sh s
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/markdown-notes/build.sh ui                  # the flows at four sizes
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/markdown-notes/build.sh cross               # aarch64 into root/
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/markdown-notes/build.sh cross --arch amd64  # x86-64 into root.amd64/
-python3 tools/make_registry.py --only markdown-notes --out <a folder outside packages/>               # the .deb (draft)
+python3 tools/make_registry.py --only markdown-notes --out <a folder outside packages/>               # the .deb
 ```
 
 - `tests/unit`: the core (vault walk, names, text codec, atomic save, changed-on-disk check, trash, settings, ranking,
@@ -194,7 +194,7 @@ changed it meanwhile.
 
 ## Changes
 
-- 0.1.2 (draft): Markdown help (Ctrl+H, or the options box of the preview and the editor): what to type and how it
+- 0.1.2: Markdown help (Ctrl+H, or the options box of the preview and the editor): what to type and how it
   looks, what is not supported yet, the keys; read only, drawn by the preview at the chosen text size; Esc returns to
   the note as it was. (Not done: inserting an example at the editor's cursor from the help.)
 - 0.1.1 (draft): no bars (owner decision): the preview and the editor take the whole page; a 3 s hold on the note
