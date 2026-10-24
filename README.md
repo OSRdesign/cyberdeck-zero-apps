@@ -25,7 +25,7 @@ Each app has its own page with the full description, keys, requirements, known l
 | --- | --- | --- | --- |
 | [**LAN Scan**](apps/lanscan/README.md) (`lanscan`) | 0.1.3 | arm64 | Lists the devices on your Wi-Fi network (IP, MAC, vendor, name) and scans the open ports of one of them. |
 | [**Markdown Notes**](apps/markdown-notes/README.md) (`markdown-notes`) | 0.1.2 | arm64, amd64 | Notes as plain Markdown files in a folder on the deck (tile name "Notes"): write them, read them with headings, lists, task boxes and links, open any note by name, and keep the folder in sync with Syncthing, rsync or git. Category Productivity, no network. |
-| [**Mesh Hop**](apps/mesh-hop/README.md) (`mesh-hop`) | 0.5.3 | arm64, amd64 | Full-screen client for MeshCore LoRa mesh networks: chats, contacts, nearby nodes, radio settings, packet log and position, with a MeshCore companion radio board on USB, Bluetooth LE or IP, by touch or keyboard, on any screen from 640x480 up. |
+| [**Mesh Hop**](apps/mesh-hop/README.md) (`mesh-hop`) | 0.7.2 | arm64, amd64 | Full-screen client for MeshCore LoRa mesh networks: chats, contacts, repeater login, the meshcore-cli command line over the mesh, nearby nodes, radio settings, packet log and position, with a MeshCore companion radio board on USB, Bluetooth LE or IP, by touch or keyboard, on any screen from 640x480 up. |
 | [**Net Toolbox**](apps/net-toolbox/README.md) (`net-toolbox`) | 0.4.3 | arm64, amd64 | The tools you reach for when the network misbehaves: a step-by-step diagnosis, ping, traceroute, DNS lookup, port check, HTTP check, public IP, whois and the interfaces, a speed test with a bufferbloat grade, Wake-on-LAN, a Bluetooth radar, a local device scanner, Wi-Fi networks with their channels and a Wi-Fi walk test. It replaces LAN Scan and Wi-Fi Survey. |
 | [**RSS Reader**](apps/rss-reader/README.md) (`rss-reader`) | 0.1.3 | arm64, amd64 | A reader of RSS and Atom text feeds: pin your favorite news, tech and science feeds from a catalog of about 260 by country and topic, or add any site by its address, then read the articles full screen with their pictures, and save them to read offline, by touch or keyboard, on any screen from 640x480 up. |
 | [**Serial Console**](apps/serial-console/README.md) (`serial-console`) | 0.4.5 | arm64, amd64 | Finds your USB-serial adapters and boards, tells what is plugged in and what is behind it, recommends the settings, and talks to it. |
@@ -244,4 +244,6 @@ The repository is MIT. Each app page lists its own credits and licences in full;
   the LVGL based `cp0_lvgl` runtime (MIT); see [its page](apps/markdown-notes/README.md).
 * **Mesh Hop** speaks the MeshCore protocol (MeshCore firmware and protocol, MIT; meshcore_py, MIT, as the
   reference of the wire format). Other MeshCore clients (two MIT, two GPL) were feature references only, no code was copied from
-  the GPL ones; see [its page](apps/mesh-hop/README.md).
+  the GPL ones. Its CLI page bundles, unmodified, meshcore-cli (MIT) and its libraries meshcore_py (MIT), pycayennelpp (MIT),
+  pyserial-asyncio-fast (BSD-3-Clause), pycryptodome (BSD-2-Clause and Unlicense), prompt-toolkit (BSD-3-Clause) and wcwidth
+  (MIT), each with its licence file in the package; see [its page](apps/mesh-hop/README.md).
