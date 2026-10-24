@@ -1,0 +1,141 @@
+# Simulator options: --remote-cases (cli_run.sh, SIMCTL=1)
+# Mesh Hop 0.7.0 (report 036 slice S1): the Repeater page and the CLI share one session on the node. The real bundled meshcore-cli
+# (MESHHOP_MESHCLI) on Mesh Hop's relay against the simulated board with the remote cases: two "Hilltop repeater" (keys 9091... and
+# 3031...), "909192" (a name that looks like the first one's key: 3839...), "Old Mill  relay 2" (two spaces: 4041...), "Club room".
+# Contacts > Search <9091 > the first Hilltop: an admin login on the page (the password remembered), More > Open in CLI: meshcore-cli
+# gets `to <its 64 hex key>` once at its first prompt (0.7.2: the output shows "to Hilltop repeater <909192", not the 64 digits), and
+# `ver` answers with no `login` typed (the node lists this deck as admin); Esc goes back to the Repeater page. 0.7.2 (the To... picker
+# is gone): Open in CLI from the Repeater pages of the second Hilltop (the same name), "Old Mill  relay 2" (spaces) and "909192" (a
+# hex-looking name) sends each one's own full key. More's order: Details, Open in CLI, Reset path, Forget password.
+wait 6000
+key down
+key enter
+wait 1200
+type /
+wait 300
+type <9091
+wait 600
+key enter
+wait 1000
+say == the Repeater page of the first Hilltop, its login box (expect rep=1 login=1 sel_key=9091)
+dump
+type password
+key enter
+waitstate rep_role admin 9000
+wait 300
+say == admin on the page, the password saved (expect rep_role=admin pw_saved=1)
+dump
+
+# More > Open in CLI (the second row): the CLI page, then `to <the full key>` at the first prompt, once
+type m
+wait 600
+key down
+key enter
+waitstate cli running 40000
+waitcli "to Hilltop repeater <909192" 15000
+waitcli "Hilltop repeater|" 15000
+expect noclitext "909192939495969798999a9b9c9d9e9f"
+expect notext "Contacts > a repeater > More > Open in CLI, or type: to <name>"
+say == meshcore-cli is on the repeater (expect cli=running cli_to='' cli_back='90919293', the prompt SimNode/Hilltop repeater|0>; the 64 digits not shown)
+dump
+shot clr01-open-in-cli
+check open-in-cli
+# ver: the repeater answers with no login typed (the page's login is the same entry of its access list)
+type ver
+key enter
+waitcli "v1.15.0-sim" 15000
+expect noclitext "Password"
+say == ver answered, no password asked
+dump
+shot clr02-ver-no-login
+# Esc: the session ends, back to the Repeater page it was opened from
+key esc
+waitstate tab Contacts 3000
+waitstate rep 1 2000
+waitstate cli off 2000
+waitstate relay off 8000
+say == back on the Repeater page (expect tab=Contacts rep=1 rep_name='Hilltop repeater' rep_role=admin)
+dump
+shot clr03-back-to-repeater
+
+# the second Hilltop (the same name, key 3031...): Contacts' Search again (it closes on the way to the CLI), its own page, the
+# box closed (Esc), More > Open in CLI: its own key
+key esc
+wait 500
+type /
+wait 300
+type <3031
+wait 600
+key enter
+wait 1000
+key esc
+wait 400
+say == the second Hilltop's page (expect rep=1 login=0 rep_name='Hilltop repeater')
+dump
+type m
+wait 600
+key down
+key enter
+waitstate cli running 40000
+waitcli "to Hilltop repeater <303132" 15000
+waitcli "SimNode/Hilltop repeater" 15000
+waitstate cli_back 30313233 1000
+expect noclitext "303132333435363738393a3b3c3d3e3f"
+shot clr04-same-name
+key esc
+waitstate rep 1 3000
+waitstate relay off 8000
+
+# a name with two spaces
+key esc
+wait 500
+type /
+wait 300
+type mill  relay
+wait 600
+key enter
+wait 1000
+key esc
+wait 400
+type m
+wait 600
+key down
+key enter
+waitstate cli running 40000
+waitcli "to Old Mill  relay 2 <404142" 15000
+waitcli "SimNode/Old Mill  relay 2" 15000
+waitstate cli_back 40414243 1000
+shot clr05-spaces
+key esc
+waitstate rep 1 3000
+waitstate relay off 8000
+
+# a hex-looking name: found by its name (the key of "909192" is 3839...), not taken for a key
+key esc
+wait 500
+type /
+wait 300
+type 909192
+wait 600
+key enter
+wait 1000
+key esc
+wait 400
+say == the page of "909192" (expect rep_name='909192')
+dump
+type m
+wait 600
+key down
+key enter
+waitstate cli running 40000
+waitcli "to 909192 <38393a" 15000
+waitcli "SimNode/909192>" 15000
+waitstate cli_back 38393a3b 1000
+say == three repeaters, three keys
+dump
+shot clr06-hex-name
+key esc
+waitstate tab Contacts 3000
+waitstate rep 1 2000
+waitstate relay off 8000
+dump

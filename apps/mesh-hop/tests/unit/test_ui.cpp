@@ -3,6 +3,7 @@
 #include "key_bridge.hpp"
 #include "png_writer.hpp"
 #include "ui_logic.hpp"
+#include "ui_repeater.hpp"
 
 #include "model.hpp"
 #include "presets.hpp"
@@ -360,8 +361,8 @@ static void test_navigation()
     s.editor_open = false; s.detail_open = false; s.tab = Tab::Settings;
     CHECK(back_action(s) == BackAction::ExitHint);
     CHECK(step_tab(Tab::Chats, 1) == Tab::Map && step_tab(Tab::Settings, 1) == Tab::Chats && step_tab(Tab::Chats, -1) == Tab::Settings);
-    CHECK(step_tab(Tab::Map, -1) == Tab::Chats && step_tab(Tab::Contacts, 2) == Tab::Settings);
-    CHECK(std::strcmp(tab_name(Tab::Terminal), "Terminal") == 0);
+    CHECK(step_tab(Tab::Map, -1) == Tab::Chats && step_tab(Tab::Contacts, 3) == Tab::Settings && step_tab(Tab::Contacts, 1) == Tab::Tools);   // 0.7.0: Tools
+    CHECK(std::strcmp(tab_name(Tab::Cli), "CLI") == 0 && std::strcmp(tab_name(Tab::Tools), "Tools") == 0);
 }
 
 static void test_status()
@@ -794,15 +795,15 @@ static void test_navigation_popup()
     CHECK(back_action(s) == BackAction::ClosePopup);
     s.popup_open = false;
     CHECK(back_action(s) == BackAction::CancelEditor);
-    // Tab walks the five tabs in a loop, both ways
+    // step_tab walks the six tabs in a loop, both ways (0.7.0: Tools; the page loop of Tab is next_page, test_repeater_ui)
     Tab t = Tab::Chats;
-    for (int i = 0; i < 5; ++i) t = step_tab(t, 1);
+    for (int i = 0; i < kTabCount; ++i) t = step_tab(t, 1);
     CHECK(t == Tab::Chats && step_tab(Tab::Settings, 1) == Tab::Chats && step_tab(Tab::Chats, -1) == Tab::Settings);
-    Tab seen[5];
+    Tab seen[kTabCount];
     t = Tab::Chats;
-    for (int i = 0; i < 5; ++i) { seen[i] = t; t = step_tab(t, 1); }
-    for (int i = 0; i < 5; ++i)
-        for (int j = i + 1; j < 5; ++j) CHECK(seen[i] != seen[j]);
+    for (int i = 0; i < kTabCount; ++i) { seen[i] = t; t = step_tab(t, 1); }
+    for (int i = 0; i < kTabCount; ++i)
+        for (int j = i + 1; j < kTabCount; ++j) CHECK(seen[i] != seen[j]);
 }
 
 static void test_channel_status_text()
@@ -883,9 +884,9 @@ static void test_packet_log_rows()
     log.start();
     for (int i = 0; i < 5; ++i) log.add(lp.pkt, 1);
     CHECK(packet_log_status(log) == "Capturing: 3 / 3, 2 dropped");
-    // navigation: Esc closes the packet log; the row is in Settings, connected or not
+    // navigation: Esc closes the packet log; 0.7.0: it is on the Tools page (connected or not), no longer a Settings row
     NavState n;
-    n.tab = Tab::Settings;
+    n.tab = Tab::Tools;
     n.packet_log_open = true;
     CHECK(back_action(n) == BackAction::ClosePacketLog);
     n.popup_open = true;
@@ -893,7 +894,10 @@ static void test_packet_log_rows()
     SettingsContext ctx;
     bool found = false;
     for (const SRowSpec &s : settings_layout(ctx)) found = found || s.kind == SRowKind::PacketLog;
-    CHECK(found && settings_row_selectable(SRowKind::PacketLog));
+    CHECK(!found && settings_row_selectable(SRowKind::PacketLog));
+    ToolsContext tc;
+    const std::vector<ToolRow> tools = tools_rows(tc);
+    CHECK(tools.size() == 4 && tools[1].item == ToolItem::PacketLog && tools[1].title == "Packet log" && tools[1].caption == "capture off");
 }
 
 static void test_hex_key_editor()
@@ -1034,6 +1038,8 @@ static void test_history_ui()
 #include "test_phase2_ui.inc"
 #include "test_pages_ui.inc"
 #include "test_nodes_ui.inc"
+#include "test_cli_ui.inc"
+#include "test_repeater_ui.inc"
 
 int main()
 {
@@ -1065,6 +1071,8 @@ int main()
     test_describe_changes();
     test_pages_ui();
     test_node_rows();
+    test_cli_ui();
+    test_repeater_ui();
     std::printf("ui: %d checks, %d failed\n", g_checks, g_fail);
     return g_fail ? 1 : 0;
 }

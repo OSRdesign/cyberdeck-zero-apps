@@ -37,7 +37,7 @@ static void test_pages_ui()
         for (SRowKind k : {SRowKind::Info, SRowKind::GpsNotice, SRowKind::StatsNotice, SRowKind::PathHashNotice,
                            SRowKind::AutoAddNotice, SRowKind::ChannelsNotice})
             CHECK(settings_row_aff(k) == Aff::Info);
-        for (SRowKind k : {SRowKind::Position, SRowKind::Stats, SRowKind::PacketLog, SRowKind::Channel, SRowKind::AddChannel})
+        for (SRowKind k : {SRowKind::Position, SRowKind::Stats, SRowKind::PacketLog, SRowKind::Channel, SRowKind::AddChannel, SRowKind::MyName, SRowKind::MyKey})
             CHECK(settings_row_aff(k) == Aff::Open);
         for (SRowKind k : {SRowKind::Name, SRowKind::Preset, SRowKind::Freq, SRowKind::Bw, SRowKind::Sf, SRowKind::Cr, SRowKind::Tx,
                            SRowKind::RetryAttempts, SRowKind::ResetAfter, SRowKind::BoardGps, SRowKind::PathHash, SRowKind::Repeat,
@@ -47,7 +47,7 @@ static void test_pages_ui()
                            SRowKind::HistoryOthers, SRowKind::Reboot, SRowKind::FactoryReset, SRowKind::Undo, SRowKind::Save})
             CHECK(settings_row_aff(k) == Aff::Action);
         // every selectable row (Enter does something) has a marker; the rows the keys skip are read-outs
-        for (int i = 0; i <= static_cast<int>(SRowKind::PacketLog); ++i) {
+        for (int i = 0; i <= static_cast<int>(SRowKind::MyKey); ++i) {
             const SRowKind k = static_cast<SRowKind>(i);
             const Aff a = settings_row_aff(k);
             if (k == SRowKind::Header) continue;
@@ -81,8 +81,14 @@ static void test_pages_ui()
         const std::vector<SRowSpec> fewer = settings_layout(ctx);
         const int kept = keep_selected_row(before, ch2, fewer);
         CHECK(kept > first && settings_row_selectable(fewer[static_cast<size_t>(kept)].kind) && std::abs(kept - ch2) <= 2);
-        const int info = 1;                                                     // a read-out (Board) was selected: the nearest row that acts
-        CHECK(before[info].kind == SRowKind::Info && keep_selected_row(before, info, before) == first);
+        int info = -1;                                                          // a read-out (Board) was selected: the nearest row that acts
+        for (size_t i = 0; i < before.size() && info < 0; ++i)
+            if (before[i].kind == SRowKind::Info) info = static_cast<int>(i);
+        // (0.7.0: MY CONTACT comes first, so the Board line sits under it; the nearest row that acts is its Public key row, 2 above,
+        // nearer than Position, 4 below)
+        const int near = keep_selected_row(before, info, before);
+        CHECK(info > 0 && before[static_cast<size_t>(info)].kind == SRowKind::Info && near == info - 2 && before[static_cast<size_t>(near)].kind == SRowKind::MyKey);
+        CHECK(before[static_cast<size_t>(first)].kind == SRowKind::MyName);
         CHECK(keep_selected_row(before, save, {}) == -1);
     }
 
@@ -118,6 +124,11 @@ static void test_pages_ui()
         v.group = "Friends";
         CHECK(contact_view_summary(12, 193, v) == "12 of 193  \xC2\xB7  Repeater  \xC2\xB7  Last 24 h  \xC2\xB7  Group Friends");
         CHECK(std::string(type_filter_label(TypeFilter::All)) == "All types" && std::string(age_filter_label(AgeFilter::Week)) == "Last 7 days");
+        v.filter.search = "hill";                         // 0.7.0: the Search at the end
+        CHECK(contact_view_summary(2, 193, v) == "2 of 193  \xC2\xB7  Repeater  \xC2\xB7  Last 24 h  \xC2\xB7  Group Friends  \xC2\xB7  \"hill\" in the name");
+        v.filter.search = "<9A3f";
+        CHECK(contact_search_summary(v.filter.search) == "key 9a3f..." && contact_search_summary("<") == "any key");
+        CHECK(contact_search_summary("<9g") == "\"<9g\" in the name");
         CHECK(contact_marked_summary(1, 0) == "Manage contacts: 1 selected");
         CHECK(contact_marked_summary(3, 1) == "Manage contacts: 3 selected (+1 hidden by the filters)");
     }

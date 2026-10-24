@@ -53,6 +53,7 @@ bool usb_ids(const std::string &sys_class_tty, const std::string &name, SerialCa
             c.pid = static_cast<uint16_t>(std::strtoul(read_first_line(dir + "/idProduct").c_str(), nullptr, 16));
             c.vendor = read_first_line(dir + "/manufacturer");
             c.product = read_first_line(dir + "/product");
+            c.serial = read_first_line(dir + "/serial");
             return true;
         }
         const size_t slash = dir.rfind('/');
@@ -103,6 +104,26 @@ std::vector<SerialCandidate> list_serial_ports(const std::string &dev_dir, const
     ::closedir(d);
     std::sort(out.begin(), out.end(), [](const SerialCandidate &a, const SerialCandidate &b) { return a.path < b.path; });
     return out;
+}
+
+SerialCandidate describe_port(const std::string &path, const std::string &sys_class_tty)
+{
+    SerialCandidate c;
+    c.path = path;
+    char real[PATH_MAX];
+    const std::string dev = ::realpath(path.c_str(), real) ? std::string(real) : path;
+    const size_t slash = dev.rfind('/');
+    const std::string name = slash == std::string::npos ? dev : dev.substr(slash + 1);
+    if (!name.empty()) usb_ids(sys_class_tty, name, c);
+    return c;
+}
+
+std::string usb_identity(const SerialCandidate &c)
+{
+    if (c.vid == 0 && c.pid == 0) return "";
+    char ids[16];
+    std::snprintf(ids, sizeof(ids), "%04x:%04x", c.vid, c.pid);
+    return c.serial.empty() ? std::string(ids) : std::string(ids) + "/" + c.serial;
 }
 
 const SerialCandidate *choose_port(const std::vector<SerialCandidate> &list, const std::string &last_ids)

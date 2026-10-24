@@ -1,0 +1,25 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+# Mesh Hop's bundled meshcore-cli (report 033, packaging K1): the pinned upstream console in py/ next to this script,
+# run by Debian's python3 in isolated mode. Arguments go to meshcore-cli unchanged, e.g. on Mesh Hop's CLI relay:
+#   /opt/mesh-hop/cli/mccli -c off -t 127.0.0.1 -p <relay port>
+# - meshcore-cli keeps its files in $HOME/.config/meshcore (passwords as <repeater key>.pass, the init scripts):
+#   HOME is Mesh Hop's data folder + /cli (the folder of store.cpp: $MESHHOP_DATA, else $XDG_DATA_HOME/mesh-hop, else
+#   ~/.local/share/mesh-hop), created 0700, and the umask is 077 (a saved password is 0600);
+# - its typed-line history and <node>.msgs message log go nowhere (decision D5: mccli.py);
+# - compiled .pyc files go to $XDG_CACHE_HOME/mesh-hop/pycache (~/.cache/...), never next to the sources.
+here=$(dirname "$(readlink -f "$0")")
+if [ -n "$MESHHOP_DATA" ]; then
+    data=$MESHHOP_DATA
+elif [ -n "$XDG_DATA_HOME" ]; then
+    data=$XDG_DATA_HOME/mesh-hop
+elif [ -n "$HOME" ]; then
+    data=$HOME/.local/share/mesh-hop
+else
+    data=/tmp/mesh-hop
+fi
+cache=${XDG_CACHE_HOME:-${HOME:-/tmp}/.cache}/mesh-hop/pycache
+umask 077
+mkdir -p "$data/cli/.config/meshcore" "$cache" || exit 1
+chmod 700 "$data/cli" "$data/cli/.config" "$data/cli/.config/meshcore"
+HOME=$data/cli exec /usr/bin/python3 -I -X pycache_prefix="$cache" "$here/mccli.py" "$@"

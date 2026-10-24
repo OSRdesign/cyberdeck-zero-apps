@@ -51,7 +51,9 @@ Aff settings_row_aff(SRowKind k)
     case SRowKind::Stats:
     case SRowKind::PacketLog:
     case SRowKind::Channel:
-    case SRowKind::AddChannel: return Aff::Open;
+    case SRowKind::AddChannel:
+    case SRowKind::MyName:                          // a link: the highlight goes to RADIO > Node name
+    case SRowKind::MyKey: return Aff::Open;         // the whole key in a box
     case SRowKind::Name:
     case SRowKind::Preset:
     case SRowKind::Freq:
@@ -166,7 +168,15 @@ std::string contact_view_summary(size_t shown, size_t total, const ContactView &
     s += kDot;
     s += age_filter_label(v.filter.age);
     if (!v.group.empty()) s += kDot + std::string("Group ") + truncate_ellipsis(v.group, 16);
+    if (!v.filter.search.empty()) s += kDot + contact_search_summary(v.filter.search);
     return s;
+}
+
+std::string contact_search_summary(const std::string &query)
+{
+    std::string hex;
+    if (search_key_prefix(query, &hex)) return hex.empty() ? std::string("any key") : "key " + hex + "...";
+    return "\"" + truncate_ellipsis(query, 16) + "\" in the name";
 }
 
 std::string contact_marked_summary(size_t marked, size_t hidden)

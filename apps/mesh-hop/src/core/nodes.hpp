@@ -6,7 +6,8 @@
  *   A node key names one way: "usb:/dev/ttyACM0", "ble:EC:EB:45:39:28:2D", "ip:192.168.1.20:5000" ("ip:[fe80::1]:5000").
  *   NodeBook is <data dir>/nodes.txt: the nodes added by IP address (always listed), the node chosen last (highlighted at the
  *   start, never connected by itself), the answer to the first Bluetooth scan question, and the node names learned once a
- *   node answered (a USB port or a Bluetooth address has no node name of its own).
+ *   node answered (a USB port or a Bluetooth address has no node name of its own). A name line is
+ *   "name<TAB>key<TAB>name[<TAB>USB identity]" (older versions read the first three fields and ignore the identity).
  */
 
 #pragma once
@@ -65,15 +66,25 @@ public:
 
     /* The node name learned for a key ("" when none); forget_name when the user forgets the node. */
     std::string name_of(const std::string &key) const;
-    void set_name(const std::string &key, const std::string &name);
+    /* A USB port is a path, not a board: its name is learned with the identity of the USB device that answered (usb_identity,
+     * serial_transport.hpp: vid:pid/serial). name_for gives the name only when the device behind the port now is that one;
+     * a name learned for another device, or written before the identity was recorded (a line of an older version), is not
+     * trusted: "" (the row shows the USB product string until the node answers and its name is learned again). An empty
+     * ident (not a USB device, ids unknown, a Bluetooth or IP key) is name_of. */
+    std::string name_for(const std::string &key, const std::string &ident) const;
+    void set_name(const std::string &key, const std::string &name, const std::string &ident = "");
     void forget_name(const std::string &key);
 
 private:
+    struct Learned {
+        std::string key, name;
+        std::string ident;       // USB: the device's identity when the name was learned ("" for the other kinds, old lines)
+    };
     std::string path_;
     std::vector<IpNode> ip_;
     std::string last_;
     Scan scan_ = Scan::Ask;
-    std::vector<std::pair<std::string, std::string>> names_;
+    std::vector<Learned> names_;
 };
 
 } // namespace meshzero

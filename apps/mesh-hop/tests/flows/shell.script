@@ -1,4 +1,4 @@
-# Mesh Hop P2b (the shell): Home (a list: Chats, Contacts, Settings, each with a chevron and a short state), the header (title, Esc
+# Mesh Hop P2b (the shell): Home (a list: Chats, Contacts, Tools, Settings, Node (0.7.0), each with a chevron and a short state), the header (title, Esc
 # button, status strip), the caption line (the board and the notices), the key hint line (only while a keyboard is there), the three
 # pages, the dialogs (Quit, a menu, a question, a choice, an editor, the Position box) and the sub-pages, at any size, the default
 # simulated board. There is no tab row: the Esc button of a page goes back to Home, the one of Home asks "Quit Mesh Hop?".
@@ -92,7 +92,13 @@ shot h06b-contacts-keyboard
 check contacts-keyboard
 keyboard off
 
-# Settings by the Tab key (the next page), and without a keyboard
+# Tools by the Tab key (the next page, 0.7.0), then Settings (the one after), and without a keyboard
+key tab
+wait 800
+say == Tools (expect home=0 tab=Tools)
+dump
+shot h06c-tools
+check tools
 key tab
 wait 800
 say == Settings (expect home=0 tab=Settings)
@@ -151,8 +157,10 @@ check editor-dialog
 key esc
 wait 300
 
-# the Position box
+# the Position box (0.7.0: the third selectable row, after MY CONTACT's Name and Public key)
 key home
+key down
+key down
 key enter
 wait 800
 say == the Position box (expect pos_box=1)
@@ -162,14 +170,14 @@ check position-dialog
 key esc
 wait 300
 
-# a sub-page: the title has one more part, the Esc button goes back one step
+# a sub-page: the title has one more part, the Esc button goes back one step (the packet log, on Tools: Shift+Tab from Settings)
+key backtab
+wait 600
 key home
-key down
-key down
 key down
 key enter
 wait 600
-say == the packet log (expect log_open=1)
+say == the packet log (expect tab=Tools log_open=1)
 dump
 shot h12-subpage
 check subpage

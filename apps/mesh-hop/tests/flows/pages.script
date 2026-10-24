@@ -1,7 +1,8 @@
 # Simulator options: --contacts 193 --manual-add --new-nodes 3 --heard-back 2
-# Mesh Hop P3: the pages that fill the width (Contacts, a contact's details, Nearby, Settings, Statistics, the packet log, the message
-# search) with 193 contacts, at any size (run_flows.sh stage runs it at the five sizes). Shots of each page, of the Filter, Sort and
-# More dialogs, of a filter and of the select mode; `check` holds everything outside the stage of Chats to the size rules.
+# Mesh Hop P3: the pages that fill the width (Contacts, a contact's Options and details, Nearby, Tools, Settings, Statistics, the
+# packet log, the message search) with 193 contacts, at any size (run_flows.sh stage runs it at the five sizes). Shots of each page,
+# of the Filter, Sort and More dialogs, of a filter and of the select mode; `check` holds everything outside the stage of Chats to the
+# size rules. 0.7.0: Statistics and the packet log are on the Tools page.
 wait 4000
 keyboard off
 say == Contacts from Home (expect home=0 tab=Contacts contacts=197)
@@ -135,8 +136,15 @@ check select-mode
 key esc
 wait 400
 
-say == the details of the selected contact (key I; a tap on the selected row does the same) (expect detail=1)
+say == the Options of the selected contact (key I; a 3 s hold on its row does the same): Message, Details, Groups, Delete (expect popup=menu)
 type i
+wait 800
+dump
+shot p10a-contact-options
+check contact-options
+say == Details (expect detail=1)
+key down
+key enter
 wait 800
 dump
 shot p10-contact-detail
@@ -161,6 +169,12 @@ check nearby
 key esc
 wait 400
 
+say == Tools (Tab, 0.7.0): Nearby with the nodes waiting, Packet log, Statistics, CLI (expect tab=Tools)
+key tab
+wait 1000
+dump
+shot p12b-tools
+check tools
 say == Settings (Tab) (expect tab=Settings)
 key tab
 wait 1000
@@ -183,7 +197,9 @@ shot p15-settings-end
 key home
 wait 300
 
-say == Statistics (a first tap selects the row, the second opens it) (expect stats_open=1)
+say == Statistics on Tools (Shift+Tab; a first tap selects the row, the second opens it) (expect tab=Tools stats_open=1)
+key backtab
+wait 600
 tap "Statistics"
 tap "Statistics"
 wait 2500
@@ -211,16 +227,16 @@ wait 400
 key end
 wait 400
 mark
-say == Settings at its end while the capture runs: the Packet log row changes, the list is built again; the highlight (Save) and the scroll stay
+say == Tools while the capture runs: the Packet log row's count changes, the list is built again; the highlight (CLI, the last row) stays
 wait 9000
-expect more settings_builds
-expect same settings_sel
-expect same settings_scroll
+expect more tools_builds
+expect same tools_sel
 dump
-shot p20-settings-after-refresh
+shot p20-tools-after-refresh
 
-say == the message search over Chats (Tab, Ctrl+F) with a keyboard (chats.script has it with the on-screen keyboard) (expect search_open=1)
+say == the message search over Chats (Tab twice from Tools, Ctrl+F) with a keyboard (chats.script has it with the on-screen keyboard) (expect search_open=1)
 keyboard on
+key tab
 key tab
 wait 600
 key ctrl-f

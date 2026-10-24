@@ -1,0 +1,316 @@
+# Simulator options: --remote-cases --contacts 6 (repeater_run.sh, with SIMCTL=1)
+# Mesh Hop 0.7.0 (report 036 slice S1, the owner's option B) with a keyboard: Home (Chats, Contacts, Tools, Settings, Node), the Search
+# of Contacts (a part of the name, or < and the start of the key), a tap (Enter) opens a contact by its type: a repeater its Repeater
+# page and, not logged in, the login box by itself; a wrong password gets no answer (the firmware sends none): "No answer. Wrong
+# password, or <name> is out of reach."; Guest (a blank password) gives guest; L logs out (here only); an admin login with Remember
+# saves the password; the page left and opened again: still logged in; logged out, the box has the saved password (no typing); More
+# (0.7.2: Details, Open in CLI, Reset path, Forget password); 0.7.2: the route in the box, Reset path from the box (Ctrl+R) and from More; a room (the same page, "Room"); a chat contact opens its conversation, a sensor its
+# details; Tools reaches Nearby, Statistics, the packet log; Settings starts with MY CONTACT. The simulator's remote nodes: admin
+# password "password", guest password empty; its names trap a lookup by name: two "Hilltop repeater" (keys 9091... and 3031...),
+# "909192" (a name that looks like the first one's key), "Old Mill  relay 2", "Club room".
+wait 4500
+fill
+say == Home: Chats, Contacts, Tools, Settings, Node (expect home=1)
+expect text "Tools"
+expect text "Node"
+dump
+shot r00-home
+check home
+
+key down
+key enter
+wait 1200
+say == Contacts: the bar Search, Filter, Sort, More (expect tab=Contacts contacts=14)
+expect text "Search"
+dump
+shot r01-contacts
+check contacts
+
+# the Search: / opens it, typing filters at once, the line under the title says what is shown
+type /
+wait 400
+type hill
+wait 600
+say == two Hilltop repeaters (expect cs=1 cs_text='hill' shown=2)
+dump
+shot r02-search
+check search
+key bksp
+key bksp
+key bksp
+key bksp
+type <9091
+wait 600
+say == < and the start of the key: the first Hilltop only (expect cs_text='<9091' shown=1 first='Hilltop repeater' sel_key=9091)
+dump
+shot r03-search-key
+
+# Enter opens it by its type: the Repeater page; not logged in: the login box by itself (no saved password: an empty field)
+key enter
+wait 900
+say == the Repeater page and its login box (expect rep=1 rep_name='Hilltop repeater' login=1 login_pw=empty login_remember=1 rep_role=none)
+expect text "Log in to Hilltop repeater"
+expect text "Remember on this deck"
+expect text "Route: direct, 3 hops"
+expect text "Reset path"
+say == 0.7.2: the route in the box (expect login_route='Route: direct, 3 hops' login_reset=1 rep_route='direct, 3 hops')
+dump
+shot r04-login-box
+check login-box
+
+# 0.7.2: Reset path from the box (Ctrl+R; no confirm box): RESET_PATH, the box says so, its route line and the page's go to flood
+key ctrl-r
+waitstate rep_route flood 3000
+wait 300
+say == the path reset (expect login=1 rep_route=flood login_route='Route: flood: the login goes to the whole mesh' login_reset=0)
+expect text "Path reset: the next message goes by flood"
+expect text "Route: flood: the login goes to the whole mesh"
+dump
+shot r04b-login-path-reset
+check login-path-reset
+
+# a wrong password: the request waits for the node, which never answers a wrong password: a timeout, the text says both causes
+type wrongpass
+key enter
+wait 200
+say == waiting (expect login_wait=1 remote=waiting, the message line Waiting... up to N s; Log in and Guest dimmed)
+dump
+shot r05-login-waiting
+waitstate login_wait 0 9000
+say == no answer (expect login=1 login_pw=empty rep_role=none)
+expect text "No answer. Wrong password, or Hilltop repeater is out of reach."
+dump
+shot r06-login-timeout
+check login-timeout
+
+# Guest: a blank password; the node's guest password is empty (the firmware's default): guest
+tap "Guest"
+waitstate rep_role guest 9000
+wait 300
+say == guest: the box closed, the page says Guest since hh:mm (expect login=0 rep_role=guest)
+dump
+shot r07-guest
+check repeater-guest
+
+# L: Log out (this deck only: the node keeps the deck in its list, the note says until when)
+type l
+wait 600
+say == logged out here (expect rep_role=none sessions=0)
+dump
+shot r08-logged-out
+
+# an admin login with Remember (on by default): the password is saved for the CLI's login too
+type l
+wait 900
+type password
+key enter
+waitstate rep_role admin 9000
+wait 300
+say == admin, the password saved (expect login=0 rep_role=admin pw_saved=1)
+dump
+shot r09-admin
+check repeater-admin
+
+# the page left and opened again: still logged in (the session of this connection), no box
+key esc
+wait 500
+key enter
+wait 900
+say == opened again: no box (expect rep=1 login=0 rep_role=admin)
+dump
+# logged out, left, opened again: the box with the saved password (masked): Enter logs in, nothing typed
+type l
+wait 500
+key esc
+wait 500
+key enter
+wait 900
+say == the box with the saved password (expect login=1 login_pw=saved)
+dump
+shot r10-login-saved
+key enter
+waitstate rep_role admin 9000
+wait 300
+say == admin again with the saved password (expect login=0 rep_role=admin)
+dump
+
+# More (0.7.2 order): Details, Open in CLI, Reset path, Forget password (a password is saved) last
+type m
+wait 600
+say == More (expect popup=menu)
+expect text "Open in CLI"
+expect text "Reset path"
+expect text "Forget password"
+expect text "Details"
+dump
+shot r11-more
+check more
+key enter
+wait 600
+say == Details over the page (expect detail=1 rep=1)
+dump
+shot r11b-details
+key esc
+wait 400
+type m
+wait 600
+key down
+key down
+key down
+key enter
+wait 600
+say == the password forgotten (expect pw_saved=0)
+dump
+type m
+wait 600
+expect notext "Forget password"
+expect text "Reset path"
+key esc
+wait 300
+
+# a room: the same page, "Room" in the line under the title; Guest
+key esc
+wait 400
+key bksp
+key bksp
+key bksp
+key bksp
+key bksp
+type club
+wait 600
+key enter
+wait 900
+say == a room (expect rep=1 rep_name='Club room' login=1)
+dump
+shot r12-room-login
+tap "Guest"
+waitstate rep_role guest 9000
+wait 300
+dump
+shot r13-room-guest
+key esc
+wait 400
+
+# 0.7.2: Reset path from the page's More (the second Hilltop, key 3031..., has a direct route): the line under the title says flood
+key bksp
+key bksp
+key bksp
+key bksp
+type <3031
+wait 600
+key enter
+wait 900
+key esc
+wait 400
+waitstate rep_route direct 1000
+say == the second Hilltop: direct (expect rep=1 login=0 rep_route=direct)
+dump
+type m
+wait 600
+key down
+key down
+key enter
+waitstate rep_route flood 3000
+wait 300
+say == More > Reset path: flood (expect rep_route=flood, the notice Path reset)
+expect text "Path reset: the next message goes by flood"
+dump
+shot r13b-more-reset-path
+check more-reset-path
+key esc
+wait 400
+key bksp
+key bksp
+key bksp
+key bksp
+key bksp
+type club
+wait 300
+
+# a chat contact opens its conversation (Alice: key 1011...), a sensor its details (Node 185 Alice: key 393a...)
+key bksp
+key bksp
+key bksp
+key bksp
+type <1011
+wait 600
+key enter
+wait 900
+say == Alice's conversation (expect tab=Chats conv=d:101112131415 compose_focus=1)
+waitstate tab Chats 2000
+waitstate conv d:101112131415 1000
+dump
+shot r14-chat-opened
+key esc
+wait 300
+key tab
+wait 600
+type /
+wait 300
+type <393a
+wait 600
+key enter
+wait 600
+say == a sensor: its details (expect tab=Contacts detail=1 detail_name='Node 185 Alice')
+waitstate detail 1 2000
+dump
+shot r15-sensor-details
+key esc
+wait 300
+key esc
+wait 300
+
+# Tools: Nearby, Packet log, Statistics, CLI
+key tab
+wait 800
+say == Tools (expect tab=Tools)
+expect text "Packet log"
+expect text "Statistics"
+dump
+shot r20-tools
+check tools
+key home
+key down
+key down
+key enter
+waitstate stats_open 1 2000
+wait 1500
+shot r21-statistics
+key esc
+wait 300
+key up
+key enter
+waitstate log_open 1 2000
+shot r22-packet-log
+key esc
+wait 300
+key home
+key enter
+waitstate nearby_open 1 2000
+shot r23-nearby
+key esc
+wait 300
+
+# Settings: MY CONTACT first (Name: a link to RADIO > Node name; Public key: the whole key in a box)
+key tab
+wait 800
+say == Settings (expect tab=Settings settings_sel=0)
+expect text "MY CONTACT"
+expect text "Public key"
+dump
+shot r24-settings-my-contact
+check settings
+key enter
+wait 400
+say == Name: the highlight goes to RADIO > Node name (expect settings_sel=4)
+dump
+key home
+key down
+key enter
+wait 600
+say == the public key, whole (expect popup=info popup_title='Public key')
+dump
+shot r25-public-key
+check public-key
+key enter
+wait 300

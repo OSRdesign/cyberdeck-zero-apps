@@ -13,6 +13,8 @@
 #include "logdata.hpp"
 #include "model.hpp"
 #include "packet_log.hpp"
+#include "passwords.hpp"
+#include "relay.hpp"
 #include "transport.hpp"
 
 #include <deque>
@@ -159,6 +161,182 @@ public:
     /* Channel sends still inside their window (tests, diagnostics). */
     size_t echoes_open() const { return echoes_.size(); }
 
+    // ---- the CLI relay (report 033, option (b), phase P3)
+    /* A meshcore-cli session shares the node through Mesh Hop's own link (USB, BLE or IP alike: the relay sits above the
+     * transport). start_relay() opens a listener on 127.0.0.1 (RelayServer: ephemeral port, one client, the framing of the
+     * companion's TCP interface) for `meshcli -t 127.0.0.1 -p <port>`, and pauses Mesh Hop's own commands: the companion
+     * protocol has no request ids, so two programs must not have commands in flight at once.
+     *   Draining     Mesh Hop's command in flight gets its answer (or its timeout); the console's frames wait.
+     *   Passthrough  the console's frames go to the node as they are; every frame of the node goes to the console. Mesh Hop
+     *                still reads them all but applies only the pushes (adverts, radio log, acks, deleted contacts...) and
+     *                the messages (Chats, unread, notices go on; a CLI reply, text type 1, never becomes a message); the
+     *                answers to the console's own commands (contacts, channels, self info, ...) are not applied, and a
+     *                MESSAGES_WAITING push does not make Mesh Hop fetch: the console fetches and Mesh Hop reads along.
+     *                The second APP_START / DEVICE_QUERY the console sends go to the node and are answered by it: the
+     *                firmware keeps no per-client state for them (one link, no client identity), so nothing is faked.
+     *   Settling     the session ended (stop_relay(), the console closed its connection, it never connected): the node's last
+     *                answers to the console are let through (kRelaySettleMs of quiet, kRelaySettleMaxMs at most) so none
+     *                of them is taken for the answer to a Mesh Hop command. Then Mesh Hop resumes: its held commands go
+     *                out, its retry timers start again where they stopped, and when the console sent anything it re-reads
+     *                the node (device info, self info, contacts, channels, variables, auto-add, waiting messages) and
+     *                resets the flood scope if the console set one.
+     * A lost link ends the session at once (the reconnect re-reads everything). Mesh Hop's own sends wait while a session runs:
+     * leaving the CLI page must call stop_relay() (D6). */
+    enum class RelayState { Off, Draining, Passthrough, Settling };
+    static constexpr uint32_t kRelayAcceptTimeoutMs = 60000;   // the console must connect within this (a first Python start is slow)
+    static constexpr uint32_t kRelaySettleMs = 600;
+    static constexpr uint32_t kRelaySettleMaxMs = 4000;
+    /* Opens the listener and pauses Mesh Hop's commands. Returns the port on 127.0.0.1, or 0 when refused (not connected, a
+     * session still runs or settles, socket error: notice() says why). The console may connect at once: its frames wait until
+     * relay_ready(); meshcore_py gives its APP_START 2 s, so start the console when relay_ready() is true. */
+    int start_relay();
+    /* Ends the session (closes the console's connection and the listener, then Settling). Nothing when none runs. */
+    void stop_relay();
+    /* A session runs (Draining, Passthrough or Settling): Mesh Hop's own commands are held. */
+    bool relay_active() const { return relay_state_ != RelayState::Off; }
+    /* The console's frames go to the node. */
+    bool relay_ready() const { return relay_state_ == RelayState::Passthrough; }
+    RelayState relay_state() const { return relay_state_; }
+    bool relay_client_connected() const { return relay_.connected(); }
+    int relay_port() const { return relay_.port(); }
+    /* Why the last session ended ("" while one runs or before any) and a counter that grows when one ends: the page sees a
+     * session that ended by itself (the console quit, the link was lost). */
+    const std::string &relay_end_reason() const { return relay_end_reason_; }
+    uint32_t relay_sessions_ended() const { return relay_ended_id_; }
+    size_t relay_frames_to_node() const { return relay_to_node_; }
+    size_t relay_frames_to_console() const { return relay_to_console_; }
+
+    // ---- remote administration of a repeater or room (report 036, slice S1: log in, log out)
+    /* A remote request is a normal queued command (SEND_LOGIN 26) answered at once by the companion with SENT (a flood flag and
+     * est_timeout), followed by a REMOTE WAIT: a timer of this Client for the push that carries the remote node's answer
+     * (LOGIN_SUCCESS 0x85). The wait holds no command in flight, so Chats, direct messages, retries and the sync go on during it.
+     *   - One remote request at a time, like the companion (clearPendingReqs() on every login or request: a second one makes the first
+     *     one's answer unmatchable). A new request cancels the pending one (its result: Cancelled), and so does cancel_remote().
+     *   - Refused while a CLI session runs (relay_active(): Busy); start_relay() and a lost link cancel the pending one (Cancelled,
+     *     LinkLost). A push that arrives when nothing is pending, or for another node, is ignored (the late answer of a cancelled or
+     *     timed out request).
+     *   - The wait: kRemoteWaitFactor x est_timeout, as meshcore_py's est_timeout / 800 s (binary.py), bounded by kRemoteMinWaitMs and
+     *     kRemoteMaxWaitMs; kRemoteDefaultWaitMs when SENT carries no estimate. A wrong password gets NO answer from the firmware
+     *     (simple_repeater handleLoginReq returns 0), so it ends as Timeout like an out-of-reach node; LOGIN_FAIL (0x86) only comes from
+     *     a legacy node (Refused).
+     *   - Nothing here sets notice(): the Repeater page shows the result. The password is never logged; it is kept only while a login
+     *     with `remember` waits, to be written to the PasswordStore after a success, and wiped then.
+     * The companion supports SEND_LOGIN and LOGOUT from companion v1.4.0 (level 3) on; before v1.10.0 (level 8) the success push has no
+     * clock, ACL byte or firmware level (has_clock / has_fw_level false, the role from the admin bit). A board without the commands
+     * answers "unsupported" (Unsupported). */
+    enum class RemoteOp { None, Login, Logout };
+    /* The role in the remote node's access list (ACL permission bits 0-1). A repeater gives Guest or Admin; a room also ReadOnly
+     * (a blank password when `allow.read.only` is on) and ReadWrite (the room password). */
+    enum class RemoteRole { None, Guest, ReadOnly, ReadWrite, Admin };
+    enum class RemoteError {
+        None,
+        Timeout,         // SENT came but no answer within the wait (wrong password, out of reach, session gone), or the board never answered SENT (sent = false)
+        NotFound,        // ERR not found: the node is not a contact on the board
+        TableFull,       // ERR table full: the board could not send it (its send queue is full: "busy")
+        Unsupported,     // ERR unsupported: the board's firmware lacks the command
+        Failed,          // another ERR code (err_code)
+        Refused,         // LOGIN_FAIL from a legacy node
+        Busy,            // refused: a CLI session holds the node
+        NotConnected,    // refused: no board
+        BadPassword,     // refused: longer than kMaxLoginPassword bytes, or a NUL in it
+        Cancelled,       // a newer request, cancel_remote(), start_relay(), logout() of the same node
+        LinkLost,        // the link to the board went away
+    };
+    /* NotAsked: no `remember`, or a blank password (never written); Skipped: a password the file cannot hold (spaces around it, a line
+     * end); Failed: no PasswordStore set, or an I/O error. */
+    enum class PasswordSave { NotAsked, Saved, Skipped, Failed };
+    struct RemoteState {
+        enum class Phase { Idle, Sending, Waiting };
+        Phase phase = Phase::Idle;       // Sending: the command is queued or waits for SENT; Waiting: the timer runs
+        RemoteOp op = RemoteOp::None;
+        uint32_t req = 0;                // the id start_login() returned
+        PubKey key{};
+        uint64_t since_ms = 0;           // poll() clock at the request
+        uint64_t deadline_ms = 0;        // Waiting: when it ends as Timeout
+        bool flood = false;              // SENT said: sent by flood (no known route)
+        uint32_t est_timeout_ms = 0;     // as SENT gave it
+    };
+    struct RemoteResult {
+        uint32_t id = 0;                 // grows with every result: the UI shows each once
+        uint32_t req = 0;                // the request it ends (0: refused before it got an id)
+        RemoteOp op = RemoteOp::None;
+        PubKey key{};
+        bool ok = false;
+        RemoteError error = RemoteError::None;
+        int err_code = -1;               // the board's ERR code for NotFound / TableFull / Unsupported / Failed
+        bool sent = false;               // the board confirmed the send (SENT)
+        bool flood = false;
+        uint32_t waited_ms = 0;          // from the request to the end
+        // a login success
+        RemoteRole role = RemoteRole::None;
+        uint8_t permissions = 0;         // the ACL byte (or the legacy admin byte when has_acl is false)
+        bool has_acl = false;
+        bool has_clock = false;
+        uint32_t clock = 0;              // the remote node's clock at its answer
+        uint32_t deck_time = 0;          // deck_unix() when the answer came: the skew is clock - deck_time
+        bool has_fw_level = false;
+        uint8_t fw_level = 0;
+        PasswordSave password = PasswordSave::NotAsked;
+    };
+    /* What this node connection knows of its logins (the session table). The REMOTE access list survives our link (a guest until the
+     * node reboots, an admin until `setperm`), but this table is cleared when the link to the board drops or changes (another board,
+     * a factory reset): the knowledge belongs to one board identity and one connection. A CLI session leaves it as it is (the CLI
+     * shares the board's identity, so its logins are the same entries). logout() removes the node at once. A failed or timed out
+     * login leaves an entry as it was (a wrong password does not touch the remote list). */
+    struct RemoteSession {
+        PubKey key{};
+        RemoteRole role = RemoteRole::None;
+        uint8_t permissions = 0;
+        uint32_t since = 0;              // deck_unix() at the login
+        bool has_clock = false;
+        uint32_t clock = 0;              // the remote clock at the login, and the deck time then
+        uint32_t deck_time = 0;
+        bool has_fw_level = false;
+        uint8_t fw_level = 0;
+    };
+    static constexpr uint32_t kRemoteDefaultWaitMs = 30000;
+    static constexpr uint32_t kRemoteMinWaitMs = 2000;
+    static constexpr uint32_t kRemoteMaxWaitMs = 120000;
+    static constexpr double kRemoteWaitFactor = 1.25;
+    /* The wait after SENT for an est_timeout (0 = none given). */
+    static uint32_t remote_wait_ms(uint32_t est_timeout_ms);
+    /* Where a successful login with `remember` writes the password (nullptr: never written). Not owned. */
+    void set_password_store(PasswordStore *store) { passwords_ = store; }
+    /* Logs in to a repeater or room (its full key). guest: a blank password (password is ignored): the firmware's default guest
+     * password is empty, and a node that has this board in its access list gives its role back. remember: after a SUCCESS with a
+     * non-blank password, the password goes to the PasswordStore (RemoteResult::password says how it went). Returns the request id,
+     * 0 when refused at once (remote_result() then holds the reason: NotConnected, Busy, BadPassword). */
+    uint32_t start_login(const PubKey &key, const std::string &password, bool guest, bool remember = false);
+    /* "Log out (this deck)": forgets the session of this node here, cancels a pending request to it, and sends LOGOUT (the companion
+     * stops its keep-alive; the node still lists us). The board's answer ends as a RemoteResult with op Logout. Returns its id, 0 when
+     * refused (NotConnected, Busy). */
+    uint32_t logout(const PubKey &key);
+    /* Stops waiting for the pending request (Cancelled). Its answer, if it still comes, is ignored. */
+    void cancel_remote();
+    const RemoteState &remote_state() const { return remote_; }
+    bool remote_busy() const { return remote_.phase != RemoteState::Phase::Idle; }
+    const RemoteResult &remote_result() const { return remote_result_; }
+    const std::vector<RemoteSession> &remote_sessions() const { return sessions_; }
+    const RemoteSession *remote_session(const PubKey &key) const;
+
+    // ---- the route of a contact (0.7.2)
+    /* "Reset path": RESET_PATH (13, the contact's 32-byte key). The companion forgets its stored route to the contact
+     * (out_path_len = unknown) and answers OK, or ERR not found when the key is not one of its contacts. After OK the model's contact
+     * is set to flood at once and read back from the board (GET_CONTACT_BY_KEY), so every route text says "flood". Refused (result
+     * at once, false): not connected, a CLI session holds the node (Busy), a reset already on its way (Busy). Nothing here sets
+     * notice(): the page shows path_reset_result(). The DM retry's own reset (RetrySettings::reset_after) goes the same way. */
+    enum class PathResetError { None, NotConnected, Busy, NotFound, Failed, Timeout, LinkLost };
+    struct PathResetResult {
+        uint32_t id = 0;                 // grows with every result: the UI shows each once
+        PubKey key{};
+        bool ok = false;
+        PathResetError error = PathResetError::None;
+        int err_code = -1;               // the board's ERR code (NotFound, Failed)
+    };
+    bool reset_path(const PubKey &key);
+    bool path_reset_busy() const { return path_reset_busy_; }
+    const PathResetResult &path_reset_result() const { return path_reset_result_; }
+
     // ---- counters (tests, diagnostics)
     size_t frames_received() const { return frames_rx_; }
     size_t bad_frames() const { return bad_frames_ + parser_.bad_headers(); }
@@ -175,6 +353,7 @@ private:
         uint32_t timeout_ms = 5000;
         bool accept_any = false;          // any answer that is not an error and not a push completes it (channel send)
         bool no_reply = false;            // the board sends no answer (reboot): the command completes when it is written
+        uint32_t remote_req = 0;          // a remote request's command: dropped from the queue when that request is cancelled
         Done done;
     };
     struct Outgoing {
@@ -226,6 +405,21 @@ private:
     void register_echo(uint32_t seq, int channel_idx, const std::string &text);
     void on_log_packet(const LogPacket &pkt);
     void tick_echoes();
+    void tick_relay();
+    void relay_to_node(const Bytes &payload);
+    void end_relay(const std::string &why);
+    void finish_relay();
+    void reset_flood_scope();
+    RemoteResult refuse_remote(RemoteOp op, const PubKey &key, RemoteError e);
+    void end_remote(RemoteError e, int err_code = -1);
+    void drop_queued_remote(uint32_t req);
+    void tick_remote();
+    void on_login_reply(const KeyPrefix &prefix, const LoginSuccess *ok);
+    void publish_remote(RemoteResult r);
+    void wipe_remote_password();
+    /* RESET_PATH for `key`; on OK the model's contact goes to flood and is read back; `then` gets the outcome (may be empty). */
+    void queue_reset_path(const PubKey &key, std::function<void(Outcome, int)> then);
+    void publish_path_reset(const PubKey &key, bool ok, PathResetError e, int err_code = -1);
 
     ITransport &transport_;
     Model &model_;
@@ -293,6 +487,30 @@ private:
     EchoTracker echo_{kEchoWindowS};
     std::vector<ChannelEcho> echoes_;
     PacketLog packet_log_;
+
+    // the CLI relay
+    RelayServer relay_;
+    RelayState relay_state_ = RelayState::Off;
+    std::vector<Bytes> relay_hold_;           // the console's frames while Draining
+    uint64_t relay_started_ms_ = 0, relay_accept_until_ = 0, relay_settle_until_ = 0, relay_settle_cap_ = 0;
+    bool relay_scope_set_ = false;            // the console sent SET_FLOOD_SCOPE in this session
+    bool scope_reset_pending_ = false;        // ... and the link was lost before Mesh Hop could reset it
+    size_t relay_to_node_ = 0, relay_to_console_ = 0;
+    std::string relay_end_reason_;
+    uint32_t relay_ended_id_ = 0;
+
+    // remote administration (report 036)
+    RemoteState remote_;
+    RemoteResult remote_result_;
+    uint32_t remote_req_counter_ = 0;
+    bool remote_remember_ = false;
+    std::string remote_password_;              // only while a login with `remember` waits; wiped at its end
+    std::vector<RemoteSession> sessions_;
+    PasswordStore *passwords_ = nullptr;
+
+    // the route of a contact (0.7.2)
+    bool path_reset_busy_ = false;
+    PathResetResult path_reset_result_;
 };
 
 } // namespace meshzero

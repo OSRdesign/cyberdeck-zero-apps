@@ -34,6 +34,59 @@ Files: usr/share/APPLaunch/applications/mesh-hop.desktop
 Copyright: 2026 OSRdesign
 License: MIT
 
+Files: opt/mesh-hop/cli/mccli opt/mesh-hop/cli/mccli.py
+Copyright: 2026 OSRdesign
+License: MIT
+Comment: The launcher of the bundled meshcore-cli below. Everything under opt/mesh-hop/cli/py is the unmodified content of
+ the upstream wheels pinned (with their sha256) in apps/mesh-hop/cli/requirements.txt of the source repository, less
+ pycryptodome's test suite (Crypto/SelfTest); each distribution keeps its own metadata and licence files in its
+ *.dist-info folder. The full licence texts are also in /usr/share/doc/mesh-hop/LICENSE.<distribution>.
+
+Files: opt/mesh-hop/cli/py/meshcore_cli/* opt/mesh-hop/cli/py/meshcore_cli-*.dist-info/*
+Copyright: 2025 fdlamotte (Florent de Lamotte)
+License: MIT
+Comment: meshcore-cli 1.6.6, https://github.com/meshcore-dev/meshcore-cli (LICENSE.meshcore-cli)
+
+Files: opt/mesh-hop/cli/py/meshcore/* opt/mesh-hop/cli/py/meshcore-*.dist-info/*
+Copyright: 2025 Florent de Lamotte
+License: MIT
+Comment: meshcore (meshcore_py) 2.3.17, https://github.com/meshcore-dev/meshcore_py (LICENSE.meshcore)
+
+Files: opt/mesh-hop/cli/py/cayennelpp/* opt/mesh-hop/cli/py/pycayennelpp-*.dist-info/*
+Copyright: 2018-2021 Sebastian Meiling
+License: MIT
+Comment: pycayennelpp 2.4.0, https://github.com/smlng/pycayennelpp (LICENSE.pycayennelpp)
+
+Files: opt/mesh-hop/cli/py/serial_asyncio_fast/* opt/mesh-hop/cli/py/pyserial_asyncio_fast-*.dist-info/*
+Copyright: 2015-2021 pySerial-team
+License: BSD-3-Clause
+Comment: pyserial-asyncio-fast 0.16, https://github.com/home-assistant-libs/pyserial-asyncio-fast
+ (LICENSE.pyserial-asyncio-fast, with its CREDITS)
+
+Files: opt/mesh-hop/cli/py/Crypto/* opt/mesh-hop/cli/py/pycryptodome-*.dist-info/*
+Copyright: Helder Eijs (Legrandin) and the PyCryptodome contributors, each for their own part
+License: BSD-2-Clause AND Unlicense AND MIT
+Comment: pycryptodome 4.1.0, https://www.pycryptodome.org, https://github.com/Legrandin/pycryptodome; binary wheels
+ built by upstream (aarch64 in the arm64 package, x86-64 in the amd64 package). Partly public domain (Unlicense),
+ partly BSD-2-Clause; its mldsa-native part is offered under Apache-2.0 OR ISC OR MIT and is used here under MIT
+ (LICENSE.pycryptodome).
+
+Files: opt/mesh-hop/cli/py/prompt_toolkit/* opt/mesh-hop/cli/py/prompt_toolkit-*.dist-info/*
+Copyright: 2014 Jonathan Slenders
+License: BSD-3-Clause
+Comment: prompt_toolkit 3.0.53, https://github.com/prompt-toolkit/python-prompt-toolkit (LICENSE.prompt-toolkit, with
+ its AUTHORS)
+
+Files: opt/mesh-hop/cli/py/wcwidth/* opt/mesh-hop/cli/py/wcwidth-*.dist-info/*
+Copyright: 2014 Jeff Quast
+License: MIT
+Comment: wcwidth 0.9.3, https://github.com/jquast/wcwidth (LICENSE.wcwidth)
+
+Files: usr/share/doc/mesh-hop/LICENSE.*
+Copyright: the copyright holders named in each file
+License: MIT AND BSD-2-Clause AND BSD-3-Clause AND Unlicense
+Comment: The licence files of the bundled distributions, copied unchanged from their wheels.
+
 License: MIT
  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
  documentation files (the "Software"), to deal in the Software without restriction, including without limitation
@@ -48,3 +101,64 @@ License: MIT
  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE.
+
+License: BSD-3-Clause
+ Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
+ following conditions are met:
+ .
+ 1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following
+ disclaimer.
+ .
+ 2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following
+ disclaimer in the documentation and/or other materials provided with the distribution.
+ .
+ 3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote
+ products derived from this software without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ .
+ The exact texts, with their copyright notices, are in LICENSE.prompt-toolkit and LICENSE.pyserial-asyncio-fast.
+
+License: BSD-2-Clause
+ Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
+ following conditions are met:
+ .
+ 1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following
+ disclaimer.
+ .
+ 2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following
+ disclaimer in the documentation and/or other materials provided with the distribution.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ .
+ The exact text is in LICENSE.pycryptodome.
+
+License: Unlicense
+ This is free and unencumbered software released into the public domain.
+ .
+ Anyone is free to copy, modify, publish, use, compile, sell, or distribute this software, either in source code form
+ or as a compiled binary, for any purpose, commercial or non-commercial, and by any means.
+ .
+ In jurisdictions that recognize copyright laws, the author or authors of this software dedicate any and all copyright
+ interest in the software to the public domain. We make this dedication for the benefit of the public at large and to
+ the detriment of our heirs and successors. We intend this dedication to be an overt act of relinquishment in
+ perpetuity of all present and future rights to this software under copyright law.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+ WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS BE
+ LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ .
+ For more information, please refer to <http://unlicense.org>. The exact text is in LICENSE.pycryptodome.

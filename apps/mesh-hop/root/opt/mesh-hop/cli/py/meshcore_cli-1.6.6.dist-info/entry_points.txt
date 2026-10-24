@@ -1,0 +1,3 @@
+[console_scripts]
+meshcli = meshcore_cli.meshcore_cli:cli
+meshcore-cli = meshcore_cli.meshcore_cli:cli

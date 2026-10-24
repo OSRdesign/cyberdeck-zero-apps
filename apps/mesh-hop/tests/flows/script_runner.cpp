@@ -36,6 +36,9 @@
  *   mark                         remembers the app's state line (what `dump` prints)
  *   expect same KEY | changed KEY | more KEY   KEY= of the state line now equals / differs from / is larger than at `mark`
  *                                (a refresh keeps the selection and the scroll: expect same settings_sel ...)
+ *   expect clitext "T" | noclitext "T"   the CLI page's output (App::cli_text: every line kept) holds T (or not)
+ *   waitcli "T" <ms>             runs the app until the CLI's output holds T (a failure after ms): meshcore-cli answers in its time
+ *   waitstate KEY VALUE <ms>     runs the app until KEY= of the state line is VALUE (a failure after ms)
  *   lifecycle                    the runner plays a multitasking launcher (apps/_common/headless lifecycle_begin: the control
  *                                socket and the toolkit's helper); then hide / show (answered within 300 ms) and
  *                                expect hidden | visible | nowrite (no flush while hidden) | repaint (the whole screen since show)
@@ -635,6 +638,36 @@ int run_script(const std::string &file, const std::string &shot_dir)
                 }
                 failures += under;
             }
+        } else if (cmd == "waitcli" || cmd == "waitstate") {
+            // waitcli "T" <ms> / waitstate KEY VALUE <ms>: the app runs until it holds, a failure after ms
+            std::string rest;
+            std::getline(ss, rest);
+            const std::vector<std::string> w = words_of(rest);
+            const bool cli = cmd == "waitcli";
+            const size_t need = cli ? 2 : 3;
+            if (w.size() < need) {
+                std::fprintf(stderr, "script:%d: waitcli \"T\" <ms> | waitstate KEY VALUE <ms>\n", lineno);
+                ++failures;
+                continue;
+            }
+            const int ms = std::atoi(w[need - 1].c_str());
+            int waited = 0;
+            bool ok = false;
+            while (!g_quit.load()) {
+                Session *s = running_session();
+                ok = s && (cli ? s->app().cli_text().find(w[0]) != std::string::npos : state_value(s->app().debug_state(), w[0]) == w[1]);
+                if (ok || waited >= ms) break;
+                run_for(100);
+                waited += 100;
+            }
+            std::printf("%s \"%s\"%s after %d ms: %s\n", cmd.c_str(), w[0].c_str(), cli ? "" : (" = \"" + w[1] + "\"").c_str(), waited, ok ? "PASS" : "FAIL");
+            if (!ok) {
+                ++failures;
+                if (Session *s = running_session()) {
+                    if (cli) std::printf("  the CLI's output:\n%s\n", s->app().cli_text().c_str());
+                    else std::printf("  %s=%s\n", w[0].c_str(), state_value(s->app().debug_state(), w[0]).c_str());
+                }
+            }
         } else if (cmd == "lifecycle") {
             // multitasking: the runner plays the launcher (the shared harness's control socket and the toolkit's helper)
             const bool ok = headless::lifecycle_begin();
@@ -664,6 +697,8 @@ int run_script(const std::string &file, const std::string &shot_dir)
             } else if (what == "text") ok = headless::find_label(arg, false) != nullptr;
             else if (what == "notext") ok = headless::find_label(arg, false) == nullptr;
             else if (what == "osk") ok = cp0::ui::osk::visible() == (arg == "on");
+            else if (what == "clitext" && session) ok = session->app().cli_text().find(arg) != std::string::npos;
+            else if (what == "noclitext" && session) ok = session->app().cli_text().find(arg) == std::string::npos;
             else if ((what == "same" || what == "changed" || what == "more") && session) {
                 const std::string was = state_value(marked, arg), now = state_value(session->app().debug_state(), arg);
                 ok = what == "same" ? was == now : what == "changed" ? was != now : std::atoll(now.c_str()) > std::atoll(was.c_str());

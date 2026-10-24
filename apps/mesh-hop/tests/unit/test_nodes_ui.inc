@@ -64,6 +64,29 @@ static void test_node_rows()
         CHECK(node_page_caption(s, true) == "Scanning for Bluetooth nodes...");
         CHECK(std::string(node_icon(NodeKind::Usb)) == "\xEF\x8a\x87" && std::string(node_icon(NodeKind::Ble)) == "\xEF\x8a\x93");
     }
+    // a USB device with its identity: the name learned on the port only while that same device is behind it
+    {
+        meshzero::SerialCandidate esp;
+        esp.path = "/dev/ttyACM0";
+        esp.vid = 0x303A;
+        esp.pid = 0x1001;
+        esp.vendor = "Espressif";
+        esp.product = "USB JTAG/serial debug unit";
+        esp.serial = "1C:DB:D4:A8:9A:70";
+        NodePageState u = s;
+        u.usb = {esp};
+        NodeBook b2(dir);
+        u.book = &b2;
+        b2.set_name("usb:/dev/ttyACM0", "SpyMesh");                                    // an old line (no identity): not trusted
+        CHECK(build_node_rows(u)[0].title == "USB JTAG/serial debug unit" && build_node_rows(u)[0].detail == "ttyACM0 \xC2\xB7 Espressif");
+        b2.set_name("usb:/dev/ttyACM0", "SpyMesh", "2886:8044/5A1B2C3D4E5F");          // learned with the XIAO nRF52 behind the port
+        CHECK(build_node_rows(u)[0].title == "USB JTAG/serial debug unit");
+        b2.set_name("usb:/dev/ttyACM0", "Wio S3", "303a:1001/1C:DB:D4:A8:9A:70");      // learned with this board
+        CHECK(build_node_rows(u)[0].title == "Wio S3" && build_node_rows(u)[0].detail == "ttyACM0 \xC2\xB7 USB JTAG/serial debug unit");
+        u.usb[0].product.clear();
+        u.usb[0].serial = "OTHER";
+        CHECK(build_node_rows(u)[0].title == "USB board" && build_node_rows(u)[0].detail == "ttyACM0 \xC2\xB7 Espressif");
+    }
     s.scanning = false;
     CHECK(build_node_rows(s)[5].title == "Rescan for Bluetooth nodes" && build_node_rows(s)[5].aff == Aff::Action);
     s.scan_answer = NodeBook::Scan::No;

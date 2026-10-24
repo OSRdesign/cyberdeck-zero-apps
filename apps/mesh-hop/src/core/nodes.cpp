@@ -177,7 +177,7 @@ bool NodeBook::load()
         } else if (f[0] == "name" && f.size() >= 3) {
             NodeKind k;
             std::string id;
-            if (parse_node_key(f[1], k, id) && !f[2].empty()) set_name(f[1], f[2]);
+            if (parse_node_key(f[1], k, id) && !f[2].empty()) set_name(f[1], f[2], f.size() >= 4 ? f[3] : std::string());
         }
     }
     return true;
@@ -193,7 +193,8 @@ bool NodeBook::save() const
         if (scan_ != Scan::Ask) out << "ble_scan\t" << (scan_ == Scan::Yes ? "yes" : "no") << "\n";
         if (!last_.empty()) out << "last\t" << field(last_) << "\n";
         for (const IpNode &n : ip_) out << "ip\t" << field(n.host) << "\t" << n.port << "\t" << field(n.name) << "\n";
-        for (const auto &kv : names_) out << "name\t" << field(kv.first) << "\t" << field(kv.second) << "\n";
+        for (const Learned &n : names_)
+            out << "name\t" << field(n.key) << "\t" << field(n.name) << (n.ident.empty() ? std::string() : "\t" + field(n.ident)) << "\n";
         if (!out) return false;
     }
     return std::rename(tmp.c_str(), path_.c_str()) == 0;
@@ -234,25 +235,34 @@ const IpNode *NodeBook::find_ip(const std::string &key) const
 
 std::string NodeBook::name_of(const std::string &key) const
 {
-    for (const auto &kv : names_)
-        if (kv.first == key) return kv.second;
+    for (const Learned &n : names_)
+        if (n.key == key) return n.name;
     return "";
 }
 
-void NodeBook::set_name(const std::string &key, const std::string &name)
+std::string NodeBook::name_for(const std::string &key, const std::string &ident) const
 {
-    for (auto &kv : names_)
-        if (kv.first == key) {
-            kv.second = name;
+    if (ident.empty()) return name_of(key);
+    for (const Learned &n : names_)
+        if (n.key == key) return n.ident == ident ? n.name : std::string();      // another board on this port, or not known
+    return "";
+}
+
+void NodeBook::set_name(const std::string &key, const std::string &name, const std::string &ident)
+{
+    for (Learned &n : names_)
+        if (n.key == key) {
+            n.name = name;
+            n.ident = ident;
             return;
         }
     if (names_.size() >= 64) names_.erase(names_.begin());
-    names_.emplace_back(key, name);
+    names_.push_back({key, name, ident});
 }
 
 void NodeBook::forget_name(const std::string &key)
 {
-    names_.erase(std::remove_if(names_.begin(), names_.end(), [&](const auto &kv) { return kv.first == key; }), names_.end());
+    names_.erase(std::remove_if(names_.begin(), names_.end(), [&](const Learned &n) { return n.key == key; }), names_.end());
 }
 
 } // namespace meshzero

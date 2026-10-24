@@ -1,0 +1,127 @@
+# Report 033, phase P5: the CLI page with a keyboard, end to end. The real bundled meshcore-cli (MESHHOP_MESHCLI: phase P4's mccli,
+# as installed) runs on Mesh Hop's relay against the simulated board (serial pty; its repeater "Hilltop repeater", admin password
+# "password"). Tools > CLI (0.7.0; Home > CLI before), Starting..., the prompt, infos, to the repeater, login with its password masked,
+# ver; Help (a command put into the entry, All commands = mccli -h); Esc leaves: meshcore-cli stops, Mesh Hop resumes, Tools is back; a
+# message that came during the session is in Chats, no repeater reply is. Run by cli_run.sh (SIMCTL=1) at 640x480 and 800x480.
+wait 6000
+expect text "Tools"
+mark
+shot cli01-home
+key down
+key down
+key enter
+wait 600
+expect text "CLI"
+key end
+key enter
+wait 250
+say == Starting (expect cli=waiting or starting, the caption Starting meshcore-cli...)
+dump
+expect text "Starting meshcore-cli..."
+shot cli02-starting
+waitstate cli running 40000
+waitcli "SimNode> " 5000
+say == the prompt (expect cli=running relay=passthrough)
+dump
+waitstate tab CLI 100
+# 0.7.2: opened from Tools, nothing sent yet: the caption says how to pick a repeater (the To... picker is gone)
+expect text "Contacts > a repeater > More > Open in CLI, or type: to <name>"
+expect notext "Toâ¦"
+shot cli03-prompt
+check cli-prompt
+
+# a command of the node itself, typed with the keyboard: its answer (infos as JSON)
+type infos
+key enter
+waitcli adv_type 15000
+expect clitext "SimNode> infos"
+# a message for the deck while the console has the node: meshcore-cli shows it, Mesh Hop reads along (Chats after the session)
+sim msg arrives while the CLI runs
+waitcli "arrives while the CLI runs" 15000
+# the repeater: to, login (the password prompt, the entry in '*', the password never shown), ver (its reply)
+type to Hilltop repeater
+key enter
+waitcli "Hilltop repeater|" 10000
+type login
+key enter
+waitstate cli_pw 1 15000
+say == the password prompt (expect cli_pw=1, the entry empty with its password placeholder)
+dump
+shot cli04-password-prompt
+type password
+waitstate cli_entry ******** 2000
+shot cli05-password-typed
+key enter
+waitcli "Login success" 15000
+expect noclitext ": password"
+expect noclitext "> password"
+waitstate cli_pw 0 1000
+type ver
+key enter
+waitcli "v1.15.0-sim" 15000
+say == the repeater's answers in the output (expect cli_masked=8)
+dump
+shot cli06-output
+check cli-output
+# Up: the history (this run only; the password is not in it)
+key up
+waitstate cli_entry ver 1000
+key up
+waitstate cli_entry login 1000
+key down
+key down
+waitstate cli_entry "" 1000
+# PgUp scrolls back (the view stops following), PgDn goes back to the bottom
+key pgup
+waitstate cli_follow 0 1000
+key pgdn
+waitstate cli_follow 1 1000
+
+# Help (Ctrl+H): the curated list; Enter on a command puts it into the entry and goes back to the console
+key ctrl-h
+waitstate cli_help 1 2000
+expect text "HOW IT WORKS"
+shot cli07-help
+check cli-help
+key down
+key down
+key enter
+waitstate cli_help 0 2000
+waitstate cli_entry / 1000
+key bksp
+# All commands: meshcore-cli -h of the bundle
+key ctrl-h
+waitstate cli_help 1 2000
+key end
+key enter
+waitstate cli_help 2 2000
+waitstate cli_usage 2 30000
+shot cli08-all-commands
+key esc
+waitstate cli_help 1 1000
+key esc
+waitstate cli_help 0 1000
+
+# Ctrl+C sends the interrupt: at its prompt meshcore-cli (prompt_toolkit) takes it as the end of the session
+key ctrl-c
+waitstate cli ended 8000
+say == after Ctrl+C (expect cli=ended cli_end='meshcore-cli ended' relay=off)
+dump
+shot cli08b-interrupted
+
+# Esc leaves: meshcore-cli stops, the relay closes, Mesh Hop resumes and reads the node again; Tools is back (0.7.0: the CLI is one of
+# its rows)
+key esc
+waitstate tab Tools 2000
+waitstate cli off 2000
+waitstate relay off 8000
+say == back on Tools after the CLI (expect cli=off relay=off home=0 tab=Tools)
+dump
+shot cli09-home-after
+# Chats (Tab twice: Settings, Chats): the message of the session is there; no reply of the repeater became a chat
+expect more all_msgs
+key tab
+key tab
+wait 800
+expect notext "Hilltop repeater"
+shot cli10-chats-after

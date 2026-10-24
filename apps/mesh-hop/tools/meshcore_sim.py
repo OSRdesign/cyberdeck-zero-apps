@@ -28,6 +28,26 @@ size the firmware would give "<name>: <text>") arrive in the radio log (0x88) 1 
 as if the board heard repeaters forward it (--heard-back-direct adds one copy with an empty path, as if heard from the sender). The radio log
 push every 3 s alternates random bytes with well formed packets of other traffic (REQ, ACK, TXT_MSG, PATH, a GRP_TXT of a channel the
 board does not have, a transport route), for the packet log (D8).
+Report 033 (the CLI) cases: remote administration of the repeaters and room servers among the contacts (Hilltop repeater, Weather room),
+as the companion and the repeater firmware do it. SEND_LOGIN (26) is answered MSG_SENT, then the remote node's verdict as a push after
+--remote-delay: LOGIN_SUCCESS (0x85, admin with --admin-password, guest with --guest-password; a blank password is accepted from a key
+already in its access list) or, for a wrong password, nothing at all like the firmware (--login-fail-push sends LOGIN_FAIL 0x86 instead).
+A CLI command (SEND_TXT with text type 1, CLI_DATA) is answered MSG_SENT with no ACK; the node runs it only for an admin, and its reply
+comes --cli-delay later as a contact message of text type 1 (MESSAGES_WAITING, then SYNC_NEXT): ver, board, clock, clock sync, advert,
+get / set name, get / set repeat, get / set guest.password, password, get prv.key ("??: prv.key": serial only in the firmware),
+"Unknown command", "unknown config: ..."; reboot answers nothing (the node restarts). --cli-silent: the remote nodes never answer a
+command (out of range). SET_FLOOD_SCOPE (54) is kept and answered OK; LOGOUT (29) is answered OK.
+Report 036 (the Repeater page, slice S1) cases: the guest password of the remote nodes is EMPTY by default, like the firmware's own
+default, so a blank login gives guest (--guest-password / $MESHHOP_SIM_GUEST_PASSWORD and --admin-password / $MESHHOP_SIM_ADMIN_PASSWORD
+set others); a blank password from a key already in a node's access list gives its role back first (simple_repeater handleLoginReq).
+The companion keeps ONE pending login (clearPendingReqs): a second SEND_LOGIN makes the first one's answer unmatchable, so it never
+comes. --remote-delay SEC (alias --login-delay) is the time before a remote node's answer; --remote-drop N|all loses the next N answers
+(all: out of reach) on the way back (the node still logs us in); stdin "drop N|all|0" does the same at run time. stdin "remote-reboot"
+restarts every remote node: its access list forgets the guests (they are not saved to flash; the admins are), "remote-reboot all"
+forgets the admins too; a remote CLI "reboot" restarts that node the same way. LOGOUT is local to the companion: the node keeps us in
+its list (bookkeeping printed). --remote-cases adds repeaters and a room that trap name lookups: a second "Hilltop repeater" (the same
+name, another key), "909192" (a hex-looking name that is the start of the first Hilltop's key), "Old Mill  relay 2" (spaces, two
+in a row) and "Club room".
 
     python3 meshcore_sim.py                      # creates the port /tmp/ttyMC0 (a symlink to the pty)
     python3 meshcore_sim.py --link /tmp/ttyMC1 --chatter 20 --echo
@@ -40,6 +60,8 @@ Commands typed on the simulator's stdin (when it has one):
     chan <idx> <text>     a channel message "Zed: <text>"
     advert                a new advert from a neighbour
     unplug / plug         remove / recreate the port (unplug and replug the board)
+    drop N|all|0          lose the next N answers of the remote repeaters / rooms (all: out of reach; 0: none)
+    remote-reboot [all]   every remote node restarts: its access list forgets the guests (all: the admins too)
     quit
 
 On the deck (no root, no extra package):  python3 meshcore_sim.py &   then start the app: the pty stands in for the USB
@@ -74,6 +96,19 @@ CMD_ADD_UPDATE_CONTACT, CMD_REMOVE_CONTACT, CMD_REBOOT, CMD_SET_OTHER_PARAMS = 9
 CMD_FACTORY_RESET, CMD_SEND_CONTROL_DATA, CMD_GET_STATS, CMD_SET_AUTOADD, CMD_GET_AUTOADD = 51, 55, 56, 58, 59
 CMD_GET_ALLOWED_REPEAT_FREQ, CMD_SET_PATH_HASH_MODE = 60, 61
 CMD_SET_ADVERT_LATLON = 14
+# report 033 (the CLI)
+CMD_SEND_LOGIN, CMD_LOGOUT, CMD_SET_FLOOD_SCOPE = 26, 29, 54
+TXT_TYPE_CLI_DATA = 1
+PERM_ACL_GUEST, PERM_ACL_ADMIN = 0, 3                 # ClientACL.h: the role in the low 2 bits
+REMOTE_FW_VER_LEVEL = 2                               # simple_repeater MyMesh.cpp FIRMWARE_VER_LEVEL, sent back in a login success
+
+
+def parse_drop(value):
+    """--remote-drop / stdin "drop": a count of remote answers to lose, or "all" (-1: every one, the node is out of reach)."""
+    value = str(value).strip().lower()
+    if value in ("all", "-1"):
+        return -1
+    return max(0, int(value or "0"))
 
 
 def text_field(s, width):
@@ -103,6 +138,12 @@ class Radio:
         # the weather room shares none
         self.contacts = [Contact(0x10, "Alice", 1, path_len=1, lat=48.9020, lon=2.4010), Contact(0x50, "Bob", 1, lat=48.8010, lon=2.2890),
                          Contact(0x90, "Hilltop repeater", 2, path_len=3, lat=49.1200, lon=2.6100), Contact(0xC0, "Weather room", 3, lat=0.0, lon=0.0)]
+        if getattr(args, "remote_cases", False):
+            # report 036: names a lookup by name gets wrong (meshcore-cli tries a hex-looking name as a key prefix first)
+            self.contacts += [Contact(0x30, "Hilltop repeater", 2, path_len=0, lat=49.0400, lon=2.5200),
+                              Contact(0x38, "909192", 2, lat=48.9500, lon=2.2000),
+                              Contact(0x40, "Old Mill  relay 2", 2, path_len=1, lat=48.7800, lon=2.4400),
+                              Contact(0x48, "Club room", 3, lat=0.0, lon=0.0)]
         self.channels = {0: ("Public", bytes.fromhex("8b3387e9c5cdea6ac9e5edbaa115cd72")),
                          1: ("#test", bytes.fromhex("9cd8fcf22a47333b591d96a2b848b73f"))}
         self.queue = []          # frames for CMD_SYNC_NEXT
@@ -151,9 +192,16 @@ class Radio:
         self.ident = "A"
         self.other = None                                 # the saved state of the board that is not plugged in
         self.reset_count = 0
+        # report 033: what the remote repeaters / rooms keep about this board (their name, passwords, our role in their access list)
+        self.remote = {}
+        self.scope = None                                 # the flood scope key (hex) set by SET_FLOOD_SCOPE; None = default
+        # report 036: the companion's one pending login (the first 4 key bytes, companion MyMesh.cpp pending_login) and the answers lost
+        self.pending_login = None
+        self.remote_drop = parse_drop(getattr(args, "remote_drop", "0"))
 
     SWAP_ATTRS = ("name", "key", "contacts", "channels", "queue", "nodes", "neighbours", "node_count", "manual_add", "multi_acks", "loc_policy",
-                  "telemetry", "autoadd", "path_mode", "repeat", "freq_khz", "bw_hz", "sf", "cr", "txp", "gps", "battery_mv", "lat_e6", "lon_e6")
+                  "telemetry", "autoadd", "path_mode", "repeat", "freq_khz", "bw_hz", "sf", "cr", "txp", "gps", "battery_mv", "lat_e6", "lon_e6",
+                  "remote", "pending_login")
 
     def make_board_b(self):
         """Another board: its own key, name, contacts, channels and waiting messages."""
@@ -270,8 +318,140 @@ class Radio:
         frame = struct.pack("<BBIIIIII", 24, 2, self.rx_packets, self.tx_packets, 4, 27, 90 + up // 5, 30)
         return frame + (struct.pack("<I", 3) if not self.args.old_stats else b"")
 
-    def dm(self, c, text, ts=None):
-        return (bytes([16, 0x16, 0, 0]) + c.key[:6] + bytes([0xFF, 0]) + struct.pack("<I", ts or int(time.time())) + text.encode())
+    def dm(self, c, text, ts=None, txt_type=0):
+        return (bytes([16, 0x16, 0, 0]) + c.key[:6] + bytes([0xFF, txt_type]) + struct.pack("<I", ts or int(time.time())) + text.encode())
+
+    # ---- report 033: a remote repeater / room server administered over LoRa (simple_repeater MyMesh.cpp, CommonCLI.cpp)
+    def remote_of(self, c):
+        """What the remote node c keeps: its own name, its passwords, the role this board has in its access list (None: not in it),
+        and how often this board logged in and out (bookkeeping, printed)."""
+        r = self.remote.get(c.key)
+        if r is None:
+            r = {"name": c.name, "admin": self.args.admin_password, "guest": self.args.guest_password, "perm": None, "repeat": True,
+                 "logins": 0, "logouts": 0}
+            self.remote[c.key] = r
+        return r
+
+    def remote_answer(self, what, frame, out):
+        """A remote node's answer on its way back over the air: lost while --remote-drop / stdin "drop" says so. Returns True if it came."""
+        if self.remote_drop != 0:
+            if self.remote_drop > 0:
+                self.remote_drop -= 1
+            print("meshcore_sim: %s lost on the air (remote drop, %s left)" % (what, "all" if self.remote_drop < 0 else self.remote_drop), flush=True)
+            return False
+        out(frame)
+        return True
+
+    def remote_login(self, c, password, out):
+        """The verdict of the remote node (simple_repeater MyMesh.cpp handleLoginReq), as the companion pushes it (companion_radio
+        MyMesh.cpp onContactResponse: only when it answers the login the companion still has pending)."""
+        r = self.remote_of(c)
+        if c.kind not in (2, 3, 4):
+            print("meshcore_sim: login to %s (a chat node): no answer" % c.name, flush=True)
+            return
+        if password == "" and r["perm"] is not None:      # "blank password, just check if sender is in ACL": its role back
+            perm = r["perm"]
+        elif password == r["admin"]:
+            perm = PERM_ACL_ADMIN
+        elif password == r["guest"]:                      # the firmware's default guest password is empty: a blank login is a guest
+            perm = PERM_ACL_GUEST
+        else:
+            print("meshcore_sim: login to %s: wrong password, %s" % (c.name, "LOGIN_FAIL" if self.args.login_fail_push else "no answer (like the firmware)"),
+                  flush=True)
+            if self.args.login_fail_push and self.pending_login == c.key[:4]:
+                self.pending_login = None
+                self.remote_answer("login fail of %s" % c.name, bytes([0x86, 0]) + c.key[:6], out)
+            return
+        r["perm"] = perm
+        r["logins"] += 1
+        admin = perm == PERM_ACL_ADMIN
+        if self.pending_login != c.key[:4]:
+            print("meshcore_sim: login to %s: %s, but the companion no longer waits for it (another request came since): no push" %
+                  (c.name, "admin" if admin else "guest"), flush=True)
+            return
+        print("meshcore_sim: login to %s: %s (login %d)" % (c.name, "admin" if admin else "guest", r["logins"]), flush=True)
+        if self.remote_answer("login answer of %s" % c.name,
+                              bytes([0x85, 1 if admin else 0]) + c.key[:6] + struct.pack("<I", int(time.time())) + bytes([perm, REMOTE_FW_VER_LEVEL]), out):
+            self.pending_login = None
+
+    def remote_reboot(self, c=None, everything=False):
+        """A remote node restarts (c; None: every one): its access list forgets the guests (not saved to flash, simple_repeater
+        MyMesh.cpp handleLoginReq), the admins stay (saved); everything=True forgets the admins too (an erased node, a setperm)."""
+        for key, r in self.remote.items():
+            if c is not None and key != c.key:
+                continue
+            if r["perm"] is not None and (everything or r["perm"] != PERM_ACL_ADMIN):
+                print("meshcore_sim: %s restarted: this board is no longer in its access list" % r["name"], flush=True)
+                r["perm"] = None
+            elif r["perm"] is not None:
+                print("meshcore_sim: %s restarted: this board stays in its access list (admin)" % r["name"], flush=True)
+
+    def remote_cli_reply(self, c, command):
+        """CommonCLI::handleCommand for the commands the simulator knows; "" = no reply. The reply is at most 160 bytes."""
+        r = self.remote_of(c)
+        command = command.lstrip(" ")
+        prefix = ""
+        if len(command) > 4 and command[2] == "|":      # the optional prefix a companion CLI puts in front: reflected back
+            prefix, command = command[:3], command[3:]
+        t = time.gmtime()
+        clock = "%02d:%02d - %d/%d/%d UTC" % (t.tm_hour, t.tm_min, t.tm_mday, t.tm_mon, t.tm_year)
+        if command.startswith("reboot"):
+            print("meshcore_sim: %s reboots (no reply)" % r["name"], flush=True)
+            self.remote_reboot(c)
+            return ""
+        if command.startswith("clock sync"):
+            reply = "OK - clock set: " + clock
+        elif command.startswith("clock"):
+            reply = clock
+        elif command.startswith("advert"):
+            reply = "OK - Advert sent"
+        elif command.startswith("password "):
+            r["admin"] = command[9:]
+            reply = "password now: " + r["admin"]
+        elif command.startswith("get "):
+            cfg = command[4:]
+            if cfg.startswith("guest.password"):
+                reply = "> " + r["guest"]
+            elif cfg.startswith("name"):
+                reply = "> " + r["name"]
+            elif cfg.startswith("repeat"):
+                reply = "> " + ("on" if r["repeat"] else "off")
+            else:                                         # get prv.key lands here too: it is answered on the serial console only
+                reply = "??: " + cfg
+        elif command.startswith("set "):
+            cfg = command[4:]
+            if cfg.startswith("name "):
+                r["name"] = cfg[5:]
+                reply = "OK"
+            elif cfg.startswith("repeat "):
+                r["repeat"] = not cfg[7:].startswith("off")
+                reply = "OK - repeat is now " + ("ON" if r["repeat"] else "OFF")
+            elif cfg.startswith("guest.password "):
+                r["guest"] = cfg[15:]
+                reply = "OK"
+            else:
+                reply = "unknown config: " + cfg
+        elif command.startswith("ver"):
+            reply = "v1.15.0-sim (Build: 19-Apr-2026)"
+        elif command.startswith("board"):
+            reply = "Simulated Heltec V3"
+        else:
+            reply = "Unknown command"
+        return (prefix + reply).encode("utf-8")[:160].decode("utf-8", "ignore")
+
+    def remote_cli(self, c, command, out):
+        """A CLI command on its way to c: it runs only for an admin (simple_repeater MyMesh.cpp), the reply comes as text type 1."""
+        r = self.remote_of(c)
+        if self.args.cli_silent:
+            print("meshcore_sim: CLI command for %s: no answer (--cli-silent)" % c.name, flush=True)
+            return
+        if c.kind not in (2, 3, 4) or r["perm"] != PERM_ACL_ADMIN:
+            print("meshcore_sim: CLI command for %s ignored: not logged in as admin" % c.name, flush=True)
+            return
+        reply = self.remote_cli_reply(c, command)
+        print("meshcore_sim: CLI command for %s (%d bytes), reply %d bytes" % (r["name"], len(command), len(reply)), flush=True)
+        if reply:
+            self.after(self.args.cli_delay, lambda: self.push_msg(out, self.dm(c, reply, txt_type=TXT_TYPE_CLI_DATA)))
 
     def chan_msg(self, idx, text, ts=None):
         return bytes([17, 0x0C, 0, 0, idx, 0x01, 0]) + struct.pack("<I", ts or int(time.time())) + text.encode()
@@ -308,8 +488,18 @@ class Radio:
                     out(b"\x00")
                 else:
                     out(bytes([1, 6]))
-        elif code in (CMD_SET_TIME, CMD_RESET_PATH):
+        elif code == CMD_SET_TIME:
             out(b"\x00")
+        elif code == CMD_RESET_PATH:
+            # companion_radio MyMesh.cpp: the contact's out_path_len becomes OUT_PATH_UNKNOWN (flood), OK; unknown key -> ERR_CODE_NOT_FOUND
+            key = bytes(c[1:33])
+            ct = next((x for x in self.contacts if x.key == key), None)
+            if ct is None or len(c) < 33:
+                out(bytes([1, 2]))
+            else:
+                ct.path_len = 0xFF
+                print("meshcore_sim: path reset for %s" % ct.name, flush=True)
+                out(b"\x00")
         elif code == CMD_ADVERT:
             out(b"\x00")
             self.after(1.5, lambda: out(bytes([0x80]) + random.choice(self.contacts).key))
@@ -432,6 +622,7 @@ class Radio:
             self.contacts, self.channels = [], {}
             self.queue = []
             self.nodes, self.neighbours = [], []
+            self.remote, self.pending_login = {}, None    # a new identity: no remote node knows it
             self.name = "MeshCore"
             self.reset_count += 1
             self.key = bytes((0x30 + self.reset_count * 7 + i * 5) & 0xFF for i in range(32))      # a new identity every time
@@ -484,6 +675,8 @@ class Radio:
                 out(b"\x00")
         elif code == CMD_GET_CHANNEL and a.old_firmware:
             out(bytes([1, 1]))
+        elif code == CMD_GET_CHANNEL and c[1] >= REAL_DEVICE_INFO[3]:
+            out(bytes([1, 2]))          # ERR_CODE_NOT_FOUND past MAX_GROUP_CHANNELS (40), as the firmware: meshcore-cli reads until it
         elif code == CMD_GET_CHANNEL:
             idx = c[1]
             name, secret = self.channels.get(idx, ("", b"\0" * 16))
@@ -495,6 +688,42 @@ class Radio:
             out(b"\x00")
         elif code == CMD_SYNC:
             out(self.queue.pop(0) if self.queue else bytes([10]))
+        elif code == CMD_SEND_LOGIN:
+            key, password = bytes(c[1:33]), bytes(c[33:]).split(b"\0")[0].decode("utf-8", "ignore")
+            ct = next((x for x in self.contacts if x.key == key), None) if len(c) >= 33 else None
+            if ct is None:
+                out(bytes([1, 2]))                      # ERR_CODE_NOT_FOUND: not a contact
+                return
+            out(bytes([6, 1 if ct.path_len == 0xFF else 0]) + key[:4] + struct.pack("<I", 1600))
+            self.pending_login = key[:4]                  # clearPendingReqs(): an older login's answer is not matched any more
+            print("meshcore_sim: login to %s sent (%s password)" % (ct.name, "blank" if password == "" else "a"), flush=True)
+            self.after(a.remote_delay, lambda: self.remote_login(ct, password, out))
+        elif code == CMD_LOGOUT:
+            # the companion only stops its keep-alive (stopConnection) and always answers OK; the node keeps this board in its list
+            ct = next((x for x in self.contacts if x.key == bytes(c[1:33])), None)
+            if ct is not None:
+                r = self.remote_of(ct)
+                r["logouts"] += 1
+                print("meshcore_sim: logout from %s (logout %d): local to the companion, %s" %
+                      (ct.name, r["logouts"], "the node still lists this board as " + ("admin" if r["perm"] == PERM_ACL_ADMIN else "guest")
+                       if r["perm"] is not None else "the node does not list this board"), flush=True)
+            out(b"\x00")
+        elif code == CMD_SET_FLOOD_SCOPE:
+            if a.old_firmware or len(c) < 2:
+                out(bytes([1, 1]))
+            else:
+                key = bytes(c[2:18]) if c[1] == 0 and len(c) >= 18 else b""
+                self.scope = None if c[1] == 0 and not any(key) else ("unscoped" if c[1] else key.hex())
+                print("meshcore_sim: flood scope %s" % ("reset" if self.scope is None else "set to " + self.scope), flush=True)
+                out(b"\x00")
+        elif code == CMD_SEND_TXT and len(c) >= 13 and c[1] == TXT_TYPE_CLI_DATA:
+            dst = bytes(c[7:13])
+            ct = next((x for x in self.contacts if x.key[:6] == dst), None)
+            if ct is None:
+                out(bytes([1, 2]))
+                return
+            out(bytes([6, 1 if ct.path_len == 0xFF else 0, 0, 0, 0, 0]) + struct.pack("<I", 1600))     # no ACK is expected for a command
+            self.remote_cli(ct, c[13:].decode("utf-8", "ignore"), out)
         elif code == CMD_SEND_TXT:
             attempt = c[2]
             dst = bytes(c[7:13])
@@ -635,7 +864,7 @@ class TcpPort:
             self.closed()
 
 
-def main():
+def build_parser():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--link", default="/tmp/ttyMC0", help="symlink to create for the pty (default /tmp/ttyMC0)")
     ap.add_argument("--device", help="use this existing character device instead of creating a pty (a socat pair end)")
@@ -680,7 +909,26 @@ def main():
     ap.add_argument("--heard-back", type=int, default=0, metavar="N", help="our channel sends come back in the radio log over N different paths (phase 3)")
     ap.add_argument("--heard-back-direct", action="store_true", help="plus one copy with an empty path (heard straight from the sender)")
     ap.add_argument("--strict-reset-word", action="store_true", help="FACTORY_RESET needs the word 'reset' behind the command byte (what I remember of the firmware)")
-    args = ap.parse_args()
+    # report 033 (the CLI)
+    ap.add_argument("--admin-password", default=os.environ.get("MESHHOP_SIM_ADMIN_PASSWORD", "password"),
+                    help="the admin password of the remote repeaters and rooms (default $MESHHOP_SIM_ADMIN_PASSWORD, else the firmware's 'password')")
+    ap.add_argument("--guest-password", default=os.environ.get("MESHHOP_SIM_GUEST_PASSWORD", ""),
+                    help="their guest password (default $MESHHOP_SIM_GUEST_PASSWORD, else empty like the firmware: a blank login gives guest)")
+    ap.add_argument("--remote-delay", "--login-delay", dest="remote_delay", type=float, default=0.8, metavar="SEC",
+                    help="seconds before a remote node's answer, e.g. the login verdict (default 0.8)")
+    ap.add_argument("--remote-drop", default="0", metavar="N|all",
+                    help="lose the next N answers of the remote nodes on the air (all: every one, out of reach); stdin 'drop N|all|0'")
+    ap.add_argument("--remote-cases", action="store_true",
+                    help="extra repeaters and a room: a duplicate name, a hex-looking name, spaces (report 036)")
+    ap.add_argument("--login-fail-push", action="store_true", help="a wrong password gets LOGIN_FAIL (0x86); by default nothing comes, like the firmware")
+    ap.add_argument("--cli-delay", type=float, default=1.0, metavar="SEC", help="seconds before the reply to a CLI command (the firmware waits 600 ms, then the air)")
+    ap.add_argument("--cli-silent", action="store_true", help="the remote nodes never answer a CLI command (out of range)")
+    return ap
+
+
+def main():
+    args = build_parser().parse_args()
+    parse_drop(args.remote_drop)                          # a bad value stops here, before the port exists
     if args.old_firmware:
         args.no_autoadd = args.no_stats = args.no_discover = True
 
@@ -760,6 +1008,14 @@ def main():
                     radio.new_node_advert(out)
                 elif parts[0] == "reboot":
                     radio.restart()
+                elif parts[0] == "drop":
+                    try:
+                        radio.remote_drop = parse_drop(parts[1] if len(parts) > 1 else "all")
+                        print("meshcore_sim: remote answers lost: %s" % ("all" if radio.remote_drop < 0 else radio.remote_drop), flush=True)
+                    except ValueError:
+                        print("meshcore_sim: drop N|all|0", flush=True)
+                elif parts[0] == "remote-reboot":
+                    radio.remote_reboot(None, len(parts) > 1 and parts[1] == "all")
                 elif parts[0] == "swap":
                     radio.restart()
                     radio.after(0.4, radio.swap_identity)         # the other board is on the cable when the port comes back

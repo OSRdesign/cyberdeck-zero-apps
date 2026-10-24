@@ -487,6 +487,7 @@ const char *type_filter_name(TypeFilter t)
     case TypeFilter::Repeater: return "Repeater";
     case TypeFilter::Room: return "Room";
     case TypeFilter::Sensor: return "Sensor";
+    case TypeFilter::RepeaterRoom: return "Repeater + Room";
     }
     return "";
 }
@@ -504,6 +505,7 @@ const char *age_filter_name(AgeFilter a)
 
 TypeFilter next_type_filter(TypeFilter t)
 {
+    if (t == TypeFilter::RepeaterRoom) return TypeFilter::All;            // (the picker's preset: never in the loop of T)
     return static_cast<TypeFilter>((static_cast<int>(t) + 1) % 5);
 }
 
@@ -531,13 +533,47 @@ bool type_matches(TypeFilter f, int type)
     case TypeFilter::Repeater: return type == advtype::kRepeater;
     case TypeFilter::Room: return type == advtype::kRoom;
     case TypeFilter::Sensor: return type == advtype::kSensor;
+    case TypeFilter::RepeaterRoom: return type == advtype::kRepeater || type == advtype::kRoom;
     }
     return true;
+}
+
+bool search_key_prefix(const std::string &query, std::string *hex)
+{
+    if (query.empty() || query[0] != '<') return false;
+    std::string h;
+    for (size_t i = 1; i < query.size(); ++i) {
+        const char c = static_cast<char>(std::tolower(static_cast<unsigned char>(query[i])));
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
+        h += c;
+    }
+    if (hex) *hex = h;
+    return true;
+}
+
+bool contact_matches_search(const std::string &name, const std::string &key_hex, const std::string &query)
+{
+    if (query.empty()) return true;
+    std::string hex;
+    if (search_key_prefix(query, &hex)) {
+        if (hex.size() > key_hex.size()) return false;
+        for (size_t i = 0; i < hex.size(); ++i)
+            if (std::tolower(static_cast<unsigned char>(key_hex[i])) != hex[i]) return false;
+        return true;
+    }
+    auto fold = [](const std::string &s) {
+        std::string o = s;
+        for (char &ch : o)
+            if (ch >= 'A' && ch <= 'Z') ch = static_cast<char>(ch - 'A' + 'a');
+        return o;
+    };
+    return fold(name).find(fold(query)) != std::string::npos;
 }
 
 bool passes_filter(const ContactRow &r, const ContactFilter &f, uint32_t now)
 {
     if (!type_matches(f.type, r.type)) return false;
+    if (!f.search.empty() && !contact_matches_search(r.name, r.key_hex, f.search)) return false;
     const uint32_t limit = age_filter_seconds(f.age);
     if (limit == 0) return true;
     if (r.heard == 0 || r.heard < kMinPlausibleTime || now < kMinPlausibleTime) return false;
@@ -967,14 +1003,20 @@ MenuResult menu_key(const KeyEvent &e, int &selected, int count)
 
 const char *settings_section_title(int section)
 {
-    static const char *const titles[] = {"BOARD", "RADIO", "DIRECT MESSAGES", "CLOCK", "CHANNELS", "RADIO CHANGES", "HISTORY", "SCHEDULED ADVERT", "CONTACTS", "BOARD ACTIONS"};
-    return section >= 0 && section < 10 ? titles[section] : "";
+    static const char *const titles[] = {"BOARD", "RADIO", "DIRECT MESSAGES", "CLOCK", "CHANNELS", "RADIO CHANGES", "HISTORY", "SCHEDULED ADVERT", "CONTACTS",
+                                         "BOARD ACTIONS", "MY CONTACT"};
+    return section >= 0 && section < 11 ? titles[section] : "";
 }
 
 std::vector<SRowSpec> settings_layout(const SettingsContext &ctx)
 {
     std::vector<SRowSpec> rows;
     auto add = [&](SRowKind k, int arg = 0) { rows.push_back({k, arg}); };
+    if (ctx.have_self) {                            // MY CONTACT (0.7.0): what other nodes know this node by
+        add(SRowKind::Header, 10);
+        add(SRowKind::MyName);                      // the node name: a link to RADIO > Node name
+        add(SRowKind::MyKey);                       // the public key, grouped; Enter shows the whole 64 hex digits
+    }
     add(SRowKind::Header, 0);                       // BOARD
     add(SRowKind::Info, 0);                         // connection
     add(SRowKind::Info, 1);                         // firmware
@@ -983,9 +1025,7 @@ std::vector<SRowSpec> settings_layout(const SettingsContext &ctx)
     if (ctx.connected && ctx.have_self) add(SRowKind::Position);          // the board position (phase 2, D6)
     if (ctx.gps.available) add(SRowKind::BoardGps);
     else if (!ctx.gps.notice.empty()) add(SRowKind::GpsNotice);
-    if (ctx.stats.available) add(SRowKind::Stats);
-    else if (!ctx.stats.notice.empty()) add(SRowKind::StatsNotice);
-    add(SRowKind::PacketLog);                       // the packet log (D8): an app capture, also viewable when the board is gone
+    // (0.7.0: Statistics and the Packet log are on the Tools page)
     add(SRowKind::Header, 1);                       // RADIO
     add(SRowKind::Name);
     add(SRowKind::Preset);
@@ -1036,6 +1076,7 @@ std::vector<SRowSpec> settings_layout(const SettingsContext &ctx)
 
 bool settings_row_selectable(SRowKind k)
 {
+    // (MyName and MyKey are selectable: a link and a row that shows the whole key)
     return k != SRowKind::Header && k != SRowKind::Info && k != SRowKind::GpsNotice && k != SRowKind::ChannelsNotice &&
            k != SRowKind::StatsNotice && k != SRowKind::PathHashNotice && k != SRowKind::AutoAddNotice;
 }
@@ -1237,7 +1278,8 @@ const char *tab_name(Tab t)
     case Tab::Chats: return "Chats";
     case Tab::Map: return "Map";
     case Tab::Contacts: return "Contacts";
-    case Tab::Terminal: return "Terminal";
+    case Tab::Tools: return "Tools";
+    case Tab::Cli: return "CLI";
     case Tab::Settings: return "Settings";
     }
     return "";
@@ -1245,7 +1287,7 @@ const char *tab_name(Tab t)
 
 Tab step_tab(Tab t, int delta)
 {
-    const int n = 5;
+    const int n = kTabCount;
     const int i = (static_cast<int>(t) + delta % n + n) % n;
     return static_cast<Tab>(i);
 }
@@ -1257,9 +1299,11 @@ BackAction back_action(const NavState &s)
     if (s.search_open) return BackAction::CloseSearch;
     if (s.stats_open) return BackAction::CloseStats;
     if (s.packet_log_open) return BackAction::ClosePacketLog;
-    if (s.detail_open) return BackAction::CloseDetail;
+    if (s.detail_open) return BackAction::CloseDetail;           // (over the Repeater page too: More > Details)
+    if (s.repeater_open) return BackAction::CloseRepeater;
     if (s.nearby_open) return BackAction::CloseNearby;
     if (s.select_mode) return BackAction::ExitSelect;
+    if (s.contact_search) return BackAction::CloseContactSearch;
     if (s.tab == Tab::Chats && s.compose_focus) return BackAction::FocusList;
     return BackAction::ExitHint;
 }

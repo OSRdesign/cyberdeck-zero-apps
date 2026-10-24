@@ -8,7 +8,9 @@
  *   Rows, in this order: USB nodes, Bluetooth nodes (paired first, then the strongest), IP nodes, then the Bluetooth row
  *   (scanning, Rescan, Scan for Bluetooth nodes, or a grey note when Bluetooth cannot be used), and last "Add a node by IP
  *   address". A node row: the transport icon, the node's name, a second line ("ttyACM0 · T1000", "BLE · paired",
- *   "192.168.1.20:5000", or the state of the connection), and for Bluetooth the signal bars while the scan hears it.
+ *   "192.168.1.20:5000", or the state of the connection), and for Bluetooth the signal bars while the scan hears it. A USB
+ *   row shows the node name learned on its port only while the same USB device is behind it (NodeBook::name_for), else
+ *   the USB product string ("USB JTAG/serial debug unit"), else "USB board".
  *   Markers (the row affordance rule): a node acts (the dot; blue while it connects or is connected), Add opens a dialog (the
  *   chevron), a note is information (grey, never selected).
  */

@@ -1,5 +1,6 @@
-# Mesh Hop (P2b, the shell; P3, the pages; P4, Chats and the on-screen keyboard): Home is a list (Chats, Contacts, Settings, with a
-# chevron and a short state each), the header has the Esc button, the caption line says the board and the notices; a page has the same
+# Mesh Hop (P2b, the shell; P3, the pages; P4, Chats and the on-screen keyboard; 0.7.0, Tools): Home is a list (Chats, Contacts,
+# Tools, Settings, Node, with a chevron and a short state each), the header has the Esc button, the caption line says the board and
+# the notices; a page has the same
 # header and its Esc goes back to Home, where it asks "Quit Mesh Hop?". Every page fills the width of the screen (no 640 px stage any
 # more): Chats is one pane at 640x480 and two on the other sizes (the bar over the list). At the five sizes, no board (the app
 # offline). Taps go by label (a first tap on a row selects it, the second opens it), the keys come through the shared keyboard bridge.
@@ -18,18 +19,21 @@ sizes 640x480 800x480 720x720 1024x600 1280x720
 wait 900
 expect text "Chats"
 expect text "Contacts"
+expect text "Tools"
 expect text "Settings"
+expect text "Node"
 expect text "Esc"
 expect notext "Map"
 expect notext "Terminal"
 expect notext "More"
 expect noquit
 
-# Contacts from Home: a first tap selects the row, the second opens it. One action bar: Filter, Sort, More
+# Contacts from Home: a first tap selects the row, the second opens it. One action bar: Search, Filter, Sort, More (0.7.0)
 tap "Contacts"
 tap "Contacts"
 wait 400
 expect text "More"
+expect text "Search"
 expect notext "Send advert"
 check contacts
 # More opens the menu with the board's actions; Send advert opens the arrow choice of its scope (Flood, Zero-hop); Cancel closes both
@@ -51,13 +55,14 @@ wait 400
 expect notext "More"
 expect text "Settings"
 
-# Settings, a row of its list opens the packet log (a sub-page: a first tap selects the row, the second opens it); the header Esc
-# goes back to Settings, then Home
-tap "Settings"
-tap "Settings"
+# Tools (0.7.0): Nearby, Packet log, Statistics, CLI; a row opens the packet log (a sub-page: a first tap selects the row, the
+# second opens it); the header Esc goes back to Tools, then Home
+tap "Tools"
+tap "Tools"
 wait 400
-expect text "Node name"
-check settings
+expect text "Packet log"
+expect text "Statistics"
+check tools
 tap "Packet log"
 tap "Packet log"
 wait 300
@@ -66,7 +71,17 @@ check packet-log
 tap "Esc"
 wait 400
 expect notext "Clear"
+expect text "Statistics"
+tap "Esc"
+wait 400
+
+# Settings: no Statistics or Packet log rows any more (they are on Tools)
+tap "Settings"
+tap "Settings"
+wait 400
 expect text "Node name"
+expect notext "Packet log"
+check settings
 
 # the keys through cp0_lvgl's queue and the app's key bridge: Tab goes to the next page (Settings -> Chats -> Contacts). Chats without
 # a board: the bar (Search, Add channel: 7 mm cells) and the empty list
@@ -100,6 +115,25 @@ expect notext "More"
 key esc
 expect text "Hold Esc 3 s to exit"
 expect noquit
+
+# Tools > CLI without a node (0.6, report 033 P5; 0.7.0: under Tools): the row says so, a tap on it explains in a box, nothing starts
+tap "Tools"
+tap "Tools"
+wait 400
+expect text "CLI"
+expect text "meshcore-cli  ·  not connected"
+tap "CLI"
+tap "CLI"
+wait 600
+expect text "Connect to a node first (Home > Node)."
+shot cli-not-connected
+tap "OK"
+wait 400
+expect notext "Connect to a node first (Home > Node)."
+expect text "Statistics"
+tap "Esc"
+wait 400
+expect text "Chats"
 
 # the header's Esc at Home asks first: Cancel stays, Quit leaves (a touch-only board has no other way out)
 tap "Esc"

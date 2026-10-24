@@ -124,9 +124,9 @@ wait 300
 say == back to the list (expect conv_open=0)
 dump
 
-# Settings > History (the rows end: Delete all, Delete older than, Forget this board's data, Reboot, Factory reset, Undo, Save)
-key tab
-key tab
+# Settings > History (the rows end: Delete all, Delete older than, Forget this board's data, Reboot, Factory reset, Undo, Save);
+# Settings is the page before Chats (Shift+Tab)
+key backtab
 wait 300
 key end
 key up

@@ -5,6 +5,7 @@
 #include "mesh_app.hpp"
 
 #include "app.hpp"
+#include "cli_page.hpp"
 #include "ble/ble_transport.hpp"
 #include "ble/bluez_backend.hpp"
 #include "clock_policy.hpp"
@@ -31,7 +32,7 @@ namespace meshhop {
 
 namespace {
 
-constexpr const char *kVersion = "0.5.0";
+constexpr const char *kVersion = "0.7.2";
 
 // ---- the colours: the launcher's (cp0_ui_list.h and cp0_ui_osk.h), not an own palette. Green, amber and red are the
 // status tones (ValueTone Ok / Warn / Bad), the accent blue marks what is selected, focused or unread.
@@ -116,7 +117,10 @@ enum Tag {
     kTagFilter, kTagSortMenu, kTagMore, kTagNearbyAdd, kTagNearbyIgnore,
     // P4: Chats, the search field, the bar over the list
     kTagSearchField, kTagSearchOpen, kTagChatAdd,
+    // 0.7.0: the Search of Contacts (the Repeater page's and the login box's tags: RepTag, mesh_app.hpp)
+    kTagContactSearch, kTagContactSearchField,
 };
+static_assert(static_cast<int>(kTagContactSearchField) < static_cast<int>(kTagRepLogin), "the tags of repeater_page.cpp come after mesh_app.cpp's");
 
 App *g_app = nullptr;
 
@@ -610,6 +614,7 @@ void ActionBar::place(Cell &c, int x, int w)
     const int top = std::max(0, (h_ - (two ? lh + vh : lh)) / 2);
     const int tw = std::max(1, w - 2 * pad);
     lv_label_set_text(c.label, c.spec.label.c_str());
+    set_color(c.label, c.spec.dim ? kMuted : kText);
     lv_obj_set_pos(c.label, pad, top);
     lv_obj_set_size(c.label, tw, lh);
     lv_label_set_text(c.value, c.spec.value.c_str());
@@ -661,7 +666,7 @@ void ActionBar::set_cells(const std::vector<CellSpec> &cells)
         bool changed = false;
         for (size_t i = 0; i < cells.size(); ++i) {
             Cell &c = cells_[i];
-            if (c.spec.label == cells[i].label && c.spec.value == cells[i].value) continue;
+            if (c.spec.label == cells[i].label && c.spec.value == cells[i].value && c.spec.dim == cells[i].dim) continue;
             c.spec = cells[i];
             changed = true;
         }
@@ -835,6 +840,7 @@ App::App(Platform &plat) : plat_(plat)
     } else {
         transport_ = std::make_unique<NullTransport>();
     }
+    passwords_ = std::make_unique<PasswordStore>(store_->dir());   // meshcore-cli's files (<data>/cli/.config/meshcore/<key>.pass)
     make_client();
     deck_clock_.refresh();                      // is the deck clock NTP synchronised? answered by a worker thread
 
@@ -850,6 +856,7 @@ App::App(Platform &plat) : plat_(plat)
 App::~App()
 {
     plat_.on_key = nullptr;
+    cli_shutdown();                     // meshcore-cli killed, the relay closed (before the client goes)
     if (inset_listener_) cp0::ui::osk::remove_inset_listener(inset_listener_);
     inset_listener_ = 0;
     release_osk();
@@ -873,6 +880,9 @@ void App::make_client()
     client_->set_log([this](const std::string &s) { if (log_) log_->line(s); });
     if (const char *d = std::getenv("MESHHOP_DEBUG"); d && *d && *d != '0') client_->options().log_frames = true;
     client_->set_deck_clock([this] { return deck_clock_.state(); }, [this] { deck_clock_.refresh(); });
+    client_->set_password_store(passwords_.get());                // a login with Remember writes there after a success
+    rep_req_ = 0;                                                 // (a new client: its results count from 0 again)
+    rep_seen_result_ = 0;
 }
 
 void App::post(std::function<void()> fn)
@@ -952,7 +962,8 @@ App::Geo App::geo() const
 }
 
 /* Home: the main menu, a CompactList with the rows of Settings (settings_list_layout: the same height, label and value sizes,
- * chevron, and the page column): Chats, Contacts, Settings, Node (0.5: the start page; Map and Terminal come back when they exist). The value of a row
+ * chevron, and the page column): Chats, Contacts, Tools (0.7.0: Nearby, Packet log, Statistics and the CLI), Settings, Node (0.5:
+ * the start page; Map comes back when it exists). The value of a row
  * is a short state in grey. (Before P3c it was the Comfortable list of the ROW token on the 640 stage: its text is 43 % of
  * a 7 mm row, so on a panel of low density, the HackBerry, it came out smaller than the pages.) */
 void App::build_home()
@@ -969,8 +980,15 @@ void App::build_home()
     cp0::ui::CompactListEvents ev;
     ev.activate = [this](int, std::intptr_t id) {
         post([this, id] {
-            if (id == 3) open_nodes(true);
-            else open_page(id == 0 ? Tab::Chats : id == 1 ? Tab::Contacts : Tab::Settings);
+            const auto &items = home_items();
+            if (id < 0 || id >= static_cast<std::intptr_t>(items.size())) return;
+            switch (items[static_cast<size_t>(id)]) {
+            case HomeItem::Chats: open_page(Tab::Chats); break;
+            case HomeItem::Contacts: open_page(Tab::Contacts); break;
+            case HomeItem::Tools: open_page(Tab::Tools); break;
+            case HomeItem::Settings: open_page(Tab::Settings); break;
+            case HomeItem::Node: open_nodes(true); break;
+            }
         });
     };
     ev.back = [this] { header_back(); };
@@ -985,11 +1003,13 @@ void App::build_screen()
 {
     build_shell();
     build_body();
-    // every page fills the width (Map and Terminal are not on Home and never shown: empty until they exist)
-    for (int i = 0; i < 5; ++i) page_[i] = make_box(wide_, 0, 0, layout_.w, panel_h_);
+    // every page fills the width (Map is not on Home and never shown: empty until it exists; CLI: cli_page.cpp)
+    for (int i = 0; i < kTabCount; ++i) page_[i] = make_box(wide_, 0, 0, layout_.w, panel_h_);
     build_chats();
     build_contacts();
     build_settings();
+    build_tools();
+    build_cli();
     build_home();
     build_nodes();
     build_hint_line();
@@ -1327,15 +1347,23 @@ cp0_ui_list_layout_t App::settings_list_layout(int y, int h) const
 }
 
 /* Contacts (P3): the line under the title says what is shown (the shell's caption place, page_caption), one action bar of
- * three cells (Filter, Sort, More; the select mode has its own), then the contacts in two-line rows: the name, and under it
- * the type, when it was heard, the hops (and the SNR on the Wide and Large screens); at the right the distance and the
- * chevron. A tap selects a row, a tap on the selected row opens the contact's details. */
+ * four cells (0.7.0: Search, Filter, Sort, More; the select mode has its own), the Search field under it while it is shown,
+ * then the contacts in two-line rows: the name, and under it the type, when it was heard, the hops (and the SNR on the Wide and
+ * Large screens); at the right the distance and the chevron. A tap selects a row, a tap on the selected row opens it by its
+ * type (0.7.0): a repeater or a room its Repeater page, a chat node its conversation, anything else its details; a 3 s hold
+ * (or I) opens its Options. */
 void App::build_contacts()
 {
     const Geo g = geo();
     lv_obj_t *p = page_[static_cast<int>(Tab::Contacts)];
     const int bar_y = g.s / 2, list_y = bar_y + g.bar + g.s;
     contacts_bar_.create(p, g.x, bar_y, g.cw, g.bar, f_body_, f_caption_);
+    // the Search field (0.7.0): a part of the name, or '<' and the start of the key; it filters as it is typed
+    cs_field_ = make_text_field(p, kTagContactSearchField, 40, g.row);
+    lv_obj_set_pos(cs_field_, g.x, list_y);
+    lv_obj_set_width(cs_field_, g.cw);
+    lv_textarea_set_placeholder_text(cs_field_, "Name, or < and the start of the key");
+    set_hidden(cs_field_, true);
     RowList::Config cfg;
     cfg.max_cells = 4;
     cfg.max_boxes = 1;
@@ -1346,6 +1374,8 @@ void App::build_contacts()
     cfg.mark_layout.text_px = cp0_ui_metrics_get()->text_px[CP0_TEXT_BODY];
     contact_list_.create(p, g.lx, list_y, g.lw, std::max(1, g.h - list_y), cfg);
 
+    // 0.7.0: the Repeater page of a repeater or room (repeater_page.cpp), under the details (More > Details opens over it)
+    build_repeater();
     // a contact's details (C8): a sub-page over the list, its actions on top, its facts under them
     detail_ = make_panel(wide_, g.w, g.h);
     detail_bar_.create(detail_, g.x, bar_y, g.cw, g.bar, f_body_, f_caption_);
@@ -1438,6 +1468,23 @@ void App::build_settings()
     build_packet_log();
 }
 
+/* Tools (0.7.0, the official app's tools menu): Nearby, Packet log, Statistics, CLI in two-line rows (the name; what it holds or
+ * does), each with the chevron; a tap selects a row, a tap on the selected row (or Enter) opens it. Nearby is the panel of
+ * Contacts > More > Nearby, Statistics and the Packet log the panels Settings had before. */
+void App::build_tools()
+{
+    const Geo g = geo();
+    RowList::Config cfg;
+    cfg.max_cells = 3;
+    cfg.max_boxes = 0;
+    cfg.flat = true;
+    cfg.marks = true;
+    cfg.mark_layout = settings_list_layout(g.s / 2, g.h - g.s / 2);
+    cfg.mark_layout.text_px = cp0_ui_metrics_get()->text_px[CP0_TEXT_BODY];
+    cfg.min_row_h = std::max(g.row, line_h(f_body_) + line_h(f_caption_) + 2 * std::max(4, g.s / 2));
+    tools_list_.create(page_[static_cast<int>(Tab::Tools)], g.lx, g.s / 2, g.lw, std::max(1, g.h - g.s / 2), cfg);
+}
+
 /* The packet log (D8): a sub-page over Settings, like the statistics. Start / Stop and Clear on the bar; the packets in a table
  * whose columns are chosen by the width (the time and the type always, then the route, the hops, the SNR, the channel, the
  * RSSI and the size while they fit); the path and the bytes of the selected packet under the table, or at its right on the
@@ -1508,14 +1555,18 @@ void App::layout_wide()
 {
     const Geo g = geo();
     lv_obj_set_size(wide_, layout_.w, panel_h_);
-    for (int i = 0; i < 5; ++i) lv_obj_set_size(page_[i], layout_.w, panel_h_);
-    for (lv_obj_t *panel : {search_panel_, nearby_, detail_, stats_panel_, log_panel_}) lv_obj_set_size(panel, layout_.w, panel_h_);
+    for (int i = 0; i < kTabCount; ++i) lv_obj_set_size(page_[i], layout_.w, panel_h_);
+    for (lv_obj_t *panel : {search_panel_, nearby_, detail_, stats_panel_, log_panel_, rep_panel_}) lv_obj_set_size(panel, layout_.w, panel_h_);
     const int list_y = g.s / 2 + g.bar + g.s;
-    contact_list_.resize(std::max(1, g.h - list_y));
+    layout_contacts();
     detail_list_.resize(std::max(1, g.h - list_y));
     nearby_list_.resize(std::max(1, g.h - list_y));
+    tools_list_.resize(std::max(1, g.h - g.s / 2));
+    tools_sig_ = 0;
+    layout_repeater();
     layout_search();
     layout_chats();
+    layout_cli();
     // the packet log: the table and the bytes of the selected packet (under it: one line of path, four of bytes)
     const int log_y = g.s / 2 + g.bar + g.s + line_h(f_caption_) + g.s / 2;
     const int detail_h = log_side_ ? 0 : g.s + line_h(f_caption_) + 4 * line_h(f_mono_);
@@ -1593,6 +1644,28 @@ void App::layout_body()
     set_hidden(hint_box_, !hint);
     lv_obj_set_pos(hint_box_, 0, layout_.h - hint_h_);
     invalidate();
+}
+
+/* Contacts (0.7.0): the bar at the top, the Search field under it while the search is shown, the list under both. While the
+ * on-screen keyboard is up for the field, the bar goes and the field moves to the top: the rows that fit above the keyboard stay
+ * (at 640x480 only the field: its Enter puts the keyboard away and the rows come back). */
+void App::layout_contacts()
+{
+    if (!cs_field_) return;
+    const Geo g = geo();
+    const bool search = nav_.contact_search;
+    const bool osk_for_field = search && osk_inset_ > 0 && osk_field_ == cs_field_;
+    const int bar_y = g.s / 2;
+    const int field_y = osk_for_field ? g.s / 2 : bar_y + g.bar + g.s;
+    const int list_y = search ? field_y + g.row + g.s : bar_y + g.bar + g.s;
+    set_hidden(contacts_bar_.root(), osk_for_field);
+    set_hidden(cs_field_, !search || nav_.repeater_open || nav_.detail_open || nav_.nearby_open);   // (under a sub-page: hidden, as covered)
+    lv_obj_set_pos(cs_field_, g.x, field_y);
+    lv_obj_set_size(cs_field_, g.cw, g.row);
+    const int list_h = g.h - list_y;
+    set_hidden(contact_list_.obj(), list_h < g.list_row);
+    contact_list_.set_y(list_y);
+    contact_list_.resize(std::max(1, list_h));
 }
 
 /* The search: the field at the top, then the filters and the results while they fit above the on-screen keyboard (with it up at
@@ -1720,7 +1793,9 @@ std::string App::debug_state() const
     }
     // P4: the panes of Chats, the on-screen keyboard and the field it is up for
     const char *typing = !osk_field_ ? "-" : osk_field_ == compose_ ? "compose" : osk_field_ == sr_query_ ? "search"
-                         : osk_field_ == ed_ta_ ? "editor" : osk_field_ == pos_ta_[0] ? "latitude" : osk_field_ == pos_ta_[1] ? "longitude" : "?";
+                         : osk_field_ == ed_ta_ ? "editor" : osk_field_ == pos_ta_[0] ? "latitude" : osk_field_ == pos_ta_[1] ? "longitude"
+                         : cli_ && osk_field_ == cli_->entry ? "cli" : osk_field_ == cs_field_ ? "contacts-search"
+                         : osk_field_ == login_ta_ ? "password" : "?";
     s += std::string(" panes=") + (two_pane_fit_ && osk_inset_ == 0 ? "2" : "1") + " conv_open=" + (conv_open_ ? "1" : "0") +
          " osk=" + (cp0::ui::osk::visible() ? "up" : "down") + " osk_h=" + std::to_string(osk_inset_) + " typing=" + typing +
          " compose_view=" + (compose_view() ? "1" : "0") + " search_typing=" + (search_typing_ ? "1" : "0") +
@@ -1729,6 +1804,31 @@ std::string App::debug_state() const
     s += std::string(" nodes=") + (at_nodes_ ? "1" : "0") + " node_rows=" + std::to_string(node_rows_.size()) + " node_sel='" + nodes_sel_key_ + "'" +
          " active='" + active_key_ + "' transport='" + transport_->kind() + "'" +
          " ble=" + (ble_link_ ? ble::state_name(ble_link_->status().state) : "-");
+    // 0.6: the CLI page (the entry's text in clear only when it is not a password: '*' per character then)
+    if (cli_) {
+        const CliState &c = *cli_;
+        const char *et = c.entry ? lv_textarea_get_text(c.entry) : "";
+        std::string entry = et ? et : "";
+        if (c.password) {
+            size_t n = 0;
+            for (const char ch : entry) n += (static_cast<unsigned char>(ch) & 0xC0) != 0x80 ? 1 : 0;
+            entry = std::string(n, '*');
+        }
+        std::string prompt = c.screen.current_line();
+        for (char &ch : prompt)
+            if (ch == '\'') ch = '"';
+        s += std::string(" cli=") + cli_phase_name(c.phase) + " cli_pw=" + (c.screen.password_prompt() ? "1" : "0") +
+             " cli_help=" + std::to_string(c.help) + " cli_typing=" + (c.typing ? "1" : "0") + " cli_entry='" + entry + "'" +
+             " cli_line='" + prompt + "' cli_end='" + c.end_text + "' cli_hist=" + std::to_string(c.history.size()) +
+             " cli_follow=" + (c.follow ? "1" : "0") + " cli_out=" + (c.out_visible ? "1" : "0") + " cli_masked=" + std::to_string(c.screen.masked_bytes()) +
+             " cli_usage=" + std::to_string(c.usage_state) + " cli_version='" + c.version + "' cli_warm=" + (c.warm_done ? std::to_string(c.warm_exit) : "-") +
+             " relay=" + (client_->relay_active() ? (client_->relay_ready() ? "passthrough" : "busy") : "off") +
+             " relay_ended=" + std::to_string(client_->relay_sessions_ended()) + " cli_to='" + cli_to_pending_.substr(0, 8) + "'" +
+             " cli_back='" + cli_back_rep_.substr(0, 8) + "'";
+    }
+    // 0.7.0: Tools, the Search of Contacts, the Repeater page and its login box (never the password: only where it came from)
+    s += std::string(" tools_sel=") + std::to_string(tools_sel_) + " tools_builds=" + std::to_string(tools_builds_) + " cs=" + (nav_.contact_search ? "1" : "0") + " cs_text='" + cview_.filter.search + "'" +
+         " cs_typing=" + (cs_typing_ ? "1" : "0") + repeater_debug();
     return s;
 }
 
@@ -1765,18 +1865,26 @@ void App::sync_osk()
 {
     lv_obj_t *want = nullptr;
     if (editor_open_) {
-        if (edit_kind_ != EditKind::Position) want = ed_ta_;
+        if (edit_kind_ == EditKind::Login) want = login_typing_ && login_focus_ == 0 ? login_ta_ : nullptr;   // the password, once tapped
+        else if (edit_kind_ != EditKind::Position) want = ed_ta_;
         else if (pos_typing_ && (pos_focus_ == kPosLat || pos_focus_ == kPosLon)) want = pos_ta_[pos_focus_];
     } else if (!nav_.popup_open && !at_home_ && nav_.tab == Tab::Chats) {
         if (nav_.search_open) want = search_typing_ ? sr_query_ : nullptr;
         else if (nav_.compose_focus && !conv_.empty() && conversation_visible()) want = compose_;
+    } else if (!nav_.popup_open && !at_home_ && !at_nodes_ && nav_.tab == Tab::Cli && cli_ && cli_->help == 0 && cli_->typing) {
+        want = cli_->entry;                                   // the CLI's entry line, once tapped
+    } else if (!nav_.popup_open && !at_home_ && !at_nodes_ && nav_.tab == Tab::Contacts && nav_.contact_search && cs_typing_ && !nav_.repeater_open &&
+               !nav_.detail_open && !nav_.nearby_open) {
+        want = cs_field_;                                     // the Search of Contacts
     }
     if (want == osk_field_) return;
     release_osk();
     osk_field_ = want;
     const bool digits = editor_open_ && edit_kind_ == EditKind::BlePin;
-    if (want) cp0::ui::osk::request(want, digits ? cp0::ui::TextType::Number : cp0::ui::TextType::Text, false);   // Text: the number pad has neither '-' nor '.'
+    const bool password = editor_open_ && edit_kind_ == EditKind::Login;
+    if (want) cp0::ui::osk::request(want, digits ? cp0::ui::TextType::Number : password ? cp0::ui::TextType::Password : cp0::ui::TextType::Text, false);   // Text: the number pad has neither '-' nor '.'
     chat_mode_ = ~0u;                                                         // the compose view follows
+    layout_contacts();                                                        // (the Search field moves up while the keyboard is up for it)
     invalidate();
 }
 
@@ -1791,16 +1899,20 @@ void App::on_osk_inset(int inset)
 void App::select_tab(Tab t)
 {
     if (editor_open_ || nav_.popup_open) return;
+    if (nav_.tab == Tab::Cli && t != Tab::Cli) cli_stop();  // another page: the CLI's session ends (D6)
     nav_.tab = t;
     nav_.detail_open = false;
     set_hidden(detail_, true);
     detail_key_.clear();
-    // every layer over a page closes with the tab (the search, the Nearby list, the statistics, the select mode)
+    // every layer over a page closes with the tab (the search, the Nearby list, the statistics, the select mode; 0.7.0: the
+    // Repeater page, which cancels a login it waits for, and the Search of Contacts)
     if (nav_.search_open) close_search();
     if (nav_.stats_open) close_stats();
     if (nav_.packet_log_open) close_packet_log();
     if (nav_.nearby_open) close_nearby();
     if (nav_.select_mode) leave_select_mode();
+    if (nav_.repeater_open) close_repeater();
+    if (nav_.contact_search) close_contact_search();
     if (t == Tab::Settings && !dirty_radio_) edit_ = model_.radio_settings();
     if (t == Tab::Settings && client_->ready() && mono_ms() - self_refresh_ms_ > 20000) {     // the board position and settings as the board holds them now
         self_refresh_ms_ = mono_ms();
@@ -1812,7 +1924,7 @@ void App::select_tab(Tab t)
 
 void App::set_page_visible()
 {
-    for (int i = 0; i < 5; ++i) set_hidden(page_[i], i != static_cast<int>(nav_.tab));
+    for (int i = 0; i < kTabCount; ++i) set_hidden(page_[i], i != static_cast<int>(nav_.tab));
 }
 
 /* The page title of the header: "Mesh Hop > Chats", and one more part inside a sub-page (a contact, Nearby, Search...). */
@@ -1832,14 +1944,26 @@ void App::update_title()
         if (nav_.detail_open) {
             const ContactRec *r = model_.find_contact(detail_key_);
             path.push_back(r ? truncate_ellipsis(r->c.name, 24) : std::string("Contact"));
+        } else if (nav_.repeater_open) {                     // 0.7.0: "Contacts > Hilltop repeater"
+            const ContactRec *r = model_.find_contact(rep_key_);
+            path.push_back(r ? truncate_ellipsis(r->c.name.empty() ? to_hex(r->prefix()) : r->c.name, 24) : std::string("Repeater"));
         } else if (nav_.nearby_open) {
             path.push_back("Nearby");
         }
         break;
+    case Tab::Tools:                                         // 0.7.0: Nearby, the statistics and the packet log are its sub-pages
+        path.push_back("Tools");
+        if (nav_.nearby_open) path.push_back("Nearby");
+        else if (nav_.stats_open) path.push_back("Statistics");
+        else if (nav_.packet_log_open) path.push_back("Packet log");
+        break;
     case Tab::Settings:
         path.push_back("Settings");
-        if (nav_.stats_open) path.push_back("Statistics");
-        else if (nav_.packet_log_open) path.push_back("Packet log");
+        break;
+    case Tab::Cli:
+        path.push_back("CLI");
+        if (cli_ && cli_->help == 1) path.push_back("Help");
+        else if (cli_ && cli_->help == 2) path.push_back("Commands");      // (All commands: cut beside Esc at 640)
         break;
     default: break;                                          // Home: "Mesh Hop"
     }
@@ -1947,6 +2071,12 @@ void App::on_board_changed()
 {
     seen_epoch_ = model_.board_epoch();
     if (log_) log_->line("board identity: " + (model_.board_known() ? model_.board_key().substr(0, 12) : std::string("none")) + ", the conversations, contacts, groups and flags were reloaded");
+    {   // another board answered: on a USB port it may be another device than the one chosen (swapped while reconnecting)
+        NodeKind k = NodeKind::Usb;
+        std::string id;
+        if (!active_key_.empty() && parse_node_key(active_key_, k, id) && k == NodeKind::Usb) active_ident_ = usb_ident_of(id, true);
+    }
+    if (editor_open_ && edit_kind_ == EditKind::Login) close_login_box();
     if (editor_open_) close_editor(false);
     if (nav_.popup_open || pop_.kind != Popup::None) close_popup();
     if (nav_.search_open) close_search();
@@ -1954,6 +2084,8 @@ void App::on_board_changed()
     if (nav_.packet_log_open) close_packet_log();
     if (nav_.nearby_open) close_nearby();
     if (nav_.select_mode) leave_select_mode();
+    if (nav_.repeater_open) close_repeater();                // 0.7.0: another board: another identity, another access list
+    if (nav_.contact_search) close_contact_search();
     nav_.detail_open = false;
     set_hidden(detail_, true);
     detail_key_.clear();
@@ -2113,40 +2245,46 @@ void App::hold_event(int what, RowList *list, int index, int x, int y)
         hold_.cancel();
         return;
     }
-    // pressed: is this a name that has options? (a chat of the list, or a node of the start page)
+    // pressed: is this a name that has options? (a chat of the list, a node of the start page; 0.7.0: a contact)
     std::string target;
     const bool chats = list == &chat_list_ && nav_.tab == Tab::Chats && !at_home_ && !at_nodes_;
     const bool nodes = list == &nodes_list_ && at_nodes_;
+    const bool contacts = list == &contact_list_ && nav_.tab == Tab::Contacts && !at_home_ && !at_nodes_ && !nav_.select_mode && !nav_.repeater_open &&
+                          !nav_.detail_open && !nav_.nearby_open;
     if (chats) {
         const std::string &id = chat_list_.id_at(index);
         if (id.rfind("c:", 0) == 0 || id.rfind("d:", 0) == 0) target = id;
     } else if (nodes) {
         const int i = find_node_row(node_rows_, nodes_list_.id_at(index));
         if (i >= 0 && node_rows_[static_cast<size_t>(i)].type == NodeRowType::Node) target = node_rows_[static_cast<size_t>(i)].key;
+    } else if (contacts) {
+        target = contact_list_.id_at(index);                 // the contact's key
     }
-    if (target.empty() || nav_.popup_open || editor_open_ || view_pending_ || !(chats || nodes)) {
+    if (target.empty() || nav_.popup_open || editor_open_ || view_pending_ || !(chats || nodes || contacts)) {
         hold_.cancel();
         hold_.take_swallow();
         return;
     }
     hold_list_ = list;
     hold_scroll_y_ = lv_obj_get_scroll_y(list->obj());
-    place_hold_cue(nodes);
+    place_hold_cue(nodes ? HoldWhere::Nodes : contacts ? HoldWhere::Contacts : HoldWhere::Chats);
     hold_.begin(target, x, y, mono_ms());
 }
 
-/* The cue of a 3 s hold (a bar that fills): at the bottom of the chat list, or of the start page's list. */
-void App::place_hold_cue(bool nodes)
+/* The cue of a 3 s hold (a bar that fills): at the bottom of the chat list, of the start page's list, or of Contacts' list. */
+void App::place_hold_cue(HoldWhere where)
 {
     if (!hold_box_) return;
-    lv_obj_t *want = nodes ? shell_->root() : page_[static_cast<int>(Tab::Chats)];
+    lv_obj_t *want = where == HoldWhere::Nodes ? shell_->root() : where == HoldWhere::Contacts ? page_[static_cast<int>(Tab::Contacts)]
+                                                                                                : page_[static_cast<int>(Tab::Chats)];
     if (lv_obj_get_parent(hold_box_) == want) return;
     lv_obj_set_parent(hold_box_, want);
-    if (nodes) {
+    if (where != HoldWhere::Chats) {
         const Geo g = geo();
         const int lh = line_h(f_caption_), pad = g.s;
         const int cue_w = std::max(1, g.lw - 2 * g.inset), cue_h = pad + lh + pad / 2 + pad + pad;
-        lv_obj_set_pos(hold_box_, g.lx + g.inset, tabs_y_ + std::max(0, panel_h_ - cue_h - g.s));
+        const int top = where == HoldWhere::Nodes ? tabs_y_ : 0;
+        lv_obj_set_pos(hold_box_, g.lx + g.inset, top + std::max(0, panel_h_ - cue_h - g.s));
         lv_obj_set_size(hold_box_, cue_w, cue_h);
         lv_obj_set_pos(hold_label_, pad, pad - 2);
         lv_obj_set_size(hold_label_, std::max(1, cue_w - 2 * pad - 4), lh);
@@ -2167,8 +2305,11 @@ void App::hold_tick(uint64_t now)
         return;
     }
     const bool nodes = hold_list_ == &nodes_list_;
-    RowList &held = nodes ? nodes_list_ : chat_list_;
-    const bool context = nodes ? at_nodes_ : (nav_.tab == Tab::Chats && !at_home_ && !at_nodes_);
+    const bool contacts = hold_list_ == &contact_list_;
+    RowList &held = nodes ? nodes_list_ : contacts ? contact_list_ : chat_list_;
+    const bool context = nodes ? at_nodes_
+                         : contacts ? (nav_.tab == Tab::Contacts && !at_home_ && !at_nodes_ && !nav_.repeater_open && !nav_.detail_open && !nav_.nearby_open)
+                                    : (nav_.tab == Tab::Chats && !at_home_ && !at_nodes_);
     if (nav_.popup_open || editor_open_ || !context || lv_obj_get_scroll_y(held.obj()) != hold_scroll_y_) {
         hold_.cancel();                                  // a scroll of the list, or something else took over
         set_hidden(hold_box_, true);
@@ -2184,6 +2325,16 @@ void App::hold_tick(uint64_t now)
             }
             return;
         }
+        if (contacts) {                                  // 0.7.0: the held contact is selected, its Options open
+            const int idx = csnap_.index_of(hold_.target());
+            if (idx >= 0) {
+                contact_sel_ = idx;
+                contact_sel_key_ = hold_.target();
+                contact_list_.set_selected(idx, true, false);
+                open_contact_options(hold_.target());
+            }
+            return;
+        }
         const int idx = find_chat_row(chat_rows_, hold_.target());       // the held row is selected: the menu's options act on it
         if (idx >= 0) {
             select_chat_row(idx);
@@ -2196,6 +2347,9 @@ void App::hold_tick(uint64_t now)
         if (nodes) {
             const int idx = find_node_row(node_rows_, hold_.target());
             if (idx >= 0) who = node_rows_[static_cast<size_t>(idx)].title;
+        } else if (contacts) {
+            const int idx = csnap_.index_of(hold_.target());
+            if (idx >= 0) who = csnap_.rows[static_cast<size_t>(idx)].name;
         } else {
             who = model_.conv_title(hold_.target());
         }
@@ -2272,6 +2426,7 @@ void App::tick()
         transport_->poll();                             // a pairing or a TCP connect moves on while the client waits
         client_->poll(now);
     }
+    cli_tick(now);                                      // the CLI page: meshcore-cli's output, its end, the relay
     nodes_tick(now);
     if (model_.board_epoch() != seen_epoch_) on_board_changed();
     if (pop_dirty_) {                                   // the widgets of a new popup are built here, never inside the click of another
@@ -2283,6 +2438,7 @@ void App::tick()
     hold_tick(now);
     presets_tick(now);
     tick_phase2(now);
+    repeater_tick(now);                                 // 0.7.0: the login of the Repeater page (its wait, its result)
     if (share_pending_) {                               // a new private channel: show its key once the board holds it
         const ChannelRec *c = model_.find_channel_by_name(share_name_);
         if (c && c->has_secret && c->secret == share_key_) {
@@ -2376,13 +2532,17 @@ void App::render()
         if (nav_.search_open) render_search();
         break;
     case Tab::Contacts: render_contacts(); break;
-    case Tab::Settings:
-        render_settings();
+    case Tab::Cli: render_cli(); break;
+    case Tab::Tools:                                        // 0.7.0: its sub-pages are the panels of Nearby, the statistics, the packet log
+        render_tools();
+        set_hidden(nearby_, !nav_.nearby_open);
+        if (nav_.nearby_open) render_nearby();
         set_hidden(stats_panel_, !nav_.stats_open);
         if (nav_.stats_open) render_stats();
         set_hidden(log_panel_, !nav_.packet_log_open);
         if (nav_.packet_log_open) render_packet_log();
         break;
+    case Tab::Settings: render_settings(); break;
     default: break;
     }
     position_refresh();
@@ -2417,20 +2577,31 @@ void App::render_home()
     case Link::NotCompanion: board = "wrong firmware"; board_tone = ValueTone::Bad; break;
     }
     std::vector<ListRow> rows;
-    rows.push_back(ListRow::item("Chats", chats, ValueTone::Muted, 0, RowAffordance::Open));
-    rows.push_back(ListRow::item("Contacts", contacts, ValueTone::Muted, 1, RowAffordance::Open));
-    rows.push_back(ListRow::item("Settings", truncate_ellipsis(board, 22), board_tone, 2, RowAffordance::Open));
-    {   // 0.5: the node in use and how it is reached; opens the start page "Choose a node"
-        std::string node = "none";
-        NodeKind k = NodeKind::Usb;
-        std::string id;
-        if (!active_key_.empty() && parse_node_key(active_key_, k, id)) {
-            const std::string learned = nodes_book_->name_of(active_key_);
-            node = (model_.self() && !model_.self()->name.empty() ? model_.self()->name : !learned.empty() ? learned : std::string());
-            const char *how = k == NodeKind::Usb ? "USB" : k == NodeKind::Ble ? "Bluetooth" : "IP";
-            node = node.empty() ? std::string(how) : truncate_ellipsis(node, 16) + " \xC2\xB7 " + how;
+    // 0.7.0: Chats, Contacts, Tools, Settings, Node (the ids are the rows of home_items())
+    const size_t pending = model_.pending_count();
+    for (HomeItem item : home_items()) {
+        const std::intptr_t id = home_index(item);
+        switch (item) {
+        case HomeItem::Chats: rows.push_back(ListRow::item("Chats", chats, ValueTone::Muted, id, RowAffordance::Open)); break;
+        case HomeItem::Contacts: rows.push_back(ListRow::item("Contacts", contacts, ValueTone::Muted, id, RowAffordance::Open)); break;
+        case HomeItem::Tools:       // Nearby, Packet log, Statistics, CLI: the nodes waiting in Nearby in amber
+            rows.push_back(ListRow::item("Tools", tools_home_value(pending), pending ? ValueTone::Warn : ValueTone::Muted, id, RowAffordance::Open));
+            break;
+        case HomeItem::Settings: rows.push_back(ListRow::item("Settings", truncate_ellipsis(board, 22), board_tone, id, RowAffordance::Open)); break;
+        case HomeItem::Node: {      // 0.5: the node in use and how it is reached; opens the start page "Choose a node"
+            std::string node = "none";
+            NodeKind k = NodeKind::Usb;
+            std::string nid;
+            if (!active_key_.empty() && parse_node_key(active_key_, k, nid)) {
+                const std::string learned = nodes_book_->name_for(active_key_, active_ident_);
+                node = (model_.self() && !model_.self()->name.empty() ? model_.self()->name : !learned.empty() ? learned : std::string());
+                const char *how = k == NodeKind::Usb ? "USB" : k == NodeKind::Ble ? "Bluetooth" : "IP";
+                node = node.empty() ? std::string(how) : truncate_ellipsis(node, 16) + " \xC2\xB7 " + how;
+            }
+            rows.push_back(ListRow::item("Node", node, client_->ready() ? ValueTone::Ok : ValueTone::Muted, id, RowAffordance::Open));
+            break;
         }
-        rows.push_back(ListRow::item("Node", node, client_->ready() ? ValueTone::Ok : ValueTone::Muted, 3, RowAffordance::Open));
+        }
     }
     if (home_list_->count() == 0) home_list_->reset_rows(rows, 0);
     else home_list_->set_rows(rows);
@@ -2458,11 +2629,13 @@ void App::open_page(Tab t)
 /* Back to Home from the root of a page (Esc, the header's Esc button). The page keeps its state. */
 void App::go_home()
 {
+    if (nav_.tab == Tab::Cli) cli_stop();                   // leaving the CLI ends its session (D6)
+    if (nav_.repeater_open) close_repeater();               // (a pending login of the Repeater page is cancelled)
+    if (nav_.contact_search) close_contact_search();
     at_home_ = true;
     nav_.compose_focus = false;
     hold_.cancel();
-    const int idx = nav_.tab == Tab::Contacts ? 1 : nav_.tab == Tab::Settings ? 2 : 0;
-    home_list_->select(idx, false);
+    home_list_->select(home_row_of(nav_.tab), false);
     invalidate();
 }
 
@@ -2476,11 +2649,19 @@ void App::key_home(const KeyEvent &e)
     case Key::Home: sel = 0; break;
     case Key::End: sel = n - 1; break;
     case Key::Enter:
-    case Key::Right:
+    case Key::Right: {
         if (e.repeat) return;
-        if (sel == 3) open_nodes(true);
-        else open_page(sel == 0 ? Tab::Chats : sel == 1 ? Tab::Contacts : Tab::Settings);
+        const auto &items = home_items();
+        if (sel < 0 || sel >= static_cast<int>(items.size())) return;
+        switch (items[static_cast<size_t>(sel)]) {
+        case HomeItem::Chats: open_page(Tab::Chats); break;
+        case HomeItem::Contacts: open_page(Tab::Contacts); break;
+        case HomeItem::Tools: open_page(Tab::Tools); break;
+        case HomeItem::Settings: open_page(Tab::Settings); break;
+        case HomeItem::Node: open_nodes(true); break;
+        }
         return;
+    }
     default: return;
     }
     home_list_->select(sel, false);
@@ -2547,6 +2728,14 @@ std::vector<SerialCandidate> App::usb_candidates() const
         v.insert(v.begin(), c);
     }
     return v;
+}
+
+std::string App::usb_ident_of(const std::string &path, bool fresh) const
+{
+    if (!fresh || demo_)
+        for (const SerialCandidate &c : demo_ ? demo_->usb : usb_now_)
+            if (c.path == path) return usb_identity(c);
+    return demo_ ? std::string() : usb_identity(describe_port(path));
 }
 
 NodePhase App::node_phase(std::string *text) const
@@ -2714,9 +2903,9 @@ void App::leave_nodes(bool connected)
     at_nodes_ = false;
     hold_.cancel();
     set_hidden(hold_box_, true);
-    place_hold_cue(false);
+    place_hold_cue(HoldWhere::Chats);
     at_home_ = true;                                       // after a connection, or back from Home > Node
-    home_list_->select(connected || !nodes_from_home_ ? 0 : 3, false);
+    home_list_->select(connected || !nodes_from_home_ ? 0 : home_index(HomeItem::Node), false);
     nodes_from_home_ = false;
     invalidate();
 }
@@ -2853,6 +3042,7 @@ void App::connect_node(const std::string &key)
     }
     if (ble_link_) ble_link_->stop_scan();                 // the scan stops on connect
     active_key_ = key;
+    active_ident_ = k == NodeKind::Usb ? usb_ident_of(id, false) : std::string();     // the board the row showed
     connect_ms_ = mono_ms();
     connect_pending_ = true;
     nodes_book_->set_last(key);
@@ -2865,6 +3055,9 @@ void App::connect_node(const std::string &key)
 void App::use_transport(std::unique_ptr<ITransport> t, bool ble)
 {
     std::unique_ptr<ITransport> old = std::move(transport_);
+    cli_stop();                                            // a CLI session runs on the old client's relay: it ends with it
+    if (editor_open_ && edit_kind_ == EditKind::Login) close_login_box();     // 0.7.0: its login waits on the old client
+    if (nav_.repeater_open) close_repeater();
     client_.reset();                                       // the client goes first: it holds the old transport
     transport_ = std::move(t);
     transport_ble_ = ble;
@@ -2878,6 +3071,7 @@ void App::use_transport(std::unique_ptr<ITransport> t, bool ble)
 void App::disconnect_node()
 {
     active_key_.clear();
+    active_ident_.clear();
     connect_pending_ = false;
     use_transport(std::make_unique<NullTransport>(), false);
 }
@@ -2961,7 +3155,7 @@ void App::open_node_info(const NodeRow &r)
     } else if (const IpNode *n = nodes_book_->find_ip(r.key)) {
         lines.push_back("Network (TCP) " + n->address());
     }
-    const std::string learned = nodes_book_->name_of(r.key);
+    const std::string learned = nodes_book_->name_for(r.key, k == NodeKind::Usb ? usb_ident_of(id, false) : std::string());
     if (!learned.empty()) lines.push_back("Node name " + learned);
     lines.push_back(r.detail);
     open_info(r.title, join_lines(lines), r.key == active_key_ ? "The node in use." : "");
@@ -3012,10 +3206,11 @@ void App::key_nodes(const KeyEvent &e)
 
 void App::nodes_tick(uint64_t now)
 {
-    // the node answered: its name is learned (a port or an address has none), and a connection made on the page goes to Home
+    // the node answered: its name is learned (a port or an address has none; a USB port with the device's identity), and a
+    // connection made on the page goes to Home
     if (!active_key_.empty() && client_->ready() && model_.self() && !model_.self()->name.empty() &&
-        nodes_book_->name_of(active_key_) != model_.self()->name) {
-        nodes_book_->set_name(active_key_, model_.self()->name);
+        nodes_book_->name_for(active_key_, active_ident_) != model_.self()->name) {
+        nodes_book_->set_name(active_key_, model_.self()->name, active_ident_);
         nodes_book_->save();
         nodes_sig_ = 0;
     }
@@ -3045,8 +3240,10 @@ void App::nodes_tick(uint64_t now)
     if (now - usb_check_ms_ >= 1000) {
         usb_check_ms_ = now;
         std::vector<SerialCandidate> c = usb_candidates();
-        const bool same = c.size() == usb_now_.size() &&
-                          std::equal(c.begin(), c.end(), usb_now_.begin(), [](const SerialCandidate &a, const SerialCandidate &b) { return a.path == b.path; });
+        const bool same = c.size() == usb_now_.size() &&             // (another board on the same port: another row)
+                          std::equal(c.begin(), c.end(), usb_now_.begin(), [](const SerialCandidate &a, const SerialCandidate &b) {
+                              return a.path == b.path && usb_identity(a) == usb_identity(b) && a.product == b.product;
+                          });
         if (!same) {
             usb_now_ = std::move(c);
             invalidate();
@@ -3367,7 +3564,9 @@ void App::build_contact_specs()
         s.h = 2 * lh1 + 2 * g.s;
         s.selectable = false;
         const bool filtered = (cview_.filter.active() || !cview_.group.empty()) && model_.contact_count() > 0;
-        Cell c{filtered ? "No contact matches the filters." : client_->ready() ? "No contacts yet. Send an advert and wait for the others." : "No contacts cached. Connect the radio board.",
+        const bool searched = !cview_.filter.search.empty() && model_.contact_count() > 0;
+        Cell c{searched ? "No contact matches the search." : filtered ? "No contact matches the filters."
+               : client_->ready() ? "No contacts yet. Send an advert and wait for the others." : "No contacts cached. Connect the radio board.",
                kMuted, g.inset, g.lw - 2 * g.inset, LV_TEXT_ALIGN_LEFT, f_body_, g.s};
         c.lines = 2;
         s.cells.push_back(c);
@@ -3413,6 +3612,7 @@ void App::render_contacts_bar()
         cells.push_back({kTagSelGroup, "Group...", ""});
     } else {
         const size_t pending = model_.pending_count();
+        cells.push_back({kTagContactSearch, "Search", ""});                  // 0.7.0: / opens it too
         cells.push_back({kTagFilter, std::string("Filter") + kDownMark, ""});
         cells.push_back({kTagSortMenu, sort_button_text(v) + kDownMark, ""});
         cells.push_back({kTagMore, "More", pending ? std::to_string(pending) + " nearby waiting" : std::string()});
@@ -3427,6 +3627,10 @@ void App::render_contacts()
     const bool stale = !csnap_valid_ || model_.revision() != csnap_rev_ || minute != csnap_minute_;
     if (stale && !view_pending_ && !plat_.touching()) rebuild_contact_snapshot();
     render_contacts_bar();
+    if (nav_.contact_search) style_field(cs_field_, cs_typing_);   // blue while it takes the keys
+    set_hidden(cs_field_, !nav_.contact_search || nav_.repeater_open || nav_.detail_open || nav_.nearby_open);
+    set_hidden(rep_panel_, !nav_.repeater_open);                     // 0.7.0: the Repeater page
+    if (nav_.repeater_open) render_repeater();
     set_hidden(detail_, !nav_.detail_open);
     if (nav_.detail_open) render_detail();
     set_hidden(nearby_, !nav_.nearby_open);
@@ -3516,6 +3720,206 @@ void App::render_detail()
     }
     detail_sel_ = std::clamp(detail_sel_, 0, static_cast<int>(specs.size()) - 1);
     detail_list_.set(std::move(specs), detail_sel_, true);
+}
+
+/* ---- 0.7.0: Contacts: the Search, what a tap opens, the Options of a contact */
+
+void App::open_contact_search()
+{
+    if (nav_.popup_open || editor_open_ || view_pending_ || nav_.tab != Tab::Contacts || nav_.repeater_open || nav_.detail_open || nav_.nearby_open) return;
+    nav_.contact_search = true;
+    cs_typing_ = true;                                       // the field takes the keys (without a keyboard: the on-screen keyboard by the rule)
+    lv_textarea_set_text(cs_field_, cview_.filter.search.c_str());
+    lv_textarea_set_cursor_pos(cs_field_, LV_TEXTAREA_CURSOR_LAST);
+    style_field(cs_field_, true);
+    layout_contacts();
+    invalidate();
+}
+
+void App::close_contact_search()
+{
+    nav_.contact_search = false;
+    cs_typing_ = false;
+    if (cs_field_) lv_textarea_set_text(cs_field_, "");
+    set_contact_search("");                                  // Esc restores the whole list
+    layout_contacts();
+    invalidate();
+}
+
+/* The Search filters at once as it is typed (no "Loading..." box: the rows are rebuilt from the model, a few ms for 200). */
+void App::set_contact_search(const std::string &text)
+{
+    if (cview_.filter.search == text) return;
+    cview_.filter.search = text;
+    if (view_pending_) view_next_.filter.search = text;
+    csnap_valid_ = false;
+    rebuild_contact_snapshot();
+    contact_list_.scroll_to_top();
+    invalidate();
+}
+
+/* The keys while the Search field has them: text edits it, Up / Down (PgUp / PgDn, Home / End) move in the list, Enter opens the
+ * selected contact (the on-screen keyboard's Enter only puts the keyboard away, the rows come back). Esc is Back (back()). */
+void App::contact_search_key(const KeyEvent &e)
+{
+    if (e.key == Key::Enter && osk_inset_ > 0 && osk_field_ == cs_field_) {
+        if (!e.repeat) {
+            cs_typing_ = false;
+            invalidate();
+        }
+        return;
+    }
+    switch (e.key) {
+    case Key::Up: move_contact_selection(-1, false); return;
+    case Key::Down: move_contact_selection(1, false); return;
+    case Key::PageUp: move_contact_selection(-6, false); return;
+    case Key::PageDown: move_contact_selection(6, false); return;
+    case Key::Home: move_contact_selection(0, true); return;
+    case Key::End: move_contact_selection(static_cast<int>(csnap_.rows.size()) - 1, true); return;
+    case Key::Enter:
+        if (!e.repeat) {
+            if (nav_.select_mode) toggle_selected(contact_sel_key_);
+            else open_contact(contact_sel_key_);
+        }
+        return;
+    case Key::Backspace: lv_textarea_delete_char(cs_field_); break;
+    case Key::Delete: lv_textarea_delete_char_forward(cs_field_); break;
+    case Key::Left: lv_textarea_cursor_left(cs_field_); return;
+    case Key::Right: lv_textarea_cursor_right(cs_field_); return;
+    case Key::Char: {
+        if (e.ctrl || e.alt) return;
+        const char *cur = lv_textarea_get_text(cs_field_);
+        const std::string add = filter_typed(EditMode::Free, cur ? cur : "", e.text, 40);
+        if (add.empty()) return;
+        lv_textarea_add_text(cs_field_, add.c_str());
+        break;
+    }
+    default: return;
+    }
+    const char *now_text = lv_textarea_get_text(cs_field_);
+    set_contact_search(now_text ? now_text : "");
+}
+
+/* A tap on the selected row, Enter: by the contact's type (contact_open_target). A chat contact's conversation takes the keys only
+ * with a keyboard (by touch the entry is tapped first, as in Chats). */
+void App::open_contact(const std::string &key_hex)
+{
+    const ContactRec *rec = model_.find_contact(key_hex);
+    if (!rec) return;
+    const int idx = csnap_.index_of(key_hex);
+    if (idx >= 0) {
+        contact_sel_ = idx;
+        contact_sel_key_ = key_hex;
+    }
+    switch (contact_open_target(rec->c.type)) {
+    case ContactOpen::Repeater: open_repeater(key_hex, true); break;
+    case ContactOpen::Chat: open_conversation(Model::conv_direct(rec->prefix()), keyboard_ready()); break;
+    case ContactOpen::Details: open_detail(key_hex); break;
+    }
+}
+
+/* "Options for <name>" (a 3 s hold on its row, or I): Manage (a repeater or room), Message (a chat node), Details, Groups, Delete. */
+void App::open_contact_options(const std::string &key_hex)
+{
+    if (nav_.popup_open || editor_open_) return;
+    const ContactRec *rec = model_.find_contact(key_hex);
+    if (!rec) return;
+    const std::string name = rec->c.name.empty() ? to_hex(rec->prefix()) : rec->c.name;
+    const ContactOptions o = contact_options(name, rec->c.type);
+    open_menu(o.title, o.labels, [this, key_hex, o](int i) {
+        if (i < 0 || i >= static_cast<int>(o.actions.size())) return;
+        const ContactRec *r = model_.find_contact(key_hex);
+        if (!r) return;
+        switch (o.actions[static_cast<size_t>(i)]) {
+        case ContactAction::Manage: open_repeater(key_hex, true); break;
+        case ContactAction::Message: open_conversation(Model::conv_direct(r->prefix()), keyboard_ready()); break;
+        case ContactAction::Details: open_detail(key_hex); break;
+        case ContactAction::Groups:
+            group_focus_ = 0;
+            group_toggle_for(key_hex);
+            break;
+        case ContactAction::Delete: delete_contact(key_hex); break;
+        }
+    }, {}, o.affs);
+}
+
+/* ---- 0.7.0: Tools */
+
+void App::render_tools()
+{
+    ToolsContext ctx;
+    ctx.pending = model_.pending_count();
+    ctx.capturing = client_->packet_log().capturing();
+    ctx.log_n = client_->packet_log().size();
+    ctx.stats = feature_state(Feature::Stats, model_.device() ? &*model_.device() : nullptr, model_.caps());
+    ctx.connected = client_->ready();
+    cp0::ui::ValueTone tone = cp0::ui::ValueTone::Muted;
+    ctx.cli_needs_python = !cli_home_value(tone).empty() && tone == cp0::ui::ValueTone::Warn;
+    tools_rows_ = tools_rows(ctx);
+    tools_sel_ = std::clamp(tools_sel_, 0, static_cast<int>(tools_rows_.size()) - 1);
+    const Geo g = geo();
+    cp0_ui_list_layout_t ml = settings_list_layout(0, g.h);
+    ml.text_px = cp0_ui_metrics_get()->text_px[CP0_TEXT_BODY];
+    const int lh1 = line_h(f_body_), lh2 = line_h(f_caption_);
+    const int row_h = std::max(g.row, lh1 + lh2 + 2 * std::max(4, g.s / 2));
+    const int top = std::max(0, (row_h - lh1 - lh2) / 2);
+    const int right = g.lw - g.inset - trail_of(ml, Aff::Open);
+    std::vector<RowSpec> specs;
+    uint32_t sig = fnv_int(0, tools_sel_);
+    sig = fnv_int(sig, panel_h_);
+    for (const ToolRow &r : tools_rows_) {
+        RowSpec s;
+        s.h = row_h;
+        s.id = r.title;
+        s.aff = Aff::Open;
+        s.cells.push_back({r.title, kText, g.inset, std::max(1, right - g.inset), LV_TEXT_ALIGN_LEFT, f_body_, top});
+        s.cells.push_back({r.caption, tone_color(r.tone), g.inset, std::max(1, right - g.inset), LV_TEXT_ALIGN_LEFT, f_caption_, top + lh1});
+        sig = fnv(fnv_int(sig, static_cast<int>(r.tone)), r.title + r.caption);
+        specs.push_back(std::move(s));
+    }
+    if (sig == tools_sig_ || plat_.touching()) return;
+    tools_sig_ = sig;
+    tools_list_.set(std::move(specs), tools_sel_, true);
+    ++tools_builds_;
+}
+
+void App::tools_select(int index, bool scroll)
+{
+    if (index < 0 || index >= static_cast<int>(tools_rows_.size())) return;
+    tools_sel_ = index;
+    tools_list_.set_selected(index, true, scroll);
+    tools_sig_ = 0;
+    invalidate();
+}
+
+void App::tools_activate(int index)
+{
+    if (index < 0 || index >= static_cast<int>(tools_rows_.size())) return;
+    tools_sel_ = index;
+    switch (tools_rows_[static_cast<size_t>(index)].item) {
+    case ToolItem::Nearby: open_nearby(); break;
+    case ToolItem::PacketLog: open_packet_log(); break;
+    case ToolItem::Statistics: open_stats(); break;
+    case ToolItem::Cli: open_cli(); break;
+    }
+}
+
+void App::key_tools(const KeyEvent &e)
+{
+    const int n = static_cast<int>(tools_rows_.size());
+    switch (e.key) {
+    case Key::Up: tools_select(std::max(0, tools_sel_ - 1), true); break;
+    case Key::Down: tools_select(std::min(n - 1, tools_sel_ + 1), true); break;
+    case Key::Home:
+    case Key::PageUp: tools_select(0, true); break;
+    case Key::End:
+    case Key::PageDown: tools_select(n - 1, true); break;
+    case Key::Enter:
+    case Key::Right:
+        if (!e.repeat) tools_activate(tools_sel_);
+        break;
+    default: break;
+    }
 }
 
 /* ---- settings */
@@ -3650,6 +4054,16 @@ void App::render_settings()
             rows.push_back(item("Board GPS", model_.caps().gps_on ? "On" : "Off", model_.caps().gps_on ? ValueTone::Ok : ValueTone::Muted));
             break;
         case SRowKind::GpsNotice: rows.push_back(item("Board GPS", "Firmware too old for this feature", ValueTone::Warn)); break;
+        case SRowKind::MyName: {    // 0.7.0: what other nodes see; it is changed in RADIO > Node name (this row goes there)
+            const std::string n = model_.self() ? model_.self()->name : std::string();
+            rows.push_back(item("Name", n.empty() ? "-" : n, n.empty() ? ValueTone::Muted : ValueTone::Normal));
+            break;
+        }
+        case SRowKind::MyKey: {     // 0.7.0: grouped; Enter shows the whole 64 hex digits
+            const std::string k = model_.self() ? key_short_grouped(to_hex(model_.self()->key)) : std::string();
+            rows.push_back(item("Public key", k.empty() ? "-" : k, k.empty() ? ValueTone::Muted : ValueTone::Normal));
+            break;
+        }
         case SRowKind::Name: rows.push_back(value("Node name", edit_.name.empty() ? "-" : edit_.name, changed_name)); break;
         case SRowKind::Preset: {
             const int p = connected ? find_preset(edit_.freq_mhz, edit_.bw_khz, edit_.sf, edit_.cr) : -1;
@@ -3769,6 +4183,7 @@ std::string App::hint_text() const
         default: return "Enter or Esc: close";
         }
     }
+    if (editor_open_ && edit_kind_ == EditKind::Login) return login_waiting_ ? "Esc: stop waiting" : "Type the password   Enter: log in   Tab: Remember   Esc: cancel";
     if (editor_open_) return edit_kind_ == EditKind::Position ? "Tab: next field   Enter: OK   Esc: cancel" : "Type with the keyboard   Enter: OK   Esc: cancel";
     if (at_nodes_) return "Up/Down: choose  Enter: connect  O: options  S: scan  A: add by IP";
     if (at_home_) return "Up/Down: choose   Enter: open   Hold Esc 3 s: leave";
@@ -3780,15 +4195,28 @@ std::string App::hint_text() const
         if (!two && conv_open_) return "Enter: write  Up/Down: scroll  Esc: back  Ctrl+O: options";
         return two ? "Enter: write  Ctrl+O: options  Ctrl+F: find" : "Up/Down: choose  Enter: write  Ctrl+O: options  Ctrl+F: find";
     }
-    case Tab::Contacts:
-        return nav_.detail_open ? "Enter: message   G: groups   D: delete   Esc: back"
-               : nav_.nearby_open ? "Enter: add   I: ignore   S: scan   V: ignored   Esc: back"
-               : nav_.select_mode ? "Space: mark  A all  N none  I invert  M menu  D delete  G group"
-                                  : "Enter: open  I: info  X: manage  N: nearby  G: group";
-    case Tab::Settings:
-        return nav_.stats_open ? "R: refresh   A: auto refresh   Esc: back"
+    case Tab::Contacts: {
+        if (nav_.detail_open) return "Enter: message   G: groups   D: delete   Esc: back";
+        if (nav_.repeater_open) {
+            const ContactRec *r = model_.find_contact(rep_key_);
+            const bool in = r && client_->remote_session(r->c.key);
+            return in ? "L: log out   M: more   Up/Down: scroll   Esc: back" : "L or Enter: log in   M: more   Esc: back";
+        }
+        if (nav_.nearby_open) return "Enter: add   I: ignore   S: scan   V: ignored   Esc: back";
+        if (nav_.contact_search) return "Type to search   Up/Down: choose   Enter: open   Esc: clear";
+        return nav_.select_mode ? "Space: mark  A all  N none  I invert  M menu  D delete  G group"
+                                : "Enter: open  I: options  /: search  X: manage  N: nearby";
+    }
+    case Tab::Tools:
+        return nav_.nearby_open ? "Enter: add   I: ignore   S: scan   V: ignored   Esc: back"
+               : nav_.stats_open ? "R: refresh   A: auto refresh   Esc: back"
                : nav_.packet_log_open ? "Up/Down: select  Space: start/stop  C: clear  Esc: back"
-                                      : "Enter: change   Left/Right: step   S: save   V: undo";
+                                      : "Up/Down: choose   Enter: open   Tab: next page";
+    case Tab::Settings: return "Enter: change   Left/Right: step   S: save   V: undo";
+    case Tab::Cli:
+        if (cli_ && cli_->help == 1) return "Up/Down: choose   Enter: put it in the entry   Esc: back";
+        if (cli_ && cli_->help == 2) return "Up/Down, PgUp/PgDn: scroll   Esc: back";
+        return "Enter: send  Up/Down: history  Ctrl+H: help  Esc: leave";
     default: return "Tab: next tab   Esc: back";
     }
 }
@@ -3804,6 +4232,7 @@ bool App::page_caption(std::string &text) const
     switch (nav_.tab) {
     case Tab::Contacts:
         if (nav_.detail_open) return false;
+        if (nav_.repeater_open) return repeater_caption(text);   // 0.7.0: "Repeater  ·  direct, 2 hops  ·  heard 3 min ago"
         if (nav_.nearby_open) {
             text = nearby_summary(nearby_rows_.size(), model_.pending_count(), nearby_show_ignored_);
             return true;
@@ -3826,7 +4255,11 @@ bool App::page_caption(std::string &text) const
         else text = std::to_string(search_total_) + (search_total_ == 1 ? " message matches" : " messages match") +
                     (search_total_ > search_rows_.size() ? ", the newest " + std::to_string(search_rows_.size()) + " are listed" : std::string());
         return true;
-    case Tab::Settings:
+    case Tab::Tools:                                     // 0.7.0: Nearby, the statistics, the packet log; the page itself
+        if (nav_.nearby_open) {
+            text = nearby_summary(nearby_rows_.size(), model_.pending_count(), nearby_show_ignored_);
+            return true;
+        }
         if (nav_.stats_open) {
             const StatsView v = build_stats_view(model_.stats());
             text = v.updated;
@@ -3840,7 +4273,10 @@ bool App::page_caption(std::string &text) const
             text = packet_log_status(client_->packet_log());
             return true;
         }
-        return false;
+        text = "Radio and mesh tools";
+        return true;
+    case Tab::Settings: return false;
+    case Tab::Cli: return cli_caption(text);
     default: return false;
     }
 }
@@ -4492,6 +4928,11 @@ void App::close_editor(bool accept)
         close_position_box(accept);
         return;
     }
+    if (edit_kind_ == EditKind::Login) {                 // 0.7.0: Esc / Back is Cancel (it stops a wait first), OK is Log in
+        if (accept) login_submit(false);
+        else login_cancel();
+        return;
+    }
     const std::string text = lv_textarea_get_text(ed_ta_);
     bool chain_key = false, chain_ip_name = false;
     if (accept) {
@@ -4616,6 +5057,10 @@ void App::editor_key(const KeyEvent &e)
 {
     if (edit_kind_ == EditKind::Position) {
         position_key(e);
+        return;
+    }
+    if (edit_kind_ == EditKind::Login) {
+        login_key(e);
         return;
     }
     switch (e.key) {
@@ -4975,15 +5420,7 @@ void App::open_detail(const std::string &key_hex)
 
 void App::activate_contact(const std::string &key_hex)
 {
-    const ContactRec *rec = model_.find_contact(key_hex);
-    if (!rec) return;
-    const int idx = csnap_.index_of(key_hex);
-    if (idx >= 0) {
-        contact_sel_ = idx;
-        contact_sel_key_ = key_hex;
-    }
-    if (opens_chat(rec->c.type)) open_conversation(Model::conv_direct(rec->prefix()), true);
-    else open_detail(key_hex);
+    open_contact(key_hex);                               // 0.7.0: by the contact's type (open_contact)
 }
 
 void App::settings_step(int index, int delta)
@@ -5123,6 +5560,19 @@ void App::settings_activate(int index)
     case SRowKind::Position:
         self_refresh_ms_ = mono_ms();
         open_position_box();                                  // (it reads the position from the board again as it opens)
+        break;
+    case SRowKind::MyName:                                    // 0.7.0: a link: the highlight goes to RADIO > Node name
+        for (size_t i = 0; i < srows_.size(); ++i)
+            if (srows_[i].kind == SRowKind::Name) {
+                settings_select(static_cast<int>(i), true);
+                notice("The node name is changed here: Enter (or a tap) edits it", true);
+                break;
+            }
+        break;
+    case SRowKind::MyKey:
+        if (model_.self())
+            open_info("Public key", key_grouped_lines(to_hex(model_.self()->key)),
+                      "This node's public key: the 64 hex digits other nodes know it by.");
         break;
     case SRowKind::Stats: open_stats(); break;
     case SRowKind::PacketLog: open_packet_log(); break;
@@ -5470,7 +5920,13 @@ void App::open_contact_info(const std::string &key_hex)
 
 void App::delete_detail_contact()
 {
-    const ContactRec *r = model_.find_contact(detail_key_);
+    delete_contact(detail_key_);
+}
+
+/* Delete a contact from the board (its details' Delete, its Options' Delete): Yes / No first. */
+void App::delete_contact(const std::string &key_hex)
+{
+    const ContactRec *r = model_.find_contact(key_hex);
     if (!r) return;
     if (!client_->ready()) {
         notice("Connect the radio first", false);
@@ -5479,9 +5935,10 @@ void App::delete_detail_contact()
     const std::string name = r->c.name.empty() ? to_hex(r->prefix()) : r->c.name;
     PubKey key = r->c.key;
     open_confirm("Delete contact?", "Delete " + truncate_ellipsis(name, 30) + " from the radio board? It comes back only when its node adverts again. This cannot be undone.",
-                 [this, key] {
+                 [this, key, key_hex] {
                      if (client_->remove_contacts({key})) {
-                         nav_.detail_open = false;
+                         if (detail_key_ == key_hex) nav_.detail_open = false;
+                         if (nav_.repeater_open && rep_key_ == key_hex) close_repeater();
                          invalidate();
                      }
                  },
@@ -6204,6 +6661,51 @@ void App::button_clicked(int tag)
     }
     if (nav_.popup_open || view_pending_) return;
     switch (tag) {
+    // 0.7.0: the login box's field and its Remember row (only while it is open), the Search of Contacts, the Repeater page's bar
+    case kTagLoginField:
+        if (editor_open_ && edit_kind_ == EditKind::Login) {
+            login_typing_ = true;                           // a tap on the field types into it (the on-screen keyboard by the rule)
+            login_focus_ = 0;
+            if (!login_waiting_ && !login_msg_.empty()) login_message("", false);   // 0.7.2: (a Reset path line) the field gets the room
+            login_refresh();
+            sync_osk();
+            if (login_ta_) lv_obj_scroll_to_view_recursive(login_ta_, LV_ANIM_OFF);
+        }
+        break;
+    case kTagLoginRemember:                                 // (not the second tap of the tap that opened the box)
+        if (editor_open_ && edit_kind_ == EditKind::Login && !login_waiting_ && mono_ms() - edit_open_ms_ >= 400) {
+            login_remember_ = !login_remember_;
+            login_focus_ = 1;
+            login_refresh();
+        }
+        break;
+    case kTagContactSearch:
+        if (editor_open_) break;
+        if (nav_.contact_search) {
+            cs_typing_ = true;
+            invalidate();
+        } else {
+            open_contact_search();
+        }
+        break;
+    case kTagContactSearchField:
+        if (nav_.contact_search && !editor_open_) {
+            cs_typing_ = true;
+            invalidate();
+        }
+        break;
+    case kTagLoginResetPath:                                // 0.7.2: the login box's Reset path (not the tap that opened the box)
+        if (editor_open_ && edit_kind_ == EditKind::Login && !login_waiting_ && mono_ms() - edit_open_ms_ >= 400) repeater_reset_path();
+        break;
+    case kTagRepLogin:
+        if (!editor_open_ && nav_.repeater_open) repeater_login_or_out();
+        break;
+    case kTagRepRefresh:
+        if (!editor_open_ && nav_.repeater_open) notice("Refresh comes with the status, neighbours and owner (next version)", true);
+        break;
+    case kTagRepMore:
+        if (!editor_open_ && nav_.repeater_open) repeater_more();
+        break;
     case kTagSend:
         if (!editor_open_) send_message();
         break;
@@ -6329,6 +6831,11 @@ void App::row_clicked(RowList *list, int index, int x)
             nav_.compose_focus = false;
         }
     } else if (list == &contact_list_) {
+        if (hold_.take_swallow()) return;                 // the release of a completed 3 s hold is not a tap (0.7.0: the Options)
+        if (nav_.contact_search && cs_typing_ && osk_inset_ > 0) {     // a tap on the rows puts the on-screen keyboard away
+            cs_typing_ = false;
+            invalidate();
+        }
         // the row that was tapped, whatever the order it is shown in: its id is the contact key of THIS row
         const std::string key = contact_list_.id_at(index);
         if (!key.empty()) {
@@ -6337,13 +6844,16 @@ void App::row_clicked(RowList *list, int index, int x)
             contact_sel_key_ = key;
             if (nav_.select_mode) {                                       // select mode: a tap marks the row (a check box)
                 toggle_selected(key);
-            } else if (again) {                                           // a tap on the selected row: the details (the key I)
-                open_contact_info(key);
+            } else if (again) {                                           // a tap on the selected row opens it by its type (0.7.0)
+                open_contact(key);
             } else {                                                      // the first tap selects the row
                 contact_list_.set_selected(index, true, false);
                 invalidate();
             }
         }
+    } else if (list == &tools_list_) {                    // 0.7.0: Tools: the first tap selects, a tap on the selected row opens
+        if (index == tools_sel_) tools_activate(index);
+        else tools_select(index, false);
     } else if (list == &nearby_list_) {
         nearby_activate(index);
     } else if (list == &settings_list_) {
@@ -6367,6 +6877,16 @@ void App::row_clicked(RowList *list, int index, int x)
     } else if (list == &log_list_) {
         const std::string &id = log_list_.id_at(index);
         if (!id.empty()) packet_log_select(std::atoll(id.c_str()));
+    } else if (cli_ && list == &cli_->help_list && nav_.tab == Tab::Cli && cli_->help == 1) {
+        if (index == cli_->help_sel) {                            // a tap on the selected row acts
+            post([this, index] { cli_help_activate(index); });
+        } else if (index >= 0 && index < static_cast<int>(cli_->help_rows.size())) {
+            const HelpKind k = cli_->help_rows[static_cast<size_t>(index)].kind;
+            if (k == HelpKind::Insert || k == HelpKind::Usage) {    // the first tap selects it
+                cli_->help_sel = index;
+                cli_->help_list.set_selected(index, true, false);
+            }
+        }
     }
 }
 
@@ -6376,6 +6896,10 @@ void App::back()
     if (at_nodes_ && a != BackAction::ClosePopup && a != BackAction::CancelEditor) {
         if (nodes_from_home_) leave_nodes(false);                // opened from Home > Node: back there
         else notice("Hold Esc 3 s to exit", true);               // the start page is the root, as Home is
+        return;
+    }
+    if (!at_home_ && nav_.tab == Tab::Cli && cli_ && a != BackAction::ClosePopup && a != BackAction::CancelEditor) {
+        cli_back();                                              // All commands, Help, the keyboard, then Home (the session ends)
         return;
     }
     if (!at_home_ && nav_.tab == Tab::Chats) {
@@ -6396,10 +6920,18 @@ void App::back()
             return;
         }
     }
+    // 0.7.0: the Search of Contacts: the on-screen keyboard goes first (the rows come back), then the search (the whole list)
+    if (!at_home_ && nav_.tab == Tab::Contacts && a == BackAction::CloseContactSearch && cs_typing_ && osk_inset_ > 0 && osk_field_ == cs_field_) {
+        cs_typing_ = false;
+        invalidate();
+        return;
+    }
     switch (a) {
     case BackAction::ClosePopup: popup_cancel(); break;
     case BackAction::CancelEditor: close_editor(false); break;
     case BackAction::CloseSearch: close_search(); break;
+    case BackAction::CloseRepeater: close_repeater(); break;
+    case BackAction::CloseContactSearch: close_contact_search(); break;
     case BackAction::CloseStats: close_stats(); break;
     case BackAction::ClosePacketLog: close_packet_log(); break;
     case BackAction::CloseNearby: close_nearby(); break;
@@ -6595,11 +7127,20 @@ void App::key_contacts(const KeyEvent &e)
         key_detail(e);
         return;
     }
+    if (nav_.repeater_open) {                            // 0.7.0: the Repeater page
+        key_repeater(e);
+        return;
+    }
     if (nav_.nearby_open) {
         key_nearby(e);
         return;
     }
     if (view_pending_) return;
+    if (nav_.contact_search && (cs_typing_ || (e.key == Key::Char && !e.ctrl && !e.alt))) {     // the Search field has the keys
+        cs_typing_ = true;
+        contact_search_key(e);
+        return;
+    }
     const bool sel = nav_.select_mode;
     switch (e.key) {
     case Key::Up: move_contact_selection(-1, false); break;
@@ -6611,7 +7152,7 @@ void App::key_contacts(const KeyEvent &e)
     case Key::Enter:
         if (e.repeat) break;
         if (sel) toggle_selected(contact_sel_key_);
-        else activate_contact(contact_sel_key_);
+        else open_contact(contact_sel_key_);             // 0.7.0: by its type (the Repeater page, the conversation, the details)
         break;
     case Key::Delete:
         if (sel && !e.repeat) confirm_bulk_delete();
@@ -6637,7 +7178,8 @@ void App::key_contacts(const KeyEvent &e)
         else if (!sel && c == 'x') enter_select_mode();
         else if (!sel && c == 'g') open_group_filter();
         else if (!sel && c == 'n') open_nearby();
-        else if (!sel && c == 'i') open_contact_info(contact_sel_key_);
+        else if (!sel && c == 'i') open_contact_options(contact_sel_key_);         // 0.7.0: the Options (Details is one of them)
+        else if (e.text == "/") open_contact_search();                             // 0.7.0: the Search
         break;
     }
     default: break;
@@ -6707,18 +7249,18 @@ void App::on_key(const KeyEvent &e)
         key_nodes(e);
         return;
     }
-    // On a page, Tab goes to the next page in a loop over Chats, Contacts, Settings (Shift+Tab backwards); Home is the other way to a page.
+    // On a page, Tab goes to the next page in a loop over Chats, Contacts, Tools, Settings (Shift+Tab backwards; 0.7.0: Tools);
+    // Home is the other way to a page.
     if (at_home_) {
         key_home(e);
         return;
     }
+    if (nav_.tab == Tab::Cli) {                         // the CLI page has every key (Tab included: no page change from it)
+        key_cli(e);
+        return;
+    }
     if (e.key == Key::Tab || e.key == Key::BackTab) {
-        if (!e.repeat) {
-            const int dir = e.key == Key::Tab ? 1 : -1;
-            Tab next = step_tab(nav_.tab, dir);
-            while (next == Tab::Map || next == Tab::Terminal) next = step_tab(next, dir);       // not shown until they exist
-            select_tab(next);
-        }
+        if (!e.repeat) select_tab(next_page(nav_.tab, e.key == Key::Tab ? 1 : -1));     // Chats, Contacts, Tools, Settings
         return;
     }
     switch (nav_.tab) {
@@ -6727,11 +7269,13 @@ void App::on_key(const KeyEvent &e)
         else key_chats(e);
         break;
     case Tab::Contacts: key_contacts(e); break;
-    case Tab::Settings:
-        if (nav_.stats_open) key_stats(e);
+    case Tab::Tools:                                    // 0.7.0: Nearby, the statistics and the packet log are its sub-pages
+        if (nav_.nearby_open) key_nearby(e);
+        else if (nav_.stats_open) key_stats(e);
         else if (nav_.packet_log_open) key_packet_log(e);
-        else key_settings(e);
+        else key_tools(e);
         break;
+    case Tab::Settings: key_settings(e); break;
     default: break;
     }
 }

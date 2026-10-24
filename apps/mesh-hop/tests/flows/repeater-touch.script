@@ -1,0 +1,139 @@
+# Simulator options: --remote-cases --contacts 6 (repeater_run.sh)
+# Mesh Hop 0.7.0 (report 036 slice S1) by touch only (no keyboard: the launcher's input.state says none): Contacts by two taps, Search
+# on the bar (its field brings the on-screen keyboard; the keyboard's Enter puts it away, the rows come back), a repeater tapped twice:
+# its Repeater page and the login box with no keyboard up (a saved password needs no typing); a tap on the password field brings the
+# on-screen keyboard (masked), its Enter logs in (0.7.2: before it, the box's Reset path button: the route goes to flood); Log out and Log in on the bar: the box has the saved password, its Log in button
+# logs in; the header's Esc closes the page; a 3 s hold on a contact opens its Options (Manage for a repeater); Tools > Statistics.
+keyboard off
+wait 4500
+tap "Contacts"
+tap "Contacts"
+wait 1200
+say == Contacts by touch (expect tab=Contacts)
+dump
+shot rt00-contacts
+check contacts-touch
+
+tap "Search"
+wait 1200
+say == the Search field takes the keys: the on-screen keyboard (expect cs=1 cs_typing=1 osk=up typing=contacts-search)
+expect osk on
+dump
+shot rt01-search-osk
+check search-osk
+tapkey "h"
+tapkey "i"
+tapkey "l"
+tapkey "l"
+wait 400
+key enter
+wait 900
+say == the keyboard's Enter: the keyboard goes, the two Hilltop repeaters (expect osk=down cs_typing=0 cs_text='hill' shown=2)
+expect osk off
+dump
+shot rt02-search-results
+check search-results
+
+# (after a search the first row is selected: one tap on it opens it, as on any list of the app)
+tap "Hilltop repeater"
+wait 1000
+say == the Repeater page, the login box, no on-screen keyboard yet (expect rep=1 login=1 login_pw=empty login_remember=1 login_focus=0 osk=down)
+expect osk off
+expect text "Remember on this deck"
+expect text "Route: direct"
+dump
+shot rt03-login-touch
+check login-touch
+# 0.7.2: the box's Reset path button (7 mm, beside the route line): RESET_PATH, the route goes to flood, the button goes
+tap "Reset path"
+waitstate rep_route flood 3000
+wait 300
+say == Reset path by touch (expect login=1 rep_route=flood login_route='Route: flood: the login goes to the whole mesh' login_reset=0)
+expect text "Path reset: the next message goes by flood"
+expect text "Route: flood: the login goes to the whole mesh"
+dump
+shot rt03b-login-reset-touch
+check login-reset-touch
+tapfield 1
+wait 1200
+say == a tap on the password: the on-screen keyboard (masked) (expect osk=up typing=password)
+expect osk on
+dump
+shot rt04-login-osk
+check login-osk
+tapkey "p"
+tapkey "a"
+tapkey "s"
+tapkey "s"
+tapkey "w"
+tapkey "o"
+tapkey "r"
+tapkey "d"
+wait 300
+key enter
+waitstate rep_role admin 9000
+wait 800
+say == admin by touch (expect login=0 rep_role=admin pw_saved=1 osk=down)
+expect osk off
+dump
+shot rt05-admin-touch
+check repeater-touch
+
+# Log out, then Log in on the bar: the saved password is in the box, its Log in button logs in (nothing typed)
+tap "Log out"
+wait 600
+tap "Log in"
+wait 1000
+say == the box with the saved password, no keyboard (expect login=1 login_pw=saved osk=down)
+expect osk off
+dump
+shot rt06-login-saved-touch
+tap "Log in" last
+waitstate rep_role admin 9000
+wait 300
+dump
+
+# the header's Esc closes the page; a 3 s hold on a contact: its Options (a repeater: Manage first)
+tap "Esc"
+wait 600
+hold "Hilltop repeater" 3400
+wait 600
+say == the Options of a repeater by a hold (expect popup=menu popup_title='Options for Hilltop repeater')
+expect text "Manage"
+expect text "Details"
+expect notext "Message"
+dump
+shot rt07-options-hold
+check options-hold
+tap "Manage"
+wait 900
+say == Manage: its Repeater page (logged in: no box) (expect rep=1 login=0 rep_role=admin)
+dump
+tap "Esc"
+wait 400
+tap "Esc"
+wait 400
+say == the header's Esc closed the page, then the Search (expect rep=0 cs=0)
+dump
+tap "Esc"
+wait 400
+
+# Tools by touch: Statistics
+tap "Tools"
+tap "Tools"
+wait 900
+say == Tools by touch (expect tab=Tools)
+dump
+shot rt08-tools-touch
+check tools-touch
+tap "Statistics"
+tap "Statistics"
+wait 2000
+say == Statistics (expect stats_open=1)
+dump
+tap "Esc"
+wait 400
+tap "Esc"
+wait 400
+say == Home again (expect home=1)
+dump

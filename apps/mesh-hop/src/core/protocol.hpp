@@ -41,11 +41,14 @@ constexpr uint8_t kRemoveContact = 15;
 constexpr uint8_t kReboot = 19;
 constexpr uint8_t kBattery = 20;
 constexpr uint8_t kDeviceQuery = 22;
+constexpr uint8_t kSendLogin = 26;
+constexpr uint8_t kLogout = 29;
 constexpr uint8_t kGetContactByKey = 30;
 constexpr uint8_t kGetChannel = 31;
 constexpr uint8_t kSetChannel = 32;
 constexpr uint8_t kSetOtherParams = 38;
 constexpr uint8_t kFactoryReset = 51;
+constexpr uint8_t kSetFloodScope = 54;
 constexpr uint8_t kSendControlData = 55;
 constexpr uint8_t kGetStats = 56;
 constexpr uint8_t kSetAutoadd = 58;
@@ -82,6 +85,8 @@ constexpr uint8_t kAdvertisement = 0x80;
 constexpr uint8_t kPathUpdate = 0x81;
 constexpr uint8_t kAck = 0x82;
 constexpr uint8_t kMessagesWaiting = 0x83;
+constexpr uint8_t kLoginSuccess = 0x85;
+constexpr uint8_t kLoginFail = 0x86;
 constexpr uint8_t kLogData = 0x88;
 constexpr uint8_t kNewAdvert = 0x8A;
 constexpr uint8_t kControlData = 0x8E;
@@ -240,6 +245,24 @@ struct ContactDeleted {
     PubKey key{};
 };
 struct ContactsFull {};
+/* PUSH_CODE_LOGIN_SUCCESS (0x85): a repeater or room accepted our login (companion MyMesh.cpp onContactResponse; meshcore_py reader.py).
+ * 8 bytes up to companion v1.9 (level 7 and below): the code, `permissions`, the 6 byte key prefix of the remote node. From companion
+ * v1.10.0 (level 8) 14 bytes: + the remote node's clock (4), its ACL permissions byte, its FIRMWARE_VER_LEVEL. The push carries no
+ * request tag: it answers the login the companion has pending (one at a time), matched here by the key prefix. */
+struct LoginSuccess {
+    uint8_t permissions = 0;                // byte 1: 1 = admin (a room: 1 admin, 2 read only, 0 read-write); 0 in the legacy "OK" reply
+    KeyPrefix prefix{};
+    bool has_clock = false;
+    uint32_t clock = 0;                     // the remote node's clock when it answered (UNIX time)
+    bool has_acl = false;
+    uint8_t acl = 0;                        // its ACL permissions: the role in bits 0-1 (0 guest, 1 read only, 2 read-write, 3 admin)
+    bool has_fw_level = false;
+    uint8_t fw_level = 0;                   // the remote firmware's own level (a repeater: 2 has the owner info request)
+};
+/* PUSH_CODE_LOGIN_FAIL (0x86): only for a legacy reply. A current repeater or room answers a wrong password with nothing at all. */
+struct LoginFail {
+    KeyPrefix prefix{};
+};
 
 /* RESP_CODE_STATS (24), three sub types (meshcore_py reader.py): core 11 bytes, radio 14, packets 26 or 30. */
 struct CoreStats {
@@ -301,7 +324,7 @@ struct Unknown {
 using Packet = std::variant<Ok, Error, ContactStart, Contact, ContactEnd, SelfInfo, MsgSent, IncomingMessage, CurrentTime, CustomVars,
                             NoMoreMsgs, Battery, DeviceInfo, ChannelInfo, Advertisement, PathUpdate, Ack, MessagesWaiting,
                             LogData, NewAdvert, ContactDeleted, ContactsFull, StatsReply, AutoaddConfig, AllowedRepeatFreq, ControlData,
-                            Unknown>;
+                            LoginSuccess, LoginFail, Unknown>;
 
 /* An ADVERT packet read out of a LogData frame (the radio log of every packet the board hears): who advertised, what it is, where it
  * is, how loud it was and how many hops it took. The Ed25519 signature is NOT checked (the app has no crypto for it): a name and a
@@ -370,10 +393,22 @@ Bytes build_get_autoadd_config();
 Bytes build_get_allowed_repeat_freq();
 /* SET_PATH_HASH_MODE: 0, 1, 2 = 1, 2, 3 bytes per hop hash. Frame 3D 00 mode (meshcore_py set_path_hash_mode). */
 Bytes build_set_path_hash_mode(int mode);
+/* SET_FLOOD_SCOPE back to the default (no scope): 36 00 and a zero 16 byte key, as meshcore_py set_flood_scope("") sends it. Mesh Hop
+ * never sets a scope; it only undoes one a meshcore-cli session left (report 033). An older firmware answers "unsupported". */
+Bytes build_reset_flood_scope();
 /* SEND_CONTROL_DATA carrying a DISCOVER_REQ (meshcore_py send_node_discover_req): flags 0x80 | prefix_only, the node type filter (one bit
  * per ADV_TYPE: bit n for type n, 0xFF = all), a 4 byte tag. Zero-hop only: the answers come from the nodes in direct radio range. */
 Bytes build_discover_request(uint8_t type_filter, uint32_t tag, bool prefix_only);
 constexpr uint8_t kDiscoverAllTypes = 0xFF;
+/* SEND_LOGIN (26, meshcore_py send_login): the full 32 byte key of a contact (a repeater or room), then the password bytes (none for a
+ * blank, guest login). The companion answers SENT (6: flood flag, tag = the first 4 key bytes, est_timeout in ms), ERROR not found (not a
+ * contact) or table full (nothing could be sent); the verdict comes later as a push (LoginSuccess, rarely LoginFail) or never. The firmware
+ * cuts a password at kMaxLoginPassword bytes (BaseChatMesh::sendLogin): longer ones are refused before this is built. */
+Bytes build_send_login(const PubKey &key, const std::string &password);
+constexpr size_t kMaxLoginPassword = 15;
+/* LOGOUT (29): the 32 byte key. The companion only stops its keep-alive to that node and answers OK; the remote node keeps us in its
+ * access list. */
+Bytes build_logout(const PubKey &key);
 /* Direct message to the first 6 bytes of a contact's public key. */
 Bytes build_send_txt(const KeyPrefix &dst, const std::string &text, uint32_t timestamp, uint8_t attempt);
 Bytes build_send_channel_txt(uint8_t channel_idx, const std::string &text, uint32_t timestamp);

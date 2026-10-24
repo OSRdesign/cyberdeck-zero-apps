@@ -10,6 +10,8 @@
 #include <poll.h>
 #include <sys/socket.h>
 #include <chrono>
+#include <fstream>
+#include <iterator>
 #include <thread>
 
 /* A TCP server on 127.0.0.1 (a free port), driven by hand: accept, read, write, close. */
@@ -287,6 +289,64 @@ static void test_node_book()
         NodeBook b(dir);
         CHECK(b.load() && b.ip_nodes().size() == 1 && b.ip_nodes()[0].host == "10.0.0.3" && b.last().empty() && b.ble_scan() == NodeBook::Scan::Yes);
     }
+    // a USB port is not a board: the name learned there holds for the USB device that answered (its identity), never for
+    // another board plugged into the same port later (the owner's ESP32-S3 shown as the XIAO nRF52 "SpyMesh" of before)
+    {
+        const std::string nrf = "2886:8044/5A1B2C3D4E5F", esp = "303a:1001/1C:DB:D4:A8:9A:70";
+        FILE *f = std::fopen((dir + "/nodes.txt").c_str(), "w");
+        std::fputs("name\tusb:/dev/ttyACM0\tSpyMesh\nname\tble:EC:EB:45:39:28:2D\tOSR T1000\n", f);     // a file of 0.7.0: no identity
+        std::fclose(f);
+        NodeBook b(dir);
+        CHECK(b.load() && b.name_of("usb:/dev/ttyACM0") == "SpyMesh");
+        CHECK(b.name_for("usb:/dev/ttyACM0", esp).empty());                     // an old line: which board it was is not known
+        CHECK(b.name_for("usb:/dev/ttyACM0", "") == "SpyMesh");                 // nothing to compare (a pty, no USB ids): as before
+        CHECK(b.name_for("ble:EC:EB:45:39:28:2D", "") == "OSR T1000" && b.name_for("usb:/dev/ttyACM1", esp).empty());
+        b.set_name("usb:/dev/ttyACM0", "SpyMesh", nrf);                         // learned again, with the device's identity
+        CHECK(b.name_for("usb:/dev/ttyACM0", nrf) == "SpyMesh" && b.name_for("usb:/dev/ttyACM0", esp).empty());
+        CHECK(b.save());
+        std::ifstream in(dir + "/nodes.txt");
+        const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        CHECK(text.find("name\tusb:/dev/ttyACM0\tSpyMesh\t" + nrf + "\n") != std::string::npos);
+        CHECK(text.find("name\tble:EC:EB:45:39:28:2D\tOSR T1000\n") != std::string::npos);     // no identity: three fields as before
+        NodeBook c(dir);
+        CHECK(c.load() && c.name_for("usb:/dev/ttyACM0", nrf) == "SpyMesh" && c.name_for("usb:/dev/ttyACM0", esp).empty());
+        c.set_name("usb:/dev/ttyACM0", "Wio S3", esp);                          // the other board answered on that port
+        CHECK(c.name_for("usb:/dev/ttyACM0", esp) == "Wio S3" && c.name_for("usb:/dev/ttyACM0", nrf).empty());
+    }
+}
+
+/* The USB device behind a port, from a fake /sys/class/tty: ids, strings and the serial number, through a udev alias too. */
+static void test_usb_identity()
+{
+    using namespace meshzero;
+    const std::string root = tmpdir("usb-sysfs");
+    const std::string dev = root + "/dev", tty = root + "/class/tty", usbdev = root + "/devices/usb1/1-1";
+    CHECK(std::system(("rm -rf " + root + " && mkdir -p " + dev + "/serial/by-id " + tty + "/ttyACM0 " + tty + "/ttyUSB0 " + usbdev +
+                       "/1-1:1.0 && touch " + dev + "/ttyACM0 " + dev + "/ttyUSB0 " + dev + "/ttyS0 && ln -s " + usbdev + "/1-1:1.0 " +
+                       tty + "/ttyACM0/device && ln -s ../../ttyACM0 " + dev + "/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit-if00")
+                          .c_str()) == 0);
+    auto put = [&](const std::string &name, const char *text) {
+        FILE *f = std::fopen((usbdev + "/" + name).c_str(), "w");
+        std::fputs(text, f);
+        std::fclose(f);
+    };
+    put("idVendor", "303a\n");
+    put("idProduct", "1001\n");
+    put("manufacturer", "Espressif\n");
+    put("product", "USB JTAG/serial debug unit\n");
+    put("serial", "1C:DB:D4:A8:9A:70\n");
+    const std::vector<SerialCandidate> list = list_serial_ports(dev, tty);
+    CHECK(list.size() == 2 && list[0].path == dev + "/ttyACM0" && list[1].path == dev + "/ttyUSB0");      // (not ttyS0)
+    CHECK(list[0].vid == 0x303A && list[0].pid == 0x1001 && list[0].product == "USB JTAG/serial debug unit" && list[0].serial == "1C:DB:D4:A8:9A:70");
+    CHECK(usb_identity(list[0]) == "303a:1001/1C:DB:D4:A8:9A:70");
+    CHECK(list[1].vid == 0 && usb_identity(list[1]).empty());                  // no USB device behind it (no sysfs entry)
+    const SerialCandidate alias = describe_port(dev + "/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit-if00", tty);
+    CHECK(alias.path == dev + "/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit-if00" && usb_identity(alias) == "303a:1001/1C:DB:D4:A8:9A:70");
+    CHECK(usb_identity(describe_port(dev + "/ttyACM0", tty)) == "303a:1001/1C:DB:D4:A8:9A:70");
+    CHECK(usb_identity(describe_port("/dev/pts/77", tty)).empty() && usb_identity(describe_port("", tty)).empty());
+    std::remove((usbdev + "/serial").c_str());                                // a CH340-like device: no serial number
+    CHECK(usb_identity(describe_port(dev + "/ttyACM0", tty)) == "303a:1001");
+    CHECK(std::system(("rm -rf " + root).c_str()) == 0);
 }
 
 static void test_nodes()
@@ -294,4 +354,5 @@ static void test_nodes()
     test_tcp_transport();
     test_client_over_tcp();
     test_node_book();
+    test_usb_identity();
 }
