@@ -223,17 +223,29 @@ public:
      *     with `remember` waits, to be written to the PasswordStore after a success, and wiped then.
      * The companion supports SEND_LOGIN and LOGOUT from companion v1.4.0 (level 3) on; before v1.10.0 (level 8) the success push has no
      * clock, ACL byte or firmware level (has_clock / has_fw_level false, the role from the admin bit). A board without the commands
-     * answers "unsupported" (Unsupported). */
-    enum class RemoteOp { None, Login, Logout };
+     * answers "unsupported" (Unsupported).
+     * 0.8.0, the role: the ACL byte only counts when the node sends its FIRMWARE_VER_LEVEL (level 1+: repeater and room server
+     * v1.9.0+). An older node has no ACL byte in its reply (a repeater: a reserved 0, a room: its count of unsynced posts), so the
+     * role comes from byte 1 (repeater: 1 admin, else guest; room: 1 admin, 0 read-write, 2 read-only). A legacy "OK" answer (an
+     * 8 byte push from a companion of level 8+) carries no role at all: RemoteRole::None ("Logged in"). */
+    enum class RemoteOp { None, Login, Logout, Status, Neighbours, Owner };
     /* The role in the remote node's access list (ACL permission bits 0-1). A repeater gives Guest or Admin; a room also ReadOnly
      * (a blank password when `allow.read.only` is on) and ReadWrite (the room password). */
     enum class RemoteRole { None, Guest, ReadOnly, ReadWrite, Admin };
     enum class RemoteError {
         None,
-        Timeout,         // SENT came but no answer within the wait (wrong password, out of reach, session gone), or the board never answered SENT (sent = false)
-        NotFound,        // ERR not found: the node is not a contact on the board
+        /* SENT came but no answer within the wait, or the board never answered SENT (sent = false). The firmware answers NOTHING to a
+         * wrong password, to a request from a client it does not list (its session ended: a reboot forgets the guests), to a request
+         * type it does not know (an older repeater) and to an anonymous request that arrived by flood or over its limit: all of these
+         * look exactly like a node out of reach. */
+        Timeout,
+        NotFound,        // ERR not found: the node is not a contact on the board; or refused at once: not in the model's contacts (err_code -1)
         TableFull,       // ERR table full: the board could not send it (its send queue is full: "busy")
-        Unsupported,     // ERR unsupported: the board's firmware lacks the command
+        /* ERR unsupported: the board's firmware lacks the command (SEND_LOGIN before companion v1.4.0, BINARY_REQ before v1.8.0,
+         * ANON_REQ before v1.12.0); or refused at once (err_code -1): the node cannot answer it: not a repeater or room, a room asked
+         * for neighbours or the owner, or the level of its login answer is too low (neighbours: kRepeaterLevelNeighbours, owner:
+         * kRepeaterLevelOwnerInfo): "firmware too old". */
+        Unsupported,
         Failed,          // another ERR code (err_code)
         Refused,         // LOGIN_FAIL from a legacy node
         Busy,            // refused: a CLI session holds the node
@@ -241,6 +253,9 @@ public:
         BadPassword,     // refused: longer than kMaxLoginPassword bytes, or a NUL in it
         Cancelled,       // a newer request, cancel_remote(), start_relay(), logout() of the same node
         LinkLost,        // the link to the board went away
+        NotLoggedIn,     // refused: status and neighbours need a session (remote_sessions(), guest or admin) with that node
+        NoDirectRoute,   // refused: the owner without a session uses the anonymous request, which the node answers only on a direct route
+        BadReply,        // the answer with the right tag could not be read (too short, malformed)
     };
     /* NotAsked: no `remember`, or a blank password (never written); Skipped: a password the file cannot hold (spaces around it, a line
      * end); Failed: no PasswordStore set, or an I/O error. */
@@ -255,6 +270,12 @@ public:
         uint64_t deadline_ms = 0;        // Waiting: when it ends as Timeout
         bool flood = false;              // SENT said: sent by flood (no known route)
         uint32_t est_timeout_ms = 0;     // as SENT gave it
+        // a request (Status, Neighbours, Owner): the tag of SENT that its push 0x8C carries, and what is needed to read the answer
+        std::array<uint8_t, 4> tag{};
+        bool anonymous = false;          // Owner by the anonymous request (no session)
+        bool room = false;               // Status of a room: the room layout
+        uint16_t nb_offset = 0;          // Neighbours: the page asked for
+        uint8_t nb_prefix_len = 0;
     };
     struct RemoteResult {
         uint32_t id = 0;                 // grows with every result: the UI shows each once
@@ -274,9 +295,14 @@ public:
         bool has_clock = false;
         uint32_t clock = 0;              // the remote node's clock at its answer
         uint32_t deck_time = 0;          // deck_unix() when the answer came: the skew is clock - deck_time
-        bool has_fw_level = false;
+        bool has_fw_level = false;       // a login success; an Owner result: the level from the session (none when anonymous)
         uint8_t fw_level = 0;
         PasswordSave password = PasswordSave::NotAsked;
+        // a request's answer (ok, op Status / Neighbours / Owner)
+        bool anonymous = false;          // Owner read (0.8.0: or tried and failed) with the anonymous request
+        RepeaterStatus status;           // Status (status.room: a room's layout)
+        NeighboursPage neighbours;       // Neighbours (names: neighbour_name() in model.hpp)
+        OwnerInfo owner;                 // Owner (fw_version only from OWNER_INFO 0x07)
     };
     /* What this node connection knows of its logins (the session table). The REMOTE access list survives our link (a guest until the
      * node reboots, an admin until `setperm`), but this table is cleared when the link to the board drops or changes (another board,
@@ -298,6 +324,10 @@ public:
     static constexpr uint32_t kRemoteMinWaitMs = 2000;
     static constexpr uint32_t kRemoteMaxWaitMs = 120000;
     static constexpr double kRemoteWaitFactor = 1.25;
+    /* A NEIGHBOURS page after the first (offset > 0) waits at least this long: the pages are asked close together and their answers
+     * are big, so the repeater's duty cycle may hold them back (meshcore_py fetch_all_neighbours: min_timeout + 25 s for the next
+     * pages). Bounded by kRemoteMaxWaitMs like every wait. */
+    static constexpr uint32_t kRemoteNeighboursPageMinWaitMs = 25000;
     /* The wait after SENT for an est_timeout (0 = none given). */
     static uint32_t remote_wait_ms(uint32_t est_timeout_ms);
     /* Where a successful login with `remember` writes the password (nullptr: never written). Not owned. */
@@ -319,7 +349,35 @@ public:
     const std::vector<RemoteSession> &remote_sessions() const { return sessions_; }
     const RemoteSession *remote_session(const PubKey &key) const;
 
+    // ---- the read-only view of a repeater or room (report 036, slice S2)
+    /* Requests on the same remote queue as start_login(): one at a time (a new one, a login or logout of that node, cancel_remote(),
+     * start_relay() cancel the pending one; a lost link ends it: Cancelled / LinkLost), refused while a CLI session runs (Busy), the
+     * same wait after SENT (remote_wait_ms(), no automatic retry). The command is BINARY_REQ (50) or ANON_REQ (57); the companion's
+     * SENT gives a tag, and the answer is the push BINARY_RESPONSE (0x8C) with that tag: a push with another tag, or one that comes
+     * when nothing waits (a cancelled or timed out request), is ignored. The answer ends as a RemoteResult of op Status, Neighbours or
+     * Owner (ok: its data in status / neighbours / owner; BadReply when it cannot be read). Nothing sets notice().
+     * Refused at once (0 returned, remote_result() says why, err_code -1): NotConnected, Busy, NotFound (not one of the model's
+     * contacts), Unsupported (a chat node or sensor; a room: status only; a session whose level is too low), NotLoggedIn (status and
+     * neighbours need a session in remote_sessions(): guest or admin, or a room's read-only / read-write), NoDirectRoute (below).
+     * Returns the request id. */
+    uint32_t request_status(const PubKey &key);
+    /* One page of the repeater's zero-hop neighbours from `offset`: up to `count` entries (the repeater stops at 14 with 4 byte
+     * prefixes), in `order`. The page says the total and whether more remain (NeighboursPage::more: ask again from offset +
+     * entries.size()). Repeaters only, from level 1 (v1.9.0). */
+    uint32_t request_neighbours(const PubKey &key, uint16_t offset = 0, uint8_t count = 255, NeighbourOrder order = NeighbourOrder::NewestFirst);
+    /* The owner info. With a session: OWNER_INFO (0x07, level 2: repeater v1.12.0+), which also gives the firmware version. Without
+     * one: the anonymous OWNER request (0x02), sent only when the contact has a direct route (zero hop or a known path; the reply path
+     * is that route reversed); a flood route is refused at once (NoDirectRoute: the repeater ignores an anonymous request by flood).
+     * The repeater answers at most 4 anonymous requests per 3 minutes from everybody together: past that it is silent (Timeout).
+     * Repeaters only. */
+    uint32_t request_owner(const PubKey &key);
+
     // ---- the route of a contact (0.7.2)
+    /* 0.8.0: the companion's push PATH_UPDATED (0x81, the contact's key) says it learnt a new route to that contact (a flood
+     * exchange brought one back: a login, a request, a message); the contact is read back (GET_CONTACT_BY_KEY), so the route texts
+     * and the anonymous owner request (direct only) follow at once. One read per key at a time; none while a CLI session runs (the
+     * console reads its own, and the end of the session re-reads the contacts when the console sent anything). */
+    size_t path_lookups_pending() const { return path_lookups_.size(); }
     /* "Reset path": RESET_PATH (13, the contact's 32-byte key). The companion forgets its stored route to the contact
      * (out_path_len = unknown) and answers OK, or ERR not found when the key is not one of its contacts. After OK the model's contact
      * is set to flood at once and read back from the board (GET_CONTACT_BY_KEY), so every route text says "flood". Refused (result
@@ -415,11 +473,18 @@ private:
     void drop_queued_remote(uint32_t req);
     void tick_remote();
     void on_login_reply(const KeyPrefix &prefix, const LoginSuccess *ok);
+    /* SENT (or the error) of a pending remote command: the wait starts (Waiting, the tag kept), or the request ends. */
+    void on_remote_sent(uint32_t req, Outcome o, const Packet *p, int err);
+    /* The checks of request_status / _neighbours / _owner: RemoteError::None when the request may go (rec: the model's contact). */
+    RemoteError check_request(RemoteOp op, const PubKey &key, const ContactRec *&rec) const;
+    uint32_t start_request(RemoteOp op, const PubKey &key, Bytes payload, const RemoteState &extra, const std::string &what);
+    void on_binary_response(const BinaryResponse &b);
     void publish_remote(RemoteResult r);
     void wipe_remote_password();
     /* RESET_PATH for `key`; on OK the model's contact goes to flood and is read back; `then` gets the outcome (may be empty). */
     void queue_reset_path(const PubKey &key, std::function<void(Outcome, int)> then);
     void publish_path_reset(const PubKey &key, bool ok, PathResetError e, int err_code = -1);
+    void on_path_updated(const PubKey &key);
 
     ITransport &transport_;
     Model &model_;
@@ -511,6 +576,7 @@ private:
     // the route of a contact (0.7.2)
     bool path_reset_busy_ = false;
     PathResetResult path_reset_result_;
+    std::vector<PubKey> path_lookups_;           // 0.8.0: contacts read back after a PATH_UPDATED push (their answer pending)
 };
 
 } // namespace meshzero

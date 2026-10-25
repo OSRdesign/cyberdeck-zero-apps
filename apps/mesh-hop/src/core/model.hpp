@@ -248,6 +248,13 @@ public:
     void load_contact(const ContactRec &rec);                    // from the cache (no listener call)
     const ContactRec *find_contact(const std::string &key_hex) const;
     const ContactRec *find_by_prefix(const KeyPrefix &prefix) const;
+    /* The contacts whose key starts with `prefix` (1-32 bytes, e.g. the 4 byte prefix of a repeater's neighbour): how many, and the
+     * first of them in the order of contacts_sorted() (the most recently heard, then by name). No match (or a bad length): 0, null. */
+    struct PrefixMatch {
+        const ContactRec *contact = nullptr;
+        int matches = 0;
+    };
+    PrefixMatch match_key_prefix(const uint8_t *prefix, size_t len) const;
     std::vector<const ContactRec *> contacts_sorted() const;      // most recently heard first
     size_t contact_count() const { return contacts_.size(); }
     /* While a batch is open (a bulk delete) the contact cache is not rewritten after every change, only once at the end. */
@@ -384,5 +391,17 @@ private:
     uint32_t revision_ = 1;
     Listener *listener_ = nullptr;
 };
+
+/* Report 036 S2: who a repeater's neighbour is (NeighbourEntry::prefix). text: the name of the first matching contact
+ * (Model::match_key_prefix), its prefix in hex when that contact has no name yet, or the prefix in hex when no contact matches
+ * (known false). ambiguous: more than one contact starts with the prefix (4 bytes from a repeater can match two keys). */
+struct NeighbourName {
+    std::string text;
+    bool known = false;
+    bool ambiguous = false;
+    int matches = 0;
+    std::string key_hex;                    // the full key of the contact named (empty when none)
+};
+NeighbourName neighbour_name(const Model &m, const Bytes &prefix);
 
 } // namespace meshzero

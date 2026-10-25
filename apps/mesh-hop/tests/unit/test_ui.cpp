@@ -1073,6 +1073,7 @@ int main()
     test_node_rows();
     test_cli_ui();
     test_repeater_ui();
+    test_repeater_view();
     std::printf("ui: %d checks, %d failed\n", g_checks, g_fail);
     return g_fail ? 1 : 0;
 }

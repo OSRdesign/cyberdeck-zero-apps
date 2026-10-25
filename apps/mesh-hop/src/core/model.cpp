@@ -482,6 +482,37 @@ const ContactRec *Model::find_by_prefix(const KeyPrefix &prefix) const
     return nullptr;
 }
 
+Model::PrefixMatch Model::match_key_prefix(const uint8_t *prefix, size_t len) const
+{
+    PrefixMatch m;
+    if (!prefix || len == 0 || len > 32) return m;
+    for (const auto &kv : contacts_) {
+        const ContactRec &r = kv.second;
+        if (!std::equal(prefix, prefix + len, r.c.key.begin())) continue;
+        ++m.matches;
+        if (!m.contact) {
+            m.contact = &r;
+            continue;
+        }
+        const uint32_t ha = r.last_heard(), hb = m.contact->last_heard();          // the order of contacts_sorted()
+        if (ha > hb || (ha == hb && r.c.name < m.contact->c.name)) m.contact = &r;
+    }
+    return m;
+}
+
+NeighbourName neighbour_name(const Model &m, const Bytes &prefix)
+{
+    NeighbourName n;
+    if (prefix.empty()) return n;
+    const Model::PrefixMatch pm = m.match_key_prefix(prefix.data(), prefix.size());
+    n.matches = pm.matches;
+    n.ambiguous = pm.matches > 1;
+    n.known = pm.contact != nullptr;
+    if (pm.contact) n.key_hex = pm.contact->key_hex();
+    n.text = pm.contact && !pm.contact->c.name.empty() ? pm.contact->c.name : to_hex(prefix);
+    return n;
+}
+
 std::vector<const ContactRec *> Model::contacts_sorted() const
 {
     std::vector<const ContactRec *> v;

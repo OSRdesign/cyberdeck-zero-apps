@@ -139,10 +139,35 @@ int main()
         say("remote-reboot");                                                  // the node restarts: an admin stays in its list
         CHECK(login("", true, false));
         CHECK(client.remote_result().ok && client.remote_result().role == Client::RemoteRole::Admin);
+        // report 036 S2: the read-only view over the real serial path (BINARY_REQ 50, the push 0x8C with the tag of SENT)
+        auto request = [&](auto send) {
+            const uint32_t before = client.remote_result().id;
+            const uint32_t req = send();
+            return req != 0 && wait_for(client, [&] { return client.remote_result().id == before + 1; }, 5000) && client.remote_result().req == req;
+        };
+        CHECK(request([&] { return client.request_status(hill); }));
+        CHECK(client.remote_result().ok && client.remote_result().op == Client::RemoteOp::Status && client.remote_result().status.battery_mv == 4120 &&
+              client.remote_result().status.has_rx_errors && client.remote_result().status.rx_errors == 7 && !client.remote_result().flood);
+        CHECK(request([&] { return client.request_neighbours(hill); }));
+        CHECK(client.remote_result().ok && client.remote_result().neighbours.total == 22 && client.remote_result().neighbours.entries.size() == 14 &&
+              client.remote_result().neighbours.more && client.remote_result().neighbours.entries[0].prefix.size() == 4);
+        CHECK(request([&] { return client.request_neighbours(hill, 14); }));
+        CHECK(client.remote_result().ok && client.remote_result().neighbours.entries.size() == 8 && !client.remote_result().neighbours.more);
+        CHECK(request([&] { return client.request_owner(hill); }));
+        CHECK(client.remote_result().ok && !client.remote_result().owner.anonymous && client.remote_result().owner.fw_version == "v1.18.0" &&
+              client.remote_result().owner.name == "Hilltop repeater" && client.remote_result().owner.owner_info == "Simulated owner\nAsk on #test");
+        say("drop 1");
+        CHECK(request([&] { return client.request_status(hill); }));
+        CHECK(client.remote_result().error == Client::RemoteError::Timeout && client.remote_result().op == Client::RemoteOp::Status);
         const uint32_t id = client.remote_result().id;
         CHECK(client.logout(hill) != 0 && !client.remote_session(hill));
         CHECK(wait_for(client, [&] { return client.remote_result().id == id + 1; }, 3000));
         CHECK(client.remote_result().op == Client::RemoteOp::Logout && client.remote_result().ok);
+        // no session: the status is refused, the owner goes by the anonymous request (Hilltop has a route)
+        CHECK(client.request_status(hill) == 0 && client.remote_result().error == Client::RemoteError::NotLoggedIn);
+        CHECK(request([&] { return client.request_owner(hill); }));
+        CHECK(client.remote_result().ok && client.remote_result().owner.anonymous && client.remote_result().owner.name == "Hilltop repeater" &&
+              client.remote_result().owner.has_clock && client.remote_result().owner.owner_info == "Simulated owner\nAsk on #test");
         CHECK(pw.forget(hex) && !pw.read(hex));
         client.set_password_store(nullptr);
     }

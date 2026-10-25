@@ -32,7 +32,7 @@ namespace meshhop {
 
 namespace {
 
-constexpr const char *kVersion = "0.7.2";
+constexpr const char *kVersion = "0.8.1";
 
 // ---- the colours: the launcher's (cp0_ui_list.h and cp0_ui_osk.h), not an own palette. Green, amber and red are the
 // status tones (ValueTone Ok / Warn / Bad), the accent blue marks what is selected, focused or unread.
@@ -883,6 +883,7 @@ void App::make_client()
     client_->set_password_store(passwords_.get());                // a login with Remember writes there after a success
     rep_req_ = 0;                                                 // (a new client: its results count from 0 again)
     rep_seen_result_ = 0;
+    rep_reads_.clear();                                           // 0.8.0: and its requests' ids
 }
 
 void App::post(std::function<void()> fn)
@@ -1947,6 +1948,8 @@ void App::update_title()
         } else if (nav_.repeater_open) {                     // 0.7.0: "Contacts > Hilltop repeater"
             const ContactRec *r = model_.find_contact(rep_key_);
             path.push_back(r ? truncate_ellipsis(r->c.name.empty() ? to_hex(r->prefix()) : r->c.name, 24) : std::string("Repeater"));
+            // 0.8.1: a section's screen, "Hilltop repeater > Status" (the shared rule drops the first parts when they do not fit)
+            if (rep_sub_ != RepSection::None) path.push_back(rep_section_name(rep_sub_));
         } else if (nav_.nearby_open) {
             path.push_back("Nearby");
         }
@@ -4200,7 +4203,10 @@ std::string App::hint_text() const
         if (nav_.repeater_open) {
             const ContactRec *r = model_.find_contact(rep_key_);
             const bool in = r && client_->remote_session(r->c.key);
-            return in ? "L: log out   M: more   Up/Down: scroll   Esc: back" : "L or Enter: log in   M: more   Esc: back";
+            if (rep_sub_ != RepSection::None)                    // 0.8.1: a section's screen
+                return rep_reads_.running() ? "R: cancel   Up/Down: move   Esc: back" : "R: refresh   Up/Down: move   Enter: the selected row   Esc: back";
+            if (rep_reads_.running()) return "Enter: open   R: stop reading   M: more   Esc: back";
+            return in ? "Enter: open   R: refresh all   L: log out   M: more   Esc: back" : "Enter: open   L: log in   R: refresh   M: more   Esc: back";
         }
         if (nav_.nearby_open) return "Enter: add   I: ignore   S: scan   V: ignored   Esc: back";
         if (nav_.contact_search) return "Type to search   Up/Down: choose   Enter: open   Esc: clear";
@@ -6700,8 +6706,8 @@ void App::button_clicked(int tag)
     case kTagRepLogin:
         if (!editor_open_ && nav_.repeater_open) repeater_login_or_out();
         break;
-    case kTagRepRefresh:
-        if (!editor_open_ && nav_.repeater_open) notice("Refresh comes with the status, neighbours and owner (next version)", true);
+    case kTagRepRefresh:                                    // 0.8.1: a section's screen: read it again (Cancel while a read runs)
+        if (!editor_open_ && nav_.repeater_open && !nav_.popup_open && rep_sub_ != RepSection::None) repeater_refresh(rep_sub_);
         break;
     case kTagRepMore:
         if (!editor_open_ && nav_.repeater_open) repeater_more();
@@ -6860,6 +6866,8 @@ void App::row_clicked(RowList *list, int index, int x)
         if (index == settings_sel_) settings_activate(index);       // a tap on the selected row acts
         else settings_select(index, false);                         // the first tap selects it
         invalidate();
+    } else if (list == &rep_list_) {                      // 0.8.0: the Repeater page: the first tap selects, the selected action row acts
+        if (nav_.repeater_open && !nav_.detail_open) repeater_rows_clicked(index);
     } else if (list == &detail_list_) {
         detail_sel_ = index;
         detail_list_.set_selected(index, true, false);
@@ -6931,6 +6939,7 @@ void App::back()
     case BackAction::CancelEditor: close_editor(false); break;
     case BackAction::CloseSearch: close_search(); break;
     case BackAction::CloseRepeater: close_repeater(); break;
+    case BackAction::CloseRepeaterSection: repeater_close_section(); break;      // 0.8.1: a section's screen: back to the hub
     case BackAction::CloseContactSearch: close_contact_search(); break;
     case BackAction::CloseStats: close_stats(); break;
     case BackAction::ClosePacketLog: close_packet_log(); break;

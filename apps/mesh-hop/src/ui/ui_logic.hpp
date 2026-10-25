@@ -504,10 +504,11 @@ struct NavState {
     bool packet_log_open = false;   // Tools: the packet log (D8; Settings before 0.7.0)
     bool select_mode = false;       // Contacts: marking contacts for a bulk delete or a group
     bool repeater_open = false;     // Contacts: the Repeater page of a repeater or room (0.7.0)
+    bool repeater_section = false;  // 0.8.1: one of its sections' screens (Status, Neighbours, Owner) over it
     bool contact_search = false;    // Contacts: the Search field is shown (0.7.0)
 };
 enum class BackAction { ClosePopup, CancelEditor, CloseSearch, CloseStats, CloseDetail, CloseNearby, ExitSelect, FocusList, ExitHint, ClosePacketLog,
-                        CloseRepeater, CloseContactSearch };
+                        CloseRepeater, CloseContactSearch, CloseRepeaterSection };
 /* A short Esc and every Back button. Never quits: only the launcher's 3 s hold ends the app. */
 BackAction back_action(const NavState &s);
 

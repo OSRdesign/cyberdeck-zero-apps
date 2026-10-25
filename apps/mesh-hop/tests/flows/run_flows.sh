@@ -1,6 +1,6 @@
 #!/bin/sh
 # The 23 scripted simulator flows of Mesh Hop (0.5: nodes, the start page over TCP; 0.5.1: hidden and shown again; 0.7.0: repeater_run.sh,
-# the Repeater page and the regrouped Home at 640x480 and 800x480), one after the other (the simulator's link /tmp/ttyMHSIM is shared), each
+# the Repeater page and the regrouped Home at 640x480 and 800x480; 0.8.0: repeater_s2_run.sh, its read-only view), one after the other (the simulator's link /tmp/ttyMHSIM is shared), each
 # with the simulator options its header names; the preset flows through presets_run.sh (its cases 1-7 and the 60 s
 # retry). About 15 minutes. Needs python3 and the host build (../../build.sh host).
 #   sh run_flows.sh [RUNNER] [OUT] [WxH | sizes]
@@ -70,6 +70,8 @@ one lifecycle SHOTS="$OUT/lifecycle" SIMCTL=1 SCRIPT="$T/lifecycle.script" sh "$
 # 0.7.0: the Repeater page, the Search of Contacts, Tools, MY CONTACT (repeater_run.sh: a keyboard and touch only, always at 640x480
 # and 800x480); its shots in OUT/repeater/repeater-<WxH> and OUT/repeater/repeater-touch-<WxH>
 one repeater sh "$T/repeater_run.sh" "$MESHHOP_BIN" "$OUT/repeater"
+# 0.8.0: the Repeater page's read-only view (repeater_s2_run.sh: a keyboard, an older repeater, touch only; 640x480 and 800x480)
+one repeater-s2 sh "$T/repeater_s2_run.sh" "$MESHHOP_BIN" "$OUT/repeater-s2"
 # 0.6: the CLI page with the real bundled meshcore-cli (cli_run.sh: a keyboard and touch only), when MESHHOP_MESHCLI names its mccli
 # (build.sh cli installs one in $CDK_BUILD/cli-smoke); its shots in OUT/cli/cli-<WxH> and OUT/cli/cli-touch-<WxH>
 if [ -n "$MESHHOP_MESHCLI" ]; then one cli sh "$T/cli_run.sh" "$MESHHOP_BIN" "$OUT/cli" "$MESHHOP_MESHCLI" "$SIZE"; fi

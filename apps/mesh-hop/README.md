@@ -1,6 +1,6 @@
 # Mesh Hop
 
-Version 0.7.2, package `mesh-hop`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.8.1, package `mesh-hop`. Part of [cyberdeck-zero-apps](../../README.md).
 
 **Status: early release.** 0.2.2 and 0.3.0 were tested on the deck by the owner with real boards (Seeed XIAO nRF52840 and a
 spare XIAO S3 WIO, MeshCore firmware v1.15.0, a board swap included). 0.4.0 is the responsive, touch-complete version; its board
@@ -9,7 +9,10 @@ tests are in [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md). The GPS switch of t
 yet on a real board** (section N of the board tests). 0.6.0 adds the **CLI** page (the upstream meshcore-cli inside Mesh Hop):
 tested with the simulator only, **not yet on a real node** (section 10 of the board tests). 0.7.0 regroups Home (a **Tools** page)
 and adds the **Repeater page** (log in to your repeaters and rooms from Contacts): tested with the simulator and the bundled
-meshcore-cli only, **not yet on a real node** (section 11 of the board tests). Several MeshCore features are not there yet (see [Known limits](#known-limits)).
+meshcore-cli only, **not yet on a real node** (section 11 of the board tests). 0.8.1 adds the page's **read-only view** (Status,
+Neighbours, Owner, each on a screen of its own): tested with the simulator; its first layout (0.8.0, one list, never published) was
+tried by the owner on the deck (section 12 of the board tests). Several MeshCore
+features are not there yet (see [Known limits](#known-limits)).
 
 A full-screen client for [MeshCore](https://github.com/meshcore-dev/MeshCore) LoRa mesh networks. The radio is a separate
 **companion radio board** (a *node*) reached over the deck's USB port, over **Bluetooth LE** or over **Wi-Fi** (MeshCore's
@@ -17,12 +20,44 @@ companion firmware for USB, BLE or Wi-Fi); the deck is its screen and keyboard. 
 [MeshZero](../meshzero/README.md) and keeps its core: the serial transport, the protocol, the client, the model and the history
 store (`src/core/`, with unit tests).
 
+## What changed in 0.8.1
+
+* **Repeater page: Status, Neighbours and Owner** (report 036, second part), as a **hub and three screens**. The page itself is
+  the hub: its bar is **Log in** / **Log out** and **More**; under ACCESS (as before) a section **READ** has three rows with a
+  chevron, each with a one-line summary at the right: **Status** ("4.12 V · up 3 d 4 h"), **Neighbours** ("12 heard · newest 12 s
+  ago"), **Owner** ("Olivier · fw 1.12.0"), or "not read yet", "needs login", "no answer", "firmware too old", "waiting… up to 12 s".
+  A row (a tap on it selected, or Enter) opens that section's **screen**: the header "Hilltop repeater > Status", the line under it
+  "read 14:02 · tap Refresh to read again" (or "waiting… up to 12 s", or what went wrong), **one button, Refresh** (**Cancel** while
+  a read runs; `R` or Ctrl+R), and the section's rows:
+  * **Status** (guest or admin): battery, uptime, noise floor, last RSSI / SNR, packets received / sent, flood / direct received
+    and sent, airtime TX / RX, duplicates, RX errors (newer repeaters), TX queue; a room: its posts stored / pushed.
+  * **Neighbours** (guest or admin): the repeaters it hears at zero hop, newest first, by their name in your Contacts (else `<` and
+    their key prefix; "(ambiguous 2)" when two contacts start the same), with SNR and when; **More neighbours** reads the next
+    page while some remain ("14 of 22 shown").
+  * **Owner**: logged in, the owner's name, the repeater's **firmware version** and its owner info; not logged in, **Read owner
+    (direct route)** asks without a login, only when the route is direct (the repeater answers that 4 times in 3 minutes, for
+    everyone together); on a flood route "Log in to read".
+* **What is read when**: the **status once by itself** right after a successful login (guest or admin); a screen never read is
+  read **by itself once** when you open it (logged in); after that, **Refresh** on its screen. The hub's **More > Refresh all** (or
+  `R` on the hub) reads Status, then Neighbours, then Owner, one after the other (their summaries show it; a section without an
+  answer is marked and the next one still goes; a lost login, a lost link or the CLI stop the chain; "Stop reading" there, or
+  leaving the page, cancels). No automatic retry, no confirmation box. Esc on a screen goes back to the hub; what was read stays
+  while the page is open; leaving it, Log out and a new login clear it.
+* `R` on the Repeater page was Reset path in 0.7.2: Reset path stays in **More**, and Ctrl+R in the login box. More's order:
+  Details, Open in CLI, Reset path, **Refresh all**, Forget password (last).
+* When the node learns a new route to a contact (a login or a request that went by flood brought one back), Mesh Hop reads that
+  contact again: the route line and Read owner (direct route) follow at once.
+* A login to a repeater or room older than v1.9.0 now shows **Admin** for an admin (0.7 showed Guest); when an old node's answer
+  carries no role at all the page says "Logged in" instead of guessing.
+* 0.8.0 was never published: it had the three sections in the page's one list, with a Refresh on the bar that read the section of
+  the selected row; after his test on the deck the owner chose the hub and a screen per section.
+
 ## What changed in 0.7.2
 
 * **Repeater page**: the login box now shows the **route** under its title ("Route: direct, 2 hops", or "Route: flood: the login
   goes to the whole mesh"), since the box covers the page's own line. **Reset path** forgets the node's stored route to that
   repeater (MeshCore's reset path: the next message goes by flood): a button at the right of "Remember on this deck" in the login
-  box when a route is known (Ctrl+R), and in the page's More (or `R`), before or after logging in. No confirmation box; the box or the status line
+  box when a route is known (Ctrl+R), and in the page's More (or `R`, until 0.8.1), before or after logging in. No confirmation box; the box or the status line
   says "Path reset: the next message goes by flood" and the route lines change to flood.
 * **More** of the Repeater page, new order: Details, Open in CLI, Reset path, Forget password (only when one is saved) last.
 * **CLI**: the **To…** button, its picker and Ctrl+T are gone: pick a repeater in Contacts (a tap on it, More > **Open in CLI**), or
@@ -264,12 +299,22 @@ reset) shows "Firmware too old for this feature" instead of its row.
 
 ## Repeaters and rooms
 
-**The Repeater page** (a repeater or room tapped in Contacts, or its Options > Manage): the header says its name, the line under
-it "Repeater · direct, 2 hops · heard 3 min ago" (or "Room", "flood" when no route is known). The bar: **Log in** (**Log out**
-once logged in), **Refresh** (grey: it comes with the status view), **More**. The rows: ACCESS, "Not logged in", or "Admin since
-14:02" ("Guest", and for a room "Read-only" or "Read-write"), with "password saved" when one is; logged in, **Clock at login**: the
-repeater's clock and its gap to the deck's (amber, with a warning, when it is more than a minute ahead: it may then drop the commands
-sent from here). The status, the neighbours and the owner come in the next version.
+**The Repeater page** (a repeater or room tapped in Contacts, or its Options > Manage) is a hub (0.8.1): the header says its name,
+the line under it "Repeater · direct, 2 hops · heard 3 min ago" (or "Room", "flood" when no route is known). The bar: **Log in**
+(**Log out** once logged in) and **More**. The rows: ACCESS, "Not logged in", or "Admin since 14:02" ("Guest", and for a room
+"Read-only" or "Read-write"; "Logged in" when an old node does not say), with "password saved" when one is; logged in, **Clock at
+login**: the repeater's clock and its gap to the deck's (amber, with a warning, when it is more than a minute ahead: it may then
+drop the commands sent from here), and the note of Log out. Then **READ**: **Status**, and for a repeater **Neighbours** and
+**Owner**, rows with a chevron and a one-line summary at the right ("4.12 V · up 3 d 4 h", "12 heard · newest 12 s ago", "Olivier ·
+fw 1.12.0"; "not read yet", "needs login", "no answer" in amber, "firmware too old", "direct route only", "waiting… up to 12 s").
+A first tap selects a row, a tap on it selected (or Up / Down, then Enter) opens its **screen**. At 640x480, logged in, the READ
+rows start at the bottom of the screen: scroll (or Down) to them.
+
+**A section's screen**: the header "Hilltop repeater > Status" (on a narrow screen only "Status": the shared header drops the
+first parts that do not fit), the line under it "read 14:02 · tap Refresh to read again", "waiting… up to 12 s" or what went wrong,
+**one button, Refresh** (**Cancel** while a read runs; `R` or Ctrl+R), and the rows. A screen never read is read **by itself once**
+when it opens and you are logged in (the status after a login already was: it shows at once); after a failure it waits for
+Refresh. Esc (or the header's) goes back to the hub, whose summary follows; a read still running goes on there.
 
 * **Logging in**: not logged in, the login box opens by itself: under its title the route ("Route: direct, 2 hops" or "Route:
   flood: the login goes to the whole mesh"); the password (masked, 15 bytes at most; the saved one is already in
@@ -281,13 +326,38 @@ sent from here). The status, the neighbours and the owner come in the next versi
   box closes and the line under the title says the role (and "password saved").
 * **Log out** forgets the session on this deck; the repeater itself keeps the deck in its list (an admin until `setperm`, a guest
   until it reboots): the page says so.
+* **Status** (guest or admin; read **once by itself** after each successful login): Battery (V), Uptime (d h m), Noise floor,
+  Last RSSI / SNR, Packets received / sent, Received flood / direct, Sent flood / direct, Airtime TX / RX (h m), Duplicates flood /
+  direct, RX errors (repeater v1.12.0 and newer), TX queue; a room has Airtime TX and Posts stored / pushed. Not logged in: "Log in
+  to read".
+* **Neighbours** (repeaters; guest or admin): one row per repeater it hears at zero hop, newest first: its name in your Contacts,
+  else `<` and the first 4 bytes of its key (`<e0e1e2e3`), "(ambiguous 2)" when two of your contacts start with those bytes; at the
+  right "SNR 7.0 · 12 s ago". The repeater sends 14 per page: **More neighbours** ("14 of 22 shown", an action row: a tap on it
+  selected, or Enter) reads the next one (a later page may take up to 25 s; after a failure it asks that page again). Some older
+  repeaters answer only an admin: a guest then gets "no answer".
+* **Owner** (repeaters): logged in, Name, **Firmware** (its version, v1.12.0 and newer: older ones say "firmware too old") and the
+  owner info (`set owner.info` on the repeater). Not logged in, **Read owner (direct route)** (an action row; Refresh does the
+  same) asks without a login, but only when the route is direct (zero hop or a known path): the repeater ignores that request by
+  flood and answers it at most 4 times in 3 minutes for everyone together, which the screen says after a request without an
+  answer. On a flood route the row says "Log in to read" (or a direct route: a login or message by flood usually brings one back,
+  and the row follows).
+* **Refresh all** (the hub's More, or `R` on the hub): Status, then Neighbours (the first page), then Owner, one after the other
+  (one request at a time, like the node); the hub's summaries show where it is. A section without an answer, too old or unreadable
+  is marked and the next one still goes; not logged in any more, the CLI, a lost link or a busy node stop the chain (the sections
+  not read yet keep what they showed). While it runs, More says **Stop reading** (and `R` stops it). Not logged in, it reads the
+  owner on a direct route and nothing else ("Log in first").
+* **When something fails** the screen says why (the line under its header, and the whole text as its first row: "No answer. <name>
+  may be out of reach, or its session ended (a reboot): log in again.", "Log in first", "Firmware too old for this", "Unreadable
+  answer", "The CLI holds the node"...), the hub's summary in amber ("no answer"...), and the status line for a few seconds;
+  **Refresh** asks again. Nothing is retried by itself and nothing asks for a confirmation.
+* What was read stays on the page while it is open (nothing is saved): leaving the page, **Log out** and a new login clear it.
 * **More**: **Details**: the contact's details. **Open in CLI** opens the CLI and types `to <its full key>` at meshcore-cli's first
   prompt (the output shows "to <name> <its first 6 key digits>"): logged in as admin on the page, admin commands work there at once
-  (the repeater knows this node, not the program), and the CLI's Esc comes back to the page. **Reset path** (or `R`): the node
+  (the repeater knows this node, not the program), and the CLI's Esc comes back to the page. **Reset path**: the node
   forgets its stored route to the repeater (RESET_PATH, as the CLI's `rp`), so the next message or login goes by flood and finds a
-  new route; no confirmation, the status line says "Path reset: the next message goes by flood". **Forget password** (only when one
-  is saved, last) deletes it, as the CLI's `fp`.
-* Leaving the page stops a login that still waits. The passwords are meshcore-cli's own files (see [Files](#files-the-app-keeps)):
+  new route; no confirmation, the status line says "Path reset: the next message goes by flood". **Refresh all** (0.8.1, above).
+  **Forget password** (only when one is saved, last) deletes it, as the CLI's `fp`.
+* Leaving the page stops a login or a read that still waits. The passwords are meshcore-cli's own files (see [Files](#files-the-app-keeps)):
   one store for the page and the CLI's `login`.
 
 ## CLI
@@ -373,9 +443,9 @@ and at Home it says "Hold Esc 3 s to exit". **Holding Esc 3 s** ends the app (th
 | --- | --- |
 | Up / Down, Enter or Right | Home: choose a page, open it |
 | Tab / Shift+Tab | on a page: the next / previous page (Chats, Contacts, Tools, Settings), in a loop |
-| Up / Down, PgUp / PgDn, Home / End | move in a list (Chats, Contacts, Tools, Settings, Nearby, details, results, packet log); scroll a conversation or the Repeater page |
+| Up / Down, PgUp / PgDn, Home / End | move in a list (Chats, Contacts, Tools, Settings, Nearby, details, results, packet log); scroll a conversation; Repeater page: Up / Down select the READ rows (the hub) or a screen's rows (above the first: none), PgUp / PgDn scroll, Home: no row selected, the top |
 | Enter or Right, or a letter | Chats: write in the selected conversation (one pane: its page opens with the entry) |
-| Enter | entry: send; Contacts: open the contact by its type (a repeater or room: its Repeater page; a chat: its conversation; a sensor: its details; Manage contacts: mark); Tools: open; Settings: change / do; Nearby: add; details: open the chat; Repeater page: log in |
+| Enter | entry: send; Contacts: open the contact by its type (a repeater or room: its Repeater page; a chat: its conversation; a sensor: its details; Manage contacts: mark); Tools: open; Settings: change / do; Nearby: add; details: open the chat; Repeater page: the hub: open the selected section's screen (also Right; no row selected and not logged in: log in); a screen: the selected action row (More neighbours, Read owner) |
 | Left / Right | Settings: step the value of the row; entry: move the cursor; arrow choice: previous / next value |
 | Ctrl+O | Chats: the menu of the selected or open conversation (the touch way is a 3 s hold on its row) |
 | Ctrl+M | Chats: mute / unmute the conversation |
@@ -383,7 +453,8 @@ and at Home it says "Hold Esc 3 s to exit". **Holding Esc 3 s** ends the app (th
 | `S` `R` `T` `H` | Contacts: next sort, reverse, type filter, heard filter |
 | `/` | Contacts: Search (then type; Up / Down move in the rows, Enter opens, Esc clears) |
 | `G` `N` `X` `I` `U` | Contacts: group filter, Nearby, Manage contacts, the Options of the selected contact (Manage, Message, Details, Groups, Delete), ask the board for its contacts again |
-| `L` `M` `R` | Repeater page: log in or log out, More (Details, Open in CLI, Reset path, Forget password), Reset path |
+| `L` `M` `R` | Repeater page (the hub): log in or log out, More (Details, Open in CLI, Reset path, Refresh all, Forget password), Refresh all (0.8.1; stops a read that runs; it was Reset path in 0.7.2) |
+| `R`, Ctrl+R | a Repeater page's screen (Status, Neighbours, Owner): read it again (Cancel while a read runs); Esc: back to the hub. Ctrl+R on the hub: as `R` |
 | Tab, Space, Ctrl+R | the login box: go to Remember on this deck, switch it, Reset path (Enter logs in, Esc cancels or stops the wait) |
 | `A` `D` | Contacts: send a flood / zero-hop advert at once (Settings: `A` sends a flood advert) |
 | Space or Enter, `A` `N` `I` `M` `D` or Del, `G` | Manage contacts: mark, all, none, invert, the Select menu, delete, group |
@@ -459,10 +530,11 @@ its public key); plugging the first back restores them. The log holds no message
 ## Known limits
 
 * No **Map** yet. The **CLI** (0.6.0) is the upstream meshcore-cli in a line console, not a full terminal. Bluetooth LE and Wi-Fi (TCP) are new in 0.5.0 and not yet tested with a real node.
-* The **Repeater page** (0.7.0) logs in and out only: its status, neighbours and owner come next (Refresh is grey until then); no
-  Trace / Ping on Tools yet, no favourites, no QR code of My contact. A wrong password and an out-of-reach repeater look the same
-  (the firmware answers neither): the page says so. Its session is the board's: a new connection to the board starts without it
-  (the repeater still lists the deck).
+* The **Repeater page** reads (0.8.1) the status, the neighbours and the owner; the admin parameters, telemetry and the access
+  list are not there (the CLI has them); no Trace / Ping on Tools yet, no favourites, no QR code of My contact. A wrong password,
+  an ended session and an out-of-reach repeater look the same (the firmware answers none of them): the page says so. Its session is
+  the board's: a new connection to the board starts without it (the repeater still lists the deck). What the page read is not kept
+  once it is left.
 * Pairing is done by Mesh Hop itself (its own BlueZ agent); a node paired in another program works too. Forgetting a node is
   done on the start page (or `bluetoothctl remove`).
 * A **channel message has no delivery acknowledgement** in MeshCore: it ends at "sent", never "delivered". "Heard back by N
@@ -514,7 +586,11 @@ service's tokens (`mesh_app.cpp` `layout_body()`, `layout_chats()`).
   repeaters and rooms answer logins like the firmware (report 036): an empty guest password by default (`--guest-password`,
   `--admin-password`, or `$MESHHOP_SIM_GUEST_PASSWORD` / `$MESHHOP_SIM_ADMIN_PASSWORD`), no answer to a wrong password, one
   pending login at a time, `--remote-delay SEC`, `--remote-drop N|all` (stdin `drop N|all|0`), stdin `remote-reboot [all]`, and
-  `--remote-cases` for a duplicate name, a hex-looking name and names with spaces. Its names (Alice, Bob, Zed...) are invented. `MESHHOP_DEMO=<scenario>` plays the start page with pretend USB ports and Bluetooth
+  `--remote-cases` for a duplicate name, a hex-looking name and names with spaces. They also answer the read-only requests (slice
+  S2): status, neighbours (`--neighbours N`, paged like the firmware) and owner info (`--owner-info`, `--remote-fw`) to a logged-in
+  board, the anonymous owner request only on a direct route and 4 per 180 s, and `--old-repeater` (no owner info, no anonymous
+  answers, neighbours for admins only); 0.8.1: `--learn-path` (an answer to a login or request sent by flood brings a route back:
+  the contact is 1 hop away and the board pushes PATH_UPDATED, 0x81). Its names (Alice, Bob, Zed...) are invented. `MESHHOP_DEMO=<scenario>` plays the start page with pretend USB ports and Bluetooth
   (`src/core/node_demo.hpp`).
 * **Flows**: the scripts in `tests/flows/` drive `mesh-hop-script` (`--script f --shot-dir d [--size WxH] [--ppmm N]`: the shared
   headless harness at any size and density). Commands: `key`, `type`, `tap "label"`, `tapfield n`, `tapkey "label"` (a key of the
@@ -527,7 +603,12 @@ service's tokens (`mesh_app.cpp` `layout_body()`, `layout_chats()`).
   `cli_run.sh` (with `MESHHOP_MESHCLI`, the mccli of `build.sh cli`) adds `cli-repeater.script`: an admin login on the page, More >
   Open in CLI, `ver` with no `login` typed, then (0.7.2) Open in CLI from the pages of two of the same name, a name with spaces and a
   hex-looking name (each sends its own full key). 0.7.2: `repeater.script` and `repeater-touch.script` also show the route in the
-  login box and Reset path from the box (Ctrl+R, a tap) and from More.
+  login box and Reset path from the box (Ctrl+R, a tap) and from More. 0.8.1: `repeater_s2_run.sh` runs the read-only view (the hub and
+  its three screens) at 640x480 and 800x480: `repeater-s2.script` (a keyboard: the status by itself after a login, the hub's
+  summaries, each screen with its Refresh and Cancel, Neighbours and Owner reading themselves once, More neighbours, Refresh all
+  from the hub and its stop, More, the owner without a login, a flood contact whose guest login brings a route back, the answers
+  lost on the air; `--neighbours 24 --owner-info ... --learn-path`), `repeater-s2-old.script` (`--old-repeater`) and
+  `repeater-s2-touch.script` (touch only).
 * **Scenes** of the shared harness (`tests/scenes/`) and the **unit tests** (`tests/unit/`) run with `build.sh host`.
 * **Package**: `python3 tools/make_registry.py --only mesh-hop --out <a folder outside packages/>` (arm64), then the
   same with `--arch amd64`; add `--owner OSRdesign --repo cyberdeck-zero-apps` when the checkout has no `origin` remote. Run it with
@@ -556,7 +637,7 @@ service's tokens (`mesh_app.cpp` `layout_body()`, `layout_chats()`).
 
 | Path | What |
 | --- | --- |
-| `src/core/` | transport, protocol, client, model, store, clock policy, presets (`radio_presets.inc` is the dated data file), preset feed, channel keys, firmware features, contact groups, message search, log, the radio log parser and echo tracker, the packet log, the remote login queue of the client (log in / out of a repeater or room, one request at a time, the session table: report 036) and the password store shared with meshcore-cli (`passwords.*`: `<data>/cli/.config/meshcore/<key>.pass`) (no LVGL; unit tested: `tests/unit/test_remote.inc`, `sim_remote_check.py`) |
+| `src/core/` | transport, protocol, client, model, store, clock policy, presets (`radio_presets.inc` is the dated data file), preset feed, channel keys, firmware features, contact groups, message search, log, the radio log parser and echo tracker, the packet log, the remote login queue of the client (log in / out of a repeater or room, one request at a time, the session table: report 036) and the password store shared with meshcore-cli (`passwords.*`: `<data>/cli/.config/meshcore/<key>.pass`); the read-only requests on that queue (report 036 slice S2: `request_status`, `request_neighbours`, `request_owner`: BINARY_REQ 50 and ANON_REQ 57, the push 0x8C matched by its tag; the parsers of the status, the neighbour pages and the owner info in `protocol.*`; `neighbour_name()` in `model.*`; 0.8.1: PATH_UPDATED reads the contact back, the role of an old node's login, the 25 s floor of a later neighbours page) (no LVGL; unit tested: `tests/unit/test_remote.inc`, `test_remote_s2.inc`, `sim_remote_check.py`) |
 | `src/core/ble/` | the Bluetooth LE link to a BLE companion board: BlueZ over sd-bus loaded at run time, the link state machine, an `ITransport`, a fake for the tests; see [`docs/BLE.md`](docs/BLE.md) |
 | `src/core/tcp_transport.*`, `nodes.*`, `node_demo.*` | the TCP transport (and the "no node chosen" one), what the deck remembers about the nodes (`nodes.txt`), the start page's demo worlds; see [`docs/CONNECT.md`](docs/CONNECT.md) |
 | `src/ui/ui_nodes.*` | the rows of the start page "Choose a node" (no LVGL; unit tested) |
@@ -564,9 +645,9 @@ service's tokens (`mesh_app.cpp` `layout_body()`, `layout_chats()`).
 | `src/ui/ui_logic.*`, `ui_phase2.cpp`, `ui_pages.*` | keys, editor filters, formatting, chat and contact rows, filters and sort, selection, groups, details, Nearby, search, statistics, popups, the Settings layout, the Back rule (no LVGL; unit tested) |
 | `src/ui/key_bridge.*` | the platform's keys to the app's key events, with the US / FR tables (no LVGL; unit tested) |
 | `src/ui/stage.*`, `session.hpp`, `app_spec.cpp` | the keyboard bridge, the tick timer, the app's spec for the shared runners |
-| `src/ui/ui_repeater.*` | 0.7.0: Home's rows and the page loop, the Tools rows, what a tap on a contact opens and its Options, MY CONTACT's key text, the Repeater page's rows, More's order and the login box's texts (errors, the wait, the route line, Reset path's answers), the CLI's `to` line (no LVGL; unit tested: `tests/unit/test_repeater_ui.inc`) |
+| `src/ui/ui_repeater.*` | 0.7.0: Home's rows and the page loop, the Tools rows, what a tap on a contact opens and its Options, MY CONTACT's key text, the Repeater page's rows, More's order and the login box's texts (errors, the wait, the route line, Reset path's answers), the CLI's `to` line; 0.8.1: the read-only view (the hub's rows and summaries, each screen's rows and line, their states and error texts, every value's format, `RepeaterReads`: what the page read, the one-at-a-time queue of Refresh, the automatic first read of a screen) (no LVGL; unit tested: `tests/unit/test_repeater_ui.inc`) |
 | `src/ui/mesh_app.*` | the shell (Home, header, status line, hint line, dialogs), the pages (0.7.0: Tools, the Search of Contacts), Chats in one or two panes, the text fields and the on-screen keyboard, the virtual row list |
-| `src/ui/repeater_page.cpp` | 0.7.0: the Repeater page of a repeater or room and its login box (report 036 slice S1) |
+| `src/ui/repeater_page.cpp` | 0.7.0: the Repeater page of a repeater or room and its login box (report 036 slice S1); 0.8.1: its read-only view, the hub and a screen per section, Refresh / Cancel, Refresh all (slice S2) |
 | `src/ui/cli_page.*`, `cli_logic.*` | the CLI page (meshcore-cli on a pty through the relay, the line console, Help; 0.7.0: Open in CLI; 0.7.2: no To… picker); its logic unit tested (`tests/unit/test_cli_ui.inc`) |
 | `src/main.cpp` | `cdk::run` (apps/_common: display, touch, keyboards, signals, the "needs 640x480" notice) |
 | `tests/flows/`, `tests/scenes/`, `tests/unit/` | the simulator flows and `mesh-hop-script`, the shared harness's scenes, the unit tests |

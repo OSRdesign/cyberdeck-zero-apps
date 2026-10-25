@@ -134,13 +134,12 @@ wait 300
 say == admin again with the saved password (expect login=0 rep_role=admin)
 dump
 
-# More (0.7.2 order): Details, Open in CLI, Reset path, Forget password (a password is saved) last
+# More (0.7.2 order; 0.8.1: Refresh all before it): Details, Open in CLI, Reset path, Refresh all, Forget password (a password is saved) last
 type m
 wait 600
 say == More (expect popup=menu)
 expect text "Open in CLI"
 expect text "Reset path"
-expect text "Forget password"
 expect text "Details"
 dump
 shot r11-more
@@ -157,6 +156,9 @@ wait 600
 key down
 key down
 key down
+key down
+wait 300
+expect text "Forget password"
 key enter
 wait 600
 say == the password forgotten (expect pw_saved=0)
