@@ -486,6 +486,21 @@ private:
     void show_path_reset(const meshzero::Client::PathResetResult &r);
     void login_route_refresh();
     void login_note_text(const std::string &text, uint32_t rgb);
+    /* 0.8.0 (report 036 slice S2): the read-only view; 0.8.1 (the owner's design): the Repeater page is a hub (ACCESS, then READ:
+     * Status, Neighbours, Owner, each with its summary, a chevron row that opens its screen) and each section has a screen of its own
+     * (rep_sub_): its rows, the line under the header, one bar button Refresh (Cancel while a read runs; R or Ctrl+R). A screen
+     * never read is read by itself once when a session exists. The hub's More > Refresh all (or R there) reads the three one after
+     * the other. The reads go one at a time through repeater_tick (RepeaterReads' queue); an action row (More neighbours, Read
+     * owner) acts on a tap when it is selected, or Enter. */
+    RepeaterView repeater_view() const;
+    void repeater_refresh(RepSection only);          // None: all of them
+    void repeater_cancel_reads();
+    void repeater_act(const RepeaterRow &row);
+    void repeater_select(int index, bool scroll);
+    void repeater_pump();
+    void repeater_rows_clicked(int index);
+    void repeater_open_section(RepSection s);
+    void repeater_close_section();
     // the CLI page (report 033 P5, cli_page.cpp): meshcore-cli on a pty through the loopback relay (Client::start_relay)
     void build_cli();
     void layout_cli();
@@ -843,6 +858,14 @@ private:
     uint32_t rep_sig_ = 0;
     uint32_t rep_req_ = 0;               // the login this page asked (Client::start_login), 0: none
     uint32_t rep_seen_result_ = 0;       // Client::remote_result().id handled
+    // 0.8.0: what the page read (kept while it is open), the rows shown, the selection (by row id; -1: none)
+    RepeaterReads rep_reads_;
+    std::vector<RepeaterRow> rep_rows_;
+    std::string rep_sel_id_;
+    int rep_sel_ = -1;
+    RepSection rep_sub_ = RepSection::None;   // 0.8.1: the section's screen shown over the hub (None: the hub)
+    std::string rep_hub_sel_;                 // the hub's row selected when a screen opened (back: selected again)
+    uint64_t rep_tick_ms_ = 0;           // the last redraw for the waits' seconds and the neighbours' ages
     // the login box (an editor: editor_open_ with edit_kind_ == EditKind::Login)
     lv_obj_t *login_ta_ = nullptr, *login_check_ = nullptr, *login_check_mark_ = nullptr, *login_check_row_ = nullptr;
     lv_obj_t *login_note_ = nullptr;     // the line under Remember: the guest hint, or why the last try failed (red, wrapped)

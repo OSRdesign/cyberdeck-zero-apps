@@ -6,7 +6,7 @@
 # gets `to <its 64 hex key>` once at its first prompt (0.7.2: the output shows "to Hilltop repeater <909192", not the 64 digits), and
 # `ver` answers with no `login` typed (the node lists this deck as admin); Esc goes back to the Repeater page. 0.7.2 (the To... picker
 # is gone): Open in CLI from the Repeater pages of the second Hilltop (the same name), "Old Mill  relay 2" (spaces) and "909192" (a
-# hex-looking name) sends each one's own full key. More's order: Details, Open in CLI, Reset path, Forget password.
+# hex-looking name) sends each one's own full key. More's order: Details, Open in CLI, Reset path, Refresh all (0.8.1), Forget password.
 wait 6000
 key down
 key enter

@@ -48,6 +48,18 @@ forgets the admins too; a remote CLI "reboot" restarts that node the same way. L
 its list (bookkeeping printed). --remote-cases adds repeaters and a room that trap name lookups: a second "Hilltop repeater" (the same
 name, another key), "909192" (a hex-looking name that is the start of the first Hilltop's key), "Old Mill  relay 2" (spaces, two
 in a row) and "Club room".
+Report 036 slice S2 (the read-only view) cases: SEND_BINARY_REQ (50) is answered MSG_SENT with a TAG (the companion's clock made
+unique) and est_timeout, the companion keeps that one tag (a login or another request replaces it), and after --remote-delay the
+remote node's answer comes as the push BINARY_RESPONSE (0x8C, 0, the tag, the reply zero padded to 16 byte blocks like the firmware's
+decryption). Only a board in the node's access list (a login, guest or admin) gets an answer: STATUS (a repeater's 56 byte
+RepeaterStats, a room's 52 byte ServerStats), TELEMETRY (Cayenne LPP; a guest gets the base), NEIGHBOURS (repeaters: --neighbours N,
+default 22: the other repeater contacts first, so --remote-cases names three of them, then strangers; paged like the firmware: count,
+offset, order, prefix length, the 130 byte results buffer) and OWNER_INFO ("<--remote-fw>\\n<name>\\n<--owner-info>"); an unknown type
+gets nothing. SEND_ANON_REQ (57) needs no login: OWNER (the clock, "<name>\\n<owner info>") and BASIC (the clock, 0x80 when repeat is
+off) from repeaters, only when the request goes DIRECT (the contact has a route), at most 4 per 180 s per node (RateLimiter), with a
+valid reply path. --remote-drop and --remote-delay apply. A late answer (the companion waits for another tag) is still pushed, like
+the firmware's "unhandled response". --old-repeater: level 1 in the login answer, no OWNER_INFO, no anonymous answers, neighbours for
+admins only. Rooms report level 1 (simple_room_server). --remote-battery MV sets the battery of their status.
 
     python3 meshcore_sim.py                      # creates the port /tmp/ttyMC0 (a symlink to the pty)
     python3 meshcore_sim.py --link /tmp/ttyMC1 --chatter 20 --echo
@@ -101,6 +113,15 @@ CMD_SEND_LOGIN, CMD_LOGOUT, CMD_SET_FLOOD_SCOPE = 26, 29, 54
 TXT_TYPE_CLI_DATA = 1
 PERM_ACL_GUEST, PERM_ACL_ADMIN = 0, 3                 # ClientACL.h: the role in the low 2 bits
 REMOTE_FW_VER_LEVEL = 2                               # simple_repeater MyMesh.cpp FIRMWARE_VER_LEVEL, sent back in a login success
+ROOM_FW_VER_LEVEL = 1                                 # simple_room_server MyMesh.cpp FIRMWARE_VER_LEVEL
+OLD_REPEATER_LEVEL = 1                                # --old-repeater: like repeater v1.9.0 - v1.11.0
+# report 036 S2 (the read-only view): binary requests (companion MyMesh.cpp CMD_SEND_BINARY_REQ 50) and anonymous requests (57), their
+# answer PUSH_CODE_BINARY_RESPONSE 0x8C; the request types of simple_repeater MyMesh.cpp (REQ_TYPE_*, ANON_REQ_TYPE_*)
+CMD_SEND_BINARY_REQ, CMD_SEND_ANON_REQ = 50, 57
+REQ_STATUS, REQ_TELEMETRY, REQ_NEIGHBOURS, REQ_OWNER_INFO = 0x01, 0x03, 0x06, 0x07
+ANON_OWNER, ANON_BASIC = 0x02, 0x03
+NEIGHBOURS_RESULT_BYTES = 130                         # MyMesh.cpp results_buffer[130]
+ANON_LIMIT, ANON_WINDOW = 4, 180                      # MyMesh.cpp anon_limiter(4, 180), RateLimiter.h
 
 
 def parse_drop(value):
@@ -198,10 +219,13 @@ class Radio:
         # report 036: the companion's one pending login (the first 4 key bytes, companion MyMesh.cpp pending_login) and the answers lost
         self.pending_login = None
         self.remote_drop = parse_drop(getattr(args, "remote_drop", "0"))
+        # report 036 S2: the companion's one pending request tag (pending_req) and the last tag given (getCurrentTimeUnique)
+        self.pending_req = None
+        self.last_tag = 0
 
     SWAP_ATTRS = ("name", "key", "contacts", "channels", "queue", "nodes", "neighbours", "node_count", "manual_add", "multi_acks", "loc_policy",
                   "telemetry", "autoadd", "path_mode", "repeat", "freq_khz", "bw_hz", "sf", "cr", "txp", "gps", "battery_mv", "lat_e6", "lon_e6",
-                  "remote", "pending_login")
+                  "remote", "pending_login", "pending_req")
 
     def make_board_b(self):
         """Another board: its own key, name, contacts, channels and waiting messages."""
@@ -332,14 +356,20 @@ class Radio:
             self.remote[c.key] = r
         return r
 
-    def remote_answer(self, what, frame, out):
-        """A remote node's answer on its way back over the air: lost while --remote-drop / stdin "drop" says so. Returns True if it came."""
+    def remote_answer(self, what, frame, out, c=None):
+        """A remote node's answer on its way back over the air: lost while --remote-drop / stdin "drop" says so. Returns True if it came.
+        --learn-path (0.8.0): the answer to a request that went by flood brings a route back; the companion stores it as the contact's
+        out path and pushes PATH_UPDATED (0x81, companion MyMesh.cpp onContactPathUpdated) after the answer."""
         if self.remote_drop != 0:
             if self.remote_drop > 0:
                 self.remote_drop -= 1
             print("meshcore_sim: %s lost on the air (remote drop, %s left)" % (what, "all" if self.remote_drop < 0 else self.remote_drop), flush=True)
             return False
         out(frame)
+        if c is not None and getattr(self.args, "learn_path", False) and c.path_len == 0xFF:
+            c.path_len = 1                                # one hop (its hash byte 0: the simulator's paths are zeros)
+            print("meshcore_sim: %s came back by flood with a route: %s is 1 hop away now (PATH_UPDATED)" % (what, c.name), flush=True)
+            out(bytes([0x81]) + c.key)
         return True
 
     def remote_login(self, c, password, out):
@@ -371,8 +401,176 @@ class Radio:
             return
         print("meshcore_sim: login to %s: %s (login %d)" % (c.name, "admin" if admin else "guest", r["logins"]), flush=True)
         if self.remote_answer("login answer of %s" % c.name,
-                              bytes([0x85, 1 if admin else 0]) + c.key[:6] + struct.pack("<I", int(time.time())) + bytes([perm, REMOTE_FW_VER_LEVEL]), out):
+                              bytes([0x85, 1 if admin else 0]) + c.key[:6] + struct.pack("<I", int(time.time())) + bytes([perm, self.remote_level(c)]), out,
+                              c):
             self.pending_login = None
+
+    # ---- report 036 S2: the read-only view (simple_repeater MyMesh.cpp handleRequest / onAnonDataRecv, companion MyMesh.cpp)
+    def remote_level(self, c):
+        """FIRMWARE_VER_LEVEL of the remote node c (the last byte of a login success)."""
+        if c.kind == 3:
+            return ROOM_FW_VER_LEVEL
+        return OLD_REPEATER_LEVEL if self.args.old_repeater else REMOTE_FW_VER_LEVEL
+
+    def unique_tag(self):
+        """The companion's tag for a request: its clock, made unique (RTCClock getCurrentTimeUnique)."""
+        self.last_tag = max(self.board_time(), self.last_tag + 1) & 0xFFFFFFFF
+        return self.last_tag
+
+    def owner_text(self):
+        """owner.info as `set owner.info` stores it: '|' becomes a new line, 119 bytes at most (CommonCLI.cpp)."""
+        return self.args.owner_info.replace("|", "\n").encode("utf-8")[:119].decode("utf-8", "ignore")
+
+    def remote_neighbour_list(self, c):
+        """The zero-hop repeaters remote node c heard: the other repeaters among the contacts and the known nodes first (their keys
+        match), then strangers up to --neighbours. Each with the repeater's clock when it heard it and its SNR x 4."""
+        r = self.remote_of(c)
+        if r.get("neighbours") is None:
+            now = self.board_time()
+            nb = []
+            known = [x for x in self.contacts + self.nodes if x.kind == 2 and x.key != c.key]
+            for i, x in enumerate(known):
+                nb.append({"key": x.key, "heard": now - (20 + 90 * i), "snr4": max(-128, 34 - 9 * i)})
+            prefixes = {x.key[:4] for x in self.contacts + self.nodes}
+            i = 0
+            while len(nb) < self.args.neighbours:
+                key = bytes((0x61 + 11 * i + 3 * j * j) & 0xFF for j in range(32))
+                i += 1
+                if key[:4] in prefixes:
+                    continue
+                nb.append({"key": key, "heard": now - (60 + (47 * i * i) % 86000), "snr4": (i * 29) % 90 - 50})
+            r["neighbours"] = nb[:max(0, self.args.neighbours)]
+        return r["neighbours"]
+
+    def remote_status(self, c):
+        """RepeaterStats (simple_repeater MyMesh.h: 56 bytes; 52 below level 2) or a room's ServerStats (52 bytes)."""
+        r = self.remote_of(c)
+        st = r.setdefault("stats", {"rx": 12000 + c.key[0] * 10, "tx": 3400 + c.key[0]})
+        st["rx"] += 13
+        st["tx"] += 4
+        up = int(time.time() - self.t0) + 3 * 86400 + c.key[0] * 97
+        flood_tx = st["tx"] * 2 // 3
+        flood_rx = st["rx"] * 3 // 4
+        head = struct.pack("<HHhhIIIIIIIIHhHH", self.args.remote_battery, 1, -112, -89, st["rx"], st["tx"], st["tx"] // 10, up,
+                           flood_tx, st["tx"] - flood_tx, flood_rx, st["rx"] - flood_rx, 0, 26, 14, 410)
+        if c.kind == 3:
+            return head + struct.pack("<HH", 12, 30)            # n_posted, n_post_push
+        body = head + struct.pack("<I", st["rx"] // 8)          # rx airtime
+        if self.remote_level(c) >= 2:
+            body += struct.pack("<I", 7)                        # n_recv_errors (repeater v1.12.0)
+        return body
+
+    def remote_neighbours(self, c, req):
+        """A NEIGHBOURS page (MyMesh.cpp handleRequest): version 0 only; count, offset, order_by, the key prefix length; the entries
+        that fit the 130 byte results buffer; the total and the count in the page in front."""
+        if len(req) < 7 or req[1] != 0:
+            return None
+        count, offset, order, plen = req[2], struct.unpack("<H", req[3:5])[0], req[5], min(req[6], 32)
+        nb = list(self.remote_neighbour_list(c))
+        if order == 0:
+            nb.sort(key=lambda e: -e["heard"])                  # newest to oldest
+        elif order == 1:
+            nb.sort(key=lambda e: e["heard"])
+        elif order == 2:
+            nb.sort(key=lambda e: -e["snr4"])                   # strongest to weakest
+        elif order == 3:
+            nb.sort(key=lambda e: e["snr4"])
+        now = self.board_time()
+        res, n, i = b"", 0, 0
+        while i < count and i + offset < len(nb):
+            if len(res) + plen + 5 > NEIGHBOURS_RESULT_BYTES:
+                break
+            e = nb[i + offset]
+            res += e["key"][:plen] + struct.pack("<Ib", max(0, now - e["heard"]), e["snr4"])
+            n += 1
+            i += 1
+        return struct.pack("<hh", len(nb), n) + res
+
+    def remote_reply(self, c, tag, body, what, out):
+        """The reply as the companion pushes it: 0x8C, 0, the tag, the rest of the reply; zero padded like the decryption leaves it
+        (16 byte blocks). The companion matches it to its pending tag; one it no longer waits for comes all the same (the "unhandled
+        response" push has the same bytes), so only the app's tag check tells them apart."""
+        plain = struct.pack("<I", tag) + body
+        plain += b"\0" * ((-len(plain)) % 16)
+        if self.pending_req != tag:
+            print("meshcore_sim: %s: the companion no longer waits for tag %08x (pushed as an unhandled response)" % (what, tag), flush=True)
+        if self.remote_answer(what, bytes([0x8C, 0]) + plain, out, c) and self.pending_req == tag:
+            self.pending_req = None
+
+    def remote_request(self, c, tag, req, out):
+        """A binary request at the remote node: only a client in its access list gets an answer (guest or admin), and only for a type it
+        knows: STATUS (repeater or room), TELEMETRY (a guest gets the base), NEIGHBOURS (repeaters; --old-repeater: admins only),
+        OWNER_INFO (repeaters of level 2)."""
+        r = self.remote_of(c)
+        if c.kind not in (2, 3):
+            print("meshcore_sim: request to %s (not a repeater or room): no answer" % c.name, flush=True)
+            return
+        if r["perm"] is None:
+            print("meshcore_sim: request to %s: this board is not in its access list, no answer" % c.name, flush=True)
+            return
+        t = req[0] if req else -1
+        body = None
+        if t == REQ_STATUS:
+            body = self.remote_status(c)
+        elif t == REQ_TELEMETRY:
+            # Cayenne LPP: channel 1 voltage (0x74, 0.01 V) and MCU temperature (0x67, 0.1 C); an admin also gets a humidity sensor
+            body = bytes([1, 0x74]) + struct.pack(">H", self.args.remote_battery // 10) + bytes([1, 0x67]) + struct.pack(">h", 231)
+            if r["perm"] == PERM_ACL_ADMIN:
+                body += bytes([2, 0x68, 101])
+        elif t == REQ_NEIGHBOURS and c.kind == 2:
+            if self.args.old_repeater and r["perm"] != PERM_ACL_ADMIN:
+                print("meshcore_sim: neighbours of %s: an old repeater answers admins only (--old-repeater)" % c.name, flush=True)
+                return
+            body = self.remote_neighbours(c, req)
+        elif t == REQ_OWNER_INFO and c.kind == 2 and self.remote_level(c) >= 2:
+            body = ("%s\n%s\n%s" % (self.args.remote_fw, r["name"], self.owner_text())).encode("utf-8")
+        if body is None:
+            print("meshcore_sim: request type %d to %s: not known there, no answer" % (t, c.name), flush=True)
+            return
+        print("meshcore_sim: request type %d to %s: %d bytes of answer" % (t, c.name, len(body)), flush=True)
+        self.remote_reply(c, tag, body, "answer of %s to request %d" % (c.name, t), out)
+
+    def anon_allow(self, r):
+        """RateLimiter(4, 180).allow(): a fixed window opened by the first request; the 5th within it is denied."""
+        now = self.board_time()
+        win = r.setdefault("anon", [0, 0])
+        if now < win[0] + ANON_WINDOW:
+            win[1] += 1
+            return win[1] <= ANON_LIMIT
+        win[0], win[1] = now, 1
+        return True
+
+    def remote_anon(self, c, tag, data, out):
+        """An anonymous request at the remote node (onAnonDataRecv): repeaters of level 2, only when it arrives DIRECT (the contact has
+        a route), within the limiter, with a valid reply path; OWNER (the clock, "<name>\\n<owner info>") and BASIC (the clock, the
+        feature byte: 0x80 repeat off)."""
+        r = self.remote_of(c)
+        if c.kind != 2 or self.remote_level(c) < 2:
+            print("meshcore_sim: anonymous request to %s: not answered (%s)" % (c.name, "an old repeater" if c.kind == 2 else "not a repeater"),
+                  flush=True)
+            return
+        if c.path_len == 0xFF:
+            print("meshcore_sim: anonymous request to %s arrived by flood: ignored (isRouteDirect)" % c.name, flush=True)
+            return
+        t = data[0]
+        if t not in (ANON_OWNER, ANON_BASIC):
+            print("meshcore_sim: anonymous request type %d to %s: not simulated, no answer" % (t, c.name), flush=True)
+            return
+        if not self.anon_allow(r):
+            print("meshcore_sim: anonymous request to %s: over the limit of %d per %d s, no answer" % (c.name, ANON_LIMIT, ANON_WINDOW), flush=True)
+            return
+        plen = data[1] if len(data) > 1 else 0xFF
+        if (plen >> 6) == 3 or (plen & 63) * ((plen >> 6) + 1) > 64:
+            print("meshcore_sim: anonymous request to %s: bad reply path, no answer" % c.name, flush=True)
+            return
+        body = struct.pack("<I", int(time.time()))
+        if t == ANON_OWNER:
+            body += ("%s\n%s" % (r["name"], self.owner_text())).encode("utf-8")
+        else:
+            body += bytes([0 if r["repeat"] else 0x80])
+        print("meshcore_sim: anonymous %s of %s answered (reply path of %d hops)" % ("OWNER" if t == ANON_OWNER else "BASIC", c.name, plen & 63),
+              flush=True)
+        self.remote_reply(c, tag, body, "anonymous answer of %s" % c.name, out)
 
     def remote_reboot(self, c=None, everything=False):
         """A remote node restarts (c; None: every one): its access list forgets the guests (not saved to flash, simple_repeater
@@ -622,7 +820,7 @@ class Radio:
             self.contacts, self.channels = [], {}
             self.queue = []
             self.nodes, self.neighbours = [], []
-            self.remote, self.pending_login = {}, None    # a new identity: no remote node knows it
+            self.remote, self.pending_login, self.pending_req = {}, None, None    # a new identity: no remote node knows it
             self.name = "MeshCore"
             self.reset_count += 1
             self.key = bytes((0x30 + self.reset_count * 7 + i * 5) & 0xFF for i in range(32))      # a new identity every time
@@ -698,6 +896,39 @@ class Radio:
             self.pending_login = key[:4]                  # clearPendingReqs(): an older login's answer is not matched any more
             print("meshcore_sim: login to %s sent (%s password)" % (ct.name, "blank" if password == "" else "a"), flush=True)
             self.after(a.remote_delay, lambda: self.remote_login(ct, password, out))
+        elif code == CMD_SEND_BINARY_REQ:
+            # companion MyMesh.cpp: the key and at least the request type; not a contact -> ERR_CODE_NOT_FOUND; SENT with the tag (the
+            # remote node reflects it in front of its answer) and est_timeout; clearPendingReqs() then pending_req = tag
+            if len(c) < 34:
+                out(bytes([1, 1]))
+                return
+            key = bytes(c[1:33])
+            ct = next((x for x in self.contacts if x.key == key), None)
+            if ct is None:
+                out(bytes([1, 2]))
+                return
+            tag = self.unique_tag()
+            out(bytes([6, 1 if ct.path_len == 0xFF else 0]) + struct.pack("<II", tag, 1600))
+            self.pending_req, self.pending_login = tag, None
+            req = bytes(c[33:])
+            print("meshcore_sim: binary request %d to %s sent (tag %08x)" % (req[0], ct.name, tag), flush=True)
+            self.after(a.remote_delay, lambda: self.remote_request(ct, tag, req, out))
+        elif code == CMD_SEND_ANON_REQ:
+            # companion MyMesh.cpp: the key and at least one data byte; a key that is not a contact gets a temporary one asked at zero hop
+            if len(c) <= 33:
+                out(bytes([1, 1]))
+                return
+            key = bytes(c[1:33])
+            ct = next((x for x in self.contacts if x.key == key), None)
+            tag = self.unique_tag()
+            out(bytes([6, 1 if ct is not None and ct.path_len == 0xFF else 0]) + struct.pack("<II", tag, 1600))
+            self.pending_req, self.pending_login = tag, None
+            if ct is None:
+                print("meshcore_sim: anonymous request to an unknown key: asked at zero hop, nobody answers", flush=True)
+                return
+            data = bytes(c[33:])
+            print("meshcore_sim: anonymous request %d to %s sent (tag %08x)" % (data[0], ct.name, tag), flush=True)
+            self.after(a.remote_delay, lambda: self.remote_anon(ct, tag, data, out))
         elif code == CMD_LOGOUT:
             # the companion only stops its keep-alive (stopConnection) and always answers OK; the node keeps this board in its list
             ct = next((x for x in self.contacts if x.key == bytes(c[1:33])), None)
@@ -923,6 +1154,19 @@ def build_parser():
     ap.add_argument("--login-fail-push", action="store_true", help="a wrong password gets LOGIN_FAIL (0x86); by default nothing comes, like the firmware")
     ap.add_argument("--cli-delay", type=float, default=1.0, metavar="SEC", help="seconds before the reply to a CLI command (the firmware waits 600 ms, then the air)")
     ap.add_argument("--cli-silent", action="store_true", help="the remote nodes never answer a CLI command (out of range)")
+    # report 036 S2 (the read-only view)
+    ap.add_argument("--old-repeater", action="store_true",
+                    help="older remote repeaters (level 1, like v1.9.0-v1.11.0): no OWNER_INFO (0x07), no anonymous requests, and NEIGHBOURS "
+                         "for admins only (report 036's claim from the official app; the firmware source has no such check)")
+    ap.add_argument("--neighbours", type=int, default=22, metavar="N",
+                    help="zero-hop neighbours of each remote repeater (default 22): the other repeater contacts first, then strangers")
+    ap.add_argument("--owner-info", default="Simulated owner|Ask on #test",
+                    help="the remote repeaters' owner info ('|' is a new line, like `set owner.info`)")
+    ap.add_argument("--remote-fw", default="v1.18.0", help="the remote repeaters' FIRMWARE_VERSION in OWNER_INFO (default v1.18.0)")
+    ap.add_argument("--remote-battery", type=int, default=4120, metavar="MV", help="the remote nodes' battery in their status (default 4120 mV)")
+    ap.add_argument("--learn-path", action="store_true",
+                    help="0.8.0: an answer to a login or request sent by flood brings a route back: the contact becomes 1 hop away and the "
+                         "companion pushes PATH_UPDATED (0x81), as the firmware does")
     return ap
 
 

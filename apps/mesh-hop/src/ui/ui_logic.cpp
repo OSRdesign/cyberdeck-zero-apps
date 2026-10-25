@@ -1300,6 +1300,7 @@ BackAction back_action(const NavState &s)
     if (s.stats_open) return BackAction::CloseStats;
     if (s.packet_log_open) return BackAction::ClosePacketLog;
     if (s.detail_open) return BackAction::CloseDetail;           // (over the Repeater page too: More > Details)
+    if (s.repeater_open && s.repeater_section) return BackAction::CloseRepeaterSection;     // 0.8.1: a section's screen: back to the hub
     if (s.repeater_open) return BackAction::CloseRepeater;
     if (s.nearby_open) return BackAction::CloseNearby;
     if (s.select_mode) return BackAction::ExitSelect;

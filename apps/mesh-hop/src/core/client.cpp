@@ -615,6 +615,10 @@ void Client::on_frame(const Bytes &frame)
         on_login_reply(ls->prefix, ls);                        // report 036: the remote node's verdict on a pending login
     } else if (const auto *lf = std::get_if<LoginFail>(&p)) {
         on_login_reply(lf->prefix, nullptr);
+    } else if (const auto *br = std::get_if<BinaryResponse>(&p)) {
+        on_binary_response(*br);                               // report 036 S2: the answer to a pending request, matched by its tag
+    } else if (const auto *pu = std::get_if<PathUpdate>(&p)) {
+        on_path_updated(pu->key);                              // 0.8.0: a new route to a contact: read it back
     }
 
     // ---- diagnostics: what the board sends while a channel message waits for its answer
@@ -866,13 +870,28 @@ const char *remote_error_name(Client::RemoteError e)
     case Client::RemoteError::BadPassword: return "refused: password longer than 15 bytes or with a NUL";
     case Client::RemoteError::Cancelled: return "cancelled";
     case Client::RemoteError::LinkLost: return "the link to the board was lost";
+    case Client::RemoteError::NotLoggedIn: return "refused: no session with the node (log in first)";
+    case Client::RemoteError::NoDirectRoute: return "refused: no direct route for an anonymous request";
+    case Client::RemoteError::BadReply: return "the answer could not be read";
     }
     return "?";
 }
 
 const char *remote_op_name(Client::RemoteOp op)
 {
-    return op == Client::RemoteOp::Login ? "login" : op == Client::RemoteOp::Logout ? "logout" : "request";
+    switch (op) {
+    case Client::RemoteOp::Login: return "login";
+    case Client::RemoteOp::Logout: return "logout";
+    case Client::RemoteOp::Status: return "status";
+    case Client::RemoteOp::Neighbours: return "neighbours";
+    case Client::RemoteOp::Owner: return "owner";
+    default: return "request";
+    }
+}
+
+bool is_request(Client::RemoteOp op)
+{
+    return op == Client::RemoteOp::Status || op == Client::RemoteOp::Neighbours || op == Client::RemoteOp::Owner;
 }
 
 Client::RemoteRole role_of_acl(uint8_t acl)
@@ -885,6 +904,24 @@ Client::RemoteRole role_of_acl(uint8_t acl)
     }
 }
 
+/* The role of a login success (see client.hpp start_login: which byte to trust on which firmware). companion_level: the board's
+ * DEVICE_INFO level (-1 unknown). */
+Client::RemoteRole role_of_login(const LoginSuccess &s, bool room, int companion_level)
+{
+    if (s.has_acl && s.has_fw_level && s.fw_level >= 1) return role_of_acl(s.acl);     // repeater / room server v1.9.0+
+    // companion v1.10.0+ (level 8) pushes 14 bytes for a current answer, 8 for the legacy "OK" one, whose byte 1 is always 0
+    if (!s.has_acl && companion_level >= 8) return s.permissions == 1 ? Client::RemoteRole::Admin : Client::RemoteRole::None;
+    if (room) {                                                // room server before v1.9.0: RoomPermission ADMIN 1, GUEST 0, READ_ONLY 2
+        switch (s.permissions) {
+        case 1: return Client::RemoteRole::Admin;
+        case 0: return Client::RemoteRole::ReadWrite;      // the room password: may post
+        case 2: return Client::RemoteRole::ReadOnly;
+        default: return Client::RemoteRole::None;
+        }
+    }
+    return (s.permissions & 1) ? Client::RemoteRole::Admin : Client::RemoteRole::Guest;     // repeater before v1.9.0: is_admin
+}
+
 const char *role_name(Client::RemoteRole r)
 {
     switch (r) {
@@ -892,7 +929,7 @@ const char *role_name(Client::RemoteRole r)
     case Client::RemoteRole::ReadOnly: return "read only";
     case Client::RemoteRole::ReadWrite: return "read-write";
     case Client::RemoteRole::Admin: return "admin";
-    default: return "none";
+    default: return "role unknown";
     }
 }
 } // namespace
@@ -961,6 +998,7 @@ void Client::end_remote(RemoteError e, int err_code)
     r.err_code = err_code;
     r.sent = st.phase == RemoteState::Phase::Waiting;
     r.flood = st.flood;
+    r.anonymous = st.anonymous;                               // 0.8.0: an anonymous owner request that failed says so too
     r.waited_ms = static_cast<uint32_t>(now_ > st.since_ms ? now_ - st.since_ms : 0);
     log(std::string("remote ") + remote_op_name(st.op) + " " + to_hex(st.key).substr(0, 8) + ": " + remote_error_name(e) +
         (err_code >= 0 && (e == RemoteError::Failed || e == RemoteError::Unsupported) ? " (error " + std::to_string(err_code) + ")" : std::string()) +
@@ -998,32 +1036,182 @@ uint32_t Client::start_login(const PubKey &key, const std::string &password_in, 
     r.payload = build_send_login(key, password);
     r.accept = {resp::kMsgSent};
     r.remote_req = req;
-    r.done = [this, req](Outcome o, const Packet *p, int err) {
-        if (remote_.req != req || remote_.phase != RemoteState::Phase::Sending) return;     // cancelled meanwhile, or answered already
-        if (o == Outcome::Ok) {
-            if (const auto *s = pkt_as<MsgSent>(p)) {
-                remote_.phase = RemoteState::Phase::Waiting;
-                remote_.flood = s->type == 1;
-                remote_.est_timeout_ms = s->suggested_timeout_ms;
-                const uint32_t wait = remote_wait_ms(s->suggested_timeout_ms);
-                remote_.deadline_ms = now_ + wait;
-                log("remote login " + to_hex(remote_.key).substr(0, 8) + ": sent " + (remote_.flood ? "by flood" : "direct") + ", est_timeout " +
-                    std::to_string(s->suggested_timeout_ms) + " ms, waiting up to " + std::to_string(wait) + " ms");
-                model_.touch();
-                return;
-            }
-            end_remote(RemoteError::Failed);
-        } else if (o == Outcome::Error) {
-            end_remote(remote_error_of(err), err);
-        } else if (o == Outcome::Timeout) {
-            end_remote(RemoteError::Timeout);                  // the board did not even confirm the send (sent = false)
-        } else {
-            end_remote(RemoteError::LinkLost);
-        }
-    };
+    r.done = [this, req](Outcome o, const Packet *p, int err) { on_remote_sent(req, o, p, err); };
     enqueue(std::move(r), true);
     model_.touch();
     return req;
+}
+
+void Client::on_remote_sent(uint32_t req, Outcome o, const Packet *p, int err)
+{
+    if (remote_.req != req || remote_.phase != RemoteState::Phase::Sending) return;     // cancelled meanwhile, or answered already
+    if (o == Outcome::Ok) {
+        if (const auto *s = pkt_as<MsgSent>(p)) {
+            remote_.phase = RemoteState::Phase::Waiting;
+            remote_.flood = s->type == 1;
+            remote_.est_timeout_ms = s->suggested_timeout_ms;
+            remote_.tag = s->expected_ack;                     // a request's answer (0x8C) carries it; a login's push is matched by key
+            uint32_t wait = remote_wait_ms(s->suggested_timeout_ms);
+            if (remote_.op == RemoteOp::Neighbours && remote_.nb_offset > 0)     // a later page: as meshcore_py, 25 s at least
+                wait = std::min(kRemoteMaxWaitMs, std::max(wait, kRemoteNeighboursPageMinWaitMs));
+            remote_.deadline_ms = now_ + wait;
+            log(std::string("remote ") + remote_op_name(remote_.op) + " " + to_hex(remote_.key).substr(0, 8) + ": sent " +
+                (remote_.flood ? "by flood" : "direct") + ", est_timeout " + std::to_string(s->suggested_timeout_ms) + " ms, waiting up to " +
+                std::to_string(wait) + " ms");
+            model_.touch();
+            return;
+        }
+        end_remote(RemoteError::Failed);
+    } else if (o == Outcome::Error) {
+        end_remote(remote_error_of(err), err);
+    } else if (o == Outcome::Timeout) {
+        end_remote(RemoteError::Timeout);                      // the board did not even confirm the send (sent = false)
+    } else {
+        end_remote(RemoteError::LinkLost);
+    }
+}
+
+/* ------------------------------------------------------------------ the read-only view (report 036, slice S2) */
+
+Client::RemoteError Client::check_request(RemoteOp op, const PubKey &key, const ContactRec *&rec) const
+{
+    rec = nullptr;
+    if (!ready()) return RemoteError::NotConnected;
+    if (relay_active()) return RemoteError::Busy;
+    rec = model_.find_contact(to_hex(key));
+    if (!rec) return RemoteError::NotFound;
+    // rooms answer the status only (simple_room_server handleRequest: no neighbours, no owner info, no anonymous request types)
+    const uint8_t type = rec->c.type;
+    if (type != advtype::kRepeater && !(type == advtype::kRoom && op == RemoteOp::Status)) return RemoteError::Unsupported;
+    const RemoteSession *ses = remote_session(key);
+    if (!ses && op != RemoteOp::Owner) return RemoteError::NotLoggedIn;
+    if (ses && ses->has_fw_level) {
+        if (op == RemoteOp::Neighbours && ses->fw_level < kRepeaterLevelNeighbours) return RemoteError::Unsupported;
+        if (op == RemoteOp::Owner && ses->fw_level < kRepeaterLevelOwnerInfo) return RemoteError::Unsupported;
+    }
+    return RemoteError::None;
+}
+
+uint32_t Client::start_request(RemoteOp op, const PubKey &key, Bytes payload, const RemoteState &extra, const std::string &what)
+{
+    if (remote_busy()) end_remote(RemoteError::Cancelled);     // one at a time: the companion forgets the older one as well
+    const uint32_t req = ++remote_req_counter_;
+    remote_ = RemoteState();
+    remote_.phase = RemoteState::Phase::Sending;
+    remote_.op = op;
+    remote_.req = req;
+    remote_.key = key;
+    remote_.since_ms = now_;
+    remote_.anonymous = extra.anonymous;
+    remote_.room = extra.room;
+    remote_.nb_offset = extra.nb_offset;
+    remote_.nb_prefix_len = extra.nb_prefix_len;
+    log(std::string("remote ") + remote_op_name(op) + " " + to_hex(key).substr(0, 8) + ": " + what);
+    Request r;
+    r.payload = std::move(payload);
+    r.accept = {resp::kMsgSent};
+    r.remote_req = req;
+    r.done = [this, req](Outcome o, const Packet *p, int err) { on_remote_sent(req, o, p, err); };
+    enqueue(std::move(r), true);
+    model_.touch();
+    return req;
+}
+
+uint32_t Client::request_status(const PubKey &key)
+{
+    const ContactRec *rec = nullptr;
+    const RemoteError e = check_request(RemoteOp::Status, key, rec);
+    if (e != RemoteError::None) { refuse_remote(RemoteOp::Status, key, e); return 0; }
+    RemoteState extra;
+    extra.room = rec->c.type == advtype::kRoom;
+    return start_request(RemoteOp::Status, key, build_status_request(key), extra, extra.room ? "a room's status" : "a repeater's status");
+}
+
+uint32_t Client::request_neighbours(const PubKey &key, uint16_t offset, uint8_t count, NeighbourOrder order)
+{
+    const ContactRec *rec = nullptr;
+    const RemoteError e = check_request(RemoteOp::Neighbours, key, rec);
+    if (e != RemoteError::None) { refuse_remote(RemoteOp::Neighbours, key, e); return 0; }
+    tag_counter_ += 0x9E3779B9u;                               // the nonce only makes the packet hash unique (the firmware ignores it)
+    const uint32_t nonce = (static_cast<uint32_t>(now_) * 2654435761u ^ tag_counter_) | 1u;
+    RemoteState extra;
+    extra.nb_offset = offset;
+    extra.nb_prefix_len = static_cast<uint8_t>(kNeighbourPrefixLen);
+    return start_request(RemoteOp::Neighbours, key, build_neighbours_request(key, count, offset, order, extra.nb_prefix_len, nonce), extra,
+                         "from " + std::to_string(offset) + ", up to " + std::to_string(count) + ", order " + std::to_string(static_cast<int>(order)));
+}
+
+uint32_t Client::request_owner(const PubKey &key)
+{
+    const ContactRec *rec = nullptr;
+    const RemoteError e = check_request(RemoteOp::Owner, key, rec);
+    if (e != RemoteError::None) { refuse_remote(RemoteOp::Owner, key, e); return 0; }
+    if (remote_session(key)) return start_request(RemoteOp::Owner, key, build_owner_info_request(key), RemoteState(), "OWNER_INFO (logged in)");
+    const auto path = anon_reply_path(rec->c.out_path_len, rec->c.out_path);
+    if (!path) { refuse_remote(RemoteOp::Owner, key, RemoteError::NoDirectRoute); return 0; }
+    RemoteState extra;
+    extra.anonymous = true;
+    return start_request(RemoteOp::Owner, key, build_anon_request(key, anontype::kOwner, *path), extra,
+                         "anonymous OWNER, reply path of " + std::to_string(path_hops(rec->c.out_path_len)) + " hops");
+}
+
+/* A push 0x8C: the answer to the pending request when it carries that request's tag; anything else is ignored. */
+void Client::on_binary_response(const BinaryResponse &b)
+{
+    const bool pending = remote_.phase == RemoteState::Phase::Waiting && is_request(remote_.op) && b.tag == remote_.tag;
+    if (!pending) {
+        if (!relay_active()) log("remote answer (0x8C, tag " + to_hex(b.tag.data(), b.tag.size()) + ", " + std::to_string(b.data.size()) +
+                                 " bytes) ignored: no request with that tag is pending");
+        return;
+    }
+    const RemoteState st = remote_;
+    const RemoteSession *ses = remote_session(st.key);
+    RemoteResult r;
+    r.req = st.req;
+    r.op = st.op;
+    r.key = st.key;
+    r.sent = true;
+    r.flood = st.flood;
+    r.anonymous = st.anonymous;
+    r.waited_ms = static_cast<uint32_t>(now_ > st.since_ms ? now_ - st.since_ms : 0);
+    bool ok = false;
+    std::string what;
+    if (st.op == RemoteOp::Status) {
+        if (auto s = parse_repeater_status(b.data, st.room)) {
+            r.status = *s;
+            // the 52 byte reply of a repeater before v1.12.0 is padded to look 56 long: its "error counter" is padding
+            if (ses && ses->has_fw_level && ses->fw_level < kRepeaterLevelOwnerInfo) r.status.has_rx_errors = false;
+            ok = true;
+            what = "battery " + std::to_string(s->battery_mv) + " mV, up " + std::to_string(s->uptime_s) + " s";
+        }
+    } else if (st.op == RemoteOp::Neighbours) {
+        if (auto pg = parse_neighbours(b.data, st.nb_prefix_len, st.nb_offset)) {
+            r.neighbours = std::move(*pg);
+            ok = true;
+            what = std::to_string(r.neighbours.entries.size()) + " of " + std::to_string(r.neighbours.total) + " from " +
+                   std::to_string(r.neighbours.offset) + (r.neighbours.more ? ", more" : "");
+        }
+    } else if (auto o = st.anonymous ? parse_anon_owner(b.data) : parse_owner_info(b.data)) {
+        r.owner = std::move(*o);
+        if (ses && ses->has_fw_level) {
+            r.has_fw_level = true;
+            r.fw_level = ses->fw_level;
+        }
+        ok = true;
+        what = (st.anonymous ? std::string("anonymous answer") : "firmware " + r.owner.fw_version) + ", " +
+               std::to_string(r.owner.owner_info.size()) + " bytes of owner info";
+    }
+    if (!ok) {
+        log(std::string("remote ") + remote_op_name(st.op) + " " + to_hex(st.key).substr(0, 8) + ": an answer of " + std::to_string(b.data.size()) +
+            " bytes that cannot be read");
+        end_remote(RemoteError::BadReply);
+        return;
+    }
+    r.ok = true;
+    remote_ = RemoteState();
+    drop_queued_remote(st.req);
+    log(std::string("remote ") + remote_op_name(st.op) + " " + to_hex(st.key).substr(0, 8) + ": " + what + " after " + std::to_string(r.waited_ms) + " ms");
+    publish_remote(std::move(r));
 }
 
 /* The verdict of the remote node (0x85, or 0x86 when s is null): it ends the pending login when it is from that node. */
@@ -1050,7 +1238,11 @@ void Client::on_login_reply(const KeyPrefix &prefix, const LoginSuccess *s)
     r.waited_ms = static_cast<uint32_t>(now_ > st.since_ms ? now_ - st.since_ms : 0);
     r.has_acl = s->has_acl;
     r.permissions = s->has_acl ? s->acl : s->permissions;
-    r.role = s->has_acl ? role_of_acl(s->acl) : ((s->permissions & 1) ? RemoteRole::Admin : RemoteRole::Guest);   // meshcore_py: is_admin = bit 0
+    {
+        const ContactRec *node = model_.find_contact(to_hex(st.key));
+        const bool room = node && node->c.type == advtype::kRoom;
+        r.role = role_of_login(*s, room, model_.device() ? static_cast<int>(model_.device()->fw_ver) : -1);
+    }
     r.has_clock = s->has_clock;
     r.clock = s->clock;
     r.deck_time = deck_unix();
@@ -1271,6 +1463,25 @@ void Client::queue_reset_path(const PubKey &key, std::function<void(Outcome, int
         if (then) then(o, err);
     };
     enqueue(std::move(rp), true);
+}
+
+/* PATH_UPDATED (0x81): the companion stored a new route to this contact (companion MyMesh.cpp onContactPathUpdated). The model's
+ * copy still has the old one: read the contact back (its CONTACT answer goes through upsert_contact like any other). */
+void Client::on_path_updated(const PubKey &key)
+{
+    if (!ready() || relay_active()) return;                    // a CLI session: the console reads it (the session's end re-reads)
+    if (!model_.find_contact(to_hex(key))) return;            // not one of ours (a contact only the board knows comes with the sync)
+    if (std::find(path_lookups_.begin(), path_lookups_.end(), key) != path_lookups_.end()) return;     // already asked
+    path_lookups_.push_back(key);
+    log("path updated " + to_hex(key.data(), 4) + ": reading the contact back");
+    Request g;
+    g.payload = build_get_contact_by_key(key);
+    g.accept = {resp::kContact};
+    g.done = [this, key](Outcome o, const Packet *, int err) {
+        path_lookups_.erase(std::remove(path_lookups_.begin(), path_lookups_.end(), key), path_lookups_.end());
+        if (o != Outcome::Ok) log("path updated " + to_hex(key.data(), 4) + ": the contact was not read back (" + answer_text(static_cast<int>(o), err) + ")");
+    };
+    enqueue(std::move(g));
 }
 
 void Client::publish_path_reset(const PubKey &key, bool ok, PathResetError e, int err_code)

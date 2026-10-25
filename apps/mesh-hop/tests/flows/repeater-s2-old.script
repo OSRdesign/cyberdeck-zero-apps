@@ -1,0 +1,97 @@
+# Simulator options: --remote-cases --contacts 6 --old-repeater (repeater_s2_run.sh)
+# Mesh Hop 0.8.1 (report 036 slice S2) against older repeaters (level 1, like v1.9.0-v1.11.0): a guest's status (52 bytes: no RX
+# errors row), its neighbours unanswered (such a node gives them to admins only: "no answer"), the owner refused at once ("firmware
+# too old": no OWNER_INFO below level 2, nothing sent); the hub's summaries say so. As admin the Neighbours screen reads itself and
+# the neighbours come. Not logged in, the anonymous owner request on a direct route gets no answer from an old repeater: its limit
+# is said.
+wait 4500
+key down
+key enter
+wait 1200
+type /
+wait 400
+type <9091
+wait 600
+key enter
+wait 900
+tap "Guest"
+waitstate rep_role guest 9000
+waitstate rep_st read 6000
+wait 300
+say == an old repeater, guest: the status by itself; R on the hub reads all
+type r
+wait 200
+waitstate rep_run 1 100
+waitstate rep_run 0 12000
+wait 300
+say == the summaries (expect rep_sum_nb='no answer' rep_sum_own='firmware too old')
+waitstate rep_sum_nb "no answer" 100
+waitstate rep_sum_own "firmware too old" 100
+key down
+key down
+key down
+waitstate rep_sel open.own 300
+dump
+shot o00-old-hub
+check old-hub
+key enter
+wait 400
+say == the Owner screen: firmware too old (expect rep_sub=owner rep_line='Firmware too old for this')
+waitstate rep_line "Firmware too old for this" 100
+dump
+shot o01-old-owner
+key esc
+wait 300
+key home
+key down
+key enter
+wait 400
+say == the Status screen: no RX errors row (52 bytes)
+waitstate rep_sub status 100
+expect notext "RX errors"
+expect text "Battery"
+dump
+shot o02-old-status
+key esc
+wait 300
+
+# admin: a new login clears what was read; the Neighbours screen reads itself and the neighbours come
+type l
+wait 600
+type l
+wait 900
+type password
+key enter
+waitstate rep_role admin 9000
+waitstate rep_st read 6000
+key home
+key down
+key down
+key enter
+waitstate rep_nbs read 6000
+wait 300
+say == an old repeater, admin: the neighbours (expect rep_sub=neighbours rep_nbs=read rep_nb=14/22)
+waitstate rep_nb 14/22 100
+dump
+shot o03-old-admin-neighbours
+key esc
+wait 300
+
+# not logged in: the anonymous owner request on this direct route (3 hops): an old repeater does not answer it
+type l
+wait 600
+key home
+key down
+key down
+key down
+key enter
+wait 400
+key down
+waitstate rep_sel own.read 300
+key enter
+waitstate rep_own noanswer 6000
+wait 300
+say == the anonymous owner request unanswered: its limit is said (expect rep_own=noanswer rep_anon=1)
+waitstate rep_anon 1 100
+dump
+shot o04-old-anonymous

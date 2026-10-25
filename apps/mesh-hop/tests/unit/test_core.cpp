@@ -556,6 +556,21 @@ public:
     std::map<std::string, uint8_t> acl;  // node key hex -> this board's role in that node's access list
     int logouts = 0;
     bool reset_path_silent = false;      // 0.7.2: RESET_PATH gets no answer
+    // report 036 S2: BINARY_REQ (50) and ANON_REQ (57), the answer as a push 0x8C with the tag of SENT (test_remote_s2.inc)
+    bool req_supported = true;           // false: ERR unsupported (a companion before v1.8.0 / v1.12.0)
+    bool req_table_full = false;
+    uint32_t req_est = 1600;
+    int req_mode = 0;                    // 0 the answer at once, 1 lost on the air, 2 held in held_req
+    std::vector<Bytes> held_req;
+    uint32_t req_tag = 0x6A000000;       // the companion's tag: its clock made unique (getCurrentTimeUnique)
+    int remote_level = 2;                // the remote node's FIRMWARE_VER_LEVEL in a login success
+    bool neighbours_admin_only = false;  // report 036's claim about older repeaters (the firmware source has no such check)
+    size_t status_len = 56;              // bytes of RepeaterStats the node answers (52 below level 2; under 52: a broken answer)
+    struct NbEntry { uint8_t seed; uint32_t ago; int8_t snr4; };
+    std::vector<NbEntry> nb_table;       // the repeaters' zero-hop neighbours (key = seed + 0..31)
+    std::string owner_text = "Sim owner\nkey 1234";
+    bool contact_by_key = false;         // 0.8.0: GET_CONTACT_BY_KEY (30) answered with the contact (else ERR unsupported, as before)
+    int contact_by_key_asks = 0;
 
     FakePeer()
     {
@@ -758,8 +773,9 @@ private:
                 verdict = {resp::kLoginSuccess, static_cast<uint8_t>(role == 3 ? 1 : 0), k[0], k[1], k[2], k[3], k[4], k[5]};
                 if (login_mode != 3) {
                     put32(verdict, 1790000500);
-                    verdict.push_back(static_cast<uint8_t>(role));
-                    verdict.push_back(2);                                // the repeater's FIRMWARE_VER_LEVEL
+                    // the ACL byte: a node before v1.9.0 (level 0) has none there (a repeater's reserved 0, MyMesh.cpp v1.8.1)
+                    verdict.push_back(static_cast<uint8_t>(remote_level >= 1 ? role : 0));
+                    verdict.push_back(static_cast<uint8_t>(remote_level));   // the repeater's FIRMWARE_VER_LEVEL
                 }
             }
             if (verdict.empty() || login_mode == 1) break;
@@ -772,6 +788,40 @@ private:
             ++logouts;
             push({resp::kOk});
             break;
+        case cmd::kSendBinaryReq:
+        case cmd::kSendAnonReq: {
+            if (!req_supported || c.size() < 34) { push({resp::kError, err::kUnsupported}); break; }
+            PubKey k{};
+            std::copy(c.begin() + 1, c.begin() + 33, k.begin());
+            const auto it = std::find_if(contacts.begin(), contacts.end(), [&](const Contact &x) { return x.key == k; });
+            if (it == contacts.end()) { push({resp::kError, err::kNotFound}); break; }
+            if (req_table_full) { push({resp::kError, err::kTableFull}); break; }
+            const uint32_t tag = ++req_tag;
+            Bytes sent = {resp::kMsgSent, static_cast<uint8_t>(it->out_path_len == kPathFlood ? 1 : 0)};
+            put32(sent, tag);
+            put32(sent, req_est);
+            push(sent);
+            const Bytes body = remote_reply(*it, c, c[0] == cmd::kSendAnonReq);
+            if (body.empty() || req_mode == 1) break;                        // no answer, or lost on the air
+            Bytes f = {resp::kBinaryResponse, 0};
+            put32(f, tag);
+            f.insert(f.end(), body.begin(), body.end());
+            const size_t plain = 4 + body.size();                            // the reply as encrypted: tag + body, in 16 byte blocks
+            f.resize(f.size() + ((plain + 15) / 16 * 16 - plain), 0);
+            if (req_mode == 2) held_req.push_back(f);
+            else push(f);
+            break;
+        }
+        case cmd::kGetContactByKey: {                                  // 0.8.0 (opt-in): the contact as the board holds it
+            if (!contact_by_key || c.size() < 33) { push({resp::kError, err::kUnsupported}); break; }
+            ++contact_by_key_asks;
+            PubKey k{};
+            std::copy(c.begin() + 1, c.begin() + 33, k.begin());
+            const auto it = std::find_if(contacts.begin(), contacts.end(), [&](const Contact &x) { return x.key == k; });
+            if (it == contacts.end()) push({resp::kError, err::kNotFound});
+            else push(make_contact_from(*it));
+            break;
+        }
         case cmd::kSendAdvert: case cmd::kSetName: case cmd::kSetTxPower: push({resp::kOk}); break;
         case cmd::kResetPath: {                                        // 0.7.2: as companion_radio: the route forgotten, or not found
             if (reset_path_silent) break;
@@ -856,6 +906,70 @@ private:
         }
         default: push({resp::kError, err::kUnsupported});
         }
+    }
+    /* What the remote node answers after its copy of the tag (simple_repeater MyMesh.cpp handleRequest / onAnonDataRecv); empty: nothing. */
+    Bytes remote_reply(const Contact &node, const Bytes &c, bool anon)
+    {
+        const uint8_t type = c[33];
+        const std::string kh = to_hex(node.key);
+        const auto role = acl.find(kh);
+        if (anon) {                                                          // no login; direct only; repeaters of level 2
+            if (node.type != advtype::kRepeater || remote_level < 2 || node.out_path_len == kPathFlood) return {};
+            Bytes b;
+            put32(b, 1790001234);                                            // the node's clock
+            if (type == anontype::kOwner) {
+                const std::string t = node.name + "\n" + owner_text;
+                b.insert(b.end(), t.begin(), t.end());
+            } else if (type == anontype::kBasic) {
+                b.push_back(0x00);
+            } else {
+                return {};
+            }
+            return b;
+        }
+        if (role == acl.end()) return {};                                    // not in its access list: it cannot even decrypt us
+        if (type == reqtype::kStatus) {
+            if (node.type == advtype::kRoom) {                               // ServerStats: 52 bytes
+                Bytes s = hex("3c0f00008aff9bffe8030000c80000003c000000100e00000a000000140000001e0000002800000000001a0001000200110009000000000000000000");
+                s.resize(52);
+                return s;
+            }
+            Bytes s = hex("1b10020090ffa9ff40e20100d21e0000100e000085f40300f40100002c01000070170000bc0200000500e7ff0b00de00201c000021000000");
+            s.resize(std::min(remote_level >= 2 ? status_len : std::min<size_t>(status_len, 52), s.size()));
+            return s;
+        }
+        if (type == reqtype::kNeighbours) {
+            if (node.type != advtype::kRepeater || remote_level < 1 || c.size() < 40 || c[34] != 0) return {};
+            if (neighbours_admin_only && role->second != 3) return {};
+            const size_t count = c[35], offset = static_cast<size_t>(c[36] | (c[37] << 8)), plen = std::min<size_t>(c[39], 32);
+            std::vector<NbEntry> v = nb_table;
+            std::stable_sort(v.begin(), v.end(), [&](const NbEntry &a, const NbEntry &b) {
+                switch (c[38]) {
+                case 1: return a.ago > b.ago;
+                case 2: return a.snr4 > b.snr4;
+                case 3: return a.snr4 < b.snr4;
+                default: return a.ago < b.ago;                               // newest first
+                }
+            });
+            Bytes res;
+            size_t n = 0;
+            for (size_t i = 0; i < count && i + offset < v.size(); ++i) {
+                if (res.size() + plen + 5 > 130) break;                       // the repeater's results buffer
+                for (size_t j = 0; j < plen; ++j) res.push_back(static_cast<uint8_t>(v[i + offset].seed + j));
+                put32(res, v[i + offset].ago);
+                res.push_back(static_cast<uint8_t>(v[i + offset].snr4));
+                ++n;
+            }
+            Bytes b = {static_cast<uint8_t>(v.size()), static_cast<uint8_t>(v.size() >> 8), static_cast<uint8_t>(n), static_cast<uint8_t>(n >> 8)};
+            b.insert(b.end(), res.begin(), res.end());
+            return b;
+        }
+        if (type == reqtype::kOwnerInfo) {
+            if (node.type != advtype::kRepeater || remote_level < 2) return {};
+            const std::string t = "v1.18.0\n" + node.name + "\n" + owner_text;
+            return Bytes(t.begin(), t.end());
+        }
+        return {};
     }
     Bytes make_self_info_from() const { return make_self_info(self.name, self.freq_khz, self.bw_hz, self.sf, self.cr, self.tx_power, manual_add, key_seed); }
     static Bytes make_contact_from(const Contact &c)
@@ -2104,6 +2218,7 @@ static void test_preset_feed()
 #include "test_relay.inc"
 #include "test_pty.inc"
 #include "test_remote.inc"
+#include "test_remote_s2.inc"
 
 static Bytes hex_sp(std::string s)
 {
@@ -2593,6 +2708,11 @@ int main()
     test_remote_relay_and_link();
     test_passwords();
     test_reset_path();
+    test_remote_s2_protocol();
+    test_remote_requests();
+    test_remote_old_repeaters();
+    test_remote_requests_relay_and_link();
+    test_remote_s2_followups();
     std::printf("%d checks, %d failed\n", g_checks, g_fail);
     return g_fail ? 1 : 0;
 }

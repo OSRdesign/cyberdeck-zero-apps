@@ -68,6 +68,185 @@ class Board:
         self.flush()
         return sent, self.take()
 
+    def request(self, c, data, code=50):
+        """SEND_BINARY_REQ (or 57: SEND_ANON_REQ) with the request data, SENT, then the pushes 0x8C (or nothing)."""
+        self.take()
+        self.cmd(bytes([code]) + c.key + bytes(data))
+        sent = self.take()
+        self.flush()
+        return sent, [f for f in self.take() if f[0] == 0x8C]
+
+
+def neighbours_req(count=255, offset=0, order=0, plen=4):
+    return bytes([6, 0, count]) + struct.pack("<H", offset) + bytes([order, plen]) + b"\x11\x22\x33\x44"
+
+
+def neighbours_page(push, plen=4):
+    """(total, [(prefix, heard secs ago, snr)]) of a 0x8C NEIGHBOURS answer (the layout meshcore_py reader.py reads)."""
+    d = push[6:]
+    total, n = struct.unpack("<hh", d[:4])
+    out = []
+    for i in range(n):
+        e = d[4 + i * (plen + 5): 4 + (i + 1) * (plen + 5)]
+        out.append((e[:plen], struct.unpack("<I", e[plen:plen + 4])[0], struct.unpack("<b", e[plen + 4:plen + 5])[0] / 4))
+    return total, out
+
+
+def s2_checks(sim):
+    """Report 036 slice S2: binary requests (50), anonymous requests (57), the push 0x8C with the tag of SENT."""
+    b = Board(sim, ["--remote-cases"])
+    hill, room = b.contact("Hilltop repeater"), b.contact("Weather room")
+    # no login: SENT with a tag, then nothing (the node does not list this board)
+    sent, pushes = b.request(hill, [1])
+    check(len(sent) == 1 and sent[0][0] == 6 and len(sent[0]) == 10 and struct.unpack("<I", sent[0][6:10])[0] == 1600 and pushes == [],
+          "STATUS without a login: SENT, no answer")
+    tag0 = sent[0][2:6]
+    check(tag0 != hill.key[:4], "a request's tag is the companion's clock, not the key prefix")
+    # a guest: STATUS answered as 0x8C, 0, the tag, the 56 byte RepeaterStats padded to 16 byte blocks (4 + 56 -> 64)
+    b.login(hill, "")
+    sent, pushes = b.request(hill, [1])
+    tag = sent[0][2:6]
+    check(len(pushes) == 1 and pushes[0][1] == 0 and pushes[0][2:6] == tag and len(pushes[0]) == 2 + 64, "STATUS: the push carries the tag, padded")
+    check(struct.unpack("<I", tag)[0] > struct.unpack("<I", tag0)[0], "tags grow (getCurrentTimeUnique)")
+    st = pushes[0][6:]
+    bat, txq, nf, rssi, rx, tx = struct.unpack("<HHhhII", st[:16])
+    snr4, = struct.unpack("<h", st[42:44])
+    rxerr, = struct.unpack("<I", st[52:56])
+    check(bat == 4120 and nf == -112 and rssi == -89 and rx > 0 and tx > 0 and snr4 == 26 and rxerr == 7 and st[56:] == bytes(4),
+          "RepeaterStats: battery, noise floor, RSSI, counters, SNR x 4, the error counter, then padding")
+    # a room's ServerStats: 52 bytes (4 + 52 -> 64: 8 bytes of padding), posts at 48
+    b.login(room, "")
+    sent, pushes = b.request(room, [1])
+    check(len(pushes) == 1 and len(pushes[0]) == 66 and struct.unpack("<HH", pushes[0][6 + 48:6 + 52]) == (12, 30) and pushes[0][6 + 52:] == bytes(8),
+          "a room's status: ServerStats with n_posted / n_post_push")
+    sent, pushes = b.request(room, neighbours_req())
+    check(pushes == [], "a room has no neighbours")
+    sent, pushes = b.request(room, [7])
+    check(pushes == [], "a room has no owner info")
+    # NEIGHBOURS, paged: 22 by default, 14 per page with 4 byte prefixes (the 130 byte buffer), the other repeater contacts among them
+    sent, pushes = b.request(hill, neighbours_req())
+    check(len(pushes) == 1 and pushes[0][2:6] == sent[0][2:6], "NEIGHBOURS answered with the tag")
+    total, page = neighbours_page(pushes[0])
+    check(total == 22 and len(page) == 14, "22 neighbours, 14 in the first page")
+    others = [c for c in b.radio.contacts if c.kind == 2 and c.key != hill.key]
+    prefixes = [p for p, _, _ in page]
+    check(len(others) == 3 and all(c.key[:4] in prefixes for c in others), "the three other repeater contacts are among them (names to resolve)")
+    check(all(page[i][1] <= page[i + 1][1] for i in range(len(page) - 1)), "newest first (heard seconds ago ascending)")
+    sent, pushes = b.request(hill, neighbours_req(offset=14))
+    total, page2 = neighbours_page(pushes[0])
+    check(total == 22 and len(page2) == 8 and not set(p for p, _, _ in page2) & set(prefixes), "the second page: the 8 others")
+    sent, pushes = b.request(hill, neighbours_req(count=5, order=2))
+    total, strong = neighbours_page(pushes[0])
+    check(len(strong) == 5 and all(strong[i][2] >= strong[i + 1][2] for i in range(4)), "count 5, strongest first")
+    sent, pushes = b.request(hill, neighbours_req(plen=6))
+    total, wide = neighbours_page(pushes[0], 6)
+    check(len(wide) == 11 and len(wide[0][0]) == 6, "6 byte prefixes: 11 entries fit 130 bytes")
+    sent, pushes = b.request(hill, bytes([6, 1, 255, 0, 0, 0, 4]))
+    check(pushes == [], "a NEIGHBOURS version other than 0: no answer")
+    # OWNER_INFO: "<firmware>\n<name>\n<owner info>", '|' of --owner-info as a new line
+    sent, pushes = b.request(hill, [7])
+    text = pushes[0][6:].rstrip(b"\0").decode() if pushes else ""
+    check(text == "v1.18.0\nHilltop repeater\nSimulated owner\nAsk on #test", "OWNER_INFO text")
+    # TELEMETRY: Cayenne LPP, a guest gets the base (voltage, temperature)
+    sent, pushes = b.request(hill, [3, 0, 0, 0, 0])
+    check(len(pushes) == 1 and pushes[0][6:14] == bytes([1, 0x74, 0x01, 0x9C, 1, 0x67, 0x00, 0xE7]) and pushes[0][14] == 0, "TELEMETRY base for a guest")
+    b.login(hill, "password")
+    sent, pushes = b.request(hill, [3, 0, 0, 0, 0])
+    check(pushes[0][14:17] == bytes([2, 0x68, 101]), "an admin gets the other sensors too")
+    sent, pushes = b.request(hill, [9])
+    check(pushes == [], "an unknown request type: no answer")
+    # one pending tag: a second request replaces it; the first answer still comes (an "unhandled response" with its own tag)
+    b.take()
+    b.cmd(bytes([50]) + hill.key + bytes([1]))
+    b.cmd(bytes([50]) + hill.key + bytes([7]))
+    sents = b.take()
+    b.flush()
+    pushes = [f for f in b.take() if f[0] == 0x8C]
+    check(len(sents) == 2 and len(pushes) == 2 and pushes[0][2:6] == sents[0][2:6] and pushes[1][2:6] == sents[1][2:6] and
+          b.radio.pending_req is None, "two requests: both answers come, each with its own tag")
+    # a request clears the pending login (clearPendingReqs)
+    b.take()
+    b.cmd(bytes([26]) + hill.key + b"password")
+    b.cmd(bytes([50]) + hill.key + bytes([1]))
+    b.flush()
+    check([f[0] for f in b.take() if f[0] in (0x85, 0x8C)] == [0x8C], "a request after a login: the login's answer is not matched any more")
+    # --remote-drop: the next answer is lost on the air
+    b.radio.remote_drop = 1
+    sent, pushes = b.request(hill, [1])
+    check(len(sent) == 1 and pushes == [] and b.radio.remote_drop == 0, "an answer lost on the air")
+    # not a contact: ERR not found; a frame without the request type: unsupported
+    b.take()
+    b.cmd(bytes([50]) + bytes(32) + bytes([1]))
+    check(b.take() == [bytes([1, 2])], "BINARY_REQ to a key that is not a contact: ERR not found")
+    b.cmd(bytes([50]) + hill.key)
+    check(b.take() == [bytes([1, 1])], "BINARY_REQ without a request type: unsupported")
+
+    # ---- anonymous requests: no login, direct only, the limiter
+    a = Board(sim, ["--remote-cases"])
+    hill, mill, hexname = a.contact("Hilltop repeater"), a.contact("Old Mill  relay 2"), a.contact("909192")
+    check(hill.path_len != 0xFF and hexname.path_len == 0xFF, "Hilltop has a route, 909192 floods")
+    sent, pushes = a.request(hill, [2, 0x03, 0x30, 0x20, 0x10], code=57)
+    body = pushes[0][6:] if pushes else b""
+    check(len(sent) == 1 and sent[0][1] == 0 and len(pushes) == 1 and pushes[0][2:6] == sent[0][2:6] and len(body) >= 4 and
+          body[4:].rstrip(b"\0") == b"Hilltop repeater\nSimulated owner\nAsk on #test", "anonymous OWNER: the clock, then name and owner info")
+    check(abs(struct.unpack("<I", body[:4])[0] - int(sim.time.time())) < 5, "the node's clock in front")
+    sent, pushes = a.request(hexname, [2, 0xFF], code=57)
+    check(sent[0][1] == 1 and pushes == [], "anonymous by flood: ignored by the repeater")
+    sent, pushes = a.request(mill, [3, 0x01, 0x40], code=57)
+    check(len(pushes) == 1 and pushes[0][6 + 4] == 0x00, "anonymous BASIC: the clock and the feature byte (repeat on)")
+    sent, pushes = a.request(mill, [2, 0xC1, 0x40], code=57)
+    check(pushes == [], "a reply path with hash size 4: no answer")
+    sent, pushes = a.request(a.contact("Club room"), [2, 0x00], code=57)
+    check(pushes == [], "a room does not answer anonymous requests")
+    for i in range(2):
+        sent, pushes = a.request(hill, [3, 0x00], code=57)
+        check(len(pushes) == 1, "anonymous request %d of 4 in the window" % (i + 2))
+    sent, pushes = a.request(hill, [2, 0x00], code=57)
+    check(len(pushes) == 1, "the 4th in the window")
+    sent, pushes = a.request(hill, [2, 0x00], code=57)
+    check(len(sent) == 1 and pushes == [], "the 5th within 180 s: over the limit, no answer")
+    a.radio.remote_of(hill)["anon"][0] -= 181                # the window is over
+    sent, pushes = a.request(hill, [2, 0x00], code=57)
+    check(len(pushes) == 1, "a new window")
+    a.take()
+    a.cmd(bytes([57]) + hill.key)
+    check(a.take() == [bytes([1, 1])], "ANON_REQ without data: unsupported")
+
+    # ---- an old repeater: level 1, no OWNER_INFO, no anonymous answers, neighbours for admins only
+    o = Board(sim, ["--old-repeater", "--remote-cases"])
+    hill, room = o.contact("Hilltop repeater"), o.contact("Weather room")
+    _, v = o.login(hill, "")
+    check(len(v) == 1 and v[0][13] == 1, "an old repeater reports level 1")
+    _, v = o.login(room, "")
+    check(len(v) == 1 and v[0][13] == 1, "a room reports level 1 (simple_room_server)")
+    sent, pushes = o.request(hill, [1])
+    check(len(pushes) == 1 and len(pushes[0]) == 2 + 64 and pushes[0][6 + 52:] == bytes(8), "an old repeater's status: 52 bytes (no error counter)")
+    sent, pushes = o.request(hill, [7])
+    check(pushes == [], "no OWNER_INFO")
+    sent, pushes = o.request(hill, neighbours_req())
+    check(pushes == [], "neighbours: not for a guest")
+    o.login(hill, "password")
+    sent, pushes = o.request(hill, neighbours_req())
+    check(len(pushes) == 1 and neighbours_page(pushes[0])[0] == 22, "neighbours for an admin")
+    sent, pushes = o.request(hill, [2, 0x00], code=57)
+    check(pushes == [], "no anonymous answer")
+    # --neighbours, --owner-info, --remote-fw, --remote-battery, --remote-delay
+    n = Board(sim, ["--neighbours", "3", "--owner-info", "Me|Here", "--remote-fw", "v9.9", "--remote-battery", "3700", "--remote-delay", "0.25"])
+    hill = n.contact("Hilltop repeater")
+    check(n.radio.args.remote_delay == 0.25, "--remote-delay")
+    n.login(hill, "")
+    n.take()
+    n.cmd(bytes([50]) + hill.key + bytes([1]))
+    n.take()
+    check(len(n.radio.timers) == 1 and 0.2 < n.radio.timers[0][0] - sim.time.time() <= 0.25, "the answer is due --remote-delay later")
+    n.flush()
+    st = [f for f in n.take() if f[0] == 0x8C]
+    check(len(st) == 1 and struct.unpack("<H", st[0][6:8])[0] == 3700, "--remote-battery")
+    sent, pushes = n.request(hill, neighbours_req())
+    check(neighbours_page(pushes[0])[0] == 3, "--neighbours 3")
+    sent, pushes = n.request(hill, [7])
+    check(pushes[0][6:].rstrip(b"\0") == b"v9.9\nHilltop repeater\nMe\nHere", "--owner-info, --remote-fw")
+
 
 def main():
     sim = load(sys.argv[1])
@@ -201,6 +380,28 @@ def main():
     rp.cmd(bytes([13]) + bytes(32))
     check(rp.take() == [bytes([1, 2])], "RESET_PATH of an unknown key: ERR not found")
 
+    s2_checks(sim)
+
+    # 0.8.0 --learn-path: an answer to a login sent by flood brings a route back: the contact is 1 hop away and PATH_UPDATED (0x81)
+    # follows the answer; a contact with a route, or a login without an answer, changes nothing; without the option nothing moves
+    lp = Board(sim, ["--remote-cases", "--learn-path"])
+    flood = lp.contact("909192")
+    check(flood.path_len == 0xFF, "909192 is a flood contact")
+    lp.take()
+    lp.cmd(bytes([26]) + flood.key)
+    sent = lp.take()
+    lp.flush()
+    after = lp.take()
+    check(sent[0][1] == 1 and [f[0] for f in after] == [0x85, 0x81] and after[1][1:] == flood.key and flood.path_len == 1,
+          "--learn-path: the login answer by flood, then PATH_UPDATED with the key; 1 hop now")
+    sent, after = lp.login(flood, "")
+    check(sent[0][1] == 0 and [f[0] for f in after] == [0x85], "the next login goes direct, no new PATH_UPDATED")
+    club = lp.contact("Club room")
+    _, after = lp.login(club, "wrong")
+    check(after == [] and club.path_len == 0xFF, "no answer (a wrong password): no route learnt")
+    plain = Board(sim, ["--remote-cases"])
+    _, after = plain.login(plain.contact("909192"), "")
+    check([f[0] for f in after] == [0x85] and plain.contact("909192").path_len == 0xFF, "without --learn-path the route stays flood")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-# Mesh Hop 0.4.0 / 0.5.0 / 0.6.0 / 0.7.0 / 0.7.2: board tests
+# Mesh Hop 0.4.0 / 0.5.0 / 0.6.0 / 0.7.0 / 0.7.2 / 0.8.1: board tests
 
 For the Controller and the owner (controller-led testing: the Controller deploys and reads logs, the owner does the
 physical steps and ticks the boxes). Commands run from Windows: `deck.py` is
@@ -8,7 +8,8 @@ The app's process name is `mesh-hop` (`pgrep -x mesh-hop`; never `pkill -f`).
 0.5.0 (the start page "Choose a node", Bluetooth LE and IP nodes): section **N**; the app now opens on that page (D1 starts
 there). 0.6.0 (the CLI page, meshcore-cli inside Mesh Hop): section **10**. 0.7.0 (Home regrouped: Tools; the Repeater page, the
 Search and Options of Contacts, MY CONTACT; 0.7.2: the route in the login box, Reset path, More's order, no To… in the CLI):
-section **11**; D1, D4, D5, 10, P and H follow the new places. Boards: **deck** (Pi Zero 2 W, 640x480, Bluetooth keyboard), **Pi 3A+** (800x480 touch, no keyboard: the on-screen
+section **11**; D1, D4, D5, 10, P and H follow the new places. 0.8.1 (the Repeater page reads Status, Neighbours and Owner: a hub and
+a screen per section): section **12**. Boards: **deck** (Pi Zero 2 W, 640x480, Bluetooth keyboard), **Pi 3A+** (800x480 touch, no keyboard: the on-screen
 keyboard), **HackBerry** (CM5, 720x720 square touch, built-in USB keyboard). Radio: a MeshCore companion radio board on USB
 (board A: Seeed XIAO nRF52840; board B: XIAO S3 WIO, MeshCore v1.15.0), and for R1-R3 a second MeshCore node in radio range
 (a phone with the MeshCore app, or the other board on another host) and, for heard-back, a repeater in range.
@@ -259,7 +260,7 @@ there: then the login box of 11.3 shows it, as dots; clear the field first).
    again: the login box shows "Route: direct, N hops" and **Reset path** at the right of Remember on this deck. Tap it (or Ctrl+R): "Path reset: the next
    message goes by flood", the route line says "Route: flood: the login goes to the whole mesh"; Cancel: the page's line says "flood". Log in: it works
    by flood (time: ____ s), and afterwards the page shows a route again (direct, N hops) once the node learned one. Then **More >
-   Reset path** (or `R`) on the page: the same notice in the status line, the line under the title says "flood". No confirmation
+   Reset path** on the page (0.8.1: `R` is Refresh all now): the same notice in the status line, the line under the title says "flood". No confirmation
    box either way. Tools > CLI: the bar is the entry and **Help** only (no To…); before you type, the status line says "Contacts > a
    repeater > More > Open in CLI, or type: to <name>".
 9. **11.9 Options, the tap rule**: hold your repeater 3 s (or `I`): "Options for <name>": Manage, Details, Groups, Delete; Manage
@@ -276,6 +277,50 @@ password is in the box, tap **Log in**: nothing typed. A 3 s hold on a contact: 
 header's Esc goes back each time.
 
 [ ] pass  [ ] fail  Login answer time: ____ s  Clock gap: ____  Notes:
+
+## 12. Repeater read-only view: the hub and its screens (0.8.1; deck, about 10 min)
+
+Needs board A connected, **your own repeater** in radio range (its admin password at hand; best with a direct route: the page
+says "direct, N hops") and **a repeater you do not own** (in range or heard on the mesh). The pictures to compare:
+`C:\CLAUDE\zero7\apps-s2-shots\s2b-flows` (`repeater-s2-640x480`: the keyboard flow, `b00-hub` ... `b19`; `repeater-s2-touch-*`:
+by touch; `repeater-s2-old-*`: an older repeater). Logs: `tail -n 60 ~/.local/share/mesh-hop/mesh-hop.log` (lines `remote status`,
+`remote neighbours`, `remote owner`, `repeater page:`, `path updated`). Write down each wait ("waiting… up to N s").
+
+1. **12.1 The hub, status by itself**: Contacts, open your repeater, log in as admin: the box closes, the page (the hub) has
+   **Log out** and **More** on its bar, ACCESS, then **READ**: Status, Neighbours, Owner, rows with a chevron (scroll or Down at
+   640x480: they start at the bottom). Status's summary turns from "waiting… up to N s" to "x.xx V · up ..." by itself (time: ____
+   s); Neighbours and Owner say "not read yet" (the log has one `remote status` line, nothing else).
+2. **12.2 The Status screen**: select Status (Down, or a tap) and open it (Enter, or a tap on it selected): the header "Status"
+   (at 640x480 the name of the repeater does not fit), the line "read hh:mm · tap Refresh to read again", **one button Refresh**;
+   the values: Battery ____ V (compare with the repeater's own `get bat` or the phone app), Uptime, Noise floor, Last RSSI / SNR,
+   Packets, Airtime, Duplicates, RX errors (only from repeater v1.12.0), TX queue. Nothing was asked again (it was read at the login).
+   Tap **Refresh** (or R): it says **Cancel** while it waits, then "read hh:mm" again. Refresh, then Cancel at once: it stops.
+   Esc (or the header's): the hub, Status selected.
+3. **12.3 Neighbours, Owner**: open **Neighbours**: it reads by itself once ("waiting…", then the list, newest first, names from
+   your Contacts, else `<` and 8 hex digits, "SNR x.x · N s ago"; compare a few with the CLI's `neighbors`). If it hears more than
+   14: **More neighbours** ("14 of N shown"), Enter or two taps: the next page (up to 25 s). Esc: the hub's summary "N heard ·
+   newest ...". Open **Owner**: it reads by itself: Name, **Firmware** (____; "Firmware too old for this" before v1.12.0), the owner
+   info. Esc: "<owner> · fw x.y.z". Open Owner again: nothing is read by itself any more (Refresh does it).
+4. **12.4 Refresh all**: on the hub, **More > Refresh all** (or R): the three summaries turn "waiting…" one after the other, then
+   their values (total time: ____ s). Again, then More > **Stop reading** (or R): it stops, the summaries keep their values.
+5. **12.5 A repeater you do not own, guest**: open it, **Guest**: "Guest since hh:mm" and Status's summary by itself (or "no
+   answer": its screen says "No answer. <name> may be out of reach, or its session ended (a reboot): log in again.", and Refresh
+   asks again: note which). Open Neighbours (some older repeaters answer only an admin: "no answer": note which) and Owner (as guest
+   it reads the owner info with the firmware version). Note what came: ____.
+6. **12.6 Owner without a login, direct vs flood**: **Log out**. On a repeater with a **direct** route (the hub's line says
+   "direct..."), Owner's summary is "not read yet": its screen reads nothing by itself (no login) and offers **Read owner (direct
+   route)**: Enter or two taps: Name and owner info, no firmware (the anonymous answer has none), or "no answer" and the grey line
+   about the limit (4 per 3 minutes, for everyone together). On a **flood** route (More > Reset path first, if needed) Owner's
+   summary is "needs login" and its screen says "Log in, or get a direct route"; R on the hub says "Log in first". Then log in as
+   guest by flood: when the answer brings a route back, the hub's line turns to "direct, N hops" by itself within a few seconds (the
+   log: `path updated`); after Log out, Owner is "not read yet" again (readable without a login).
+7. **12.7 Leaving clears**: Esc (the hub), open the repeater again: still logged in, but every summary says "not read yet" (nothing
+   read is kept); Log out clears it too.
+
+**Touch pass (the deck with the keyboard off, or the Pi 3A+)**: the hub's rows by two taps, each screen's Refresh button and its
+Cancel, the header's Esc back to the hub, More neighbours and Read owner (direct route) by two taps.
+
+[ ] pass  [ ] fail  Status time: ____ s  Refresh all: ____ s  Firmware: ____  Guest on the other repeater: ____  Notes:
 
 ## P. Pi 3A+ (800x480, touch only, on-screen keyboard)
 
@@ -326,6 +371,7 @@ header's Esc goes back each time.
 | 0.5.0 Choose a node: USB, first scan, BLE pair / reconnect / forget, IP (N1-N10) | [ ] | [ ] (N7 by touch) | |
 | 0.6.0 CLI: prompt, repeater login, saved password, messages, Help (10.1-10.10) / touch pass | [ ] | [ ] (touch pass) | |
 | 0.7.0 / 0.7.2 Repeater page, regrouped Home: your repeater, one you do not own, Open in CLI, Reset path, Search, Options, MY CONTACT (11.1-11.10) / touch pass | [ ] | [ ] (touch pass) | |
+| 0.8.1 Repeater read-only view, the hub and its screens: status by itself, each screen's Refresh / Cancel, reads by itself once, More neighbours, Refresh all, guest elsewhere, owner direct vs flood (12.1-12.7) / touch pass | [ ] | [ ] (touch pass) | |
 
 ## Unverified until a board run
 
@@ -345,3 +391,7 @@ header's Esc goes back each time.
 | U-12 | 0.7.0: a real repeater's login answer (LOGIN_SUCCESS with its clock and ACL byte) reads as the simulator's, and the wait (est_timeout x 1.25) is long enough over LoRa, flood included |
 | U-13 | 0.7.0: meshcore-cli 1.6.6 takes `to <64 hex key>` for a real contact, and the repeater accepts admin commands after the page's login with no `login` in the CLI (the simulator does) |
 | U-14 | 0.7.0: LOGOUT (29) is answered OK by the real companion and changes nothing on the repeater |
+| U-15 | 0.8.1: a real repeater's STATUS (56 bytes from v1.12.0, 52 before), NEIGHBOURS pages and OWNER_INFO read as the simulator's (byte layouts from the firmware source and meshcore_py), and est_timeout x 1.25 is long enough for them over LoRa |
+| U-16 | 0.8.1: the companion pushes PATH_UPDATED (0x81) after a flood login or request whose answer brought a route, so the page's route and Read owner (direct route) follow (the simulator does it with `--learn-path`) |
+| U-17 | 0.8.1: the anonymous OWNER request (57) is answered on a direct route by the owner's repeater (repeater v1.12.0+), within its limit of 4 per 3 minutes shared with every other user |
+| U-18 | 0.8.1: a repeater older than v1.9.0 gives an admin "is_admin" 1 in byte 1 of its login answer (the page then says Admin; read from the firmware source, no such repeater tested) |

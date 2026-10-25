@@ -5,9 +5,8 @@
  *
  *   the page     a sub-page over Contacts (a tap on a repeater or room, or its Options > Manage): the header "Contacts > <name>",
  *                the line under it "Repeater  ·  direct, 2 hops  ·  heard 3 min ago"; the bar Log in (Log out once logged in),
- *                Refresh (grey: it comes with the status view of slice S2; a tap says so), More (0.7.2 order: Details, Open in
- *                CLI, Reset path, Forget password when one is saved, last); R or Ctrl+R: Reset path; the rows of ui_repeater.hpp repeater_rows (ACCESS, the clock at the login, the
- *                note of Log out, the grey row of what comes next), read-only (the keys scroll them).
+ *                Refresh (0.8.0: live, below), More (0.7.2 order: Details, Open in CLI, Reset path, Forget password when one is
+ *                saved, last); the rows of ui_repeater.hpp repeater_rows (ACCESS, the clock at the login, the note of Log out).
  *   the login    a box (an editor: editor_open_, EditKind::Login) that opens by itself when the page opens from Contacts and this
  *                connection has no session with the node: the password field (masked, 15 bytes at most, the saved password in it,
  *                masked, when there is one), Remember on this deck (on), Cancel / Guest (a blank password) / Log in, and "No
@@ -25,6 +24,19 @@
  *                no confirm box, the answer in the box's line ("Path reset: the next message goes by flood"), the route
  *                lines follow (flood).
  *   leaving      the page's Esc, another page, another board: a wait of this page is cancelled (Client::cancel_remote).
+ *   0.8.0        (report 036 slice S2) the read-only view: Status, Neighbours and Owner. Status is read once by itself after a
+ *                successful login (guest or admin). No automatic retry, no confirm box. What was read stays while the page is open:
+ *                leaving it, Log out and a new login clear it. (0.7.2's R for Reset path: Reset path is in More, and Ctrl+R in the
+ *                login box.)
+ *   0.8.1        (the owner's design after 0.8.0 on the deck) the page is a HUB: the bar Log in / Log out and More (Details, Open
+ *                in CLI, Reset path, Refresh all, Forget password); ACCESS as before; READ: Status, Neighbours, Owner, each a row
+ *                with a chevron and its one-line summary ("4.12 V · up 3 d 4 h", "12 heard · newest 12 s ago", "Olivier · fw
+ *                1.12.0", "not read yet", "needs login", "no answer", "waiting… up to 12 s"). A first tap selects a row, a tap on
+ *                it selected (or Enter, Right) opens its SCREEN (rep_sub_): the header "Hilltop repeater > Status", the line under
+ *                it "read 14:02 · tap Refresh to read again" / "waiting… up to 12 s" / the error, ONE bar button Refresh (Cancel
+ *                while a read runs; R or Ctrl+R), the section's rows (More neighbours and Read owner (direct route) are action rows).
+ *                A screen never read is read by itself once when a session exists. Esc goes back to the hub (a read goes on, its
+ *                summary says so); R on the hub: Refresh all (Stop reading while a read runs); leaving the hub cancels the waits.
  */
 
 #include "app.hpp"
@@ -120,6 +132,12 @@ bool parse_key(const std::string &hex, PubKey &out)
     return hex.size() == 64 && from_hex(hex, out.data(), out.size());
 }
 
+std::string lower_ascii(std::string s)
+{
+    for (char &c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return s;
+}
+
 } // namespace
 
 /* ------------------------------------------------------------------ the page */
@@ -169,6 +187,12 @@ void App::open_repeater(const std::string &key_hex, bool auto_login)
     rep_seen_result_ = client_->remote_result().id;            // only the results of what this page asks from now on
     rep_seen_reset_ = client_->path_reset_result().id;
     rep_reset_asked_ = false;
+    rep_reads_.clear();                                            // 0.8.0: nothing read yet (nothing is kept between two visits)
+    rep_rows_.clear();
+    rep_sel_id_.clear();
+    rep_sel_ = -1;
+    rep_sub_ = RepSection::None;                                   // 0.8.1: the hub
+    nav_.repeater_section = false;
     rep_list_.scroll_to_top();
     if (log_) log_->line("repeater page: " + key_hex.substr(0, 8) + (auto_login ? " (from Contacts)" : ""));
     // "opens by itself on entering the page when not logged in" (connected only: offline a box would only say so)
@@ -182,8 +206,16 @@ void App::close_repeater()
 {
     if (editor_open_ && edit_kind_ == EditKind::Login) close_login_box();
     PubKey pk{};
-    if (client_->remote_busy() && parse_key(rep_key_, pk) && client_->remote_state().key == pk && client_->remote_state().op == Client::RemoteOp::Login)
+    const Client::RemoteOp op = client_->remote_state().op;
+    if (client_->remote_busy() && parse_key(rep_key_, pk) && client_->remote_state().key == pk &&
+        (op == Client::RemoteOp::Login || op == Client::RemoteOp::Status || op == Client::RemoteOp::Neighbours || op == Client::RemoteOp::Owner))
         client_->cancel_remote();                                 // leaving the page stops its wait (no answer is awaited for it any more)
+    rep_reads_.clear();                                            // 0.8.0: what was read goes with the page
+    rep_rows_.clear();
+    rep_sel_id_.clear();
+    rep_sel_ = -1;
+    rep_sub_ = RepSection::None;
+    nav_.repeater_section = false;
     nav_.repeater_open = false;
     hide(rep_panel_, true);
     rep_key_.clear();
@@ -198,8 +230,67 @@ bool App::repeater_caption(std::string &text) const
         text = "This contact is gone from the board";
         return true;
     }
+    if (rep_sub_ != RepSection::None) {                            // 0.8.1: a section's screen: its state ("read 14:02  ·  tap Refresh...")
+        text = rep_section_line(repeater_view(), rep_sub_).text;
+        return true;
+    }
     text = repeater_status_line(r->c.type, path_hops(r->c.out_path_len), r->last_heard());
     return true;
+}
+
+/* 0.8.1: a section's screen over the hub (its row on the hub, Enter or a tap on it selected): its rows, the line under the header,
+ * the bar's Refresh. A section never read is read by itself once when a session exists (the status after a login already was). */
+void App::repeater_open_section(RepSection s)
+{
+    if (!nav_.repeater_open || s == RepSection::None) return;
+    const RepeaterView v = repeater_view();
+    const std::vector<RepSection> secs = rep_sections(v.room);
+    if (std::find(secs.begin(), secs.end(), s) == secs.end()) return;
+    rep_sub_ = s;
+    nav_.repeater_section = true;
+    rep_hub_sel_ = rep_sel_id_;                                    // the hub's row comes back selected
+    rep_sel_id_.clear();
+    rep_sel_ = -1;
+    rep_sig_ = 0;
+    rep_list_.scroll_to_top();
+    if (log_) log_->line(std::string("repeater page: ") + rep_section_name(s) + " of " + rep_key_.substr(0, 8));
+    if (client_->ready() && rep_reads_.auto_read(s, v.session != nullptr)) {
+        if (log_) log_->line(std::string("repeater page: ") + rep_section_name(s) + " read by itself (never read yet)");
+        repeater_pump();
+    }
+    invalidate();
+}
+
+/* Esc (or the header's) on a section's screen: the hub again, the section's row selected; a read that runs goes on (its summary
+ * says so). */
+void App::repeater_close_section()
+{
+    if (rep_sub_ == RepSection::None) return;
+    rep_sub_ = RepSection::None;
+    nav_.repeater_section = false;
+    rep_sel_id_ = rep_hub_sel_;
+    rep_sel_ = -1;
+    rep_sig_ = 0;
+    rep_list_.scroll_to_top();
+    invalidate();
+}
+
+RepeaterView App::repeater_view() const
+{
+    RepeaterView v;
+    const ContactRec *r = model_.find_contact(rep_key_);
+    if (!r) return v;
+    v.room = r->c.type == advtype::kRoom;
+    v.session = client_->remote_session(r->c.key);
+    v.password_saved = passwords_ && passwords_->remembered(rep_key_);
+    v.reads = &rep_reads_;
+    v.model = &model_;
+    v.remote = &client_->remote_state();
+    v.now_ms = mono_ms();
+    v.now = now_unix();
+    v.hops = path_hops(r->c.out_path_len);
+    v.name = r->c.name.empty() ? to_hex(r->prefix()) : r->c.name;
+    return v;
 }
 
 void App::render_repeater()
@@ -207,39 +298,61 @@ void App::render_repeater()
     const ContactRec *r = model_.find_contact(rep_key_);
     const Client::RemoteSession *ses = r ? client_->remote_session(r->c.key) : nullptr;
     std::vector<ActionBar::CellSpec> cells;
-    cells.push_back({kTagRepLogin, ses ? "Log out" : "Log in", ""});
-    ActionBar::CellSpec refresh{kTagRepRefresh, "Refresh", ""};
-    refresh.dim = true;                                            // the status view of slice S2: not there yet
-    cells.push_back(refresh);
-    cells.push_back({kTagRepMore, "More", ""});
+    if (rep_sub_ == RepSection::None) {                            // 0.8.1, the hub: Log in / Log out, More (Refresh all is in More)
+        cells.push_back({kTagRepLogin, ses ? "Log out" : "Log in", ""});
+        cells.push_back({kTagRepMore, "More", ""});
+    } else {                                                       // a section's screen: one button, Refresh (Cancel while a read runs)
+        cells.push_back({kTagRepRefresh, rep_reads_.running() ? "Cancel" : "Refresh", ""});
+    }
     rep_bar_.set_cells(cells);
 
-    RepeaterView v;
-    v.room = r && r->c.type == advtype::kRoom;
-    v.session = ses;
-    v.password_saved = passwords_ && passwords_->remembered(rep_key_);
-    std::vector<RepeaterRow> rows = r ? repeater_rows(v) : std::vector<RepeaterRow>{{RepeaterRow::Note, "This contact is gone from the board.", "", Tone::Muted}};
+    const RepeaterView v = repeater_view();
+    std::vector<RepeaterRow> rows;
+    if (r) {
+        rows = rep_sub_ == RepSection::None ? repeater_rows(v) : repeater_section_rows(v, rep_sub_);
+    } else {
+        RepeaterRow gone;
+        gone.kind = RepeaterRow::Note;
+        gone.label = "This contact is gone from the board.";
+        gone.id = "gone";
+        rows.push_back(gone);
+    }
+    if (plat_.touching()) return;                                  // (the list stays as it is under a finger)
+    // the selection follows its row's id (the rows move as answers come); a row that went takes the selection with it
+    int sel = -1;
+    for (size_t i = 0; i < rows.size() && !rep_sel_id_.empty(); ++i)
+        if (rows[i].id == rep_sel_id_ && rows[i].selectable()) sel = static_cast<int>(i);
+    if (sel < 0) rep_sel_id_.clear();
+    rep_sel_ = sel;
+    rep_rows_ = rows;
 
     const Geo g = geo();
     const cp0_ui_list_layout_t l = settings_list_layout(0, g.h);
     const lv_font_t *lf = face(label_px_), *vf = face(value_px_), *sf = face(l.section_px);
     const int tw_all = g.lw - 2 * g.inset, pad = std::max(4, g.s / 2);
     uint32_t sig = sig_of(0, std::to_string(g.h) + "/" + std::to_string(tw_all));
-    for (const RepeaterRow &row : rows) sig = sig_of(sig_of(sig, row.label), row.value + std::to_string(static_cast<int>(row.tone)));
-    if (sig == rep_sig_ || plat_.touching()) return;
+    for (const RepeaterRow &row : rows)
+        sig = sig_of(sig_of(sig_of(sig, row.id), row.label), row.value + std::to_string(static_cast<int>(row.tone)) + std::to_string(static_cast<int>(row.aff)));
+    if (sig == rep_sig_) {
+        if (rep_list_.selected() != rep_sel_) rep_list_.set_selected(rep_sel_, true, false);
+        return;
+    }
     rep_sig_ = sig;
     std::vector<RowSpec> specs;
     for (size_t i = 0; i < rows.size(); ++i) {
         const RepeaterRow &row = rows[i];
         RowSpec s;
-        s.id = std::to_string(i);
-        s.selectable = false;                                      // read-only rows: the keys scroll them
+        s.id = row.id.empty() ? std::to_string(i) : row.id;
+        s.selectable = row.selectable();                           // 0.8.0: the rows of the read sections (the rest is read-only)
         if (row.kind == RepeaterRow::Section) {
             s.h = l.section_h;
             std::string up = row.label;
             for (char &c : up)
                 if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
-            s.cells.push_back({up, kRepSection, g.inset, tw_all, LV_TEXT_ALIGN_LEFT, sf, (s.h - lh(sf)) / 2});
+            // 0.8.0: the section's state at the right ("read 14:02", "waiting… up to 12 s", "no answer" in Gold...)
+            const int vw = row.value.empty() ? 0 : std::min(tw(row.value, sf) + 2, tw_all / 2 + tw_all / 4);
+            s.cells.push_back({up, kRepSection, g.inset, std::max(1, tw_all - (vw ? vw + l.gap : 0)), LV_TEXT_ALIGN_LEFT, sf, (s.h - lh(sf)) / 2});
+            if (vw) s.cells.push_back({row.value, tone_rgb(row.tone), g.inset + tw_all - vw, vw, LV_TEXT_ALIGN_RIGHT, sf, (s.h - lh(sf)) / 2});
         } else if (row.kind == RepeaterRow::Note) {
             const int n = lines_in(row.label, f_caption_, tw_all);
             s.h = std::max(l.row_h, n * lh(f_caption_) + 2 * pad);
@@ -248,14 +361,140 @@ void App::render_repeater()
             s.cells.push_back(c);
         } else {
             s.h = l.row_h;
-            s.aff = Aff::Info;
-            const int vw = row.value.empty() ? 0 : std::min(tw(row.value, vf) + 2, tw_all / 2 + tw_all / 4);
-            s.cells.push_back({row.label, kRepText, g.inset, std::max(1, tw_all - (vw ? vw + l.gap : 0)), LV_TEXT_ALIGN_LEFT, lf, (s.h - lh(lf)) / 2});
-            if (vw) s.cells.push_back({row.value, tone_rgb(row.tone), g.inset + tw_all - vw, vw, LV_TEXT_ALIGN_RIGHT, vf, (s.h - lh(vf)) / 2});
+            // an action row: the dot; the hub's section rows (0.8.1): the chevron; a value: grey, no marker
+            s.aff = row.aff == Aff::Action || row.aff == Aff::Open ? row.aff : Aff::Info;
+            // the marker's slot stays free at the right (cp0_ui_list_trail_w), the value ends before it
+            const int trail = row.aff == Aff::Action ? cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_ACTION)
+                              : row.aff == Aff::Open ? cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_OPEN) : 0;
+            const int room = std::max(1, tw_all - trail);
+            const int vw = row.value.empty() ? 0 : std::min(tw(row.value, vf) + 2, room / 2 + room / 4);
+            s.cells.push_back({row.label, kRepText, g.inset, std::max(1, room - (vw ? vw + l.gap : 0)), LV_TEXT_ALIGN_LEFT, lf, (s.h - lh(lf)) / 2});
+            if (vw) s.cells.push_back({row.value, tone_rgb(row.tone), g.inset + room - vw, vw, LV_TEXT_ALIGN_RIGHT, vf, (s.h - lh(vf)) / 2});
         }
         specs.push_back(std::move(s));
     }
-    rep_list_.set(std::move(specs), -1, true);
+    rep_list_.set(std::move(specs), rep_sel_, true);
+}
+
+/* 0.8.0: the selection of the rows (the hub's section rows, a section's rows; index into rep_rows_, -1: none). */
+void App::repeater_select(int index, bool scroll)
+{
+    if (index >= 0 && (index >= static_cast<int>(rep_rows_.size()) || !rep_rows_[static_cast<size_t>(index)].selectable())) return;
+    rep_sel_ = index;
+    rep_sel_id_ = index >= 0 ? rep_rows_[static_cast<size_t>(index)].id : std::string();
+    rep_list_.set_selected(index, true, scroll && index >= 0);
+    if (index < 0 && scroll) rep_list_.scroll_to_top();
+    invalidate();
+}
+
+/* Refresh: one section (only: a section's screen, its button or R), or all of them (None: the hub's More > Refresh all, or R there):
+ * queued in RepeaterReads, sent one at a time by repeater_pump. While a read runs it is Cancel. */
+void App::repeater_refresh(RepSection only)
+{
+    if (rep_reads_.running()) {
+        repeater_cancel_reads();
+        return;
+    }
+    const ContactRec *r = model_.find_contact(rep_key_);
+    if (!r) return;
+    if (!client_->ready()) {
+        notice("Not connected to a node.", false);
+        return;
+    }
+    const RepeaterView v = repeater_view();
+    const bool queued = only != RepSection::None ? rep_reads_.refresh(only) : rep_reads_.refresh_all(v.session != nullptr, v.room, v.hops >= 0);
+    if (!queued) {                                                // not logged in, no direct route: nothing can be read
+        notice(read_error_text(Client::RemoteError::NotLoggedIn, -1, v.name), false);
+        return;
+    }
+    if (log_) log_->line(std::string("repeater page: refresh ") + (only == RepSection::None ? "all" : rep_section_name(only)) + " of " + rep_key_.substr(0, 8));
+    repeater_pump();
+    rep_sig_ = 0;
+    invalidate();
+}
+
+/* Cancel: the queue goes, the read in flight is cancelled at the client (its Cancelled result leaves its section as it was). */
+void App::repeater_cancel_reads()
+{
+    if (!rep_reads_.running()) return;
+    rep_reads_.cancel();
+    PubKey pk{};
+    if (rep_reads_.sent() && client_->remote_busy() && client_->remote_state().req == rep_reads_.req() && parse_key(rep_key_, pk) &&
+        client_->remote_state().key == pk)
+        client_->cancel_remote();
+    if (log_) log_->line("repeater page: reads cancelled");
+    rep_sig_ = 0;
+    invalidate();
+}
+
+/* A row that does something: the hub's section rows open their screens (0.8.1); on a screen, More neighbours and Read owner (direct
+ * route) read (nothing while a read runs: the bar says Cancel). */
+void App::repeater_act(const RepeaterRow &row)
+{
+    if (row.action == RepAction::Open) {
+        repeater_open_section(row.section);
+        return;
+    }
+    if (rep_reads_.running() || !client_->ready()) {
+        if (!client_->ready()) notice("Not connected to a node.", false);
+        return;
+    }
+    bool queued = false;
+    switch (row.action) {
+    case RepAction::MoreNeighbours: queued = rep_reads_.more_neighbours(); break;
+    case RepAction::ReadOwner: queued = rep_reads_.refresh(RepSection::Owner); break;
+    case RepAction::Open:
+    case RepAction::None: break;
+    }
+    if (!queued) return;
+    repeater_pump();
+    rep_sig_ = 0;
+    invalidate();
+}
+
+/* The next read of the queue goes when the client has no remote wait (a login of the box first). A read refused at once (not logged
+ * in, firmware too old, no direct route...) ends there and then; the chain goes on, or stops, as RepeaterReads decides. */
+void App::repeater_pump()
+{
+    PubKey pk{};
+    if (!nav_.repeater_open || !parse_key(rep_key_, pk)) return;
+    const ContactRec *r = model_.find_contact(rep_key_);
+    const std::string name = r ? (r->c.name.empty() ? to_hex(r->prefix()) : r->c.name) : std::string("the node");
+    for (int guard = 0; guard < 8; ++guard) {
+        if (!rep_reads_.running() || rep_reads_.in_flight() != RepSection::None || client_->remote_busy()) return;
+        RepeaterReads::Next n;
+        if (!rep_reads_.pop(n)) return;
+        const uint32_t req = n.section == RepSection::Status ? client_->request_status(pk)
+                             : n.section == RepSection::Neighbours ? client_->request_neighbours(pk, n.offset)
+                                                                   : client_->request_owner(pk);
+        rep_sig_ = 0;
+        invalidate();
+        if (req != 0) {
+            rep_reads_.sent_as(req);
+            return;
+        }
+        rep_seen_result_ = client_->remote_result().id;            // refused at once: its result is here already
+        const std::string why = rep_reads_.on_result(client_->remote_result(), now_unix(), name);
+        if (!why.empty()) notice(why, false);
+    }
+}
+
+/* A tap on a row of the page: the first selects it, a tap on the selected row acts (the app's rule for lists): the hub's section
+ * rows open their screens, a screen's action rows read. */
+void App::repeater_rows_clicked(int list_index)
+{
+    const std::string id = rep_list_.id_at(list_index);          // the row that was tapped, by its id (never a stale index)
+    int index = -1;
+    for (size_t i = 0; i < rep_rows_.size(); ++i)
+        if (rep_rows_[i].id == id) index = static_cast<int>(i);
+    if (index < 0) return;
+    const RepeaterRow &row = rep_rows_[static_cast<size_t>(index)];
+    if (!row.selectable()) return;
+    if (index != rep_sel_) {
+        repeater_select(index, false);
+        return;
+    }
+    if (row.aff == Aff::Action || row.aff == Aff::Open) repeater_act(row);
 }
 
 /* Log in (the box), or Log out: the session of this connection is forgotten and LOGOUT goes to the board (the node itself keeps
@@ -273,18 +512,23 @@ void App::repeater_login_or_out()
         return;
     }
     rep_seen_result_ = client_->remote_result().id;
+    rep_reads_.clear();                                            // 0.8.0: logging out clears what was read (a read waiting ended Cancelled)
+    rep_sel_id_.clear();
+    rep_sel_ = -1;
+    rep_list_.scroll_to_top();                                     // (the page is short again)
     rep_sig_ = 0;
     notice("Logged out on this deck (" + truncate_ellipsis(r->c.name, 20) + " still lists it)", true);
     invalidate();
 }
 
-/* More (0.7.2 order): Details, Open in CLI, Reset path, Forget password (only when one is saved) last. */
+/* More (0.7.2 order; 0.8.1: Refresh all before Forget password): Details, Open in CLI, Reset path, Refresh all ("Stop reading" while a
+ * read runs), Forget password (only when one is saved) last. */
 void App::repeater_more()
 {
     if (nav_.popup_open || editor_open_) return;
     const ContactRec *r = model_.find_contact(rep_key_);
     if (!r) return;
-    const std::vector<RepeaterMoreItem> more = repeater_more_items(passwords_ && passwords_->remembered(rep_key_));
+    const std::vector<RepeaterMoreItem> more = repeater_more_items(passwords_ && passwords_->remembered(rep_key_), rep_reads_.running());
     std::vector<std::string> items;
     std::vector<Aff> affs;
     for (const RepeaterMoreItem &m : more) {
@@ -299,6 +543,9 @@ void App::repeater_more()
         case RepeaterMore::OpenCli: open_cli_for(key); break;
         case RepeaterMore::ResetPath:
             if (nav_.repeater_open && rep_key_ == key) repeater_reset_path();
+            break;
+        case RepeaterMore::RefreshAll:                         // 0.8.1: the chained read of the three (Stop reading: Cancel)
+            if (nav_.repeater_open && rep_key_ == key) repeater_refresh(RepSection::None);
             break;
         case RepeaterMore::ForgetPassword: {
             const bool ok = passwords_ && passwords_->forget(key);
@@ -366,28 +613,50 @@ void App::login_route_refresh()
 void App::key_repeater(const KeyEvent &e)
 {
     const int step = std::max(1, geo().list_row);
+    // Up/Down move the selection over the hub's section rows (0.8.1) or a screen's rows (above the first one: none, the list at its
+    // top); at the last one Down scrolls on (the notes under it)
+    auto next_sel = [this](int from, int dir) {
+        for (int i = from + dir; i >= 0 && i < static_cast<int>(rep_rows_.size()); i += dir)
+            if (rep_rows_[static_cast<size_t>(i)].selectable()) return i;
+        return -1;
+    };
     switch (e.key) {
-    case Key::Up: rep_list_.scroll_by(-step); return;
-    case Key::Down: rep_list_.scroll_by(step); return;
+    case Key::Up: {
+        const int i = rep_sel_ < 0 ? -1 : next_sel(rep_sel_, -1);
+        if (rep_sel_ < 0) rep_list_.scroll_by(-step);
+        else repeater_select(i, true);
+        return;
+    }
+    case Key::Down: {
+        const int i = next_sel(rep_sel_, 1);
+        if (i >= 0) repeater_select(i, true);
+        else rep_list_.scroll_by(step);
+        return;
+    }
     case Key::PageUp: rep_list_.scroll_by(-4 * step); return;
     case Key::PageDown: rep_list_.scroll_by(4 * step); return;
-    case Key::Home: rep_list_.scroll_to_top(); return;
+    case Key::Home: repeater_select(-1, true); return;
     default: break;
     }
     if (e.repeat) return;
     const ContactRec *r = model_.find_contact(rep_key_);
     const bool in = r && client_->remote_session(r->c.key);
-    if (e.key == Key::Enter) {
-        if (!in) open_login_box();
+    if (e.key == Key::Enter || (e.key == Key::Right && rep_sub_ == RepSection::None)) {
+        if (rep_sel_ >= 0 && rep_sel_ < static_cast<int>(rep_rows_.size())) {     // the selected row: open its screen, or its action
+            const RepeaterRow row = rep_rows_[static_cast<size_t>(rep_sel_)];
+            if (row.aff == Aff::Action || row.aff == Aff::Open) repeater_act(row);
+            return;
+        }
+        if (e.key == Key::Enter && !in && rep_sub_ == RepSection::None) open_login_box();
         return;
     }
     if (e.key != Key::Char || e.alt || e.text.size() != 1) return;
     const char c = static_cast<char>(std::tolower(static_cast<unsigned char>(e.text[0])));
-    if (c == 'r') {                                                // R or Ctrl+R (the login box's shortcut): Reset path
-        repeater_reset_path();
+    if (c == 'r') {                                                // R or Ctrl+R: the hub: refresh all; a screen: that one (Cancel while a read runs)
+        repeater_refresh(rep_sub_);
         return;
     }
-    if (e.ctrl) return;
+    if (e.ctrl || rep_sub_ != RepSection::None) return;           // (a section's screen has Refresh only)
     if (c == 'l') repeater_login_or_out();
     else if (c == 'm') repeater_more();
 }
@@ -407,20 +676,51 @@ void App::repeater_tick(uint64_t now)
             show_path_reset(pr);
         }
     }
+    // 0.8.0: while a read runs, the header's seconds left move on (four times a second)
+    if (nav_.repeater_open && rep_reads_.running() && now - rep_tick_ms_ >= kLoginWaitPollMs) {
+        rep_tick_ms_ = now;
+        invalidate();
+    }
     const Client::RemoteResult &res = client_->remote_result();
-    if (res.id == rep_seen_result_) return;
+    if (res.id == rep_seen_result_) {
+        repeater_pump();                                           // (the queue waits for the client's remote wait to end)
+        return;
+    }
     rep_seen_result_ = res.id;
     rep_sig_ = 0;
     invalidate();
-    if (rep_req_ == 0 || res.req != rep_req_ || res.op != Client::RemoteOp::Login) return;
-    rep_req_ = 0;
     const ContactRec *r = model_.find_contact(rep_key_);
     const std::string name = r ? (r->c.name.empty() ? to_hex(r->prefix()) : r->c.name) : std::string("the node");
+    if (rep_reads_.sent() && res.req == rep_reads_.req()) {        // 0.8.0: a read of this page: its section, then the next read
+        const std::string why = rep_reads_.on_result(res, now_unix(), name);
+        if (log_) log_->line(std::string("repeater page: ") + rep_section_name(res.op == Client::RemoteOp::Status ? RepSection::Status
+                                                                                 : res.op == Client::RemoteOp::Neighbours ? RepSection::Neighbours
+                                                                                                                          : RepSection::Owner) +
+                             (res.ok ? std::string(" read") : res.error == Client::RemoteError::Cancelled ? std::string(" cancelled")
+                                                                                                           : " not read (" + read_error_state(res.error) + ")"));
+        if (!why.empty()) notice(why, false);
+        repeater_pump();
+        return;
+    }
+    if (rep_req_ == 0 || res.req != rep_req_ || res.op != Client::RemoteOp::Login) {
+        repeater_pump();
+        return;
+    }
+    rep_req_ = 0;
     const bool box = editor_open_ && edit_kind_ == EditKind::Login;
     login_waiting_ = false;
     if (res.ok) {
         if (box) close_login_box();
         notice(login_success_text(res, name), true);
+        // 0.8.0: a new login starts afresh, and its Status is read once by itself (everything else on Refresh)
+        rep_reads_.clear();
+        rep_sel_id_.clear();
+        rep_sel_ = -1;
+        if (nav_.repeater_open) {
+            rep_list_.scroll_to_top();
+            rep_reads_.refresh(RepSection::Status);
+            repeater_pump();
+        }
         return;
     }
     const std::string why = login_error_text(res, name);
@@ -444,7 +744,24 @@ std::string App::repeater_debug() const
     const bool box = editor_open_ && edit_kind_ == EditKind::Login;
     const char *pw = !box || !login_ta_ ? "-" : !lv_textarea_get_text(login_ta_)[0] ? "empty" : login_prefilled_ && login_fresh_ ? "saved" : "typed";
     std::string role = ses ? remote_role_name(ses->role) : "none";
-    for (char &c : role) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    for (char &c : role) c = c == ' ' ? '-' : static_cast<char>(std::tolower(static_cast<unsigned char>(c)));     // "logged-in": no role known
+    // 0.8.0: each read section in one word (wait, read, noanswer, needslogin, tooold, directonly, badreply, failed, none)
+    auto code = [this, ses, r](RepSection s) -> std::string {
+        using E = Client::RemoteError;
+        const RepeaterReads::Section &sec = rep_reads_.section(s);
+        if (rep_reads_.in_flight() == s) return "wait";
+        switch (sec.error) {
+        case E::None: break;
+        case E::Timeout: return "noanswer";
+        case E::NotLoggedIn: return "needslogin";
+        case E::Unsupported: return "tooold";
+        case E::NoDirectRoute: return "directonly";
+        case E::BadReply: return "badreply";
+        default: return "failed";
+        }
+        if (sec.has) return "read";
+        return ses || (s == RepSection::Owner && r && path_hops(r->c.out_path_len) >= 0) ? "none" : "needslogin";
+    };
     return std::string(" rep=") + (nav_.repeater_open ? "1" : "0") + " rep_name='" + (r ? r->c.name : std::string()) + "'" + " rep_role=" + role +
            " pw_saved=" + (r && passwords_ && passwords_->remembered(rep_key_) ? "1" : "0") + " login=" + (box ? "1" : "0") +
            " login_wait=" + (login_waiting_ ? "1" : "0") + " login_pw=" + pw + " login_remember=" + (login_remember_ ? "1" : "0") +
@@ -453,7 +770,22 @@ std::string App::repeater_debug() const
            " rep_route='" + (r ? repeater_route_text(path_hops(r->c.out_path_len)) : std::string()) + "'" +
            " login_route='" + (box && login_route_ ? std::string(lv_label_get_text(login_route_)) : std::string()) + "'" +
            " login_reset=" + (box && login_reset_btn_ && !lv_obj_has_flag(login_reset_btn_, LV_OBJ_FLAG_HIDDEN) ? "1" : "0") +
-           " path_reset=" + (client_->path_reset_busy() ? "busy" : std::to_string(client_->path_reset_result().id));
+           " path_reset=" + (client_->path_reset_busy() ? "busy" : std::to_string(client_->path_reset_result().id)) +
+           " rep_st=" + code(RepSection::Status) + " rep_nbs=" + code(RepSection::Neighbours) + " rep_own=" + code(RepSection::Owner) +
+           " rep_nb=" + std::to_string(rep_reads_.neighbours.size()) + "/" + std::to_string(rep_reads_.nb_total) +
+           " rep_more=" + (rep_reads_.nb_more ? "1" : "0") + " rep_run=" + (rep_reads_.running() ? "1" : "0") +
+           " rep_queue=" + std::to_string(rep_reads_.queued()) + " rep_sel='" + rep_sel_id_ + "'" +
+           " rep_owner='" + (rep_reads_.section(RepSection::Owner).has ? rep_reads_.owner.name : std::string()) + "'" +
+           " rep_fw='" + (rep_reads_.section(RepSection::Owner).has ? rep_reads_.owner.fw_version : std::string()) + "'" +
+           " rep_anon=" + (rep_reads_.section(RepSection::Owner).anonymous ? "1" : "0") +
+           " rep_batt='" + (rep_reads_.section(RepSection::Status).has ? fmt_volts(rep_reads_.status.battery_mv) : std::string()) + "'" +
+           " rep_hops=" + std::to_string(r ? path_hops(r->c.out_path_len) : -1) +
+           // 0.8.1: the screen shown (hub, status, neighbours, owner), the hub's summaries, a screen's line
+           " rep_sub=" + (rep_sub_ == RepSection::None ? std::string("hub") : lower_ascii(rep_section_name(rep_sub_))) +
+           " rep_sum_st='" + (r ? rep_summary(repeater_view(), RepSection::Status).text : std::string()) + "'" +
+           " rep_sum_nb='" + (r ? rep_summary(repeater_view(), RepSection::Neighbours).text : std::string()) + "'" +
+           " rep_sum_own='" + (r ? rep_summary(repeater_view(), RepSection::Owner).text : std::string()) + "'" +
+           " rep_line='" + (r && rep_sub_ != RepSection::None ? rep_section_line(repeater_view(), rep_sub_).text : std::string()) + "'";
 }
 
 /* ------------------------------------------------------------------ the login box */

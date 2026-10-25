@@ -469,6 +469,14 @@ std::optional<Packet> parse_packet(const Bytes &f)
         lf.prefix = r.arr<6>();
         return lf;
     }
+    case resp::kBinaryResponse: {
+        if (f.size() < 6) return std::nullopt;      // without the whole tag it cannot be matched to a request
+        BinaryResponse b;
+        r.u8();                                     // reserved
+        b.tag = r.arr<4>();
+        b.data.assign(f.begin() + 6, f.end());
+        return b;
+    }
     default: {
         Unknown u;
         u.code = code;
@@ -770,6 +778,176 @@ Bytes build_logout(const PubKey &key)
 {
     Bytes b = {cmd::kLogout};
     b.insert(b.end(), key.begin(), key.end());
+    return b;
+}
+
+/* ------------------------------------------------------------------ report 036 S2: binary and anonymous requests */
+
+Bytes build_binary_request(const PubKey &key, uint8_t req_type, const Bytes &params)
+{
+    Bytes b = {cmd::kSendBinaryReq};
+    b.insert(b.end(), key.begin(), key.end());
+    b.push_back(req_type);
+    b.insert(b.end(), params.begin(), params.end());
+    return b;
+}
+
+Bytes build_status_request(const PubKey &key)
+{
+    return build_binary_request(key, reqtype::kStatus);
+}
+
+Bytes build_owner_info_request(const PubKey &key)
+{
+    return build_binary_request(key, reqtype::kOwnerInfo);
+}
+
+Bytes build_telemetry_request(const PubKey &key)
+{
+    return build_binary_request(key, reqtype::kTelemetry, {0x00, 0x00, 0x00, 0x00});
+}
+
+Bytes build_neighbours_request(const PubKey &key, uint8_t count, uint16_t offset, NeighbourOrder order, uint8_t prefix_len, uint32_t nonce)
+{
+    Bytes p = {0x00, count, static_cast<uint8_t>(offset & 0xFF), static_cast<uint8_t>(offset >> 8), static_cast<uint8_t>(order), prefix_len};
+    put_u32(p, nonce);
+    return build_binary_request(key, reqtype::kNeighbours, p);
+}
+
+Bytes build_anon_request(const PubKey &key, uint8_t anon_type, const Bytes &reply_path)
+{
+    Bytes b = {cmd::kSendAnonReq};
+    b.insert(b.end(), key.begin(), key.end());
+    b.push_back(anon_type);
+    b.insert(b.end(), reply_path.begin(), reply_path.end());
+    return b;
+}
+
+std::optional<Bytes> anon_reply_path(uint8_t out_path_len, const std::array<uint8_t, 64> &out_path)
+{
+    if (out_path_len == kPathFlood) return std::nullopt;
+    const size_t hops = out_path_len & 0x3F;
+    const size_t hash_size = static_cast<size_t>(out_path_len >> 6) + 1;
+    if (hash_size > 3 || hops * hash_size > out_path.size()) return std::nullopt;     // Packet::isValidPathLen
+    Bytes b = {out_path_len};
+    for (size_t h = hops; h-- > 0;)                                                      // the last hop first, each hash kept whole
+        b.insert(b.end(), out_path.begin() + static_cast<long>(h * hash_size), out_path.begin() + static_cast<long>((h + 1) * hash_size));
+    return b;
+}
+
+namespace {
+uint16_t le16(const Bytes &d, size_t at) { return static_cast<uint16_t>(d[at] | (d[at + 1] << 8)); }
+uint32_t le32(const Bytes &d, size_t at)
+{
+    return static_cast<uint32_t>(d[at]) | static_cast<uint32_t>(d[at + 1]) << 8 | static_cast<uint32_t>(d[at + 2]) << 16 |
+           static_cast<uint32_t>(d[at + 3]) << 24;
+}
+/* Text of a reply: up to the first NUL (the padding), sanitized (new lines kept). */
+std::string reply_text(const Bytes &d, size_t from)
+{
+    if (from >= d.size()) return "";
+    std::string s(reinterpret_cast<const char *>(d.data() + from), d.size() - from);
+    const size_t nul = s.find('\0');
+    if (nul != std::string::npos) s.resize(nul);
+    return sanitize_utf8(s);
+}
+} // namespace
+
+std::optional<RepeaterStatus> parse_repeater_status(const Bytes &d, bool room)
+{
+    if (d.size() < kStatusBytes) return std::nullopt;
+    RepeaterStatus s;
+    s.room = room;
+    s.battery_mv = le16(d, 0);
+    s.tx_queue = le16(d, 2);
+    s.noise_floor = static_cast<int16_t>(le16(d, 4));
+    s.last_rssi = static_cast<int16_t>(le16(d, 6));
+    s.packets_rx = le32(d, 8);
+    s.packets_tx = le32(d, 12);
+    s.airtime_tx_s = le32(d, 16);
+    s.uptime_s = le32(d, 20);
+    s.flood_tx = le32(d, 24);
+    s.direct_tx = le32(d, 28);
+    s.flood_rx = le32(d, 32);
+    s.direct_rx = le32(d, 36);
+    s.debug_flags = le16(d, 40);
+    s.last_snr = static_cast<int16_t>(le16(d, 42)) / 4.0;
+    s.direct_dups = le16(d, 44);
+    s.flood_dups = le16(d, 46);
+    if (room) {
+        s.posted = le16(d, 48);
+        s.post_pushes = le16(d, 50);
+    } else {
+        s.has_airtime_rx = true;
+        s.airtime_rx_s = le32(d, 48);
+        if (d.size() >= 56) {
+            s.has_rx_errors = true;
+            s.rx_errors = le32(d, 52);
+        }
+    }
+    return s;
+}
+
+std::optional<NeighboursPage> parse_neighbours(const Bytes &d, size_t prefix_len, uint16_t offset)
+{
+    if (d.size() < 4 || prefix_len > 32) return std::nullopt;
+    const int total = static_cast<int16_t>(le16(d, 0));
+    const int count = static_cast<int16_t>(le16(d, 2));
+    if (total < 0 || count < 0) return std::nullopt;
+    const size_t entry = prefix_len + 4 + 1;
+    if (d.size() < 4 + static_cast<size_t>(count) * entry) return std::nullopt;      // says more entries than it holds
+    NeighboursPage pg;
+    pg.total = total;
+    pg.offset = offset;
+    for (int i = 0; i < count; ++i) {
+        const size_t at = 4 + static_cast<size_t>(i) * entry;
+        NeighbourEntry e;
+        e.prefix.assign(d.begin() + static_cast<long>(at), d.begin() + static_cast<long>(at + prefix_len));
+        e.heard_secs_ago = le32(d, at + prefix_len);
+        e.snr = static_cast<int8_t>(d[at + prefix_len + 4]) / 4.0;
+        pg.entries.push_back(std::move(e));
+    }
+    pg.more = !pg.entries.empty() && static_cast<int>(offset) + count < total;
+    return pg;
+}
+
+std::optional<OwnerInfo> parse_owner_info(const Bytes &d)
+{
+    const std::string s = reply_text(d, 0);
+    const size_t a = s.find('\n');
+    if (a == std::string::npos) return std::nullopt;                                  // the firmware always writes two new lines
+    OwnerInfo o;
+    o.fw_version = s.substr(0, a);
+    const size_t b = s.find('\n', a + 1);
+    if (b == std::string::npos) {
+        o.name = s.substr(a + 1);
+    } else {
+        o.name = s.substr(a + 1, b - a - 1);
+        o.owner_info = s.substr(b + 1);
+    }
+    return o;
+}
+
+std::optional<OwnerInfo> parse_anon_owner(const Bytes &d)
+{
+    if (d.size() < 4) return std::nullopt;
+    OwnerInfo o;
+    o.anonymous = true;
+    o.has_clock = true;
+    o.clock = le32(d, 0);
+    const std::string s = reply_text(d, 4);
+    const size_t a = s.find('\n');                                                    // meshcore_py: split("\n", 1)
+    o.name = a == std::string::npos ? s : s.substr(0, a);
+    if (a != std::string::npos) o.owner_info = s.substr(a + 1);
+    return o;
+}
+
+std::optional<AnonBasic> parse_anon_basic(const Bytes &d)
+{
+    if (d.size() < 5) return std::nullopt;
+    AnonBasic b;
+    b.clock = le32(d, 0);
+    b.features = d[4];
     return b;
 }
 

@@ -1,0 +1,310 @@
+# Simulator options: --remote-cases --contacts 6 --neighbours 24 --owner-info Hilltop-owner|LoRa-868 --learn-path (repeater_s2_run.sh, SIMCTL=1)
+# Mesh Hop 0.8.1 (report 036 slice S2, the read-only view as a hub and three screens) with a keyboard: an admin login on the first
+# Hilltop repeater (3 hops) reads its status by itself; the hub shows ACCESS and READ (Status, Neighbours, Owner, each with its
+# summary); Enter opens a section's screen (header "... > Status", the line under it, ONE button Refresh): Status shows at once,
+# R reads it again (Cancel meanwhile); Neighbours and Owner, never read, read by themselves once; More neighbours (Enter on its row)
+# reads the next page; Esc goes back to the hub, its summaries follow; on the hub R (or More > Refresh all) reads the three one
+# after the other, R again stops; L logs out (what was read goes); not logged in, the owner's screen offers Read owner (direct
+# route); a flood contact: nothing to read without a login ("Log in first"), its guest login by flood brings a route back
+# (--learn-path); the answers lost on the air (sim "drop all"): every summary says "no answer", the status screen the whole text,
+# and its Refresh reads again. The simulator's remote nodes: admin password "password", guest password empty.
+wait 4500
+key down
+key enter
+wait 1200
+type /
+wait 400
+type <9091
+wait 600
+key enter
+wait 900
+say == the Repeater page and its login box (expect rep=1 login=1 rep_name='Hilltop repeater' rep_sub=hub)
+expect text "Log in to Hilltop repeater"
+dump
+
+# an admin login: the status is read by itself; the hub: Log out and More, ACCESS, READ with the three summaries
+type password
+key enter
+waitstate rep_role admin 9000
+waitstate rep_st read 6000
+wait 400
+say == the hub (expect rep_sub=hub rep_st=read rep_nbs=none rep_own=none rep_sum_nb='not read yet' rep_sum_own='not read yet')
+waitstate rep_sum_nb "not read yet" 100
+waitstate rep_sum_own "not read yet" 100
+expect text "Log out"
+expect text "More"
+expect notext "Refresh"
+dump
+shot b00-hub
+check s2b-hub
+key down
+waitstate rep_sel open.st 300
+say == the hub's READ rows: Status selected, its summary (expect rep_sel='open.st')
+expect text "READ"
+expect text "Status"
+dump
+shot b01-hub-read-rows
+
+# Enter: the Status screen, shown at once (read after the login: nothing asked)
+key enter
+wait 400
+say == the Status screen (expect rep_sub=status rep_run=0 rep_line='read hh:mm  ·  tap Refresh to read again')
+waitstate rep_sub status 100
+waitstate rep_run 0 100
+expect text "Refresh"
+expect text "Battery"
+expect text "4.12 V"
+expect notext "Log out"
+dump
+shot b02-status
+check s2b-status
+type r
+wait 150
+say == R: the status read again, the button says Cancel (expect rep_run=1 rep_st=wait)
+expect text "Cancel"
+dump
+shot b03-status-waiting
+waitstate rep_run 0 6000
+waitstate rep_st read 100
+key esc
+wait 400
+say == Esc: the hub, Status selected again (expect rep_sub=hub rep_sel='open.st')
+waitstate rep_sub hub 100
+waitstate rep_sel open.st 100
+dump
+
+# Neighbours: never read: read by itself once when its screen opens; More neighbours reads the next page
+key down
+waitstate rep_sel open.nb 300
+key enter
+wait 200
+say == the Neighbours screen reads itself (expect rep_sub=neighbours rep_nbs=wait)
+waitstate rep_sub neighbours 100
+dump
+waitstate rep_nbs read 6000
+wait 300
+say == the first page (expect rep_nb=14/24 rep_more=1)
+waitstate rep_nb 14/24 100
+dump
+shot b04-neighbours
+check s2b-neighbours
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+waitstate rep_sel nb.more 300
+expect text "More neighbours"
+expect text "14 of 24 shown"
+shot b05-more-selected
+key enter
+waitstate rep_more 0 6000
+wait 300
+say == the next page (expect rep_nb=24/24 rep_more=0)
+waitstate rep_nb 24/24 100
+expect notext "More neighbours"
+dump
+shot b06-more-read
+key esc
+wait 400
+say == the hub: the neighbours' summary (expect rep_sub=hub rep_sum_nb='24 heard  ·  newest ...')
+waitstate rep_sub hub 100
+dump
+
+# Owner: read by itself once (logged in: OWNER_INFO, the firmware version)
+key down
+waitstate rep_sel open.own 300
+key enter
+waitstate rep_own read 6000
+wait 300
+say == the Owner screen (expect rep_sub=owner rep_own=read rep_fw='v1.18.0')
+waitstate rep_fw v1.18.0 100
+expect text "Firmware"
+expect text "v1.18.0"
+dump
+shot b07-owner
+check s2b-owner
+key esc
+wait 400
+key home
+wait 300
+say == the hub with the three summaries (expect rep_sum_own='Hilltop-owner  ·  fw 1.18.0')
+waitstate rep_sum_own "Hilltop-owner  ·  fw 1.18.0" 100
+dump
+shot b08-hub-summaries
+
+# R on the hub: Refresh all, one after the other (the summaries say "waiting"); R again stops it; More holds Refresh all too
+type r
+wait 150
+say == Refresh all from the hub (expect rep_run=1 rep_sub=hub rep_sum_st='waiting... up to N s' or 'sending...')
+waitstate rep_run 1 100
+dump
+shot b09-hub-refresh-all
+waitstate rep_run 0 15000
+waitstate rep_nbs read 100
+waitstate rep_own read 100
+type r
+wait 150
+waitstate rep_run 1 100
+type r
+wait 300
+say == stopped (expect rep_run=0 rep_st=read)
+waitstate rep_run 0 1000
+waitstate rep_st read 100
+dump
+type m
+wait 600
+say == More: Details, Open in CLI, Reset path, Refresh all, Forget password (expect popup=menu)
+expect text "Refresh all"
+expect text "Reset path"
+dump
+shot b10-more-menu
+check s2b-more
+key down
+key down
+key down
+key down
+wait 300
+expect text "Forget password"
+shot b10b-more-menu-end
+key esc
+wait 300
+
+# L: Log out: what was read goes; not logged in on this direct route (3 hops): the owner's screen offers Read owner (direct route),
+# nothing is read by itself (no session)
+type l
+wait 600
+say == logged out (expect rep_role=none rep_st=needslogin rep_nb=0/0 rep_sum_st='needs login' rep_sum_own='not read yet')
+waitstate rep_sum_st "needs login" 100
+waitstate rep_sum_own "not read yet" 100
+expect text "Status"
+expect text "Owner"
+dump
+shot b11-hub-logged-out
+key down
+key down
+key down
+waitstate rep_sel open.own 300
+key enter
+wait 400
+say == the Owner screen without a login: nothing read by itself (expect rep_sub=owner rep_run=0 rep_own=none)
+waitstate rep_run 0 100
+expect text "Read owner (direct route)"
+dump
+shot b12-owner-no-login
+key down
+waitstate rep_sel own.read 300
+key enter
+waitstate rep_own read 6000
+wait 300
+say == the owner without a login (expect rep_own=read rep_anon=1 rep_fw='' rep_owner='Hilltop repeater')
+waitstate rep_anon 1 100
+expect text "Name"
+dump
+shot b13-owner-anonymous
+key esc
+wait 400
+
+# a flood contact (909192) without a login: nothing can be read; its guest login (by flood) brings a route back (PATH_UPDATED)
+key esc
+wait 400
+key bksp
+key bksp
+key bksp
+key bksp
+key bksp
+type 909192
+wait 600
+key enter
+wait 900
+key esc
+wait 400
+say == the flood repeater, not logged in (expect rep_name='909192' login=0 rep_hops=-1 rep_sum_own='needs login')
+waitstate rep_hops -1 100
+waitstate rep_sum_own "needs login" 100
+type r
+wait 200
+expect text "Log in first"
+dump
+shot b14-flood-hub
+key down
+key down
+key down
+key enter
+wait 400
+say == its Owner screen (expect rep_sub=owner rep_line='Log in, or get a direct route')
+waitstate rep_line "Log in, or get a direct route" 100
+expect text "or a direct route"
+dump
+shot b15-flood-owner
+key esc
+wait 400
+type l
+wait 900
+tap "Guest"
+waitstate rep_role guest 9000
+waitstate rep_st read 6000
+waitstate rep_hops 1 3000
+wait 300
+say == guest by flood: the status by itself, the route learnt from the answer (expect rep_hops=1 rep_route='direct, 1 hop')
+dump
+shot b16-guest-route-learnt
+type l
+wait 600
+say == logged out: on the new route the owner can be read without a login (expect rep_sum_own='not read yet')
+waitstate rep_sum_own "not read yet" 100
+dump
+
+# the answers lost on the air: Refresh all marks every section "no answer"; the status screen says it whole, its Refresh reads again
+type l
+wait 900
+tap "Guest"
+waitstate rep_role guest 9000
+waitstate rep_st read 6000
+sim drop all
+wait 200
+type r
+wait 200
+waitstate rep_run 1 100
+waitstate rep_run 0 12000
+wait 300
+say == no answer anywhere (expect rep_sum_st='no answer' rep_sum_nb='no answer' rep_sum_own='no answer')
+waitstate rep_sum_st "no answer" 100
+waitstate rep_sum_nb "no answer" 100
+waitstate rep_sum_own "no answer" 100
+dump
+key down
+waitstate rep_sel open.st 300
+shot b17-hub-no-answer
+check s2b-no-answer
+key enter
+wait 400
+say == the Status screen after no answer: the whole text first, the old values under it (expect rep_sub=status rep_st=noanswer)
+waitstate rep_sub status 100
+waitstate rep_run 0 100
+expect text "Battery"
+dump
+shot b18-status-no-answer
+sim drop 0
+wait 200
+type r
+waitstate rep_st read 6000
+wait 300
+say == Refresh: the status is back (expect rep_st=read rep_line='read hh:mm  ·  tap Refresh to read again')
+dump
+shot b19-status-read-again
+key esc
+wait 400
+say == the hub (expect rep_sub=hub rep_sum_nb='no answer')
+waitstate rep_sum_nb "no answer" 100
+dump

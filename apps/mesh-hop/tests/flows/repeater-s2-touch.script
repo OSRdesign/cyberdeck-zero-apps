@@ -1,0 +1,160 @@
+# Simulator options: --remote-cases --contacts 6 --neighbours 24 (repeater_s2_run.sh)
+# Mesh Hop 0.8.1 (report 036 slice S2) by touch only (no keyboard: the launcher's input.state says none): a repeater opened by two
+# taps, its login box's Guest: the status comes by itself; on the hub a section row tapped twice (the first tap selects, the second
+# opens) opens its screen: Status at once, its Refresh button (Cancel meanwhile), the header's Esc back to the hub; Neighbours reads
+# itself, More neighbours by two taps; Owner reads itself; Log out; on this zero-hop Hilltop without a login, the Owner screen's
+# Read owner (direct route) by two taps; the header's Esc goes back to the hub, then leaves the page.
+keyboard off
+wait 4500
+tap "Contacts"
+tap "Contacts"
+wait 1200
+tap "Search"
+wait 1200
+tapkey "h"
+tapkey "i"
+tapkey "l"
+tapkey "l"
+wait 400
+key enter
+wait 900
+say == the two Hilltop repeaters (expect cs_text='hill' shown=2)
+dump
+tap "Hilltop repeater"
+wait 1000
+say == the Repeater page, the login box (expect rep=1 login=1)
+dump
+tap "Guest"
+waitstate rep_role guest 9000
+waitstate rep_st read 6000
+wait 400
+say == guest by touch: the hub (expect rep_sub=hub rep_st=read)
+dump
+shot t00-hub-touch
+drag 320 420 320 220
+wait 500
+expect text "Neighbours"
+shot t01-hub-read-rows-touch
+check s2b-touch-hub
+
+# Status: two taps open its screen (shown at once); Refresh; the header's Esc back to the hub
+tap "Status"
+wait 300
+waitstate rep_sel open.st 100
+tap "Status"
+wait 500
+say == the Status screen by touch (expect rep_sub=status)
+waitstate rep_sub status 100
+expect text "Battery"
+expect text "Refresh"
+dump
+shot t02-status-touch
+check s2b-touch-status
+tap "Refresh"
+wait 150
+say == Refresh by touch: Cancel meanwhile (expect rep_run=1)
+expect text "Cancel"
+shot t03-status-cancel-cell
+waitstate rep_run 0 6000
+tap "Refresh"
+wait 150
+waitstate rep_run 1 100
+tap "Cancel"
+wait 300
+say == cancelled by touch (expect rep_run=0 rep_st=read)
+waitstate rep_run 0 1000
+waitstate rep_st read 100
+dump
+tap "Esc"
+wait 500
+say == the header's Esc: the hub (expect rep=1 rep_sub=hub)
+waitstate rep_sub hub 100
+waitstate rep 1 100
+dump
+
+# Neighbours: two taps; it reads itself; More neighbours by two taps (the list dragged to its end)
+drag 320 420 320 220
+wait 500
+tap "Neighbours"
+wait 300
+tap "Neighbours"
+waitstate rep_nbs read 6000
+wait 300
+say == the Neighbours screen by touch (expect rep_sub=neighbours rep_nb=14/24)
+waitstate rep_sub neighbours 100
+dump
+shot t04-neighbours-touch
+drag 320 420 320 120
+wait 300
+drag 320 420 320 120
+wait 300
+drag 320 420 320 120
+wait 300
+drag 320 420 320 120
+wait 500
+expect text "More neighbours"
+shot t05-more-row-touch
+tap "More neighbours"
+wait 300
+waitstate rep_sel nb.more 100
+tap "More neighbours"
+waitstate rep_more 0 6000
+wait 300
+say == the next page by touch (expect rep_nb=24/24 rep_more=0)
+waitstate rep_nb 24/24 100
+dump
+shot t06-more-read-touch
+check s2b-touch-more
+tap "Esc"
+wait 500
+
+# Owner: two taps, it reads itself (guest: OWNER_INFO)
+drag 320 420 320 220
+wait 500
+tap "Owner"
+wait 300
+tap "Owner"
+waitstate rep_own read 6000
+wait 300
+say == the Owner screen by touch (expect rep_sub=owner rep_own=read)
+dump
+shot t07-owner-touch
+tap "Esc"
+wait 500
+
+# Log out on the bar; this Hilltop is zero hop away: without a login the Owner screen's Read owner (direct route) by two taps
+tap "Log out"
+wait 600
+say == logged out by touch (expect rep_role=none rep_st=needslogin rep_hops=0)
+waitstate rep_st needslogin 100
+waitstate rep_hops 0 100
+dump
+shot t08-hub-logged-out-touch
+drag 320 420 320 220
+wait 500
+tap "Owner"
+wait 300
+tap "Owner"
+wait 500
+waitstate rep_sub owner 100
+expect text "Read owner (direct route)"
+shot t09-owner-no-login-touch
+tap "Read owner (direct route)"
+wait 300
+waitstate rep_sel own.read 100
+tap "Read owner (direct route)"
+waitstate rep_own read 6000
+wait 300
+say == the owner without a login, by touch (expect rep_own=read rep_anon=1)
+waitstate rep_anon 1 100
+dump
+shot t10-owner-anonymous-touch
+check s2b-touch-owner
+tap "Esc"
+wait 500
+waitstate rep_sub hub 100
+tap "Esc"
+wait 600
+say == the header's Esc: the screen, then the page (expect rep=0)
+waitstate rep 0 100
+dump
