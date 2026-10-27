@@ -1,0 +1,98 @@
+# PDA mode (X-Portrait=480x640): the portrait canvases a portrait launcher gives the app upright. 480x800: the six
+# cards in one column; 480x640 (too low for six) and 800x1280 (too wide for one card): Power and Network across, 2 x 2
+# between them, on 800x1280 each history line under its value. Keys first (the ring down from Power to CPU, open,
+# back), then every page by touch (the PDA way: a pen or a finger) and the header Esc back to the overview and out.
+title System Monitor: portrait (PDA mode)
+env SYSTEM_MONITOR_FIXTURE pi-zero-2w:busy
+sizes 480x800 480x640 800x1280
+
+wait 600
+shot overview
+expect noquit
+expect text "System Monitor"
+expect text "Power OK"
+expect text "192.168.1.23"
+expect text "Every 1 s"
+
+# keys: Down from Power (the first card) to CPU, Enter opens, Esc comes back with the ring on CPU
+key down
+wait 300
+shot focus-cpu
+key enter
+wait 1200
+expect text "Total"
+key esc
+wait 600
+expect text "Power OK"
+# one column (480x800): Left / Right keep the ring; down to the last card, then to the footer
+@480x800 key right
+@480x800 key down
+@480x800 key down
+@480x800 key down
+@480x800 key down
+@480x800 key down
+wait 300
+@480x800 shot focus-footer
+expect noquit
+
+tap "CPU"
+wait 1200
+shot cpu
+expect text "Total"
+tap "Esc"
+wait 500
+
+tap "Memory"
+wait 1200
+shot memory
+expect text "Used"
+tap "Esc"
+wait 500
+
+tap "Temperature"
+wait 1200
+shot thermal
+expect text "CPU temperature"
+tap "Esc"
+wait 500
+
+tap "Storage"
+wait 1200
+shot storage
+expect text "/boot/firmware"
+tap "Esc"
+wait 500
+
+tap "Network"
+wait 1200
+shot network
+expect text "Address"
+tap "Esc"
+wait 500
+
+@480x800,480x640 tap "Processes"
+@800x1280 tap "Processes 17"
+wait 1200
+shot processes
+expect text "Sort by"
+tap "Esc"
+wait 500
+
+tap "System"
+wait 1200
+shot system
+expect text "Model"
+tap "Esc"
+wait 500
+
+tap "Every 1 s"
+wait 800
+shot period
+expect text "Every second"
+tap "Esc"
+wait 500
+shot back
+expect text "Power OK"
+expect noquit
+tap "Esc"
+expect quit

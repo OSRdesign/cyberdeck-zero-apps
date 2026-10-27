@@ -78,22 +78,37 @@ void show_notice(const AppSpec &spec, lv_obj_t *screen, int w, int h)
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_text(label, min_size_notice(spec, w, h).c_str());
     lv_obj_center(label);
-    std::fprintf(stderr, "[cdk] %s: screen %dx%d is under %dx%d: notice shown\n", spec.id, w, h, spec.min_w,
-                 spec.min_h);
+    int mw = 0, mh = 0;
+    min_for(spec, w, h, &mw, &mh);
+    std::fprintf(stderr, "[cdk] %s: screen %dx%d is under %dx%d: notice shown\n", spec.id, w, h, mw, mh);
 }
+
+std::string size_text(int w, int h) { return std::to_string(w) + "x" + std::to_string(h); }
 
 } // namespace
 
+bool has_portrait(const AppSpec &spec) { return spec.portrait_w > 0 && spec.portrait_h > 0; }
+
+void min_for(const AppSpec &spec, int w, int h, int *min_w, int *min_h)
+{
+    const bool portrait = h > w && has_portrait(spec);
+    if (min_w) *min_w = portrait ? spec.portrait_w : spec.min_w;
+    if (min_h) *min_h = portrait ? spec.portrait_h : spec.min_h;
+}
+
 bool screen_fits(const AppSpec &spec, int w, int h)
 {
-    return w >= spec.min_w && h >= spec.min_h;
+    int mw = 0, mh = 0;
+    min_for(spec, w, h, &mw, &mh);
+    return w >= mw && h >= mh;
 }
 
 std::string min_size_notice(const AppSpec &spec, int w, int h)
 {
     const std::string title = spec.title && spec.title[0] ? spec.title : "This app";
-    return title + " needs a screen of at least " + std::to_string(spec.min_w) + "x" + std::to_string(spec.min_h) +
-           ".\nThis screen is " + std::to_string(w) + "x" + std::to_string(h) +
+    int mw = 0, mh = 0;
+    min_for(spec, w, h, &mw, &mh);
+    return title + " needs a screen of at least " + size_text(mw, mh) + ".\nThis screen is " + size_text(w, h) +
            ".\n\nPress any key or tap the screen to close.";
 }
 
@@ -102,8 +117,9 @@ std::string version_text(const AppSpec &spec)
     std::string text = std::string(spec.title) + " (" + spec.id + ") " + CDK_APP_VERSION + "\n";
     text += std::string("launcher ") + CDK_LAUNCHER_REF + " (cp0_lvgl " + CDK_LAUNCHER_PIN + "), " + CDK_BUILD_TARGET +
             " build " + CDK_BUILD_DATE + "\n";
-    text += "needs a screen of at least " + std::to_string(spec.min_w) + "x" + std::to_string(spec.min_h) + "\n";
-    return text;
+    text += "needs a screen of at least " + size_text(spec.min_w, spec.min_h);
+    if (has_portrait(spec)) text += ", in portrait " + size_text(spec.portrait_w, spec.portrait_h);
+    return text + "\n";
 }
 
 void request_quit(int code)

@@ -3,13 +3,15 @@
  *
  * System Monitor: the overview's tile grid (LVGL thread only). The area under the page header, all from the layout
  * service: margins SPACE_M, gaps SPACE_S, a footer row ROW high, tiles placed by core/grid.hpp (2 x 3 at 640x480,
- * 3 x 2 on wide screens, Power and Network across the width on a square one; never scrolling).
+ * 3 x 2 on wide screens, Power and Network across the width on a square one; on a portrait screen one column of cards
+ * when it is at most 60 mm wide and every card keeps its height; never scrolling).
  *
  *   tile     the launcher home grid's tile look (ground #1E1E1E, frame #3A3A3A, radius RADIUS_M): a title and a dim
  *            hint at the top, one big value (the largest text size its middle has room for, TITLE size at least
  *            when possible, 48 px at most), a small line at the bottom, and beside the value a history line (lv_chart,
- *            the last 120 samples) or a fill bar when the tile has room. The Power tile's frame and ground take its
- *            state colour (green / amber / red).
+ *            the last 120 samples) or a fill bar when the tile has room. On a portrait screen a tile with room for
+ *            three value lines in its middle has the line or the bar under the value, across the tile. The Power
+ *            tile's frame and ground take its state colour (green / amber / red).
  *   footer   Processes, System, Sampling: ROW high, same look.
  *   focus    a blue ring (the launcher's selection colour) around one tile or footer item; arrows move it by position
  *            (core/grid.hpp next_focus), Enter opens, Esc goes back (at the overview: the app ends). A tap opens a
@@ -88,6 +90,7 @@ private:
     GridLayout grid_;
     int x0_ = 0, y0_ = 0;
     int pad_ = 0, gap_ = 0;
+    bool portrait_ = false;              /* a portrait screen (PDA mode): the column rule, the line under the value */
     const lv_font_t *small_ = nullptr;   /* CAPTION: titles, hints, small lines */
     const lv_font_t *label_ = nullptr;   /* BODY: footer items */
     int small_h_ = 0;

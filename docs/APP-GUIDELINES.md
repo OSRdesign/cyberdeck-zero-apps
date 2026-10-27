@@ -27,6 +27,11 @@ The starting point of a native app: [`apps/cyberdeck-app-template`](../apps/cybe
 app declares `X-MinSize=640x480` and is hidden on a smaller screen. If fitting a smaller screen would cost heavy rework,
 we do not do it ([section 12](#12-when-not-to-build-it)). Landscape only: the launcher rotates portrait panels for you.
 
+**Portrait (PDA mode, launcher 0.8.8 and later) is optional.** A portrait launcher (Settings > Screen > PDA mode:
+480x800, 480x640, the 800x1280 tablet) runs a landscape app turned by a quarter, so nothing has to change. An app that
+also has a portrait layout declares `X-Portrait=WxH` (its smallest portrait canvas, e.g. `480x640`) and is then shown
+upright ([portrait layout](#portrait-layout-x-portrait)). System Monitor 0.3.0 is the first.
+
 ## 1. Which kind of app
 
 | Kind | What it is | Fits when | Example |
@@ -77,6 +82,25 @@ Rules:
 | show "needs 640x480" and a way out when the screen is too small (an older launcher ignores `X-MinSize`) | draw off the edge |
 
 The template does this for you: `AppSpec` carries the minimum, `_common/app.cpp` shows the notice.
+
+### Portrait layout (`X-Portrait`)
+
+Only for an app that wants to be upright in PDA mode; without it the app runs turned and needs nothing.
+
+- **Declare it in two places, equal:** `X-Portrait=480x640` in the `.desktop` file and `portrait_w` / `portrait_h` in
+  `AppSpec` (`tests/test_core.cpp` compares them, as for `X-MinSize`). `X-MinSize` keeps its landscape meaning. On a
+  portrait canvas (`h > w`) `_common/app.cpp` holds the canvas against the portrait minimum, else against `X-MinSize`.
+- **What the app gets:** a fullscreen canvas taller than wide (`APPLAUNCH_CANVAS=480x800`, class `portrait`), the whole
+  panel: the launcher's handwriting band is never drawn over a fullscreen app, and the launcher passes
+  `APPLAUNCH_PDA=0` (0.8.9) so the app's display backend draws no band of its own. Declare `X-Portrait` only when the
+  layout passes at 480x640 and 480x800 (APP-CONTRACT section 6); on a portrait panel smaller than the declared size the
+  app runs turned, or is hidden when `X-MinSize` does not fit the turned canvas either.
+- **Layout:** the same tokens and widgets; decide by the canvas shape (`h > w`), never by a named size. The pages,
+  lists and the header follow by themselves; at a pin of v0.8.9 or later the header is the narrow one (18 px title,
+  last part of a breadcrumb, a 72 % strip) on the 480 px wide canvases. Keep the landscape layouts exactly as they were
+  (compare the landscape shots before and after).
+- **Test it:** add a scene at `480x800 480x640 800x1280` (the headless harness gives them the densities of the
+  launcher's PDA scenes) that goes through every page by touch and by keys.
 
 ### Header, title, status strip
 
@@ -181,6 +205,7 @@ Full text: [APP-CONTRACT.md](https://github.com/OSRdesign/cyberdeck-zero-launche
 | `$XDG_RUNTIME_DIR/applaunch/launcher.sock` | requests to the launcher (beep, toast, volume, brightness, dim), from launcher 0.8.6 ([below](#asking-the-launcher-launchersock)) |
 | `.desktop` `X-Fullscreen=true` | the app owns the panel until it exits |
 | `.desktop` `X-MinSize=WxH` | the tile is hidden (also in Settings > Apps) on a smaller screen; a malformed value means no restriction |
+| `.desktop` `X-Portrait=WxH` | (launcher 0.8.8) the smallest portrait canvas the app supports: on a portrait launcher (PDA mode) the app gets the portrait canvas upright instead of running turned ([portrait layout](#portrait-layout-x-portrait)) |
 | `.desktop` `X-Background=freeze\|run` | multitasking: the app can be hidden and shown again instead of owning the panel until it exits (below) |
 
 - An app **never writes** `screen.state` or `input.state`. The launcher rewrites `screen.state` after every app exits.
@@ -316,7 +341,8 @@ fallback). One request line, one reply line, at most 254 bytes. Replies are `ok 
 ### Launcher versions and what each added for apps
 
 The apps build against one launcher commit, [`apps/_common/LAUNCHER_REF`](../apps/_common/LAUNCHER_REF) (today the
-**v0.8.5** commit `d0cb456`; the launcher itself is at **v0.8.7**, which changed nothing an app is built with). Launcher features that live in the launcher process (the feed's values, the media keys,
+**v0.8.9** commit `25927c3`, moved there for System Monitor 0.3.0, the first portrait app; the other apps were last built
+at the v0.8.5 commit `d0cb456` and move to it at their next rebuild). Launcher features that live in the launcher process (the feed's values, the media keys,
 the socket's server) work with any build; features that live in `cp0_lvgl` (the strip's drawing and reading, the
 readers, the client) reach an app only at a pin that has them. **Using a 0.8.6 feature from `cp0_lvgl` needs a re-pin
 to the v0.8.6 commit `aef009b`** (and then the rebuild of every app, as above); an app can also copy the plain-C
@@ -328,9 +354,11 @@ files of the contract and the client.
 | 0.8.2 | Settings > Apps reads `registry-amd64.json` on a PC | no rebuild |
 | 0.8.3 | the strip shows a `power_supply` battery | re-pin |
 | 0.8.4 | the strip reads a fuel gauge (`$APPLAUNCH_GAUGE`, HackBerry MAX17048); the launcher detects battery, backlight and sound at run time | re-pin |
-| 0.8.5 (`d0cb456`, **the current pin**) | `status.state` (`wifi`, `wifi_pct`, `eth`, `bt`, `battery`, `battery_state`) and `cp0_app_status_read()`; the strip reads the feed; Wi-Fi interface found under any name | re-pin (done: the six apps rebuilt at 0.8.5) |
+| 0.8.5 (`d0cb456`, the previous pin) | `status.state` (`wifi`, `wifi_pct`, `eth`, `bt`, `battery`, `battery_state`) and `cp0_app_status_read()`; the strip reads the feed; Wi-Fi interface found under any name | re-pin (done: the six apps rebuilt at 0.8.5) |
 | 0.8.6 (`aef009b`) | `board.state`; `status.state` gains `volume`, `mute`, `brightness_pct`; `launcher.sock`, `cp0_app_client.[ch]`, `cyberdeckzero-ctl`; volume and brightness keys of keyboards acted on by the launcher while an app is in front; `X-Permissions` reserved | the files and the keys: no rebuild; the readers and the client in `cp0_lvgl`: re-pin. The strip did not change, so no forced re-pin |
 | 0.8.7 ([release page](https://github.com/OSRdesign/cyberdeck-zero-launcher/releases/tag/v0.8.7)) | the five media keys are also read from input devices that are not keyboards and act while an app is in front; the Windows key double tap or a 0.6 s hold opens the app switcher (apps give it no meaning); `KEY_F14` reserved; fix of a launcher crash at start (sound-player race, also in 0.8.6). Apps do not change | nothing to rebuild, no new pin (the strip's drawing did not change) |
+| 0.8.8 | PDA profile: a portrait launcher (480x800, 480x640) with a handwriting band; landscape apps run turned; `X-Portrait=WxH` shows an app upright; the toolkit draws a narrow page header on 480 px wide canvases | turned: no rebuild; upright: `X-Portrait` and a portrait layout, built at a pin that has the narrow header |
+| 0.8.9 (`25927c3`, **the current pin**) | Settings > Screen > PDA mode on any panel with room (also the 800x1280 tablet); `APPLAUNCH_PDA=0` passed to every app | the pin of System Monitor 0.3.0 |
 
 **What needs a re-pin, in short.** An app pins a launcher commit. A change to the **drawing** of the shared widgets (the
 status strip) needs a re-pin and a rebuild of every app. A change to the **data** the launcher publishes (state-file

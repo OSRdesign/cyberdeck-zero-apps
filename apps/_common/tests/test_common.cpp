@@ -264,8 +264,38 @@ void test_min_size()
     const std::string version = cdk::version_text(spec);
     CHECK(version.find("Template (x-app) ") == 0);
     CHECK(version.find("launcher ") != std::string::npos && version.find("cp0_lvgl ") != std::string::npos);
-    CHECK(version.find("needs a screen of at least 640x480") != std::string::npos);
+    CHECK(version.find("needs a screen of at least 640x480\n") != std::string::npos);
     std::printf("%s", version.c_str());
+
+    // landscape only (no X-Portrait): a portrait canvas is held against the landscape minimum, so it never fits
+    CHECK(!cdk::has_portrait(spec));
+    CHECK(!cdk::screen_fits(spec, 480, 800));
+    CHECK(cdk::min_size_notice(spec, 480, 800).find("at least 640x480") != std::string::npos);
+    // X-Portrait=480x640: a portrait canvas against it, a landscape or square one against X-MinSize as before
+    spec.portrait_w = 480;
+    spec.portrait_h = 640;
+    CHECK(cdk::has_portrait(spec));
+    CHECK(cdk::screen_fits(spec, 480, 640));
+    CHECK(cdk::screen_fits(spec, 480, 800));
+    CHECK(cdk::screen_fits(spec, 800, 1280));
+    CHECK(!cdk::screen_fits(spec, 320, 480));
+    CHECK(!cdk::screen_fits(spec, 480, 600));
+    CHECK(cdk::screen_fits(spec, 640, 480));
+    CHECK(cdk::screen_fits(spec, 720, 720));
+    CHECK(!cdk::screen_fits(spec, 480, 320));
+    CHECK(!cdk::screen_fits(spec, 600, 480));
+    int mw = 0, mh = 0;
+    cdk::min_for(spec, 480, 800, &mw, &mh);
+    CHECK(mw == 480 && mh == 640);
+    cdk::min_for(spec, 800, 480, &mw, &mh);
+    CHECK(mw == 640 && mh == 480);
+    CHECK(cdk::min_size_notice(spec, 480, 600).find("Template needs a screen of at least 480x640") == 0);
+    CHECK(cdk::min_size_notice(spec, 600, 480).find("Template needs a screen of at least 640x480") == 0);
+    CHECK(cdk::version_text(spec).find("needs a screen of at least 640x480, in portrait 480x640\n") !=
+          std::string::npos);
+    spec.portrait_h = 0; /* half a declaration is none */
+    CHECK(!cdk::has_portrait(spec));
+    CHECK(!cdk::screen_fits(spec, 480, 800));
 }
 
 /* Multitasking: without the launcher's control socket nothing is on (the app as before); with one, the toolkit's helper
