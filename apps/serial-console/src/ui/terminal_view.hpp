@@ -4,9 +4,11 @@
  * Serial Console: the terminal page (LVGL thread only). It fills the page under the header (the header's title is
  * "ttyUSB0 115200 8N1"):
  *   status line   a pill (Connected / Port lost: waiting / Opening) and RX / TX counters, Paused, the log file
- *   text          the received text in the launcher's monospace face at the CAPTION size, cut into rows of the
- *                 view's width (core/term.hpp); it follows new text, a drag (or Shift+Page Up / Down) scrolls back
- *                 and pauses it, scrolling to the bottom follows again; redrawn at most 10 times a second
+ *   text          the received text in the launcher's monospace face at the CAPTION size (on a portrait canvas, PDA
+ *                 mode: smaller where CAPTION leaves fewer columns than the deck has, never under the deck's size in
+ *                 millimetres, board_text_px), cut into rows of the view's width (core/term.hpp); it follows new
+ *                 text, a drag (or Shift+Page Up / Down) scrolls back and pauses it, scrolling to the bottom follows
+ *                 again; redrawn at most 10 times a second
  *   toolbar       one row of TARGET-high keys that scrolls sideways: Ctrl-C, Ctrl-D, Ctrl-Z, Tab, Send Esc, Enter,
  *                 Pause / Resume, Clear, Start / Stop log, Reset board
  *   input         only without a physical keyboard (the shared on-screen keyboard rule, _common/osk_policy): a
@@ -33,6 +35,15 @@
 #include <vector>
 
 namespace sc {
+
+/* The launcher's monospace face at px (the builtin font when it is missing). */
+const lv_font_t *mono_font(int px);
+/* The size of the board's text (the terminal, the boot output and evidence pages). Landscape and square: CAPTION. A
+ * portrait canvas (PDA mode) gets the Standard class's CAPTION (18 px) on panels of about 8.5 px/mm: a third larger than
+ * on the deck, and only 40 columns at 480 wide. There the text stays at CAPTION while the terminal keeps at least the
+ * deck's 55 columns, else it goes down 2 px at a time to the deck's own size in millimetres (1.6 mm) and never smaller:
+ * 14 px and 56 columns on the 480 px wide panels, CAPTION and 69 columns on the 800 px wide tablet. */
+int board_text_px(const cp0_ui_roller_page_t &layout);
 
 struct TerminalSpec {
     PortInfo port;

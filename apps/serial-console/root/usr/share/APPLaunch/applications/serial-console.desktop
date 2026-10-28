@@ -6,4 +6,5 @@ Icon=share/images/serial-console.png
 Type=Application
 X-Fullscreen=true
 X-MinSize=640x480
+X-Portrait=480x640
 X-Background=run

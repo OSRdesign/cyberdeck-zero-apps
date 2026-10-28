@@ -30,7 +30,8 @@ we do not do it ([section 12](#12-when-not-to-build-it)). Landscape only: the la
 **Portrait (PDA mode, launcher 0.8.8 and later) is optional.** A portrait launcher (Settings > Screen > PDA mode:
 480x800, 480x640, the 800x1280 tablet) runs a landscape app turned by a quarter, so nothing has to change. An app that
 also has a portrait layout declares `X-Portrait=WxH` (its smallest portrait canvas, e.g. `480x640`) and is then shown
-upright ([portrait layout](#portrait-layout-x-portrait)). System Monitor 0.3.0 is the first.
+upright ([portrait layout](#portrait-layout-x-portrait)). System Monitor 0.3.0 is the first, Serial Console 0.5.0 the
+first with text input.
 
 ## 1. Which kind of app
 
@@ -99,6 +100,16 @@ Only for an app that wants to be upright in PDA mode; without it the app runs tu
   lists and the header follow by themselves; at a pin of v0.8.9 or later the header is the narrow one (18 px title,
   last part of a breadcrumb, a 72 % strip) on the 480 px wide canvases. Keep the landscape layouts exactly as they were
   (compare the landscape shots before and after).
+- **Text sizes:** the portrait class borrows the Standard text sizes (CAPTION 18 px) on panels of about 8.5 px/mm, a
+  third larger than on the deck. Where that costs too much (a terminal: 40 columns at 480 wide), size the text in
+  millimetres instead (`cp0_ui_mm_px`), never under the deck's size (CAPTION is 1.6 mm there); Serial Console 0.5.0 does
+  this for the board's text only.
+- **Text input:** there is no handwriting band in an app (`APPLAUNCH_PDA=0`; apps drawing their own band are the
+  launcher's parked step S4). The `TextField` and the toolkit's on-screen keyboard work upright as in landscape: the
+  keyboard lays itself out across the portrait canvas (about 40 % of the height at 480x800, 45 % at 480x640, a quarter
+  at 800x1280; its row of Esc, Tab, Ctrl and the arrows fits at 480 wide), `cp0::ui::osk::bottom_inset()` and the inset
+  listener say how much room it takes. The launcher publishes the usual keyboard rule while the app is in front
+  (`vkb=zone` only while its own band shows).
 - **Test it:** add a scene at `480x800 480x640 800x1280` (the headless harness gives them the densities of the
   launcher's PDA scenes) that goes through every page by touch and by keys.
 
@@ -341,8 +352,8 @@ fallback). One request line, one reply line, at most 254 bytes. Replies are `ok 
 ### Launcher versions and what each added for apps
 
 The apps build against one launcher commit, [`apps/_common/LAUNCHER_REF`](../apps/_common/LAUNCHER_REF) (today the
-**v0.8.9** commit `25927c3`, moved there for System Monitor 0.3.0, the first portrait app; the other apps were last built
-at the v0.8.5 commit `d0cb456` and move to it at their next rebuild). Launcher features that live in the launcher process (the feed's values, the media keys,
+**v0.8.9** commit `25927c3`, moved there for System Monitor 0.3.0, the first portrait app, and used by Serial Console
+0.5.0; the other apps were last built at the v0.8.5 commit `d0cb456` and move to it at their next rebuild). Launcher features that live in the launcher process (the feed's values, the media keys,
 the socket's server) work with any build; features that live in `cp0_lvgl` (the strip's drawing and reading, the
 readers, the client) reach an app only at a pin that has them. **Using a 0.8.6 feature from `cp0_lvgl` needs a re-pin
 to the v0.8.6 commit `aef009b`** (and then the rebuild of every app, as above); an app can also copy the plain-C
@@ -358,7 +369,7 @@ files of the contract and the client.
 | 0.8.6 (`aef009b`) | `board.state`; `status.state` gains `volume`, `mute`, `brightness_pct`; `launcher.sock`, `cp0_app_client.[ch]`, `cyberdeckzero-ctl`; volume and brightness keys of keyboards acted on by the launcher while an app is in front; `X-Permissions` reserved | the files and the keys: no rebuild; the readers and the client in `cp0_lvgl`: re-pin. The strip did not change, so no forced re-pin |
 | 0.8.7 ([release page](https://github.com/OSRdesign/cyberdeck-zero-launcher/releases/tag/v0.8.7)) | the five media keys are also read from input devices that are not keyboards and act while an app is in front; the Windows key double tap or a 0.6 s hold opens the app switcher (apps give it no meaning); `KEY_F14` reserved; fix of a launcher crash at start (sound-player race, also in 0.8.6). Apps do not change | nothing to rebuild, no new pin (the strip's drawing did not change) |
 | 0.8.8 | PDA profile: a portrait launcher (480x800, 480x640) with a handwriting band; landscape apps run turned; `X-Portrait=WxH` shows an app upright; the toolkit draws a narrow page header on 480 px wide canvases | turned: no rebuild; upright: `X-Portrait` and a portrait layout, built at a pin that has the narrow header |
-| 0.8.9 (`25927c3`, **the current pin**) | Settings > Screen > PDA mode on any panel with room (also the 800x1280 tablet); `APPLAUNCH_PDA=0` passed to every app | the pin of System Monitor 0.3.0 |
+| 0.8.9 (`25927c3`, **the current pin**) | Settings > Screen > PDA mode on any panel with room (also the 800x1280 tablet); `APPLAUNCH_PDA=0` passed to every app | the pin of System Monitor 0.3.0 and Serial Console 0.5.0 |
 
 **What needs a re-pin, in short.** An app pins a launcher commit. A change to the **drawing** of the shared widgets (the
 status strip) needs a re-pin and a rebuild of every app. A change to the **data** the launcher publishes (state-file

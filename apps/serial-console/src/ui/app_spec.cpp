@@ -2,8 +2,8 @@
  * SPDX-License-Identifier: MIT
  *
  * What the Serial Console gives the shared runners (_common/app.hpp): its id, title, minimum screen and UI.
- * min_w x min_h must equal X-MinSize in root/usr/share/APPLaunch/applications/serial-console.desktop
- * (tests/test_core.cpp checks it).
+ * min_w x min_h must equal X-MinSize and portrait_w x portrait_h X-Portrait in
+ * root/usr/share/APPLaunch/applications/serial-console.desktop (tests/test_core.cpp checks both).
  */
 #include "app.hpp"
 #include "serial_app.hpp"
@@ -18,6 +18,8 @@ const AppSpec &app_spec()
         s.title = sc::kAppTitle;
         s.min_w = sc::kMinW;
         s.min_h = sc::kMinH;
+        s.portrait_w = sc::kPortraitW;
+        s.portrait_h = sc::kPortraitH;
         s.build = [](lv_obj_t *screen) -> std::shared_ptr<void> { return std::make_shared<sc::SerialApp>(screen); };
         return s;
     }();
