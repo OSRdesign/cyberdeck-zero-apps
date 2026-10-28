@@ -107,6 +107,7 @@ struct Scene {
     std::vector<Line> lines;
     bool nocontract = false; /* started by hand: no contract variables, no input.state (APP-CONTRACT section 7) */
     bool lifecycle = false;  /* a multitasking launcher: the control socket (APP-CONTRACT section 13) */
+    bool band = false;       /* a launcher with the PDA writing zone runs the app upright: APPLAUNCH_PDA=1, hand=1 */
     std::vector<std::pair<std::string, std::string>> env; /* set before the app starts (an app's test fixture) */
 };
 
@@ -157,6 +158,10 @@ bool load_scene(const std::string &path, Scene &scene)
             scene.lifecycle = true;
             continue;
         }
+        if (line.words[0] == "band") {
+            scene.band = true;
+            continue;
+        }
         if (line.words[0] == "env") {
             if (line.words.size() != 3) {
                 std::fprintf(stderr, "%s:%d: env NAME VALUE\n", path.c_str(), number);
@@ -185,6 +190,7 @@ struct Run {
     std::string runtime; /* the state directory */
     int keyboards = 0;
     std::string vkb = "auto";
+    int hand = 0; /* input.state hand= (report 044): Handwriting + keyboard */
     unsigned gen = 0;
     bool notice = false;
     int failures = 0;
@@ -200,7 +206,7 @@ void write_input_state(Run &run)
     {
         std::ofstream f(tmp);
         f << "v=1\nkeyboards=" << run.keyboards << "\nlast_seen=0\nbt_keyboards=0\nkb_gone=0\nbt_gone=0\nvkb="
-          << run.vkb << "\ngen=" << run.gen << "\n";
+          << run.vkb << "\nhand=" << run.hand << "\ngen=" << run.gen << "\n";
     }
     std::rename(tmp.c_str(), path.c_str());
 }
@@ -323,7 +329,9 @@ void play(Run &run, const Scene &scene)
                 i += n;
             }
         } else if (cmd == "tap" || cmd == "tapkey") {
-            lv_obj_t *label = headless::find_label(arg(1), cmd == "tapkey");
+            /* CLOSE: the keyboard's close cross (a symbol, drawn while the writing zone is the first input) */
+            lv_obj_t *label = headless::find_label(arg(1) == "CLOSE" ? std::string(LV_SYMBOL_CLOSE) : arg(1),
+                                                   cmd == "tapkey");
             if (!label) {
                 fail(run, line, "nothing labelled \"" + arg(1) + "\" to tap");
                 continue;
@@ -352,6 +360,52 @@ void play(Run &run, const Scene &scene)
         } else if (cmd == "keyboards") {
             run.keyboards = std::atoi(arg(1).c_str());
             write_input_state(run);
+        } else if (cmd == "hand") {
+            /* hand 0|1: Settings > On-screen keyboard Handwriting + keyboard (1) or Auto / On (0), as input.state says */
+            if (arg(1) != "0" && arg(1) != "1") {
+                fail(run, line, "usage: hand 0|1");
+                continue;
+            }
+            run.hand = std::atoi(arg(1).c_str());
+            write_input_state(run);
+        } else if (cmd == "zonekey") {
+            /* zonekey NAME [hold MS]: a tap (or a press held MS ms) on a key of the band's strip, through the touch path */
+            int x = 0, y = 0, kw = 0, kh = 0;
+            if ((w.size() != 2 && !(w.size() == 4 && w[2] == "hold")) || arg(1) == "letters" || arg(1) == "digits" ||
+                !headless::band_rect(arg(1), &x, &y, &kw, &kh)) {
+                fail(run, line, "zonekey Keyb|Tab|Ctrl|Alt|Left|Up|Down|Right|Enter [hold MS] (a band scene, portrait)");
+                continue;
+            }
+            const int held = w.size() == 4 ? std::max(0, std::atoi(arg(3).c_str())) : 80;
+            headless::platform_touch(true, x + kw / 2, y + kh / 2);
+            headless::run_for(held);
+            headless::platform_touch(false, x + kw / 2, y + kh / 2);
+            headless::run_for(300);
+        } else if (cmd == "write") {
+            /* write letters|digits GLYPH ...: each glyph's shipped stroke in that box (a letter, a digit, or a gesture:
+             * space enter bksp shift ext) */
+            if (w.size() < 3 || (arg(1) != "letters" && arg(1) != "digits")) {
+                fail(run, line, "usage: write letters|digits GLYPH ...");
+                continue;
+            }
+            for (size_t i = 2; i < w.size(); ++i)
+                if (!headless::band_write(arg(1) == "digits", w[i]))
+                    fail(run, line, "write: no band, or no glyph \"" + w[i] + "\" in " + arg(1));
+        } else if (cmd == "stroke") {
+            /* stroke letters|digits X,Y ...: a pen stroke, the points in px from the box's top-left corner */
+            int bx = 0, by = 0, bw = 0, bh = 0;
+            if (w.size() < 3 || (arg(1) != "letters" && arg(1) != "digits") ||
+                !headless::band_rect(arg(1), &bx, &by, &bw, &bh)) {
+                fail(run, line, "usage: stroke letters|digits X,Y ... (a band scene, portrait)");
+                continue;
+            }
+            std::vector<std::pair<int, int>> pts;
+            for (size_t i = 2; i < w.size(); ++i) {
+                int x = 0, y = 0;
+                if (std::sscanf(w[i].c_str(), "%d,%d", &x, &y) == 2) pts.emplace_back(bx + x, by + y);
+                else fail(run, line, "stroke: bad point " + w[i]);
+            }
+            headless::band_stroke(pts);
         } else if (cmd == "shot") {
             shot(run, line, arg(1), true);
         } else if (cmd == "check") {
@@ -363,6 +417,13 @@ void play(Run &run, const Scene &scene)
             else if (what == "osk") {
                 const bool want = arg(2) == "on";
                 if (cp0::ui::osk::visible() != want) fail(run, line, "expected the on-screen keyboard " + arg(2));
+            } else if (what == "band") {
+                /* expect band shown|hidden|none: the writing zone's band (none: this size has no band) */
+                const std::string now = !headless::band_on() ? "none" : headless::band_shown() ? "shown" : "hidden";
+                if (arg(2) != "shown" && arg(2) != "hidden" && arg(2) != "none")
+                    fail(run, line, "expect band shown|hidden|none");
+                else if (now != arg(2))
+                    fail(run, line, "expected the band " + arg(2) + ", it is " + now);
             } else if (what == "hidden" && !cdk::hidden()) {
                 fail(run, line, "expected the app hidden");
             } else if (what == "visible" && cdk::hidden()) {
@@ -422,7 +483,9 @@ int run_size(const Size &size, const Scene &scene, const std::string &out_dir, c
     setenv("TZ", "UTC", 1);
     tzset();
     unsetenv("APPLAUNCH_OSK");
+    unsetenv("APPLAUNCH_PDA"); /* band scenes: band_begin sets it where the size has a band */
     setenv("APPLAUNCH_STATE_DIR", run.runtime.c_str(), 1); /* never the real runtime directory */
+    run.hand = scene.band ? 1 : 0; /* the PDA profile's default choice: Handwriting + keyboard */
     if (!scene.nocontract) {
         /* the per-launch environment of a fullscreen app (app_launch_env.cpp in the launcher) */
         setenv("APPLAUNCH_CONTRACT", "1", 1);
@@ -443,6 +506,17 @@ int run_size(const Size &size, const Scene &scene, const std::string &out_dir, c
     if (!headless::platform_init(size.w, size.h, default_ppmm(size), resources)) {
         std::fprintf(stderr, "[%s] platform init failed\n", size.name().c_str());
         return 1;
+    }
+    if (scene.band) {
+        /* a portrait canvas of a launcher with the writing zone: the backend builds the band (none in landscape) */
+        if (headless::band_begin(resources + "/strokes")) {
+            run.report << "band on (APPLAUNCH_PDA=1): from row " << headless::band_strip_y() << "\n";
+        } else if (size.h > size.w) {
+            ++run.failures;
+            run.report << "FAIL band: no writing zone at this portrait size\n";
+        } else {
+            run.report << "band: none at this size (landscape: APPLAUNCH_PDA=0, as on a board)\n";
+        }
     }
     const cdk::AppSpec &spec = cdk::app_spec();
     run.notice = !cdk::screen_fits(spec, size.w, size.h);

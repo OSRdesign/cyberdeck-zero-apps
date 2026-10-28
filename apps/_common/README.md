@@ -14,7 +14,7 @@ The starting point of a new app is `apps/cyberdeck-app-template` (a draft that u
 |---|---|
 | `app.{hpp,cpp}` | `AppSpec` (id, title, minimum screen = `X-MinSize`, minimum portrait canvas = `X-Portrait` when the app has a portrait layout, UI builder), `start()` / `stop()` (what both runners do once the display exists), `request_quit()`, the keypad input group, the "needs WxH" notice for a screen under the minimum (an older launcher ignores `X-MinSize`), `hidden()` / `leave_to_home()` (multitasking) |
 | `platform.{hpp,cpp}` | the device runner `cdk::run()`: cp0_lvgl's display backend switched to the native display, every keyboard read, SIGTERM / SIGINT / SIGHUP end the loop cleanly, `--version`; started by hand it still uses the launcher's backend (`APPLAUNCH_DISPLAY=dpi-scaled`); with the launcher's control socket, the multitasking lifecycle (`cp0_app_lifecycle_device_start()`: hide / show / close, below) |
-| `osk_policy.{hpp,cpp}` | the app-side on-screen keyboard rule: `cp0_app_osk_allowed()` on `input.state`, looked at once a second at most and parsed again only when the file changed (a new `gen`); never shown by hand, and off for 600 s after a Bluetooth keyboard went away (tests and the Settings line to show the rule: [guidelines, section 14](../../docs/APP-GUIDELINES.md#14-lessons-learned)); without the file `APPLAUNCH_OSK` and the keyboards of `/proc/bus/input/devices` |
+| `osk_policy.{hpp,cpp}` | the app-side on-screen keyboard rule: `cp0_app_osk_allowed()` on `input.state`, looked at once a second at most and parsed again only when the file changed (a new `gen`); never shown by hand, and off for 600 s after a Bluetooth keyboard went away (tests and the Settings line to show the rule: [guidelines, section 14](../../docs/APP-GUIDELINES.md#14-lessons-learned)); without the file `APPLAUNCH_OSK` and the keyboards of `/proc/bus/input/devices`. It also binds the PDA writing zone's band (`cp0::ui::zone_host`, launcher report 044): with `APPLAUNCH_PDA=1` (an app run upright by a launcher with the zone) and `input.state` `hand=1` the band shows where the keyboard would; a change of `hand=` is passed on at the next LVGL cycle |
 | `async_run.{hpp,cpp}` | background commands: fork + exec in their own process group, lines and the end delivered on the LVGL thread in order (`lv_async_call` under `lv_lock()`), timeout, cancel, PDEATHSIG, `shutdown()` at exit |
 | `build_info.hpp` | the version stamp (`cdk_build_info.h` from `build_app.sh`) |
 | `build_app.sh` | cross (aarch64, stripped, into the app's `root/`; with `--arch amd64` x86-64, native, into `root.amd64/`) and host (headless harness, unit tests, scenes, contact sheets) builds in WSL, the launcher pin check, the stamp |
@@ -79,7 +79,18 @@ and compare the header shots with the launcher's. Details, and what else the lau
 
 ## The launcher pin
 
-`LAUNCHER_REF` is the **v0.8.9** commit `25927c3`, moved from v0.8.5 (`d0cb456`) for System Monitor 0.3.0, the first
+`LAUNCHER_REF` is **`5f54d15`**, the launcher release **v0.8.11** (tag `v0.8.11`; PDA S4 phase 1, report 044: the
+writing zone's band in an app run upright, `cp0::ui::zone_host`, `input.state` `hand=`). It was the test pin `6f37057`
+(branch `pda-s4-plan`) until the release: the code under `ext_components`, `projects`, `SDK` and `tools` is identical, only docs differ. From v0.8.9 it changes no
+pixel where the band is not shown: Serial Console's 352 earlier shots (292 landscape) and System Monitor's 259 are the
+same pictures as the v0.8.9 builds' with the clock frozen (byte-identical, or in another run where the demonstration
+world's text or the sampler's timing moved; System Monitor's About page shows the build stamp). Serial Console is built
+at it (the band in its line field); the other apps keep their builds. `build_app.sh` needs a checkout of
+that commit as `LAUNCHER_SRC` (`git fetch origin v0.8.11`, or the commit `5f54d15d95ecd4e89121dada3c0941317126f0c2`)
+whose files equal the WSL build tree's byte for byte (a tree synced from a Windows checkout has its line ends: give a WSL
+checkout `core.autocrlf true` and compare with `diff -rq` before building).
+
+Before it, `LAUNCHER_REF` was the **v0.8.9** commit `25927c3`, moved from v0.8.5 (`d0cb456`) for System Monitor 0.3.0, the first
 app with a portrait layout: on the 480 px wide portrait canvases the v0.8.8 toolkit draws the narrow page header (an
 18 px title, the last part of a breadcrumb, the status strip at 72 %), which a v0.8.5 build lacks ("Syste..." in the
 header). At 640x480 and every other landscape size the toolkit draws the same pixels as at v0.8.5 (System Monitor's

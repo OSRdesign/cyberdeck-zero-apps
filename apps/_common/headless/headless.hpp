@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 extern "C" void headless_keyboard_init(void);
@@ -50,7 +51,27 @@ bool platform_init(int w, int h, int ppmm_x100, const std::string &resource_root
 void platform_touch(bool pressed, int x, int y);
 /* Runs LVGL (and the app's lifecycle service, when on) for ms of real time. */
 void run_for(int ms);
+/* The screen as shown: the app's display, with the writing zone's band over its bottom rows while the band shows. */
 Image screenshot();
+
+/* ------------------------------------------------------------------ the PDA writing zone (report 044) */
+
+/* The harness plays the display backend of an app the launcher runs upright with APPLAUNCH_PDA=1: the band's own LVGL
+ * display (cp0_zone_ui_create, the shipped Strokes tables of strokes_dir, no user overlay) under the app's, the touch
+ * router (a touch belongs to the app area, the strip or the writing zone by where it starts), the band's pointer, and
+ * cp0_display_available() / cp0_display_zone_active() for cp0::ui::zone_host. After platform_init, before cdk::start.
+ * False when this size has no band (landscape, or no room: cp0_zone_layout), as on a board. */
+bool band_begin(const std::string &strokes_dir);
+bool band_on();
+bool band_shown();
+int band_strip_y(); /* the panel row of the band's top (-1 without the band) */
+/* A strip key (Keyb Tab Ctrl Alt Left Up Down Right Enter) or a box (letters digits), screen coordinates. */
+bool band_rect(const std::string &name, int *x, int *y, int *w, int *h);
+/* A pen stroke through the touch path: the points (screen px), a frame every 1 mm and 10 ms, the lift, 400 ms. */
+void band_stroke(const std::vector<std::pair<int, int>> &pts);
+/* The glyph's shipped template (its first variant; Strokes table id: a letter, a digit, or a gesture: space enter bksp
+ * shift ext) written 12 mm high in the letters or digits box. False without the band or such a glyph. */
+bool band_write(bool digits, const std::string &glyph);
 
 /* ------------------------------------------------------------------ the launcher's lifecycle (multitasking P-e) */
 

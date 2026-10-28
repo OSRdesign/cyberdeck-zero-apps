@@ -8,6 +8,19 @@ a raw terminal it first shows the serial ports it finds, says what is plugged in
 can find the speed by itself, can find out **what is on the other end** (the board or firmware behind a USB-serial
 adapter), then opens a terminal page.
 
+## Next (not released yet): the handwriting band in PDA mode
+
+* Built at the launcher toolkit of PDA S4 (the launcher v0.8.11 release, `5f54d15`). On a
+  launcher with that part, PDA mode on and Settings > System > On-screen keyboard = **Handwriting + keyboard**, the
+  launcher's **handwriting band** comes up in the app where the on-screen keyboard would (touch only, a tap on the line
+  field): letters and digits written in its boxes go into the line field, its key strip (Tab, Ctrl, Alt, the arrows,
+  Enter) acts as the on-screen keyboard's keys, Keyb gives the standard keyboard until its close cross. The board's
+  text keeps its rows above the field, as with the keyboard: 480x800 the same rows (the band is the keyboard's height),
+  480x640 two more, the 800x1280 tablet about 26 instead of 34 (the band is taller there). Nothing else
+  changed: the key bar, the line field and Raw mode with a keyboard are as in 0.5.0; with Auto or On, or in
+  landscape, the standard keyboard as before. Glyphs trained in Strokes training count after the app's next start.
+  The version in `app.json` stays 0.5.0 until this is released.
+
 ## What changed in 0.5.0
 
 * **Portrait (PDA mode).** The app declares `X-Portrait=480x640`: on a launcher in PDA mode (v0.8.8 and later;
@@ -193,7 +206,7 @@ The screens above come from several screen sizes: the app adapts to the screen i
 | Boot output, Evidence | Up / Down, Page Up / Down, Home / End scroll; Esc or Left goes back | a drag scrolls; the header's Esc |
 | Terminal, keyboard connected | every key goes to the board: Enter sends the line ending, Backspace DEL or BS, Ctrl+letter its control code, arrows / Home / End / Page Up / Down / F1-F12 their ANSI sequences | toolbar keys |
 | Terminal, app keys | **Esc** leaves the page (the connection closes; a real ESC is the toolbar's Send Esc), Shift+Page Up / Down scroll, Alt+P pause, Alt+X clear, Alt+L log, Alt+R reset the board, Alt+E send ESC | |
-| Terminal, no keyboard | | a tap on the line field brings the on-screen keyboard; its Enter (or Send) sends the line; its one-shot Ctrl + a letter sends the control code |
+| Terminal, no keyboard | | a tap on the line field brings the on-screen keyboard; its Enter (or Send) sends the line; its one-shot Ctrl + a letter sends the control code. In PDA mode with Handwriting + keyboard (launcher with PDA S4): the handwriting band instead, its strip's keys are the keyboard's (Enter sends the line, Ctrl then a written letter the control code) |
 
 A short Esc on the ports page (or the header's Esc) ends the app; holding Esc 3 s is the launcher's watchdog. The
 on-screen keyboard only shows when no physical keyboard is connected (the launcher's rule).
@@ -242,8 +255,9 @@ The identification is kept in the port's section of the settings file as `id_*` 
 * The on-screen keyboard's own Tab and arrows work on the line field (Left / Right move in it, Tab and Up / Down send
   nothing); its Ctrl + a letter goes to the board. A Tab for the board is the key bar's (Esc closes the keyboard
   first); arrows for the board need a physical keyboard.
-* In PDA mode there is no handwriting band in the app (the launcher's band is for its own pages; apps drawing it are a
-  later launcher step): without a keyboard, the on-screen keyboard is the way to type.
+* In PDA mode the handwriting band needs a launcher with PDA S4 and this build (see the top); with an older launcher
+  (v0.8.9, v0.8.10) the on-screen keyboard is the way to type without a keyboard. The band's strip has no Esc: the
+  header's Esc, or Keyb's keyboard Esc, ends the editing.
 * One port at a time. Typed bytes are not logged (only what the board sends).
 * Reset board pulses DTR off and RTS on for 100 ms: it resets ESP32 / ESP8266 boards with the usual auto-reset circuit
   and Arduino boards (DTR); a board wired differently may not react; a port without modem lines says so.
@@ -267,6 +281,8 @@ The identification is kept in the port's section of the settings file as `id_*` 
 
 ## Changes
 
+* Next (unreleased): built at the launcher PDA S4 toolkit (v0.8.11, `5f54d15`): the handwriting band in PDA mode where the
+  on-screen keyboard would show; no other change.
 * 0.5.0: portrait (PDA mode, `X-Portrait=480x640`): the pages at the screen's width, the terminal over the whole
   height with the board's text at the deck's size in millimetres on the 480 px wide screens, the on-screen keyboard
   with the text's rows above it; landscape unchanged; built at the launcher v0.8.9 toolkit (see
@@ -339,7 +355,9 @@ python3 tools/make_registry.py --only serial-console --out C:/somewhere/outside/
   u-blox GPS on a PL2303 cable, a MicroPython Pico, an Arduino Uno, and an RP2040 in BOOTSEL mode). It also works on
   the deck, to try the app without a board. `portrait.scene` and `portrait-identify.scene` play the pages at 480x800,
   480x640 and 800x1280 (PDA mode: by touch, the terminal with the line field, the on-screen keyboard and a keyboard;
-  the identification's notice, card, boot output and confirmations). Contact sheets:
+  the identification's notice, card, boot output and confirmations); `portrait-band.scene` the terminal with the
+  handwriting band (written letters and digits, the strip's Enter, Ctrl and Keyb, hide and show, Settings Auto, a
+  keyboard), and 640x480 with no band. Contact sheets:
   `~/cdk-build/serial-console/host/out/sheets`.
 * `tests/BOARD-TESTS.md`: the physical tests on the deck and the Pi 3A+.
 

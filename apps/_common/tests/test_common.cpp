@@ -1,15 +1,16 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * Unit tests of _common: the on-screen keyboard policy (input.state re-read rules, the no-file fallback), the
- * background command runner (lines in order on the LVGL thread, exit codes, timeout, cancel, the process group,
- * shutdown), the minimum-size rule and the multitasking lifecycle (off without the launcher's socket; hide / show
- * answered with one). Built with LVGL (async_run delivers through lv_async_call) on a small headless display. Run by
- * ../build_app.sh host.
+ * Unit tests of _common: the on-screen keyboard policy (input.state re-read rules, the no-file fallback, hand= and its
+ * hand-over to the writing zone), the background command runner (lines in order on the LVGL thread, exit codes,
+ * timeout, cancel, the process group, shutdown), the minimum-size rule and the multitasking lifecycle (off without the
+ * launcher's socket; hide / show answered with one). Built with LVGL (async_run delivers through lv_async_call) on a
+ * small headless display. Run by ../build_app.sh host.
  */
 #include "app.hpp"
 #include "async_run.hpp"
 #include "cp0_app_lifecycle_lvgl.h"
+#include "cp0_ui_widgets.hpp"
 #include "headless.hpp"
 #include "osk_policy.hpp"
 
@@ -50,13 +51,15 @@ bool process_running(pid_t pid)
 }
 
 void write_input(const std::string &path, unsigned keyboards, const char *vkb, unsigned gen, long kb_gone = 0,
-                 long bt_gone = 0)
+                 long bt_gone = 0, int hand = -1 /* -1: no hand= line, as a launcher before report 044 */)
 {
     const std::string tmp = path + ".tmp";
     {
         std::ofstream f(tmp);
         f << "v=1\nkeyboards=" << keyboards << "\nlast_seen=0\nbt_keyboards=0\nkb_gone=" << kb_gone
-          << "\nbt_gone=" << bt_gone << "\nvkb=" << vkb << "\ngen=" << gen << "\n";
+          << "\nbt_gone=" << bt_gone << "\nvkb=" << vkb << "\n";
+        if (hand >= 0) f << "hand=" << hand << "\n";
+        f << "gen=" << gen << "\n";
     }
     std::rename(tmp.c_str(), path.c_str());
 }
@@ -121,6 +124,70 @@ void test_osk_file()
     std::remove(path.c_str());
     CHECK(!p.allowed(t0 + 702000));
     CHECK(!p.from_file());
+}
+
+/* input.state hand= (report 044): the user chose Handwriting + keyboard. A file without the line (an older launcher), a
+ * file with hand=0 and no file at all: no. The keyboard rule itself does not change with it (vkb stays auto). */
+void test_osk_hand()
+{
+    const std::string path = g_dir + "/hand.state";
+    write_input(path, 0, "auto", 1);
+    cdk::osk_policy::Policy p(path, "", [] { return 0; });
+    const std::int64_t t0 = 2000000;
+    CHECK(p.allowed(t0));
+    CHECK(p.from_file() && !p.hand());
+    write_input(path, 0, "auto", 2, 0, 0, 1);
+    CHECK(p.allowed(t0 + 1000));
+    CHECK(p.gen() == 2 && p.hand() && p.input().hand == 1);
+    write_input(path, 1, "auto", 3, 0, 0, 1); /* a keyboard connects: neither the keyboard nor the band */
+    CHECK(!p.allowed(t0 + 2000));
+    CHECK(p.hand());
+    write_input(path, 0, "auto", 4, 0, 0, 0);
+    CHECK(p.allowed(t0 + 3000));
+    CHECK(!p.hand());
+    write_input(path, 0, "auto", 5, 0, 0, 1);
+    CHECK(p.allowed(t0 + 4000) && p.hand());
+    std::remove(path.c_str()); /* no file: the fallback, no band */
+    CHECK(p.allowed(t0 + 5000));
+    CHECK(!p.from_file() && !p.hand());
+}
+
+/* install(): the policy on input.state of the state directory; a new hand= is passed on to the writing zone
+ * (zone_host::hand_changed) on the next LVGL cycle after the keyboard service asked the policy, once per change. Without
+ * the band (this test has none) the zone does nothing with it. LVGL up (platform_init) first. */
+void test_osk_install()
+{
+    const std::string dir = g_dir + "/state";
+    mkdir(dir.c_str(), 0755);
+    setenv("APPLAUNCH_STATE_DIR", dir.c_str(), 1);
+    const std::string path = dir + "/input.state";
+    write_input(path, 0, "auto", 1, 0, 0, 0);
+    cdk::osk_policy::install();
+    cdk::osk_policy::Policy *p = cdk::osk_policy::installed();
+    CHECK(p != nullptr);
+    if (!p) return;
+    CHECK(p->from_file() && !p->hand());
+    CHECK(cdk::osk_policy::hand_changes() == 0);
+
+    lv_obj_t *field = lv_textarea_create(lv_screen_active());
+    cp0::ui::osk::request(field, cp0::ui::TextType::Text, false);
+    headless::run_for(300);
+    CHECK(cp0::ui::osk::visible()); /* no keyboard connected: the standard keyboard (no band here) */
+    CHECK(cdk::osk_policy::hand_changes() == 0);
+    write_input(path, 0, "auto", 2, 0, 0, 1); /* Settings: Handwriting + keyboard */
+    headless::run_for(1400);                   /* the next look (once a second), asked every 250 ms */
+    CHECK(p->hand());
+    CHECK(cdk::osk_policy::hand_changes() == 1);
+    CHECK(cp0::ui::osk::visible()); /* still the keyboard: no band in this process */
+    headless::run_for(600);
+    CHECK(cdk::osk_policy::hand_changes() == 1); /* once per change */
+    write_input(path, 0, "auto", 3, 0, 0, 0);
+    headless::run_for(1400);
+    CHECK(!p->hand());
+    CHECK(cdk::osk_policy::hand_changes() == 2);
+    cp0::ui::osk::dismiss();
+    lv_obj_delete(field);
+    unsetenv("APPLAUNCH_STATE_DIR");
 }
 
 void test_split_lines()
@@ -348,11 +415,13 @@ int main()
     g_dir = dir;
     test_osk_fallback();
     test_osk_file();
+    test_osk_hand();
     test_split_lines();
     test_min_size();
     headless::platform_init(320, 240, 0, "/nonexistent"); /* LVGL for lv_async_call */
     test_async_run();
     test_lifecycle();
+    test_osk_install();
     std::string cmd = "rm -rf " + g_dir;
     if (std::system(cmd.c_str()) != 0) std::fprintf(stderr, "could not remove %s\n", g_dir.c_str());
     std::printf("test-common: %d passed, %d failed\n", g_pass, g_fail);
