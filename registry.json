@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-10-25T12:54:34+00:00",
+  "generated_at": "2026-10-28T00:54:47+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CardputerZero"
@@ -446,9 +446,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.2.7",
+      "version": "0.3.0",
       "published_at": "2026-10-14T23:13:05+00:00",
-      "updated_at": "2026-10-23T08:55:13+00:00",
+      "updated_at": "2026-10-28T00:54:47+00:00",
       "review": {
         "status": "approved"
       },
@@ -457,10 +457,10 @@
       "download": {
         "type": "deb",
         "package": "system-monitor",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/system-monitor_0.2.7_arm64.deb",
-        "md5": "013be76e1bd50bedf8258b55b3646d83",
-        "sha256": "eba71537d65e8b258fd36a76262049acffc6a49a4061ab4071a94bff4f99d7ff",
-        "size": 1440436
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/system-monitor_0.3.0_arm64.deb",
+        "md5": "39eea059965e597e7d1b1594f9b7afe9",
+        "sha256": "c503ff1a0b4370f0bd9b4827b67bf86f26a0529781b0c9b45af292bc3ddd191e",
+        "size": 1480918
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0",
       "permissions": {
@@ -484,7 +484,9 @@
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/07-processes-800x480.png",
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/08-storage-1280x720.png",
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/09-x86-overview-640x480.png",
-          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/10-x86-temp-battery-640x480.png"
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/10-x86-temp-battery-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/11-portrait-overview-480x800.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/12-portrait-overview-800x1280.png"
         ]
       },
       "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/icon.png",
@@ -498,7 +500,9 @@
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/07-processes-800x480.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/08-storage-1280x720.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/09-x86-overview-640x480.png",
-        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/10-x86-temp-battery-640x480.png"
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/10-x86-temp-battery-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/11-portrait-overview-480x800.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/12-portrait-overview-800x1280.png"
       ]
     },
     {
