@@ -6,7 +6,8 @@ points it at another board). The app's process name is `serial-console`.
 
 Expected pictures: the contact sheets of `build.sh host` in `\\wsl.localhost\Ubuntu\home\osrde\cdk-build\serial-console\host\out\sheets\`
 (`ports.png`, `empty.png`, `port.png`, `detect.png`, `terminal.png`, `lost.png`, `access.png`, `notice.png`,
-`identify.png`, `identify-more.png`, `longname.png`; PDA mode: `portrait.png`, `portrait-identify.png`).
+`identify.png`, `identify-more.png`, `longname.png`; PDA mode: `portrait.png`, `portrait-identify.png`,
+`portrait-band.png`).
 
 Hardware wanted: a USB-serial board that prints at boot (an ESP32 dev board on CP2102 / CH340 / CH9102 is ideal), and
 if possible a second one (an Arduino Uno, a GPS, an FTDI cable). For the identification (S8 to S12): an ESP32 board,
@@ -185,6 +186,35 @@ to RX, Local echo Off, so every line typed comes back as received text.
    scrolls, the counters run, Esc answers at once.
 7. Settings > Screen > PDA mode Off (the launcher restarts): the app is the landscape app of 0.4.5, unchanged.
 
+## S14. PDA S4: the handwriting band in the app (build at the launcher pin 6f37057, launcher with the S4 part)
+
+The launcher must carry PDA S4 phase 1 (branch `pda-s4-plan` 6f37057 or the release that ships it), PDA mode On rotate
+left. Boards: the **Pi 4 B** (DSI 800x480 panel, portrait 480x800, finger or stylus, arm64 package) and the **FZ-M1
+tablet** (800x1280 portrait, finger, amd64 package). The board or loopback of S13; no physical keyboard connected
+unless a step says so. Expected pictures: `portrait-band.png` of the sheets (480x800, 480x640, 800x1280).
+
+1. **Band on the line field.** Settings > System > On-screen keyboard = **Handwriting + keyboard**. Start Serial
+   Console (upright), Connect, tap the line field: the **band** comes up at the bottom (the key strip Keyb, Tab, Ctrl,
+   Alt, arrows, Enter over the letters and digits boxes), the same look as the launcher's; no on-screen keyboard. The
+   board's text keeps its rows above the field, the field right above the band. Esc (header) or the board's text: as
+   before.
+2. **Writing.** Write `help` in the letters box: the letters appear in the line field; write `42` in the digits box:
+   the digits appear. Strip **Enter**: the line goes to the board (loopback: it comes back as text, TX grows), the band
+   stays for the next line.
+3. **Strip keys = the on-screen keyboard's keys.** Ctrl on the strip, then a written `c`: a Ctrl-C goes to the board
+   (TX + 1), as the keyboard's Ctrl then C. Tab, Up, Down, Left, Right behave as the on-screen keyboard's Tab and arrows
+   on the line field (no new rule: Left / Right move in the line). **Keyb**: the standard keyboard with a close cross in
+   the band's place; type a key; the cross brings the band back.
+4. **Key bar.** Esc (the strip has none: the header Esc or Keyb's keyboard Esc) ends the editing: the band goes, the
+   status line and the key bar come back; Ctrl-C, Tab, Esc of the key bar still go to the board (TX grows).
+5. **Setting Auto.** Leave the app with the switcher (or Home), Settings > System > On-screen keyboard = **Auto**, back
+   in the app, tap the line field: the **standard on-screen keyboard** as in S13 step 4, no band. Back to Handwriting +
+   keyboard: the band again.
+6. **A keyboard connects:** the field and the band go, every key to the board (S13 step 5).
+7. Tablet only: steps 1, 2 and 4 (the band is 478 px high, taller than the keyboard: about 26 rows of text above the
+   field instead of 34; note if too few).
+8. Note the band's memory if easy: `free -m` before and after starting the app.
+
 ## Unverified until a board run
 
 | # | Assumption |
@@ -204,3 +234,4 @@ to RX, Local echo Off, so every line typed comes back as received text.
 | U-13 | In PDA mode the launcher starts the app upright with the portrait canvas (`APPLAUNCH_CANVAS=480x800`, the board's rotation inherited) and the touch, the on-screen keyboard's keys included, follows that rotation (seen only in the harness, which has no rotation) |
 | U-14 | The portrait densities of the harness (8.5 px/mm on the 4.3" DSI, 9.0 on a 3.5" panel, 8.6 on the tablet) are the boards'; the terminal's 14 px text (1.6 mm, the deck's size) reads well on the DSI panel |
 | U-15 | In PDA mode the launcher publishes the usual keyboard rule (`input.state vkb=auto`) while the app is in front, also with Settings > On-screen keyboard = Handwriting + keyboard, so the app's on-screen keyboard shows when no keyboard is connected |
+| U-16 | PDA S4: the app's display backend builds the band with `APPLAUNCH_PDA=1` on the rotated panel (touch of the strip and the writing zone follow the rotation; the band is drawn in the app's framebuffer output, 16 / 32 bpp), and the recogniser reads the shipped tables and the user's glyphs from disk at start (the harness drew the band on a plain display without rotation, shipped tables only) |

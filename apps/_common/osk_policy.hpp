@@ -15,6 +15,13 @@
  * No input.state (the app was started over ssh, or by an older launcher): the app's own probe (APP-CONTRACT section 7):
  * the rule APPLAUNCH_OSK (force | off | auto, default auto) with the real keyboards of /proc/bus/input/devices, at
  * most once a second too.
+ *
+ * The PDA writing zone's band (launcher report 044, APP-CONTRACT section 3 "The band in an app"): an app the launcher
+ * runs upright on a portrait panel with the writing zone gets APPLAUNCH_PDA=1, and its display backend builds the band.
+ * install() binds cp0_lvgl's shared rule (cp0::ui::zone_host) to input.state hand=: while hand=1 (Settings > System >
+ * On-screen keyboard is Handwriting + keyboard) the band shows exactly where this keyboard would (same rule, same
+ * triggers), the strip's Keyb puts the keyboard in its place until its close cross, and the band's keys reach the app as
+ * the keyboard's do. hand=0, no file, or no band (APPLAUNCH_PDA=0, landscape, the SDL simulator): the keyboard, as before.
  */
 #pragma once
 
@@ -35,6 +42,10 @@ public:
 
     /* May the keyboard show now? now_ms: CLOCK_MONOTONIC milliseconds (cp0_app_monotonic_s() * 1000 scale). */
     bool allowed(std::int64_t now_ms);
+
+    /* The user chose Handwriting + keyboard: input.state hand=1 as last read (no file, or a file without the line: no).
+     * Read by allowed(); asking it reads nothing. */
+    bool hand() const { return have_file_ && input_.hand != 0; }
 
     /* For tests and the info page. */
     bool from_file() const { return have_file_; }
@@ -65,11 +76,17 @@ private:
 bool fallback_allows(const std::string &env_osk, int keyboards);
 
 /* Gives cp0::ui::osk its policy: a Policy on input.state, APPLAUNCH_OSK and /proc/bus/input/devices, asked with the
- * monotonic clock. Once; later calls do nothing. LVGL thread. */
+ * monotonic clock; then binds the writing zone's rule (cp0::ui::zone_host::bind) with the policy's hand(), no gate (an
+ * app in front is always its own text input) and nothing to publish. When hand() changes, zone_host::hand_changed() runs
+ * on the next LVGL cycle (lv_async_call: the policy is asked inside the keyboard service's own update). Once; later
+ * calls do nothing. LVGL thread. */
 void install();
 
 /* The installed policy (NULL before install()). */
 Policy *installed();
+
+/* Times a change of hand() was passed on to the writing zone (zone_host::hand_changed()), for tests. */
+unsigned hand_changes();
 
 } // namespace osk_policy
 } // namespace cdk

@@ -25,7 +25,8 @@ when a scene names them: 480x800 (8.5, the 4.3" DSI panel), 480x640 (9.0, a 3.5"
 tablet).
 The densities are the launcher harness's, so both compute the same tokens. Each size runs in its own process, all at
 once. The app sees the per-launch environment of a fullscreen app (`APPLAUNCH_CONTRACT=1`, `APPLAUNCH_APP_MODE=fullscreen`,
-window and canvas = the size) and an `input.state` fixture (no keyboard, rule `auto`) in `out/<scene>/<WxH>/runtime`.
+window and canvas = the size) and an `input.state` fixture (no keyboard, rule `auto`, `hand=0`; `hand=1` in a `band`
+scene) in `out/<scene>/<WxH>/runtime`.
 
 ## Scene scripts
 
@@ -53,6 +54,13 @@ After the app asks to quit, only `expect` lines are read.
 | `expect hidden\|visible` | the app's lifecycle state (`cdk::hidden()`) |
 | `expect nowrite` | no flush at all while the app was hidden (the helper turns LVGL's invalidation off; the harness writes nothing then anyway) |
 | `expect repaint` | every pixel of the screen was flushed since the last `show` (run a `wait` first) |
+| `band` | (scene option) a launcher with the PDA writing zone runs the app upright (launcher report 044): `APPLAUNCH_PDA=1`, `input.state` `hand=1`, and at a portrait size the harness builds the band as the display backend does (its own display laid over the app's bottom rows while it shows, the touch router, the band's pointer, the shipped Strokes tables of `--resources`/strokes, no user glyphs). A landscape size has no band (a landscape app on a portrait launcher runs turned) |
+| `hand 0\|1` | rewrite `input.state` (gen + 1): Settings > On-screen keyboard Handwriting + keyboard (1) or Auto / On (0) |
+| `write letters\|digits GLYPH ...` | each glyph's shipped stroke (its first template; a letter, a digit, or a gesture: `space enter bksp shift ext`) written 12 mm high in that box, through the touch path |
+| `stroke letters\|digits X,Y ...` | a pen stroke, the points in px from the box's top-left corner (a frame every 1 mm and 10 ms, then the lift and 400 ms) |
+| `zonekey NAME [hold MS]` | a tap (or a press held MS ms) on a key of the band's strip: `Keyb Tab Ctrl Alt Left Up Down Right Enter` |
+| `expect band shown\|hidden\|none` | the band's state (`none`: this size has no band) |
+| `tapkey CLOSE` | the keyboard's close cross (drawn while the band is the first input) |
 
 ## Layout checks (after every shot)
 
@@ -65,6 +73,7 @@ or click, and has no such object inside it (a scroll area that only drags is not
 | size | page rows and fields >= ROW (7 mm), buttons >= TARGET (7 mm), the header's Esc >= min(TARGET, header - 2 x status_top) (the layout service's header rule), keys of the on-screen keyboard >= `CP0_UI_OSK_KEY_MIN_PX`; a row inside a vertically scrolling list may be LIST_ROW (5 mm: `cp0::ui::CompactList`'s compact density, where a tap only moves the highlight) |
 | header | no interactive element of the body reaches under the header |
 | keyboard | while the on-screen keyboard is up, the field it is for is visible above it and no element of the page lies under it |
+| band | the same while the writing zone's band shows (`band` scenes): the field above the band's top row, nothing of the page under it |
 | notice | under the app's minimum screen, the notice is the only thing to press |
 
 The report line of each shot also gives the smallest row, button, header element and key it found (and the smallest

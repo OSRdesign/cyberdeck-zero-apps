@@ -288,6 +288,23 @@ CheckResult check_layout(bool notice_expected)
                                           " is under the on-screen keyboard");
         }
     }
+    // the writing zone's band (report 044) covers the rows from its strip while it shows: the same rule as the keyboard
+    const bool band_up = band_shown();
+    const int band_y = band_strip_y();
+    if (band_up) {
+        lv_obj_t *owner = cp0::ui::osk::owner();
+        if (owner) {
+            const lv_area_t v = visible_area(owner);
+            if (empty(v)) result.failures.push_back("band: the field being edited is not visible");
+            else if (v.y2 >= band_y)
+                result.failures.push_back("band: the field being edited " + area_text(v) + " reaches under it (" +
+                                          std::to_string(band_y) + ")");
+        }
+        for (const Leaf &leaf : walk.leaves)
+            if (!leaf.osk && leaf.visible.y2 >= band_y)
+                result.failures.push_back("band: " + describe(leaf.obj) + " " + area_text(leaf.visible) +
+                                          " is under the writing zone's band (" + std::to_string(band_y) + ")");
+    }
     char note[256];
     std::snprintf(note, sizeof(note),
                   "%d interactive; rows/fields min %d (ROW %d), buttons min %d (TARGET %d), header min %d (rule %d), "
@@ -305,6 +322,11 @@ CheckResult check_layout(bool notice_expected)
     if (osk_up) {
         std::snprintf(note, sizeof(note), "keyboard %s, key height min %d", area_text(osk_area).c_str(),
                       min_key_h == (1 << 20) ? 0 : min_key_h);
+        result.notes.push_back(note);
+    }
+    if (band_on()) {
+        std::snprintf(note, sizeof(note), "band %s (from row %d), inset %d", band_up ? "shown" : "hidden", band_y,
+                      cp0::ui::osk::bottom_inset());
         result.notes.push_back(note);
     }
     return result;

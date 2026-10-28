@@ -1,0 +1,116 @@
+# PDA S4 (launcher report 044): a launcher with the writing zone runs the app upright with APPLAUNCH_PDA=1, and the
+# user's Settings > On-screen keyboard is Handwriting + keyboard (input.state hand=1). Nothing in the app changed: the
+# band shows exactly where the on-screen keyboard would (the line field, touch only), its rows are left free through the
+# keyboard's inset (the text keeps its rows above the field), and its keys reach the app as the keyboard's do. The
+# letters and digits are written with the shipped strokes in the boxes; the strip's Enter sends the line; Ctrl armed on
+# the strip then a written c is Ctrl-C (the keyboard's one-shot Ctrl, as before); Keyb puts the standard keyboard with
+# its close cross in the band's place, the cross brings the band back; Settings Auto (hand=0) gives the standard keyboard
+# again; hide / show keep the band; Esc ends the editing (the key bar is back); a keyboard connects: every key to the
+# board, no band. 640x480 (a landscape app on a portrait launcher runs turned, APPLAUNCH_PDA=0): no band, the standard
+# keyboard whatever hand= says.
+title Serial Console: the writing zone's band (PDA mode)
+env SERIAL_CONSOLE_DEMO boards
+band
+lifecycle
+sizes 480x800 480x640 800x1280 640x480
+
+wait 300
+# the ESP32 board's port page, then Connect (as terminal.scene)
+key down
+key enter
+wait 300
+key enter
+wait 1800
+expect text "Connected"
+@480x800,480x640,800x1280 expect band hidden
+@640x480 expect band none
+expect osk off
+shot terminal
+
+# a tap on the line field: the band (portrait), the standard keyboard (landscape)
+@480x800,480x640,800x1280 tapxy 0.3 0.96
+@640x480 tapxy 0.3 0.9
+wait 300
+@480x800,480x640,800x1280 expect band shown
+@480x800,480x640,800x1280 expect osk off
+@640x480 expect osk on
+shot terminal-band
+
+# written into the line field, the strip's Enter sends it (the field stays for the next line)
+@480x800,480x640,800x1280 write letters h e l p
+@640x480 type "help"
+expect text "help"
+shot terminal-written
+@480x800,480x640,800x1280 zonekey Enter
+@640x480 key enter
+wait 600
+@480x800,480x640,800x1280 expect band shown
+expect notext "help"
+shot terminal-sent
+
+# digits in the digits box
+@480x800,480x640,800x1280 write digits 4 2
+@640x480 type "42"
+expect text "42"
+shot terminal-digits
+
+# Ctrl armed on the strip, then a written c: Ctrl-C to the board (the field keeps its text)
+@480x800,480x640,800x1280 zonekey Ctrl
+@480x800,480x640,800x1280 write letters c
+@480x800,480x640,800x1280 expect text "42"
+@480x800,480x640,800x1280 shot terminal-ctrl-c
+
+# Keyb: the standard keyboard with its close cross in the band's place; typed keys go to the field; the cross: the band
+@480x800,480x640,800x1280 zonekey Keyb
+@480x800,480x640,800x1280 expect band hidden
+@480x800,480x640,800x1280 expect osk on
+@480x800,480x640,800x1280 tapkey x
+@480x800,480x640,800x1280 expect text "42x"
+@480x800,480x640,800x1280 shot terminal-keyb
+@480x800,480x640,800x1280 tapkey CLOSE
+@480x800,480x640,800x1280 wait 300
+@480x800,480x640,800x1280 expect band shown
+@480x800,480x640,800x1280 expect osk off
+
+# hidden and shown again (the switcher): the band is back with the field, nothing written meanwhile
+hide
+expect hidden
+show
+wait 300
+expect visible
+expect repaint
+@480x800,480x640,800x1280 expect band shown
+@480x800,480x640,800x1280 shot terminal-shown-again
+
+# Settings > On-screen keyboard Auto (hand=0): the standard keyboard, as before; Handwriting + keyboard again: the band
+hand 0
+wait 1500
+@480x800,480x640,800x1280 expect band hidden
+expect osk on
+shot terminal-hand0
+hand 1
+wait 1500
+@480x800,480x640,800x1280 expect band shown
+@480x800,480x640,800x1280 expect osk off
+
+# Esc ends the editing: the band goes, the key bar is back and its keys still work (the shot's status line: TX 7 B in
+# portrait = "help" + CR, the strip's Ctrl-C, the key bar's Ctrl-C; 6 B at 640x480, which has no strip)
+key esc
+wait 300
+@480x800,480x640,800x1280 expect band hidden
+expect osk off
+expect key "Ctrl-C" toolbar
+tap "Ctrl-C"
+wait 300
+shot terminal-back
+
+# a keyboard connects: no field, every key to the board, no band
+keyboards 1
+wait 1300
+type "ls"
+key enter
+wait 600
+@480x800,480x640,800x1280 expect band hidden
+expect osk off
+expect notext "Send"
+shot terminal-keyboard

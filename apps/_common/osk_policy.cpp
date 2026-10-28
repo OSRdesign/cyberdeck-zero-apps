@@ -7,7 +7,9 @@
 
 #include "cp0_keyboard_presence.h"
 #include "cp0_ui_widgets.hpp"
+#include "cp0_zone_host.hpp"
 
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
@@ -22,12 +24,32 @@ namespace {
 constexpr std::int64_t kLookEveryMs = 1000;
 
 std::unique_ptr<Policy> g_policy;
+bool g_hand = false;       /* hand() as the writing zone was last told */
+bool g_hand_armed = false; /* its hand_changed() is posted for the next cycle */
+unsigned g_hand_changes = 0;
 
 std::int64_t monotonic_ms()
 {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return static_cast<std::int64_t>(ts.tv_sec) * 1000 + ts.tv_nsec / 1000000;
+}
+
+void hand_changed_cb(void *)
+{
+    g_hand_armed = false;
+    ++g_hand_changes;
+    cp0::ui::zone_host::hand_changed(); /* Keyb forgotten without hand, the keyboard's cross, the band follow */
+}
+
+/* the policy was just asked (inside the keyboard service's update): a new hand= is passed on at the next cycle */
+void note_hand(bool hand)
+{
+    if (hand == g_hand) return;
+    g_hand = hand;
+    if (g_hand_armed) return;
+    g_hand_armed = lv_async_call(hand_changed_cb, nullptr) == LV_RESULT_OK;
+    if (!g_hand_armed) std::fprintf(stderr, "[cdk] osk_policy: hand=%d not passed on (lv_async_call)\n", hand ? 1 : 0);
 }
 
 } // namespace
@@ -98,10 +120,25 @@ void install()
     const char *env = std::getenv("APPLAUNCH_OSK");
     g_policy = std::make_unique<Policy>(std::string(), env ? env : "", [] { return cp0_kbd_presence_count(nullptr); });
     Policy *policy = g_policy.get();
-    cp0::ui::osk::set_policy([policy] { return policy->allowed(monotonic_ms()); });
+    cp0::ui::osk::set_policy([policy] {
+        const bool allowed = policy->allowed(monotonic_ms());
+        note_hand(policy->hand());
+        return allowed;
+    });
+    /* The writing zone's band (report 044), when the display backend built it (APPLAUNCH_PDA=1): it shows where the
+     * keyboard would while input.state hand=1. input.state is read now, so the keyboard's close cross is right from the
+     * first field. No gate, nothing to publish (cp0_zone_host.hpp). Without the band, bind() only keeps the hooks. */
+    (void)policy->allowed(monotonic_ms());
+    g_hand = policy->hand();
+    cp0::ui::zone_host::bind({[policy] { return policy->hand(); }, nullptr, nullptr});
+    if (cp0::ui::zone_host::active())
+        std::fprintf(stderr, "[cdk] writing zone: the band is the text input while input.state hand=1 (now %d)\n",
+                     g_hand ? 1 : 0);
 }
 
 Policy *installed() { return g_policy.get(); }
+
+unsigned hand_changes() { return g_hand_changes; }
 
 } // namespace osk_policy
 } // namespace cdk
