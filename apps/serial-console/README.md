@@ -1,6 +1,6 @@
 # Serial Console
 
-Version 0.5.0, package `serial-console`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.6.0, package `serial-console`. Part of [cyberdeck-zero-apps](../../README.md).
 
 Serial Console talks to a USB-serial adapter or a microcontroller board (Arduino, ESP32, Raspberry Pi Pico, a GPS, a
 router console...) from the deck. It is a full-screen touch app made for the small screen: instead of dropping you into
@@ -8,10 +8,10 @@ a raw terminal it first shows the serial ports it finds, says what is plugged in
 can find the speed by itself, can find out **what is on the other end** (the board or firmware behind a USB-serial
 adapter), then opens a terminal page.
 
-## Next (not released yet): the handwriting band in PDA mode
+## What changed in 0.6.0: the handwriting band in PDA mode
 
 * Built at the launcher toolkit of PDA S4 (the launcher v0.8.11 release, `5f54d15`). On a
-  launcher with that part, PDA mode on and Settings > System > On-screen keyboard = **Handwriting + keyboard**, the
+  launcher with that part (v0.8.11 or later), PDA mode on and Settings > System > On-screen keyboard = **Handwriting + keyboard**, the
   launcher's **handwriting band** comes up in the app where the on-screen keyboard would (touch only, a tap on the line
   field): letters and digits written in its boxes go into the line field, its key strip (Tab, Ctrl, Alt, the arrows,
   Enter) acts as the on-screen keyboard's keys, Keyb gives the standard keyboard until its close cross. The board's
@@ -19,7 +19,8 @@ adapter), then opens a terminal page.
   480x640 two more, the 800x1280 tablet about 26 instead of 34 (the band is taller there). Nothing else
   changed: the key bar, the line field and Raw mode with a keyboard are as in 0.5.0; with Auto or On, or in
   landscape, the standard keyboard as before. Glyphs trained in Strokes training count after the app's next start.
-  The version in `app.json` stays 0.5.0 until this is released.
+  Two renders of the harness show it ([screenshots](#screenshots) 10 and 11). On an older launcher the app behaves as
+  0.5.0 did.
 
 ## What changed in 0.5.0
 
@@ -74,7 +75,7 @@ The ports, port, result and Find the speed pages are rendered by the app's headl
 demonstration world's simulated boards) with fixture data at the deck's size and at other screen sizes, **not
 photographs of the panel**. The two landscape terminal shots are real captures, from the deck (640x480) and from a Pi
 3A+ with the Waveshare 4.3" DSI panel (800x480, touch only); the terminal page did not change in 0.4.0. The two portrait
-shots (0.5.0) are renders of the harness in the demonstration world.
+shots (0.5.0) and the two with the handwriting band (0.6.0) are renders of the harness in the demonstration world.
 
 | | |
 |---|---|
@@ -82,7 +83,8 @@ shots (0.5.0) are renders of the harness in the demonstration world.
 | ![Behind it](screenshots/03-behind-it-720x720.png) 720x720 render, HackBerry size (square). The result card after Ask the device: an ESP32-S3 behind a CH340 adapter, its firmware, MAC and confidence | ![Find the speed](screenshots/04-find-speed-1024x600.png) 1024x600 render, larger screen. Find the speed found 57600 on an FT232R cable and set it |
 | ![Terminal](screenshots/05-terminal-deck.png) 640x480, deck (real capture). The terminal on a MicroPython REPL; a keyboard sends keys straight to the board | ![GPS card](screenshots/06-gps-card-1280x720.png) 1280x720 render, larger screen. A u-blox GPS receiver found by Listen behind a PL2303 cable, recommended 9600 |
 | ![Terminal with the on-screen keyboard](screenshots/07-terminal-keyboard-pi3a.png) 800x480, Pi 3A+ (real capture). Touch only: a text line and the on-screen keyboard with Esc, Tab, Ctrl and arrows | ![Portrait terminal with the on-screen keyboard](screenshots/08-portrait-terminal-keyboard-480x800.png) 480x800 render, PDA mode (portrait, 4.3" DSI). Touch only: the on-screen keyboard across the bottom, the board's text and its prompt above the line field |
-| ![Portrait terminal, tablet](screenshots/09-portrait-terminal-800x1280.png) 800x1280 render, PDA mode on the 7-inch tablet, a keyboard connected: the text takes the whole height above the key bar | |
+| ![Portrait terminal, tablet](screenshots/09-portrait-terminal-800x1280.png) 800x1280 render, PDA mode on the 7-inch tablet, a keyboard connected: the text takes the whole height above the key bar | ![Handwriting band](screenshots/10-portrait-band-480x800.png) 480x800 render, PDA mode with Handwriting + keyboard (launcher v0.8.11): the handwriting band where the keyboard would be (Tab, Ctrl, Alt, arrows, Enter strip over the writing boxes), *help* written into the line field |
+| ![Handwriting band, tablet](screenshots/11-portrait-band-800x1280.png) 800x1280 render, the same on the 7-inch tablet: the band is taller, the text keeps about 26 rows above the field | |
 
 The screens above come from several screen sizes: the app adapts to the screen it runs on.
 
@@ -243,7 +245,7 @@ The identification is kept in the port's section of the settings file as `id_*` 
   **480x640** (`X-Portrait=480x640`); a launcher before v0.8.8 never gives a portrait canvas.
 * The user in the `dialout` group: `sudo usermod -aG dialout $USER`, then reboot.
 * Packages: `libfreetype6`, `libinput10`, `libxkbcommon0` (picocom is no longer used).
-* x86-64 PCs: an amd64 package, `serial-console_0.5.0_amd64.deb`, is in the amd64 registry
+* x86-64 PCs: an amd64 package, `serial-console_0.6.0_amd64.deb`, is in the amd64 registry
   ([amd64](../../README.md#amd64-x86-64-pcs)) for a PC running the launcher. It has had no board test on a PC yet.
 
 ## Known limits
@@ -281,8 +283,8 @@ The identification is kept in the port's section of the settings file as `id_*` 
 
 ## Changes
 
-* Next (unreleased): built at the launcher PDA S4 toolkit (v0.8.11, `5f54d15`): the handwriting band in PDA mode where the
-  on-screen keyboard would show; no other change.
+* 0.6.0: the handwriting band in PDA mode (launcher v0.8.11, `5f54d15`) where the on-screen keyboard would show; no other
+  change (see [What changed in 0.6.0](#what-changed-in-060-the-handwriting-band-in-pda-mode)).
 * 0.5.0: portrait (PDA mode, `X-Portrait=480x640`): the pages at the screen's width, the terminal over the whole
   height with the board's text at the deck's size in millimetres on the 480 px wide screens, the on-screen keyboard
   with the text's rows above it; landscape unchanged; built at the launcher v0.8.9 toolkit (see
