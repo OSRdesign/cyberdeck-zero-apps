@@ -1,0 +1,123 @@
+# PDA mode (X-Portrait=480x640): the portrait canvases a portrait launcher gives the app upright, in the demonstration
+# world's three boards. The pages are the landscape ones at the screen's width (on the 480 px wide screens the narrow
+# header: the last part of the path). By touch (the PDA way: a pen or a finger) the ports page, the port page, the Speed
+# list and Connect; the terminal touch only (the line field, then the on-screen keyboard with the text's rows above
+# it); then a keyboard connects (every key to the board, the text takes the room).
+title Serial Console: portrait (PDA mode)
+env SERIAL_CONSOLE_DEMO boards
+sizes 480x800 480x640 800x1280
+
+wait 300
+shot ports
+expect noquit
+expect text "Arduino Uno"
+# 480x640 draws the rows' text larger (9 px/mm): the longest name ends with dots there, its tty stays whole
+@480x800,800x1280 expect text "CP210x USB-serial"
+expect text "FT232R USB-serial"
+expect text "ttyUSB0"
+expect text "ttyACM0 - 9600 recommended"
+
+# touch: a tap highlights the ESP32 board's row, a second tap opens its port page (Connect highlighted)
+tap "ttyUSB0"
+wait 300
+expect text "ttyUSB0 - 115200 recommended"
+tap "ttyUSB0"
+wait 600
+shot port
+expect text "Connect"
+expect text "115200 8N1"
+expect text "ESP32 boards use 115200; ESP8266 ROM: 74880"
+
+# the Speed list by touch: a tap highlights the row, a second opens the pick-one list; 57600 picked by touch
+tap "115200 (recommended)"
+wait 300
+tap "115200 (recommended)"
+wait 600
+shot speed-list
+tap "57600"
+wait 300
+tap "57600"
+wait 600
+shot port-settings
+expect text "57600"
+# back to the recommended speed by keys (two rows down from 57600: 74880, 115200)
+key enter
+wait 300
+key down
+key down
+key enter
+wait 600
+expect text "115200 8N1"
+
+# up to the identification rows, then the top (what is connected)
+key up
+key up
+key up
+wait 600
+shot port-identify
+expect text "Listen"
+expect text "Listens at each speed; sends nothing, no reset"
+key home
+wait 600
+shot port-info
+expect text "Silicon Labs"
+expect text "10c4:ea60"
+
+# Connect (the last row) by touch: the terminal, no keyboard (the line field and Send under the key bar)
+key end
+wait 600
+tap "Connect"
+wait 1800
+shot terminal
+expect text "Connected"
+expect text "ttyUSB0 115200 8N1"
+expect osk off
+expect key "Ctrl-C" toolbar
+expect key "Tab" toolbar
+expect key "Send" target
+
+# a tap on the line field brings the on-screen keyboard (its own Esc, Tab, Ctrl and arrows row) within the screen; the
+# text keeps its rows above the field, the last one (the board's prompt) right above it
+tapxy 0.3 0.96
+wait 300
+expect osk on
+shot terminal-osk
+type "help"
+key enter
+wait 600
+shot terminal-sent
+expect osk on
+key esc
+wait 300
+expect osk off
+shot terminal-back
+
+# a keyboard connects: no field, every key to the board, the text takes the room
+keyboards 1
+wait 1300
+type "ls"
+key enter
+wait 600
+shot terminal-keyboard
+expect notext "Send"
+expect key "Ctrl-C" toolbar
+
+# the key bar scrolls sideways where it is wider than the screen: its last keys by touch (the log on and off), then the
+# header Esc leaves
+drag 0.9 0.95 0.1 0.95
+wait 300
+tap "Start log"
+wait 600
+expect text "Stop log"
+shot terminal-bar-end
+tap "Stop log"
+wait 600
+expect text "Start log"
+tap "Esc"
+wait 300
+expect text "Connect"
+tap "Esc"
+wait 300
+expect text "Arduino Uno"
+tap "Esc"
+expect quit

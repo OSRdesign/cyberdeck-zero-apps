@@ -1,12 +1,37 @@
 # Serial Console
 
-Version 0.4.5, package `serial-console`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.5.0, package `serial-console`. Part of [cyberdeck-zero-apps](../../README.md).
 
 Serial Console talks to a USB-serial adapter or a microcontroller board (Arduino, ESP32, Raspberry Pi Pico, a GPS, a
 router console...) from the deck. It is a full-screen touch app made for the small screen: instead of dropping you into
 a raw terminal it first shows the serial ports it finds, says what is plugged into each one and recommends the settings,
 can find the speed by itself, can find out **what is on the other end** (the board or firmware behind a USB-serial
 adapter), then opens a terminal page.
+
+## What changed in 0.5.0
+
+* **Portrait (PDA mode).** The app declares `X-Portrait=480x640`: on a launcher in PDA mode (v0.8.8 and later;
+  Settings > Screen > PDA mode from v0.8.9) it runs **upright** on the portrait screen instead of turned by a quarter.
+  * The pages (ports, port, the value lists, Ask, the result card, the boot output) are the landscape ones at the
+    screen's width. On the 480 px wide screens the header is the toolkit's narrow one: an 18 px title, the last part
+    of the path (*ttyUSB0*, *Speed*, *Behind it*). At 480x640 the rows' text is a little larger (9 px/mm), so the
+    longest board names end with dots on the ports page (*CP210x USB-ser...*); the tty stays whole and the port
+    page names the whole device.
+  * **The terminal** takes the whole height: the status line, the text, the key bar and (without a keyboard) the line
+    field. On the 480 px wide screens the board's text is drawn at the deck's size in millimetres (14 px, about 56
+    columns) instead of 18 px (40 columns); on the 800x1280 tablet it keeps 18 px (about 69 columns). The boot output
+    and evidence pages use the same size. Rows of text with a keyboard connected: about 33 at 480x800, 24 at 480x640,
+    45 at 800x1280; touch only (the line field under the key bar): 30, 20 and 42.
+  * **Without a keyboard** the line field and the toolkit's on-screen keyboard work as in landscape: a tap on the field
+    brings the keyboard (its own row of Esc, Tab, Ctrl and the arrows) across the bottom of the screen, about 40 % of
+    the height at 480x800 and 45 % at 480x640, a quarter on the tablet; the text keeps its rows above the field, the
+    newest (the board's prompt) right above it: about 19 rows at 480x800, 11 at 480x640, 34 at 800x1280 (at 640x480
+    the keyboard leaves room for the field only). The launcher's handwriting band is not offered to apps.
+  * Keys and touch as in landscape.
+* **Landscape unchanged**: every landscape shot of the scenes (292) is the same picture as 0.4.5's (a shot that
+  catches the simulated boards' text in real time matched in a second run).
+* Built at the launcher **v0.8.9** toolkit (`25927c3`, the apps' pin since System Monitor 0.3.0; 0.4.5 was built at
+  v0.8.5).
 
 ## What changed in 0.4.4
 
@@ -34,15 +59,17 @@ adapter), then opens a terminal page.
 
 The ports, port, result and Find the speed pages are rendered by the app's headless harness (`build.sh host`, the
 demonstration world's simulated boards) with fixture data at the deck's size and at other screen sizes, **not
-photographs of the panel**. The two terminal shots are real captures, from the deck (640x480) and from a Pi 3A+ with the
-Waveshare 4.3" DSI panel (800x480, touch only); the terminal page did not change in 0.4.0.
+photographs of the panel**. The two landscape terminal shots are real captures, from the deck (640x480) and from a Pi
+3A+ with the Waveshare 4.3" DSI panel (800x480, touch only); the terminal page did not change in 0.4.0. The two portrait
+shots (0.5.0) are renders of the harness in the demonstration world.
 
 | | |
 |---|---|
 | ![Ports](screenshots/01-ports-640x480.png) 640x480 render, deck size. The ports list: each board named from its USB descriptor, its tty on the right, the recommended speed in the status band | ![Port page](screenshots/02-port-800x480.png) 800x480 render, Pi 3A+ size. The port page's *What is connected* rows: the exact chip, maker, USB product string, id, speed, driver and what it typically is |
 | ![Behind it](screenshots/03-behind-it-720x720.png) 720x720 render, HackBerry size (square). The result card after Ask the device: an ESP32-S3 behind a CH340 adapter, its firmware, MAC and confidence | ![Find the speed](screenshots/04-find-speed-1024x600.png) 1024x600 render, larger screen. Find the speed found 57600 on an FT232R cable and set it |
 | ![Terminal](screenshots/05-terminal-deck.png) 640x480, deck (real capture). The terminal on a MicroPython REPL; a keyboard sends keys straight to the board | ![GPS card](screenshots/06-gps-card-1280x720.png) 1280x720 render, larger screen. A u-blox GPS receiver found by Listen behind a PL2303 cable, recommended 9600 |
-| ![Terminal with the on-screen keyboard](screenshots/07-terminal-keyboard-pi3a.png) 800x480, Pi 3A+ (real capture). Touch only: a text line and the on-screen keyboard with Esc, Tab, Ctrl and arrows | |
+| ![Terminal with the on-screen keyboard](screenshots/07-terminal-keyboard-pi3a.png) 800x480, Pi 3A+ (real capture). Touch only: a text line and the on-screen keyboard with Esc, Tab, Ctrl and arrows | ![Portrait terminal with the on-screen keyboard](screenshots/08-portrait-terminal-keyboard-480x800.png) 480x800 render, PDA mode (portrait, 4.3" DSI). Touch only: the on-screen keyboard across the bottom, the board's text and its prompt above the line field |
+| ![Portrait terminal, tablet](screenshots/09-portrait-terminal-800x1280.png) 800x1280 render, PDA mode on the 7-inch tablet, a keyboard connected: the text takes the whole height above the key bar | |
 
 The screens above come from several screen sizes: the app adapts to the screen it runs on.
 
@@ -144,8 +171,9 @@ The screens above come from several screen sizes: the app adapts to the screen i
     port page shows it as **Behind it** (Enter: its card), and its speed becomes the port's recommended speed (the ports
     page says `ttyUSB1 - 9600 recommended` for a GPS found at 9600). A later probe that finds nothing keeps it.
 * **Terminal page** (Connect). The header shows `ttyUSB0 115200 8N1` (the frame moves to the status line on a 640x480
-  screen, where the header has no room for it), the status line a pill (*Connected*, *Port lost: waiting*) and the RX /
-  TX byte counts, *Paused*, the log file. The text is the board's output in a monospace face: colour codes and other
+  screen, where the header has no room for it; in portrait the whole title fits, except on a 480 px wide screen whose
+  status strip shows a battery: there `ttyUSB0`, and the speed and frame start the status line), the status line a
+  pill (*Connected*, *Port lost: waiting*) and the RX / TX byte counts, *Paused*, the log file. The text is the board's output in a monospace face: colour codes and other
   escape sequences are removed, CR, LF, Backspace, Tab and the line-editing codes of a shell prompt are handled, bytes
   that are not UTF-8 show as `.`; a long line wraps; the last 2000 lines are kept. A drag scrolls back (it pauses the
   view; scrolling to the bottom follows again). The toolbar (it scrolls sideways where the screen is narrow): Ctrl-C,
@@ -198,10 +226,11 @@ The identification is kept in the port's section of the settings file as `id_*` 
 ## Requirements
 
 * A screen of at least 640x480 (`X-MinSize=640x480`: the tile is hidden on smaller screens; started there anyway, the
-  app says it needs 640x480) and a launcher with full-screen app support.
+  app says it needs 640x480) and a launcher with full-screen app support. In PDA mode (portrait) a canvas of at least
+  **480x640** (`X-Portrait=480x640`); a launcher before v0.8.8 never gives a portrait canvas.
 * The user in the `dialout` group: `sudo usermod -aG dialout $USER`, then reboot.
 * Packages: `libfreetype6`, `libinput10`, `libxkbcommon0` (picocom is no longer used).
-* x86-64 PCs: an amd64 package, `serial-console_0.4.5_amd64.deb`, is in the amd64 registry
+* x86-64 PCs: an amd64 package, `serial-console_0.5.0_amd64.deb`, is in the amd64 registry
   ([amd64](../../README.md#amd64-x86-64-pcs)) for a PC running the launcher. It has had no board test on a PC yet.
 
 ## Known limits
@@ -209,7 +238,12 @@ The identification is kept in the port's section of the settings file as `id_*` 
 * Not a terminal emulator: no cursor addressing, no colours, no alternate screen. Line-oriented consoles (boot logs,
   shells, REPLs, AT commands, U-Boot, a router CLI) work; full-screen programs (vi, top, menuconfig) do not.
 * At 640x480 without a keyboard, the on-screen keyboard leaves room for the line field only: the text shows again when
-  it goes (Esc).
+  it goes (Esc). In portrait the text keeps its rows above it.
+* The on-screen keyboard's own Tab and arrows work on the line field (Left / Right move in it, Tab and Up / Down send
+  nothing); its Ctrl + a letter goes to the board. A Tab for the board is the key bar's (Esc closes the keyboard
+  first); arrows for the board need a physical keyboard.
+* In PDA mode there is no handwriting band in the app (the launcher's band is for its own pages; apps drawing it are a
+  later launcher step): without a keyboard, the on-screen keyboard is the way to type.
 * One port at a time. Typed bytes are not logged (only what the board sends).
 * Reset board pulses DTR off and RTS on for 100 ms: it resets ESP32 / ESP8266 boards with the usual auto-reset circuit
   and Arduino boards (DTR); a board wired differently may not react; a port without modem lines says so.
@@ -233,6 +267,10 @@ The identification is kept in the port's section of the settings file as `id_*` 
 
 ## Changes
 
+* 0.5.0: portrait (PDA mode, `X-Portrait=480x640`): the pages at the screen's width, the terminal over the whole
+  height with the board's text at the deck's size in millimetres on the 480 px wide screens, the on-screen keyboard
+  with the text's rows above it; landscape unchanged; built at the launcher v0.8.9 toolkit (see
+  [What changed in 0.5.0](#what-changed-in-050)).
 * 0.4.5: rebuilt against launcher v0.8.5: battery in the header, Wi-Fi interface lookup, status feed; no other change.
 * 0.4.4: rebuilt on launcher v0.8.1 (2b1a070), no behaviour change intended; the toolkit changed under it: upstream decoupling, time zone/Settings work, x86 port; nothing the app uses was removed
   (see [What changed in 0.4.4](#what-changed-in-044)).
@@ -299,7 +337,9 @@ python3 tools/make_registry.py --only serial-console --out C:/somewhere/outside/
   Arduino Uno at 9600, an FT232R cable at 57600, the on-board UART; `lost` unplugs the ESP32 board for 3 s, `noaccess`
   refuses it; `identify` has the simulated boards of `src/core/sim.cpp` with their DTR / RTS: an ESP32-S3 on a CH340, a
   u-blox GPS on a PL2303 cable, a MicroPython Pico, an Arduino Uno, and an RP2040 in BOOTSEL mode). It also works on
-  the deck, to try the app without a board. Contact sheets:
+  the deck, to try the app without a board. `portrait.scene` and `portrait-identify.scene` play the pages at 480x800,
+  480x640 and 800x1280 (PDA mode: by touch, the terminal with the line field, the on-screen keyboard and a keyboard;
+  the identification's notice, card, boot output and confirmations). Contact sheets:
   `~/cdk-build/serial-console/host/out/sheets`.
 * `tests/BOARD-TESTS.md`: the physical tests on the deck and the Pi 3A+.
 

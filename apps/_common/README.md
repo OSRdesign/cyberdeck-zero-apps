@@ -84,8 +84,9 @@ app with a portrait layout: on the 480 px wide portrait canvases the v0.8.8 tool
 18 px title, the last part of a breadcrumb, the status strip at 72 %), which a v0.8.5 build lacks ("Syste..." in the
 header). At 640x480 and every other landscape size the toolkit draws the same pixels as at v0.8.5 (System Monitor's
 landscape shots are byte-identical). The pin also brings the v0.8.6 readers and the socket client of `cp0_lvgl`
-(`cp0_app_board_read()`, `cp0_app_client.h`). Only System Monitor is built at it so far; every other app still carries
-a v0.8.5 build and moves to this pin at its next rebuild (both architectures). `_common` has no launcher-request
+(`cp0_app_board_read()`, `cp0_app_client.h`). System Monitor 0.3.0 and Serial Console 0.5.0 are built at it (Serial
+Console's landscape shots are the same pictures as at v0.8.5 too); every other app still carries a v0.8.5 build and
+moves to this pin at its next rebuild (both architectures). `_common` has no launcher-request
 wrapper yet.
 
 Launcher **v0.8.7** (media keys of non-keyboard devices, the Windows key opening the app switcher, the sound-player

@@ -1,0 +1,107 @@
+# PDA mode: "What is on the other end?" on the portrait canvases (scenario "identify": an ESP32-S3 behind a CH340, the
+# RP2040 in BOOTSEL mode). The BOOTSEL notice, Listen and its card, the boot output page, the Reset and listen
+# confirmation (a dialog within the 480 px width, its buttons by touch), the Ask page and its confirmation.
+title Serial Console: portrait, identify an ESP32-S3 on a CH340
+env SERIAL_CONSOLE_DEMO identify
+sizes 480x800 480x640 800x1280
+
+wait 600
+shot ports
+# 480x640 draws the rows' text larger (9 px/mm): the longest names end with dots there, their tty stays whole
+@480x800,800x1280 expect text "CH340 USB-serial"
+expect text "ttyUSB0"
+
+# the board in BOOTSEL mode: a USB drive, not a serial port; what to do (a notice, OK by touch)
+key up
+key up
+wait 600
+expect text "RP2040 in BOOTSEL mode"
+expect text "A USB drive, not a serial port: replug it without BOOT"
+key enter
+wait 300
+shot bootsel-notice
+expect text "RP2040 in BOOTSEL mode (a USB drive, not a serial port): unplug and replug without the BOOT button."
+tap "OK"
+wait 300
+expect notext "RP2040 in BOOTSEL mode (a USB drive, not a serial port): unplug and replug without the BOOT button."
+
+# the ESP32-S3 board: its port page, Listen, the card
+key up
+key up
+wait 600
+expect text "ttyUSB0 - 115200 recommended"
+key enter
+wait 300
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+key up
+wait 600
+expect text "Listens at each speed; sends nothing, no reset"
+key enter
+wait 500
+shot listening
+expect text "Esc stops"
+wait 3500
+shot card-listen
+expect text "An ESP32 board"
+expect text "Likely (listened)"
+key down
+key down
+key down
+key down
+wait 600
+expect text "Boot output"
+key enter
+wait 600
+shot boot-output
+tap "Esc"
+wait 300
+expect text "Boot output"
+
+# Reset and listen: the confirmation, Cancel by touch
+tap "Esc"
+wait 300
+key down
+key down
+key enter
+wait 300
+shot reset-confirm
+expect text "Reset the board?"
+expect text "Reset and listen"
+expect text "Cancel"
+tap "Cancel"
+wait 300
+expect notext "Reset the board?"
+
+# Ask the device: the probes, the ESP boot loader's confirmation (what it sends), Cancel
+key down
+key enter
+wait 300
+shot ask
+expect text "MicroPython"
+key up
+wait 600
+expect text "ESP boot loader"
+key enter
+wait 300
+shot ask-confirm
+expect text "Ask: ESP boot loader?"
+expect text "Send"
+tap "Cancel"
+wait 300
+tap "Esc"
+wait 300
+expect text "Ask the device"
+tap "Esc"
+wait 300
+expect text "Arduino Uno"
+tap "Esc"
+expect quit

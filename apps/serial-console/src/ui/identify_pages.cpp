@@ -389,9 +389,7 @@ void SerialApp::open_detail(const std::string &title, const std::vector<std::str
     std::string text;
     for (const std::string &l : lines) text += l + "\n";
     if (!text.empty()) text.pop_back();
-    const int px = cp0_ui_metrics_get()->text_px[CP0_TEXT_CAPTION];
-    const lv_font_t *mono = cp0_fonts().get("JetBrainsMono-Regular.ttf", static_cast<uint16_t>(px));
-    if (!mono) mono = cp0_ui_font_px(px);
+    const lv_font_t *mono = mono_font(board_text_px(layout_)); /* the terminal's size (PDA mode: by density) */
     nav_.open(View::Detail);
     update_chrome(); /* the list and the band give way to the text */
     detail_ = std::make_unique<cp0::ui::TextBlock>(page_->root(), layout_, text, mono, [this] { post([this] { back(); }); });

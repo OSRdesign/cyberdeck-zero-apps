@@ -57,6 +57,9 @@ int caption_px()
     return cp0_ui_metrics_get()->text_px[CP0_TEXT_CAPTION];
 }
 
+constexpr int kDeckColumns = 55;    /* the deck's terminal: 608 px at 11 px a character (18 px) */
+constexpr int kDeckTextMmX10 = 16;  /* the deck's CAPTION: 18 px at 11.3 px/mm */
+
 /* The key bar's keys: the launcher's 9 mm toolbar key (as the header Esc, the stock-app toolbars and the on-screen
  * keyboard), not TARGET (7 mm), which the line field's Send keeps. */
 int toolbar_key()
@@ -79,24 +82,49 @@ std::string echo_of(const std::string &bytes)
 
 } // namespace
 
+const lv_font_t *mono_font(int px)
+{
+    const lv_font_t *font = cp0_fonts().get("JetBrainsMono-Regular.ttf", static_cast<uint16_t>(px));
+    return font ? font : cp0_ui_font_px(px);
+}
+
+int board_text_px(const cp0_ui_roller_page_t &layout)
+{
+    const int caption = caption_px();
+    if (layout.h <= layout.w) return caption; /* landscape and square: as always */
+    const int smallest = std::min(caption, cp0_ui_font_snap(cp0_ui_mm_px(cp0_ui_metrics_get()->ppmm_x100,
+                                                                         kDeckTextMmX10, 0)));
+    const int view_w = layout.w - 2 * layout.gap; /* relayout()'s text width */
+    for (int px = caption; px > smallest; px -= 2) {
+        const int advance = static_cast<int>(lv_font_get_glyph_width(mono_font(px), 'M', 0));
+        if (advance > 0 && view_w / advance >= kDeckColumns) return px;
+    }
+    return smallest;
+}
+
 TerminalView::TerminalView(cp0::ui::Page &page, const cp0_ui_roller_page_t &layout, TerminalSpec spec)
     : page_(page), layout_(layout), spec_(std::move(spec))
 {
-    mono_ = cp0_fonts().get("JetBrainsMono-Regular.ttf", static_cast<uint16_t>(caption_px()));
-    if (!mono_) mono_ = cp0_ui_font_px(caption_px());
+    mono_ = mono_font(board_text_px(layout_));
     char_w_ = std::max(1, static_cast<int>(lv_font_get_glyph_width(mono_, 'M', 0)));
     line_h_ = std::max(1, static_cast<int>(lv_font_get_line_height(mono_)));
 
     build();
 
     // the header: "ttyUSB0 115200 8N1"; where the title has no room for it (640x480: the Esc button and the status
-    // strip take the right half), "ttyUSB0 115200" and the frame opens the status line
+    // strip take the right half), "ttyUSB0 115200" and the frame opens the status line; where even that has no room (a
+    // 480 px wide portrait screen whose status strip shows a battery), "ttyUSB0" and the speed opens it too
     const std::string full = terminal_title(spec_.port.tty, spec_.baud, spec_.settings.frame);
-    if (text_width(full.c_str(), cp0_ui_font_px(layout_.title_px)) <= layout_.title_max_w) {
+    const std::string with_speed = spec_.port.tty + " " + std::to_string(spec_.baud);
+    const lv_font_t *title_font = cp0_ui_font_px(layout_.title_px);
+    if (text_width(full.c_str(), title_font) <= layout_.title_max_w) {
         page_.set_title({full});
-    } else {
-        page_.set_title({spec_.port.tty + " " + std::to_string(spec_.baud)});
+    } else if (text_width(with_speed.c_str(), title_font) <= layout_.title_max_w) {
+        page_.set_title({with_speed});
         status_prefix_ = spec_.settings.frame + "  ";
+    } else {
+        page_.set_title({spec_.port.tty});
+        status_prefix_ = std::to_string(spec_.baud) + " " + spec_.settings.frame + "  ";
     }
 
     SessionOptions o;

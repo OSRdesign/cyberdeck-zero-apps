@@ -6,7 +6,7 @@ points it at another board). The app's process name is `serial-console`.
 
 Expected pictures: the contact sheets of `build.sh host` in `\\wsl.localhost\Ubuntu\home\osrde\cdk-build\serial-console\host\out\sheets\`
 (`ports.png`, `empty.png`, `port.png`, `detect.png`, `terminal.png`, `lost.png`, `access.png`, `notice.png`,
-`identify.png`, `identify-more.png`, `longname.png`).
+`identify.png`, `identify-more.png`, `longname.png`; PDA mode: `portrait.png`, `portrait-identify.png`).
 
 Hardware wanted: a USB-serial board that prints at boot (an ESP32 dev board on CP2102 / CH340 / CH9102 is ideal), and
 if possible a second one (an Arduino Uno, a GPS, an FTDI cable). For the identification (S8 to S12): an ESP32 board,
@@ -18,13 +18,13 @@ Copy summary file in `~/serial-logs`).
 
 ```
 python tools/make_registry.py --only serial-console --out C:/CLAUDE/zero7/pkg-out
-python deck.py put C:/CLAUDE/zero7/pkg-out/serial-console_0.4.5_arm64.deb /tmp/serial-console.deb
+python deck.py put C:/CLAUDE/zero7/pkg-out/serial-console_0.5.0_arm64.deb /tmp/serial-console.deb
 python deck.py sudo 'dpkg -i /tmp/serial-console.deb'
 python deck.py run '/usr/share/APPLaunch/bin/serial-console --version; id -nG'
 ```
 
-`--version`: `Serial Console (serial-console) 0.4.2`, the launcher commit, `cp0_lvgl pinned`. `id -nG` must list
-`dialout` (else S6 first). Logs: `python deck.py run 'journalctl --user -n 80 --no-pager | grep -E "cdk|serial-console"'`.
+`--version`: `Serial Console (serial-console) 0.5.0`, the launcher commit `25927c3...` (`cp0_lvgl pinned`), `needs a
+screen of at least 640x480, in portrait 480x640`. `id -nG` must list `dialout` (else S6 first). Logs: `python deck.py run 'journalctl --user -n 80 --no-pager | grep -E "cdk|serial-console"'`.
 
 ## S1. Deck (640x480, Bluetooth keyboard): ports, hot-plug, identification
 
@@ -80,7 +80,7 @@ Connect refused with the dialog *No permission for ttyUSB0*. Restore with `sudo 
 
 ```
 set DECK_HOST=<pi3a ip>
-python deck.py put C:/CLAUDE/zero7/pkg-out/serial-console_0.4.5_arm64.deb /tmp/serial-console.deb
+python deck.py put C:/CLAUDE/zero7/pkg-out/serial-console_0.5.0_arm64.deb /tmp/serial-console.deb
 python deck.py sudo 'dpkg -i /tmp/serial-console.deb'
 ```
 
@@ -158,6 +158,33 @@ CNC (Ask > GRBL controller), an AT modem (Ask > AT modem: the model), a Meshtast
 Note the card. A probe that does not fit the device must do no harm: AT on an ESP32 prints an error at most; nothing
 else.
 
+## S13. PDA mode (0.5.0; launcher v0.8.9 or later, Settings > Screen > PDA mode On rotate left)
+
+On the Pi 3A+ or Pi 4 B DSI board (480x800, touch only) and, if at hand, the FZ-M1 tablet (800x1280, amd64 package).
+A board that prints (the ESP32 of S1), or a loopback: a USB-serial adapter (CP2102, CH340, FT232) with a wire from TX
+to RX, Local echo Off, so every line typed comes back as received text.
+
+1. **Upright start.** The home grid shows the **Serial Console** tile; a tap starts it **upright** (not turned): the
+   ports page as `portrait/480x800/ports.png` of the sheets (on the tablet `portrait/800x1280/ports.png`); the header
+   reads *Serial Console*, the Esc pill and the status strip do not overlap it. On the 480 px wide screen the port
+   page's header reads *ttyUSB0* (the last part of the path).
+2. **Touch under rotation.** A tap on a port's row highlights the row under the finger (not another one: the touch
+   follows the portrait rotation), a second tap opens the port page; a drag scrolls the list the way the finger moves;
+   Speed by two taps, a value by two taps; the header Esc goes back. Note any tap that lands on the wrong row.
+3. **Terminal, touch only.** Connect: the header `ttyUSB0 115200 8N1`, the green *Connected* pill, the key bar and the
+   line field with Send at the bottom; the board's text fills the height (about 30 rows at 480x800) at a size you can
+   read (note it: too small, fine, too large). A drag on the key bar scrolls it to Reset board.
+4. **Keyboard up.** Tap the line field: the on-screen keyboard across the bottom (Esc, Tab, Ctrl and the arrows over
+   the letters), inside the screen, nothing cut at the sides; the board's text stays above the field (about 19 rows),
+   the newest line right above it. Type `help` and the keyboard's Enter: the line goes to the board (loopback: it comes
+   back as text), the keyboard stays. Ctrl then C: a Ctrl-C goes to the board (TX + 1). The keyboard's Esc closes it:
+   the status line and the key bar come back.
+5. **A keyboard connects** (Bluetooth or USB): the line field goes, every key goes to the board at once; the text
+   takes the room of the field. Esc leaves the terminal, Esc, Esc ends the app.
+6. **Loopback flood** (optional, an adapter with TX wired to RX at 921600): hold a key on the keyboard; the text
+   scrolls, the counters run, Esc answers at once.
+7. Settings > Screen > PDA mode Off (the launcher restarts): the app is the landscape app of 0.4.5, unchanged.
+
 ## Unverified until a board run
 
 | # | Assumption |
@@ -174,3 +201,6 @@ else.
 | U-10 | The sysfs `bcdDevice`, `bNumInterfaces`, `speed` and `/sys/bus/usb/devices` are read as on a PC; an RP2040 in BOOTSEL mode is `2e8a:0003` with no tty |
 | U-11 | The text patterns match real boards' output (they were written from the formats and tested on representative samples only) |
 | U-12 | A USB-Serial/JTAG ESP32-S3 (`303a:1001`) that re-enumerates at a reset is found again within 2.5 s |
+| U-13 | In PDA mode the launcher starts the app upright with the portrait canvas (`APPLAUNCH_CANVAS=480x800`, the board's rotation inherited) and the touch, the on-screen keyboard's keys included, follows that rotation (seen only in the harness, which has no rotation) |
+| U-14 | The portrait densities of the harness (8.5 px/mm on the 4.3" DSI, 9.0 on a 3.5" panel, 8.6 on the tablet) are the boards'; the terminal's 14 px text (1.6 mm, the deck's size) reads well on the DSI panel |
+| U-15 | In PDA mode the launcher publishes the usual keyboard rule (`input.state vkb=auto`) while the app is in front, also with Settings > On-screen keyboard = Handwriting + keyboard, so the app's on-screen keyboard shows when no keyboard is connected |

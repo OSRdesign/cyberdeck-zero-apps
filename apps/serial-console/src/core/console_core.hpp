@@ -22,6 +22,10 @@ namespace sc {
 /* The smallest screen: X-MinSize of the .desktop file (tests/test_core.cpp compares them). */
 constexpr int kMinW = 640;
 constexpr int kMinH = 480;
+/* The smallest portrait canvas (PDA mode): X-Portrait of the .desktop file (tests/test_core.cpp compares them). At
+ * 480x640 the terminal keeps about a dozen rows of text above the on-screen keyboard and its line field. */
+constexpr int kPortraitW = 480;
+constexpr int kPortraitH = 640;
 constexpr const char *kAppTitle = "Serial Console";
 
 /* ---------------------------------------------------------------- navigation */
