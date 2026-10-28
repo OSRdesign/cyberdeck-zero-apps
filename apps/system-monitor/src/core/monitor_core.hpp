@@ -42,6 +42,9 @@ namespace sm {
 /* The smallest screen: X-MinSize of the .desktop file (tests/test_core.cpp compares them). */
 constexpr int kMinW = 640;
 constexpr int kMinH = 480;
+/* The smallest portrait canvas (PDA mode): X-Portrait of the .desktop file (tests/test_core.cpp compares them). */
+constexpr int kPortraitW = 480;
+constexpr int kPortraitH = 640;
 constexpr const char *kAppTitle = "System Monitor";
 constexpr const char *kAppId = "system-monitor";
 constexpr int kTopProcs = 15;   /* the Processes page */

@@ -44,12 +44,17 @@ bool parse_size(const std::string &s, Size &out)
     return std::sscanf(s.c_str(), "%dx%d", &out.w, &out.h) == 2 && out.w > 0 && out.h > 0;
 }
 
-/* The densities of the launcher's render harness (generic profile), so both harnesses compute the same tokens. */
+/* The densities of the launcher's render harness (generic profile), so both harnesses compute the same tokens. The
+ * portrait canvases (PDA mode, an app with X-Portrait) are the panels of the launcher's PDA scenes, turned: 480x800 the
+ * Waveshare 4.3" DSI (94x56 mm), 480x640 a 3.5" 640x480 panel (71x53 mm), 800x1280 the FZ-M1 tablet (150x93 mm). */
 int default_ppmm(const Size &s)
 {
     if (s.w == 800 && s.h == 480) return 920;
     if (s.w == 720 && s.h == 720) return 1000;
     if (s.w == 1280 && s.h == 720) return 1160;
+    if (s.w == 480 && s.h == 800) return 851;
+    if (s.w == 480 && s.h == 640) return 901;
+    if (s.w == 800 && s.h == 1280) return 856;
     return 1130;
 }
 

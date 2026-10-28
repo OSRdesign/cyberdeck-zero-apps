@@ -11,7 +11,7 @@
 
 namespace sm {
 
-GridLayout grid_layout(int w, int h, int gap, int footer_h, int footer_items, int tiles, int min_tile_h)
+GridLayout grid_layout(int w, int h, int gap, int footer_h, int footer_items, int tiles, int min_tile_h, int max_tile_w)
 {
     GridLayout g;
     if (w <= 0 || h <= 0 || tiles <= 0) return g;
@@ -26,6 +26,23 @@ GridLayout grid_layout(int w, int h, int gap, int footer_h, int footer_items, in
             r.w = i == footer_items - 1 ? w - r.x : iw; /* the last one takes the rounding */
             r.h = foot;
             g.footer.push_back(r);
+        }
+    }
+    // a portrait area: one column of cards across the width, when one card that wide is not too wide and every card
+    // keeps its height (else the rule below, as on a landscape screen)
+    if (h > w && max_tile_w > 0 && w <= max_tile_w) {
+        const int ch = (area_h - (tiles - 1) * gap) / tiles;
+        if (ch >= min_tile_h && ch > 0) {
+            g.cols = 1;
+            g.rows = tiles;
+            for (int i = 0; i < tiles; ++i) {
+                Rect r;
+                r.w = w;
+                r.y = i * (ch + gap);
+                r.h = ch;
+                g.tiles.push_back(r);
+            }
+            return g;
         }
     }
     // the columns: the cells closest to a landscape card among those tall enough

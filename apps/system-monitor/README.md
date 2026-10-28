@@ -1,6 +1,6 @@
 # System Monitor
 
-Version 0.2.7, package `system-monitor`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.3.0, package `system-monitor`. Part of [cyberdeck-zero-apps](../../README.md).
 
 System Monitor is a live, read-only look at the board or PC it runs on: CPU load per core, temperature, frequency,
 memory, storage, network, processes and the **power supply** (on a Raspberry Pi: under-voltage and throttling from the
@@ -11,6 +11,26 @@ changes nothing on the system: no kill, no writes except its own one-line settin
 
 Kind: a native `cp0_lvgl` app (kind A of the [guidelines](../../docs/APP-GUIDELINES.md)), because it has its own
 pages, live charts and must be complete by touch and by keys; no existing program fits the small screen.
+
+## What changed in 0.3.0
+
+* **Portrait (PDA mode).** The app declares `X-Portrait=480x640`: on a launcher in PDA mode (v0.8.8 and later;
+  Settings > Screen > PDA mode from v0.8.9) it runs **upright** on the portrait screen instead of turned by a quarter.
+  * **480x800** (the Pi 3A+ and Pi 4 B 4.3"/5" DSI panels): the six tiles stacked as **cards across the whole width**,
+    Power first, each with its history line (or fill bar) beside the value; the footer (Processes, System, Sampling)
+    at the bottom.
+  * **480x640** (3.5 to 4 inch panels): six cards in a column would be too low, so Power and Network go across and the
+    four others sit in 2 x 2 between them (the square screen's layout).
+  * **800x1280** (the 7-inch tablet): two columns, Power and Network across; each card's history line (or bar) goes
+    **under** its value, across the card.
+  * The pages (charts, lists, Processes, System, Sampling) are the landscape ones at the screen's width. On the 480 px
+    wide screens the header is the toolkit's narrow one: an 18 px title and the last part of the path (*CPU*, *Temp &
+    power*).
+  * Keys and touch as in landscape; in the one-column overview Up / Down go card by card and on to the footer, Left /
+    Right move only along the footer.
+* **Landscape unchanged**: every landscape shot of the scenes is the same picture as 0.2.7's (only the version and the
+  measured CPU on the System page differ).
+* Built at the launcher **v0.8.9** toolkit (`25927c3`, the new pin of the apps; 0.2.7 was built at v0.8.5).
 
 ## What changed in 0.2.6
 
@@ -66,13 +86,15 @@ five sizes (see [Build and test](#build-and-test)).
 | ![Power warning](screenshots/05-power-warning-640x480.png) 640x480 render, deck size. Under-voltage now: the Power tile turns red with *Now: check the power supply*; storage at 93 % in amber | ![Temp and power](screenshots/06-temp-power-640x480.png) 640x480 render, deck size. The Temp & power page during the same under-voltage: the temperature chart with its 70 and 80 °C lines, the power state in plain words |
 | ![Processes](screenshots/07-processes-800x480.png) 800x480 render, Pi 3A+ size. Processes sorted by CPU, with their memory | ![Storage](screenshots/08-storage-1280x720.png) 1280x720 render, larger screen. The Storage page: read / write chart, each mounted file system with its fill, the disk's rates |
 | ![x86 overview](screenshots/09-x86-overview-640x480.png) 640x480 render of x86 fixture data (Panasonic FZ-M1): the Power tile is the battery, the temperature the package sensor | ![x86 Temp and battery](screenshots/10-x86-temp-battery-640x480.png) 640x480 render, same fixture. Temp & power: the battery rows first, then the temperature; no firmware flags |
+| ![Portrait overview](screenshots/11-portrait-overview-480x800.png) 480x800 render, PDA mode (portrait, 4.3" DSI). The six tiles as cards across the width, the footer at the bottom | ![Portrait overview, tablet](screenshots/12-portrait-overview-800x1280.png) 800x1280 render, PDA mode on the 7-inch tablet. Two columns, Power and Network across, each history line under its value |
 
 The screens above come from several screen sizes: the app adapts to the screen it runs on.
 
 ## What it does
 
 * **Overview** (the first page): six tiles that fill the screen under the header, never scrolling (2 x 3 at 640x480;
-  3 x 2 on the wide screens 800x480, 1024x600, 1280x720; on the square 720x720 Power and Network across the width).
+  3 x 2 on the wide screens 800x480, 1024x600, 1280x720; on the square 720x720 Power and Network across the width;
+  in portrait one column of cards at 480x800, Power and Network across at 480x640 and 800x1280).
   Each tile has a title, one big value, a small line and, when the tile has room, a history line of the last 2
   minutes (or a fill bar):
   * **Power** (first, top left): *Power OK* in green with a green frame; *Under-voltage* in red, a red frame and a red
@@ -128,7 +150,7 @@ third of a second after the start.
 
 | Function | Keys | Touch |
 |---|---|---|
-| Overview: move the blue ring between the tiles and the footer items | the arrows, by position (Left / Right in a row, Up / Down across rows and down to the footer) | |
+| Overview: move the blue ring between the tiles and the footer items | the arrows, by position (Left / Right in a row, Up / Down across rows and down to the footer; in the one-column portrait overview Up / Down card by card) | |
 | Overview: open a tile's page or a footer item | Enter | **one tap** on the tile or the item (a tile is a large target: no first tap to highlight) |
 | A page: move the highlight (CPU, Memory, Processes) | Up / Down | a tap on a row highlights it; swipe to scroll |
 | A read-only page (Temp & power, Storage, Network, System): scroll | Up / Down, one row per press | swipe |
@@ -148,7 +170,8 @@ header and Settings > Apps keep "System Monitor".
 ## Requirements
 
 * A screen of at least **640x480** (`X-MinSize=640x480`; under it the app says so and closes on any key) and a
-  CyberdeckZero Launcher with full-screen app support (contract 1).
+  CyberdeckZero Launcher with full-screen app support (contract 1). In PDA mode (portrait) a canvas of at least
+  **480x640** (`X-Portrait=480x640`); a launcher before v0.8.8 never gives a portrait canvas.
 * A Raspberry Pi running Linux (tested in the harness with fixtures of a Pi Zero 2 W, a Pi 3A+ and a Pi 5), or an
   x86-64 PC with Linux (the amd64 package; fixture of a Panasonic FZ-M1). Every number comes from `/proc` and `/sys`
   (on a PC: also the DMI name and the battery in `/sys/class/power_supply`) except, on a Pi only:
@@ -169,7 +192,7 @@ From **Settings > Apps**. By hand:
 
 ```sh
 python3 tools/make_registry.py --only system-monitor --out <a folder outside packages/>
-sudo dpkg -i system-monitor_0.2.7_arm64.deb      # amd64 for PCs: system-monitor_0.2.7_amd64.deb; remove: sudo dpkg -r system-monitor
+sudo dpkg -i system-monitor_0.3.0_arm64.deb      # amd64 for PCs: system-monitor_0.3.0_amd64.deb; remove: sudo dpkg -r system-monitor
 ```
 
 ## Files the app keeps
@@ -240,15 +263,15 @@ python3 tools/make_registry.py --only system-monitor --out <a folder outside pac
 * `src/ui/`: `monitor_app` (pages on `cp0::ui::Page`, their lists on `cp0::ui::CompactList`, Sampling on
   `cp0::ui::Roller`), `overview` (the tile grid), `panels` (the detail pages' `lv_chart` history chart and the
   Processes status line).
-* `tests/`: unit tests (`test-system-monitor`, 787 checks) on `tests/fixtures/<board>/` (recorded `/proc` and `/sys`
+* `tests/`: unit tests (`test-system-monitor`, 812 checks) on `tests/fixtures/<board>/` (recorded `/proc` and `/sys`
   files of a Pi Zero 2 W, a Pi 3A+ with `throttled=0x50005`, a Pi 5 with a fan, NVMe and 16 kB pages, and an x86 tablet
   (`x86-fz-m1`: DMI, ACPI battery, x86_pkg_temp; its tree is the sysfs-root hook: `SYSTEM_MONITOR_FIXTURE=<folder>` reads
   every `/proc` and `/sys` path from a folder, so a tree recorded like these can be tried); two snapshots
-  one second apart; a process table; a missing and a refused `vcgencmd`; the grid at the five sizes and every focus
-  move); headless scenes in `tests/scenes` on the same fixtures with a scenario that makes the counters move
+  one second apart; a process table; a missing and a refused `vcgencmd`; the grid at the five sizes and the portrait
+  ones, and every focus move); headless scenes in `tests/scenes` on the same fixtures with a scenario that makes the counters move
   (`SYSTEM_MONITOR_FIXTURE=<board>:<scenario>`: the deck at work, without vcgencmd, offline; the Pi 3A+ under-voltage;
-  a hot Pi 5) at 640x480, 800x480, 720x720, 1280x720 and 1024x600, the notice under 640x480 and a start without the
-  launcher.
+  a hot Pi 5) at 640x480, 800x480, 720x720, 1280x720 and 1024x600, the notice under 640x480, a start without the
+  launcher, and `portrait.scene` at 480x800, 480x640 and 800x1280 (PDA mode: every page by touch, the ring by keys).
 * Board protocol: [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md).
 
 The same fixture variable works on a board, for screenshots of a state that is hard to cause:
@@ -256,6 +279,9 @@ The same fixture variable works on a board, for screenshots of a state that is h
 
 ## Changes
 
+* 0.3.0: portrait (PDA mode, `X-Portrait=480x640`): one column of cards at 480x800, Power and Network across at
+  480x640 and 800x1280 (there with the history lines under the values); landscape unchanged; built at the launcher
+  v0.8.9 toolkit (see [What changed in 0.3.0](#what-changed-in-030)).
 * 0.2.7: rebuilt against launcher v0.8.5: battery in the header, Wi-Fi interface lookup, status feed; no other change.
 * 0.2.6: x86 PCs and tablets: the model from DMI, the CPU temperature from `x86_pkg_temp` (else coretemp, acpitz, the
   hottest sane zone), a battery tile and rows (percent, state, power, time left) when there is a battery, no `vcgencmd`

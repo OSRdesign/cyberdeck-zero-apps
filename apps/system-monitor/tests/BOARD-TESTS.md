@@ -142,6 +142,21 @@ Temp & power shows *Fan* (level and rpm; compare `cat /sys/class/thermal/cooling
 input)* = `vcgencmd pmic_read_adc EXT5V_V`; Storage shows the NVMe or eMMC; at 720x720 (HackBerry, keyboard rule
 forced) every page as on the 720x720 column of the sheets.
 
+## B8. PDA mode (0.3.0; launcher v0.8.9, Settings > Screen > PDA mode On rotate left)
+
+On the Pi 3A+ or Pi 4 B DSI board (480x800) and, if at hand, the FZ-M1 tablet (800x1280, amd64 package):
+
+1. The home grid shows the **Monitor** tile; a tap starts it **upright** (not turned): on 480x800 six cards in one
+   column and the footer at the bottom (as `portrait/480x800/overview.png` of the sheets); on the tablet two columns
+   with Power and Network across and each history line under its value (`portrait/800x1280/overview.png`). The header
+   reads *System Monitor*, the Esc pill and the status strip do not overlap it.
+2. By touch: a tap on each card opens its page (title *CPU*, *Memory*, *Temp & power* ...), a drag scrolls a page,
+   the header Esc goes back to the overview; *Processes*, *System* and the sampling item open from the footer. The
+   handwriting band never shows (no text field).
+3. With a keyboard: Up / Down move the ring card by card and down to the footer, Left / Right move along the footer,
+   Enter opens, Esc goes back, a short Esc at the overview quits.
+4. Settings > Screen > PDA mode Off (the launcher restarts): the app is the landscape app of 0.2.7, unchanged.
+
 Cleanup: `sudo dpkg -r system-monitor`; `rm -f ~/.config/cyberdeckzero/system-monitor.conf`; `sudo apt remove
 stress-ng` if it was installed for B3.
 
@@ -159,3 +174,5 @@ stress-ng` if it was installed for B3.
 | U-10 | The home tile label *Monitor* stays on one line on every board's home grid (measured: 96 px of 176 px on the deck) |
 | U-7 | `iw dev wlan0 link` works without root on Raspberry Pi OS (it does on Debian) |
 | U-8 | The pwm-fan cooling device and the `pwmfan` hwmon are named so on the Pi 5 kernel in use |
+| U-11 | In PDA mode the launcher starts the app upright with the portrait canvas (`APPLAUNCH_CANVAS=480x800`, the board's rotation inherited) and the touch follows that rotation (seen only in the harness, which has no rotation) |
+| U-12 | The portrait densities of the harness (8.5 px/mm on the 4.3" DSI, 8.6 on the tablet) are the boards'; another density moves the one-column limit (60 mm) only on a panel near it |

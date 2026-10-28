@@ -115,6 +115,40 @@ static void test_grid()
     g = grid_layout(608, 408, 8, 79, 0, kTileCount, 90);
     CHECK(g.footer.empty() && g.tiles[5].y + g.tiles[5].h <= 408);
 
+    // portrait (PDA mode): 480x800, a column 448 px wide under the 60 mm cap (511 px at 8.5 px/mm): six cards across
+    g = grid_layout(448, 728, 8, 60, kFootCount, kTileCount, 90, 511);
+    CHECK(g.cols == 1 && g.rows == 6 && !g.wide);
+    CHECK_EQ(g.tiles.size(), static_cast<std::size_t>(6));
+    for (const Rect &t : g.tiles) CHECK(t.x == 0 && t.w == 448 && t.h == 103);
+    CHECK_EQ(g.tiles[1].y, 103 + 8);
+    CHECK(g.tiles[5].y + g.tiles[5].h <= g.footer[0].y - 8);
+    CHECK(g.footer.size() == 3 && g.footer[0].y == 728 - 60 && g.footer[2].x + g.footer[2].w == 448);
+    {
+        std::vector<Rect> col = g.tiles;
+        col.insert(col.end(), g.footer.begin(), g.footer.end());
+        CHECK_EQ(next_focus(col, 0, Dir::Down), 1);
+        CHECK_EQ(next_focus(col, 4, Dir::Down), 5);
+        CHECK_EQ(next_focus(col, 3, Dir::Up), 2);
+        CHECK_EQ(next_focus(col, 2, Dir::Left), -1); /* one card per row: Left / Right keep the ring */
+        CHECK_EQ(next_focus(col, 2, Dir::Right), -1);
+        const int foot = next_focus(col, 5, Dir::Down); /* Network down to the footer */
+        CHECK(foot >= 6 && foot <= 8);
+        CHECK_EQ(next_focus(col, 6, Dir::Up), 5);
+        CHECK_EQ(next_focus(col, 6, Dir::Right), 7);
+    }
+    // 480x640: six cards would be 76 px, under the 92 px a card needs: the two-column rule (Power and Network across)
+    g = grid_layout(448, 568, 8, 63, kFootCount, kTileCount, 92, 541);
+    CHECK(g.cols == 2 && g.rows == 4 && g.wide);
+    CHECK(g.tiles[0].w == 448 && g.tiles[5].w == 448 && g.tiles[1].w < 448);
+    // 800x1280: a column 768 px wide is over the cap (514 px at 8.6 px/mm): two columns, Power and Network across
+    g = grid_layout(768, 1208, 8, 60, kFootCount, kTileCount, 90, 514);
+    CHECK(g.cols == 2 && g.rows == 4 && g.wide);
+    // no cap (0): a portrait area takes the landscape rule; a landscape area ignores the cap
+    g = grid_layout(448, 728, 8, 60, kFootCount, kTileCount, 90, 0);
+    CHECK(g.cols == 2);
+    g = grid_layout(608, 408, 8, 79, kFootCount, kTileCount, 90, 10000);
+    CHECK(g.cols == 2 && g.rows == 3 && !g.wide && g.tiles[0].w == 300 && g.tiles[0].h == 101);
+
     // focus on the 640x480 grid: tiles 0-5 (2 x 3), footer 6-8
     g = grid_layout(608, 408, 8, 79, kFootCount, kTileCount, 90);
     std::vector<Rect> r = g.tiles;
@@ -379,6 +413,9 @@ static void test_package()
     CHECK(desktop.find("\nX-Fullscreen=true") != std::string::npos);
     const std::string min = "\nX-MinSize=" + std::to_string(kMinW) + "x" + std::to_string(kMinH);
     CHECK(desktop.find(min) != std::string::npos);
+    /* PDA mode: shown upright on a portrait launcher (APP-CONTRACT section 6), the same minimum as the AppSpec's */
+    const std::string portrait = "\nX-Portrait=" + std::to_string(kPortraitW) + "x" + std::to_string(kPortraitH) + "\n";
+    CHECK(desktop.find(portrait) != std::string::npos);
     CHECK(desktop.find("\nExec=/usr/share/APPLaunch/bin/system-monitor\n") != std::string::npos);
     CHECK(desktop.find("\nIcon=share/images/system-monitor.png") != std::string::npos);
     CHECK(desktop.find("\nTerminal=false") != std::string::npos);
@@ -390,7 +427,7 @@ static void test_package()
     const std::string manifest = read_file(app + "/app.json");
     CHECK(manifest.find("\"share_code\": \"system-monitor\"") != std::string::npos);
     CHECK(manifest.find("\"package\": \"system-monitor\"") != std::string::npos);
-    CHECK(manifest.find("\"version\": \"0.2.7\"") != std::string::npos);
+    CHECK(manifest.find("\"version\": \"0.3.0\"") != std::string::npos);
     CHECK(manifest.find("\"title\": \"System Monitor\"") != std::string::npos);
     CHECK(manifest.find("\"license\": \"MIT\"") != std::string::npos);
     CHECK(manifest.find("\"depends\": \"libfreetype6, libinput10, libxkbcommon0\"") != std::string::npos);

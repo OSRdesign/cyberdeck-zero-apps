@@ -4,8 +4,9 @@
  * cdk (cyberdeck kit): what every native fullscreen app of this repository shares, on the deck and in the headless
  * harness (report 024 section 2). This header is the LVGL side that both runners use:
  *
- *   AppSpec       what an app gives the runner: id, title, the minimum screen (= X-MinSize of its .desktop file) and
- *                 the function that builds its UI on a screen.
+ *   AppSpec       what an app gives the runner: id, title, the minimum screen (= X-MinSize of its .desktop file), the
+ *                 minimum portrait canvas when it has a portrait layout (= X-Portrait) and the function that builds
+ *                 its UI on a screen.
  *   start/stop    the runner's two calls once the display exists: too small a screen -> the "needs WxH" notice; else
  *                 the on-screen keyboard policy (osk_policy.hpp), the keypad input group and the app's UI.
  *   request_quit  the app ends: a short Esc at the root page, the header's Esc button at the root page (report 024,
@@ -30,6 +31,11 @@ struct AppSpec {
     const char *title = "";        /* the page title, also named in the notice */
     int min_w = 640;               /* the smallest logical screen the app supports: keep it equal to X-MinSize in */
     int min_h = 480;               /* the .desktop file (the template's tests compare them) */
+    /* The smallest portrait canvas (taller than wide) the app supports: keep it equal to X-Portrait in the .desktop
+     * file (APP-CONTRACT section 6). 0 x 0 = landscape only: no X-Portrait, and a portrait launcher runs the app
+     * turned (it then gets a landscape canvas and min_w x min_h applies). */
+    int portrait_w = 0;
+    int portrait_h = 0;
     /* Builds the app on `screen` (the native display's active screen, black, empty). Called once on the LVGL thread
      * after the keypad group exists. The returned object owns the UI; it is released by stop(), LVGL still up. */
     std::function<std::shared_ptr<void>(lv_obj_t *screen)> build;
@@ -41,7 +47,12 @@ const AppSpec &app_spec();
 
 /* --------------------------------------------------------------------------------------------- pure (unit-tested) */
 
-/* The screen is big enough: w >= min_w and h >= min_h (logical, landscape). */
+/* The app declares a portrait canvas (portrait_w x portrait_h, X-Portrait). */
+bool has_portrait(const AppSpec &spec);
+/* The minimum that applies to a w x h canvas: portrait_w x portrait_h on a portrait canvas (h > w) of an app that
+ * declares one, else min_w x min_h. */
+void min_for(const AppSpec &spec, int w, int h, int *min_w, int *min_h);
+/* The screen is big enough: w x h at least min_for() (logical, as the launcher gives the canvas). */
 bool screen_fits(const AppSpec &spec, int w, int h);
 /* The notice for a screen that is too small (an older launcher ignores X-MinSize, APP-CONTRACT section 6). */
 std::string min_size_notice(const AppSpec &spec, int w, int h);

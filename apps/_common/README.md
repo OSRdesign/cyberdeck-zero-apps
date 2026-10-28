@@ -12,7 +12,7 @@ The starting point of a new app is `apps/cyberdeck-app-template` (a draft that u
 
 | File | What |
 |---|---|
-| `app.{hpp,cpp}` | `AppSpec` (id, title, minimum screen = `X-MinSize`, UI builder), `start()` / `stop()` (what both runners do once the display exists), `request_quit()`, the keypad input group, the "needs WxH" notice for a screen under the minimum (an older launcher ignores `X-MinSize`), `hidden()` / `leave_to_home()` (multitasking) |
+| `app.{hpp,cpp}` | `AppSpec` (id, title, minimum screen = `X-MinSize`, minimum portrait canvas = `X-Portrait` when the app has a portrait layout, UI builder), `start()` / `stop()` (what both runners do once the display exists), `request_quit()`, the keypad input group, the "needs WxH" notice for a screen under the minimum (an older launcher ignores `X-MinSize`), `hidden()` / `leave_to_home()` (multitasking) |
 | `platform.{hpp,cpp}` | the device runner `cdk::run()`: cp0_lvgl's display backend switched to the native display, every keyboard read, SIGTERM / SIGINT / SIGHUP end the loop cleanly, `--version`; started by hand it still uses the launcher's backend (`APPLAUNCH_DISPLAY=dpi-scaled`); with the launcher's control socket, the multitasking lifecycle (`cp0_app_lifecycle_device_start()`: hide / show / close, below) |
 | `osk_policy.{hpp,cpp}` | the app-side on-screen keyboard rule: `cp0_app_osk_allowed()` on `input.state`, looked at once a second at most and parsed again only when the file changed (a new `gen`); never shown by hand, and off for 600 s after a Bluetooth keyboard went away (tests and the Settings line to show the rule: [guidelines, section 14](../../docs/APP-GUIDELINES.md#14-lessons-learned)); without the file `APPLAUNCH_OSK` and the keyboards of `/proc/bus/input/devices` |
 | `async_run.{hpp,cpp}` | background commands: fork + exec in their own process group, lines and the end delivered on the LVGL thread in order (`lv_async_call` under `lv_lock()`), timeout, cancel, PDEATHSIG, `shutdown()` at exit |
@@ -25,7 +25,10 @@ The starting point of a new app is `apps/cyberdeck-app-template` (a draft that u
 
 ## Rules every app follows
 
-- `.desktop`: `X-Fullscreen=true`, `X-MinSize=640x480` (decision 2026-10-13), the same numbers in `AppSpec`.
+- `.desktop`: `X-Fullscreen=true`, `X-MinSize=640x480` (decision 2026-10-13), the same numbers in `AppSpec`. An app
+  with a portrait layout (PDA mode) also declares `X-Portrait=WxH` and the same numbers in `AppSpec.portrait_w/h`
+  ([guidelines, portrait layout](../../docs/APP-GUIDELINES.md#portrait-layout-x-portrait)); without it the launcher
+  runs the app turned on a portrait panel.
 - Layout from the layout service only (`cp0_ui_metrics_get()`, `cp0_ui_roller_page()`, the widgets): no pixel constant.
 - Keyboard first, every action by keys and by touch; a short Esc at the root page ends the app; the 3 s Esc hold is the
   launcher's.
@@ -76,14 +79,17 @@ and compare the header shots with the launcher's. Details, and what else the lau
 
 ## The launcher pin
 
-`LAUNCHER_REF` is the **v0.8.5** commit `d0cb456`. The launcher-process side of v0.8.6 (`board.state`, the new
-`status.state` keys, `launcher.sock`, the volume and brightness keys inside apps) works for apps built at this pin
-without a rebuild; using the v0.8.6 readers or the socket client of `cp0_lvgl` (`cp0_app_board_read()`,
-`cp0_app_client.h`) needs a re-pin to the v0.8.6 commit `aef009b`, then a rebuild of every app on both architectures.
-`_common` has no launcher-request wrapper yet.
+`LAUNCHER_REF` is the **v0.8.9** commit `25927c3`, moved from v0.8.5 (`d0cb456`) for System Monitor 0.3.0, the first
+app with a portrait layout: on the 480 px wide portrait canvases the v0.8.8 toolkit draws the narrow page header (an
+18 px title, the last part of a breadcrumb, the status strip at 72 %), which a v0.8.5 build lacks ("Syste..." in the
+header). At 640x480 and every other landscape size the toolkit draws the same pixels as at v0.8.5 (System Monitor's
+landscape shots are byte-identical). The pin also brings the v0.8.6 readers and the socket client of `cp0_lvgl`
+(`cp0_app_board_read()`, `cp0_app_client.h`). Only System Monitor is built at it so far; every other app still carries
+a v0.8.5 build and moves to this pin at its next rebuild (both architectures). `_common` has no launcher-request
+wrapper yet.
 
 Launcher **v0.8.7** (media keys of non-keyboard devices, the Windows key opening the app switcher, the sound-player
-crash fix) lives in the launcher process: it needs no re-pin and no rebuild, and `LAUNCHER_REF` stays at `d0cb456`.
+crash fix) lives in the launcher process: it needs no re-pin and no rebuild.
 What needs a re-pin is a change to the drawing of the shared widgets (the status strip), not a change to the data or the
 keys the launcher publishes ([guidelines, launcher versions](../../docs/APP-GUIDELINES.md#launcher-versions-and-what-each-added-for-apps)).
 

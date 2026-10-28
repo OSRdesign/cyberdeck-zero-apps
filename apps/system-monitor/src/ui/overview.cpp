@@ -20,6 +20,9 @@ constexpr std::uint32_t kTileBg = 0x1E1E1E;     /* the launcher home grid's tile
 constexpr std::uint32_t kTileFocusBg = 0x262626; /* ... selected ... */
 constexpr std::uint32_t kTilePressed = 0x33414D; /* ... and pressed */
 constexpr std::uint32_t kWhite = 0xFFFFFF;
+/* PDA mode (a portrait screen): the cards stack in one column when it is at most this wide, else two columns (grid.hpp):
+ * the 480 px wide portrait panels (53-56 mm) get one column, the 800 px wide tablet (90 mm) two. mm x 10. */
+constexpr int kPortraitCardMaxMmX10 = 600;
 
 lv_obj_t *plain(lv_obj_t *parent)
 {
@@ -120,7 +123,9 @@ OverviewGrid::OverviewGrid(lv_obj_t *parent, const cp0_ui_roller_page_t &layout,
     const int w = layout.w - 2 * margin;
     const int h = layout.body_h - 2 * pad_;
     const int min_tile_h = 2 * pad_ + 2 * small_h_ + body_line;
-    grid_ = grid_layout(w, h, gap_, cp0_ui_tok(CP0_TOK_ROW_H), kFootCount, kTileCount, min_tile_h);
+    portrait_ = layout.h > layout.w;
+    const int max_tile_w = portrait_ && m ? cp0_ui_mm_px(m->ppmm_x100, kPortraitCardMaxMmX10, 1) : 0;
+    grid_ = grid_layout(w, h, gap_, cp0_ui_tok(CP0_TOK_ROW_H), kFootCount, kTileCount, min_tile_h, max_tile_w);
 
     for (int i = 0; i < kTileCount; ++i) {
         tiles_.push_back(make_box(grid_.tiles[static_cast<std::size_t>(i)], false));
@@ -192,14 +197,24 @@ void OverviewGrid::build_tile(Item &it, int id)
 }
 
 /* The history line or the bar beside the value: from the widest value it takes to the tile's right edge, when that
- * leaves at least two value-heights of room. */
+ * leaves at least two value-heights of room. On a portrait screen a tile whose middle has room for three value lines
+ * has it under the value instead, across the tile (the value at the top of the middle): the tall cards of 800x1280. */
 void OverviewGrid::place_spark(Item &it)
 {
-    const int value_w = std::max(text_width(lv_label_get_text(it.value), it.value_font),
-                                 text_width(reserve_of(it.spark), it.value_font));
-    const int x = pad_ + value_w + gap_ * 2;
-    const int w = it.rect.w - pad_ - x;
-    const bool room = it.spark != Spark::None && w >= 2 * it.value_px;
+    const int mid_h = it.rect.h - 2 * pad_ - 2 * small_h_;
+    const int top = pad_ + small_h_;
+    const int line = lv_font_get_line_height(it.value_font);
+    const bool below = portrait_ && it.spark != Spark::None && mid_h >= 3 * line + gap_;
+    if (portrait_) lv_obj_set_y(it.value, below ? top : top + (mid_h - line) / 2); /* else centred, as build_tile put it */
+    int x = pad_, w = it.rect.w - 2 * pad_;
+    bool room = below;
+    if (!below) {
+        const int value_w = std::max(text_width(lv_label_get_text(it.value), it.value_font),
+                                     text_width(reserve_of(it.spark), it.value_font));
+        x = pad_ + value_w + gap_ * 2;
+        w = it.rect.w - pad_ - x;
+        room = it.spark != Spark::None && w >= 2 * it.value_px;
+    }
     const int new_x = room ? x : -1;
     if (new_x == it.spark_x && (it.chart || it.bar || !room)) return;
     it.spark_x = new_x;
@@ -211,14 +226,15 @@ void OverviewGrid::place_spark(Item &it)
     it.shown_bar = -1;
     it.shown_spark_rgb = -1;
     if (!room) return;
-    const int mid_h = it.rect.h - 2 * pad_ - 2 * small_h_;
-    const int top = pad_ + small_h_;
+    // where it goes: beside the value, centred on the middle; or under the value, the rest of the middle
+    const int area_y = below ? top + line + gap_ / 2 : top;
+    const int area_h = below ? mid_h - line - gap_ : mid_h;
     if (it.spark == Spark::Bar) {
         const int bh = std::max(4, it.value_px / 3);
         it.bar = lv_bar_create(it.box);
         lv_obj_remove_flag(it.bar, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_set_size(it.bar, w, bh);
-        lv_obj_set_pos(it.bar, x, top + (mid_h - bh) / 2);
+        lv_obj_set_pos(it.bar, x, area_y + (area_h - bh) / 2);
         lv_bar_set_range(it.bar, 0, 100);
         lv_obj_set_style_radius(it.bar, bh / 2, LV_PART_MAIN);
         lv_obj_set_style_radius(it.bar, bh / 2, LV_PART_INDICATOR);
@@ -229,13 +245,13 @@ void OverviewGrid::place_spark(Item &it)
         lv_obj_set_style_anim_duration(it.bar, 0, 0);
         return;
     }
-    // the line beside the value, at most twice its height, centred on it
-    const int ch = std::max(8, std::min(mid_h - pad_ / 2, 2 * lv_font_get_line_height(it.value_font)));
+    // the line beside the value, at most twice its height, centred on it; under the value: all the room there
+    const int ch = below ? area_h : std::max(8, std::min(mid_h - pad_ / 2, 2 * line));
     it.chart = lv_chart_create(it.box);
     lv_obj_remove_flag(it.chart, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_remove_flag(it.chart, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_size(it.chart, w, ch);
-    lv_obj_set_pos(it.chart, x, top + (mid_h - ch) / 2);
+    lv_obj_set_pos(it.chart, x, area_y + (area_h - ch) / 2);
     lv_obj_set_style_bg_opa(it.chart, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(it.chart, 0, 0);
     lv_obj_set_style_pad_all(it.chart, 2, 0);
@@ -245,7 +261,10 @@ void OverviewGrid::place_spark(Item &it)
     lv_obj_set_style_anim_duration(it.chart, 0, 0);
     lv_chart_set_type(it.chart, LV_CHART_TYPE_LINE);
     // one point every few pixels (each segment is a draw task): the 120 samples binned into a few dozen points
-    const std::size_t points = std::clamp<std::size_t>(static_cast<std::size_t>(w / std::max(3, pad_ / 2)), 12, kHistory);
+    std::size_t points = std::clamp<std::size_t>(static_cast<std::size_t>(w / std::max(3, pad_ / 2)), 12, kHistory);
+    // portrait: a whole number of samples per point, so that the 120 samples reach across the line (91 points of 2
+    // samples would leave the oldest third empty)
+    if (portrait_) points = kHistory / ((kHistory + points - 1) / points);
     lv_chart_set_point_count(it.chart, static_cast<uint32_t>(points));
     lv_chart_set_div_line_count(it.chart, 0, 0);
     it.data.assign(points, LV_CHART_POINT_NONE);

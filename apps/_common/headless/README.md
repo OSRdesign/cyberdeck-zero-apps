@@ -20,6 +20,9 @@ Output: `out/<scene>/<WxH>/<shot>.png`, `out/<scene>/<WxH>/report.txt` (each che
 Exit status 0 when every size passed.
 
 Default sizes: 640x480 (deck, 11.3 px/mm), 800x480 (9.2), 720x720 (10.0), 1280x720 (11.6), 1024x600 (11.3), 480x320.
+The portrait canvases an app with `X-Portrait` gets in PDA mode run at the densities of the launcher's PDA scenes
+when a scene names them: 480x800 (8.5, the 4.3" DSI panel), 480x640 (9.0, a 3.5" panel), 800x1280 (8.6, the FZ-M1
+tablet).
 The densities are the launcher harness's, so both compute the same tokens. Each size runs in its own process, all at
 once. The app sees the per-launch environment of a fullscreen app (`APPLAUNCH_CONTRACT=1`, `APPLAUNCH_APP_MODE=fullscreen`,
 window and canvas = the size) and an `input.state` fixture (no keyboard, rule `auto`) in `out/<scene>/<WxH>/runtime`.
