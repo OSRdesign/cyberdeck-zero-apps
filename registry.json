@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-10-28T07:43:41+00:00",
+  "generated_at": "2026-10-28T22:56:01+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CardputerZero"
@@ -370,9 +370,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.5.0",
+      "version": "0.6.0",
       "published_at": "2026-10-15T00:04:47+00:00",
-      "updated_at": "2026-10-28T07:43:41+00:00",
+      "updated_at": "2026-10-28T22:56:01+00:00",
       "review": {
         "status": "approved"
       },
@@ -381,10 +381,10 @@
       "download": {
         "type": "deb",
         "package": "serial-console",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/serial-console_0.5.0_arm64.deb",
-        "md5": "4959abf70acafb1a51e4a87ed1b2f22c",
-        "sha256": "0eab4f898e83008ecb77e698c096246efd71cfdc3ac79490b9291382ffe15a78",
-        "size": 1585404
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/serial-console_0.6.0_arm64.deb",
+        "md5": "236d6cffc96e7cfaf8d79e61f9a4a1ac",
+        "sha256": "77a937dd42f9078d6bd25c1eba86ccdf06eba11df9e317cef4154b23ec5e9097",
+        "size": 1586434
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0",
       "permissions": {
@@ -407,7 +407,9 @@
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/06-gps-card-1280x720.png",
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/07-terminal-keyboard-pi3a.png",
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/08-portrait-terminal-keyboard-480x800.png",
-          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/09-portrait-terminal-800x1280.png"
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/09-portrait-terminal-800x1280.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/10-portrait-band-480x800.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/11-portrait-band-800x1280.png"
         ]
       },
       "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/icon.png",
@@ -420,7 +422,9 @@
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/06-gps-card-1280x720.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/07-terminal-keyboard-pi3a.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/08-portrait-terminal-keyboard-480x800.png",
-        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/09-portrait-terminal-800x1280.png"
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/09-portrait-terminal-800x1280.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/10-portrait-band-480x800.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/11-portrait-band-800x1280.png"
       ]
     },
     {
