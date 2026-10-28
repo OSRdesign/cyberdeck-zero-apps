@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-10-28T00:54:47+00:00",
+  "generated_at": "2026-10-28T07:43:42+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CyberdeckZero"
@@ -310,9 +310,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.4.5",
+      "version": "0.5.0",
       "published_at": "2026-10-22T11:02:03+00:00",
-      "updated_at": "2026-10-23T08:55:13+00:00",
+      "updated_at": "2026-10-28T07:43:42+00:00",
       "review": {
         "status": "approved"
       },
@@ -321,10 +321,10 @@
       "download": {
         "type": "deb",
         "package": "serial-console",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/serial-console_0.4.5_amd64.deb",
-        "md5": "93706d30088357c72092a4be00f285fc",
-        "sha256": "ce0633210a4974c5c3e137d26e69acb01507734dce967a5e7d33af112930c4e6",
-        "size": 1617354
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/serial-console_0.5.0_amd64.deb",
+        "md5": "77483c38428966c2fa402207a46e2ea3",
+        "sha256": "38c24b4b4d27b779b57ed0270411f9e61dfecd6fafcf8e8ff75ff84fabefadab",
+        "size": 1656640
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0",
       "permissions": {
@@ -345,7 +345,9 @@
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/04-find-speed-1024x600.png",
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/05-terminal-deck.png",
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/06-gps-card-1280x720.png",
-          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/07-terminal-keyboard-pi3a.png"
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/07-terminal-keyboard-pi3a.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/08-portrait-terminal-keyboard-480x800.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/09-portrait-terminal-800x1280.png"
         ]
       },
       "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/icon.png",
@@ -356,7 +358,9 @@
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/04-find-speed-1024x600.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/05-terminal-deck.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/06-gps-card-1280x720.png",
-        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/07-terminal-keyboard-pi3a.png"
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/07-terminal-keyboard-pi3a.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/08-portrait-terminal-keyboard-480x800.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/09-portrait-terminal-800x1280.png"
       ]
     },
     {
