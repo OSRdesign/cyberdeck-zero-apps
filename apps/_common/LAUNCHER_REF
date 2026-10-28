@@ -1,5 +1,5 @@
-6f37057bba7afb407e0f21a645617be8c4794df3
-# The launcher commit (cyberdeck-zero-launcher branch pda-s4-plan, PDA S4 phase 1: the writing zone's band in an app run upright, cp0::ui::zone_host, input.state hand=; a TEST pin, to move to the launcher's release tag once it ships; before it 25927c3 = v0.8.9, d0cb456 = v0.8.5) every cdk app is built against:
+5f54d15d95ecd4e89121dada3c0941317126f0c2
+# The launcher commit (v0.8.11 release, tag v0.8.11: PDA S4 phase 1, the writing zone's band in an app run upright, cp0::ui::zone_host, input.state hand=; before it 6f37057 = the PDA S4 test pin (same toolkit code), 25927c3 = v0.8.9, d0cb456 = v0.8.5) every cdk app is built against:
 # its ext_components/cp0_lvgl (display backend, keyboard, widgets, layout service), its LVGL FreeType glue
 # (projects/APPLaunch/main/lvgl) and its LVGL configuration. build_app.sh compares the launcher checkout with it and
 # stamps the result into --version and usr/share/doc/<app>/build-info. Move it deliberately, then rebuild every app.

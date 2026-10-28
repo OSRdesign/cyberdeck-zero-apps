@@ -108,7 +108,7 @@ Only for an app that wants to be upright in PDA mode; without it the app runs tu
 - **Text input:** the `TextField` and the toolkit's on-screen keyboard work upright as in landscape: the keyboard lays
   itself out across the portrait canvas (about 40 % of the height at 480x800, 45 % at 480x640, a quarter at 800x1280;
   its row of Esc, Tab, Ctrl and the arrows fits at 480 wide), `cp0::ui::osk::bottom_inset()` and the inset listener say
-  how much room it takes. **The handwriting band (PDA S4, built at a pin that has it, `LAUNCHER_REF` 6f37057 or
+  how much room it takes. **The handwriting band (PDA S4, built at a pin that has it, `LAUNCHER_REF` v0.8.11 (`5f54d15`) or
   later):** with `APPLAUNCH_PDA=1` and `input.state` `hand=1` (Settings > On-screen keyboard is Handwriting + keyboard)
   the band shows exactly where the keyboard would, by the same rule (a field asks, no physical keyboard), and leaves its
   rows free through the same inset (318 px at 480x800, 240 at 480x640, 478 at 800x1280); its keys reach the app as the
@@ -377,7 +377,7 @@ files of the contract and the client.
 | 0.8.7 ([release page](https://github.com/OSRdesign/cyberdeck-zero-launcher/releases/tag/v0.8.7)) | the five media keys are also read from input devices that are not keyboards and act while an app is in front; the Windows key double tap or a 0.6 s hold opens the app switcher (apps give it no meaning); `KEY_F14` reserved; fix of a launcher crash at start (sound-player race, also in 0.8.6). Apps do not change | nothing to rebuild, no new pin (the strip's drawing did not change) |
 | 0.8.8 | PDA profile: a portrait launcher (480x800, 480x640) with a handwriting band; landscape apps run turned; `X-Portrait=WxH` shows an app upright; the toolkit draws a narrow page header on 480 px wide canvases | turned: no rebuild; upright: `X-Portrait` and a portrait layout, built at a pin that has the narrow header |
 | 0.8.9 (`25927c3`, the previous pin) | Settings > Screen > PDA mode on any panel with room (also the 800x1280 tablet); `APPLAUNCH_PDA=0` passed to every app | the pin of System Monitor 0.3.0 and Serial Console 0.5.0 |
-| PDA S4 (`6f37057`, **the current pin, a test pin**: branch `pda-s4-plan`, not released; moves to the release tag) | `APPLAUNCH_PDA=1` for an app run upright on a launcher with the writing zone; `input.state` `hand=0\|1`; `cp0::ui::zone_host` (the band's rule, shared with the launcher) | the band needs the pin (`_common/osk_policy` binds it); `hand=` alone: no rebuild |
+| 0.8.11 (`5f54d15`, **the current pin**; before it the test pin `6f37057`, same toolkit code) PDA S4 | `APPLAUNCH_PDA=1` for an app run upright on a launcher with the writing zone; `input.state` `hand=0\|1`; `cp0::ui::zone_host` (the band's rule, shared with the launcher) | the band needs the pin (`_common/osk_policy` binds it); `hand=` alone: no rebuild |
 
 **What needs a re-pin, in short.** An app pins a launcher commit. A change to the **drawing** of the shared widgets (the
 status strip) needs a re-pin and a rebuild of every app. A change to the **data** the launcher publishes (state-file

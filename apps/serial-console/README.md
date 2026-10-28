@@ -10,7 +10,7 @@ adapter), then opens a terminal page.
 
 ## Next (not released yet): the handwriting band in PDA mode
 
-* Built at the launcher toolkit of PDA S4 (`6f37057`, a test pin until the launcher release that carries it). On a
+* Built at the launcher toolkit of PDA S4 (the launcher v0.8.11 release, `5f54d15`). On a
   launcher with that part, PDA mode on and Settings > System > On-screen keyboard = **Handwriting + keyboard**, the
   launcher's **handwriting band** comes up in the app where the on-screen keyboard would (touch only, a tap on the line
   field): letters and digits written in its boxes go into the line field, its key strip (Tab, Ctrl, Alt, the arrows,
@@ -281,7 +281,7 @@ The identification is kept in the port's section of the settings file as `id_*` 
 
 ## Changes
 
-* Next (unreleased): built at the launcher PDA S4 toolkit (`6f37057`): the handwriting band in PDA mode where the
+* Next (unreleased): built at the launcher PDA S4 toolkit (v0.8.11, `5f54d15`): the handwriting band in PDA mode where the
   on-screen keyboard would show; no other change.
 * 0.5.0: portrait (PDA mode, `X-Portrait=480x640`): the pages at the screen's width, the terminal over the whole
   height with the board's text at the deck's size in millimetres on the 480 px wide screens, the on-screen keyboard

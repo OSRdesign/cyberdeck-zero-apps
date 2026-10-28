@@ -79,14 +79,14 @@ and compare the header shots with the launcher's. Details, and what else the lau
 
 ## The launcher pin
 
-`LAUNCHER_REF` is **`6f37057`**, a test pin: the launcher's branch `pda-s4-plan` (PDA S4 phase 1, report 044: the
-writing zone's band in an app run upright, `cp0::ui::zone_host`, `input.state` `hand=`), not released yet. It **must move
-to the launcher's release tag** once that ships (same `cp0_lvgl`, or the rebuild below). From v0.8.9 it changes no
+`LAUNCHER_REF` is **`5f54d15`**, the launcher release **v0.8.11** (tag `v0.8.11`; PDA S4 phase 1, report 044: the
+writing zone's band in an app run upright, `cp0::ui::zone_host`, `input.state` `hand=`). It was the test pin `6f37057`
+(branch `pda-s4-plan`) until the release: the code under `ext_components`, `projects`, `SDK` and `tools` is identical, only docs differ. From v0.8.9 it changes no
 pixel where the band is not shown: Serial Console's 352 earlier shots (292 landscape) and System Monitor's 259 are the
 same pictures as the v0.8.9 builds' with the clock frozen (byte-identical, or in another run where the demonstration
 world's text or the sampler's timing moved; System Monitor's About page shows the build stamp). Serial Console is built
 at it (the band in its line field); the other apps keep their builds. `build_app.sh` needs a checkout of
-that commit as `LAUNCHER_SRC` (it is on the launcher's GitHub branch: `git fetch origin 6f37057bba7afb407e0f21a645617be8c4794df3`)
+that commit as `LAUNCHER_SRC` (`git fetch origin v0.8.11`, or the commit `5f54d15d95ecd4e89121dada3c0941317126f0c2`)
 whose files equal the WSL build tree's byte for byte (a tree synced from a Windows checkout has its line ends: give a WSL
 checkout `core.autocrlf true` and compare with `diff -rq` before building).
 

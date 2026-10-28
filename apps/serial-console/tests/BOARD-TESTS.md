@@ -186,9 +186,9 @@ to RX, Local echo Off, so every line typed comes back as received text.
    scrolls, the counters run, Esc answers at once.
 7. Settings > Screen > PDA mode Off (the launcher restarts): the app is the landscape app of 0.4.5, unchanged.
 
-## S14. PDA S4: the handwriting band in the app (build at the launcher pin 6f37057, launcher with the S4 part)
+## S14. PDA S4: the handwriting band in the app (build at the launcher pin v0.8.11 / 5f54d15, launcher with the S4 part)
 
-The launcher must carry PDA S4 phase 1 (branch `pda-s4-plan` 6f37057 or the release that ships it), PDA mode On rotate
+The launcher must carry PDA S4 phase 1 (release v0.8.11 or later), PDA mode On rotate
 left. Boards: the **Pi 4 B** (DSI 800x480 panel, portrait 480x800, finger or stylus, arm64 package) and the **FZ-M1
 tablet** (800x1280 portrait, finger, amd64 package). The board or loopback of S13; no physical keyboard connected
 unless a step says so. Expected pictures: `portrait-band.png` of the sheets (480x800, 480x640, 800x1280).
