@@ -28,6 +28,7 @@ void test_package()
     // X-MinSize = AppSpec's minimum (notes_app.hpp kMinW / kMinH, used by app_spec.cpp)
     const std::string spec = get(app + "/src/ui/notes_app.hpp");
     CHECK(has(spec, "constexpr int kMinW = 640;") && has(spec, "constexpr int kMinH = 480;"));
+    CHECK(has(spec, "constexpr int kPortraitW = 480;") && has(spec, "constexpr int kPortraitH = 640;"));
     CHECK(has(spec, "kAppTitle = \"Markdown Notes\""));
     // the Home page's header: "Notes" (the shared header cuts "Markdown Notes" at 640x480; tests/scenes/shell.scene)
     CHECK(has(spec, "kHomeTitle = \"Notes\""));
@@ -38,7 +39,7 @@ void test_package()
     CHECK(has(json, "\"share_code\": \"markdown-notes\""));
     CHECK(has(json, "\"package\": \"markdown-notes\""));
     CHECK(has(json, "\"title\": \"Markdown Notes\""));
-    CHECK(has(json, "\"version\": \"0.1.2\""));
+    CHECK(has(json, "\"version\": \"0.2.0\""));
     CHECK(has(json, "\"categories\": [\"Productivity\"]"));
     CHECK(has(json, "\"license\": \"MIT\""));
     CHECK(has(json, "\"depends\": \"libfreetype6, libinput10, libxkbcommon0\""));

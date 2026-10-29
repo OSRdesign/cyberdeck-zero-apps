@@ -98,7 +98,10 @@ void App::build_home()
     lv_obj_t *p = make_page(PageId::Home);
     const Geo g = geo();
     make_list(home_list_, p, 0, panel_h_, 3);
-    home_hint_ = make_hint(p, f_caption_, g.x, g.cw, g.s / 2, home_hint());
+    // portrait (PDA mode): the 480 px wide column cuts the whole hint, so the shorter one (landscape keeps its own)
+    std::string hint = home_hint();
+    if (layout_.h > layout_.w && text_w(hint, f_caption_) > g.cw) hint = home_hint_short();
+    home_hint_ = make_hint(p, f_caption_, g.x, g.cw, g.s / 2, hint);
     place_hint(home_hint_, home_list_, 0);
 }
 

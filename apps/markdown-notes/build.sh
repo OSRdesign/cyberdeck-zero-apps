@@ -34,22 +34,26 @@ case ${1:-} in
     ui) exec sh "$here/tests/flows/run_flows.sh" "$build/host/markdown-notes-script" "$shots" sizes ;;
 esac
 
-# The scenes' vault: a fresh copy of the fixture vault (the scenes only read it: every size runs at once), its notes
+# The scenes' vault: a fresh copy of the fixture vault (the scenes only read it: every size runs at once; portrait-band.scene
+# writes, each size into its own note, in a second copy, /tmp/markdown-notes-scene-vault-band), its notes
 # aged as tests/data/vault.ages says; two settings folders: the default one and one with open_in=editor (editor.scene,
 # keyboard.scene: the scenes have no hold and no Ctrl key to reach the editor from the preview).
 scene_vault() {
     v=/tmp/markdown-notes-scene-vault
-    rm -rf "$v" /tmp/markdown-notes-scene-config /tmp/markdown-notes-scene-config-editor
+    vb=/tmp/markdown-notes-scene-vault-band
+    rm -rf "$v" "$vb" /tmp/markdown-notes-scene-config /tmp/markdown-notes-scene-config-editor
     mkdir -p /tmp/markdown-notes-scene-config-editor/markdown-notes
     printf 'vault=~/Notes\ntext_size=medium\nopen_in=editor\n' > /tmp/markdown-notes-scene-config-editor/markdown-notes/settings.conf
-    mkdir -p "$v"
+    mkdir -p "$v" "$vb"
     cp -r "$here/tests/data/vault/." "$v/"
+    cp -r "$here/tests/data/vault/." "$vb/"
     now=$(date +%s)
     grep -v '^#' "$here/tests/data/vault.ages" | while read -r line; do
         [ -n "$line" ] || continue
         secs=${line##* }
         rel=${line% *}
         touch -d "@$((now - secs))" "$v/$rel"
+        touch -d "@$((now - secs))" "$vb/$rel"
     done
 }
 

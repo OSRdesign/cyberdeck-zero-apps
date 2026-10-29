@@ -1,4 +1,4 @@
-# Markdown Notes 0.1.2 (slice N1): board tests
+# Markdown Notes 0.2.0 (slice N1): board tests
 
 About 10 minutes on the **deck** (Pi Zero 2 W, 640x480, Bluetooth keyboard), then one touch-only pass on the **Pi 3A+**
 (800x480 touch, no keyboard: the on-screen keyboard). Controller-led: the Controller deploys and reads the logs, the
@@ -13,13 +13,13 @@ clock fixed at 2026-10-24 14:03 UTC: the notes, dates and ages differ on a board
 
 ```
 set DECK_HOST=<board ip>        (deck: leave it unset)
-python deck.py put C:/CLAUDE/zero7/pkg-out-notes/markdown-notes_0.1.2_arm64.deb /tmp/markdown-notes.deb
+python deck.py put C:/CLAUDE/zero7/pkg-out-notes/markdown-notes_0.2.0_arm64.deb /tmp/markdown-notes.deb
 python deck.py sudo 'dpkg -i /tmp/markdown-notes.deb'
 python deck.py run '/usr/share/APPLaunch/bin/markdown-notes --version'
 python deck.py put C:/CLAUDE/zero7/apps-notes/apps/markdown-notes/tests/board/big-note.sh /tmp/big-note.sh
 ```
 
-`--version`: `Markdown Notes (markdown-notes) 0.1.2`, launcher `d0cb456...` with `cp0_lvgl pinned`. Logs while testing:
+`--version`: `Markdown Notes (markdown-notes) 0.2.0`, launcher `d0cb456...` with `cp0_lvgl pinned`. Logs while testing:
 `python deck.py run 'journalctl --user -n 60 --no-pager | grep markdown-notes'`; the first line of a start names the
 vault (`~/Notes (created)` the first time) and its note count. Back up an existing `~/Notes` first if there is one.
 
@@ -112,3 +112,31 @@ In a note's editor type a word, then at once Ctrl+H: the page "Markdown help" (`
 Settings; scroll to the end (the keys). Esc: the editor exactly as it was (the cursor, the scroll, the word, the dot of
 the title), saved 1.5 s later. In the preview, hold the note 3 s > Markdown help, Esc: the same place. A tap on an example
 box or link in the help does nothing but say so. [ ] pass
+
+## P. Portrait (PDA mode, 0.2.0, about 10 minutes)
+
+Boards: the **Pi 4 B** (DSI 800x480 panel, portrait 480x800, arm64 package) and, if there, the **FZ-M1 tablet** (800x1280,
+amd64 package). Launcher v0.8.11 or later, Settings > Screen > PDA mode On; the first three steps with a Bluetooth keyboard,
+the rest touch only. Expected pictures: `portrait.png`, `portrait-keyboard.png`, `portrait-band.png` of the sheets
+(`build.sh host`: `host/out/sheets/` of the build dir). Back up an existing `~/Notes` first.
+
+`--version` says `needs a screen of at least 640x480, in portrait 480x640`.
+
+1. **Upright start.** The home grid shows the **Notes** tile; a tap starts it upright (not turned): Home in one column,
+   the header *Notes*, Esc and the status strip not overlapping, the key hint at the bottom not cut. [ ] pass
+2. **Touch on the lists.** All notes, a folder, Recent: a tap highlights the row under the finger (not another one), a
+   second opens it; a drag scrolls; the header Esc goes back. A long note name ends with dots. Note any wrong row. [ ] pass
+3. **Preview and help.** Open a note: it wraps at the screen width, no sideways scroll; tick a task box by touch; the 3 s
+   hold opens the options, Markdown help reads without sideways scroll. [ ] pass
+4. **On-screen keyboard** (no physical keyboard; Settings > On-screen keyboard = Auto): Open or create: the field, the
+   matches under it, the keyboard below; type part of a name, Enter opens the first match at once. New note: field, Create.
+   A note's editor: tap the text, the keyboard comes, the text and the cursor stay above it (about 13 lines); type a
+   sentence, it appears where the cursor is and scrolls; the keyboard's Ctrl then o opens the options box (readable, not
+   cut); Esc of the keyboard puts it away. [ ] pass
+5. **Band** (Settings > On-screen keyboard = Handwriting + keyboard): the same steps: the band instead of the keyboard
+   (Keyb, Tab, Ctrl, Alt, arrows, Enter over the writing boxes); write a few letters into the editor and a name into
+   Open or create, strip Enter makes a new line in the editor / opens the match; Ctrl on the strip then a written `o`
+   opens the options box; Keyb brings the keyboard and its cross the band back; the header Esc leaves the editor with the
+   text saved (reopen it). [ ] pass
+6. **A keyboard connects** (Bluetooth or USB) while the editor is open: the band or keyboard goes, keys type as before. [ ] pass
+7. Settings > Screen > PDA mode Off: the landscape app of 0.1.2, unchanged. [ ] pass

@@ -1,0 +1,87 @@
+# PDA mode (X-Portrait=480x640): the portrait canvases a portrait launcher gives the app upright (480x800 the 4.3" DSI
+# panel, 480x640 a 3.5" panel, 800x1280 the FZ-M1 tablet). The pages are the landscape ones at the screen's width, one
+# column under the narrow header: Home, a folder, the preview (link ring), Recent, Open or create, New note, Settings and its choice list. A keyboard is there (no on-screen
+# keyboard: portrait-keyboard.scene) and nothing is typed except the Open query (every size reads the same vault).
+title Markdown Notes: portrait (PDA mode)
+env NOTES_VAULT /tmp/markdown-notes-scene-vault
+env XDG_CONFIG_HOME /tmp/markdown-notes-scene-config
+sizes 480x800 480x640 800x1280
+
+keyboards 1
+wait 700
+expect noquit
+expect text "Notes"
+shot home
+key down
+key enter
+wait 400
+expect text "All notes"
+expect text "FOLDERS"
+shot all-notes
+key down
+key down
+key enter
+wait 400
+expect text "Cyberdeck"
+shot folder
+key esc
+wait 300
+# the Welcome note (the last but two row): the preview
+key end
+key up
+key up
+key enter
+wait 600
+expect text "Preview  ·  edited 2 h ago  ·  Ctrl+O: options"
+shot preview
+key tab
+wait 200
+shot preview-ring
+key esc
+wait 400
+key esc
+wait 300
+# back at Home, All notes still selected: Recent is the next row
+key down
+key enter
+wait 400
+expect text "The 10 notes edited last"
+shot recent
+key esc
+wait 300
+key home
+key enter
+wait 400
+type mesh
+wait 300
+expect text "Mesh antenna ideas"
+shot open
+key esc
+wait 300
+# New note (the fifth row): a keyboard is there, so no on-screen keyboard
+key down
+key down
+key down
+key down
+key enter
+wait 500
+expect text "Create"
+shot new
+key esc
+wait 300
+key end
+key enter
+wait 400
+expect text "Text size"
+shot settings
+# Open notes in: the choice list over the page, then Esc
+key up
+key enter
+wait 400
+shot settings-choice
+key esc
+wait 300
+key esc
+wait 300
+key esc
+expect quit

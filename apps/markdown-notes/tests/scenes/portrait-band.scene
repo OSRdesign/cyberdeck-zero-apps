@@ -1,0 +1,80 @@
+# PDA S4 (launcher report 044): a launcher with the writing zone runs the app upright with APPLAUNCH_PDA=1, and the
+# user's Settings > On-screen keyboard is Handwriting + keyboard (input.state hand=1). The app has no code of its own for
+# it: the band shows exactly where the on-screen keyboard would (Open or create, New note, the editor, touch only), its
+# rows are left free through the keyboard's inset (the same layout_pages), its keys reach the app as the keyboard's do.
+# Written into Open or create the matches follow; into the editor the text and the cursor; the strip's Enter opens the
+# first match / makes a new line; Keyb puts the standard keyboard with its close cross in the band's place; hide / show
+# keep the band.
+title Markdown Notes: portrait, the writing zone's band
+# the scene writes into notes: a copy of the vault of its own (build.sh), each size into its own note (the sizes run at once)
+env NOTES_VAULT /tmp/markdown-notes-scene-vault-band
+env XDG_CONFIG_HOME /tmp/markdown-notes-scene-config-editor
+band
+lifecycle
+sizes 480x800 480x640 800x1280
+
+keyboards 0
+wait 700
+expect band hidden
+key enter
+wait 600
+expect band shown
+expect osk off
+shot open-band
+write letters w e l
+wait 300
+expect text "Welcome"
+shot open-written
+zonekey Keyb
+wait 300
+expect band hidden
+expect osk on
+shot open-keyb
+tapkey CLOSE
+wait 300
+expect band shown
+tap "Esc"
+wait 400
+# a note of its own per size, found by Open or create (typed with keys: Enter opens the exact name; the editor, the band)
+key enter
+wait 400
+@480x800 type "Deck build log"
+@480x640 type "Parts list"
+@800x1280 type "Battery"
+wait 300
+key enter
+wait 600
+expect band shown
+shot editor-band
+write letters h i
+zonekey Enter
+write letters o k
+wait 300
+shot editor-written
+zonekey Up
+zonekey Tab
+wait 300
+shot editor-strip
+# Ctrl armed on the strip, then a written o: Ctrl+O, the options box (the band goes for it)
+zonekey Ctrl
+write letters o
+wait 600
+expect band hidden
+expect text "Preview"
+shot editor-options-band
+key esc
+wait 600
+expect band shown
+hide
+expect hidden
+show
+wait 300
+expect visible
+expect band shown
+shot editor-shown-again
+tap "Esc"
+wait 600
+tap "Esc"
+wait 400
+tap "Esc"
+expect quit

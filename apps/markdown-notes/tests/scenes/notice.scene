@@ -3,7 +3,7 @@
 title Markdown Notes: screens under 640x480
 env NOTES_VAULT /tmp/markdown-notes-scene-vault
 env XDG_CONFIG_HOME /tmp/markdown-notes-scene-config
-sizes 480x320 640x400 480x800
+sizes 480x320 640x400 480x600
 
 shot notice
 expect noquit

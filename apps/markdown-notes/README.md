@@ -1,6 +1,6 @@
 # Markdown Notes
 
-Package `markdown-notes`, title "Markdown Notes", version 0.1.2. Part of
+Package `markdown-notes`, title "Markdown Notes", version 0.2.0. Part of
 [cyberdeck-zero-apps](../../README.md).
 
 Notes as plain Markdown files in one folder on the deck, the **vault** (`~/Notes` by default): write them, read them
@@ -17,6 +17,12 @@ board test plan: [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md).
 
 From the headless harness (`build.sh ui`: the flows at 640x480, 800x480, 720x720 and 1280x800, a fixed clock and the
 fixture vault of `tests/data`); copies for `docs/screenshots/` and `screenshots/` come with the publication.
+
+Portrait renders of the same harness (PDA mode, `portrait-keyboard.scene` and `portrait-band.scene`), **not photographs of the panel**:
+
+| | |
+|---|---|
+| ![Portrait editor with the on-screen keyboard](screenshots/01-portrait-editor-keyboard-480x800.png) 480x800 render, PDA mode (portrait, 4.3" DSI). Touch only: the editor above the on-screen keyboard (Esc, Tab, Ctrl, Alt, arrows) | ![Portrait editor with the handwriting band](screenshots/02-portrait-editor-band-480x800.png) 480x800 render, PDA mode with Handwriting + keyboard (launcher v0.8.11): the band where the keyboard would be (Keyb, Tab, Ctrl, Alt, arrows, Enter over the writing boxes) |
 
 | Page | What the shot shows (flow `screens` unless named) |
 |---|---|
@@ -100,9 +106,31 @@ A screen of at least 640x480 (`X-MinSize=640x480`), a launcher with full-screen 
 hardware. arm64 (the boards) and amd64 (PCs). The fonts are the launcher's (Montserrat, JetBrains Mono, DejaVu, Noto Sans
 CJK), read at run time.
 
+## Portrait (PDA mode)
+
+`X-Portrait=480x640`: on a launcher in PDA mode (v0.8.8 and later; Settings > Screen > PDA mode from v0.8.9) the app runs
+**upright** on the portrait screen (480x800, 480x640, 800x1280) instead of turned by a quarter; every other screen
+(landscape, an older launcher, a portrait panel under 480x640) is exactly as before. The app has one pane at every
+size, so the portrait layout is the same pages in one column at the screen's width under the toolkit's narrow header
+(18 px title, the last part of the path, a 72 % status strip); nothing scrolls sideways.
+
+- **Lists** (Home, folders, Recent, Open or create): rows keep their chevron or grey dot; on the 480 px wide screens a
+  long note name ends with dots (the whole name is in Note info), and Home's key hint is the shorter "Enter: open
+  Ctrl+D: today Esc: quit" where the whole one does not fit.
+- **Preview and Markdown help**: the text wraps at the width of the screen (no sideways scroll); the page scrolls.
+- **Editor with the keyboard**: the page ends above the on-screen keyboard (about 40 % of the height at 480x800, 45 %
+  at 480x640, a quarter at 800x1280): about 13 lines of text at 480x800, 8 at 480x640, 27 at 800x1280 stay above it, the cursor
+  line in view. Open or create keeps its matches under the field (landscape hides them behind the keyboard), so there
+  Enter opens the selected match at once.
+- **The handwriting band** (PDA mode with Settings > On-screen keyboard = Handwriting + keyboard, launcher v0.8.11 and
+  later): the band takes the keyboard's place on the same rule (a field asks, no physical keyboard) and its rows are left
+  free through the same inset; written letters and digits, the strip's Tab, Ctrl, arrows and Enter reach the editor and the
+  fields as the keyboard's keys do. The strip has no Esc: the header Esc leaves the page (the editor saves first) and
+  Keyb brings the keyboard, with its Esc.
+
 ## Install
 
-Settings > Apps once the app is published; until then by hand: `sudo dpkg -i markdown-notes_0.1.2_arm64.deb` (amd64 on a
+Settings > Apps once the app is published; until then by hand: `sudo dpkg -i markdown-notes_0.2.0_arm64.deb` (amd64 on a
 PC). Removing it (`sudo dpkg -r markdown-notes`) leaves the vault and the settings.
 
 ## Files the app keeps
@@ -175,7 +203,11 @@ python3 tools/make_registry.py --only markdown-notes --out <a folder outside pac
   links, tasks, dates, md4c's block model) and the UI logic (rows, menus, words, text sizes, the preview's layout and
   ring, link plans, the editor's offsets).
 - `tests/scenes`: the shared harness's scenes (Home at six sizes with the header title check, the pages and the
-  on-screen keyboard at 640x480, 800x480, 720x720 and 1280x800, multitasking, no contract, the "needs 640x480" notice).
+  on-screen keyboard at 640x480, 800x480, 720x720 and 1280x800, multitasking, no contract, the "needs 640x480" notice;
+  PDA mode at 480x800, 480x640 and 800x1280: `portrait` (the pages), `portrait-keyboard` (Open, New note, the editor, its
+  options box and the help with the on-screen keyboard) and `portrait-band` (the same with the handwriting band: written
+  letters, the strip's keys, Keyb and its cross, hide and show). `portrait-band` writes into notes, in its own copy of
+  the vault (`/tmp/markdown-notes-scene-vault-band`), each size into its own note).
 - `tests/flows`: `markdown-notes-script` runs twelve scripts on seeded vaults: create and type, Esc back and reopen, preview
   and tick, links (create, follow, a web address), Today, delete to `.trash`, a conflict on disk, typing with the
   on-screen keyboard (touch only), the keyboard going away while a field is open (the real policy on input.state), the
@@ -194,6 +226,8 @@ changed it meanwhile.
 
 ## Changes
 
+- 0.2.0: portrait layout for PDA mode (`X-Portrait=480x640`, see [Portrait](#portrait-pda-mode)): the pages upright at
+  480x800, 480x640 and 800x1280, the editor above the keyboard or the handwriting band; no change at any landscape size.
 - 0.1.2: Markdown help (Ctrl+H, or the options box of the preview and the editor): what to type and how it
   looks, what is not supported yet, the keys; read only, drawn by the preview at the chosen text size; Esc returns to
   the note as it was. (Not done: inserting an example at the editor's cursor from the help.)

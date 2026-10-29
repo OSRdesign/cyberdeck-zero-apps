@@ -71,6 +71,7 @@ public:
     /* A grey line shown while the list has no row (wraps over the list's width). */
     void set_empty_text(const std::string &text, const lv_font_t *font, std::uint32_t color);
     void set_hidden(bool hidden);
+    bool hidden() const { return !cont_ || lv_obj_has_flag(cont_, LV_OBJ_FLAG_HIDDEN); }
 
     lv_obj_t *obj() const { return cont_; }
     int selected() const { return selected_; }

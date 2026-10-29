@@ -86,7 +86,10 @@ void App::key_open(const KeyEvent &e)
     }
     if (e.key == Key::Enter) {
         if (e.repeat) return;
-        if (open_typing_ && cp0::ui::osk::visible()) {     // the keyboard goes, the matches show
+        // the keyboard goes, the matches show; a portrait screen keeps its matches under the field (the keyboard, or the
+        // writing zone's band, leaves them room), so there Enter opens the selected one at once
+        const bool matches_hidden = open_list_.hidden();
+        if (open_typing_ && cp0::ui::osk::visible() && (matches_hidden || layout_.h <= layout_.w)) {
             open_typing_ = false;
             invalidate();
             return;
