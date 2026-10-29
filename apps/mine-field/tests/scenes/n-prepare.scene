@@ -1,0 +1,23 @@
+title Mine Field: the first dig prepares the board off the UI thread: a status line, the board inert meanwhile
+sizes 640x480 800x480 720x720 1024x600 1280x720 480x800 480x640 800x1280
+env MINEFIELD_TEST_DATA n-prepare
+env MINEFIELD_TEST_RESET 1
+env MINEFIELD_TEST_SEED 7
+env MINEFIELD_TEST_PROBES 1
+env MINEFIELD_TEST_DIMS 9x9x10,16x16x40,30x16x99
+env MINEFIELD_TEST_GENDELAY 1200
+env MINEFIELD_TEST_PREFS fair=1
+
+wait 300
+tap "@c2,2"
+wait 300
+expect text "Preparing board..."
+shot preparing
+check preparing
+tap "@c4,4"
+tap "Hint"
+wait 1800
+expect notext "Preparing board..."
+expect text "Mines 10"
+shot prepared
+check prepared

@@ -1,0 +1,17 @@
+title Mine Field: a win that is not the best says its rank in the best five
+sizes 640x480 800x480 720x720 1024x600 1280x720 480x800 480x640 800x1280
+env MINEFIELD_TEST_DATA g-win-rank
+env MINEFIELD_TEST_RESET 1
+env MINEFIELD_TEST_SEED 7
+env MINEFIELD_TEST_PROBES 1
+env MINEFIELD_TEST_DIMS 9x9x10,16x16x40,30x16x99
+env MINEFIELD_TEST_SETUP "dig 2,2;safeleft;tick 5000"
+env MINEFIELD_TEST_STATS "{'version':2,'presets':{'beginner':{'played':3,'won':3,'streak':3,'best_streak':3,'total_time_ms':25000,'best':[{'time_ms':2000,'seed':'11','fair':false,'w':9,'h':9,'mines':10},{'time_ms':3000,'seed':'12','fair':true,'w':9,'h':9,'mines':10},{'time_ms':60000,'seed':'13','fair':false,'w':9,'h':9,'mines':10}]}}}"
+
+wait 300
+tap "@safe"
+wait 1500
+shot rank
+check rank
+expect text "You won!"
+expect text "Rank 3 in the best 5"

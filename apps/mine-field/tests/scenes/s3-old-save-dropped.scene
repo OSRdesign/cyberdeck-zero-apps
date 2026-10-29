@@ -1,0 +1,11 @@
+title Mine Field: a game saved by the first version (fixed 9x9, no preset) on a screen with other boards: dropped, not a crash
+sizes 800x480 480x800 640x480
+env MINEFIELD_TEST_DATA s3-old-save-dropped
+env MINEFIELD_TEST_RESET 1
+env MINEFIELD_TEST_OLDSAVE 1
+env MINEFIELD_TEST_DIMS 8x7x7,11x9x14,18x12x40
+
+wait 400
+expect text "Saved game dropped: screen changed"
+shot old-dropped
+check old-dropped

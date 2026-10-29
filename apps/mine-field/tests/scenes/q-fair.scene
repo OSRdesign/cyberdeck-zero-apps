@@ -1,0 +1,15 @@
+title Mine Field: fair boards on (a board the solver finishes by logic)
+sizes 640x480 800x480 720x720 1024x600 1280x720 480x800 480x640 800x1280
+env MINEFIELD_TEST_DATA q-fair
+env MINEFIELD_TEST_RESET 1
+env MINEFIELD_TEST_SEED 11
+env MINEFIELD_TEST_PROBES 1
+env MINEFIELD_TEST_DIMS 9x9x10,16x16x40,30x16x99
+env MINEFIELD_TEST_PREFS fair=1,preset=intermediate
+
+wait 300
+tap "@c2,2"
+wait 1500
+shot fair
+check fair
+expect notext "Preparing"

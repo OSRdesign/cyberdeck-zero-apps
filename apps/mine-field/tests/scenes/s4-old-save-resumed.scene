@@ -1,0 +1,11 @@
+title Mine Field: the same old save on a screen whose Beginner is 9x9/10: it is read and resumed
+sizes 800x480 480x800 640x480
+env MINEFIELD_TEST_DATA s4-old-save-resumed
+env MINEFIELD_TEST_RESET 1
+env MINEFIELD_TEST_OLDSAVE 1
+env MINEFIELD_TEST_DIMS 9x9x10,14x10x22,18x12x40
+
+wait 400
+expect text "Game resumed"
+shot old-resumed
+check old-resumed

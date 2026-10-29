@@ -1,0 +1,24 @@
+title Mine Field: Best times with entries (fair tag, short seed) and without
+sizes 640x480 800x480 720x720 1024x600 1280x720 480x800 480x640 800x1280
+env MINEFIELD_TEST_DATA k-best
+env MINEFIELD_TEST_RESET 1
+env MINEFIELD_TEST_SEED 7
+env MINEFIELD_TEST_PROBES 1
+env MINEFIELD_TEST_DIMS 9x9x10,16x16x40,30x16x99
+env MINEFIELD_TEST_STATS "{'version':2,'presets':{'beginner':{'played':8,'won':5,'streak':2,'best_streak':3,'total_time_ms':500000,'best':[{'time_ms':45000,'seed':'123456','fair':true,'w':9,'h':9,'mines':10},{'time_ms':61000,'seed':'98765','fair':false,'w':9,'h':9,'mines':10},{'time_ms':83000,'seed':'4242','fair':true,'w':9,'h':9,'mines':10}]},'expert':{'played':2,'won':1,'streak':1,'best_streak':1,'total_time_ms':900000,'best':[{'time_ms':412000,'seed':'777','fair':true,'w':9,'h':9,'mines':10}]}}}"
+
+wait 300
+key m
+wait 200
+key down
+key down
+key down
+key enter
+wait 300
+shot best
+check best
+expect text "1.  0:45"
+expect text "No best time yet"
+key esc
+wait 200
+expect text "Resume"

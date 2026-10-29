@@ -1,0 +1,56 @@
+title Mine Field: keys only: the cursor, dig, flag, chord, hint, mode, new game, menu, Esc
+sizes 640x480 800x480 720x720 1024x600 1280x720 480x800 480x640 800x1280
+env MINEFIELD_TEST_DATA j-keys
+env MINEFIELD_TEST_RESET 1
+env MINEFIELD_TEST_SEED 7
+env MINEFIELD_TEST_PROBES 1
+env MINEFIELD_TEST_DIMS 9x9x10,16x16x40,30x16x99
+
+wait 300
+key down
+wait 100
+shot cursor
+check cursor
+key space
+wait 500
+shot dug
+key right
+key right
+key down
+key f
+wait 100
+shot flagged
+key left
+key up
+key h
+wait 200
+shot hint
+key t
+wait 100
+expect text "Flag"
+key t
+key right
+key right
+key right
+key right
+key down
+key down
+key down
+key down
+wait 100
+shot moved
+check moved
+key n
+wait 200
+expect text "Start a new game?"
+key esc
+wait 200
+key m
+wait 200
+expect text "Resume"
+key esc
+wait 200
+expect noquit
+key esc
+wait 300
+expect quit

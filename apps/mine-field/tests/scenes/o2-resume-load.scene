@@ -1,0 +1,14 @@
+title Mine Field: the next start brings back the game in progress
+sizes 640x480 800x480 720x720 1024x600 1280x720 480x800 480x640 800x1280
+env MINEFIELD_TEST_DATA o-resume
+env MINEFIELD_TEST_PROBES 1
+env MINEFIELD_TEST_DIMS 9x9x10,16x16x40,30x16x99
+
+wait 400
+expect text "Game resumed"
+expect text "Mines 9"
+shot resumed
+check resumed
+tap "Hint"
+wait 200
+expect text "+10 s"

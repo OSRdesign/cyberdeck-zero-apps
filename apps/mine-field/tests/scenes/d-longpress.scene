@@ -1,0 +1,29 @@
+title Mine Field: a long press does the other action (flag in Dig mode, dig in Flag mode)
+sizes 640x480 800x480 720x720 1024x600 1280x720 480x800 480x640 800x1280
+env MINEFIELD_TEST_DATA d-longpress
+env MINEFIELD_TEST_RESET 1
+env MINEFIELD_TEST_SEED 7
+env MINEFIELD_TEST_PROBES 1
+env MINEFIELD_TEST_DIMS 9x9x10,16x16x40,30x16x99
+env MINEFIELD_TEST_SETUP "dig 2,2"
+
+wait 300
+hold "@safe" 600
+wait 300
+expect text "Mines 9"
+shot long-flag
+check long-flag
+tap "Dig"
+wait 200
+expect text "Flag"
+hold "@safe" 600
+wait 400
+shot long-dig
+check long-dig
+expect text "Mines 9"
+tap "Flag"
+wait 200
+hold "@flag" 600
+wait 300
+expect text "Mines 10"
+shot long-unflag

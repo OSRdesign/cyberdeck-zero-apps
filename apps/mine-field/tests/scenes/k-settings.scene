@@ -1,0 +1,56 @@
+title Mine Field: Settings (fair boards with its one-line explanation, animations, timer, flag mode, reset)
+sizes 640x480 800x480 720x720 1024x600 1280x720 480x800 480x640 800x1280
+env MINEFIELD_TEST_DATA k-settings
+env MINEFIELD_TEST_RESET 1
+env MINEFIELD_TEST_SEED 7
+env MINEFIELD_TEST_PROBES 1
+env MINEFIELD_TEST_DIMS 9x9x10,16x16x40,30x16x99
+
+wait 300
+key m
+wait 200
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 300
+shot settings
+check settings
+expect text "Fair boards"
+expect text "Animations"
+expect text "Show timer"
+expect text "Never needs a guess; may take a moment to prepare"
+key enter
+wait 200
+shot fair-on
+check fair-on
+key down
+wait 100
+key enter
+wait 200
+expect text "Reduced"
+key down
+key enter
+wait 200
+key down
+key enter
+wait 200
+shot changed
+check changed
+key down
+key enter
+wait 300
+shot reset
+check reset
+expect text "Reset statistics?"
+key enter
+wait 300
+expect notext "Reset statistics?"
+key end
+wait 200
+shot end
+check end
+expect text "Reset statistics"
+expect text "Removes the results and best times of every difficulty"

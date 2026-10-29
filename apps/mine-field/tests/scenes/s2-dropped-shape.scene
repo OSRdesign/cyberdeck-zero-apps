@@ -1,0 +1,23 @@
+title Mine Field: the screen gives other boards now (another density): the saved game is dropped, no loss, one line says so
+sizes 800x480 480x800 640x480
+ppmm 741
+env MINEFIELD_TEST_DATA s-shape
+env MINEFIELD_TEST_PROBES 1
+
+wait 400
+expect text "Saved game dropped: screen changed"
+expect notext "Game resumed"
+shot dropped
+check dropped
+wait 4000
+expect notext "Saved game dropped: screen changed"
+key m
+wait 200
+key down
+key down
+key down
+key down
+key enter
+wait 300
+shot stats-clean
+expect text "Played"

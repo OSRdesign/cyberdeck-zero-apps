@@ -1,0 +1,20 @@
+title Mine Field: a dug mine: the mines show nearest first, wrong flags crossed, the exploded cell red, the panel
+sizes 640x480 800x480 720x720 1024x600 1280x720 480x800 480x640 800x1280
+env MINEFIELD_TEST_DATA h-loss
+env MINEFIELD_TEST_RESET 1
+env MINEFIELD_TEST_SEED 7
+env MINEFIELD_TEST_PROBES 1
+env MINEFIELD_TEST_DIMS 9x9x10,16x16x40,30x16x99
+env MINEFIELD_TEST_SETUP "dig 2,2;wrongflags 2"
+
+wait 300
+tap "@mine"
+wait 300
+shot loss-mid
+wait 1800
+shot loss
+check loss
+expect text "Mine hit"
+expect text "Try again"
+expect text "New game"
+expect text "Close"
