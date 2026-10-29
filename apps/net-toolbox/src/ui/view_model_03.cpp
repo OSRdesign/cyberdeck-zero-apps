@@ -369,7 +369,7 @@ Band speed_band(const SpeedSnapshot &s, double target_s)
 
 /* ---------------------------------------------------------------- the live block's layout */
 
-SpeedLayout speed_layout(int w, int h, int lh, int big_h, int pad)
+SpeedLayout speed_layout(int w, int h, int lh, int big_h, int pad, bool portrait)
 {
     SpeedLayout L;
     w = std::max(1, w);
@@ -386,10 +386,17 @@ SpeedLayout speed_layout(int w, int h, int lh, int big_h, int pad)
     const int chart_w = std::max(w * 36 / 100, 160);
     const int side_gw = std::max(1, w - chart_w - pad);
     const int r_side = radius_for(side_gw, h);
-    /* stacked: the dial over the chart over the progress */
-    const int chart_min_h = 3 * lh;
-    const int r_stack = radius_for(w, h - chart_min_h - prog_h - 2 * pad);
-    L.side = r_side >= r_stack * 95 / 100;
+    /* stacked: the dial over the chart over the progress. Portrait (a narrow tall screen): always stacked, and the chart
+     * keeps at least 30 % of the height so that it stays readable under the dial (480x640) */
+    const int chart_min_h = portrait ? std::max(3 * lh, h * 30 / 100) : 3 * lh;
+    int r_stack = radius_for(w, h - chart_min_h - prog_h - 2 * pad);
+    /* portrait: a dial as wide as the screen (800x1280) hangs its round ends 0.40 of the radius under the centre, lower than
+     * the texts under the hub: the box keeps them (landscape's stacked dial is held by the height, the texts are lower) */
+    const auto below_hub = [&](int r) {
+        return portrait ? std::max(static_cast<int>(0.08 * r) + text_h, r * 40 / 100 + 1) : static_cast<int>(0.08 * r) + text_h;
+    };
+    if (portrait) r_stack = std::max(24, std::min(r_stack, (h - chart_min_h - prog_h - 2 * pad - top) * 100 / 141));
+    L.side = !portrait && r_side >= r_stack * 95 / 100;
     if (L.side) {
         L.radius = r_side;
         L.gauge = {0, 0, side_gw, h};
@@ -401,7 +408,7 @@ SpeedLayout speed_layout(int w, int h, int lh, int big_h, int pad)
         L.progress = {cx0, h - prog_h, std::max(1, w - cx0), prog_h};
     } else {
         L.radius = r_stack;
-        const int gh = top + L.radius + static_cast<int>(0.08 * L.radius) + text_h;
+        const int gh = top + L.radius + below_hub(L.radius);
         L.gauge = {0, 0, w, gh};
         L.cx = w / 2;
         L.cy = top + L.radius;

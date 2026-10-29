@@ -86,7 +86,7 @@ std::string box_text(const Box &b)
 SpeedLiveBlock::SpeedLiveBlock(int w, int h, int inset, const lv_font_t *caption, const lv_font_t *small, const lv_font_t *big)
     : w_(w), h_(h), inset_(inset), caption_(caption), small_(small), big_(big)
 {
-    layout_ = speed_layout(std::max(1, w - 2 * inset), h, line_height(caption), line_height(big), space_s());
+    layout_ = speed_layout(std::max(1, w - 2 * inset), h, line_height(caption), line_height(big), space_s(), portrait());
     radii_ = gauge_radii(layout_.radius);
     scaler_.reset();
     labels_scale_ = scaler_.scale;
@@ -675,11 +675,14 @@ void MachineRowView::apply()
     set_text_if(second_label_, second_);
     set_text_if(status_label_, status_);
     set_color_if(status_label_, tone_rgb(tone_, kText));
+    /* portrait: when the MAC and the address do not fit beside the status, the status goes up beside the name and the
+     * second line takes the whole width */
+    const bool up = portrait() && text_width(second_.c_str(), small_) + 2 > left_w;
     lv_obj_set_pos(name_label_, inset_, top);
     lv_obj_set_size(name_label_, left_w, line_height(main_));
     lv_obj_set_pos(second_label_, inset_, top + line_height(main_));
-    lv_obj_set_size(second_label_, left_w, line_height(small_));
-    lv_obj_set_pos(status_label_, w_ - inset_ - sw, (h_ - line_height(small_)) / 2);
+    lv_obj_set_size(second_label_, up ? avail : left_w, line_height(small_));
+    lv_obj_set_pos(status_label_, w_ - inset_ - sw, up ? top + (line_height(main_) - line_height(small_)) / 2 : (h_ - line_height(small_)) / 2);
     lv_obj_set_size(status_label_, sw, line_height(small_));
 }
 

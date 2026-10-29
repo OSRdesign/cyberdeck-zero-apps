@@ -116,7 +116,9 @@ void ToolboxApp::build_trace()
     /* the row: as low as the two lines of text need, as high as 7 rows leave room for, never over a compact list row */
     const int avail = g.bottom - chain_y;
     const int row_h = std::max(ui::ChainStyle::min_row_h(main, small), std::min(g.crow, avail / kChainMinRows));
-    chain_style_ = ui::ChainStyle::make(rich_->layout().w, row_h, rich_->layout().inset, main, small);
+    /* portrait: the hop rows are stacked (the name over the width, the address and the bar under it): a 480 px wide row
+     * cannot hold the name, the address and a readable bar side by side */
+    chain_style_ = ui::ChainStyle::make(rich_->layout().w, row_h, rich_->layout().inset, main, small, portrait());
     std::vector<lv_obj_t *> order = bar_->focus_objects();
     order.push_back(rich_->focus_object());
     focus_group(order);
@@ -162,10 +164,9 @@ void ToolboxApp::poll_trace(bool force)
         }
     }
     ui::Band band = ui::trace_band(snap ? *snap : TraceSnapshot(), trace_target_text(), true);
-    if (snap && snap->state == TraceSnapshot::State::Failed &&
-        ui::text_width(band.text.c_str(), ui::caption_font()) > lv_obj_get_width(band_))
+    if (snap && snap->state == TraceSnapshot::State::Failed && !band_fits(band.text))
         band.text = "The trace could not start"; /* the whole reason is in the page */
-    if (ui::text_width(band.text.c_str(), ui::caption_font()) > lv_obj_get_width(band_) && snap)
+    if (!band_fits(band.text) && snap)
         band = ui::trace_band(*snap, trace_target_text(), false);
     show_band(band);
 }

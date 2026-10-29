@@ -323,6 +323,25 @@ void test_speed_layout()
     CHECK(speed_layout(560, 252, 22, 40, 8).side);   /* 640x480: side by side, the dial as large as the height allows */
     CHECK(!speed_layout(640, 470, 22, 40, 8).side);  /* a tall area: the chart under the dial */
     CHECK(speed_layout(960, 480, 26, 48, 8).side);
+
+    /* portrait (PDA mode, 0.5.0): always stacked, the chart at least 30 % of the block; the landscape answer unchanged */
+    const Size tall[] = {{424, 560, 22, 40}, {424, 400, 23, 44}, {688, 1050, 22, 40}, {688, 1300, 22, 40}, {560, 252, 22, 40}};
+    for (const Size &z : tall) {
+        const SpeedLayout L = speed_layout(z.w, z.h, z.lh, z.big, 8, true);
+        CHECK(!L.side);
+        CHECK(L.chart.h >= z.h * 30 / 100 - 2 * z.lh - 8);  /* the progress line and a gap come out of the 30 % */
+        CHECK(L.gauge.y + L.gauge.h <= L.chart.y);
+        CHECK(L.chart.y + L.chart.h <= L.progress.y);
+        CHECK(L.progress.y + L.progress.h <= z.h);
+        CHECK(L.cx - L.radius >= 0 && L.cx + L.radius <= z.w && L.cy - L.radius >= 0);
+        CHECK(L.radius >= 24);
+        /* the round ends of the 220 degree arc (0.38 of the radius under the centre) stay inside the dial's box */
+        CHECK(L.gauge.y + L.gauge.h - L.cy >= L.radius * 38 / 100);
+        CHECK(L.cy + static_cast<int>(0.08 * L.radius) + 2 * z.lh + z.big <= L.gauge.y + L.gauge.h);
+        const SpeedLayout land = speed_layout(z.w, z.h, z.lh, z.big, 8);
+        CHECK(L.radius <= land.radius || land.side);       /* the chart's share is taken from the dial, never the reverse */
+    }
+    CHECK(speed_layout(560, 252, 22, 40, 8, false).side == speed_layout(560, 252, 22, 40, 8).side);
 }
 
 void test_wake()

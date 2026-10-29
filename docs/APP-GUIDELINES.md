@@ -31,7 +31,7 @@ we do not do it ([section 12](#12-when-not-to-build-it)). Landscape only: the la
 480x800, 480x640, the 800x1280 tablet) runs a landscape app turned by a quarter, so nothing has to change. An app that
 also has a portrait layout declares `X-Portrait=WxH` (its smallest portrait canvas, e.g. `480x640`) and is then shown
 upright ([portrait layout](#portrait-layout-x-portrait)). System Monitor 0.3.0 is the first, Serial Console 0.5.0 the
-first with text input; RSS Reader 0.2.0, Markdown Notes 0.2.0 and Klondike Solitaire 0.1.0 have one too.
+first with text input; RSS Reader 0.2.0, Markdown Notes 0.2.0, Klondike Solitaire 0.1.0 and Net Toolbox 0.5.0 have one too.
 
 ## 1. Which kind of app
 

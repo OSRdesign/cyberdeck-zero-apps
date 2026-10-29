@@ -255,7 +255,13 @@ void draw_spinner(lv_layer_t *layer, int cx, int cy, int r, std::uint32_t rgb, i
 
 /* ---------------------------------------------------------------- the health ladder */
 
-HealthLadder::HealthLadder(lv_obj_t *parent, int x, int y, int w, int rung_h, const lv_font_t *font)
+int HealthLadder::two_line_rung_h(const lv_font_t *font, const lv_font_t *detail_font)
+{
+    return line_height(font) + line_height(detail_font ? detail_font : font) + 4;
+}
+
+HealthLadder::HealthLadder(lv_obj_t *parent, int x, int y, int w, int rung_h, const lv_font_t *font, bool two_line,
+                           const lv_font_t *detail_font)
     : rung_h_(rung_h), w_(w)
 {
     lv_obj_t *root = plain(parent);
@@ -263,7 +269,10 @@ HealthLadder::HealthLadder(lv_obj_t *parent, int x, int y, int w, int rung_h, co
     lv_obj_set_pos(root, x, y);
     lv_obj_set_size(root, w, rung_h * kStepCount);
     const int lh = line_height(font);
+    if (!detail_font) detail_font = font;
+    const int dlh = line_height(detail_font);
     mark_ = std::max(8, std::min(rung_h - 4, lh + 6));
+    const int block_top = (rung_h - lh - dlh) / 2; /* two_line: the name and the detail under it, centred in the rung */
     const int gap = space_m();
     int name_w = 0;
     for (int i = 0; i < kStepCount; ++i) name_w = std::max(name_w, text_width(step_title(static_cast<Step>(i)), font));
@@ -300,13 +309,21 @@ HealthLadder::HealthLadder(lv_obj_t *parent, int x, int y, int w, int rung_h, co
         });
         r.mark->place(0, top + (rung_h - mark_) / 2, mark_, mark_);
         r.name = make_label(root, font, kLabel);
-        lv_obj_set_pos(r.name, name_x, top + (rung_h - lh) / 2);
         set_text_if(r.name, step_title(static_cast<Step>(i)));
-        r.detail = make_label(root, font, kLabel);
-        lv_label_set_long_mode(r.detail, LV_LABEL_LONG_MODE_DOTS);
-        lv_obj_set_style_text_align(r.detail, LV_TEXT_ALIGN_RIGHT, 0);
-        lv_obj_set_pos(r.detail, detail_x, top + (rung_h - lh) / 2);
-        lv_obj_set_size(r.detail, std::max(1, w - detail_x), lh);
+        if (two_line) {
+            lv_obj_set_pos(r.name, name_x, top + block_top);
+            r.detail = make_label(root, detail_font, kLabel);
+            lv_label_set_long_mode(r.detail, LV_LABEL_LONG_MODE_DOTS);
+            lv_obj_set_pos(r.detail, name_x, top + block_top + lh);
+            lv_obj_set_size(r.detail, std::max(1, w - name_x), dlh);
+        } else {
+            lv_obj_set_pos(r.name, name_x, top + (rung_h - lh) / 2);
+            r.detail = make_label(root, font, kLabel);
+            lv_label_set_long_mode(r.detail, LV_LABEL_LONG_MODE_DOTS);
+            lv_obj_set_style_text_align(r.detail, LV_TEXT_ALIGN_RIGHT, 0);
+            lv_obj_set_pos(r.detail, detail_x, top + (rung_h - lh) / 2);
+            lv_obj_set_size(r.detail, std::max(1, w - detail_x), lh);
+        }
         rungs_.push_back(std::move(r));
     }
     DiagReport blank;
@@ -507,7 +524,10 @@ void PingPanel::update(const PingSnapshot &s)
     const Band head = ping_head(s);
     set_text_if(head_, head.text);
     set_color_if(head_, tone_rgb(head.tone, kText));
-    set_text_if(scale_, s.recent.empty() ? std::string() : ping_scale(top_ms_, s.recent.size()));
+    std::string scale = s.recent.empty() ? std::string() : ping_scale(top_ms_, s.recent.size());
+    /* portrait: the right half of a narrow screen keeps the scale and drops "last 120 packets" rather than cut it */
+    if (portrait() && !scale.empty() && text_width(scale.c_str(), font_) > w_ - w_ / 2) scale = ping_scale(top_ms_, 0);
+    set_text_if(scale_, scale);
     set_text_if(stats_, ping_stats(s.stats));
     graph_->invalidate();
     strip_->invalidate();
@@ -562,6 +582,17 @@ void ResultBadge::update(const PortSummary &s)
     set_text_if(host_, s.host);
     set_text_if(word_, s.word);
     set_color_if(word_, tone_rgb(s.tone, kText));
+    if (portrait()) { /* a narrow screen: a long word ("500 Internal Server Error") steps down to the body size before dots */
+        const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
+        const int room = std::max(1, w_ - mark_d_ - 2 * gap_); /* the word's label (see the constructor) */
+        const lv_font_t *f = font_bold(m->text_px[CP0_TEXT_TITLE]);
+        for (int px = m->text_px[CP0_TEXT_TITLE]; px >= m->text_px[CP0_TEXT_BODY]; px -= 2) {
+            f = font_bold(px);
+            if (text_width(s.word.c_str(), f) <= room) break;
+        }
+        lv_obj_set_style_text_font(word_, f, 0);
+        lv_obj_set_style_pad_top(word_, std::max(0, (mark_d_ - line_height(f)) / 2), 0); /* the label is mark_d_ high */
+    }
     set_text_if(detail_, s.detail);
     mark_->invalidate();
 }

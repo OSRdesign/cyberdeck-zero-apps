@@ -366,6 +366,22 @@ std::string resolver_label(const std::string &server, const std::string &system_
     return server;
 }
 
+std::vector<std::string> resolver_label_forms(const std::string &label, bool as_value)
+{
+    std::vector<std::string> forms;
+    const auto add = [&forms](const std::string &f) {
+        if (!f.empty() && (forms.empty() || forms.back() != f)) forms.push_back(f);
+    };
+    add(label);
+    std::string s = label;
+    const std::string sys = "System default";
+    if (s.compare(0, sys.size(), sys) == 0) s = "System" + s.substr(sys.size());
+    add(s);
+    const std::size_t sp = s.find_last_of(' ');
+    if (sp != std::string::npos && sp > 0 && sp + 1 < s.size()) add(as_value ? s.substr(sp + 1) : s.substr(0, sp));
+    return forms;
+}
+
 Band dns_status(const DnsSnapshot &s)
 {
     Band b;

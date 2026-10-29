@@ -55,7 +55,7 @@ int ChainStyle::min_row_h(const lv_font_t *main, const lv_font_t *small)
     return line_height(main) + line_height(small) + 3;
 }
 
-ChainStyle ChainStyle::make(int w, int row_h, int inset, const lv_font_t *main, const lv_font_t *small)
+ChainStyle ChainStyle::make(int w, int row_h, int inset, const lv_font_t *main, const lv_font_t *small, bool stacked)
 {
     ChainStyle s;
     s.main = main;
@@ -88,6 +88,19 @@ ChainStyle ChainStyle::make(int w, int row_h, int inset, const lv_font_t *main, 
     s.bar_h = std::max(6, s.lh * 45 / 100);
     s.bar_full = std::max(1, s.bar_w * 85 / 100);
     s.stub = 3;
+    s.y1 = s.y0 + s.lh + 1;
+    s.note_y = s.y1;
+    if (stacked) { /* a narrow screen: the name gets line 1, the address and the bar line 2 (see the header) */
+        s.stacked = true;
+        s.name_w = std::max(1, s.ms_x - s.gap - s.name_x);
+        s.ip_x = s.name_x;
+        s.ip_w = std::min(text_width("255.255.255.255", small) + 2, std::max(10, (s.right - s.name_x) / 2));
+        s.bar_x = s.ip_x + s.ip_w + s.gap;
+        s.bar_w = std::max(1, s.right - s.bar_x);
+        s.bar_h = std::max(6, std::min(s.slh - 2, s.lh * 45 / 100));
+        s.bar_full = std::max(1, s.bar_w * 85 / 100);
+        s.note_y = s.y1 + s.slh + 1;
+    }
     return s;
 }
 
@@ -127,6 +140,17 @@ void draw_hop_node(lv_layer_t *layer, int cx, int cy, int r, HopLook look, bool 
 /* ---------------------------------------------------------------- a hop */
 
 HopRowView::HopRowView(const ChainStyle &style) : style_(style), h_(style.row_h) {}
+
+bool HopRowView::note_in_ip_column() const
+{
+    return style_.stacked && !note_.empty() && texts_.ip.empty() && text_width(note_.c_str(), style_.small) + 2 <= style_.ip_w;
+}
+
+int HopRowView::base_h() const
+{
+    if (!style_.stacked || note_.empty() || note_in_ip_column()) return style_.row_h;
+    return std::max(style_.row_h, style_.note_y + style_.slh + 1 + style_.y0);
+}
 
 HopRowView::~HopRowView() = default;
 
@@ -172,15 +196,21 @@ void HopRowView::attach(lv_obj_t *host, int w, int h)
     painter_->place(0, 0, w, h);
     num_ = label_at(host, s.main, kLabel, LV_LABEL_LONG_MODE_CLIP, s.num_x, s.y0, s.num_w, s.lh);
     name_ = label_at(host, s.main, kText, LV_LABEL_LONG_MODE_DOTS, s.name_x, s.y0, s.name_w, s.lh);
-    ip_ = label_at(host, s.small, kLabel, LV_LABEL_LONG_MODE_DOTS, s.ip_x, s.y0 + s.lh - s.slh, s.ip_w, s.slh);
-    bar_word_ = label_at(host, s.main, kLabel, LV_LABEL_LONG_MODE_DOTS, s.bar_x, s.y0, s.bar_w, s.lh);
+    if (s.stacked) { /* line 2: the address, then "no reply" in the bar's place */
+        ip_ = label_at(host, s.small, kLabel, LV_LABEL_LONG_MODE_DOTS, s.ip_x, s.y1, s.ip_w, s.slh);
+        bar_word_ = label_at(host, s.small, kLabel, LV_LABEL_LONG_MODE_DOTS, s.bar_x, s.y1, s.bar_w, s.slh);
+    } else {
+        ip_ = label_at(host, s.small, kLabel, LV_LABEL_LONG_MODE_DOTS, s.ip_x, s.y0 + s.lh - s.slh, s.ip_w, s.slh);
+        bar_word_ = label_at(host, s.main, kLabel, LV_LABEL_LONG_MODE_DOTS, s.bar_x, s.y0, s.bar_w, s.lh);
+    }
     avg_ = label_at(host, s.main, kText, LV_LABEL_LONG_MODE_CLIP, s.ms_x, s.y0, s.ms_w, s.lh);
     lv_obj_set_style_text_align(avg_, LV_TEXT_ALIGN_RIGHT, 0);
     loss_ = label_at(host, s.main, kText, LV_LABEL_LONG_MODE_CLIP, s.tag_x, s.y0, s.tag_w, s.lh);
     lv_obj_set_style_text_align(loss_, LV_TEXT_ALIGN_RIGHT, 0);
-    note_label_ = label_at(host, s.small, kLabel, LV_LABEL_LONG_MODE_DOTS, s.name_x, s.y0 + s.lh + 1, s.right - s.name_x, s.slh);
+    note_label_ = label_at(host, s.small, kLabel, LV_LABEL_LONG_MODE_DOTS, s.name_x, s.stacked ? s.note_y : s.y0 + s.lh + 1,
+                           s.right - s.name_x, s.slh);
     for (int i = 0; i < 4; ++i)
-        detail_label_[i] = label_at(host, s.small, i == 3 ? kLabel : kText, LV_LABEL_LONG_MODE_WRAP, s.name_x, s.row_h, s.right - s.name_x,
+        detail_label_[i] = label_at(host, s.small, i == 3 ? kLabel : kText, LV_LABEL_LONG_MODE_WRAP, s.name_x, base_h(), s.right - s.name_x,
                                     s.slh);
     apply();
 }
@@ -203,7 +233,7 @@ void HopRowView::resized(int w, int h)
 
 void HopRowView::layout_details()
 {
-    int y = style_.row_h + style_.gap / 2;
+    int y = base_h() + style_.gap / 2;
     const std::string lines[4] = {detail_.addresses, detail_.timing, detail_.counts, detail_.note};
     for (int i = 0; i < 4; ++i) {
         if (!detail_label_[i]) continue;
@@ -225,8 +255,8 @@ void HopRowView::apply()
     if (!host_) return;
     const HopTexts &t = texts_;
     set_text_if(num_, t.number);
-    /* the name takes the address's column too when there is no address beside it */
-    const int name_w = t.ip.empty() ? style_.ip_x + style_.ip_w - style_.name_x : style_.name_w;
+    /* the name takes the address's column too when there is no address beside it (stacked: it has line 1 anyway) */
+    const int name_w = t.ip.empty() && !style_.stacked ? style_.ip_x + style_.ip_w - style_.name_x : style_.name_w;
     lv_obj_set_width(name_, std::max(1, name_w));
     set_text_if(name_, t.name);
     set_text_if(ip_, t.ip);
@@ -236,6 +266,11 @@ void HopRowView::apply()
     set_color_if(loss_, tone_rgb(t.loss_tone, kLabel));
     set_text_if(note_label_, t.note);
     set_color_if(note_label_, t.note_tone == Tone::Normal ? kLabel : tone_rgb(t.note_tone));
+    if (style_.stacked) { /* the note in the empty address column of line 2, else on its own third line */
+        const bool low = note_in_ip_column();
+        lv_obj_set_pos(note_label_, style_.name_x, low ? style_.y1 : style_.note_y);
+        lv_obj_set_width(note_label_, std::max(1, low ? style_.ip_w : style_.right - style_.name_x));
+    }
     layout_details();
     if (painter_) painter_->invalidate();
 }
@@ -252,7 +287,7 @@ void HopRowView::paint(lv_layer_t *layer, const lv_area_t &a)
     draw_hop_node(layer, cx, cy, s.node_r, texts_.look, texts_.destination);
     if (!texts_.has_bar) return;
     /* the bar: the best-to-worst range lighter, the average solid over it, both on the chain's one scale */
-    const int by = cy - s.bar_h / 2, bx = x + s.bar_x;
+    const int by = s.stacked ? y + s.y1 + (s.slh - s.bar_h) / 2 : cy - s.bar_h / 2, bx = x + s.bar_x;
     const int avg_px = bar_px(texts_.avg_ms, scale_ms_, s.bar_full, s.stub);
     const int best_px = bar_px(texts_.best_ms, scale_ms_, s.bar_full, 1);
     const int worst_px = std::min(s.bar_w, bar_px(texts_.worst_ms, scale_ms_, s.bar_full, s.stub));

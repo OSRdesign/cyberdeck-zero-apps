@@ -1,0 +1,125 @@
+# PDA mode (X-Portrait=480x640, 0.5.0): the portrait canvases a portrait launcher gives the app upright (480x800 the 4.3"
+# DSI panel, 480x640 a 3.5" panel, 800x1280 the FZ-M1 tablet). Home, the Network choice, Interfaces, Diagnosis, Ping, DNS
+# lookup and Port check, by touch (a tap selects a row, a tap on the selected row acts, the header's Esc goes back) and by
+# keys. Portrait rules seen here: the status line is two lines (never cut), the diagnosis rungs are two lines (the detail
+# under the name: an address, a resolver and a time are never cut), the ping scale drops "last 120 packets" when the half
+# line is too narrow, a Compare row drops the resolver's address and the Resolver row says "System 192.168.1.1" when the
+# row is too narrow, Home says "Automatic" for "Automatic (wlan0)" when the label would be cut.
+title Net Toolbox: portrait (PDA mode), Home and the 0.1 tools
+sizes 480x800 480x640 800x1280
+env NET_TOOLBOX_DEMO "diag=portal,ping=mixed"
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+wait 300
+shot home
+expect noquit
+expect text "Net Toolbox"
+expect text "Diagnose my connection"
+expect text "wlan0: 192.168.68.121"
+key end
+wait 400
+shot home-end
+expect text "Interfaces"
+key home
+wait 400
+
+# the Network choice (Up from the first highlighted row, Enter), back with the header's Esc
+key up
+key enter
+wait 300
+shot network
+expect text "wlan0  192.168.68.121"
+tap "Esc"
+wait 300
+
+# Diagnosis: a captive portal (the longest explanation), by touch
+tap "Diagnose my connection"
+tap "Diagnose my connection"
+wait 400
+shot diagnosis
+expect text "Captive portal failed"
+expect text "192.168.68.1, 3.0 ms"
+expect text "via 192.168.1.1, 12 ms"
+expect notext "Message cut off"
+tap "Esc"
+wait 300
+
+# Ping: Start, Stop, the target Roller
+tap "Ping"
+tap "Ping"
+wait 300
+shot ping-idle
+expect text "Press Start to ping Gateway 192.168.68.1"
+tap "Start"
+wait 300
+shot ping-running
+expect text "Stop"
+expect text "now 16 ms"
+tap "Stop"
+wait 300
+shot ping-stopped
+tap "Target"
+tap "Target"
+wait 300
+shot ping-target
+expect text "1.1.1.1 Cloudflare"
+key esc
+wait 300
+tap "Esc"
+wait 300
+
+# DNS lookup: Look up (the first row, selected: one tap acts), then Compare resolvers
+tap "DNS lookup"
+tap "DNS lookup"
+wait 300
+tap "Look up"
+wait 300
+shot dns-answer
+expect text "93.184.215.14"
+@480x800,480x640 expect text "System 192.168.1.1"
+@800x1280 expect text "System default 192.168.1.1"
+tap "Compare resolvers"
+tap "Compare resolvers"
+wait 400
+shot dns-compare
+expect text "Compared 4 resolvers, fastest 1.1.1.1 9 ms"
+expect text "Cloudflare 1.1.1.1"
+tap "Esc"
+wait 300
+
+# Port check (Down from DNS lookup selects it, one tap opens it): Run (the first row: one tap acts), the port Roller
+key down
+wait 400
+tap "Port check"
+wait 300
+tap "Run"
+wait 300
+shot port-open
+expect text "Open"
+tap "Port"
+tap "Port"
+wait 300
+shot port-choice
+key esc
+wait 300
+tap "Esc"
+wait 300
+
+# Interfaces: End selects it, one tap opens it
+key end
+wait 400
+tap "Interfaces"
+wait 300
+shot interfaces
+expect text "Signal"
+key end
+wait 300
+shot interfaces-end
+expect text "DNS server 1"
+tap "Esc"
+wait 300
+expect noquit
+expect notext "Message cut off"
+# Esc at Home ends the app
+tap "Esc"
+expect quit

@@ -146,7 +146,9 @@ void DeviceRowView::apply()
         lv_obj_add_flag(pill_->obj(), LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(tag_, LV_OBJ_FLAG_HIDDEN);
     }
-    set_text_if(detail_, t_.detail);
+    /* portrait: a narrow row shows the vendor alone rather than half a MAC (the device's page has the MAC) */
+    const bool whole = !portrait() || t_.vendor.empty() || text_width(t_.detail.c_str(), small_) + 2 <= right - inset_;
+    set_text_if(detail_, whole ? t_.detail : t_.vendor);
     lv_obj_set_pos(detail_, inset_, top + lh1);
     lv_obj_set_size(detail_, std::max(1, right - inset_), lh2);
 }
@@ -214,7 +216,21 @@ void WifiRowView::apply()
     bars_x_ = x;
     bars_y_ = top + (lh1 - bar_h_) / 2 + bar_h_;
     int left = x;
-    if (t_.in_use) {
+    /* portrait: the check and "connected" go down to the right of line 2, so that the name keeps line 1 */
+    const bool low = portrait() && t_.in_use;
+    int line2_right = w_ - inset_;
+    if (low) {
+        const int cw = text_width(t_.connected.c_str(), small_) + 2;
+        const int cx0 = w_ - inset_ - cw;
+        set_text_if(connected_, t_.connected);
+        lv_obj_remove_flag(connected_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_pos(connected_, cx0, top + lh1);
+        lv_obj_set_size(connected_, cw, lh2);
+        check_r_ = std::max(4, lh2 * 45 / 100);
+        check_x_ = cx0 - 4 - check_r_;
+        check_y_ = top + lh1 + lh2 / 2;
+        line2_right = check_x_ - check_r_ - gap;
+    } else if (t_.in_use) {
         const int cw = text_width(t_.connected.c_str(), small_) + 2;
         left = x - gap - cw;
         set_text_if(connected_, t_.connected);
@@ -233,14 +249,15 @@ void WifiRowView::apply()
     lv_obj_set_size(title_, std::max(1, left - gap - inset_), lh1);
     /* line 2: "ch 36, 5 GHz" then the security words (amber when weak) */
     const std::string cap = t_.security.empty() ? t_.caption : t_.caption + (t_.caption.empty() ? "" : ", ");
-    const int cap_w = std::min(avail, text_width(cap.c_str(), small_) + 2);
+    const int line2 = low ? std::max(1, line2_right - inset_) : avail;
+    const int cap_w = std::min(line2, text_width(cap.c_str(), small_) + 2);
     set_text_if(caption_, cap);
     lv_obj_set_pos(caption_, inset_, top + lh1);
     lv_obj_set_size(caption_, std::max(1, cap_w), lh2);
     set_text_if(security_, t_.security);
     set_color_if(security_, t_.weak_security ? kWarn : kLabel);
     lv_obj_set_pos(security_, inset_ + cap_w, top + lh1);
-    lv_obj_set_size(security_, std::max(1, avail - cap_w), lh2);
+    lv_obj_set_size(security_, std::max(1, line2 - cap_w), lh2);
     if (glyphs_) glyphs_->invalidate();
 }
 
@@ -262,8 +279,10 @@ ChannelsBlock::ChannelsBlock(int w, int inset, const lv_font_t *caption, const l
     : w_(w), inset_(inset), caption_(caption), small_(small)
 {
     pad_ = space_s();
-    bars_h_ = 6 * line_height(small);
-    layout_ = channels_layout(std::max(1, w - 2 * inset), line_height(caption), line_height(small), bars_h_, pad_, false, false);
+    /* portrait: the bands are one over the other over the whole width, with taller bars (the screen has the height) */
+    bars_h_ = (portrait() ? 8 : 6) * line_height(small);
+    layout_ = channels_layout(std::max(1, w - 2 * inset), line_height(caption), line_height(small), bars_h_, pad_, false, false,
+                              portrait());
 }
 
 ChannelsBlock::~ChannelsBlock() = default;
@@ -296,7 +315,8 @@ void ChannelsBlock::set(const std::vector<ChannelsView> &parts)
     parts_ = parts;
     const bool d0 = parts_.size() > 0 && parts_[0].empty.empty();
     const bool d1 = parts_.size() > 1 && parts_[1].empty.empty();
-    layout_ = channels_layout(std::max(1, w_ - 2 * inset_), line_height(caption_), line_height(small_), bars_h_, pad_, d0, d1);
+    layout_ = channels_layout(std::max(1, w_ - 2 * inset_), line_height(caption_), line_height(small_), bars_h_, pad_, d0, d1,
+                              portrait());
     if (host_) {
         build();
         place();
@@ -444,7 +464,8 @@ void ChannelsBlock::paint_bars(int part, lv_layer_t *layer, const lv_area_t &a)
 WalkLiveBlock::WalkLiveBlock(int w, int h, int inset, const lv_font_t *caption, const lv_font_t *small, const lv_font_t *big)
     : w_(w), h_(h), inset_(inset), caption_(caption), small_(small), big_(big)
 {
-    layout_ = walk_layout(std::max(1, w - 2 * inset), h, line_height(caption), line_height(small), line_height(big), space_s());
+    layout_ = walk_layout(std::max(1, w - 2 * inset), h, line_height(caption), line_height(small), line_height(big), space_s(),
+                          portrait());
     ylab_w_ = text_width("-100", small) + 2;
 }
 
@@ -453,7 +474,8 @@ WalkLiveBlock::~WalkLiveBlock() = default;
 void WalkLiveBlock::set_height(int h)
 {
     h_ = h;
-    layout_ = walk_layout(std::max(1, w_ - 2 * inset_), h_, line_height(caption_), line_height(small_), line_height(big_), space_s());
+    layout_ = walk_layout(std::max(1, w_ - 2 * inset_), h_, line_height(caption_), line_height(small_), line_height(big_), space_s(),
+                          portrait());
 }
 
 void WalkLiveBlock::resized(int w, int h)

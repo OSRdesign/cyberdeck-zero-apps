@@ -130,6 +130,15 @@ void test_device_rows()
     /* an unnamed host with a vendor, and one whose company is not in the table */
     CHECK_EQ(device_row_texts(*device_at(s, "192.168.68.35")).detail, std::string("Espressif  24:6f:28:aa:01:02"));
     CHECK_EQ(device_row_texts(*device_at(s, "192.168.68.200")).detail, std::string("Vendor unknown  00:00:5e:00:53:01"));
+    /* portrait (0.5.0): the short form of line 2 is the detail without the MAC (the device's page has it) */
+    CHECK_EQ(r.vendor, std::string("TP-Link"));
+    CHECK_EQ(phone.vendor, std::string("Private (random) address"));
+    CHECK_EQ(device_row_texts(*device_at(s, "192.168.68.200")).vendor, std::string("Vendor unknown"));
+    for (const Device &d : s.devices) {
+        const DeviceRowTexts t = device_row_texts(d);
+        CHECK_EQ(t.vendor.empty(), t.detail.empty());
+        CHECK_EQ(t.detail.compare(0, t.vendor.size(), t.vendor), 0); /* the detail starts with it */
+    }
 
     /* a name from mDNS and one from NetBIOS keep the address apart */
     CHECK_EQ(device_row_texts(*device_named(s, "nas")).ip, std::string("192.168.68.20"));
@@ -632,6 +641,19 @@ void test_channels()
     }
     CHECK(channels_layout(960, 20, 14, 84, 8, true, true).total_h < channels_layout(560, 20, 14, 84, 8, true, true).total_h);
     CHECK(channels_layout(560, 20, 14, 84, 8, true, false).total_h < channels_layout(560, 20, 14, 84, 8, true, true).total_h);
+
+    /* portrait (PDA mode, 0.5.0): one band over the other over the whole width, whatever the width (the tablet's 680 px too) */
+    for (const int w : {424, 680, 960}) {
+        const ChannelsLayout L = channels_layout(w, 20, 14, 112, 8, true, true, true);
+        CHECK(!L.side);
+        CHECK_EQ(L.first.w, w);
+        CHECK_EQ(L.second.w, w);
+        CHECK_EQ(L.second.y, L.first.y + L.first.h);
+        CHECK(!overlaps(L.first, L.second));
+        const ChannelsLayout land = channels_layout(w, 20, 14, 112, 8, true, true);
+        CHECK_EQ(land.side, w >= 640);
+        CHECK(L.total_h >= land.total_h);
+    }
 }
 
 /* ---------------------------------------------------------------- the walk test */
@@ -914,6 +936,20 @@ void test_walk_demo()
     }
     CHECK(walk_layout(560, 250, 20, 14, 40, 8).side);
     CHECK(!walk_layout(640, 500, 20, 14, 40, 8).side);
+
+    /* portrait (PDA mode, 0.5.0): the reading always over the chart, also in the shorter block of a stopped walk (424 x 220:
+     * landscape would put them side by side) */
+    CHECK(walk_layout(424, 220, 20, 14, 40, 8).side);
+    for (const int w : {424, 680}) {
+        for (const int h : {220, 300, 500, 800}) {
+            const WalkLayout L = walk_layout(w, h, 20, 14, 40, 8, true);
+            CHECK(!L.side);
+            CHECK_EQ(L.chart.w, w);
+            CHECK(L.reading.y + L.reading.h <= L.chart.y);
+            CHECK(L.chart.y + L.chart.h <= L.legend.y);
+            CHECK(L.legend.y + L.legend.h <= h);
+        }
+    }
 }
 
 /* 0.4.1, the row-affordance rule: a row of the view model is a read-out (Info: grey value, no marker) unless a page says
