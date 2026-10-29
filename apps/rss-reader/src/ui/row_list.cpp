@@ -231,7 +231,7 @@ void RowList::bind(Slot &s, int i)
         lv_obj_set_style_text_font(l, f, 0);
         lv_obj_set_style_text_color(l, lv_color_hex(c.color), 0);
         lv_obj_set_style_text_align(l, c.align, 0);
-        lv_label_set_long_mode(l, c.lines > 1 ? LV_LABEL_LONG_MODE_WRAP : LV_LABEL_LONG_MODE_DOTS);
+        lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_DOTS    /* several lines: wrapped, the last one ends with dots */);
         lv_obj_set_width(l, std::max(1, c.w));
         lv_obj_set_height(l, lh * std::max(1, c.lines));
         lv_obj_set_pos(l, c.x, c.y);

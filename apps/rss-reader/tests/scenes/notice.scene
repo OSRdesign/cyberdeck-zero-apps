@@ -1,8 +1,8 @@
 # Under the app's minimum (640x480, X-MinSize): an older launcher ignores X-MinSize, so the shared runner shows the
-# "needs 640x480" notice instead of the app, which closes on any key.
+# "needs 640x480" notice instead of the app, which closes on any key; a portrait canvas under X-Portrait (480x640) gets it too.
 title RSS Reader: screens under 640x480
 env RSSREADER_DATA /tmp/rss-reader-scene-data
-sizes 480x320 640x400 480x800
+sizes 480x320 640x400 480x560
 
 shot notice
 expect noquit

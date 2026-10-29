@@ -49,10 +49,18 @@ void App::layout_add()
     const int find_w = std::max(g.row, text_w("Find feed", f_body_) + 2 * g.m);
     const int y0 = g.s / 2;
     lv_obj_set_pos(add_ta_, g.x, y0);
-    lv_obj_set_size(add_ta_, std::max(g.row, g.cw - find_w - g.s), g.row);
-    lv_obj_set_pos(add_find_, g.x + g.cw - find_w, y0);
-    lv_obj_set_size(add_find_, find_w, g.row);
-    const int sy = y0 + g.row + g.m;
+    int sy;
+    if (portrait()) {                                  // a narrow tall screen: the field takes the width, Find feed under it
+        lv_obj_set_size(add_ta_, g.cw, g.row);
+        lv_obj_set_pos(add_find_, g.x, y0 + g.row + g.s);
+        lv_obj_set_size(add_find_, g.cw, g.row);
+        sy = y0 + 2 * g.row + g.s + g.m;
+    } else {
+        lv_obj_set_size(add_ta_, std::max(g.row, g.cw - find_w - g.s), g.row);
+        lv_obj_set_pos(add_find_, g.x + g.cw - find_w, y0);
+        lv_obj_set_size(add_find_, find_w, g.row);
+        sy = y0 + g.row + g.m;
+    }
     lv_obj_set_pos(add_status_, g.x, sy);
     lv_obj_set_width(add_status_, g.cw);
     lv_obj_update_layout(add_status_);

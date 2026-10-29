@@ -49,6 +49,8 @@ const AppSpec &app_spec()
         s.title = "RSS Reader";
         s.min_w = rssui::kScreenW;
         s.min_h = rssui::kScreenH;
+        s.portrait_w = rssui::kPortraitW;
+        s.portrait_h = rssui::kPortraitH;
         s.build = [](lv_obj_t *screen) -> std::shared_ptr<void> { return std::make_shared<rssui::Session>(screen); };
         return s;
     }();

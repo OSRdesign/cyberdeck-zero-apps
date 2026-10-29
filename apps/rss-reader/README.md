@@ -1,6 +1,6 @@
 # RSS Reader
 
-Package `rss-reader`, title "RSS Reader", version 0.1.3. Part of
+Package `rss-reader`, title "RSS Reader", version 0.2.0. Part of
 [cyberdeck-zero-apps](../../README.md).
 
 A text-feed reader for the CyberdeckZero handheld: pin your favourite news, tech and science feeds from a bundled catalog
@@ -14,10 +14,35 @@ lists and forms on the launcher's `cp0_lvgl`.
 OPML). Phase 2: the app, every page and a minimal reader. Phase 3 (this version): the images in the reader, the full-screen
 image, Save for offline and the Saved articles page.
 
+## What changed in 0.2.0
+
+* **Portrait (PDA mode).** The app declares `X-Portrait=480x640`: on a launcher in PDA mode (v0.8.8 and later;
+  Settings > Screen > PDA mode from v0.8.9) it runs **upright** on the portrait screen (480x800, 480x640, the 800x1280
+  tablet) instead of turned by a quarter. The layout is chosen from the canvas shape (taller than wide), never from a
+  named size; every landscape size renders as in 0.1.3.
+  * Every page is the same column in the screen's width (the narrow header of the toolkit on the 480 px wide screens:
+    the last part of the path as the title). Rows keep the row rule (a chevron, or a grey information / action dot at
+    the right) and at least 7 mm; the reader's text is the chosen size, wrapped to the width, no sideways scrolling.
+  * **Article titles** (the article list and Saved articles) wrap over two lines when one line cuts them (in
+    landscape they are one line, cut with dots); the second line ends with dots.
+  * **Add a feed**: the address field takes the whole width and *Find feed* sits under it (beside it in landscape), so a
+    long address shows more of itself; the answer and Pin / Cancel follow.
+  * **Browse**: the line under the header drops the topic (the header names it) when the hint would be cut.
+  * The on-screen keyboard (and the handwriting band of launcher v0.8.11, touch only) works as in landscape: the
+    pages end above it (the search with 2-3 rows visible at 480x640).
+  * 800x1280: the same column (up to 960 px wide), about 69 text characters per line in the reader.
+* A canvas smaller than 480x640 in portrait gets the notice "needs a screen of at least 480x640"; landscape unchanged.
+* Tests: the scripted flows run at the portrait canvases too (`build.sh uip`); a flow line starting with `!WxH` is left
+  out at that size (the two image-viewer checks that need a picture larger than the screen, at 800x1280).
+
 ## Screenshots
 
-Taken in the headless harness at the five sizes (`build.sh ui`, a fake network): the publishing PR adds the 640x480 ones
-to `docs/screenshots/` and `screenshots/`. Board screenshots come with the board tests.
+Renders of the headless harness (`build.sh uip`, a fake network with fixture feeds), **not photographs of the panel**.
+Board screenshots come with the board tests.
+
+| | |
+|---|---|
+| ![Portrait article list](screenshots/01-portrait-articles-480x800.png) 480x800 render, PDA mode (portrait, 4.3" DSI). The article list with titles over two lines, unread dots, a *saved* mark and a chevron on every row | ![Portrait reader](screenshots/02-portrait-reader-800x1280.png) 800x1280 render, PDA mode on the 7-inch tablet. The reader: title, source and date, the lead picture and the text under the header |
 
 ## Pages
 
@@ -68,17 +93,19 @@ The launcher's 3 s Esc hold ends any app.
 ## Requirements
 
 - A screen of at least 640x480 (`X-MinSize=640x480`; tested in the harness at 640x480, 800x480, 720x720, 1024x600 and
-  1280x720) and a launcher with full-screen app support (`X-Fullscreen` in `.desktop` files).
+  1280x720) and a launcher with full-screen app support (`X-Fullscreen` in `.desktop` files). In PDA mode (portrait) a
+  canvas of at least **480x640** (`X-Portrait=480x640`; tested at 480x800, 480x640 and 800x1280); a launcher before
+  v0.8.8 never gives a portrait canvas.
 - The packages `curl` and `ca-certificates` (dependencies of the package); the network to update the feeds (what was fetched
   stays readable offline).
 - The launcher's fonts in `/usr/share/APPLaunch/share/font` (Montserrat; DejaVu Sans and Noto Sans CJK for accents and
   Japanese).
-- x86-64 PCs: an amd64 package, `rss-reader_0.1.3_amd64.deb`, is in the amd64 registry
+- x86-64 PCs: an amd64 package, `rss-reader_0.2.0_amd64.deb`, is in the amd64 registry
   ([amd64](../../README.md#amd64-x86-64-pcs)) for a PC running the launcher. It has had no board test on a PC yet.
 
 ## Install
 
-Settings > Apps. By hand: `sudo dpkg -i rss-reader_0.1.3_arm64.deb`.
+Settings > Apps. By hand: `sudo dpkg -i rss-reader_0.2.0_arm64.deb`.
 
 ## Files the app keeps
 
@@ -97,7 +124,7 @@ Reset: close the app and remove `~/.local/share/rss-reader` and `~/.cache/rss-re
   (progressive: 8 MP) or a PNG, GIF or BMP over 4.2 MP shows "Too large to show"; a photo turned by its EXIF tag is shown
   as stored, not turned; at most six pictures per article, 2 MB each. No zoom in the full-screen view.
 - Articles show what the feed carries: a feed that gives only a summary shows only the summary (and only its pictures).
-- Article titles are one line in the lists, cut with dots.
+- Article titles are one line in the lists in landscape, cut with dots (two lines in portrait).
 - The lists and the key bridge are copies of Mesh Hop's (a shared one in `apps/_common` is a follow-up).
 - Untested on a board so far: see [tests/BOARD-TESTS.md](tests/BOARD-TESTS.md).
 
@@ -110,7 +137,7 @@ Reset: close the app and remove `~/.local/share/rss-reader` and `~/.cache/rss-re
 | `data/catalog.json` | 269 feeds (see `data/CATALOG-SOURCES.md`); the package installs a copy in `/usr/share/APPLaunch/share/rss-reader/` |
 | `tests/unit/` | host tests of the core (about 10000 checks, with the image headers, the image cache and the read marks made during a refresh), of the UI logic and the package files (`ui_tests.cpp`, about 520), and of the decoding (`img_tests.cpp`: `rss-reader-imgtest`, with LVGL, a mutation test of the decoders; `--bench` measures one picture) |
 | `tests/flows/` | the scripted runner (`rss-reader-script`: a fake network answering from `tests/data/ui` by `routes.txt`, pictures in `tests/data/ui/img`, a fixed clock, a seeded store) and thirteen flows |
-| `tests/scenes/` | scenes of the shared headless harness (Home, Browse, Add a feed with the on-screen keyboard, Settings, the quit question, the notice under 640x480, a start without the launcher) |
+| `tests/scenes/` | scenes of the shared headless harness (Home, Browse, Add a feed with the on-screen keyboard, Settings, the quit question, the notice under 640x480, a start without the launcher; `portrait.scene` and `portrait-band.scene`: PDA mode at 480x800, 480x640, 800x1280, by touch, with the on-screen keyboard and the handwriting band) |
 | `tools/fetch_smoke.cpp` | optional: fetches three real feeds with the real curl client (not part of the tests) |
 | `tools/make_img_fixtures.py` | makes the picture fixtures and the large pictures of the measurements (Python with Pillow; not part of the tests) |
 | `docs/IMAGES.md` | the decoders of the pinned launcher, what the app uses, the memory and time measured |
@@ -125,6 +152,7 @@ wsl -e sh .../apps/rss-reader/build.sh test      # unit tests only (core + UI lo
 wsl -e sh .../apps/rss-reader/build.sh asan      # the same under AddressSanitizer + UBSan
 wsl -e sh .../apps/rss-reader/build.sh sim       # the thirteen flows against the fake network at 640x480 (or: sim 800x480)
 wsl -e sh .../apps/rss-reader/build.sh ui        # the flows at the five sizes (about 3 minutes, the sizes side by side)
+wsl -e sh .../apps/rss-reader/build.sh uip       # the flows at the PDA mode's portrait canvases (480x800, 480x640, 800x1280)
 python tools/make_registry.py --only rss-reader --out <a folder outside packages/>   # the .deb
 ```
 
@@ -144,6 +172,8 @@ shown on the device. Details in `root/usr/share/doc/rss-reader/copyright`.
 
 ## Changes
 
+- 0.2.0: portrait (PDA mode, `X-Portrait=480x640`): upright on 480x800, 480x640 and 800x1280; article titles over two
+  lines, Find feed under the address field, the Browse hint shortened where it would be cut; landscape unchanged.
 - 0.1.3: rebuilt against launcher v0.8.5: battery in the header, Wi-Fi interface lookup, status feed; no other change.
 - 0.1.2: rebuilt on launcher v0.8.1 (2b1a070), no behaviour change intended; the toolkit changed under it: upstream decoupling, time zone/Settings work, x86 port; nothing the app uses was removed.
 - 0.1.1: multitasking, `X-Background=freeze` (APP-CONTRACT section 13 of the launcher; [guidelines](../../docs/APP-GUIDELINES.md#multitasking-hidden-and-shown-again-x-background)): under a launcher with multitasking on, Super, Alt+Tab or

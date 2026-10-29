@@ -1,4 +1,4 @@
-# RSS Reader 0.1.0 (phase 3): board tests
+# RSS Reader 0.2.0: board tests
 
 Phase 2 (the pages, the reader) and phase 3 (sections I, L, O, C: the pictures, a very large picture, reading offline, the
 storage cap). For the Controller and the owner (controller-led testing: the Controller deploys and reads the logs, the owner does
@@ -20,12 +20,12 @@ and the counts differ on a board, the layout does not.
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/rss-reader/build.sh all --strict
 python tools/make_registry.py --only rss-reader --out C:/CLAUDE/zero7/pkg-out
 set DECK_HOST=<board ip>        (deck: leave it unset)
-python deck.py put C:/CLAUDE/zero7/pkg-out/rss-reader_0.1.0_arm64.deb /tmp/rss-reader.deb
+python deck.py put C:/CLAUDE/zero7/pkg-out/rss-reader_0.2.0_arm64.deb /tmp/rss-reader.deb
 python deck.py sudo 'dpkg -i /tmp/rss-reader.deb || apt-get -f install -y'
 python deck.py run '/usr/share/APPLaunch/bin/rss-reader --version; which curl; ls -l /usr/share/APPLaunch/share/rss-reader/'
 ```
 
-`--version`: `RSS Reader (rss-reader) 0.1.0`, the launcher commit `f35c2d6...` with `cp0_lvgl pinned`, "needs a screen of at
+`--version`: `RSS Reader (rss-reader) 0.2.0`, the launcher commit `f35c2d6...` with `cp0_lvgl pinned`, "needs a screen of at
 least 640x480". `curl` is found; `catalog.json` is there. Logs while testing:
 
 ```
@@ -194,6 +194,27 @@ Add a feed `http://127.0.0.1:8765/feed.xml` and pin it ("Big pictures", 13 artic
 1. Started over ssh (`python deck.py run 'timeout 5 /usr/share/APPLaunch/bin/rss-reader; echo rc=$?'`): one log line, no
    crash. [ ] pass
 2. The 480x320 notice: covered by `tests/scenes/notice.scene` (harness); on the Pi 3A+ with its SPI panel if available. [ ] pass
+
+## P. PDA mode (0.2.0; launcher v0.8.9 or later, Settings > Screen > PDA mode On rotate left)
+
+On the Pi 3A+ or Pi 4 B DSI board (480x800, touch only) and, if at hand, the FZ-M1 tablet (800x1280, amd64 package).
+Wi-Fi on. Expected pictures: `build.sh uip` (`flows-portrait/<WxH>/<flow>/`) and the sheets of `portrait.png`,
+`portrait-band.png` in the host build's `out/sheets`. Start from a clean data folder, with Favorites of a few feeds
+(Browse > International > Technology, pin three) and refreshed.
+
+1. **Upright start.** The **RSS Reader** tile starts the app **upright** (not turned): Home with five rows, the header
+   reads *RSS Reader*, the Esc pill and the status strip do not overlap it. [ ] pass
+2. **Touch under rotation.** A tap on a row highlights the row under the finger (not another one), a second tap opens
+   it; a drag scrolls a list the way the finger moves; the header Esc goes back. Note any tap on the wrong row. [ ] pass
+3. **Articles.** Favorites > a feed: titles that do not fit wrap over two lines (the second one ends with dots), the
+   unread dot, age and chevron on every row; a tap, a second tap: the reader. [ ] pass
+4. **Reader.** The text is readable at the Medium size (note: too small, fine, too large), wrapped to the width, no
+   sideways scrolling; a picture fits the width; a drag scrolls; Esc back. [ ] pass
+5. **Add a feed.** Tap Add a feed: the field full width, *Find feed* under it, the on-screen keyboard across the bottom
+   (nothing cut at the sides); type `korben.info`, the keyboard's Enter finds the feed; Pin. [ ] pass
+6. **Browse and Settings.** The topic list's line under the header is not cut; the search field with the keyboard up
+   leaves a few result rows; Settings rows each have their value or dot. [ ] pass
+7. Settings > Screen > PDA mode Off (the launcher restarts): the app is the landscape app of 0.1.3, unchanged. [ ] pass
 
 ## Cleanup
 
