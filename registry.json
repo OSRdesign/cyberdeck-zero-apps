@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-10-29T08:59:39+00:00",
+  "generated_at": "2026-10-29T10:59:15+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CardputerZero"
@@ -13,6 +13,84 @@
     ]
   },
   "apps": [
+    {
+      "uuid": "8268c72d-f588-521f-a81f-8379d1201f7b",
+      "share_code": "klondike-solitaire",
+      "title": "Klondike Solitaire",
+      "summary": "The classic patience game: draw one or three, Standard or Vegas scoring, unlimited undo, hints and deals that are sure to be winnable.",
+      "description": "Klondike solitaire for the deck, played by touch or keyboard. Draw one or three cards, with unlimited passes through the stock, three or one; Standard scoring (with an optional timer and its time bonus), Vegas scoring with a bank that carries over from game to game, or no score. Unlimited undo and redo, hints that never send you back and forth, safe moves to the foundations done for you if you wish, a check that tells you when no move is left, numbered deals that are the same on every board, and winnable deals proven by a built-in solver. Statistics per variation (games won, streaks, best score, best time, fewest moves) and the game in progress are kept on the board. No network. Needs a screen of at least 640x480 (in PDA mode, portrait 480x640) and a launcher with full-screen app support.",
+      "locales": {
+        "en": {
+          "title": "Klondike Solitaire",
+          "summary": "The classic patience game: draw one or three, Standard or Vegas scoring, unlimited undo, hints and deals that are sure to be winnable.",
+          "description": "Klondike solitaire for the deck, played by touch or keyboard. Draw one or three cards, with unlimited passes through the stock, three or one; Standard scoring (with an optional timer and its time bonus), Vegas scoring with a bank that carries over from game to game, or no score. Unlimited undo and redo, hints that never send you back and forth, safe moves to the foundations done for you if you wish, a check that tells you when no move is left, numbered deals that are the same on every board, and winnable deals proven by a built-in solver. Statistics per variation (games won, streaks, best score, best time, fewest moves) and the game in progress are kept on the board. No network. Needs a screen of at least 640x480 (in PDA mode, portrait 480x640) and a launcher with full-screen app support."
+        }
+      },
+      "i18n": {
+        "en": {
+          "title": "Klondike Solitaire",
+          "summary": "The classic patience game: draw one or three, Standard or Vegas scoring, unlimited undo, hints and deals that are sure to be winnable.",
+          "description": "Klondike solitaire for the deck, played by touch or keyboard. Draw one or three cards, with unlimited passes through the stock, three or one; Standard scoring (with an optional timer and its time bonus), Vegas scoring with a bank that carries over from game to game, or no score. Unlimited undo and redo, hints that never send you back and forth, safe moves to the foundations done for you if you wish, a check that tells you when no move is left, numbered deals that are the same on every board, and winnable deals proven by a built-in solver. Statistics per variation (games won, streaks, best score, best time, fewest moves) and the game in progress are kept on the board. No network. Needs a screen of at least 640x480 (in PDA mode, portrait 480x640) and a launcher with full-screen app support."
+        }
+      },
+      "categories": [
+        "Games"
+      ],
+      "author": {
+        "github": "OSRdesign",
+        "display_name": "OSRdesign"
+      },
+      "version": "0.1.0",
+      "published_at": "2026-10-29T10:59:14+00:00",
+      "updated_at": "2026-10-29T10:59:14+00:00",
+      "review": {
+        "status": "approved"
+      },
+      "license": "MIT",
+      "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/klondike-solitaire",
+      "download": {
+        "type": "deb",
+        "package": "klondike-solitaire",
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/klondike-solitaire_0.1.0_arm64.deb",
+        "md5": "2a6ed9cc5935568d5484db35b9df3fdf",
+        "sha256": "125e9a9aa9a1baf4fdf691bd1171a3040b0b32f96ef0a153c9bc82f7839f6368",
+        "size": 1455130
+      },
+      "depends": "libfreetype6, libinput10, libxkbcommon0",
+      "permissions": {
+        "camera": false,
+        "microphone": false,
+        "imu": false,
+        "network": false,
+        "additional_hardware": false,
+        "background_service": false,
+        "external_display": false
+      },
+      "assets": {
+        "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/klondike-solitaire/icon.png",
+        "screenshots": [
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/klondike-solitaire/screenshots/01-fresh-deal-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/klondike-solitaire/screenshots/02-draw3-midgame-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/klondike-solitaire/screenshots/03-portrait-midgame-480x800.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/klondike-solitaire/screenshots/04-win-cascade-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/klondike-solitaire/screenshots/05-settings-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/klondike-solitaire/screenshots/06-statistics-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/klondike-solitaire/screenshots/07-menu-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/klondike-solitaire/screenshots/08-left-handed-640x480.png"
+        ]
+      },
+      "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/klondike-solitaire/icon.png",
+      "screenshots": [
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/klondike-solitaire/screenshots/01-fresh-deal-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/klondike-solitaire/screenshots/02-draw3-midgame-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/klondike-solitaire/screenshots/03-portrait-midgame-480x800.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/klondike-solitaire/screenshots/04-win-cascade-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/klondike-solitaire/screenshots/05-settings-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/klondike-solitaire/screenshots/06-statistics-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/klondike-solitaire/screenshots/07-menu-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/klondike-solitaire/screenshots/08-left-handed-640x480.png"
+      ]
+    },
     {
       "uuid": "1331569f-c0a5-52e1-957c-b4d29fc560d7",
       "share_code": "lanscan",
