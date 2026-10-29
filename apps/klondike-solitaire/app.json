@@ -1,0 +1,15 @@
+{
+  "share_code": "klondike-solitaire",
+  "package": "klondike-solitaire",
+  "version": "0.1.0",
+  "title": "Klondike Solitaire",
+  "summary": "The classic patience game: draw one or three, Standard or Vegas scoring, unlimited undo, hints and deals that are sure to be winnable.",
+  "description": "Klondike solitaire for the deck, played by touch or keyboard. Draw one or three cards, with unlimited passes through the stock, three or one; Standard scoring (with an optional timer and its time bonus), Vegas scoring with a bank that carries over from game to game, or no score. Unlimited undo and redo, hints that never send you back and forth, safe moves to the foundations done for you if you wish, a check that tells you when no move is left, numbered deals that are the same on every board, and winnable deals proven by a built-in solver. Statistics per variation (games won, streaks, best score, best time, fewest moves) and the game in progress are kept on the board. No network. Needs a screen of at least 640x480 (in PDA mode, portrait 480x640) and a launcher with full-screen app support.",
+  "categories": ["Games"],
+  "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
+  "license": "MIT",
+  "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/klondike-solitaire",
+  "depends": "libfreetype6, libinput10, libxkbcommon0",
+  "arch": ["arm64", "amd64"],
+  "permissions": {}
+}

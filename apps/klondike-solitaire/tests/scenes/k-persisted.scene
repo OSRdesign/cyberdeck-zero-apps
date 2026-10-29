@@ -1,0 +1,27 @@
+title Klondike: the next start brings back the game in progress and the settings (follows j-settings)
+sizes 640x480 800x480 720x720 1280x800 480x800 800x1280 480x640
+env KLONDIKE_TEST_DATA persist
+env KLONDIKE_TEST_PROBES 1
+wait 400
+expect text "Moves 3"
+expect text "Game resumed"
+shot resumed
+check resumed
+key m
+wait 200
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 200
+expect text "3 cards"
+shot settings-kept
+check settings-kept
+key esc
+key esc
+wait 200
+expect noquit

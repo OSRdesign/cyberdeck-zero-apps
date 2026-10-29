@@ -1,0 +1,23 @@
+title Klondike: a game by deal number, typed into the toolkit's field (the on-screen keyboard shows where no keyboard is)
+sizes 640x480 800x480 720x720 1280x800 480x800 800x1280 480x640
+env KLONDIKE_TEST_DATA n-number
+env KLONDIKE_TEST_RESET 1
+env KLONDIKE_TEST_DEAL 1
+wait 300
+key m
+wait 200
+key down
+key enter
+wait 300
+expect osk on
+shot dialog
+check dialog
+type "4242"
+wait 100
+shot typed
+key enter
+wait 500
+expect osk off
+expect text "Deal 4242"
+shot dealt
+check dealt

@@ -1,0 +1,50 @@
+title Klondike: keyboard play, pick and place, undo, redo, hint, new game, menu, Esc
+sizes 640x480 800x480 720x720 1280x800 480x800 800x1280 480x640
+env KLONDIKE_TEST_DATA l-keys
+env KLONDIKE_TEST_RESET 1
+env KLONDIKE_TEST_DEAL 1
+env KLONDIKE_TEST_PROBES 1
+wait 300
+key down
+wait 100
+shot cursor
+key enter
+wait 100
+shot picked
+key up
+key right
+key right
+wait 100
+shot on-foundation
+key enter
+wait 500
+expect text "Moves 2"
+key u
+wait 400
+expect text "Moves 3"
+key r
+wait 400
+expect text "Moves 4"
+key h
+wait 200
+shot hint
+key down
+key enter
+wait 100
+key esc
+wait 100
+expect noquit
+key n
+wait 200
+expect text "Start a new game?"
+key esc
+wait 200
+key m
+wait 200
+expect text "Restart this deal"
+key esc
+wait 200
+expect noquit
+key esc
+wait 300
+expect quit

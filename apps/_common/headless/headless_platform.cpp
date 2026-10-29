@@ -226,7 +226,7 @@ std::string resource_path(const std::string &name)
 
 Platform &platform() { return g_platform; }
 
-bool platform_init(int w, int h, int ppmm_x100, const std::string &resource_root)
+bool platform_init(int w, int h, int ppmm_x100, const std::string &resource_root, bool force_density)
 {
     g_resources = resource_root;
     Platform &p = g_platform;
@@ -249,7 +249,7 @@ bool platform_init(int w, int h, int ppmm_x100, const std::string &resource_root
 
     /* metrics: the deck size has no physical size (default density); the others report mm like a driver */
     int mm_w = 0, mm_h = 0;
-    if (ppmm_x100 > 0 && !(w == 640 && h == 480)) {
+    if (ppmm_x100 > 0 && (force_density || !(w == 640 && h == 480))) {
         mm_w = (w * 100 + ppmm_x100 / 2) / ppmm_x100;
         mm_h = (h * 100 + ppmm_x100 / 2) / ppmm_x100;
     }

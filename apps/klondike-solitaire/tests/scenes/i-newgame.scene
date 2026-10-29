@@ -1,0 +1,48 @@
+title Klondike: a new game asks first when a move was made, an abandoned game counts as a loss
+sizes 640x480 800x480 720x720 1280x800 480x800 800x1280 480x640
+env KLONDIKE_TEST_DATA i-newgame
+env KLONDIKE_TEST_RESET 1
+env KLONDIKE_TEST_DEAL 1
+env KLONDIKE_TEST_PROBES 1
+wait 300
+tap "@T3.top"
+tap "@T5.top"
+wait 400
+expect text "Moves 3"
+key m
+wait 200
+key enter
+wait 200
+shot confirm
+check confirm
+expect text "Start a new game?"
+key esc
+wait 200
+expect notext "Start a new game?"
+expect text "Moves 3"
+key n
+wait 200
+expect text "Start a new game?"
+key enter
+wait 600
+expect text "Moves 0"
+shot newgame
+key m
+wait 200
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 200
+shot stats-loss
+check stats-loss
+expect text "Played"
+key esc
+key esc
+wait 200
+expect noquit

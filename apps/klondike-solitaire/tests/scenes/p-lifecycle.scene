@@ -1,0 +1,25 @@
+title Klondike: hidden and shown again by the launcher (the clock is paused, the table is intact)
+sizes 640x480 480x800
+lifecycle
+env KLONDIKE_TEST_DATA p-life
+env KLONDIKE_TEST_RESET 1
+env KLONDIKE_TEST_DEAL 1
+env KLONDIKE_TEST_PROBES 1
+wait 300
+tap "@S"
+wait 400
+expect text "Moves 3"
+hide
+expect hidden
+wait 1500
+show
+expect visible
+wait 400
+expect repaint
+shot shown
+check shown
+expect text "Moves 3"
+tap "@S"
+wait 300
+expect text "Moves 4"
+close

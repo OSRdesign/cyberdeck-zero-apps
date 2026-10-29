@@ -1,0 +1,18 @@
+title Klondike: one move from winning, double tap sends the last King up, the result screen (animation Off: the cascade has its own scenes, q-cascade-*)
+sizes 640x480 800x480 720x720 1280x800 480x800 800x1280 480x640
+env KLONDIKE_TEST_DATA e-win
+env KLONDIKE_TEST_RESET 1
+env KLONDIKE_TEST_PROBES 1
+env KLONDIKE_TEST_PREFS anim=2
+env KLONDIKE_TEST_RULES draw=1,passes=0,scoring=standard,timed=0,auto=1,fback=1,fill=king
+env KLONDIKE_TEST_BOARD "f C13 D13 H13 S12;t KS;t;t;t;t;t;t;w;s;r 0"
+wait 300
+shot before
+tap "@T1.top"
+tap "@T1.top"
+wait 900
+shot won
+check won
+expect text "You won!"
+expect text "New game"
+expect text "Statistics"
