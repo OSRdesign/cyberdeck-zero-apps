@@ -146,6 +146,10 @@ Band ping_band(const PingSnapshot &s);
 /* "System 192.168.1.1" for the first system server, "Cloudflare 1.1.1.1" for a preset, else the address */
 std::string resolver_label(const std::string &server, const std::string &system_server,
                            const std::string &system_name = "System");
+/* Portrait (0.5.0): the shorter forms of a resolver label for a narrow row, longest first, each different from the one
+ * before: the label itself, "System default" said "System", then the address alone (as_value: the Resolver row's value) or
+ * the name without its address (the label of a Compare row). "1.1.1.1" alone has no shorter form. */
+std::vector<std::string> resolver_label_forms(const std::string &label, bool as_value);
 Band dns_status(const DnsSnapshot &s);
 /* the result list: a heading, then a row per answer (data, with "TYPE ttl" at the right) or per resolver (compare) */
 std::vector<RowDef> dns_rows(const DnsSnapshot &s, const std::string &system_server,

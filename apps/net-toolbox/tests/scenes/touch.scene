@@ -50,7 +50,9 @@ key down
 key down
 key down
 key down
-wait 400
+# the Diagnosis's "Saved ..." note holds the status line for 6 s: past it whatever the machine's speed (0.5.0: the check
+# below passed only on a loaded build machine)
+wait 6000
 tap "Speed test"
 wait 250
 expect text "Press Start to test your connection"

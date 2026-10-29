@@ -105,6 +105,7 @@ void ToolboxApp::build_interfaces()
     read_net();
     request_links(true);
     apply_links();
+    rows_density_ = CP0_UI_LIST_COMPACT;
     build_list(CP0_UI_LIST_COMPACT, g.top, g.bottom - g.top, true, to_rows(ui::interface_rows(net_, scope_)), 0);
     next_state_ms_ = now_ms() + 2000;
 }
@@ -125,22 +126,46 @@ void ToolboxApp::build_diagnosis()
     const Geo g = geo();
     const int y = build_band();
     const int avail = g.bottom - y;
-    const int msg_h = (1 + kMsgLines) * g.lh; /* the head and the explanation, never cut */
+    int msg_lines = kMsgLines;
+    int msg_h = (1 + msg_lines) * g.lh; /* the head and the explanation, never cut */
     const int pref = g.lh * 7 / 4;
     const auto rung_for = [&](int list_h) { return (avail - msg_h - 2 * g.s - list_h) / kStepCount; };
     cp0_ui_list_density_t density = CP0_UI_LIST_COMFORTABLE;
-    int rung = rung_for(2 * g.row);
-    if (rung < pref) {
-        density = CP0_UI_LIST_COMPACT;
-        rung = rung_for(2 * g.crow);
-    }
-    rung = std::clamp(rung, g.lh + 4, 2 * g.lh + g.s);
     const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
     const lv_font_t *font = ui::font_medium(m->text_px[CP0_TEXT_BODY]);
-    if (ui::line_height(font) + 4 > rung) font = ui::caption_font();
-
     const int x = g.x + g.inset, w = std::max(1, g.w - 2 * g.inset);
-    ladder_ = std::make_unique<ui::HealthLadder>(page_->root(), x, y, w, rung, font);
+    int rung = 0;
+    if (portrait()) {
+        /* a narrow tall screen: each rung is two lines (the name, its detail under it over the whole width: an address, a
+         * resolver and a time are never cut), and the explanation has two more lines when the screen has the room */
+        const lv_font_t *caption = ui::caption_font();
+        const int two_cap = ui::HealthLadder::two_line_rung_h(caption, caption);
+        const int two_body = ui::HealthLadder::two_line_rung_h(font, caption);
+        msg_lines = kMsgLines + 2;
+        msg_h = (1 + msg_lines) * g.lh;
+        rung = rung_for(2 * g.row);
+        if (rung < two_cap) {
+            density = CP0_UI_LIST_COMPACT;
+            rung = rung_for(2 * g.crow);
+        }
+        if (rung < two_cap) {
+            msg_lines = kMsgLines;
+            msg_h = (1 + msg_lines) * g.lh;
+            rung = rung_for(density == CP0_UI_LIST_COMPACT ? 2 * g.crow : 2 * g.row);
+        }
+        rung = std::clamp(rung, two_cap, two_body + g.s);
+        if (rung < two_body) font = caption;
+        ladder_ = std::make_unique<ui::HealthLadder>(page_->root(), x, y, w, rung, font, true, caption);
+    } else {
+        rung = rung_for(2 * g.row);
+        if (rung < pref) {
+            density = CP0_UI_LIST_COMPACT;
+            rung = rung_for(2 * g.crow);
+        }
+        rung = std::clamp(rung, g.lh + 4, 2 * g.lh + g.s);
+        if (ui::line_height(font) + 4 > rung) font = ui::caption_font();
+        ladder_ = std::make_unique<ui::HealthLadder>(page_->root(), x, y, w, rung, font);
+    }
     const int msg_y = y + rung * kStepCount + g.s;
     message_head_ = ui::make_label(page_->root(), ui::font_bold(ui::caption_px()), ui::kLabel);
     lv_label_set_long_mode(message_head_, LV_LABEL_LONG_MODE_DOTS);
@@ -149,7 +174,7 @@ void ToolboxApp::build_diagnosis()
     message_body_ = ui::make_label(page_->root(), ui::caption_font(), ui::kText);
     lv_label_set_long_mode(message_body_, LV_LABEL_LONG_MODE_WRAP);
     lv_obj_set_pos(message_body_, x, msg_y + g.lh);
-    lv_obj_set_size(message_body_, w, kMsgLines * g.lh);
+    lv_obj_set_size(message_body_, w, msg_lines * g.lh);
 
     const int list_y = msg_y + msg_h + g.s;
     build_list(density, list_y, g.bottom - list_y, false, diag_rows(), 0);
@@ -263,6 +288,7 @@ void ToolboxApp::build_ping(int select)
     const int x = g.x + g.inset, w = std::max(1, g.w - 2 * g.inset);
     if (ping_ok_) ping_panel_ = std::make_unique<ui::PingPanel>(page_->root(), x, y, w, panel_h, font);
     else notice_ = std::make_unique<ui::NoticeBox>(page_->root(), x, y, w, panel_h, font, "Ping is not available here", ping_why_);
+    rows_density_ = density;
     build_list(density, y + panel_h + g.s, list_h, false, ping_rows(), select);
     poll_ping(true);
 }
@@ -271,8 +297,12 @@ std::vector<cp0::ui::ListRow> ToolboxApp::ping_rows() const
 {
     const std::shared_ptr<const PingSnapshot> s = fresh_ ? backend_.ping->latest() : nullptr;
     const bool running = s && s->running();
+    std::string target = ping_target_text();
+    /* portrait: "Gateway 192.168.68.1" is said "Gateway" when the label would be cut (the status line has the address) */
+    if (portrait() && ping_target_.empty() && !list_row_fits("Target", target, ui::Aff::Edit)) target = "Gateway";
     return {action(running ? "Stop" : "Start", running ? "pinging" : "", kRun, ui::action_aff(running)),
-            action("Target", ping_target_text(), kTarget, ui::Aff::Edit), action("Save log", "", kSaveLog, ui::Aff::Action),
+            action("Target", fit_value("Target", target, ui::Aff::Edit), kTarget, ui::Aff::Edit),
+            action("Save log", "", kSaveLog, ui::Aff::Action),
             action("Save target", "", kSaveTarget, ui::Aff::Action)};
 }
 
@@ -410,7 +440,8 @@ void ToolboxApp::build_dns(int select)
     read_net();
     const int y = build_band();
     const int h = g.bottom - y;
-    build_list(h >= 10 * g.row ? CP0_UI_LIST_COMFORTABLE : CP0_UI_LIST_COMPACT, y, h, false, dns_list(), select);
+    rows_density_ = h >= 10 * g.row ? CP0_UI_LIST_COMFORTABLE : CP0_UI_LIST_COMPACT;
+    build_list(rows_density_, y, h, false, dns_list(), select);
     poll_dns(true);
 }
 
@@ -424,13 +455,27 @@ std::vector<cp0::ui::ListRow> ToolboxApp::dns_list() const
     if (s) { /* the answers right under the two actions, the settings below them */
         std::vector<ui::RowDef> defs = ui::dns_rows(*s, system_resolver(), system_name());
         int k = 0;
-        for (ui::RowDef &d : defs)
-            if (!d.section) d.id = kResult + k++;
+        for (ui::RowDef &d : defs) {
+            if (d.section) continue;
+            d.id = kResult + k++;
+            /* portrait: a Compare row whose resolver and time do not fit drops the resolver's address (its name stays) */
+            if (portrait() && s->compare() && !list_row_fits(d.label, d.value, d.aff))
+                for (const std::string &f : ui::resolver_label_forms(d.label, false)) {
+                    d.label = f;
+                    if (list_row_fits(f, d.value, d.aff)) break;
+                }
+        }
         for (cp0::ui::ListRow &r : to_rows(defs)) rows.push_back(std::move(r));
     }
-    rows.push_back(action("Name", dns_name_, kName, ui::Aff::Edit));
+    rows.push_back(action("Name", fit_value("Name", dns_name_, ui::Aff::Edit), kName, ui::Aff::Edit));
     rows.push_back(action("Type", dns_type_, kType, ui::Aff::Edit));
-    rows.push_back(action("Resolver", dns_resolver_label(), kResolver, ui::Aff::Edit));
+    std::string resolver = dns_resolver_label();
+    if (portrait()) /* a narrow row: "System default 192.168.1.1" becomes "System 192.168.1.1", then the address alone */
+        for (const std::string &f : ui::resolver_label_forms(resolver, true)) {
+            resolver = f;
+            if (list_row_fits("Resolver", f, ui::Aff::Edit)) break;
+        }
+    rows.push_back(action("Resolver", fit_value("Resolver", resolver, ui::Aff::Edit), kResolver, ui::Aff::Edit));
     rows.push_back(action("Save log", "", kSaveLog, ui::Aff::Action));
     return rows;
 }
@@ -583,7 +628,8 @@ void ToolboxApp::build_port(int select)
     const int list_y = y + badge_h + g.s;
     const int list_h = g.bottom - list_y;
     badge_ = std::make_unique<ui::ResultBadge>(page_->root(), g.x + g.inset, y, std::max(1, g.w - 2 * g.inset), badge_h, caption, big);
-    build_list(list_h >= 2 * g.row ? CP0_UI_LIST_COMFORTABLE : CP0_UI_LIST_COMPACT, list_y, list_h, false, port_list(), select);
+    rows_density_ = list_h >= 2 * g.row ? CP0_UI_LIST_COMFORTABLE : CP0_UI_LIST_COMPACT;
+    build_list(rows_density_, list_y, list_h, false, port_list(), select);
     poll_port(true);
 }
 
@@ -591,8 +637,9 @@ std::vector<cp0::ui::ListRow> ToolboxApp::port_list() const
 {
     const std::shared_ptr<const PortSnapshot> s = fresh_ ? backend_.port->latest() : nullptr;
     const bool running = s && (s->state == PortSnapshot::State::Running || s->state == PortSnapshot::State::Resolving);
-    return {action("Run", running ? "checking..." : "", kRun, ui::action_aff(running)), action("Host", port_host_, kHost, ui::Aff::Edit),
-            action("Port", ui::port_choice_text(port_preset_, port_), kPortRow, ui::Aff::Edit),
+    return {action("Run", running ? "checking..." : "", kRun, ui::action_aff(running)),
+            action("Host", fit_value("Host", port_host_, ui::Aff::Edit), kHost, ui::Aff::Edit),
+            action("Port", fit_value("Port", ui::port_choice_text(port_preset_, port_), ui::Aff::Edit), kPortRow, ui::Aff::Edit),
             action("Save log", "", kSaveLog, ui::Aff::Action)};
 }
 

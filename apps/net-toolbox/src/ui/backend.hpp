@@ -21,7 +21,8 @@
  *       trace_target=, http_url=, http_method=GET|HEAD, http_insecure=1, whois_query=   the values those pages start with
  *       speed=latency | down-low | down-mid | down-high | up | done-a | done-b | done-c | done-d | done-f | stopped |
  *             e-network | e-tls | e-refused | e-ping       0.3: the speed test (Start shows the state, Stop gives Cancelled for
- *                                                          stopped; "idle" before Start)
+ *                                                          stopped; "idle" before Start); done-fast (0.5.0): grade A
+ *                                                          on a gigabit line (1180 down, 940 up)
  *       wol=sent | waking | awake | once | noanswer | failed       0.3: what Wake now does (a machine without a host to
  *             watch always gives "sent"); wol_machines=0..20 saved machines; wol_last=name:kind+name:kind the list's last status
  *       ble=idle | scan0 | scan6 | scan25 | done25 | stopped | off | rfkill | none | bluez       0.3: the radar (Start shows the

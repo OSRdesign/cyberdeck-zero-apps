@@ -1,4 +1,4 @@
-# Net Toolbox 0.4.3: board tests
+# Net Toolbox 0.5.0: board tests
 
 For the Controller and the user (controller-led testing: the Controller deploys and reads logs, the user does the
 physical steps). `deck.py` is `C:\CLAUDE\zero7\launcher\docs\dev\deck\deck.py` (password in `PIPW`; `DECK_HOST=<ip>`
@@ -465,3 +465,31 @@ with the same network name (a mesh, or a repeater).
    with the settings, the summary, the dips, the access point changes and every reading.
 8. At 640x480 the cells, the caption, the reading, the chart with its legend and the `Weak below` row are on screen at once,
    and touch alone does everything (Start, Stop, Reset, the setting row, scrolling the summary by dragging).
+
+## P. PDA mode (0.5.0; launcher v0.8.11, Settings > Screen > PDA mode On rotate left)
+
+On the Pi 4 B DSI board (480x800, touch only) and on the FZ-M1 tablet (800x1280, the amd64 package). Wi-Fi on. Expected
+pictures: the sheets `portrait.png`, `portrait-02.png`, `portrait-03.png`, `portrait-04.png`, `portrait-speed.png`,
+`portrait-keyboard.png`, `portrait-band.png` in the host build's `out/sheets` (the layout rules: README, *Portrait (PDA
+mode)*). Main path only; note anything cut, overlapping or too small to read.
+
+1. **Upright start.** The **Net Toolbox** tile starts the app **upright** (not turned): Home with the line
+   `wlan0: <address>` and the sixteen rows, the header reads *Net Toolbox*, the Esc pill and the status strip do not overlap
+   it. [ ] pass
+2. **Touch under rotation.** A tap on a row highlights the row under the finger (not another one), a second tap opens it;
+   a drag scrolls Home the way the finger moves; the header Esc goes back. Note any tap on the wrong row. [ ] pass
+3. **Diagnosis** (tap Diagnose my connection twice): six rungs of two lines (the name, its detail under it: the address,
+   the gateway with its time, `via <resolver>, NN ms`), nothing cut with dots; *Everything works* and its explanation;
+   Run again and Save log by tap. [ ] pass
+4. **Ping and Traceroute.** Ping: Start, the graph over the width, the packet strip, the statistics on two lines, Stop.
+   Traceroute: Start (the cell); each hop is two lines (the name over the width with the ms at the right, the address and
+   the bar under it), the destination says `reached`; a tap on a hop, a second tap: its details in place. [ ] pass
+5. **Speed test** (on the tablet only if the data use is fine: up to 150 MB each way): Start, the dial over the chart
+   (the chart is not squeezed), the result card with Download and Upload whole. [ ] pass
+6. **Local devices and Wi-Fi networks.** Scan: the rows of two lines, the router's tag and the round trip whole (a long
+   vendor drops the MAC); a tap on a device opens its page. Wi-Fi networks: the network in use shows its full name on line
+   1 and `connected` on line 2; View: the two bands one over the other. [ ] pass
+7. **Typing.** Ping > Target > Type a host...: with no keyboard connected the on-screen keyboard (or, with Settings >
+   On-screen keyboard = Handwriting + keyboard, the handwriting band) shows across the bottom, the field stays above it;
+   type `nas.local`, Enter keeps it (the band: write the letters, then its Enter). [ ] pass
+8. Settings > Screen > PDA mode Off (the launcher restarts): the app is the landscape app of 0.4.3, unchanged. [ ] pass

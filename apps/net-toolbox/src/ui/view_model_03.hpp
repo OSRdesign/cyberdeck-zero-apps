@@ -115,7 +115,8 @@ struct Box {
 };
 
 /* The live block of the speed page (gauge, chart, progress) in a row w wide and h high: side by side when that gives the
- * bigger dial, else stacked. lh: a line of caption text. */
+ * bigger dial, else stacked. lh: a line of caption text. portrait (PDA mode, 0.5.0): always stacked, the chart at least
+ * 30 % of h. */
 struct SpeedLayout {
     bool side = false;
     Box gauge;     /* the dial's box (the dial is centred in it) */
@@ -124,7 +125,7 @@ struct SpeedLayout {
     int radius = 0; /* the dial's outer radius */
     int cx = 0, cy = 0; /* the dial's centre, in the block's coordinates */
 };
-SpeedLayout speed_layout(int w, int h, int lh, int big_h, int pad);
+SpeedLayout speed_layout(int w, int h, int lh, int big_h, int pad, bool portrait = false);
 /* the dial's radii, from its outer radius (the numbers, the ticks, the needle's tip) */
 struct GaugeRadii {
     int outer = 0, track = 0, inner = 0, tick_major = 0, tick_minor = 0, label = 0, needle = 0, hub = 0;

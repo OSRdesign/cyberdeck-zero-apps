@@ -47,6 +47,12 @@ const lv_font_t *caption_font();
 int caption_px();
 int text_width(const char *text, const lv_font_t *font);
 int line_height(const lv_font_t *font);
+/* the height of the text wrapped to width px */
+int wrapped_text_height(const std::string &text, const lv_font_t *font, int width);
+
+/* PDA mode (0.5.0, X-Portrait): the canvas is taller than wide. The blocks that adapt to a tall narrow screen ask this; the
+ * landscape layouts never look at it, so every landscape size draws as before. */
+bool portrait();
 
 /* the number of LVGL objects below `root` (the page leak check) and of LVGL timers */
 int count_objects(lv_obj_t *root);

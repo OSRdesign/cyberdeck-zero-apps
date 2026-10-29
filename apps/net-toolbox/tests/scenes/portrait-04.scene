@@ -1,0 +1,133 @@
+# PDA mode (0.5.0): the 0.4 tools on the portrait canvases. Local devices: a device row whose vendor and MAC do not fit
+# beside the tag and the round trip shows the vendor alone (the device's page has the MAC). Wi-Fi networks: the check and
+# "connected" go down to line 2 so that the name keeps line 1; the Channels view puts the two bands one over the other
+# over the whole width with taller bars (side by side only in landscape). Walk test: the reading is always over the chart,
+# also in the shorter block of a stopped walk with its summary.
+title Net Toolbox: portrait (PDA mode), Local devices, Wi-Fi networks, walk test
+sizes 480x800 480x640 800x1280
+env NET_TOOLBOX_DEMO "devices=done,ports=done,wifi=list,walk=run"
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+wait 300
+
+# Local devices: Scan, a device, Scan ports 1-1024
+key end
+key up
+key up
+key up
+wait 400
+tap "Local devices"
+wait 300
+shot devices-idle
+expect text "Press Scan to look for devices on your network"
+tap "Scan"
+wait 300
+shot devices-done
+expect text "Done: 14 devices on 192.168.68.0/24"
+expect text "router"
+expect text "192.168.68.1"
+# nas, the second device, by touch (rows tapped by position: a tap selects, a tap on the selected row opens)
+@480x800 tapxy 0.5 0.336
+@480x800 tapxy 0.5 0.336
+@480x640 tapxy 0.5 0.430
+@480x640 tapxy 0.5 0.430
+@800x1280 tapxy 0.5 0.210
+@800x1280 tapxy 0.5 0.210
+wait 300
+shot device
+expect text "Ping this device"
+expect text "00:11:32:aa:bb:cc"
+key down
+key down
+key down
+key enter
+wait 300
+shot device-ports
+expect text "OPEN PORTS"
+key end
+wait 200
+shot device-ports-end
+expect notext "Message cut off"
+tap "Esc"
+wait 300
+shot devices-back
+key down
+key end
+wait 300
+shot devices-end
+@480x800,480x640 expect text "Vendor unknown"
+@800x1280 expect text "Vendor unknown  00:00:5e:00:53:01"
+expect notext "Message cut off"
+tap "Esc"
+wait 300
+
+# Wi-Fi networks: the list, a network's page, the Channels view
+key down
+key enter
+wait 400
+shot wifi-list
+expect text "11 networks on wlan0, scanned 3 s ago"
+expect text "connected"
+expect text "-48 dBm"
+# the second network by touch (rows tapped by position)
+@480x800 tapxy 0.5 0.336
+@480x800 tapxy 0.5 0.336
+@480x640 tapxy 0.5 0.430
+@480x640 tapxy 0.5 0.430
+@800x1280 tapxy 0.5 0.210
+@800x1280 tapxy 0.5 0.210
+wait 300
+shot wifi-network
+expect text "In range"
+key end
+wait 200
+shot wifi-network-end
+expect text "WPA2: encrypted, a password is needed."
+key esc
+wait 300
+tap "View"
+wait 300
+shot wifi-channels
+expect text "Least crowded: channel 13 (2.4 GHz), channel 40 (5 GHz)"
+expect text "Busiest: channel 6, 2 networks"
+key down
+key end
+wait 300
+shot wifi-channels-end
+expect text "Channels 149 to 165 are not allowed for Wi-Fi in every country."
+expect notext "Message cut off"
+tap "Esc"
+wait 300
+
+# Wi-Fi walk test: Start (83 s of walking), Stop (the summary under the chart)
+key down
+key enter
+wait 300
+shot walk-idle
+expect text "Press Start, then walk around"
+tap "Start"
+wait 400
+shot walk-running
+expect text "Walking: 01:23, weakest -82 dBm"
+expect text "Weak below"
+tap "Stop"
+wait 400
+shot walk-stopped
+expect text "Stopped: 01:23, weakest -82 dBm"
+key down
+key down
+key down
+key down
+wait 200
+shot walk-summary
+expect text "Duration"
+key end
+wait 300
+shot walk-summary-end
+expect text "At 01:02, moved to"
+expect notext "Message cut off"
+tap "Esc"
+wait 300
+expect noquit
+tap "Esc"
+expect quit

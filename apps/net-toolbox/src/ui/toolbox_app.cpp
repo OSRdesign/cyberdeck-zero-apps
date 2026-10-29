@@ -281,6 +281,7 @@ void ToolboxApp::show(View view, int select)
     apply_bind();
     shown_seq_ = 0;
     next_state_ms_ = 0;
+    rows_density_ = CP0_UI_LIST_COMFORTABLE;
     show_title();
     switch (view) {
     case View::Home: build_home(select); break;
@@ -440,15 +441,56 @@ ToolboxApp::Geo ToolboxApp::geo() const
     return g;
 }
 
-/* The status band: one line of CAPTION text at the top of the column. Returns the y under it. */
+/* The status band: one line of CAPTION text at the top of the column (portrait: two lines, wrapped, so that a status of
+ * a narrow screen is never cut). Returns the y under it. */
 int ToolboxApp::build_band()
 {
     const Geo g = geo();
+    const int lines = portrait() ? 2 : 1;
     band_ = ui::make_label(page_->root(), ui::caption_font(), ui::kOk);
     lv_label_set_long_mode(band_, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_set_pos(band_, g.x + g.inset, g.top);
-    lv_obj_set_size(band_, std::max(1, g.w - 2 * g.inset), g.lh);
-    return g.top + g.lh + g.s;
+    lv_obj_set_size(band_, std::max(1, g.w - 2 * g.inset), lines * g.lh);
+    band_w_ = std::max(1, g.w - 2 * g.inset);
+    band_h_ = lines * g.lh;
+    return g.top + lines * g.lh + g.s;
+}
+
+bool ToolboxApp::band_fits(const std::string &text) const
+{
+    if (!band_) return true;
+    if (!portrait()) return ui::text_width(text.c_str(), ui::caption_font()) <= lv_obj_get_width(band_); /* as in 0.4 */
+    return ui::wrapped_text_height(text, ui::caption_font(), band_w_) <= band_h_;
+}
+
+/* measured at the density of the page's list (rows_density_, set by the page before it makes its rows) */
+bool ToolboxApp::list_row_fits(const std::string &label, const std::string &value, ui::Aff aff) const
+{
+    const Geo g = geo();
+    cp0_ui_list_layout_t l{};
+    cp0_ui_list_layout(cp0_ui_metrics_get(), rows_density_, g.x, 0, g.w, std::max(1, layout_.h), &l);
+    const cp0_ui_list_affordance_t a = static_cast<cp0_ui_list_affordance_t>(row_affordance(aff));
+    const int value_w = value.empty() ? 0 : ui::text_width(value.c_str(), ui::font_medium(l.value_px)) + 2;
+    const int label_w = cp0_ui_list_label_w(g.w - cp0_ui_list_trail_w(&l, a), l.inset, l.gap, value_w);
+    return ui::text_width(label.c_str(), ui::font_bold(l.text_px)) <= label_w;
+}
+
+std::string ToolboxApp::fit_value(const std::string &label, const std::string &value, ui::Aff aff) const
+{
+    if (!portrait() || value.empty() || list_row_fits(label, value, aff)) return value;
+    const Geo g = geo();
+    cp0_ui_list_layout_t l{};
+    cp0_ui_list_layout(cp0_ui_metrics_get(), rows_density_, g.x, 0, g.w, std::max(1, layout_.h), &l);
+    const int text_w = g.w - cp0_ui_list_trail_w(&l, static_cast<cp0_ui_list_affordance_t>(row_affordance(aff))) - 2 * l.inset;
+    /* a long label (a DNS answer, a record) is the row's point: the toolkit cuts it, the short value stays */
+    if (ui::text_width(label.c_str(), ui::font_bold(l.text_px)) > text_w * 45 / 100) return value;
+    std::string v = value;
+    while (!v.empty() && !list_row_fits(label, v + "...", aff)) {
+        std::size_t n = v.size() - 1;
+        while (n > 0 && (static_cast<unsigned char>(v[n]) & 0xC0) == 0x80) --n; /* a whole UTF-8 character */
+        v.erase(n);
+    }
+    return v + "...";
 }
 
 /* The band shows `dflt` unless a note (Saved ..., an error of Save) is still fresh. */
@@ -465,7 +507,7 @@ void ToolboxApp::show_band(const ui::Band &dflt, bool via)
         b.text = with_scope(b.text);
     }
     if (band_check_ && backend_.demo && !noted) { /* the scenes: the status line of a 0.2 page is never cut (no ellipsis) */
-        if (ui::text_width(b.text.c_str(), ui::caption_font()) > lv_obj_get_width(band_)) {
+        if (!band_fits(b.text)) {
             std::fprintf(stderr, "[%s] the status line does not fit: %s\n", kAppId, b.text.c_str());
             layout_cut_ = true;
         }
@@ -484,10 +526,9 @@ std::string ToolboxApp::with_scope(const std::string &text) const
 {
     const std::string suffix = "(" + scope_.via() + ")";
     if (text.empty()) return scope_.via();
-    const lv_font_t *font = ui::caption_font();
-    const int room = band_ ? lv_obj_get_width(band_) : 0;
+    const int room = band_ ? (portrait() ? band_w_ : static_cast<int>(lv_obj_get_width(band_))) : 0;
     std::string base = text;
-    if (room > 0 && ui::text_width((base + " " + suffix).c_str(), font) > room) {
+    if (room > 0 && !band_fits(base + " " + suffix)) {
         for (;;) {
             std::size_t cut = base.find_last_of(' ');
             if (cut == std::string::npos || cut == 0) {
@@ -495,7 +536,7 @@ std::string ToolboxApp::with_scope(const std::string &text) const
                 break;
             }
             base.erase(cut);
-            if (ui::text_width((base + "... " + suffix).c_str(), font) <= room) {
+            if (band_fits(base + "... " + suffix)) {
                 base += "...";
                 break;
             }
@@ -517,7 +558,8 @@ std::vector<cp0::ui::ListRow> ToolboxApp::to_rows(const std::vector<ui::RowDef> 
     rows.reserve(defs.size());
     for (const ui::RowDef &d : defs)
         rows.push_back(d.section ? cp0::ui::ListRow::section(d.label)
-                                 : cp0::ui::ListRow::item(d.label, d.value, value_tone(d.tone), d.id, row_affordance(d.aff)));
+                                 : cp0::ui::ListRow::item(d.label, fit_value(d.label, d.value, d.aff), value_tone(d.tone), d.id,
+                                                          row_affordance(d.aff)));
     return rows;
 }
 
@@ -552,7 +594,11 @@ void ToolboxApp::build_home(int select)
 std::vector<cp0::ui::ListRow> ToolboxApp::home_rows() const
 {
     std::vector<cp0::ui::ListRow> rows;
-    rows.push_back(cp0::ui::ListRow::item("Network", ui::network_value(scope_), cp0::ui::ValueTone::Normal, kHomeNet, row_affordance(ui::Aff::Edit)));
+    std::string net = ui::network_value(scope_);
+    /* portrait: "Automatic (wlan0)" is said "Automatic" when the label would be cut (the line above names the interface) */
+    if (portrait() && scope_.automatic() && !list_row_fits("Network", net, ui::Aff::Edit)) net = "Automatic";
+    net = fit_value("Network", net, ui::Aff::Edit);
+    rows.push_back(cp0::ui::ListRow::item("Network", net, cp0::ui::ValueTone::Normal, kHomeNet, row_affordance(ui::Aff::Edit)));
     rows.push_back(cp0::ui::ListRow::item("Diagnose my connection", "", cp0::ui::ValueTone::Normal, kHomeDiag, row_affordance(ui::Aff::Open)));
     rows.push_back(cp0::ui::ListRow::item("Ping", "", cp0::ui::ValueTone::Normal, kHomePing, row_affordance(ui::Aff::Open)));
     rows.push_back(cp0::ui::ListRow::item("Traceroute", "", cp0::ui::ValueTone::Normal, kHomeTrace, row_affordance(ui::Aff::Open)));
@@ -745,7 +791,8 @@ void ToolboxApp::build_typed()
     lv_obj_set_style_text_font(typed_status_, font, 0);
     lv_obj_set_style_text_color(typed_status_, lv_color_hex(ui::kBad), 0);
     lv_obj_set_width(typed_status_, layout_.roller_w);
-    lv_obj_set_height(typed_status_, lv_font_get_line_height(font));
+    /* portrait: two lines (wrapped), so that a reason such as the MAC address's is not cut on a narrow screen */
+    lv_obj_set_height(typed_status_, (portrait() ? 2 : 1) * lv_font_get_line_height(font));
     set_typed_status("");
     focus(field_->focus_object());
 }

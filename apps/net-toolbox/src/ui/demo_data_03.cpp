@@ -138,6 +138,7 @@ SpeedSnapshot demo_speed(const std::string &scenario, const SpeedConfig &cfg)
     if (scenario == "done-c") return finished(23.4, 31.2, 120.0, 45.0);
     if (scenario == "done-d") return finished(23.4, 31.2, 300.0, 150.0);
     if (scenario == "done-f") return finished(23.4, 31.2, 650.0, 480.0);
+    if (scenario == "done-fast") return finished(1180.4, 940.2, 12.0, 8.0); /* 0.5.0: a gigabit line (the portrait scenes) */
     if (scenario == "done-noping") {
         SpeedSnapshot s = finished(23.4, 31.2, 0.0, 0.0);
         s.result.down.loaded = s.result.up.loaded = LatencyStats();

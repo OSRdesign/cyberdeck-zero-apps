@@ -470,4 +470,19 @@ void test_ui_scope()
     CHECK_EQ(resolver_label("172.20.10.1", "172.20.10.1", "wlan1's DNS"), std::string("wlan1's DNS 172.20.10.1"));
     CHECK_EQ(resolver_label("172.20.10.1", "172.20.10.1"), std::string("System 172.20.10.1"));
     CHECK_EQ(resolver_label("1.1.1.1", "1.1.1.1", "wlan1's DNS"), std::string("Cloudflare 1.1.1.1")); /* presets keep their name */
+
+    // portrait (0.5.0): the shorter forms of a resolver label, longest first, each different from the one before
+    using Forms = std::vector<std::string>;
+    CHECK(resolver_label_forms("System default 192.168.1.1", true) == Forms({"System default 192.168.1.1", "System 192.168.1.1", "192.168.1.1"}));
+    CHECK(resolver_label_forms("System default 192.168.1.1", false) == Forms({"System default 192.168.1.1", "System 192.168.1.1", "System"}));
+    CHECK(resolver_label_forms("System default (not wlan1's) 192.168.1.1", true) ==
+          Forms({"System default (not wlan1's) 192.168.1.1", "System (not wlan1's) 192.168.1.1", "192.168.1.1"}));
+    CHECK(resolver_label_forms("wlan1's DNS 172.20.10.1", true) == Forms({"wlan1's DNS 172.20.10.1", "172.20.10.1"}));
+    CHECK(resolver_label_forms("Cloudflare 1.1.1.1", false) == Forms({"Cloudflare 1.1.1.1", "Cloudflare"}));
+    CHECK(resolver_label_forms("System 192.168.1.1", false) == Forms({"System 192.168.1.1", "System"}));
+    CHECK(resolver_label_forms("10.0.0.1", true) == Forms({"10.0.0.1"})); /* a typed address alone has no shorter form */
+    CHECK(resolver_label_forms("", true).empty());
+    // each form is a compare row's label of the same resolver: the last one is never empty
+    for (const std::string &l : {resolver_label("9.9.9.9", ""), resolver_label("192.168.1.1", "192.168.1.1"), std::string("x")})
+        for (const bool v : {true, false}) CHECK(!resolver_label_forms(l, v).empty() && !resolver_label_forms(l, v).back().empty());
 }

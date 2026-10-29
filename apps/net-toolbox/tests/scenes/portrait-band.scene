@@ -1,0 +1,87 @@
+# PDA S4 (launcher report 044): a launcher with the writing zone runs the app upright with APPLAUNCH_PDA=1, and the user's
+# Settings > On-screen keyboard is Handwriting + keyboard (input.state hand=1). Nothing in Net Toolbox does it: the band
+# shows exactly where the on-screen keyboard would (a typed page's field; touch only), its rows are left free through the
+# keyboard's inset, its keys reach the app as the keyboard's do. Keyb brings the standard keyboard, its cross the band back.
+# 640x480 (a landscape app on a portrait launcher runs turned): no band, the standard keyboard.
+title Net Toolbox: the writing zone's band (PDA mode)
+sizes 480x800 480x640 800x1280 640x480
+env NET_TOOLBOX_DEMO "ping=mixed,whois=domain"
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+band
+wait 600
+expect text "Diagnose my connection"
+@480x800,480x640,800x1280 expect band hidden
+@640x480 expect band none
+
+# Ping > Target > Type a host...: the field asks at once
+key down
+key enter
+key down
+key enter
+key down
+key down
+key down
+key enter
+wait 600
+@480x800,480x640,800x1280 expect band shown
+@480x800,480x640,800x1280 expect osk off
+@640x480 expect osk on
+shot host-band
+expect text "Host"
+
+# written into the field with the shipped strokes (a landscape size types it)
+@480x800,480x640,800x1280 write letters n a s
+@640x480 type "nas"
+wait 300
+expect text "nas"
+shot host-written
+
+# Keyb: the standard keyboard with its close cross in the band's place; the cross brings the band back
+@480x800,480x640,800x1280 zonekey Keyb
+@480x800,480x640,800x1280 wait 400
+@480x800,480x640,800x1280 expect osk on
+@480x800,480x640,800x1280 expect band hidden
+@480x800,480x640,800x1280 shot host-keyb
+@480x800,480x640,800x1280 tapkey CLOSE
+@480x800,480x640,800x1280 wait 400
+@480x800,480x640,800x1280 expect band shown
+@480x800,480x640,800x1280 expect osk off
+
+# the band's Enter keeps the value (a landscape size presses Enter)
+@480x800,480x640,800x1280 zonekey Enter
+@640x480 key enter
+wait 600
+shot host-kept
+expect text "nas"
+@480x800,480x640,800x1280 expect band hidden
+key esc
+wait 400
+
+# Whois > Query, then a keyboard connects: no band, no on-screen keyboard
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+key enter
+wait 600
+@480x800,480x640,800x1280 expect band shown
+shot whois-band
+keyboards 1
+wait 1300
+expect osk off
+@480x800,480x640,800x1280 expect band hidden
+shot whois-keyboard
+keyboards 0
+wait 1300
+@480x800,480x640,800x1280 expect band shown
+# Esc leaves the field: the band goes
+key esc
+wait 600
+@480x800,480x640,800x1280 expect band hidden
+expect osk off
+expect noquit

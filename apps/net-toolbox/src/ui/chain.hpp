@@ -44,10 +44,15 @@ struct ChainStyle {
     int ms_x = 0, ms_w = 0;
     int tag_x = 0, tag_w = 0;
     int right = 0;      /* the right edge of the content */
+    /* stacked (portrait, 0.5.0): line 1 the number, the name over the width, the ms and the loss tag; line 2 (y1) the
+     * address and the bar, which gets the rest of the width; the note (reached, probably rate limiting) on a third line
+     * (note_y) only for a hop that has one */
+    bool stacked = false;
+    int y1 = 0, note_y = 0;
 
-    /* The least row height that holds the main line and the note line. */
+    /* The least row height that holds the main line and the note line (stacked: the main line and the address line). */
     static int min_row_h(const lv_font_t *main, const lv_font_t *small);
-    static ChainStyle make(int w, int row_h, int inset, const lv_font_t *main, const lv_font_t *small);
+    static ChainStyle make(int w, int row_h, int inset, const lv_font_t *main, const lv_font_t *small, bool stacked = false);
 };
 
 /* the node of a hop, drawn at (cx, cy) with radius r */
@@ -61,7 +66,7 @@ public:
     void set(const TraceHop &hop, double scale_ms, bool first, bool last);
     void set_expanded(bool expanded);
     bool expanded() const { return expanded_; }
-    int height() const { return expanded_ ? style_.row_h + details_h_ : style_.row_h; }
+    int height() const { return expanded_ ? base_h() + details_h_ : base_h(); }
     int visible_note_lines() const { return note_.empty() ? 0 : 1; }
     const HopTexts &texts() const { return texts_; }
     /* the objects (tests of the layout): the name label, the note label */
@@ -72,6 +77,10 @@ public:
     void resized(int w, int h) override;
 
 private:
+    /* stacked: the note fits line 2 in the address's place (a hop named by its address: "reached") */
+    bool note_in_ip_column() const;
+    /* the row without its details: stacked, a hop with a note has the note's own line too, unless it sits on line 2 */
+    int base_h() const;
     void measure_details();
     void apply();
     void layout_details();

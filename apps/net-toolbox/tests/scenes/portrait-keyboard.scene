@@ -1,0 +1,132 @@
+# PDA mode (0.5.0): the typed pages with the on-screen keyboard (the shared rule: only while no physical keyboard is
+# connected) on the portrait canvases. The keyboard takes about 40 % of the height at 480x800, 45 % at 480x640 and a
+# quarter at 800x1280; the typed page is the toolkit's text field under the header, above the keyboard, with its error
+# line under it (the harness's keyboard check: the field above the keyboard, nothing of the page under it). Ping's typed
+# host, a refused one, DNS lookup's name, Whois's query, a new Wake-on-LAN machine (name, a refused MAC, the MAC, the
+# address to watch); a keyboard connecting takes the on-screen one away.
+title Net Toolbox: portrait (PDA mode), typing with the on-screen keyboard
+sizes 480x800 480x640 800x1280
+env NET_TOOLBOX_DEMO "ping=mixed,whois=domain,wol=awake"
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+keyboards 0
+wait 300
+
+# Ping > Target > Type a host...
+key down
+key enter
+key down
+key enter
+key down
+key down
+key down
+key enter
+wait 400
+shot ping-host
+expect osk on
+type "bad host!"
+key enter
+wait 300
+shot ping-host-refused
+expect osk on
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+type nas.local
+key enter
+wait 300
+shot ping-host-kept
+expect osk off
+expect text "nas.local"
+key esc
+wait 300
+
+# DNS lookup > Name
+key down
+key down
+key enter
+key down
+key down
+key enter
+wait 400
+shot dns-name
+expect osk on
+expect text "Name"
+# a keyboard connects: the on-screen one goes; it comes back when the keyboard goes
+keyboards 1
+wait 1300
+expect osk off
+shot dns-name-keyboard
+keyboards 0
+wait 1300
+expect osk on
+key enter
+wait 300
+expect osk off
+key esc
+wait 300
+
+# Whois > Query
+key down
+key down
+key down
+key down
+key down
+key enter
+key enter
+wait 400
+shot whois-query
+expect osk on
+type example.org
+key enter
+wait 300
+expect osk off
+expect text "example.org"
+key esc
+wait 300
+
+# Wake-on-LAN > Add a machine: Name, MAC (a bad one refused under the field), the address to watch
+key down
+key enter
+key enter
+wait 400
+shot wol-name
+expect osk on
+type "Desk PC"
+key enter
+wait 300
+shot wol-mac
+expect osk on
+type zz:12
+key enter
+wait 300
+shot wol-mac-refused
+expect osk on
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+type B8-27-EB-11-22-33
+key enter
+wait 300
+shot wol-address
+expect osk on
+type 192.168.68.30
+key enter
+wait 300
+shot wol-saved
+expect osk off
+expect text "Desk PC"
+expect notext "Message cut off"
+tap "Esc"
+wait 300
+expect noquit
+tap "Esc"
+expect quit

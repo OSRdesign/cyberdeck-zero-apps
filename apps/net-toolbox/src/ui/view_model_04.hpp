@@ -46,6 +46,7 @@ struct DeviceRowTexts {
     std::string title;   /* line 1, left: the name, else the address */
     std::string ip;      /* line 1, right: "192.168.68.20" ("" when the title is the address) */
     std::string detail;  /* line 2, left: "Raspberry Pi  b8:27:eb:10:20:30" */
+    std::string vendor;  /* the detail without the MAC: what a narrow row shows when the whole detail does not fit (portrait) */
     std::string rtt;     /* line 2, right: "2 ms", "" when it did not answer a ping */
     std::string tag;     /* "router", "this device" or "" (a shape and a word) */
     bool router = false, self = false;
@@ -163,13 +164,14 @@ bool channels_have_149(const ChannelsView &v);
 
 /* The channels block: the bars of each band (side by side on a wide screen when both have data, else one over the other); the
  * sentence and the notes are rows of the list around it. Boxes in the block's coordinates; lh: a line of caption text, slh: of
- * the small text. */
+ * the small text. portrait (PDA mode, 0.5.0): always one over the other, each band over the whole width. */
 struct ChannelsLayout {
     bool side = false;
     Box first, second;
     int total_h = 0;
 };
-ChannelsLayout channels_layout(int w, int lh, int slh, int bars_h, int pad, bool first_data, bool second_data);
+ChannelsLayout channels_layout(int w, int lh, int slh, int bars_h, int pad, bool first_data, bool second_data,
+                               bool portrait = false);
 
 /* ================================================================ Wi-Fi walk test */
 
@@ -183,12 +185,13 @@ std::string weak_value(int dbm);
 int next_weak_dbm(int dbm);
 
 /* The live block of the page in a row w wide and h high: the reading at the left and the chart at the right when the area is
- * wide, else the reading over the chart; the legend under the chart. */
+ * wide, else the reading over the chart; the legend under the chart. portrait (PDA mode, 0.5.0): always the reading over
+ * the chart (also in the shorter block of a stopped walk with its summary). */
 struct WalkLayout {
     bool side = false;
     Box reading, chart, legend;
 };
-WalkLayout walk_layout(int w, int h, int lh, int slh, int big_h, int pad);
+WalkLayout walk_layout(int w, int h, int lh, int slh, int big_h, int pad, bool portrait = false);
 
 /* Start / Stop (the page's first cell) */
 std::string walk_start_label(const WalkSnapshot &s);

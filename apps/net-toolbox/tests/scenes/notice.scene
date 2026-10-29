@@ -1,6 +1,7 @@
-# Under the app's minimum (640x480): an older launcher ignores X-MinSize, so the app says so and closes on any key.
+# Under the app's minimum (640x480): an older launcher ignores X-MinSize, so the app says so and closes on any key; a
+# portrait canvas under X-Portrait (480x640, PDA mode, 0.5.0) gets it too (480x560).
 title Net Toolbox: screens under 640x480
-sizes 480x320 800x400 640x400
+sizes 480x320 800x400 640x400 480x560
 
 shot notice
 expect noquit

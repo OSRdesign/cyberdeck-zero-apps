@@ -165,8 +165,17 @@ private:
     void finish_sub(const std::function<void()> &action);
     void show_title();
     Geo geo() const;
+    /* PDA mode (0.5.0, X-Portrait): the canvas is taller than wide. Chosen from the shape, never from a named size; the
+     * landscape layouts never look at it (they draw as in 0.4.3). */
+    bool portrait() const { return layout_.h > layout_.w; }
     int build_band();
+    bool band_fits(const std::string &text) const; /* the status band shows the text whole (one line; two in portrait) */
     void show_band(const ui::Band &dflt, bool via = true); /* via: " (via wlan1)" after the text when a network is chosen */
+    /* portrait: does a CompactList row show this label and value whole (the label in bold, as when selected)? */
+    bool list_row_fits(const std::string &label, const std::string &value, ui::Aff aff) const;
+    /* portrait: a setting row (a short label) whose value would push the label into dots gets its value cut with "..."
+     * instead, so that the label stays whole; landscape and a row that fits: the value as it is */
+    std::string fit_value(const std::string &label, const std::string &value, ui::Aff aff) const;
     void note(const ui::Band &b);
     std::string with_scope(const std::string &text) const;
     void build_list(cp0_ui_list_density_t density, int y, int h, bool read_only, std::vector<cp0::ui::ListRow> rows,
@@ -331,6 +340,8 @@ private:
     std::unique_ptr<ui::RadarView> radar_;
     lv_obj_t *info_ = nullptr;
     lv_obj_t *band_ = nullptr;
+    int band_w_ = 0, band_h_ = 0;    /* the band's size as built (portrait: two lines) */
+    cp0_ui_list_density_t rows_density_ = CP0_UI_LIST_COMFORTABLE; /* the density of the page's CompactList (list_row_fits) */
     lv_obj_t *message_head_ = nullptr;
     lv_obj_t *message_body_ = nullptr;
     lv_obj_t *typed_status_ = nullptr;

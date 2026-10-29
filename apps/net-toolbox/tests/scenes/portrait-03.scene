@@ -1,0 +1,99 @@
+# PDA mode (0.5.0): the 0.3 tools on the portrait canvases. The speed test is always stacked in portrait (the dial over the
+# throughput chart, the chart at least 30 % of the block so that it stays readable at 480x640); Wake-on-LAN's machine rows
+# put the status beside the name when the MAC and the address need the whole second line; the Bluetooth radar is stacked
+# (the radar over the device list) by the landscape rule for a tall area.
+title Net Toolbox: portrait (PDA mode), Speed test, Wake-on-LAN, Bluetooth radar
+sizes 480x800 480x640 800x1280
+env NET_TOOLBOX_DEMO "speed=down-mid,wol=waking,wol_machines=3,wol_last=Desk PC:awake+NAS:sent+Living room TV:noanswer,ble=scan25"
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+wait 300
+
+# Speed test by touch: Start (the cell), the gauge and the chart, Stop, the card
+key down
+key down
+key down
+key down
+key down
+key down
+wait 400
+tap "Speed test"
+wait 300
+shot speed-idle
+expect text "Press Start to test your connection"
+tap "Start"
+wait 450
+shot speed-running
+expect text "Downloading, 4 s of 8 s"
+expect text "Stop"
+tap "Stop"
+wait 450
+shot speed-stopped
+expect text "Start"
+expect notext "Message cut off"
+tap "Esc"
+wait 300
+
+# Wake-on-LAN: the list, a machine, Wake now, Stop
+key down
+key down
+key down
+key enter
+wait 300
+shot wol-list
+expect text "Desk PC"
+expect text "b8:27:eb:10:20:30  192.168.68.20"
+expect text "Awake after 22 s"
+expect text "No answer yet"
+# Desk PC by touch (the rows of this list are tapped by position: a tap selects, a tap on the selected row opens)
+@480x800 tapxy 0.5 0.234
+@480x800 tapxy 0.5 0.234
+@480x640 tapxy 0.5 0.297
+@480x640 tapxy 0.5 0.297
+@800x1280 tapxy 0.5 0.146
+@800x1280 tapxy 0.5 0.146
+wait 300
+shot machine
+expect text "Desk PC"
+expect text "Wake now"
+key enter
+wait 400
+shot machine-waking
+expect text "Waking... 37 s"
+key enter
+wait 300
+shot machine-stopped
+expect text "Watch stopped"
+expect notext "Message cut off"
+tap "Esc"
+wait 300
+tap "Esc"
+wait 300
+
+# Bluetooth radar: Start, a device, its details, Esc closes them
+key down
+key enter
+wait 300
+tap "Start"
+wait 400
+shot radar
+expect text "Scanning, 25 devices, 37 s left"
+key down
+key down
+key down
+wait 200
+shot radar-selected
+expect text "Pixel 8"
+key enter
+wait 200
+shot radar-details
+expect text "6C:A1:00:3F:22:9E"
+key esc
+wait 200
+expect noquit
+expect notext "Message cut off"
+tap "Esc"
+wait 300
+expect text "Bluetooth radar"
+tap "Esc"
+expect quit

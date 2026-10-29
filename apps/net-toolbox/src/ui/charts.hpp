@@ -80,8 +80,12 @@ void draw_spinner(lv_layer_t *layer, int cx, int cy, int r, std::uint32_t rgb, i
 
 class HealthLadder : public Owned {
 public:
-    /* the ladder at x, y, w wide, rung_h per rung; font: the name and the detail text */
-    HealthLadder(lv_obj_t *parent, int x, int y, int w, int rung_h, const lv_font_t *font);
+    /* the ladder at x, y, w wide, rung_h per rung; font: the name and the detail text. two_line (portrait, 0.5.0): the
+     * detail goes under the name in detail_font, the whole width beside the mark, instead of right of the name */
+    HealthLadder(lv_obj_t *parent, int x, int y, int w, int rung_h, const lv_font_t *font, bool two_line = false,
+                 const lv_font_t *detail_font = nullptr);
+    /* the least rung height of the two-line form */
+    static int two_line_rung_h(const lv_font_t *font, const lv_font_t *detail_font);
     ~HealthLadder();
     int height() const { return rung_h_ * kStepCount; }
     void update(const DiagReport &report, std::int64_t now_ms);

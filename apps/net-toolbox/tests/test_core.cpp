@@ -106,6 +106,10 @@ static void test_package()
     CHECK(desktop.find("\nX-Fullscreen=true") != std::string::npos);
     const std::string min = "\nX-MinSize=" + std::to_string(kMinW) + "x" + std::to_string(kMinH);
     CHECK(desktop.find(min) != std::string::npos);
+    /* PDA mode (0.5.0): X-Portrait equal to the app's minimum portrait canvas (AppSpec portrait_w x portrait_h) */
+    const std::string portrait = "\nX-Portrait=" + std::to_string(kPortraitW) + "x" + std::to_string(kPortraitH) + "\n";
+    CHECK(desktop.find(portrait) != std::string::npos);
+    CHECK(kPortraitW == 480 && kPortraitH == 640);
     CHECK(desktop.find("\nExec=/usr/share/APPLaunch/bin/net-toolbox\n") != std::string::npos);
     CHECK(desktop.find("\nIcon=share/images/net-toolbox.png") != std::string::npos); /* the icon itself: pending */
     CHECK(desktop.find("\nTerminal=false") != std::string::npos);
@@ -114,7 +118,7 @@ static void test_package()
     const std::string manifest = read_file(app + "/app.json");
     CHECK(manifest.find("\"share_code\": \"net-toolbox\"") != std::string::npos);
     CHECK(manifest.find("\"package\": \"net-toolbox\"") != std::string::npos);
-    CHECK(manifest.find("\"version\": \"0.4.3\"") != std::string::npos);
+    CHECK(manifest.find("\"version\": \"0.5.0\"") != std::string::npos);
     CHECK(manifest.find("\"title\": \"Net Toolbox\"") != std::string::npos);
     CHECK(manifest.find("\"license\": \"MIT\"") != std::string::npos);
     CHECK(manifest.find("\"categories\": [\"Tools\"]") != std::string::npos);

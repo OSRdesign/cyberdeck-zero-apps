@@ -1,0 +1,39 @@
+# PDA mode (0.5.0): the speed test's result card on a gigabit line (the demonstration's done-fast: 1180 down, 940 up,
+# grade A): four digits and the unit still fit half of a 480 px wide row in the big face, the card is the landscape one.
+title Net Toolbox: portrait (PDA mode), the speed test's results
+sizes 480x800 480x640 800x1280
+env NET_TOOLBOX_DEMO speed=done-fast
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+key enter
+wait 450
+shot result
+expect text "Download"
+expect text "1180 Mbit/s"
+expect text "940 Mbit/s"
+expect text "A: latency stays flat under load"
+expect notext "Message cut off"
+key down
+key down
+key down
+key down
+key down
+wait 300
+shot middle
+expect text "Latency while downloading"
+key end
+wait 300
+shot bottom
+expect text "Server"
+expect notext "Message cut off"
+key esc
+wait 300
+key esc
+expect quit

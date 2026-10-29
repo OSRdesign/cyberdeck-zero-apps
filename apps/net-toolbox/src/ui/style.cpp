@@ -82,6 +82,20 @@ int text_width(const char *text, const lv_font_t *font)
 
 int line_height(const lv_font_t *font) { return font ? static_cast<int>(lv_font_get_line_height(font)) : 0; }
 
+int wrapped_text_height(const std::string &text, const lv_font_t *font, int width)
+{
+    if (!font) return 0;
+    lv_point_t size{};
+    lv_text_get_size(&size, text.c_str(), font, 0, 0, width > 0 ? width : 1, LV_TEXT_FLAG_NONE);
+    return static_cast<int>(size.y);
+}
+
+bool portrait()
+{
+    const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
+    return m && m->h > m->w;
+}
+
 int count_objects(lv_obj_t *root)
 {
     if (!root) return 0;

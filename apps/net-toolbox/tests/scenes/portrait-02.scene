@@ -1,0 +1,102 @@
+# PDA mode (0.5.0): the 0.2 tools on the portrait canvases. Traceroute's hop rows are stacked in portrait (line 1 the
+# number, the name over the width, the ms and the loss tag; line 2 the address and the latency bar, which gets the rest of
+# the width; the note on a third line, or in the address's place for a hop named by its address); HTTP check's status
+# word steps down to the body size before it would be cut; Public IP and Whois are the landscape lists in the width.
+title Net Toolbox: portrait (PDA mode), Traceroute, HTTP check, Public IP, Whois
+sizes 480x800 480x640 800x1280
+env NET_TOOLBOX_DEMO "trace=ratelimit,trace_target=example.com,http=500,http_url=https://example.com,pubip=cgnat,whois=domain,whois_query=example.com"
+env NET_TOOLBOX_FIXTURE deck
+env NET_TOOLBOX_LOG_DIR /tmp/nt-scene-logs
+wait 300
+
+# Traceroute by touch: the Start cell, a hop's details in place, Stop
+tap "Traceroute"
+tap "Traceroute"
+wait 300
+shot trace-idle
+expect text "Press Start to trace example.com"
+tap "Start"
+wait 400
+shot trace-running
+expect text "to example.com 93.184.215.14, round 30, 9 hops"
+expect text "probably rate limiting"
+expect text "zrh.ix.example"
+expect text "80.81.192.21"
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 300
+shot trace-details
+expect text "sent 30  received 21  lost 9 (30%)"
+key tab
+key enter
+wait 300
+shot trace-stopped
+expect text "Reached in 9 hops, 43 ms"
+expect notext "Message cut off"
+tap "Esc"
+wait 300
+
+# HTTP check (Home's seventh row: three Downs from Traceroute select it, one tap opens it): Run (selected first: one tap
+# acts), the result, the end of the list
+key down
+key down
+key down
+wait 400
+tap "HTTP check"
+wait 300
+shot http-idle
+# the Run row (selected: one tap acts; the rows of this list are tapped by position, as in http-touch.scene)
+@480x800 tapxy 0.5 0.171
+@480x640 tapxy 0.5 0.216
+@800x1280 tapxy 0.5 0.107
+wait 400
+shot http-result
+expect text "500 Internal Server Error"
+expect text "Total 1329 ms"
+key down
+key end
+wait 300
+shot http-bottom
+expect text "Ignore certificate errors"
+expect notext "Message cut off"
+key esc
+wait 300
+
+# Public IP: asks by itself on entry (carrier-grade NAT: the long note wraps)
+key down
+key down
+key enter
+wait 400
+shot pubip
+expect text "Your provider shares one public address between customers (carrier-grade NAT): you cannot receive inbound connections"
+key end
+wait 300
+shot pubip-actions
+expect text "Whois of this address"
+expect notext "Message cut off"
+key esc
+wait 300
+
+# Whois: Run, the summary, the raw answer (cut with dots by design: Save log has every line)
+key down
+key enter
+wait 300
+shot whois-idle
+key down
+key enter
+wait 400
+shot whois-result
+expect text "RESERVED-Internet Assigned Numbers Authority"
+key end
+wait 300
+shot whois-raw-end
+expect notext "Message cut off"
+tap "Esc"
+wait 300
+expect noquit
+tap "Esc"
+expect quit

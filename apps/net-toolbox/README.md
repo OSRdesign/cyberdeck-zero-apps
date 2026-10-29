@@ -1,6 +1,6 @@
 # Net Toolbox
 
-Version 0.4.3, package `net-toolbox`. Part of
+Version 0.5.0, package `net-toolbox`. Part of
 [cyberdeck-zero-apps](../../README.md).
 
 Net Toolbox gathers the tools you reach for when a network misbehaves: a step-by-step **diagnosis** ("why is my
@@ -44,6 +44,24 @@ test (0.4): the cores](#wi-fi-networks-and-walk-test-04-the-cores), the pages in
 in the headless scenes only; the board steps B16 to B19 (`tests/BOARD-TESTS.md`) are still to be run. Local devices scans only
 the chosen interface's own private network (never a public address), without root.
 
+## What changed in 0.5.0
+
+* **Portrait (PDA mode).** The app declares `X-Portrait=480x640`: on a launcher in PDA mode (v0.8.8 and later; Settings >
+  Screen > PDA mode from v0.8.9) it runs **upright** on the portrait screen (480x800, 480x640, the 800x1280 tablet) instead
+  of turned by a quarter. The layout is chosen from the canvas shape (taller than wide), never from a named size; every
+  landscape size renders as in 0.4.3. Page by page: [Portrait (PDA mode)](#portrait-pda-mode).
+  * Every page is the landscape column in the screen's width; the status line under the header has two lines (never cut
+    with dots); a setting row keeps its label whole (a value that would push it out is said shorter or cut instead).
+  * The **traceroute** hops are two lines (the name over the width, the address and the latency bar under it), the
+    **diagnosis** rungs too (the detail under the name); the **speed test** puts the dial over the chart, the Wi-Fi
+    **channels** one band over the other, the **walk test** the reading over the chart, at every portrait size.
+  * The on-screen keyboard, and with launcher v0.8.11 the handwriting band (touch only), work as in landscape: the typed
+    pages keep their field above them.
+* A portrait canvas smaller than 480x640 gets the notice "Net Toolbox needs a screen of at least 480x640" (a landscape one
+  under 640x480 keeps its notice); `--version` says `needs a screen of at least 640x480, in portrait 480x640`.
+* Built at the launcher pin v0.8.11 (`5f54d15`, the shared `LAUNCHER_REF`); the demonstration backend gains `speed=done-fast`
+  (a gigabit result) for the portrait scenes.
+
 ## What changed in 0.4.2
 
 * Built on the launcher's newer `cp0_lvgl` (commit `f35c2d6`): its buttons and rows use the shared 7 mm minimum tap target.
@@ -54,9 +72,10 @@ the chosen interface's own private network (never a public address), without roo
 ## Screenshots
 
 Shots 01 to 12 are real captures of the app running on the boards: the deck (Pi Zero 2 W, 640x480) and a Pi 3A+ with
-the Waveshare 4.3" DSI panel (800x480), on a home network. Shots 13 and 14 are rendered by the app's headless harness
+the Waveshare 4.3" DSI panel (800x480), on a home network. Shots 13 to 16 are rendered by the app's headless harness
 (`build.sh host`) with fixture data at other screen sizes, **not photographs of a panel**; the contact sheets of the headless scenes
-(folder in *Build and test*) show every page at 640x480, 800x480, 720x720, 1024x600 and 1280x720.
+(folder in *Build and test*) show every page at 640x480, 800x480, 720x720, 1024x600 and 1280x720, and in PDA mode
+(`portrait*.png`) at 480x800, 480x640 and 800x1280.
 
 | | |
 |---|---|
@@ -67,6 +86,7 @@ the Waveshare 4.3" DSI panel (800x480), on a home network. Shots 13 and 14 are r
 | ![Interfaces](screenshots/09-interfaces-deck.png) 640x480, deck. Interfaces: wlan0 with its state, addresses, MAC, network and signal | ![Diagnosis on the Pi 3A+](screenshots/10-diagnosis-pi3a.png) 800x480, Pi 3A+. The same diagnosis on the wider screen |
 | ![Ping on the Pi 3A+](screenshots/11-ping-pi3a.png) 800x480, Pi 3A+. Ping 8.8.8.8 with the jitter band shaded behind the line | ![Traceroute on the Pi 3A+](screenshots/12-traceroute-pi3a.png) 800x480, Pi 3A+. Traceroute scrolled to the end: hop 10, *dns.google*, reached |
 | ![Traceroute render](screenshots/13-traceroute-720x720.png) 720x720 render, HackBerry size (square). The whole chain of nine hops fits on the square screen | ![HTTP check render](screenshots/14-http-check-1280x720.png) 1280x720 render, larger screen. The HTTP check with the certificate's subject, issuer and expiry |
+| ![Portrait traceroute](screenshots/15-portrait-traceroute-480x800.png) 480x800 render, PDA mode (portrait, 4.3" DSI). Traceroute with the hops stacked: the name over the width, the address and the latency bar under it, a rate-limiting hop's note | ![Portrait speed test](screenshots/16-portrait-speed-800x1280.png) 800x1280 render, PDA mode on the 7-inch tablet. The speed test with the dial over the throughput chart |
 
 The screens above come from several screen sizes: the app adapts to the screen it runs on.
 
@@ -104,6 +124,64 @@ Traceroute to the chain and back.
 
 Leaving a page, and leaving the app, stops its worker thread and ends its curl (Stop does the same): nothing runs in the
 background (a cancel ends a probe within 50 ms). The page changes were checked for leaks (`tests/scenes/leak.scene`).
+
+## Portrait (PDA mode)
+
+From 0.5.0 (`X-Portrait=480x640`) a launcher in PDA mode runs the app upright on its portrait canvas: 480x800 (the 4.3"
+DSI panels of the Pi 3A+ and the Pi 4 B), 480x640 (a 3.5" panel), 800x1280 (the FZ-M1 tablet). The app decides by the
+canvas shape (`h > w`, `ToolboxApp::portrait()` and `ui::portrait()`), never by a named size; the landscape sizes do not
+look at it and draw as in 0.4.3. Under 480x640 in portrait the app shows the "needs 480x640" notice.
+
+Rules for every page:
+
+* **One column**, the landscape one: the screen's width less a side margin (up to 40 px), at most 960 px (720 px wide at
+  800x1280). The header is the toolkit's: on the 480 px wide screens the narrow header (the last part of the path as the
+  title), at 800x1280 the whole path. No page has two columns: at 800x1280 a second column would not show more of any page
+  (the pages are lists and one chart each), and the side-by-side blocks of landscape (the speed dial beside its chart,
+  the radar beside its list, the walk reading beside its chart, the two Wi-Fi bands) are one over the other in portrait,
+  which gives each chart the full width.
+* **The status line** under the header has **two lines**, wrapped (one in landscape): no status, saved path or error is
+  cut with dots at 480 px. The scenes' check for a cut status line (`Message cut off`) measures the two lines.
+* **Setting rows** of the CompactList pages (Home, Ping, DNS lookup, Port check, Interfaces) keep their label whole: a
+  value that would push the label into dots is said shorter (Home's `Automatic (wlan0)` is `Automatic`; Ping's
+  `Gateway 192.168.68.1` is `Gateway`, the status line has the address; DNS's `System default 192.168.1.1` is
+  `System 192.168.1.1`, then the address alone) or cut with dots itself. A row whose label is the point (a DNS answer, a
+  record) keeps the toolkit's rule: the label is cut, the short value stays.
+* **Rows stay at least 7 mm**, every list row keeps its marker (chevron, grey information, action dot), the header's Esc
+  is the toolkit's 9 mm button; text sizes are the layout service's (CAPTION 18 px at 8.5 px/mm, the traceroute's
+  small face 14 px = 1.6 mm, never under the deck's caption).
+* **Typed pages** (a host, a name, a query, a MAC address): the toolkit's field under the header, the on-screen keyboard
+  (or the handwriting band of launcher v0.8.11 with Settings > On-screen keyboard = Handwriting + keyboard) across the
+  bottom, the reason a value is refused under the field on **two lines** (one in landscape).
+
+Page by page (480x800 and 480x640 are the same layout in a shorter screen; 800x1280 is the same layout wider unless said):
+
+| Page | Portrait layout |
+|---|---|
+| **Home** | the sixteen rows (the list scrolls); the Network row says `Automatic` when `Automatic (wlan0)` would cut its label (480x640) |
+| **Network** (choice) | the toolkit's Roller, as in landscape |
+| **Interfaces** | the landscape list (compact rows); a value too long for the row is cut with dots, the label stays |
+| **Diagnosis** | each rung is **two lines**: the name, then its detail (the address, `192.168.68.1, 3.0 ms`, `via 192.168.1.1, 12 ms`) under it over the whole width, never cut (landscape: the detail right of the name, cut with dots at 480 px); the names in the body face when the screen has the room (480x800, 800x1280), in the caption face at 480x640; the explanation has six lines when there is room (else four, then a smaller face, as in landscape) |
+| **Ping** | the graph over the width, as tall as the four rows leave (about 280 px at 480x800, 110 at 480x640); the scale line says `0-300 ms` without `last 120 packets` when the half line is too narrow; the Target row says `Gateway` for the gateway when its address would cut the label |
+| **DNS lookup** | the landscape list; the Resolver row says `System 192.168.1.1`, then the address alone, when the long label would cut `Resolver`; a Compare row drops the resolver's address (`System`, `Cloudflare`) when its time and answer count would not fit beside it (480x800); a long record (TXT) is cut with dots as in landscape (Save log has it) |
+| **Port check** | the result badge over the rows; a long word steps down from the title size to the body size before it would be cut |
+| **Traceroute** | the three cells over the chain; each hop is **stacked**: line 1 the number, the name over the width (`gw-wlan.cablecom.example`), the average in ms and the loss tag at the right; line 2 the address in the small face and the latency bar, which gets the rest of the width (about 250 px at 480 px; the bars share one scale); the note (`probably rate limiting`) on a third line, or in the address's place for a hop named by its address (`reached`); `no reply` on line 2 in the bar's place. The demonstration's nine hops are all in view at each portrait size (the scenes require seven); a hop's details open in place under it, as in landscape |
+| **HTTP check** | the landscape list of rows of any height (badge, waterfall over the width, certificate); the status word (`500 Internal Server Error`) steps down from the title size to the body size before it would be cut |
+| **Public IP** | the landscape list; the carrier-grade NAT note wraps; at 480x640 a row whose value does not fit beside its label puts the value under it (the list's rule) |
+| **Whois** | the landscape list: the summary wraps, never cut; the raw answer's lines are cut with dots as in landscape (Save log has them all) |
+| **Speed test** | always **stacked**: the dial over the throughput chart over the progress line; the chart keeps at least 30 % of the block (480x640: about 120 px under a smaller dial; landscape 720x720 keeps three lines); a dial as wide as the tablet keeps the round ends of its arc inside its box; the result card as in landscape (a gigabit result, `1180 Mbit/s  940 Mbit/s`, fits at 480 px) |
+| **Wake-on-LAN** | the list of machines; a machine whose MAC and address do not fit beside its status puts the status beside the name and gives the second line the whole width |
+| **A machine** | the landscape page: the wake watch (ring, word, strip of 120 seconds over the width), the rows, the note |
+| **Bluetooth radar** | stacked by the landscape rule for a tall area: the radar over the device list (four devices in view at 480x800, two and a half at 480x640, seven at 800x1280; the list scrolls); the details open in place |
+| **Local devices** | the two-line device rows; line 2 shows the vendor alone when the vendor and the MAC do not fit beside the tag and the round trip (the device's page has the MAC; 800x1280 shows both) |
+| **A device** | the landscape page: the rows, the actions, the open ports as found |
+| **Wi-Fi networks** | the network rows; the network in use puts its check and `connected` at the right of line 2, so that its name keeps line 1. **Channels**: the 2.4 and 5 GHz bands **one over the other** over the whole width with taller bars (eight lines of the small face instead of six), also at 800x1280 where landscape's rule (680 px and wider) would put them side by side |
+| **A network** | the landscape list |
+| **Wi-Fi walk test** | the reading **always over the chart** (the chart over the width, -40 / threshold / -90 on the y axis, the start and `now` on the x axis), also in the shorter block of a stopped walk with its summary, where landscape's ratio rule would put them side by side at 480 px |
+| **Choice** and **Typed** pages | the toolkit's Roller and text field (see above) |
+
+No page falls back to the landscape layout or runs turned: every page above has its portrait form at 480x640, 480x800 and
+800x1280 (`tests/scenes/portrait*.scene`).
 
 ## What each tool sends, and to whom
 
@@ -609,7 +687,9 @@ network's channel width, so a 40 or 80 MHz network counts on its main channel on
 ## Requirements
 
 * A screen of at least **640x480** (`X-MinSize=640x480`; under it the app says so and closes on any key) and a
-  CyberdeckZero Launcher with full-screen app support (contract 1).
+  CyberdeckZero Launcher with full-screen app support (contract 1). In PDA mode (portrait) a canvas of at least
+  **480x640** (`X-Portrait=480x640`; tested in the harness at 480x800, 480x640 and 800x1280); a launcher before v0.8.8
+  never gives a portrait canvas, and the handwriting band in the typed pages needs launcher v0.8.11.
 * Ping needs unprivileged ICMP sockets (`net.ipv4.ping_group_range` covering the user's group; the default on
   Raspberry Pi OS). Without them ping says so with the fix, and the diagnosis uses TCP connections instead.
 * `iw` (package `iw`) for the Wi-Fi network name and bit rate; optional.
@@ -624,7 +704,7 @@ network's channel width, so a 40 or 80 MHz network counts on its main channel on
   public address asks `www.cloudflare.com` (Cloudflare), whois asks `whois.iana.org` and the servers it names, only
   when you start them. From 0.3: the speed test talks to `speed.cloudflare.com` (Cloudflare) and pings 1.1.1.1 or
   your gateway, only when you start it.
-* **x86-64 PCs:** an amd64 package, `net-toolbox_0.4.3_amd64.deb`, is in the amd64 registry
+* **x86-64 PCs:** an amd64 package, `net-toolbox_0.5.0_amd64.deb`, is in the amd64 registry
   ([amd64](../../README.md#amd64-x86-64-pcs)) for a PC running the launcher. It has had no board test on a PC yet.
 
 ## Install
@@ -633,7 +713,7 @@ From **Settings > Apps**. By hand:
 
 ```sh
 python3 tools/make_registry.py --only net-toolbox --out <a folder outside packages/>
-sudo dpkg -i net-toolbox_0.4.3_arm64.deb      # remove: sudo dpkg -r net-toolbox
+sudo dpkg -i net-toolbox_0.5.0_arm64.deb      # remove: sudo dpkg -r net-toolbox
 ```
 
 ## Files the app keeps
@@ -660,6 +740,9 @@ Logs go to stderr with the tag `[net-toolbox]` (the launcher's journal).
   down on the two boards' Wi-Fi, grade B; the radar heard 17 to 23 devices); the Wake-on-LAN page ran in the headless scenes
   only (B14 is still to be run). The last wake status of a machine is kept while the app runs, not in the settings file. A
   BLE scan is never started on the deck during tests without the owner's say (the Bluetooth keyboard shares the radio).
+* 0.5.0, portrait (PDA mode): the layouts ran in the headless harness only (`portrait*.scene`); touch under rotation, the
+  tablet and the handwriting band on a board are the steps of section P of `tests/BOARD-TESTS.md`. The raw whois lines and
+  a long DNS record are cut with dots there as in landscape (Save log has them whole).
 * Ping has Start and Stop, no Pause: Start begins a new series.
 * IPv4 first: the gateway is the IPv4 default route; an IPv6-only network is not diagnosed yet.
 * Names ending in `.local` (mDNS) are not resolved; use the address.
@@ -782,9 +865,25 @@ python3 tools/make_registry.py --only net-toolbox --out <a folder outside packag
   NetworkManager, no Wi-Fi adapter, a network's page, an open network, a random BSSID, a network that disappeared, Rescan,
   Channels, a 2.4 GHz-only board, touch) and `walk-*` (idle, walking, the summary, a long walk, no link, no iw, no adapter, the
   weak-zone setting, Reset, touch).
+* `tests/` from 0.5 (5695 checks in all): the portrait forms and layouts (`resolver_label_forms` in `test_ui_model.cpp`, the
+  speed layout in `test_ui_model_03.cpp`, the channels and walk layouts and the device row's short form in
+  `test_ui_model_04.cpp`, `X-Portrait` against the app's minimum in `test_core.cpp`); the headless scenes (200 in all) add
+  `portrait.scene` (Home, the Network choice, Interfaces, Diagnosis, Ping, DNS lookup, Port check), `portrait-02.scene`
+  (Traceroute, HTTP check, Public IP, Whois), `portrait-03.scene` (Speed test, Wake-on-LAN and a machine, Bluetooth radar),
+  `portrait-04.scene` (Local devices and a device, Wi-Fi networks, a network, the channels, the walk test),
+  `portrait-speed.scene` (the result card of a gigabit line), `portrait-keyboard.scene` (the typed pages with the on-screen
+  keyboard, a keyboard connecting) and `portrait-band.scene` (the handwriting band, 640x480 for comparison), each at 480x800,
+  480x640 and 800x1280, by touch and by keys; `notice.scene` adds 480x560 (a portrait canvas under 480x640). The
+  landscape scenes keep their five sizes (they tap by position, and their texts are the landscape ones).
 
 ## Changes
 
+* 0.5.0: portrait (PDA mode, `X-Portrait=480x640`): upright on 480x800, 480x640 and 800x1280 ([the rules](#portrait-pda-mode));
+  a two-line status line, stacked traceroute hops and diagnosis rungs, the speed test and the walk test stacked, the Wi-Fi
+  channels one over the other, setting rows that keep their label whole, a two-line reason under a typed field; the
+  handwriting band of launcher v0.8.11 in the typed pages; landscape unchanged. Built at the launcher pin v0.8.11
+  (`5f54d15`). The scenes `portrait*.scene` (every page at 480x800, 480x640 and 800x1280, the on-screen keyboard and the
+  band) and the unit tests of the portrait forms and layouts.
 * 0.4.3: rebuilt against launcher v0.8.5: battery in the header, Wi-Fi interface lookup, status feed; no other change.
 * 0.4.2: rebuilt on launcher f35c2d6: the toolkit's 7 mm minimum tap target for buttons and rows (the header Esc
   keeps 9 mm) and pointer navigation (Settings > System > Pointer navigation); no change in Net Toolbox's own code.

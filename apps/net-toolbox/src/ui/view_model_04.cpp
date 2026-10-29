@@ -81,6 +81,7 @@ DeviceRowTexts device_row_texts(const Device &d)
     t.ip = d.name.empty() ? std::string() : d.ip;
     const std::string vendor = device_vendor_text(d);
     t.detail = vendor;
+    t.vendor = vendor.empty() ? d.mac : vendor;
     if (!d.mac.empty()) t.detail += (t.detail.empty() ? "" : "  ") + d.mac;
     if (d.has_rtt) t.rtt = rtt_text(d.rtt_ms);
     t.self = d.is_self;
@@ -457,12 +458,12 @@ bool channels_have_149(const ChannelsView &v)
     return false;
 }
 
-ChannelsLayout channels_layout(int w, int lh, int slh, int bars_h, int pad, bool first_data, bool second_data)
+ChannelsLayout channels_layout(int w, int lh, int slh, int bars_h, int pad, bool first_data, bool second_data, bool portrait)
 {
     ChannelsLayout L;
     w = std::max(1, w);
     const auto part_h = [&](bool data) { return data ? lh + bars_h + 2 * slh + pad : lh + 2 * slh + pad; };
-    L.side = first_data && second_data && w >= 640;
+    L.side = !portrait && first_data && second_data && w >= 640;
     if (L.side) {
         const int half = (w - pad) / 2;
         const int h = part_h(true);
@@ -479,13 +480,13 @@ ChannelsLayout channels_layout(int w, int lh, int slh, int bars_h, int pad, bool
 
 /* ================================================================ Wi-Fi walk test */
 
-WalkLayout walk_layout(int w, int h, int lh, int slh, int big_h, int pad)
+WalkLayout walk_layout(int w, int h, int lh, int slh, int big_h, int pad, bool portrait)
 {
     WalkLayout L;
     w = std::max(1, w);
     h = std::max(1, h);
     const int legend_h = 2 * slh;
-    L.side = w * 100 >= h * 170;
+    L.side = !portrait && w * 100 >= h * 170;
     if (L.side) {
         const int rc = std::min(250, std::max(150, w * 30 / 100));
         L.reading = {0, 0, rc, h};
