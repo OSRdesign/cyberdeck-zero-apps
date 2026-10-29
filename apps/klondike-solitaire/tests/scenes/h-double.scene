@@ -1,0 +1,18 @@
+title Klondike: double tap sends a card to its foundation (the safe Ace follows by itself)
+sizes 640x480 800x480 720x720 1280x800 480x800 800x1280 480x640
+env KLONDIKE_TEST_DATA h-double
+env KLONDIKE_TEST_RESET 1
+env KLONDIKE_TEST_DEAL 1
+env KLONDIKE_TEST_PROBES 1
+wait 300
+tap "@T1.top"
+tap "@T1.top"
+wait 600
+shot foundation
+check foundation
+expect text "Moves 2"
+expect text "Score 25"
+tap "Undo"
+wait 400
+expect text "Score 0"
+expect text "Moves 3"

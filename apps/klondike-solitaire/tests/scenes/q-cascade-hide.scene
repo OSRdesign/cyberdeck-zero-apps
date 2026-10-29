@@ -1,0 +1,28 @@
+title Klondike: the cascade waits while the app is hidden and goes on when shown (reduced run)
+sizes 640x480 480x800
+lifecycle
+env KLONDIKE_TEST_DATA q-cascade-hide
+env KLONDIKE_TEST_RESET 1
+env KLONDIKE_TEST_PROBES 1
+env KLONDIKE_TEST_PREFS anim=1
+env KLONDIKE_TEST_RULES draw=1,passes=0,scoring=standard,timed=0,auto=1,fback=1,fill=king
+env KLONDIKE_TEST_BOARD "f C13 D13 H13 S12;t KS;t;t;t;t;t;t;w;s;r 0"
+wait 300
+tap "@T1.top"
+tap "@T1.top"
+wait 2500
+shot before-hide
+hide
+expect hidden
+wait 14000
+expect nowrite
+show
+expect visible
+wait 400
+expect repaint
+expect notext "You won!"
+shot after-show
+check after-show
+wait 9500
+expect text "You won!"
+shot end

@@ -107,6 +107,7 @@ struct Scene {
     std::vector<Line> lines;
     bool nocontract = false; /* started by hand: no contract variables, no input.state (APP-CONTRACT section 7) */
     bool lifecycle = false;  /* a multitasking launcher: the control socket (APP-CONTRACT section 13) */
+    int ppmm_x100 = 0;       /* `ppmm N` (px per mm x 100): the panel of a board, whatever the size (0: the size's default) */
     bool band = false;       /* a launcher with the PDA writing zone runs the app upright: APPLAUNCH_PDA=1, hand=1 */
     std::vector<std::pair<std::string, std::string>> env; /* set before the app starts (an app's test fixture) */
 };
@@ -156,6 +157,10 @@ bool load_scene(const std::string &path, Scene &scene)
         }
         if (line.words[0] == "lifecycle") {
             scene.lifecycle = true;
+            continue;
+        }
+        if (line.words[0] == "ppmm" && line.words.size() == 2) {
+            scene.ppmm_x100 = std::atoi(line.words[1].c_str());
             continue;
         }
         if (line.words[0] == "band") {
@@ -503,7 +508,8 @@ int run_size(const Size &size, const Scene &scene, const std::string &out_dir, c
 
     for (const auto &kv : scene.env) setenv(kv.first.c_str(), kv.second.c_str(), 1);
 
-    if (!headless::platform_init(size.w, size.h, default_ppmm(size), resources)) {
+    if (!headless::platform_init(size.w, size.h, scene.ppmm_x100 > 0 ? scene.ppmm_x100 : default_ppmm(size), resources,
+                                 scene.ppmm_x100 > 0)) {
         std::fprintf(stderr, "[%s] platform init failed\n", size.name().c_str());
         return 1;
     }

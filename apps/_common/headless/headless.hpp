@@ -47,7 +47,7 @@ Platform &platform();
 /* LVGL, a W x H display (XRGB8888, memory), the layout service's metrics for it at ppmm_x100 (<= 0: default
  * density; the generic profile reports the size in mm like a driver, as the launcher's render harness does), the
  * keyboard queue + bridge, a pointer indev, the filesystem service answering font and resource paths. */
-bool platform_init(int w, int h, int ppmm_x100, const std::string &resource_root);
+bool platform_init(int w, int h, int ppmm_x100, const std::string &resource_root, bool force_density = false);
 void platform_touch(bool pressed, int x, int y);
 /* Runs LVGL (and the app's lifecycle service, when on) for ms of real time. */
 void run_for(int ms);

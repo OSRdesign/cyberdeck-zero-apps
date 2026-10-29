@@ -1,0 +1,9 @@
+title Klondike: no more useful moves, the banner (the helper process finds it)
+sizes 640x480 800x480 720x720 1280x800 480x800 800x1280 480x640
+env KLONDIKE_TEST_DATA f-deadend
+env KLONDIKE_TEST_RESET 1
+env KLONDIKE_TEST_BOARD "f D1 C3 H4 -;t KS;t KC QD JS TD 9S 8H 7C 6D;t 3D;t 7s th JC;t 2s 4c 5s 5c 9H 8S 7D 6C 5D;t 5h qs 2d qh 3S;t as 6s ts 4s KH QC JH TC 9D 8C 7H;w;s 4D 8D JD 9C KD 6H;r 8"
+wait 2500
+shot deadend
+check deadend
+expect text "No more useful moves. Undo, or start a new game."

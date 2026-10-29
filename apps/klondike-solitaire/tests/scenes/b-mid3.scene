@@ -1,0 +1,16 @@
+title Klondike: draw 3 with a fanned waste, four-colour deck, blue felt, red back
+sizes 640x480 800x480 720x720 1280x800 480x800 800x1280 480x640
+env KLONDIKE_TEST_DATA b-mid3
+env KLONDIKE_TEST_RESET 1
+env KLONDIKE_TEST_BOARD "f - - - -;t AC;t 2c 4C;t 5c 6c 8C;t 9c tc qc KC;t ad 3d 4d 5d 7D;t 8d 9d jd qd kd AH;t 2h 3h 5h 6h 7h 9h KS QH JC TD 9S 8H 7C 6D 5S 4H 3C 2D AS;w;s TH JH KH 2S 3S 4S 6S 7S 8S TS JS QS;r 0"
+env KLONDIKE_TEST_RULES draw=3,passes=0,scoring=standard,timed=1,auto=1,fback=1,fill=king
+env KLONDIKE_TEST_PREFS four=1,felt=1,back=1
+wait 300
+key enter
+key enter
+wait 400
+key right
+key enter
+wait 400
+shot draw3
+check draw3

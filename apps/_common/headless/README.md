@@ -36,6 +36,7 @@ After the app asks to quit, only `expect` lines are read.
 | Command | Meaning |
 |---|---|
 | `title TEXT`, `sizes WxH ...` | sheet title; sizes (the command line's `--sizes` wins) |
+| `ppmm N` | the panel's density in px per mm x 100 for every size of the scene (a 5" 800x480 DSI of 108x65 mm is `ppmm 741`); default: the size's own (the deck 11.3, 800x480 9.2 ...) |
 | `nocontract` | started by hand: no contract variables and no `input.state` (APP-CONTRACT section 7) |
 | `env NAME VALUE` | an environment variable set before the app starts (an app's own test fixture, e.g. the Serial Console's `SERIAL_CONSOLE_DEMO`) |
 | `wait MS` | run the app for MS ms (real time: background commands are real processes) |

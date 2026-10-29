@@ -1,0 +1,14 @@
+title Klondike: the dock labels and the HUD at the board's density (800x480 at 741 px per 100 mm), nothing clipped
+sizes 800x480
+ppmm 741
+env KLONDIKE_TEST_DATA u-dock-board-landscape
+env KLONDIKE_TEST_RESET 1
+env KLONDIKE_TEST_DEAL 7
+env KLONDIKE_TEST_LABELS 1
+wait 300
+shot table
+check table
+expect text "Undo"
+expect text "Redo"
+expect text "Menu"
+expect notext "LABELCLIP"

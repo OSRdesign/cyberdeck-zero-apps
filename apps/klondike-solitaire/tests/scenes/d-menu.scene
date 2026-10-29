@@ -1,0 +1,39 @@
+title Klondike: the menu, Settings, Statistics, Help
+sizes 640x480 800x480 720x720 1280x800 480x800 800x1280 480x640
+env KLONDIKE_TEST_DATA d-menu
+env KLONDIKE_TEST_RESET 1
+wait 300
+key m
+wait 200
+shot menu
+check menu
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 200
+shot settings
+check settings
+key esc
+wait 200
+expect text "Statistics"
+key down
+key enter
+wait 200
+shot stats
+check stats
+key esc
+key down
+key enter
+wait 200
+shot help
+check help
+key esc
+key esc
+wait 200
+expect noquit
+shot back

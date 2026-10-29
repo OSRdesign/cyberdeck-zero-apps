@@ -1,0 +1,12 @@
+title Klondike: 700 random steps (drag, tap-move, double tap, undo, redo, hint, draw, resume, restart, hand switch) with the stacking order checked after each
+sizes 640x480 480x800 800x480
+env KLONDIKE_TEST_DATA s-stack-fuzz-b
+env KLONDIKE_TEST_RESET 1
+env KLONDIKE_TEST_ZCHECK 1
+env KLONDIKE_TEST_DEAL 3
+env KLONDIKE_TEST_PREFS "anim=1,four=1"
+env KLONDIKE_TEST_ZFUZZ "29,700"
+wait 20000
+expect text "ZFUZZ DONE"
+expect notext "ZFAIL"
+shot end

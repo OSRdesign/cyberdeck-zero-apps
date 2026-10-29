@@ -1,0 +1,18 @@
+title Klondike: Esc skips the cascade and does not quit the app
+sizes 640x480 480x800
+env KLONDIKE_TEST_DATA q-cascade-skip-esc
+env KLONDIKE_TEST_RESET 1
+env KLONDIKE_TEST_PROBES 1
+env KLONDIKE_TEST_RULES draw=1,passes=0,scoring=standard,timed=0,auto=1,fback=1,fill=king
+env KLONDIKE_TEST_BOARD "f C13 D13 H13 S12;t KS;t;t;t;t;t;t;w;s;r 0"
+wait 300
+tap "@T1.top"
+tap "@T1.top"
+wait 900
+wait 1200
+key esc
+wait 600
+expect noquit
+expect text "You won!"
+shot skipped
+check skipped

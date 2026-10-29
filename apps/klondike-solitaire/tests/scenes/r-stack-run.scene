@@ -1,0 +1,22 @@
+title Klondike: a run of five (K Q J 10 9, four suits) moved to an empty column, undone and redone: every card of a pile stays above the one before it
+sizes 640x480 800x480 720x720 1280x800 480x800 800x1280 480x640
+env KLONDIKE_TEST_DATA r-stack-run
+env KLONDIKE_TEST_RESET 1
+env KLONDIKE_TEST_ZCHECK 1
+env KLONDIKE_TEST_PROBES 1
+env KLONDIKE_TEST_BOARD "f - - - -;t KC QD JS TH 9C;t;t;t;t;t;t;w;s AC AD AH AS 2C 2D 2H 2S 3C 3D 3H 3S 4C 4D 4H 4S 5C 5D 5H 5S 6C 6D 6H 6S 7C 7D 7H 7S 8C 8D 8H 8S 9D 9H 9S TC TD TS JC JD JH QC QH QS KD KH KS;r 0"
+wait 300
+shot before
+tap "@T1.0"
+tap "@T2.slot"
+wait 600
+shot moved
+check moved
+expect notext "ZFAIL"
+tap "Undo"
+wait 600
+expect notext "ZFAIL"
+tap "Redo"
+wait 600
+shot redone
+expect notext "ZFAIL"

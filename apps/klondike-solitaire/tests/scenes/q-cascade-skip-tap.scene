@@ -1,0 +1,23 @@
+title Klondike: a tap on the cascade ends it, the result box follows, the table is back
+sizes 640x480 480x800
+env KLONDIKE_TEST_DATA q-cascade-skip-tap
+env KLONDIKE_TEST_RESET 1
+env KLONDIKE_TEST_PROBES 1
+env KLONDIKE_TEST_RULES draw=1,passes=0,scoring=standard,timed=0,auto=1,fback=1,fill=king
+env KLONDIKE_TEST_BOARD "f C13 D13 H13 S12;t KS;t;t;t;t;t;t;w;s;r 0"
+wait 300
+tap "@T1.top"
+tap "@T1.top"
+wait 900
+wait 1500
+shot running
+expect notext "You won!"
+tapxy 0.5 0.5
+wait 600
+expect text "You won!"
+shot skipped
+check skipped
+tap "Close"
+wait 300
+shot closed
+check closed
