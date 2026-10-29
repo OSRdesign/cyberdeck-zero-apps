@@ -173,6 +173,7 @@ void test_home_rows()
     for (int i : {0, 1, 2, 3, 5}) CHECK(rows[static_cast<std::size_t>(i)].aff == Affordance::Open);
     CHECK_EQ(home_caption("~/Notes", 184), std::string("Vault: ~/Notes  \xC2\xB7  184 notes"));
     CHECK(home_hint().find("Esc: quit") != std::string::npos && folder_hint().find("Ctrl+O") != std::string::npos);
+    CHECK(home_hint_short().find("Esc: quit") != std::string::npos && home_hint_short().size() < home_hint().size());   // portrait column
 }
 
 void test_folder_rows()

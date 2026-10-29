@@ -1,7 +1,7 @@
 {
   "share_code": "markdown-notes",
   "package": "markdown-notes",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "title": "Markdown Notes",
   "summary": "Notes as plain Markdown files in a folder on the deck: write them, read them with headings, lists, task boxes and links, open any note by name, and keep the folder in sync with Syncthing, rsync or git.",
   "description": "A full-screen notes app for the deck. Your notes are plain .md files in one folder, the vault (~/Notes unless you choose another), with sub-folders as you like, so they stay readable by any Markdown editor and can be kept in sync with Syncthing, rsync or git (the app does not sync itself). Open or create a note by typing part of its name; existing notes open in a preview (headings, bold and italic, lists, code, quotes, task boxes you can tick, [[links]] to other notes that create the note when it does not exist yet, properties shown muted), new notes and today's note open in a plain text editor that saves by itself. Deleted notes go to the vault's .trash folder. Nothing is sent anywhere: no network. Text is typed with a Bluetooth or USB keyboard, or with the on-screen keyboard while none is connected. Needs a screen of at least 640x480 and a launcher with full-screen app support (X-Fullscreen in .desktop files).",

@@ -1,8 +1,8 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * What Markdown Notes gives the shared runners (apps/_common/app.hpp): its id, title, minimum screen and UI. min_w x
- * min_h must equal X-MinSize in root/usr/share/APPLaunch/applications/markdown-notes.desktop (tests/unit/test_package.cpp
+ * What Markdown Notes gives the shared runners (apps/_common/app.hpp): its id, title, minimum screens and UI. min_w x
+ * min_h must equal X-MinSize and portrait_w x portrait_h X-Portrait in root/usr/share/APPLaunch/applications/markdown-notes.desktop (tests/unit/test_package.cpp
  * checks it). The title is the notice's ("Markdown Notes needs a screen of at least 640x480"); the Home page's header
  * says kHomeTitle ("Notes": the shared header cuts longer titles at 640x480).
  */
@@ -51,6 +51,8 @@ const AppSpec &app_spec()
         s.title = notesui::kAppTitle;
         s.min_w = notesui::kMinW;
         s.min_h = notesui::kMinH;
+        s.portrait_w = notesui::kPortraitW;
+        s.portrait_h = notesui::kPortraitH;
         s.build = [](lv_obj_t *screen) -> std::shared_ptr<void> { return std::make_shared<notesui::Session>(screen); };
         return s;
     }();

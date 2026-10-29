@@ -131,6 +131,7 @@ std::vector<ListItem> home_rows(std::size_t notes, const std::string &today);
 std::string home_caption(const std::string &vault_shown, std::size_t notes);
 /* The bottom line of Home and of the folder pages (the mock-up's key hints). */
 std::string home_hint();
+std::string home_hint_short();           /* the portrait column (480 px wide) when the whole hint does not fit */
 std::string folder_hint();
 
 /* A folder page: "New note here" (Action, +), then FOLDERS (each Open, its notes in it and below) and NOTES (Open,

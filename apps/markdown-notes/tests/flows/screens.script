@@ -145,7 +145,7 @@ expect state page settings
 expect text "Folder"
 expect text "Text size"
 expect text "Open notes in"
-expect text "0.1.2"
+expect text "0.2.0"
 shot 18-settings
 check settings
 key enter

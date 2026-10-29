@@ -298,6 +298,7 @@ std::string home_caption(const std::string &vault_shown, std::size_t notes)
 }
 
 std::string home_hint() { return "Up/Down: choose  Enter: open  Ctrl+D: today  Esc: quit"; }
+std::string home_hint_short() { return "Enter: open  Ctrl+D: today  Esc: quit"; }
 std::string folder_hint() { return "Enter: open  Ctrl+O: options  Esc: back"; }
 
 std::vector<ListItem> folder_rows(const VaultIndex &ix, const std::string &rel, std::int64_t now_s)

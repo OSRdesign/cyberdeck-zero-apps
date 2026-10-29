@@ -1,0 +1,80 @@
+# PDA mode: the typing pages with the on-screen keyboard (the shared rule: only while no physical keyboard is there) on
+# the portrait canvases. The keyboard takes about 40 % of the height at 480x800, 45 % at 480x640 and a quarter at
+# 800x1280, so Open or create keeps its matches under the field (landscape hides them), New note its Create button, and
+# the editor its text above the keyboard; the keyboard's Ctrl then o opens the options box (the keyboard goes for it),
+# Ctrl then h the Markdown help, Esc of the keyboard puts it away. A keyboard connecting takes it away. Nothing is typed
+# (every size shares the vault).
+title Markdown Notes: portrait, on-screen keyboard
+env NOTES_VAULT /tmp/markdown-notes-scene-vault
+# notes open in the editor here (build.sh writes open_in=editor in this settings folder)
+env XDG_CONFIG_HOME /tmp/markdown-notes-scene-config-editor
+sizes 480x800 480x640 800x1280
+
+keyboards 0
+wait 700
+key enter
+wait 600
+expect osk on
+shot open-osk
+keyboards 1
+wait 1500
+expect osk off
+shot open-keyboard
+keyboards 0
+wait 1500
+tap "Esc"
+wait 400
+# Home: New note (the fifth row)
+key down
+key down
+key down
+key down
+key enter
+wait 600
+expect osk on
+expect text "Create"
+shot new-osk
+tap "Esc"
+wait 400
+# Home again (New note selected): All notes, its last note (it opens in the editor)
+key home
+key down
+key enter
+wait 400
+key end
+key enter
+wait 600
+expect osk on
+expect text "Editor  ·  83 bytes  ·  Hold 3 s: options"
+shot editor-osk
+# the keyboard's Ctrl, then o: Ctrl+O, the options box (the keyboard goes for it)
+tapkey "Ctrl"
+tapkey "o"
+wait 600
+expect osk off
+expect text "Preview"
+expect text "Ctrl+E"
+shot editor-options-osk
+key esc
+wait 600
+expect osk on
+# the Markdown help by touch alone
+tapkey "Ctrl"
+tapkey "h"
+wait 800
+expect text "Markdown help"
+shot help-osk
+key esc
+wait 600
+expect osk on
+# the keyboard's Esc puts the keyboard away: the whole page shows
+tapkey "Esc"
+wait 600
+expect osk off
+shot editor-keyboard-away
+tap "Esc"
+wait 400
+tap "Esc"
+wait 400
+tap "Esc"
+expect quit

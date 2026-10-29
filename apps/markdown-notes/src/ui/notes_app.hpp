@@ -49,6 +49,8 @@ constexpr const char *kAppTitle = "Markdown Notes";   /* the app's name: the not
 constexpr const char *kHomeTitle = "Notes";           /* the Home page's header (longer titles are cut at 640x480) */
 constexpr int kMinW = 640;   /* = X-MinSize of the .desktop file */
 constexpr int kMinH = 480;
+constexpr int kPortraitW = 480;   /* = X-Portrait of the .desktop file (PDA mode: the smallest portrait canvas) */
+constexpr int kPortraitH = 640;
 
 /* One line on stderr, "[markdown-notes] ..." (the launcher's journal). */
 void log_line(const std::string &s);
