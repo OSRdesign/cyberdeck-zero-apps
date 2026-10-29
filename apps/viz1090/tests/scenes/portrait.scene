@@ -1,0 +1,115 @@
+# PDA mode (X-Portrait=480x640): the portrait canvases a portrait launcher gives the intro upright (480x800 the 4.3" DSI
+# panel, 480x640 a 3.5" panel, 800x1280 the FZ-M1 tablet). Every page, by touch (a tap selects a row, a tap on the
+# selected row acts, the header's Esc goes back; the on-screen keyboard is kept away here, portrait-keyboard.scene has
+# it) and then by keys (a physical keyboard): root, Position with its Recent places, Latitude, Longitude. Portrait rules
+# seen here: the status line is two lines (never cut), the Position row keeps its code when the coordinates do not fit.
+title viz1090: portrait (PDA mode), every page
+sizes 480x800 480x640 800x1280
+env VIZ_USB_DIR tests/fixtures/usb-sdr
+env VIZ_DEV_DIR tests/fixtures/dev-gps-none
+env VIZ_WORLD root/opt/viz1090/world-map.bin
+env VIZ_CONF_SEED tests/fixtures/conf/cdg.conf
+env VIZ_PROGRAM /bin/sh
+osk off
+wait 600
+shot root
+expect noquit
+expect text "viz1090"
+expect text "Esc"
+expect text "Start"
+expect text "SDR receiver"
+expect text "GPS receiver"
+expect text "Start opens the map around CDG"
+
+# Position by touch: the page with its field, Latitude, Longitude and Recent
+tap "Position"
+tap "Position"
+shot position
+expect text "Nearest airport code"
+expect text "found: CDG"
+expect text "Latitude"
+expect text "Longitude"
+expect text "JFK"
+
+# Latitude by touch, typed with the (absent) keyboard: the field and its range line, then back with the header's Esc
+tap "Latitude"
+tap "Latitude"
+shot latitude
+expect text "From -90 to 90, south is negative"
+tap "Esc"
+tap "Longitude"
+tap "Longitude"
+shot longitude
+expect text "From -180 to 180, west is negative"
+tap "Esc"
+
+# a Recent place by touch: set, back to the root
+tap "JFK"
+wait 500
+tap "JFK"
+shot root-jfk
+expect text "Position set: JFK  40.6394, -73.7793"
+expect noquit
+
+# the same by keys, with a keyboard connected: the field edits at once
+keyboards 1
+wait 1200
+key down
+key down
+key down
+key enter
+shot position-keys
+expect osk off
+expect text "found: JFK"
+key down
+key enter
+wait 300
+shot latitude-keys
+expect text "From -90 to 90, south is negative"
+key end
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+type "-33.9461"
+shot latitude-typed
+expect text "-33.9461"
+key enter
+shot position-lat
+expect text "-33.9461"
+key down
+key down
+key enter
+wait 300
+shot longitude-keys
+expect text "From -180 to 180, west is negative"
+key end
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+type "151.1772"
+shot longitude-typed
+expect text "151.1772"
+key enter
+shot position-both
+expect text "151.1772"
+# the first Esc only leaves the field, the second goes back to the root
+key esc
+wait 300
+key esc
+wait 400
+shot root-typed
+expect text "Start opens the map around -33.9461, 151.1772"
+expect noquit
+# Esc at the root ends the app (cancelled)
+key esc
+expect quit

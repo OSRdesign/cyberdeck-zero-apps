@@ -531,7 +531,8 @@ static void test_model()
 
     viz::GpsSnapshot g;
     const viz::RowText none = viz::gps_row(g);
-    CHECK(none.label == "GPS receiver" && none.values[0] == "None detected");
+    CHECK(none.label == "GPS receiver" && none.values[0] == "None detected" &&
+          none.values.back() == "None"); /* a portrait screen's shorter word */
     CHECK(none.tone == viz::Tone::Muted); /* an absent optional receiver: grey, the words say it */
     g.denied = "ttyACM0";
     const viz::RowText denied = viz::gps_row(g);
@@ -623,6 +624,62 @@ static void test_screen()
     CHECK(viz_screen_uiscale(&s) == 3);
     s.h = 320;
     CHECK(viz_screen_uiscale(&s) == 1); /* never more than one step per 240 rows */
+    /* the cap is by the SHORT side: landscape sizes as before, portrait canvases (PDA mode) at their panels' densities */
+    for (const int dens : {660, 920, 1130, 1500}) {
+        s.w = 800;
+        s.h = 480;
+        s.ppmm_x100 = dens;
+        const int landscape = viz_screen_uiscale(&s);
+        s.w = 480; /* the same panel turned upright: the same step */
+        s.h = 800;
+        CHECK(viz_screen_uiscale(&s) == landscape);
+    }
+    s.w = 640;
+    s.h = 480;
+    s.ppmm_x100 = 1130;
+    CHECK(viz_screen_uiscale(&s) == 2); /* the deck, with its width known */
+    s.w = 1280;
+    s.h = 720;
+    s.ppmm_x100 = 1160;
+    CHECK(viz_screen_uiscale(&s) == 2);
+    s.w = 1024;
+    s.h = 600;
+    s.ppmm_x100 = 1500;
+    CHECK(viz_screen_uiscale(&s) == 2); /* 600 rows: two steps at most (landscape, unchanged) */
+    s.w = 480;
+    s.h = 800;
+    s.ppmm_x100 = 850;
+    CHECK(viz_screen_uiscale(&s) == 2); /* the 4.3" DSI panel, upright */
+    s.h = 640;
+    s.ppmm_x100 = 900;
+    CHECK(viz_screen_uiscale(&s) == 2); /* a 3.5" panel */
+    s.w = 800;
+    s.h = 1280;
+    s.ppmm_x100 = 860;
+    CHECK(viz_screen_uiscale(&s) == 2); /* the FZ-M1 tablet: not 3 by its 1280 rows */
+    s.w = 480;
+    s.h = 800;
+    s.ppmm_x100 = 1500;
+    CHECK(viz_screen_uiscale(&s) == 2); /* a dense narrow screen: capped by its 480 short side */
+    s.w = 320;
+    s.h = 480;
+    CHECK(viz_screen_uiscale(&s) == 1);
+    /* the 7.0 px/mm threshold: the 5" 800x480 panel (7.4 px/mm) gets 2, the 7" 1024x600 (6.6) stays 1 */
+    s.w = 480;
+    s.h = 800;
+    s.ppmm_x100 = 740;
+    CHECK(viz_screen_uiscale(&s) == 2); /* the 5" panel, upright */
+    s.w = 800;
+    s.h = 480;
+    CHECK(viz_screen_uiscale(&s) == 2); /* the 5" panel, landscape */
+    s.ppmm_x100 = 699;
+    CHECK(viz_screen_uiscale(&s) == 1);
+    s.ppmm_x100 = 700;
+    CHECK(viz_screen_uiscale(&s) == 2);
+    s.w = 1024;
+    s.h = 600;
+    s.ppmm_x100 = 660;
+    CHECK(viz_screen_uiscale(&s) == 1); /* the 7" panel */
     int w = 0, h = 0;
     CHECK(viz_parse_wxh("800x480", &w, &h) == 0 && w == 800 && h == 480);
     CHECK(viz_parse_wxh("800x", &w, &h) != 0 && viz_parse_wxh("10x10", &w, &h) != 0);
@@ -663,7 +720,7 @@ static void test_package()
 
     const std::string manifest = read_file(kApp + "/app.json");
     CHECK(contains(manifest, "\"share_code\": \"viz1090\""));
-    CHECK(contains(manifest, "\"version\": \"0.2.3\""));
+    CHECK(contains(manifest, "\"version\": \"0.3.0\""));
     /* what the native intro links (cp0_lvgl: libinput, libxkbcommon, FreeType) and what viz1090 and readsb link */
     for (const char *dep : {"libfreetype6", "libinput10", "libxkbcommon0", "libsdl2-2.0-0", "libsdl2-ttf-2.0-0",
                             "libsdl2-gfx-1.0-0", "librtlsdr0", "python3"})

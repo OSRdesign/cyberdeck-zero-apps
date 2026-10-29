@@ -1,4 +1,4 @@
-# viz1090 0.2.3: board tests of the intro screen
+# viz1090 0.3.0: board tests of the intro screen
 
 For the Controller and the owner (controller-led testing: the Controller deploys and reads logs, the owner does the
 physical steps). Commands run from Windows: `deck.py` is `C:\CLAUDE\zero7\launcher\docs\dev\deck\deck.py` (password in
@@ -15,12 +15,12 @@ Expected pictures: the contact sheets of `build.sh host` in `\\wsl.localhost\Ubu
 ```
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/viz1090/build.sh all --strict
 python tools/make_registry.py --only viz1090 --out C:/CLAUDE/zero7/pkg-out
-python deck.py put C:/CLAUDE/zero7/pkg-out/viz1090_0.2.3_arm64.deb /tmp/viz1090.deb
+python deck.py put C:/CLAUDE/zero7/pkg-out/viz1090_0.3.0_arm64.deb /tmp/viz1090.deb
 python deck.py sudo 'dpkg -i /tmp/viz1090.deb || apt-get -f install -y'
 python deck.py run '/opt/viz1090/vizsetup --version; /opt/viz1090/vizsetup --screen'
 ```
 
-`--version`: `viz1090 (viz1090) 0.2.3`, the launcher commit and `cp0_lvgl pinned` or `same-tree`. `--screen`: the
+`--version`: `viz1090 (viz1090) 0.3.0`, the launcher commit and `cp0_lvgl pinned` or `same-tree`. `--screen`: the
 panel, e.g. `640 480 2 1130 screen.state` on the deck. Logs while testing:
 
 ```
@@ -32,7 +32,7 @@ python deck.py run 'journalctl --user -u cyberdeckzero.service -n 80 --no-pager 
 1. Open viz1090 from the home grid. Expect the intro: gold title "viz1090", the grey Esc button, the clock / Wi-Fi /
    Bluetooth strip where the home grid has it, a grey status line, a wide Start button, then SDR receiver, GPS
    receiver and Position rows (compare `receivers.png` / `root.png`, column 640x480).
-2. Log: `[cdk] viz1090 0.2.3: launcher contract 1, mode fullscreen, canvas 640x480` and
+2. Log: `[cdk] viz1090 0.3.0: launcher contract 1, mode fullscreen, canvas 640x480` and
    `[viz1090] intro: position ..., SDR ..., viz1090 installed, settings /home/<user>/.config/cardputerzero/viz1090.conf`.
 
 ## T2. Esc from every source, Start, the contract with run_viz1090.sh
@@ -86,3 +86,31 @@ Compare `position-forced.png`, column 720x720.
    VmRSS under 25 MB.
 
 Remove after the tests (when the deck should go back to the published version): `python deck.py sudo 'dpkg -r viz1090'`.
+
+## P. Portrait (PDA mode, 0.3.0; launcher v0.8.11, Settings > Screen > PDA mode)
+
+On the Pi 3A+ with the 4.3" DSI panel (480x800 in PDA mode; touch only, SDR dongle plugged in if you have one). Expected
+pictures: `portrait.png`, `portrait-keyboard.png`, `portrait-band.png`, `portrait-messages.png` in the host build's
+`out/sheets`, and the README's two portrait shots (layout rules: README, *Portrait (PDA mode)*). Main path only; note
+anything cut, overlapping or too small to read.
+
+1. **Upright start.** Settings > Screen > PDA mode On, rotate left (the launcher restarts). The **viz1090** tile starts the
+   intro **upright**: the header (gold title, Esc, the status strip) does not overlap, the status line under it has one or
+   two lines whole, Start, then SDR receiver, GPS receiver and Position. Log: `canvas 480x800`. [ ] pass
+2. **Rotate right.** Rotate the other way (right): the same intro upright, and a tap on a row highlights the row under the
+   finger. [ ] pass
+3. **Airport code by touch.** Tap Position twice, tap the field: the on-screen keyboard shows across the bottom with the
+   field and its line above it; type `cdg` ("found: CDG"), Enter. [ ] pass
+4. **Airport code by band.** Settings > On-screen keyboard = Handwriting + keyboard: Position, the field, write `jfk` in
+   the band, its Enter. Then **Latitude** and **Longitude** by the band (`40.64`, `-73.78`): the intro shows both. [ ] pass
+5. **Lat/lon by touch.** With the keyboard rule back on the keyboard: Latitude `48.8566` and Longitude `2.3522` on the `123`
+   page; Esc (header) back on the intro. [ ] pass
+6. **Start.** The map comes (`viz1090` and `readsb` running) upright, centred on the position, under the narrow header
+   (title, Esc, the strip; log `[viz1090] map 480x...` under the header); nothing of the map is drawn over the header;
+   the scale and the status line at the bottom whole. Compare `docs/screenshots/viz1090-portrait-map.png`. [ ] pass
+7. **Pan, pinch, Esc.** One-finger drag pans the way the finger moves; two fingers zoom (a bit uneven is known); a double
+   tap zooms and moves the map only about half way to the tapped point (known). The header's Esc: back to the launcher, no
+   `readsb` left (`pgrep -x readsb` prints nothing). Open again, Start, the keyboard's Esc on the map: the same. [ ] pass
+8. **Back to the launcher.** Home grid intact in portrait, the tile still there. [ ] pass
+9. **Landscape unchanged.** Settings > Screen > PDA mode Off (the launcher restarts): the intro and the map are the
+   0.2.3 ones at 800x480 (T1, T2 step 4), nothing turned or cut. [ ] pass

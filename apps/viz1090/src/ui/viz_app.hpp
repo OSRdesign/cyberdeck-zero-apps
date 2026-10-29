@@ -121,6 +121,7 @@ private:
     std::unique_ptr<cp0::ui::TextField> field_;
     lv_obj_t *band_ = nullptr;
     lv_obj_t *hint_ = nullptr;
+    int band_w_ = 0, band_h_ = 0; /* the status line's width and height (portrait: two lines) */
     lv_timer_t *timer_ = nullptr;
     std::vector<std::function<void()>> posted_;
     bool post_armed_ = false;

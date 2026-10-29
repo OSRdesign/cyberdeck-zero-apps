@@ -85,7 +85,7 @@ writing zone's band in an app run upright, `cp0::ui::zone_host`, `input.state` `
 pixel where the band is not shown: Serial Console's 352 earlier shots (292 landscape) and System Monitor's 259 are the
 same pictures as the v0.8.9 builds' with the clock frozen (byte-identical, or in another run where the demonstration
 world's text or the sampler's timing moved; System Monitor's About page shows the build stamp). Serial Console is built
-at it (the band in its line field), and so are the portrait layouts of RSS Reader 0.2.0, Markdown Notes 0.2.0, Klondike Solitaire 0.1.0 and Net Toolbox 0.5.0; the
+at it (the band in its line field), and so are the portrait layouts of RSS Reader 0.2.0, Markdown Notes 0.2.0, Klondike Solitaire 0.1.0, Net Toolbox 0.5.0 and viz1090 0.3.0; the
 other apps keep their builds. `build_app.sh` needs a checkout of
 that commit as `LAUNCHER_SRC` (`git fetch origin v0.8.11`, or the commit `5f54d15d95ecd4e89121dada3c0941317126f0c2`)
 whose files equal the WSL build tree's byte for byte (a tree synced from a Windows checkout has its line ends: give a WSL

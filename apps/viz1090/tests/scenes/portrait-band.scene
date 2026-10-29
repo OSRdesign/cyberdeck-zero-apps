@@ -1,0 +1,107 @@
+# PDA S4 (launcher report 044): a launcher with the writing zone runs the app upright with APPLAUNCH_PDA=1, and the user's
+# Settings > On-screen keyboard is Handwriting + keyboard (input.state hand=1). Nothing in viz1090 does it: the band shows
+# where the on-screen keyboard would (a field being edited; touch only), the Position list hides and the field with its
+# line stays above it, its keys reach the app as the keyboard's do. Keyb brings the standard keyboard (where '-' and '.'
+# of a latitude are typed), its cross the band back.
+# 640x480 (a landscape app on a portrait launcher runs turned): no band, the standard keyboard.
+title viz1090: the writing zone's band (PDA mode)
+sizes 480x800 480x640 800x1280 640x480
+env VIZ_USB_DIR tests/fixtures/usb-sdr
+env VIZ_DEV_DIR tests/fixtures/dev-gps-none
+env VIZ_WORLD root/opt/viz1090/world-map.bin
+env VIZ_CONF_SEED tests/fixtures/conf/cdg.conf
+env VIZ_PROGRAM /bin/sh
+band
+wait 600
+expect text "Start"
+@480x800,480x640,800x1280 expect band hidden
+@640x480 expect band none
+
+# Position: the page opens on its list (no band yet); a tap on the airport field edits, the band comes, the list goes
+tap "Position"
+tap "Position"
+wait 400
+@480x800,480x640,800x1280 expect band hidden
+expect text "Latitude"
+shot position-list
+tap "CDG"
+wait 600
+@480x800,480x640,800x1280 expect band shown
+@480x800,480x640,800x1280 expect osk off
+@640x480 expect osk on
+expect notext "RECENT"
+expect text "found: CDG"
+shot position-band
+key backspace
+key backspace
+key backspace
+@480x800,480x640,800x1280 write letters j f k
+@640x480 type "jfk"
+wait 300
+shot position-written
+expect text "found: JFK"
+
+# Keyb: the standard keyboard with its close cross in the band's place; the cross brings the band back
+@480x800,480x640,800x1280 zonekey Keyb
+@480x800,480x640,800x1280 wait 400
+@480x800,480x640,800x1280 expect osk on
+@480x800,480x640,800x1280 expect band hidden
+@480x800,480x640,800x1280 shot position-keyb
+@480x800,480x640,800x1280 tapkey CLOSE
+@480x800,480x640,800x1280 wait 400
+@480x800,480x640,800x1280 expect band shown
+@480x800,480x640,800x1280 expect osk off
+
+# the band's Enter sets the airport and goes back to the root
+@480x800,480x640,800x1280 zonekey Enter
+@640x480 key enter
+wait 600
+shot root-jfk
+expect text "Position set: JFK  40.6394, -73.7793"
+@480x800,480x640,800x1280 expect band hidden
+
+# Latitude: the band at once; '-' and '.' from Keyb, the digits written (the root comes back on the Position row: one tap)
+tap "Position"
+wait 400
+tap "Latitude"
+tap "Latitude"
+wait 600
+@480x800,480x640,800x1280 expect band shown
+shot latitude-band
+expect text "From -90 to 90, south is negative"
+key end
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+@480x800,480x640,800x1280 zonekey Keyb
+@480x800,480x640,800x1280 wait 400
+tapkey "123"
+tapkey "-"
+@480x800,480x640,800x1280 tapkey CLOSE
+@480x800,480x640,800x1280 wait 400
+@480x800,480x640,800x1280 write digits 3 3
+@640x480 type "33"
+@480x800,480x640,800x1280 zonekey Keyb
+@480x800,480x640,800x1280 wait 400
+@480x800,480x640,800x1280 tapkey "123"
+tapkey "."
+tapkey "9"
+@480x800,480x640,800x1280 tapkey CLOSE
+@480x800,480x640,800x1280 wait 400
+shot latitude-written
+expect text "-33.9"
+@480x800,480x640,800x1280 expect band shown
+@480x800,480x640,800x1280 zonekey Enter
+@640x480 key enter
+wait 600
+shot position-lat
+expect text "-33.9000"
+# Esc leaves the Position page (first Esc only leaves a field being edited), the root ends with the next
+tap "Esc"
+wait 600
+@480x800,480x640,800x1280 expect band hidden
+expect noquit
