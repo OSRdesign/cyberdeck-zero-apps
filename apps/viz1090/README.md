@@ -1,12 +1,13 @@
 # viz1090
 
-Version 0.2.3, package `viz1090`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.3.0, package `viz1090`. Part of [cyberdeck-zero-apps](../../README.md).
 
 The real [viz1090](https://github.com/nmatsuda/viz1090) ADS-B display (by Nathan Matsuda) on the deck, full screen,
 with its own RTL-SDR decoder, an intro screen and a world map. The intro screen shows whether the SDR dongle and a
 USB GPS receiver are found and takes your position (the nearest airport code, the GPS, latitude and longitude, or a
 recent place), by touch or by keyboard. It fills any screen from 640x480 up (the deck, the 800x480 panels, 720x720,
-1024x600, 1280x720).
+1024x600, 1280x720), and, in PDA mode, upright on a portrait screen of at least 480x640 (480x800, 480x640, the
+800x1280 tablet).
 
 Kind of app ([guidelines](../../docs/APP-GUIDELINES.md), section 1): the map is a **wrapped upstream program** (kind C:
 viz1090 and readsb unchanged but for three constants, drawn through a small display bridge); the intro screen is a
@@ -29,6 +30,12 @@ The map under the app header (title, the on-screen Esc, the status strip), with 
 (640x480, drawn by the bridge into a test framebuffer, with synthetic traffic from a test feeder):
 
 ![viz1090, map](../../docs/screenshots/viz1090-map.png)
+
+Portrait (PDA mode), rendered by the headless harness and by the bridge into a test framebuffer, **not photographs of a
+panel**: the intro screen at 480x800, and the map upright under the narrow header (480x800, without traffic):
+
+![viz1090, portrait intro screen](../../docs/screenshots/viz1090-portrait-intro.png)
+![viz1090, portrait map](../../docs/screenshots/viz1090-portrait-map.png)
 
 ## Use
 
@@ -97,17 +104,45 @@ converted for rotated panels and 16 bpp framebuffers as the launcher does (`APPL
 | --- | --- |
 | 640x480 (the deck), 800x480 (Pi 3A+ DSI, HyperPixel), 720x720 (HackBerry) | 2 |
 | 1024x600 | 1 on a 7" panel (6.6 px/mm), 2 at the default 11.3 px/mm |
-| 1280x720 | 2 (1 below 7.5 px/mm) |
+| 1280x720 | 2 (1 below 7.0 px/mm) |
+| 800x480 / 480x800 | 2 on a 5" panel (7.4 px/mm) and a 4.3" one (8.5 px/mm) |
 
-`UISCALE` (viz1090's text size, 12 px x uiscale) follows the screen's density: 1 below 7.5 px/mm, 2 up to 14 px/mm,
-3 above, and never more than one step per 240 screen rows. A `UISCALE=` line in `viz1090.conf` still wins. The map
+`UISCALE` (viz1090's text size, 12 px x uiscale) follows the screen's density: 1 below 7.0 px/mm, 2 up to 14 px/mm,
+3 above, and never more than one step per 240 rows of the screen's short side (the height in landscape). A `UISCALE=` line in `viz1090.conf` still wins. The map
 window cut around your position (`RADIUS`, 500 nautical miles) is the same on every screen: viz1090 maps its zoom to
 half the longer side, so the window covers the whole screen, square or wide, at any zoom up to that distance.
 
+## Portrait (PDA mode)
+
+From 0.3.0 (`X-Portrait=480x640` in the `.desktop` file) a launcher in PDA mode (v0.8.8 and later; Settings > Screen > PDA
+mode from v0.8.9) runs the tile **upright** on a portrait canvas of at least **480x640** (reference 480x800, the 4.3" DSI
+panels; also 480x640 and the 800x1280 tablet) instead of turned by a quarter. The layout is chosen from the canvas shape
+(taller than wide), never from a named size; the landscape sizes draw as in 0.2.3.
+
+* **Intro screen**: one column, the landscape one in the screen's width. The status line under the header has **two
+  lines**, wrapped, never cut with dots. Start, the SDR and GPS rows and Position are the same rows; the Position page,
+  Latitude and Longitude keep their field above the keyboard.
+* **Typing**: with no keyboard connected the on-screen keyboard, or (launcher v0.8.11, Settings > On-screen keyboard =
+  Handwriting + keyboard, touch only) the **handwriting band**, shows across the bottom and the field with its line stays
+  above it; the airport code, Latitude and Longitude can be written in the band. With a keyboard connected nothing shows.
+* **Map**: upright, under the **narrow header** (the status strip takes 72 % of its width and the title is 18 px under
+  600 px wide, so that the Esc button, the title and the strip do not overlap at 480 px). One finger pans, two fingers
+  zoom, the header's Esc or the Esc key returns to the launcher, as in landscape. The bridge is rebuilt from the launcher's
+  copies at v0.8.11 (`5f54d15`).
+* **Map text**: `UISCALE` now caps on the **short side** of the screen (the 240-rows-per-step limit counts the short side,
+  not the height), so that a tall panel does not get landscape's larger text; landscape sizes are unchanged.
+* A portrait canvas under 480x640 gets the notice "needs a screen of at least 480x640"; a launcher before v0.8.8 never
+  gives a portrait canvas.
+
+The headless scenes `tests/scenes/portrait*.scene` check the intro at 480x800, 480x640 and 800x1280.
+
 ## Requirements
 
-* A screen of at least **640x480** and a launcher with **full-screen app support** (`X-Fullscreen=true` in the
-  `.desktop` file): the launcher stops drawing and gives the whole panel to the app.
+* A screen of at least **640x480** (landscape; **480x640** in portrait, in PDA mode) and a launcher with **full-screen
+  app support** (`X-Fullscreen=true` in the `.desktop` file): the launcher stops drawing and gives the whole panel to
+  the app.
+* **arm64 only**: the package is `viz1090_0.3.0_arm64.deb`; there is no amd64 build of this app (readsb, viz1090 and the
+  bridge are built on a Pi).
 * An **RTL-SDR dongle** with a 1090 MHz antenna.
 * Optional: a USB GPS receiver (serial NMEA on `/dev/ttyACM*` or `/dev/ttyUSB*`). The deck user must be able to read
   it: the `dialout` group of Raspberry Pi OS (`sudo usermod -aG dialout $USER`, then log out and in). The intro only
@@ -126,7 +161,7 @@ half the longer side, so the window covers the whole screen, square or wide, at 
 On the deck: **Settings > Apps > Sources > + Add a GitHub source**, enter `OSRdesign/cyberdeck-zero-apps`, go to the
 **Apps** tab, pick **viz1090** and press Enter. Installing asks for the deck user's sudo password; the package depends on
 the libraries it needs. See the [repository README](../../README.md) for details. If an older version is installed,
-the deck offers 0.2.3 as an update in the same menu. By hand: `sudo dpkg -i viz1090_0.2.3_arm64.deb` (then
+the deck offers 0.3.0 as an update in the same menu. By hand: `sudo dpkg -i viz1090_0.3.0_arm64.deb` (then
 `sudo apt-get -f install` for missing libraries).
 
 ## Files the app keeps
@@ -151,7 +186,14 @@ the deck offers 0.2.3 as an update in the same menu. By hand: `sudo dpkg -i viz1
   still work. (The intro screen reads every keyboard, as the launcher does.)
 * The header's Esc button takes the header's height (56 px, 5 mm on the deck) by the button's width (9 mm) plus a
   small margin; like the native pages, it does not reach into the map.
-* Not yet tested on a board with an SDR dongle and a GPS receiver plugged in.
+* Portrait, the map: a double tap zooms in but moves the map only about half way to the tapped point (upstream viz1090's
+  `View.cpp` moves it by a factor `0.75 * w / h`, which is about 0.4 on a tall screen; accepted, not changed).
+* Portrait, the map: a pinch is measured per axis, so the zoom is a bit uneven when the two fingers are far apart on one
+  axis.
+* Portrait, the map: the layout of the aircraft and their labels is checked only without traffic (the render shows the map,
+  the scale and the status line); with many aircraft it has not been looked at.
+* Not yet tested on a board with an SDR dongle and a GPS receiver plugged in. Portrait has been seen only in the headless
+  harness and the bridge's test framebuffer, not yet on a panel.
 
 ## Credits and licence
 
@@ -190,7 +232,8 @@ python3 tools/make_registry.py --only viz1090 --out <a folder outside packages/>
 `build.sh host` runs the unit tests (`tests/test_core.cpp`: the NMEA sentences of a receiver with and without a fix,
 the SDR id table on a fake sysfs, the airport list of the world map file, the settings file with its old keys and
 unknown lines, the typed values, the recent list, the page texts, the package files) and the headless scenes of
-`tests/scenes` at 640x480, 800x480, 720x720, 1024x600 and 1280x720 (480x320 for the notice), with the layout checks
+`tests/scenes` at 640x480, 800x480, 720x720, 1024x600 and 1280x720 (480x320 for the notice) and, in portrait, 480x800,
+480x640 and 800x1280, with the layout checks
 of [`apps/_common/headless`](../_common/headless/README.md) and a contact sheet per scene. The board protocol is
 [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md). `build_on_pi.sh --bridge-only` rebuilds only the bridge and the
 scripts. `build/make_world.py` builds the world map from open data (it needs a PC). The files of `build/`, `src/`,
@@ -199,6 +242,11 @@ scripts. `build/make_world.py` builds the world map from open data (it needs a P
 
 ## Changes
 
+* **0.3.0**: portrait (PDA mode, `X-Portrait=480x640`): the intro screen is one column with a two-line status line, the
+  handwriting band and the on-screen keyboard keep the field above them, and the map is upright under the narrow header
+  ([Portrait (PDA mode)](#portrait-pda-mode)). The display bridge `libviz_fb.so` is rebuilt from the launcher's copies at
+  v0.8.11 (`5f54d15`); `UISCALE` caps on the short side of the screen; a portrait canvas under 480x640 gets a notice. The
+  viz1090 and readsb binaries are unchanged, and the landscape screens draw as in 0.2.3.
 * **0.2.3**: rebuilt against launcher v0.8.5: battery in the header, Wi-Fi interface lookup, status feed; the map's header (the display bridge) has the launcher's status strip too, so it shows the battery and finds the Wi-Fi interface (the bridge `libviz_fb.so` is rebuilt from the refreshed copies on a Pi, see `build/build_on_pi.sh`); the viz1090 and readsb binaries are unchanged.
 * **0.2.2**: built on the newer toolkit (launcher f35c2d6). Buttons and rows of the intro screen use the shared 7 mm
   minimum tap target (was 9 mm for buttons), and the header's Esc keeps its 9 mm on the intro screen and on the map.

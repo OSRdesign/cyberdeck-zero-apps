@@ -27,6 +27,9 @@ constexpr const char *kAppId = "viz1090";
 constexpr const char *kAppTitle = "viz1090";
 constexpr int kMinW = 640; /* = X-MinSize of root/usr/share/APPLaunch/applications/viz1090.desktop (tests check it) */
 constexpr int kMinH = 480;
+/* PDA mode: the smallest portrait canvas = X-Portrait of the .desktop file (tests check it) */
+constexpr int kPortraitW = 480;
+constexpr int kPortraitH = 640;
 
 /* Muted: grey, for an absent thing or a plain setting (never the only signal of status) */
 enum class Tone { Normal, Ok, Warn, Bad, Muted };

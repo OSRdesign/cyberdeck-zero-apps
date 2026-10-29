@@ -1,7 +1,8 @@
-# Under the app's minimum (640x480; the Pi 3A+'s old 480x320 SPI panel): an older launcher ignores X-MinSize, so the
+# Under the app's minimum (640x480; the Pi 3A+'s old 480x320 SPI panel; a portrait canvas under X-Portrait 480x640, PDA
+# mode, is 480x560): an older launcher ignores X-MinSize, so the
 # intro says so and closes on any key or a tap (exit 1: run_viz1090.sh goes back to the launcher, no map).
 title viz1090: screens under 640x480
-sizes 480x320 800x400 640x400
+sizes 480x320 800x400 640x400 480x560
 env VIZ_PROGRAM /bin/sh
 shot notice
 expect noquit

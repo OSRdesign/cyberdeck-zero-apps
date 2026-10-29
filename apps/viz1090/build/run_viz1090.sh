@@ -3,7 +3,7 @@
 # Your position and options: ~/.config/cardputerzero/viz1090.conf (written by the intro screen)
 #     LAT=48.8566  LON=2.3522  UISCALE=2  METRIC=1  RADIUS=500
 # (AIRPORT= and RECENT1= .. RECENT5= are the intro screen's: the airport of the position, the last places used.)
-# Without UISCALE in the file, viz1090's text size follows the screen's density: 1 below 7.5 px/mm, 2 up to
+# Without UISCALE in the file, viz1090's text size follows the screen's density: 1 below 7.0 px/mm, 2 up to
 # 14 px/mm (the deck), 3 above (and never more than 1 per 240 screen rows).
 # VIZ_TITLE: the display bridge draws the app header above the map (title, the Esc button, the status strip), as the
 # intro screen and every native page have it.

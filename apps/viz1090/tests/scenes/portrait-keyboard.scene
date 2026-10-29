@@ -1,0 +1,89 @@
+# PDA mode (X-Portrait=480x640): the Position, Latitude and Longitude pages with the on-screen keyboard (the shared rule:
+# only while no physical keyboard is connected) on the portrait canvases. The keyboard takes about 40 % of the height at
+# 480x800, 45 % at 480x640 and a quarter at 800x1280: the list under the airport field hides while it is up, the field
+# and its line stay above it (the harness's keyboard check: the field above the keyboard, nothing of the page under it).
+# '-' and '.' are keys of the keyboard's symbols page (a latitude is typed with them); a keyboard connecting takes the
+# on-screen one away and brings the list back.
+title viz1090: portrait (PDA mode), typing with the on-screen keyboard
+sizes 480x800 480x640 800x1280
+env VIZ_USB_DIR tests/fixtures/usb-sdr
+env VIZ_DEV_DIR tests/fixtures/dev-gps-none
+env VIZ_WORLD root/opt/viz1090/world-map.bin
+env VIZ_CONF_SEED tests/fixtures/conf/cdg.conf
+env VIZ_PROGRAM /bin/sh
+keyboards 0
+wait 600
+tap "Position"
+tap "Position"
+expect osk off
+shot position-list
+expect text "Latitude"
+
+# a tap on the field: the keyboard comes, the list goes, the field and its line stay in view
+tap "CDG"
+wait 400
+expect osk on
+shot position-osk
+expect text "found: CDG"
+expect notext "RECENT"
+key backspace
+key backspace
+key backspace
+tapkey "j"
+tapkey "f"
+tapkey "k"
+shot position-osk-jfk
+expect text "found: JFK"
+
+# a keyboard connects: the keyboard goes, the list comes back
+keyboards 1
+wait 1300
+expect osk off
+shot position-keyboard-came
+expect text "Latitude"
+keyboards 0
+wait 1300
+# the header's Esc: the keyboard is gone, so the field is not editing and Esc goes back to the root
+tap "Esc"
+wait 600
+expect osk off
+shot root-back
+expect text "Start opens the map around CDG"
+
+# Latitude: the keyboard at once, a negative decimal typed with '-' and '.' (the root comes back on the Position row, so
+# one tap opens it)
+tap "Position"
+wait 400
+tap "Latitude"
+tap "Latitude"
+wait 400
+expect osk on
+shot latitude-osk
+expect text "From -90 to 90, south is negative"
+key end
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+tapkey "123"
+tapkey "-"
+tapkey "3"
+tapkey "3"
+tapkey "."
+tapkey "9"
+shot latitude-typed
+expect text "-33.9"
+key enter
+wait 400
+expect osk off
+shot position-lat
+expect text "-33.9000"
+tap "Esc"
+wait 400
+shot root-lat
+expect text "Position"
+tap "Esc"
+expect quit

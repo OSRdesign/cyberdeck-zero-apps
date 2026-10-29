@@ -74,6 +74,22 @@ int text_width(const std::string &text, const lv_font_t *font)
     return size.x;
 }
 
+/* the height of the text wrapped to width px */
+int wrapped_text_height(const std::string &text, const lv_font_t *font, int width)
+{
+    if (text.empty() || !font) return 0;
+    lv_point_t size{};
+    lv_text_get_size(&size, text.c_str(), font, 0, 0, width > 0 ? width : 1, LV_TEXT_FLAG_NONE);
+    return size.y;
+}
+
+/* PDA mode (X-Portrait): the canvas is taller than wide. Only the status line asks; landscape draws as before. */
+bool portrait()
+{
+    const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
+    return m && m->h > m->w;
+}
+
 const lv_font_t *caption_font()
 {
     return face("Montserrat-Medium.ttf", cp0_ui_metrics_get()->text_px[CP0_TEXT_CAPTION]);
@@ -358,8 +374,12 @@ void VizApp::build_root(int select)
     lv_obj_set_style_text_font(band_, caption_font(), 0);
     lv_label_set_long_mode(band_, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_set_pos(band_, g.x + g.inset, g.top);
-    lv_obj_set_size(band_, std::max(1, g.w - 2 * g.inset), g.lh);
-    int y = g.top + g.lh + g.s;
+    /* portrait: two lines (wrapped), so that a status of a narrow screen is not cut */
+    const int lines = portrait() ? 2 : 1;
+    lv_obj_set_size(band_, std::max(1, g.w - 2 * g.inset), lines * g.lh);
+    band_w_ = std::max(1, g.w - 2 * g.inset);
+    band_h_ = lines * g.lh;
+    int y = g.top + lines * g.lh + g.s;
 
     ui::ActionBarEvents bar_events;
     bar_events.activate = [this](int id) {
@@ -420,7 +440,9 @@ void VizApp::show_band()
     if (!now || b.text != now) {
         lv_label_set_text(band_, b.text.c_str());
         lv_obj_update_layout(band_);
-        if (text_width(b.text, caption_font()) > lv_obj_get_width(band_)) /* cut with dots: the scenes' logs show it */
+        const bool fits = portrait() ? wrapped_text_height(b.text, caption_font(), band_w_) <= band_h_
+                                     : text_width(b.text, caption_font()) <= lv_obj_get_width(band_);
+        if (!fits) /* cut with dots: the scenes' logs show it */
             std::fprintf(stderr, "[%s] the status line does not fit: %s\n", kAppId, b.text.c_str());
     }
     lv_obj_set_style_text_color(band_, lv_color_hex(band_rgb(b.tone)), 0);

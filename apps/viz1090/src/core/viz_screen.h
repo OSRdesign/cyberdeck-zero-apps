@@ -179,10 +179,12 @@ static inline void viz_screen_detect(viz_screen_t *s)
 }
 
 /* viz1090's --uiscale (its fonts are 12 px x uiscale): about the deck's look (uiscale 2 at 11.3 px/mm) in
- * millimetres, never so big that a short screen fills up with labels. 1 below 7.5 px/mm, 2 up to 14, then 3. */
+ * millimetres, never so big that a short screen fills up with labels. 1 below 7.0 px/mm, 2 up to 14, then 3. */
 static inline int viz_screen_uiscale(const viz_screen_t *s)
 {
-    int u = s->ppmm_x100 < 750 ? 1 : (s->ppmm_x100 < 1400 ? 2 : 3);
-    const int cap = s->h / 240 > 1 ? s->h / 240 : 1;   /* 320 rows: 1, 480: 2, 720: 3 */
+    int u = s->ppmm_x100 < 700 ? 1 : (s->ppmm_x100 < 1400 ? 2 : 3);
+    /* by the SHORT side of the canvas, so that a portrait screen (480x800) is capped like its landscape twin */
+    const int shorter = s->w > 0 && s->w < s->h ? s->w : s->h;
+    const int cap = shorter / 240 > 1 ? shorter / 240 : 1;   /* 320 short rows: 1, 480: 2, 720: 3 */
     return u < cap ? u : cap;
 }

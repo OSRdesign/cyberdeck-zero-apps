@@ -89,7 +89,7 @@ RowText gps_row(const GpsSnapshot &gps)
             r.values = {std::string(kCross) + " No access to /dev/" + gps.denied, std::string(kCross) + " No access"};
             r.tone = Tone::Bad;
         } else {
-            r.values = {"None detected"};
+            r.values = {"None detected", "None"}; /* "None" on a portrait screen, where the label would be cut */
             r.tone = Tone::Muted;
         }
         break;

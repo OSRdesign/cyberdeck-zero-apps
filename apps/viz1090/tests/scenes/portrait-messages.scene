@@ -1,0 +1,30 @@
+# PDA mode (X-Portrait=480x640): the status lines that only show in odd cases, on the portrait canvases (each must fit
+# its two lines, never cut): a saved position but no dongle, Enter on the SDR and GPS rows with nothing plugged in, a
+# broken install without the airport list, and a GPS waiting for a fix (the longest row value).
+title viz1090: portrait (PDA mode), messages
+sizes 480x800 480x640 800x1280
+env VIZ_USB_DIR tests/fixtures/usb-none
+env VIZ_DEV_DIR tests/fixtures/dev-gps-wait
+env VIZ_WORLD /nonexistent/world-map.bin
+env VIZ_CONF_SEED tests/fixtures/conf/cdg.conf
+env VIZ_PROGRAM /bin/sh
+osk off
+wait 1200
+shot no-dongle
+expect text "No SDR receiver: plug the dongle into a USB port"
+key down
+key enter
+expect text "No SDR receiver: plug the dongle into a USB port"
+key down
+key enter
+shot gps-waiting
+expect text "GPS on /dev/ttyACM0: no fix yet, it needs open sky"
+key down
+key enter
+shot no-airport-list
+expect text "No airport list: use Latitude and Longitude"
+expect text "Latitude"
+key esc
+key esc
+key esc
+expect quit
