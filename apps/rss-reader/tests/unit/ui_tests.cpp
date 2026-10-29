@@ -515,6 +515,7 @@ void test_package()
     CHECK(read_file(app + "/root/usr/share/APPLaunch/applications/rss-reader.desktop", desktop));
     CHECK(desktop.find("\nX-Fullscreen=true") != std::string::npos);
     CHECK(desktop.find("\nX-MinSize=640x480") != std::string::npos);        // = AppSpec min_w x min_h (stage.hpp kScreenW/H)
+    CHECK(desktop.find("\nX-Portrait=480x640\n") != std::string::npos);      // PDA mode: = AppSpec portrait_w x portrait_h (stage.hpp kPortraitW/H)
     CHECK(desktop.find("\nExec=/usr/share/APPLaunch/bin/rss-reader\n") != std::string::npos);
     CHECK(desktop.find("\nIcon=share/images/rss-reader.png\n") != std::string::npos);
     CHECK(desktop.find("\nX-Background=freeze\n") != std::string::npos);  // multitasking: stopped while hidden
@@ -534,7 +535,7 @@ void test_package()
     Json j;
     CHECK(json_parse(manifest, j));
     CHECK(j.get_string("share_code") == "rss-reader" && j.get_string("package") == "rss-reader" && j.get_string("title") == "RSS Reader");
-    CHECK(j.get_string("version") == "0.1.3" && !j.get_string("summary").empty() && !j.get_string("description").empty());
+    CHECK(j.get_string("version") == "0.2.0" && !j.get_string("summary").empty() && !j.get_string("description").empty());
     CHECK(j.get_string("depends") == "libfreetype6, libinput10, libxkbcommon0, curl, ca-certificates");
     CHECK(j.get_string("depends").find("libc6") == std::string::npos);
     std::string copyright;

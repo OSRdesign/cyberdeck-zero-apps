@@ -3,7 +3,8 @@
 # and a home folder), the fake network of routes.txt answering from tests/data/ui, the clock fixed at 2026-10-18 16:00 UTC.
 #   sh run_flows.sh [RUNNER] [OUT] [WxH | sizes] [flow ...]
 #   RUNNER default ~/cdk-build/rss-reader/host/rss-reader-script, OUT default /tmp/rss-reader-flows, WxH default 640x480;
-#   "sizes": 640x480, 800x480, 720x720, 1024x600 and 1280x720. Flows: all of them, or the ones named.
+#   "sizes": 640x480, 800x480, 720x720, 1024x600 and 1280x720; "portrait" (PDA mode): 480x800, 480x640 and 800x1280.
+#   Flows: all of them, or the ones named.
 # Output: OUT/<WxH>/<flow>/*.png, OUT/<WxH>/<flow>.out (the run's output); a summary of the failures at the end.
 HERE=$(cd "$(dirname "$0")" && pwd)
 APP=$(cd "$HERE/../.." && pwd)
@@ -16,8 +17,10 @@ export CDK_HEADLESS_RESOURCES=${CDK_HEADLESS_RESOURCES:-$HOME/zero7/launcher/pro
 export RSS_FAKE_ROUTES=$HERE/routes.txt RSS_FAKE_ROOT=$APP/tests/data/ui RSS_TEST_NOW=1792339200 TZ=UTC RSSREADER_KEYMAP=us
 export RSSREADER_CATALOG=$APP/data/catalog.json
 SIZES=$SIZE
-if [ "$SIZE" = sizes ]; then        # the five sizes side by side (one process each), then the summary
-    for s in 640x480 800x480 720x720 1024x600 1280x720; do RSS_FLOWS_CHILD=1 sh "$0" "$RUNNER" "$OUT" "$s" $FLOWS > "$OUT.$s.log" 2>&1 & done
+if [ "$SIZE" = sizes ] || [ "$SIZE" = portrait ]; then        # the sizes side by side (one process each), then the summary
+    list="640x480 800x480 720x720 1024x600 1280x720"
+    [ "$SIZE" = portrait ] && list="480x800 480x640 800x1280"
+    for s in $list; do RSS_FLOWS_CHILD=1 sh "$0" "$RUNNER" "$OUT" "$s" $FLOWS > "$OUT.$s.log" 2>&1 & done
     wait
     cat "$OUT".*.log
     echo "== $(find "$OUT" -name "*.png" | wc -l) shots"

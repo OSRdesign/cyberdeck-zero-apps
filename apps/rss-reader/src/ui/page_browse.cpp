@@ -74,6 +74,9 @@ void App::render_browse()
         for (const CatalogFeed *f : bfeeds_) feed_row(f, search_line2(*f));
         caption = bfeeds_.empty() ? std::string("No feed matches") : plural(static_cast<long>(bfeeds_.size()), "feed matches", "feeds match") +
                                                                        "  \xC2\xB7  tap a selected one to pin or unpin it";
+        // portrait: the caption is one line of a narrow screen; the shorter hint when the long one is cut
+        if (portrait() && !bfeeds_.empty() && text_w(caption, f_caption_) > layout_.caption_w)
+            caption = plural(static_cast<long>(bfeeds_.size()), "feed matches", "feeds match") + "  \xC2\xB7  tap a selected one to pin";
         browse_list_.set_empty_text("No feed matches \"" + search_text_ + "\".", f_body_, kMuted);
     } else if (countries) {
         std::size_t total = 0;
@@ -106,6 +109,10 @@ void App::render_browse()
         bfeeds_ = browse_feeds(catalog_, bcountry_, btopic_);
         for (const CatalogFeed *f : bfeeds_) feed_row(f, feed_content_text(*f));
         caption = country_name(bcountry_) + "  \xC2\xB7  " + topic_label(btopic_) + "  \xC2\xB7  tap a selected feed to pin or unpin it";
+        if (portrait() && text_w(caption, f_caption_) > layout_.caption_w)       // the header names the topic
+            caption = country_name(bcountry_) + "  \xC2\xB7  tap a selected feed to pin or unpin it";
+        if (portrait() && text_w(caption, f_caption_) > layout_.caption_w)
+            caption = country_name(bcountry_) + "  \xC2\xB7  tap a selected feed to pin";
     }
     set_caption(caption);
     browse_sel_ = rows.empty() ? 0 : std::clamp(browse_sel_, 0, static_cast<int>(rows.size()) - 1);

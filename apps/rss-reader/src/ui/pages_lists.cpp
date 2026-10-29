@@ -101,6 +101,7 @@ Row App::build_row(const RowText &t) const
     }
     const lv_font_t *f1 = t.f1 ? t.f1 : f_row_;
     const bool two = !t.line2.empty() || !t.line2_extra.empty();
+    const int lh1 = line_h(f1), lh2 = line_h(f_caption_), lhv = line_h(f_value_);
     r.h = two ? g.two_line : g.row;
     const cp0_ui_list_affordance_t aff = t.trail == Mark::Chevron ? CP0_UI_LIST_AFFORDANCE_OPEN
                                          : t.trail == Mark::None ? CP0_UI_LIST_AFFORDANCE_UNSPECIFIED : CP0_UI_LIST_AFFORDANCE_ACTION;
@@ -108,15 +109,19 @@ Row App::build_row(const RowText &t) const
     const int x0 = ml.inset + (t.indent ? cp0_ui_list_dot_px(&ml) + g.s : 0);
     const int right_edge = g.lw - ml.inset - trail;
     const int rw = t.right.empty() ? 0 : std::min(text_w(t.right, f_value_) + 2, std::max(10, (right_edge - x0) * 3 / 5));
-    const int lh1 = line_h(f1), lh2 = line_h(f_caption_), lhv = line_h(f_value_);
-    const int top = (r.h - (two ? lh1 + lh2 : lh1)) / 2;
     Cell c1;
     c1.text = t.line1;
     c1.color = t.c1;
     c1.font = f1;
     c1.x = x0;
-    c1.y = top;
     c1.w = std::max(10, right_edge - x0 - (rw ? rw + ml.gap : 0));
+    // portrait (a narrow tall screen): a title that does not fit one line wraps over title_lines lines, the row grows
+    if (t.title_lines > 1 && two && portrait() && text_w(t.line1, f1) > c1.w) {
+        c1.lines = t.title_lines;
+        r.h = std::max(r.h, c1.lines * lh1 + lh2 + g.s);
+    }
+    const int top = (r.h - (two ? c1.lines * lh1 + lh2 : lh1)) / 2;
+    c1.y = top;
     r.cells.push_back(c1);
     if (two) {
         Cell c2;
@@ -124,7 +129,7 @@ Row App::build_row(const RowText &t) const
         c2.color = t.c2;
         c2.font = f_caption_;
         c2.x = x0;
-        c2.y = top + lh1;
+        c2.y = top + c1.lines * lh1;
         c2.w = std::max(10, right_edge - x0);
         if (!t.line2_extra.empty()) c2.w = std::min(c2.w, text_w(t.line2, f_caption_) + 1);
         r.cells.push_back(c2);
@@ -486,6 +491,7 @@ void App::render_articles()
         t.line2 = ar.age.empty() ? std::string("no date") : ar.age;
         if (ar.saved) t.line2_extra = "  \xC2\xB7  saved";
         t.lead_dot = ar.unread;
+        t.title_lines = 2;
         t.indent = true;
         t.trail = Mark::Chevron;
         if (ar.id == art_sel_id_) sel_by_id = static_cast<int>(rows.size());
@@ -620,6 +626,7 @@ void App::render_saved()
         t.id = s.id;
         t.line1 = s.title.empty() ? std::string("(no title)") : s.title;
         t.line2 = saved_row_line2(s, now);
+        t.title_lines = 2;
         t.trail = Mark::Chevron;
         rows.push_back(build_row(t));
     }

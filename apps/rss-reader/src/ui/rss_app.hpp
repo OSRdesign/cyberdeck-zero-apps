@@ -98,11 +98,14 @@ private:
         const lv_font_t *f1 = nullptr;             /* default: the list label face */
         std::string right;
         std::uint32_t c_right = 0x9A9A9A;
+        int title_lines = 1;                       /* portrait: a title wider than the row wraps over this many lines */
         bool lead_dot = false, indent = false;     /* indent: the text starts after the unread dot's column */
         bool selectable = true, section = false;
         Mark trail = Mark::None;
     };
     Row build_row(const RowText &t) const;
+    /* PDA mode: the canvas is taller than wide (X-Portrait). The landscape layouts do not look at it. */
+    bool portrait() const { return layout_.h > layout_.w; }
 
     struct Popup {
         enum Kind { None, Choice, Confirm, Menu, Info, List } kind = None;

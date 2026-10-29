@@ -11,7 +11,8 @@
 #          AddressSanitizer + UBSan;
 #   sim:   the scripted flows against the fake network (tests/flows/*.script, fixtures in tests/data/ui, a fixed clock) at
 #          640x480 or WxH; needs a host build; shots in ${CDK_BUILD:-~/cdk-build/rss-reader}/flows-<WxH>;
-#   ui:    the flows at the five sizes (640x480, 800x480, 720x720, 1024x600, 1280x720): the render sheets' shots.
+#   ui:    the flows at the five sizes (640x480, 800x480, 720x720, 1024x600, 1280x720): the render sheets' shots;
+#   uip:   the flows at the PDA mode's portrait canvases (480x800, 480x640, 800x1280).
 # Then the package: python3 tools/make_registry.py --only rss-reader --out <dir outside packages/> (app.json is a draft).
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
@@ -24,6 +25,7 @@ case ${1:-} in
     asan) SANITIZE=1 OUT="$build/unit" exec sh "$here/tests/unit/run_tests.sh" ;;
     sim) exec sh "$here/tests/flows/run_flows.sh" "$build/host/rss-reader-script" "$build/flows-${2:-640x480}" "${2:-640x480}" ;;
     ui) exec sh "$here/tests/flows/run_flows.sh" "$build/host/rss-reader-script" "$build/flows-sizes" sizes ;;
+    uip) exec sh "$here/tests/flows/run_flows.sh" "$build/host/rss-reader-script" "$build/flows-portrait" portrait ;;
 esac
 
 rc=0

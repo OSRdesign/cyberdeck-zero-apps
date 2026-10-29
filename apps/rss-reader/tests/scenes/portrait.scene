@@ -1,0 +1,130 @@
+# PDA mode (X-Portrait=480x640): the portrait canvases a portrait launcher gives the app upright, in the demonstration
+# world's three boards (480x800 the 4.3" DSI, 480x640 a 3.5" panel, 800x1280 the FZ-M1 tablet). The pages are the
+# landscape ones in the screen's width (the narrow header on the 480 px wide screens); in portrait Add a feed puts Find
+# feed under the field, and the article titles of the lists wrap over two lines (tests/flows/articles.script at these
+# sizes: `build.sh uip`). By touch (a pen or a finger): Home, Browse (a tap selects, a tap on the selected row acts),
+# the search and the on-screen keyboard, Add a feed, Settings and a dialog, the quit question. No network here.
+title RSS Reader: portrait (PDA mode)
+env RSSREADER_DATA /tmp/rss-reader-scene-data
+sizes 480x800 480x640 800x1280
+
+wait 900
+shot home
+expect noquit
+expect text "Favorites"
+expect text "Browse feeds"
+expect text "Saved articles"
+expect text "Add a feed"
+expect text "Settings"
+expect text "No favorites yet"
+
+# Favorites and Saved (empty) by touch, Esc of the header back
+tap "Favorites"
+wait 300
+tap "Favorites"
+wait 500
+shot favorites-empty
+expect text "No favorites yet. Browse feeds or add one by its address."
+tap "Esc"
+wait 400
+tap "Saved articles"
+wait 300
+tap "Saved articles"
+wait 500
+shot saved-empty
+expect text "No saved articles yet. Open an article and choose Save for offline in its options."
+tap "Esc"
+wait 400
+
+# Browse by touch: the countries, a country's topics, a topic's feeds
+tap "Browse feeds"
+wait 300
+tap "Browse feeds"
+wait 500
+shot browse-countries
+expect text "International"
+tap "France"
+wait 300
+tap "France"
+wait 500
+shot browse-topics
+tap "Technology"
+wait 300
+tap "Technology"
+wait 500
+shot browse-feeds
+expect text "Korben"
+tap "Esc"
+wait 300
+tap "Esc"
+wait 300
+expect text "International"
+
+# the search field takes the on-screen keyboard (no keyboard connected); the list keeps its rows above it
+@480x800 tapxy 0.5 0.15
+@480x640 tapxy 0.5 0.185
+@800x1280 tapxy 0.5 0.09
+wait 400
+expect osk on
+shot browse-search-osk
+type linux
+wait 500
+shot browse-search-results
+key esc
+wait 300
+shot browse-search-closed
+key esc
+wait 300
+expect text "International"
+key esc
+wait 300
+expect text "Favorites"
+
+# Add a feed: the field over the width, Find feed under it, the on-screen keyboard under both
+tap "Add a feed"
+wait 300
+tap "Add a feed"
+wait 600
+expect osk on
+expect text "Find feed"
+shot add-osk
+type notanaddress
+key enter
+wait 600
+expect osk off
+expect text "That is not a web address. Type a site (example.com) or the address of its feed."
+shot add-error
+keyboards 1
+type x
+wait 1200
+expect osk off
+shot add-keyboard
+keyboards 0
+key esc
+wait 300
+expect text "Browse feeds"
+expect notext "Find feed"
+
+# Settings and a dialog, by touch
+tap "Settings"
+wait 300
+tap "Settings"
+wait 500
+shot settings
+tap "Text size"
+wait 300
+tap "Text size"
+wait 400
+shot settings-text-size
+key esc
+key esc
+wait 300
+
+# the quit question of Esc at Home, then Quit
+key esc
+wait 300
+shot quit
+expect text "Quit RSS Reader?"
+key right
+key enter
+expect quit

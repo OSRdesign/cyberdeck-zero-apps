@@ -22,6 +22,9 @@ namespace rssui {
 /* The smallest screen (X-MinSize of the .desktop file). */
 constexpr int kScreenW = 640;
 constexpr int kScreenH = 480;
+/* The smallest portrait canvas (X-Portrait of the .desktop file, PDA mode). */
+constexpr int kPortraitW = 480;
+constexpr int kPortraitH = 640;
 
 class Platform {
 public:

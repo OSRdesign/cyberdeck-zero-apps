@@ -83,7 +83,7 @@ check offline-reader
 tapimage 0
 wait 800
 expect state viewer 0
-expect state viewer_hd 1
+!800x1280 expect state viewer_hd 1
 shot 07-offline-viewer
 key esc
 wait 300

@@ -25,6 +25,7 @@
  *   shot <name>   check <name> [fullscreen]   dump   mark   say <text>   (fullscreen: the header rule is left out, for the
  *                         full-screen image that covers the header on purpose)
  *   expect text "T" | notext "T" | osk on|off | quit | noquit | state KEY VALUE | same KEY | changed KEY
+ *   !WxH[,WxH] <command>   the line is left out at those sizes
  *   key names: esc enter tab backtab up down left right pgup pgdn home end bksp del space, ctrl-<letter>
  */
 
@@ -722,6 +723,9 @@ int ppmm_for(int w, int h)
     if (w == 800 && h == 480) return 920;
     if (w == 720 && h == 720) return 1000;
     if (w == 1280 && h == 720) return 1160;
+    if (w == 480 && h == 800) return 851;      // the PDA panels (apps/_common/headless/headless_main.cpp)
+    if (w == 480 && h == 640) return 901;
+    if (w == 800 && h == 1280) return 856;
     return 1130;
 }
 
@@ -766,7 +770,17 @@ int main(int argc, char *argv[])
             return 2;
         }
         std::string line;
-        while (std::getline(in, line)) lines.push_back(line);
+        const std::string size_now = std::to_string(g_w) + "x" + std::to_string(g_h);
+        while (std::getline(in, line)) {
+            // "!WxH[,WxH] command": the line is left out at these sizes (a fixture that does not fit there)
+            if (!line.empty() && line[0] == '!') {
+                const std::size_t sp = line.find(' ');
+                const std::string sizes = "," + line.substr(1, sp == std::string::npos ? std::string::npos : sp - 1) + ",";
+                if (sizes.find("," + size_now + ",") != std::string::npos) continue;
+                line = sp == std::string::npos ? std::string() : line.substr(sp + 1);
+            }
+            lines.push_back(line);
+        }
     }
     struct sigaction sa;
     std::memset(&sa, 0, sizeof(sa));

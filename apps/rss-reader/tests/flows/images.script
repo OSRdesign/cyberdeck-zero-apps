@@ -41,14 +41,14 @@ shot 04-tab-next
 key enter
 wait 800
 expect state viewer 1
-expect state viewer_hd 1
+!800x1280 expect state viewer_hd 1
 expect text "Esc or tap to close  ·  2 / 2"
 shot 05-viewer
 check viewer fullscreen
 key left
 wait 800
 expect state viewer 0
-expect state viewer_hd 1
+!800x1280 expect state viewer_hd 1
 expect text "Esc or tap to close  ·  1 / 2"
 shot 06-viewer-first
 wait 2800
