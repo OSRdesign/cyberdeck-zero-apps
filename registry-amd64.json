@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-10-29T08:54:04+00:00",
+  "generated_at": "2026-10-29T08:59:48+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CyberdeckZero"
@@ -40,9 +40,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.1.2",
+      "version": "0.2.0",
       "published_at": "2026-10-24T21:44:09+00:00",
-      "updated_at": "2026-10-24T21:44:09+00:00",
+      "updated_at": "2026-10-29T08:59:40+00:00",
       "review": {
         "status": "approved"
       },
@@ -51,10 +51,10 @@
       "download": {
         "type": "deb",
         "package": "markdown-notes",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/markdown-notes_0.1.2_amd64.deb",
-        "md5": "87ea4e624f365ebb7d75699872904444",
-        "sha256": "5ed6f8b6bc6cf7f27245c3d7af4246466f17e70eec588923a5288ecfab432684",
-        "size": 1517796
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/markdown-notes_0.2.0_amd64.deb",
+        "md5": "dfee9c159b65e45a0a71fd780eaef33d",
+        "sha256": "8a1a60dbd3352e3194d3b11181ca87199e154f4e8b07aa0d5d5caf1b56db243a",
+        "size": 1559606
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0",
       "permissions": {
@@ -68,10 +68,16 @@
       },
       "assets": {
         "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/markdown-notes/icon.png",
-        "screenshots": []
+        "screenshots": [
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/markdown-notes/screenshots/01-portrait-editor-keyboard-480x800.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/markdown-notes/screenshots/02-portrait-editor-band-480x800.png"
+        ]
       },
       "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/markdown-notes/icon.png",
-      "screenshots": []
+      "screenshots": [
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/markdown-notes/screenshots/01-portrait-editor-keyboard-480x800.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/markdown-notes/screenshots/02-portrait-editor-band-480x800.png"
+      ]
     },
     {
       "uuid": "9d3fef69-7f03-5d37-8734-b7e984998822",
