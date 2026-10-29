@@ -1,0 +1,13 @@
+title Mine Field: a game in progress on one screen shape (first half; follows s2)
+sizes 800x480 480x800 640x480
+ppmm 850
+env MINEFIELD_TEST_DATA s-shape
+env MINEFIELD_TEST_RESET 1
+env MINEFIELD_TEST_SEED 7
+env MINEFIELD_TEST_PROBES 1
+env MINEFIELD_TEST_SETUP "dig 2,2;tick 3000"
+
+wait 300
+shot saved
+check saved
+expect notext "Saved game dropped: screen changed"

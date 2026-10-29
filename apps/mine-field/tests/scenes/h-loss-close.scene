@@ -1,0 +1,24 @@
+title Mine Field: Close on the panel leaves the lost board to look at
+sizes 640x480 800x480 720x720 1024x600 1280x720 480x800 480x640 800x1280
+env MINEFIELD_TEST_DATA h-loss-close
+env MINEFIELD_TEST_RESET 1
+env MINEFIELD_TEST_SEED 7
+env MINEFIELD_TEST_PROBES 1
+env MINEFIELD_TEST_DIMS 9x9x10,16x16x40,30x16x99
+env MINEFIELD_TEST_SETUP "dig 2,2;wrongflags 2"
+env MINEFIELD_TEST_PREFS anim=2
+
+wait 300
+tap "@mine"
+wait 600
+tap "Close"
+wait 300
+shot lost-board
+check lost-board
+expect notext "Mine hit"
+tap "Hint"
+wait 200
+expect noquit
+key esc
+wait 300
+expect quit

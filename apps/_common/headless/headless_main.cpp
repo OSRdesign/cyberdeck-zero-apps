@@ -343,6 +343,19 @@ void play(Run &run, const Scene &scene)
             }
             const lv_area_t a = headless::visible_area(headless::clickable_of(label));
             tap_at((a.x1 + a.x2) / 2, (a.y1 + a.y2) / 2);
+        } else if (cmd == "hold") {
+            /* hold TEXT MS: a press on the label's clickable parent held MS ms (a long press), then released */
+            lv_obj_t *label = headless::find_label(arg(1), false);
+            if (!label) {
+                fail(run, line, "nothing labelled \"" + arg(1) + "\" to hold");
+                continue;
+            }
+            const lv_area_t a = headless::visible_area(headless::clickable_of(label));
+            const int x = (a.x1 + a.x2) / 2, y = (a.y1 + a.y2) / 2;
+            headless::platform_touch(true, x, y);
+            headless::run_for(std::atoi(arg(2).c_str()));
+            headless::platform_touch(false, x, y);
+            headless::run_for(120);
         } else if (cmd == "tapxy") {
             tap_at(static_cast<int>(std::atof(arg(1).c_str()) * (run.size.w - 1)),
                    static_cast<int>(std::atof(arg(2).c_str()) * (run.size.h - 1)));

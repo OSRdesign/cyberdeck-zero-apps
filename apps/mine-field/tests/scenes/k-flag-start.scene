@@ -1,0 +1,13 @@
+title Mine Field: Flag mode on start: the app opens in Flag mode
+sizes 640x480 800x480 720x720 1024x600 1280x720 480x800 480x640 800x1280
+env MINEFIELD_TEST_DATA k-flag-start
+env MINEFIELD_TEST_RESET 1
+env MINEFIELD_TEST_SEED 7
+env MINEFIELD_TEST_PROBES 1
+env MINEFIELD_TEST_DIMS 9x9x10,16x16x40,30x16x99
+env MINEFIELD_TEST_PREFS flag=1
+
+wait 300
+expect text "Flag"
+shot flag-start
+check flag-start

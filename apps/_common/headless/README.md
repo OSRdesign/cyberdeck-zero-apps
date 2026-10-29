@@ -43,6 +43,7 @@ After the app asks to quit, only `expect` lines are read.
 | `key NAME` | a press and release through cp0_lvgl's keyboard queue: `esc enter up down left right tab backspace delete space home end pgup pgdn`, a letter or a digit |
 | `type TEXT` | the characters, each as a key with its text (`cp0_keyboard_inject_key`, the on-screen keyboard's path) |
 | `tap TEXT` / `tapkey TEXT` | a tap on the visible label with exactly this text (its nearest clickable parent): on the page / on the on-screen keyboard |
+| `hold TEXT MS` | a press on the visible label's clickable parent held MS ms and then released (a long press) |
 | `tapxy FX FY`, `drag FX1 FY1 FX2 FY2` | a tap / a drag at fractions (0..1) of the screen |
 | `keyboards N`, `osk auto\|off\|force` | rewrite `input.state` (gen + 1): physical keyboards present, the keyboard rule |
 | `shot NAME` / `check NAME` | settle 250 ms, save the PNG (shot only), run the layout checks |

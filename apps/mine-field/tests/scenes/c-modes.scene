@@ -1,0 +1,32 @@
+title Mine Field: Dig / Flag button, a tap flags in Flag mode, a tap on a flag in Dig mode does nothing, mines left
+sizes 640x480 800x480 720x720 1024x600 1280x720 480x800 480x640 800x1280
+env MINEFIELD_TEST_DATA c-modes
+env MINEFIELD_TEST_RESET 1
+env MINEFIELD_TEST_SEED 7
+env MINEFIELD_TEST_PROBES 1
+env MINEFIELD_TEST_DIMS 9x9x10,16x16x40,30x16x99
+env MINEFIELD_TEST_SETUP "dig 2,2"
+
+wait 300
+expect text "Dig"
+tap "Dig"
+wait 200
+expect text "Flag"
+tap "@safe"
+wait 300
+expect text "Mines 9"
+shot flag-mode
+check flag-mode
+tap "Flag"
+wait 200
+expect text "Dig"
+tap "@flag"
+wait 300
+expect text "Mines 9"
+shot flag-kept
+tap "Dig"
+tap "@flag"
+wait 300
+expect text "Mines 10"
+shot unflagged
+check unflagged

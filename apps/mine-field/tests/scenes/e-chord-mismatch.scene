@@ -1,0 +1,17 @@
+title Mine Field: a tap on a number with the wrong number of flags flashes the neighbours and says so
+sizes 640x480 800x480 720x720 1024x600 1280x720 480x800 480x640 800x1280
+env MINEFIELD_TEST_DATA e-chord-mismatch
+env MINEFIELD_TEST_RESET 1
+env MINEFIELD_TEST_SEED 7
+env MINEFIELD_TEST_PROBES 1
+env MINEFIELD_TEST_DIMS 9x9x10,16x16x40,30x16x99
+env MINEFIELD_TEST_SETUP "dig 2,2"
+
+wait 300
+tap "@num"
+wait 100
+expect text "Flags do not match"
+shot mismatch
+check mismatch
+wait 2300
+expect notext "Flags do not match"
