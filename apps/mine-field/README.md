@@ -10,6 +10,10 @@ Written from scratch: no code, art or text of other programs of its kind.
 `03-portrait-board-480x800`, `04-expert-portrait-480x800`, `05-hint-640x480`, `06-loss-640x480`, `07-win-640x480`,
 `08-settings-640x480`.
 
+![Mine Field, portrait on the Pi 4B](../../docs/screenshots/mine-field-pi4b-portrait.png)
+
+Portrait on the Pi 4B (5-inch DSI, PDA mode): a won Beginner board, 7 x 8 cells.
+
 ## What it does
 
 - **Boards that fit the screen.** There is no panning, zooming or scrolling: the board always fits the area under the page header
