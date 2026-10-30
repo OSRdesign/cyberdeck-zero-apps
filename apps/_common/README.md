@@ -67,9 +67,10 @@ Not copied here: apps use the launcher's own `cp0::ui::StatusStrip::add(page->he
 `Page` title factory) and `cp0::ui::status_strip_left()` (the `strip_left` of `cp0_ui_roller_page()`) from
 `cp0_ui_widgets.hpp`, pinned by `LAUNCHER_REF`. The strip reads the battery itself (a `/sys/class/power_supply`
 battery, else the fuel gauge named by `$APPLAUNCH_GAUGE`, the HackBerry's MAX17048), then the launcher's `status.state`
-feed while the launcher process is alive (from v0.8.5: Wi-Fi, Bluetooth and battery as the home grid shows them), else
-sysfs / procfs (the Wi-Fi interface whatever its name, not only `wlan0`); fonts come from the launcher's
-`/usr/share/APPLaunch/share/font`. Header controls stay left of `status_strip_left()`: the battery widens the strip.
+feed while the launcher process is alive (from v0.8.5: Wi-Fi, Bluetooth and battery as the home grid shows them; from
+the pin `3f6579f` also the SSH indicator), else sysfs / procfs (the Wi-Fi interface whatever its name, not only `wlan0`;
+no SSH indicator); fonts come from the launcher's `/usr/share/APPLaunch/share/font`. Header controls stay left of
+`status_strip_left()`: the battery widens the strip, and the SSH indicator's slot is always kept free.
 
 The strip's drawing and reading code are compiled into each binary at the pin, so **values the feed carries reach the
 apps without a rebuild, a change to the drawing does not**: moving `LAUNCHER_REF` moves the strip; rebuild every app
@@ -79,17 +80,31 @@ and compare the header shots with the launcher's. Details, and what else the lau
 
 ## The launcher pin
 
-`LAUNCHER_REF` is **`5f54d15`**, the launcher release **v0.8.11** (tag `v0.8.11`; PDA S4 phase 1, report 044: the
+`LAUNCHER_REF` is **`3f6579f`**, launcher main after v0.8.11 (#113, not a release yet): the **SSH indicator** in the
+status strip. The strip reads `status.state` `ssh=` / `ssh_act=` and draws a terminal glyph in its leftmost slot while
+someone is connected over SSH (blue, blinking white on traffic; with a battery it takes the percentage's place, so the
+strip keeps its width), and `cp0::ui::status_strip_left()` always keeps that slot free: the header's Esc and title move
+left on every screen without a battery (49 px at 640x480 and 1280x720, 35 px at 480x800), whether or not a session is
+open; with a battery the header does not move ("100%" was already as wide). The title has that much less room: a
+breadcrumb falls back to its last part sooner ("Klondike > Settings" is "Settings" at 720x720), a long title ends in
+dots ("Markdown ..." at 640x480), and Serial Console leaves the speed out of its title at 640x480 (it moves to the line
+under it). Nothing else of the toolkit changed
+(`cp0_ssh_watch.c`, the launcher's detector, is new in `cp0_lvgl` but no app calls it). An app shows the glyph and the
+new header only once rebuilt at this pin; until then it keeps its old header and shows no glyph. `build_app.sh` needs a
+checkout of the commit `3f6579fe34b264e6f976830aba435010fb41df5c` as `LAUNCHER_SRC` (`git fetch origin main`)
+whose files equal the WSL build tree's byte for byte (a tree synced from a Windows checkout has its line ends: give a WSL
+checkout `core.autocrlf true` and compare with `diff -rq` before building). viz1090's display bridge carries copies of
+the strip files (`apps/viz1090/build`, refreshed at this pin, with `viz_fb_shim.c`'s own copy of the slot rule and the
+feed) and is built on a Pi (`build_on_pi.sh --bridge-only`).
+
+Before it, `LAUNCHER_REF` was **`5f54d15`**, the launcher release **v0.8.11** (tag `v0.8.11`; PDA S4 phase 1, report 044: the
 writing zone's band in an app run upright, `cp0::ui::zone_host`, `input.state` `hand=`). It was the test pin `6f37057`
 (branch `pda-s4-plan`) until the release: the code under `ext_components`, `projects`, `SDK` and `tools` is identical, only docs differ. From v0.8.9 it changes no
 pixel where the band is not shown: Serial Console's 352 earlier shots (292 landscape) and System Monitor's 259 are the
 same pictures as the v0.8.9 builds' with the clock frozen (byte-identical, or in another run where the demonstration
 world's text or the sampler's timing moved; System Monitor's About page shows the build stamp). Serial Console is built
 at it (the band in its line field), and so are the portrait layouts of RSS Reader 0.2.0, Markdown Notes 0.2.0, Klondike Solitaire 0.1.0, Mine Field 0.1.0, Net Toolbox 0.5.0 and viz1090 0.3.0; the
-other apps keep their builds. `build_app.sh` needs a checkout of
-that commit as `LAUNCHER_SRC` (`git fetch origin v0.8.11`, or the commit `5f54d15d95ecd4e89121dada3c0941317126f0c2`)
-whose files equal the WSL build tree's byte for byte (a tree synced from a Windows checkout has its line ends: give a WSL
-checkout `core.autocrlf true` and compare with `diff -rq` before building).
+other apps keep their builds.
 
 Before it, `LAUNCHER_REF` was the **v0.8.9** commit `25927c3`, moved from v0.8.5 (`d0cb456`) for System Monitor 0.3.0, the first
 app with a portrait layout: on the 480 px wide portrait canvases the v0.8.8 toolkit draws the narrow page header (an

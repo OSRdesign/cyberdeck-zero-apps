@@ -1,5 +1,5 @@
-5f54d15d95ecd4e89121dada3c0941317126f0c2
-# The launcher commit (v0.8.11 release, tag v0.8.11: PDA S4 phase 1, the writing zone's band in an app run upright, cp0::ui::zone_host, input.state hand=; before it 6f37057 = the PDA S4 test pin (same toolkit code), 25927c3 = v0.8.9, d0cb456 = v0.8.5) every cdk app is built against:
+3f6579fe34b264e6f976830aba435010fb41df5c
+# The launcher commit (launcher main after v0.8.11, #113: the SSH indicator in the status strip, its slot always kept free so the header's Esc and title sit left of it, status.state ssh= ssh_act=; before it 5f54d15 = v0.8.11 (PDA S4: the band in an app run upright), 6f37057 = the PDA S4 test pin, 25927c3 = v0.8.9, d0cb456 = v0.8.5) every cdk app is built against:
 # its ext_components/cp0_lvgl (display backend, keyboard, widgets, layout service), its LVGL FreeType glue
 # (projects/APPLaunch/main/lvgl) and its LVGL configuration. build_app.sh compares the launcher checkout with it and
 # stamps the result into --version and usr/share/doc/<app>/build-info. Move it deliberately, then rebuild every app.

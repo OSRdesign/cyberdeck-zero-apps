@@ -184,8 +184,18 @@ static cp0_statusbar_t *strip_renderer(void)
     return status_bar;
 }
 
-/* cp0::ui::status_strip_left(): the strip drawn in its fullest state (Bluetooth glyph, every bar, a clock) into a
- * scratch canvas; its first column holding a pixel is the leftmost pixel the strip can draw. */
+/* The strip drawn in `state` into the scratch canvas: its first column holding a pixel. */
+static int strip_first_column(cp0_statusbar_t *bar, uint32_t *pixels, int rows, const cp0_statusbar_state_t *state)
+{
+    memset(pixels, 0, (size_t)strip.w * rows * sizeof(uint32_t));
+    cp0_statusbar_render_scaled(bar, pixels, strip.w, strip.w, 0, strip.top, 0, state, strip.pct);
+    return cp0_ui_status_first_column(pixels, strip.w, rows);
+}
+
+/* cp0::ui::status_strip_left(): the strip drawn in its fullest state (the SSH indicator's slot, Bluetooth glyph, every
+ * bar, a clock) into a scratch canvas; its first column holding a pixel is the leftmost pixel the strip can draw. The
+ * SSH indicator's slot is always kept (launcher 3f6579f), so the Esc button and the title never move when a session
+ * starts or ends; with a battery its "100%" yields to the indicator, so the leftmost of both states counts. */
 static int strip_left_px(void)
 {
     cp0_statusbar_t *bar = strip_renderer();
@@ -200,13 +210,19 @@ static int strip_left_px(void)
     full.bt_on = 1;
     full.bt_connected = 1;
     snprintf(full.clock, sizeof(full.clock), "%s", "00:00");
+    cp0_ui_status_set_ssh(&full, 1, 0);
     cp0_power_battery_t battery;
-    if (cp0_power_supply_battery(&battery)) {       /* a battery at 100 % when the board has one now */
+    const int has_battery = cp0_power_supply_battery(&battery);
+    if (has_battery) {                              /* a battery at 100 % when the board has one now */
         battery.percent = 100;
         cp0_ui_status_set_battery(&full, &battery);
     }
-    cp0_statusbar_render_scaled(bar, pixels, strip.w, strip.w, 0, strip.top, 0, &full, strip.pct);
-    const int first = cp0_ui_status_first_column(pixels, strip.w, rows);
+    int first = strip_first_column(bar, pixels, rows, &full);
+    if (has_battery) {
+        cp0_ui_status_set_ssh(&full, 0, 0);         /* the percentage drawn */
+        const int other = strip_first_column(bar, pixels, rows, &full);
+        if (other < first) first = other;
+    }
     free(pixels);
     return strip.x + (first < strip.w ? first : 0);
 }
@@ -501,16 +517,17 @@ static int hdr_w, hdr_rows;
 static int esc_pressed;               /* a finger holds the Esc button */
 static int shown_pressed = -1;
 static cp0_statusbar_state_t status_state, shown_state;
-static Uint32 status_read_at;
+static Uint32 status_read_at, ssh_tick_at;
 
-/* Brings the header's pixels up to date (status every 2 s, the clock every frame); 1 when they changed. */
+/* Brings the header's pixels up to date (status every 2 s, the clock every frame, the SSH indicator's blink every
+ * second); 1 when they changed. */
 static int header_update(void)
 {
     const Uint32 now = SDL_GetTicks();
     if (!status_read_at || now - status_read_at >= 2000) {
         /* what cp0::ui::StatusStrip does (cp0_ui_status_strip_widget.cpp): the battery from power_supply, then the
-         * launcher's status.state while its process is alive (Wi-Fi, Bluetooth, battery as the home grid shows them),
-         * else sysfs / procfs */
+         * launcher's status.state while its process is alive (Wi-Fi, Bluetooth, battery and the SSH indicator as the
+         * home grid shows them), else sysfs / procfs (no SSH indicator) */
         cp0_power_battery_t battery;
         cp0_ui_status_set_battery(&status_state, cp0_power_supply_battery(&battery) ? &battery : NULL);
         cp0_app_status_t feed;
@@ -523,20 +540,31 @@ static int header_update(void)
                 status_state.battery_pct = feed.battery > 100 ? 100 : feed.battery;
                 status_state.battery_charging = feed.battery_charging;
             }
+            cp0_ui_status_set_ssh(&status_state, feed.ssh, feed.ssh_act);
         } else {
             cp0_statusbar_state_t read;
             cp0_statusbar_read_state(&read);
             cp0_ui_status_set_wifi(&status_state, read.wifi_up, read.wifi_pct);
             status_state.bt_on = read.bt_on;
             status_state.bt_connected = read.bt_connected;
+            cp0_ui_status_set_ssh(&status_state, 0, 0);     /* no launcher, no indicator */
         }
         status_read_at = now ? now : 1;
+    }
+    if (!ssh_tick_at) {
+        ssh_tick_at = now ? now : 1;
+    } else if (now - ssh_tick_at >= 1000) {              /* the strip's 1 s tick: the glyph blinks on traffic */
+        cp0_ui_status_ssh_tick(&status_state, 1);
+        ssh_tick_at = now ? now : 1;
     }
     const time_t t = time(NULL);
     struct tm local;
     localtime_r(&t, &local);
     strftime(status_state.clock, sizeof(status_state.clock), "%H:%M", &local);
-    if (hdr && shown_pressed == esc_pressed && memcmp(&shown_state, &status_state, sizeof(status_state)) == 0) return 0;
+    /* only what is drawn counts: ssh_active itself is not (its blink phase ssh_bright is) */
+    cp0_statusbar_state_t drawn = status_state;
+    drawn.ssh_active = 0;
+    if (hdr && shown_pressed == esc_pressed && memcmp(&shown_state, &drawn, sizeof(drawn)) == 0) return 0;
 
     if (!hdr) {
         hdr_w = canvas_w();
@@ -562,8 +590,8 @@ static int header_update(void)
     cp0_statusbar_t *bar = strip_renderer();
     if (bar && strip.x >= 0 && strip.x < hdr_w)     /* the strip's canvas: strip.w wide at strip.x */
         cp0_statusbar_render_scaled(bar, hdr + strip.x, hdr_w - strip.x < strip.w ? hdr_w - strip.x : strip.w, hdr_w, 0,
-                                    strip.top, 0, &status_state, strip.pct);
-    shown_state = status_state;
+                                    strip.top, 0, &drawn, strip.pct);
+    shown_state = drawn;
     shown_pressed = esc_pressed;
     return 1;
 }
