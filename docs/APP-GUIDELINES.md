@@ -129,7 +129,10 @@ Colours and fonts come from the widgets (black ground, Montserrat from `/usr/sha
 time; do not bundle fonts that the launcher has).
 
 - **What the strip shows.** The clock, the Wi-Fi bars, the Bluetooth glyph and, on a board that has one, the battery
-  (level glyph and percent, green while charging) exactly as the home grid shows them. Where the values come from, and
+  (level glyph and percent, green while charging) exactly as the home grid shows them; from the pin `3f6579f`, also the
+  SSH indicator (a terminal glyph in the strip's leftmost slot while someone is connected over SSH, blinking on traffic;
+  the launcher's Settings > System > SSH indicator), whose slot is always kept free, so the header's Esc and title sit
+  that much further left even when no session is open. Where the values come from, and
   which change needs a rebuild: [section 3, the status strip](#the-status-strip-data-and-drawing).
 - **Keep your header controls left of `cp0::ui::status_strip_left()`** (the `strip_left` argument of
   `cp0_ui_roller_page()`; the template and every app here do it). Never assume a strip width: the battery makes the
@@ -266,7 +269,8 @@ without a source of its own:
    else the fuel gauge that `$APPLAUNCH_GAUGE` names (the HackBerry's MAX17048 over i2c, pin of 0.8.4 or later; the
    app inherits the variable from the board profile);
 2. reads the launcher's feed (`cp0_app_status_read()` on `status.state`, pin of 0.8.5 or later): Wi-Fi, Bluetooth
-   powered / connected as the launcher's BlueZ sees it, and the battery when the feed has one;
+   powered / connected as the launcher's BlueZ sees it, the battery when the feed has one, and (pin `3f6579f` or later)
+   the SSH indicator's `ssh=` / `ssh_act=` (only the launcher looks for SSH sessions: no indicator without its feed);
 3. without a good feed (no file, or its `pid` gone): sysfs and procfs (`cp0_statusbar_read_state()`), which since 0.8.5
    finds the Wi-Fi interface under any name (`wlan0`, `wlp2s0`, `wlx...`) instead of assuming `wlan0`. sysfs cannot
    tell "Bluetooth powered", so the glyph can differ from the home grid's on that path only.
@@ -377,7 +381,8 @@ files of the contract and the client.
 | 0.8.7 ([release page](https://github.com/OSRdesign/cyberdeck-zero-launcher/releases/tag/v0.8.7)) | the five media keys are also read from input devices that are not keyboards and act while an app is in front; the Windows key double tap or a 0.6 s hold opens the app switcher (apps give it no meaning); `KEY_F14` reserved; fix of a launcher crash at start (sound-player race, also in 0.8.6). Apps do not change | nothing to rebuild, no new pin (the strip's drawing did not change) |
 | 0.8.8 | PDA profile: a portrait launcher (480x800, 480x640) with a handwriting band; landscape apps run turned; `X-Portrait=WxH` shows an app upright; the toolkit draws a narrow page header on 480 px wide canvases | turned: no rebuild; upright: `X-Portrait` and a portrait layout, built at a pin that has the narrow header |
 | 0.8.9 (`25927c3`, the previous pin) | Settings > Screen > PDA mode on any panel with room (also the 800x1280 tablet); `APPLAUNCH_PDA=0` passed to every app | the pin of System Monitor 0.3.0 and Serial Console 0.5.0 |
-| 0.8.11 (`5f54d15`, **the current pin**; before it the test pin `6f37057`, same toolkit code) PDA S4 | `APPLAUNCH_PDA=1` for an app run upright on a launcher with the writing zone; `input.state` `hand=0\|1`; `cp0::ui::zone_host` (the band's rule, shared with the launcher) | the band needs the pin (`_common/osk_policy` binds it); `hand=` alone: no rebuild |
+| 0.8.11 (`5f54d15`, the previous pin; before it the test pin `6f37057`, same toolkit code) PDA S4 | `APPLAUNCH_PDA=1` for an app run upright on a launcher with the writing zone; `input.state` `hand=0\|1`; `cp0::ui::zone_host` (the band's rule, shared with the launcher) | the band needs the pin (`_common/osk_policy` binds it); `hand=` alone: no rebuild |
+| main after 0.8.11 (`3f6579f`, **the current pin**, launcher #113) | the SSH indicator: `status.state` `ssh=` / `ssh_act=`; the strip draws a terminal glyph in its leftmost slot (blue, blinking white on traffic; with a battery it takes the percentage's place); `status_strip_left()` always keeps that slot, so the header's Esc and title move left (49 px at 640x480 without a battery) | re-pin and rebuild (the strip's drawing and reading changed); an app built at an older pin shows no glyph and keeps its old header |
 
 **What needs a re-pin, in short.** An app pins a launcher commit. A change to the **drawing** of the shared widgets (the
 status strip) needs a re-pin and a rebuild of every app. A change to the **data** the launcher publishes (state-file
