@@ -31,7 +31,7 @@ namespace mfui {
 
 constexpr int kMinW = 640, kMinH = 480;
 constexpr int kPortraitW = 480, kPortraitH = 640;
-constexpr const char *kVersion = "0.1.0";
+constexpr const char *kVersion = "0.1.1";
 
 class MineFieldApp;
 /* what a button's click handler gets (the app and the button's number) */

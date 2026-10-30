@@ -4,9 +4,9 @@ The classic patience game for the deck, to be played by touch or keyboard: draw 
 three or one, Standard, Vegas or no scoring, unlimited undo and redo, hints, safe moves to the foundations played for
 you if you wish, a check that tells you when no useful move is left, numbered deals that are the same on every board,
 and winnable deals proven by a built-in solver. Statistics per variation and the game in progress are kept on the
-board. No network. Category Games, licence MIT, version 0.1.0.
+board. No network. Category Games, licence MIT, version 0.1.1.
 
-> **Status.** Version 0.1.0, the first release, for arm64 and amd64 (`app.json`: `arm64`, `amd64`). The engine and the screen are
+> **Status.** Version 0.1.1 (0.1.0 was the first release), for arm64 and amd64 (`app.json`: `arm64`, `amd64`). The engine and the screen are
 > tested on the PC (unit tests and scene runs at seven sizes) and the game was played on a Raspberry Pi 4B (touch and keyboard)
 > before publishing; other boards are listed in `tests/BOARD-TESTS.md`.
 
@@ -308,6 +308,7 @@ as `LAUNCHER_SRC` and a build tree with its SDK as `LAUNCHER_TREE`. `cross` (the
 
 ## Changes
 
+- 0.1.1: Rebuilt for the new launcher strip (SSH indicator slot); no other change.
 - 0.1.0 (first release): the game engine and the screen: touch (drag, tap, double tap) and keys, menu, Settings,
   Statistics, Help, landscape and portrait layouts, left-handed, four-colour deck, felts and backs, hints, auto-finish,
   dead-end banner, winnable deals by a helper process, autosave and resume; the classic win cascade (skippable, reduced

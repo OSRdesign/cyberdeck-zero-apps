@@ -111,9 +111,10 @@ TerminalView::TerminalView(cp0::ui::Page &page, const cp0_ui_roller_page_t &layo
 
     build();
 
-    // the header: "ttyUSB0 115200 8N1"; where the title has no room for it (640x480: the Esc button and the status
-    // strip take the right half), "ttyUSB0 115200" and the frame opens the status line; where even that has no room (a
-    // 480 px wide portrait screen whose status strip shows a battery), "ttyUSB0" and the speed opens it too
+    // the header: "ttyUSB0 115200 8N1"; where the title has no room for it (the Esc button and the status strip with
+    // its SSH slot take the right half: 640x480 shows "ttyUSB0 115200"), the frame opens the status line; where even
+    // that has no room (a 480 px wide portrait screen whose status strip shows a battery), "ttyUSB0" and the speed
+    // opens it too
     const std::string full = terminal_title(spec_.port.tty, spec_.baud, spec_.settings.frame);
     const std::string with_speed = spec_.port.tty + " " + std::to_string(spec_.baud);
     const lv_font_t *title_font = cp0_ui_font_px(layout_.title_px);

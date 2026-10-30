@@ -546,7 +546,7 @@ static void test_package()
     const std::string manifest = read_text(app + "/app.json");
     CHECK(manifest.find("\"share_code\": \"klondike-solitaire\"") != std::string::npos);
     CHECK(manifest.find("\"package\": \"klondike-solitaire\"") != std::string::npos);
-    CHECK(manifest.find("\"version\": \"0.1.0\"") != std::string::npos);
+    CHECK(manifest.find("\"version\": \"0.1.1\"") != std::string::npos);
     CHECK(manifest.find("\"draft\": true") != std::string::npos); /* in development: never published */
     CHECK(manifest.find("\"categories\": [\"Games\"]") != std::string::npos);
     CHECK(manifest.find("\"license\": \"MIT\"") != std::string::npos);
