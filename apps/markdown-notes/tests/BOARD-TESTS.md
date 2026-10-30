@@ -1,4 +1,4 @@
-# Markdown Notes 0.2.0 (slice N1): board tests
+# Markdown Notes 0.2.1 (slice N1): board tests
 
 About 10 minutes on the **deck** (Pi Zero 2 W, 640x480, Bluetooth keyboard), then one touch-only pass on the **Pi 3A+**
 (800x480 touch, no keyboard: the on-screen keyboard). Controller-led: the Controller deploys and reads the logs, the

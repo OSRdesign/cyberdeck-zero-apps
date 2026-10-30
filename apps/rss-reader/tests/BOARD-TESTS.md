@@ -1,4 +1,4 @@
-# RSS Reader 0.2.0: board tests
+# RSS Reader 0.2.1: board tests
 
 Phase 2 (the pages, the reader) and phase 3 (sections I, L, O, C: the pictures, a very large picture, reading offline, the
 storage cap). For the Controller and the owner (controller-led testing: the Controller deploys and reads the logs, the owner does

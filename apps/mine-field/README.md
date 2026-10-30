@@ -177,4 +177,6 @@ presses and holds (long press). The board tests for the owner: [`tests/BOARD-TES
 
 ## Changes
 
+0.1.1: Rebuilt for the new launcher strip (SSH indicator slot); no other change.
+
 0.1.0: first version.

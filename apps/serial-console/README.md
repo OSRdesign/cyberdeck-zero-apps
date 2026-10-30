@@ -1,6 +1,6 @@
 # Serial Console
 
-Version 0.6.0, package `serial-console`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.6.1, package `serial-console`. Part of [cyberdeck-zero-apps](../../README.md).
 
 Serial Console talks to a USB-serial adapter or a microcontroller board (Arduino, ESP32, Raspberry Pi Pico, a GPS, a
 router console...) from the deck. It is a full-screen touch app made for the small screen: instead of dropping you into
@@ -245,7 +245,7 @@ The identification is kept in the port's section of the settings file as `id_*` 
   **480x640** (`X-Portrait=480x640`); a launcher before v0.8.8 never gives a portrait canvas.
 * The user in the `dialout` group: `sudo usermod -aG dialout $USER`, then reboot.
 * Packages: `libfreetype6`, `libinput10`, `libxkbcommon0` (picocom is no longer used).
-* x86-64 PCs: an amd64 package, `serial-console_0.6.0_amd64.deb`, is in the amd64 registry
+* x86-64 PCs: an amd64 package, `serial-console_0.6.1_amd64.deb`, is in the amd64 registry
   ([amd64](../../README.md#amd64-x86-64-pcs)) for a PC running the launcher. It has had no board test on a PC yet.
 
 ## Known limits
@@ -283,6 +283,7 @@ The identification is kept in the port's section of the settings file as `id_*` 
 
 ## Changes
 
+* 0.6.1: Rebuilt for the new launcher strip (SSH indicator slot); no other change.
 * 0.6.0: the handwriting band in PDA mode (launcher v0.8.11, `5f54d15`) where the on-screen keyboard would show; no other
   change (see [What changed in 0.6.0](#what-changed-in-060-the-handwriting-band-in-pda-mode)).
 * 0.5.0: portrait (PDA mode, `X-Portrait=480x640`): the pages at the screen's width, the terminal over the whole

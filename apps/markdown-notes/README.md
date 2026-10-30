@@ -1,6 +1,6 @@
 # Markdown Notes
 
-Package `markdown-notes`, title "Markdown Notes", version 0.2.0. Part of
+Package `markdown-notes`, title "Markdown Notes", version 0.2.1. Part of
 [cyberdeck-zero-apps](../../README.md).
 
 Notes as plain Markdown files in one folder on the deck, the **vault** (`~/Notes` by default): write them, read them
@@ -130,7 +130,7 @@ size, so the portrait layout is the same pages in one column at the screen's wid
 
 ## Install
 
-Settings > Apps once the app is published; until then by hand: `sudo dpkg -i markdown-notes_0.2.0_arm64.deb` (amd64 on a
+Settings > Apps once the app is published; until then by hand: `sudo dpkg -i markdown-notes_0.2.1_arm64.deb` (amd64 on a
 PC). Removing it (`sudo dpkg -r markdown-notes`) leaves the vault and the settings.
 
 ## Files the app keeps
@@ -226,6 +226,7 @@ changed it meanwhile.
 
 ## Changes
 
+- 0.2.1: Rebuilt for the new launcher strip (SSH indicator slot); no other change.
 - 0.2.0: portrait layout for PDA mode (`X-Portrait=480x640`, see [Portrait](#portrait-pda-mode)): the pages upright at
   480x800, 480x640 and 800x1280, the editor above the keyboard or the handwriting band; no change at any landscape size.
 - 0.1.2: Markdown help (Ctrl+H, or the options box of the preview and the editor): what to type and how it

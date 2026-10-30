@@ -39,7 +39,7 @@ void test_package()
     CHECK(has(json, "\"share_code\": \"markdown-notes\""));
     CHECK(has(json, "\"package\": \"markdown-notes\""));
     CHECK(has(json, "\"title\": \"Markdown Notes\""));
-    CHECK(has(json, "\"version\": \"0.2.0\""));
+    CHECK(has(json, "\"version\": \"0.2.1\""));
     CHECK(has(json, "\"categories\": [\"Productivity\"]"));
     CHECK(has(json, "\"license\": \"MIT\""));
     CHECK(has(json, "\"depends\": \"libfreetype6, libinput10, libxkbcommon0\""));

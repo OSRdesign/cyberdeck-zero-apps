@@ -1,6 +1,6 @@
 # Mesh Hop
 
-Version 0.8.1, package `mesh-hop`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.8.2, package `mesh-hop`. Part of [cyberdeck-zero-apps](../../README.md).
 
 **Status: early release.** 0.2.2 and 0.3.0 were tested on the deck by the owner with real boards (Seeed XIAO nRF52840 and a
 spare XIAO S3 WIO, MeshCore firmware v1.15.0, a board swap included). 0.4.0 is the responsive, touch-complete version; its board
@@ -19,6 +19,10 @@ A full-screen client for [MeshCore](https://github.com/meshcore-dev/MeshCore) Lo
 companion firmware for USB, BLE or Wi-Fi); the deck is its screen and keyboard. Everything works **by touch or by keyboard**, on any screen from **640x480** up. Mesh Hop replaces the 320x170 UI of
 [MeshZero](../meshzero/README.md) and keeps its core: the serial transport, the protocol, the client, the model and the history
 store (`src/core/`, with unit tests).
+
+## What changed in 0.8.2
+
+* Rebuilt for the new launcher strip (SSH indicator slot). No other change.
 
 ## What changed in 0.8.1
 

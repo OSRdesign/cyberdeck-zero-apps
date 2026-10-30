@@ -1,6 +1,6 @@
 # RSS Reader
 
-Package `rss-reader`, title "RSS Reader", version 0.2.0. Part of
+Package `rss-reader`, title "RSS Reader", version 0.2.1. Part of
 [cyberdeck-zero-apps](../../README.md).
 
 A text-feed reader for the CyberdeckZero handheld: pin your favourite news, tech and science feeds from a bundled catalog
@@ -100,12 +100,12 @@ The launcher's 3 s Esc hold ends any app.
   stays readable offline).
 - The launcher's fonts in `/usr/share/APPLaunch/share/font` (Montserrat; DejaVu Sans and Noto Sans CJK for accents and
   Japanese).
-- x86-64 PCs: an amd64 package, `rss-reader_0.2.0_amd64.deb`, is in the amd64 registry
+- x86-64 PCs: an amd64 package, `rss-reader_0.2.1_amd64.deb`, is in the amd64 registry
   ([amd64](../../README.md#amd64-x86-64-pcs)) for a PC running the launcher. It has had no board test on a PC yet.
 
 ## Install
 
-Settings > Apps. By hand: `sudo dpkg -i rss-reader_0.2.0_arm64.deb`.
+Settings > Apps. By hand: `sudo dpkg -i rss-reader_0.2.1_arm64.deb`.
 
 ## Files the app keeps
 
@@ -172,6 +172,7 @@ shown on the device. Details in `root/usr/share/doc/rss-reader/copyright`.
 
 ## Changes
 
+- 0.2.1: Rebuilt for the new launcher strip (SSH indicator slot); no other change.
 - 0.2.0: portrait (PDA mode, `X-Portrait=480x640`): upright on 480x800, 480x640 and 800x1280; article titles over two
   lines, Find feed under the address field, the Browse hint shortened where it would be cut; landscape unchanged.
 - 0.1.3: rebuilt against launcher v0.8.5: battery in the header, Wi-Fi interface lookup, status feed; no other change.

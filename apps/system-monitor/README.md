@@ -1,6 +1,6 @@
 # System Monitor
 
-Version 0.3.0, package `system-monitor`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.3.1, package `system-monitor`. Part of [cyberdeck-zero-apps](../../README.md).
 
 System Monitor is a live, read-only look at the board or PC it runs on: CPU load per core, temperature, frequency,
 memory, storage, network, processes and the **power supply** (on a Raspberry Pi: under-voltage and throttling from the
@@ -192,7 +192,7 @@ From **Settings > Apps**. By hand:
 
 ```sh
 python3 tools/make_registry.py --only system-monitor --out <a folder outside packages/>
-sudo dpkg -i system-monitor_0.3.0_arm64.deb      # amd64 for PCs: system-monitor_0.3.0_amd64.deb; remove: sudo dpkg -r system-monitor
+sudo dpkg -i system-monitor_0.3.1_arm64.deb      # amd64 for PCs: system-monitor_0.3.1_amd64.deb; remove: sudo dpkg -r system-monitor
 ```
 
 ## Files the app keeps
@@ -279,6 +279,7 @@ The same fixture variable works on a board, for screenshots of a state that is h
 
 ## Changes
 
+* 0.3.1: Rebuilt for the new launcher strip (SSH indicator slot); no other change.
 * 0.3.0: portrait (PDA mode, `X-Portrait=480x640`): one column of cards at 480x800, Power and Network across at
   480x640 and 800x1280 (there with the history lines under the values); landscape unchanged; built at the launcher
   v0.8.9 toolkit (see [What changed in 0.3.0](#what-changed-in-030)).

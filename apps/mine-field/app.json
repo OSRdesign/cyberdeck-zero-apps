@@ -1,7 +1,7 @@
 {
   "share_code": "mine-field",
   "package": "mine-field",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "title": "Mine Field",
   "summary": "A mine-clearing puzzle: dig the safe cells, flag the mines, and play fair boards that never need a guess.",
   "description": "A mine-clearing puzzle for the deck, played by touch or keyboard. Dig the safe cells, flag the mines (a tap digs or flags as the Dig / Flag button says, a long press does the other one, a tap on a number opens its neighbours when the flags match) and clear the board. The board always fits the screen, nothing to pan or scroll: the three levels are derived from your screen (Expert is the largest grid of 5 mm cells that fits, Intermediate and Beginner are smaller grids with bigger cells and fewer mines), and the Difficulty page shows each level's size on your screen. The first dig is always safe and opens an area. Fair boards never need a guess: the app lays only boards that its own solver can finish by logic, and the Hint button points at a cell that is safe or a mine for sure (it costs ten seconds and rules out a best time). Best five times for each level, statistics, and the game in progress is kept on the board. No network. Needs a screen of at least 640x480 (in PDA mode, portrait 480x640) and a launcher with full-screen app support; no special hardware.",
