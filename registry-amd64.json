@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-10-29T23:55:14+00:00",
+  "generated_at": "2026-10-30T19:09:24+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CyberdeckZero"
@@ -40,9 +40,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.1.0",
+      "version": "0.1.1",
       "published_at": "2026-10-29T10:59:15+00:00",
-      "updated_at": "2026-10-29T10:59:15+00:00",
+      "updated_at": "2026-10-30T19:09:24+00:00",
       "review": {
         "status": "approved"
       },
@@ -51,10 +51,10 @@
       "download": {
         "type": "deb",
         "package": "klondike-solitaire",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/klondike-solitaire_0.1.0_amd64.deb",
-        "md5": "ad0326799f97c651d69c1ac760c869d2",
-        "sha256": "65375f4efc13a435b21d50a66b7d4c49532f67c16be007ce3fb71ab357986e7e",
-        "size": 1495934
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/klondike-solitaire_0.1.1_amd64.deb",
+        "md5": "13597603f011ca810ce25c8b93d1bf7f",
+        "sha256": "b8d46d1b1eeb0d43567b73ce7f120fba1e2ec4a897337fd17a43428feadcfd54",
+        "size": 1496744
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0",
       "permissions": {
@@ -118,9 +118,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.2.0",
+      "version": "0.2.1",
       "published_at": "2026-10-24T21:44:09+00:00",
-      "updated_at": "2026-10-29T08:59:40+00:00",
+      "updated_at": "2026-10-30T19:09:24+00:00",
       "review": {
         "status": "approved"
       },
@@ -129,10 +129,10 @@
       "download": {
         "type": "deb",
         "package": "markdown-notes",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/markdown-notes_0.2.0_amd64.deb",
-        "md5": "dfee9c159b65e45a0a71fd780eaef33d",
-        "sha256": "8a1a60dbd3352e3194d3b11181ca87199e154f4e8b07aa0d5d5caf1b56db243a",
-        "size": 1559606
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/markdown-notes_0.2.1_amd64.deb",
+        "md5": "132f99b91a671701608c6cce4ac499b5",
+        "sha256": "1d84df630eecece8f9a5c4bdec968cccf134dbb283e0d7f7453186df6f0f9962",
+        "size": 1560312
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0",
       "permissions": {
@@ -184,9 +184,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.8.1",
+      "version": "0.8.2",
       "published_at": "2026-10-22T11:01:59+00:00",
-      "updated_at": "2026-10-25T12:54:34+00:00",
+      "updated_at": "2026-10-30T19:09:24+00:00",
       "review": {
         "status": "approved"
       },
@@ -195,10 +195,10 @@
       "download": {
         "type": "deb",
         "package": "mesh-hop",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/mesh-hop_0.8.1_amd64.deb",
-        "md5": "ea79397e5f771f44a70c2c113d51ae7a",
-        "sha256": "8671daa09238c23a40f2bf420fdf667fbaec45bd9529cddb9b810273eae627c8",
-        "size": 5219980
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/mesh-hop_0.8.2_amd64.deb",
+        "md5": "f524048a7773a00afde437faf660718f",
+        "sha256": "c3a1de3344981830c2b699099a21efda03642e167d6d4ca557d054aec754e0fa",
+        "size": 5262506
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0, curl, python3 (>= 3.10), python3-requests (>= 2.28), python3-serial",
       "permissions": {
@@ -244,9 +244,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.1.0",
+      "version": "0.1.1",
       "published_at": "2026-10-29T23:55:14+00:00",
-      "updated_at": "2026-10-29T23:55:14+00:00",
+      "updated_at": "2026-10-30T19:09:24+00:00",
       "review": {
         "status": "approved"
       },
@@ -255,10 +255,10 @@
       "download": {
         "type": "deb",
         "package": "mine-field",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/mine-field_0.1.0_amd64.deb",
-        "md5": "6f697a6353abb0babf0fff98bb7ac912",
-        "sha256": "567f70c96661620353596caea2abd5d7c65b5602ad762e4e72b06473856c1e29",
-        "size": 1428740
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/mine-field_0.1.1_amd64.deb",
+        "md5": "bf41ee6bd19fe62a3ea42d503653820b",
+        "sha256": "f88245535c8ec17dd4f127fa1e19398701a1696c6a47d8bb5569d4c9dfa95acb",
+        "size": 1429280
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0",
       "permissions": {
@@ -322,9 +322,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.5.0",
+      "version": "0.5.1",
       "published_at": "2026-10-22T11:02:01+00:00",
-      "updated_at": "2026-10-29T16:15:06+00:00",
+      "updated_at": "2026-10-30T19:09:24+00:00",
       "review": {
         "status": "approved"
       },
@@ -333,10 +333,10 @@
       "download": {
         "type": "deb",
         "package": "net-toolbox",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/net-toolbox_0.5.0_amd64.deb",
-        "md5": "9ec043f5773eec675941faef2d157ab9",
-        "sha256": "7352f366ec3cec43e7fb760586dcb5a2b408db2269fa9f353033ddc242844445",
-        "size": 2874176
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/net-toolbox_0.5.1_amd64.deb",
+        "md5": "672e57d1b6158ab3c4bd468e3fd684b3",
+        "sha256": "6f376eca41d82ff357cac0443050f3ad3546379a539635218b1c8772e6eadd53",
+        "size": 2874766
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0, curl, ca-certificates, network-manager",
       "permissions": {
@@ -416,9 +416,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.2.0",
+      "version": "0.2.1",
       "published_at": "2026-10-22T11:02:02+00:00",
-      "updated_at": "2026-10-29T08:54:02+00:00",
+      "updated_at": "2026-10-30T19:09:24+00:00",
       "review": {
         "status": "approved"
       },
@@ -427,10 +427,10 @@
       "download": {
         "type": "deb",
         "package": "rss-reader",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/rss-reader_0.2.0_amd64.deb",
-        "md5": "887ca2ff780d42db1986d712b131e94e",
-        "sha256": "8e9514bfe8e201d04fd0d4ec683bdd2e2df6808025d6b89a9b03710f708a3ef6",
-        "size": 1842662
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/rss-reader_0.2.1_amd64.deb",
+        "md5": "b7663d92214092dea8f4021c19612043",
+        "sha256": "064b2c4750475d049ed38fb8ed8503bf0f5c8c6edc193e3f4009933425160007",
+        "size": 1843376
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0, curl, ca-certificates",
       "permissions": {
@@ -482,9 +482,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.6.0",
+      "version": "0.6.1",
       "published_at": "2026-10-22T11:02:03+00:00",
-      "updated_at": "2026-10-28T22:56:01+00:00",
+      "updated_at": "2026-10-30T19:09:24+00:00",
       "review": {
         "status": "approved"
       },
@@ -493,10 +493,10 @@
       "download": {
         "type": "deb",
         "package": "serial-console",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/serial-console_0.6.0_amd64.deb",
-        "md5": "519f87df4c0ea9cae3437a49b2269fd7",
-        "sha256": "d71b44c21f4bdb2f7b489ec8dfc970088a76f708b1e64eaf993266e417f6bcdb",
-        "size": 1659254
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/serial-console_0.6.1_amd64.deb",
+        "md5": "fc2ef4ed6576ae1160e377b2b65c0f41",
+        "sha256": "5b2307d02ff0b23242cadee04f22079b3624f354f10742f69c027360f929b592",
+        "size": 1660050
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0",
       "permissions": {
@@ -566,9 +566,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.3.0",
+      "version": "0.3.1",
       "published_at": "2026-10-22T11:02:04+00:00",
-      "updated_at": "2026-10-28T00:54:47+00:00",
+      "updated_at": "2026-10-30T19:09:24+00:00",
       "review": {
         "status": "approved"
       },
@@ -577,10 +577,10 @@
       "download": {
         "type": "deb",
         "package": "system-monitor",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/system-monitor_0.3.0_amd64.deb",
-        "md5": "a25c54d0bd103f2373035ddf3ba82f26",
-        "sha256": "7bc527640232a551dd111dc75c42b6c6e8828a698a610e31891b00db6fe228cc",
-        "size": 1532740
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/system-monitor_0.3.1_amd64.deb",
+        "md5": "62a3d1a5993cd47205f42357d3e3cd37",
+        "sha256": "0de9de9fd1afbc68ff5ddfc7e6076f607506cd351804ba856e260fa14ecfc1b3",
+        "size": 1535602
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0",
       "permissions": {
