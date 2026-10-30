@@ -41,13 +41,13 @@ void test_package_group()
     const std::string hpp = read_text(app + "/src/ui/minefield_app.hpp");
     CHECK(has(hpp, "kMinW = 640, kMinH = 480"));
     CHECK(has(hpp, "kPortraitW = 480, kPortraitH = 640"));
-    CHECK(has(hpp, "kVersion = \"0.1.0\""));
+    CHECK(has(hpp, "kVersion = \"0.1.1\""));
     CHECK(!read_text(app + "/root/usr/share/APPLaunch/share/images/mine-field.png").empty());
     CHECK(!read_text(app + "/root/usr/share/doc/mine-field/copyright").empty());
     const std::string manifest = read_text(app + "/app.json");
     CHECK(has(manifest, "\"share_code\": \"mine-field\""));
     CHECK(has(manifest, "\"package\": \"mine-field\""));
-    CHECK(has(manifest, "\"version\": \"0.1.0\""));
+    CHECK(has(manifest, "\"version\": \"0.1.1\""));
     CHECK(has(manifest, "\"categories\": [\"Games\"]"));
     CHECK(has(manifest, "\"license\": \"MIT\""));
     CHECK(has(manifest, "\"arch\": [\"arm64\", \"amd64\"]"));
