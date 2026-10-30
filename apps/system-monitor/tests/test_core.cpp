@@ -427,7 +427,7 @@ static void test_package()
     const std::string manifest = read_file(app + "/app.json");
     CHECK(manifest.find("\"share_code\": \"system-monitor\"") != std::string::npos);
     CHECK(manifest.find("\"package\": \"system-monitor\"") != std::string::npos);
-    CHECK(manifest.find("\"version\": \"0.3.0\"") != std::string::npos);
+    CHECK(manifest.find("\"version\": \"0.3.1\"") != std::string::npos);
     CHECK(manifest.find("\"title\": \"System Monitor\"") != std::string::npos);
     CHECK(manifest.find("\"license\": \"MIT\"") != std::string::npos);
     CHECK(manifest.find("\"depends\": \"libfreetype6, libinput10, libxkbcommon0\"") != std::string::npos);
