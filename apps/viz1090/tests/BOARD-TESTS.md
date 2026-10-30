@@ -1,4 +1,4 @@
-# viz1090 0.3.0: board tests of the intro screen
+# viz1090 0.3.1: board tests of the intro screen
 
 For the Controller and the owner (controller-led testing: the Controller deploys and reads logs, the owner does the
 physical steps). Commands run from Windows: `deck.py` is `C:\CLAUDE\zero7\launcher\docs\dev\deck\deck.py` (password in
@@ -15,7 +15,7 @@ Expected pictures: the contact sheets of `build.sh host` in `\\wsl.localhost\Ubu
 ```
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/viz1090/build.sh all --strict
 python tools/make_registry.py --only viz1090 --out C:/CLAUDE/zero7/pkg-out
-python deck.py put C:/CLAUDE/zero7/pkg-out/viz1090_0.3.0_arm64.deb /tmp/viz1090.deb
+python deck.py put C:/CLAUDE/zero7/pkg-out/viz1090_0.3.1_arm64.deb /tmp/viz1090.deb
 python deck.py sudo 'dpkg -i /tmp/viz1090.deb || apt-get -f install -y'
 python deck.py run '/opt/viz1090/vizsetup --version; /opt/viz1090/vizsetup --screen'
 ```
