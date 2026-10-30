@@ -70,7 +70,9 @@ tap "Connect"
 wait 1800
 shot terminal
 expect text "Connected"
-expect text "ttyUSB0 115200 8N1"
+# the header title on the 480 px wide screens: the tty and the speed (the frame opens the status line)
+@480x800,480x640 expect text "ttyUSB0 115200"
+@800x1280 expect text "ttyUSB0 115200 8N1"
 expect osk off
 expect key "Ctrl-C" toolbar
 expect key "Tab" toolbar
