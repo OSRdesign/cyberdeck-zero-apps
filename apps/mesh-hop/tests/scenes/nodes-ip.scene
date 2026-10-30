@@ -36,7 +36,12 @@ key backspace
 key backspace
 key enter
 wait 600
-@800x480,720x720,1024x600,1280x720 expect text "Name of 192.168.1.30:5000"
+shot ip-name
+# the name box opened for the new address: its hint at every size; the header title whole where it fits, ended with
+# dots at 800x480 (owner decision 2026-10-30: a title with no room may end with dots)
+expect text "Optional: a name to list it by. Leave it empty to show the address."
+@720x720,1024x600,1280x720 expect text "Name of 192.168.1.30:5000"
+@800x480 expect text "Name of 192.168.1.30:5..."
 type Garage
 key enter
 wait 600

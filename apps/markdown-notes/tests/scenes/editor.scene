@@ -38,7 +38,10 @@ wait 600
 tapkey "Ctrl"
 tapkey "h"
 wait 800
-expect text "Markdown help"
+# the header title whole where it fits, ended with dots at 640x480 (owner decision 2026-10-30); the line under it at
+# every size
+@800x480,720x720,1280x800 expect text "Markdown help"
+@640x480 expect text "Markdown ..."
 expect text "What you type, then how it looks"
 shot help
 key esc

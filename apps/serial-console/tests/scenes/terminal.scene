@@ -12,8 +12,11 @@ key enter
 wait 1800
 shot terminal
 expect text "Connected"
-@640x480 expect text "ttyUSB0 115200"
-@800x480,720x720,1280x720,1024x600 expect text "ttyUSB0 115200 8N1"
+# the header title steps down where it has no room (the launcher's SSH slot moved Esc left): the tty alone at 640x480
+# (the speed and the frame open the status line), the tty and the speed at 720x720 (the frame opens it)
+@640x480 expect text "ttyUSB0"
+@720x720 expect text "ttyUSB0 115200"
+@800x480,1280x720,1024x600 expect text "ttyUSB0 115200 8N1"
 expect osk off
 # the key bar's keys are 9 mm toolbar keys (as the header Esc and the on-screen keyboard), the line field's Send TARGET
 expect key "Ctrl-C" toolbar
