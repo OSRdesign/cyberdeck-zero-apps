@@ -6,6 +6,8 @@ This package bundles several programs and data sets, each under its own licence.
 1. viz1090  (/opt/viz1090/viz1090)
    Source: https://github.com/nmatsuda/viz1090, commit fb7bf016d5d95ddca5b27f260e871484864b5c96
    Built with one change (three constants in AircraftLabel.h, see build/build_on_pi.sh).
+   The arm64 package is built on a Raspberry Pi (build/build_on_pi.sh), the amd64 one in WSL (build/build_amd64.sh): the
+   same sources and commits; the amd64 binaries are stripped, and readsb links the system librtlsdr0 dynamically.
 
    Copyright (C) 2020, Nathan Matsuda <info@nathanmatsuda.com>
    Copyright (C) 2014, Malcolm Robb <Support@ATTAvionics.com>

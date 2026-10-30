@@ -1,6 +1,6 @@
 # viz1090
 
-Version 0.3.1, package `viz1090`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.3.2, package `viz1090`. Part of [cyberdeck-zero-apps](../../README.md).
 
 The real [viz1090](https://github.com/nmatsuda/viz1090) ADS-B display (by Nathan Matsuda) on the deck, full screen,
 with its own RTL-SDR decoder, an intro screen and a world map. The intro screen shows whether the SDR dongle and a
@@ -141,8 +141,10 @@ The headless scenes `tests/scenes/portrait*.scene` check the intro at 480x800, 4
 * A screen of at least **640x480** (landscape; **480x640** in portrait, in PDA mode) and a launcher with **full-screen
   app support** (`X-Fullscreen=true` in the `.desktop` file): the launcher stops drawing and gives the whole panel to
   the app.
-* **arm64 only**: the package is `viz1090_0.3.1_arm64.deb`; there is no amd64 build of this app (readsb, viz1090 and the
-  bridge are built on a Pi).
+* **arm64 and amd64**: the packages are `viz1090_0.3.2_arm64.deb` (the deck boards; readsb, viz1090 and the bridge are
+  built on a Pi) and `viz1090_0.3.2_amd64.deb` (x86 PCs such as the FZ-M1 tablet; built in WSL by
+  [`build/build_amd64.sh`](build/build_amd64.sh), the same upstream commits, stripped). The amd64 readsb links the
+  system `librtlsdr.so.0`, like the arm64 one. Not yet tried on the tablet with a dongle.
 * An **RTL-SDR dongle** with a 1090 MHz antenna.
 * Optional: a USB GPS receiver (serial NMEA on `/dev/ttyACM*` or `/dev/ttyUSB*`). The deck user must be able to read
   it: the `dialout` group of Raspberry Pi OS (`sudo usermod -aG dialout $USER`, then log out and in). The intro only
@@ -161,7 +163,7 @@ The headless scenes `tests/scenes/portrait*.scene` check the intro at 480x800, 4
 On the deck: **Settings > Apps > Sources > + Add a GitHub source**, enter `OSRdesign/cyberdeck-zero-apps`, go to the
 **Apps** tab, pick **viz1090** and press Enter. Installing asks for the deck user's sudo password; the package depends on
 the libraries it needs. See the [repository README](../../README.md) for details. If an older version is installed,
-the deck offers 0.3.1 as an update in the same menu. By hand: `sudo dpkg -i viz1090_0.3.1_arm64.deb` (then
+the deck offers 0.3.2 as an update in the same menu. By hand: `sudo dpkg -i viz1090_0.3.2_arm64.deb` (amd64: `viz1090_0.3.2_amd64.deb`) (then
 `sudo apt-get -f install` for missing libraries).
 
 ## Files the app keeps
@@ -242,6 +244,7 @@ scripts. `build/make_world.py` builds the world map from open data (it needs a P
 
 ## Changes
 
+* **0.3.2**: adds an amd64 build for the x86 tablet; no change on arm64 (the same viz1090, readsb and `libviz_fb.so` as 0.3.1; the intro screen is only rebuilt for the new version stamp).
 * **0.3.1**: rebuilt for the new launcher strip (SSH indicator slot): the intro screen and the map header (the display bridge `libviz_fb.so`, rebuilt on a Pi) show the SSH glyph slot, built against launcher `3f6579f`; the viz1090 and readsb binaries are unchanged.
 * **0.3.0**: portrait (PDA mode, `X-Portrait=480x640`): the intro screen is one column with a two-line status line, the
   handwriting band and the on-screen keyboard keep the field above them, and the map is upright under the narrow header
