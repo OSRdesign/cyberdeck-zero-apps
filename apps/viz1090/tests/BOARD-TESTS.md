@@ -1,4 +1,4 @@
-# viz1090 0.3.1: board tests of the intro screen
+# viz1090 0.3.2: board tests of the intro screen
 
 For the Controller and the owner (controller-led testing: the Controller deploys and reads logs, the owner does the
 physical steps). Commands run from Windows: `deck.py` is `C:\CLAUDE\zero7\launcher\docs\dev\deck\deck.py` (password in
@@ -15,7 +15,7 @@ Expected pictures: the contact sheets of `build.sh host` in `\\wsl.localhost\Ubu
 ```
 wsl -e sh /mnt/c/CLAUDE/zero7/cyberdeck-zero-apps/apps/viz1090/build.sh all --strict
 python tools/make_registry.py --only viz1090 --out C:/CLAUDE/zero7/pkg-out
-python deck.py put C:/CLAUDE/zero7/pkg-out/viz1090_0.3.1_arm64.deb /tmp/viz1090.deb
+python deck.py put C:/CLAUDE/zero7/pkg-out/viz1090_0.3.2_arm64.deb /tmp/viz1090.deb
 python deck.py sudo 'dpkg -i /tmp/viz1090.deb || apt-get -f install -y'
 python deck.py run '/opt/viz1090/vizsetup --version; /opt/viz1090/vizsetup --screen'
 ```
@@ -114,3 +114,14 @@ anything cut, overlapping or too small to read.
 8. **Back to the launcher.** Home grid intact in portrait, the tile still there. [ ] pass
 9. **Landscape unchanged.** Settings > Screen > PDA mode Off (the launcher restarts): the intro and the map are the
    0.2.3 ones at 800x480 (T1, T2 step 4), nothing turned or cut. [ ] pass
+
+## T7. Tablet (amd64, FZ-M1; 0.3.2, `viz1090_0.3.2_amd64.deb`)
+
+Needs Wi-Fi once (the package pulls libsdl2, libsdl2-ttf, libsdl2-gfx, librtlsdr0 and their dependencies) and, for aircraft, an RTL-SDR dongle with a 1090 MHz antenna (the deck's will do). Not run yet.
+
+1. **Install.** `sudo apt install ./viz1090_0.3.2_amd64.deb`; Settings > Apps lists viz1090 0.3.2; the tile is on the home grid. `file /opt/viz1090/readsb` says x86-64; `ldd /opt/viz1090/readsb /opt/viz1090/viz1090` shows no "not found". [ ] pass
+2. **Intro.** PDA mode on: the intro upright at 800x1280, header Esc and strip as in the other apps; the SDR row "Not found" (red) without the dongle, "Found" about a second after plugging it in (the kernel DVB driver is detached by librtlsdr). [ ] pass
+3. **Map.** Start with a position: the map upright under the narrow header; with the dongle near a window, aircraft within a minute. One-finger pan, two-finger pinch, tap an aircraft; the header's Esc: back to the home grid, `pgrep -x readsb` prints nothing. [ ] pass
+4. **Landscape.** PDA mode off (the launcher restarts): the same at 1280x800. [ ] pass
+5. **No dongle.** Start anyway: the map with no aircraft ("connecting"), Esc back. [ ] pass
+6. **Memory.** While the map runs: `grep VmRSS /proc/$(pgrep -x viz1090)/status; free -m`. [ ] pass

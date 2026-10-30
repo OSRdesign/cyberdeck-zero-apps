@@ -720,7 +720,7 @@ static void test_package()
 
     const std::string manifest = read_file(kApp + "/app.json");
     CHECK(contains(manifest, "\"share_code\": \"viz1090\""));
-    CHECK(contains(manifest, "\"version\": \"0.3.1\""));
+    CHECK(contains(manifest, "\"version\": \"0.3.2\""));
     /* what the native intro links (cp0_lvgl: libinput, libxkbcommon, FreeType) and what viz1090 and readsb link */
     for (const char *dep : {"libfreetype6", "libinput10", "libxkbcommon0", "libsdl2-2.0-0", "libsdl2-ttf-2.0-0",
                             "libsdl2-gfx-1.0-0", "librtlsdr0", "python3"})
