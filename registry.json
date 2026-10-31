@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-10-30T19:09:24+00:00",
+  "generated_at": "2026-10-30T23:59:55+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CardputerZero"
@@ -690,19 +690,19 @@
       "share_code": "viz1090",
       "title": "viz1090",
       "summary": "Full-screen ADS-B display: live aircraft from an RTL-SDR dongle on a world map.",
-      "description": "The real viz1090 (by Nathan Matsuda) on the deck, full screen, with its own decoder (readsb with RTL-SDR support), an intro screen (whether the SDR and a USB GPS are found; your position from the nearest airport code, the GPS, latitude and longitude, or a recent place; by touch or keyboard) and a world map. Rows show what can be tapped: a chevron opens or changes, a dot runs. Needs an RTL-SDR dongle with a 1090 MHz antenna. On a launcher in PDA mode the intro screen and the map run upright on the portrait screen (480x800, 480x640, the 800x1280 tablet). Needs a screen of at least 640x480 (in PDA mode, portrait 480x640) and a launcher with full-screen support (X-Fullscreen in .desktop files). Map data: Natural Earth and OurAirports. viz1090: BSD licence; readsb: GPL-3 (source: https://github.com/wiedehopf/readsb); the intro screen and the display bridge: MIT.",
+      "description": "The real viz1090 (by Nathan Matsuda) on the deck, full screen, with its own decoder (readsb with RTL-SDR support), an intro screen (whether the SDR and a USB GPS are found; your position from the nearest airport code, the GPS, latitude and longitude, or a recent place; by touch or keyboard) and a world map. Rows show what can be tapped: a chevron opens or changes, a dot runs. Needs an RTL-SDR dongle with a 1090 MHz antenna. Runs on the deck boards (arm64) and on x86 PCs such as the FZ-M1 tablet (amd64). On a launcher in PDA mode the intro screen and the map run upright on the portrait screen (480x800, 480x640, the 800x1280 tablet). Needs a screen of at least 640x480 (in PDA mode, portrait 480x640) and a launcher with full-screen support (X-Fullscreen in .desktop files). Map data: Natural Earth and OurAirports. viz1090: BSD licence; readsb: GPL-3 (source: https://github.com/wiedehopf/readsb); the intro screen and the display bridge: MIT.",
       "locales": {
         "en": {
           "title": "viz1090",
           "summary": "Full-screen ADS-B display: live aircraft from an RTL-SDR dongle on a world map.",
-          "description": "The real viz1090 (by Nathan Matsuda) on the deck, full screen, with its own decoder (readsb with RTL-SDR support), an intro screen (whether the SDR and a USB GPS are found; your position from the nearest airport code, the GPS, latitude and longitude, or a recent place; by touch or keyboard) and a world map. Rows show what can be tapped: a chevron opens or changes, a dot runs. Needs an RTL-SDR dongle with a 1090 MHz antenna. On a launcher in PDA mode the intro screen and the map run upright on the portrait screen (480x800, 480x640, the 800x1280 tablet). Needs a screen of at least 640x480 (in PDA mode, portrait 480x640) and a launcher with full-screen support (X-Fullscreen in .desktop files). Map data: Natural Earth and OurAirports. viz1090: BSD licence; readsb: GPL-3 (source: https://github.com/wiedehopf/readsb); the intro screen and the display bridge: MIT."
+          "description": "The real viz1090 (by Nathan Matsuda) on the deck, full screen, with its own decoder (readsb with RTL-SDR support), an intro screen (whether the SDR and a USB GPS are found; your position from the nearest airport code, the GPS, latitude and longitude, or a recent place; by touch or keyboard) and a world map. Rows show what can be tapped: a chevron opens or changes, a dot runs. Needs an RTL-SDR dongle with a 1090 MHz antenna. Runs on the deck boards (arm64) and on x86 PCs such as the FZ-M1 tablet (amd64). On a launcher in PDA mode the intro screen and the map run upright on the portrait screen (480x800, 480x640, the 800x1280 tablet). Needs a screen of at least 640x480 (in PDA mode, portrait 480x640) and a launcher with full-screen support (X-Fullscreen in .desktop files). Map data: Natural Earth and OurAirports. viz1090: BSD licence; readsb: GPL-3 (source: https://github.com/wiedehopf/readsb); the intro screen and the display bridge: MIT."
         }
       },
       "i18n": {
         "en": {
           "title": "viz1090",
           "summary": "Full-screen ADS-B display: live aircraft from an RTL-SDR dongle on a world map.",
-          "description": "The real viz1090 (by Nathan Matsuda) on the deck, full screen, with its own decoder (readsb with RTL-SDR support), an intro screen (whether the SDR and a USB GPS are found; your position from the nearest airport code, the GPS, latitude and longitude, or a recent place; by touch or keyboard) and a world map. Rows show what can be tapped: a chevron opens or changes, a dot runs. Needs an RTL-SDR dongle with a 1090 MHz antenna. On a launcher in PDA mode the intro screen and the map run upright on the portrait screen (480x800, 480x640, the 800x1280 tablet). Needs a screen of at least 640x480 (in PDA mode, portrait 480x640) and a launcher with full-screen support (X-Fullscreen in .desktop files). Map data: Natural Earth and OurAirports. viz1090: BSD licence; readsb: GPL-3 (source: https://github.com/wiedehopf/readsb); the intro screen and the display bridge: MIT."
+          "description": "The real viz1090 (by Nathan Matsuda) on the deck, full screen, with its own decoder (readsb with RTL-SDR support), an intro screen (whether the SDR and a USB GPS are found; your position from the nearest airport code, the GPS, latitude and longitude, or a recent place; by touch or keyboard) and a world map. Rows show what can be tapped: a chevron opens or changes, a dot runs. Needs an RTL-SDR dongle with a 1090 MHz antenna. Runs on the deck boards (arm64) and on x86 PCs such as the FZ-M1 tablet (amd64). On a launcher in PDA mode the intro screen and the map run upright on the portrait screen (480x800, 480x640, the 800x1280 tablet). Needs a screen of at least 640x480 (in PDA mode, portrait 480x640) and a launcher with full-screen support (X-Fullscreen in .desktop files). Map data: Natural Earth and OurAirports. viz1090: BSD licence; readsb: GPL-3 (source: https://github.com/wiedehopf/readsb); the intro screen and the display bridge: MIT."
         }
       },
       "categories": [
@@ -712,9 +712,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.3.1",
+      "version": "0.3.2",
       "published_at": "2026-10-04T19:29:31+00:00",
-      "updated_at": "2026-10-30T19:09:24+00:00",
+      "updated_at": "2026-10-30T23:59:57+00:00",
       "review": {
         "status": "approved"
       },
@@ -723,10 +723,10 @@
       "download": {
         "type": "deb",
         "package": "viz1090",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/viz1090_0.3.1_arm64.deb",
-        "md5": "1963e47b42fcb847ec41c97ca2617987",
-        "sha256": "98f4b394a516812e0ca7cfdaef680cc57e13394a591ec5c89ba8d8a6dde994ae",
-        "size": 6825598
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/viz1090_0.3.2_arm64.deb",
+        "md5": "e64a81720cddc8f03d75fef7012ea9b2",
+        "sha256": "d2af87547856ae0bc73ecd001ee9a4cbdd6b3974ebb4aea9a10a83a56a6ea6ec",
+        "size": 6825718
       },
       "depends": "libsdl2-2.0-0, libsdl2-ttf-2.0-0, libsdl2-gfx-1.0-0, librtlsdr0, libusb-1.0-0, libfreetype6, libinput10, libxkbcommon0, libncurses6, libzstd1, zlib1g, python3",
       "permissions": {
