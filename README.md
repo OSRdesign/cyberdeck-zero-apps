@@ -70,7 +70,7 @@ apps/<id>/app.json            what you write: name, description, version, ...
 apps/<id>/icon.png            optional icon, 100x100 square transparent PNG (see docs/ICON-PALETTE.md)
 apps/<id>/screenshots/*.png   optional screenshots at the real screen size (640x480 deck, or 800x480)
 apps/<id>/root/...            the files of the app, laid out as they must be on the device
-tools/                        build_deb.py and make_registry.py (pure Python 3, no other dependencies)
+tools/                        build_deb.py, make_registry.py and check_descriptors.py (pure Python 3, no other dependencies)
 
 and, for apps also built for x86-64 PCs (optional, see amd64 below):
 registry-amd64.json           the catalogue of the amd64 packages
@@ -117,8 +117,8 @@ A program that does not use the runtime works too: the launcher starts any execu
   "package": "myapp",
   "version": "0.1.0",
   "title": "My App",
-  "summary": "One line shown in the list.",
-  "description": "A longer description shown on the detail page.",
+  "summary": "One line shown in the list (at most 80 characters).",
+  "description": "What the app does, its main features and what it needs.",
   "categories": ["Tools"],
   "author": {"github": "your-github-name", "display_name": "Your Name"},
   "license": "MIT",
@@ -131,6 +131,12 @@ A program that does not use the runtime works too: the launcher starts any execu
 * `share_code` – short unique id (lowercase letters and digits). It also gives the app a stable identity:
   keep it the same across versions.
 * `package` – the Debian package name (lowercase letters, digits, `+ - .`).
+* `summary` and `description` – the app's descriptor, the only text the launcher shows (Settings > Apps): a summary
+  line of at most 80 characters, then a description of what the app is, its main features and what it needs
+  (keyboard, USB dongle, network, minimum screen), nothing more. Summary + description together: at most **500
+  characters**; the launcher cuts a longer text at 500 with dots. The long documentation lives in the app's
+  `README.md` in this repository, for reading on a computer. `python3 tools/check_descriptors.py` checks every app and
+  both registries, and `tools/make_registry.py` refuses an app that breaks the rule.
 * `version` – increase it for every release; the deck offers an upgrade when it grows.
 * `depends` – optional Debian dependencies that `apt` must have (e.g. `curl`); leave empty if none.
 * `draft` – optional. `"draft": true` keeps an unfinished app out of the store: `tools/make_registry.py` skips it (no

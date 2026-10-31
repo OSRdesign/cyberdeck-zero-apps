@@ -15,6 +15,9 @@ For every apps/<id>/app.json and every architecture the app lists in "arch" (def
 
     "arch": ["arm64", "amd64"]        in app.json: root/ holds the arm64 binary, root.amd64/ the amd64 one
 
+Every app it reads must keep the descriptor rule of tools/check_descriptors.py (summary <= 80 characters, summary +
+newline + description <= 500 characters), or it stops.
+
 An app whose app.json has  "draft": true  is skipped (no .deb, no registry entry). To build a local .deb of an
 app without publishing it (a draft included), use --only <id> --out <folder> [--arch amd64]: it writes just that .deb
 into the folder and touches neither packages/ nor the registries.
@@ -34,6 +37,9 @@ import re
 import subprocess
 import sys
 import uuid
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import check_descriptors  # noqa: E402  (tools/check_descriptors.py: the 500-character descriptor rule)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
@@ -164,6 +170,11 @@ def main():
         for key in ("share_code", "package", "version", "title", "summary"):
             if not meta.get(key):
                 sys.exit("%s: missing '%s'" % (manifest_path, key))
+        errors = check_descriptors.manifest_errors(meta)
+        if errors:
+            sys.exit("%s: %s (summary <= %d characters, summary + description <= %d; the long text goes in the "
+                     "README)" % (manifest_path, "; ".join(errors), check_descriptors.SUMMARY_MAX,
+                                  check_descriptors.DESCRIPTOR_MAX))
         manifests.append((name, meta, app_arches(meta, manifest_path)))
 
     if args.only:

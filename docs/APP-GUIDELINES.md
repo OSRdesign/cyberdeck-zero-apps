@@ -493,7 +493,7 @@ X-Background=freeze
 | `share_code` | lowercase id, stable forever (it gives the registry uuid) |
 | `package` | Debian package name, = the app id |
 | `version` | **raise it for every release**: the deck compares Debian-style (`dpkg --compare-versions`); the same version is not an update |
-| `title`, `summary`, `description` | what Settings > Apps shows; the description states needs (hardware, groups, network, minimum screen) |
+| `title`, `summary`, `description` | what Settings > Apps shows, and the only text the launcher shows: the **descriptor** = a summary line (at most 80 characters) + a description of what the app is, its main features and what it needs (hardware, groups, network, minimum screen), nothing more. Summary + description together **at most 500 characters**; the launcher cuts a longer text at 500 with dots. The long documentation lives in the app's README in this repository, for reading on a computer. Checked by `python3 tools/check_descriptors.py` (every app and both registries) and by `make_registry.py` |
 | `license` | SPDX expression of everything shipped (`MIT`, or `BSD-3-Clause AND GPL-3.0-or-later`) |
 | `depends` | Debian packages `apt` must add: **only what the binary links dynamically** (native apps: `libfreetype6, libinput10, libxkbcommon0`), plus tools you run (`curl`, `picocom`). Check the names exist on Debian 13 arm64 |
 | `recommends` | optional: Debian packages a feature uses when they are there (apt installs them by default; the app must work without them), e.g. Mesh Hop's `bluez` |
@@ -667,7 +667,7 @@ Copy into the pull request and tick.
 | 14 | Logs to stderr with a tag, no secrets, bounded | [ ] |
 | 15 | Binary named after the app id; no stock-device prefix or logo; "CyberdeckZero Launcher" spelled right | [ ] |
 | 16 | Upstream credited, licences in `/usr/share/doc/<id>/copyright` (+ texts), GPL source URL given | [ ] |
-| 17 | `app.json` complete: `version` raised, `depends` correct (no libc6 line), `permissions` honest, `license` right | [ ] |
+| 17 | `app.json` complete: `version` raised, `depends` correct (no libc6 line), `permissions` honest, `license` right; descriptor within the rule (summary <= 80 characters, summary + description <= 500; long text in the README): `python3 tools/check_descriptors.py` passes | [ ] |
 | 18 | `python3 tools/make_registry.py` builds; `dpkg-deb -I` and `-c` look right; `registry.json` regenerated | [ ] |
 | 19 | Unit tests green; headless scenes pass at the five sizes; contact sheets reviewed | [ ] |
 | 20 | `tests/BOARD-TESTS.md` written; the owner ran it on the deck (and the other boards that apply) | [ ] |
