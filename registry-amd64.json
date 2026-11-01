@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-11-01T16:30:21+00:00",
+  "generated_at": "2026-11-01T22:10:48+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CyberdeckZero"
@@ -89,7 +89,9 @@
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/klondike-solitaire/screenshots/06-statistics-640x480.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/klondike-solitaire/screenshots/07-menu-640x480.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/klondike-solitaire/screenshots/08-left-handed-640x480.png"
-      ]
+      ],
+      "min_size": "640x480",
+      "portrait_min_size": "480x640"
     },
     {
       "uuid": "86e86d1a-2552-5a0d-ad23-7b4db5acf4b4",
@@ -155,7 +157,9 @@
       "screenshots": [
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/markdown-notes/screenshots/01-portrait-editor-keyboard-480x800.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/markdown-notes/screenshots/02-portrait-editor-band-480x800.png"
-      ]
+      ],
+      "min_size": "640x480",
+      "portrait_min_size": "480x640"
     },
     {
       "uuid": "9d3fef69-7f03-5d37-8734-b7e984998822",
@@ -215,7 +219,8 @@
         "screenshots": []
       },
       "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mesh-hop/icon.png",
-      "screenshots": []
+      "screenshots": [],
+      "min_size": "640x480"
     },
     {
       "uuid": "570ad6eb-0a2e-5e5f-affa-dd36300fef27",
@@ -293,7 +298,9 @@
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mine-field/screenshots/06-loss-640x480.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mine-field/screenshots/07-win-640x480.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mine-field/screenshots/08-settings-640x480.png"
-      ]
+      ],
+      "min_size": "640x480",
+      "portrait_min_size": "480x640"
     },
     {
       "uuid": "978c39c5-fff8-5414-af97-bc3b78da75a5",
@@ -387,7 +394,9 @@
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/14-http-check-1280x720.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/15-portrait-traceroute-480x800.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-toolbox/screenshots/16-portrait-speed-800x1280.png"
-      ]
+      ],
+      "min_size": "640x480",
+      "portrait_min_size": "480x640"
     },
     {
       "uuid": "bb8214d0-592f-5472-8095-ce934b7b2ed2",
@@ -465,7 +474,9 @@
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-walk/screenshots/06-expert-1024x600.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-walk/screenshots/07-portrait-480x800.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/net-walk/screenshots/08-portrait-win-480x640.png"
-      ]
+      ],
+      "min_size": "480x320",
+      "portrait_min_size": "480x640"
     },
     {
       "uuid": "f90b6c76-fefd-5369-b039-151ae201bcc0",
@@ -531,7 +542,9 @@
       "screenshots": [
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/rss-reader/screenshots/01-portrait-articles-480x800.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/rss-reader/screenshots/02-portrait-reader-800x1280.png"
-      ]
+      ],
+      "min_size": "640x480",
+      "portrait_min_size": "480x640"
     },
     {
       "uuid": "2d352197-d45d-50d1-9f6f-75387ab6d9e8",
@@ -615,7 +628,9 @@
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/09-portrait-terminal-800x1280.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/10-portrait-band-480x800.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/serial-console/screenshots/11-portrait-band-800x1280.png"
-      ]
+      ],
+      "min_size": "640x480",
+      "portrait_min_size": "480x640"
     },
     {
       "uuid": "2ac794f7-c2d8-572f-a0bb-1a895856db77",
@@ -701,7 +716,9 @@
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/10-x86-temp-battery-640x480.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/11-portrait-overview-480x800.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/system-monitor/screenshots/12-portrait-overview-800x1280.png"
-      ]
+      ],
+      "min_size": "640x480",
+      "portrait_min_size": "480x640"
     },
     {
       "uuid": "b316a757-7d69-5f51-8ba3-1f47e9b229b6",
@@ -761,7 +778,9 @@
         "screenshots": []
       },
       "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/viz1090/icon.png",
-      "screenshots": []
+      "screenshots": [],
+      "min_size": "640x480",
+      "portrait_min_size": "480x640"
     }
   ]
 }
