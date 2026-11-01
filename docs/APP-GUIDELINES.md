@@ -499,6 +499,7 @@ X-Background=freeze
 | `recommends` | optional: Debian packages a feature uses when they are there (apt installs them by default; the app must work without them), e.g. Mesh Hop's `bluez` |
 | `permissions` | `network`, `additional_hardware`, `camera`, `microphone`, `imu`, `background_service`, `external_display` (honest: they are shown to the user) |
 | `draft` | `true` keeps the app out of the registry (`make_registry.py` skips it); build a local `.deb` with `--only <id> --out <dir outside packages/>` |
+| `min_size` | optional `"WxH"`: the landscape minimum screen, used **only when the `.desktop` has no `X-MinSize`** (the `.desktop` wins). Rarely needed: declare `X-MinSize` in the `.desktop` instead (an old package without it needs a rebuild to carry it, this field does not) |
 | `arch` | optional, default `["arm64"]`; `["arm64", "amd64"]` also packages the app for x86-64 PCs from `root.amd64/` into `registry-amd64.json` (README, amd64) |
 | `categories`, `author`, `source_repo` | shown in the catalogue |
 
@@ -518,6 +519,15 @@ X-Background=freeze
 - **No root at run time.** The app runs as the deck user. If it needs a group (`dialout`, `video`, `bluetooth`), document it (section 6).
 - **Large packages.** Above 50 MB attach the `.deb` to a GitHub Release (README of this repository, "Publish").
 - **Source of truth.** Never hand-edit `registry.json`; regenerate it.
+- **Screen requirements in the registry.** `make_registry.py` copies the launcher's own reading of the packaged `.desktop`
+  into every entry, so the launcher can show only the apps that fit the board it runs on (it hides the others from
+  Settings > Apps, as it hides an installed tile):
+  `"min_size": "WxH"` is the `X-MinSize` (the smallest landscape screen; the tile is hidden on a smaller one, either
+  dimension), `"portrait_min_size": "WxH"` is the `X-Portrait` (the smallest canvas on a portrait launcher, a size and not a
+  flag; without it a portrait screen runs the app turned, against `min_size`). Both are written normalised (`640x480`).
+  An app whose `.desktop` has no `X-MinSize` (and no `app.json` `min_size`) gets **no field**: it is shown on every screen.
+  `python3 tools/check_registry.py` fails when a registry value differs from the `.desktop`; `python3 tools/test_registry_tools.py`
+  is the self test of the generator (dates, `device_targets`, `generated_at`, these fields).
 
 ## 6. Behaviour
 
@@ -673,6 +683,7 @@ Copy into the pull request and tick.
 | 20 | `tests/BOARD-TESTS.md` written; the owner ran it on the deck (and the other boards that apply) | [ ] |
 | 21 | README complete (section 8) with 640x480 screenshots; repository README table updated | [ ] |
 | 22 | `sh tools/branding/check-branding.sh` clean for the new files | [ ] |
+| 23 | **Declare `X-MinSize`** (and `X-Portrait` when the layout passes on 480x640): the registry's `min_size` / `portrait_min_size` come from it, and the launcher hides the app on a screen that cannot run it; `python3 tools/check_registry.py` passes | [ ] |
 | 23 | Icon follows [ICON-PALETTE.md](ICON-PALETTE.md): 100x100 square transparent PNG, own hue (not green, not shared), own silhouette, two colours, strokes >= 9 px | [ ] |
 | 24 | Icon checked at 32 px and in greyscale on the review sheet (`python tools/icons/make_icons.py`), distinct from every other tile | [ ] |
 | 25 | Data and app lists on `CompactList`; no status shown by colour alone | [ ] |

@@ -70,13 +70,21 @@ apps/<id>/app.json            what you write: name, description, version, ...
 apps/<id>/icon.png            optional icon, 100x100 square transparent PNG (see docs/ICON-PALETTE.md)
 apps/<id>/screenshots/*.png   optional screenshots at the real screen size (640x480 deck, or 800x480)
 apps/<id>/root/...            the files of the app, laid out as they must be on the device
-tools/                        build_deb.py, make_registry.py and check_descriptors.py (pure Python 3, no other dependencies)
+tools/                        build_deb.py, make_registry.py, check_descriptors.py, check_registry.py (pure Python 3, no other dependencies)
 
 and, for apps also built for x86-64 PCs (optional, see amd64 below):
 registry-amd64.json           the catalogue of the amd64 packages
 packages/<name>_<ver>_amd64.deb
 apps/<id>/root.amd64/...      the amd64 files (the binary) that replace those of root/ in the amd64 package
 ```
+
+Each registry entry also carries the app's screen requirements, copied from its packaged `.desktop` by
+`tools/make_registry.py`, so that the launcher shows only the apps that fit the board's screen:
+`"min_size": "WxH"` (from `X-MinSize`, the smallest landscape screen) and `"portrait_min_size": "WxH"` (from `X-Portrait`,
+the smallest canvas on a portrait launcher), the second only when declared. An app without `X-MinSize` has no field and is
+listed everywhere. `python3 tools/check_registry.py` checks the registries against the `.desktop` files and
+`python3 tools/test_registry_tools.py` is the generator's self test; a plain `make_registry.py` run keeps the dates and
+`device_targets` of unchanged entries.
 
 The deck downloads `registry.json`, lists the apps in it, and installs the `.deb` an entry points to after
 checking its MD5. The format is the registry format (schema 2) of M5Stack's CardputerZero Store, which the
@@ -142,6 +150,8 @@ A program that does not use the runtime works too: the launcher starts any execu
 * `draft` – optional. `"draft": true` keeps an unfinished app out of the store: `tools/make_registry.py` skips it (no
   `.deb`, no registry entry). To build a local package of a draft anyway, without publishing, run
   `python tools/make_registry.py --only <id> --out <folder outside packages/>`; it writes only that `.deb`.
+* `min_size` – optional `"WxH"`, the landscape minimum screen; only used when the app's `.desktop` has no `X-MinSize`
+  (the `.desktop` wins). Normally leave it out and declare `X-MinSize` in the `.desktop`.
 * `arch` – optional, the architectures the app is packaged for: `["arm64"]` when left out (the decks),
   `["arm64", "amd64"]` for an app also built for x86-64 PCs ([amd64](#amd64-x86-64-pcs)).
 
