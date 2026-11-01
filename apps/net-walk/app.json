@@ -11,6 +11,5 @@
   "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/net-walk",
   "depends": "libfreetype6, libinput10, libxkbcommon0",
   "arch": ["arm64", "amd64"],
-  "permissions": {},
-  "draft": true
+  "permissions": {}
 }
