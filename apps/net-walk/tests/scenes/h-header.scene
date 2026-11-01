@@ -1,0 +1,34 @@
+title Net Walk: the shared page header (Esc button, title, status strip) over the body; the header Esc closes a window first, then ends the app
+sizes 480x320 640x480 800x480 1024x600 1280x800 720x720 480x800 480x640 800x1280
+env NETWALK_TEST_DATA h-header
+env NETWALK_TEST_RESET 1
+env NETWALK_TEST_SEED 7
+env NETWALK_TEST_PROBES 1
+
+wait 300
+expect text "Net Walk"
+expect text "Esc"
+shot header
+check header
+tap "@scores"
+wait 300
+expect text "@mode=scores"
+shot header-scores
+check header-scores
+tap "Esc"
+wait 300
+expect text "@mode=play"
+expect noquit
+tap "@size"
+wait 300
+tap "Esc"
+wait 300
+expect text "@mode=play"
+expect noquit
+type m
+wait 200
+expect text "@mode=play"
+expect noquit
+tap "Esc"
+wait 300
+expect quit

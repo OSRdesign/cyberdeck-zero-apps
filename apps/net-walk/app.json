@@ -1,0 +1,16 @@
+{
+  "share_code": "net-walk",
+  "package": "net-walk",
+  "version": "0.1.0",
+  "title": "Net Walk",
+  "summary": "A cable puzzle: turn the tiles until every computer is on the network.",
+  "description": "Turn the tiles until the server's power reaches every computer. A tap turns a tile clockwise, a long press the other way, a hold locks it. Four sizes: 5x5, 7x7, 9x9 and a 9x9 board whose edges wrap. Best moves and times are kept per size. Touch or keyboard; drawn in a Palm OS colour look that scales crisply to the screen. No network. Needs a screen of at least 480x320 (portrait 480x640 in PDA mode).",
+  "categories": ["Games"],
+  "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
+  "license": "MIT",
+  "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/net-walk",
+  "depends": "libfreetype6, libinput10, libxkbcommon0",
+  "arch": ["arm64", "amd64"],
+  "permissions": {},
+  "draft": true
+}

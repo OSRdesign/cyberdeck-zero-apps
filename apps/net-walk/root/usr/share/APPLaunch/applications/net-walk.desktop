@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Net Walk
+Exec=/usr/share/APPLaunch/bin/net-walk
+Terminal=false
+Icon=share/images/net-walk.png
+Type=Application
+X-Fullscreen=true
+X-MinSize=480x320
+X-Portrait=480x640
+X-Background=freeze

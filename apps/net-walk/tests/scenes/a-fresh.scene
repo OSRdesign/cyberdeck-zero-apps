@@ -1,0 +1,28 @@
+title Net Walk: a fresh Normal board (7x7), landscape (board left, panel right) and portrait (panel under the board)
+sizes 480x320 640x480 800x480 1024x600 1280x800 720x720 480x800 480x640 800x1280
+env NETWALK_TEST_DATA a-fresh
+env NETWALK_TEST_RESET 1
+env NETWALK_TEST_SEED 7
+env NETWALK_TEST_PROBES 1
+
+wait 300
+shot fresh
+check fresh
+expect text "@moves=0"
+expect text "@mode=play"
+expect text "@level=normal"
+expect text "@won=0"
+expect text "@t0,0"
+expect text "@t6,6"
+@480x320 expect text "@scale=2"
+@480x320 expect text "@hdr=40"
+@480x320 expect text "@body=480x280"
+@640x480 expect text "@scale=2"
+@640x480 expect text "@hdr=56"
+@480x640 expect text "@scale=2"
+@800x480 expect text "@scale=3"
+@1280x800 expect text "@scale=5"
+@480x800 expect text "@layout=portrait"
+@480x640 expect text "@layout=portrait"
+@480x320 expect text "@layout=landscape"
+expect noquit
