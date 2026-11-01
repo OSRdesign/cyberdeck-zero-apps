@@ -1,0 +1,12 @@
+title Home Assistant: a server name longer than the row: "Server" stays whole, the name ends with "..." (the address line above has it whole)
+sizes 480x320 640x480 800x480 1280x720 480x800
+env HA_DEMO connect
+env HA_DEMO_SERVER "home-assistant-in-the-basement.example.lan:8123"
+
+wait 700
+shot long-host
+check long-host
+expect text "Server"
+expect text "http://home-assistant-in-the-basement.example.lan:8123"
+expect notext "home-assistant-in-the-basement.example.lan"
+expect noquit

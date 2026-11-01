@@ -1,0 +1,18 @@
+title Home Assistant: Esc goes back one page, a short Esc at the root quits
+sizes 640x480 480x320 480x800
+env HA_DEMO home
+
+wait 900
+key end
+key up
+key up
+key up
+key enter
+wait 500
+expect text "Coffee machine"
+key esc
+wait 300
+expect text "FAVOURITES"
+expect noquit
+key esc
+expect quit

@@ -1,0 +1,21 @@
+title Home Assistant: long names and a room of 300 entities (cut with dots, values whole), scrolled by Page Down
+sizes 480x320 640x480 800x480 1024x600 1280x720 1280x800 720x720 480x800 480x640 800x1280
+env HA_DEMO big
+
+wait 1000
+shot big-home
+check big-home
+key end
+key up
+key up
+key enter
+wait 1500
+shot big-room
+check big-room
+key pgdn
+key pgdn
+key pgdn
+wait 500
+shot big-room-scrolled
+check big-room-scrolled
+expect noquit

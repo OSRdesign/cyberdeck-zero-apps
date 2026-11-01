@@ -1,0 +1,68 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Home Assistant (a client app for CyberdeckZero Launcher)
+Upstream-Contact: OSRdesign <https://github.com/OSRdesign/cyberdeck-zero-apps>
+Source: https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/home-assistant
+Comment: A client of a Home Assistant server on the local network, over Home
+ Assistant's WebSocket and authentication APIs. It is not affiliated with or
+ endorsed by the Home Assistant project; "Home Assistant" names the server it talks
+ to. The icon is the app's own (a house with a signal), not a mark of that project.
+ .
+ The binary contains the LVGL based cp0_lvgl runtime of the CyberdeckZero Launcher
+ (derived from the MIT-licensed launcher of M5Stack Technology CO LTD) and LVGL,
+ and the QR Code generator library by Project Nayuki (C++ version 1.8.0, unchanged),
+ all under the MIT licence, listed below.
+ .
+ libcurl is not shipped: the app opens the system's libcurl.so.4 (Debian package
+ libcurl4t64, the curl licence, https://curl.se/docs/copyright.html) at run time.
+
+Files: usr/share/APPLaunch/bin/home-assistant
+Copyright: 2026 OSRdesign
+ M5Stack Technology CO LTD (cp0_lvgl runtime linked into the binary)
+ LVGL Kft (LVGL, linked into the binary)
+ Project Nayuki (QR Code generator library, linked into the binary)
+License: MIT and MIT-Nayuki
+
+Files: usr/share/APPLaunch/applications/home-assistant.desktop
+       usr/share/APPLaunch/share/images/home-assistant.png
+       usr/share/doc/home-assistant/*
+Copyright: 2026 OSRdesign
+License: MIT
+
+License: MIT
+ Permission is hereby granted, free of charge, to any person obtaining a copy of this
+ software and associated documentation files (the "Software"), to deal in the Software
+ without restriction, including without limitation the rights to use, copy, modify, merge,
+ publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons
+ to whom the Software is furnished to do so, subject to the following conditions:
+ .
+ The above copyright notice and this permission notice shall be included in all copies or
+ substantial portions of the Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+ INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+ PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+ FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ DEALINGS IN THE SOFTWARE.
+
+License: MIT-Nayuki
+ QR Code generator library (C++)
+ .
+ Copyright (c) Project Nayuki. (MIT License)
+ https://www.nayuki.io/page/qr-code-generator-library
+ .
+ Permission is hereby granted, free of charge, to any person obtaining a copy of
+ this software and associated documentation files (the "Software"), to deal in
+ the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ the Software, and to permit persons to whom the Software is furnished to do so,
+ subject to the following conditions:
+ - The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
+ - The Software is provided "as is", without warranty of any kind, express or
+   implied, including but not limited to the warranties of merchantability,
+   fitness for a particular purpose and noninfringement. In no event shall the
+   authors or copyright holders be liable for any claim, damages or other
+   liability, whether in an action of contract, tort or otherwise, arising from,
+   out of or in connection with the Software or the use or other dealings in the
+   Software.

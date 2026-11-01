@@ -1,0 +1,17 @@
+title Home Assistant: multitasking (X-Background=freeze): hidden, keys typed meanwhile dropped, shown again with a full repaint, closed by the launcher
+sizes 640x480 800x480
+lifecycle
+env HA_DEMO home
+
+wait 900
+hide
+expect hidden
+stale down
+stale enter
+show
+expect visible
+wait 400
+expect repaint
+expect text "FAVOURITES"
+close
+expect quit

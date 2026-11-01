@@ -1,0 +1,16 @@
+{
+  "share_code": "home-assistant",
+  "package": "home-assistant",
+  "version": "0.1.0",
+  "title": "Home Assistant",
+  "summary": "Control your Home Assistant from the deck: favourites, rooms, lights, scenes.",
+  "description": "A client of your own Home Assistant server on the local network. Sign in by scanning a QR code with your phone, star favourites, browse rooms, switch lights and switches, set a light's brightness, run scenes and scripts, open covers and unlock locks after a confirmation, read sensors. Live states, greyed when offline. Not affiliated with the Home Assistant project. Needs Home Assistant on your network and a phone.",
+  "categories": ["Home"],
+  "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
+  "license": "MIT",
+  "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/home-assistant",
+  "depends": "libfreetype6, libinput10, libxkbcommon0, libcurl4t64",
+  "arch": ["arm64", "amd64"],
+  "draft": true,
+  "permissions": {"network": true}
+}
