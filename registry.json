@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-11-01T22:10:48+00:00",
+  "generated_at": "2026-11-02T01:24:37+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CardputerZero"
@@ -92,66 +92,6 @@
       ],
       "min_size": "640x480",
       "portrait_min_size": "480x640"
-    },
-    {
-      "uuid": "1331569f-c0a5-52e1-957c-b4d29fc560d7",
-      "share_code": "lanscan",
-      "title": "LAN Scan",
-      "summary": "Find the devices on your Wi-Fi network and scan their open ports.",
-      "description": "Lists the devices of the local network with IP, MAC, vendor and name (mDNS, NetBIOS, reverse DNS), then runs a TCP connect scan of the common ports (or 1-1024) on the one you select. Needs no root and no extra tools, and only ever scans the subnet the deck is connected to. Use it on networks you own or are allowed to test.",
-      "locales": {
-        "en": {
-          "title": "LAN Scan",
-          "summary": "Find the devices on your Wi-Fi network and scan their open ports.",
-          "description": "Lists the devices of the local network with IP, MAC, vendor and name (mDNS, NetBIOS, reverse DNS), then runs a TCP connect scan of the common ports (or 1-1024) on the one you select. Needs no root and no extra tools, and only ever scans the subnet the deck is connected to. Use it on networks you own or are allowed to test."
-        }
-      },
-      "i18n": {
-        "en": {
-          "title": "LAN Scan",
-          "summary": "Find the devices on your Wi-Fi network and scan their open ports.",
-          "description": "Lists the devices of the local network with IP, MAC, vendor and name (mDNS, NetBIOS, reverse DNS), then runs a TCP connect scan of the common ports (or 1-1024) on the one you select. Needs no root and no extra tools, and only ever scans the subnet the deck is connected to. Use it on networks you own or are allowed to test."
-        }
-      },
-      "categories": [
-        "Network"
-      ],
-      "author": {
-        "github": "OSRdesign",
-        "display_name": "OSRdesign"
-      },
-      "version": "0.1.3",
-      "published_at": "2026-10-06T06:09:12+00:00",
-      "updated_at": "2026-10-06T06:09:12+00:00",
-      "review": {
-        "status": "approved"
-      },
-      "license": "MIT",
-      "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/lanscan",
-      "download": {
-        "type": "deb",
-        "package": "lanscan",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/lanscan_0.1.3_arm64.deb",
-        "md5": "05d9ef668cbdf4db7f0c7622a153c4a9",
-        "sha256": "3dc935d3e008d287fba3c46f0912311d3f059619ad2caf0ca091849538167f1f",
-        "size": 1454328
-      },
-      "depends": "",
-      "permissions": {
-        "camera": false,
-        "microphone": false,
-        "imu": false,
-        "network": true,
-        "additional_hardware": false,
-        "background_service": false,
-        "external_display": false
-      },
-      "assets": {
-        "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/lanscan/icon.png",
-        "screenshots": []
-      },
-      "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/lanscan/icon.png",
-      "screenshots": []
     },
     {
       "uuid": "86e86d1a-2552-5a0d-ad23-7b4db5acf4b4",
@@ -841,66 +781,6 @@
       "screenshots": [],
       "min_size": "640x480",
       "portrait_min_size": "480x640"
-    },
-    {
-      "uuid": "8ec73f7d-f864-5a5e-8d9c-a2f6914e2e7c",
-      "share_code": "wifi-survey",
-      "title": "Wi-Fi Survey",
-      "summary": "See the Wi-Fi networks around you and which channels are crowded.",
-      "description": "Lists the Wi-Fi networks in range by signal, with SSID, channel, band and security, and marks the one the deck is connected to; a network's page shows its BSSID, vendor, frequency and rate. A chart counts the networks per channel on 2.4 and 5 GHz and highlights the least crowded one. Passive only: it reads NetworkManager's scan results, needs no root and never connects.",
-      "locales": {
-        "en": {
-          "title": "Wi-Fi Survey",
-          "summary": "See the Wi-Fi networks around you and which channels are crowded.",
-          "description": "Lists the Wi-Fi networks in range by signal, with SSID, channel, band and security, and marks the one the deck is connected to; a network's page shows its BSSID, vendor, frequency and rate. A chart counts the networks per channel on 2.4 and 5 GHz and highlights the least crowded one. Passive only: it reads NetworkManager's scan results, needs no root and never connects."
-        }
-      },
-      "i18n": {
-        "en": {
-          "title": "Wi-Fi Survey",
-          "summary": "See the Wi-Fi networks around you and which channels are crowded.",
-          "description": "Lists the Wi-Fi networks in range by signal, with SSID, channel, band and security, and marks the one the deck is connected to; a network's page shows its BSSID, vendor, frequency and rate. A chart counts the networks per channel on 2.4 and 5 GHz and highlights the least crowded one. Passive only: it reads NetworkManager's scan results, needs no root and never connects."
-        }
-      },
-      "categories": [
-        "Network"
-      ],
-      "author": {
-        "github": "OSRdesign",
-        "display_name": "OSRdesign"
-      },
-      "version": "0.1.1",
-      "published_at": "2026-10-06T06:09:15+00:00",
-      "updated_at": "2026-10-06T06:09:15+00:00",
-      "review": {
-        "status": "approved"
-      },
-      "license": "MIT",
-      "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/wifi-survey",
-      "download": {
-        "type": "deb",
-        "package": "wifi-survey",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/wifi-survey_0.1.1_arm64.deb",
-        "md5": "53626f14d5a5d710c0c71ac82b3cc4ea",
-        "sha256": "3b76fc4fb9cdfc9f99752db18b28b2ad282c98e21fba8a02496c5797ad208687",
-        "size": 1455316
-      },
-      "depends": "network-manager",
-      "permissions": {
-        "camera": false,
-        "microphone": false,
-        "imu": false,
-        "network": true,
-        "additional_hardware": false,
-        "background_service": false,
-        "external_display": false
-      },
-      "assets": {
-        "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/wifi-survey/icon.png",
-        "screenshots": []
-      },
-      "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/wifi-survey/icon.png",
-      "screenshots": []
     }
   ]
 }
