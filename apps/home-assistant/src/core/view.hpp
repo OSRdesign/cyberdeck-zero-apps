@@ -7,6 +7,7 @@
 #pragma once
 
 #include "model.hpp"
+#include "tiles.hpp"
 
 #include <cstdint>
 #include <string>
@@ -26,6 +27,19 @@ struct EntityRow {
     bool pending = false; /* a command was sent, the new state has not come back yet ("...") */
     bool done = false;    /* a scene or script just ran ("Done") */
     bool running = false; /* a script is running (the dot in blue) */
+
+    /* the tile (tiles.hpp): its second line, glyph and colours, what its icon does */
+    std::string tile_value;      /* "On, 72 %", "21.5 °C", "Unavailable", "..." (pending) */
+    std::uint32_t glyph = 0;     /* MDI codepoint; 0 when the font's table knows none of its names */
+    std::uint32_t glyph_rgb = rgb::kInactive;
+    std::uint32_t circle_rgb = rgb::kCircle;
+    bool active = false;         /* the circle tinted */
+    bool unavailable = false;    /* the tile dimmed */
+    TileAction tile_action = TileAction::Details;
+    bool confirm = false;        /* the icon's action asks first (a lock, a garage / gate / door cover) */
+    bool dimmable = false;       /* a light with brightness: a slider row under its tile */
+    int brightness_pct = 0;      /* 0..100 (0 = off) */
+    bool on = false;             /* on / open / unlocked: which way the action goes */
 };
 
 struct RoomRow {
@@ -47,6 +61,9 @@ struct Detail {
     bool on = false;
     bool confirm = false;   /* a lock, or a garage-type cover: actions ask first */
     bool favourite = false;
+    /* the page's top (study 053 section 7.6): the tile's glyph and colours, its word, "Living room - changed 19:58" */
+    EntityRow tile;
+    std::string meta;
 };
 
 enum class Tone { Normal, Warn, Error };
@@ -69,6 +86,7 @@ struct View {
 
     std::vector<EntityRow> favourites;
     std::vector<RoomRow> rooms;
+    std::vector<Tab> tabs; /* Favourites, the areas with entities, All */
     bool room_shown = false;
     std::string room_id, room_name;
     std::vector<EntityRow> room;

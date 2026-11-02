@@ -52,11 +52,15 @@ struct RegEntry {
     bool has_entity_name = false; /* "hn": the friendly name is the device's name + this name */
     bool hidden = false;          /* hidden by the user ("hb") or a configuration / diagnostic entity ("ec") */
     int precision = -1;           /* "dp": display precision of a sensor, -1 none */
+    std::string icon;             /* "ic": the user's icon ("mdi:ceiling-light"), may be empty */
+    std::string platform;         /* "pl": the integration ("hue") */
+    std::string translation_key;  /* "tk": its key for the integration's icons and names, may be empty */
 };
 
 struct State {
     std::string state;
     std::string friendly_name, unit, device_class;
+    std::string icon; /* the "icon" attribute, may be empty */
     int brightness = -1;  /* 0..255, -1 when absent */
     bool dimmable = false; /* supported_color_modes names a mode with brightness */
     double current_temperature = NAN, target_temperature = NAN;
@@ -80,6 +84,12 @@ public:
     bool set_devices(const json::Value &result);
     bool set_entities(const json::Value &result);
     void clear_registry();
+    /* The layout cached by an earlier session (store::load_layout): areas and entries whose name and area are already
+     * resolved (no devices). Replaces the registry; the next registry from Home Assistant replaces it in turn. */
+    void restore(std::vector<Area> areas, std::vector<RegEntry> entries);
+    /* The visible entries with their display name (registry, device) and area resolved: what restore() takes. */
+    std::vector<RegEntry> resolved_entries() const;
+    const std::vector<Area> &areas() const { return areas_; }
     void clear_states() { states_.clear(); }
 
     /* One subscribe_entities event ({"a": ..., "c": ..., "r": [...]}). True when a state changed. ids_changed gets

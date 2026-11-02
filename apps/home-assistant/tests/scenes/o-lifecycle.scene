@@ -3,7 +3,7 @@ sizes 640x480 800x480
 lifecycle
 env HA_DEMO home
 
-wait 900
+wait 1600
 hide
 expect hidden
 stale down
@@ -12,6 +12,7 @@ show
 expect visible
 wait 400
 expect repaint
-expect text "FAVOURITES"
+expect text "Favourites"
+expect text "On, 72 %"
 close
 expect quit

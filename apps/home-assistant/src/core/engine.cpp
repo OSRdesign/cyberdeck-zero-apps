@@ -6,6 +6,7 @@
 #include "engine.hpp"
 
 #include "format.hpp"
+#include "mdi.hpp"
 
 #include <algorithm>
 
@@ -528,8 +529,31 @@ void Engine::on_result(const json::Value &msg, const Pending &p, std::int64_t no
     case Req::Config:
         if (success)
             if (const json::Value *us = r.get("unit_system"))
-                if (const json::Value *t = us->get("temperature")) temp_unit_ = clean_unit(t->as_string("C"));
+                if (const json::Value *t = us->get("temperature")) {
+                    temp_unit_ = clean_unit(t->as_string("C"));
+                    temp_unit_raw_ = t->as_string(temp_unit_raw_);
+                }
         return;
+    case Req::IconsComponent:
+    case Req::IconsEntity: {
+        /* a refusal (an older server) keeps what we had: the app's own table covers every phase-1 domain */
+        if (!success) return;
+        bool ok = false;
+        if (p.req == Req::IconsComponent) {
+            ok = icons_.set_component(r);
+        } else {
+            std::set<std::string> keep;
+            for (const RegEntry &e : model_.resolved_entries())
+                if (!e.platform.empty() && !e.translation_key.empty())
+                    keep.insert(e.platform + "|" + domain_word(e.id) + "|" + e.translation_key);
+            ok = icons_.set_entity(r, keep);
+        }
+        if (ok) {
+            save_layout();
+            changed();
+        }
+        return;
+    }
     case Req::User:
         if (success)
             if (const json::Value *n = r.get("name")) user_ = n->as_string();
@@ -556,6 +580,8 @@ void Engine::on_result(const json::Value &msg, const Pending &p, std::int64_t no
             registry_ever_ = true;
             update_subscription();
             update_name_cache();
+            send_icon_requests();
+            save_layout();
         }
         changed();
         return;
@@ -600,6 +626,69 @@ void Engine::update_name_cache()
     if (next == names_) return;
     names_ = std::move(next);
     push(Action{Action::Kind::SaveNames, "", "", "", HttpTag::CheckServer});
+}
+
+/* The icon rules of Home Assistant (study 053 section 6.6), both open to any user: the phase-1 domains' rules, then the
+ * translation-key icons of the integrations whose entities the registry holds with a key. */
+void Engine::send_icon_requests()
+{
+    std::string domains = "[";
+    for (std::size_t i = 0; i < icon_domains().size(); ++i) domains += (i ? "," : "") + json::quote(icon_domains()[i]);
+    send("frontend/get_icons", "\"category\":\"entity_component\",\"integration\":" + domains + "]", Req::IconsComponent);
+    std::set<std::string> platforms;
+    for (const RegEntry &e : model_.resolved_entries())
+        if (!e.platform.empty() && !e.translation_key.empty() && platforms.size() < 200) platforms.insert(e.platform);
+    if (platforms.empty()) return;
+    std::string list = "[";
+    bool first = true;
+    for (const std::string &p : platforms) {
+        list += (first ? "" : ",") + json::quote(p);
+        first = false;
+    }
+    send("frontend/get_icons", "\"category\":\"entity\",\"integration\":" + list + "]", Req::IconsEntity);
+}
+
+void Engine::set_cached_layout(std::vector<Area> areas, std::vector<RegEntry> entries, IconRules icons)
+{
+    if (entries.empty() && areas.empty()) return;
+    model_.restore(std::move(areas), std::move(entries));
+    icons_ = std::move(icons);
+    registry_ever_ = model_.registry_size() > 0;
+    layout_saved_ = layout_text();
+}
+
+std::string Engine::layout_text() const
+{
+    if (model_.registry_size() == 0 && model_.area_count() == 0) return std::string();
+    std::string s = "{\n  \"version\": 1,\n  \"areas\": [";
+    bool first = true;
+    for (const Area &a : model_.areas()) {
+        s += std::string(first ? "\n    " : ",\n    ") + "{\"id\": " + json::quote(a.id) + ", \"name\": " + json::quote(a.name) + "}";
+        first = false;
+    }
+    s += "\n  ],\n  \"entities\": [";
+    first = true;
+    for (const RegEntry &e : model_.resolved_entries()) {
+        s += std::string(first ? "\n    " : ",\n    ") + "{\"id\": " + json::quote(e.id) + ", \"name\": " + json::quote(e.name);
+        if (!e.area.empty()) s += ", \"area\": " + json::quote(e.area);
+        if (e.precision >= 0) s += ", \"dp\": " + std::to_string(e.precision);
+        if (!e.icon.empty()) s += ", \"ic\": " + json::quote(e.icon);
+        if (!e.platform.empty()) s += ", \"pl\": " + json::quote(e.platform);
+        if (!e.translation_key.empty()) s += ", \"tk\": " + json::quote(e.translation_key);
+        s += "}";
+        first = false;
+        if (s.size() > kMaxLayoutBytes) return std::string();
+    }
+    s += "\n  ],\n  \"icons\": " + icons_.to_json() + "\n}\n";
+    return s.size() > kMaxLayoutBytes ? std::string() : s;
+}
+
+void Engine::save_layout()
+{
+    const std::string text = layout_text();
+    if (text.empty() || text == layout_saved_) return;
+    layout_saved_ = text;
+    push(Action{Action::Kind::SaveLayout, "", "", "", HttpTag::CheckServer});
 }
 
 std::set<std::string> Engine::wanted_set() const
@@ -839,26 +928,47 @@ EntityRow Engine::row(const std::string &id, std::int64_t now) const
     r.id = id;
     r.domain = domain_of(id);
     r.action = row_action(r.domain);
+    r.tile_action = tile_action(r.domain);
     r.name = name_of(id);
     const RegEntry *e = model_.entry(id);
     const State *s = model_.state(id);
     if (s) {
         r.value = state_label(r.domain, *s, e ? e->precision : -1, temp_unit_);
+        r.tile_value = tile_word(r.domain, *s, e ? e->precision : -1, temp_unit_raw_);
         r.muted = unavailable(*s) && r.domain != Domain::Scene;
         r.running = r.domain == Domain::Script && s->state == "on";
+        r.dimmable = r.domain == Domain::Light && s->dimmable;
+        r.brightness_pct = brightness_pct(*s);
+        r.on = is_on(r.domain, *s);
+        r.confirm = r.domain == Domain::Lock || (r.domain == Domain::Cover && confirm_cover(*s));
     } else {
         r.muted = true;
+        r.tile_value = failures_ >= kOfflineAfter && st_ != St::Online ? "Offline" : "...";
+        r.confirm = r.domain == Domain::Lock || r.domain == Domain::Cover; /* unknown class: ask */
+    }
+    const TileLook look = tile_look(r.domain, s);
+    r.active = look.active;
+    r.unavailable = look.unavailable;
+    r.glyph_rgb = look.glyph;
+    r.circle_rgb = look.circle;
+    const MdiNames &names = mdi();
+    if (names.loaded()) {
+        const std::string icon =
+            resolve_icon(id, e, s, icons_, [&names](const std::string &n) { return names.lookup(n) != 0; });
+        r.glyph = names.lookup(icon);
     }
     auto p = pending_until_.find(id);
     if (p != pending_until_.end() && now < p->second) {
         r.pending = true;
         r.value = "...";
+        r.tile_value = "...";
         r.muted = false;
     }
     auto d = done_until_.find(id);
     if (d != done_until_.end() && now < d->second) {
         r.done = true;
         r.value = "Done";
+        r.tile_value = "Done";
         r.muted = false;
     }
     if (st_ != St::Online) r.muted = true; /* the last value, greyed */
@@ -889,7 +999,9 @@ View Engine::view(std::int64_t now, std::int64_t wall) const
     v.paired_now = paired_now_;
 
     for (const std::string &id : favourites_) v.favourites.push_back(row(id, now));
-    for (const RoomInfo &r : model_.rooms()) v.rooms.push_back(RoomRow{r.id, r.name, r.count});
+    const std::vector<RoomInfo> rooms = model_.rooms();
+    for (const RoomInfo &r : rooms) v.rooms.push_back(RoomRow{r.id, r.name, r.count});
+    v.tabs = make_tabs(rooms);
     v.room_shown = view_room_;
     if (view_room_) {
         v.room_id = view_room_id_;
@@ -900,6 +1012,7 @@ View Engine::view(std::int64_t now, std::int64_t wall) const
     if (!view_entity_.empty()) {
         Detail &d = v.detail;
         const EntityRow r = row(view_entity_, now);
+        d.tile = r;
         d.known = model_.known(view_entity_);
         d.id = view_entity_;
         d.name = r.name;
@@ -912,14 +1025,18 @@ View Engine::view(std::int64_t now, std::int64_t wall) const
         d.room = model_.entry(view_entity_) ? model_.area_name(area) : std::string();
         d.favourite = std::find(favourites_.begin(), favourites_.end(), view_entity_) != favourites_.end();
         if (const State *st = model_.state(view_entity_)) {
-            d.info = detail_rows(d.domain, *st, temp_unit_, d.room, wall);
+            d.info = detail_rows(d.domain, *st, temp_unit_raw_, d.room, wall); /* the page writes "21.4 °C" */
             d.dimmable = d.domain == Domain::Light && st->dimmable;
             d.brightness_pct = brightness_pct(*st);
             d.on = is_on(d.domain, *st);
             d.confirm = d.domain == Domain::Lock || (d.domain == Domain::Cover && confirm_cover(*st));
+            const std::string changed = changed_text(st->last_changed, wall);
+            d.meta = d.room;
+            if (!changed.empty()) d.meta += (d.meta.empty() ? "Changed " : " - changed ") + changed;
         } else {
             if (!d.room.empty()) d.info.emplace_back("Room", d.room);
             d.confirm = d.domain == Domain::Lock || d.domain == Domain::Cover; /* unknown class: ask */
+            d.meta = d.room;
         }
     }
     v.message = message_;

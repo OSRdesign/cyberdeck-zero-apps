@@ -7,12 +7,13 @@
  * /auth/token (authorization_code, refresh_token), /auth/revoke, and over the WebSocket auth, supported_features,
  * get_config, auth/current_user, the area, device and entity-for-display lists, subscribe_entities (a snapshot of the
  * ids asked, then "c" changes), unsubscribe_events, call_service (light, switch, input_boolean, scene, script, lock,
- * cover) and ping. It is a stand-in for the tests, not a description of Home Assistant beyond that subset.
+ * cover), frontend/get_icons (a few made-up rules of the test fixture's own, in the shape Home Assistant serves) and
+ * ping. It is a stand-in for the tests, not a description of Home Assistant beyond that subset.
  *
- * Worlds (HA_DEMO): connect (no sign-in yet), connect-unreachable, home (signed in, five rooms, five favourites),
+ * Worlds (HA_DEMO): connect (no sign-in yet), connect-unreachable, home (signed in, five rooms, eight favourites),
  * empty (signed in, nothing configured), big (a room of 300 entities with long names), connecting (signed in, server
- * down from the start), reconnecting (connects, then the link drops for good), offline (the same, time running 20
- * times faster so that the line reaches Offline quickly). HA_DEMO_PHONE=ok|refused|badcode makes the simulated phone
+ * down from the start, the layout of an earlier session cached), reconnecting (connects, then the link drops for
+ * good), offline (the same, time running 20 times faster so that the line reaches Offline quickly). HA_DEMO_PHONE=ok|refused|badcode makes the simulated phone
  * answer the QR code one second after it shows. HA_DEMO_SPEED=N runs the simulated time N times faster.
  */
 #pragma once
@@ -39,6 +40,9 @@ struct SimEntity {
     double current_temperature = -1000, target_temperature = -1000;
     int position = -1;
     std::string fail_service; /* this service answers an error (a jammed lock) */
+    std::string icon;         /* the registry's user icon ("ic") */
+    std::string attr_icon;    /* the state's "icon" attribute */
+    std::string platform = "demo", translation_key;
 };
 
 struct SimWorld {
@@ -51,6 +55,7 @@ struct SimWorld {
     std::vector<std::pair<std::string, std::string>> areas;   /* id, name */
     std::map<std::string, std::string> device_area;           /* device id -> area */
     std::vector<SimEntity> entities;
+    bool icons = true; /* frontend/get_icons answers (false: an older server, "unknown_command") */
 
     /* counters for the tests */
     int refreshes = 0, revokes = 0, exchanges = 0, ws_opens = 0, auths = 0, provider_checks = 0;
@@ -100,6 +105,8 @@ public:
     bool credentials_file() const { return creds_file_; }
     const std::vector<std::string> &saved_favourites() const { return saved_favs_; }
     const std::map<std::string, std::string> &saved_names() const { return saved_names_; }
+    const std::string &saved_layout() const { return saved_layout_; }
+    int layout_saves() const { return layout_saves_; }
     bool listening() const { return listening_; }
 
 private:
@@ -128,6 +135,8 @@ private:
     bool creds_file_ = false;
     std::vector<std::string> saved_favs_;
     std::map<std::string, std::string> saved_names_;
+    std::string saved_layout_;
+    int layout_saves_ = 0;
     std::string issued_refresh_;
     int token_serial_ = 0;
     std::string demo_;

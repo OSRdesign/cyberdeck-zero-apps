@@ -43,13 +43,14 @@ std::string format_number(const std::string &raw, int precision)
     return s;
 }
 
-std::string format_temperature(double t, const std::string &unit)
+std::string format_temperature(double t, const std::string &unit, bool keep_degree)
 {
     if (std::isnan(t)) return "";
     char buf[32];
     if (std::fabs(t - std::round(t)) < 0.05) std::snprintf(buf, sizeof buf, "%.0f", t);
     else std::snprintf(buf, sizeof buf, "%.1f", t);
-    const std::string u = clean_unit(unit);
+    std::string u = clean_unit(unit);
+    if (keep_degree && unit.find("\xC2\xB0") != std::string::npos && !u.empty()) u = "\xC2\xB0" + u;
     return u.empty() ? std::string(buf) : std::string(buf) + " " + u;
 }
 
@@ -164,8 +165,8 @@ std::vector<std::pair<std::string, std::string>> detail_rows(Domain d, const Sta
             rows.emplace_back("Brightness", std::to_string(brightness_pct(s)) + " %");
         break;
     case Domain::Climate: {
-        const std::string cur = format_temperature(s.current_temperature, temp_unit);
-        const std::string target = format_temperature(s.target_temperature, temp_unit);
+        const std::string cur = format_temperature(s.current_temperature, temp_unit, true);
+        const std::string target = format_temperature(s.target_temperature, temp_unit, true);
         if (!cur.empty()) rows.emplace_back("Temperature", cur);
         if (!target.empty()) rows.emplace_back("Target", target);
         if (!s.hvac_action.empty()) rows.emplace_back("Action", capitalised(s.hvac_action));

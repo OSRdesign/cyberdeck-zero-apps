@@ -22,8 +22,9 @@ namespace ha {
 std::string clean_unit(const std::string &unit);
 /* A sensor value: a number rounded to `precision` decimals when precision >= 0, else the text as Home Assistant sent it. */
 std::string format_number(const std::string &raw, int precision);
-/* A temperature with its unit ("21.5 C"); "" for NAN. */
-std::string format_temperature(double t, const std::string &unit);
+/* A temperature with its unit ("21.5 C"); "" for NAN. keep_degree: "21.5 °C" (the entity page's face, FreeType
+ * Montserrat, has the degree sign; the lists keep ASCII). */
+std::string format_temperature(double t, const std::string &unit, bool keep_degree = false);
 
 bool unavailable(const State &s); /* "unavailable" or "unknown" or empty */
 bool is_on(Domain d, const State &s);

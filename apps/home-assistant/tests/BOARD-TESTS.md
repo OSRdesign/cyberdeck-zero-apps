@@ -1,8 +1,80 @@
-# Home Assistant: board tests (owner protocol, about 10 minutes)
+# Home Assistant: board tests (owner protocol)
+
+## 0.2.0 (draft, study 053 P1): the tile dashboard, about 10 minutes
+
+Two boards: one with a **keyboard** (the deck, Pi Zero 2 W, 640x480: K steps) and one **touch only** (the Pi 3A+ or
+zero8: T steps). Against the real Home Assistant (`http://homeassistant.local:8123`, 2026.10.4), signed in as `deck`
+(non-admin). Nothing here was run on a board or against a real Home Assistant before: the app was tested against a
+simulated and a fake server only, in the PC harness.
+
+Install over 0.1.0: copy `home-assistant_0.2.0_arm64.deb` to the board, then `sudo dpkg -i home-assistant_0.2.0_arm64.deb`.
+The sign-in of 0.1.0 is kept (`~/.config/home-assistant/`): no new QR code. On a board without 0.1.0, pair first as in
+0.1.0's T1 below. Remove with `sudo dpkg -r home-assistant`.
+
+Before: in HA, have one dimmable light, one lock (or garage door), one scene, and two or three of them starred on the deck
+(0.1.0's "Add to favourites", or the entity page's row in 0.2.0).
+
+### P1. The dashboard (2 minutes, both boards)
+
+1. Open **Home Assistant**. Expected: under the header a bar **Favourites | <your areas> | All**, and at its right a green
+   dot and **Online**. Under it, your favourites as tiles: an icon in a circle at the left, the name, the state word in grey,
+   and a small `›` at the top right on the tiles whose page has more than the icon's action (a dimmable light, a cover, a
+   sensor, a thermostat; not a plain switch, scene or lock). A light that is on: its circle tinted amber, "On, 72 %"; off: grey, "Off" and the bulb
+   glyph crossed. A lock: green "Locked". Columns: 2 on the deck; on the 3.5" Pi 3A+ panel 3, on an 800x480 panel 3.
+2. A dimmable light has a full-width row under its row of tiles: its name, a slider, "72 %".
+3. Do the icons look like the ones in Home Assistant's app for the same entities? Note any tile whose icon differs or is a
+   letter (a letter means the icon name was not found).
+
+### P2. Toggle and slider (2 minutes)
+
+- K: press **Down** once (the first tile gets a blue outline and a lighter ground; the first key only shows the focus).
+  Move with the arrows to a light, **Enter**: the word shows "..." then the new state; the lamp follows. Move **Down** from
+  a dimmable light: the focus goes into its slider row; **Right** / **Left** change it by 10 %; the lamp follows within
+  about a second. **Up** goes back to the light.
+- T: tap a light's **icon**: it toggles ("..." then the state). Tap the slider row right of the knob: +10 %; drag the knob:
+  the level follows the finger, the lamp a moment after you stop. Tap a tile's **name**: its page opens (Esc back).
+- Tap or Enter a **scene**'s icon: "Done" for a moment; the scene runs.
+
+### P3. Lock and garage confirmation (1 minute)
+
+1. K: focus the lock's tile, Enter. T: tap the lock's icon. Expected: a box "Unlock Front door?" Yes / Cancel. Cancel:
+   nothing happens.
+2. Again, Yes: "..." then "Unlocked" (red circle). Lock it again the same way ("Lock Front door?").
+3. A garage, gate or door cover: its icon asks "Open Garage door?" the same way.
+
+### P4. Tabs and details (2 minutes)
+
+1. K: **Page Down** / **Page Up** switch views; or **Up** from the first row (the active tab gets the outline), then
+   **Left** / **Right**. T: tap an area's tab; or swipe sideways over the tiles. Each area shows its entities as tiles.
+2. **All**: 0.1.0's list (FAVOURITES, ROOMS, Settings). Open Settings: "Tile action: Enter", "Tile page: Ctrl+O".
+3. K: on a tile, **Ctrl+O** opens its page (only the keyboard can test this one). The page: the icon at the top, the word
+   and "<area> - changed HH:MM", then right under it 7 mm rows (no gap): Brightness (a dimmable light; label whole,
+   Left / Right 10 %), Turn on / off (or Lock / Unlock, Activate, Run, Open / Close) with a dot, Add to / Remove from
+   favourites. Up / Down move, Enter acts, Esc back. T: tap a row to select it, tap it again to act; drag the slider.
+   Star one entity there, Esc: it is a tile in Favourites now.
+
+### P5. Offline and a start without a connection (2 minutes)
+
+1. On Favourites, turn the board's Wi-Fi off. Expected within about 45 s: the bar says "Reconnecting..." (amber), the tiles
+   go grey with their last words; after about 15 s more "Offline HH:MM" (red). No spinner.
+2. With Wi-Fi still off, quit (Esc) and open the app again. Expected: the same tabs and tiles at once, grey, "..." as
+   words, "Connecting..." then "Offline".
+3. Wi-Fi on. Expected: "Online" within a minute, live words and colours back.
+
+### What to send back (0.2.0)
+
+Per step: pass, or what you saw instead (a photo helps for the look). Which tiles' icons differ from Home Assistant's app.
+How the deck feels when switching tabs (any delay you notice). Optional:
+`grep VmRSS /proc/$(pgrep -x home-assistant)/status` on Favourites and on your largest area (target under 25 MB), and
+`ls -l ~/.config/home-assistant/` (`layout.json` and `names.json` are `-rw-------`).
+
+---
+
+## 0.1.0: the first protocol (pairing, lists, sign out; still valid)
 
 Phase 1, version 0.1.0 (draft). The owner runs these on the deck (Pi Zero 2 W, 640x480, Bluetooth keyboard and
-touch) against the real Home Assistant (`http://homeassistant.local:8123`, 2026.10.4). Nothing here was run on a board
-or against a real Home Assistant before this protocol: the app was tested against a simulated and a fake server only.
+touch) against the real Home Assistant (`http://homeassistant.local:8123`, 2026.10.4). In 0.2.0 the 0.1.0 Home list is
+the **All** tab, so "Home" below means All.
 
 Install: copy `home-assistant_0.1.0_arm64.deb` to the deck, then `sudo dpkg -i home-assistant_0.1.0_arm64.deb` (it
 depends on `libcurl4t64`, which the boards already have through `curl`; `sudo apt -f install` if dpkg says it is

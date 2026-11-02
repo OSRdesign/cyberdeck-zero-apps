@@ -81,8 +81,11 @@ void home_world(SimWorld &w)
     w.entities.push_back(e);
     e = ent("light.kitchen", "Kitchen light", "kitchen", "off");
     e.dimmable = true;
+    e.icon = "mdi:ceiling-light"; /* the user's own icon in the registry */
     w.entities.push_back(e);
-    w.entities.push_back(ent("switch.coffee_machine", "Coffee machine", "kitchen", "off"));
+    e = ent("switch.coffee_machine", "Coffee machine", "kitchen", "off");
+    e.attr_icon = "mdi:coffee-maker"; /* the integration's icon attribute */
+    w.entities.push_back(e);
     e = ent("sensor.fridge", "Fridge", "", "4.1");
     e.device = "dev_fridge";
     e.unit = "\xC2\xB0" "C";
@@ -114,6 +117,11 @@ void home_world(SimWorld &w)
     e = ent("sensor.garage_power", "Power", "garage", "12.0");
     e.unit = "W";
     e.precision = 0;
+    e.translation_key = "power_meter"; /* the integration's translation-key icon (frontend/get_icons entity) */
+    w.entities.push_back(e);
+    e = ent("sensor.hall_motion_battery", "Motion sensor battery", "hall", "15");
+    e.unit = "%";
+    e.device_class = "battery";
     w.entities.push_back(e);
     w.entities.push_back(ent("input_boolean.guest_mode", "Guest mode", "", "off"));
     e = ent("sensor.router_uptime", "Router uptime", "hall", "12");
@@ -366,12 +374,17 @@ void SimBackend::exec(const Action &a)
     case Action::Kind::SaveSettings: return;
     case Action::Kind::SaveFavourites: saved_favs_ = engine_.favourites(); return;
     case Action::Kind::SaveNames: saved_names_ = engine_.cached_names(); return;
+    case Action::Kind::SaveLayout:
+        saved_layout_ = engine_.layout_text();
+        ++layout_saves_;
+        return;
     }
 }
 
 std::string SimBackend::compressed(const SimEntity &e) const
 {
     std::string a = "\"friendly_name\":" + json::quote(e.name);
+    if (!e.attr_icon.empty()) a += ",\"icon\":" + json::quote(e.attr_icon);
     if (!e.unit.empty()) a += ",\"unit_of_measurement\":" + json::quote(e.unit);
     if (!e.device_class.empty()) a += ",\"device_class\":" + json::quote(e.device_class);
     if (e.id.rfind("light.", 0) == 0) {
@@ -452,9 +465,11 @@ void SimBackend::ws_receive(const std::string &text)
         for (const SimEntity &e : world_.entities) {
             r += first ? "" : ",";
             first = false;
-            r += "{\"ei\":" + json::quote(e.id) + ",\"pl\":\"demo\",\"en\":" + json::quote(e.name);
+            r += "{\"ei\":" + json::quote(e.id) + ",\"pl\":" + json::quote(e.platform) + ",\"en\":" + json::quote(e.name);
             if (!e.area.empty()) r += ",\"ai\":" + json::quote(e.area);
             if (!e.device.empty()) r += ",\"di\":" + json::quote(e.device);
+            if (!e.icon.empty()) r += ",\"ic\":" + json::quote(e.icon);
+            if (!e.translation_key.empty()) r += ",\"tk\":" + json::quote(e.translation_key);
             if (e.hidden) r += ",\"hb\":true";
             if (e.category) r += ",\"ec\":1";
             if (e.precision >= 0) r += ",\"dp\":" + std::to_string(e.precision);
@@ -475,6 +490,32 @@ void SimBackend::ws_receive(const std::string &text)
             first = false;
         }
         out("{\"id\":" + sid + ",\"type\":\"event\",\"event\":{\"a\":" + a + "}}}");
+    } else if (type == "frontend/get_icons" && world_.icons) {
+        /* the test fixture's own few rules, in the shape Home Assistant serves them */
+        const std::string category = m.get("category") ? m.get("category")->as_string() : "";
+        if (category == "entity_component")
+            result("{\"resources\":{"
+                   "\"light\":{\"_\":{\"default\":\"mdi:lightbulb\",\"state\":{\"off\":\"mdi:lightbulb-off\"}}},"
+                   "\"switch\":{\"_\":{\"default\":\"mdi:toggle-switch-variant\",\"state\":{\"off\":\"mdi:toggle-switch-variant-off\"}}},"
+                   "\"input_boolean\":{\"_\":{\"default\":\"mdi:check-circle-outline\",\"state\":{\"off\":\"mdi:close-circle-outline\"}}},"
+                   "\"scene\":{\"_\":{\"default\":\"mdi:palette\"}},"
+                   "\"script\":{\"_\":{\"default\":\"mdi:script-text\"}},"
+                   "\"lock\":{\"_\":{\"default\":\"mdi:lock\",\"state\":{\"unlocked\":\"mdi:lock-open-variant\",\"jammed\":\"mdi:lock-alert\"}}},"
+                   "\"cover\":{\"_\":{\"default\":\"mdi:window-shutter-open\",\"state\":{\"closed\":\"mdi:window-shutter\"}},"
+                   "\"garage\":{\"default\":\"mdi:garage-open\",\"state\":{\"closed\":\"mdi:garage\"}}},"
+                   "\"climate\":{\"_\":{\"default\":\"mdi:thermostat\"}},"
+                   "\"sensor\":{\"_\":{\"default\":\"mdi:eye\"},\"temperature\":{\"default\":\"mdi:thermometer\"},"
+                   "\"humidity\":{\"default\":\"mdi:water-percent\"}},"
+                   "\"binary_sensor\":{\"_\":{\"default\":\"mdi:radiobox-blank\",\"state\":{\"on\":\"mdi:checkbox-marked-circle\"}},"
+                   "\"window\":{\"default\":\"mdi:window-closed\",\"state\":{\"on\":\"mdi:window-open\"}},"
+                   "\"motion\":{\"default\":\"mdi:motion-sensor-off\",\"state\":{\"on\":\"mdi:motion-sensor\"}},"
+                   "\"door\":{\"default\":\"mdi:door-closed\",\"state\":{\"on\":\"mdi:door-open\"}}},"
+                   "\"media_player\":{\"_\":{\"default\":\"mdi:cast\"}}}}");
+        else if (category == "entity")
+            result("{\"resources\":{\"demo\":{\"sensor\":{\"power_meter\":{\"default\":\"mdi:meter-electric\"},"
+                   "\"unused_key\":{\"default\":\"mdi:help\"}}}}}");
+        else
+            out("{\"id\":" + sid + ",\"type\":\"result\",\"success\":false,\"error\":{\"code\":\"invalid_format\"}}");
     } else if (type == "call_service") {
         const std::string domain = m.get("domain") ? m.get("domain")->as_string() : "";
         const std::string service = m.get("service") ? m.get("service")->as_string() : "";
@@ -573,17 +614,37 @@ std::unique_ptr<SimBackend> make_demo_backend(const std::string &name)
         creds.client_id = "http://192.168.1.42:41234/";
         creds.refresh_token = kSimRefresh;
     }
+    /* the Favourites tab of the dashboard: a dimmable light on (its slider row), a light off, a lock, a sensor, a
+     * thermostat, a scene, an unavailable light, a garage door */
     if (name == "home" || name == "reconnecting" || name == "offline" || name == "connecting")
-        favs = {"light.living_ceiling", "scene.evening", "sensor.living_temperature", "lock.front_door",
-                "cover.garage_door"};
+        favs = {"light.living_ceiling", "light.reading_lamp", "lock.front_door", "sensor.living_temperature",
+                "climate.thermostat",   "scene.evening",      "light.porch",     "cover.garage_door"};
     if (name == "big")
         favs = {"light.workshop_005", "sensor.workshop_002", "switch.workshop_001", "light.living_ceiling"};
     std::map<std::string, std::string> names;
     if (name == "connecting") /* the names cached by an earlier session: a start without a connection shows them */
-        names = {{"light.living_ceiling", "Ceiling light"}, {"scene.evening", "Evening"},
-                 {"sensor.living_temperature", "Temperature"}, {"lock.front_door", "Front door"},
-                 {"cover.garage_door", "Garage door"}};
+        for (const std::string &id : favs)
+            if (const SimEntity *e = w.find(id)) names[id] = e->name;
+    /* the layout cached by an earlier session (layout.json): the tabs and tiles, greyed, before any connection */
+    std::vector<Area> areas;
+    std::vector<RegEntry> entries;
+    if (name == "connecting") {
+        for (const auto &a : w.areas) areas.push_back(Area{a.first, a.second});
+        for (const SimEntity &e : w.entities) {
+            if (e.hidden || e.category || !supported(domain_of(e.id))) continue;
+            RegEntry r;
+            r.id = e.id;
+            r.name = e.name;
+            r.area = !e.area.empty() ? e.area : (w.device_area.count(e.device) ? w.device_area.at(e.device) : "");
+            r.precision = e.precision;
+            r.icon = e.icon;
+            r.platform = e.platform;
+            r.translation_key = e.translation_key;
+            entries.push_back(std::move(r));
+        }
+    }
     auto b = std::make_unique<SimBackend>(std::move(w), settings, creds, favs, speed, true, std::move(names));
+    if (!entries.empty()) b->engine().set_cached_layout(std::move(areas), std::move(entries), IconRules());
     if (name == "reconnecting") b->drop_after(1000);
     if (name == "offline") b->drop_after(1000, 20.0);
     return b;

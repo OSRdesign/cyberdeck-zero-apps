@@ -1,0 +1,33 @@
+title Home Assistant: an area's tab (Living room, Page Down five times): its lights, switch, scene, sensors and thermostat as tiles, by name; a dimmable light's slider row
+sizes 480x320 640x480 800x480 1024x600 1280x720 1280x800 720x720 480x800 480x640 800x1280
+env HA_DEMO home
+
+wait 1600
+key pgdn
+key pgdn
+key pgdn
+key pgdn
+key pgdn
+wait 900
+shot area
+check area
+expect text "Living room"
+expect text "Ceiling light"
+expect text "Humidity"
+@800x480,1024x600,1280x720,1280x800,800x1280 expect text "48 %"
+@800x480,1024x600,1280x720,1280x800,800x1280 expect text "Reading lamp"
+# Page Up goes back one view at a time
+key pgup
+wait 700
+shot area-kitchen
+check area-kitchen
+expect text "Kitchen"
+@640x480,1024x600 expect text "Coffee machine"
+expect text "Kitchen light"
+# a sideways swipe on the grid switches views too (a convenience: Page Up / Down and the tabs do it as well)
+@640x480 drag 0.85 0.38 0.15 0.38
+@640x480 wait 700
+@640x480 expect text "Ceiling light"
+@640x480 expect text "Humidity"
+@640x480 shot area-swiped
+expect noquit

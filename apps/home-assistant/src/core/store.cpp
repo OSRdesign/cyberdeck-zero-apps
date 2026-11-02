@@ -162,7 +162,50 @@ bool save_names(const std::string &dir, const std::map<std::string, std::string>
         first = false;
     }
     text += first ? "}\n}\n" : "\n  }\n}\n";
-    return write_atomic(dir + "/names.json", text, 0644);
+    return write_atomic(dir + "/names.json", text, 0600);
+}
+
+bool load_layout(const std::string &dir, std::vector<Area> &areas, std::vector<RegEntry> &entries, IconRules &icons)
+{
+    json::Value v;
+    std::string text;
+    if (!read_file(dir + "/layout.json", text, kMaxLayoutBytes) || !json::parse(text, v) || !v.is_object()) return false;
+    const json::Value *ver = v.get("version");
+    if (!ver || ver->as_int(0) != 1) return false;
+    std::vector<Area> a;
+    std::vector<RegEntry> e;
+    if (const json::Value *list = v.get("areas"))
+        for (const json::Value &x : list->items) {
+            Area area;
+            if (const json::Value *s = x.get("id")) area.id = s->as_string();
+            if (const json::Value *s = x.get("name")) area.name = s->as_string();
+            if (!area.id.empty() && a.size() < 1000) a.push_back(std::move(area));
+        }
+    if (const json::Value *list = v.get("entities"))
+        for (const json::Value &x : list->items) {
+            RegEntry r;
+            if (const json::Value *s = x.get("id")) r.id = s->as_string();
+            if (r.id.find('.') == std::string::npos || e.size() >= 20000) continue;
+            if (const json::Value *s = x.get("name")) r.name = s->as_string();
+            if (const json::Value *s = x.get("area")) r.area = s->as_string();
+            if (const json::Value *s = x.get("dp")) r.precision = static_cast<int>(s->as_int(-1));
+            if (const json::Value *s = x.get("ic")) r.icon = s->as_string();
+            if (const json::Value *s = x.get("pl")) r.platform = s->as_string();
+            if (const json::Value *s = x.get("tk")) r.translation_key = s->as_string();
+            e.push_back(std::move(r));
+        }
+    IconRules rules;
+    if (const json::Value *i = v.get("icons")) rules.from_json(*i);
+    areas = std::move(a);
+    entries = std::move(e);
+    icons = std::move(rules);
+    return true;
+}
+
+bool save_layout(const std::string &dir, const std::string &text)
+{
+    if (text.empty() || text.size() > kMaxLayoutBytes || !make_dirs(dir, 0700)) return false;
+    return write_atomic(dir + "/layout.json", text, 0600);
 }
 
 Credentials load_credentials(const std::string &dir)

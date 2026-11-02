@@ -3,7 +3,7 @@ sizes 640x480
 nocontract
 env HA_DEMO home
 
-wait 900
+wait 1600
 shot nocontract
-expect text "FAVOURITES"
+expect text "Favourites"
 expect noquit

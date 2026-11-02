@@ -10,6 +10,13 @@ check connect-panel
 expect text "Server"
 expect text "homeassistant.local"
 wait 3500
+key pgdn
+key pgdn
+key pgdn
+key pgdn
+key pgdn
+key pgdn
+wait 600
 key end
 key enter
 wait 500

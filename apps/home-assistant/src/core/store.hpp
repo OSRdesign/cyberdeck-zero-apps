@@ -7,6 +7,10 @@
  *   settings.json     {"server": "homeassistant.local:8123", "qr_use_ip": false}
  *   favourites.json   {"entities": ["light.kitchen", ...]}   (starred on the deck, in the order they were starred)
  *   names.json        {"names": {"light.kitchen": "Kitchen light"}}   (the favourites' names, for a start offline)
+ *   layout.json       {"version": 1, "areas": [...], "entities": [{"id", "name", "area", "dp", "ic", "pl", "tk"}],
+ *                     "icons": {...}}: the tabs, the tiles' names and the icon rules as last seen, for a start offline
+ *                     (engine.hpp layout_text()); at most 1 MB. names.json and layout.json are mode 0600 like the
+ *                     credentials (they name the user's home).
  *   credentials.json  {"server": ..., "client_id": ..., "refresh_token": ...}   mode 0600; never logged or printed.
  *                     Deleted by Sign out (after Home Assistant revoked the token) or when Home Assistant refuses it.
  *
@@ -36,6 +40,10 @@ bool save_favourites(const std::string &dir, const std::vector<std::string> &ids
 /* names.json: {"names": {"light.kitchen": "Kitchen light", ...}}, the favourites' names as last seen */
 std::map<std::string, std::string> load_names(const std::string &dir);
 bool save_names(const std::string &dir, const std::map<std::string, std::string> &names);
+
+/* layout.json: false (and nothing filled) when missing, damaged, larger than 1 MB or of another version */
+bool load_layout(const std::string &dir, std::vector<Area> &areas, std::vector<RegEntry> &entries, IconRules &icons);
+bool save_layout(const std::string &dir, const std::string &text);
 
 Credentials load_credentials(const std::string &dir);
 bool save_credentials(const std::string &dir, const Credentials &c);

@@ -104,6 +104,9 @@ bool Model::set_entities(const json::Value &result)
         if (const json::Value *v = e.get("hb")) r.hidden = v->as_bool() || r.hidden;
         if (e.get("ec")) r.hidden = true; /* configuration or diagnostic */
         if (const json::Value *v = e.get("dp")) r.precision = static_cast<int>(v->as_int(-1));
+        if (const json::Value *v = e.get("ic")) r.icon = v->as_string();
+        if (const json::Value *v = e.get("pl")) r.platform = v->as_string();
+        if (const json::Value *v = e.get("tk")) r.translation_key = v->as_string();
         reg_[r.id] = std::move(r);
     }
     return true;
@@ -114,6 +117,38 @@ void Model::clear_registry()
     areas_.clear();
     devices_.clear();
     reg_.clear();
+}
+
+void Model::restore(std::vector<Area> areas, std::vector<RegEntry> entries)
+{
+    clear_registry();
+    areas_ = std::move(areas);
+    std::sort(areas_.begin(), areas_.end(),
+              [](const Area &x, const Area &y) { return lower(x.name) < lower(y.name); });
+    for (RegEntry &e : entries) {
+        if (e.id.empty() || !supported(domain_of(e.id))) continue;
+        e.device.clear();
+        e.has_entity_name = false;
+        e.hidden = false;
+        reg_[e.id] = std::move(e);
+    }
+}
+
+std::vector<RegEntry> Model::resolved_entries() const
+{
+    std::vector<RegEntry> out;
+    out.reserve(reg_.size());
+    for (const auto &kv : reg_) {
+        if (kv.second.hidden) continue;
+        RegEntry e = kv.second;
+        e.name = display_name(kv.first, false);
+        e.area = area_of(kv.first);
+        e.device.clear();
+        e.has_entity_name = false;
+        out.push_back(std::move(e));
+    }
+    std::sort(out.begin(), out.end(), [](const RegEntry &a, const RegEntry &b) { return a.id < b.id; });
+    return out;
 }
 
 /* --------------------------------------------------------------------------------------------- states */
@@ -127,6 +162,7 @@ void Model::read_attributes(State &st, const json::Value &attrs)
         if (k == "friendly_name") st.friendly_name = v.as_string();
         else if (k == "unit_of_measurement") st.unit = v.as_string();
         else if (k == "device_class") st.device_class = v.as_string();
+        else if (k == "icon") st.icon = v.as_string();
         else if (k == "brightness") st.brightness = v.is_number() ? static_cast<int>(v.as_int(-1)) : -1;
         else if (k == "current_temperature") st.current_temperature = v.as_double(NAN);
         else if (k == "temperature") st.target_temperature = v.as_double(NAN);
@@ -147,6 +183,7 @@ void Model::remove_attribute(State &st, const std::string &k)
     if (k == "friendly_name") st.friendly_name.clear();
     else if (k == "unit_of_measurement") st.unit.clear();
     else if (k == "device_class") st.device_class.clear();
+    else if (k == "icon") st.icon.clear();
     else if (k == "brightness") st.brightness = -1;
     else if (k == "current_temperature") st.current_temperature = NAN;
     else if (k == "temperature") st.target_temperature = NAN;

@@ -56,3 +56,4 @@ void test_sim_group();
 void test_store_group();
 void test_qr_group();
 void test_package_group();
+void test_tiles_group();

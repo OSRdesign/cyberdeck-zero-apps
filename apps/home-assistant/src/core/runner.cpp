@@ -53,6 +53,16 @@ ClientBackend::ClientBackend(Settings settings, Credentials creds, std::vector<s
     : engine_(std::move(settings), std::move(creds), std::move(favourites)), dir_(std::move(config_dir))
 {
     engine_.set_cached_names(std::move(names));
+    {
+        std::vector<Area> areas;
+        std::vector<RegEntry> entries;
+        IconRules icons;
+        if (engine_.signed_in() && store::load_layout(dir_, areas, entries, icons)) {
+            log("layout of the last session: " + std::to_string(areas.size()) + " areas, " +
+                std::to_string(entries.size()) + " entities");
+            engine_.set_cached_layout(std::move(areas), std::move(entries), std::move(icons));
+        }
+    }
     wake_fd_ = ::eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     std::string why;
     if (!curl::load(why)) {
@@ -206,6 +216,9 @@ void ClientBackend::exec(const Action &a)
     case Action::Kind::SaveSettings: store::save_settings(dir_, engine_.settings()); return;
     case Action::Kind::SaveFavourites: store::save_favourites(dir_, engine_.favourites()); return;
     case Action::Kind::SaveNames: store::save_names(dir_, engine_.cached_names()); return;
+    case Action::Kind::SaveLayout:
+        if (!store::save_layout(dir_, engine_.layout_text())) log("cannot save the layout in " + dir_);
+        return;
     }
 }
 

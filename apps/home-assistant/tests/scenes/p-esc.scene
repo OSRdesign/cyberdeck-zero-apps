@@ -1,18 +1,14 @@
-title Home Assistant: Esc goes back one page, a short Esc at the root quits
+title Home Assistant: Esc goes back one page (the entity page to the dashboard), a short Esc at the dashboard quits
 sizes 640x480 480x320 480x800
 env HA_DEMO home
 
-wait 900
-key end
-key up
-key up
-key up
-key enter
+wait 1600
+tap "Reading lamp"
 wait 500
-expect text "Coffee machine"
+expect text "Turn on"
 key esc
-wait 300
-expect text "FAVOURITES"
+wait 400
+expect text "Favourites"
 expect noquit
 key esc
 expect quit

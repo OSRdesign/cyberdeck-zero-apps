@@ -1,0 +1,31 @@
+title Home Assistant: the real 480x320 panel (the Pi 3A+'s 3.5", 79x49 mm, 6.1 px/mm): three tile columns, the slider row, an area, the All tab
+sizes 480x320
+ppmm 608
+env HA_DEMO home
+
+wait 1600
+shot panel-favourites
+check panel-favourites
+expect text "Ceiling light"
+expect text "Reading lamp"
+expect text "Front door"
+expect text "Locked"
+drag 0.5 0.92 0.5 0.35
+wait 400
+shot panel-favourites-end
+check panel-favourites-end
+key pgdn
+key pgdn
+key pgdn
+key pgdn
+key pgdn
+wait 800
+shot panel-area
+check panel-area
+expect text "Living room"
+key pgdn
+wait 600
+shot panel-all
+check panel-all
+expect text "FAVOURITES"
+expect noquit

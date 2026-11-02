@@ -84,6 +84,7 @@ void test_store_group()
     CHECK(store::save_names(dir, {{"light.a", "Kitchen \"main\" light"}, {"scene.b", "Evening"}}));
     const auto names = store::load_names(dir);
     CHECK(names.size() == 2);
+    CHECK(mode_of(dir + "/names.json") == 0600); /* 0.2.0: the names of the user's home, private like the sign-in */
     CHECK_EQ(names.at("light.a"), std::string("Kitchen \"main\" light"));
     CHECK(store::save_names(dir, {}));
     CHECK(store::load_names(dir).empty());
@@ -109,19 +110,31 @@ void test_package_group()
     const std::string hpp = read_text(app + "/src/ui/ha_app.hpp");
     CHECK(has(hpp, "kMinW = 480, kMinH = 320"));
     CHECK(has(hpp, "kPortraitW = 480, kPortraitH = 640"));
-    CHECK(has(hpp, "kVersion = \"0.1.0\""));
+    CHECK(has(hpp, "kVersion = \"0.2.0\""));
     CHECK(!read_text(app + "/root/usr/share/APPLaunch/share/images/home-assistant.png").empty());
     const std::string copyright = read_text(app + "/root/usr/share/doc/home-assistant/copyright");
     CHECK(has(copyright, "Project Nayuki"));
     CHECK(has(copyright, "License: MIT"));
+    /* 0.2.0: Material Design Icons (Apache-2.0), the font and its name table, with the licence text */
+    CHECK(has(copyright, "Material Design Icons"));
+    CHECK(has(copyright, "License: Apache-2.0"));
+    const std::string mdi_licence = read_text(app + "/root/usr/share/doc/home-assistant/LICENSE.mdi");
+    CHECK(has(mdi_licence, "Pictogrammers"));
+    CHECK(has(mdi_licence, "Apache License"));
+    CHECK(has(mdi_licence, "Version 2.0, January 2004"));
+    std::string ttf;
+    CHECK(store::read_file(app + "/root/usr/share/APPLaunch/share/home-assistant/materialdesignicons-webfont.ttf", ttf,
+                           2u << 20));
+    CHECK(ttf.size() == 1307660);
+    CHECK(read_text(app + "/root/usr/share/APPLaunch/share/home-assistant/mdi-names.bin").rfind("MDN1", 0) == 0);
     CHECK(!read_text(app + "/icon.png").empty());
     const std::string manifest = read_text(app + "/app.json");
     CHECK(has(manifest, "\"share_code\": \"home-assistant\""));
     CHECK(has(manifest, "\"package\": \"home-assistant\""));
-    CHECK(has(manifest, "\"version\": \"0.1.0\""));
+    CHECK(has(manifest, "\"version\": \"0.2.0\""));
     CHECK(has(manifest, "\"title\": \"Home Assistant\""));
     CHECK(has(manifest, "\"draft\": true"));
     CHECK(has(manifest, "libcurl4t64"));
     CHECK(has(manifest, "\"arch\": [\"arm64\", \"amd64\"]"));
-    CHECK(has(manifest, "\"license\": \"MIT\""));
+    CHECK(has(manifest, "\"license\": \"MIT AND Apache-2.0\"")); /* the app MIT, the bundled icon font Apache-2.0 */
 }

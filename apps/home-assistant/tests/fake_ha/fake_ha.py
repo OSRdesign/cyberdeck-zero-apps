@@ -21,7 +21,8 @@ messages.py, auth/__init__.py, auth/indieauth.py):
         auth/current_user, config/area_registry/list, config/device_registry/list,
         config/entity_registry/list_for_display, subscribe_entities (entity_ids; result, snapshot "a", then "c"
         changes), unsubscribe_events, call_service (light, switch, input_boolean: turn_on / turn_off / toggle;
-        scene / script turn_on; lock lock / unlock; cover open_cover / close_cover), ping -> pong.
+        scene / script turn_on; lock lock / unlock; cover open_cover / close_cover), frontend/get_icons (a few
+        made-up rules, 0.2.0), ping -> pong.
   Test controls (GET /fake/...): calls (the service calls, JSON), stats (counters, JSON), wsping (a WebSocket ping
         frame to every client), rst (TCP reset of every WebSocket), expire (every access token refused from now on),
         revoke_all (every token removed, connections closed, as deleting the sign-in in the user's profile),
@@ -342,6 +343,15 @@ def ws_session(c):
                 c.subs.pop(m.get("subscription"), None)
             STATS["unsubscribes"] += 1
             out = [result(mid)]
+        elif t == "frontend/get_icons":
+            # the fixture's own made-up rules, in the shape Home Assistant serves them (0.2.0's tiles)
+            STATS["icons"] = STATS.get("icons", 0) + 1
+            if m.get("category") == "entity_component":
+                out = [result(mid, {"resources": {
+                    "light": {"_": {"default": "mdi:lightbulb", "state": {"off": "mdi:lightbulb-off"}}},
+                    "switch": {"_": {"default": "mdi:toggle-switch-variant"}}}})]
+            else:
+                out = [result(mid, {"resources": {}})]
         elif t == "call_service":
             out, change = call_service(c, m)
         else:

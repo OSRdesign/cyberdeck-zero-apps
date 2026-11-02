@@ -250,7 +250,7 @@ void test_sim_group()
         b->world().reachable = true;
         b->advance(20000);
         CHECK(b->snapshot().conn == Conn::Connected);
-        CHECK(b->saved_names().size() == 5);
+        CHECK(b->saved_names().size() == 8); /* the eight favourites of the dashboard's demonstration */
         CHECK(b->saved_names().at("light.living_ceiling") == "Ceiling light");
     }
     {

@@ -1,0 +1,38 @@
+title Home Assistant: the keyboard's 2-D focus: the first key shows it (the launcher's highlight and an outline) on the first tile; Down into the light's slider row (Right +10 %), Up back, Up again to the tab bar, Right there switches the view; a tap hides the focus
+sizes 480x320 640x480 800x480 1024x600 1280x720 1280x800 720x720 480x800 480x640 800x1280
+env HA_DEMO home
+
+wait 1600
+key down
+wait 300
+shot focus-tile
+check focus-tile
+key right
+wait 300
+shot focus-right
+key left
+key down
+wait 300
+shot focus-slider
+key right
+wait 900
+expect text "82 %"
+shot focus-slider-up
+check focus-slider-up
+key up
+key up
+wait 300
+shot focus-bar
+check focus-bar
+key right
+wait 700
+shot focus-bar-bedroom
+check focus-bar-bedroom
+expect text "Bedside lamp"
+key down
+wait 300
+shot focus-bedroom-tile
+key enter
+wait 300
+expect text "Blind"
+expect noquit

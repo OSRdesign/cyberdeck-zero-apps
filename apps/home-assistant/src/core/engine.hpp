@@ -26,6 +26,7 @@
  */
 #pragma once
 
+#include "icons.hpp"
 #include "model.hpp"
 #include "text.hpp"
 #include "view.hpp"
@@ -66,6 +67,7 @@ struct Action {
         SaveSettings,      /* engine.settings() */
         SaveFavourites,    /* engine.favourites() */
         SaveNames,         /* engine.cached_names(): the favourites' names, for a start without a connection */
+        SaveLayout,        /* engine.layout_text(): areas, entities and icon rules, for a start without a connection */
     };
     Kind kind = Kind::WsClose;
     std::string url, body, host;
@@ -74,6 +76,9 @@ struct Action {
 
 /* 2, 4, 8, 16, 32, then 60 s (failures = consecutive failed attempts, from 1). */
 std::int64_t backoff_ms(int failures);
+
+/* layout.json (and any file the app reads) at most 1 MB: a larger install is not cached */
+constexpr std::size_t kMaxLayoutBytes = 1u << 20;
 
 class Engine {
 public:
@@ -106,6 +111,13 @@ public:
      * arrived (a start without a connection). Set before start(); kept up to date as names arrive. */
     void set_cached_names(std::map<std::string, std::string> names) { names_ = std::move(names); }
     const std::map<std::string, std::string> &cached_names() const { return names_; }
+    /* The layout of an earlier session (store::load_layout): the tabs and tiles show it, greyed, until Home Assistant
+     * answers. Set before start(). */
+    void set_cached_layout(std::vector<Area> areas, std::vector<RegEntry> entries, IconRules icons);
+    /* layout.json's text for the registry and icon rules as they are now ("" while there is no registry); at most
+     * kMaxLayoutBytes (a larger install is not cached). */
+    std::string layout_text() const;
+    const IconRules &icon_rules() const { return icons_; }
     const Model &model() const { return model_; }
     bool signed_in() const { return creds_.valid(); }
     bool online() const { return st_ == St::Online; }
@@ -116,7 +128,8 @@ public:
 
 private:
     enum class St { PairCheck, PairCheckWait, PairListen, PairWait, PairExchange, Refresh, Open, Auth, Online, Backoff };
-    enum class Req { Features, Config, User, Areas, Devices, Entities, Subscribe, Unsubscribe, Call, Ping };
+    enum class Req { Features, Config, User, Areas, Devices, Entities, Subscribe, Unsubscribe, Call, Ping, IconsComponent,
+                     IconsEntity };
     struct Pending {
         Req req = Req::Call;
         std::string entity, service;
@@ -145,6 +158,8 @@ private:
                       const std::string &data, bool pending, std::int64_t now);
     std::set<std::string> wanted_set() const;
     void update_name_cache();
+    void send_icon_requests();
+    void save_layout();
     std::string name_of(const std::string &id) const;
     EntityRow row(const std::string &id, std::int64_t now) const;
 
@@ -191,7 +206,9 @@ private:
     bool registry_ever_ = false; /* the registry arrived once (kept, greyed, while offline) */
     int sub_id_ = 0;
     std::set<std::string> sub_set_;
-    std::string user_, ha_version_, temp_unit_ = "C";
+    std::string user_, ha_version_, temp_unit_ = "C", temp_unit_raw_ = "\xC2\xB0" "C";
+    IconRules icons_;
+    std::string layout_saved_; /* the text of the last SaveLayout (or of the file read at start) */
     std::int64_t last_update_ = 0;
     std::map<std::string, std::int64_t> pending_until_; /* entity -> "..." until */
     std::map<std::string, std::int64_t> done_until_;    /* entity -> "Done" until */

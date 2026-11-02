@@ -14,6 +14,19 @@ Comment: A client of a Home Assistant server on the local network, over Home
  .
  libcurl is not shipped: the app opens the system's libcurl.so.4 (Debian package
  libcurl4t64, the curl licence, https://curl.se/docs/copyright.html) at run time.
+ .
+ The tiles' icons are Material Design Icons 7.4.47 by Pictogrammers (npm @mdi/font
+ and @mdi/svg), under the Apache License 2.0: the font file unchanged, and a table
+ of its icon names generated from @mdi/svg's meta.json by the app's
+ tools/make_mdi.py. The full licence text is in LICENSE.mdi in this folder.
+
+Files: usr/share/APPLaunch/share/home-assistant/materialdesignicons-webfont.ttf
+       usr/share/APPLaunch/share/home-assistant/mdi-names.bin
+Copyright: Pictogrammers (https://pictogrammers.com) and the Material Design Icons contributors
+License: Apache-2.0
+ Licensed under the Apache License, Version 2.0; see
+ /usr/share/doc/home-assistant/LICENSE.mdi for the full text (also at
+ https://www.apache.org/licenses/LICENSE-2.0).
 
 Files: usr/share/APPLaunch/bin/home-assistant
 Copyright: 2026 OSRdesign
