@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-11-02T01:24:37+00:00",
+  "generated_at": "2026-11-02T22:06:31+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CardputerZero"
@@ -13,6 +13,106 @@
     ]
   },
   "apps": [
+    {
+      "uuid": "744b65ae-fc4b-50a1-aeb4-38060ae3f267",
+      "share_code": "home-assistant",
+      "title": "Home Assistant",
+      "summary": "Your Home Assistant on the deck: your own dashboard, favourites and rooms.",
+      "description": "A client of your own Home Assistant server on the local network, signed in by scanning a QR code with a phone. Your stored dashboard drawn natively (entities, sensor and weather cards), then tiles for favourites and each area, with Home Assistant's icons and state colours. Switch a light, run a scene; locks and garage doors ask first. Greyed when offline. Not affiliated with the Home Assistant project.",
+      "locales": {
+        "en": {
+          "title": "Home Assistant",
+          "summary": "Your Home Assistant on the deck: your own dashboard, favourites and rooms.",
+          "description": "A client of your own Home Assistant server on the local network, signed in by scanning a QR code with a phone. Your stored dashboard drawn natively (entities, sensor and weather cards), then tiles for favourites and each area, with Home Assistant's icons and state colours. Switch a light, run a scene; locks and garage doors ask first. Greyed when offline. Not affiliated with the Home Assistant project."
+        }
+      },
+      "i18n": {
+        "en": {
+          "title": "Home Assistant",
+          "summary": "Your Home Assistant on the deck: your own dashboard, favourites and rooms.",
+          "description": "A client of your own Home Assistant server on the local network, signed in by scanning a QR code with a phone. Your stored dashboard drawn natively (entities, sensor and weather cards), then tiles for favourites and each area, with Home Assistant's icons and state colours. Switch a light, run a scene; locks and garage doors ask first. Greyed when offline. Not affiliated with the Home Assistant project."
+        }
+      },
+      "categories": [
+        "Home"
+      ],
+      "author": {
+        "github": "OSRdesign",
+        "display_name": "OSRdesign"
+      },
+      "version": "0.3.0",
+      "published_at": "2026-11-02T22:06:31+00:00",
+      "updated_at": "2026-11-02T22:06:31+00:00",
+      "review": {
+        "status": "approved"
+      },
+      "license": "MIT AND Apache-2.0",
+      "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/home-assistant",
+      "download": {
+        "type": "deb",
+        "package": "home-assistant",
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/home-assistant_0.3.0_arm64.deb",
+        "md5": "63d58b7c027ee2827fee6cbb73274fa5",
+        "sha256": "beb926c3835572caa4863df8904312d5d34ff67d2b8f7f4b9d65eb129f5f719d",
+        "size": 2370208
+      },
+      "depends": "libfreetype6, libinput10, libxkbcommon0, libcurl4t64",
+      "permissions": {
+        "camera": false,
+        "microphone": false,
+        "imu": false,
+        "network": true,
+        "additional_hardware": false,
+        "background_service": false,
+        "external_display": false
+      },
+      "assets": {
+        "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/icon.png",
+        "screenshots": [
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/01-connect-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/02-home-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/03-room-800x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/04-light-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/05-confirm-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/06-settings-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/07-offline-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/08-connect-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/09-home-480x800.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/10-panel-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/11-focus-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/12-dash-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/13-dash-weather-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/14-dash-1280x800.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/15-dash-480x800.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/16-dash-unsupported-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/17-dash-offline-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/18-dash-settings-640x480.png"
+        ]
+      },
+      "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/icon.png",
+      "screenshots": [
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/01-connect-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/02-home-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/03-room-800x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/04-light-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/05-confirm-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/06-settings-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/07-offline-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/08-connect-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/09-home-480x800.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/10-panel-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/11-focus-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/12-dash-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/13-dash-weather-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/14-dash-1280x800.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/15-dash-480x800.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/16-dash-unsupported-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/17-dash-offline-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/home-assistant/screenshots/18-dash-settings-640x480.png"
+      ],
+      "min_size": "480x320",
+      "portrait_min_size": "480x640"
+    },
     {
       "uuid": "8268c72d-f588-521f-a81f-8379d1201f7b",
       "share_code": "klondike-solitaire",

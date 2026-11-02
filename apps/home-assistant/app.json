@@ -11,6 +11,5 @@
   "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/home-assistant",
   "depends": "libfreetype6, libinput10, libxkbcommon0, libcurl4t64",
   "arch": ["arm64", "amd64"],
-  "draft": true,
   "permissions": {"network": true}
 }
