@@ -24,6 +24,9 @@ On the deck: **Settings > Apps > Sources > + Add a GitHub source**, enter `OSRde
 **Apps** tab, pick **Wi-Fi Survey** and press Enter. Installing asks for the deck user's sudo password; the package depends on
 `network-manager`. See the [repository README](../../README.md) for details.
 
+Wi-Fi Survey was unpublished from the Store on 2026-11-02 (marked draft in the registry): [Net Toolbox](../net-toolbox/README.md)
+replaces it, and the deck no longer offers it in the Apps tab.
+
 ## Use
 
 The app runs in the launcher's normal 640x340 window, under the top bar.

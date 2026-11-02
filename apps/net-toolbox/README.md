@@ -10,8 +10,8 @@ with a timing waterfall and the certificate's days left, your **public IP** and 
 (Pi Zero 2 W, 640x480) and meant to work the same on the Pi 3A+, the Pi 5 and the CM5. From 0.4 it also **replaces
 [LAN Scan](../lanscan/README.md) and [Wi-Fi Survey](../wifi-survey/README.md)**: **Local devices** (the devices on your network
 and the open ports of one of them), **Wi-Fi networks** (the networks around, their channels and the least crowded one) and a
-**Wi-Fi walk test** (the signal against time while you walk with the board). LAN Scan and Wi-Fi Survey remain installable
-for now. Nothing leaves the board until you start a test (the Wi-Fi list is read by NetworkManager's own scan as soon as its
+**Wi-Fi walk test** (the signal against time while you walk with the board). LAN Scan and Wi-Fi Survey were unpublished
+from the Store on 2026-11-02 (marked draft in the registry). Nothing leaves the board until you start a test (the Wi-Fi list is read by NetworkManager's own scan as soon as its
 page opens, as the diagnosis and the public address start when you open them).
 
 Kind: a native `cp0_lvgl` app (kind A of the [guidelines](../../docs/APP-GUIDELINES.md)), because it has its own
@@ -898,7 +898,7 @@ python3 tools/make_registry.py --only net-toolbox --out <a folder outside packag
   Wi-Fi walk test (the big reading, the 2.5-minute chart with the weak-zone line, the summary card, the weak-zone setting);
   Home has sixteen rows; the OUI table feeds both vendor lookups; the scripted demonstration backend (`devices=`, `ports=`,
   `wifi=`, `walk=`), the unit tests of the new wording (`test_ui_model_04.cpp`) and the headless scenes. The app now replaces
-  LAN Scan and Wi-Fi Survey, which remain installable for now. Only headless scenes so far: the board steps B16 to B19 are
+  LAN Scan and Wi-Fi Survey, which remained installable until 2026-11-02 (then unpublished from the Store). Only headless scenes so far: the board steps B16 to B19 are
   still to be run.
 * 0.4.0 (draft): the core of **Local devices**, a LAN scanner folded in from LAN Scan. Discovery
   without root (ICMP echo and TCP connect probes to prime ARP, `/proc/net/arp` for the MAC, the chosen interface's

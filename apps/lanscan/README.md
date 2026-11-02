@@ -24,6 +24,9 @@ On the deck: **Settings > Apps > Sources > + Add a GitHub source**, enter `OSRde
 [repository README](../../README.md) for details. If an older version is installed, the deck offers 0.1.2 as an
 update in the same menu.
 
+LAN Scan was unpublished from the Store on 2026-11-02 (marked draft in the registry): [Net Toolbox](../net-toolbox/README.md)
+replaces it, and the deck no longer offers it in the Apps tab.
+
 ## Use
 
 The app starts a scan of the network at once. The top line shows the interface, the deck's IP and the number of

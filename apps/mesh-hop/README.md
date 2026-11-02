@@ -17,7 +17,7 @@ features are not there yet (see [Known limits](#known-limits)).
 A full-screen client for [MeshCore](https://github.com/meshcore-dev/MeshCore) LoRa mesh networks. The radio is a separate
 **companion radio board** (a *node*) reached over the deck's USB port, over **Bluetooth LE** or over **Wi-Fi** (MeshCore's
 companion firmware for USB, BLE or Wi-Fi); the deck is its screen and keyboard. Everything works **by touch or by keyboard**, on any screen from **640x480** up. Mesh Hop replaces the 320x170 UI of
-[MeshZero](../meshzero/README.md) and keeps its core: the serial transport, the protocol, the client, the model and the history
+[MeshZero](https://github.com/OSRdesign/cyberdeck-zero-apps/tree/462b51bfa2c58b32d28d0bb16f9a111cc89e81d1/apps/meshzero) (removed from this repository on 2026-11-02) and keeps its core: the serial transport, the protocol, the client, the model and the history
 store (`src/core/`, with unit tests).
 
 ## What changed in 0.8.2
