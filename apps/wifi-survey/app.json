@@ -1,6 +1,7 @@
 {
   "share_code": "wifi-survey",
   "package": "wifi-survey",
+  "draft": true,
   "version": "0.1.1",
   "title": "Wi-Fi Survey",
   "summary": "See the Wi-Fi networks around you and which channels are crowded.",

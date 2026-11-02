@@ -38,7 +38,6 @@ in [`tools/icons/out/`](../tools/icons/out/), the review sheet is [`tools/icons/
 | LAN Scan (`lanscan`) | cyan `#19D3E6` | ink `#14181C` | circle | radar scope: two range rings, sweep, filled blips |
 | Wi-Fi Survey (`wifi-survey`) | orange `#FF7A1A` | ink `#14181C` | diamond (rotated, soft corners) | dot and two thick arcs |
 | Mesh Hop (`mesh-hop`) | purple `#8E5CF5` | white `#FFFFFF` | hexagon | three linked nodes |
-| MeshZero (`meshzero`) | magenta `#E23BD6` | white `#FFFFFF` | speech bubble | signal-wave bars |
 | Serial Console (`serial-console`) | amber `#FFC21A` | ink `#14181C` | DB9 trapezoid | nine pins |
 | System Monitor (`system-monitor`) | red `#F23B3B` | white `#FFFFFF` | shield | heartbeat line |
 | Viz1090 (`viz1090`) | sky blue `#5BB8FF` | ink `#14181C` | squircle | aircraft, seen from above |

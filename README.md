@@ -29,7 +29,6 @@ Each app has its own page with the full description, keys, requirements, known l
 | --- | --- | --- | --- |
 | [**Klondike Solitaire**](apps/klondike-solitaire/README.md) (`klondike-solitaire`) | 0.1.1 | arm64, amd64 | The classic patience game, by touch or keyboard: draw one or three, Standard, Vegas or no scoring, unlimited undo and redo, hints, deals that are the same on every board and winnable deals proven by a built-in solver, statistics, the win cascade, portrait (PDA mode) and left-handed layouts. Category Games, no network. |
 | [**Mine Field**](apps/mine-field/README.md) (`mine-field`) | 0.1.1 | arm64, amd64 | A mine-clearing puzzle, by touch or keyboard: three levels whose boards are derived from the screen and always fit it (no pan, no scroll), fair boards that never need a guess, hints, long press to flag, chord, best five times, statistics, the game in progress kept, portrait (PDA mode) layout. Category Games, no network. |
-| [**LAN Scan**](apps/lanscan/README.md) (`lanscan`) | 0.1.3 | arm64 | Lists the devices on your Wi-Fi network (IP, MAC, vendor, name) and scans the open ports of one of them. |
 | [**Markdown Notes**](apps/markdown-notes/README.md) (`markdown-notes`) | 0.2.1 | arm64, amd64 | Notes as plain Markdown files in a folder on the deck (tile name "Notes"): write them, read them with headings, lists, task boxes and links, open any note by name, and keep the folder in sync with Syncthing, rsync or git. Category Productivity, no network. |
 | [**Mesh Hop**](apps/mesh-hop/README.md) (`mesh-hop`) | 0.8.2 | arm64, amd64 | Full-screen client for MeshCore LoRa mesh networks: chats, contacts, repeater login, the meshcore-cli command line over the mesh, nearby nodes, radio settings, packet log and position, with a MeshCore companion radio board on USB, Bluetooth LE or IP, by touch or keyboard, on any screen from 640x480 up. |
 | [**Net Toolbox**](apps/net-toolbox/README.md) (`net-toolbox`) | 0.5.1 | arm64, amd64 | The tools you reach for when the network misbehaves: a step-by-step diagnosis, ping, traceroute, DNS lookup, port check, HTTP check, public IP, whois and the interfaces, a speed test with a bufferbloat grade, Wake-on-LAN, a Bluetooth radar, a local device scanner, Wi-Fi networks with their channels and a Wi-Fi walk test. It replaces LAN Scan and Wi-Fi Survey. |
@@ -37,7 +36,6 @@ Each app has its own page with the full description, keys, requirements, known l
 | [**Serial Console**](apps/serial-console/README.md) (`serial-console`) | 0.6.1 | arm64, amd64 | Finds your USB-serial adapters and boards, tells what is plugged in and what is behind it, recommends the settings, and talks to it. |
 | [**System Monitor**](apps/system-monitor/README.md) (`system-monitor`) | 0.3.1 | arm64, amd64 | A live look at the board or PC it runs on: CPU, temperature, memory, storage, network, processes, and the power supply or battery. |
 | [**viz1090**](apps/viz1090/README.md) (`viz1090`) | 0.3.2 | arm64, amd64 | The real viz1090 ADS-B display, full screen on any supported screen, fed by an RTL-SDR dongle, with an intro screen, the app header (Esc) and a world map, upright on portrait screens (PDA mode). Needs the dongle and a launcher with full-screen app support. |
-| [**Wi-Fi Survey**](apps/wifi-survey/README.md) (`wifi-survey`) | 0.1.1 | arm64 | Shows the Wi-Fi networks around the deck and a chart that points out the least crowded channel. Passive only, reads the scan results of NetworkManager. |
 
 `arm64` packages run on the Raspberry Pi boards (the decks). The apps marked `amd64` also have a package for x86-64 PCs
 running the launcher, listed in their own registry ([amd64](#amd64-x86-64-pcs)).
@@ -70,13 +68,21 @@ apps/<id>/app.json            what you write: name, description, version, ...
 apps/<id>/icon.png            optional icon, 100x100 square transparent PNG (see docs/ICON-PALETTE.md)
 apps/<id>/screenshots/*.png   optional screenshots at the real screen size (640x480 deck, or 800x480)
 apps/<id>/root/...            the files of the app, laid out as they must be on the device
-tools/                        build_deb.py, make_registry.py and check_descriptors.py (pure Python 3, no other dependencies)
+tools/                        build_deb.py, make_registry.py, check_descriptors.py, check_registry.py (pure Python 3, no other dependencies)
 
 and, for apps also built for x86-64 PCs (optional, see amd64 below):
 registry-amd64.json           the catalogue of the amd64 packages
 packages/<name>_<ver>_amd64.deb
 apps/<id>/root.amd64/...      the amd64 files (the binary) that replace those of root/ in the amd64 package
 ```
+
+Each registry entry also carries the app's screen requirements, copied from its packaged `.desktop` by
+`tools/make_registry.py`, so that the launcher shows only the apps that fit the board's screen:
+`"min_size": "WxH"` (from `X-MinSize`, the smallest landscape screen) and `"portrait_min_size": "WxH"` (from `X-Portrait`,
+the smallest canvas on a portrait launcher), the second only when declared. An app without `X-MinSize` has no field and is
+listed everywhere. `python3 tools/check_registry.py` checks the registries against the `.desktop` files and
+`python3 tools/test_registry_tools.py` is the generator's self test; a plain `make_registry.py` run keeps the dates and
+`device_targets` of unchanged entries.
 
 The deck downloads `registry.json`, lists the apps in it, and installs the `.deb` an entry points to after
 checking its MD5. The format is the registry format (schema 2) of M5Stack's CardputerZero Store, which the
@@ -142,6 +148,8 @@ A program that does not use the runtime works too: the launcher starts any execu
 * `draft` – optional. `"draft": true` keeps an unfinished app out of the store: `tools/make_registry.py` skips it (no
   `.deb`, no registry entry). To build a local package of a draft anyway, without publishing, run
   `python tools/make_registry.py --only <id> --out <folder outside packages/>`; it writes only that `.deb`.
+* `min_size` – optional `"WxH"`, the landscape minimum screen; only used when the app's `.desktop` has no `X-MinSize`
+  (the `.desktop` wins). Normally leave it out and declare `X-MinSize` in the `.desktop`.
 * `arch` – optional, the architectures the app is packaged for: `["arm64"]` when left out (the decks),
   `["arm64", "amd64"]` for an app also built for x86-64 PCs ([amd64](#amd64-x86-64-pcs)).
 

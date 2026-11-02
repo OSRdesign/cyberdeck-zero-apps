@@ -15,6 +15,15 @@ For every apps/<id>/app.json and every architecture the app lists in "arch" (def
 
     "arch": ["arm64", "amd64"]        in app.json: root/ holds the arm64 binary, root.amd64/ the amd64 one
 
+Each entry also carries the screen requirements the launcher reads from the app's packaged .desktop, so it can hide
+the apps a board's screen cannot run (tools/screen_info.py has the exact semantics):
+    "min_size": "WxH"           from X-MinSize (landscape minimum); absent when the .desktop has none (fits everywhere);
+                                an app.json "min_size" fills it when the .desktop has none
+    "portrait_min_size": "WxH"  from X-Portrait (the smallest canvas on a portrait launcher), only when declared
+
+A plain run is idempotent: an entry whose package (version and sha256) did not change keeps its published_at and
+updated_at, each registry file keeps its device_targets, and generated_at moves only when the content changed.
+
 Every app it reads must keep the descriptor rule of tools/check_descriptors.py (summary <= 80 characters, summary +
 newline + description <= 500 characters), or it stops.
 
@@ -40,6 +49,7 @@ import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import check_descriptors  # noqa: E402  (tools/check_descriptors.py: the 500-character descriptor rule)
+import screen_info  # noqa: E402  (tools/screen_info.py: X-MinSize / X-Portrait of the .desktop)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
@@ -95,7 +105,7 @@ def build_package(name, meta, arch, out_dir, owner):
         + (["--scripts", scripts] if os.path.isdir(scripts) else []))
 
 
-def registry_entry(name, meta, base, package, package_path, owner, repo):
+def registry_entry(name, meta, base, package, package_path, owner, repo, arch="arm64", previous=None):
     md5, sha256, size = digest(package_path)
     apps_dir = os.path.join(REPO, "apps")
     now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat()
@@ -108,7 +118,7 @@ def registry_entry(name, meta, base, package, package_path, owner, repo):
     permissions = {"camera": False, "microphone": False, "imu": False, "network": False,
                    "additional_hardware": False, "background_service": False, "external_display": False}
     permissions.update(meta.get("permissions", {}))
-    return {
+    entry = {
         "uuid": str(uuid.uuid5(NAMESPACE, meta["share_code"])),
         "share_code": meta["share_code"],
         **text,
@@ -117,7 +127,7 @@ def registry_entry(name, meta, base, package, package_path, owner, repo):
         "categories": meta.get("categories", ["Tools"]),
         "author": meta.get("author", {"github": owner, "display_name": owner}),
         "version": meta["version"],
-        "published_at": meta.get("published_at", now),
+        "published_at": meta.get("published_at") or (previous or {}).get("published_at") or now,
         "updated_at": now,
         "review": {"status": "approved"},      # the Store only installs approved entries; you review your own
         "license": meta.get("license", "MIT"),
@@ -129,7 +139,43 @@ def registry_entry(name, meta, base, package, package_path, owner, repo):
         "assets": {"icon": icon, "screenshots": shots},
         "icon": icon,
         "screenshots": shots,
+        **screen_info.screen_fields(os.path.join(apps_dir, name), meta, arch),
     }
+    if previous and previous.get("version") == entry["version"] \
+            and (previous.get("download") or {}).get("sha256") == sha256:
+        # the package did not change: keep its dates, a plain run must not rewrite them
+        for key in ("published_at", "updated_at"):
+            if previous.get(key):
+                entry[key] = previous[key]
+    return entry
+
+
+def load_registry(path):
+    """The registry file as a dict, or {} when missing or unreadable."""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def build_registry(old, apps, registry_id, now):
+    """The registry document. The old file's device_targets are kept; generated_at stays the old one unless the
+    content (everything but generated_at) changed."""
+    registry = {
+        "schema_version": 2,
+        "generated_at": now,
+        "registry_id": registry_id,
+        # informative only: read by neither the Store nor the launcher
+        "device_targets": old.get("device_targets") or ["CyberdeckZero"],
+        "i18n": {"default_locale": "en", "fallback_locale": "en", "supported_locales": ["en"]},
+        "apps": apps,
+    }
+    if old.get("generated_at") and {k: v for k, v in old.items() if k != "generated_at"} \
+            == {k: v for k, v in registry.items() if k != "generated_at"}:
+        registry["generated_at"] = old["generated_at"]
+    return registry
 
 
 def main():
@@ -195,6 +241,9 @@ def main():
         return
 
     for arch in [args.arch] if args.arch else ARCHES:
+        registry_file = REGISTRY_FILES[arch]
+        old = load_registry(os.path.join(REPO, registry_file))
+        old_apps = {a.get("share_code"): a for a in old.get("apps", []) if isinstance(a, dict)}
         apps = []
         for name, meta, arches in manifests:
             if arch not in arches:
@@ -205,17 +254,11 @@ def main():
                 build_package(name, meta, arch, os.path.join(REPO, "packages"), owner)
             if not os.path.isfile(package_path):
                 sys.exit("package not found: " + package_path)
-            apps.append(registry_entry(name, meta, base, package, package_path, owner, repo))
+            apps.append(registry_entry(name, meta, base, package, package_path, owner, repo, arch,
+                                     old_apps.get(meta["share_code"])))
 
-        registry = {
-            "schema_version": 2,
-            "generated_at": datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat(),
-            "registry_id": args.registry_name or repo,
-            "device_targets": ["CyberdeckZero"],          # informative only: read by neither the Store nor the launcher
-            "i18n": {"default_locale": "en", "fallback_locale": "en", "supported_locales": ["en"]},
-            "apps": apps,
-        }
-        registry_file = REGISTRY_FILES[arch]
+        now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat()
+        registry = build_registry(old, apps, args.registry_name or repo, now)
         with open(os.path.join(REPO, registry_file), "w", encoding="utf-8", newline="\n") as handle:
             json.dump(registry, handle, indent=2, ensure_ascii=False)
             handle.write("\n")
