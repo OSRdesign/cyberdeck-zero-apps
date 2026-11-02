@@ -1,0 +1,9 @@
+title Home Assistant: started by hand (no launcher contract): the app degrades, nothing crashes
+sizes 640x480
+nocontract
+env HA_DEMO home
+
+wait 1600
+shot nocontract
+expect text "Favourites"
+expect noquit

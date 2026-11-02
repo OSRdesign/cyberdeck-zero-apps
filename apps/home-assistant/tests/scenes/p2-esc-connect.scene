@@ -1,0 +1,7 @@
+title Home Assistant: the header's Esc button on the Connect page ends the app
+sizes 640x480 480x320
+env HA_DEMO connect
+
+wait 600
+tap "Esc"
+expect quit

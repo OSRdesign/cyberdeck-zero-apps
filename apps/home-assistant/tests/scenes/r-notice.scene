@@ -1,0 +1,7 @@
+title Home Assistant: under the minimum (480x320): the notice instead of the app, closed by any key
+sizes 320x240 400x300
+
+shot notice
+expect noquit
+key down
+expect quit

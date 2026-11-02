@@ -1,0 +1,27 @@
+title Home Assistant: the real 480x320 panel (the Pi 3A+'s 3.5" Luckfox, 79x49 mm, 6.1 px/mm): "Server" and the address whole, on the Connect page and in Settings
+sizes 480x320
+ppmm 608
+env HA_DEMO connect
+env HA_DEMO_PHONE ok
+
+wait 900
+shot connect-panel
+check connect-panel
+expect text "Server"
+expect text "homeassistant.local"
+wait 3500
+key pgdn
+key pgdn
+key pgdn
+key pgdn
+key pgdn
+key pgdn
+wait 600
+key end
+key enter
+wait 500
+shot settings-panel
+check settings-panel
+expect text "Server"
+expect text "homeassistant.local:8123"
+expect noquit

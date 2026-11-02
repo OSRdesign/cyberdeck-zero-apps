@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Home Assistant
+Exec=/usr/share/APPLaunch/bin/home-assistant
+Terminal=false
+Icon=share/images/home-assistant.png
+Type=Application
+X-Fullscreen=true
+X-MinSize=480x320
+X-Portrait=480x640
+X-Background=freeze

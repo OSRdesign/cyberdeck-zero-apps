@@ -1,0 +1,15 @@
+title Home Assistant: the Connect page (first run): the QR code, the address line, waiting for the phone, the Server address row
+sizes 480x320 640x480 800x480 1024x600 1280x720 1280x800 720x720 480x800 480x640 800x1280
+env HA_DEMO connect
+
+wait 600
+shot connect
+check connect
+expect text "Scan with your phone to connect to Home Assistant"
+expect text "http://homeassistant.local:8123"
+expect text "Server"
+# the host whole beside "Server" (at 480x320 the harness uses the deck's 11.3 px/mm, a 2" screen no board has:
+# the host gets "..." there; a2-connect-panel480 runs the real 480x320 panel)
+@640x480,800x480,1024x600,1280x720,1280x800,720x720,480x800,480x640,800x1280 expect text "homeassistant.local"
+expect text "Waiting for the phone..."
+expect noquit

@@ -1,0 +1,16 @@
+{
+  "share_code": "home-assistant",
+  "package": "home-assistant",
+  "version": "0.3.0",
+  "title": "Home Assistant",
+  "summary": "Your Home Assistant on the deck: your own dashboard, favourites and rooms.",
+  "description": "A client of your own Home Assistant server on the local network, signed in by scanning a QR code with a phone. Your stored dashboard drawn natively (entities, sensor and weather cards), then tiles for favourites and each area, with Home Assistant's icons and state colours. Switch a light, run a scene; locks and garage doors ask first. Greyed when offline. Not affiliated with the Home Assistant project.",
+  "categories": ["Home"],
+  "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
+  "license": "MIT AND Apache-2.0",
+  "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/home-assistant",
+  "depends": "libfreetype6, libinput10, libxkbcommon0, libcurl4t64",
+  "arch": ["arm64", "amd64"],
+  "draft": true,
+  "permissions": {"network": true}
+}

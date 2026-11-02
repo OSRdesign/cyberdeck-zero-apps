@@ -1,0 +1,45 @@
+title Home Assistant: a tile's name opens the entity page (study 053 section 7.6): the icon, the word and "room - changed" at the top, then the rows straight under it: the brightness slider (Left / Right by 10 %, the label whole at every size), Turn off, the favourite row (the lists' highlight and action dots)
+sizes 480x320 640x480 800x480 1024x600 1280x720 1280x800 720x720 480x800 480x640 800x1280
+env HA_DEMO home
+
+wait 1600
+tap "Ceiling light"
+wait 600
+shot light
+check light
+expect text "On, 72 %"
+expect text "Brightness"
+expect text "Turn off"
+expect text "Remove from favourites"
+expect text "72 %"
+key right
+wait 900
+expect text "82 %"
+shot slider
+check slider
+key left
+key left
+key left
+wait 900
+expect text "52 %"
+shot slider-down
+check slider-down
+key down
+wait 300
+expect text "Turn off"
+key enter
+wait 800
+expect text "Off"
+expect text "Turn on"
+# the rows laid out again (the action's words changed): the slider's label still whole
+expect text "Brightness"
+shot turned-off
+check turned-off
+key down
+wait 300
+expect text "Remove from favourites"
+key esc
+wait 500
+expect text "Favourites"
+expect text "Ceiling light"
+expect noquit

@@ -1,0 +1,3 @@
+# the Material Design Icons font and its name table (tools/make_mdi.py): bytes, never line-end conversion
+*.ttf binary
+*.bin binary

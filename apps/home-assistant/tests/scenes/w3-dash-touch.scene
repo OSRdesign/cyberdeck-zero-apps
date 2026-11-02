@@ -1,0 +1,40 @@
+title Home Assistant 0.3.0: touch on the stored dashboard: a row's name opens its entity page (the row's name override "Lamp"), back; a sensor card opens its page; the header toggle turns the card's lights and switch off
+sizes 480x320 640x480 800x480 1024x600 1280x720 1280x800 720x720 480x800 480x640 800x1280
+env HA_DEMO dash
+
+# the keys bring the row into view on every screen, the tap hides the focus again
+wait 1800
+key down
+key down
+key down
+wait 300
+tap "Lamp"
+wait 600
+shot lamp-page
+check lamp-page
+expect text "Turn on"
+key esc
+wait 600
+expect text "Living room"
+# the sensor card three stops before the end (the Air card's header toggle, its fan, the battery row)
+key end
+key end
+key up
+key up
+key up
+wait 400
+tap "Power"
+wait 600
+shot sensor-page
+check sensor-page
+expect text "12 W"
+# the first card's header toggle: everything on it off
+key esc
+wait 600
+key home
+key home
+key enter
+wait 900
+shot header-off
+check header-off
+expect noquit
