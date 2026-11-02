@@ -150,18 +150,6 @@ def icon_meshhop(hue, ink):
     return c.finish()
 
 
-def icon_meshzero(hue, ink):
-    c = Canvas()
-    c.rrect(5, 8, 95, 76, 26, hue)
-    c.polygon([(24, 66), (44, 66), (22, 94)], hue, round_r=2)
-    # signal wave: five bars of different heights
-    xs = [24, 37, 50, 63, 76]
-    hs = [8, 17, 28, 17, 8]
-    for x, h in zip(xs, hs):
-        c.line([(x, 42 - h), (x, 42 + h)], 9, ink)
-    return c.finish()
-
-
 def icon_serial(hue, ink):
     """A whole DB9 plug: the mounting flange with its two screw holes, the D-shell and the nine pins."""
     c = Canvas()
@@ -237,7 +225,6 @@ ICONS = [
     ("lanscan",              icon_lanscan,  "#19D3E6", INK,   "circle"),
     ("wifi-survey",          icon_wifi,     "#FF7A1A", INK,   "diamond"),
     ("mesh-hop",             icon_meshhop,  "#8E5CF5", WHITE, "hexagon"),
-    ("meshzero",             icon_meshzero, "#E23BD6", WHITE, "speech bubble"),
     ("serial-console",       icon_serial,   "#FFC21A", INK,   "DB9 plug"),
     ("system-monitor",       icon_sysmon,   "#F23B3B", WHITE, "shield"),
     ("viz1090",              icon_viz,      "#5BB8FF", INK,   "squircle"),
