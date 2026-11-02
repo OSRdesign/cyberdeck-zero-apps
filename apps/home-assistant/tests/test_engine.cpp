@@ -256,12 +256,16 @@ static void test_connect_and_messages()
     CHECK_EQ(first[5], std::string("{\"id\":6,\"type\":\"config/entity_registry/list_for_display\"}"));
     auto a2 = e2.take_actions();
     auto s2 = sent(a2);
-    CHECK(s2.size() == 2);
+    CHECK(s2.size() == 5);
     CHECK_EQ(s2[0], std::string("{\"id\":7,\"type\":\"subscribe_entities\",\"entity_ids\":[\"light.k\",\"scene.evening\"]}"));
     /* 0.2.0: the domains' icon rules (no entity of this registry has a translation key: no "entity" request) */
     CHECK_EQ(s2[1], std::string("{\"id\":8,\"type\":\"frontend/get_icons\",\"category\":\"entity_component\",\"integration\":"
                                 "[\"binary_sensor\",\"climate\",\"cover\",\"input_boolean\",\"light\",\"lock\",\"scene\","
                                 "\"script\",\"sensor\",\"switch\"]}"));
+    /* 0.3.0: the stored dashboards (any user may read them), the system's default panel, the default dashboard */
+    CHECK_EQ(s2[2], std::string("{\"id\":9,\"type\":\"lovelace/dashboards/list\"}"));
+    CHECK_EQ(s2[3], std::string("{\"id\":10,\"type\":\"frontend/get_system_data\",\"key\":\"core\"}"));
+    CHECK_EQ(s2[4], std::string("{\"id\":11,\"type\":\"lovelace/config\"}"));
     CHECK(has(a2, Action::Kind::SaveLayout));
     View v = e2.view(t, WALL);
     CHECK(v.conn == Conn::Connected);
@@ -291,12 +295,12 @@ static void test_connect_and_messages()
     /* commands: the exact call_service messages */
     e2.on_command(Command::of(Command::Kind::Toggle, "light.k"), t);
     auto c = sent(e2.take_actions());
-    CHECK_EQ(c[0], std::string("{\"id\":9,\"type\":\"call_service\",\"domain\":\"light\",\"service\":\"turn_off\","
+    CHECK_EQ(c[0], std::string("{\"id\":12,\"type\":\"call_service\",\"domain\":\"light\",\"service\":\"turn_off\","
                                "\"target\":{\"entity_id\":\"light.k\"}}"));
     v = e2.view(t, WALL);
     CHECK(v.favourites[0].pending);
     CHECK_EQ(v.favourites[0].value, std::string("..."));
-    e2.on_ws_message("{\"id\":9,\"type\":\"result\",\"success\":true,\"result\":{\"context\":{}}}", t, WALL);
+    e2.on_ws_message("{\"id\":12,\"type\":\"result\",\"success\":true,\"result\":{\"context\":{}}}", t, WALL);
     CHECK(e2.view(t, WALL).favourites[0].pending); /* still waiting for the new state */
     e2.on_ws_message("{\"id\":7,\"type\":\"event\",\"event\":{\"c\":{\"light.k\":{\"+\":{\"s\":\"off\"},\"-\":{\"a\":[\"brightness\"]}}}}}",
                      t, WALL);
@@ -305,29 +309,29 @@ static void test_connect_and_messages()
     CHECK_EQ(v.favourites[0].value, std::string("Off"));
 
     e2.on_command(Command::of(Command::Kind::Toggle, "switch.coffee"), t);
-    CHECK_EQ(sent(e2.take_actions())[0], std::string("{\"id\":10,\"type\":\"call_service\",\"domain\":\"switch\",\"service\":\"toggle\","
+    CHECK_EQ(sent(e2.take_actions())[0], std::string("{\"id\":13,\"type\":\"call_service\",\"domain\":\"switch\",\"service\":\"toggle\","
                                                      "\"target\":{\"entity_id\":\"switch.coffee\"}}"));
     e2.on_command(Command::of(Command::Kind::Run, "scene.evening"), t);
-    CHECK_EQ(sent(e2.take_actions())[0], std::string("{\"id\":11,\"type\":\"call_service\",\"domain\":\"scene\",\"service\":\"turn_on\","
+    CHECK_EQ(sent(e2.take_actions())[0], std::string("{\"id\":14,\"type\":\"call_service\",\"domain\":\"scene\",\"service\":\"turn_on\","
                                                      "\"target\":{\"entity_id\":\"scene.evening\"}}"));
-    e2.on_ws_message("{\"id\":11,\"type\":\"result\",\"success\":true,\"result\":null}", t, WALL);
+    e2.on_ws_message("{\"id\":14,\"type\":\"result\",\"success\":true,\"result\":null}", t, WALL);
     CHECK(e2.view(t + 100, WALL).favourites[1].done);
     CHECK_EQ(e2.view(t + 100, WALL).favourites[1].value, std::string("Done"));
     e2.on_tick(t + 1600, WALL);
     CHECK(!e2.view(t + 1600, WALL).favourites[1].done);
     e2.on_command(Command::of(Command::Kind::SetBrightness, "light.k", "", 50), t);
-    CHECK_EQ(sent(e2.take_actions())[0], std::string("{\"id\":12,\"type\":\"call_service\",\"domain\":\"light\",\"service\":\"turn_on\","
+    CHECK_EQ(sent(e2.take_actions())[0], std::string("{\"id\":15,\"type\":\"call_service\",\"domain\":\"light\",\"service\":\"turn_on\","
                                                      "\"service_data\":{\"brightness_pct\":50},\"target\":{\"entity_id\":\"light.k\"}}"));
     e2.on_command(Command::of(Command::Kind::SetBrightness, "light.k", "", 0), t);
     CHECK(sent(e2.take_actions())[0].find("\"service\":\"turn_off\"") != std::string::npos);
     e2.on_command(Command::of(Command::Kind::Service, "lock.front", "unlock"), t);
-    CHECK_EQ(sent(e2.take_actions())[0], std::string("{\"id\":14,\"type\":\"call_service\",\"domain\":\"lock\",\"service\":\"unlock\","
+    CHECK_EQ(sent(e2.take_actions())[0], std::string("{\"id\":17,\"type\":\"call_service\",\"domain\":\"lock\",\"service\":\"unlock\","
                                                      "\"target\":{\"entity_id\":\"lock.front\"}}"));
     e2.on_command(Command::of(Command::Kind::Service, "lock.front", "open_cover"), t); /* not a lock service: nothing */
     e2.on_command(Command::of(Command::Kind::Run, "light.k"), t);                       /* not a scene: nothing */
     CHECK(sent(e2.take_actions()).empty());
     /* a failed call: the message names the entity and Home Assistant's reason; the "..." goes */
-    e2.on_ws_message("{\"id\":14,\"type\":\"result\",\"success\":false,\"error\":{\"code\":\"home_assistant_error\",\"message\":\"Lock jammed\"}}",
+    e2.on_ws_message("{\"id\":17,\"type\":\"result\",\"success\":false,\"error\":{\"code\":\"home_assistant_error\",\"message\":\"Lock jammed\"}}",
                      t, WALL);
     v = e2.view(t, WALL);
     CHECK(v.message_error);
@@ -342,8 +346,8 @@ static void test_connect_and_messages()
     e2.on_command(Command::set_view(true, "kitchen", ""), t);
     auto rs = sent(e2.take_actions());
     CHECK(rs.size() == 2);
-    CHECK_EQ(rs[0], std::string("{\"id\":16,\"type\":\"unsubscribe_events\",\"subscription\":7}"));
-    CHECK_EQ(rs[1], std::string("{\"id\":17,\"type\":\"subscribe_entities\",\"entity_ids\":[\"light.k\",\"scene.evening\",\"switch.coffee\"]}"));
+    CHECK_EQ(rs[0], std::string("{\"id\":19,\"type\":\"unsubscribe_events\",\"subscription\":7}"));
+    CHECK_EQ(rs[1], std::string("{\"id\":20,\"type\":\"subscribe_entities\",\"entity_ids\":[\"light.k\",\"scene.evening\",\"switch.coffee\"]}"));
     v = e2.view(t, WALL);
     CHECK(v.room_shown && v.room.size() == 2);
     CHECK_EQ(v.room_name, std::string("Kitchen"));

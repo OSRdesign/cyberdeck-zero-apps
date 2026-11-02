@@ -1,0 +1,44 @@
+title Home Assistant 0.3.0: the owner-shaped stored dashboard (one masonry view of 12 cards: 9 entities, 2 sensor, 1 weather-forecast, invented names), its view's tab first, then Favourites, the areas, All; dragged down to the end
+sizes 480x320 640x480 800x480 1024x600 1280x720 1280x800 720x720 480x800 480x640 800x1280
+env HA_DEMO dash
+
+wait 1800
+shot dash-top
+check dash-top
+expect text "Online"
+expect text "Home"
+expect text "Favourites"
+expect text "Living room"
+@640x480,800x480,1024x600,1280x720,1280x800,720x720,480x800,480x640,800x1280 expect text "Lamp"
+drag 0.5 0.85 0.5 0.55
+wait 500
+shot dash-1
+check dash-1
+drag 0.5 0.85 0.5 0.55
+wait 500
+shot dash-2
+check dash-2
+drag 0.5 0.85 0.5 0.55
+wait 500
+shot dash-3
+check dash-3
+drag 0.5 0.85 0.5 0.55
+wait 500
+shot dash-4
+check dash-4
+drag 0.5 0.85 0.5 0.55
+wait 500
+shot dash-5
+check dash-5
+drag 0.5 0.85 0.5 0.55
+wait 500
+shot dash-6
+check dash-6
+# the end of the view: End moves the keyboard's focus to the last row (the first key only shows the focus)
+key end
+key end
+wait 500
+shot dash-end
+check dash-end
+expect text "Motion sensor battery"
+expect noquit

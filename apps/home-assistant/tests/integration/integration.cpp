@@ -8,7 +8,10 @@
  *
  *   ha-integration <fake port> <work dir>
  *
- * Steps: pairing and sign-in (credentials file 0600) -> registry (2,000 entries) -> 100 favourites subscribed ->
+ * Steps: pairing and sign-in (credentials file 0600) -> registry (2,000 entries) -> 100 favourites subscribed -> the
+ * stored dashboard (0.3.0: the default one read, the map-only one not offered, 12 cards with the forecast and two
+ * histories, the header toggle's list call, dashboard.json 0600, Settings > Dashboard Off and back, no administrator
+ * command, no REST call) ->
  * service calls (light, switch, input_boolean, scene, script, lock, cover, brightness) and their states -> a change
  * made at the wall -> a WebSocket ping from the server (libcurl's automatic pong) -> a 5 MB message (dropped, the link
  * stays) -> a TCP reset (reconnects, subscribes again) -> an access token refused by the server (one refresh, connected)
@@ -190,6 +193,64 @@ int main(int argc, char **argv)
                }, 4000),
                "the favourites' names cached (names.json, the states' friendly names)");
         EXPECT(stat_of("subscribes") >= 1, "subscribe_entities sent");
+
+        std::puts("== 2b. the stored dashboard (0.3.0)");
+        EXPECT(wait_for(b, [](const View &v) { return v.dash && v.dash_tabs.size() == 1; }, 8000),
+               "the default dashboard read (lovelace/config), its view is the first tab");
+        v = b.snapshot();
+        EXPECT(v.tabs[0].kind == Tab::Kind::View && v.dash_choices.size() == 1, "the map-only dashboard is not offered");
+        EXPECT(stat_of("lovelace_config") == 2, "lovelace/config read twice (the default, the listed one)");
+        b.send(Command::set_view(false, "", "", 0));
+        EXPECT(wait_for(b, [](const View &v) {
+                   if (v.dash_cards.size() != 12) return false;
+                   for (const DashCardView &c : v.dash_cards) {
+                       if (c.kind == DashCard::Kind::Weather && c.days.size() != 5) return false;
+                       if (c.kind == DashCard::Kind::Sensor && c.spark.empty()) return false;
+                   }
+                   return true;
+               }, 8000),
+               "12 cards, the forecast (5 days) and both sensor cards' history");
+        EXPECT(stat_of("forecast_subs") == 1 && stat_of("history") == 2, "one forecast subscription, two history reads");
+        memory("dashboard view shown");
+        auto lights = [](const View &v) -> const DashCardView * {
+            for (const DashCardView &c : v.dash_cards)
+                if (c.title == "Lights") return &c;
+            return nullptr;
+        };
+        v = b.snapshot();
+        const DashCardView *lc = lights(v);
+        EXPECT(lc && lc->header_toggle && lc->toggle_ids.size() == 3 && !lc->header_on, "the Lights card's header toggle (3 lights, off)");
+        if (lc) {
+            const std::vector<std::string> ids = lc->toggle_ids;
+            b.send(Command::set_group(ids, true));
+            EXPECT(wait_for(b, [&lights](const View &v) { const DashCardView *c = lights(v); return c && c->header_on; }, 4000),
+                   "the header toggle turned the three lights on");
+            EXPECT(get("/fake/calls").find("\"service\": \"turn_on\", \"entity_id\": [\"light.fake_") != std::string::npos,
+                   "one light.turn_on with the list as its target");
+            b.send(Command::set_group(ids, false));
+            EXPECT(wait_for(b, [&lights](const View &v) {
+                       const DashCardView *c = lights(v);
+                       return c && !c->header_on && !c->header_pending;
+                   }, 4000),
+                   "and off again");
+        }
+        EXPECT(wait_for(b, [&dir](const View &) { return file_mode(dir + "/dashboard.json") == 0600; }, 3000),
+               "dashboard.json written, mode 0600");
+        b.send(Command::of(Command::Kind::SetDashboard, "off"));
+        EXPECT(wait_for(b, [](const View &v) { return !v.dash && v.tabs[0].kind == Tab::Kind::Favourites; }, 3000),
+               "Settings > Dashboard Off: the tiles");
+        EXPECT(store::load_settings(dir).dashboard == "off", "the choice kept in settings.json");
+        b.send(Command::of(Command::Kind::SetDashboard, "auto"));
+        EXPECT(wait_for(b, [](const View &v) { return v.dash; }, 3000), "Automatic: the dashboard again");
+        const long unsubs = stat_of("unsubscribes");
+        b.send(Command::set_view(false, "", "", -1));
+        EXPECT(wait_for(b, [unsubs](const View &) { return stat_of("unsubscribes") >= unsubs + 2; }, 3000),
+               "another tab: the forecast unsubscribed (and the entities' subscription replaced)");
+        const std::string types = get("/fake/types");
+        EXPECT(types.find("/save") == std::string::npos && types.find("/create") == std::string::npos &&
+                   types.find("/delete") == std::string::npos && types.find("/update") == std::string::npos,
+               "no administrator command sent");
+        EXPECT(stat_of("rest_calls") == 0, "no REST API call");
 
         std::puts("== 3. service calls");
         b.send(Command::of(Command::Kind::Toggle, "light.fake_0000")); /* off -> on */

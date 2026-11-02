@@ -1,12 +1,13 @@
 # Home Assistant (`home-assistant`)
 
 A client of your own Home Assistant server on the local network, for the cyberdeck: sign in by scanning a QR code with your
-phone, then a dashboard of tiles in the style of Home Assistant's own app (its icons and state colours): your favourites,
-one tab per area, and All. Tap a tile's icon to switch a light or a switch, run a scene or a script, open a garage door or
-unlock a lock after a confirmation; drag a dimmable light's slider; tap its name for its page. Native fullscreen app on the
-launcher's `cp0_lvgl` (kind A of the [guidelines](../../docs/APP-GUIDELINES.md): its own pages and live data), MIT (the
-bundled icon font Apache-2.0), version 0.2.0, **draft** (study 053 P1 on top of design 052a's phase 1; not in the registry
-yet).
+phone, then **your own stored Home Assistant dashboard, drawn natively** (its views as the first tabs: entities, sensor
+and weather-forecast cards, as the official app shows them), and after it a dashboard of tiles in the style of Home
+Assistant's own app (its icons and state colours): your favourites, one tab per area, and All. Tap a row's switch or a
+tile's icon to switch a light or a switch, run a scene or a script, open a garage door or unlock a lock after a
+confirmation; drag a dimmable light's slider; tap a name for its page. Native fullscreen app on the launcher's `cp0_lvgl`
+(kind A of the [guidelines](../../docs/APP-GUIDELINES.md): its own pages and live data), MIT (the bundled icon font
+Apache-2.0), version 0.3.0, **draft** (study 053 P2 and P1 on top of design 052a's phase 1; not in the registry yet).
 
 It is a pure client: the deck is not registered in Home Assistant as a device, nothing of the deck appears in Home Assistant
 except the sign-in (a refresh token) in the user's profile. Everything stays on the local network: no cloud, no account other
@@ -19,7 +20,11 @@ Rendered by the PC harness with the simulated Home Assistant (`build.sh host`, `
 `01-connect-640x480`, `02-home-640x480` (Favourites), `03-room-800x480` (an area's tab), `04-light-640x480` (a light's
 page), `05-confirm-640x480` (a lock's tile asks), `06-settings-640x480`, `07-offline-640x480`, `08-connect-480x320`,
 `09-home-480x800` (portrait), `10-panel-480x320` (the Pi 3A+'s 3.5" panel: three columns), `11-focus-640x480` (the
-keyboard's focus on a slider row).
+keyboard's focus on a slider row); 0.3.0, the stored dashboard (`HA_DEMO=dash`, the owner-shaped fixture):
+`12-dash-640x480` (its view, one column), `13-dash-weather-640x480` (a sensor card's line and the weather card),
+`14-dash-1280x800` (two masonry columns), `15-dash-480x800` (portrait), `16-dash-unsupported-640x480` (cards the deck
+does not draw), `17-dash-offline-640x480` (a start without a connection), `18-dash-settings-640x480` (Settings >
+Dashboard).
 
 ## Pages
 
@@ -35,11 +40,42 @@ keyboard's focus on a slider row).
 - **Server address**: one field (the toolkit's `TextField`; the fallback keyboard shows only when no keyboard is connected, the
   shared rule). `homeassistant.local:8123`, `192.168.1.5:8123`, `http://...`, `https://...` are understood; without a port, the
   scheme's own (80 / 443), as in a browser. A wrong address is named under the field. Enter keeps it, Esc goes back.
-- **Dashboard** (0.2.0, study 053 P1). Under the shared header, one 7 mm **tab bar**: **Favourites** (starred on the deck,
-  in the order starred), then **one tab per Home Assistant area** that holds entities (by name, as All's rooms), then **All**.
+- **Dashboard** (0.2.0, study 053 P1; 0.3.0, P2). Under the shared header, one 7 mm **tab bar**: first **the views of your
+  stored dashboard** (0.3.0: their titles, or their icon when a title is missing or too long for the bar; subviews and
+  views hidden from your user get no tab), then **Favourites** (starred on the deck, in the order starred), then **one tab
+  per Home Assistant area** that holds entities (by name, as All's rooms), then **All**. The app opens on the dashboard's
+  first view when there is one.
   The bar scrolls sideways; a long area name ends with dots. Its right end is the connection as a dot and a word: **Online**
   (green), **Connecting...** / **Reconnecting...** (amber), **Offline HH:MM** (red, after three failed tries, with the time
   of the last update).
+  - A **view of your stored dashboard** (0.3.0) shows its cards as Home Assistant's masonry view places them:
+    `columns = clamp(floor(width_mm / 50), 1, 4)` (one on the deck's 56.6 mm and in portrait, two on the Pi 4B's 5" 108 mm
+    screen and at 1280x720 / 1280x800; a panel view one card, full width), each card in order into the column that is the
+    shortest so far, as wide as its column; the view scrolls vertically. Cards are Home Assistant's dark card colour
+    #1c1c1c with a small radius (no shadows, gradients or animations), titles in the toolkit's label colour:
+    - **entities**: the title, and in its line a switch, the **header toggle**, when the card holds lights, switches, fans or
+      input booleans (`show_header_toggle: false` hides it; locks and covers never take part): all on when none is on,
+      else all off. Then one 7 mm row per entity (given as an id or as `{entity, name, icon, secondary_info, tap_action}`):
+      the icon in its state colour (the row's own `icon` first), the name (the row's `name` first; cut with dots), and at
+      the right the state word ("Locked", "21.5 °C", "Home" / "Away", "Partly cloudy", "Not available" for an entity Home
+      Assistant does not have) or, for a light, switch, fan or input boolean, a **switch** that only moves when Home
+      Assistant reports the new state ("..." while waiting). A tap on the icon or the switch does the row's action
+      (toggle; run a scene or script; a lock and a garage / gate / door cover ask first, as the tiles); a tap on the name
+      follows the row's `tap_action` (the entity page by default, `toggle`, or `none`). `section` rows are grey capitals
+      after a hairline, `divider` rows a hairline; other row types (button, weblink, call-service, conditional ...) show
+      their name (or type) in grey and do nothing. `secondary_info` is read and not drawn.
+    - **sensor**: the name and the icon, the value large with its unit (`name`, `icon`, `unit` honoured), and with
+      `graph: line` a line of its history (`hours_to_show`, 24 by default; `detail` 1: a point an hour, 2: six an hour, at
+      most 100 points), from `history/history_during_period`; while there is no history only the value shows. A tap opens
+      the entity page.
+    - **weather-forecast**: the name, the condition's icon (Material Design Icons' `weather-*`), the temperature with its
+      unit and the condition in words; with `show_forecast` (default) up to five days: the day, its icon, high and low
+      (`weather/subscribe_forecast`, daily, only while the view shows). Read only.
+    - **any other card** (a map, a thermostat, a tile, a custom card ...): a small greyed card with its title (or type) and
+      "Not supported on this screen", in its place; never dropped. A panel view with such a card shows the same.
+    Keys: Up / Down from stop to stop (header toggles, entity rows, sensor cards), Left / Right to the previous / next card,
+    Home / End, Enter acts, Ctrl+O opens the entity page, Up from the first stop to the tab bar. Only what changed is
+    redrawn (a row's word, colour or switch, a chart's points).
   - Favourites and the areas are **grids of tiles**. Columns from the width in millimetres:
     `clamp(floor((width_mm - 2 margin + gap) / (24 mm + gap)), 2, 6)` (margin and gap from the `space` tokens): 2 on the deck
     and in portrait, 3 at 800x480 and on the Pi 3A+'s 3.5" panel (79 mm), 4 on the Pi 4B's 5" screen. Each tile is one 7 mm
@@ -75,8 +111,11 @@ keyboard's focus on a slider row).
   slider by 10 %, Enter (or Right) acts, Esc (or Left) goes back. Touch: a tap selects a row, a tap on the selected row
   acts (the lists' rule); the slider follows a drag at once, a tap on it left or right of the knob steps 10 %.
 - **Settings** (the last row of All): Server (the address with its port when it fits, else the host) and Signed in as (read
-  only), the tiles' keys ("Tile action: Enter", "Tile page: Ctrl+O"), Sign out (asks first; Home Assistant revokes the
-  sign-in, the file goes, the Connect page shows).
+  only), **Dashboard** (0.3.0: "Automatic (Home)", the dashboard's title, or "Off (tiles only)"; Enter, or a tap on the
+  highlighted row, moves to the next: Automatic, each dashboard with at least one card the deck draws, Off; Automatic is
+  the dashboard the system's default panel names when it is one of the listed dashboards, else the default dashboard),
+  the tiles' keys ("Tile action: Enter", "Tile page: Ctrl+O", also the rows'), Sign out (asks first; Home Assistant
+  revokes the sign-in, the file goes, the Connect page shows).
 
 Room and Settings keep 0.1.0's line under the title (Connected / Connecting... / Reconnecting... / Offline, "last update
 HH:MM"). Not connected, the tiles and rows keep their last values in grey; no spinner animation (CPU on the Zero 2 W). A
@@ -190,6 +229,19 @@ room's filter never move the list; outside a room the navigation letters work as
   `entity_component` for the ten phase-1 domains, and category `entity` for the integrations whose entities have a
   translation key (both open to a user without administrator rights). Changes arrive as `a` / `c` / `r` and are applied to
   the model; only the attributes the pages show are kept (0.2.0 adds `icon`).
+- **Stored dashboards** (0.3.0, study 053 P2; every command open to a user without administrator rights): after the
+  registry, `lovelace/dashboards/list`, `frontend/get_system_data` (key `core`: the default panel) and `lovelace/config`
+  for the default dashboard (no `url_path`), then `lovelace/config` for each listed dashboard (at most 20). Each answer is
+  imported into a small Lovelace-shaped model (views, cards, rows; unknown keys ignored; a `sections` view's cards flattened
+  in order; badges not kept); a dashboard generated by a strategy (`config_not_found`, or `{"strategy": ...}`) is not read
+  (no generators on the deck: then the tiles). An answer over 1 MB is not shown: a message, and the tiles. The
+  subscription (`subscribe_entities`) holds the entities of the view shown plus the favourites, and changes when the tab
+  does; `weather/subscribe_forecast` runs only while a view with a weather card shows; a sensor card's
+  `history/history_during_period` (`minimal_response`, `no_attributes`) is asked when its view shows, again after 5
+  minutes. The app never calls Home Assistant's REST API.
+- **Dashboard cache**: the dashboard shown, as Lovelace-shaped JSON (only the keys the deck uses), with the dashboards
+  offered, the system's default panel and the names of its entities as last seen, is written to `dashboard.json` when it
+  changes (atomically, mode 0600, at most 1 MB). The next start shows it at once, greyed, until Home Assistant answers.
 - **Layout cache**: the areas, the visible entities (name, area, icon, platform, key, precision) and the icon rules are
   written to `layout.json` when they change (atomically, mode 0600, at most 1 MB: a larger install is not cached; 2,000
   entities make about 130 KB). The next start shows the tabs and tiles from it, greyed with "...", until Home Assistant
@@ -229,22 +281,26 @@ room's filter never move the list; outside a room the navigation letters work as
 
 ## Install
 
-Settings > Apps once published. Today (draft): `sudo dpkg -i home-assistant_0.2.0_arm64.deb` (or `_amd64.deb` on a PC);
+Settings > Apps once published. Today (draft): `sudo dpkg -i home-assistant_0.3.0_arm64.deb` (or `_amd64.deb` on a PC);
 remove with `sudo dpkg -r home-assistant`.
 
 ## Files the app keeps
 
 | Path | What |
 |---|---|
-| `~/.config/home-assistant/settings.json` | the server address, and `"qr_use_ip": true` to put Home Assistant's IP address in the QR code instead of its name (for a phone that cannot resolve `homeassistant.local`; no row for it in phase 1) |
+| `~/.config/home-assistant/settings.json` | the server address, `"dashboard"` (0.3.0: `auto`, `off` or a dashboard's `url_path`; Settings > Dashboard), and `"qr_use_ip": true` to put Home Assistant's IP address in the QR code instead of its name (for a phone that cannot resolve `homeassistant.local`; no row for it in phase 1) |
 | `~/.config/home-assistant/favourites.json` | the starred entity ids |
 | `~/.config/home-assistant/names.json` | the favourites' names as last seen, written when one changes: a start without a connection shows them; mode 0600 (0.2.0) |
 | `~/.config/home-assistant/layout.json` | 0.2.0: the areas, the entities' names, areas and icons, and Home Assistant's icon rules as last seen (the tabs and tiles of a start without a connection); mode 0600, at most 1 MB |
+| `~/.config/home-assistant/dashboard.json` | 0.3.0: the stored dashboard shown (Lovelace-shaped, only the keys the deck uses), the dashboards offered, the names of its entities as last seen (a start without a connection); mode 0600, at most 1 MB |
 | `~/.config/home-assistant/credentials.json` | server, client id, refresh token; mode 0600; deleted by Sign out or when refused |
 
 Reset: Sign out in the app (revokes the token), then delete the folder. `HA_CONFIG_DIR` moves it (tests).
 `HA_DEMO=<world>` runs the app against the simulated Home Assistant, with no network (the harness's worlds: `connect`,
-`home`, `empty`, `big`, `connecting`, `reconnecting`, `offline`).
+`home`, `empty`, `big`, `connecting`, `reconnecting`, `offline`; 0.3.0: `dash` (the owner-shaped stored dashboard: one
+masonry view of 12 cards, 9 entities, 2 sensor, 1 weather-forecast, 25 entity references, invented names; a second
+dashboard of one map card), `dash-offline`, `dash-mixed` (unsupported cards and rows, an icon-only view, a panel map view,
+a subview, a hidden view), `dash-long` (long names)).
 
 ## Known limits (phase 1)
 
@@ -259,9 +315,16 @@ Reset: Sign out in the app (revokes the token), then delete the folder. `HA_CONF
 - Tiles and rows are 7 mm: on the deck about three and a half rows of tiles show under the header and the tab bar (two
   columns). A long name is cut with dots. A dimmable light's slider row is full width under its row of tiles; two dimmable
   lights side by side give two slider rows, each with the light's name.
-- The tiles' layout is the app's own (favourites, then each area's entities by name): Home Assistant's dashboards
-  (Lovelace, the Overview) are not read yet (study 053 P2 / P3). No colour temperature, climate control or cover position
-  feature rows yet; climate is read only.
+- The tiles' layout is the app's own (favourites, then each area's entities by name). 0.3.0 reads your **stored**
+  dashboards, and draws only the card types the owner's dashboard holds: `entities`, `sensor`, `weather-forecast`; every
+  other card (map, thermostat, gauge, history graph, tile, heading, custom cards ...) is a greyed "Not supported on this
+  screen" card. Generated dashboards (the new Overview, the `original-states` / `areas` strategies) are not rebuilt (study
+  053 P3): with only those, the tiles show. Cards' `visibility` conditions and views' badges are not read (every card
+  shows); `state_color` is not read (icons are coloured by state); `secondary_info` is not drawn; the weather card shows the
+  daily forecast only. No colour temperature, climate control or cover position feature rows yet; climate is read only.
+- Automatic follows the **system's** default panel (`frontend/get_system_data`), not a default panel chosen by your user
+  in its profile; a default panel that is not a listed dashboard (the generated Overview `home`, `map` ...) reads as the
+  default stored dashboard.
 - Ctrl+O cannot be scripted in the PC harness (no modifier keys there): its mapping is unit-tested (`nav_key`), the scenes
   open pages by a tap on the name. The Server row is
   fitted the other way ("Server" stays whole, the value gives way): `homeassistant.local` is whole at 640x480 and up and on
@@ -280,7 +343,9 @@ Reset: Sign out in the app (revokes the token), then delete the folder. `HA_CONF
   `meta.json` by `tools/make_mdi.py` (which checks both npm tarballs against their pinned sha512); the licence text is
   `/usr/share/doc/home-assistant/LICENSE.mdi`. The tiles' look follows Home Assistant's tile card as its documentation and
   the study describe it (facts: the Material colour values of its state colours, its dark surface colours); no code, CSS,
-  SVG or icon table of Home Assistant's frontend (Apache-2.0) is used. No Home Assistant logo.
+  SVG or icon table of Home Assistant's frontend (Apache-2.0) is used. No Home Assistant logo. 0.3.0's dashboard reads the
+  cards' configuration keys as Home Assistant's dashboard documentation describes them and draws them its own way; the
+  weather conditions' icon names are Material Design Icons names.
 <!-- branding-allow-begin: credits -->
 - The LVGL based `cp0_lvgl` runtime of the CyberdeckZero Launcher (derived from the MIT-licensed launcher of M5Stack Technology
   CO LTD) and LVGL (MIT), linked into the binary.
@@ -292,7 +357,7 @@ Reset: Sign out in the app (revokes the token), then delete the folder. `HA_CONF
 ## Build and test
 
 ```
-sh apps/home-assistant/build.sh host            # unit tests (core: 800+ checks) and the scenes at ten sizes
+sh apps/home-assistant/build.sh host            # unit tests (core: 1,200+ checks) and the scenes at ten sizes
 python3 apps/home-assistant/tools/make_mdi.py --download --check   # the font, name table and licence = the pinned npm packages
 sh apps/home-assistant/build.sh cross           # the aarch64 binary into root/
 sh apps/home-assistant/build.sh cross --arch amd64   # the x86-64 binary into root.amd64/ (Mesh Hop's README: private dev root)
@@ -302,21 +367,34 @@ python tools/make_registry.py --only home-assistant --out <folder outside packag
 
 - `src/core/` (no LVGL): `json` (the reader), `text` (URL / form encoding, the server address), `model` (registry, rooms,
   a / c / r), `format` (the words of the rows), `tiles` (0.2.0: tabs, columns by mm, the tiles' colours and words, the rows
-  of tiles and sliders, the 2-D focus and the keys), `icons` (the icon order, Home Assistant's icon rules, the app's own
+  of tiles and sliders, the 2-D focus and the keys), `lovelace` (0.3.0: the stored dashboard's model, its importer and
+  export, which dashboard is shown), `dash` (0.3.0: masonry, the toggle domains, the forecast, the history's buckets, the
+  rows' words), `icons` (the icon order, Home Assistant's icon rules, the app's own
   table), `mdi` (the name table), `engine` (the client state machine), `store` (the files), `qr` + `qrcodegen`
   (the code), `sim` (the simulated Home Assistant of the tests and the harness), `curl_api` + `net` (libcurl at run time, the
-  WebSocket, HTTP, the listener), `runner` (the connection thread). `src/ui/`: the pages.
-- `tests/*.cpp`: the unit tests (`test-home-assistant`; `test_tiles.cpp` for 0.2.0's dashboard). `tests/scenes/*.scene`:
+  WebSocket, HTTP, the listener), `runner` (the connection thread). `src/ui/`: the pages (`ha_app`), a view of the stored
+  dashboard (`ha_dash`, 0.3.0).
+- `tests/*.cpp`: the unit tests (`test-home-assistant`; `test_tiles.cpp` for 0.2.0's dashboard, `test_lovelace.cpp` for
+  0.3.0's stored dashboard: the importer, masonry, toggles, forecast, history, the choice, the cache, the engine against the
+  owner-shaped fixture). `tests/scenes/*.scene`:
   every page and state at 480x320, 640x480, 800x480, 1024x600, 1280x720, 1280x800, 720x720 and the portrait 480x800,
   480x640, 800x1280 (the dashboard: Favourites, an area, All, the entity page, the lock's confirmation, toggles and the
   slider, the keyboard's focus, offline, the cached layout, a 300-entity area; `t-panel480` the real 480x320 panel at
-  6.1 px/mm); the notice under 480x320; Esc; no contract; the multitasking lifecycle. `tests/fake_ha/fake_ha.py` (Python stdlib) and `tests/integration/`: pairing,
-  2,000 registry entries, 100 subscribed entities, 1 KB frames, service calls, server pings, a 5 MB message, a TCP reset, an
+  6.1 px/mm; 0.3.0 `w1`-`w7`: the owner-shaped stored dashboard, the keys and a lock row's question, touch, unsupported
+  cards, the cached dashboard offline, Settings > Dashboard, long names); the notice under 480x320; Esc; no contract; the multitasking lifecycle. `tests/fake_ha/fake_ha.py` (Python stdlib) and `tests/integration/`: pairing,
+  2,000 registry entries, 100 subscribed entities, the stored dashboard (0.3.0: an owner-shaped one on the fake house, a
+  map-only one, the forecast, the history, the header toggle's list call, Settings > Dashboard, no administrator command,
+  no REST call), 1 KB frames, service calls, server pings, a 5 MB message, a TCP reset, an
   expired token, the token refresh, Sign out with revoke, a sign-in deleted on the server; every issued token is searched for
   in the logs. `tests/BOARD-TESTS.md`: the owner's protocol.
 
 ## Changes
 
+- 0.3.0 (draft): study 053 P2: your stored dashboard drawn natively, its views as the first tabs (titles or icons): masonry
+  columns by millimetres, `entities` cards (rows with icons, names, state words or switches, sections, dividers, the
+  header toggle, `tap_action`), `sensor` cards (the value and a line of its history), `weather-forecast` cards (now and
+  five days), any other card greyed "Not supported on this screen"; the subscription follows the view shown; Settings >
+  Dashboard (Automatic, a dashboard, Off); the dashboard cached for a start offline (`dashboard.json`).
 - 0.2.0 (draft): study 053 P1: the dashboard of tiles (Favourites, a tab per area, All), Material Design Icons with Home
   Assistant's icon rules (`frontend/get_icons`), its state colours, the icon acts and the name opens the page, a slider
   row for dimmable lights, the keyboard's 2-D focus (Enter acts, Ctrl+O opens, Page Up / Down switch views), the entity

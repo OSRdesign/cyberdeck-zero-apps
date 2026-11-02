@@ -7,13 +7,19 @@
  * /auth/token (authorization_code, refresh_token), /auth/revoke, and over the WebSocket auth, supported_features,
  * get_config, auth/current_user, the area, device and entity-for-display lists, subscribe_entities (a snapshot of the
  * ids asked, then "c" changes), unsubscribe_events, call_service (light, switch, input_boolean, scene, script, lock,
- * cover), frontend/get_icons (a few made-up rules of the test fixture's own, in the shape Home Assistant serves) and
- * ping. It is a stand-in for the tests, not a description of Home Assistant beyond that subset.
+ * cover, fan), frontend/get_icons (a few made-up rules of the test fixture's own, in the shape Home Assistant serves),
+ * ping, and for 0.3.0's stored dashboard lovelace/dashboards/list, lovelace/config, frontend/get_system_data,
+ * weather/subscribe_forecast (daily, one event) and history/history_during_period (a made-up curve). It is a stand-in
+ * for the tests, not a description of Home Assistant beyond that subset.
  *
  * Worlds (HA_DEMO): connect (no sign-in yet), connect-unreachable, home (signed in, five rooms, eight favourites),
  * empty (signed in, nothing configured), big (a room of 300 entities with long names), connecting (signed in, server
  * down from the start, the layout of an earlier session cached), reconnecting (connects, then the link drops for
- * good), offline (the same, time running 20 times faster so that the line reaches Offline quickly). HA_DEMO_PHONE=ok|refused|badcode makes the simulated phone
+ * good), offline (the same, time running 20 times faster so that the line reaches Offline quickly); 0.3.0: dash (the
+ * owner-shaped stored dashboard: one masonry view of 12 cards, 9 entities, 2 sensor, 1 weather-forecast, 25 entity
+ * references, invented names; a second dashboard of one map card in a panel view), dash-offline (the same cached, the
+ * server down), dash-mixed (unsupported cards and rows, an icon-only view, a panel map view, a subview, a hidden view,
+ * a second dashboard), dash-long (long names everywhere, six views). HA_DEMO_PHONE=ok|refused|badcode makes the simulated phone
  * answer the QR code one second after it shows. HA_DEMO_SPEED=N runs the simulated time N times faster.
  */
 #pragma once
@@ -43,6 +49,7 @@ struct SimEntity {
     std::string icon;         /* the registry's user icon ("ic") */
     std::string attr_icon;    /* the state's "icon" attribute */
     std::string platform = "demo", translation_key;
+    std::string temperature_unit; /* a weather entity's */
 };
 
 struct SimWorld {
@@ -56,9 +63,17 @@ struct SimWorld {
     std::map<std::string, std::string> device_area;           /* device id -> area */
     std::vector<SimEntity> entities;
     bool icons = true; /* frontend/get_icons answers (false: an older server, "unknown_command") */
+    /* the stored dashboards (0.3.0) */
+    std::string default_config;  /* lovelace/config without url_path: its JSON ("" config_not_found) */
+    std::vector<std::pair<std::string, std::string>> dashboards; /* listed: url_path, title */
+    std::map<std::string, std::string> dashboard_configs;        /* url_path -> its JSON ("" config_not_found) */
+    std::string default_panel;   /* frontend/get_system_data core.default_panel ("" not set) */
+    bool lovelace = true;        /* false: the lovelace commands are unknown */
+    bool forecasts = true;       /* weather/subscribe_forecast answers */
 
     /* counters for the tests */
     int refreshes = 0, revokes = 0, exchanges = 0, ws_opens = 0, auths = 0, provider_checks = 0;
+    int config_reads = 0, forecast_subscribes = 0, history_reads = 0;
     std::vector<std::string> calls; /* "light.turn_on light.x {..}" */
     std::vector<std::string> sent;  /* every message the engine sent (tokens included: tests only) */
 
@@ -67,6 +82,8 @@ struct SimWorld {
 
 /* The worlds of the render harness and the tests. */
 SimWorld sim_world(const std::string &name);
+/* dashboard.json's text for a world's default dashboard, as an earlier session would have saved it */
+std::string sim_cached_dashboard(const SimWorld &w);
 
 /* Runs an Engine against a SimWorld: executes the engine's actions, delivers the simulated server's answers one poll
  * later (a message round trip), keeps the "files" in memory. Time: a virtual clock moved by poll() (real time times
@@ -107,6 +124,8 @@ public:
     const std::map<std::string, std::string> &saved_names() const { return saved_names_; }
     const std::string &saved_layout() const { return saved_layout_; }
     int layout_saves() const { return layout_saves_; }
+    const std::string &saved_dashboard() const { return saved_dashboard_; }
+    int dashboard_saves() const { return dashboard_saves_; }
     bool listening() const { return listening_; }
 
 private:
@@ -137,6 +156,8 @@ private:
     std::map<std::string, std::string> saved_names_;
     std::string saved_layout_;
     int layout_saves_ = 0;
+    std::string saved_dashboard_;
+    int dashboard_saves_ = 0;
     std::string issued_refresh_;
     int token_serial_ = 0;
     std::string demo_;

@@ -106,6 +106,8 @@ Settings load_settings(const std::string &dir)
     if (const json::Value *x = v.get("server"))
         if (!x->as_string().empty()) s.server = x->as_string();
     if (const json::Value *x = v.get("qr_use_ip")) s.qr_use_ip = x->as_bool();
+    if (const json::Value *x = v.get("dashboard"))
+        if (!x->as_string().empty() && x->as_string().size() < 256) s.dashboard = x->as_string();
     return s;
 }
 
@@ -113,7 +115,8 @@ bool save_settings(const std::string &dir, const Settings &s)
 {
     if (!make_dirs(dir, 0700)) return false;
     const std::string text = std::string("{\n  \"server\": ") + json::quote(s.server) +
-                             ",\n  \"qr_use_ip\": " + (s.qr_use_ip ? "true" : "false") + "\n}\n";
+                             ",\n  \"qr_use_ip\": " + (s.qr_use_ip ? "true" : "false") +
+                             ",\n  \"dashboard\": " + json::quote(s.dashboard) + "\n}\n";
     return write_atomic(dir + "/settings.json", text, 0644);
 }
 
@@ -206,6 +209,17 @@ bool save_layout(const std::string &dir, const std::string &text)
 {
     if (text.empty() || text.size() > kMaxLayoutBytes || !make_dirs(dir, 0700)) return false;
     return write_atomic(dir + "/layout.json", text, 0600);
+}
+
+bool load_dashboard(const std::string &dir, std::string &text)
+{
+    return read_file(dir + "/dashboard.json", text, kMaxDashBytes) && !text.empty();
+}
+
+bool save_dashboard(const std::string &dir, const std::string &text)
+{
+    if (text.empty() || text.size() > kMaxDashBytes || !make_dirs(dir, 0700)) return false;
+    return write_atomic(dir + "/dashboard.json", text, 0600);
 }
 
 Credentials load_credentials(const std::string &dir)

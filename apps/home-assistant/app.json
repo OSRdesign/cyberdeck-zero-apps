@@ -1,10 +1,10 @@
 {
   "share_code": "home-assistant",
   "package": "home-assistant",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "title": "Home Assistant",
-  "summary": "Control your Home Assistant from the deck: tiles for favourites and rooms.",
-  "description": "A client of your own Home Assistant server on the local network. Sign in by scanning a QR code with a phone. Tiles with Home Assistant's icons and state colours: Favourites, a tab per area, All. Tap an icon to switch a light, run a scene, set a brightness; locks and garage doors ask first. Live states, greyed when offline. Not affiliated with the Home Assistant project. Needs Home Assistant on your network and a phone.",
+  "summary": "Your Home Assistant on the deck: your own dashboard, favourites and rooms.",
+  "description": "A client of your own Home Assistant server on the local network, signed in by scanning a QR code with a phone. Your stored dashboard drawn natively (entities, sensor and weather cards), then tiles for favourites and each area, with Home Assistant's icons and state colours. Switch a light, run a scene; locks and garage doors ask first. Greyed when offline. Not affiliated with the Home Assistant project.",
   "categories": ["Home"],
   "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
   "license": "MIT AND Apache-2.0",

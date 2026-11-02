@@ -1,5 +1,78 @@
 # Home Assistant: board tests (owner protocol)
 
+## 0.3.0 (draft, study 053 P2): your own dashboard, about 10 minutes
+
+Your stored Home Assistant dashboard drawn by the deck (the probe of study 053 counted it: one view, 12 cards, 9
+entities, 2 sensor, 1 weather-forecast). Boards: the **deck** (Pi Zero 2 W, 640x480, keyboard: K steps), **zero8** and
+the **Pi 4B** (touch: T steps; unplug the Pi 4B's charger, it reports under-voltage while charging). Against your Home
+Assistant (`http://homeassistant.local:8123`, 2026.10.4), signed in as `deck` (non-admin). Have your phone's Home
+Assistant app open on the same dashboard to compare. Nothing here ran on a board or against a real Home Assistant
+before: the app was tested against a simulated and a fake server only (PC harness, integration test).
+
+Install over 0.2.0 / 0.1.0 (the sign-in is kept, no new QR code): copy `home-assistant_0.3.0_arm64.deb` to the board,
+`sudo dpkg -i home-assistant_0.3.0_arm64.deb`. Remove with `sudo dpkg -r home-assistant`.
+
+### D1. Your dashboard, compared with the phone (3 minutes, every board)
+
+1. Open **Home Assistant**. Expected: under the header the tab bar starts with your dashboard's view (its title, or its
+   icon when the title is too long), then **Favourites**, your three areas, **All**; at its right **Online** (green).
+   The app opens on the dashboard's view. The first start after installing may show Favourites for a second until the
+   dashboard arrives, then it moves to the view by itself.
+2. The cards, in the phone's order. The deck has **one column** (56 mm wide); the Pi 4B's 5" screen (108 mm) **two**
+   (each card goes into the shorter column, as Home Assistant's own masonry view does); zero8 by its width (50 mm a
+   column). Drag to scroll through all 12 cards.
+3. For each entities card: its title, then one 7 mm row per entity: the icon (coloured when on: amber light or switch,
+   green lock ...), the name (or the name you gave the row in the dashboard), and at the right the state word ("Locked",
+   "21.5 °C", "Home", "Detected") or a **switch** (lights, switches, fans, input booleans). Section labels are grey
+   capitals, dividers a thin line; a row type the deck does not draw (a button, a web link ...) shows its name in grey.
+   A card with lights or switches has a switch in its title line (the header toggle); your locks and covers never get
+   one.
+4. The two sensor cards: the name, the value large with its unit, and a blue line of the last 24 hours (or what the card
+   asks for) that has the shape of the phone's graph. The weather card: the condition's icon, the temperature, the
+   condition ("Partly cloudy"), then up to five days (day, icon, high, low).
+5. Note anything the phone shows that the deck does not, or shows differently (a name, an icon, a word, a missing row).
+
+### D2. Act from the dashboard (3 minutes)
+
+1. T: tap a light row's **switch** (or its icon): the switch follows within about a second, the lamp too (no flip before
+   Home Assistant confirms; "..." while waiting). Tap the light's **name**: its entity page (brightness, Turn on / off,
+   Add to favourites); Esc back to the same view.
+2. K: press **Down** once (the first stop gets the blue outline; the first key only shows it), **Down** / **Up** move
+   from row to row (and to each card's header toggle and each sensor card), **Left** / **Right** jump to the previous /
+   next card. On a light: **Enter** toggles; **Ctrl+O** opens its page.
+3. A card's header switch: all its lights and switches off (or all on when none was on).
+4. A lock row (or a garage door): its icon, switch zone or Enter asks "Unlock Front door?" Yes / Cancel, as the tiles of
+   0.2.0. Cancel: nothing happens.
+5. Tap a **sensor card**: its entity page.
+
+### D3. Tabs, Settings > Dashboard (2 minutes)
+
+1. Switch tabs: T a tap on a tab, or a sideways swipe; K Page Up / Page Down, or Up from the first row to the tab bar,
+   then Left / Right. Favourites, the areas and All are the 0.2.0 tiles and list.
+2. All > Settings > **Dashboard**: "Automatic (<your dashboard's title>)" (on a narrow screen just "Automatic"). Enter
+   (T: tap the highlighted row) moves to your dashboard by name, then "Off (tiles only)", then Automatic again. Your
+   map-only dashboard is never offered. With Off, Esc: the tabs start with Favourites (0.2.0's look). Set it back to
+   Automatic.
+
+### D4. Offline (2 minutes)
+
+1. On the dashboard's view, turn the board's Wi-Fi off. Expected within about 45 s: "Reconnecting..." (amber), the rows
+   grey with their last words and switch positions; after about 15 s more "Offline HH:MM" (red).
+2. With Wi-Fi still off, quit (Esc) and open the app again. Expected: the dashboard's view at once (the last one cached
+   in `~/.config/home-assistant/dashboard.json`), grey, the names kept, "Offline" / "..." as words, no switches until a
+   state arrives.
+3. Wi-Fi on: "Online" within a minute, live words, switches, the forecast and the sensor lines back.
+
+### What to send back (0.3.0)
+
+Per step: pass, or what you saw instead (a photo of the deck next to the phone helps most). The differences noted at
+D1.5. How fast the view appears and scrolls on the deck (any delay you notice when switching to the dashboard's tab).
+Optional: `grep VmRSS /proc/$(pgrep -x home-assistant)/status` on the dashboard's view (target under 25 MB; the PC
+harness measured the app at about 10 MB at 640x480 with the view scrolled through, 0.2.0's tiles about 9 MB), and
+`ls -l ~/.config/home-assistant/` (`dashboard.json` is `-rw-------`).
+
+---
+
 ## 0.2.0 (draft, study 053 P1): the tile dashboard, about 10 minutes
 
 Two boards: one with a **keyboard** (the deck, Pi Zero 2 W, 640x480: K steps) and one **touch only** (the Pi 3A+ or

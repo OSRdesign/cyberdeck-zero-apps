@@ -6,6 +6,7 @@
  */
 #pragma once
 
+#include "lovelace.hpp"
 #include "model.hpp"
 #include "tiles.hpp"
 
@@ -68,6 +69,63 @@ struct Detail {
 
 enum class Tone { Normal, Warn, Error };
 
+/* ------------------------------------------------------------------ the stored dashboard (0.3.0, study 053 P2) */
+
+/* One row of an entities card, as the page draws it. */
+struct DashRowView {
+    DashRow::Kind kind = DashRow::Kind::Entity;
+    std::string label;     /* Section: its label; Other: the row's name, else its type ("weblink") */
+    EntityRow e;           /* Entity: the name (the row's override), glyph, colours, what the icon does */
+    std::string word;      /* Entity: the state word ("On", "21.5 °C", "Home", "Not available", "...") */
+    bool toggle = false;   /* Entity: a switch (light, switch, fan, input_boolean) */
+    bool available = true; /* Entity: Home Assistant has it (false: "Not available", greyed) */
+    bool has_state = false; /* Entity: its state arrived (else the word "..." or "Offline", never a switch) */
+    TapAction tap = TapAction::Default; /* what a tap on the name does */
+    bool operator==(const DashRowView &o) const
+    {
+        return kind == o.kind && label == o.label && word == o.word && toggle == o.toggle && available == o.available &&
+               has_state == o.has_state &&
+               tap == o.tap && e.id == o.e.id && e.name == o.e.name && e.glyph == o.e.glyph &&
+               e.glyph_rgb == o.e.glyph_rgb && e.muted == o.e.muted && e.pending == o.e.pending && e.done == o.e.done &&
+               e.on == o.e.on && e.unavailable == o.e.unavailable && e.confirm == o.e.confirm &&
+               e.tile_action == o.e.tile_action;
+    }
+    bool operator!=(const DashRowView &o) const { return !(*this == o); }
+};
+
+struct ForecastCol {
+    std::string day;         /* "Mon" */
+    std::uint32_t glyph = 0; /* the condition's MDI codepoint */
+    std::string high, low;   /* "14°", "6°" ("" unknown) */
+    bool operator==(const ForecastCol &o) const { return day == o.day && glyph == o.glyph && high == o.high && low == o.low; }
+};
+
+/* One card of the view shown. */
+struct DashCardView {
+    DashCard::Kind kind = DashCard::Kind::Unsupported;
+    std::string type, title;
+    /* entities */
+    std::vector<DashRowView> rows;
+    bool header_toggle = false, header_on = false, header_pending = false;
+    std::vector<std::string> toggle_ids; /* what the header toggle switches */
+    /* sensor and weather: the entity (name, glyph, colours) */
+    EntityRow e;
+    std::string value, unit;  /* sensor: "21.5", "°C"; weather: the temperature "14.2", "°C" */
+    bool graph = false;       /* sensor: graph: line */
+    std::vector<int> spark;   /* sensor: the points 0..1000 (-1 none); empty: no history (the value only) */
+    std::string condition;    /* weather: "Partly cloudy" */
+    std::uint32_t big_glyph = 0; /* weather: the condition's glyph */
+    bool forecast = false;    /* weather: show_forecast */
+    std::vector<ForecastCol> days;
+};
+
+/* A view of the dashboard that gets a tab. */
+struct DashTab {
+    int view = 0;            /* its index in the dashboard */
+    std::string title;       /* "" when it has none */
+    std::uint32_t glyph = 0; /* its icon (0 none) */
+};
+
 struct View {
     bool signed_in = false;
     Conn conn = Conn::SignedOut;
@@ -93,6 +151,18 @@ struct View {
     std::string entity_id;
     Detail detail;
 
+    /* the stored dashboard (0.3.0): its views' tabs come first; the cards of the view shown (dash_view) */
+    bool dash = false;            /* a dashboard with supported cards is shown */
+    std::string dash_key, dash_title;
+    std::vector<DashTab> dash_tabs;
+    int dash_view = -1;           /* the view whose cards dash_cards holds (-1: none yet) */
+    bool dash_panel = false;      /* that view is a panel (one card, full width) */
+    std::vector<DashCardView> dash_cards;
+    /* Settings > Dashboard: the setting ("auto", "off", a key), the offered dashboards (key, title), Automatic's */
+    std::string dash_setting = kDashAuto;
+    std::vector<std::pair<std::string, std::string>> dash_choices;
+    std::string dash_auto_title;
+
     /* a short message for the status line (a command that failed, a sign-out that could not reach the server) */
     std::string message;
     bool message_error = false;
@@ -102,7 +172,8 @@ struct View {
 
 struct Command {
     enum class Kind {
-        SetView,         /* flag: a room is shown (a = its id, "" = No room); b: the entity page shown ("" none) */
+        SetView,         /* flag: a room is shown (a = its id, "" = No room); b: the entity page shown ("" none);
+                            value: the dashboard view shown (-1 none) */
         ToggleFavourite, /* a: entity */
         Toggle,          /* a: entity (light, switch, input_boolean) */
         Run,             /* a: entity (scene, script) */
@@ -110,19 +181,31 @@ struct Command {
         Service,         /* a: entity, b: service of its domain (lock, unlock, open_cover, close_cover) */
         SignOut,
         SetServer,       /* a: the address as typed */
+        SetDashboard,    /* a: "auto", "off" or a dashboard's key (Settings > Dashboard) */
+        SetGroup,        /* ids: the entities of an entities card's header toggle; flag: on */
     };
     Kind kind = Kind::SetView;
     std::string a, b;
     int value = 0;
     bool flag = false;
+    std::vector<std::string> ids;
 
-    static Command set_view(bool room_shown, const std::string &room, const std::string &entity)
+    static Command set_view(bool room_shown, const std::string &room, const std::string &entity, int dash_view = -1)
     {
         Command c;
         c.kind = Kind::SetView;
         c.flag = room_shown;
         c.a = room;
         c.b = entity;
+        c.value = dash_view;
+        return c;
+    }
+    static Command set_group(std::vector<std::string> ids, bool on)
+    {
+        Command c;
+        c.kind = Kind::SetGroup;
+        c.ids = std::move(ids);
+        c.flag = on;
         return c;
     }
     static Command of(Kind k, const std::string &a = std::string(), const std::string &b = std::string(), int v = 0)

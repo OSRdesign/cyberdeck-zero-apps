@@ -196,13 +196,14 @@ std::string Tab::key() const
     case Kind::Favourites: return "fav";
     case Kind::Area: return "area:" + area;
     case Kind::All: return "all";
+    case Kind::View: return "view:" + std::to_string(view);
     }
     return "fav";
 }
 
-std::vector<Tab> make_tabs(const std::vector<RoomInfo> &rooms)
+std::vector<Tab> make_tabs(const std::vector<RoomInfo> &rooms, const std::vector<Tab> &views)
 {
-    std::vector<Tab> tabs;
+    std::vector<Tab> tabs(views.begin(), views.end());
     Tab fav;
     fav.kind = Tab::Kind::Favourites;
     fav.title = "Favourites";

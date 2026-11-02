@@ -76,15 +76,19 @@ bool tile_has_more(Domain d, TileAction a, bool dimmable);
 int grid_columns(int width_px, int ppmm_x100, int margin_px, int gap_px);
 constexpr int kTileMinMmX10 = 240;
 
-/* The views: Favourites, one per area holding visible entities (the areas by name, as All's ROOMS), then All. */
+/* The views: the stored dashboard's views first (0.3.0), then Favourites, one per area holding visible entities (the
+ * areas by name, as All's ROOMS), then All. */
 struct Tab {
-    enum class Kind { Favourites, Area, All };
+    enum class Kind { Favourites, Area, All, View };
     Kind kind = Kind::Favourites;
     std::string area; /* Area: its id */
     std::string title;
-    std::string key() const; /* "fav", "area:<id>", "all": what the app remembers across rebuilds */
+    int view = -1;            /* View: its index in the dashboard */
+    std::uint32_t glyph = 0;  /* View: its icon (MDI codepoint, 0 none) */
+    std::string key() const;  /* "view:<n>", "fav", "area:<id>", "all": what the app remembers across rebuilds */
 };
-std::vector<Tab> make_tabs(const std::vector<RoomInfo> &rooms);
+/* views: the dashboard's tabs (Kind::View), put first */
+std::vector<Tab> make_tabs(const std::vector<RoomInfo> &rooms, const std::vector<Tab> &views = {});
 /* The index of key in tabs, else 0 (Favourites). */
 int tab_index(const std::vector<Tab> &tabs, const std::string &key);
 

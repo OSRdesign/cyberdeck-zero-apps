@@ -4,13 +4,16 @@
  * Home Assistant app core: the files the app keeps (no LVGL; tests/test_store.cpp). All in
  * ${XDG_CONFIG_HOME:-~/.config}/home-assistant (mode 0700), each written to a temporary file and renamed into place:
  *
- *   settings.json     {"server": "homeassistant.local:8123", "qr_use_ip": false}
+ *   settings.json     {"server": "homeassistant.local:8123", "qr_use_ip": false, "dashboard": "auto"}  (0.3.0:
+ *                     the dashboard shown: "auto", "off" or a dashboard's key)
  *   favourites.json   {"entities": ["light.kitchen", ...]}   (starred on the deck, in the order they were starred)
  *   names.json        {"names": {"light.kitchen": "Kitchen light"}}   (the favourites' names, for a start offline)
  *   layout.json       {"version": 1, "areas": [...], "entities": [{"id", "name", "area", "dp", "ic", "pl", "tk"}],
  *                     "icons": {...}}: the tabs, the tiles' names and the icon rules as last seen, for a start offline
  *                     (engine.hpp layout_text()); at most 1 MB. names.json and layout.json are mode 0600 like the
  *                     credentials (they name the user's home).
+ *   dashboard.json    0.3.0: the stored dashboard shown (Lovelace-shaped), the dashboards offered and its entities'
+ *                     names as last seen (engine.hpp dashboard_text()), for a start offline; at most 1 MB, mode 0600.
  *   credentials.json  {"server": ..., "client_id": ..., "refresh_token": ...}   mode 0600; never logged or printed.
  *                     Deleted by Sign out (after Home Assistant revoked the token) or when Home Assistant refuses it.
  *
@@ -44,6 +47,10 @@ bool save_names(const std::string &dir, const std::map<std::string, std::string>
 /* layout.json: false (and nothing filled) when missing, damaged, larger than 1 MB or of another version */
 bool load_layout(const std::string &dir, std::vector<Area> &areas, std::vector<RegEntry> &entries, IconRules &icons);
 bool save_layout(const std::string &dir, const std::string &text);
+
+/* dashboard.json's text (Engine::set_cached_dashboard reads it): false when missing or larger than 1 MB */
+bool load_dashboard(const std::string &dir, std::string &text);
+bool save_dashboard(const std::string &dir, const std::string &text);
 
 Credentials load_credentials(const std::string &dir);
 bool save_credentials(const std::string &dir, const Credentials &c);

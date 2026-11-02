@@ -14,6 +14,8 @@
  *   package  the .desktop file, app.json, the icon and the licence file
  *   tiles    0.2.0's dashboard: tabs, columns by mm, rows and 2-D focus, keys, colours / words / glyphs, the icon order,
  *            the MDI name table, the layout cache, the icon requests
+ *   lovelace 0.3.0's stored dashboard: the importer, masonry, toggles, forecast, history, the dashboard chosen, the
+ *            cache, the engine against the owner-shaped dashboard of the simulated Home Assistant
  */
 #include "test_util.hpp"
 
@@ -29,6 +31,7 @@ int main()
     test_qr_group();
     test_package_group();
     test_tiles_group();
+    test_lovelace_group();
     std::printf("%d checks passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

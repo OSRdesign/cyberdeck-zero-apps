@@ -110,7 +110,7 @@ void test_package_group()
     const std::string hpp = read_text(app + "/src/ui/ha_app.hpp");
     CHECK(has(hpp, "kMinW = 480, kMinH = 320"));
     CHECK(has(hpp, "kPortraitW = 480, kPortraitH = 640"));
-    CHECK(has(hpp, "kVersion = \"0.2.0\""));
+    CHECK(has(hpp, "kVersion = \"0.3.0\""));
     CHECK(!read_text(app + "/root/usr/share/APPLaunch/share/images/home-assistant.png").empty());
     const std::string copyright = read_text(app + "/root/usr/share/doc/home-assistant/copyright");
     CHECK(has(copyright, "Project Nayuki"));
@@ -131,7 +131,7 @@ void test_package_group()
     const std::string manifest = read_text(app + "/app.json");
     CHECK(has(manifest, "\"share_code\": \"home-assistant\""));
     CHECK(has(manifest, "\"package\": \"home-assistant\""));
-    CHECK(has(manifest, "\"version\": \"0.2.0\""));
+    CHECK(has(manifest, "\"version\": \"0.3.0\""));
     CHECK(has(manifest, "\"title\": \"Home Assistant\""));
     CHECK(has(manifest, "\"draft\": true"));
     CHECK(has(manifest, "libcurl4t64"));

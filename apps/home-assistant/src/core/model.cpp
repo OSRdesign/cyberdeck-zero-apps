@@ -167,6 +167,7 @@ void Model::read_attributes(State &st, const json::Value &attrs)
         else if (k == "current_temperature") st.current_temperature = v.as_double(NAN);
         else if (k == "temperature") st.target_temperature = v.as_double(NAN);
         else if (k == "hvac_action") st.hvac_action = v.as_string();
+        else if (k == "temperature_unit") st.temperature_unit = v.as_string();
         else if (k == "current_position") st.current_position = v.is_number() ? static_cast<int>(v.as_int(-1)) : -1;
         else if (k == "supported_color_modes") {
             st.dimmable = false;
@@ -188,6 +189,7 @@ void Model::remove_attribute(State &st, const std::string &k)
     else if (k == "current_temperature") st.current_temperature = NAN;
     else if (k == "temperature") st.target_temperature = NAN;
     else if (k == "hvac_action") st.hvac_action.clear();
+    else if (k == "temperature_unit") st.temperature_unit.clear();
     else if (k == "current_position") st.current_position = -1;
     else if (k == "supported_color_modes") st.dimmable = false;
 }

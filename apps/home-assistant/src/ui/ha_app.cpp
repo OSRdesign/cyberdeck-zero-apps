@@ -4,6 +4,7 @@
  * Home Assistant app: the pages (see ha_app.hpp).
  */
 #include "ha_app.hpp"
+#include "ha_ui.hpp"
 
 #include "app.hpp"
 #include "format.hpp"
@@ -45,12 +46,6 @@ constexpr std::uint32_t kSlideDebounceMs = 300;
 constexpr std::uint32_t kSlideHoldMs = 1500; /* the slider is not moved by the state while the user slides */
 constexpr int kInfoSidePct = 60;             /* a tap right of this share of the row opens the entity page */
 constexpr int kQuiet = 2;                    /* quiet zone of the QR code, in modules (on a white box) */
-constexpr int kMuted = 0x9A9A9A;
-constexpr std::uint32_t kHighlight = CP0_UI_LIST_BAR_RGB; /* the launcher's highlight: a focused tile's ground */
-constexpr std::uint32_t kAccent = 0x2D9CDB;  /* the launcher's selection blue: the focus outline, the slider's fill */
-constexpr std::uint32_t kTrack = 0x3A3A3A;   /* the toolkit's slider track */
-constexpr std::uint32_t kKnob = 0xFFFFFF;
-constexpr int kSwipeMmX10 = 60;              /* a sideways swipe this long switches views (a convenience) */
 
 const char *kConnectText = "Scan with your phone to connect to Home Assistant";
 const char *kChevron = "\xE2\x80\xBA"; /* U+203A, the lists' chevron */
@@ -94,57 +89,6 @@ std::unique_ptr<ha::Backend> make_backend()
 #endif
 }
 
-lv_obj_t *plain_label(lv_obj_t *parent, const lv_font_t *font, int rgb)
-{
-    lv_obj_t *l = lv_label_create(parent);
-    lv_obj_set_style_text_font(l, font, 0);
-    lv_obj_set_style_text_color(l, lv_color_hex(static_cast<uint32_t>(rgb)), 0);
-    lv_label_set_long_mode(l, LV_LABEL_LONG_WRAP);
-    return l;
-}
-
-/* A plain box: no theme style, not clickable, not scrollable. */
-lv_obj_t *box(lv_obj_t *parent)
-{
-    lv_obj_t *o = lv_obj_create(parent);
-    lv_obj_remove_style_all(o);
-    lv_obj_remove_flag(o, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_remove_flag(o, LV_OBJ_FLAG_SCROLLABLE);
-    return o;
-}
-
-/* A one-line label cut with dots. */
-lv_obj_t *line_label(lv_obj_t *parent, const lv_font_t *font, std::uint32_t rgb, int w)
-{
-    lv_obj_t *l = lv_label_create(parent);
-    lv_obj_set_style_text_font(l, font, 0);
-    lv_obj_set_style_text_color(l, lv_color_hex(rgb), 0);
-    lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_DOTS);
-    lv_obj_remove_flag(l, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_remove_flag(l, LV_OBJ_FLAG_CLICKABLE);
-    if (w > 0) {
-        /* one line high: the dots cut what does not fit (an auto height would wrap instead) */
-        lv_obj_set_size(l, w, font ? lv_font_get_line_height(font) : LV_SIZE_CONTENT);
-    }
-    return l;
-}
-
-/* The keyboard focus: the launcher's selection blue as an outline inside the object (no layout change), the home
- * grid's selected-tile width. */
-void set_focus_ring(lv_obj_t *o, bool on)
-{
-    const int w = cp0_ui_metrics_get()->shell.tile_border_sel;
-    lv_obj_set_style_outline_color(o, lv_color_hex(kAccent), 0);
-    lv_obj_set_style_outline_width(o, on ? w : 0, 0);
-    lv_obj_set_style_outline_pad(o, on ? -w : 0, 0);
-    lv_obj_set_style_outline_opa(o, LV_OPA_COVER, 0);
-}
-
-int line_h(const lv_font_t *f)
-{
-    return f ? lv_font_get_line_height(f) : 0;
-}
-
 /* the last UTF-8 character of s removed */
 void pop_utf8(std::string &s)
 {
@@ -157,28 +101,6 @@ void pop_utf8(std::string &s)
 bool contains_ci(const std::string &hay, const std::string &needle)
 {
     return ha::lower(hay).find(ha::lower(needle)) != std::string::npos;
-}
-
-int text_w(const std::string &text, const lv_font_t *font)
-{
-    if (text.empty() || !font) return 0;
-    lv_point_t p{};
-    lv_text_get_size(&p, text.c_str(), font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-    return static_cast<int>(p.x);
-}
-
-/* The first character of a name (the glyph's stand-in when the icon font is missing). */
-std::string initial(const std::string &name)
-{
-    if (name.empty()) return "?";
-    std::size_t n = 1;
-    const unsigned char c = static_cast<unsigned char>(name[0]);
-    if (c >= 0xF0) n = 4;
-    else if (c >= 0xE0) n = 3;
-    else if (c >= 0xC0) n = 2;
-    std::string s = name.substr(0, n);
-    if (s.size() == 1 && s[0] >= 'a' && s[0] <= 'z') s[0] = static_cast<char>(s[0] - 'a' + 'A');
-    return s;
 }
 
 /* The value of a row whose label must stay whole ("Server"): the toolkit's list never cuts a value and cuts the label
@@ -284,6 +206,13 @@ HaApp::HaApp(lv_obj_t *screen) : screen_(screen)
     hero_glyph_font_ = have_mdi ? cp0_fonts().get(mdi.c_str(), static_cast<uint16_t>(even(row_h_ * 55 / 100))) : nullptr;
     lv_font_glyph_dsc_t g{};
     chevron_text_ = name_font_ && lv_font_get_glyph_dsc(name_font_, &g, CP0_UI_LIST_CHEVRON_CODEPOINT, 0) ? kChevron : ">";
+    /* the stored dashboard's cards (0.3.0): a sensor's or the weather's value 3 mm high, the cards' inner padding the
+     * small space token, the rows' switch 2.5 mm high */
+    big_font_ = cp0_fonts().get("Montserrat-Medium.ttf",
+                                static_cast<uint16_t>(even(std::max(cp0_ui_mm_px(m->ppmm_x100, 30, 20), name_px + 6))));
+    cpad_ = std::max(4, gap_);
+    sw_h_ = even(std::max(16, std::min(row_h_ * 36 / 100, cp0_ui_mm_px(m->ppmm_x100, 25, 16))));
+    sw_w_ = sw_h_ * 9 / 5;
 
     /* every key reaches the app as LV_EVENT_KEYBOARD on its screen; the keypad path is intercepted so that letters
      * typed into a room's filter never move the list (W, E, R, T share codes with the arrows there) */
@@ -407,7 +336,7 @@ void HaApp::show(Screen s)
         build_list(true);
         break;
     case Screen::Entity:
-        backend_->send(ha::Command::set_view(room_shown_, room_id_, entity_id_));
+        backend_->send(ha::Command::set_view(room_shown_, room_id_, entity_id_, dash_shown_));
         build_entity();
         break;
     case Screen::None: break;
@@ -694,9 +623,16 @@ void HaApp::build_tab_bar()
     lv_obj_remove_flag(tabs_box_, LV_OBJ_FLAG_SCROLL_ELASTIC);
     int x = std::max(0, margin_ - gap_);
     const int tab_max = std::max(row_h_, (w - conn_w) * 55 / 100); /* a long area name ends with dots */
+    tab_icon_.assign(tabs_.size(), false);
     for (std::size_t i = 0; i < tabs_.size(); ++i) {
-        const int tw = std::clamp(std::max(text_w(tabs_[i].title, tab_bold_), text_w(tabs_[i].title, tab_font_)) + 2 * margin_,
-                                  row_h_, tab_max);
+        /* a view of the stored dashboard: its title, or its icon when the title is missing or does not fit */
+        const bool icon = tabs_[i].kind == ha::Tab::Kind::View && tabs_[i].glyph && glyph_font_ &&
+                          (tabs_[i].title.empty() || text_w(tabs_[i].title, tab_bold_) + 2 * margin_ > tab_max);
+        tab_icon_[i] = icon;
+        const int tw = icon ? row_h_
+                            : std::clamp(std::max(text_w(tabs_[i].title, tab_bold_), text_w(tabs_[i].title, tab_font_)) +
+                                             2 * margin_,
+                                         row_h_, tab_max);
         lv_obj_t *b = lv_obj_create(tabs_box_);
         lv_obj_remove_style_all(b);
         lv_obj_remove_flag(b, LV_OBJ_FLAG_SCROLLABLE);
@@ -706,9 +642,9 @@ void HaApp::build_tab_bar()
         lv_obj_set_style_radius(b, m_radius(), 0);
         lv_obj_set_user_data(b, reinterpret_cast<void *>(static_cast<std::intptr_t>(i)));
         lv_obj_add_event_cb(b, tab_event_cb, LV_EVENT_CLICKED, this);
-        lv_obj_t *label = line_label(b, tab_font_, ha::rgb::kSecondary, 0);
-        lv_label_set_text(label, tabs_[i].title.c_str());
-        if (text_w(tabs_[i].title, tab_bold_) > tw - 2 * margin_)
+        lv_obj_t *label = line_label(b, icon ? glyph_font_ : tab_font_, ha::rgb::kSecondary, 0);
+        lv_label_set_text(label, icon ? ha::utf8_of(tabs_[i].glyph).c_str() : tabs_[i].title.c_str());
+        if (!icon && text_w(tabs_[i].title, tab_bold_) > tw - 2 * margin_)
             lv_obj_set_size(label, tw - 2 * margin_, std::max(line_h(tab_font_), line_h(tab_bold_)));
         lv_obj_center(label);
         lv_obj_t *under = box(b); /* the active tab's underline */
@@ -742,6 +678,8 @@ void HaApp::refresh_bar()
         const std::string before = tab_key_;
         tabs_ = view_.tabs;
         if (ha::tab_index(tabs_, tab_key_) == 0) tab_key_ = tabs_[0].key();
+        /* the stored dashboard arrived: the app opens on its first view, unless a tab was chosen meanwhile */
+        if (!tab_chosen_ && tabs_[0].kind == ha::Tab::Kind::View) tab_key_ = tabs_[0].key();
         build_tab_bar(); /* styles it too */
         if (tab_key_ != before) build_content();
         return;
@@ -763,7 +701,7 @@ void HaApp::style_bar()
         lv_obj_t *label = lv_obj_get_child(b, 0);
         lv_obj_t *under = lv_obj_get_child(b, 1);
         const bool active = static_cast<int>(i) == cur;
-        lv_obj_set_style_text_font(label, active ? tab_bold_ : tab_font_, 0);
+        if (i >= tab_icon_.size() || !tab_icon_[i]) lv_obj_set_style_text_font(label, active ? tab_bold_ : tab_font_, 0);
         lv_obj_set_style_text_color(label, lv_color_hex(active ? ha::rgb::kText : ha::rgb::kSecondary), 0);
         if (active) lv_obj_remove_flag(under, LV_OBJ_FLAG_HIDDEN);
         else lv_obj_add_flag(under, LV_OBJ_FLAG_HIDDEN);
@@ -792,6 +730,7 @@ void HaApp::clear_content()
     grid_ids_.clear();
     grid_dims_.clear();
     focus_drawn_ = slider_focus_drawn_ = -1;
+    clear_dash();
     if (screen_kind_ == Screen::Dashboard) list_.reset();
 }
 
@@ -831,7 +770,10 @@ void HaApp::build_content()
         list_->select(1, false); /* the first item (row 0 is the FAVOURITES heading) */
         return;
     }
-    if (t->kind == ha::Tab::Kind::Area) {
+    if (t->kind == ha::Tab::Kind::View) { /* a view of the stored dashboard (ha_dash.cpp) */
+        room_shown_ = false;
+        backend_->send(ha::Command::set_view(false, "", "", t->view));
+    } else if (t->kind == ha::Tab::Kind::Area) {
         room_id_ = t->area;
         room_shown_ = true;
         backend_->send(ha::Command::set_view(true, t->area, ""));
@@ -882,6 +824,10 @@ void HaApp::refresh_dashboard()
     if (!t) return;
     if (t->kind == ha::Tab::Kind::All) {
         refresh_list();
+        return;
+    }
+    if (t->kind == ha::Tab::Kind::View) {
+        refresh_dash_view();
         return;
     }
     bool loading = false;
@@ -1177,6 +1123,7 @@ void HaApp::style_focus()
             set_focus_ring(o, true);
         }
     }
+    style_dash_focus();
     style_bar();
 }
 
@@ -1185,6 +1132,11 @@ void HaApp::focus_tile_into_view()
     if (zone_ == Zone::Bar) {
         const int cur = ha::tab_index(tabs_, tab_key_);
         if (cur < static_cast<int>(tab_btns_.size())) lv_obj_scroll_to_view(tab_btns_[static_cast<std::size_t>(cur)], LV_ANIM_OFF);
+        return;
+    }
+    if (on_dash_tab()) {
+        if (dstop_drawn_ >= 0 && dstop_drawn_ < static_cast<int>(dstops_.size()))
+            lv_obj_scroll_to_view_recursive(dstops_[static_cast<std::size_t>(dstop_drawn_)].obj, LV_ANIM_OFF);
         return;
     }
     if (slider_focus_drawn_ >= 0) lv_obj_scroll_to_view(sliders_[static_cast<std::size_t>(slider_focus_drawn_)].row, LV_ANIM_OFF);
@@ -1197,7 +1149,9 @@ void HaApp::switch_tab(int index)
     index = std::clamp(index, 0, static_cast<int>(tabs_.size()) - 1);
     if (tabs_[static_cast<std::size_t>(index)].key() == tab_key_) return;
     tab_key_ = tabs_[static_cast<std::size_t>(index)].key();
+    tab_chosen_ = true;
     focus_ = ha::Focus();
+    dstop_ = 0;
     close_dialog();
     build_content();
     refresh_dashboard();
@@ -1409,12 +1363,17 @@ void HaApp::dashboard_key(ha::NavKey k)
         case ha::NavKey::Enter:
             zone_ = Zone::Grid;
             focus_ = ha::Focus();
+            dstop_ = 0;
             if (list_ && current_tab()->kind == ha::Tab::Kind::All) list_->select(1, false);
             break;
         default: break;
         }
         style_focus();
         focus_tile_into_view();
+        return;
+    }
+    if (t->kind == ha::Tab::Kind::View) {
+        dash_key(k);
         return;
     }
     if (list_tab) {
@@ -1659,6 +1618,25 @@ std::vector<ListRow> HaApp::room_rows()
     return rows;
 }
 
+/* Settings > Dashboard's value: "Automatic (Home)", a dashboard's title, "Off (tiles only)"; shorter when it does not
+ * fit beside the label */
+std::string HaApp::dash_setting_value()
+{
+    const std::string &s = view_.dash_setting;
+    std::vector<std::string> candidates;
+    if (s == ha::kDashOff) {
+        candidates = {"Off (tiles only)", "Off"};
+    } else {
+        std::string title;
+        for (const auto &c : view_.dash_choices)
+            if (c.first == s) title = c.second;
+        if (!title.empty() && s != ha::kDashAuto) candidates = {title};
+        else candidates = {"Automatic (" + (view_.dash_auto_title.empty() ? std::string("tiles only") : view_.dash_auto_title) + ")",
+                           "Automatic"};
+    }
+    return list_ ? fit_value(list_->layout(), "Dashboard", candidates, CP0_UI_LIST_AFFORDANCE_EDIT) : candidates.front();
+}
+
 std::vector<ListRow> HaApp::settings_rows()
 {
     std::vector<ListRow> rows;
@@ -1670,6 +1648,11 @@ std::vector<ListRow> HaApp::settings_rows()
                                  RowAffordance::Info));
     rows.push_back(ListRow::item("Signed in as", view_.user.empty() ? std::string("-") : view_.user, ValueTone::Normal,
                                  add_target(Target()), RowAffordance::Info));
+    /* 0.3.0: which stored dashboard the tabs start with; Enter (or a tap on the highlighted row) moves to the next */
+    Target dash;
+    dash.kind = Target::Kind::Dashboard;
+    rows.push_back(ListRow::item("Dashboard", dash_setting_value(), ValueTone::Normal, add_target(dash),
+                                 RowAffordance::Edit));
     /* the tiles' keys, where a keyboard user looks for them (touch: the icon acts, the name opens the page) */
     rows.push_back(ListRow::item("Tile action", "Enter", ValueTone::Normal, add_target(Target()), RowAffordance::Info));
     rows.push_back(ListRow::item("Tile page", "Ctrl+O", ValueTone::Normal, add_target(Target()), RowAffordance::Info));
@@ -2258,6 +2241,23 @@ void HaApp::list_activate(std::intptr_t id, bool by_key, std::uint32_t key, int 
         return;
     case Target::Kind::Settings: show(Screen::Settings); return;
     case Target::Kind::ServerAddress: show(Screen::ServerEdit); return;
+    case Target::Kind::Dashboard: {
+        /* the next of Automatic, each dashboard with supported cards, Off */
+        std::vector<ha::DashChoice> choices;
+        for (const auto &c : view_.dash_choices) {
+            ha::DashChoice d;
+            d.key = c.first;
+            d.title = c.second;
+            d.loaded = true;
+            d.supported = 1;
+            choices.push_back(d);
+        }
+        backend_->send(ha::Command::of(ha::Command::Kind::SetDashboard, ha::next_dashboard_setting(view_.dash_setting, choices)));
+        tab_chosen_ = false; /* back on the dashboard: its first tab */
+        tab_key_.clear();
+        refresh(true);
+        return;
+    }
     case Target::Kind::SignOut:
         if (view_.signing_out) return;
         confirm("Sign out of Home Assistant?", [this] { backend_->send(ha::Command::of(ha::Command::Kind::SignOut)); });
@@ -2287,11 +2287,13 @@ void HaApp::act_on_entity(const ha::EntityRow &row)
 void HaApp::open_entity(const std::string &id)
 {
     entity_from_ = screen_kind_ == Screen::Room ? Screen::Room : Screen::Dashboard;
+    dash_shown_ = -1;
     if (entity_from_ == Screen::Dashboard) {
-        /* keep the area's tiles subscribed under the page (back shows them at once) */
+        /* keep the area's tiles (or the dashboard view's cards) subscribed under the page (back shows them at once) */
         const ha::Tab *t = current_tab();
         room_shown_ = t && t->kind == ha::Tab::Kind::Area;
         if (room_shown_) room_id_ = t->area;
+        if (t && t->kind == ha::Tab::Kind::View) dash_shown_ = t->view;
     }
     entity_id_ = id;
     show(Screen::Entity);

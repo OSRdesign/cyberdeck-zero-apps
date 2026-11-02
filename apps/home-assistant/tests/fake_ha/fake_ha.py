@@ -21,12 +21,20 @@ messages.py, auth/__init__.py, auth/indieauth.py):
         auth/current_user, config/area_registry/list, config/device_registry/list,
         config/entity_registry/list_for_display, subscribe_entities (entity_ids; result, snapshot "a", then "c"
         changes), unsubscribe_events, call_service (light, switch, input_boolean: turn_on / turn_off / toggle;
-        scene / script turn_on; lock lock / unlock; cover open_cover / close_cover), frontend/get_icons (a few
-        made-up rules, 0.2.0), ping -> pong.
+        scene / script turn_on; lock lock / unlock; cover open_cover / close_cover; fan toggle / turn_on / turn_off;
+        a list of entity ids as the target), frontend/get_icons (a few made-up rules, 0.2.0), ping -> pong; 0.3.0's
+        stored dashboard: lovelace/dashboards/list (one map-only dashboard listed), lovelace/config (the default one:
+        owner-shaped, study 053 section 13's counts, 9 entities + 2 sensor + 1 weather-forecast cards, 25 entity
+        references, on the fake house's entities; by url_path; config_not_found otherwise), frontend/get_system_data
+        (core: no default panel), weather/subscribe_forecast (daily: the result, then one event), history/
+        history_during_period (a made-up curve every 10 minutes). Every message type received is counted: the test
+        checks that no administrator command was sent.
   Test controls (GET /fake/...): calls (the service calls, JSON), stats (counters, JSON), wsping (a WebSocket ping
         frame to every client), rst (TCP reset of every WebSocket), expire (every access token refused from now on),
         revoke_all (every token removed, connections closed, as deleting the sign-in in the user's profile),
-        huge (a 5 MB message on every subscription), state?entity=..&s=.. (a change made at the wall switch).
+        huge (a 5 MB message on every subscription), state?entity=..&s=.. (a change made at the wall switch),
+        types (the message types received, JSON). Any other /api/ path answers 404 and is counted (rest_calls): the
+        app never calls the REST API.
 
 Options: --port, --entities (2000), --areas (20), --frag BYTES (every message longer than that goes out in
 continuation frames of that size; 0 = one frame), --expires S (access token lifetime, 1800), --secrets FILE (every token
@@ -47,7 +55,10 @@ CLIENTS = []    # live WebSocket connections
 CALLS = []
 STATS = {"providers": 0, "authorize": 0, "exchanges": 0, "refreshes": 0, "refresh_refused": 0, "revokes": 0,
          "ws_connects": 0, "auth_ok": 0, "auth_invalid": 0, "pongs": 0, "subscribes": 0, "unsubscribes": 0,
-         "messages_in": 0, "max_message_out": 0, "frames_out": 0}
+         "messages_in": 0, "max_message_out": 0, "frames_out": 0, "lovelace_config": 0, "forecast_subs": 0,
+         "history": 0, "rest_calls": 0}
+TYPES = {}      # message type -> count (0.3.0: no administrator command)
+DASH = {}       # "" (the default dashboard) or url_path -> its config
 STATES = {}     # entity_id -> {"s":..., "a": {...}, "lc": float}
 REG = {"areas": [], "devices": [], "entities": []}
 EXPIRED_BEFORE = [0.0]
@@ -113,6 +124,30 @@ def build_house(n_entities, n_areas):
             attrs.update({"current_temperature": 21.4, "temperature": 21, "hvac_action": "heating"})
         STATES[eid] = {"s": s, "a": attrs, "lc": now - i}
     REG.update({"areas": areas, "devices": devices, "entities": entities})
+    # 0.3.0: a weather entity, and the owner-shaped stored dashboard on the house's entities
+    STATES["weather.fake_home"] = {"s": "partlycloudy", "a": {"friendly_name": "Fake Home", "temperature": 14.2,
+                                                              "temperature_unit": "°C"}, "lc": now}
+    STATES["fan.fake_fan"] = {"s": "off", "a": {"friendly_name": "Fake Fan"}, "lc": now}
+    def ids(dom, n, start=0):
+        out = [e for e in sorted(STATES) if e.startswith(dom + ".fake_")]
+        return out[start:start + n]
+    lights, switches, sensors = ids("light", 6), ids("switch", 3), ids("sensor", 6)
+    cards = [
+        {"type": "entities", "title": "Lights", "entities": lights[:3]},
+        {"type": "entities", "title": "More lights", "entities": [{"entity": lights[3], "name": "Renamed", "icon": "mdi:floor-lamp"}, lights[4]]},
+        {"type": "entities", "title": "Plugs", "entities": switches[:2] + ["fan.fake_fan"]},
+        {"type": "entities", "title": "Doors", "show_header_toggle": False, "entities": ids("lock", 2) + ids("cover", 1)},
+        {"type": "sensor", "entity": sensors[0], "graph": "line"},
+        {"type": "weather-forecast", "entity": "weather.fake_home"},
+        {"type": "entities", "title": "Climate", "entities": ids("climate", 1) + [{"type": "section", "label": "Air"}] + sensors[1:3]},
+        {"type": "entities", "entities": ids("binary_sensor", 2) + [{"type": "divider"}]},
+        {"type": "entities", "title": "Scenes", "entities": ids("scene", 2)},
+        {"type": "sensor", "entity": sensors[3], "graph": "line", "detail": 2},
+        {"type": "entities", "title": "Misc", "entities": ids("input_boolean", 2) + [{"type": "weblink", "name": "Link", "url": "http://x"}]},
+        {"type": "entities", "entities": ids("script", 1) + [switches[2]]},
+    ]
+    DASH[""] = {"title": "Fake", "views": [{"title": "Fake", "path": "fake", "icon": "mdi:home", "cards": cards}]}
+    DASH["dashboard-map"] = {"views": [{"type": "panel", "title": "Map", "cards": [{"type": "map", "entities": []}]}]}
 
 
 # ---------------------------------------------------------------- WebSocket framing
@@ -239,11 +274,23 @@ def call_service(c, m):
     target = (m.get("target") or {}).get("entity_id") or (m.get("service_data") or {}).get("entity_id")
     data = m.get("service_data") or {}
     CALLS.append({"domain": dom, "service": svc, "entity_id": target, "data": data})
+    if isinstance(target, list):  # a list target (0.3.0's header toggle): each entity, one result
+        if not target or any(e not in STATES for e in target):
+            return [result(m["id"], ok=False, err={"code": "not_found", "message": "Entity not found"})], None
+        changes = []
+        for e in target:
+            r, ch = call_service(c, dict(m, target={"entity_id": e}))
+            CALLS.pop()
+            if ch:
+                changes.append(ch)
+        for ch in changes[:-1]:
+            push_change(*ch)
+        return r, (changes[-1] if changes else None)
     if target not in STATES:
         return [result(m["id"], ok=False, err={"code": "not_found", "message": "Entity not found"})], None
     st = STATES[target]
     plus, minus = {}, None
-    if dom in ("light", "switch", "input_boolean") and svc in ("turn_on", "turn_off", "toggle"):
+    if dom in ("light", "switch", "input_boolean", "fan") and svc in ("turn_on", "turn_off", "toggle"):
         on = {"turn_on": True, "turn_off": False, "toggle": st["s"] != "on"}[svc]
         st["s"] = "on" if on else "off"
         plus["s"] = st["s"]
@@ -313,6 +360,8 @@ def ws_session(c):
         m, msg_parts = json.loads(msg_parts), b""
         STATS["messages_in"] += 1
         t, mid = m.get("type"), m.get("id")
+        with LOCK:
+            TYPES[t] = TYPES.get(t, 0) + 1
         out, change = [], None
         if t == "supported_features":
             c.coalesce = bool((m.get("features") or {}).get("coalesce_messages"))
@@ -352,6 +401,43 @@ def ws_session(c):
                     "switch": {"_": {"default": "mdi:toggle-switch-variant"}}}})]
             else:
                 out = [result(mid, {"resources": {}})]
+        elif t == "lovelace/dashboards/list":
+            out = [result(mid, [{"id": "d1", "url_path": "dashboard-map", "title": "Map", "icon": "mdi:map",
+                                 "mode": "storage", "require_admin": False, "show_in_sidebar": True}])]
+        elif t == "lovelace/config":
+            STATS["lovelace_config"] += 1
+            cfg = DASH.get(m.get("url_path") or "")
+            out = [result(mid, cfg) if cfg is not None else
+                   result(mid, ok=False, err={"code": "config_not_found", "message": "No config found."})]
+        elif t == "frontend/get_system_data":
+            out = [result(mid, {"value": None})]
+        elif t == "weather/subscribe_forecast":
+            STATS["forecast_subs"] += 1
+            if m.get("entity_id") not in STATES:
+                out = [result(mid, ok=False, err={"code": "invalid_entity_id", "message": "Weather entity not found"})]
+            else:
+                day0 = int(time.time()) // 86400 * 86400
+                fc = [{"datetime": time.strftime("%Y-%m-%dT11:00:00+00:00", time.gmtime(day0 + i * 86400)),
+                       "condition": ["sunny", "rainy", "cloudy", "fog", "snowy", "pouring"][i], "temperature": 10 + i,
+                       "templow": 2 + i} for i in range(6)]
+                c.send(result(mid))
+                c.send({"id": mid, "type": "event", "event": {"type": "daily", "forecast": fc}})
+                continue
+        elif t == "history/history_during_period":
+            STATS["history"] += 1
+            def ts(v):
+                from datetime import datetime
+                return datetime.fromisoformat(v).timestamp()
+            t0, t1 = ts(m["start_time"]), ts(m["end_time"])
+            res = {}
+            for e in m.get("entity_ids") or []:
+                if e in STATES:
+                    pts, tt = [], t0
+                    while tt <= t1:
+                        pts.append({"s": "%.2f" % (20 + 3 * ((tt - t0) / max(1, t1 - t0))), "lu": tt})
+                        tt += 600
+                    res[e] = pts
+            out = [result(mid, res)]
         elif t == "call_service":
             out, change = call_service(c, m)
         else:
@@ -434,6 +520,8 @@ class H(BaseHTTPRequestHandler):
             return self._send(302, loc.encode(), "text/plain", {"Location": loc})
         if u.path.startswith("/fake/"):
             return self.fake(u.path[6:], q)
+        if u.path.startswith("/api/"):
+            STATS["rest_calls"] += 1
         self._send(404, b"404: Not Found", "text/plain")
 
     def fake(self, what, q):
@@ -441,6 +529,9 @@ class H(BaseHTTPRequestHandler):
             clients = list(CLIENTS)
         if what == "calls":
             return self._json(200, CALLS)
+        if what == "types":
+            with LOCK:
+                return self._json(200, dict(TYPES))
         if what == "stats":
             return self._json(200, dict(STATS, clients=len(clients), refresh_tokens=len(REFRESH)))
         if what == "wsping":

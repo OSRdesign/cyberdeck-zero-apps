@@ -62,6 +62,10 @@ ClientBackend::ClientBackend(Settings settings, Credentials creds, std::vector<s
                 std::to_string(entries.size()) + " entities");
             engine_.set_cached_layout(std::move(areas), std::move(entries), std::move(icons));
         }
+        std::string dash;
+        if (engine_.signed_in() && store::load_dashboard(dir_, dash) && engine_.set_cached_dashboard(dash))
+            log(engine_.dashboard_key().empty() ? "dashboard of the last session: none (tiles)"
+                                                : "dashboard of the last session: cached");
     }
     wake_fd_ = ::eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     std::string why;
@@ -218,6 +222,9 @@ void ClientBackend::exec(const Action &a)
     case Action::Kind::SaveNames: store::save_names(dir_, engine_.cached_names()); return;
     case Action::Kind::SaveLayout:
         if (!store::save_layout(dir_, engine_.layout_text())) log("cannot save the layout in " + dir_);
+        return;
+    case Action::Kind::SaveDashboard:
+        if (!store::save_dashboard(dir_, engine_.dashboard_text())) log("cannot save the dashboard in " + dir_);
         return;
     }
 }

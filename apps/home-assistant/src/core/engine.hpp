@@ -26,7 +26,9 @@
  */
 #pragma once
 
+#include "dash.hpp"
 #include "icons.hpp"
+#include "lovelace.hpp"
 #include "model.hpp"
 #include "text.hpp"
 #include "view.hpp"
@@ -42,6 +44,7 @@ namespace ha {
 struct Settings {
     std::string server = kDefaultServer; /* as typed (shown) */
     bool qr_use_ip = false; /* the QR code names Home Assistant by its IP address (a phone that cannot resolve .local) */
+    std::string dashboard = kDashAuto; /* 0.3.0, Settings > Dashboard: "auto", "off" or a dashboard's key */
 };
 
 struct Credentials {
@@ -68,6 +71,7 @@ struct Action {
         SaveFavourites,    /* engine.favourites() */
         SaveNames,         /* engine.cached_names(): the favourites' names, for a start without a connection */
         SaveLayout,        /* engine.layout_text(): areas, entities and icon rules, for a start without a connection */
+        SaveDashboard,     /* engine.dashboard_text(): the stored dashboard shown, for a start without a connection */
     };
     Kind kind = Kind::WsClose;
     std::string url, body, host;
@@ -118,6 +122,16 @@ public:
      * kMaxLayoutBytes (a larger install is not cached). */
     std::string layout_text() const;
     const IconRules &icon_rules() const { return icons_; }
+    /* The stored dashboard of an earlier session (dashboard.json, store::load_dashboard): shown greyed until Home
+     * Assistant answers. Set before start(). False when the text is not one. */
+    bool set_cached_dashboard(const std::string &text);
+    /* dashboard.json's text: the dashboards offered, the one shown (Lovelace-shaped), its entities' names as last
+     * seen; "" over kMaxDashBytes */
+    std::string dashboard_text() const;
+    /* for the tests: the dashboard shown ("" none), the dashboards known, the forecast subscriptions */
+    const std::string &dashboard_key() const { return dash_key_; }
+    const std::vector<DashChoice> &dashboard_choices() const { return dash_choices_; }
+    const std::map<std::string, int> &forecast_subscriptions() const { return forecast_sub_; }
     const Model &model() const { return model_; }
     bool signed_in() const { return creds_.valid(); }
     bool online() const { return st_ == St::Online; }
@@ -129,10 +143,12 @@ public:
 private:
     enum class St { PairCheck, PairCheckWait, PairListen, PairWait, PairExchange, Refresh, Open, Auth, Online, Backoff };
     enum class Req { Features, Config, User, Areas, Devices, Entities, Subscribe, Unsubscribe, Call, Ping, IconsComponent,
-                     IconsEntity };
+                     IconsEntity, DashList, DashConfig, SysData, Forecast, History };
     struct Pending {
         Req req = Req::Call;
-        std::string entity, service;
+        std::string entity, service; /* DashConfig: entity = the dashboard's key; History: entity, service = graph key */
+        std::int64_t t0 = 0, t1 = 0; /* History: the period (epoch s) */
+        int points = 0;              /* History: the buckets */
     };
 
     void push(Action a) { actions_.push_back(std::move(a)); }
@@ -156,6 +172,21 @@ private:
     void update_subscription();
     void call_service(const std::string &entity, const std::string &domain, const std::string &service,
                       const std::string &data, bool pending, std::int64_t now);
+    void call_group(const std::string &domain, const std::string &service, const std::vector<std::string> &ids,
+                    std::int64_t now);
+    /* the stored dashboard (0.3.0) */
+    void send_dashboard_requests();
+    void on_dash_config(const Pending &p, bool success, const json::Value &msg, const json::Value &r);
+    void apply_dashboards(bool force, std::int64_t now);
+    void update_dash_extras(std::int64_t now);
+    void save_dashboard();
+    void refresh_dash_ids();
+    DashChoice *choice(const std::string &key);
+    const Dashboard *shown_dashboard() const;
+    const DashView *shown_view() const;
+    EntityRow dash_entity(const std::string &id, const std::string &name, const std::string &icon, std::int64_t now) const;
+    DashRowView dash_row(const DashRow &r, std::int64_t now) const;
+    std::vector<DashCardView> dash_cards(const DashView &v, std::int64_t now) const;
     std::set<std::string> wanted_set() const;
     void update_name_cache();
     void send_icon_requests();
@@ -220,6 +251,28 @@ private:
     std::string message_;
     bool message_error_ = false;
     std::uint64_t message_seq_ = 0;
+
+    /* the stored dashboard (0.3.0) */
+    std::vector<DashChoice> dash_choices_;     /* the default ("lovelace") first, then the listed dashboards */
+    std::map<std::string, Dashboard> dashes_;  /* the imported ones with supported cards, by key */
+    std::string default_panel_;                /* frontend/get_system_data core.default_panel */
+    std::string user_id_;
+    bool dash_list_done_ = false, sysdata_done_ = false;
+    int dash_wait_ = 0;                        /* lovelace/config answers still expected */
+    std::string dash_key_;                     /* the dashboard shown ("" none: the tiles) */
+    bool dash_said_large_ = false;
+    std::string dash_saved_;                   /* the text of the last SaveDashboard (or of the file read at start) */
+    std::set<std::string> dash_ids_;           /* the entities of the dashboard shown (all views) */
+    std::map<std::string, std::string> dash_names_; /* their names as last seen (cached for a start offline) */
+    int view_dash_ = -1;                       /* the view shown (-1 none) */
+    std::size_t msg_bytes_ = 0;                /* the size of the message being handled */
+    std::map<std::string, int> forecast_sub_;  /* weather entity -> its weather/subscribe_forecast */
+    std::map<int, std::string> forecast_of_;
+    std::map<std::string, std::vector<ForecastDay>> forecasts_;
+    std::map<std::string, std::vector<double>> graphs_; /* "entity|hours|detail" -> the averaged points */
+    std::map<std::string, std::int64_t> graph_at_;      /* when it was asked for */
+    std::int64_t wall_ = 0, extras_at_ = 0;
+    bool sub_loaded_ = false;                  /* the current subscription's first snapshot arrived */
 };
 
 } // namespace ha

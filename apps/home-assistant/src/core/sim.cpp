@@ -5,9 +5,11 @@
  */
 #include "sim.hpp"
 
+#include "dash.hpp"
 #include "json.hpp"
 #include "text.hpp"
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
@@ -154,6 +156,119 @@ void big_world(SimWorld &w)
     }
 }
 
+/* ------------------------------------------------------------------ the stored dashboards (0.3.0, study 053 P2) */
+
+/* The owner's dashboard as the probe of study 053 section 13 counted it (HA 2026.10.4): the default dashboard is a
+ * stored config, one masonry view, 12 cards (9 entities, 2 sensor, 1 weather-forecast), 25 entity references, only
+ * mdi: icons, nesting depth 1, about 1 KB; a second dashboard is one map card in a panel view. The names are invented. */
+const char *kOwnerDashboard = R"JSON({"title": "Home", "views": [{"title": "Home", "path": "home", "icon": "mdi:home", "cards": [
+  {"type": "entities", "title": "Living room", "entities": ["light.living_ceiling",
+    {"entity": "light.reading_lamp", "name": "Lamp", "icon": "mdi:floor-lamp"}, "switch.tv_plug", "scene.evening"]},
+  {"type": "entities", "title": "Kitchen", "entities": ["light.kitchen", "switch.coffee_machine", "binary_sensor.kitchen_motion"]},
+  {"type": "entities", "title": "Bedroom", "entities": ["light.bedside", "cover.bedroom_blind", "script.good_night"]},
+  {"type": "entities", "title": "Doors", "show_header_toggle": false, "entities": ["lock.front_door", "lock.back_door", "cover.garage_door"]},
+  {"type": "sensor", "entity": "sensor.living_temperature", "name": "Living room", "graph": "line"},
+  {"type": "weather-forecast", "entity": "weather.home", "show_forecast": true},
+  {"type": "entities", "title": "Climate", "entities": ["climate.thermostat", "sensor.living_humidity",
+    {"type": "section", "label": "Outside"}, "sensor.outdoor_temperature"]},
+  {"type": "entities", "title": "Hall", "entities": ["light.porch", {"type": "divider"}, "input_boolean.guest_mode"]},
+  {"type": "entities", "title": "Family", "entities": [{"entity": "person.alex", "secondary_info": "last-changed"}, "person.sam"]},
+  {"type": "sensor", "entity": "sensor.garage_power", "graph": "line", "detail": 2, "hours_to_show": 12},
+  {"type": "entities", "title": "Air", "entities": [{"entity": "fan.bedroom_fan", "tap_action": {"action": "toggle"}},
+    {"type": "weblink", "name": "Air quality report", "url": "https://example.invalid/air"}]},
+  {"type": "entities", "entities": ["sensor.hall_motion_battery"]}
+]}]})JSON";
+
+const char *kMapDashboard =
+    R"JSON({"views": [{"type": "panel", "title": "Map", "path": "map", "cards": [{"type": "map", "entities": ["person.alex", "person.sam"]}]}]})JSON";
+
+/* unsupported cards and rows, an icon-only view, a panel view with a map, a subview and a hidden view */
+const char *kMixedDashboard = R"JSON({"title": "House", "views": [
+  {"title": "Overview", "path": "overview", "cards": [
+    {"type": "thermostat", "entity": "climate.thermostat", "title": "Heating"},
+    {"type": "entities", "title": "Lights", "entities": ["light.living_ceiling", "light.kitchen",
+      {"type": "button", "name": "Restart router", "tap_action": {"action": "perform-action"}},
+      {"type": "call-service", "name": "All off", "action": "light.turn_off"},
+      {"type": "conditional", "conditions": [], "row": {"entity": "light.porch"}},
+      "light.bedside"]},
+    {"type": "custom:mushroom-light-card", "entity": "light.kitchen"},
+    {"type": "history-graph", "title": "Power", "entities": ["sensor.garage_power"]},
+    {"type": "entities", "title": "Locks", "entities": ["lock.front_door", "cover.garage_door"]}]},
+  {"icon": "mdi:floor-plan", "path": "plan", "cards": [
+    {"type": "entities", "entities": ["person.alex", "light.missing_lamp"]},
+    {"type": "sensor", "entity": "sensor.outdoor_temperature", "graph": "none"},
+    {"type": "weather-forecast", "entity": "weather.home", "show_forecast": false}]},
+  {"title": "Map", "path": "map", "type": "panel", "cards": [{"type": "map", "entities": ["person.alex"]}]},
+  {"title": "Details", "path": "details", "subview": true, "cards": [{"type": "entities", "entities": ["light.kitchen"]}]},
+  {"title": "Hidden", "path": "hidden", "visible": false, "cards": [{"type": "entities", "entities": ["light.kitchen"]}]}
+]})JSON";
+
+const char *kEnergyDashboard =
+    R"JSON({"title": "Energy", "views": [{"title": "Power", "cards": [{"type": "sensor", "entity": "sensor.garage_power", "graph": "line"}]}]})JSON";
+
+/* long names everywhere, six views (the tab bar scrolls) */
+const char *kLongDashboard = R"JSON({"title": "A dashboard with a really long title for the deck", "views": [
+  {"title": "Living room and kitchen downstairs", "cards": [
+    {"type": "entities", "title": "Everything in the living room next to the big window", "entities": [
+      {"entity": "light.living_ceiling", "name": "Ceiling light above the dining table by the window"},
+      {"entity": "switch.tv_plug", "name": "Television and sound bar power plug behind the cabinet"},
+      {"entity": "sensor.living_temperature", "name": "Temperature of the living room near the sofa"},
+      {"type": "section", "label": "A section label that is much longer than the card is wide"},
+      {"entity": "lock.front_door", "name": "Front door lock of the main entrance on the street side"},
+      {"type": "weblink", "name": "A web link row with a long name that cannot be opened here"}]},
+    {"type": "sensor", "entity": "sensor.garage_power", "name": "Power drawn by the garage workshop and the freezer", "graph": "line"},
+    {"type": "weather-forecast", "entity": "weather.home", "name": "Weather at the holiday cottage by the sea"},
+    {"type": "custom:a-very-long-custom-card-type-name-from-hacs", "title": "A custom card with a long title that is not supported"}]},
+  {"title": "Bedrooms upstairs and the attic", "cards": [{"type": "entities", "entities": ["light.bedside"]}]},
+  {"title": "Garden, shed and greenhouse", "cards": [{"type": "entities", "entities": ["sensor.outdoor_temperature"]}]},
+  {"title": "Garage and workshop", "cards": [{"type": "entities", "entities": ["cover.garage_door"]}]},
+  {"title": "Security cameras and alarms", "cards": [{"type": "entities", "entities": ["lock.back_door"]}]},
+  {"title": "Energy", "cards": [{"type": "entities", "entities": ["sensor.garage_power"]}]}
+]})JSON";
+
+void dash_entities(SimWorld &w)
+{
+    SimEntity e = ent("sensor.outdoor_temperature", "Outdoor temperature", "", "8.7");
+    e.unit = "\xC2\xB0" "C";
+    e.device_class = "temperature";
+    e.precision = 1;
+    w.entities.push_back(e);
+    e = ent("person.alex", "Alex", "", "home");
+    e.platform = "person";
+    w.entities.push_back(e);
+    e = ent("person.sam", "Sam", "", "not_home");
+    e.platform = "person";
+    w.entities.push_back(e);
+    e = ent("fan.bedroom_fan", "Bedroom fan", "bedroom", "off");
+    w.entities.push_back(e);
+    e = ent("weather.home", "Forecast home", "", "partlycloudy");
+    e.target_temperature = 14.2;
+    e.temperature_unit = "\xC2\xB0" "C";
+    e.platform = "met";
+    w.entities.push_back(e);
+}
+
+void dash_world(SimWorld &w)
+{
+    home_world(w);
+    /* the owner's install has three areas: the other entities have none here ("No room") */
+    w.areas = {{"living_room", "Living room"}, {"kitchen", "Kitchen"}, {"bedroom", "Bedroom"}};
+    dash_entities(w);
+    w.default_config = kOwnerDashboard;
+    w.dashboards = {{"dashboard-map", "Map"}};
+    w.dashboard_configs["dashboard-map"] = kMapDashboard;
+}
+
+void long_names(SimWorld &w)
+{
+    for (SimEntity &e : w.entities)
+        if (e.id == "light.bedside") e.name = "Bedside lamp on the left of the double bed upstairs";
+        else if (e.id == "cover.garage_door") e.name = "Garage door to the street with the remote control";
+        else if (e.id == "lock.back_door") e.name = "Back door to the garden behind the kitchen";
+        else if (e.id == "sensor.outdoor_temperature") e.name = "Outdoor temperature in the shade of the north wall";
+        else if (e.id == "weather.home") e.name = "Forecast for home from the national weather service";
+}
+
 } // namespace
 
 SimEntity *SimWorld::find(const std::string &id)
@@ -168,9 +283,31 @@ SimWorld sim_world(const std::string &name)
     SimWorld w;
     if (name == "empty") return w;
     if (name == "big") big_world(w);
+    else if (name == "dash" || name == "dash-offline" || name == "dash-mixed" || name == "dash-long") dash_world(w);
     else home_world(w);
-    if (name == "connect-unreachable" || name == "connecting") w.reachable = false;
+    if (name == "dash-mixed") {
+        w.default_config = kMixedDashboard;
+        w.dashboards = {{"dashboard-energy", "Energy"}, {"dashboard-map", "Map"}};
+        w.dashboard_configs["dashboard-energy"] = kEnergyDashboard;
+    }
+    if (name == "dash-long") {
+        w.default_config = kLongDashboard;
+        long_names(w);
+    }
+    if (name == "connect-unreachable" || name == "connecting" || name == "dash-offline") w.reachable = false;
     return w;
+}
+
+std::string sim_cached_dashboard(const SimWorld &w)
+{
+    std::string names;
+    for (const SimEntity &e : w.entities) {
+        if (supported(domain_of(e.id))) continue; /* the registry has those */
+        names += std::string(names.empty() ? "" : ", ") + json::quote(e.id) + ": " + json::quote(e.name);
+    }
+    return "{\"version\": 1, \"key\": \"lovelace\", \"default_panel\": \"\", \"user_id\": \"u1\", \"choices\": "
+           "[{\"key\": \"lovelace\", \"title\": \"Home\", \"supported\": 12}], \"names\": {" +
+           names + "}, \"config\": " + w.default_config + "}\n";
 }
 
 /* --------------------------------------------------------------------------------------------- the backend */
@@ -378,6 +515,10 @@ void SimBackend::exec(const Action &a)
         saved_layout_ = engine_.layout_text();
         ++layout_saves_;
         return;
+    case Action::Kind::SaveDashboard:
+        saved_dashboard_ = engine_.dashboard_text();
+        ++dashboard_saves_;
+        return;
     }
 }
 
@@ -394,6 +535,7 @@ std::string SimBackend::compressed(const SimEntity &e) const
     if (e.current_temperature > -999) a += ",\"current_temperature\":" + json::number(e.current_temperature);
     if (e.target_temperature > -999) a += ",\"temperature\":" + json::number(e.target_temperature);
     if (e.position >= 0) a += ",\"current_position\":" + std::to_string(e.position);
+    if (!e.temperature_unit.empty()) a += ",\"temperature_unit\":" + json::quote(e.temperature_unit);
     return "{\"s\":" + json::quote(e.state) + ",\"a\":{" + a + "},\"c\":\"01SIM\",\"lc\":" +
            std::to_string(wall() - 600) + ".25}";
 }
@@ -516,49 +658,128 @@ void SimBackend::ws_receive(const std::string &text)
                    "\"unused_key\":{\"default\":\"mdi:help\"}}}}}");
         else
             out("{\"id\":" + sid + ",\"type\":\"result\",\"success\":false,\"error\":{\"code\":\"invalid_format\"}}");
+    } else if (world_.lovelace && type == "lovelace/dashboards/list") {
+        std::string r = "[";
+        for (std::size_t i = 0; i < world_.dashboards.size(); ++i)
+            r += std::string(i ? "," : "") + "{\"id\":\"d" + std::to_string(i) + "\",\"url_path\":" +
+                 json::quote(world_.dashboards[i].first) + ",\"title\":" + json::quote(world_.dashboards[i].second) +
+                 ",\"icon\":null,\"mode\":\"storage\",\"require_admin\":false,\"show_in_sidebar\":true}";
+        result(r + "]");
+    } else if (world_.lovelace && type == "lovelace/config") {
+        ++world_.config_reads;
+        const json::Value *u = m.get("url_path");
+        std::string config = world_.default_config;
+        if (u && !u->is_null()) {
+            auto it = world_.dashboard_configs.find(u->as_string());
+            config = it == world_.dashboard_configs.end() ? std::string() : it->second;
+        }
+        if (config.empty())
+            out("{\"id\":" + sid + ",\"type\":\"result\",\"success\":false,\"error\":{\"code\":"
+                "\"config_not_found\",\"message\":\"No config found.\"}}");
+        else result(config);
+    } else if (type == "frontend/get_system_data") {
+        result(world_.default_panel.empty() ? "{\"value\":null}"
+                                            : "{\"value\":{\"default_panel\":" + json::quote(world_.default_panel) + "}}");
+    } else if (world_.forecasts && type == "weather/subscribe_forecast") {
+        ++world_.forecast_subscribes;
+        const std::string entity = m.get("entity_id") ? m.get("entity_id")->as_string() : "";
+        if (!world_.find(entity)) {
+            out("{\"id\":" + sid + ",\"type\":\"result\",\"success\":false,\"error\":{\"code\":"
+                "\"invalid_entity_id\",\"message\":\"Weather entity not found\"}}");
+            return;
+        }
+        result("null");
+        static const char *conds[] = {"sunny", "partlycloudy", "rainy", "cloudy", "pouring", "snowy", "fog"};
+        static const double highs[] = {14.2, 12.0, 9.5, 11.1, 8.0, 3.5, 6.0}, lows[] = {6.1, 5.0, 4.2, 3.9, 2.0, -1.5, 1.0};
+        const std::int64_t day0 = wall() / 86400 * 86400;
+        std::string f = "[";
+        for (int i = 0; i < 7; ++i)
+            f += std::string(i ? "," : "") + "{\"datetime\":" + json::quote(iso_utc(day0 + i * 86400 + 11 * 3600)) +
+                 ",\"condition\":\"" + conds[i] + "\",\"temperature\":" + json::number(highs[i]) +
+                 ",\"templow\":" + json::number(lows[i]) + ",\"precipitation\":0.0}";
+        out("{\"id\":" + sid + ",\"type\":\"event\",\"event\":{\"type\":\"daily\",\"forecast\":" + f + "]}}");
+    } else if (type == "history/history_during_period") {
+        ++world_.history_reads;
+        double t0 = 0, t1 = 0;
+        parse_iso(m.get("start_time") ? m.get("start_time")->as_string() : "", t0);
+        parse_iso(m.get("end_time") ? m.get("end_time")->as_string() : "", t1);
+        std::string r = "{";
+        bool first = true;
+        if (const json::Value *ids = m.get("entity_ids"))
+            for (const json::Value &v : ids->items) {
+                const SimEntity *e = world_.find(v.as_string());
+                if (!e) continue;
+                const double base = std::atof(e->state.c_str());
+                std::string pts = "[";
+                int n = 0;
+                for (double t = t0; t <= t1 && t1 > t0; t += 900, ++n) {
+                    const double x = (t - t0) / (t1 - t0);
+                    const double val = base + (base > 50 ? 30.0 : 2.5) * std::sin(x * 6.2831853 * 1.5) - (base > 50 ? 10.0 : 1.0) * x;
+                    char buf[48];
+                    std::snprintf(buf, sizeof buf, "%.2f", val);
+                    pts += std::string(n ? "," : "") + "{\"s\":\"" + buf + "\",\"lu\":" + json::number(t) + "}";
+                }
+                r += std::string(first ? "" : ",") + json::quote(e->id) + ":" + pts + "]";
+                first = false;
+            }
+        result(r + "}");
     } else if (type == "call_service") {
         const std::string domain = m.get("domain") ? m.get("domain")->as_string() : "";
         const std::string service = m.get("service") ? m.get("service")->as_string() : "";
-        std::string target;
+        std::vector<std::string> targets;
         if (const json::Value *t = m.get("target"))
-            if (const json::Value *e = t->get("entity_id")) target = e->as_string();
+            if (const json::Value *e = t->get("entity_id")) {
+                if (e->is_array())
+                    for (const json::Value &x : e->items) targets.push_back(x.as_string());
+                else targets.push_back(e->as_string());
+            }
         int pct = -1;
         if (const json::Value *d = m.get("service_data"))
             if (const json::Value *b = d->get("brightness_pct")) pct = static_cast<int>(b->as_int(-1));
-        world_.calls.push_back(domain + "." + service + " " + target + (pct >= 0 ? " " + std::to_string(pct) : ""));
-        SimEntity *e = world_.find(target);
-        if (!e) {
+        std::string all;
+        for (const std::string &t : targets) all += (all.empty() ? "" : ",") + t;
+        world_.calls.push_back(domain + "." + service + " " + all + (pct >= 0 ? " " + std::to_string(pct) : ""));
+        std::vector<SimEntity *> es;
+        for (const std::string &t : targets)
+            if (SimEntity *e = world_.find(t)) es.push_back(e);
+        if (es.empty() || es.size() != targets.size()) {
             out("{\"id\":" + sid + ",\"type\":\"result\",\"success\":false,\"error\":{\"code\":"
                              "\"not_found\",\"message\":\"Entity not found\"}}");
             return;
         }
-        if (e->fail_service == service) {
-            out("{\"id\":" + sid + ",\"type\":\"result\",\"success\":false,\"error\":{\"code\":"
-                             "\"home_assistant_error\",\"message\":\"Lock jammed\"}}");
-            return;
-        }
-        bool removed_brightness = false;
-        if (service == "turn_on" && (domain == "light" || domain == "switch" || domain == "input_boolean")) {
-            e->state = "on";
-            if (domain == "light") e->brightness = pct > 0 ? (pct * 255 + 50) / 100 : (e->brightness > 0 ? e->brightness : 255);
-        } else if (service == "turn_off") {
-            removed_brightness = domain == "light" && e->state == "on";
-            e->state = "off";
-        } else if (service == "toggle") {
-            e->state = e->state == "on" ? "off" : "on";
-        } else if (service == "lock") {
-            e->state = "locked";
-        } else if (service == "unlock") {
-            e->state = "unlocked";
-        } else if (service == "open_cover") {
-            e->state = "open";
-        } else if (service == "close_cover") {
-            e->state = "closed";
-        } else if (domain == "scene") {
-            e->state = "2026-11-01T20:00:00+00:00";
+        for (SimEntity *e : es)
+            if (e->fail_service == service) {
+                out("{\"id\":" + sid + ",\"type\":\"result\",\"success\":false,\"error\":{\"code\":"
+                                 "\"home_assistant_error\",\"message\":\"Lock jammed\"}}");
+                return;
+            }
+        std::vector<std::pair<SimEntity *, bool>> changes;
+        for (SimEntity *e : es) {
+            bool removed_brightness = false;
+            if (service == "turn_on" && (domain == "light" || domain == "switch" || domain == "input_boolean" || domain == "fan")) {
+                e->state = "on";
+                if (domain == "light") e->brightness = pct > 0 ? (pct * 255 + 50) / 100 : (e->brightness > 0 ? e->brightness : 255);
+            } else if (service == "turn_off") {
+                removed_brightness = domain == "light" && e->state == "on";
+                e->state = "off";
+            } else if (service == "toggle") {
+                e->state = e->state == "on" ? "off" : "on";
+            } else if (service == "lock") {
+                e->state = "locked";
+            } else if (service == "unlock") {
+                e->state = "unlocked";
+            } else if (service == "open_cover") {
+                e->state = "open";
+            } else if (service == "close_cover") {
+                e->state = "closed";
+            } else if (domain == "scene") {
+                e->state = "2026-11-01T20:00:00+00:00";
+            }
+            changes.emplace_back(e, removed_brightness);
         }
         result("{\"context\":{\"id\":\"01SIMCTX\"},\"response\":null}");
-        if (domain != "scene" && domain != "script") push_state_change(*e, removed_brightness);
+        if (domain != "scene" && domain != "script")
+            for (const auto &c : changes) push_state_change(*c.first, c.second);
     } else {
         out("{\"id\":" + sid +
                          ",\"type\":\"result\",\"success\":false,\"error\":{\"code\":\"unknown_command\"}}");
@@ -621,14 +842,16 @@ std::unique_ptr<SimBackend> make_demo_backend(const std::string &name)
                 "climate.thermostat",   "scene.evening",      "light.porch",     "cover.garage_door"};
     if (name == "big")
         favs = {"light.workshop_005", "sensor.workshop_002", "switch.workshop_001", "light.living_ceiling"};
+    if (name.rfind("dash", 0) == 0) favs = {"light.living_ceiling", "lock.front_door", "sensor.living_temperature"};
     std::map<std::string, std::string> names;
-    if (name == "connecting") /* the names cached by an earlier session: a start without a connection shows them */
+    if (name == "connecting" || name == "dash-offline") /* the names cached by an earlier session: a start offline shows them */
         for (const std::string &id : favs)
             if (const SimEntity *e = w.find(id)) names[id] = e->name;
     /* the layout cached by an earlier session (layout.json): the tabs and tiles, greyed, before any connection */
     std::vector<Area> areas;
     std::vector<RegEntry> entries;
-    if (name == "connecting") {
+    const std::string cached_dash = name == "dash-offline" ? sim_cached_dashboard(w) : std::string();
+    if (name == "connecting" || name == "dash-offline") {
         for (const auto &a : w.areas) areas.push_back(Area{a.first, a.second});
         for (const SimEntity &e : w.entities) {
             if (e.hidden || e.category || !supported(domain_of(e.id))) continue;
@@ -645,6 +868,7 @@ std::unique_ptr<SimBackend> make_demo_backend(const std::string &name)
     }
     auto b = std::make_unique<SimBackend>(std::move(w), settings, creds, favs, speed, true, std::move(names));
     if (!entries.empty()) b->engine().set_cached_layout(std::move(areas), std::move(entries), IconRules());
+    if (!cached_dash.empty()) b->engine().set_cached_dashboard(cached_dash);
     if (name == "reconnecting") b->drop_after(1000);
     if (name == "offline") b->drop_after(1000, 20.0);
     return b;

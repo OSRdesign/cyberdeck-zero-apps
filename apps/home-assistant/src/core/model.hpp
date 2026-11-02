@@ -66,6 +66,7 @@ struct State {
     double current_temperature = NAN, target_temperature = NAN;
     int current_position = -1; /* cover 0..100 */
     std::string hvac_action;
+    std::string temperature_unit; /* a weather entity's (0.3.0) */
     double last_changed = 0; /* epoch seconds */
 };
 

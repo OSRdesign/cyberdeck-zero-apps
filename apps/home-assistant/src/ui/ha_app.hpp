@@ -1,26 +1,34 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * Home Assistant app: the pages (design 052a phase 1, study 053 P1: the tile dashboard). LVGL thread only.
+ * Home Assistant app: the pages (design 052a phase 1, study 053 P1: the tile dashboard, P2: the owner's stored
+ * dashboard drawn natively). LVGL thread only.
  *
  *   Connect    (no sign-in yet, or after Sign out) "Scan with your phone to connect to Home Assistant", the QR code
  *              (left in landscape, on top in portrait), the address line, the Server address row (opens its field:
  *              the fallback keyboard only when no keyboard is connected, the shared rule), the status line ("Waiting
  *              for the phone...", "Connected as <user>", or which step failed). Esc quits.
- *   Dashboard  under the shared header, one 7 mm tab bar: Favourites, one tab per Home Assistant area, All, scrolling
+ *   Dashboard  under the shared header, one 7 mm tab bar: the stored dashboard's views first (0.3.0: their titles, or
+ *              their icons when a title does not fit), then Favourites, one tab per Home Assistant area, All, scrolling
  *              sideways; the connection at its right end as a dot and a word. Favourites and the areas are grids of
  *              tiles (core/tiles.hpp: columns from the width in mm, one 7 mm row each): the left 7 x 7 mm square is the
  *              icon (an MDI glyph in a circle tinted with the state colour when active) and does the tile's action
  *              (toggle, run, lock / unlock and garage-type covers after a confirmation); the name and state word open
  *              the entity page (the small chevron says so). A dimmable light gets a full-width slider row under its
- *              tile. All is 0.1.0's list (favourites, rooms, Settings).
+ *              tile. All is 0.1.0's list (favourites, rooms, Settings). A view of the stored dashboard (ha_dash.cpp)
+ *              is its cards in masonry columns (clamp(floor(width_mm / 50), 1, 4), each card into the shortest
+ *              column): entities (7 mm rows: icon, name, state word or a switch; sections, dividers, other row types
+ *              greyed; a header toggle for lights, switches, fans and input booleans), sensor (the value and a line of
+ *              its history), weather-forecast (now and five days), any other card greyed: "Not supported on this
+ *              screen". A row's icon or switch acts, its name opens the entity page (or follows its tap_action).
  *   Room       (from All) the room's entities, a keyboard filter.
  *   Entity     (study 053 section 7.6) the tile's icon, word and "room - changed HH:MM" at the top, then 7 mm rows
  *              straight under it, the toolkit's list look (cp0_ui_list.h: highlight bar, action dots, grey values):
  *              read-only attributes, the brightness slider row (Left / Right 10 %, a drag), the action row (Turn on /
  *              off, Activate, Run, Lock / Unlock, a cover's Open and Close), the favourite row. Up / Down move, Enter
  *              (or Right) acts, Esc (or Left) goes back; a tap selects a row, a tap on the selected row acts.
- *   Settings   Server address and Signed in as (read only), the keys of the tiles, Sign out (asks first).
+ *   Settings   Server address and Signed in as (read only), Dashboard (0.3.0: Automatic, a dashboard, Off; Enter
+ *              moves to the next), the keys of the tiles, Sign out (asks first).
  *
  * Keys on the dashboard: arrows move a 2-D focus (Up / Down by row, Left / Right by column; Up from the first row to
  * the tab bar, where Left / Right switch views), Enter does the tile's action, Ctrl+O opens its page, Page Up / Down
@@ -51,7 +59,7 @@ namespace haui {
 /* = X-MinSize / X-Portrait of root/usr/share/APPLaunch/applications/home-assistant.desktop (tests/test_package.cpp) */
 constexpr int kMinW = 480, kMinH = 320;
 constexpr int kPortraitW = 480, kPortraitH = 640;
-constexpr const char *kVersion = "0.2.0";
+constexpr const char *kVersion = "0.3.0";
 
 class HaApp {
 public:
@@ -63,7 +71,7 @@ public:
 private:
     enum class Screen { None, Connect, ServerEdit, Dashboard, Room, Entity, Settings };
     struct Target {
-        enum class Kind { None, Entity, Room, Settings, ServerAddress, SignOut };
+        enum class Kind { None, Entity, Room, Settings, ServerAddress, SignOut, Dashboard };
         Kind kind = Kind::None;
         std::string id;
         ha::RowAction action = ha::RowAction::Info;
@@ -101,6 +109,32 @@ private:
         bool on = false;
     };
     enum class Zone { Bar, Grid };
+
+    /* the stored dashboard's view (ha_dash.cpp): its cards, their rows, the touch zones and the keyboard's stops */
+    struct DashRowUi {
+        int card = -1;
+        lv_obj_t *box = nullptr, *glyph = nullptr, *name = nullptr, *value = nullptr, *sw = nullptr;
+        int name_x = 0, name_right = 0; /* the name's left and the value's right edge, in their parent */
+        ha::DashRowView shown;
+        bool drawn = false;
+    };
+    struct DashCardUi {
+        lv_obj_t *box = nullptr, *title = nullptr, *hdr = nullptr, *hdr_sw = nullptr, *hdr_value = nullptr;
+        lv_obj_t *glyph = nullptr, *name = nullptr, *value = nullptr, *unit = nullptr, *cond = nullptr, *chart = nullptr;
+        lv_chart_series_t *series = nullptr;
+        std::vector<lv_obj_t *> days; /* per forecast day: its name, glyph, high, low */
+        int first_row = 0, rows = 0;  /* its rows in dash_rows_ */
+        int col = 0, x = 0, y = 0, w = 0, h = 0;
+        int hdr_key = -1; /* the header switch as drawn: on x 2 + grey */
+        ha::DashCardView shown;
+        bool drawn = false;
+    };
+    enum class DashZone { Icon, Name, Switch, Card, Header };
+    struct DashStop {   /* a stop of the keyboard's focus */
+        int card = -1;
+        int row = -1;   /* its index in dash_rows_; -1: the card's header toggle; -2: the card itself (a sensor) */
+        lv_obj_t *obj = nullptr;
+    };
 
     /* pages */
     void show(Screen s);
@@ -140,6 +174,28 @@ private:
     static void zone_event_cb(lv_event_t *e);
     static void slider_event_cb(lv_event_t *e);
     static void grid_event_cb(lv_event_t *e);
+
+    /* the stored dashboard's view (ha_dash.cpp) */
+    bool on_dash_tab() const;
+    void refresh_dash_view();
+    void build_dash_view();
+    void clear_dash();
+    int build_entities_card(DashCardUi &c, const ha::DashCardView &v, int card);
+    int build_sensor_card(DashCardUi &c, const ha::DashCardView &v, int card);
+    int build_weather_card(DashCardUi &c, const ha::DashCardView &v);
+    int build_unsupported_card(DashCardUi &c, const ha::DashCardView &v);
+    lv_obj_t *dash_zone(lv_obj_t *parent, int x, int y, int w, int h, int card, int row, DashZone zone);
+    lv_obj_t *dash_switch(lv_obj_t *parent, int zone_x, int zone_w, int row_h);
+    void draw_dash_row(DashRowUi &r, const ha::DashRowView &want, bool force);
+    void draw_dash_card(DashCardUi &c, const ha::DashCardView &want, bool force);
+    void draw_switch(lv_obj_t *sw, bool on, bool grey);
+    void dash_tap(int card, int row, DashZone zone);
+    void act_on_dash_row(const ha::DashRowView &r);
+    void dash_header(int card);
+    void dash_key(ha::NavKey k);
+    void style_dash_focus();
+    static void dash_event_cb(lv_event_t *e);
+    std::string dash_setting_value();
 
     /* data */
     void tick();
@@ -207,7 +263,8 @@ private:
     lv_obj_t *bar_ = nullptr, *tabs_box_ = nullptr, *conn_dot_ = nullptr, *conn_word_ = nullptr;
     std::vector<lv_obj_t *> tab_btns_;
     std::vector<ha::Tab> tabs_;
-    std::string tab_key_ = "fav";
+    std::string tab_key_;          /* "" until the first tab is shown: the first tab */
+    std::vector<bool> tab_icon_;   /* the tab shows its view's icon (its title does not fit) */
     std::string bar_conn_;
     lv_obj_t *grid_ = nullptr, *grid_note_ = nullptr;
     std::vector<TileUi> tiles_;
@@ -227,6 +284,16 @@ private:
     int content_y_ = 0;
     lv_obj_t *toast_ = nullptr;
     std::uint32_t toast_until_ = 0;
+    /* the stored dashboard's view */
+    std::vector<DashCardUi> dcards_;
+    std::vector<DashRowUi> dash_rows_;
+    std::vector<DashStop> dstops_;
+    int dstop_ = 0, dstop_drawn_ = -1;
+    std::string dash_sig_;
+    int dash_shown_ = -1;     /* the dashboard view under the entity page (kept subscribed) */
+    bool tab_chosen_ = false; /* the user moved to a tab: the dashboard's first view no longer takes over */
+    const lv_font_t *big_font_ = nullptr;
+    int cpad_ = 0, sw_h_ = 0, sw_w_ = 0;
     /* fonts and sizes of the tiles, from the layout service (built once per page) */
     const lv_font_t *name_font_ = nullptr, *word_font_ = nullptr, *tab_font_ = nullptr, *tab_bold_ = nullptr;
     const lv_font_t *glyph_font_ = nullptr, *hero_glyph_font_ = nullptr;
