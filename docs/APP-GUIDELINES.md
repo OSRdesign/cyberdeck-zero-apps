@@ -8,7 +8,7 @@ tokens at run time, never copy them).
 The app contract (environment variables, state files, `.desktop` keys, requests to the launcher) is specified in the
 launcher repository, and that text is normative:
 [APP-CONTRACT.md](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/APP-CONTRACT.md); what the
-launcher gives apps as of v0.8.7 is summarised in [section 3](#3-the-launcher-contract). Hosting and
+launcher gives apps as of v0.9.3 is summarised in [section 3](#3-the-launcher-contract). Hosting and
 the Settings > Apps flow: [HOSTING-APPS.md](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/HOSTING-APPS.md).
 The starting point of a native app: [`apps/cyberdeck-app-template`](../apps/cyberdeck-app-template/README.md) on the shared code in
 [`apps/_common`](../apps/_common/README.md). Repository overview: [README](../README.md).
@@ -31,7 +31,7 @@ we do not do it ([section 12](#12-when-not-to-build-it)). Landscape only: the la
 480x800, 480x640, the 800x1280 tablet) runs a landscape app turned by a quarter, so nothing has to change. An app that
 also has a portrait layout declares `X-Portrait=WxH` (its smallest portrait canvas, e.g. `480x640`) and is then shown
 upright ([portrait layout](#portrait-layout-x-portrait)). System Monitor 0.3.0 is the first, Serial Console 0.5.0 the
-first with text input; RSS Reader 0.2.0, Markdown Notes 0.2.0, Klondike Solitaire 0.1.0, Mine Field 0.1.0, Net Toolbox 0.5.0 and viz1090 0.3.0 have one too.
+first with text input; RSS Reader 0.2.0, Markdown Notes 0.2.0, Klondike Solitaire 0.1.0, Mine Field 0.1.0, Net Toolbox 0.5.0, viz1090 0.3.0, Net Walk 0.1.0 and Home Assistant 0.3.0 have one too.
 
 ## 1. Which kind of app
 
@@ -39,7 +39,7 @@ first with text input; RSS Reader 0.2.0, Markdown Notes 0.2.0, Klondike Solitair
 |---|---|---|---|
 | **A. Native `cp0_lvgl` app** (the default) | C++ app from the template: fullscreen, the launcher's widgets, status strip and on-screen keyboard in its own process | any app with its own screens, forms, lists, live data; touch and keyboard | the [template](../apps/cyberdeck-app-template/README.md) |
 | **B. Wrapped terminal / shell app** | a program run by the launcher's terminal page (`Terminal=true` in the `.desktop`) | a text tool that already exists (menu script, `picocom`, a TUI); it must also run on small screens | a serial console menu |
-| **C. Wrapped upstream program** | an existing program (SDL, framebuffer) started as `X-Fullscreen=true` with a small shim for display and input, or drawn into the launcher's 320x170 virtual framebuffer | you carry someone else's program and do not rewrite its UI | [viz1090](../apps/viz1090/README.md) (fullscreen shim); [LAN Scan](../apps/lanscan/README.md) and [Wi-Fi Survey](../apps/wifi-survey/README.md) (320x170 compat) |
+| **C. Wrapped upstream program** | an existing program (SDL, framebuffer) started as `X-Fullscreen=true` with a small shim for display and input, or drawn into the launcher's 320x170 virtual framebuffer | you carry someone else's program and do not rewrite its UI | [viz1090](../apps/viz1090/README.md) (fullscreen shim); [LAN Scan](../apps/lanscan/README.md) and [Wi-Fi Survey](../apps/wifi-survey/README.md) (320x170 compat, unpublished on 2026-11-02) |
 
 Choose by this order: **A** unless the program already exists (then **C**) or is plain text (then **B**).
 
@@ -184,7 +184,9 @@ affordances" (decision 2026-10-16). It is purely visual: keys, taps and row heig
   `_trail_w()`, `_chevron_y()`) so that it looks the same as `CompactList`; reserve the trailing width only for rows
   that carry a marker, and make the value text fit beside the marker (it is never cut under it).
 - **Not lists:** a bar of buttons (Start / Stop / Save cells) and a tile grid are controls that look tappable by
-  themselves; they carry no row marker.
+  themselves; they carry no row marker. The tile grid to copy is Home Assistant's dashboard: a tile is one `row` high, its
+  icon is the action (a tap on it, or Enter on the focused tile, toggles or runs), its name opens the details page (a tap,
+  or Ctrl+O), and a small chevron in its corner only when that page holds more than the icon's action.
 
 ### Touch and keyboard: both complete
 
@@ -225,7 +227,7 @@ Full text: [APP-CONTRACT.md](https://github.com/OSRdesign/cyberdeck-zero-launche
 | `APPLAUNCH_STATE_DIR` | directory of the state files `screen.state`, `input.state`, `status.state` and `board.state` (below); written **only** by the launcher, re-read when `gen` changes (at most once a second); without it `$XDG_RUNTIME_DIR/applaunch/` |
 | `$XDG_RUNTIME_DIR/applaunch/launcher.sock` | requests to the launcher (beep, toast, volume, brightness, dim), from launcher 0.8.6 ([below](#asking-the-launcher-launchersock)) |
 | `.desktop` `X-Fullscreen=true` | the app owns the panel until it exits |
-| `.desktop` `X-MinSize=WxH` | the tile is hidden (also in Settings > Apps) on a smaller screen; a malformed value means no restriction |
+| `.desktop` `X-MinSize=WxH` | the tile is hidden on a smaller screen; Settings > Apps leaves the app out of Available there, through the registry's `min_size` ([section 5](#5-packaging-and-registry)); a malformed value means no restriction |
 | `.desktop` `X-Portrait=WxH` | (launcher 0.8.8) the smallest portrait canvas the app supports: on a portrait launcher (PDA mode) the app gets the portrait canvas upright instead of running turned ([portrait layout](#portrait-layout-x-portrait)) |
 | `.desktop` `X-Background=freeze\|run` | multitasking: the app can be hidden and shown again instead of owning the panel until it exits (below) |
 
@@ -234,7 +236,7 @@ Full text: [APP-CONTRACT.md](https://github.com/OSRdesign/cyberdeck-zero-launche
 - The C reader (`cp0_app_contract.h`, no LVGL) is copy-ready; a native app already uses it through `cp0_lvgl`.
 - An app **never writes** `status.state` or `board.state` either, and never creates `launcher.sock`.
 
-APP-CONTRACT.md is the normative text; the sections below summarise what changed for apps up to launcher **v0.8.7**
+APP-CONTRACT.md is the normative text; the sections below summarise what changed for apps up to launcher **v0.9.3**
 and how to use it. A native app gets a feature only when it is built against a launcher commit that has it
 ([launcher versions](#launcher-versions-and-what-each-added-for-apps)).
 
@@ -362,9 +364,9 @@ fallback). One request line, one reply line, at most 254 bytes. Replies are `ok 
 
 ### Launcher versions and what each added for apps
 
-The apps build against one launcher commit, [`apps/_common/LAUNCHER_REF`](../apps/_common/LAUNCHER_REF) (today the
-**v0.8.9** commit `25927c3`, moved there for System Monitor 0.3.0, the first portrait app, and used by Serial Console
-0.5.0; the other apps were last built at the v0.8.5 commit `d0cb456` and move to it at their next rebuild). Launcher features that live in the launcher process (the feed's values, the media keys,
+The apps build against one launcher commit, [`apps/_common/LAUNCHER_REF`](../apps/_common/LAUNCHER_REF) (today
+`3f6579f`, the SSH indicator commit of launcher v0.8.12; every published native app is built at it: the earlier ones
+were rebuilt by apps #116 to #119, Net Walk and Home Assistant came after). Launcher features that live in the launcher process (the feed's values, the media keys,
 the socket's server) work with any build; features that live in `cp0_lvgl` (the strip's drawing and reading, the
 readers, the client) reach an app only at a pin that has them. **Using a 0.8.6 feature from `cp0_lvgl` needs a re-pin
 to the v0.8.6 commit `aef009b`** (and then the rebuild of every app, as above); an app can also copy the plain-C
@@ -383,6 +385,7 @@ files of the contract and the client.
 | 0.8.9 (`25927c3`, the previous pin) | Settings > Screen > PDA mode on any panel with room (also the 800x1280 tablet); `APPLAUNCH_PDA=0` passed to every app | the pin of System Monitor 0.3.0 and Serial Console 0.5.0 |
 | 0.8.11 (`5f54d15`, the previous pin; before it the test pin `6f37057`, same toolkit code) PDA S4 | `APPLAUNCH_PDA=1` for an app run upright on a launcher with the writing zone; `input.state` `hand=0\|1`; `cp0::ui::zone_host` (the band's rule, shared with the launcher) | the band needs the pin (`_common/osk_policy` binds it); `hand=` alone: no rebuild |
 | main after 0.8.11 (`3f6579f`, **the current pin**, launcher #113) | the SSH indicator: `status.state` `ssh=` / `ssh_act=`; the strip draws a terminal glyph in its leftmost slot (blue, blinking white on traffic; with a battery it takes the percentage's place); `status_strip_left()` always keeps that slot, so the header's Esc and title move left (49 px at 640x480 without a battery) | re-pin and rebuild (the strip's drawing and reading changed); an app built at an older pin shows no glyph and keeps its old header |
+| 0.8.12 to 0.9.3 | 0.8.12 is the release that holds `3f6579f`; 0.9.2: Settings > Apps lists only the apps whose registry `min_size` fits the screen and shows Screen and Minimum size rows (section 5); 0.9.3: home tile names on one line (the font steps down to 80 %, then dots). The only toolkit change, `cp0_display_repaint_all()` (0.9.1), is the launcher's own repaint after a system suspend | nothing to rebuild, no new pin (the strip's drawing did not change) |
 
 **What needs a re-pin, in short.** An app pins a launcher commit. A change to the **drawing** of the shared widgets (the
 status strip) needs a re-pin and a rebuild of every app. A change to the **data** the launcher publishes (state-file
@@ -439,7 +442,7 @@ What an opted-in app must (and must not) do:
 | Affiliation | never imply that the project, the launcher or your app is made, endorsed or sponsored by the maker of the stock device; no logos or names of it in your tile, icon, README or package description |
 | Credit upstream | name every program, library, dataset and protocol you use, its author and licence, in the README and in the package copyright file |
 | Our code | MIT, copyright `2026 <your name>`; add no copyright line for anyone who did not write the file |
-| Third-party licences | ship each licence text under `/usr/share/doc/<app>/` (`copyright` in Debian format; one `LICENSE.<component>` file per bundled component); GPL parts: give the source URL in the description and the README |
+| Third-party licences | ship each licence text under `/usr/share/doc/<app>/` (`copyright` in Debian format; one `LICENSE.<component>` file per bundled component, e.g. Home Assistant's `LICENSE.mdi` for Material Design Icons, Apache-2.0; a vendored file that carries its own notice, as Project Nayuki's MIT QR encoder there, keeps it and is listed in `copyright`); GPL parts: give the source URL in the description and the README |
 | Technical names that stay | `APPLaunch`, `APPLAUNCH_*`, `applaunch` state paths, `cp0_*`, `~/.config/cardputerzero` (launcher's own): [NAMING.md](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/NAMING.md). Your app has no reason to use them except to read the contract |
 
 <!-- branding-allow-begin: names the old stock-device prefix as the thing not to use -->
@@ -493,7 +496,7 @@ X-Background=freeze
 | `share_code` | lowercase id, stable forever (it gives the registry uuid) |
 | `package` | Debian package name, = the app id |
 | `version` | **raise it for every release**: the deck compares Debian-style (`dpkg --compare-versions`); the same version is not an update |
-| `title`, `summary`, `description` | what Settings > Apps shows, and the only text the launcher shows: the **descriptor** = a summary line (at most 80 characters) + a description of what the app is, its main features and what it needs (hardware, groups, network, minimum screen), nothing more. Summary + description together **at most 500 characters**; the launcher cuts a longer text at 500 with dots. The long documentation lives in the app's README in this repository, for reading on a computer. Checked by `python3 tools/check_descriptors.py` (every app and both registries) and by `make_registry.py` |
+| `title`, `summary`, `description` | what Settings > Apps shows, and the only text the launcher shows: the **descriptor** = a summary line (one line, at most 80 characters) + a description of what the app is, its main features and what it needs (hardware, groups, network, minimum screen), nothing more. Summary + newline + description **at most 500 characters** (characters, not bytes); the launcher cuts a longer text at 500 with dots. The long documentation lives in the app's README in this repository, for reading on a computer. Checked by `python3 tools/check_descriptors.py` (every app and both registries) and by `make_registry.py` |
 | `license` | SPDX expression of everything shipped (`MIT`, or `BSD-3-Clause AND GPL-3.0-or-later`) |
 | `depends` | Debian packages `apt` must add: **only what the binary links dynamically** (native apps: `libfreetype6, libinput10, libxkbcommon0`), plus tools you run (`curl`, `picocom`). Check the names exist on Debian 13 arm64 |
 | `recommends` | optional: Debian packages a feature uses when they are there (apt installs them by default; the app must work without them), e.g. Mesh Hop's `bluez` |
@@ -520,12 +523,15 @@ X-Background=freeze
 - **Large packages.** Above 50 MB attach the `.deb` to a GitHub Release (README of this repository, "Publish").
 - **Source of truth.** Never hand-edit `registry.json`; regenerate it.
 - **Screen requirements in the registry.** `make_registry.py` copies the launcher's own reading of the packaged `.desktop`
-  into every entry, so the launcher can show only the apps that fit the board it runs on (it hides the others from
-  Settings > Apps, as it hides an installed tile):
+  into every entry, so the launcher can show only the apps that fit the board it runs on (from launcher v0.9.2, Settings >
+  Apps > Available leaves the others out, as the home grid hides an installed tile; installed apps stay listed):
   `"min_size": "WxH"` is the `X-MinSize` (the smallest landscape screen; the tile is hidden on a smaller one, either
   dimension), `"portrait_min_size": "WxH"` is the `X-Portrait` (the smallest canvas on a portrait launcher, a size and not a
   flag; without it a portrait screen runs the app turned, against `min_size`). Both are written normalised (`640x480`).
   An app whose `.desktop` has no `X-MinSize` (and no `app.json` `min_size`) gets **no field**: it is shown on every screen.
+  Only `min_size` filters, and a portrait screen is judged turned (480x800 as 800x480), so orientation hides nothing;
+  `portrait_min_size` is information. The app's page in Settings > Apps shows them as the rows **Screen** (Landscape, or
+  Landscape and portrait) and **Minimum size** (the `min_size`).
   `python3 tools/check_registry.py` fails when a registry value differs from the `.desktop`; `python3 tools/test_registry_tools.py`
   is the self test of the generator (dates, `device_targets`, `generated_at`, these fields).
 
@@ -626,8 +632,8 @@ Add the app to the table in the repository [README](../README.md) (name, version
 ## 11. Existing apps and these guidelines
 
 The first apps predate the template. They are not wrong, but they do not all meet today's rules; do not copy their
-gaps. Known gaps (also tracked in their READMEs): LAN Scan and Wi-Fi Survey draw 320x170 (compat) and have no on-screen
-keyboard; viz1090 reads its framebuffer through its own
+gaps. Known gaps (also tracked in their READMEs): LAN Scan and Wi-Fi Survey (unpublished on 2026-11-02) draw 320x170
+(compat) and have no on-screen keyboard; viz1090 reads its framebuffer through its own
 shim; some still carry the old binary prefix, to be dropped at their next version (decision 7 of report 025). Fix these when you next
 release the app, not as a drive-by.
 
@@ -684,14 +690,14 @@ Copy into the pull request and tick.
 | 21 | README complete (section 8) with 640x480 screenshots; repository README table updated | [ ] |
 | 22 | `sh tools/branding/check-branding.sh` clean for the new files | [ ] |
 | 23 | **Declare `X-MinSize`** (and `X-Portrait` when the layout passes on 480x640): the registry's `min_size` / `portrait_min_size` come from it, and the launcher hides the app on a screen that cannot run it; `python3 tools/check_registry.py` passes | [ ] |
-| 23 | Icon follows [ICON-PALETTE.md](ICON-PALETTE.md): 100x100 square transparent PNG, own hue (not green, not shared), own silhouette, two colours, strokes >= 9 px | [ ] |
-| 24 | Icon checked at 32 px and in greyscale on the review sheet (`python tools/icons/make_icons.py`), distinct from every other tile | [ ] |
-| 25 | Data and app lists on `CompactList`; no status shown by colour alone | [ ] |
-| 26 | List rows tagged Open / Edit / Action / Info; no marker on pure read-outs ([row kinds](#row-kinds-what-can-be-tapped)) | [ ] |
-| 27 | Multitasking chosen and written in the README: `X-Background=freeze`, `run` (and why), or none (and why); a `lifecycle` scene passes ([section 3](#multitasking-hidden-and-shown-again-x-background)) | [ ] |
-| 28 | Header controls left of `status_strip_left()`, nothing placed from a fixed strip width; the app does not act on the volume, mute or brightness keys ([section 3](#sound-volume-and-brightness)) | [ ] |
-| 29 | Launcher requests (if any) off the LVGL thread, at most about 200 ms, silent without the socket; sound options only with `board.state` `sound=1`; a missing state key means its default ([section 3](#asking-the-launcher-launchersock)) | [ ] |
-| 30 | Built against the current [`LAUNCHER_REF`](../apps/_common/LAUNCHER_REF) (`--version` says it matches); a launcher change to the strip's drawing means a re-pin and rebuild of every app ([section 3](#the-status-strip-data-and-drawing)) | [ ] |
+| 24 | Icon follows [ICON-PALETTE.md](ICON-PALETTE.md): 100x100 square transparent PNG, own hue (not green, not shared), own silhouette, two colours, strokes >= 9 px | [ ] |
+| 25 | Icon checked at 32 px and in greyscale on the review sheet (`python tools/icons/make_icons.py`), distinct from every other tile | [ ] |
+| 26 | Data and app lists on `CompactList`; no status shown by colour alone | [ ] |
+| 27 | List rows tagged Open / Edit / Action / Info; no marker on pure read-outs ([row kinds](#row-kinds-what-can-be-tapped)) | [ ] |
+| 28 | Multitasking chosen and written in the README: `X-Background=freeze`, `run` (and why), or none (and why); a `lifecycle` scene passes ([section 3](#multitasking-hidden-and-shown-again-x-background)) | [ ] |
+| 29 | Header controls left of `status_strip_left()`, nothing placed from a fixed strip width; the app does not act on the volume, mute or brightness keys ([section 3](#sound-volume-and-brightness)) | [ ] |
+| 30 | Launcher requests (if any) off the LVGL thread, at most about 200 ms, silent without the socket; sound options only with `board.state` `sound=1`; a missing state key means its default ([section 3](#asking-the-launcher-launchersock)) | [ ] |
+| 31 | Built against the current [`LAUNCHER_REF`](../apps/_common/LAUNCHER_REF) (`--version` says it matches); a launcher change to the strip's drawing means a re-pin and rebuild of every app ([section 3](#the-status-strip-data-and-drawing)) | [ ] |
 
 > **Icon upgrades:** a launcher older than PR #46 (2026-10-14) reads an icon's size once and keeps it until it restarts, so an app
 > update that ships an icon of a different size can look cropped on its tile; a current launcher reloads the tile within about 3 s

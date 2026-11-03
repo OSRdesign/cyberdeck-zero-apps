@@ -80,7 +80,7 @@ and compare the header shots with the launcher's. Details, and what else the lau
 
 ## The launcher pin
 
-`LAUNCHER_REF` is **`3f6579f`**, launcher main after v0.8.11 (#113, not a release yet): the **SSH indicator** in the
+`LAUNCHER_REF` is **`3f6579f`**, launcher main after v0.8.11 (#113, part of the release v0.8.12): the **SSH indicator** in the
 status strip. The strip reads `status.state` `ssh=` / `ssh_act=` and draws a terminal glyph in its leftmost slot while
 someone is connected over SSH (blue, blinking white on traffic; with a battery it takes the percentage's place, so the
 strip keeps its width), and `cp0::ui::status_strip_left()` always keeps that slot free: the header's Esc and title move
@@ -117,7 +117,9 @@ moves to this pin at its next rebuild (both architectures). `_common` has no lau
 wrapper yet.
 
 Launcher **v0.8.7** (media keys of non-keyboard devices, the Windows key opening the app switcher, the sound-player
-crash fix) lives in the launcher process: it needs no re-pin and no rebuild.
+crash fix) lives in the launcher process: it needs no re-pin and no rebuild. So do **v0.8.13 to v0.9.3** (Settings >
+Updates, Settings > Apps filtered by the registry's `min_size`, one-line tile names): their only toolkit change,
+`cp0_display_repaint_all()` (v0.9.1), is the launcher's own repaint after a system suspend.
 What needs a re-pin is a change to the drawing of the shared widgets (the status strip), not a change to the data or the
 keys the launcher publishes ([guidelines, launcher versions](../../docs/APP-GUIDELINES.md#launcher-versions-and-what-each-added-for-apps)).
 

@@ -169,4 +169,4 @@ the font table. The scenes (`tests/scenes/`) go through touch, keys, a win, Size
 
 ## Changes
 
-- 0.1.0: first version (shared page header, pixel-art monitors and server, magenta icon). `app.json` carries `"draft": true` (tools/make_registry.py skips the app) until it is published.
+- 0.1.0: first version (shared page header, pixel-art monitors and server, magenta icon), published on 2026-11-01 for arm64 and amd64.
