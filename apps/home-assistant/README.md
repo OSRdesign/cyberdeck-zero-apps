@@ -7,7 +7,8 @@ Assistant's own app (its icons and state colours): your favourites, one tab per 
 tile's icon to switch a light or a switch, run a scene or a script, open a garage door or unlock a lock after a
 confirmation; drag a dimmable light's slider; tap a name for its page. Native fullscreen app on the launcher's `cp0_lvgl`
 (kind A of the [guidelines](../../docs/APP-GUIDELINES.md): its own pages and live data), MIT (the bundled icon font
-Apache-2.0), version 0.3.0, **draft** (study 053 P2 and P1 on top of design 052a's phase 1; not in the registry yet).
+Apache-2.0), version 0.3.0, published on 2026-11-02 for arm64 and amd64, category Home (study 053 P2 and P1 on top of
+design 052a's phase 1).
 
 It is a pure client: the deck is not registered in Home Assistant as a device, nothing of the deck appears in Home Assistant
 except the sign-in (a refresh token) in the user's profile. Everything stays on the local network: no cloud, no account other
@@ -281,8 +282,8 @@ room's filter never move the list; outside a room the navigation letters work as
 
 ## Install
 
-Settings > Apps once published. Today (draft): `sudo dpkg -i home-assistant_0.3.0_arm64.deb` (or `_amd64.deb` on a PC);
-remove with `sudo dpkg -r home-assistant`.
+Settings > Apps > Available (the project's default source), or by hand: `sudo dpkg -i home-assistant_0.3.0_arm64.deb`
+(or `_amd64.deb` on a PC); remove from Settings > Apps > Installed or with `sudo dpkg -r home-assistant`.
 
 ## Files the app keeps
 
@@ -390,7 +391,7 @@ python tools/make_registry.py --only home-assistant --out <folder outside packag
 
 ## Changes
 
-- 0.3.0 (draft): study 053 P2: your stored dashboard drawn natively, its views as the first tabs (titles or icons): masonry
+- 0.3.0 (published 2026-11-02, the first published version): study 053 P2: your stored dashboard drawn natively, its views as the first tabs (titles or icons): masonry
   columns by millimetres, `entities` cards (rows with icons, names, state words or switches, sections, dividers, the
   header toggle, `tap_action`), `sensor` cards (the value and a line of its history), `weather-forecast` cards (now and
   five days), any other card greyed "Not supported on this screen"; the subscription follows the view shown; Settings >

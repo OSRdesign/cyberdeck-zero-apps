@@ -27,21 +27,23 @@ Each app has its own page with the full description, keys, requirements, known l
 
 | App | Version | Packages | What it does |
 | --- | --- | --- | --- |
+| [**Home Assistant**](apps/home-assistant/README.md) (`home-assistant`) | 0.3.0 | arm64, amd64 | A client of your own Home Assistant server on the local network, signed in by scanning a QR code with a phone: your stored dashboard drawn natively (entities, sensor and weather cards), then tiles for your favourites and each area, with Home Assistant's icons and state colours; switch a light, run a scene, locks and garage doors ask first. By touch or keyboard, from 480x320 up, portrait (PDA mode) layout. Needs the Home Assistant server. Category Home. Not affiliated with the Home Assistant project. |
 | [**Klondike Solitaire**](apps/klondike-solitaire/README.md) (`klondike-solitaire`) | 0.1.1 | arm64, amd64 | The classic patience game, by touch or keyboard: draw one or three, Standard, Vegas or no scoring, unlimited undo and redo, hints, deals that are the same on every board and winnable deals proven by a built-in solver, statistics, the win cascade, portrait (PDA mode) and left-handed layouts. Category Games, no network. |
 | [**Mine Field**](apps/mine-field/README.md) (`mine-field`) | 0.1.1 | arm64, amd64 | A mine-clearing puzzle, by touch or keyboard: three levels whose boards are derived from the screen and always fit it (no pan, no scroll), fair boards that never need a guess, hints, long press to flag, chord, best five times, statistics, the game in progress kept, portrait (PDA mode) layout. Category Games, no network. |
 | [**Markdown Notes**](apps/markdown-notes/README.md) (`markdown-notes`) | 0.2.1 | arm64, amd64 | Notes as plain Markdown files in a folder on the deck (tile name "Notes"): write them, read them with headings, lists, task boxes and links, open any note by name, and keep the folder in sync with Syncthing, rsync or git. Category Productivity, no network. |
-| [**Mesh Hop**](apps/mesh-hop/README.md) (`mesh-hop`) | 0.8.2 | arm64, amd64 | Full-screen client for MeshCore LoRa mesh networks: chats, contacts, repeater login, the meshcore-cli command line over the mesh, nearby nodes, radio settings, packet log and position, with a MeshCore companion radio board on USB, Bluetooth LE or IP, by touch or keyboard, on any screen from 640x480 up. |
-| [**Net Toolbox**](apps/net-toolbox/README.md) (`net-toolbox`) | 0.5.1 | arm64, amd64 | The tools you reach for when the network misbehaves: a step-by-step diagnosis, ping, traceroute, DNS lookup, port check, HTTP check, public IP, whois and the interfaces, a speed test with a bufferbloat grade, Wake-on-LAN, a Bluetooth radar, a local device scanner, Wi-Fi networks with their channels and a Wi-Fi walk test. It replaces LAN Scan and Wi-Fi Survey. |
-| [**RSS Reader**](apps/rss-reader/README.md) (`rss-reader`) | 0.2.1 | arm64, amd64 | A reader of RSS and Atom text feeds: pin your favorite news, tech and science feeds from a catalog of about 260 by country and topic, or add any site by its address, then read the articles full screen with their pictures, and save them to read offline, by touch or keyboard, on any screen from 640x480 up. |
-| [**Serial Console**](apps/serial-console/README.md) (`serial-console`) | 0.6.1 | arm64, amd64 | Finds your USB-serial adapters and boards, tells what is plugged in and what is behind it, recommends the settings, and talks to it. |
-| [**System Monitor**](apps/system-monitor/README.md) (`system-monitor`) | 0.3.1 | arm64, amd64 | A live look at the board or PC it runs on: CPU, temperature, memory, storage, network, processes, and the power supply or battery. |
-| [**viz1090**](apps/viz1090/README.md) (`viz1090`) | 0.3.2 | arm64, amd64 | The real viz1090 ADS-B display, full screen on any supported screen, fed by an RTL-SDR dongle, with an intro screen, the app header (Esc) and a world map, upright on portrait screens (PDA mode). Needs the dongle and a launcher with full-screen app support. |
+| [**Mesh Hop**](apps/mesh-hop/README.md) (`mesh-hop`) | 0.8.2 | arm64, amd64 | Full-screen client for MeshCore LoRa mesh networks: chats, contacts, repeater login, the meshcore-cli command line over the mesh, nearby nodes, radio settings, packet log and position, with a MeshCore companion radio board on USB, Bluetooth LE or IP, by touch or keyboard, on any screen from 640x480 up. Category Radio. |
+| [**Net Toolbox**](apps/net-toolbox/README.md) (`net-toolbox`) | 0.5.1 | arm64, amd64 | The tools you reach for when the network misbehaves: a step-by-step diagnosis, ping, traceroute, DNS lookup, port check, HTTP check, public IP, whois and the interfaces, a speed test with a bufferbloat grade, Wake-on-LAN, a Bluetooth radar, a local device scanner, Wi-Fi networks with their channels and a Wi-Fi walk test. It replaces LAN Scan and Wi-Fi Survey (unpublished on 2026-11-02). Category Tools. |
+| [**Net Walk**](apps/net-walk/README.md) (`net-walk`) | 0.1.0 | arm64, amd64 | A network-wiring puzzle, by touch or keyboard: turn the tiles until the server's power reaches every computer. Four sizes (5x5, 7x7, 9x9 and a 9x9 board whose edges wrap), padlocks, best moves and times per size, drawn in a Palm OS colour look, from 480x320 up, portrait (PDA mode) layout. Category Games, no network. |
+| [**RSS Reader**](apps/rss-reader/README.md) (`rss-reader`) | 0.2.1 | arm64, amd64 | A reader of RSS and Atom text feeds: pin your favorite news, tech and science feeds from a catalog of about 260 by country and topic, or add any site by its address, then read the articles full screen with their pictures, and save them to read offline, by touch or keyboard, on any screen from 640x480 up. Category Internet. |
+| [**Serial Console**](apps/serial-console/README.md) (`serial-console`) | 0.6.1 | arm64, amd64 | Finds your USB-serial adapters and boards, tells what is plugged in and what is behind it, recommends the settings, and talks to it. Category Tools. |
+| [**System Monitor**](apps/system-monitor/README.md) (`system-monitor`) | 0.3.1 | arm64, amd64 | A live look at the board or PC it runs on: CPU, temperature, memory, storage, network, processes, and the power supply or battery. Category Tools. |
+| [**viz1090**](apps/viz1090/README.md) (`viz1090`) | 0.3.2 | arm64, amd64 | The real viz1090 ADS-B display, full screen on any supported screen, fed by an RTL-SDR dongle, with an intro screen, the app header (Esc) and a world map, upright on portrait screens (PDA mode). Needs the dongle and a launcher with full-screen app support. Category Radio. |
 
 `arm64` packages run on the Raspberry Pi boards (the decks). The apps marked `amd64` also have a package for x86-64 PCs
 running the launcher, listed in their own registry ([amd64](#amd64-x86-64-pcs)).
 
-Known limit that applies to every app: after an upgrade through the Apps menu the tile moves to the end of the
-launcher grid.
+An upgrade through the Apps menu keeps the app's tile where it was on the launcher grid (launcher v0.4.0 and later), as
+long as the `.desktop` file name does not change.
 
 ## Install apps from this repository on a deck
 
@@ -80,7 +82,10 @@ Each registry entry also carries the app's screen requirements, copied from its 
 `tools/make_registry.py`, so that the launcher shows only the apps that fit the board's screen:
 `"min_size": "WxH"` (from `X-MinSize`, the smallest landscape screen) and `"portrait_min_size": "WxH"` (from `X-Portrait`,
 the smallest canvas on a portrait launcher), the second only when declared. An app without `X-MinSize` has no field and is
-listed everywhere. `python3 tools/check_registry.py` checks the registries against the `.desktop` files and
+listed everywhere. From launcher v0.9.2, Settings > Apps > Available leaves out an app whose `min_size` does not fit
+the screen (a portrait screen is judged turned, as the app would run, so orientation hides nothing; installed apps stay
+listed), and an app's page shows the rows Screen (Landscape, or Landscape and portrait) and Minimum size.
+`python3 tools/check_registry.py` checks the registries against the `.desktop` files and
 `python3 tools/test_registry_tools.py` is the generator's self test; a plain `make_registry.py` run keeps the dates and
 `device_targets` of unchanged entries.
 
@@ -101,11 +106,11 @@ Your app is a normal **aarch64 Linux executable**. **New apps are native full-sc
 runtime: they fill the whole screen, **640x480 and up** (the minimum screen for new apps; `X-MinSize=640x480` in the
 `.desktop` file), and take keys and touch directly. The [app guidelines](docs/APP-GUIDELINES.md) give the screen
 sizes, the input rules, the packaging and the tests. Native apps build against one launcher commit,
-[`apps/_common/LAUNCHER_REF`](apps/_common/LAUNCHER_REF) (today the v0.8.5 commit; the launcher itself is at v0.8.7, which needs no re-pin); what each launcher version adds for
+[`apps/_common/LAUNCHER_REF`](apps/_common/LAUNCHER_REF) (today `3f6579f`, the SSH indicator commit of launcher v0.8.12; the launcher itself is at v0.9.3, which needs no re-pin); what each launcher version adds for
 apps, and when it needs a rebuild: [launcher versions](docs/APP-GUIDELINES.md#launcher-versions-and-what-each-added-for-apps).
 
 Wrapped (compat) apps, such as the first ones here ([LAN Scan](apps/lanscan/README.md),
-[Wi-Fi Survey](apps/wifi-survey/README.md)), still work: such an app draws a fixed 320x170 picture into the
+[Wi-Fi Survey](apps/wifi-survey/README.md), unpublished on 2026-11-02 and kept as drafts), still work: such an app draws a fixed 320x170 picture into the
 launcher's virtual framebuffer, and the launcher scales it into its window. Keys arrive as normal keyboard events
 (arrows, Enter, Esc; hold Esc 3 s to quit), touch is turned into keys by the launcher (Settings > Touch picks the
 behaviour per app). Do not start a new app this way.
@@ -139,8 +144,8 @@ A program that does not use the runtime works too: the launcher starts any execu
 * `package` – the Debian package name (lowercase letters, digits, `+ - .`).
 * `summary` and `description` – the app's descriptor, the only text the launcher shows (Settings > Apps): a summary
   line of at most 80 characters, then a description of what the app is, its main features and what it needs
-  (keyboard, USB dongle, network, minimum screen), nothing more. Summary + description together: at most **500
-  characters**; the launcher cuts a longer text at 500 with dots. The long documentation lives in the app's
+  (keyboard, USB dongle, network, minimum screen), nothing more. Summary + newline + description: at most **500
+  characters** (characters, not bytes); the launcher cuts a longer text at 500 with dots. The long documentation lives in the app's
   `README.md` in this repository, for reading on a computer. `python3 tools/check_descriptors.py` checks every app and
   both registries, and `tools/make_registry.py` refuses an app that breaks the rule.
 * `version` – increase it for every release; the deck offers an upgrade when it grows.
@@ -255,7 +260,14 @@ The launcher also runs on x86-64 PCs (the Panasonic FZ-M1 tablet is the referenc
 
 The repository is MIT. Each app page lists its own credits and licences in full; in short:
 
-* **LAN Scan** and **Wi-Fi Survey** use the IEEE OUI registry (vendor names) published at
+* **Home Assistant** ships Material Design Icons 7.4.47 by Pictogrammers (Apache-2.0: the webfont unchanged, its licence
+  in `/usr/share/doc/home-assistant/LICENSE.mdi`) and vendors Project Nayuki's QR Code generator library 1.8.0 (MIT,
+  unchanged); no code of Home Assistant's frontend is used; see [its page](apps/home-assistant/README.md).
+* **RSS Reader** decodes pictures with stb_image v2.30 (Sean Barrett and the stb contributors, public domain or MIT);
+  see [its page](apps/rss-reader/README.md).
+* **Net Toolbox** ships a shortened list of vendor names from the IEEE OUI registry (<https://standards-oui.ieee.org/>);
+  see [its page](apps/net-toolbox/README.md).
+* **LAN Scan** and **Wi-Fi Survey** (unpublished on 2026-11-02, kept as drafts) use the IEEE OUI registry (vendor names) published at
   <https://standards-oui.ieee.org/>. Both run on the LVGL based `cp0_lvgl` runtime, from the CardputerZero launcher by M5Stack
   (MIT).
 * **viz1090** bundles viz1090 (BSD), readsb (GPL-3 or later), fonts (SIL OFL 1.1, Font Awesome icons CC BY 4.0) and
