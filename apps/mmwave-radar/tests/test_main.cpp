@@ -36,6 +36,8 @@ int main()
     test_frame();
     test_units();
     test_detect();
+    test_tracker();
+    test_link();
     test_posix();
     std::printf("mmwave-radar core tests: %d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;

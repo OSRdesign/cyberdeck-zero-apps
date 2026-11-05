@@ -43,4 +43,6 @@ std::string test_read_file(const std::string &path);
 void test_frame();
 void test_units();
 void test_detect();
+void test_tracker();
+void test_link();
 void test_posix();
