@@ -1,0 +1,22 @@
+title mmWave Radar: tall Radar page at 320x480 (6.1 px/mm): three people, then paused
+sizes 320x480
+ppmm 608
+env MMWAVE_DEMO three
+env MMWAVE_TEST_CONFIG 1
+
+wait 11000
+shot tall-three
+check tall-three
+expect notext "PAUSED"
+key space
+wait 1500
+shot tall-paused
+check tall-paused
+expect text "PAUSED"
+key space
+wait 400
+expect notext "PAUSED"
+tapxy 0.97 0.97
+wait 400
+expect text "PAUSED"
+expect noquit

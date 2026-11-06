@@ -114,6 +114,31 @@ private:
     void invalidate_view();
     void draw_table(lv_layer_t *layer, const lv_area_t &a);
     void draw_graph(lv_layer_t *layer, const lv_area_t &a);
+    /* the tall Radar page (lay_.tall): the compact target list under the plot, the distance strip chart under it */
+    void compute_layout();
+    void draw_radar_list(lv_layer_t *layer, const lv_area_t &a);
+    void draw_radar_chart(lv_layer_t *layer, const lv_area_t &a);
+    /* One line of a target's two-line block: n values at xs (heads, when given, above each value). */
+    struct BlockLine {
+        int n;
+        const int *xs;
+        const char *const *heads;
+        const char *const *values;
+    };
+    /* One target's two-line block (the Table on narrow canvases, the tall Radar page's list): its panel from
+     * y - pad / 4, block_h high; the dot with "T<n>" under it at the left; line 1, line_gap px, line 2. */
+    void draw_block(lv_layer_t *layer, int i, int x1, int w, int y, int block_h, const BlockLine &l1,
+                    const BlockLine &l2, int line_gap);
+    /* The Graph's scales over the last 30 s, and one of its charts (0 distance, 1 speed) between x0 and x1. */
+    struct ChartScale {
+        std::int64_t span = 30000, t_end = 0, t_start = 0;
+        bool raw = false;
+        double d_top = 0, v_top = 0;
+        const char *l_top = "", *l_vtop = "", *l_vbot = "";
+        int axis_w = 0;
+    };
+    ChartScale chart_scale();
+    void draw_chart(lv_layer_t *layer, const ChartScale &s, int chart, int x0, int x1, int top, int chart_h);
     const char *fmt(const char *format, ...);
     void text(lv_layer_t *layer, const char *s, int x, int y, int px, std::uint32_t rgb, lv_opa_t opa = LV_OPA_COVER);
     int text_w(const char *s, int px) const;
@@ -182,6 +207,9 @@ private:
     std::int64_t last_draw_ = 0, last_sensor_ = 0, last_nf_ = 0, last_chip_ = 0;
     bool dirty_ = true;
     bool full_redraw_ = true;       /* else only the targets' areas are redrawn */
+    bool chart_dirty_ = false;      /* tall Radar page: the history changed, the strip chart is redrawn */
+    mmw::RadarLayout lay_;          /* the Radar page's split (classic: the plot is the whole view) */
+    int list_block_h_ = 0, list_gap_ = 0;
     lv_area_t last_box_[3] = {};
     bool have_box_[3] = {};
     int label_w_max_ = 0;

@@ -71,6 +71,37 @@ PlotGeom plot_geom(int x, int y, int w, int h, int range_m, Orientation o, int p
     return g;
 }
 
+int plot_full_width_h(int w, int pad, int near_pad)
+{
+    /* plot_geom: px_per_mm = min(avail_w / half_w, avail_h / range); width-limited when avail_h >= avail_w / sin(fov) */
+    const double avail_w = std::max(1, w - 2 * pad) / 2.0;
+    return static_cast<int>(std::ceil(avail_w / std::sin(kFovDeg * M_PI / 180.0))) + pad + near_pad;
+}
+
+RadarLayout radar_layout(int w, int h, int top_band, int pad, int near_pad, int list_block_h, int list_gap,
+                         int chart_min_h)
+{
+    RadarLayout l;
+    l.plot_y = 0;
+    l.plot_h = h;
+    if (w <= 0 || h <= w) return l; /* landscape and square: classic */
+    const int plot_h = plot_full_width_h(w, pad, near_pad);
+    const int list_h = 3 * list_block_h + 2 * list_gap;
+    const int free_h = h - top_band - plot_h;
+    if (free_h < list_gap + list_h) return l;
+    l.tall = true;
+    l.plot_y = top_band;
+    l.plot_h = plot_h;
+    l.list_y = l.plot_y + plot_h + list_gap;
+    l.list_h = list_h;
+    const int rest = h - (l.list_y + list_h);
+    if (rest >= chart_min_h && rest > 2 * list_gap) {
+        l.chart_y = l.list_y + list_h + list_gap;
+        l.chart_h = h - list_gap - l.chart_y;
+    }
+    return l;
+}
+
 void plot_point(const PlotGeom &g, int x_mm, int y_mm, int &px, int &py)
 {
     px = g.sx + static_cast<int>(std::lround(g.xsign * x_mm * g.px_per_mm));

@@ -126,8 +126,11 @@ mmw::PlotGeom RadarApp::plot_geometry(bool local) const
     lv_area_t a;
     lv_obj_get_coords(view_, &a);
     const int pad = std::max(sz_.space_m, sz_.dot);
-    return mmw::plot_geom(local ? 0 : a.x1, local ? 0 : a.y1, lv_area_get_width(&a), lv_area_get_height(&a),
-                          effective_range(), settings_.orientation, pad, std::max(sz_.space_m, sz_.dot / 2 + 4));
+    /* classic: the whole view; tall: the rectangle of the layout (the sensor at the bottom centre of it) */
+    const int y = (local ? 0 : a.y1) + lay_.plot_y;
+    const int h = lay_.tall ? lay_.plot_h : lv_area_get_height(&a);
+    return mmw::plot_geom(local ? 0 : a.x1, y, lv_area_get_width(&a), h, effective_range(), settings_.orientation, pad,
+                          std::max(sz_.space_m, sz_.dot / 2 + 4));
 }
 
 /* The static part of the plot (the wedge, the rings and their labels, the axis, the sensor, the range) is drawn once
@@ -167,7 +170,18 @@ void RadarApp::render_background()
         line(&layer, g.sx, g.sy, g.sx + static_cast<int>(std::lround(R * std::cos(ang))),
              g.sy + static_cast<int>(std::lround(R * std::sin(ang))), 1, pal::kWedge, LV_OPA_40);
     }
-    /* range rings every metre over the half circle in front, brighter inside the field of view; labels on the axis */
+    /* range rings every metre over the half circle in front, brighter inside the field of view; their labels along the
+     * wedge's left edge, just inside each ring (off the centre line, where a target's label would cover them) on a
+     * dark backing */
+    const double edge = (down ? front + mmw::kFovDeg : front - mmw::kFovDeg) * M_PI / 180.0; /* the screen-left edge */
+    const double ex = std::cos(edge), ey = std::sin(edge);
+    const double fx = std::cos(front * M_PI / 180.0), fy = std::sin(front * M_PI / 180.0);
+    const double fe = fx * ex + fy * ey;
+    double nx = fx - fe * ex, ny = fy - fe * ey; /* the normal from the edge into the wedge */
+    const double nl = std::max(1e-6, std::hypot(nx, ny));
+    nx /= nl;
+    ny /= nl;
+    const int lh_cap = lv_font_get_line_height(cp0_ui_font_px(cap));
     for (int m = 1; m <= range; ++m) {
         const int r = static_cast<int>(std::lround(m * 1000.0 * g.px_per_mm));
         lv_draw_arc_dsc_t d;
@@ -186,8 +200,12 @@ void RadarApp::render_background()
         d.color = lv_color_hex(pal::kRingFov);
         lv_draw_arc(&layer, &d);
         const char *label = settings_.units == mmw::UnitMode::MmCms ? fmt("%d mm", m * 1000) : fmt("%d m", m);
-        const int ly = down ? g.sy + r - cap - 2 : g.sy - r + 2;
-        text(&layer, label, g.sx + 4, ly, cap, pal::kMuted);
+        const int lw = text_w(label, cap);
+        const int px = g.sx + static_cast<int>(std::lround(ex * (r - 4) + nx * 3));
+        const int py = g.sy + static_cast<int>(std::lround(ey * (r - 4) + ny * 3));
+        const int ly = ny < 0 ? py - lh_cap : py; /* the text grows away from the edge, into the wedge */
+        rect(&layer, px - 1, ly, lw + 3, lh_cap, 0x000000, LV_OPA_60, 3);
+        text(&layer, label, px, ly, cap, pal::kMuted);
     }
     line(&layer, g.sx, g.sy, g.sx, down ? g.sy + R : g.sy - R, 1, pal::kRing, LV_OPA_COVER);
     /* the sensor: a small bar across its position */
@@ -196,7 +214,8 @@ void RadarApp::render_background()
     /* the range in the far corner */
     const char *rl = settings_.range_m ? fmt("%d m", range) : fmt("Auto %d m", range);
     const int rw = text_w(rl, cap);
-    text(&layer, rl, g.x + g.w - rw - sz_.space_s, down ? g.y + g.h - cap - sz_.space_s - 4 : g.y + sz_.space_s, cap,
+    /* (tall: in the chips' row, over the plot's rectangle) */
+    text(&layer, rl, g.x + g.w - rw - sz_.space_s, down ? g.y + g.h - cap - sz_.space_s - 4 : sz_.space_s, cap,
          pal::kMuted);
     lv_canvas_finish_layer(bg_, &layer);
     lv_obj_invalidate(bg_);
@@ -234,6 +253,7 @@ void RadarApp::invalidate_view()
 {
     if (tab_ != Tab::Radar || full_redraw_) {
         full_redraw_ = false;
+        chart_dirty_ = false;
         lv_obj_invalidate(view_);
         if (tab_ == Tab::Radar) {
             const mmw::PlotGeom g = plot_geometry(false);
@@ -250,6 +270,17 @@ void RadarApp::invalidate_view()
         last_box_[i] = now_box;
         have_box_[i] = have;
     }
+    if (lay_.tall) { /* the list with every frame, the strip chart when the history moved */
+        lv_area_t v;
+        lv_obj_get_coords(view_, &v);
+        lv_area_t r{v.x1, v.y1 + lay_.list_y - list_gap_, v.x2, v.y1 + lay_.list_y + lay_.list_h};
+        lv_obj_invalidate_area(view_, &r);
+        if (lay_.chart_h > 0 && chart_dirty_) {
+            r = {v.x1, v.y1 + lay_.chart_y, v.x2, v.y1 + lay_.chart_y + lay_.chart_h - 1};
+            lv_obj_invalidate_area(view_, &r);
+        }
+    }
+    chart_dirty_ = false;
 }
 
 void RadarApp::draw_radar(lv_layer_t *layer, const lv_area_t &a)
@@ -368,6 +399,53 @@ void RadarApp::draw_radar(lv_layer_t *layer, const lv_area_t &a)
         rect(layer, b.x, b.y, b.w, b.h, 0x000000, LV_OPA_60, 3);
         text(layer, label, b.x + 3, b.y + 1, cap, pal::kTarget[p.slot], p.live ? LV_OPA_COVER : LV_OPA_70);
     }
+    if (lay_.tall) {
+        draw_radar_list(layer, a);
+        if (lay_.chart_h > 0) draw_radar_chart(layer, a);
+    }
+}
+
+/* The tall Radar page's list: the three slots in the Table's two-line block, in the units chosen (Metres: m, km/h;
+ * Millimetres: mm, cm/s): distance and angle, then speed and direction; an empty slot is a dimmed "-". */
+void RadarApp::draw_radar_list(lv_layer_t *layer, const lv_area_t &a)
+{
+    const int w = lv_area_get_width(&a);
+    const int pad = sz_.space_m;
+    const int x0 = a.x1 + pad + sz_.dot + pad; /* the Table's: the dot column, "T1" under the dot */
+    const int col = (w - 2 * pad - sz_.dot - pad) / 2;
+    const int xs[2] = {x0, x0 + col};
+    const bool raw = settings_.units == mmw::UnitMode::MmCms;
+    for (int i = 0; i < 3; ++i) {
+        const mmw::SlotState &s = slot(i);
+        const char *v1[2] = {"-", "-"}, *v2[2] = {"-", "-"};
+        if (s.active) {
+            const double speed = std::fabs(s.speed_smooth_cm_s);
+            v1[0] = raw ? fmt("%d mm", s.last.distance_mm) : fmt("%.2f m", mmw::mm_to_m(s.last.distance_mm));
+            v1[1] = fmt("%+.0f deg", s.last.angle_deg);
+            v2[0] = raw ? fmt("%.0f cm/s", speed) : fmt("%.1f km/h", mmw::cm_s_to_km_h(speed));
+            v2[1] = direction_text(s.last.direction);
+        }
+        const int top = a.y1 + lay_.list_y + i * (list_block_h_ + list_gap_);
+        draw_block(layer, i, a.x1, w, top + pad / 4, list_block_h_, BlockLine{2, xs, nullptr, v1},
+                   BlockLine{2, xs, nullptr, v2}, 0);
+    }
+}
+
+/* The tall Radar page's strip chart: the Graph's distance chart of the last 30 s, smaller, with "-30 s" and "now". */
+void RadarApp::draw_radar_chart(lv_layer_t *layer, const lv_area_t &a)
+{
+    const int cap = sz_.caption_px;
+    const int lh = lv_font_get_line_height(cp0_ui_font_px(cap));
+    const int pad = sz_.space_m;
+    const ChartScale s = chart_scale();
+    const int x0 = a.x1 + pad + s.axis_w, x1 = a.x2 - pad;
+    const int top = a.y1 + lay_.chart_y + lh + 2;
+    const int chart_h = lay_.chart_h - 2 * (lh + 2);
+    if (chart_h < 20 || x1 - x0 < 40) return;
+    text(layer, s.raw ? "Distance (mm), last 30 s" : "Distance (m), last 30 s", x0, top - lh - 2, cap, pal::kMuted);
+    draw_chart(layer, s, 0, x0, x1, top, chart_h);
+    text(layer, "-30 s", x0, top + chart_h + 2, cap, pal::kMuted);
+    text(layer, "now", x1 - text_w("now", cap), top + chart_h + 2, cap, pal::kMuted);
 }
 
 /* ------------------------------------------------------------------------------------------------ Table */
@@ -435,46 +513,51 @@ void RadarApp::draw_table(lv_layer_t *layer, const lv_area_t &a)
     const int cell_h = lh_cap + lh_body + 2;
     const int h = lv_area_get_height(&a);
     const bool per_cell = 3 * (2 * cell_h + pad + pad / 2) + pad <= h;
-    auto row_values = [&](int i, int yv, int line_gap, bool heads) {
-        const mmw::SlotState &s = slot(i);
-        const char *v[7] = {"-", "-", "-", "-", "-", "-", "-"};
-        if (s.active) values(s, v);
-        const std::uint32_t vc = s.active ? pal::kText : pal::kDim;
-        const int hy = heads ? lh_cap : 0;
-        for (int c = 0; c < 4; ++c) {
-            if (heads) text(layer, kHead[c], x0 + c * cell_w, yv, cap, pal::kMuted);
-            text(layer, v[c], x0 + c * cell_w, yv + hy, body, vc);
-        }
-        const int y2 = yv + hy + lh_body + line_gap;
-        for (int k = 0; k < 3; ++k) {
-            if (heads) text(layer, kHead[4 + k], xs2[k], y2, cap, pal::kMuted);
-            text(layer, v[4 + k], xs2[k], y2 + hy, body, vc);
-        }
-    };
+    const int xs1[4] = {x0, x0 + cell_w, x0 + 2 * cell_w, x0 + 3 * cell_w};
     if (!per_cell) {
-        for (int c = 0; c < 4; ++c) text(layer, kHead[c], x0 + c * cell_w, y, cap, pal::kMuted);
+        for (int c = 0; c < 4; ++c) text(layer, kHead[c], xs1[c], y, cap, pal::kMuted);
         for (int k = 0; k < 3; ++k) text(layer, kHead[4 + k], xs2[k], y + lh_cap, cap, pal::kMuted);
         y += 2 * lh_cap + pad / 2;
     }
     for (int i = 0; i < 3; ++i) {
         const mmw::SlotState &s = slot(i);
         const int block_h = per_cell ? 2 * cell_h + pad : 2 * lh_body + pad / 2 + 2;
-        rect(layer, a.x1 + pad / 2, y - pad / 4, w - pad, block_h, pal::kPanel, LV_OPA_COVER, 4);
-        disc(layer, a.x1 + pad + sz_.dot / 2, y + lh_body / 2, sz_.dot / 2, pal::kTarget[i], s.active ? LV_OPA_COVER : LV_OPA_30);
-        text(layer, fmt("T%d", i + 1), a.x1 + pad, y + lh_body, cap, s.active ? pal::kTarget[i] : pal::kDim);
-        row_values(i, y, per_cell ? 2 : 0, per_cell);
+        const char *v[7] = {"-", "-", "-", "-", "-", "-", "-"};
+        if (s.active) values(s, v);
+        draw_block(layer, i, a.x1, w, y, block_h, BlockLine{4, xs1, per_cell ? kHead : nullptr, v},
+                   BlockLine{3, xs2, per_cell ? kHead + 4 : nullptr, v + 4}, per_cell ? 2 : 0);
         y += block_h + pad / 2;
+    }
+}
+
+void RadarApp::draw_block(lv_layer_t *layer, int i, int x1, int w, int y, int block_h, const BlockLine &l1,
+                          const BlockLine &l2, int line_gap)
+{
+    const int body = sz_.body_px, cap = sz_.caption_px;
+    const int lh_body = lv_font_get_line_height(cp0_ui_font_px(body));
+    const int lh_cap = lv_font_get_line_height(cp0_ui_font_px(cap));
+    const int pad = sz_.space_m;
+    const bool active = slot(i).active;
+    rect(layer, x1 + pad / 2, y - pad / 4, w - pad, block_h, pal::kPanel, LV_OPA_COVER, 4);
+    disc(layer, x1 + pad + sz_.dot / 2, y + lh_body / 2, sz_.dot / 2, pal::kTarget[i], active ? LV_OPA_COVER : LV_OPA_30);
+    text(layer, fmt("T%d", i + 1), x1 + pad, y + lh_body, cap, active ? pal::kTarget[i] : pal::kDim);
+    const std::uint32_t vc = active ? pal::kText : pal::kDim;
+    int yv = y;
+    for (const BlockLine *l : {&l1, &l2}) {
+        const int hy = l->heads ? lh_cap : 0;
+        for (int c = 0; c < l->n; ++c) {
+            if (l->heads) text(layer, l->heads[c], l->xs[c], yv, cap, pal::kMuted);
+            text(layer, l->values[c], l->xs[c], yv + hy, body, vc);
+        }
+        yv += hy + lh_body + line_gap;
     }
 }
 
 /* ------------------------------------------------------------------------------------------------ Graph */
 
-void RadarApp::draw_graph(lv_layer_t *layer, const lv_area_t &a)
+RadarApp::ChartScale RadarApp::chart_scale()
 {
-    const int h = lv_area_get_height(&a);
     const int cap = sz_.caption_px;
-    const int lh = lv_font_get_line_height(cp0_ui_font_px(cap));
-    const int pad = sz_.space_m;
     const std::int64_t span = 30000, t_end = view_time(), t_start = t_end - span;
     const bool raw = settings_.units == mmw::UnitMode::MmCms;
 
@@ -500,53 +583,82 @@ void RadarApp::draw_graph(lv_layer_t *layer, const lv_area_t &a)
     const char *l_vtop = fmt("+%g", v_top_u);
     const char *l_vbot = fmt("-%g", v_top_u);
     const int axis_w = std::max({text_w(l_top, cap), text_w(l_vtop, cap), text_w(l_vbot, cap), text_w("0", cap)}) + 6;
-    const int x0 = a.x1 + pad + axis_w, x1 = a.x2 - pad;
+    ChartScale cs;
+    cs.span = span;
+    cs.t_end = t_end;
+    cs.t_start = t_start;
+    cs.raw = raw;
+    cs.d_top = d_top;
+    cs.v_top = v_top;
+    cs.l_top = l_top;
+    cs.l_vtop = l_vtop;
+    cs.l_vbot = l_vbot;
+    cs.axis_w = axis_w;
+    return cs;
+}
+
+void RadarApp::draw_chart(lv_layer_t *layer, const ChartScale &cs, int chart, int x0, int x1, int top, int chart_h)
+{
+    const int cap = sz_.caption_px;
+    const int lh = lv_font_get_line_height(cp0_ui_font_px(cap));
+    auto tx = [&](std::int64_t t) { return x0 + static_cast<int>((t - cs.t_start) * (x1 - x0) / cs.span); };
+    const int bottom = top + chart_h;
+    rect(layer, x0, top, x1 - x0, chart_h, pal::kPanel, LV_OPA_COVER);
+    /* grid: every 10 s, and the half / zero lines */
+    for (int k = 1; k < 3; ++k)
+        line(layer, tx(cs.t_start + k * 10000), top, tx(cs.t_start + k * 10000), bottom, 1, pal::kRing, LV_OPA_COVER);
+    const int mid = (top + bottom) / 2;
+    line(layer, x0, mid, x1, mid, 1, chart == 1 ? pal::kAxis : pal::kRing, LV_OPA_COVER);
+    if (chart == 0) {
+        text(layer, cs.l_top, x0 - text_w(cs.l_top, cap) - 4, top - lh / 2, cap, pal::kMuted);
+        text(layer, "0", x0 - text_w("0", cap) - 4, bottom - lh / 2, cap, pal::kMuted);
+    } else {
+        text(layer, cs.l_vtop, x0 - text_w(cs.l_vtop, cap) - 4, top - lh / 2, cap, pal::kMuted);
+        text(layer, "0", x0 - text_w("0", cap) - 4, mid - lh / 2, cap, pal::kMuted);
+        text(layer, cs.l_vbot, x0 - text_w(cs.l_vbot, cap) - 4, bottom - lh / 2, cap, pal::kMuted);
+    }
+    auto ty = [&](const mmw::HistorySample &s) {
+        double f;
+        if (chart == 0) f = std::clamp(s.distance_mm / cs.d_top, 0.0, 1.0);
+        else f = std::clamp(0.5 + 0.5 * s.speed_cm_s / cs.v_top, 0.0, 1.0);
+        return bottom - static_cast<int>(std::lround(f * chart_h));
+    };
+    for (int i = 0; i < 3; ++i) {
+        const mmw::SlotState &st = slot(i);
+        const mmw::HistorySample *prev = nullptr;
+        for (const mmw::HistorySample &s : st.history) {
+            if (s.t_ms < cs.t_start || s.t_ms > cs.t_end || !s.valid) {
+                prev = nullptr;
+                continue;
+            }
+            if (prev && s.t_ms - prev->t_ms <= 1000)
+                line(layer, tx(prev->t_ms), ty(*prev), tx(s.t_ms), ty(s), 2, pal::kTarget[i], LV_OPA_COVER);
+            else
+                disc(layer, tx(s.t_ms), ty(s), 1, pal::kTarget[i], LV_OPA_COVER);
+            prev = &s;
+        }
+    }
+}
+
+void RadarApp::draw_graph(lv_layer_t *layer, const lv_area_t &a)
+{
+    const int h = lv_area_get_height(&a);
+    const int cap = sz_.caption_px;
+    const int lh = lv_font_get_line_height(cp0_ui_font_px(cap));
+    const int pad = sz_.space_m;
+    const ChartScale cs = chart_scale();
+    const bool raw = cs.raw;
+    const int x0 = a.x1 + pad + cs.axis_w, x1 = a.x2 - pad;
     const int chart_h = (h - 2 * (lh + 2) - lh - 3 * pad) / 2;
     if (chart_h < 20 || x1 - x0 < 40) return;
 
-    auto tx = [&](std::int64_t t) { return x0 + static_cast<int>((t - t_start) * (x1 - x0) / span); };
-
     for (int chart = 0; chart < 2; ++chart) {
         const int top = a.y1 + pad + chart * (chart_h + lh + 2 + pad) + lh + 2;
-        const int bottom = top + chart_h;
         const char *title = chart == 0 ? (raw ? "Distance (mm)" : "Distance (m)")
                                        : (raw ? "Speed (cm/s, minus = closer)" : "Speed (km/h, minus = closer)");
         text(layer, title, x0, top - lh - 2, cap, pal::kMuted);
         if (chart == 0 && paused_) text(layer, "PAUSED", x1 - text_w("PAUSED", cap), top - lh - 2, cap, pal::kWarn);
-        rect(layer, x0, top, x1 - x0, chart_h, pal::kPanel, LV_OPA_COVER);
-        /* grid: every 10 s, and the half / zero lines */
-        for (int k = 1; k < 3; ++k) line(layer, tx(t_start + k * 10000), top, tx(t_start + k * 10000), bottom, 1, pal::kRing, LV_OPA_COVER);
-        const int mid = (top + bottom) / 2;
-        line(layer, x0, mid, x1, mid, 1, chart == 1 ? pal::kAxis : pal::kRing, LV_OPA_COVER);
-        if (chart == 0) {
-            text(layer, l_top, x0 - text_w(l_top, cap) - 4, top - lh / 2, cap, pal::kMuted);
-            text(layer, "0", x0 - text_w("0", cap) - 4, bottom - lh / 2, cap, pal::kMuted);
-        } else {
-            text(layer, l_vtop, x0 - text_w(l_vtop, cap) - 4, top - lh / 2, cap, pal::kMuted);
-            text(layer, "0", x0 - text_w("0", cap) - 4, mid - lh / 2, cap, pal::kMuted);
-            text(layer, l_vbot, x0 - text_w(l_vbot, cap) - 4, bottom - lh / 2, cap, pal::kMuted);
-        }
-        auto ty = [&](const mmw::HistorySample &s) {
-            double f;
-            if (chart == 0) f = std::clamp(s.distance_mm / d_top, 0.0, 1.0);
-            else f = std::clamp(0.5 + 0.5 * s.speed_cm_s / v_top, 0.0, 1.0);
-            return bottom - static_cast<int>(std::lround(f * chart_h));
-        };
-        for (int i = 0; i < 3; ++i) {
-            const mmw::SlotState &st = slot(i);
-            const mmw::HistorySample *prev = nullptr;
-            for (const mmw::HistorySample &s : st.history) {
-                if (s.t_ms < t_start || s.t_ms > t_end || !s.valid) {
-                    prev = nullptr;
-                    continue;
-                }
-                if (prev && s.t_ms - prev->t_ms <= 1000)
-                    line(layer, tx(prev->t_ms), ty(*prev), tx(s.t_ms), ty(s), 2, pal::kTarget[i], LV_OPA_COVER);
-                else
-                    disc(layer, tx(s.t_ms), ty(s), 1, pal::kTarget[i], LV_OPA_COVER);
-                prev = &s;
-            }
-        }
+        draw_chart(layer, cs, chart, x0, x1, top, chart_h);
     }
     /* the time axis under the second chart, and the legend */
     const int ty0 = a.y1 + pad + 2 * (chart_h + lh + 2) + pad + 2;

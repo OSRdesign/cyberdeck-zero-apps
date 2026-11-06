@@ -152,6 +152,7 @@ RadarApp::RadarApp(lv_obj_t *screen) : screen_(screen)
     build_chips();
     build_tabs();
 
+    compute_layout();
     /* the link: a scripted port layer for the scenes and the demonstration, else the real ports */
     const char *demo = std::getenv("MMWAVE_DEMO");
     if (demo && *demo) sys_ = std::make_unique<mmw::DemoSys>(demo, [] { return mono_ms(); });
@@ -163,6 +164,10 @@ RadarApp::RadarApp(lv_obj_t *screen) : screen_(screen)
                  narrow ? " narrow portrait" : "", demo && *demo ? (std::string(" demo ") + demo).c_str() : "",
                  remembered.empty() ? "none" : remembered.port_id.c_str());
 
+    if (lay_.tall)
+        log_line("tall radar page: view %dx%d, plot y %d h %d, list y %d h %d (3 x %d + gaps %d), chart y %d h %d", w_,
+                 view_h_, lay_.plot_y, lay_.plot_h, lay_.list_y, lay_.list_h, list_block_h_, list_gap_, lay_.chart_y,
+                 lay_.chart_h);
     label_w_max_ = std::max(text_w("T3 88.88 m  88.8 km/h", sz_.caption_px), text_w("T3 8888 mm  888 cm/s", sz_.caption_px)) + 6;
     update_tabs();
     update_chips();
@@ -376,6 +381,20 @@ void RadarApp::build_tabs()
     lv_obj_set_style_bg_color(tabbar_, lv_color_hex(0x111111), 0);
     lv_obj_set_style_bg_opa(tabbar_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_side(tabbar_, LV_BORDER_SIDE_TOP, 0);
+/* The Radar page's split (core/view.hpp radar_layout): the list's block is the Table's two-line block without heads
+ * (the values carry their units), the chip band is the chips' row and a small gap, the strip chart needs 120 px
+ * (its title, a chart of at least 60 px and its time axis: 480x800 has 136 px under the list). */
+void RadarApp::compute_layout()
+{
+    const int pad = sz_.space_m;
+    list_block_h_ = 2 * lv_font_get_line_height(cp0_ui_font_px(sz_.body_px)) + pad / 2 + 2;
+    list_gap_ = pad / 2;
+    lv_obj_update_layout(chip_);
+    const int band = sz_.space_s + lv_obj_get_height(chip_) + sz_.space_s;
+    lay_ = mmw::radar_layout(w_, view_h_, band, std::max(sz_.space_m, sz_.dot), std::max(sz_.space_m, sz_.dot / 2 + 4),
+                             list_block_h_, list_gap_, 120);
+}
+
     lv_obj_set_style_border_color(tabbar_, lv_color_hex(pal::kBar), 0);
     lv_obj_set_style_border_width(tabbar_, 1, 0);
 
@@ -606,6 +625,10 @@ void RadarApp::tick()
         dirty_ = false;
         last_draw_ = now_;
         if (tab_ == Tab::Radar && bg_buf_) render_background();
+        if (tab_ == Tab::Radar && lay_.chart_h > 0 && history != seen_history_) {
+            chart_dirty_ = true;
+            dirty_ = true;
+        }
         if (!lv_obj_has_flag(view_, LV_OBJ_FLAG_HIDDEN)) invalidate_view();
     }
     if (tab_ == Tab::Radar && now_ - last_chip_ >= 500) {

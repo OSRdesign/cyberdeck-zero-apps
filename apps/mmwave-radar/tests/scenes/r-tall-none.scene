@@ -1,0 +1,11 @@
+title mmWave Radar: tall size without a radar: the not-found page as before (no list)
+sizes 480x800
+env MMWAVE_DEMO none
+env MMWAVE_TEST_CONFIG 1
+
+wait 2500
+shot tall-notfound
+check tall-notfound
+expect text "No radar found"
+expect text "Rescan"
+expect noquit

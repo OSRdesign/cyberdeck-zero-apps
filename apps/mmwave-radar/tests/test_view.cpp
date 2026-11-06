@@ -165,6 +165,67 @@ void test_geometry()
     CHECK(arrow_length(80, 12) > arrow_length(40, 12));
 }
 
+/* The Radar page's split: tall on 480x800 (the Pi 3A+ DSI) and 320x480 at the board's density, classic on 480x640, at
+ * 320x480 with an 80 px tab strip and on every landscape and square size. The numbers are the app's (its start log:
+ * view, chip band, pads, list block, gap) at the harness densities. Nothing leaves the view or overlaps. */
+void test_radar_layout()
+{
+    CHECK_EQ(plot_full_width_h(480, 18, 16), 291);
+    CHECK_EQ(plot_full_width_h(320, 12, 10), 193);
+    /* 480x800: view 480x684 (header 56, tabs 60), band 41, pads 18/16, list 3 x 64 + 8 */
+    RadarLayout l = radar_layout(480, 684, 41, 18, 16, 64, 8, 120);
+    CHECK(l.tall);
+    CHECK_EQ(l.plot_y, 41);
+    CHECK_EQ(l.plot_h, 291);
+    CHECK_EQ(l.list_y, 340);
+    CHECK_EQ(l.list_h, 208);
+    CHECK_EQ(l.chart_y, 556);
+    CHECK_EQ(l.chart_h, 120);
+    /* the wedge fills the width in its rectangle, the sensor at its bottom centre */
+    PlotGeom g = plot_geom(0, l.plot_y, 480, l.plot_h, 4, Orientation::Normal, 18, 16);
+    CHECK_EQ(g.sx, 240);
+    CHECK_EQ(g.sy, l.plot_y + l.plot_h - 1 - 16);
+    CHECK(std::fabs(4000 * std::sin(kFovDeg * M_PI / 180.0) * g.px_per_mm - (480 - 36) / 2.0) < 0.5);
+    CHECK(g.sy - 4000 * g.px_per_mm >= l.plot_y + 18 - 1);
+    /* 320x480 on the board (6.1 px/mm): view 320x380 (tabs 44), band 30, pads 12/10, list 3 x 43 + 5: no chart */
+    l = radar_layout(320, 380, 30, 12, 10, 43, 5, 120);
+    CHECK(l.tall);
+    CHECK_EQ(l.plot_y, 30);
+    CHECK_EQ(l.plot_h, 193);
+    CHECK_EQ(l.list_y, 228);
+    CHECK_EQ(l.list_h, 139);
+    CHECK_EQ(l.chart_h, 0);
+    /* classic: 320x480 at 11.3 px/mm (tabs 80), 480x640, landscape and square */
+    for (const RadarLayout &c : {radar_layout(320, 344, 30, 12, 10, 43, 5, 120), radar_layout(480, 521, 41, 18, 16, 64, 8, 120),
+                                 radar_layout(480, 220, 41, 18, 16, 64, 8, 120), radar_layout(640, 348, 41, 18, 16, 64, 8, 120),
+                                 radar_layout(800, 360, 41, 18, 16, 64, 8, 120), radar_layout(720, 600, 41, 18, 16, 64, 8, 120),
+                                 radar_layout(1280, 680, 41, 18, 16, 64, 8, 120)}) {
+        CHECK(!c.tall);
+        CHECK_EQ(c.plot_y, 0);
+        CHECK_EQ(c.list_h, 0);
+        CHECK_EQ(c.chart_h, 0);
+    }
+    CHECK_EQ(radar_layout(480, 521, 41, 18, 16, 64, 8, 120).plot_h, 521);
+    /* every portrait size: the parts stack inside the view, the plot under the band, nothing overlaps */
+    int bad = 0, tall = 0;
+    for (int w = 300; w <= 900; w += 20)
+        for (int h = w + 1; h <= 1400; h += 7) {
+            const RadarLayout t = radar_layout(w, h, 41, 18, 16, 64, 8, 120);
+            if (!t.tall) {
+                bad += t.plot_y != 0 || t.plot_h != h || t.list_h || t.chart_h;
+                continue;
+            }
+            ++tall;
+            bad += t.plot_y != 41 || t.plot_y + t.plot_h > t.list_y || t.list_y + t.list_h > h;
+            if (t.chart_h) bad += t.chart_y < t.list_y + t.list_h || t.chart_y + t.chart_h > h || t.chart_h < 120 - 16;
+            else bad += h - (t.list_y + t.list_h) >= 120;
+            const PlotGeom pg = plot_geom(0, t.plot_y, w, t.plot_h, 6, Orientation::Normal, 18, 16);
+            bad += pg.sy - static_cast<int>(6000 * pg.px_per_mm) < t.plot_y + 18 - 1; /* the wedge's top in its rectangle */
+        }
+    CHECK_EQ(bad, 0);
+    CHECK(tall > 100);
+}
+
 void test_labels()
 {
     const PlotGeom g = plot_geom(0, 0, 480, 236, 4, Orientation::Normal, 12, 10);
@@ -302,6 +363,7 @@ void test_view()
     test_files();
     test_range();
     test_geometry();
+    test_radar_layout();
     test_labels();
     test_demo();
 }

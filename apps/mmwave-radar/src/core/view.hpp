@@ -41,6 +41,24 @@ struct PlotGeom {
  * near_pad px between the sensor and its edge): Normal and Mirror put the sensor at the bottom centre, Rotate180 at
  * the top centre. */
 PlotGeom plot_geom(int x, int y, int w, int h, int range_m, Orientation o, int pad, int near_pad);
+/* The height a plot rectangle w px wide needs to show the wedge at full width (plot_geom then is width-limited). */
+int plot_full_width_h(int w, int pad, int near_pad);
+
+/* The Radar page's split of the view (w x h px, under the header, over the tab strip).
+ * Classic (every landscape canvas, and portrait canvases without the room): the plot takes the whole view.
+ * Tall: the wedge laid out at full width leaves under it the room of the compact target list (three blocks of
+ * list_block_h px, list_gap px apart, list_gap px above it). Then the plot is top-aligned under the chip band
+ * (top_band px), exactly plot_full_width_h high, the list follows; when at least chart_min_h px are still free under
+ * the list, a strip chart takes them (less list_gap above it and list_gap kept free at the bottom). */
+struct RadarLayout {
+    bool tall = false;
+    int plot_y = 0, plot_h = 0;     /* the plot's rectangle, full width */
+    int list_y = 0, list_h = 0;     /* tall: the target list (0 high when classic) */
+    int chart_y = 0, chart_h = 0;   /* tall: the strip chart with its title and time axis (0 high: none) */
+};
+RadarLayout radar_layout(int w, int h, int top_band, int pad, int near_pad, int list_block_h, int list_gap,
+                         int chart_min_h);
+
 /* The screen pixel of a point in sensor mm. */
 void plot_point(const PlotGeom &g, int x_mm, int y_mm, int &px, int &py);
 /* True when the pixel lies inside the plot's rectangle. */
