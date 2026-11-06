@@ -13,6 +13,7 @@
  *           $MMWAVE_DEMO_FILE), looped, starting 3 s in
  *   one     ttyUSB0 (CH340): one person walking a slow loop (generated)
  *   three   ttyUSB0 (CH340): three people (generated)
+ *   held    as three, but T2 is a stale target: byte-identical values in every frame (the LD2452's quirk)
  *   lost    as one, and the stream stops 1.5 s after the port was first opened
  *   none    ttyUSB0 (CP2102): a GPS receiver (NMEA); ttyACM0 (Pico): silent
  *   busy    ttyUSB0 (CH340): held by another app
@@ -56,7 +57,7 @@ public:
     const std::string &scenario() const { return scenario_; }
 
 private:
-    enum class Kind { Walk, One, Three, Gps, Silent };
+    enum class Kind { Walk, One, Three, Held, Gps, Silent };
     struct Port {
         PortMeta meta;
         Kind kind = Kind::Silent;

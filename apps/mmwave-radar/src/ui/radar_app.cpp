@@ -48,7 +48,8 @@ std::int64_t mono_ms()
 }
 
 const char *const kTabNames[4] = {"Radar", "Table", "Graph", "Sensor"};
-const char *const kSettingNames[4] = {"Units", "Orientation", "Range", "Trails"};
+constexpr int kSettingCount = 5;
+const char *const kSettingNames[kSettingCount] = {"Units", "Orientation", "Range", "Trails", "Hide held targets"};
 
 std::uint32_t state_rgb(mmw::LinkState s)
 {
@@ -169,7 +170,8 @@ RadarApp::RadarApp(lv_obj_t *screen) : screen_(screen)
                  view_h_, lay_.plot_y, lay_.plot_h, lay_.list_y, lay_.list_h, list_block_h_, list_gap_, lay_.chart_y,
                  lay_.chart_h);
 
-    label_w_max_ = std::max(text_w("T3 88.88 m  88.8 km/h", sz_.caption_px), text_w("T3 8888 mm  888 cm/s", sz_.caption_px)) + 6;
+    label_w_max_ = std::max(text_w("T3 88.88 m  88.8 km/h", sz_.caption_px), text_w("T3 8888 mm  888 cm/s", sz_.caption_px)) + 6 +
+                    text_w(" held", sz_.caption_px);
     update_tabs();
     update_chips();
     update_view_visibility();
@@ -380,6 +382,10 @@ void RadarApp::build_chips()
     lv_obj_set_style_pad_hor(paused_chip_, sz_.space_s + 2, 0);
     lv_obj_set_style_pad_ver(paused_chip_, 2, 0);
     lv_obj_add_flag(paused_chip_, LV_OBJ_FLAG_HIDDEN);
+    /* "N held" (muted): shown only while "Hide held targets" is on and some target is held, so nothing is hidden silently */
+    held_chip_ = make_label(chip_, sz_.caption_px, pal::kMuted, false);
+    lv_obj_set_style_pad_hor(held_chip_, sz_.space_s, 0);
+    lv_obj_add_flag(held_chip_, LV_OBJ_FLAG_HIDDEN);
 }
 
 /* The Radar page's split (core/view.hpp radar_layout): the list's block is the Table's two-line block without heads
@@ -525,7 +531,7 @@ void RadarApp::build_sensor()
 
     h = make_heading(sensor_, "SETTINGS");
     lv_obj_set_width(h, lv_pct(100));
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < kSettingCount; ++i) {
         SettingRow &r = settings_rows_[i];
         r.row = lv_obj_create(sensor_);
         plain(r.row);
@@ -721,6 +727,22 @@ void RadarApp::update_chips()
     lv_obj_set_style_bg_color(chip_dot_, lv_color_hex(state_rgb(s)), 0);
     if (paused_) lv_obj_remove_flag(paused_chip_, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_add_flag(paused_chip_, LV_OBJ_FLAG_HIDDEN);
+    int held = 0;
+    if (settings_.hide_held) {
+        for (int i = 0; i < 3; ++i) held += mmw::held_count(&slot(i), 1);
+    }
+    if (held > 0) {
+        char hb[24];
+        std::snprintf(hb, sizeof(hb), "%d held", held);
+        if (held_shown_ != hb) {
+            held_shown_ = hb;
+            lv_label_set_text(held_chip_, hb);
+        }
+        lv_obj_remove_flag(held_chip_, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        held_shown_.clear();
+        lv_obj_add_flag(held_chip_, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 void RadarApp::update_notfound(bool force)
@@ -798,9 +820,11 @@ void RadarApp::update_sensor(bool force)
         lv_label_set_text(si_reports_, reports.c_str());
     }
 
-    const std::string values[4] = {mmw::units_label(settings_.units), mmw::orientation_label(settings_.orientation),
-                                   mmw::range_label(settings_.range_m), settings_.trails ? "On" : "Off"};
-    for (int i = 0; i < 4; ++i) {
+    const std::string values[kSettingCount] = {mmw::units_label(settings_.units),
+                                               mmw::orientation_label(settings_.orientation),
+                                               mmw::range_label(settings_.range_m), settings_.trails ? "On" : "Off",
+                                               settings_.hide_held ? "On" : "Off"};
+    for (int i = 0; i < kSettingCount; ++i) {
         set_text_if(settings_rows_[i].value, values[i]);
         lv_obj_set_style_bg_opa(settings_rows_[i].row, i == setting_sel_ ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
     }
@@ -860,17 +884,19 @@ void RadarApp::apply_setting(int index)
         if (settings_.range_m) auto_range_m_ = settings_.range_m;
         break;
     case 3: settings_.trails = !settings_.trails; break;
+    case 4: settings_.hide_held = !settings_.hide_held; break;
     default: return;
     }
     save_settings();
     update_sensor(true);
+    update_chips();
     dirty_ = true;
     full_redraw_ = true;
 }
 
 void RadarApp::select_setting(int index)
 {
-    setting_sel_ = std::clamp(index, 0, 3);
+    setting_sel_ = std::clamp(index, 0, kSettingCount - 1);
     update_sensor(true);
     lv_obj_scroll_to_view(settings_rows_[setting_sel_].row, LV_ANIM_OFF);
 }
@@ -915,7 +941,7 @@ void RadarApp::on_key(std::uint32_t key)
     case LV_KEY_LEFT: set_tab(static_cast<Tab>((static_cast<int>(tab_) + 3) % 4)); break;
     case LV_KEY_RIGHT: set_tab(static_cast<Tab>((static_cast<int>(tab_) + 1) % 4)); break;
     case LV_KEY_UP:
-        if (tab_ == Tab::Sensor) select_setting(setting_sel_ < 0 ? 3 : setting_sel_ - 1);
+        if (tab_ == Tab::Sensor) select_setting(setting_sel_ < 0 ? kSettingCount - 1 : setting_sel_ - 1);
         break;
     case LV_KEY_DOWN:
         if (tab_ == Tab::Sensor) select_setting(setting_sel_ < 0 ? 0 : setting_sel_ + 1);

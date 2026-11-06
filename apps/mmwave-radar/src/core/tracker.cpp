@@ -22,8 +22,20 @@ void Tracker::update(const Frame &f, std::int64_t t_ms)
     for (int i = 0; i < 3; ++i) {
         SlotState &s = slots_[i];
         const Target &t = f.target[i];
+        const bool was_present = s.present_now;
         s.present_now = t.present;
-        if (!t.present) continue;
+        if (!t.present) {
+            s.held = false; /* gone from the frame: the count restarts when it comes back */
+            continue;
+        }
+        const bool same = s.active && was_present && s.last.x_mm == t.x_mm && s.last.y_mm == t.y_mm &&
+                          s.last.speed_cm_s == t.speed_cm_s && s.last.resolution_mm == t.resolution_mm;
+        if (!same) {
+            s.same_since_ms = t_ms;
+            s.held = false;
+        } else if (t_ms - s.same_since_ms >= kHeldMs) {
+            s.held = true;
+        }
         if (!s.active) {
             s.active = true;
             s.id = next_id_++;
@@ -45,10 +57,21 @@ void Tracker::update(const Frame &f, std::int64_t t_ms)
     sample(t_ms);
 }
 
+int Tracker::held_count() const
+{
+    int n = 0;
+    for (const SlotState &s : slots_)
+        if (s.active && s.present_now && s.held) ++n;
+    return n;
+}
+
 void Tracker::tick(std::int64_t t_ms)
 {
     if (frames_ > 0 && t_ms - last_frame_ms_ >= cfg_.drop_ms)
-        for (SlotState &s : slots_) s.present_now = false; /* the frames stopped */
+        for (SlotState &s : slots_) {
+            s.present_now = false; /* the frames stopped */
+            s.held = false;
+        }
     expire(t_ms);
     sample(t_ms);
 }
@@ -59,6 +82,7 @@ void Tracker::expire(std::int64_t t_ms)
         if (s.active && t_ms - s.last_seen_ms >= cfg_.drop_ms) {
             s.present_now = false;
             s.active = false;
+            s.held = false;
             s.trail.clear();
         }
         /* a slot seen in an older frame is not "now" any more once time moved on past drop */

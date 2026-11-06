@@ -224,7 +224,7 @@ void RadarApp::render_background()
 bool RadarApp::target_area(int i, const mmw::PlotGeom &g, lv_area_t &out) const
 {
     const mmw::SlotState &s = slot(i);
-    if (!s.active) return false;
+    if (!mmw::slot_shown(s, settings_.hide_held)) return false;
     int px, py;
     mmw::plot_point(g, s.last.x_mm, s.last.y_mm, px, py);
     const int reach = sz_.dot / 2 + 4 * sz_.dot + sz_.dot; /* circle, the longest arrow, its head */
@@ -302,9 +302,10 @@ void RadarApp::draw_radar(lv_layer_t *layer, const lv_area_t &a)
     int n_pending = 0;
     for (int i = 0; i < 3; ++i) {
         const mmw::SlotState &s = slot(i);
-        if (!s.active) continue;
+        if (!mmw::slot_shown(s, settings_.hide_held)) continue;
         const std::uint32_t col = pal::kTarget[i];
-        if (settings_.trails && s.trail.size() > 1) {
+        /* a held (stale) target: dimmed, no trail, no arrow */
+        if (settings_.trails && !s.held && s.trail.size() > 1) {
             /* one segment per 150 ms at most (about 13 for the 2 s trail; a line is the costly primitive on a
              * Zero 2 W), the newest point always, segments under 2 px merged into the next */
             int px0 = 0, py0 = 0;
@@ -331,7 +332,7 @@ void RadarApp::draw_radar(lv_layer_t *layer, const lv_area_t &a)
         mmw::plot_point(g, s.last.x_mm, s.last.y_mm, px, py);
         if (!mmw::plot_contains(g, px, py)) continue; /* beyond a fixed range: not drawn outside the plot */
         /* the arrow along the movement: the trail's last 0.4 s, else radial by the speed's sign */
-        const int len = mmw::arrow_length(s.speed_smooth_cm_s, sz_.dot);
+        const int len = s.held ? 0 : mmw::arrow_length(s.speed_smooth_cm_s, sz_.dot);
         if (len > 0) {
             double dx = 0, dy = 0;
             if (s.trail.size() > 1) {
@@ -371,7 +372,7 @@ void RadarApp::draw_radar(lv_layer_t *layer, const lv_area_t &a)
             t.opa = LV_OPA_COVER;
             lv_draw_triangle(layer, &t);
         }
-        disc(layer, px, py, dot_r, col, s.present_now ? LV_OPA_COVER : LV_OPA_50);
+        disc(layer, px, py, dot_r, col, s.held ? LV_OPA_40 : s.present_now ? LV_OPA_COVER : LV_OPA_50);
         pending[n_pending++] = {px, py, i, s.present_now};
     }
     /* the chips' corner is kept free of labels */
@@ -389,7 +390,9 @@ void RadarApp::draw_radar(lv_layer_t *layer, const lv_area_t &a)
                                 ? fmt("T%d %d mm  %d cm/s", p.slot + 1, s.last.distance_mm, speed)
                                 : fmt("T%d %.2f m  %.1f km/h", p.slot + 1, mmw::mm_to_m(s.last.distance_mm),
                                       mmw::cm_s_to_km_h(speed));
-        const int lw = text_w(label, cap) + 6, lh = lv_font_get_line_height(cp0_ui_font_px(cap)) + 2;
+        const bool held = s.held;
+        const int held_w = held ? text_w(" held", cap) : 0;
+        const int lw = text_w(label, cap) + held_w + 6, lh = lv_font_get_line_height(cp0_ui_font_px(cap)) + 2;
         mmw::Box all[6];
         int n = 0;
         for (int j = 0; j < n_taken; ++j) all[n++] = taken[j];
@@ -397,7 +400,12 @@ void RadarApp::draw_radar(lv_layer_t *layer, const lv_area_t &a)
         const mmw::Box b = mmw::place_label(g, p.px, p.py, dot_r, lw, lh, all, n);
         placed[k] = b;
         rect(layer, b.x, b.y, b.w, b.h, 0x000000, LV_OPA_60, 3);
-        text(layer, label, b.x + 3, b.y + 1, cap, pal::kTarget[p.slot], p.live ? LV_OPA_COVER : LV_OPA_70);
+        if (held) { /* the readout dimmed, then "held" in the muted colour */
+            text(layer, label, b.x + 3, b.y + 1, cap, pal::kTarget[p.slot], LV_OPA_60);
+            text(layer, " held", b.x + 3 + text_w(label, cap), b.y + 1, cap, pal::kMuted);
+        } else {
+            text(layer, label, b.x + 3, b.y + 1, cap, pal::kTarget[p.slot], p.live ? LV_OPA_COVER : LV_OPA_70);
+        }
     }
     if (lay_.tall) {
         draw_radar_list(layer, a);
@@ -418,11 +426,11 @@ void RadarApp::draw_radar_list(lv_layer_t *layer, const lv_area_t &a)
     for (int i = 0; i < 3; ++i) {
         const mmw::SlotState &s = slot(i);
         const char *v1[2] = {"-", "-"}, *v2[2] = {"-", "-"};
-        if (s.active) {
+        if (mmw::slot_shown(s, settings_.hide_held)) {
             const double speed = std::fabs(s.speed_smooth_cm_s);
             v1[0] = raw ? fmt("%d mm", s.last.distance_mm) : fmt("%.2f m", mmw::mm_to_m(s.last.distance_mm));
             v1[1] = fmt("%+.0f deg", s.last.angle_deg);
-            v2[0] = raw ? fmt("%.0f cm/s", speed) : fmt("%.1f km/h", mmw::cm_s_to_km_h(speed));
+            v2[0] = s.held ? "held" : raw ? fmt("%.0f cm/s", speed) : fmt("%.1f km/h", mmw::cm_s_to_km_h(speed));
             v2[1] = direction_text(s.last.direction);
         }
         const int top = a.y1 + lay_.list_y + i * (list_block_h_ + list_gap_);
@@ -475,7 +483,7 @@ void RadarApp::draw_table(lv_layer_t *layer, const lv_area_t &a)
         out[1] = fmt("%d", t.y_mm);
         out[2] = fmt("%d", t.distance_mm);
         out[3] = fmt("%+.0f", t.angle_deg);
-        out[4] = fmt("%d", t.speed_cm_s);
+        out[4] = s.held ? "held" : fmt("%d", t.speed_cm_s);
         out[5] = direction_text(t.direction);
         out[6] = fmt("%d", t.resolution_mm);
     };
@@ -489,14 +497,16 @@ void RadarApp::draw_table(lv_layer_t *layer, const lv_area_t &a)
         for (int i = 0; i < 3; ++i) {
             const mmw::SlotState &s = slot(i);
             const int row_h = lh_body + pad;
+            const bool shown = mmw::slot_shown(s, settings_.hide_held);
             rect(layer, a.x1 + pad / 2, y - pad / 4, w - pad, row_h, pal::kPanel, i % 2 ? LV_OPA_TRANSP : LV_OPA_COVER, 4);
-            disc(layer, a.x1 + pad + sz_.dot / 2, y + lh_body / 2, sz_.dot / 2, pal::kTarget[i], s.active ? LV_OPA_COVER : LV_OPA_30);
-            text(layer, fmt("T%d", i + 1), a.x1 + pad + sz_.dot + 4, y, cap, s.active ? pal::kTarget[i] : pal::kDim);
+            disc(layer, a.x1 + pad + sz_.dot / 2, y + lh_body / 2, sz_.dot / 2, pal::kTarget[i],
+                 !shown ? LV_OPA_30 : s.held ? LV_OPA_40 : LV_OPA_COVER);
+            text(layer, fmt("T%d", i + 1), a.x1 + pad + sz_.dot + 4, y, cap, shown ? pal::kTarget[i] : pal::kDim);
             const char *v[7] = {"-", "-", "-", "-", "-", "-", "-"};
-            if (s.active) values(s, v);
+            if (shown) values(s, v);
             x = a.x1 + pad + wide_col;
             for (int c = 0; c < 7; ++c) {
-                text(layer, v[c], x, y, body, s.active ? pal::kText : pal::kDim);
+                text(layer, v[c], x, y, body, !shown ? pal::kDim : s.held ? pal::kMuted : pal::kText);
                 x += col_w[c];
             }
             y += row_h + pad / 2;
@@ -523,7 +533,7 @@ void RadarApp::draw_table(lv_layer_t *layer, const lv_area_t &a)
         const mmw::SlotState &s = slot(i);
         const int block_h = per_cell ? 2 * cell_h + pad : 2 * lh_body + pad / 2 + 2;
         const char *v[7] = {"-", "-", "-", "-", "-", "-", "-"};
-        if (s.active) values(s, v);
+        if (mmw::slot_shown(s, settings_.hide_held)) values(s, v);
         draw_block(layer, i, a.x1, w, y, block_h, BlockLine{4, xs1, per_cell ? kHead : nullptr, v},
                    BlockLine{3, xs2, per_cell ? kHead + 4 : nullptr, v + 4}, per_cell ? 2 : 0);
         y += block_h + pad / 2;
@@ -537,11 +547,13 @@ void RadarApp::draw_block(lv_layer_t *layer, int i, int x1, int w, int y, int bl
     const int lh_body = lv_font_get_line_height(cp0_ui_font_px(body));
     const int lh_cap = lv_font_get_line_height(cp0_ui_font_px(cap));
     const int pad = sz_.space_m;
-    const bool active = slot(i).active;
+    const bool active = mmw::slot_shown(slot(i), settings_.hide_held);
+    const bool held = active && slot(i).held;
     rect(layer, x1 + pad / 2, y - pad / 4, w - pad, block_h, pal::kPanel, LV_OPA_COVER, 4);
-    disc(layer, x1 + pad + sz_.dot / 2, y + lh_body / 2, sz_.dot / 2, pal::kTarget[i], active ? LV_OPA_COVER : LV_OPA_30);
+    disc(layer, x1 + pad + sz_.dot / 2, y + lh_body / 2, sz_.dot / 2, pal::kTarget[i],
+         !active ? LV_OPA_30 : held ? LV_OPA_40 : LV_OPA_COVER);
     text(layer, fmt("T%d", i + 1), x1 + pad, y + lh_body, cap, active ? pal::kTarget[i] : pal::kDim);
-    const std::uint32_t vc = active ? pal::kText : pal::kDim;
+    const std::uint32_t vc = !active ? pal::kDim : held ? pal::kMuted : pal::kText;
     int yv = y;
     for (const BlockLine *l : {&l1, &l2}) {
         const int hy = l->heads ? lh_cap : 0;
@@ -625,6 +637,7 @@ void RadarApp::draw_chart(lv_layer_t *layer, const ChartScale &cs, int chart, in
     };
     for (int i = 0; i < 3; ++i) {
         const mmw::SlotState &st = slot(i);
+        if (settings_.hide_held && st.held) continue; /* a hidden held target is not in the charts either */
         const mmw::HistorySample *prev = nullptr;
         for (const mmw::HistorySample &s : st.history) {
             if (s.t_ms < cs.t_start || s.t_ms > cs.t_end || !s.valid) {

@@ -30,6 +30,8 @@ std::string diag_line(const Link &link, Ms now)
                            " T%d[act=%d now=%d x=%d y=%d v=%d id=%u]", i + 1, t.active ? 1 : 0, t.present_now ? 1 : 0,
                            t.last.x_mm, t.last.y_mm, t.last.speed_cm_s, t.id);
     }
+    if (n > 0 && n < static_cast<int>(sizeof(b)))
+        std::snprintf(b + n, sizeof(b) - static_cast<std::size_t>(n), " held=%d", link.tracker().held_count());
     return b;
 }
 

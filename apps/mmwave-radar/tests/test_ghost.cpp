@@ -112,6 +112,7 @@ void diag_text()
     const std::string l = diag_line(link, sys.now_ms);
     CHECK(l.find("state=Found port=ttyUSB0 baud=9600") != std::string::npos);
     CHECK(l.find("T1[act=") != std::string::npos && l.find("T3[act=") != std::string::npos);
+    CHECK(l.find(" held=") != std::string::npos);
     CHECK(extra.find("target-frame 1 aaff0300") != std::string::npos);
     CHECK(extra.find("target-frame 3 aaff0300") != std::string::npos);
     CHECK(extra.find("target-frame 4") == std::string::npos);
@@ -224,6 +225,10 @@ void diag_counts_link()
         CHECK_EQ(r.window_nonempty + c.nonempty, c.total_nonempty);
         CHECK_EQ(r.window_same + c.same, c.total_same);
         CHECK(r.lines.find(" empty=0 nonempty=19 same_as_prev=19 ") != std::string::npos);
+        /* the stale target: live in the first seconds, held=1 from 3 s of identical frames, at the end of the line */
+        CHECK(r.lines.find("T3[act=0 now=0 x=0 y=0 v=0 id=0] held=0 empty=") != std::string::npos);
+        CHECK(r.lines.find("T3[act=0 now=0 x=0 y=0 v=0 id=0] held=1 empty=") != std::string::npos);
+        CHECK(r.lines.rfind(" held=1 empty=") > r.lines.find(" held=0 empty="));
         CHECK_EQ(r.hex_lines, 2); /* at 10 s and 20 s */
         std::string ahex;
         for (unsigned char v : a) {

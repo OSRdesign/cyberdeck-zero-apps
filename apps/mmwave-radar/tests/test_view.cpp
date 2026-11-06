@@ -26,7 +26,8 @@ void test_settings()
     CHECK(d.orientation == Orientation::Normal);
     CHECK_EQ(d.range_m, 0);
     CHECK(d.trails);
-    CHECK_EQ(serialize_settings(d), "units=metres\norientation=normal\nrange=auto\ntrails=on\n");
+    CHECK(!d.hide_held);
+    CHECK_EQ(serialize_settings(d), "units=metres\norientation=normal\nrange=auto\ntrails=on\nhide_held=off\n");
     Settings s;
     s.units = UnitMode::MmCms;
     s.orientation = Orientation::Rotate180;
@@ -37,6 +38,15 @@ void test_settings()
     CHECK(r.orientation == Orientation::Rotate180);
     CHECK_EQ(r.range_m, 6);
     CHECK(!r.trails);
+    CHECK(!r.hide_held);
+    /* Hide held targets: off by default, round trip, a file from before the key loads with the default */
+    s.hide_held = true;
+    CHECK(parse_settings(serialize_settings(s)).hide_held);
+    CHECK(serialize_settings(s).find("hide_held=on\n") != std::string::npos);
+    CHECK(!parse_settings("units=metres\norientation=normal\nrange=auto\ntrails=on\n").hide_held);
+    CHECK(!parse_settings("").hide_held);
+    CHECK(!parse_settings("hide_held=maybe\n").hide_held);
+    CHECK(parse_settings("hide_held=on\r\ntrails=off\r\n").hide_held);
     /* tolerant: CRLF, junk, bad values keep the defaults */
     const Settings j = parse_settings("junk\r\nrange=5\r\norientation=sideways\r\nunits=raw\r\ntrails=maybe\r\n");
     CHECK_EQ(j.range_m, 0);
@@ -226,6 +236,43 @@ void test_radar_layout()
     CHECK(tall > 100);
 }
 
+/* The view model of held targets: what is shown and how many are held. */
+void test_held_view()
+{
+    SlotState s[3];
+    CHECK_EQ(held_count(s, 3), 0);
+    CHECK(!slot_shown(s[0], false) && !slot_shown(s[0], true)); /* no target */
+    s[0].active = s[0].present_now = true;
+    s[1].active = s[1].present_now = true;
+    s[1].held = true;
+    s[2].active = true;
+    s[2].present_now = false;
+    s[2].held = true; /* gone from the latest frame: not counted */
+    CHECK(slot_shown(s[0], false) && slot_shown(s[0], true));
+    CHECK(slot_shown(s[1], false)); /* held targets are shown, marked */
+    CHECK(!slot_shown(s[1], true)); /* ... or hidden with the setting */
+    CHECK(slot_shown(s[2], false));
+    CHECK_EQ(held_count(s, 3), 1);
+    CHECK_EQ(held_count(s + 1, 1), 1);
+    /* the tracker and the helper agree */
+    Tracker tr;
+    Frame f;
+    for (int i = 0; i < 3; ++i) f.target[i].slot = i + 1;
+    for (int i = 0; i < 2; ++i) {
+        Target &t = f.target[i];
+        t.present = true;
+        t.x_mm = 300 * (i + 1);
+        t.y_mm = 2000;
+        t.resolution_mm = 360;
+        t.distance_mm = 2000;
+    }
+    for (int t = 0; t <= 3000; t += 100) tr.update(f, t);
+    const SlotState snap[3] = {tr.slot(0), tr.slot(1), tr.slot(2)};
+    CHECK_EQ(tr.held_count(), 2);
+    CHECK_EQ(held_count(snap, 3), 2);
+    CHECK(!slot_shown(snap[0], true) && !slot_shown(snap[1], true) && slot_shown(snap[0], false));
+}
+
 void test_labels()
 {
     const PlotGeom g = plot_geom(0, 0, 480, 236, 4, Orientation::Normal, 12, 10);
@@ -364,6 +411,7 @@ void test_view()
     test_range();
     test_geometry();
     test_radar_layout();
+    test_held_view();
     test_labels();
     test_demo();
 }

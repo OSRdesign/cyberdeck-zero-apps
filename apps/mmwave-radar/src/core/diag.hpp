@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  *
  * mmWave Radar: the diagnostic log line (off unless $MMWAVE_LOG names a file or the marker file <config dir>/diag
- * exists). One line a second: link state, port, speed, frame counters, the three slots as the tracker holds them and
+ * exists). One line a second: link state, port, speed, frame counters, the three slots as the tracker holds them, held=N (targets reported unchanged for 3 s) and
  * the empty / non-empty / identical frame counts, plus once the port settings and the raw bytes of the first three
  * frames that held a target, and every 10 s the raw bytes of the latest one. Pure text from a Link;
  * nothing is ever sent to the sensor.

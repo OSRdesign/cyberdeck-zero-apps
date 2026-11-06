@@ -8,6 +8,7 @@
 #pragma once
 
 #include "settings.hpp"
+#include "tracker.hpp"
 
 #include <cstdint>
 
@@ -75,6 +76,11 @@ struct Box {
 /* A target's label of lw x lh px beside its dot (radius r) at (px, py): right of it, else left when it would leave
  * the plot; moved below (else above) a label already placed when they overlap; always inside the plot. */
 Box place_label(const PlotGeom &g, int px, int py, int r, int lw, int lh, const Box *taken, int n_taken);
+
+/* What the screens show of a tracked slot: it has a target, and it is not a held one the user chose to hide. */
+bool slot_shown(const SlotState &s, bool hide_held);
+/* Held targets among n slots (active, in the latest frame, held). */
+int held_count(const SlotState *slots, int n);
 
 /* A rounded-up scale for a graph axis: the smallest of 1, 2, 5 x 10^n at least v (v <= 0: 1). */
 double nice_ceiling(double v);

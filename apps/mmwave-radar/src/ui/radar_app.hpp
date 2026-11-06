@@ -171,7 +171,8 @@ private:
     Cell tabs_[4];
     Cell pause_;
     lv_obj_t *chip_ = nullptr, *chip_dot_ = nullptr, *chip_label_ = nullptr, *paused_chip_ = nullptr;
-    std::string chip_shown_;
+    lv_obj_t *held_chip_ = nullptr;     /* "N held", only while Hide held targets is on */
+    std::string chip_shown_, held_shown_;
 
     lv_obj_t *nf_ = nullptr;        /* the "not found" help on the Radar page */
     lv_obj_t *nf_title_ = nullptr, *nf_status_ = nullptr, *nf_tried_ = nullptr, *nf_wiring_ = nullptr;
@@ -183,7 +184,7 @@ private:
     InfoRow si_state_, si_port_, si_id_, si_baud_, si_fps_, si_good_, si_bad_, si_age_, si_model_;
     lv_obj_t *si_reports_ = nullptr;
     std::string si_reports_shown_;
-    SettingRow settings_rows_[4];
+    SettingRow settings_rows_[5];
     int setting_sel_ = -1;
 
     std::unique_ptr<mmw::Sys> sys_;

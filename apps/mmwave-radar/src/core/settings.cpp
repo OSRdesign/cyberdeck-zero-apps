@@ -21,6 +21,7 @@ std::string serialize_settings(const Settings &s)
     out += std::string("orientation=") + orientation_name(s.orientation) + "\n";
     out += "range=" + (s.range_m == 0 ? std::string("auto") : std::to_string(s.range_m)) + "\n";
     out += std::string("trails=") + (s.trails ? "on" : "off") + "\n";
+    out += std::string("hide_held=") + (s.hide_held ? "on" : "off") + "\n";
     return out;
 }
 
@@ -44,6 +45,8 @@ Settings parse_settings(const std::string &text)
             s.range_m = (r == 2 || r == 4 || r == 6) ? r : 0;
         } else if (key == "trails") {
             s.trails = value != "off";
+        } else if (key == "hide_held") {
+            s.hide_held = value == "on";
         }
     }
     return s;

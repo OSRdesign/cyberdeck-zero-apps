@@ -184,10 +184,132 @@ void test_history()
     CHECK_EQ(a.slot(0).trail.size(), b.slot(0).trail.size());
 }
 
+/* Held (stale) targets: byte-identical x, y, speed, resolution for kHeldMs of continuous frames. */
+void test_held()
+{
+    CHECK_EQ(static_cast<int>(kHeldMs), 3000);
+    /* exactly at 3000 ms, not at 2999; frames every 100 ms with identical values */
+    {
+        Tracker tr;
+        for (int t = 0; t <= 2900; t += 100) {
+            tr.update(make(500, 2000, 0), t);
+            CHECK(!tr.slot(0).held);
+        }
+        tr.update(make(500, 2000, 0), 2999);
+        CHECK(!tr.slot(0).held);
+        CHECK_EQ(tr.held_count(), 0);
+        tr.update(make(500, 2000, 0), 3000);
+        CHECK(tr.slot(0).held);
+        CHECK_EQ(tr.held_count(), 1);
+        tr.update(make(500, 2000, 0), 3100);
+        CHECK(tr.slot(0).held); /* stays held */
+        CHECK(tr.slot(0).active && tr.slot(0).present_now);
+    }
+    /* any single changed value resets (x, y, speed, resolution) and the count restarts from that frame */
+    for (int what = 0; what < 4; ++what) {
+        Tracker tr;
+        for (int t = 0; t <= 3500; t += 100) tr.update(make(500, 2000, 0), t);
+        CHECK(tr.slot(0).held);
+        Frame f = make(500, 2000, 0);
+        Target &g = f.target[0];
+        if (what == 0) g.x_mm += 1;
+        if (what == 1) g.y_mm += 1;
+        if (what == 2) g.speed_cm_s += 1;
+        if (what == 3) g.resolution_mm += 1;
+        tr.update(f, 3600);
+        CHECK(!tr.slot(0).held);
+        const std::uint32_t id = tr.slot(0).id;
+        for (int t = 3700; t < 6600; t += 100) {
+            tr.update(f, t);
+            CHECK(!tr.slot(0).held); /* under 3000 ms since the change */
+        }
+        tr.update(f, 6599);
+        CHECK(!tr.slot(0).held);
+        tr.update(f, 6600);
+        CHECK(tr.slot(0).held);
+        CHECK_EQ(tr.slot(0).id, id); /* held detection does not change identity */
+    }
+    /* the target leaves the frame (even for one frame): reset, and it has to be 3 s again after it comes back */
+    {
+        Tracker tr;
+        for (int t = 0; t <= 3500; t += 100) tr.update(make(500, 2000, 0), t);
+        CHECK(tr.slot(0).held);
+        const std::uint32_t id = tr.slot(0).id;
+        tr.update(make(0, 0, 0), 3600); /* empty frame */
+        CHECK(!tr.slot(0).held);
+        CHECK(tr.slot(0).active);
+        CHECK_EQ(tr.held_count(), 0);
+        for (int t = 3700; t < 6700; t += 100) {
+            tr.update(make(500, 2000, 0), t);
+            CHECK(!tr.slot(0).held);
+        }
+        tr.update(make(500, 2000, 0), 6700);
+        CHECK(tr.slot(0).held); /* 3000 ms after 3700 */
+        CHECK_EQ(tr.slot(0).id, id);
+    }
+    /* released after drop_ms, then back: a new target, not held at once */
+    {
+        Tracker tr;
+        for (int t = 0; t <= 3500; t += 100) tr.update(make(500, 2000, 0), t);
+        tr.tick(4200); /* nothing for 700 ms: released */
+        CHECK(!tr.slot(0).active);
+        CHECK(!tr.slot(0).held);
+        tr.update(make(500, 2000, 0), 4300);
+        CHECK(!tr.slot(0).held);
+        CHECK(tr.slot(0).active);
+    }
+    /* the frames stop: a held target does not stay held */
+    {
+        Tracker tr;
+        for (int t = 0; t <= 3500; t += 100) tr.update(make(500, 2000, 0), t);
+        tr.tick(3700);
+        CHECK(tr.slot(0).held); /* a glitch shorter than drop_ms */
+        tr.tick(4100);
+        CHECK(!tr.slot(0).held);
+        CHECK_EQ(tr.held_count(), 0);
+    }
+    /* two targets are independent: T2 is stale from the start, T1 moves, then T1 freezes too */
+    {
+        Tracker tr;
+        for (int t = 0; t <= 4000; t += 100) tr.update(make(100 + t / 10, 1500, -17, -900, 3000, 0), t);
+        CHECK(!tr.slot(0).held);
+        CHECK(tr.slot(1).held);
+        CHECK_EQ(tr.held_count(), 1);
+        for (int t = 4100; t < 7100; t += 100) tr.update(make(500, 1500, 0, -900, 3000, 0), t);
+        CHECK(!tr.slot(0).held && tr.slot(1).held); /* frozen since 4100: held from 7100 */
+        tr.update(make(500, 1500, 0, -900, 3000, 0), 7100);
+        CHECK(tr.slot(0).held && tr.slot(1).held);
+        CHECK_EQ(tr.held_count(), 2);
+        /* T2 changes: only T2 resets */
+        tr.update(make(500, 1500, 0, -899, 3000, 0), 7200);
+        CHECK(tr.slot(0).held && !tr.slot(1).held);
+        CHECK_EQ(tr.held_count(), 1);
+    }
+    /* a real still person: 1 mm of jitter at least every 2 s keeps the target live for over a minute */
+    {
+        Tracker tr;
+        for (int t = 0; t <= 70000; t += 100) {
+            const int jitter = (t / 2000) % 2; /* 0, 1, 0, 1 mm: a change every 2 s */
+            tr.update(make(500 + jitter, 2000, 0), t);
+            CHECK(!tr.slot(0).held);
+        }
+        CHECK_EQ(tr.held_count(), 0);
+    }
+    /* clear() */
+    {
+        Tracker tr;
+        for (int t = 0; t <= 3500; t += 100) tr.update(make(500, 2000, 0), t);
+        tr.clear();
+        CHECK(!tr.slot(0).held);
+        CHECK_EQ(tr.held_count(), 0);
+    }
+}
+
 } // namespace
 
 void test_tracker()
 {
+    test_held();
     test_walk();
     test_ids_and_drop();
     test_trail_and_smoothing();

@@ -153,6 +153,16 @@ Box place_label(const PlotGeom &g, int px, int py, int r, int lw, int lh, const 
     return b;
 }
 
+bool slot_shown(const SlotState &s, bool hide_held) { return s.active && !(hide_held && s.held); }
+
+int held_count(const SlotState *slots, int n)
+{
+    int c = 0;
+    for (int i = 0; i < n; ++i)
+        if (slots[i].active && slots[i].present_now && slots[i].held) ++c;
+    return c;
+}
+
 double nice_ceiling(double v)
 {
     if (!(v > 0.0)) return 1.0;

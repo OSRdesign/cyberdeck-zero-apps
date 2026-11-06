@@ -133,6 +133,8 @@ DemoSys::DemoSys(const std::string &scenario, Clock clock) : scenario_(scenario)
         add("ttyUSB0", 0x1a86, 0x7523, "USB Serial", Kind::One);
     } else if (scenario == "three") {
         add("ttyUSB0", 0x1a86, 0x7523, "USB Serial", Kind::Three);
+    } else if (scenario == "held") {
+        add("ttyUSB0", 0x1a86, 0x7523, "USB Serial", Kind::Held);
     } else if (scenario == "lost") {
         add("ttyUSB0", 0x1a86, 0x7523, "USB Serial", Kind::One).stop_after_ms = 1500;
     } else if (scenario == "none") {
@@ -227,11 +229,20 @@ std::uint8_t DemoSys::byte_at(Port &p, std::uint64_t index)
     case Kind::Walk: return walk_.empty() ? 0 : walk_[index % walk_.size()];
     case Kind::Gps: return static_cast<std::uint8_t>(nmea_[index % nmea_.size()]);
     case Kind::One:
+    case Kind::Held:
     case Kind::Three: {
         const std::uint64_t k = index / kFrameSize;
-        const int count = p.kind == Kind::Three ? 3 : 1;
+        const int count = p.kind == Kind::One ? 1 : 3;
         if (k != cached_frame_ || count != cached_count_) {
-            encode_frame(demo_frame(static_cast<double>(k) * kFrameSize / kBytesPerSecond, count), cache_);
+            Frame f = demo_frame(static_cast<double>(k) * kFrameSize / kBytesPerSecond, count);
+            if (p.kind == Kind::Held) { /* T2 is a stale target: the same bytes in every frame, speed 0 */
+                Target &t = f.target[1];
+                t.x_mm = -1100;
+                t.y_mm = 2300;
+                t.speed_cm_s = 0;
+                t.resolution_mm = 360;
+            }
+            encode_frame(f, cache_);
             cached_frame_ = k;
             cached_count_ = count;
         }

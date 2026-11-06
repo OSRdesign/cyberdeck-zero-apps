@@ -37,7 +37,8 @@ Four pages, switched by the tab strip at the bottom, the Left / Right keys or th
   button, what the last scan found on every port (`ttyUSB0 (CP2102): not a supported radar: GPS receiver (NMEA)`), the
   line *Detected by listening only: the app sends nothing to the sensor*, and the settings: **Units** (Metres: m and
   km/h / Millimetres: mm and cm/s), **Orientation** (Normal / Mirror (left and right swapped) / Rotate 180), **Range**
-  (Auto / 2 / 4 / 6 m), **Trails** (On / Off). A tap or Enter on a setting row moves it to its next value.
+  (Auto / 2 / 4 / 6 m), **Trails** (On / Off), **Hide held targets** (On / Off, default Off; see Known behaviour).
+  A tap or Enter on a setting row moves it to its next value.
 - **No radar.** While the radar is not streaming, the Radar page says why ("No radar found", "The port is used by
   another app", "Signal lost, searching", "The port cannot be opened"), what the scan is doing, what was tried on each
   port, the wiring and a Rescan button. A plugged-in sensor is found by itself (the port list is checked every 2 s).
@@ -107,10 +108,20 @@ frames that held a target, and every 10 s the raw bytes of the latest one; it ne
 - A still target: the sensor can report a person at rest (speed 0.0 km/h) and keeps reporting it; the app shows what the
   sensor sends and drops a slot 0.5 s after the sensor stops sending it. Our own recordings of an empty room
   (`tests/data/empty-*.bin`) decode to empty frames in every slot, and the tests check that no target stays on screen.
+- Held (stale) targets: the HLK-LD2452 sometimes keeps reporting a target that is no longer there, byte-identical in
+  every frame (the same x, y, speed 0 and resolution) for seconds to over a minute; a real person standing still shows
+  a few millimetres of jitter. This is a sensor quirk we observed on the LD2452, not something the app can fix. A target
+  whose x, y, speed and resolution stay exactly the same for 3 s of continuous frames is marked **held**: its circle is
+  dimmed, it has no speed arrow and no trail, its label ends with a muted `held`, and in the Table and the tall
+  Radar page's list the speed reads `held` in muted text. Any change of any of the four values, or the target leaving
+  the frame, clears the mark and the 3 s start again; the target is otherwise tracked, counted and released after 0.5 s
+  as before. **Hide held targets** (Sensor page, default Off) does not draw or list held targets; the status line
+  then shows `N held` (muted) so nothing is hidden silently. Nothing extra is shown while no target is held. The
+  diagnostic line ends its slots with `held=N`.
 - The diagnostic log (off by default). The launcher starts the app, where no variable can be set, so a marker file turns
   it on: `touch ~/.config/mmwave-radar/diag` (the app's settings folder, see Files the app keeps), then start the app.
   It writes `~/.config/mmwave-radar/mmwave.log`: a first line `log on (marker ...)`, the start line, then one line a
-  second (link state, port, speed, frame counters, the three slots) and once the port settings and the raw bytes of the
+  second (link state, port, speed, frame counters, the three slots, `held=N`) and once the port settings and the raw bytes of the
   first three frames that held a target. Each line ends with the frames of that second and the totals since the start:
   `empty=0 nonempty=20 same_as_prev=20 total_empty=0 total_nonempty=407 total_same_as_prev=406`. `empty` frames hold
   no target; `same_as_prev` counts the frames whose 24 target bytes equal the previous non-empty frame's byte for byte,
@@ -134,7 +145,7 @@ replays the recorded walk from `tests/data`, or `$MMWAVE_DEMO_FILE`).
 
 ## Files the app keeps
 
-`~/.config/mmwave-radar/` (or `$XDG_CONFIG_HOME/mmwave-radar/`): `settings.conf` (units, orientation, range, trails) and
+`~/.config/mmwave-radar/` (or `$XDG_CONFIG_HOME/mmwave-radar/`): `settings.conf` (units, orientation, range, trails, hide_held) and
 `remembered.conf` (the port id and speed of the last radar), both written atomically. Delete the folder to reset. Only
 when you create the marker file `diag` there: `mmwave.log` (the diagnostic log, at most about 400 KB).
 
@@ -195,4 +206,5 @@ Build from a WSL native-filesystem LF copy with fresh build dirs (`CDK_BUILD`, `
 - 0.1.0 (draft): first version: Radar, Table, Graph and Sensor pages, listen-only detection, units, orientation,
   range and trails settings, 480x320 and 320x480 minimum layouts; the tall Radar page (plot, target list, distance
   strip), ring labels on the wedge's edge, the diagnostic log's marker file and its frame counters (empty, non-empty,
-  identical; the latest target frame every 10 s).
+  identical; the latest target frame every 10 s); held (stale) targets of the LD2452 marked after 3 s, with the
+  setting Hide held targets.

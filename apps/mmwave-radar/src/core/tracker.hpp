@@ -27,6 +27,11 @@ struct TrackerConfig {
     double speed_alpha = 0.3;              /* smoothing: s += alpha * (v - s) per frame */
 };
 
+/* A target the sensor reports byte-identical (x, y, speed, resolution) in every frame for this long is HELD: the
+ * HLK-LD2452 sometimes keeps a stale target for seconds to over a minute, speed 0, without the few mm of jitter a
+ * real still person gives. */
+constexpr std::int64_t kHeldMs = 3000;
+
 struct TrailPoint {
     std::int64_t t_ms = 0;
     int x_mm = 0, y_mm = 0;
@@ -48,6 +53,8 @@ struct SlotState {
     std::int64_t first_seen_ms = 0, last_seen_ms = 0;
     std::deque<TrailPoint> trail;   /* oldest first, within trail_ms of the newest point */
     std::deque<HistorySample> history;
+    bool held = false;              /* identical values for kHeldMs of continuous frames (see kHeldMs) */
+    std::int64_t same_since_ms = 0; /* the time of the first of the identical frames */
 };
 
 class Tracker {
@@ -62,6 +69,7 @@ public:
 
     const SlotState &slot(int index) const { return slots_[index]; } /* 0..2 */
     std::uint32_t frames() const { return frames_; }
+    int held_count() const; /* slots held now (active and in the latest frame) */
 
 private:
     void expire(std::int64_t t_ms);

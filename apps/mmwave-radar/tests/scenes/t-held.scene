@@ -1,0 +1,17 @@
+title mmWave Radar: a held (stale) target: T2 reports the same bytes in every frame (Radar page, Table, Hide held targets off)
+sizes 640x480 480x320 320x480 480x800
+env MMWAVE_DEMO held
+env MMWAVE_TEST_CONFIG 1
+
+wait 11000
+shot held-radar
+check held-radar
+expect notext "PAUSED"
+expect notext "1 held"
+key 2
+wait 700
+shot held-table
+check held-table
+key 1
+wait 400
+expect noquit
