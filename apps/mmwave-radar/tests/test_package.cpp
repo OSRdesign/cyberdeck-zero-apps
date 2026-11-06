@@ -34,7 +34,7 @@ void test_package()
     CHECK(has(desktop, "\nX-Fullscreen=true\n"));
     CHECK(has(desktop, "\nX-MinSize=480x320\n"));
     CHECK(has(desktop, "\nX-Portrait=320x480\n"));
-    CHECK(has(desktop, "\nX-Background=freeze\n"));
+    CHECK(!has(desktop, "X-Background"));  // the app does not answer the lifecycle protocol (contract section 13)
     CHECK(has(desktop, "\nExec=/usr/share/APPLaunch/bin/mmwave-radar\n"));
     CHECK(has(desktop, "\nIcon=share/images/mmwave-radar.png\n"));
     CHECK(!has(desktop, "\r"));
