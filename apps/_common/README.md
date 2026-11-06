@@ -80,7 +80,28 @@ and compare the header shots with the launcher's. Details, and what else the lau
 
 ## The launcher pin
 
-`LAUNCHER_REF` is **`3f6579f`**, launcher main after v0.8.11 (#113, part of the release v0.8.12): the **SSH indicator** in the
+`LAUNCHER_REF` is **`e3a2899`**, launcher main after v0.9.4 (#145, not a release yet): the **offline map engine** in
+`cp0_lvgl` (`include/cp0_map.h`: Web Mercator, MBTiles / PMTiles readers, the shared tile store, the RAM tile cache,
+online sources with a viewing cache, the LVGL map widget), which Deck Atlas needs and Mesh Hop's map tab will use. It is
+compiled only with `CONFIG_CP0_LVGL_MAP=y` (Kconfig, default n), which neither `scons/cross_config_defaults.mk` nor
+`headless/Makefile` sets: an app that does not ask for it builds without a line of it, and the first map app adds the
+switch to its build. The pin also brings the toolkit changes of v0.9.1 to v0.9.4: `cp0_display_repaint_all()` (v0.9.1,
+the launcher's own repaint after a system suspend; no app calls it), the **narrow portrait shell** of v0.9.4 (#137: on a
+portrait canvas under 480 px wide, 320x480 on a 480x320 panel turned, the Compact tokens with 16 px body text, a 40 px
+bar with the Esc at the left edge, 44x30 with its tap area over the whole bar height, no page title, no writing band, the
+overlays sized for it), and the render harness configuration without an LVGL draw thread (#132,
+`projects/APPLaunch/tests/render/config/lvgl_config.h`, which `headless/` compiles LVGL with: `LV_OS_NONE`, so
+`lv_lock()` does nothing in the PC harness and the unit tests; the device build keeps `LV_OS_PTHREAD`). No app here
+declares an `X-Portrait` under 480 px wide and no scene uses such a size, so the existing apps draw the same pictures as
+at `3f6579f`; they keep their `3f6579f` builds and move to this pin at their next rebuild. viz1090's copies of the layout
+service (`apps/viz1090/build/cp0_ui_metrics.[ch]`, `cp0_ui_roller.[ch]`) stay at `3f6579f`: they differ from this pin
+only by the narrow portrait additions, which its 480x640 portrait minimum never reaches. `build_app.sh` needs a checkout
+of the commit `e3a28995a131405e7bc5255420a7978087618f0a` as `LAUNCHER_SRC` (`git fetch origin main`). From this pin the
+launcher's `sync_tree` (#140, which `build_app.sh --sync` runs) writes LF line ends: a WSL checkout with LF line ends
+(`core.autocrlf` unset) equals the synced tree; a Windows checkout (CRLF) does not, so build from it with `--sync` every
+time.
+
+Before it, `LAUNCHER_REF` was **`3f6579f`**, launcher main after v0.8.11 (#113, part of the release v0.8.12): the **SSH indicator** in the
 status strip. The strip reads `status.state` `ssh=` / `ssh_act=` and draws a terminal glyph in its leftmost slot while
 someone is connected over SSH (blue, blinking white on traffic; with a battery it takes the percentage's place, so the
 strip keeps its width), and `cp0::ui::status_strip_left()` always keeps that slot free: the header's Esc and title move

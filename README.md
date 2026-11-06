@@ -106,7 +106,7 @@ Your app is a normal **aarch64 Linux executable**. **New apps are native full-sc
 runtime: they fill the whole screen, **640x480 and up** (the minimum screen for new apps; `X-MinSize=640x480` in the
 `.desktop` file), and take keys and touch directly. The [app guidelines](docs/APP-GUIDELINES.md) give the screen
 sizes, the input rules, the packaging and the tests. Native apps build against one launcher commit,
-[`apps/_common/LAUNCHER_REF`](apps/_common/LAUNCHER_REF) (today `3f6579f`, the SSH indicator commit of launcher v0.8.12; the launcher itself is at v0.9.3, which needs no re-pin); what each launcher version adds for
+[`apps/_common/LAUNCHER_REF`](apps/_common/LAUNCHER_REF) (today `e3a2899`, launcher main after v0.9.4 with the map engine, off by default; the published apps are still built at `3f6579f`, the SSH indicator commit of launcher v0.8.12); what each launcher version adds for
 apps, and when it needs a rebuild: [launcher versions](docs/APP-GUIDELINES.md#launcher-versions-and-what-each-added-for-apps).
 
 Wrapped (compat) apps, such as the first ones here ([LAN Scan](apps/lanscan/README.md),
