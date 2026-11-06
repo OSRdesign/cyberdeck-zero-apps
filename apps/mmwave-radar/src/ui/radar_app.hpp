@@ -214,10 +214,11 @@ private:
     bool have_box_[3] = {};
     int label_w_max_ = 0;
 
-    /* $MMWAVE_LOG=<file>: one diagnostic line a second (off when unset) */
+    /* $MMWAVE_LOG=<file> or the marker <config dir>/diag: one diagnostic line a second (off when neither) */
     std::string diag_path_;
+    bool diag_bounded_ = false;     /* the marker's log: kept to about mmw::kDiagKeepBytes */
     std::int64_t diag_last_ = 0;
-    unsigned diag_sent_ = 0;
+    unsigned diag_sent_ = 0, diag_lines_ = 0;
     void diag_write(const std::string &text) const;
 
     /* $MMWAVE_TIMING=1: the render time of the screen, logged every 5 s (for the board test) */

@@ -10,6 +10,10 @@
 #include "fake_sys.hpp"
 #include "diag.hpp"
 #include "link.hpp"
+#include "settings.hpp"
+
+#include <cstdlib>
+#include <unistd.h>
 
 using namespace mmw;
 
@@ -113,11 +117,64 @@ void diag_text()
     CHECK(diag_extra(link, again).empty()); /* each only once */
 }
 
+/* The diagnostic switch: $MMWAVE_LOG first, else the marker <config dir>/diag -> <config dir>/mmwave.log; no marker,
+ * no file. The marker log is cut to its last kDiagKeepBytes, from a whole line. */
+void diag_switch()
+{
+    char tmpl[] = "/tmp/mmw-diag-XXXXXX";
+    const char *base = mkdtemp(tmpl);
+    CHECK(base != nullptr);
+    if (!base) return;
+    const std::string dir = std::string(base) + "/mmwave-config";
+    bool marker = true;
+    /* off: no variable, no folder / no marker */
+    CHECK_EQ(diag_log_path(nullptr, "", &marker), "");
+    CHECK(!marker);
+    CHECK_EQ(diag_log_path(nullptr, dir, &marker), "");
+    CHECK(make_dirs(dir));
+    CHECK_EQ(diag_log_path("", dir, &marker), "");
+    CHECK(!marker);
+    CHECK(::access((dir + "/mmwave.log").c_str(), F_OK) != 0); /* nothing written */
+    /* the variable wins (with or without the marker) */
+    CHECK_EQ(diag_log_path("/tmp/x.log", dir, &marker), "/tmp/x.log");
+    CHECK(!marker);
+    /* the marker */
+    CHECK(write_file_atomic(dir + "/diag", ""));
+    CHECK_EQ(diag_log_path(nullptr, dir, &marker), dir + "/mmwave.log");
+    CHECK(marker);
+    CHECK_EQ(diag_log_path("/tmp/x.log", dir, &marker), "/tmp/x.log");
+    CHECK(!marker);
+    /* trimming: a missing or small file is left alone */
+    const std::string log = dir + "/mmwave.log";
+    CHECK(!diag_trim(log, 100));
+    CHECK(::access(log.c_str(), F_OK) != 0);
+    CHECK(write_file_atomic(log, "line 1\nline 2\n"));
+    CHECK(!diag_trim(log, 100));
+    CHECK_EQ(test_read_file(log), "line 1\nline 2\n");
+    /* a big one keeps its last bytes from a whole line */
+    std::string big;
+    for (int i = 0; i < 1000; ++i) big += "t=" + std::to_string(i) + " state=Found frames=" + std::to_string(i * 19) + "\n";
+    CHECK(write_file_atomic(log, big));
+    CHECK(diag_trim(log, 2000));
+    const std::string kept = test_read_file(log);
+    CHECK(kept.size() <= 2000 && kept.size() > 1900);
+    CHECK(kept.rfind("t=999 state=Found frames=18981\n") == kept.size() - 31);
+    CHECK(kept.compare(0, 2, "t=") == 0); /* starts on a whole line */
+    CHECK(big.size() > kept.size() && big.compare(big.size() - kept.size(), kept.size(), kept) == 0);
+    CHECK(!diag_trim(log, 2000)); /* now within the bound */
+    CHECK(kDiagKeepBytes >= 100 * 1024 && kDiagKeepBytes <= 256 * 1024);
+    unlink(log.c_str());
+    unlink((dir + "/diag").c_str());
+    rmdir(dir.c_str());
+    rmdir(base);
+}
+
 } // namespace
 
 void test_ghost()
 {
     diag_text();
+    diag_switch();
     decoder_empty("empty-pi3a-30s.bin", 0);
     decoder_empty("empty-pi3a-20s.bin", 0);
     decoder_empty("empty-deck-30s.bin", 3);

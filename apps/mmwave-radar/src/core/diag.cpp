@@ -5,7 +5,13 @@
  */
 #include "diag.hpp"
 
+#include "settings.hpp"
+
+#include <cerrno>
 #include <cstdio>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 namespace mmw {
 
@@ -41,6 +47,41 @@ std::string diag_extra(const Link &link, unsigned &sent)
         sent |= 2u << i;
     }
     return out;
+}
+
+std::string diag_log_path(const char *env_log, const std::string &config_dir, bool *from_marker)
+{
+    if (from_marker) *from_marker = false;
+    if (env_log && *env_log) return env_log;
+    if (config_dir.empty()) return std::string();
+    struct stat st;
+    if (::stat((config_dir + "/diag").c_str(), &st) != 0) return std::string();
+    if (from_marker) *from_marker = true;
+    return config_dir + "/mmwave.log";
+}
+
+bool diag_trim(const std::string &path, std::size_t keep_bytes)
+{
+    struct stat st;
+    if (::stat(path.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) return false;
+    const std::size_t size = static_cast<std::size_t>(st.st_size);
+    if (size <= keep_bytes) return false;
+    const int fd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return false;
+    std::string tail(keep_bytes, '\0');
+    std::size_t got = 0;
+    const off_t from = static_cast<off_t>(size - keep_bytes);
+    while (got < keep_bytes) {
+        const ssize_t n = ::pread(fd, &tail[got], keep_bytes - got, from + static_cast<off_t>(got));
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) break;
+        got += static_cast<std::size_t>(n);
+    }
+    ::close(fd);
+    tail.resize(got);
+    const std::size_t nl = tail.find('\n');
+    tail.erase(0, nl == std::string::npos ? tail.size() : nl + 1); /* no half line at the top */
+    return write_file_atomic(path, tail);
 }
 
 } // namespace mmw

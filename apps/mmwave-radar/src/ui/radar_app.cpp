@@ -22,6 +22,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <sys/stat.h>
 
 namespace mmwui {
 
@@ -151,8 +152,8 @@ RadarApp::RadarApp(lv_obj_t *screen) : screen_(screen)
     build_sensor();
     build_chips();
     build_tabs();
-
     compute_layout();
+
     /* the link: a scripted port layer for the scenes and the demonstration, else the real ports */
     const char *demo = std::getenv("MMWAVE_DEMO");
     if (demo && *demo) sys_ = std::make_unique<mmw::DemoSys>(demo, [] { return mono_ms(); });
@@ -163,11 +164,11 @@ RadarApp::RadarApp(lv_obj_t *screen) : screen_(screen)
     log_line("%s %dx%d%s%s, listen only, remembered %s", kVersion, w_, h_,
                  narrow ? " narrow portrait" : "", demo && *demo ? (std::string(" demo ") + demo).c_str() : "",
                  remembered.empty() ? "none" : remembered.port_id.c_str());
-
     if (lay_.tall)
         log_line("tall radar page: view %dx%d, plot y %d h %d, list y %d h %d (3 x %d + gaps %d), chart y %d h %d", w_,
                  view_h_, lay_.plot_y, lay_.plot_h, lay_.list_y, lay_.list_h, list_block_h_, list_gap_, lay_.chart_y,
                  lay_.chart_h);
+
     label_w_max_ = std::max(text_w("T3 88.88 m  88.8 km/h", sz_.caption_px), text_w("T3 8888 mm  888 cm/s", sz_.caption_px)) + 6;
     update_tabs();
     update_chips();
@@ -180,8 +181,16 @@ RadarApp::RadarApp(lv_obj_t *screen) : screen_(screen)
     const char *t = std::getenv("MMWAVE_TIMING");
     timing_ = t && *t && std::strcmp(t, "0") != 0;
     timing_since_ = mono_ms();
-    if (const char *lg = std::getenv("MMWAVE_LOG"); lg && *lg) {
-        diag_path_ = lg;
+    /* the diagnostic log: $MMWAVE_LOG, or the marker file <config dir>/diag (the launcher starts the app: no variable
+     * there) -> <config dir>/mmwave.log, kept to its last 200 KB; neither: no file is written at all */
+    bool diag_marker = false;
+    diag_path_ = mmw::diag_log_path(std::getenv("MMWAVE_LOG"), config_dir_, &diag_marker);
+    diag_bounded_ = diag_marker;
+    if (!diag_path_.empty()) {
+        if (diag_bounded_) mmw::diag_trim(diag_path_, mmw::kDiagKeepBytes);
+        log_line("diagnostic log on: %s%s", diag_path_.c_str(), diag_marker ? " (marker file diag)" : " ($MMWAVE_LOG)");
+        diag_write(std::string("log on ") + (diag_marker ? "(marker " + config_dir_ + "/diag)" : std::string("($MMWAVE_LOG)")) +
+                   " " + diag_path_ + "\n");
         diag_write(std::string("start ") + kVersion + (demo && *demo ? " demo " : " real ports") + (demo && *demo ? demo : "") +
                    " config_dir=" + config_dir_ + " remembered=" + (remembered.empty() ? "none" : remembered.port_id + " " + std::to_string(remembered.baud)) + "\n");
     }
@@ -372,15 +381,6 @@ void RadarApp::build_chips()
     lv_obj_add_flag(paused_chip_, LV_OBJ_FLAG_HIDDEN);
 }
 
-void RadarApp::build_tabs()
-{
-    tabbar_ = lv_obj_create(surface_);
-    plain(tabbar_);
-    lv_obj_set_pos(tabbar_, 0, view_h_);
-    lv_obj_set_size(tabbar_, w_, sz_.tab_h);
-    lv_obj_set_style_bg_color(tabbar_, lv_color_hex(0x111111), 0);
-    lv_obj_set_style_bg_opa(tabbar_, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_side(tabbar_, LV_BORDER_SIDE_TOP, 0);
 /* The Radar page's split (core/view.hpp radar_layout): the list's block is the Table's two-line block without heads
  * (the values carry their units), the chip band is the chips' row and a small gap, the strip chart needs 120 px
  * (its title, a chart of at least 60 px and its time axis: 480x800 has 136 px under the list). */
@@ -395,6 +395,15 @@ void RadarApp::compute_layout()
                              list_block_h_, list_gap_, 120);
 }
 
+void RadarApp::build_tabs()
+{
+    tabbar_ = lv_obj_create(surface_);
+    plain(tabbar_);
+    lv_obj_set_pos(tabbar_, 0, view_h_);
+    lv_obj_set_size(tabbar_, w_, sz_.tab_h);
+    lv_obj_set_style_bg_color(tabbar_, lv_color_hex(0x111111), 0);
+    lv_obj_set_style_bg_opa(tabbar_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_side(tabbar_, LV_BORDER_SIDE_TOP, 0);
     lv_obj_set_style_border_color(tabbar_, lv_color_hex(pal::kBar), 0);
     lv_obj_set_style_border_width(tabbar_, 1, 0);
 
@@ -563,6 +572,9 @@ void RadarApp::tick()
     if (!diag_path_.empty() && now_ - diag_last_ >= 1000) {
         diag_last_ = now_;
         diag_write(mmw::diag_line(*link_, now_) + "\n" + mmw::diag_extra(*link_, diag_sent_));
+        if (diag_bounded_ && ++diag_lines_ % 60 == 0) /* about once a minute: back to 200 KB once it reached twice that */
+            if (struct stat st; ::stat(diag_path_.c_str(), &st) == 0 && st.st_size > static_cast<off_t>(2 * mmw::kDiagKeepBytes))
+                mmw::diag_trim(diag_path_, mmw::kDiagKeepBytes);
     }
     if (link_->take_remembered_changed() && !config_dir_.empty()) {
         mmw::make_dirs(config_dir_);
@@ -613,6 +625,10 @@ void RadarApp::tick()
         } else if (frames != seen_frames_ || slots != seen_slots_) {
             dirty_ = true;
         }
+        if (tab_ == Tab::Radar && lay_.chart_h > 0 && history != seen_history_) {
+            chart_dirty_ = true;
+            dirty_ = true;
+        }
     }
     seen_frames_ = frames;
     seen_slots_ = slots;
@@ -625,10 +641,6 @@ void RadarApp::tick()
         dirty_ = false;
         last_draw_ = now_;
         if (tab_ == Tab::Radar && bg_buf_) render_background();
-        if (tab_ == Tab::Radar && lay_.chart_h > 0 && history != seen_history_) {
-            chart_dirty_ = true;
-            dirty_ = true;
-        }
         if (!lv_obj_has_flag(view_, LV_OBJ_FLAG_HIDDEN)) invalidate_view();
     }
     if (tab_ == Tab::Radar && now_ - last_chip_ >= 500) {
