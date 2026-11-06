@@ -178,8 +178,7 @@ RadarApp::RadarApp(lv_obj_t *screen) : screen_(screen)
     if (const char *lg = std::getenv("MMWAVE_LOG"); lg && *lg) {
         diag_path_ = lg;
         diag_write(std::string("start ") + kVersion + (demo && *demo ? " demo " : " real ports") + (demo && *demo ? demo : "") +
-                   " config_dir=" + config_dir_ + " remembered=" + (remembered.empty() ? "none" : remembered.port_id + " " + std::to_string(remembered.baud)) + "
-");
+                   " config_dir=" + config_dir_ + " remembered=" + (remembered.empty() ? "none" : remembered.port_id + " " + std::to_string(remembered.baud)) + "\n");
     }
     lv_display_add_event_cb(lv_obj_get_display(screen_), render_cb, LV_EVENT_ALL, this);
 }
@@ -544,8 +543,7 @@ void RadarApp::tick()
     link_->poll(now_);
     if (!diag_path_.empty() && now_ - diag_last_ >= 1000) {
         diag_last_ = now_;
-        diag_write(mmw::diag_line(*link_, now_) + "
-" + mmw::diag_extra(*link_, diag_sent_));
+        diag_write(mmw::diag_line(*link_, now_) + "\n" + mmw::diag_extra(*link_, diag_sent_));
     }
     if (link_->take_remembered_changed() && !config_dir_.empty()) {
         mmw::make_dirs(config_dir_);
