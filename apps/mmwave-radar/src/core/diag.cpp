@@ -49,6 +49,31 @@ std::string diag_extra(const Link &link, unsigned &sent)
     return out;
 }
 
+std::string diag_frames(Link &link, Ms now, std::string *hex_line)
+{
+    DiagFrameCounts &c = link.diag_counts();
+    char b[200];
+    std::snprintf(b, sizeof(b), " empty=%u nonempty=%u same_as_prev=%u total_empty=%llu total_nonempty=%llu total_same_as_prev=%llu",
+                  c.empty, c.nonempty, c.same, static_cast<unsigned long long>(c.total_empty),
+                  static_cast<unsigned long long>(c.total_nonempty), static_cast<unsigned long long>(c.total_same));
+    c.empty = c.nonempty = c.same = 0;
+    if (hex_line) hex_line->clear();
+    if (now - c.hex_since >= 10000) {
+        if (c.latest_new && hex_line) {
+            static const char *hex = "0123456789abcdef";
+            *hex_line = "last-target-frame ";
+            for (std::uint8_t v : c.latest) {
+                *hex_line += hex[v >> 4];
+                *hex_line += hex[v & 15];
+            }
+            *hex_line += '\n';
+        }
+        c.latest_new = false;
+        c.hex_since = now;
+    }
+    return b;
+}
+
 std::string diag_log_path(const char *env_log, const std::string &config_dir, bool *from_marker)
 {
     if (from_marker) *from_marker = false;

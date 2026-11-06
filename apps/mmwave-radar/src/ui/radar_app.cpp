@@ -187,6 +187,7 @@ RadarApp::RadarApp(lv_obj_t *screen) : screen_(screen)
     diag_path_ = mmw::diag_log_path(std::getenv("MMWAVE_LOG"), config_dir_, &diag_marker);
     diag_bounded_ = diag_marker;
     if (!diag_path_.empty()) {
+        link_->set_diag_counting(true); /* the frame counters of the per-second line (nothing counted without a log) */
         if (diag_bounded_) mmw::diag_trim(diag_path_, mmw::kDiagKeepBytes);
         log_line("diagnostic log on: %s%s", diag_path_.c_str(), diag_marker ? " (marker file diag)" : " ($MMWAVE_LOG)");
         diag_write(std::string("log on ") + (diag_marker ? "(marker " + config_dir_ + "/diag)" : std::string("($MMWAVE_LOG)")) +
@@ -571,7 +572,9 @@ void RadarApp::tick()
     link_->poll(now_);
     if (!diag_path_.empty() && now_ - diag_last_ >= 1000) {
         diag_last_ = now_;
-        diag_write(mmw::diag_line(*link_, now_) + "\n" + mmw::diag_extra(*link_, diag_sent_));
+        std::string hex;
+        const std::string counts = mmw::diag_frames(*link_, now_, &hex);
+        diag_write(mmw::diag_line(*link_, now_) + counts + "\n" + hex + mmw::diag_extra(*link_, diag_sent_));
         if (diag_bounded_ && ++diag_lines_ % 60 == 0) /* about once a minute: back to 200 KB once it reached twice that */
             if (struct stat st; ::stat(diag_path_.c_str(), &st) == 0 && st.st_size > static_cast<off_t>(2 * mmw::kDiagKeepBytes))
                 mmw::diag_trim(diag_path_, mmw::kDiagKeepBytes);

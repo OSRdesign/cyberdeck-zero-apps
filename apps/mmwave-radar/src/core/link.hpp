@@ -50,6 +50,21 @@ struct LinkStats {
     Ms last_frame_age_ms = -1;         /* -1: no frame yet */
 };
 
+/* Frame counters for the diagnostic log, at the raw-frame level (before the tracker). Fixed arrays, no allocation;
+ * the Link counts only while set_diag_counting(true) (the app turns it on with the log). */
+struct DiagFrameCounts {
+    std::uint32_t empty = 0, nonempty = 0, same = 0; /* the current window (diag_frames ends it) */
+    std::uint64_t total_empty = 0, total_nonempty = 0, total_same = 0; /* since start() */
+    bool have_prev = false;
+    std::uint8_t prev[24] = {};        /* the 24 target bytes of the previous non-empty frame */
+    bool latest_new = false;           /* a non-empty frame came since the last hex line */
+    std::uint8_t latest[30] = {};      /* the latest non-empty frame, all 30 bytes */
+    Ms hex_since = 0;                  /* the start of the current 10 s hex window */
+    /* One frame: empty (no target), else non-empty, and "same" when its target bytes equal the previous non-empty
+     * frame's byte for byte. */
+    void count(const Frame &f);
+};
+
 class Link {
 public:
     Link(Sys &sys, const LinkConfig &cfg = LinkConfig());
@@ -85,6 +100,11 @@ public:
      * held a target (hex, 30 bytes each). */
     const std::string &tty_settings() const { return tty_settings_; }
     const std::vector<std::string> &first_target_frames() const { return first_target_frames_; }
+    /* The diagnostic frame counters: off by default (then nothing is counted); start() zeroes them. */
+    void set_diag_counting(bool on) { diag_on_ = on; }
+    bool diag_counting() const { return diag_on_; }
+    DiagFrameCounts &diag_counts() { return diag_; }
+    const DiagFrameCounts &diag_counts() const { return diag_; }
     /* Sensor-model line for the sensor page. */
     static const char *model() { return "LD2450-family tracking radar (LD2450, LD2452)"; }
 
@@ -119,6 +139,8 @@ private:
     bool remembered_changed_ = false;
     std::string tty_settings_;
     std::vector<std::string> first_target_frames_;
+    bool diag_on_ = false;
+    DiagFrameCounts diag_;
 };
 
 } // namespace mmw

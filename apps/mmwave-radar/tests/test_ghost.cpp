@@ -8,11 +8,13 @@
 #include "check.hpp"
 
 #include "fake_sys.hpp"
+#include "demo_sys.hpp"
 #include "diag.hpp"
 #include "link.hpp"
 #include "settings.hpp"
 
 #include <cstdlib>
+#include <cstring>
 #include <unistd.h>
 
 using namespace mmw;
@@ -117,6 +119,167 @@ void diag_text()
     CHECK(diag_extra(link, again).empty()); /* each only once */
 }
 
+/* A tracking frame's 30 bytes: one target at (x, y) mm, speed 0, or none (x = y = 0). */
+std::string frame_at(int x, int y)
+{
+    Frame f;
+    if (x || y) {
+        f.target[0].present = true;
+        f.target[0].x_mm = x;
+        f.target[0].y_mm = y;
+        f.target[0].resolution_mm = 360;
+    }
+    std::uint8_t raw[30];
+    encode_frame(f, raw);
+    return std::string(reinterpret_cast<const char *>(raw), 30);
+}
+Frame decoded(const std::string &bytes)
+{
+    Frame f;
+    CHECK(decode_frame(reinterpret_cast<const std::uint8_t *>(bytes.data()), f));
+    return f;
+}
+
+/* The frame counters on single frames: empty, distinct, identical (byte for byte, raw target bytes). */
+void diag_counts_direct()
+{
+    const std::string e = frame_at(0, 0), a = frame_at(-300, 1500), b = frame_at(-300, 1501);
+    DiagFrameCounts c;
+    c.count(decoded(e));
+    c.count(decoded(a));
+    c.count(decoded(a));
+    c.count(decoded(e)); /* an empty frame between two identical ones does not break the run */
+    c.count(decoded(a));
+    c.count(decoded(b)); /* one byte apart: not the same */
+    c.count(decoded(a));
+    CHECK_EQ(c.empty, 2u);
+    CHECK_EQ(c.nonempty, 5u);
+    CHECK_EQ(c.same, 2u);
+    CHECK_EQ(c.total_empty, 2ull);
+    CHECK_EQ(c.total_nonempty, 5ull);
+    CHECK_EQ(c.total_same, 2ull);
+    CHECK(c.latest_new);
+    CHECK(std::memcmp(c.latest, a.data(), 30) == 0);
+}
+
+struct CountRun {
+    std::string lines, hex;
+    std::uint64_t window_empty = 0, window_nonempty = 0, window_same = 0;
+    int hex_lines = 0;
+};
+/* A Link on a fake port that cycles `stream`, a diag line every second as the app writes it, until `until` ms. */
+void run_counts(FakeSys &sys, Link &link, long until, CountRun &r)
+{
+    long last = sys.now_ms;
+    while (sys.now_ms < until) {
+        sys.now_ms += 30;
+        link.poll(sys.now_ms);
+        if (sys.now_ms - last < 1000) continue;
+        last = sys.now_ms;
+        std::string hex;
+        const std::string l = diag_frames(link, sys.now_ms, &hex);
+        unsigned e = 0, n = 0, s = 0;
+        CHECK_EQ(std::sscanf(l.c_str(), " empty=%u nonempty=%u same_as_prev=%u", &e, &n, &s), 3);
+        r.window_empty += e;
+        r.window_nonempty += n;
+        r.window_same += s;
+        r.lines += diag_line(link, sys.now_ms) + l + "\n" + hex;
+        if (!hex.empty()) {
+            ++r.hex_lines;
+            r.hex += hex;
+        }
+    }
+}
+
+/* The counters through a Link: the per-second windows add up to the totals and to the frames decoded; identical
+ * frames counted; nothing counted while off; start() begins again; the 10 s hex line only when a target came. */
+void diag_counts_link()
+{
+    const std::string a = frame_at(-300, 1500), b = frame_at(250, 2200), e = frame_at(0, 0);
+    { /* off (the default): nothing counted */
+        FakeSys sys;
+        sys.add("ttyUSB0").stream[9600] = a;
+        Link link(sys);
+        link.start(0);
+        CountRun r;
+        run_counts(sys, link, 5000, r);
+        CHECK(link.stats().frames > 40);
+        CHECK_EQ(link.diag_counts().total_nonempty, 0ull);
+        CHECK_EQ(r.window_nonempty, 0ull);
+    }
+    { /* a latched target: the same frame again and again */
+        FakeSys sys;
+        sys.add("ttyUSB0").stream[9600] = a;
+        Link link(sys);
+        link.set_diag_counting(true);
+        link.start(0);
+        CountRun r;
+        run_counts(sys, link, 21500, r);
+        const DiagFrameCounts &c = link.diag_counts();
+        CHECK(link.state() == LinkState::Found);
+        CHECK(c.total_nonempty > 300);
+        CHECK_EQ(c.total_empty, 0ull);
+        CHECK_EQ(c.total_same, c.total_nonempty - 1);
+        CHECK_EQ(c.total_nonempty, static_cast<std::uint64_t>(link.stats().frames));
+        CHECK_EQ(r.window_nonempty + c.nonempty, c.total_nonempty);
+        CHECK_EQ(r.window_same + c.same, c.total_same);
+        CHECK(r.lines.find(" empty=0 nonempty=19 same_as_prev=19 ") != std::string::npos);
+        CHECK_EQ(r.hex_lines, 2); /* at 10 s and 20 s */
+        std::string ahex;
+        for (unsigned char v : a) {
+            char h[3];
+            std::snprintf(h, sizeof(h), "%02x", v);
+            ahex += h;
+        }
+        CHECK_EQ(r.hex.substr(0, 18 + 60 + 1), "last-target-frame " + ahex + "\n");
+        if (std::getenv("MMW_SHOW_DIAG")) std::fputs(r.lines.c_str(), stderr);
+        /* a new session: everything from zero */
+        link.start(sys.now_ms);
+        CHECK_EQ(link.diag_counts().total_nonempty, 0ull);
+        CHECK_EQ(link.diag_counts().total_same, 0ull);
+        CHECK(!link.diag_counts().have_prev);
+        CHECK(!link.diag_counts().latest_new);
+        CountRun r2;
+        run_counts(sys, link, sys.now_ms + 5000, r2);
+        CHECK(link.diag_counts().total_nonempty > 0);
+        CHECK(link.diag_counts().total_nonempty < 120);
+        CHECK_EQ(r2.hex_lines, 0); /* not 10 s into the new session yet */
+    }
+    { /* distinct frames with empty ones between */
+        FakeSys sys;
+        sys.add("ttyUSB0").stream[9600] = a + e + b + e;
+        Link link(sys);
+        link.set_diag_counting(true);
+        link.start(0);
+        CountRun r;
+        run_counts(sys, link, 12000, r);
+        const DiagFrameCounts &c = link.diag_counts();
+        CHECK(c.total_nonempty > 80);
+        CHECK(c.total_empty + 1 >= c.total_nonempty && c.total_empty <= c.total_nonempty + 1);
+        CHECK_EQ(c.total_same, 0ull);
+        CHECK_EQ(c.total_empty + c.total_nonempty, static_cast<std::uint64_t>(link.stats().frames));
+        CHECK_EQ(r.window_empty + c.empty, c.total_empty);
+        CHECK_EQ(r.hex_lines, 1);
+        CHECK(r.hex.compare(0, 26, "last-target-frame aaff0300") == 0);
+    }
+    { /* empty frames only: counted, never a hex line */
+        FakeSys sys;
+        sys.add("ttyUSB0").stream[9600] = e;
+        Link link(sys);
+        link.set_diag_counting(true);
+        link.start(0);
+        CountRun r;
+        run_counts(sys, link, 21500, r);
+        const DiagFrameCounts &c = link.diag_counts();
+        CHECK(link.state() == LinkState::Found);
+        CHECK(c.total_empty > 300);
+        CHECK_EQ(c.total_nonempty, 0ull);
+        CHECK_EQ(c.total_empty, static_cast<std::uint64_t>(link.stats().frames));
+        CHECK_EQ(r.hex_lines, 0);
+        CHECK(r.lines.find(" empty=19 nonempty=0 same_as_prev=0 ") != std::string::npos);
+    }
+}
+
 /* The diagnostic switch: $MMWAVE_LOG first, else the marker <config dir>/diag -> <config dir>/mmwave.log; no marker,
  * no file. The marker log is cut to its last kDiagKeepBytes, from a whole line. */
 void diag_switch()
@@ -174,6 +337,8 @@ void diag_switch()
 void test_ghost()
 {
     diag_text();
+    diag_counts_direct();
+    diag_counts_link();
     diag_switch();
     decoder_empty("empty-pi3a-30s.bin", 0);
     decoder_empty("empty-pi3a-20s.bin", 0);

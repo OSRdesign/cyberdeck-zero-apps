@@ -5,7 +5,29 @@
  */
 #include "link.hpp"
 
+#include <cstring>
+
 namespace mmw {
+
+void DiagFrameCounts::count(const Frame &f)
+{
+    if (f.present_count() == 0) {
+        ++empty;
+        ++total_empty;
+        return;
+    }
+    ++nonempty;
+    ++total_nonempty;
+    const std::uint8_t *t = f.raw + 4; /* the three 8-byte target slots */
+    if (have_prev && std::memcmp(prev, t, sizeof(prev)) == 0) {
+        ++same;
+        ++total_same;
+    }
+    std::memcpy(prev, t, sizeof(prev));
+    have_prev = true;
+    std::memcpy(latest, f.raw, sizeof(latest));
+    latest_new = true;
+}
 
 const char *link_state_name(LinkState s)
 {
@@ -50,6 +72,8 @@ void Link::start(Ms now, const Remembered &remembered)
     tracker_.clear();
     tty_settings_.clear();
     first_target_frames_.clear();
+    diag_ = DiagFrameCounts();
+    diag_.hex_since = now;
     state_ = LinkState::Searching;
     started_ = true;
     begin_scan(now);
@@ -130,6 +154,7 @@ void Link::read_frames(Ms now)
             }
             first_target_frames_.push_back(h);
         }
+        if (diag_on_) diag_.count(f);
         tracker_.update(f, now);
         last_ = f;
         arrivals_.push_back(now);

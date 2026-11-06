@@ -99,8 +99,8 @@ rings, labels) is drawn once into a canvas, and each frame redraws only where th
 second and never more than half of the time (the render time paces it). `MMWAVE_TIMING=1` logs the render time every
 5 s. `MMWAVE_LOG=<file>` or the marker file `diag` in the settings folder (off by default, see Known behaviour)
 appends one diagnostic line a second (link state, port, speed, frame counters, the three slots as the tracker holds
-them) plus once the port settings and the raw bytes of the first three frames that held a target; it never sends
-anything to the sensor.
+them, the empty / non-empty / identical frame counts) plus once the port settings and the raw bytes of the first three
+frames that held a target, and every 10 s the raw bytes of the latest one; it never sends anything to the sensor.
 
 ## Known behaviour
 
@@ -111,7 +111,12 @@ anything to the sensor.
   it on: `touch ~/.config/mmwave-radar/diag` (the app's settings folder, see Files the app keeps), then start the app.
   It writes `~/.config/mmwave-radar/mmwave.log`: a first line `log on (marker ...)`, the start line, then one line a
   second (link state, port, speed, frame counters, the three slots) and once the port settings and the raw bytes of the
-  first three frames that held a target. The log is cut to its last 200 KB at each start (and while running once it
+  first three frames that held a target. Each line ends with the frames of that second and the totals since the start:
+  `empty=0 nonempty=20 same_as_prev=20 total_empty=0 total_nonempty=407 total_same_as_prev=406`. `empty` frames hold
+  no target; `same_as_prev` counts the frames whose 24 target bytes equal the previous non-empty frame's byte for byte,
+  as received (before any tracking): a sensor that keeps reporting a still target shows `same_as_prev` equal to
+  `nonempty` second after second. Every 10 s, when a target came in those 10 s, a line `last-target-frame <hex>` gives
+  the latest such frame's 30 bytes. Nothing is counted while the log is off. The log is cut to its last 200 KB at each start (and while running once it
   reaches 400 KB). `rm ~/.config/mmwave-radar/diag` turns it off; without the marker the app writes no log file at all.
   `MMWAVE_LOG=<file>` (started by hand) does the same into that file, without the cut.
 
@@ -189,4 +194,5 @@ Build from a WSL native-filesystem LF copy with fresh build dirs (`CDK_BUILD`, `
 
 - 0.1.0 (draft): first version: Radar, Table, Graph and Sensor pages, listen-only detection, units, orientation,
   range and trails settings, 480x320 and 320x480 minimum layouts; the tall Radar page (plot, target list, distance
-  strip), ring labels on the wedge's edge, the diagnostic log's marker file.
+  strip), ring labels on the wedge's edge, the diagnostic log's marker file and its frame counters (empty, non-empty,
+  identical; the latest target frame every 10 s).
