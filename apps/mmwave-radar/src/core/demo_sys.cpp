@@ -57,7 +57,35 @@ std::string nmea_sentence(const char *body)
     return buf;
 }
 
+/* the LD2451 scenario: a loop of kLdSlots frame slots 140 ms apart */
+constexpr int kLdSlots = 100;
+constexpr int kLdSlotMs = 140;
+
 } // namespace
+
+std::vector<std::uint8_t> encode_ld2451_frame(const Ld2451Wire *targets, int count, int alarm)
+{
+    std::vector<std::uint8_t> out = {0xF4, 0xF3, 0xF2, 0xF1};
+    if (count <= 0) {
+        out.push_back(0);
+        out.push_back(0);
+    } else {
+        const int len = 2 + 5 * count;
+        out.push_back(static_cast<std::uint8_t>(len & 0xFF));
+        out.push_back(static_cast<std::uint8_t>(len >> 8));
+        out.push_back(static_cast<std::uint8_t>(count));
+        out.push_back(static_cast<std::uint8_t>(alarm));
+        for (int i = 0; i < count; ++i) {
+            out.push_back(static_cast<std::uint8_t>(targets[i].angle_deg + 0x80));
+            out.push_back(static_cast<std::uint8_t>(targets[i].distance_m));
+            out.push_back(static_cast<std::uint8_t>(targets[i].direction));
+            out.push_back(static_cast<std::uint8_t>(targets[i].speed_kmh));
+            out.push_back(static_cast<std::uint8_t>(targets[i].snr));
+        }
+    }
+    out.insert(out.end(), {0xF8, 0xF7, 0xF6, 0xF5});
+    return out;
+}
 
 void encode_frame(const Frame &f, std::uint8_t out[30])
 {
@@ -129,6 +157,9 @@ DemoSys::DemoSys(const std::string &scenario, Clock clock) : scenario_(scenario)
             std::ifstream in(path, std::ios::binary);
             walk_.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
         }
+    } else if (scenario == "ld2451" || scenario == "ld2451-away" || scenario == "ld2451-two") {
+        add("ttyUSB0", 0x1a86, 0x7523, "USB Serial", Kind::Ld2451);
+        build_ld2451(scenario == "ld2451" ? 0 : scenario == "ld2451-away" ? 1 : 2);
     } else if (scenario == "one") {
         add("ttyUSB0", 0x1a86, 0x7523, "USB Serial", Kind::One);
     } else if (scenario == "three") {
@@ -147,6 +178,39 @@ DemoSys::DemoSys(const std::string &scenario, Clock clock) : scenario_(scenario)
     }
     nmea_ = nmea_sentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,") +
             nmea_sentence("GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W");
+}
+
+/* Slots 0..89: a target in every slot (a pass of 12.6 s); slot 90: the empty frame; 91..99: nothing (a frame comes only
+ * when there is something to say, as the sensor does). mode 0 approaching, 1 receding, 2 both. */
+void DemoSys::build_ld2451(int mode)
+{
+    ld_buf_.clear();
+    ld_cum_.assign(kLdSlots + 1, 0);
+    for (int k = 0; k < kLdSlots; ++k) {
+        ld_cum_[k] = ld_buf_.size();
+        Ld2451Wire w[2];
+        int n = 0;
+        if (k < 90) {
+            const double u = k / 90.0;
+            if (mode == 0 || mode == 2) { /* approaching: 14 m to 8 m, a few degrees to the right of the centre line */
+                w[n++] = {static_cast<int>(std::lround(8.0 + 6.0 * std::sin(u * 3.14159265))),
+                          static_cast<int>(std::lround(14.0 - 6.0 * u)), 1, 4,
+                          150 + (k * 37) % 100};
+            }
+            if (mode == 1 || mode == 2) { /* receding: 4 m to 12 m, to the left */
+                w[n++] = {static_cast<int>(std::lround(-12.0 + 5.0 * std::sin(u * 3.14159265 * 2.0))),
+                          static_cast<int>(std::lround(4.0 + 8.0 * u)), 0, 4, 120 + (k * 53) % 130};
+            }
+        }
+        if (k < 90) {
+            const std::vector<std::uint8_t> f = encode_ld2451_frame(w, n, w[0].direction);
+            ld_buf_.insert(ld_buf_.end(), f.begin(), f.end());
+        } else if (k == 90) {
+            const std::vector<std::uint8_t> f = encode_ld2451_frame(nullptr, 0, 0);
+            ld_buf_.insert(ld_buf_.end(), f.begin(), f.end());
+        }
+    }
+    ld_cum_[kLdSlots] = ld_buf_.size();
 }
 
 std::vector<PortMeta> DemoSys::list_ports()
@@ -214,6 +278,11 @@ void DemoSys::flush_input(int handle)
 
 std::uint64_t DemoSys::stream_now(const Port &p, std::int64_t now) const
 {
+    if (p.kind == Kind::Ld2451) { /* time in slots of 140 ms, a loop of kLdSlots of them */
+        const std::int64_t t = std::max<std::int64_t>(0, now - t0_);
+        const std::uint64_t slot = static_cast<std::uint64_t>(t / kLdSlotMs);
+        return (slot / kLdSlots) * ld_cum_[kLdSlots] + ld_cum_[slot % kLdSlots];
+    }
     const double rate = p.kind == Kind::Gps ? kNmeaBytesPerSecond : kBytesPerSecond;
     std::int64_t t = now - t0_;
     if (p.stop_after_ms >= 0 && p.first_open_ms >= 0) t = std::min<std::int64_t>(t, p.first_open_ms - t0_ + p.stop_after_ms);
@@ -228,6 +297,7 @@ std::uint8_t DemoSys::byte_at(Port &p, std::uint64_t index)
     switch (p.kind) {
     case Kind::Walk: return walk_.empty() ? 0 : walk_[index % walk_.size()];
     case Kind::Gps: return static_cast<std::uint8_t>(nmea_[index % nmea_.size()]);
+    case Kind::Ld2451: return ld_buf_.empty() ? 0 : ld_buf_[index % ld_buf_.size()];
     case Kind::One:
     case Kind::Held:
     case Kind::Three: {
@@ -261,7 +331,7 @@ long DemoSys::read(int handle, std::uint8_t *buf, std::size_t n)
     const std::uint64_t end = stream_now(*p, clock_ ? clock_() : 0);
     if (end > p->pos + 4096) p->pos = end - 4096; /* a tty buffer keeps about 4 KB */
     std::size_t got = 0;
-    const bool wrong_speed = p->kind != Kind::Gps && p->baud != 9600;
+    const bool wrong_speed = p->kind == Kind::Ld2451 ? p->baud != 115200 : (p->kind != Kind::Gps && p->baud != 9600);
     while (got < n && p->pos < end) {
         const std::uint8_t b = byte_at(*p, p->pos++);
         buf[got++] = wrong_speed ? 0 : b;

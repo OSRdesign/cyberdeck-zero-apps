@@ -14,6 +14,7 @@
 #include "fake_sys.hpp"
 #include "ld2410.hpp"
 #include "ld2450.hpp"
+#include "ld2451.hpp"
 #include "link.hpp"
 #include "settings.hpp"
 
@@ -64,9 +65,10 @@ void test_registry()
 {
     std::size_t n = 0;
     const SensorDriver *const *all = drivers(n);
-    CHECK_EQ(n, static_cast<std::size_t>(2));
+    CHECK_EQ(n, static_cast<std::size_t>(3));
     CHECK(all[0] == &kDriverLd2450); /* real drivers first */
-    CHECK(all[1] == &kDriverLd2410);
+    CHECK(all[1] == &kDriverLd2451);
+    CHECK(all[2] == &kDriverLd2410);
     CHECK(find_driver("ld2450") == &kDriverLd2450);
     CHECK(find_driver("ld2410") == &kDriverLd2410);
     CHECK(find_driver("nope") == nullptr);
@@ -76,7 +78,7 @@ void test_registry()
     const SensorDriver &d = kDriverLd2450;
     CHECK(d.supported());
     CHECK_EQ(std::string(d.id), "ld2450");
-    CHECK_EQ(std::string(d.name), "HLK-LD2452 / LD2450");
+    CHECK_EQ(std::string(d.name), "LD2452 / LD2450");
     CHECK_EQ(std::string(d.found_text), "mmWave radar (LD2450 family)");
     CHECK(d.caps.tracking_targets && !d.caps.presence_gates);
     CHECK(d.view == ViewKind::Tracking);
@@ -98,10 +100,12 @@ void test_registry()
     CHECK(!valid_sensor_type("zzz"));
     CHECK(!valid_sensor_type(nullptr));
     CHECK_EQ(std::string(next_sensor_type("auto")), "ld2450");
-    CHECK_EQ(std::string(next_sensor_type("ld2450")), "auto");
+    CHECK_EQ(std::string(next_sensor_type("ld2450")), "ld2451");
+    CHECK_EQ(std::string(next_sensor_type("ld2451")), "auto");
     CHECK_EQ(std::string(next_sensor_type("junk")), "auto");
     CHECK_EQ(std::string(sensor_type_label("auto")), "Auto");
-    CHECK_EQ(std::string(sensor_type_label("ld2450")), "HLK-LD2452 / LD2450");
+    CHECK_EQ(std::string(sensor_type_label("ld2450")), "LD2452 / LD2450");
+    CHECK_EQ(std::string(sensor_type_label("ld2451")), "LD2451");
     CHECK_EQ(std::string(sensor_type_label("ld2410")), "Auto");
 }
 

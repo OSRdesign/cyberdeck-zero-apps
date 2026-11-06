@@ -1,0 +1,14 @@
+title mmWave Radar: HLK-LD2451, one target approaching (negative speed), the Table and the Radar page
+sizes 480x320 320x480
+env MMWAVE_DEMO ld2451
+env MMWAVE_TEST_CONFIG 1
+
+wait 5000
+shot ld2451-approach
+check ld2451-approach
+expect notext "No radar found"
+key 2
+wait 600
+shot ld2451-approach-table
+check ld2451-approach-table
+expect noquit

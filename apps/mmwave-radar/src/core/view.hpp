@@ -14,15 +14,24 @@
 
 namespace mmw {
 
-constexpr int kRangeSteps[3] = {2, 4, 6};   /* metres */
+constexpr int kRangeSteps[3] = {2, 4, 6};   /* metres: the fixed settings (Range row, + / - keys) */
+/* The steps the Auto range may take: the three above, and for a long-range sensor (SensorDriver::max_range_m, the
+ * LD2451 reports up to 100 m) these as well. */
+constexpr int kAutoSteps[7] = {2, 4, 6, 10, 20, 50, 100};
+constexpr int kAutoStepCount = 7;
 constexpr int kAutoMarginMm = 500;          /* Auto: the farthest target + this must fit */
 constexpr int kAutoShrinkMm = 300;          /* ... and the range shrinks only when it fits this much inside the next
                                                smaller step (no flapping at a boundary) */
 constexpr double kFovDeg = 60.0;            /* azimuth +-60 deg (LD2450 and LD2452 manuals, report 056 section 2.2) */
 
-/* The Auto range: grows at once to the smallest step that holds max_dist_mm + kAutoMarginMm, shrinks one step at a time
- * only when that need is kAutoShrinkMm inside the smaller step. Without a target (any = false) it keeps current_m. */
-int auto_range(int current_m, int max_dist_mm, bool any);
+/* The Auto range: grows at once to the smallest step (kAutoSteps up to max_range_m, default the 6 m of the LD2450
+ * family) that holds max_dist_mm + kAutoMarginMm, shrinks one step at a time only when that need is kAutoShrinkMm inside
+ * the smaller step. Without a target (any = false) it keeps current_m (but never above max_range_m). */
+int auto_range(int current_m, int max_dist_mm, bool any, int max_range_m = 6);
+
+/* The distance between range rings (and their labels) for a plot range: every metre up to 6 m, then 2, 5, 10, 20 m,
+ * so that a 100 m plot has 5 rings and not 100. */
+int ring_step_m(int range_m);
 
 /* The +/- keys: dir > 0 a bigger range. From a fixed range the next step (past 6 m or under 2 m: Auto); from Auto the
  * step next to the range shown (effective_m). Returns the new setting (0 = Auto). */

@@ -10,23 +10,37 @@
 
 namespace mmw {
 
-int auto_range(int current_m, int max_dist_mm, bool any)
+int auto_range(int current_m, int max_dist_mm, bool any, int max_range_m)
 {
+    /* the allowed steps: kAutoSteps up to max_range_m, never fewer than the first three */
+    int top = kRangeSteps[2];
+    for (int i = 0; i < kAutoStepCount; ++i)
+        if (kAutoSteps[i] <= max_range_m) top = kAutoSteps[i];
+    if (current_m > top) current_m = top;
     if (!any) return current_m;
     const int need = max_dist_mm + kAutoMarginMm;
-    int fit = kRangeSteps[2];
-    for (int s : kRangeSteps)
-        if (s * 1000 >= need) {
-            fit = s;
+    int fit = top;
+    for (int i = 0; i < kAutoStepCount && kAutoSteps[i] <= top; ++i)
+        if (kAutoSteps[i] * 1000 >= need) {
+            fit = kAutoSteps[i];
             break;
         }
     if (fit >= current_m) return fit; /* grow at once (or stay) */
     /* shrink: one step, and only well inside it */
     int smaller = current_m;
-    for (int s : kRangeSteps)
-        if (s < current_m) smaller = s;
+    for (int i = 0; i < kAutoStepCount; ++i)
+        if (kAutoSteps[i] < current_m) smaller = kAutoSteps[i];
     if (smaller < current_m && need <= smaller * 1000 - kAutoShrinkMm) return smaller;
     return current_m;
+}
+
+int ring_step_m(int range_m)
+{
+    if (range_m <= 6) return 1;
+    if (range_m <= 10) return 2;
+    if (range_m <= 20) return 5;
+    if (range_m <= 50) return 10;
+    return 20;
 }
 
 int step_range(int setting_m, int effective_m, int dir)
@@ -35,7 +49,7 @@ int step_range(int setting_m, int effective_m, int dir)
     int idx = -1;
     for (int i = 0; i < 3; ++i)
         if (kRangeSteps[i] == base) idx = i;
-    if (idx < 0) idx = 1;
+    if (idx < 0) idx = base > kRangeSteps[2] ? 2 : 1; /* an Auto range of 10 m or more: next to the 6 m step */
     if (setting_m == 0) { /* from Auto: the neighbour of what is shown, clamped */
         const int j = std::clamp(idx + (dir > 0 ? 1 : -1), 0, 2);
         return kRangeSteps[j];

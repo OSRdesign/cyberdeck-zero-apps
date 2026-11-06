@@ -7,6 +7,7 @@
 
 #include "ld2410.hpp"
 #include "ld2450.hpp"
+#include "ld2451.hpp"
 
 #include <cstring>
 
@@ -15,7 +16,7 @@ namespace mmw {
 namespace {
 
 /* Real drivers first, then the stubs. */
-const SensorDriver *const kRegistry[] = {&kDriverLd2450, &kDriverLd2410};
+const SensorDriver *const kRegistry[] = {&kDriverLd2450, &kDriverLd2451, &kDriverLd2410};
 
 } // namespace
 

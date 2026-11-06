@@ -100,6 +100,12 @@ void Link::begin_scan(Ms now)
     idle_check_ms_ = now;
 }
 
+Ms Link::lost_after_ms() const
+{
+    if (cfg_.lost_ms > 0) return cfg_.lost_ms;
+    return driver_ ? driver_->quiet_ms : kDriverQuietDefaultMs;
+}
+
 const char *Link::model() const
 {
     if (driver_) return driver_->model;
@@ -164,7 +170,8 @@ void Link::read_frames(Ms now)
         dec_->feed(buf, static_cast<std::size_t>(n), &frames);
         if (n < static_cast<long>(sizeof(buf))) break;
     }
-    for (const Frame &f : frames) {
+    for (Frame &f : frames) {
+        if (flip_angle_ && driver_ && driver_->caps.polar) mirror_frame_x(f);
         if (f.present_count() > 0 && first_target_frames_.size() < 3) {
             static const char *hex = "0123456789abcdef";
             std::string h;
@@ -188,7 +195,8 @@ void Link::read_frames(Ms now)
     while (!arrivals_.empty() && now - arrivals_.front() > 1000) arrivals_.pop_front();
     const Ms span = now - found_ms_ < 1000 ? (now - found_ms_ > 0 ? now - found_ms_ : 1) : 1000;
     stats_.fps = static_cast<double>(arrivals_.size()) * 1000.0 / static_cast<double>(span);
-    if (last_frame_ms_ < 0 ? now - found_ms_ > cfg_.lost_ms : now - last_frame_ms_ > cfg_.lost_ms) lose(now);
+    const Ms lost_ms = lost_after_ms();
+    if (last_frame_ms_ < 0 ? now - found_ms_ > lost_ms : now - last_frame_ms_ > lost_ms) lose(now);
 }
 
 void Link::after_scan(Ms now)
@@ -209,6 +217,7 @@ void Link::after_scan(Ms now)
         tty_settings_ = sys_.describe(port_.handle);
         driver_ = port_.driver;
         dec_ = driver_->make_decoder();
+        tracker_.set_drop_ms(driver_->drop_ms);
         stats_ = LinkStats();
         arrivals_.clear();
         last_frame_ms_ = -1;

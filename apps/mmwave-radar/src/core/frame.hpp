@@ -44,6 +44,17 @@ struct Frame {
     }
 };
 
+/* Mirrors a frame left to right (x and the angle change sign): the Flip angle setting for a sensor whose angle sign is
+ * not verified (DriverCaps::polar). Distance, speed and the raw bytes are left alone. */
+inline void mirror_frame_x(Frame &f)
+{
+    for (Target &t : f.target)
+        if (t.present) {
+            t.x_mm = -t.x_mm;
+            t.angle_deg = -t.angle_deg;
+        }
+}
+
 struct DecoderStats {
     std::uint64_t bytes = 0;
     std::uint32_t frames_ok = 0;        /* good data frames yielded */

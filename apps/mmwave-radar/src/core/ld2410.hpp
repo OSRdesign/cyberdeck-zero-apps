@@ -11,7 +11,10 @@
 
 namespace mmw {
 
-/* True when a complete LD2410 frame starts at p (avail bytes from there on): header, length 1..100, footer. */
+/* True when a complete LD2410 data frame starts at p (avail bytes from there on): header, length 4..100, data type 01
+ * (engineering) or 02 (basic), the head byte AA right after it, the tail 55 00 and the footer. The LD2451 uses the same
+ * header and footer (ld2451.hpp), but its data starts with a target count and an alarm byte (0 or 1), never AA, and its
+ * length is 0 or 2 + 5n: so no frame is both. */
 bool ld2410_frame_at(const std::uint8_t *p, std::size_t avail);
 
 extern const SensorDriver kDriverLd2410;

@@ -280,10 +280,25 @@ void test_silent_and_busy()
     const long t = run(sys, det);
     CHECK(det.reports()[0].verdict == Verdict::Silent);
     CHECK_EQ(det.reports()[0].text, "not a supported radar: silent (no data)");
-    CHECK(t >= 600 && t <= 700); /* 0.6 s, then the port is left */
+    /* Auto: the LD2451 listens too, and it is quiet for up to 1.7 s between frames, so a port is "silent" only after
+     * its silent_ms (2 s); a fixed LD2450 (below) keeps the 0.6 s of 0.1.0 */
+    CHECK(t >= 2000 && t <= 2100);
     CHECK_EQ(silent.bauds.size(), static_cast<std::size_t>(1));
     CHECK_EQ(silent.restores, 1);
     CHECK_EQ(silent.closes, 1);
+
+    {
+        FakeSys sf;
+        FakePort &q = sf.add("ttyUSB0");
+        q.wrong_speed.clear();
+        DetectConfig cf;
+        cf.sensor = "ld2450";
+        Detector df(sf, cf);
+        df.start(0, Remembered());
+        const long tf = run(sf, df);
+        CHECK(df.reports()[0].verdict == Verdict::Silent);
+        CHECK(tf >= 600 && tf <= 700); /* 0.6 s, then the port is left */
+    }
 
     FakeSys s2;
     s2.add("ttyUSB0").excl_busy = true;

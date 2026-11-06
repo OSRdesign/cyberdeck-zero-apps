@@ -66,6 +66,9 @@ public:
     /* No frame, only time passing (releases stale slots, keeps the history sampling): call from a timer. */
     void tick(std::int64_t t_ms);
     void clear();
+    /* The release time of a slot, per sensor (SensorDriver::drop_ms); the Link sets it when a sensor is found. */
+    void set_drop_ms(std::int64_t ms) { cfg_.drop_ms = ms; }
+    std::int64_t drop_ms() const { return cfg_.drop_ms; }
 
     const SlotState &slot(int index) const { return slots_[index]; } /* 0..2 */
     std::uint32_t frames() const { return frames_; }

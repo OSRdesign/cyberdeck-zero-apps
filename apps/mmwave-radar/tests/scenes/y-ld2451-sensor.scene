@@ -1,0 +1,35 @@
+title mmWave Radar: Sensor page with the LD2451 chosen as the Sensor type and the Flip angle row (the last row)
+sizes 480x320 320x480
+env MMWAVE_DEMO ld2451-two
+env MMWAVE_TEST_CONFIG 1
+
+wait 4000
+key 4
+wait 700
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+key enter
+wait 600
+key down
+wait 300
+shot sensor-ld2451
+check sensor-ld2451
+expect text "Sensor type"
+expect text "LD2451"
+expect text "Flip angle"
+expect text "Off"
+key enter
+wait 400
+shot sensor-flip
+check sensor-flip
+expect text "On"
+key 1
+wait 1500
+shot radar-flipped
+check radar-flipped
+expect noquit

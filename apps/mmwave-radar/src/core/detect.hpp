@@ -134,6 +134,7 @@ private:
     std::size_t bi_ = 0;
     Ms window_start_ = 0;
     Ms window_len_ = 0;
+    Ms silent_len_ = 0;       /* how long the first speed may stay without a byte before the port is "silent" */
     bool first_baud_ = true;
     bool any_bytes_ = false;
     std::vector<const SensorDriver *> active_;            /* the real drivers listening on this port */

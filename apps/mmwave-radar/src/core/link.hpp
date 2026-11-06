@@ -12,7 +12,7 @@
  *          Lost       it was found and the frames stopped (2 s without a frame, or the port went away): re-detecting
  *          Busy       no radar, and a port was skipped because another app holds it
  *          Error      no radar, and a port could not be opened or configured (permission, ...)
- * Re-detection: frames stop for lost_ms (2 s) or a read fails -> the port is released, state Lost, a scan starts with
+ * Re-detection: frames stop for the driver's quiet_ms (LD2450 family 2 s, LD2451 5 s) or a read fails -> the port is released, state Lost, a scan starts with
  * the remembered port and speed first. While nothing is found, the port list is checked every rescan_ms (2 s): a new or
  * changed list starts a scan (hot-plug); busy, denied and failed ports are tried again every retry_ms (4 s); ports
  * judged "not a radar" or silent are not opened again until the list changes or rescan() is called.
@@ -31,13 +31,15 @@
 
 namespace mmw {
 
+constexpr Ms kDriverQuietDefaultMs = 2000; /* the LD2450 family's quiet_ms, used before a sensor is found */
+
 enum class LinkState { Searching, Found, Lost, Busy, Error };
 const char *link_state_name(LinkState s);
 
 struct LinkConfig {
     DetectConfig detect;
     TrackerConfig tracker;
-    Ms lost_ms = 2000;
+    Ms lost_ms = 0;     /* 0: the found driver's quiet_ms (driver.hpp); > 0 overrides it (tests) */
     Ms rescan_ms = 2000;
     Ms retry_ms = 4000;
 };
@@ -114,6 +116,12 @@ public:
      * value starts a scan at once (forgetting what was judged not-a-radar); a streaming radar is left alone. */
     void set_sensor_type(const std::string &id, Ms now);
     const std::string &sensor_type() const { return cfg_.detect.sensor; }
+    /* The Flip angle setting: mirrors x and the angle of the frames of a polar sensor (DriverCaps::polar, the LD2451)
+     * before the tracker sees them; other sensors are left alone. Takes effect on the next frame. */
+    void set_flip_angle(bool on) { flip_angle_ = on; }
+    bool flip_angle() const { return flip_angle_; }
+    /* The time without a frame that counts as lost, for the found driver (before one: the LD2450 family's). */
+    Ms lost_after_ms() const;
 
 private:
     void begin_scan(Ms now);
@@ -148,6 +156,7 @@ private:
     std::string tty_settings_;
     std::vector<std::string> first_target_frames_;
     bool diag_on_ = false;
+    bool flip_angle_ = false;
     DiagFrameCounts diag_;
 };
 

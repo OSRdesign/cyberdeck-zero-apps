@@ -232,6 +232,14 @@ void Detector::begin_baud(Ms now)
     for (auto &d : decs_) d->reset();
     window_start_ = now;
     window_len_ = first_baud_ ? cfg_.first_listen_ms : cfg_.next_listen_ms;
+    /* a driver with a slow sensor (the LD2451 sends one frame every 1.4 s when idle) asks for a longer window at its
+     * own first speed, so that three frames fit; and for a longer wait before a quiet port counts as silent */
+    silent_len_ = window_len_;
+    for (const SensorDriver *d : active_) {
+        if (d->listen_ms > 0 && d->baud_count > 0 && d->bauds[0] == bauds_[bi_])
+            window_len_ = std::max<Ms>(window_len_, d->listen_ms);
+        if (d->silent_ms > 0) silent_len_ = std::max<Ms>(silent_len_, d->silent_ms);
+    }
 }
 
 void Detector::next_baud(Ms now)
@@ -298,9 +306,9 @@ void Detector::poll(Ms now)
         if (st.bytes > bytes_seen) bytes_seen = st.bytes;
     }
     const Ms elapsed = now - window_start_;
-    if (first_baud_ && !any_bytes_ && elapsed >= window_len_) {
-        end_port(Verdict::Silent, "not a supported radar: silent (no data)", 0);
-        return;
+    if (first_baud_ && !any_bytes_) {
+        if (elapsed >= silent_len_) end_port(Verdict::Silent, "not a supported radar: silent (no data)", 0);
+        return; /* a quiet sensor may still talk: wait out silent_len_ before the next speed */
     }
     if (!header_seen && bytes_seen >= cfg_.early_garbage_bytes) {
         next_baud(now);

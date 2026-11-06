@@ -182,7 +182,7 @@ void RadarApp::render_background()
     nx /= nl;
     ny /= nl;
     const int lh_cap = lv_font_get_line_height(cp0_ui_font_px(cap));
-    for (int m = 1; m <= range; ++m) {
+    for (int m = mmw::ring_step_m(range); m <= range; m += mmw::ring_step_m(range)) {
         const int r = static_cast<int>(std::lround(m * 1000.0 * g.px_per_mm));
         lv_draw_arc_dsc_t d;
         lv_draw_arc_dsc_init(&d);

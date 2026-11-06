@@ -184,7 +184,7 @@ private:
     InfoRow si_state_, si_port_, si_id_, si_baud_, si_fps_, si_good_, si_bad_, si_age_, si_model_;
     lv_obj_t *si_reports_ = nullptr;
     std::string si_reports_shown_;
-    SettingRow settings_rows_[6];
+    SettingRow settings_rows_[7]; /* kSettingCount in radar_app.cpp */
     int setting_sel_ = -1;
 
     std::unique_ptr<mmw::Sys> sys_;

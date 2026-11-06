@@ -192,7 +192,7 @@ const int kBauds[] = {256000, 9600, 115200, 57600, 38400, 19200, 230400, 460800}
 
 const SensorDriver kDriverLd2450 = {
     "ld2450",
-    "HLK-LD2452 / LD2450",
+    "LD2452 / LD2450",
     "LD2450-family tracking radar (LD2450, LD2452)",
     "mmWave radar (LD2450 family)",
     "",
@@ -200,8 +200,13 @@ const SensorDriver kDriverLd2450 = {
     sizeof(kBauds) / sizeof(kBauds[0]),
     &sniff,
     &make_decoder,
-    {true, false},
+    {true, false, false},
     ViewKind::Tracking,
+    2000, /* quiet_ms: 19 frames a second, 2 s without one is a lost sensor */
+    500,  /* drop_ms */
+    0,    /* listen_ms: the detector's own windows */
+    0,    /* silent_ms */
+    6,    /* max_range_m: 2, 4 or 6 m */
 };
 
 } // namespace mmw
