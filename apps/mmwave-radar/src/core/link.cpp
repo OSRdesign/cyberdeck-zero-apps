@@ -48,6 +48,8 @@ void Link::start(Ms now, const Remembered &remembered)
     stats_ = LinkStats();
     last_frame_ms_ = -1;
     tracker_.clear();
+    tty_settings_.clear();
+    first_target_frames_.clear();
     state_ = LinkState::Searching;
     started_ = true;
     begin_scan(now);
@@ -119,6 +121,15 @@ void Link::read_frames(Ms now)
         if (n < static_cast<long>(sizeof(buf))) break;
     }
     for (const Frame &f : frames) {
+        if (f.present_count() > 0 && first_target_frames_.size() < 3) {
+            static const char *hex = "0123456789abcdef";
+            std::string h;
+            for (int k = 0; k < 30; ++k) {
+                h += hex[f.raw[k] >> 4];
+                h += hex[f.raw[k] & 15];
+            }
+            first_target_frames_.push_back(h);
+        }
         tracker_.update(f, now);
         last_ = f;
         arrivals_.push_back(now);
@@ -150,6 +161,7 @@ void Link::after_scan(Ms now)
     if (det_.found()) {
         port_ = det_.take_radar();
         open_ = true;
+        tty_settings_ = sys_.describe(port_.handle);
         dec_.reset();
         stats_ = LinkStats();
         arrivals_.clear();

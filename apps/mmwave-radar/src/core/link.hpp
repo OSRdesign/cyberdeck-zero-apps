@@ -81,6 +81,10 @@ public:
     /* What to store for the next fast start; true once after it changed. */
     bool take_remembered_changed();
     const Remembered &remembered() const { return remembered_; }
+    /* For the diagnostic log (MMWAVE_LOG): the port settings as set, and the raw bytes of the first 3 frames that
+     * held a target (hex, 30 bytes each). */
+    const std::string &tty_settings() const { return tty_settings_; }
+    const std::vector<std::string> &first_target_frames() const { return first_target_frames_; }
     /* Sensor-model line for the sensor page. */
     static const char *model() { return "LD2450-family tracking radar (LD2450, LD2452)"; }
 
@@ -113,6 +117,8 @@ private:
     bool scanning_ = false;
     Remembered remembered_;
     bool remembered_changed_ = false;
+    std::string tty_settings_;
+    std::vector<std::string> first_target_frames_;
 };
 
 } // namespace mmw

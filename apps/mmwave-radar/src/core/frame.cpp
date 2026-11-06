@@ -45,6 +45,7 @@ int Frame::present_count() const
 bool decode_frame(const std::uint8_t *p, Frame &out)
 {
     if (header_match(p, 4) != 4 || p[28] != 0x55 || p[29] != 0xCC) return false;
+    for (int k = 0; k < 30; ++k) out.raw[k] = p[k];
     for (int i = 0; i < 3; ++i) {
         const std::uint8_t *q = p + 4 + 8 * i;
         Target &t = out.target[i];

@@ -186,6 +186,12 @@ private:
     bool have_box_[3] = {};
     int label_w_max_ = 0;
 
+    /* $MMWAVE_LOG=<file>: one diagnostic line a second (off when unset) */
+    std::string diag_path_;
+    std::int64_t diag_last_ = 0;
+    unsigned diag_sent_ = 0;
+    void diag_write(const std::string &text) const;
+
     /* $MMWAVE_TIMING=1: the render time of the screen, logged every 5 s (for the board test) */
     bool timing_ = false;
     std::int64_t render_start_ = 0, timing_since_ = 0, render_sum_ = 0, render_max_ = 0, last_render_ms_ = 0;

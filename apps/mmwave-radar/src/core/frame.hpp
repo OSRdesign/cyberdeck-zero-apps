@@ -41,6 +41,7 @@ struct Target {
 
 struct Frame {
     Target target[3];
+    std::uint8_t raw[30] = {}; /* the 30 bytes as received (for the diagnostic log) */
     int present_count() const;
 };
 

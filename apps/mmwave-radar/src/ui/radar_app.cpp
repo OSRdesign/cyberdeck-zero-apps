@@ -7,6 +7,7 @@
 
 #include "app.hpp"
 #include "demo_sys.hpp"
+#include "diag.hpp"
 #include "keyboard_input.h"
 #include "palette.hpp"
 #include "posix_sys.hpp"
@@ -174,7 +175,21 @@ RadarApp::RadarApp(lv_obj_t *screen) : screen_(screen)
     const char *t = std::getenv("MMWAVE_TIMING");
     timing_ = t && *t && std::strcmp(t, "0") != 0;
     timing_since_ = mono_ms();
+    if (const char *lg = std::getenv("MMWAVE_LOG"); lg && *lg) {
+        diag_path_ = lg;
+        diag_write(std::string("start ") + kVersion + (demo && *demo ? " demo " : " real ports") + (demo && *demo ? demo : "") +
+                   " config_dir=" + config_dir_ + " remembered=" + (remembered.empty() ? "none" : remembered.port_id + " " + std::to_string(remembered.baud)) + "
+");
+    }
     lv_display_add_event_cb(lv_obj_get_display(screen_), render_cb, LV_EVENT_ALL, this);
+}
+
+void RadarApp::diag_write(const std::string &text) const
+{
+    if (FILE *f = std::fopen(diag_path_.c_str(), "a")) {
+        std::fputs(text.c_str(), f);
+        std::fclose(f);
+    }
 }
 
 void RadarApp::render_cb(lv_event_t *e)
@@ -527,6 +542,11 @@ void RadarApp::tick()
 {
     now_ = mono_ms();
     link_->poll(now_);
+    if (!diag_path_.empty() && now_ - diag_last_ >= 1000) {
+        diag_last_ = now_;
+        diag_write(mmw::diag_line(*link_, now_) + "
+" + mmw::diag_extra(*link_, diag_sent_));
+    }
     if (link_->take_remembered_changed() && !config_dir_.empty()) {
         mmw::make_dirs(config_dir_);
         if (!mmw::write_file_atomic(config_dir_ + "/remembered.conf", link_->remembered().serialize()))

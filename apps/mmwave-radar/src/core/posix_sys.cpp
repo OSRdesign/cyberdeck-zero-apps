@@ -218,4 +218,6 @@ void PosixSys::close(int handle)
     ::close(handle);
 }
 
+std::string PosixSys::describe(int handle) { return tty_describe(handle); }
+
 } // namespace mmw

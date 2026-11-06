@@ -34,6 +34,7 @@ public:
     long read(int handle, std::uint8_t *buf, std::size_t n) override;
     void restore(int handle) override;
     void close(int handle) override;
+    std::string describe(int handle) override;
 
     /* Test hook: also list this device node (e.g. a pseudo-terminal slave) as a port. */
     void add_extra_port(const std::string &path);

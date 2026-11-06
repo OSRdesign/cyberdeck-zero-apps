@@ -88,7 +88,15 @@ toolkit pin the bar keeps its 56 px, see Known limits). The tab strip is one 7 m
 480x320 panels). The plot, the table and the graph are drawn by draw events; the radar's static background (wedge,
 rings, labels) is drawn once into a canvas, and each frame redraws only where the targets moved, at most 20 times a
 second and never more than half of the time (the render time paces it). `MMWAVE_TIMING=1` logs the render time every
-5 s.
+5 s. `MMWAVE_LOG=<file>` (off by default) appends one diagnostic line a second (link state, port, speed, frame counters,
+the three slots as the tracker holds them) plus once the port settings and the raw bytes of the first three frames that
+held a target; it never sends anything to the sensor.
+
+## Known behaviour
+
+- A still target: the sensor can report a person at rest (speed 0.0 km/h) and keeps reporting it; the app shows what the
+  sensor sends and drops a slot 0.5 s after the sensor stops sending it. Our own recordings of an empty room
+  (`tests/data/empty-*.bin`) decode to empty frames in every slot, and the tests check that no target stays on screen.
 
 ## The code
 

@@ -48,3 +48,4 @@ void test_link();
 void test_posix();
 void test_view();
 void test_package();
+void test_ghost();

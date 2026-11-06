@@ -55,6 +55,8 @@ public:
     virtual void restore(int handle) = 0;
     /* Releases the lock and closes. */
     virtual void close(int handle) = 0;
+    /* The settings of an open port as text, for the diagnostic log (read only; "" when not known). */
+    virtual std::string describe(int handle) { (void)handle; return std::string(); }
 };
 
 } // namespace mmw
