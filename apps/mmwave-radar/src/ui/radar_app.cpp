@@ -48,9 +48,9 @@ std::int64_t mono_ms()
 }
 
 const char *const kTabNames[4] = {"Radar", "Table", "Graph", "Sensor"};
-constexpr int kSettingCount = 7;
+constexpr int kSettingCount = 6;
 const char *const kSettingNames[kSettingCount] = {"Units", "Orientation", "Range", "Trails", "Hide held targets",
-                                                   "Sensor type", "Flip angle"};
+                                                   "Sensor type"};
 
 std::uint32_t state_rgb(mmw::LinkState s)
 {
@@ -163,7 +163,6 @@ RadarApp::RadarApp(lv_obj_t *screen) : screen_(screen)
     mmw::LinkConfig link_cfg;
     link_cfg.detect.sensor = settings_.sensor;
     link_ = std::make_unique<mmw::Link>(*sys_, link_cfg);
-    link_->set_flip_angle(settings_.flip_angle);
     now_ = mono_ms();
     link_->start(now_, remembered);
     log_line("%s %dx%d%s%s, listen only, remembered %s", kVersion, w_, h_,
@@ -828,8 +827,7 @@ void RadarApp::update_sensor(bool force)
                                                mmw::orientation_label(settings_.orientation),
                                                mmw::range_label(settings_.range_m), settings_.trails ? "On" : "Off",
                                                settings_.hide_held ? "On" : "Off",
-                                               mmw::sensor_type_label(settings_.sensor.c_str()),
-                                               settings_.flip_angle ? "On" : "Off"};
+                                               mmw::sensor_type_label(settings_.sensor.c_str())};
     for (int i = 0; i < kSettingCount; ++i) {
         set_text_if(settings_rows_[i].value, values[i]);
         lv_obj_set_style_bg_opa(settings_rows_[i].row, i == setting_sel_ ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
@@ -894,10 +892,6 @@ void RadarApp::apply_setting(int index)
     case 5:
         settings_.sensor = mmw::next_sensor_type(settings_.sensor.c_str());
         link_->set_sensor_type(settings_.sensor, now_);
-        break;
-    case 6:
-        settings_.flip_angle = !settings_.flip_angle;
-        link_->set_flip_angle(settings_.flip_angle);
         break;
     default: return;
     }

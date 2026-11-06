@@ -171,7 +171,6 @@ void Link::read_frames(Ms now)
         if (n < static_cast<long>(sizeof(buf))) break;
     }
     for (Frame &f : frames) {
-        if (flip_angle_ && driver_ && driver_->caps.polar) mirror_frame_x(f);
         if (f.present_count() > 0 && first_target_frames_.size() < 3) {
             static const char *hex = "0123456789abcdef";
             std::string h;

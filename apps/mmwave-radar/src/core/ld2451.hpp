@@ -10,9 +10,9 @@
  * with len = 2 + 5 x count. A frame with NOTHING in view is F4 F3 F2 F1 00 00 F8 F7 F6 F5 (len 0: no count and no alarm
  * byte; about every 1.4 s); one with a target comes about every 0.14 s. A frame of len 2 (count 0) is accepted as
  * empty too. Per target, one byte each:
- *   angle      reported value - 0x80, degrees (1 degree steps). Which side is positive is NOT verified: the driver takes
- *              positive as to the right, seen from behind the sensor looking where it points (x = d sin a); the Flip
- *              angle setting mirrors it.
+ *   angle      reported value - 0x80, degrees (1 degree steps). Positive is to the right, seen from behind the sensor
+ *              looking where it points (x = d sin a); confirmed by one walk test on 2026-11-06 (Orientation > Mirror
+ *              gives the view facing the sensor).
  *   distance   metres, whole (1 m steps; 2 m is the nearest seen; readings of 6-10 m in a 4 m room are reflections, not
  *              filtered here)
  *   direction  1 = approaching, 0 = receding (the document says the opposite; the recordings show the distance falling

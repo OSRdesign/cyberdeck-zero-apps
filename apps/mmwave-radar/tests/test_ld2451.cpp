@@ -3,7 +3,7 @@
  *
  * mmWave Radar tests: the HLK-LD2451 driver. The three real recordings (tests/data/ld2451-*.bin, README there) through
  * the decoder, the link and the tracker with their own timing; the decoder's edge cases (resync, split reads, truncated
- * and inconsistent frames, count above the slot cap); the polar maths and the Flip angle setting; the per-driver
+ * and inconsistent frames, count above the slot cap); the polar maths and the angle sign; a removed flip_angle settings key; the per-driver
  * timeouts (quiet_ms, drop_ms); the discrimination from the LD2410 both ways; the demo scenarios; listen-only.
  */
 #include "check.hpp"
@@ -900,86 +900,62 @@ void test_tracker_gap()
     }
 }
 
-/* ------------------------------------------------------------------------------------------ Flip angle */
+/* ------------------------------------------------------------------------------------------ angle sign */
 
-void test_flip_angle()
+/* The angle sign was confirmed by one walk test on 2026-11-06 (sensor horizontal, cable on the left as seen when facing it):
+ * positive = to the right as seen from behind the sensor; Orientation > Mirror gives the facing view. The polar maths is
+ * not mirrored anywhere (the Flip angle setting is gone). */
+void test_angle_sign()
 {
-    const Bytes tb = frame_bytes({{20, 8, 1, 4, 100}});
+    const Bytes tb = frame_bytes({{20, 8, 1, 4, 100}, {-15, 6, 0, 4, 100}});
     Frame f;
     CHECK(ld2451_decode_frame(tb.data(), tb.size(), f));
-    const int x0 = f.target[0].x_mm;
-    CHECK(x0 > 0);
-    Frame m = f;
-    mirror_frame_x(m);
-    CHECK_EQ(m.target[0].x_mm, -x0);
-    CHECK_EQ(m.target[0].angle_deg, -20.0);
-    CHECK_EQ(m.target[0].y_mm, f.target[0].y_mm);
-    CHECK_EQ(m.target[0].distance_mm, f.target[0].distance_mm);
-    CHECK_EQ(m.target[0].speed_cm_s, f.target[0].speed_cm_s);
-    CHECK(!m.target[1].present && m.target[1].x_mm == 0);
+    CHECK(f.target[0].x_mm > 0);
+    CHECK(f.target[1].x_mm < 0);
+    const int x0 = f.target[0].x_mm, x1 = f.target[1].x_mm;
+    CHECK_EQ(f.target[0].angle_deg, 20.0);
+    CHECK_EQ(f.target[1].angle_deg, -15.0);
 
-    for (int flip = 0; flip < 2; ++flip) {
-        FakeSys sys;
-        FakePort &p = sys.add("ttyUSB0");
-        p.stream[115200] = as_string(repeat(tb, 1));
-        p.rate_bps = 17 / 0.14;
-        Link link(sys);
-        link.set_flip_angle(flip != 0);
-        link.start(0);
-        step(sys, link, 8000);
-        CHECK(link.state() == LinkState::Found);
-        CHECK(link.driver() == &kDriverLd2451);
-        CHECK(link.tracker().slot(0).active);
-        CHECK_EQ(link.tracker().slot(0).last.x_mm, flip ? -x0 : x0);
-        CHECK_EQ(link.tracker().slot(0).last.angle_deg, flip ? -20.0 : 20.0);
-        /* switching it while running takes effect on the next frames */
-        link.set_flip_angle(flip == 0);
-        step(sys, link, 600);
-        CHECK_EQ(link.tracker().slot(0).last.x_mm, flip ? x0 : -x0);
-        link.close();
-    }
-    /* the LD2450 is left alone (it has Orientation > Mirror) */
-    {
-        FakeSys sys;
-        sys.add("ttyUSB0").stream[9600] = test_read_file(test_data_dir() + "ld2452-9600-walk-15s.bin");
-        Link a(sys);
-        a.set_flip_angle(true);
-        a.start(0);
-        step(sys, a, 6000);
-        CHECK(a.driver() == &kDriverLd2450);
-        const std::vector<std::uint8_t> raw(a.last_frame().raw, a.last_frame().raw + 30);
-        /* a flipped x would not match the bytes of the frame: decode them again */
-        Frame again;
-        CHECK(decode_frame(raw.data(), again));
-        for (int i = 0; i < 3; ++i) CHECK_EQ(a.last_frame().target[i].x_mm, again.target[i].x_mm);
-        a.close();
-    }
+    FakeSys sys;
+    FakePort &p = sys.add("ttyUSB0");
+    p.stream[115200] = as_string(repeat(tb, 1));
+    p.rate_bps = 17 / 0.14;
+    Link link(sys);
+    link.start(0);
+    step(sys, link, 8000);
+    CHECK(link.state() == LinkState::Found);
+    CHECK(link.driver() == &kDriverLd2451);
+    CHECK(link.tracker().slot(0).active);
+    CHECK_EQ(link.tracker().slot(0).last.x_mm, x0);
+    CHECK_EQ(link.tracker().slot(0).last.angle_deg, 20.0);
+    CHECK_EQ(link.tracker().slot(1).last.x_mm, x1);
+    link.close();
 }
 
 void test_flip_setting()
 {
-    Settings d;
-    CHECK(!d.flip_angle);
     /* the default file is as before: no line for it */
-    CHECK_EQ(serialize_settings(d), "units=metres\norientation=normal\nrange=auto\ntrails=on\nhide_held=off\n");
+    CHECK_EQ(serialize_settings(Settings()), "units=metres\norientation=normal\nrange=auto\ntrails=on\nhide_held=off\n");
+    /* an old file with the removed flip_angle key still loads (the key is ignored) and it is never written back */
+    for (const char *v : {"on", "off", "yes", ""}) {
+        const Settings r = parse_settings(std::string("units=raw\nflip_angle=") + v + "\nsensor=ld2451\nrange=4\n");
+        CHECK(r.units == UnitMode::MmCms);
+        CHECK_EQ(r.sensor, "ld2451");
+        CHECK_EQ(r.range_m, 4);
+        CHECK(serialize_settings(r).find("flip") == std::string::npos);
+    }
+    {
+        const Settings r = parse_settings("flip_angle=on\r\nunits=raw\r\n");
+        CHECK(r.units == UnitMode::MmCms);
+        CHECK(serialize_settings(r).find("flip") == std::string::npos);
+    }
     Settings s;
-    s.flip_angle = true;
-    CHECK(serialize_settings(s).find("flip_angle=on\n") != std::string::npos);
-    CHECK(parse_settings(serialize_settings(s)).flip_angle);
     s.sensor = "ld2451";
     s.range_m = 4;
     const Settings r = parse_settings(serialize_settings(s));
-    CHECK(r.flip_angle);
     CHECK_EQ(r.sensor, "ld2451");
     CHECK_EQ(r.range_m, 4);
     CHECK_EQ(serialize_settings(r), serialize_settings(s));
-    s.flip_angle = false;
-    CHECK(serialize_settings(s).find("flip_angle") == std::string::npos);
-    CHECK(!parse_settings("").flip_angle);
-    CHECK(!parse_settings("flip_angle=off\n").flip_angle);
-    CHECK(!parse_settings("flip_angle=yes\n").flip_angle);
-    CHECK(!parse_settings("flip_angle=\n").flip_angle);
-    CHECK(parse_settings("flip_angle=on\r\nunits=raw\r\n").flip_angle);
     /* the Sensor type value */
     CHECK_EQ(parse_settings("sensor=ld2451\n").sensor, "ld2451");
     CHECK(valid_sensor_type("ld2451"));
@@ -1109,7 +1085,7 @@ void test_ld2451()
     test_empty_only_stream();
     test_per_driver_timeouts();
     test_tracker_gap();
-    test_flip_angle();
+    test_angle_sign();
     test_flip_setting();
     test_range();
     test_demo_scenarios();

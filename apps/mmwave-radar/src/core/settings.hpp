@@ -31,12 +31,11 @@ struct Settings {
     bool trails = true;
     bool hide_held = false;   /* do not draw or list held (stale) targets; the status line counts them */
     std::string sensor = kSensorAuto;   /* Sensor type: "auto" or the id of a real driver (driver.hpp) */
-    bool flip_angle = false;  /* mirror left and right for a sensor whose angle sign is unverified (the LD2451) */
 };
 
 /* "units=metres\norientation=normal\nrange=auto\ntrails=on\nhide_held=off\n"; "sensor=<driver id>\n" is added only when
- * the Sensor type is not Auto and "flip_angle=on\n" only when Flip angle is on, so a file written with the defaults stays
- * as older versions wrote it. */
+ * the Sensor type is not Auto, so a file written with the defaults stays as older versions wrote it. A "flip_angle" key
+ * (a setting that no longer exists) in an old file is ignored silently and never written. */
 std::string serialize_settings(const Settings &s);
 /* Tolerant: unknown keys and bad values keep the defaults. */
 Settings parse_settings(const std::string &text);

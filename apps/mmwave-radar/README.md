@@ -10,7 +10,7 @@ nothing to the sensor, not even to find it (study: launcher report 056).
 `screenshots/` (rendered by the PC harness with the scripted ports, `build.sh host`): `01-radar-640x480`,
 `02-radar-480x320`, `03-radar-320x480` (the tall page at the board's 6.1 px/mm), `04-table-480x320`,
 `05-graph-640x480`, `06-sensor-320x480`, `07-notfound-480x320`, `08-table-320x480`, `09-radar-480x800` (the tall page
-with the strip chart). `18`-`21`: the Radar page with an LD2451 (an approaching and a receding target, Auto range 20 m) at 640x480, 480x320, 320x480 and 480x800; `22`, `23`: its Table; `24`, `25`: the Sensor page with the LD2451 chosen and Flip angle on.
+with the strip chart). `18`-`21`: the Radar page with an LD2451 (an approaching and a receding target, Auto range 20 m) at 640x480, 480x320, 320x480 and 480x800; `22`, `23`: its Table; `24`, `25`: the Sensor page with the LD2451 chosen (six setting rows).
 
 ## What it does
 
@@ -39,8 +39,7 @@ Four pages, switched by the tab strip at the bottom, the Left / Right keys or th
   line *Detected by listening only: the app sends nothing to the sensor*, and the settings: **Units** (Metres: m and
   km/h / Millimetres: mm and cm/s), **Orientation** (Normal / Mirror (left and right swapped) / Rotate 180), **Range**
   (Auto / 2 / 4 / 6 m), **Trails** (On / Off), **Hide held targets** (On / Off, default Off; see Known behaviour), **Sensor type** (Auto, the default, or
-  LD2452 / LD2450, or LD2451: a fixed type listens for that driver only), **Flip angle** (On / Off, default Off: mirrors
-  left and right for the LD2451, whose angle sign is not verified; no effect on the LD2450 family, which has Orientation).
+  LD2452 / LD2450, or LD2451: a fixed type listens for that driver only).
   A tap or Enter on a setting row moves it to its next value.
 - **No radar.** While the radar is not streaming, the Radar page says why ("No radar found", "The port is used by
   another app", "Signal lost, searching", "The port cannot be opened"), what the scan is doing, what was tried on each
@@ -98,9 +97,10 @@ Facts from our own recordings (`tests/data/ld2451-*.bin`, README there), which d
 direction byte is 1 for approaching and 0 for receding (the document says the opposite), and the empty frame has no
 count and alarm byte. The alarm byte is read for the plausibility check and not used. The sensor showed at most one
 target at a time; the decoder accepts up to 16 per frame and shows the first three. The polar values become x and y
-(`x = d sin a`, `y = d cos a`; the Table also shows the distance and the angle as sent). **The sign of the angle is not
-verified**: the app takes a positive angle as to the right of the sensor, seen from behind it; if a step to your right
-moves the dot left, switch on **Flip angle**. Readings of 6-10 m in a 4 m room were seen: they look like reflections and
+(`x = d sin a`, `y = d cos a`; the Table also shows the distance and the angle as sent). **The sign of the angle was confirmed by one
+walk test on 2026-11-06**, with the sensor horizontal and its cable on the left as seen when facing it: a positive angle
+is to the right as seen from behind the sensor (looking where it points), and the plot in the Normal orientation shows
+that view; **Orientation > Mirror** gives the view as seen when facing the sensor. Readings of 6-10 m in a 4 m room were seen: they look like reflections and
 are shown as sent. The resolution is 1 m and 1 degree, so the plot moves in steps. The sensor's detection settings (a
 direction filter, a minimum speed) cannot be read or changed with a listen-only app. Not supported:
 the LD2410 presence radar (named in the scan; its data frames are told from the LD2451's by their `02 AA ... 55 00` layout), any configuration (0.1 sends no command), two-person slot identity (not
@@ -176,7 +176,7 @@ struct and the registry. To add a model:
    `listen_ms` / `silent_ms` (longer detector windows for a slow sensor) and `max_range_m` (how far the Auto range may
    grow); see `ld2450.cpp` (the numbers of a fast sensor) and `ld2451.cpp` (a slow one, the numbers justified from its
    recordings). A polar sensor (distance and angle on the wire) fills `distance_mm` and `angle_deg` from the wire,
-   derives x and y, and sets `caps.polar` (the Flip angle setting applies to it). Its sniff must not match another
+   derives x and y, and sets `caps.polar`. Its sniff must not match another
    model's frames: the LD2410 shares the `F4 F3 F2 F1` framing with the LD2451, so each checks the layout inside it.
 2. Add it to the array in `driver.cpp` (real drivers before stubs). The Sensor type row, the settings file value
    (`sensor=<id>`), the scan and the diagnostic line's `driver=<id>` pick it up from there.
@@ -190,7 +190,7 @@ replays the recorded walk from `tests/data`, or `$MMWAVE_DEMO_FILE`; the `ld2451
 
 ## Files the app keeps
 
-`~/.config/mmwave-radar/` (or `$XDG_CONFIG_HOME/mmwave-radar/`): `settings.conf` (units, orientation, range, trails, hide_held, `sensor=<driver id>` only when the Sensor type is not Auto, and `flip_angle=on` only when Flip angle is on) and
+`~/.config/mmwave-radar/` (or `$XDG_CONFIG_HOME/mmwave-radar/`): `settings.conf` (units, orientation, range, trails, hide_held, `sensor=<driver id>` only when the Sensor type is not Auto; a `flip_angle` line of an older version is ignored and not written back) and
 `remembered.conf` (the port id and speed of the last radar), both written atomically. Delete the folder to reset. Only
 when you create the marker file `diag` there: `mmwave.log` (the diagnostic log, at most about 400 KB).
 
@@ -222,11 +222,11 @@ Settings > Apps, once published (0.1.0 is a draft: `"draft": true`). By hand: `s
 - Listen only: no sensor setting can be read or changed (the LD2452 does not answer the LD2450 queries anyway; the
   LD2451's direction filter and minimum speed stay as they are, and a sensor set to approaching only never shows a
   receding target).
-- LD2451: the angle sign is unverified (Flip angle, above); the field of view drawn is the LD2450's +-60 degrees, the
+- LD2451: the angle sign was confirmed by one walk test (see above); the field of view drawn is the LD2450's +-60 degrees, the
   LD2451's is not in the protocol paper (angles up to 71 degrees were recorded); a fixed Range is 2, 4 or 6 m (Auto goes
   to 100 m); the speed is a whole km/h from the sensor, so the Table's cm/s column moves in steps of 28.
 - Left and right: the sign of x is taken as the sensor sends it; if a step to your right moves the dot left, choose
-  Orientation > Mirror.
+  Orientation > Mirror (it applies to every sensor).
 - A frozen (hidden) app keeps the port; another app cannot open it meanwhile.
 - The plot's refresh rate on a Pi Zero 2 W is not measured yet (board test).
 
@@ -259,5 +259,4 @@ Build from a WSL native-filesystem LF copy with fresh build dirs (`CDK_BUILD`, `
   identical; the latest target frame every 10 s); held (stale) targets of the LD2452 marked after 3 s, with the
   setting Hide held targets; the sensor driver seam (the LD2450 family is one driver, the LD2410 a stub) and the
   Sensor type setting (Auto, default, or a fixed driver); the diagnostic line gains `driver=<id>`; the HLK-LD2451
-  driver (115200 baud, polar targets, per-driver quiet time and release time, Auto range up to 100 m) and the
-  Flip angle setting; the Sensor type value of the LD2450 family reads `LD2452 / LD2450`.
+  driver (115200 baud, polar targets, per-driver quiet time and release time, Auto range up to 100 m); the Sensor type value of the LD2450 family reads `LD2452 / LD2450`.

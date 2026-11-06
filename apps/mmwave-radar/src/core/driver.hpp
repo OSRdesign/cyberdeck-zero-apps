@@ -30,7 +30,7 @@ enum class ViewKind { Tracking, Presence };
 struct DriverCaps {
     bool tracking_targets;   /* frames carry up to three targets with positions */
     bool presence_gates;     /* frames carry presence and energy per range gate */
-    bool polar = false;      /* the wire carries distance and angle (x and y are derived); the Flip angle setting applies */
+    bool polar = false;      /* the wire carries distance and angle (x and y are derived) */
 };
 
 struct SensorDriver {

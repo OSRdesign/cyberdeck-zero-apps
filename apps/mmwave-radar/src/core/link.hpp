@@ -116,10 +116,6 @@ public:
      * value starts a scan at once (forgetting what was judged not-a-radar); a streaming radar is left alone. */
     void set_sensor_type(const std::string &id, Ms now);
     const std::string &sensor_type() const { return cfg_.detect.sensor; }
-    /* The Flip angle setting: mirrors x and the angle of the frames of a polar sensor (DriverCaps::polar, the LD2451)
-     * before the tracker sees them; other sensors are left alone. Takes effect on the next frame. */
-    void set_flip_angle(bool on) { flip_angle_ = on; }
-    bool flip_angle() const { return flip_angle_; }
     /* The time without a frame that counts as lost, for the found driver (before one: the LD2450 family's). */
     Ms lost_after_ms() const;
 
@@ -156,7 +152,6 @@ private:
     std::string tty_settings_;
     std::vector<std::string> first_target_frames_;
     bool diag_on_ = false;
-    bool flip_angle_ = false;
     DiagFrameCounts diag_;
 };
 
