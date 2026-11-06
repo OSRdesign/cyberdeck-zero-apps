@@ -44,6 +44,14 @@ plot look smooth? Is the touch still quick (tabs, pause)?
 3. A GPS or another serial board on the port only: "No radar found", the TRIED list names it (e.g. "GPS receiver
    (NMEA)"), the wiring table, Rescan works. The other device keeps working afterwards (nothing was sent to it).
 
+## T4b. Tall screen and the diagnostic log (2 min, Pi 3A+ 480x800)
+
+1. `touch ~/.config/mmwave-radar/diag`, then open mmWave Radar from the launcher with one person walking: the plot at
+   the top at full width, the ring labels (`1 m`, `2 m` ...) along the left edge of the wedge, under it the T1-T3 list
+   (distance, angle, speed, direction; empty slots `-`) and the 30 s distance strip; nothing under the tab strip.
+2. Close the app: `~/.config/mmwave-radar/mmwave.log` begins with `log on (marker ...)` and has a line a second. Send it
+   if something looked wrong, then `rm ~/.config/mmwave-radar/diag` (no log file is written without it).
+
 ## T5. Exit (30 s)
 
 Esc key and the header's Esc end the app; the port is free again (Serial Console can open it).

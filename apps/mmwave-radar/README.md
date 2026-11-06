@@ -8,8 +8,9 @@ nothing to the sensor, not even to find it (study: launcher report 056).
 ## Screenshots
 
 `screenshots/` (rendered by the PC harness with the scripted ports, `build.sh host`): `01-radar-640x480`,
-`02-radar-480x320`, `03-radar-320x480`, `04-table-480x320`, `05-graph-640x480`, `06-sensor-320x480`,
-`07-notfound-480x320`, `08-table-320x480`.
+`02-radar-480x320`, `03-radar-320x480` (the tall page at the board's 6.1 px/mm), `04-table-480x320`,
+`05-graph-640x480`, `06-sensor-320x480`, `07-notfound-480x320`, `08-table-320x480`, `09-radar-480x800` (the tall page
+with the strip chart).
 
 ## What it does
 
@@ -21,7 +22,11 @@ Four pages, switched by the tab strip at the bottom, the Left / Right keys or th
   last 2 s, an arrow along its movement that grows with its speed, and a label such as `T1 1.23 m  3.6 km/h`. The range
   is Auto (the farthest target plus 0.5 m, rounded up to 2, 4 or 6 m, shrinking only well inside the smaller step) or
   fixed with + / - or the Range setting; it shows in the corner. A chip in the top left: the link dot (green found,
-  amber searching, red lost or error, grey busy) and the frames per second; `PAUSED` while paused.
+  amber searching, red lost or error, grey busy) and the frames per second; `PAUSED` while paused. The ring labels sit
+  along the left edge of the field of view, so a target near the centre line never covers them. On a tall screen
+  (480x800, 320x480 on the board) the plot sits at the top at full width and a compact list of T1-T3 follows (distance,
+  angle, speed and direction in the units chosen; an empty slot is a dimmed `-`), and where there is room (480x800) a
+  strip chart of the distance over the last 30 s.
 - **Table.** One row per slot T1-T3: x, y, distance, angle, speed, direction (Approaching / Receding / Still) and
   resolution in the sensor's own units (mm, cm/s, degrees), whatever the Units setting says; an empty slot is a dimmed
   `-`. On a narrow screen each target takes two lines, the label above each value.
@@ -85,18 +90,30 @@ The minimum screens are 480x320 (landscape) and 320x480 (portrait in PDA mode); 
 800x480, 720x720, 1280x800, 480x640, 480x800). The page header is the launcher's (Esc, title, status strip); at
 320x480 the Esc sits at the left edge and there is no title (the launcher's narrow portrait rule; with the current
 toolkit pin the bar keeps its 56 px, see Known limits). The tab strip is one 7 mm row high (44 px on the 6.1 px/mm
-480x320 panels). The plot, the table and the graph are drawn by draw events; the radar's static background (wedge,
+480x320 panels). The Radar page is tall when the wedge, laid out at full width under the chip row, leaves room for the
+three two-line list rows below it (`core/view.hpp` `radar_layout`): 480x800 (plot 291 px, list 208 px, strip chart
+120 px) and 320x480 at the board's 6.1 px/mm (plot 193 px, list 139 px); 480x640, 320x480 with the 80 px tab strip of
+an 11.3 px/mm panel and every landscape or square size keep the plot over the whole page. The plot, the table and the
+graph are drawn by draw events; the radar's static background (wedge,
 rings, labels) is drawn once into a canvas, and each frame redraws only where the targets moved, at most 20 times a
 second and never more than half of the time (the render time paces it). `MMWAVE_TIMING=1` logs the render time every
-5 s. `MMWAVE_LOG=<file>` (off by default) appends one diagnostic line a second (link state, port, speed, frame counters,
-the three slots as the tracker holds them) plus once the port settings and the raw bytes of the first three frames that
-held a target; it never sends anything to the sensor.
+5 s. `MMWAVE_LOG=<file>` or the marker file `diag` in the settings folder (off by default, see Known behaviour)
+appends one diagnostic line a second (link state, port, speed, frame counters, the three slots as the tracker holds
+them) plus once the port settings and the raw bytes of the first three frames that held a target; it never sends
+anything to the sensor.
 
 ## Known behaviour
 
 - A still target: the sensor can report a person at rest (speed 0.0 km/h) and keeps reporting it; the app shows what the
   sensor sends and drops a slot 0.5 s after the sensor stops sending it. Our own recordings of an empty room
   (`tests/data/empty-*.bin`) decode to empty frames in every slot, and the tests check that no target stays on screen.
+- The diagnostic log (off by default). The launcher starts the app, where no variable can be set, so a marker file turns
+  it on: `touch ~/.config/mmwave-radar/diag` (the app's settings folder, see Files the app keeps), then start the app.
+  It writes `~/.config/mmwave-radar/mmwave.log`: a first line `log on (marker ...)`, the start line, then one line a
+  second (link state, port, speed, frame counters, the three slots) and once the port settings and the raw bytes of the
+  first three frames that held a target. The log is cut to its last 200 KB at each start (and while running once it
+  reaches 400 KB). `rm ~/.config/mmwave-radar/diag` turns it off; without the marker the app writes no log file at all.
+  `MMWAVE_LOG=<file>` (started by hand) does the same into that file, without the cut.
 
 ## The code
 
@@ -113,7 +130,8 @@ replays the recorded walk from `tests/data`, or `$MMWAVE_DEMO_FILE`).
 ## Files the app keeps
 
 `~/.config/mmwave-radar/` (or `$XDG_CONFIG_HOME/mmwave-radar/`): `settings.conf` (units, orientation, range, trails) and
-`remembered.conf` (the port id and speed of the last radar), both written atomically. Delete the folder to reset.
+`remembered.conf` (the port id and speed of the last radar), both written atomically. Delete the folder to reset. Only
+when you create the marker file `diag` there: `mmwave.log` (the diagnostic log, at most about 400 KB).
 
 ## Multitasking
 
@@ -170,4 +188,5 @@ Build from a WSL native-filesystem LF copy with fresh build dirs (`CDK_BUILD`, `
 ## Changes
 
 - 0.1.0 (draft): first version: Radar, Table, Graph and Sensor pages, listen-only detection, units, orientation,
-  range and trails settings, 480x320 and 320x480 minimum layouts.
+  range and trails settings, 480x320 and 320x480 minimum layouts; the tall Radar page (plot, target list, distance
+  strip), ring labels on the wedge's edge, the diagnostic log's marker file.
