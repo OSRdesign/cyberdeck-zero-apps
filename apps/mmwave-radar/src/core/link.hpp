@@ -24,6 +24,7 @@
 #include "tracker.hpp"
 
 #include <deque>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -105,8 +106,14 @@ public:
     bool diag_counting() const { return diag_on_; }
     DiagFrameCounts &diag_counts() { return diag_; }
     const DiagFrameCounts &diag_counts() const { return diag_; }
-    /* Sensor-model line for the sensor page. */
-    static const char *model() { return "LD2450-family tracking radar (LD2450, LD2452)"; }
+    /* The driver of the radar found (null before the first find; Lost keeps the last one). */
+    const SensorDriver *driver() const { return driver_; }
+    /* Sensor-model line for the sensor page: the found driver's, before that the first real driver's. */
+    const char *model() const;
+    /* The Sensor type setting ("auto" or a driver id): it applies to the next scan. When no radar is streaming, a new
+     * value starts a scan at once (forgetting what was judged not-a-radar); a streaming radar is left alone. */
+    void set_sensor_type(const std::string &id, Ms now);
+    const std::string &sensor_type() const { return cfg_.detect.sensor; }
 
 private:
     void begin_scan(Ms now);
@@ -123,7 +130,8 @@ private:
     bool ever_found_ = false;
     RadarPort port_;
     bool open_ = false;
-    Decoder dec_;
+    std::unique_ptr<FrameDecoder> dec_;   /* the found driver's decoder */
+    const SensorDriver *driver_ = nullptr;
     LinkStats stats_;
     Frame last_;
     Ms last_frame_ms_ = -1;

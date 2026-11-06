@@ -6,9 +6,10 @@
  *
  *   NMEA     $...*hh sentences with a valid checksum ("$G.." = GPS receiver)
  *   UBX      B5 62 class id len(2) payload ck_a ck_b with a valid Fletcher checksum (u-blox GPS)
- *   LD2410   F4 F3 F2 F1 len(2) data F8 F7 F6 F5 (Hi-Link presence radar, not supported yet)
+ *   LD2410   F4 F3 F2 F1 len(2) data F8 F7 F6 F5 (Hi-Link presence radar, not supported yet: the stub driver, ld2410.hpp;
+ *            looked for only while set_stubs(true), the default: a fixed Sensor type leaves the stubs out)
  *
- * The tracking frame itself is the Decoder's job (frame.hpp).
+ * The tracking frame itself is the driver decoder's job (driver.hpp).
  */
 #pragma once
 
@@ -31,6 +32,8 @@ public:
      * a log)", "unknown data". */
     std::string describe_unknown() const;
     std::size_t bytes() const { return total_; }
+    /* Whether the stub drivers (known but unsupported models) are recognised; kept by reset(). Default true. */
+    void set_stubs(bool on) { stubs_ = on; }
     void reset();
 
 private:
@@ -39,6 +42,7 @@ private:
     std::size_t total_ = 0;
     std::size_t zeros_ = 0, printable_ = 0;
     Sniffed kind_ = Sniffed::None;
+    bool stubs_ = true;
 };
 
 } // namespace mmw

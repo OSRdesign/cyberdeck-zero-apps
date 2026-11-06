@@ -4,13 +4,14 @@
  * mmWave Radar: the user's settings and where the app keeps its files. Pure text in and out (no LVGL); the file
  * operations are plain POSIX and never throw.
  *
- * Files (one folder, `config_dir()`): `settings.conf` (the five settings below, key=value lines) and `remembered.conf`
+ * Files (one folder, `config_dir()`): `settings.conf` (the settings below, key=value lines) and `remembered.conf`
  * (the port identity and speed of the last radar, Remembered::serialize). Both are written atomically (a temp file,
  * fsync, rename). The folder is $MMWAVE_CONFIG_DIR when set (tests), else $XDG_CONFIG_HOME/mmwave-radar, else
  * ~/.config/mmwave-radar.
  */
 #pragma once
 
+#include "driver.hpp"
 #include "units.hpp"
 
 #include <cstddef>
@@ -29,9 +30,11 @@ struct Settings {
     int range_m = 0;      /* 0 = Auto, else 2, 4 or 6 */
     bool trails = true;
     bool hide_held = false;   /* do not draw or list held (stale) targets; the status line counts them */
+    std::string sensor = kSensorAuto;   /* Sensor type: "auto" or the id of a real driver (driver.hpp) */
 };
 
-/* "units=metres\norientation=normal\nrange=auto\ntrails=on\nhide_held=off\n" */
+/* "units=metres\norientation=normal\nrange=auto\ntrails=on\nhide_held=off\n"; "sensor=<driver id>\n" is added only when
+ * the Sensor type is not Auto, so a file written with the default stays as older versions wrote it. */
 std::string serialize_settings(const Settings &s);
 /* Tolerant: unknown keys and bad values keep the defaults. */
 Settings parse_settings(const std::string &text);

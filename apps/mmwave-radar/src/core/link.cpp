@@ -67,6 +67,8 @@ void Link::start(Ms now, const Remembered &remembered)
     listed_.clear();
     reports_.clear();
     ever_found_ = false;
+    driver_ = nullptr;
+    dec_.reset();
     stats_ = LinkStats();
     last_frame_ms_ = -1;
     tracker_.clear();
@@ -96,6 +98,24 @@ void Link::begin_scan(Ms now)
     scanning_ = true;
     last_scan_ms_ = now;
     idle_check_ms_ = now;
+}
+
+const char *Link::model() const
+{
+    if (driver_) return driver_->model;
+    std::size_t n = 0;
+    const SensorDriver *const *all = drivers(n);
+    for (std::size_t i = 0; i < n; ++i)
+        if (all[i]->supported()) return all[i]->model;
+    return "";
+}
+
+void Link::set_sensor_type(const std::string &id, Ms now)
+{
+    if (cfg_.detect.sensor == id) return;
+    cfg_.detect.sensor = id;
+    det_.set_sensor(id);
+    if (started_ && !open_) rescan(now);
 }
 
 std::string Link::status() const { return scanning_ ? det_.status() : std::string(); }
@@ -141,7 +161,7 @@ void Link::read_frames(Ms now)
             return;
         }
         if (n == 0) break;
-        dec_.feed(buf, static_cast<std::size_t>(n), &frames);
+        dec_->feed(buf, static_cast<std::size_t>(n), &frames);
         if (n < static_cast<long>(sizeof(buf))) break;
     }
     for (const Frame &f : frames) {
@@ -160,7 +180,7 @@ void Link::read_frames(Ms now)
         arrivals_.push_back(now);
         last_frame_ms_ = now;
     }
-    const DecoderStats &ds = dec_.stats();
+    const DecoderStats &ds = dec_->stats();
     stats_.frames = ds.frames_ok;
     stats_.bad_frames = ds.frames_bad + ds.frames_cut;
     stats_.answers = ds.answers;
@@ -187,7 +207,8 @@ void Link::after_scan(Ms now)
         port_ = det_.take_radar();
         open_ = true;
         tty_settings_ = sys_.describe(port_.handle);
-        dec_.reset();
+        driver_ = port_.driver;
+        dec_ = driver_->make_decoder();
         stats_ = LinkStats();
         arrivals_.clear();
         last_frame_ms_ = -1;

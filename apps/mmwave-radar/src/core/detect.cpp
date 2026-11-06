@@ -182,17 +182,43 @@ void Detector::begin_port(Ms now)
         }
         return;
     }
+    choose_drivers();
     /* the speed order: this port's remembered speed first, then the list */
     bauds_.clear();
     if (!remembered_.empty() && remembered_.port_id == port_id(m)) bauds_.push_back(remembered_.baud);
-    for (int b : cfg_.bauds)
+    auto add_baud = [&](int b) {
         if (std::find(bauds_.begin(), bauds_.end(), b) == bauds_.end()) bauds_.push_back(b);
+    };
+    if (!cfg_.bauds.empty()) {
+        for (int b : cfg_.bauds) add_baud(b);
+    } else {
+        for (const SensorDriver *d : active_)
+            for (std::size_t k = 0; k < d->baud_count; ++k) add_baud(d->bauds[k]);
+    }
     bi_ = 0;
     first_baud_ = true;
     any_bytes_ = false;
     sniff_.reset();
     state_ = State::Listen;
     begin_baud(now);
+}
+
+/* The drivers in play on this port: the one the Sensor type names, else every real driver; the stubs are looked for
+ * (named in the scan) only with Auto. */
+void Detector::choose_drivers()
+{
+    active_.clear();
+    decs_.clear();
+    const SensorDriver *fixed = find_driver(cfg_.sensor.c_str());
+    if (fixed && !fixed->supported()) fixed = nullptr;
+    std::size_t n = 0;
+    const SensorDriver *const *all = drivers(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        if (!all[i]->supported() || (fixed && all[i] != fixed)) continue;
+        active_.push_back(all[i]);
+        decs_.push_back(all[i]->make_decoder());
+    }
+    sniff_.set_stubs(fixed == nullptr);
 }
 
 void Detector::begin_baud(Ms now)
@@ -203,7 +229,7 @@ void Detector::begin_baud(Ms now)
         return;
     }
     sys_.flush_input(handle_);
-    dec_.reset();
+    for (auto &d : decs_) d->reset();
     window_start_ = now;
     window_len_ = first_baud_ ? cfg_.first_listen_ms : cfg_.next_listen_ms;
 }
@@ -241,16 +267,20 @@ void Detector::poll(Ms now)
         }
         if (n == 0) break;
         any_bytes_ = true;
-        dec_.feed(buf, static_cast<std::size_t>(n), nullptr);
+        for (auto &d : decs_) d->feed(buf, static_cast<std::size_t>(n), nullptr);
         sniff_.feed(buf, static_cast<std::size_t>(n));
-        if (dec_.stats().good_run >= cfg_.frames_needed) {
+        const SensorDriver *hit = nullptr;
+        for (std::size_t k = 0; k < decs_.size() && !hit; ++k)
+            if (decs_[k]->stats().good_run >= cfg_.frames_needed) hit = active_[k];
+        if (hit) {
+            radar_.driver = hit;
             radar_.handle = handle_;
             radar_.meta = queue_[qi_];
             radar_.id = port_id(radar_.meta);
             radar_.title = port_title(radar_.meta);
             radar_.baud = bauds_[bi_];
             found_ = true;
-            end_port(Verdict::Radar, "mmWave radar (LD2450 family)", bauds_[bi_]); /* the handle stays open */
+            end_port(Verdict::Radar, hit->found_text, bauds_[bi_]); /* the handle stays open */
             begin_port(now); /* found_: the rest is skipped, the scan is done */
             return;
         }
@@ -260,14 +290,19 @@ void Detector::poll(Ms now)
         }
         if (n < static_cast<long>(sizeof(buf))) break;
     }
-    const DecoderStats &st = dec_.stats();
-    const bool header_seen = st.frames_ok + st.frames_bad + st.frames_cut + st.answers > 0;
+    bool header_seen = false;
+    std::uint64_t bytes_seen = 0;
+    for (auto &d : decs_) {
+        const DecoderStats &st = d->stats();
+        if (st.frames_ok + st.frames_bad + st.frames_cut + st.answers > 0) header_seen = true;
+        if (st.bytes > bytes_seen) bytes_seen = st.bytes;
+    }
     const Ms elapsed = now - window_start_;
     if (first_baud_ && !any_bytes_ && elapsed >= window_len_) {
         end_port(Verdict::Silent, "not a supported radar: silent (no data)", 0);
         return;
     }
-    if (!header_seen && st.bytes >= cfg_.early_garbage_bytes) {
+    if (!header_seen && bytes_seen >= cfg_.early_garbage_bytes) {
         next_baud(now);
         return;
     }

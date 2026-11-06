@@ -5,6 +5,8 @@
  */
 #include "sniff.hpp"
 
+#include "ld2410.hpp"
+
 namespace mmw {
 
 namespace {
@@ -88,15 +90,10 @@ void Sniffer::scan()
                     return;
                 }
             }
-        } else if (c == 0xF4 && i + 10 <= n && u(s[i + 1]) == 0xF3 && u(s[i + 2]) == 0xF2 && u(s[i + 3]) == 0xF1) {
-            const std::size_t len = static_cast<std::size_t>(u(s[i + 4]) | (u(s[i + 5]) << 8));
-            if (len >= 1 && len <= 100 && i + 10 + len <= n) {
-                const std::size_t f = i + 6 + len;
-                if (u(s[f]) == 0xF8 && u(s[f + 1]) == 0xF7 && u(s[f + 2]) == 0xF6 && u(s[f + 3]) == 0xF5) {
-                    kind_ = Sniffed::Ld2410;
-                    return;
-                }
-            }
+        } else if (stubs_ && c == 0xF4 &&
+                   ld2410_frame_at(reinterpret_cast<const std::uint8_t *>(s.data()) + i, n - i)) {
+            kind_ = Sniffed::Ld2410; /* the stub driver's frame (ld2410.hpp) */
+            return;
         }
     }
 }
@@ -107,7 +104,7 @@ std::string Sniffer::describe() const
     case Sniffed::Gps: return "GPS receiver (NMEA)";
     case Sniffed::Nmea: return "NMEA device";
     case Sniffed::Ubx: return "GPS receiver (u-blox UBX)";
-    case Sniffed::Ld2410: return "LD2410 presence radar (not supported yet)";
+    case Sniffed::Ld2410: return kDriverLd2410.stub_text;
     case Sniffed::None: break;
     }
     return std::string();

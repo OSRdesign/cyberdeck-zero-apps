@@ -46,6 +46,7 @@ int main()
     test_view();
     test_package();
     test_ghost();
+    test_driver();
     std::printf("mmwave-radar core tests: %d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

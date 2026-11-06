@@ -19,10 +19,10 @@ std::string diag_line(const Link &link, Ms now)
 {
     char b[640];
     const LinkStats s = link.stats(now);
-    int n = std::snprintf(b, sizeof(b), "t=%lld state=%s port=%s baud=%d frames=%u bad=%u answers=%u bytes=%llu fps=%.1f age=%lld",
+    int n = std::snprintf(b, sizeof(b), "t=%lld state=%s port=%s baud=%d driver=%s frames=%u bad=%u answers=%u bytes=%llu fps=%.1f age=%lld",
                           static_cast<long long>(now), link_state_name(link.state()),
                           link.state() == LinkState::Found || link.state() == LinkState::Lost ? link.port().tty.c_str() : "-",
-                          link.baud(), s.frames, s.bad_frames, s.answers, static_cast<unsigned long long>(s.bytes), s.fps,
+                          link.baud(), link.driver() ? link.driver()->id : "-", s.frames, s.bad_frames, s.answers, static_cast<unsigned long long>(s.bytes), s.fps,
                           static_cast<long long>(s.last_frame_age_ms));
     for (int i = 0; i < 3 && n > 0 && n < static_cast<int>(sizeof(b)); ++i) {
         const SlotState &t = link.tracker().slot(i);

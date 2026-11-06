@@ -22,6 +22,7 @@ std::string serialize_settings(const Settings &s)
     out += "range=" + (s.range_m == 0 ? std::string("auto") : std::to_string(s.range_m)) + "\n";
     out += std::string("trails=") + (s.trails ? "on" : "off") + "\n";
     out += std::string("hide_held=") + (s.hide_held ? "on" : "off") + "\n";
+    if (s.sensor != kSensorAuto) out += "sensor=" + s.sensor + "\n"; /* only when not Auto: old files stay as they were */
     return out;
 }
 
@@ -47,6 +48,8 @@ Settings parse_settings(const std::string &text)
             s.trails = value != "off";
         } else if (key == "hide_held") {
             s.hide_held = value == "on";
+        } else if (key == "sensor") {
+            s.sensor = valid_sensor_type(value.c_str()) ? value : std::string(kSensorAuto); /* unknown: Auto */
         }
     }
     return s;

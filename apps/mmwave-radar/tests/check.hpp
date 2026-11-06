@@ -49,3 +49,4 @@ void test_posix();
 void test_view();
 void test_package();
 void test_ghost();
+void test_driver();

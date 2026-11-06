@@ -8,9 +8,10 @@
  * Per candidate port (ttyUSB*, ttyACM*; the remembered one first):
  *   1. skipped as "busy (held by another app)" when another process has it open (/proc), when the exclusive open fails
  *      (TIOCEXCL held elsewhere) or when its flock is taken (Mesh Hop, Serial Console, another instance);
- *   2. for each speed (the remembered one for this port, then 256000, 9600, 115200, 57600, 38400, 19200, 230400,
- *      460800): raw 8N1, listen 600 ms for the first speed and 400 ms for each next one; the radar is found after 3
- *      consecutive valid tracking frames; GPS (NMEA, UBX) and the LD2410 are named and left; a port that sends nothing
+ *   2. for each speed (the remembered one for this port, then the speeds of the drivers in play: for the LD2450
+ *      family 256000, 9600, 115200, 57600, 38400, 19200, 230400, 460800): raw 8N1, listen 600 ms for the first speed
+ *      and 400 ms for each next one; the radar is found after 3 consecutive valid frames of a driver's decoder;
+ *      GPS (NMEA, UBX) and the stub drivers' models (LD2410) are named and left; a port that sends nothing
  *      in the first 600 ms is silent and left; 90 bytes without any header move on to the next speed at once;
  *   3. the port is restored (original termios) and released unless it is the radar, which stays open, locked and
  *      configured, and is handed to the caller by take_radar().
@@ -18,11 +19,13 @@
  */
 #pragma once
 
+#include "driver.hpp"
 #include "frame.hpp"
 #include "port_sys.hpp"
 #include "sniff.hpp"
 
 #include <cstdint>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -61,7 +64,11 @@ struct PortReport {
 };
 
 struct DetectConfig {
-    std::vector<int> bauds = {256000, 9600, 115200, 57600, 38400, 19200, 230400, 460800};
+    /* The speeds to try; empty (the default) means the speeds of the drivers in play, in registry order. */
+    std::vector<int> bauds;
+    /* The Sensor type setting: "auto" (every real driver listens, the stubs are recognised and named) or a driver id
+     * (only that driver listens; the stubs are not looked for). Anything else is read as "auto". */
+    std::string sensor = kSensorAuto;
     Ms first_listen_ms = 600;
     Ms next_listen_ms = 400;
     Ms total_budget_ms = 8000;
@@ -77,6 +84,7 @@ struct RadarPort {
     std::string id;
     std::string title;
     int baud = 0;
+    const SensorDriver *driver = nullptr;   /* the driver whose decoder recognised it */
 };
 
 class Detector {
@@ -86,6 +94,8 @@ public:
 
     /* Begins a scan. `settled` paths (already judged not-a-radar or silent) are not opened again. */
     void start(Ms now, const Remembered &remembered, const std::set<std::string> &settled = std::set<std::string>());
+    /* The Sensor type for the next port to be opened (see DetectConfig::sensor). */
+    void set_sensor(const std::string &id) { cfg_.sensor = id; }
     /* Abandons a running scan: closes the port being probed, the rest are "skipped". */
     void cancel();
     void poll(Ms now);
@@ -104,6 +114,7 @@ private:
     enum class State { Idle, NextPort, Listen, Done };
     void begin_port(Ms now);
     void begin_baud(Ms now);
+    void choose_drivers();
     void end_port(Verdict v, const std::string &text, int baud);
     void next_baud(Ms now);
     void finish(Ms now);
@@ -125,7 +136,8 @@ private:
     Ms window_len_ = 0;
     bool first_baud_ = true;
     bool any_bytes_ = false;
-    Decoder dec_;
+    std::vector<const SensorDriver *> active_;            /* the real drivers listening on this port */
+    std::vector<std::unique_ptr<FrameDecoder>> decs_;     /* one decoder each */
     Sniffer sniff_;
     RadarPort radar_;
     bool found_ = false;

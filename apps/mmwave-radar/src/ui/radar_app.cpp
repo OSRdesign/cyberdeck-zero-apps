@@ -48,8 +48,9 @@ std::int64_t mono_ms()
 }
 
 const char *const kTabNames[4] = {"Radar", "Table", "Graph", "Sensor"};
-constexpr int kSettingCount = 5;
-const char *const kSettingNames[kSettingCount] = {"Units", "Orientation", "Range", "Trails", "Hide held targets"};
+constexpr int kSettingCount = 6;
+const char *const kSettingNames[kSettingCount] = {"Units", "Orientation", "Range", "Trails", "Hide held targets",
+                                                   "Sensor type"};
 
 std::uint32_t state_rgb(mmw::LinkState s)
 {
@@ -159,7 +160,9 @@ RadarApp::RadarApp(lv_obj_t *screen) : screen_(screen)
     const char *demo = std::getenv("MMWAVE_DEMO");
     if (demo && *demo) sys_ = std::make_unique<mmw::DemoSys>(demo, [] { return mono_ms(); });
     else sys_ = std::make_unique<mmw::PosixSys>();
-    link_ = std::make_unique<mmw::Link>(*sys_);
+    mmw::LinkConfig link_cfg;
+    link_cfg.detect.sensor = settings_.sensor;
+    link_ = std::make_unique<mmw::Link>(*sys_, link_cfg);
     now_ = mono_ms();
     link_->start(now_, remembered);
     log_line("%s %dx%d%s%s, listen only, remembered %s", kVersion, w_, h_,
@@ -807,7 +810,7 @@ void RadarApp::update_sensor(bool force)
     if (st.last_frame_age_ms < 0) std::snprintf(buf, sizeof(buf), "-");
     else std::snprintf(buf, sizeof(buf), "%.1f s ago", st.last_frame_age_ms / 1000.0);
     set_info(si_age_, buf, pal::kMuted);
-    set_info(si_model_, mmw::Link::model(), pal::kMuted);
+    set_info(si_model_, link_->model(), pal::kMuted);
 
     std::string reports;
     for (const mmw::PortReport &r : link_->reports()) {
@@ -823,7 +826,8 @@ void RadarApp::update_sensor(bool force)
     const std::string values[kSettingCount] = {mmw::units_label(settings_.units),
                                                mmw::orientation_label(settings_.orientation),
                                                mmw::range_label(settings_.range_m), settings_.trails ? "On" : "Off",
-                                               settings_.hide_held ? "On" : "Off"};
+                                               settings_.hide_held ? "On" : "Off",
+                                               mmw::sensor_type_label(settings_.sensor.c_str())};
     for (int i = 0; i < kSettingCount; ++i) {
         set_text_if(settings_rows_[i].value, values[i]);
         lv_obj_set_style_bg_opa(settings_rows_[i].row, i == setting_sel_ ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
@@ -885,6 +889,10 @@ void RadarApp::apply_setting(int index)
         break;
     case 3: settings_.trails = !settings_.trails; break;
     case 4: settings_.hide_held = !settings_.hide_held; break;
+    case 5:
+        settings_.sensor = mmw::next_sensor_type(settings_.sensor.c_str());
+        link_->set_sensor_type(settings_.sensor, now_);
+        break;
     default: return;
     }
     save_settings();

@@ -1,9 +1,9 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * mmWave Radar: the frame decoder (see frame.hpp).
+ * mmWave Radar: the LD2450-family frame decoder and driver (see ld2450.hpp).
  */
-#include "frame.hpp"
+#include "ld2450.hpp"
 
 #include <cmath>
 #include <cstdlib>
@@ -33,13 +33,6 @@ int sign_magnitude(std::uint16_t raw)
 {
     const int v = raw & 0x7FFF;
     return (raw & 0x8000) ? v : -v;
-}
-
-int Frame::present_count() const
-{
-    int n = 0;
-    for (const Target &t : target) n += t.present ? 1 : 0;
-    return n;
 }
 
 bool decode_frame(const std::uint8_t *p, Frame &out)
@@ -167,5 +160,48 @@ void Decoder::process(std::vector<Frame> *out, std::size_t &added)
         pos_ += 1;
     }
 }
+
+namespace {
+
+/* Stateless: Match when a complete, valid and plausible tracking frame is in the window; Maybe when the window ends in
+ * what could be the start of one (a header prefix, or the header with fewer than 30 bytes after it). */
+SniffResult sniff(const std::uint8_t *s, std::size_t n)
+{
+    bool maybe = false;
+    for (std::size_t i = 0; i < n; ++i) {
+        if (s[i] != kHeader[0]) continue;
+        const std::size_t avail = n - i;
+        const std::size_t hm = header_match(s + i, avail);
+        if (hm < 4 && hm < avail) continue; /* a wrong header byte */
+        if (avail < kFrameSize) {
+            maybe = true; /* the header so far, the frame incomplete */
+        } else if (hm == 4) {
+            Frame f;
+            if (decode_frame(s + i, f) && plausible(f)) return SniffResult::Match;
+        }
+    }
+    return maybe ? SniffResult::Maybe : SniffResult::No;
+}
+
+std::unique_ptr<FrameDecoder> make_decoder() { return std::unique_ptr<FrameDecoder>(new Decoder()); }
+
+/* The speeds in the detector's order (the remembered one goes first, see detect.cpp). */
+const int kBauds[] = {256000, 9600, 115200, 57600, 38400, 19200, 230400, 460800};
+
+} // namespace
+
+const SensorDriver kDriverLd2450 = {
+    "ld2450",
+    "HLK-LD2452 / LD2450",
+    "LD2450-family tracking radar (LD2450, LD2452)",
+    "mmWave radar (LD2450 family)",
+    "",
+    kBauds,
+    sizeof(kBauds) / sizeof(kBauds[0]),
+    &sniff,
+    &make_decoder,
+    {true, false},
+    ViewKind::Tracking,
+};
 
 } // namespace mmw

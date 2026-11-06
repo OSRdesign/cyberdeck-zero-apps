@@ -37,7 +37,8 @@ Four pages, switched by the tab strip at the bottom, the Left / Right keys or th
   button, what the last scan found on every port (`ttyUSB0 (CP2102): not a supported radar: GPS receiver (NMEA)`), the
   line *Detected by listening only: the app sends nothing to the sensor*, and the settings: **Units** (Metres: m and
   km/h / Millimetres: mm and cm/s), **Orientation** (Normal / Mirror (left and right swapped) / Rotate 180), **Range**
-  (Auto / 2 / 4 / 6 m), **Trails** (On / Off), **Hide held targets** (On / Off, default Off; see Known behaviour).
+  (Auto / 2 / 4 / 6 m), **Trails** (On / Off), **Hide held targets** (On / Off, default Off; see Known behaviour), **Sensor type** (Auto, the default, or
+  HLK-LD2452 / LD2450: a fixed type listens for that driver only).
   A tap or Enter on a setting row moves it to its next value.
 - **No radar.** While the radar is not streaming, the Radar page says why ("No radar found", "The port is used by
   another app", "Signal lost, searching", "The port cannot be opened"), what the scan is doing, what was tried on each
@@ -61,7 +62,7 @@ The app looks at `ttyUSB*` and `ttyACM*` only (USB serial ports; no GPIO UART in
 Hop, Serial Console, a terminal) is skipped as busy, never opened. Every other port is opened, set to a speed (the
 remembered one first, then 256000, 9600, 115200, 57600, 38400, 19200, 230400, 460800) and **listened to**: three valid
 tracking frames in a row make it the radar; a GPS receiver (NMEA, UBX), an LD2410 presence radar, text and silence are
-named and left alone, and the port's settings are put back. Nothing is ever written to a port: the port layer has no
+named and left alone (a fixed Sensor type does not look for the LD2410 any more: only the driver you chose listens), and the port's settings are put back. Nothing is ever written to a port: the port layer has no
 write call. The port and speed that worked are remembered for a fast start (the port by its USB identity, not its
 number). The owner's LD2452 talks at 9600 baud and 19 frames a second.
 
@@ -133,19 +134,36 @@ frames that held a target, and every 10 s the raw bytes of the latest one; it ne
 
 ## The code
 
-- `src/core/` (no LVGL, unit tested): `frame` (decoder), `sniff` (what else talks on a port), `detect` (the
+- `src/core/` (no LVGL, unit tested): `frame` (the common frame model and the decoder interface), `driver` (the sensor
+  driver seam and registry), `ld2450` (the LD2450-family driver and decoder), `ld2410` (the stub driver: recognised, not
+  read), `sniff` (what else talks on a port), `detect` (the
   listen-only scan), `port_sys` / `posix_sys` / `posix_tty` (the port layer: sysfs, /proc, flock, termios2, no write),
   `link` (the poll loop: Searching / Found / Lost / Busy / Error, hot-plug), `tracker` (trails, smoothed speed, the
   30 s history), `units`, `csv`, `settings` (the settings file), `view` (range, orientation, arrow, label placement),
   `demo_sys` (the scripted ports of the scenes and of `MMWAVE_DEMO`).
 - `src/ui/`: `radar_app` (pages, timer, input), `radar_draw` (the plot, the table, the graph), `palette`.
 
+### Adding a driver
+
+A sensor model is one `SensorDriver` (`core/driver.hpp`): a const struct of names, speeds, a stateless `sniff`, a
+decoder factory and capability flags. The detector, the link, the settings and the Sensor type row read only that
+struct and the registry. To add a model:
+
+1. Write `core/<model>.hpp/.cpp`: a `FrameDecoder` (bytes in any chunking in, `Frame`s out, with `DecoderStats`, no
+   allocation per frame), a `sniff(bytes)` that answers Match / Maybe / No, and a `const SensorDriver kDriver<Model>` with
+   its `id`, `name`, `model`, `found_text`, speeds, `caps` and `view` (see `ld2450.cpp`).
+2. Add it to the array in `driver.cpp` (real drivers before stubs). The Sensor type row, the settings file value
+   (`sensor=<id>`), the scan and the diagnostic line's `driver=<id>` pick it up from there.
+3. Add the model's fixtures and a contract test like `tests/test_driver.cpp` (the decoded frames equal a golden file).
+
+A stub (no `make_decoder`) is only recognised and named in the scan, as the LD2410 is.
+
 `MMWAVE_DEMO=walk|one|three|lost|none|busy|denied` runs the app on scripted ports instead of the real ones (`walk`
 replays the recorded walk from `tests/data`, or `$MMWAVE_DEMO_FILE`).
 
 ## Files the app keeps
 
-`~/.config/mmwave-radar/` (or `$XDG_CONFIG_HOME/mmwave-radar/`): `settings.conf` (units, orientation, range, trails, hide_held) and
+`~/.config/mmwave-radar/` (or `$XDG_CONFIG_HOME/mmwave-radar/`): `settings.conf` (units, orientation, range, trails, hide_held, and `sensor=<driver id>` only when the Sensor type is not Auto) and
 `remembered.conf` (the port id and speed of the last radar), both written atomically. Delete the folder to reset. Only
 when you create the marker file `diag` there: `mmwave.log` (the diagnostic log, at most about 400 KB).
 
@@ -207,4 +225,5 @@ Build from a WSL native-filesystem LF copy with fresh build dirs (`CDK_BUILD`, `
   range and trails settings, 480x320 and 320x480 minimum layouts; the tall Radar page (plot, target list, distance
   strip), ring labels on the wedge's edge, the diagnostic log's marker file and its frame counters (empty, non-empty,
   identical; the latest target frame every 10 s); held (stale) targets of the LD2452 marked after 3 s, with the
-  setting Hide held targets.
+  setting Hide held targets; the sensor driver seam (the LD2450 family is one driver, the LD2410 a stub) and the
+  Sensor type setting (Auto, default, or a fixed driver); the diagnostic line gains `driver=<id>`.
