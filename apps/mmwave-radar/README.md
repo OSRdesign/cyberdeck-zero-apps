@@ -109,9 +109,10 @@ replays the recorded walk from `tests/data`, or `$MMWAVE_DEMO_FILE`).
 
 ## Multitasking
 
-`X-Background=freeze`: hidden, the app is stopped and draws nothing (it is a viewer; nothing must go on). It keeps the
-port open while frozen; when shown again it reads what the port buffered and goes on (a gap of more than 2 s counts as
-Lost and the radar is found again at once).
+The app declares no `X-Background`: it owns the panel until it exits, so it never answers the launcher's lifecycle
+protocol. If the launcher freezes it behind the "Close app?" sheet (three-finger hold, status-strip long press), the
+port stays open while it is stopped; when it continues, a gap of more than 2 s counts as Lost and the radar is found
+again at once. Declaring `freeze` is possible later, with the protocol helper.
 
 ## Requirements
 
