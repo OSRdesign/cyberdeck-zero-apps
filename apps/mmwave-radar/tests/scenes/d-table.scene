@@ -1,0 +1,11 @@
+title mmWave Radar: Table page (key 2): three targets in mm and cm/s; one target and two empty slots
+sizes 480x320 320x480 640x480
+env MMWAVE_DEMO three
+env MMWAVE_TEST_CONFIG 1
+
+wait 2000
+key 2
+wait 600
+shot table-three
+check table-three
+expect noquit

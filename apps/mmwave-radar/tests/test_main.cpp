@@ -10,7 +10,11 @@
 #include <sstream>
 
 #ifndef MMW_DATA_DIR
+#ifdef CDK_APP_DIR /* the headless Makefile (build.sh host) */
+#define MMW_DATA_DIR CDK_APP_DIR "/tests/data/"
+#else
 #define MMW_DATA_DIR "tests/data/"
+#endif
 #endif
 
 int g_pass = 0, g_fail = 0;
@@ -39,6 +43,8 @@ int main()
     test_tracker();
     test_link();
     test_posix();
+    test_view();
+    test_package();
     std::printf("mmwave-radar core tests: %d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

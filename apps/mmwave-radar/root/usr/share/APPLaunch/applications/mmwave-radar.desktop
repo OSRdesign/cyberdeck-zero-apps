@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=mmWave Radar
+Exec=/usr/share/APPLaunch/bin/mmwave-radar
+Terminal=false
+Icon=share/images/mmwave-radar.png
+Type=Application
+X-Fullscreen=true
+X-MinSize=480x320
+X-Portrait=320x480
+X-Background=freeze

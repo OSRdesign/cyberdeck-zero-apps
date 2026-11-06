@@ -1,0 +1,16 @@
+{
+  "share_code": "mmwave-radar",
+  "package": "mmwave-radar",
+  "version": "0.1.0",
+  "title": "mmWave Radar",
+  "summary": "See people move: a viewer for the HLK-LD2450 / LD2452 tracking radar.",
+  "description": "Shows up to three people the radar tracks: a top-down plot with trails and speed arrows, a table of the raw numbers, a 30 s graph of distance and speed, and the sensor's state. Finds the radar on a USB-serial adapter by listening only: it sends nothing to the sensor. Metres and km/h, or mm and cm/s. Needs a screen of at least 480x320 (portrait 320x480 in PDA mode).",
+  "categories": ["Tools"],
+  "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
+  "license": "MIT",
+  "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/mmwave-radar",
+  "depends": "libfreetype6, libinput10, libxkbcommon0",
+  "arch": ["arm64", "amd64"],
+  "permissions": {"additional_hardware": true},
+  "draft": true
+}

@@ -46,3 +46,5 @@ void test_detect();
 void test_tracker();
 void test_link();
 void test_posix();
+void test_view();
+void test_package();

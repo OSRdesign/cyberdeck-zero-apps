@@ -1,0 +1,11 @@
+title mmWave Radar: Table page by touch, one target (the recorded walk), the empty slots dimmed
+sizes 480x320 320x480 640x480
+env MMWAVE_DEMO walk
+env MMWAVE_TEST_CONFIG 1
+
+wait 3000
+tap "Table"
+wait 600
+shot table-one
+check table-one
+expect noquit

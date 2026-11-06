@@ -1,0 +1,31 @@
+title mmWave Radar: pages by Left / Right and 1-4, range by + and -, R rescans, Esc ends the app
+sizes 480x320 320x480 640x480
+env MMWAVE_DEMO three
+env MMWAVE_TEST_CONFIG 1
+
+wait 2000
+key right
+wait 300
+key right
+wait 300
+key right
+wait 300
+expect text "Connection"
+key right
+wait 300
+key left
+wait 300
+key 1
+wait 300
+type +
+wait 400
+shot range-plus
+type -
+type -
+wait 400
+shot range-minus
+key r
+wait 300
+key esc
+wait 300
+expect quit

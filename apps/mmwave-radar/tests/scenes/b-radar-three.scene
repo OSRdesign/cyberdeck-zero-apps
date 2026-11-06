@@ -1,0 +1,11 @@
+title mmWave Radar: Radar page, three people (generated frames, scripted port)
+sizes 480x320 320x480 640x480
+env MMWAVE_DEMO three
+env MMWAVE_TEST_CONFIG 1
+env MMWAVE_TIMING 1
+
+wait 11000
+shot radar-three
+check radar-three
+expect notext "PAUSED"
+expect noquit

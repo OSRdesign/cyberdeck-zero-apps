@@ -1,0 +1,12 @@
+title mmWave Radar: Radar page, one person (the recorded walk of report 056, scripted port)
+sizes 480x320 320x480 640x480
+env MMWAVE_DEMO walk
+env MMWAVE_TEST_CONFIG 1
+
+wait 3500
+shot radar-one
+check radar-one
+expect text "Radar"
+expect text "Sensor"
+expect notext "No radar found"
+expect noquit

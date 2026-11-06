@@ -1,0 +1,15 @@
+title mmWave Radar: Graph page (key 3): distance and speed of the last 30 s, one line per target; pause freezes it
+sizes 480x320 320x480 640x480
+env MMWAVE_DEMO three
+env MMWAVE_TEST_CONFIG 1
+env MMWAVE_TIMING 1
+
+wait 12000
+key 3
+wait 600
+shot graph
+check graph
+key space
+wait 1500
+shot graph-paused
+expect noquit

@@ -1,0 +1,21 @@
+title mmWave Radar: Space pauses (PAUSED chip, the plot frozen), Space resumes; the pause cell by touch too
+sizes 480x320 320x480 640x480
+env MMWAVE_DEMO three
+env MMWAVE_TEST_CONFIG 1
+
+wait 2500
+key space
+wait 1500
+shot radar-paused
+check radar-paused
+expect text "PAUSED"
+key space
+wait 400
+expect notext "PAUSED"
+tapxy 0.97 0.97
+wait 400
+expect text "PAUSED"
+tapxy 0.97 0.97
+wait 400
+expect notext "PAUSED"
+expect noquit

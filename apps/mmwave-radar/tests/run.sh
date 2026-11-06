@@ -14,6 +14,6 @@ fi
 work=$(mktemp -d "${TMPDIR:-/tmp}/mmw-build-XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/app"
-(cd "$app" && tar cf - src tests) | (cd "$work/app" && tar xf -)
-find "$work/app" -type f \( -name '*.cpp' -o -name '*.hpp' -o -name Makefile -o -name '*.csv' \) -exec sed -i 's/\r$//' {} +
+(cd "$app" && tar cf - src tests root app.json icon.png) | (cd "$work/app" && tar xf -)
+find "$work/app" -type f \( -name '*.cpp' -o -name '*.hpp' -o -name Makefile -o -name '*.csv' -o -name '*.desktop' -o -name '*.json' -o -name copyright \) -exec sed -i 's/\r$//' {} +
 make -C "$work/app/tests" APP="$work/app" BUILD="$work/build" -j3 test

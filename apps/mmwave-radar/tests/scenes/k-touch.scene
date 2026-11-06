@@ -1,0 +1,16 @@
+title mmWave Radar: every page by touch, the header Esc ends the app
+sizes 480x320 320x480 640x480
+env MMWAVE_DEMO three
+env MMWAVE_TEST_CONFIG 1
+
+wait 2000
+tap "Graph"
+wait 400
+tap "Sensor"
+wait 400
+expect text "Connection"
+tap "Radar"
+wait 400
+tap "Esc"
+wait 300
+expect quit

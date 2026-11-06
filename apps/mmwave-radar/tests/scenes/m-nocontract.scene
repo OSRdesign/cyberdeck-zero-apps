@@ -1,0 +1,10 @@
+title mmWave Radar: started by hand without the launcher contract (ssh): the same app
+sizes 640x480
+nocontract
+env MMWAVE_DEMO three
+env MMWAVE_TEST_CONFIG 1
+
+wait 2000
+shot nocontract
+check nocontract
+expect noquit

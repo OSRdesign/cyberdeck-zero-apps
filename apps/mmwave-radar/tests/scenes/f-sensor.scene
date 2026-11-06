@@ -1,0 +1,36 @@
+title mmWave Radar: Sensor page (key 4): connection, detection, the listen-only line, the settings (keys: Down, Enter)
+sizes 480x320 320x480 640x480
+env MMWAVE_DEMO three
+env MMWAVE_TEST_CONFIG 1
+
+wait 2500
+key 4
+wait 700
+shot sensor
+check sensor
+expect text "Found"
+expect text "ttyUSB0 (CH340)"
+expect text "9600 baud"
+key down
+wait 200
+key enter
+wait 300
+key down
+key enter
+key enter
+wait 300
+key down
+key enter
+key enter
+wait 300
+key down
+key enter
+wait 500
+shot sensor-settings
+check sensor-settings
+expect text "Off"
+key 1
+wait 800
+shot radar-changed
+check radar-changed
+expect noquit
