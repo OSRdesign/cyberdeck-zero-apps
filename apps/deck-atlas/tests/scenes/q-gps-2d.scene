@@ -1,4 +1,4 @@
-# A 2D fix (four satellites, HDOP 4: about 20 m): the dot and its accuracy ring, the chip "2D fix".
+# A 2D fix (four satellites, HDOP 4: about 20 m): the dot and its accuracy ring, the chip: two orange bars.
 title GPS: 2D fix, accuracy ring
 sizes 640x480 480x320 320x480
 env DECKATLAS_DEMO 1
@@ -8,4 +8,4 @@ env DECKATLAS_VIEW 48.889643,2.269995,16
 
 wait 1500
 shot fix-2d
-expect text "2D fix"
+expect text "Map"

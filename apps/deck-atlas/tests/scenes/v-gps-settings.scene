@@ -8,8 +8,7 @@ env DECKATLAS_VIEW 48.889643,2.269995,16
 
 wait 800
 shot map-gps-off
-expect notext "3D fix 9 sats"
-expect notext "No GPS device"
+expect text "Map"
 key tab
 key tab
 wait 800
@@ -41,4 +40,4 @@ expect text "4800"
 key tab
 wait 2500
 shot map-gps-on
-expect text "3D fix 9 sats"
+expect text "Map"

@@ -1,4 +1,4 @@
-# A moving fix (10.1 knots, course 70): the heading wedge and the speed in the chip, "3D fix 9 sats, 19 km/h".
+# A moving fix (10.1 knots, course 70): the heading wedge and (the speed is for the status page).
 title GPS: moving, heading wedge, speed
 sizes 640x480 480x320 320x480
 env DECKATLAS_DEMO 1
@@ -8,4 +8,4 @@ env DECKATLAS_VIEW 48.889643,2.269995,16
 
 wait 1500
 shot moving
-expect text "3D fix 9 sats, 19 km/h"
+expect text "Map"

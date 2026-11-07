@@ -23,6 +23,7 @@
 
 #include "attribution.hpp"
 #include "follow.hpp"
+#include "gps_chip.hpp"
 #include "gps_link.hpp"
 #include "position_state.hpp"
 #include "geo.hpp"
@@ -120,6 +121,7 @@ private:
     void update_chip();
     void build_gps_layer();      /* the position dot's layer, over the map (atlas_gps.cpp) */
     void build_gps_controls();   /* the status chip and the follow button */
+    void build_gps_chip();       /* the dish-and-bars chip (atlas_chip.cpp) */
     void update_attribution();   /* the bottom row: scale bar and credit in the smallest font (core/attribution.hpp) */
     std::string engine_attribution() const;
     void build_credit();         /* the bottom row's drawing object (atlas_credit.cpp) */
@@ -137,8 +139,13 @@ private:
     void gps_apply_settings();             /* the Settings rows changed: configure the reader, show or hide the overlays */
     void gps_tick(std::int64_t now);
     void gps_refresh_ports();
-    void gps_layout();                     /* the chip and the follow button, laid out from the engine's controls */
-    void gps_show_overlays();              /* chip text and colour, button visibility, a redraw of the dot */
+    void gps_layout();                     /* the follow button, laid out from the engine's controls */
+    void gps_layout_chip();                /* the chip's plate and touch square (atlas_chip.cpp) */
+    void gps_show_overlays();              /* chip and button visibility, a redraw of the chip and the dot */
+    void open_gps_status();                /* STUB: the chip's tap and the S key; the GPS status page comes later (atlas_chip.cpp) */
+    void draw_gps_chip(lv_layer_t *layer, const lv_area_t &area);
+    static void chip_draw_cb(lv_event_t *e);
+    static void chip_click_cb(lv_event_t *e);
     void set_follow(bool on);
     void on_follow_off();
     void recentre_on(double lat, double lon);
@@ -230,9 +237,12 @@ private:
     std::unique_ptr<atlas::PositionStateWriter> pos_writer_;
     atlas::FollowLogic follow_;
     atlas::GpsStatus gps_status_;
-    std::string gps_chip_text_, gps_source_;
+    std::string gps_source_;
+    atlas::ChipState gps_chip_state_;        /* what the chip shows now (core/gps_chip.hpp) */
+    bool gps_status_requested_ = false;      /* open_gps_status() was called (the status page does not exist yet) */
+    int chip_w_ = 0, chip_h_ = 0, chip_dx_ = 0, chip_dy_ = 0;   /* the chip plate's size and its offset inside its touch square */
     std::vector<std::string> gps_present_;   /* the serial ports present, for the Port row */
-    lv_obj_t *gps_layer_ = nullptr, *gps_chip_ = nullptr, *gps_chip_label_ = nullptr, *follow_btn_ = nullptr;
+    lv_obj_t *gps_layer_ = nullptr, *gps_chip_ = nullptr, *follow_btn_ = nullptr;
     int follow_plate_ = 0, follow_dx_ = 0, follow_dy_ = 0;   /* the follow plate's size and offset inside its touch square */
     std::int64_t gps_ports_at_ = 0;
     lv_obj_t *tabbar_ = nullptr;

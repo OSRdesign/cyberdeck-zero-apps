@@ -11,7 +11,7 @@ env DECKATLAS_VIEW 48.889643,2.269995,16
 
 wait 1300
 shot follow-off-start
-expect text "3D fix 8 sats"
+expect text "Map"
 wait 3000
 shot follow-off-walked
 

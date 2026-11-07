@@ -145,7 +145,7 @@ void AtlasApp::gps_apply_settings()
     if (!settings_.gps) {
         follow_.set(false, 0, 0);
         gps_status_ = atlas::GpsStatus();
-        gps_chip_text_.clear();
+        gps_chip_state_ = atlas::ChipState();
         if (pos_writer_) pos_writer_->clear();
     }
     gps_show_overlays();
@@ -172,28 +172,7 @@ void AtlasApp::build_gps_layer()
 
 void AtlasApp::build_gps_controls()
 {
-    const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
-    const atlas::MapMetrics mm = atlas::map_metrics(overlay_input());
-
-    gps_chip_ = lv_obj_create(map_box_);
-    plain(gps_chip_);
-    lv_obj_set_size(gps_chip_, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_style_max_width(gps_chip_, std::max(40, w_ - 3 * mm.margin - mm.plate), 0);
-    lv_obj_set_style_bg_color(gps_chip_, rgb(kPlateRgb), 0);
-    lv_obj_set_style_bg_opa(gps_chip_, LV_OPA_80, 0);
-    lv_obj_set_style_radius(gps_chip_, m->tok[CP0_TOK_RADIUS_S], 0);
-    lv_obj_set_style_pad_hor(gps_chip_, mm.pad, 0);
-    lv_obj_set_style_pad_ver(gps_chip_, mm.pad, 0);
-    gps_chip_label_ = lv_label_create(gps_chip_);
-    lv_obj_set_style_text_font(gps_chip_label_, cp0_ui_font(CP0_TEXT_CAPTION), 0);
-    lv_obj_set_style_text_color(gps_chip_label_, rgb(pal::kText), 0);
-    lv_label_set_long_mode(gps_chip_label_, LV_LABEL_LONG_MODE_DOTS);
-    lv_obj_remove_flag(gps_chip_label_, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_width(gps_chip_label_, LV_SIZE_CONTENT);
-    lv_obj_set_style_max_width(gps_chip_label_, std::max(24, w_ - 3 * mm.margin - mm.plate - 2 * mm.pad), 0);
-    lv_label_set_text(gps_chip_label_, "");
-    lv_obj_set_pos(gps_chip_, mm.margin, mm.margin + mm.row_h + mm.margin / 2); /* the row under the engine's top row */
-    lv_obj_add_flag(gps_chip_, LV_OBJ_FLAG_HIDDEN);
+    build_gps_chip();
 
     /* the follow button: the touch square (TARGET) of the zoom buttons' column, the plate drawn in it like theirs */
     follow_btn_ = lv_obj_create(map_box_);
@@ -278,15 +257,10 @@ void AtlasApp::gps_show_overlays()
         if (gps_layer_) lv_obj_invalidate(gps_layer_);
         return;
     }
-    const std::string text = gps_chip_text_;
-    if (text.empty()) {
+    if (gps_chip_state_.level == atlas::ChipLevel::Hidden) {
         lv_obj_add_flag(gps_chip_, LV_OBJ_FLAG_HIDDEN);
     } else {
-        const bool problem = gps_status_.kind == atlas::GpsStatus::Kind::NoDevice ||
-                             gps_status_.kind == atlas::GpsStatus::Kind::NoReceiver ||
-                             gps_status_.kind == atlas::GpsStatus::Kind::NoAccess || gps_status_.stale;
-        lv_obj_set_style_text_color(gps_chip_label_, rgb(problem ? pal::kWarn : pal::kText), 0);
-        lv_label_set_text(gps_chip_label_, text.c_str());
+        gps_layout_chip();
         lv_obj_remove_flag(gps_chip_, LV_OBJ_FLAG_HIDDEN);
     }
     gps_layout();
@@ -300,12 +274,12 @@ void AtlasApp::gps_tick(std::int64_t now)
     gps_->tick(now);
     if (!settings_.gps) return;
     const atlas::GpsStatus st = gps_->status(now);
-    const std::string chip = atlas::chip_text(st, settings_.units == atlas::Units::Mi);
+    const atlas::ChipState chip = atlas::chip_state(st);
     const bool changed = st.kind != gps_status_.kind || st.stale != gps_status_.stale || st.fix.fix_ms != gps_status_.fix.fix_ms ||
-                         chip != gps_chip_text_;
+                         chip != gps_chip_state_;
     const bool new_fix = st.has_fix() && !st.stale && st.fix.fix_ms != gps_status_.fix.fix_ms;
     gps_status_ = st;
-    gps_chip_text_ = chip;
+    gps_chip_state_ = chip;
     if (gps_->port().path.empty()) {
         gps_source_.clear();
     } else {
@@ -349,7 +323,7 @@ void AtlasApp::on_follow_off()
     if (follow_btn_) lv_obj_invalidate(follow_btn_);
 }
 
-/* G toggles follow, Home turns it on and recentres (the engine's own "centre on me" key). ch: the character of a key the
+/* G toggles follow, Home turns it on and recentres (the engine's own "centre on me" key), S opens the GPS status page. ch: the character of a key the
  * on-screen keyboard typed without a key code. True when the key was used. */
 bool AtlasApp::gps_key(std::uint32_t key_code, char ch)
 {
@@ -360,6 +334,10 @@ bool AtlasApp::gps_key(std::uint32_t key_code, char ch)
     }
     if (key_code == KEY_HOME) {
         set_follow(true);
+        return true;
+    }
+    if (key_code == KEY_S || ch == 's' || ch == 'S') { /* the GPS status page (the chip's tap) */
+        open_gps_status();
         return true;
     }
     return false;

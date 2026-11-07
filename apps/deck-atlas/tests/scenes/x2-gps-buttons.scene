@@ -10,7 +10,7 @@ env DECKATLAS_VIEW 48.889643,2.269995,16
 
 wait 1500
 shot follow-off
-expect text "3D fix 9 sats"
+expect text "Map"
 key g
 wait 400
 shot follow-on

@@ -1,6 +1,6 @@
-# Only a serial port that is no known GPS receiver is plugged in (a CH340 radar, 1a86:7523): Auto never opens it, the chip says
-# "No GPS receiver found"; Settings > GPS receiver > Port lists it (and the hint row), and a port chosen there is opened
-# (it sends nothing, so: "Searching"). The synthetic feed "other" stands for that port.
+# Only a serial port that is no known GPS receiver is plugged in (a CH340 radar, 1a86:7523): Auto never opens it, the chip is
+# the crossed-out dish; Settings > GPS receiver > Port lists it (and the hint row), and a port chosen there is opened
+# (it sends nothing, so the dish stays crossed out). The synthetic feed "other" stands for that port.
 title GPS: only another serial device, Auto leaves it alone
 sizes 640x480 480x320 320x480
 env DECKATLAS_DEMO 1
@@ -10,8 +10,7 @@ env DECKATLAS_VIEW 48.889643,2.269995,16
 
 wait 3000
 shot no-receiver
-expect text "No GPS receiver found"
-expect notext "Searching"
+expect text "Map"
 key tab
 key tab
 wait 800
@@ -32,5 +31,4 @@ expect text "ttyUSB0"
 key tab
 wait 3500
 shot map-port-chosen
-expect text "Searching"
-expect notext "No GPS receiver found"
+expect text "Map"

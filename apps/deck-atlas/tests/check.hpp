@@ -66,6 +66,7 @@ void test_nmea();
 void test_gps_ids();
 void test_gps_fix();
 void test_gps_sky();
+void test_gps_chip();
 void test_gps_link();
 void test_gps_posix();
 void test_gps_demo();

@@ -1,0 +1,16 @@
+# GPS: a multi-constellation 3D fix (GPS and SBAS under $GP, GLONASS under $GL, one $GNGSA per system, multi-message GSV
+# groups): thirteen satellites used, HDOP 0.9: three green bars. Then the feed ends: after 5 s the bars are dimmed with the
+# "!" mark (stale). tests/tools/check_chip_shots.py measures the shots.
+title GPS: sky of three constellations, good fix, then stale
+sizes 640x480 480x320 320x480
+env DECKATLAS_DEMO 1
+env DECKATLAS_GPS auto
+env DECKATLAS_GPS_FEED skylost
+env DECKATLAS_VIEW 48.889643,2.269995,16
+
+wait 1500
+shot sky-good
+expect text "Map"
+wait 5000
+shot sky-stale
+expect text "Map"
