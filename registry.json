@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-11-02T22:06:31+00:00",
+  "generated_at": "2026-11-07T14:14:14+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CardputerZero"
@@ -401,6 +401,138 @@
       ],
       "min_size": "640x480",
       "portrait_min_size": "480x640"
+    },
+    {
+      "uuid": "f215ced5-fbdc-56a1-9d10-1a987964b9b7",
+      "share_code": "mmwave-radar",
+      "title": "mmWave Radar",
+      "summary": "See people move: a viewer for the Hi-Link LD2452 and LD2451 radars.",
+      "description": "Shows up to three targets the radar tracks: a top-down plot with trails and speed arrows, a table of the raw numbers, a 30 s graph of distance and speed, and the sensor's state. For the HLK-LD2452 (and LD2450) and the HLK-LD2451, on a USB-serial adapter, or the LD2451 over Bluetooth LE. Listen only: it sends nothing to the sensor. Needs a screen of at least 480x320 (portrait 320x480 in PDA mode).",
+      "locales": {
+        "en": {
+          "title": "mmWave Radar",
+          "summary": "See people move: a viewer for the Hi-Link LD2452 and LD2451 radars.",
+          "description": "Shows up to three targets the radar tracks: a top-down plot with trails and speed arrows, a table of the raw numbers, a 30 s graph of distance and speed, and the sensor's state. For the HLK-LD2452 (and LD2450) and the HLK-LD2451, on a USB-serial adapter, or the LD2451 over Bluetooth LE. Listen only: it sends nothing to the sensor. Needs a screen of at least 480x320 (portrait 320x480 in PDA mode)."
+        }
+      },
+      "i18n": {
+        "en": {
+          "title": "mmWave Radar",
+          "summary": "See people move: a viewer for the Hi-Link LD2452 and LD2451 radars.",
+          "description": "Shows up to three targets the radar tracks: a top-down plot with trails and speed arrows, a table of the raw numbers, a 30 s graph of distance and speed, and the sensor's state. For the HLK-LD2452 (and LD2450) and the HLK-LD2451, on a USB-serial adapter, or the LD2451 over Bluetooth LE. Listen only: it sends nothing to the sensor. Needs a screen of at least 480x320 (portrait 320x480 in PDA mode)."
+        }
+      },
+      "categories": [
+        "Tools"
+      ],
+      "author": {
+        "github": "OSRdesign",
+        "display_name": "OSRdesign"
+      },
+      "version": "0.1.0",
+      "published_at": "2026-11-07T14:08:19+00:00",
+      "updated_at": "2026-11-07T14:14:14+00:00",
+      "review": {
+        "status": "approved"
+      },
+      "license": "MIT",
+      "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/mmwave-radar",
+      "download": {
+        "type": "deb",
+        "package": "mmwave-radar",
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/mmwave-radar_0.1.0_arm64.deb",
+        "md5": "23e92528aea7e11985286d3b3d8b4186",
+        "sha256": "9c7d823f56905d1bd0ce4a31677ca18b269610e20d314ff5a902a8ad675103d5",
+        "size": 1482450
+      },
+      "depends": "libfreetype6, libinput10, libxkbcommon0",
+      "permissions": {
+        "camera": false,
+        "microphone": false,
+        "imu": false,
+        "network": false,
+        "additional_hardware": true,
+        "background_service": false,
+        "external_display": false
+      },
+      "assets": {
+        "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/icon.png",
+        "screenshots": [
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/01-radar-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/02-radar-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/03-radar-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/04-table-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/05-graph-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/06-sensor-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/07-notfound-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/08-table-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/09-radar-480x800.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/10-held-radar-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/11-held-radar-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/12-held-radar-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/13-held-radar-480x800.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/14-held-hide-radar-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/15-held-hide-radar-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/16-held-hide-radar-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/17-held-hide-radar-480x800.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/18-ld2451-radar-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/19-ld2451-radar-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/20-ld2451-radar-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/21-ld2451-radar-480x800.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/22-ld2451-table-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/23-ld2451-table-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/24-ld2451-sensor-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/25-ld2451-sensor-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/26-ble-list-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/27-ble-list-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/28-ble-list-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/29-ble-list-480x800.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/30-ble-connecting-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/31-ble-radar-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/32-ble-sensor-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/33-ble-sensor-settings-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/34-ble-off-320x480.png"
+        ]
+      },
+      "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/icon.png",
+      "screenshots": [
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/01-radar-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/02-radar-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/03-radar-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/04-table-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/05-graph-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/06-sensor-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/07-notfound-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/08-table-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/09-radar-480x800.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/10-held-radar-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/11-held-radar-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/12-held-radar-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/13-held-radar-480x800.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/14-held-hide-radar-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/15-held-hide-radar-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/16-held-hide-radar-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/17-held-hide-radar-480x800.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/18-ld2451-radar-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/19-ld2451-radar-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/20-ld2451-radar-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/21-ld2451-radar-480x800.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/22-ld2451-table-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/23-ld2451-table-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/24-ld2451-sensor-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/25-ld2451-sensor-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/26-ble-list-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/27-ble-list-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/28-ble-list-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/29-ble-list-480x800.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/30-ble-connecting-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/31-ble-radar-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/32-ble-sensor-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/33-ble-sensor-settings-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/mmwave-radar/screenshots/34-ble-off-320x480.png"
+      ],
+      "min_size": "480x320",
+      "portrait_min_size": "320x480"
     },
     {
       "uuid": "978c39c5-fff8-5414-af97-bc3b78da75a5",

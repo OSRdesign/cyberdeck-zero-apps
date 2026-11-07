@@ -1,0 +1,17 @@
+title mmWave Radar: larger screens scale (800x480, 480x800, 1280x800, 720x720): radar and table
+sizes 800x480 480x800 1280x800 720x720 480x640
+env MMWAVE_DEMO three
+env MMWAVE_TEST_CONFIG 1
+
+wait 3000
+shot radar
+check radar
+key 2
+wait 500
+shot table
+check table
+key 4
+wait 500
+shot sensor
+check sensor
+expect noquit

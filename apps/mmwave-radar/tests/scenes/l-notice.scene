@@ -1,0 +1,9 @@
+title mmWave Radar: a screen under 480x320 (an older launcher ignores X-MinSize) shows the notice
+sizes 400x300 320x240
+env MMWAVE_DEMO three
+env MMWAVE_TEST_CONFIG 1
+
+wait 400
+shot notice
+check notice
+expect noquit

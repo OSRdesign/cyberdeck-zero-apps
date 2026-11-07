@@ -1,0 +1,10 @@
+title mmWave Radar: the radar was found and its frames stopped (Lost, searching again)
+sizes 480x320 320x480 640x480
+env MMWAVE_DEMO lost
+env MMWAVE_TEST_CONFIG 1
+
+wait 6000
+shot lost
+check lost
+expect text "Signal lost, searching"
+expect noquit

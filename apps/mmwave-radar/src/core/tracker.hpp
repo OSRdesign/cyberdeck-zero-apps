@@ -1,0 +1,97 @@
+/*
+ * SPDX-License-Identifier: MIT
+ *
+ * mmWave Radar: per-slot state from the decoded frames: a short trail, a smoothed speed, a stable target id and a
+ * rolling history of distance and speed for the graph. Pure and deterministic: every call takes the time in ms (any
+ * monotonic origin); there is no clock inside.
+ *
+ * The radar's three slots are taken as the target identities (the slot number stays with a person as long as the radar
+ * keeps it; whether it does with two people is not verified, report 056 section 8). A slot that disappears for less
+ * than drop_ms keeps its id (one empty frame is a glitch, not a new person); after drop_ms the slot is released and
+ * the next target in it gets a new id. A new id restarts the trail and the smoothed speed.
+ */
+#pragma once
+
+#include "frame.hpp"
+
+#include <cstdint>
+#include <deque>
+
+namespace mmw {
+
+struct TrackerConfig {
+    std::int64_t trail_ms = 2000;          /* trail length */
+    std::int64_t history_ms = 30000;       /* graph history length */
+    std::int64_t history_step_ms = 333;    /* one history sample every this (3 per second) */
+    std::int64_t drop_ms = 500;            /* a slot unseen for this long is released */
+    double speed_alpha = 0.3;              /* smoothing: s += alpha * (v - s) per frame */
+};
+
+/* A target the sensor reports byte-identical (x, y, speed, resolution) in every frame for this long is HELD: the
+ * HLK-LD2452 sometimes keeps a stale target for seconds to over a minute, speed 0, without the few mm of jitter a
+ * real still person gives. */
+constexpr std::int64_t kHeldMs = 3000;
+
+/* A jump rule: a slot's next measurement farther from its last one than a person or a vehicle could have moved in the
+ * elapsed time (kMaxJumpSpeed for that time, plus kJumpSlack for the noise of whole-metre distances and coarse angles)
+ * is not the same target: the slot takes a new id (a real far reflection, a ghost). No time passed between two frames
+ * with the same time stamp (read in one poll): the rule is not applied to those. */
+constexpr double kMaxJumpSpeed = 40.0; /* m/s (144 km/h) */
+constexpr double kJumpSlack = 1.0;     /* m */
+
+struct TrailPoint {
+    std::int64_t t_ms = 0;
+    int x_mm = 0, y_mm = 0;
+};
+
+struct HistorySample {
+    std::int64_t t_ms = 0;
+    bool valid = false;         /* a target was there */
+    int distance_mm = 0;
+    double speed_cm_s = 0.0;    /* smoothed */
+};
+
+struct SlotState {
+    bool active = false;            /* has a target (seen within drop_ms) */
+    bool present_now = false;       /* in the latest frame */
+    std::uint32_t id = 0;           /* stable while the slot stays active; 0 = never had one */
+    Target last;                    /* the latest values (kept while active) */
+    double speed_smooth_cm_s = 0.0;
+    std::int64_t first_seen_ms = 0, last_seen_ms = 0;
+    std::deque<TrailPoint> trail;   /* oldest first, within trail_ms of the newest point */
+    std::deque<HistorySample> history;
+    bool held = false;              /* identical values for kHeldMs of continuous frames (see kHeldMs) */
+    std::int64_t same_since_ms = 0; /* the time of the first of the identical frames */
+};
+
+class Tracker {
+public:
+    explicit Tracker(const TrackerConfig &cfg = TrackerConfig()) : cfg_(cfg) {}
+
+    /* One decoded frame, arrived at t_ms. */
+    void update(const Frame &f, std::int64_t t_ms);
+    /* No frame, only time passing (releases stale slots, keeps the history sampling): call from a timer. */
+    void tick(std::int64_t t_ms);
+    void clear();
+    /* The release time of a slot, per sensor (SensorDriver::drop_ms); the Link sets it when a sensor is found. */
+    void set_drop_ms(std::int64_t ms) { cfg_.drop_ms = ms; }
+    std::int64_t drop_ms() const { return cfg_.drop_ms; }
+
+    const SlotState &slot(int index) const { return slots_[index]; } /* 0..2 */
+    std::uint32_t frames() const { return frames_; }
+    int held_count() const; /* slots held now (active and in the latest frame) */
+
+private:
+    static bool implausible_jump(const Target &from, const Target &to, std::int64_t dt_ms);
+    void expire(std::int64_t t_ms);
+    void sample(std::int64_t t_ms);
+    TrackerConfig cfg_;
+    SlotState slots_[3];
+    std::uint32_t next_id_ = 1;
+    std::uint32_t frames_ = 0;
+    std::int64_t last_sample_ms_ = 0;
+    std::int64_t last_frame_ms_ = 0;
+    bool sampled_ = false;
+};
+
+} // namespace mmw

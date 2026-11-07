@@ -1,0 +1,10 @@
+title mmWave Radar: the only port is held by another app (Busy)
+sizes 480x320 320x480 640x480
+env MMWAVE_DEMO busy
+env MMWAVE_TEST_CONFIG 1
+
+wait 1500
+shot busy
+check busy
+expect text "The port is used by another app"
+expect noquit

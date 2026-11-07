@@ -1,0 +1,50 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: mmWave Radar
+Upstream-Contact: OSRdesign <https://github.com/OSRdesign/cyberdeck-zero-apps>
+Source: https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/mmwave-radar
+Comment: The application is linked against the LVGL based cp0_lvgl runtime of the
+ CardputerZero launcher by M5Stack (Copyright M5Stack Technology CO LTD, MIT) and LVGL
+ (Copyright LVGL Kft, MIT), which are part of the binary and are therefore listed in
+ its Copyright field below. The fonts it draws with are the launcher's; none is shipped
+ in this package.
+ .
+ The frame decoder, the listen-only port detector, the tracker and the screen are the
+ app's own code, written from scratch for this project from Hi-Link's published
+ documents of the HLK-LD2450 serial protocol and the HLK-LD2452 user manual (facts of
+ the data frame only) and from our own recordings of the sensor. It contains no code of
+ other radar libraries. Hi-Link is named only to say which sensor the app reads; the
+ project is not made, endorsed or sponsored by Hi-Link.
+ .
+ For a radar over Bluetooth LE the app talks to BlueZ over the system D-Bus with the
+ sd-bus functions of the system's libsystemd.so.0 (systemd, LGPL-2.1-or-later), opened
+ at run time: it is neither linked into the binary nor shipped in this package.
+
+Files: usr/share/APPLaunch/bin/mmwave-radar
+Copyright: 2026 OSRdesign
+ M5Stack Technology CO LTD (cp0_lvgl runtime linked into the binary)
+ LVGL Kft (LVGL, linked into the binary)
+License: MIT
+
+Files: usr/share/APPLaunch/applications/mmwave-radar.desktop
+       usr/share/APPLaunch/share/images/mmwave-radar.png
+       usr/share/doc/mmwave-radar/*
+Copyright: 2026 OSRdesign
+License: MIT
+
+License: MIT
+ Permission is hereby granted, free of charge, to any person obtaining a copy of this
+ software and associated documentation files (the "Software"), to deal in the Software
+ without restriction, including without limitation the rights to use, copy, modify,
+ merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+ permit persons to whom the Software is furnished to do so, subject to the following
+ conditions:
+ .
+ The above copyright notice and this permission notice shall be included in all copies
+ or substantial portions of the Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+ INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+ PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+ CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
+ THE USE OR OTHER DEALINGS IN THE SOFTWARE.

@@ -1,0 +1,11 @@
+title mmWave Radar: HLK-LD2451 radar page, one target approaching and one receding (scripted LD2451 at 115200, auto range past 6 m)
+sizes 640x480 480x320 320x480 480x800
+env MMWAVE_DEMO ld2451-two
+env MMWAVE_TEST_CONFIG 1
+
+wait 5000
+shot ld2451-two
+check ld2451-two
+expect text "Radar"
+expect notext "No radar found"
+expect noquit

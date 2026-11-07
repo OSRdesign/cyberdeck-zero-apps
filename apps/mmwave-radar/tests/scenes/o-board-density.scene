@@ -1,0 +1,22 @@
+title mmWave Radar: the real small panels (6.1 px/mm: zero8 at 480x320 and upright at 320x480): every page
+sizes 480x320 320x480
+ppmm 608
+env MMWAVE_DEMO three
+env MMWAVE_TEST_CONFIG 1
+
+wait 12000
+shot radar
+check radar
+key 2
+wait 500
+shot table
+check table
+key 3
+wait 500
+shot graph
+check graph
+key 4
+wait 500
+shot sensor
+check sensor
+expect noquit

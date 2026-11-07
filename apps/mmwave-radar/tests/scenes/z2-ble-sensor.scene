@@ -1,0 +1,30 @@
+title mmWave Radar: Sensor page of a Bluetooth radar: the port, no speed, the remembered radar, the Connection row (keys: Down x7)
+sizes 480x320 320x480 640x480 480x800
+env MMWAVE_DEMO ble
+env MMWAVE_TEST_CONFIG 1
+
+wait 2500
+key down
+key enter
+wait 4500
+key 4
+wait 700
+shot ble-sensor
+check ble-sensor
+expect text "Found"
+expect text "HLK-LD2451_49F0 (Bluetooth)"
+expect text "ble:ED:2F:90:B4:49:F0"
+@320x480,480x800 expect text "Bluetooth"
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 500
+shot ble-sensor-settings
+check ble-sensor-settings
+expect text "Connection"
+expect text "Sensor type"
+expect noquit

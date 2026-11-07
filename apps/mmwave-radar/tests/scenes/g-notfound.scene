@@ -1,0 +1,20 @@
+title mmWave Radar: no radar (a GPS receiver and a silent board on the ports): what was tried, the wiring, Rescan
+sizes 480x320 320x480 640x480
+env MMWAVE_DEMO none
+env MMWAVE_TEST_CONFIG 1
+
+wait 2500
+shot notfound
+check notfound
+expect text "No radar found"
+expect text "Rescan"
+expect text "TRIED"
+tap "Rescan"
+wait 300
+shot notfound-rescan
+key 4
+wait 500
+shot notfound-sensor
+check notfound-sensor
+expect text "Searching"
+expect noquit

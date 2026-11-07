@@ -1,0 +1,20 @@
+title mmWave Radar: hidden and shown again (X-Background=freeze): nothing drawn while hidden, a full repaint, close quits
+sizes 480x320 640x480
+lifecycle
+env MMWAVE_DEMO three
+env MMWAVE_TEST_CONFIG 1
+
+wait 1500
+hide
+expect hidden
+wait 800
+expect nowrite
+stale space
+show
+expect visible
+wait 600
+expect repaint
+expect notext "PAUSED"
+shot shown
+close
+expect quit

@@ -1,0 +1,23 @@
+title mmWave Radar: tall Radar page at 320x480 on the board's density (6.1 px/mm): plot and target list, one person, Metres then Millimetres
+sizes 320x480
+ppmm 608
+env MMWAVE_DEMO walk
+env MMWAVE_TEST_CONFIG 1
+
+wait 3500
+shot tall-one
+check tall-one
+expect text "Radar"
+expect notext "No radar found"
+key 4
+wait 500
+key down
+wait 200
+key enter
+wait 300
+expect text "Millimetres"
+key 1
+wait 1200
+shot tall-one-mm
+check tall-one-mm
+expect noquit

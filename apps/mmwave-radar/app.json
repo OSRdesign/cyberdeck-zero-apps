@@ -1,0 +1,16 @@
+{
+  "share_code": "mmwave-radar",
+  "package": "mmwave-radar",
+  "version": "0.1.0",
+  "title": "mmWave Radar",
+  "summary": "See people move: a viewer for the Hi-Link LD2452 and LD2451 radars.",
+  "description": "Shows up to three targets the radar tracks: a top-down plot with trails and speed arrows, a table of the raw numbers, a 30 s graph of distance and speed, and the sensor's state. For the HLK-LD2452 (and LD2450) and the HLK-LD2451, on a USB-serial adapter, or the LD2451 over Bluetooth LE. Listen only: it sends nothing to the sensor. Needs a screen of at least 480x320 (portrait 320x480 in PDA mode).",
+  "categories": ["Tools"],
+  "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
+  "license": "MIT",
+  "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/mmwave-radar",
+  "depends": "libfreetype6, libinput10, libxkbcommon0",
+  "recommends": "bluez",
+  "arch": ["arm64", "amd64"],
+  "permissions": {"additional_hardware": true}
+}
