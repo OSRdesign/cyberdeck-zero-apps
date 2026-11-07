@@ -1,7 +1,7 @@
 {
   "share_code": "mesh-hop",
   "package": "mesh-hop",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "title": "Mesh Hop",
   "summary": "MeshCore messenger: chats, contacts and settings of a LoRa companion radio.",
   "description": "The deck is the screen and keyboard of a MeshCore companion radio board, over USB, Bluetooth LE or Wi-Fi. Channel and direct chats with search, contacts, nearby nodes, repeater and room login, radio presets and node settings, and the bundled meshcore-cli. Messages are kept per board. Needs a board running MeshCore companion firmware; USB needs the dialout group, Bluetooth needs BlueZ.",

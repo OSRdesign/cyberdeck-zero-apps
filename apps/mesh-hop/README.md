@@ -1,6 +1,6 @@
 # Mesh Hop
 
-Version 0.8.2, package `mesh-hop`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.8.3, package `mesh-hop`. Part of [cyberdeck-zero-apps](../../README.md).
 
 **Status: early release.** 0.2.2 and 0.3.0 were tested on the deck by the owner with real boards (Seeed XIAO nRF52840 and a
 spare XIAO S3 WIO, MeshCore firmware v1.15.0, a board swap included). 0.4.0 is the responsive, touch-complete version; its board
@@ -19,6 +19,22 @@ A full-screen client for [MeshCore](https://github.com/meshcore-dev/MeshCore) Lo
 companion firmware for USB, BLE or Wi-Fi); the deck is its screen and keyboard. Everything works **by touch or by keyboard**, on any screen from **640x480** up. Mesh Hop replaces the 320x170 UI of
 [MeshZero](https://github.com/OSRdesign/cyberdeck-zero-apps/tree/462b51bfa2c58b32d28d0bb16f9a111cc89e81d1/apps/meshzero) (removed from this repository on 2026-11-02) and keeps its core: the serial transport, the protocol, the client, the model and the history
 store (`src/core/`, with unit tests).
+
+## What changed in 0.8.3
+
+* **Never the wrong serial port.** Opening a serial port raises DTR (an ESP32-style board resets) and Mesh Hop then writes to it, so
+  it must not open a port that is not your MeshCore node. The app never connected by itself from the start page; what changed is the
+  automatic choice inside the USB transport (used when no port is named) and the page itself:
+  * a port is chosen without asking only when that is **unambiguous**: exactly one serial port, or the port you named
+    (`MESHHOP_PORT`, the `port` file), or the board used last time is exactly one of the ports plugged (its USB id and serial number
+    are remembered; the "last used" file of 0.8.2 and before holds only `vid:pid`, which still counts when it matches one port);
+  * with **several** ports and no such match nothing is opened and nothing is guessed (0.8.2 and before took a board with a
+    well-known USB id, then the lowest name). The start page lists them all and says **Several serial devices found: choose your
+    MeshCore node.** Two boards with the same USB id and no serial number are asked about too;
+  * a port **another program holds open** (a Reticulum daemon, `cat`, a GPS tool) is never opened: its row is dimmed with
+    **in use by rnsd** (the program's name) and choosing it says **This port is used by rnsd. Close that program first.** Mesh Hop's
+    own handle does not count; processes of other users cannot be seen and count as not busy.
+* BLE and IP nodes, the baud rate and the DTR handling are unchanged.
 
 ## What changed in 0.8.2
 
@@ -201,6 +217,11 @@ highlighted. **O** (or Ctrl+O, or a 3 s hold on the row): Forget this node (a pa
 pairing), Remove IP node, Info. **S** scans, **A** adds by IP. The header's Esc asks **Quit Mesh Hop?** here; opened from
 Home > Node it goes back to Home.
 
+* **Several serial ports, and a port in use** (0.8.3): when two or more USB serial ports are plugged and the node chosen last is
+  not one of them, the line under the title says **Several serial devices found: choose your MeshCore node.** and nothing is
+  opened until you choose a row (your choice is remembered as before). With exactly one port, or when the node chosen last is
+  plugged, the page is as before. A port that another program holds open is dimmed (**in use by rnsd**) and choosing it only says
+  who holds it: close that program, and the row comes back within a second.
 * **Bluetooth**: the first time, a box asks before the first scan (Bluetooth shares the radio with the keyboard and Wi-Fi: a
   Bluetooth keyboard may lag briefly during a scan): **Scan** or **Not now** (a row starts it later); asked once. A scan lasts
   10 s, runs only while the page is open, stops on a connect. A node not paired yet asks for its PIN: the 6 digits on its screen,
@@ -527,6 +548,7 @@ its public key); plugging the first back restores them. The log holds no message
 | `presets.jsonl` | the last good copy of the radio preset list |
 | `nodes.txt` | the nodes added by IP address, the node chosen last, the answer to the Bluetooth scan question, the node names learned (0.5.0; a USB name with the identity of the device that answered, `name usb:/dev/ttyACM0 <name> 303a:1001/<serial>`, so another board on that port does not inherit it) |
 | `port` | optional: a serial port to list on the start page |
+| `lastport` | the USB identity of the board opened by the automatic choice (`303a:1001/<serial>`; `vid:pid` in 0.8.2 and before); used only to tell which of several ports was used last |
 | `cli/` | the CLI's home: `.config/meshcore/<repeater key>.pass`, the passwords kept by the CLI's `login` (0.6.0) and by the Repeater page's Remember on this deck (0.7.0): one file per repeater or room, mode 0600, for both |
 | `mesh-hop.log` | debug log, size bounded (`MESHHOP_DEBUG=1` logs every frame) |
 | `*.pre-boards.bak` | the files of 0.2.1 and before, kept after they moved into the first board's folder |
