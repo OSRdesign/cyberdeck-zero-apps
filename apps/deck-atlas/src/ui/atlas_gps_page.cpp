@@ -330,7 +330,7 @@ void AtlasApp::build_gps_page()
         lv_obj_set_size(skyc, side, LV_SIZE_CONTENT);
         lv_obj_set_flex_flow(skyc, LV_FLEX_FLOW_COLUMN);
         lv_obj_t *st = make_label(skyc, caption_px_, pal::kMuted, false);
-        lv_label_set_text(st, "SKY (30 and 60 degree rings, N up)");
+        lv_label_set_text(st, "SKY (N up)");
         lv_label_set_long_mode(st, LV_LABEL_LONG_MODE_DOTS);
         lv_obj_set_width(st, lv_pct(100));
         gp_.sky = lv_obj_create(skyc);
