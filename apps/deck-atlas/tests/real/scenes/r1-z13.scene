@@ -1,0 +1,10 @@
+# Real tiles (tests/real/run.sh: DECKATLAS_MBTILES, the owner's folder converted): zoom 13 over the area.
+title Real tiles: zoom 13
+sizes 640x480 480x320 320x480 480x800
+env DECKATLAS_DEMO 1
+env DECKATLAS_VIEW 48.864715,2.460938,13
+
+wait 3000
+shot real-z13
+key esc
+expect quit

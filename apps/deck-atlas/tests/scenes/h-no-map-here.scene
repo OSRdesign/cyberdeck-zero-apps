@@ -1,0 +1,16 @@
+# A view no imported file covers (far from the fixture's tiles), at the fixture's deepest level (15): "No map here".
+# Zoomed out to 14 it stays: the engine's record of a converted folder now holds the extent of every level, so the
+# shallower levels are bounded too and the plate follows the engine (before the pin 28817a5 it went at 14).
+title No map here
+sizes 640x480 320x480
+env DECKATLAS_DEMO 1
+env DECKATLAS_VIEW 45.75,4.85,15
+
+wait 1000
+shot no-map-here
+expect text "No map here"
+key pgdn
+wait 800
+expect text "No map here"
+key esc
+expect quit

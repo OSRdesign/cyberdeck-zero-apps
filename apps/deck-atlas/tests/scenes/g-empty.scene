@@ -1,0 +1,15 @@
+# The first run with no map at all (DECKATLAS_DEMO=empty): the world view and the hint; the Sources tab says there
+# is no map file yet.
+title First run: no map yet
+sizes 640x480 480x320 320x480 480x800
+env DECKATLAS_DEMO empty
+
+wait 1000
+shot first-run
+expect text "No map yet. Import a map file in Sources."
+key tab
+wait 600
+shot sources-empty
+@640x480,480x320,480x800 expect text "No map files yet"
+key esc
+expect quit

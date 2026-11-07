@@ -1,0 +1,52 @@
+# The Map tab over the fixture's tiles (tests/fixtures/tiles, converted by the engine's folder import into the
+# demonstration store): the view, zoom by keys (+ / -, one level of over-zoom), pan by arrows and by a drag, the
+# widget's own zoom pad and scale bar, Tab to the next tab and back, a short Esc at the tab ends the app.
+title Map: tiles, keys, drag, over-zoom, exit
+sizes 640x480 480x320 320x480 480x800
+env DECKATLAS_DEMO 1
+env DECKATLAS_VIEW 48.886392,2.27417,15
+
+wait 1500
+shot map-z15
+expect noquit
+expect text "Map"
+expect text "Sources"
+expect text "Settings"
+
+# + zooms in (typed, as the on-screen keyboard sends it): z16 is the over-zoom level (the z15 tiles magnified)
+type +
+wait 1200
+shot map-z16-overzoom
+type -
+key pgdn
+wait 1200
+shot map-z14
+key pgup
+wait 600
+
+# arrows pan by an eighth of the view
+key right
+key right
+key down
+wait 1200
+shot map-panned
+
+# a drag pans back
+drag 0.30 0.40 0.60 0.55
+wait 1200
+shot map-dragged
+
+# Tab and Shift is not needed: Tab cycles Map -> Sources -> Settings -> Map
+key tab
+wait 400
+expect text "MAP FILES"
+key tab
+wait 400
+expect text "Units"
+key tab
+wait 800
+expect notext "Units"
+shot map-again
+
+key esc
+expect quit

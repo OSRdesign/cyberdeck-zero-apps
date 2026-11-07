@@ -1,0 +1,15 @@
+# Started by hand (ssh, a script): no launcher contract and no input.state. The app sizes itself from the layout
+# service and works.
+title Started without the launcher
+nocontract
+sizes 640x480 320x480
+env DECKATLAS_DEMO 1
+env DECKATLAS_VIEW 48.886392,2.27417,15
+
+wait 1200
+shot map-nocontract
+key tab
+wait 600
+shot sources-nocontract
+key esc
+expect quit

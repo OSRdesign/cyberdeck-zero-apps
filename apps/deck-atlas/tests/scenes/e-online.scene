@@ -1,0 +1,86 @@
+# Online sources (the demonstration never uses the network: the engine's network is off, so a source switched on says
+# "Offline"). OpenTopoMap: the terms dialog the first time, off and on again without it. Thunderforest: the key page
+# first (the on-screen keyboard with no keyboard attached), then its terms, then on; the key row says "Key saved" and
+# never shows the key. Geoapify's key page with a keyboard attached and a refused key. The Map tab then shows the
+# online source with the engine's state strip.
+title Online sources: terms, key first, Key saved
+sizes 640x480 480x320 320x480 480x800
+env DECKATLAS_DEMO 1
+env DECKATLAS_VIEW 48.886392,2.27417,15
+
+wait 600
+key tab
+wait 800
+# rows: Map shows, the file, Import a map, Geoapify, Geoapify key, OpenTopoMap, Thunderforest, Thunderforest key
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 600
+shot terms-opentopomap
+expect text "I agree, enable"
+expect text "Cancel"
+expect notext "054"
+expect notext "unverified"
+# a long text scrolls inside the dialog, the buttons stay: the end of it
+drag 0.50 0.60 0.50 0.22
+wait 400
+shot terms-opentopomap-end
+expect text "I agree, enable"
+key enter
+wait 1000
+shot otm-on
+expect notext "I agree, enable"
+expect text "Offline"
+# off, then on again: the terms are not asked again
+key enter
+wait 800
+key enter
+wait 1000
+expect notext "I agree, enable"
+shot otm-on-again
+
+# Thunderforest: the key page first
+key down
+key enter
+wait 800
+expect osk on
+shot key-page-osk
+type "abcd1234EFGH"
+key enter
+wait 1200
+shot terms-thunderforest
+expect text "I agree, enable"
+key enter
+wait 1000
+shot thunderforest-on
+expect text "Key saved"
+expect notext "abcd1234EFGH"
+
+# Geoapify's key page with a keyboard attached: no on-screen keyboard; a refused key
+keyboards 1
+wait 1200
+key up
+key up
+key up
+key enter
+wait 800
+expect osk off
+type "short"
+key enter
+wait 500
+shot key-refused
+expect text "A key has 8 to 127 characters"
+key esc
+key esc
+wait 600
+
+# the Map tab shows the online source switched on last, offline: the engine's strip says so
+key tab
+key tab
+wait 1500
+shot map-online-offline
+key esc
+expect quit

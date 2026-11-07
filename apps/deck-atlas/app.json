@@ -1,0 +1,15 @@
+{
+  "share_code": "deck-atlas",
+  "package": "deck-atlas",
+  "version": "0.1.0",
+  "title": "Deck Atlas",
+  "summary": "Offline maps on the deck: your MBTiles, PMTiles and tile folders.",
+  "description": "A map viewer that works offline: import MBTiles or PMTiles files, or a z/x/y tile folder (converted on the deck), from the SD card or USB; pan and zoom by touch or keys. Online sources (OpenTopoMap, Thunderforest and Geoapify with your own key) stay off until you switch one on and accept its terms; never the OpenStreetMap Foundation's servers. Viewed tiles are kept. 480x320 and up (320x480 in PDA mode). GPS comes later.",
+  "categories": ["Tools"],
+  "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
+  "license": "MIT",
+  "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/deck-atlas",
+  "depends": "libfreetype6, libinput10, libxkbcommon0, libsqlite3-0, libcurl4t64, ca-certificates",
+  "arch": ["arm64", "amd64"],
+  "permissions": {"network": true}
+}

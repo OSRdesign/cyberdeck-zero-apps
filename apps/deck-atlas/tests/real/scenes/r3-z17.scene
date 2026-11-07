@@ -1,0 +1,10 @@
+# Real tiles: zoom 17 (the deepest level of the folder; the first of its two z17 patches), at the four canvases.
+title Real tiles: zoom 17
+sizes 640x480 480x320 320x480 480x800
+env DECKATLAS_DEMO 1
+env DECKATLAS_VIEW 48.88007,2.263184,17
+
+wait 3000
+shot real-z17
+key esc
+expect quit

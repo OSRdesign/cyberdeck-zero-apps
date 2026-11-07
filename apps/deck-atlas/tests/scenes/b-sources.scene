@@ -1,0 +1,54 @@
+# The Sources tab: Map shows, the map files (the fixture converted at start), Import, the online sources and their key
+# rows; a map file's page (Show on map, Remove, its facts); the "Map shows" choice; Show on map goes to the Map tab.
+title Sources: files list, a file's page, Map shows
+sizes 640x480 480x320 320x480 480x800
+env DECKATLAS_DEMO 1
+env DECKATLAS_VIEW 48.886392,2.27417,15
+
+wait 600
+key tab
+wait 800
+shot sources
+expect text "MAP FILES"
+@640x480,480x320,480x800 expect text "Map shows"
+# the end of the list: the online sources and their key rows
+key end
+wait 600
+shot sources-end
+expect text "No key"
+expect text "Off"
+key home
+wait 400
+
+# the file's page: Enter on the file (the second item)
+key down
+key enter
+wait 600
+shot file-page
+expect text "Show on map"
+expect text "Remove"
+@480x800 expect text "z13-15"
+@480x800 expect text "6"
+key esc
+wait 400
+expect text "MAP FILES"
+
+# Map shows: every map file, the file
+key up
+key enter
+wait 500
+shot map-shows
+@640x480,480x320,480x800 expect text "All map files"
+expect text "Shown"
+key down
+key enter
+wait 1500
+shot shown-file-on-map
+expect noquit
+
+# back to Sources: the row says what the map shows
+key tab
+wait 600
+shot sources-shows-file
+key esc
+expect quit

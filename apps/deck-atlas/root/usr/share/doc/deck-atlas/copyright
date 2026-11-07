@@ -1,0 +1,55 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Deck Atlas
+Upstream-Contact: OSRdesign <https://github.com/OSRdesign/cyberdeck-zero-apps>
+Source: https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/deck-atlas
+Comment: The application is linked against the LVGL based cp0_lvgl runtime of the
+ CardputerZero launcher by M5Stack (Copyright M5Stack Technology CO LTD, MIT) and LVGL
+ (Copyright LVGL Kft, MIT), which are part of the binary and are therefore listed in
+ its Copyright field below. The map engine of cp0_lvgl (projection, MBTiles and PMTiles
+ readers, the tile store, the online sources, the map widget; MIT, written for the
+ CyberdeckZero Launcher) is compiled into this app only, and contains stb_image 2.30 by
+ Sean Barrett (public domain or MIT, at the user's choice), built as a static part of
+ the engine.
+ .
+ Loaded at run time when installed, not shipped: SQLite (libsqlite3.so.0, public
+ domain) for MBTiles files and the viewing cache, and libcurl (libcurl.so.4, the curl
+ licence, an MIT-style licence) for the online sources, with the system's CA
+ certificates. The Montserrat font (SIL Open Font License 1.1) is read from the
+ launcher's installation at run time, not shipped.
+ .
+ Map data is not part of the package. Imported maps are the user's own, under their
+ own terms. The optional online sources (OpenTopoMap, Thunderforest, Geoapify) are
+ switched off until the user switches them on and accepts the provider's terms; their
+ map data and styles are credited in the app (About) and on the map itself: map data
+ (c) OpenStreetMap contributors (ODbL), OpenTopoMap style (CC-BY-SA), Maps (c)
+ Thunderforest, Powered by Geoapify, (c) OpenMapTiles.
+
+Files: usr/share/APPLaunch/bin/deck-atlas
+Copyright: 2026 OSRdesign
+ M5Stack Technology CO LTD (cp0_lvgl runtime linked into the binary)
+ LVGL Kft (LVGL, linked into the binary)
+ 2017 Sean Barrett (stb_image, inside the map engine)
+License: MIT
+
+Files: usr/share/APPLaunch/applications/deck-atlas.desktop
+       usr/share/APPLaunch/share/images/deck-atlas.png
+       usr/share/doc/deck-atlas/*
+Copyright: 2026 OSRdesign
+License: MIT
+
+License: MIT
+ Permission is hereby granted, free of charge, to any person obtaining a copy of this
+ software and associated documentation files (the "Software"), to deal in the Software
+ without restriction, including without limitation the rights to use, copy, modify, merge,
+ publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons
+ to whom the Software is furnished to do so, subject to the following conditions:
+ .
+ The above copyright notice and this permission notice shall be included in all copies or
+ substantial portions of the Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+ INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+ PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+ FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ DEALINGS IN THE SOFTWARE.

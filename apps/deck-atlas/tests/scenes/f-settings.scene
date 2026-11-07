@@ -1,0 +1,57 @@
+# The Settings tab: Units, Display scale, Offline mode, Cache size cycle on Enter; Clear saved tiles asks first and
+# runs on the worker; the usage line; About (version, attributions, credits). The map then has the imperial scale
+# bar at 1x.
+title Settings: values, Clear saved tiles, About
+sizes 640x480 480x320 320x480 480x800
+env DECKATLAS_DEMO 1
+env DECKATLAS_VIEW 48.886392,2.27417,15
+
+wait 600
+key tab
+key tab
+wait 1000
+shot settings
+expect text "Units"
+expect text "km"
+
+key enter
+wait 300
+expect text "mi"
+key down
+key enter
+wait 300
+expect text "1x"
+key down
+key enter
+key down
+key enter
+wait 800
+shot settings-changed
+expect text "128 MB"
+
+key down
+key enter
+wait 500
+shot clear-confirm
+expect text "Clear saved tiles?"
+key enter
+wait 1200
+shot settings-cleared
+expect notext "Clear saved tiles?"
+
+key down
+key down
+key down
+key enter
+wait 600
+shot about
+expect notext "Units"
+key esc
+wait 400
+expect text "Version"
+
+key tab
+wait 1500
+shot map-miles-1x
+key esc
+expect quit

@@ -1,0 +1,10 @@
+# Real tiles: zoom 15, at the four canvases with their default densities (2x).
+title Real tiles: zoom 15
+sizes 640x480 480x320 320x480 480x800
+env DECKATLAS_DEMO 1
+env DECKATLAS_VIEW 48.88278,2.290649,15
+
+wait 3000
+shot real-z15
+key esc
+expect quit

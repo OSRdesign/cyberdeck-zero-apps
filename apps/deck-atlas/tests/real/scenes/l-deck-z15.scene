@@ -1,0 +1,10 @@
+# Legibility (the check of report 054) on the deck (640x480, 11.3 px/mm): zoom 15 at the automatic display scale (2x).
+title Legibility deck: zoom 15, scale auto (2x)
+sizes 640x480
+env DECKATLAS_DEMO 1
+env DECKATLAS_VIEW 48.88278,2.290649,15
+
+wait 3000
+shot deck-z15-auto
+key esc
+expect quit
