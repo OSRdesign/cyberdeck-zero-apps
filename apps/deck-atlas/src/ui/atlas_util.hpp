@@ -35,8 +35,8 @@ void log_line(const char *format, ...) __attribute__((format(printf, 1, 2)));
 std::int64_t mono_ms();
 void plain(lv_obj_t *o);
 
-/* The store's archives (with their records' tile counts) and online sources. 0 or an engine error. */
-int list_store(cp0_map_store_t *store, const std::string &store_dir, std::vector<ArchiveItem> &archives,
+/* The store's archives (with the engine's tile counts) and online sources. 0 or an engine error. */
+int list_store(cp0_map_store_t *store, std::vector<ArchiveItem> &archives,
                std::vector<OnlineItem> &online);
 
 /* A friendly text for an engine result of an import or a removal. */

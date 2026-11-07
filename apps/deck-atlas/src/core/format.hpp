@@ -45,5 +45,7 @@ std::string byte_rate_label(double per_s);
 std::string eta_label(double seconds);
 /* "2026-11-07" from the record's "2026-11-07T10:20:30Z" (the text unchanged when it is not of that shape). */
 std::string date_label(const std::string &iso);
+/* The engine's "imported" (seconds since the Unix epoch, 0 unknown) as "2026-11-07T10:20:30Z" (UTC); "" for 0. */
+std::string iso_utc(std::int64_t epoch);
 
 } // namespace atlas

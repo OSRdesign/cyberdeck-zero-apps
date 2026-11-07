@@ -101,7 +101,9 @@ AtlasApp::AtlasApp(lv_obj_t *screen) : screen_(screen)
     worker_ = std::make_unique<Worker>();
 
     first_view();
-    poll_view();
+    /* after the first view: the callback's first call would only repeat it */
+    if (map_) cp0_map_on_view_change(map_, view_cb, this);
+    update_chip();
     set_tab(Tab::Map);
     log_line("%s %dx%d%s scale %s, store %s%s, %d map files, network %s", kVersion, w_, h_, narrow_ ? " narrow portrait" : "",
              atlas::scale_label(settings_.scale, map_ ? cp0_map_get_scale(map_) : 0).c_str(), store_dir_.c_str(),
@@ -115,6 +117,7 @@ AtlasApp::~AtlasApp()
     /* the order matters: the import is told to stop and the worker joined; the view saved; the widgets (the map
      * widget and its tile thread) deleted; then the store flushed and closed */
     import_cancel_ = 1;
+    if (map_) cp0_map_on_view_change(map_, nullptr, nullptr);
     if (worker_) worker_->shutdown();
     if (timer_) lv_timer_delete(timer_);
     timer_ = nullptr;
@@ -187,7 +190,7 @@ void AtlasApp::open_store()
     if (demo_) {
         /* the scenes' map: a real archive in place (the optional real-tile check), else the fixture folder converted
          * by the engine's own import (a few tiles: instant; demonstration mode only, before the UI exists) */
-        list_store(store_, store_dir_, archives_, online_);
+        list_store(store_, archives_, online_);
         const char *real = std::getenv("DECKATLAS_MBTILES");
         if (archives_.empty() && real && *real && demo_mode_ != "empty") {
             cp0_map_import_opts_t o{};
@@ -212,7 +215,7 @@ void AtlasApp::open_store()
         }
         log_line("demo: network forced off, settings in %s", config_dir_.c_str());
     }
-    list_store(store_, store_dir_, archives_, online_);
+    list_store(store_, archives_, online_);
     for (OnlineItem &o : online_) o.facts.network_on = !settings_.offline;
     listed_once_ = true;
 }
@@ -532,10 +535,6 @@ void AtlasApp::tick()
     const std::int64_t now = mono_ms();
     if (worker_) worker_->poll();
     if (importing_ || sub_ == Sub::Import) update_import_page(false);
-    if (sub_ == Sub::None && tab_ == Tab::Map && now - last_view_poll_ >= 250) {
-        last_view_poll_ = now;
-        poll_view();
-    }
     if (view_dirty_ && now - view_saved_at_ >= 30000) {
         view_saved_at_ = now;
         view_dirty_ = false;
@@ -575,13 +574,6 @@ void AtlasApp::apply_map_source()
         log_line("map source %s gone: every map file", id.c_str());
         settings_.source.clear();
     }
-    /* every map file. With one file, that file by its id: the engine's every-archive lookup skips the tiles outside
-     * a file's bounds, and the bounds of a converted folder are its deepest level's extent only (a MapTileDl folder's
-     * wide shallow levels would vanish); a lookup by id reads them all */
-    if (archives_.size() == 1 && cp0_map_set_source(map_, archives_.front().id.c_str()) == CP0_MAP_OK) {
-        widget_by_id_ = true;
-        return;
-    }
     widget_by_id_ = false;
     cp0_map_set_source(map_, nullptr);
 }
@@ -589,8 +581,6 @@ void AtlasApp::apply_map_source()
 void AtlasApp::store_changed()
 {
     if (!store_ || !map_) return;
-    /* the widget keys the tiles of "every map file" under "*": a removed or new archive must not leave old pictures */
-    cp0_map_cache_drop(cp0_map_store_ram_cache(store_), cp0_map_source_hash("*"));
     double lat = 0, lon = 0;
     cp0_map_get_center(map_, &lat, &lon);
     const int z = cp0_map_get_zoom(map_);
@@ -628,23 +618,17 @@ void AtlasApp::first_view()
     cp0_map_set_center(map_, f.lat, f.lon);
 }
 
-void AtlasApp::poll_view()
+/* The widget says when the centre or the zoom changed (LVGL thread, at most once per its tick): the view is worth
+ * saving, and "No map here" is decided again. A change of the display scale is not reported: the Settings row asks. */
+void AtlasApp::view_cb(void *user, double lat, double lon, int zoom)
 {
-    if (!map_) {
-        update_chip();
-        return;
-    }
-    double lat = 0, lon = 0;
-    cp0_map_get_center(map_, &lat, &lon);
-    const int z = cp0_map_get_zoom(map_);
-    const float s = cp0_map_get_scale(map_);
-    if (lat == seen_lat_ && lon == seen_lon_ && z == seen_zoom_ && s == seen_scale_) return;
-    if (seen_zoom_ >= 0) view_dirty_ = true;
-    seen_lat_ = lat;
-    seen_lon_ = lon;
-    seen_zoom_ = z;
-    seen_scale_ = s;
-    update_chip();
+    AtlasApp *self = static_cast<AtlasApp *>(user);
+    self->view_dirty_ = true;
+    self->settings_.view.set = true;
+    self->settings_.view.lat = lat;
+    self->settings_.view.lon = lon;
+    self->settings_.view.zoom = zoom;
+    self->update_chip();
 }
 
 void AtlasApp::update_chip()
@@ -676,10 +660,7 @@ void AtlasApp::update_chip()
                 c.minzoom = a.minzoom;
                 c.maxzoom = a.maxzoom;
                 c.missing = a.state == CP0_MAP_E_ARCHIVE_MISSING;
-                /* the widget reads a file by its id at every level, whatever its bounds say (a converted folder's are its
-                 * deepest level's extent; an MBTiles made elsewhere may say as little): trust them only at that level.
-                 * The every-archive lookup filters by the bounds at every level, and so does this test then */
-                c.bounds_deepest_only = widget_by_id_;
+                c.bounds_deepest_only = atlas::bounds_deepest_only(widget_by_id_, a.has_zoom_extents);
                 cov.push_back(c);
             }
             double lat = 0, lon = 0;

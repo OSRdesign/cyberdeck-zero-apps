@@ -42,10 +42,15 @@ struct Coverage {
     Box bounds;
     int minzoom = -1, maxzoom = -1;
     bool missing = false;                /* an in-place file whose stick is out */
-    /* the bounds hold only at the deepest level (and the over-zoom one): the engine's folder conversion writes the
-     * extent of the deepest zoom, while the shallower levels of a downloader's folder usually reach much further */
+    /* the bounds hold only at the deepest level (and the over-zoom one); see bounds_deepest_only() */
     bool bounds_deepest_only = false;
 };
+/* Whether a file's bounds can be trusted at its deepest level only. A file read by its own id (shown by itself) is
+ * read at every level whatever its bounds say (a copied MBTiles made elsewhere may declare as little), so its bounds
+ * count only at the deepest level, unless its record keeps the tile rectangle of every zoom (has_zoom_extents: a
+ * folder converted by the engine since 2026-11-07, whose bounds are the union of all levels). The every-archive
+ * lookup tests the declared bounds at every level itself, so the plate follows it: false. */
+bool bounds_deepest_only(bool read_by_id, bool has_zoom_extents);
 /* Some file has tiles in the view at this zoom (its bounds meet the view, the zoom within its levels plus the one
  * level of over-zoom the widget allows). A file without bounds, or whose bounds do not hold at this zoom, counts as
  * covering everything. */

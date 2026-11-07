@@ -6,7 +6,9 @@
 #include "format.hpp"
 
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
+#include <ctime>
 #include <utility>
 
 namespace atlas {
@@ -181,6 +183,22 @@ std::string date_label(const std::string &iso)
 {
     if (iso.size() >= 10 && iso[4] == '-' && iso[7] == '-') return iso.substr(0, 10);
     return iso;
+}
+
+std::string iso_utc(std::int64_t epoch)
+{
+    if (epoch <= 0) return std::string();
+    const std::time_t t = static_cast<std::time_t>(epoch);
+    std::tm tm{};
+#ifdef _WIN32
+    if (gmtime_s(&tm, &t) != 0) return std::string();
+#else
+    if (!gmtime_r(&t, &tm)) return std::string();
+#endif
+    char buf[96]; /* any int field fits: no truncation warning, the text is 20 characters for a real date */
+    std::snprintf(buf, sizeof buf, "%04d-%02d-%02dT%02d:%02d:%02dZ", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour,
+                  tm.tm_min, tm.tm_sec);
+    return buf;
 }
 
 } // namespace atlas

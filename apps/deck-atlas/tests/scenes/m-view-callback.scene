@@ -1,0 +1,96 @@
+# The view moves and the page follows through the widget's view-change callback (no polling): over the fixture's
+# tiles there is no plate; panned east with the arrow keys until the view leaves the file's area it appears, panned
+# back it goes.
+title View follows the map
+sizes 640x480 320x480
+env DECKATLAS_DEMO 1
+env DECKATLAS_VIEW 48.886,2.274,15
+
+wait 1000
+expect notext "No map here"
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+wait 800
+expect text "No map here"
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+key left
+wait 800
+expect notext "No map here"
+key esc
+expect quit

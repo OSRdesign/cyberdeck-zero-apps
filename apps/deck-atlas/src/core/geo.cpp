@@ -84,6 +84,8 @@ Fit world_view(int w_px, int h_px, float scale)
     return f;
 }
 
+bool bounds_deepest_only(bool read_by_id, bool has_zoom_extents) { return read_by_id && !has_zoom_extents; }
+
 bool view_covered(const std::vector<Coverage> &files, const Box &view, int zoom)
 {
     for (const Coverage &c : files) {

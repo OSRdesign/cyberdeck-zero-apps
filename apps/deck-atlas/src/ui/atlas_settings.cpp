@@ -80,6 +80,7 @@ void AtlasApp::settings_activate(std::intptr_t id)
     case kScale:
         settings_.scale = atlas::next_scale(settings_.scale);
         if (map_) cp0_map_set_scale(map_, settings_.scale);
+        update_chip(); /* the ground the view covers changed with the scale */
         break;
     case kOffline: {
         settings_.offline = !settings_.offline;

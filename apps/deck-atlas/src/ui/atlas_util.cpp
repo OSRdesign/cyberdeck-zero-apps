@@ -5,7 +5,7 @@
  */
 #include "atlas_util.hpp"
 
-#include "record.hpp"
+#include "format.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -38,7 +38,7 @@ void plain(lv_obj_t *o)
     lv_obj_remove_flag(o, LV_OBJ_FLAG_CLICKABLE);
 }
 
-int list_store(cp0_map_store_t *store, const std::string &store_dir, std::vector<ArchiveItem> &archives,
+int list_store(cp0_map_store_t *store, std::vector<ArchiveItem> &archives,
                std::vector<OnlineItem> &online)
 {
     archives.clear();
@@ -66,13 +66,10 @@ int list_store(cp0_map_store_t *store, const std::string &store_dir, std::vector
             a.has_bounds = s.has_bounds != 0;
             a.bounds = {s.bounds.west, s.bounds.south, s.bounds.east, s.bounds.north};
             a.bytes = s.bytes;
-            std::string rec;
-            if (atlas::read_small_file(store_dir + "/archives/" + a.id + ".conf", rec)) {
-                const atlas::ArchiveRecord r = atlas::parse_archive_record(rec);
-                a.tiles = r.tiles;
-                a.imported = r.imported;
-                a.source_path = r.source_path;
-            }
+            a.tiles = s.tiles > 0 ? static_cast<std::uint64_t>(s.tiles) : 0; /* -1: unknown */
+            a.imported = atlas::iso_utc(s.imported);
+            a.source_path = s.source_path;
+            a.has_zoom_extents = s.has_zoom_extents != 0;
             archives.push_back(std::move(a));
         } else if (s.kind == CP0_MAP_ENTRY_SOURCE) {
             OnlineItem o;

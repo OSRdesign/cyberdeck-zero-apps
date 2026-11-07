@@ -110,12 +110,11 @@ void AtlasApp::refresh_store(std::function<void()> then)
     auto thens = std::make_shared<std::vector<std::function<void()>>>();
     thens->swap(refresh_thens_);
     cp0_map_store_t *store = store_;
-    const std::string dir = store_dir_;
-    worker_->submit([this, store, dir, thens]() -> Worker::Done {
+    worker_->submit([this, store, thens]() -> Worker::Done {
         auto arch = std::make_shared<std::vector<ArchiveItem>>();
         auto onl = std::make_shared<std::vector<OnlineItem>>();
         cp0_map_store_refresh(store); /* another app may have imported or removed something */
-        const int rc = list_store(store, dir, *arch, *onl);
+        const int rc = list_store(store, *arch, *onl);
         return [this, arch, onl, rc, thens] {
             refreshing_ = false;
             last_refresh_ = mono_ms();

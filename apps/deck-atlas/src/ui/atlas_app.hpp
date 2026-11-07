@@ -51,7 +51,7 @@ constexpr const char *kVersion = "0.1.0";
 enum class Tab { Map = 0, Sources, Settings };
 enum class Sub { None, FileDetail, Browser, Import, Key, Shown, About };
 
-/* One imported archive as the pages show it (the engine's listing plus its record's tile count). */
+/* One imported archive as the pages show it (the engine's listing). */
 struct ArchiveItem {
     std::string id, title, path, attribution, imported, source_path;
     int state = 0;
@@ -60,6 +60,7 @@ struct ArchiveItem {
     bool has_bounds = false;
     atlas::Box bounds;
     std::uint64_t bytes = 0, tiles = 0;
+    bool has_zoom_extents = false; /* the record keeps every zoom's tile rectangle: the bounds are the union of all levels */
 };
 
 /* One online source. */
@@ -111,7 +112,7 @@ private:
     void apply_map_source();
     void first_view();
     void fit_archive(const ArchiveItem &a);
-    void poll_view();
+    static void view_cb(void *user, double lat, double lon, int zoom);
     void update_chip();
     void show_on_map(const std::string &id);
     void store_changed();     /* an archive came or went: the widget's limits, attribution and "*" tiles refreshed */
@@ -215,11 +216,8 @@ private:
     std::string demo_mode_;
 
     /* the map's view as last seen (polled: the widget has no view-change event) */
-    double seen_lat_ = 999, seen_lon_ = 999;
-    int seen_zoom_ = -1;
-    float seen_scale_ = 0;
     bool view_dirty_ = false;
-    std::int64_t view_saved_at_ = 0, last_view_poll_ = 0;
+    std::int64_t view_saved_at_ = 0;
     std::string chip_shown_;
     bool widget_by_id_ = false;   /* the widget reads one archive or source by its id (not the every-archive lookup) */
 

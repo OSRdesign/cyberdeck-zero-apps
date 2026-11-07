@@ -120,7 +120,7 @@ import page and the record of each file say so. Deck Atlas never downloads areas
   (`X-Portrait=320x480`, the launcher's narrow portrait shell). Every board of the project fits.
 - Packages (pulled by the `.deb`): `libsqlite3-0` (MBTiles), `libcurl4t64` and `ca-certificates` (online sources),
   plus the base `libfreetype6, libinput10, libxkbcommon0`.
-- A launcher with fullscreen app support (contract 1); built against launcher `e3a2899` (the map engine).
+- A launcher with fullscreen app support (contract 1); built against launcher `28817a5` (the map engine with its first fixes).
 - Network only for the online sources, and only when you switch one on.
 - No GPS in this version.
 
@@ -160,15 +160,13 @@ exits. The next version (the GPS reader and `position.state`) is planned with `X
 - One source on the map at a time (all files, one file, or one online source); no overlay of an online source over a
   file.
 - Vector tiles (pbf), WebP and brotli / zstd PMTiles directories are refused (raster first).
-- "No map here" is decided from each file's bounds and zooms, not from its actual tiles. The engine records a converted
-  tile folder's bounds as the extent of its **deepest** level only (and an MBTiles made elsewhere may be as narrow),
-  while a file shown by itself is read at every level whatever its bounds say; so for a file shown by itself the plate
-  shows only at its deepest level (and the over-zoom one), and at the shallower levels a view outside it shows the grey
-  grid without the plate. With two or more files on "All map files" the plate follows the engine's bounds test.
-- The engine's "every map file" lookup skips the tiles outside each file's bounds, which for a converted folder hides
-  its wider shallow levels (a MapTileDl folder: zoom 10-11 reach far beyond the zoom 17 patches). With one map file
-  the app therefore reads that file by its id (every level shows); with two or more, choose the file in *Map shows*
-  to see all of it. To be fixed in the engine (the record's bounds should be the union of every level).
+- "No map here" is decided from each file's bounds and zooms, not from its actual tiles. A tile folder converted with
+  this pin keeps the tile rectangle of every zoom (the file's Area is the union of all levels), so it is found at every
+  level on "All map files" and by itself. A folder converted **before** (an earlier pin) kept the extent of its deepest
+  level only: on "All map files" its wider shallow levels are skipped outside that extent; remove it in Sources and
+  import the folder again to get all levels. A file made elsewhere (MBTiles / PMTiles) is only as wide as it declares;
+  shown by itself it is read at every level whatever it declares, so there the plate shows only at its deepest level
+  (and the over-zoom one), and at the shallower levels a view outside it shows the grey grid without the plate.
 - The engine draws a grey grid while a tile loads (the parent tile magnified when it is cached); there is no separate
   "loading" indicator.
 - Board-only checks are listed in [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md): the import rate on the Zero 2 W,

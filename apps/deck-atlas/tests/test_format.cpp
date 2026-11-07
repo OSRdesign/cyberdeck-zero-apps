@@ -5,7 +5,6 @@
  */
 #include "check.hpp"
 #include "format.hpp"
-#include "record.hpp"
 
 using namespace atlas;
 
@@ -70,14 +69,9 @@ void test_format()
     CHECK_EQ(date_label("2026-11-07T10:20:30Z"), std::string("2026-11-07"));
     CHECK_EQ(date_label("yesterday"), std::string("yesterday"));
 
-    /* the archive record's extra fields (the engine's key=value file) */
-    const ArchiveRecord r = parse_archive_record("v=1\nid=tiles\ntitle=tiles\nkind=mbtiles\nmode=converted\n"
-                                                 "source_path=/home/deck/Downloads/tiles\ntiles=10326\n"
-                                                 "imported=2026-11-07T10:20:30Z\nfuture=1\n");
-    CHECK_EQ(r.tiles, static_cast<std::uint64_t>(10326));
-    CHECK_EQ(r.imported, std::string("2026-11-07T10:20:30Z"));
-    CHECK_EQ(r.source_path, std::string("/home/deck/Downloads/tiles"));
-    CHECK_EQ(parse_archive_record("tiles=-3\n").tiles, static_cast<std::uint64_t>(0));
-    CHECK_EQ(parse_archive_record("tiles=12x\n").tiles, static_cast<std::uint64_t>(0));
-    CHECK_EQ(parse_archive_record("").tiles, static_cast<std::uint64_t>(0));
+    /* the engine's import date (epoch seconds) as the ISO text the page shortens */
+    CHECK_EQ(iso_utc(0), std::string(""));
+    CHECK_EQ(iso_utc(-5), std::string(""));
+    CHECK_EQ(iso_utc(1794046830), std::string("2026-11-07T10:20:30Z"));
+    CHECK_EQ(date_label(iso_utc(1794046830)), std::string("2026-11-07"));
 }

@@ -30,6 +30,8 @@ or put it on a USB stick.
    the rate and the time left, then "Imported: 10,326 tiles, 260 MB, ... tiles/s". **Note the rate** (report 055: 784
    tiles/s on the deck for small tiles; these are about 26 KB) and whether the deck stays responsive (the clock in the
    strip keeps going, the Bluetooth keyboard keeps typing).
+   If this folder was imported on the deck with an earlier build of the engine, remove it in Sources first and import it
+   again: only a fresh import keeps every zoom's coverage (the Sources page of the file then shows the union as Area).
 4. Show on map: the map over the imported area at the file's deepest level. Pan by dragging and by the arrow keys, zoom with the + / -
    buttons on the right, the + and - keys, Page Up / Down, a double tap.
 5. Cancel once on a second try (import the same folder again from a USB stick: Cancel, then import it again; it goes on

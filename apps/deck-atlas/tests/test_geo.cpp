@@ -100,6 +100,10 @@ void test_geo()
     CHECK(!view_covered(folder, lyon, 17));
     CHECK(!view_covered(folder, lyon, 18));
     CHECK(view_covered(folder, b, 17));
+    CHECK(bounds_deepest_only(true, false));   /* by its id, bounds of unknown reach: the deepest level only */
+    CHECK(!bounds_deepest_only(true, true));   /* by its id, a record with every zoom's rectangle: the union holds */
+    CHECK(!bounds_deepest_only(false, false)); /* the every-archive lookup applies the same bounds: the plate follows */
+    CHECK(!bounds_deepest_only(false, true));
     Coverage nob;                       /* a file without bounds covers everything */
     files.push_back(nob);
     CHECK(view_covered(files, lyon, 5));
