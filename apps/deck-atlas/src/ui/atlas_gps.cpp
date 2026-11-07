@@ -90,7 +90,7 @@ atlas::AttrInput AtlasApp::overlay_input() const
 {
     atlas::AttrInput in;
     in.w = w_;
-    in.h = view_h_;
+    in.h = map_h_;   /* the engine's layout rules run on the widget's own (taller) box */
     in.target = target_;
     in.space = space_m_;
     in.text_h = lv_font_get_line_height(cp0_ui_font(CP0_TEXT_CAPTION));
@@ -241,7 +241,7 @@ void AtlasApp::gps_layout()
     int px = col_x, py = top_out + pitch;
     bool side = false;
     int limit = box.y2 + 1 - mm.margin;
-    if (attr_row_top_ >= 0) limit = std::min(limit, box.y1 + attr_row_top_ - 1);
+    if (credit_top_ >= 0) limit = std::min(limit, box.y1 + credit_top_ - 1);
     if (py + plate > limit) {
         const int above = top_in - pitch;
         if (above >= box.y1 + mm.margin + mm.row_h + 2) {
@@ -327,14 +327,14 @@ void AtlasApp::gps_tick(std::int64_t now)
 
 void AtlasApp::recentre_on(double lat, double lon)
 {
-    if (map_) cp0_map_set_center(map_, lat, lon); /* the zoom stays */
+    if (map_) set_visible_center(lat, lon); /* the zoom stays */
 }
 
 void AtlasApp::set_follow(bool on)
 {
     if (!map_ || !settings_.gps) return;
     double lat = 0, lon = 0;
-    cp0_map_get_center(map_, &lat, &lon);
+    visible_center(lat, lon);
     follow_.set(on, lat, lon);
     if (on && gps_status_.has_fix() && follow_.on_fix(gps_status_.fix.lat, gps_status_.fix.lon))
         recentre_on(gps_status_.fix.lat, gps_status_.fix.lon);
@@ -432,11 +432,11 @@ void AtlasApp::draw_gps(lv_layer_t *layer, const lv_area_t &o)
     double cx = 0, cy = 0, px = 0, py = 0;
     atlas::to_world_px(clat, clon, zoom, cx, cy);
     atlas::to_world_px(f.lat, f.lon, zoom, px, py);
-    const double sx = o.x1 + w_ / 2.0 + (px - cx) * scale, sy = o.y1 + view_h_ / 2.0 + (py - cy) * scale;
+    const double sx = o.x1 + w_ / 2.0 + (px - cx) * scale, sy = o.y1 + map_h_ / 2.0 + (py - cy) * scale;
     const int r = std::max(6, target_ / 7);
     const double mpp = metres_per_px(f.lat, zoom, scale);
     double ar = atlas::accuracy_from_hdop(f.hdop) / mpp;
-    const double cap = std::max(w_, view_h_);
+    const double cap = std::max(w_, map_h_);
     if (ar > cap) ar = cap;
     const double reach = std::max(ar, 3.0 * r);
     if (sx < o.x1 - reach || sx > o.x2 + reach || sy < o.y1 - reach || sy > o.y2 + reach) return; /* off the view */

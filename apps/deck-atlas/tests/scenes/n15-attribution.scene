@@ -1,0 +1,21 @@
+# A long map credit: the bottom row shows it whole in the smallest font (one line when it fits, else abbreviated, else
+# wrapped), beside the scale bar on the very bottom edge, clear of the zoom buttons (core/attribution.hpp).
+# A short credit (the other scenes) is one line.
+title Long map credit at display scale 1.5x: whole, bottom edge
+sizes 640x480 480x320 320x480
+env DECKATLAS_DEMO 1
+env DECKATLAS_SCALE 1.5
+env DECKATLAS_VIEW 48.886392,2.27417,15
+env DECKATLAS_ATTRIBUTION "Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)"
+
+wait 1500
+shot long-credit
+expect noquit
+expect text "Map"
+
+# a pan and a zoom keep the row where it is
+type +
+wait 900
+key right
+wait 900
+shot long-credit-zoomed

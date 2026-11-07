@@ -1,24 +1,88 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * Deck Atlas tests: the map credit (core/attribution.cpp): the plain text the widget shows, the standard abbreviation,
- * the two-line wrap and the plan of the plate that covers the engine's cut credit (where it goes: above the scale bar,
- * left of the button column, never over either).
+ * Deck Atlas tests: the map credit and the scale bar at the bottom edge (core/attribution.cpp): the plain text the
+ * widget shows, the standard abbreviation, the word wrap that never cuts, the engine's overlay rows moved out of sight
+ * (engine_reserve) and the bottom row's layout (one line / abbreviated / wrapped, flush with the bottom edge, one
+ * baseline, no overlaps) at 640x480, 480x320 and 320x480 with the longest credit (OpenTopoMap's).
  */
 #include "attribution.hpp"
 #include "check.hpp"
 
+#include <algorithm>
 #include <cstring>
 
 using namespace atlas;
 
 namespace {
+int px5(const std::string &s) { return static_cast<int>(s.size()) * 5; } /* about the smallest font's average glyph */
 int px7(const std::string &s) { return static_cast<int>(s.size()) * 7; }
-const MeasureFn kMeasure = px7;
+const MeasureFn kMeasure5 = px5;
+const MeasureFn kMeasure7 = px7;
 
-/* the engine's rules, repeated by hand for 480x240 (a 480x320 panel's map area) as an independent check */
-AttrInput zero8_landscape() { AttrInput in; in.w = 480; in.h = 240; in.target = 44; in.space = 12; in.text_h = 14; return in; }
-AttrInput portrait() { AttrInput in; in.w = 320; in.h = 400; in.target = 44; in.space = 12; in.text_h = 14; return in; }
+/* The visible map view of each panel (the header and the tab strip taken off), the toolkit's tokens of that class. */
+struct Panel {
+    const char *name;
+    int w, view_h, target, space, caption_h;
+};
+const Panel kPanels[] = {
+    {"640x480", 640, 345, 44, 16, 22},
+    {"480x320", 480, 200, 44, 12, 18},
+    {"320x480", 320, 360, 44, 12, 18},
+};
+
+const char *const kShort = "(C) OpenStreetMap contributors";
+const char *const kLong = "Map data: (C) OpenStreetMap contributors, SRTM | Map style: (C) OpenTopoMap (CC-BY-SA)";
+
+CreditInput credit_in(const Panel &p)
+{
+    CreditInput in;
+    in.w = p.w;
+    in.h = p.view_h;
+    in.text_h = 9;
+    AttrInput a;
+    a.w = p.w;
+    a.h = p.view_h;
+    a.target = p.target;
+    a.space = p.space;
+    a.text_h = p.caption_h;
+    in.pad = map_metrics(a).pad;
+    return in;
+}
+
+std::string joined(const std::vector<std::string> &l)
+{
+    std::string s;
+    for (const std::string &x : l) s += (s.empty() ? "" : " ") + x;
+    return s;
+}
+
+/* the geometry rules every layout keeps */
+void check_row(const CreditInput &in, const CreditLayout &L, const std::string &credit_text)
+{
+    /* the scale bar's widest plate: left, flush with the bottom edge, one row high */
+    CHECK_EQ(L.scale.x, 0);
+    CHECK_EQ(L.scale.y + L.scale.h, in.h);
+    CHECK_EQ(L.scale.h, L.row_h);
+    /* one baseline: the last credit line's text and the scale bar's text start at the same y */
+    CHECK_EQ(L.text_y, in.h - L.row_h + L.vp);
+    if (credit_text.empty()) {
+        CHECK(L.credit.empty());
+        return;
+    }
+    CHECK(!L.credit.empty());
+    CHECK_EQ(L.credit.x + L.credit.w, in.right > 0 ? in.right : in.w); /* flush right (at the limit the zoom buttons set) */
+    CHECK_EQ(L.credit.y + L.credit.h, in.h);      /* flush with the bottom edge */
+    CHECK_EQ(L.credit.h, static_cast<int>(L.lines.size()) * in.text_h + 2 * L.vp);
+    CHECK_EQ(L.credit.y + L.vp + (static_cast<int>(L.lines.size()) - 1) * in.text_h, L.text_y); /* last line on the baseline */
+    CHECK(L.credit.x >= L.scale.x + L.scale.w + L.hp); /* never over the scale bar, a gap between */
+    CHECK(L.credit.y >= 0 && L.credit.x >= 0);
+    /* nothing cut, nothing dropped: the lines are the credit or its abbreviation, word for word */
+    const std::string j = joined(L.lines);
+    CHECK(j == credit_text || j == attribution_abbrev(credit_text));
+    CHECK(j.find("...") == std::string::npos);
+    for (const std::string &l : L.lines) CHECK(px5(l) + 2 * L.hp <= L.credit.w);
+}
 } // namespace
 
 void test_attribution()
@@ -37,92 +101,154 @@ void test_attribution()
     CHECK_EQ(attribution_abbrev("OpenStreetMap and OpenStreetMap"), "OSM and OSM");
     CHECK_EQ(attribution_abbrev("nothing to shorten"), "nothing to shorten");
 
-    /* the wrap */
+    /* the wrap: greedy, nothing cut */
     {
-        const auto l = wrap_lines("aaa bbb ccc ddd", 7 * 7, 2, kMeasure); /* 7 chars per line */
+        const auto l = wrap_words("aaa bbb ccc ddd", 7 * 7, kMeasure7); /* 7 chars per line */
         CHECK_EQ(l.size(), static_cast<std::size_t>(2));
         CHECK_EQ(l[0], "aaa bbb");
         CHECK_EQ(l[1], "ccc ddd");
-        const auto one = wrap_lines("aaa bbb", 100, 2, kMeasure);
-        CHECK_EQ(one.size(), static_cast<std::size_t>(1));
-        const auto cut = wrap_lines("aaa bbb ccc ddd eee fff", 7 * 7, 2, kMeasure); /* the rest ends in dots */
-        CHECK_EQ(cut.size(), static_cast<std::size_t>(2));
-        CHECK_EQ(cut[0], "aaa bbb");
-        CHECK(cut[1].size() >= 3 && cut[1].compare(cut[1].size() - 3, 3, "...") == 0);
-        CHECK(px7(cut[1]) <= 7 * 7);
-        const auto word = wrap_lines("abcdefghijklmnopqrstuvwxyz", 10 * 7, 2, kMeasure); /* one word too wide */
-        CHECK_EQ(word.size(), static_cast<std::size_t>(1));
-        CHECK(px7(word[0]) <= 70);
-        CHECK(wrap_lines("", 100, 2, kMeasure).empty());
+        CHECK_EQ(wrap_words("aaa bbb", 100, kMeasure7).size(), static_cast<std::size_t>(1));
+        const auto many = wrap_words("aaa bbb ccc ddd eee fff", 7 * 7, kMeasure7); /* as many lines as it takes */
+        CHECK_EQ(many.size(), static_cast<std::size_t>(3));
+        CHECK_EQ(joined(many), "aaa bbb ccc ddd eee fff");
+        const auto word = wrap_words("abcdefghijklmnopqrstuvwxyz", 10 * 7, kMeasure7); /* one word too wide: split */
+        CHECK_EQ(word.size(), static_cast<std::size_t>(3));
+        for (const std::string &w : word) CHECK(px7(w) <= 70);
+        std::string back;
+        for (const std::string &w : word) back += w;
+        CHECK_EQ(back, "abcdefghijklmnopqrstuvwxyz");
+        CHECK(wrap_words("", 100, kMeasure7).empty());
     }
 
-    /* the plan: a short credit is the engine's business */
+    /* the engine's rules for 480x240 repeated by hand: target 44 -> plate 33 (15 % of 240 = 36), margin 12, pad 6, bar 3;
+     * scale bar max 120 px, plate 132 x (6 + 14 + 3 + 3 + 6 = 32), top y = 240 - 12 - 32 = 196 */
     {
-        const AttrPlan p = plan_attribution(zero8_landscape(), "(C) OpenStreetMap contributors", kMeasure);
-        CHECK(!p.cover); /* 30 chars = 210 px: fits beside the scale bar of 480 px */
-        CHECK(!plan_attribution(zero8_landscape(), "", kMeasure).cover);
+        AttrInput in;
+        in.w = 480;
+        in.h = 240;
+        in.target = 44;
+        in.space = 12;
+        in.text_h = 14;
+        const MapMetrics m = map_metrics(in);
+        CHECK_EQ(m.plate, 33);
+        CHECK_EQ(m.margin, 12);
+        CHECK_EQ(m.pad, 6);
+        CHECK_EQ(m.sb_w, 132);
+        CHECK_EQ(m.sb_h, 32);
+        CHECK_EQ(m.sb_y, 196);
+        CHECK_EQ(m.row_h, 26);
     }
-    /* a long credit on the landscape zero8 map: the engine's rules: target 44 -> plate 33 (15 % of 240 = 36), margin 12
-     * -> 12 (plate/2 = 16), pad 6; scale bar max 120 px, width 132, height 6+14+3+3+6 = 32, y = 240-12-32 = 196;
-     * right = 480-12-33-12 = 423; the row-higher box is 411 px wide (x 12..423); text fits in 399 px */
-    {
-        const std::string text = "(C) OpenStreetMap contributors, (C) OpenTopoMap (CC-BY-SA), SRTM, data from many other places";
-        const AttrPlan p = plan_attribution(zero8_landscape(), text, kMeasure);
-        CHECK(p.cover);
-        CHECK_EQ(p.pad, 6);
-        CHECK_EQ(p.x, 12);
-        CHECK_EQ(p.w, 411);
-        CHECK_EQ(p.lines.size(), static_cast<std::size_t>(2));
-        CHECK_EQ(p.h, 2 * 14 + 12);
-        CHECK_EQ(p.y + p.h, 196 - 6); /* ends just above the scale bar (its top is 196), a pad clear */
-        CHECK(p.x + p.w <= 423);      /* left of the button column */
-        for (const std::string &l : p.lines) CHECK(px7(l) <= p.w - 2 * p.pad);
-        CHECK(p.lines[0].find("OSM") != std::string::npos); /* abbreviated */
-    }
-    /* a credit the engine cuts, that fits on one line once abbreviated: still covered (its cut row would show) */
-    {
-        const std::string text = "(C) OpenStreetMap contributors, (C) OpenTopoMap (CC-BY-SA)"; /* 58 chars = 406 + 12 px */
-        const AttrPlan p = plan_attribution(zero8_landscape(), text, kMeasure);
-        CHECK(p.cover); /* 418 px does not fit in the 411 px box: cut by the engine, covered by us */
-        CHECK_EQ(p.lines.size(), static_cast<std::size_t>(1)); /* the abbreviation saves 70 px: one line now */
-        CHECK(p.lines[0].find("OSM") != std::string::npos);
-        CHECK(p.lines[0].find("...") == std::string::npos);
-    }
-    /* portrait 320x400 */
-    {
-        const std::string text = "(C) OpenStreetMap contributors, (C) OpenTopoMap (CC-BY-SA)";
-        const AttrInput in = portrait();
-        const AttrPlan p = plan_attribution(in, text, kMeasure);
-        CHECK(p.cover);
-        CHECK(p.x >= 0 && p.x + p.w <= in.w);
-        CHECK(p.y >= 0 && p.y + p.h <= in.h);
-        /* target 44 -> 44 (a third of 320 is 106), plate 33 (15 % of 320 = 48), margin 12, pad 6, bar 3; the scale bar's top is
-         * 400-12-32 = 356, the plate ends 6 px above it; right = 320-12-33-12 = 263 */
-        CHECK_EQ(p.y + p.h, 356 - 6);
-        CHECK(p.x + p.w <= 263);
-        CHECK_EQ(p.lines.size(), static_cast<std::size_t>(2));
-        for (const std::string &l : p.lines) CHECK(px7(l) <= p.w - 2 * p.pad);
-    }
-    /* OpenTopoMap's own credit on the portrait map: three lines, nothing cut, still clear of the scale bar */
-    {
-        const std::string text = "Map data: (C) OpenStreetMap contributors, SRTM | Map style: (C) OpenTopoMap (CC-BY-SA)";
-        const AttrPlan p = plan_attribution(portrait(), text, kMeasure);
-        CHECK(p.cover);
-        CHECK_EQ(p.lines.size(), static_cast<std::size_t>(3));
-        for (const std::string &l : p.lines) {
-            CHECK(px7(l) <= p.w - 2 * p.pad);
-            CHECK(l.find("...") == std::string::npos);
+
+    /* engine_reserve: the engine's scale bar and credit end up wholly below the view's bottom edge. A short credit sits
+     * beside the scale bar (the bar's top is the topmost row), a long one a row higher (its top is). */
+    for (const Panel &p : kPanels) {
+        for (int credit_w : {0, 150, 400}) {
+            AttrInput v;
+            v.w = p.w;
+            v.h = p.view_h;
+            v.target = p.target;
+            v.space = p.space;
+            v.text_h = p.caption_h;
+            const int r = engine_reserve(v, credit_w);
+            CHECK(r > 0);
+            AttrInput t = v;
+            t.h = v.h + r;
+            const MapMetrics m = map_metrics(t);
+            int top = m.sb_y;
+            if (credit_w > 0) {
+                const int full = credit_w + 2 * m.pad, beside = t.w - m.margin - (m.margin + m.sb_w) - m.margin;
+                top = full <= beside ? std::min(top, t.h - m.margin - m.row_h) : std::min(top, m.sb_y - m.pad - m.row_h);
+            }
+            CHECK(top >= v.h);          /* every engine row starts at or below the view's edge */
+            CHECK(top - v.h < m.row_h); /* and no more than needed is reserved */
         }
-        CHECK_EQ(p.y + p.h, 356 - 6);
-        CHECK_EQ(p.h, 3 * 14 + 12);
-        CHECK_EQ(p.lines[0], "Map data: (C) OSM contributors,");
-        CHECK_EQ(p.lines[2], "(CC-BY-SA)");
     }
-    /* the same credit on the landscape zero8 map: two lines */
+    /* the reserve of a credit that does not fit beside the scale bar is larger by the row it moves up */
     {
-        const std::string text = "Map data: (C) OpenStreetMap contributors, SRTM | Map style: (C) OpenTopoMap (CC-BY-SA)";
-        const AttrPlan p = plan_attribution(zero8_landscape(), text, kMeasure);
-        CHECK(p.cover);
-        CHECK_EQ(p.lines.size(), static_cast<std::size_t>(2));
+        const Panel &p = kPanels[2];
+        AttrInput v;
+        v.w = p.w;
+        v.h = p.view_h;
+        v.target = p.target;
+        v.space = p.space;
+        v.text_h = p.caption_h;
+        CHECK(engine_reserve(v, 400) > engine_reserve(v, 100));
+    }
+
+    /* the bottom row at the three panel sizes: a short credit is whole on one line */
+    for (const Panel &p : kPanels) {
+        const CreditInput in = credit_in(p);
+        const CreditLayout L = plan_credit(in, kShort, kMeasure5);
+        check_row(in, L, kShort);
+        CHECK_EQ(L.lines.size(), static_cast<std::size_t>(1));
+        CHECK(!L.abbreviated);
+        CHECK(!L.wrapped);
+        CHECK_EQ(L.lines[0], kShort);
+        CHECK_EQ(L.credit.h, L.row_h);
+    }
+    /* the longest credit (OpenTopoMap's, 88 characters = 440 px at 5 px): the full text when it fits, then the abbreviation
+     * on one line, then wrapped; per panel */
+    {
+        const CreditInput wide = credit_in(kPanels[0]);
+        const CreditLayout L = plan_credit(wide, kLong, kMeasure5);
+        check_row(wide, L, kLong);
+        CHECK(L.abbreviated);          /* 440 px does not fit beside the scale bar of 640 px, the abbreviation does */
+        CHECK(!L.wrapped);
+        CHECK_EQ(L.lines[0], attribution_abbrev(kLong));
+        const CreditInput mid = credit_in(kPanels[1]);
+        const CreditLayout M = plan_credit(mid, kLong, kMeasure5);
+        check_row(mid, M, kLong);
+        CHECK(M.wrapped);              /* last resort: two lines, the full text (it fits in two) */
+        CHECK_EQ(M.lines.size(), static_cast<std::size_t>(2));
+        CHECK(!M.abbreviated);
+        const CreditInput narrow = credit_in(kPanels[2]);
+        const CreditLayout N = plan_credit(narrow, kLong, kMeasure5);
+        check_row(narrow, N, kLong);
+        CHECK(N.wrapped);
+        CHECK(N.lines.size() >= 2);
+        CHECK(N.abbreviated);          /* more than two lines in full: the abbreviation, wrapped */
+    }
+    /* any credit length at any panel keeps the rules; the plates never meet whatever the scale bar's length (1x, 1.5x and 2x
+     * change the bar's pixels and its label, up to the reserved widest) */
+    for (const Panel &p : kPanels) {
+        const CreditInput in = credit_in(p);
+        for (int n = 0; n <= 40; n += 3) {
+            std::string text;
+            for (int i = 0; i < n; ++i) text += "abcd ";
+            text += "(C) OpenStreetMap contributors";
+            const CreditLayout L = plan_credit(in, text, kMeasure5);
+            check_row(in, L, text);
+            for (int bar = 1; bar <= L.sb_bar_max; bar += 13)
+                for (int label = 20; label <= L.sb_label_w; label += 5) {
+                    const Rect s = scale_plate(L, bar, label);
+                    CHECK(s.x + s.w <= L.credit.x);
+                    CHECK_EQ(s.y + s.h, in.h);
+                    CHECK_EQ(s.h, L.row_h);
+                }
+        }
+    }
+    /* the zoom buttons reach the credit's rows (a short view, a long credit): the credit stops left of their column and
+     * grows a line instead; still whole, still on the baseline, still clear of the scale bar */
+    for (const Panel &p : kPanels) {
+        CreditInput in = credit_in(p);
+        const CreditLayout free_run = plan_credit(in, kLong, kMeasure5);
+        in.right = p.w - 60;
+        const CreditLayout L = plan_credit(in, kLong, kMeasure5);
+        check_row(in, L, kLong);
+        CHECK(L.credit.x + L.credit.w <= p.w - 60);
+        CHECK(L.lines.size() >= free_run.lines.size());
+    }
+    /* no credit: only the scale bar's row; the credit text is empty */
+    for (const Panel &p : kPanels) {
+        const CreditInput in = credit_in(p);
+        const CreditLayout L = plan_credit(in, "", kMeasure5);
+        check_row(in, L, "");
+        CHECK(L.lines.empty());
+    }
+    /* a missing byte-order or html credit goes through attribution_plain first (the caller's job): the layout keeps "(C)" */
+    {
+        const CreditInput in = credit_in(kPanels[1]);
+        const CreditLayout L = plan_credit(in, attribution_plain("&copy; OpenStreetMap contributors"), kMeasure5);
+        CHECK_EQ(L.lines[0], "(C) OpenStreetMap contributors");
     }
 }

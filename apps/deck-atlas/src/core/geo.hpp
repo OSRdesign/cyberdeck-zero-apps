@@ -27,6 +27,10 @@ constexpr double kMaxLat = 85.05112877980659;
 void to_world_px(double lat, double lon, int zoom, double &x, double &y);
 void from_world_px(double x, double y, int zoom, double &lat, double &lon);
 
+/* The point dy_px screen pixels below (dy > 0) or above lat/lon at zoom and display scale: the view's centre is the
+ * widget's, the visible centre of a map that is taller than its view lies half the extra height above it. */
+void shift_down_px(double lat, double lon, int zoom, float scale, double dy_px, double &out_lat, double &out_lon);
+
 /* The ground box a w x h px view shows centred on lat/lon at zoom and display scale (1, 1.5, 2). */
 Box view_box(double lat, double lon, int zoom, int w_px, int h_px, float scale);
 bool box_intersects(const Box &a, const Box &b);

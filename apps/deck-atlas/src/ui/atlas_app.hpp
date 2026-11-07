@@ -120,8 +120,14 @@ private:
     void update_chip();
     void build_gps_layer();      /* the position dot's layer, over the map (atlas_gps.cpp) */
     void build_gps_controls();   /* the status chip and the follow button */
-    void update_attribution();   /* the plate over a credit the engine would cut (core/attribution.hpp) */
+    void update_attribution();   /* the bottom row: scale bar and credit in the smallest font (core/attribution.hpp) */
     std::string engine_attribution() const;
+    void build_credit();         /* the bottom row's drawing object (atlas_credit.cpp) */
+    void draw_credit(lv_layer_t *layer, const lv_area_t &area);
+    static void credit_cb(lv_event_t *e);
+    void apply_reserve(int reserve);   /* the widget's extra height below the view (the engine's own bottom rows hide there) */
+    void visible_center(double &lat, double &lon) const;  /* the centre of what the view shows (not the widget's) */
+    void set_visible_center(double lat, double lon);
     void show_on_map(const std::string &id);
     void store_changed();     /* an archive came or went: the widget's limits, attribution and "*" tiles refreshed */
 
@@ -210,9 +216,13 @@ private:
     bool narrow_ = false;
 
     lv_obj_t *map_box_ = nullptr, *map_ = nullptr, *chip_ = nullptr, *chip_label_ = nullptr;
-    lv_obj_t *attr_plate_ = nullptr, *attr_label_ = nullptr;
-    std::string attr_key_;
-    int attr_row_top_ = -1;      /* atlas::AttrPlan::row_top of the credit now shown */
+    lv_obj_t *credit_ = nullptr;          /* draws the scale bar and the credit at the view's bottom edge */
+    std::string attr_key_, credit_text_;
+    atlas::CreditLayout credit_plan_;
+    bool credit_pending_ = false;          /* the zoom buttons were not laid out yet: the row is planned again at the next tick */
+    int credit_top_ = -1;        /* y of the top of the credit's plate in the view (the buttons stay above it), -1 none */
+    int credit_y_ = 0, credit_h_ = 0;      /* the drawing object's place in the view */
+    int map_h_ = 0, reserve_ = 0;          /* the widget's height = view_h_ + reserve_ (the extra lies below the view, clipped) */
 
     /* GPS: the reader (a fake port in demonstration mode), position.state, follow mode, what the overlays show now */
     std::unique_ptr<atlas::GpsPortSys> gps_ports_;

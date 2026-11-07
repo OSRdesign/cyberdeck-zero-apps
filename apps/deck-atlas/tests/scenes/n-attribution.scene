@@ -1,7 +1,7 @@
-# A long map credit: the engine cuts it with "..." in one row above the scale bar; the app covers that row with the
-# whole credit (abbreviated, in up to two lines) on a plate over the engine's box, clear of the scale bar and the
-# zoom buttons (core/attribution.hpp). A short credit (the other scenes) is left to the engine.
-title Long map credit: whole text, two lines, clear of the scale bar
+# A long map credit: the bottom row shows it whole in the smallest font (one line when it fits, else abbreviated, else
+# wrapped), beside the scale bar on the very bottom edge, clear of the zoom buttons (core/attribution.hpp).
+# A short credit (the other scenes) is one line.
+title Long map credit: whole text, smallest font, bottom edge, clear of the buttons
 sizes 640x480 480x320 320x480 480x800
 env DECKATLAS_DEMO 1
 env DECKATLAS_VIEW 48.886392,2.27417,15
@@ -12,7 +12,7 @@ shot long-credit
 expect noquit
 expect text "Map"
 
-# a pan and a zoom keep the plate where it is
+# a pan and a zoom keep the row where it is
 type +
 wait 900
 key right

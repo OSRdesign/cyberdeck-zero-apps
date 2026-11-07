@@ -42,6 +42,9 @@ or put it on a USB stick.
 At arm's length, at zoom 15 and zoom 17:
 
 - Can you read the street names, the road numbers, the place names and the scale bar's figure?
+- The credit at the very bottom edge (scale bar left, credit right, one line, the smallest font): can you read it at
+  arm's length, with the default map and with OpenTopoMap (the long credit; two lines on a narrow screen)? Is the full
+  text there, not cut? Does it touch the zoom or follow buttons? If the 8 px text is too small on a board, say which.
 - Settings > Display scale: Auto shows "Auto (2x)" on the deck and "Auto (1.5x)" on zero8. Try 1x, 1.5x and 2x on each
   board and tell which you prefer. The PC check's verdict is in the README (Known limits: legibility); confirm or correct it.
 
@@ -113,6 +116,6 @@ real puck, the cold start, power, memory.
 - The legibility answers (T2) per board and scale.
 - VmRSS on the deck, with and without a GPS fix (T5.10).
 - The GPS: time to a cold fix, the puck's node and USB id, whether it locked at 9600, anything odd on unplug / replug.
-- Anything cut, overlapping or hard to hit: the zoom buttons, the tab strip, the rows; the attribution line at the
-  bottom right of the map.
+- Anything cut, overlapping or hard to hit: the zoom buttons, the tab strip, the rows; the scale bar and the credit
+  on the bottom edge of the map (can you read them? is the credit whole? does it touch a button?).
 - Cleanup: `sudo dpkg -r deck-atlas` (the maps stay in `~/.local/share/cyberdeckzero/maps`; delete that folder to reset).

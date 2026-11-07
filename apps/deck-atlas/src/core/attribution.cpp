@@ -106,10 +106,11 @@ std::string attribution_abbrev(const std::string &text)
     return out;
 }
 
-std::vector<std::string> wrap_lines(const std::string &text, int max_w, int max_lines, const MeasureFn &measure)
+std::vector<std::string> wrap_words(const std::string &text, int max_w, const MeasureFn &measure)
 {
     std::vector<std::string> lines;
-    if (text.empty() || max_lines < 1) return lines;
+    if (text.empty()) return lines;
+    if (max_w < 1) max_w = 1;
     std::vector<std::string> words;
     {
         std::string cur;
@@ -123,41 +124,34 @@ std::vector<std::string> wrap_lines(const std::string &text, int max_w, int max_
         }
         if (!cur.empty()) words.push_back(cur);
     }
-    /* the longest start of s that fits with "..." (UTF-8 aware) */
-    auto fit_dots = [&](const std::string &s) {
-        if (measure(s) <= max_w) return s;
-        std::size_t n = s.size();
-        while (n > 0) {
+    /* a word wider than a line: split between characters (UTF-8 aware), so nothing is lost */
+    std::vector<std::string> pieces;
+    for (const std::string &w : words) {
+        std::string rest = w;
+        while (measure(rest) > max_w && rest.size() > 1) {
+            std::size_t n = rest.size();
             do --n;
-            while (n > 0 && (static_cast<unsigned char>(s[n]) & 0xC0) == 0x80);
-            std::string t = s.substr(0, n);
-            while (!t.empty() && t.back() == ' ') t.pop_back();
-            t += "...";
-            if (measure(t) <= max_w) return t;
+            while (n > 1 && (static_cast<unsigned char>(rest[n]) & 0xC0) == 0x80);
+            while (n > 1 && measure(rest.substr(0, n)) > max_w) {
+                do --n;
+                while (n > 1 && (static_cast<unsigned char>(rest[n]) & 0xC0) == 0x80);
+            }
+            pieces.push_back(rest.substr(0, n));
+            rest = rest.substr(n);
         }
-        return std::string("...");
-    };
-    std::string line;
-    for (std::size_t i = 0; i < words.size(); ++i) {
-        const std::string cand = line.empty() ? words[i] : line + " " + words[i];
-        if (measure(cand) <= max_w) {
-            line = cand;
-            continue;
-        }
-        if (line.empty()) { /* one word wider than the line: it stays alone and is cut below */
-            line = words[i];
-            continue;
-        }
-        if (static_cast<int>(lines.size()) + 1 >= max_lines) { /* this is the last line: all that is left, cut */
-            std::string rest = line;
-            for (std::size_t j = i; j < words.size(); ++j) rest += " " + words[j];
-            lines.push_back(fit_dots(rest));
-            return lines;
-        }
-        lines.push_back(fit_dots(line));
-        line = words[i];
+        pieces.push_back(rest);
     }
-    if (!line.empty()) lines.push_back(fit_dots(line));
+    std::string line;
+    for (const std::string &w : pieces) {
+        const std::string cand = line.empty() ? w : line + " " + w;
+        if (line.empty() || measure(cand) <= max_w) {
+            line = cand;
+        } else {
+            lines.push_back(line);
+            line = w;
+        }
+    }
+    if (!line.empty()) lines.push_back(line);
     return lines;
 }
 
@@ -193,36 +187,78 @@ MapMetrics map_metrics(const AttrInput &in)
     return m;
 }
 
-AttrPlan plan_attribution(const AttrInput &in, const std::string &text, const MeasureFn &measure)
+int engine_reserve(const AttrInput &in, int credit_w)
 {
-    AttrPlan plan;
-    if (text.empty() || in.w <= 0 || in.h <= 0) return plan;
-    const int w = in.w, h = in.h;
-    const MapMetrics mm = map_metrics(in);
-    const int margin = mm.margin, pad = mm.pad, plate = mm.plate, text_h = mm.text_h, sb_w = mm.sb_w, sb_y = mm.sb_y;
-
-    const int full = measure(text) + 2 * pad;
-    const int beside = w - margin - (margin + sb_w) - margin;
-    if (full <= beside) { /* the engine shows it whole beside the scale bar */
-        plan.row_top = h - margin - mm.row_h;
-        return plan;
+    int r = 0;
+    for (int it = 0; it < 8; ++it) {
+        AttrInput t = in;
+        t.h = in.h + r;
+        const MapMetrics mm = map_metrics(t);
+        int top = mm.sb_y; /* the topmost row the engine draws, in widget coordinates */
+        if (credit_w > 0) {
+            const int full = credit_w + 2 * mm.pad;
+            const int beside = t.w - mm.margin - (mm.margin + mm.sb_w) - mm.margin;
+            if (full <= beside) top = std::min(top, t.h - mm.margin - mm.row_h);
+            else top = std::min(top, mm.sb_y - mm.pad - mm.row_h); /* a row higher */
+        }
+        const int need = in.h - top;
+        if (need <= 0) break;
+        r += need;
     }
-    const int right = w - margin - plate - margin; /* the button column starts here */
-    int aw = std::min(full, right - margin);
-    if (aw < 2 * pad + 8) aw = 2 * pad + 8;
-    if (full <= aw) return plan;     /* the engine shows it whole, a row higher */
+    return r;
+}
 
-    /* the engine would cut it: our plate over its box (as wide as that box), growing upward from the box's bottom edge,
-     * which is just above the scale bar */
-    plan.pad = pad;
-    plan.lines = wrap_lines(attribution_abbrev(text), aw - 2 * pad, kMaxLines, measure);
-    if (plan.lines.empty()) return plan;
-    plan.w = aw;
-    plan.h = static_cast<int>(plan.lines.size()) * text_h + 2 * pad;
-    plan.x = right - aw;
-    plan.y = (sb_y - pad) - plan.h;
-    plan.cover = true;
-    return plan;
+CreditLayout plan_credit(const CreditInput &in, const std::string &text, const MeasureFn &measure)
+{
+    CreditLayout L;
+    const int text_h = in.text_h > 0 ? in.text_h : 9;
+    L.hp = std::max(in.pad / 2, 2);
+    L.vp = std::max(in.pad / 4, 1);
+    L.row_h = text_h + 2 * L.vp;
+    int sb_max = in.w / 4;
+    if (sb_max > 200) sb_max = 200;
+    if (sb_max < 40) sb_max = 40;
+    if (sb_max > in.w / 3) sb_max = std::max(in.w / 3, 8);
+    L.sb_bar_max = sb_max;
+    L.sb_label_w = measure("5000 km");
+    const int sb_w = L.hp + sb_max + L.hp + L.sb_label_w + L.hp;
+    L.scale = Rect{0, in.h - L.row_h, sb_w, L.row_h};
+    L.text_y = in.h - L.row_h + L.vp;
+    if (text.empty() || in.w <= 0 || in.h <= 0) return L;
+
+    const int right = in.right > 0 && in.right < in.w ? in.right : in.w;
+    const int avail = std::max(right - sb_w - L.hp, 2 * L.hp + 8); /* the credit plate's widest width: a gap to the scale bar */
+    const std::string abbr = attribution_abbrev(text);
+    std::vector<std::string> lines;
+    if (measure(text) + 2 * L.hp <= avail) {
+        lines = {text};
+    } else if (abbr != text && measure(abbr) + 2 * L.hp <= avail) {
+        lines = {abbr};
+        L.abbreviated = true;
+    } else {
+        std::vector<std::string> full = wrap_words(text, avail - 2 * L.hp, measure);
+        if (full.size() <= 2) {
+            lines = full;
+        } else {
+            lines = wrap_words(abbr, avail - 2 * L.hp, measure);
+            L.abbreviated = abbr != text;
+        }
+    }
+    int widest = 0;
+    for (const std::string &l : lines) widest = std::max(widest, measure(l));
+    L.lines = lines;
+    L.wrapped = lines.size() > 1;
+    const int w = widest + 2 * L.hp, h = static_cast<int>(lines.size()) * text_h + 2 * L.vp;
+    L.credit = Rect{right - w, in.h - h, w, h};
+    L.text_y = in.h - L.row_h + L.vp;
+    return L;
+}
+
+Rect scale_plate(const CreditLayout &l, int bar_px, int label_w)
+{
+    int w = l.hp + std::max(bar_px, 1) + l.hp + label_w + l.hp;
+    if (w > l.scale.w) w = l.scale.w;
+    return Rect{0, l.scale.y, w, l.scale.h};
 }
 
 } // namespace atlas

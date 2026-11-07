@@ -1,13 +1,16 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * Deck Atlas: the map credit at the bottom of the map. The engine's widget draws the attribution of the map in view
- * in one row (cut with "..." when it does not fit: cp0_map_widget.c fit_text) and the app cannot change that text. When
- * the engine would cut it, the app covers the engine's box with a plate of its own that shows the whole credit: the
- * standard abbreviation first ("OpenStreetMap" -> "OSM"), then up to three lines (OpenTopoMap's credit needs three on a 320 px map). The plate sits exactly where the engine's
- * row is (above the scale bar, left of the button column), so it never overlaps the scale bar or the buttons.
+ * Deck Atlas: the map credit and the scale bar at the very bottom edge of the map view. The engine's widget draws both
+ * itself (plates in the toolkit's caption font, the credit cut with "..." when it does not fit) and the app cannot
+ * change that. So the app gives the widget a taller box than the view shows (engine_reserve(): the widget's bottom rows
+ * lie below the view's edge, clipped by the map's parent) and draws its own bottom row in the smallest font the toolkit
+ * has (CP0_UI_FONT_MIN_PX): the scale bar at the left, the credit at the right, flush with the bottom edge, one baseline.
  *
- * plan_attribution() repeats the engine's layout rules for that box (cp0_map_view.c cp0_map_layout: the plate, margin
+ * plan_credit() lays that row out: the credit whole on one line when it fits beside the widest scale bar; else the
+ * standard abbreviation ("OpenStreetMap" -> "OSM") on one line; else the credit (then the abbreviation) wrapped to two
+ * lines; else as many lines as it takes. The credit is never cut and never dropped. The plates never overlap each other.
+ * engine_reserve() and map_metrics() repeat the engine's layout rules (cp0_map_view.c cp0_map_layout: the plate, margin
  * and padding rules, the scale bar's width, "beside the scale bar or a row higher"); a change of those rules in the
  * toolkit has to be followed here (tests/test_attribution.cpp pins the numbers). Pure: no LVGL, no engine.
  */
@@ -26,16 +29,15 @@ std::string attribution_plain(const std::string &raw);
 std::string attribution_abbrev(const std::string &text);
 
 using MeasureFn = std::function<int(const std::string &)>; /* width in px of one line of text */
-/* Greedy word wrap into at most max_lines lines of at most max_w px; what does not fit ends the last line with "...". */
-std::vector<std::string> wrap_lines(const std::string &text, int max_w, int max_lines, const MeasureFn &measure);
-
-constexpr int kMaxLines = 3;
+/* Greedy word wrap into as many lines of at most max_w px as it takes; nothing is cut (a word wider than a line is split
+ * between characters). Empty text: no lines. */
+std::vector<std::string> wrap_words(const std::string &text, int max_w, const MeasureFn &measure);
 
 struct AttrInput {
     int w = 0, h = 0;      /* the map widget's size */
     int target = 44;       /* the TARGET token */
     int space = 8;         /* the SPACE_M token */
-    int text_h = 12;       /* the caption font's line height */
+    int text_h = 12;       /* the caption font's line height (the engine's) */
 };
 
 /* The numbers the engine derives from the tokens for its overlays (cp0_map_layout): the app lays its own overlays (the
@@ -51,16 +53,39 @@ struct MapMetrics {
 };
 MapMetrics map_metrics(const AttrInput &in);
 
-struct AttrPlan {
-    bool cover = false;    /* true: the engine would cut the credit; draw `lines` on a plate at x, y, w, h (widget coordinates) */
+/* How many pixels taller than the visible view (in.h) the widget must be so that the engine's own scale bar and credit
+ * (the credit as the engine measures it: engine_credit_w px in its caption font, 0 = none) lie wholly below the view's
+ * bottom edge. in.h is the VISIBLE height; the metrics are those of the taller widget (the plate sizes depend on the
+ * shorter side). */
+int engine_reserve(const AttrInput &visible, int engine_credit_w);
+
+struct Rect {
     int x = 0, y = 0, w = 0, h = 0;
-    int pad = 0;
-    std::vector<std::string> lines;
-    /* >= 0: the engine draws the credit whole in the bottom row at the right, beside the scale bar; its top edge. The
-     * button column must stay above it. -1: the credit is elsewhere (a row higher, left of the buttons) or absent. */
-    int row_top = -1;
+    bool empty() const { return w <= 0 || h <= 0; }
 };
 
-AttrPlan plan_attribution(const AttrInput &in, const std::string &text, const MeasureFn &measure);
+struct CreditInput {
+    int w = 0, h = 0;      /* the VISIBLE map view */
+    int right = 0;         /* the credit's right edge: 0 = the view's (flush right); less when the zoom buttons come down that far */
+    int text_h = 9;        /* line height of the smallest font */
+    int pad = 4;           /* MapMetrics::pad (the toolkit's) */
+};
+
+struct CreditLayout {
+    int hp = 0, vp = 0;            /* a plate's horizontal and vertical padding */
+    int row_h = 0;                 /* one text row on a plate: text_h + 2 vp */
+    int sb_bar_max = 0;            /* the longest scale bar the row has room for, px */
+    int sb_label_w = 0;            /* the widest scale bar label ("5000 km"), px */
+    Rect scale;                    /* the widest scale bar plate: left, flush with the bottom edge, one row high */
+    std::vector<std::string> lines; /* the credit, top line first; empty: no credit */
+    bool abbreviated = false;      /* "OSM" used */
+    bool wrapped = false;          /* more than one line */
+    Rect credit;                   /* the credit's plate: right (at CreditInput::right), flush with the bottom edge; empty: no credit */
+    int text_y = 0;                /* top of the last text line: the scale bar's text sits at the same y (one baseline) */
+};
+
+CreditLayout plan_credit(const CreditInput &in, const std::string &text, const MeasureFn &measure);
+/* The scale bar's plate for a bar of bar_px and a label label_w px wide: starts at x 0, same row as the credit's last line. */
+Rect scale_plate(const CreditLayout &l, int bar_px, int label_w);
 
 } // namespace atlas

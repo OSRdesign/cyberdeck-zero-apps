@@ -47,7 +47,8 @@ Three tabs, switched by the strip at the bottom (or Tab / Shift+Tab):
 
 - **Map.** The engine's map widget over the whole area. Drag to pan (or the arrow keys: an eighth of the view, a half
   with Shift); zoom with the + / - buttons at the right edge, the + and - keys, Page Up / Page Down, or a double tap.
-  The scale bar is at the bottom left (km or miles), the attribution of the map in view at the bottom right. The zoom
+  The scale bar is at the bottom left (km or miles), the credit of the map in view at the bottom right, both on the
+  very bottom edge of the view, on one line, in the smallest font the toolkit has. The zoom
   goes one level deeper than the map's last level ("overzoom": the deepest tiles magnified). When no imported file
   covers the view, a plate says **No map here**; on the first run with nothing imported it says **No map yet. Import a
   map file in Sources.** An online source that cannot fetch says why in the engine's strip at the top ("Offline: saved
@@ -231,13 +232,19 @@ comes with the recording of tracks.
   import the folder again to get all levels. A file made elsewhere (MBTiles / PMTiles) is only as wide as it declares;
   shown by itself it is read at every level whatever it declares, so there the plate shows only at its deepest level
   (and the over-zoom one), and at the shallower levels a view outside it shows the grey grid without the plate.
-- The engine draws the map credit in one row above the scale bar and cuts it with "..." when it does not fit. The app
-  cannot change the engine's text, so when the engine would cut it (narrow screens, long credits such as
-  OpenTopoMap's) the app covers that row with a plate of its own holding the whole credit: "OpenStreetMap" written
-  "OSM", wrapped into up to three lines, in the same place (above the scale bar, left of the buttons, so it never
-  overlaps either). A credit the engine shows whole is left to the engine. The plate repeats the engine's layout rules
-  (`src/core/attribution.cpp`); it is a stop-gap until the engine wraps its own credit. The full text is also in
-  Settings > About and in each file's facts in Sources.
+- The engine draws its own scale bar and map credit in the toolkit's caption font and cuts a long credit with "...";
+  the app cannot change that. So the app gives the engine's widget a box taller than the view (by the height of the
+  engine's two bottom rows, `src/core/attribution.cpp engine_reserve`) and the view clips it: the engine's rows lie
+  below the edge. The app draws its own bottom row there (`src/ui/atlas_credit.cpp`), in the smallest font (8 px
+  Montserrat): the scale bar at the left, the credit at the right, flush with the bottom edge, one baseline. The credit
+  is shown whole on one line when it fits beside the scale bar, else with "OpenStreetMap" written "OSM", else wrapped
+  to two lines (more only when two do not hold it); it is never cut and never dropped. It stops left of the zoom
+  buttons when they come down to its rows (a short view with a long credit). The copyright sign is written "(C)": the
+  builtin fonts have no (c) glyph. Side effect: the widget's centre is half the extra height below the view's middle,
+  so the zoom buttons sit a little lower and, as their size is a share of the widget's shorter side, a little larger
+  than in 0.1.0; the app converts between the widget's centre and the view's middle wherever it matters (first view,
+  saved view, follow, the dot, "No map here"). The full text is also in Settings > About and in each file's facts in
+  Sources.
 - The engine draws a grey grid while a tile loads (the parent tile magnified when it is cached); there is no separate
   "loading" indicator.
 - Board-only checks are listed in [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md): the import rate on the Zero 2 W,
@@ -303,7 +310,8 @@ python3 tools/make_registry.py --only deck-atlas --arch amd64 --out <dir>
   its accuracy ring, heading wedge and hollow stale state, the status chip, follow mode (button below the zoom buttons,
   G / Home keys, a pan turns it off), Settings > GPS receiver (GPS, Port, Speed; Port Auto opens only known GPS
   receivers: u-blox, Prolific PL2303 pucks; every other serial device is listed in Port but never opened unless chosen), `position.state` for other apps; the map
-  credit is shown whole on narrow screens (abbreviated, wrapped) instead of being cut with "...".
+  credit and the scale bar sit on the view's bottom edge in the smallest font, the credit whole (abbreviated or
+  wrapped when it does not fit on one line) instead of being cut with "...".
 
 - **0.1.0** (2026-11-07): first version. Map, Sources and Settings tabs; MBTiles, PMTiles and tile-folder
   imports with progress and cancel; the engine's three online sources off by default, with the key page and the terms
