@@ -227,11 +227,11 @@ void AtlasApp::gps_layout()
     const double pitch = cy_out - cy_in;
     const int plate = std::min(mm.plate, static_cast<int>(zo.x2 - zo.x1 + 1));
     /* one pitch below the zoom-out button, like the zoom pair; lifted when the credit's row at the bottom right (beside
-     * the scale bar) is in the way, never closer to the zoom-out plate than 2 px; when even that does not fit, above the
+     * the scale bar) is in the way (1 px clear of it), never closer to the zoom-out plate than 2 px; when even that does not fit, above the
      * zoom-in button (the engine's own locate button goes there) */
     double cy = cy_out + pitch;
     double limit = box.y2 - mm.margin - plate / 2.0;
-    if (attr_row_top_ >= 0) limit = std::min(limit, box.y1 + attr_row_top_ - 4 - plate / 2.0);
+    if (attr_row_top_ >= 0) limit = std::min(limit, box.y1 + attr_row_top_ - 1 - plate / 2.0);
     cy = std::min(cy, limit);
     const double min_below = cy_out + plate + 2.0;
     bool side = false;
