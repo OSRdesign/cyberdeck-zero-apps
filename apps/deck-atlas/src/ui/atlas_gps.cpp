@@ -223,36 +223,50 @@ void AtlasApp::gps_layout()
         return;
     }
     const atlas::MapMetrics mm = atlas::map_metrics(overlay_input());
-    const double cx = (zo.x1 + zo.x2) / 2.0;
-    const double cy_in = (zi.y1 + zi.y2) / 2.0, cy_out = (zo.y1 + zo.y2) / 2.0;
-    const double pitch = cy_out - cy_in;
-    const int plate = std::min(mm.plate, static_cast<int>(zo.x2 - zo.x1 + 1));
-    /* one pitch below the zoom-out button, like the zoom pair; lifted when the credit's row at the bottom right (beside
-     * the scale bar) is in the way (1 px clear of it), never closer to the zoom-out plate than 2 px; when even that does not fit, above the
-     * zoom-in button (the engine's own locate button goes there) */
-    double cy = cy_out + pitch;
-    double limit = box.y2 - mm.margin - plate / 2.0;
-    if (attr_row_top_ >= 0) limit = std::min(limit, box.y1 + attr_row_top_ - 1 - plate / 2.0);
-    cy = std::min(cy, limit);
-    const double min_below = cy_out + plate + 2.0;
+    /* the engine's plates, rebuilt from its layout rules (cp0_map_layout): the right edge of the column is the widget's
+     * edge less the margin (the touch squares may be cut by the widget's edge, so their centre is not the plate's), the
+     * top of a plate is its touch square's top plus half the difference; the pitch is the distance of two plates */
+    lv_area_t mapa;
+    lv_obj_get_coords(map_, &mapa);
+    const int plate = mm.plate;
+    const int zi_th = zi.y2 - zi.y1 + 1, zo_th = zo.y2 - zo.y1 + 1;
+    const int top_in = zi.y1 + zi_th / 2 - plate / 2, top_out = zo.y1 + zo_th / 2 - plate / 2;
+    const int pitch = top_out - top_in;
+    const int gap = pitch - plate;
+    const int col_x = mapa.x2 + 1 - mm.margin - plate;
+    /* one pitch below the zoom-out button, like the zoom pair (the same gap as between + and -); when that does not
+     * fit above the bottom margin and the credit's row at the bottom right, above the zoom-in button (the engine's own
+     * locate button goes there); failing that, beside the zoom-out button on its left (the only place left that touches
+     * neither the credit, the scale bar nor the other buttons), the same gap again */
+    int px = col_x, py = top_out + pitch;
     bool side = false;
-    if (cy < min_below) {
-        /* no room below (a short map with the credit in the bottom row at the right: 480x320 has a map 200 px high): above
-         * the zoom-in button, clear of the engine's top row of messages; failing that, beside the zoom-out button on its
-         * left (the only place left that touches neither the credit, the scale bar nor the other buttons) */
-        const double above = cy_in - std::max(pitch, plate + 2.0);
-        const double top_min = box.y1 + mm.margin + mm.row_h + 2.0 + plate / 2.0;
-        if (above >= top_min) {
-            cy = above;
+    int limit = box.y2 + 1 - mm.margin;
+    if (attr_row_top_ >= 0) limit = std::min(limit, box.y1 + attr_row_top_ - 1);
+    if (py + plate > limit) {
+        const int above = top_in - pitch;
+        if (above >= box.y1 + mm.margin + mm.row_h + 2) {
+            py = above;
         } else {
+            px = col_x - gap - plate;
+            py = top_out;
             side = true;
-            cy = cy_out;
         }
     }
-    const int x = (side ? zo.x1 - target_ : static_cast<int>(std::lround(cx - target_ / 2.0))) - box.x1;
-    const int y = static_cast<int>(std::lround(cy - target_ / 2.0)) - box.y1;
-    if (lv_obj_get_x(follow_btn_) != x || lv_obj_get_y(follow_btn_) != y) lv_obj_set_pos(follow_btn_, x, y);
+    /* the touch square (TARGET, as every control of the app) centred on the plate; beside the zoom-out button it stops at
+     * that button's own touch square, the plate still inside it */
+    const int touch = target_;
+    int ox = px + plate / 2 - touch / 2;
+    const int oy = py + plate / 2 - touch / 2;
+    if (side && ox + touch > zo.x1 && zo.x1 - touch <= px && px + plate <= zo.x1) ox = zo.x1 - touch;
+    follow_plate_ = plate;
+    follow_dx_ = px - ox;
+    follow_dy_ = py - oy;
+    if (lv_obj_get_width(follow_btn_) != touch || lv_obj_get_height(follow_btn_) != touch)
+        lv_obj_set_size(follow_btn_, touch, touch);
+    if (lv_obj_get_x(follow_btn_) != ox - box.x1 || lv_obj_get_y(follow_btn_) != oy - box.y1)
+        lv_obj_set_pos(follow_btn_, ox - box.x1, oy - box.y1);
     lv_obj_remove_flag(follow_btn_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_invalidate(follow_btn_);
 }
 
 void AtlasApp::gps_show_overlays()
@@ -371,22 +385,21 @@ void AtlasApp::follow_draw_cb(lv_event_t *e)
     }
 }
 
+/* A third zoom button: the engine's own draw_button (cp0_map_widget.c) for its locate control, plate, ring and crosshair
+ * the same, only the on state is added: a 2 px ring in the accent blue round the plate. */
 void AtlasApp::draw_follow_button(lv_layer_t *layer, const lv_area_t &o)
 {
-    const atlas::MapMetrics mm = atlas::map_metrics(overlay_input());
-    const int plate = std::min(mm.plate, static_cast<int>(o.x2 - o.x1 + 1));
-    const double cx = (o.x1 + o.x2) / 2.0, cy = (o.y1 + o.y2) / 2.0;
+    const int p = follow_plate_ > 0 ? follow_plate_ : atlas::map_metrics(overlay_input()).plate;
     const int radius = cp0_ui_metrics_get()->tok[CP0_TOK_RADIUS_S];
-    const lv_area_t a = {static_cast<int>(std::lround(cx - plate / 2.0)), static_cast<int>(std::lround(cy - plate / 2.0)),
-                         static_cast<int>(std::lround(cx - plate / 2.0)) + plate - 1,
-                         static_cast<int>(std::lround(cy - plate / 2.0)) + plate - 1};
-    const bool on = follow_.on();
+    const lv_area_t a = {o.x1 + follow_dx_, o.y1 + follow_dy_, o.x1 + follow_dx_ + p - 1, o.y1 + follow_dy_ + p - 1};
+    const int cx = a.x1 + p / 2, cy = a.y1 + p / 2;
     const bool pressed = lv_obj_has_state(follow_btn_, LV_STATE_PRESSED);
-    fill(layer, a, on || pressed ? pal::kAccent : kPlateRgb, on ? LV_OPA_COVER : LV_OPA_80, radius);
+    fill(layer, a, pressed ? pal::kAccent : kPlateRgb, LV_OPA_80, radius);
     ring(layer, a, pal::kText, LV_OPA_30, 1, radius);
+    if (follow_.on()) ring(layer, a, pal::kAccent, LV_OPA_COVER, 2, radius);
     /* the crosshair of the engine's own locate button: a ring and four ticks */
-    const int stroke = std::max(plate / 12, 2), len = plate * 2 / 5, rr = plate / 4;
-    const lv_area_t ca = square(cx, cy, rr);
+    const int stroke = std::max(p / 12, 2), len = p * 2 / 5, rr = p / 4;
+    const lv_area_t ca = {cx - rr, cy - rr, cx + rr, cy + rr};
     ring(layer, ca, pal::kText, LV_OPA_COVER, stroke, LV_RADIUS_CIRCLE);
     line(layer, cx - len, cy, cx - rr, cy, pal::kText, stroke);
     line(layer, cx + rr, cy, cx + len, cy, pal::kText, stroke);

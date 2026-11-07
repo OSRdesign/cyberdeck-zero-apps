@@ -1,0 +1,16 @@
+# The follow button is a third zoom button: same size, corner radius, plate and column as the engine's + and -, the same
+# gap below - (tests/tools/check_follow_shots.py measures the shots). Display scale 2x; off by default, on with G.
+title GPS: follow button beside the zoom buttons, scale 2x
+sizes 640x480 480x320 320x480
+env DECKATLAS_DEMO 1
+env DECKATLAS_GPS auto
+env DECKATLAS_GPS_FEED fix3d
+env DECKATLAS_SCALE 2
+env DECKATLAS_VIEW 48.889643,2.269995,16
+
+wait 1500
+shot follow-off
+expect text "3D fix 9 sats"
+key g
+wait 400
+shot follow-on

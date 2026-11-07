@@ -223,6 +223,7 @@ private:
     std::string gps_chip_text_, gps_source_;
     std::vector<std::string> gps_present_;   /* the serial ports present, for the Port row */
     lv_obj_t *gps_layer_ = nullptr, *gps_chip_ = nullptr, *gps_chip_label_ = nullptr, *follow_btn_ = nullptr;
+    int follow_plate_ = 0, follow_dx_ = 0, follow_dy_ = 0;   /* the follow plate's size and offset inside its touch square */
     std::int64_t gps_ports_at_ = 0;
     lv_obj_t *tabbar_ = nullptr;
     struct Cell {
