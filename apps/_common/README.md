@@ -80,7 +80,13 @@ and compare the header shots with the launcher's. Details, and what else the lau
 
 ## The launcher pin
 
-`LAUNCHER_REF` is **`e3a2899`**, launcher main after v0.9.4 (#145, not a release yet): the **offline map engine** in
+`LAUNCHER_REF` is **`28817a5`**, launcher main after #146 and #147 (not a release yet): the **map engine** of `e3a2899` with its first fixes, all inside `cp0_lvgl/src/map`, `include/cp0_map*.h` and the harness's map scene, so still compiled only with `CONFIG_CP0_LVGL_MAP=y` (default n). #146 adds `cp0_map_on_view_change()` (a callback when the widget's view changes), per-zoom coverage for converted folders, the `*` cache invalidation, and the `cp0_map_source_info_t` fields `tiles`, `imported`, `source_path` and `has_zoom_extents`; #147 is documentation only. Nothing else the apps compile changed between the two pins (the diff of `ext_components/cp0_lvgl`, `projects/APPLaunch/main/lvgl` and the render harness configuration touches only the map files), neither `scons/cross_config_defaults.mk` nor `headless/Makefile` compiles `src/map`, so the existing apps behave as at `e3a2899`: rebuilt at each pin they differ only by the commit hash `build_app.sh` stamps into them (checked with mmwave-radar and Klondike Solitaire). The published apps keep their builds and move to this pin at their next rebuild. `build_app.sh` needs a checkout
+of the commit `28817a50cfbc52e8b394390ef49dcbbab7586deb` as `LAUNCHER_SRC` (`git fetch origin main`). From this pin the
+launcher's `sync_tree` (#140, which `build_app.sh --sync` runs) writes LF line ends: a WSL checkout with LF line ends
+(`core.autocrlf` unset) equals the synced tree; a Windows checkout (CRLF) does not, so build from it with `--sync` every
+time.
+
+Before it, `LAUNCHER_REF` was **`e3a2899`**, launcher main after v0.9.4 (#145, not a release yet): the **offline map engine** in
 `cp0_lvgl` (`include/cp0_map.h`: Web Mercator, MBTiles / PMTiles readers, the shared tile store, the RAM tile cache,
 online sources with a viewing cache, the LVGL map widget), which Deck Atlas needs and Mesh Hop's map tab will use. It is
 compiled only with `CONFIG_CP0_LVGL_MAP=y` (Kconfig, default n), which neither `scons/cross_config_defaults.mk` nor
@@ -95,11 +101,7 @@ overlays sized for it), and the render harness configuration without an LVGL dra
 declares an `X-Portrait` under 480 px wide and no scene uses such a size, so the existing apps draw the same pictures as
 at `3f6579f`; they keep their `3f6579f` builds and move to this pin at their next rebuild. viz1090's copies of the layout
 service (`apps/viz1090/build/cp0_ui_metrics.[ch]`, `cp0_ui_roller.[ch]`) stay at `3f6579f`: they differ from this pin
-only by the narrow portrait additions, which its 480x640 portrait minimum never reaches. `build_app.sh` needs a checkout
-of the commit `e3a28995a131405e7bc5255420a7978087618f0a` as `LAUNCHER_SRC` (`git fetch origin main`). From this pin the
-launcher's `sync_tree` (#140, which `build_app.sh --sync` runs) writes LF line ends: a WSL checkout with LF line ends
-(`core.autocrlf` unset) equals the synced tree; a Windows checkout (CRLF) does not, so build from it with `--sync` every
-time.
+only by the narrow portrait additions, which its 480x640 portrait minimum never reaches.
 
 Before it, `LAUNCHER_REF` was **`3f6579f`**, launcher main after v0.8.11 (#113, part of the release v0.8.12): the **SSH indicator** in the
 status strip. The strip reads `status.state` `ssh=` / `ssh_act=` and draws a terminal glyph in its leftmost slot while
