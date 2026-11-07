@@ -10,6 +10,7 @@
 #pragma once
 
 #include "link.hpp"
+#include "settings.hpp"
 
 #include <cstddef>
 #include <string>
@@ -18,6 +19,12 @@ namespace mmw {
 
 /* The per-second line at `now` (ms, the app's clock). */
 std::string diag_line(const Link &link, Ms now);
+/* The app's log line for Found / Lost: "Found ttyUSB0 (CH340) 9600 baud"; a Bluetooth radar has no speed, so
+ * "Found HLK-LD2451_49F0 (Bluetooth)" (the title says so). */
+std::string link_state_line(const Link &link);
+/* The end of the `start` line: " connection=<usb|bluetooth|auto>" and, for Bluetooth and Auto, " ble=<the remembered address
+ * or -> name=<the remembered name or ->". */
+std::string diag_start_tail(Connection c, const Remembered &remembered);
 /* The extra lines to add when new (port settings once found, each of the first target frames once): `sent` counts
  * what was written before (bit 0 settings, bits 1-3 the frames); returns the lines and updates it. */
 std::string diag_extra(const Link &link, unsigned &sent);

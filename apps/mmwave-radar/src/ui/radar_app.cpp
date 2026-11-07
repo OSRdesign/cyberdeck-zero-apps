@@ -217,7 +217,11 @@ RadarApp::RadarApp(lv_obj_t *screen) : screen_(screen)
         diag_write(std::string("log on ") + (diag_marker ? "(marker " + config_dir_ + "/diag)" : std::string("($MMWAVE_LOG)")) +
                    " " + diag_path_ + "\n");
         diag_write(std::string("start ") + kVersion + (demo && *demo ? " demo " : " real ports") + (demo && *demo ? demo : "") +
-                   " config_dir=" + config_dir_ + " remembered=" + (remembered.empty() ? "none" : remembered.port_id + " " + std::to_string(remembered.baud)) + "\n");
+                   " config_dir=" + config_dir_ + " remembered=" + (remembered.empty() ? "none" : remembered.port_id + " " + std::to_string(remembered.baud)) +
+                   mmw::diag_start_tail(settings_.connection, remembered) + "\n");
+        /* the Bluetooth and link events of the log (nothing is built while the log is off) */
+        ble_->set_diag([this](const std::string &l) { diag_write(l + "\n"); });
+        link_->set_event_log([this](const std::string &l) { diag_write(l + "\n"); });
     }
     lv_display_add_event_cb(lv_obj_get_display(screen_), render_cb, LV_EVENT_ALL, this);
 }
@@ -695,8 +699,7 @@ void RadarApp::tick()
     if (state_changed) {
         seen_state_ = state;
         if (state == mmw::LinkState::Found || state == mmw::LinkState::Lost)
-            log_line("%s %s %d baud", mmw::link_state_name(state),
-                         link_->port_title().c_str(), link_->baud());
+            log_line("%s", mmw::link_state_line(*link_).c_str()); /* a Bluetooth radar has no baud */
         update_view_visibility();
         update_chips();
         update_notfound(true);

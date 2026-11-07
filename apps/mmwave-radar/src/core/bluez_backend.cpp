@@ -159,7 +159,7 @@ std::string device_path(const std::string &adapter, const std::string &address)
 /* ================================================================================================================ */
 
 struct BluezBackend::Impl {
-    enum class Op { Objects, Ignore, StartDiscovery, Connect, GattObjects, AcquireNotify, StartNotify };
+    enum class Op { Objects, Ignore, StartDiscovery, Connect, Disconnect, GattObjects, AcquireNotify, StartNotify };
     struct Call {
         Impl *self = nullptr;
         Op op = Op::Ignore;
@@ -198,6 +198,7 @@ struct BluezBackend::Impl {
     NotifySink *sink = nullptr;
 
     std::function<void(const std::string &)> log;
+    std::function<void(const std::string &)> diag; /* the diagnostic log (null: off) */
 
     void say(const std::string &line) const
     {
@@ -454,6 +455,12 @@ struct BluezBackend::Impl {
             }
             return;
         case Op::Connect: emit(BleEvent::Kind::ConnectResult, c.address, err.empty(), err); return;
+        case Op::Disconnect: {
+            const std::string res = ble_disconnect_result(err);
+            if (diag) diag("ble-disconnect addr=" + c.address + " result=" + res);
+            if (res.compare(0, 6, "error:") == 0) say(c.path + ": " + err);
+            return;
+        }
         case Op::GattObjects: {
             if (c.seq != gatt_seq) return;
             if (!err.empty()) {
@@ -484,6 +491,7 @@ struct BluezBackend::Impl {
             if (c.seq != gatt_seq) return; /* unsubscribed meanwhile: the socket goes with the message */
             if (!err.empty()) {
                 say("AcquireNotify: " + err + ", using StartNotify");
+                if (diag) diag("ble-subscribe-note AcquireNotify failed (" + err + "), using StartNotify");
                 call(notify_path, kChr, "StartNotify", Op::StartNotify, c.address, nullptr, 10 * kSec);
                 return;
             }
@@ -715,6 +723,18 @@ struct BluezBackend::Impl {
         notify_props = false;
         if (scanning && !adapter.empty()) call(adapter, kAdapter, "StopDiscovery", Op::Ignore, "", nullptr, 2 * kSec);
         api.flush(bus); /* the disconnection BleSys queued, the subscription and the discovery ended, before closing */
+        /* with the diagnostic log on: wait (at most 0.5 s) for BlueZ's answer to a pending Disconnect, to log its result */
+        if (diag) {
+            for (int i = 0; i < 50; ++i) {
+                bool pending = false;
+                for (const auto &c : calls)
+                    if (c->op == Op::Disconnect && !c->done) pending = true;
+                if (!pending) break;
+                while (api.process(bus, nullptr) > 0) {
+                }
+                ::usleep(10000);
+            }
+        }
         for (sd::slot *s : slots) api.slot_unref(s);
         slots.clear();
         api.flush_close_unref(bus);
@@ -792,6 +812,7 @@ bool BluezBackend::started() const { return d_->bus != nullptr; }
 BleAvail BluezBackend::availability() const { return d_->availability(); }
 std::string BluezBackend::unavailable_why() const { return d_->why; }
 void BluezBackend::set_log(std::function<void(const std::string &)> log) { d_->log = std::move(log); }
+void BluezBackend::set_diag(std::function<void(const std::string &)> sink) { d_->diag = std::move(sink); }
 void BluezBackend::set_sink(NotifySink *sink) { d_->sink = sink; }
 
 void BluezBackend::poll(std::vector<BleEvent> &out)
@@ -857,7 +878,7 @@ void BluezBackend::disconnect(const std::string &address)
 {
     Impl &d = *d_;
     if (d.adapter.empty()) return;
-    d.call(device_path(d.adapter, address), kDevice, "Disconnect", Impl::Op::Ignore, upper(address), nullptr, 5 * kSec);
+    d.call(device_path(d.adapter, address), kDevice, "Disconnect", Impl::Op::Disconnect, upper(address), nullptr, 5 * kSec);
 }
 
 void BluezBackend::subscribe(const std::string &address)

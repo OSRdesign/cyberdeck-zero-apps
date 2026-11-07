@@ -5,6 +5,8 @@
  */
 #include "tracker.hpp"
 
+#include <cstdint>
+
 namespace mmw {
 
 void Tracker::clear()
@@ -13,6 +15,14 @@ void Tracker::clear()
     frames_ = 0;
     sampled_ = false;
     /* ids keep counting: an id is never reused in a session */
+}
+
+bool Tracker::implausible_jump(const Target &from, const Target &to, std::int64_t dt_ms)
+{
+    if (dt_ms <= 0) return false; /* the same poll: no elapsed time to judge by */
+    const double limit_mm = kMaxJumpSpeed * static_cast<double>(dt_ms) + kJumpSlack * 1000.0; /* m/s = mm/ms */
+    const double dx = static_cast<double>(to.x_mm) - from.x_mm, dy = static_cast<double>(to.y_mm) - from.y_mm;
+    return dx * dx + dy * dy > limit_mm * limit_mm;
 }
 
 void Tracker::update(const Frame &f, std::int64_t t_ms)
@@ -27,6 +37,11 @@ void Tracker::update(const Frame &f, std::int64_t t_ms)
         if (!t.present) {
             s.held = false; /* gone from the frame: the count restarts when it comes back */
             continue;
+        }
+        if (s.active && implausible_jump(s.last, t, t_ms - s.last_seen_ms)) {
+            s.active = false; /* a new target: the old one in this slot is gone (new id, trail, smoothing, held count) */
+            s.held = false;
+            s.trail.clear();
         }
         const bool same = s.active && was_present && s.last.x_mm == t.x_mm && s.last.y_mm == t.y_mm &&
                           s.last.speed_cm_s == t.speed_cm_s && s.last.resolution_mm == t.resolution_mm;

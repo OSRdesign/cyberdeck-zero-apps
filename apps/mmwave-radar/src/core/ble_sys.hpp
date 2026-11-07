@@ -33,7 +33,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -70,6 +72,11 @@ struct BleCandidate {
 bool hlk_candidate(const std::string &name);
 /* The last two bytes of an address, "49:F0" ("" for a bad address). */
 std::string address_tail(const std::string &address);
+
+/* The diagnostic log's word for BlueZ's answer to Device1.Disconnect (error = "" when it succeeded): "ok", "ok-already-
+ * disconnected" for the expected answer when the link is gone already ("No matching connection", NotConnected), else
+ * "error:<text>". */
+std::string ble_disconnect_result(const std::string &error);
 
 /* Why Bluetooth cannot be used here. */
 enum class BleAvail { Unknown, Ok, NoBluez, NoAdapter, Off };
@@ -125,6 +132,9 @@ public:
     virtual void set_sink(NotifySink *sink) = 0;
     /* "notify=AcquireNotify mtu=512" for the diagnostic log. */
     virtual std::string describe() const { return std::string(); }
+    /* The diagnostic log (null = off): lines without a time stamp ("ble-disconnect addr=... result=...") for the events
+     * only the backend sees, as BlueZ answers. Not set when logging is off. */
+    virtual void set_diag(std::function<void(const std::string &)> /*sink*/) {}
 };
 
 enum class BleState { Off, Starting, Unavailable, Idle, Scanning, Connecting, Subscribing, Connected, Waiting };
@@ -187,6 +197,10 @@ public:
     std::uint64_t dropped_bytes() const { return dropped_; }
     /* A log line for each change of state (the app prints it): true once per change. */
     bool take_log(std::string &line);
+    /* The diagnostic log (mmwave.log): `sink` gets one line per event, "t=<ms> ble-scan ..." (scan windows and the
+     * radars seen, the user's choice, connect / subscribe with their duration and result, the retry waits, the
+     * disconnection). Never per notification, never a secret. Null (the default) switches it off: nothing is built. */
+    void set_diag(std::function<void(const std::string &)> sink);
 
     /* --- Sys (read only; one port: the connected radar) */
     std::vector<PortMeta> list_ports() override;
@@ -207,10 +221,15 @@ private:
     void begin_attempt(Ms now);
     void begin_window(Ms now, bool searching);
     void end_window(Ms now);
-    void stop_scan();
+    void stop_scan(const char *why = "stopped");
     void fail_attempt(const std::string &why, Ms now);
     void lose(const std::string &why, Ms now);
-    void drop_link();
+    void drop_link(const char *why = "dropped");
+    void start_subscribe(Ms now);
+    void connect_done(const std::string &result, Ms now);
+    void subscribe_done(const std::string &result, Ms now);
+    void scan_done(const std::string &reason);
+    void dlog(const std::string &line) const;
     void set_state(BleState s, const std::string &why = std::string());
     void note_device(const std::string &address);
     std::string shown_name() const;
@@ -235,6 +254,14 @@ private:
     static constexpr Ms kStableMs = 20000; /* a link that lasted this long resets the retry waits when it ends */
     std::string last_error_;
     std::vector<BleCandidate> seen_;
+    bool disc_sent_ = false;       /* Device1.Disconnect was asked and the link did not report down yet: not asked twice */
+    /* the diagnostic log */
+    std::function<void(const std::string &)> diag_;
+    Ms connect_t0_ = 0, sub_t0_ = 0;
+    bool connect_open_ = false, sub_open_ = false;
+    bool win_open_ = false;
+    std::set<std::string> win_found_;                          /* the devices BlueZ reported in this window */
+    std::vector<std::pair<std::string, std::string>> win_kept_; /* the HLK-LD ones: address, "name=... addr=... rssi=..." */
     /* the port */
     int handle_ = -1;
     bool handle_dead_ = false;

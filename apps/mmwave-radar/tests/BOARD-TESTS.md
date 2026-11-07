@@ -60,11 +60,15 @@ plot look smooth? Is the touch still quick (tabs, pause)?
    few seconds a row `HLK-LD2451_xxxx  -NN dBm  XX:XX` (no other device listed). After 10 s the scan stops ("Choose a
    radar"), another starts 20 s later. Does Wi-Fi (the status strip, an SSH session) stay usable during the scan?
 2. Tap the row: "Connecting to HLK-LD2451_xxxx" (blue dot), then the plot within about 10 s; walk in front: the target
-   moves as over USB, the Sensor page says `HLK-LD2451_xxxx (Bluetooth)`, Baud `-`, Bluetooth `HLK-LD2451_xxxx`.
+   moves as over USB, the Sensor page says `HLK-LD2451_xxxx (Bluetooth)`, Baud `-`, Bluetooth `HLK-LD2451_xxxx`. The
+   log says `Found HLK-LD2451_xxxx (Bluetooth)` (no baud), within about 2 s of "Connecting" ending for an idle radar.
 3. Power the radar off: "Signal lost, reconnecting" after about 5 s, retries at 2, 4, 8 ... s; power it on: found
    again by itself. End the app and start it again: it connects to the remembered radar without the list.
 4. End the app (Esc): `bluetoothctl info <address>` says `Connected: no` within a few seconds; the phone app can reach
-   the radar again. The log's `ble ...` line says AcquireNotify or StartNotify.
+   the radar again. The log's `ble ...` line says AcquireNotify or StartNotify. `mmwave.log` (marker `diag`) has the
+   `start ... connection=bluetooth ble=... name=...` line and the `ble-scan`, `ble-seen`, `ble-choose`, `ble-connect`,
+   `ble-subscribe`, `ble-found` lines of this run in that order, and at the end one `ble-disconnect ... result=ok` (or
+   `ok-already-disconnected`), never an `error:`. A target that jumps tens of metres in one frame gets a new id.
 5. Connection **Auto** with the USB adapter plugged: the USB radar is used, Bluetooth stays off (`bluetoothctl info`:
    not connected); unplug it: after the scan the Bluetooth radar is connected. Back to **USB** at the end.
 

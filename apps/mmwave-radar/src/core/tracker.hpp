@@ -32,6 +32,13 @@ struct TrackerConfig {
  * real still person gives. */
 constexpr std::int64_t kHeldMs = 3000;
 
+/* A jump rule: a slot's next measurement farther from its last one than a person or a vehicle could have moved in the
+ * elapsed time (kMaxJumpSpeed for that time, plus kJumpSlack for the noise of whole-metre distances and coarse angles)
+ * is not the same target: the slot takes a new id (a real far reflection, a ghost). No time passed between two frames
+ * with the same time stamp (read in one poll): the rule is not applied to those. */
+constexpr double kMaxJumpSpeed = 40.0; /* m/s (144 km/h) */
+constexpr double kJumpSlack = 1.0;     /* m */
+
 struct TrailPoint {
     std::int64_t t_ms = 0;
     int x_mm = 0, y_mm = 0;
@@ -75,6 +82,7 @@ public:
     int held_count() const; /* slots held now (active and in the latest frame) */
 
 private:
+    static bool implausible_jump(const Target &from, const Target &to, std::int64_t dt_ms);
     void expire(std::int64_t t_ms);
     void sample(std::int64_t t_ms);
     TrackerConfig cfg_;

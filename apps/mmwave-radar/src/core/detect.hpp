@@ -18,7 +18,8 @@
  * A total time budget ends the scan; the ports not reached are reported as skipped.
  *
  * A Bluetooth radar (PortMeta::transport Ble, ble_sys.hpp) is a port without a speed: it is listened to once, for the
- * longest window of the drivers in play plus nobaud_extra_ms (notifications come up to 0.5 s late), configure() and
+ * longest window of the drivers in play plus nobaud_extra_ms (notifications come up to 0.5 s late), it is found after
+ * frames_needed_nobaud (1) valid frame, configure() and
  * flush_input() are never called, the reports and the radar carry baud 0. It is looked at right after the remembered
  * serial port (it is only listed while connected, so the time budget never skips it).
  */
@@ -86,6 +87,10 @@ struct DetectConfig {
     Ms total_budget_ms = 8000;
     std::size_t early_garbage_bytes = 90;
     std::uint32_t frames_needed = 3;
+    /* A port without a speed (Bluetooth): one whole valid frame is enough. The module is chosen by its HLK-LD name and
+     * a notification is one whole frame, so there is no baud to guess and no line noise to rule out; three frames would
+     * make an idle LD2451 (one frame every 1.4 s) wait up to 4.2 s. */
+    std::uint32_t frames_needed_nobaud = 1;
     Ms nobaud_extra_ms = 1000;   /* a port without a speed (Bluetooth): added to its one listen window */
 };
 

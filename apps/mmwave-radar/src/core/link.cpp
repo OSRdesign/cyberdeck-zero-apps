@@ -149,8 +149,13 @@ void Link::set_remembered_ble(const std::string &address, const std::string &nam
     remembered_changed_ = true;
 }
 
-void Link::lose(Ms now)
+void Link::lose(Ms now, const char *reason, Ms quiet_ms)
 {
+    if (events_ && port_.meta.transport == Transport::Ble) {
+        std::string l = "t=" + std::to_string(now) + " ble-lost reason=" + reason + " addr=" + port_.meta.address;
+        if (quiet_ms > 0) l += " quiet_ms=" + std::to_string(quiet_ms) + " limit_ms=" + std::to_string(lost_after_ms());
+        events_(l);
+    }
     if (open_) {
         sys_.restore(port_.handle);
         sys_.close(port_.handle);
@@ -172,7 +177,7 @@ void Link::read_frames(Ms now)
     for (int rounds = 0; rounds < 4; ++rounds) {
         const long n = sys_.read(port_.handle, buf, sizeof(buf));
         if (n < 0) {
-            lose(now);
+            lose(now, "port-gone");
             return;
         }
         if (n == 0) break;
@@ -204,7 +209,8 @@ void Link::read_frames(Ms now)
     const Ms span = now - found_ms_ < 1000 ? (now - found_ms_ > 0 ? now - found_ms_ : 1) : 1000;
     stats_.fps = static_cast<double>(arrivals_.size()) * 1000.0 / static_cast<double>(span);
     const Ms lost_ms = lost_after_ms();
-    if (last_frame_ms_ < 0 ? now - found_ms_ > lost_ms : now - last_frame_ms_ > lost_ms) lose(now);
+    if (last_frame_ms_ < 0 ? now - found_ms_ > lost_ms : now - last_frame_ms_ > lost_ms)
+        lose(now, last_frame_ms_ < 0 ? "no-frame-since-found" : "quiet", last_frame_ms_ < 0 ? now - found_ms_ : now - last_frame_ms_);
 }
 
 void Link::after_scan(Ms now)
@@ -232,6 +238,9 @@ void Link::after_scan(Ms now)
         found_ms_ = now;
         ever_found_ = true;
         state_ = LinkState::Found;
+        if (events_ && port_.meta.transport == Transport::Ble)
+            events_("t=" + std::to_string(now) + " ble-found addr=" + port_.meta.address + " name=" +
+                    (port_.meta.tty.empty() ? "-" : port_.meta.tty) + " driver=" + driver_->id);
         if (port_.meta.transport == Transport::Ble) return; /* the Bluetooth radar is remembered when the user chooses it */
         if (port_.id != remembered_.port_id || port_.baud != remembered_.baud) {
             remembered_.port_id = port_.id;

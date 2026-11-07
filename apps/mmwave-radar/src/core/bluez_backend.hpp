@@ -53,6 +53,7 @@ public:
     void unsubscribe() override;
     void set_sink(NotifySink *sink) override;
     std::string describe() const override;
+    void set_diag(std::function<void(const std::string &)> sink) override;
 
     /* Lines for the app's log ("bluez: ..."). */
     void set_log(std::function<void(const std::string &)> log);

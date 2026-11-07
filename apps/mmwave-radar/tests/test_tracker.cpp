@@ -305,10 +305,125 @@ void test_held()
     }
 }
 
+/* The jump rule (tracker.hpp): a measurement farther from the slot's last one than kMaxJumpSpeed for the elapsed time plus
+ * kJumpSlack is a new target. */
+void test_jump()
+{
+    /* run 7 of the Bluetooth board test: 2 m / +30 deg, 0.8 km/h, then 0.3 s later a raw frame of 41 m / -47 deg, 30 km/h */
+    {
+        Tracker tr;
+        for (std::int64_t t = 0; t <= 3500; t += 100) tr.update(make(1000, 1732, 8), t); /* held for over 3 s */
+        CHECK(tr.slot(0).held);
+        CHECK(tr.slot(0).trail.size() > 5);
+        const std::uint32_t a = tr.slot(0).id;
+        tr.update(make(-29986, 27962, 833), 3800);
+        const SlotState &s = tr.slot(0);
+        CHECK(s.active && s.present_now);
+        CHECK(s.id != a && s.id > a);
+        CHECK(!s.held);
+        CHECK_EQ(s.trail.size(), static_cast<std::size_t>(1));
+        CHECK_EQ(s.same_since_ms, static_cast<std::int64_t>(3800));
+        CHECK_EQ(s.first_seen_ms, static_cast<std::int64_t>(3800));
+        CHECK_EQ(s.speed_smooth_cm_s, 833.0); /* no smoothing from the old target */
+        CHECK_EQ(s.last.x_mm, -29986);
+        CHECK(!tr.slot(1).active && !tr.slot(2).active); /* the old target is gone, not kept beside the new one */
+        CHECK_EQ(tr.held_count(), 0);
+        /* and it holds only as long as the new one is there: the old place again is another jump */
+        const std::uint32_t b = s.id;
+        tr.update(make(1000, 1732, 8), 3900);
+        CHECK(tr.slot(0).id > b);
+    }
+    /* 3 m in 0.15 s (20 m/s) is a person or a car: the same id, the trail goes on */
+    {
+        Tracker tr;
+        tr.update(make(0, 2000, -17), 0);
+        const std::uint32_t a = tr.slot(0).id;
+        tr.update(make(0, 5000, -17), 150);
+        CHECK_EQ(tr.slot(0).id, a);
+        CHECK_EQ(tr.slot(0).trail.size(), static_cast<std::size_t>(2));
+    }
+    /* exactly at the limit stays, one mm over is new: 100 ms allow 40 m/s * 0.1 s + 1 m = 5 m (3-4-5 in whole mm) */
+    {
+        Tracker tr;
+        tr.update(make(0, 2000, 0), 0);
+        const std::uint32_t a = tr.slot(0).id;
+        tr.update(make(3000, 6000, 0), 100);
+        CHECK_EQ(tr.slot(0).id, a);
+        tr.update(make(3000 + 3000, 6000 + 4000, 0), 200);
+        CHECK_EQ(tr.slot(0).id, a);
+        Tracker over;
+        over.update(make(0, 2000, 0), 0);
+        over.update(make(3001, 6000, 0), 100); /* 5000.2 mm */
+        CHECK(over.slot(0).id > a);
+        Tracker straight;
+        straight.update(make(0, 2000, 0), 0);
+        straight.update(make(0, 7000, 0), 100); /* 5000 mm: at the limit */
+        CHECK_EQ(straight.slot(0).id, 1u);
+        Tracker straight2;
+        straight2.update(make(0, 2000, 0), 0);
+        straight2.update(make(0, 7001, 0), 100);
+        CHECK(straight2.slot(0).id > 1u);
+    }
+    /* the first measurement has nothing to jump from, however far */
+    {
+        Tracker tr;
+        tr.update(make(-29986, 27962, 833), 0);
+        CHECK(tr.slot(0).active);
+        CHECK_EQ(tr.slot(0).id, 1u);
+        CHECK_EQ(tr.slot(0).trail.size(), static_cast<std::size_t>(1));
+    }
+    /* a gap longer than drop_ms: the slot was released first (the Link ticks), the next one is a new target anyway */
+    {
+        Tracker tr;
+        tr.update(make(0, 2000, 0), 0);
+        const std::uint32_t a = tr.slot(0).id;
+        tr.tick(600);
+        CHECK(!tr.slot(0).active);
+        tr.update(make(100, 2100, 0), 700); /* near the old place: still a new id, the slot was released */
+        CHECK(tr.slot(0).id > a);
+        tr.tick(700);
+        tr.tick(1500);
+        tr.update(make(-29986, 27962, 833), 4000);
+        CHECK(tr.slot(0).id > a + 1);
+        CHECK_EQ(tr.slot(0).trail.size(), static_cast<std::size_t>(1));
+        /* with the LD2451's 3 s: a 2.8 s gap keeps the slot, and 2.8 s allow 112 m + 1 m: no jump */
+        TrackerConfig c;
+        c.drop_ms = 3000;
+        Tracker t451(c);
+        t451.update(make(0, 2000, 0), 0);
+        t451.tick(2800);
+        t451.update(make(-29986, 27962, 833), 2800);
+        CHECK_EQ(t451.slot(0).id, 1u);
+    }
+    /* frames with the same time stamp (read in one poll): no elapsed time, the rule does not judge them */
+    {
+        Tracker tr;
+        tr.update(make(0, 2000, 0), 500);
+        tr.update(make(0, 7000, 0), 500);
+        CHECK_EQ(tr.slot(0).id, 1u);
+    }
+    /* two targets (the LD2450 family): only the slot that jumped gets a new id, the other walks on */
+    {
+        Tracker tr;
+        tr.update(make(-500, 1500, -10, 900, 3000, 10), 0);
+        const std::uint32_t a = tr.slot(0).id, b = tr.slot(1).id;
+        CHECK(a != b);
+        for (int i = 1; i <= 10; ++i) tr.update(make(-500 + 20 * i, 1500 + 15 * i, -10, 900 - 10 * i, 3000 + 10 * i, 10), 52 * i);
+        CHECK_EQ(tr.slot(0).id, a);
+        CHECK_EQ(tr.slot(1).id, b);
+        tr.update(make(-300, 1700, -10, 8000, 9000, 10), 52 * 11); /* the second jumps 9 m in 52 ms */
+        CHECK_EQ(tr.slot(0).id, a);
+        CHECK(tr.slot(1).id > b);
+        CHECK_EQ(tr.slot(0).trail.size(), static_cast<std::size_t>(12));
+        CHECK_EQ(tr.slot(1).trail.size(), static_cast<std::size_t>(1));
+    }
+}
+
 } // namespace
 
 void test_tracker()
 {
+    test_jump();
     test_held();
     test_walk();
     test_ids_and_drop();

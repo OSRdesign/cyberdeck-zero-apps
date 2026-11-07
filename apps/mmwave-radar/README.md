@@ -128,8 +128,11 @@ adapter (**Connection > Bluetooth**, or **Auto** as a fallback). It is a second 
 port interface (`core/ble_sys.hpp`): the frames, the decoder, the tracker and the pages are the same; only there is no
 speed (the diagnostic line reads `transport=ble addr=ED:2F:90:B4:49:F0 name=HLK-LD2451_49F0` instead of `port=... baud=...`,
 the Sensor page's Baud is `-`, the port is `HLK-LD2451_49F0 (Bluetooth)` with the id `ble:<address>`). The driver is
-chosen as on a serial port: by listening to the first frames (one window: the longest of the drivers in play, 6 s for
-the LD2451, plus 1 s), honouring the Sensor type.
+chosen as on a serial port: by listening (one window: the longest of the drivers in play, 6 s for the LD2451, plus 1 s),
+honouring the Sensor type. A Bluetooth radar is found at its first valid frame (a serial port needs three in a row: the
+module is picked by its HLK-LD name and a notification is one whole frame, so there is no speed to guess), which is
+within 1.4 s for an idle LD2451, and the link listens the moment the connection is up. The app's log says
+`Found HLK-LD2451_49F0 (Bluetooth)`, without a baud (`Found ttyUSB0 (CH340) 115200 baud` stays for a serial port).
 
 **What the module does** (measured on the owner's HLK-LD2451 from a Pi 3A+ with BlueZ, 2026-11-06/07; captures in the
 study folder, `tests/data/ble-ld2451-notify-75s.csv`):
@@ -218,6 +221,27 @@ frames that held a target, and every 10 s the raw bytes of the latest one; it ne
   the latest such frame's 30 bytes. Nothing is counted while the log is off. The log is cut to its last 200 KB at each start (and while running once it
   reaches 400 KB). `rm ~/.config/mmwave-radar/diag` turns it off; without the marker the app writes no log file at all.
   `MMWAVE_LOG=<file>` (started by hand) does the same into that file, without the cut.
+  The start line ends with `connection=<usb|bluetooth|auto>` and, for Bluetooth and Auto, `ble=<remembered address or
+  -> name=<remembered name or ->`. With Bluetooth in use the log also gets one line per event (time stamp `t=` in ms as
+  in the per-second line; none per notification, no secrets, nothing is built while the log is off):
+  `ble-scan start window_ms=10000 looking_for=-`, then at its end `ble-seen name=HLK-LD2451_49F0 addr=ED:2F:90:B4:49:F0
+  rssi=-60` once per radar of that window (HLK-LD names only) and `ble-scan end found=3 kept=1 reason=window-ended` (found
+  = every device BlueZ reported, kept = the HLK-LD ones); `ble-choose addr=... name=...` (the user's pick);
+  `ble-connect-start addr=... name=... attempt=1 already_connected=0`, `ble-connect addr=... name=... ms=1840 result=ok`
+  (`result=ok|timeout|error:<text>`); `ble-subscribe addr=... ms=210 result=ok notify=AcquireNotify mtu=512` (or
+  `notify=StartNotify`; a failed AcquireNotify adds a `ble-subscribe-note` line); `ble-found addr=... name=...
+  driver=ld2451` and `ble-lost reason=quiet|port-gone|no-frame-since-found` (with `quiet_ms` and `limit_ms` for the
+  silence); `ble-lose reason=<why the link ended> had_data=1 connected_ms=...` and `ble-backoff attempt=2 wait_ms=4000
+  reason=...` (the retry waits 2, 4, 8, 15, 30 s); `ble-disconnect-request addr=... reason=failed|lost|choose|exit...`
+  and BlueZ's answer `ble-disconnect addr=... result=ok|ok-already-disconnected|error:<text>` (the app asks BlueZ for
+  one disconnection per link, and at the exit waits at most 0.5 s for the answer). A serial radar logs none of this.
+- Target jumps (the tracker). A slot's next measurement farther from its last one than a person or a vehicle could
+  have moved in the time between the two frames is a **new target** (new id, trail, smoothed speed and held count
+  restarted; the old one is gone): at most 40 m/s (144 km/h) for the elapsed time plus 1 m of slack for the noise of
+  whole-metre distances and coarse angles. It catches the far reflection the LD2451 reports for a frame now and then
+  (seen on the Pi 3A+: 41 m at -47 deg, 0.3 s after a target at 2 m, which used to keep its id across the 39 m jump).
+  Two frames read in one poll share their time stamp and are not judged. In our recordings the largest step is a third
+  of the limit.
 
 ## The code
 
@@ -226,7 +250,7 @@ frames that held a target, and every 10 s the raw bytes of the latest one; it ne
   `ld2410` (the stub driver: recognised, not read), `sniff` (what else talks on a port), `detect` (the
   listen-only scan), `port_sys` / `posix_sys` / `posix_tty` (the port layer: sysfs, /proc, flock, termios2, no write),
   `link` (the poll loop: Searching / Found / Lost / Busy / Error, hot-plug), `tracker` (trails, smoothed speed, the
-  30 s history), `units`, `csv`, `settings` (the settings file), `view` (range, orientation, arrow, label placement),
+  30 s history, the jump rule), `units`, `csv`, `settings` (the settings file), `view` (range, orientation, arrow, label placement),
   `demo_sys` (the scripted ports of the scenes and of `MMWAVE_DEMO`), `ble_sys` (the Bluetooth radar as a listen-only
   port: discovery windows, the remembered radar, connect, subscribe, retries; a state machine over a `BleBackend`),
   `bluez_backend` (BlueZ over sd-bus, `libsystemd.so.0` loaded at run time, asynchronous calls polled from the UI

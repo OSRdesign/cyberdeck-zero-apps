@@ -27,6 +27,7 @@
 #include "tracker.hpp"
 
 #include <deque>
+#include <functional>
 #include <memory>
 #include <set>
 #include <string>
@@ -114,6 +115,9 @@ public:
     /* The diagnostic frame counters: off by default (then nothing is counted); start() zeroes them. */
     void set_diag_counting(bool on) { diag_on_ = on; }
     bool diag_counting() const { return diag_on_; }
+    /* The diagnostic log's events of a Bluetooth radar ("t=<ms> ble-found addr=... name=... driver=...", "t=<ms> ble-lost
+     * reason=..."): null (the default) switches them off; a USB radar logs none. */
+    void set_event_log(std::function<void(const std::string &)> sink) { events_ = std::move(sink); }
     DiagFrameCounts &diag_counts() { return diag_; }
     const DiagFrameCounts &diag_counts() const { return diag_; }
     /* The driver of the radar found (null before the first find; Lost keeps the last one). */
@@ -129,7 +133,7 @@ public:
 
 private:
     void begin_scan(Ms now);
-    void lose(Ms now);
+    void lose(Ms now, const char *reason, Ms quiet_ms = 0);
     void after_scan(Ms now);
     void read_frames(Ms now);
 
@@ -162,6 +166,7 @@ private:
     std::vector<std::string> first_target_frames_;
     bool diag_on_ = false;
     DiagFrameCounts diag_;
+    std::function<void(const std::string &)> events_;
 };
 
 } // namespace mmw

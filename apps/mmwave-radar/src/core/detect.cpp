@@ -306,7 +306,7 @@ void Detector::poll(Ms now)
         sniff_.feed(buf, static_cast<std::size_t>(n));
         const SensorDriver *hit = nullptr;
         for (std::size_t k = 0; k < decs_.size() && !hit; ++k)
-            if (decs_[k]->stats().good_run >= cfg_.frames_needed) hit = active_[k];
+            if (decs_[k]->stats().good_run >= (nobaud_ ? cfg_.frames_needed_nobaud : cfg_.frames_needed)) hit = active_[k];
         if (hit) {
             radar_.driver = hit;
             radar_.handle = handle_;

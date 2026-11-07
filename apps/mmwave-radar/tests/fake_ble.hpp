@@ -10,6 +10,7 @@
 #include "ble_sys.hpp"
 
 #include <algorithm>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -25,6 +26,8 @@ public:
     bool auto_ready = true;            /* Ready on the first poll after start() */
     bool auto_connect = true;          /* Connect answers on the next poll (ok unless connect_error is set) */
     std::string connect_error;
+    std::string disconnect_error;      /* BlueZ's answer to Disconnect for the diagnostic log ("No matching connection" ...) */
+    std::function<void(const std::string &)> diag;
     bool subscribe_ok = true;
     std::string subscribe_error = "no 0xfff1 characteristic: not an HLK-LD radar module";
     struct Dev {
@@ -175,6 +178,7 @@ public:
     {
         ++disconnects;
         calls.push_back("disconnect " + a);
+        if (diag) diag("ble-disconnect addr=" + a + " result=" + ble_disconnect_result(disconnect_error));
         if (pending_connect == a) pending_connect.clear();
         if (connected == a) {
             if (Dev *d = dev(a)) d->d.connected = d->d.services_resolved = false;
@@ -197,6 +201,7 @@ public:
         pending_sub.clear();
     }
     void set_sink(NotifySink *s) override { sink = s; }
+    void set_diag(std::function<void(const std::string &)> f) override { diag = std::move(f); }
     std::string describe() const override { return subscribed ? "notify=AcquireNotify mtu=512" : std::string(); }
 
 private:

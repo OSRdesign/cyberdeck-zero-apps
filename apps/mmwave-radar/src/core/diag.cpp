@@ -41,6 +41,22 @@ std::string diag_line(const Link &link, Ms now)
     return b;
 }
 
+std::string link_state_line(const Link &link)
+{
+    std::string s = std::string(link_state_name(link.state())) + " " + link.port_title();
+    if (link.port().transport != Transport::Ble) s += " " + std::to_string(link.baud()) + " baud";
+    return s;
+}
+
+std::string diag_start_tail(Connection c, const Remembered &r)
+{
+    std::string s = std::string(" connection=") + connection_name(c);
+    if (c != Connection::Usb)
+        s += " ble=" + (r.ble_address.empty() ? std::string("-") : r.ble_address) + " name=" +
+             (r.ble_name.empty() ? std::string("-") : r.ble_name);
+    return s;
+}
+
 std::string diag_extra(const Link &link, unsigned &sent)
 {
     std::string out;

@@ -25,7 +25,18 @@ std::string secs(Ms ms)
     return std::to_string(s < 0 ? 0 : s) + " s";
 }
 
+std::string rssi_text(const BleDevice &d) { return d.has_rssi ? std::to_string(d.rssi) : std::string("-"); }
+
 } // namespace
+
+std::string ble_disconnect_result(const std::string &error)
+{
+    if (error.empty()) return "ok";
+    if (error.find("No matching connection") != std::string::npos || error.find("NotConnected") != std::string::npos ||
+        error.find("Not connected") != std::string::npos)
+        return "ok-already-disconnected";
+    return "error:" + error;
+}
 
 bool hlk_candidate(const std::string &name)
 {
@@ -81,6 +92,56 @@ void BleSys::set_state(BleState s, const std::string &why)
     log_new_ = true;
 }
 
+void BleSys::set_diag(std::function<void(const std::string &)> sink)
+{
+    diag_ = std::move(sink);
+    if (!be_) return;
+    if (diag_) be_->set_diag([this](const std::string &l) { dlog(l); });
+    else be_->set_diag(nullptr);
+}
+
+void BleSys::dlog(const std::string &line) const
+{
+    if (diag_) diag_("t=" + std::to_string(now_) + " " + line);
+}
+
+/* the Connecting step ended (ok, timeout, error:<text>): one line with its duration, once per attempt */
+void BleSys::connect_done(const std::string &result, Ms now)
+{
+    if (!connect_open_) return;
+    connect_open_ = false;
+    if (diag_) dlog("ble-connect addr=" + target_addr_ + " name=" + (target_name_.empty() ? "-" : target_name_) +
+                    " ms=" + std::to_string(now - connect_t0_) + " result=" + result);
+}
+
+void BleSys::subscribe_done(const std::string &result, Ms now)
+{
+    if (!sub_open_) return;
+    sub_open_ = false;
+    if (diag_) {
+        std::string line = "ble-subscribe addr=" + target_addr_ + " ms=" + std::to_string(now - sub_t0_) + " result=" + result;
+        if (result == "ok") {
+            const std::string how = be_ ? be_->describe() : std::string();
+            if (!how.empty()) line += " " + how;
+        }
+        dlog(line);
+    }
+}
+
+/* A discovery window ended (once): the radars seen, then the totals */
+void BleSys::scan_done(const std::string &reason)
+{
+    if (!win_open_) return;
+    win_open_ = false;
+    if (diag_) {
+        for (const auto &k : win_kept_) dlog("ble-seen " + k.second);
+        dlog("ble-scan end found=" + std::to_string(win_found_.size()) + " kept=" + std::to_string(win_kept_.size()) +
+             " reason=" + reason);
+    }
+    win_found_.clear();
+    win_kept_.clear();
+}
+
 bool BleSys::take_log(std::string &line)
 {
     if (!log_new_) return false;
@@ -97,7 +158,7 @@ void BleSys::shutdown()
         enabled_ = false;
         return;
     }
-    drop_link();
+    drop_link("exit");
     stop_scan();
     be_->stop();
     enabled_ = false;
@@ -110,7 +171,7 @@ void BleSys::set_enabled(bool on, Ms now)
     if (!be_ || on == enabled_) return;
     enabled_ = on;
     if (!on) {
-        drop_link();
+        drop_link("disabled");
         stop_scan();
         if (be_->started()) be_->stop();
         avail_ = BleAvail::Unknown;
@@ -140,7 +201,7 @@ void BleSys::set_active(bool on, Ms now)
     active_ = on;
     now_ = now;
     if (!on && scanning_) { /* the radio is free while nobody looks */
-        stop_scan();
+        stop_scan("page-hidden");
         if (st_ == BleState::Scanning) set_state(BleState::Idle);
         searching_ = false;
     }
@@ -165,10 +226,11 @@ void BleSys::choose(const std::string &address, Ms now)
     if (st_ == BleState::Unavailable || st_ == BleState::Starting || st_ == BleState::Off) return;
     if (a == target_addr_ && (st_ == BleState::Connecting || st_ == BleState::Subscribing || st_ == BleState::Connected))
         return;
-    drop_link();
+    drop_link("choose");
     std::string name;
     for (const BleCandidate &c : seen_)
         if (c.address == a) name = c.name;
+    if (diag_) dlog("ble-choose addr=" + a + " name=" + (name.empty() ? "-" : name));
     target_addr_ = a;
     target_name_ = name;
     rem_addr_ = a;
@@ -237,7 +299,7 @@ void BleSys::after_ready(Ms now)
 {
     avail_ = be_->availability();
     if (avail_ != BleAvail::Ok) {
-        drop_link();
+        drop_link("unavailable");
         scanning_ = false;
         last_error_ = be_->unavailable_why();
         set_state(BleState::Unavailable, last_error_);
@@ -264,13 +326,17 @@ void BleSys::begin_attempt(Ms now)
         begin_window(now, true);
         return;
     }
-    stop_scan(); /* never discover while connecting */
+    stop_scan("connecting"); /* never discover while connecting */
     if (!d.name.empty()) target_name_ = d.name;
+    disc_sent_ = false;
+    connect_t0_ = now;
+    connect_open_ = true;
+    if (diag_)
+        dlog("ble-connect-start addr=" + target_addr_ + " name=" + (target_name_.empty() ? "-" : target_name_) +
+             " attempt=" + std::to_string(attempt_ + 1) + " already_connected=" + (d.connected ? "1" : "0"));
     if (d.connected && d.services_resolved) {
         connect_answered_ = true;
-        deadline_ = now + t_.subscribe_ms;
-        set_state(BleState::Subscribing);
-        be_->subscribe(target_addr_);
+        start_subscribe(now);
         return;
     }
     deadline_ = now + t_.connect_ms;
@@ -279,18 +345,37 @@ void BleSys::begin_attempt(Ms now)
     else be_->connect(target_addr_);
 }
 
+/* the link is up and its services known: the notifications of 0xfff1 on */
+void BleSys::start_subscribe(Ms now)
+{
+    connect_done("ok", now);
+    deadline_ = now + t_.subscribe_ms;
+    set_state(BleState::Subscribing);
+    sub_t0_ = now;
+    sub_open_ = true;
+    be_->subscribe(target_addr_);
+}
+
 void BleSys::begin_window(Ms now, bool searching)
 {
     searching_ = searching;
     scan_until_ = now + t_.scan_window_ms;
-    if (!scanning_) be_->start_scan();
+    if (!scanning_) {
+        be_->start_scan();
+        win_open_ = diag_ != nullptr;
+        win_found_.clear();
+        win_kept_.clear();
+        if (diag_)
+            dlog(std::string("ble-scan start window_ms=") + std::to_string(t_.scan_window_ms) +
+                 " looking_for=" + (searching ? target_addr_ : std::string("-")));
+    }
     scanning_ = true;
     set_state(BleState::Scanning, searching ? "looking for " + shown_name() : std::string());
 }
 
 void BleSys::end_window(Ms now)
 {
-    stop_scan();
+    stop_scan("window-ended");
     const bool was_searching = searching_;
     searching_ = false;
     next_window_ = now + t_.scan_gap_ms;
@@ -303,17 +388,24 @@ void BleSys::end_window(Ms now)
     }
 }
 
-void BleSys::stop_scan()
+void BleSys::stop_scan(const char *why)
 {
+    if (scanning_) scan_done(why);
     if (scanning_ && be_ && be_->started()) be_->stop_scan();
     scanning_ = false;
 }
 
 void BleSys::fail_attempt(const std::string &why, Ms now)
 {
-    drop_link();
+    if (st_ == BleState::Connecting) connect_done(why == "connect timed out" ? std::string("timeout") : "error:" + why, now);
+    else if (st_ == BleState::Subscribing)
+        subscribe_done(why == "the data characteristic did not open" ? std::string("timeout") : "error:" + why, now);
+    drop_link("failed");
     ++attempt_;
     retry_at_ = now + ble_backoff_ms(attempt_);
+    if (diag_)
+        dlog("ble-backoff attempt=" + std::to_string(attempt_) + " wait_ms=" + std::to_string(retry_at_ - now) +
+             " reason=" + why);
     last_error_ = why;
     set_state(BleState::Waiting, why + ", retry in " + secs(retry_at_ - now));
 }
@@ -321,7 +413,10 @@ void BleSys::fail_attempt(const std::string &why, Ms now)
 void BleSys::lose(const std::string &why, Ms now)
 {
     const bool had_data = got_data_;
-    drop_link();
+    if (diag_)
+        dlog("ble-lose reason=" + why + " had_data=" + (had_data ? "1" : "0") + " connected_ms=" +
+             std::to_string(now - connected_at_));
+    drop_link("lost");
     /* a link that streamed for a while starts the waits again at 2 s; a quick end (a verdict of the detector, a radar
      * that drops at once) keeps growing them, so a wrong Sensor type or a flaky module is not hammered */
     if (had_data && now - connected_at_ >= kStableMs) attempt_ = 0;
@@ -331,7 +426,7 @@ void BleSys::lose(const std::string &why, Ms now)
 
 /* Ends what this process holds of the link: the port goes away (a reader gets -1), the subscription ends, the device is
  * disconnected (or its connection attempt cancelled). */
-void BleSys::drop_link()
+void BleSys::drop_link(const char *why)
 {
     const bool linked = st_ == BleState::Connecting || st_ == BleState::Subscribing || st_ == BleState::Connected;
     if (st_ == BleState::Connected) ++gen_;
@@ -343,7 +438,13 @@ void BleSys::drop_link()
     if (!be_ || !be_->started() || target_addr_.empty()) return;
     if (st_ == BleState::Subscribing || st_ == BleState::Connected) be_->unsubscribe();
     BleDevice d;
-    if (linked || (be_->find(target_addr_, d) && d.connected)) be_->disconnect(target_addr_);
+    /* one Device1.Disconnect per link: a second one (the reader's release, then the shutdown) is answered "No matching
+     * connection" */
+    if (linked || (!disc_sent_ && be_->find(target_addr_, d) && d.connected)) {
+        if (diag_) dlog(std::string("ble-disconnect-request addr=") + target_addr_ + " reason=" + why);
+        be_->disconnect(target_addr_);
+        disc_sent_ = true;
+    }
     if (linked) st_ = BleState::Idle;
 }
 
@@ -351,6 +452,12 @@ void BleSys::note_device(const std::string &address)
 {
     BleDevice d;
     if (!be_->find(address, d) || !hlk_candidate(d.name)) return;
+    if (win_open_) { /* the diagnostic log's list of this window (the last RSSI) */
+        const std::string a = upper(d.address), text = "name=" + d.name + " addr=" + a + " rssi=" + rssi_text(d);
+        auto k = std::find_if(win_kept_.begin(), win_kept_.end(), [&](const auto &p) { return p.first == a; });
+        if (k == win_kept_.end()) win_kept_.emplace_back(a, text);
+        else k->second = text;
+    }
     auto it = std::find_if(seen_.begin(), seen_.end(), [&](const BleCandidate &c) { return c.address == d.address; });
     if (it == seen_.end()) {
         if (!d.has_rssi) return; /* listed when seen in a window of ours, not from BlueZ's cache */
@@ -382,6 +489,7 @@ void BleSys::handle(const BleEvent &e, Ms now)
         break;
     }
     case K::DeviceUpdated:
+        if (win_open_ && scanning_) win_found_.insert(upper(e.address));
         if (scanning_) note_device(e.address);
         if (target && st_ == BleState::Scanning && searching_) {
             BleDevice d;
@@ -396,6 +504,7 @@ void BleSys::handle(const BleEvent &e, Ms now)
         break;
     case K::ScanStopped:
         if (!scanning_) break;
+        scan_done(e.error.empty() ? std::string("stopped-by-bluez") : "error:" + e.error);
         scanning_ = false;
         if (st_ == BleState::Scanning) {
             if (!e.error.empty()) last_error_ = e.error;
@@ -407,24 +516,17 @@ void BleSys::handle(const BleEvent &e, Ms now)
         if (e.ok || e.error.find("AlreadyConnected") != std::string::npos) {
             connect_answered_ = true;
             BleDevice d;
-            if (be_->find(target_addr_, d) && d.services_resolved) {
-                deadline_ = now + t_.subscribe_ms;
-                set_state(BleState::Subscribing);
-                be_->subscribe(target_addr_);
-            }
+            if (be_->find(target_addr_, d) && d.services_resolved) start_subscribe(now);
         } else {
             fail_attempt(e.error.empty() ? "could not connect" : e.error, now);
         }
         break;
     case K::ServicesResolved:
-        if (target && e.ok && st_ == BleState::Connecting && connect_answered_) {
-            deadline_ = now + t_.subscribe_ms;
-            set_state(BleState::Subscribing);
-            be_->subscribe(target_addr_);
-        }
+        if (target && e.ok && st_ == BleState::Connecting && connect_answered_) start_subscribe(now);
         break;
     case K::ConnectionChanged:
         if (!target || e.ok) break;
+        disc_sent_ = false; /* the link is down */
         if (st_ == BleState::Connected) lose("disconnected", now);
         else if ((st_ == BleState::Connecting && connect_answered_) || st_ == BleState::Subscribing)
             fail_attempt("disconnected while connecting", now);
@@ -437,6 +539,7 @@ void BleSys::handle(const BleEvent &e, Ms now)
             got_data_ = false;
             lost_ = false;
             connected_at_ = now;
+            subscribe_done("ok", now);
             ++gen_; /* the port is listed now */
             set_state(BleState::Connected, be_->describe());
         } else {

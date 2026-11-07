@@ -23,6 +23,7 @@
 #include "settings.hpp"
 
 #include <cstdlib>
+#include <functional>
 #include <map>
 #include <memory>
 #include <sstream>
@@ -892,9 +893,10 @@ void test_fixture_link()
         DecoderStats st;
         CHECK(same_frames(decode(got, &st), decode(uart)));
         CHECK_EQ(st.frames_ok, 182u);
-        /* the link decoded all but the frames the detector used to recognise the radar (3, one per notification) */
+        /* the link decoded all but the frame the detector used to recognise the radar (one: DetectConfig::frames_needed_nobaud;
+         * it was three before Found followed the first frame) */
         const LinkStats s = r.link.stats();
-        CHECK(s.frames >= 178u && s.frames <= 179u);
+        CHECK(s.frames >= 180u && s.frames <= 181u);
         CHECK_EQ(s.bad_frames, 1u); /* the malformed frame came at 66.9 s, well after detection */
         CHECK(r.link.tracker().frames() >= 178u);
         CHECK(r.link.reports().size() == 1u && r.link.reports()[0].verdict == Verdict::Radar);
@@ -977,6 +979,225 @@ void test_diag()
     CHECK(sl.find("transport=") == std::string::npos);
 }
 
+/* ------------------------------------------------------------------------------------------ the diagnostic events */
+
+/* the log lines of a rig: Bluetooth events and the link's (the app's two sinks write the same file) */
+struct Lines {
+    std::vector<std::string> v;
+    std::function<void(const std::string &)> sink()
+    {
+        return [this](const std::string &l) { v.push_back(l); };
+    }
+    /* the index of the first line at or after `from` containing `part`, -1 when none */
+    int find(const std::string &part, std::size_t from = 0) const
+    {
+        for (std::size_t i = from; i < v.size(); ++i)
+            if (v[i].find(part) != std::string::npos) return static_cast<int>(i);
+        return -1;
+    }
+    std::string all() const
+    {
+        std::string s;
+        for (const std::string &l : v) s += l + "\n";
+        return s;
+    }
+};
+
+void hook(Rig &r, Lines &l)
+{
+    r.ble.set_diag(l.sink());
+    r.link.set_event_log(l.sink());
+}
+
+Bytes empty_ld_frame() { return {0xF4, 0xF3, 0xF2, 0xF1, 0, 0, 0xF8, 0xF7, 0xF6, 0xF5}; }
+
+void test_diag_events()
+{
+    CHECK_EQ(ble_disconnect_result(""), "ok");
+    CHECK_EQ(ble_disconnect_result("org.bluez.Error.Failed: No matching connection for (0 devices)"), "ok-already-disconnected");
+    CHECK_EQ(ble_disconnect_result("org.bluez.Error.NotConnected: Not connected"), "ok-already-disconnected");
+    CHECK_EQ(ble_disconnect_result("org.bluez.Error.Failed: boom"), "error:org.bluez.Error.Failed: boom");
+    /* the start line's end */
+    CHECK_EQ(diag_start_tail(Connection::Usb, Remembered()), " connection=usb");
+    CHECK_EQ(diag_start_tail(Connection::Usb, remembered_ble()), " connection=usb");
+    CHECK_EQ(diag_start_tail(Connection::Auto, Remembered()), " connection=auto ble=- name=-");
+    CHECK_EQ(diag_start_tail(Connection::Bluetooth, remembered_ble()),
+             std::string(" connection=bluetooth ble=") + kAddr + " name=" + kName);
+
+    /* a full flow: the window lists the radars, the user chooses one, it connects and is found, the app ends */
+    {
+        Rig r(Connection::Bluetooth);
+        Lines l;
+        r.fake->add(kAddr, kName, -60, false);
+        r.fake->add("C4:3A:1C:7E:A1:C3", "HLK-LD2450_A1C3", -50);
+        r.fake->add("11:22:33:44:55:66", "JBL Flip", -40);
+        hook(r, l);
+        r.start(Remembered());
+        r.run(10600); /* the window (10 s) ends */
+        CHECK(r.ble.state() == BleState::Idle);
+        r.ble.choose(kAddr, r.now);
+        r.fake->disconnect_error = "org.bluez.Error.Failed: No matching connection";
+        run_radar(r, 4000);
+        CHECK(r.link.state() == LinkState::Found);
+        r.link.close();
+        r.ble.shutdown();
+        const int scan0 = l.find("ble-scan start window_ms=10000");
+        const int seen1 = l.find(std::string("ble-seen name=") + kName + " addr=" + kAddr + " rssi=-60");
+        const int seen2 = l.find("ble-seen name=HLK-LD2450_A1C3 addr=C4:3A:1C:7E:A1:C3 rssi=-50");
+        const int scan1 = l.find("ble-scan end found=3 kept=2 reason=window-ended");
+        const int ch = l.find(std::string("ble-choose addr=") + kAddr + " name=" + kName);
+        const int cs = l.find(std::string("ble-connect-start addr=") + kAddr);
+        const int cr = l.find(std::string("ble-connect addr=") + kAddr + " name=" + kName + " ms=");
+        const int sub = l.find(std::string("ble-subscribe addr=") + kAddr + " ms=");
+        const int fnd = l.find(std::string("ble-found addr=") + kAddr + " name=" + kName + " driver=ld2451");
+        const int dreq = l.find(std::string("ble-disconnect-request addr=") + kAddr + " reason=lost"); /* the reader's release at the exit */
+        const int dres = l.find(std::string("ble-disconnect addr=") + kAddr + " result=ok-already-disconnected");
+        CHECK(scan0 >= 0 && seen1 > scan0 && seen2 > seen1 && scan1 > seen2);
+        CHECK(ch > scan1 && cs > ch && cr > cs && sub > cr && fnd > sub);
+        CHECK(cr >= 0 && l.v[static_cast<std::size_t>(cr)].find(" result=ok") != std::string::npos);
+        CHECK(sub >= 0 && l.v[static_cast<std::size_t>(sub)].find(" result=ok notify=AcquireNotify mtu=512") != std::string::npos);
+        CHECK(dreq > fnd && dres > dreq);
+        CHECK_EQ(l.find("JBL"), -1); /* only HLK-LD names are listed (the other one counts in found=3) */
+        CHECK_EQ(r.fake->count(std::string("disconnect ") + kAddr), 1); /* the reader's release and the exit: one disconnection */
+        /* every line has the app's time stamp and none is per notification: a handful for the whole flow */
+        for (const std::string &s : l.v) CHECK(s.compare(0, 2, "t=") == 0);
+        CHECK(l.v.size() < 20);
+        if (std::getenv("MMW_TEST_LINES")) std::fprintf(stderr, "--- diag events, full flow ---\n%s", l.all().c_str());
+    }
+    /* a connect that never answers: the timeout with its duration, the cancelling disconnect, the first wait */
+    {
+        Rig r(Connection::Bluetooth);
+        Lines l;
+        r.fake->add(kAddr, kName, -60, true);
+        r.fake->auto_connect = false;
+        hook(r, l);
+        r.start(remembered_ble());
+        r.run(10300);
+        const int cs = l.find("ble-connect-start addr=");
+        const int cr = l.find("result=timeout");
+        const int dr = l.find("ble-disconnect-request addr=");
+        const int bo = l.find("ble-backoff attempt=1 wait_ms=2000 reason=connect timed out");
+        CHECK(cs >= 0 && cr > cs && dr > cr && bo > dr);
+        CHECK(cr >= 0 && l.v[static_cast<std::size_t>(cr)].find(" ms=100") != std::string::npos); /* 10 s, +- a tick */
+        CHECK(dr >= 0 && l.v[static_cast<std::size_t>(dr)].find("reason=failed") != std::string::npos);
+        r.run(2300); /* the second try after the wait */
+        CHECK(bo >= 0 && l.find("ble-connect-start", static_cast<std::size_t>(bo)) > bo);
+        CHECK(bo >= 0 && l.find("attempt=2", static_cast<std::size_t>(bo)) > bo);
+        if (std::getenv("MMW_TEST_LINES")) std::fprintf(stderr, "--- diag events, timeout ---\n%s", l.all().c_str());
+    }
+    /* a link loss: why it ended, the wait, the link's Lost, then the reconnection */
+    {
+        Rig r(Connection::Bluetooth);
+        Lines l;
+        r.fake->add(kAddr, kName, -60, true);
+        hook(r, l);
+        r.start(remembered_ble());
+        run_radar(r, 3000);
+        CHECK(r.link.state() == LinkState::Found);
+        const std::size_t before = l.v.size();
+        r.fake->drop();
+        run_radar(r, 90, false);
+        const int lose = l.find("ble-lose reason=disconnected had_data=1", before);
+        const int bo = l.find("ble-backoff attempt=1 wait_ms=2000 reason=disconnected", before);
+        const int lost = l.find(std::string("ble-lost reason=port-gone addr=") + kAddr, before);
+        CHECK(lose >= 0 && bo > lose && lost > bo);
+        run_radar(r, 2600);
+        const int again = l.find("ble-connect-start", static_cast<std::size_t>(lost));
+        const int found2 = l.find("ble-found", static_cast<std::size_t>(lost));
+        CHECK(again > lost && found2 > again);
+        /* the radar goes quiet while the link stays up: the link's own Lost names the silence */
+        run_radar(r, 5600, false);
+        const int quiet = l.find("ble-lost reason=quiet", static_cast<std::size_t>(found2));
+        CHECK(quiet > found2);
+        CHECK(quiet >= 0 && l.v[static_cast<std::size_t>(quiet)].find("limit_ms=5000") != std::string::npos);
+        if (std::getenv("MMW_TEST_LINES")) std::fprintf(stderr, "--- diag events, link loss ---\n%s", l.all().c_str());
+    }
+    /* a subscription that fails */
+    {
+        Rig r(Connection::Bluetooth);
+        Lines l;
+        r.fake->add(kAddr, kName, -60, true);
+        r.fake->subscribe_ok = false;
+        hook(r, l);
+        r.start(remembered_ble());
+        r.run(300);
+        const int s = l.find("ble-subscribe addr=");
+        CHECK(s >= 0 && l.v[static_cast<std::size_t>(s)].find("result=error:no 0xfff1 characteristic") != std::string::npos);
+    }
+    /* logging off: no sink, nothing is built or written; switching it off again stops the lines */
+    {
+        Rig r(Connection::Bluetooth);
+        r.fake->add(kAddr, kName, -60, true);
+        r.start(remembered_ble());
+        CHECK(!r.fake->diag);
+        run_radar(r, 3000);
+        CHECK(r.link.state() == LinkState::Found);
+        CHECK(!r.fake->diag);
+        Lines l;
+        hook(r, l);
+        CHECK(static_cast<bool>(r.fake->diag));
+        r.fake->drop();
+        run_radar(r, 90, false);
+        CHECK(!l.v.empty());
+        r.ble.set_diag(nullptr);
+        r.link.set_event_log(nullptr);
+        CHECK(!r.fake->diag);
+        const std::size_t n = l.v.size();
+        run_radar(r, 4000);
+        r.link.close();
+        r.ble.shutdown();
+        CHECK_EQ(l.v.size(), n);
+    }
+    /* a serial radar logs none of these */
+    {
+        FakeSys sys;
+        FakePort &p = sys.add("ttyUSB0");
+        p.stream[115200] = ld2451_stream();
+        p.rate_bps = 120;
+        Link link(sys);
+        Lines l;
+        link.set_event_log(l.sink());
+        link.start(0, Remembered());
+        for (int i = 0; i < 700 && link.state() != LinkState::Found; ++i) {
+            sys.now_ms += 30;
+            link.poll(sys.now_ms);
+        }
+        CHECK(link.state() == LinkState::Found);
+        CHECK(l.v.empty());
+        CHECK_EQ(link_state_line(link), "Found ttyUSB0 (CH340) 115200 baud");
+    }
+}
+
+/* ------------------------------------------------------------------------------------------ Found without a rescan wait */
+
+void test_found_fast()
+{
+    /* the radar idle: one empty frame every 1.4 s, the first 1.4 s after the connection; Found follows that frame (a Link
+     * that waited for its 2 s rescan would say it up to 2 s later) */
+    for (Connection c : {Connection::Bluetooth, Connection::Auto}) {
+        Rig r(c);
+        r.fake->add(kAddr, kName, -60, true);
+        r.start(remembered_ble());
+        CHECK(r.until([&] { return r.ble.state() == BleState::Connected; }, 20000));
+        const Ms connected = r.now;
+        const Bytes f = empty_ld_frame();
+        Ms next = connected + 1400, found = -1;
+        for (int i = 0; i < 400 && found < 0; ++i) {
+            if (r.now + 30 >= next) {
+                r.fake->notify(f);
+                next += 1400;
+            }
+            r.tick();
+            if (r.link.state() == LinkState::Found) found = r.now;
+        }
+        CHECK(found > 0);
+        if (std::getenv("MMW_TEST_LINES")) std::fprintf(stderr, "found %lld ms after the connection (mode %d)\n", static_cast<long long>(found - connected),
+                     static_cast<int>(c));
+        CHECK(found - connected >= 1400 - 30); /* not before a frame */
+        CHECK(found - connected <= 1400 + 90); /* at the first frame, not at the next 2 s boundary */
+    }
+}
+
 /* ------------------------------------------------------------------------------------------ the scripted demo */
 
 void test_demo_backend()
@@ -1044,5 +1265,7 @@ void test_ble()
     test_fixture_link();
     test_detector_verdict();
     test_diag();
+    test_diag_events();
+    test_found_fast();
     test_demo_backend();
 }
