@@ -19,6 +19,10 @@
 #          architectures (it always uses LAUNCHER_TREE).
 #   all    both (default).
 #
+# Toolkit switches of one app: an optional <app>/cp0_config.mk holds Kconfig lines (CONFIG_CP0_LVGL_MAP=y for the
+# map engine, off by default) that cross appends to the scratch project's configuration and host's Makefile includes;
+# an app without the file builds exactly as before.
+#
 # The launcher: LAUNCHER_SRC (default /mnt/c/CLAUDE/zero7/launcher) is the git checkout the pin is checked against;
 # LAUNCHER_TREE (default ~/zero7/<its folder name>) is its WSL build tree, whose SDK/ holds LVGL and the aarch64
 # sysroot (tools/dev/wsl-build.sh of the launcher keeps it in sync and seeds it); LAUNCHER_TREE_AMD64 (default
@@ -188,6 +192,11 @@ build_cross() {
             grep -v -e '^CONFIG_TOOLCHAIN_PREFIX=' -e 'LV_DRAW_SW_ASM_NEON' -e 'LV_USE_DRAW_SW_ASM' > "$proj/$config"
     else
         cp "$COMMON/scons/cross_config_defaults.mk" "$proj/$config"
+    fi
+    # the app's own toolkit switches (Kconfig lines, e.g. CONFIG_CP0_LVGL_MAP=y for a map app): only for this app
+    if [[ -f $APP/cp0_config.mk ]]; then
+        echo "== $ID: toolkit switches from cp0_config.mk: $(sed 's/\r$//' "$APP/cp0_config.mk" | grep -E '^CONFIG_' | tr '\n' ' ')"
+        { echo; echo "# apps/$ID/cp0_config.mk"; sed 's/\r$//' "$APP/cp0_config.mk"; } >> "$proj/$config"
     fi
     (
         cd "$proj"

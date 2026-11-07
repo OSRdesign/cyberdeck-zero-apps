@@ -32,6 +32,15 @@ ifeq ($(wildcard $(LVGL)/lvgl.h),)
 $(error LVGL 9.5 not found at $(LVGL): run one scons build of the launcher so its SDK downloads it)
 endif
 
+# The app's own toolkit switches (Kconfig lines, as build_app.sh cross appends them): CONFIG_CP0_LVGL_MAP=y adds the map
+# engine (cp0_lvgl src/map, SQLite and libcurl loaded at run time) to the app's harness binary only.
+-include $(APP_DIR)/cp0_config.mk
+ifeq ($(strip $(CONFIG_CP0_LVGL_MAP)),y)
+MAP_SRCS := $(wildcard $(CP0)/src/map/*.c)
+MAP_DEFS := -DCONFIG_CP0_LVGL_MAP=1
+MAP_LIBS := -ldl
+endif
+
 FT_CFLAGS  := $(shell pkg-config --cflags freetype2)
 FT_LIBS    := $(shell pkg-config --libs freetype2)
 PNG_CFLAGS := $(shell pkg-config --cflags libpng)
@@ -108,6 +117,7 @@ appobj    = $(patsubst $(APP_DIR)/%,$(OBJ)/app/%.o,$(1))
 
 LVGL_OBJS   := $(call lvobj,$(LVGL_SRCS)) $(addprefix $(LVBUILD)/ftovr/,$(addsuffix .o,$(LV_OVERRIDE)))
 CP0_OBJS    := $(call cp0obj,$(CP0_SRCS))
+MAP_OBJS    := $(call cp0obj,$(MAP_SRCS))
 COMMON_OBJS := $(call commonobj,$(COMMON_SRCS) $(HEADLESS_SRCS))
 APP_OBJS    := $(call appobj,$(APP_SRCS))
 
@@ -118,8 +128,8 @@ TEST_COMMON := $(BUILD)/test-common
 .PHONY: all clean
 all: $(BIN) $(if $(APP_TEST_SRCS),$(TEST_APP)) $(if $(COMMON_TEST_SRCS),$(TEST_COMMON))
 
-$(BIN): $(LVGL_OBJS) $(CP0_OBJS) $(COMMON_OBJS) $(APP_OBJS)
-	$(CXX) -o $@ $^ -Wl,--gc-sections $(FT_LIBS) $(PNG_LIBS) -lpthread -lm
+$(BIN): $(LVGL_OBJS) $(CP0_OBJS) $(MAP_OBJS) $(COMMON_OBJS) $(APP_OBJS)
+	$(CXX) -o $@ $^ -Wl,--gc-sections $(FT_LIBS) $(PNG_LIBS) -lpthread -lm $(MAP_LIBS)
 
 # Unit tests: the app's core/ and its tests (no LVGL); _common's pure pieces with LVGL linked for lv_lock / lv_async.
 $(TEST_APP): $(call appobj,$(APP_CORE_SRCS) $(APP_TEST_SRCS))
@@ -151,14 +161,14 @@ $(OBJ)/common/%.cpp.o: $(COMMON)/%.cpp
 	$(CXX) -std=gnu++17 $(OPT) $(WARN) $(LV_DEFS) $(INC) -MMD -MP -c $< -o $@
 $(OBJ)/app/%.c.o: $(APP_DIR)/%.c
 	@mkdir -p $(@D)
-	$(CC) -std=gnu11 $(OPT) $(WARN) $(LV_DEFS) $(INC) -MMD -MP -c $< -o $@
+	$(CC) -std=gnu11 $(OPT) $(WARN) $(LV_DEFS) $(MAP_DEFS) $(INC) -MMD -MP -c $< -o $@
 $(OBJ)/app/%.cpp.o: $(APP_DIR)/%.cpp
 	@mkdir -p $(@D)
-	$(CXX) -std=gnu++17 $(OPT) $(WARN) $(LV_DEFS) $(INC) -DCDK_APP_DIR='"$(APP_DIR)"' -MMD -MP -c $< -o $@
+	$(CXX) -std=gnu++17 $(OPT) $(WARN) $(LV_DEFS) $(MAP_DEFS) $(INC) -DCDK_APP_DIR='"$(APP_DIR)"' -MMD -MP -c $< -o $@
 
 clean:
 	rm -rf $(BUILD)
 
--include $(LVGL_OBJS:.o=.d) $(CP0_OBJS:.o=.d) $(COMMON_OBJS:.o=.d) $(APP_OBJS:.o=.d)
+-include $(LVGL_OBJS:.o=.d) $(CP0_OBJS:.o=.d) $(MAP_OBJS:.o=.d) $(COMMON_OBJS:.o=.d) $(APP_OBJS:.o=.d)
 # the unit tests too: a header of core/ changed recompiles them (else a test links against a stale layout)
 -include $(patsubst %.o,%.d,$(call appobj,$(APP_TEST_SRCS)) $(call commonobj,$(COMMON_TEST_SRCS)))

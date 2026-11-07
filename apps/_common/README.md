@@ -17,7 +17,7 @@ The starting point of a new app is `apps/cyberdeck-app-template` (a draft that u
 | `osk_policy.{hpp,cpp}` | the app-side on-screen keyboard rule: `cp0_app_osk_allowed()` on `input.state`, looked at once a second at most and parsed again only when the file changed (a new `gen`); never shown by hand, and off for 600 s after a Bluetooth keyboard went away (tests and the Settings line to show the rule: [guidelines, section 14](../../docs/APP-GUIDELINES.md#14-lessons-learned)); without the file `APPLAUNCH_OSK` and the keyboards of `/proc/bus/input/devices`. It also binds the PDA writing zone's band (`cp0::ui::zone_host`, launcher report 044): with `APPLAUNCH_PDA=1` (an app run upright by a launcher with the zone) and `input.state` `hand=1` the band shows where the keyboard would; a change of `hand=` is passed on at the next LVGL cycle |
 | `async_run.{hpp,cpp}` | background commands: fork + exec in their own process group, lines and the end delivered on the LVGL thread in order (`lv_async_call` under `lv_lock()`), timeout, cancel, PDEATHSIG, `shutdown()` at exit |
 | `build_info.hpp` | the version stamp (`cdk_build_info.h` from `build_app.sh`) |
-| `build_app.sh` | cross (aarch64, stripped, into the app's `root/`; with `--arch amd64` x86-64, native, into `root.amd64/`) and host (headless harness, unit tests, scenes, contact sheets) builds in WSL, the launcher pin check, the stamp |
+| `build_app.sh` | cross (aarch64, stripped, into the app's `root/`; with `--arch amd64` x86-64, native, into `root.amd64/`) and host (headless harness, unit tests, scenes, contact sheets) builds in WSL, the launcher pin check, the stamp; an app's own toolkit switches from its `cp0_config.mk` ([below](#toolkit-switches-of-one-app-cp0_configmk)) |
 | `LAUNCHER_REF` | the launcher commit the apps build against ([the launcher pin](#the-launcher-pin)) |
 | `scons/` | the scratch project's scons files: the SDK's project `SConstruct`, the component (`main.SConstruct`: cp0_lvgl + LVGL static, the launcher's FreeType glue, `-O2`, `--as-needed`) and the cross configuration (cp0_lvgl with the filesystem service only) |
 | `headless/` | the PC harness (see its README): a plain LVGL display at any size, scripted keys and taps, PNG shots, layout checks, contact sheets |
@@ -37,6 +37,18 @@ The starting point of a new app is `apps/cyberdeck-app-template` (a draft that u
   file, or nothing (the app owns the panel until it exits); the choice and its reason in the README.
 - Build: `build.sh` of the app calls `build_app.sh`; the binary links cp0_lvgl and LVGL statically and needs only
   libinput, libxkbcommon, libfreetype, libstdc++ and libc at run time.
+
+## Toolkit switches of one app (`cp0_config.mk`)
+
+Optional parts of `cp0_lvgl` that are off by default (Kconfig switches such as `CONFIG_CP0_LVGL_MAP`, the map engine)
+are switched on for one app by a file `apps/<id>/cp0_config.mk` holding Kconfig lines (`CONFIG_CP0_LVGL_MAP=y`, `#`
+comments). `build_app.sh cross` appends it to the app's scratch configuration (both architectures; the log line
+`== <id>: toolkit switches from cp0_config.mk: ...` says so) and `headless/Makefile` includes it: with
+`CONFIG_CP0_LVGL_MAP=y` the harness binary of that app also compiles `cp0_lvgl/src/map` (`-DCONFIG_CP0_LVGL_MAP=1`,
+`-ldl`; the unit tests and `test-common` stay without it). An app without the file builds exactly as before, and the
+shared `scons/cross_config_defaults.mk` never carries an app's switch. Deck Atlas is the first user
+(`apps/deck-atlas/cp0_config.mk`); a map app then lists `libsqlite3-0` (and `libcurl4t64, ca-certificates` for online
+sources) in its `depends`, since the engine loads them at run time.
 
 ## amd64
 
@@ -90,15 +102,15 @@ Before it, `LAUNCHER_REF` was **`e3a2899`**, launcher main after v0.9.4 (#145, n
 `cp0_lvgl` (`include/cp0_map.h`: Web Mercator, MBTiles / PMTiles readers, the shared tile store, the RAM tile cache,
 online sources with a viewing cache, the LVGL map widget), which Deck Atlas needs and Mesh Hop's map tab will use. It is
 compiled only with `CONFIG_CP0_LVGL_MAP=y` (Kconfig, default n), which neither `scons/cross_config_defaults.mk` nor
-`headless/Makefile` sets: an app that does not ask for it builds without a line of it, and the first map app adds the
-switch to its build. The pin also brings the toolkit changes of v0.9.1 to v0.9.4: `cp0_display_repaint_all()` (v0.9.1,
+`headless/Makefile` sets: an app that does not ask for it builds without a line of it; a map app sets it in its own
+`cp0_config.mk` ([above](#toolkit-switches-of-one-app-cp0_configmk); Deck Atlas does). The pin also brings the toolkit changes of v0.9.1 to v0.9.4: `cp0_display_repaint_all()` (v0.9.1,
 the launcher's own repaint after a system suspend; no app calls it), the **narrow portrait shell** of v0.9.4 (#137: on a
 portrait canvas under 480 px wide, 320x480 on a 480x320 panel turned, the Compact tokens with 16 px body text, a 40 px
 bar with the Esc at the left edge, 44x30 with its tap area over the whole bar height, no page title, no writing band, the
 overlays sized for it), and the render harness configuration without an LVGL draw thread (#132,
 `projects/APPLaunch/tests/render/config/lvgl_config.h`, which `headless/` compiles LVGL with: `LV_OS_NONE`, so
-`lv_lock()` does nothing in the PC harness and the unit tests; the device build keeps `LV_OS_PTHREAD`). No app here
-declares an `X-Portrait` under 480 px wide and no scene uses such a size, so the existing apps draw the same pictures as
+`lv_lock()` does nothing in the PC harness and the unit tests; the device build keeps `LV_OS_PTHREAD`). No published app
+declares an `X-Portrait` under 480 px wide (Deck Atlas, a draft, is the first: 320x480), so the existing apps draw the same pictures as
 at `3f6579f`; they keep their `3f6579f` builds and move to this pin at their next rebuild. viz1090's copies of the layout
 service (`apps/viz1090/build/cp0_ui_metrics.[ch]`, `cp0_ui_roller.[ch]`) stay at `3f6579f`: they differ from this pin
 only by the narrow portrait additions, which its 480x640 portrait minimum never reaches.
