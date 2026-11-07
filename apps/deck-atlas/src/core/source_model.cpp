@@ -135,6 +135,9 @@ std::string terms_text(const std::string &title, const std::string &licence, con
              "Tiles are saved on this device as you view them.");
     else
         para(terms.what + "\n" + terms.rules);
+    /* privacy: every online source, known or not */
+    para("The tile provider can see your IP address when this device fetches tiles; tiles already saved on the SD "
+         "card are not fetched again.");
     para(daily_limit_line(daily_cap));
     para("Check the provider's current terms before relying on this." +
          (terms.terms_url.empty() ? std::string() : "\n" + terms.terms_url));

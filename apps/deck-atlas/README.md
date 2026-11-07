@@ -57,7 +57,8 @@ Three tabs, switched by the strip at the bottom (or Tab / Shift+Tab):
     Another app, Cache full) and, for the keyed ones, a key row (*Key saved* / *No key*). A tap on a source's row
     switches it: a source that needs a key and has none opens its **key page** first; the first time a source is
     switched on, the **terms dialog** shows its name, the app's own plain-language text for that source (what it is and its rules in a
-    sentence or two), "Daily limit in this app: N requests", "Check the provider's current terms before relying on
+    sentence or two), a privacy line (the tile provider can see your IP address when tiles are fetched; tiles already
+    saved on the SD card are not fetched again), "Daily limit in this app: N requests", "Check the provider's current terms before relying on
     this." with the provider's address as plain text, and the map data credit; **Cancel** or
     **I agree, enable**. The acceptance is remembered per source; switching it off and on again does not ask again.
     Switching a source on shows it on the map. The area download is not offered (the engine's phase 0.2).

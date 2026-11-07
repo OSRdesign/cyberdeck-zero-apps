@@ -114,6 +114,9 @@ void test_sources()
     CHECK_EQ(daily_limit_line(0), std::string(""));
     /* the dialog text comes from the app's own table: every shipped source has text, none of it internal wording */
     const char *shipped[] = {"opentopomap", "thunderforest", "geoapify"};
+    /* the privacy line: in every online source's text, its own paragraph */
+    const std::string privacy = "\n\nThe tile provider can see your IP address when this device fetches tiles; tiles "
+                                "already saved on the SD card are not fetched again.\n\n";
     for (const char *id : shipped) {
         const ProviderTerms pt = provider_terms(id);
         CHECK(!pt.what.empty());
@@ -127,6 +130,7 @@ void test_sources()
         CHECK(tt.find("Daily limit in this app: 1,500 requests") != std::string::npos);
         CHECK(tt.find("Check the provider's current terms before relying on this.\n" + pt.terms_url) != std::string::npos);
         CHECK(tt.find("Map data (c) somebody") != std::string::npos);
+        CHECK(tt.find(privacy) != std::string::npos);
     }
     const std::string t = terms_text("OpenTopoMap", "Map style CC-BY-SA", provider_terms("opentopomap"), 2000);
     CHECK(t.find("Free public server run by volunteers. Tiles are saved on this device as you view them. No bulk downloads.") !=
@@ -139,6 +143,7 @@ void test_sources()
     const std::string g = terms_text("My Server", "", provider_terms("my-own"), 0);
     CHECK(g.find("My Server is an online map server.") == 0);
     CHECK(g.find("Daily limit") == std::string::npos);
+    CHECK(g.find(privacy) != std::string::npos);
     CHECK(g.find("Check the provider's current terms before relying on this.") != std::string::npos);
     CHECK(g.find("http") == std::string::npos);
     CHECK(g.find("054") == std::string::npos && g.find("unverified") == std::string::npos);
