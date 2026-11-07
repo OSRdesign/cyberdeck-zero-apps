@@ -66,6 +66,44 @@ void GpsLink::close_port()
     valid_count_ = 0;
     pending_.clear();
     splitter_.reset();
+    reset_counts(0);
+}
+
+void GpsLink::reset_counts(std::int64_t now)
+{
+    bad_count_ = 0;
+    last_sentence_ms_ = 0;
+    rate_from_ms_ = now;
+    recent_.clear();
+}
+
+GpsLinkFacts GpsLink::facts(std::int64_t now_ms) const
+{
+    GpsLinkFacts f;
+    if (handle_ < 0) return f;
+    f.port = port_.path;
+    f.device = port_.product;
+    f.vid = port_.vid;
+    f.pid = port_.pid;
+    f.baud = baud_;
+    f.choice = cfg_.port.empty() ? PortChoice::AutoKnown : PortChoice::ByUser;
+    f.baud_auto = cfg_.baud == 0;
+    f.last_valid_ms = last_sentence_ms_;
+    f.bad_checksums = bad_count_;
+    int n = 0;
+    for (std::int64_t t : recent_)
+        if (now_ms - t <= kReceiverAliveMs) ++n;
+    const std::int64_t span = std::min<std::int64_t>(kReceiverAliveMs, std::max<std::int64_t>(1000, now_ms - rate_from_ms_));
+    f.sentences_per_s = n * 1000.0 / static_cast<double>(span);
+    return f;
+}
+
+GpsStatus GpsLink::status(std::int64_t now_ms) const
+{
+    GpsStatus s = make_status(state_, tracker_, now_ms);
+    s.link = facts(now_ms);
+    s.receiver_alive = atlas::receiver_alive(s.link, now_ms);
+    return s;
 }
 
 void GpsLink::fail_port(const std::string &path, PortErr err, std::int64_t now)
@@ -106,6 +144,7 @@ bool GpsLink::begin(const PortInfo &p, std::int64_t now, PortErr &err)
     splitter_.reset();
     pending_.clear();
     valid_count_ = 0;
+    reset_counts(now);
     sniff_start_ = now;
     last_valid_ms_ = now;
     state_ = GpsLinkState::Searching;
@@ -175,9 +214,15 @@ void GpsLink::read_some(std::int64_t now)
         splitter_.feed(buf, static_cast<std::size_t>(n), lines);
         for (const std::string &line : lines) {
             const NmeaMsg m = parse_nmea(line);
-            if (m.kind == MsgKind::None) continue; /* bad checksum or not a sentence */
+            if (m.kind == MsgKind::None) { /* bad checksum or not a sentence */
+                ++bad_count_;
+                continue;
+            }
             ++valid_count_;
             last_valid_ms_ = now;
+            last_sentence_ms_ = now;
+            recent_.push_back(now);
+            while (!recent_.empty() && now - recent_.front() > kReceiverAliveMs) recent_.erase(recent_.begin());
             if (state_ == GpsLinkState::Locked) tracker_.on_msg(m, now);
             else pending_.push_back(m);
         }
@@ -196,6 +241,7 @@ void GpsLink::next_baud_or_fail(std::int64_t now)
         splitter_.reset();
         pending_.clear();
         valid_count_ = 0;
+        reset_counts(now);
         sniff_start_ = now;
         return;
     }

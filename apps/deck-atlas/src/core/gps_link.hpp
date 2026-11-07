@@ -58,7 +58,9 @@ public:
 
     GpsLinkState state() const { return state_; }
     const FixTracker &tracker() const { return tracker_; }
-    GpsStatus status(std::int64_t now_ms) const { return make_status(state_, tracker_, now_ms); }
+    /* The fix, the sky (tracker) and the facts of the link: what the status page and the chip read. */
+    GpsStatus status(std::int64_t now_ms) const;
+    GpsLinkFacts facts(std::int64_t now_ms) const;
     /* The receiver in use (empty while none), its speed (0 while none), and the speed that locked last. */
     const PortInfo &port() const { return port_; }
     int baud() const { return baud_; }
@@ -86,6 +88,7 @@ private:
     void fail_port(const std::string &path, PortErr err, std::int64_t now);
     void lose(const char *why, std::int64_t now);
     void close_port();
+    void reset_counts(std::int64_t now);
     void say(const std::string &s) const { if (log_) log_(s); }
 
     GpsPortSys &sys_;
@@ -99,6 +102,10 @@ private:
     std::size_t baud_idx_ = 0;
     std::int64_t sniff_start_ = 0, last_valid_ms_ = 0, next_scan_ms_ = 0;
     int valid_count_ = 0;
+    int bad_count_ = 0;                  /* sentences with a wrong or missing checksum since the port / speed was set */
+    std::int64_t last_sentence_ms_ = 0;  /* the last valid sentence on this port, 0 none */
+    std::int64_t rate_from_ms_ = 0;      /* the port's (or speed's) start, for the rate of the first seconds */
+    std::vector<std::int64_t> recent_;   /* arrival times of the valid sentences of the last 3 s */
     int last_good_baud_ = 0;
     std::vector<NmeaMsg> pending_;      /* what the sniff heard, handed to the tracker at the lock */
     std::map<std::string, PortFail> fails_;

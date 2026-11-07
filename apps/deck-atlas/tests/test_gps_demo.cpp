@@ -92,7 +92,9 @@ void test_gps_demo()
     };
     const Want wants[] = {{"searching", GpsStatus::Kind::Searching, -1, true}, {"fix2d", GpsStatus::Kind::Fix2D, -1, true},
                           {"fix3d", GpsStatus::Kind::Fix3D, 9, true},          {"moving", GpsStatus::Kind::Fix3D, 9, true},
-                          {"stale", GpsStatus::Kind::Fix3D, 9, true},          {"follow", GpsStatus::Kind::Fix3D, 8, true}};
+                          {"stale", GpsStatus::Kind::Fix3D, 9, true},          {"follow", GpsStatus::Kind::Fix3D, 8, true},
+                          {"weak3d", GpsStatus::Kind::Fix3D, 4, true},         {"sky", GpsStatus::Kind::Fix3D, 13, true},
+                          {"skylost", GpsStatus::Kind::Fix3D, 13, true}};
     for (const Want &w : wants) {
         const std::string file = feeds + "/" + w.name + ".nmea";
         std::ifstream in(file);
@@ -122,6 +124,35 @@ void test_gps_demo()
         const GpsStatus s = link.status(1500);
         CHECK(s.kind == w.kind);
         if (w.sats >= 0) CHECK_EQ(s.fix.sats_used, w.sats);
+    }
+    /* the multi-constellation feed through the link: GPS and SBAS under $GP, GLONASS under $GL, one GSA per system */
+    {
+        const std::string file = feeds + "/sky.nmea";
+        if (std::ifstream(file)) {
+            DemoGpsPorts demo(file);
+            GpsLink link(demo);
+            GpsConfig c;
+            c.on = true;
+            link.configure(c);
+            for (long t = 0; t < 1500; t += 100) link.tick(t);
+            const GpsStatus s = link.status(1500);
+            int gps = 0, glo = 0, sbas = 0, used = 0, untracked = 0;
+            for (const SkySat &sat : s.sats) {
+                gps += sat.sys == Constellation::Gps;
+                glo += sat.sys == Constellation::Glonass;
+                sbas += sat.sys == Constellation::Sbas;
+                used += sat.used;
+                untracked += sat.snr < 0;
+            }
+            CHECK_EQ(gps, 9);
+            CHECK_EQ(glo, 6);
+            CHECK_EQ(sbas, 2);
+            CHECK_EQ(used, 13);        /* eight GPS and the SBAS satellite 33 of the first GSA, four GLONASS of the second */
+            CHECK_EQ(untracked, 1);    /* one satellite in view and not tracked */
+            CHECK_EQ(s.gsa.size(), static_cast<std::size_t>(2));
+            CHECK_NEAR(s.dop.hdop, 0.9, 1e-9);
+            CHECK_EQ(s.fix.sats_view, 17);
+        }
     }
     /* the noisy feed: garbage and a bad sentence first, the fix after */
     {

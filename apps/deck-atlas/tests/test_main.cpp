@@ -69,6 +69,7 @@ int main()
     test_nmea();
     test_gps_ids();
     test_gps_fix();
+    test_gps_sky();
     test_gps_link();
     test_gps_posix();
     test_gps_demo();

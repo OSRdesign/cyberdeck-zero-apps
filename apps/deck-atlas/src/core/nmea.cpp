@@ -179,21 +179,57 @@ void parse_gsa(const std::vector<std::string> &f, NmeaMsg &m)
 {
     int mode = 0;
     if (parse_int(field(f, 2), mode) && mode >= 1 && mode <= 3) m.mode = mode;
+    m.gsa_manual = field(f, 1) == "M";
     int sys = 0;
     if (parse_int(field(f, 18), sys) && sys <= 9) m.system_id = sys;
-    double v = 0;
-    if (parse_double(field(f, 16), v) && v >= 0 && v < 100) { /* PDOP 15, HDOP 16, VDOP 17 (fields 0 = address) */
+    for (std::size_t i = 3; i <= 14; ++i) { /* the twelve satellite fields */
+        int prn = 0;
+        if (parse_int(field(f, i), prn) && prn >= 1 && prn <= 999) m.used_prns.push_back(prn);
+    }
+    double v = 0; /* PDOP 15, HDOP 16, VDOP 17 (fields 0 = address) */
+    if (parse_double(field(f, 15), v) && v >= 0 && v < 100) {
+        m.has_pdop = true;
+        m.pdop = v;
+    }
+    if (parse_double(field(f, 16), v) && v >= 0 && v < 100) {
         m.has_hdop = true;
         m.hdop = v;
     }
+    if (parse_double(field(f, 17), v) && v >= 0 && v < 100) {
+        m.has_vdop = true;
+        m.vdop = v;
+    }
 }
 
+/* $--GSV,total,number,inview,{prn,elev,azim,snr}x1..4[,signal id]: the blocks start at field 4; a field count of
+ * 4 + 4k + 1 means the NMEA 4.1 signal id follows the last block. */
 void parse_gsv(const std::vector<std::string> &f, NmeaMsg &m)
 {
     int n = 0;
     if (parse_int(field(f, 3), n) && n <= 99) {
         m.has_in_view = true;
         m.in_view = n;
+    }
+    int total = 0, num = 0;
+    if (!parse_int(field(f, 1), total) || !parse_int(field(f, 2), num) || total < 1 || total > 9 || num < 1 || num > total) return;
+    m.gsv_total = total;
+    m.gsv_num = num;
+    std::size_t blocks = f.size() > 4 ? (f.size() - 4) / 4 : 0;
+    if (blocks > 4) blocks = 4;
+    for (std::size_t b = 0; b < blocks; ++b) {
+        const std::size_t at = 4 + 4 * b;
+        GsvSat s;
+        int v = 0;
+        if (!parse_int(field(f, at), v) || v < 1 || v > 999) continue; /* an empty block */
+        s.prn = v;
+        if (parse_int(field(f, at + 1), v) && v <= 90) s.elev = v;
+        if (parse_int(field(f, at + 2), v) && v <= 360) s.azim = v == 360 ? 0 : v;
+        if (parse_int(field(f, at + 3), v) && v <= 99) s.snr = v;
+        m.gsv_sats.push_back(s);
+    }
+    if (f.size() > 4 && (f.size() - 4) % 4 == 1) {
+        int sig = 0;
+        if (parse_int(f.back(), sig) && sig <= 15) m.gsv_signal = sig;
     }
 }
 

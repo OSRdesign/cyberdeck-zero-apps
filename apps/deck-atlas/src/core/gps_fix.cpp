@@ -22,6 +22,7 @@ void FixTracker::reset()
     gsa_.clear();
     gsv_.clear();
     alt_known_ = false;
+    sky_.reset();
 }
 
 int FixTracker::mode_now(std::int64_t now_ms) const
@@ -55,6 +56,7 @@ void FixTracker::set_fix(const NmeaMsg &m, std::int64_t now_ms)
 
 void FixTracker::on_msg(const NmeaMsg &m, std::int64_t now_ms)
 {
+    sky_.on_msg(m, now_ms);
     switch (m.kind) {
     case MsgKind::Gsa:
         if (m.mode > 0) gsa_[std::string(m.talker) + ':' + std::to_string(m.system_id)] = Seen{m.mode, now_ms};
@@ -103,6 +105,11 @@ void FixTracker::on_msg(const NmeaMsg &m, std::int64_t now_ms)
     }
 }
 
+bool receiver_alive(const GpsLinkFacts &f, std::int64_t now_ms)
+{
+    return !f.port.empty() && f.last_valid_ms > 0 && now_ms - f.last_valid_ms <= kReceiverAliveMs;
+}
+
 double accuracy_from_hdop(double hdop)
 {
     if (!(hdop > 0)) return 10.0;
@@ -120,6 +127,9 @@ GpsStatus make_status(GpsLinkState link, const FixTracker &tracker, std::int64_t
     case GpsLinkState::Searching: s.kind = GpsStatus::Kind::Searching; return s;
     case GpsLinkState::Locked: break;
     }
+    s.sats = tracker.sky().satellites(now_ms);
+    s.gsa = tracker.sky().reports(now_ms);
+    s.dop = tracker.sky().dop(now_ms);
     const Fix &f = tracker.fix();
     if (f.kind == 0) {
         s.kind = GpsStatus::Kind::Searching;

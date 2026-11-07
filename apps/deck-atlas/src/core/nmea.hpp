@@ -3,7 +3,9 @@
  *
  * Deck Atlas: NMEA 0183, read only. A line splitter for the bytes of a serial port, the checksum, and the sentences
  * the map needs: RMC (position, speed, course, date), GGA (position, quality, satellites used, HDOP, altitude), GSA
- * (2D / 3D mode, DOP) and GSV (satellites in view). Any talker ($GP, $GN, $GL, $GA, $GB, $BD, $GQ ...) counts. Strict:
+ * (mode, the PRNs used per constellation, PDOP / HDOP / VDOP) and GSV (the satellites in view: up to four per sentence
+ * with PRN, elevation, azimuth and SNR, and where the sentence stands in its group of messages; gps_sky.hpp folds the
+ * groups into a satellite table). Any talker ($GP, $GN, $GL, $GA, $GB, $BD, $GQ ...) counts. Strict:
  * a sentence without a valid "*HH" checksum is rejected; empty fields are fine. Pure: no I/O, no clock.
  */
 #pragma once
@@ -16,6 +18,14 @@
 namespace atlas {
 
 enum class MsgKind { None, Rmc, Gga, Gsa, Gsv, Other };
+
+/* One satellite block of a GSV sentence. -1: the field was empty (SNR empty = the satellite is not tracked). */
+struct GsvSat {
+    int prn = 0;
+    int elev = -1;     /* degrees above the horizon, 0..90 */
+    int azim = -1;     /* degrees from true north, 0..359 */
+    int snr = -1;      /* dB-Hz, 0..99 */
+};
 
 struct NmeaMsg {
     MsgKind kind = MsgKind::None;   /* None: not a valid sentence (bad checksum, malformed) */
@@ -47,11 +57,22 @@ struct NmeaMsg {
 
     /* GSA */
     int mode = 0;                   /* 1 no fix, 2 2D, 3 3D; 0 unknown */
-    int system_id = 0;              /* NMEA 4.1: which constellation this GSA is for (1 GPS, 2 GLONASS, ...); 0 absent */
+    bool gsa_manual = false;        /* the receiver was told to use 2D / 3D only (M); false: automatic (A) or unknown */
+    int system_id = 0;              /* NMEA 4.1: which constellation this GSA is for (1 GPS, 2 GLONASS, 3 Galileo, 4 BeiDou,
+                                       5 QZSS); 0 absent */
+    std::vector<int> used_prns;     /* the satellites in the solution (up to 12 fields, the empty ones skipped) */
+    bool has_pdop = false;
+    double pdop = 0;
+    bool has_vdop = false;
+    double vdop = 0;                /* HDOP is has_hdop / hdop above (GGA and GSA) */
 
     /* GSV */
     bool has_in_view = false;
-    int in_view = 0;                /* satellites in view */
+    int in_view = 0;                /* satellites in view (all the messages of the group together) */
+    int gsv_total = 0;              /* messages in the group, 1..9; 0: the GSV header is unusable */
+    int gsv_num = 0;                /* this message's number, 1..gsv_total */
+    int gsv_signal = 0;             /* NMEA 4.1 signal id (the field after the last satellite block); 0 absent */
+    std::vector<GsvSat> gsv_sats;   /* the satellite blocks of this message, up to four, empty-PRN blocks skipped */
 };
 
 /* The XOR of the characters between '$' and '*'. */
