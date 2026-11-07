@@ -27,6 +27,12 @@
 #include <cstring>
 #include <sys/stat.h>
 
+/* The narrow portrait shell (320x480: 40 px bar, Esc 44x30 at the left edge, no title) is the toolkit's: a toolkit
+ * before the launcher's v0.9.4 would draw a round Esc and a 56 px bar, so it is not built against. */
+#ifndef CP0_UI_NARROW_PORTRAIT_SIZE
+#error "mmwave-radar needs the launcher toolkit at the pin of apps/_common/LAUNCHER_REF (v0.9.4 or later)"
+#endif
+
 namespace mmwui {
 
 namespace {
@@ -104,36 +110,9 @@ RadarApp::RadarApp(lv_obj_t *screen) : screen_(screen)
     /* the launcher's page header, as in every app */
     const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
     cp0_ui_roller_page(m, cp0::ui::status_strip_left(), &page_layout_);
-    const bool narrow = sz_.narrow;
-#ifndef CP0_UI_NARROW_PORTRAIT_SIZE
-    /* a toolkit before the narrow portrait shell (launcher v0.9.4): its rule done here (Esc TARGET wide at the left
-     * edge, no title); the bar keeps the toolkit's height, the status strip is drawn for it */
-    if (narrow) {
-        page_layout_.esc_x = sz_.space_m;
-        page_layout_.esc_w = sz_.target;
-        page_layout_.title_max_w = 0;
-    }
-#endif
-    page_ = std::make_unique<cp0::ui::Page>(
-        screen_, page_layout_,
-        [narrow](lv_obj_t *parent, const char *t) -> lv_obj_t * {
-            lv_obj_t *l = cp0::ui::add_title(parent, t);
-            if (narrow && l) lv_obj_add_flag(l, LV_OBJ_FLAG_HIDDEN);
-            return l;
-        },
-        [] { cdk::request_quit(0); });
+    page_ = std::make_unique<cp0::ui::Page>(screen_, page_layout_, cp0::ui::add_title, [] { cdk::request_quit(0); });
     cp0::ui::StatusStrip::add(page_->header());
     page_->set_title({"mmWave Radar"});
-#ifndef CP0_UI_NARROW_PORTRAIT_SIZE
-    if (narrow) { /* the Esc's tap area over the whole bar height */
-        const uint32_t n = lv_obj_get_child_count(page_->header());
-        for (uint32_t i = 0; i < n; ++i) {
-            lv_obj_t *c = lv_obj_get_child(page_->header(), static_cast<int32_t>(i));
-            if (lv_obj_check_type(c, &lv_button_class))
-                lv_obj_set_ext_click_area(c, std::max(0, (page_layout_.header_h - page_layout_.esc_h) / 2));
-        }
-    }
-#endif
 
     w_ = page_layout_.w;
     h_ = page_layout_.h;
@@ -182,7 +161,7 @@ RadarApp::RadarApp(lv_obj_t *screen) : screen_(screen)
     now_ = mono_ms();
     link_->start(now_, remembered);
     log_line("%s %dx%d%s%s, listen only, remembered %s%s%s%s", kVersion, w_, h_,
-                 narrow ? " narrow portrait" : "", demo && *demo ? (std::string(" demo ") + demo).c_str() : "",
+                 sz_.narrow ? " narrow portrait" : "", demo && *demo ? (std::string(" demo ") + demo).c_str() : "",
                  remembered.empty() ? "none" : remembered.port_id.c_str(),
                  settings_.connection == mmw::Connection::Usb ? "" : ", connection ",
                  settings_.connection == mmw::Connection::Usb ? "" : mmw::connection_name(settings_.connection),
@@ -290,14 +269,6 @@ void RadarApp::compute_sizes()
     sz_.target = m->tok[CP0_TOK_TARGET];
     sz_.body_px = m->text_px[CP0_TEXT_BODY];
     sz_.caption_px = m->text_px[CP0_TEXT_CAPTION];
-#ifndef CP0_UI_NARROW_PORTRAIT_SIZE
-    if (sz_.narrow) { /* the launcher's narrow portrait numbers (v0.9.4), not in the pinned toolkit */
-        sz_.body_px = 16;
-        sz_.caption_px = 14;
-        sz_.space_s = 5;
-        sz_.space_m = 10;
-    }
-#endif
     sz_.tab_h = std::max(sz_.row, sz_.target);
     sz_.dot = std::clamp(std::min(w, h) / 26, 10, 24);
 }
