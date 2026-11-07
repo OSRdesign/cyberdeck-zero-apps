@@ -1,0 +1,49 @@
+# How the GPS status page is opened and left: the S key and a tap on the chip from the map, the Settings row from Settings;
+# Esc (and the header's Esc) returns to where it came from. The page follows the receiver while it is open.
+title GPS status: opening and leaving
+sizes 640x480 480x320 320x480
+env DECKATLAS_DEMO 1
+env DECKATLAS_GPS auto
+env DECKATLAS_GPS_FEED sky20
+env DECKATLAS_VIEW 48.889643,2.269995,16
+
+wait 1800
+key s
+wait 500
+expect text "3D fix"
+expect text "RECEIVER"
+key esc
+wait 400
+expect text "Map"
+expect notext "RECEIVER"
+key tab
+key tab
+wait 800
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 300
+key enter
+wait 500
+expect text "RECEIVER"
+shot from-settings
+key esc
+wait 400
+expect text "Status"
+shot settings-again
+key enter
+wait 500
+expect text "RECEIVER"
+tap "Esc"
+wait 400
+expect text "Status"
+key tab
+wait 400
+expect text "Map"
+expect notext "RECEIVER"

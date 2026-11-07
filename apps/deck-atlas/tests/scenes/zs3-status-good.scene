@@ -1,0 +1,30 @@
+# GPS status page (3D fix, 21 satellites over GPS, SBAS and GLONASS): opened from the map with the S key. Top of the page, scrolled by two steps (the sky), by five (the bars), and the end.
+# Synthetic feed only (tests/tools/gen_nmea.py, an invented point). tests/tools/check_status_shots.py measures the shots.
+title GPS status: 3D fix, 21 satellites over GPS, SBAS and GLONASS
+sizes 640x480 480x320 320x480
+env DECKATLAS_DEMO 1
+env DECKATLAS_GPS auto
+env DECKATLAS_GPS_FEED sky20
+env DECKATLAS_VIEW 48.889643,2.269995,16
+
+wait 1800
+key s
+wait 600
+shot top
+expect text "3D fix"
+key down
+key down
+wait 300
+shot scrolled-1
+key down
+key down
+key down
+wait 300
+shot scrolled-2
+key end
+wait 300
+shot end
+key esc
+wait 400
+expect text "Map"
+expect noquit

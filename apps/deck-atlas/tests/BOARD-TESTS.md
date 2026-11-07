@@ -70,7 +70,7 @@ At arm's length, at zoom 15 and zoom 17:
 ## T5. GPS (0.2.0; 15 minutes, outdoors or at a window, the u-blox puck on the deck and then on zero8)
 
 The PC tests cover the parser, the fix logic, the baud sniff on a fake port and on a pseudo-terminal, follow mode and the
-`position.state` writer, and eight scenes draw every state at 640x480, 480x320 and 320x480. What only a board can tell: the
+`position.state` writer, and the scenes draw every state, and the GPS status page in each of them, at 640x480, 480x320 and 320x480. What only a board can tell: the
 real puck, the cold start, power, memory.
 
 1. **Off is quiet.** GPS Off (the default): the Map tab has no chip (no dish) and no follow button; `ls -l /proc/$(pgrep -x deck-atlas)/fd`
@@ -83,8 +83,8 @@ real puck, the cold start, power, memory.
    about 3 s of the puck talking (it says the puck sends valid sentences, not that it has a fix), then **two orange bars**
    (a 2D fix, or a 3D fix with few satellites or a high HDOP) and finally **three green bars** (a good 3D fix: HDOP 5 or
    less, 5 satellites or more). Note the time of each change (a cold start takes minutes). No dot appears before a fix.
-   Are the bars and the colours readable at arm's length (red against orange especially)? Tap the chip, or press S: nothing
-   visible happens yet (the status page is the next change); the log says "gps: status page requested".
+   Are the bars and the colours readable at arm's length (red against orange especially)? Tap the chip, or press S: the GPS
+   status page opens (T5a).
 4. **The dot.** With the fix: the blue dot with its white outline and the accuracy ring at the right place; walk or drive: the
    heading wedge (the speed is not on the map any more; it comes back on the status page). Cover the puck or unplug its antenna
    side: after 5 s the dot is hollow, the bars are dimmed and a small "!" shows next to them.
@@ -115,11 +115,40 @@ real puck, the cold start, power, memory.
     the u-blox puck too: Auto finds the puck (u-blox 1546:*) and still never touches the radar. Repeat with an ESP32 / LoRa
     board on a `ttyACM*` (303a:*) or a CP210x / FTDI adapter.
 
+## T5a. The GPS status page (10 minutes, with the puck and a phone showing its own GPS data)
+
+Open it three ways and leave it with Esc each time: the chip's tap, the S key (both from the map), Settings > GPS receiver >
+Status (also with GPS Off: the page then says only that GPS is off, and `ls -l /proc/$(pgrep -x deck-atlas)/fd | grep tty` shows
+no port). Esc must return to where you came from (the map, or Settings with the Status row selected).
+
+1. **Values against a phone.** With a 3D fix, put a phone's GPS app (GPS Test or similar) beside the deck: latitude and longitude
+   agree to about 4 decimals (about 10 m) and the altitude within a few tens of metres (MSL, from the GGA); the UTC time is the
+   phone's UTC to the second; the satellite counts are close (the phone may count more systems: the puck may track only GPS and
+   SBAS, or GPS and GLONASS). Walk: the speed and the course (compass word) follow, the course goes to a hyphen at a standstill.
+   Units km / mi switches km/h and mph.
+2. **Satellite counts against the chip.** Cold start with the page open: In view grows first, In the fix follows; the headline and
+   the chip go Searching (1 red bar), then 2D fix or weak 3D (2 orange), then 3D fix (3 green) at the same moment. A good fix needs
+   HDOP 5 or less and 5 used: the page's HDOP and Used show why the chip is orange when it is.
+3. **Sky and bars.** The sky plot matches the phone's (N at the top, a dot per satellite, filled = used); the bars are tall for the
+   satellites high in the sky; a satellite with no signal figure shows a short stub; the letters match the legend. Readable at arm's
+   length on the deck (640x480, two columns) and on zero8 (480x320 and the portrait 320x480): nothing cut at either side, the bars
+   of 20 or more satellites wrap into rows. Scroll with Up / Down and with a finger.
+4. **Receiver facts.** Device is the puck's product string (u-blox 7 or similar), Port ttyACM0, Speed 9600 baud ("(auto)" in
+   Auto), Sentences a few per second, Last data stays at 0 to 1 s. Bad checksums stays 0 (a few after plugging in are fine).
+5. **Unplug and replug with the page open:** within about 3 s Last data climbs, the headline becomes "Receiver connected, no data"
+   or "No GPS receiver found", the chip is crossed out, the position goes to hyphens; plug back: the page recovers by itself. A
+   fix lost while the receiver still talks: the headline keeps the mode, the second line says "signal lost, last fix N s ago".
+6. **Wrong speed and denied port:** Speed 4800 with a 9600 puck: "Receiver connected, no data" or "No GPS receiver found", never
+   garbage values. Without the dialout group: "No access to the port (dialout group?)".
+7. **Cost.** With the page open and a fix, `top` shows the app well under the map-moving load (the page redraws a part only when
+   its data changed); VmRSS no more than a few MB above T5.10.
+
 ## T6. What to tell me
 
 - The import rate and the time for the 10,326 tiles on the deck; anything slow while it ran.
 - The legibility answers (T2) per board and scale.
 - VmRSS on the deck, with and without a GPS fix (T5.10).
+- The GPS status page (T5a): values against the phone, system counts, anything cut or unclear at arm's length.
 - The GPS: time to a cold fix, the puck's node and USB id, whether it locked at 9600, anything odd on unplug / replug.
 - Anything cut, overlapping or hard to hit: the zoom buttons, the tab strip, the rows; the scale bar and the credit
   on the bottom edge of the map (can you read them? is the credit whole? does it touch a button?).

@@ -13,7 +13,9 @@ Files: searching (receiver talks, no fix), fix2d, fix3d (nine satellites), movin
 a pause, then a walk east: the map follows), stale (one epoch, then silence), noise (garbage before valid sentences),
 weak3d (a 3D fix with four satellites used: weak geometry), sky (a multi-constellation 3D fix as a GN receiver sends it:
 GPS and SBAS satellites under $GP, GLONASS under $GL, one $GNGSA per system with the NMEA 4.1 system id, multi-message
-GSV groups, one satellite in view but not tracked), skylost (the same sky, then silence). The satellite geometry (PRNs,
+GSV groups, one satellite in view but not tracked), skylost (the same sky, then silence), and the feeds of the GPS status
+page scenes: nofix3 (connected, no fix, three satellites in view), sky20 (a good 3D fix, 21 satellites over GPS, SBAS and
+GLONASS, 16 used), sky20lost (the same, then silence), weak2d (a 2D fix, HDOP 4.2, six satellites in view, four used). The satellite geometry (PRNs,
 elevations, azimuths, SNRs) is invented: a fixed table, not a recording and not a real almanac.
 """
 import math
@@ -122,6 +124,45 @@ def sky_epoch(t, lat, lon, hdop=0.9, alt=41.5):
     return out
 
 
+# the status page's skies (also invented): a good fix with 21 satellites in view, a weak 2D fix, no fix with three in view
+SKY20_GPS = [(2, 62, 37, 41), (5, 48, 78, 38), (7, 35, 119, 36), (9, 28, 150, 33), (13, 22, 160, 29), (15, 15, 201, 24),
+             (16, 52, 225, 40), (20, 71, 242, 44), (24, 10, 283, None), (26, 38, 300, 35), (29, 40, 324, 33), (31, 55, 5, 40),
+             (33, 30, 150, 27), (135, 25, 190, 25)]
+SKY20_GLO = [(66, 58, 20, 39), (67, 44, 71, 35), (74, 30, 122, 31), (81, 18, 173, 26), (82, 66, 224, 42), (88, 12, 275, 21),
+             (75, 8, 330, None)]
+USED20_GPS = [2, 5, 7, 9, 13, 15, 16, 20, 26, 29, 31, 33]
+USED20_GLO = [66, 67, 74, 82]
+SKY_WEAK = [(3, 40, 60, 26), (8, 25, 130, 22), (14, 55, 210, 30), (22, 15, 290, 19), (27, 33, 340, 24), (31, 10, 20, None)]
+USED_WEAK = [3, 8, 14, 22]
+SKY_NOFIX_GPS = [(5, 45, 100, 18), (14, 30, 200, 12)]
+SKY_NOFIX_GLO = [(74, 20, 300, None)]
+
+
+def status_epoch(t, lat, lon, kind, gps_sky, glo_sky, used_gps, used_glo, hdop, alt, speed_kn=0.1, course=0.0):
+    """One second as a GN receiver sends it: RMC, GGA, a GSA per system (kind 0: a mode 1 report with 99.99), GSV groups.
+    kind: 0 no fix, 2 2D, 3 3D."""
+    out = []
+    if kind == 0:
+        out.append(frame("GNRMC,%s,V,,,,,,,%s,,,N,V" % (hms(t), DATE)))
+        out.append(frame("GNGGA,%s,,,,,0,00,99.99,,,,,," % hms(t)))
+        out.append(gsa_line(1, [], 99.99, 99.99, 99.99, 1))
+    else:
+        la, ha = dm(lat, True)
+        lo, ho = dm(lon, False)
+        crs = "%.1f" % course if speed_kn >= 0.5 else ""
+        out.append(frame("GNRMC,%s,A,%s,%s,%s,%s,%.2f,%s,%s,,,A,V" % (hms(t), la, ha, lo, ho, speed_kn, crs, DATE)))
+        altf = ("%.1f" % alt) if kind == 3 else ""
+        out.append(frame("GNGGA,%s,%s,%s,%s,%s,1,%02d,%.2f,%s,M,47.3,M,," % (hms(t), la, ha, lo, ho, len(used_gps) + len(used_glo),
+                                                                       hdop, altf)))
+        out.append(gsa_line(kind, used_gps, hdop * 1.5, hdop, hdop * 1.2, 1))
+        if used_glo:
+            out.append(gsa_line(kind, used_glo, hdop * 1.5, hdop, hdop * 1.2, 2))
+    out += gsv_group("GP", gps_sky)
+    if glo_sky:
+        out += gsv_group("GL", glo_sky)
+    return out
+
+
 def feed(epochs):
     lines = ["# synthetic NMEA feed (tests/tools/gen_nmea.py): invented position, valid checksums"]
     for i, e in enumerate(epochs):
@@ -151,6 +192,11 @@ def main(out_dir):
     files["weak3d"] = feed([epoch(t, LAT0, LON0, 3, 4, 8, 1.8, 0.1, 0, 41.5) for t in range(4)])
     files["sky"] = feed([sky_epoch(t, LAT0, LON0) for t in range(4)])
     files["skylost"] = feed([sky_epoch(0, LAT0, LON0)])
+    sky20 = lambda t, la=LAT0, lo=LON0: status_epoch(t, la, lo, 3, SKY20_GPS, SKY20_GLO, USED20_GPS, USED20_GLO, 0.8, 41.5)
+    files["sky20"] = feed([sky20(t) for t in range(4)])
+    files["sky20lost"] = feed([sky20(0)])
+    files["weak2d"] = feed([status_epoch(t, LAT0, LON0, 2, SKY_WEAK, [], USED_WEAK, [], 4.2, 0) for t in range(4)])
+    files["nofix3"] = feed([status_epoch(t, 0, 0, 0, SKY_NOFIX_GPS, SKY_NOFIX_GLO, [], [], 99.99, 0) for t in range(4)])
     files["stale"] = feed([epoch(0, LAT0, LON0, 3, 9, 12, 1.1, 0.0, 0, 41.5)] + [])
     # line noise and a binary burst before the sentences, a broken checksum between them
     noisy = ["# garbage, then valid sentences (the reader must drop the garbage)", "\x7f\x01\x02garbage$GPGGA,broken*00"]

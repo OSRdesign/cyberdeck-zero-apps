@@ -45,6 +45,23 @@ The GPS (0.2.0), over a synthetic feed (an invented position inside the test til
 | ![No receiver](screenshots/20-gps-no-receiver-480x320.png) | ![Port](screenshots/21-settings-port-320x480.png) |
 | Only another serial device (a CH340 radar): Auto never opens it | Port lists it; a port chosen by hand is opened |
 
+The GPS status page (tap the chip, the S key, or Settings > GPS receiver > Status), over synthetic feeds:
+
+| | |
+| --- | --- |
+| ![Status 640](screenshots/25-gps-status-good-640x480.png) | ![Sky 640](screenshots/26-gps-status-sky-640x480.png) |
+| Good 3D fix on 640x480: receiver and position side by side | Scrolled: the satellites card, 21 in view, 16 in the fix: legend, sky plot, signal bars |
+| ![Status 480](screenshots/27-gps-status-good-480x320.png) | ![Sky 480](screenshots/28-gps-status-sky-480x320.png) |
+| The same on 480x320 (one column) | Scrolled: the sky plot, N up, rings at 30 and 60 degrees |
+| ![Status 320](screenshots/29-gps-status-good-320x480.png) | ![Bars 320](screenshots/30-gps-status-bars-320x480.png) |
+| 320x480 | The end of the page: 21 bars wrapped into three rows, the footer |
+| ![No fix](screenshots/31-gps-status-nofix-320x480.png) | ![Weak 2D](screenshots/32-gps-status-weak2d-480x320.png) |
+| Connected, no fix: one red bar, hyphens for the position | A weak 2D fix: two orange bars, no altitude |
+| ![Stale](screenshots/33-gps-status-stale-320x480.png) | ![No device](screenshots/34-gps-status-no-device-480x320.png) |
+| Signal lost: the values stay, the chip dims, the second line says how long ago | No receiver found |
+| ![Off](screenshots/35-gps-status-off-320x480.png) | ![Status row](screenshots/36-settings-status-320x480.png) |
+| GPS Off: one sentence, no port | The Status row in Settings > GPS receiver (a chevron, the state as its value) |
+
 ## What it does
 
 Three tabs, switched by the strip at the bottom (or Tab / Shift+Tab):
@@ -94,7 +111,8 @@ Three tabs, switched by the strip at the bottom (or Tab / Shift+Tab):
 | --- | --- | --- |
 | Switch tabs | Tab, Shift+Tab | the tab strip |
 | Follow the GPS position (GPS on) | G (on / off), Home (on, recentre) | the crosshair button under the zoom buttons |
-| GPS status page (GPS on; a stub for now) | S | the dish chip at the top left |
+| GPS status page (GPS on) | S | the dish chip at the top left; Settings > GPS receiver > Status (also with GPS Off) |
+| Scroll the GPS status page | Up / Down, Home / End | drag |
 | Pan | arrows (Shift: half a view); the deck's F / X / Z / C aliases | drag |
 | Zoom in / out | + (=, keypad +) or Page Up / - (keypad -) or Page Down | the + / - buttons, a double tap (in) |
 | Move in a list, open, act | Up / Down, Enter or Right | a tap selects a row, a tap on the selected row acts |
@@ -145,8 +163,31 @@ GPS Off the app opens no port at all and the Map tab is exactly what 0.1.0 drew.
   | 3 green bars | a good 3D fix: HDOP 5 or less and at least 5 satellites used |
   | the bars of the level dimmed to 40 %, a small "!" | the fix is stale: no valid fix sentence for 5 s |
 
-  A tap on the chip, or the **S** key, calls `open_gps_status()`, the entry of the GPS status page (a stub in this change:
-  the page itself, with the speed, the satellites and the receiver's facts, is the next one). GPS off: no chip.
+  A tap on the chip, or the **S** key, opens the **GPS status page** (below). GPS off: no chip.
+- **GPS status page.** Three ways in: a tap on the chip, the **S** key, and Settings > GPS receiver > **Status** (its value
+  is the receiver's state in two words, and it is there with GPS Off too). Esc, or the header's Esc, goes back to where it
+  came from (the map or Settings). One scrolling page of cards (two columns on 640x480, one on the narrower canvases;
+  scroll with Up / Down, Home / End or a drag), updated while it is open (a part is drawn again only when its data changed):
+  - **Receiver:** the dish chip drawn at the same state as on the map, beside the state in words (Searching for satellites,
+    2D fix, 3D fix, No GPS receiver found, No access to the port (dialout group?), Receiver connected, no data) and a second
+    line (Good 3D fix, Fix with weak geometry, signal lost and how long ago); the device (the USB product string, else the USB
+    id), the port, the speed (9600 baud, "(auto)" when found by listening), sentences per second, the last data (N s ago), the
+    count of sentences with a bad checksum, and how the port was chosen (Auto: known receiver, or Chosen by hand).
+  - **Position:** latitude and longitude (6 decimals, N S E W), altitude (MSL), the accuracy (+-m, the HDOP value the ring on the map
+    uses), speed (km/h or mph by the Units setting, m/s small), course (degrees and a compass word), the UTC date and time of the
+    fix. A hyphen where a value is unknown.
+  - **Dilution of precision:** HDOP, VDOP, PDOP (from the receiver's GSA), the fix mode and the satellites used.
+  - **Satellites:** in view and in the fix; a legend with a count per system (G GPS, R GLONASS, E Galileo, C BeiDou, J QZSS, S SBAS);
+    the **sky plot** (N up, rings at 30 and 60 degrees, a dot per satellite by azimuth and elevation: filled = used in the
+    fix, a ring = in view only, the system's letter inside, the PRN beside it where there is room); the **signal bars** (one
+    per satellite in view, by system then PRN, height = signal on a 0 to 50 dB-Hz scale with lines at 25 and 50, solid = used in
+    the fix, outlined = in view only, a short stub = not tracked yet; the letter and the PRN under the bar; more satellites than
+    fit in a row wrap into further rows). The six system colours (sky blue, purple, yellow, violet, light grey, teal) are a
+    colour-blind-safe set; the letters carry the information too, and red, orange and green are used only for the chip.
+  - The footer repeats the promise: the app never transmits to the receiver, and the position never leaves the device.
+
+  GPS Off: the page (from Settings) says "GPS is off. Switch it on in Settings > GPS receiver." and nothing else; no port is
+  opened. The page only reads what the reader already keeps; it adds no I/O.
 - **Follow.** The crosshair button below the zoom buttons (or **G**; **Home** turns it on and recentres): the map keeps the
   position at its centre on every fix, at the zoom it has. A pan (drag, arrow key, double tap away from the centre) turns
   it off; zooming does not. The button is highlighted while follow is on. Off by default.
@@ -289,9 +330,10 @@ The binary links the cp0_lvgl runtime of the CardputerZero launcher by M5Stack (
 ## Build and test
 
 ```sh
-wsl -e sh apps/deck-atlas/build.sh host                 # unit tests (8,344 checks) and 30 scenes (sheets in ~/cdk-build/deck-atlas/host/out/sheets)
+wsl -e sh apps/deck-atlas/build.sh host                 # unit tests (8,843 checks) and 37 scenes (sheets in ~/cdk-build/deck-atlas/host/out/sheets)
 python3 apps/deck-atlas/tests/tools/check_follow_shots.py <host out dir>   # the follow button against the zoom buttons (Pillow, numpy, scipy)
 python3 apps/deck-atlas/tests/tools/check_chip_shots.py <host out dir>     # the chip's bars and colours in the GPS shots
+python3 apps/deck-atlas/tests/tools/check_status_shots.py <host out dir>   # the GPS status page: nothing clipped, the chip, the systems' colours, the sky ring round
 wsl -e sh apps/deck-atlas/build.sh cross                # the arm64 binary into root/
 wsl -e sh apps/deck-atlas/build.sh cross --arch amd64   # the amd64 binary into root.amd64/
 python3 tools/make_registry.py --only deck-atlas --out <dir>            # a local arm64 .deb, no registry
@@ -303,9 +345,10 @@ python3 tools/make_registry.py --only deck-atlas --arch amd64 --out <dir>
   [`_common` README](../_common/README.md#toolkit-switches-of-one-app-cp0_configmk)); no other app changes.
 - **GPS in the scenes.** `DECKATLAS_GPS=auto|off` switches the GPS on or off; `DECKATLAS_GPS_FEED=<name>` plays
   `tests/gps-feeds/<name>.nmea` through a fake port (demonstration mode only; without it there is no device). The feeds
-  (searching, fix2d, fix3d, moving, follow, stale, noise, weak3d, sky, skylost; `sky` is a multi-constellation fix with GPS
+  (searching, fix2d, fix3d, moving, follow, stale, noise, weak3d, sky, skylost, and for the status page nofix3, sky20, sky20lost, weak2d; `sky` is a multi-constellation fix with GPS
   and SBAS under `$GP`, GLONASS under `$GL`, one `$GNGSA` per system and multi-message GSV groups) are made at build time by
-  `tests/tools/gen_nmea.py` around an invented point in the fixture tiles' area, with an invented satellite geometry and
+  `tests/tools/gen_nmea.py` (`sky20`: a good fix with 21 satellites over GPS, SBAS and GLONASS; `weak2d`: a 2D fix, HDOP 4.2; `nofix3`:
+  connected, three satellites in view, no fix) around an invented point in the fixture tiles' area, with an invented satellite geometry and
   valid checksums; no recording, never packaged or committed.
 - **What the GPS reader parses.** RMC, GGA, GSA and GSV (strict checksum; any talker). GSV groups of several messages are
   folded into a satellite table when the group is complete (message number = total): constellation (GP GPS, GL GLONASS,
@@ -314,7 +357,9 @@ python3 tools/make_registry.py --only deck-atlas --arch amd64 --out <dir>
   satellite not reported for 10 s is dropped. The link adds its facts: port, speed, device (the USB product string),
   how it was chosen, valid sentences per second, the last valid sentence, bad checksums. The GPS status page reads
   `GpsStatus` (`src/core/gps_fix.hpp`: `sats`, `gsa`, `dop`, `link`, `receiver_alive`); the chip's levels are
-  `chip_state()` in `src/core/gps_chip.hpp`.
+  `chip_state()` in `src/core/gps_chip.hpp`. The page's texts, the sky plot's and the bars' geometry, the colours, how it is
+  opened and what changed since the last look are `src/core/gps_page.hpp` (pure, unit tested); `src/ui/atlas_gps_page.cpp`
+  builds and draws it.
 - **Demonstration mode** (the scenes; never on a board): `DECKATLAS_DEMO=1` keeps the settings and the store under the
   harness's runtime folder, converts the generated `tests/fixtures/tiles` with the engine's own import at the start, and forces the
   network off. `DECKATLAS_DEMO=empty` starts with nothing; `DECKATLAS_DEMO=import-hold` replaces the import with a
