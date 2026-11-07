@@ -13,6 +13,7 @@
 
 #include "app.hpp"
 #include "cp0_ui_metrics_lvgl.h"
+#include "cp0_ui_roller.h"
 #include "cp0_ui_widgets.hpp"
 #include "keyboard_input.h"
 
@@ -457,6 +458,48 @@ void play(Run &run, const Scene &scene)
                 fail(run, line, "no visible text \"" + arg(2) + "\"");
             } else if (what == "notext" && headless::find_label(arg(2), false)) {
                 fail(run, line, "text \"" + arg(2) + "\" is visible");
+            } else if (what == "esc") {
+                /* expect esc: the page header's Esc button follows the layout service's rule at this size: on a narrow
+                 * portrait canvas (320x480) TARGET wide, the bar minus its margins high (not a circle), SPACE_M from the
+                 * left edge, its tap area over the whole bar height, no page title; elsewhere the 9 mm toolbar key
+                 * (as high as the bar's margins allow). The size goes in the report. */
+                const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
+                cp0_ui_roller_page_t want{};
+                lv_obj_t *label = headless::find_label("Esc", false);
+                if (cp0_ui_roller_page(m, 0, &want) != 0) {
+                    fail(run, line, "expect esc: no page layout at this size");
+                } else if (!label) {
+                    fail(run, line, "no visible text \"Esc\"");
+                } else {
+                    lv_obj_t *button = headless::clickable_of(label);
+                    lv_area_t a;
+                    lv_obj_get_coords(button, &a);
+                    const int bw = lv_obj_get_width(button), bh = lv_obj_get_height(button);
+                    const int bx = a.x1, by = a.y1;
+                    const bool narrow = cp0_ui_narrow_portrait(m) != 0;
+                    const int pad = lv_obj_get_style_radius(button, LV_PART_MAIN);
+                    run.report << "esc " << bw << "x" << bh << "@(" << bx << "," << by << ") radius " << pad
+                               << (narrow ? " narrow portrait" : "") << ", bar " << want.header_h << "\n";
+                    std::string why;
+                    if (narrow) {
+                        if (bw != m->tok[CP0_TOK_TARGET]) why = "width is not TARGET";
+                        else if (bh != want.header_h - 2 * m->shell.status_top) why = "height is not the bar minus its margins";
+                        else if (bh >= bw) why = "not wider than high (a circle)";
+                        else if (bx != m->tok[CP0_TOK_SPACE_M]) why = "not SPACE_M from the left edge";
+                        else if (want.header_h != 40) why = "bar is not 40 px";
+                        else if (want.title_hidden != 1) why = "the page title is not hidden";
+                        else {
+                            const lv_point_t top = {bx + bw / 2, 0}, bottom = {bx + bw / 2, want.header_h - 1};
+                            if (!lv_obj_hit_test(button, &top) || !lv_obj_hit_test(button, &bottom))
+                                why = "tap area does not cover the bar height";
+                        }
+                    } else {
+                        const int key = cp0_ui_toolbar_key_px(m->ppmm_x100);
+                        if (bw != key) why = "width is not the 9 mm toolbar key";
+                        else if (bh != std::min(key, want.header_h - 2 * m->shell.status_top)) why = "height is not the toolbar key capped by the bar's margins";
+                    }
+                    if (!why.empty()) fail(run, line, "Esc " + std::to_string(bw) + "x" + std::to_string(bh) + ": " + why);
+                }
             } else if (what == "key") {
                 /* expect key "TEXT" toolbar|target: the button labelled TEXT is exactly that high and at least that
                  * wide (toolbar = cp0_ui_toolbar_key_px, the 9 mm toolbar key; target = TARGET) */
