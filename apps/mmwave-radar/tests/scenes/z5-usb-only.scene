@@ -1,0 +1,15 @@
+title mmWave Radar: Connection USB (the default): the USB-only hint and TRIED list, nothing about Bluetooth
+sizes 480x320 320x480
+env MMWAVE_DEMO none
+env MMWAVE_TEST_CONFIG 1
+
+wait 2500
+shot z5-usb-only
+check z5-usb-only
+expect text "No radar found"
+expect text "TRIED"
+expect text "Plug the sensor in: it is found by itself."
+expect notext "Plug the sensor in or switch on its Bluetooth: it is found by itself."
+expect notext "Bluetooth: no radar chosen yet (Connection > Bluetooth lists them)."
+expect notext "Bluetooth: no HLK-LD module in range (scanning)."
+expect noquit

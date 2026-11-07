@@ -35,6 +35,7 @@ DemoBle::DemoBle(const std::string &scenario, Clock clock) : scenario_(scenario)
         d.seen_after_ms = after;
         devs_.push_back(d);
     };
+    if (scenario_ == "ble-empty") return; /* nothing in range: the scan finds no module */
     add("34:B7:DA:62:1E:ED", "Meshtastic_1eec", -64, 200);
     add("ED:2F:90:B4:49:F0", "HLK-LD2451_49F0", -58, 700);
     add("EC:EB:45:39:28:2D", "MeshCore-OSR T1000", -80, 900);
@@ -165,7 +166,9 @@ void DemoBle::poll(std::vector<BleEvent> &out)
     if (!connecting_.empty() && t >= connect_at_) {
         const std::string a = connecting_;
         connecting_.clear();
-        if (Dev *d = dev(a)) {
+        if (scenario_ == "ble-refuse") {
+            out.push_back(ev(BleEvent::Kind::ConnectResult, a, false, "org.bluez.Error.Failed: connection refused (demo)"));
+        } else if (Dev *d = dev(a)) {
             d->d.connected = true;
             connected_ = a;
             resolve_at_ = t + 400;
