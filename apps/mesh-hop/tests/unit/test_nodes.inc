@@ -349,8 +349,105 @@ static void test_usb_identity()
     CHECK(std::system(("rm -rf " + root).c_str()) == 0);
 }
 
+
+/* 0.8.3: the port is chosen by itself only when it is unambiguous; a port another program holds open is never opened. */
+static void test_port_choice()
+{
+    using namespace meshzero;
+    auto cand = [](const char *path, uint16_t vid, uint16_t pid, const char *serial) {
+        SerialCandidate c;
+        c.path = path;
+        c.vid = vid;
+        c.pid = pid;
+        c.serial = serial;
+        return c;
+    };
+    bool ask = true;
+    const std::vector<SerialCandidate> one = {cand("/dev/ttyUSB0", 0x1A86, 0x7523, "")};
+    CHECK(choose_port(one, "", &ask) == &one[0] && !ask);                        // exactly one port: used, even an unknown one
+    CHECK(choose_port(one, "303a:1001", &ask) == &one[0] && !ask);               // (what was remembered is not plugged: still the only port)
+    const std::vector<SerialCandidate> two = {cand("/dev/ttyACM0", 0x303A, 0x1001, "AA"), cand("/dev/ttyUSB0", 0x1A86, 0x7523, "")};
+    CHECK(choose_port(two, "", &ask) == nullptr && ask);                         // several, nothing remembered: ask, never the lowest name
+    CHECK(choose_port(two, "303a:1001", &ask) == &two[0] && !ask);               // remembered vid:pid matches exactly one
+    CHECK(choose_port(two, "303a:1001/AA", &ask) == &two[0] && !ask);            // remembered identity (0.8.3 form)
+    CHECK(choose_port(two, "1a86:7523", &ask) == &two[1] && !ask);
+    CHECK(choose_port(two, "303a:1001/BB", &ask) == nullptr && ask);             // that board with another serial number is not it
+    const std::vector<SerialCandidate> twin = {cand("/dev/ttyACM0", 0x303A, 0x1001, "AA"), cand("/dev/ttyACM1", 0x303A, 0x1001, "BB")};
+    CHECK(choose_port(twin, "303a:1001", &ask) == nullptr && ask);               // two boards of the same ids, remembered by ids only: ask
+    CHECK(choose_port(twin, "303a:1001/BB", &ask) == &twin[1] && !ask);          // the serial number tells them apart
+    const std::vector<SerialCandidate> twin_noserial = {cand("/dev/ttyACM0", 0x303A, 0x1001, ""), cand("/dev/ttyACM1", 0x303A, 0x1001, "")};
+    CHECK(choose_port(twin_noserial, "303a:1001", &ask) == nullptr && ask);
+    CHECK(choose_port({}, "", &ask) == nullptr && !ask);
+
+    // the transport refuses a port another process holds (a real /proc here: a `sleep` that keeps a file open), before opening it
+    const std::string root = tmpdir("port-choice");
+    const std::string data = root + "/data";
+    CHECK(std::system(("rm -rf " + root + " && mkdir -p " + data + " && touch " + root + "/ttyACM9").c_str()) == 0);
+    {
+        CHECK(std::system(("(sleep 1 < " + root + "/ttyACM9 &) ; sleep 0.3").c_str()) == 0);
+        SerialTransport t(data, root + "/ttyACM9");
+        CHECK(t.open() == OpenStatus::Busy && !t.is_open());
+        CHECK(t.last_error() == "This port is used by sleep. Close that program first.");
+        CHECK(std::system("sleep 1.2") == 0);                                      // it has exited
+        FILE *own = std::fopen((root + "/ttyACM9").c_str(), "r");               // our own handle is not "another process"
+        CHECK(t.open() == OpenStatus::Error);                                    // (a plain file is no serial port: not Busy)
+        std::fclose(own);
+    }
+
+    // busy detection over a fake /proc
+    const std::string proc = root + "/proc", dev = root + "/dev";
+    CHECK(std::system(("mkdir -p " + dev + "/serial/by-id " + proc + "/101/fd " + proc + "/202/fd " + proc + "/303/fd " + proc + "/404/fd " +
+                       proc + "/self && touch " + dev + "/ttyACM0 " + dev + "/ttyUSB0 && ln -s ../../ttyACM0 " + dev + "/serial/by-id/usb-X-if00 && " +
+                       "ln -s ../../ttyUSB0 " + dev + "/serial/by-id/usb-Y-if00").c_str()) == 0);
+    auto comm = [&](int pid, const char *name) {
+        FILE *f = std::fopen((proc + "/" + std::to_string(pid) + "/comm").c_str(), "w");
+        std::fputs(name, f);
+        std::fputs("\n", f);
+        std::fclose(f);
+    };
+    auto link = [&](int pid, int fd, const std::string &target) {
+        CHECK(std::system(("ln -sf '" + target + "' " + proc + "/" + std::to_string(pid) + "/fd/" + std::to_string(fd)).c_str()) == 0);
+    };
+    comm(101, "rnsd");
+    comm(202, "cat");
+    comm(303, "other-user");
+    comm(404, "mesh-hop");
+    link(101, 3, "pipe:[1234]");
+    link(101, 4, dev + "/ttyUSB0");                                          // rnsd holds ttyUSB0
+    link(202, 0, "socket:[9]");
+    link(202, 7, dev + "/serial/by-id/usb-X-if00");                          // cat holds ttyACM0 through its udev alias
+    link(404, 5, dev + "/ttyACM0");                                          // this process (pid 404 here)
+    CHECK(std::system(("chmod 000 " + proc + "/303/fd").c_str()) == 0);      // another user's fds: unreadable
+    PortUser who;
+    CHECK(port_in_use(dev + "/ttyUSB0", &who, proc, 404) && who.pid == 101 && who.name == "rnsd");
+    CHECK(port_in_use(dev + "/serial/by-id/usb-Y-if00", &who, proc, 404) && who.pid == 101 && who.name == "rnsd");     // asked by its alias
+    CHECK(port_in_use(dev + "/ttyACM0", &who, proc, 404) && who.pid == 202 && who.name == "cat");                       // held through the alias
+    link(202, 7, dev + "/ttyUSB0");                                                                                       // cat moved on
+    CHECK(!port_in_use(dev + "/ttyACM0", &who, proc, 404));                  // only our own handle (pid 404) holds ttyACM0: not busy
+    CHECK(!port_in_use(dev + "/ttyACM0", nullptr, proc, 404));
+    CHECK(port_in_use(dev + "/ttyACM0", &who, proc, 202) && who.pid == 404);   // (from cat's point of view the other process is 404)
+    CHECK(!port_in_use("", &who, proc, 404) && !port_in_use(dev + "/ttyACM0", &who, root + "/no-proc", 404));
+    CHECK(!port_in_use(dev + "/ttyS9", &who, proc, 404));                    // nobody has it
+    comm(101, "");                                                           // a process without a readable name
+    CHECK(port_in_use(dev + "/ttyUSB0", &who, proc, 404) && who.name.empty());
+    CHECK(port_busy_text(who) == "This port is used by another program. Close that program first.");
+    who.name = "rnsd";
+    CHECK(port_busy_text(who) == "This port is used by rnsd. Close that program first.");
+
+    std::vector<SerialCandidate> cs = {cand((dev + "/ttyACM0").c_str(), 0x303A, 0x1001, ""), cand((dev + "/ttyUSB0").c_str(), 0x1A86, 0x7523, "")};
+    comm(101, "rnsd");
+    CHECK(std::system(("rm " + proc + "/404/fd/5").c_str()) == 0);            // (mark_busy runs as this process: pid 404 is just a process here)
+    mark_busy(cs, proc);
+    CHECK(!cs[0].busy && cs[0].busy_by.empty() && cs[1].busy && cs[1].busy_by == "rnsd");
+
+    // a pseudo terminal is the simulator's: never reported busy
+    CHECK(!serial_port_busy("/dev/pts/ptmx-not-there", &who, proc));
+    CHECK(std::system(("chmod 755 " + proc + "/303/fd; rm -rf " + root).c_str()) == 0);
+}
+
 static void test_nodes()
 {
+    test_port_choice();
     test_tcp_transport();
     test_client_over_tcp();
     test_node_book();
