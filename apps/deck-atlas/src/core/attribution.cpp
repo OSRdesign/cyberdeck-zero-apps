@@ -161,12 +161,10 @@ std::vector<std::string> wrap_lines(const std::string &text, int max_w, int max_
     return lines;
 }
 
-AttrPlan plan_attribution(const AttrInput &in, const std::string &text, const MeasureFn &measure)
+MapMetrics map_metrics(const AttrInput &in)
 {
-    AttrPlan plan;
-    if (text.empty() || in.w <= 0 || in.h <= 0) return plan;
-    const int w = in.w, h = in.h;
-    const int shorter = std::min(w, h);
+    MapMetrics m;
+    const int shorter = std::min(in.w, in.h);
     int target = in.target > 0 ? in.target : 44;
     if (target > shorter / 3) target = shorter / 3;
     if (target < 8) target = 8;
@@ -174,25 +172,41 @@ AttrPlan plan_attribution(const AttrInput &in, const std::string &text, const Me
     if (plate > shorter * 15 / 100) plate = shorter * 15 / 100;
     if (plate < 8) plate = 8;
     if (plate > target) plate = target;
-    const int text_h = in.text_h > 0 ? in.text_h : 12;
+    m.target = target;
+    m.plate = plate;
+    m.text_h = in.text_h > 0 ? in.text_h : 12;
     int margin = in.space > 0 ? in.space : 8;
     if (margin > plate / 2) margin = plate / 2;
     if (margin < 2) margin = 2;
-    const int pad = std::max(margin / 2, 2);
-
-    int sb_max = w / 4;
+    m.margin = margin;
+    m.pad = std::max(margin / 2, 2);
+    m.row_h = m.text_h + 2 * m.pad;
+    int sb_max = in.w / 4;
     if (sb_max > 200) sb_max = 200;
     if (sb_max < 48) sb_max = 48;
-    if (sb_max > w - 2 * margin - 2 * pad) sb_max = w - 2 * margin - 2 * pad;
+    if (sb_max > in.w - 2 * margin - 2 * m.pad) sb_max = in.w - 2 * margin - 2 * m.pad;
     if (sb_max < 8) sb_max = 8;
-    const int bar_h = std::max(text_h / 4, 3);
-    const int sb_w = sb_max + 2 * pad;
-    const int sb_h = pad + text_h + pad / 2 + bar_h + pad;
-    const int sb_y = h - margin - sb_h;
+    const int bar_h = std::max(m.text_h / 4, 3);
+    m.sb_w = sb_max + 2 * m.pad;
+    m.sb_h = m.pad + m.text_h + m.pad / 2 + bar_h + m.pad;
+    m.sb_y = in.h - margin - m.sb_h;
+    return m;
+}
+
+AttrPlan plan_attribution(const AttrInput &in, const std::string &text, const MeasureFn &measure)
+{
+    AttrPlan plan;
+    if (text.empty() || in.w <= 0 || in.h <= 0) return plan;
+    const int w = in.w, h = in.h;
+    const MapMetrics mm = map_metrics(in);
+    const int margin = mm.margin, pad = mm.pad, plate = mm.plate, text_h = mm.text_h, sb_w = mm.sb_w, sb_y = mm.sb_y;
 
     const int full = measure(text) + 2 * pad;
     const int beside = w - margin - (margin + sb_w) - margin;
-    if (full <= beside) return plan; /* the engine shows it whole beside the scale bar */
+    if (full <= beside) { /* the engine shows it whole beside the scale bar */
+        plan.row_top = h - margin - mm.row_h;
+        return plan;
+    }
     const int right = w - margin - plate - margin; /* the button column starts here */
     int aw = std::min(full, right - margin);
     if (aw < 2 * pad + 8) aw = 2 * pad + 8;

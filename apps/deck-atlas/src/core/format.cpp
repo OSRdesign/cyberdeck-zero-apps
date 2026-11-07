@@ -80,6 +80,14 @@ std::string cache_label(int mb, std::uint64_t cap_bytes)
 
 const char *on_off(bool on) { return on ? "On" : "Off"; }
 
+const char *gps_label(bool on) { return on ? "Auto" : "Off"; }
+std::string gps_port_label(const std::string &port, bool present)
+{
+    if (port.empty()) return "Auto";
+    return present ? port : port + " (absent)";
+}
+std::string gps_speed_label(int baud) { return baud == 0 ? std::string("Auto") : std::to_string(baud); }
+
 std::string latlon_label(double lat, double lon)
 {
     char buf[64];

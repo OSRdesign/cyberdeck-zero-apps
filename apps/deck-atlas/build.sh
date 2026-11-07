@@ -9,4 +9,5 @@
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 python3 "$here/tests/tools/gen_fixture_tiles.py" "$here/tests/fixtures/tiles" > /dev/null
+python3 "$here/tests/tools/gen_nmea.py" "$here/tests/gps-feeds"
 exec bash "$here/../_common/build_app.sh" --name DeckAtlas "$here" "$@"

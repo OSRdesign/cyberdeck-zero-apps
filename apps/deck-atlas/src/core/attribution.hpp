@@ -38,11 +38,27 @@ struct AttrInput {
     int text_h = 12;       /* the caption font's line height */
 };
 
+/* The numbers the engine derives from the tokens for its overlays (cp0_map_layout): the app lays its own overlays (the
+ * GPS chip, the follow button) out with the same ones. */
+struct MapMetrics {
+    int margin = 0;     /* the gap to the widget's edge */
+    int pad = 0;        /* a plate's inner padding */
+    int plate = 0;      /* a button's drawn square (the zoom buttons') */
+    int target = 0;     /* the touch square, at most a third of the shorter side */
+    int text_h = 0;
+    int row_h = 0;      /* one row of text on a plate: text_h + 2 pad */
+    int sb_w = 0, sb_h = 0, sb_y = 0;   /* the scale bar's plate (x = margin) */
+};
+MapMetrics map_metrics(const AttrInput &in);
+
 struct AttrPlan {
     bool cover = false;    /* true: the engine would cut the credit; draw `lines` on a plate at x, y, w, h (widget coordinates) */
     int x = 0, y = 0, w = 0, h = 0;
     int pad = 0;
     std::vector<std::string> lines;
+    /* >= 0: the engine draws the credit whole in the bottom row at the right, beside the scale bar; its top edge. The
+     * button column must stay above it. -1: the credit is elsewhere (a row higher, left of the buttons) or absent. */
+    int row_top = -1;
 };
 
 AttrPlan plan_attribution(const AttrInput &in, const std::string &text, const MeasureFn &measure);
