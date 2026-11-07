@@ -5,8 +5,8 @@
  *   - a source's row says its state in a word (Off, On, Needs key, Offline, Paused by server, Daily cap reached with
  *     the counts, ...) from the engine's listing (cp0_map_source_info_t: enabled, state, has_key, counts);
  *   - switching a source ON: a source that needs a key and has none asks for the key first; then, the first time only
- *     (remembered per source id in settings.conf), the terms dialog (name, the record's note, the provider's terms and
- *     their address as plain text, the daily cap) with Cancel / "I agree, enable"; switching it off and on again does
+ *     (remembered per source id in settings.conf), the terms dialog (name, the app's own plain text per source, the daily
+ *     limit, the provider's address as plain text) with Cancel / "I agree, enable"; switching it off and on again does
  *     not ask again. Switching OFF never asks.
  *   - a key is never shown again once saved: the page says "Key saved" or "No key".
  * Pure: plain values in, texts and steps out; the engine's state codes come from cp0_map_common.h (constants only).
@@ -67,13 +67,18 @@ std::string trim_key(const std::string &key);
 struct ProviderTerms {
     std::string terms_url;        /* "https://www.thunderforest.com/terms/" */
     std::string key_hint;         /* where a key comes from ("" for a source without key) */
+    std::string what;             /* the app's own words: what the source is */
+    std::string rules;            /* the plain rules in one or two sentences */
 };
+/* The app's table for the shipped sources; an unknown id gets a short generic text (no URL, no internal wording). */
 ProviderTerms provider_terms(const std::string &id);
 
-/* "At most 2,000 tiles a day from this provider; after that, saved tiles only until midnight." */
-std::string cap_line(std::uint32_t daily_cap);
-/* The terms dialog's text: the note, the licence / terms text, the address, the cap line, the user-agent sentence. */
-std::string terms_text(const std::string &note, const std::string &licence, const ProviderTerms &terms,
+/* "Daily limit in this app: 2,000 requests" ("" for no cap). */
+std::string daily_limit_line(std::uint32_t daily_cap);
+/* The terms dialog's text, all from the app's own table (never the engine record's note): what the source is, the plain
+ * rules, the daily limit, "Check the provider's current terms before relying on this." with the provider's address
+ * (when known), then the map data attribution line (the record's licence text). `title` is for the generic fallback. */
+std::string terms_text(const std::string &title, const std::string &licence, const ProviderTerms &terms,
                        std::uint32_t daily_cap);
 
 } // namespace atlas

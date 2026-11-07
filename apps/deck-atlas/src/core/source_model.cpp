@@ -99,22 +99,29 @@ std::string key_error(const std::string &key)
 
 ProviderTerms provider_terms(const std::string &id)
 {
-    /* the addresses of report 054's sources ([OTM], [TF-terms], [TF-price], [Geoapify-terms], [Geoapify-price]) */
-    if (id == "opentopomap") return {"https://opentopomap.org/about", ""};
+    if (id == "opentopomap")
+        return {"https://opentopomap.org/about", "",
+                "OpenTopoMap is a topographic map with contour lines.",
+                "Free public server run by volunteers. Tiles are saved on this device as you view them. No bulk downloads."};
     if (id == "thunderforest")
-        return {"https://www.thunderforest.com/terms/", "A free Hobby key: www.thunderforest.com/pricing/"};
+        return {"https://www.thunderforest.com/terms/", "A free Hobby key: www.thunderforest.com/pricing/",
+                "Thunderforest offers cycling, outdoor and transport map styles.",
+                "Needs your own API key from thunderforest.com; free plans have a monthly limit. Tiles are saved on this "
+                "device as you view them."};
     if (id == "geoapify")
-        return {"https://www.geoapify.com/terms-and-conditions/", "A free key: www.geoapify.com/pricing/"};
+        return {"https://www.geoapify.com/terms-and-conditions/", "A free key: www.geoapify.com/pricing/",
+                "Geoapify serves street map tiles.",
+                "Needs your own API key from geoapify.com; the free plan has a daily limit."};
     return {};
 }
 
-std::string cap_line(std::uint32_t daily_cap)
+std::string daily_limit_line(std::uint32_t daily_cap)
 {
     if (daily_cap == 0) return std::string();
-    return "At most " + count_label(daily_cap) + " tiles a day from this provider; after that, saved tiles only until midnight.";
+    return "Daily limit in this app: " + count_label(daily_cap) + " requests";
 }
 
-std::string terms_text(const std::string &note, const std::string &licence, const ProviderTerms &terms,
+std::string terms_text(const std::string &title, const std::string &licence, const ProviderTerms &terms,
                        std::uint32_t daily_cap)
 {
     std::string s;
@@ -123,12 +130,15 @@ std::string terms_text(const std::string &note, const std::string &licence, cons
         if (!s.empty()) s += "\n\n";
         s += p;
     };
-    para(note);
+    if (terms.what.empty())
+        para((title.empty() ? std::string("This source") : title) + " is an online map server.\n"
+             "Tiles are saved on this device as you view them.");
+    else
+        para(terms.what + "\n" + terms.rules);
+    para(daily_limit_line(daily_cap));
+    para("Check the provider's current terms before relying on this." +
+         (terms.terms_url.empty() ? std::string() : "\n" + terms.terms_url));
     para(licence);
-    if (!terms.terms_url.empty()) para("Terms: " + terms.terms_url);
-    para(cap_line(daily_cap));
-    para("Only the tiles you look at are requested. A request carries the tile's z/x/y and the app's name and version "
-         "(and your key for a source that needs one), nothing else; the provider sees your IP address.");
     return s;
 }
 

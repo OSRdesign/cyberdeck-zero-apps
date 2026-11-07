@@ -110,14 +110,36 @@ void test_sources()
     CHECK(!provider_terms("thunderforest").key_hint.empty());
     CHECK_EQ(provider_terms("geoapify").terms_url, std::string("https://www.geoapify.com/terms-and-conditions/"));
     CHECK(provider_terms("my-own").terms_url.empty());
-    CHECK_EQ(cap_line(2000), std::string("At most 2,000 tiles a day from this provider; after that, saved tiles only until midnight."));
-    CHECK_EQ(cap_line(0), std::string(""));
-    const std::string t = terms_text("unverified: check before enabling: caching headers.", "Map style CC-BY-SA",
-                                     provider_terms("opentopomap"), 2000);
-    CHECK(t.find("unverified: check before enabling") == 0);
-    CHECK(t.find("\n\nMap style CC-BY-SA\n\n") != std::string::npos);
-    CHECK(t.find("Terms: https://opentopomap.org/about") != std::string::npos);
-    CHECK(t.find("At most 2,000 tiles a day") != std::string::npos);
-    CHECK(t.find("z/x/y") != std::string::npos);
-    CHECK(t.find("openstreetmap.org") == std::string::npos);
+    CHECK_EQ(daily_limit_line(2000), std::string("Daily limit in this app: 2,000 requests"));
+    CHECK_EQ(daily_limit_line(0), std::string(""));
+    /* the dialog text comes from the app's own table: every shipped source has text, none of it internal wording */
+    const char *shipped[] = {"opentopomap", "thunderforest", "geoapify"};
+    for (const char *id : shipped) {
+        const ProviderTerms pt = provider_terms(id);
+        CHECK(!pt.what.empty());
+        CHECK(!pt.rules.empty());
+        CHECK(!pt.terms_url.empty());
+        const std::string tt = terms_text(id, "Map data (c) somebody", pt, 1500);
+        CHECK(!tt.empty());
+        CHECK(tt.find("054") == std::string::npos);
+        CHECK(tt.find("unverified") == std::string::npos);
+        CHECK(tt.find("check before enabling") == std::string::npos);
+        CHECK(tt.find("Daily limit in this app: 1,500 requests") != std::string::npos);
+        CHECK(tt.find("Check the provider's current terms before relying on this.\n" + pt.terms_url) != std::string::npos);
+        CHECK(tt.find("Map data (c) somebody") != std::string::npos);
+    }
+    const std::string t = terms_text("OpenTopoMap", "Map style CC-BY-SA", provider_terms("opentopomap"), 2000);
+    CHECK(t.find("Free public server run by volunteers. Tiles are saved on this device as you view them. No bulk downloads.") !=
+          std::string::npos);
+    CHECK(t.find("\n\nMap style CC-BY-SA") != std::string::npos);
+    CHECK(t.find("Daily limit in this app: 2,000 requests") != std::string::npos);
+    CHECK(provider_terms("thunderforest").rules.find("API key from thunderforest.com") != std::string::npos);
+    CHECK(provider_terms("geoapify").rules.find("API key from geoapify.com") != std::string::npos);
+    /* an id the table does not know: short generic text, no address, no internal wording */
+    const std::string g = terms_text("My Server", "", provider_terms("my-own"), 0);
+    CHECK(g.find("My Server is an online map server.") == 0);
+    CHECK(g.find("Daily limit") == std::string::npos);
+    CHECK(g.find("Check the provider's current terms before relying on this.") != std::string::npos);
+    CHECK(g.find("http") == std::string::npos);
+    CHECK(g.find("054") == std::string::npos && g.find("unverified") == std::string::npos);
 }

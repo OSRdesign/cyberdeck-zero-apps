@@ -418,7 +418,7 @@ void AtlasApp::ask_terms(const std::string &id)
                                 });
                             }});
     dialog_ = std::make_unique<cp0::ui::Dialog>(page_->root(), layout_, std::move(spec));
-    dialog_->add_text(atlas::terms_text(o->note, o->licence, atlas::provider_terms(id), o->facts.daily_cap));
+    dialog_->add_text(atlas::terms_text(o->facts.title, o->licence, atlas::provider_terms(id), o->facts.daily_cap));
     dialog_->relayout();
     focus(dialog_->focus_object());
 }

@@ -30,23 +30,23 @@ or put it on a USB stick.
    the rate and the time left, then "Imported: 10,326 tiles, 260 MB, ... tiles/s". **Note the rate** (report 055: 784
    tiles/s on the deck for small tiles; these are about 26 KB) and whether the deck stays responsive (the clock in the
    strip keeps going, the Bluetooth keyboard keeps typing).
-4. Show on map: the map over Paris at the file's deepest level. Pan by dragging and by the arrow keys, zoom with the + / -
+4. Show on map: the map over the imported area at the file's deepest level. Pan by dragging and by the arrow keys, zoom with the + / -
    buttons on the right, the + and - keys, Page Up / Down, a double tap.
 5. Cancel once on a second try (import the same folder again from a USB stick: Cancel, then import it again; it goes on
    where it stopped, "N from before").
 
 ## T2. Legibility (the legibility check of report 054; 3 min, the deck and zero8 in both orientations)
 
-At arm's length, at zoom 15 (Neuilly-sur-Seine, Levallois) and zoom 17 (the two small patches west and north of it):
+At arm's length, at zoom 15 and zoom 17:
 
-- Can you read the street names, the road numbers (D 908), the place names and the scale bar's figure?
+- Can you read the street names, the road numbers, the place names and the scale bar's figure?
 - Settings > Display scale: Auto shows "Auto (2x)" on the deck and "Auto (1.5x)" on zero8. Try 1x, 1.5x and 2x on each
   board and tell which you prefer. The PC check's verdict is in the README (Known limits: legibility); confirm or correct it.
 
 ## T3. Online source (2 min, a board with Wi-Fi; optional)
 
-1. Sources > OpenTopoMap: the terms dialog (the record's "unverified: check before enabling" note, the licence, the
-   address of the terms, the cap of 2,000 tiles a day). I agree, enable. The row says "On", the map shows OpenTopoMap and
+1. Sources > OpenTopoMap: the terms dialog (what the source is and its rules in plain words, "Daily limit in
+   this app: 2,000 requests", the "check the provider's current terms" line with the address, the map data credit). I agree, enable. The row says "On", the map shows OpenTopoMap and
    fills as you look; the attribution is in the bottom right corner.
 2. Settings > Offline mode On: the map's top strip says "Offline: saved tiles only"; the tiles you saw stay.
 3. Switch OpenTopoMap off and on again: no dialog the second time.

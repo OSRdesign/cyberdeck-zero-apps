@@ -1,4 +1,4 @@
-# A view no imported file covers (Lyon, the fixture is in Paris), at the fixture's deepest level (15: a converted
+# A view no imported file covers (far from the fixture's tiles), at the fixture's deepest level (15: a converted
 # folder's bounds are that level's extent, the engine's record): "No map here". Zoomed out to 14 the plate goes (the
 # shallower levels of a converted folder are not bounded by the record).
 title No map here

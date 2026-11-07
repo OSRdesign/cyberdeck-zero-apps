@@ -192,8 +192,8 @@ void AtlasApp::open_store()
         if (archives_.empty() && real && *real && demo_mode_ != "empty") {
             cp0_map_import_opts_t o{};
             o.copy = 0;
-            o.id = "paris-real";
-            o.title = "Paris (real tiles)";
+            o.id = "real-tiles";
+            o.title = "Real tiles";
             const int r = cp0_map_store_import_ex(store_, real, &o);
             log_line("demo: %s registered in place: %s", real, r == CP0_MAP_OK ? "ok" : cp0_map_strerror(r));
         } else if (archives_.empty() && demo_mode_ != "empty") {
@@ -204,8 +204,8 @@ void AtlasApp::open_store()
 #endif
             if (!fixture.empty()) {
                 cp0_map_import_opts_t o{};
-                o.id = "paris-fixture";
-                o.title = "Paris (test tiles)";
+                o.id = "test-tiles";
+                o.title = "Test map";
                 const int r = cp0_map_store_import_ex(store_, fixture.c_str(), &o);
                 log_line("demo: fixture %s imported: %s", fixture.c_str(), r == CP0_MAP_OK ? "ok" : cp0_map_strerror(r));
             }

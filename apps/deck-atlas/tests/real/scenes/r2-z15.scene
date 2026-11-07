@@ -1,4 +1,4 @@
-# Real tiles: zoom 15 (Neuilly-sur-Seine / Levallois), at the four canvases with their default densities (2x).
+# Real tiles: zoom 15, at the four canvases with their default densities (2x).
 title Real tiles: zoom 15
 sizes 640x480 480x320 320x480 480x800
 env DECKATLAS_DEMO 1
