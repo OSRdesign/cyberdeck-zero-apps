@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-11-07T14:08:19+00:00",
+  "generated_at": "2026-11-07T14:14:14+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CyberdeckZero"
@@ -431,7 +431,7 @@
       },
       "version": "0.1.0",
       "published_at": "2026-11-07T14:08:19+00:00",
-      "updated_at": "2026-11-07T14:08:19+00:00",
+      "updated_at": "2026-11-07T14:14:14+00:00",
       "review": {
         "status": "approved"
       },
@@ -441,9 +441,9 @@
         "type": "deb",
         "package": "mmwave-radar",
         "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/mmwave-radar_0.1.0_amd64.deb",
-        "md5": "0f7c98c89809cfe51f852e2cdbdd64f1",
-        "sha256": "86a5a47c603b47e64ec5c4067f40ef32f98689b805486a2b42239c5f1ca60eea",
-        "size": 1538058
+        "md5": "a31937db3607b0c677234af992325c34",
+        "sha256": "0fb5be0ff91afe408d05bc2ecbb651b86a06ff7da4e82175254e5f07b6162406",
+        "size": 1538010
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0",
       "permissions": {
