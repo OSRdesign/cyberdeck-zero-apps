@@ -22,6 +22,9 @@
 #pragma once
 
 #include "attribution.hpp"
+#include "follow.hpp"
+#include "gps_link.hpp"
+#include "position_state.hpp"
 #include "geo.hpp"
 #include "import_model.hpp"
 #include "settings.hpp"
@@ -115,10 +118,31 @@ private:
     void fit_archive(const ArchiveItem &a);
     static void view_cb(void *user, double lat, double lon, int zoom);
     void update_chip();
+    void build_gps_layer();      /* the position dot's layer, over the map (atlas_gps.cpp) */
+    void build_gps_controls();   /* the status chip and the follow button */
     void update_attribution();   /* the plate over a credit the engine would cut (core/attribution.hpp) */
     std::string engine_attribution() const;
     void show_on_map(const std::string &id);
     void store_changed();     /* an archive came or went: the widget's limits, attribution and "*" tiles refreshed */
+
+    /* ---- GPS (atlas_gps.cpp) */
+    void gps_start();
+    void gps_stop();
+    void gps_apply_settings();             /* the Settings rows changed: configure the reader, show or hide the overlays */
+    void gps_tick(std::int64_t now);
+    void gps_refresh_ports();
+    void gps_layout();                     /* the chip and the follow button, laid out from the engine's controls */
+    void gps_show_overlays();              /* chip text and colour, button visibility, a redraw of the dot */
+    void set_follow(bool on);
+    void on_follow_off();
+    void recentre_on(double lat, double lon);
+    bool gps_key(std::uint32_t key_code, char ch);
+    void draw_gps(lv_layer_t *layer, const lv_area_t &area);
+    void draw_follow_button(lv_layer_t *layer, const lv_area_t &area);
+    static void gps_layer_cb(lv_event_t *e);
+    static void follow_draw_cb(lv_event_t *e);
+    static void follow_click_cb(lv_event_t *e);
+    atlas::AttrInput overlay_input() const;
 
     /* ---- store data (atlas_sources.cpp) */
     void refresh_store(std::function<void()> then = nullptr);
@@ -188,6 +212,18 @@ private:
     lv_obj_t *map_box_ = nullptr, *map_ = nullptr, *chip_ = nullptr, *chip_label_ = nullptr;
     lv_obj_t *attr_plate_ = nullptr, *attr_label_ = nullptr;
     std::string attr_key_;
+    int attr_row_top_ = -1;      /* atlas::AttrPlan::row_top of the credit now shown */
+
+    /* GPS: the reader (a fake port in demonstration mode), position.state, follow mode, what the overlays show now */
+    std::unique_ptr<atlas::GpsPortSys> gps_ports_;
+    std::unique_ptr<atlas::GpsLink> gps_;
+    std::unique_ptr<atlas::PositionStateWriter> pos_writer_;
+    atlas::FollowLogic follow_;
+    atlas::GpsStatus gps_status_;
+    std::string gps_chip_text_, gps_source_;
+    std::vector<std::string> gps_present_;   /* the serial ports present, for the Port row */
+    lv_obj_t *gps_layer_ = nullptr, *gps_chip_ = nullptr, *gps_chip_label_ = nullptr, *follow_btn_ = nullptr;
+    std::int64_t gps_ports_at_ = 0;
     lv_obj_t *tabbar_ = nullptr;
     struct Cell {
         lv_obj_t *obj = nullptr, *label = nullptr, *mark = nullptr;

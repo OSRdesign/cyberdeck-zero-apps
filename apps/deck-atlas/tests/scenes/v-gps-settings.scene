@@ -1,0 +1,44 @@
+# Settings > GPS receiver: GPS (Off, Auto), Port (Auto, then each serial port present), Speed (Auto, 9600, 4800, 38400,
+# 115200). Off by default: no chip and no follow button on the map; Auto starts the reader (a synthetic feed here).
+title GPS: the Settings group
+sizes 640x480 480x320 320x480
+env DECKATLAS_DEMO 1
+env DECKATLAS_GPS_FEED fix3d
+env DECKATLAS_VIEW 48.889643,2.269995,16
+
+wait 800
+shot map-gps-off
+expect notext "3D fix 9 sats"
+expect notext "No GPS device"
+key tab
+key tab
+wait 800
+key down
+key down
+key down
+key down
+key down
+key down
+wait 400
+shot settings-gps-off
+expect text "GPS RECEIVER"
+expect text "Off"
+key enter
+wait 400
+shot settings-gps-auto
+key down
+key enter
+wait 300
+shot settings-port
+expect text "/dev/ttyACM0"
+key down
+key enter
+wait 300
+key enter
+wait 300
+shot settings-speed
+expect text "4800"
+key tab
+wait 2500
+shot map-gps-on
+expect text "3D fix 9 sats"
