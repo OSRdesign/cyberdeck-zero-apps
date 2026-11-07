@@ -6,7 +6,8 @@
  *   $GPRMC,...*5A        a sentence (sent as it stands; its line end is added)
  *   #wait 1500           pauses the feed for 1500 ms (relative to the one before)
  *   # anything else      a comment
- * Without a file the list of ports is empty ("No GPS device"). The file is made by tests/tools/gen_nmea.py from an
+ * Without a file the list of ports is empty ("No GPS device"). The feed name "@other" lists one serial port that is
+ * no known receiver (a CH340, 1a86:7523) and sends nothing: Auto must not open it ("No GPS receiver found"). The file is made by tests/tools/gen_nmea.py from an
  * invented coordinate (never a recording). Every speed is accepted.
  */
 #pragma once
@@ -34,6 +35,7 @@ public:
     void close(int handle) override;
 
 private:
+    bool other_ = false;                                       /* "@other": the unknown serial port */
     std::vector<std::pair<std::int64_t, std::string>> feed_;   /* (due ms after the open, bytes) */
     bool opened_ = false;
     std::chrono::steady_clock::time_point t0_;

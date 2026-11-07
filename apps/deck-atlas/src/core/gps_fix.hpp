@@ -57,10 +57,10 @@ private:
  * 10 m when the HDOP is unknown. */
 double accuracy_from_hdop(double hdop);
 
-enum class GpsLinkState { Off, NoDevice, NoAccess, Searching, Locked };
+enum class GpsLinkState { Off, NoDevice, NoReceiver, NoAccess, Searching, Locked };
 
 struct GpsStatus {
-    enum class Kind { Off, NoDevice, NoAccess, Searching, Fix2D, Fix3D };
+    enum class Kind { Off, NoDevice, NoReceiver, NoAccess, Searching, Fix2D, Fix3D };
     Kind kind = Kind::Off;
     bool stale = false;           /* a 2D / 3D fix whose last valid sentence is older than kStaleMs */
     std::int64_t age_ms = 0;      /* of the fix; 0 when there is none */
@@ -70,7 +70,7 @@ struct GpsStatus {
 
 GpsStatus make_status(GpsLinkState link, const FixTracker &tracker, std::int64_t now_ms);
 
-/* The status chip: "" (GPS off: no chip), "No GPS device", "No access to GPS port", "Searching", "2D fix", "3D fix 9
+/* The status chip: "" (GPS off: no chip), "No GPS device", "No GPS receiver found" (Auto sees only serial ports that are no known receiver), "No access to GPS port", "Searching", "2D fix", "3D fix 9
  * sats", "Last fix 12 s ago" (stale); a moving fix adds ", 12 km/h" (", 8 mph" with miles). */
 std::string chip_text(const GpsStatus &s, bool miles);
 

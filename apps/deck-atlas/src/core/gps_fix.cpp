@@ -115,6 +115,7 @@ GpsStatus make_status(GpsLinkState link, const FixTracker &tracker, std::int64_t
     switch (link) {
     case GpsLinkState::Off: s.kind = GpsStatus::Kind::Off; return s;
     case GpsLinkState::NoDevice: s.kind = GpsStatus::Kind::NoDevice; return s;
+    case GpsLinkState::NoReceiver: s.kind = GpsStatus::Kind::NoReceiver; return s;
     case GpsLinkState::NoAccess: s.kind = GpsStatus::Kind::NoAccess; return s;
     case GpsLinkState::Searching: s.kind = GpsStatus::Kind::Searching; return s;
     case GpsLinkState::Locked: break;
@@ -136,6 +137,7 @@ std::string chip_text(const GpsStatus &s, bool miles)
     switch (s.kind) {
     case GpsStatus::Kind::Off: return "";
     case GpsStatus::Kind::NoDevice: return "No GPS device";
+    case GpsStatus::Kind::NoReceiver: return "No GPS receiver found";
     case GpsStatus::Kind::NoAccess: return "No access to GPS port";
     case GpsStatus::Kind::Searching: return "Searching";
     default: break;

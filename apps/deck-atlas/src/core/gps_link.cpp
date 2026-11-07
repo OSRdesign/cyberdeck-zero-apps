@@ -5,8 +5,9 @@
  */
 #include "gps_link.hpp"
 
+#include "gps_ids.hpp"
+
 #include <algorithm>
-#include <cctype>
 
 namespace atlas {
 
@@ -16,24 +17,8 @@ constexpr int kReadsPerTick = 4;       /* at most 4 x 512 bytes per 100 ms tick:
 constexpr std::size_t kReadSize = 512;
 constexpr int kLockSentences = 2;      /* valid-checksum sentences needed to call a port a receiver */
 
-bool contains_ci(const std::string &hay, const char *needle)
-{
-    std::string h = hay;
-    for (char &c : h) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    return h.find(needle) != std::string::npos;
-}
-
-/* Lower is tried first: a u-blox (USB 1546), a port named like a GPS, then native USB (ACM), then bridges (USB). */
-int port_score(const PortInfo &p)
-{
-    if (p.vid == 0x1546) return 0;
-    if (contains_ci(p.by_id, "gps") || contains_ci(p.by_id, "gnss") || contains_ci(p.by_id, "u-blox") ||
-        contains_ci(p.product, "gps") || contains_ci(p.product, "gnss"))
-        return 1;
-    if (p.tty.compare(0, 6, "ttyACM") == 0) return 2;
-    if (p.tty.compare(0, 6, "ttyUSB") == 0) return 3;
-    return 4;
-}
+/* Lower is tried first: a u-blox, then the other known receivers (only known receivers are candidates in Auto). */
+int port_score(const PortInfo &p) { return p.vid == 0x1546 ? 0 : 1; }
 
 } // namespace
 
@@ -147,12 +132,16 @@ void GpsLink::scan(std::int64_t now)
         for (const PortInfo &p : ports)
             if (p.path == cfg_.port) cand.push_back(p);
     } else {
-        cand = ports;
+        /* Auto opens only a known GPS receiver (gps_ids.cpp): never a radar, a LoRa board or any other serial device, whose
+         * reset line the open could pull */
+        for (const PortInfo &p : ports)
+            if (gps_known_receiver(p.vid, p.pid)) cand.push_back(p);
         std::stable_sort(cand.begin(), cand.end(),
                          [](const PortInfo &a, const PortInfo &b) { return port_score(a) < port_score(b); });
     }
     if (cand.empty()) {
-        state_ = GpsLinkState::NoDevice;
+        /* serial ports exist but none is a known receiver (Auto): say so; a chosen port that is absent, or no port: no device */
+        state_ = (cfg_.port.empty() && !ports.empty()) ? GpsLinkState::NoReceiver : GpsLinkState::NoDevice;
         return;
     }
     int denied = 0, other = 0;

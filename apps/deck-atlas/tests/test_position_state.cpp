@@ -103,7 +103,8 @@ void test_position_state()
     /* no fix, no device, stale: fix=0 and nothing that could be taken for a position */
     {
         FixTracker none;
-        for (GpsLinkState l : {GpsLinkState::Searching, GpsLinkState::NoDevice, GpsLinkState::NoAccess, GpsLinkState::Locked}) {
+        for (GpsLinkState l : {GpsLinkState::Searching, GpsLinkState::NoDevice, GpsLinkState::NoReceiver, GpsLinkState::NoAccess,
+                               GpsLinkState::Locked}) {
             const std::string t = format_position_state(make_status(l, none, 500), info);
             CHECK_EQ(t, std::string("v=1\ngen=812\npid=2310\nwriter=deck-atlas\nfix=0\nmono_ms=123999\nsource=usb:1546:01a8\n"));
         }

@@ -2,7 +2,7 @@
 
 For the owner (controller-led testing: Claude deploys and reads the logs, you do the physical steps). The models
 (settings, labels, the import progress, the online sources' flow, the file browser, the map geometry, the package files)
-are tested on the PC (`build.sh host`: 1,912 checks), and 22 scenes draw every page at 640x480, 480x320, 320x480 and
+are tested on the PC (`build.sh host`: 2,014 checks), and 23 scenes draw every page at 640x480, 480x320, 320x480 and
 480x800 (plus the zero8 density). What the PC cannot tell: **whether the map is readable on the glass**, how a real
 import feels on a Zero 2 W's SD card, the memory use, and the network path. Keep it short: the main path must work.
 
@@ -98,6 +98,14 @@ real puck, the cold start, power, memory.
     MB above T4); with Wi-Fi tile fetching on, the deck does not reset (a powered hub if it does; note the board).
 11. **Privacy.** `ss -tnp | grep deck-atlas` shows only the tile source's connections (none with Offline mode on), never anything
     about the position.
+
+12. **Other serial devices are never opened in Auto** (the owner's rule: a mmWave radar's CH340, ESP32 / LoRa boards). With
+    the CH340 radar (1a86:7523) on a `ttyUSB*` and **no GPS puck**, GPS Auto: the chip says "No GPS receiver found";
+    `ls -l /proc/$(pgrep -x deck-atlas)/fd | grep tty` shows nothing, the radar keeps streaming in mmWave Radar / Serial Console
+    without a reset, and `journalctl` shows no `gps: opened` line. Settings > GPS receiver > Port lists `/dev/ttyUSB0`
+    (tap to pick it: only then is it opened, and "Searching" stays since it sends no NMEA; back to Auto closes it). Then plug
+    the u-blox puck too: Auto finds the puck (u-blox 1546:*) and still never touches the radar. Repeat with an ESP32 / LoRa
+    board on a `ttyACM*` (303a:*) or a CP210x / FTDI adapter.
 
 ## T6. What to tell me
 

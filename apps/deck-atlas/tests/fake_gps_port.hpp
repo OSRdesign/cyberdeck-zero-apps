@@ -34,13 +34,16 @@ public:
     int list_calls = 0, open_calls = 0;
     std::size_t bytes_read = 0;
 
-    FakeDevice &add(const std::string &tty, int baud = 9600, std::uint16_t vid = 0, const std::string &by_id = "")
+    /* vid:pid default to a u-blox (a known receiver: Auto may open it); pass others for the unknown devices */
+    FakeDevice &add(const std::string &tty, int baud = 9600, std::uint16_t vid = 0x1546, const std::string &by_id = "",
+                    std::uint16_t pid = 0x01a8)
     {
         FakeDevice d;
         d.info.tty = tty;
         d.info.path = "/dev/" + tty;
         d.info.vid = vid;
         d.info.by_id = by_id;
+        d.info.pid = pid;
         d.baud = baud;
         devs.push_back(d);
         return devs.back();

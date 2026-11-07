@@ -320,31 +320,89 @@ void test_gps_link()
         CHECK_EQ(fake.devs[0].opens, 0);
         CHECK_EQ(fake.count("close "), 1);
     }
-    /* Auto: a u-blox is tried before other ports; ACM before USB bridges */
+    /* Auto: a u-blox is tried before the other known receivers (a Prolific puck), whatever the port numbers */
     {
         FakeGpsPorts fake;
-        fake.add("ttyACM0", 1);                       /* a board that is not a receiver */
+        fake.add("ttyACM0", 1, 0x067b, "", 0x2303);   /* a Prolific puck that does not talk */
         fake.add("ttyUSB0", 9600, 0x1546);            /* the u-blox */
         GpsLink link(fake);
         link.configure(on());
         run(link, fake, 0, 1500, 1);
         CHECK(link.state() == GpsLinkState::Locked);
+        CHECK_EQ(link.port().path, std::string("/dev/ttyUSB0"));
         CHECK_EQ(fake.devs[0].opens, 0); /* never opened: the u-blox went first and talked */
+        /* two known receivers, the first silent: the second is used after it (both are known) */
         FakeGpsPorts f2;
-        f2.add("ttyUSB0", 1);
-        f2.add("ttyACM0", 9600);
+        f2.add("ttyUSB0", 1, 0x067b, "", 0x23a3);
+        f2.add("ttyUSB1", 9600, 0x067b, "", 0x2303);
         GpsLink l2(f2);
         l2.configure(on());
-        run(l2, f2, 0, 1500, 1);
-        CHECK_EQ(l2.port().path, std::string("/dev/ttyACM0"));
-        CHECK_EQ(f2.devs[0].opens, 0);
-        FakeGpsPorts f3;
-        f3.add("ttyUSB0", 1);
-        f3.add("ttyUSB1", 9600, 0, "usb-u-blox_AG_-_www.u-blox.com_u-blox_7_-_GPS_GNSS_Receiver-if00");
-        GpsLink l3(f3);
-        l3.configure(on());
-        run(l3, f3, 0, 1500, 1);
-        CHECK_EQ(l3.port().path, std::string("/dev/ttyUSB1"));
+        run(l2, f2, 0, 14000, 1);
+        CHECK_EQ(l2.port().path, std::string("/dev/ttyUSB1"));
+        CHECK_EQ(f2.devs[0].opens, 1);
+    }
+    /* THE RULE: Auto never opens a device that is no known receiver (a CH340 radar, CP210x, FTDI, an Espressif board, a
+     * port with no USB id, another Prolific chip): no open() at all, "No GPS receiver found"; a known receiver that
+     * appears later is found, the unknown ones still untouched; a port the user chose is opened whatever it is */
+    {
+        FakeGpsPorts fake;
+        fake.add("ttyUSB0", 9600, 0x1a86, "", 0x7523);   /* CH340: the mmWave radar */
+        fake.add("ttyUSB1", 9600, 0x10c4, "", 0xea60);   /* CP210x */
+        fake.add("ttyUSB2", 9600, 0x0403, "", 0x6001);   /* FTDI */
+        fake.add("ttyACM0", 9600, 0x303a, "", 0x1001);   /* Espressif native USB */
+        fake.add("ttyACM1", 9600, 0, "usb-GPS_Receiver-if00"); /* no USB id, a GPS-like name: still no */
+        fake.add("ttyUSB3", 9600, 0x067b, "", 0x2304);   /* another Prolific chip: not on the list */
+        for (FakeDevice &d : fake.devs) d.info.product = "GPS GNSS receiver"; /* a name proves nothing */
+        GpsLink link(fake);
+        link.configure(on());
+        run(link, fake, 0, 70000, -1);
+        CHECK_EQ(fake.open_calls, 0);
+        CHECK_EQ(fake.count("open "), 0);
+        CHECK_EQ(fake.count("config "), 0);
+        CHECK_EQ(static_cast<int>(fake.bytes_read), 0);
+        CHECK(link.state() == GpsLinkState::NoReceiver);
+        CHECK_EQ(chip_text(link.status(70000), false), std::string("No GPS receiver found"));
+        CHECK(link.status(70000).kind == GpsStatus::Kind::NoReceiver);
+        CHECK(!link.status(70000).has_fix());
+        CHECK(fake.list_calls > 20); /* it keeps looking, every 2 s, but only looks */
+        /* a known receiver is plugged in: found; the unknown ones are still never opened */
+        fake.add("ttyUSB4", 9600, 0x1546);
+        run(link, fake, 70100, 74500, 6);
+        CHECK(link.state() == GpsLinkState::Locked);
+        CHECK_EQ(link.port().path, std::string("/dev/ttyUSB4"));
+        for (std::size_t i = 0; i < 6; ++i) CHECK_EQ(fake.devs[i].opens, 0);
+        /* the port the user chose is opened as chosen, a CH340 included */
+        GpsConfig c = on();
+        c.port = "/dev/ttyUSB0";
+        link.configure(c);
+        run(link, fake, 74600, 76000, 0);
+        CHECK_EQ(fake.devs[0].opens, 1);
+        CHECK(link.state() == GpsLinkState::Locked);
+        CHECK_EQ(link.port().path, std::string("/dev/ttyUSB0"));
+        /* back to Auto: it is closed, and Auto goes to the u-blox again */
+        link.configure(on());
+        run(link, fake, 76100, 79000, 6);
+        CHECK_EQ(link.port().path, std::string("/dev/ttyUSB4"));
+        CHECK_EQ(fake.devs[0].opens, 1);
+    }
+    /* only unknown ports, no GPS at all: a chosen absent port is "no device", Auto sees ports but no receiver; no port: no device */
+    {
+        FakeGpsPorts fake;
+        fake.add("ttyUSB0", 9600, 0x1a86, "", 0x7523);
+        GpsLink link(fake);
+        link.configure(on());
+        run(link, fake, 0, 3000);
+        CHECK(link.state() == GpsLinkState::NoReceiver);
+        fake.devs[0].present = false;
+        run(link, fake, 3100, 6000);
+        CHECK(link.state() == GpsLinkState::NoDevice);
+        GpsConfig c = on();
+        c.port = "/dev/ttyUSB5";
+        link.configure(c);
+        fake.devs[0].present = true;
+        run(link, fake, 6100, 9000);
+        CHECK(link.state() == GpsLinkState::NoDevice); /* the chosen one is not there */
+        CHECK_EQ(fake.open_calls, 0);
     }
     /* the first port does not talk (it is listened to for all four speeds), then the second is tried and found; the first is
      * left alone for its backoff */

@@ -55,7 +55,7 @@ void test_package()
     CHECK(has(test_read_file(app + "/src/ui/atlas_app.cpp"), "cp0_map_user_agent(ua, sizeof ua, \"deck-atlas\", kVersion)"));
     /* the GPS reader is listen-only by construction: nothing in its sources can send a byte to a port, the device is
      * opened read-only, and the port interface has no send call at all (the way mmWave Radar's test checks its reader) */
-    const char *const gps_files[] = {"nmea.hpp", "nmea.cpp", "gps_fix.hpp", "gps_fix.cpp", "gps_port.hpp", "gps_link.hpp",
+    const char *const gps_files[] = {"nmea.hpp", "nmea.cpp", "gps_ids.hpp", "gps_ids.cpp", "gps_fix.hpp", "gps_fix.cpp", "gps_port.hpp", "gps_link.hpp",
                                      "gps_link.cpp", "gps_posix.hpp", "gps_posix.cpp", "gps_demo.hpp", "gps_demo.cpp",
                                      "follow.hpp", "follow.cpp", "../ui/atlas_gps.cpp"};
     const char *const banned[] = {"write(", "writev(", "pwrite", "fwrite(", "send(", "sendto(", "sendmsg", "O_RDWR", "O_WRONLY",

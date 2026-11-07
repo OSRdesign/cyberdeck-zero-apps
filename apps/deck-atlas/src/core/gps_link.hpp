@@ -5,8 +5,9 @@
  * timer: every call is non-blocking (open, read and list are quick system calls; nothing sleeps, no thread), reads at
  * most a few KB, and does nothing at all while the GPS is off.
  *
- * Find: every 2 s (and at once when the list of ports changed) the candidate ports are listed (/dev/ttyACM* and
- * /dev/ttyUSB*, a u-blox first, or just the one the user chose) and the first free one is opened (read-only, locked:
+ * Find: every 2 s (and at once when the list of ports changed) the candidate ports are listed: in Auto only ports whose
+ * USB id is a known GPS receiver (gps_ids.cpp: u-blox first; a CH340 radar, an ESP32 or any other serial device is never
+ * opened, "No GPS receiver found"), or just the one the user chose (opened whatever it is). The first free one is opened (read-only, locked:
  * a port another app holds is skipped). Speed: a fixed one, or Auto: the last good one, then 9600, 4800, 38400 and
  * 115200, each listened to for 2.5 s; the port is the receiver only when two sentences with a valid NMEA checksum
  * arrived (a strict sniff; line noise at a wrong speed never passes). A port that does not talk NMEA, is busy or

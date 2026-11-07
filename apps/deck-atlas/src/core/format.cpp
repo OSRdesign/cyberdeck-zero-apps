@@ -84,7 +84,8 @@ const char *gps_label(bool on) { return on ? "Auto" : "Off"; }
 std::string gps_port_label(const std::string &port, bool present)
 {
     if (port.empty()) return "Auto";
-    return present ? port : port + " (absent)";
+    const std::string name = port.compare(0, 5, "/dev/") == 0 ? port.substr(5) : port; /* "ttyUSB0": a row is narrow */
+    return present ? name : name + " (absent)";
 }
 std::string gps_speed_label(int baud) { return baud == 0 ? std::string("Auto") : std::to_string(baud); }
 

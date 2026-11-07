@@ -7,6 +7,7 @@
  */
 #include "check.hpp"
 #include "gps_demo.hpp"
+#include "gps_ids.hpp"
 #include "gps_link.hpp"
 
 #include <cstdio>
@@ -32,6 +33,25 @@ void test_gps_demo()
         CHECK(missing.list_ports().empty());
         PortErr err;
         CHECK_EQ(missing.open("/dev/ttyACM0", err), -1);
+    }
+    /* the "@other" feed: one serial port that is no known receiver: listed, never opened by Auto, opened when chosen */
+    {
+        DemoGpsPorts other("@other");
+        const std::vector<PortInfo> l = other.list_ports();
+        CHECK_EQ(l.size(), static_cast<std::size_t>(1));
+        CHECK(!gps_known_receiver(l[0].vid, l[0].pid));
+        GpsLink link(other);
+        GpsConfig c;
+        c.on = true;
+        link.configure(c);
+        for (long t = 0; t < 3000; t += 100) link.tick(t);
+        CHECK(link.state() == GpsLinkState::NoReceiver);
+        CHECK(link.port().path.empty());
+        c.port = "/dev/ttyUSB0";
+        link.configure(c);
+        for (long t = 3000; t < 4000; t += 100) link.tick(t);
+        CHECK(link.state() == GpsLinkState::Searching); /* opened by choice, nothing is sent: searching */
+        CHECK_EQ(link.port().path, std::string("/dev/ttyUSB0"));
     }
     /* a small feed with a pause: the first line at once, the second after the wait */
     {

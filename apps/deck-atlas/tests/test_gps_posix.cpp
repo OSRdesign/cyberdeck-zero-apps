@@ -6,6 +6,7 @@
  * the whole link over a pty: sentences written to the master end come out as a 3D fix.
  */
 #include "check.hpp"
+#include "gps_ids.hpp"
 #include "gps_link.hpp"
 #include "gps_posix.hpp"
 
@@ -57,6 +58,13 @@ void test_gps_posix()
         roots.dev = root + "/dev";
         roots.sys = root + "/sys";
         for (const char *n : {"ttyACM0", "ttyACM10", "ttyACM2", "ttyUSB0", "ttyS0", "tty1", "null"}) make_file(roots.dev + "/" + n, "");
+        make_file(root + "/sys/devices/usb1/1-2/idVendor", "1a86\n"); /* a CH340 on ttyUSB0 */
+        make_file(root + "/sys/devices/usb1/1-2/idProduct", "7523\n");
+        make_file(root + "/sys/devices/usb1/1-2/1-2:1.0/ttyUSB0/dummy", "");
+        ::mkdir((root + "/sys/class").c_str(), 0755);
+        ::mkdir((root + "/sys/class/tty").c_str(), 0755);
+        ::mkdir((root + "/sys/class/tty/ttyUSB0").c_str(), 0755);
+        ::symlink((root + "/sys/devices/usb1/1-2/1-2:1.0").c_str(), (root + "/sys/class/tty/ttyUSB0/device").c_str());
         make_file(root + "/sys/devices/usb1/1-1/idVendor", "1546\n");
         make_file(root + "/sys/devices/usb1/1-1/idProduct", "01a8\n");
         make_file(root + "/sys/devices/usb1/1-1/product", "u-blox 7 - GPS/GNSS Receiver\n");
@@ -81,6 +89,12 @@ void test_gps_posix()
             CHECK_EQ(l[0].product, std::string("u-blox 7 - GPS/GNSS Receiver"));
             CHECK_EQ(l[0].by_id, std::string("usb-u-blox_AG_u-blox_7-if00"));
             CHECK_EQ(l[1].vid, static_cast<std::uint16_t>(0));
+            /* the identity decides what Auto may open: the u-blox yes, the CH340, a port with no id no */
+            CHECK(gps_known_receiver(l[0].vid, l[0].pid));
+            CHECK_EQ(static_cast<int>(l[3].vid), 0x1a86);
+            CHECK_EQ(static_cast<int>(l[3].pid), 0x7523);
+            CHECK(!gps_known_receiver(l[3].vid, l[3].pid));
+            CHECK(!gps_known_receiver(l[1].vid, l[1].pid));
             CHECK_EQ(l[0].path, roots.dev + "/ttyACM0");
         }
         /* a regular file is no tty: Other; a missing node: Gone */
@@ -177,9 +191,15 @@ void test_gps_posix()
         PosixGpsPorts ports(roots);
         ports.add_extra_port(s2);
         GpsLink link(ports);
+        /* Auto: the pty has no USB id, so it is no known receiver and is never opened */
+        GpsConfig a;
+        a.on = true;
+        link.configure(a);
+        for (long t = 0; t < 4000; t += 100) link.tick(t);
+        CHECK(link.state() == GpsLinkState::NoReceiver);
         GpsConfig c;
         c.on = true;
-        c.port = ""; /* Auto: the extra port is a candidate */
+        c.port = s2; /* the port chosen by hand is opened whatever its id */
         link.configure(c);
         const std::string pos = "4853.37855,N,00216.19971,E";
         const std::string feed = nmea_frame("GNRMC,101530.00,A," + pos + ",0.10,,150126,,,A,V") + "\r\n" +

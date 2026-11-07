@@ -30,7 +30,7 @@ key down
 key enter
 wait 300
 shot settings-port
-expect text "/dev/ttyACM0"
+expect text "ttyACM0"
 key down
 key enter
 wait 300

@@ -27,6 +27,7 @@ enum : std::intptr_t {
     kGps,
     kGpsPort,
     kGpsSpeed,
+    kGpsHint,
     kUsage,
     kVersionRow,
     kAbout,
@@ -76,6 +77,8 @@ std::vector<cp0::ui::ListRow> AtlasApp::settings_rows() const
                                  ValueTone::Normal, kGpsPort, RowAffordance::Edit));
     rows.push_back(ListRow::item("Speed", atlas::gps_speed_label(settings_.gps_baud), ValueTone::Normal, kGpsSpeed,
                                  RowAffordance::Edit));
+    rows.push_back(ListRow::item("Not found by itself? Pick its port above.", "",
+                                 ValueTone::Normal, kGpsHint, RowAffordance::Info));
     rows.push_back(ListRow::section("About"));
     rows.push_back(ListRow::item("Version", kVersion, ValueTone::Normal, kVersionRow, RowAffordance::Info));
     rows.push_back(ListRow::item("Map data and credits", "", ValueTone::Normal, kAbout, RowAffordance::Open));
@@ -210,7 +213,9 @@ std::string AtlasApp::about_text() const
          "libcurl (curl licence), system libraries loaded when present; LVGL (MIT); the Montserrat font (OFL) from "
          "the launcher.";
     s += "\n\nGPS\nOff until you switch it on in Settings. Deck Atlas only listens to the receiver (NMEA sentences on a USB "
-         "serial port; it never sends anything to it) and shows the position on the map. The position is never sent "
+         "serial port; it never sends anything to it) and shows the position on the map. Port Auto opens only known GPS "
+         "receivers (u-blox, Prolific PL2303 pucks); other serial devices are never opened unless you pick their port: other "
+         "serial ports are listed in Port, pick one if your receiver is not found by itself. The position is never sent "
          "anywhere: it is drawn on the screen and written to position.state in the launcher's state folder so that "
          "other apps on this deck can read it.";
     s += "\n\nFILES\nSettings: ~/.config/deck-atlas/settings.conf\nMaps, keys and saved tiles: " +

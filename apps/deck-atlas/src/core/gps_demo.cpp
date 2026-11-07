@@ -13,6 +13,10 @@ namespace atlas {
 
 DemoGpsPorts::DemoGpsPorts(const std::string &feed_path)
 {
+    if (feed_path == "@other") {
+        other_ = true;
+        return;
+    }
     if (feed_path.empty()) return;
     std::ifstream in(feed_path);
     if (!in) return;
@@ -37,6 +41,16 @@ DemoGpsPorts::DemoGpsPorts(const std::string &feed_path)
 std::vector<PortInfo> DemoGpsPorts::list_ports()
 {
     std::vector<PortInfo> out;
+    if (other_) {
+        PortInfo o;
+        o.path = "/dev/ttyUSB0";
+        o.tty = "ttyUSB0";
+        o.vid = 0x1a86;
+        o.pid = 0x7523;
+        o.product = "USB Serial";
+        out.push_back(o);
+        return out;
+    }
     if (feed_.empty()) return out;
     PortInfo p;
     p.path = "/dev/ttyACM0";
@@ -51,6 +65,14 @@ std::vector<PortInfo> DemoGpsPorts::list_ports()
 int DemoGpsPorts::open(const std::string &path, PortErr &err)
 {
     err = PortErr::None;
+    if (other_ && path == "/dev/ttyUSB0") {
+        opened_ = true;
+        pending_.clear();
+        pending_off_ = 0;
+        t0_ = std::chrono::steady_clock::now();
+        next_ = 0;
+        return 42;
+    }
     if (feed_.empty() || path != "/dev/ttyACM0") {
         err = PortErr::Gone;
         return -1;

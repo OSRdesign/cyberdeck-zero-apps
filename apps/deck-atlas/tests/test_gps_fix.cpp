@@ -153,6 +153,10 @@ void test_gps_fix()
         CHECK(!nd.has_fix()); /* a lost receiver: no dot, whatever the tracker remembers */
         CHECK_EQ(chip_text(nd, false), std::string("No GPS device"));
         CHECK_EQ(chip_text(make_status(GpsLinkState::NoAccess, t, 100), false), std::string("No access to GPS port"));
+        const GpsStatus nr = make_status(GpsLinkState::NoReceiver, t, 100);
+        CHECK(nr.kind == GpsStatus::Kind::NoReceiver);
+        CHECK(!nr.has_fix());
+        CHECK_EQ(chip_text(nr, false), std::string("No GPS receiver found"));
         CHECK_EQ(chip_text(make_status(GpsLinkState::Searching, t, 100), false), std::string("Searching"));
     }
     /* the chip: a moving fix shows its speed; 1.0 m/s and below does not; miles */

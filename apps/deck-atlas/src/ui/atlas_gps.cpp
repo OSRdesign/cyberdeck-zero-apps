@@ -104,7 +104,8 @@ void AtlasApp::gps_start()
         std::string feed;
         if (const char *f = std::getenv("DECKATLAS_GPS_FEED"); f && *f) {
             feed = f;
-            if (feed.find('/') == std::string::npos) {
+            if (feed == "other") feed = "@other"; /* an unknown serial port, no receiver */
+            else if (feed.find('/') == std::string::npos) {
 #ifdef CDK_APP_DIR
                 feed = std::string(CDK_APP_DIR) + "/tests/gps-feeds/" + feed + ".nmea";
 #endif
@@ -268,6 +269,7 @@ void AtlasApp::gps_show_overlays()
         lv_obj_add_flag(gps_chip_, LV_OBJ_FLAG_HIDDEN);
     } else {
         const bool problem = gps_status_.kind == atlas::GpsStatus::Kind::NoDevice ||
+                             gps_status_.kind == atlas::GpsStatus::Kind::NoReceiver ||
                              gps_status_.kind == atlas::GpsStatus::Kind::NoAccess || gps_status_.stale;
         lv_obj_set_style_text_color(gps_chip_label_, rgb(problem ? pal::kWarn : pal::kText), 0);
         lv_label_set_text(gps_chip_label_, text.c_str());

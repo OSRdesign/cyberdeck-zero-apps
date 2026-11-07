@@ -95,8 +95,8 @@ void test_settings_gps()
     CHECK_EQ(std::string(gps_label(false)), std::string("Off"));
     CHECK_EQ(std::string(gps_label(true)), std::string("Auto"));
     CHECK_EQ(gps_port_label("", false), std::string("Auto"));
-    CHECK_EQ(gps_port_label("/dev/ttyACM0", true), std::string("/dev/ttyACM0"));
-    CHECK_EQ(gps_port_label("/dev/ttyUSB1", false), std::string("/dev/ttyUSB1 (absent)"));
+    CHECK_EQ(gps_port_label("/dev/ttyACM0", true), std::string("ttyACM0"));
+    CHECK_EQ(gps_port_label("/dev/ttyUSB1", false), std::string("ttyUSB1 (absent)"));
     CHECK_EQ(gps_speed_label(0), std::string("Auto"));
     CHECK_EQ(gps_speed_label(9600), std::string("9600"));
 }

@@ -67,6 +67,7 @@ int main()
     test_geo();
     test_attribution();
     test_nmea();
+    test_gps_ids();
     test_gps_fix();
     test_gps_link();
     test_gps_posix();
