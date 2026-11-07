@@ -1,0 +1,234 @@
+# Deck Atlas (`deck-atlas`)
+
+An offline map viewer for the cyberdeck, by touch or keyboard: import your own maps (MBTiles or PMTiles files, or a
+`z/x/y` tile folder from a tile downloader, converted on the board into one MBTiles file) from the SD card or a USB
+stick, then pan and zoom without any network. Three online tile sources come with the map engine, all **off** until you
+switch them on (OpenTopoMap, and Thunderforest and Geoapify with your own free key); the tiles you looked at stay on the
+SD card. Version **0.1.0** (draft: not in the registry until the owner's board test). Native fullscreen app (kind A of
+the guidelines: it has its own pages, lists and forms) on the launcher's `cp0_lvgl` with its **map engine**
+(`cp0_map.h`, switched on for this app only), MIT. The GPS (a position dot, follow mode, `position.state`) comes in the
+next version; places and tracks after that.
+
+## Screenshots
+
+Rendered by the PC harness (`build.sh host`) over the test tiles (`tests/fixtures`):
+
+| | |
+| --- | --- |
+| ![Map](../../docs/screenshots/deck-atlas-map.png) | ![Sources](../../docs/screenshots/deck-atlas-sources.png) |
+| Map tab at 640x480 (the deck: 2x) | Sources tab |
+| ![Import](../../docs/screenshots/deck-atlas-import.png) | ![Terms](../../docs/screenshots/deck-atlas-terms.png) |
+| Converting a tile folder | Switching an online source on: its terms, once |
+| ![Settings](../../docs/screenshots/deck-atlas-settings.png) | ![zero8](../../docs/screenshots/deck-atlas-zero8-480x320.png) |
+| Settings tab | zero8's 3.5" 480x320 panel (6.3 px/mm: 1.5x) |
+
+The Store shows `screenshots/` (640x480, 480x320, 320x480 and 480x800).
+
+## What it does
+
+Three tabs, switched by the strip at the bottom (or Tab / Shift+Tab):
+
+- **Map.** The engine's map widget over the whole area. Drag to pan (or the arrow keys: an eighth of the view, a half
+  with Shift); zoom with the + / - buttons at the right edge, the + and - keys, Page Up / Page Down, or a double tap.
+  The scale bar is at the bottom left (km or miles), the attribution of the map in view at the bottom right. The zoom
+  goes one level deeper than the map's last level ("overzoom": the deepest tiles magnified). When no imported file
+  covers the view, a plate says **No map here**; on the first run with nothing imported it says **No map yet. Import a
+  map file in Sources.** An online source that cannot fetch says why in the engine's strip at the top ("Offline: saved
+  tiles only", "This source needs an API key", "Daily tile limit reached: saved tiles only"...). The view (centre and
+  zoom) is remembered; the first run centres on the first imported file, or shows the world.
+- **Sources.**
+  - *Map shows*: every map file (each tile from the first file, in id order, that has it), one file, or an online
+    source that is switched on.
+  - *Map files*: each imported file with its size and zoom levels. Its page: Show on map (fits the file in the view),
+    Remove (asks first; a copied or converted file is deleted, a file read in place on a stick is only forgotten), and
+    the facts: name, file, size, zooms, tiles, area, how it is kept, what was imported, the date, its attribution.
+  - *Import a map*: the file browser (the home folder and every USB stick or card mounted under `/media`,
+    `/run/media` or `/mnt`; folders, `.mbtiles` and `.pmtiles` files, nothing else). A tile folder (zoom folders of
+    column folders of tiles, MapTileDl's layout, or a TMS folder with `tilemapresource.xml`) shows one row, *Import this
+    tile folder*, with its zoom levels. An archive offers **Copy** (recommended: it stays when the stick is out) or **In
+    place** (read on the stick; listed as missing while the stick is out). Before it starts, the free space is checked
+    (the folder's size plus 5 % and 16 MB, or the file's size). The import page shows the phase, a bar, "N of M tiles",
+    the rate and the time left, and **Cancel** (a cancelled folder import goes on where it stopped next time). The
+    result: tiles, size and rate, then Show on map. The import runs on a worker thread (the screen keeps
+    responding; Esc on the page cancels it).
+  - *Online sources*: OpenTopoMap, Thunderforest Outdoors and Geoapify OSM Bright, each with its state in a word (Off,
+    On, Needs key, Offline, Paused by server, Daily cap reached with the counts, Server busy, No connection, No libcurl,
+    Another app, Cache full) and, for the keyed ones, a key row (*Key saved* / *No key*). A tap on a source's row
+    switches it: a source that needs a key and has none opens its **key page** first; the first time a source is
+    switched on, the **terms dialog** shows its name, the note of its record ("unverified: check before enabling ..."),
+    its licence and terms as plain text with their address, the daily cap, and what a request carries; **Cancel** or
+    **I agree, enable**. The acceptance is remembered per source; switching it off and on again does not ask again.
+    Switching a source on shows it on the map. The area download is not offered (the engine's phase 0.2).
+- **Settings.** Units (km / mi), Display scale (Auto / 1x / 1.5x / 2x; Auto shows what it chose), Offline mode (no
+  tile request at all), Cache size (Auto / 128 MB / 256 MB / 512 MB / 1 GB: the cap of the saved online tiles; Auto is
+  the smaller of 512 MB and 10 % of the free space), Clear saved tiles (asks first; imported files are never touched),
+  the saved tiles now, and About: the version, the attribution of the map shown and of every source, the credits.
+
+### Keys and touch
+
+| Function | Keys | Touch |
+| --- | --- | --- |
+| Switch tabs | Tab, Shift+Tab | the tab strip |
+| Pan | arrows (Shift: half a view); the deck's F / X / Z / C aliases | drag |
+| Zoom in / out | + (=, keypad +) or Page Up / - (keypad -) or Page Down | the + / - buttons, a double tap (in) |
+| Move in a list, open, act | Up / Down, Enter or Right | a tap selects a row, a tap on the selected row acts |
+| A choice (Units, scale, cache, offline) | Enter on its row: the next value | a tap on the selected row |
+| Switch an online source | Enter on its row | a tap on the selected row |
+| Back (a page, a dialog) | Esc or Left | the header's Esc, Cancel |
+| Leave | Esc at a tab (hold Esc 3 s: the launcher's watchdog) | the header's Esc at a tab |
+| Type a key | the keyboard; Enter saves | the on-screen keyboard (only without a keyboard, the shared rule), Save key |
+
+Every list row carries its marker (the launcher's row rule): a chevron on rows that open a page or change a value,
+a dot on rows that act (Show on map, Remove, Import this tile folder, an archive, Clear saved tiles; blue while the
+clearing runs), none on information rows.
+
+## Map files: where they come from
+
+- **MBTiles** (SQLite, raster PNG or JPEG tiles, 256 or 512 px): QGIS (*Generate XYZ tiles (MBTiles)*), `gdal_translate`
+  / `gdaladdo`, MOBAC, TileMill, `mb-util`. Vector tiles (pbf) and WebP are refused for now (raster first, owner decision).
+- **PMTiles** v3 with raster tiles (`pmtiles convert` from an MBTiles file).
+- **A tile folder** `<zoom>/<x>/<y>.png` (or `.jpg`, `.jpeg`, `.png.tile`, extensionless), from MapTileDl or any tile
+  downloader, or `gdal2tiles` (TMS: flipped by the engine). Converted into one MBTiles in the store (one SQLite file
+  instead of thousands of small ones: SD wear). Other files in the folder (MapTileDl's `inventory.json`) are ignored.
+
+**You are responsible for the terms of the maps you import**: a tile set downloaded from a public tile server may only
+be used as its terms allow (many servers, the OpenStreetMap Foundation's among them, forbid bulk downloads). The
+import page and the record of each file say so. Deck Atlas never downloads areas.
+
+## Online sources: the rules
+
+- The OpenStreetMap Foundation's tile servers are **never** used: there is no OSM source, and the engine refuses any
+  `openstreetmap.org` / `osm.org` address, in a record or a redirect.
+- All three sources are off by default. Only the tiles you look at are requested, never the tiles around the view.
+- A request carries the tile's z/x/y and the app's User-Agent `deck-atlas/0.1.0 (+https://github.com/OSRdesign/cyberdeck-zero-apps)`,
+  plus your key for a keyed source; nothing else. The provider sees your IP address.
+- Keys are kept by the engine in `~/.local/share/cyberdeckzero/maps/sources/<id>.key`, mode 0600, never logged and
+  never shown again (the page says *Key saved*); never in `settings.conf`.
+- Each provider has a daily cap (OpenTopoMap 2,000, Thunderforest 5,000, Geoapify 12,000 requests), counted across
+  restarts; at the cap it shows saved tiles only until midnight. A server's "blocked" picture pauses the source for an
+  hour; missing tiles are not asked again for 24 h.
+- Offline mode (Settings) stops every request at once; saved tiles keep showing.
+- Without libcurl (`libcurl4t64`), the sources say *No libcurl* and the engine's strip "Network library missing";
+  imports and offline viewing work. Without SQLite (`libsqlite3-0`), MBTiles files cannot be read (PMTiles still can).
+
+## Requirements
+
+- A screen of at least **480x320** (`X-MinSize=480x320`); in PDA mode an upright canvas of at least **320x480**
+  (`X-Portrait=320x480`, the launcher's narrow portrait shell). Every board of the project fits.
+- Packages (pulled by the `.deb`): `libsqlite3-0` (MBTiles), `libcurl4t64` and `ca-certificates` (online sources),
+  plus the base `libfreetype6, libinput10, libxkbcommon0`.
+- A launcher with fullscreen app support (contract 1); built against launcher `e3a2899` (the map engine).
+- Network only for the online sources, and only when you switch one on.
+- No GPS in this version.
+
+## Install
+
+Settings > Apps > Available > Deck Atlas (once published; it is a draft until the board test), or by hand:
+`sudo dpkg -i deck-atlas_0.1.0_arm64.deb` (`_amd64` on an x86-64 PC), then `sudo apt-get -f install` if a dependency is
+missing. Remove with `sudo dpkg -r deck-atlas` (your maps and settings stay).
+
+## Files the app keeps
+
+| Path | What |
+| --- | --- |
+| `~/.config/deck-atlas/settings.conf` | units, display scale, cache size, offline mode, what the map shows, the last view, the sources whose terms you accepted (key=value lines, written atomically, mode 0600) |
+| `~/.local/share/cyberdeckzero/maps/` | the shared map store of the engine (any app may read it; Mesh Hop will): `archives/` (imported files and their records), `tiles/` (the saved online tiles, one MBTiles per source, within the cache cap), `sources/` (your switches and keys), `state/` (daily counts and pauses) |
+
+Reset: delete `~/.config/deck-atlas` (settings) and `~/.local/share/cyberdeckzero/maps` (every map, key and saved tile).
+
+## Multitasking
+
+None (no `X-Background`): this version does not answer the launcher's lifecycle protocol, so it owns the panel until it
+exits. The next version (the GPS reader and `position.state`) is planned with `X-Background=run` (report 054 7.4).
+
+## Known limits
+
+- **Legibility** (the legibility check of report 054, judged on the PC from the harness's pictures of the owner's tile
+  set, the OpenStreetMap standard style's 256 px tiles; to be confirmed on the glass): street and place labels are
+  about 7 px high (capitals) in a tile. **zero8, 480x320 and 320x480 (6.3 px/mm), Auto = 1.5x:** capitals about
+  10 px = 1.6 mm (letters about 2.3 mm, a little above the launcher's own smallest text there, 2.2 mm): street names
+  (from zoom 15), house numbers and the names of places (zoom 17) read well; **1x** makes them 1.1 mm, too small;
+  **2x** gives 2.2 mm capitals but shows half the area and looks blockier. **The deck, 640x480 (11.3 px/mm), Auto =
+  2x:** capitals about 14 px = 1.2 mm, the size of the launcher's smallest caption: readable close up, small at arm's
+  length, and 2x is the engine's largest scale (the one over-zoom level magnifies further, blurred). Keep Auto; zoom
+  15 is the first level with street names, 16-17 for house numbers. Sharper text on the deck needs 512 px ("@2x")
+  tiles in the imported file (the engine draws them 1:1 at 2x) or the vector rendering of a later phase.
+- No GPS, places or tracks yet; no area download (the engine's phase 0.2, Geoapify only).
+- One source on the map at a time (all files, one file, or one online source); no overlay of an online source over a
+  file.
+- Vector tiles (pbf), WebP and brotli / zstd PMTiles directories are refused (raster first).
+- "No map here" is decided from each file's bounds and zooms, not from its actual tiles. The engine records a converted
+  tile folder's bounds as the extent of its **deepest** level only (and an MBTiles made elsewhere may be as narrow),
+  while a file shown by itself is read at every level whatever its bounds say; so for a file shown by itself the plate
+  shows only at its deepest level (and the over-zoom one), and at the shallower levels a view outside it shows the grey
+  grid without the plate. With two or more files on "All map files" the plate follows the engine's bounds test.
+- The engine's "every map file" lookup skips the tiles outside each file's bounds, which for a converted folder hides
+  its wider shallow levels (a MapTileDl folder: zoom 10-11 reach far beyond the zoom 17 patches). With one map file
+  the app therefore reads that file by its id (every level shows); with two or more, choose the file in *Map shows*
+  to see all of it. To be fixed in the engine (the record's bounds should be the union of every level).
+- The engine draws a grey grid while a tile loads (the parent tile magnified when it is cached); there is no separate
+  "loading" indicator.
+- Board-only checks are listed in [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md): the import rate on the Zero 2 W,
+  VmRSS (expected 22-24 MB with the engine's 8 MiB tile cache), the legibility on the glass, the network path.
+
+## Credits and licences
+
+- Deck Atlas: MIT, 2026 OSRdesign.
+- The map engine of the CyberdeckZero Launcher's toolkit `cp0_lvgl` (projection, MBTiles / PMTiles readers, the shared
+  store, the online sources, the map widget; MIT), compiled into the binary.
+- stb_image 2.30 by Sean Barrett (public domain or MIT), inside the engine.
+- SQLite (public domain) and libcurl (the curl licence, MIT-style): system libraries the engine loads at run time when
+  installed; not shipped.
+- LVGL (MIT), linked; the Montserrat font (SIL OFL 1.1), read from the launcher.
+- Map data and styles shown in the app and credited on the map: map data © OpenStreetMap contributors (ODbL);
+  OpenTopoMap style (CC-BY-SA, SRTM elevation); Maps © Thunderforest; Powered by Geoapify, © OpenMapTiles. Imported
+  maps are the user's own, under their own terms.
+- The test tiles in `tests/fixtures` (six tiles, never packaged): see [`tests/fixtures/README.md`](tests/fixtures/README.md).
+
+<!-- branding-allow-begin: credits the upstream runtime the binary links -->
+The binary links the cp0_lvgl runtime of the CardputerZero launcher by M5Stack (MIT); the full notices are in
+`/usr/share/doc/deck-atlas/copyright`.
+<!-- branding-allow-end -->
+
+## Build and test
+
+```sh
+wsl -e sh apps/deck-atlas/build.sh host                 # unit tests (399 checks) and 12 scenes (sheets in ~/cdk-build/deck-atlas/host/out/sheets)
+wsl -e sh apps/deck-atlas/build.sh cross                # the arm64 binary into root/
+wsl -e sh apps/deck-atlas/build.sh cross --arch amd64   # the amd64 binary into root.amd64/
+python3 tools/make_registry.py --only deck-atlas --out <dir>            # the arm64 .deb (draft: outside packages/)
+python3 tools/make_registry.py --only deck-atlas --arch amd64 --out <dir>
+```
+
+- **The map engine for this app only.** `cp0_config.mk` holds `CONFIG_CP0_LVGL_MAP=y`; `apps/_common/build_app.sh`
+  appends it to this app's scratch configuration and `apps/_common/headless/Makefile` includes it (the
+  [`_common` README](../_common/README.md#toolkit-switches-of-one-app-cp0_configmk)); no other app changes.
+- **Demonstration mode** (the scenes; never on a board): `DECKATLAS_DEMO=1` keeps the settings and the store under the
+  harness's runtime folder, converts `tests/fixtures/tiles` with the engine's own import at the start, and forces the
+  network off. `DECKATLAS_DEMO=empty` starts with nothing; `DECKATLAS_DEMO=import-hold` replaces the import with a
+  simulated 10,326-tile conversion held at 40 % (the progress shots). `DECKATLAS_VIEW=lat,lon,zoom`,
+  `DECKATLAS_SCALE=auto|1x|1.5x|2x` and `DECKATLAS_UNITS=km|mi` set the first view; `DECKATLAS_MBTILES=<file>` registers
+  that archive in place instead of the fixture.
+- **The real-tile check** (optional, needs a tile folder; skipped with a message otherwise):
+  `DECKATLAS_TILES=<folder> wsl -e sh apps/deck-atlas/tests/real/run.sh` builds `tests/real/import_bench.c` against the
+  engine, imports the folder into a scratch store (rate, size, tile count) and renders `tests/real/scenes` (zoom 13, 15,
+  17 at the four canvases; the legibility shots at 1x, 1.5x, 2x on zero8's density and 2x on the deck's). Owner's set,
+  2026-11-07 (MapTileDl, 10,326 tiles, zoom 1-17): 10,326 tiles imported out of 10,326 image files (`inventory.json`
+  ignored), a 260 MB MBTiles (273,063,936 bytes); 4,000 to 22,000 tiles/s on the PC (i5-12450H, WSL2) from a
+  native copy of the folder (four runs: the page cache decides), 165-200 tiles/s read straight from the Windows folder
+  over WSL's `/mnt/c`.
+- The board protocol: [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md). The icon: `python tools/make_icon.py`
+  (`--sheet <png>` for the check picture).
+
+## Changes
+
+- **0.1.0** (2026-11-07, draft): first version. Map, Sources and Settings tabs; MBTiles, PMTiles and tile-folder
+  imports with progress and cancel; the engine's three online sources off by default, with the key page and the terms
+  dialog; the persistent viewing cache with its cap and clearing; offline mode; 480x320 and up, 320x480 in PDA mode.
+
+## Roadmap
+
+1. **GPS** (next): the receiver on USB, the position dot (the widget's `cp0_map_set_position()` is wired and kept empty
+   in this version), follow mode, `position.state` for other apps, `X-Background=run`.
+2. Places and tracks (record, list, show, GPX export); the area download (Geoapify).
+3. Mesh Hop shows its nodes on the same engine and store (read-only, report 054 6.2).
