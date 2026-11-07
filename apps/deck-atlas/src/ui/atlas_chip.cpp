@@ -4,7 +4,8 @@
  * Deck Atlas: the GPS chip on the map: a satellite dish and three reception bars on a small plate under the engine's top
  * row, drawn with LVGL primitives (no image). Which dish, which bars and which colour is decided in core/gps_chip.cpp
  * (the five states: no receiver, receiver and no fix, 2D or weak 3D, good 3D, stale); this file only draws it and takes
- * the touch. A tap, or the S key, calls open_gps_status() (a stub until the GPS status page exists).
+ * the touch. A tap, or the S key, opens the GPS status page (atlas_gps_page.cpp), which draws the same chip beside its
+ * headline (draw_chip below).
  */
 #include "atlas_app.hpp"
 #include "atlas_util.hpp"
@@ -148,16 +149,7 @@ void AtlasApp::chip_draw_cb(lv_event_t *e)
 void AtlasApp::chip_click_cb(lv_event_t *e)
 {
     auto *self = static_cast<AtlasApp *>(lv_event_get_user_data(e));
-    self->post([self] { self->open_gps_status(); });
-}
-
-/* The stub of the GPS status page: the chip's tap and the S key land here. The page itself comes with the next change; until
- * then this only records the request (gps_status_requested_) and writes a log line. */
-void AtlasApp::open_gps_status()
-{
-    if (!settings_.gps) return;
-    gps_status_requested_ = true;
-    log_line("gps: status page requested (%s)", atlas::chip_description(gps_chip_state_).c_str());
+    self->post([self] { self->open_gps_status(atlas::StatusOrigin::Map); });
 }
 
 void AtlasApp::draw_gps_chip(lv_layer_t *layer, const lv_area_t &o)
@@ -167,20 +159,26 @@ void AtlasApp::draw_gps_chip(lv_layer_t *layer, const lv_area_t &o)
     const atlas::MapMetrics mm = atlas::map_metrics(overlay_input());
     const int radius = cp0_ui_metrics_get()->tok[CP0_TOK_RADIUS_S];
     const lv_area_t a = {o.x1 + chip_dx_, o.y1 + chip_dy_, o.x1 + chip_dx_ + chip_w_ - 1, o.y1 + chip_dy_ + chip_h_ - 1};
-    const bool pressed = lv_obj_has_state(gps_chip_, LV_STATE_PRESSED);
+    draw_chip(layer, a, cs, lv_obj_has_state(gps_chip_, LV_STATE_PRESSED), radius, mm.pad);
+}
+
+/* The chip in the plate area a: plate and outline, then the dish, the bars and a slot for the stale "!" (always reserved,
+ * so the chip does not shift between states). The map's chip and the status page's both come here. */
+void draw_chip(lv_layer_t *layer, const lv_area_t &a, const atlas::ChipState &cs, bool pressed, int radius, int pad)
+{
+    const int chip_w = a.x2 - a.x1 + 1, chip_h = a.y2 - a.y1 + 1;
     fill_rect(layer, a, pressed ? pal::kAccent : kPlateRgb, LV_OPA_80, radius);
     outline(layer, a, pal::kText, LV_OPA_30, 1, radius);
 
-    /* the contents: dish, bars, and a slot for the stale "!" (always reserved, so the chip does not shift between states) */
-    const int vp = std::max(mm.pad / 2, 2), hp = std::max(mm.pad / 2, 2);
-    const int H = std::max(chip_h_ - 2 * vp, 8);
+    const int vp = std::max(pad / 2, 2), hp = std::max(pad / 2, 2);
+    const int H = std::max(chip_h - 2 * vp, 8);
     const int bw = std::max(H / 5, 3), bgap = std::max(H / 10, 1), g = std::max(H / 4, 3);
     const int bars_w = 3 * bw + 2 * bgap, ex_w = std::max(bw * 2 / 3, 2);
     int s = H;
-    const int avail = chip_w_ - 2 * hp;
+    const int avail = chip_w - 2 * hp;
     if (s + g + bars_w + g + ex_w > avail) s = std::max(avail - (g + bars_w + g + ex_w), 8);
     const int group = s + g + bars_w + g + ex_w;
-    const int gx = a.x1 + (chip_w_ - group) / 2, gy = a.y1 + (chip_h_ - H) / 2;
+    const int gx = a.x1 + (chip_w - group) / 2, gy = a.y1 + (chip_h - H) / 2;
     const bool none = cs.level == atlas::ChipLevel::NoReceiver;
     draw_dish(layer, gx, gy + (H - s) / 2, s, none ? pal::kMuted : pal::kText, cs.crossed);
 

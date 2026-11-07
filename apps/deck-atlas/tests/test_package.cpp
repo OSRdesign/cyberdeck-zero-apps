@@ -57,7 +57,8 @@ void test_package()
      * opened read-only, and the port interface has no send call at all (the way mmWave Radar's test checks its reader) */
     const char *const gps_files[] = {"nmea.hpp", "nmea.cpp", "gps_ids.hpp", "gps_ids.cpp", "gps_fix.hpp", "gps_fix.cpp", "gps_port.hpp", "gps_link.hpp",
                                      "gps_link.cpp", "gps_posix.hpp", "gps_posix.cpp", "gps_demo.hpp", "gps_demo.cpp",
-                                     "follow.hpp", "follow.cpp", "../ui/atlas_gps.cpp"};
+                                     "gps_page.hpp", "gps_page.cpp", "gps_chip.hpp", "gps_chip.cpp", "follow.hpp", "follow.cpp",
+                                     "../ui/atlas_gps.cpp", "../ui/atlas_gps_page.cpp", "../ui/atlas_chip.cpp"};
     const char *const banned[] = {"write(", "writev(", "pwrite", "fwrite(", "send(", "sendto(", "sendmsg", "O_RDWR", "O_WRONLY",
                                   "TIOCSTI", "TIOCM", "tcsendbreak", "tcdrain", "ofstream", "fputs(", "fprintf(", "dprintf("};
     for (const char *f : gps_files) {

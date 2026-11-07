@@ -25,6 +25,7 @@
 #include "follow.hpp"
 #include "gps_chip.hpp"
 #include "gps_link.hpp"
+#include "gps_page.hpp"
 #include "position_state.hpp"
 #include "geo.hpp"
 #include "import_model.hpp"
@@ -54,7 +55,7 @@ constexpr int kPortraitW = 320, kPortraitH = 480;
 constexpr const char *kVersion = "0.2.0";
 
 enum class Tab { Map = 0, Sources, Settings };
-enum class Sub { None, FileDetail, Browser, Import, Key, Shown, About };
+enum class Sub { None, FileDetail, Browser, Import, Key, Shown, About, GpsStatus };
 
 /* One imported archive as the pages show it (the engine's listing). */
 struct ArchiveItem {
@@ -142,7 +143,7 @@ private:
     void gps_layout();                     /* the follow button, laid out from the engine's controls */
     void gps_layout_chip();                /* the chip's plate and touch square (atlas_chip.cpp) */
     void gps_show_overlays();              /* chip and button visibility, a redraw of the chip and the dot */
-    void open_gps_status();                /* STUB: the chip's tap and the S key; the GPS status page comes later (atlas_chip.cpp) */
+    void open_gps_status(atlas::StatusOrigin from);   /* the chip's tap and the S key (Map), the Settings row (Settings): the page below */
     void draw_gps_chip(lv_layer_t *layer, const lv_area_t &area);
     static void chip_draw_cb(lv_event_t *e);
     static void chip_click_cb(lv_event_t *e);
@@ -156,6 +157,20 @@ private:
     static void follow_draw_cb(lv_event_t *e);
     static void follow_click_cb(lv_event_t *e);
     atlas::AttrInput overlay_input() const;
+
+    /* ---- GPS status page (atlas_gps_page.cpp) */
+    void build_gps_page();
+    void update_gps_page(bool force);
+    void apply_gps_text(const atlas::GpsPageText &t);
+    void layout_gps_bars();
+    lv_obj_t *gp_card(lv_obj_t *parent, const char *title, int width);
+    void gp_row(lv_obj_t *card, const char *name, std::string atlas::GpsPageText::*field);
+    void gp_cell(lv_obj_t *parent, int width, const char *name, std::string atlas::GpsPageText::*field);
+    void draw_gps_sky(lv_layer_t *layer, const lv_area_t &area);
+    void draw_gps_bars(lv_layer_t *layer, const lv_area_t &area);
+    static void gp_sky_cb(lv_event_t *e);
+    static void gp_bars_cb(lv_event_t *e);
+    static void gp_chip_cb(lv_event_t *e);
 
     /* ---- store data (atlas_sources.cpp) */
     void refresh_store(std::function<void()> then = nullptr);
@@ -206,6 +221,7 @@ private:
     void refresh_stats();
     void confirm_clear();
     void open_about();
+    void refresh_gps_row();                /* the GPS status row's value changed with the receiver */
     std::string about_text() const;
 
     lv_obj_t *screen_ = nullptr;
@@ -239,7 +255,19 @@ private:
     atlas::GpsStatus gps_status_;
     std::string gps_source_;
     atlas::ChipState gps_chip_state_;        /* what the chip shows now (core/gps_chip.hpp) */
-    bool gps_status_requested_ = false;      /* open_gps_status() was called (the status page does not exist yet) */
+    mutable std::string gps_row_shown_;      /* the value the Settings > GPS status row shows (core/gps_page.hpp: gps_row_value) */
+    atlas::StatusNav status_nav_;            /* how the GPS status page was opened (where Esc returns to) */
+    atlas::GpsPageLive gps_live_;            /* what changed on the page since the last look */
+    atlas::GpsPageText gp_text_;
+    std::vector<atlas::SkySat> gp_sats_;
+    std::int64_t gp_at_ = 0;
+    struct GpsPageUi {
+        lv_obj_t *headline = nullptr, *detail = nullptr, *chip = nullptr, *sky = nullptr, *bars = nullptr, *legend[6] = {};
+        std::vector<std::pair<lv_obj_t *, std::string atlas::GpsPageText::*>> fields;
+        bool built_off = false;
+        int plot_h = 0, row_h = 0, bars_w = 0, axis_w = 0, label_w = 0, lh = 0;
+        atlas::BarLayout layout;
+    } gp_;
     int chip_w_ = 0, chip_h_ = 0, chip_dx_ = 0, chip_dy_ = 0;   /* the chip plate's size and its offset inside its touch square */
     std::vector<std::string> gps_present_;   /* the serial ports present, for the Port row */
     lv_obj_t *gps_layer_ = nullptr, *gps_chip_ = nullptr, *follow_btn_ = nullptr;

@@ -27,6 +27,7 @@ enum : std::intptr_t {
     kGps,
     kGpsPort,
     kGpsSpeed,
+    kGpsStatus,
     kGpsHint,
     kUsage,
     kVersionRow,
@@ -77,6 +78,8 @@ std::vector<cp0::ui::ListRow> AtlasApp::settings_rows() const
                                  ValueTone::Normal, kGpsPort, RowAffordance::Edit));
     rows.push_back(ListRow::item("Speed", atlas::gps_speed_label(settings_.gps_baud), ValueTone::Normal, kGpsSpeed,
                                  RowAffordance::Edit));
+    gps_row_shown_ = atlas::gps_row_value(gps_status_);
+    rows.push_back(ListRow::item("Status", gps_row_shown_, ValueTone::Normal, kGpsStatus, RowAffordance::Open));
     rows.push_back(ListRow::item("Not found by itself? Pick its port above.", "",
                                  ValueTone::Normal, kGpsHint, RowAffordance::Info));
     rows.push_back(ListRow::section("About"));
@@ -143,12 +146,21 @@ void AtlasApp::settings_activate(std::intptr_t id)
         settings_.gps_baud = atlas::next_gps_baud(settings_.gps_baud);
         gps_apply_settings();
         break;
+    case kGpsStatus: open_gps_status(atlas::StatusOrigin::Settings); return;
     case kClear: confirm_clear(); return;
     case kAbout: open_about(); return;
     default: return;
     }
     save_settings();
     if (list_ && sub_ == Sub::None && tab_ == Tab::Settings) list_->set_rows(settings_rows());
+}
+
+/* The receiver's state changed: the GPS status row's value follows (only when the Settings list is what is on screen). */
+void AtlasApp::refresh_gps_row()
+{
+    if (!list_ || sub_ != Sub::None || tab_ != Tab::Settings) return;
+    if (atlas::gps_row_value(gps_status_) == gps_row_shown_) return;
+    list_->set_rows(settings_rows());
 }
 
 void AtlasApp::refresh_stats()

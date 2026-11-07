@@ -391,6 +391,9 @@ void AtlasApp::set_title()
     case Sub::Key: path = {"Deck Atlas", kTab[1], "API key"}; break;
     case Sub::Shown: path = {"Deck Atlas", kTab[1], "Map shows"}; break;
     case Sub::About: path = {"Deck Atlas", kTab[2], "About"}; break;
+    case Sub::GpsStatus:
+        path = {"Deck Atlas", kTab[status_nav_.origin() == atlas::StatusOrigin::Settings ? 2 : 0], "GPS status"};
+        break;
     }
     page_->set_title(path);
 }
@@ -406,6 +409,7 @@ void AtlasApp::clear_page_objects()
     key_status_ = nullptr;
     imp_title_ = imp_bar_ = imp_count_ = imp_rate_ = imp_result_ = imp_note_ = imp_cancel_ = imp_show_ = imp_done_ = nullptr;
     imp_shown_.clear();
+    gp_ = GpsPageUi();
 }
 
 void AtlasApp::make_list(bool with_tabs, cp0::ui::CompactListEvents ev)
@@ -436,6 +440,7 @@ void AtlasApp::set_tab(Tab t)
         if (tab_ == Tab::Sources) sources_sel_ = list_->selected();
         if (tab_ == Tab::Settings) settings_sel_ = list_->selected();
     }
+    status_nav_.leave();
     clear_page_objects();
     sub_ = Sub::None;
     tab_ = t;
@@ -475,6 +480,11 @@ void AtlasApp::close_sub()
     const Sub was = sub_;
     if (was == Sub::About) {
         set_tab(Tab::Settings);
+        return;
+    }
+    if (was == Sub::GpsStatus) { /* Esc: back to where the page was opened from (Settings or the map) */
+        const atlas::StatusOrigin from = status_nav_.leave();
+        set_tab(from == atlas::StatusOrigin::Settings ? Tab::Settings : Tab::Map);
         return;
     }
     set_tab(Tab::Sources);
@@ -555,6 +565,7 @@ void AtlasApp::tick()
     if (credit_pending_) update_attribution();
     gps_tick(now);
     if (importing_ || sub_ == Sub::Import) update_import_page(false);
+    if (sub_ == Sub::GpsStatus) update_gps_page(false);
     if (view_dirty_ && now - view_saved_at_ >= 30000) {
         view_saved_at_ = now;
         view_dirty_ = false;

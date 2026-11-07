@@ -289,6 +289,7 @@ void AtlasApp::gps_tick(std::int64_t now)
         gps_source_ = buf;
     }
     if (pos_writer_) pos_writer_->update(st, gps_source_, now);
+    refresh_gps_row();
     if (!changed) {
         if (follow_btn_ && lv_obj_has_flag(follow_btn_, LV_OBJ_FLAG_HIDDEN)) gps_layout(); /* the widget laid out since */
         return;
@@ -337,7 +338,7 @@ bool AtlasApp::gps_key(std::uint32_t key_code, char ch)
         return true;
     }
     if (key_code == KEY_S || ch == 's' || ch == 'S') { /* the GPS status page (the chip's tap) */
-        open_gps_status();
+        open_gps_status(atlas::StatusOrigin::Map);
         return true;
     }
     return false;
