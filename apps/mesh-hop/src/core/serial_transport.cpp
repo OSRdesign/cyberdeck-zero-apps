@@ -63,14 +63,6 @@ bool usb_ids(const std::string &sys_class_tty, const std::string &name, SerialCa
     return false;
 }
 
-bool known_vid(uint16_t vid)
-{
-    switch (vid) {
-    case 0x303A: case 0x239A: case 0x1A86: case 0x10C4: case 0x2886: case 0x0403: case 0x2E8A: return true;
-    default: return false;
-    }
-}
-
 } // namespace
 
 std::string guess_board(uint16_t vid, uint16_t pid)
@@ -126,17 +118,44 @@ std::string usb_identity(const SerialCandidate &c)
     return c.serial.empty() ? std::string(ids) : std::string(ids) + "/" + c.serial;
 }
 
-const SerialCandidate *choose_port(const std::vector<SerialCandidate> &list, const std::string &last_ids)
+const SerialCandidate *choose_port(const std::vector<SerialCandidate> &list, const std::string &last_ident, bool *ask)
 {
+    if (ask) *ask = false;
     if (list.empty()) return nullptr;
-    char ids[16];
-    for (const SerialCandidate &c : list) {
-        std::snprintf(ids, sizeof(ids), "%04x:%04x", c.vid, c.pid);
-        if (!last_ids.empty() && last_ids == ids) return &c;
+    if (list.size() == 1) return &list.front();
+    const SerialCandidate *match = nullptr;
+    int matches = 0;
+    if (!last_ident.empty()) {
+        const bool with_serial = last_ident.find('/') != std::string::npos;
+        char ids[16];
+        for (const SerialCandidate &c : list) {
+            std::snprintf(ids, sizeof(ids), "%04x:%04x", c.vid, c.pid);
+            if (last_ident == (with_serial ? usb_identity(c) : std::string(ids))) {
+                match = &c;
+                ++matches;
+            }
+        }
     }
-    for (const SerialCandidate &c : list)
-        if (known_vid(c.vid)) return &c;
-    return &list.front();
+    if (matches == 1) return match;
+    if (ask) *ask = true;                       // several ports and no unique remembered one: never a guess
+    return nullptr;
+}
+
+bool serial_port_busy(const std::string &path, PortUser *who, const std::string &proc_dir)
+{
+    // a pseudo terminal is the simulator's or a test's: its other end is open by design, so it is not checked
+    char real_path[PATH_MAX];
+    if (::realpath(path.c_str(), real_path) && std::strncmp(real_path, "/dev/pts/", 9) == 0) return false;
+    return port_in_use(path, who, proc_dir);
+}
+
+void mark_busy(std::vector<SerialCandidate> &list, const std::string &proc_dir)
+{
+    for (SerialCandidate &c : list) {
+        PortUser who;
+        c.busy = serial_port_busy(c.path, &who, proc_dir);
+        c.busy_by = c.busy ? who.name : std::string();
+    }
 }
 
 SerialTransport::SerialTransport(std::string data_dir, std::string explicit_path)
@@ -151,6 +170,8 @@ SerialTransport::~SerialTransport()
 
 std::string SerialTransport::pick_path(LinkInfo &info)
 {
+    ident_.clear();
+    error_.clear();
     std::string override_path = explicit_path_;
     if (override_path.empty())
         if (const char *e = std::getenv("MESHHOP_PORT"); e && *e) override_path = e;
@@ -162,8 +183,13 @@ std::string SerialTransport::pick_path(LinkInfo &info)
     }
     const std::vector<SerialCandidate> list = list_serial_ports();
     const std::string last = data_dir_.empty() ? std::string() : read_first_line(data_dir_ + "/lastport");
-    const SerialCandidate *c = choose_port(list, last);
-    if (!c) return "";
+    bool ask = false;
+    const SerialCandidate *c = choose_port(list, last, &ask);
+    if (!c) {
+        if (ask) error_ = "several serial ports: choose the node on the start page";
+        return "";
+    }
+    ident_ = usb_identity(*c);
     info.path = c->path;
     info.vid = c->vid;
     info.pid = c->pid;
@@ -180,8 +206,14 @@ OpenStatus SerialTransport::open()
     LinkInfo info;
     const std::string path = pick_path(info);
     if (path.empty()) {
-        error_ = "no serial port (plug the board into the USB port)";
+        if (error_.empty() || error_.rfind("several", 0) != 0) error_ = "no serial port (plug the board into the USB port)";
         return OpenStatus::NotFound;
+    }
+    // before the open (it raises DTR and a board may reset): never a port another program holds
+    PortUser who;
+    if (serial_port_busy(path, &who)) {
+        error_ = port_busy_text(who);
+        return OpenStatus::Busy;
     }
     const int fd = ::open(path.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK | O_CLOEXEC);
     if (fd < 0) {

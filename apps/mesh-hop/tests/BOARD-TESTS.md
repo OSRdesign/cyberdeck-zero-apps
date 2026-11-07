@@ -188,6 +188,27 @@ Logs: `tail -n 60 ~/.local/share/mesh-hop/mesh-hop.log` (lines `node:`, `ble:`, 
 
 [ ] pass  [ ] fail  Notes:
 
+### N11. 0.8.3: several serial ports and a port in use (deck; about 5 min)
+
+Needs: the MeshCore board A on USB and one other serial device (a second board, a GPS puck, an RNode, a CH340 sensor). Forget
+the remembered node first: `rm ~/.local/share/mesh-hop/nodes.txt ~/.local/share/mesh-hop/lastport`. Watch the other device's own
+output (or a `sudo dmesg -w`, or its LED): opening a port resets many boards.
+
+1. **N11a Two ports, nothing remembered**: plug both, open the app: the page lists both ports and the line under the title says
+   **Several serial devices found: choose your MeshCore node.** Nothing connects, the other device does not reset or blink, the log
+   (`tail -n 30 ~/.local/share/mesh-hop/mesh-hop.log`) has no `node: connecting`. Tap board A's row twice: Connecting..., Home. Quit
+   and open again: the line is gone (the node chosen last is plugged), its row highlighted, still nothing connects by itself.
+2. **N11b One port**: unplug the other device: the page is as in 0.8.2 (the line says "Choose the node to connect to").
+3. **N11c A port in use**: plug the other device again and hold its port from a terminal: `cat /dev/ttyUSB0` (or `ttyACM1`; or
+   start the program that normally uses it, such as `rnsd`). Within a second its row is dimmed and says **in use by cat**
+   (`rnsd`...). Choose it twice: the line says **This port is used by cat. Close that program first.**; the other device sees nothing
+   (no reset, `cat` shows no garbage from Mesh Hop). Stop `cat` (Ctrl+C): the row is normal again within a second and connects.
+4. **N11d Your own handle**: connect board A, leave the page open (Home > Node): its row is not shown as in use.
+5. **N11e The named port**: `MESHHOP_PORT=/dev/ttyACM0 mesh-hop` (or the `port` file) connects at once as before, even with two
+   ports plugged; if `cat` holds that port the app says the port is in use and opens nothing.
+
+[ ] pass  [ ] fail  Notes:
+
 ## 10. CLI (0.6.0; deck, about 15 min; the touch pass on the Pi 3A+)
 
 Needs board A connected (USB, or a BLE / IP node), **your own repeater** in radio range with its admin password at hand, and
@@ -369,6 +390,7 @@ Cancel, the header's Esc back to the hub, More neighbours and Read owner (direct
 | Memory under 25 MB (M) | [ ] | [ ] | [ ] |
 | Radio: send, heard back, advert, replug (R) | [ ] | | |
 | 0.5.0 Choose a node: USB, first scan, BLE pair / reconnect / forget, IP (N1-N10) | [ ] | [ ] (N7 by touch) | |
+| 0.8.3 Several serial ports ask, a port in use is dimmed and never opened (N11a-N11e) | [ ] | | |
 | 0.6.0 CLI: prompt, repeater login, saved password, messages, Help (10.1-10.10) / touch pass | [ ] | [ ] (touch pass) | |
 | 0.7.0 / 0.7.2 Repeater page, regrouped Home: your repeater, one you do not own, Open in CLI, Reset path, Search, Options, MY CONTACT (11.1-11.10) / touch pass | [ ] | [ ] (touch pass) | |
 | 0.8.1 Repeater read-only view, the hub and its screens: status by itself, each screen's Refresh / Cancel, reads by itself once, More neighbours, Refresh all, guest elsewhere, owner direct vs flood (12.1-12.7) / touch pass | [ ] | [ ] (touch pass) | |

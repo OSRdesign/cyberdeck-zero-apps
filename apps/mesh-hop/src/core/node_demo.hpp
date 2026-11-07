@@ -11,6 +11,9 @@
  *   first   one USB board, the Bluetooth scan question not asked yet (the first-use warning)
  *   pin     a Bluetooth node not paired yet: it asks for its PIN (123456)
  *   fail    a paired Bluetooth node that cannot be reached, and a USB port that does not open
+ *   usb2    two USB serial devices (a MeshCore board and an RNode), nothing remembered: the page asks which one
+ *   busy    the same two, the CH340 one held by "rnsd" (a dimmed row, "in use by rnsd")
+ *   usb1    one USB board, nothing remembered (the same page as always)
  *   ip      two nodes added by IP address (no TCP server: their connect fails)
  *   off     the Bluetooth adapter is off
  *   nobt    no Bluetooth service (start fails)

@@ -345,9 +345,11 @@ static void test_util()
     std::vector<SerialCandidate> list(2);
     list[0].path = "/dev/ttyACM0"; list[0].vid = 0x1234; list[0].pid = 1;
     list[1].path = "/dev/ttyACM1"; list[1].vid = 0x2886; list[1].pid = 0x8044;
-    CHECK(choose_port(list, "")->path == "/dev/ttyACM1");               // known board family first
+    bool ask = true;
+    CHECK(choose_port(list, "", &ask) == nullptr && ask);               // several ports, nothing remembered: no guess (0.8.3)
     CHECK(choose_port(list, "1234:0001")->path == "/dev/ttyACM0");      // the one used last time
-    CHECK(choose_port({}, "") == nullptr);
+    CHECK(choose_port(list, "9999:0001", &ask) == nullptr && ask);      // remembered, but not plugged: still no guess
+    CHECK(choose_port({}, "", &ask) == nullptr && !ask);
     CHECK(guess_board(0x2886, 0x8044).find("XIAO") != std::string::npos);
 }
 

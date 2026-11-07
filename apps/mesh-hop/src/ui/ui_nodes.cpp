@@ -83,7 +83,14 @@ std::vector<NodeRow> build_node_rows(const NodePageState &s)
         r.detail = port_short(c.path);
         if (!c.product.empty() && c.product != r.title) r.detail += kDot + c.product;
         else if (!c.vendor.empty()) r.detail += kDot + c.vendor;
-        apply_phase(r, s);
+        if (c.busy) {
+            r.detail = "in use by " + (c.busy_by.empty() ? std::string("another program") : c.busy_by);
+            r.tone = Tone::Muted;
+            r.aff = Aff::Info;
+            r.dim = true;
+        } else {
+            apply_phase(r, s);
+        }
         rows.push_back(r);
     }
     // Bluetooth: paired first, then the strongest
@@ -166,6 +173,15 @@ int find_node_row(const std::vector<NodeRow> &rows, const std::string &key)
     return -1;
 }
 
+bool several_usb_hint(const NodePageState &s)
+{
+    if (s.usb.size() < 2 || !s.active.empty()) return false;
+    if (s.book && !s.book->last().empty())
+        for (const SerialCandidate &c : s.usb)
+            if (node_key(NodeKind::Usb, c.path) == s.book->last()) return false;
+    return true;
+}
+
 std::string node_page_caption(const NodePageState &s, bool touch)
 {
     std::string who;
@@ -181,6 +197,7 @@ std::string node_page_caption(const NodePageState &s, bool touch)
     default: break;
     }
     if (s.scanning) return "Scanning for Bluetooth nodes...";
+    if (several_usb_hint(s)) return "Several serial devices found: choose your MeshCore node.";
     return touch ? "Choose a node: tap it, then tap it again to connect" : "Choose the node to connect to";
 }
 

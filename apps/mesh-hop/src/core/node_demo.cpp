@@ -148,7 +148,7 @@ std::unique_ptr<ble::IBleBackend> NodeDemo::make_backend() const
 
 std::unique_ptr<NodeDemo> node_demo(const std::string &n)
 {
-    static const char *const known[] = {"empty", "usb", "ble", "first", "pin", "fail", "ip", "off", "nobt"};
+    static const char *const known[] = {"empty", "usb", "ble", "first", "pin", "fail", "ip", "off", "nobt", "usb2", "busy", "usb1"};
     bool ok = false;
     for (const char *k : known) ok = ok || n == k;
     if (!ok) return nullptr;
@@ -158,6 +158,16 @@ std::unique_ptr<NodeDemo> node_demo(const std::string &n)
         d->usb = {usb("/dev/ttyACM0", 0x2886, 0x8044, "Seeed Studio", "XIAO nRF52840"), usb("/dev/ttyUSB0", 0x1A86, 0x55D4, "QinHeng", "USB Single Serial")};
         d->scan = NodeBook::Scan::No;
         d->last = node_key(NodeKind::Usb, "/dev/ttyACM0");
+    } else if (n == "usb2" || n == "busy") {
+        d->usb = {usb("/dev/ttyACM0", 0x2886, 0x8044, "Seeed Studio", "XIAO nRF52840"), usb("/dev/ttyUSB0", 0x1A86, 0x7523, "QinHeng", "USB Serial")};
+        d->scan = NodeBook::Scan::No;
+        if (n == "busy") {
+            d->usb[1].busy = true;
+            d->usb[1].busy_by = "rnsd";
+        }
+    } else if (n == "usb1") {
+        d->usb = {usb("/dev/ttyACM0", 0x2886, 0x8044, "Seeed Studio", "XIAO nRF52840")};
+        d->scan = NodeBook::Scan::No;
     } else if (n == "first") {
         d->usb = {usb("/dev/ttyACM0", 0x2886, 0x8044, "Seeed Studio", "XIAO nRF52840")};
         d->scan = NodeBook::Scan::Ask;

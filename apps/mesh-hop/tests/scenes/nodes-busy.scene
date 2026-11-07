@@ -1,0 +1,21 @@
+# Mesh Hop 0.8.3, a serial port another program holds open (here the CH340 port, held by rnsd): its row is dimmed with the
+# second line "in use by rnsd" and the grey info dot. Choosing it opens nothing and says why; the other port still connects
+# (here the port does not exist, so the row says why and offers to retry, as in nodes-usb).
+title Mesh Hop: Choose a node, a port in use
+env MESHHOP_DATA /tmp/mesh-hop-scene-nodes
+env MESHHOP_DEMO busy
+env MESHHOP_ONLINE 0
+sizes 640x480 800x480 720x720 1024x600 1280x720
+
+wait 1500
+expect text "XIAO nRF52840"
+expect text "in use by rnsd"
+expect text "Several serial devices found: choose your MeshCore node."
+shot busy
+check busy
+tap "USB Serial"
+tap "USB Serial"
+wait 400
+expect text "This port is used by rnsd. Close that program first."
+shot busy-chosen
+check busy-chosen

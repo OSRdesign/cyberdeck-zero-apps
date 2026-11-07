@@ -16,8 +16,58 @@ static meshzero::ble::BleDevice ble_dev(const char *addr, const char *name, bool
     return d;
 }
 
+/* 0.8.3: several serial ports ask which one; a port another program holds is a dimmed row. */
+static void test_node_rows_usb_choice()
+{
+    using meshzero::NodeBook;
+    using meshzero::NodeKind;
+    using meshzero::SerialCandidate;
+    const std::string dir = "/tmp/meshzero-test-nodes-ui2-" + std::to_string(::getpid());
+    NodeBook book(dir);
+    NodePageState s;
+    s.book = &book;
+    SerialCandidate a, b;
+    a.path = "/dev/ttyACM0";
+    a.vid = 0x2886;
+    a.pid = 0x8044;
+    a.product = "XIAO nRF52840";
+    b.path = "/dev/ttyUSB0";
+    b.vid = 0x1A86;
+    b.pid = 0x7523;
+    b.product = "USB Serial";
+    const char *const hint = "Several serial devices found: choose your MeshCore node.";
+    s.usb = {a};
+    CHECK(!several_usb_hint(s) && node_page_caption(s, false) == "Choose the node to connect to");      // one port: as before
+    s.usb = {a, b};
+    CHECK(several_usb_hint(s) && node_page_caption(s, false) == hint && node_page_caption(s, true) == hint);
+    book.set_last(meshzero::node_key(NodeKind::Usb, "/dev/ttyUSB0"));                                    // a remembered node among them
+    CHECK(!several_usb_hint(s) && node_page_caption(s, false) == "Choose the node to connect to");
+    book.set_last(meshzero::node_key(NodeKind::Usb, "/dev/ttyACM7"));                                    // remembered, not plugged now
+    CHECK(several_usb_hint(s));
+    book.set_last("");
+    s.active = meshzero::node_key(NodeKind::Usb, "/dev/ttyACM0");
+    s.phase = NodePhase::Connected;
+    CHECK(!several_usb_hint(s));                                                                          // one is in use: no question
+    s.active.clear();
+    s.phase = NodePhase::None;
+
+    // a port in use: dimmed, "in use by rnsd", the grey info dot, still selectable (choosing it explains why)
+    s.usb[1].busy = true;
+    s.usb[1].busy_by = "rnsd";
+    {
+        const std::vector<NodeRow> r = build_node_rows(s);
+        CHECK(r.size() >= 2 && !r[0].dim && r[0].detail.rfind("ttyACM0", 0) == 0);
+        CHECK(r[1].dim && r[1].detail == "in use by rnsd" && r[1].aff == Aff::Info && r[1].tone == Tone::Muted && r[1].selectable);
+    }
+    s.usb[1].busy_by.clear();
+    CHECK(build_node_rows(s)[1].detail == "in use by another program");
+    s.usb[1].busy = false;
+    CHECK(!build_node_rows(s)[1].dim && build_node_rows(s)[1].detail.rfind("ttyUSB0", 0) == 0);
+}
+
 static void test_node_rows()
 {
+    test_node_rows_usb_choice();
     using meshzero::NodeBook;
     using meshzero::NodeKind;
     const std::string dir = "/tmp/meshzero-test-nodes-ui-" + std::to_string(::getpid());

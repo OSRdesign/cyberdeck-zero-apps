@@ -32,7 +32,7 @@ namespace meshhop {
 
 namespace {
 
-constexpr const char *kVersion = "0.8.2";
+constexpr const char *kVersion = "0.8.3";
 
 // ---- the colours: the launcher's (cp0_ui_list.h and cp0_ui_osk.h), not an own palette. Green, amber and red are the
 // status tones (ValueTone Ok / Warn / Bad), the accent blue marks what is selected, focused or unread.
@@ -2730,6 +2730,7 @@ std::vector<SerialCandidate> App::usb_candidates() const
         c.product = "port file";
         v.insert(v.begin(), c);
     }
+    mark_busy(v);                                       // a port another program holds open: a dimmed row
     return v;
 }
 
@@ -2874,7 +2875,7 @@ void App::render_nodes()
             s.bars_right = right;
             text_right = right - bg.block_w - g.m;
         }
-        const bool note = r.type == NodeRowType::Note;
+        const bool note = r.type == NodeRowType::Note || r.dim;
         const char *icon = r.type == NodeRowType::AddIp ? LV_SYMBOL_PLUS : r.type == NodeRowType::Scan ? LV_SYMBOL_REFRESH : node_icon(r.kind);
         s.cells.push_back({icon, note ? kMuted : kText, g.inset, icon_w, LV_TEXT_ALIGN_CENTER, sym, (row_h - line_h(sym)) / 2});
         s.cells.push_back({r.title, note ? kMuted : kText, tx, std::max(1, text_right - tx), LV_TEXT_ALIGN_LEFT, f_body_, top});
@@ -3026,6 +3027,25 @@ void App::connect_node(const std::string &key)
     const std::string title = idx >= 0 ? node_rows_[static_cast<size_t>(idx)].title : id;
     std::unique_ptr<ITransport> t;
     bool ble = false;
+    if (k == NodeKind::Usb) {                              // never open (it raises DTR) a port another program holds
+        PortUser who;
+        bool busy = false;
+        if (demo_) {
+            for (const SerialCandidate &c : demo_->usb)
+                if (c.path == id && c.busy) {
+                    busy = true;
+                    who.name = c.busy_by;
+                }
+        } else {
+            busy = serial_port_busy(id, &who);
+        }
+        if (busy) {
+            if (log_) log_->line("node: " + id + " is in use by " + (who.name.empty() ? std::string("another program") : who.name) + ", not opened");
+            notice(port_busy_text(who), false);
+            nodes_sig_ = 0;
+            return;
+        }
+    }
     switch (k) {
     case NodeKind::Usb: t = std::make_unique<SerialTransport>(store_->dir(), id); break;
     case NodeKind::Ble:
@@ -3245,7 +3265,8 @@ void App::nodes_tick(uint64_t now)
         std::vector<SerialCandidate> c = usb_candidates();
         const bool same = c.size() == usb_now_.size() &&             // (another board on the same port: another row)
                           std::equal(c.begin(), c.end(), usb_now_.begin(), [](const SerialCandidate &a, const SerialCandidate &b) {
-                              return a.path == b.path && usb_identity(a) == usb_identity(b) && a.product == b.product;
+                              return a.path == b.path && usb_identity(a) == usb_identity(b) && a.product == b.product &&
+                                     a.busy == b.busy && a.busy_by == b.busy_by;
                           });
         if (!same) {
             usb_now_ = std::move(c);
