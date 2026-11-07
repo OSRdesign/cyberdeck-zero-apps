@@ -16,7 +16,7 @@ start it once by hand with `MMWAVE_TIMING=1 /usr/share/APPLaunch/bin/mmwave-rada
 
 1. Plug the adapter in, open mmWave Radar. Within about 2 s the chip in the top left turns green with about 19 fps; the
    log says `Found ttyUSB0 (CH340) 9600 baud`.
-2. Sensor page (key 4 or the tab): Connection Found, Port `ttyUSB0 (CH340)`, Baud 9600, Bad frames 0, the line "Detected
+2. Sensor page (key 4 or the tab): Status Found, Port `ttyUSB0 (CH340)`, Baud 9600, Bad frames 0, the line "Detected
    by listening only". Close and open the app again: found at once (remembered).
 
 ## T2. Walking (3 min)

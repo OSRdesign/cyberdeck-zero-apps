@@ -10,7 +10,7 @@ key right
 wait 300
 key right
 wait 300
-expect text "Connection"
+expect text "Status"
 key right
 wait 300
 key left

@@ -486,7 +486,7 @@ void RadarApp::build_notfound()
 
     /* the key column of the tables: the widest key */
     key_w_ = 0;
-    for (const char *k : {"Connection", "Port id", "Frames/s", "Good frames", "Bad frames", "Last frame", "Sensor",
+    for (const char *k : {"Status", "Port id", "Frames/s", "Good frames", "Bad frames", "Last frame", "Sensor",
                           "Baud", "Port", "5V (VCC)"})
         key_w_ = std::max(key_w_, text_w(k, sz_.body_px));
     key_w_ = std::min(key_w_ + 4, w_ / 2);
@@ -575,7 +575,7 @@ void RadarApp::build_sensor()
     lv_obj_set_style_pad_all(sensor_, sz_.space_m, 0);
     lv_obj_set_style_pad_row(sensor_, sz_.space_s, 0);
 
-    si_state_ = make_info(sensor_, "Connection");
+    si_state_ = make_info(sensor_, "Status");
     si_port_ = make_info(sensor_, "Port");
     si_id_ = make_info(sensor_, "Port id");
     si_baud_ = make_info(sensor_, "Baud");

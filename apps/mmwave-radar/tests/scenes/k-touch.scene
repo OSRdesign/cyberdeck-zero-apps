@@ -8,7 +8,7 @@ tap "Graph"
 wait 400
 tap "Sensor"
 wait 400
-expect text "Connection"
+expect text "Status"
 tap "Radar"
 wait 400
 tap "Esc"

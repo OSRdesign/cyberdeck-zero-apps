@@ -34,7 +34,7 @@ Four pages, switched by the tab strip at the bottom, the Left / Right keys or th
   `-`. On a narrow screen each target takes two lines, the label above each value.
 - **Graph.** Distance and speed of each target over the last 30 s, one line per target in its colour (3 samples a second
   from the tracker), in the units chosen.
-- **Sensor.** The connection (Found, Searching, Lost, Busy, Error), the port (its name and its id: the by-id name or
+- **Sensor.** The **Status** of the link (Found, Searching, Lost, Busy, Error), the port (its name and its id: the by-id name or
   `usb-vvvv:pppp`), the baud rate, frames per second, good and bad frame counts, the age of the last frame, the Rescan
   button, what the last scan found on every port (`ttyUSB0 (CP2102): not a supported radar: GPS receiver (NMEA)`), the
   line *Detected by listening only: the app sends nothing to the sensor*, and the settings: **Units** (Metres: m and
@@ -44,8 +44,7 @@ Four pages, switched by the tab strip at the bottom, the Left / Right keys or th
   serial ports only, no radio is used; Bluetooth: an HLK-LD radar over Bluetooth LE only; Auto: the USB ports first,
   and only when a scan finds no radar there, the remembered Bluetooth radar; see [Bluetooth](#bluetooth-hlk-ld2451)).
   With Bluetooth or Auto a line **Bluetooth** under the Sensor line names the remembered radar ("None chosen" before
-  one was picked). The first row **Connection** of the page is the link's state; the last setting row of the same
-  name is this transport setting.
+  one was picked).
   A tap or Enter on a setting row moves it to its next value.
 - **No radar.** While the radar is not streaming, the Radar page says why ("No radar found", "The port is used by
   another app", "Signal lost, searching", "The port cannot be opened"), what the scan is doing, what was tried on each
