@@ -1,0 +1,12 @@
+# A receiver that talks NMEA but has no fix yet: "Searching", no dot (a position would be a lie).
+title GPS: searching
+sizes 640x480 480x320 320x480
+env DECKATLAS_DEMO 1
+env DECKATLAS_GPS auto
+env DECKATLAS_GPS_FEED searching
+env DECKATLAS_VIEW 48.889643,2.269995,16
+
+wait 1500
+shot searching
+expect text "Searching"
+expect notext "No GPS device"

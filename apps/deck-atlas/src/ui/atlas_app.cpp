@@ -8,6 +8,7 @@
 #include "atlas_util.hpp"
 
 #include "app.hpp"
+#include "attribution.hpp"
 #include "format.hpp"
 #include "keyboard_input.h"
 
@@ -79,6 +80,7 @@ AtlasApp::AtlasApp(lv_obj_t *screen) : screen_(screen)
             if (t.view.set) settings_.view = t.view;
         }
         if (const char *u = std::getenv("DECKATLAS_UNITS"); u && *u) settings_.units = std::strcmp(u, "mi") == 0 ? atlas::Units::Mi : atlas::Units::Km;
+        if (const char *g = std::getenv("DECKATLAS_GPS"); g && *g) settings_.gps = std::strcmp(g, "auto") == 0; /* the GPS scenes */
     }
 
     open_store();
@@ -104,6 +106,7 @@ AtlasApp::AtlasApp(lv_obj_t *screen) : screen_(screen)
     /* after the first view: the callback's first call would only repeat it */
     if (map_) cp0_map_on_view_change(map_, view_cb, this);
     update_chip();
+    gps_start();
     set_tab(Tab::Map);
     log_line("%s %dx%d%s scale %s, store %s%s, %d map files, network %s", kVersion, w_, h_, narrow_ ? " narrow portrait" : "",
              atlas::scale_label(settings_.scale, map_ ? cp0_map_get_scale(map_) : 0).c_str(), store_dir_.c_str(),
@@ -121,6 +124,7 @@ AtlasApp::~AtlasApp()
     if (worker_) worker_->shutdown();
     if (timer_) lv_timer_delete(timer_);
     timer_ = nullptr;
+    gps_stop(); /* the port closed, position.state removed */
     lv_async_call_cancel(posted_cb, this);
     if (map_ && store_) {
         double lat = 0, lon = 0;
@@ -209,6 +213,8 @@ void AtlasApp::open_store()
                 cp0_map_import_opts_t o{};
                 o.id = "test-tiles";
                 o.title = "Test map";
+                const char *attr = std::getenv("DECKATLAS_ATTRIBUTION"); /* the scenes of a long credit */
+                if (attr && *attr) o.attribution = attr;
                 const int r = cp0_map_store_import_ex(store_, fixture.c_str(), &o);
                 log_line("demo: fixture %s imported: %s", fixture.c_str(), r == CP0_MAP_OK ? "ok" : cp0_map_strerror(r));
             }
@@ -279,6 +285,20 @@ void AtlasApp::build_map()
          * reader; until then no fix is ever set */
         cp0_map_set_position(map_, nullptr);
     }
+    build_gps_layer(); /* the dot's layer over the map, under the credit plate and the chips */
+
+    /* the credit the engine would cut: a plate of ours over its box with the whole text (update_attribution) */
+    attr_plate_ = lv_obj_create(map_box_);
+    plain(attr_plate_);
+    lv_obj_set_style_bg_color(attr_plate_, lv_color_hex(pal::kBar), 0);
+    lv_obj_set_style_bg_opa(attr_plate_, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(attr_plate_, cp0_ui_metrics_get()->tok[CP0_TOK_RADIUS_S], 0);
+    attr_label_ = lv_label_create(attr_plate_);
+    lv_obj_set_style_text_font(attr_label_, cp0_ui_font(CP0_TEXT_CAPTION), 0);
+    lv_obj_set_style_text_color(attr_label_, lv_color_hex(pal::kText), 0);
+    lv_label_set_long_mode(attr_label_, LV_LABEL_LONG_MODE_CLIP);
+    lv_obj_remove_flag(attr_label_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(attr_plate_, LV_OBJ_FLAG_HIDDEN);
 
     /* "No map here": a plate in the middle of the map when no imported file covers the view */
     chip_ = lv_obj_create(map_box_);
@@ -296,6 +316,7 @@ void AtlasApp::build_map()
     lv_obj_set_style_text_align(chip_label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_center(chip_);
     lv_obj_add_flag(chip_, LV_OBJ_FLAG_HIDDEN);
+    build_gps_controls();
 }
 
 void AtlasApp::build_tabs()
@@ -534,6 +555,7 @@ void AtlasApp::tick()
 {
     const std::int64_t now = mono_ms();
     if (worker_) worker_->poll();
+    gps_tick(now);
     if (importing_ || sub_ == Sub::Import) update_import_page(false);
     if (view_dirty_ && now - view_saved_at_ >= 30000) {
         view_saved_at_ = now;
@@ -628,11 +650,71 @@ void AtlasApp::view_cb(void *user, double lat, double lon, int zoom)
     self->settings_.view.lat = lat;
     self->settings_.view.lon = lon;
     self->settings_.view.zoom = zoom;
+    if (self->follow_.on_view_change(lat, lon, zoom, cp0_map_get_scale(self->map_))) self->on_follow_off();
+    if (self->gps_layer_ && self->settings_.gps) lv_obj_invalidate(self->gps_layer_); /* the dot moves with the map */
     self->update_chip();
+}
+
+/* What the engine draws as the credit, as far as the app can tell (the same source choice as its update_attribution:
+ * the source's own, or the first two archives' joined with " | "). */
+std::string AtlasApp::engine_attribution() const
+{
+    std::string raw;
+    if (const OnlineItem *o = settings_.source.empty() ? nullptr : find_online(settings_.source)) {
+        raw = o->attribution;
+    } else if (const ArchiveItem *a = settings_.source.empty() ? nullptr : find_archive(settings_.source)) {
+        raw = a->attribution;
+    } else {
+        int n = 0;
+        for (const ArchiveItem &a : archives_) {
+            const std::string clean = atlas::attribution_plain(a.attribution);
+            if (clean.empty() || raw.find(clean) != std::string::npos) continue;
+            raw += (raw.empty() ? "" : " | ") + clean;
+            if (++n == 2) break;
+        }
+    }
+    return atlas::attribution_plain(raw);
+}
+
+void AtlasApp::update_attribution()
+{
+    if (!attr_plate_ || !map_) return;
+    const std::string text = engine_attribution();
+    const std::string key = text + "|" + std::to_string(w_) + "x" + std::to_string(view_h_);
+    if (key == attr_key_) return;
+    attr_key_ = key;
+    const lv_font_t *font = cp0_ui_font(CP0_TEXT_CAPTION);
+    atlas::AttrInput in;
+    in.w = w_;
+    in.h = view_h_;
+    in.target = target_;
+    in.space = space_m_;
+    in.text_h = lv_font_get_line_height(font);
+    const atlas::AttrPlan plan = atlas::plan_attribution(in, text, [font](const std::string &s) {
+        if (s.empty()) return 0;
+        lv_point_t p;
+        lv_text_get_size(&p, s.c_str(), font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        return static_cast<int>(p.x);
+    });
+    attr_row_top_ = plan.row_top;
+    gps_layout(); /* the follow button keeps clear of a credit in the bottom row at the right */
+    if (!plan.cover) {
+        lv_obj_add_flag(attr_plate_, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+    std::string joined;
+    for (const std::string &l : plan.lines) joined += (joined.empty() ? "" : "\n") + l;
+    lv_obj_set_pos(attr_plate_, plan.x, plan.y);
+    lv_obj_set_size(attr_plate_, plan.w, plan.h);
+    lv_label_set_text(attr_label_, joined.c_str());
+    lv_obj_set_pos(attr_label_, plan.pad, plan.pad);
+    lv_obj_set_size(attr_label_, plan.w - 2 * plan.pad, plan.h - 2 * plan.pad);
+    lv_obj_remove_flag(attr_plate_, LV_OBJ_FLAG_HIDDEN);
 }
 
 void AtlasApp::update_chip()
 {
+    update_attribution();
     if (!chip_) return;
     std::string text;
     if (!store_) {
@@ -716,10 +798,12 @@ void AtlasApp::on_keyboard(const key_item &item)
     /* + and - typed without a key code (the on-screen keyboard's path): the widget reads key codes only */
     if (item.key_code == 0 && map_ && sub_ == Sub::None && tab_ == Tab::Map && !dialog_ && item.utf8[0] && !item.utf8[1]) {
         const char c = item.utf8[0];
+        if (gps_key(0, c)) return;
         if (c == '+' || c == '=') cp0_map_handle_key(map_, KEY_EQUAL, 0);
         else if (c == '-') cp0_map_handle_key(map_, KEY_MINUS, 0);
         return;
     }
+    if (map_ && sub_ == Sub::None && tab_ == Tab::Map && !dialog_ && gps_key(item.key_code, 0)) return;
     if (item.key_code != KEY_TAB) return;
     /* Tab / Shift+Tab: the next / previous tab, only at a tab (a form uses Tab between its fields) */
     if (sub_ != Sub::None || dialog_) return;

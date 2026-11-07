@@ -11,4 +11,7 @@ The demonstration mode of the app (`DECKATLAS_DEMO=1`, the headless scenes) conv
 import into the demonstration store, and the file browser scenes open it. `broken.mbtiles` is a one-line text file
 ("not an MBTiles file"), for the import error page.
 
+The GPS scenes play synthetic NMEA feeds (`tests/gps-feeds`, written at build time by `tests/tools/gen_nmea.py` from an
+invented point inside the tile area above, valid checksums; not in the repository, no recording of anyone's position).
+
 To look at real tiles, set `DECKATLAS_TILES` (see `tests/real/run.sh`): the folder is only read, never copied here.

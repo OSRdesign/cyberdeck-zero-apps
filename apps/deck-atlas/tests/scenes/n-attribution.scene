@@ -1,0 +1,20 @@
+# A long map credit: the engine cuts it with "..." in one row above the scale bar; the app covers that row with the
+# whole credit (abbreviated, in up to two lines) on a plate over the engine's box, clear of the scale bar and the
+# zoom buttons (core/attribution.hpp). A short credit (the other scenes) is left to the engine.
+title Long map credit: whole text, two lines, clear of the scale bar
+sizes 640x480 480x320 320x480 480x800
+env DECKATLAS_DEMO 1
+env DECKATLAS_VIEW 48.886392,2.27417,15
+env DECKATLAS_ATTRIBUTION "Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)"
+
+wait 1500
+shot long-credit
+expect noquit
+expect text "Map"
+
+# a pan and a zoom keep the plate where it is
+type +
+wait 900
+key right
+wait 900
+shot long-credit-zoomed

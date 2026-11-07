@@ -1,0 +1,32 @@
+# Follow mode on a walk east (12 m a second, a fix a second): off by default (the dot walks away from the centre while the
+# map stays), G turns it on (the map recentres at once and on every fix, the zoom stays), a drag turns it off again
+# (the dot walks away once more); the follow button (crosshair, below the zoom buttons) turns it on by touch, and the
+# Home key does too. The follow button is highlighted while follow is on.
+title GPS: follow mode, pan turns it off
+sizes 640x480 480x320 320x480
+env DECKATLAS_DEMO 1
+env DECKATLAS_GPS auto
+env DECKATLAS_GPS_FEED follow
+env DECKATLAS_VIEW 48.889643,2.269995,16
+
+wait 1300
+shot follow-off-start
+expect text "3D fix 8 sats"
+wait 3000
+shot follow-off-walked
+
+key g
+wait 300
+shot follow-on-at-once
+wait 2500
+shot follow-on-walked
+
+drag 0.30 0.45 0.55 0.45
+wait 300
+shot follow-off-by-drag
+wait 2500
+shot follow-off-again
+
+key home
+wait 300
+shot home-recentred
