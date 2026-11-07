@@ -15,8 +15,11 @@
  * Re-detection: frames stop for the driver's quiet_ms (LD2450 family 2 s, LD2451 5 s) or a read fails -> the port is released, state Lost, a scan starts with
  * the remembered port and speed first. While nothing is found, the port list is checked every rescan_ms (2 s): a new or
  * changed list starts a scan (hot-plug); busy, denied and failed ports are tried again every retry_ms (4 s); ports
- * judged "not a radar" or silent are not opened again until the list changes or rescan() is called.
+ * judged "not a radar" or silent are not opened again until the list changes or rescan() is called. A port layer that
+ * announces a change of its list (Sys::ports_generation: a Bluetooth radar ready or gone) is looked at at once.
  * The time stamp of a frame is the poll time (frames read in one poll share it).
+ * A Bluetooth radar (Transport::Ble) is a port like the others, without a speed: its baud() is 0 and it does not change
+ * the remembered serial port; the remembered Bluetooth radar is the user's choice (set_remembered_ble).
  */
 #pragma once
 
@@ -99,6 +102,11 @@ public:
     /* What to store for the next fast start; true once after it changed. */
     bool take_remembered_changed();
     const Remembered &remembered() const { return remembered_; }
+    /* The Bluetooth radar the user chose (kept in the same file): take_remembered_changed() reports it. */
+    void set_remembered_ble(const std::string &address, const std::string &name);
+    /* A scan is running / a radar is open (Found). Neither: the last scan found no radar (the Connection Auto rule). */
+    bool scanning() const { return scanning_; }
+    bool streaming() const { return open_; }
     /* For the diagnostic log (MMWAVE_LOG): the port settings as set, and the raw bytes of the first 3 frames that
      * held a target (hex, 30 bytes each). */
     const std::string &tty_settings() const { return tty_settings_; }
@@ -145,6 +153,7 @@ private:
     std::set<std::string> settled_;
     std::set<std::string> listed_;     /* the ports of the last scan */
     Ms idle_check_ms_ = 0;
+    std::uint64_t ports_gen_ = 0;      /* Sys::ports_generation() at the last look at the list */
     Ms last_scan_ms_ = 0;
     bool scanning_ = false;
     Remembered remembered_;

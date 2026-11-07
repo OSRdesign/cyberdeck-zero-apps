@@ -14,6 +14,10 @@ Comment: The application is linked against the LVGL based cp0_lvgl runtime of th
  the data frame only) and from our own recordings of the sensor. It contains no code of
  other radar libraries. Hi-Link is named only to say which sensor the app reads; the
  project is not made, endorsed or sponsored by Hi-Link.
+ .
+ For a radar over Bluetooth LE the app talks to BlueZ over the system D-Bus with the
+ sd-bus functions of the system's libsystemd.so.0 (systemd, LGPL-2.1-or-later), opened
+ at run time: it is neither linked into the binary nor shipped in this package.
 
 Files: usr/share/APPLaunch/bin/mmwave-radar
 Copyright: 2026 OSRdesign

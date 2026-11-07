@@ -1,0 +1,37 @@
+title mmWave Radar: the Connection row cycles USB -> Bluetooth -> Auto -> USB (scripted ports and radios)
+sizes 480x320 320x480
+env MMWAVE_DEMO none
+env MMWAVE_TEST_CONFIG 1
+
+wait 2500
+key 4
+wait 500
+key up
+wait 300
+expect text "USB"
+key enter
+wait 300
+shot connection-bluetooth
+check connection-bluetooth
+expect text "Bluetooth"
+key 1
+wait 2500
+shot connection-bluetooth-radar
+check connection-bluetooth-radar
+expect text "HLK-LD2451_49F0"
+key 4
+wait 500
+key enter
+wait 300
+expect text "Auto"
+key 1
+wait 2500
+shot connection-auto-radar
+check connection-auto-radar
+expect text "TRIED"
+key 4
+wait 500
+key enter
+wait 300
+expect text "USB"
+expect noquit

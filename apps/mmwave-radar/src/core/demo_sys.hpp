@@ -51,6 +51,10 @@ struct Ld2451Wire {
     int angle_deg, distance_m, direction, speed_kmh, snr;
 };
 std::vector<std::uint8_t> encode_ld2451_frame(const Ld2451Wire *targets, int count, int alarm);
+/* The generated LD2451 stream of the ld2451* scenarios (and of the Bluetooth demo, demo_ble.hpp): the frame of slot k
+ * (one slot every 140 ms, a loop of 100) for mode 0 approaching, 1 receding, 2 both; empty when the slot has none. */
+std::vector<std::uint8_t> ld2451_demo_frame(int mode, int k);
+constexpr int kLd2451DemoSlotMs = 140;
 
 class DemoSys : public Sys {
 public:

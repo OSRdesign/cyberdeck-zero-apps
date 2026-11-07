@@ -1,0 +1,12 @@
+title mmWave Radar: Connection Bluetooth, BlueZ not available (scripted): the message and nothing else
+sizes 480x320 320x480
+env MMWAVE_DEMO ble-nobluez
+env MMWAVE_TEST_CONFIG 1
+
+wait 1500
+shot ble-nobluez
+check ble-nobluez
+expect text "BlueZ not available"
+expect notext "HLK-LD2451_49F0"
+expect notext "TRIED"
+expect noquit

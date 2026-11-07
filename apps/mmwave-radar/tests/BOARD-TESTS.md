@@ -52,6 +52,22 @@ plot look smooth? Is the touch still quick (tabs, pause)?
 2. Close the app: `~/.config/mmwave-radar/mmwave.log` begins with `log on (marker ...)` and has a line a second. Send it
    if something looked wrong, then `rm ~/.config/mmwave-radar/diag` (no log file is written without it).
 
+## T4c. Bluetooth, HLK-LD2451 (5 min, Pi 3A+; the radar powered, its UART free)
+
+`bluetoothctl show` says `Powered: yes` (the app never switches it on). Keep the diagnostic marker of T4b.
+
+1. Sensor > Connection to **Bluetooth**, then the Radar page: "Searching for radars over Bluetooth..." and within a
+   few seconds a row `HLK-LD2451_xxxx  -NN dBm  XX:XX` (no other device listed). After 10 s the scan stops ("Choose a
+   radar"), another starts 20 s later. Does Wi-Fi (the status strip, an SSH session) stay usable during the scan?
+2. Tap the row: "Connecting to HLK-LD2451_xxxx" (blue dot), then the plot within about 10 s; walk in front: the target
+   moves as over USB, the Sensor page says `HLK-LD2451_xxxx (Bluetooth)`, Baud `-`, Bluetooth `HLK-LD2451_xxxx`.
+3. Power the radar off: "Signal lost, reconnecting" after about 5 s, retries at 2, 4, 8 ... s; power it on: found
+   again by itself. End the app and start it again: it connects to the remembered radar without the list.
+4. End the app (Esc): `bluetoothctl info <address>` says `Connected: no` within a few seconds; the phone app can reach
+   the radar again. The log's `ble ...` line says AcquireNotify or StartNotify.
+5. Connection **Auto** with the USB adapter plugged: the USB radar is used, Bluetooth stays off (`bluetoothctl info`:
+   not connected); unplug it: after the scan the Bluetooth radar is connected. Back to **USB** at the end.
+
 ## T5. Exit (30 s)
 
 Esc key and the header's Esc end the app; the port is free again (Serial Console can open it).

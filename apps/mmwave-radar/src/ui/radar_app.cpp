@@ -6,12 +6,15 @@
 #include "radar_app.hpp"
 
 #include "app.hpp"
+#include "bluez_backend.hpp"
+#include "demo_ble.hpp"
 #include "demo_sys.hpp"
 #include "diag.hpp"
 #include "keyboard_input.h"
 #include "palette.hpp"
 #include "posix_sys.hpp"
 
+#include "cp0_ui_list.h"
 #include "cp0_ui_metrics_lvgl.h"
 
 #include <linux/input-event-codes.h>
@@ -48,9 +51,9 @@ std::int64_t mono_ms()
 }
 
 const char *const kTabNames[4] = {"Radar", "Table", "Graph", "Sensor"};
-constexpr int kSettingCount = 6;
+constexpr int kSettingCount = 7;
 const char *const kSettingNames[kSettingCount] = {"Units", "Orientation", "Range", "Trails", "Hide held targets",
-                                                   "Sensor type"};
+                                                   "Sensor type", "Connection"};
 
 std::uint32_t state_rgb(mmw::LinkState s)
 {
@@ -156,18 +159,34 @@ RadarApp::RadarApp(lv_obj_t *screen) : screen_(screen)
     build_tabs();
     compute_layout();
 
-    /* the link: a scripted port layer for the scenes and the demonstration, else the real ports */
+    /* the link: a scripted port layer for the scenes and the demonstration, else the real ports; the Bluetooth radar
+     * through BlueZ (or the scripted backend of MMWAVE_DEMO=ble...), started only when the Connection asks for it */
     const char *demo = std::getenv("MMWAVE_DEMO");
+    const bool demo_ble = demo && std::strncmp(demo, "ble", 3) == 0;
     if (demo && *demo) sys_ = std::make_unique<mmw::DemoSys>(demo, [] { return mono_ms(); });
     else sys_ = std::make_unique<mmw::PosixSys>();
+    if (demo && *demo) { /* a demonstration never talks to BlueZ: the scripted radios (demo_ble.hpp) */
+        ble_ = std::make_unique<mmw::BleSys>(std::make_unique<mmw::DemoBle>(demo_ble ? demo : "ble", [] { return mono_ms(); }));
+        if (demo_ble && settings_.connection == mmw::Connection::Usb) settings_.connection = mmw::Connection::Bluetooth; /* not saved */
+    } else {
+        auto bluez = std::make_unique<mmw::BluezBackend>();
+        bluez->set_log([](const std::string &l) { log_line("%s", l.c_str()); });
+        ble_ = std::make_unique<mmw::BleSys>(std::move(bluez));
+    }
+    ble_->set_remembered(remembered.ble_address, remembered.ble_name);
+    mux_ = std::make_unique<mmw::MuxSys>(*sys_, ble_.get());
+    mux_->set_mode(settings_.connection);
     mmw::LinkConfig link_cfg;
     link_cfg.detect.sensor = settings_.sensor;
-    link_ = std::make_unique<mmw::Link>(*sys_, link_cfg);
+    link_ = std::make_unique<mmw::Link>(*mux_, link_cfg);
     now_ = mono_ms();
     link_->start(now_, remembered);
-    log_line("%s %dx%d%s%s, listen only, remembered %s", kVersion, w_, h_,
+    log_line("%s %dx%d%s%s, listen only, remembered %s%s%s%s", kVersion, w_, h_,
                  narrow ? " narrow portrait" : "", demo && *demo ? (std::string(" demo ") + demo).c_str() : "",
-                 remembered.empty() ? "none" : remembered.port_id.c_str());
+                 remembered.empty() ? "none" : remembered.port_id.c_str(),
+                 settings_.connection == mmw::Connection::Usb ? "" : ", connection ",
+                 settings_.connection == mmw::Connection::Usb ? "" : mmw::connection_name(settings_.connection),
+                 remembered.ble_empty() ? "" : (", bluetooth " + remembered.ble_address).c_str());
     if (lay_.tall)
         log_line("tall radar page: view %dx%d, plot y %d h %d, list y %d h %d (3 x %d + gaps %d), chart y %d h %d", w_,
                  view_h_, lay_.plot_y, lay_.plot_h, lay_.list_y, lay_.list_h, list_block_h_, list_gap_, lay_.chart_y,
@@ -244,8 +263,11 @@ RadarApp::~RadarApp()
     if (lv_obj_is_valid(screen_)) lv_display_remove_event_cb_with_user_data(lv_obj_get_display(screen_), render_cb, this);
     if (LV_EVENT_KEYBOARD != 0 && lv_obj_is_valid(screen_))
         lv_obj_remove_event_cb_with_user_data(screen_, keyboard_cb, this);
-    if (link_) link_->close(); /* the port's settings restored, the lock released */
+    if (link_) link_->close(); /* the port's settings restored, the lock released; a Bluetooth radar let go */
     link_.reset();
+    mux_.reset();
+    if (ble_) ble_->shutdown(); /* the Bluetooth radar disconnected, the discovery ended, BlueZ closed (flushed) */
+    ble_.reset();
     sys_.reset();
     page_.reset();
     if (bg_buf_) lv_draw_buf_destroy(bg_buf_); /* after the canvas that showed it */
@@ -475,15 +497,53 @@ void RadarApp::build_notfound()
     nf_status_ = make_label(nf_, sz_.caption_px, pal::kMuted, true);
     lv_obj_set_width(nf_status_, lv_pct(100));
     lv_obj_set_style_text_align(nf_status_, LV_TEXT_ALIGN_CENTER, 0);
+    /* the Bluetooth radars (Connection Bluetooth), under the status line and before the Rescan button so the first
+     * one stays in view at 480x320: hidden otherwise, so the USB page is laid out as before */
+    const int slot_w = text_w(LV_SYMBOL_RIGHT, sz_.body_px); /* the setting rows' chevron column */
+    ble_slot_w_ = slot_w;
+    ble_row_w_ = w_ - 2 * sz_.space_m - 2 * sz_.space_s; /* inside the page's and the row's padding */
+    const int dot_d = std::max(8, sz_.body_px / 2);
+    for (int i = 0; i < kBleRows; ++i) {
+        BleRow &r = ble_rows_[i];
+        r.row = lv_obj_create(nf_);
+        plain(r.row);
+        lv_obj_add_flag(r.row, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_size(r.row, lv_pct(100), sz_.row);
+        lv_obj_set_style_radius(r.row, page_layout_.esc_radius, 0);
+        lv_obj_set_style_bg_color(r.row, lv_color_hex(pal::kBar), 0);
+        lv_obj_set_style_bg_opa(r.row, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_bg_color(r.row, lv_color_hex(pal::kPressed), LV_STATE_PRESSED);
+        lv_obj_set_style_bg_opa(r.row, LV_OPA_COVER, LV_STATE_PRESSED);
+        lv_obj_set_style_pad_hor(r.row, sz_.space_s, 0);
+        lv_obj_set_user_data(r.row, reinterpret_cast<void *>(static_cast<intptr_t>(i)));
+        lv_obj_add_event_cb(r.row, ble_row_cb, LV_EVENT_CLICKED, this);
+        r.name = make_label(r.row, sz_.body_px, pal::kText, false);
+        lv_label_set_long_mode(r.name, LV_LABEL_LONG_MODE_DOTS); /* one line, cut with dots if it must */
+        lv_obj_set_size(r.name, ble_row_w_ / 2, lv_font_get_line_height(cp0_ui_font_px(sz_.body_px)));
+        lv_obj_align(r.name, LV_ALIGN_LEFT_MID, 0, 0);
+        r.dot = lv_obj_create(r.row);
+        plain(r.dot);
+        lv_obj_set_size(r.dot, dot_d, dot_d);
+        lv_obj_set_style_radius(r.dot, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_opa(r.dot, LV_OPA_COVER, 0);
+        lv_obj_set_style_bg_color(r.dot, lv_color_hex(cp0_ui_list_dot_rgb(CP0_UI_LIST_AFFORDANCE_ACTION)), 0);
+        lv_obj_align(r.dot, LV_ALIGN_RIGHT_MID, -(slot_w - dot_d) / 2, 0);
+        r.detail = make_label(r.row, sz_.caption_px, pal::kMuted, false);
+        lv_obj_align(r.detail, LV_ALIGN_RIGHT_MID, -(slot_w + sz_.space_m), 0);
+        lv_obj_add_flag(r.row, LV_OBJ_FLAG_HIDDEN);
+    }
     lv_obj_t *b = make_button(nf_, "Rescan");
     lv_obj_add_event_cb(b, rescan_cb, LV_EVENT_CLICKED, this);
     lv_obj_t *tried = make_heading(nf_, "TRIED");
     lv_obj_set_width(tried, lv_pct(100));
     nf_tried_ = make_label(nf_, sz_.caption_px, pal::kText, true);
     lv_obj_set_width(nf_tried_, lv_pct(100));
+    nf_usb_parts_.push_back(tried);
+    nf_usb_parts_.push_back(nf_tried_);
     lv_obj_t *wiring = make_heading(nf_, "WIRING: SENSOR TO USB-SERIAL ADAPTER");
     lv_obj_set_width(wiring, lv_pct(100));
     lv_label_set_long_mode(wiring, LV_LABEL_LONG_MODE_WRAP);
+    nf_usb_parts_.push_back(wiring);
     static const char *const kWiring[][2] = {
         {"Sensor", "Adapter"}, {"5V (VCC)", "5V"}, {"GND", "GND"}, {"TX", "RX"}, {"RX", "TX"}};
     for (int i = 0; i < 5; ++i) {
@@ -491,8 +551,10 @@ void RadarApp::build_notfound()
         lv_label_set_text(r.value, kWiring[i][1]);
         lv_obj_set_style_text_color(r.key, lv_color_hex(i == 0 ? pal::kMuted : pal::kText), 0);
         lv_obj_set_style_text_color(r.value, lv_color_hex(i == 0 ? pal::kMuted : pal::kText), 0);
+        nf_usb_parts_.push_back(r.row);
     }
     nf_note_ = make_label(nf_, sz_.caption_px, pal::kMuted, true);
+    nf_usb_parts_.push_back(nf_note_);
     lv_obj_set_width(nf_note_, lv_pct(100));
     lv_label_set_text(nf_note_, "The sensor's UART uses 3.3 V logic: connect it through a USB-serial adapter (CH340, "
                                 "CP2102, FTDI), never to a 5 V port. Power it from 5 V (about 130 mA). It is found "
@@ -522,6 +584,8 @@ void RadarApp::build_sensor()
     si_bad_ = make_info(sensor_, "Bad frames");
     si_age_ = make_info(sensor_, "Last frame");
     si_model_ = make_info(sensor_, "Sensor");
+    si_ble_ = make_info(sensor_, "Bluetooth"); /* shown with Connection Bluetooth or Auto */
+    lv_obj_add_flag(si_ble_.row, LV_OBJ_FLAG_HIDDEN);
     lv_obj_t *b = make_button(sensor_, "Rescan");
     lv_obj_add_event_cb(b, rescan_cb, LV_EVENT_CLICKED, this);
     lv_obj_t *h = make_heading(sensor_, "DETECTION");
@@ -579,6 +643,13 @@ void RadarApp::tick()
 {
     now_ = mono_ms();
     link_->poll(now_);
+    /* the Bluetooth radar: windows and retries only while the Radar page is visible (never while hidden) */
+    mux_->update(*link_, tab_ == Tab::Radar && !cdk::hidden(), now_);
+    for (std::string l; ble_->take_log(l);) log_line("bluetooth: %s", l.c_str());
+    if (std::string a, n; ble_->take_chosen(a, n)) {
+        link_->set_remembered_ble(a, n);
+        log_line("bluetooth: remembered %s %s", a.c_str(), n.c_str());
+    }
     if (!diag_path_.empty() && now_ - diag_last_ >= 1000) {
         diag_last_ = now_;
         std::string hex;
@@ -592,6 +663,7 @@ void RadarApp::tick()
         mmw::make_dirs(config_dir_);
         if (!mmw::write_file_atomic(config_dir_ + "/remembered.conf", link_->remembered().serialize()))
             log_line("cannot write %s/remembered.conf", config_dir_.c_str());
+        if (tab_ == Tab::Sensor) update_sensor(true);
     }
 
     const mmw::Tracker &tr = link_->tracker();
@@ -768,13 +840,95 @@ void RadarApp::update_notfound(bool force)
         tried += r.title + ": " + r.text;
     }
     if (tried.empty()) tried = status.empty() ? "No USB serial port (ttyUSB*, ttyACM*) is plugged in." : "-";
-    const std::string line = !status.empty() ? status : std::string("Plug the sensor in: it is found by itself.");
-    const std::string key = title + "|" + line + "|" + tried;
+    std::string line = !status.empty() ? status : std::string("Plug the sensor in: it is found by itself.");
+    const bool ble_page = ble_mode();
+    if (ble_page) { /* Connection Bluetooth: the Bluetooth state instead of the USB scan */
+        title = ble_->title();
+        if (title.empty()) title = "Searching for radars over Bluetooth...";
+        /* a title too long for one line breaks before its last word (a radar's name, "Bluetooth..."), never inside
+         * it: LVGL would break at the "-", "_" or "." in it */
+        const std::size_t sp = title.rfind(' ');
+        if (sp != std::string::npos && text_w(title.c_str(), sz_.body_px) > w_ - 2 * sz_.space_m) title[sp] = '\n';
+        line = !status.empty() ? status : ble_->detail(now_);
+    } else if (settings_.connection == mmw::Connection::Auto && status.empty() && !link_->streaming()) {
+        /* Auto, the USB scan found nothing: what the fallback to the remembered Bluetooth radar does */
+        if (link_->remembered().ble_empty()) line = "No Bluetooth radar chosen yet: Connection > Bluetooth lists them.";
+        else if (ble_->enabled()) line = "Bluetooth: " + ble_->title() + ".";
+    }
+    const std::string key = std::string(ble_page ? "B|" : "U|") + title + "|" + line + "|" + tried;
+    const bool mode_changed = force || nf_shown_.compare(0, 2, ble_page ? "B|" : "U|") != 0;
+    if (mode_changed)
+        for (lv_obj_t *o : nf_usb_parts_) {
+            if (ble_page) lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
+            else lv_obj_remove_flag(o, LV_OBJ_FLAG_HIDDEN);
+        }
+    update_ble_rows(ble_page && ble_->state() != mmw::BleState::Unavailable && ble_->state() != mmw::BleState::Off);
     if (!force && key == nf_shown_) return;
     nf_shown_ = key;
     set_text_if(nf_title_, title);
     set_text_if(nf_status_, line);
     set_text_if(nf_tried_, tried);
+}
+
+/* The Bluetooth radars as rows: name, RSSI and the address's last two bytes, the action dot (blue while connecting to
+ * that radar or connected to it). Hidden when not shown, so the USB page keeps its layout. */
+void RadarApp::update_ble_rows(bool show)
+{
+    std::vector<mmw::BleCandidate> c;
+    if (show) c = ble_->candidates();
+    if (c.size() > static_cast<std::size_t>(kBleRows)) c.resize(kBleRows);
+    const mmw::BleState st = ble_->state();
+    const bool linking = st == mmw::BleState::Connecting || st == mmw::BleState::Subscribing || st == mmw::BleState::Connected;
+    std::string key = show ? "1" : "0";
+    for (const mmw::BleCandidate &d : c)
+        key += "|" + d.address + d.name + std::to_string(d.has_rssi ? d.rssi : 1) +
+               (linking && d.address == ble_->target_address() ? "*" : "");
+    key += "|" + std::to_string(ble_sel_);
+    if (key == ble_rows_shown_) return;
+    ble_rows_shown_ = key;
+    if (ble_sel_ >= static_cast<int>(c.size())) ble_sel_ = c.empty() ? -1 : static_cast<int>(c.size()) - 1;
+    for (int i = 0; i < kBleRows; ++i) {
+        BleRow &r = ble_rows_[i];
+        if (i >= static_cast<int>(c.size())) {
+            r.address.clear();
+            lv_obj_add_flag(r.row, LV_OBJ_FLAG_HIDDEN);
+            continue;
+        }
+        const mmw::BleCandidate &d = c[static_cast<std::size_t>(i)];
+        r.address = d.address;
+        set_text_if(r.name, d.name.empty() ? d.address : d.name);
+        char b[48];
+        if (d.has_rssi) std::snprintf(b, sizeof(b), "%d dBm  %s", d.rssi, mmw::address_tail(d.address).c_str());
+        else std::snprintf(b, sizeof(b), "%s", mmw::address_tail(d.address).c_str());
+        set_text_if(r.detail, b);
+        /* the name takes what the detail and the dot leave */
+        lv_obj_set_width(r.name, std::max(sz_.target, ble_row_w_ - ble_slot_w_ - sz_.space_m - text_w(b, sz_.caption_px) -
+                                                          sz_.space_s));
+        const bool running = linking && d.address == ble_->target_address();
+        lv_obj_set_style_bg_color(r.dot, lv_color_hex(cp0_ui_list_dot_rgb(running ? CP0_UI_LIST_AFFORDANCE_ACTION_RUNNING
+                                                                                  : CP0_UI_LIST_AFFORDANCE_ACTION)), 0);
+        lv_obj_set_style_bg_opa(r.row, i == ble_sel_ ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
+        lv_obj_remove_flag(r.row, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+void RadarApp::select_ble_row(int index)
+{
+    int n = 0;
+    for (const BleRow &r : ble_rows_) n += !r.address.empty() && !lv_obj_has_flag(r.row, LV_OBJ_FLAG_HIDDEN) ? 1 : 0;
+    if (n == 0) return;
+    ble_sel_ = std::clamp(index, 0, n - 1);
+    update_ble_rows(true);
+    lv_obj_scroll_to_view(ble_rows_[ble_sel_].row, LV_ANIM_OFF);
+}
+
+void RadarApp::choose_ble_row(int index)
+{
+    if (index < 0 || index >= kBleRows || ble_rows_[index].address.empty()) return;
+    ble_sel_ = index;
+    log_line("bluetooth: chosen %s", ble_rows_[index].address.c_str());
+    ble_->choose(ble_rows_[index].address, now_);
+    update_notfound(true);
 }
 
 void RadarApp::set_info(InfoRow &r, const std::string &text, std::uint32_t rgb)
@@ -789,7 +943,8 @@ void RadarApp::update_sensor(bool force)
 {
     if (!link_) return;
     if (force) {
-        for (InfoRow *r : {&si_state_, &si_port_, &si_id_, &si_baud_, &si_fps_, &si_good_, &si_bad_, &si_age_, &si_model_})
+        for (InfoRow *r : {&si_state_, &si_port_, &si_id_, &si_baud_, &si_fps_, &si_good_, &si_bad_, &si_age_, &si_model_,
+                           &si_ble_})
             r->shown.clear();
         si_reports_shown_.clear();
     }
@@ -811,6 +966,16 @@ void RadarApp::update_sensor(bool force)
     else std::snprintf(buf, sizeof(buf), "%.1f s ago", st.last_frame_age_ms / 1000.0);
     set_info(si_age_, buf, pal::kMuted);
     set_info(si_model_, link_->model(), pal::kMuted);
+    /* the remembered Bluetooth radar, under the radar line, with Connection Bluetooth or Auto */
+    const bool ble_on = settings_.connection != mmw::Connection::Usb;
+    if (ble_on) {
+        const mmw::Remembered &rem = link_->remembered();
+        set_info(si_ble_, rem.ble_empty() ? std::string("None chosen") : (rem.ble_name.empty() ? rem.ble_address : rem.ble_name),
+                 pal::kMuted);
+        lv_obj_remove_flag(si_ble_.row, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(si_ble_.row, LV_OBJ_FLAG_HIDDEN);
+    }
 
     std::string reports;
     for (const mmw::PortReport &r : link_->reports()) {
@@ -818,6 +983,10 @@ void RadarApp::update_sensor(bool force)
         reports += r.title + ": " + r.text;
     }
     if (reports.empty()) reports = link_->status().empty() ? "No scan result yet." : link_->status();
+    if (ble_on && ble_->enabled() && !link_->streaming()) {
+        reports += "\nBluetooth: " + ble_->title();
+        if (!ble_->last_error().empty()) reports += " (" + ble_->last_error() + ")";
+    }
     if (reports != si_reports_shown_) {
         si_reports_shown_ = reports;
         lv_label_set_text(si_reports_, reports.c_str());
@@ -827,7 +996,8 @@ void RadarApp::update_sensor(bool force)
                                                mmw::orientation_label(settings_.orientation),
                                                mmw::range_label(settings_.range_m), settings_.trails ? "On" : "Off",
                                                settings_.hide_held ? "On" : "Off",
-                                               mmw::sensor_type_label(settings_.sensor.c_str())};
+                                               mmw::sensor_type_label(settings_.sensor.c_str()),
+                                               mmw::connection_label(settings_.connection)};
     for (int i = 0; i < kSettingCount; ++i) {
         set_text_if(settings_rows_[i].value, values[i]);
         lv_obj_set_style_bg_opa(settings_rows_[i].row, i == setting_sel_ ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
@@ -854,6 +1024,7 @@ void RadarApp::toggle_pause()
 void RadarApp::rescan()
 {
     link_->rescan(now_);
+    if (settings_.connection != mmw::Connection::Usb) ble_->rescan(now_);
     log_line("rescan");
     update_notfound(true);
     if (tab_ == Tab::Sensor) update_sensor(true);
@@ -893,6 +1064,15 @@ void RadarApp::apply_setting(int index)
         settings_.sensor = mmw::next_sensor_type(settings_.sensor.c_str());
         link_->set_sensor_type(settings_.sensor, now_);
         break;
+    case 6: /* the transport changes: the link lets go of what it holds and searches again with the new port list */
+        settings_.connection = mmw::next_connection(settings_.connection);
+        mux_->set_mode(settings_.connection);
+        link_->start(now_, link_->remembered());
+        ble_sel_ = -1;
+        log_line("connection %s", mmw::connection_name(settings_.connection));
+        update_view_visibility();
+        update_notfound(true);
+        break;
     default: return;
     }
     save_settings();
@@ -930,6 +1110,13 @@ void RadarApp::setting_cb(lv_event_t *e)
     self->apply_setting(i);
 }
 
+void RadarApp::ble_row_cb(lv_event_t *e)
+{
+    auto *self = static_cast<RadarApp *>(lv_event_get_user_data(e));
+    const int i = static_cast<int>(reinterpret_cast<intptr_t>(lv_obj_get_user_data(lv_event_get_current_target_obj(e))));
+    self->choose_ble_row(i);
+}
+
 void RadarApp::key_cb(lv_event_t *e)
 {
     static_cast<RadarApp *>(lv_event_get_user_data(e))->on_key(lv_event_get_key(e));
@@ -950,12 +1137,18 @@ void RadarApp::on_key(std::uint32_t key)
     case LV_KEY_RIGHT: set_tab(static_cast<Tab>((static_cast<int>(tab_) + 1) % 4)); break;
     case LV_KEY_UP:
         if (tab_ == Tab::Sensor) select_setting(setting_sel_ < 0 ? kSettingCount - 1 : setting_sel_ - 1);
+        else if (tab_ == Tab::Radar && ble_mode() && !lv_obj_has_flag(nf_, LV_OBJ_FLAG_HIDDEN))
+            select_ble_row(ble_sel_ < 0 ? kBleRows - 1 : ble_sel_ - 1);
         break;
     case LV_KEY_DOWN:
         if (tab_ == Tab::Sensor) select_setting(setting_sel_ < 0 ? 0 : setting_sel_ + 1);
+        else if (tab_ == Tab::Radar && ble_mode() && !lv_obj_has_flag(nf_, LV_OBJ_FLAG_HIDDEN))
+            select_ble_row(ble_sel_ < 0 ? 0 : ble_sel_ + 1);
         break;
     case LV_KEY_ENTER:
         if (tab_ == Tab::Sensor && setting_sel_ >= 0) apply_setting(setting_sel_);
+        else if (tab_ == Tab::Radar && ble_mode() && !lv_obj_has_flag(nf_, LV_OBJ_FLAG_HIDDEN) && ble_sel_ >= 0)
+            choose_ble_row(ble_sel_);
         break;
     default: break;
     }

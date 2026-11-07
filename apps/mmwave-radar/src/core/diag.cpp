@@ -19,10 +19,16 @@ std::string diag_line(const Link &link, Ms now)
 {
     char b[640];
     const LinkStats s = link.stats(now);
-    int n = std::snprintf(b, sizeof(b), "t=%lld state=%s port=%s baud=%d driver=%s frames=%u bad=%u answers=%u bytes=%llu fps=%.1f age=%lld",
-                          static_cast<long long>(now), link_state_name(link.state()),
-                          link.state() == LinkState::Found || link.state() == LinkState::Lost ? link.port().tty.c_str() : "-",
-                          link.baud(), link.driver() ? link.driver()->id : "-", s.frames, s.bad_frames, s.answers, static_cast<unsigned long long>(s.bytes), s.fps,
+    const bool known = link.state() == LinkState::Found || link.state() == LinkState::Lost;
+    char where[160];
+    if (known && link.port().transport == Transport::Ble) /* a Bluetooth radar: no speed applies */
+        std::snprintf(where, sizeof(where), "transport=ble addr=%s name=%s", link.port().address.c_str(),
+                      link.port().tty.empty() ? "-" : link.port().tty.c_str());
+    else
+        std::snprintf(where, sizeof(where), "port=%s baud=%d", known ? link.port().tty.c_str() : "-", link.baud());
+    int n = std::snprintf(b, sizeof(b), "t=%lld state=%s %s driver=%s frames=%u bad=%u answers=%u bytes=%llu fps=%.1f age=%lld",
+                          static_cast<long long>(now), link_state_name(link.state()), where,
+                          link.driver() ? link.driver()->id : "-", s.frames, s.bad_frames, s.answers, static_cast<unsigned long long>(s.bytes), s.fps,
                           static_cast<long long>(s.last_frame_age_ms));
     for (int i = 0; i < 3 && n > 0 && n < static_cast<int>(sizeof(b)); ++i) {
         const SlotState &t = link.tracker().slot(i);
@@ -39,7 +45,7 @@ std::string diag_extra(const Link &link, unsigned &sent)
 {
     std::string out;
     if (!(sent & 1u) && !link.tty_settings().empty()) {
-        out += "termios " + link.tty_settings() + "\n";
+        out += (link.port().transport == Transport::Ble ? "ble " : "termios ") + link.tty_settings() + "\n";
         sent |= 1u;
     }
     const std::vector<std::string> &f = link.first_target_frames();

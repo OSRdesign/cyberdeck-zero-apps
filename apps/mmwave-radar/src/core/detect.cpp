@@ -12,8 +12,10 @@ namespace mmw {
 
 std::string Remembered::serialize() const
 {
-    if (empty()) return std::string();
-    return "port=" + port_id + "\nbaud=" + std::to_string(baud) + "\n";
+    std::string out;
+    if (!empty()) out = "port=" + port_id + "\nbaud=" + std::to_string(baud) + "\n";
+    if (!ble_empty()) out += "ble=" + ble_address + "\nble_name=" + ble_name + "\n";
+    return out;
 }
 
 Remembered Remembered::parse(const std::string &text)
@@ -28,8 +30,18 @@ Remembered Remembered::parse(const std::string &text)
         while (!line.empty() && line.back() == '\r') line.pop_back();
         if (line.compare(0, 5, "port=") == 0) r.port_id = line.substr(5);
         else if (line.compare(0, 5, "baud=") == 0) r.baud = std::atoi(line.c_str() + 5);
+        else if (line.compare(0, 9, "ble_name=") == 0) r.ble_name = line.substr(9);
+        else if (line.compare(0, 4, "ble=") == 0) r.ble_address = line.substr(4);
     }
-    if (r.baud < 1200 || r.baud > 3000000) r = Remembered();
+    if (r.baud < 1200 || r.baud > 3000000) {
+        r.port_id.clear();
+        r.baud = 0;
+    }
+    if (!valid_ble_address(r.ble_address)) {
+        r.ble_address.clear();
+        r.ble_name.clear();
+    }
+    if (r.ble_name.size() > 64) r.ble_name.resize(64);
     return r;
 }
 
@@ -57,7 +69,8 @@ void Detector::start(Ms now, const Remembered &remembered, const std::set<std::s
     std::vector<PortMeta> all = sys_.list_ports();
     for (const PortMeta &m : all)
         if (!settled.count(m.path)) queue_.push_back(m);
-    /* the remembered port first */
+    /* a Bluetooth radar (listed only while connected) before the other ports, the remembered port first */
+    std::stable_partition(queue_.begin(), queue_.end(), [](const PortMeta &m) { return m.transport == Transport::Ble; });
     if (!remembered.port_id.empty()) {
         std::stable_partition(queue_.begin(), queue_.end(),
                               [&](const PortMeta &m) { return port_id(m) == remembered.port_id; });
@@ -100,6 +113,7 @@ void Detector::cancel()
 std::string Detector::status() const
 {
     if (state_ != State::Listen || qi_ >= queue_.size() || bi_ >= bauds_.size()) return std::string();
+    if (nobaud_) return "Listening to " + port_title(queue_[qi_]);
     return "Looking at " + port_title(queue_[qi_]) + " at " + std::to_string(bauds_[bi_]) + " baud";
 }
 
@@ -183,13 +197,17 @@ void Detector::begin_port(Ms now)
         return;
     }
     choose_drivers();
-    /* the speed order: this port's remembered speed first, then the list */
+    /* the speed order: this port's remembered speed first, then the list; a port without a speed: one pass (0) */
     bauds_.clear();
-    if (!remembered_.empty() && remembered_.port_id == port_id(m)) bauds_.push_back(remembered_.baud);
+    nobaud_ = m.transport == Transport::Ble;
+    if (nobaud_) bauds_.push_back(0);
+    else if (!remembered_.empty() && remembered_.port_id == port_id(m)) bauds_.push_back(remembered_.baud);
     auto add_baud = [&](int b) {
         if (std::find(bauds_.begin(), bauds_.end(), b) == bauds_.end()) bauds_.push_back(b);
     };
-    if (!cfg_.bauds.empty()) {
+    if (nobaud_) {
+        /* nothing to add */
+    } else if (!cfg_.bauds.empty()) {
         for (int b : cfg_.bauds) add_baud(b);
     } else {
         for (const SensorDriver *d : active_)
@@ -223,6 +241,15 @@ void Detector::choose_drivers()
 
 void Detector::begin_baud(Ms now)
 {
+    if (nobaud_) { /* Bluetooth: no speed, no flush (what came since the subscription is the sensor's), one window */
+        for (auto &d : decs_) d->reset();
+        window_start_ = now;
+        window_len_ = cfg_.first_listen_ms;
+        for (const SensorDriver *d : active_) window_len_ = std::max<Ms>(window_len_, d->listen_ms);
+        window_len_ += cfg_.nobaud_extra_ms;
+        silent_len_ = window_len_;
+        return;
+    }
     while (bi_ < bauds_.size() && !sys_.configure(handle_, bauds_[bi_])) ++bi_; /* a speed the driver refuses */
     if (bi_ >= bauds_.size()) {
         end_port(Verdict::Error, "cannot set any speed", 0);

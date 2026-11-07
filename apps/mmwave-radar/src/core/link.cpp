@@ -92,6 +92,7 @@ void Link::rescan(Ms now)
 
 void Link::begin_scan(Ms now)
 {
+    ports_gen_ = sys_.ports_generation();
     listed_.clear();
     for (const PortMeta &m : sys_.list_ports()) listed_.insert(m.path);
     det_.start(now, remembered_, settled_);
@@ -138,6 +139,14 @@ bool Link::take_remembered_changed()
     const bool c = remembered_changed_;
     remembered_changed_ = false;
     return c;
+}
+
+void Link::set_remembered_ble(const std::string &address, const std::string &name)
+{
+    if (remembered_.ble_address == address && remembered_.ble_name == name) return;
+    remembered_.ble_address = address;
+    remembered_.ble_name = name;
+    remembered_changed_ = true;
 }
 
 void Link::lose(Ms now)
@@ -223,11 +232,10 @@ void Link::after_scan(Ms now)
         found_ms_ = now;
         ever_found_ = true;
         state_ = LinkState::Found;
-        Remembered r;
-        r.port_id = port_.id;
-        r.baud = port_.baud;
-        if (r.port_id != remembered_.port_id || r.baud != remembered_.baud) {
-            remembered_ = r;
+        if (port_.meta.transport == Transport::Ble) return; /* the Bluetooth radar is remembered when the user chooses it */
+        if (port_.id != remembered_.port_id || port_.baud != remembered_.baud) {
+            remembered_.port_id = port_.id;
+            remembered_.baud = port_.baud;
             remembered_changed_ = true;
         }
         return;
@@ -253,8 +261,10 @@ void Link::poll(Ms now)
         return;
     }
     tracker_.tick(now);
-    /* idle: no radar. Hot-plug check every rescan_ms. */
-    if (now - idle_check_ms_ < cfg_.rescan_ms) return;
+    /* idle: no radar. Hot-plug check every rescan_ms, and at once when the port layer says its list changed. */
+    const std::uint64_t gen = sys_.ports_generation();
+    if (now - idle_check_ms_ < cfg_.rescan_ms && gen == ports_gen_) return;
+    ports_gen_ = gen;
     idle_check_ms_ = now;
     std::set<std::string> listed;
     for (const PortMeta &m : sys_.list_ports()) listed.insert(m.path);

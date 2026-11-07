@@ -51,3 +51,4 @@ void test_package();
 void test_ghost();
 void test_driver();
 void test_ld2451();
+void test_ble();

@@ -182,33 +182,34 @@ DemoSys::DemoSys(const std::string &scenario, Clock clock) : scenario_(scenario)
 
 /* Slots 0..89: a target in every slot (a pass of 12.6 s); slot 90: the empty frame; 91..99: nothing (a frame comes only
  * when there is something to say, as the sensor does). mode 0 approaching, 1 receding, 2 both. */
+std::vector<std::uint8_t> ld2451_demo_frame(int mode, int k)
+{
+    k %= kLdSlots;
+    if (k > 90) return std::vector<std::uint8_t>();
+    if (k == 90) return encode_ld2451_frame(nullptr, 0, 0);
+    Ld2451Wire w[2];
+    int n = 0;
+    const double u = k / 90.0;
+    if (mode == 0 || mode == 2) { /* approaching: 14 m to 8 m, a few degrees to the right of the centre line */
+        w[n++] = {static_cast<int>(std::lround(8.0 + 6.0 * std::sin(u * 3.14159265))),
+                  static_cast<int>(std::lround(14.0 - 6.0 * u)), 1, 4,
+                  150 + (k * 37) % 100};
+    }
+    if (mode == 1 || mode == 2) { /* receding: 4 m to 12 m, to the left */
+        w[n++] = {static_cast<int>(std::lround(-12.0 + 5.0 * std::sin(u * 3.14159265 * 2.0))),
+                  static_cast<int>(std::lround(4.0 + 8.0 * u)), 0, 4, 120 + (k * 53) % 130};
+    }
+    return encode_ld2451_frame(w, n, w[0].direction);
+}
+
 void DemoSys::build_ld2451(int mode)
 {
     ld_buf_.clear();
     ld_cum_.assign(kLdSlots + 1, 0);
     for (int k = 0; k < kLdSlots; ++k) {
         ld_cum_[k] = ld_buf_.size();
-        Ld2451Wire w[2];
-        int n = 0;
-        if (k < 90) {
-            const double u = k / 90.0;
-            if (mode == 0 || mode == 2) { /* approaching: 14 m to 8 m, a few degrees to the right of the centre line */
-                w[n++] = {static_cast<int>(std::lround(8.0 + 6.0 * std::sin(u * 3.14159265))),
-                          static_cast<int>(std::lround(14.0 - 6.0 * u)), 1, 4,
-                          150 + (k * 37) % 100};
-            }
-            if (mode == 1 || mode == 2) { /* receding: 4 m to 12 m, to the left */
-                w[n++] = {static_cast<int>(std::lround(-12.0 + 5.0 * std::sin(u * 3.14159265 * 2.0))),
-                          static_cast<int>(std::lround(4.0 + 8.0 * u)), 0, 4, 120 + (k * 53) % 130};
-            }
-        }
-        if (k < 90) {
-            const std::vector<std::uint8_t> f = encode_ld2451_frame(w, n, w[0].direction);
-            ld_buf_.insert(ld_buf_.end(), f.begin(), f.end());
-        } else if (k == 90) {
-            const std::vector<std::uint8_t> f = encode_ld2451_frame(nullptr, 0, 0);
-            ld_buf_.insert(ld_buf_.end(), f.begin(), f.end());
-        }
+        const std::vector<std::uint8_t> f = ld2451_demo_frame(mode, k);
+        ld_buf_.insert(ld_buf_.end(), f.begin(), f.end());
     }
     ld_cum_[kLdSlots] = ld_buf_.size();
 }

@@ -11,10 +11,16 @@
  * Keys: Left / Right or 1-4 switch pages, Space pauses (the display freezes, the link keeps reading), R rescans,
  * + / - change the plot range, Up / Down / Enter pick and change a setting on the Sensor page, Esc ends the app. Touch:
  * the tabs, the pause cell at the right end of the tab strip, the Rescan buttons, the setting rows. LVGL thread only.
+ *
+ * Connection (Sensor page): USB (the default), Bluetooth or Auto (core/mux_sys.hpp). With Bluetooth the Radar page shows,
+ * while no radar streams, the Bluetooth state (core/ble_sys.hpp) and the HLK-LD radars nearby as rows (Up / Down and
+ * Enter, or a tap, connects one and remembers it). BlueZ is driven from the same 30 ms timer, never blocking.
  */
 #pragma once
 
+#include "ble_sys.hpp"
 #include "link.hpp"
+#include "mux_sys.hpp"
 #include "settings.hpp"
 #include "view.hpp"
 
@@ -69,6 +75,12 @@ private:
     struct SettingRow {
         lv_obj_t *row = nullptr, *key = nullptr, *value = nullptr, *chevron = nullptr;
     };
+    /* a Bluetooth radar of the list: name, "RSSI  address tail", the action dot (white, blue while connecting to it) */
+    struct BleRow {
+        lv_obj_t *row = nullptr, *name = nullptr, *detail = nullptr, *dot = nullptr;
+        std::string address;
+    };
+    static constexpr int kBleRows = 6;
 
     /* building */
     void compute_sizes();
@@ -95,7 +107,11 @@ private:
     void update_chips();
     void update_tabs();
     void update_notfound(bool force);
+    void update_ble_rows(bool show);
     void update_sensor(bool force);
+    bool ble_mode() const { return settings_.connection == mmw::Connection::Bluetooth; }
+    void select_ble_row(int index);
+    void choose_ble_row(int index);
     void update_view_visibility();
     void select_setting(int index);
     const mmw::SlotState &slot(int i) const;
@@ -153,6 +169,7 @@ private:
     static void pause_cb(lv_event_t *e);
     static void rescan_cb(lv_event_t *e);
     static void setting_cb(lv_event_t *e);
+    static void ble_row_cb(lv_event_t *e);
     void on_key(std::uint32_t key);
     void on_keyboard(const struct key_item &item);
 
@@ -178,16 +195,24 @@ private:
     lv_obj_t *nf_title_ = nullptr, *nf_status_ = nullptr, *nf_tried_ = nullptr, *nf_wiring_ = nullptr;
     lv_obj_t *nf_note_ = nullptr;
     std::string nf_shown_;
+    std::vector<lv_obj_t *> nf_usb_parts_;   /* TRIED, the wiring and its note: hidden in the Bluetooth mode */
+    BleRow ble_rows_[kBleRows];
+    int ble_sel_ = -1;
+    int ble_row_w_ = 100, ble_slot_w_ = 10;  /* a row's inner width, the dot's column */
+    std::string ble_rows_shown_;
 
     int key_w_ = 100;               /* the key column of the Sensor page and the wiring table */
     lv_obj_t *sensor_ = nullptr;    /* the Sensor page: a scrolling column */
     InfoRow si_state_, si_port_, si_id_, si_baud_, si_fps_, si_good_, si_bad_, si_age_, si_model_;
+    InfoRow si_ble_;                /* the remembered Bluetooth radar (Connection Bluetooth or Auto) */
     lv_obj_t *si_reports_ = nullptr;
     std::string si_reports_shown_;
-    SettingRow settings_rows_[6]; /* kSettingCount in radar_app.cpp */
+    SettingRow settings_rows_[7]; /* kSettingCount in radar_app.cpp */
     int setting_sel_ = -1;
 
-    std::unique_ptr<mmw::Sys> sys_;
+    std::unique_ptr<mmw::Sys> sys_;      /* the serial ports (real or scripted) */
+    std::unique_ptr<mmw::BleSys> ble_;   /* the Bluetooth radar (BlueZ or scripted); started only when wanted */
+    std::unique_ptr<mmw::MuxSys> mux_;   /* what the link reads, by the Connection setting */
     std::unique_ptr<mmw::Link> link_;
     mmw::Settings settings_;
     std::string config_dir_;

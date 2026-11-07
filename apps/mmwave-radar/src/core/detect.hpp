@@ -16,6 +16,11 @@
  *   3. the port is restored (original termios) and released unless it is the radar, which stays open, locked and
  *      configured, and is handed to the caller by take_radar().
  * A total time budget ends the scan; the ports not reached are reported as skipped.
+ *
+ * A Bluetooth radar (PortMeta::transport Ble, ble_sys.hpp) is a port without a speed: it is listened to once, for the
+ * longest window of the drivers in play plus nobaud_extra_ms (notifications come up to 0.5 s late), configure() and
+ * flush_input() are never called, the reports and the radar carry baud 0. It is looked at right after the remembered
+ * serial port (it is only listed while connected, so the time budget never skips it).
  */
 #pragma once
 
@@ -34,13 +39,20 @@ namespace mmw {
 
 using Ms = std::int64_t;
 
-/* What the app remembers to start fast: the port identity (port_id) and the speed it worked at. */
+/* What the app remembers to start fast: the port identity (port_id) and the speed it worked at; and the Bluetooth radar
+ * the user chose last (its address and name), kept beside it in the same file. */
 struct Remembered {
     std::string port_id;
     int baud = 0;
-    bool empty() const { return port_id.empty() || baud <= 0; }
-    std::string serialize() const;                  /* "port=<id>\nbaud=<n>\n" */
-    static Remembered parse(const std::string &text); /* tolerant: bad text gives an empty one */
+    std::string ble_address;   /* "AA:BB:CC:DD:EE:FF", "" when none was chosen */
+    std::string ble_name;      /* its advertised name, "HLK-LD2451_49F0" */
+    bool empty() const { return port_id.empty() || baud <= 0; } /* the serial part */
+    bool ble_empty() const { return ble_address.empty(); }
+    /* "port=<id>\nbaud=<n>\n" when the serial part is set, then "ble=<address>\nble_name=<name>\n" when a Bluetooth radar
+     * is; "" when neither */
+    std::string serialize() const;
+    /* tolerant: a bad serial part leaves it empty, a bad address leaves the Bluetooth part empty */
+    static Remembered parse(const std::string &text);
 };
 
 enum class Verdict {
@@ -74,6 +86,7 @@ struct DetectConfig {
     Ms total_budget_ms = 8000;
     std::size_t early_garbage_bytes = 90;
     std::uint32_t frames_needed = 3;
+    Ms nobaud_extra_ms = 1000;   /* a port without a speed (Bluetooth): added to its one listen window */
 };
 
 /* The result handed over when a radar was found: the open, locked, configured port. The caller must close() it
@@ -137,6 +150,7 @@ private:
     Ms silent_len_ = 0;       /* how long the first speed may stay without a byte before the port is "silent" */
     bool first_baud_ = true;
     bool any_bytes_ = false;
+    bool nobaud_ = false;     /* the port has no speed (Bluetooth) */
     std::vector<const SensorDriver *> active_;            /* the real drivers listening on this port */
     std::vector<std::unique_ptr<FrameDecoder>> decs_;     /* one decoder each */
     Sniffer sniff_;

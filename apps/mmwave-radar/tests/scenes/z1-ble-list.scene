@@ -1,0 +1,25 @@
+title mmWave Radar: Connection Bluetooth (scripted radios): the HLK-LD radars nearby, a tap connects one, then the Radar page
+sizes 640x480 480x320 320x480 480x800
+env MMWAVE_DEMO ble
+env MMWAVE_TEST_CONFIG 1
+
+wait 2500
+shot ble-list
+check ble-list
+@640x480,480x320,480x800 expect text "Searching for radars over Bluetooth..."
+expect text "HLK-LD2451_49F0"
+@640x480,320x480,480x800 expect text "HLK-LD2451_7C1E"
+expect notext "Meshtastic_1eec"
+expect notext "MeshCore-OSR T1000"
+expect notext "TRIED"
+tap "HLK-LD2451_49F0"
+wait 400
+shot ble-connecting
+check ble-connecting
+expect text "Connecting to HLK-LD2451_49F0"
+wait 4500
+shot ble-radar
+check ble-radar
+expect notext "HLK-LD2451_7C1E"
+expect notext "No radar found"
+expect noquit

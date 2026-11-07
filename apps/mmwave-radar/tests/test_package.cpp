@@ -59,4 +59,35 @@ void test_package()
     CHECK(!port.empty());
     CHECK(!has(port, "write("));
     CHECK(!has(test_read_file(app + "/src/core/posix_sys.cpp"), "::write("));
+    /* Bluetooth: Bluetooth needs BlueZ, recommended (as Mesh Hop does), never required */
+    CHECK(has(manifest, "\"recommends\": \"bluez\""));
+    CHECK(!has(manifest, "\"depends\": \"libfreetype6, libinput10, libxkbcommon0, bluez"));
+    /* ... and listen-only by construction too: no D-Bus call that sends or fetches a characteristic value, bonds, marks
+     * a device, registers an agent, forgets a device or sets any property (Properties "Set": Powered, Alias, ...);
+     * the only thing sent to the module is the notification subscription (AcquireNotify / StartNotify) */
+    const char *const ble_files[] = {"ble_sys.hpp", "ble_sys.cpp", "bluez_backend.hpp", "bluez_backend.cpp",
+                                     "mux_sys.hpp", "mux_sys.cpp", "demo_ble.hpp", "demo_ble.cpp"};
+    const char *const banned[] = {"WriteValue", "ReadValue", "AcquireWrite", "\"Pair\"", "Pair(", "CancelPairing",
+                                  "\"Trusted\"", "\"Blocked\"", "\"Set\"", "RegisterAgent", "RequestDefaultAgent",
+                                  "RemoveDevice", "::write(", "::send(", "sendmsg", "writev("};
+    for (const char *f : ble_files) {
+        const std::string text = test_read_file(app + "/src/core/" + f);
+        CHECK(!text.empty());
+        for (const char *b : banned) {
+            const bool found = has(text, b);
+            if (found) std::fprintf(stderr, "listen-only: %s contains %s\n", f, b);
+            CHECK(!found);
+        }
+    }
+    const std::string bluez = test_read_file(app + "/src/core/bluez_backend.cpp");
+    CHECK(has(bluez, "\"AcquireNotify\"")); /* the subscription is there (the grep above is not looking at an empty file) */
+    CHECK(has(bluez, "\"StartNotify\""));
+    CHECK(has(bluez, "\"StopNotify\""));
+    CHECK(has(bluez, "\"Disconnect\""));
+    CHECK(has(bluez, "kHlkDataNotify"));
+    /* the backend interface offers no write or read of a value at all */
+    const std::string iface = test_read_file(app + "/src/core/ble_sys.hpp");
+    CHECK(!has(iface, "write("));
+    CHECK(!has(iface, "read_value"));
+    CHECK(has(iface, "virtual void subscribe(const std::string &address) = 0;"));
 }

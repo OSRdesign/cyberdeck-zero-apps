@@ -28,3 +28,20 @@ asserted in `test_ld2451.cpp`.
 - `room` and `walk` hold two stray bytes (`F4 F3`) at offset 40 that belong to no frame; the decoder skips them.
 - Gaps seen: 1.39-1.67 s between empty frames, up to 2.65 s between two target frames of one pass, never more than
   2.8 s between any two frames (the basis of the driver's `quiet_ms` 5 s and `drop_ms` 3 s).
+
+## HLK-LD2451 over Bluetooth LE (2026-11-07)
+
+Our own capture of the same HLK-LD2451, read at the same time over its Bluetooth LE module and over its UART (a CH340
+at 115200 baud), on the Pi 3A+ with BlueZ's `bluetoothctl` (connect without bonding, `notify on` for 0xfff1 only;
+nothing was written to the module) and the capture script of the study; MIT like the rest of the app.
+`t` is in seconds from the moment the subscription was asked for (it was on 0.545 s later). Trimmed to the first 75 s
+of the 150 s capture, to keep the malformed frame (66.9 s) and end in a gap between two passes.
+
+- `ble-ld2451-notify-75s.csv`: one line per notification of 0xfff1, `t_s,hex` (parsed from the raw `bluetoothctl`
+  log with the logic of the study's `parse_ble_notify.py`): 183 notifications, 1.66 s to 74.89 s: 14 empty frames
+  (10 bytes), 168 frames with one target (17 bytes) and one malformed frame (12 bytes: `F4 F3 F2 F1 07 00 01 00 F8 F7
+  F6 F5`, the length says 7, the body has 2 bytes); one frame per notification; the longest gap 3.2 s.
+- `ld2451-combo-uart-75s.bin` (3008 bytes) and `.ts.csv`: the UART bytes of the same period, cut at the frame the
+  first notification mirrors and after the frame the last one mirrors. They are the notifications' bytes, byte for
+  byte (the malformed frame included): 182 good frames and one bad one through the decoder. `test_ble.cpp` asserts
+  both, through BleSys, the detector, the link and the tracker.

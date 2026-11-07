@@ -1,16 +1,17 @@
 # mmWave Radar (`mmwave-radar`)
 
 A viewer for the Hi-Link HLK-LD2450 / HLK-LD2452 24 GHz tracking radar and the HLK-LD2451 24 GHz target radar on a
-USB-serial adapter: up to three targets seen from above, with trails and speed arrows, the raw numbers, a 30-second
+USB-serial adapter, or for the HLK-LD2451 over Bluetooth LE (its built-in module): up to three targets seen from above, with trails and speed arrows, the raw numbers, a 30-second
 graph of distance and speed, and the sensor's state. Native fullscreen app on the launcher's `cp0_lvgl`, MIT, version 0.1.0 (draft). **Listen only:** the app sends
-nothing to the sensor, not even to find it (study: launcher report 056).
+nothing to the sensor, not even to find it (study: launcher report 056); over Bluetooth the only thing sent is the
+standard notification subscription (see [Bluetooth](#bluetooth-hlk-ld2451)).
 
 ## Screenshots
 
 `screenshots/` (rendered by the PC harness with the scripted ports, `build.sh host`): `01-radar-640x480`,
 `02-radar-480x320`, `03-radar-320x480` (the tall page at the board's 6.1 px/mm), `04-table-480x320`,
 `05-graph-640x480`, `06-sensor-320x480`, `07-notfound-480x320`, `08-table-320x480`, `09-radar-480x800` (the tall page
-with the strip chart). `18`-`21`: the Radar page with an LD2451 (an approaching and a receding target, Auto range 20 m) at 640x480, 480x320, 320x480 and 480x800; `22`, `23`: its Table; `24`, `25`: the Sensor page with the LD2451 chosen (six setting rows).
+with the strip chart). `18`-`21`: the Radar page with an LD2451 (an approaching and a receding target, Auto range 20 m) at 640x480, 480x320, 320x480 and 480x800; `22`, `23`: its Table; `24`, `25`: the Sensor page with the LD2451 chosen (the Sensor type row; the Connection row is below it). `26`-`29`: Connection Bluetooth, the HLK-LD radars nearby (scripted radios, `MMWAVE_DEMO=ble`) at 640x480, 480x320, 320x480 and 480x800; `30`: connecting to one; `31`: the Radar page of the Bluetooth radar; `32`, `33`: its Sensor page (the port, no speed, the remembered radar; the Connection row); `34`: "Bluetooth is off".
 
 ## What it does
 
@@ -39,11 +40,25 @@ Four pages, switched by the tab strip at the bottom, the Left / Right keys or th
   line *Detected by listening only: the app sends nothing to the sensor*, and the settings: **Units** (Metres: m and
   km/h / Millimetres: mm and cm/s), **Orientation** (Normal / Mirror (left and right swapped) / Rotate 180), **Range**
   (Auto / 2 / 4 / 6 m), **Trails** (On / Off), **Hide held targets** (On / Off, default Off; see Known behaviour), **Sensor type** (Auto, the default, or
-  LD2452 / LD2450, or LD2451: a fixed type listens for that driver only).
+  LD2452 / LD2450, or LD2451: a fixed type listens for that driver only), **Connection** (USB, the default: the USB
+  serial ports only, no radio is used; Bluetooth: an HLK-LD radar over Bluetooth LE only; Auto: the USB ports first,
+  and only when a scan finds no radar there, the remembered Bluetooth radar; see [Bluetooth](#bluetooth-hlk-ld2451)).
+  With Bluetooth or Auto a line **Bluetooth** under the Sensor line names the remembered radar ("None chosen" before
+  one was picked). The first row **Connection** of the page is the link's state; the last setting row of the same
+  name is this transport setting.
   A tap or Enter on a setting row moves it to its next value.
 - **No radar.** While the radar is not streaming, the Radar page says why ("No radar found", "The port is used by
   another app", "Signal lost, searching", "The port cannot be opened"), what the scan is doing, what was tried on each
   port, the wiring and a Rescan button. A plugged-in sensor is found by itself (the port list is checked every 2 s).
+  With **Connection Bluetooth** the page shows the Bluetooth state instead of the USB scan ("Searching for radars over
+  Bluetooth...", "Choose a radar", "No radar found over Bluetooth", "Looking for HLK-LD2451_49F0", "Connecting to
+  HLK-LD2451_49F0", "Connected to HLK-LD2451_49F0" while the detector listens, "Signal lost, reconnecting", "Could not
+  connect to HLK-LD2451_49F0", or only "Bluetooth is off" / "No Bluetooth adapter" / "BlueZ not available"), a line
+  under it (the scan's seconds left, the next try and why the last one failed), the Rescan button and the HLK-LD radars
+  seen (rows: name, RSSI, the last two bytes of the address, and a white dot that turns blue while connecting to that
+  radar). A tap on a row, or Up / Down and Enter, connects it and remembers it. With **Auto** the USB page stays, and
+  once the USB scan found nothing its status line tells what the fallback does ("Bluetooth: Connecting to ...", or
+  "No Bluetooth radar chosen yet: Connection > Bluetooth lists them.").
 
 ### Keys and touch
 
@@ -55,6 +70,7 @@ Four pages, switched by the tab strip at the bottom, the Left / Right keys or th
 | Rescan the ports now | R | Rescan (Sensor page, the "no radar" page) |
 | Bigger / smaller range | + (or =) / - | Range row (Sensor page) |
 | Pick a setting, change it | Up / Down, Enter (Sensor page) | tap the row |
+| Connect a Bluetooth radar of the list | Up / Down, Enter (Radar page, Connection Bluetooth) | tap the row |
 | End the app | Esc | Esc in the header |
 
 ### Finding the radar (listen only)
@@ -105,6 +121,58 @@ are shown as sent. The resolution is 1 m and 1 degree, so the plot moves in step
 direction filter, a minimum speed) cannot be read or changed with a listen-only app. Not supported:
 the LD2410 presence radar (named in the scan; its data frames are told from the LD2451's by their `02 AA ... 55 00` layout), any configuration (0.1 sends no command), two-person slot identity (not
 verified, report 056 section 8).
+
+## Bluetooth (HLK-LD2451)
+
+The HLK-LD2451 has a Bluetooth LE module on board; the app can read the radar through it instead of a USB-serial
+adapter (**Connection > Bluetooth**, or **Auto** as a fallback). It is a second transport under the same listen-only
+port interface (`core/ble_sys.hpp`): the frames, the decoder, the tracker and the pages are the same; only there is no
+speed (the diagnostic line reads `transport=ble addr=ED:2F:90:B4:49:F0 name=HLK-LD2451_49F0` instead of `port=... baud=...`,
+the Sensor page's Baud is `-`, the port is `HLK-LD2451_49F0 (Bluetooth)` with the id `ble:<address>`). The driver is
+chosen as on a serial port: by listening to the first frames (one window: the longest of the drivers in play, 6 s for
+the LD2451, plus 1 s), honouring the Sensor type.
+
+**What the module does** (measured on the owner's HLK-LD2451 from a Pi 3A+ with BlueZ, 2026-11-06/07; captures in the
+study folder, `tests/data/ble-ld2451-notify-75s.csv`):
+
+- It advertises as `HLK-LD2451_xxxx` (the last four hex digits of its address; a public address, connectable, no
+  bonding needed) with the 16-bit service 0xAF30 in the advertisement (not in the GATT table).
+- GATT: service 0xfff0 with 0xfff2 (write without response) and 0xfff1 (notify, its CCCD at handle 0x0009); a Jieli
+  service 0xae00 with 0xae01 (write without response) and 0xae02 (notify, silent in our tests: ignored); the Device
+  Name; ATT MTU 512.
+- 0xfff1 is a complete real-time mirror of the UART stream: **one whole LD2451 frame per notification** (the empty
+  frame every 1.4 s, a target frame about every 0.15 s while someone is in view, 17 bytes for one target), 0 to 0.5 s
+  after the UART (batching). Over 75 s of a walk the notifications and the UART carried the same 3008 bytes, the same
+  182 frames (the test asserts it).
+- The module can send a malformed frame (the length says 7, the body has 2 bytes: `F4 F3 F2 F1 07 00 01 00 F8 F7 F6 F5`);
+  it came through the UART as well. The decoder counts it as one bad frame and resyncs on the next header (tested
+  alone, glued to the next frame and cut in any chunking). A frame split over two notifications (another module, a
+  smaller MTU) is read the same way.
+
+**Safety rules (built in).** The module's writable characteristics (0xfff2, 0xae01, the Device Name) need no
+authentication: anyone in range could reconfigure the radar or rename it. The app never writes any characteristic
+value, never reads one, never bonds with the module, never marks it as known to BlueZ, registers no agent and changes
+no adapter setting (it never powers the adapter on). The only thing sent to the module is the standard notification
+subscription of 0xfff1 (its CCCD, through BlueZ's AcquireNotify, else StartNotify). The backend interface has no call
+for anything else, and `tests/test_package.cpp` greps the Bluetooth sources for the D-Bus names that would.
+
+**Finding and choosing a radar.** Discovery runs in windows of 10 s with 20 s between them, never continuously (the
+Pi 3A+ shares its radio with Wi-Fi), only while the Radar page is visible and no radar is connected, and it stops as
+soon as a connection starts. Only devices whose name starts with `HLK-LD` (any case) are listed, strongest first, with
+the last RSSI seen. A tap (or Enter) connects one and remembers it (`remembered.conf`). With a remembered radar the app
+connects at once when BlueZ knows it, else a window looks for it and connects as soon as it is seen.
+
+**The connection.** Connect, with the services resolved, within 10 s; then the 0xfff1 subscription (5 s); the radar
+counts as found once the detector has heard three good frames, and as lost after the driver's quiet time (LD2451: 5 s
+without a frame). A failed step, a lost link or the radar going quiet disconnects it cleanly and tries again after 2, 4,
+8, 15 and then every 30 s, while the Radar page is visible (a link that streamed for 20 s or more starts again at 2 s).
+Leaving Bluetooth (Connection USB) and ending the app disconnect it and end the subscription and the discovery before
+BlueZ is closed. **A connected radar is busy**: Hi-Link's phone app cannot reach the module while the deck holds it
+(end the app or switch Connection to USB first).
+
+**Requirements.** BlueZ (`bluetoothd`, the package recommends `bluez`) and the system D-Bus; `libsystemd.so.0` is
+opened at run time (no link, the same approach as Mesh Hop), so the app starts and works over USB when either is
+missing and says "BlueZ not available" on the Bluetooth page. Any user may use BlueZ through D-Bus (no group needed).
 
 ## Layout and sizes
 
@@ -160,7 +228,12 @@ frames that held a target, and every 10 s the raw bytes of the latest one; it ne
   listen-only scan), `port_sys` / `posix_sys` / `posix_tty` (the port layer: sysfs, /proc, flock, termios2, no write),
   `link` (the poll loop: Searching / Found / Lost / Busy / Error, hot-plug), `tracker` (trails, smoothed speed, the
   30 s history), `units`, `csv`, `settings` (the settings file), `view` (range, orientation, arrow, label placement),
-  `demo_sys` (the scripted ports of the scenes and of `MMWAVE_DEMO`).
+  `demo_sys` (the scripted ports of the scenes and of `MMWAVE_DEMO`), `ble_sys` (the Bluetooth radar as a listen-only
+  port: discovery windows, the remembered radar, connect, subscribe, retries; a state machine over a `BleBackend`),
+  `bluez_backend` (BlueZ over sd-bus, `libsystemd.so.0` loaded at run time, asynchronous calls polled from the UI
+  timer: Mesh Hop's approach cut down to discovery, connect / disconnect and the notification subscription),
+  `mux_sys` (the port layer by the Connection setting, and the Auto rule), `demo_ble` (the scripted radios of the
+  scenes and of `MMWAVE_DEMO=ble...`).
 - `src/ui/`: `radar_app` (pages, timer, input), `radar_draw` (the plot, the table, the graph), `palette`.
 
 ### Adding a driver
@@ -186,12 +259,16 @@ A stub (no `make_decoder`) is only recognised and named in the scan, as the LD24
 
 `MMWAVE_DEMO=walk|one|three|lost|none|busy|denied|ld2451|ld2451-away|ld2451-two` runs the app on scripted ports instead of the real ones (`walk`
 replays the recorded walk from `tests/data`, or `$MMWAVE_DEMO_FILE`; the `ld2451*` ones are generated LD2451 streams at
-115200 baud: an approaching target, a receding one, or both).
+115200 baud: an approaching target, a receding one, or both). `MMWAVE_DEMO=ble|ble-off|ble-noadapter|ble-nobluez`
+starts in Connection Bluetooth (not saved) on scripted radios: two HLK-LD2451 nearby among three other devices, the
+connected one sending the `ld2451-two` stream one frame per notification; or the adapter off, no adapter, no BlueZ. Any
+demonstration uses the scripted radios (never BlueZ) when Bluetooth is chosen.
 
 ## Files the app keeps
 
-`~/.config/mmwave-radar/` (or `$XDG_CONFIG_HOME/mmwave-radar/`): `settings.conf` (units, orientation, range, trails, hide_held, `sensor=<driver id>` only when the Sensor type is not Auto; a `flip_angle` line of an older version is ignored and not written back) and
-`remembered.conf` (the port id and speed of the last radar), both written atomically. Delete the folder to reset. Only
+`~/.config/mmwave-radar/` (or `$XDG_CONFIG_HOME/mmwave-radar/`): `settings.conf` (units, orientation, range, trails, hide_held, `sensor=<driver id>` only when the Sensor type is not Auto, `connection=bluetooth|auto` only when the Connection is not USB, so an older file reads as USB; a `flip_angle` line of an older version is ignored and not written back) and
+`remembered.conf` (the port id and speed of the last radar; `ble=<address>` and `ble_name=<name>` of the Bluetooth
+radar chosen last), both written atomically. Delete the folder to reset. Only
 when you create the marker file `diag` there: `mmwave.log` (the diagnostic log, at most about 400 KB).
 
 ## Multitasking
@@ -199,13 +276,17 @@ when you create the marker file `diag` there: `mmwave.log` (the diagnostic log, 
 The app declares no `X-Background`: it owns the panel until it exits, so it never answers the launcher's lifecycle
 protocol. If the launcher freezes it behind the "Close app?" sheet (three-finger hold, status-strip long press), the
 port stays open while it is stopped; when it continues, a gap of more than 2 s counts as Lost and the radar is found
-again at once. Declaring `freeze` is possible later, with the protocol helper.
+again at once. Declaring `freeze` is possible later, with the protocol helper. A frozen app cannot run any code
+(`SIGSTOP`), so **a Bluetooth radar stays connected while the app is frozen**; Close on that sheet (and Esc, the
+header's Esc, the 3 s Esc hold) ends the app normally and disconnects it. Only a killed app (`SIGKILL`, the
+out-of-memory killer) leaves it connected until BlueZ or the radar drops the link.
 
 ## Requirements
 
 A screen of at least 480x320 (portrait 320x480), a USB-serial adapter with the sensor, the user in the `dialout` group
 (`sudo usermod -aG dialout $USER`, then log out and in), CyberdeckZero Launcher with full-screen app support. Packages:
-`libfreetype6, libinput10, libxkbcommon0`. arm64 and amd64.
+`libfreetype6, libinput10, libxkbcommon0`; recommended: `bluez` (Connection Bluetooth / Auto; `libsystemd0` is there
+on every systemd system and is only opened at run time). arm64 and amd64.
 
 ## Install
 
@@ -227,8 +308,13 @@ Settings > Apps, once published (0.1.0 is a draft: `"draft": true`). By hand: `s
   to 100 m); the speed is a whole km/h from the sensor, so the Table's cm/s column moves in steps of 28.
 - Left and right: the sign of x is taken as the sensor sends it; if a step to your right moves the dot left, choose
   Orientation > Mirror (it applies to every sensor).
-- A frozen (hidden) app keeps the port; another app cannot open it meanwhile.
+- A frozen (hidden) app keeps the port; another app cannot open it meanwhile. A Bluetooth radar stays connected too.
 - The plot's refresh rate on a Pi Zero 2 W is not measured yet (board test).
+- Bluetooth: tested on scripted radios with the owner's recorded notifications, not yet on a board with the real
+  BlueZ and the radar (board test): the scan's timing on the Pi 3A+ (shared radio), BlueZ's answers to Connect and
+  AcquireNotify on this module and the 10 s timeout are the things to watch. Auto falls back to Bluetooth only at
+  search time: a USB radar plugged in while the Bluetooth radar streams is used once that one is lost. Only the
+  LD2451's module is known; another HLK-LD module with the same 0xfff0 / 0xfff1 service would be read by its driver.
 
 ## Credits and licences
 
@@ -236,6 +322,9 @@ Our code, MIT. Written from Hi-Link's published documents (HLK-LD2450 serial pro
 V1.3: the facts of the data frame) and our own recordings; no code of other radar libraries (ESPHome's GPL components
 were not used). Hi-Link is named only to say which sensor the app reads; the project is not made, endorsed or sponsored
 by Hi-Link. Linked: `cp0_lvgl` of the CyberdeckZero launcher (MIT) and LVGL (MIT); see the package's `copyright` file.
+Bluetooth: BlueZ's D-Bus API (the `org.bluez` documents of BlueZ 5) through systemd's sd-bus, `libsystemd.so.0`
+(LGPL-2.1-or-later) opened at run time from the system, neither linked nor shipped; the backend follows the approach
+of Mesh Hop's (`apps/mesh-hop/src/core/ble`, our own code, MIT). The module's facts are from our own captures.
 
 ## Build and test
 
@@ -259,4 +348,7 @@ Build from a WSL native-filesystem LF copy with fresh build dirs (`CDK_BUILD`, `
   identical; the latest target frame every 10 s); held (stale) targets of the LD2452 marked after 3 s, with the
   setting Hide held targets; the sensor driver seam (the LD2450 family is one driver, the LD2410 a stub) and the
   Sensor type setting (Auto, default, or a fixed driver); the diagnostic line gains `driver=<id>`; the HLK-LD2451
-  driver (115200 baud, polar targets, per-driver quiet time and release time, Auto range up to 100 m); the Sensor type value of the LD2450 family reads `LD2452 / LD2450`.
+  driver (115200 baud, polar targets, per-driver quiet time and release time, Auto range up to 100 m); the Sensor type value of the LD2450 family reads `LD2452 / LD2450`;
+  the Bluetooth LE transport for the HLK-LD2451 (listen-only: the 0xfff1 notifications only; discovery windows, the
+  remembered radar, retries, clean disconnection) and the Connection setting (USB, default / Bluetooth / Auto); the
+  package recommends `bluez`.

@@ -10,6 +10,7 @@
   "license": "MIT",
   "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/mmwave-radar",
   "depends": "libfreetype6, libinput10, libxkbcommon0",
+  "recommends": "bluez",
   "arch": ["arm64", "amd64"],
   "permissions": {"additional_hardware": true},
   "draft": true

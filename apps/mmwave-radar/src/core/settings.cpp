@@ -23,6 +23,7 @@ std::string serialize_settings(const Settings &s)
     out += std::string("trails=") + (s.trails ? "on" : "off") + "\n";
     out += std::string("hide_held=") + (s.hide_held ? "on" : "off") + "\n";
     if (s.sensor != kSensorAuto) out += "sensor=" + s.sensor + "\n"; /* only when not Auto: old files stay as they were */
+    if (s.connection != Connection::Usb) out += std::string("connection=") + connection_name(s.connection) + "\n";
     return out;
 }
 
@@ -50,6 +51,8 @@ Settings parse_settings(const std::string &text)
             s.hide_held = value == "on";
         } else if (key == "sensor") {
             s.sensor = valid_sensor_type(value.c_str()) ? value : std::string(kSensorAuto); /* unknown: Auto */
+        } else if (key == "connection") {
+            s.connection = value == "bluetooth" ? Connection::Bluetooth : value == "auto" ? Connection::Auto : Connection::Usb;
         }
     }
     return s;
@@ -76,6 +79,33 @@ const char *orientation_name(Orientation o)
 }
 
 std::string range_label(int range_m) { return range_m == 0 ? std::string("Auto") : std::to_string(range_m) + " m"; }
+
+const char *connection_label(Connection c)
+{
+    switch (c) {
+    case Connection::Bluetooth: return "Bluetooth";
+    case Connection::Auto: return "Auto";
+    default: return "USB";
+    }
+}
+
+const char *connection_name(Connection c)
+{
+    switch (c) {
+    case Connection::Bluetooth: return "bluetooth";
+    case Connection::Auto: return "auto";
+    default: return "usb";
+    }
+}
+
+Connection next_connection(Connection c)
+{
+    switch (c) {
+    case Connection::Auto: return Connection::Usb;
+    case Connection::Usb: return Connection::Bluetooth;
+    default: return Connection::Auto;
+    }
+}
 
 UnitMode next_units(UnitMode u) { return u == UnitMode::MetresKmh ? UnitMode::MmCms : UnitMode::MetresKmh; }
 

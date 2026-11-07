@@ -22,19 +22,29 @@ namespace mmw {
 
 enum class OpenErr { None, Busy, Denied, Gone, Other };
 
+/* How a port's bytes arrive. Serial: a tty at a speed the detector sets. Ble: the notifications of a Bluetooth LE radar
+ * module (ble_sys.hpp): no speed applies, the detector listens once and never calls configure(). */
+enum class Transport { Serial, Ble };
+
 struct PortMeta {
-    std::string tty;        /* "ttyUSB0" */
-    std::string path;       /* "/dev/ttyUSB0" */
+    std::string tty;        /* "ttyUSB0"; a Bluetooth radar's advertised name ("HLK-LD2451_49F0") */
+    std::string path;       /* "/dev/ttyUSB0"; "ble:AA:BB:CC:DD:EE:FF" */
     std::string by_id;      /* the /dev/serial/by-id link name, "" when none */
     std::uint16_t vid = 0, pid = 0;
     std::string product;    /* the USB product string */
-    std::string driver;     /* ch341, cp210x, ftdi_sio, cdc_acm, ... */
+    std::string driver;     /* ch341, cp210x, ftdi_sio, cdc_acm, ...; "bluez" */
+    Transport transport = Transport::Serial;
+    std::string address;    /* Bluetooth: "AA:BB:CC:DD:EE:FF" */
 };
 
-/* The stable key the remembered port is kept under: the by-id name, else "usb-vvvv:pppp", else the tty name. */
+/* The stable key the remembered port is kept under: the by-id name, else "usb-vvvv:pppp", else the tty name; a
+ * Bluetooth radar's is "ble:<address>". */
 std::string port_id(const PortMeta &m);
-/* "ttyUSB0 (CH340)": the chip for the well known bridges, else the product string, else just the tty name. */
+/* "ttyUSB0 (CH340)": the chip for the well known bridges, else the product string, else just the tty name; a Bluetooth
+ * radar's is "<name> (Bluetooth)". */
 std::string port_title(const PortMeta &m);
+/* True for "AA:BB:CC:DD:EE:FF" (six pairs of hex digits, either case, colons between). */
+bool valid_ble_address(const std::string &address);
 
 class Sys {
 public:
@@ -57,6 +67,9 @@ public:
     virtual void close(int handle) = 0;
     /* The settings of an open port as text, for the diagnostic log (read only; "" when not known). */
     virtual std::string describe(int handle) { (void)handle; return std::string(); }
+    /* Grows whenever the port list changed by itself (a Bluetooth radar became ready or went away); 0 for a layer without
+     * such events (the serial ports are looked at every 2 s). The link looks at the list at once when it grows. */
+    virtual std::uint64_t ports_generation() { return 0; }
 };
 
 } // namespace mmw
