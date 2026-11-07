@@ -4,7 +4,7 @@
   "version": "0.2.0",
   "title": "Deck Atlas",
   "summary": "Offline maps on the deck: your MBTiles, PMTiles and tile folders.",
-  "description": "A map viewer that works offline: import MBTiles or PMTiles files, or a z/x/y tile folder (converted on the deck), from the SD card or USB; pan and zoom by touch or keys. Online sources (OpenTopoMap, Thunderforest and Geoapify with your own key) stay off until you switch one on and accept its terms; never the OpenStreetMap Foundation's servers. Viewed tiles are kept. Optional USB GPS (listen-only): a position dot, follow mode, position.state for other apps; off until you switch it on. 480x320 and up (320x480 in PDA mode).",
+  "description": "Offline maps: import MBTiles or PMTiles files, or a z/x/y tile folder, then pan and zoom by touch or keys. An optional USB GPS (listen-only) shows your position, with follow mode, and writes position.state for other apps; off until switched on. Online sources (OpenTopoMap, Thunderforest, Geoapify with your key) stay off until you accept their terms; never the OSM Foundation's servers. 480x320 and up (320x480 in PDA mode).",
   "categories": ["Tools"],
   "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
   "license": "MIT",
