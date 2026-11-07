@@ -39,12 +39,12 @@ namespace mmwui {
 
 constexpr int kMinW = 480, kMinH = 320;
 constexpr int kPortraitW = 320, kPortraitH = 480;
-constexpr const char *kVersion = "0.1.0";
+constexpr const char *kVersion = "0.1.1";
 
 enum class Tab { Radar = 0, Table, Graph, Sensor };
 
-/* The sizes of this canvas: the toolkit's tokens, or on a narrow portrait canvas (320x480) the launcher's narrow
- * portrait numbers when the pinned toolkit does not have them yet (body 16 px, caption 14 px). */
+/* The sizes of this canvas: the toolkit's tokens (on a narrow portrait canvas, 320x480, the toolkit's own narrow
+ * portrait numbers: Compact tokens, 16 px body text, 14 px caption). */
 struct Sizes {
     bool narrow = false;     /* narrow portrait: w < 480 and h > w */
     bool portrait = false;
@@ -192,7 +192,7 @@ private:
     std::string chip_shown_, held_shown_;
 
     lv_obj_t *nf_ = nullptr;        /* the "not found" help on the Radar page */
-    lv_obj_t *nf_title_ = nullptr, *nf_status_ = nullptr, *nf_tried_ = nullptr, *nf_wiring_ = nullptr;
+    lv_obj_t *nf_title_ = nullptr, *nf_status_ = nullptr, *nf_tried_ = nullptr, *nf_tried_bt_ = nullptr, *nf_wiring_ = nullptr;
     lv_obj_t *nf_note_ = nullptr;
     std::string nf_shown_;
     std::vector<lv_obj_t *> nf_usb_parts_;   /* TRIED, the wiring and its note: hidden in the Bluetooth mode */

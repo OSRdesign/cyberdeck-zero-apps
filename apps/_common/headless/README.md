@@ -49,6 +49,7 @@ After the app asks to quit, only `expect` lines are read.
 | `shot NAME` / `check NAME` | settle 250 ms, save the PNG (shot only), run the layout checks |
 | `expect quit\|noquit`, `expect osk on\|off`, `expect text "T"`, `expect notext "T"` | assertions |
 | `expect key "T" toolbar\|target` | the button labelled T is exactly the 9 mm toolbar key (`cp0_ui_toolbar_key_px`) / TARGET high and at least as wide; its size goes in the report |
+| `expect esc` | the header's Esc button follows the layout service's rule at this size: narrow portrait (320x480) TARGET wide, the bar (40 px) minus its margins high, SPACE_M from the left edge, tap area over the whole bar, no title; elsewhere the 9 mm toolbar key; its size goes in the report |
 | `say TEXT` | a line in the log |
 | `lifecycle` | (scene option, like `nocontract`) the harness plays a multitasking launcher: a control socket in `APPLAUNCH_LIFECYCLE` / `APPLAUNCH_CONTROL_FD` and the toolkit's helper (`cp0_app_lifecycle_lvgl.h`) on the harness's display and pointer |
 | `hide`, `show`, `close` | the launcher's message; `hide` / `show` must be answered within 300 ms (the time goes in the report), `close` must make the app quit within 300 ms |

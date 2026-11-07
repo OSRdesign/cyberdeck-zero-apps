@@ -1,0 +1,19 @@
+title mmWave Radar: Connection Auto, no radar on USB, no Bluetooth radar chosen yet
+sizes 480x320 320x480
+env MMWAVE_DEMO ble-empty
+env MMWAVE_TEST_CONFIG 1
+env MMWAVE_DEMO_CONNECTION auto
+wait 6500
+shot z5-auto-nochosen
+check z5-auto-nochosen
+expect text "No radar found"
+expect text "Plug the sensor in or switch on its Bluetooth: it is found by itself."
+@320x480 expect text "No USB serial port (ttyUSB*, ttyACM*) is plugged in."
+@320x480 expect text "Bluetooth: no radar chosen yet (Connection > Bluetooth lists them)."
+drag 0.5 0.6 0.5 0.4
+wait 500
+shot z5-auto-nochosen-scrolled
+check z5-auto-nochosen-scrolled
+@480x320 expect text "No USB serial port (ttyUSB*, ttyACM*) is plugged in."
+@480x320 expect text "Bluetooth: no radar chosen yet (Connection > Bluetooth lists them)."
+expect noquit

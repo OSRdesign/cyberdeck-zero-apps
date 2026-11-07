@@ -1246,6 +1246,36 @@ void test_demo_backend()
     }
 }
 
+/* the Bluetooth line of the "No radar found" TRIED list (Connection Auto) */
+void test_tried_line()
+{
+    const std::string none = "Bluetooth: no HLK-LD module in range (scanning).";
+    const std::string seen = "Bluetooth: HLK-LD module seen, connecting (retrying).";
+    CHECK_EQ(ble_tried_line(BleState::Scanning, false, false), none);
+    CHECK_EQ(ble_tried_line(BleState::Starting, false, false), none);
+    CHECK_EQ(ble_tried_line(BleState::Idle, false, false), none);
+    CHECK_EQ(ble_tried_line(BleState::Idle, true, false), seen);
+    CHECK_EQ(ble_tried_line(BleState::Connecting, true, false), seen);
+    CHECK_EQ(ble_tried_line(BleState::Waiting, true, false), seen);
+    CHECK_EQ(ble_tried_line(BleState::Unavailable, false, false),
+             "Bluetooth is not available (needs the bluez package and a switched-on adapter).");
+    CHECK_EQ(ble_tried_line(BleState::Off, false, true), "Bluetooth: no radar chosen yet (Connection > Bluetooth lists them).");
+    /* the scripted scenarios the scenes use: nothing in range, and a module that refuses */
+    for (const char *sc : {"ble-empty", "ble-refuse"}) {
+        Ms clock = 0;
+        BleSys ble(std::unique_ptr<BleBackend>(new DemoBle(sc, [&] { return clock; })));
+        ble.set_remembered("ED:2F:90:B4:49:F0", "HLK-LD2451_49F0");
+        ble.set_active(true, clock);
+        ble.set_enabled(true, clock);
+        for (int i = 0; i < 200; ++i) ble.poll(clock += 30);
+        const bool empty = std::string(sc) == "ble-empty";
+        CHECK_EQ(ble.candidates().empty(), empty);
+        if (!empty) CHECK(ble.state() != BleState::Connected);
+        const std::string line = ble_tried_line(ble.state(), !ble.candidates().empty(), false);
+        CHECK_EQ(line, empty ? none : seen);
+    }
+}
+
 } // namespace
 
 void test_ble()
@@ -1268,4 +1298,5 @@ void test_ble()
     test_diag_events();
     test_found_fast();
     test_demo_backend();
+    test_tried_line();
 }
