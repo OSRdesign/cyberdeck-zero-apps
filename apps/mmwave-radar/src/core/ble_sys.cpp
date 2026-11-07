@@ -588,6 +588,26 @@ std::vector<BleCandidate> BleSys::candidates() const
     return v;
 }
 
+std::string ble_tried_line(BleState s, bool module_seen, bool no_radar_chosen)
+{
+    switch (s) {
+    case BleState::Off:
+        return no_radar_chosen ? "Bluetooth: no radar chosen yet (Connection > Bluetooth lists them)."
+                               : "Bluetooth: waiting for the USB scan.";
+    case BleState::Unavailable: return "Bluetooth is not available (needs the bluez package and a switched-on adapter).";
+    case BleState::Starting:
+    case BleState::Idle:
+    case BleState::Scanning:
+        return module_seen ? "Bluetooth: HLK-LD module seen, connecting (retrying)."
+                           : "Bluetooth: no HLK-LD module in range (scanning).";
+    case BleState::Connecting:
+    case BleState::Subscribing:
+    case BleState::Connected:
+    case BleState::Waiting: return "Bluetooth: HLK-LD module seen, connecting (retrying).";
+    }
+    return std::string();
+}
+
 std::string BleSys::title() const
 {
     switch (st_) {

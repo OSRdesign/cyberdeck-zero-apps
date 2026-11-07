@@ -140,6 +140,11 @@ public:
 enum class BleState { Off, Starting, Unavailable, Idle, Scanning, Connecting, Subscribing, Connected, Waiting };
 const char *ble_state_name(BleState s);
 
+/* The Bluetooth line of the "No radar found" page's TRIED list (Connection Auto), from the state the app already has:
+ * module_seen = an HLK-LD module is in the scan list; no_radar_chosen = Auto has no remembered Bluetooth radar (so
+ * the Bluetooth fallback never started). */
+std::string ble_tried_line(BleState s, bool module_seen, bool no_radar_chosen);
+
 struct BleTimings {
     Ms scan_window_ms = 10000;  /* one discovery window */
     Ms scan_gap_ms = 20000;     /* between two windows while nothing is connected and the list is shown */

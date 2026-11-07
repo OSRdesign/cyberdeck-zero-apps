@@ -65,8 +65,11 @@ Four pages, switched by the tab strip at the bottom, the Left / Right keys or th
   under it (the scan's seconds left, the next try and why the last one failed), the Rescan button and the HLK-LD radars
   seen (rows: name, RSSI, the last two bytes of the address, and a white dot that turns blue while connecting to that
   radar). A tap on a row, or Up / Down and Enter, connects it and remembers it. With **Auto** the USB page stays, and
-  once the USB scan found nothing its status line tells what the fallback does ("Bluetooth: Connecting to ...", or
-  "No Bluetooth radar chosen yet: Connection > Bluetooth lists them.").
+  once the USB scan found nothing the hint reads "Plug the sensor in or switch on its Bluetooth: it is found by
+  itself." and the TRIED list ends with a Bluetooth line from the fallback's state: "Bluetooth: no HLK-LD module in range
+  (scanning).", "Bluetooth: HLK-LD module seen, connecting (retrying).", "Bluetooth is not available (needs the bluez
+  package and a switched-on adapter)." or, with no Bluetooth radar chosen, "Bluetooth: no radar chosen yet (Connection >
+  Bluetooth lists them).". With **USB** (the default) the page keeps its USB-only texts.
 
 ### Keys and touch
 
@@ -291,7 +294,7 @@ A stub (no `make_decoder`) is only recognised and named in the scan, as the LD24
 
 `MMWAVE_DEMO=walk|one|three|lost|none|busy|denied|ld2451|ld2451-away|ld2451-two` runs the app on scripted ports instead of the real ones (`walk`
 replays the recorded walk from `tests/data`, or `$MMWAVE_DEMO_FILE`; the `ld2451*` ones are generated LD2451 streams at
-115200 baud: an approaching target, a receding one, or both). `MMWAVE_DEMO=ble|ble-off|ble-noadapter|ble-nobluez`
+115200 baud: an approaching target, a receding one, or both). `MMWAVE_DEMO=ble|ble-off|ble-noadapter|ble-nobluez|ble-empty|ble-refuse` (nothing in range; a module that refuses to connect; with `MMWAVE_DEMO_CONNECTION=auto|bluetooth` and `MMWAVE_DEMO_REMEMBERED="AA:BB:CC:DD:EE:FF Name"` as scene fixtures, never saved)
 starts in Connection Bluetooth (not saved) on scripted radios: two HLK-LD2451 nearby among three other devices, the
 connected one sending the `ld2451-two` stream one frame per notification; or the adapter off, no adapter, no BlueZ. Any
 demonstration uses the scripted radios (never BlueZ) when Bluetooth is chosen.
@@ -370,7 +373,9 @@ Build from a WSL native-filesystem LF copy with fresh build dirs (`CDK_BUILD`, `
 
 ## Changes
 
-- 0.1.1: the 320x480 header follows the launcher's narrow portrait shell: a 40 px bar and the Esc 44x30 at the left
+- 0.1.1: on the "No radar found" page, Connection Auto names Bluetooth: the hint "Plug the sensor in or switch on its
+  Bluetooth: it is found by itself." and a Bluetooth line under TRIED (no module in range, module seen and retrying,
+  not available, no radar chosen yet); USB keeps its texts. The 320x480 header follows the launcher's narrow portrait shell: a 40 px bar and the Esc 44x30 at the left
   edge with its tap area over the whole bar. 0.1.0 was built at a toolkit before that shell and drew a round Esc
   and a 56 px bar there (480x320 and the larger sizes are unchanged); the app's own copy of the rule is gone and the
   build stops on such a toolkit.

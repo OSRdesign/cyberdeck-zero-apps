@@ -192,7 +192,7 @@ private:
     std::string chip_shown_, held_shown_;
 
     lv_obj_t *nf_ = nullptr;        /* the "not found" help on the Radar page */
-    lv_obj_t *nf_title_ = nullptr, *nf_status_ = nullptr, *nf_tried_ = nullptr, *nf_wiring_ = nullptr;
+    lv_obj_t *nf_title_ = nullptr, *nf_status_ = nullptr, *nf_tried_ = nullptr, *nf_tried_bt_ = nullptr, *nf_wiring_ = nullptr;
     lv_obj_t *nf_note_ = nullptr;
     std::string nf_shown_;
     std::vector<lv_obj_t *> nf_usb_parts_;   /* TRIED, the wiring and its note: hidden in the Bluetooth mode */

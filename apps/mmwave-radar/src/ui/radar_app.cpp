@@ -152,6 +152,16 @@ RadarApp::RadarApp(lv_obj_t *screen) : screen_(screen)
         bluez->set_log([](const std::string &l) { log_line("%s", l.c_str()); });
         ble_ = std::make_unique<mmw::BleSys>(std::move(bluez));
     }
+    if (demo && *demo) { /* the scenes' fixtures (not saved): a Connection and a remembered Bluetooth radar */
+        if (const char *c = std::getenv("MMWAVE_DEMO_CONNECTION")) {
+            if (!std::strcmp(c, "auto")) settings_.connection = mmw::Connection::Auto;
+            else if (!std::strcmp(c, "bluetooth")) settings_.connection = mmw::Connection::Bluetooth;
+        }
+        if (const char *r = std::getenv("MMWAVE_DEMO_REMEMBERED"); r && *r) { /* "AA:BB:CC:DD:EE:FF Name" */
+            remembered.ble_address = std::string(r, std::strcspn(r, " "));
+            remembered.ble_name = r[remembered.ble_address.size()] ? r + remembered.ble_address.size() + 1 : "";
+        }
+    }
     ble_->set_remembered(remembered.ble_address, remembered.ble_name);
     mux_ = std::make_unique<mmw::MuxSys>(*sys_, ble_.get());
     mux_->set_mode(settings_.connection);
@@ -515,6 +525,9 @@ void RadarApp::build_notfound()
     lv_obj_set_width(nf_tried_, lv_pct(100));
     nf_usb_parts_.push_back(tried);
     nf_usb_parts_.push_back(nf_tried_);
+    nf_tried_bt_ = make_label(nf_, sz_.caption_px, pal::kText, true); /* Connection Auto: the Bluetooth fallback's line */
+    lv_obj_set_width(nf_tried_bt_, lv_pct(100));
+    nf_usb_parts_.push_back(nf_tried_bt_);
     lv_obj_t *wiring = make_heading(nf_, "WIRING: SENSOR TO USB-SERIAL ADAPTER");
     lv_obj_set_width(wiring, lv_pct(100));
     lv_label_set_long_mode(wiring, LV_LABEL_LONG_MODE_WRAP);
@@ -808,13 +821,16 @@ void RadarApp::update_notfound(bool force)
     case mmw::LinkState::Found: title = "Radar found"; break;
     default: title = reports.empty() && !status.empty() ? "Looking for the radar" : "No radar found"; break;
     }
-    std::string tried;
+    std::string tried, tried_bt;
     for (const mmw::PortReport &r : reports) {
         if (!tried.empty()) tried += "\n";
         tried += r.title + ": " + r.text;
     }
     if (tried.empty()) tried = status.empty() ? "No USB serial port (ttyUSB*, ttyACM*) is plugged in." : "-";
-    std::string line = !status.empty() ? status : std::string("Plug the sensor in: it is found by itself.");
+    const bool auto_usb_page = settings_.connection == mmw::Connection::Auto && !ble_mode();
+    std::string line = !status.empty() ? status
+                       : auto_usb_page ? std::string("Plug the sensor in or switch on its Bluetooth: it is found by itself.")
+                                       : std::string("Plug the sensor in: it is found by itself.");
     const bool ble_page = ble_mode();
     if (ble_page) { /* Connection Bluetooth: the Bluetooth state instead of the USB scan */
         title = ble_->title();
@@ -824,24 +840,29 @@ void RadarApp::update_notfound(bool force)
         const std::size_t sp = title.rfind(' ');
         if (sp != std::string::npos && text_w(title.c_str(), sz_.body_px) > w_ - 2 * sz_.space_m) title[sp] = '\n';
         line = !status.empty() ? status : ble_->detail(now_);
-    } else if (settings_.connection == mmw::Connection::Auto && status.empty() && !link_->streaming()) {
-        /* Auto, the USB scan found nothing: what the fallback to the remembered Bluetooth radar does */
-        if (link_->remembered().ble_empty()) line = "No Bluetooth radar chosen yet: Connection > Bluetooth lists them.";
-        else if (ble_->enabled()) line = "Bluetooth: " + ble_->title() + ".";
+    } else if (auto_usb_page && status.empty() && !link_->streaming()) {
+        /* Auto, the USB scan found nothing: the Bluetooth fallback's state is one more line of what was tried */
+        const std::string bt = mmw::ble_tried_line(ble_->state(), !ble_->candidates().empty(), link_->remembered().ble_empty());
+        tried_bt = bt;
     }
-    const std::string key = std::string(ble_page ? "B|" : "U|") + title + "|" + line + "|" + tried;
+    const std::string key = std::string(ble_page ? "B|" : "U|") + title + "|" + line + "|" + tried + "|" + tried_bt;
     const bool mode_changed = force || nf_shown_.compare(0, 2, ble_page ? "B|" : "U|") != 0;
     if (mode_changed)
         for (lv_obj_t *o : nf_usb_parts_) {
             if (ble_page) lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
             else lv_obj_remove_flag(o, LV_OBJ_FLAG_HIDDEN);
         }
+    if (!ble_page) { /* its own label, shown only when there is a line (Connection Auto) */
+        if (tried_bt.empty()) lv_obj_add_flag(nf_tried_bt_, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_remove_flag(nf_tried_bt_, LV_OBJ_FLAG_HIDDEN);
+    }
     update_ble_rows(ble_page && ble_->state() != mmw::BleState::Unavailable && ble_->state() != mmw::BleState::Off);
     if (!force && key == nf_shown_) return;
     nf_shown_ = key;
     set_text_if(nf_title_, title);
     set_text_if(nf_status_, line);
     set_text_if(nf_tried_, tried);
+    set_text_if(nf_tried_bt_, tried_bt);
 }
 
 /* The Bluetooth radars as rows: name, RSSI and the address's last two bytes, the action dot (blue while connecting to
