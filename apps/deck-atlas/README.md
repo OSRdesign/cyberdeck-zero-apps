@@ -31,13 +31,17 @@ The GPS (0.2.0), over a synthetic feed (an invented position inside the test til
 | | |
 | --- | --- |
 | ![3D fix](screenshots/12-gps-3d-640x480.png) | ![Searching](screenshots/18-gps-searching-640x480.png) |
-| 3D fix, nine satellites, accuracy ring; follow button under the zoom buttons | Receiver talking, no fix yet: "Searching", no dot |
+| Good 3D fix, nine satellites, accuracy ring; the chip: dish and three green bars | Receiver talking, no fix yet: dish and one red bar, no dot |
 | ![Moving](screenshots/13-gps-moving-480x320.png) | ![2D](screenshots/16-gps-2d-480x320.png) |
-| Moving: heading wedge, speed; the follow button left of the zoom-out button on the 200 px high 480x320 map | 2D fix: a wider ring |
+| Moving: heading wedge; the follow button left of the zoom-out button on the 200 px high 480x320 map | 2D fix: a wider ring, two orange bars |
 | ![Follow](screenshots/14-gps-follow-320x480.png) | ![Stale](screenshots/15-gps-stale-320x480.png) |
-| Follow on (button highlighted), the dot kept in the middle | Stale (no fix for 5 s): hollow dot, "Last fix 7 s ago" |
+| Follow on (button highlighted), the dot kept in the middle | Stale (no fix for 5 s): hollow dot, the bars dimmed, a "!" |
 | ![Settings](screenshots/17-settings-gps-320x480.png) | ![Credit](screenshots/19-credit-320x480.png) |
-| Settings > GPS receiver | OpenTopoMap's credit shown whole on 320x480 |
+| Settings > GPS receiver | OpenTopoMap's credit, the smallest font on the bottom edge, abbreviated and on two lines on 320x480 |
+| ![Credit 640](screenshots/22-credit-640x480.png) | ![Credit 480](screenshots/23-credit-480x320.png) |
+| The same credit on one line, abbreviated, on 640x480 | On two lines on 480x320, stopping left of the zoom buttons |
+| ![Chip states](screenshots/24-gps-chip-states.png) | |
+| The GPS chip in its five states (no receiver, receiver and no fix, 2D or weak 3D, good 3D, stale) at 640x480, 480x320 and 320x480 | |
 | ![No receiver](screenshots/20-gps-no-receiver-480x320.png) | ![Port](screenshots/21-settings-port-320x480.png) |
 | Only another serial device (a CH340 radar): Auto never opens it | Port lists it; a port chosen by hand is opened |
 
@@ -90,6 +94,7 @@ Three tabs, switched by the strip at the bottom (or Tab / Shift+Tab):
 | --- | --- | --- |
 | Switch tabs | Tab, Shift+Tab | the tab strip |
 | Follow the GPS position (GPS on) | G (on / off), Home (on, recentre) | the crosshair button under the zoom buttons |
+| GPS status page (GPS on; a stub for now) | S | the dish chip at the top left |
 | Pan | arrows (Shift: half a view); the deck's F / X / Z / C aliases | drag |
 | Zoom in / out | + (=, keypad +) or Page Up / - (keypad -) or Page Down | the + / - buttons, a double tap (in) |
 | Move in a list, open, act | Up / Down, Enter or Right | a tap selects a row, a tap on the selected row acts |
@@ -118,7 +123,7 @@ GPS Off the app opens no port at all and the Map tab is exactly what 0.1.0 drew.
   a short built-in list of GPS receivers (`src/core/gps_ids.cpp`): **u-blox 1546:\*** (all), **Prolific 067b:2303** and
   **067b:23a3** (the PL2303 bridges of the common GPS pucks). Every other serial port is **never opened in Auto**: a CH340
   (1a86:\*, the mmWave radar), a CP210x (10c4:\*), an FTDI (0403:\*), an ESP32 or LoRa board (303a:\*, ...), a port with
-  no USB id. With only such ports present the chip says "No GPS receiver found". Other serial ports are listed in
+  no USB id. With only such ports present the chip shows the crossed-out dish. Other serial ports are listed in
   Settings > GPS receiver > Port: pick one there if your receiver is not found by itself, and it is opened as chosen
   (that is your decision, and it is the only way such a port is ever opened). Several known receivers: the u-blox
   first, then the others in port order; the first one that talks is used. Auto looks at the ports every 2 s.
@@ -128,9 +133,20 @@ GPS Off the app opens no port at all and the Map tab is exactly what 0.1.0 drew.
   10 s is found again when it talks. Nothing blocks the screen: the reader runs inside the app's 100 ms timer.
 - **On the map.** With a fix: a filled blue dot with a white outline, a translucent accuracy ring (HDOP x 5 m, 3 to 100 m,
   drawn when wider than the dot) and, above 1 m/s with a known course, a heading wedge. No valid fix sentence for 5 s: a
-  **hollow** dot, no ring. No fix yet: no dot. The **status chip** under the map's top edge says "No GPS device", "No access
-  to GPS port" (the `dialout` group), "No GPS receiver found" (Auto sees only other serial ports), "Searching", "2D fix", "3D fix 9 sats" or "Last fix 12 s ago", with the speed
-  ("19 km/h", "12 mph" with miles) when moving.
+  **hollow** dot, no ring. No fix yet: no dot. The **GPS chip** under the map's top edge (left, below the "overzoom" badge) is a
+  satellite dish with three reception bars, drawn with LVGL primitives; the number of lit bars carries the level, the
+  colour backs it up:
+
+  | Chip | Meaning |
+  | --- | --- |
+  | dish crossed out, three outlined grey bars | no receiver: no device, no access to the port (`dialout`), only other serial ports in Auto, or a port that sends no valid sentence |
+  | 1 red bar | the receiver is connected (valid checksummed sentences in the last 3 s, not just an open port) and has no fix |
+  | 2 orange bars | a 2D fix, or a 3D fix with weak geometry (HDOP above 5, fewer than 5 satellites used, or either unknown) |
+  | 3 green bars | a good 3D fix: HDOP 5 or less and at least 5 satellites used |
+  | the bars of the level dimmed to 40 %, a small "!" | the fix is stale: no valid fix sentence for 5 s |
+
+  A tap on the chip, or the **S** key, calls `open_gps_status()`, the entry of the GPS status page (a stub in this change:
+  the page itself, with the speed, the satellites and the receiver's facts, is the next one). GPS off: no chip.
 - **Follow.** The crosshair button below the zoom buttons (or **G**; **Home** turns it on and recentres): the map keeps the
   position at its centre on every fix, at the zoom it has. A pan (drag, arrow key, double tap away from the centre) turns
   it off; zooming does not. The button is highlighted while follow is on. Off by default.
@@ -273,7 +289,9 @@ The binary links the cp0_lvgl runtime of the CardputerZero launcher by M5Stack (
 ## Build and test
 
 ```sh
-wsl -e sh apps/deck-atlas/build.sh host                 # unit tests (2,014 checks) and 23 scenes (sheets in ~/cdk-build/deck-atlas/host/out/sheets)
+wsl -e sh apps/deck-atlas/build.sh host                 # unit tests (8,344 checks) and 30 scenes (sheets in ~/cdk-build/deck-atlas/host/out/sheets)
+python3 apps/deck-atlas/tests/tools/check_follow_shots.py <host out dir>   # the follow button against the zoom buttons (Pillow, numpy, scipy)
+python3 apps/deck-atlas/tests/tools/check_chip_shots.py <host out dir>     # the chip's bars and colours in the GPS shots
 wsl -e sh apps/deck-atlas/build.sh cross                # the arm64 binary into root/
 wsl -e sh apps/deck-atlas/build.sh cross --arch amd64   # the amd64 binary into root.amd64/
 python3 tools/make_registry.py --only deck-atlas --out <dir>            # a local arm64 .deb, no registry
@@ -285,8 +303,18 @@ python3 tools/make_registry.py --only deck-atlas --arch amd64 --out <dir>
   [`_common` README](../_common/README.md#toolkit-switches-of-one-app-cp0_configmk)); no other app changes.
 - **GPS in the scenes.** `DECKATLAS_GPS=auto|off` switches the GPS on or off; `DECKATLAS_GPS_FEED=<name>` plays
   `tests/gps-feeds/<name>.nmea` through a fake port (demonstration mode only; without it there is no device). The feeds
-  (searching, fix2d, fix3d, moving, follow, stale, noise) are made at build time by `tests/tools/gen_nmea.py` around an
-  invented point in the fixture tiles' area, with valid checksums; no recording, never packaged or committed.
+  (searching, fix2d, fix3d, moving, follow, stale, noise, weak3d, sky, skylost; `sky` is a multi-constellation fix with GPS
+  and SBAS under `$GP`, GLONASS under `$GL`, one `$GNGSA` per system and multi-message GSV groups) are made at build time by
+  `tests/tools/gen_nmea.py` around an invented point in the fixture tiles' area, with an invented satellite geometry and
+  valid checksums; no recording, never packaged or committed.
+- **What the GPS reader parses.** RMC, GGA, GSA and GSV (strict checksum; any talker). GSV groups of several messages are
+  folded into a satellite table when the group is complete (message number = total): constellation (GP GPS, GL GLONASS,
+  GA Galileo, GB / BD BeiDou, GQ QZSS; PRN 33-64 and 120-158 under GPS are SBAS), PRN, elevation, azimuth, SNR (-1 =
+  in view, not tracked), used in the fix (from the GSA reports, per talker and the NMEA 4.1 system id), last seen; a
+  satellite not reported for 10 s is dropped. The link adds its facts: port, speed, device (the USB product string),
+  how it was chosen, valid sentences per second, the last valid sentence, bad checksums. The GPS status page reads
+  `GpsStatus` (`src/core/gps_fix.hpp`: `sats`, `gsa`, `dop`, `link`, `receiver_alive`); the chip's levels are
+  `chip_state()` in `src/core/gps_chip.hpp`.
 - **Demonstration mode** (the scenes; never on a board): `DECKATLAS_DEMO=1` keeps the settings and the store under the
   harness's runtime folder, converts the generated `tests/fixtures/tiles` with the engine's own import at the start, and forces the
   network off. `DECKATLAS_DEMO=empty` starts with nothing; `DECKATLAS_DEMO=import-hold` replaces the import with a
@@ -307,7 +335,7 @@ python3 tools/make_registry.py --only deck-atlas --arch amd64 --out <dir>
 ## Changes
 
 - **0.2.0** (2026-11-07): the GPS reader (NMEA 0183, listen-only, Auto port and speed, hot-plug), the position dot with
-  its accuracy ring, heading wedge and hollow stale state, the status chip, follow mode (button below the zoom buttons,
+  its accuracy ring, heading wedge and hollow stale state, the GPS chip (a satellite dish with three reception bars: crossed out, red, orange, green; a stale fix dims the bars), follow mode (button below the zoom buttons,
   G / Home keys, a pan turns it off), Settings > GPS receiver (GPS, Port, Speed; Port Auto opens only known GPS
   receivers: u-blox, Prolific PL2303 pucks; every other serial device is listed in Port but never opened unless chosen), `position.state` for other apps; the map
   credit and the scale bar sit on the view's bottom edge in the smallest font, the credit whole (abbreviated or

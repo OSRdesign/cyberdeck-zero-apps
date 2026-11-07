@@ -2,7 +2,7 @@
 
 For the owner (controller-led testing: Claude deploys and reads the logs, you do the physical steps). The models
 (settings, labels, the import progress, the online sources' flow, the file browser, the map geometry, the package files)
-are tested on the PC (`build.sh host`: 2,014 checks), and 23 scenes draw every page at 640x480, 480x320, 320x480 and
+are tested on the PC (`build.sh host`: 8,344 checks), and 30 scenes draw every page at 640x480, 480x320, 320x480 and
 480x800 (plus the zero8 density). What the PC cannot tell: **whether the map is readable on the glass**, how a real
 import feels on a Zero 2 W's SD card, the memory use, and the network path. Keep it short: the main path must work.
 
@@ -73,25 +73,30 @@ The PC tests cover the parser, the fix logic, the baud sniff on a fake port and 
 `position.state` writer, and eight scenes draw every state at 640x480, 480x320 and 320x480. What only a board can tell: the
 real puck, the cold start, power, memory.
 
-1. **Off is quiet.** GPS Off (the default): the Map tab has no chip and no follow button; `ls -l /proc/$(pgrep -x deck-atlas)/fd`
+1. **Off is quiet.** GPS Off (the default): the Map tab has no chip (no dish) and no follow button; `ls -l /proc/$(pgrep -x deck-atlas)/fd`
    shows no `/dev/tty*`. Settings > GPS receiver shows GPS Off, Port Auto, Speed Auto.
 2. **Plug the puck, GPS Auto** (Settings > GPS receiver > GPS). `lsusb` and `ls /dev/ttyACM* /dev/ttyUSB*`: note which node it
-   is and the USB id (u-blox 1546:01a7/01a8/01a9). If the chip says "No access to GPS port": `groups` must list `dialout`
+   is and the USB id (u-blox 1546:01a7/01a8/01a9). If the chip stays the crossed-out dish with the puck plugged in: `groups` must list `dialout`
    (`sudo usermod -aG dialout $USER`, log in again). The log (`[deck-atlas] gps: ...`) says which port and speed it locked at.
-3. **Cold start.** Put the puck where it sees the sky. Note the time from plugging to "Searching", then "2D fix"/"3D fix N
-   sats" (a cold start takes minutes; the chip must say "Searching" meanwhile, and no dot appears before a fix).
+3. **Cold start: the chip's colours.** Put the puck where it sees the sky and watch the chip (dish and three bars) from
+   plugging in. Expect, in this order: the crossed-out dish with three grey outlines (no receiver), **one red bar** within
+   about 3 s of the puck talking (it says the puck sends valid sentences, not that it has a fix), then **two orange bars**
+   (a 2D fix, or a 3D fix with few satellites or a high HDOP) and finally **three green bars** (a good 3D fix: HDOP 5 or
+   less, 5 satellites or more). Note the time of each change (a cold start takes minutes). No dot appears before a fix.
+   Are the bars and the colours readable at arm's length (red against orange especially)? Tap the chip, or press S: nothing
+   visible happens yet (the status page is the next change); the log says "gps: status page requested".
 4. **The dot.** With the fix: the blue dot with its white outline and the accuracy ring at the right place; walk or drive: the
-   heading wedge and the speed in the chip (km/h; mph with Units mi). Cover the puck or unplug its antenna side: after 5 s the dot
-   is hollow and the chip says "Last fix N s ago".
+   heading wedge (the speed is not on the map any more; it comes back on the status page). Cover the puck or unplug its antenna
+   side: after 5 s the dot is hollow, the bars are dimmed and a small "!" shows next to them.
 5. **Follow.** Tap the crosshair button under the zoom buttons (or press G): the map recentres at once and keeps the dot in the
    middle while you move; zoom with the buttons: follow stays; drag the map: follow goes off (the button loses its highlight);
    tap it again: it recentres. Home does the same. Check on the deck and on zero8 that the button is below the zoom buttons, the
    same size, and clear of the map credit and the scale bar (also at 320x480 with PDA mode on).
-6. **Unplug and replug** while the app runs: "No GPS device" within a few seconds, no dot, no crash; plug it back: it finds the
+6. **Unplug and replug** while the app runs: the crossed-out dish within a few seconds (10 s of silence at the latest), no dot, no crash; plug it back: it finds the
    receiver again within about 2 s (same node or another number) and the fix returns. Repeat three times quickly.
-7. **Wrong speed.** Settings > Speed 4800 with the puck at 9600: "Searching" for ever (nothing locks, no garbage position);
+7. **Wrong speed.** Settings > Speed 4800 with the puck at 9600: the crossed-out dish for ever (nothing locks, no garbage position);
    back to Auto: it locks at 9600. The log shows the speeds tried.
-8. **Another app on the port.** Open Serial Console or Mesh Hop on the same node first: Deck Atlas says "Searching" (the port is
+8. **Another app on the port.** Open Serial Console or Mesh Hop on the same node first: the chip stays the crossed-out dish (the port is
    held; no error, no crash) and takes it when the other app lets go (within the 30 s backoff).
 9. **position.state.** While there is a fix: `cat $APPLAUNCH_STATE_DIR/position.state` (else
    `cat $XDG_RUNTIME_DIR/applaunch/position.state`): `fix=3`, `lat`, `lon`, `alt_m`, `utc` (the receiver's time), `mono_ms`, `pid`
@@ -103,10 +108,10 @@ real puck, the cold start, power, memory.
     about the position.
 
 12. **Other serial devices are never opened in Auto** (the owner's rule: a mmWave radar's CH340, ESP32 / LoRa boards). With
-    the CH340 radar (1a86:7523) on a `ttyUSB*` and **no GPS puck**, GPS Auto: the chip says "No GPS receiver found";
+    the CH340 radar (1a86:7523) on a `ttyUSB*` and **no GPS puck**, GPS Auto: the chip is the crossed-out dish;
     `ls -l /proc/$(pgrep -x deck-atlas)/fd | grep tty` shows nothing, the radar keeps streaming in mmWave Radar / Serial Console
     without a reset, and `journalctl` shows no `gps: opened` line. Settings > GPS receiver > Port lists `/dev/ttyUSB0`
-    (tap to pick it: only then is it opened, and "Searching" stays since it sends no NMEA; back to Auto closes it). Then plug
+    (tap to pick it: only then is it opened, and the crossed-out dish stays since it sends no NMEA; back to Auto closes it). Then plug
     the u-blox puck too: Auto finds the puck (u-blox 1546:*) and still never touches the radar. Repeat with an ESP32 / LoRa
     board on a `ttyACM*` (303a:*) or a CP210x / FTDI adapter.
 
