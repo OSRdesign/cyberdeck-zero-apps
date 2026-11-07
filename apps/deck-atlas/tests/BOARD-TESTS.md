@@ -2,12 +2,12 @@
 
 For the owner (controller-led testing: Claude deploys and reads the logs, you do the physical steps). The models
 (settings, labels, the import progress, the online sources' flow, the file browser, the map geometry, the package files)
-are tested on the PC (`build.sh host`: 399 checks), and twelve scenes draw every page at 640x480, 480x320, 320x480 and
+are tested on the PC (`build.sh host`: 1,912 checks), and 22 scenes draw every page at 640x480, 480x320, 320x480 and
 480x800 (plus the zero8 density). What the PC cannot tell: **whether the map is readable on the glass**, how a real
 import feels on a Zero 2 W's SD card, the memory use, and the network path. Keep it short: the main path must work.
 
 Boards: the deck (640x480, 11.3 px/mm), zero8 (480x320 3.5", 6.3 px/mm; 320x480 with PDA mode on), and the FZ-M1 tablet
-for the amd64 package. Install the `.deb` from the bundle (`sudo dpkg -i deck-atlas_0.1.0_arm64.deb`); it pulls
+for the amd64 package. Install the `.deb` from the bundle (`sudo dpkg -i deck-atlas_0.2.0_arm64.deb`); it pulls
 `libsqlite3-0`, `libcurl4t64` and `ca-certificates`.
 
 Before: copy the tile folder (MapTileDl's `tiles`, about 276 MB) to the board, e.g. `scp -r tiles deck@zero7.local:Maps/`,
@@ -18,7 +18,7 @@ or put it on a USB stick.
 1. Open Deck Atlas from the home grid. The launcher's header (Esc, title "Deck Atlas", status strip), the tab strip at
    the bottom (Map, Sources, Settings, Map underlined in blue). With an empty store: a grey world grid and the plate
    "No map yet. Import a map file in Sources."
-2. Log: `journalctl --user -u <launcher service> | grep deck-atlas` shows `[deck-atlas] 0.1.0 640x480 scale Auto (2x),
+2. Log: `journalctl --user -u <launcher service> | grep deck-atlas` shows `[deck-atlas] 0.2.0 640x480 scale Auto (2x),
    store /home/<user>/.local/share/cyberdeckzero/maps, 0 map files, network on`.
 
 ## T1. Import the tile folder (3 min, the deck first, then zero8)
@@ -64,11 +64,47 @@ At arm's length, at zoom 15 and zoom 17:
 4. Started over ssh without the launcher (`/usr/share/APPLaunch/bin/deck-atlas` on the console of the deck): the app
    comes up and logs one line about the missing contract.
 
-## T5. What to tell me
+## T5. GPS (0.2.0; 15 minutes, outdoors or at a window, the u-blox puck on the deck and then on zero8)
+
+The PC tests cover the parser, the fix logic, the baud sniff on a fake port and on a pseudo-terminal, follow mode and the
+`position.state` writer, and eight scenes draw every state at 640x480, 480x320 and 320x480. What only a board can tell: the
+real puck, the cold start, power, memory.
+
+1. **Off is quiet.** GPS Off (the default): the Map tab has no chip and no follow button; `ls -l /proc/$(pgrep -x deck-atlas)/fd`
+   shows no `/dev/tty*`. Settings > GPS receiver shows GPS Off, Port Auto, Speed Auto.
+2. **Plug the puck, GPS Auto** (Settings > GPS receiver > GPS). `lsusb` and `ls /dev/ttyACM* /dev/ttyUSB*`: note which node it
+   is and the USB id (u-blox 1546:01a7/01a8/01a9). If the chip says "No access to GPS port": `groups` must list `dialout`
+   (`sudo usermod -aG dialout $USER`, log in again). The log (`[deck-atlas] gps: ...`) says which port and speed it locked at.
+3. **Cold start.** Put the puck where it sees the sky. Note the time from plugging to "Searching", then "2D fix"/"3D fix N
+   sats" (a cold start takes minutes; the chip must say "Searching" meanwhile, and no dot appears before a fix).
+4. **The dot.** With the fix: the blue dot with its white outline and the accuracy ring at the right place; walk or drive: the
+   heading wedge and the speed in the chip (km/h; mph with Units mi). Cover the puck or unplug its antenna side: after 5 s the dot
+   is hollow and the chip says "Last fix N s ago".
+5. **Follow.** Tap the crosshair button under the zoom buttons (or press G): the map recentres at once and keeps the dot in the
+   middle while you move; zoom with the buttons: follow stays; drag the map: follow goes off (the button loses its highlight);
+   tap it again: it recentres. Home does the same. Check on the deck and on zero8 that the button is below the zoom buttons, the
+   same size, and clear of the map credit and the scale bar (also at 320x480 with PDA mode on).
+6. **Unplug and replug** while the app runs: "No GPS device" within a few seconds, no dot, no crash; plug it back: it finds the
+   receiver again within about 2 s (same node or another number) and the fix returns. Repeat three times quickly.
+7. **Wrong speed.** Settings > Speed 4800 with the puck at 9600: "Searching" for ever (nothing locks, no garbage position);
+   back to Auto: it locks at 9600. The log shows the speeds tried.
+8. **Another app on the port.** Open Serial Console or Mesh Hop on the same node first: Deck Atlas says "Searching" (the port is
+   held; no error, no crash) and takes it when the other app lets go (within the 30 s backoff).
+9. **position.state.** While there is a fix: `cat $APPLAUNCH_STATE_DIR/position.state` (else
+   `cat $XDG_RUNTIME_DIR/applaunch/position.state`): `fix=3`, `lat`, `lon`, `alt_m`, `utc` (the receiver's time), `mono_ms`, `pid`
+   equal to `pgrep -x deck-atlas`. `watch -n1 cat ...` changes about once a second, never twice a second. Unplug: `fix=0` and no
+   position. GPS Off or leaving the app: the file is gone (`ls`).
+10. **Memory and power.** `grep VmRSS /proc/$(pgrep -x deck-atlas)/status` with a fix and the map moving (no more than a few
+    MB above T4); with Wi-Fi tile fetching on, the deck does not reset (a powered hub if it does; note the board).
+11. **Privacy.** `ss -tnp | grep deck-atlas` shows only the tile source's connections (none with Offline mode on), never anything
+    about the position.
+
+## T6. What to tell me
 
 - The import rate and the time for the 10,326 tiles on the deck; anything slow while it ran.
 - The legibility answers (T2) per board and scale.
-- VmRSS on the deck.
+- VmRSS on the deck, with and without a GPS fix (T5.10).
+- The GPS: time to a cold fix, the puck's node and USB id, whether it locked at 9600, anything odd on unplug / replug.
 - Anything cut, overlapping or hard to hit: the zoom buttons, the tab strip, the rows; the attribution line at the
   bottom right of the map.
 - Cleanup: `sudo dpkg -r deck-atlas` (the maps stay in `~/.local/share/cyberdeckzero/maps`; delete that folder to reset).

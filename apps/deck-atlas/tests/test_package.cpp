@@ -31,7 +31,7 @@ void test_package()
     const std::string hpp = test_read_file(app + "/src/ui/atlas_app.hpp");
     CHECK(has(hpp, "kMinW = 480, kMinH = 320"));
     CHECK(has(hpp, "kPortraitW = 320, kPortraitH = 480"));
-    CHECK(has(hpp, "kVersion = \"0.1.0\""));
+    CHECK(has(hpp, "kVersion = \"0.2.0\""));
     const std::string icon = test_read_file(app + "/root/usr/share/APPLaunch/share/images/deck-atlas.png");
     CHECK(!icon.empty());
     CHECK(icon == test_read_file(app + "/icon.png"));
@@ -41,7 +41,7 @@ void test_package()
     const std::string manifest = test_read_file(app + "/app.json");
     CHECK(has(manifest, "\"share_code\": \"deck-atlas\""));
     CHECK(has(manifest, "\"package\": \"deck-atlas\""));
-    CHECK(has(manifest, "\"version\": \"0.1.0\""));
+    CHECK(has(manifest, "\"version\": \"0.2.0\""));
     CHECK(has(manifest, "\"title\": \"Deck Atlas\""));
     CHECK(has(manifest, "\"license\": \"MIT\""));
     CHECK(has(manifest, "\"arch\": [\"arm64\", \"amd64\"]"));

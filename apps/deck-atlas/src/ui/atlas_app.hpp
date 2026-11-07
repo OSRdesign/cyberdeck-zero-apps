@@ -50,7 +50,7 @@ namespace atlasui {
 /* = X-MinSize / X-Portrait of root/usr/share/APPLaunch/applications/deck-atlas.desktop (tests/test_package.cpp) */
 constexpr int kMinW = 480, kMinH = 320;
 constexpr int kPortraitW = 320, kPortraitH = 480;
-constexpr const char *kVersion = "0.1.0";
+constexpr const char *kVersion = "0.2.0";
 
 enum class Tab { Map = 0, Sources, Settings };
 enum class Sub { None, FileDetail, Browser, Import, Key, Shown, About };
