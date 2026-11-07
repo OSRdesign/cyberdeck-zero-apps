@@ -4,7 +4,7 @@ An offline map viewer for the cyberdeck, by touch or keyboard: import your own m
 `z/x/y` tile folder from a tile downloader, converted on the board into one MBTiles file) from the SD card or a USB
 stick, then pan and zoom without any network. Three online tile sources come with the map engine, all **off** until you
 switch them on (OpenTopoMap, and Thunderforest and Geoapify with your own free key); the tiles you looked at stay on the
-SD card. Version **0.1.0** (draft: not in the registry until the owner's board test). Native fullscreen app (kind A of
+SD card. Version **0.1.0**, category Tools. Native fullscreen app (kind A of
 the guidelines: it has its own pages, lists and forms) on the launcher's `cp0_lvgl` with its **map engine**
 (`cp0_map.h`, switched on for this app only), MIT. The GPS (a position dot, follow mode, `position.state`) comes in the
 next version; places and tracks after that.
@@ -126,7 +126,7 @@ import page and the record of each file say so. Deck Atlas never downloads areas
 
 ## Install
 
-Settings > Apps > Available > Deck Atlas (once published; it is a draft until the board test), or by hand:
+Settings > Apps > Available > Deck Atlas (category Tools), or by hand:
 `sudo dpkg -i deck-atlas_0.1.0_arm64.deb` (`_amd64` on an x86-64 PC), then `sudo apt-get -f install` if a dependency is
 missing. Remove with `sudo dpkg -r deck-atlas` (your maps and settings stay).
 
@@ -167,6 +167,8 @@ exits. The next version (the GPS reader and `position.state`) is planned with `X
   import the folder again to get all levels. A file made elsewhere (MBTiles / PMTiles) is only as wide as it declares;
   shown by itself it is read at every level whatever it declares, so there the plate shows only at its deepest level
   (and the over-zoom one), and at the shallower levels a view outside it shows the grey grid without the plate.
+- On a narrow screen the attribution line at the bottom right of the map is shortened with an ellipsis ("...") when
+  it does not fit; the full text is in Settings > About and in each file's facts in Sources.
 - The engine draws a grey grid while a tile loads (the parent tile magnified when it is cached); there is no separate
   "loading" indicator.
 - Board-only checks are listed in [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md): the import rate on the Zero 2 W,
@@ -198,7 +200,7 @@ The binary links the cp0_lvgl runtime of the CardputerZero launcher by M5Stack (
 wsl -e sh apps/deck-atlas/build.sh host                 # unit tests (399 checks) and 12 scenes (sheets in ~/cdk-build/deck-atlas/host/out/sheets)
 wsl -e sh apps/deck-atlas/build.sh cross                # the arm64 binary into root/
 wsl -e sh apps/deck-atlas/build.sh cross --arch amd64   # the amd64 binary into root.amd64/
-python3 tools/make_registry.py --only deck-atlas --out <dir>            # the arm64 .deb (draft: outside packages/)
+python3 tools/make_registry.py --only deck-atlas --out <dir>            # a local arm64 .deb, no registry
 python3 tools/make_registry.py --only deck-atlas --arch amd64 --out <dir>
 ```
 
@@ -224,7 +226,7 @@ python3 tools/make_registry.py --only deck-atlas --arch amd64 --out <dir>
 
 ## Changes
 
-- **0.1.0** (2026-11-07, draft): first version. Map, Sources and Settings tabs; MBTiles, PMTiles and tile-folder
+- **0.1.0** (2026-11-07): first version. Map, Sources and Settings tabs; MBTiles, PMTiles and tile-folder
   imports with progress and cancel; the engine's three online sources off by default, with the key page and the terms
   dialog; the persistent viewing cache with its cap and clearing; offline mode; 480x320 and up, 320x480 in PDA mode.
 

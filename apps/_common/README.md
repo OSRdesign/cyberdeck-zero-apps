@@ -110,7 +110,7 @@ bar with the Esc at the left edge, 44x30 with its tap area over the whole bar he
 overlays sized for it), and the render harness configuration without an LVGL draw thread (#132,
 `projects/APPLaunch/tests/render/config/lvgl_config.h`, which `headless/` compiles LVGL with: `LV_OS_NONE`, so
 `lv_lock()` does nothing in the PC harness and the unit tests; the device build keeps `LV_OS_PTHREAD`). No published app
-declares an `X-Portrait` under 480 px wide (Deck Atlas, a draft, is the first: 320x480), so the existing apps draw the same pictures as
+declares an `X-Portrait` under 480 px wide (Deck Atlas is the first: 320x480), so the existing apps draw the same pictures as
 at `3f6579f`; they keep their `3f6579f` builds and move to this pin at their next rebuild. viz1090's copies of the layout
 service (`apps/viz1090/build/cp0_ui_metrics.[ch]`, `cp0_ui_roller.[ch]`) stay at `3f6579f`: they differ from this pin
 only by the narrow portrait additions, which its 480x640 portrait minimum never reaches.
