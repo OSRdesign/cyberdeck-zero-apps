@@ -1,0 +1,38 @@
+# The 3.5" 480x320 panel of zero8 and the Pi 3A+ (6.3 px/mm, board.conf 79x49 mm), landscape and in PDA mode
+# (320x480 narrow portrait): the automatic display scale is 1.5x; the tabs, a list, the terms dialog, the key page
+# with the on-screen keyboard.
+title zero8 density (6.3 px/mm): map 1.5x, lists, dialog, key page
+sizes 480x320 320x480
+ppmm 630
+env DECKATLAS_DEMO 1
+env DECKATLAS_VIEW 48.886392,2.27417,15
+
+wait 1500
+shot map-zero8
+key tab
+wait 600
+shot sources-zero8
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 600
+shot terms-zero8
+key esc
+wait 400
+key down
+key enter
+wait 800
+shot key-zero8
+expect osk on
+key esc
+key esc
+wait 400
+key tab
+wait 600
+shot settings-zero8
+expect text "Auto (1.5x)"
+key esc
+expect quit

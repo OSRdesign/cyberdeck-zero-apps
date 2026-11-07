@@ -1,0 +1,35 @@
+# The import page while it runs (DECKATLAS_DEMO=import-hold: a 10,326-tile folder converted at 800 tiles/s, held at
+# 40 % until Cancel): the bar, the count, the rate and the time left, Cancel by touch, the stopped state.
+title Import: progress, Cancel
+sizes 640x480 480x320 320x480 480x800
+env DECKATLAS_DEMO import-hold
+env DECKATLAS_VIEW 48.886392,2.27417,15
+
+wait 600
+key tab
+wait 600
+key down
+key down
+key enter
+wait 800
+key enter
+wait 800
+key enter
+wait 800
+key enter
+wait 500
+key enter
+wait 3500
+shot importing
+expect text "Converting tiles"
+expect text "Cancel"
+tap "Cancel"
+wait 800
+shot import-stopped
+expect text "Import stopped"
+expect text "Back"
+key esc
+wait 500
+expect text "Import a map"
+key esc
+expect quit

@@ -1,0 +1,10 @@
+# Under the minimum (X-MinSize 480x320, X-Portrait 320x480): an older launcher ignores them, so the app says so and
+# closes on any key.
+title Under the minimum screen
+sizes 400x300 470x320 300x450
+env DECKATLAS_DEMO 1
+
+shot notice
+expect noquit
+key down
+expect quit

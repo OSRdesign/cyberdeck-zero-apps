@@ -1,0 +1,70 @@
+# Import, the real path: the browser (the start places, then a folder, then a tile folder), the confirmation with the
+# terms note, the engine's folder conversion of the fixture (six tiles: instant), the result page, Show on map.
+# Then a damaged .mbtiles file: Copy, and the error line.
+title Import: browse, a tile folder, done, a damaged file
+sizes 640x480 480x320 320x480 480x800
+env DECKATLAS_DEMO 1
+env DECKATLAS_VIEW 48.886392,2.27417,15
+
+wait 600
+key tab
+wait 600
+# Import a map: Map shows, the file, Import a map
+key down
+key down
+key enter
+wait 800
+shot browse-start
+@640x480,480x320,480x800 expect text "Test files"
+key enter
+wait 800
+shot browse-folder
+expect text "tiles"
+@640x480,480x320,480x800 expect text "broken.mbtiles"
+expect notext "README.md"
+key enter
+wait 800
+shot browse-tile-folder
+@640x480,480x800 expect text "Import this tile folder"
+key enter
+wait 500
+shot import-confirm
+expect text "Import this tile folder?"
+key enter
+wait 2500
+shot import-done
+expect text "Imported"
+expect text "Show on map"
+key enter
+wait 1500
+shot imported-on-map
+expect noquit
+
+# a damaged file: the error line on the import page
+key tab
+wait 600
+key home
+key down
+key down
+key down
+key enter
+wait 800
+key enter
+wait 800
+key down
+wait 300
+shot browse-broken
+key enter
+wait 500
+shot import-file-confirm
+expect text "Copy"
+expect text "In place"
+key enter
+wait 1500
+shot import-failed
+expect text "Import failed"
+key esc
+wait 500
+expect text "Import a map"
+key esc
+expect quit

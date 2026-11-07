@@ -1,0 +1,30 @@
+# Touch only: the tab strip by taps, a row by a tap and a tap on the highlighted row, the map's zoom by a double tap,
+# the header's Esc goes back from a sub-page and ends the app at a tab.
+title Touch: tabs, rows, double tap, header Esc
+sizes 640x480 480x800
+env DECKATLAS_DEMO 1
+env DECKATLAS_VIEW 48.886392,2.27417,14
+
+wait 1200
+tapxy 0.40 0.40
+tapxy 0.40 0.40
+wait 1500
+shot double-tap-zoom
+tap "Sources"
+wait 600
+tap "Import a map"
+wait 300
+tap "Import a map"
+wait 800
+shot browse-by-touch
+expect text "Test files"
+tap "Esc"
+wait 600
+expect text "Map shows"
+tap "Settings"
+wait 600
+shot settings-by-touch
+tap "Map"
+wait 800
+tap "Esc"
+expect quit

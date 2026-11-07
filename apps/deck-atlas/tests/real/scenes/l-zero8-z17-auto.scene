@@ -1,0 +1,13 @@
+# Legibility (the check of report 054) on zero8's 3.5" 480x320 panel (6.3 px/mm), landscape and PDA mode: zoom 17, display
+# scale auto (the engine's choice at 6.3 px/mm: 1.5x).
+title Legibility zero8: zoom 17, scale auto
+sizes 480x320 320x480
+ppmm 630
+env DECKATLAS_DEMO 1
+env DECKATLAS_SCALE auto
+env DECKATLAS_VIEW 48.88007,2.263184,17
+
+wait 3000
+shot zero8-z17-auto
+key esc
+expect quit
