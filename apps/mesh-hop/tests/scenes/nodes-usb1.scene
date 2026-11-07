@@ -1,0 +1,14 @@
+# Mesh Hop 0.8.3, the start page with exactly one USB serial device and nothing remembered: the page is as before (no
+# "several devices" line).
+title Mesh Hop: Choose a node, one serial device
+env MESHHOP_DATA /tmp/mesh-hop-scene-nodes
+env MESHHOP_DEMO usb1
+env MESHHOP_ONLINE 0
+sizes 640x480 800x480 720x720 1024x600 1280x720
+
+wait 1500
+expect text "XIAO nRF52840"
+expect text "Choose a node: tap it, then tap it again to connect"
+expect notext "Several serial devices"
+shot usb1
+check usb1

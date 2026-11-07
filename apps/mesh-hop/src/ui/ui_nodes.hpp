@@ -11,6 +11,8 @@
  *   "192.168.1.20:5000", or the state of the connection), and for Bluetooth the signal bars while the scan hears it. A USB
  *   row shows the node name learned on its port only while the same USB device is behind it (NodeBook::name_for), else
  *   the USB product string ("USB JTAG/serial debug unit"), else "USB board".
+ *   A USB port another program holds open (port_busy.hpp) is a dimmed row: second line "in use by rnsd", the grey info dot; choosing
+ *   it connects nothing (the app says "This port is used by rnsd. Close that program first.").
  *   Markers (the row affordance rule): a node acts (the dot; blue while it connects or is connected), Add opens a dialog (the
  *   chevron), a note is information (grey, never selected).
  */
@@ -39,6 +41,7 @@ struct NodeRow {
     Aff aff = Aff::Action;
     Tone tone = Tone::Muted;         // of the second line
     bool selectable = true;
+    bool dim = false;                // a USB port another program holds open: the whole row grey (selecting it only says why)
 };
 
 /* The state of the node being connected (the one the user chose last in this run). */
@@ -60,6 +63,9 @@ struct NodePageState {
 
 std::vector<NodeRow> build_node_rows(const NodePageState &s);
 int find_node_row(const std::vector<NodeRow> &rows, const std::string &key);
+/* True when the page should say "Several serial devices found": two or more USB ports, no node in use and no remembered one
+ * among them (the node chosen last, NodeBook::last, is one of the ports now: the start page highlights that one). */
+bool several_usb_hint(const NodePageState &s);
 /* The grey line under the title: what the page does now. touch: no keyboard (say "tap twice"). */
 std::string node_page_caption(const NodePageState &s, bool touch);
 /* The name of a Bluetooth node: its learned name, else the advertised name without "MeshCore-", else the address. */

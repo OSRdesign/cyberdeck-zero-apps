@@ -1,0 +1,17 @@
+# Mesh Hop 0.8.3, the start page with two USB serial devices and nothing remembered (a MeshCore board and another serial
+# device, say a Reticulum RNode): nothing is opened and the page asks which one is the MeshCore node. The grey line under the
+# title says so. Nothing connects by itself; a port is opened only when the user chooses its row.
+title Mesh Hop: Choose a node, two serial devices
+env MESHHOP_DATA /tmp/mesh-hop-scene-nodes
+env MESHHOP_DEMO usb2
+env MESHHOP_ONLINE 0
+sizes 640x480 800x480 720x720 1024x600 1280x720
+
+wait 1500
+expect text "XIAO nRF52840"
+expect text "USB Serial"
+expect text "Several serial devices found: choose your MeshCore node."
+expect notext "in use by"
+expect notext "Choose a node: tap it"
+shot usb2
+check usb2
