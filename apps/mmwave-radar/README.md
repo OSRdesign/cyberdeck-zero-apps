@@ -2,9 +2,18 @@
 
 A viewer for the Hi-Link HLK-LD2450 / HLK-LD2452 24 GHz tracking radar and the HLK-LD2451 24 GHz target radar on a
 USB-serial adapter, or for the HLK-LD2451 over Bluetooth LE (its built-in module): up to three targets seen from above, with trails and speed arrows, the raw numbers, a 30-second
-graph of distance and speed, and the sensor's state. Native fullscreen app on the launcher's `cp0_lvgl`, MIT, version 0.1.0 (draft). **Listen only:** the app sends
+graph of distance and speed, and the sensor's state. Native fullscreen app on the launcher's `cp0_lvgl`, MIT, version 0.1.0, category Tools. **Listen only:** the app sends
 nothing to the sensor, not even to find it (study: launcher report 056); over Bluetooth the only thing sent is the
 standard notification subscription (see [Bluetooth](#bluetooth-hlk-ld2451)).
+
+- **Listen only.** Nothing is ever written to a serial port (the port layer has no write call); over Bluetooth the
+  only thing sent is the subscription to the radar's notifications. No sensor setting is read or changed.
+- **Supported sensors:** the HLK-LD2452 (and the HLK-LD2450, which sends the same frame) and the HLK-LD2451, on a
+  USB-serial adapter; the HLK-LD2451 also over Bluetooth LE. See [Supported sensor](#supported-sensor).
+- **Not supported:** the HLK-LD2410 presence radar is only recognised by listening (sniffed and named in the scan),
+  never read or shown.
+- **Bluetooth** needs BlueZ: the package recommends `bluez` (see [Requirements](#requirements)); without it the app
+  works over USB.
 
 ## Screenshots
 
@@ -313,7 +322,7 @@ on every systemd system and is only opened at run time). arm64 and amd64.
 
 ## Install
 
-Settings > Apps, once published (0.1.0 is a draft: `"draft": true`). By hand: `sudo dpkg -i mmwave-radar_0.1.0_arm64.deb`.
+Settings > Apps (category Tools). By hand: `sudo dpkg -i mmwave-radar_0.1.0_arm64.deb`.
 
 ## Known limits
 
@@ -356,7 +365,7 @@ wsl -e sh <repo>/apps/mmwave-radar/tests/run.sh        # the core tests alone (n
 wsl -e sh <repo>/apps/mmwave-radar/build.sh host       # unit tests + headless scenes (scripted ports, no serial)
 wsl -e sh <repo>/apps/mmwave-radar/build.sh cross      # arm64 binary into root/
 wsl -e sh <repo>/apps/mmwave-radar/build.sh cross --arch amd64   # amd64 binary into root.amd64/
-python3 tools/make_registry.py --only mmwave-radar --out <dir outside the repo>   # the draft packages
+python3 tools/make_registry.py --only mmwave-radar --out <dir outside the repo>   # a local package, no registry
 python apps/mmwave-radar/tools/make_icon.py            # the icon (--sheet PNG for the check picture)
 ```
 
@@ -365,7 +374,7 @@ Build from a WSL native-filesystem LF copy with fresh build dirs (`CDK_BUILD`, `
 
 ## Changes
 
-- 0.1.0 (draft): first version: Radar, Table, Graph and Sensor pages, listen-only detection, units, orientation,
+- 0.1.0: first version: Radar, Table, Graph and Sensor pages, listen-only detection, units, orientation,
   range and trails settings, 480x320 and 320x480 minimum layouts; the tall Radar page (plot, target list, distance
   strip), ring labels on the wedge's edge, the diagnostic log's marker file and its frame counters (empty, non-empty,
   identical; the latest target frame every 10 s); held (stale) targets of the LD2452 marked after 3 s, with the
