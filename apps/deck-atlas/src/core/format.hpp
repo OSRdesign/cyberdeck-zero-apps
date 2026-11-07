@@ -27,6 +27,10 @@ std::string scale_label(float setting, float in_use);
 /* mb 0 -> "Auto (512 MB)" with the cap in force (0: "Auto"); else "128 MB", "256 MB", "512 MB", "1 GB". */
 std::string cache_label(int mb, std::uint64_t cap_bytes);
 const char *on_off(bool on);                        /* "On" / "Off" */
+/* The GPS rows of Settings: "Off" / "Auto"; "Auto", "ttyACM0" or "ttyUSB1 (absent)" (the device name without /dev/); "Auto" or "9600". */
+const char *gps_label(bool on);
+std::string gps_port_label(const std::string &port, bool present);
+std::string gps_speed_label(int baud);
 
 /* "48.916 N, 2.274 E" (3 decimals). */
 std::string latlon_label(double lat, double lon);

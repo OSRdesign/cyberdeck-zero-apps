@@ -24,6 +24,11 @@ enum : std::intptr_t {
     kOffline,
     kCache,
     kClear,
+    kGps,
+    kGpsPort,
+    kGpsSpeed,
+    kGpsStatus,
+    kGpsHint,
     kUsage,
     kVersionRow,
     kAbout,
@@ -33,6 +38,7 @@ enum : std::intptr_t {
 
 void AtlasApp::build_settings()
 {
+    gps_refresh_ports(); /* the Port row says whether the chosen device is there */
     cp0::ui::CompactListEvents ev;
     ev.activate = [this](int, std::intptr_t id) { post([this, id] { settings_activate(id); }); };
     ev.back = [this] { post([this] { back(); }); };
@@ -63,6 +69,19 @@ std::vector<cp0::ui::ListRow> AtlasApp::settings_rows() const
     else if (stats_known_)
         usage = atlas::bytes_label(stats_disk_) + ", " + atlas::count_label(stats_tiles_) + (stats_tiles_ == 1 ? " tile" : " tiles");
     rows.push_back(ListRow::item("Saved now", usage, ValueTone::Normal, kUsage, RowAffordance::Info));
+    rows.push_back(ListRow::section("GPS receiver"));
+    rows.push_back(ListRow::item("GPS", atlas::gps_label(settings_.gps), ValueTone::Normal, kGps, RowAffordance::Edit));
+    rows.push_back(ListRow::item("Port",
+                                 atlas::gps_port_label(settings_.gps_port,
+                                                       std::find(gps_present_.begin(), gps_present_.end(), settings_.gps_port) !=
+                                                           gps_present_.end()),
+                                 ValueTone::Normal, kGpsPort, RowAffordance::Edit));
+    rows.push_back(ListRow::item("Speed", atlas::gps_speed_label(settings_.gps_baud), ValueTone::Normal, kGpsSpeed,
+                                 RowAffordance::Edit));
+    gps_row_shown_ = atlas::gps_row_value(gps_status_);
+    rows.push_back(ListRow::item("Status", gps_row_shown_, ValueTone::Normal, kGpsStatus, RowAffordance::Open));
+    rows.push_back(ListRow::item("Not found by itself? Pick its port above.", "",
+                                 ValueTone::Normal, kGpsHint, RowAffordance::Info));
     rows.push_back(ListRow::section("About"));
     rows.push_back(ListRow::item("Version", kVersion, ValueTone::Normal, kVersionRow, RowAffordance::Info));
     rows.push_back(ListRow::item("Map data and credits", "", ValueTone::Normal, kAbout, RowAffordance::Open));
@@ -114,12 +133,34 @@ void AtlasApp::settings_activate(std::intptr_t id)
         }
         break;
     }
+    case kGps:
+        settings_.gps = !settings_.gps;
+        gps_apply_settings();
+        break;
+    case kGpsPort:
+        gps_refresh_ports();
+        settings_.gps_port = atlas::next_gps_port(settings_.gps_port, gps_present_);
+        gps_apply_settings();
+        break;
+    case kGpsSpeed:
+        settings_.gps_baud = atlas::next_gps_baud(settings_.gps_baud);
+        gps_apply_settings();
+        break;
+    case kGpsStatus: open_gps_status(atlas::StatusOrigin::Settings); return;
     case kClear: confirm_clear(); return;
     case kAbout: open_about(); return;
     default: return;
     }
     save_settings();
     if (list_ && sub_ == Sub::None && tab_ == Tab::Settings) list_->set_rows(settings_rows());
+}
+
+/* The receiver's state changed: the GPS status row's value follows (only when the Settings list is what is on screen). */
+void AtlasApp::refresh_gps_row()
+{
+    if (!list_ || sub_ != Sub::None || tab_ != Tab::Settings) return;
+    if (atlas::gps_row_value(gps_status_) == gps_row_shown_) return;
+    list_->set_rows(settings_rows());
 }
 
 void AtlasApp::refresh_stats()
@@ -183,6 +224,12 @@ std::string AtlasApp::about_text() const
          "(MIT); stb_image 2.30 by Sean Barrett (public domain or MIT), inside the engine; SQLite (public domain) and "
          "libcurl (curl licence), system libraries loaded when present; LVGL (MIT); the Montserrat font (OFL) from "
          "the launcher.";
+    s += "\n\nGPS\nOff until you switch it on in Settings. Deck Atlas only listens to the receiver (NMEA sentences on a USB "
+         "serial port; it never sends anything to it) and shows the position on the map. Port Auto opens only known GPS "
+         "receivers (u-blox, Prolific PL2303 pucks); other serial devices are never opened unless you pick their port: other "
+         "serial ports are listed in Port, pick one if your receiver is not found by itself. The position is never sent "
+         "anywhere: it is drawn on the screen and written to position.state in the launcher's state folder so that "
+         "other apps on this deck can read it.";
     s += "\n\nFILES\nSettings: ~/.config/deck-atlas/settings.conf\nMaps, keys and saved tiles: " +
          atlas::path_display(store_dir_, home_);
     s += std::string("\n\nBuilt against launcher ") + std::string(CDK_LAUNCHER_REF).substr(0, 7) + " (" + CDK_LAUNCHER_PIN + ")";

@@ -2,12 +2,12 @@
 
 For the owner (controller-led testing: Claude deploys and reads the logs, you do the physical steps). The models
 (settings, labels, the import progress, the online sources' flow, the file browser, the map geometry, the package files)
-are tested on the PC (`build.sh host`: 399 checks), and twelve scenes draw every page at 640x480, 480x320, 320x480 and
+are tested on the PC (`build.sh host`: 8,344 checks), and 30 scenes draw every page at 640x480, 480x320, 320x480 and
 480x800 (plus the zero8 density). What the PC cannot tell: **whether the map is readable on the glass**, how a real
 import feels on a Zero 2 W's SD card, the memory use, and the network path. Keep it short: the main path must work.
 
 Boards: the deck (640x480, 11.3 px/mm), zero8 (480x320 3.5", 6.3 px/mm; 320x480 with PDA mode on), and the FZ-M1 tablet
-for the amd64 package. Install the `.deb` from the bundle (`sudo dpkg -i deck-atlas_0.1.0_arm64.deb`); it pulls
+for the amd64 package. Install the `.deb` from the bundle (`sudo dpkg -i deck-atlas_0.2.0_arm64.deb`); it pulls
 `libsqlite3-0`, `libcurl4t64` and `ca-certificates`.
 
 Before: copy the tile folder (MapTileDl's `tiles`, about 276 MB) to the board, e.g. `scp -r tiles deck@zero7.local:Maps/`,
@@ -18,7 +18,7 @@ or put it on a USB stick.
 1. Open Deck Atlas from the home grid. The launcher's header (Esc, title "Deck Atlas", status strip), the tab strip at
    the bottom (Map, Sources, Settings, Map underlined in blue). With an empty store: a grey world grid and the plate
    "No map yet. Import a map file in Sources."
-2. Log: `journalctl --user -u <launcher service> | grep deck-atlas` shows `[deck-atlas] 0.1.0 640x480 scale Auto (2x),
+2. Log: `journalctl --user -u <launcher service> | grep deck-atlas` shows `[deck-atlas] 0.2.0 640x480 scale Auto (2x),
    store /home/<user>/.local/share/cyberdeckzero/maps, 0 map files, network on`.
 
 ## T1. Import the tile folder (3 min, the deck first, then zero8)
@@ -42,6 +42,9 @@ or put it on a USB stick.
 At arm's length, at zoom 15 and zoom 17:
 
 - Can you read the street names, the road numbers, the place names and the scale bar's figure?
+- The credit at the very bottom edge (scale bar left, credit right, one line, the smallest font): can you read it at
+  arm's length, with the default map and with OpenTopoMap (the long credit; two lines on a narrow screen)? Is the full
+  text there, not cut? Does it touch the zoom or follow buttons? If the 8 px text is too small on a board, say which.
 - Settings > Display scale: Auto shows "Auto (2x)" on the deck and "Auto (1.5x)" on zero8. Try 1x, 1.5x and 2x on each
   board and tell which you prefer. The PC check's verdict is in the README (Known limits: legibility); confirm or correct it.
 
@@ -64,11 +67,89 @@ At arm's length, at zoom 15 and zoom 17:
 4. Started over ssh without the launcher (`/usr/share/APPLaunch/bin/deck-atlas` on the console of the deck): the app
    comes up and logs one line about the missing contract.
 
-## T5. What to tell me
+## T5. GPS (0.2.0; 15 minutes, outdoors or at a window, the u-blox puck on the deck and then on zero8)
+
+The PC tests cover the parser, the fix logic, the baud sniff on a fake port and on a pseudo-terminal, follow mode and the
+`position.state` writer, and the scenes draw every state, and the GPS status page in each of them, at 640x480, 480x320 and 320x480. What only a board can tell: the
+real puck, the cold start, power, memory.
+
+1. **Off is quiet.** GPS Off (the default): the Map tab has no chip (no dish) and no follow button; `ls -l /proc/$(pgrep -x deck-atlas)/fd`
+   shows no `/dev/tty*`. Settings > GPS receiver shows GPS Off, Port Auto, Speed Auto.
+2. **Plug the puck, GPS Auto** (Settings > GPS receiver > GPS). `lsusb` and `ls /dev/ttyACM* /dev/ttyUSB*`: note which node it
+   is and the USB id (u-blox 1546:01a7/01a8/01a9). If the chip stays the crossed-out dish with the puck plugged in: `groups` must list `dialout`
+   (`sudo usermod -aG dialout $USER`, log in again). The log (`[deck-atlas] gps: ...`) says which port and speed it locked at.
+3. **Cold start: the chip's colours.** Put the puck where it sees the sky and watch the chip (dish and three bars) from
+   plugging in. Expect, in this order: the crossed-out dish with three grey outlines (no receiver), **one red bar** within
+   about 3 s of the puck talking (it says the puck sends valid sentences, not that it has a fix), then **two orange bars**
+   (a 2D fix, or a 3D fix with few satellites or a high HDOP) and finally **three green bars** (a good 3D fix: HDOP 5 or
+   less, 5 satellites or more). Note the time of each change (a cold start takes minutes). No dot appears before a fix.
+   Are the bars and the colours readable at arm's length (red against orange especially)? Tap the chip, or press S: the GPS
+   status page opens (T5a).
+4. **The dot.** With the fix: the blue dot with its white outline and the accuracy ring at the right place; walk or drive: the
+   heading wedge (the speed is not on the map any more; it comes back on the status page). Cover the puck or unplug its antenna
+   side: after 5 s the dot is hollow, the bars are dimmed and a small "!" shows next to them.
+5. **Follow.** Tap the crosshair button under the zoom buttons (or press G): the map recentres at once and keeps the dot in the
+   middle while you move; zoom with the buttons: follow stays; drag the map: follow goes off (the button loses its highlight);
+   tap it again: it recentres. Home does the same. Check on the deck and on zero8 that the button is below the zoom buttons, the
+   same size, and clear of the map credit and the scale bar (also at 320x480 with PDA mode on).
+6. **Unplug and replug** while the app runs: the crossed-out dish within a few seconds (10 s of silence at the latest), no dot, no crash; plug it back: it finds the
+   receiver again within about 2 s (same node or another number) and the fix returns. Repeat three times quickly.
+7. **Wrong speed.** Settings > Speed 4800 with the puck at 9600: the crossed-out dish for ever (nothing locks, no garbage position);
+   back to Auto: it locks at 9600. The log shows the speeds tried.
+8. **Another app on the port.** Open Serial Console or Mesh Hop on the same node first: the chip stays the crossed-out dish (the port is
+   held; no error, no crash) and takes it when the other app lets go (within the 30 s backoff).
+9. **position.state.** While there is a fix: `cat $APPLAUNCH_STATE_DIR/position.state` (else
+   `cat $XDG_RUNTIME_DIR/applaunch/position.state`): `fix=3`, `lat`, `lon`, `alt_m`, `utc` (the receiver's time), `mono_ms`, `pid`
+   equal to `pgrep -x deck-atlas`. `watch -n1 cat ...` changes about once a second, never twice a second. Unplug: `fix=0` and no
+   position. GPS Off or leaving the app: the file is gone (`ls`).
+10. **Memory and power.** `grep VmRSS /proc/$(pgrep -x deck-atlas)/status` with a fix and the map moving (no more than a few
+    MB above T4); with Wi-Fi tile fetching on, the deck does not reset (a powered hub if it does; note the board).
+11. **Privacy.** `ss -tnp | grep deck-atlas` shows only the tile source's connections (none with Offline mode on), never anything
+    about the position.
+
+12. **Other serial devices are never opened in Auto** (the owner's rule: a mmWave radar's CH340, ESP32 / LoRa boards). With
+    the CH340 radar (1a86:7523) on a `ttyUSB*` and **no GPS puck**, GPS Auto: the chip is the crossed-out dish;
+    `ls -l /proc/$(pgrep -x deck-atlas)/fd | grep tty` shows nothing, the radar keeps streaming in mmWave Radar / Serial Console
+    without a reset, and `journalctl` shows no `gps: opened` line. Settings > GPS receiver > Port lists `/dev/ttyUSB0`
+    (tap to pick it: only then is it opened, and the crossed-out dish stays since it sends no NMEA; back to Auto closes it). Then plug
+    the u-blox puck too: Auto finds the puck (u-blox 1546:*) and still never touches the radar. Repeat with an ESP32 / LoRa
+    board on a `ttyACM*` (303a:*) or a CP210x / FTDI adapter.
+
+## T5a. The GPS status page (10 minutes, with the puck and a phone showing its own GPS data)
+
+Open it three ways and leave it with Esc each time: the chip's tap, the S key (both from the map), Settings > GPS receiver >
+Status (also with GPS Off: the page then says only that GPS is off, and `ls -l /proc/$(pgrep -x deck-atlas)/fd | grep tty` shows
+no port). Esc must return to where you came from (the map, or Settings with the Status row selected).
+
+1. **Values against a phone.** With a 3D fix, put a phone's GPS app (GPS Test or similar) beside the deck: latitude and longitude
+   agree to about 4 decimals (about 10 m) and the altitude within a few tens of metres (MSL, from the GGA); the UTC time is the
+   phone's UTC to the second; the satellite counts are close (the phone may count more systems: the puck may track only GPS and
+   SBAS, or GPS and GLONASS). Walk: the speed and the course (compass word) follow, the course goes to a hyphen at a standstill.
+   Units km / mi switches km/h and mph.
+2. **Satellite counts against the chip.** Cold start with the page open: In view grows first, In the fix follows; the headline and
+   the chip go Searching (1 red bar), then 2D fix or weak 3D (2 orange), then 3D fix (3 green) at the same moment. A good fix needs
+   HDOP 5 or less and 5 used: the page's HDOP and Used show why the chip is orange when it is.
+3. **Sky and bars.** The sky plot matches the phone's (N at the top, a dot per satellite, filled = used); the bars are tall for the
+   satellites high in the sky; a satellite with no signal figure shows a short stub; the letters match the legend. Readable at arm's
+   length on the deck (640x480, two columns) and on zero8 (480x320 and the portrait 320x480): nothing cut at either side, the bars
+   of 20 or more satellites wrap into rows. Scroll with Up / Down and with a finger.
+4. **Receiver facts.** Device is the puck's product string (u-blox 7 or similar), Port ttyACM0, Speed 9600 baud ("(auto)" in
+   Auto), Sentences a few per second, Last data stays at 0 to 1 s. Bad checksums stays 0 (a few after plugging in are fine).
+5. **Unplug and replug with the page open:** within about 3 s Last data climbs, the headline becomes "Receiver connected, no data"
+   or "No GPS receiver found", the chip is crossed out, the position goes to hyphens; plug back: the page recovers by itself. A
+   fix lost while the receiver still talks: the headline keeps the mode, the second line says "signal lost, last fix N s ago".
+6. **Wrong speed and denied port:** Speed 4800 with a 9600 puck: "Receiver connected, no data" or "No GPS receiver found", never
+   garbage values. Without the dialout group: "No access to the port (dialout group?)".
+7. **Cost.** With the page open and a fix, `top` shows the app well under the map-moving load (the page redraws a part only when
+   its data changed); VmRSS no more than a few MB above T5.10.
+
+## T6. What to tell me
 
 - The import rate and the time for the 10,326 tiles on the deck; anything slow while it ran.
 - The legibility answers (T2) per board and scale.
-- VmRSS on the deck.
-- Anything cut, overlapping or hard to hit: the zoom buttons, the tab strip, the rows; the attribution line at the
-  bottom right of the map.
+- VmRSS on the deck, with and without a GPS fix (T5.10).
+- The GPS status page (T5a): values against the phone, system counts, anything cut or unclear at arm's length.
+- The GPS: time to a cold fix, the puck's node and USB id, whether it locked at 9600, anything odd on unplug / replug.
+- Anything cut, overlapping or hard to hit: the zoom buttons, the tab strip, the rows; the scale bar and the credit
+  on the bottom edge of the map (can you read them? is the credit whole? does it touch a button?).
 - Cleanup: `sudo dpkg -r deck-atlas` (the maps stay in `~/.local/share/cyberdeckzero/maps`; delete that folder to reset).

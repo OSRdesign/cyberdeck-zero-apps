@@ -31,7 +31,7 @@ void test_package()
     const std::string hpp = test_read_file(app + "/src/ui/atlas_app.hpp");
     CHECK(has(hpp, "kMinW = 480, kMinH = 320"));
     CHECK(has(hpp, "kPortraitW = 320, kPortraitH = 480"));
-    CHECK(has(hpp, "kVersion = \"0.1.0\""));
+    CHECK(has(hpp, "kVersion = \"0.2.0\""));
     const std::string icon = test_read_file(app + "/root/usr/share/APPLaunch/share/images/deck-atlas.png");
     CHECK(!icon.empty());
     CHECK(icon == test_read_file(app + "/icon.png"));
@@ -41,7 +41,7 @@ void test_package()
     const std::string manifest = test_read_file(app + "/app.json");
     CHECK(has(manifest, "\"share_code\": \"deck-atlas\""));
     CHECK(has(manifest, "\"package\": \"deck-atlas\""));
-    CHECK(has(manifest, "\"version\": \"0.1.0\""));
+    CHECK(has(manifest, "\"version\": \"0.2.0\""));
     CHECK(has(manifest, "\"title\": \"Deck Atlas\""));
     CHECK(has(manifest, "\"license\": \"MIT\""));
     CHECK(has(manifest, "\"arch\": [\"arm64\", \"amd64\"]"));
@@ -53,6 +53,33 @@ void test_package()
     CHECK(has(test_read_file(app + "/cp0_config.mk"), "\nCONFIG_CP0_LVGL_MAP=y\n"));
     /* the user agent is the engine's rule with this app's id */
     CHECK(has(test_read_file(app + "/src/ui/atlas_app.cpp"), "cp0_map_user_agent(ua, sizeof ua, \"deck-atlas\", kVersion)"));
+    /* the GPS reader is listen-only by construction: nothing in its sources can send a byte to a port, the device is
+     * opened read-only, and the port interface has no send call at all (the way mmWave Radar's test checks its reader) */
+    const char *const gps_files[] = {"nmea.hpp", "nmea.cpp", "gps_ids.hpp", "gps_ids.cpp", "gps_fix.hpp", "gps_fix.cpp", "gps_port.hpp", "gps_link.hpp",
+                                     "gps_link.cpp", "gps_posix.hpp", "gps_posix.cpp", "gps_demo.hpp", "gps_demo.cpp",
+                                     "gps_page.hpp", "gps_page.cpp", "gps_chip.hpp", "gps_chip.cpp", "follow.hpp", "follow.cpp",
+                                     "../ui/atlas_gps.cpp", "../ui/atlas_gps_page.cpp", "../ui/atlas_chip.cpp"};
+    const char *const banned[] = {"write(", "writev(", "pwrite", "fwrite(", "send(", "sendto(", "sendmsg", "O_RDWR", "O_WRONLY",
+                                  "TIOCSTI", "TIOCM", "tcsendbreak", "tcdrain", "ofstream", "fputs(", "fprintf(", "dprintf("};
+    for (const char *f : gps_files) {
+        const std::string text = test_read_file(app + "/src/core/" + f);
+        CHECK(!text.empty());
+        for (const char *b : banned) {
+            const bool found = has(text, b);
+            if (found) std::fprintf(stderr, "listen-only: %s contains %s\n", f, b);
+            CHECK(!found);
+        }
+    }
+    const std::string port_hpp = test_read_file(app + "/src/core/gps_port.hpp");
+    CHECK(has(port_hpp, "virtual long read(int handle"));
+    CHECK(has(port_hpp, "virtual int open(const std::string &path, PortErr &err) = 0;"));
+    CHECK(has(test_read_file(app + "/src/core/gps_posix.cpp"), "O_RDONLY | O_NOCTTY | O_NONBLOCK"));
+    /* the link and the UI see the port only through that interface; position.state and settings never touch a port */
+    for (const char *f : {"position_state.hpp", "position_state.cpp", "settings.cpp"}) {
+        const std::string text = test_read_file(app + "/src/core/" + f);
+        CHECK(!has(text, "gps_port.hpp"));
+        CHECK(!has(text, "gps_posix.hpp"));
+    }
     /* no tile server of the OSM Foundation anywhere in the app's sources */
     for (const char *f : {"/src/ui/atlas_app.cpp", "/src/ui/atlas_sources.cpp", "/src/ui/atlas_import.cpp",
                           "/src/ui/atlas_settings.cpp", "/src/core/source_model.cpp"})

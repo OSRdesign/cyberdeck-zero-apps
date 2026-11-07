@@ -1,0 +1,15 @@
+# A 3D fix with nine satellites (HDOP 2.4: about 12 m): the dot, the ring, "3D fix 9 sats". Zoomed in and out the ring
+# follows the ground; kilometres by default.
+title GPS: 3D fix, nine satellites
+sizes 640x480 480x320 320x480
+env DECKATLAS_DEMO 1
+env DECKATLAS_GPS auto
+env DECKATLAS_GPS_FEED fix3d
+env DECKATLAS_VIEW 48.889643,2.269995,16
+
+wait 1500
+shot fix-3d
+expect text "Map"
+type -
+wait 1200
+shot fix-3d-z15

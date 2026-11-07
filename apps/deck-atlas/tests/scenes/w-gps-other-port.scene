@@ -1,0 +1,34 @@
+# Only a serial port that is no known GPS receiver is plugged in (a CH340 radar, 1a86:7523): Auto never opens it, the chip is
+# the crossed-out dish; Settings > GPS receiver > Port lists it (and the hint row), and a port chosen there is opened
+# (it sends nothing, so the dish stays crossed out). The synthetic feed "other" stands for that port.
+title GPS: only another serial device, Auto leaves it alone
+sizes 640x480 480x320 320x480
+env DECKATLAS_DEMO 1
+env DECKATLAS_GPS auto
+env DECKATLAS_GPS_FEED other
+env DECKATLAS_VIEW 48.889643,2.269995,16
+
+wait 3000
+shot no-receiver
+expect text "Map"
+key tab
+key tab
+wait 800
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 400
+shot settings-port-auto
+expect text "Port"
+key enter
+wait 400
+shot settings-port-chosen
+expect text "ttyUSB0"
+key tab
+wait 3500
+shot map-port-chosen
+expect text "Map"

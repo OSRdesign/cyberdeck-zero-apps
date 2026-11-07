@@ -1,0 +1,12 @@
+# GPS on (Auto) with no receiver plugged in: the chip is the crossed-out dish with three outlined grey bars, no dot, the follow button is there. Settings'
+# GPS group is the v-gps-settings scene. The receiver is a synthetic feed in the scenes (DECKATLAS_GPS_FEED); none here.
+title GPS: no device, the crossed-out dish
+sizes 640x480 480x320 320x480
+env DECKATLAS_DEMO 1
+env DECKATLAS_GPS auto
+env DECKATLAS_VIEW 48.889643,2.269995,16
+
+wait 1500
+shot no-device
+expect noquit
+expect text "Map"

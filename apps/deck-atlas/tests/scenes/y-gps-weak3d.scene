@@ -1,0 +1,12 @@
+# GPS: a 3D fix with four satellites used (weak geometry): two orange bars, the same as a 2D fix. The chip is an icon:
+# tests/tools/check_chip_shots.py measures the shot.
+title GPS: weak 3D geometry, two orange bars
+sizes 640x480 480x320 320x480
+env DECKATLAS_DEMO 1
+env DECKATLAS_GPS auto
+env DECKATLAS_GPS_FEED weak3d
+env DECKATLAS_VIEW 48.889643,2.269995,16
+
+wait 1500
+shot weak-3d
+expect text "Map"

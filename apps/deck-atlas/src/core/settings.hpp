@@ -12,6 +12,9 @@
  *   source=<id>             what the map shows: "" (absent) = every imported map file, else an archive or source id
  *   view=<lat>,<lon>,<zoom> the last view (absent before the first run ends)
  *   terms=<id>,<id>         the online sources whose terms the user accepted (asked once per source)
+ *   gps=off|auto            the GPS receiver (off: no port is ever opened)
+ *   gps_port=auto|/dev/ttyXXX   which serial port (auto: the first that talks NMEA)
+ *   gps_speed=auto|4800|9600|38400|115200   the receiver's speed (auto: tried in turn)
  * API keys are never in this file: the engine keeps them in its store, mode 0600.
  *
  * The folder is $DECKATLAS_CONFIG_DIR when set (tests), else $XDG_CONFIG_HOME/deck-atlas, else ~/.config/deck-atlas.
@@ -41,6 +44,9 @@ struct Settings {
     std::string source;                 /* "" = every map file */
     View view;
     std::vector<std::string> terms;     /* accepted, sorted, unique */
+    bool gps = false;                   /* "Auto" when true: read the receiver; the default is Off */
+    std::string gps_port;               /* "" = Auto, else "/dev/tty..." (valid_gps_port) */
+    int gps_baud = 0;                   /* 0 = Auto, else 4800, 9600, 38400 or 115200 */
 };
 
 std::string serialize_settings(const Settings &s);
@@ -52,6 +58,15 @@ float next_scale(float s);              /* Auto -> 1x -> 1.5x -> 2x -> Auto */
 int next_cache_mb(int mb);              /* Auto -> 128 -> 256 -> 512 -> 1024 -> Auto */
 bool valid_cache_mb(int mb);
 float snap_scale(float s);              /* 0 stays 0 (Auto); anything else to the nearest of 1, 1.5, 2 */
+
+/* The GPS settings: a device path is "/dev/tty" and 1..24 characters of [A-Za-z0-9_.-]; the speeds are the four the
+ * reader offers. */
+bool valid_gps_port(const std::string &path);
+bool valid_gps_baud(int baud);                    /* 0 (Auto), 4800, 9600, 38400, 115200 */
+int next_gps_baud(int baud);                      /* Auto -> 9600 -> 4800 -> 38400 -> 115200 -> Auto */
+/* The next value of the Port row: Auto, then each present port in the order given, then Auto again. A chosen port that
+ * is not present goes back to Auto. */
+std::string next_gps_port(const std::string &current, const std::vector<std::string> &present);
 
 /* Terms: accepted once per source id (switching a source off and on again does not ask again). */
 bool terms_accepted(const Settings &s, const std::string &id);

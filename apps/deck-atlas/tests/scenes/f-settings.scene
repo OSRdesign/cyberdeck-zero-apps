@@ -42,13 +42,17 @@ expect notext "Clear saved tiles?"
 key down
 key down
 key down
+key down
+key down
+key down
 key enter
 wait 600
 shot about
 expect notext "Units"
 key esc
 wait 400
-expect text "Version"
+shot settings-after-about
+expect text "Settings"  # the tab strip is back (the About page hides it)
 
 key tab
 wait 1500

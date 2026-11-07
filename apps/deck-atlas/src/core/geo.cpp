@@ -31,6 +31,14 @@ void from_world_px(double x, double y, int zoom, double &lat, double &lon)
     lat = std::atan(std::sinh(n)) * 180.0 / kPi;
 }
 
+void shift_down_px(double lat, double lon, int zoom, float scale, double dy_px, double &out_lat, double &out_lon)
+{
+    const double s = scale > 0 ? scale : 1.0;
+    double x, y;
+    to_world_px(lat, lon, zoom, x, y);
+    from_world_px(x, y + dy_px / s, zoom, out_lat, out_lon);
+}
+
 Box view_box(double lat, double lon, int zoom, int w_px, int h_px, float scale)
 {
     const double s = scale > 0 ? scale : 1.0;

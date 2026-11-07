@@ -1,0 +1,11 @@
+# A moving fix (10.1 knots, course 70): the heading wedge and (the speed is for the status page).
+title GPS: moving, heading wedge, speed
+sizes 640x480 480x320 320x480
+env DECKATLAS_DEMO 1
+env DECKATLAS_GPS auto
+env DECKATLAS_GPS_FEED moving
+env DECKATLAS_VIEW 48.889643,2.269995,16
+
+wait 1500
+shot moving
+expect text "Map"

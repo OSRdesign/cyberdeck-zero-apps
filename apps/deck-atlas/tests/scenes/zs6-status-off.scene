@@ -1,0 +1,39 @@
+# GPS status page with GPS Off (the default): reached from Settings > GPS receiver > GPS status (the row is there with GPS
+# off, and no chip exists on the map). The page says that GPS is off and draws nothing else; Esc returns to Settings with
+# the row selected. No port is opened.
+title GPS status: GPS off, from Settings
+sizes 640x480 480x320 320x480
+env DECKATLAS_DEMO 1
+env DECKATLAS_GPS_FEED sky20
+env DECKATLAS_VIEW 48.889643,2.269995,16
+
+wait 800
+key s
+wait 300
+expect notext "GPS is off"
+key tab
+key tab
+wait 800
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 300
+shot settings-row
+expect text "Status"
+key enter
+wait 500
+shot off
+expect text "GPS is off. Switch it on in Settings > GPS receiver."
+expect notext "RECEIVER"
+expect notext "SATELLITES"
+key esc
+wait 400
+shot back-in-settings
+expect text "Status"
+expect noquit

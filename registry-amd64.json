@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-11-07T16:14:35+00:00",
+  "generated_at": "2026-11-07T22:55:36+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CyberdeckZero"
@@ -18,19 +18,19 @@
       "share_code": "deck-atlas",
       "title": "Deck Atlas",
       "summary": "Offline maps on the deck: your MBTiles, PMTiles and tile folders.",
-      "description": "A map viewer that works offline: import MBTiles or PMTiles files, or a z/x/y tile folder (converted on the deck), from the SD card or USB; pan and zoom by touch or keys. Online sources (OpenTopoMap, Thunderforest and Geoapify with your own key) stay off until you switch one on and accept its terms; never the OpenStreetMap Foundation's servers. Viewed tiles are kept. 480x320 and up (320x480 in PDA mode). GPS comes later.",
+      "description": "Offline maps: import MBTiles or PMTiles files, or a z/x/y tile folder, then pan and zoom by touch or keys. An optional USB GPS (listen-only) shows your position (follow mode, status page) and writes position.state for other apps; off until switched on. Online sources (OpenTopoMap, Thunderforest, Geoapify with your key) stay off until you accept their terms; never the OSM Foundation's servers. 480x320 and up (320x480 in PDA mode).",
       "locales": {
         "en": {
           "title": "Deck Atlas",
           "summary": "Offline maps on the deck: your MBTiles, PMTiles and tile folders.",
-          "description": "A map viewer that works offline: import MBTiles or PMTiles files, or a z/x/y tile folder (converted on the deck), from the SD card or USB; pan and zoom by touch or keys. Online sources (OpenTopoMap, Thunderforest and Geoapify with your own key) stay off until you switch one on and accept its terms; never the OpenStreetMap Foundation's servers. Viewed tiles are kept. 480x320 and up (320x480 in PDA mode). GPS comes later."
+          "description": "Offline maps: import MBTiles or PMTiles files, or a z/x/y tile folder, then pan and zoom by touch or keys. An optional USB GPS (listen-only) shows your position (follow mode, status page) and writes position.state for other apps; off until switched on. Online sources (OpenTopoMap, Thunderforest, Geoapify with your key) stay off until you accept their terms; never the OSM Foundation's servers. 480x320 and up (320x480 in PDA mode)."
         }
       },
       "i18n": {
         "en": {
           "title": "Deck Atlas",
           "summary": "Offline maps on the deck: your MBTiles, PMTiles and tile folders.",
-          "description": "A map viewer that works offline: import MBTiles or PMTiles files, or a z/x/y tile folder (converted on the deck), from the SD card or USB; pan and zoom by touch or keys. Online sources (OpenTopoMap, Thunderforest and Geoapify with your own key) stay off until you switch one on and accept its terms; never the OpenStreetMap Foundation's servers. Viewed tiles are kept. 480x320 and up (320x480 in PDA mode). GPS comes later."
+          "description": "Offline maps: import MBTiles or PMTiles files, or a z/x/y tile folder, then pan and zoom by touch or keys. An optional USB GPS (listen-only) shows your position (follow mode, status page) and writes position.state for other apps; off until switched on. Online sources (OpenTopoMap, Thunderforest, Geoapify with your key) stay off until you accept their terms; never the OSM Foundation's servers. 480x320 and up (320x480 in PDA mode)."
         }
       },
       "categories": [
@@ -40,9 +40,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.1.0",
+      "version": "0.2.0",
       "published_at": "2026-11-07T16:14:35+00:00",
-      "updated_at": "2026-11-07T16:14:35+00:00",
+      "updated_at": "2026-11-07T22:55:36+00:00",
       "review": {
         "status": "approved"
       },
@@ -51,10 +51,10 @@
       "download": {
         "type": "deb",
         "package": "deck-atlas",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/deck-atlas_0.1.0_amd64.deb",
-        "md5": "1d6b1b4e7405df0a543bd8683a51033f",
-        "sha256": "a753fc94dc51916588b206793234b718de0aa367ac50fa3098d3a607f732575d",
-        "size": 1579486
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/deck-atlas_0.2.0_amd64.deb",
+        "md5": "f0546983ffde6825ec38b44baea83238",
+        "sha256": "1fe8f5073310b51eae2175b1d0f594e4492d77f240e172d3c3a6783b9497a26d",
+        "size": 1729618
       },
       "depends": "libfreetype6, libinput10, libxkbcommon0, libsqlite3-0, libcurl4t64, ca-certificates",
       "permissions": {
@@ -79,7 +79,32 @@
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/08-settings-320x480.png",
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/09-terms-480x320.png",
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/10-terms-320x480.png",
-          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/11-terms-end-320x480.png"
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/11-terms-end-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/12-gps-3d-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/13-gps-moving-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/14-gps-follow-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/15-gps-stale-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/16-gps-2d-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/17-settings-gps-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/18-gps-searching-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/19-credit-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/20-gps-no-receiver-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/21-settings-port-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/22-credit-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/23-credit-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/24-gps-chip-states.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/25-gps-status-good-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/26-gps-status-sky-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/27-gps-status-good-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/28-gps-status-sky-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/29-gps-status-good-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/30-gps-status-bars-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/31-gps-status-nofix-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/32-gps-status-weak2d-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/33-gps-status-stale-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/34-gps-status-no-device-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/35-gps-status-off-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/36-settings-status-320x480.png"
         ]
       },
       "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/icon.png",
@@ -94,7 +119,32 @@
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/08-settings-320x480.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/09-terms-480x320.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/10-terms-320x480.png",
-        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/11-terms-end-320x480.png"
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/11-terms-end-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/12-gps-3d-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/13-gps-moving-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/14-gps-follow-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/15-gps-stale-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/16-gps-2d-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/17-settings-gps-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/18-gps-searching-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/19-credit-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/20-gps-no-receiver-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/21-settings-port-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/22-credit-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/23-credit-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/24-gps-chip-states.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/25-gps-status-good-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/26-gps-status-sky-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/27-gps-status-good-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/28-gps-status-sky-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/29-gps-status-good-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/30-gps-status-bars-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/31-gps-status-nofix-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/32-gps-status-weak2d-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/33-gps-status-stale-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/34-gps-status-no-device-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/35-gps-status-off-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/deck-atlas/screenshots/36-settings-status-320x480.png"
       ],
       "min_size": "480x320",
       "portrait_min_size": "320x480"

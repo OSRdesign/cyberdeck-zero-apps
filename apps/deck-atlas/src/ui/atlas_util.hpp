@@ -34,6 +34,8 @@ constexpr std::uint32_t kBad = 0xFF6666;
 void log_line(const char *format, ...) __attribute__((format(printf, 1, 2)));
 std::int64_t mono_ms();
 void plain(lv_obj_t *o);
+/* The GPS chip (dish, three bars, stale mark) on its plate in the area a (atlas_chip.cpp): the map's chip and the status page's. */
+void draw_chip(lv_layer_t *layer, const lv_area_t &a, const atlas::ChipState &cs, bool pressed, int radius, int pad);
 
 /* The store's archives (with the engine's tile counts) and online sources. 0 or an engine error. */
 int list_store(cp0_map_store_t *store, std::vector<ArchiveItem> &archives,

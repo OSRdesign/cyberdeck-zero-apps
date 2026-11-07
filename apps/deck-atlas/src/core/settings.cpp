@@ -108,6 +108,10 @@ std::string serialize_settings(const Settings &s)
         std::snprintf(buf, sizeof buf, "view=%.6f,%.6f,%d\n", s.view.lat, s.view.lon, s.view.zoom);
         out += buf;
     }
+    /* only what differs from the defaults: a file of a user who never touched the GPS stays what 0.1.0 wrote */
+    if (s.gps) out += "gps=auto\n";
+    if (!s.gps_port.empty() && valid_gps_port(s.gps_port)) out += "gps_port=" + s.gps_port + "\n";
+    if (s.gps_baud != 0 && valid_gps_baud(s.gps_baud)) out += "gps_speed=" + std::to_string(s.gps_baud) + "\n";
     if (!s.terms.empty()) {
         out += "terms=";
         for (std::size_t i = 0; i < s.terms.size(); ++i) out += (i ? "," : "") + s.terms[i];
@@ -152,6 +156,13 @@ Settings parse_settings(const std::string &text)
                 s.view.lon = lon;
                 s.view.zoom = z;
             }
+        } else if (key == "gps") {
+            s.gps = value == "auto" || value == "on";
+        } else if (key == "gps_port") {
+            s.gps_port = valid_gps_port(value) ? value : std::string();
+        } else if (key == "gps_speed") {
+            int b = 0;
+            s.gps_baud = (value != "auto" && parse_int(value, b) && valid_gps_baud(b)) ? b : 0;
         } else if (key == "terms") {
             s.terms.clear();
             for (const std::string &id : split(value, ','))
@@ -181,6 +192,40 @@ int next_cache_mb(int mb)
     case 512: return 1024;
     default: return 0;
     }
+}
+
+bool valid_gps_port(const std::string &path)
+{
+    static const std::string kPrefix = "/dev/tty";
+    if (path.size() <= kPrefix.size() || path.size() > kPrefix.size() + 24 || path.compare(0, kPrefix.size(), kPrefix) != 0)
+        return false;
+    for (std::size_t i = kPrefix.size(); i < path.size(); ++i) {
+        const char c = path[i];
+        const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '.' || c == '-';
+        if (!ok) return false;
+    }
+    return path.find("..") == std::string::npos;
+}
+
+bool valid_gps_baud(int baud) { return baud == 0 || baud == 4800 || baud == 9600 || baud == 38400 || baud == 115200; }
+
+int next_gps_baud(int baud)
+{
+    switch (baud) {
+    case 0: return 9600;
+    case 9600: return 4800;
+    case 4800: return 38400;
+    case 38400: return 115200;
+    default: return 0;
+    }
+}
+
+std::string next_gps_port(const std::string &current, const std::vector<std::string> &present)
+{
+    if (current.empty()) return present.empty() ? std::string() : present.front();
+    for (std::size_t i = 0; i < present.size(); ++i)
+        if (present[i] == current) return i + 1 < present.size() ? present[i + 1] : std::string();
+    return std::string();
 }
 
 bool terms_accepted(const Settings &s, const std::string &id)
