@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Deck Atlas
+Exec=/usr/share/APPLaunch/bin/deck-atlas
+Terminal=false
+Icon=share/images/deck-atlas.png
+Type=Application
+X-Fullscreen=true
+X-MinSize=480x320
+X-Portrait=320x480
