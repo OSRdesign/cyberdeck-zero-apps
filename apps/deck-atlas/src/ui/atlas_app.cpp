@@ -8,6 +8,7 @@
 #include "atlas_util.hpp"
 
 #include "app.hpp"
+#include "attribution.hpp"
 #include "format.hpp"
 #include "keyboard_input.h"
 
@@ -209,6 +210,8 @@ void AtlasApp::open_store()
                 cp0_map_import_opts_t o{};
                 o.id = "test-tiles";
                 o.title = "Test map";
+                const char *attr = std::getenv("DECKATLAS_ATTRIBUTION"); /* the scenes of a long credit */
+                if (attr && *attr) o.attribution = attr;
                 const int r = cp0_map_store_import_ex(store_, fixture.c_str(), &o);
                 log_line("demo: fixture %s imported: %s", fixture.c_str(), r == CP0_MAP_OK ? "ok" : cp0_map_strerror(r));
             }
@@ -279,6 +282,19 @@ void AtlasApp::build_map()
          * reader; until then no fix is ever set */
         cp0_map_set_position(map_, nullptr);
     }
+
+    /* the credit the engine would cut: a plate of ours over its box with the whole text (update_attribution) */
+    attr_plate_ = lv_obj_create(map_box_);
+    plain(attr_plate_);
+    lv_obj_set_style_bg_color(attr_plate_, lv_color_hex(pal::kBar), 0);
+    lv_obj_set_style_bg_opa(attr_plate_, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(attr_plate_, cp0_ui_metrics_get()->tok[CP0_TOK_RADIUS_S], 0);
+    attr_label_ = lv_label_create(attr_plate_);
+    lv_obj_set_style_text_font(attr_label_, cp0_ui_font(CP0_TEXT_CAPTION), 0);
+    lv_obj_set_style_text_color(attr_label_, lv_color_hex(pal::kText), 0);
+    lv_label_set_long_mode(attr_label_, LV_LABEL_LONG_MODE_CLIP);
+    lv_obj_remove_flag(attr_label_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(attr_plate_, LV_OBJ_FLAG_HIDDEN);
 
     /* "No map here": a plate in the middle of the map when no imported file covers the view */
     chip_ = lv_obj_create(map_box_);
@@ -631,8 +647,64 @@ void AtlasApp::view_cb(void *user, double lat, double lon, int zoom)
     self->update_chip();
 }
 
+/* What the engine draws as the credit, as far as the app can tell (the same source choice as its update_attribution:
+ * the source's own, or the first two archives' joined with " | "). */
+std::string AtlasApp::engine_attribution() const
+{
+    std::string raw;
+    if (const OnlineItem *o = settings_.source.empty() ? nullptr : find_online(settings_.source)) {
+        raw = o->attribution;
+    } else if (const ArchiveItem *a = settings_.source.empty() ? nullptr : find_archive(settings_.source)) {
+        raw = a->attribution;
+    } else {
+        int n = 0;
+        for (const ArchiveItem &a : archives_) {
+            const std::string clean = atlas::attribution_plain(a.attribution);
+            if (clean.empty() || raw.find(clean) != std::string::npos) continue;
+            raw += (raw.empty() ? "" : " | ") + clean;
+            if (++n == 2) break;
+        }
+    }
+    return atlas::attribution_plain(raw);
+}
+
+void AtlasApp::update_attribution()
+{
+    if (!attr_plate_ || !map_) return;
+    const std::string text = engine_attribution();
+    const std::string key = text + "|" + std::to_string(w_) + "x" + std::to_string(view_h_);
+    if (key == attr_key_) return;
+    attr_key_ = key;
+    const lv_font_t *font = cp0_ui_font(CP0_TEXT_CAPTION);
+    atlas::AttrInput in;
+    in.w = w_;
+    in.h = view_h_;
+    in.target = target_;
+    in.space = space_m_;
+    in.text_h = lv_font_get_line_height(font);
+    const atlas::AttrPlan plan = atlas::plan_attribution(in, text, [font](const std::string &s) {
+        if (s.empty()) return 0;
+        lv_point_t p;
+        lv_text_get_size(&p, s.c_str(), font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        return static_cast<int>(p.x);
+    });
+    if (!plan.cover) {
+        lv_obj_add_flag(attr_plate_, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+    std::string joined;
+    for (const std::string &l : plan.lines) joined += (joined.empty() ? "" : "\n") + l;
+    lv_obj_set_pos(attr_plate_, plan.x, plan.y);
+    lv_obj_set_size(attr_plate_, plan.w, plan.h);
+    lv_label_set_text(attr_label_, joined.c_str());
+    lv_obj_set_pos(attr_label_, plan.pad, plan.pad);
+    lv_obj_set_size(attr_label_, plan.w - 2 * plan.pad, plan.h - 2 * plan.pad);
+    lv_obj_remove_flag(attr_plate_, LV_OBJ_FLAG_HIDDEN);
+}
+
 void AtlasApp::update_chip()
 {
+    update_attribution();
     if (!chip_) return;
     std::string text;
     if (!store_) {

@@ -61,4 +61,5 @@ void test_import();
 void test_sources();
 void test_browser();
 void test_geo();
+void test_attribution();
 void test_package();

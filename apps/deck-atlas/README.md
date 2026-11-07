@@ -167,8 +167,13 @@ exits. The next version (the GPS reader and `position.state`) is planned with `X
   import the folder again to get all levels. A file made elsewhere (MBTiles / PMTiles) is only as wide as it declares;
   shown by itself it is read at every level whatever it declares, so there the plate shows only at its deepest level
   (and the over-zoom one), and at the shallower levels a view outside it shows the grey grid without the plate.
-- On a narrow screen the attribution line at the bottom right of the map is shortened with an ellipsis ("...") when
-  it does not fit; the full text is in Settings > About and in each file's facts in Sources.
+- The engine draws the map credit in one row above the scale bar and cuts it with "..." when it does not fit. The app
+  cannot change the engine's text, so when the engine would cut it (narrow screens, long credits such as
+  OpenTopoMap's) the app covers that row with a plate of its own holding the whole credit: "OpenStreetMap" written
+  "OSM", wrapped into up to three lines, in the same place (above the scale bar, left of the buttons, so it never
+  overlaps either). A credit the engine shows whole is left to the engine. The plate repeats the engine's layout rules
+  (`src/core/attribution.cpp`); it is a stop-gap until the engine wraps its own credit. The full text is also in
+  Settings > About and in each file's facts in Sources.
 - The engine draws a grey grid while a tile loads (the parent tile magnified when it is cached); there is no separate
   "loading" indicator.
 - Board-only checks are listed in [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md): the import rate on the Zero 2 W,

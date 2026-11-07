@@ -21,6 +21,7 @@
  */
 #pragma once
 
+#include "attribution.hpp"
 #include "geo.hpp"
 #include "import_model.hpp"
 #include "settings.hpp"
@@ -114,6 +115,8 @@ private:
     void fit_archive(const ArchiveItem &a);
     static void view_cb(void *user, double lat, double lon, int zoom);
     void update_chip();
+    void update_attribution();   /* the plate over a credit the engine would cut (core/attribution.hpp) */
+    std::string engine_attribution() const;
     void show_on_map(const std::string &id);
     void store_changed();     /* an archive came or went: the widget's limits, attribution and "*" tiles refreshed */
 
@@ -183,6 +186,8 @@ private:
     bool narrow_ = false;
 
     lv_obj_t *map_box_ = nullptr, *map_ = nullptr, *chip_ = nullptr, *chip_label_ = nullptr;
+    lv_obj_t *attr_plate_ = nullptr, *attr_label_ = nullptr;
+    std::string attr_key_;
     lv_obj_t *tabbar_ = nullptr;
     struct Cell {
         lv_obj_t *obj = nullptr, *label = nullptr, *mark = nullptr;

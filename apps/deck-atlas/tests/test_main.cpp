@@ -65,6 +65,7 @@ int main()
     test_sources();
     test_browser();
     test_geo();
+    test_attribution();
     test_package();
     std::printf("deck-atlas core tests: %d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
