@@ -7,6 +7,7 @@ env MMWAVE_TEST_CONFIG 1
 wait 12000
 shot radar
 check radar
+expect esc
 key 2
 wait 500
 shot table

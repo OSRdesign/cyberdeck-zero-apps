@@ -6,6 +6,7 @@ env MMWAVE_TEST_CONFIG 1
 wait 3500
 shot radar-one
 check radar-one
+expect esc
 expect text "Radar"
 expect text "Sensor"
 expect notext "No radar found"

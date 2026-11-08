@@ -1,0 +1,20 @@
+title mmWave Radar: Connection Auto, no radar on USB, Bluetooth switched off (scripted)
+sizes 480x320 320x480
+env MMWAVE_DEMO ble-off
+env MMWAVE_TEST_CONFIG 1
+env MMWAVE_DEMO_CONNECTION auto
+env MMWAVE_DEMO_REMEMBERED "ED:2F:90:B4:49:F0 HLK-LD2451_49F0"
+wait 6500
+shot z5-auto-unavailable
+check z5-auto-unavailable
+expect text "No radar found"
+expect text "Plug the sensor in or switch on its Bluetooth: it is found by itself."
+@320x480 expect text "No USB serial port (ttyUSB*, ttyACM*) is plugged in."
+@320x480 expect text "Bluetooth is not available (needs the bluez package and a switched-on adapter)."
+drag 0.5 0.6 0.5 0.4
+wait 500
+shot z5-auto-unavailable-scrolled
+check z5-auto-unavailable-scrolled
+@480x320 expect text "No USB serial port (ttyUSB*, ttyACM*) is plugged in."
+@480x320 expect text "Bluetooth is not available (needs the bluez package and a switched-on adapter)."
+expect noquit

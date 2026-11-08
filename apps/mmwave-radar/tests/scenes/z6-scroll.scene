@@ -1,0 +1,63 @@
+title mmWave Radar: a vertical drag that starts on the status block, a label, the page background or the Rescan button scrolls the no-radar page and the Sensor page; a short tap on Rescan still rescans
+sizes 480x320 320x480 640x480
+env MMWAVE_DEMO none
+env MMWAVE_TEST_CONFIG 1
+
+wait 2500
+expect text "No radar found"
+expect text "Plug the sensor in: it is found by itself."
+scrollmark
+dragon "Plug the sensor in: it is found by itself." -0.08
+expect scrolled
+say a drag on the status line scrolled the no-radar page
+drag 0.5 0.3 0.5 0.95
+drag 0.5 0.3 0.5 0.95
+wait 500
+expect text "Plug the sensor in: it is found by itself."
+scrollmark
+tap "Rescan"
+wait 200
+expect notext "Plug the sensor in: it is found by itself."
+expect notscrolled
+say a short tap on Rescan still rescans and does not scroll
+wait 500
+scrollmark
+dragon "No radar found" -0.08
+expect scrolled
+say a drag on the status title scrolled it
+drag 0.5 0.3 0.5 0.95
+drag 0.5 0.3 0.5 0.95
+wait 500
+scrollmark
+drag 0.02 0.6 0.02 0.3
+expect scrolled
+say a drag on the page background (the margin) scrolled it
+drag 0.5 0.3 0.5 0.95
+drag 0.5 0.3 0.5 0.95
+wait 500
+scrollmark
+dragon "Rescan" -0.08
+expect scrolled
+say a drag that starts on the Rescan button scrolled it
+drag 0.5 0.3 0.5 0.95
+drag 0.5 0.3 0.5 0.95
+wait 500
+shot scroll-notfound
+key 4
+wait 500
+expect text "Status"
+scrollmark
+dragon "Status" -0.08
+expect scrolled
+say a drag on a Sensor page status row scrolled it
+drag 0.5 0.3 0.5 0.95
+drag 0.5 0.3 0.5 0.95
+wait 500
+scrollmark
+dragon "Status" -0.3
+expect scrolled
+dragon "Rescan" -0.05
+expect scrolled
+say a drag on the Sensor page Rescan button scrolled it
+shot scroll-sensor
+expect noquit
