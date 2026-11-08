@@ -7,7 +7,7 @@
  */
 #pragma once
 
-#include "alsa_api.hpp"
+#include "../alsa/alsa_api.hpp"
 
 #include <string>
 #include <vector>

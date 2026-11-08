@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 #include "output.hpp"
 
-#include "card.hpp"
+#include "../alsa/card.hpp"
 
 #include <algorithm>
 #include <cctype>
