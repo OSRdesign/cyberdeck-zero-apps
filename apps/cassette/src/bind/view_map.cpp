@@ -393,6 +393,10 @@ ui::ViewModel map_view(const MapInput &in)
         r.info.play_pos_ms = std::llround(s.time.position_s * 1000.0);
         r.info.play_len_ms = std::llround(s.time.length_s * 1000.0);
     }
+    r.info.server = present && s.card.via_server;
+    if (r.info.server && ds == kDeckIdle) r.info.card = upper(s.card.label);
+    if (rec_side && s.problems.frames_lost > 0)
+        r.info.lost_ms = std::max<long long>(1, std::llround(s.problems.lost_seconds * 1000.0));
     r.info.limiter = s.settings.limiter;
     r.info.low_cut = s.settings.low_cut;
     vm.notice = local.notice;
@@ -491,7 +495,7 @@ bool same(const ui::RecorderVm &a, const ui::RecorderVm &b)
         return false;
     const ui::InfoVm &x = a.info, &y = b.info;
     if (x.take != y.take || x.format != y.format || x.time_left != y.time_left || x.play_pos_ms != y.play_pos_ms ||
-        x.play_len_ms != y.play_len_ms || x.limiter != y.limiter || x.low_cut != y.low_cut || x.notice != y.notice)
+        x.play_len_ms != y.play_len_ms || x.server != y.server || x.card != y.card || x.lost_ms != y.lost_ms || x.limiter != y.limiter || x.low_cut != y.low_cut || x.notice != y.notice)
         return false;
     auto gain = [](const ui::GainVm &g, const ui::GainVm &h) {
         return g.shown == h.shown && g.db == h.db && g.can_down == h.can_down && g.can_up == h.can_up;

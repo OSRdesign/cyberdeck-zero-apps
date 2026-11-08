@@ -178,6 +178,7 @@ std::string journal_to_json(const JournalEntry &e) {
     o += "  \"last_sync_wall\": " + std::to_string(e.last_sync_wall) + ",\n";
     o += "  \"paused_frames\": " + std::to_string(e.paused_frames) + ",\n";
     o += "  \"dropped_frames\": " + std::to_string(e.dropped_frames) + ",\n";
+    o += "  \"lost_frames\": " + std::to_string(e.lost_frames) + ",\n";
     o += "  \"reason\": " + esc(e.reason) + "\n}\n";
     return o;
 }
@@ -220,6 +221,7 @@ bool journal_from_json(const std::string &textIn, JournalEntry &e) {
     r.last_sync_wall = num(root.get("last_sync_wall"));
     r.paused_frames = static_cast<uint64_t>(num(root.get("paused_frames")));
     r.dropped_frames = static_cast<uint64_t>(num(root.get("dropped_frames")));
+    r.lost_frames = static_cast<uint64_t>(num(root.get("lost_frames")));
     r.reason = text(root.get("reason"));
     e = r;
     return true;

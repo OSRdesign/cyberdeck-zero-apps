@@ -1,0 +1,14 @@
+title Cassette on the sound server, idle (T6e): the strip leads with the card label and (server); the narrow box says (server) with the time left
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_SERVER 1
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+shot server-idle
+@480x320,640x480 expect text "USB AUDIO CODEC (server) · TAKE 008 · 12 h 40 left"
+@320x480 expect text "(server) 12 h 40"
+expect notext "LAYOUT FAIL"
+expect text "SOFT"
+expect noquit

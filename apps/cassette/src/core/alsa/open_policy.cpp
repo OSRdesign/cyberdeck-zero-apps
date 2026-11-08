@@ -3,7 +3,11 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <cstdlib>
 #include <cstring>
+#include <string>
+#include <sys/stat.h>
+#include <unistd.h>
 
 namespace cassette {
 
@@ -15,6 +19,23 @@ void convert_s32_to_s24_3(const void *in, void *out, size_t samples) {
         d[3 * i + 1] = s[4 * i + 2];
         d[3 * i + 2] = s[4 * i + 3];
     }
+}
+
+bool sound_server_running(const std::function<bool(const std::string &)> &is_socket, const char *xdg_runtime_dir,
+                          unsigned uid) {
+    std::string dir = xdg_runtime_dir ? xdg_runtime_dir : "";
+    if (dir.empty()) dir = "/run/user/" + std::to_string(uid);
+    while (dir.size() > 1 && dir.back() == '/') dir.pop_back();
+    return is_socket(dir + "/pipewire-0") || is_socket(dir + "/pulse/native");
+}
+
+bool sound_server_running_here() {
+    return sound_server_running(
+        [](const std::string &p) {
+            struct stat st;
+            return ::stat(p.c_str(), &st) == 0 && S_ISSOCK(st.st_mode);
+        },
+        std::getenv("XDG_RUNTIME_DIR"), static_cast<unsigned>(::getuid()));
 }
 
 namespace {

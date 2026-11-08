@@ -335,6 +335,7 @@ int Writer::journal_update(const std::string &state, const std::string &reason) 
     je_.frames_synced = synced_frames_;
     je_.paused_frames = paused_frames_;
     je_.dropped_frames = ring_.frames_dropped();
+    if (cfg_.lost_frames) je_.lost_frames = cfg_.lost_frames->load(std::memory_order_relaxed);
     je_.last_sync_wall = clk_.wall_s();
     return journal_write(ops_, cfg_.recordings_dir, je_);
 }

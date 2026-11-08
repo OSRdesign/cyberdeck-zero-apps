@@ -62,4 +62,5 @@ void test_deck();        /* record timer, pause, scan, jump */
 void test_unplug();      /* unplug mid-take, replug, card at another index */
 void test_edit();        /* trim and splits, replace, app leave during a save, in-memory peaks */
 void test_faults();      /* abandoned take and repair, disk full, low space */
+void test_notes();       /* the capture path on screen: server notice, other-apps notice, lost audio (study 058) */
 void test_settings();    /* persistence across a restart */

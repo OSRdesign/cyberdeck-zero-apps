@@ -1,0 +1,13 @@
+title Cassette recording with lost audio (T6e): lost 0.3 s in red at the end of the strip (the narrow box shows it alone)
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO recording
+env CASSETTE_DEMO_LOST_MS 300
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot lost-audio
+@480x320,640x480 expect text "TAKE 007 · 48k/16 WAV · #8E1D15 lost 0.3 s#"
+@320x480 expect text "#8E1D15 lost 0.3 s#"
+expect notext "LAYOUT FAIL"
+expect noquit

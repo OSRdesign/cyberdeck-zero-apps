@@ -266,6 +266,13 @@ ViewModel demo_model(const std::string &scene)
     vm.confirm.yes = "DELETE";
     /* CASSETTE_DEMO_NOTICE=<text>: a notice that stays until a tap dismisses it (the narrow recorder) or the scene ends */
     if (const char *n = std::getenv("CASSETTE_DEMO_NOTICE")) vm.notice = n;
+    /* CASSETTE_DEMO_SERVER=1: the capture path is the sound server (idle: the card label leads the strip; recording: "(server)"
+     * after the format); CASSETTE_DEMO_LOST_MS=<ms>: audio lost so far in the take (the red "lost 0.3 s", while recording) */
+    if (const char *sv = std::getenv("CASSETTE_DEMO_SERVER")) {
+        vm.rec.info.server = std::string(sv) == "1";
+        if (vm.rec.info.server && vm.rec.transport == Transport::Idle) vm.rec.info.card = "USB AUDIO CODEC";
+    }
+    if (const char *lm = std::getenv("CASSETTE_DEMO_LOST_MS")) vm.rec.info.lost_ms = std::atoll(lm);
     if (const char *b = std::getenv("CASSETTE_DEMO_BOX")) {
         if (std::string(b) == "save") vm.save.shown = true;
         if (std::string(b) == "confirm") vm.confirm.shown = true;

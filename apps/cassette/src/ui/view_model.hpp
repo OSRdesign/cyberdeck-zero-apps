@@ -72,6 +72,9 @@ struct InfoVm {
     std::int64_t play_pos_ms = 0, play_len_ms = 0; /* while a take plays or is paused */
     bool limiter = false;        /* LIM lamp */
     bool low_cut = false;        /* LOW CUT lamp */
+    bool server = false;         /* the capture path is the sound server (the card is held by another program) */
+    std::string card;            /* idle and through the server: the card's label, shown first on the strip ("" otherwise) */
+    std::int64_t lost_ms = 0;    /* recording: audio lost to capture overruns so far (0 = none); shown in red */
     std::string notice;          /* a standing message that replaces the strip's text (the card's "no sound input" reason); the
                                   * timed notices of the controller and the binding are ViewModel::notice */
 };

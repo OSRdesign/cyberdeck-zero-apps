@@ -36,7 +36,7 @@ int text_width(const lv_font_t *f, const char *text, int letter_space)
 {
     if (!f || !text || !*text) return 0;
     lv_point_t size;
-    lv_text_get_size(&size, text, f, letter_space, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    lv_text_get_size(&size, text, f, letter_space, 0, LV_COORD_MAX, LV_TEXT_FLAG_RECOLOR); /* "#RRGGBB text#" counts as its text only */
     return size.x;
 }
 

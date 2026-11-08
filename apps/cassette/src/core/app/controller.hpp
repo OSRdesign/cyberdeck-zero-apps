@@ -78,6 +78,13 @@ struct ControllerConfig {
     uint32_t replug_retry_ms = 1000; /* how often a lost card is looked for */
     size_t save_block_bytes = 256 * 1024; /* copy block of the trim engine (tests use small ones) */
     uint64_t split_bytes = 0;        /* when not 0, overrides the writer's 4 GiB part size (tests) */
+    /* Is a sound server (PipeWire or PulseAudio) running? Asked when a take starts on a direct (hw) open: other apps then
+     * record silence, so the take start says so. Null: sound_server_running_here() (a client socket exists under
+     * $XDG_RUNTIME_DIR or /run/user/<uid>; false on the appliance boards, which have no sound server). */
+    std::function<bool()> server_running;
+    /* Seconds, monotonic, for the capture thread's overrun estimate (the gap since the last good read). Null: steady_clock.
+     * Tests give the fake sound system's clock, so a scripted stall is a measurable gap. */
+    std::function<double()> capture_now;
 };
 
 /* ---- keys ---- */
@@ -156,6 +163,7 @@ struct TakeSnap {
 struct ProblemSnap {
     uint64_t frames_dropped = 0; /* the ring was full */
     uint64_t frames_lost = 0;    /* estimate of the audio lost to capture overruns */
+    double lost_seconds = 0;     /* the same in seconds (frames_lost / rate); grows during a take, kept until the next one */
     unsigned overruns = 0;
     bool unplugged = false;      /* the last take ended because the card went away */
     bool disk_full = false;      /* ... because the disk filled up (or the free space got too low) */

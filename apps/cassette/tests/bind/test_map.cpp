@@ -594,6 +594,74 @@ void test_boxes()
     CHECK_EQ(vm.confirm.body, "take_004_nodate.wav");
 }
 
+void test_capture_path()
+{
+    /* idle, direct: nothing extra */
+    Snapshot s = base_snapshot();
+    ui::ViewModel vm = map(s);
+    CHECK(!vm.rec.info.server);
+    CHECK_EQ(vm.rec.info.card, "");
+    CHECK_EQ(vm.rec.info.lost_ms, 0);
+
+    /* idle, through the sound server: the flag and the card label (upper case, as the take) */
+    s.card.via_server = true;
+    vm = map(s);
+    CHECK(vm.rec.info.server);
+    CHECK_EQ(vm.rec.info.card, "DEMO MICROPHONE");
+    CHECK_EQ(vm.rec.info.lost_ms, 0);
+
+    /* recording through the sound server: the flag stays, the card label is not on the strip */
+    s.deck.state = kDeckRecording;
+    s.take.name = "take_008_20261108-1200.wav";
+    s.take.recording = true;
+    vm = map(s);
+    CHECK(vm.rec.info.server);
+    CHECK_EQ(vm.rec.info.card, "");
+    CHECK_EQ(vm.rec.info.lost_ms, 0);
+
+    /* lost audio: seconds to milliseconds; a tiny loss still shows (at least 1 ms) */
+    s.problems.frames_lost = 14400;
+    s.problems.lost_seconds = 0.3;
+    vm = map(s);
+    CHECK_EQ(vm.rec.info.lost_ms, 300);
+    s.problems.frames_lost = 3;
+    s.problems.lost_seconds = 0.00006;
+    vm = map(s);
+    CHECK_EQ(vm.rec.info.lost_ms, 1);
+
+    /* direct recording with a loss */
+    s.card.via_server = false;
+    s.problems.frames_lost = 14400;
+    s.problems.lost_seconds = 0.3;
+    vm = map(s);
+    CHECK(!vm.rec.info.server);
+    CHECK_EQ(vm.rec.info.lost_ms, 300);
+
+    /* after the take the count is not shown (the idle strip), though the problem record still holds it */
+    s.deck.state = kDeckIdle;
+    s.take.recording = false;
+    vm = map(s);
+    CHECK_EQ(vm.rec.info.lost_ms, 0);
+    CHECK(vm.rec.info.take.rfind("TAKE", 0) == 0);
+
+    /* paused take: still counted */
+    s.deck.state = kDeckRecordingPaused;
+    vm = map(s);
+    CHECK_EQ(vm.rec.info.lost_ms, 300);
+
+    /* the fields take part in change detection */
+    const ui::ViewModel a = map(base_snapshot());
+    ui::ViewModel c = a;
+    c.rec.info.server = true;
+    CHECK(!same(a, c));
+    c = a;
+    c.rec.info.card = "X";
+    CHECK(!same(a, c));
+    c = a;
+    c.rec.info.lost_ms = 5;
+    CHECK(!same(a, c));
+}
+
 void test_same()
 {
     const Snapshot s = base_snapshot();
@@ -647,5 +715,6 @@ void test_map()
     test_list();
     test_trim();
     test_boxes();
+    test_capture_path();
     test_same();
 }

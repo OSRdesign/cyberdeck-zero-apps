@@ -50,6 +50,12 @@ std::string info_title(const RecorderVm &rec);
 std::string info_detail(const RecorderVm &rec);
 /* The state lamp at the strip's right end: "REC" (recording, paused, countdown), "PLAY" (playing, scanning), "" none. */
 std::string info_state(const RecorderVm &rec);
+/* The lost-audio part of the strip: "lost 0.3 s" (one decimal; "lost <0.1 s" under 50 ms) while a take records and audio was
+ * lost, else "". The strip shows it last, in red; the portrait box shows it alone as its detail.
+ * Server marks: recording through the sound server "TAKE 007 · 48k/16 WAV (server) · 12 h 40 left"; idle through the server
+ * "CARD LABEL (server) · TAKE 008 · 12 h 40 left" (no format: the line is short); with lost audio the time left gives way:
+ * "TAKE 007 · 48k/16 WAV · lost 0.3 s"; the portrait detail "(server) 12 h 40". */
+std::string info_lost(const RecorderVm &rec);
 
 /* The recordings strip: landscape "12 TAKES · ~/Recordings" | "41 GB FREE · 117 h at 48k/16",
  * portrait "12 TAKES" | "41 GB FREE · 117 h". "1 TAKE" for one. */

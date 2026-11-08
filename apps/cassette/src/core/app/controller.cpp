@@ -138,6 +138,8 @@ struct Controller::Impl : public DeckCommands {
     uint64_t pause_total = 0, pause_start = 0;
     uint32_t base_overruns = 0;
     uint64_t base_lost = 0;
+    std::atomic<uint64_t> take_lost{0}; /* running estimate of the take's lost frames: the writer keeps it in the journal */
+    bool lost_noticed = false;          /* the "some audio was lost" notice was raised for this take */
     ProblemSnap prob;
 
     /* takes */
@@ -369,7 +371,9 @@ struct Controller::Impl : public DeckCommands {
         via_server = r.via_server;
         proc.reset(new ProcessingSink(fmt, &gate));
         apply_dsp_settings();
-        std::unique_ptr<Capture> c(new Capture(std::move(r), *proc));
+        CaptureOptions copt;
+        copt.now = cfg.capture_now;
+        std::unique_ptr<Capture> c(new Capture(std::move(r), *proc, std::move(copt)));
         if (!c->start()) {
             cap_message = "The sound card stopped answering";
             proc.reset();
@@ -448,6 +452,9 @@ struct Controller::Impl : public DeckCommands {
             t.part = static_cast<uint32_t>(part) + 1;
             return dir + "/" + format_take_name(t);
         };
+        wc.lost_frames = &take_lost;
+        take_lost.store(0);
+        lost_noticed = false;
         wc.device_name = active.name;
         wc.device_id = active.usb_by_id.empty() ? active.id : active.usb_by_id;
         wc.sync_interval_s = static_cast<uint32_t>(s.sync_interval_s);
@@ -493,12 +500,20 @@ struct Controller::Impl : public DeckCommands {
         target = take_name;
         take_active = true;
         gate.attach(ring.get());
+        /* what the screen must say about the capture path (the planned notices of study 058) */
+        if (via_server) {
+            add_notice(Notice::Info, "Recording through the sound server: the card is in use");
+        } else {
+            const bool running = cfg.server_running ? cfg.server_running() : sound_server_running_here();
+            if (running) add_notice(Notice::Info, "Other apps cannot use this card while Cassette records");
+        }
         return true;
     }
 
     void end_take() {
         if (!take_active) return;
         gate.detach();
+        if (cap) take_lost.store(cap->stats().frames_lost_xrun - base_lost); /* the closing journal carries the final count */
         writer->stop();
         const WriterStatus st = writer->status();
         prob.frames_dropped = ring->frames_dropped();
@@ -506,6 +521,7 @@ struct Controller::Impl : public DeckCommands {
             const CaptureStats cs = cap->stats();
             prob.overruns = cs.overruns - base_overruns;
             prob.frames_lost = cs.frames_lost_xrun - base_lost;
+            prob.lost_seconds = fmt.rate ? static_cast<double>(prob.frames_lost) / fmt.rate : 0.0;
         }
         if (unplug_flag) {
             prob.unplugged = true;
@@ -740,6 +756,12 @@ struct Controller::Impl : public DeckCommands {
                 prob.frames_dropped = ring->frames_dropped();
                 prob.overruns = cs.overruns - base_overruns;
                 prob.frames_lost = cs.frames_lost_xrun - base_lost;
+                prob.lost_seconds = fmt.rate ? static_cast<double>(prob.frames_lost) / fmt.rate : 0.0;
+                take_lost.store(prob.frames_lost, std::memory_order_relaxed);
+                if (prob.frames_lost > 0 && !lost_noticed) {
+                    lost_noticed = true;
+                    add_notice(Notice::Info, "Some audio was lost: the card or the disk could not keep up");
+                }
                 if (!cs.message.empty() && cs.last_error != CaptureError::None) prob.message = cs.message;
             }
         }

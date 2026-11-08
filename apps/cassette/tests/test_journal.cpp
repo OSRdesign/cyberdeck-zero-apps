@@ -31,6 +31,7 @@ void test_journal() {
     e.last_sync_wall = 1700000010;
     e.paused_frames = 5;
     e.dropped_frames = 7;
+    e.lost_frames = 14400;
     CHECK_EQ(journal_write(ops, d.path, e), 0);
     const std::string f = journal_file(d.path, e.take);
     CHECK(f == d.path + "/.journal/voice_007_20261108-1105.json");
@@ -54,6 +55,7 @@ void test_journal() {
     CHECK_EQ(r.frames_synced, static_cast<uint64_t>(90));
     CHECK_EQ(r.paused_frames, static_cast<uint64_t>(5));
     CHECK_EQ(r.dropped_frames, static_cast<uint64_t>(7));
+    CHECK_EQ(r.lost_frames, static_cast<uint64_t>(14400));
 
     /* closing */
     e.state = "closed";

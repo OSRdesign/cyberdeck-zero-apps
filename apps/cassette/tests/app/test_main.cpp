@@ -11,6 +11,7 @@ int main(int argc, char **argv) {
     test_record();
     test_settings();
     test_unplug();
+    test_notes();
     if (!quick) test_deck();
     test_edit();
     std::printf("cassette-app tests: %d checks passed, %d failed, %d skipped\n", g_pass, g_fail, g_skip);

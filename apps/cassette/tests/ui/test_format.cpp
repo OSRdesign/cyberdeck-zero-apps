@@ -90,6 +90,45 @@ void info()
     idle.info.take = "TAKE 008";
     CHECK_EQ(info_line(idle), "TAKE 008");
     CHECK_EQ(info_state(idle), "");
+
+    /* through the sound server: recording marks the format; idle leads with the card */
+    RecorderVm sv;
+    sv.transport = Transport::Recording;
+    sv.info.take = "TAKE 007";
+    sv.info.format = "48k/16 WAV";
+    sv.info.time_left = "12 h 40";
+    sv.info.server = true;
+    CHECK_EQ(info_line(sv), "TAKE 007 \xC2\xB7 48k/16 WAV (server) \xC2\xB7 12 h 40 left");
+    CHECK_EQ(info_title(sv), "TAKE 007");
+    CHECK_EQ(info_detail(sv), "(server) 12 h 40");
+    sv.transport = Transport::Idle;
+    sv.info.card = "USB AUDIO CODEC";
+    CHECK_EQ(info_line(sv), "USB AUDIO CODEC (server) \xC2\xB7 TAKE 007 \xC2\xB7 12 h 40 left");
+    CHECK_EQ(info_detail(sv), "(server) 12 h 40");
+    sv.info.server = false;
+    sv.info.card.clear();
+    CHECK_EQ(info_line(sv), "TAKE 007 \xC2\xB7 48k/16 WAV \xC2\xB7 12 h 40 left"); /* direct: as before */
+
+    /* lost audio: one decimal, last on the strip, alone in the box, only while recording */
+    RecorderVm lo;
+    lo.transport = Transport::Recording;
+    lo.info.take = "TAKE 007";
+    lo.info.format = "48k/16 WAV";
+    lo.info.time_left = "12 h 40";
+    CHECK_EQ(info_lost(lo), "");
+    lo.info.lost_ms = 300;
+    CHECK_EQ(info_lost(lo), "lost 0.3 s");
+    CHECK_EQ(info_line(lo), "TAKE 007 \xC2\xB7 48k/16 WAV \xC2\xB7 lost 0.3 s");
+    CHECK_EQ(info_detail(lo), "lost 0.3 s");
+    lo.info.lost_ms = 12345;
+    CHECK_EQ(info_lost(lo), "lost 12.3 s");
+    lo.info.lost_ms = 20;
+    CHECK_EQ(info_lost(lo), "lost <0.1 s");
+    lo.info.lost_ms = 300;
+    lo.info.server = true;
+    CHECK_EQ(info_line(lo), "TAKE 007 \xC2\xB7 48k/16 WAV (server) \xC2\xB7 lost 0.3 s");
+    lo.transport = Transport::Idle;
+    CHECK_EQ(info_lost(lo), ""); /* the count belongs to a take */
 }
 
 void list_and_trim()

@@ -58,8 +58,9 @@ Bluetooth keyboard (for the deck), a phone and the PC (to play files back), a ph
 nothing is uploaded anywhere, and nothing in these tests asks you to send audio; send the helper's text output instead.
 
 **The helper** (read-only, no sudo): `sh ~/cassette-check.sh cards | take [FILE] | journal | watch [S] [N] | usb [MIN]`.
-`take` prints the newest take's size, header, length and its journal entry, including the **DROPPED** count (the app
-does not show a dropout count on screen in this build (to confirm), the journal keeps it). `watch` prints the app's CPU
+`take` prints the newest take's size, header, length and its journal entry, including the **DROPPED** count (frames the
+app's own buffer had to drop) and the **LOST** figure (audio the card or the disk could not keep up with, about; the same
+number the screen shows during the take as `lost 0.3 s` in red at the end of the info strip, and the journal keeps it). `watch` prints the app's CPU
 %, memory, temperature and throttle flags every 5 s.
 
 ## B0. Probe (every board, 2 min)
@@ -89,7 +90,7 @@ Goal: a long take records, lists, plays and opens everywhere; the board copes.
    10 min Â· 58 MB` (about 5.8 MB a minute at 48 kHz mono 16-bit).
 5. Select it and PLAY (Enter or PLAY): you hear the start; STOP.
 6. On the board: `sh ~/cassette-check.sh take`. Expected: `ok header and file size agree`, length about 600 s, journal
-   state `closed`, DROPPED 0.
+   state `closed`, DROPPED 0, LOST 0.
 7. On the PC: `scp <user>@<board>:Recordings/<file>.wav .` (files are named `take_001_YYYYMMDD-HHMM.wav`, or
    `take_001_nodate.wav` when the board's clock was not set from the network) then `ffprobe -hide_banner <file>.wav` (if ffmpeg is
    installed). Expected: `Duration: 00:10:0x`, `pcm_s16le, 48000 Hz, mono`. Play it in a PC player (VLC or the Windows
@@ -148,7 +149,7 @@ Goal: whether the turning hubs cost too much on a Zero 2 W.
    temperature at the end, and a few timing lines. STOP, Esc.
 3. The same without the animation: `CASSETTE_ANIM=0 CASSETTE_TIMING=1 /usr/share/APPLaunch/bin/cassette`, REC for
    3 minutes, note the same figures. (Also possible: `CASSETTE_ANIM_FPS=10` for a slower turn.)
-4. Both runs: `sh ~/cassette-check.sh take` (DROPPED should be 0).
+4. Both runs: `sh ~/cassette-check.sh take` (DROPPED and LOST should be 0).
 
 Report: per board, CPU % and temperature with and without the animation, the render avg / max, DROPPED, and whether the
 UI feels smooth (the hubs, the meter, the keys answering at once).
@@ -161,15 +162,18 @@ get silence while Cassette holds the card.
 1. Headset or card plugged in. On the desktop start a recording elsewhere first: `pw-record /tmp/other.wav` in a
    terminal (or a browser page that records).
 2. `cassette-probe`: expected `OK VIA SERVER` and the `note:` line.
-3. Open Cassette, REC 30 s, STOP, play it: it holds your voice. What the screen says about the server: the plan wants a
-   line saying the take is recorded through the sound server; **the code read for this protocol uses the server but
-   shows no line for it yet (to confirm)**. Report exactly what the screen shows.
+3. Open Cassette. Before any take the info strip leads with the card name and `(server)`. REC 30 s, STOP, play it: it
+   holds your voice. Expected on screen: when REC starts, a 4 s notice "Recording through the sound server: the card is
+   in use"; during the take the strip reads like `TAKE 007 · 48k/16 WAV (server) · 12 h 40 left` (on the narrow screen
+   the small box says `(server)` before the time left). Report exactly what the screen shows.
 4. Stop `pw-record` (Ctrl+C). Close and open Cassette (it now opens the card directly). REC, and while it records start
-   `pw-record /tmp/other2.wav` for 10 s. Expected from P0: `other2.wav` holds silence. The plan wants a notice in
-   Cassette while it holds the card; **no such notice was found in the code (to confirm)**: report what you see.
+   `pw-record /tmp/other2.wav` for 10 s. Expected from P0: `other2.wav` holds silence. Expected on screen: when REC
+   starts, a 4 s notice "Other apps cannot use this card while Cassette records" (shown only because a sound server
+   runs; on a board without one there is nothing). Report what you see.
 5. `rm /tmp/other.wav /tmp/other2.wav`.
 
-Report: the probe output, the screen texts in steps 3 and 4, whether both takes play.
+Report: the probe output, the screen texts in steps 3 and 4, whether both takes play, and `sh ~/cassette-check.sh take`
+(LOST should be 0 ms unless the strip showed `lost`).
 
 ## B6. zero8 upright (320x480, 10 min)
 

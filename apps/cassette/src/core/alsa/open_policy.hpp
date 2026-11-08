@@ -8,6 +8,7 @@
  */
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -55,6 +56,15 @@ bool choose_params(const CaptureOffer &offer, const OpenOptions &opt, HwRequest 
                    std::string *why);
 
 OpenResult open_capture(AlsaApi &api, const CardInfo &card, const OpenOptions &opt = OpenOptions());
+
+/* Is a sound server (PipeWire or PulseAudio) running for this user? While one runs, a program that holds a card directly
+ * leaves every other program recording silence without an error (P0-f). True when a client socket exists:
+ * <runtime_dir>/pipewire-0 or <runtime_dir>/pulse/native, where runtime_dir is $XDG_RUNTIME_DIR, else /run/user/<uid>.
+ * False on the appliance boards, which have no sound server. `is_socket` answers for one path (tests inject it). */
+bool sound_server_running(const std::function<bool(const std::string &)> &is_socket, const char *xdg_runtime_dir,
+                          unsigned uid);
+/* The same on this machine: getenv, getuid, stat. */
+bool sound_server_running_here();
 
 /* Converts n frames of `channels` S32_LE samples to packed S24_3LE (drops the low byte). `out` holds n*channels*3 bytes. */
 void convert_s32_to_s24_3(const void *in, void *out, size_t samples);

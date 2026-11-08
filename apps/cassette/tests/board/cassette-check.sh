@@ -157,9 +157,10 @@ show_journal() {
     fr=$(jget "$j" frames)
     fs=$(jget "$j" frames_synced)
     dr=$(jget "$j" dropped_frames)
+    lo=$(jget "$j" lost_frames)
     pa=$(jget "$j" paused_frames)
     echo "journal $(basename "$j"): state $(jget "$j" state), take $(jget "$j" take)"
-    echo "        frames ${fr:-?} ($(( ${fr:-0} / r )) s), synced ${fs:-?}, paused ${pa:-0}, DROPPED ${dr:-0} ($(( ${dr:-0} * 1000 / r )) ms)"
+    echo "        frames ${fr:-?} ($(( ${fr:-0} / r )) s), synced ${fs:-?}, paused ${pa:-0}, DROPPED ${dr:-0} ($(( ${dr:-0} * 1000 / r )) ms), LOST ${lo:-0} ($(( ${lo:-0} * 1000 / r )) ms)"
     rs=$(jget "$j" reason)
     [ -n "$rs" ] && echo "        reason: $rs"
     echo "        device $(jget "$j" name) $(jget "$j" by_id)"

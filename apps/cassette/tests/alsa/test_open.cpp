@@ -196,7 +196,23 @@ void other_failures() {
 
 } // namespace
 
+void server_detection() {
+    auto only = [](const std::string &sock) { return [sock](const std::string &p) { return p == sock; }; };
+    CHECK(sound_server_running(only("/run/user/1000/pipewire-0"), "/run/user/1000", 1000));
+    CHECK(sound_server_running(only("/run/user/1000/pulse/native"), "/run/user/1000", 1000));
+    CHECK(sound_server_running(only("/run/user/1000/pulse/native"), "/run/user/1000/", 1000)); /* trailing slash */
+    CHECK(!sound_server_running(only("/run/user/1000/other"), "/run/user/1000", 1000));
+    CHECK(!sound_server_running([](const std::string &) { return false; }, "/run/user/1000", 1000)); /* an appliance board */
+    /* no XDG_RUNTIME_DIR: /run/user/<uid> */
+    CHECK(sound_server_running(only("/run/user/1001/pipewire-0"), nullptr, 1001));
+    CHECK(sound_server_running(only("/run/user/1001/pipewire-0"), "", 1001));
+    CHECK(!sound_server_running(only("/run/user/1000/pipewire-0"), nullptr, 1001));
+    /* the real check answers without throwing (the result depends on the machine) */
+    (void)sound_server_running_here();
+}
+
 void test_open() {
+    server_detection();
     direct_open_and_rate_choice();
     channels_and_formats();
     busy_falls_back_to_server();

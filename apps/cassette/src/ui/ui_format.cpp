@@ -38,6 +38,11 @@ bool playing(Transport t)
            t == Transport::ScanReverse;
 }
 
+bool recording(Transport t)
+{
+    return t == Transport::Recording || t == Transport::RecordingPaused;
+}
+
 std::string pos_len(const RecorderVm &r)
 {
     return fmt_mmss(r.info.play_pos_ms) + " / " + fmt_mmss(r.info.play_len_ms);
@@ -139,9 +144,15 @@ std::string info_line(const RecorderVm &r)
         if (r.transport == Transport::ScanForward) join(out, "FWD " + std::to_string(r.scan_speed) + "x");
         return out;
     }
+    const bool rec = recording(r.transport);
+    if (r.transport == Transport::Idle && r.info.server && !r.info.card.empty()) join(out, r.info.card + " (server)");
     join(out, r.info.take);
-    join(out, r.info.format);
-    if (!r.info.time_left.empty()) join(out, r.info.time_left + " left");
+    const std::string lost = info_lost(r);
+    const bool card_first = r.transport == Transport::Idle && r.info.server && !r.info.card.empty();
+    /* the strip is one short line: the card name takes the format's place, the lost audio the time left's */
+    if (!card_first) join(out, r.info.format.empty() || !rec || !r.info.server ? r.info.format : r.info.format + " (server)");
+    if (lost.empty() && !r.info.time_left.empty()) join(out, r.info.time_left + " left");
+    join(out, lost);
     return out;
 }
 
@@ -154,7 +165,20 @@ std::string info_detail(const RecorderVm &r)
 {
     if (!r.info.notice.empty()) return r.info.notice;
     if (playing(r.transport)) return pos_len(r);
+    const std::string lost = info_lost(r);
+    if (!lost.empty()) return lost;
+    if (r.info.server && (recording(r.transport) || r.transport == Transport::Idle))
+        return r.info.time_left.empty() ? std::string("(server)") : "(server) " + r.info.time_left;
     return r.info.time_left.empty() ? std::string() : r.info.time_left + " left";
+}
+
+std::string info_lost(const RecorderVm &r)
+{
+    if (!recording(r.transport) || r.info.lost_ms <= 0) return std::string();
+    if (r.info.lost_ms < 50) return "lost <0.1 s";
+    char b[32];
+    std::snprintf(b, sizeof b, "lost %.1f s", static_cast<double>(r.info.lost_ms) / 1000.0);
+    return b;
 }
 
 std::string info_state(const RecorderVm &r)

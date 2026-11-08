@@ -12,11 +12,21 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 namespace cassette {
 namespace ui {
 
 namespace {
+
+/* `text` with its trailing `tail` (when it ends with it) in the strip's red, as LVGL recolor markup. */
+std::string red_tail(const std::string &text, const std::string &tail)
+{
+    if (tail.empty() || text.size() < tail.size() || text.compare(text.size() - tail.size(), tail.size(), tail) != 0) return text;
+    char b[16];
+    std::snprintf(b, sizeof b, "#%06X ", static_cast<unsigned>(col::kRecWord));
+    return text.substr(0, text.size() - tail.size()) + b + tail + "#";
+}
 
 const Icon kKeyIcons[5] = {Icon::Rew, Icon::Play, Icon::Fwd, Icon::Stop, Icon::Rec};
 const char *const kKeyNames[5] = {"REW", "PLAY", "FWD", "STOP", "REC"};
@@ -164,6 +174,7 @@ void RecorderPage::build_landscape()
     strip_y_ = fit_.y(182);
     strip_h_ = fit_.h(182, 20);
     strip_text_ = fit_label(root_, fit_, Face::Bold, 14, col::kInk, 26, 182, 300, 20, LV_TEXT_ALIGN_LEFT, 0.5);
+    lv_label_set_recolor(strip_text_, true); /* the lost-audio part is red (red_tail) */
     strip_lim_ = fit_label(root_, fit_, Face::Bold, 12, col::kInk, 300, 182, 0, 20, LV_TEXT_ALIGN_LEFT, 1);
     lv_label_set_text(strip_lim_, "LIM");
     strip_cut_ = fit_label(root_, fit_, Face::Bold, 12, col::kInk, 340, 182, 0, 20, LV_TEXT_ALIGN_LEFT, 1);
@@ -212,6 +223,7 @@ void RecorderPage::build_portrait()
     box(root_, fit_.x(204), fit_.y(294), fit_.w(204, 100), fit_.h(294, 44), col::kStrip, fit_.px(6));
     box_title_ = fit_label(root_, fit_, Face::Bold, 15, col::kInk, 212, 299, 66, 18, LV_TEXT_ALIGN_LEFT, 0.5);
     box_detail_ = fit_label(root_, fit_, Face::Medium, 13, col::kInkSoft, 212, 317, 84, 16);
+    lv_label_set_recolor(box_detail_, true); /* the lost-audio part is red (red_tail) */
     state_lamp_ = std::make_unique<Lamp>(root_, fit_.x(285), fit_.y(302), fit_.px(11), col::kLampRed, fit_.px(6));
 
     card_ = std::make_unique<Stepper>(root_, fit_, DRect{16, 352, 142, 44}, "CARD", 14, Icon::Minus, Icon::Plus,
@@ -318,10 +330,12 @@ void RecorderPage::update_deck(const RecorderVm &rec)
         if (first_ || rec.info.low_cut != low_cut_) lamp(*cut_, rec.info.low_cut);
         limiter_ = rec.info.limiter;
         low_cut_ = rec.info.low_cut;
-        set_fitted(strip_text_, Face::Bold, fit_.px(14), ls_screen(0.5, fit_.s), std::max(9, fit_.px(11)), info_line(rec));
+        set_fitted(strip_text_, Face::Bold, fit_.px(14), ls_screen(0.5, fit_.s), std::max(9, fit_.px(11)),
+                   red_tail(info_line(rec), info_lost(rec)));
     } else {
         set_fitted(box_title_, Face::Bold, fit_.px(15), ls_screen(0.5, fit_.s), std::max(9, fit_.px(11)), info_title(rec));
-        set_fitted(box_detail_, Face::Medium, fit_.px(13), 0, std::max(9, fit_.px(10)), info_detail(rec));
+        set_fitted(box_detail_, Face::Medium, fit_.px(13), 0, std::max(9, fit_.px(10)),
+                   red_tail(info_detail(rec), info_lost(rec)));
         state_lamp_->set(!state.empty(), state == "PLAY" ? col::kLampGreen : col::kLampRed);
     }
 

@@ -33,6 +33,7 @@ struct JournalEntry {
     int64_t last_sync_wall = 0;
     uint64_t paused_frames = 0;      /* frames discarded while paused */
     uint64_t dropped_frames = 0;     /* frames the ring had to drop */
+    uint64_t lost_frames = 0;        /* estimate of the audio lost to capture overruns (the card or the disk could not keep up) */
     std::string reason;              /* why it ended, when it did not end by the user */
 };
 

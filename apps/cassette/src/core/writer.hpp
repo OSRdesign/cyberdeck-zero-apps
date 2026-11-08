@@ -45,6 +45,7 @@ struct WriterConfig {
     uint64_t riff_limit = kRiffMax;                /* RIFF size above which the file switches to RF64 (tests lower it) */
     uint64_t min_free_bytes = 200ull << 20;        /* stop cleanly when free space falls under this */
     uint32_t space_check_ms = 1000;
+    const std::atomic<uint64_t> *lost_frames = nullptr; /* the caller's running estimate of audio lost to capture overruns: kept in the journal */
     std::function<void(uint64_t)> on_sync;         /* called after each successful fdatasync with the total synced frames */
 };
 
