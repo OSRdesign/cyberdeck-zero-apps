@@ -33,6 +33,10 @@ struct FakeCard {
     std::vector<FakeEvent> events; /* sorted by at_frame; consumed by the PCM that is open */
     unsigned short_read_every = 0; /* every Nth read returns half a period */
     bool zero_reads = false;    /* every read returns 0 frames (a stuck card) */
+    /* Playback side (task T5): used when info.playback is set. */
+    PlaybackOffer play_offer;
+    int play_open_error = 0;            /* a negative error for every playback open/query, when not 0 */
+    std::vector<FakeEvent> play_events; /* Xrun: an underrun (-EPIPE until recover); Error: a lost card */
 };
 
 class FakeAlsa : public AlsaApi {
@@ -47,6 +51,12 @@ public:
     std::vector<HwRequest> requests;
     std::vector<std::pair<std::string, long>> mixer_writes; /* name, value, in order */
     unsigned reads_after_error = 0;     /* reads still made after a fatal error was returned */
+    /* Playback (task T5) */
+    int default_play_error = 0;         /* error opening "default" for playback */
+    std::vector<std::string> opened_playback;
+    std::vector<HwRequest> playback_requests;
+    std::vector<uint8_t> played;        /* every byte written to a playback PCM, in order */
+    unsigned drops = 0, drains = 0, underruns = 0;
 
     bool available(std::string *why) override;
     std::vector<CardInfo> cards() override;
@@ -56,6 +66,9 @@ public:
     int mixer_list(const std::string &card, std::vector<CtlInfo> &out) override;
     int mixer_get(const std::string &card, const std::string &name, long &value) override;
     int mixer_set(const std::string &card, const std::string &name, long value) override;
+    int query_playback(const std::string &device, PlaybackOffer &out) override;
+    int open_playback(const std::string &device, const HwRequest &req, std::unique_ptr<AlsaPcm> &pcm,
+                      HwGranted &granted) override;
 
     FakeCard *find_id(const std::string &id);
     /* Renumbers the cards as a reboot would (rotates the indexes). */

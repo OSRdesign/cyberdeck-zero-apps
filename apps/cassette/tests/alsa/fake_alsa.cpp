@@ -99,11 +99,73 @@ private:
     int dead_ = 0;
 };
 
-/* "hw:CARD=Device,DEV=0" or "hw:CARD=Device" -> "Device"; "" otherwise */
+/* A playback PCM: keeps every byte written in FakeAlsa::played; scripted underruns and a lost card. */
+class FakePlayPcm : public AlsaPcm {
+public:
+    FakePlayPcm(FakeAlsa *f, const FakeCard *spec, const HwGranted &hw) : f_(f), hw_(hw) {
+        if (spec) events_ = spec->play_events;
+        std::sort(events_.begin(), events_.end(),
+                  [](const FakeEvent &a, const FakeEvent &b) { return a.at_frame < b.at_frame; });
+    }
+    long readi(void *, size_t) override { return -EBADFD; }
+    long writei(const void *buf, size_t frames) override {
+        if (closed_) return -ENODEV;
+        if (dead_ != 0) return dead_;
+        if (xrun_pending_) return -EPIPE;
+        if (next_ < events_.size() && events_[next_].at_frame <= written_) {
+            const FakeEvent e = events_[next_++];
+            if (e.kind == FakeEvent::Xrun) {
+                xrun_pending_ = true;
+                ++f_->underruns;
+                return -EPIPE;
+            }
+            dead_ = e.err;
+            return dead_;
+        }
+        size_t n = frames;
+        if (next_ < events_.size()) n = std::min<size_t>(n, events_[next_].at_frame - written_);
+        const size_t bytes = n * hw_.channels * format_bytes(hw_.format);
+        const uint8_t *p = static_cast<const uint8_t *>(buf);
+        f_->played.insert(f_->played.end(), p, p + bytes);
+        written_ += n;
+        f_->clock += static_cast<double>(n) / hw_.rate;
+        return static_cast<long>(n);
+    }
+    int recover(int err) override {
+        if (err == -EPIPE && xrun_pending_) {
+            xrun_pending_ = false;
+            return 0;
+        }
+        return err;
+    }
+    int prepare() override { return closed_ ? -ENODEV : 0; }
+    long delay() override { return closed_ ? -ENODEV : 0; }
+    int drop() override {
+        ++f_->drops;
+        return closed_ ? -ENODEV : 0;
+    }
+    int drain() override {
+        ++f_->drains;
+        return closed_ ? -ENODEV : 0;
+    }
+    void close() override { closed_ = true; }
+
+private:
+    FakeAlsa *f_;
+    HwGranted hw_;
+    std::vector<FakeEvent> events_;
+    size_t next_ = 0;
+    uint64_t written_ = 0;
+    bool closed_ = false, xrun_pending_ = false;
+    int dead_ = 0;
+};
+
+/* "hw:CARD=Device,DEV=0", "plughw:CARD=Device,DEV=0" or "hw:CARD=Device" -> "Device"; "" otherwise */
 std::string card_id_of(const std::string &dev) {
     const std::string key = "hw:CARD=";
-    if (dev.compare(0, key.size(), key) != 0) return "";
-    std::string rest = dev.substr(key.size());
+    size_t at = dev.compare(0, 4, "plug") == 0 ? 4 : 0;
+    if (dev.compare(at, key.size(), key) != 0) return "";
+    std::string rest = dev.substr(at + key.size());
     return rest.substr(0, rest.find(','));
 }
 
@@ -171,6 +233,43 @@ int FakeAlsa::open_capture(const std::string &device, const HwRequest &req, std:
     granted.period_frames = req.period_frames;
     granted.buffer_frames = req.buffer_frames;
     pcm.reset(new FakePcm(this, spec, granted));
+    return 0;
+}
+
+int FakeAlsa::query_playback(const std::string &device, PlaybackOffer &out) {
+    if (!lib_available) return kNoAlsa;
+    if (device == "default") return default_play_error ? default_play_error : -ENOENT; /* a server device: not queried */
+    FakeCard *c = find_id(card_id_of(device));
+    if (!c || !c->info.playback) return -ENOENT;
+    if (c->play_open_error) return c->play_open_error;
+    out = c->play_offer;
+    return 0;
+}
+
+int FakeAlsa::open_playback(const std::string &device, const HwRequest &req, std::unique_ptr<AlsaPcm> &pcm,
+                            HwGranted &granted) {
+    if (!lib_available) return kNoAlsa;
+    opened_playback.push_back(device);
+    playback_requests.push_back(req);
+    const FakeCard *spec = nullptr;
+    if (device == "default") {
+        if (default_play_error) return default_play_error;
+    } else {
+        FakeCard *c = find_id(card_id_of(device));
+        if (!c || !c->info.playback) return -ENOENT;
+        if (c->play_open_error) return c->play_open_error;
+        const bool plug = device.compare(0, 4, "plug") == 0; /* plughw converts anything */
+        if (!plug && (!c->play_offer.has_rate(req.rate) || !c->play_offer.has_format(req.format) ||
+                      req.channels < c->play_offer.min_channels || req.channels > c->play_offer.max_channels))
+            return -EINVAL;
+        spec = c;
+    }
+    granted.rate = req.rate;
+    granted.channels = req.channels;
+    granted.format = req.format;
+    granted.period_frames = req.period_frames;
+    granted.buffer_frames = req.buffer_frames;
+    pcm.reset(new FakePlayPcm(this, spec, granted));
     return 0;
 }
 
@@ -246,6 +345,11 @@ FakeCard fake_pcm2902(int index, const std::string &id, const std::string &port)
               ctl_bool("Mic Playback Switch")};
     c.values = {{"Mic Capture Volume", 0}, {"Mic Capture Switch", 1}, {"Auto Gain Control", 1},
                 {"Mic Playback Volume", 0}, {"Mic Playback Switch", 0}};
+    c.info.playback = true; /* the codec has an output (synthetic preset) */
+    c.play_offer.rates = {32000, 44100, 48000};
+    c.play_offer.min_channels = 1;
+    c.play_offer.max_channels = 2;
+    c.play_offer.formats = {SampleFormat::S16_LE};
     return c;
 }
 
@@ -264,6 +368,10 @@ FakeCard fake_uc02(int index, const std::string &port) {
     c.offer.formats = {SampleFormat::S16_LE};
     c.ctls = {ctl_int("Mic Capture Volume", 0, 127, false), ctl_bool("Mic Capture Switch")};
     c.values = {{"Mic Capture Volume", 0}, {"Mic Capture Switch", 1}};
+    c.info.playback = true; /* headset earphones: stereo only (synthetic preset) */
+    c.play_offer.rates = {48000};
+    c.play_offer.min_channels = c.play_offer.max_channels = 2;
+    c.play_offer.formats = {SampleFormat::S16_LE};
     return c;
 }
 
@@ -275,6 +383,8 @@ FakeCard fake_card_no_controls(int index) {
     c.info.usb_id = "1234:5678";
     c.ctls.clear();
     c.values.clear();
+    c.info.playback = false; /* capture only */
+    c.play_offer = PlaybackOffer();
     return c;
 }
 
