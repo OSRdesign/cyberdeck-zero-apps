@@ -74,7 +74,7 @@ struct EditResult {
 };
 
 /* What the engine knows about a take. */
-struct TakeInfo {
+struct EditTakeInfo {
     bool ok = false;
     std::string error;
     AudioFormat fmt;
@@ -85,11 +85,11 @@ struct TakeInfo {
     int64_t mtime = 0;
     BwfInfo bwf;                       /* from the source bext (defaults when it has none) */
 };
-TakeInfo inspect_take(FileOps &ops, const std::string &path);
+EditTakeInfo inspect_take(FileOps &ops, const std::string &path);
 
 /* The kDataOffset header for the part [start, start+frames) of the take (exposed so the RF64 boundary can be tested with
  * mocked sizes). part is 1-based. */
-std::vector<unsigned char> build_part_header(const TakeInfo &take, const std::string &source_name, uint64_t start_frame,
+std::vector<unsigned char> build_part_header(const EditTakeInfo &take, const std::string &source_name, uint64_t start_frame,
                                              uint64_t frames, int part, int parts);
 
 EditResult trim_split(const EditRequest &req, const EditOptions &opt);

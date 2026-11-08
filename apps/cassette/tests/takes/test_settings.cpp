@@ -33,6 +33,7 @@ void test_settings() {
     CHECK(!s.values().low_cut);
     CHECK(!s.values().limiter);
     CHECK_EQ(s.values().soft_gain_db, 0.0);
+    CHECK(s.values().card.empty() && s.values().output_device.empty());
 
     /* round trip, the folder is created */
     Settings &v = s.values();
@@ -46,6 +47,8 @@ void test_settings() {
     v.low_cut = true;
     v.limiter = true;
     v.soft_gain_db = 12.5;
+    v.card = "UC02||";
+    v.output_device = "hw:CARD=UC02,DEV=0";
     /* two cards with the same name, different by-id; the first has no USB identity */
     const std::string c1 = card_descriptor("UC02", "usb-UC02_UC02_UC02-00", "0000:0000");
     const std::string c2 = card_descriptor("UC02", "usb-UC02_UC02_UC02-01", "0d8c:0014");
@@ -76,6 +79,8 @@ void test_settings() {
     CHECK(s2.values().low_cut);
     CHECK(s2.values().limiter);
     CHECK_EQ(s2.values().soft_gain_db, 12.5);
+    CHECK_EQ(s2.values().card, "UC02||");
+    CHECK_EQ(s2.values().output_device, "hw:CARD=UC02,DEV=0");
     CardState r;
     CHECK(s2.card_state(c1, r));
     CHECK(r.has_level);

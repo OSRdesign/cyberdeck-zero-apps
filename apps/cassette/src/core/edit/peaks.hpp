@@ -57,6 +57,9 @@ public:
     uint64_t frames() const { return frames_; }
     uint32_t rate() const { return rate_; }
     bool rebuilt() const { return rebuilt_; } /* this open had to build the cache */
+    /* The cache file could not be written (read-only or full folder): the pyramid lives in memory (at most 64 MiB; a longer
+     * take then fails to open). Same answers from window(). */
+    bool in_memory() const { return cache_fd_ == kMemCacheFd; }
     size_t levels() const { return counts_.size(); }
     uint64_t level_blocks(size_t level) const { return level < counts_.size() ? counts_[level] : 0; }
 
@@ -71,7 +74,10 @@ public:
     size_t level_for(uint64_t frames_per_bar) const;
 
 private:
+    static constexpr int kMemCacheFd = 0x3fffff01;
     PeakPyramid() = default;
+    int64_t cache_read(void *buf, size_t n, uint64_t off);
+    std::vector<unsigned char> mem_;
     FileOps *ops_ = nullptr;
     int cache_fd_ = -1, take_fd_ = -1;
     uint64_t frames_ = 0, data_offset_ = 0;

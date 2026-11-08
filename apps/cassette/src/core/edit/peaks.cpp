@@ -187,10 +187,60 @@ int build(FileOps &ops, const std::string &take_path, int take_fd, const Meta &m
     return r;
 }
 
+/* The cache held in memory (the folder is read-only or full): a FileOps wrapper that serves ONE descriptor value from a byte
+ * vector and passes every other descriptor to the real ops, so fill() runs unchanged. */
+constexpr int kMemFd = 0x3fffff01; /* equals PeakPyramid::kMemCacheFd */
+constexpr uint64_t kMemCacheMax = 64ull << 20; /* the largest in-memory pyramid: about 12 h of audio at any format */
+
+class MemCacheOps final : public FileOps {
+public:
+    MemCacheOps(FileOps &b, std::vector<unsigned char> &mem) : b_(b), mem_(mem) {}
+    int open(const std::string &p, int f, int m) override { return b_.open(p, f, m); }
+    int close(int fd) override { return fd == kMemFd ? 0 : b_.close(fd); }
+    ssize_t write(int fd, const void *x, size_t n) override { return b_.write(fd, x, n); }
+    ssize_t pwrite(int fd, const void *x, size_t n, uint64_t o) override {
+        if (fd != kMemFd) return b_.pwrite(fd, x, n, o);
+        if (o + n > mem_.size()) return -ENOSPC;
+        std::memcpy(&mem_[static_cast<size_t>(o)], x, n);
+        return static_cast<ssize_t>(n);
+    }
+    ssize_t pread(int fd, void *x, size_t n, uint64_t o) override {
+        if (fd != kMemFd) return b_.pread(fd, x, n, o);
+        if (o >= mem_.size()) return 0;
+        const size_t k = static_cast<size_t>(std::min<uint64_t>(n, mem_.size() - o));
+        std::memcpy(x, &mem_[static_cast<size_t>(o)], k);
+        return static_cast<ssize_t>(k);
+    }
+    int fdatasync(int fd) override { return fd == kMemFd ? 0 : b_.fdatasync(fd); }
+    int fsync(int fd) override { return fd == kMemFd ? 0 : b_.fsync(fd); }
+    int ftruncate(int fd, uint64_t l) override { return b_.ftruncate(fd, l); }
+    int fstat(int fd, StatInfo &s) override { return b_.fstat(fd, s); }
+    int stat(const std::string &p, StatInfo &s) override { return b_.stat(p, s); }
+    int rename(const std::string &a, const std::string &b) override { return b_.rename(a, b); }
+    int unlink(const std::string &p) override { return b_.unlink(p); }
+    int mkdir(const std::string &p) override { return b_.mkdir(p); }
+    int fsync_dir(const std::string &p) override { return b_.fsync_dir(p); }
+    int list_dir(const std::string &p, std::vector<std::string> &n) override { return b_.list_dir(p, n); }
+    int free_space(const std::string &p, uint64_t &a) override { return b_.free_space(p, a); }
+
+private:
+    FileOps &b_;
+    std::vector<unsigned char> &mem_;
+};
+
+/* 0, -EFBIG when the pyramid would exceed kMemCacheMax, -ECANCELED, or another -errno. */
+int build_memory(FileOps &ops, int take_fd, const Meta &m, const Layout &l, const PeakBuildOptions &opt,
+                 std::vector<unsigned char> &mem) {
+    if (l.total > kMemCacheMax) return -EFBIG;
+    mem.assign(static_cast<size_t>(l.total), 0);
+    MemCacheOps mo(ops, mem);
+    return fill(mo, kMemFd, take_fd, m, l, opt);
+}
+
 }  // namespace
 
 PeakPyramid::~PeakPyramid() {
-    if (cache_fd_ >= 0) ops_->close(cache_fd_);
+    if (cache_fd_ >= 0 && !in_memory()) ops_->close(cache_fd_);
     if (take_fd_ >= 0) ops_->close(take_fd_);
 }
 
@@ -225,6 +275,7 @@ std::unique_ptr<PeakPyramid> PeakPyramid::open_or_build(FileOps &ops, const std:
 
     const std::string cache = cache_path(take_path);
     bool rebuilt = false;
+    std::vector<unsigned char> mem;
     int cfd = ops.open(cache, O_RDONLY, 0);
     if (cfd >= 0 && !cache_valid(ops, cfd, m, l)) {
         ops.close(cfd);
@@ -233,10 +284,18 @@ std::unique_ptr<PeakPyramid> PeakPyramid::open_or_build(FileOps &ops, const std:
     if (cfd < 0) {
         r = build(ops, take_path, take_fd, m, l, opt);
         if (r == -ECANCELED) return fail("cancelled");
-        if (r < 0) return fail("cannot write the peak cache (" + std::to_string(-r) + ")");
-        rebuilt = true;
-        cfd = ops.open(cache, O_RDONLY, 0);
-        if (cfd < 0) return fail("cannot open the peak cache (" + std::to_string(-cfd) + ")");
+        if (r == 0) {
+            rebuilt = true;
+            cfd = ops.open(cache, O_RDONLY, 0);
+            if (cfd < 0) r = cfd;
+        }
+        if (r < 0) { /* the cache cannot be stored: keep the pyramid in memory instead (bounded) */
+            r = build_memory(ops, take_fd, m, l, opt, mem);
+            if (r == -ECANCELED) return fail("cancelled");
+            if (r < 0) return fail("cannot write the peak cache (" + std::to_string(-r) + ")");
+            rebuilt = true;
+            cfd = kMemFd;
+        }
     }
     std::unique_ptr<PeakPyramid> p(new PeakPyramid());
     p->ops_ = &ops;
@@ -251,7 +310,16 @@ std::unique_ptr<PeakPyramid> PeakPyramid::open_or_build(FileOps &ops, const std:
     p->counts_ = l.counts;
     p->offsets_ = l.offsets;
     p->rebuilt_ = rebuilt;
+    p->mem_ = std::move(mem);
     return p;
+}
+
+int64_t PeakPyramid::cache_read(void *buf, size_t n, uint64_t off) {
+    if (!in_memory()) return pread_full(*ops_, cache_fd_, buf, n, off);
+    if (off >= mem_.size()) return 0;
+    const size_t k = static_cast<size_t>(std::min<uint64_t>(n, mem_.size() - off));
+    std::memcpy(buf, &mem_[static_cast<size_t>(off)], k);
+    return static_cast<int64_t>(k);
 }
 
 size_t PeakPyramid::level_for(uint64_t fpb) const {
@@ -306,7 +374,7 @@ std::vector<PeakPair> PeakPyramid::window(uint64_t start, uint64_t fpb, size_t b
     }
     if (hi <= lo) return res;
     std::vector<unsigned char> buf(static_cast<size_t>(hi - lo) * kPairBytes);
-    int64_t got = pread_full(*ops_, cache_fd_, buf.data(), buf.size(), offsets_[k] + lo * kPairBytes);
+    int64_t got = cache_read(buf.data(), buf.size(), offsets_[k] + lo * kPairBytes);
     if (got != static_cast<int64_t>(buf.size())) return std::vector<PeakPair>(bars);
     for (size_t i = 0; i < bars; i++) {
         if (spans[i].b1 <= spans[i].b0) continue;

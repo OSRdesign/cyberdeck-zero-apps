@@ -16,6 +16,7 @@
  *     "sync_interval_s": 5..30, "auto_split": true (4 GiB parts) | false (one RF64 file),
  *     "record_timer_s": 0|3|10|20, "rew_fwd": "scan" (5x, held) | "jump" (5 s per tap),
  *     "low_cut": bool, "limiter": bool, "soft_gain_db": 0..24,
+ *     "card": "<descriptor>", "output_device": "<alsa device>",
  *     "cards": { "<descriptor>": { "level_db": number (absent: no level control), "auto_gain": bool, "mute": bool } } }
  */
 #pragma once
@@ -49,6 +50,8 @@ struct Settings {
     bool low_cut = false;
     bool limiter = false;
     double soft_gain_db = 0.0;
+    std::string card;          /* the chosen capture card as card_descriptor() text; empty: the first capture card */
+    std::string output_device; /* the playback device the user picked ("hw:CARD=..,DEV=0" or "default"); empty: automatic */
 };
 
 struct CardState {

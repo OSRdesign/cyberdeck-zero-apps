@@ -80,8 +80,8 @@ std::string errtxt(const char *what, int err) { return std::string(what) + " fai
 
 }  // namespace
 
-TakeInfo inspect_take(FileOps &ops, const std::string &path) {
-    TakeInfo t;
+EditTakeInfo inspect_take(FileOps &ops, const std::string &path) {
+    EditTakeInfo t;
     HeaderInfo h = parse_header(ops, path);
     if (!h.ok) {
         t.error = "cannot read the take: " + h.error;
@@ -110,7 +110,7 @@ TakeInfo inspect_take(FileOps &ops, const std::string &path) {
     return t;
 }
 
-std::vector<unsigned char> build_part_header(const TakeInfo &take, const std::string &source_name, uint64_t start_frame,
+std::vector<unsigned char> build_part_header(const EditTakeInfo &take, const std::string &source_name, uint64_t start_frame,
                                              uint64_t frames, int part, int parts) {
     BwfInfo info = take.bwf;
     info.time_reference = take.bwf.time_reference + start_frame;
@@ -169,7 +169,7 @@ private:
     const EditOptions &opt;
     FileOps &ops;
     EditResult res;
-    TakeInfo take;
+    EditTakeInfo take;
     std::vector<Part> parts;
     std::string dir, base;
     uint64_t total_bytes = 0, done_bytes = 0;

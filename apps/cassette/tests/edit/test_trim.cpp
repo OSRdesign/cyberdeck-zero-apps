@@ -225,7 +225,7 @@ void t_placeholder_sources() {
         Env e(s);
         HeaderInfo h = parse_header(e.m, e.path);
         CHECK(h.ok && h.suspicious()); /* the source really is unrepaired */
-        TakeInfo t = inspect_take(e.m, e.path);
+        EditTakeInfo t = inspect_take(e.m, e.path);
         CHECK(t.ok);
         CHECK_EQ(t.frames, 7000u); /* the real file length counts */
         EditResult r = e.run(10, 6990, {3000});
@@ -608,7 +608,7 @@ void t_unlink_original_fails() {
 }
 
 void t_rf64_header_boundary() {
-    TakeInfo t;
+    EditTakeInfo t;
     t.ok = true;
     t.fmt.rate = 48000;
     t.fmt.channels = 1;

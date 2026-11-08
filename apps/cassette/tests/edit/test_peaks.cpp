@@ -379,9 +379,18 @@ void t_cancel_and_failure() {
     CHECK(PeakPyramid::open_or_build(ops, take, &err, bo) == nullptr);
     CHECK_EQ(err, "cancelled");
     CHECK_EQ(d.list().size(), 1u); /* no cache, no temporary */
+    /* the cache cannot be stored: the pyramid is built in memory, same answers, nothing left in the folder */
     ops.fail_rename = true;
-    CHECK(PeakPyramid::open_or_build(ops, take, &err) == nullptr);
-    CHECK(err.find("peak cache") != std::string::npos);
+    {
+        std::unique_ptr<PeakPyramid> M = PeakPyramid::open_or_build(ops, take, &err);
+        CHECK(M != nullptr);
+        if (M) {
+            CHECK(M->in_memory());
+            CHECK(M->rebuilt());
+            Ref ref(s.fmt, s.frames);
+            zoom_suite(*M, ref, s.frames);
+        }
+    }
     CHECK_EQ(d.list().size(), 1u);
     ops.fail_rename = false;
     CHECK(PeakPyramid::open_or_build(ops, take, &err) != nullptr);

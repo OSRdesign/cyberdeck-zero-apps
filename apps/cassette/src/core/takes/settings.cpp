@@ -109,6 +109,8 @@ int SettingsStore::load() {
     get_bool(root, "low_cut", s_.low_cut);
     get_bool(root, "limiter", s_.limiter);
     if (get_num(root, "soft_gain_db", d)) s_.soft_gain_db = d;
+    if (get_str(root, "card", str) && valid_folder(str)) s_.card = str;
+    if (get_str(root, "output_device", str) && valid_folder(str)) s_.output_device = str;
     clamp_settings(s_);
 
     if (const json::Value *cards = root.get("cards")) {
@@ -143,6 +145,8 @@ int SettingsStore::save() {
     root.set("low_cut", json::Value::boolean(s_.low_cut));
     root.set("limiter", json::Value::boolean(s_.limiter));
     root.set("soft_gain_db", json::Value::number(s_.soft_gain_db));
+    root.set("card", json::Value::string(s_.card));
+    root.set("output_device", json::Value::string(s_.output_device));
 
     json::Value cards = json::Value::object();
     if (const json::Value *old = root.get("cards"))
