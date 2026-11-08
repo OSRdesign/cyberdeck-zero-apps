@@ -17,10 +17,23 @@ standard notification subscription (see [Bluetooth](#bluetooth-hlk-ld2451)).
 
 ## Screenshots
 
-`screenshots/` (rendered by the PC harness with the scripted ports, `build.sh host`): `01-radar-640x480`,
-`02-radar-480x320`, `03-radar-320x480` (the tall page at the board's 6.1 px/mm), `04-table-480x320`,
-`05-graph-640x480`, `06-sensor-320x480`, `07-notfound-480x320`, `08-table-320x480`, `09-radar-480x800` (the tall page
-with the strip chart). `18`-`21`: the Radar page with an LD2451 (an approaching and a receding target, Auto range 20 m) at 640x480, 480x320, 320x480 and 480x800; `22`, `23`: its Table; `24`, `25`: the Sensor page with the LD2451 chosen (the Sensor type row; the Connection row is below it). `26`-`29`: Connection Bluetooth, the HLK-LD radars nearby (scripted radios, `MMWAVE_DEMO=ble`) at 640x480, 480x320, 320x480 and 480x800; `30`: connecting to one; `31`: the Radar page of the Bluetooth radar; `32`, `33`: its Sensor page (the port, no speed, the remembered radar; the Connection row); `34`: "Bluetooth is off".
+All ten were rendered on a PC by the headless harness (`build.sh host`, version 0.1.1) over the scripted ports and
+radios (`MMWAVE_DEMO`, synthetic targets, no sensor); real-hardware captures will replace them. Each comes from a scene
+in `tests/scenes` (named below): the build writes its PNGs to `<CDK_BUILD>/host/out/<scene>/<size>/`. The Store shows
+the same ten pictures, in this order.
+
+| | |
+| --- | --- |
+| ![Radar, 640x480](screenshots/01-radar-640x480.png) | ![Radar, 480x320](screenshots/02-radar-480x320.png) |
+| Radar page, three targets with trails and speed arrows, 640x480, rendered on a PC (`b-radar-three`) | Radar page, 480x320 at the small panel's 6.1 px/mm, rendered on a PC (`o-board-density`) |
+| ![Radar, 320x480](screenshots/03-radar-320x480.png) | ![Table, 480x320](screenshots/04-table-480x320.png) |
+| Tall Radar page with the T1-T3 list, 320x480 at 6.1 px/mm, rendered on a PC (`s-tall-three`) | Table page, the sensor's own units, 480x320 at 6.1 px/mm, rendered on a PC (`o-board-density`) |
+| ![Graph, 640x480](screenshots/05-graph-640x480.png) | ![Sensor, 320x480](screenshots/06-sensor-320x480.png) |
+| Graph page, distance and speed over 30 s, 640x480, rendered on a PC (`e-graph`) | Sensor page, link status and frame counts, 320x480 at 6.1 px/mm, rendered on a PC (`o-board-density`) |
+| ![No radar found, 480x320](screenshots/07-notfound-480x320.png) | ![Held target, 640x480](screenshots/08-held-radar-640x480.png) |
+| No radar found with Connection Auto: the hint names Bluetooth, 480x320, rendered on a PC (`z5-auto-nomodule`) | A held target: T2 dimmed with the `held` label, 640x480, rendered on a PC (`t-held`) |
+| ![LD2451 table, 480x320](screenshots/09-ld2451-table-480x320.png) | ![Bluetooth list, 640x480](screenshots/10-ble-list-640x480.png) |
+| LD2451 Table: an approaching target, its speed signed (`-111` cm/s), 480x320, rendered on a PC (`w-ld2451-approach`) | Connection Bluetooth: the HLK-LD radars nearby (scripted radios), 640x480, rendered on a PC (`z1-ble-list`) |
 
 ## What it does
 
