@@ -43,6 +43,8 @@ class PianoKey {
 public:
     PianoKey(lv_obj_t *parent, const Fit &fit, DRect r, KeyType type, std::function<void(KeyEdge)> on_edge);
     void set(Icon icon, const std::string &caption, KeyLook look, bool enabled, bool latched);
+    /* Drawn pressed (a keyboard key held), as a finger on it does. */
+    void set_pressed(bool pressed);
     lv_obj_t *obj() const { return obj_; }
 
 private:

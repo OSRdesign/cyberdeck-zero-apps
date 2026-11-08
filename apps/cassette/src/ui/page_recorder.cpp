@@ -11,6 +11,7 @@
 #include "ui_format.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 namespace cassette {
 namespace ui {
@@ -33,12 +34,31 @@ lv_obj_t *peak_lamp(lv_obj_t *parent, const Fit &fit, double x, double y)
     return o;
 }
 
+/* A plain linear Fit (no bands) with design y `dy` on screen y `sy`: a group of elements kept together at scale s */
+Fit anchored(const Fit &f, double dy, double sy)
+{
+    Fit a = f;
+    a.segs.clear();
+    a.oy = sy - (dy - a.dbody) * a.s;
+    return a;
+}
+
 } // namespace
 
 RecorderPage::RecorderPage(lv_obj_t *parent, const Frame &frame, const UiActions &actions, const Nav &nav, AnimOptions anim)
     : PageBase(parent, frame), act_(actions), nav_(nav)
 {
-    fit_ = frame.fit({179, 204, 251}, {217, 291, 345, 399});
+    /* The deck (640x480 at 11.3 px/mm) needs 79 px touch targets where the board scaled by 4/3 gives 59-67: the key
+     * row, the steppers and (portrait) the counter row get the toolkit's TARGET; the window row (landscape) gets what
+     * the meter panel needs with TARGET-high Recordings / Settings buttons; the margins give back what is missing. */
+    const double s = frame.scale(), t = frame.target;
+    btn_h_ = std::max(44 * s, t);
+    const std::vector<Band> bl = {{40, 54, 0, 0, true},     {54, 176, 5 * s + btn_h_ + 73 * s, 0, false},
+                                  {206, 250, t, 0, false},   {252, 302, t, 0, false}, {302, 320, 0, 0, true}};
+    const std::vector<Band> bp = {{40, 54, 0, 0, true},   {54, 214, 0, 0, true},   {294, 338, t, 0, false},
+                                  {352, 396, t, 0, false}, {402, 458, t, 0, false}, {458, 480, 0, 0, true}};
+    fit_ = frame.fit({179, 204, 251}, {217, 291, 345, 399}, bl, bp);
+    if (fit_.mins_dropped) btn_h_ = 44 * fit_.s;
     deck_body(root_, fit_);
     CassetteWindow::Layout lay;
     if (frame.portrait) {
@@ -74,29 +94,39 @@ RecorderPage::RecorderPage(lv_obj_t *parent, const Frame &frame, const UiActions
 void RecorderPage::build_landscape()
 {
     framed_panel(root_, fit_, {258, 54, 206, 122}, col::kPanel);
-    counter_ = std::make_unique<Counter>(root_, fit_, 268, 64, 66, 34, 12, 26, 7, 20, 5);
-    peak_ = peak_lamp(root_, fit_, 345, 66);
-    lv_obj_t *peak = fit_label(root_, fit_, Face::Bold, 9, col::kScale, 337, 82, 0, 10, LV_TEXT_ALIGN_LEFT, 0.8);
+    /* inside the meter panel: the button row from the top (the counter and PEAK centred on it, as on the board), the
+     * meter from the bottom, both at scale s; on the board both meet exactly */
+    const int row_y = fit_.y(54) + fit_.px(5);
+    const int bh = static_cast<int>(std::lround(btn_h_));
+    const Fit mid = anchored(fit_, 81, row_y + bh / 2.0); /* 81: the board's button / counter centre line */
+    const Fit lo = anchored(fit_, 176, fit_.y(176));
+    counter_ = std::make_unique<Counter>(root_, mid, 268, 64, 66, 34, 12, 26, 7, 20, 5);
+    peak_ = peak_lamp(root_, mid, 345, 66);
+    lv_obj_t *peak = fit_label(root_, mid, Face::Bold, 9, col::kScale, 337, 82, 0, 10, LV_TEXT_ALIGN_LEFT, 0.8);
     lv_label_set_text(peak, "PEAK");
-    list_btn_ = std::make_unique<IconButton>(root_, fit_, DRect{366, 59, 40, 44}, Icon::List, [this] { nav_.go(Screen::List); });
-    gear_btn_ = std::make_unique<IconButton>(root_, fit_, DRect{410, 59, 40, 44}, Icon::Gear, [this] { nav_.go(Screen::Settings); });
-    in_label_ = fit_label(root_, fit_, Face::Bold, 13, col::kInLabel, 268, 112, 0, 22, LV_TEXT_ALIGN_LEFT, 1);
+    list_btn_ = std::make_unique<IconButton>(root_, mid, DRect{366, 59, 40, 44}, Icon::List, [this] { nav_.go(Screen::List); });
+    gear_btn_ = std::make_unique<IconButton>(root_, mid, DRect{410, 59, 40, 44}, Icon::Gear, [this] { nav_.go(Screen::Settings); });
+    for (IconButton *b : {list_btn_.get(), gear_btn_.get()}) {
+        lv_obj_set_y(b->obj(), row_y);
+        lv_obj_set_height(b->obj(), bh);
+    }
+    in_label_ = fit_label(root_, lo, Face::Bold, 13, col::kInLabel, 268, 112, 0, 22, LV_TEXT_ALIGN_LEFT, 1);
     lv_label_set_text(in_label_, "IN");
-    ch_l_ = fit_label(root_, fit_, Face::Bold, 9, col::kInLabel, 271, 112, 0, 11);
+    ch_l_ = fit_label(root_, lo, Face::Bold, 9, col::kInLabel, 271, 112, 0, 11);
     lv_label_set_text(ch_l_, "L");
-    ch_r_ = fit_label(root_, fit_, Face::Bold, 9, col::kInLabel, 271, 123, 0, 11);
+    ch_r_ = fit_label(root_, lo, Face::Bold, 9, col::kInLabel, 271, 123, 0, 11);
     lv_label_set_text(ch_r_, "R");
-    bar_ = std::make_unique<LedBar>(root_, fit_, 286, 112, 9, 22, 2);
-    lv_obj_t *br = box(root_, fit_.x(374), fit_.y(139), fit_.w(374, 42), fit_.h(139, 5), 0, 0, LV_OPA_TRANSP);
-    border(br, fit_.px(2), col::kAmber);
+    bar_ = std::make_unique<LedBar>(root_, lo, 286, 112, 9, 22, 2);
+    lv_obj_t *br = box(root_, lo.x(374), lo.y(139), lo.w(374, 42), lo.h(139, 5), 0, 0, LV_OPA_TRANSP);
+    border(br, lo.px(2), col::kAmber);
     lv_obj_set_style_border_side(br, static_cast<lv_border_side_t>(LV_BORDER_SIDE_LEFT | LV_BORDER_SIDE_RIGHT | LV_BORDER_SIDE_BOTTOM), 0);
     const double sx[4] = {2, 74, 112, 150};
     const char *const st[4] = {"-40", "-20", "-10", "0"};
     for (int i = 0; i < 4; ++i) {
-        lv_obj_t *l = fit_label(root_, fit_, Face::Bold, 11, col::kScale, 286 + sx[i], 146, 0, 14);
+        lv_obj_t *l = fit_label(root_, lo, Face::Bold, 11, col::kScale, 286 + sx[i], 146, 0, 14);
         lv_label_set_text(l, st[i]);
     }
-    lv_obj_t *tg = fit_label(root_, fit_, Face::Bold, 9, col::kAmber, 372, 159, 46, 11, LV_TEXT_ALIGN_CENTER, 1.2);
+    lv_obj_t *tg = fit_label(root_, lo, Face::Bold, 9, col::kAmber, 372, 159, 46, 11, LV_TEXT_ALIGN_CENTER, 1.2);
     lv_label_set_text(tg, "TARGET");
 
     /* the info strip: the text left, the lamps right */
@@ -270,6 +300,11 @@ void RecorderPage::update(const RecorderVm &rec)
         keys_[i]->set(ic, name, i == 4 ? KeyLook::Red : KeyLook::Charcoal, k.enabled, k.latched);
     }
     first_ = false;
+}
+
+void RecorderPage::press_key(int key, bool down)
+{
+    if (key >= 0 && key < 5) keys_[key]->set_pressed(down);
 }
 
 void RecorderPage::set_shown_page(bool shown)

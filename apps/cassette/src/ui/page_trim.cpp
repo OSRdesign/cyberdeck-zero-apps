@@ -33,7 +33,11 @@ TrimPage::TrimPage(lv_obj_t *parent, const Frame &frame, const UiActions &action
     : PageBase(parent, frame), act_(actions), nav_(nav)
 {
     const bool p = frame.portrait;
-    fit_ = frame.fit({145}, {200}); /* the main waveform takes what a larger screen leaves */
+    /* the steppers and the keys get the toolkit's touch target (the deck: 79 px); the main waveform takes what is left
+     * (it grows on a larger screen, it gives height back for taller controls) */
+    const double t = frame.target;
+    fit_ = frame.fit({145}, {200}, {{114, 176, 0, 0, true}, {198, 242, t, 0, false}, {252, 302, t, 0, false}},
+                     {{122, 272, 0, 0, true}, {306, 350, t, 0, false}, {392, 456, t, 0, false}});
     deck_body(root_, fit_);
 
     /* the strip: sticker, TAKE, the in / out / length / splits text at the right */
@@ -139,6 +143,30 @@ void TrimPage::update(const TrimVm &t)
     main_bars_ = resample_max(t.window_peaks, bar_count(main_w_ + (pitch_ - bar_w_), pitch_));
     over_bars_ = resample_max(t.overview_peaks, bar_count(over_w_ + (pitch_ - bar_w_), pitch_));
     lv_obj_invalidate(wave_);
+}
+
+void TrimPage::press(Command c)
+{
+    const bool sel = vm_.selected_split >= 0 && vm_.selected_split < static_cast<int>(vm_.splits.size());
+    switch (c) {
+    case SetIn: if (act_.trim_set_in) act_.trim_set_in(); break;
+    case SetOut: if (act_.trim_set_out) act_.trim_set_out(); break;
+    case Split:
+        if (sel) {
+            if (act_.trim_remove_split) act_.trim_remove_split(vm_.selected_split);
+        } else if (act_.trim_split) {
+            act_.trim_split();
+        }
+        break;
+    case Play: if (act_.trim_play) act_.trim_play(); break;
+    case Save: if (act_.trim_save) act_.trim_save(); break;
+    case ZoomIn: if (act_.trim_zoom) act_.trim_zoom(1); break;
+    case ZoomOut: if (act_.trim_zoom) act_.trim_zoom(-1); break;
+    case NextFlag:
+        if (!vm_.splits.empty() && act_.trim_select_split)
+            act_.trim_select_split(sel ? (vm_.selected_split + 1) % static_cast<int>(vm_.splits.size()) : 0);
+        break;
+    }
 }
 
 void TrimPage::nudge(int dir, bool shift)

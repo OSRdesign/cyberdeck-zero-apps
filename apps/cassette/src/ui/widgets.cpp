@@ -98,6 +98,14 @@ void PianoKey::set(Icon icon, const std::string &caption, KeyLook look, bool ena
     }
 }
 
+void PianoKey::set_pressed(bool pressed)
+{
+    if (pressed == pressed_) return;
+    pressed_ = pressed;
+    place_caption();
+    lv_obj_invalidate(obj_);
+}
+
 void PianoKey::place_caption()
 {
     const bool down = latched_ || pressed_;
@@ -246,16 +254,18 @@ void Stepper::place(const Fit &fit, DRect r, double value_px)
     lv_obj_set_pos(down_->obj(), fit.x(r.x), fit.y(r.y));
     lv_obj_set_pos(up_->obj(), fit.x(r.x + r.w - 44), fit.y(r.y));
     const int cx = fit.x(r.x + 44), cw = fit.w(r.x + 44, r.w - 88);
-    /* caption: line 15 under a 6 px padding; value: line 20 under it (the boards' text boxes) */
+    /* caption: line 15 under a 6 px padding; value: line 20 under it (the boards' text boxes), the 44 px block centred in
+     * a taller stepper (the deck's touch target) */
+    const int top = fit.y(r.y) + (fit.h(r.y, r.h) - fit.px(44)) / 2;
     const lv_font_t *cf = lv_obj_get_style_text_font(caption_, LV_PART_MAIN);
-    lv_obj_set_pos(caption_, cx, fit.y(r.y + 6) + (fit.px(15) - lv_font_get_line_height(cf)) / 2);
+    lv_obj_set_pos(caption_, cx, top + fit.px(6) + (fit.px(15) - lv_font_get_line_height(cf)) / 2);
     lv_obj_set_width(caption_, cw);
     lv_obj_set_width(value_, cw);
     const std::string keep = value_text_;
     value_text_.clear();
     set_value(keep);
     const lv_font_t *vf = lv_obj_get_style_text_font(value_, LV_PART_MAIN);
-    lv_obj_set_pos(value_, cx, fit.y(r.y + 21) + (fit.px(20) - lv_font_get_line_height(vf)) / 2);
+    lv_obj_set_pos(value_, cx, top + fit.px(21) + (fit.px(20) - lv_font_get_line_height(vf)) / 2);
 }
 
 void Stepper::set_value(const std::string &value)

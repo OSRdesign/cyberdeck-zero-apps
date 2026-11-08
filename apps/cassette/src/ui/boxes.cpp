@@ -20,18 +20,31 @@ namespace ui {
 namespace {
 
 /* A Fit for a box drawn at (bx, by, bw, bh) on the board, centred on the screen as on the board (the board's offset
- * from the centre kept, scaled). */
-Fit box_fit(const Fit &page, int sw, int sh, double dw, double dh, double bx, double by, double bw, double bh)
+ * from the centre kept, scaled); its button bands get the toolkit's touch target, so the box grows by what they need. */
+Fit box_fit(const Fit &page, int sw, int sh, double dw, double dh, double bx, double by, double bw, double bh,
+            const std::vector<Band> &bands)
 {
     Fit f = page;
-    f.seams.clear();
     f.share = 0;
-    const double w = bw * page.s, h = bh * page.s;
+    f.dbody = by;
+    f.segs = fit_segments(by, by + bh, page.s, bands, 1e9);
+    double h = 0;
+    for (const Fit::Seg &g : f.segs) h += g.h;
+    const double w = bw * page.s;
     const double x = (sw - w) / 2.0 + (bx - (dw - bw) / 2.0) * page.s;
     const double y = (sh - h) / 2.0 + (by - (dh - bh) / 2.0) * page.s;
     f.ox = x - bx * page.s;
-    f.oy = y - (by - page.dbody) * page.s;
+    f.oy = std::clamp(y, 0.0, std::max(0.0, sh - h));
     return f;
+}
+
+/* The keyboard focus of a box: a 2 px white outline (the look of the selected split flag), shown once a key moved it. */
+void outline(lv_obj_t *b, const Fit &f, bool on)
+{
+    lv_obj_set_style_outline_width(b, on ? f.px(2) : 0, 0);
+    lv_obj_set_style_outline_color(b, lv_color_hex(col::kWhite), 0);
+    lv_obj_set_style_outline_pad(b, on ? f.px(2) : 0, 0);
+    lv_obj_set_style_outline_opa(b, LV_OPA_COVER, 0);
 }
 
 enum class BoxKey { Green, Outline, Charcoal, Red };
@@ -113,7 +126,10 @@ SaveBox::SaveBox(lv_obj_t *parent, const Frame &frame, const UiActions &actions)
     const bool p = frame.portrait;
     narrow_ = p;
     const Fit page = frame.fit({}, {});
-    fit_ = p ? box_fit(page, frame.w, frame.h, 320, 480, 12, 48, 296, 369) : box_fit(page, frame.w, frame.h, 480, 320, 40, 28, 400, 261);
+    const double t = frame.target;
+    fit_ = p ? box_fit(page, frame.w, frame.h, 320, 480, 12, 48, 296, 369,
+                       {{183, 239, t, 0, false}, {249, 305, t, 0, false}, {317, 361, t, 0, false}})
+             : box_fit(page, frame.w, frame.h, 480, 320, 40, 28, 400, 261, {{157, 209, t, 0, false}, {221, 265, t, 0, false}});
     dim_ = dim_layer(parent, frame.w, frame.h);
     const double bx = p ? 12 : 40, by = p ? 48 : 28, bw = p ? 296 : 400, bh = p ? 369 : 261;
     cream_box(dim_, fit_, {bx, by, bw, bh});
@@ -123,19 +139,24 @@ SaveBox::SaveBox(lv_obj_t *parent, const Frame &frame, const UiActions &actions)
     summary_ = fit_label(dim_, fit_, Face::Medium, 14, col::kInkSoft, cx, by + 32, cw, 16);
     files_ = box(dim_, fit_.x(cx), fit_.y(by + 54), fit_.w(cx, cw), fit_.px(59), col::kStrip, fit_.px(5));
     if (p) {
-        box_button(dim_, fit_, {26, 183, 268, 56}, BoxKey::Green, "SAVE AS NEW FILES", "original take kept", button_cb, this, 0);
-        box_button(dim_, fit_, {26, 249, 268, 56}, BoxKey::Outline, "REPLACE ORIGINAL", "original deleted after saving", button_cb, this, 1);
-        box_button(dim_, fit_, {26, 317, 268, 44}, BoxKey::Charcoal, "CANCEL", nullptr, button_cb, this, 2);
+        buttons_.push_back(box_button(dim_, fit_, {26, 183, 268, 56}, BoxKey::Green, "SAVE AS NEW FILES", "original take kept", button_cb, this, 0));
+        buttons_.push_back(box_button(dim_, fit_, {26, 249, 268, 56}, BoxKey::Outline, "REPLACE ORIGINAL", "original deleted after saving", button_cb, this, 1));
+        buttons_.push_back(box_button(dim_, fit_, {26, 317, 268, 44}, BoxKey::Charcoal, "CANCEL", nullptr, button_cb, this, 2));
     } else {
-        box_button(dim_, fit_, {54, 157, 182, 52}, BoxKey::Green, "SAVE AS NEW FILES", "original take kept", button_cb, this, 0);
-        box_button(dim_, fit_, {244, 157, 182, 52}, BoxKey::Outline, "REPLACE ORIGINAL", "original deleted after saving", button_cb, this, 1);
-        box_button(dim_, fit_, {54, 221, 372, 44}, BoxKey::Charcoal, "CANCEL", nullptr, button_cb, this, 2);
+        buttons_.push_back(box_button(dim_, fit_, {54, 157, 182, 52}, BoxKey::Green, "SAVE AS NEW FILES", "original take kept", button_cb, this, 0));
+        buttons_.push_back(box_button(dim_, fit_, {244, 157, 182, 52}, BoxKey::Outline, "REPLACE ORIGINAL", "original deleted after saving", button_cb, this, 1));
+        buttons_.push_back(box_button(dim_, fit_, {54, 221, 372, 44}, BoxKey::Charcoal, "CANCEL", nullptr, button_cb, this, 2));
     }
 }
 
 void SaveBox::update(const SaveVm &s, const TrimVm &t)
 {
-    if (s.shown != shown_ && s.shown) lv_obj_move_foreground(dim_);
+    if (s.shown != shown_ && s.shown) {
+        lv_obj_move_foreground(dim_);
+        focus_ = 0; /* SAVE AS NEW FILES, the default */
+        focus_shown_ = false;
+        for (lv_obj_t *b : buttons_) outline(b, fit_, false);
+    }
     shown_ = s.shown;
     show(dim_, s.shown);
     if (!s.shown) return;
@@ -169,6 +190,18 @@ void SaveBox::update(const SaveVm &s, const TrimVm &t)
     lv_obj_set_height(files_, 2 * pad_y + static_cast<int>(s.files.size()) * line_h);
 }
 
+void SaveBox::key_move(int dir)
+{
+    focus_ = (focus_ + dir + 3) % 3; /* from the default (SAVE AS NEW FILES) */
+    focus_shown_ = true;
+    for (std::size_t i = 0; i < buttons_.size(); ++i) outline(buttons_[i], fit_, static_cast<int>(i) == focus_);
+}
+
+void SaveBox::key_choose()
+{
+    if (act_.save_choose) act_.save_choose(focus_ == 0 ? SaveMode::NewFiles : focus_ == 1 ? SaveMode::Replace : SaveMode::Cancel);
+}
+
 void SaveBox::button_cb(lv_event_t *e)
 {
     auto *self = static_cast<SaveBox *>(lv_event_get_user_data(e));
@@ -186,7 +219,8 @@ ConfirmBox::ConfirmBox(lv_obj_t *parent, const Frame &frame, const UiActions &ac
     /* the save box's width and margins, as tall as its content: title, two body lines, the keys */
     const double bx = p ? 12 : 40, bw = p ? 296 : 400, bh = 160;
     const double dh = p ? 480 : 320, by = (dh - bh) / 2;
-    fit_ = box_fit(page, frame.w, frame.h, p ? 320 : 480, dh, bx, by, bw, bh);
+    const double kyd = by + bh - 14 - 52;
+    fit_ = box_fit(page, frame.w, frame.h, p ? 320 : 480, dh, bx, by, bw, bh, {{kyd, kyd + 52, double(frame.target), 0, false}});
     dim_ = dim_layer(parent, frame.w, frame.h);
     cream_box(dim_, fit_, {bx, by, bw, bh});
     const double cx = bx + 14, cw = bw - 28;
@@ -196,18 +230,36 @@ ConfirmBox::ConfirmBox(lv_obj_t *parent, const Frame &frame, const UiActions &ac
     const double kw = (cw - 8) / 2, ky = by + bh - 14 - 52;
     lv_obj_t *yes = box_button(dim_, fit_, {cx, ky, kw, 52}, BoxKey::Red, "DELETE", nullptr, button_cb, this, 1);
     yes_label_ = lv_obj_get_child(yes, 0);
-    box_button(dim_, fit_, {cx + kw + 8, ky, kw, 52}, BoxKey::Charcoal, "CANCEL", nullptr, button_cb, this, 0);
+    buttons_.push_back(yes);
+    buttons_.push_back(box_button(dim_, fit_, {cx + kw + 8, ky, kw, 52}, BoxKey::Charcoal, "CANCEL", nullptr, button_cb, this, 0));
 }
 
 void ConfirmBox::update(const ConfirmVm &c)
 {
-    if (c.shown != shown_ && c.shown) lv_obj_move_foreground(dim_);
+    if (c.shown != shown_ && c.shown) {
+        lv_obj_move_foreground(dim_);
+        focus_ = 1; /* CANCEL: the safe answer is the default */
+        focus_shown_ = false;
+        for (lv_obj_t *b : buttons_) outline(b, fit_, false);
+    }
     shown_ = c.shown;
     show(dim_, c.shown);
     if (!c.shown) return;
     set_fitted(title_, Face::Bold, fit_.px(20), 0, std::max(10, fit_.px(14)), c.title);
     set_text(body_, c.body);
     if (yes_label_) set_fitted(yes_label_, Face::Bold, fit_.px(16), ls_screen(1, fit_.s), std::max(9, fit_.px(12)), c.yes);
+}
+
+void ConfirmBox::key_move(int dir)
+{
+    focus_ = (focus_ + dir + 2) % 2; /* from the default (CANCEL) */
+    focus_shown_ = true;
+    for (std::size_t i = 0; i < buttons_.size(); ++i) outline(buttons_[i], fit_, static_cast<int>(i) == focus_);
+}
+
+void ConfirmBox::key_choose()
+{
+    if (act_.confirm_answer) act_.confirm_answer(focus_ == 0);
 }
 
 void ConfirmBox::button_cb(lv_event_t *e)

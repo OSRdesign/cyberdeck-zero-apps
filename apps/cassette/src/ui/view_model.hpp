@@ -223,8 +223,9 @@ inline bool operator==(const ConfirmVm &a, const ConfirmVm &b)
 /* The pages. The UI owns which one shows (L, S, Esc, the header buttons, TRIM) and reports every change. */
 enum class Screen { Recorder, Settings, List, Trim };
 
-/* A piano key's touch: Down and Up for every key (REW / FWD scan while held), then Click when the finger is lifted
- * on the key (a tap). The controller acts on Click for PLAY/PAUSE, STOP and REC, on Down / Up for REW and FWD. */
+/* A piano key's touch or keyboard key (docs/KEYS.md): Down and Up for every key (REW / FWD scan while held), then
+ * Click when the finger is lifted on the key or the keyboard key is released. The controller acts on Click for
+ * PLAY/PAUSE, STOP and REC, on Down / Up for REW and FWD. */
 enum class KeyEdge { Down, Up, Click };
 
 enum class SaveMode { NewFiles, Replace, Cancel };
@@ -248,7 +249,7 @@ struct UiActions {
     std::function<void(int index)> list_play;
     std::function<void(int index, const std::string &prefix)> list_rename; /* the edited prefix, after RENAME */
     std::function<void(int index)> list_trim;         /* TRIM: the UI shows the trim page; load TrimVm for that take */
-    std::function<void(int index)> list_delete;
+    std::function<void(int index)> list_delete;       /* DELETE: confirm first (ConfirmVm), delete on confirm_answer(true) */
     /* trim and split */
     std::function<void(int dir)> trim_zoom;           /* ZOOM -1 (wider window) / +1 (narrower) */
     std::function<void(std::int64_t delta_ms)> trim_nudge; /* POSITION buttons, Left / Right: 100 ms, Shift 1000 ms */

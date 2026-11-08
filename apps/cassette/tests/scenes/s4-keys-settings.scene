@@ -1,0 +1,38 @@
+title Cassette keys on the settings: Down moves, Right opens the Record timer picker, Down and Enter take 10 s, Right flips a switch, Esc back
+sizes 480x320 320x480
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key s
+wait 300
+key down
+key down
+key down
+key down
+key down
+wait 200
+shot keys-settings-highlight
+key right
+wait 300
+expect text "3 s"
+expect text "20 s"
+key down
+key down
+key enter
+wait 300
+expect text "Record timer"
+expect text "10 s"
+say Right opened the picker, Down Down Enter took 10 s
+key down
+key down
+key down
+key right
+wait 300
+say Right on Auto gain flipped the switch (setting_toggle agc off)
+key esc
+wait 300
+expect text "SOFT"
+expect notext "LAYOUT FAIL"
+expect noquit

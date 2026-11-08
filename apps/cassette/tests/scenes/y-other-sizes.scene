@@ -1,0 +1,22 @@
+title Cassette at other sizes and their own densities (800x480 at 9.2 px/mm, 480x800 at 8.5): recorder, settings, list, trim
+sizes 800x480 480x800
+env CASSETTE_DEMO recording
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot other-recording
+expect esc
+expect notext "LAYOUT FAIL"
+key s
+wait 400
+shot other-settings
+expect notext "LAYOUT FAIL"
+key l
+wait 400
+shot other-list
+expect notext "LAYOUT FAIL"
+key t
+wait 400
+shot other-trim
+expect notext "LAYOUT FAIL"
+expect noquit

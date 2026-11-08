@@ -1,0 +1,19 @@
+title Cassette (deck, 640x480 at 11.3 px/mm): the save box with buttons of the toolkit touch target, then the confirm box
+sizes 640x480
+ppmm 1130
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_PAGE trim
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+tap "SAVE"
+wait 400
+expect text "SAVE AS NEW FILES"
+shot deck-save
+expect notext "LAYOUT FAIL"
+tap "REPLACE ORIGINAL"
+wait 400
+expect text "Delete the original take?"
+shot deck-confirm
+expect notext "LAYOUT FAIL"
+expect noquit

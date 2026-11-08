@@ -1,0 +1,66 @@
+title Cassette keys on the trim page: Tab selects the next flag, Enter removes it (SPLIT reads REMOVE), I sets IN, Up and Down zoom, S opens the save box (Right, Enter, Esc), Esc goes back
+sizes 480x320 320x480
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_PAGE trim
+env CASSETTE_DEMO_TRIM unselected
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+expect text "SPLIT"
+key tab
+wait 200
+expect text "REMOVE"
+@320x480 expect text "SPLIT 1 SELECTED"
+@480x320 expect text "05:21.1"
+key tab
+wait 200
+@320x480 expect text "SPLIT 2 SELECTED"
+@480x320 expect text "06:05.0"
+say Tab selected flag 1, then flag 2 (the marker moved to it)
+key enter
+wait 200
+expect text "SPLIT"
+expect notext "REMOVE"
+say Enter removed flag 2
+key i
+wait 200
+@480x320 expect text "IN 06:05.0 · OUT 10:28.7 · LEN 04:23.6 · 1 split"
+@320x480 expect text "IN 6:05 · OUT 10:29"
+say I set IN at the marker
+key up
+wait 200
+expect text "30 s"
+key down
+key down
+wait 200
+expect text "2 min"
+say Up zoomed in, Down zoomed out
+key enter
+wait 200
+expect text "SPLIT"
+@480x320 expect text "IN 06:05.0 · OUT 10:28.7 · LEN 04:23.6 · 2 splits"
+@320x480 expect text "2 splits · LEN 4:24"
+say Enter added a split at the marker
+key s
+wait 300
+expect text "SAVE AS NEW FILES"
+key right
+wait 200
+shot keys-save-focus
+key enter
+wait 300
+expect text "Delete the original take?"
+say Right moved to REPLACE ORIGINAL, Enter chose it: the confirm box
+key esc
+wait 300
+expect notext "Delete the original take?"
+key esc
+wait 300
+expect notext "SAVE AS NEW FILES"
+key esc
+wait 300
+expect text "RENAME"
+say Esc closed both boxes, then went back to the list
+expect notext "LAYOUT FAIL"
+expect noquit

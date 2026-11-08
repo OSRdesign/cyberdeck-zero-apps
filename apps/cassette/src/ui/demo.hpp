@@ -23,7 +23,9 @@
  *
  * DemoDriver's UiActions change the model the way the controller would in simple cases (the steppers step, toggles
  * flip, a choice is taken, a tap on the countdown cancels it, the trim marker, zoom, flags, IN / OUT and the boxes
- * follow) and log each call ("[cassette-demo] ..."), so the scenes can prove that a touch reached its action.
+ * follow; a small deck: REC records, PLAY/PAUSE plays Take 006 or pauses, STOP stops, REW / FWD held scan at 5x and
+ * with CASSETTE_DEMO_REWFWD=jump each click jumps 5 s; DELETE on the list asks in the confirm box) and log each call
+ * ("[cassette-demo] ..."), so the scenes can prove that a touch or a key reached its action.
  */
 #pragma once
 
@@ -55,7 +57,11 @@ public:
 private:
     void emit();
     void refresh_trim();
+    void deck(KeyId k, KeyEdge e);
+    void set_transport(Transport t);
     ViewModel vm_;
+    Transport before_scan_ = Transport::Playing;
+    int pending_delete_ = -1; /* the take the confirm box asks about (-1: the replace of the save box) */
 };
 
 } // namespace ui

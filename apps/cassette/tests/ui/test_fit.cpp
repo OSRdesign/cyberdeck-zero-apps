@@ -52,6 +52,40 @@ void test_fit()
     CHECK(t.y(458) <= 800);
     CHECK(t.share > 0);
 
+    /* the deck (640x480, 11.3 px/mm): the keys and the steppers get the toolkit's 79 px, the window row what the meter
+     * panel needs with 79 px buttons, the margins give back the rest */
+    {
+        const double s = 4.0 / 3.0, t = 79;
+        const std::vector<Band> bands = {{40, 54, 0, 0, true}, {54, 176, 5 * s + t + 73 * s, 0, false},
+                                         {206, 250, t, 0, false}, {252, 302, t, 0, false}, {302, 320, 0, 0, true}};
+        const Fit k = make_fit(640, 480, 56, 480, 320, 40, {179, 204, 251}, bands);
+        CHECK(!k.mins_dropped);
+        CHECK_EQ(k.h(206, 44), 79);
+        CHECK_EQ(k.h(252, 50), 79);
+        CHECK(k.h(54, 122) >= 182);
+        CHECK(k.yd(320) <= 480.5);
+        CHECK(k.y(54) > 56);
+        /* the same bands on the small panel (44 px): the board's pixels */
+        const std::vector<Band> small = {{40, 54, 0, 0, true}, {54, 176, 122, 0, false}, {206, 250, 44, 0, false},
+                                         {252, 302, 44, 0, false}, {302, 320, 0, 0, true}};
+        const Fit z = make_fit(480, 320, 40, 480, 320, 40, {179, 204, 251}, small);
+        CHECK(!z.mins_dropped);
+        CHECK_EQ(z.y(252), 252);
+        CHECK_EQ(z.h(206, 44), 44);
+        CHECK_EQ(z.y(320), 320);
+        /* 79 px controls on 480x320 do not fit: the minimums are dropped, the board is scaled */
+        const Fit n = make_fit(480, 320, 40, 480, 320, 40, {179, 204, 251}, bands);
+        CHECK(n.mins_dropped);
+        CHECK_EQ(n.y(252), 252);
+        /* a box laid alone: the button band at its minimum, nothing added */
+        double share = -1;
+        const std::vector<Fit::Seg> seg = fit_segments(28, 289, 1.0, {{157, 209, 79, 0, false}}, 1e6, &share);
+        double total = 0;
+        for (const Fit::Seg &g : seg) total += g.h;
+        CHECK(std::fabs(total - (261 + 27)) < 1e-6);
+        CHECK_EQ(share, 0.0);
+    }
+
     /* a size of 0 or less scales to 0, anything else to at least 1 */
     CHECK_EQ(d.px(0), 0);
     CHECK_EQ(a.px(0.4), 1);

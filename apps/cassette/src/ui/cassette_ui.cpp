@@ -85,10 +85,16 @@ const char *screen_name(Screen s)
 
 /* ------------------------------------------------------------------------------------------------ Frame, PageBase */
 
-Fit Frame::fit(std::vector<double> seams_landscape, std::vector<double> seams_portrait) const
+Fit Frame::fit(std::vector<double> seams_landscape, std::vector<double> seams_portrait, std::vector<Band> bands_landscape,
+               std::vector<Band> bands_portrait) const
 {
-    return portrait ? make_fit(w, h, body_y, 320, 480, 40, std::move(seams_portrait))
-                    : make_fit(w, h, body_y, 480, 320, 40, std::move(seams_landscape));
+    return portrait ? make_fit(w, h, body_y, 320, 480, 40, std::move(seams_portrait), std::move(bands_portrait))
+                    : make_fit(w, h, body_y, 480, 320, 40, std::move(seams_landscape), std::move(bands_landscape));
+}
+
+double Frame::scale() const
+{
+    return make_fit(w, h, body_y, portrait ? 320 : 480, portrait ? 480 : 320, 40, {}).s;
 }
 
 PageBase::PageBase(lv_obj_t *parent, const Frame &frame) : frame_(frame)
@@ -131,6 +137,7 @@ struct CassetteUi::Impl {
     std::unique_ptr<cp0::ui::TextField> field;
     std::function<void(const std::string &)> on_text;
     bool closing = false;
+    bool held[static_cast<int>(KeyId::kCount)] = {}; /* deck keys held on the keyboard */
 
     /* scenes' check and timing */
     lv_timer_t *check_timer = nullptr;
@@ -179,6 +186,9 @@ void CassetteUi::Impl::build(AnimOptions anim)
     frame.h = layout.h;
     frame.body_y = layout.body_y;
     frame.portrait = layout.h > layout.w;
+    frame.target = m->tok[CP0_TOK_TARGET];
+    frame.row = m->tok[CP0_TOK_ROW_H];
+    frame.list_row = std::min(m->tok[CP0_TOK_ROW_H], m->tok[CP0_TOK_LIST_ROW_H]);
 
     surface = lv_obj_create(page->root());
     plain(surface);
@@ -218,8 +228,9 @@ void CassetteUi::Impl::build(AnimOptions anim)
     list->set_shown(false);
     trim->set_shown(false);
 
-    log_line("ui %dx%d%s%s, animation %s at %d fps", frame.w, frame.h, frame.portrait ? " portrait" : "",
-             cp0_ui_narrow_portrait(m) ? " (narrow shell)" : "", anim.enabled ? "on" : "off", anim.fps);
+    log_line("ui %dx%d%s%s, %.2f px/mm, touch target %d px, row %d px, list row %d px, animation %s at %d fps", frame.w,
+             frame.h, frame.portrait ? " portrait" : "", cp0_ui_narrow_portrait(m) ? " (narrow shell)" : "",
+             m->ppmm_x100 / 100.0, frame.target, frame.row, frame.list_row, anim.enabled ? "on" : "off", anim.fps);
 
     if (env_on("CASSETTE_LAYOUT_CHECK")) check_timer = lv_timer_create(check_cb, 250, this);
     timing = env_on("CASSETTE_TIMING");
@@ -282,41 +293,108 @@ void CassetteUi::Impl::back()
 
 void CassetteUi::Impl::on_key(std::uint32_t k)
 {
+    /* every key is handled from LV_EVENT_KEYBOARD (on_keyboard: it has the releases and the modifiers); the keypad's
+     * LV_EVENT_KEY for the same key is ignored */
+    (void)k;
+}
+
+/* The keyboard map (cassette_ui.hpp, docs/KEYS.md). */
+void CassetteUi::Impl::on_keyboard(const key_item &item)
+{
     if (dialog) return; /* the text box has the keys */
-    if (k == LV_KEY_ESC) {
-        back();
+    const bool press = item.key_state == KBD_KEY_PRESSED, repeat = item.key_state == KBD_KEY_REPEATED;
+    const bool release = item.key_state == KBD_KEY_RELEASED;
+    const std::uint32_t code = item.key_code;
+    /* a character without a key code (the toolkit's on-screen keyboard, a scripted key) */
+    char ch = 0;
+    if (code == 0 && item.utf8[0] && !item.utf8[1]) {
+        ch = item.utf8[0];
+        if (ch >= 'A' && ch <= 'Z') ch = static_cast<char>(ch - 'A' + 'a');
+    }
+    auto is = [code, ch](std::uint32_t k, char c) { return code == k || (code == 0 && c && ch == c); };
+
+    /* the deck keys: the press and the release reach the deck (holding REW / FWD scans), then a click */
+    if (cur == Screen::Recorder && !box_up()) {
+        int k = -1;
+        if (is(KEY_COMMA, ',')) k = static_cast<int>(KeyId::Rew);
+        else if (is(KEY_SPACE, ' ')) k = static_cast<int>(KeyId::PlayPause);
+        else if (is(KEY_DOT, '.')) k = static_cast<int>(KeyId::Fwd);
+        else if (is(KEY_X, 'x')) k = static_cast<int>(KeyId::Stop);
+        else if (is(KEY_R, 'r')) k = static_cast<int>(KeyId::Rec);
+        if (k >= 0) {
+            if (press && !held[k]) {
+                if (item.mods & (KBD_MOD_CTRL | KBD_MOD_ALT | KBD_MOD_LOGO | KBD_MOD_FN)) return;
+                held[k] = true;
+                rec->press_key(k, true);
+                if (act.deck_key) act.deck_key(static_cast<KeyId>(k), KeyEdge::Down);
+            } else if (release && held[k]) {
+                held[k] = false;
+                rec->press_key(k, false);
+                if (act.deck_key) act.deck_key(static_cast<KeyId>(k), KeyEdge::Up);
+                if (act.deck_key) act.deck_key(static_cast<KeyId>(k), KeyEdge::Click);
+            }
+            return;
+        }
+    }
+    if (!press && !repeat) return;
+    if (item.mods & (KBD_MOD_CTRL | KBD_MOD_ALT | KBD_MOD_LOGO | KBD_MOD_FN)) return;
+    const bool shift = (item.mods & KBD_MOD_SHIFT) != 0;
+    const bool esc = code == KEY_ESC, enter = code == KEY_ENTER || code == KEY_KPENTER;
+    const bool up = code == KEY_UP, down = code == KEY_DOWN, left = code == KEY_LEFT, right = code == KEY_RIGHT;
+    const bool tab = code == KEY_TAB || (code == 0 && ch == '\t');
+
+    if (esc) {
+        if (press) back();
         return;
     }
+    /* the boxes: Left / Right / Tab move between the buttons, Enter chooses, Esc cancels */
     if (box_up()) {
-        if (k == LV_KEY_ENTER && save->shown() && act.save_choose) act.save_choose(SaveMode::NewFiles);
+        if (!press && !(left || right)) return;
+        const int dir = left ? -1 : (right || tab) ? 1 : 0;
+        if (confirm->shown()) {
+            if (dir) confirm->key_move(dir);
+            else if (enter) confirm->key_choose();
+        } else {
+            if (dir) save->key_move(dir);
+            else if (enter) save->key_choose();
+        }
         return;
     }
     switch (cur) {
-    case Screen::Settings: settings->on_key(k); break;
-    case Screen::List: list->on_key(k); break;
-    default: break;
-    }
-}
-
-void CassetteUi::Impl::on_keyboard(const key_item &item)
-{
-    if (item.key_state != KBD_KEY_PRESSED && item.key_state != KBD_KEY_REPEATED) return;
-    if (dialog || box_up()) return;
-    if (item.mods & (KBD_MOD_CTRL | KBD_MOD_ALT | KBD_MOD_LOGO | KBD_MOD_FN)) return;
-    const bool shift = (item.mods & KBD_MOD_SHIFT) != 0;
-    char ch = 0;
-    if (item.key_code == KEY_L) ch = 'l';
-    else if (item.key_code == KEY_S) ch = 's';
-    else if (item.key_code == 0 && item.utf8[0] && !item.utf8[1]) ch = static_cast<char>(item.utf8[0] | 0x20);
-    const bool repeat = item.key_state == KBD_KEY_REPEATED;
-    if (!repeat && (ch == 'l' || ch == 's') && cur != Screen::Trim) {
-        go(ch == 'l' ? Screen::List : Screen::Settings);
-        return;
-    }
-    if (item.key_code == KEY_LEFT || item.key_code == KEY_RIGHT) {
-        const int dir = item.key_code == KEY_LEFT ? -1 : 1;
-        if (cur == Screen::Trim) trim->nudge(dir, shift);
-        else if (cur == Screen::Settings) settings->on_left_right(dir);
+    case Screen::Recorder:
+        if (press && is(KEY_L, 'l')) go(Screen::List);
+        else if (press && is(KEY_S, 's')) go(Screen::Settings);
+        break;
+    case Screen::Settings:
+        if (up) settings->on_key(LV_KEY_UP);
+        else if (down) settings->on_key(LV_KEY_DOWN);
+        else if (enter && press) settings->on_key(LV_KEY_ENTER);
+        else if (right) settings->on_right();
+        else if (left) settings->on_left_right(-1);
+        else if (press && is(KEY_L, 'l')) go(Screen::List);
+        break;
+    case Screen::List:
+        if (up) list->on_key(LV_KEY_UP);
+        else if (down) list->on_key(LV_KEY_DOWN);
+        else if (!press) break;
+        else if (enter) list->key(0);
+        else if (is(KEY_N, 'n')) list->key(1);
+        else if (is(KEY_T, 't')) list->key(2);
+        else if (code == KEY_DELETE) list->key(3);
+        else if (is(KEY_S, 's')) go(Screen::Settings);
+        break;
+    case Screen::Trim:
+        if (left || right) trim->nudge(left ? -1 : 1, shift);
+        else if (!press) break;
+        else if (up) trim->press(TrimPage::ZoomIn);
+        else if (down) trim->press(TrimPage::ZoomOut);
+        else if (is(KEY_I, 'i')) trim->press(TrimPage::SetIn);
+        else if (is(KEY_O, 'o')) trim->press(TrimPage::SetOut);
+        else if (enter) trim->press(TrimPage::Split);
+        else if (tab) trim->press(TrimPage::NextFlag);
+        else if (is(KEY_SPACE, ' ')) trim->press(TrimPage::Play);
+        else if (is(KEY_S, 's')) trim->press(TrimPage::Save);
+        break;
     }
 }
 
