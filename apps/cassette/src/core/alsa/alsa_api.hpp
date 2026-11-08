@@ -7,6 +7,7 @@
  */
 #pragma once
 
+#include <cerrno>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -33,6 +34,7 @@ struct CardInfo {
     std::string usb_id;     /* "vvvv:pppp" when a USB card, else "" (a cheap headset may report 0000:0000) */
     std::string usb_port;   /* USB port path such as "1-1.2" when known, else "" */
     bool capture = false;   /* has a capture PCM */
+    bool playback = false;  /* has a playback PCM (filled like `capture`, from /dev/snd pcmC<n>D<d>p) */
 };
 
 /* What a capture PCM offers (from hw_params_any and test_*). */
@@ -59,12 +61,26 @@ struct HwGranted {
     uint32_t buffer_frames = 0;
 };
 
-/* One open capture PCM. Used by one thread at a time. */
+/* What a playback PCM offers: the same fields as a capture offer. */
+using PlaybackOffer = CaptureOffer;
+
+/* One open capture or playback PCM. Used by one thread at a time. */
 class AlsaPcm {
 public:
     virtual ~AlsaPcm() = default;
     /* Frames read (> 0, possibly fewer than asked) or a negative error (-EPIPE overrun, -ENODEV/-EBADFD unplugged...). */
     virtual long readi(void *buf, size_t frames) = 0;
+    /* Playback PCMs: frames written (> 0, possibly fewer) or a negative error (-EPIPE underrun, -ENODEV unplugged...). */
+    virtual long writei(const void *buf, size_t frames) {
+        (void)buf;
+        (void)frames;
+        return -ENOSYS; /* a capture PCM */
+    }
+    /* Playback PCMs: frames queued but not yet heard (snd_pcm_delay), or a negative error. */
+    virtual long delay() { return 0; }
+    /* Playback PCMs: stop at once and discard what is queued (snd_pcm_drop) / play out what is queued (snd_pcm_drain). */
+    virtual int drop() { return 0; }
+    virtual int drain() { return 0; }
     /* snd_pcm_recover: 0 when the stream can be read again, else a negative error. */
     virtual int recover(int err) = 0;
     virtual int prepare() = 0;
@@ -99,6 +115,23 @@ public:
     virtual int mixer_list(const std::string &card, std::vector<CtlInfo> &out) = 0;
     virtual int mixer_get(const std::string &card, const std::string &name, long &value) = 0;       /* first channel */
     virtual int mixer_set(const std::string &card, const std::string &name, long value) = 0;        /* all channels */
+
+    /* Playback (task T5). Defaults return -ENOSYS so a capture-only implementation still builds. */
+    /* What the playback PCM offers; opens it briefly. */
+    virtual int query_playback(const std::string &device, PlaybackOffer &out) {
+        (void)device;
+        (void)out;
+        return -ENOSYS;
+    }
+    /* Opens and configures a playback PCM: interleaved write, exactly the requested format, rate and channels. */
+    virtual int open_playback(const std::string &device, const HwRequest &req, std::unique_ptr<AlsaPcm> &pcm,
+                              HwGranted &granted) {
+        (void)device;
+        (void)req;
+        (void)pcm;
+        (void)granted;
+        return -ENOSYS;
+    }
 };
 
 /* The production implementation: loads libasound.so.2 on first use. Never null; unavailable() explains. */
