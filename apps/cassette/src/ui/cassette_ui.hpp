@@ -10,10 +10,20 @@
  * Pages: Recorder (the root), Settings, Recordings (list), Trim; the save and confirm boxes over them (shown while the
  * model says so); the record countdown and the scan badge are states of the recorder page.
  *
- * Keys (a physical keyboard): L the recordings list, S the settings (from the recorder, the settings and the list);
- * Esc back (the root's Esc ends the app, as every app; during the countdown it cancels it; a picker, a box or a text
- * field closes first); Up / Down / Enter in the lists; Left / Right move the trim marker 0.1 s (Shift 1 s) and change
- * a selected slider row. The header's Esc button does what Esc does.
+ * Keys (a Bluetooth or USB keyboard; docs/KEYS.md is the same map). Esc is back everywhere (the recorder's Esc ends
+ * the app as in every app, during the countdown it cancels it; a picker, a box or a text field closes first); the
+ * header's Esc button does what Esc does.
+ *   Recorder    R REC, Space PLAY/PAUSE, X STOP, comma REW, period FWD (the press and the release reach the deck:
+ *               holding REW / FWD scans), L the recordings, S the settings
+ *   Recordings  Up / Down move the selection, Enter PLAY, N RENAME, T TRIM, Delete DELETE (the controller asks in the
+ *               confirm box), S the settings, Esc the recorder
+ *   Trim        Left / Right move the marker 0.1 s (Shift 1 s), Up zoom in, Down zoom out, I SET IN, O SET OUT,
+ *               Enter SPLIT (REMOVE while a flag is selected), Tab select the next flag, Space PLAY, S SAVE, Esc back
+ *               to the list (nothing saved)
+ *   Boxes       Left / Right or Tab move between the buttons (a white outline from the first move), Enter chooses
+ *               (the save box: SAVE AS NEW FILES; the confirm box: CANCEL, when nothing was moved), Esc cancels
+ *   Settings    Up / Down move, Enter or Right change / open (Left / Right step a slider row), Esc back (a picker
+ *               first), L the recordings
  *
  * Text entry (the File prefix setting, RENAME): the toolkit's Dialog with a TextField, so the keyboard policy applies
  * as everywhere (a physical keyboard first; the toolkit's fallback keyboard only when none is connected).

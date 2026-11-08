@@ -1,0 +1,13 @@
+title Cassette (deck, 640x480 at 11.3 px/mm): the recordings list, keys of the toolkit touch target, rows of the list row minimum
+sizes 640x480
+ppmm 1130
+env CASSETTE_DEMO idle
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key l
+wait 400
+shot deck-list
+expect text "Take 006 selected. Esc returns to the recorder."
+expect notext "LAYOUT FAIL"
+expect noquit

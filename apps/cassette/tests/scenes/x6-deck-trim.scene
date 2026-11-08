@@ -1,0 +1,12 @@
+title Cassette (deck, 640x480 at 11.3 px/mm): trim and split, steppers and keys of the toolkit touch target, the waveform takes the rest
+sizes 640x480
+ppmm 1130
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_PAGE trim
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot deck-trim
+expect text "REMOVE"
+expect notext "LAYOUT FAIL"
+expect noquit

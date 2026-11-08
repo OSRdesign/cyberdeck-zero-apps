@@ -49,7 +49,13 @@ struct Nav {
 struct Frame {
     int w = 480, h = 320, body_y = 40;
     bool portrait = false;
-    Fit fit(std::vector<double> seams_landscape, std::vector<double> seams_portrait) const;
+    /* the toolkit's touch sizes for this panel (cp0_ui_metrics: TARGET and ROW 7 mm, LIST_ROW 5 mm, with floors):
+     * the minimum height of the keys, steppers and buttons, of a row that acts on a tap, of a row a tap selects */
+    int target = 44, row = 40, list_row = 24;
+    Fit fit(std::vector<double> seams_landscape, std::vector<double> seams_portrait, std::vector<Band> bands_landscape = {},
+            std::vector<Band> bands_portrait = {}) const;
+    /* the scale a page will get (for computing band minimums) */
+    double scale() const;
 };
 
 class PageBase {
@@ -71,6 +77,8 @@ public:
     RecorderPage(lv_obj_t *parent, const Frame &frame, const UiActions &actions, const Nav &nav, AnimOptions anim);
     void update(const RecorderVm &rec);
     void set_shown_page(bool shown);
+    /* A deck key held on the keyboard: drawn pressed until released. */
+    void press_key(int key, bool down);
     const CassetteWindow &window() const { return *window_; }
 
 private:
@@ -99,6 +107,7 @@ private:
     int strip_x_ = 0, strip_w_ = 0, strip_y_ = 0, strip_h_ = 0;
     bool card_shown_ = true;
     bool limiter_ = false, low_cut_ = false;
+    double btn_h_ = 44; /* the Recordings / Settings buttons' height (landscape) */
     bool first_ = true;
 };
 
@@ -109,6 +118,8 @@ public:
     /* Keys: Up / Down move the highlight, Enter acts, Left / Right change a slider. True when used. */
     bool on_key(std::uint32_t lv_key);
     bool on_left_right(int dir);
+    /* Right: steps a slider row up, else changes / opens the highlighted row (as Enter). */
+    bool on_right();
     /* Esc: closes the picker first; false when there was none. */
     bool back();
     void reset_view();
@@ -151,6 +162,8 @@ public:
     void update(const ListVm &l);
     bool on_key(std::uint32_t lv_key);
     int selected() const { return vm_.selected; }
+    /* The four keys on the selected take: 0 PLAY, 1 RENAME, 2 TRIM, 3 DELETE. */
+    void key(int which);
 
 private:
     struct Row {
@@ -163,7 +176,6 @@ private:
     void style_row(int i);
     void select(int i, bool from_touch);
     void update_scrollbar();
-    void key(int which);
 
     const UiActions &act_;
     Nav nav_;
@@ -184,6 +196,9 @@ public:
     void update(const TrimVm &t);
     /* Left / Right: one POSITION step (100 ms, Shift 1 s). */
     void nudge(int dir, bool shift);
+    /* The keyboard's commands (the keys' and steppers' own actions; NextFlag selects the flag after the selected one). */
+    enum Command { SetIn, SetOut, Split, Play, Save, ZoomIn, ZoomOut, NextFlag };
+    void press(Command c);
 
 private:
     static void wave_draw_cb(lv_event_t *e);
@@ -217,11 +232,17 @@ public:
     void update(const SaveVm &s, const TrimVm &t);
     bool shown() const { return shown_; }
     lv_obj_t *root() const { return dim_; }
+    /* Keys: Left / Right / Tab move the focus from the default (outlined from the first move), Enter chooses (SAVE AS
+     * NEW FILES when nothing was moved). */
+    void key_move(int dir);
+    void key_choose();
 
 private:
     static void button_cb(lv_event_t *e);
     lv_obj_t *dim_ = nullptr, *title_ = nullptr, *summary_ = nullptr, *files_ = nullptr;
-    std::vector<lv_obj_t *> names_, lengths_;
+    std::vector<lv_obj_t *> names_, lengths_, buttons_;
+    int focus_ = 0;
+    bool focus_shown_ = false;
     const UiActions &act_;
     Fit fit_;
     bool narrow_ = false, shown_ = false;
@@ -234,10 +255,16 @@ public:
     void update(const ConfirmVm &c);
     bool shown() const { return shown_; }
     lv_obj_t *root() const { return dim_; }
+    /* Keys as the save box; Enter alone answers CANCEL (the safe default). */
+    void key_move(int dir);
+    void key_choose();
 
 private:
     static void button_cb(lv_event_t *e);
     lv_obj_t *dim_ = nullptr, *title_ = nullptr, *body_ = nullptr, *yes_label_ = nullptr;
+    std::vector<lv_obj_t *> buttons_;
+    int focus_ = 1;
+    bool focus_shown_ = false;
     const UiActions &act_;
     Fit fit_;
     bool shown_ = false;

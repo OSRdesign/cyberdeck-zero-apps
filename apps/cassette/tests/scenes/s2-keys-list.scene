@@ -1,0 +1,59 @@
+title Cassette keys on the recordings list: Down, Enter plays, N renames, T opens the trim page, Delete asks in the confirm box (Tab and Enter answer), S the settings, Esc the recorder
+sizes 480x320 320x480
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key l
+wait 300
+key down
+wait 200
+@480x320 expect text "Take 005 selected. Esc returns to the recorder."
+key n
+wait 400
+expect text "Name"
+key esc
+wait 300
+expect text "RENAME"
+say N opened the text box for the name; Esc closed it
+key t
+wait 400
+expect text "POSITION"
+key esc
+wait 300
+expect text "RENAME"
+say T opened the trim page; Esc came back
+key delete
+wait 300
+expect text "Delete Take 005?"
+shot keys-delete
+expect notext "LAYOUT FAIL"
+key enter
+wait 300
+expect notext "Delete Take 005?"
+expect text "Take 005"
+say Enter answered CANCEL (the default): the take stays
+key delete
+wait 300
+key tab
+wait 200
+shot keys-delete-focus
+key enter
+wait 300
+expect notext "Delete Take 005?"
+expect notext "Take 005"
+say Tab moved to DELETE, Enter deleted it
+key enter
+wait 300
+key esc
+wait 300
+@480x320 expect text "PLAYING TAKE 004 · 00:00 / 00:41"
+@320x480 expect text "00:00 / 00:41"
+say Enter played the selected take
+key l
+wait 300
+key s
+wait 300
+expect text "Record timer"
+expect noquit

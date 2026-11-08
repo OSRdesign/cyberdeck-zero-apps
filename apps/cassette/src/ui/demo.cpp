@@ -195,7 +195,8 @@ ViewModel demo_model(const std::string &scene)
     }
     s.rows.push_back(choice("format", "Format", {"WAV 48 kHz 16-bit", "WAV 48 kHz 24-bit", "WAV 44.1 kHz 16-bit"}, 0));
     s.rows.push_back(choice("timer", "Record timer", {"Off", "3 s", "10 s", "20 s"}, 0));
-    s.rows.push_back(choice("rewfwd", "REW / FWD", {"Fast scan 5x", "Jump 5 s"}, 0));
+    const char *rf = std::getenv("CASSETTE_DEMO_REWFWD");
+    s.rows.push_back(choice("rewfwd", "REW / FWD", {"Fast scan 5x", "Jump 5 s"}, rf && std::string(rf) == "jump" ? 1 : 0));
     s.rows.push_back(choice("channels", "Channels", {"Mono", "Stereo"}, 0));
     s.rows.push_back(toggle("lowcut", "Low cut 80 Hz", false));
     s.rows.push_back(toggle("limiter", "Limiter", false));
@@ -256,6 +257,66 @@ ViewModel demo_model(const std::string &scene)
     return vm;
 }
 
+void DemoDriver::set_transport(Transport t)
+{
+    RecorderVm &r = vm_.rec;
+    r.transport = t;
+    const bool rec = t == Transport::Recording || t == Transport::RecordingPaused || t == Transport::Countdown;
+    const bool play = t == Transport::Playing || t == Transport::PlayingPaused || t == Transport::ScanForward ||
+                      t == Transport::ScanReverse;
+    r.keys[static_cast<int>(KeyId::Rew)].enabled = !rec;
+    r.keys[static_cast<int>(KeyId::Fwd)].enabled = !rec;
+    r.keys[static_cast<int>(KeyId::Rec)].latched = t == Transport::Recording || t == Transport::RecordingPaused;
+    r.keys[static_cast<int>(KeyId::PlayPause)].latched = play || t == Transport::RecordingPaused;
+    r.keys[static_cast<int>(KeyId::Rew)].latched = t == Transport::ScanReverse;
+    r.keys[static_cast<int>(KeyId::Fwd)].latched = t == Transport::ScanForward;
+}
+
+void DemoDriver::deck(KeyId k, KeyEdge e)
+{
+    RecorderVm &r = vm_.rec;
+    const Transport t = r.transport;
+    const bool playing = t == Transport::Playing || t == Transport::PlayingPaused;
+    const bool jump = std::any_of(vm_.settings.rows.begin(), vm_.settings.rows.end(),
+                                  [](const SettingRow &row) { return row.id == "rewfwd" && row.choice == 1; });
+    if ((k == KeyId::Rew || k == KeyId::Fwd) && playing && !jump && e == KeyEdge::Down) {
+        before_scan_ = t;
+        set_transport(k == KeyId::Rew ? Transport::ScanReverse : Transport::ScanForward);
+    } else if ((k == KeyId::Rew || k == KeyId::Fwd) && !jump && e == KeyEdge::Up &&
+               (t == Transport::ScanReverse || t == Transport::ScanForward)) {
+        set_transport(before_scan_);
+    } else if ((k == KeyId::Rew || k == KeyId::Fwd) && jump && playing && e == KeyEdge::Click) {
+        const std::int64_t d = k == KeyId::Rew ? -5000 : 5000;
+        r.info.play_pos_ms = std::clamp<std::int64_t>(r.info.play_pos_ms + d, 0, r.info.play_len_ms);
+        r.counter_ms = r.info.play_pos_ms;
+    } else if (e != KeyEdge::Click) {
+        return;
+    } else if (k == KeyId::Rec && (t == Transport::Idle || playing)) {
+        set_transport(Transport::Recording);
+        r.tape.label = "Take 008";
+        r.info.take = "TAKE 008";
+        r.counter_ms = 0;
+    } else if (k == KeyId::PlayPause) {
+        if (t == Transport::Idle) {
+            set_transport(Transport::Playing);
+            r.tape.label = "Take 006";
+            r.info.take = "TAKE 006";
+            r.info.play_pos_ms = 5 * 60000 + 44000;
+            r.info.play_len_ms = 12 * 60000 + 8000;
+            r.counter_ms = r.info.play_pos_ms;
+        } else if (t == Transport::Playing) set_transport(Transport::PlayingPaused);
+        else if (t == Transport::PlayingPaused) set_transport(Transport::Playing);
+        else if (t == Transport::Recording) set_transport(Transport::RecordingPaused);
+        else if (t == Transport::RecordingPaused) set_transport(Transport::Recording);
+        else return;
+    } else if (k == KeyId::Stop && t != Transport::Idle) {
+        set_transport(Transport::Idle);
+    } else {
+        return;
+    }
+    emit();
+}
+
 void DemoDriver::tick_live(std::uint32_t elapsed_ms)
 {
     RecorderVm &r = vm_.rec;
@@ -290,10 +351,7 @@ UiActions DemoDriver::actions()
     static const char *const edges[3] = {"down", "up", "click"};
     a.deck_key = [this](KeyId k, KeyEdge e) {
         log_action(std::string("deck_key ") + keys[static_cast<int>(k)] + " " + edges[static_cast<int>(e)]);
-        if (k == KeyId::Stop && e == KeyEdge::Click && vm_.rec.transport == Transport::Countdown) {
-            vm_.rec.transport = Transport::Idle;
-            emit();
-        }
+        deck(k, e);
     };
     a.countdown_cancel = [this] {
         log_action("countdown_cancel");
@@ -354,14 +412,34 @@ UiActions DemoDriver::actions()
         emit();
     };
     a.list_activate = [](int i) { log_action("list_activate " + std::to_string(i)); };
-    a.list_play = [](int i) { log_action("list_play " + std::to_string(i)); };
+    a.list_play = [this](int i) {
+        log_action("list_play " + std::to_string(i));
+        if (i < 0 || i >= static_cast<int>(vm_.list.takes.size())) return;
+        const TakeRow &t = vm_.list.takes[static_cast<std::size_t>(i)];
+        set_transport(Transport::Playing);
+        vm_.rec.tape.label = t.name;
+        vm_.rec.info.take = "TAKE " + t.sticker;
+        vm_.rec.info.play_pos_ms = 0;
+        vm_.rec.info.play_len_ms = t.length_ms;
+        vm_.rec.counter_ms = 0;
+        emit();
+    };
     a.list_rename = [this](int i, const std::string &p) {
         log_action("list_rename " + std::to_string(i) + " " + p);
         if (i >= 0 && i < static_cast<int>(vm_.list.takes.size())) vm_.list.takes[static_cast<std::size_t>(i)].prefix = p;
         emit();
     };
     a.list_trim = [](int i) { log_action("list_trim " + std::to_string(i)); };
-    a.list_delete = [](int i) { log_action("list_delete " + std::to_string(i)); };
+    a.list_delete = [this](int i) {
+        log_action("list_delete " + std::to_string(i));
+        if (i < 0 || i >= static_cast<int>(vm_.list.takes.size())) return;
+        pending_delete_ = i;
+        vm_.confirm.title = "Delete " + vm_.list.takes[static_cast<std::size_t>(i)].name + "?";
+        vm_.confirm.body = "The file is removed from the recordings folder.";
+        vm_.confirm.yes = "DELETE";
+        vm_.confirm.shown = true;
+        emit();
+    };
     a.trim_zoom = [this](int d) {
         log_action("trim_zoom " + std::to_string(d));
         TrimVm &t = vm_.trim;
@@ -425,14 +503,28 @@ UiActions DemoDriver::actions()
     a.save_choose = [this](SaveMode m) {
         static const char *const n[3] = {"new files", "replace", "cancel"};
         log_action(std::string("save_choose ") + n[static_cast<int>(m)]);
-        if (m == SaveMode::Replace) vm_.confirm.shown = true;
-        else vm_.save.shown = false;
+        if (m == SaveMode::Replace) {
+            pending_delete_ = -1;
+            vm_.confirm.title = "Delete the original take?";
+            vm_.confirm.body = "It is deleted only after every new file is written and synced.";
+            vm_.confirm.yes = "DELETE";
+            vm_.confirm.shown = true;
+        } else {
+            vm_.save.shown = false;
+        }
         emit();
     };
     a.confirm_answer = [this](bool yes) {
         log_action(std::string("confirm_answer ") + (yes ? "yes" : "no"));
         vm_.confirm.shown = false;
-        if (yes) vm_.save.shown = false;
+        if (yes && pending_delete_ >= 0 && pending_delete_ < static_cast<int>(vm_.list.takes.size())) {
+            vm_.list.takes.erase(vm_.list.takes.begin() + pending_delete_);
+            vm_.list.take_count = std::max(0, vm_.list.take_count - 1);
+            vm_.list.selected = std::min(vm_.list.selected, static_cast<int>(vm_.list.takes.size()) - 1);
+        } else if (yes) {
+            vm_.save.shown = false;
+        }
+        pending_delete_ = -1;
         emit();
     };
     return a;

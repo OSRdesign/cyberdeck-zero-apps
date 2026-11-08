@@ -22,14 +22,18 @@ ListPage::ListPage(lv_obj_t *parent, const Frame &frame, const UiActions &action
     : PageBase(parent, frame), act_(actions), nav_(nav)
 {
     const bool p = frame.portrait;
-    fit_ = frame.fit({219}, {389});
+    /* the four keys get the toolkit's touch target (the deck: 79 px), the list area gives the height back */
+    const double t = frame.target;
+    fit_ = frame.fit({219}, {389}, {{78, 216, 0, 0, true}, {222, 278, t, 0, false}},
+                     {{78, 382, 0, 0, true}, {396, 460, t, 0, false}});
     deck_body(root_, fit_);
     const double sw = p ? 278 : 446;
     box(root_, fit_.x(16), fit_.y(52), fit_.w(16, sw), fit_.h(52, 22), col::kStrip, fit_.px(5));
     strip_left_ = fit_label(root_, fit_, Face::Bold, 14, col::kInk, 26, 52, sw / 2 + 40, 22, LV_TEXT_ALIGN_LEFT, 0.5);
     strip_right_ = fit_label(root_, fit_, Face::Bold, 14, col::kInk, 16 + sw / 2 - 30, 52, sw / 2 + 20, 22, LV_TEXT_ALIGN_RIGHT, 0.5);
 
-    row_h_ = fit_.px(p ? 56 : 42);
+    /* a tap selects a row (a second tap or Enter acts): the toolkit's list row minimum (LIST_ROW) applies */
+    row_h_ = std::max(fit_.px(p ? 56 : 42), frame.list_row);
     row_gap_ = fit_.px(p ? 6 : 4);
     const double lw = p ? 276 : 430;
     list_ = lv_obj_create(root_);
@@ -217,10 +221,6 @@ bool ListPage::on_key(std::uint32_t k)
         int i = vm_.selected < 0 ? 0 : vm_.selected + (k == LV_KEY_DOWN ? 1 : -1);
         i = std::clamp(i, 0, n - 1);
         if (i != vm_.selected) select(i, false);
-        return true;
-    }
-    if (k == LV_KEY_ENTER && vm_.selected >= 0) {
-        if (act_.list_activate) act_.list_activate(vm_.selected);
         return true;
     }
     return false;

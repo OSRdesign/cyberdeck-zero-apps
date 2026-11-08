@@ -59,7 +59,8 @@ SettingsPage::SettingsPage(lv_obj_t *parent, const Frame &frame, const UiActions
 
 int SettingsPage::row_h() const
 {
-    return fit_.px(kRowH);
+    /* a tap acts at once (a switch flips, a picker opens): the toolkit's ROW (the deck: 79 px) */
+    return std::max(fit_.px(kRowH), frame_.row);
 }
 
 void SettingsPage::update(const SettingsVm &s)
@@ -187,7 +188,8 @@ void SettingsPage::highlight(int i)
     for (std::size_t k = 0; k < rows_.size(); ++k) {
         if (picker_ >= 0) {
             const SettingRow &sr = vm_.rows[static_cast<std::size_t>(picker_)];
-            const bool cur = rows_[k].index == sr.choice || static_cast<int>(k) == i;
+            /* the keyboard highlight, else the current choice */
+            const bool cur = i >= 0 ? static_cast<int>(k) == i : rows_[k].index == sr.choice;
             lv_obj_set_style_bg_color(rows_[k].obj, lv_color_hex(cur ? col::kStrip : col::kRow), 0);
             lv_obj_set_style_border_color(rows_[k].obj, lv_color_hex(cur ? col::kHinge : col::kBodyEdge), 0);
         } else {
@@ -268,6 +270,9 @@ bool SettingsPage::on_key(std::uint32_t k)
     const int n = static_cast<int>(rows_.size());
     if (n == 0) return false;
     if (k == LV_KEY_DOWN || k == LV_KEY_UP) {
+        /* in a picker the highlight starts on the current choice */
+        if (sel_ < 0 && picker_ >= 0 && picker_ < static_cast<int>(vm_.rows.size()))
+            sel_ = vm_.rows[static_cast<std::size_t>(picker_)].choice;
         if (sel_ < 0) sel_ = k == LV_KEY_DOWN ? 0 : n - 1;
         else sel_ = std::clamp(sel_ + (k == LV_KEY_DOWN ? 1 : -1), 0, n - 1);
         highlight(sel_);
@@ -278,6 +283,16 @@ bool SettingsPage::on_key(std::uint32_t k)
         return true;
     }
     return false;
+}
+
+bool SettingsPage::on_right()
+{
+    if (sel_ < 0 || sel_ >= static_cast<int>(rows_.size())) return false;
+    if (picker_ < 0 && sel_ < static_cast<int>(vm_.rows.size()) &&
+        vm_.rows[static_cast<std::size_t>(sel_)].kind == SettingKind::Slider)
+        return on_left_right(1);
+    activate(sel_, -1);
+    return true;
 }
 
 bool SettingsPage::on_left_right(int dir)

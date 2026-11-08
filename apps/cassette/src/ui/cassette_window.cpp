@@ -40,14 +40,21 @@ CassetteWindow::CassetteWindow(lv_obj_t *parent, const Fit &fit, const Layout &l
                                std::function<void()> on_cancel)
     : fit_(fit), lay_(lay), anim_(anim), on_cancel_(std::move(on_cancel))
 {
-    k_ = lay.tape_scale * fit.s;
     window_ = framed_panel(parent, fit, lay.window, col::kWindow);
+    /* the window's screen box (its height follows the page's bands); everything inside is placed from it at scale s:
+     * the cassette centred (on the boards it is), the badge from the top, the countdown's hint from the bottom */
+    const DRect &w = lay.window;
+    const int wx = fit.x(w.x), wy = fit.y(w.y), ww = fit.w(w.x, w.w), wh = fit.h(w.y, w.h);
+    const double margin = (w.h - 104 * lay.tape_scale) / 2.0; /* the board's gap above and under the cassette */
+    k_ = std::min(lay.tape_scale * fit.s, (wh - 2 * margin * fit.s) / 104.0);
 
     /* the cassette: drawn once into a canvas in the display's colour format (opaque, on the window colour) */
     const int cw = static_cast<int>(std::lround(200 * k_)), ch = static_cast<int>(std::lround(104 * k_));
+    const int tx = fit.x(lay.tape_x) + (static_cast<int>(std::lround(200 * lay.tape_scale * fit.s)) - cw) / 2;
+    const int ty = wy + (wh - ch) / 2;
     canvas_ = lv_canvas_create(parent);
     lv_obj_remove_flag(canvas_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_pos(canvas_, fit.x(lay.tape_x), fit.y(lay.tape_y));
+    lv_obj_set_pos(canvas_, tx, ty);
     tape_buf_ = lv_draw_buf_create(static_cast<uint32_t>(cw), static_cast<uint32_t>(ch),
                                    lv_display_get_color_format(lv_obj_get_display(parent)), LV_STRIDE_AUTO);
     if (tape_buf_) lv_canvas_set_draw_buf(canvas_, tape_buf_);
@@ -60,8 +67,8 @@ CassetteWindow::CassetteWindow(lv_obj_t *parent, const Fit &fit, const Layout &l
     for (int i = 0; i < 2; ++i) {
         hub_[i] = lv_image_create(parent);
         lv_obj_remove_flag(hub_[i], LV_OBJ_FLAG_CLICKABLE);
-        const int cx = fit.x(lay.tape_x) + static_cast<int>(std::lround(hx[i] * k_));
-        const int cy = fit.y(lay.tape_y) + static_cast<int>(std::lround(74 * k_));
+        const int cx = tx + static_cast<int>(std::lround(hx[i] * k_));
+        const int cy = ty + static_cast<int>(std::lround(74 * k_));
         lv_obj_set_pos(hub_[i], cx - hub_box_ / 2, cy - hub_box_ / 2);
         lv_obj_set_size(hub_[i], hub_box_, hub_box_);
         if (frames_[0]) lv_image_set_src(hub_[i], frames_[0]);
@@ -70,16 +77,15 @@ CassetteWindow::CassetteWindow(lv_obj_t *parent, const Fit &fit, const Layout &l
     /* the scan badge */
     badge_ = lv_obj_create(parent);
     plain(badge_);
-    lv_obj_set_pos(badge_, fit.x(lay.badge.x), fit.y(lay.badge.y));
-    lv_obj_set_size(badge_, fit.w(lay.badge.x, lay.badge.w), fit.h(lay.badge.y, lay.badge.h));
+    lv_obj_set_pos(badge_, fit.x(lay.badge.x), wy + fit.px(lay.badge.y - w.y));
+    lv_obj_set_size(badge_, fit.w(lay.badge.x, lay.badge.w), fit.px(lay.badge.h));
     lv_obj_add_event_cb(badge_, badge_draw_cb, LV_EVENT_DRAW_MAIN, this);
     lv_obj_add_flag(badge_, LV_OBJ_FLAG_HIDDEN);
 
     /* the empty window (no sound input) */
-    const DRect &w = lay.window;
-    empty_ = box(parent, fit.x(w.x), fit.y(w.y), fit.w(w.x, w.w), fit.h(w.y, w.h), col::kWindow, fit.px(8), LV_OPA_TRANSP);
+    empty_ = box(parent, wx, wy, ww, wh, col::kWindow, fit.px(8), LV_OPA_TRANSP);
     const int pad = fit.px(12);
-    const int ew = fit.w(w.x, w.w) - 2 * pad;
+    const int ew = ww - 2 * pad;
     empty_msg_ = label(empty_, Face::Bold, fit.px(15), col::kKeyText, pad, 0, ew, LV_TEXT_ALIGN_CENTER);
     lv_label_set_long_mode(empty_msg_, LV_LABEL_LONG_MODE_WRAP);
     empty_hint_ = label(empty_, Face::Medium, fit.px(12), col::kHint, pad, 0, ew, LV_TEXT_ALIGN_CENTER);
@@ -88,7 +94,7 @@ CassetteWindow::CassetteWindow(lv_obj_t *parent, const Fit &fit, const Layout &l
     lv_label_set_text(empty_hint_, "Found by itself when plugged in.");
     lv_obj_update_layout(empty_);
     const int mh = lv_obj_get_height(empty_msg_), hh = lv_obj_get_height(empty_hint_), gap = fit.px(8);
-    const int top = (fit.h(w.y, w.h) - (mh + gap + hh)) / 2;
+    const int top = (wh - (mh + gap + hh)) / 2;
     lv_obj_set_y(empty_msg_, top);
     lv_obj_set_y(empty_hint_, top + mh + gap);
     lv_obj_add_flag(empty_, LV_OBJ_FLAG_HIDDEN);
@@ -97,26 +103,28 @@ CassetteWindow::CassetteWindow(lv_obj_t *parent, const Fit &fit, const Layout &l
     count_ = lv_obj_create(parent);
     plain(count_);
     lv_obj_add_flag(count_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_pos(count_, fit.x(w.x), fit.y(w.y));
-    const int ow = fit.w(w.x, w.w), oh = fit.h(w.y, w.h);
+    lv_obj_set_pos(count_, wx, wy);
+    const int ow = ww, oh = wh;
     lv_obj_set_size(count_, ow, oh);
     lv_obj_add_event_cb(count_, cancel_cb, LV_EVENT_CLICKED, this);
     lv_obj_t *shade = box(count_, 0, 0, ow, oh, col::kShade, fit.px(8), static_cast<lv_opa_t>(214)); /* 84 % */
     border(shade, fit.px(3), col::kFrame);
-    const int oy = fit.y(w.y);
-    count_title_ = label(count_, Face::Bold, fit.px(12), col::kScale, 0, fit.y(lay.label_y) - oy, ow, LV_TEXT_ALIGN_CENTER,
+    /* the ring and the number centred on the board's centre line (2 px under the window's middle) */
+    const int ring_cy = oh / 2 + fit.px(lay.ring_y + lay.ring_d / 2 - (w.y + w.h / 2));
+    count_title_ = label(count_, Face::Bold, fit.px(12), col::kScale, 0, fit.px(lay.label_y - w.y), ow, LV_TEXT_ALIGN_CENTER,
                          static_cast<int>(2.5 * fit.s));
     lv_label_set_text(count_title_, "RECORDING IN");
     const int rd = fit.px(lay.ring_d);
     count_ring_ = lv_obj_create(count_);
     plain(count_ring_);
-    lv_obj_set_pos(count_ring_, (ow - rd) / 2, fit.y(lay.ring_y) - oy);
+    lv_obj_set_pos(count_ring_, (ow - rd) / 2, ring_cy - rd / 2);
     lv_obj_set_size(count_ring_, rd, rd);
     lv_obj_add_event_cb(count_ring_, ring_draw_cb, LV_EVENT_DRAW_MAIN, this);
     const int npx = fit.px(lay.number_px);
     count_number_ = label(count_, Face::Mono, npx, col::kAmber, 0, 0, ow, LV_TEXT_ALIGN_CENTER);
-    lv_obj_set_y(count_number_, fit.y(lay.number_y) - oy + (npx - lv_font_get_line_height(font(Face::Mono, npx))) / 2);
-    count_hint_ = label(count_, Face::Medium, fit.px(12), col::kHint, 0, fit.y(lay.hint_y) - oy, ow, LV_TEXT_ALIGN_CENTER);
+    lv_obj_set_y(count_number_, ring_cy - lv_font_get_line_height(font(Face::Mono, npx)) / 2);
+    count_hint_ = label(count_, Face::Medium, fit.px(12), col::kHint, 0, oh - fit.px(w.y + w.h - lay.hint_y), ow,
+                        LV_TEXT_ALIGN_CENTER);
     lv_label_set_text(count_hint_, "tap here, STOP or Esc cancels");
     lv_obj_add_flag(count_, LV_OBJ_FLAG_HIDDEN);
 
