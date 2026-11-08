@@ -9,6 +9,7 @@
  * controller: its snapshot() fills the ViewModel, its commands are the UiActions (view_model.hpp).
  */
 #include "app.hpp"
+#include "bind/bound_app.hpp"
 #include "cassette_ui.hpp"
 #include "demo.hpp"
 
@@ -45,6 +46,8 @@ const AppSpec &app_spec()
         s.portrait_w = cassette::ui::kPortraitW;
         s.portrait_h = cassette::ui::kPortraitH;
         s.build = [](lv_obj_t *screen) -> std::shared_ptr<void> {
+            /* T6c: the controller bound to the UI (CASSETTE_DEMO unset or 1); another value is a UI demo state */
+            if (cassette::bind::bound_wanted()) return cassette::bind::build_bound_app(screen);
             auto app = std::make_shared<CassetteApp>();
             const char *scene = std::getenv("CASSETTE_DEMO");
             app->demo = std::make_unique<cassette::ui::DemoDriver>(cassette::ui::demo_model(scene && *scene ? scene : "idle"));
