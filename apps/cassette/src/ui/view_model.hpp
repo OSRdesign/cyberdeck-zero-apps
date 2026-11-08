@@ -1,0 +1,237 @@
+/*
+ * SPDX-License-Identifier: MIT
+ *
+ * Cassette: the view model of the user interface (task T6b) and the callbacks the screens issue.
+ *
+ * The UI (ui/cassette_ui.hpp) draws ONLY what this model says and never touches the core: the application controller
+ * (src/core/app, task T6a) fills a ViewModel from its state (Controller::snapshot() mirrors these structs) and calls
+ * CassetteUi::update(vm) whenever something changed (the meter at about 30 Hz while it runs). Every command a screen
+ * issues goes out through UiActions; the UI changes nothing by itself except which page is shown, the selection
+ * highlight of a list, and the scroll positions (it tells the controller about page changes through UiActions::open).
+ *
+ * Plain values only (no LVGL, no core types), so the model can be built and compared in unit tests. Times are
+ * milliseconds; texts are UTF-8 and already in the user's words (the UI adds only its fixed labels and joins the
+ * parts it is given, see ui_format.hpp). An empty std::function in UiActions is allowed: that command does nothing.
+ */
+#pragma once
+
+#include <cstdint>
+#include <functional>
+#include <string>
+#include <vector>
+
+namespace cassette {
+namespace ui {
+
+/* ------------------------------------------------------------------------------------------------ the recorder page */
+
+/* The five piano keys, left to right. */
+enum class KeyId { Rew = 0, PlayPause, Fwd, Stop, Rec, kCount };
+
+/* What the transport does now: decides the hubs (still, counterclockwise, clockwise fast), the PLAY/PAUSE key's icon
+ * and the info strip's wording. Mirrors core DeckState. */
+enum class Transport { Idle, Countdown, Recording, RecordingPaused, Playing, PlayingPaused, ScanForward, ScanReverse };
+
+struct KeyState {
+    bool enabled = true;  /* false: dimmed (35 %), presses are still reported (the controller ignores them) */
+    bool latched = false; /* drawn pressed down (dark red), e.g. REC while recording, REW while scanning */
+};
+
+/* One metered channel: the LED bar has 15 steps over -40..0 dBFS (core Meter: step i lit when peak >= -40 + i*40/14). */
+struct ChannelMeter {
+    int bar = 0;            /* lit steps 0..15 (core ChannelLevel::bar) */
+    int hold_bar = 0;       /* peak-hold tick after this many steps, 0 = no tick (core ChannelLevel::hold_bar) */
+    bool peak_lamp = false; /* PEAK lamp: a sample at -1 dBFS or above within the last second */
+};
+
+struct MeterVm {
+    int channels = 1;   /* 1: one bar "IN"; 2: two bars "L" and "R" */
+    ChannelMeter ch[2];
+};
+
+/* The cassette in the window. */
+struct TapeVm {
+    bool loaded = true;          /* false: the empty window (no sound input) */
+    std::string label;           /* the handwritten name, "Take 007" */
+    std::string side = "SIDE A";
+    std::string format;          /* "WAV 48k" */
+};
+
+/* A gain stepper (CARD = the sound card's capture level, SOFT = software gain on top). */
+struct GainVm {
+    bool shown = true;           /* CARD: only when the card has a capture level control; SOFT: always */
+    double db = 0.0;             /* shown "+13.0 dB" (one decimal) where it fits, "+13 dB" in the narrow layout */
+    bool can_down = true, can_up = true; /* false: that button dimmed */
+};
+
+/* What the info strip and the portrait info box say (joined by ui_format.hpp info_line / info_title / info_detail). */
+struct InfoVm {
+    std::string take;            /* "TAKE 007" (recording, idle) or the playing take "TAKE 006" */
+    std::string format;          /* "48k/16 WAV" */
+    std::string time_left;       /* "12 h 40" (the strip adds " left") */
+    std::int64_t play_pos_ms = 0, play_len_ms = 0; /* while a take plays or is paused */
+    bool limiter = false;        /* LIM lamp */
+    bool low_cut = false;        /* LOW CUT lamp */
+    std::string notice;          /* non-empty: replaces the strip's text (a short message: "Sound card unplugged: take kept") */
+};
+
+struct RecorderVm {
+    bool input_present = true;   /* false: the "no sound input" state (empty window, message, REC dimmed) */
+    Transport transport = Transport::Idle;
+    KeyState keys[static_cast<int>(KeyId::kCount)];
+    int scan_speed = 5;          /* the badge "<< 5x" / ">> 5x" while scanning */
+    int countdown_left = 0;      /* Countdown: the big number (seconds left) */
+    float countdown_fraction = 1.0f; /* Countdown: the red ring's remaining part, 1 = full, 0 = empty */
+    std::int64_t counter_ms = 0; /* the counter: MM:SS, H:MM:SS from one hour (smaller digits) */
+    MeterVm meter;
+    TapeVm tape;
+    InfoVm info;
+    GainVm card;                 /* CARD stepper */
+    GainVm soft;                 /* SOFT stepper */
+};
+
+/* ------------------------------------------------------------------------------------------------ settings */
+
+enum class SettingKind {
+    Choice, /* a value with a chevron; a tap opens the picker of `choices` (UiActions::setting_choice) */
+    Toggle, /* a switch (UiActions::setting_toggle) */
+    Slider, /* a slider with `value_text` beside it, min..max (UiActions::setting_slider) */
+    Text,   /* a value with a chevron; a tap opens a one-line text field (UiActions::setting_text) */
+};
+
+struct SettingRow {
+    std::string id;              /* the controller's key, given back in every callback ("input", "format", ...) */
+    std::string label;           /* "Input level" */
+    SettingKind kind = SettingKind::Choice;
+    bool enabled = true;         /* false: dimmed and not changeable (format, folder while a take records) */
+    std::string value;           /* Choice / Text: the shown value ("WAV 48 kHz 16-bit") */
+    std::vector<std::string> choices; /* Choice: the picker's entries */
+    int choice = 0;              /* Choice: the current entry */
+    bool on = false;             /* Toggle */
+    int min = 0, max = 16, pos = 0; /* Slider */
+    std::string value_text;      /* Slider: "8 / 16" */
+};
+
+/* The rows in order. The controller leaves out what the card does not have (Input level, Auto gain). */
+struct SettingsVm {
+    std::vector<SettingRow> rows;
+};
+
+/* ------------------------------------------------------------------------------------------------ recordings list */
+
+struct TakeRow {
+    std::string id;              /* the controller's key (a file name) */
+    std::string sticker;         /* the label sticker: "007", "006-1" */
+    std::string name;            /* "Take 007" */
+    std::string detail;          /* "today 14:32 · 42 s · 4 MB", "nodate · 41 s · 4 MB" */
+    std::int64_t length_ms = 0;  /* the duration column (landscape) */
+    std::string prefix;          /* the editable part of the name (rename) */
+};
+
+struct ListVm {
+    std::vector<TakeRow> takes;  /* newest first */
+    int selected = 0;            /* the darker row; the four keys act on it (-1: none) */
+    int take_count = 0;          /* the strip: "12 TAKES" */
+    std::string folder;          /* "~/Recordings" */
+    std::string free_space;      /* "41 GB" */
+    std::string free_hours;      /* "117 h" */
+    std::string format_short;    /* "48k/16" */
+};
+
+/* ------------------------------------------------------------------------------------------------ trim and split */
+
+struct TrimVm {
+    std::string take_id;
+    std::string sticker;         /* "006" */
+    std::string take;            /* "TAKE 006" */
+    std::int64_t length_ms = 0;  /* the whole take */
+    std::int64_t marker_ms = 0;  /* the red play marker, always in the middle of the waveform */
+    std::int64_t span_ms = 60000; /* ZOOM: the window shown, from the whole take down to 2 s */
+    std::int64_t in_ms = 0, out_ms = 0;
+    std::vector<std::int64_t> splits; /* split points, ascending; flags are numbered 1.. in this order */
+    int selected_split = -1;     /* the flag with the white outline (-1: none); the SPLIT key then reads REMOVE */
+    /* Peaks 0..1 (any count; the UI resamples to its bar count with the maximum of each bucket):
+     * window_peaks cover marker - span/2 .. marker + span/2 (zero where that is outside the take),
+     * overview_peaks cover the whole take. */
+    std::vector<float> window_peaks;
+    std::vector<float> overview_peaks;
+    bool playing = false;        /* PLAY latched */
+};
+
+/* The save box (opened by SAVE on the trim page; UiActions::trim_save asks for it). */
+struct SaveFile {
+    std::string name;            /* "take_006_20261108-1105-1.wav" (the narrow layout drops ".wav") */
+    std::int64_t length_ms = 0;
+};
+
+struct SaveVm {
+    bool shown = false;
+    std::vector<SaveFile> files;
+};
+
+/* A small yes / no box ("Delete the original take?"). */
+struct ConfirmVm {
+    bool shown = false;
+    std::string title;           /* "Delete the original take?" */
+    std::string body;            /* one or two lines under it (may be empty) */
+    std::string yes = "DELETE";  /* the red key; the other one is CANCEL */
+};
+
+/* ------------------------------------------------------------------------------------------------ everything */
+
+struct ViewModel {
+    RecorderVm rec;
+    SettingsVm settings;
+    ListVm list;
+    TrimVm trim;
+    SaveVm save;
+    ConfirmVm confirm;
+};
+
+/* The pages. The UI owns which one shows (L, S, Esc, the header buttons, TRIM) and reports every change. */
+enum class Screen { Recorder, Settings, List, Trim };
+
+/* A piano key's touch: Down and Up for every key (REW / FWD scan while held), then Click when the finger is lifted
+ * on the key (a tap). The controller acts on Click for PLAY/PAUSE, STOP and REC, on Down / Up for REW and FWD. */
+enum class KeyEdge { Down, Up, Click };
+
+enum class SaveMode { NewFiles, Replace, Cancel };
+
+struct UiActions {
+    /* recorder */
+    std::function<void(KeyId, KeyEdge)> deck_key;
+    std::function<void()> countdown_cancel;           /* a tap on the countdown panel, or Esc during the countdown */
+    std::function<void(int dir)> card_gain;           /* CARD -1 / +1 step */
+    std::function<void(int dir)> soft_gain;           /* SOFT -1 / +1 step */
+    /* navigation: the page now shown (Recorder after Esc, List, Settings, Trim after TRIM) */
+    std::function<void(Screen)> open;
+    /* settings (id = SettingRow::id) */
+    std::function<void(const std::string &id, int choice)> setting_choice;
+    std::function<void(const std::string &id, bool on)> setting_toggle;
+    std::function<void(const std::string &id, int pos)> setting_slider;
+    std::function<void(const std::string &id, const std::string &text)> setting_text;
+    /* recordings list (index into ListVm::takes) */
+    std::function<void(int index)> list_select;       /* a tap or Up / Down moved the highlight */
+    std::function<void(int index)> list_activate;     /* Enter, or a tap on the selected row */
+    std::function<void(int index)> list_play;
+    std::function<void(int index, const std::string &prefix)> list_rename; /* the edited prefix, after RENAME */
+    std::function<void(int index)> list_trim;         /* TRIM: the UI shows the trim page; load TrimVm for that take */
+    std::function<void(int index)> list_delete;
+    /* trim and split */
+    std::function<void(int dir)> trim_zoom;           /* ZOOM -1 (wider window) / +1 (narrower) */
+    std::function<void(std::int64_t delta_ms)> trim_nudge; /* POSITION buttons, Left / Right: 100 ms, Shift 1000 ms */
+    std::function<void(std::int64_t marker_ms)> trim_scrub; /* a sideways drag of the waveform: the new marker */
+    std::function<void()> trim_set_in;
+    std::function<void()> trim_set_out;
+    std::function<void()> trim_split;                 /* add a split point at the marker */
+    std::function<void(int split)> trim_remove_split; /* SPLIT reads REMOVE while a flag is selected */
+    std::function<void(int split)> trim_select_split; /* a tap on a flag: select it and move the marker to it (-1: none) */
+    std::function<void()> trim_play;
+    std::function<void()> trim_save;                  /* SAVE: show the save box (SaveVm::shown) */
+    /* boxes */
+    std::function<void(SaveMode)> save_choose;
+    std::function<void(bool yes)> confirm_answer;
+};
+
+} // namespace ui
+} // namespace cassette
