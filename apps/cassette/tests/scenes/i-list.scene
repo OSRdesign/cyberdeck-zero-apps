@@ -1,0 +1,34 @@
+title Cassette: the recordings list (board CassetteList) opened with L: five takes, Take 006 selected; Down moves the highlight, a tap selects a row; Esc comes back
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key l
+wait 400
+expect text "Take 007"
+expect text "Take 006"
+expect text "RENAME"
+expect text "TRIM"
+expect text "DELETE"
+@480x320,640x480 expect text "Take 006 selected. Esc returns to the recorder."
+shot list
+expect notext "LAYOUT FAIL"
+key down
+wait 300
+@480x320,640x480 expect text "Take 005 selected. Esc returns to the recorder."
+tap "Take 007"
+wait 300
+@480x320,640x480 expect text "Take 007 selected. Esc returns to the recorder."
+say Down and a tap moved the highlight (list_select)
+@480x320,640x480 scrollmark
+@480x320,640x480 dragon "Take 005" -0.15
+@480x320,640x480 expect scrolled
+@480x320,640x480 say a drag that starts on a row scrolled the list (portrait shows all five rows)
+shot list-scrolled
+key esc
+wait 300
+expect text "SOFT"
+expect notext "RENAME"
+expect noquit

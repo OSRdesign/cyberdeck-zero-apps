@@ -1,0 +1,14 @@
+title Cassette: Esc during the countdown cancels it and does not end the app; the next Esc ends it
+sizes 480x320
+ppmm 608
+env CASSETTE_DEMO countdown
+
+wait 500
+expect text "RECORDING IN"
+key esc
+wait 300
+expect notext "RECORDING IN"
+expect noquit
+key esc
+wait 300
+expect quit

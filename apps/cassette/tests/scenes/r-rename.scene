@@ -1,0 +1,19 @@
+title Cassette: RENAME opens the toolkit text box for the take prefix (keyboard policy: no keyboard connected here, so the toolkit fallback keyboard shows); Esc closes it
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO idle
+
+wait 500
+key l
+wait 300
+tap "RENAME"
+wait 500
+expect text "Name"
+expect osk on
+shot rename
+key esc
+wait 300
+expect osk off
+expect text "RENAME"
+say Esc closed the text box; the list is back
+expect noquit

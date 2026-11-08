@@ -1,0 +1,56 @@
+title Cassette: settings (board CassetteSettings) opened with S: the top, then scrolled; a drag that starts on a label, a switch, a slider or the gap between rows scrolls the list; Esc comes back
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key s
+wait 400
+expect text "Input level"
+expect text "Auto gain (card)"
+shot settings-top
+expect notext "LAYOUT FAIL"
+scrollmark
+dragon "Format" -0.12
+expect scrolled
+say a drag that starts on a row label scrolled the list
+drag 0.5 0.3 0.5 0.95
+drag 0.5 0.3 0.5 0.95
+wait 400
+scrollmark
+@480x320 drag 0.86 0.52 0.86 0.30
+@640x480 drag 0.86 0.53 0.86 0.33
+@320x480 drag 0.82 0.37 0.82 0.20
+expect scrolled
+say a drag that starts on a switch scrolled the list
+drag 0.5 0.3 0.5 0.95
+drag 0.5 0.3 0.5 0.95
+wait 400
+scrollmark
+@480x320 drag 0.65 0.375 0.65 0.15
+@640x480 drag 0.65 0.38 0.65 0.18
+@320x480 drag 0.53 0.27 0.53 0.10
+expect scrolled
+say a drag that starts on the slider scrolled the list
+drag 0.5 0.3 0.5 0.95
+drag 0.5 0.3 0.5 0.95
+wait 400
+scrollmark
+@480x320 drag 0.30 0.3075 0.30 0.10
+@640x480 drag 0.30 0.311 0.30 0.12
+@320x480 drag 0.30 0.2075 0.30 0.10
+expect scrolled
+say a drag that starts in the gap between two rows scrolled the list
+drag 0.5 0.4 0.5 0.05
+drag 0.5 0.4 0.5 0.05
+wait 600
+shot settings-scrolled
+expect text "Auto-split"
+expect notext "LAYOUT FAIL"
+key esc
+wait 300
+expect text "SOFT"
+expect notext "Auto-split"
+say Esc came back to the recorder
+expect noquit

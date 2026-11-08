@@ -1,0 +1,11 @@
+title Cassette: rewinding at 5x while playing: hubs clockwise fast, the 5x badge, REW and PLAY/PAUSE latched, REC unlatched (board CassetteWind)
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO wind
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot wind
+expect text "REW"
+expect notext "LAYOUT FAIL"
+expect noquit

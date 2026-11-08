@@ -1,0 +1,84 @@
+/*
+ * SPDX-License-Identifier: MIT
+ *
+ * Cassette UI: the texts the screens show, built from the view model (pure, no LVGL; tests/ui/test_format.cpp).
+ *
+ * Times (ms, negative = 0):
+ *   counter     "00:42", "59:59"; from one hour "1:02:03" (the counter then draws smaller digits)
+ *   mmss        "05:44" (truncated to the second), "1:02:03" from one hour
+ *   tenths      "02:58.7" (padded minutes, truncated to the tenth), "1:02:58.7" from one hour
+ *   short       "2:59" (rounded to the second, minutes not padded), "1:02:59" from one hour
+ *   ruler       "5:14" (truncated, minutes not padded), "1:02:03" from one hour
+ *   zoom        "60 s", "2 s", "1.5 s" (under 10 s with a tenth), "12 min" from 100 s
+ * Levels: db "+13.0 dB" (decimal) or "+13 dB"; 0 is "0.0 dB" / "0 dB".
+ */
+#pragma once
+
+#include "view_model.hpp"
+
+#include <cstdint>
+#include <functional>
+#include <string>
+#include <vector>
+
+namespace cassette {
+namespace ui {
+
+std::string fmt_counter(std::int64_t ms);
+bool counter_long(std::int64_t ms); /* the counter shows H:MM:SS */
+std::string fmt_mmss(std::int64_t ms);
+std::string fmt_tenths(std::int64_t ms);
+std::string fmt_tenths_short(std::int64_t ms); /* "5:44.2": minutes not padded (the narrow trim page) */
+std::string fmt_short(std::int64_t ms);
+std::string fmt_ruler(std::int64_t ms);
+std::string fmt_zoom(std::int64_t span_ms);
+std::string fmt_db(double db, bool decimal);
+
+/* The LED bar: lit steps for a sample peak in dBFS (the core meter's rule: step i, 0..14, lit when db >= -40 + i*40/14),
+ * and the colour band of step i: 0..9 green, 10..12 amber, 13..14 red. */
+int bar_steps(float db);
+enum class LedBand { Green, Amber, Red };
+LedBand led_band(int step);
+
+/* The recorder's info strip (landscape, one line) and the portrait info box (title over detail):
+ *   recording / idle   "TAKE 007 · 48k/16 WAV · 12 h 40 left"          box "TAKE 007" / "12 h 40 left"
+ *   playing / paused   "PLAYING TAKE 006 · 05:44 / 12:08"               box "TAKE 006" / "05:44 / 12:08"
+ *   scanning           "PLAYING TAKE 006 · 05:44 / 12:08 · REW 5x"      (FWD 5x forward)
+ * Empty parts are left out with their separator. A notice replaces the line (and the box's detail). */
+std::string info_line(const RecorderVm &rec);
+std::string info_title(const RecorderVm &rec);
+std::string info_detail(const RecorderVm &rec);
+/* The state lamp at the strip's right end: "REC" (recording, paused, countdown), "PLAY" (playing, scanning), "" none. */
+std::string info_state(const RecorderVm &rec);
+
+/* The recordings strip: landscape "12 TAKES · ~/Recordings" | "41 GB FREE · 117 h at 48k/16",
+ * portrait "12 TAKES" | "41 GB FREE · 117 h". "1 TAKE" for one. */
+std::string list_strip_left(const ListVm &l, bool narrow);
+std::string list_strip_right(const ListVm &l, bool narrow);
+/* The hint under the keys (landscape): "Take 006 selected. Esc returns to the recorder." */
+std::string list_hint(const ListVm &l);
+
+/* The trim page's strips:
+ *   landscape top   "IN 02:58.7 · OUT 10:28.7 · LEN 07:30.0 · 2 splits"
+ *   portrait top    "2 splits · LEN 7:30"
+ *   portrait bottom "IN 2:59 · OUT 10:29" | "SPLIT 2 SELECTED" ("" when none is selected)
+ * "1 split", "no splits". */
+std::string splits_text(std::size_t n);
+std::string trim_strip_wide(const TrimVm &t);
+std::string trim_strip_narrow_top(const TrimVm &t);
+std::string trim_strip_narrow_left(const TrimVm &t);
+std::string trim_strip_narrow_right(const TrimVm &t);
+
+/* The save box's line: "Keep 02:58.7 to 10:28.7, cut at 2 splits: 3 files." (narrow: "Keep 2:59 to 10:29, ...");
+ * without a split "Keep 02:58.7 to 10:28.7: 1 file." */
+std::string save_summary(const TrimVm &t, std::size_t files, bool narrow);
+/* A file name without its ".wav" (the narrow save box). */
+std::string strip_wav(const std::string &name);
+
+/* "more below: REW / FWD, Channels, Low cut" for the labels of the rows under the visible part ("" for none). */
+std::string more_below(const std::vector<std::string> &labels);
+/* The same, with as many names as `fits` accepts, then ", ..." for the rest (at least "more below: ..."). */
+std::string more_below_fit(const std::vector<std::string> &labels, const std::function<bool(const std::string &)> &fits);
+
+} // namespace ui
+} // namespace cassette

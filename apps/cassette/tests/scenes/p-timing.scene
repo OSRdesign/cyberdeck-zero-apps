@@ -1,0 +1,9 @@
+title Cassette: the hub animation cost: recording for 11 s with CASSETTE_TIMING=1 (the render time per refresh is in the log); the level stays still
+sizes 480x320 640x480
+ppmm 608
+env CASSETTE_DEMO recording
+env CASSETTE_TIMING 1
+
+wait 11000
+shot timing
+expect noquit

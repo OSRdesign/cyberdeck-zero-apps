@@ -1,0 +1,24 @@
+title Cassette: the CARD and SOFT steppers call their actions: SOFT + steps +1 dB, CARD - steps -1 dB
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO recording
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+@480x320 tapxy 0.9228 0.7147
+@640x480 tapxy 0.922 0.7077
+@320x480 tapxy 0.884 0.781
+wait 300
+@480x320,640x480 expect text "+7.0 dB"
+@320x480 expect text "+7 dB"
+say SOFT + called soft_gain +1
+@480x320 tapxy 0.0793 0.7147
+@640x480 tapxy 0.0793 0.7077
+@320x480 tapxy 0.119 0.781
+wait 300
+@480x320,640x480 expect text "+12.0 dB"
+@320x480 expect text "+12 dB"
+say CARD - called card_gain -1
+shot steppers
+expect notext "LAYOUT FAIL"
+expect noquit

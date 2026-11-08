@@ -1,0 +1,36 @@
+title Cassette: navigation: L opens the list, S the settings, Esc comes back; the Recordings and Settings buttons beside the counter do the same; Esc on the recorder ends the app
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO idle
+
+wait 500
+key l
+wait 300
+expect text "RENAME"
+key s
+wait 300
+expect text "Record timer"
+key esc
+wait 300
+expect text "SOFT"
+expect notext "Record timer"
+@480x320 tapxy 0.806 0.254
+@640x480 tapxy 0.805 0.231
+@320x480 tapxy 0.4075 0.6597
+wait 300
+expect text "RENAME"
+say the Recordings button opened the list
+key esc
+wait 300
+@480x320 tapxy 0.898 0.254
+@640x480 tapxy 0.897 0.231
+@320x480 tapxy 0.558 0.6597
+wait 300
+expect text "Record timer"
+say the Settings button opened the settings
+key esc
+wait 300
+expect noquit
+key esc
+wait 300
+expect quit
