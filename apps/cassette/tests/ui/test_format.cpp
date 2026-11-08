@@ -29,6 +29,8 @@ void times()
     CHECK_EQ(fmt_tenths(10 * 60000 + 28799), "10:28.7");
     CHECK_EQ(fmt_tenths(7 * 60000 + 30000), "07:30.0");
     CHECK_EQ(fmt_tenths(3600000 + 58700), "1:00:58.7");
+    CHECK_EQ(fmt_tenths_short(5 * 60000 + 44200), "5:44.2");
+    CHECK_EQ(fmt_tenths_short(3600000 + 44200), "1:00:44.2");
 
     CHECK_EQ(fmt_short(2 * 60000 + 58700), "2:59");
     CHECK_EQ(fmt_short(10 * 60000 + 28700), "10:29");
@@ -132,6 +134,11 @@ void list_and_trim()
     CHECK_EQ(strip_wav("x.flac"), "x.flac");
     CHECK_EQ(more_below({}), "");
     CHECK_EQ(more_below({"REW / FWD", "Channels"}), "more below: REW / FWD, Channels");
+    auto upto = [](std::size_t n) { return [n](const std::string &s) { return s.size() <= n; }; };
+    CHECK_EQ(more_below_fit({"REW / FWD", "Channels"}, upto(100)), "more below: REW / FWD, Channels");
+    CHECK_EQ(more_below_fit({"REW / FWD", "Channels", "Limiter"}, upto(30)), "more below: REW / FWD, ...");
+    CHECK_EQ(more_below_fit({"A very long setting name"}, upto(10)), "more below: ...");
+    CHECK_EQ(more_below_fit({}, upto(10)), "");
 }
 
 } // namespace

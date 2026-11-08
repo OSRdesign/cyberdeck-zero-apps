@@ -69,6 +69,15 @@ std::string fmt_tenths(std::int64_t ms)
     return b;
 }
 
+std::string fmt_tenths_short(std::int64_t ms)
+{
+    if (ms < 0) ms = 0;
+    const std::int64_t tenths = ms / 100;
+    char b[40];
+    std::snprintf(b, sizeof b, "%s.%d", hms(tenths / 10, false).c_str(), static_cast<int>(tenths % 10));
+    return b;
+}
+
 std::string fmt_short(std::int64_t ms)
 {
     if (ms < 0) ms = 0;
@@ -249,6 +258,19 @@ std::string more_below(const std::vector<std::string> &labels)
         out += labels[i];
     }
     return out;
+}
+
+std::string more_below_fit(const std::vector<std::string> &labels, const std::function<bool(const std::string &)> &fits)
+{
+    const std::string all = more_below(labels);
+    if (all.empty() || !fits || fits(all)) return all;
+    std::string out = "more below: ";
+    for (std::size_t i = 0; i < labels.size(); ++i) {
+        const std::string next = out + (i ? ", " : "") + labels[i];
+        if (!fits(next + ", ...")) break;
+        out = next;
+    }
+    return out + (out == "more below: " ? "..." : ", ...");
 }
 
 } // namespace ui

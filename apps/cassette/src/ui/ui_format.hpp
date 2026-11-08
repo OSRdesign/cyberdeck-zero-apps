@@ -17,6 +17,7 @@
 #include "view_model.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -27,6 +28,7 @@ std::string fmt_counter(std::int64_t ms);
 bool counter_long(std::int64_t ms); /* the counter shows H:MM:SS */
 std::string fmt_mmss(std::int64_t ms);
 std::string fmt_tenths(std::int64_t ms);
+std::string fmt_tenths_short(std::int64_t ms); /* "5:44.2": minutes not padded (the narrow trim page) */
 std::string fmt_short(std::int64_t ms);
 std::string fmt_ruler(std::int64_t ms);
 std::string fmt_zoom(std::int64_t span_ms);
@@ -75,6 +77,8 @@ std::string strip_wav(const std::string &name);
 
 /* "more below: REW / FWD, Channels, Low cut" for the labels of the rows under the visible part ("" for none). */
 std::string more_below(const std::vector<std::string> &labels);
+/* The same, with as many names as `fits` accepts, then ", ..." for the rest (at least "more below: ..."). */
+std::string more_below_fit(const std::vector<std::string> &labels, const std::function<bool(const std::string &)> &fits);
 
 } // namespace ui
 } // namespace cassette
