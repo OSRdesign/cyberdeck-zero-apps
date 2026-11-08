@@ -255,6 +255,10 @@ public:
     /* The trim page's waveform: `bars` min/max pairs over [window_start, window_start + visible_frames); empty until the
      * peaks are ready. Does one pread; safe to call from the UI thread at any rate. */
     std::vector<PeakBar> peak_window(int bars) const;
+    /* The same over any range (task T6c: the UI draws a window centred on the marker): `bars` pairs over
+     * [start_frame, start_frame + frames); start_frame may be negative, bars outside the take are (0,0). Empty until the
+     * peaks are ready or when the trim page is closed. */
+    std::vector<PeakBar> peak_range(int64_t start_frame, uint64_t frames, int bars) const;
     /* Clears the notices the UI has shown. */
     void ack_notices();
 

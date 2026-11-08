@@ -1006,6 +1006,38 @@ std::vector<PeakBar> Controller::peak_window(int bars) const {
     return out;
 }
 
+std::vector<PeakBar> Controller::peak_range(int64_t start_frame, uint64_t frames, int bars) const {
+    std::vector<PeakBar> out;
+    if (bars <= 0 || frames == 0) return out;
+    {
+        std::lock_guard<std::mutex> g(p_->pub_mu);
+        if (!p_->pub.trim.open) return out;
+    }
+    std::shared_ptr<PeakPyramid> py;
+    {
+        std::lock_guard<std::mutex> g(p_->pyr_mu);
+        py = p_->pyr;
+    }
+    if (!py) return out;
+    const uint64_t n = static_cast<uint64_t>(bars);
+    const uint64_t fpb = std::max<uint64_t>(1, (frames + n - 1) / n);
+    out.assign(static_cast<size_t>(bars), PeakBar());
+    /* the bars that start before frame 0 stay (0,0): the first bar inside the take is lead */
+    uint64_t lead = 0;
+    if (start_frame < 0) {
+        const uint64_t before = static_cast<uint64_t>(-start_frame);
+        lead = (before + fpb - 1) / fpb;
+        if (lead >= n) return out;
+    }
+    const uint64_t first = static_cast<uint64_t>(start_frame + static_cast<int64_t>(lead * fpb));
+    const std::vector<PeakPair> w = py->window(first, fpb, static_cast<size_t>(n - lead));
+    for (size_t i = 0; i < w.size() && lead + i < n; ++i) {
+        out[static_cast<size_t>(lead + i)].min = w[i].min;
+        out[static_cast<size_t>(lead + i)].max = w[i].max;
+    }
+    return out;
+}
+
 bool Controller::key_event(KeyEvent e) {
     Locked l(p_->mu);
     Impl &d = *p_;

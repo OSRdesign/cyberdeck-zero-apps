@@ -1,0 +1,36 @@
+title Cassette bound (CASSETTE_DEMO=1): Settings > Record timer 3 s, REC starts the countdown, Esc cancels it (nothing written), REC again records at zero
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO 1
+env CASSETTE_DEMO_HOME demo-home
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 1200
+key s
+wait 500
+tap "Record timer"
+wait 400
+tap "3 s"
+wait 500
+expect text "3 s"
+shot settings-timer
+key esc
+wait 400
+tap "REC"
+wait 700
+shot countdown
+key esc
+wait 600
+expect noquit
+shot countdown-cancelled
+tap "REC"
+wait 4300
+shot recording-after-countdown
+tap "STOP"
+wait 1000
+key l
+wait 600
+expect text "Take 001"
+expect notext "Take 002"
+shot list-one-take
+expect notext "LAYOUT FAIL"
