@@ -270,6 +270,30 @@ void tap_at(int x, int y)
     headless::run_for(120);
 }
 
+/* A press, ten moves and the lift: the drag of the `drag` and `dragon` commands. */
+void drag_px(int x1, int y1, int x2, int y2)
+{
+    headless::platform_touch(true, x1, y1);
+    headless::run_for(40);
+    for (int i = 1; i <= 10; ++i) {
+        headless::platform_touch(true, x1 + (x2 - x1) * i / 10, y1 + (y2 - y1) * i / 10);
+        headless::run_for(25);
+    }
+    headless::platform_touch(false, x2, y2);
+    headless::run_for(400);
+}
+
+/* The sum of every scroll offset (x + y) of the active screen's objects: `scrollmark` keeps it, `expect scrolled` /
+ * `expect notscrolled` compare. */
+long scroll_sum(lv_obj_t *obj)
+{
+    if (lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN)) return 0; /* a page that is not shown keeps its offset */
+    long sum = static_cast<long>(lv_obj_get_scroll_x(obj)) + lv_obj_get_scroll_y(obj);
+    for (uint32_t i = 0; i < lv_obj_get_child_count(obj); ++i) sum += scroll_sum(lv_obj_get_child(obj, static_cast<int32_t>(i)));
+    return sum;
+}
+long g_scroll_mark = 0;
+
 void shot(Run &run, const Line &line, const std::string &name, bool save)
 {
     headless::run_for(250); /* settle: animations, the drain of posted work */
@@ -365,14 +389,21 @@ void play(Run &run, const Scene &scene)
             const int y1 = static_cast<int>(std::atof(arg(2).c_str()) * (run.size.h - 1));
             const int x2 = static_cast<int>(std::atof(arg(3).c_str()) * (run.size.w - 1));
             const int y2 = static_cast<int>(std::atof(arg(4).c_str()) * (run.size.h - 1));
-            headless::platform_touch(true, x1, y1);
-            headless::run_for(40);
-            for (int i = 1; i <= 10; ++i) {
-                headless::platform_touch(true, x1 + (x2 - x1) * i / 10, y1 + (y2 - y1) * i / 10);
-                headless::run_for(25);
+            drag_px(x1, y1, x2, y2);
+        } else if (cmd == "dragon") {
+            /* dragon TEXT DY: a drag that starts at the centre of the visible label (on a button: its label, so on the
+             * button) and moves DY (a fraction of the screen height, negative = up) straight down / up */
+            lv_obj_t *label = headless::find_label(arg(1), false);
+            if (!label) {
+                fail(run, line, "nothing labelled \"" + arg(1) + "\" to drag");
+                continue;
             }
-            headless::platform_touch(false, x2, y2);
-            headless::run_for(400);
+            const lv_area_t a = headless::visible_area(label);
+            const int x = (a.x1 + a.x2) / 2, y = (a.y1 + a.y2) / 2;
+            const int y2 = std::clamp(y + static_cast<int>(std::atof(arg(2).c_str()) * (run.size.h - 1)), 0, run.size.h - 1);
+            drag_px(x, y, x, y2);
+        } else if (cmd == "scrollmark") {
+            g_scroll_mark = scroll_sum(lv_screen_active());
         } else if (cmd == "osk") {
             run.vkb = arg(1);
             write_input_state(run);
@@ -458,6 +489,12 @@ void play(Run &run, const Scene &scene)
                 fail(run, line, "no visible text \"" + arg(2) + "\"");
             } else if (what == "notext" && headless::find_label(arg(2), false)) {
                 fail(run, line, "text \"" + arg(2) + "\" is visible");
+            } else if (what == "scrolled" || what == "notscrolled") {
+                /* expect scrolled|notscrolled: some scroll offset of the screen changed / none changed since scrollmark */
+                const long now = scroll_sum(lv_screen_active());
+                run.report << "scroll " << g_scroll_mark << " -> " << now << "\n";
+                if (what == "scrolled" && now == g_scroll_mark) fail(run, line, "expected a scroll, the offsets did not change");
+                else if (what == "notscrolled" && now != g_scroll_mark) fail(run, line, "the page scrolled (" + std::to_string(g_scroll_mark) + " -> " + std::to_string(now) + ")");
             } else if (what == "esc") {
                 /* expect esc: the page header's Esc button follows the layout service's rule at this size: on a narrow
                  * portrait canvas (320x480) TARGET wide, the bar minus its margins high (not a circle), SPACE_M from the

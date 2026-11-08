@@ -378,7 +378,10 @@ Build from a WSL native-filesystem LF copy with fresh build dirs (`CDK_BUILD`, `
   not available, no radar chosen yet); USB keeps its texts. The 320x480 header follows the launcher's narrow portrait shell: a 40 px bar and the Esc 44x30 at the left
   edge with its tap area over the whole bar. 0.1.0 was built at a toolkit before that shell and drew a round Esc
   and a 56 px bar there (480x320 and the larger sizes are unchanged); the app's own copy of the rule is gone and the
-  build stops on such a toolkit.
+  build stops on such a toolkit. A vertical drag that starts anywhere on the "No radar found" page or on the Sensor
+  page scrolls it (the status block, a label, the page background, the Rescan button); before, only a drag that began
+  on a button or a row did, because the page itself was not clickable and a press on its labels went to the screen.
+  A tap on Rescan or a row still acts.
 - 0.1.0: first version: Radar, Table, Graph and Sensor pages, listen-only detection, units, orientation,
   range and trails settings, 480x320 and 320x480 minimum layouts; the tall Radar page (plot, target list, distance
   strip), ring labels on the wedge's edge, the diagnostic log's marker file and its frame counters (empty, non-empty,

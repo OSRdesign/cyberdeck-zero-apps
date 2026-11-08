@@ -460,6 +460,11 @@ void RadarApp::build_notfound()
     nf_ = lv_obj_create(surface_);
     plain(nf_);
     lv_obj_add_flag(nf_, LV_OBJ_FLAG_SCROLLABLE);
+    /* A press lands on the topmost CLICKABLE object under the finger and a drag scrolls the first scrollable ancestor
+     * of that object. plain() makes every box non-clickable, so a press on a label, a status row or the page
+     * background resolved to the screen, outside this page: only a drag that began on a button or a row scrolled.
+     * The page is clickable itself (nothing listens to it); its labels and rows stay click-through. */
+    lv_obj_add_flag(nf_, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_scroll_dir(nf_, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(nf_, LV_SCROLLBAR_MODE_AUTO);
     lv_obj_set_pos(nf_, 0, 0);
@@ -555,6 +560,7 @@ void RadarApp::build_sensor()
     sensor_ = lv_obj_create(surface_);
     plain(sensor_);
     lv_obj_add_flag(sensor_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(sensor_, LV_OBJ_FLAG_CLICKABLE); /* a drag from a label or a row scrolls the page (see nf_) */
     lv_obj_set_scroll_dir(sensor_, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(sensor_, LV_SCROLLBAR_MODE_AUTO);
     lv_obj_set_pos(sensor_, 0, 0);

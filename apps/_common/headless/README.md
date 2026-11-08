@@ -45,6 +45,8 @@ After the app asks to quit, only `expect` lines are read.
 | `tap TEXT` / `tapkey TEXT` | a tap on the visible label with exactly this text (its nearest clickable parent): on the page / on the on-screen keyboard |
 | `hold TEXT MS` | a press on the visible label's clickable parent held MS ms and then released (a long press) |
 | `tapxy FX FY`, `drag FX1 FY1 FX2 FY2` | a tap / a drag at fractions (0..1) of the screen |
+| `dragon TEXT DY` | a drag that starts at the centre of the visible label (a button: its label, so on the button) and moves DY (a fraction of the screen height, negative = up) |
+| `scrollmark`, `expect scrolled\|notscrolled` | `scrollmark` keeps the sum of every scroll offset of the shown objects; `expect scrolled` fails when it did not change since, `expect notscrolled` when it did |
 | `keyboards N`, `osk auto\|off\|force` | rewrite `input.state` (gen + 1): physical keyboards present, the keyboard rule |
 | `shot NAME` / `check NAME` | settle 250 ms, save the PNG (shot only), run the layout checks |
 | `expect quit\|noquit`, `expect osk on\|off`, `expect text "T"`, `expect notext "T"` | assertions |
