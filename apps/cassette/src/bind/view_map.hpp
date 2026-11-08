@@ -90,6 +90,8 @@ std::vector<ui::SettingRow> settings_rows(const Snapshot &s);
 /* The record timer's choices (seconds) in row order; and the deepest zoom level whose window is still >= 2 s (or the
  * whole take when it is shorter): the plan's "from the whole take down to a 2 s window". */
 extern const int kTimerChoices[4];
+/* The "Sync every" choices (seconds, the controller's 5..30 range) in row order. */
+extern const int kSyncChoices[4];
 int zoom_limit(const TrimSnap &t, double min_window_s = 2.0);
 int64_t frames_to_ms(uint64_t frames, uint32_t rate);
 int64_t ms_to_frames(int64_t ms, uint32_t rate);

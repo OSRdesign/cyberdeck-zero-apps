@@ -1,0 +1,18 @@
+title Cassette notice on the recorder page (T6d): The sound card was unplugged replaces the info strip (landscape) or the counter row (narrow, a tap dismisses it); the layout check passes while it shows
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_NOTICE "The sound card was unplugged"
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+expect text "The sound card was unplugged"
+shot recorder-unplugged
+expect notext "LAYOUT FAIL"
+expect text "SOFT"
+@320x480 tap "The sound card was unplugged"
+@320x480 wait 300
+@320x480 expect notext "The sound card was unplugged"
+@320x480 say a tap on the notice dismissed it
+@320x480 expect text "CARD"
+expect noquit

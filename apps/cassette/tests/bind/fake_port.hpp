@@ -52,7 +52,7 @@ public:
     double level_step = 1.0;      /* set_level_db rounds to this step (a coarse card: 3.0) */
     bool open_trim_result = true;
     int delete_result = 0, rename_result = 0;
-    bool save_result = true, folder_result = true;
+    bool save_result = true, folder_result = true, output_result = true;
     uint64_t next = 8;
     std::vector<std::string> names = {"take_006_20261108-1105-1.wav", "take_006_20261108-1105-2.wav",
                                       "take_006_20261108-1105-3.wav"};
@@ -178,6 +178,21 @@ public:
     {
         log(std::string("set_limiter ") + (on ? "on" : "off"));
         return true;
+    }
+    bool set_mute(bool on) override
+    {
+        log(std::string("set_mute ") + (on ? "on" : "off"));
+        return true;
+    }
+    bool set_sync_interval(int s) override
+    {
+        log("set_sync_interval " + std::to_string(s));
+        return true;
+    }
+    bool select_output(const std::string &d) override
+    {
+        log("select_output " + d);
+        return output_result;
     }
     bool select_card(int i) override
     {

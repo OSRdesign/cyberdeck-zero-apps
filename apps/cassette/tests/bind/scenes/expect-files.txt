@@ -4,3 +4,4 @@
 x1-bound-take take_001_*[0-9][0-9][0-9][0-9].wav|take_001_nodate.wav take_001_*-1.wav take_001_*-2.wav take_001_*-3.wav
 x2-bound-countdown take_001_*[0-9][0-9][0-9][0-9].wav|take_001_nodate.wav
 x3-bound-unplug take_001_*[0-9][0-9][0-9][0-9].wav|take_001_nodate.wav
+x6-bound-replace take_001_*-1.wav take_001_*-2.wav take_001_*-3.wav

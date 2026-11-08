@@ -8,6 +8,8 @@ env CASSETTE_LAYOUT_CHECK 1
 wait 1200
 key s
 wait 500
+@480x320 dragon "Format" -0.25
+@480x320 wait 300
 tap "Record timer"
 wait 400
 tap "3 s"

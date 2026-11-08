@@ -141,6 +141,8 @@ struct CardSnap {
     std::string message;       /* why the card cannot be used, empty when fine */
     std::string output_label;  /* the playback output in use */
     std::vector<std::string> output_labels; /* only when there is more than one to pick from */
+    std::vector<std::string> output_devices; /* the device of each label (select_output's argument), same order */
+    int output_selected = -1;  /* index of the output in use in output_labels, -1 when not listed */
 };
 
 struct TakeSnap {

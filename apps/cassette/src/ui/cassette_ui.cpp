@@ -576,7 +576,10 @@ void CassetteUi::update(const ViewModel &vm)
 {
     Impl &d = *d_;
     d.vm = vm;
-    d.rec->update(vm.rec);
+    d.rec->update(vm.rec, vm.notice);
+    d.settings->set_notice(vm.notice);
+    d.list->set_notice(vm.notice);
+    d.trim->set_notice(vm.notice);
     d.settings->update(vm.settings);
     d.list->update(vm.list);
     d.trim->update(vm.trim);

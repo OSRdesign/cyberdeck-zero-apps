@@ -111,6 +111,27 @@ TrimPage::TrimPage(lv_obj_t *parent, const Frame &frame, const UiActions &action
         });
         keys_[i]->set(icons[i], names[i], i == 4 ? KeyLook::Green : KeyLook::Charcoal, true, false);
     }
+
+    /* the notice: over the top strip, growing down into the gap above the waveform window */
+    NoticeSpec ns;
+    ns.x = fit_.x(16);
+    ns.y = fit_.y(sy);
+    ns.w = fit_.w(16, sw);
+    ns.h_min = fit_.h(sy, 28);
+    ns.h_max = std::max(ns.h_min, fit_.y(p ? 88 : 84) - fit_.y(sy));
+    ns.px = fit_.px(p ? 13 : 14);
+    ns.min_px = std::max(9, fit_.px(11));
+    ns.ls = ls_screen(0.4, fit_.s);
+    ns.pad = fit_.px(8);
+    notice_ = std::make_unique<NoticeBox>(root_, ns);
+}
+
+void TrimPage::set_notice(const std::string &text)
+{
+    const bool on = notice_->set(text);
+    show(sticker_, !on);
+    show(take_, !on);
+    show(info_, !on);
 }
 
 void TrimPage::update(const TrimVm &t)

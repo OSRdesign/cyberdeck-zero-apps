@@ -54,6 +54,9 @@ public:
     bool set_scan_mode(ScanMode m) override { return c_.set_scan_mode(m); }
     bool set_low_cut(bool on) override { return c_.set_low_cut(on); }
     bool set_limiter(bool on) override { return c_.set_limiter(on); }
+    bool set_mute(bool on) override { return c_.set_mute(on); }
+    bool set_sync_interval(int s) override { return c_.set_sync_interval(s); }
+    bool select_output(const std::string &d) override { return c_.select_output(d); }
     bool select_card(int i) override { return c_.select_card(i); }
     void refresh_cards() override { c_.refresh_cards(); }
     void refresh_takes() override { c_.refresh_takes(); }

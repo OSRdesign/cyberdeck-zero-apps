@@ -110,13 +110,15 @@ ui::UiActions Binder::actions()
             port_.set_soft_gain_db(std::clamp(cur + dir * step, kSoftGainMin, kSoftGainMax));
         });
     };
+    a.notice_dismiss = [this] { local_.notice.clear(); }; /* the next notice comes with the next tick */
     a.open = [this](ui::Screen s) {
         const ui::Screen was = screen_;
         screen_ = s;
         if (was == ui::Screen::Trim && s != ui::Screen::Trim) leave_trim();
         if (s == ui::Screen::Settings) post([this] { port_.refresh_cards(); });
         if (s == ui::Screen::List) {
-            local_.list_sel.clear();
+            local_.list_sel = select_after_nav_; /* empty: the current take */
+            select_after_nav_.clear();
             post([this] { port_.refresh_takes(); });
         }
     };
@@ -144,11 +146,24 @@ ui::UiActions Binder::actions()
         } else if (id == "split") {
             const bool on = c == 0;
             post([this, on] { port_.set_auto_split(on); });
+        } else if (id == "sync") {
+            if (c < 0 || c > 3) return;
+            const int secs = kSyncChoices[c];
+            post([this, secs] { port_.set_sync_interval(secs); });
+        } else if (id == "output") {
+            /* the picker's entry to the controller's device string (the snapshot lists both in the same order) */
+            const Snapshot s = have_snap_ ? snap_ : Snapshot();
+            if (c < 0 || c >= static_cast<int>(s.card.output_devices.size())) return;
+            const std::string dev = s.card.output_devices[static_cast<size_t>(c)];
+            post([this, dev, c] {
+                if (!port_.select_output(dev)) notice_from_job("The output cannot be changed now");
+            });
         }
         /* "channels": what the card records; nothing to set */
     };
     a.setting_toggle = [this](const std::string &id, bool on) {
         if (id == "agc") post([this, on] { port_.set_auto_gain(on); });
+        else if (id == "mute") post([this, on] { port_.set_mute(on); });
         else if (id == "lowcut") post([this, on] { port_.set_low_cut(on); });
         else if (id == "limiter") post([this, on] { port_.set_limiter(on); });
     };
@@ -288,7 +303,8 @@ ui::UiActions Binder::actions()
         case ui::SaveMode::NewFiles:
             local_.save_shown = false;
             post([this] {
-                if (!port_.save(SaveKind::NewFiles)) notice_from_job("The save could not start");
+                if (port_.save(SaveKind::NewFiles)) save_accepted_.store(true);
+                else notice_from_job("The save could not start");
             });
             break;
         case ui::SaveMode::Replace:
@@ -308,7 +324,8 @@ ui::UiActions Binder::actions()
         if (what == LocalState::Confirm::Replace) {
             local_.save_shown = false;
             post([this] {
-                if (!port_.save(SaveKind::ReplaceOriginal)) notice_from_job("The save could not start");
+                if (port_.save(SaveKind::ReplaceOriginal)) save_accepted_.store(true);
+                else notice_from_job("The save could not start");
             });
         } else if (what == LocalState::Confirm::Delete) {
             post([this, take] {
@@ -386,6 +403,8 @@ bool Binder::tick(int64_t now_mono_ms, int64_t now_wall_s)
 {
     now_ms_ = now_mono_ms;
     drain_inbox();
+    /* a save the controller accepted since the last tick: read before the snapshot, so the snapshot is not older than it */
+    if (save_accepted_.exchange(false)) save_wait_ = true;
     snap_ = port_.snapshot();
     have_snap_ = true;
 
@@ -415,12 +434,26 @@ bool Binder::tick(int64_t now_mono_ms, int64_t now_wall_s)
 
     /* the trim page: a finished save, a close or an open waiting for it */
     const int ss = snap_.trim.open ? snap_.trim.save_state : 0;
-    if (ss != last_save_state_) {
-        if (last_save_state_ == 1 && ss == 2) {
-            const size_t n = snap_.trim.save_outputs.size();
-            push_notice(snap_.trim.save_replaced ? std::string("Saved: the original take was replaced")
-                                                 : "Saved " + std::to_string(n) + (n == 1 ? " new file" : " new files"));
-        } else if (last_save_state_ == 1 && ss == 3) {
+    /* a save that is over: seen running and then done, or (a small take saves between two ticks) accepted and now over */
+    const bool over = (ss == 2 || ss == 3) && ((ss != last_save_state_ && last_save_state_ == 1) || save_wait_);
+    if (ss == 1 || ss == 0 || ss == 4 || over) save_wait_ = false;
+    if (ss != last_save_state_ || over) {
+        if (over && ss == 2) {
+            const std::vector<std::string> &outs = snap_.trim.save_outputs;
+            const size_t n = outs.size();
+            if (snap_.trim.save_replaced) {
+                /* the take the page shows is gone: back to the list, on the first result */
+                push_notice(n == 1 ? std::string("Saved, original replaced")
+                                   : "Saved " + std::to_string(n) + " files, original removed");
+                if (screen_ == ui::Screen::Trim) {
+                    nav_pending_ = true;
+                    nav_ = ui::Screen::List;
+                    select_after_nav_ = outs.empty() ? std::string() : outs.front();
+                }
+            } else {
+                push_notice("Saved " + std::to_string(n) + (n == 1 ? " new file" : " new files"));
+            }
+        } else if (over && ss == 3) {
             push_notice("Save failed: " + snap_.trim.save_message);
         }
         last_save_state_ = ss;

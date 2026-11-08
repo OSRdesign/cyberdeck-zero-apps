@@ -19,7 +19,8 @@
  *   long           recording for more than an hour (H:MM:SS)
  * plus, for every state, the settings rows, five takes and the trim state of Take 006 (two splits, the second
  * selected); CASSETTE_DEMO_TRIM=none starts the trim page without splits, =unselected with none selected;
- * CASSETTE_DEMO_BOX=save|confirm opens a box; CASSETTE_DEMO_PAGE=settings|list|trim starts on that page.
+ * CASSETTE_DEMO_BOX=save|confirm opens a box; CASSETTE_DEMO_NOTICE=<text> shows a notice (until a tap dismisses it);
+ * CASSETTE_DEMO_SETTINGS=full adds the card-dependent rows (Mic mute) and the Output row; CASSETTE_DEMO_PAGE=settings|list|trim starts on that page.
  *
  * DemoDriver's UiActions change the model the way the controller would in simple cases (the steppers step, toggles
  * flip, a choice is taken, a tap on the countdown cancels it, the trim marker, zoom, flags, IN / OUT and the boxes
@@ -50,6 +51,12 @@ public:
     UiActions actions();
     std::function<void(const ViewModel &)> changed;
     const ViewModel &model() const { return vm_; }
+    /* A notice (empty: none), as the binding would set it. */
+    void set_notice(const std::string &text)
+    {
+        vm_.notice = text;
+        emit();
+    }
     /* CASSETTE_DEMO_LIVE=1 (the timing scene): a moving synthetic level and a running counter, called at the meter's
      * rate (every 33 ms) with the elapsed time, as the controller would update the model. */
     void tick_live(std::uint32_t elapsed_ms);

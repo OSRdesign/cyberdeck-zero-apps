@@ -106,9 +106,27 @@ void t_corrupt_settings() {
     CHECK_EQ(r.snap().settings.prefix, "ok");
 }
 
+/* T6d: the snapshot lists every output with its device and the one in use; choosing one by its device sticks */
+void t_outputs() {
+    Rig r(one_card());
+    r.open();
+    CHECK(r.wait_meter());
+    Snapshot s = r.snap();
+    CHECK(s.card.output_labels.size() >= 2); /* the card's own playback side and the default output */
+    CHECK_EQ(s.card.output_devices.size(), s.card.output_labels.size());
+    CHECK(s.card.output_selected >= 0 && s.card.output_selected < static_cast<int>(s.card.output_labels.size()));
+    if (s.card.output_devices.size() < 2 || s.card.output_selected < 0) return;
+    const int other = 1 - s.card.output_selected;
+    CHECK(r.ctl().select_output(s.card.output_devices[static_cast<size_t>(other)]));
+    s = r.snap();
+    CHECK_EQ(s.card.output_selected, other);
+    CHECK_EQ(s.card.output_label, s.card.output_labels[static_cast<size_t>(other)]);
+}
+
 }  // namespace
 
 void test_settings() {
+    t_outputs();
     t_persistence();
     t_corrupt_settings();
 }

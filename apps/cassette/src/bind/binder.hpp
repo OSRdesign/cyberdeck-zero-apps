@@ -127,8 +127,11 @@ private:
     unsigned names_token_ = 0;
     std::vector<int64_t> names_lengths_;
     int last_save_state_ = 0;
+    std::atomic<bool> save_accepted_{false}; /* set by the job when the controller took a save */
+    bool save_wait_ = false;                 /* a save was taken and its end has not been seen yet */
     bool nav_pending_ = false;
     ui::Screen nav_ = ui::Screen::List;
+    std::string select_after_nav_; /* the list's selection when the page opens by itself (after a replace save) */
     /* the trim waveform: re-read only when the window moved */
     std::vector<PeakBar> window_, overview_;
     std::string peaks_key_, overview_key_;

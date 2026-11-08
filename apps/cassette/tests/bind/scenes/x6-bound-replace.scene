@@ -1,0 +1,72 @@
+title Cassette bound (CASSETTE_DEMO=1) T6d: TRIM to two splits, SAVE, REPLACE ORIGINAL, DELETE: the trim page closes onto the list with the notice, the original is gone and the first result is selected
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO 1
+env CASSETTE_DEMO_HOME demo-home
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 1500
+@320x480 expect text "TAKE 001"
+expect text "CARD"
+expect text "SOFT"
+expect notext "No sound input found. Plug in a USB sound card or headset."
+tap "REC"
+wait 3300
+@320x480 expect text "TAKE 001"
+tap "STOP"
+wait 1000
+@320x480 expect text "TAKE 002"
+say STOP closed the take; the cassette shows the next one
+key l
+wait 700
+expect text "Take 001"
+tap "TRIM"
+wait 1500
+expect text "TAKE 001"
+key right
+key right
+key right
+key right
+key right
+wait 300
+tap "SPLIT"
+wait 400
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+wait 300
+tap "SPLIT"
+wait 500
+expect text "SPLIT"
+expect notext "REMOVE"
+tap "SAVE"
+wait 700
+expect text "REPLACE ORIGINAL"
+tap "REPLACE ORIGINAL"
+wait 500
+expect text "Delete the original take?"
+shot confirm-replace
+tap "DELETE"
+wait 3500
+say the trim page closed onto the list: the original is gone, the first result is selected, the notice shows
+expect text "RENAME"
+expect notext "TAKE 001"
+expect notext "SAVE AS NEW FILES"
+expect text "Take 001-1"
+expect text "Saved 3 files, original removed"
+shot list-after-replace
+expect notext "LAYOUT FAIL"
+wait 4500
+expect notext "Saved 3 files, original removed"
+shot list-after-replace-later
+key esc
+wait 500
+expect text "SOFT"
+expect noquit

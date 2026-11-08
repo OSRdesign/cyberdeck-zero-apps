@@ -44,6 +44,9 @@ public:
     virtual bool set_scan_mode(ScanMode m) = 0;
     virtual bool set_low_cut(bool on) = 0;
     virtual bool set_limiter(bool on) = 0;
+    virtual bool set_mute(bool on) = 0;
+    virtual bool set_sync_interval(int seconds) = 0;
+    virtual bool select_output(const std::string &device) = 0;
     virtual bool select_card(int index) = 0;
     virtual void refresh_cards() = 0;
     virtual void refresh_takes() = 0;

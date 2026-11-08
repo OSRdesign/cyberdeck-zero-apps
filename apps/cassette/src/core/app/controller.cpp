@@ -837,7 +837,11 @@ struct Controller::Impl : public DeckCommands {
         }
         s.card.soft_gain_db = store.values().soft_gain_db;
         s.card.output_label = plan.chosen.label;
-        for (const OutputOption &o : plan.choices) s.card.output_labels.push_back(o.label);
+        for (const OutputOption &o : plan.choices) {
+            if (o.device == plan.chosen.device) s.card.output_selected = static_cast<int>(s.card.output_labels.size());
+            s.card.output_labels.push_back(o.label);
+            s.card.output_devices.push_back(o.device);
+        }
         /* take */
         s.take.recording = take_active;
         s.take.name = take_active ? take_name : target;

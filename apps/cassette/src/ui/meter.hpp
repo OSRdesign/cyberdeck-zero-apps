@@ -42,6 +42,7 @@ public:
     Counter(lv_obj_t *parent, const Fit &fit, double x, double y, double w, double h, double cell_w, double cell_h,
             double colon_w, double px, double radius);
     void set_ms(std::int64_t ms);
+    lv_obj_t *obj() const { return obj_; }
 
 private:
     static void draw_cb(lv_event_t *e);

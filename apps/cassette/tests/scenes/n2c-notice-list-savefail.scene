@@ -1,0 +1,15 @@
+title Cassette notice on the list page (T6d): Save failed: not enough space on the card replaces the hint line (landscape) or the top strip (narrow); the layout check passes while it shows
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_NOTICE "Save failed: not enough space on the card"
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key l
+wait 400
+expect text "Save failed: not enough space on the card"
+shot list-savefail
+expect notext "LAYOUT FAIL"
+expect text "RENAME"
+expect noquit

@@ -164,12 +164,12 @@ void test_settings_actions()
     r.port.folder_result = false;
     r.act.setting_choice("folder", 0);
     r.tick();
-    CHECK_EQ(r.binder.vm().rec.info.notice, "The folder cannot be changed now");
+    CHECK_EQ(r.binder.vm().notice, "The folder cannot be changed now");
     /* a refused prefix: a notice */
     Rig q;
     q.act.setting_text("prefix", "bad name!");
     q.tick();
-    CHECK_EQ(q.binder.vm().rec.info.notice, "Prefix not changed: use letters, digits, - and _ (1 to 24)");
+    CHECK_EQ(q.binder.vm().notice, "Prefix not changed: use letters, digits, - and _ (1 to 24)");
 }
 
 void test_pages_and_list()
@@ -198,7 +198,7 @@ void test_pages_and_list()
     r.port.rename_result = -EEXIST;
     r.act.list_rename(0, "x");
     r.tick();
-    CHECK_EQ(r.binder.vm().rec.info.notice, "Not renamed: that name is taken");
+    CHECK_EQ(r.binder.vm().notice, "Not renamed: that name is taken");
     CHECK(has(r.calls(), "rename_take take_007_20261108-1432.wav x"));
 
     /* DELETE asks first */
@@ -221,7 +221,7 @@ void test_pages_and_list()
     r.act.confirm_answer(true);
     r.tick(5000); /* the rename notice ends */
     r.tick();
-    CHECK_EQ(r.binder.vm().rec.info.notice, "Not deleted: the take is in use");
+    CHECK_EQ(r.binder.vm().notice, "Not deleted: the take is in use");
 
     /* opening the list again: the highlight goes back to the current take */
     r.act.open(ui::Screen::Recorder);
@@ -357,7 +357,7 @@ void test_save_flow()
     r.port.snap.trim.save_state = 2;
     r.port.snap.trim.save_outputs = {"a-1.wav", "a-2.wav", "a-3.wav"};
     r.tick();
-    CHECK_EQ(r.binder.vm().rec.info.notice, "Saved 3 new files");
+    CHECK_EQ(r.binder.vm().notice, "Saved 3 new files");
     r.port.snap.trim.save_state = 0;
     r.tick();
     /* REPLACE ORIGINAL: asks once more */
@@ -382,7 +382,7 @@ void test_save_flow()
     r.port.snap.trim.save_state = 3;
     r.port.snap.trim.save_message = "the disk is full";
     r.tick(5000);
-    CHECK_EQ(r.binder.vm().rec.info.notice, "Save failed: the disk is full");
+    CHECK_EQ(r.binder.vm().notice, "Save failed: the disk is full");
     /* a refused save */
     r.port.snap.trim.save_state = 0;
     r.port.save_result = false;
@@ -391,7 +391,7 @@ void test_save_flow()
     r.tick();
     r.act.save_choose(ui::SaveMode::NewFiles);
     r.tick(5000);
-    CHECK_EQ(r.binder.vm().rec.info.notice, "The save could not start");
+    CHECK_EQ(r.binder.vm().notice, "The save could not start");
     /* nothing to save: no box */
     r.port.snap.trim.out_frame = r.port.snap.trim.in_frame;
     r.tick();
@@ -461,7 +461,7 @@ void test_leaving_trim()
     g.act.list_trim(1);
     g.tick();
     CHECK(!has(g.calls(), "open_trim take_006_20261108-1105.wav"));
-    CHECK_EQ(g.binder.vm().rec.info.notice, "Stop the recording to trim a take");
+    CHECK_EQ(g.binder.vm().notice, "Stop the recording to trim a take");
     CHECK(g.binder.take_nav(s) && s == ui::Screen::List);
 
     /* TRIM while a take plays: STOP first */
@@ -487,21 +487,21 @@ void test_notices()
     CHECK(has(r.calls(), "ack_notices"));
     CHECK(r.port.snap.notices.empty());
     r.tick();
-    CHECK_EQ(r.binder.vm().rec.info.notice, a.text);
+    CHECK_EQ(r.binder.vm().notice, a.text);
     r.tick(3000);
-    CHECK_EQ(r.binder.vm().rec.info.notice, a.text);
+    CHECK_EQ(r.binder.vm().notice, a.text);
     r.tick(1100);
-    CHECK_EQ(r.binder.vm().rec.info.notice, b.text);
+    CHECK_EQ(r.binder.vm().notice, b.text);
     r.tick(4100);
-    CHECK_EQ(r.binder.vm().rec.info.notice, "");
+    CHECK_EQ(r.binder.vm().notice, "");
     CHECK(!has(r.calls(), "ack_notices")); /* nothing new: no ack */
     /* the binding's own */
     r.binder.push_notice("hello");
     r.tick();
-    CHECK_EQ(r.binder.vm().rec.info.notice, "hello");
+    CHECK_EQ(r.binder.vm().notice, "hello");
     r.binder.push_notice("");
     r.tick(4100);
-    CHECK_EQ(r.binder.vm().rec.info.notice, "");
+    CHECK_EQ(r.binder.vm().notice, "");
 }
 
 void test_next_take_and_revision()
@@ -562,8 +562,122 @@ void test_leave()
 
 } // namespace
 
+/* T6d: Sync every, Mic mute, Output reach their commands; a notice is dismissed by a tap */
+void test_new_settings_actions()
+{
+    Rig r;
+    r.port.snap.card.has_mute = true;
+    r.port.snap.card.output_labels = {"USB Audio Device", "Default output"};
+    r.port.snap.card.output_devices = {"hw:CARD=Demo,DEV=0", "default"};
+    r.port.snap.card.output_selected = 0;
+    r.tick();
+    r.act.setting_choice("sync", 0);
+    r.act.setting_choice("sync", 3);
+    r.act.setting_choice("sync", 4); /* out of range: nothing */
+    r.act.setting_toggle("mute", true);
+    r.act.setting_choice("output", 1);
+    r.act.setting_choice("output", 2); /* out of range: nothing */
+    const std::vector<std::string> want = {"set_sync_interval 5", "set_sync_interval 30", "set_mute on",
+                                           "select_output default"};
+    CHECK(r.calls() == want);
+    r.port.output_result = false; /* a take runs: refused */
+    r.act.setting_choice("output", 0);
+    r.tick();
+    CHECK_EQ(r.binder.vm().notice, "The output cannot be changed now");
+    /* the rows follow the snapshot */
+    bool mute = false, out = false;
+    for (const ui::SettingRow &row : r.binder.vm().settings.rows) {
+        mute |= row.id == "mute";
+        out |= row.id == "output";
+    }
+    CHECK(mute && out);
+
+    /* a tap on the notice dismisses it; the next one follows */
+    Rig q;
+    q.binder.push_notice("first");
+    q.binder.push_notice("second");
+    q.tick();
+    CHECK_EQ(q.binder.vm().notice, "first");
+    q.act.notice_dismiss();
+    q.tick();
+    CHECK_EQ(q.binder.vm().notice, "second");
+    q.act.notice_dismiss();
+    q.tick();
+    CHECK_EQ(q.binder.vm().notice, "");
+}
+
+/* T6d: after a replace save the trim page closes onto the list, on the first result, with the notice */
+void test_replace_save()
+{
+    auto run = [](std::vector<std::string> outs, const char *want_notice, bool replaced, bool expect_nav) {
+        Rig r;
+        open_trim(r);
+        r.port.snap.trim.save_state = 1;
+        r.tick();
+        r.port.snap.trim.save_state = 2;
+        r.port.snap.trim.save_replaced = replaced;
+        r.port.snap.trim.save_outputs = outs;
+        r.tick();
+        CHECK_EQ(r.binder.vm().notice, want_notice);
+        ui::Screen s = ui::Screen::Trim;
+        const bool nav = r.binder.take_nav(s);
+        CHECK_EQ(nav, expect_nav);
+        if (!expect_nav) return;
+        CHECK(s == ui::Screen::List);
+        /* the UI shows the list: its open() call; the selection is the first result */
+        r.port.rows = {row("take_007_20261108-1432.wav", 42, 4ull << 20, "2026-11-08 14:32", true),
+                       row(outs[0], 2, 1ull << 20, "2026-11-08 11:30")};
+        for (size_t i = 1; i < outs.size(); ++i) r.port.rows.push_back(row(outs[i], 3, 1ull << 20, "2026-11-08 11:30"));
+        r.port.snap.takes_revision = 9;
+        r.calls();
+        r.act.open(ui::Screen::List);
+        r.tick();
+        CHECK(has(r.calls(), "close_trim"));
+        CHECK_EQ(r.binder.vm().list.selected, 1);
+        CHECK_EQ(r.binder.vm().list.takes[1].id, outs[0]);
+    };
+    run({"a-1.wav", "a-2.wav", "a-3.wav"}, "Saved 3 files, original removed", true, true);
+    run({"a-1.wav"}, "Saved, original replaced", true, true);
+    /* new files: the page stays */
+    run({"a-1.wav", "a-2.wav"}, "Saved 2 new files", false, false);
+
+    /* a small take saves between two ticks: the binding never sees "running", only the end */
+    {
+        Rig m;
+        open_trim(m);
+        m.act.trim_save();
+        m.tick();
+        m.act.save_choose(ui::SaveMode::Replace);
+        m.act.confirm_answer(true);
+        CHECK(has(m.calls(), "save replace"));
+        m.port.snap.trim.save_state = 2; /* done at once */
+        m.port.snap.trim.save_replaced = true;
+        m.port.snap.trim.save_outputs = {"c-1.wav", "c-2.wav"};
+        m.tick();
+        CHECK_EQ(m.binder.vm().notice, "Saved 2 files, original removed");
+        ui::Screen sc = ui::Screen::Trim;
+        CHECK(m.binder.take_nav(sc) && sc == ui::Screen::List);
+    }
+
+    /* the page was left while the save ran: the notice only, no navigation */
+    Rig q;
+    open_trim(q);
+    q.port.snap.trim.save_state = 1;
+    q.tick();
+    q.act.open(ui::Screen::List);
+    q.port.snap.trim.save_state = 2;
+    q.port.snap.trim.save_replaced = true;
+    q.port.snap.trim.save_outputs = {"b-1.wav", "b-2.wav"};
+    q.tick();
+    ui::Screen s;
+    CHECK(!q.binder.take_nav(s));
+    CHECK_EQ(q.binder.vm().notice, "Saved 2 files, original removed");
+}
+
 void test_binder()
 {
+    test_new_settings_actions();
+    test_replace_save();
     test_deck_keys();
     test_steppers();
     test_settings_actions();

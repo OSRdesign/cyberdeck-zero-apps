@@ -61,6 +61,50 @@ ListPage::ListPage(lv_obj_t *parent, const Frame &frame, const UiActions &action
         keys_[i]->set(icons[i], names[i], i == 3 ? KeyLook::Red : KeyLook::Charcoal, true, false);
     }
     if (!p) hint_ = fit_label(root_, fit_, Face::Medium, 13, col::kInkMuted, 16, 288, 446, 16);
+    list_y0_ = lv_obj_get_style_y(list_, LV_PART_MAIN);
+    list_h0_ = lv_obj_get_style_height(list_, LV_PART_MAIN);
+    track_y0_ = lv_obj_get_style_y(track_, LV_PART_MAIN);
+    track_h0_ = lv_obj_get_style_height(track_, LV_PART_MAIN);
+
+    /* the notice: the hint line (landscape) or the top strip (portrait, which has no hint line) */
+    NoticeSpec ns;
+    ns.ls = ls_screen(0.5, fit_.s);
+    ns.px = fit_.px(14);
+    ns.min_px = std::max(9, fit_.px(11));
+    ns.x = fit_.x(16);
+    ns.w = fit_.w(16, sw);
+    if (p) {
+        ns.y = fit_.y(52);
+        ns.h_min = fit_.h(52, 22);
+        ns.h_max = std::max(ns.h_min, fit_.px(38));
+    } else {
+        ns.y = fit_.y(286);
+        ns.h_min = fit_.h(286, 20);
+        ns.h_max = std::max(ns.h_min, fit_.y(310) - fit_.y(286));
+        ns.pad = fit_.px(10);
+    }
+    notice_ = std::make_unique<NoticeBox>(root_, ns);
+}
+
+void ListPage::set_notice(const std::string &text)
+{
+    const bool on = notice_->set(text);
+    const bool p = frame_.portrait;
+    show(hint_, !on);
+    if (p) {
+        show(strip_left_, !on);
+        show(strip_right_, !on);
+        /* a notice taller than the strip pushes the list down (what scrolls out of view stays in the list) */
+        const int extra = on ? std::max(0, notice_->height() - fit_.h(52, 22)) : 0;
+        if (extra != shift_) {
+            shift_ = extra;
+            lv_obj_set_y(list_, list_y0_ + extra);
+            lv_obj_set_height(list_, std::max(1, list_h0_ - extra));
+            lv_obj_set_y(track_, track_y0_ + extra);
+            lv_obj_set_height(track_, std::max(1, track_h0_ - extra));
+            update_scrollbar();
+        }
+    }
 }
 
 void ListPage::key(int which)

@@ -55,6 +55,41 @@ SettingsPage::SettingsPage(lv_obj_t *parent, const Frame &frame, const UiActions
     track_ = box(root_, fit_.x(tx), fit_.y(56), fit_.w(tx, 6), fit_.y(p ? 464 : 306) - fit_.y(56), col::kScrollTrack, fit_.px(3));
     thumb_ = box(root_, fit_.x(tx), fit_.y(56), fit_.w(tx, 6), fit_.px(40), col::kHinge, fit_.px(3));
     if (!p) hint_ = fit_label(root_, fit_, Face::Medium, 14, col::kInkMuted, 16, 286, 430, 18, LV_TEXT_ALIGN_CENTER);
+
+    /* the notice: the 'more below' line (landscape); narrow: a strip at the bottom of the list area (the list is
+     * shorter while it shows) */
+    NoticeSpec ns;
+    ns.ls = ls_screen(0.5, fit_.s);
+    ns.px = fit_.px(14);
+    ns.min_px = std::max(9, fit_.px(11));
+    ns.pad = fit_.px(10);
+    ns.x = fit_.x(16);
+    ns.w = fit_.w(16, lw);
+    if (p) {
+        ns.y = list_y_ + list_h_; /* the list's bottom edge */
+        ns.anchor_bottom = true;
+        ns.h_min = fit_.px(26);
+        ns.h_max = fit_.px(40);
+    } else {
+        ns.y = fit_.y(286);
+        ns.h_min = fit_.h(286, 20);
+        ns.h_max = std::max(ns.h_min, fit_.y(310) - fit_.y(286));
+    }
+    notice_ = std::make_unique<NoticeBox>(root_, ns);
+}
+
+void SettingsPage::set_notice(const std::string &text)
+{
+    const bool on = notice_->set(text);
+    if (hint_) show(hint_, !on);
+    if (frame_.portrait) {
+        const int h = on ? notice_->height() + fit_.px(6) : 0;
+        if (h != notice_h_) {
+            notice_h_ = h;
+            lv_obj_set_height(list_, std::max(1, list_h_ - h));
+            update_scrollbar();
+        }
+    }
 }
 
 int SettingsPage::row_h() const
@@ -158,6 +193,8 @@ void SettingsPage::fill_row(Row &r, const SettingRow &s)
         right -= fit_.px(44);
     } else if (r.slider) {
         value = s.value_text;
+    } else if (s.kind == SettingKind::Info) {
+        value = s.value; /* no chevron: the value ends at the row's right padding */
     }
     const int lab_nat = text_width(font(Face::Bold, fit_.px(19)), s.label.c_str(), ls_screen(0.3, fit_.s));
     int value_w = 0;
@@ -240,6 +277,7 @@ void SettingsPage::activate(int i, int touch_x)
     case SettingKind::Text:
         if (nav_.edit_text) nav_.edit_text(s.id, s.label, s.value);
         break;
+    case SettingKind::Info: break; /* read-only */
     }
 }
 

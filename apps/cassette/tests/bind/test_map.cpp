@@ -314,7 +314,8 @@ void test_recorder()
     LocalState with_notice = local;
     with_notice.notice = "The sound card was unplugged";
     vm = map(base_snapshot(), {}, with_notice);
-    CHECK_EQ(vm.rec.info.notice, "The sound card was unplugged");
+    CHECK_EQ(vm.notice, "The sound card was unplugged"); /* the page that shows shows it: every page */
+    CHECK_EQ(vm.rec.info.notice, "");
 
     /* no sound input: the empty window, NO INPUT, REC dimmed, no CARD, no level */
     s = base_snapshot();
@@ -339,7 +340,8 @@ void test_recorder()
     CHECK_EQ(vm.rec.info.notice, "The sound card is busy");
     with_notice.notice = "Recovered take_003";
     vm = map(s, {}, with_notice);
-    CHECK_EQ(vm.rec.info.notice, "Recovered take_003"); /* a notice first */
+    CHECK_EQ(vm.notice, "Recovered take_003"); /* a notice is its own field; the standing reason stays beside it */
+    CHECK_EQ(vm.rec.info.notice, "The sound card is busy");
 }
 
 void test_settings()
@@ -350,7 +352,7 @@ void test_settings()
     std::vector<std::string> ids;
     for (const ui::SettingRow &r : vm.settings.rows) ids.push_back(r.id);
     const std::vector<std::string> want = {"input", "level", "agc", "format", "timer", "rewfwd", "channels", "lowcut",
-                                           "limiter", "folder", "prefix", "split"};
+                                           "limiter", "sync", "folder", "prefix", "split"};
     CHECK(ids == want);
     const ui::SettingRow *r = find_row(vm, "input");
     CHECK(r && r->kind == ui::SettingKind::Choice && r->label == "Input" && r->enabled);
@@ -379,6 +381,44 @@ void test_settings()
     CHECK(r && r->kind == ui::SettingKind::Text && r->value == "take");
     r = find_row(vm, "split");
     CHECK(r && r->choice == 0 && r->value == "At 4 GiB");
+
+    r = find_row(vm, "channels");
+    CHECK(r && r->kind == ui::SettingKind::Info && !r->enabled && r->choices.empty());
+    r = find_row(vm, "sync");
+    CHECK(r && r->kind == ui::SettingKind::Choice && r->label == "Sync every" && r->choices.size() == 4);
+    CHECK(r && r->choice == 1 && r->value == "10 s"); /* the default */
+    CHECK(!find_row(vm, "mute") && !find_row(vm, "output")); /* no mute control, one output */
+
+    /* T6d: the final order with the conditional rows, and their values */
+    {
+        Snapshot f = base_snapshot();
+        f.card.has_mute = true;
+        f.card.mute = true;
+        f.card.output_labels = {"USB Audio Device", "Default output"};
+        f.card.output_devices = {"hw:CARD=Demo,DEV=0", "default"};
+        f.card.output_selected = 1;
+        f.settings.sync_interval_s = 20;
+        ui::ViewModel fv = map(f);
+        std::vector<std::string> fids;
+        for (const ui::SettingRow &row : fv.settings.rows) fids.push_back(row.id);
+        const std::vector<std::string> fwant = {"input", "level", "agc", "mute", "format", "timer", "rewfwd", "channels",
+                                                "lowcut", "limiter", "sync", "folder", "prefix", "split", "output"};
+        CHECK(fids == fwant);
+        const ui::SettingRow *m = find_row(fv, "mute");
+        CHECK(m && m->kind == ui::SettingKind::Toggle && m->on && m->label == "Mic mute (card)");
+        const ui::SettingRow *o = find_row(fv, "output");
+        CHECK(o && o->kind == ui::SettingKind::Choice && o->label == "Output" && o->choice == 1 && o->value == "Default output");
+        CHECK(find_row(fv, "sync")->value == "20 s");
+        f.settings.sync_interval_s = 17; /* any value of 5..30: the nearest entry */
+        CHECK(find_row(map(f), "sync")->value == "20 s");
+        f.settings.sync_interval_s = 6;
+        CHECK(find_row(map(f), "sync")->value == "5 s");
+        /* the card is gone: no mute row (it needs a present card), one output left: no Output row */
+        f.card.present = false;
+        f.card.output_labels = {"Default output"};
+        fv = map(f);
+        CHECK(!find_row(fv, "mute") && !find_row(fv, "output"));
+    }
 
     /* other values */
     s.settings.record_timer_s = 10;
@@ -412,7 +452,7 @@ void test_settings()
     s.card.has_level = s.card.has_agc = false;
     vm = map(s);
     CHECK(!find_row(vm, "level") && !find_row(vm, "agc"));
-    CHECK(vm.settings.rows.size() == 10);
+    CHECK(vm.settings.rows.size() == 11);
     /* no card at all */
     s.card.present = false;
     s.card.labels.clear();
@@ -570,6 +610,9 @@ void test_same()
     CHECK(!same(a, c));
     c = a;
     c.rec.info.notice = "x";
+    CHECK(!same(a, c));
+    c = a;
+    c.notice = "x";
     CHECK(!same(a, c));
     c = a;
     c.rec.soft.db += 1;

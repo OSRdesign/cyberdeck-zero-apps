@@ -13,7 +13,10 @@ wait 1500
 shot recording-before-unplug
 wait 2300
 expect text "No sound input found. Plug in a USB sound card or headset."
+expect text "The sound card was unplugged"
+say the unplug notice shows (strip, or the whole counter row at 320x480) and the layout check passes with it
 shot unplugged
+expect notext "LAYOUT FAIL"
 wait 4500
 expect notext "No sound input found. Plug in a USB sound card or headset."
 expect text "CARD"

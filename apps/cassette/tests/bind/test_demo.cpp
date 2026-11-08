@@ -108,7 +108,7 @@ struct E2E {
     void tick()
     {
         binder->tick(mono_ms(), static_cast<int64_t>(std::time(nullptr)));
-        const std::string &n = binder->vm().rec.info.notice;
+        const std::string &n = binder->vm().notice;
         if (!n.empty() && (notices_seen.empty() || notices_seen.back() != n)) notices_seen.push_back(n);
     }
     /* ticks every 20 ms until pred holds or ms elapse */

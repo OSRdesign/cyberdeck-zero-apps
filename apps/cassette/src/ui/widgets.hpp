@@ -124,6 +124,36 @@ lv_obj_t *make_sticker(lv_obj_t *parent, const Fit &fit, double w, double h, dou
                        double text_y, int radius);
 void set_sticker(lv_obj_t *sticker, const std::string &text);
 
+/* The notice of a page: the tan strip of the page's own info line with the message in the strip's bold face, replacing
+ * the line while it shows. The text takes one line at the largest size from px down to min_px that fits; a narrow
+ * strip takes two lines (the largest size at which both fit the height allowed) before the size shrinks. The height
+ * grows from h_min to what the text needs, within h_max; anchor_bottom keeps the bottom edge (y is then that edge),
+ * else the top edge. With a tap handler the strip is a touch target (the narrow recorder's counter row). */
+struct NoticeSpec {
+    int x = 0, y = 0, w = 0, h_min = 20, h_max = 20;
+    int px = 14, min_px = 11, ls = 0, pad = 10, radius = 5;
+    bool anchor_bottom = false;
+};
+class NoticeBox {
+public:
+    NoticeBox(lv_obj_t *parent, const NoticeSpec &spec, std::function<void()> on_tap = nullptr);
+    /* Shows `text` (empty: hides the strip); true when it shows. */
+    bool set(const std::string &text);
+    bool shown() const { return shown_; }
+    int height() const { return h_; }
+    lv_obj_t *obj() const { return bg_; }
+    int lines() const { return lines_; }
+
+private:
+    static void click_cb(lv_event_t *e);
+    lv_obj_t *bg_ = nullptr, *text_ = nullptr;
+    NoticeSpec spec_;
+    std::function<void()> on_tap_;
+    std::string shown_text_;
+    bool shown_ = false;
+    int h_ = 0, lines_ = 1;
+};
+
 /* A label in board coordinates: px, letter spacing ls and the line box line_h (the text centred in it vertically, as
  * the boards' line-height does); w <= 0: as wide as its text. */
 lv_obj_t *fit_label(lv_obj_t *parent, const Fit &fit, Face face, double px, std::uint32_t rgb, double x, double y, double w,

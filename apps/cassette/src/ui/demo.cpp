@@ -180,6 +180,9 @@ ViewModel demo_model(const std::string &scene)
 
     /* settings: the board's rows, a card with a level (8 of 16) and auto gain */
     SettingsVm &s = vm.settings;
+    /* CASSETTE_DEMO_SETTINGS=full: also the rows that depend on the card (Mic mute) and on the outputs (Output) */
+    const char *ds = std::getenv("CASSETTE_DEMO_SETTINGS");
+    const bool full_settings = ds && std::string(ds) == "full";
     s.rows.push_back(choice("input", "Input", {"USB Audio Device", "USB Headset"}, 0));
     if (scene != "nocard" && scene != "noinput") {
         SettingRow lvl;
@@ -192,14 +195,24 @@ ViewModel demo_model(const std::string &scene)
         lvl.value_text = "8 / 16";
         s.rows.push_back(lvl);
         s.rows.push_back(toggle("agc", "Auto gain (card)", true));
+        if (full_settings) s.rows.push_back(toggle("mute", "Mic mute (card)", false));
     }
     s.rows.push_back(choice("format", "Format", {"WAV 48 kHz 16-bit", "WAV 48 kHz 24-bit", "WAV 44.1 kHz 16-bit"}, 0));
     s.rows.push_back(choice("timer", "Record timer", {"Off", "3 s", "10 s", "20 s"}, 0));
     const char *rf = std::getenv("CASSETTE_DEMO_REWFWD");
     s.rows.push_back(choice("rewfwd", "REW / FWD", {"Fast scan 5x", "Jump 5 s"}, rf && std::string(rf) == "jump" ? 1 : 0));
-    s.rows.push_back(choice("channels", "Channels", {"Mono", "Stereo"}, 0));
+    {
+        SettingRow ch;
+        ch.id = "channels";
+        ch.label = "Channels";
+        ch.kind = SettingKind::Info;
+        ch.enabled = false;
+        ch.value = "Mono";
+        s.rows.push_back(ch);
+    }
     s.rows.push_back(toggle("lowcut", "Low cut 80 Hz", false));
     s.rows.push_back(toggle("limiter", "Limiter", false));
+    s.rows.push_back(choice("sync", "Sync every", {"5 s", "10 s", "20 s", "30 s"}, 1));
     s.rows.push_back(choice("folder", "Folder", {"~/Recordings"}, 0));
     SettingRow prefix;
     prefix.id = "prefix";
@@ -208,6 +221,7 @@ ViewModel demo_model(const std::string &scene)
     prefix.value = "take";
     s.rows.push_back(prefix);
     s.rows.push_back(choice("split", "Auto-split", {"At 4 GiB", "Off (one RF64 file)"}, 0));
+    if (full_settings) s.rows.push_back(choice("output", "Output", {"USB Audio Device", "Default output"}, 0));
     if (r.transport == Transport::Recording)
         for (SettingRow &row : s.rows)
             if (row.id == "format" || row.id == "folder") row.enabled = false;
@@ -250,6 +264,8 @@ ViewModel demo_model(const std::string &scene)
     vm.confirm.title = "Delete the original take?";
     vm.confirm.body = "It is deleted only after every new file is written and synced.";
     vm.confirm.yes = "DELETE";
+    /* CASSETTE_DEMO_NOTICE=<text>: a notice that stays until a tap dismisses it (the narrow recorder) or the scene ends */
+    if (const char *n = std::getenv("CASSETTE_DEMO_NOTICE")) vm.notice = n;
     if (const char *b = std::getenv("CASSETTE_DEMO_BOX")) {
         if (std::string(b) == "save") vm.save.shown = true;
         if (std::string(b) == "confirm") vm.confirm.shown = true;
@@ -368,6 +384,11 @@ UiActions DemoDriver::actions()
     a.soft_gain = [this](int d) {
         log_action("soft_gain " + std::to_string(d));
         vm_.rec.soft.db = std::clamp(vm_.rec.soft.db + d, 0.0, 24.0);
+        emit();
+    };
+    a.notice_dismiss = [this] {
+        log_action("notice_dismiss");
+        vm_.notice.clear();
         emit();
     };
     a.open = [](Screen s) {

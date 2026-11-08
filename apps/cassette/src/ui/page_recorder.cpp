@@ -89,6 +89,34 @@ RecorderPage::RecorderPage(lv_obj_t *parent, const Frame &frame, const UiActions
         });
         keys_[i]->set(kKeyIcons[i], kKeyNames[i], i == 4 ? KeyLook::Red : KeyLook::Charcoal, true, false);
     }
+
+    /* the notice, over everything of the strip (landscape) or of the counter row (portrait); last, so on top */
+    NoticeSpec ns;
+    ns.px = 14;
+    ns.min_px = std::max(9, fit_.px(11));
+    ns.ls = ls_screen(0.5, fit_.s);
+    ns.pad = fit_.px(10);
+    if (frame.portrait) {
+        ns.x = fit_.x(16);
+        ns.y = fit_.y(294);
+        ns.w = fit_.w(16, 288);
+        ns.h_min = ns.h_max = fit_.h(294, 44);
+        ns.px = fit_.px(14);
+        ns.radius = fit_.px(6);
+        notice_ = std::make_unique<NoticeBox>(root_, ns, [this] {
+            if (act_.notice_dismiss) act_.notice_dismiss();
+        });
+        notice_covers_ = {counter_->obj(), list_btn_->obj(), gear_btn_->obj(), box_title_, box_detail_};
+    } else {
+        ns.x = fit_.x(16);
+        ns.y = fit_.y(182);
+        ns.w = fit_.w(16, 448);
+        ns.h_min = fit_.h(182, 20);
+        ns.h_max = std::max(ns.h_min, fit_.y(204) - fit_.y(182));
+        ns.px = fit_.px(14);
+        notice_ = std::make_unique<NoticeBox>(root_, ns);
+        notice_covers_ = {strip_text_, strip_lim_, strip_cut_, strip_state_};
+    }
 }
 
 void RecorderPage::build_landscape()
@@ -242,7 +270,21 @@ void RecorderPage::place_strip_right(const std::string &state)
     lv_obj_set_width(strip_text_, std::max(10, x - strip_x_));
 }
 
-void RecorderPage::update(const RecorderVm &rec)
+void RecorderPage::update(const RecorderVm &rec, const std::string &notice)
+{
+    const bool was_on = notice_on_;
+    notice_on_ = notice_->set(notice);
+    if (notice_on_ != was_on) {
+        /* the state label (REC / PLAY) comes back with place_strip_right, when the strip is placed again */
+        for (lv_obj_t *o : notice_covers_)
+            if (notice_on_ || o != strip_state_) show(o, !notice_on_);
+        state_shown_ = "?"; /* the strip's right group is placed again when the notice ends */
+        first_ = true;
+    }
+    update_deck(rec);
+}
+
+void RecorderPage::update_deck(const RecorderVm &rec)
 {
     window_->update(rec);
     counter_->set_ms(rec.counter_ms);
@@ -261,7 +303,9 @@ void RecorderPage::update(const RecorderVm &rec)
     }
 
     const std::string state = info_state(rec);
-    if (!frame_.portrait) {
+    if (notice_on_) {
+        /* the strip (landscape) or the counter row (portrait) is under the notice: nothing of it is touched */
+    } else if (!frame_.portrait) {
         if (first_ || state != state_shown_) {
             state_shown_ = state;
             place_strip_right(state);

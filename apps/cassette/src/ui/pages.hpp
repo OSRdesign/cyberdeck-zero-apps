@@ -75,13 +75,16 @@ protected:
 class RecorderPage : public PageBase {
 public:
     RecorderPage(lv_obj_t *parent, const Frame &frame, const UiActions &actions, const Nav &nav, AnimOptions anim);
-    void update(const RecorderVm &rec);
+    /* `notice`: the timed notice (ViewModel::notice); it replaces the info strip (landscape) or covers the counter row
+     * (portrait: the counter, the two buttons and the info box) while it shows. */
+    void update(const RecorderVm &rec, const std::string &notice = std::string());
     void set_shown_page(bool shown);
     /* A deck key held on the keyboard: drawn pressed until released. */
     void press_key(int key, bool down);
     const CassetteWindow &window() const { return *window_; }
 
 private:
+    void update_deck(const RecorderVm &rec);
     void build_landscape();
     void build_portrait();
     void place_strip_right(const std::string &state);
@@ -109,6 +112,9 @@ private:
     bool limiter_ = false, low_cut_ = false;
     double btn_h_ = 44; /* the Recordings / Settings buttons' height (landscape) */
     bool first_ = true;
+    std::unique_ptr<NoticeBox> notice_;
+    std::vector<lv_obj_t *> notice_covers_; /* hidden while the notice shows (the parts under it) */
+    bool notice_on_ = false;
 };
 
 class SettingsPage : public PageBase {
@@ -123,6 +129,8 @@ public:
     /* Esc: closes the picker first; false when there was none. */
     bool back();
     void reset_view();
+    /* The notice replaces the 'more below' line (landscape); narrow: a strip at the bottom of the list area. */
+    void set_notice(const std::string &text);
 
 private:
     struct Row {
@@ -144,6 +152,8 @@ private:
     const UiActions &act_;
     Nav nav_;
     Fit fit_;
+    std::unique_ptr<NoticeBox> notice_;
+    int notice_h_ = 0;
     SettingsVm vm_;
     bool have_ = false;
     lv_obj_t *list_ = nullptr, *track_ = nullptr, *thumb_ = nullptr, *hint_ = nullptr;
@@ -162,6 +172,8 @@ public:
     void update(const ListVm &l);
     bool on_key(std::uint32_t lv_key);
     int selected() const { return vm_.selected; }
+    /* The notice replaces the hint line (landscape) or the top strip (narrow; the list moves down for a taller one). */
+    void set_notice(const std::string &text);
     /* The four keys on the selected take: 0 PLAY, 1 RENAME, 2 TRIM, 3 DELETE. */
     void key(int which);
 
@@ -188,6 +200,8 @@ private:
     std::unique_ptr<PianoKey> keys_[4];
     int row_h_ = 42, row_gap_ = 4;
     std::string rows_key_;
+    std::unique_ptr<NoticeBox> notice_;
+    int list_y0_ = 0, list_h0_ = 0, track_y0_ = 0, track_h0_ = 0, shift_ = 0;
 };
 
 class TrimPage : public PageBase {
@@ -199,6 +213,8 @@ public:
     /* The keyboard's commands (the keys' and steppers' own actions; NextFlag selects the flag after the selected one). */
     enum Command { SetIn, SetOut, Split, Play, Save, ZoomIn, ZoomOut, NextFlag };
     void press(Command c);
+    /* The notice replaces the top strip (take label, IN / OUT / LEN). */
+    void set_notice(const std::string &text);
 
 private:
     static void wave_draw_cb(lv_event_t *e);
@@ -215,6 +231,7 @@ private:
     lv_obj_t *bottom_left_ = nullptr, *bottom_right_ = nullptr;
     std::unique_ptr<Stepper> zoom_, pos_;
     std::unique_ptr<PianoKey> keys_[5];
+    std::unique_ptr<NoticeBox> notice_;
     /* the waveform's parts in screen px (relative to the screen) */
     int over_x_ = 0, over_y_ = 0, over_w_ = 0, over_h_ = 0;
     int main_x_ = 0, main_y_ = 0, main_w_ = 0, main_h_ = 0;

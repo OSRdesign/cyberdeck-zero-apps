@@ -54,6 +54,7 @@ ui::SettingRow toggle_row(const char *id, const char *label, bool on)
 } // namespace
 
 const int kTimerChoices[4] = {0, 3, 10, 20};
+const int kSyncChoices[4] = {5, 10, 20, 30};
 
 ui::Transport transport_of(int s)
 {
@@ -275,6 +276,7 @@ std::vector<ui::SettingRow> settings_rows(const Snapshot &s)
         rows.push_back(r);
     }
     if (c.present && c.has_agc) rows.push_back(toggle_row("agc", "Auto gain (card)", c.auto_gain));
+    if (c.present && c.has_mute) rows.push_back(toggle_row("mute", "Mic mute (card)", c.mute));
     {
         ui::SettingRow r = choice_row("format", "Format", {format_words(s.take.format_text)}, 0);
         r.enabled = !busy;
@@ -288,12 +290,22 @@ std::vector<ui::SettingRow> settings_rows(const Snapshot &s)
     }
     rows.push_back(choice_row("rewfwd", "REW / FWD", {"Fast scan 5x", "Jump 5 s"}, s.settings.rew_fwd == ScanMode::Jump ? 1 : 0));
     {
-        ui::SettingRow r = choice_row("channels", "Channels", {"Mono", "Stereo"}, s.meter.channels == 2 ? 1 : 0);
-        r.enabled = false; /* what the card records; the controller has no channel setting */
+        ui::SettingRow r;
+        r.id = "channels";
+        r.label = "Channels";
+        r.kind = ui::SettingKind::Info; /* what the card records; the controller has no channel setting: read-only */
+        r.enabled = false;
+        r.value = s.meter.channels == 2 ? "Stereo" : "Mono";
         rows.push_back(r);
     }
     rows.push_back(toggle_row("lowcut", "Low cut 80 Hz", s.settings.low_cut));
     rows.push_back(toggle_row("limiter", "Limiter", s.settings.limiter));
+    {
+        int pick = 0; /* the nearest choice (the setting may hold any value from 5 to 30) */
+        for (int i = 1; i < 4; ++i)
+            if (std::abs(kSyncChoices[i] - s.settings.sync_interval_s) < std::abs(kSyncChoices[pick] - s.settings.sync_interval_s)) pick = i;
+        rows.push_back(choice_row("sync", "Sync every", {"5 s", "10 s", "20 s", "30 s"}, pick));
+    }
     {
         std::vector<std::string> folders = {s.settings.folder};
         if (s.settings.folder != "~/Recordings") folders.push_back("~/Recordings");
@@ -310,6 +322,11 @@ std::vector<ui::SettingRow> settings_rows(const Snapshot &s)
         rows.push_back(r);
     }
     rows.push_back(choice_row("split", "Auto-split", {"At 4 GiB", "Off (one RF64 file)"}, s.settings.auto_split ? 0 : 1));
+    if (c.output_labels.size() > 1) {
+        ui::SettingRow r = choice_row("output", "Output", c.output_labels, c.output_selected);
+        r.enabled = !busy;
+        rows.push_back(r);
+    }
     return rows;
 }
 
@@ -378,8 +395,9 @@ ui::ViewModel map_view(const MapInput &in)
     }
     r.info.limiter = s.settings.limiter;
     r.info.low_cut = s.settings.low_cut;
-    r.info.notice = local.notice;
-    if (r.info.notice.empty() && !present && !s.card.labels.empty()) r.info.notice = s.card.message;
+    vm.notice = local.notice;
+    /* the standing reason why there is no input stays in the strip until a card is found */
+    if (!present && !s.card.labels.empty()) r.info.notice = s.card.message;
 
     r.card.shown = present && s.card.has_level;
     r.card.db = s.card.level_db;
@@ -483,7 +501,7 @@ bool same(const ui::RecorderVm &a, const ui::RecorderVm &b)
 
 bool same(const ui::ViewModel &a, const ui::ViewModel &b)
 {
-    return same(a.rec, b.rec) && a.settings == b.settings && a.list == b.list && a.trim == b.trim && a.save == b.save &&
+    return a.notice == b.notice && same(a.rec, b.rec) && a.settings == b.settings && a.list == b.list && a.trim == b.trim && a.save == b.save &&
            a.confirm == b.confirm;
 }
 

@@ -72,7 +72,8 @@ struct InfoVm {
     std::int64_t play_pos_ms = 0, play_len_ms = 0; /* while a take plays or is paused */
     bool limiter = false;        /* LIM lamp */
     bool low_cut = false;        /* LOW CUT lamp */
-    std::string notice;          /* non-empty: replaces the strip's text (a short message: "Sound card unplugged: take kept") */
+    std::string notice;          /* a standing message that replaces the strip's text (the card's "no sound input" reason); the
+                                  * timed notices of the controller and the binding are ViewModel::notice */
 };
 
 struct RecorderVm {
@@ -97,6 +98,7 @@ enum class SettingKind {
     Toggle, /* a switch (UiActions::setting_toggle) */
     Slider, /* a slider with `value_text` beside it, min..max (UiActions::setting_slider) */
     Text,   /* a value with a chevron; a tap opens a one-line text field (UiActions::setting_text) */
+    Info,   /* a read-only value without a chevron (dimmed with enabled = false), e.g. Channels */
 };
 
 struct SettingRow {
@@ -180,6 +182,9 @@ struct ConfirmVm {
 /* ------------------------------------------------------------------------------------------------ everything */
 
 struct ViewModel {
+    /* A notice (a message of the controller or the binding, the binding times it: 4 s, one after the other). Shown on
+     * every page in the place of that page's own info line (see cassette_ui.hpp); empty: none. */
+    std::string notice;
     RecorderVm rec;
     SettingsVm settings;
     ListVm list;
@@ -238,6 +243,8 @@ struct UiActions {
     std::function<void(int dir)> soft_gain;           /* SOFT -1 / +1 step */
     /* navigation: the page now shown (Recorder after Esc, List, Settings, Trim after TRIM) */
     std::function<void(Screen)> open;
+    /* a tap on the notice that covers the counter row of the narrow recorder: dismisses it (the next one may follow) */
+    std::function<void()> notice_dismiss;
     /* settings (id = SettingRow::id) */
     std::function<void(const std::string &id, int choice)> setting_choice;
     std::function<void(const std::string &id, bool on)> setting_toggle;

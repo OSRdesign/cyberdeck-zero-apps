@@ -429,6 +429,82 @@ void set_sticker(lv_obj_t *paper, const std::string &text)
     set_fitted(t, Face::Bold, px, 0, std::max(8, px * 2 / 3), text);
 }
 
+NoticeBox::NoticeBox(lv_obj_t *parent, const NoticeSpec &spec, std::function<void()> on_tap)
+    : spec_(spec), on_tap_(std::move(on_tap))
+{
+    h_ = spec.h_min;
+    bg_ = box(parent, spec.x, spec.y, spec.w, spec.h_min, col::kStrip, spec.radius);
+    text_ = lv_label_create(bg_);
+    lv_obj_remove_flag(text_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(text_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_text_color(text_, lv_color_hex(col::kInk), 0);
+    lv_obj_set_style_text_align(text_, LV_TEXT_ALIGN_LEFT, 0);
+    lv_label_set_long_mode(text_, LV_LABEL_LONG_MODE_WRAP);
+    lv_label_set_text(text_, "");
+    if (on_tap_) {
+        lv_obj_add_flag(bg_, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(bg_, click_cb, LV_EVENT_CLICKED, this);
+    }
+    show(bg_, false);
+}
+
+void NoticeBox::click_cb(lv_event_t *e)
+{
+    auto *self = static_cast<NoticeBox *>(lv_event_get_user_data(e));
+    if (self->on_tap_) self->on_tap_();
+}
+
+bool NoticeBox::set(const std::string &text)
+{
+    if (text.empty()) {
+        shown_text_.clear();
+        shown_ = false;
+        show(bg_, false);
+        return false;
+    }
+    if (shown_ && text == shown_text_) return true;
+    shown_text_ = text;
+    const int inner = std::max(10, spec_.w - 2 * spec_.pad);
+    const int vpad = 1;
+    int p = spec_.px, lines = 1;
+    bool placed = false;
+    for (p = spec_.px; p >= spec_.min_px && !placed; --p) {
+        const lv_font_t *f = font(Face::Bold, p);
+        const int lh = lv_font_get_line_height(f);
+        if (text_width(f, text.c_str(), spec_.ls) <= inner) {
+            lines = 1;
+            placed = true;
+        } else if (2 * lh + 2 * vpad <= spec_.h_max) {
+            lv_point_t sz;
+            lv_text_get_size(&sz, text.c_str(), f, spec_.ls, 0, inner, LV_TEXT_FLAG_NONE);
+            if (sz.y <= 2 * lh + 1) {
+                lines = 2;
+                placed = true;
+            }
+        }
+        if (placed) break;
+    }
+    if (!placed) { /* nothing fits: the smallest size on two lines (the height allowing) */
+        p = spec_.min_px;
+        const lv_font_t *f = font(Face::Bold, p);
+        lines = 2 * lv_font_get_line_height(f) + 2 * vpad <= spec_.h_max ? 2 : 1;
+    }
+    const lv_font_t *f = font(Face::Bold, p);
+    const int lh = lv_font_get_line_height(f);
+    lines_ = lines;
+    h_ = std::min(spec_.h_max, std::max(spec_.h_min, lines * lh + 2 * vpad));
+    lv_obj_set_style_text_font(text_, f, 0);
+    lv_obj_set_style_text_letter_space(text_, spec_.ls, 0);
+    lv_obj_set_size(bg_, spec_.w, h_);
+    lv_obj_set_y(bg_, spec_.anchor_bottom ? spec_.y - h_ : spec_.y);
+    lv_obj_set_pos(text_, spec_.pad - 0, (h_ - lines * lh) / 2);
+    lv_obj_set_size(text_, inner, lines * lh);
+    lv_label_set_text(text_, text.c_str());
+    shown_ = true;
+    show(bg_, true);
+    return true;
+}
+
 int ls_screen(double ls, double s)
 {
     return ls_px(ls, s);
