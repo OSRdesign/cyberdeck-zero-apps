@@ -1,13 +1,15 @@
 {
   "share_code": "cassette",
   "package": "cassette",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "title": "Cassette",
-  "summary": "A sound recorder with crash-safe takes.",
-  "description": "Records sound from a USB sound card or microphone to WAV files and repairs a take that a power cut interrupted. Work in progress: the core only.",
+  "summary": "A sound recorder with a tape-deck look and crash-safe WAV takes.",
+  "description": "Records from any USB sound card or headset to WAV files: a level meter with a target zone, software gain, a record timer, trim and split, and playback with 5x scan. Crash-safe: a take survives a power cut up to the last sync. No cloud: nothing leaves the board. Needs a screen of at least 480x320 (portrait 320x480 in PDA mode).",
   "categories": ["Tools"],
   "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
   "license": "MIT",
   "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/cassette",
-  "arch": ["arm64", "amd64"]
+  "depends": "libfreetype6, libinput10, libxkbcommon0, libasound2t64 | libasound2",
+  "arch": ["arm64", "amd64"],
+  "permissions": {"microphone": true, "additional_hardware": true}
 }

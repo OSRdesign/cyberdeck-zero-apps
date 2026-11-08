@@ -1,0 +1,58 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Cassette
+Upstream-Contact: OSRdesign <https://github.com/OSRdesign/cyberdeck-zero-apps>
+Source: https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/cassette
+Comment: The application is linked against the LVGL based cp0_lvgl runtime of the
+ CardputerZero launcher by M5Stack (Copyright M5Stack Technology CO LTD, MIT) and LVGL
+ (Copyright LVGL Kft, MIT), which are part of the binary and are therefore listed in
+ its Copyright field below. The fonts it draws with are the launcher's, read at run
+ time from /usr/share/APPLaunch/share/font (Montserrat: SIL OFL 1.1; JetBrains Mono:
+ SIL OFL 1.1); none is shipped in this package.
+ .
+ The capture and playback layer, the ring buffer, the WAV / Broadcast Wave / RF64
+ writer, the journal and the repair step, the meter and the gain, the trim and split
+ editor, the take list, the settings and the screens are the app's own code, written
+ from scratch for this project from the published file format documents (EBU Tech 3285
+ Broadcast Wave, EBU Tech 3306 RF64) and the ALSA library's API documentation. The
+ package holds no code of other recorder programs.
+ .
+ Sound cards are reached through the ALSA library, libasound.so.2 of the system
+ (alsa-lib, LGPL-2.1-or-later), opened at run time: it is neither linked into the
+ binaries nor shipped in this package (the package depends on libasound2t64 or
+ libasound2 so that apt installs it).
+ .
+ usr/share/APPLaunch/bin/cassette-probe is a small listen-only command line tool built
+ from the same capture layer (it lists the sound cards and their controls and opens
+ each card for two seconds to count frames, writing no file and changing no setting),
+ for the board tests.
+
+Files: usr/share/APPLaunch/bin/cassette
+Copyright: 2026 OSRdesign
+ M5Stack Technology CO LTD (cp0_lvgl runtime linked into the binary)
+ LVGL Kft (LVGL, linked into the binary)
+License: MIT
+
+Files: usr/share/APPLaunch/bin/cassette-probe
+       usr/share/APPLaunch/applications/cassette.desktop
+       usr/share/APPLaunch/share/images/cassette.png
+       usr/share/doc/cassette/*
+Copyright: 2026 OSRdesign
+License: MIT
+
+License: MIT
+ Permission is hereby granted, free of charge, to any person obtaining a copy of this
+ software and associated documentation files (the "Software"), to deal in the Software
+ without restriction, including without limitation the rights to use, copy, modify,
+ merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+ permit persons to whom the Software is furnished to do so, subject to the following
+ conditions:
+ .
+ The above copyright notice and this permission notice shall be included in all copies
+ or substantial portions of the Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+ INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+ PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+ CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
+ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
