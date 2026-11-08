@@ -135,10 +135,10 @@ SaveBox::SaveBox(lv_obj_t *parent, const Frame &frame, const UiActions &actions)
 
 void SaveBox::update(const SaveVm &s, const TrimVm &t)
 {
+    if (s.shown != shown_ && s.shown) lv_obj_move_foreground(dim_);
     shown_ = s.shown;
     show(dim_, s.shown);
     if (!s.shown) return;
-    lv_obj_move_foreground(dim_);
     std::string key;
     for (const SaveFile &f : s.files) key += f.name + "=" + std::to_string(f.length_ms) + ";";
     key += std::to_string(t.in_ms) + "/" + std::to_string(t.out_ms) + "/" + std::to_string(t.splits.size());
@@ -201,10 +201,10 @@ ConfirmBox::ConfirmBox(lv_obj_t *parent, const Frame &frame, const UiActions &ac
 
 void ConfirmBox::update(const ConfirmVm &c)
 {
+    if (c.shown != shown_ && c.shown) lv_obj_move_foreground(dim_);
     shown_ = c.shown;
     show(dim_, c.shown);
     if (!c.shown) return;
-    lv_obj_move_foreground(dim_);
     set_fitted(title_, Face::Bold, fit_.px(20), 0, std::max(10, fit_.px(14)), c.title);
     set_text(body_, c.body);
     if (yes_label_) set_fitted(yes_label_, Face::Bold, fit_.px(16), ls_screen(1, fit_.s), std::max(9, fit_.px(12)), c.yes);

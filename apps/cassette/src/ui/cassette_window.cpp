@@ -345,7 +345,7 @@ void CassetteWindow::badge_draw_cb(lv_event_t *e)
     const lv_font_t *f = font(Face::Bold, self->fit_.px(14));
     const int tw = text_width(f, self->badge_text_.c_str(), 0);
     /* the board's "◀◀" glyphs: two triangles about 9 x 11 px, 1 px apart */
-    const int tri_w = static_cast<int>(std::lround(9 * s)), tri_h = static_cast<int>(std::lround(11 * s));
+    const int tri_w = static_cast<int>(std::lround(10 * s)), tri_h = static_cast<int>(std::lround(12 * s));
     const int gap = static_cast<int>(std::lround(5 * s)), sep = std::max(1, static_cast<int>(std::lround(s)));
     const int total = 2 * tri_w + sep + gap + tw;
     int x = (a.x1 + a.x2 + 1) / 2 - total / 2;

@@ -12,6 +12,7 @@
 #include "cassette_ui.hpp"
 #include "demo.hpp"
 
+#include <cstdint>
 #include <cstdlib>
 #include <memory>
 #include <string>
@@ -21,6 +22,12 @@ namespace {
 struct CassetteApp {
     std::unique_ptr<cassette::ui::DemoDriver> demo;
     std::unique_ptr<cassette::ui::CassetteUi> ui;
+    lv_timer_t *live = nullptr;
+    std::uint32_t started = 0;
+    ~CassetteApp()
+    {
+        if (live) lv_timer_delete(live);
+    }
 };
 
 } // namespace
@@ -45,6 +52,15 @@ const AppSpec &app_spec()
             cassette::ui::CassetteUi *ui = app->ui.get();
             app->demo->changed = [ui](const cassette::ui::ViewModel &vm) { ui->update(vm); };
             ui->update(app->demo->model());
+            if (const char *live = std::getenv("CASSETTE_DEMO_LIVE"); live && *live && std::string(live) != "0") {
+                app->started = lv_tick_get();
+                app->live = lv_timer_create(
+                    [](lv_timer_t *t) {
+                        auto *a = static_cast<CassetteApp *>(lv_timer_get_user_data(t));
+                        a->demo->tick_live(lv_tick_elaps(a->started));
+                    },
+                    33, app.get());
+            }
             if (const char *page = std::getenv("CASSETTE_DEMO_PAGE")) {
                 const std::string p = page;
                 if (p == "settings") ui->go(cassette::ui::Screen::Settings);

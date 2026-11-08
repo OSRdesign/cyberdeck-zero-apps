@@ -77,6 +77,8 @@ void ListPage::key(int which)
 
 void ListPage::update(const ListVm &l)
 {
+    if (have_ && l == vm_) return; /* nothing changed */
+    have_ = true;
     const int old_sel = vm_.selected;
     vm_ = l;
     std::string key;

@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <unordered_map>
 #include <utility>
 
 namespace cassette {
@@ -107,16 +108,40 @@ void set_text(lv_obj_t *l, const std::string &t)
     if (!cur || t != cur) lv_label_set_text(l, t.c_str());
 }
 
+namespace {
+struct FitMemo {
+    int w, px, ls, min_px, ls_out;
+    const lv_font_t *font;
+    std::string text;
+};
+std::unordered_map<const lv_obj_t *, FitMemo> &fit_memo()
+{
+    static std::unordered_map<const lv_obj_t *, FitMemo> m;
+    return m;
+}
+} // namespace
+
 void set_fitted(lv_obj_t *l, Face face, int px, int ls, int min_px, const std::string &t)
 {
     int w = lv_obj_get_style_width(l, LV_PART_MAIN);
     if (w <= 0 || w == LV_SIZE_CONTENT) w = 1 << 20;
+    /* the same text in the same box, and the label still shows what was fitted: nothing to measure */
+    auto &memo = fit_memo();
+    if (auto it = memo.find(l); it != memo.end()) {
+        const FitMemo &m = it->second;
+        const char *cur = lv_label_get_text(l);
+        if (m.w == w && m.px == px && m.ls == ls && m.min_px == min_px && m.text == t && cur && t == cur &&
+            lv_obj_get_style_text_font(l, LV_PART_MAIN) == m.font &&
+            lv_obj_get_style_text_letter_space(l, LV_PART_MAIN) == m.ls_out)
+            return;
+    }
     int ls_out = ls;
     const int p = fit_px(face, px, ls, t, w, min_px, &ls_out);
     const lv_font_t *f = font(face, p);
     if (lv_obj_get_style_text_font(l, LV_PART_MAIN) != f) lv_obj_set_style_text_font(l, f, 0);
     if (lv_obj_get_style_text_letter_space(l, LV_PART_MAIN) != ls_out) lv_obj_set_style_text_letter_space(l, ls_out, 0);
     set_text(l, t);
+    memo[l] = FitMemo{w, px, ls, min_px, ls_out, f, t};
 }
 
 void show(lv_obj_t *o, bool shown)

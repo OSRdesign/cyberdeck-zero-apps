@@ -56,7 +56,7 @@ private:
     int body_h_ = 0, lip_ = 4, off_ = 3, radius_ = 6, gap_ = 3, icon_h_ = 15, px_ = 12, ls_ = 1;
     Icon icon_ = Icon::None;
     KeyLook look_ = KeyLook::Charcoal;
-    bool enabled_ = true, latched_ = false, pressed_ = false;
+    bool enabled_ = true, latched_ = false, pressed_ = false, first_ = true;
     std::string text_;
     std::function<void(KeyEdge)> on_edge_;
 };
@@ -107,6 +107,8 @@ public:
 
 private:
     lv_obj_t *obj_ = nullptr;
+    bool known_ = false, lit_ = false;
+    std::uint32_t rgb_ = 0;
 };
 
 /* Drawn controls of the settings rows (not clickable: the row is). */

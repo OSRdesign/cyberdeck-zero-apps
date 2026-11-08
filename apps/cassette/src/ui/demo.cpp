@@ -256,6 +256,21 @@ ViewModel demo_model(const std::string &scene)
     return vm;
 }
 
+void DemoDriver::tick_live(std::uint32_t elapsed_ms)
+{
+    RecorderVm &r = vm_.rec;
+    const double t = elapsed_ms / 1000.0;
+    /* a speech-like level between -30 and -8 dBFS, the hold following its peaks */
+    const double db = -19.0 + 9.0 * std::sin(t * 2.3) * std::fabs(std::sin(t * 0.7 + 0.4)) + 2.0 * std::sin(t * 11.0);
+    for (int c = 0; c < r.meter.channels; ++c) {
+        ChannelMeter &ch = r.meter.ch[c];
+        ch.bar = bar_steps(static_cast<float>(db - 2.0 * c));
+        ch.hold_bar = std::max(ch.bar, ch.hold_bar - ((elapsed_ms / 33) % 15 == 0 ? 1 : 0));
+    }
+    if (r.transport == Transport::Recording || r.transport == Transport::Playing) r.counter_ms += 33;
+    emit();
+}
+
 void DemoDriver::emit()
 {
     if (changed) changed(vm_);

@@ -48,6 +48,9 @@ public:
     UiActions actions();
     std::function<void(const ViewModel &)> changed;
     const ViewModel &model() const { return vm_; }
+    /* CASSETTE_DEMO_LIVE=1 (the timing scene): a moving synthetic level and a running counter, called at the meter's
+     * rate (every 33 ms) with the elapsed time, as the controller would update the model. */
+    void tick_live(std::uint32_t elapsed_ms);
 
 private:
     void emit();

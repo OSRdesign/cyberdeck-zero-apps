@@ -111,6 +111,8 @@ TrimPage::TrimPage(lv_obj_t *parent, const Frame &frame, const UiActions &action
 
 void TrimPage::update(const TrimVm &t)
 {
+    if (have_ && t == vm_) return; /* nothing changed */
+    have_ = true;
     vm_ = t;
     const bool p = frame_.portrait;
     set_sticker(sticker_, t.sticker);

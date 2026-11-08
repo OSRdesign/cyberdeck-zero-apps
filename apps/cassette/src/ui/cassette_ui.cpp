@@ -197,7 +197,7 @@ void CassetteUi::Impl::build(AnimOptions anim)
     nav.rename = [this](int index) {
         if (index < 0 || index >= static_cast<int>(vm.list.takes.size())) return;
         const TakeRow &t = vm.list.takes[static_cast<std::size_t>(index)];
-        open_text("Rename " + t.name, "Name", t.prefix, [this, index](const std::string &text) {
+        open_text("Rename", "Name", t.prefix, [this, index](const std::string &text) {
             if (act.list_rename) act.list_rename(index, text);
         });
     };

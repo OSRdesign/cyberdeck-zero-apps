@@ -64,7 +64,15 @@ int SettingsPage::row_h() const
 
 void SettingsPage::update(const SettingsVm &s)
 {
+    if (have_ && s == vm_) return; /* nothing changed (the root calls every page at the meter's rate) */
+    have_ = true;
     vm_ = s;
+    refresh();
+}
+
+void SettingsPage::refresh()
+{
+    const SettingsVm &s = vm_;
     std::string key = std::to_string(picker_) + "|";
     for (const SettingRow &r : s.rows) key += r.id + ":" + std::to_string(static_cast<int>(r.kind)) + ";";
     if (picker_ >= 0 && picker_ < static_cast<int>(s.rows.size()))
@@ -207,7 +215,7 @@ void SettingsPage::activate(int i, int touch_x)
         picker_ = i;
         sel_ = -1;
         if (nav_.set_title) nav_.set_title(s.label);
-        update(vm_);
+        refresh();
         lv_obj_scroll_to_y(list_, 0, LV_ANIM_OFF);
         break;
     case SettingKind::Toggle:
@@ -240,7 +248,7 @@ bool SettingsPage::back()
     picker_ = -1;
     sel_ = -1;
     if (nav_.set_title) nav_.set_title("Settings");
-    update(vm_);
+    refresh();
     if (was < static_cast<int>(rows_.size())) lv_obj_scroll_to_view(rows_[static_cast<std::size_t>(was)].obj, LV_ANIM_OFF);
     return true;
 }

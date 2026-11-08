@@ -90,6 +90,7 @@ private:
     std::unique_ptr<PianoKey> keys_[5];
     std::unique_ptr<Lamp> lim_, cut_, state_lamp_;
     lv_obj_t *peak_ = nullptr;
+    bool peak_lit_ = false;
     lv_obj_t *in_label_ = nullptr, *ch_l_ = nullptr, *ch_r_ = nullptr; /* IN (mono), L / R (stereo) */
     lv_obj_t *open_ = nullptr;
     lv_obj_t *strip_text_ = nullptr, *strip_lim_ = nullptr, *strip_cut_ = nullptr, *strip_state_ = nullptr;
@@ -120,6 +121,7 @@ private:
     };
     static void row_cb(lv_event_t *e);
     static void scroll_cb(lv_event_t *e);
+    void refresh();
     void rebuild();
     void fill_row(Row &r, const SettingRow &s);
     void activate(int i, int touch_x);
@@ -132,6 +134,7 @@ private:
     Nav nav_;
     Fit fit_;
     SettingsVm vm_;
+    bool have_ = false;
     lv_obj_t *list_ = nullptr, *track_ = nullptr, *thumb_ = nullptr, *hint_ = nullptr;
     std::vector<Row> rows_;
     int picker_ = -1;             /* the setting whose choices show, -1: the settings */
@@ -166,6 +169,7 @@ private:
     Nav nav_;
     Fit fit_;
     ListVm vm_;
+    bool have_ = false;
     lv_obj_t *strip_left_ = nullptr, *strip_right_ = nullptr, *list_ = nullptr, *track_ = nullptr, *thumb_ = nullptr,
              *hint_ = nullptr;
     std::vector<Row> rows_;
@@ -190,6 +194,7 @@ private:
     Nav nav_;
     Fit fit_;
     TrimVm vm_;
+    bool have_ = false;
     std::vector<float> main_bars_, over_bars_;
     lv_obj_t *sticker_ = nullptr, *take_ = nullptr, *info_ = nullptr, *wave_ = nullptr;
     lv_obj_t *bottom_left_ = nullptr, *bottom_right_ = nullptr;

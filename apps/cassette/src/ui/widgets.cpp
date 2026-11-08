@@ -85,13 +85,17 @@ void PianoKey::set(Icon icon, const std::string &caption, KeyLook look, bool ena
         lv_obj_set_style_text_letter_space(caption_, ls, 0);
         lv_label_set_text(caption_, caption.c_str());
     }
-    lv_obj_set_style_text_color(caption_, lv_color_hex(look == KeyLook::Charcoal && !latched ? col::kKeyText : col::kWhite), 0);
+    if (changed || first_)
+        lv_obj_set_style_text_color(caption_, lv_color_hex(look == KeyLook::Charcoal && !latched ? col::kKeyText : col::kWhite), 0);
+    first_ = false;
     if (enabled != enabled_) {
         enabled_ = enabled;
         lv_obj_set_style_opa_layered(obj_, static_cast<lv_opa_t>(enabled ? 255 : 89), 0); /* 35 % */
     }
-    place_caption();
-    if (changed) lv_obj_invalidate(obj_);
+    if (changed) {
+        place_caption();
+        lv_obj_invalidate(obj_);
+    }
 }
 
 void PianoKey::place_caption()
@@ -289,6 +293,10 @@ Lamp::Lamp(lv_obj_t *parent, int x, int y, int d, std::uint32_t rgb, int glow)
 
 void Lamp::set(bool lit, std::uint32_t rgb)
 {
+    if (known_ && lit == lit_ && rgb == rgb_) return; /* a style change redraws */
+    known_ = true;
+    lit_ = lit;
+    rgb_ = rgb;
     show(obj_, lit);
     lv_obj_set_style_bg_color(obj_, lv_color_hex(rgb), 0);
     lv_obj_set_style_shadow_color(obj_, lv_color_hex(rgb), 0);

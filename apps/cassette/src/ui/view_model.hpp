@@ -188,6 +188,38 @@ struct ViewModel {
     ConfirmVm confirm;
 };
 
+/* Equality of the parts the pages compare to skip work when nothing changed (the meter updates 30 times a second). */
+inline bool operator==(const SettingRow &a, const SettingRow &b)
+{
+    return a.id == b.id && a.label == b.label && a.kind == b.kind && a.enabled == b.enabled && a.value == b.value &&
+           a.choices == b.choices && a.choice == b.choice && a.on == b.on && a.min == b.min && a.max == b.max &&
+           a.pos == b.pos && a.value_text == b.value_text;
+}
+inline bool operator==(const SettingsVm &a, const SettingsVm &b) { return a.rows == b.rows; }
+inline bool operator==(const TakeRow &a, const TakeRow &b)
+{
+    return a.id == b.id && a.sticker == b.sticker && a.name == b.name && a.detail == b.detail && a.length_ms == b.length_ms &&
+           a.prefix == b.prefix;
+}
+inline bool operator==(const ListVm &a, const ListVm &b)
+{
+    return a.takes == b.takes && a.selected == b.selected && a.take_count == b.take_count && a.folder == b.folder &&
+           a.free_space == b.free_space && a.free_hours == b.free_hours && a.format_short == b.format_short;
+}
+inline bool operator==(const TrimVm &a, const TrimVm &b)
+{
+    return a.take_id == b.take_id && a.sticker == b.sticker && a.take == b.take && a.length_ms == b.length_ms &&
+           a.marker_ms == b.marker_ms && a.span_ms == b.span_ms && a.in_ms == b.in_ms && a.out_ms == b.out_ms &&
+           a.splits == b.splits && a.selected_split == b.selected_split && a.window_peaks == b.window_peaks &&
+           a.overview_peaks == b.overview_peaks && a.playing == b.playing;
+}
+inline bool operator==(const SaveFile &a, const SaveFile &b) { return a.name == b.name && a.length_ms == b.length_ms; }
+inline bool operator==(const SaveVm &a, const SaveVm &b) { return a.shown == b.shown && a.files == b.files; }
+inline bool operator==(const ConfirmVm &a, const ConfirmVm &b)
+{
+    return a.shown == b.shown && a.title == b.title && a.body == b.body && a.yes == b.yes;
+}
+
 /* The pages. The UI owns which one shows (L, S, Esc, the header buttons, TRIM) and reports every change. */
 enum class Screen { Recorder, Settings, List, Trim };
 

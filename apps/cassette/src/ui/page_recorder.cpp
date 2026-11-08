@@ -222,8 +222,9 @@ void RecorderPage::update(const RecorderVm &rec)
     show(ch_l_, stereo);
     show(ch_r_, stereo);
     show(open_, rec.transport != Transport::Countdown); /* under the countdown panel */
-    {
-        const bool lit = rec.meter.ch[0].peak_lamp || (stereo && rec.meter.ch[1].peak_lamp);
+    const bool lit = rec.meter.ch[0].peak_lamp || (stereo && rec.meter.ch[1].peak_lamp);
+    if (first_ || lit != peak_lit_) { /* a style change redraws: only when the lamp changes */
+        peak_lit_ = lit;
         lv_obj_set_style_bg_color(peak_, lv_color_hex(lit ? col::kPeakOn : col::kPeakOff), 0);
         lv_obj_set_style_shadow_width(peak_, lit ? fit_.px(6) : 0, 0);
         lv_obj_set_style_shadow_color(peak_, lv_color_hex(col::kPeakOn), 0);
