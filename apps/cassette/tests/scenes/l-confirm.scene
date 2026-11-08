@@ -1,0 +1,25 @@
+title Cassette: REPLACE ORIGINAL in the save box asks once more: Delete the original take? with DELETE and CANCEL; Esc is CANCEL
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_PAGE trim
+env CASSETTE_DEMO_BOX save
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+tap "REPLACE ORIGINAL"
+wait 400
+expect text "Delete the original take?"
+expect text "DELETE"
+shot confirm
+expect notext "LAYOUT FAIL"
+key esc
+wait 300
+expect notext "Delete the original take?"
+expect text "SAVE AS NEW FILES"
+say Esc answered no (confirm_answer no); the save box stays
+key esc
+wait 300
+expect notext "SAVE AS NEW FILES"
+expect text "POSITION"
+expect noquit

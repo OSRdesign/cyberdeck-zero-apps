@@ -1,0 +1,43 @@
+title Cassette: a tap on split flag 1 selects it (white outline), the SPLIT key becomes REMOVE and removes it; Right moves the marker; ZOOM steps; Esc goes back to the list
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_PAGE trim
+env CASSETTE_DEMO_TRIM unselected
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+expect text "SPLIT"
+expect notext "REMOVE"
+shot trim-unselected
+@480x320 tapxy 0.148 0.455
+@640x480 tapxy 0.148 0.41
+@320x480 tapxy 0.1755 0.417
+wait 300
+expect text "REMOVE"
+@320x480 expect text "SPLIT 1 SELECTED"
+say the tap on flag 1 selected it (trim_select_split) and SPLIT reads REMOVE
+shot trim-flag1
+tap "REMOVE"
+wait 300
+expect text "SPLIT"
+expect notext "REMOVE"
+@480x320,640x480 expect text "IN 02:58.7 · OUT 10:28.7 · LEN 07:30.0 · 1 split"
+say REMOVE deleted the split (trim_remove_split)
+key right
+wait 200
+@480x320,640x480 expect text "05:21.2"
+@320x480 expect text "5:21.2"
+say Right moved the marker 0.1 s (trim_nudge 100)
+@480x320 tapxy 0.4583 0.6865
+@640x480 tapxy 0.4583 0.71
+@320x480 tapxy 0.4075 0.684
+wait 300
+expect text "30 s"
+say ZOOM + narrowed the window (trim_zoom)
+shot trim-zoomed
+key esc
+wait 300
+expect text "RENAME"
+say Esc went back to the list
+expect noquit

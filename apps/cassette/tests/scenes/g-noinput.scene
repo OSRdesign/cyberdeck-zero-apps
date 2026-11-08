@@ -1,0 +1,13 @@
+title Cassette: no sound input found: the empty window with the message, REC dimmed, no CARD stepper
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO noinput
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot noinput
+expect text "No sound input found. Plug in a USB sound card or headset."
+expect text "Found by itself when plugged in."
+expect notext "CARD"
+expect notext "LAYOUT FAIL"
+expect noquit

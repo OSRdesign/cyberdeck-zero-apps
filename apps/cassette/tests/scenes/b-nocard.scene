@@ -1,0 +1,13 @@
+title Cassette: recording with a card that has no capture level control: no CARD stepper, SOFT takes the full width (board CassetteNoCard)
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO nocard
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot nocard
+expect esc
+expect notext "CARD"
+expect text "SOFT"
+expect notext "LAYOUT FAIL"
+expect noquit

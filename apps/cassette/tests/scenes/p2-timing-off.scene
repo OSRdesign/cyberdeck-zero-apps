@@ -1,0 +1,9 @@
+title Cassette: the same 11 s with the hub animation off (CASSETTE_ANIM=0): nothing is redrawn
+sizes 480x320
+ppmm 608
+env CASSETTE_DEMO recording
+env CASSETTE_TIMING 1
+env CASSETTE_ANIM 0
+
+wait 11000
+expect noquit

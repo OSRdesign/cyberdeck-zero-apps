@@ -1,0 +1,10 @@
+title Cassette: a take over one hour: the counter shows H:MM:SS in smaller digits in the same box; PEAK lit
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO long
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot long
+expect notext "LAYOUT FAIL"
+expect noquit
