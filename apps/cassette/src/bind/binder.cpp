@@ -82,6 +82,8 @@ ui::UiActions Binder::actions()
         else if (k == ui::KeyId::Stop && e == ui::KeyEdge::Click) ev = KeyEvent::Stop;
         else if (k == ui::KeyId::Rec && e == ui::KeyEdge::Click) ev = KeyEvent::Rec;
         else return;
+        /* a dimmed key does nothing (REC without a sound input; the deck's own dimmed keys); an Up always goes through */
+        if (e != ui::KeyEdge::Up && have_vm_ && !vm_.rec.keys[static_cast<int>(k)].enabled) return;
         post([this, ev] { port_.key_event(ev); });
     };
     a.countdown_cancel = [this] { post([this] { port_.key_event(KeyEvent::TapOverlay); }); };

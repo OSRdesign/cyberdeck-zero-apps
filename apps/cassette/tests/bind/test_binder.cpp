@@ -52,6 +52,8 @@ bool has(const std::vector<std::string> &v, const std::string &s) { return std::
 void test_deck_keys()
 {
     Rig r;
+    r.port.snap.deck.stop.enabled = true;
+    r.tick();
     r.act.deck_key(ui::KeyId::Rew, ui::KeyEdge::Down);
     r.act.deck_key(ui::KeyId::Rew, ui::KeyEdge::Up);
     r.act.deck_key(ui::KeyId::Rew, ui::KeyEdge::Click); /* nothing: REW acts on Down / Up */
@@ -68,6 +70,19 @@ void test_deck_keys()
                                            "key_event FwdUp",   "key_event PlayPause", "key_event Stop",
                                            "key_event Rec",     "key_event TapOverlay"};
     CHECK(r.calls() == want);
+
+    /* a dimmed key does nothing: REC without a sound input, STOP when idle; an Up always goes through */
+    r.port.snap.card.present = false;
+    r.port.snap.deck.stop.enabled = false;
+    r.port.snap.deck.rew.enabled = false;
+    r.tick();
+    CHECK(!r.binder.vm().rec.keys[static_cast<int>(ui::KeyId::Rec)].enabled);
+    r.act.deck_key(ui::KeyId::Rec, ui::KeyEdge::Click);
+    r.act.deck_key(ui::KeyId::Stop, ui::KeyEdge::Click);
+    r.act.deck_key(ui::KeyId::Rew, ui::KeyEdge::Down);
+    r.act.deck_key(ui::KeyId::Rew, ui::KeyEdge::Up);
+    const std::vector<std::string> only_up = {"key_event RewUp"};
+    CHECK(r.calls() == only_up);
 }
 
 void test_steppers()

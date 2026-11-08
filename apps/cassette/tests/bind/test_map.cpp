@@ -358,7 +358,7 @@ void test_settings()
     r = find_row(vm, "level");
     CHECK(r && r->kind == ui::SettingKind::Slider && r->label == "Input level");
     CHECK(r && r->min == 0 && r->max == 24 && r->pos == 12);
-    CHECK(r && r->value_text == "+11.9 dB");
+    CHECK(r && r->value_text == "+12 dB");
     r = find_row(vm, "agc");
     CHECK(r && r->kind == ui::SettingKind::Toggle && r->on && r->label == "Auto gain (card)");
     r = find_row(vm, "format");

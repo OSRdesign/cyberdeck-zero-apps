@@ -271,7 +271,7 @@ std::vector<ui::SettingRow> settings_rows(const Snapshot &s)
         r.min = 0;
         r.max = std::max(1, static_cast<int>(std::lround(c.level_max_db - c.level_min_db)));
         r.pos = std::clamp(static_cast<int>(std::lround(c.level_db - c.level_min_db)), 0, r.max);
-        r.value_text = ui::fmt_db(c.level_db, true);
+        r.value_text = ui::fmt_db(c.level_db, false); /* "+12 dB": the row keeps room for its label at 320 wide */
         rows.push_back(r);
     }
     if (c.present && c.has_agc) rows.push_back(toggle_row("agc", "Auto gain (card)", c.auto_gain));

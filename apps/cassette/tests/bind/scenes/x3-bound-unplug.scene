@@ -1,0 +1,26 @@
+title Cassette bound (CASSETTE_DEMO=1): the scripted card is pulled 4 s after the start while recording (the take is closed and kept, the no sound input page), and comes back at 8 s (found by itself)
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO 1
+env CASSETTE_DEMO_HOME demo-home
+env CASSETTE_DEMO_UNPLUG_MS 4000
+env CASSETTE_DEMO_REPLUG_MS 8000
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 1200
+tap "REC"
+wait 1500
+shot recording-before-unplug
+wait 2300
+expect text "No sound input found. Plug in a USB sound card or headset."
+shot unplugged
+wait 4500
+expect notext "No sound input found. Plug in a USB sound card or headset."
+expect text "CARD"
+shot replugged
+key l
+wait 700
+expect text "Take 001"
+shot list-take-kept
+expect notext "LAYOUT FAIL"
+expect noquit
