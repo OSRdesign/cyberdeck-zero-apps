@@ -1,0 +1,13 @@
+{
+  "share_code": "cassette",
+  "package": "cassette",
+  "version": "0.0.1",
+  "title": "Cassette",
+  "summary": "A sound recorder with crash-safe takes.",
+  "description": "Records sound from a USB sound card or microphone to WAV files and repairs a take that a power cut interrupted. Work in progress: the core only.",
+  "categories": ["Tools"],
+  "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
+  "license": "MIT",
+  "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/cassette",
+  "arch": ["arm64", "amd64"]
+}
