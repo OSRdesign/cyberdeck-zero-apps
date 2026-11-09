@@ -5,8 +5,10 @@
  */
 #include "cassette_window.hpp"
 
+#include "handwriting.hpp"
 #include "paint.hpp"
 #include "theme.hpp"
+#include "ui_check.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -22,6 +24,7 @@ AnimOptions anim_options_from_env()
     if (const char *a = std::getenv("CASSETTE_ANIM"); a && std::strcmp(a, "0") == 0) o.enabled = false;
     if (const char *f = std::getenv("CASSETTE_ANIM_FPS"); f && *f) o.fps = std::clamp(std::atoi(f), 1, 60);
     if (const char *n = std::getenv("CASSETTE_ANIM_TICKS"); n && *n) o.ticks = std::max(0, std::atoi(n));
+    if (const char *m = std::getenv("CASSETTE_LOAD_STEP_MS"); m && *m) o.load_step_ms = std::clamp(std::atoi(m), 0, 100);
     return o;
 }
 
@@ -56,9 +59,21 @@ CassetteWindow::CassetteWindow(lv_obj_t *parent, const Fit &fit, const Layout &l
     const int cw = static_cast<int>(std::lround(200 * k_)), ch = static_cast<int>(std::lround(104 * k_));
     const int tx = fit.x(lay.tape_x) + (static_cast<int>(std::lround(200 * lay.tape_scale * fit.s)) - cw) / 2;
     const int ty = wy + (wh - ch) / 2;
-    canvas_ = lv_canvas_create(parent);
+    /* the window's inner area (inside its 3 px frame) clips the cassette object, which holds the canvas, the hubs and the name */
+    const int bw = fit.px(3);
+    clip_ = lv_obj_create(parent);
+    plain(clip_);
+    lv_obj_set_pos(clip_, wx + bw, wy + bw);
+    lv_obj_set_size(clip_, ww - 2 * bw, wh - 2 * bw);
+    cass_ = lv_obj_create(clip_);
+    plain(cass_);
+    base_y_ = ty - (wy + bw);
+    lv_obj_set_pos(cass_, tx - (wx + bw), base_y_);
+    lv_obj_set_size(cass_, cw, ch);
+    box_w_ = static_cast<int>(std::lround(118 * k_));
+    canvas_ = lv_canvas_create(cass_);
     lv_obj_remove_flag(canvas_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_pos(canvas_, tx, ty);
+    lv_obj_set_pos(canvas_, 0, 0);
     tape_buf_ = lv_draw_buf_create(static_cast<uint32_t>(cw), static_cast<uint32_t>(ch),
                                    lv_display_get_color_format(lv_obj_get_display(parent)), LV_STRIDE_AUTO);
     if (tape_buf_) lv_canvas_set_draw_buf(canvas_, tape_buf_);
@@ -69,14 +84,20 @@ CassetteWindow::CassetteWindow(lv_obj_t *parent, const Fit &fit, const Layout &l
     render_hub_frames();
     const double hx[2] = {64, 136};
     for (int i = 0; i < 2; ++i) {
-        hub_[i] = lv_image_create(parent);
+        hub_[i] = lv_image_create(cass_);
         lv_obj_remove_flag(hub_[i], LV_OBJ_FLAG_CLICKABLE);
-        const int cx = tx + static_cast<int>(std::lround(hx[i] * k_));
-        const int cy = ty + static_cast<int>(std::lround(74 * k_));
+        const int cx = static_cast<int>(std::lround(hx[i] * k_)); /* in cass_ */
+        const int cy = static_cast<int>(std::lround(74 * k_));
         lv_obj_set_pos(hub_[i], cx - hub_box_ / 2, cy - hub_box_ / 2);
         lv_obj_set_size(hub_[i], hub_box_, hub_box_);
         if (frames_[0]) lv_image_set_src(hub_[i], frames_[0]);
     }
+
+    /* the take name: a label in the handwriting face inside a container whose width is the reveal */
+    name_clip_ = lv_obj_create(cass_);
+    plain(name_clip_);
+    name_label_ = label(name_clip_, Face::Bold, std::max(8, static_cast<int>(std::lround(22 * k_))), col::kLabelInk, 0, 0, box_w_);
+    lv_obj_add_flag(name_clip_, LV_OBJ_FLAG_HIDDEN);
 
     /* the scan badge */
     badge_ = lv_obj_create(parent);
@@ -135,6 +156,7 @@ CassetteWindow::CassetteWindow(lv_obj_t *parent, const Fit &fit, const Layout &l
     if (anim_.enabled) timer_ = lv_timer_create(timer_cb, static_cast<uint32_t>(std::max(1, 1000 / anim_.fps)), this);
     last_ms_ = lv_tick_get();
     render_tape();
+    layout_name();
 }
 
 CassetteWindow::~CassetteWindow()
@@ -150,6 +172,7 @@ CassetteWindow::~CassetteWindow()
         f = nullptr;
     }
     if (canvas_ && lv_obj_is_valid(canvas_)) lv_obj_delete(canvas_);
+    if (clip_ && lv_obj_is_valid(clip_)) lv_obj_delete(clip_);
     if (tape_buf_) lv_draw_buf_destroy(tape_buf_);
     tape_buf_ = nullptr;
 }
@@ -204,10 +227,7 @@ void CassetteWindow::render_tape()
         fill(&layer, area(X(10), X(8), X(180), X(46)), col::kPaper, X(3));
         fill(&layer, area(X(10), X(8), X(180), X(8)), col::kStripe, X(3));
         line(&layer, X(20), X(46), X(180), X(46), 1, col::kPaperLine);
-        /* the handwritten name: the bold face (the toolkit has no handwriting face), as large as fits up to 22 */
-        const lv_font_t *fl = font(Face::Bold, fit_px(Face::Bold, X(22), 0, label_, X(118), X(12), nullptr));
-        text(&layer, fl, label_.c_str(), area(X(20), top_for_baseline(fl, X(40)), X(118), lv_font_get_line_height(fl)),
-             col::kLabelInk);
+        /* the take name is not in the canvas: it is a label of its own (name_label_), written in by the load animation */
         const lv_font_t *fs = font(Face::Bold, X(10));
         text(&layer, fs, side_.c_str(), area(X(100), top_for_baseline(fs, X(31)), X(76), lv_font_get_line_height(fs)),
              col::kLabelInk, LV_TEXT_ALIGN_RIGHT, std::max(0, X(1) - 1));
@@ -235,17 +255,40 @@ void CassetteWindow::render_tape()
 
 void CassetteWindow::update(const RecorderVm &rec)
 {
-    const bool loaded = rec.input_present && rec.tape.loaded;
-    if (loaded != loaded_ || rec.tape.label != label_ || rec.tape.side != side_ || rec.tape.format != format_) {
-        loaded_ = loaded;
-        label_ = rec.tape.label;
-        side_ = rec.tape.side;
-        format_ = rec.tape.format;
-        render_tape();
+    /* what the model says */
+    t_loaded_ = rec.input_present && rec.tape.loaded;
+    if (t_label_ != rec.tape.label) t_label_ = rec.tape.label;
+    if (t_side_ != rec.tape.side) t_side_ = rec.tape.side;
+    if (t_format_ != rec.tape.format) t_format_ = rec.tape.format;
+    const bool event = have_seq_ && rec.tape.load_seq != seq_;
+    seq_ = rec.tape.load_seq;
+    have_seq_ = true;
+    if (event) {
+        /* a LOAD: the animation (not when there is no cassette to show or no timer); when the list is still in front the
+         * old cassette stays until the recorder shows (set_visible): LOAD closes the list right after it asks */
+        if (load_.active()) finish_load();
+        pending_load_ = false;
+        if (t_loaded_ && anim_.enabled) {
+            if (visible_) begin_load();
+            else pending_load_ = true;
+        } else {
+            apply_target();
+        }
+    } else if (pending_load_) {
+        if (!t_loaded_) {
+            pending_load_ = false;
+            apply_target();
+        }
+    } else if (load_.active()) {
+        if (!t_loaded_) {
+            finish_load();
+            apply_target();
+        } else if (swapped_ && (t_loaded_ != loaded_ || t_label_ != label_ || t_side_ != side_ || t_format_ != format_)) {
+            apply_target(); /* a text changed under the animation (rename): shown at once */
+        }
+    } else {
+        apply_target();
     }
-    show(canvas_, loaded_ && tape_buf_);
-    show(hub_[0], loaded_);
-    show(hub_[1], loaded_);
     show(empty_, !rec.input_present);
 
     if (rec.hub_dps[0] != speed_[0] || rec.hub_dps[1] != speed_[1]) {
@@ -255,6 +298,10 @@ void CassetteWindow::update(const RecorderVm &rec)
     }
 
     const bool counting = rec.transport == Transport::Countdown;
+    if (counting != counting_) {
+        counting_ = counting;
+        if (!load_.active()) check_exempt(cass_, counting_); /* the name lies under the dark panel and the big number */
+    }
     show(count_, counting);
     if (counting) {
         set_text(count_number_, std::to_string(std::max(0, rec.countdown_left)));
@@ -275,10 +322,178 @@ void CassetteWindow::update(const RecorderVm &rec)
     show(badge_, scanning);
 }
 
+/* The cassette as the model says, at rest (the target's texts, in its place); during a load only the texts follow. */
+void CassetteWindow::apply_target()
+{
+    const bool changed = t_loaded_ != loaded_ || t_label_ != label_ || t_side_ != side_ || t_format_ != format_;
+    if (changed) {
+        const bool canvas_changed = t_loaded_ != loaded_ || t_side_ != side_ || t_format_ != format_;
+        loaded_ = t_loaded_;
+        label_ = t_label_;
+        side_ = t_side_;
+        format_ = t_format_;
+        if (canvas_changed) render_tape();
+        layout_name();
+    }
+    if (load_.active()) return;
+    if (cass_y_ != 0) {
+        cass_y_ = 0;
+        lv_obj_set_y(cass_, base_y_);
+    }
+    if (cass_shown_ != loaded_) {
+        cass_shown_ = loaded_;
+        show(cass_, loaded_);
+    }
+    show(canvas_, tape_buf_ != nullptr);
+}
+
+/* The font rung, the size and the place of the name label; the reveal at 100 %. */
+void CassetteWindow::layout_name()
+{
+    const bool has = loaded_ && !label_.empty();
+    show(name_clip_, has);
+    if (!has) return;
+    const double k = k_;
+    auto X = [k](double v) { return static_cast<int>(std::lround(v * k)); };
+    /* the label's largest size is the old Bold face's X(22); the ladder of fonts has a few rungs, the next smaller one when
+     * the name is too wide; the last rung ends with dots */
+    int rung = hand_rung(X(22));
+    const lv_font_t *f = handwriting_font(rung);
+    while (text_width(f, label_.c_str(), 0) > box_w_) {
+        const int below = hand_rung_below(rung);
+        if (below == 0) break;
+        rung = below;
+        f = handwriting_font(rung);
+    }
+    const int tw = text_width(f, label_.c_str(), 0);
+    lv_obj_set_style_text_font(name_label_, f, 0);
+    lv_label_set_long_mode(name_label_, tw > box_w_ ? LV_LABEL_LONG_MODE_DOTS : LV_LABEL_LONG_MODE_CLIP);
+    set_text(name_label_, label_);
+    const int lh = lv_font_get_line_height(f);
+    lv_obj_set_size(name_label_, box_w_, lh);
+    lv_obj_set_pos(name_clip_, X(20), top_for_baseline(f, X(40)));
+    lv_obj_set_height(name_clip_, lh);
+    name_w_ = std::min(box_w_, tw + 2);
+    reveal_w_ = -1;
+    set_reveal(name_w_);
+}
+
+void CassetteWindow::set_reveal(int w)
+{
+    w = std::max(0, w);
+    if (w == reveal_w_) return;
+    reveal_w_ = w;
+    lv_obj_set_width(name_clip_, w);
+}
+
+void CassetteWindow::begin_load()
+{
+    const bool had_old = loaded_;
+    load_.start(had_old);
+    swapped_ = false;
+    landed_ = false;
+    load_ticks_ = 0;
+    load_last_ms_ = lv_tick_get();
+    check_exempt(cass_, true); /* the scenes' layout check: the cassette is out of place and the name is cut on purpose */
+    if (!had_old) swap_to_target(); /* nothing to drop out: the new cassette falls in at once */
+    apply_pose();
+}
+
+/* The new cassette's texts into the canvas and the name label; called when nothing of the cassette is in view. */
+void CassetteWindow::swap_to_target()
+{
+    const bool canvas_changed = t_loaded_ != loaded_ || t_side_ != side_ || t_format_ != format_ || !load_.had_old();
+    loaded_ = t_loaded_;
+    label_ = t_label_;
+    side_ = t_side_;
+    format_ = t_format_;
+    if (canvas_changed) render_tape();
+    /* the hubs at rest on their first frame */
+    angle_[0] = angle_[1] = 0;
+    for (int i = 0; i < 2; ++i)
+        if (frame_[i] != 0 && frames_[0]) {
+            frame_[i] = 0;
+            lv_image_set_src(hub_[i], frames_[0]);
+        }
+    layout_name();
+    set_reveal(0);
+    swapped_ = true;
+}
+
+void CassetteWindow::apply_pose()
+{
+    const LoadPose p = load_.pose();
+    if (!swapped_ && p.phase != LoadPose::Phase::Out) swap_to_target();
+    bool shown = true;
+    int y = 0;
+    switch (p.phase) {
+    case LoadPose::Phase::Out: y = static_cast<int>(std::lround(p.old_y * k_)); break;
+    case LoadPose::Phase::Gap: shown = false; break;
+    default: y = static_cast<int>(std::lround(p.new_y * k_)); break;
+    }
+    if (shown != cass_shown_) {
+        cass_shown_ = shown;
+        show(cass_, shown);
+    }
+    if (shown && y != cass_y_) { /* the one object that moves */
+        cass_y_ = y;
+        lv_obj_set_y(cass_, base_y_ + y);
+    }
+    if (p.phase == LoadPose::Phase::Out) set_reveal(name_w_); /* the old name stays written */
+    else if (swapped_) set_reveal(static_cast<int>(std::lround(name_w_ * p.name)));
+    if (p.landed && !landed_) {
+        landed_ = true;
+        if (on_landed_) on_landed_();
+    }
+    if (!load_.active()) { /* over: the cassette at rest, the name written, the checks watch it again */
+        check_exempt(cass_, counting_);
+        if (cass_y_ != 0) {
+            cass_y_ = 0;
+            lv_obj_set_y(cass_, base_y_);
+        }
+        cass_shown_ = loaded_;
+        show(cass_, loaded_);
+        show(canvas_, tape_buf_ != nullptr);
+        set_reveal(name_w_);
+    }
+}
+
+void CassetteWindow::finish_load()
+{
+    if (!load_.active()) return;
+    load_.finish();
+    apply_pose();
+}
+
+void CassetteWindow::step_load(std::uint32_t now)
+{
+    int dt;
+    if (anim_.ticks > 0) { /* the scenes: a fixed step per tick, then the frame stays */
+        if (load_ticks_ >= anim_.ticks) return;
+        ++load_ticks_;
+        dt = anim_.load_step_ms;
+    } else {
+        dt = static_cast<int>(std::min<std::uint32_t>(100, lv_tick_diff(now, load_last_ms_)));
+    }
+    load_last_ms_ = now;
+    if (!visible_) load_.finish(); /* another page in front: nothing to animate */
+    else load_.advance(dt);
+    apply_pose();
+}
+
 void CassetteWindow::set_visible(bool visible)
 {
     visible_ = visible;
     last_ms_ = lv_tick_get();
+    if (visible && pending_load_) {
+        pending_load_ = false;
+        if (t_loaded_ && anim_.enabled) {
+            begin_load();
+        } else {
+            apply_target();
+            if (on_landed_) on_landed_(); /* the strip text and the counter were held for the load */
+        }
+    }
 }
 
 void CassetteWindow::timer_cb(lv_timer_t *t)
@@ -289,6 +504,11 @@ void CassetteWindow::timer_cb(lv_timer_t *t)
 void CassetteWindow::tick()
 {
     const std::uint32_t now = lv_tick_get();
+    if (load_.active()) {
+        step_load(now);
+        last_ms_ = now;
+        return; /* the hubs stay still while a cassette is loaded */
+    }
     double dt = static_cast<double>(lv_tick_diff(now, last_ms_)) / 1000.0;
     last_ms_ = now;
     if (anim_.ticks > 0) { /* CASSETTE_ANIM_TICKS: a fixed step per tick, then the hubs stop (the scenes' fixed angles) */

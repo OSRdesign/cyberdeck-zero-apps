@@ -1,0 +1,21 @@
+title Cassette LOAD animation, frame 3 of 5 (190 ms): the empty window: only the OPEN word; no cassette, no name
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_ANIM_TICKS 19
+env CASSETTE_ANIM_FPS 60
+env CASSETTE_LOAD_STEP_MS 10
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key l
+wait 400
+key up
+wait 200
+key l
+wait 900
+shot load-t190ms
+@480x320 expect text "TAKE 006 · 48k/16 WAV · 12 h 40 left"
+expect text "OPEN"
+expect notext "LAYOUT FAIL"
+expect noquit

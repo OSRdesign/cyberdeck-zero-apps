@@ -40,3 +40,4 @@ void test_format();
 void test_meter_steps();
 void test_wave();
 void test_fit();
+void test_load_anim();

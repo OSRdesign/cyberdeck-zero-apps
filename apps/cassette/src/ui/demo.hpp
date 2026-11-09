@@ -17,7 +17,8 @@
  *   fwd            scanning forward at 5x while playing, FWD held
  *   paused         a recording paused
  *   noinput        no sound input found
- *   idle           nothing running (the default)
+ *   idle           nothing running, Take 006 loaded (the default)
+ *   deckempty      nothing running and nothing loaded: the window shows only OPEN, PLAY is dimmed
  *   stereo         recording two channels
  *   long           recording for more than an hour (H:MM:SS)
  * plus, for every state, the settings rows, five takes and the trim state of Take 006 (two splits, the second
@@ -49,7 +50,7 @@ std::vector<float> demo_overview_peaks(std::int64_t length_ms, int n);
 
 class DemoDriver {
 public:
-    explicit DemoDriver(ViewModel vm) : vm_(std::move(vm)) {}
+    explicit DemoDriver(ViewModel vm) : vm_(std::move(vm)) { loaded_ = vm_.rec.tape.loaded ? 1 : -1; }
     /* The actions; after each change `changed` runs with the new model (bind it to CassetteUi::update). */
     UiActions actions();
     std::function<void(const ViewModel &)> changed;

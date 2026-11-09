@@ -15,8 +15,8 @@ wait 3300
 @320x480 expect text "TAKE 001"
 tap "STOP"
 wait 1000
-@320x480 expect text "TAKE 002"
-say STOP closed the take; the cassette shows the next one
+@320x480 expect text "TAKE 001"
+say STOP closed the take; the new take stays loaded on the cassette (no load animation)
 key l
 wait 700
 expect text "Take 001"

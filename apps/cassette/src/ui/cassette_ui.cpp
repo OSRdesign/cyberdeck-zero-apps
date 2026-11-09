@@ -263,6 +263,8 @@ void CassetteUi::Impl::go(Screen s)
 
 void CassetteUi::Impl::back()
 {
+    /* Esc while the cassette is going in: the animation ends at once, then Esc acts as usual */
+    if (rec && rec->window().loading()) rec->window().finish_load();
     if (dialog) {
         close_text();
         return;
@@ -302,6 +304,8 @@ void CassetteUi::Impl::on_key(std::uint32_t k)
 void CassetteUi::Impl::on_keyboard(const key_item &item)
 {
     if (dialog) return; /* the text box has the keys */
+    /* the cassette is going in: every key is ignored but Esc */
+    if (rec && rec->window().loading() && item.key_code != KEY_ESC && item.key_state != KBD_KEY_RELEASED) return;
     const bool press = item.key_state == KBD_KEY_PRESSED, repeat = item.key_state == KBD_KEY_REPEATED;
     const bool release = item.key_state == KBD_KEY_RELEASED;
     const std::uint32_t code = item.key_code;
@@ -577,7 +581,7 @@ void CassetteUi::update(const ViewModel &vm)
 {
     Impl &d = *d_;
     d.vm = vm;
-    d.rec->update(vm.rec, vm.notice);
+    d.rec->update(d.vm.rec, d.vm.notice); /* the member copy: the page keeps a pointer to it for the landing */
     d.settings->set_notice(vm.notice);
     d.list->set_notice(vm.notice);
     d.trim->set_notice(vm.notice);

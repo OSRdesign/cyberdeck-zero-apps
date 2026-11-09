@@ -77,11 +77,13 @@ public:
     RecorderPage(lv_obj_t *parent, const Frame &frame, const UiActions &actions, const Nav &nav, AnimOptions anim);
     /* `notice`: the timed notice (ViewModel::notice); it replaces the info strip (landscape) or covers the counter row
      * (portrait: the counter, the two buttons and the info box) while it shows. */
+    /* `rec` must stay alive until the next update (the load animation's landing updates the strip from it). */
     void update(const RecorderVm &rec, const std::string &notice = std::string());
     void set_shown_page(bool shown);
     /* A deck key held on the keyboard: drawn pressed until released. */
     void press_key(int key, bool down);
     const CassetteWindow &window() const { return *window_; }
+    CassetteWindow &window() { return *window_; }
 
 private:
     void update_deck(const RecorderVm &rec);
@@ -115,6 +117,7 @@ private:
     std::unique_ptr<NoticeBox> notice_;
     std::vector<lv_obj_t *> notice_covers_; /* hidden while the notice shows (the parts under it) */
     bool notice_on_ = false;
+    const RecorderVm *last_rec_ = nullptr; /* the model of the last update (the landing of a load updates from it) */
 };
 
 class SettingsPage : public PageBase {

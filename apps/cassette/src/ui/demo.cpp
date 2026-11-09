@@ -197,6 +197,14 @@ ViewModel demo_model(const std::string &scene)
         r.info.format.clear();
         r.info.limiter = false;
         r.info.low_cut = false;
+    } else if (scene == "deckempty") { /* idle with nothing in the deck (the loaded take was deleted): only OPEN, PLAY dimmed */
+        r.transport = Transport::Idle;
+        r.tape.loaded = false;
+        r.tape.label.clear();
+        r.info.take = "TAKE 008";
+        r.keys[static_cast<int>(KeyId::PlayPause)].enabled = false;
+        r.meter.ch[0].bar = 2;
+        r.meter.ch[0].hold_bar = 0;
     } else { /* idle: Take 006 is loaded (the list's highlighted row) */
         r.transport = Transport::Idle;
         r.tape.label = "Take 006";
@@ -374,6 +382,7 @@ void DemoDriver::deck(KeyId k, KeyEdge e)
         r.info.take = "TAKE 008";
         r.counter_ms = 0;
     } else if (k == KeyId::PlayPause) {
+        if (t == Transport::Idle && loaded_ < 0) return; /* nothing in the deck */
         if (t == Transport::Idle) {
             set_transport(Transport::Playing);
             show_take(loaded_);
@@ -519,6 +528,7 @@ UiActions DemoDriver::actions()
         set_transport(Transport::Idle);
         show_take(i);
         vm_.rec.tape.loaded = true;
+        vm_.rec.keys[static_cast<int>(KeyId::PlayPause)].enabled = true;
         ++vm_.rec.tape.load_seq;
         emit();
     };

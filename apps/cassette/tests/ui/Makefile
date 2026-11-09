@@ -6,7 +6,7 @@
 # (tests/ui/run.sh does that). The LVGL screens are checked by the headless scenes (build.sh host).
 APP   ?= ../..
 BUILD ?= build
-SRCS  := $(APP)/src/ui/ui_format.cpp $(APP)/src/ui/wave_geom.cpp $(APP)/src/ui/fit.cpp
+SRCS  := $(APP)/src/ui/ui_format.cpp $(APP)/src/ui/wave_geom.cpp $(APP)/src/ui/fit.cpp $(APP)/src/ui/load_anim.cpp
 TESTS := $(wildcard $(APP)/tests/ui/*.cpp)
 OBJS  := $(patsubst $(APP)/%.cpp,$(BUILD)/%.o,$(SRCS) $(TESTS))
 CXXFLAGS ?= -std=c++17 -O1 -g -Wall -Wextra -Werror

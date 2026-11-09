@@ -298,6 +298,8 @@ void test_preview_and_load()
     CHECK_EQ(r.binder.vm().rec.tape.label, "Take 006");
     CHECK_EQ(r.binder.vm().rec.tape.load_seq, 1u);
     CHECK_EQ(r.binder.vm().rec.transport, ui::Transport::Idle);
+    CHECK(r.binder.vm().rec.hub_dps[0] == 0.0 && r.binder.vm().rec.hub_dps[1] == 0.0); /* the hubs do not turn until PLAY */
+    CHECK_EQ(r.binder.vm().rec.counter_ms, 0);
     CHECK_EQ(r.binder.vm().list.previewing, -1);
     CHECK_EQ(r.binder.vm().list.selected, 1);
     /* the list opens on the loaded take */

@@ -48,9 +48,16 @@ key enter
 wait 300
 key esc
 wait 300
-@480x320 expect text "PLAYING TAKE 004 · 00:00 / 00:41"
-@320x480 expect text "00:00 / 00:41"
-say Enter played the selected take
+@480x320 expect text "TAKE 006 · 48k/16 WAV · 12 h 40 left"
+say Enter previewed the selected take (Take 004), Esc stopped the preview: the loaded Take 006 is in the deck, nothing plays
+key l
+wait 300
+key l
+wait 1300
+expect text "SOFT"
+@480x320 expect text "TAKE 004 · 48k/16 WAV · 12 h 40 left"
+expect text "Take 004"
+say L loaded the selected take (Take 004) into the deck and showed the recorder
 key l
 wait 300
 key s

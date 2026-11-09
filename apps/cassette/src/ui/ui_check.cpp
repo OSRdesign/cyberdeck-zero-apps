@@ -17,6 +17,8 @@ namespace ui {
 
 namespace {
 
+const char kExempt = 0; /* the user data of an exempt object */
+
 bool hidden_up(lv_obj_t *o)
 {
     for (; o; o = lv_obj_get_parent(o))
@@ -84,6 +86,7 @@ void walk(lv_obj_t *o, int sw, int sh, const std::vector<lv_obj_t *> &narrow_ok,
 {
     has_target_below = false;
     if (lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN)) return;
+    if (lv_obj_get_user_data(o) == &kExempt) return;
     bool scroll_clip = false;
     const lv_area_t vis = clipped(o, &scroll_clip);
     if (vis.x2 < vis.x1 || vis.y2 < vis.y1) return; /* scrolled away */
@@ -163,6 +166,11 @@ void walk(lv_obj_t *o, int sw, int sh, const std::vector<lv_obj_t *> &narrow_ok,
 }
 
 } // namespace
+
+void check_exempt(lv_obj_t *o, bool on)
+{
+    if (o) lv_obj_set_user_data(o, on ? const_cast<char *>(&kExempt) : nullptr);
+}
 
 std::vector<std::string> check_layout(lv_obj_t *root, int sw, int sh, const std::vector<lv_obj_t *> &narrow_ok, CheckStats *stats)
 {

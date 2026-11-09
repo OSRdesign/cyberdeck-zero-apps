@@ -1,0 +1,21 @@
+title Cassette LOAD into an empty deck (the first load): no drop-out and no empty gap, the cassette falls in at once (frame at 190 ms: the cassette is on its way down, the old one never shows)
+sizes 480x320 320x480
+ppmm 608
+env CASSETTE_DEMO deckempty
+env CASSETTE_ANIM_TICKS 19
+env CASSETTE_ANIM_FPS 60
+env CASSETTE_LOAD_STEP_MS 10
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+expect text "OPEN"
+shot deck-empty
+key l
+wait 400
+key up
+wait 200
+key l
+wait 900
+shot load-first-t190ms
+expect notext "LAYOUT FAIL"
+expect noquit

@@ -7,7 +7,7 @@ env CASSETTE_LAYOUT_CHECK 1
 
 wait 500
 shot server-idle
-@480x320,640x480 expect text "USB AUDIO CODEC (server) · TAKE 008 · 12 h 40 left"
+@480x320,640x480 expect text "USB AUDIO CODEC (server) · TAKE 006 · 12 h 40 left"
 @320x480 expect text "(server) 12 h 40"
 expect notext "LAYOUT FAIL"
 expect text "SOFT"

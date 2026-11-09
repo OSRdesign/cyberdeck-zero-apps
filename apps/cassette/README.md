@@ -53,8 +53,12 @@ Four pages and two boxes:
   REC starts a countdown over the cassette window instead: the meter stays live, a tap, STOP or Esc cancels it (nothing
   is written), at zero the take starts. Without a card the cassette window reads "No sound input found. Plug in a USB
   sound card or headset." and a card plugged in later is found by itself.
-- **Recordings.** The takes in the folder, newest first, with their length and size; PLAY, RENAME, TRIM and DELETE
-  (which asks first). A take repaired after a power cut is marked as such.
+- **Recordings.** The takes in the folder, newest first, with their length and size; LOAD, RENAME, TRIM and DELETE
+  (which asks first). A take repaired after a power cut is marked as such. LOAD puts the take into the deck with a
+  cassette animation (the old cassette drops out, the new one falls in with a small bounce, the name is written onto the
+  label in handwriting; 0.9 s, keys are ignored meanwhile but Esc) and PLAY then plays that take; it is dimmed while a
+  take records. A double tap or Enter on a row previews the take, again on the same row stops the preview and rewinds it;
+  closing the list stops it. Previewing never changes the loaded take.
 - **Trim and split.** The take as a waveform that scrolls under a fixed play marker (drag, a 0.1 s stepper or the keys),
   ZOOM from the whole take down to a 2 s window, a thin overview strip of the whole take, the IN and OUT handles and any
   number of numbered split points (a tap selects one and the SPLIT key becomes REMOVE). SAVE opens the save box.
@@ -83,7 +87,8 @@ The full map is [`docs/KEYS.md`](docs/KEYS.md).
 | | L / S | the recordings list / the settings |
 | | Esc | end the app (cancels a running countdown) |
 | Recordings | Up / Down | move the selection |
-| | Enter | PLAY the selected take |
+| | Enter | PREVIEW the selected take (again on it: stop and rewind) |
+| | L | LOAD the selected take into the deck |
 | | N / T / Delete | RENAME / TRIM / DELETE (asks first) |
 | | S | the settings |
 | | Esc | back to the recorder |
@@ -224,4 +229,6 @@ the binary: the handwriting of the cassette label is Caveat SemiBold (Copyright 
   320x480 minimum layouts; `cassette-probe` in the package. Cards that record at other rates than 48000 or 44100 Hz
   (16000 Hz speech headsets) are opened at their own rate. The PLAY / PAUSE key shows the current state (PLAY latched
   while playing, PAUSE latched while paused); both hubs turn the same way (3x for REW / FWD, clockwise for REW); the
-  meter shows the played level while a take plays.
+  meter shows the played level while a take plays. The recordings list has LOAD (the take goes into the deck with a
+  cassette animation, PLAY plays it; the name on the cassette label is handwriting, Caveat SemiBold) and a preview that
+  stops on a second double tap; a paused take reads PAUSED in the strip.

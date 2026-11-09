@@ -81,6 +81,10 @@ RecorderPage::RecorderPage(lv_obj_t *parent, const Frame &frame, const UiActions
     window_ = std::make_unique<CassetteWindow>(root_, fit_, lay, anim, [this] {
         if (act_.countdown_cancel) act_.countdown_cancel();
     });
+    /* the strip text and the counter keep what they showed until the loaded cassette has landed */
+    window_->set_landed_callback([this] {
+        if (last_rec_) update_deck(*last_rec_);
+    });
     lv_obj_move_to_index(open_, lv_obj_get_index(open_) + 1); /* over the window's frame, under the cassette canvas */
     if (frame.portrait) build_portrait();
     else build_landscape();
@@ -89,6 +93,7 @@ RecorderPage::RecorderPage(lv_obj_t *parent, const Frame &frame, const UiActions
         const DRect r = frame.portrait ? DRect{16.0 + 59 * i, 402, 52, 56} : DRect{16.0 + 91 * i, 252, 84, 50};
         const KeyType t = frame.portrait ? KeyType{10, 1, 4} : KeyType{12, 1.5, 3};
         keys_[i] = std::make_unique<PianoKey>(root_, fit_, r, t, [this, i](KeyEdge e) {
+            if (window_->loading()) return; /* the cassette is going in: touches are ignored (Esc is not one) */
             if (act_.deck_key) act_.deck_key(static_cast<KeyId>(i), e);
         });
         keys_[i]->set(kKeyIcons[i], kKeyNames[i], i == 4 ? KeyLook::Red : KeyLook::Charcoal, true, false);
@@ -136,8 +141,8 @@ void RecorderPage::build_landscape()
     peak_ = peak_lamp(root_, mid, 345, 66);
     lv_obj_t *peak = fit_label(root_, mid, Face::Bold, 9, col::kScale, 337, 82, 0, 10, LV_TEXT_ALIGN_LEFT, 0.8);
     lv_label_set_text(peak, "PEAK");
-    list_btn_ = std::make_unique<IconButton>(root_, mid, DRect{366, 59, 40, 44}, Icon::List, [this] { nav_.go(Screen::List); });
-    gear_btn_ = std::make_unique<IconButton>(root_, mid, DRect{410, 59, 40, 44}, Icon::Gear, [this] { nav_.go(Screen::Settings); });
+    list_btn_ = std::make_unique<IconButton>(root_, mid, DRect{366, 59, 40, 44}, Icon::List, [this] { if (!window_->loading()) nav_.go(Screen::List); });
+    gear_btn_ = std::make_unique<IconButton>(root_, mid, DRect{410, 59, 40, 44}, Icon::Gear, [this] { if (!window_->loading()) nav_.go(Screen::Settings); });
     for (IconButton *b : {list_btn_.get(), gear_btn_.get()}) {
         lv_obj_set_y(b->obj(), row_y);
         lv_obj_set_height(b->obj(), bh);
@@ -180,9 +185,9 @@ void RecorderPage::build_landscape()
     state_lamp_ = std::make_unique<Lamp>(root_, 0, 0, d11, col::kLampRed, fit_.px(6));
 
     card_ = std::make_unique<Stepper>(root_, fit_, DRect{16, 206, 220, 44}, "CARD", 17, Icon::Minus, Icon::Plus,
-                                      [this](int d) { if (act_.card_gain) act_.card_gain(d); });
+                                      [this](int d) { if (act_.card_gain && !window_->loading()) act_.card_gain(d); });
     soft_ = std::make_unique<Stepper>(root_, fit_, DRect{244, 206, 220, 44}, "SOFT", 17, Icon::Minus, Icon::Plus,
-                                      [this](int d) { if (act_.soft_gain) act_.soft_gain(d); });
+                                      [this](int d) { if (act_.soft_gain && !window_->loading()) act_.soft_gain(d); });
 }
 
 void RecorderPage::build_portrait()
@@ -211,8 +216,8 @@ void RecorderPage::build_portrait()
     lv_label_set_text(tg, "TARGET");
 
     counter_ = std::make_unique<Counter>(root_, fit_, 16, 294, 88, 44, 15, 30, 8, 24, 6);
-    list_btn_ = std::make_unique<IconButton>(root_, fit_, DRect{108, 294, 44, 44}, Icon::List, [this] { nav_.go(Screen::List); });
-    gear_btn_ = std::make_unique<IconButton>(root_, fit_, DRect{156, 294, 44, 44}, Icon::Gear, [this] { nav_.go(Screen::Settings); });
+    list_btn_ = std::make_unique<IconButton>(root_, fit_, DRect{108, 294, 44, 44}, Icon::List, [this] { if (!window_->loading()) nav_.go(Screen::List); });
+    gear_btn_ = std::make_unique<IconButton>(root_, fit_, DRect{156, 294, 44, 44}, Icon::Gear, [this] { if (!window_->loading()) nav_.go(Screen::Settings); });
     /* the info box: take over time left, the state lamp at the top right */
     box(root_, fit_.x(204), fit_.y(294), fit_.w(204, 100), fit_.h(294, 44), col::kStrip, fit_.px(6));
     box_title_ = fit_label(root_, fit_, Face::Bold, 15, col::kInk, 212, 299, 66, 18, LV_TEXT_ALIGN_LEFT, 0.5);
@@ -221,9 +226,9 @@ void RecorderPage::build_portrait()
     state_lamp_ = std::make_unique<Lamp>(root_, fit_.x(285), fit_.y(302), fit_.px(11), col::kLampRed, fit_.px(6));
 
     card_ = std::make_unique<Stepper>(root_, fit_, DRect{16, 352, 142, 44}, "CARD", 14, Icon::Minus, Icon::Plus,
-                                      [this](int d) { if (act_.card_gain) act_.card_gain(d); });
+                                      [this](int d) { if (act_.card_gain && !window_->loading()) act_.card_gain(d); });
     soft_ = std::make_unique<Stepper>(root_, fit_, DRect{162, 352, 142, 44}, "SOFT", 14, Icon::Minus, Icon::Plus,
-                                      [this](int d) { if (act_.soft_gain) act_.soft_gain(d); });
+                                      [this](int d) { if (act_.soft_gain && !window_->loading()) act_.soft_gain(d); });
 }
 
 void RecorderPage::place_steppers(bool card)
@@ -278,6 +283,7 @@ void RecorderPage::place_strip_right(const std::string &state)
 
 void RecorderPage::update(const RecorderVm &rec, const std::string &notice)
 {
+    last_rec_ = &rec;
     const bool was_on = notice_on_;
     notice_on_ = notice_->set(notice);
     if (notice_on_ != was_on) {
@@ -293,7 +299,10 @@ void RecorderPage::update(const RecorderVm &rec, const std::string &notice)
 void RecorderPage::update_deck(const RecorderVm &rec)
 {
     window_->update(rec);
-    counter_->set_ms(rec.counter_ms);
+    /* a take is being loaded: the strip text and the counter wait for the landing of the cassette (the landed callback
+     * calls this again); everything else follows the model at once */
+    const bool hold = window_->before_landing();
+    if (!hold) counter_->set_ms(rec.counter_ms);
     bar_->update(rec.meter);
     const bool stereo = rec.meter.channels >= 2;
     show(in_label_, !stereo);
@@ -309,8 +318,9 @@ void RecorderPage::update_deck(const RecorderVm &rec)
     }
 
     const std::string state = info_state(rec);
-    if (notice_on_) {
-        /* the strip (landscape) or the counter row (portrait) is under the notice: nothing of it is touched */
+    if (notice_on_ || hold) {
+        /* the strip (landscape) or the counter row (portrait) is under the notice: nothing of it is touched; while a take
+         * is loaded the strip keeps its text until the landing */
     } else if (!frame_.portrait) {
         if (first_ || state != state_shown_) {
             state_shown_ = state;
@@ -324,7 +334,9 @@ void RecorderPage::update_deck(const RecorderVm &rec)
         if (first_ || rec.info.low_cut != low_cut_) lamp(*cut_, rec.info.low_cut);
         limiter_ = rec.info.limiter;
         low_cut_ = rec.info.low_cut;
-        set_fitted(strip_text_, Face::Bold, fit_.px(14), ls_screen(0.5, fit_.s), std::max(9, fit_.px(11)),
+        /* the largest size that fits one line, down to the smallest the strip allows (the REW / FWD text at 640x480 needs the
+         * smaller size; a text that fits keeps the size it had) */
+        set_fitted(strip_text_, Face::Bold, fit_.px(14), ls_screen(0.5, fit_.s), std::max(8, fit_.px(9)),
                    red_tail(info_line(rec), info_lost(rec)));
     } else {
         set_fitted(box_title_, Face::Bold, fit_.px(15), ls_screen(0.5, fit_.s), std::max(9, fit_.px(11)), info_title(rec));
