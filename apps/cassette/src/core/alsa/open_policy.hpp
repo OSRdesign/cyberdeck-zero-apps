@@ -3,7 +3,8 @@
  *
  * Cassette: how a capture card is opened. hw: first (never plughw: no resampling, no format conversion in ALSA); if the card is
  * busy (a sound server holds it while a client records, P0-f) open the server's ALSA "default" device and say so.
- * Rate: 48000 first, else 44100. Channels follow the device (mono, else stereo). Format: native S16, else S24_3LE kept as
+ * Rate: the card's own: 48000 first, then 44100, then the highest offered rate below 48000 (a speech headset records 16000),
+ * and only when every offered rate is above 48000 the lowest one. Refused only when the card offers no rate. Channels follow the device (mono, else stereo). Format: native S16, else S24_3LE kept as
  * 24-bit packed, else S32_LE converted to 24-bit packed (the low byte is dropped).
  */
 #pragma once
@@ -50,6 +51,9 @@ struct OpenResult {
     CaptureOffer offer;          /* what the card offered (empty when it was busy) */
     bool ok() const { return status == OpenStatus::Ok; }
 };
+
+/* The capture rate for an offer: 48000, 44100, the highest offered rate at or below 48000, else the lowest offered; 0 when none. */
+uint32_t choose_rate(const CaptureOffer &offer);
 
 /* The pure choice of parameters from an offer: false with `why` when nothing usable. */
 bool choose_params(const CaptureOffer &offer, const OpenOptions &opt, HwRequest &req, Conversion &conv, AudioFormat &fmt,

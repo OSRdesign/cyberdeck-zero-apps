@@ -115,6 +115,14 @@ void test_helpers()
     CHECK_EQ(short_format("48k/16 WAV"), "48k/16");
     CHECK_EQ(format_words("48k/16 WAV"), "WAV 48 kHz 16-bit");
     CHECK_EQ(format_words("44.1k/24 stereo WAV"), "WAV 44.1 kHz 24-bit stereo");
+    CHECK_EQ(format_words("16k/16 WAV"), "WAV 16 kHz 16-bit");
+    CHECK_EQ(format_words("22.05k/16 stereo WAV"), "WAV 22.05 kHz 16-bit stereo");
+    CHECK_EQ(tape_format("16k/16 WAV"), "WAV 16k");
+    CHECK_EQ(short_format("22.05k/16 stereo WAV"), "22.05k/16");
+    CHECK_EQ(frames_to_ms(16000 * 90, 16000), 90000);
+    CHECK_EQ(frames_to_ms(8000, 16000), 500);
+    CHECK_EQ(ms_to_frames(500, 16000), 8000);
+    CHECK_EQ(ms_to_frames(2500, 22050), 55125);
 
     /* peaks */
     PeakBar b;

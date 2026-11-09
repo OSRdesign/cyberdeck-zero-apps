@@ -281,6 +281,26 @@ Report: what came back and what did not.
 
 Report: the notice texts as shown, whether the filler was removed.
 
+## B12. A speech-only headset at its own rate (any board with a headset that offers 16000 Hz only, 10 min)
+
+Goal: a card that records at neither 48000 nor 44100 Hz (a USB headset in its call profile, for example the Jabra Evolve
+65: `mono S16 at 16000 Hz`) opens and plays back at the right speed.
+
+1. `cassette-probe --card <the headset>`. Expected: `open: ... OK direct: 16000 Hz, 1 ch, 16-bit` (no `Unsupported card`).
+2. Open Cassette with only that headset plugged in. Expected: the strip says `16k/16 WAV`, Settings > Format reads
+   `WAV 16 kHz 16-bit`, the meter moves when you speak.
+3. Say the numbers 1 to 30 aloud, one a second, and press REC with a watch in view; record 30 s, STOP. Expected: the
+   counter at STOP reads about 0:30 (not 0:10 and not 1:30); the list shows the take at about 0:30.
+4. PLAY it through the headset (its output may play 16000 Hz only) and through another output (Settings > Output, one that
+   plays 48000 only). Expected on both: normal speed and voice pitch, about 30 s long, counting in step with your watch.
+   REW / FWD scan at 5x and the 5 s jump move by the right amount of time.
+5. TRIM: split at about 15 s and save as new files. Expected: two takes of about 15 s each that play at normal speed.
+6. `file ~/Recordings/take_001_*.wav`.
+   Expected: `... WAVE audio, Microsoft PCM, 16 bit, mono 16000 Hz`.
+
+Report: the probe line, the counter and list length of the 30 s take, whether both playbacks were at the right speed, the
+`file` line.
+
 ## Results
 
 | Test | Board | Pass / fail | Notes |
@@ -297,6 +317,7 @@ Report: the notice texts as shown, whether the filler was removed.
 | B9 keys and touch |  |  |  |
 | B10 settings after reboot |  |  |  |
 | B11 notices and errors |  |  |  |
+| B12 speech-only headset |  |  |  |
 
 **What to send back:** the table; the probe output per board (B0); the `watch` and `take` outputs of B1, B3, B4; the
 `ui` log line per board; the notice texts as you read them; screenshots or photos of anything cut, overlapping or odd.

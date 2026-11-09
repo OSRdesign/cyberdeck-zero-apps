@@ -41,3 +41,4 @@ void test_writer();
 void test_journal();
 void test_repair();
 void test_crash();
+void test_rates();

@@ -92,6 +92,23 @@ DemoCard level_card(int index)
     return c;
 }
 
+/* A speech headset: mono, 16000 Hz only (the call profile), a level and a mute switch, no auto gain. */
+DemoCard speech_card(int index)
+{
+    DemoCard c;
+    c.info.index = index;
+    c.info.id = "DemoSpeech";
+    c.info.name = "Demo Speech Headset";
+    c.info.long_name = "Demo Speech Headset (scripted, no hardware, records at 16000 Hz only)";
+    c.info.capture = true;
+    c.offer.rates = {16000};
+    c.offer.min_channels = c.offer.max_channels = 1;
+    c.offer.formats = {SampleFormat::S16_LE};
+    c.ctls = {int_ctl(kLevelCtl, 0, kLevelSteps, 0, static_cast<long>(kLevelMaxDb * 100)), bool_ctl(kSwitchCtl)};
+    c.values = {{kLevelCtl, kLevelStart}, {kSwitchCtl, 1}};
+    return c;
+}
+
 DemoCard plain_card(int index)
 {
     DemoCard c;
@@ -177,6 +194,7 @@ public:
     {
         if (s.cards == "level" || s.cards == "both") cards_.push_back(level_card(static_cast<int>(cards_.size())));
         if (s.cards == "plain" || s.cards == "both") cards_.push_back(plain_card(static_cast<int>(cards_.size())));
+        if (s.cards == "speech") cards_.push_back(speech_card(static_cast<int>(cards_.size())));
     }
 
     double seconds() const { return std::chrono::duration<double>(SteadyClock::now() - start_).count(); }
@@ -390,7 +408,7 @@ Script script_from_env()
     Script s;
     if (const char *c = std::getenv("CASSETTE_DEMO_CARD"); c && *c) {
         const std::string v = c;
-        if (v == "level" || v == "plain" || v == "both" || v == "none") s.cards = v;
+        if (v == "level" || v == "plain" || v == "both" || v == "speech" || v == "none") s.cards = v;
     }
     s.unplug_ms = env_ms("CASSETTE_DEMO_UNPLUG_MS");
     s.replug_ms = env_ms("CASSETTE_DEMO_REPLUG_MS");

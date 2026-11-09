@@ -202,4 +202,31 @@ void test_recordings() {
     uint64_t t = 0;
     CHECK_EQ(reserve_take_number(ops, dir, t), 0);
     CHECK_EQ(t, static_cast<uint64_t>(11));
+
+    /* takes at a card's own rate: the length in the list is frames / rate, the hours left count the real byte rate */
+    {
+        TempDir r;
+        AudioFormat f16;
+        f16.rate = 16000;
+        make_wav(r.file("take_001_nodate.wav"), 16000 * 90, f16);   /* 90 s */
+        AudioFormat f22;
+        f22.rate = 22050;
+        f22.channels = 2;
+        make_wav(r.file("take_002_nodate.wav"), 22050 * 3, f22);    /* 3 s stereo */
+        std::vector<TakeInfo> v;
+        CHECK_EQ(list_takes(ops, r.path, v), 0);
+        CHECK_EQ(v.size(), static_cast<size_t>(2));
+        const TakeInfo *a16 = find(v, "take_001_nodate.wav");
+        CHECK(a16 != nullptr);
+        if (a16) {
+            CHECK_EQ(a16->fmt.rate, 16000u);
+            CHECK_EQ(a16->frames, static_cast<uint64_t>(16000 * 90));
+            CHECK(std::fabs(a16->seconds - 90.0) < 1e-9);
+        }
+        const TakeInfo *a22 = find(v, "take_002_nodate.wav");
+        CHECK(a22 != nullptr);
+        if (a22) CHECK(std::fabs(a22->seconds - 3.0) < 1e-9);
+        CHECK_EQ(bytes_per_hour(f16), static_cast<uint64_t>(115200000)); /* 32,000 bytes a second */
+        CHECK(std::fabs(hours_left(1152000000ull, f16) - 10.0) < 1e-9);
+    }
 }

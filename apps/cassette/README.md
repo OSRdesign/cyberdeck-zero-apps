@@ -135,6 +135,12 @@ out and in). CyberdeckZero Launcher with full-screen app support. Packages: `lib
 and `libasound2t64 | libasound2` (the ALSA library: it is opened at run time, never linked). When a sound server holds
 the card, the app falls back to the server's ALSA device. arm64 and amd64.
 
+The app records at the card's own sample rate: 48000 Hz, else 44100 Hz, else the highest rate the card offers at or below
+48000 Hz (a USB headset in its call profile records 16000 Hz only), and only when every offered rate is above 48000 Hz the
+lowest one. A card that offers no rate at all is refused. The take, its header, the counter and the lengths all use that
+rate; playback on an output that does not play the take's rate goes through ALSA's own conversion (`plughw:`) at the right
+speed. Through the sound server the take is S16 at 48000 Hz.
+
 ## Install
 
 Settings > Apps (category Tools). By hand: `sudo dpkg -i cassette_0.1.0_arm64.deb`.
@@ -204,4 +210,5 @@ the fonts (Montserrat and JetBrains Mono, SIL OFL 1.1) are the launcher's, read 
 
 - 0.1.0: first version: recorder, recordings list, trim and split, settings, save and confirm boxes; WAV / BWF takes
   with journal and repair; meter with target zone, software gain, record timer, playback with 5x scan; 480x320 and
-  320x480 minimum layouts; `cassette-probe` in the package.
+  320x480 minimum layouts; `cassette-probe` in the package. Cards that record at other rates than 48000 or 44100 Hz
+  (16000 Hz speech headsets) are opened at their own rate.

@@ -1,0 +1,30 @@
+title Cassette bound (CASSETTE_DEMO=1, CASSETTE_DEMO_CARD=speech): a speech headset that records at 16000 Hz only: the strip says 16k/16 WAV, Settings > Format says 16 kHz, a short take is listed
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO 1
+env CASSETTE_DEMO_HOME demo-home
+env CASSETTE_DEMO_CARD speech
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 1500
+expect text "CARD"
+expect text "SOFT"
+shot speech-card
+key s
+wait 500
+expect text "Record timer"
+expect notext "Auto gain (card)"
+shot speech-settings
+key esc
+wait 400
+tap "REC"
+wait 1800
+shot speech-recording
+tap "STOP"
+wait 1000
+key l
+wait 600
+expect text "Take 001"
+shot speech-list
+expect notext "LAYOUT FAIL"
+expect noquit

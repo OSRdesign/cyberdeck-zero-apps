@@ -388,6 +388,52 @@ FakeCard fake_card_no_controls(int index) {
     return c;
 }
 
+FakeCard fake_headset16(int index, const std::string &port) {
+    FakeCard c;
+    c.info.index = index;
+    c.info.id = "J65";
+    c.info.name = "Speech Headset";
+    c.info.long_name = "Speech Headset at usb-3f980000.usb-" + (port.size() > 2 ? port.substr(2) : port) + ", full speed";
+    c.info.usb_by_id = "/dev/snd/by-id/usb-Speech_Headset-00";
+    c.info.usb_id = "0b0e:0001";
+    c.info.usb_port = port;
+    c.info.capture = true;
+    c.offer.rates = {16000}; /* the call profile: mono S16 at 16000 Hz only */
+    c.offer.min_channels = c.offer.max_channels = 1;
+    c.offer.formats = {SampleFormat::S16_LE};
+    c.ctls = {ctl_int("Headset Capture Volume", 0, 15, true, 0, 2000), ctl_bool("Headset Capture Switch")};
+    c.values = {{"Headset Capture Volume", 8}, {"Headset Capture Switch", 1}};
+    c.info.playback = true; /* its earphones also play 16000 only */
+    c.play_offer.rates = {16000};
+    c.play_offer.min_channels = c.play_offer.max_channels = 1;
+    c.play_offer.formats = {SampleFormat::S16_LE};
+    return c;
+}
+
+FakeCard fake_stereo22(int index, const std::string &port) {
+    FakeCard c = fake_card_no_controls(index);
+    c.info.id = "Stereo22";
+    c.info.name = "Stereo 22k Card";
+    c.info.usb_by_id = "/dev/snd/by-id/usb-Stereo_22k_Card-00";
+    c.info.usb_id = "1234:2222";
+    c.info.usb_port = port;
+    c.offer.rates = {22050, 32000};
+    c.offer.min_channels = 1;
+    c.offer.max_channels = 2;
+    return c;
+}
+
+FakeCard fake_card96(int index, const std::string &port) {
+    FakeCard c = fake_card_no_controls(index);
+    c.info.id = "Hi96";
+    c.info.name = "Hi-Res 96k Card";
+    c.info.usb_by_id = "/dev/snd/by-id/usb-HiRes_96k_Card-00";
+    c.info.usb_id = "1234:9696";
+    c.info.usb_port = port;
+    c.offer.rates = {96000};
+    return c;
+}
+
 FakeAlsa fake_demo() {
     FakeAlsa f;
     f.cards_.push_back(fake_pcm2902(0));

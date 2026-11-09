@@ -409,6 +409,65 @@ void test_no_input_and_cards()
     }
 }
 
+/* The speech headset of the demo: mono, 16000 Hz only. Record, list, trim with two splits, save: every millisecond figure
+ * on the way is frames / 16000, and the new files are cut at the right byte offsets. */
+void test_speech_card()
+{
+    demo::Script s;
+    s.cards = "speech";
+    E2E e(s);
+    CHECK(e.until([](const ui::ViewModel &v) { return v.rec.input_present; }, 2000));
+    CHECK_EQ(e.vm().rec.info.format, "16k/16 WAV");
+    CHECK_EQ(e.vm().rec.tape.format, "WAV 16k");
+    const ui::SettingRow *fmt = find_row(e.vm(), "format");
+    CHECK(fmt && fmt->choices.size() == 1 && fmt->choices[0] == "WAV 16 kHz 16-bit");
+    CHECK(e.vm().rec.card.shown);              /* it has a level */
+    CHECK(!find_row(e.vm(), "agc"));           /* no auto gain */
+    CHECK(find_row(e.vm(), "mute"));
+    click(e, ui::KeyId::Rec);
+    CHECK(e.until([](const ui::ViewModel &v) { return v.rec.transport == ui::Transport::Recording; }, 1000));
+    CHECK(e.until([](const ui::ViewModel &v) { return v.rec.counter_ms >= 1600; }, 4000));
+    click(e, ui::KeyId::Stop);
+    CHECK(e.until([](const ui::ViewModel &v) { return idle(v) && v.list.take_count == 1; }, 3000));
+    const std::string take = e.vm().list.takes[0].id;
+    CHECK(e.vm().list.takes[0].length_ms >= 1500 && e.vm().list.takes[0].length_ms < 3500);
+
+    e.act.open(ui::Screen::List);
+    e.act.list_trim(0);
+    e.act.open(ui::Screen::Trim);
+    CHECK(e.until([&take](const ui::ViewModel &v) { return v.trim.take_id == take && !v.trim.window_peaks.empty(); }, 3000));
+    e.act.trim_nudge(500);
+    CHECK(e.until([](const ui::ViewModel &v) { return v.trim.marker_ms == 500; }, 1000));
+    e.act.trim_split();
+    CHECK(e.until([](const ui::ViewModel &v) { return v.trim.splits.size() == 1; }, 1000));
+    e.act.trim_nudge(500);
+    CHECK(e.until([](const ui::ViewModel &v) { return v.trim.marker_ms == 1000; }, 1000));
+    e.act.trim_split();
+    CHECK(e.until([](const ui::ViewModel &v) { return v.trim.splits.size() == 2; }, 1000));
+    e.act.trim_save();
+    CHECK(e.until([](const ui::ViewModel &v) { return v.save.shown; }, 1000));
+    const std::vector<ui::SaveFile> files = e.vm().save.files;
+    CHECK_EQ(files.size(), 3u);
+    if (files.size() == 3) {
+        CHECK_EQ(files[0].length_ms, 500);
+        CHECK_EQ(files[1].length_ms, 500);
+    }
+    e.act.save_choose(ui::SaveMode::NewFiles);
+    CHECK(e.until([](const ui::ViewModel &v) { return !v.save.shown && v.list.take_count == 4; }, 5000));
+    e.act.open(ui::Screen::List);
+    CHECK(e.until([](const ui::ViewModel &v) { return v.trim.take_id.empty(); }, 1000));
+    const ui::ListVm l = e.vm().list;
+    if (l.takes.size() == 4) {
+        CHECK_EQ(l.takes[1].length_ms, 500);
+        CHECK_EQ(l.takes[2].length_ms, 500);
+    }
+    /* the byte length of a 500 ms piece at 16000 Hz mono S16 is 16,000 bytes of audio */
+    const std::string stem = take.substr(0, take.size() - 4);
+    struct stat st;
+    CHECK(::stat((e.recordings() + "/" + stem + "-1.wav").c_str(), &st) == 0);
+    CHECK_EQ(static_cast<long long>(st.st_size), 5120LL + 16000LL);
+}
+
 } // namespace
 
 void test_demo()
@@ -418,4 +477,5 @@ void test_demo()
     test_countdown();
     test_unplug_replug();
     test_no_input_and_cards();
+    test_speech_card();
 }

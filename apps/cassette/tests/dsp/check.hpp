@@ -56,3 +56,4 @@ void test_meter();
 void test_gain();
 void test_filters();
 void test_sink();
+void test_rates();

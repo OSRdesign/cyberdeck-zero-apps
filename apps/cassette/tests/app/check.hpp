@@ -63,4 +63,6 @@ void test_unplug();      /* unplug mid-take, replug, card at another index */
 void test_edit();        /* trim and splits, replace, app leave during a save, in-memory peaks */
 void test_faults();      /* abandoned take and repair, disk full, low space */
 void test_notes();       /* the capture path on screen: server notice, other-apps notice, lost audio (study 058) */
+void test_rates_fork();  /* a 16000 Hz take killed mid-take and repaired (forks: run first) */
+void test_rates();       /* a card that records at 16000 Hz: counter, take length, header, journal, playback */
 void test_settings();    /* persistence across a restart */

@@ -79,6 +79,9 @@ public:
 /* Presets from the P0 measurements (synthetic data only). */
 FakeCard fake_pcm2902(int index, const std::string &id = "Device", const std::string &port = "1-1");
 FakeCard fake_uc02(int index, const std::string &port = "1-1.2");
+FakeCard fake_headset16(int index, const std::string &port = "1-1.4"); /* mono S16, 16000 Hz only; level + mute, no auto gain */
+FakeCard fake_stereo22(int index, const std::string &port = "1-1.5");  /* stereo, 22050 and 32000 Hz */
+FakeCard fake_card96(int index, const std::string &port = "1-1.6");    /* 96000 Hz only */
 FakeCard fake_card_no_controls(int index); /* a capture card with no mixer controls at all */
 FakeAlsa fake_demo();                      /* what the probe shows with --fake */
 

@@ -61,15 +61,27 @@ OpenStatus status_for(int err) {
 
 } // namespace
 
+uint32_t choose_rate(const CaptureOffer &offer) {
+    if (offer.has_rate(48000)) return 48000;
+    if (offer.has_rate(44100)) return 44100;
+    uint32_t best_below = 0, lowest = 0;
+    for (uint32_t r : offer.rates) {
+        if (r == 0) continue;
+        if (r <= 48000 && r > best_below) best_below = r;
+        if (lowest == 0 || r < lowest) lowest = r;
+    }
+    return best_below ? best_below : lowest; /* lowest: every offered rate is above 48000 */
+}
+
 bool choose_params(const CaptureOffer &offer, const OpenOptions &opt, HwRequest &req, Conversion &conv, AudioFormat &fmt,
                    std::string *why) {
     auto no = [&](const char *m) {
         if (why) *why = m;
         return false;
     };
-    if (offer.has_rate(48000)) req.rate = 48000;
-    else if (offer.has_rate(44100)) req.rate = 44100;
-    else return no("the card records at neither 48000 nor 44100 Hz");
+    const uint32_t rate = choose_rate(offer);
+    if (rate == 0) return no("the card offers no sample rate");
+    req.rate = rate;
 
     if (offer.max_channels == 0 || offer.min_channels > 2) return no("the card offers no mono or stereo capture");
     req.channels = std::min<unsigned>(offer.max_channels, 2);

@@ -11,6 +11,7 @@
  *   level  (default) one card with a capture level (16 steps over 0 to +23.81 dB, 8 at start), a capture switch and
  *          auto gain; its level scales the tone, so CARD moves the meter
  *   plain  one card without any mixer control (the "no card control" variant)
+ *   speech one speech headset: mono, 16000 Hz only, a level and a mute switch, no auto gain
  *   both   both cards, the one with a level first (Settings > Input switches)
  *   none   no card at all (the "no sound input" page)
  * CASSETTE_DEMO_UNPLUG_MS=<ms> unplugs every card that long after the app started (reads fail as a pulled USB card's
@@ -32,7 +33,7 @@ namespace cassette {
 namespace demo {
 
 struct Script {
-    std::string cards = "level"; /* level | plain | both | none */
+    std::string cards = "level"; /* level | plain | both | speech | none */
     int64_t unplug_ms = -1;      /* -1: never */
     int64_t replug_ms = -1;
 };

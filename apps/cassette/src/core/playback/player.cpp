@@ -220,6 +220,10 @@ int Player::ensure_sink() {
         sink_.close();
         return -EINVAL;
     }
+    if (f.rate != 0 && f.rate != reader_.format().rate) { /* the Player sends source frames: another rate would play at the wrong speed */
+        sink_.close();
+        return -EINVAL;
+    }
     if (f.period_frames == 0) f.period_frames = kPlaybackPeriod;
     sfmt_ = f;
     sink_open_ = true;

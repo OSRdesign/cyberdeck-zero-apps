@@ -771,11 +771,49 @@ void t_real_fs() {
 
 }  // namespace
 
+/* Cards that record at their own rate: the cut files keep the rate in the header, the coding history, the iXML and the time
+ * reference (a position in frames, so it moves by the same number of frames at any rate). */
+static void t_rates_trim() {
+    for (uint32_t rate : {16000u, 22050u, 32000u, 96000u}) {
+        SrcSpec s;
+        s.fmt.rate = rate;
+        s.frames = 20000;
+        s.tref = 10ull * rate; /* ten seconds after midnight */
+        Env e(s);
+        CHECK_EQ(inspect_take(e.m, e.path).fmt.rate, rate);
+        EditResult r = e.run(500, 19000, {8000});
+        CHECK(r.ok);
+        CHECK_EQ(r.outputs.size(), 2u);
+        verify_part(e, "take_006_20261108-1105-1.wav", 500, 7500, 1, 2);
+        verify_part(e, "take_006_20261108-1105-2.wav", 8000, 11000, 2, 2);
+        const Bytes f2 = e.m.get(std::string(kDir) + "/take_006_20261108-1105-2.wav");
+        HeaderInfo h = parse_header(f2.data(), 65536, f2.size());
+        CHECK_EQ(bext_tref(f2, h), 10ull * rate + 8000);
+        const std::string hist = field(f2, static_cast<size_t>(h.bext_offset) + 602, 256);
+        CHECK(hist.find("F=" + std::to_string(rate) + ",") != std::string::npos);
+        CHECK(hist.find("F=48000") == std::string::npos);
+        const std::string ix = field(f2, static_cast<size_t>(h.ixml_offset), static_cast<size_t>(h.ixml_size));
+        CHECK(ix.find("<FILE_SAMPLE_RATE>" + std::to_string(rate) + "</FILE_SAMPLE_RATE>") != std::string::npos);
+        CHECK(ix.find("<TIMESTAMP_SAMPLE_RATE>" + std::to_string(rate) + "</TIMESTAMP_SAMPLE_RATE>") != std::string::npos);
+    }
+    /* a 16000 Hz stereo 24-bit take keeps its byte offsets (6 bytes a frame) */
+    SrcSpec s;
+    s.fmt.rate = 16000;
+    s.fmt.channels = 2;
+    s.fmt.bits = 24;
+    s.frames = 9000;
+    Env e(s);
+    CHECK(e.run(1000, 8000, {4000}).ok);
+    verify_part(e, "take_006_20261108-1105-1.wav", 1000, 3000, 1, 2);
+    verify_part(e, "take_006_20261108-1105-2.wav", 4000, 4000, 2, 2);
+}
+
 void test_trim() {
     t_trim_alone();
     t_edges();
     t_split_two_points();
     t_formats();
+    t_rates_trim();
     t_placeholder_sources();
     t_time_reference();
     t_refusals();

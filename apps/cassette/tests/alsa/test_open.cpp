@@ -51,6 +51,57 @@ void direct_open_and_rate_choice() {
     CHECK(o.hw.buffer_frames >= 22050u);
 }
 
+void rate_choice_table() {
+    struct Row { std::vector<uint32_t> offered; uint32_t want; };
+    const Row rows[] = {
+        {{44100, 48000}, 48000},        /* 48000 first */
+        {{44100}, 44100},               /* then 44100 */
+        {{16000}, 16000},               /* a speech headset */
+        {{8000, 16000}, 16000},         /* the highest at or below 48000 */
+        {{22050, 32000}, 32000},
+        {{32000, 96000}, 32000},        /* below beats above */
+        {{16000, 44100, 96000}, 44100},
+        {{96000}, 96000},               /* only rates above 48000: the lowest */
+        {{192000, 88200, 96000}, 88200},
+        {{}, 0},
+    };
+    for (const Row &r : rows) {
+        CaptureOffer o;
+        o.rates = r.offered;
+        CHECK_EQ(choose_rate(o), r.want);
+    }
+
+    /* the fake cards through open_capture, and the hardware request carries the chosen rate */
+    FakeAlsa f;
+    f.cards_ = {fake_headset16(0), fake_stereo22(1), fake_card96(2)};
+    OpenResult h = open_capture(f, f.cards_[0].info);
+    CHECK(h.ok());
+    CHECK_EQ(h.format.rate, 16000u);
+    CHECK_EQ(h.format.channels, 1u);
+    CHECK_EQ(h.format.bits, 16u);
+    CHECK_EQ(f.requests[0].rate, 16000u);
+    CHECK_EQ(h.hw.buffer_frames % 1024u, 0u);
+    CHECK(h.hw.buffer_frames >= 8000u && h.hw.buffer_frames < 8000u + 1024u); /* 500 ms at 16000 Hz */
+    OpenResult s2 = open_capture(f, f.cards_[1].info);
+    CHECK(s2.ok());
+    CHECK_EQ(s2.format.rate, 32000u);
+    CHECK_EQ(s2.format.channels, 2u);
+    OpenResult n = open_capture(f, f.cards_[2].info);
+    CHECK(n.ok());
+    CHECK_EQ(n.format.rate, 96000u);
+    CHECK(!any_plughw(f));
+
+    /* the sound-server route still asks for S16 at 48000, whatever the card offers */
+    FakeAlsa g;
+    g.cards_ = {fake_headset16(0)};
+    g.cards_[0].busy = true;
+    OpenResult b = open_capture(g, g.cards_[0].info);
+    CHECK(b.ok());
+    CHECK(b.via_server);
+    CHECK_EQ(b.format.rate, 48000u);
+    CHECK_EQ(g.requests[0].rate, 48000u);
+}
+
 void channels_and_formats() {
     CaptureOffer off;
     off.rates = {48000};
@@ -94,8 +145,12 @@ void channels_and_formats() {
     CHECK(!why.empty());
 
     off.formats = {SampleFormat::S16_LE};
-    off.rates = {32000, 96000};
+    off.rates = {32000, 96000}; /* a rate at or below 48000 beats the ones above */
+    CHECK(choose_params(off, opt, req, conv, fmt, &why));
+    CHECK_EQ(req.rate, 32000u);
+    off.rates.clear(); /* no rate at all: the only refusal on rate */
     CHECK(!choose_params(off, opt, req, conv, fmt, &why));
+    CHECK_EQ(why, "the card offers no sample rate");
 
     /* the packer drops the low byte */
     const uint8_t in[8] = {0xAA, 0x01, 0x02, 0x03, 0xBB, 0x04, 0x05, 0x06};
@@ -103,10 +158,10 @@ void channels_and_formats() {
     convert_s32_to_s24_3(in, out, 2);
     CHECK(out[0] == 1 && out[1] == 2 && out[2] == 3 && out[3] == 4 && out[4] == 5 && out[5] == 6);
 
-    /* unsupported card through open_capture */
+    /* unsupported card through open_capture (no rate offered) */
     FakeAlsa f;
     f.cards_ = {fake_pcm2902(0)};
-    f.cards_[0].offer.rates = {32000};
+    f.cards_[0].offer.rates = {};
     OpenResult r = open_capture(f, f.cards_[0].info);
     CHECK(r.status == OpenStatus::Unsupported);
     CHECK(f.opened.empty()); /* nothing opened, no server detour */
@@ -214,6 +269,7 @@ void server_detection() {
 void test_open() {
     server_detection();
     direct_open_and_rate_choice();
+    rate_choice_table();
     channels_and_formats();
     busy_falls_back_to_server();
     open_succeeds_after_a_race();

@@ -266,6 +266,14 @@ bool Writer::pump(bool *busy) {
     if (busy) *busy = did;
     if (state_ == WriterState::Failed) return false;
     const uint64_t now = clk_.mono_ms();
+    if (now - last_sync_ms_ >= sync_ms_) {
+        /* A sync is a durable point: the audio that has arrived by now goes into it, however small the partial block is
+         * (at 16000 Hz mono a 128 KB block is 4 s: waiting for a full block would leave seconds outside every sync). */
+        size_t guard = ring_.available() / std::max<size_t>(cfg_.block_bytes / fb_, 1) + 2;
+        while (guard-- > 0 && state_ != WriterState::Failed && drain_step(true)) {
+        }
+        if (state_ == WriterState::Failed) return false;
+    }
     if (unsynced_ > 0 && now - last_sync_ms_ >= sync_ms_) {
         int r = do_sync();
         if (r < 0) {

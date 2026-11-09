@@ -476,9 +476,41 @@ void t_large_virtual() {
 
 }  // namespace
 
+/* A take at 16000 Hz: the pyramid carries the rate (from the header and through the cache), windows stay exact. */
+static void t_rates_peaks() {
+    for (uint32_t rate : {16000u, 22050u, 96000u}) {
+        Dir d;
+        SrcSpec s;
+        s.fmt.rate = rate;
+        s.frames = 30000;
+        write_bytes(d.file("t.wav"), make_source(s));
+        CountOps ops;
+        std::string err;
+        auto P = PeakPyramid::open_or_build(ops, d.file("t.wav"), &err);
+        CHECK(P != nullptr);
+        if (!P) continue;
+        CHECK_EQ(P->rate(), rate);
+        CHECK_EQ(P->frames(), s.frames);
+        Ref ref(s.fmt, s.frames);
+        int bad = 0;
+        for (uint64_t fpb : {uint64_t(1), uint64_t(100), uint64_t(256), uint64_t(1000), uint64_t(30000)})
+            bad += check_window(*P, ref, 0, fpb, 30);
+        CHECK_EQ(bad, 0);
+        /* a second open reads the cache and still knows the rate */
+        CountOps ops2;
+        auto Q = PeakPyramid::open_or_build(ops2, d.file("t.wav"), &err);
+        CHECK(Q != nullptr);
+        if (Q) {
+            CHECK_EQ(Q->rate(), rate);
+            CHECK_EQ(Q->frames(), s.frames);
+        }
+    }
+}
+
 void test_peaks() {
     t_zoom_mono();
     t_formats();
+    t_rates_peaks();
     t_small_and_empty();
     t_placeholder_header();
     t_cache_validity();
