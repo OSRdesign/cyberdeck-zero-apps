@@ -220,7 +220,9 @@ ViewModel demo_model(const std::string &scene)
     /* CASSETTE_DEMO_SETTINGS=full: also the rows that depend on the card (Mic mute) and on the outputs (Output) */
     const char *ds = std::getenv("CASSETTE_DEMO_SETTINGS");
     const bool full_settings = ds && std::string(ds) == "full";
-    s.rows.push_back(choice("input", "Input", {"USB Audio Device", "USB Headset"}, 0));
+    /* CASSETTE_DEMO_CARD=<name>: the first capture card's name (a long ALSA card name wraps in the picker) */
+    const char *dc = std::getenv("CASSETTE_DEMO_CARD");
+    s.rows.push_back(choice("input", "Input", {dc && *dc ? dc : "USB Audio Device", "USB Headset"}, 0));
     if (scene != "nocard" && scene != "noinput") {
         SettingRow lvl;
         lvl.id = "level";

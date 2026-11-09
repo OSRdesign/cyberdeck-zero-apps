@@ -142,10 +142,25 @@ void SettingsPage::rebuild()
     std::vector<std::string> labels;
     if (picker_ >= 0 && picker_ < static_cast<int>(vm_.rows.size())) labels = vm_.rows[static_cast<std::size_t>(picker_)].choices;
     else for (const SettingRow &r : vm_.rows) labels.push_back(r.label);
+    const lv_font_t *f19 = font(Face::Bold, fit_.px(19));
+    const int ls19 = ls_screen(0.3, fit_.s);
+    const int lh19 = lv_font_get_line_height(f19);
+    const int text_w = row_w_ - 2 * pad;
+    int y = 0;
     for (std::size_t i = 0; i < labels.size(); ++i) {
         Row r;
         r.index = static_cast<int>(i);
-        r.obj = box(list_, 0, static_cast<int>(i) * (h + gap), row_w_, h, col::kRow, fit_.px(6));
+        /* a picker entry (a long card name) wraps at the row's width and its row grows to fit every line; the
+         * toolkit's ROW stays the least height */
+        int rh = h, text_h = lh19;
+        if (picker_ >= 0) {
+            lv_point_t sz;
+            lv_text_get_size(&sz, labels[i].c_str(), f19, ls19, 0, text_w, LV_TEXT_FLAG_NONE);
+            text_h = std::max(lh19, static_cast<int>(sz.y));
+            rh = std::max(h, text_h + 2 + 2 * fit_.px(10));
+        }
+        r.obj = box(list_, 0, y, row_w_, rh, col::kRow, fit_.px(6));
+        y += rh + gap;
         border(r.obj, 1, col::kBodyEdge);
         lv_obj_add_flag(r.obj, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_flag(r.obj, LV_OBJ_FLAG_SCROLL_CHAIN_VER);
@@ -154,9 +169,8 @@ void SettingsPage::rebuild()
         lv_obj_add_event_cb(r.obj, row_cb, LV_EVENT_PRESSED, this);
         lv_obj_add_event_cb(r.obj, row_cb, LV_EVENT_PRESSING, this);
         lv_obj_add_event_cb(r.obj, row_cb, LV_EVENT_RELEASED, this);
-        const int lh19 = lv_font_get_line_height(font(Face::Bold, fit_.px(19)));
-        r.label = label(r.obj, Face::Bold, fit_.px(19), col::kInk, pad - 1, (h - 2 - lh19) / 2, row_w_ - 2 * pad, LV_TEXT_ALIGN_LEFT,
-                        ls_screen(0.3, fit_.s));
+        r.label = label(r.obj, Face::Bold, fit_.px(19), col::kInk, pad - 1, (rh - 2 - text_h) / 2, text_w, LV_TEXT_ALIGN_LEFT, ls19);
+        if (picker_ >= 0) lv_label_set_long_mode(r.label, LV_LABEL_LONG_MODE_WRAP);
         lv_label_set_text(r.label, labels[i].c_str());
         if (picker_ < 0) {
             const SettingRow &s = vm_.rows[i];
