@@ -253,9 +253,59 @@ void no_alloc() {
     CHECK_EQ(alloc_count() - before, 0LL);
 }
 
+/* feed_peaks (the playback meter): the same bar, hold and zone rules as feed() from a level per channel; no lamp, no clips;
+ * a level at the same dBFS as a fed sine gives the same bar and hold; no allocation. */
+void feed_peaks_rules() {
+    AudioFormat f{48000, 2, 16};
+    Meter m(f), ref(f);
+    auto b = sig::sine(f, kPeriod, 1000.0, {-12.0, -12.0});
+    ref.feed(b.data(), kPeriod, 1000);
+    const float lv[2] = {-12.0f, -30.0f};
+    m.feed_peaks(lv, 2, 1000);
+    MeterSnapshot s = m.snapshot(), r = ref.snapshot();
+    CHECK_EQ(s.channels, 2);
+    CHECK_EQ(s.ch[0].bar, r.ch[0].bar);
+    CHECK_EQ(s.ch[0].hold_bar, r.ch[0].hold_bar);
+    CHECK_EQ(s.ch[0].bar, Meter::bar_steps(-12.0f));
+    CHECK_EQ(s.ch[1].bar, Meter::bar_steps(-30.0f));
+    CHECK(s.ch[0].zone == Zone::InZone);
+    CHECK(s.ch[1].zone == Zone::Low);
+    /* full scale: no lamp, no clips (the PEAK lamp is the recording's clip warning) */
+    const float hot[2] = {0.0f, 3.0f};
+    m.feed_peaks(hot, 2, 2000);
+    s = m.snapshot();
+    CHECK(!s.ch[0].peak_lamp && !s.ch[1].peak_lamp);
+    CHECK_EQ(s.ch[0].clips, 0u);
+    CHECK_NEAR(s.ch[1].peak_db, 0.0, 1e-6); /* clamped to 0 dBFS */
+    CHECK(s.ch[0].zone == Zone::High);
+    /* silence: the bar drops, the hold stays 1.5 s, then falls at 20 dB/s */
+    const float quiet[2] = {-120.0f, -120.0f};
+    m.feed_peaks(quiet, 2, 1000000);
+    s = m.snapshot();
+    CHECK_EQ(s.ch[0].bar, 0);
+    CHECK_NEAR(s.ch[0].hold_db, 0.0, 1e-6);
+    m.feed_peaks(quiet, 2, 2000 + 1500000 + 500000);
+    CHECK_NEAR(m.snapshot().ch[0].hold_db, -10.0, 0.01);
+    /* mono: one channel; 0 channels or a null pointer are ignored */
+    Meter mono(f);
+    const float one[1] = {-6.5f};
+    mono.feed_peaks(one, 1, 10);
+    CHECK_EQ(mono.snapshot().channels, 1);
+    mono.feed_peaks(one, 0, 20);
+    mono.feed_peaks(nullptr, 1, 30);
+    CHECK_EQ(mono.snapshot().periods, 1u);
+    const long long before = alloc_count();
+    for (int i = 0; i < 100; ++i) {
+        m.feed_peaks(lv, 2, 3000000 + uint64_t(i) * 20000);
+        (void)m.snapshot();
+    }
+    CHECK_EQ(alloc_count() - before, 0LL);
+}
+
 }  // namespace
 
 void test_meter() {
+    feed_peaks_rules();
     dbfs_accuracy();
     stereo_and_silence();
     bar_steps();

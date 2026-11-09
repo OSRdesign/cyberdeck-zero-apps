@@ -66,3 +66,4 @@ void test_notes();       /* the capture path on screen: server notice, other-app
 void test_rates_fork();  /* a 16000 Hz take killed mid-take and repaired (forks: run first) */
 void test_rates();       /* a card that records at 16000 Hz: counter, take length, header, journal, playback */
 void test_settings();    /* persistence across a restart */
+void test_playmeter();   /* the played level in the snapshot (16000 and 48000 Hz) and the 5 s jump flash */

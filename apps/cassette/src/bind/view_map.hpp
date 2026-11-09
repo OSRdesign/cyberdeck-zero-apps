@@ -6,8 +6,12 @@
  *
  * The rules (the controller's facts mapped onto what the canvas boards show):
  *   recorder  transport = the deck state; keys enabled as the deck says, a latched key never dimmed; REC latched while
- *             recording (not during the countdown, as the board CassetteCount), PLAY/PAUSE latched while playing, while
- *             paused and while scanning, REW / FWD latched while held or scanning; REC dimmed without a sound input.
+ *             recording (not during the countdown, as the board CassetteCount), PLAY/PAUSE as ui_format.hpp play_key_look
+ *             (latched while a take plays, scans or is paused and while a recording is paused; not while recording),
+ *             REW / FWD latched while held or scanning; REC dimmed without a sound input. The hubs: hub_speed_dps of the
+ *             transport, or of a 5 s jump while it flashes (ScanSnap::jump_dir). The meter: the INPUT level (idle,
+ *             countdown, recording); the PLAYED level (Snapshot::play_meter) on L and R while a take plays, scans or is
+ *             paused, a mono take on both bars, the PEAK lamp off.
  *             The counter: the take's length while recording, the position while playing, else 0. The cassette and the
  *             info strip name the take being recorded, the take playing, else the take REC would write next ("Take 008").
  *             No sound input (the capture path is not running): the empty window, "NO INPUT", no CARD stepper; the card's

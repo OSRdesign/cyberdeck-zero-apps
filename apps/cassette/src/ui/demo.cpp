@@ -66,6 +66,24 @@ TakeRow take(const char *sticker, const char *detail, std::int64_t ms)
     return t;
 }
 
+/* What follows from the transport alone: the hubs' speed and the PLAY/PAUSE key's latch (ui_format.hpp). */
+void transport_looks(RecorderVm &r)
+{
+    r.hub_dps[0] = r.hub_dps[1] = hub_speed_dps(r.transport);
+    r.keys[static_cast<int>(KeyId::PlayPause)].latched = play_key_look(r.transport).latched;
+}
+
+/* A take playing: the played level on both bars (a mono take drives L and R equally), no PEAK lamp. */
+void meter_played(RecorderVm &r, int bar, int hold)
+{
+    r.meter.channels = 2;
+    for (ChannelMeter &c : r.meter.ch) {
+        c.bar = bar;
+        c.hold_bar = hold;
+        c.peak_lamp = false;
+    }
+}
+
 void keys_recording(RecorderVm &r)
 {
     r.keys[static_cast<int>(KeyId::Rew)].enabled = false;
@@ -143,15 +161,24 @@ ViewModel demo_model(const std::string &scene)
         r.countdown_left = 3;
         r.countdown_fraction = 221.7f / 226.2f;
         r.counter_ms = 0;
-    } else if (scene == "playing" || scene == "wind") {
-        r.transport = scene == "wind" ? Transport::ScanReverse : Transport::Playing;
+    } else if (scene == "playing" || scene == "wind" || scene == "fwd" || scene == "play-paused" ||
+               scene == "playing-meter") {
+        /* playing Take 006 (playing-meter: the played level at -12 dBFS, 10 steps); wind: REW held (5x backwards); fwd:
+         * FWD held; play-paused: the take paused (the played level falling away) */
+        r.transport = scene == "wind"          ? Transport::ScanReverse
+                      : scene == "fwd"         ? Transport::ScanForward
+                      : scene == "play-paused" ? Transport::PlayingPaused
+                                               : Transport::Playing;
         r.tape.label = "Take 006";
         r.info.take = "TAKE 006";
         r.info.play_pos_ms = 5 * 60000 + 44000;
         r.info.play_len_ms = 12 * 60000 + 8000;
         r.counter_ms = r.info.play_pos_ms;
-        r.keys[static_cast<int>(KeyId::PlayPause)].latched = true;
         if (scene == "wind") r.keys[static_cast<int>(KeyId::Rew)].latched = true;
+        if (scene == "fwd") r.keys[static_cast<int>(KeyId::Fwd)].latched = true;
+        if (scene == "playing-meter") meter_played(r, bar_steps(-12.0f), bar_steps(-11.0f));
+        else if (scene == "play-paused") meter_played(r, 3, 9);
+        else meter_played(r, 11, 12);
     } else if (scene == "paused") {
         r.transport = Transport::RecordingPaused;
         keys_recording(r);
@@ -177,6 +204,8 @@ ViewModel demo_model(const std::string &scene)
         r.meter.ch[0].bar = 2;
         r.meter.ch[0].hold_bar = 0;
     }
+
+    transport_looks(r);
 
     /* settings: the board's rows, a card with a level (8 of 16) and auto gain */
     SettingsVm &s = vm.settings;
@@ -285,12 +314,10 @@ void DemoDriver::set_transport(Transport t)
     RecorderVm &r = vm_.rec;
     r.transport = t;
     const bool rec = t == Transport::Recording || t == Transport::RecordingPaused || t == Transport::Countdown;
-    const bool play = t == Transport::Playing || t == Transport::PlayingPaused || t == Transport::ScanForward ||
-                      t == Transport::ScanReverse;
     r.keys[static_cast<int>(KeyId::Rew)].enabled = !rec;
     r.keys[static_cast<int>(KeyId::Fwd)].enabled = !rec;
     r.keys[static_cast<int>(KeyId::Rec)].latched = t == Transport::Recording || t == Transport::RecordingPaused;
-    r.keys[static_cast<int>(KeyId::PlayPause)].latched = play || t == Transport::RecordingPaused;
+    transport_looks(r);
     r.keys[static_cast<int>(KeyId::Rew)].latched = t == Transport::ScanReverse;
     r.keys[static_cast<int>(KeyId::Fwd)].latched = t == Transport::ScanForward;
 }

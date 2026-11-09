@@ -64,22 +64,45 @@ void Meter::feed(const void *frames, size_t nframes, uint64_t now_us) {
     frames_total_ += nframes;
     ++periods_;
 
-    MeterSnapshot s;
-    s.channels = nch_;
-    s.periods = periods_;
-    s.frames = frames_total_;
     const double fs = double(maxp);
     const int32_t lamp_level = int32_t(std::ceil(fs * std::pow(10.0, kLampDb / 20.0) - 1e-9));
+    float pk[MeterSnapshot::kMaxChannels] = {kFloorDb, kFloorDb};
+    float rms[MeterSnapshot::kMaxChannels] = {kFloorDb, kFloorDb};
+    bool lamp[MeterSnapshot::kMaxChannels] = {};
     for (uint16_t c = 0; c < nch_; ++c) {
+        pk[c] = to_db(double(peak[c]) / fs);
+        if (nframes) {
+            const double r = std::sqrt(sumsq[c] / double(nframes)) / fs;
+            rms[c] = to_db(r > 1.0 ? 1.0 : r);
+        }
+        lamp[c] = peak[c] >= lamp_level;
+    }
+    update(nch_, pk, rms, lamp, clips, now_us);
+}
+
+void Meter::feed_peaks(const float *peak_db, uint16_t channels, uint64_t now_us) {
+    if (peak_db == nullptr) return;
+    const uint16_t n = channels < MeterSnapshot::kMaxChannels ? channels : uint16_t(MeterSnapshot::kMaxChannels);
+    if (n == 0) return;
+    float pk[MeterSnapshot::kMaxChannels] = {kFloorDb, kFloorDb};
+    bool lamp[MeterSnapshot::kMaxChannels] = {};
+    uint32_t clips[MeterSnapshot::kMaxChannels] = {};
+    for (uint16_t c = 0; c < n; ++c) pk[c] = peak_db[c] < kFloorDb ? kFloorDb : (peak_db[c] > 0.0f ? 0.0f : peak_db[c]);
+    ++periods_;
+    update(n, pk, pk, lamp, clips, now_us);
+}
+
+void Meter::update(uint16_t n, const float *pk_db, const float *rms_db, const bool *lamp_hit, const uint32_t *clips,
+                   uint64_t now_us) {
+    MeterSnapshot s;
+    s.channels = n;
+    s.periods = periods_;
+    s.frames = frames_total_;
+    for (uint16_t c = 0; c < n; ++c) {
         ChanState &st = st_[c];
         ChannelLevel &out = s.ch[c];
         st.clips += clips[c];
-        const float pk = to_db(double(peak[c]) / fs);
-        float rms = kFloorDb;
-        if (nframes) {
-            const double r = std::sqrt(sumsq[c] / double(nframes)) / fs;
-            rms = to_db(r > 1.0 ? 1.0 : r);
-        }
+        const float pk = pk_db[c];
 
         /* peak hold: hold 1.5 s, then fall at 20 dB/s down to the current peak */
         float shown = st.held_db;
@@ -94,12 +117,12 @@ void Meter::feed(const void *frames, size_t nframes, uint64_t now_us) {
             shown = pk;
         }
 
-        if (peak[c] >= lamp_level) { st.lamp_at = now_us; st.lamp_seen = true; }
+        if (lamp_hit[c]) { st.lamp_at = now_us; st.lamp_seen = true; }
         if (pk >= kZoneLowDb) { st.reach_low_at = now_us; st.low_seen = true; }
         if (pk > kZoneHighDb) { st.over_high_at = now_us; st.high_seen = true; }
 
         out.peak_db = pk;
-        out.rms_db = rms;
+        out.rms_db = rms_db[c];
         out.hold_db = shown;
         out.clips = st.clips;
         out.bar = bar_steps(pk);

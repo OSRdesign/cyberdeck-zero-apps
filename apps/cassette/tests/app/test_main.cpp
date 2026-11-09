@@ -16,6 +16,7 @@ int main(int argc, char **argv) {
     test_notes();
     if (!quick) test_deck();
     test_edit();
+    test_playmeter();
     std::printf("cassette-app tests: %d checks passed, %d failed, %d skipped\n", g_pass, g_fail, g_skip);
     return g_fail ? 1 : 0;
 }

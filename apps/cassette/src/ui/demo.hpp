@@ -10,8 +10,11 @@
  *   recording-low  the same with a low level (under the zone)
  *   nocard         recording, the card has no capture level control (CassetteNoCard)
  *   countdown      the record countdown at 3 (CassetteCount)
- *   playing        playing Take 006
- *   wind           rewinding at 5x while playing (CassetteWind)
+ *   playing        playing Take 006 (the played level on both bars: a mono take drives L and R equally)
+ *   playing-meter  the same with the played level at -12 dBFS
+ *   play-paused    Take 006 paused (the played level falling away)
+ *   wind           rewinding at 5x while playing, REW held (CassetteWind)
+ *   fwd            scanning forward at 5x while playing, FWD held
  *   paused         a recording paused
  *   noinput        no sound input found
  *   idle           nothing running (the default)

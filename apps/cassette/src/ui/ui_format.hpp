@@ -40,6 +40,32 @@ int bar_steps(float db);
 enum class LedBand { Green, Amber, Red };
 LedBand led_band(int step);
 
+/* The PLAY / PAUSE key shows the CURRENT state, latched like REC while recording (owner, 2026-11-09). One key, one glyph;
+ * what a press does is unchanged (it plays, pauses and resumes). The same at every screen size:
+ *   transport                          glyph   latched
+ *   Idle (stopped, nothing runs)       PLAY    no
+ *   Countdown (REC pressed, timer)     PLAY    no      (the key is dimmed; nothing records or plays yet)
+ *   Playing, ScanForward, ScanReverse  PLAY    yes     (normal speed, or while REW / FWD is held)
+ *   PlayingPaused                      PAUSE   yes
+ *   Recording                          PAUSE   no      (REC is latched; PAUSE is what a press would do)
+ *   RecordingPaused                    PAUSE   yes
+ * The UI takes the glyph from here and the latch from KeyState::latched (the binding and the demo fill it from here). */
+struct PlayKeyLook {
+    bool pause_glyph = false;
+    bool latched = false;
+};
+PlayKeyLook play_key_look(Transport t);
+
+/* The cassette hubs (owner, 2026-11-09): both hubs turn the same way at the same speed (a real cassette), in degrees per
+ * second, counterclockwise positive:
+ *   Recording, Playing                 +kHubPlayDps   (one turn in 2.4 s)
+ *   ScanForward, a forward 5 s jump    +3 x kHubPlayDps
+ *   ScanReverse, a backward 5 s jump   -3 x kHubPlayDps (clockwise)
+ *   anything else                      0 (still)
+ * jump_dir: -1 / +1 while a 5 s jump flashes (about 300 ms, core kJumpFlashMs), 0 otherwise; it wins over the transport. */
+constexpr double kHubPlayDps = 150.0;
+double hub_speed_dps(Transport t, int jump_dir = 0);
+
 /* The recorder's info strip (landscape, one line) and the portrait info box (title over detail):
  *   recording / idle   "TAKE 007 · 48k/16 WAV · 12 h 40 left"          box "TAKE 007" / "12 h 40 left"
  *   playing / paused   "PLAYING TAKE 006 · 05:44 / 12:08"               box "TAKE 006" / "05:44 / 12:08"

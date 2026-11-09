@@ -21,6 +21,17 @@ app (during the record countdown it cancels the countdown). The header's Esc but
 
 A held deck key is drawn pressed until it is released.
 
+The PLAY / PAUSE key shows the current state, latched (drawn pressed down) like REC while recording; what a press does
+does not change (it plays, pauses and resumes). The same at every screen size:
+
+| State | The key shows | Latched |
+|---|---|---|
+| Stopped, nothing playing or recording (also the record countdown) | PLAY | no |
+| A take playing (normal speed, or while REW / FWD is held) | PLAY | yes |
+| A take paused | PAUSE | yes |
+| Recording (REC latched) | PAUSE (what a press does) | no |
+| A recording paused | PAUSE | yes |
+
 ## Recordings list
 
 | Key | Does |

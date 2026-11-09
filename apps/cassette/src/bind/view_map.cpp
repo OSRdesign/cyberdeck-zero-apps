@@ -355,23 +355,41 @@ ui::ViewModel map_view(const MapInput &in)
         o.enabled = (k.enabled && extra_enable) || latched;
     };
     key(ui::KeyId::Rew, s.deck.rew, s.deck.rew.active, true);
-    key(ui::KeyId::PlayPause, s.deck.play_pause, play_side || ds == kDeckRecordingPaused, true);
+    /* PLAY/PAUSE shows the current state (ui_format.hpp play_key_look): latched while a take plays, scans or is paused and
+     * while a recording is paused; the glyph follows the transport in the page */
+    key(ui::KeyId::PlayPause, s.deck.play_pause, ui::play_key_look(r.transport).latched, true);
     key(ui::KeyId::Fwd, s.deck.fwd, s.deck.fwd.active, true);
     key(ui::KeyId::Stop, s.deck.stop, false, true);
     key(ui::KeyId::Rec, s.deck.rec, rec_side, present);
+    /* the hubs: both the same way at the same speed; a 5 s jump flashes its direction (ScanSnap::jump_dir) */
+    r.hub_dps[0] = r.hub_dps[1] = ui::hub_speed_dps(r.transport, play_side ? s.scan.jump_dir : 0);
     r.scan_speed = 5;
     if (!s.scan.speed_text.empty()) r.scan_speed = std::max(1, std::atoi(s.scan.speed_text.c_str()));
     r.countdown_left = s.time.countdown_seconds;
     r.countdown_fraction = ds == kDeckCountdown ? s.time.countdown_fraction : 1.0f;
     if (recording_family(ds) && ds != kDeckCountdown) r.counter_ms = std::llround(s.time.elapsed_s * 1000.0);
     else if (play_side) r.counter_ms = std::llround(s.time.position_s * 1000.0);
-    r.meter.channels = s.meter.channels == 2 ? 2 : 1;
-    if (present)
+    if (play_side) {
+        /* a take plays, scans or is paused: the bars show the PLAYED level (Snapshot::play_meter) on L and R (a mono take
+         * drives both equally); the PEAK lamp is the recording's clip warning and stays off */
+        const MeterSnap &pm = s.play_meter;
+        r.meter.channels = 2;
         for (int i = 0; i < 2; ++i) {
-            r.meter.ch[i].bar = s.meter.ch[i].bar;
-            r.meter.ch[i].hold_bar = s.meter.ch[i].hold_bar;
-            r.meter.ch[i].peak_lamp = s.meter.ch[i].peak_lamp;
+            const MeterChannelSnap &c = pm.ch[pm.channels == 2 ? i : 0];
+            r.meter.ch[i].bar = pm.channels > 0 ? c.bar : 0;
+            r.meter.ch[i].hold_bar = pm.channels > 0 ? c.hold_bar : 0;
+            r.meter.ch[i].peak_lamp = false;
         }
+    } else {
+        /* idle, countdown, recording: the live INPUT level */
+        r.meter.channels = s.meter.channels == 2 ? 2 : 1;
+        if (present)
+            for (int i = 0; i < 2; ++i) {
+                r.meter.ch[i].bar = s.meter.ch[i].bar;
+                r.meter.ch[i].hold_bar = s.meter.ch[i].hold_bar;
+                r.meter.ch[i].peak_lamp = s.meter.ch[i].peak_lamp;
+            }
+    }
 
     /* the take the cassette and the strip name */
     std::string take_name;
@@ -481,7 +499,8 @@ ui::ViewModel map_view(const MapInput &in)
 bool same(const ui::RecorderVm &a, const ui::RecorderVm &b)
 {
     if (a.input_present != b.input_present || a.transport != b.transport || a.scan_speed != b.scan_speed ||
-        a.countdown_left != b.countdown_left || a.countdown_fraction != b.countdown_fraction || a.counter_ms != b.counter_ms)
+        a.countdown_left != b.countdown_left || a.countdown_fraction != b.countdown_fraction || a.counter_ms != b.counter_ms ||
+        a.hub_dps[0] != b.hub_dps[0] || a.hub_dps[1] != b.hub_dps[1])
         return false;
     for (int i = 0; i < static_cast<int>(ui::KeyId::kCount); ++i)
         if (a.keys[i].enabled != b.keys[i].enabled || a.keys[i].latched != b.keys[i].latched) return false;

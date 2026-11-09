@@ -36,6 +36,28 @@ namespace cassette {
 namespace {
 
 constexpr uint64_t kSpaceRefreshMs = 2000;
+constexpr uint64_t kPlayLevelStaleMs = 150; /* no new played period for this long: the playback level falls */
+
+AudioFormat play_meter_format() {
+    AudioFormat f;
+    f.rate = 48000;
+    f.channels = 2;
+    f.bits = 16;
+    return f;
+}
+
+void copy_meter(const MeterSnapshot &m, MeterSnap &o) {
+    o.channels = m.channels;
+    for (int i = 0; i < 2; ++i) {
+        o.ch[i].peak_db = m.ch[i].peak_db;
+        o.ch[i].rms_db = m.ch[i].rms_db;
+        o.ch[i].hold_db = m.ch[i].hold_db;
+        o.ch[i].bar = m.ch[i].bar;
+        o.ch[i].hold_bar = m.ch[i].hold_bar;
+        o.ch[i].peak_lamp = m.ch[i].peak_lamp;
+        o.ch[i].zone = static_cast<int>(m.ch[i].zone);
+    }
+}
 
 std::string format_text(const AudioFormat &f) {
     char b[64];
@@ -68,8 +90,6 @@ CardDescriptor parse_descriptor(const std::string &text) {
 }
 
 std::string key_of(const CardInfo &c) { return card_descriptor(c.name, c.usb_by_id, c.usb_id); }
-
-int zone_int(Zone z) { return static_cast<int>(z); }
 
 }  // namespace
 
@@ -129,6 +149,16 @@ struct Controller::Impl : public DeckCommands {
     std::unique_ptr<PlaybackSink> sink;
     std::unique_ptr<Player> player;
     OutputPlan plan;
+    /* the playback meter (service thread, under mu): fed from the Player's level tap while a take plays or is paused */
+    Meter play_meter{play_meter_format()};
+    bool play_meter_on = false;
+    uint32_t play_seq = 0;
+    uint16_t play_ch = 1;
+    float play_db[2] = {Meter::kFloorDb, Meter::kFloorDb};
+    uint64_t play_new_ms = 0, play_tick_ms = 0;
+    /* the last 5 s jump, for ScanSnap::jump_dir */
+    uint64_t jump_ms = 0;
+    int jump_dir = 0;
 
     /* the take being recorded */
     std::unique_ptr<Ring> ring;
@@ -605,6 +635,8 @@ struct Controller::Impl : public DeckCommands {
             break;
         case DeckCommand::Jump:
             if (player) player->jump(c.dir, kJumpSeconds);
+            jump_ms = clk->mono_ms();
+            jump_dir = c.dir == Direction::Forward ? 1 : -1;
             break;
         case DeckCommand::StartCountdown:
         case DeckCommand::CancelCountdown: break; /* the Deck runs the count; the snapshot shows it */
@@ -731,6 +763,43 @@ struct Controller::Impl : public DeckCommands {
     /* ================================================================================================================ */
     /* the service tick and the snapshot */
 
+    /* The playback meter, once per service tick: a new played period feeds its peak; paused (or no period for
+     * kPlayLevelStaleMs) the level falls at the meter's 20 dB/s; out of the playing states the meter is cleared. */
+    void update_play_meter(uint64_t now) {
+        if (!playing_family() || !player) {
+            if (play_meter_on) {
+                play_meter.reset();
+                play_meter_on = false;
+            }
+            return;
+        }
+        float pk[2] = {0.0f, 0.0f};
+        uint16_t ch = 0;
+        const uint32_t q = player->level(pk, &ch);
+        if (!play_meter_on) { /* a take started: what the tap holds is from before */
+            play_meter.reset();
+            play_meter_on = true;
+            play_seq = q;
+            play_db[0] = play_db[1] = Meter::kFloorDb;
+            play_ch = player->format().channels >= 2 ? 2 : 1;
+            play_new_ms = play_tick_ms = now;
+            play_meter.feed_peaks(play_db, play_ch, now * 1000);
+            return;
+        }
+        const double dt = static_cast<double>(now - play_tick_ms) / 1000.0;
+        play_tick_ms = now;
+        if (q != play_seq) {
+            play_seq = q;
+            play_new_ms = now;
+            if (ch) play_ch = ch;
+            for (int c = 0; c < 2; ++c) play_db[c] = Meter::to_db(pk[c]);
+            play_meter.feed_peaks(play_db, play_ch, now * 1000);
+        } else if (deck.state() == DeckState::PlayingPaused || now - play_new_ms > kPlayLevelStaleMs) {
+            for (float &d : play_db) d = std::max(Meter::kFloorDb, static_cast<float>(d - Meter::kHoldFallDbPerSec * dt));
+            play_meter.feed_peaks(play_db, play_ch, now * 1000);
+        }
+    }
+
     void tick() {
         std::lock_guard<std::mutex> g(mu);
         if (!started || down) return;
@@ -786,6 +855,7 @@ struct Controller::Impl : public DeckCommands {
         }
         merge_save();
         if (now - last_space_ms >= kSpaceRefreshMs) refresh_space();
+        update_play_meter(now);
         publish();
     }
 
@@ -823,19 +893,10 @@ struct Controller::Impl : public DeckCommands {
         }
         /* meter */
         if (proc) {
-            const MeterSnapshot m = proc->levels();
-            s.meter.channels = m.channels;
-            for (int i = 0; i < 2; ++i) {
-                s.meter.ch[i].peak_db = m.ch[i].peak_db;
-                s.meter.ch[i].rms_db = m.ch[i].rms_db;
-                s.meter.ch[i].hold_db = m.ch[i].hold_db;
-                s.meter.ch[i].bar = m.ch[i].bar;
-                s.meter.ch[i].hold_bar = m.ch[i].hold_bar;
-                s.meter.ch[i].peak_lamp = m.ch[i].peak_lamp;
-                s.meter.ch[i].zone = zone_int(m.ch[i].zone);
-            }
+            copy_meter(proc->levels(), s.meter);
             s.meter.clips = static_cast<unsigned>(proc->clip_count());
         }
+        if (play_meter_on && playing_family()) copy_meter(play_meter.snapshot(), s.play_meter);
         /* card */
         s.card.present = cap && cap->running();
         s.card.via_server = cap && via_server;
@@ -880,6 +941,7 @@ struct Controller::Impl : public DeckCommands {
             s.scan.direction = ds == DeckState::ScanningForward ? 1 : -1;
             s.scan.speed_text = std::to_string(kScanSpeed) + "x";
         }
+        if (jump_dir != 0 && playing_family() && clk->mono_ms() - jump_ms < kJumpFlashMs) s.scan.jump_dir = jump_dir;
         /* trim */
         if (tr.open) {
             TrimSnap &t = s.trim;

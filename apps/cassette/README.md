@@ -42,7 +42,14 @@ Four pages and two boxes:
   -6 dBFS marked on the scale), the **CARD** stepper (the card's own level, only when the card has a level control) and
   the **SOFT** stepper (software gain 0 to +24 dB on top of the card's level, with a clip counter; SOFT takes the full
   width on a card without a level control), and the five deck keys REC, PLAY / PAUSE, STOP, REW and FWD. REW and FWD
-  scan at 5x while held (or jump 5 s per tap, setting). With the **Record timer** set (3, 10 or 20 s; default Off),
+  scan at 5x while held (or jump 5 s per tap, setting). The PLAY / PAUSE key shows the current state: PLAY latched while
+  a take plays (also while REW / FWD is held), PAUSE latched while a take or a recording is paused, PAUSE unlatched while
+  recording (what a press does), PLAY unlatched when stopped (the table is in [`docs/KEYS.md`](docs/KEYS.md)). Both hubs
+  turn the same way, like a real cassette's: counterclockwise while recording and playing, counterclockwise at 3x for
+  FWD, clockwise at 3x for REW (a 5 s jump turns them that way for about 300 ms), still when paused or stopped. The meter
+  shows the live input level when idle and while recording; while a take plays or is paused it shows the played level on
+  L and R instead (a mono take on both bars, the 5x cue while scanning; paused, the bars fall away; the PEAK lamp is the
+  recording's clip warning and stays off). With the **Record timer** set (3, 10 or 20 s; default Off),
   REC starts a countdown over the cassette window instead: the meter stays live, a tap, STOP or Esc cancels it (nothing
   is written), at zero the take starts. Without a card the cassette window reads "No sound input found. Plug in a USB
   sound card or headset." and a card plugged in later is found by itself.
@@ -211,4 +218,6 @@ the fonts (Montserrat and JetBrains Mono, SIL OFL 1.1) are the launcher's, read 
 - 0.1.0: first version: recorder, recordings list, trim and split, settings, save and confirm boxes; WAV / BWF takes
   with journal and repair; meter with target zone, software gain, record timer, playback with 5x scan; 480x320 and
   320x480 minimum layouts; `cassette-probe` in the package. Cards that record at other rates than 48000 or 44100 Hz
-  (16000 Hz speech headsets) are opened at their own rate.
+  (16000 Hz speech headsets) are opened at their own rate. The PLAY / PAUSE key shows the current state (PLAY latched
+  while playing, PAUSE latched while paused); both hubs turn the same way (3x for REW / FWD, clockwise for REW); the
+  meter shows the played level while a take plays.

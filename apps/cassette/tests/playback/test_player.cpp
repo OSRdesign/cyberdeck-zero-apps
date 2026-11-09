@@ -4,6 +4,7 @@
 #include "support.hpp"
 
 #include <cerrno>
+#include <cmath>
 #include <vector>
 
 using namespace cassette;
@@ -13,6 +14,71 @@ namespace {
 
 void run_to_end(Player &p, int max_steps = 100000) {
     while (max_steps-- > 0 && p.step()) {
+    }
+}
+
+/* A sine of `hz` at `dbfs` per channel (relative to the largest positive sample), interleaved. */
+std::vector<int32_t> tone(uint32_t rate, unsigned ch, unsigned bits, uint64_t frames, double hz, const double *dbfs) {
+    std::vector<int32_t> v;
+    v.reserve(frames * ch);
+    const double full = static_cast<double>((int64_t{1} << (bits - 1)) - 1);
+    for (uint64_t i = 0; i < frames; ++i)
+        for (unsigned c = 0; c < ch; ++c)
+            v.push_back(static_cast<int32_t>(std::lround(full * std::pow(10.0, dbfs[c] / 20.0) *
+                                                         std::sin(2.0 * 3.14159265358979323846 * hz * static_cast<double>(i) / rate))));
+    return v;
+}
+
+double db_of(float ratio) { return ratio > 0 ? 20.0 * std::log10(ratio) : -200.0; }
+
+/* The level tap: the peak of each period sent, per source channel, before any volume; scanning: the averaged cue sent. */
+void test_level_tap(TempDir &d) {
+    for (uint32_t rate : {16000u, 48000u}) {
+        const double lv[2] = {-12.0, -12.0};
+        const std::string path = d.file("lvl" + std::to_string(rate) + ".wav");
+        write_wav(path, afmt(rate, 1, 16), tone(rate, 1, 16, rate * 3, 200.0, lv));
+        FakeSink sink;
+        sink.force_channels = 2; /* the device's channel mapping does not change the level */
+        Player p(posix_file_ops(), sink, Player::Mode::Manual);
+        float pk[2] = {1, 1};
+        uint16_t ch = 9;
+        CHECK_EQ(p.level(pk, &ch), 0u); /* nothing sent yet */
+        CHECK_EQ(p.open(path), 0);
+        CHECK_EQ(p.play(), 0);
+        CHECK(p.step());
+        const uint32_t q1 = p.level(pk, &ch);
+        CHECK_EQ(q1, 1u);
+        CHECK_EQ(ch, 1);
+        CHECK(std::fabs(db_of(pk[0]) + 12.0) < 0.1);
+        CHECK_EQ(pk[1], 0.0f);
+        CHECK(p.step());
+        CHECK_EQ(p.level(pk, &ch), 2u);
+        /* paused: nothing is sent, the count stands */
+        CHECK_EQ(p.pause(), 0);
+        CHECK(!p.step());
+        CHECK_EQ(p.level(pk, &ch), 2u);
+        /* scanning forward at 5x: the cue's peak (a 200 Hz tone barely changes in a 5-frame average) */
+        CHECK_EQ(p.scan(Direction::Forward), 0);
+        CHECK(p.step());
+        CHECK_EQ(p.level(pk, &ch), 3u);
+        CHECK(std::fabs(db_of(pk[0]) + 12.0) < 0.6);
+    }
+    /* stereo 24-bit, two levels */
+    {
+        const double lv[2] = {-6.0, -24.0};
+        const std::string path = d.file("lvl-st.wav");
+        write_wav(path, afmt(44100, 2, 24), tone(44100, 2, 24, 44100, 441.0, lv));
+        FakeSink sink;
+        Player p(posix_file_ops(), sink, Player::Mode::Manual);
+        CHECK_EQ(p.open(path), 0);
+        CHECK_EQ(p.play(), 0);
+        CHECK(p.step());
+        float pk[2];
+        uint16_t ch = 0;
+        CHECK_EQ(p.level(pk, &ch), 1u);
+        CHECK_EQ(ch, 2);
+        CHECK(std::fabs(db_of(pk[0]) + 6.0) < 0.1);
+        CHECK(std::fabs(db_of(pk[1]) + 24.0) < 0.1);
     }
 }
 
@@ -330,4 +396,5 @@ void test_player() {
         CHECK_EQ(p.close(), 0);
         CHECK_EQ(p.play(), -ENOENT);
     }
+    test_level_tap(d);
 }

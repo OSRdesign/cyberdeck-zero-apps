@@ -50,6 +50,34 @@ std::string pos_len(const RecorderVm &r)
 
 } // namespace
 
+PlayKeyLook play_key_look(Transport t)
+{
+    switch (t) {
+    case Transport::Playing:
+    case Transport::ScanForward:
+    case Transport::ScanReverse: return {false, true};
+    case Transport::PlayingPaused: return {true, true};
+    case Transport::Recording: return {true, false};
+    case Transport::RecordingPaused: return {true, true};
+    case Transport::Idle:
+    case Transport::Countdown: break;
+    }
+    return {false, false};
+}
+
+double hub_speed_dps(Transport t, int jump_dir)
+{
+    if (jump_dir > 0) return 3 * kHubPlayDps;
+    if (jump_dir < 0) return -3 * kHubPlayDps;
+    switch (t) {
+    case Transport::Recording:
+    case Transport::Playing: return kHubPlayDps;
+    case Transport::ScanForward: return 3 * kHubPlayDps;
+    case Transport::ScanReverse: return -3 * kHubPlayDps;
+    default: return 0.0;
+    }
+}
+
 std::string fmt_counter(std::int64_t ms)
 {
     return hms(ms < 0 ? 0 : ms / 1000, true);

@@ -177,10 +177,14 @@ struct Notice {
     std::string text;
 };
 
+/* How long a 5 s jump (REW / FWD in mode "jump 5 s") shows as ScanSnap::jump_dir: the UI turns the hubs that way. */
+constexpr uint32_t kJumpFlashMs = 300;
+
 struct ScanSnap {
     bool active = false;
     int direction = 0;           /* -1 reverse, +1 forward, 0 not scanning */
     std::string speed_text;      /* "5x" while scanning, else empty */
+    int jump_dir = 0;            /* -1 / +1 for kJumpFlashMs after a 5 s jump backwards / forwards, else 0 */
 };
 
 /* The trim page (open_trim ... close_trim). Positions are frames of the take. */
@@ -214,7 +218,13 @@ struct Snapshot {
     bool started = false;
     DeckSnap deck;
     TimeSnap time;
-    MeterSnap meter;
+    MeterSnap meter;             /* the INPUT level (the processed capture signal): live whenever the card delivers */
+    /* The PLAYED level while a take plays, scans or is paused (channels 0 otherwise: stopped, recording, idle). Fed from the
+     * Player's level tap (the sample peak of each period sent out, before any output volume; while scanning, the 5x cue
+     * that is sent) through the same meter rules: 15 steps over -40..0 dBFS, the target zone marks, peak hold 1.5 s then
+     * 20 dB/s. Paused (or no period for 150 ms) the level falls at 20 dB/s. The PEAK lamp is never lit here (clips is 0):
+     * it is the recording's clip warning. channels is the take's (1 mono, 2 stereo). */
+    MeterSnap play_meter;
     CardSnap card;
     TakeSnap take;
     ProblemSnap problems;

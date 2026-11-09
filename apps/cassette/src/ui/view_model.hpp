@@ -28,8 +28,8 @@ namespace ui {
 /* The five piano keys, left to right. */
 enum class KeyId { Rew = 0, PlayPause, Fwd, Stop, Rec, kCount };
 
-/* What the transport does now: decides the hubs (still, counterclockwise, clockwise fast), the PLAY/PAUSE key's icon
- * and the info strip's wording. Mirrors core DeckState. */
+/* What the transport does now: decides the PLAY/PAUSE key's glyph (ui_format.hpp play_key_look) and the info strip's
+ * wording; the hubs turn at RecorderVm::hub_dps (filled from ui_format.hpp hub_speed_dps). Mirrors core DeckState. */
 enum class Transport { Idle, Countdown, Recording, RecordingPaused, Playing, PlayingPaused, ScanForward, ScanReverse };
 
 struct KeyState {
@@ -84,6 +84,10 @@ struct RecorderVm {
     Transport transport = Transport::Idle;
     KeyState keys[static_cast<int>(KeyId::kCount)];
     int scan_speed = 5;          /* the badge "<< 5x" / ">> 5x" while scanning */
+    /* The hubs' angular speed in degrees per second, counterclockwise positive, left and right (ui_format.hpp
+     * hub_speed_dps: both the same, a real cassette's hubs turn together): play / record +150, FWD or a forward jump
+     * +450, REW or a backward jump -450, otherwise 0 (still). */
+    double hub_dps[2] = {0.0, 0.0};
     int countdown_left = 0;      /* Countdown: the big number (seconds left) */
     float countdown_fraction = 1.0f; /* Countdown: the red ring's remaining part, 1 = full, 0 = empty */
     std::int64_t counter_ms = 0; /* the counter: MM:SS, H:MM:SS from one hour (smaller digits) */

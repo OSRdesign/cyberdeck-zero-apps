@@ -7,6 +7,7 @@
 #include "fake_port.hpp"
 
 #include "bind/view_map.hpp"
+#include "ui/ui_format.hpp"
 
 #include <cmath>
 
@@ -711,6 +712,113 @@ void test_same()
     c = a;
     c.rec.tape.label = "Take 999";
     CHECK(!same(a, c));
+    c = a;
+    c.rec.hub_dps[1] = 450.0;
+    CHECK(!same(a, c));
+}
+
+/* The PLAY/PAUSE key's glyph and latch for every deck state (ui_format.hpp play_key_look), the hubs (both the same way,
+ * 3x while REW / FWD, a jump's flash), and the meter's source (input, or the played level while a take plays). */
+void test_play_ui()
+{
+    struct Row {
+        int deck;
+        ui::Transport t;
+        bool pause_glyph, latched;
+        double hubs; /* degrees per second, counterclockwise positive */
+    };
+    const double p = ui::kHubPlayDps;
+    const Row rows[] = {
+        {kDeckIdle, ui::Transport::Idle, false, false, 0},
+        {kDeckCountdown, ui::Transport::Countdown, false, false, 0},
+        {kDeckRecording, ui::Transport::Recording, true, false, p},
+        {kDeckRecordingPaused, ui::Transport::RecordingPaused, true, true, 0},
+        {kDeckPlaying, ui::Transport::Playing, false, true, p},
+        {kDeckPlayingPaused, ui::Transport::PlayingPaused, true, true, 0},
+        {kDeckScanningForward, ui::Transport::ScanForward, false, true, 3 * p},
+        {kDeckScanningReverse, ui::Transport::ScanReverse, false, true, -3 * p},
+    };
+    for (const Row &r : rows) {
+        Snapshot s = base_snapshot();
+        s.deck.state = r.deck;
+        s.deck.play_pause.enabled = true;
+        const ui::ViewModel vm = map(s);
+        CHECK(vm.rec.transport == r.t);
+        CHECK_EQ(ui::play_key_look(r.t).pause_glyph, r.pause_glyph);
+        CHECK_EQ(ui::play_key_look(r.t).latched, r.latched);
+        CHECK_EQ(key(vm, ui::KeyId::PlayPause).latched, r.latched);
+        CHECK(std::fabs(vm.rec.hub_dps[0] - r.hubs) < 1e-9);
+        CHECK(std::fabs(vm.rec.hub_dps[1] - r.hubs) < 1e-9); /* both hubs, in step */
+    }
+
+    /* the hubs between states: playing counterclockwise; FWD the same way at 3x; REW the other way at 3x */
+    Snapshot s = base_snapshot();
+    s.deck.state = kDeckPlaying;
+    const ui::ViewModel play = map(s);
+    s.deck.state = kDeckScanningForward;
+    const ui::ViewModel fwd = map(s);
+    s.deck.state = kDeckScanningReverse;
+    const ui::ViewModel rew = map(s);
+    for (int h = 0; h < 2; ++h) {
+        CHECK(play.rec.hub_dps[h] > 0);
+        CHECK(fwd.rec.hub_dps[h] > 0);
+        CHECK(rew.rec.hub_dps[h] < 0);
+        CHECK(std::fabs(fwd.rec.hub_dps[h] / play.rec.hub_dps[h] - 3.0) < 1e-9);
+        CHECK(std::fabs(rew.rec.hub_dps[h] / play.rec.hub_dps[h] + 3.0) < 1e-9);
+    }
+    CHECK(!same(play, fwd) && !same(play, rew) && !same(fwd, rew));
+
+    /* a 5 s jump flashes its direction at the scan speed, from play or pause; not outside the playing states */
+    s.deck.state = kDeckPlayingPaused;
+    s.scan.jump_dir = -1;
+    CHECK(std::fabs(map(s).rec.hub_dps[0] + 3 * p) < 1e-9 && std::fabs(map(s).rec.hub_dps[1] + 3 * p) < 1e-9);
+    s.deck.state = kDeckPlaying;
+    s.scan.jump_dir = 1;
+    CHECK(std::fabs(map(s).rec.hub_dps[0] - 3 * p) < 1e-9 && std::fabs(map(s).rec.hub_dps[1] - 3 * p) < 1e-9);
+    s.deck.state = kDeckIdle;
+    CHECK_EQ(map(s).rec.hub_dps[0], 0.0);
+    s.scan.jump_dir = 0;
+
+    /* the meter: idle shows the input; a mono take playing drives L and R equally from the played level, no PEAK lamp */
+    s = base_snapshot();
+    s.meter.ch[0].peak_lamp = true;
+    s.play_meter.channels = 1;
+    s.play_meter.ch[0].bar = 10;
+    s.play_meter.ch[0].hold_bar = 11;
+    s.play_meter.ch[0].peak_lamp = true;
+    ui::ViewModel vm = map(s);
+    CHECK_EQ(vm.rec.meter.channels, 1);
+    CHECK_EQ(vm.rec.meter.ch[0].bar, 11); /* the input (base snapshot) */
+    CHECK(vm.rec.meter.ch[0].peak_lamp);
+    s.deck.state = kDeckPlaying;
+    vm = map(s);
+    CHECK_EQ(vm.rec.meter.channels, 2);
+    for (int c = 0; c < 2; ++c) {
+        CHECK_EQ(vm.rec.meter.ch[c].bar, 10);
+        CHECK_EQ(vm.rec.meter.ch[c].hold_bar, 11);
+        CHECK(!vm.rec.meter.ch[c].peak_lamp);
+    }
+    /* stereo take: each bar its channel; paused: still the played level (falling in the controller) */
+    s.play_meter.channels = 2;
+    s.play_meter.ch[1].bar = 4;
+    s.play_meter.ch[1].hold_bar = 6;
+    s.deck.state = kDeckPlayingPaused;
+    vm = map(s);
+    CHECK_EQ(vm.rec.meter.ch[0].bar, 10);
+    CHECK_EQ(vm.rec.meter.ch[1].bar, 4);
+    CHECK_EQ(vm.rec.meter.ch[1].hold_bar, 6);
+    /* the playback meter not fed yet: the bars at zero (not the input's level) */
+    s.play_meter = MeterSnap();
+    s.deck.state = kDeckScanningReverse;
+    vm = map(s);
+    CHECK_EQ(vm.rec.meter.ch[0].bar, 0);
+    CHECK_EQ(vm.rec.meter.ch[1].hold_bar, 0);
+    /* recording: the input again, with its PEAK lamp */
+    s.deck.state = kDeckRecording;
+    vm = map(s);
+    CHECK_EQ(vm.rec.meter.channels, 1);
+    CHECK_EQ(vm.rec.meter.ch[0].bar, 11);
+    CHECK(vm.rec.meter.ch[0].peak_lamp);
 }
 
 } // namespace
@@ -725,4 +833,5 @@ void test_map()
     test_boxes();
     test_capture_path();
     test_same();
+    test_play_ui();
 }

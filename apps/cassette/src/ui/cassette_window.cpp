@@ -21,13 +21,17 @@ AnimOptions anim_options_from_env()
     AnimOptions o;
     if (const char *a = std::getenv("CASSETTE_ANIM"); a && std::strcmp(a, "0") == 0) o.enabled = false;
     if (const char *f = std::getenv("CASSETTE_ANIM_FPS"); f && *f) o.fps = std::clamp(std::atoi(f), 1, 60);
+    if (const char *n = std::getenv("CASSETTE_ANIM_TICKS"); n && *n) o.ticks = std::max(0, std::atoi(n));
     return o;
 }
 
 namespace {
 
-/* the hubs' turn times in s (the boards' CSS animations) */
-constexpr double kTurnLeft = 2.4, kTurnRight = 1.8, kScanLeft = 0.45, kScanRight = 0.3;
+/* The largest turn of a hub in one timer tick. The spokes repeat every 60 degrees, so a step of 30 degrees or more reads
+ * as standing still or turning backwards (the old 5x scan: 40 and 60 degrees a tick at 20 fps showed one hub still and
+ * the other turning the wrong way). 20 degrees is two whole frames: the direction is always clear. At 20 fps the 450
+ * degrees a second of REW / FWD (22.5 a tick) is held to 20 (about 2.7x the play speed); at 30 fps and more it is exact. */
+constexpr double kMaxStepDeg = 20.0;
 
 int top_for_baseline(const lv_font_t *f, int baseline)
 {
@@ -229,26 +233,6 @@ void CassetteWindow::render_tape()
     lv_obj_invalidate(canvas_);
 }
 
-void CassetteWindow::set_speeds(Transport t)
-{
-    switch (t) {
-    case Transport::Recording:
-    case Transport::Playing:
-        speed_[0] = 360.0 / kTurnLeft;
-        speed_[1] = 360.0 / kTurnRight;
-        break;
-    case Transport::ScanForward:
-        speed_[0] = 360.0 / kScanLeft;
-        speed_[1] = 360.0 / kScanRight;
-        break;
-    case Transport::ScanReverse:
-        speed_[0] = -360.0 / kScanLeft;
-        speed_[1] = -360.0 / kScanRight;
-        break;
-    default: speed_[0] = speed_[1] = 0; break;
-    }
-}
-
 void CassetteWindow::update(const RecorderVm &rec)
 {
     const bool loaded = rec.input_present && rec.tape.loaded;
@@ -264,9 +248,9 @@ void CassetteWindow::update(const RecorderVm &rec)
     show(hub_[1], loaded_);
     show(empty_, !rec.input_present);
 
-    if (rec.transport != transport_) {
-        transport_ = rec.transport;
-        set_speeds(transport_);
+    if (rec.hub_dps[0] != speed_[0] || rec.hub_dps[1] != speed_[1]) {
+        speed_[0] = rec.hub_dps[0];
+        speed_[1] = rec.hub_dps[1];
         last_ms_ = lv_tick_get();
     }
 
@@ -305,12 +289,19 @@ void CassetteWindow::timer_cb(lv_timer_t *t)
 void CassetteWindow::tick()
 {
     const std::uint32_t now = lv_tick_get();
-    const double dt = static_cast<double>(lv_tick_diff(now, last_ms_)) / 1000.0;
+    double dt = static_cast<double>(lv_tick_diff(now, last_ms_)) / 1000.0;
     last_ms_ = now;
+    if (anim_.ticks > 0) { /* CASSETTE_ANIM_TICKS: a fixed step per tick, then the hubs stop (the scenes' fixed angles) */
+        if (ticks_done_ >= anim_.ticks || (speed_[0] == 0 && speed_[1] == 0)) return; /* only turning ticks count */
+        ++ticks_done_;
+        dt = 1.0 / anim_.fps;
+    }
     if (!visible_ || !loaded_) return;
     for (int i = 0; i < 2; ++i) {
         if (speed_[i] == 0) continue;
-        angle_[i] = std::fmod(angle_[i] + speed_[i] * dt, 120.0);
+        /* both hubs get the same clamped step from the same speed: they stay in step */
+        const double step = std::clamp(speed_[i] * dt, -kMaxStepDeg, kMaxStepDeg);
+        angle_[i] = std::fmod(angle_[i] + step, 120.0);
         if (angle_[i] < 0) angle_[i] += 120.0;
         const int f = static_cast<int>(angle_[i] / 10.0) % 12;
         if (f != frame_[i] && frames_[f]) {

@@ -457,6 +457,7 @@ bool Player::pump() {
     const unsigned och = sfmt_.channels, obytes = format_bytes(sfmt_.format), obits = obytes * 8;
     out_.resize(static_cast<size_t>(nout) * och * obytes);
     tmp_.resize(sch);
+    int32_t lpk[2] = {0, 0}; /* the level tap: the sample peak of what is sent, per source channel (first two) */
     for (uint64_t j = 0; j < nout; ++j) {
         uint64_t a, b; /* source frames [a, b) of the block */
         if (!reverse) {
@@ -469,7 +470,12 @@ bool Player::pump() {
         for (unsigned c = 0; c < sch; ++c) {
             int64_t sum = 0;
             for (uint64_t i = a; i < b; ++i) sum += load_sample(&in_[(i * sch + c) * sbytes], sbytes);
-            tmp_[c] = rescale(mean(sum, static_cast<int64_t>(b - a)), f.bits, static_cast<int>(obits));
+            const int32_t m = mean(sum, static_cast<int64_t>(b - a));
+            if (c < 2) {
+                const int32_t mag = m < 0 ? -m : m;
+                if (mag > lpk[c]) lpk[c] = mag;
+            }
+            tmp_[c] = rescale(m, f.bits, static_cast<int>(obits));
         }
         unsigned char *o = &out_[static_cast<size_t>(j) * och * obytes];
         for (unsigned c = 0; c < och; ++c) {
@@ -487,6 +493,14 @@ bool Player::pump() {
 
     size_t written = 0;
     bool ok = write_out(static_cast<size_t>(nout), &written);
+    if (written > 0) {
+        /* the level tap (lock-free, no allocation): the peak of this period as a fraction of full scale, then the count */
+        const double full = static_cast<double>((int64_t{1} << (f.bits - 1)) - 1);
+        for (unsigned c = 0; c < 2; ++c)
+            level_peak_[c].store(c < sch ? static_cast<float>(std::min(1.0, lpk[c] / full)) : 0.0f, std::memory_order_relaxed);
+        level_channels_.store(static_cast<uint16_t>(std::min(2u, sch)), std::memory_order_relaxed);
+        level_seq_.fetch_add(1, std::memory_order_release);
+    }
     const uint64_t moved = std::min<uint64_t>(src, static_cast<uint64_t>(written) * g);
     if (reverse) pos_ -= moved;
     else pos_ += moved;
@@ -592,6 +606,13 @@ SinkFormat Player::sink_format() const {
 unsigned Player::underruns() const {
     std::lock_guard<std::mutex> g(mu_);
     return snap_.underruns;
+}
+uint32_t Player::level(float peak[2], uint16_t *channels) const {
+    const uint32_t q = level_seq_.load(std::memory_order_acquire);
+    peak[0] = level_peak_[0].load(std::memory_order_relaxed);
+    peak[1] = level_peak_[1].load(std::memory_order_relaxed);
+    if (channels) *channels = level_channels_.load(std::memory_order_relaxed);
+    return q;
 }
 bool Player::poll_event(PlayerEvent &e) {
     std::lock_guard<std::mutex> g(mu_);

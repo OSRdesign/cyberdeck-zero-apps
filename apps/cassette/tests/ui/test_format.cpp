@@ -180,6 +180,35 @@ void list_and_trim()
     CHECK_EQ(more_below_fit({}, upto(10)), "");
 }
 
+/* The PLAY / PAUSE key shows the current state; the hubs turn together, 3x and signed for FWD / REW. */
+void play_key_and_hubs()
+{
+    struct Row {
+        Transport t;
+        bool glyph_pause, latched;
+        double dps;
+    };
+    const Row rows[] = {
+        {Transport::Idle, false, false, 0},
+        {Transport::Countdown, false, false, 0},
+        {Transport::Recording, true, false, kHubPlayDps},
+        {Transport::RecordingPaused, true, true, 0},
+        {Transport::Playing, false, true, kHubPlayDps},
+        {Transport::PlayingPaused, true, true, 0},
+        {Transport::ScanForward, false, true, 3 * kHubPlayDps},
+        {Transport::ScanReverse, false, true, -3 * kHubPlayDps},
+    };
+    for (const Row &r : rows) {
+        CHECK_EQ(play_key_look(r.t).pause_glyph, r.glyph_pause);
+        CHECK_EQ(play_key_look(r.t).latched, r.latched);
+        CHECK(hub_speed_dps(r.t) == r.dps);
+    }
+    CHECK(kHubPlayDps > 0); /* counterclockwise while playing */
+    /* a jump flash wins: forward 3x counterclockwise, backward 3x clockwise, even from a paused take */
+    CHECK(hub_speed_dps(Transport::PlayingPaused, 1) == 3 * kHubPlayDps);
+    CHECK(hub_speed_dps(Transport::Playing, -1) == -3 * kHubPlayDps);
+}
+
 } // namespace
 
 void test_format()
@@ -188,6 +217,7 @@ void test_format()
     levels();
     info();
     list_and_trim();
+    play_key_and_hubs();
 }
 
 void test_meter_steps()

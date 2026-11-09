@@ -31,12 +31,6 @@ std::string red_tail(const std::string &text, const std::string &tail)
 const Icon kKeyIcons[5] = {Icon::Rew, Icon::Play, Icon::Fwd, Icon::Stop, Icon::Rec};
 const char *const kKeyNames[5] = {"REW", "PLAY", "FWD", "STOP", "REC"};
 
-/* the PLAY/PAUSE key shows what a press does: PLAY while nothing runs, PAUSE otherwise (boards, note n10) */
-bool shows_pause(Transport t)
-{
-    return t != Transport::Idle;
-}
-
 lv_obj_t *peak_lamp(lv_obj_t *parent, const Fit &fit, double x, double y)
 {
     lv_obj_t *o = box(parent, fit.x(x), fit.y(y), fit.px(12), fit.px(12), col::kPeakOff, LV_RADIUS_CIRCLE);
@@ -346,7 +340,10 @@ void RecorderPage::update_deck(const RecorderVm &rec)
     soft_->set_value(fmt_db(rec.soft.db, decimal));
     soft_->set_enabled(rec.soft.can_down, rec.soft.can_up);
 
-    const bool pause = shows_pause(rec.transport);
+    /* the PLAY/PAUSE key shows the current state (the table in ui_format.hpp, play_key_look): PLAY latched while a take
+     * plays or scans, PAUSE latched while paused, PAUSE unlatched while recording, PLAY unlatched otherwise; the latch is
+     * the model's (KeyState::latched) */
+    const bool pause = play_key_look(rec.transport).pause_glyph;
     for (int i = 0; i < 5; ++i) {
         const KeyState &k = rec.keys[i];
         Icon ic = kKeyIcons[i];

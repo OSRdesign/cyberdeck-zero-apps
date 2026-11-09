@@ -10,11 +10,16 @@
  * The hubs: one white hub with three spokes (a 60-degree symmetry, so 120 degrees repeat it too) is pre-rendered at
  * start as 12 frames of 10 degrees each (opaque, on the hub window's colour); two small image objects show the frame of
  * their hub. A timer (fps adjustable, CASSETTE_ANIM_FPS, default 20; CASSETTE_ANIM=0 stops it) advances each hub by its
- * angular speed and swaps the frame only when the 10-degree step changes, so a frame costs two image blits of about
- * 26 x 26 px: no per-frame image rotation (the Zero 2 W is the slowest board).
- *   recording, playing        counterclockwise, left hub 2.4 s and right hub 1.8 s a turn (the boards' speeds)
- *   scanning (REW / FWD 5x)   clockwise (REW) or counterclockwise (FWD), 0.45 s and 0.3 s a turn
- *   anything else             still
+ * angular speed (RecorderVm::hub_dps) and swaps the frame only when the 10-degree step changes, so a frame costs two image
+ * blits of about 26 x 26 px: no per-frame image rotation (the Zero 2 W is the slowest board). A tick turns a hub at most
+ * 20 degrees (the spokes repeat every 60: a bigger step would look still or backwards). Both hubs turn together, the way a
+ * real cassette's do (ui_format.hpp hub_speed_dps):
+ *   recording, playing             both counterclockwise, one turn in 2.4 s
+ *   FWD (scan or a 5 s jump)       both counterclockwise at 3x
+ *   REW (scan or a 5 s jump)       both clockwise at 3x
+ *   anything else                  still
+ * CASSETTE_ANIM_TICKS=<n> (the scenes): every tick steps 1 / fps seconds and the hubs stop after n ticks, so a shot shows
+ * a fixed angle per state.
  *
  * Overlays inside the window: the record countdown (a dark panel, RECORDING IN, a red ring that empties, the big
  * number, the hint; a tap on it calls on_cancel), the scan badge ("<< 5x" / ">> 5x"), and the empty window of the
@@ -38,8 +43,9 @@ namespace ui {
 struct AnimOptions {
     bool enabled = true;
     int fps = 20;
+    int ticks = 0; /* > 0: a fixed step per tick and only this many ticks (CASSETTE_ANIM_TICKS, the scenes) */
 };
-/* From the environment: CASSETTE_ANIM=0 disables, CASSETTE_ANIM_FPS=<1..60>. */
+/* From the environment: CASSETTE_ANIM=0 disables, CASSETTE_ANIM_FPS=<1..60>, CASSETTE_ANIM_TICKS=<n>. */
 AnimOptions anim_options_from_env();
 
 class CassetteWindow {
@@ -72,7 +78,6 @@ private:
     void render_tape();
     void render_hub_frames();
     void tick();
-    void set_speeds(Transport t);
 
     Fit fit_;
     Layout lay_;
@@ -92,6 +97,7 @@ private:
     lv_timer_t *timer_ = nullptr;
     bool visible_ = true;
     long swaps_ = 0;
+    int ticks_done_ = 0;
 
     lv_obj_t *count_ = nullptr; /* the countdown panel (clickable) */
     lv_obj_t *count_title_ = nullptr, *count_ring_ = nullptr, *count_number_ = nullptr, *count_hint_ = nullptr;
@@ -103,7 +109,6 @@ private:
 
     std::string label_, side_, format_;
     bool loaded_ = true;
-    Transport transport_ = Transport::Idle;
 };
 
 } // namespace ui

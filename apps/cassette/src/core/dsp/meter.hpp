@@ -81,6 +81,10 @@ public:
     /* Capture thread. Ignores unsupported formats (bits other than 16 or 24). */
     void feed(const void *frames, size_t nframes);
     void feed(const void *frames, size_t nframes, uint64_t now_us);
+    /* A feeder that has levels instead of samples (the playback meter: the Player's sample peak per period, fed by the
+     * controller's service thread). `peak_db` per channel (clamped to kFloorDb..0); the same bar, hold and zone rules as
+     * feed(); RMS reads the peak, no clips are counted and the PEAK lamp stays off (it is the recording's clip warning). */
+    void feed_peaks(const float *peak_db, uint16_t channels, uint64_t now_us);
 
     /* Capture thread (or while nothing feeds): clears counters, hold, lamp and zone history. */
     void reset();
@@ -103,6 +107,8 @@ private:
         uint32_t clips;
     };
 
+    void update(uint16_t n, const float *pk_db, const float *rms_db, const bool *lamp_hit, const uint32_t *clips,
+                uint64_t now_us);
     void publish(const MeterSnapshot &s);
 
     AudioFormat fmt_;

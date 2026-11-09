@@ -34,6 +34,7 @@
 #include "sink.hpp"
 #include "wav.hpp"
 
+#include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
@@ -121,6 +122,11 @@ public:
     SinkFormat sink_format() const;
     unsigned underruns() const;
     bool poll_event(PlayerEvent &e);
+    /* The level tap: the sample peak (0..1 of full scale, before any output volume) of the last period sent to the device
+     * (normal play or the averaged scan output), for the first two source channels, and the number of periods sent so far
+     * (the return value: unchanged means no new period). Written by the playback thread with atomics only (no lock, no
+     * allocation); any thread may read it. */
+    uint32_t level(float peak[2], uint16_t *channels = nullptr) const;
 
 private:
     struct Cmd;
@@ -172,6 +178,9 @@ private:
         unsigned underruns = 0;
     } snap_;
     std::thread th_;
+    std::atomic<uint32_t> level_seq_{0};
+    std::atomic<float> level_peak_[2] = {{0.0f}, {0.0f}};
+    std::atomic<uint16_t> level_channels_{0};
 };
 
 } // namespace cassette
