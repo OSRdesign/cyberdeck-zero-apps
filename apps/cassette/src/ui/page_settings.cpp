@@ -127,6 +127,15 @@ void SettingsPage::refresh()
             lv_obj_set_style_border_color(r.obj, lv_color_hex(cur ? col::kHinge : col::kBodyEdge), 0);
         }
     }
+    if (picker_ < 0) {
+        /* a row grown by a wrapped value moves the rows below it down */
+        const int gap = fit_.px(row_gap(frame_.portrait));
+        int y = 0;
+        for (Row &r : rows_) {
+            lv_obj_set_y(r.obj, y);
+            y += lv_obj_get_style_height(r.obj, LV_PART_MAIN) + gap;
+        }
+    }
     highlight(sel_);
     update_scrollbar();
     update_hint();
@@ -176,6 +185,7 @@ void SettingsPage::rebuild()
             const SettingRow &s = vm_.rows[i];
             const int lh17 = lv_font_get_line_height(font(Face::Medium, fit_.px(17)));
             r.value = label(r.obj, Face::Medium, fit_.px(17), col::kInkMuted, 0, (h - 2 - lh17) / 2, 10, LV_TEXT_ALIGN_RIGHT);
+            lv_label_set_long_mode(r.value, LV_LABEL_LONG_MODE_WRAP); /* fill_row grows the row to fit it */
             if (s.kind == SettingKind::Choice || s.kind == SettingKind::Text) {
                 r.chevron = make_chevron(r.obj, fit_, col::kInkMuted);
                 lv_obj_set_pos(r.chevron, row_w_ - 2 - pad - fit_.px(10), (h - 2 - fit_.px(16)) / 2);
@@ -211,22 +221,39 @@ void SettingsPage::fill_row(Row &r, const SettingRow &s)
         value = s.value; /* no chevron: the value ends at the row's right padding */
     }
     const int lab_nat = text_width(font(Face::Bold, fit_.px(19)), s.label.c_str(), ls_screen(0.3, fit_.s));
-    int value_w = 0;
+    int value_w = 0, value_h = 0, value_lh = 0;
     if (!value.empty()) {
         int avail = right - pad - std::min(lab_nat, (right - pad) * 45 / 100) - gap;
         if (r.slider) avail = std::min(avail, fit_.px(80));
         const int px = fit_px(Face::Medium, fit_.px(17), 0, value, avail, std::max(10, fit_.px(13)), nullptr);
-        value_w = std::min(avail, text_width(font(Face::Medium, px), value.c_str(), 0));
-        lv_obj_set_style_text_font(r.value, font(Face::Medium, px), 0);
+        const lv_font_t *vf = font(Face::Medium, px);
+        value_w = std::min(avail, text_width(vf, value.c_str(), 0));
+        lv_obj_set_style_text_font(r.value, vf, 0);
         lv_obj_set_width(r.value, value_w + 2);
         lv_obj_set_x(r.value, right - value_w - 1);
         set_text(r.value, value);
+        /* a value too long for one line even at the least size (a long card name) wraps; the row grows to fit it */
+        lv_point_t sz;
+        lv_text_get_size(&sz, value.c_str(), vf, 0, 0, value_w + 2, LV_TEXT_FLAG_NONE);
+        value_lh = lv_font_get_line_height(vf);
+        value_h = std::max(value_lh, static_cast<int>(sz.y));
     }
+    const int rh = std::max(h, value_h + 2 + 2 * fit_.px(10));
+    const int dy = (rh - h) / 2; /* the one-line parts stay centred in a grown row */
+    lv_obj_set_height(r.obj, rh);
+    const int lh19 = lv_font_get_line_height(font(Face::Bold, fit_.px(19)));
+    lv_obj_set_y(r.label, (h - 2 - lh19) / 2 + dy);
+    if (r.value) {
+        const int lh17 = lv_font_get_line_height(font(Face::Medium, fit_.px(17)));
+        lv_obj_set_y(r.value, value_h > value_lh ? (rh - 2 - value_h) / 2 : (h - 2 - lh17) / 2 + dy);
+    }
+    if (r.chevron) lv_obj_set_y(r.chevron, (h - 2 - fit_.px(16)) / 2 + dy);
+    if (r.toggle) lv_obj_set_y(r.toggle, (h - 2 - fit_.px(24)) / 2 + dy);
     int label_right = right - (value_w ? value_w + gap : (r.toggle ? gap : 0));
     if (r.slider) {
         const int sw = fit_.px(100);
         const int sx = right - value_w - gap - sw;
-        lv_obj_set_pos(r.slider, sx, (h - 2 - fit_.px(20)) / 2);
+        lv_obj_set_pos(r.slider, sx, (h - 2 - fit_.px(20)) / 2 + dy);
         set_slider_bar(r.slider, s.min, s.max, s.pos);
         label_right = sx - gap;
     }
