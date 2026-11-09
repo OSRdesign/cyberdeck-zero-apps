@@ -49,6 +49,7 @@ template <typename T> std::string test_text(const T &v) { return std::to_string(
 void test_json();
 void test_naming();
 void test_counter();
+void test_take_number_setting();
 void test_edits();
 void test_recordings();
 void test_settings();

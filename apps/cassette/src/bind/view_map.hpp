@@ -90,7 +90,7 @@ std::string format_words(const std::string &format_text);
 /* 0..1 from a 16-bit min/max pair (the louder side) */
 float peak_level(const PeakBar &b);
 std::vector<float> peak_levels(const std::vector<PeakBar> &bars);
-std::vector<ui::SettingRow> settings_rows(const Snapshot &s);
+std::vector<ui::SettingRow> settings_rows(const Snapshot &s, uint64_t next_take = 0);
 /* The record timer's choices (seconds) in row order; and the deepest zoom level whose window is still >= 2 s (or the
  * whole take when it is shorter): the plan's "from the whole take down to a 2 s window". */
 extern const int kTimerChoices[4];

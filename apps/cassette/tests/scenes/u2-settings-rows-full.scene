@@ -20,7 +20,7 @@ drag 0.5 0.9 0.5 0.05
 drag 0.5 0.9 0.5 0.05
 drag 0.5 0.9 0.5 0.05
 wait 500
-expect text "Sync every"
+expect text "Take number"
 expect text "Folder"
 expect text "Auto-split"
 expect text "Output"

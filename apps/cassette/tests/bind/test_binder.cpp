@@ -178,6 +178,47 @@ void test_settings_actions()
     CHECK_EQ(q.binder.vm().notice, "Prefix not changed: use letters, digits, - and _ (1 to 24)");
 }
 
+void test_take_number_action()
+{
+    Rig r;
+    CHECK_EQ(r.binder.vm().rec.info.take, "TAKE 008");
+    r.act.setting_number("takenum", 50);
+    r.act.setting_number("other", 3);  /* not ours: nothing */
+    r.act.setting_number("takenum", 0); /* out of range: nothing */
+    std::vector<std::string> c = r.calls();
+    CHECK(has(c, "set_next_take 50") && !has(c, "set_next_take 3") && !has(c, "set_next_take 0"));
+    CHECK(has(c, "next_take_number")); /* the row's value is read back */
+    r.tick();
+    r.tick();
+    CHECK_EQ(r.binder.vm().rec.info.take, "TAKE 050");
+    const ui::SettingRow *row = nullptr;
+    for (const ui::SettingRow &x : r.binder.vm().settings.rows)
+        if (x.id == "takenum") row = &x;
+    CHECK(row && row->value == "Next: 050" && row->pos == 50);
+    /* the guard moved it on: a notice names both numbers */
+    r.port.take_number_land = 12;
+    r.act.setting_number("takenum", 3);
+    r.tick();
+    r.tick();
+    CHECK_EQ(r.binder.vm().notice, "Take 003 is in use: next is 012");
+    CHECK_EQ(r.binder.vm().rec.info.take, "TAKE 012");
+    /* a take is running: refused with a notice, the number stays */
+    r.port.take_number_land = 0;
+    r.port.take_number_result = -16; /* EBUSY */
+    r.tick(4100); /* the previous notice has timed out */
+    r.act.setting_number("takenum", 80);
+    r.tick();
+    r.tick();
+    CHECK_EQ(r.binder.vm().notice, "The take number cannot be changed now");
+    CHECK_EQ(r.binder.vm().rec.info.take, "TAKE 012");
+    r.port.take_number_result = -5; /* EIO */
+    r.tick(4100);
+    r.act.setting_number("takenum", 81);
+    r.tick();
+    r.tick();
+    CHECK_EQ(r.binder.vm().notice, "Take number not changed");
+}
+
 void test_pages_and_list()
 {
     Rig r;
@@ -796,6 +837,7 @@ void test_binder()
     test_leaving_trim();
     test_notices();
     test_next_take_and_revision();
+    test_take_number_action();
     test_leave();
 }
 

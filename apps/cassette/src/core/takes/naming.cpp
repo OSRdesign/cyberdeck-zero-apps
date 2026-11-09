@@ -99,6 +99,39 @@ void collect_take(FileOps &, const std::string &name, uint64_t &best) {
     if (parse_take_name(base_name(name), t) && t.take > best) best = t.take;
 }
 
+/* Calls fn(TakeName) for every take name in the folder's files and journals (take names, paths, parts). */
+template <class F>
+void for_each_take_name(FileOps &ops, const std::string &dir, F fn) {
+    auto one = [&fn](const std::string &name) {
+        TakeName t;
+        if (parse_take_name(base_name(name), t)) fn(t);
+    };
+    std::vector<std::string> names;
+    if (ops.list_dir(dir, names) == 0)
+        for (const std::string &n : names) one(n);
+    std::vector<std::string> jnames;
+    const std::string jd = journal_dir(dir);
+    if (ops.list_dir(jd, jnames) == 0) {
+        for (const std::string &n : jnames) {
+            if (!ends_with(n, ".json")) continue;
+            JournalEntry e;
+            if (journal_read(ops, jd + "/" + n, e) != 0) continue;
+            one(e.take + ".wav");
+            one(e.path);
+            for (const std::string &p : e.parts) one(p);
+        }
+    }
+}
+
+bool read_counter_file(FileOps &ops, const std::string &dir, uint64_t &last) {
+    std::string body;
+    if (read_small_file(ops, take_counter_path(dir), body, 64) != 0) return false;
+    unsigned long long v = 0;
+    if (std::sscanf(body.c_str(), "%llu", &v) != 1) return false;
+    last = v;
+    return true;
+}
+
 }  // namespace
 
 bool datetime_from_wall(int64_t wall_s, DateTime &out, bool utc) {
@@ -208,20 +241,43 @@ uint64_t highest_take_found(FileOps &ops, const std::string &dir) {
     return best;
 }
 
-int reserve_take_number(FileOps &ops, const std::string &dir, uint64_t &take) {
+uint64_t first_free_take_number(FileOps &ops, const std::string &dir, const std::string &prefix, uint64_t from) {
+    std::set<uint64_t> used;
+    for_each_take_name(ops, dir, [&](const TakeName &t) {
+        if (t.prefix == prefix) used.insert(t.take);
+    });
+    uint64_t n = std::max<uint64_t>(from, 1);
+    while (used.count(n)) ++n;
+    return n;
+}
+
+uint64_t peek_take_number(FileOps &ops, const std::string &dir, const std::string &prefix) {
+    uint64_t last = 0;
+    if (read_counter_file(ops, dir, last)) return first_free_take_number(ops, dir, prefix, last + 1);
+    /* no usable counter (lost or corrupt): the folder decides, as it always did */
+    return highest_take_found(ops, dir) + 1;
+}
+
+int reserve_take_number(FileOps &ops, const std::string &dir, uint64_t &take, const std::string &prefix) {
     int r = make_dirs(ops, dir);
     if (r < 0) return r;
-    uint64_t last = 0;
-    std::string body;
-    if (read_small_file(ops, take_counter_path(dir), body, 64) == 0) {
-        unsigned long long v = 0;
-        if (std::sscanf(body.c_str(), "%llu", &v) == 1) last = v;
-    }
-    last = std::max<uint64_t>(last, highest_take_found(ops, dir));
-    const uint64_t next = last + 1;
-    r = atomic_write_file(ops, take_counter_path(dir), std::to_string(next) + "\n");
+    const uint64_t next = peek_take_number(ops, dir, prefix);
+    r = atomic_write_file(ops, take_counter_path(dir), std::to_string(next) + '\n');
     if (r < 0) return r;
     take = next;
+    return 0;
+}
+
+int set_next_take_number(FileOps &ops, const std::string &dir, const std::string &prefix, uint64_t wanted,
+                         uint64_t &landed) {
+    if (wanted < kTakeNumberMin || wanted > kTakeNumberMax) return -EINVAL;
+    int r = make_dirs(ops, dir);
+    if (r < 0) return r;
+    const uint64_t n = first_free_take_number(ops, dir, prefix, wanted);
+    /* the counter holds the last number handed out */
+    r = atomic_write_file(ops, take_counter_path(dir), std::to_string(n - 1) + '\n');
+    if (r < 0) return r;
+    landed = n;
     return 0;
 }
 

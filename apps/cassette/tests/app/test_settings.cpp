@@ -123,10 +123,55 @@ void t_outputs() {
     CHECK_EQ(s.card.output_label, s.card.output_labels[static_cast<size_t>(other)]);
 }
 
+/* The Take number setting on the real controller: set, record, restart, collision guard, busy refusal. */
+void t_take_number() {
+    Rig r(one_card());
+    r.open();
+    Controller &c = r.ctl();
+    CHECK(r.wait_meter());
+    uint64_t landed = 0;
+    CHECK(c.set_record_timer(0));
+    CHECK_EQ(c.set_next_take_number(0), -EINVAL);
+    CHECK_EQ(c.set_next_take_number(10000), -EINVAL);
+    CHECK_EQ(c.set_next_take_number(50, &landed), 0);
+    CHECK_EQ(landed, static_cast<uint64_t>(50));
+    c.key_event(KeyEvent::Rec);
+    CHECK(r.wait_state(kDeckRecording));
+    CHECK_EQ(c.set_next_take_number(70), -EBUSY); /* not while a take runs */
+    CHECK(r.wait([](const Snapshot &x) { return x.time.elapsed_s >= 0.3; }));
+    c.key_event(KeyEvent::Stop);
+    CHECK(r.wait_state(kDeckIdle));
+    std::vector<TakeRow> rows = c.takes();
+    CHECK_EQ(rows.size(), 1u);
+    if (!rows.empty()) CHECK(rows[0].name.compare(0, 9, "take_050_") == 0);
+    r.close();
+
+    /* a restart keeps the counter: the next take is 051 */
+    r.open();
+    CHECK(r.wait_meter());
+    CHECK(r.ctl().set_record_timer(0));
+    r.ctl().key_event(KeyEvent::Rec);
+    CHECK(r.wait_state(kDeckRecording));
+    CHECK(r.wait([](const Snapshot &x) { return x.time.elapsed_s >= 0.3; }));
+    r.ctl().key_event(KeyEvent::Stop);
+    CHECK(r.wait_state(kDeckIdle));
+    int n51 = 0;
+    for (const std::string &w : r.wavs())
+        if (w.compare(0, 9, "take_051_") == 0) ++n51;
+    CHECK(n51 >= 1);
+    /* the guard: 050 and 051 exist, so 50 lands on 052; 1 is free and is taken as it is */
+    CHECK_EQ(r.ctl().set_next_take_number(50, &landed), 0);
+    CHECK_EQ(landed, static_cast<uint64_t>(52));
+    CHECK_EQ(r.ctl().set_next_take_number(1, &landed), 0);
+    CHECK_EQ(landed, static_cast<uint64_t>(1));
+    r.close();
+}
+
 }  // namespace
 
 void test_settings() {
     t_outputs();
     t_persistence();
     t_corrupt_settings();
+    t_take_number();
 }

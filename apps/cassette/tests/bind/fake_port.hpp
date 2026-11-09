@@ -160,6 +160,15 @@ public:
         log("set_prefix " + p);
         return valid_prefix(p);
     }
+    int take_number_result = 0;    /* set_next_take: 0, -EBUSY, ... */
+    uint64_t take_number_land = 0; /* 0: it lands on the number asked for; else on this one */
+    int set_next_take(uint64_t n, uint64_t &landed) override
+    {
+        log("set_next_take " + std::to_string(n));
+        landed = take_number_land ? take_number_land : n;
+        if (take_number_result == 0) next = landed;
+        return take_number_result;
+    }
     bool set_auto_split(bool on) override
     {
         log(std::string("set_auto_split ") + (on ? "on" : "off"));

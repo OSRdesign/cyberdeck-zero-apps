@@ -346,6 +346,25 @@ Goal: with no take loaded the recorder shows a blank cassette in the deck, never
 
 Report: pass or fail per step, a photo of step 1 and step 4.
 
+## B15. Take number (any board, 10 min)
+
+Goal: Settings > Take number sets where the next take counts from; nothing existing changes.
+
+1. Note the takes in the list. Settings > Take number: the row reads `Next: NNN` (one more than the newest take, or the
+   number you last set). Tap it: the page shows the number large, -1 / +1, -10 / +10, -100 / +100, Reset to 1 and Set.
+2. Press Reset to 1, then +10 five times (51) and -1 once: the number reads 050. Tap Set.
+   Expected: back on Settings, the row reads `Next: 050`; the recorder label shows TAKE 050.
+3. Record a few seconds, STOP. Expected: the list has `take_050_...` (name `Take 050`); the other takes are untouched
+   (same names); the row now reads `Next: 051`.
+4. With takes 001, 002 and 003 in the folder (copy or record them first if needed): Take number > Reset to 1 > Set.
+   Expected: the row reads `Next: 004`, not `Next: 001` (a number the prefix already uses is skipped). Record, STOP: the
+   new take is `take_004_...`; no earlier take was overwritten or renamed.
+5. Open the page, press +1 a few times, then Esc. Expected: nothing changed (the row still reads the same).
+6. Set 7, tap Set, then reboot the board and open Settings. Expected: the row still reads `Next: 007` (or the first free
+   number above it). The row is dimmed while a take records.
+
+Report: what the row read at each step, the names of the takes recorded in 3 and 4, and whether the restart kept it.
+
 ## Results
 
 | Test | Board | Pass / fail | Notes |
@@ -365,6 +384,7 @@ Report: pass or fail per step, a photo of step 1 and step 4.
 | B12 speech-only headset |  |  |  |
 | B13 live monitor |  |  |  |
 | B14 blank cassette |  |  |  |
+| B15 take number |  |  |  |
 
 **What to send back:** the table; the probe output per board (B0); the `watch` and `take` outputs of B1, B3, B4; the
 `ui` log line per board; the notice texts as you read them; screenshots or photos of anything cut, overlapping or odd.

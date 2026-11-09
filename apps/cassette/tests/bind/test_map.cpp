@@ -374,7 +374,7 @@ void test_settings()
     std::vector<std::string> ids;
     for (const ui::SettingRow &r : vm.settings.rows) ids.push_back(r.id);
     const std::vector<std::string> want = {"input", "level", "agc", "format", "timer", "rewfwd", "channels", "lowcut",
-                                           "limiter", "sync", "folder", "prefix", "split"};
+                                           "limiter", "sync", "folder", "prefix", "takenum", "split"};
     CHECK(ids == want);
     const ui::SettingRow *r = find_row(vm, "input");
     CHECK(r && r->kind == ui::SettingKind::Choice && r->label == "Input" && r->enabled);
@@ -403,6 +403,27 @@ void test_settings()
     CHECK(r && r->kind == ui::SettingKind::Text && r->value == "take");
     r = find_row(vm, "split");
     CHECK(r && r->choice == 0 && r->value == "At 4 GiB");
+    /* Take number: the next number REC hands out, zero-padded as in the file names; 1 until it is known */
+    r = find_row(vm, "takenum");
+    CHECK(r && r->kind == ui::SettingKind::Number && r->label == "Take number" && r->enabled);
+    CHECK(r && r->value == "Next: 001" && r->min == 1 && r->max == 9999 && r->pos == 1);
+    {
+        LocalState lc;
+        lc.next_take = 12;
+        ui::ViewModel tv = map(s, {}, lc);
+        r = find_row(tv, "takenum");
+        CHECK(r && r->value == "Next: 012" && r->pos == 12);
+        lc.next_take = 1234;
+        r = find_row(map(s, {}, lc), "takenum");
+        CHECK(r && r->value == "Next: 1234" && r->pos == 1234);
+        lc.next_take = 20000; /* past the setting's range: the page starts at the top of it */
+        r = find_row(map(s, {}, lc), "takenum");
+        CHECK(r && r->value == "Next: 20000" && r->pos == 9999);
+        Snapshot rec = s;
+        rec.deck.state = kDeckRecording;
+        r = find_row(map(rec, {}, lc), "takenum");
+        CHECK(r && !r->enabled); /* not while a take runs */
+    }
 
     r = find_row(vm, "channels");
     CHECK(r && r->kind == ui::SettingKind::Info && !r->enabled && r->choices.empty());
@@ -424,7 +445,7 @@ void test_settings()
         std::vector<std::string> fids;
         for (const ui::SettingRow &row : fv.settings.rows) fids.push_back(row.id);
         const std::vector<std::string> fwant = {"input", "level", "agc", "mute", "format", "timer", "rewfwd", "channels",
-                                                "lowcut", "limiter", "sync", "folder", "prefix", "split", "output"};
+                                                "lowcut", "limiter", "sync", "folder", "prefix", "takenum", "split", "output"};
         CHECK(fids == fwant);
         const ui::SettingRow *m = find_row(fv, "mute");
         CHECK(m && m->kind == ui::SettingKind::Toggle && m->on && m->label == "Mic mute (card)");
@@ -507,7 +528,7 @@ void test_settings()
     s.card.has_level = s.card.has_agc = false;
     vm = map(s);
     CHECK(!find_row(vm, "level") && !find_row(vm, "agc"));
-    CHECK(vm.settings.rows.size() == 11);
+    CHECK(vm.settings.rows.size() == 12);
     /* no card at all */
     s.card.present = false;
     s.card.labels.clear();

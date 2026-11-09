@@ -129,7 +129,7 @@ public:
     bool on_left_right(int dir);
     /* Right: steps a slider row up, else changes / opens the highlighted row (as Enter). */
     bool on_right();
-    /* Esc: closes the picker first; false when there was none. */
+    /* Esc: closes the picker (or the Take number page, nothing applied) first; false when there was none. */
     bool back();
     void reset_view();
     /* The notice replaces the 'more below' line (landscape); narrow: a strip at the bottom of the list area. */
@@ -151,12 +151,28 @@ private:
     void update_hint();
     void highlight(int i);
     int row_h() const;
+    /* The Take number page (a sub-page of the same list, like a picker): the draft number large, Reset / Set, and the
+     * -1 / +1, -10 / +10, -100 / +100 steppers. Esc or back() drops the draft. */
+    struct NumBtn {
+        lv_obj_t *obj = nullptr, *label = nullptr;
+        int code = 0;             /* NumCode */
+        int line = 0;             /* 0 Reset / Set, 1 +-1, 2 +-10, 3 +-100 (the keyboard highlight row) */
+    };
+    void build_number_page();
+    void number_refresh();
+    void number_act(int code);
+    bool number_key(std::uint32_t k);
+    static void num_cb(lv_event_t *e);
 
     const UiActions &act_;
     Nav nav_;
     Fit fit_;
     std::unique_ptr<NoticeBox> notice_;
     int notice_h_ = 0;
+    bool numpage_ = false;        /* picker_ is then the Number row */
+    int draft_ = 1;
+    lv_obj_t *num_big_ = nullptr;
+    std::vector<NumBtn> nbtn_;
     SettingsVm vm_;
     bool have_ = false;
     lv_obj_t *list_ = nullptr, *track_ = nullptr, *thumb_ = nullptr, *hint_ = nullptr;
