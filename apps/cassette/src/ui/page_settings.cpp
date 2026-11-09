@@ -25,6 +25,13 @@ constexpr double kRowH = 42;
 
 double row_gap(bool portrait) { return portrait ? 9 : 4; }
 
+/* The value shown while a slider is dragged: "8 / 16", or "50 %" for a row with a value unit */
+std::string slider_text(const SettingRow &s, int pos)
+{
+    if (s.value_mul > 0) return std::to_string(pos * s.value_mul) + s.value_suffix;
+    return std::to_string(pos) + " / " + std::to_string(s.max);
+}
+
 } // namespace
 
 SettingsPage::SettingsPage(lv_obj_t *parent, const Frame &frame, const UiActions &actions, const Nav &nav)
@@ -251,8 +258,13 @@ void SettingsPage::fill_row(Row &r, const SettingRow &s)
     if (r.toggle) lv_obj_set_y(r.toggle, (h - 2 - fit_.px(24)) / 2 + dy);
     int label_right = right - (value_w ? value_w + gap : (r.toggle ? gap : 0));
     if (r.slider) {
-        const int sw = fit_.px(100);
+        int sw = fit_.px(100);
+        /* a long label (Monitor level) at the least size must fit: the bar gives up width, down to a 56 px bar */
+        const int need = text_width(font(Face::Bold, std::max(10, fit_.px(14))), s.label.c_str(), ls_screen(0.3, fit_.s)) + 2;
+        const int room = right - value_w - gap - sw - gap - pad + 1;
+        if (need > room) sw = std::max(fit_.px(56), sw - (need - room));
         const int sx = right - value_w - gap - sw;
+        lv_obj_set_width(r.slider, sw);
         lv_obj_set_pos(r.slider, sx, (h - 2 - fit_.px(20)) / 2 + dy);
         set_slider_bar(r.slider, s.min, s.max, s.pos);
         label_right = sx - gap;
@@ -311,7 +323,7 @@ void SettingsPage::activate(int i, int touch_x)
         if (touch_x < a.x1 - knob / 2 || touch_x > a.x2 + knob / 2) break;
         const int pos = s.min + std::clamp((touch_x - a.x1 - knob / 2) * (s.max - s.min) / std::max(1, w) + 0, 0, s.max - s.min);
         set_slider_bar(r.slider, s.min, s.max, pos);
-        set_text(r.value, std::to_string(pos) + " / " + std::to_string(s.max));
+        set_text(r.value, slider_text(s, pos));
         if (act_.setting_slider && pos != s.pos) act_.setting_slider(s.id, pos);
         break;
     }
@@ -400,7 +412,7 @@ void SettingsPage::row_cb(lv_event_t *e)
         if (slider_row) {
             lv_area_t a;
             lv_obj_get_coords(self->rows_[static_cast<std::size_t>(i)].slider, &a);
-            if (p.x >= a.x1 - 8 && p.x <= a.x2 + 8) self->drag_row_ = i;
+            if (p.x >= a.x1 - 8 && p.x <= a.x2 + 8 && self->vm_.rows[static_cast<std::size_t>(i)].enabled) self->drag_row_ = i;
         }
     } else if (code == LV_EVENT_PRESSING) {
         if (self->drag_row_ == i && indev && !lv_indev_get_scroll_obj(indev)) {
@@ -411,7 +423,7 @@ void SettingsPage::row_cb(lv_event_t *e)
             const int knob = a.y2 - a.y1 + 1, w = a.x2 - a.x1 + 1 - knob;
             const int pos = s.min + std::clamp((p.x - a.x1 - knob / 2) * (s.max - s.min) / std::max(1, w), 0, s.max - s.min);
             set_slider_bar(r.slider, s.min, s.max, pos);
-            set_text(r.value, std::to_string(pos) + " / " + std::to_string(s.max));
+            set_text(r.value, slider_text(s, pos));
         }
     } else if (code == LV_EVENT_RELEASED) {
         /* the drag's result is applied by CLICKED (a release without scrolling) */

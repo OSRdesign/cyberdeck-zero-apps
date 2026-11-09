@@ -300,6 +300,21 @@ std::vector<ui::SettingRow> settings_rows(const Snapshot &s)
     }
     rows.push_back(toggle_row("lowcut", "Low cut 80 Hz", s.settings.low_cut));
     rows.push_back(toggle_row("limiter", "Limiter", s.settings.limiter));
+    if (c.present && c.has_playback) { /* only a card with a playback side can be monitored */
+        rows.push_back(toggle_row("monitor", "Monitor", s.settings.monitor));
+        ui::SettingRow r;
+        r.id = "monitor_level";
+        r.label = "Monitor level";
+        r.kind = ui::SettingKind::Slider;
+        r.enabled = s.settings.monitor; /* dimmed, not hidden, while Monitor is off */
+        r.min = 0;
+        r.max = 20;
+        r.pos = std::clamp(s.settings.monitor_level / 5, 0, 20);
+        r.value_mul = 5;
+        r.value_suffix = " %";
+        r.value_text = std::to_string(r.pos * 5) + " %";
+        rows.push_back(r);
+    }
     {
         int pick = 0; /* the nearest choice (the setting may hold any value from 5 to 30) */
         for (int i = 1; i < 4; ++i)

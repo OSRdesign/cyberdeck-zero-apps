@@ -52,6 +52,7 @@ size_t ProcessingSink::write(const void *frames, size_t nframes) {
         if (clipped) clips_.fetch_add(clipped, std::memory_order_relaxed);
 
         meter_.feed(out, k);
+        if (FrameSink *t = tap_.load(std::memory_order_acquire)) t->write(out, k);
         const size_t got = next_->write(out, k);
         accepted += got;
         if (got < k) break;

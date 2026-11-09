@@ -57,3 +57,4 @@ void test_countdown();
 void test_deck();
 void test_threads();
 void test_rates();
+void test_monitor();

@@ -441,6 +441,39 @@ void test_settings()
         CHECK(!find_row(fv, "mute") && !find_row(fv, "output"));
     }
 
+    /* the live monitor: two rows after Limiter, only when the present card has a playback side */
+    CHECK(!find_row(vm, "monitor") && !find_row(vm, "monitor_level"));
+    {
+        Snapshot m = base_snapshot();
+        m.card.has_playback = true;
+        ui::ViewModel mv = map(m);
+        std::vector<std::string> mids;
+        for (const ui::SettingRow &row : mv.settings.rows) mids.push_back(row.id);
+        const std::vector<std::string> mwant = {"input", "level", "agc", "format", "timer", "rewfwd", "channels", "lowcut",
+                                                "limiter", "monitor", "monitor_level", "sync", "folder", "prefix", "split"};
+        CHECK(mids == mwant);
+        const ui::SettingRow *sw = find_row(mv, "monitor");
+        CHECK(sw && sw->kind == ui::SettingKind::Toggle && sw->label == "Monitor" && !sw->on && sw->enabled);
+        const ui::SettingRow *lv = find_row(mv, "monitor_level");
+        CHECK(lv && lv->kind == ui::SettingKind::Slider && lv->label == "Monitor level");
+        CHECK(lv && lv->min == 0 && lv->max == 20 && lv->pos == 10 && lv->value_text == "50 %");
+        CHECK(lv && lv->value_mul == 5 && lv->value_suffix == " %");
+        CHECK(lv && !lv->enabled); /* dimmed, not hidden, while Monitor is off */
+        m.settings.monitor = true;
+        m.settings.monitor_level = 85;
+        mv = map(m);
+        CHECK(find_row(mv, "monitor")->on);
+        lv = find_row(mv, "monitor_level");
+        CHECK(lv && lv->enabled && lv->pos == 17 && lv->value_text == "85 %");
+        m.settings.monitor_level = 0;
+        CHECK(find_row(map(m), "monitor_level")->value_text == "0 %");
+        m.settings.monitor_level = 100;
+        CHECK(find_row(map(m), "monitor_level")->pos == 20 && find_row(map(m), "monitor_level")->value_text == "100 %");
+        /* the card is gone: the rows go with it */
+        m.card.present = false;
+        CHECK(!find_row(map(m), "monitor") && !find_row(map(m), "monitor_level"));
+    }
+
     /* other values */
     s.settings.record_timer_s = 10;
     s.settings.rew_fwd = ScanMode::Jump;

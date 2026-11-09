@@ -16,6 +16,12 @@
  *   Writer and opens the gate; STOP closes the gate (waiting for a write in flight), then stops the Writer (the ring is
  *   drained, the header patched, the journal closed).
  *
+ * Live monitor (settings monitor / monitor_level): ProcessingSink also hands its processed frames to a MonitorTap (lock-free
+ *   ring, drops when full); a Monitor thread plays them into the capture card's playback side. publish() (every command and
+ *   service tick) starts or stops it by monitor_wanted(): capture running, card has a playback side, setting on, deck not in
+ *   the playing family, no list / trim preview, trim page closed, and not after AppLeave. The Player's open_target() and the
+ *   trim preview stop it first. See monitor.hpp.
+ *
  * Thread model:
  *   - UI thread: calls commands and snapshot()/takes()/peak_window(). Commands take one internal mutex `mu_`; a command
  *     that talks to the Player may wait for the playback thread (at most kCommandWaitMs, normally a few ms). snapshot(),
@@ -140,6 +146,8 @@ struct CardSnap {
     std::vector<std::string> labels; /* every capture card seen at the last refresh (distinct labels) */
     int selected = -1;         /* index into labels */
     bool has_level = false, has_agc = false, has_mute = false;
+    bool has_playback = false; /* the card has a playback side: the Monitor settings make sense (and appear) */
+    bool monitor_active = false; /* the microphone is being played into that playback side right now */
     double level_db = 0, level_min_db = 0, level_max_db = 0;
     bool level_inferred = false; /* the dB range is the 0..23.81 assumption, not the driver's */
     bool auto_gain = false, mute = false;
@@ -305,6 +313,13 @@ public:
     bool set_wind_mode(bool on) { return set_low_cut(on); }
     bool set_low_cut(bool on);             /* 80 Hz high-pass */
     bool set_limiter(bool on);
+    /* Live monitoring of the microphone in the capture card's playback side. Settings (persisted at once, applied live: the
+     * level never reopens the sink). The monitor runs only while the capture path runs, the take list / trim pages are not
+     * open for editing, and nothing plays (Playing, PlayingPaused, ScanForward, ScanReverse, a list or trim preview): starting
+     * any playback stops it BEFORE the Player opens its sink, ending it brings it back. It never touches the recording. When
+     * the sink cannot open, it stays off and a notice "Monitor unavailable" is raised once. */
+    bool set_monitor(bool on);
+    bool set_monitor_level(int percent);   /* 0..100, rounded to steps of 5 */
     bool select_card(int index);           /* index into snapshot().card.labels; refused while a take runs */
     bool select_output(const std::string &device); /* "" for automatic */
     void refresh_cards();                  /* re-lists the capture cards (the labels), e.g. on opening Settings */

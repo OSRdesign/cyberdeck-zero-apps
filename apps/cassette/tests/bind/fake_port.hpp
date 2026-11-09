@@ -185,6 +185,16 @@ public:
         log(std::string("set_limiter ") + (on ? "on" : "off"));
         return true;
     }
+    bool set_monitor(bool on) override
+    {
+        log(std::string("set_monitor ") + (on ? "on" : "off"));
+        return true;
+    }
+    bool set_monitor_level(int p) override
+    {
+        log("set_monitor_level " + std::to_string(p));
+        return true;
+    }
     bool set_mute(bool on) override
     {
         log(std::string("set_mute ") + (on ? "on" : "off"));

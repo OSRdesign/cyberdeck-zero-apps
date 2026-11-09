@@ -9,6 +9,7 @@
  *   4. peak limiter          (off by default, D18)
  *   5. back to S16_LE / S24_3LE: rounding, saturation at full scale, clip_count() counts saturated samples
  *   6. the meter taps the processed frames (what is recorded)
+ *   6b. the optional tap (set_tap, the live monitor) gets the same frames, its result ignored
  *   7. the processed frames go to the wrapped sink.
  * The work runs in float on chunks of at most `chunk_frames` frames, so any block size works; a larger block is
  * passed to the wrapped sink in several writes, and processing stops at the first chunk the wrapped sink does not
@@ -44,6 +45,10 @@ public:
     void set_dc_blocker(bool on) { dc_on_.store(on, std::memory_order_relaxed); }
     void set_highpass(bool on) { hpf_on_.store(on, std::memory_order_relaxed); }
     void set_limiter(bool on) { lim_on_.store(on, std::memory_order_relaxed); }
+    /* An extra consumer of the processed frames (the live monitor): write() runs on the capture thread, must never block or
+     * allocate, and its return value is ignored (it can never cost the recording a frame). The tap must outlive this sink;
+     * null removes it. */
+    void set_tap(FrameSink *tap) { tap_.store(tap, std::memory_order_release); }
     void set_soft_gain_db(double db) { gain_.set_db(db); }
     bool dc_blocker() const { return dc_on_.load(std::memory_order_relaxed); }
     bool highpass() const { return hpf_on_.load(std::memory_order_relaxed); }
@@ -69,6 +74,7 @@ private:
     std::atomic<bool> dc_on_{true}, hpf_on_{false}, lim_on_{false};
     bool dc_was_ = true, hpf_was_ = false, lim_was_ = false;
     std::atomic<uint64_t> clips_{0};
+    std::atomic<FrameSink *> tap_{nullptr};
 };
 
 }  // namespace cassette

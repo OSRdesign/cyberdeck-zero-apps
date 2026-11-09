@@ -301,6 +301,33 @@ Goal: a card that records at neither 48000 nor 44100 Hz (a USB headset in its ca
 Report: the probe line, the counter and list length of the 30 s take, whether both playbacks were at the right speed, the
 `file` line.
 
+## B13. Live monitor (a card without sidetone, any board, 10 min)
+
+Needs a USB card whose earphones you can wear and that has no hardware sidetone (the UC02 headset or the Apple dongle with
+earbuds), and the Jabra Evolve 65 for step (d). Wear the headphones: speakers cause echo.
+
+(a) Open Cassette. Settings: **Monitor** is Off and **Monitor level** is dimmed at 50 %, after Limiter. Nothing is heard
+in the earphones on the recorder screen.
+
+(b) With the UC02 or the dongle selected, switch Monitor On. Expected: you hear yourself with a small delay (a few tens of
+ms), the voice is clear. Drag or step Monitor level (Right / Left on the keyboard, 5 % per step): the loudness follows at
+once and without a click; 0 % is silence, 100 % is loud (turn the card's own volume down first). Press REC and record
+about 30 s while talking, STOP. Expected: the take is 30 s long (same as the counter), no "lost" text appears, and it
+sounds the same with Monitor on and off (the monitor level is not in the file). Do it once more with Monitor Off and
+compare the lengths.
+
+(c) With Monitor On, press PLAY on a take: the monitor stops at once (no echo of the take in the microphone path, no
+howl). Press STOP: it resumes. Also try REW / FWD held, and the list's preview (double tap): off while it plays, back
+after. With the record timer on (3 s): the monitor runs during the countdown.
+
+(d) With the Jabra Evolve 65 selected and Monitor Off: you still hear yourself, that is the headset's own hardware
+sidetone; Cassette cannot change it. (With Monitor On you hear a second, later copy: expected, switch it off.)
+
+(e) Monitor On, pull the USB card out while it runs: no crash, the notice for the lost card appears, no noise, no frozen
+screen. Plug it back: the app finds the card again and the monitor comes back by itself.
+
+Report: pass or fail per step, how the delay felt (none / small / annoying), anything cut off in the Settings rows.
+
 ## Results
 
 | Test | Board | Pass / fail | Notes |
@@ -318,6 +345,7 @@ Report: the probe line, the counter and list length of the 30 s take, whether bo
 | B10 settings after reboot |  |  |  |
 | B11 notices and errors |  |  |  |
 | B12 speech-only headset |  |  |  |
+| B13 live monitor |  |  |  |
 
 **What to send back:** the table; the probe output per board (B0); the `watch` and `take` outputs of B1, B3, B4; the
 `ui` log line per board; the notice texts as you read them; screenshots or photos of anything cut, overlapping or odd.

@@ -16,6 +16,7 @@ int main(int argc, char **argv) {
         test_countdown();
         test_deck();
         test_rates();
+        test_monitor();
     }
     test_threads();
     std::printf("cassette-playback tests: %d checks passed, %d failed, %d skipped\n", g_pass, g_fail, g_skip);

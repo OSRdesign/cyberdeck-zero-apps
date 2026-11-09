@@ -6,7 +6,7 @@
 # Run it through tests/playback/run.sh (a WSL native-filesystem copy). SAN=thread or SAN=address,undefined adds sanitizers.
 APP   ?= ../..
 BUILD ?= build
-SRCS  := $(APP)/src/core/wav.cpp $(APP)/src/core/fileops.cpp $(APP)/src/core/alsa/alsa_api.cpp \
+SRCS  := $(APP)/src/core/wav.cpp $(APP)/src/core/ring.cpp $(APP)/src/core/fileops.cpp $(APP)/src/core/alsa/alsa_api.cpp \
          $(APP)/src/core/alsa/card.cpp $(wildcard $(APP)/src/core/playback/*.cpp) $(APP)/tests/alsa/fake_alsa.cpp
 TESTS := $(wildcard $(APP)/tests/playback/*.cpp)
 OBJS  := $(patsubst $(APP)/%.cpp,$(BUILD)/%.o,$(SRCS) $(TESTS))

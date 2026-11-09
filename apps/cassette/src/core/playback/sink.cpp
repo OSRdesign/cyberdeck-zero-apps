@@ -38,8 +38,8 @@ int AlsaPlaybackSink::open(const AudioFormat &src, SinkFormat &granted) {
     req.rate = src.rate;
     req.channels = src.channels ? src.channels : 1;
     req.format = format_for_bits(src.bits);
-    req.period_frames = kPlaybackPeriod;
-    req.buffer_frames = playback_buffer_frames(src.rate);
+    req.period_frames = period_req_ ? period_req_ : kPlaybackPeriod;
+    req.buffer_frames = buffer_req_ ? buffer_req_ : playback_buffer_frames(src.rate);
 
     std::string dev = device_;
     const std::string plug = plug_variant(device_);

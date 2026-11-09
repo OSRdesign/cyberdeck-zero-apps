@@ -174,8 +174,14 @@ ui::UiActions Binder::actions()
         else if (id == "mute") post([this, on] { port_.set_mute(on); });
         else if (id == "lowcut") post([this, on] { port_.set_low_cut(on); });
         else if (id == "limiter") post([this, on] { port_.set_limiter(on); });
+        else if (id == "monitor") post([this, on] { port_.set_monitor(on); });
     };
     a.setting_slider = [this](const std::string &id, int pos) {
+        if (id == "monitor_level") { /* the slider counts steps of 5 % */
+            const int pct = std::clamp(pos, 0, 20) * 5;
+            post([this, pct] { port_.set_monitor_level(pct); });
+            return;
+        }
         if (id != "level") return;
         post([this, pos] {
             const CardSnap c = port_.snapshot().card;

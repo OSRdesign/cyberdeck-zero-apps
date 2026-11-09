@@ -49,6 +49,12 @@ public:
     /* Plays out what is queued (blocks up to one buffer); the sink stays open and ready for writes. */
     virtual void drain() = 0;
     virtual void close() = 0; /* idempotent */
+    /* Before open(): asks for this period and buffer (the monitor wants about 20 ms, not the player's 500 ms). The device
+     * may grant more (SinkFormat says what it did). 0 = the default of the sink. A sink may ignore it. */
+    virtual void set_buffering(uint32_t period_frames, uint32_t buffer_frames) {
+        (void)period_frames;
+        (void)buffer_frames;
+    }
 };
 
 /* The sample format a WAV source of `bits` bits is played in when the device takes it. */
@@ -70,12 +76,17 @@ public:
     void drop() override;
     void drain() override;
     void close() override;
+    void set_buffering(uint32_t period_frames, uint32_t buffer_frames) override {
+        period_req_ = period_frames;
+        buffer_req_ = buffer_frames;
+    }
     const std::string &device() const { return device_; }
     const std::string &opened_device() const { return opened_; } /* the device string actually opened ("" when closed) */
 
 private:
     AlsaApi &api_;
     std::string device_, opened_;
+    uint32_t period_req_ = 0, buffer_req_ = 0; /* set_buffering: 0 = the playback defaults */
     std::unique_ptr<AlsaPcm> pcm_;
 };
 

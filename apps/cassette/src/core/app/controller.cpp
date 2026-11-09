@@ -11,6 +11,7 @@
 #include "../edit/peaks.hpp"
 #include "../edit/trim_split.hpp"
 #include "../playback/deck.hpp"
+#include "../playback/monitor.hpp"
 #include "../playback/output.hpp"
 #include "../playback/player.hpp"
 #include "../playback/sink.hpp"
@@ -138,7 +139,11 @@ struct Controller::Impl : public DeckCommands {
     std::unique_ptr<Mixer> mixer;
     MixerState mstate;
 
-    /* capture pipeline: destruction order is cap, proc (the gate outlives them) */
+    /* capture pipeline: destruction order is cap, proc (the gate and the monitor tap outlive them) */
+    std::unique_ptr<MonitorTap> mtap;   /* made with the capture path; its ring is shared with the monitor thread */
+    std::unique_ptr<Monitor> mon;       /* running only while monitor_wanted() */
+    bool app_left = false;              /* AppLeave (Esc on the recorder): the monitor stays closed until the next key or setting */
+    bool mon_failed = false;            /* the sink could not be opened or died: no retry until the user toggles or the card returns */
     RecordGate gate;
     std::unique_ptr<ProcessingSink> proc;
     std::unique_ptr<Capture> cap;
@@ -365,7 +370,48 @@ struct Controller::Impl : public DeckCommands {
         proc->set_limiter(s.limiter);
     }
 
+    /* ---- live monitor ---- */
+    bool monitor_wanted() const {
+        if (!started || down || !cap || !cap->running() || !mtap || !have_card || !active.playback) return false;
+        if (!store.values().monitor || app_left) return false;
+        if (playing_family() || tr.previewing || tr.open || !preview_name.empty()) return false;
+        if (player && player->state() != PlayerState::Stopped) return false; /* the Player holds (or opens) the card */
+        return true;
+    }
+    void monitor_stop() {
+        if (mon) mon->stop();
+        mon.reset();
+    }
+    /* Brings the monitor in line with the state; called from publish() (every command and every service tick). */
+    void monitor_sync() {
+        if (mon && !mon->running()) { /* the sink died (a device error) */
+            monitor_stop();
+            mon_failed = true;
+            add_notice(Notice::Info, "Monitor unavailable");
+        }
+        if (!monitor_wanted()) {
+            if (mon) monitor_stop();
+            return;
+        }
+        if (!mon && !mon_failed) {
+            std::unique_ptr<PlaybackSink> sk;
+            const std::string dev = pcm_device(active);
+            if (cfg.make_sink) sk = cfg.make_sink(dev);
+            else sk.reset(new AlsaPlaybackSink(*cap_api(), dev));
+            std::unique_ptr<Monitor> m(new Monitor(*mtap));
+            m->set_level_pct(store.values().monitor_level);
+            if (m->start(std::move(sk)) < 0) {
+                mon_failed = true;
+                add_notice(Notice::Info, "Monitor unavailable");
+                return;
+            }
+            mon = std::move(m);
+        }
+        if (mon) mon->set_level_pct(store.values().monitor_level);
+    }
+
     void close_capture() {
+        monitor_stop();
         cap.reset();
         proc.reset();
         mixer.reset();
@@ -416,7 +462,10 @@ struct Controller::Impl : public DeckCommands {
         mstate = mixer->read();
         fmt = r.format;
         via_server = r.via_server;
+        mon_failed = false;
+        mtap.reset(new MonitorTap(fmt));
         proc.reset(new ProcessingSink(fmt, &gate));
+        proc->set_tap(mtap.get());
         apply_dsp_settings();
         CaptureOptions copt;
         copt.now = cfg.capture_now;
@@ -601,6 +650,7 @@ struct Controller::Impl : public DeckCommands {
 
     bool open_target() {
         stop_preview();
+        monitor_stop(); /* the Player is about to open the card's playback side: the monitor lets go first */
         if (!player || play_target().empty()) return false;
         const int r = player->open(folder + "/" + play_target());
         if (r < 0) {
@@ -887,6 +937,7 @@ struct Controller::Impl : public DeckCommands {
 
     void publish() {
         if (deck.state() == DeckState::Idle) preview_name.clear(); /* the preview is over */
+        monitor_sync();
         Snapshot s;
         s.started = started;
         s.folder = folder;
@@ -946,6 +997,8 @@ struct Controller::Impl : public DeckCommands {
             s.card.mute = mstate.mute_valid && mstate.mute;
         }
         s.card.soft_gain_db = store.values().soft_gain_db;
+        s.card.has_playback = s.card.present && have_card && active.playback;
+        s.card.monitor_active = mon && mon->running();
         s.card.output_label = plan.chosen.label;
         for (const OutputOption &o : plan.choices) {
             if (o.device == plan.chosen.device) s.card.output_selected = static_cast<int>(s.card.output_labels.size());
@@ -1174,6 +1227,8 @@ bool Controller::key_event(KeyEvent e) {
     case KeyEvent::AppLeave: de = DeckEvent::AppLeave; break;
     }
     if (e == KeyEvent::AppLeave) {
+        d.app_left = true;
+        d.monitor_stop();
         d.stop_preview();
         d.run_deck(de);
         d.join_save(); /* a save in progress is cancelled: the temporaries go, the original stays */
@@ -1182,6 +1237,7 @@ bool Controller::key_event(KeyEvent e) {
         d.publish();
         return true;
     }
+    d.app_left = false;
     if (de == DeckEvent::Rec || de == DeckEvent::PlayPause || de == DeckEvent::RewDown || de == DeckEvent::FwdDown)
         d.stop_preview();
     const bool r = d.run_deck(de);
@@ -1306,6 +1362,22 @@ bool Controller::set_low_cut(bool on) {
     Locked l(p_->mu);
     p_->store.values().low_cut = on;
     p_->apply_dsp_settings();
+    p_->persist();
+    p_->publish();
+    return true;
+}
+bool Controller::set_monitor(bool on) {
+    Locked l(p_->mu);
+    p_->store.values().monitor = on;
+    p_->mon_failed = false; /* a new try */
+    p_->app_left = false;
+    p_->persist();
+    p_->publish();
+    return true;
+}
+bool Controller::set_monitor_level(int percent) {
+    Locked l(p_->mu);
+    p_->store.values().monitor_level = monitor_level_clamp(percent);
     p_->persist();
     p_->publish();
     return true;
@@ -1558,6 +1630,7 @@ bool Controller::preview(bool on) {
     }
     if (d.take_active || d.deck.state() != DeckState::Idle || !d.player || d.tr.out <= d.tr.in) return false;
     const uint64_t from = (d.tr.pos >= d.tr.in && d.tr.pos < d.tr.out) ? d.tr.pos : d.tr.in;
+    d.monitor_stop();
     if (d.player->open(d.tr.path) < 0) return false;
     d.player->seek(from);
     if (d.player->play() < 0) return false;

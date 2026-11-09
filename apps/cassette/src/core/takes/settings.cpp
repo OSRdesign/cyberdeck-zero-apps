@@ -6,6 +6,7 @@
 #include "atomic_file.hpp"
 #include "naming.hpp"
 
+#include <algorithm>
 #include <cerrno>
 #include <cmath>
 #include <cstdlib>
@@ -74,6 +75,7 @@ void clamp_settings(Settings &s) {
     s.record_timer_s = best;
     if (!std::isfinite(s.soft_gain_db)) s.soft_gain_db = 0;
     s.soft_gain_db = clampd(s.soft_gain_db, kSoftGainMin, kSoftGainMax);
+    s.monitor_level = std::clamp(((std::clamp(s.monitor_level, 0, 100) + 2) / 5) * 5, 0, 100);
     if (!valid_prefix(s.prefix)) s.prefix = kDefaultPrefix;
     if (!valid_folder(s.folder)) s.folder = Settings().folder;
 }
@@ -109,6 +111,8 @@ int SettingsStore::load() {
     get_bool(root, "low_cut", s_.low_cut);
     get_bool(root, "limiter", s_.limiter);
     if (get_num(root, "soft_gain_db", d)) s_.soft_gain_db = d;
+    get_bool(root, "monitor", s_.monitor);
+    if (get_num(root, "monitor_level", d)) s_.monitor_level = static_cast<int>(std::lround(clampd(d, -1e6, 1e6)));
     if (get_str(root, "card", str) && valid_folder(str)) s_.card = str;
     if (get_str(root, "output_device", str) && valid_folder(str)) s_.output_device = str;
     clamp_settings(s_);
@@ -145,6 +149,8 @@ int SettingsStore::save() {
     root.set("low_cut", json::Value::boolean(s_.low_cut));
     root.set("limiter", json::Value::boolean(s_.limiter));
     root.set("soft_gain_db", json::Value::number(s_.soft_gain_db));
+    root.set("monitor", json::Value::boolean(s_.monitor));
+    root.set("monitor_level", json::Value::number(s_.monitor_level));
     root.set("card", json::Value::string(s_.card));
     root.set("output_device", json::Value::string(s_.output_device));
 

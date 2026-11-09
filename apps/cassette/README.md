@@ -64,8 +64,24 @@ Four pages and two boxes:
   number of numbered split points (a tap selects one and the SPLIT key becomes REMOVE). SAVE opens the save box.
 - **Settings.** Input (the capture card), Input level, Auto gain (card) and Mic mute (card) (only when the card has
   those controls), Format (WAV in 0.1), Record timer, REW / FWD (Fast scan 5x or Jump 5 s), Channels (what the card
-  records, read-only), Low cut 80 Hz, Limiter, Sync every (5, 10, 20, 30 s), Folder, File prefix, Auto-split (at 4 GiB,
+  records, read-only), Low cut 80 Hz, Limiter, Monitor and Monitor level (only when the card has a playback side;
+  see Live monitor), Sync every (5, 10, 20, 30 s), Folder, File prefix, Auto-split (at 4 GiB,
   or Off: one RF64 file) and Output (the playback device, when there is more than one).
+- **Live monitor.** Settings > **Monitor** (a switch, off by default) plays the microphone into the earphones of the same
+  card while the recorder screen runs (idle with the live meter, the record countdown, recording, recording paused), with
+  its own **Monitor level** (0 to 100 % in steps of 5, 50 % by default; dimmed while Monitor is off). Both rows appear
+  only when the selected card has a playback side. It is for cards without a hardware sidetone (a cheap USB dongle, the
+  UC02 headset): you hear yourself about 50 ms late, so the voice is clear but not instant. What you hear is what is
+  recorded (after the DC blocker and SOFT gain, before nothing else), at the monitor level; the level never changes the
+  recording. It never runs while a take plays, scans, is paused in playback or previewed from the list, and not while the
+  trim page is open: starting any playback closes the monitor first, stopping it brings it back. Leaving the app, a lost
+  card and Esc close it. It cannot cost the take anything: the monitor reads a private copy through a lock-free ring that
+  drops when it is full, and a monitor that fails or hangs only switches itself off (the info line says **Monitor
+  unavailable**, for instance when another program holds the card's output); the recording goes on untouched.
+  **Use headphones.** With speakers the microphone hears the monitor and you get an echo or a howl; that is why the
+  monitor is off by default and never plays during playback. A headset such as the Jabra Evolve 65 has its own hardware
+  sidetone: you hear yourself even with Monitor off, it is not an ALSA control and Cassette cannot change or switch it
+  off; Monitor adds a second, delayed copy on top, so leave it off there.
 - **Save box.** SAVE AS NEW FILES (the default: the original stays) or REPLACE ORIGINAL (asks once more; the original is
   deleted only after every result is written and synced). **Confirm box** for delete and replace.
 

@@ -33,6 +33,8 @@ void test_settings() {
     CHECK(!s.values().low_cut);
     CHECK(!s.values().limiter);
     CHECK_EQ(s.values().soft_gain_db, 0.0);
+    CHECK(!s.values().monitor); /* the live monitor is off by default, at 50 % */
+    CHECK_EQ(s.values().monitor_level, 50);
     CHECK(s.values().card.empty() && s.values().output_device.empty());
 
     /* round trip, the folder is created */
@@ -47,6 +49,8 @@ void test_settings() {
     v.low_cut = true;
     v.limiter = true;
     v.soft_gain_db = 12.5;
+    v.monitor = true;
+    v.monitor_level = 35;
     v.card = "UC02||";
     v.output_device = "hw:CARD=UC02,DEV=0";
     /* two cards with the same name, different by-id; the first has no USB identity */
@@ -79,6 +83,8 @@ void test_settings() {
     CHECK(s2.values().low_cut);
     CHECK(s2.values().limiter);
     CHECK_EQ(s2.values().soft_gain_db, 12.5);
+    CHECK(s2.values().monitor);
+    CHECK_EQ(s2.values().monitor_level, 35);
     CHECK_EQ(s2.values().card, "UC02||");
     CHECK_EQ(s2.values().output_device, "hw:CARD=UC02,DEV=0");
     CardState r;
@@ -126,6 +132,21 @@ void test_settings() {
     SettingsStore s3b(ops, path);
     s3b.load();
     CHECK(!s3b.card_state("A|b|", c));
+
+    /* the monitor level is clamped to 0..100 in steps of 5; a wrong type is ignored */
+    for (const auto &pr : std::vector<std::pair<std::string, int>>{{"37", 35}, {"38", 40}, {"250", 100}, {"-20", 0}, {"0", 0}, {"100", 100}, {"\"loud\"", 50}}) {
+        write_text(path, "{\"version\": 1, \"monitor\": true, \"monitor_level\": " + pr.first + "}");
+        SettingsStore sm(ops, path);
+        CHECK_EQ(sm.load(), 0);
+        CHECK(sm.values().monitor);
+        CHECK_EQ(sm.values().monitor_level, pr.second);
+    }
+    write_text(path, "{\"version\": 1, \"monitor\": \"yes\"}");
+    {
+        SettingsStore sm(ops, path);
+        CHECK_EQ(sm.load(), 0);
+        CHECK(!sm.values().monitor);
+    }
 
     /* corrupt files give defaults and never crash */
     for (const std::string &junk : {std::string("{\"prefix\": "), std::string("[1,2,3]"), std::string("null"),

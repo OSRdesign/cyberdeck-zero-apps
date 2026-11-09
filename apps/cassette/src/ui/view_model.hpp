@@ -123,6 +123,8 @@ struct SettingRow {
     bool on = false;             /* Toggle */
     int min = 0, max = 16, pos = 0; /* Slider */
     std::string value_text;      /* Slider: "8 / 16" */
+    int value_mul = 0;           /* Slider: when > 0 a drag shows pos * value_mul + value_suffix ("50 %") instead of "pos / max" */
+    std::string value_suffix;
 };
 
 /* The rows in order. The controller leaves out what the card does not have (Input level, Auto gain). */
@@ -212,7 +214,7 @@ inline bool operator==(const SettingRow &a, const SettingRow &b)
 {
     return a.id == b.id && a.label == b.label && a.kind == b.kind && a.enabled == b.enabled && a.value == b.value &&
            a.choices == b.choices && a.choice == b.choice && a.on == b.on && a.min == b.min && a.max == b.max &&
-           a.pos == b.pos && a.value_text == b.value_text;
+           a.pos == b.pos && a.value_text == b.value_text && a.value_mul == b.value_mul && a.value_suffix == b.value_suffix;
 }
 inline bool operator==(const SettingsVm &a, const SettingsVm &b) { return a.rows == b.rows; }
 inline bool operator==(const TakeRow &a, const TakeRow &b)

@@ -54,6 +54,8 @@ public:
     bool set_scan_mode(ScanMode m) override { return c_.set_scan_mode(m); }
     bool set_low_cut(bool on) override { return c_.set_low_cut(on); }
     bool set_limiter(bool on) override { return c_.set_limiter(on); }
+    bool set_monitor(bool on) override { return c_.set_monitor(on); }
+    bool set_monitor_level(int p) override { return c_.set_monitor_level(p); }
     bool set_mute(bool on) override { return c_.set_mute(on); }
     bool set_sync_interval(int s) override { return c_.set_sync_interval(s); }
     bool select_output(const std::string &d) override { return c_.select_output(d); }

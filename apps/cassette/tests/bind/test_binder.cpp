@@ -146,12 +146,18 @@ void test_settings_actions()
     r.act.setting_toggle("limiter", false);
     r.act.setting_slider("level", 15);
     r.act.setting_slider("other", 3);
+    r.act.setting_toggle("monitor", true);
+    r.act.setting_slider("monitor_level", 7); /* steps of 5 %: 35 % */
+    r.act.setting_slider("monitor_level", 40); /* out of range: clamped to the 20 steps */
+    r.act.setting_slider("monitor_level", -2);
+    r.act.setting_toggle("monitor", false);
     r.act.setting_text("prefix", "interview");
     r.act.setting_text("other", "x");
     const std::vector<std::string> want = {
         "select_card 1",      "set_format wav",    "set_record_timer 10", "set_scan_mode jump", "set_scan_mode scan",
         "set_auto_split off", "set_auto_split on", "set_auto_gain on",    "set_low_cut on",     "set_limiter off",
-        "set_level_db 15.0",  "set_prefix interview"};
+        "set_level_db 15.0",  "set_monitor on",     "set_monitor_level 35", "set_monitor_level 100",
+        "set_monitor_level 0", "set_monitor off",   "set_prefix interview"};
     const std::vector<std::string> got = r.calls();
     CHECK(got == want);
     if (got != want)

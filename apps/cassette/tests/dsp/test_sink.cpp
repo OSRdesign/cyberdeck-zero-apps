@@ -205,6 +205,48 @@ void no_alloc_after_construction() {
     }
 }
 
+/* The live monitor's tap: the same processed frames as the recording gets (after the DC blocker, SOFT gain, filters), in
+ * the same blocks; its result is ignored (a tap that accepts nothing changes nothing in the recording); no allocation. */
+void tap_sees_what_is_recorded() {
+    for (uint16_t bits : {uint16_t(16), uint16_t(24)}) {
+        AudioFormat f{48000, 2, bits};
+        const size_t n = 6000;
+        auto in = sig::sine(f, n, 440.0, {-9.0, -15.0}, 300.0 * (bits == 24 ? 256 : 1));
+        sig::FakeSink fake(f, n), tapped(f, n), refuse(f, 0);
+        ProcessingSink p(f, &fake, 512);
+        p.set_soft_gain_db(9.0);
+        p.set_highpass(true);
+        p.set_tap(&tapped);
+        CHECK_EQ(p.write(in.data(), n), n);
+        CHECK(tapped.data == fake.data); /* byte for byte what the writer got */
+        CHECK_EQ(tapped.got, n);
+        /* a tap that takes nothing: the recording is whole */
+        sig::FakeSink fake2(f, n);
+        ProcessingSink q(f, &fake2, 512);
+        q.set_soft_gain_db(9.0);
+        q.set_highpass(true);
+        q.set_tap(&refuse);
+        CHECK_EQ(q.write(in.data(), n), n);
+        CHECK(fake2.data == fake.data);
+        /* removed: no more frames */
+        p.set_tap(nullptr);
+        const size_t before = tapped.got;
+        sig::FakeSink fake3(f, n);
+        ProcessingSink r(f, &fake3, 512);
+        r.set_tap(&tapped);
+        r.set_tap(nullptr);
+        r.write(in.data(), 1000);
+        CHECK_EQ(tapped.got, before);
+        /* no allocation with a tap */
+        sig::FakeSink fake4(f, 20 * 5000), tap4(f, 20 * 5000);
+        ProcessingSink t(f, &fake4, 512);
+        t.set_tap(&tap4);
+        const long long a0 = alloc_count();
+        for (int i = 0; i < 10; ++i) t.write(in.data(), 5000);
+        CHECK_EQ(alloc_count() - a0, 0LL);
+    }
+}
+
 }  // namespace
 
 void test_sink() {
@@ -214,4 +256,5 @@ void test_sink() {
     weak_headset_with_soft_gain();
     runtime_settings();
     no_alloc_after_construction();
+    tap_sees_what_is_recorded();
 }

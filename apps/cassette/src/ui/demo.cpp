@@ -251,6 +251,23 @@ ViewModel demo_model(const std::string &scene)
     }
     s.rows.push_back(toggle("lowcut", "Low cut 80 Hz", false));
     s.rows.push_back(toggle("limiter", "Limiter", false));
+    /* CASSETTE_DEMO_MONITOR=on|off: a card with a playback side: the Monitor switch and its level (dimmed while off) */
+    if (const char *mo = std::getenv("CASSETTE_DEMO_MONITOR")) {
+        const bool on = std::string(mo) == "on";
+        s.rows.push_back(toggle("monitor", "Monitor", on));
+        SettingRow ml;
+        ml.id = "monitor_level";
+        ml.label = "Monitor level";
+        ml.kind = SettingKind::Slider;
+        ml.enabled = on;
+        ml.min = 0;
+        ml.max = 20;
+        ml.pos = 10;
+        ml.value_mul = 5;
+        ml.value_suffix = " %";
+        ml.value_text = "50 %";
+        s.rows.push_back(ml);
+    }
     s.rows.push_back(choice("sync", "Sync every", {"5 s", "10 s", "20 s", "30 s"}, 1));
     s.rows.push_back(choice("folder", "Folder", {"~/Recordings"}, 0));
     SettingRow prefix;
@@ -486,6 +503,9 @@ UiActions DemoDriver::actions()
             if (r.id == id) r.on = on;
         if (id == "lowcut") vm_.rec.info.low_cut = on;
         if (id == "limiter") vm_.rec.info.limiter = on;
+        if (id == "monitor")
+            for (SettingRow &r : vm_.settings.rows)
+                if (r.id == "monitor_level") r.enabled = on;
         emit();
     };
     a.setting_slider = [this](const std::string &id, int pos) {
@@ -493,7 +513,8 @@ UiActions DemoDriver::actions()
         for (SettingRow &r : vm_.settings.rows)
             if (r.id == id) {
                 r.pos = pos;
-                r.value_text = std::to_string(pos) + " / " + std::to_string(r.max);
+                r.value_text = r.value_mul > 0 ? std::to_string(pos * r.value_mul) + r.value_suffix
+                                               : std::to_string(pos) + " / " + std::to_string(r.max);
             }
         emit();
     };
