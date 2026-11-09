@@ -472,7 +472,8 @@ void test_settings()
         std::vector<std::string> mids;
         for (const ui::SettingRow &row : mv.settings.rows) mids.push_back(row.id);
         const std::vector<std::string> mwant = {"input", "level", "agc", "format", "timer", "rewfwd", "channels", "lowcut",
-                                                "limiter", "monitor", "monitor_level", "sync", "folder", "prefix", "split"};
+                                                "limiter", "monitor", "monitor_level", "sync", "folder", "prefix", "takenum",
+                                                "split"};
         CHECK(mids == mwant);
         const ui::SettingRow *sw = find_row(mv, "monitor");
         CHECK(sw && sw->kind == ui::SettingKind::Toggle && sw->label == "Monitor" && !sw->on && sw->enabled);
