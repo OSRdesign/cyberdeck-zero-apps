@@ -345,7 +345,8 @@ void t_take_operations() {
     CHECK_EQ(c.delete_take(nn), 0);
     rows = c.takes();
     CHECK_EQ(rows.size(), 1u);
-    CHECK(rows[0].current); /* the target moved to what is left */
+    CHECK(!rows[0].current); /* the loaded take was deleted: the deck is empty, nothing else is loaded for the user */
+    CHECK(r.snap().take.name.empty());
     CHECK_EQ(c.delete_take(rows[0].name), 0);
     CHECK(c.takes().empty());
     CHECK(!r.snap().deck.play_pause.enabled); /* nothing left to play */

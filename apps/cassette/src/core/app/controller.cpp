@@ -175,7 +175,9 @@ struct Controller::Impl : public DeckCommands {
     /* takes */
     std::vector<TakeRow> rows;
     unsigned takes_rev = 0;
-    std::string target;
+    std::string target;       /* the LOADED take: the one PLAY, REW and FWD act on; empty = nothing in the deck */
+    std::string preview_name; /* a take of the list playing without being loaded (preview_take); empty otherwise */
+    unsigned load_seq = 0;    /* counts load() calls: the UI plays its cassette animation when this moves */
     SpaceInfo space;
     uint64_t last_space_ms = 0;
 
@@ -236,8 +238,21 @@ struct Controller::Impl : public DeckCommands {
             pend.pop_front();
             deck.handle(x);
         }
-        deck.set_has_last_take(!rows.empty()); /* the list is the truth (a take that failed to start leaves none) */
+        deck.set_has_last_take(!target.empty()); /* the loaded take is the truth (a take that failed to start leaves none) */
         return r;
+    }
+
+    /* The take the player opens: a previewed take of the list, else the loaded one. */
+    std::string play_target() const { return preview_name.empty() ? target : preview_name; }
+    /* Is `name` in use (playing or previewing, recording, open for trimming)? rename and delete refuse such a take. */
+    bool in_use(const std::string &name) const {
+        return (tr.open && tr.take == name) || (take_active && take_name == name) ||
+               (deck.state() != DeckState::Idle && play_target() == name);
+    }
+    void load_newest_if_empty() {
+        if (target.empty() && !rows.empty()) target = rows.front().name;
+        for (TakeRow &r : rows) r.current = r.name == target;
+        deck.set_has_last_take(!target.empty());
     }
 
     void persist() {
@@ -295,11 +310,13 @@ struct Controller::Impl : public DeckCommands {
             r.repaired = t.repaired;
             rows.push_back(r);
         }
+        /* a loaded take that is gone (deleted) leaves the deck empty; start(), a new folder and the end of a recording
+         * load the newest take themselves (load_newest_if_empty) */
         bool found = false;
         for (const TakeRow &r : rows) found = found || r.name == target;
-        if (!found) target = rows.empty() ? std::string() : rows.front().name;
+        if (!found) target.clear();
         for (TakeRow &r : rows) r.current = r.name == target;
-        deck.set_has_last_take(!rows.empty());
+        deck.set_has_last_take(!target.empty());
         ++takes_rev;
     }
 
@@ -568,6 +585,7 @@ struct Controller::Impl : public DeckCommands {
         take_active = false;
         paused = false;
         refresh_takes_locked();
+        load_newest_if_empty(); /* the new take stays loaded; a take that was not kept leaves the newest one */
         refresh_space();
     }
 
@@ -583,8 +601,8 @@ struct Controller::Impl : public DeckCommands {
 
     bool open_target() {
         stop_preview();
-        if (!player || target.empty()) return false;
-        const int r = player->open(folder + "/" + target);
+        if (!player || play_target().empty()) return false;
+        const int r = player->open(folder + "/" + play_target());
         if (r < 0) {
             add_notice(Notice::Info, "This take cannot be played: " + std::string(std::strerror(-r)));
             return false;
@@ -725,6 +743,8 @@ struct Controller::Impl : public DeckCommands {
         save_outputs.clear();
         if (st == 2)
             for (const std::string &p : r.outputs) save_outputs.push_back(base_name(p));
+        /* a loaded take replaced by the save stays loaded under its new name (the first part), without a new load */
+        if (st == 2 && tr.replace_kind && target == tr.take && !save_outputs.empty()) target = save_outputs.front();
         refresh_takes_locked();
     }
 
@@ -860,6 +880,7 @@ struct Controller::Impl : public DeckCommands {
     }
 
     void publish() {
+        if (deck.state() == DeckState::Idle) preview_name.clear(); /* the preview is over */
         Snapshot s;
         s.started = started;
         s.folder = folder;
@@ -928,6 +949,8 @@ struct Controller::Impl : public DeckCommands {
         /* take */
         s.take.recording = take_active;
         s.take.name = take_active ? take_name : target;
+        s.take.playing_name = playing_family() ? play_target() : std::string();
+        s.take.load_seq = load_seq;
         s.take.format_text = format_text(f);
         s.take.free_bytes = space.free_bytes;
         s.take.hours_left = space.hours_left;
@@ -1004,6 +1027,7 @@ struct Controller::Impl : public DeckCommands {
         }
         for (const std::string &e : rep.errors) add_notice(Notice::Info, e);
         refresh_takes_locked();
+        load_newest_if_empty(); /* the last take is loaded at launch, without a load animation */
         want_text = s.card;
         try_open_capture();
         rebuild_output();
@@ -1222,7 +1246,9 @@ bool Controller::set_folder(const std::string &folder) {
     d.store.values().folder = folder;
     d.folder = expanded;
     d.target.clear();
+    d.preview_name.clear();
     d.refresh_takes_locked();
+    d.load_newest_if_empty();
     d.refresh_space();
     d.persist();
     d.publish();
@@ -1342,6 +1368,7 @@ bool Controller::play_take(const std::string &name) {
     if (!d.has_take(name) || d.take_active || d.deck.state() == DeckState::Countdown) return false;
     d.stop_preview();
     if (d.playing_family()) d.run_deck(DeckEvent::Stop);
+    d.preview_name.clear();
     d.target = name;
     for (TakeRow &r : d.rows) r.current = r.name == name;
     ++d.takes_rev;
@@ -1349,12 +1376,38 @@ bool Controller::play_take(const std::string &name) {
     d.publish();
     return ok;
 }
+bool Controller::load(const std::string &name) {
+    Locked l(p_->mu);
+    Impl &d = *p_;
+    /* refused while recording (a take, a paused take, the countdown) or when the take is not in the list */
+    if (!d.has_take(name) || d.take_active || d.recording_family()) return false;
+    d.stop_preview();
+    if (d.playing_family()) d.run_deck(DeckEvent::Stop);
+    d.preview_name.clear();
+    d.target = name;
+    for (TakeRow &r : d.rows) r.current = r.name == name;
+    d.deck.set_has_last_take(true);
+    ++d.takes_rev;
+    ++d.load_seq;
+    d.publish();
+    return true;
+}
+bool Controller::preview_take(const std::string &name) {
+    Locked l(p_->mu);
+    Impl &d = *p_;
+    if (!d.has_take(name) || d.take_active || d.recording_family()) return false;
+    d.stop_preview();
+    if (d.playing_family()) d.run_deck(DeckEvent::Stop);
+    d.preview_name = name == d.target ? std::string() : name;
+    d.deck.set_has_last_take(true); /* an empty deck still previews (run_deck puts the flag back to the loaded take) */
+    const bool ok = d.run_deck(DeckEvent::PlayPause);
+    d.publish();
+    return ok;
+}
 int Controller::rename_take(const std::string &name, const std::string &new_prefix, std::string *new_name) {
     Locked l(p_->mu);
     Impl &d = *p_;
-    if ((d.tr.open && d.tr.take == name) || (d.take_active && d.take_name == name) ||
-        (d.target == name && d.deck.state() != DeckState::Idle))
-        return -EBUSY;
+    if (d.in_use(name)) return -EBUSY;
     std::string out;
     const int r = cassette::rename_take(*d.ops, d.folder, name, new_prefix, out);
     if (r == 0) {
@@ -1368,9 +1421,7 @@ int Controller::rename_take(const std::string &name, const std::string &new_pref
 int Controller::delete_take(const std::string &name) {
     Locked l(p_->mu);
     Impl &d = *p_;
-    if ((d.tr.open && d.tr.take == name) || (d.take_active && d.take_name == name) ||
-        (d.target == name && d.deck.state() != DeckState::Idle))
-        return -EBUSY;
+    if (d.in_use(name)) return -EBUSY;
     const int r = cassette::delete_take(*d.ops, d.folder, name);
     d.refresh_takes_locked();
     d.publish();

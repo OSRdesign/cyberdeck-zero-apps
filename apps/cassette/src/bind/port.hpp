@@ -52,6 +52,8 @@ public:
     virtual void refresh_takes() = 0;
     virtual bool select_take(const std::string &name) = 0;
     virtual bool play_take(const std::string &name) = 0;
+    virtual bool load(const std::string &name) = 0;         /* LOAD: the take into the deck, nothing playing */
+    virtual bool preview_take(const std::string &name) = 0; /* the list's preview: plays without loading */
     virtual int rename_take(const std::string &name, const std::string &new_prefix) = 0;
     virtual int delete_take(const std::string &name) = 0;
     virtual bool open_trim(const std::string &take_name) = 0;

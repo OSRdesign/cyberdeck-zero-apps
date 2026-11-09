@@ -62,6 +62,8 @@ public:
     void refresh_takes() override { c_.refresh_takes(); }
     bool select_take(const std::string &n) override { return c_.select_take(n); }
     bool play_take(const std::string &n) override { return c_.play_take(n); }
+    bool load(const std::string &n) override { return c_.load(n); }
+    bool preview_take(const std::string &n) override { return c_.preview_take(n); }
     int rename_take(const std::string &n, const std::string &p) override { return c_.rename_take(n, p); }
     int delete_take(const std::string &n) override { return c_.delete_take(n); }
     bool open_trim(const std::string &n) override { return c_.open_trim(n); }

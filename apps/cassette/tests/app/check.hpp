@@ -60,6 +60,7 @@ template <typename F> bool wait_until(F pred, int ms) {
 void test_record();      /* tone through fake ALSA to a WAV and back, idle meter, splits, no level control */
 void test_deck();        /* record timer, pause, scan, jump */
 void test_unplug();      /* unplug mid-take, replug, card at another index */
+void test_load();        /* LOAD: the loaded take, delete / rename / replace, the list's preview */
 void test_edit();        /* trim and splits, replace, app leave during a save, in-memory peaks */
 void test_faults();      /* abandoned take and repair, disk full, low space */
 void test_notes();       /* the capture path on screen: server notice, other-apps notice, lost audio (study 058) */

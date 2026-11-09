@@ -33,8 +33,8 @@
  *   Lock order: mu_ -> (result mutex | publish mutex | peak-pointer mutex). A command never waits for a worker.
  *
  * Decisions the plan did not fix (also listed in the T6a report):
- *   - the target of PLAY/REW/FWD is the "current take": the newest take at start, the one just recorded, or the one the
- *     user selected (select_take / play_take); deleting it moves the target to the newest take.
+ *   - the target of PLAY/REW/FWD is the LOADED take: the newest take at start, the one just recorded, or the one the
+ *     user loaded (load(); select_take / play_take also set it); deleting it leaves the deck empty.
  *   - wind mode and low cut are the same switch (the 80 Hz high-pass, D18); set_wind_mode() is an alias.
  *   - only WAV is implemented: set_format() refuses Flac and Opus (returns false).
  *   - changing the folder is refused while a take or countdown runs.
@@ -153,7 +153,10 @@ struct CardSnap {
 };
 
 struct TakeSnap {
-    std::string name;          /* file name of the current take (recording: the new take) */
+    std::string name;          /* file name of the LOADED take (recording: the new take); empty: nothing in the deck */
+    std::string playing_name;  /* the take the player has open while one plays, scans or is paused (a loaded take, or a
+                                * list preview of another one), else empty */
+    unsigned load_seq = 0;     /* counts load() calls (not the load at launch, a new recording, rename or replace) */
     std::string format_text;   /* "48k/16 WAV", "44.1k/16 stereo WAV" */
     uint64_t free_bytes = 0;
     double hours_left = 0;     /* at the current format */
@@ -310,6 +313,15 @@ public:
     void refresh_takes();
     bool select_take(const std::string &name);   /* makes it the current take */
     bool play_take(const std::string &name);     /* select + play from the start */
+    /* LOAD: puts the take into the deck (the one PLAY, REW and FWD act on): stops a playback or preview, counter at the
+     * start, nothing playing; counts snapshot().take.load_seq (the UI's cassette animation). Refused (false) while
+     * recording, paused recording or the record countdown, and for a take not in the list. Deleting the loaded take
+     * leaves the deck empty (take.name empty, PLAY dimmed); renaming it, or a trim / split saved with "replace
+     * original", keeps it loaded under the new name without counting a load. */
+    bool load(const std::string &name);
+    /* The list's preview: plays a take from its start WITHOUT loading it (the loaded take stays); a second call for
+     * another take switches. Stop it with key_event(Stop). Refused while recording. */
+    bool preview_take(const std::string &name);
     int rename_take(const std::string &name, const std::string &new_prefix, std::string *new_name = nullptr); /* 0 or -errno */
     int delete_take(const std::string &name);    /* 0 or -errno; -EBUSY while it plays or is open for trimming */
 

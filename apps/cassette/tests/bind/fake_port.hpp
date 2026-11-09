@@ -211,6 +211,16 @@ public:
         log("play_take " + n);
         return true;
     }
+    bool load(const std::string &n) override
+    {
+        log("load " + n);
+        return true;
+    }
+    bool preview_take(const std::string &n) override
+    {
+        log("preview_take " + n);
+        return true;
+    }
     int rename_take(const std::string &n, const std::string &p) override
     {
         log("rename_take " + n + " " + p);
