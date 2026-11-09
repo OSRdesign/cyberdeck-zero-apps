@@ -104,6 +104,8 @@ private:
     std::unique_ptr<Lamp> lim_, cut_, state_lamp_;
     lv_obj_t *peak_ = nullptr;
     bool peak_lit_ = false;
+    lv_obj_t *mon_lamp_ = nullptr, *mon_label_ = nullptr; /* the MON lamp (live monitor running), bottom left of the meter */
+    bool mon_shown_ = false, mon_lit_ = false;
     lv_obj_t *in_label_ = nullptr, *ch_l_ = nullptr, *ch_r_ = nullptr; /* IN (mono), L / R (stereo) */
     lv_obj_t *open_ = nullptr;
     lv_obj_t *strip_text_ = nullptr, *strip_lim_ = nullptr, *strip_cut_ = nullptr, *strip_state_ = nullptr;

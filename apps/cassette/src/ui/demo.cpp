@@ -91,6 +91,21 @@ void keys_recording(RecorderVm &r)
     r.keys[static_cast<int>(KeyId::Rec)].latched = true;
 }
 
+/* The MON lamp as the controller would show it: drawn with the Monitor rows (a card with a playback side), lit while the
+ * switch is on and nothing plays (playback, scanning and a list preview suspend the monitor). */
+void monitor_looks(ViewModel &vm)
+{
+    RecorderVm &r = vm.rec;
+    const SettingRow *sw = nullptr;
+    for (const SettingRow &row : vm.settings.rows)
+        if (row.id == "monitor") sw = &row;
+    const Transport t = r.transport;
+    const bool playing = t == Transport::Playing || t == Transport::PlayingPaused || t == Transport::ScanReverse ||
+                         t == Transport::ScanForward;
+    r.monitor_shown = sw != nullptr;
+    r.monitor_active = sw && sw->on && !playing && vm.list.previewing < 0;
+}
+
 } // namespace
 
 std::vector<float> demo_window_peaks(std::int64_t length_ms, std::int64_t marker_ms, std::int64_t span_ms, int n)
@@ -352,6 +367,7 @@ ViewModel demo_model(const std::string &scene)
         if (std::string(b) == "save") vm.save.shown = true;
         if (std::string(b) == "confirm") vm.confirm.shown = true;
     }
+    monitor_looks(vm);
     return vm;
 }
 
@@ -367,6 +383,7 @@ void DemoDriver::set_transport(Transport t)
     transport_looks(r);
     r.keys[static_cast<int>(KeyId::Rew)].latched = t == Transport::ScanReverse;
     r.keys[static_cast<int>(KeyId::Fwd)].latched = t == Transport::ScanForward;
+    monitor_looks(vm_);
 }
 
 /* The cassette and the strip name list row `i`; the counter at its start. */
@@ -523,6 +540,7 @@ UiActions DemoDriver::actions()
         if (id == "monitor")
             for (SettingRow &r : vm_.settings.rows)
                 if (r.id == "monitor_level") r.enabled = on;
+        monitor_looks(vm_);
         emit();
     };
     a.setting_slider = [this](const std::string &id, int pos) {

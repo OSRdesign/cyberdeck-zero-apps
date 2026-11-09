@@ -492,10 +492,36 @@ void test_settings()
         CHECK(find_row(map(m), "monitor_level")->value_text == "0 %");
         m.settings.monitor_level = 100;
         CHECK(find_row(map(m), "monitor_level")->pos == 20 && find_row(map(m), "monitor_level")->value_text == "100 %");
-        /* the card is gone: the rows go with it */
+        /* the MON lamp: shown with the rows; lit by the controller's REAL running state, not by the switch */
+        CHECK(mv.rec.monitor_shown);
+        CHECK(!mv.rec.monitor_active); /* switch on, the monitor not running (suspended or failed): dark */
+        m.card.monitor_active = true;
+        mv = map(m);
+        CHECK(mv.rec.monitor_shown && mv.rec.monitor_active);
+        {
+            Snapshot w = m; /* the switch off but the monitor still running (it stops on the next tick): the real state wins */
+            w.settings.monitor = false;
+            CHECK(map(w).rec.monitor_active);
+        }
+        m.card.monitor_active = false;
+        CHECK(!map(m).rec.monitor_active);
+        {
+            ui::ViewModel a = map(m), b = a;
+            CHECK(same(a, b));
+            b.rec.monitor_active = true; /* a change of the lamp alone is a change of the model */
+            CHECK(!same(a, b));
+            b = a;
+            b.rec.monitor_shown = false;
+            CHECK(!same(a, b));
+        }
+        /* the card is gone: the rows go with it, and the lamp */
         m.card.present = false;
+        m.card.monitor_active = true;
         CHECK(!find_row(map(m), "monitor") && !find_row(map(m), "monitor_level"));
+        CHECK(!map(m).rec.monitor_shown && !map(m).rec.monitor_active);
     }
+    /* a card without a playback side: no lamp */
+    CHECK(!vm.rec.monitor_shown && !vm.rec.monitor_active);
 
     /* other values */
     s.settings.record_timer_s = 10;

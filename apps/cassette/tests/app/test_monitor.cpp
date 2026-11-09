@@ -391,6 +391,39 @@ void t_stalled_sink_does_not_touch_the_take() {
     CHECK(wait_until([&] { return r.log.mon_closes.load() == 1u; }, 3000));
 }
 
+/* The snapshot's monitor_active is the REAL running state (the MON lamp): true while the sink plays, false once the sink
+ * dies under it although the switch stays on, and false while a take plays. */
+void t_active_is_the_real_state() {
+    MRig r(one_card());
+    make_take(r.rec(), kTake, 4.0);
+    r.msink.lost_at = 48000; /* the monitor's device goes away after about a second of output */
+    r.open();
+    Controller &c = r.ctl();
+    CHECK(r.wait_meter());
+    CHECK(c.set_monitor(true));
+    CHECK(r.wait_mon(true)); /* running: lit */
+    CHECK(r.snap().settings.monitor);
+    CHECK(r.wait_mon(false, 4000)); /* the sink died: dark, the switch still on */
+    Snapshot s = r.snap();
+    CHECK(s.settings.monitor);
+    CHECK(s.card.has_playback);
+    CHECK_EQ(count_notice(s, "Monitor unavailable"), 1);
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    CHECK(!r.monitor_active()); /* no retry by itself */
+    /* a toggle tries again; then PLAY suspends it while the switch stays on */
+    r.msink.lost_at = UINT64_MAX;
+    CHECK(c.set_monitor(false));
+    CHECK(c.set_monitor(true));
+    CHECK(r.wait_mon(true));
+    c.key_event(KeyEvent::PlayPause);
+    CHECK(r.wait_state(kDeckPlaying));
+    CHECK(r.wait_mon(false));
+    CHECK(r.snap().settings.monitor);
+    c.key_event(KeyEvent::Stop);
+    CHECK(r.wait_state(kDeckIdle));
+    CHECK(r.wait_mon(true));
+}
+
 void t_persistence() {
     MRig r(one_card());
     r.open();
@@ -429,5 +462,6 @@ void test_monitor_app() {
     t_live_and_levels();
     t_transitions();
     t_stalled_sink_does_not_touch_the_take();
+    t_active_is_the_real_state();
     t_persistence();
 }

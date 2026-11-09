@@ -97,6 +97,11 @@ struct RecorderVm {
     float countdown_fraction = 1.0f; /* Countdown: the red ring's remaining part, 1 = full, 0 = empty */
     std::int64_t counter_ms = 0; /* the counter: MM:SS, H:MM:SS from one hour (smaller digits) */
     MeterVm meter;
+    /* The MON lamp in the meter panel (not interactive): drawn only when the card has a playback side (where the Monitor
+     * settings exist); lit only while the live monitor really plays the microphone into it (Controller's
+     * CardSnap::monitor_active: switch on, sink open, not suspended by playback, trim or a list preview, not failed). */
+    bool monitor_shown = false;
+    bool monitor_active = false;
     TapeVm tape;
     InfoVm info;
     GainVm card;                 /* CARD stepper */

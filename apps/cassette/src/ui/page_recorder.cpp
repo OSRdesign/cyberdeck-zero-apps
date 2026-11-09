@@ -38,6 +38,16 @@ lv_obj_t *peak_lamp(lv_obj_t *parent, const Fit &fit, double x, double y)
     return o;
 }
 
+/* The MON lamp: 70 % of the PEAK lamp (8.4 board px), its centre on design y `cy`; drawn dark until set lit. */
+lv_obj_t *mon_lamp(lv_obj_t *parent, const Fit &fit, double x, double cy)
+{
+    const int d = std::max(5, fit.px(8.4));
+    lv_obj_t *o = box(parent, fit.x(x), fit.y(cy) - d / 2, d, d, col::kMonOff, LV_RADIUS_CIRCLE);
+    border(o, 1, col::kPeakEdge);
+    lv_obj_set_style_shadow_color(o, lv_color_hex(col::kMonOn), 0);
+    return o;
+}
+
 /* A plain linear Fit (no bands) with design y `dy` on screen y `sy`: a group of elements kept together at scale s */
 Fit anchored(const Fit &f, double dy, double sy)
 {
@@ -165,6 +175,10 @@ void RecorderPage::build_landscape()
     }
     lv_obj_t *tg = fit_label(root_, lo, Face::Bold, 9, col::kAmber, 372, 159, 46, 11, LV_TEXT_ALIGN_CENTER, 1.2);
     lv_label_set_text(tg, "TARGET");
+    /* MON: bottom left, under IN and the -40 label, on the TARGET caption's row (left of -40 is too narrow for it) */
+    mon_lamp_ = mon_lamp(root_, lo, 268, 164.5);
+    mon_label_ = fit_label(root_, lo, Face::Bold, 9, col::kScale, 280, 159, 0, 11, LV_TEXT_ALIGN_LEFT, 0.8);
+    lv_label_set_text(mon_label_, "MON");
 
     /* the info strip: the text left, the lamps right */
     box(root_, fit_.x(16), fit_.y(182), fit_.w(16, 448), fit_.h(182, 20), col::kStrip, fit_.px(5));
@@ -214,6 +228,10 @@ void RecorderPage::build_portrait()
     lv_obj_set_style_border_side(br, static_cast<lv_border_side_t>(LV_BORDER_SIDE_LEFT | LV_BORDER_SIDE_RIGHT | LV_BORDER_SIDE_BOTTOM), 0);
     lv_obj_t *tg = fit_label(root_, fit_, Face::Bold, 9, col::kAmber, 158, 270, 54, 11, LV_TEXT_ALIGN_CENTER, 1.2);
     lv_label_set_text(tg, "TARGET");
+    /* MON: bottom left, under IN and the -40 label, on the TARGET caption's row (as in landscape) */
+    mon_lamp_ = mon_lamp(root_, fit_, 26, 275.5);
+    mon_label_ = fit_label(root_, fit_, Face::Bold, 10, col::kScale, 38, 270, 0, 11, LV_TEXT_ALIGN_LEFT, 1);
+    lv_label_set_text(mon_label_, "MON");
 
     counter_ = std::make_unique<Counter>(root_, fit_, 16, 294, 88, 44, 15, 30, 8, 24, 6);
     list_btn_ = std::make_unique<IconButton>(root_, fit_, DRect{108, 294, 44, 44}, Icon::List, [this] { if (!window_->loading()) nav_.go(Screen::List); });
@@ -315,6 +333,19 @@ void RecorderPage::update_deck(const RecorderVm &rec)
         lv_obj_set_style_bg_color(peak_, lv_color_hex(lit ? col::kPeakOn : col::kPeakOff), 0);
         lv_obj_set_style_shadow_width(peak_, lit ? fit_.px(6) : 0, 0);
         lv_obj_set_style_shadow_color(peak_, lv_color_hex(col::kPeakOn), 0);
+    }
+    /* MON: only with a playback side; lit while the monitor runs; touched only when it changes */
+    if (first_ || rec.monitor_shown != mon_shown_) {
+        mon_shown_ = rec.monitor_shown;
+        show(mon_lamp_, mon_shown_);
+        show(mon_label_, mon_shown_);
+    }
+    const bool mon_lit = rec.monitor_shown && rec.monitor_active;
+    if (first_ || mon_lit != mon_lit_) {
+        mon_lit_ = mon_lit;
+        lv_obj_set_style_bg_color(mon_lamp_, lv_color_hex(mon_lit ? col::kMonOn : col::kMonOff), 0);
+        lv_obj_set_style_shadow_width(mon_lamp_, mon_lit ? fit_.px(4) : 0, 0);
+        lv_obj_set_style_text_opa(mon_label_, mon_lit ? LV_OPA_COVER : LV_OPA_50, 0);
     }
 
     const std::string state = info_state(rec);

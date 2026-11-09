@@ -419,6 +419,9 @@ ui::ViewModel map_view(const MapInput &in)
                 r.meter.ch[i].peak_lamp = s.meter.ch[i].peak_lamp;
             }
     }
+    /* the MON lamp: where the Monitor rows exist; lit by the monitor's REAL running state, not by the setting */
+    r.monitor_shown = present && s.card.has_playback;
+    r.monitor_active = r.monitor_shown && s.card.monitor_active;
 
     /* the take the cassette and the strip name: the take being recorded, the take playing (a list preview may play another
      * one than the loaded), else the LOADED take; with nothing loaded the strip names the take REC would write next and the
@@ -557,6 +560,7 @@ bool same(const ui::RecorderVm &a, const ui::RecorderVm &b)
         if (a.meter.ch[i].bar != b.meter.ch[i].bar || a.meter.ch[i].hold_bar != b.meter.ch[i].hold_bar ||
             a.meter.ch[i].peak_lamp != b.meter.ch[i].peak_lamp)
             return false;
+    if (a.monitor_shown != b.monitor_shown || a.monitor_active != b.monitor_active) return false;
     if (a.tape.loaded != b.tape.loaded || a.tape.label != b.tape.label || a.tape.side != b.tape.side ||
         a.tape.format != b.tape.format || a.tape.load_seq != b.tape.load_seq)
         return false;

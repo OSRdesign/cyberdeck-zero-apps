@@ -1,0 +1,10 @@
+title Cassette recorder at 480x800 (its own density), a card without a playback side: no MON lamp
+sizes 480x800
+env CASSETTE_DEMO idle
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot mon-lamp-none-tall
+expect notext "MON"
+expect notext "LAYOUT FAIL"
+expect noquit

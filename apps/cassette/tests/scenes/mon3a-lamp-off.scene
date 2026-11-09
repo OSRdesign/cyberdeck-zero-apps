@@ -1,0 +1,12 @@
+title Cassette recorder, a card with a playback side and Monitor off: the MON lamp bottom left of the meter panel, dark with a dim label
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_MONITOR off
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot mon-lamp-off
+expect text "MON"
+expect notext "LAYOUT FAIL"
+expect noquit

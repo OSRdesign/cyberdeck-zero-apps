@@ -320,6 +320,9 @@ compare the lengths.
 howl). Press STOP: it resumes. Also try REW / FWD held, and the list's preview (double tap): off while it plays, back
 after. With the record timer on (3 s): the monitor runs during the countdown.
 
+(c2) Watch the small **MON** lamp at the bottom left of the meter panel (under IN): the MON lamp is lit while the monitor
+runs, dark during PLAY and with the switch off. (A card without a playback side shows no MON lamp at all.)
+
 (d) With the Jabra Evolve 65 selected and Monitor Off: you still hear yourself, that is the headset's own hardware
 sidetone; Cassette cannot change it. (With Monitor On you hear a second, later copy: expected, switch it off.)
 

@@ -81,6 +81,9 @@ Four pages and two boxes:
   card and Esc close it. It cannot cost the take anything: the monitor reads a private copy through a lock-free ring that
   drops when it is full, and a monitor that fails or hangs only switches itself off (the info line says **Monitor
   unavailable**, for instance when another program holds the card's output); the recording goes on untouched.
+  The **MON** lamp at the bottom left of the meter panel (under IN) shows whether the monitor is playing right now: lit
+  green while it runs, dark with the switch off, while playback or the trim page suspends it and after a failure. It is
+  drawn only when the card has a playback side (where the Monitor rows exist) and is not a button.
   **Use headphones.** With speakers the microphone hears the monitor and you get an echo or a howl; that is why the
   monitor is off by default and never plays during playback. A headset such as the Jabra Evolve 65 has its own hardware
   sidetone: you hear yourself even with Monitor off, it is not an ALSA control and Cassette cannot change or switch it

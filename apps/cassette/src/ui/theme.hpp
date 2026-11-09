@@ -38,6 +38,7 @@ constexpr std::uint32_t kWhite = 0xFFFFFF;
 constexpr std::uint32_t kLedGreen = 0x3FD166, kLedAmber = 0xF0B400, kLedRed = 0xFF4D3A;
 constexpr std::uint32_t kInLabel = 0xD8DCDF, kScale = 0xC9CDD0, kAmber = 0xF0B400;
 constexpr std::uint32_t kPeakOff = 0x4A1612, kPeakOn = 0xE5372B, kPeakEdge = 0x14171A;
+constexpr std::uint32_t kMonOff = 0x163F22, kMonOn = kLedGreen; /* the MON lamp: dark green, the low bars' green */
 constexpr std::uint32_t kCounterBox = 0x0A0A0A, kCounterEdge = 0x3A3F44, kCell = 0x141516, kDigit = 0xF4F1E8;
 
 /* cassette */
