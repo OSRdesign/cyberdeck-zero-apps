@@ -55,7 +55,8 @@ It stops a playback or preview, closes the list and puts the take into the deck 
 cassette drops out, the new one falls in, the name is written on the label; 0.9 s). PLAY then plays the loaded take. The
 loaded take also changes when a recording stops (the new take, no animation) and at launch (the last take, no
 animation); renaming it or replacing it by a trim or split keeps it loaded, deleting it empties the deck (the window shows
-only OPEN, PLAY is dimmed). Keys and touches are ignored during the animation, except Esc, which ends the animation at once
+a blank cassette, with no name on the label, at once; PLAY is dimmed). LOAD over the blank cassette is the same 0.9 s swap as
+between two named cassettes. Keys and touches are ignored during the animation, except Esc, which ends the animation at once
 and then acts as usual.
 
 ## Trim and split

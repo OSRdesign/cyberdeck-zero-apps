@@ -328,6 +328,24 @@ screen. Plug it back: the app finds the card again and the monitor comes back by
 
 Report: pass or fail per step, how the delay felt (none / small / annoying), anything cut off in the Settings rows.
 
+## B14. Blank cassette (any board, 5 min)
+
+Goal: with no take loaded the recorder shows a blank cassette in the deck, never an empty window.
+
+1. Start with an empty recordings folder (move `~/Recordings` aside) and open Cassette. Expected: from the first frame the
+   cassette is in the window (shell, window, still hubs, SIDE A, the format such as `WAV 48k`), the label is blank paper
+   with no handwriting, OPEN stays at the window corner, the strip names the take REC would write next.
+2. Press REC (after the countdown, if one is set). Expected: the hubs start to turn; the cassette does not drop in or
+   appear again.
+3. STOP, then open Recordings, LOAD the new take. Expected: the same 0.9 s swap as between two named cassettes (the old
+   one drops out, the new one falls in, the name is written).
+4. Delete that take (Recordings, DELETE, confirm), Esc. Expected: the blank cassette is back at once, no animation, no
+   name, PLAY dimmed.
+5. With a blank cassette in the deck, record a take and LOAD it from the list again. Expected: the blank one drops out first.
+6. Check 320x480 and 640x480 boards if you have them: nothing cut or overlapping.
+
+Report: pass or fail per step, a photo of step 1 and step 4.
+
 ## Results
 
 | Test | Board | Pass / fail | Notes |
@@ -346,6 +364,7 @@ Report: pass or fail per step, how the delay felt (none / small / annoying), any
 | B11 notices and errors |  |  |  |
 | B12 speech-only headset |  |  |  |
 | B13 live monitor |  |  |  |
+| B14 blank cassette |  |  |  |
 
 **What to send back:** the table; the probe output per board (B0); the `watch` and `take` outputs of B1, B3, B4; the
 `ui` log line per board; the notice texts as you read them; screenshots or photos of anything cut, overlapping or odd.

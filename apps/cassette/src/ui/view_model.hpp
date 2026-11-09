@@ -51,10 +51,11 @@ struct MeterVm {
 
 /* The cassette in the window. */
 struct TapeVm {
-    bool loaded = true;          /* false: no cassette in the window: only OPEN (nothing loaded), or the message of the
-                                  * no-sound-input state (RecorderVm::input_present) */
-    std::string label;           /* the handwritten name, "Take 007": the loaded take, the take recording or playing; blank
-                                  * (and loaded = false) with nothing in the deck */
+    bool loaded = true;          /* a cassette is in the deck (drawn); false only in the no-sound-input state, where the window
+                                  * shows its message (RecorderVm::input_present). With no take loaded it stays true and the
+                                  * label is empty: the BLANK cassette (no name on the label) */
+    std::string label;           /* the handwritten name, "Take 007": the loaded take, the take recording or playing; empty
+                                  * (the blank cassette) with nothing in the deck */
     std::uint32_t load_seq = 0;  /* counts LOADs from the list: when it moves the window plays the cassette load animation
                                   * (ui/load_anim.hpp). A new recording, a rename and the take loaded at launch do not move it */
     std::string side = "SIDE A";

@@ -37,7 +37,8 @@ Each comes from a scene in `tests/scenes` (named below): the build writes its PN
 Four pages and two boxes:
 
 - **Recorder** (the first page). The cassette window with two hubs that turn while the deck runs (no tape is drawn),
-  the take's name on the label, the counter, the **Recordings** (L) and **Settings** (S) buttons beside it, the LED
+  the take's name on the label (with no take loaded, at first start or after the last one is deleted, a blank cassette
+  sits in the deck with an empty label, so REC only starts the hubs), the counter, the **Recordings** (L) and **Settings** (S) buttons beside it, the LED
   meter (15 steps over -40 to 0 dBFS, one bar per channel, peak hold, the PEAK lamp, the target zone from -18 to
   -6 dBFS marked on the scale), the **CARD** stepper (the card's own level, only when the card has a level control) and
   the **SOFT** stepper (software gain 0 to +24 dB on top of the card's level, with a clip counter; SOFT takes the full
@@ -55,7 +56,7 @@ Four pages and two boxes:
   sound card or headset." and a card plugged in later is found by itself.
 - **Recordings.** The takes in the folder, newest first, with their length and size; LOAD, RENAME, TRIM and DELETE
   (which asks first). A take repaired after a power cut is marked as such. LOAD puts the take into the deck with a
-  cassette animation (the old cassette drops out, the new one falls in with a small bounce, the name is written onto the
+  cassette animation (the old cassette, or the blank one, drops out, the new one falls in with a small bounce, the name is written onto the
   label in handwriting; 0.9 s, keys are ignored meanwhile but Esc) and PLAY then plays that take; it is dimmed while a
   take records. A double tap or Enter on a row previews the take, again on the same row stops the preview and rewinds it;
   closing the list stops it. Previewing never changes the loaded take.

@@ -18,7 +18,9 @@
  *   paused         a recording paused
  *   noinput        no sound input found
  *   idle           nothing running, Take 006 loaded (the default)
- *   deckempty      nothing running and nothing loaded: the window shows only OPEN, PLAY is dimmed
+ *   deckempty      nothing running and no take loaded: the blank cassette (no name on the label), PLAY is dimmed
+ *   notakes        the same with an empty recordings list
+ *   onetake        idle, Take 006 loaded and the only take in the list (deleting it brings the blank cassette)
  *   stereo         recording two channels
  *   long           recording for more than an hour (H:MM:SS)
  * plus, for every state, the settings rows, five takes and the trim state of Take 006 (two splits, the second
@@ -36,6 +38,7 @@
 
 #include "view_model.hpp"
 
+#include <algorithm>
 #include <functional>
 #include <string>
 
@@ -50,7 +53,13 @@ std::vector<float> demo_overview_peaks(std::int64_t length_ms, int n);
 
 class DemoDriver {
 public:
-    explicit DemoDriver(ViewModel vm) : vm_(std::move(vm)) { loaded_ = vm_.rec.tape.loaded ? 1 : -1; }
+    explicit DemoDriver(ViewModel vm) : vm_(std::move(vm))
+    {
+        loaded_ = -1;
+        if (vm_.rec.tape.loaded && !vm_.rec.tape.label.empty()) {
+            loaded_ = std::min(1, static_cast<int>(vm_.list.takes.size()) - 1); /* Take 006: the second row, the only one in "onetake" */
+        }
+    }
     /* The actions; after each change `changed` runs with the new model (bind it to CassetteUi::update). */
     UiActions actions();
     std::function<void(const ViewModel &)> changed;
