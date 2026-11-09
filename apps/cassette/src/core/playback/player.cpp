@@ -431,9 +431,11 @@ bool Player::pump() {
         publish();
         return true;
     }
-    if (reverse && pos_ == 0) {
+    if (reverse && pos_ == 0) { /* the start ends a reverse scan as the end ends a forward one: Stopped at 0 */
         sink_.drain();
-        held_ = true;
+        close_sink();
+        st_ = PlayerState::Stopped;
+        held_ = false;
         post(PlayerEvent::ReachedStart);
         publish();
         return true;

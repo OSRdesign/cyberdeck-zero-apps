@@ -147,7 +147,8 @@ void test_scan() {
         CHECK_EQ(p.end_scan(), 0); /* the key released after the end: nothing to do */
         CHECK(p.state() == PlayerState::Stopped);
     }
-    /* reaching the start: ReachedStart once, held at 0 while the key is down; release plays from the start */
+    /* reaching the start: like the end while scanning forward: ReachedStart once, Stopped at 0 (the take stays open);
+     * a release afterwards is a no-op; play() then plays from the start */
     {
         const uint64_t len = 20000;
         const auto s = ramp_samples(len, 1);
@@ -164,16 +165,53 @@ void test_scan() {
         CHECK(sink.heard() == rev_cue(s, 1, 2002, 401));
         CHECK_EQ(sink.heard().back(), box(s, 1, 0, 0, 2));
         CHECK(p.step()); /* the start */
-        CHECK(p.at_start_hold());
-        CHECK(p.state() == PlayerState::Scanning);
-        CHECK(!p.step()); /* held: nothing more */
+        CHECK(!p.at_start_hold());
+        CHECK(p.state() == PlayerState::Stopped);
+        CHECK_EQ(p.position(), 0u);
+        CHECK(!p.step()); /* stopped: nothing more */
         auto ev = events(p);
         CHECK(ev.size() == 1 && ev[0] == PlayerEvent::ReachedStart);
-        CHECK_EQ(p.end_scan(), 0);
+        CHECK_EQ(p.end_scan(), 0); /* the key released after the start: nothing to do */
+        CHECK(p.state() == PlayerState::Stopped);
+        CHECK_EQ(p.position(), 0u);
+        CHECK(events(p).empty());
+        CHECK_EQ(p.play(), 0);
         CHECK(p.state() == PlayerState::Playing);
         sink.clear_heard();
         p.step();
         CHECK(sink.heard() == slice(s, 1, 0, 1024));
+    }
+    /* a scan that starts at its end: reverse at 0 (a cued take) and forward at the end stop at once, nothing is heard */
+    {
+        const uint64_t len = 20000;
+        const auto s = ramp_samples(len, 1);
+        const std::string path = d.file("atend.wav");
+        write_wav(path, afmt(48000, 1, 16), s);
+        FakeSink sink;
+        Player p(posix_file_ops(), sink, Player::Mode::Manual);
+        CHECK_EQ(p.open(path), 0);
+        CHECK_EQ(p.scan(Direction::Reverse), 0);
+        CHECK(p.step());
+        CHECK(p.state() == PlayerState::Stopped);
+        CHECK_EQ(p.position(), 0u);
+        CHECK(!p.step());
+        auto ev = events(p);
+        CHECK(ev.size() == 1 && ev[0] == PlayerEvent::ReachedStart);
+        CHECK_EQ(p.end_scan(), 0);
+        CHECK(p.state() == PlayerState::Stopped);
+        CHECK_EQ(sink.heard_frames(), 0u);
+        CHECK_EQ(p.seek(len), 0);
+        CHECK_EQ(p.pause(), 0);
+        CHECK_EQ(p.scan(Direction::Forward), 0);
+        CHECK(p.step());
+        CHECK(p.state() == PlayerState::Stopped);
+        CHECK_EQ(p.position(), len);
+        CHECK(!p.step());
+        ev = events(p);
+        CHECK(ev.size() == 1 && ev[0] == PlayerEvent::ReachedEnd);
+        CHECK_EQ(p.end_scan(), 0);
+        CHECK(p.state() == PlayerState::Stopped);
+        CHECK_EQ(sink.heard_frames(), 0u);
     }
     /* a scan of a cued (stopped) take counts as paused; speeds other than 5 */
     {
