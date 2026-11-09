@@ -197,10 +197,10 @@ ViewModel demo_model(const std::string &scene)
         r.info.format.clear();
         r.info.limiter = false;
         r.info.low_cut = false;
-    } else { /* idle */
+    } else { /* idle: Take 006 is loaded (the list's highlighted row) */
         r.transport = Transport::Idle;
-        r.tape.label = "Take 008";
-        r.info.take = "TAKE 008";
+        r.tape.label = "Take 006";
+        r.info.take = "TAKE 006";
         r.meter.ch[0].bar = 2;
         r.meter.ch[0].hold_bar = 0;
     }
@@ -263,6 +263,8 @@ ViewModel demo_model(const std::string &scene)
                take("004", "nodate \xC2\xB7 41 s \xC2\xB7 4 MB", 41000),
                take("003", "2 Nov \xC2\xB7 1 h 02 \xC2\xB7 357 MB", 3720000)};
     l.selected = 1;
+    l.can_load = r.transport != Transport::Recording && r.transport != Transport::RecordingPaused &&
+                 r.transport != Transport::Countdown;
     l.take_count = 12;
     l.folder = "~/Recordings";
     l.free_space = "41 GB";
@@ -314,12 +316,37 @@ void DemoDriver::set_transport(Transport t)
     RecorderVm &r = vm_.rec;
     r.transport = t;
     const bool rec = t == Transport::Recording || t == Transport::RecordingPaused || t == Transport::Countdown;
+    vm_.list.can_load = !rec;
     r.keys[static_cast<int>(KeyId::Rew)].enabled = !rec;
     r.keys[static_cast<int>(KeyId::Fwd)].enabled = !rec;
     r.keys[static_cast<int>(KeyId::Rec)].latched = t == Transport::Recording || t == Transport::RecordingPaused;
     transport_looks(r);
     r.keys[static_cast<int>(KeyId::Rew)].latched = t == Transport::ScanReverse;
     r.keys[static_cast<int>(KeyId::Fwd)].latched = t == Transport::ScanForward;
+}
+
+/* The cassette and the strip name list row `i`; the counter at its start. */
+void DemoDriver::show_take(int i)
+{
+    if (i < 0 || i >= static_cast<int>(vm_.list.takes.size())) return;
+    const TakeRow &t = vm_.list.takes[static_cast<std::size_t>(i)];
+    RecorderVm &r = vm_.rec;
+    r.tape.label = t.name;
+    r.info.take = "TAKE " + t.sticker;
+    r.info.play_pos_ms = 0;
+    r.info.play_len_ms = t.length_ms;
+    r.counter_ms = 0;
+}
+
+/* Ends a list preview: nothing plays, the loaded take is in the deck again. */
+void DemoDriver::stop_preview()
+{
+    if (previewing_ < 0) return;
+    previewing_ = -1;
+    vm_.list.previewing = -1;
+    set_transport(Transport::Idle);
+    show_take(loaded_);
+
 }
 
 void DemoDriver::deck(KeyId k, KeyEdge e)
@@ -349,11 +376,11 @@ void DemoDriver::deck(KeyId k, KeyEdge e)
     } else if (k == KeyId::PlayPause) {
         if (t == Transport::Idle) {
             set_transport(Transport::Playing);
-            r.tape.label = "Take 006";
-            r.info.take = "TAKE 006";
-            r.info.play_pos_ms = 5 * 60000 + 44000;
-            r.info.play_len_ms = 12 * 60000 + 8000;
-            r.counter_ms = r.info.play_pos_ms;
+            show_take(loaded_);
+            if (loaded_ == 1) { /* Take 006 plays from 05:44 in the scenes */
+                r.info.play_pos_ms = 5 * 60000 + 44000;
+                r.counter_ms = r.info.play_pos_ms;
+            }
         } else if (t == Transport::Playing) set_transport(Transport::PlayingPaused);
         else if (t == Transport::PlayingPaused) set_transport(Transport::Playing);
         else if (t == Transport::Recording) set_transport(Transport::RecordingPaused);
@@ -425,9 +452,13 @@ UiActions DemoDriver::actions()
         vm_.notice.clear();
         emit();
     };
-    a.open = [](Screen s) {
+    a.open = [this](Screen s) {
         static const char *const n[4] = {"recorder", "settings", "list", "trim"};
         log_action(std::string("open ") + n[static_cast<int>(s)]);
+        if (s != Screen::List && previewing_ >= 0) { /* closing the list ends its preview */
+            stop_preview();
+            emit();
+        }
     };
     a.setting_choice = [this](const std::string &id, int c) {
         log_action("setting_choice " + id + " " + std::to_string(c));
@@ -466,17 +497,29 @@ UiActions DemoDriver::actions()
         vm_.list.selected = i;
         emit();
     };
-    a.list_activate = [](int i) { log_action("list_activate " + std::to_string(i)); };
-    a.list_play = [this](int i) {
-        log_action("list_play " + std::to_string(i));
-        if (i < 0 || i >= static_cast<int>(vm_.list.takes.size())) return;
-        const TakeRow &t = vm_.list.takes[static_cast<std::size_t>(i)];
-        set_transport(Transport::Playing);
-        vm_.rec.tape.label = t.name;
-        vm_.rec.info.take = "TAKE " + t.sticker;
-        vm_.rec.info.play_pos_ms = 0;
-        vm_.rec.info.play_len_ms = t.length_ms;
-        vm_.rec.counter_ms = 0;
+    a.list_activate = [this](int i) {
+        log_action("list_activate " + std::to_string(i));
+        if (i < 0 || i >= static_cast<int>(vm_.list.takes.size()) || !vm_.list.can_load) return;
+        if (previewing_ == i) { /* the previewing row again: stop and rewind, no restart */
+            stop_preview();
+        } else { /* another row: the preview switches to it */
+            previewing_ = i;
+            vm_.list.previewing = i;
+            set_transport(Transport::Playing);
+            show_take(i);
+        }
+        emit();
+    };
+    a.list_load = [this](int i) {
+        log_action("list_load " + std::to_string(i));
+        if (i < 0 || i >= static_cast<int>(vm_.list.takes.size()) || !vm_.list.can_load) return;
+        previewing_ = -1;
+        vm_.list.previewing = -1;
+        loaded_ = i;
+        set_transport(Transport::Idle);
+        show_take(i);
+        vm_.rec.tape.loaded = true;
+        ++vm_.rec.tape.load_seq;
         emit();
     };
     a.list_rename = [this](int i, const std::string &p) {

@@ -15,8 +15,9 @@
  * header's Esc button does what Esc does.
  *   Recorder    R REC, Space PLAY/PAUSE, X STOP, comma REW, period FWD (the press and the release reach the deck:
  *               holding REW / FWD scans), L the recordings, S the settings
- *   Recordings  Up / Down move the selection, Enter PLAY, N RENAME, T TRIM, Delete DELETE (the controller asks in the
- *               confirm box), S the settings, Esc the recorder
+ *   Recordings  Up / Down move the selection, Enter PREVIEW (again on the previewing row: stop), L LOAD (the take goes
+ *               into the deck, the recorder shows; dimmed while recording), N RENAME, T TRIM, Delete DELETE (the
+ *               controller asks in the confirm box), S the settings, Esc the recorder (the preview stops)
  *   Trim        Left / Right move the marker 0.1 s (Shift 1 s), Up zoom in, Down zoom out, I SET IN, O SET OUT,
  *               Enter SPLIT (REMOVE while a flag is selected), Tab select the next flag, Space PLAY, S SAVE, Esc back
  *               to the list (nothing saved)

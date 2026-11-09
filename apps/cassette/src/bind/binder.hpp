@@ -20,9 +20,10 @@
  *                  set_prefix (a refused prefix gives a notice), split -> set_auto_split; channels: nothing
  *   pages          Settings -> refresh_cards; List -> refresh_takes and the highlight back on the current take; leaving
  *                  the trim page stops the preview and closes it (after a running save has finished)
- *   list           select -> select_take; activate (Enter, a tap on the highlighted row) and PLAY -> play_take; RENAME ->
- *                  rename_take; TRIM -> stop a playback, open_trim (refused: back to the list); DELETE -> the confirm
- *                  box, then delete_take
+ *   list           select -> the highlight only (nothing is loaded); activate (Enter, a tap on the highlighted row) ->
+ *                  preview_take, or Stop (stop and rewind) when that take is the one playing; LOAD -> load (refused while
+ *                  recording); leaving the list stops the preview it started; RENAME -> rename_take; TRIM -> stop a
+ *                  playback, open_trim (refused: back to the list); DELETE -> the confirm box, then delete_take
  *   trim           ZOOM -> set_zoom (down to a 2 s window), POSITION / keys -> move_position, a drag -> set_position
  *                  (coalesced), SET IN / SET OUT / SPLIT / REMOVE / a flag tap -> set_in / set_out / add_split /
  *                  remove_split / select_split, PLAY -> preview(toggle), SAVE -> the save box with the names a save would
@@ -107,6 +108,7 @@ private:
     Options opt_;
     Inbox inbox_;
     bool left_ = false;
+    bool list_preview_ = false; /* the list started a preview that closing it must stop */
 
     /* UI thread */
     Snapshot snap_;

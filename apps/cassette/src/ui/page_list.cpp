@@ -4,7 +4,9 @@
  * Cassette UI: the recordings list (boards CassetteList-480x320 / -320x480): the strip (take count, folder, free
  * space), one row per take (the label sticker in the bold face, name, date / length / size, the length in the counter
  * face in landscape, the chevron; the selected row darker), the boards' scroll bar, PLAY, RENAME, TRIM, DELETE (red)
- * and, in landscape, the hint line. A tap selects a row, a tap on the selected row activates it (Enter too); the list
+ * and, in landscape, the hint line. A tap selects a row, a tap on the selected row activates it (Enter too: it previews
+ * the take, a second one on the previewing row stops the preview); LOAD (key L) puts the take into the deck and shows the
+ * recorder, dimmed while a take records; the list
  * scrolls from a drag that starts anywhere in it (the list is clickable, the mmWave lesson).
  */
 #include "pages.hpp"
@@ -51,8 +53,8 @@ ListPage::ListPage(lv_obj_t *parent, const Frame &frame, const UiActions &action
                  col::kScrollTrack, fit_.px(3));
     thumb_ = box(root_, fit_.x(tx), fit_.y(78), fit_.w(tx, 6), fit_.px(40), col::kHinge, fit_.px(3));
 
-    static const Icon icons[4] = {Icon::Play, Icon::Pencil, Icon::Scissors, Icon::Delete};
-    static const char *const names[4] = {"PLAY", "RENAME", "TRIM", "DELETE"};
+    static const Icon icons[4] = {Icon::Load, Icon::Pencil, Icon::Scissors, Icon::Delete};
+    static const char *const names[4] = {"LOAD", "RENAME", "TRIM", "DELETE"};
     for (int i = 0; i < 4; ++i) {
         const DRect r = p ? DRect{16.0 + 70 * i, 396, 66, 64} : DRect{16.0 + 109 * i, 222, 104, 56};
         keys_[i] = std::make_unique<PianoKey>(root_, fit_, r, KeyType{12, 1.5, 4}, [this, i](KeyEdge e) {
@@ -112,7 +114,11 @@ void ListPage::key(int which)
     const int i = vm_.selected;
     if (i < 0 || i >= static_cast<int>(vm_.takes.size())) return;
     switch (which) {
-    case 0: if (act_.list_play) act_.list_play(i); break;
+    case 0:
+        if (!vm_.can_load) break;
+        if (act_.list_load) act_.list_load(i);
+        if (nav_.go) nav_.go(Screen::Recorder);
+        break;
     case 1: if (nav_.rename) nav_.rename(i); break;
     case 2:
         if (act_.list_trim) act_.list_trim(i);
@@ -121,6 +127,13 @@ void ListPage::key(int which)
     case 3: if (act_.list_delete) act_.list_delete(i); break;
     default: break;
     }
+}
+
+void ListPage::activate()
+{
+    const int i = vm_.selected;
+    if (i < 0 || i >= static_cast<int>(vm_.takes.size())) return;
+    if (act_.list_activate) act_.list_activate(i);
 }
 
 void ListPage::update(const ListVm &l)
@@ -182,7 +195,10 @@ void ListPage::update(const ListVm &l)
     }
     if (hint_) set_fitted(hint_, Face::Medium, fit_.px(13), 0, std::max(9, fit_.px(11)), list_hint(l));
     const bool any = l.selected >= 0 && l.selected < static_cast<int>(l.takes.size());
-    for (auto &k : keys_) lv_obj_set_style_opa_layered(k->obj(), static_cast<lv_opa_t>(any ? 255 : 89), 0);
+    /* all four dimmed (35 %) without a selected row; LOAD also while a take records (can_load) */
+    for (int i = 0; i < 4; ++i)
+        lv_obj_set_style_opa_layered(keys_[static_cast<std::size_t>(i)]->obj(),
+                                     static_cast<lv_opa_t>(any && (i != 0 || l.can_load) ? 255 : 89), 0);
     if (l.selected != old_sel && any) lv_obj_scroll_to_view(rows_[static_cast<std::size_t>(l.selected)].obj, LV_ANIM_OFF);
     update_scrollbar();
 }

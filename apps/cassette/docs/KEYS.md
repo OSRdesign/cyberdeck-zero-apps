@@ -37,12 +37,26 @@ does not change (it plays, pauses and resumes). The same at every screen size:
 | Key | Does |
 |---|---|
 | Up / Down | move the selection |
-| Enter | PLAY the selected take |
+| Enter | PREVIEW the selected take; Enter again on the take that previews stops it and rewinds it to the start |
+| L | LOAD the selected take into the deck (the recorder shows, the take ready at 00:00, nothing playing) |
 | N | RENAME (the text box) |
 | T | TRIM (the trim and split page) |
 | Delete | DELETE (asks in the confirm box) |
 | S | the settings |
-| Esc | back to the recorder |
+| Esc | back to the recorder (a running preview stops) |
+
+A double tap on a row is Enter: it previews that take. A single tap only selects. A second double tap on the row that is
+previewing stops the preview and rewinds it (it does not restart); a double tap on another row switches the preview to
+it. The preview also stops when the list is closed (Esc, or S for the settings) and when LOAD is used. A preview never
+changes which take is loaded.
+
+LOAD (the LOAD key on screen, or L) is dimmed while a take records, a recording is paused or the record countdown runs.
+It stops a playback or preview, closes the list and puts the take into the deck with the cassette animation (the old
+cassette drops out, the new one falls in, the name is written on the label; 0.9 s). PLAY then plays the loaded take. The
+loaded take also changes when a recording stops (the new take, no animation) and at launch (the last take, no
+animation); renaming it or replacing it by a trim or split keeps it loaded, deleting it empties the deck (the window shows
+only OPEN, PLAY is dimmed). Keys and touches are ignored during the animation, except Esc, which ends the animation at once
+and then acts as usual.
 
 ## Trim and split
 

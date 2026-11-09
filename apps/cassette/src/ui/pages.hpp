@@ -174,8 +174,11 @@ public:
     int selected() const { return vm_.selected; }
     /* The notice replaces the hint line (landscape) or the top strip (narrow; the list moves down for a taller one). */
     void set_notice(const std::string &text);
-    /* The four keys on the selected take: 0 PLAY, 1 RENAME, 2 TRIM, 3 DELETE. */
+    /* The four keys on the selected take: 0 LOAD, 1 RENAME, 2 TRIM, 3 DELETE. LOAD does nothing while the model says
+     * can_load = false (recording); otherwise it loads the take and shows the recorder. */
     void key(int which);
+    /* Enter or a second tap on the selected row: PREVIEW the take (a second one on the previewing row stops it). */
+    void activate();
 
 private:
     struct Row {

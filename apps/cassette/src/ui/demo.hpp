@@ -69,7 +69,11 @@ private:
     void refresh_trim();
     void deck(KeyId k, KeyEdge e);
     void set_transport(Transport t);
+    void show_take(int index); /* the cassette and the strip name list row `index`, counter at its start */
+    void stop_preview();
     ViewModel vm_;
+    int loaded_ = 1;      /* the list row in the deck (Take 006: what PLAY plays) */
+    int previewing_ = -1; /* the list row previewing (list_activate), -1 none */
     Transport before_scan_ = Transport::Playing;
     int pending_delete_ = -1; /* the take the confirm box asks about (-1: the replace of the save box) */
 };

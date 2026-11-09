@@ -377,7 +377,8 @@ void CassetteUi::Impl::on_keyboard(const key_item &item)
         if (up) list->on_key(LV_KEY_UP);
         else if (down) list->on_key(LV_KEY_DOWN);
         else if (!press) break;
-        else if (enter) list->key(0);
+        else if (enter) list->activate();
+        else if (is(KEY_L, 'l')) list->key(0);
         else if (is(KEY_N, 'n')) list->key(1);
         else if (is(KEY_T, 't')) list->key(2);
         else if (code == KEY_DELETE) list->key(3);

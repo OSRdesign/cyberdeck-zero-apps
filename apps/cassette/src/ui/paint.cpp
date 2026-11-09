@@ -350,6 +350,14 @@ void icon(lv_layer_t *layer, Icon ic, int cx, int cy, double s, std::uint32_t c,
         line(layer, k.x(8.5), k.y(13.5), k.x(19), k.y(2.5), w, c, opa, true);
         break;
     }
+    case Icon::Load: {
+        /* a cassette (outline, two reels) going into its slot: the slot is a bar under it */
+        frame(layer, area(k.x(4), k.y(0.5), k.x(18) - k.x(4), k.y(9.5) - k.y(0.5)), c, std::max(1, stroke(1.6, s)), stroke(1.5, s), opa);
+        disc(layer, k.x(8.5), k.y(5), std::max(1, stroke(1.5, s)), c, opa);
+        disc(layer, k.x(13.5), k.y(5), std::max(1, stroke(1.5, s)), c, opa);
+        fill(layer, area(k.x(2), k.y(12), k.x(20) - k.x(2), std::max(2, k.y(14.4) - k.y(12))), c, stroke(1, s), opa);
+        break;
+    }
     case Icon::Pencil:
         triangle(layer, k.x(3), k.y(13), k.x(3), k.y(10), k.x(6), k.y(13), c, opa);
         triangle(layer, k.x(3), k.y(10), k.x(12), k.y(1), k.x(6), k.y(13), c, opa);

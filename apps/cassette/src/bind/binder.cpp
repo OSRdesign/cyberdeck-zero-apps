@@ -114,10 +114,18 @@ ui::UiActions Binder::actions()
     a.open = [this](ui::Screen s) {
         const ui::Screen was = screen_;
         screen_ = s;
+        if (was == ui::Screen::List && s != ui::Screen::List && list_preview_) {
+            /* closing the list ends the preview the list started (a playback the recorder started goes on) */
+            list_preview_ = false;
+            post([this] {
+                if (playing_family(port_.snapshot().deck.state)) port_.key_event(KeyEvent::Stop);
+            });
+        }
         if (was == ui::Screen::Trim && s != ui::Screen::Trim) leave_trim();
         if (s == ui::Screen::Settings) post([this] { port_.refresh_cards(); });
         if (s == ui::Screen::List) {
-            local_.list_sel = select_after_nav_; /* empty: the current take */
+            list_preview_ = false;
+            local_.list_sel = select_after_nav_; /* empty: the loaded take */
             select_after_nav_.clear();
             post([this] { port_.refresh_takes(); });
         }
@@ -184,14 +192,28 @@ ui::UiActions Binder::actions()
     a.list_select = [this](int i) {
         const std::string name = take_at(i);
         if (name.empty()) return;
-        local_.list_sel = name;
-        post([this, name] { port_.select_take(name); });
+        local_.list_sel = name; /* the highlight only: what is loaded changes with LOAD alone */
     };
     a.list_activate = [this](int i) {
         const std::string name = take_at(i);
-        if (!name.empty()) post([this, name] { port_.play_take(name); });
+        if (name.empty()) return;
+        list_preview_ = true;
+        post([this, name] {
+            const Snapshot s = port_.snapshot();
+            if (recording_family(s.deck.state)) return;
+            if (playing_family(s.deck.state) && s.take.playing_name == name) port_.key_event(KeyEvent::Stop); /* stop and rewind */
+            else port_.preview_take(name); /* start, or switch to this take */
+        });
     };
-    a.list_play = a.list_activate;
+    a.list_load = [this](int i) {
+        const std::string name = take_at(i);
+        if (name.empty() || (have_vm_ && !vm_.list.can_load)) return;
+        list_preview_ = false; /* the load stops the preview itself */
+        local_.list_sel = name;
+        post([this, name] {
+            if (!port_.load(name)) notice_from_job("The take could not be loaded");
+        });
+    };
     a.list_rename = [this](int i, const std::string &prefix) {
         const std::string name = take_at(i);
         if (name.empty() || prefix == vm_.list.takes[static_cast<size_t>(i)].prefix) return;

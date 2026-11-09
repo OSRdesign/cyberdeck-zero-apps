@@ -391,19 +391,34 @@ ui::ViewModel map_view(const MapInput &in)
             }
     }
 
-    /* the take the cassette and the strip name */
+    /* the take the cassette and the strip name: the take being recorded, the take playing (a list preview may play another
+     * one than the loaded), else the LOADED take; with nothing loaded the strip names the take REC would write next and the
+     * window shows no cassette */
     std::string take_name;
-    if ((rec_side || play_side) && !s.take.name.empty()) {
+    std::string tape_fmt = s.take.format_text;
+    const bool have_loaded = !s.take.name.empty();
+    if (rec_side && have_loaded) {
         take_name = display_name(s.take.name);
+    } else if (play_side && (have_loaded || !s.take.playing_name.empty())) {
+        const std::string &pn = s.take.playing_name.empty() ? s.take.name : s.take.playing_name;
+        take_name = display_name(pn);
+        for (const TakeRow &t : rows)
+            if (t.name == pn && !t.format_text.empty()) tape_fmt = t.format_text;
+    } else if (have_loaded) {
+        take_name = display_name(s.take.name);
+        for (const TakeRow &t : rows)
+            if (t.name == s.take.name && !t.format_text.empty()) tape_fmt = t.format_text;
     } else {
         TakeName tn;
         tn.prefix = valid_prefix(s.settings.prefix) ? s.settings.prefix : std::string(kDefaultPrefix);
         tn.take = local.next_take ? local.next_take : 1;
         take_name = display_name(tn.prefix, take_label(tn));
     }
-    r.tape.loaded = present;
-    r.tape.label = take_name;
-    r.tape.format = tape_format(s.take.format_text);
+    const bool in_deck = have_loaded || (play_side && !s.take.playing_name.empty()); /* a cassette in the window */
+    r.tape.loaded = present && in_deck;
+    r.tape.label = in_deck ? take_name : std::string();
+    r.tape.load_seq = s.take.load_seq;
+    r.tape.format = tape_format(tape_fmt);
     r.info.take = present || rec_side || play_side ? upper(take_name) : "NO INPUT";
     r.info.format = present ? s.take.format_text : std::string();
     r.info.time_left = time_left_text(s.take.hours_left);
@@ -450,6 +465,10 @@ ui::ViewModel map_view(const MapInput &in)
         if (!local.list_sel.empty() && t.name == local.list_sel) chosen = static_cast<int>(i);
     }
     l.selected = chosen >= 0 ? chosen : current >= 0 ? current : (rows.empty() ? -1 : 0);
+    l.can_load = !recording_family(ds);
+    if (play_side && !s.take.playing_name.empty())
+        for (size_t i = 0; i < rows.size(); ++i)
+            if (rows[i].name == s.take.playing_name) l.previewing = static_cast<int>(i);
     l.take_count = static_cast<int>(rows.size());
     l.folder = s.settings.folder;
     l.free_space = s.take.free_bytes ? size_text(s.take.free_bytes) : std::string();
@@ -510,7 +529,7 @@ bool same(const ui::RecorderVm &a, const ui::RecorderVm &b)
             a.meter.ch[i].peak_lamp != b.meter.ch[i].peak_lamp)
             return false;
     if (a.tape.loaded != b.tape.loaded || a.tape.label != b.tape.label || a.tape.side != b.tape.side ||
-        a.tape.format != b.tape.format)
+        a.tape.format != b.tape.format || a.tape.load_seq != b.tape.load_seq)
         return false;
     const ui::InfoVm &x = a.info, &y = b.info;
     if (x.take != y.take || x.format != y.format || x.time_left != y.time_left || x.play_pos_ms != y.play_pos_ms ||

@@ -182,15 +182,15 @@ void test_pages_and_list()
     CHECK_EQ(r.binder.vm().list.selected, 0); /* the current take */
 
     r.act.list_select(1);
-    CHECK(has(r.calls(), "select_take take_006_20261108-1105.wav"));
+    CHECK(r.calls().empty()); /* a tap only moves the highlight: nothing is loaded */
     r.tick();
     CHECK_EQ(r.binder.vm().list.selected, 1); /* the highlight stays where the user put it */
     r.act.list_select(7); /* out of range: nothing */
     CHECK(r.calls().empty());
-    r.act.list_activate(1);
-    r.act.list_play(0);
+    r.act.list_activate(1); /* Enter / a second tap: the preview starts */
+    r.act.list_load(0);     /* LOAD */
     std::vector<std::string> c = r.calls();
-    CHECK(c.size() == 2 && c[0] == "play_take take_006_20261108-1105.wav" && c[1] == "play_take take_007_20261108-1432.wav");
+    CHECK(c.size() == 2 && c[0] == "preview_take take_006_20261108-1105.wav" && c[1] == "load take_007_20261108-1432.wav");
     r.act.list_rename(1, "interview");
     CHECK(has(r.calls(), "rename_take take_006_20261108-1105.wav interview"));
     r.act.list_rename(1, "take"); /* unchanged: nothing */
@@ -228,6 +228,106 @@ void test_pages_and_list()
     r.act.open(ui::Screen::List);
     r.tick();
     CHECK_EQ(r.binder.vm().list.selected, 0);
+}
+
+/* The list's preview: the same row stops and rewinds, another row switches, closing the list stops it; LOAD. */
+void test_preview_and_load()
+{
+    Rig r;
+    const std::string a = "take_007_20261108-1432.wav", b = "take_006_20261108-1105.wav";
+    r.act.open(ui::Screen::List);
+    r.tick();
+    r.calls();
+    CHECK_EQ(r.binder.vm().list.previewing, -1);
+    CHECK(r.binder.vm().list.can_load);
+    /* start on row 1 */
+    r.act.list_activate(1);
+    CHECK(r.calls() == std::vector<std::string>{"preview_take " + b});
+    r.tick();
+    CHECK_EQ(r.binder.vm().list.previewing, 1);
+    /* the same row again: stop (and rewind), no restart */
+    r.act.list_activate(1);
+    CHECK(r.calls() == std::vector<std::string>{"key_event Stop"});
+    r.tick();
+    CHECK_EQ(r.binder.vm().list.previewing, -1);
+    CHECK_EQ(r.binder.vm().rec.transport, ui::Transport::Idle);
+    /* another row while one previews: it switches */
+    r.act.list_activate(1);
+    r.act.list_activate(0);
+    CHECK(r.calls() == (std::vector<std::string>{"preview_take " + b, "preview_take " + a}));
+    r.tick();
+    CHECK_EQ(r.binder.vm().list.previewing, 0);
+    /* the cassette names the playing take, the loaded take is still the first */
+    CHECK_EQ(r.binder.vm().rec.tape.label, "Take 007");
+    r.act.list_activate(1);
+    r.calls();
+    r.tick();
+    CHECK_EQ(r.binder.vm().rec.tape.label, "Take 006");
+    CHECK_EQ(r.port.snapshot().take.name, std::string("")); /* nothing was loaded by previewing */
+    /* Esc: the list closes and the preview stops */
+    r.act.open(ui::Screen::Recorder);
+    CHECK(r.calls() == std::vector<std::string>{"key_event Stop"});
+    r.tick();
+    CHECK_EQ(r.binder.vm().list.previewing, -1);
+    /* a playback the recorder started goes on when the list is opened and closed */
+    r.port.snap.deck.state = kDeckPlaying;
+    r.port.snap.take.playing_name = a;
+    r.act.open(ui::Screen::List);
+    r.act.open(ui::Screen::Recorder);
+    CHECK(!has(r.calls(), "key_event Stop"));
+    r.port.snap.deck.state = kDeckIdle;
+    r.port.snap.take.playing_name.clear();
+
+    /* a preview and then S (the settings) also ends it */
+    r.act.open(ui::Screen::List);
+    r.act.list_activate(1);
+    r.calls();
+    r.act.open(ui::Screen::Settings);
+    CHECK(has(r.calls(), "key_event Stop"));
+    r.tick();
+
+    /* LOAD: the take goes into the deck, the preview is not stopped by the binding (the controller does it) */
+    r.act.open(ui::Screen::List);
+    r.act.list_activate(1);
+    r.calls();
+    r.act.list_load(1);
+    CHECK(r.calls() == std::vector<std::string>{"load " + b});
+    r.act.open(ui::Screen::Recorder); /* the UI shows the recorder right after LOAD */
+    CHECK(!has(r.calls(), "key_event Stop")); /* the controller's load stopped the preview already */
+    r.tick();
+    CHECK_EQ(r.binder.vm().rec.tape.label, "Take 006");
+    CHECK_EQ(r.binder.vm().rec.tape.load_seq, 1u);
+    CHECK_EQ(r.binder.vm().rec.transport, ui::Transport::Idle);
+    CHECK_EQ(r.binder.vm().list.previewing, -1);
+    CHECK_EQ(r.binder.vm().list.selected, 1);
+    /* the list opens on the loaded take */
+    r.act.open(ui::Screen::List);
+    r.tick();
+    CHECK_EQ(r.binder.vm().list.selected, 1);
+
+    /* LOAD out of range does nothing; a refusal is a notice */
+    r.calls();
+    r.act.list_load(9);
+    CHECK(r.calls().empty());
+    r.port.load_result = false;
+    r.act.list_load(0);
+    r.tick();
+    CHECK_EQ(r.binder.vm().notice, "The take could not be loaded");
+    r.port.load_result = true;
+
+    /* while recording, paused or counting down LOAD is dimmed (can_load false) and does nothing; so does a preview */
+    for (int st : {static_cast<int>(kDeckCountdown), static_cast<int>(kDeckRecording), static_cast<int>(kDeckRecordingPaused)}) {
+        r.port.snap.deck.state = st;
+        r.tick();
+        CHECK(!r.binder.vm().list.can_load);
+        r.calls();
+        r.act.list_load(0);
+        r.act.list_activate(1);
+        CHECK(r.calls().empty());
+    }
+    r.port.snap.deck.state = kDeckIdle;
+    r.tick();
+    CHECK(r.binder.vm().list.can_load);
 }
 
 void open_trim(Rig &r)
@@ -507,7 +607,7 @@ void test_notices()
 void test_next_take_and_revision()
 {
     Rig r;
-    CHECK_EQ(r.binder.vm().rec.tape.label, "Take 008"); /* FakePort::next */
+    CHECK_EQ(r.binder.vm().rec.info.take, "TAKE 008"); /* FakePort::next */
     r.port.next = 9;
     r.tick();
     CHECK(!has(r.calls(), "next_take_number")); /* only when the takes changed */
@@ -517,7 +617,7 @@ void test_next_take_and_revision()
     std::vector<std::string> c = r.calls();
     CHECK(has(c, "next_take_number"));
     r.tick();
-    CHECK_EQ(r.binder.vm().rec.tape.label, "Take 009");
+    CHECK_EQ(r.binder.vm().rec.info.take, "TAKE 009");
     CHECK_EQ(r.binder.vm().list.take_count, 3);
     /* tick() says whether anything changed */
     CHECK(!r.tick());
@@ -682,6 +782,7 @@ void test_binder()
     test_steppers();
     test_settings_actions();
     test_pages_and_list();
+    test_preview_and_load();
     test_trim_actions();
     test_save_flow();
     test_leaving_trim();

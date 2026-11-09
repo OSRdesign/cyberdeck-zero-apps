@@ -166,15 +166,24 @@ void test_recorder()
     LocalState local;
     local.next_take = 8;
 
-    /* idle: the next take on the cassette */
+    /* idle, nothing loaded: no cassette in the window, the strip names the take REC would write next */
     ui::ViewModel vm = map(s, {}, local);
     CHECK(vm.rec.input_present);
     CHECK(vm.rec.transport == ui::Transport::Idle);
+    CHECK(!vm.rec.tape.loaded);
+    CHECK_EQ(vm.rec.tape.label, "");
+    CHECK_EQ(vm.rec.tape.load_seq, 0u);
+    CHECK_EQ(vm.rec.info.take, "TAKE 008");
+    /* idle with a loaded take: the cassette and the strip name it (a rename keeps it loaded: only the name changes) */
+    s.take.name = "take_006_20261108-1105.wav";
+    s.take.load_seq = 3;
+    vm = map(s, {}, local);
     CHECK(vm.rec.tape.loaded);
-    CHECK_EQ(vm.rec.tape.label, "Take 008");
+    CHECK_EQ(vm.rec.tape.label, "Take 006");
+    CHECK_EQ(vm.rec.tape.load_seq, 3u);
+    CHECK_EQ(vm.rec.info.take, "TAKE 006");
     CHECK_EQ(vm.rec.tape.side, "SIDE A");
     CHECK_EQ(vm.rec.tape.format, "WAV 48k");
-    CHECK_EQ(vm.rec.info.take, "TAKE 008");
     CHECK_EQ(vm.rec.info.format, "48k/16 WAV");
     CHECK_EQ(vm.rec.info.time_left, "12 h 40");
     CHECK_EQ(vm.rec.counter_ms, 0);
@@ -196,9 +205,11 @@ void test_recorder()
 
     /* the next take is not known yet: 001; a custom prefix */
     s.settings.prefix = "interview";
+    s.take.name.clear();
     vm = map(s);
-    CHECK_EQ(vm.rec.tape.label, "Interview 001");
+    CHECK_EQ(vm.rec.info.take, "INTERVIEW 001");
     s.settings.prefix = "take";
+    s.take.name = "take_006_20261108-1105.wav"; /* the loaded take again */
 
     /* the steppers at their ends */
     s.card.level_db = 0;
@@ -255,6 +266,7 @@ void test_recorder()
 
     /* countdown: the number and the ring; REC not latched (board CassetteCount), counter 0 */
     s.deck.state = kDeckCountdown;
+    s.take.name = "take_006_20261108-1105.wav"; /* the controller names the loaded take until the recording starts */
     s.time.countdown_seconds = 3;
     s.time.countdown_fraction = 0.8f;
     vm = map(s, {}, local);
@@ -263,7 +275,7 @@ void test_recorder()
     CHECK(std::fabs(vm.rec.countdown_fraction - 0.8f) < 1e-6f);
     CHECK(!key(vm, ui::KeyId::Rec).latched);
     CHECK_EQ(vm.rec.counter_ms, 0);
-    CHECK_EQ(vm.rec.tape.label, "Take 008"); /* the take is not created yet */
+    CHECK_EQ(vm.rec.tape.label, "Take 006"); /* the loaded take: the new take is not created yet */
 
     /* playing: the position, PLAY latched, the take playing */
     s = base_snapshot();

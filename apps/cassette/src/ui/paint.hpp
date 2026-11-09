@@ -68,7 +68,7 @@ lv_area_t area(int x, int y, int w, int h);
 enum class Icon {
     None, Rew, Fwd, Play, Pause, Stop, Rec,  /* the five piano keys (viewBox 22 x 16, drawn 22 x 15) */
     SetIn, SetOut, Remove, Check,            /* trim keys */
-    Pencil, Scissors, Delete,                /* list keys */
+    Pencil, Scissors, Delete, Load,          /* list keys (Load: a cassette above its slot) */
     List, Gear,                              /* the Recordings and Settings buttons (viewBox 24, drawn 22) */
     Minus, Plus, Left, Right,                /* stepper buttons (the boards' 24 px "−" "+", 22 px "◀" "▶") */
     Chevron,                                 /* row chevron (viewBox 10 x 16) */

@@ -52,7 +52,7 @@ public:
     double level_step = 1.0;      /* set_level_db rounds to this step (a coarse card: 3.0) */
     bool open_trim_result = true;
     int delete_result = 0, rename_result = 0;
-    bool save_result = true, folder_result = true, output_result = true;
+    bool save_result = true, folder_result = true, output_result = true, load_result = true;
     uint64_t next = 8;
     std::vector<std::string> names = {"take_006_20261108-1105-1.wav", "take_006_20261108-1105-2.wav",
                                       "take_006_20261108-1105-3.wav"};
@@ -116,6 +116,12 @@ public:
     bool key_event(KeyEvent e) override
     {
         log(std::string("key_event ") + key_name(e));
+        std::lock_guard<std::mutex> g(mu);
+        if (e == KeyEvent::Stop && snap.deck.state >= kDeckPlaying) { /* a playback or preview stops (and rewinds) */
+            snap.deck.state = kDeckIdle;
+            snap.take.playing_name.clear();
+            snap.time.position_s = 0;
+        }
         return true;
     }
     bool set_level_db(double db) override
@@ -214,11 +220,23 @@ public:
     bool load(const std::string &n) override
     {
         log("load " + n);
-        return true;
+        std::lock_guard<std::mutex> g(mu);
+        if (load_result) {
+            snap.take.name = n;
+            for (TakeRow &t : rows) t.current = t.name == n;
+            ++snap.takes_revision;
+            ++snap.take.load_seq;
+            snap.deck.state = kDeckIdle;
+            snap.take.playing_name.clear();
+        }
+        return load_result;
     }
     bool preview_take(const std::string &n) override
     {
         log("preview_take " + n);
+        std::lock_guard<std::mutex> g(mu);
+        snap.deck.state = kDeckPlaying; /* the preview plays the take; the loaded take stays */
+        snap.take.playing_name = n;
         return true;
     }
     int rename_take(const std::string &n, const std::string &p) override

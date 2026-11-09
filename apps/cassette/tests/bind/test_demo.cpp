@@ -207,7 +207,8 @@ void test_take_trim_save()
     CHECK(e.until([](const ui::ViewModel &v) { return v.rec.input_present; }, 2000));
     CHECK(e.vm().rec.card.shown);                   /* the level card */
     CHECK(find_row(e.vm(), "level") && find_row(e.vm(), "agc"));
-    CHECK_EQ(e.vm().rec.tape.label, "Take 001");
+    CHECK_EQ(e.vm().rec.info.take, "TAKE 001"); /* nothing recorded yet: the take REC writes next */
+    CHECK(!e.vm().rec.tape.loaded);             /* nothing in the deck: no cassette */
     CHECK(e.until([](const ui::ViewModel &v) { return v.rec.meter.ch[0].bar > 0; }, 2000)); /* the tone moves the meter */
     CHECK(!e.vm().rec.keys[static_cast<int>(ui::KeyId::Stop)].enabled);
     CHECK(e.vm().rec.keys[static_cast<int>(ui::KeyId::Rec)].enabled);
@@ -228,7 +229,8 @@ void test_take_trim_save()
     CHECK(e.until([](const ui::ViewModel &v) { return v.rec.counter_ms >= 1600; }, 4000));
     click(e, ui::KeyId::Stop);
     CHECK(e.until([](const ui::ViewModel &v) { return idle(v) && v.list.take_count == 1; }, 3000));
-    CHECK(e.until([](const ui::ViewModel &v) { return v.rec.tape.label == "Take 002"; }, 1000)); /* the next take */
+    CHECK(e.until([](const ui::ViewModel &v) { return v.rec.tape.label == "Take 001" && v.rec.tape.loaded; }, 1000)); /* the new take is loaded */
+    CHECK_EQ(e.vm().rec.tape.load_seq, 0u); /* ... without a load animation */
     CHECK_EQ(e.vm().list.takes[0].name, "Take 001");
     CHECK_EQ(e.vm().list.takes[0].sticker, "001");
     CHECK(e.vm().list.takes[0].length_ms >= 1500);
@@ -295,10 +297,11 @@ void test_take_trim_save()
     CHECK(file_exists(e.recordings() + "/" + take)); /* the original kept */
     /* the take number did not move: the next take is still 002 */
     e.act.open(ui::Screen::Recorder);
-    CHECK(e.until([](const ui::ViewModel &v) { return v.rec.tape.label == "Take 002"; }, 1000));
+    CHECK(e.until([&e](const ui::ViewModel &) { return e.binder->local().next_take == 2; }, 1000));
+    CHECK_EQ(e.vm().rec.tape.label, "Take 001"); /* the original take stays loaded */
 
-    /* PLAY the take from the list, then STOP */
-    e.act.list_play(0);
+    /* preview the take from the list (Enter), then STOP */
+    e.act.list_activate(0);
     CHECK(e.until([](const ui::ViewModel &v) { return v.rec.transport == ui::Transport::Playing; }, 1000));
     CHECK(e.until([](const ui::ViewModel &v) { return v.rec.counter_ms > 200; }, 2000));
     CHECK_EQ(e.vm().rec.tape.label, "Take 001");
