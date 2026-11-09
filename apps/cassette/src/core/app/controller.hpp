@@ -298,6 +298,10 @@ public:
     bool set_format(RecFormat f);          /* only Wav */
     bool set_folder(const std::string &folder);
     bool set_prefix(const std::string &prefix);
+    /* The Take number setting: the next take gets `n` (1..9999), moved forward past numbers the file prefix already
+     * uses in the folder (naming.hpp). `landed` (when given) is the number it ended on. 0, -EINVAL (out of range) or
+     * -EBUSY (a take, countdown or save is running); other -errno: not stored. Existing files are never touched. */
+    int set_next_take_number(uint64_t n, uint64_t *landed = nullptr);
     bool set_sync_interval(int seconds);   /* 5..30 */
     bool set_auto_split(bool on);
     bool set_record_timer(int seconds);    /* 0, 3, 10 or 20 */

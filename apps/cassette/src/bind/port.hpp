@@ -39,6 +39,8 @@ public:
     virtual bool set_format(RecFormat f) = 0;
     virtual bool set_folder(const std::string &folder) = 0;
     virtual bool set_prefix(const std::string &prefix) = 0;
+    /* The Take number setting (Controller::set_next_take_number): 0, or -errno (-EINVAL range, -EBUSY recording). */
+    virtual int set_next_take(uint64_t n, uint64_t &landed) = 0;
     virtual bool set_auto_split(bool on) = 0;
     virtual bool set_record_timer(int seconds) = 0;
     virtual bool set_scan_mode(ScanMode m) = 0;
@@ -72,8 +74,8 @@ public:
     virtual void shutdown() = 0;
 
     /* ---- file-side helpers (worker thread) ---- */
-    /* The number REC would hand out next: one more than the take counter or the highest take found in the folder (the
-     * same rule as reserve_take_number, without reserving anything). */
+    /* The number REC would hand out next: the take counter + 1 moved past numbers the file prefix already uses, or the
+     * highest take found + 1 without a counter (peek_take_number: the rule of reserve_take_number, reserving nothing). */
     virtual uint64_t next_take_number() = 0;
     /* The names a save of `take` into `count` files would write now (next_edit_names over the folder and the take's
      * record of used numbers); the save itself reserves them again. */

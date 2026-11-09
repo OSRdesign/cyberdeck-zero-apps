@@ -64,7 +64,8 @@ Four pages and two boxes:
   number of numbered split points (a tap selects one and the SPLIT key becomes REMOVE). SAVE opens the save box.
 - **Settings.** Input (the capture card), Input level, Auto gain (card) and Mic mute (card) (only when the card has
   those controls), Format (WAV in 0.1), Record timer, REW / FWD (Fast scan 5x or Jump 5 s), Channels (what the card
-  records, read-only), Low cut 80 Hz, Limiter, Sync every (5, 10, 20, 30 s), Folder, File prefix, Auto-split (at 4 GiB,
+  records, read-only), Low cut 80 Hz, Limiter, Sync every (5, 10, 20, 30 s), Folder, File prefix, Take number (the number the next take gets; a page with the number large,
+  -1 / +1, -10 / +10 and -100 / +100 steppers, Reset to 1 and Set; Esc cancels; 1 to 9999), Auto-split (at 4 GiB,
   or Off: one RF64 file) and Output (the playback device, when there is more than one).
 - **Save box.** SAVE AS NEW FILES (the default: the original stays) or REPLACE ORIGINAL (asks once more; the original is
   deleted only after every result is written and synced). **Confirm box** for delete and replace.
@@ -114,7 +115,10 @@ when none is connected.
 ## Files the app keeps
 
 - `~/Recordings/` (setting Folder): the takes, `<prefix>_<take>_<YYYYMMDD-HHMM>.wav` (prefix `take` by default, for
-  example `take_006_20261108-1105.wav`). The take number never repeats, even after a delete. The date reads `nodate`
+  example `take_006_20261108-1105.wav`). The take number counts up and never repeats, even after a delete (Settings > Take number moves the
+  next number to any value from 1 to 9999: only the next take changes, existing files are never renamed; a number
+  that the same prefix already uses in the folder is skipped, so the next free one is taken and the row shows it). The
+  number has at least 3 digits (`007`) and grows past 999 (`1000`); the counter is the file `.take-counter` in the folder. The date reads `nodate`
   until the clock has been set (the boards have no clock that runs while they are off: a wrong date in a name is worse
   than none). A trim or a split is named after its source plus the next free number (`take_006_20261108-1105-1.wav`,
   `-2.wav`, ...); a trim saved with REPLACE ORIGINAL keeps the original's name.

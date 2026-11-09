@@ -281,3 +281,112 @@ void test_edits() {
     CHECK_EQ(reserve_edit_names(ops, dir, src, 1, out), 0);
     CHECK_EQ(out[0], std::string("take_006_20261108-1105-5.wav"));
 }
+
+/* ---- the Take number setting (set_next_take_number) ---- */
+void test_take_number_setting() {
+    TempDir d;
+    FailOps ops;
+    const std::string dir = d.file("Recordings");
+    uint64_t t = 0, landed = 0;
+
+    /* set, then the counter continues from there; names pad to 3 and grow past 999 */
+    CHECK_EQ(set_next_take_number(ops, dir, "take", 50, landed), 0);
+    CHECK_EQ(landed, static_cast<uint64_t>(50));
+    CHECK_EQ(read_text(take_counter_path(dir)), std::string("49\n"));
+    CHECK_EQ(peek_take_number(ops, dir, "take"), static_cast<uint64_t>(50));
+    CHECK_EQ(reserve_take_number(ops, dir, t, "take"), 0);
+    CHECK_EQ(t, static_cast<uint64_t>(50));
+    CHECK_EQ(take_number_text(t), std::string("050"));
+    CHECK_EQ(reserve_take_number(ops, dir, t, "take"), 0);
+    CHECK_EQ(t, static_cast<uint64_t>(51));
+
+    /* range: 0 and 10000 are refused and change nothing; the limits are accepted */
+    CHECK_EQ(set_next_take_number(ops, dir, "take", 0, landed), -EINVAL);
+    CHECK_EQ(set_next_take_number(ops, dir, "take", 10000, landed), -EINVAL);
+    CHECK_EQ(read_text(take_counter_path(dir)), std::string("51\n"));
+    CHECK_EQ(set_next_take_number(ops, dir, "take", 1, landed), 0);
+    CHECK_EQ(landed, static_cast<uint64_t>(1));
+    CHECK_EQ(set_next_take_number(ops, dir, "take", 9999, landed), 0);
+    CHECK_EQ(landed, static_cast<uint64_t>(9999));
+    CHECK_EQ(reserve_take_number(ops, dir, t, "take"), 0);
+    CHECK_EQ(t, static_cast<uint64_t>(9999));
+    CHECK_EQ(reserve_take_number(ops, dir, t, "take"), 0); /* past the range the counter just keeps counting */
+    CHECK_EQ(t, static_cast<uint64_t>(10000));
+    TakeName big = tn("take", t, false);
+    CHECK_EQ(format_take_name(big), std::string("take_10000_nodate.wav"));
+    TakeName p;
+    CHECK(parse_take_name(format_take_name(big), p) && p.take == 10000);
+
+    /* collision guard: takes 001..003 exist, reset to 1 lands on 004 */
+    TempDir d2;
+    const std::string dir2 = d2.file("Rec");
+    CHECK_EQ(make_dirs(ops, dir2), 0);
+    for (int i = 1; i <= 3; ++i) make_wav(dir2 + "/take_00" + std::to_string(i) + "_20261108-110" + std::to_string(i) + ".wav", 10);
+    CHECK_EQ(set_next_take_number(ops, dir2, "take", 1, landed), 0);
+    CHECK_EQ(landed, static_cast<uint64_t>(4));
+    CHECK_EQ(peek_take_number(ops, dir2, "take"), static_cast<uint64_t>(4));
+    /* an edit result and a later part count as the take number being in use */
+    make_wav(dir2 + "/take_010_nodate_p2.wav", 10);
+    make_wav(dir2 + "/take_011_nodate-2.wav", 10);
+    CHECK_EQ(set_next_take_number(ops, dir2, "take", 10, landed), 0);
+    CHECK_EQ(landed, static_cast<uint64_t>(12));
+    CHECK_EQ(read_text(take_counter_path(dir2)), std::string("11\n"));
+    /* another prefix does not collide: the number is only unique per prefix */
+    CHECK_EQ(set_next_take_number(ops, dir2, "band", 2, landed), 0);
+    CHECK_EQ(landed, static_cast<uint64_t>(2));
+    /* a take in progress (a journal) holds its number */
+    JournalEntry e;
+    e.take = "take_020_nodate";
+    e.path = dir2 + "/take_020_nodate.wav";
+    e.parts = {e.path};
+    e.state = "open";
+    CHECK_EQ(journal_write(ops, dir2, e), 0);
+    CHECK_EQ(set_next_take_number(ops, dir2, "take", 20, landed), 0);
+    CHECK_EQ(landed, static_cast<uint64_t>(21));
+    /* the counter lands below the highest take: reserve counts on from the set value, skipping used numbers only */
+    CHECK_EQ(set_next_take_number(ops, dir2, "take", 5, landed), 0);
+    CHECK_EQ(landed, static_cast<uint64_t>(5));
+    CHECK_EQ(reserve_take_number(ops, dir2, t, "take"), 0);
+    CHECK_EQ(t, static_cast<uint64_t>(5));
+    make_wav(dir2 + "/take_005_nodate.wav", 10);
+    CHECK_EQ(reserve_take_number(ops, dir2, t, "take"), 0);
+    CHECK_EQ(t, static_cast<uint64_t>(6));
+    /* a take that is made later on a number that was skipped to never duplicates one that exists */
+    for (int i = 6; i <= 9; ++i) make_wav(dir2 + "/take_00" + std::to_string(i) + "_nodate.wav", 10);
+    CHECK_EQ(reserve_take_number(ops, dir2, t, "take"), 0);
+    CHECK_EQ(t, static_cast<uint64_t>(12)); /* 7..11 used (10 and 11 as p2 / edit) */
+
+    /* nothing existing is touched */
+    CHECK(exists(dir2 + "/take_001_20261108-1101.wav"));
+    CHECK(exists(dir2 + "/take_011_nodate-2.wav"));
+
+    /* persistence: a fresh read of the folder (a restart) gives the same number; atomic write failures keep the old */
+    CHECK_EQ(set_next_take_number(ops, dir2, "take", 300, landed), 0);
+    CHECK_EQ(peek_take_number(ops, dir2, "take"), static_cast<uint64_t>(300));
+    ops.rename_errno = EIO;
+    CHECK_EQ(set_next_take_number(ops, dir2, "take", 400, landed), -EIO);
+    CHECK_EQ(read_text(take_counter_path(dir2)), std::string("299\n"));
+    CHECK(!exists(take_counter_path(dir2) + ".tmp"));
+    ops.rename_errno = 0;
+    ops.fsync_errno = EIO;
+    CHECK_EQ(set_next_take_number(ops, dir2, "take", 400, landed), -EIO);
+    CHECK_EQ(read_text(take_counter_path(dir2)), std::string("299\n"));
+    ops.fsync_errno = 0;
+    CHECK_EQ(peek_take_number(ops, dir2, "take"), static_cast<uint64_t>(300));
+
+    /* a lost counter: the folder decides again */
+    ops.unlink(take_counter_path(dir2));
+    CHECK_EQ(peek_take_number(ops, dir2, "take"), highest_take_found(ops, dir2) + 1);
+
+    /* interplay: auto-split parts and edit names keep the take number; the edit names ignore the counter */
+    set_next_take_number(ops, dir2, "take", 60, landed);
+    reserve_take_number(ops, dir2, t, "take");
+    TakeName first = tn("take", t, true);
+    TakeName part2 = first;
+    part2.part = 2;
+    CHECK_EQ(format_take_name(part2), std::string("take_060_20261108-1105_p2.wav"));
+    std::vector<std::string> out = next_edit_names(format_take_name(first), 2, {format_take_name(first)});
+    CHECK_EQ(out[0], std::string("take_060_20261108-1105-1.wav"));
+    CHECK_EQ(out[1], std::string("take_060_20261108-1105-2.wav"));
+    CHECK_EQ(peek_take_number(ops, dir2, "take"), static_cast<uint64_t>(61)); /* unchanged by the edits */
+}

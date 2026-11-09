@@ -5,6 +5,8 @@
  */
 #include "binder.hpp"
 
+#include "core/takes/naming.hpp"
+
 #include <algorithm>
 #include <cerrno>
 #include <cmath>
@@ -186,6 +188,29 @@ ui::UiActions Binder::actions()
         if (id != "prefix") return;
         post([this, text] {
             if (!port_.set_prefix(text)) notice_from_job("Prefix not changed: use letters, digits, - and _ (1 to 24)");
+        });
+    };
+
+    a.setting_number = [this](const std::string &id, int n) {
+        if (id != "takenum" || n < 1) return;
+        post([this, n] {
+            uint64_t landed = 0;
+            const int r = port_.set_next_take(static_cast<uint64_t>(n), landed);
+            if (r == -EBUSY) {
+                notice_from_job("The take number cannot be changed now");
+                return;
+            }
+            if (r < 0) {
+                notice_from_job("Take number not changed");
+                return;
+            }
+            if (landed != static_cast<uint64_t>(n))
+                notice_from_job("Take " + take_number_text(static_cast<uint64_t>(n)) + " is in use: next is " +
+                                take_number_text(landed));
+            const uint64_t next = port_.next_take_number();
+            std::lock_guard<std::mutex> g(inbox_.mu);
+            inbox_.have_next = true;
+            inbox_.next_take = next;
         });
     };
 

@@ -15,6 +15,7 @@
 #include "ui_format.hpp"
 
 #include <algorithm>
+#include <cstdio>
 
 namespace cassette {
 namespace ui {
@@ -109,10 +110,18 @@ void SettingsPage::update(const SettingsVm &s)
 void SettingsPage::refresh()
 {
     const SettingsVm &s = vm_;
-    std::string key = std::to_string(picker_) + "|";
+    std::string key = std::to_string(picker_) + (numpage_ ? "n|" : "|");
     for (const SettingRow &r : s.rows) key += r.id + ":" + std::to_string(static_cast<int>(r.kind)) + ";";
     if (picker_ >= 0 && picker_ < static_cast<int>(s.rows.size()))
         for (const std::string &c : s.rows[static_cast<std::size_t>(picker_)].choices) key += c + ",";
+    if (numpage_ && (picker_ < 0 || picker_ >= static_cast<int>(s.rows.size()) ||
+                     !s.rows[static_cast<std::size_t>(picker_)].enabled)) {
+        numpage_ = false; /* the row went away or a take started: back to the settings */
+        picker_ = -1;
+        if (nav_.set_title) nav_.set_title("Settings");
+        key = "-1|";
+        for (const SettingRow &r : s.rows) key += r.id + ":" + std::to_string(static_cast<int>(r.kind)) + ";";
+    }
     if (key != layout_key_) {
         layout_key_ = key;
         rebuild();
@@ -145,6 +154,12 @@ void SettingsPage::rebuild()
 {
     lv_obj_clean(list_);
     rows_.clear();
+    nbtn_.clear();
+    num_big_ = nullptr;
+    if (numpage_) {
+        build_number_page();
+        return;
+    }
     const int h = row_h();
     const int gap = fit_.px(row_gap(frame_.portrait));
     const int pad = fit_.px(12);
@@ -186,7 +201,7 @@ void SettingsPage::rebuild()
             const int lh17 = lv_font_get_line_height(font(Face::Medium, fit_.px(17)));
             r.value = label(r.obj, Face::Medium, fit_.px(17), col::kInkMuted, 0, (h - 2 - lh17) / 2, 10, LV_TEXT_ALIGN_RIGHT);
             lv_label_set_long_mode(r.value, LV_LABEL_LONG_MODE_WRAP); /* fill_row grows the row to fit it */
-            if (s.kind == SettingKind::Choice || s.kind == SettingKind::Text) {
+            if (s.kind == SettingKind::Choice || s.kind == SettingKind::Text || s.kind == SettingKind::Number) {
                 r.chevron = make_chevron(r.obj, fit_, col::kInkMuted);
                 lv_obj_set_pos(r.chevron, row_w_ - 2 - pad - fit_.px(10), (h - 2 - fit_.px(16)) / 2);
             } else if (s.kind == SettingKind::Toggle) {
@@ -263,6 +278,14 @@ void SettingsPage::fill_row(Row &r, const SettingRow &s)
 
 void SettingsPage::highlight(int i)
 {
+    if (numpage_) {
+        for (const NumBtn &b : nbtn_) {
+            const bool on = i >= 0 && b.line == i;
+            lv_obj_set_style_bg_color(b.obj, lv_color_hex(on ? col::kStrip : col::kRow), 0);
+            lv_obj_set_style_border_color(b.obj, lv_color_hex(on ? col::kHinge : col::kBodyEdge), 0);
+        }
+        return;
+    }
     for (std::size_t k = 0; k < rows_.size(); ++k) {
         if (picker_ >= 0) {
             const SettingRow &sr = vm_.rows[static_cast<std::size_t>(picker_)];
@@ -315,6 +338,15 @@ void SettingsPage::activate(int i, int touch_x)
         if (act_.setting_slider && pos != s.pos) act_.setting_slider(s.id, pos);
         break;
     }
+    case SettingKind::Number:
+        picker_ = i;
+        numpage_ = true;
+        draft_ = std::clamp(s.pos, s.min, s.max);
+        sel_ = -1;
+        if (nav_.set_title) nav_.set_title(s.label);
+        refresh();
+        lv_obj_scroll_to_y(list_, 0, LV_ANIM_OFF);
+        break;
     case SettingKind::Text:
         if (nav_.edit_text) nav_.edit_text(s.id, s.label, s.value);
         break;
@@ -327,6 +359,7 @@ bool SettingsPage::back()
     if (picker_ < 0) return false;
     const int was = picker_;
     picker_ = -1;
+    numpage_ = false;
     sel_ = -1;
     if (nav_.set_title) nav_.set_title("Settings");
     refresh();
@@ -346,6 +379,7 @@ void SettingsPage::reset_view()
 
 bool SettingsPage::on_key(std::uint32_t k)
 {
+    if (numpage_) return number_key(k);
     const int n = static_cast<int>(rows_.size());
     if (n == 0) return false;
     if (k == LV_KEY_DOWN || k == LV_KEY_UP) {
@@ -366,6 +400,7 @@ bool SettingsPage::on_key(std::uint32_t k)
 
 bool SettingsPage::on_right()
 {
+    if (numpage_) return number_key(LV_KEY_RIGHT);
     if (sel_ < 0 || sel_ >= static_cast<int>(rows_.size())) return false;
     if (picker_ < 0 && sel_ < static_cast<int>(vm_.rows.size()) &&
         vm_.rows[static_cast<std::size_t>(sel_)].kind == SettingKind::Slider)
@@ -376,12 +411,145 @@ bool SettingsPage::on_right()
 
 bool SettingsPage::on_left_right(int dir)
 {
+    if (numpage_) return number_key(dir < 0 ? LV_KEY_LEFT : LV_KEY_RIGHT);
     if (picker_ >= 0 || sel_ < 0 || sel_ >= static_cast<int>(vm_.rows.size())) return false;
     const SettingRow &s = vm_.rows[static_cast<std::size_t>(sel_)];
     if (s.kind != SettingKind::Slider || !s.enabled) return false;
     const int pos = std::clamp(s.pos + dir, s.min, s.max);
     if (pos != s.pos && act_.setting_slider) act_.setting_slider(s.id, pos);
     return true;
+}
+
+/* ---- the Take number page ---- */
+
+namespace {
+enum NumCode { kNumReset = 1, kNumSet, kNumM1, kNumP1, kNumM10, kNumP10, kNumM100, kNumP100 };
+} // namespace
+
+void SettingsPage::build_number_page()
+{
+    const int h = row_h();
+    const int gap = fit_.px(row_gap(frame_.portrait));
+    const int pad = fit_.px(12);
+    const int hgap = fit_.px(8);
+    const int bw = (row_w_ - hgap) / 2;
+    int y = 0;
+    /* the big number */
+    const int big_px = fit_.px(44);
+    const int big_lh = lv_font_get_line_height(font(Face::Bold, big_px));
+    const int big_h = std::max(h, big_lh + 2 * fit_.px(8));
+    lv_obj_t *disp = box(list_, 0, y, row_w_, big_h, col::kStrip, fit_.px(6));
+    border(disp, 1, col::kBodyEdge);
+    lv_obj_add_flag(disp, LV_OBJ_FLAG_SCROLL_CHAIN_VER);
+    num_big_ = label(disp, Face::Bold, big_px, col::kInk, 0, (big_h - 2 - big_lh) / 2, row_w_ - 2, LV_TEXT_ALIGN_CENTER);
+    y += big_h + gap;
+    const int codes[4][2] = {{kNumReset, kNumSet}, {kNumM1, kNumP1}, {kNumM10, kNumP10}, {kNumM100, kNumP100}};
+    const char *const names[4][2] = {{"Reset to 1", "Set"}, {"-1", "+1"}, {"-10", "+10"}, {"-100", "+100"}};
+    const lv_font_t *f19 = font(Face::Bold, fit_.px(19));
+    const int lh19 = lv_font_get_line_height(f19);
+    for (int line = 0; line < 4; ++line) {
+        for (int k = 0; k < 2; ++k) {
+            NumBtn b;
+            b.code = codes[line][k];
+            b.line = line;
+            b.obj = box(list_, k ? bw + hgap : 0, y, bw, h, col::kRow, fit_.px(6));
+            border(b.obj, 1, col::kBodyEdge);
+            lv_obj_add_flag(b.obj, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_add_flag(b.obj, LV_OBJ_FLAG_SCROLL_CHAIN_VER);
+            lv_obj_set_user_data(b.obj, reinterpret_cast<void *>(static_cast<intptr_t>(b.code)));
+            lv_obj_add_event_cb(b.obj, num_cb, LV_EVENT_CLICKED, this);
+            b.label = label(b.obj, Face::Bold, fit_.px(19), col::kInk, 0, (h - 2 - lh19) / 2, bw - 2, LV_TEXT_ALIGN_CENTER,
+                            ls_screen(0.3, fit_.s));
+            lv_label_set_text(b.label, names[line][k]);
+            nbtn_.push_back(b);
+        }
+        y += h + gap;
+    }
+    /* the rule, one short line (it wraps on a narrow screen) */
+    lv_obj_t *rule = label(list_, Face::Medium, fit_.px(15), col::kInkMuted, pad, y + fit_.px(2), row_w_ - 2 * pad,
+                           LV_TEXT_ALIGN_LEFT);
+    lv_label_set_long_mode(rule, LV_LABEL_LONG_MODE_WRAP);
+    lv_label_set_text(rule, "A number already used with this prefix is skipped: the next free one is taken.");
+    lv_obj_update_layout(list_);
+    number_refresh();
+}
+
+void SettingsPage::number_refresh()
+{
+    if (!numpage_ || picker_ < 0 || picker_ >= static_cast<int>(vm_.rows.size())) return;
+    const SettingRow &s = vm_.rows[static_cast<std::size_t>(picker_)];
+    char b[16];
+    std::snprintf(b, sizeof b, "%03d", draft_);
+    if (num_big_) set_text(num_big_, b);
+    for (const NumBtn &n : nbtn_) {
+        int d = 0;
+        switch (n.code) {
+        case kNumM1: d = -1; break;
+        case kNumP1: d = 1; break;
+        case kNumM10: d = -10; break;
+        case kNumP10: d = 10; break;
+        case kNumM100: d = -100; break;
+        case kNumP100: d = 100; break;
+        default: break;
+        }
+        const bool ok = d == 0 || (d < 0 ? draft_ > s.min : draft_ < s.max);
+        lv_obj_set_style_opa_layered(n.obj, static_cast<lv_opa_t>(ok ? 255 : 89), 0);
+    }
+}
+
+void SettingsPage::number_act(int code)
+{
+    if (!numpage_ || picker_ < 0 || picker_ >= static_cast<int>(vm_.rows.size())) return;
+    const SettingRow &s = vm_.rows[static_cast<std::size_t>(picker_)];
+    switch (code) {
+    case kNumReset: draft_ = s.min; break;
+    case kNumSet: {
+        const std::string id = s.id;
+        const int n = draft_;
+        back();
+        if (act_.setting_number) act_.setting_number(id, n);
+        return;
+    }
+    case kNumM1: draft_ -= 1; break;
+    case kNumP1: draft_ += 1; break;
+    case kNumM10: draft_ -= 10; break;
+    case kNumP10: draft_ += 10; break;
+    case kNumM100: draft_ -= 100; break;
+    case kNumP100: draft_ += 100; break;
+    default: break;
+    }
+    draft_ = std::clamp(draft_, s.min, s.max);
+    number_refresh();
+}
+
+bool SettingsPage::number_key(std::uint32_t k)
+{
+    static const int left[4] = {kNumReset, kNumM1, kNumM10, kNumM100};
+    static const int right[4] = {kNumSet, kNumP1, kNumP10, kNumP100};
+    if (k == LV_KEY_DOWN || k == LV_KEY_UP) {
+        if (sel_ < 0) sel_ = k == LV_KEY_DOWN ? 0 : 3;
+        else sel_ = std::clamp(sel_ + (k == LV_KEY_DOWN ? 1 : -1), 0, 3);
+        highlight(sel_);
+        return true;
+    }
+    if (k == LV_KEY_ENTER) { /* Enter: Set */
+        number_act(kNumSet);
+        return true;
+    }
+    if (sel_ < 0) return false;
+    if (k == LV_KEY_LEFT) number_act(left[sel_]);
+    else if (k == LV_KEY_RIGHT) number_act(right[sel_]);
+    else return false;
+    return true;
+}
+
+void SettingsPage::num_cb(lv_event_t *e)
+{
+    auto *self = static_cast<SettingsPage *>(lv_event_get_user_data(e));
+    const int code = static_cast<int>(reinterpret_cast<intptr_t>(lv_obj_get_user_data(lv_event_get_current_target_obj(e))));
+    self->sel_ = -1;
+    self->highlight(-1);
+    self->number_act(code);
 }
 
 void SettingsPage::row_cb(lv_event_t *e)

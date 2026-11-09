@@ -17,19 +17,6 @@ namespace bind {
 
 namespace {
 
-/* The take counter file: the last number handed out, decimal (naming.hpp). 0 when missing or unreadable. */
-uint64_t read_counter(FileOps &ops, const std::string &dir)
-{
-    const int fd = ops.open(take_counter_path(dir), O_RDONLY, 0);
-    if (fd < 0) return 0;
-    char buf[32] = {};
-    const ssize_t n = ops.pread(fd, buf, sizeof buf - 1, 0);
-    ops.close(fd);
-    if (n <= 0) return 0;
-    buf[n] = 0;
-    return std::strtoull(buf, nullptr, 10);
-}
-
 class ControllerPort final : public Port {
 public:
     ControllerPort(Controller &c, FileOps &ops) : c_(c), ops_(ops) {}
@@ -49,6 +36,7 @@ public:
     bool set_format(RecFormat f) override { return c_.set_format(f); }
     bool set_folder(const std::string &f) override { return c_.set_folder(f); }
     bool set_prefix(const std::string &p) override { return c_.set_prefix(p); }
+    int set_next_take(uint64_t n, uint64_t &landed) override { return c_.set_next_take_number(n, &landed); }
     bool set_auto_split(bool on) override { return c_.set_auto_split(on); }
     bool set_record_timer(int s) override { return c_.set_record_timer(s); }
     bool set_scan_mode(ScanMode m) override { return c_.set_scan_mode(m); }
@@ -83,9 +71,9 @@ public:
 
     uint64_t next_take_number() override
     {
-        const std::string dir = c_.snapshot().folder;
-        if (dir.empty()) return 1;
-        return std::max(read_counter(ops_, dir), highest_take_found(ops_, dir)) + 1;
+        const Snapshot s = c_.snapshot();
+        if (s.folder.empty()) return 1;
+        return peek_take_number(ops_, s.folder, s.settings.prefix);
     }
 
     std::vector<std::string> edit_names(const std::string &take, unsigned count) override

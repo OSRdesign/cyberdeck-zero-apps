@@ -109,6 +109,7 @@ enum class SettingKind {
     Toggle, /* a switch (UiActions::setting_toggle) */
     Slider, /* a slider with `value_text` beside it, min..max (UiActions::setting_slider) */
     Text,   /* a value with a chevron; a tap opens a one-line text field (UiActions::setting_text) */
+    Number, /* a value with a chevron; a tap opens the number page: min..max, start at pos (UiActions::setting_number) */
     Info,   /* a read-only value without a chevron (dimmed with enabled = false), e.g. Channels */
 };
 
@@ -265,6 +266,7 @@ struct UiActions {
     std::function<void(const std::string &id, bool on)> setting_toggle;
     std::function<void(const std::string &id, int pos)> setting_slider;
     std::function<void(const std::string &id, const std::string &text)> setting_text;
+    std::function<void(const std::string &id, int number)> setting_number; /* "Set" on the number page */
     /* recordings list (index into ListVm::takes) */
     std::function<void(int index)> list_select;       /* a tap or Up / Down moved the highlight */
     std::function<void(int index)> list_activate;     /* Enter, or a tap on the selected row: PREVIEW the take; on the row that is

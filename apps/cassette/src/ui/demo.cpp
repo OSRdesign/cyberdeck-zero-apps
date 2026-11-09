@@ -259,6 +259,17 @@ ViewModel demo_model(const std::string &scene)
     prefix.kind = SettingKind::Text;
     prefix.value = "take";
     s.rows.push_back(prefix);
+    {
+        SettingRow tn;
+        tn.id = "takenum";
+        tn.label = "Take number";
+        tn.kind = SettingKind::Number;
+        tn.value = "Next: 007";
+        tn.min = 1;
+        tn.max = 9999;
+        tn.pos = 7;
+        s.rows.push_back(tn);
+    }
     s.rows.push_back(choice("split", "Auto-split", {"At 4 GiB", "Off (one RF64 file)"}, 0));
     if (full_settings) s.rows.push_back(choice("output", "Output", {"USB Audio Device", "Default output"}, 0));
     if (r.transport == Transport::Recording)
@@ -501,6 +512,17 @@ UiActions DemoDriver::actions()
         log_action("setting_text " + id + " " + text);
         for (SettingRow &r : vm_.settings.rows)
             if (r.id == id) r.value = text;
+        emit();
+    };
+    a.setting_number = [this](const std::string &id, int n) {
+        log_action("setting_number " + id + " " + std::to_string(n));
+        char b[16];
+        std::snprintf(b, sizeof b, "%03d", n);
+        for (SettingRow &r : vm_.settings.rows)
+            if (r.id == id) {
+                r.pos = n;
+                r.value = std::string("Next: ") + b;
+            }
         emit();
     };
     a.list_select = [this](int i) {

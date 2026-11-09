@@ -13,8 +13,10 @@
  * The name is parsed from the right, so a prefix may itself contain '_' and '-'.
  *
  * The take counter lives in <recordings>/.take-counter (the last take number handed out, decimal) and is replaced
- * atomically. A new number is max(counter, highest take found in the file names and journals) + 1, so it never repeats
- * after deletes, after a crash, or when the counter file is lost. The edit numbers used per take are kept in
+ * atomically. A new number is counter + 1, moved forward past any number the same prefix already uses in the folder's
+ * file names and journals (so a take number is never duplicated for a prefix); with no usable counter file it is the
+ * highest take found + 1, so it does not repeat after deletes, a crash, or a lost counter file. The Take number setting
+ * (set_next_take_number) may move the counter back or forward; the same guard applies. The edit numbers used per take are kept in
  * <recordings>/.edits/<take>[_p<part>].used (one number per line) so a deleted "-2" is never handed out again.
  */
 #pragma once
@@ -94,9 +96,23 @@ bool has_wav_extension(const std::string &file_name);
 std::string take_counter_path(const std::string &recordings_dir);
 /* Highest take number in the file names of the folder and in its journals (take names, paths, parts); 0 if none. */
 uint64_t highest_take_found(FileOps &ops, const std::string &recordings_dir);
-/* Hands out the next take number and stores it before returning (creates the folder). 0 or -errno; on an error no
- * number is handed out. */
-int reserve_take_number(FileOps &ops, const std::string &recordings_dir, uint64_t &take);
+constexpr uint64_t kTakeNumberMin = 1, kTakeNumberMax = 9999; /* what the Take number setting accepts */
+/* The first number >= from that no take of this prefix uses (file names and journals; the take number plus the prefix,
+ * not the timestamped name). from 0 counts as 1. */
+uint64_t first_free_take_number(FileOps &ops, const std::string &recordings_dir, const std::string &prefix,
+                                uint64_t from);
+/* The number the next take gets, without reserving it: the counter (the last number handed out) + 1, moved forward past
+ * numbers this prefix already uses. A missing or corrupt counter: the highest take in the folder + 1. */
+uint64_t peek_take_number(FileOps &ops, const std::string &recordings_dir, const std::string &prefix);
+/* Hands out the number peek_take_number() gives and stores it before returning (creates the folder). 0 or -errno; on an
+ * error no number is handed out. */
+int reserve_take_number(FileOps &ops, const std::string &recordings_dir, uint64_t &take,
+                        const std::string &prefix = kDefaultPrefix);
+/* The Take number setting: the next take is `wanted` (kTakeNumberMin..kTakeNumberMax, else -EINVAL), moved forward past
+ * numbers this prefix already uses; `landed` is the number it ended on. Stores the counter atomically (wanted - 1 or
+ * the landed number - 1). Existing files are never touched. 0 or -errno; on an error nothing changes. */
+int set_next_take_number(FileOps &ops, const std::string &recordings_dir, const std::string &prefix, uint64_t wanted,
+                         uint64_t &landed);
 
 /* ---- edit suffixes (for trim and split) ----
  * next_edit_names(): the names for count results cut from source_name. They are the source's name without its own

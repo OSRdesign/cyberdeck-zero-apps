@@ -478,7 +478,7 @@ struct Controller::Impl : public DeckCommands {
         const Settings &s = store.values();
         make_dirs(*ops, folder);
         uint64_t number = 0;
-        int r = reserve_take_number(*ops, folder, number);
+        int r = reserve_take_number(*ops, folder, number, s.prefix);
         prob = ProblemSnap();
         if (r < 0) {
             prob.write_error = true;
@@ -1267,6 +1267,16 @@ bool Controller::set_prefix(const std::string &prefix) {
     p_->persist();
     p_->publish();
     return true;
+}
+int Controller::set_next_take_number(uint64_t n, uint64_t *landed) {
+    Locked l(p_->mu);
+    Impl &d = *p_;
+    if (d.take_active || d.deck.state() == DeckState::Countdown || d.save_state.load() == 1) return -EBUSY;
+    uint64_t got = 0;
+    const int r = cassette::set_next_take_number(*d.ops, d.folder, d.store.values().prefix, n, got);
+    if (r < 0) return r;
+    if (landed) *landed = got;
+    return 0;
 }
 bool Controller::set_sync_interval(int seconds) {
     Locked l(p_->mu);

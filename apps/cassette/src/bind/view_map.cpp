@@ -253,7 +253,7 @@ int zoom_limit(const TrimSnap &t, double min_window_s)
     return z;
 }
 
-std::vector<ui::SettingRow> settings_rows(const Snapshot &s)
+std::vector<ui::SettingRow> settings_rows(const Snapshot &s, uint64_t next_take)
 {
     std::vector<ui::SettingRow> rows;
     const bool busy = recording_family(s.deck.state);
@@ -319,6 +319,20 @@ std::vector<ui::SettingRow> settings_rows(const Snapshot &s)
         r.label = "File prefix";
         r.kind = ui::SettingKind::Text;
         r.value = s.settings.prefix;
+        rows.push_back(r);
+    }
+    {
+        /* Take number: the next number REC hands out (own block; the page opens the steppers) */
+        const uint64_t n = next_take ? next_take : 1;
+        ui::SettingRow r;
+        r.id = "takenum";
+        r.label = "Take number";
+        r.kind = ui::SettingKind::Number;
+        r.enabled = !busy;
+        r.value = "Next: " + take_number_text(n);
+        r.min = static_cast<int>(kTakeNumberMin);
+        r.max = static_cast<int>(kTakeNumberMax);
+        r.pos = static_cast<int>(std::min<uint64_t>(n, kTakeNumberMax)); /* the page's starting value */
         rows.push_back(r);
     }
     rows.push_back(choice_row("split", "Auto-split", {"At 4 GiB", "Off (one RF64 file)"}, s.settings.auto_split ? 0 : 1));
@@ -446,7 +460,7 @@ ui::ViewModel map_view(const MapInput &in)
     r.soft.can_up = s.card.soft_gain_db < kSoftGainMax - 0.01;
 
     /* ---- settings ---- */
-    vm.settings.rows = settings_rows(s);
+    vm.settings.rows = settings_rows(s, local.next_take);
 
     /* ---- list ---- */
     ui::ListVm &l = vm.list;
