@@ -3,6 +3,7 @@
  *
  * Cassette app tests: the deck through the controller: record timer, pause and resume of a take, REW/FWD scan and jump.
  */
+#include "deck.hpp"
 #include "helpers.hpp"
 
 using namespace ta;
@@ -149,10 +150,94 @@ void t_scan_and_jump() {
     CHECK(r.wait_state(kDeckIdle));
 }
 
+/* The deck looks stopped: no scan, REW / FWD and PLAY/PAUSE not latched, no jump flash. */
+bool looks_idle(const Snapshot &x) {
+    return x.deck.state == kDeckIdle && !x.scan.active && x.scan.jump_dir == 0 && !x.deck.rew.active &&
+           !x.deck.fwd.active && !x.deck.pause_icon;
+}
+
+/* REW reaching the start ends the scan like FWD reaching the end: Idle, the take still loaded; the same at once when the
+ * scan starts at its end; a jump that cannot move does not flash the hubs. */
+void t_scan_ends() {
+    Rig r(one_card());
+    make_take(r.rec(), kTake, 20.0);
+    r.sink.sleep_us = 5000;
+    r.open();
+    Controller &c = r.ctl();
+
+    /* REW held while playing: runs into the start and stops there, the key still down */
+    CHECK(c.key_event(KeyEvent::PlayPause));
+    CHECK(r.wait_state(kDeckPlaying));
+    CHECK(r.wait([](const Snapshot &x) { return x.time.position_s > 2.0; }));
+    CHECK(c.key_event(KeyEvent::RewDown));
+    CHECK(r.wait(looks_idle, 3000));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    CHECK(looks_idle(r.snap())); /* stays stopped */
+    CHECK_EQ(r.snap().take.name, kTake);
+    c.key_event(KeyEvent::RewUp); /* released at 0: nothing happens */
+    std::this_thread::sleep_for(std::chrono::milliseconds(60));
+    CHECK(looks_idle(r.snap()));
+    /* PLAY afterwards plays the take from the start */
+    CHECK(c.key_event(KeyEvent::PlayPause));
+    CHECK(r.wait_state(kDeckPlaying));
+    CHECK(r.snap().time.position_s < 1.0);
+
+    /* REW held while paused: the same */
+    CHECK(r.wait([](const Snapshot &x) { return x.time.position_s > 1.0; }));
+    CHECK(c.key_event(KeyEvent::PlayPause));
+    CHECK_EQ(r.snap().deck.state, static_cast<int>(kDeckPlayingPaused));
+    CHECK(c.key_event(KeyEvent::RewDown));
+    CHECK(r.wait(looks_idle, 3000));
+    c.key_event(KeyEvent::RewUp);
+    std::this_thread::sleep_for(std::chrono::milliseconds(60));
+    CHECK(looks_idle(r.snap()));
+
+    /* REW pressed with the take at 0 (Idle: cued at its start): stops at once */
+    CHECK(c.key_event(KeyEvent::RewDown));
+    CHECK(r.wait(looks_idle, 200));
+    std::this_thread::sleep_for(std::chrono::milliseconds(60));
+    CHECK(looks_idle(r.snap()));
+    c.key_event(KeyEvent::RewUp);
+    CHECK(looks_idle(r.snap()));
+
+    /* FWD held: runs into the end, Idle (the same end) */
+    CHECK(c.key_event(KeyEvent::FwdDown));
+    CHECK(r.wait(looks_idle, 3000));
+    c.key_event(KeyEvent::FwdUp);
+    std::this_thread::sleep_for(std::chrono::milliseconds(60));
+    CHECK(looks_idle(r.snap()));
+
+    /* jump mode: REW at 0 cannot move, so it does not flash the hubs, held or not */
+    CHECK(c.set_scan_mode(ScanMode::Jump));
+    CHECK(c.key_event(KeyEvent::RewDown)); /* Idle: cued at 0, paused */
+    Snapshot s = r.snap();
+    CHECK_EQ(s.deck.state, static_cast<int>(kDeckPlayingPaused));
+    CHECK_EQ(s.scan.jump_dir, 0);
+    CHECK(s.time.position_s < 0.001);
+    r.clock.advance(cassette::kJumpRepeatMs + 10); /* held: the repeat cannot move either */
+    std::this_thread::sleep_for(std::chrono::milliseconds(60));
+    CHECK_EQ(r.snap().scan.jump_dir, 0);
+    c.key_event(KeyEvent::RewUp);
+    /* FWD jumps while paused until the end: the last jump that moves flashes, the one at the end does not */
+    for (int i = 0; i < 4; ++i) {
+        c.key_event(KeyEvent::FwdDown);
+        c.key_event(KeyEvent::FwdUp);
+    }
+    CHECK(std::abs(r.snap().time.position_s - 20.0) < 0.01);
+    CHECK_EQ(r.snap().scan.jump_dir, 1);
+    r.clock.advance(kJumpFlashMs + 10);
+    c.key_event(KeyEvent::FwdDown);
+    c.key_event(KeyEvent::FwdUp);
+    CHECK_EQ(r.snap().scan.jump_dir, 0);
+    c.key_event(KeyEvent::Stop);
+    CHECK(r.wait_state(kDeckIdle));
+}
+
 }  // namespace
 
 void test_deck() {
     t_timer();
     t_pause_resume();
     t_scan_and_jump();
+    t_scan_ends();
 }

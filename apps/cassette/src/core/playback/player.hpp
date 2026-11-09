@@ -22,9 +22,10 @@
  *   - the END while scanning forward: the take is over, exactly as when normal play reaches the end: the queued cue plays
  *     out, the state becomes Stopped with position() == length(), the event ReachedEnd is posted (the app feeds the deck
  *     TAKE_ENDED for both TakeEnded and ReachedEnd). end_scan() afterwards is a no-op.
- *   - the START while scanning reverse: the queued cue plays out and the Player holds at frame 0, still Scanning (the key
- *     is still down), posting ReachedStart once. end_scan() then returns to the state before the scan from frame 0: Playing
- *     plays the take from its start (a tape rewound to the start and released), Paused stays paused at 0.
+ *   - the START while scanning reverse: the same as the end (owner, 2026-11-09: the hubs must not keep turning): the
+ *     queued cue plays out, the state becomes Stopped with position() == 0, the event ReachedStart is posted (the app feeds
+ *     the deck TAKE_ENDED for it too). end_scan() afterwards is a no-op; play() then plays the take from its start.
+ *   A scan started at its end (reverse at 0, forward at the end) ends this way on its first step, nothing is heard.
  * Stop rewinds to 0; play() from Stopped at the end (after the take ended) starts again from 0.
  */
 #pragma once
@@ -113,7 +114,7 @@ public:
     PlayerState state() const;
     PlayerState state_before_scan() const;
     Direction scan_direction() const;
-    bool at_start_hold() const; /* scanning reverse, held at frame 0 */
+    bool at_start_hold() const; /* scanning reverse, held at frame 0 (no longer happens: the start stops the scan) */
     uint64_t position() const;
     uint64_t length() const;
     double position_s() const;

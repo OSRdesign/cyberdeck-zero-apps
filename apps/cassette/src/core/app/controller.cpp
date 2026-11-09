@@ -651,11 +651,16 @@ struct Controller::Impl : public DeckCommands {
         case DeckCommand::EndScan:
             if (player) player->end_scan();
             break;
-        case DeckCommand::Jump:
+        case DeckCommand::Jump: {
+            /* the hubs flash only when the jump moved the tape (not at the start or the end) */
+            const uint64_t before = player ? player->position() : 0;
             if (player) player->jump(c.dir, kJumpSeconds);
-            jump_ms = clk->mono_ms();
-            jump_dir = c.dir == Direction::Forward ? 1 : -1;
+            if (player && player->position() != before) {
+                jump_ms = clk->mono_ms();
+                jump_dir = c.dir == Direction::Forward ? 1 : -1;
+            }
             break;
+        }
         case DeckCommand::StartCountdown:
         case DeckCommand::CancelCountdown: break; /* the Deck runs the count; the snapshot shows it */
         case DeckCommand::DeviceLostNotice: add_notice(Notice::CardLost, lost_text); break;
@@ -827,7 +832,8 @@ struct Controller::Impl : public DeckCommands {
         run_deck(DeckEvent::TimerTick);
         PlayerEvent ev;
         while (player && player->poll_event(ev)) {
-            if (ev == PlayerEvent::TakeEnded || ev == PlayerEvent::ReachedEnd) run_deck(DeckEvent::TakeEnded);
+            if (ev == PlayerEvent::TakeEnded || ev == PlayerEvent::ReachedEnd || ev == PlayerEvent::ReachedStart)
+                run_deck(DeckEvent::TakeEnded);
             else if (ev == PlayerEvent::DeviceLost && playing_family()) {
                 lost_text = "The sound output was lost";
                 run_deck(DeckEvent::DeviceLost);
