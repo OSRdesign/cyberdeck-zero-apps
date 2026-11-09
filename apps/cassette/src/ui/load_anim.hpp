@@ -15,7 +15,9 @@
  *                   fast, slowing down), then settles back from +4 to 0 over 60 ms (ease in-out): it overshoots 4 units
  *                   at 540 ms, 83 % of the way, and lands at 600 ms
  *     600..900 ms   the take name is written onto the label from left to right (the reveal grows 0 -> 1)
- *   the first load (nothing in the deck, 660 ms): no drop-out and no gap: the new cassette falls in at 0..360 ms, the name
+ *   a LOAD while the BLANK cassette (no name on the label, shown when no take is loaded) is in the deck is this same
+ *   900 ms swap: the blank one drops out and the loaded one falls in; there is no cassette-less deck any more.
+ *   the first load (no cassette in view at all, 660 ms; only without a sound input, where LOAD is not reachable): no drop-out and no gap: the new cassette falls in at 0..360 ms, the name
  *     follows at 360..660 ms.
  *   The label shows no name until the cassette has landed; the strip text and the counter update at the landing; the
  *   hubs do not turn (the transport is idle) until PLAY.

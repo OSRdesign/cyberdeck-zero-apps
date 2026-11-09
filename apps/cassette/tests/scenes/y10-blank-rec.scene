@@ -1,0 +1,16 @@
+title Cassette REC from the blank cassette: the cassette is already there, REC only turns the hubs (no appearance animation); the label follows the existing behaviour for a recording take
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO deckempty
+env CASSETTE_ANIM_TICKS 12
+env CASSETTE_ANIM_FPS 60
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+shot blank-before-rec
+key r
+wait 600
+expect text "PAUSE"
+shot blank-rec
+expect notext "LAYOUT FAIL"
+expect noquit

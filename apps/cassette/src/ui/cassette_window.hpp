@@ -18,7 +18,7 @@
  * shows no name before the cassette has landed; loading() is true meanwhile (the UI ignores keys and touches but Esc),
  * before_landing() is true until the landing (the recorder page keeps the strip text and the counter until then; the
  * landed callback tells it to update). finish_load() ends it at once. A change of the cassette without a move of load_seq
- * (a new recording, a rename, the take loaded at launch, an empty deck) is applied at once, no animation.
+ * (a new recording, a rename, the take loaded at launch, a deleted take: the blank cassette, with an empty label, shows at once) is applied at once, no animation.
  *
  * The hubs: one white hub with three spokes (a 60-degree symmetry, so 120 degrees repeat it too) is pre-rendered at
  * start as 12 frames of 10 degrees each (opaque, on the hub window's colour); two small image objects show the frame of

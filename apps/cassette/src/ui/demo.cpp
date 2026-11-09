@@ -197,15 +197,14 @@ ViewModel demo_model(const std::string &scene)
         r.info.format.clear();
         r.info.limiter = false;
         r.info.low_cut = false;
-    } else if (scene == "deckempty") { /* idle with nothing in the deck (the loaded take was deleted): only OPEN, PLAY dimmed */
+    } else if (scene == "deckempty" || scene == "notakes") { /* idle with no take loaded: the blank cassette, PLAY dimmed */
         r.transport = Transport::Idle;
-        r.tape.loaded = false;
         r.tape.label.clear();
         r.info.take = "TAKE 008";
         r.keys[static_cast<int>(KeyId::PlayPause)].enabled = false;
         r.meter.ch[0].bar = 2;
         r.meter.ch[0].hold_bar = 0;
-    } else { /* idle: Take 006 is loaded (the list's highlighted row) */
+    } else { /* idle (also "onetake"): Take 006 is loaded (the list's highlighted row) */
         r.transport = Transport::Idle;
         r.tape.label = "Take 006";
         r.info.take = "TAKE 006";
@@ -273,9 +272,16 @@ ViewModel demo_model(const std::string &scene)
                take("004", "nodate \xC2\xB7 41 s \xC2\xB7 4 MB", 41000),
                take("003", "2 Nov \xC2\xB7 1 h 02 \xC2\xB7 357 MB", 3720000)};
     l.selected = 1;
+    if (scene == "notakes") {
+        l.takes.clear();
+        l.selected = 0;
+    } else if (scene == "onetake") { /* only Take 006: deleting it empties the deck */
+        l.takes = {l.takes[1]};
+        l.selected = 0;
+    }
     l.can_load = r.transport != Transport::Recording && r.transport != Transport::RecordingPaused &&
                  r.transport != Transport::Countdown;
-    l.take_count = 12;
+    l.take_count = scene == "notakes" ? 0 : scene == "onetake" ? 1 : 12;
     l.folder = "~/Recordings";
     l.free_space = "41 GB";
     l.free_hours = "117 h";
@@ -629,6 +635,14 @@ UiActions DemoDriver::actions()
         vm_.confirm.shown = false;
         if (yes && pending_delete_ >= 0 && pending_delete_ < static_cast<int>(vm_.list.takes.size())) {
             vm_.list.takes.erase(vm_.list.takes.begin() + pending_delete_);
+            if (pending_delete_ == loaded_) { /* the loaded take is gone: the blank cassette, nothing to play */
+                loaded_ = -1;
+                vm_.rec.tape.label.clear();
+                vm_.rec.info.take = "TAKE 008";
+                vm_.rec.keys[static_cast<int>(KeyId::PlayPause)].enabled = false;
+            } else if (pending_delete_ < loaded_) {
+                --loaded_;
+            }
             vm_.list.take_count = std::max(0, vm_.list.take_count - 1);
             vm_.list.selected = std::min(vm_.list.selected, static_cast<int>(vm_.list.takes.size()) - 1);
         } else if (yes) {

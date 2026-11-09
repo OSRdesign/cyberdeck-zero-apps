@@ -393,7 +393,7 @@ ui::ViewModel map_view(const MapInput &in)
 
     /* the take the cassette and the strip name: the take being recorded, the take playing (a list preview may play another
      * one than the loaded), else the LOADED take; with nothing loaded the strip names the take REC would write next and the
-     * window shows no cassette */
+     * window shows the blank cassette */
     std::string take_name;
     std::string tape_fmt = s.take.format_text;
     const bool have_loaded = !s.take.name.empty();
@@ -415,7 +415,7 @@ ui::ViewModel map_view(const MapInput &in)
         take_name = display_name(tn.prefix, take_label(tn));
     }
     const bool in_deck = have_loaded || (play_side && !s.take.playing_name.empty()); /* a cassette in the window */
-    r.tape.loaded = present && in_deck;
+    r.tape.loaded = present; /* the cassette is always in the deck; with no take it is blank (no name on the label) */
     r.tape.label = in_deck ? take_name : std::string();
     r.tape.load_seq = s.take.load_seq;
     r.tape.format = tape_format(tape_fmt);

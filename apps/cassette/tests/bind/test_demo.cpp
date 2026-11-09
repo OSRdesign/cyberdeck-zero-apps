@@ -208,7 +208,8 @@ void test_take_trim_save()
     CHECK(e.vm().rec.card.shown);                   /* the level card */
     CHECK(find_row(e.vm(), "level") && find_row(e.vm(), "agc"));
     CHECK_EQ(e.vm().rec.info.take, "TAKE 001"); /* nothing recorded yet: the take REC writes next */
-    CHECK(!e.vm().rec.tape.loaded);             /* nothing in the deck: no cassette */
+    CHECK(e.vm().rec.tape.loaded);              /* the blank cassette is in the deck ... */
+    CHECK_EQ(e.vm().rec.tape.label, "");        /* ... with no name on the label */
     CHECK(e.until([](const ui::ViewModel &v) { return v.rec.meter.ch[0].bar > 0; }, 2000)); /* the tone moves the meter */
     CHECK(!e.vm().rec.keys[static_cast<int>(ui::KeyId::Stop)].enabled);
     CHECK(e.vm().rec.keys[static_cast<int>(ui::KeyId::Rec)].enabled);

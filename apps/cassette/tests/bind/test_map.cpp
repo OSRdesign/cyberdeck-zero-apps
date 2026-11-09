@@ -166,12 +166,13 @@ void test_recorder()
     LocalState local;
     local.next_take = 8;
 
-    /* idle, nothing loaded: no cassette in the window, the strip names the take REC would write next */
+    /* idle, nothing loaded: the BLANK cassette (drawn, no name on the label), the strip names the take REC would write next */
     ui::ViewModel vm = map(s, {}, local);
     CHECK(vm.rec.input_present);
     CHECK(vm.rec.transport == ui::Transport::Idle);
-    CHECK(!vm.rec.tape.loaded);
+    CHECK(vm.rec.tape.loaded);
     CHECK_EQ(vm.rec.tape.label, "");
+    CHECK(!vm.rec.tape.format.empty()); /* the blank cassette still prints its format */
     CHECK_EQ(vm.rec.tape.load_seq, 0u);
     CHECK_EQ(vm.rec.info.take, "TAKE 008");
     /* idle with a loaded take: the cassette and the strip name it (a rename keeps it loaded: only the name changes) */
