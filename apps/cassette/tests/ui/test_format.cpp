@@ -83,6 +83,17 @@ void info()
     CHECK_EQ(info_line(r), "PLAYING TAKE 006 \xC2\xB7 05:44 / 12:08 \xC2\xB7 FWD 5x");
     r.transport = Transport::PlayingPaused;
     CHECK_EQ(info_state(r), "");
+    /* a paused take reads PAUSED, not PLAYING (the strip only; the portrait box is unchanged); scanning keeps PLAYING */
+    CHECK_EQ(info_line(r), "PAUSED TAKE 006 \xC2\xB7 05:44 / 12:08");
+    CHECK_EQ(info_title(r), "TAKE 006");
+    CHECK_EQ(info_detail(r), "05:44 / 12:08");
+    r.transport = Transport::Playing;
+    CHECK_EQ(info_line(r), "PLAYING TAKE 006 \xC2\xB7 05:44 / 12:08");
+    r.info.take.clear();
+    CHECK_EQ(info_line(r), "PLAYING \xC2\xB7 05:44 / 12:08");
+    r.transport = Transport::PlayingPaused;
+    CHECK_EQ(info_line(r), "PAUSED \xC2\xB7 05:44 / 12:08");
+    r.info.take = "TAKE 006";
     r.info.notice = "Sound card unplugged: take kept";
     CHECK_EQ(info_line(r), "Sound card unplugged: take kept");
 

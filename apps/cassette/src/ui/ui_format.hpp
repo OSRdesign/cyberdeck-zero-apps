@@ -68,7 +68,8 @@ double hub_speed_dps(Transport t, int jump_dir = 0);
 
 /* The recorder's info strip (landscape, one line) and the portrait info box (title over detail):
  *   recording / idle   "TAKE 007 · 48k/16 WAV · 12 h 40 left"          box "TAKE 007" / "12 h 40 left"
- *   playing / paused   "PLAYING TAKE 006 · 05:44 / 12:08"               box "TAKE 006" / "05:44 / 12:08"
+ *   playing            "PLAYING TAKE 006 · 05:44 / 12:08"               box "TAKE 006" / "05:44 / 12:08"
+ *   paused             "PAUSED TAKE 006 · 05:44 / 12:08"                (the strip only; the box is the same)
  *   scanning           "PLAYING TAKE 006 · 05:44 / 12:08 · REW 5x"      (FWD 5x forward)
  * Empty parts are left out with their separator. A notice replaces the line (and the box's detail). */
 std::string info_line(const RecorderVm &rec);

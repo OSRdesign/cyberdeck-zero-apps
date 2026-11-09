@@ -166,7 +166,8 @@ std::string info_line(const RecorderVm &r)
     if (!r.info.notice.empty()) return r.info.notice;
     std::string out;
     if (playing(r.transport)) {
-        out = r.info.take.empty() ? std::string("PLAYING") : "PLAYING " + r.info.take;
+        const char *verb = r.transport == Transport::PlayingPaused ? "PAUSED" : "PLAYING";
+        out = r.info.take.empty() ? std::string(verb) : std::string(verb) + " " + r.info.take;
         join(out, pos_len(r));
         if (r.transport == Transport::ScanReverse) join(out, "REW " + std::to_string(r.scan_speed) + "x");
         if (r.transport == Transport::ScanForward) join(out, "FWD " + std::to_string(r.scan_speed) + "x");

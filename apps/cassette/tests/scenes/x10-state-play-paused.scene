@@ -7,6 +7,8 @@ env CASSETTE_LAYOUT_CHECK 1
 
 wait 600
 shot state-play-paused
+@480x320 expect text "PAUSED TAKE 006 · 05:44 / 12:08"
+@320x480 expect text "05:44 / 12:08"
 expect text "PAUSE"
 expect notext "LAYOUT FAIL"
 expect noquit
