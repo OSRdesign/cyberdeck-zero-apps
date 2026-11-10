@@ -87,6 +87,17 @@ std::shared_ptr<void> build_bound_app(lv_obj_t *screen)
         }
         app->api = demo::make_demo_alsa(script);
         cfg.min_free_bytes = 16ull << 20; /* a demo home may be a small tmpfs */
+        /* CASSETTE_DEMO_CODECS=none|flac|opus|both: which encoder libraries the Format picker finds (the scenes do not
+         * depend on this machine's libraries); unset: the real ones */
+        if (const char *cd = std::getenv("CASSETTE_DEMO_CODECS"); cd && *cd) {
+            CodecAvailability ca;
+            const std::string v = cd;
+            ca.flac = v == "flac" || v == "both";
+            ca.opus = v == "opus" || v == "both";
+            if (!ca.flac) ca.flac_why = "demo: not installed";
+            if (!ca.opus) ca.opus_why = "demo: not installed";
+            cfg.codecs = [ca] { return ca; };
+        }
         std::fprintf(stderr, "[cassette] demo mode: scripted sound system (cards %s), home %s\n", script.cards.c_str(),
                      cfg.home.c_str());
     } else {

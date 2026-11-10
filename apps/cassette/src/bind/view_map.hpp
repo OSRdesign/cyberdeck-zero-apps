@@ -18,7 +18,10 @@
  *             message goes to the strip when a card is listed but cannot be used (busy, unsupported).
  *   names     "Take 006-1": the file's prefix with its first letter raised, then its label ("006-1", take_label).
  *   settings  the board's rows; Input level and Auto gain only when the card has them; Channels shown and dimmed (the
- *             controller has no channel setting); Format offers what the card records (WAV only); Format, Folder and
+ *             controller has no channel setting); Format lists every format of the model (codec/formats.hpp) with its size
+ *             per minute at the card's capture format and its free hours, a format this card or the libraries cannot
+ *             record dimmed with the reason (format_picker()); its value is the effective choice ("FLAC", "Opus 32 kbps",
+ *             "WAV 48 kHz 16-bit", "WAV (FLAC unavailable)" when the stored choice cannot be used); Format, Folder and
  *             Input dimmed while a take or the countdown runs.
  *   list      newest first (the controller's order); the highlight = the take the user moved it to, else the current take.
  *   trim      times in ms from frames at the take's rate; span = the frames the zoom shows; the window's peaks are centred on
@@ -88,6 +91,22 @@ std::string take_detail(const TakeRow &r, int64_t now_wall_s, bool utc);
 std::string tape_format(const std::string &format_text);
 std::string short_format(const std::string &format_text);
 std::string format_words(const std::string &format_text);
+/* The Format picker. size_per_minute_text: "5.8 MB/min" (1 MB = 10^6 bytes; one decimal under 10 MB, none from 10), under
+ * 1 MB "190 kB/min" rounded to 5 kB; "about " in front of an estimate (SizeKind::About, FLAC); "" without a figure. */
+std::string size_per_minute_text(const SizeEstimate &size);
+/* "Sizes at 48 kHz mono 16-bit, this card"; "No sound input: sizes unknown" without a capture format */
+std::string formats_footer_text(const FormatInputs &in);
+struct FormatPicker {
+    std::vector<FormatChoice> list;        /* the model's list for this card, in the Format row's order */
+    std::vector<ui::FormatEntry> entries;  /* the same, as the page shows it */
+    int current = -1;                      /* the entry the recorder uses (effective_choice), -1: none */
+    std::string value;                     /* the Settings row's value text */
+    std::string footer;
+};
+FormatPicker format_picker(const Snapshot &s);
+/* The selection rule: the entry `index` of the list when it can be chosen; null when the index is out of range (notice
+ * stays empty) or the entry is not compatible (*notice = "Not available: <reason>"). */
+const FormatChoice *selectable_format(const std::vector<FormatChoice> &list, int index, std::string *notice);
 /* 0..1 from a 16-bit min/max pair (the louder side) */
 float peak_level(const PeakBar &b);
 std::vector<float> peak_levels(const std::vector<PeakBar> &bars);

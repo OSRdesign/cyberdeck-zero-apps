@@ -160,11 +160,16 @@ private:
         lv_obj_t *obj = nullptr, *label = nullptr, *value = nullptr, *chevron = nullptr, *toggle = nullptr,
                  *slider = nullptr;
         int index = -1;           /* the setting (rows) or the choice (picker) */
+        lv_obj_t *detail = nullptr, *dot = nullptr; /* the Format picker's second line and its current-choice dot */
     };
     static void row_cb(lv_event_t *e);
     static void scroll_cb(lv_event_t *e);
     void refresh();
     void rebuild();
+    void build_format_rows(const SettingRow &s);
+    const SettingRow *format_picker() const; /* the open picker's row when it is the Format picker, else null */
+    void apply_notice();
+    void apply_list_height();
     void fill_row(Row &r, const SettingRow &s);
     void activate(int i, int touch_x);
     void update_scrollbar();
@@ -189,6 +194,9 @@ private:
     Fit fit_;
     std::unique_ptr<NoticeBox> notice_;
     int notice_h_ = 0;
+    std::string vm_notice_, local_notice_; /* the binding's notice; the page's own ("Not available: ...", over a Format entry) */
+    lv_obj_t *foot_ = nullptr;             /* narrow: the Format picker's footer line under the list */
+    int foot_h_ = 0, applied_h_ = 0;       /* the list's height now (narrow) */
     bool numpage_ = false;        /* picker_ is then the Number row */
     int draft_ = 1;
     lv_obj_t *num_big_ = nullptr;

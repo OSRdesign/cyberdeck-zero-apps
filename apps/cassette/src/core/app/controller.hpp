@@ -57,6 +57,7 @@
 
 #include "../alsa/alsa_api.hpp"
 #include "../codec/codec_libs.hpp"
+#include "../codec/formats.hpp"
 #include "../fileops.hpp"
 #include "../frame_sink.hpp"
 #include "../takes/naming.hpp"
@@ -259,6 +260,9 @@ struct Snapshot {
     unsigned takes_revision = 0; /* changes whenever takes() would return something different */
     std::string folder;          /* the recordings folder, "~" expanded */
     Settings settings;           /* the current settings */
+    /* What the Format picker needs: the capture format the recorder uses now (state Known while the card delivers, else
+     * NoCard) and which encoder libraries load (codec/formats.hpp list_formats) */
+    FormatInputs format_inputs;
 };
 
 struct TakeRow {
@@ -318,7 +322,11 @@ public:
     bool set_auto_gain(bool on);
     bool set_mute(bool on);
     bool set_soft_gain_db(double db);      /* 0..24 */
-    bool set_format(RecFormat f);          /* only Wav */
+    bool set_format(RecFormat f);          /* only Wav (set_format_choice takes a preset too) */
+    /* The Format picker's choice: format + preset as settings.json stores them (a preset of the model: "" for WAV and FLAC,
+     * "speech24" .. "music128" for Opus). false: not a format of the model, or a take or the countdown is running. Not
+     * checked against the card: a stored choice the card cannot record falls back to WAV when a take starts. */
+    bool set_format_choice(RecFormat f, const std::string &preset);
     bool set_folder(const std::string &folder);
     bool set_prefix(const std::string &prefix);
     /* The Take number setting: the next take gets `n` (1..9999), moved forward past numbers the file prefix already

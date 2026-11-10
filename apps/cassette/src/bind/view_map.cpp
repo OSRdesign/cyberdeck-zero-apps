@@ -132,6 +132,79 @@ std::string hours_text(double hours)
     return b;
 }
 
+std::string size_per_minute_text(const SizeEstimate &size)
+{
+    if (size.kind == SizeKind::Unknown || size.bytes_per_minute == 0) return "";
+    const double v = static_cast<double>(size.bytes_per_minute);
+    char b[48];
+    /* under 1 MB: kB rounded to 5 (a figure that rounds to 1000 kB is 1.0 MB) */
+    const double kb5 = std::round(v / 5000.0) * 5.0;
+    if (v < 1e6 && kb5 < 1000.0) {
+        std::snprintf(b, sizeof b, "%.0f kB/min", std::max(5.0, kb5));
+    } else {
+        const double mb = std::max(1.0, v / 1e6);
+        if (std::round(mb * 10.0) / 10.0 < 10.0) std::snprintf(b, sizeof b, "%.1f MB/min", std::round(mb * 10.0) / 10.0);
+        else std::snprintf(b, sizeof b, "%.0f MB/min", std::round(mb));
+    }
+    return (size.kind == SizeKind::About ? "about " : "") + std::string(b);
+}
+
+std::string formats_footer_text(const FormatInputs &in)
+{
+    if (in.state != CaptureState::Known) return "No sound input: sizes unknown";
+    const AudioFormat &f = in.capture;
+    char b[96];
+    const std::string ch = f.channels == 1 ? "mono" : f.channels == 2 ? "stereo" : std::to_string(f.channels) + " ch";
+    if (f.rate % 1000 == 0) std::snprintf(b, sizeof b, "Sizes at %u kHz ", static_cast<unsigned>(f.rate / 1000));
+    else std::snprintf(b, sizeof b, "Sizes at %.1f kHz ", f.rate / 1000.0);
+    return std::string(b) + ch + " " + std::to_string(f.bits) + "-bit, this card";
+}
+
+const FormatChoice *selectable_format(const std::vector<FormatChoice> &list, int index, std::string *notice)
+{
+    if (index < 0 || index >= static_cast<int>(list.size())) return nullptr;
+    const FormatChoice &c = list[static_cast<size_t>(index)];
+    if (c.compatible) return &c;
+    if (notice) *notice = "Not available: " + c.why_not;
+    return nullptr;
+}
+
+FormatPicker format_picker(const Snapshot &s)
+{
+    FormatPicker p;
+    p.list = list_formats(s.format_inputs);
+    const FormatChoice *stored = find_choice(p.list, FormatKey{s.settings.format, s.settings.format_preset});
+    const FormatChoice *eff = effective_choice(p.list, FormatKey{s.settings.format, s.settings.format_preset});
+    for (size_t i = 0; i < p.list.size(); ++i) {
+        const FormatChoice &c = p.list[i];
+        ui::FormatEntry e;
+        e.name = c.name;
+        e.size = size_per_minute_text(c.size);
+        e.compatible = c.compatible;
+        e.reason = c.why_not;
+        if (c.compatible) {
+            e.detail = c.detail;
+            if (s.take.free_bytes > 0) {
+                const std::string h = hours_text(hours_for_space(s.take.free_bytes, c.size));
+                if (!h.empty()) e.detail += std::string(kDot) + h + " free";
+            }
+        } else {
+            e.detail = c.why_not;
+        }
+        p.entries.push_back(e);
+        if (eff == &c) p.current = static_cast<int>(i);
+    }
+    const bool known = s.format_inputs.state == CaptureState::Known;
+    if (eff && eff->key.format != RecFormat::Wav) p.value = eff->name;
+    else {
+        p.value = known ? format_words(s.take.format_text) : std::string("WAV");
+        if (stored && stored->key.format != RecFormat::Wav && !stored->compatible)
+            p.value = std::string("WAV (") + (stored->key.format == RecFormat::Flac ? "FLAC" : "Opus") + " unavailable)";
+    }
+    p.footer = formats_footer_text(s.format_inputs);
+    return p;
+}
+
 std::string size_text(uint64_t bytes)
 {
     const double kb = 1024.0, mb = kb * 1024, gb = mb * 1024;
@@ -279,8 +352,12 @@ std::vector<ui::SettingRow> settings_rows(const Snapshot &s, uint64_t next_take)
     if (c.present && c.has_agc) rows.push_back(toggle_row("agc", "Auto gain (card)", c.auto_gain));
     if (c.present && c.has_mute) rows.push_back(toggle_row("mute", "Mic mute (card)", c.mute));
     {
-        ui::SettingRow r = choice_row("format", "Format", {format_words(s.take.format_text)}, 0);
+        const FormatPicker fp = format_picker(s);
+        ui::SettingRow r = choice_row("format", "Format", {fp.value}, 0);
         r.enabled = !busy;
+        r.formats = fp.entries;
+        r.choice = fp.current;
+        r.formats_footer = fp.footer;
         rows.push_back(r);
     }
     {

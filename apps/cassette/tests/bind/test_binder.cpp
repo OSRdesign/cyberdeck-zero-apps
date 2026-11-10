@@ -129,6 +129,41 @@ void test_steppers()
     CHECK(!r.binder.vm().rec.card.shown);
 }
 
+/* The Format picker's entries: the model's order (WAV, FLAC, Opus 24, 32, 64, 128); a compatible one sets format and preset
+ * through the controller; one this card cannot record sets nothing and says why */
+void test_format_choice()
+{
+    Rig r;
+    r.act.setting_choice("format", 1);
+    CHECK(r.calls() == std::vector<std::string>{"set_format_choice flac"});
+    r.act.setting_choice("format", 3);
+    CHECK(r.calls() == std::vector<std::string>{"set_format_choice opus speech32"});
+    r.act.setting_choice("format", 5);
+    CHECK(r.calls() == std::vector<std::string>{"set_format_choice opus music128"});
+    r.act.setting_choice("format", 0);
+    CHECK(r.calls() == std::vector<std::string>{"set_format_choice wav"});
+    r.act.setting_choice("format", 6); /* out of range: nothing */
+    r.act.setting_choice("format", -1);
+    CHECK(r.calls().empty());
+    /* the controller refuses (a take is running): a notice */
+    r.port.format_choice_result = false;
+    r.act.setting_choice("format", 1);
+    r.tick();
+    r.tick();
+    CHECK_EQ(r.binder.vm().notice, "The format cannot be changed now");
+    /* a stereo 44.1 kHz card: Opus is not available, nothing is set, the reason is the notice */
+    Rig q;
+    q.port.snap.format_inputs.capture.rate = 44100;
+    q.port.snap.format_inputs.capture.channels = 2;
+    q.tick();
+    q.act.setting_choice("format", 4);
+    CHECK(q.calls().empty());
+    q.tick();
+    CHECK_EQ(q.binder.vm().notice, "Not available: Opus cannot record at 44.1 kHz");
+    q.act.setting_choice("format", 1); /* FLAC works there */
+    CHECK(q.calls() == std::vector<std::string>{"set_format_choice flac"});
+}
+
 void test_settings_actions()
 {
     Rig r;
@@ -154,7 +189,7 @@ void test_settings_actions()
     r.act.setting_text("prefix", "interview");
     r.act.setting_text("other", "x");
     const std::vector<std::string> want = {
-        "select_card 1",      "set_format wav",    "set_record_timer 10", "set_scan_mode jump", "set_scan_mode scan",
+        "select_card 1",      "set_format_choice wav",    "set_record_timer 10", "set_scan_mode jump", "set_scan_mode scan",
         "set_auto_split off", "set_auto_split on", "set_auto_gain on",    "set_low_cut on",     "set_limiter off",
         "set_level_db 15.0",  "set_monitor on",     "set_monitor_level 35", "set_monitor_level 100",
         "set_monitor_level 0", "set_monitor off",   "set_prefix interview"};
@@ -869,6 +904,7 @@ void test_binder()
     test_deck_keys();
     test_steppers();
     test_settings_actions();
+    test_format_choice();
     test_pages_and_list();
     test_preview_and_load();
     test_trim_actions();

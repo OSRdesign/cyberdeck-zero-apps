@@ -392,7 +392,7 @@ Report: what the row read at each step, the names of the takes recorded in 3 and
 ## B17. FLAC and Opus takes (any board with the libraries; zero8 or deck for the power pull, 30 min)
 
 Goal: takes record as FLAC and as Ogg Opus, play on the PC, and survive a power pull and an unplug like WAV takes.
-The Format row cannot choose them yet (the owner's design comes later): the format is set in the settings file.
+The Format picker (B19) can choose them; here the format is set in the settings file, which also tests the stored key.
 Playing, previewing and trimming FLAC/Opus takes in the app comes later too (phase C): in this version LOAD, PLAY,
 the list's preview and TRIM answer with the notice `FLAC playback is not available yet` (or `Opus ...`). That is
 expected; the takes are checked on the PC.
@@ -405,8 +405,8 @@ expected; the takes are checked on the PC.
    `sed -i 's/"format": *"[a-z]*"/"format": "flac"/' ~/.config/cassette/settings.json` and check it with
    `grep format ~/.config/cassette/settings.json` (expected: `"format": "flac"`).
 3. Open Cassette. Expected: the format on the window reads `48k/16 FLAC` (`FLAC 48 kHz 16-bit` in Settings > Format);
-   the time left is about three times what it was with WAV. Do not pick a value in the Format row during B17: in
-   this version it only offers WAV and choosing it sets WAV back.
+   the time left is about three times what it was with WAV. Do not pick a value in Settings > Format during B17
+   (that is B19): it would overwrite the setting under test.
 4. REC, talk for 1 minute, STOP. The list: the new take `take_NNN_...flac` on top, its row ends in `FLAC` (the WAV
    takes end in `WAV`). Its take number follows the WAV takes (never a number already used). Press LOAD and PLAY once:
    the notice above, nothing hangs, the app stays usable. Rename it (a new prefix) and check the name still ends in
@@ -446,6 +446,41 @@ Report: which libraries were present, the window's format text, the list rows (F
 ffprobe and opusinfo lines, whether both play on the PC and the phone, the power-pull results (timer, kept length,
 last number heard, notice text) for FLAC and Opus, the unplug result, the CPU % of step 12.
 
+## B19. The Format picker (any board with the libraries, 20 min)
+
+Goal: Settings > Format lists every format with sizes that match what a recording really takes.
+
+1. Open Settings and read the Format row. Expected: the choice in use (`WAV 48 kHz 16-bit` on a mono 48 kHz card).
+   Tap it (or Right / Enter). Expected: the page is titled `Format`; six two-line rows in this order: WAV, FLAC,
+   Opus 24 kbps, Opus 32 kbps, Opus 64 kbps, Opus 128 kbps; each shows the size per minute on the right (`5.8 MB/min`,
+   `about ... MB/min` for FLAC, `... kB/min` or `... MB/min` for Opus) and a grey line under the name (the one-line
+   description and `... h free`); the row in use has a dot and is darker; the footer under the list reads
+   `Sizes at <rate> kHz <mono|stereo> <bits>-bit, this card`. Scroll to the last row (drag, or Down keys).
+2. A card or library that cannot do it: with the PC's `ldconfig -p | grep -E 'libFLAC|libopusenc'` as the reference, a
+   missing library's rows must be dimmed with `FLAC not installed (libflac14)` or `Opus not installed (libopusenc0)`
+   in place of the description. On a card that records only 44.1 kHz (or any rate Opus does not take) the four Opus
+   rows are dimmed with `Opus cannot record at 44.1 kHz`. Tap a dimmed row. Expected: nothing is chosen, the notice
+   line says `Not available: <the same reason>`; Esc leaves the page.
+3. Choose FLAC. Expected: the page closes, the Format row reads `FLAC`, the window's format text reads
+   `48k/16 FLAC`, the time left grows to about three times the WAV figure. Close Cassette and open it again: still
+   `FLAC` (the choice is stored). Repeat for `Opus 32 kbps` (row reads `Opus 32 kbps`) and back to WAV.
+4. **Sizes against files.** For each of WAV, FLAC, Opus 24, 32, 64 and 128 kbps (the ones the card allows): choose it,
+   REC for exactly 1 minute by the counter, STOP, and read the file size in the list row (or `ls -l ~/Recordings`).
+   Write down the picker's figure and the file's size. Expected: WAV within 1 % of the figure; Opus within 10 % of
+   the figure (a take with pauses is smaller, never much larger); FLAC within the range of the take's content (speech
+   about 30 %, music about 55 % of WAV) and the picker's `about` figure of the same order.
+5. A stored choice that stops working: choose Opus on a card that allows it, close Cassette, start it with a card that
+   records 44.1 kHz only (or with the library removed). Expected: the Format row reads `WAV (Opus unavailable)`, a
+   take records as WAV, the picker marks WAV as in use and shows the Opus rows dimmed.
+6. Without a sound input (unplug the card, Cassette open): the picker lists all formats with no sizes and the footer
+   `No sound input: sizes unknown`. During a take the Format row is dimmed and does not open.
+7. By touch on a narrow screen (zero8 upright, 320x480): every row readable, nothing cut or overlapping, the footer
+   under the list (a notice, when shown, takes its place).
+
+Report: the row texts (value and every line) as read, the picker figure against the file size per format (a small
+table), the notice texts, the window's format text after choosing FLAC and Opus, what the page looked like when a row
+was dimmed, any cut or overlapping text.
+
 ## Results
 
 | Test | Board | Pass / fail | Notes |
@@ -468,6 +503,7 @@ last number heard, notice text) for FLAC and Opus, the unplug result, the CPU % 
 | B15 take number |  |  |  |
 | B16 square screen |  |  |  |
 | B17 FLAC and Opus |  |  |  |
+| B19 Format picker |  |  |  |
 
 **What to send back:** the table; the probe output per board (B0); the `watch` and `take` outputs of B1, B3, B4; the
 `ui` log line per board; the notice texts as you read them; screenshots or photos of anything cut, overlapping or odd.

@@ -382,6 +382,178 @@ void test_recorder()
     CHECK_EQ(vm.rec.info.notice, "The sound card is busy");
 }
 
+void test_size_text()
+{
+    auto est = [](SizeKind k, uint64_t bpm) {
+        SizeEstimate e;
+        e.kind = k;
+        e.bytes_per_minute = bpm;
+        return size_per_minute_text(e);
+    };
+    /* MB: one decimal under 10, none from 10 (1 MB = 10^6 bytes) */
+    CHECK_EQ(est(SizeKind::Exact, 5760000), "5.8 MB/min");
+    CHECK_EQ(est(SizeKind::Exact, 11520000), "12 MB/min");
+    CHECK_EQ(est(SizeKind::Exact, 1000000), "1.0 MB/min");
+    CHECK_EQ(est(SizeKind::Exact, 9949999), "9.9 MB/min");
+    CHECK_EQ(est(SizeKind::Exact, 9950000), "10 MB/min"); /* rounds up into the integer range, no "10.0" */
+    CHECK_EQ(est(SizeKind::Exact, 10400000), "10 MB/min");
+    CHECK_EQ(est(SizeKind::Exact, 32000000), "32 MB/min");
+    /* kB under 1 MB, rounded to 5 kB */
+    CHECK_EQ(est(SizeKind::Target, 244600), "245 kB/min");
+    CHECK_EQ(est(SizeKind::Target, 182400), "180 kB/min");
+    CHECK_EQ(est(SizeKind::Target, 182600), "185 kB/min");
+    CHECK_EQ(est(SizeKind::Target, 999999), "1.0 MB/min"); /* 1000 kB is 1.0 MB */
+    CHECK_EQ(est(SizeKind::Target, 997400), "995 kB/min");
+    CHECK_EQ(est(SizeKind::Target, 1200), "5 kB/min");     /* never 0 */
+    /* "about" only for an estimate (FLAC); a bitrate target and an exact size have none */
+    CHECK_EQ(est(SizeKind::About, 1730000), "about 1.7 MB/min");
+    CHECK_EQ(est(SizeKind::About, 700000), "about 700 kB/min");
+    CHECK_EQ(est(SizeKind::Target, 1920000), "1.9 MB/min");
+    /* no figure: blank */
+    CHECK_EQ(est(SizeKind::Unknown, 5760000), "");
+    CHECK_EQ(est(SizeKind::Exact, 0), "");
+    /* the footer */
+    FormatInputs in;
+    CHECK_EQ(formats_footer_text(in), "No sound input: sizes unknown");
+    in.state = CaptureState::Known;
+    in.capture.rate = 48000;
+    in.capture.channels = 1;
+    in.capture.bits = 16;
+    CHECK_EQ(formats_footer_text(in), "Sizes at 48 kHz mono 16-bit, this card");
+    in.capture.rate = 44100;
+    in.capture.channels = 2;
+    in.capture.bits = 24;
+    CHECK_EQ(formats_footer_text(in), "Sizes at 44.1 kHz stereo 24-bit, this card");
+}
+
+void test_format_picker()
+{
+    Snapshot s = base_snapshot();
+    FormatPicker p = format_picker(s);
+    CHECK_EQ(p.entries.size(), size_t(6));
+    CHECK_EQ(p.list.size(), size_t(6));
+    const char *names[] = {"WAV", "FLAC", "Opus 24 kbps", "Opus 32 kbps", "Opus 64 kbps", "Opus 128 kbps"};
+    for (size_t i = 0; i < 6 && i < p.entries.size(); ++i) {
+        CHECK_EQ(p.entries[i].name, std::string(names[i]));
+        CHECK(p.entries[i].compatible);
+        CHECK(!p.entries[i].size.empty());
+    }
+    CHECK_EQ(p.entries[0].size, "5.8 MB/min"); /* 48 kHz mono 16-bit */
+    CHECK(p.entries[1].size.compare(0, 6, "about ") == 0);
+    CHECK(p.entries[2].size.compare(0, 6, "about ") != 0);
+    CHECK_EQ(p.current, 0);
+    CHECK_EQ(p.value, "WAV 48 kHz 16-bit");
+    CHECK_EQ(p.footer, "Sizes at 48 kHz mono 16-bit, this card");
+    /* line 2: the model's detail and the hours that fit in the free space (41 GiB at 5.76 MB/min) */
+    CHECK_EQ(p.entries[0].detail, "uncompressed, plays everywhere \xC2\xB7 127 h free");
+    CHECK(p.entries[1].detail.find("lossless, a third to half the size \xC2\xB7 ") == 0);
+    /* no free-space figure: no hours */
+    s.take.free_bytes = 0;
+    p = format_picker(s);
+    CHECK_EQ(p.entries[0].detail, "uncompressed, plays everywhere");
+
+    /* the settings row carries it all */
+    s = base_snapshot();
+    ui::ViewModel vm = map(s);
+    const ui::SettingRow *r = find_row(vm, "format");
+    CHECK(r && r->formats.size() == 6 && r->choice == 0 && r->value == "WAV 48 kHz 16-bit");
+    CHECK(r && r->formats_footer == "Sizes at 48 kHz mono 16-bit, this card");
+
+    /* the current choice: FLAC, Opus (the stored preset; an empty one means speech32) */
+    s.settings.format = RecFormat::Flac;
+    p = format_picker(s);
+    CHECK_EQ(p.current, 1);
+    CHECK_EQ(p.value, "FLAC");
+    s.settings.format = RecFormat::Opus;
+    s.settings.format_preset = "music64";
+    p = format_picker(s);
+    CHECK_EQ(p.current, 4);
+    CHECK_EQ(p.value, "Opus 64 kbps");
+    s.settings.format_preset = "";
+    p = format_picker(s);
+    CHECK_EQ(p.current, 3);
+    CHECK_EQ(p.value, "Opus 32 kbps");
+
+    /* a stereo 44.1 kHz card: Opus rows dimmed with the model's reason, sizes still shown */
+    s = base_snapshot();
+    s.format_inputs.capture.rate = 44100;
+    s.format_inputs.capture.channels = 2;
+    p = format_picker(s);
+    CHECK(p.entries[0].compatible && p.entries[1].compatible);
+    for (size_t i = 2; i < 6; ++i) {
+        CHECK(!p.entries[i].compatible);
+        CHECK_EQ(p.entries[i].reason, "Opus cannot record at 44.1 kHz");
+        CHECK_EQ(p.entries[i].detail, "Opus cannot record at 44.1 kHz"); /* line 2 is the reason */
+        CHECK(!p.entries[i].size.empty());
+    }
+    CHECK_EQ(p.entries[0].size, "11 MB/min"); /* 44.1 kHz stereo 16-bit: 10.58 MB */
+    CHECK_EQ(p.footer, "Sizes at 44.1 kHz stereo 16-bit, this card");
+    /* a stored Opus choice the card cannot record: the value says WAV and why, the current row is WAV */
+    s.settings.format = RecFormat::Opus;
+    s.settings.format_preset = "speech32";
+    p = format_picker(s);
+    CHECK_EQ(p.value, "WAV (Opus unavailable)");
+    CHECK_EQ(p.current, 0);
+
+    /* a missing library */
+    s = base_snapshot();
+    s.format_inputs.codecs.flac = false;
+    s.settings.format = RecFormat::Flac;
+    p = format_picker(s);
+    CHECK(!p.entries[1].compatible);
+    CHECK_EQ(p.entries[1].detail, "FLAC not installed (libflac14)");
+    CHECK_EQ(p.value, "WAV (FLAC unavailable)");
+    CHECK_EQ(p.current, 0);
+    CHECK(p.entries[2].compatible);
+
+    /* a 16 kHz mono headset */
+    s = base_snapshot();
+    s.format_inputs.capture.rate = 16000;
+    p = format_picker(s);
+    CHECK_EQ(p.footer, "Sizes at 16 kHz mono 16-bit, this card");
+    CHECK_EQ(p.entries[0].size, "1.9 MB/min");
+    for (size_t i = 0; i < 6; ++i) CHECK(p.entries[i].compatible);
+
+    /* no card: no sizes, the footer says so, WAV is the value */
+    s = base_snapshot();
+    s.format_inputs.state = CaptureState::NoCard;
+    s.card.present = false;
+    s.take.format_text = "0k/0 WAV";
+    p = format_picker(s);
+    for (const ui::FormatEntry &e : p.entries) CHECK_EQ(e.size, "");
+    CHECK_EQ(p.footer, "No sound input: sizes unknown");
+    CHECK_EQ(p.value, "WAV");
+    CHECK(p.entries[0].compatible && p.entries[5].compatible);
+    s.format_inputs.codecs.opus = false;
+    p = format_picker(s);
+    CHECK(!p.entries[3].compatible);
+    CHECK_EQ(p.entries[3].detail, "Opus not installed (libopusenc0)");
+
+    /* while a take runs the row is dimmed */
+    s = base_snapshot();
+    s.deck.state = kDeckRecording;
+    CHECK(!find_row(map(s), "format")->enabled);
+}
+
+void test_format_selection()
+{
+    Snapshot s = base_snapshot();
+    s.format_inputs.capture.rate = 44100;
+    s.format_inputs.capture.channels = 2;
+    const FormatPicker p = format_picker(s);
+    std::string notice;
+    const FormatChoice *c = selectable_format(p.list, 1, &notice);
+    CHECK(c && c->key == (FormatKey{RecFormat::Flac, ""}));
+    CHECK(notice.empty());
+    c = selectable_format(p.list, 3, &notice);
+    CHECK(!c);
+    CHECK_EQ(notice, "Not available: Opus cannot record at 44.1 kHz");
+    notice.clear();
+    CHECK(!selectable_format(p.list, -1, &notice) && notice.empty());
+    CHECK(!selectable_format(p.list, 6, &notice) && notice.empty());
+    CHECK(!selectable_format(p.list, 2, nullptr)); /* no notice wanted */
+}
+
 void test_settings()
 {
     Snapshot s = base_snapshot();
@@ -938,6 +1110,9 @@ void test_map()
     test_helpers();
     test_recorder();
     test_settings();
+    test_size_text();
+    test_format_picker();
+    test_format_selection();
     test_list();
     test_trim();
     test_boxes();

@@ -6,8 +6,10 @@ default), D4 (FLAC and Opus as options), D7 (libraries loaded at run time with `
 
 **Status (2026-11-10).** Phase A (the encoders, the library loading, the format list with its size estimates, the
 stored key) and phase B (recording: the writer, names, the list, the journal, the repair) are done. The recorder writes
-FLAC and Ogg Opus takes when the stored setting asks for it and `effective_choice()` allows it; the Settings Format row
-(the owner's design) still offers WAV only, so for now the format is set in `settings.json`. Playing, previewing,
+FLAC and Ogg Opus takes when the stored setting asks for it and `effective_choice()` allows it. The Settings Format row
+(the owner's design) is done too (2026-11-10, branch `cassette-fmtui`): it opens a picker page listing every format of
+the model with its size per minute, the model's detail line and the hours that fit in the free space; entries the card
+or the libraries cannot record stay in the list, dimmed, with the model's reason. See "The Format picker" below. Playing, previewing,
 trimming and the peak cache of FLAC/Opus takes are phase C: until then those refuse with a notice. Code:
 `src/core/codec/`, `src/core/writer.*`, `src/core/repair.*`, `src/core/takes/`; tests: `tests/codec/`,
 `tests/test_stream_scan.cpp`, `tests/test_codec_writer.cpp`, `tests/test_codec_crash.cpp`, `tests/takes/test_formats.cpp`,
@@ -288,6 +290,31 @@ measured on the board (B17 step 12; P0-e measured mono speech Opus at 7-10 %).
 - The list shows 0 s for a FLAC take whose STREAMINFO says "unknown" (only a take being recorded, or one whose repair
   failed).
 - The packaging (Recommends or Depends for libflac/libopusenc, see above) is the owner's step.
+
+## The Format picker (done)
+
+Code: `src/bind/view_map.cpp` (`format_picker()`, `size_per_minute_text()`, `formats_footer_text()`,
+`selectable_format()`), `src/ui/page_settings.cpp` (`build_format_rows()`), `Controller::set_format_choice()`.
+Tests: `tests/bind/test_map.cpp` (size text, entries, selection rule), `tests/bind/test_binder.cpp`, `tests/app/test_formats.cpp`
+(`t_set_format_choice`); scenes `tests/bind/scenes/fmt*.scene`, `sq480-w-format`, `sq720-w-format`. Board test: B19.
+
+- The snapshot carries `Snapshot::format_inputs` (the capture format the recorder uses, state `Known` while the card
+  delivers, else `NoCard`; the libraries found). `format_picker()` builds the list with `list_formats()` from it and
+  maps each entry: name and size on line 1, the model's detail and, when the free space is known, the hours that fit
+  there (`hours_for_space`) on line 2; an entry that is not compatible shows `why_not` on line 2 and is not selectable.
+- Size text: 1 MB = 10^6 bytes; from 1 MB `5.8 MB/min` (one decimal under 10, none from 10); under 1 MB `190 kB/min`
+  rounded to 5 kB; `about ` in front of an estimate (FLAC); a bitrate target (Opus) and an exact size (WAV) have none;
+  no card: blank. The footer says which capture format the sizes are for.
+- The row's value is the effective choice: `WAV 48 kHz 16-bit`, `FLAC`, `Opus 32 kbps`; `WAV (FLAC unavailable)` when the
+  stored choice cannot be used (library missing, rate or channels the codec does not take). The current entry of the
+  picker is the effective one.
+- Choosing: the binder maps the entry index to the model's key and calls `set_format_choice(format, preset)`, which
+  stores both through the settings store (WAV and FLAC with an empty preset, Opus with its preset) and refreshes the
+  recorder's format text and hours left. It is refused while a take or the countdown runs (the row is dimmed then
+  too) and for a key the model does not have. The controller does not check the card: the picker does not offer an
+  incompatible entry, and a stored one that stops being compatible falls back to WAV when a take starts.
+- Demo and scenes: `CASSETTE_DEMO_CARD=stereo` (44.1 kHz stereo only) and `CASSETTE_DEMO_CODECS=none|flac|opus|both`
+  (which libraries the picker finds) make the cases reproducible without hardware.
 
 ## Next: phase C, playback and editing
 

@@ -64,7 +64,10 @@ Four pages and two boxes:
   ZOOM from the whole take down to a 2 s window, a thin overview strip of the whole take, the IN and OUT handles and any
   number of numbered split points (a tap selects one and the SPLIT key becomes REMOVE). SAVE opens the save box.
 - **Settings.** Input (the capture card), Input level, Auto gain (card) and Mic mute (card) (only when the card has
-  those controls), Format (WAV in 0.1), Record timer, REW / FWD (Fast scan 5x or Jump 5 s), Channels (what the card
+  those controls), Format (opens a page with every format: WAV, FLAC and Opus at 24, 32, 64 and 128 kbps, each with its estimated size
+  per minute at this card's format and the hours that fit in the free space; one the card or the libraries cannot
+  record stays in the list dimmed with the reason, and a tap on it says "Not available: ..."; the row shows the choice
+  in use, "WAV (FLAC unavailable)" when the stored one cannot be used), Record timer, REW / FWD (Fast scan 5x or Jump 5 s), Channels (what the card
   records, read-only), Low cut 80 Hz, Limiter, Monitor and Monitor level (only when the card has a playback side;
   see Live monitor), Sync every (5, 10, 20, 30 s), Folder, File prefix, Take number (the number the next take gets; a page
   with the number large, -1 / +1, -10 / +10 and -100 / +100 steppers, Reset to 1 and Set; Esc cancels; 1 to 9999),
@@ -196,8 +199,8 @@ It writes no file and changes no setting; `--no-open` only lists.
 
 ## Known limits
 
-- The Format row offers WAV only. The recorder can already write FLAC and Ogg Opus takes (set in the settings file,
-  see Formats below), but the app cannot play, preview or trim them yet: those refuse with a notice.
+- The Format row can choose FLAC and Ogg Opus (see Formats below), but the app cannot play, preview or trim those
+  takes yet: those refuse with a notice.
 - No background recording (plan 016, D10): the app owns the screen while it records, and leaving it stops the take
   safely. `X-Background` is not set; this is revisited when multitasking is switched on.
 - Playback plays the app's own takes (WAV) through the card's playback side when it has one, else the default device.
@@ -208,12 +211,15 @@ It writes no file and changes no setting; `--no-open` only lists.
 ## Formats
 
 WAV (Broadcast Wave) is the format of 0.1 and stays the default. FLAC (lossless) and Ogg Opus (small) are being added.
-The recorder writes them already, crash-safe like WAV (a take cut by a power loss is repaired at the next start), when
-`~/.config/cassette/settings.json` says `"format": "flac"` or `"format": "opus"` (with `"format_preset"`:
-`speech24`, `speech32`, `music64` or `music128`) and the card and the libraries allow it; otherwise it records WAV.
-Takes are named `.flac` / `.opus`, the list shows WAV, FLAC or OPUS in each row, and the take numbers run on across
-formats. Playing and trimming them in the app, and the Format row to choose them, come next. The Format row will list
-every format the selected card allows, each with an estimated size per minute:
+The recorder writes them, crash-safe like WAV (a take cut by a power loss is repaired at the next start), when the
+choice in Settings > Format (stored in `~/.config/cassette/settings.json` as `"format": "flac"` or `"format": "opus"`
+with `"format_preset"`: `speech24`, `speech32`, `music64` or `music128`) is one the card and the libraries allow;
+otherwise it records WAV. Takes are named `.flac` / `.opus`, the list shows WAV, FLAC or OPUS in each row, and the take
+numbers run on across formats. Playing and trimming them in the app comes next. Settings > Format lists every format,
+in this order, each with an estimated size per minute at the selected card's capture format (the footer of the page
+says which: "Sizes at 48 kHz mono 16-bit, this card"; without a sound input there are no sizes), the model's one-line
+description and how many hours fit in the recordings folder's free space; the choice cannot be changed while a take
+records. Sizes read like this:
 
 | Format | Size per minute at 48 kHz mono 16-bit | Needs |
 |---|---|---|

@@ -325,6 +325,50 @@ void t_flac_disk_full() {
     }
 }
 
+/* The Format picker's command: format + preset stored in settings.json, the recorder follows at once; the snapshot carries
+ * the capture format and the libraries the picker needs; refused while a take runs, and for a key the model does not have. */
+void t_set_format_choice() {
+    Rig r(one_card()); /* mono, 48 kHz */
+    use_test_codecs(r);
+    r.cfg.writer_sync_ms = 500;
+    r.open();
+    Controller &c = r.ctl();
+    CHECK(r.wait_meter());
+    Snapshot s = r.snap();
+    CHECK(s.format_inputs.state == CaptureState::Known);
+    CHECK_EQ(s.format_inputs.capture.rate, 48000u);
+    CHECK_EQ(s.format_inputs.capture.channels, uint16_t(1));
+    CHECK(s.format_inputs.codecs.flac && s.format_inputs.codecs.opus);
+    CHECK_EQ(s.take.format_text, "48k/16 WAV");
+    CHECK(c.set_format_choice(RecFormat::Flac, ""));
+    s = r.snap();
+    CHECK(s.settings.format == RecFormat::Flac && s.settings.format_preset.empty());
+    CHECK_EQ(s.take.format_text, "48k/16 FLAC");
+    CHECK(c.set_format_choice(RecFormat::Opus, "music64"));
+    s = r.snap();
+    CHECK(s.settings.format == RecFormat::Opus && s.settings.format_preset == "music64");
+    CHECK_EQ(s.take.format_text, "48k/16 OPUS");
+    CHECK(!c.set_format_choice(RecFormat::Opus, "speech99")); /* not a preset of the model: unchanged */
+    CHECK(!c.set_format_choice(RecFormat::Flac, "music64"));
+    CHECK(!c.set_format_choice(RecFormat::Wav, "speech24"));
+    CHECK(r.snap().settings.format_preset == "music64");
+    /* stored: the settings file says it */
+    const std::string stored = slurp(r.home + "/.config/cassette/settings.json");
+    CHECK(stored.find("\"opus\"") != std::string::npos && stored.find("music64") != std::string::npos);
+    /* the hours left follow the choice */
+    CHECK(c.set_format_choice(RecFormat::Wav, ""));
+    s = r.snap();
+    CHECK_EQ(s.take.format_text, "48k/16 WAV");
+    CHECK(s.settings.format_preset.empty());
+    /* not while a take runs */
+    c.key_event(KeyEvent::Rec);
+    CHECK(r.wait_state(kDeckRecording));
+    CHECK(!c.set_format_choice(RecFormat::Flac, ""));
+    CHECK(r.snap().settings.format == RecFormat::Wav);
+    c.key_event(KeyEvent::Stop);
+    CHECK(r.wait_state(kDeckIdle));
+}
+
 }  // namespace
 
 void test_formats_app() {
@@ -334,4 +378,5 @@ void test_formats_app() {
     t_mixed_folder();
     t_repair_at_launch();
     t_flac_disk_full();
+    t_set_format_choice();
 }

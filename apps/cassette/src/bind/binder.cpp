@@ -149,7 +149,19 @@ ui::UiActions Binder::actions()
         if (id == "input") {
             post([this, c] { port_.select_card(c); });
         } else if (id == "format") {
-            post([this] { port_.set_format(RecFormat::Wav); });
+            /* the Format picker's entry: the model's list for this card, in the row's order */
+            const Snapshot s = have_snap_ ? snap_ : Snapshot();
+            const std::vector<FormatChoice> list = format_picker(s).list;
+            std::string why;
+            const FormatChoice *f = selectable_format(list, c, &why);
+            if (!f) {
+                if (!why.empty()) push_notice(why);
+                return;
+            }
+            const FormatKey key = f->key;
+            post([this, key] {
+                if (!port_.set_format_choice(key.format, key.preset)) notice_from_job("The format cannot be changed now");
+            });
         } else if (id == "timer") {
             if (c < 0 || c > 3) return;
             const int secs = kTimerChoices[c];

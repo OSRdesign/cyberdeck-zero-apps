@@ -52,7 +52,7 @@ public:
     double level_step = 1.0;      /* set_level_db rounds to this step (a coarse card: 3.0) */
     bool open_trim_result = true;
     int delete_result = 0, rename_result = 0;
-    bool save_result = true, folder_result = true, output_result = true, load_result = true;
+    bool save_result = true, format_choice_result = true, folder_result = true, output_result = true, load_result = true;
     uint64_t next = 8;
     std::vector<std::string> names = {"take_006_20261108-1105-1.wav", "take_006_20261108-1105-2.wav",
                                       "take_006_20261108-1105-3.wav"};
@@ -149,6 +149,14 @@ public:
     {
         log(std::string("set_format ") + format_key(f));
         return true;
+    }
+    bool set_format_choice(RecFormat f, const std::string &preset) override
+    {
+        log(std::string("set_format_choice ") + format_key(f) + (preset.empty() ? "" : " " + preset));
+        std::lock_guard<std::mutex> g(mu);
+        snap.settings.format = f;
+        snap.settings.format_preset = preset;
+        return format_choice_result;
     }
     bool set_folder(const std::string &f) override
     {
@@ -364,6 +372,11 @@ inline Snapshot base_snapshot()
     s.card.level_max_db = 23.81;
     s.card.soft_gain_db = 6.0;
     s.take.format_text = "48k/16 WAV";
+    s.format_inputs.state = CaptureState::Known; /* a mono 48 kHz 16-bit card, both libraries found */
+    s.format_inputs.capture.rate = 48000;
+    s.format_inputs.capture.channels = 1;
+    s.format_inputs.capture.bits = 16;
+    s.format_inputs.codecs.flac = s.format_inputs.codecs.opus = true;
     s.take.free_bytes = 41ull << 30;
     s.take.hours_left = 12.0 + 40.0 / 60.0;
     s.meter.channels = 1;

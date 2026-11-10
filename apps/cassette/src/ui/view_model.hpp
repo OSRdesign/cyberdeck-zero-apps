@@ -119,6 +119,16 @@ enum class SettingKind {
     Info,   /* a read-only value without a chevron (dimmed with enabled = false), e.g. Channels */
 };
 
+/* One entry of the Format picker (a Choice row with `formats`): two lines, the name and the size per minute over the
+ * detail (or, for a format this card cannot record, the reason). */
+struct FormatEntry {
+    std::string name;            /* "Opus 32 kbps" */
+    std::string size;            /* "5.8 MB/min", "about 2 MB/min", "" when unknown (no card) */
+    std::string detail;          /* line 2: "lossless, a third to half the size · 117 h free", or the reason when !compatible */
+    std::string reason;          /* !compatible: why ("Opus cannot record at 44.1 kHz"); the page's notice says it */
+    bool compatible = true;      /* false: dimmed, a tap shows the notice instead of choosing it */
+};
+
 struct SettingRow {
     std::string id;              /* the controller's key, given back in every callback ("input", "format", ...) */
     std::string label;           /* "Input level" */
@@ -132,6 +142,10 @@ struct SettingRow {
     std::string value_text;      /* Slider: "8 / 16" */
     int value_mul = 0;           /* Slider: when > 0 a drag shows pos * value_mul + value_suffix ("50 %") instead of "pos / max" */
     std::string value_suffix;
+    /* Choice with a Format picker: one two-line entry each (then `choice` is the current one, `choices` is unused by the
+     * picker) and the one-line footer under the list ("Sizes at 48 kHz mono 16-bit, this card") */
+    std::vector<FormatEntry> formats;
+    std::string formats_footer;
 };
 
 /* The rows in order. The controller leaves out what the card does not have (Input level, Auto gain). */
@@ -217,11 +231,16 @@ struct ViewModel {
 };
 
 /* Equality of the parts the pages compare to skip work when nothing changed (the meter updates 30 times a second). */
+inline bool operator==(const FormatEntry &a, const FormatEntry &b)
+{
+    return a.name == b.name && a.size == b.size && a.detail == b.detail && a.reason == b.reason && a.compatible == b.compatible;
+}
 inline bool operator==(const SettingRow &a, const SettingRow &b)
 {
     return a.id == b.id && a.label == b.label && a.kind == b.kind && a.enabled == b.enabled && a.value == b.value &&
            a.choices == b.choices && a.choice == b.choice && a.on == b.on && a.min == b.min && a.max == b.max &&
-           a.pos == b.pos && a.value_text == b.value_text && a.value_mul == b.value_mul && a.value_suffix == b.value_suffix;
+           a.pos == b.pos && a.value_text == b.value_text && a.value_mul == b.value_mul && a.value_suffix == b.value_suffix &&
+           a.formats == b.formats && a.formats_footer == b.formats_footer;
 }
 inline bool operator==(const SettingsVm &a, const SettingsVm &b) { return a.rows == b.rows; }
 inline bool operator==(const TakeRow &a, const TakeRow &b)

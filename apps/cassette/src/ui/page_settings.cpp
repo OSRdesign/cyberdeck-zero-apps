@@ -63,6 +63,13 @@ SettingsPage::SettingsPage(lv_obj_t *parent, const Frame &frame, const UiActions
     track_ = box(root_, fit_.x(tx), fit_.y(56), fit_.w(tx, 6), fit_.y(p ? 464 : 306) - fit_.y(56), col::kScrollTrack, fit_.px(3));
     thumb_ = box(root_, fit_.x(tx), fit_.y(56), fit_.w(tx, 6), fit_.px(40), col::kHinge, fit_.px(3));
     if (!p) hint_ = fit_label(root_, fit_, Face::Medium, 14, col::kInkMuted, 16, 286, 430, 18, LV_TEXT_ALIGN_CENTER);
+    else {
+        /* the Format picker's footer: a fixed line under the list (landscape has the 'more below' line for it) */
+        foot_ = label(root_, Face::Medium, fit_.px(14), col::kInkMuted, list_x_, list_y_ + list_h_, list_w_, LV_TEXT_ALIGN_CENTER);
+        lv_label_set_long_mode(foot_, LV_LABEL_LONG_MODE_WRAP);
+        show(foot_, false);
+    }
+    applied_h_ = list_h_;
 
     /* the notice: the 'more below' line (landscape); narrow: a strip at the bottom of the list area (the list is
      * shorter while it shows) */
@@ -88,16 +95,46 @@ SettingsPage::SettingsPage(lv_obj_t *parent, const Frame &frame, const UiActions
 
 void SettingsPage::set_notice(const std::string &text)
 {
-    const bool on = notice_->set(text);
+    vm_notice_ = text;
+    apply_notice();
+}
+
+/* The binding's notice, else the page's own (a tap on a Format entry this card cannot record) */
+void SettingsPage::apply_notice()
+{
+    const bool on = notice_->set(!vm_notice_.empty() ? vm_notice_ : local_notice_);
     if (hint_) show(hint_, !on);
     if (frame_.portrait) {
-        const int h = on ? notice_->height() + fit_.px(6) : 0;
-        if (h != notice_h_) {
-            notice_h_ = h;
-            lv_obj_set_height(list_, std::max(1, list_h_ - h));
-            update_scrollbar();
-        }
+        notice_h_ = on ? notice_->height() + fit_.px(6) : 0;
+        apply_list_height();
     }
+}
+
+/* Narrow: the list gives up the height of the notice strip, or of the Format picker's footer while no notice shows */
+void SettingsPage::apply_list_height()
+{
+    if (!frame_.portrait) return;
+    const SettingRow *fp = format_picker();
+    const bool foot = fp && !fp->formats_footer.empty() && foot_h_ > 0;
+    int h = list_h_;
+    if (notice_h_ > 0) h -= notice_h_;
+    else if (foot) h -= foot_h_ + fit_.px(6);
+    if (foot_) {
+        show(foot_, foot && notice_h_ == 0);
+        if (foot) lv_obj_set_y(foot_, list_y_ + list_h_ - foot_h_);
+    }
+    h = std::max(1, h);
+    if (h == applied_h_) return;
+    applied_h_ = h;
+    lv_obj_set_height(list_, h);
+    update_scrollbar();
+}
+
+const SettingRow *SettingsPage::format_picker() const
+{
+    if (numpage_ || picker_ < 0 || picker_ >= static_cast<int>(vm_.rows.size())) return nullptr;
+    const SettingRow &r = vm_.rows[static_cast<std::size_t>(picker_)];
+    return r.formats.empty() ? nullptr : &r;
 }
 
 int SettingsPage::row_h() const
@@ -121,6 +158,12 @@ void SettingsPage::refresh()
     for (const SettingRow &r : s.rows) key += r.id + ":" + std::to_string(static_cast<int>(r.kind)) + ";";
     if (picker_ >= 0 && picker_ < static_cast<int>(s.rows.size()))
         for (const std::string &c : s.rows[static_cast<std::size_t>(picker_)].choices) key += c + ",";
+    if (!numpage_ && picker_ >= 0 && picker_ < static_cast<int>(s.rows.size())) {
+        const SettingRow &fr = s.rows[static_cast<std::size_t>(picker_)];
+        for (const FormatEntry &e : fr.formats)
+            key += e.name + "|" + e.size + "|" + e.detail + "|" + e.reason + (e.compatible ? "+" : "-") + ";";
+        if (!fr.formats.empty()) key += "cur" + std::to_string(fr.choice);
+    }
     if (numpage_ && (picker_ < 0 || picker_ >= static_cast<int>(s.rows.size()) ||
                      !s.rows[static_cast<std::size_t>(picker_)].enabled)) {
         numpage_ = false; /* the row went away or a take started: back to the settings */
@@ -159,12 +202,18 @@ void SettingsPage::refresh()
 
 void SettingsPage::rebuild()
 {
+    const int keep_y = lv_obj_get_scroll_y(list_);
     lv_obj_clean(list_);
     rows_.clear();
     nbtn_.clear();
     num_big_ = nullptr;
     if (numpage_) {
         build_number_page();
+        return;
+    }
+    if (const SettingRow *fp = format_picker()) {
+        build_format_rows(*fp);
+        lv_obj_scroll_to_y(list_, keep_y, LV_ANIM_OFF);
         return;
     }
     const int h = row_h();
@@ -218,6 +267,95 @@ void SettingsPage::rebuild()
             } else if (s.kind == SettingKind::Slider) {
                 r.slider = make_slider_bar(r.obj, fit_, 100, 20);
             }
+        }
+        rows_.push_back(r);
+    }
+    lv_obj_update_layout(list_);
+}
+
+/* The Format picker: a two-line entry per format. Line 1: a dot on the current one, the name (bold) and the size per minute
+ * on the right (the value style); line 2: the detail, smaller and muted (the reason for an entry this card cannot
+ * record, whose name and size are dimmed). Text wraps and the entry grows to fit it; the toolkit's ROW is its least
+ * height. */
+void SettingsPage::build_format_rows(const SettingRow &sr)
+{
+    const int h = row_h();
+    const int gap = fit_.px(row_gap(frame_.portrait));
+    const int pad = fit_.px(12);
+    const int inner = row_w_ - 2; /* inside the 1 px border */
+    const int dot = fit_.px(10), dgap = fit_.px(8), vpad = fit_.px(10), l2gap = fit_.px(2), vgap = fit_.px(10);
+    const int name_x = pad - 1 + dot + dgap;
+    const int right = inner - pad;
+    const lv_font_t *f19 = font(Face::Bold, fit_.px(19));
+    const int ls19 = ls_screen(0.3, fit_.s);
+    const lv_font_t *f15 = font(Face::Medium, fit_.px(15));
+    const int lh19 = lv_font_get_line_height(f19);
+    int y = 0;
+    for (std::size_t i = 0; i < sr.formats.size(); ++i) {
+        const FormatEntry &e = sr.formats[i];
+        Row r;
+        r.index = static_cast<int>(i);
+        /* the size: the largest size that fits beside the name (the name keeps its line, up to 62 % of the width), else
+         * it wraps */
+        int value_w = 0, value_h = 0;
+        const lv_font_t *vf = nullptr;
+        if (!e.size.empty()) {
+            const int nat = text_width(f19, e.name.c_str(), ls19);
+            const int avail = std::max(10, right - name_x - std::min(nat + 2, (right - name_x) * 62 / 100) - vgap);
+            const int px = fit_px(Face::Medium, fit_.px(17), 0, e.size, avail, std::max(10, fit_.px(13)), nullptr);
+            vf = font(Face::Medium, px);
+            value_w = std::min(avail, text_width(vf, e.size.c_str(), 0));
+            lv_point_t sz;
+            lv_text_get_size(&sz, e.size.c_str(), vf, 0, 0, value_w + 2, LV_TEXT_FLAG_NONE);
+            value_h = std::max(lv_font_get_line_height(vf), static_cast<int>(sz.y));
+        }
+        const int name_w = std::max(10, right - name_x - (value_w ? value_w + vgap : 0) + 1);
+        lv_point_t nsz;
+        lv_text_get_size(&nsz, e.name.c_str(), f19, ls19, 0, name_w, LV_TEXT_FLAG_NONE);
+        const int name_h = std::max(lh19, static_cast<int>(nsz.y));
+        const int line1 = std::max(name_h, value_h);
+        const int detail_w = std::max(10, right - name_x + 1);
+        int detail_h = 0;
+        if (!e.detail.empty()) {
+            lv_point_t dsz;
+            lv_text_get_size(&dsz, e.detail.c_str(), f15, 0, 0, detail_w, LV_TEXT_FLAG_NONE);
+            detail_h = std::max(lv_font_get_line_height(f15), static_cast<int>(dsz.y));
+        }
+        const int content = line1 + (detail_h ? l2gap + detail_h : 0);
+        const int rh = std::max(h, content + 2 + 2 * vpad);
+        const int top = (rh - 2 - content) / 2;
+        r.obj = box(list_, 0, y, row_w_, rh, col::kRow, fit_.px(6));
+        y += rh + gap;
+        border(r.obj, 1, col::kBodyEdge);
+        lv_obj_add_flag(r.obj, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_flag(r.obj, LV_OBJ_FLAG_SCROLL_CHAIN_VER);
+        lv_obj_set_user_data(r.obj, reinterpret_cast<void *>(static_cast<intptr_t>(i)));
+        lv_obj_add_event_cb(r.obj, row_cb, LV_EVENT_CLICKED, this);
+        lv_obj_add_event_cb(r.obj, row_cb, LV_EVENT_PRESSED, this);
+        lv_obj_add_event_cb(r.obj, row_cb, LV_EVENT_PRESSING, this);
+        lv_obj_add_event_cb(r.obj, row_cb, LV_EVENT_RELEASED, this);
+        if (static_cast<int>(i) == sr.choice) {
+            r.dot = box(r.obj, pad - 1, top + (lh19 - dot) / 2, dot, dot, col::kHinge, dot / 2);
+            lv_obj_remove_flag(r.dot, LV_OBJ_FLAG_CLICKABLE);
+        }
+        r.label = label(r.obj, Face::Bold, fit_.px(19), col::kInk, name_x, top + (line1 - name_h) / 2, name_w, LV_TEXT_ALIGN_LEFT, ls19);
+        lv_label_set_long_mode(r.label, LV_LABEL_LONG_MODE_WRAP);
+        lv_label_set_text(r.label, e.name.c_str());
+        if (vf) {
+            r.value = label(r.obj, Face::Medium, fit_.px(17), col::kInkMuted, right - value_w - 1, top + (line1 - value_h) / 2,
+                            value_w + 2, LV_TEXT_ALIGN_RIGHT);
+            lv_obj_set_style_text_font(r.value, vf, 0);
+            lv_label_set_long_mode(r.value, LV_LABEL_LONG_MODE_WRAP);
+            lv_label_set_text(r.value, e.size.c_str());
+        }
+        if (detail_h) {
+            r.detail = label(r.obj, Face::Medium, fit_.px(15), col::kInkMuted, name_x, top + line1 + l2gap, detail_w, LV_TEXT_ALIGN_LEFT);
+            lv_label_set_long_mode(r.detail, LV_LABEL_LONG_MODE_WRAP);
+            lv_label_set_text(r.detail, e.detail.c_str());
+        }
+        if (!e.compatible) { /* the owner wants to see every format: dimmed, in its place, not selectable */
+            lv_obj_set_style_text_opa(r.label, 128, 0);
+            if (r.value) lv_obj_set_style_text_opa(r.value, 128, 0);
         }
         rows_.push_back(r);
     }
@@ -319,6 +457,15 @@ void SettingsPage::activate(int i, int touch_x)
     if (i < 0 || i >= static_cast<int>(rows_.size())) return;
     if (picker_ >= 0) {
         const SettingRow &s = vm_.rows[static_cast<std::size_t>(picker_)];
+        if (!s.formats.empty()) {
+            if (i >= static_cast<int>(s.formats.size())) return;
+            const FormatEntry &e = s.formats[static_cast<std::size_t>(i)];
+            if (!e.compatible) { /* stays in the picker; the notice line says why */
+                local_notice_ = "Not available: " + e.reason;
+                apply_notice();
+                return;
+            }
+        }
         if (act_.setting_choice) act_.setting_choice(s.id, i);
         back();
         return;
@@ -373,6 +520,10 @@ bool SettingsPage::back()
     picker_ = -1;
     numpage_ = false;
     sel_ = -1;
+    if (!local_notice_.empty()) {
+        local_notice_.clear();
+        apply_notice();
+    }
     if (nav_.set_title) nav_.set_title("Settings");
     refresh();
     if (was < static_cast<int>(rows_.size())) lv_obj_scroll_to_view(rows_[static_cast<std::size_t>(was)].obj, LV_ANIM_OFF);
@@ -629,6 +780,29 @@ void SettingsPage::update_scrollbar()
 
 void SettingsPage::update_hint()
 {
+    if (const SettingRow *fp = format_picker()) {
+        /* the Format picker: the footer takes the place of 'more below' (landscape) or sits under the list (narrow) */
+        if (foot_) {
+            const std::string &t = fp->formats_footer;
+            int fh = 0;
+            if (!t.empty()) {
+                const lv_font_t *ff = font(Face::Medium, fit_.px(14));
+                set_text(foot_, t);
+                lv_point_t sz;
+                lv_text_get_size(&sz, t.c_str(), ff, 0, 0, list_w_, LV_TEXT_FLAG_NONE);
+                fh = std::max(lv_font_get_line_height(ff), static_cast<int>(sz.y));
+                lv_obj_set_height(foot_, fh);
+            }
+            foot_h_ = fh;
+            apply_list_height();
+        }
+        if (hint_) set_fitted(hint_, Face::Medium, fit_.px(14), 0, std::max(10, fit_.px(11)), fp->formats_footer);
+        return;
+    }
+    if (foot_) {
+        foot_h_ = 0;
+        apply_list_height();
+    }
     if (!hint_) return;
     std::vector<std::string> below;
     if (picker_ < 0) {

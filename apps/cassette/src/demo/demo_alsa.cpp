@@ -109,6 +109,21 @@ DemoCard speech_card(int index)
     return c;
 }
 
+/* A stereo line input: 44100 Hz only, two channels, no mixer controls. */
+DemoCard stereo_card(int index)
+{
+    DemoCard c;
+    c.info.index = index;
+    c.info.id = "DemoStereo";
+    c.info.name = "Demo Stereo Input";
+    c.info.long_name = "Demo Stereo Input (scripted, no hardware, records at 44100 Hz stereo only)";
+    c.info.capture = true;
+    c.offer.rates = {44100};
+    c.offer.min_channels = c.offer.max_channels = 2;
+    c.offer.formats = {SampleFormat::S16_LE};
+    return c;
+}
+
 DemoCard plain_card(int index)
 {
     DemoCard c;
@@ -195,6 +210,7 @@ public:
         if (s.cards == "level" || s.cards == "both") cards_.push_back(level_card(static_cast<int>(cards_.size())));
         if (s.cards == "plain" || s.cards == "both") cards_.push_back(plain_card(static_cast<int>(cards_.size())));
         if (s.cards == "speech") cards_.push_back(speech_card(static_cast<int>(cards_.size())));
+        if (s.cards == "stereo") cards_.push_back(stereo_card(static_cast<int>(cards_.size())));
     }
 
     double seconds() const { return std::chrono::duration<double>(SteadyClock::now() - start_).count(); }
@@ -408,7 +424,7 @@ Script script_from_env()
     Script s;
     if (const char *c = std::getenv("CASSETTE_DEMO_CARD"); c && *c) {
         const std::string v = c;
-        if (v == "level" || v == "plain" || v == "both" || v == "speech" || v == "none") s.cards = v;
+        if (v == "level" || v == "plain" || v == "both" || v == "speech" || v == "stereo" || v == "none") s.cards = v;
     }
     s.unplug_ms = env_ms("CASSETTE_DEMO_UNPLUG_MS");
     s.replug_ms = env_ms("CASSETTE_DEMO_REPLUG_MS");

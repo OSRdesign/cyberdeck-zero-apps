@@ -1099,6 +1099,12 @@ struct Controller::Impl : public DeckCommands {
         s.take.format_text = format_text(f, rec_compressed ? format_tag(rec_choice.key.format) : "WAV");
         s.take.free_bytes = space.free_bytes;
         s.take.hours_left = space.hours_left;
+        /* the Format picker's inputs */
+        s.format_inputs.codecs = cfg.codecs ? cfg.codecs() : codec_availability_here();
+        if (s.card.present && fmt.rate && fmt.channels && fmt.bits) {
+            s.format_inputs.state = CaptureState::Known;
+            s.format_inputs.capture = fmt;
+        }
         /* problems */
         s.problems = prob;
         s.notices = notices;
@@ -1380,6 +1386,22 @@ bool Controller::set_format(RecFormat f) {
     p_->store.values().format = f;
     p_->persist();
     p_->publish();
+    return true;
+}
+bool Controller::set_format_choice(RecFormat f, const std::string &preset) {
+    Locked l(p_->mu);
+    Impl &d = *p_;
+    if (d.take_active || d.deck.state() == DeckState::Countdown) return false;
+    FormatInputs in; /* the model's own entries: only the key matters here */
+    const std::vector<FormatChoice> list = list_formats(in);
+    bool known = false;
+    for (const FormatChoice &c : list) known = known || (c.key.format == f && c.key.preset == preset);
+    if (!known) return false;
+    d.store.values().format = f;
+    d.store.values().format_preset = preset;
+    d.persist();
+    d.refresh_space(); /* the format text and the hours left follow the choice */
+    d.publish();
     return true;
 }
 bool Controller::set_folder(const std::string &folder) {
