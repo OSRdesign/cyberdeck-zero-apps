@@ -64,7 +64,6 @@ key down
 key enter
 wait 500
 key down
-key down
 key enter
 wait 500
 key down

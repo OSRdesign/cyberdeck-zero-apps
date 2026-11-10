@@ -232,7 +232,7 @@ trim page and are trimmed and split like WAV takes; the results keep the take's 
 again, lossless and exact to the sample; Opus: the packets are copied, no second round of lossy coding, exact to the
 sample). Each of the three rows opens a picker with an estimated size per minute for every entry at the other two choices (the
 footer of the page says which: "Sizes for FLAC, 16-bit, this card"; without a sound input there are no sizes), a one-line
-description and how many hours fit in the recordings folder's free space; the Codec picker starts with six quick presets;
+description and how many hours fit in the recordings folder's free space; the Codec picker lists WAV, FLAC and Opus, then six quick presets;
 Opus is dimmed on a card that cannot record at 8, 12, 16, 24 or 48 kHz; nothing can be changed while a take records. Sizes read like this:
 
 | Format | Size per minute at 48 kHz mono 16-bit | Records with | Plays and trims with |

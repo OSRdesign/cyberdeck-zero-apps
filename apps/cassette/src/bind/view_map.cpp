@@ -282,6 +282,19 @@ ParamPicker codec_picker(const Snapshot &s)
         e.header = true;
         p.entries.push_back(e);
     };
+    header("Codecs");
+    const RecFormat codecs[3] = {RecFormat::Wav, RecFormat::Flac, RecFormat::Opus};
+    for (RecFormat f : codecs) {
+        ParamItem it;
+        it.change = change_codec(c.in, c.st, f);
+        const RecParams rp = resolve_params(c.in, it.change.stored);
+        const FormatChoice ch = choice_for(c.in, rp);
+        it.compatible = ch.compatible;
+        it.why = ch.why_not;
+        if (f == c.eff.codec) p.current = static_cast<int>(p.items.size());
+        p.items.push_back(it);
+        p.entries.push_back(param_entry(c, codec_name(f), ch.detail, ch, ch.compatible, ch.why_not));
+    }
     header("Quick presets");
     const std::vector<FormatChoice> presets = list_formats(FormatInputs()); /* the keys, names and hints of the six */
     for (const FormatChoice &pc : presets) {
@@ -301,19 +314,6 @@ ParamPicker codec_picker(const Snapshot &s)
         it.why = ch.why_not;
         p.items.push_back(it);
         p.entries.push_back(param_entry(c, name, pc.detail, ch, ch.compatible, ch.why_not));
-    }
-    header("Codecs");
-    const RecFormat codecs[3] = {RecFormat::Wav, RecFormat::Flac, RecFormat::Opus};
-    for (RecFormat f : codecs) {
-        ParamItem it;
-        it.change = change_codec(c.in, c.st, f);
-        const RecParams rp = resolve_params(c.in, it.change.stored);
-        const FormatChoice ch = choice_for(c.in, rp);
-        it.compatible = ch.compatible;
-        it.why = ch.why_not;
-        if (f == c.eff.codec) p.current = static_cast<int>(p.items.size());
-        p.items.push_back(it);
-        p.entries.push_back(param_entry(c, codec_name(f), ch.detail, ch, ch.compatible, ch.why_not));
     }
     if (!c.known) p.footer = "No sound input: sizes unknown";
     else p.footer = "Sizes for " + rate_label(c.eff.rate) + ", " + bits_text(c.eff.bits) + ", this card";

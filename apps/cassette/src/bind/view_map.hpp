@@ -106,7 +106,7 @@ std::string size_per_minute_text(const SizeEstimate &size);
  * word their own footers: the other two choices) */
 std::string formats_footer_text(const FormatInputs &in);
 /* The three pickers (Settings: Codec, Sample rate, Quality). Entries in the page's order: the Codec picker has two
- * group headings ("Quick presets", "Codecs"), which items skip (header). Choosing an entry: a preset sets the codec and its
+ * group headings ("Codecs", then "Quick presets"), which items skip (header). Choosing an entry: a preset sets the codec and its
  * bit rate (rate and quality back to their defaults); any other entry carries the stored values it leads to (change), with
  * the notice naming what else moved (a rate the new codec cannot record). */
 struct ParamItem {

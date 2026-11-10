@@ -23,7 +23,7 @@ editing) and B19 (the pickers) in `tests/BOARD-TESTS.md`.
 
 ## What is offered
 
-The Codec picker lists every entry below in this order (as its quick presets), each with a name, a one-line detail (the wording
+The Codec picker lists every entry below in this order (as its quick presets, after the three codecs), each with a name, a one-line detail (the wording
 here is a placeholder for the owner), whether it works with the selected card (and a short reason when not) and an
 estimated size per minute at the card's current capture format.
 
@@ -362,8 +362,8 @@ the dimming, the 44.1 kHz-only card, the re-validation, old and new settings key
 
 - The snapshot carries `Snapshot::format_inputs`: the capture format the recorder uses (state `Known` while the card delivers,
   else `NoCard`), the libraries found, and what the card offers (`rates`, `has16`, `has24`). Three pickers are built from it:
-  - **Codec**: the group heading `Quick presets`, the six presets (WAV and FLAC named with the rate and depth they get on this
-    card, `WAV, 48 kHz, 16-bit`; Opus as `Opus speech 24 kbps` ...), the heading `Codecs`, then WAV, FLAC and Opus. The three
+  - **Codec**: the group heading `Codecs`, WAV, FLAC and Opus, then the heading `Quick presets` and the six presets (WAV and
+    FLAC named with the rate and depth they get on this card, `WAV, 48 kHz, 16-bit`; Opus as `Opus speech 24 kbps` ...). The three
     plain codecs show the size they would give after the re-validation. The current marker is on the plain codec row. Footer:
     `Sizes for 48 kHz, 16-bit, this card`.
   - **Sample rate**: every rate of the card, ascending, with a hint (`CD`, `video and most devices`, `high resolution`), sizes at

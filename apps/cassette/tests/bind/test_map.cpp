@@ -471,53 +471,53 @@ void test_codec_picker()
 {
     Snapshot s = base_snapshot();
     ParamPicker p = codec_picker(s);
-    /* heading, six presets, heading, three codecs */
+    /* heading, three codecs, heading, six presets */
     CHECK_EQ(p.entries.size(), size_t(11));
     CHECK_EQ(p.items.size(), size_t(11));
-    CHECK(p.entries[0].header && p.items[0].header && p.entries[0].name == "Quick presets");
-    CHECK(p.entries[7].header && p.entries[7].name == "Codecs");
+    CHECK(p.entries[4].header && p.items[4].header && p.entries[4].name == "Quick presets");
+    CHECK(p.entries[0].header && p.entries[0].name == "Codecs");
     const char *names[] = {"WAV, 48 kHz, 16-bit", "FLAC, 48 kHz, 16-bit", "Opus speech 24 kbps",
                            "Opus speech 32 kbps", "Opus music 64 kbps",    "Opus music 128 kbps"};
     for (size_t i = 0; i < 6; ++i) {
-        CHECK_EQ(p.entries[1 + i].name, std::string(names[i]));
-        CHECK(p.entries[1 + i].compatible && p.items[1 + i].preset);
-        CHECK(!p.entries[1 + i].size.empty());
+        CHECK_EQ(p.entries[5 + i].name, std::string(names[i]));
+        CHECK(p.entries[5 + i].compatible && p.items[5 + i].preset);
+        CHECK(!p.entries[5 + i].size.empty());
     }
-    CHECK(p.items[1].key == (FormatKey{RecFormat::Wav, ""}));
-    CHECK(p.items[4].key == (FormatKey{RecFormat::Opus, "speech32"}));
-    CHECK_EQ(p.entries[1].size, "5.8 MB/min"); /* 48 kHz mono 16-bit */
-    CHECK(p.entries[2].size.compare(0, 6, "about ") == 0);
-    CHECK(p.entries[3].size.compare(0, 6, "about ") != 0);
-    CHECK_EQ(p.entries[8].name, "WAV");
-    CHECK_EQ(p.entries[9].name, "FLAC");
-    CHECK_EQ(p.entries[10].name, "Opus");
-    CHECK(!p.items[8].preset && !p.items[8].header);
-    CHECK_EQ(p.current, 8);
+    CHECK(p.items[5].key == (FormatKey{RecFormat::Wav, ""}));
+    CHECK(p.items[8].key == (FormatKey{RecFormat::Opus, "speech32"}));
+    CHECK_EQ(p.entries[5].size, "5.8 MB/min"); /* 48 kHz mono 16-bit */
+    CHECK(p.entries[6].size.compare(0, 6, "about ") == 0);
+    CHECK(p.entries[7].size.compare(0, 6, "about ") != 0);
+    CHECK_EQ(p.entries[1].name, "WAV");
+    CHECK_EQ(p.entries[2].name, "FLAC");
+    CHECK_EQ(p.entries[3].name, "Opus");
+    CHECK(!p.items[1].preset && !p.items[1].header);
+    CHECK_EQ(p.current, 1);
     CHECK_EQ(p.value, "WAV");
     CHECK_EQ(p.footer, "Sizes for 48 kHz, 16-bit, this card");
     /* line 2: the model's detail and the hours that fit in the free space (41 GiB at 5.76 MB/min) */
-    CHECK_EQ(p.entries[8].detail, "uncompressed, plays everywhere \xC2\xB7 127 h free");
-    CHECK(p.entries[9].detail.find("lossless, a third to half the size \xC2\xB7 ") == 0);
+    CHECK_EQ(p.entries[1].detail, "uncompressed, plays everywhere \xC2\xB7 127 h free");
+    CHECK(p.entries[2].detail.find("lossless, a third to half the size \xC2\xB7 ") == 0);
     s.take.free_bytes = 0;
     p = codec_picker(s);
-    CHECK_EQ(p.entries[8].detail, "uncompressed, plays everywhere");
+    CHECK_EQ(p.entries[1].detail, "uncompressed, plays everywhere");
 
     /* the settings rows carry it all */
     s = base_snapshot();
     ui::ViewModel vm = map(s);
     const ui::SettingRow *r = find_row(vm, "codec");
-    CHECK(r && r->formats.size() == 11 && r->choice == 8 && r->value == "WAV" && r->label == "Codec");
+    CHECK(r && r->formats.size() == 11 && r->choice == 1 && r->value == "WAV" && r->label == "Codec");
     CHECK(r && r->formats_footer == "Sizes for 48 kHz, 16-bit, this card");
 
     /* the current choice: FLAC, Opus (a stored preset, or none: 32 kbps) */
     s.settings.format = RecFormat::Flac;
     p = codec_picker(s);
-    CHECK_EQ(p.current, 9);
+    CHECK_EQ(p.current, 2);
     CHECK_EQ(p.value, "FLAC");
     s.settings.format = RecFormat::Opus;
     s.settings.format_preset = "music64";
     p = codec_picker(s);
-    CHECK_EQ(p.current, 10);
+    CHECK_EQ(p.current, 3);
     CHECK_EQ(p.value, "Opus");
 
     /* a stereo 44.1 kHz card: Opus dimmed (presets and the codec) with the reason, sizes still shown */
@@ -525,40 +525,40 @@ void test_codec_picker()
     s.format_inputs.capture.rate = 44100;
     s.format_inputs.capture.channels = 2;
     p = codec_picker(s);
-    CHECK(p.entries[1].compatible && p.entries[2].compatible && p.entries[8].compatible && p.entries[9].compatible);
-    for (size_t i : {3u, 4u, 5u, 6u, 10u}) {
+    CHECK(p.entries[5].compatible && p.entries[6].compatible && p.entries[1].compatible && p.entries[2].compatible);
+    for (size_t i : {3u, 7u, 8u, 9u, 10u}) {
         CHECK(!p.entries[i].compatible);
         CHECK_EQ(p.entries[i].reason, "Opus needs 8, 12, 16, 24 or 48 kHz; this card has 44.1 kHz");
         CHECK_EQ(p.entries[i].detail, p.entries[i].reason); /* line 2 is the reason */
         CHECK(!p.entries[i].size.empty());
     }
-    CHECK_EQ(p.entries[1].name, "WAV, 44.1 kHz, 16-bit");
-    CHECK_EQ(p.entries[1].size, "11 MB/min"); /* 44.1 kHz stereo 16-bit: 10.58 MB */
+    CHECK_EQ(p.entries[5].name, "WAV, 44.1 kHz, 16-bit");
+    CHECK_EQ(p.entries[5].size, "11 MB/min"); /* 44.1 kHz stereo 16-bit: 10.58 MB */
     CHECK_EQ(p.footer, "Sizes for 44.1 kHz, 16-bit, this card");
     /* a stored Opus choice the card cannot record: the value says WAV and why, the current row is WAV */
     s.settings.format = RecFormat::Opus;
     s.settings.format_preset = "speech32";
     p = codec_picker(s);
     CHECK_EQ(p.value, "WAV (Opus unavailable)");
-    CHECK_EQ(p.current, 8);
+    CHECK_EQ(p.current, 1);
 
     /* a missing library */
     s = base_snapshot();
     s.format_inputs.codecs.flac = false;
     s.settings.format = RecFormat::Flac;
     p = codec_picker(s);
-    CHECK(!p.entries[9].compatible && !p.entries[2].compatible);
-    CHECK_EQ(p.entries[9].detail, "FLAC not installed (libflac14)");
+    CHECK(!p.entries[2].compatible && !p.entries[6].compatible);
+    CHECK_EQ(p.entries[2].detail, "FLAC not installed (libflac14)");
     CHECK_EQ(p.value, "WAV (FLAC unavailable)");
-    CHECK_EQ(p.current, 8);
-    CHECK(p.entries[3].compatible);
+    CHECK_EQ(p.current, 1);
+    CHECK(p.entries[7].compatible);
 
     /* a 16 kHz mono headset: Opus works at its own rate, everything at 16 kHz */
     s = base_snapshot();
     s.format_inputs.capture.rate = 16000;
     p = codec_picker(s);
     CHECK_EQ(p.footer, "Sizes for 16 kHz, 16-bit, this card");
-    CHECK_EQ(p.entries[8].size, "1.9 MB/min");
+    CHECK_EQ(p.entries[1].size, "1.9 MB/min");
     for (size_t i = 0; i < p.entries.size(); ++i) CHECK(p.entries[i].compatible);
 
     /* no card: no sizes, the footer says so, WAV is the value */
@@ -570,11 +570,11 @@ void test_codec_picker()
     for (const ui::FormatEntry &e : p.entries) CHECK_EQ(e.size, "");
     CHECK_EQ(p.footer, "No sound input: sizes unknown");
     CHECK_EQ(p.value, "WAV");
-    CHECK(p.entries[1].compatible && p.entries[6].compatible && p.entries[10].compatible);
+    CHECK(p.entries[5].compatible && p.entries[10].compatible && p.entries[3].compatible);
     s.format_inputs.codecs.opus = false;
     p = codec_picker(s);
-    CHECK(!p.entries[4].compatible);
-    CHECK_EQ(p.entries[4].detail, "Opus not installed (libopusenc0)");
+    CHECK(!p.entries[8].compatible);
+    CHECK_EQ(p.entries[8].detail, "Opus not installed (libopusenc0)");
 
     /* while a take runs the rows are dimmed (a card with both depths: the Bit depth row is there) */
     s = rich_snapshot();
@@ -736,18 +736,18 @@ void test_param_changes()
     Snapshot s = rich_snapshot();
     s.settings.rate = 44100;
     ParamPicker p = codec_picker(s);
-    CHECK_EQ(p.current, 8);
-    const ParamItem &opus = p.items[10];
+    CHECK_EQ(p.current, 1);
+    const ParamItem &opus = p.items[3];
     CHECK(opus.compatible);
     CHECK(opus.change.stored.codec == RecFormat::Opus && opus.change.stored.rate == 48000);
     CHECK_EQ(opus.change.message, "Sample rate set to 48 kHz: Opus cannot record at 44.1 kHz");
     std::string why;
-    const ParamItem *it = selectable_param(p, 10, &why);
+    const ParamItem *it = selectable_param(p, 3, &why);
     CHECK(it && why.empty());
     /* WAV and FLAC keep any rate */
-    CHECK(p.items[9].change.stored.rate == 44100 && p.items[9].change.message.empty());
+    CHECK(p.items[2].change.stored.rate == 44100 && p.items[2].change.message.empty());
     /* presets keep nothing: rate and quality back to the defaults */
-    CHECK(p.items[4].preset);
+    CHECK(p.items[8].preset);
 }
 
 void test_settings()

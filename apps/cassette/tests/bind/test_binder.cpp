@@ -129,28 +129,28 @@ void test_steppers()
     CHECK(!r.binder.vm().rec.card.shown);
 }
 
-/* The three pickers' entries. Codec: a heading, the six quick presets (WAV, FLAC, Opus 24, 32, 64, 128 kbps), a heading, then
- * WAV, FLAC, Opus; a preset sets the codec and its bit rate through the controller (rate and quality back to the defaults),
+/* The three pickers' entries. Codec: a heading, WAV, FLAC, Opus, a heading, then the six quick presets (WAV, FLAC, Opus 24,
+ * 32, 64, 128 kbps); a preset sets the codec and its bit rate through the controller (rate and quality back to the defaults),
  * a plain codec sets the three stored values; one this card cannot record sets nothing and says why */
 void test_format_choice()
 {
     Rig r;
-    r.act.setting_choice("codec", 2);
-    CHECK(r.calls() == std::vector<std::string>{"set_format_choice flac"});
-    r.act.setting_choice("codec", 4);
-    CHECK(r.calls() == std::vector<std::string>{"set_format_choice opus speech32"});
     r.act.setting_choice("codec", 6);
-    CHECK(r.calls() == std::vector<std::string>{"set_format_choice opus music128"});
-    r.act.setting_choice("codec", 1);
-    CHECK(r.calls() == std::vector<std::string>{"set_format_choice wav"});
-    r.act.setting_choice("codec", 9);
-    CHECK(r.calls() == std::vector<std::string>{"set_rec_params flac - 0 0"});
-    r.act.setting_choice("codec", 10);
-    CHECK(r.calls() == std::vector<std::string>{"set_rec_params opus - 0 0"});
+    CHECK(r.calls() == std::vector<std::string>{"set_format_choice flac"});
     r.act.setting_choice("codec", 8);
+    CHECK(r.calls() == std::vector<std::string>{"set_format_choice opus speech32"});
+    r.act.setting_choice("codec", 10);
+    CHECK(r.calls() == std::vector<std::string>{"set_format_choice opus music128"});
+    r.act.setting_choice("codec", 5);
+    CHECK(r.calls() == std::vector<std::string>{"set_format_choice wav"});
+    r.act.setting_choice("codec", 2);
+    CHECK(r.calls() == std::vector<std::string>{"set_rec_params flac - 0 0"});
+    r.act.setting_choice("codec", 3);
+    CHECK(r.calls() == std::vector<std::string>{"set_rec_params opus - 0 0"});
+    r.act.setting_choice("codec", 1);
     CHECK(r.calls() == std::vector<std::string>{"set_rec_params wav - 0 0"});
-    r.act.setting_choice("codec", 0); /* a heading, out of range: nothing, no notice */
-    r.act.setting_choice("codec", 7);
+    r.act.setting_choice("codec", 4); /* a heading, out of range: nothing, no notice */
+    r.act.setting_choice("codec", 0);
     r.act.setting_choice("codec", 11);
     r.act.setting_choice("codec", -1);
     CHECK(r.calls().empty());
@@ -171,7 +171,7 @@ void test_format_choice()
     m.port.snap.format_inputs.has24 = true;
     m.port.snap.settings.rate = 44100;
     m.tick();
-    m.act.setting_choice("codec", 10);
+    m.act.setting_choice("codec", 3);
     CHECK(m.calls() == std::vector<std::string>{"set_rec_params opus - 48000 0"});
     m.tick();
     m.tick();
@@ -190,7 +190,7 @@ void test_format_choice()
     r.act.notice_dismiss();
     r.tick();
     r.port.format_choice_result = false;
-    r.act.setting_choice("codec", 2);
+    r.act.setting_choice("codec", 6);
     r.tick();
     r.tick();
     CHECK_EQ(r.binder.vm().notice, "The format cannot be changed now");
@@ -205,13 +205,13 @@ void test_format_choice()
     q.port.snap.format_inputs.capture.rate = 44100;
     q.port.snap.format_inputs.capture.channels = 2;
     q.tick();
-    q.act.setting_choice("codec", 5);
+    q.act.setting_choice("codec", 9);
     CHECK(q.calls().empty());
     q.tick();
     CHECK_EQ(q.binder.vm().notice, "Not available: Opus needs 8, 12, 16, 24 or 48 kHz; this card has 44.1 kHz");
-    q.act.setting_choice("codec", 10);
+    q.act.setting_choice("codec", 3);
     CHECK(q.calls().empty());
-    q.act.setting_choice("codec", 2); /* FLAC works there */
+    q.act.setting_choice("codec", 6); /* FLAC works there */
     CHECK(q.calls() == std::vector<std::string>{"set_format_choice flac"});
 }
 
@@ -219,7 +219,7 @@ void test_settings_actions()
 {
     Rig r;
     r.act.setting_choice("input", 1);
-    r.act.setting_choice("codec", 1);
+    r.act.setting_choice("codec", 5);
     r.act.setting_choice("timer", 2);
     r.act.setting_choice("timer", 9); /* out of range: nothing */
     r.act.setting_choice("rewfwd", 1);

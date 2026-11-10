@@ -357,7 +357,7 @@ The card's own rows depend on what the selected card has:
 | **Input level** | The card's recording level (same as CARD on the recorder). | what the card has | only when the card has a level control |
 | **Auto gain (card)** | The card's own automatic gain, if it has one. | as set on the card, then remembered | only when the card has it |
 | **Mic mute (card)** | Mutes the card's microphone. | off | only when the card has it |
-| **Codec** | The file type of new takes: WAV, FLAC or Opus. The row shows the codec in use (`WAV (Opus unavailable)` when the stored choice cannot be used) and opens a [picker page](#formats-wav-flac-and-ogg-opus): six quick presets, then the three codecs. Cannot change while a take records. | WAV | always |
+| **Codec** | The file type of new takes: WAV, FLAC or Opus. The row shows the codec in use (`WAV (Opus unavailable)` when the stored choice cannot be used) and opens a [picker page](#formats-wav-flac-and-ogg-opus): the three codecs, then six quick presets. Cannot change while a take records. | WAV | always |
 | **Sample rate** | The rate the card records at, for example `48 kHz`. The picker lists the rates the card offers; the ones the codec cannot use are dimmed. Dimmed while a take records and with no sound input. | the card's own (48 kHz if it has it) | always |
 | **Bit depth** (WAV, FLAC) or **Bit rate** (Opus) | WAV and FLAC: `16-bit` or `24-bit`, the depths the card can record. Opus: 16, 24, 32, 48, 64, 96 or 128 kbps. The row's name follows the codec. | 16-bit, Opus 32 kbps | Bit rate: always with Opus. Bit depth: only when the card records both 16-bit and 24-bit (most cards record 16-bit only: then there is no row and takes are 16-bit) |
 | **Record timer** | Off, 3 s, 10 s, 20 s countdown before REC starts. | Off | always |
@@ -407,18 +407,18 @@ The choice in use has a dot before its name; the darker row is the one the keys 
 Tap a row to choose it: the page closes and the Settings row shows the new value. Esc leaves the page without a change.
 Nothing can be changed while a take records or counts down (the rows are dimmed).
 
-**Codec.** The page starts with **Quick presets**, six ready-made combinations that set the codec and its quality at once,
-then the three plain **Codecs**:
+**Codec.** The page starts with the three plain **Codecs**, then **Quick presets**, six ready-made combinations that set
+the codec and its quality at once:
 
 | Entry | What it sets |
 |---|---|
+| WAV, FLAC, Opus | only the codec; the sample rate and the quality stay as they are, unless the new codec cannot use them |
 | WAV, 48 kHz, 16-bit | WAV, uncompressed, plays everywhere (the rate and depth are the card's own defaults) |
 | FLAC, 48 kHz, 16-bit | FLAC, lossless, a third to half the size |
 | Opus speech 24 kbps | speech, smallest |
 | Opus speech 32 kbps | speech, clear (the preset used when the settings file says Opus and names none) |
 | Opus music 64 kbps | music and voice |
 | Opus music 128 kbps | music, best |
-| WAV, FLAC, Opus | only the codec; the sample rate and the quality stay as they are, unless the new codec cannot use them |
 
 A preset also puts the sample rate and the quality back to the card's defaults. Changing only the codec re-checks the
 other two: if the sample rate is not one the new codec can record, Cassette picks the nearest one it can (48 kHz, then
@@ -441,7 +441,7 @@ is no setting for it).
 
 | The bottom of the list (the keys are on the last row) | FLAC chosen: the dot is on FLAC |
 |---|---|
-| ![The codecs at the bottom, scrolled with Down](img/codec-picker-bottom.png) | ![FLAC is the codec in use](img/codec-picker-current-flac.png) |
+| ![The quick presets at the bottom, scrolled with Down](img/codec-picker-bottom.png) | ![FLAC is the codec in use](img/codec-picker-current-flac.png) |
 
 | The Sample rate picker | The Bit depth picker |
 |---|---|
@@ -467,7 +467,7 @@ reasons you can meet:
 | `Opus not installed (libopusenc0)` | The library for recording Opus is missing. |
 | the card's own reason | The card cannot be recorded at all; then every row is dimmed with its reason. |
 
-![A stereo card at 44.1 kHz: the Opus presets and the Opus codec dimmed with the reason](img/codec-picker-unavailable.png)
+![A stereo card at 44.1 kHz: the Opus codec (and, further down, the Opus presets) dimmed with the reason](img/codec-picker-unavailable.png)
 
 ![The notice after a tap on a dimmed row](img/codec-picker-notice.png)
 

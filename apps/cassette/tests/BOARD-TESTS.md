@@ -499,11 +499,11 @@ time, anything that stuttered or clicked.
 Goal: Settings > Codec, Sample rate and Bit depth / Bit rate list every choice with sizes that match what a recording really takes, and each choice reaches the file.
 
 1. Open Settings and read the rows. Expected: `Codec` (`WAV`), `Sample rate` (`48 kHz` on a card that has it) and,
-   only on a card that records both 16 and 24-bit, `Bit depth` (`16-bit`); a 16-bit only card has no Bit depth row. Tap Codec (or Right / Enter). Expected: the page is titled `Codec`; the heading `Quick
-   presets` and six two-line rows (WAV, FLAC, Opus speech 24 kbps, Opus speech 32 kbps, Opus music 64 kbps, Opus music
-   128 kbps), then the heading `Codecs` and WAV, FLAC, Opus; each row shows the size per minute on the right (`5.8
+   only on a card that records both 16 and 24-bit, `Bit depth` (`16-bit`); a 16-bit only card has no Bit depth row. Tap Codec (or Right / Enter). Expected: the page is titled `Codec`; the heading `Codecs`
+   and WAV, FLAC, Opus, then the heading `Quick presets` and six two-line rows (WAV, FLAC, Opus speech 24 kbps, Opus
+   speech 32 kbps, Opus music 64 kbps, Opus music 128 kbps); each row shows the size per minute on the right (`5.8
    MB/min`, `about ... MB/min` for FLAC, `... kB/min` or `... MB/min` for Opus) and a grey line under the name (the
-   one-line description and `... h free`); the codec in use (in the second group) has a dot and is darker; the footer
+   one-line description and `... h free`); the codec in use (in the first group) has a dot and is darker; the footer
    under the list reads `Sizes for <rate>, <bits>-bit, this card`. The headings cannot be selected (Up / Down skip them).
    Scroll to the last row (drag, or Down keys).
 2. A card or library that cannot do it: with the PC's `ldconfig -p | grep -E 'libFLAC|libopusenc'` as the reference, a
