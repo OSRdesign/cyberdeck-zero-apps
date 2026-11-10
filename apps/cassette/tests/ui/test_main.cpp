@@ -13,6 +13,7 @@ int main()
     test_meter_steps();
     test_wave();
     test_fit();
+    test_sq();
     test_load_anim();
     std::printf("cassette ui tests: %d checks passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;

@@ -1,4 +1,4 @@
-title square screen, a stereo card (two bar rows, L over R): the meter panel grows, the rows under it move down
+title square screen, a stereo card (two bar rows, L over R): the meter panel keeps its height, the rows under it stay
 sizes 720x720
 ppmm 1000
 env CASSETTE_DEMO stereo

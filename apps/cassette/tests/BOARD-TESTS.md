@@ -378,7 +378,7 @@ Report: what the row read at each step, the names of the takes recorded in 3 and
    playback side: the lamp sits under IN); playing (the meter reads L R); paused; the record timer's countdown over the
    cassette window; LOAD from the list (the old cassette drops out, the new one falls in, the name is written); a blank
    cassette (an empty recordings folder); a card without a level control (no CARD, SOFT full width, if one is at hand);
-   a stereo card (the meter grows by two rows, everything under it moves down a little, the keys stay inside the body).
+   a stereo card (the meter shows two bar rows, L over R; the panel keeps its height and nothing under it moves between mono, stereo, recording and playing; the keys stay inside the body).
 3. Open Settings, the list, trim and the save box once: nothing cut.
 4. A photo of idle, recording and the stereo state if possible, and of the countdown. Expected: the touch targets feel
    right (the steppers' - and + buttons and the keys are 7 mm or more).

@@ -22,6 +22,7 @@
 #include "cassette_window.hpp"
 #include "fit.hpp"
 #include "meter.hpp"
+#include "sq_geom.hpp"
 #include "view_model.hpp"
 #include "widgets.hpp"
 #include "wave_geom.hpp"
@@ -75,11 +76,6 @@ protected:
     bool shown_ = true;
 };
 
-/* The square layout's rows (design px of the 720x720 mockup; recorder page, see page_recorder.cpp sq_geometry). */
-struct SqGeo {
-    double win_h = 260, row_y = 356, row_h = 72, meter_y = 440, bar_y = 452, step_y = 544, step_h = 58, key_y = 614, key_h = 72;
-};
-
 class RecorderPage : public PageBase {
 public:
     RecorderPage(lv_obj_t *parent, const Frame &frame, const UiActions &actions, const Nav &nav, AnimOptions anim);
@@ -128,13 +124,14 @@ private:
     /* the info box (title, detail, state lamp: portrait and square) instead of the strip with its lamps (landscape) */
     bool info_box_ = false;
     double title_px_ = 15, title_min_ = 11, title_ls_ = 0.5, detail_px_ = 13, detail_min_ = 10, mon_glow_ = 4;
-    /* the square layout: the meter panel grows for two channels; what is under it moves down (square_stereo) */
+    /* the square layout: the meter panel is as tall as two channels need; one channel moves its contents (square_stereo) */
     bool square_ = false, sq_stereo_ = false;
     lv_obj_t *sq_panel_ = nullptr;
     SqGeo g_;
     struct Moved {
         lv_obj_t *obj;
         int y;
+        double mono_dy; /* design px it moves with one channel */
     };
     std::vector<Moved> sq_moved_;
     std::unique_ptr<NoticeBox> notice_;

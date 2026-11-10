@@ -219,7 +219,7 @@ The square layout is the 720x720 mockup scaled by screen width / 720 (the toolki
 cassette window 498x260 with the cassette drawn at 2.3x (459x239) and no OPEN word; under it the counter, the
 Recordings and Settings buttons and the info box (take name and REC lamp over the format and the time left); the LED
 meter panel across the full width, thin (24 px bars, the scale on one row, TARGET right of its bracket, MON under IN, PEAK
-at the right) and growing for two channels (L over R); CARD and SOFT side by side (CARD hidden when the card has no level
+at the right), as tall for one channel as for two (L over R; one channel sits centred in it, so nothing below ever moves); CARD and SOFT side by side (CARD hidden when the card has no level
 control, SOFT then takes the full width); the five keys across the full width. Left and right margins are equal
 everywhere, all gaps 12 px, what is left over stays under the keys. A control row is never lower than the toolkit's touch
 target: where the panel's density asks for more than the mockup's 58 / 72 px (a 10 px/mm panel wants 70), the window

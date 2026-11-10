@@ -37,6 +37,7 @@ LedBar::LedBar(lv_obj_t *parent, const Fit &fit, double x0, double y, double led
 void LedBar::set_height(const Fit &fit, double y, double led_h)
 {
     led_h_ = fit.h(y, led_h);
+    lv_obj_set_y(obj_, fit.y(y) - over_);
     lv_obj_set_size(obj_, w_, led_h_ + 2 * over_);
     lv_obj_invalidate(obj_);
 }

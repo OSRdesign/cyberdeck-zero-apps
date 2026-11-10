@@ -38,6 +38,7 @@ template <typename T> std::string test_text(const T &v) { return std::to_string(
 
 void test_format();
 void test_meter_steps();
+void test_sq();
 void test_wave();
 void test_fit();
 void test_load_anim();

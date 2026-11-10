@@ -50,30 +50,6 @@ lv_obj_t *mon_lamp(lv_obj_t *parent, const Fit &fit, double x, double cy, double
 
 /* The square layout's design numbers (the 720x720 mockup; Fit scales them by width / 720). */
 constexpr double kSqMargin = 24;             /* the content's left and right edge: 12 inside the body's 12 */
-constexpr double kSqMeterH = 92, kSqBarH = 24;
-constexpr double kSqStereoBarH = 38;          /* two rows of 17 and a gap of 4 */
-constexpr double kSqStereoGrow = kSqStereoBarH - kSqBarH;
-
-/* The mockup's rows from the top (design px): window 84..344, counter row 356 (72), meter panel 440 (92), steppers 544 (58),
- * keys 614 (72), the body ends at 708. A control row is never shorter than the toolkit's touch target (`t`, design px: the
- * panel's density); what that needs more than the mockup gives is taken from the window, whose cassette then scales to
- * fit (7 px margin each side at least). The bottom keeps room for the keys' lip and, with two channels, the meter's
- * growth. */
-SqGeo sq_geometry(double t)
-{
-    SqGeo g;
-    g.row_h = std::max(72.0, t);
-    g.step_h = std::max(58.0, t);
-    g.key_h = std::max(72.0, t);
-    const double fixed = 84 + 12 + g.row_h + 12 + kSqMeterH + 12 + g.step_h + 12 + g.key_h; /* all but the window */
-    g.win_h = std::clamp(704 - kSqStereoGrow - 4 - fixed, 150.0, 260.0);
-    g.row_y = 84 + g.win_h + 12;
-    g.meter_y = g.row_y + g.row_h + 12;
-    g.bar_y = g.meter_y + 12;
-    g.step_y = g.meter_y + kSqMeterH + 12;
-    g.key_y = g.step_y + g.step_h + 12;
-    return g;
-}
 constexpr std::uint32_t kSqStripEdge = 0xA89F83;
 
 /* A plain linear Fit (no bands) with design y `dy` on screen y `sy`: a group of elements kept together at scale s */
@@ -151,7 +127,6 @@ RecorderPage::RecorderPage(lv_obj_t *parent, const Frame &frame, const UiActions
             if (act_.deck_key) act_.deck_key(static_cast<KeyId>(i), e);
         });
         keys_[i]->set(kKeyIcons[i], kKeyNames[i], i == 4 ? KeyLook::Red : KeyLook::Charcoal, true, false);
-        if (square_) sq_moved_.push_back({keys_[i]->obj(), lv_obj_get_style_y(keys_[i]->obj(), LV_PART_MAIN)});
     }
 
     /* the notice, over everything of the strip (landscape) or of the counter row (portrait); last, so on top */
@@ -311,12 +286,14 @@ void RecorderPage::build_portrait()
 /* The square layout: one column, every number the 720x720 mockup's (design px, scaled by width / 720). */
 void RecorderPage::build_square()
 {
-    const double dy = sq_stereo_ ? kSqStereoGrow : 0;
     const double my = g_.meter_y - 440; /* the panel against the mockup (the window may have shrunk) */
-    auto moved = [this](lv_obj_t *o) {
-        sq_moved_.push_back({o, lv_obj_get_style_y(o, LV_PART_MAIN)});
+    const double sy = my + kSqStereoGrow; /* the content's rows as drawn with two channels; one channel moves them (square_stereo) */
+    /* what moves with the channel count: down for the rows that sit at the panel's top, up for those at its bottom */
+    auto moved = [this](lv_obj_t *o, double mono_dy) {
+        sq_moved_.push_back({o, lv_obj_get_style_y(o, LV_PART_MAIN), mono_dy});
         return o;
     };
+    const double half = kSqStereoGrow / 2;
 
     /* row under the window: the counter, the two buttons, the info box */
     counter_ = std::make_unique<Counter>(root_, fit_, kSqMargin, g_.row_y, 200, g_.row_h, 30, 44, 14, 39, 8);
@@ -337,9 +314,10 @@ void RecorderPage::build_square()
     state_lamp_ = std::make_unique<Lamp>(root_, fit_.x(662), fit_.y(g_.row_y + 14 + (g_.row_h - 72) / 2), fit_.px(18), col::kLampRed, fit_.px(6));
 
     /* the meter panel across the full width: IN / L R, the bars, the scale, TARGET, PEAK, MON */
-    sq_panel_ = framed_panel(root_, fit_, {kSqMargin, g_.meter_y, 672, kSqMeterH}, col::kPanel);
+    sq_panel_ = framed_panel(root_, fit_, {kSqMargin, g_.meter_y, 672, g_.meter_h}, col::kPanel);
     in_label_ = fit_label(root_, fit_, Face::Bold, 28, col::kInLabel, 45, g_.bar_y, 0, 28, LV_TEXT_ALIGN_LEFT, 1);
     lv_label_set_text(in_label_, "IN");
+    moved(in_label_, half);
     ch_l_ = fit_label(root_, fit_, Face::Bold, 16, col::kInLabel, 48, g_.bar_y, 0, 17);
     lv_label_set_text(ch_l_, "L");
     ch_r_ = fit_label(root_, fit_, Face::Bold, 16, col::kInLabel, 48, g_.bar_y + 21, 0, 17);
@@ -348,30 +326,32 @@ void RecorderPage::build_square()
     ls.over = 6;
     ls.tick_w = 3;
     ls.radius = 3;
-    bar_ = std::make_unique<LedBar>(root_, fit_, 112, g_.bar_y, 30, kSqBarH, 4, ls);
+    bar_ = std::make_unique<LedBar>(root_, fit_, 112, g_.bar_y, 30, kSqStereoBarH, 4, ls);
     peak_ = peak_lamp(root_, fit_, 645, my + 446, 22);
+    moved(peak_, half);
     lv_obj_t *peak = fit_label(root_, fit_, Face::Bold, 18, col::kScale, 625, my + 472, 62, 18, LV_TEXT_ALIGN_CENTER, 1);
     lv_label_set_text(peak, "PEAK");
+    moved(peak, half);
     const double sx[4] = {107, 345, 464, 583};
     const char *const st[4] = {"-40", "-20", "-10", "0"};
     for (int i = 0; i < 4; ++i) {
-        lv_obj_t *l = fit_label(root_, fit_, Face::Medium, 22, col::kInLabel, sx[i], my + 482, 40, 22, LV_TEXT_ALIGN_CENTER);
+        lv_obj_t *l = fit_label(root_, fit_, Face::Medium, 22, col::kInLabel, sx[i], sy + 482, 40, 22, LV_TEXT_ALIGN_CENTER);
         lv_label_set_text(l, st[i]);
-        moved(l);
+        moved(l, -half);
     }
-    lv_obj_t *br = box(root_, fit_.x(388), fit_.y(my + 510), fit_.w(388, 143), fit_.h(my + 510, 6), 0, 0, LV_OPA_TRANSP);
+    lv_obj_t *br = box(root_, fit_.x(388), fit_.y(sy + 510), fit_.w(388, 143), fit_.h(sy + 510, 6), 0, 0, LV_OPA_TRANSP);
     border(br, fit_.px(2), col::kAmber);
     lv_obj_set_style_border_side(br, static_cast<lv_border_side_t>(LV_BORDER_SIDE_LEFT | LV_BORDER_SIDE_RIGHT | LV_BORDER_SIDE_BOTTOM), 0);
-    moved(br);
-    lv_obj_t *tg = fit_label(root_, fit_, Face::Bold, 16, col::kAmber, 541, my + 505, 0, 16, LV_TEXT_ALIGN_LEFT, 2);
+    moved(br, -half);
+    lv_obj_t *tg = fit_label(root_, fit_, Face::Bold, 16, col::kAmber, 541, sy + 505, 0, 16, LV_TEXT_ALIGN_LEFT, 2);
     lv_label_set_text(tg, "TARGET");
-    moved(tg);
+    moved(tg, -half);
     mon_glow_ = 8;
-    mon_lamp_ = mon_lamp(root_, fit_, 45, my + 500, 16);
-    mon_label_ = fit_label(root_, fit_, Face::Bold, 13, col::kInLabel, 69, my + 491, 0, 18, LV_TEXT_ALIGN_LEFT, 0);
+    mon_lamp_ = mon_lamp(root_, fit_, 45, sy + 500, 16);
+    mon_label_ = fit_label(root_, fit_, Face::Bold, 13, col::kInLabel, 69, sy + 491, 0, 18, LV_TEXT_ALIGN_LEFT, 0);
     lv_label_set_text(mon_label_, "MON");
-    moved(mon_lamp_);
-    moved(mon_label_);
+    moved(mon_lamp_, -half);
+    moved(mon_label_, -half);
 
     StepperLook look;
     look.btn_w = std::max(60.0, 41.0 / fit_.s); /* at least the toolkit's 40 px wide: more design px under scale 0.68 */
@@ -383,26 +363,29 @@ void RecorderPage::build_square()
     look.val_top = 27; /* the mono face sits low in its line: the digits end a few px above the frame */
     look.val_line = 30;
     look.icon = 1.6;
-    card_ = std::make_unique<Stepper>(root_, fit_, DRect{kSqMargin, g_.step_y + dy, 328, g_.step_h}, "CARD", 28, Icon::Minus,
+    card_ = std::make_unique<Stepper>(root_, fit_, DRect{kSqMargin, g_.step_y, 328, g_.step_h}, "CARD", 28, Icon::Minus,
                                       Icon::Plus, [this](int d) { if (act_.card_gain && !window_->loading()) act_.card_gain(d); },
                                       look);
-    soft_ = std::make_unique<Stepper>(root_, fit_, DRect{368, g_.step_y + dy, 328, g_.step_h}, "SOFT", 28, Icon::Minus,
+    soft_ = std::make_unique<Stepper>(root_, fit_, DRect{368, g_.step_y, 328, g_.step_h}, "SOFT", 28, Icon::Minus,
                                       Icon::Plus, [this](int d) { if (act_.soft_gain && !window_->loading()) act_.soft_gain(d); },
                                       look);
+    sq_stereo_ = true; /* drawn for two channels; the default (one) is applied now */
+    square_stereo(false);
 }
 
-/* The square layout with two channels: the bars take two rows (38 px instead of 24), the panel grows with them and what
- * is under it (the scale, the steppers, the keys) moves down by the difference; the bottom margin takes it. */
+/* The square layout's meter panel is always as tall as two channels need (kSqStereoGrow more than one), so nothing under
+ * it ever moves. With one channel the single bar row (24 px) and the rows around it sit in the middle of the panel: they
+ * move by half the growth (the top and bottom paddings stay equal); with two the bars take two rows (38 px). Only the
+ * panel's own contents change place here. */
 void RecorderPage::square_stereo(bool stereo)
 {
     sq_stereo_ = stereo;
-    const double d = stereo ? kSqStereoGrow : 0;
-    bar_->set_height(fit_, g_.bar_y, stereo ? kSqStereoBarH : kSqBarH);
-    lv_obj_set_height(sq_panel_, fit_.h(g_.meter_y, kSqMeterH + d));
-    /* the stepper rows are placed again by place_steppers; the keys and the scale move by the difference */
-    const int px = fit_.y(g_.key_y + d) - fit_.y(g_.key_y);
-    for (const Moved &m : sq_moved_) lv_obj_set_y(m.obj, m.y + px);
-    first_ = true; /* the stepper rows are placed again */
+    const double bd = stereo ? 0 : kSqStereoGrow / 2;
+    bar_->set_height(fit_, g_.bar_y + bd, stereo ? kSqStereoBarH : kSqBarH);
+    for (const Moved &m : sq_moved_) {
+        const double d = stereo ? 0 : m.mono_dy;
+        lv_obj_set_y(m.obj, m.y + fit_.y(g_.meter_y + d) - fit_.y(g_.meter_y));
+    }
 }
 
 void RecorderPage::place_steppers(bool card)
@@ -411,7 +394,7 @@ void RecorderPage::place_steppers(bool card)
     card_shown_ = card;
     card_->set_shown(card);
     if (square_) {
-        const double y = g_.step_y + (sq_stereo_ ? kSqStereoGrow : 0);
+        const double y = g_.step_y;
         card_->place(fit_, DRect{kSqMargin, y, 328, g_.step_h}, 28);
         soft_->place(fit_, card ? DRect{368, y, 328, g_.step_h} : DRect{kSqMargin, y, 672, g_.step_h}, 28);
     } else if (frame_.portrait) soft_->place(fit_, card ? DRect{162, 352, 142, 44} : DRect{16, 352, 288, 44}, card ? 14 : 16);
