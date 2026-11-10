@@ -9,7 +9,7 @@ key l
 wait 400
 expect text "LOAD"
 expect text "RENAME"
-expect text "TRIM"
+expect text "EDIT"
 expect text "DELETE"
 shot list-load-idle
 expect notext "LAYOUT FAIL"

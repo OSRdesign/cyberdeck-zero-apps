@@ -63,8 +63,8 @@ Source of truth: `docs/doc-images.tsv` (tab separated: image, scene, size, shot)
 | `list-preview.png` | `w6-list-load` | 480x320 | `list-load-previewing` | List, a take previewing |
 | `rename.png` | `r-rename` | 480x320 | `rename` | Rename text box |
 | `confirm-delete.png` | `s2-keys-list` | 480x320 | `keys-delete` | Delete confirm box (scene wording differs from the app's: see note) |
-| `trim.png` | `j-trim` | 480x320 | `trim` | Trim and split page, two splits |
-| `trim-zoomed.png` | `j2-trim-tapflag` | 480x320 | `trim-zoomed` | Trim page zoomed, one flag |
+| `trim.png` | `j-trim` | 480x320 | `trim` | Edit page (trim and split), two splits |
+| `trim-zoomed.png` | `j2-trim-tapflag` | 480x320 | `trim-zoomed` | Edit page zoomed, one flag |
 | `save-box.png` | `k-save` | 480x320 | `save` | Save box, three files |
 | `confirm-replace.png` | `l-confirm` | 480x320 | `confirm` | Replace original confirm |
 | `settings-top.png` | `h-settings` | 480x320 | `settings-top` | Settings, top |

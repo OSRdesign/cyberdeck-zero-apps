@@ -182,7 +182,7 @@ Goal: all five screens usable at 320x480.
 1. Start once with the layout check: `CASSETTE_LAYOUT_CHECK=1 /usr/share/APPLaunch/bin/cassette`. A failed check shows
    `LAYOUT FAIL` at the top left and a log line.
 2. Walk through the recorder (idle, recording, playing, the countdown of B9), the Recordings list, Settings (scroll to
-   the last row: Auto-split), the Trim page, the save box, the confirm box (DELETE on a test take), the rename box with
+   the last row: Auto-split), the Edit page, the save box, the confirm box (DELETE on a test take), the rename box with
    the on-screen keyboard (no keyboard plugged in).
 3. Look for: text cut or overlapping, keys too small to hit (the toolkit's target is 44 px or more; only the two small
    header-side buttons are 40 x 44), notices that do not fit their box.
@@ -204,27 +204,27 @@ Goal: the card rows go away cleanly.
 
 Report: the probe's capabilities line, what the recorder shows, the Settings rows.
 
-## B8. Trim and split (deck with keyboard, zero8 by touch, 20 min)
+## B8. Edit page: trim and split (deck with keyboard, zero8 by touch, 20 min)
 
 Goal: trim and split work, originals are kept or replaced as chosen, a power pull during a save leaves no half file.
 
-1. Record a take of about 1 minute, counting aloud every 10 s. List: select it, TRIM (T). The Trim page: the waveform,
+1. Record a take of about 1 minute, counting aloud every 10 s. List: select it, EDIT (T). The Edit page: the waveform,
    the marker, IN / OUT / LEN.
 2. Zoom in and out (Up / Down or ZOOM - / +): the waveform scrolls with the marker when zoomed in. Move the marker
    (Left / Right 0.1 s, Shift 1 s, POSITION < >, or a tap on the waveform). PLAY (Space) plays from the marker.
 3. **Trim:** marker at "ten", SET IN (I); marker at "fifty", SET OUT (O); LEN about 40 s. SAVE (S): the save box lists
    the result file and its length. SAVE AS NEW FILES. Expected: a new file with `-1` added to the name; the original is
    still in the list. Play both.
-4. **Split:** TRIM the original again. Marker at "twenty", SPLIT (Enter); at "forty", SPLIT. Tab selects a flag (the
+4. **Split:** EDIT the original again. Marker at "twenty", SPLIT (Enter); at "forty", SPLIT. Tab selects a flag (the
    marker jumps to it). Add a wrong third split, Tab to it, REMOVE (Enter while a flag is selected): it goes. SAVE:
    three files listed, SAVE AS NEW FILES. Expected: three files named `-1`, `-2`, `-3` (or the next unused numbers if
    step 3 used `-1`: numbers are never reused for a take (to confirm on the board)); play each: they join where you
    split.
-5. **Replace:** TRIM one of the results, trim a few seconds, SAVE, REPLACE ORIGINAL. The confirm box `Delete the
+5. **Replace:** EDIT one of the results, trim a few seconds, SAVE, REPLACE ORIGINAL. The confirm box `Delete the
    original take?` / `It is deleted only after every new file is written and synced.`: DELETE. Expected: the notice
-   `Saved, original replaced`, back on the list, the original gone, the result there. Esc from the Trim page without
+   `Saved, original replaced`, back on the list, the original gone, the result there. Esc from the Edit page without
    saving changes nothing.
-6. **Power pull during a save (the warning of B3 applies):** TRIM the 10-minute take of B1, split it in two, SAVE AS NEW
+6. **Power pull during a save (the warning of B3 applies):** EDIT the 10-minute take of B1, split it in two, SAVE AS NEW
    FILES and pull the power while the save runs (a few seconds on the SD card; what the screen shows while saving:
    **to confirm**). After boot, before opening Cassette: `sh ~/cassette-check.sh journal` (leftover `.tmp-*` files are
    expected). Open Cassette, then the same command again. Expected: the original is whole, and either both results or
@@ -248,7 +248,7 @@ Goal: the map in `docs/KEYS.md` works, and the same by touch.
    Back to Off.
 4. Recordings list: Up / Down, Enter plays, N rename (only the prefix is edited, take number, date and time stay), T trim,
    Delete asks (B11), S settings, Esc back.
-5. Trim keys as in B8; save and confirm box: Left / Right or Tab move the white outline, Enter chooses, Esc cancels.
+5. Edit page keys as in B8; save and confirm box: Left / Right or Tab move the white outline, Enter chooses, Esc cancels.
 6. Settings: Up / Down, Enter or Right opens or flips, Left / Right on Input level, Esc closes a choice list first, L the
    list.
 7. zero8 by touch: the same paths with the on-screen keys and buttons.
@@ -304,7 +304,7 @@ Goal: a card that records at neither 48000 nor 44100 Hz (a USB headset in its ca
 4. PLAY it through the headset (its output may play 16000 Hz only) and through another output (Settings > Output, one that
    plays 48000 only). Expected on both: normal speed and voice pitch, about 30 s long, counting in step with your watch.
    REW / FWD scan at 5x and the 5 s jump move by the right amount of time.
-5. TRIM: split at about 15 s and save as new files. Expected: two takes of about 15 s each that play at normal speed.
+5. EDIT: split at about 15 s and save as new files. Expected: two takes of about 15 s each that play at normal speed.
 6. `file ~/Recordings/take_001_*.wav`.
    Expected: `... WAVE audio, Microsoft PCM, 16 bit, mono 16000 Hz`.
 
@@ -469,13 +469,13 @@ libopusfile).
    three times: -15 s, never before 0:00. Set it back to Fast scan.
 6. **Preview** from the list (double tap the row, or Enter): it plays from the start without loading; double tap again
    stops it.
-7. **Trim and split.** TRIM on the FLAC take: the waveform appears after a short progress (it is decoded once, then
-   the `.flac.peaks` file is reused: close and open TRIM again, it is instant). Zoom in to the closest level and back.
+7. **Trim and split.** EDIT on the FLAC take: the waveform appears after a short progress (it is decoded once, then
+   the `.flac.peaks` file is reused: close and open EDIT again, it is instant). Zoom in to the closest level and back.
    Set IN at about 0:10 (on a counted word), OUT at about 0:50, a split at about 0:30; preview the kept part. Save as
    new files. Expected: two new rows `take_NNN_...-1.flac` and `-2.flac`, about 20 s each (row lengths), rows end in
    `FLAC`. Play each: the first starts at the word where IN was, the second at the split's word; nothing missing at the
    joins. Then trim the Opus take the same way: `-1.opus`, `-2.opus`, rows end in `OPUS`.
-8. **Replace original.** TRIM a part, set IN at 0:02, save with REPLACE ORIGINAL and confirm: the row keeps its name,
+8. **Replace original.** EDIT a part, set IN at 0:02, save with REPLACE ORIGINAL and confirm: the row keeps its name,
    its length is 2 s shorter, it plays from the new start.
 9. **On the PC** (the controller can do this): copy the four parts and check them: `flac -t <part>.flac` says `ok`;
    `ffprobe -hide_banner <part>` shows the durations the rows showed; `opusinfo <part>.opus` (if opus-tools are
@@ -575,9 +575,9 @@ Report: pass or fail per step, the name used, the screens tried, and the smalles
 
 ## B21. Waveform scale TRUE / FIT (any board, 5 min)
 
-Goal: a quiet take is readable on the trim page, and the chip and the key switch the scale.
+Goal: a quiet take is readable on the Edit page, and the chip and the key switch the scale.
 
-1. Record a quiet take of about 20 s (speak softly, card level low), TRIM it. Expected: the waveform chip at the top right
+1. Record a quiet take of about 20 s (speak softly, card level low), EDIT it. Expected: the waveform chip at the top right
    corner of the waveform reads `TRUE` (the first time) and the bars are low.
 2. Tap the chip (or press F on a keyboard). Expected: it reads `FIT x` and a number (more than 1 for a quiet take), the
    bars of the main waveform and of the overview strip grow, the loudest part of the whole take reaches about nine tenths

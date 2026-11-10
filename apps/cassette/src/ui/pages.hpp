@@ -12,7 +12,7 @@
  *   SettingsPage  the setting rows in a scrolling list with the boards' scroll bar; a choice row opens its picker in
  *                 the same list (the chosen entry in the selected-row look)
  *   ListPage      the strip, the take rows (label sticker, name, details, duration, chevron; the selected row
- *                 darker), PLAY, RENAME, TRIM, DELETE, the hint
+ *                 darker), PLAY, RENAME, EDIT, DELETE, the hint
  *   TrimPage      the strip, the waveform window (overview, main bars, handles, flags, marker, ruler), ZOOM and
  *                 POSITION, SET IN, SET OUT, SPLIT / REMOVE, PLAY, SAVE
  *   SaveBox, ConfirmBox  the dim overlay over the whole screen and the cream box
@@ -226,7 +226,7 @@ public:
     int selected() const { return vm_.selected; }
     /* The notice replaces the hint line (landscape) or the top strip (narrow; the list moves down for a taller one). */
     void set_notice(const std::string &text);
-    /* The four keys on the selected take: 0 LOAD, 1 RENAME, 2 TRIM, 3 DELETE. LOAD does nothing while the model says
+    /* The four keys on the selected take: 0 LOAD, 1 RENAME, 2 EDIT (the trim page), 3 DELETE. LOAD does nothing while the model says
      * can_load = false (recording); otherwise it loads the take and shows the recorder. */
     void key(int which);
     /* Enter or a second tap on the selected row: PREVIEW the take (a second one on the previewing row stops it). */

@@ -40,7 +40,7 @@ does not change (it plays, pauses and resumes). The same at every screen size:
 | Enter | PREVIEW the selected take; Enter again on the take that previews stops it and rewinds it to the start |
 | L | LOAD the selected take into the deck (the recorder shows, the take ready at 00:00, nothing playing) |
 | N | RENAME (the text box) |
-| T | TRIM (the trim and split page) |
+| T | EDIT (the Edit page: trim and split) |
 | Delete | DELETE (asks in the confirm box) |
 | S | the settings |
 | Esc | back to the recorder (a running preview stops) |
@@ -59,7 +59,7 @@ a blank cassette, with no name on the label, at once; PLAY is dimmed). LOAD over
 between two named cassettes. Keys and touches are ignored during the animation, except Esc, which ends the animation at once
 and then acts as usual.
 
-## Trim and split
+## Edit page (trim and split)
 
 | Key | Does |
 |---|---|

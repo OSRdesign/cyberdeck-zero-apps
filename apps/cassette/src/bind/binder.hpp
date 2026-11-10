@@ -22,7 +22,7 @@
  *                  the trim page stops the preview and closes it (after a running save has finished)
  *   list           select -> the highlight only (nothing is loaded); activate (Enter, a tap on the highlighted row) ->
  *                  preview_take, or Stop (stop and rewind) when that take is the one playing; LOAD -> load (refused while
- *                  recording); leaving the list stops the preview it started; RENAME -> rename_take; TRIM -> stop a
+ *                  recording); leaving the list stops the preview it started; RENAME -> rename_take; EDIT -> stop a
  *                  playback, open_trim (refused: back to the list); DELETE -> the confirm box, then delete_take
  *   trim           ZOOM -> set_zoom (down to a 2 s window), POSITION / keys -> move_position, a drag -> set_position
  *                  (coalesced), SET IN / SET OUT / SPLIT / REMOVE / a flag tap -> set_in / set_out / add_split /
@@ -78,7 +78,7 @@ public:
     bool tick(int64_t now_mono_ms, int64_t now_wall_s);
     const ui::ViewModel &vm() const { return vm_; }
     const LocalState &local() const { return local_; }
-    /* A page the binding asks the UI to show (TRIM on a take that could not be opened: back to the list). */
+    /* A page the binding asks the UI to show (EDIT on a take that could not be opened: back to the list). */
     bool take_nav(ui::Screen &screen);
     /* A notice of the binding's own (UI thread). */
     void push_notice(const std::string &text);

@@ -1,4 +1,4 @@
-title Cassette bound (CASSETTE_DEMO=1), square screen: a 6 s take on the trim page, ZOOM in once, PLAY: the waveform scrolls under the marker with its bars on the take's grid (each bar keeps its height as it moves), the marker followed smoothly, the time ruler inside the panel
+title Cassette bound (CASSETTE_DEMO=1), square screen: a 6 s take on the Edit (trim) page, ZOOM in once, PLAY: the waveform scrolls under the marker with its bars on the take's grid (each bar keeps its height as it moves), the marker followed smoothly, the time ruler inside the panel
 sizes 720x720
 ppmm 800
 env CASSETTE_DEMO 1
@@ -14,7 +14,7 @@ wait 1000
 key l
 wait 700
 expect text "Take 001"
-tap "TRIM"
+tap "EDIT"
 wait 1500
 expect text "TAKE 001"
 key up

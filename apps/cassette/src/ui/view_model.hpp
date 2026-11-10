@@ -282,7 +282,7 @@ inline bool operator==(const ConfirmVm &a, const ConfirmVm &b)
     return a.shown == b.shown && a.title == b.title && a.body == b.body && a.yes == b.yes;
 }
 
-/* The pages. The UI owns which one shows (L, S, Esc, the header buttons, TRIM) and reports every change. */
+/* The pages. The UI owns which one shows (L, S, Esc, the header buttons, EDIT) and reports every change. */
 enum class Screen { Recorder, Settings, List, Trim };
 
 /* A piano key's touch or keyboard key (docs/KEYS.md): Down and Up for every key (REW / FWD scan while held), then
@@ -298,7 +298,7 @@ struct UiActions {
     std::function<void()> countdown_cancel;           /* a tap on the countdown panel, or Esc during the countdown */
     std::function<void(int dir)> card_gain;           /* CARD -1 / +1 step */
     std::function<void(int dir)> soft_gain;           /* SOFT -1 / +1 step */
-    /* navigation: the page now shown (Recorder after Esc, List, Settings, Trim after TRIM) */
+    /* navigation: the page now shown (Recorder after Esc, List, Settings, Trim after EDIT) */
     std::function<void(Screen)> open;
     /* a tap on the notice that covers the counter row of the narrow recorder: dismisses it (the next one may follow) */
     std::function<void()> notice_dismiss;
@@ -314,7 +314,7 @@ struct UiActions {
                                                        * previewing it stops the preview and rewinds it (no restart) */
     std::function<void(int index)> list_load;         /* LOAD (key L): the take goes into the deck; the UI then shows the recorder */
     std::function<void(int index, const std::string &prefix)> list_rename; /* the edited prefix, after RENAME */
-    std::function<void(int index)> list_trim;         /* TRIM: the UI shows the trim page; load TrimVm for that take */
+    std::function<void(int index)> list_trim;         /* EDIT: the UI shows the trim page (titled Edit); load TrimVm for that take */
     std::function<void(int index)> list_delete;       /* DELETE: confirm first (ConfirmVm), delete on confirm_answer(true) */
     /* trim and split */
     std::function<void(int dir)> trim_zoom;           /* ZOOM -1 (wider window) / +1 (narrower) */

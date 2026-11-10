@@ -10,7 +10,7 @@ wait 400
 expect text "Take 007"
 expect text "Take 006"
 expect text "RENAME"
-expect text "TRIM"
+expect text "EDIT"
 expect text "DELETE"
 shot list
 expect notext "LAYOUT FAIL"

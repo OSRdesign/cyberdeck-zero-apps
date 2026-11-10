@@ -239,7 +239,7 @@ never produces; checked against both header sets (`check_codec_abi.cpp`).
 Phase C adds nothing to that list (phase A expected `libopusfile0` here; it is not needed: `libopus0` plays Opus, and
 `libopusenc0` already depends on it). The app runs with none of them: WAV records and plays, the FLAC and Opus rows are
 greyed with the package to install, and a FLAC / Opus take whose library is missing is refused by LOAD, PLAY, the
-preview and TRIM with one notice (`This take cannot be played: FLAC not installed (libflac14)`, `... Opus not installed
+preview and EDIT with one notice (`This take cannot be played: FLAC not installed (libflac14)`, `... Opus not installed
 (libopus0)`). Caveat: the launcher's Store installs a package with plain `dpkg --install` when
 its Depends are already met (`appstore_native.cpp`), and dpkg never installs Recommends; only `apt install` does. So
 with the current Store, Recommends only help users who install by apt. If the owner wants FLAC and Opus to work after
@@ -321,7 +321,7 @@ ID3 tag is left alone):
 - Idempotent and safe to interrupt; the take gets the same notice and the same "repaired" mark as a WAV take.
 
 **The phase B gate** (`playback_refusal()` in takes/recordings and its five calls in the controller: LOAD, PLAY on a
-loaded take, PLAY from the list, the preview, TRIM) is gone since phase C. In its place the controller refuses only a
+loaded take, PLAY from the list, the preview, EDIT) is gone since phase C. In its place the controller refuses only a
 take whose decoder library is missing, with the notice above.
 
 **Tests.** The test encoders `tests/fixture_codecs.hpp` (a real FLAC stream with verbatim subframes, an Ogg Opus stream
@@ -397,7 +397,7 @@ the dimming, the 44.1 kHz-only card, the re-validation, old and new settings key
 ## Phase C: playback and editing (done)
 
 FLAC and Ogg Opus takes load, play, pause and resume, seek, scan at 5x both ways (REW stops at the start, FWD ends the
-take at its end), jump 5 s, preview from the list, open on the trim page with their peaks, preview there, and are
+take at its end), jump 5 s, preview from the list, open on the Edit page with their peaks, preview there, and are
 trimmed and split into results of their own format, exactly as WAV takes. WAV keeps its own code paths (WavReader,
 its peak builder, its byte-copy trim): nothing changed for WAV.
 
@@ -466,7 +466,7 @@ the WAV twins, for a period of 21.3 ms.
 **Peaks** (`edit/peaks.*`): the same pyramid and cache file (`<take>.flac.peaks`, `<take>.opus.peaks`), keyed by the
 take's size and mtime and recording the decoder's output format, built from the decoded audio in one streaming pass of
 65536-frame steps (a take of hours needs no more memory than a short one) on the controller's worker thread with the
-progress the trim page already shows; the UI never waits. Exact bars (fewer than 256 frames per bar) decode the few
+progress the Edit page already shows; the UI never waits. Exact bars (fewer than 256 frames per bar) decode the few
 frames they need, under a lock (the UI may ask from several threads). A missing decoder: `cannot decode the take: FLAC
 not installed (libflac14)`.
 
@@ -500,7 +500,7 @@ libFLAC's calling conventions, seek_absolute included; a stateless libopus decod
 so positions are checked to the sample): the codec suite (framing, decoders, seeks at four rates, bisection on a long
 take, damage, the window cache, remux of 60 ranges), the playback suite (the twin scripts), the edit suite (results,
 errors, crash sweeps, peaks), the app suite (a FLAC and an Opus take recorded, loaded, played to the end with every
-sample checked, previewed, trimmed and split from the trim page; the notices without the libraries). The real-library
+sample checked, previewed, trimmed and split from the Edit page; the notices without the libraries). The real-library
 group (`tests/codec/test_decoders_real.cpp`) runs with both private roots: FLAC 1.4.3 / libopus 1.4 and FLAC 1.5.0 /
 libopus 1.5.2, libopusfile 0.12 as the reference.
 

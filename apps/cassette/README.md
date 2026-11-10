@@ -15,7 +15,7 @@ category Tools. Plan: launcher `docs/dev/tasks/016-cassette-recorder.md`; study:
 ## Documentation
 
 - [`docs/USER-GUIDE.md`](docs/USER-GUIDE.md): the user guide (what you need, the recorder screen, recording, monitoring,
-  playing, the list, trim and split, settings, files, crash safety, troubleshooting, limits), with pictures.
+  playing, the list, the Edit page (trim and split), settings, files, crash safety, troubleshooting, limits), with pictures.
 - [`docs/KEYS.md`](docs/KEYS.md): the keyboard map.
 - [`docs/MAKING-SCREENSHOTS.md`](docs/MAKING-SCREENSHOTS.md): how to render the guide's pictures again after a change
   (`docs/make-doc-images.sh`).
@@ -33,10 +33,10 @@ Each comes from a scene in `tests/scenes` (named below): the build writes its PN
 | Recorder while recording: the meter in the target zone, CARD and SOFT, 640x480, rendered on a PC (`a-recording`) | Recorder while recording, 480x320, rendered on a PC (`a-recording`) |
 | ![Recorder, 320x480](screenshots/03-recording-320x480.png) | ![Record countdown, 480x320](screenshots/04-countdown-480x320.png) |
 | Recorder in portrait (PDA mode), 320x480, rendered on a PC (`a-recording`) | The record timer's countdown over the cassette window, 480x320, rendered on a PC (`c-countdown`) |
-| ![Recordings, 480x320](screenshots/05-list-480x320.png) | ![Trim and split, 640x480](screenshots/06-trim-640x480.png) |
-| Recordings list with the free space and the four actions, 480x320, rendered on a PC (`i-list`) | Trim and split: IN, OUT, two split points (one selected: REMOVE), the overview strip, 640x480, rendered on a PC (`j-trim`) |
-| ![Trim and split, 320x480](screenshots/07-trim-320x480.png) | ![Save box, 480x320](screenshots/08-save-480x320.png) |
-| Trim and split in portrait, 320x480, rendered on a PC (`j-trim`) | The save box: three files from two split points, save as new files or replace the original, 480x320, rendered on a PC (`k-save`) |
+| ![Recordings, 480x320](screenshots/05-list-480x320.png) | ![Edit page, 640x480](screenshots/06-trim-640x480.png) |
+| Recordings list with the free space and the four actions, 480x320, rendered on a PC (`i-list`) | The Edit page (trim and split): IN, OUT, two split points (one selected: REMOVE), the overview strip, 640x480, rendered on a PC (`j-trim`) |
+| ![Edit page, 320x480](screenshots/07-trim-320x480.png) | ![Save box, 480x320](screenshots/08-save-480x320.png) |
+| The Edit page in portrait, 320x480, rendered on a PC (`j-trim`) | The save box: three files from two split points, save as new files or replace the original, 480x320, rendered on a PC (`k-save`) |
 | ![Settings, 320x480](screenshots/09-settings-320x480.png) | ![Card without a level control, 480x320](screenshots/10-nocard-480x320.png) |
 | Settings in portrait: the card's own rows first, 320x480, rendered on a PC (`h-settings`) | A card without a level control: SOFT takes the full width, 480x320, rendered on a PC (`b-nocard`) |
 
@@ -62,13 +62,13 @@ Four pages and two boxes:
   REC starts a countdown over the cassette window instead: the meter stays live, a tap, STOP or Esc cancels it (nothing
   is written), at zero the take starts. Without a card the cassette window reads "No sound input found. Plug in a USB
   sound card or headset." and a card plugged in later is found by itself.
-- **Recordings.** The takes in the folder, newest first, with their length and size; LOAD, RENAME, TRIM and DELETE
+- **Recordings.** The takes in the folder, newest first, with their length and size; LOAD, RENAME, EDIT and DELETE
   (which asks first). A take repaired after a power cut is marked as such. LOAD puts the take into the deck with a
   cassette animation (the old cassette, or the blank one, drops out, the new one falls in with a small bounce, the name is written onto the
   label in handwriting; 0.9 s, keys are ignored meanwhile but Esc) and PLAY then plays that take; it is dimmed while a
   take records. A double tap or Enter on a row previews the take, again on the same row stops the preview and rewinds it;
   closing the list stops it. Previewing never changes the loaded take.
-- **Trim and split.** The take as a waveform that scrolls under a fixed play marker (drag, a 0.1 s stepper or the keys),
+- **Edit (trim and split).** The take as a waveform that scrolls under a fixed play marker (drag, a 0.1 s stepper or the keys),
   ZOOM from the whole take down to a 2 s window, a thin overview strip of the whole take, the IN and OUT handles and any
   number of numbered split points (a tap selects one and the SPLIT key becomes REMOVE). A chip at the waveform's top right
   (key F) switches its scale between TRUE (real level) and FIT (the take's loudest peak fills the panel, `FIT x8`: one gain
@@ -90,12 +90,12 @@ Four pages and two boxes:
   UC02 headset): you hear yourself about 50 ms late, so the voice is clear but not instant. What you hear is what is
   recorded (after the DC blocker and SOFT gain, before nothing else), at the monitor level; the level never changes the
   recording. It never runs while a take plays, scans, is paused in playback or previewed from the list, and not while the
-  trim page is open: starting any playback closes the monitor first, stopping it brings it back. Leaving the app, a lost
+  Edit page is open: starting any playback closes the monitor first, stopping it brings it back. Leaving the app, a lost
   card and Esc close it. It cannot cost the take anything: the monitor reads a private copy through a lock-free ring that
   drops when it is full, and a monitor that fails or hangs only switches itself off (the info line says **Monitor
   unavailable**, for instance when another program holds the card's output); the recording goes on untouched.
   The **MON** lamp at the bottom left of the meter panel (under IN) shows whether the monitor is playing right now: lit
-  green while it runs, dark with the switch off, while playback or the trim page suspends it and after a failure. It is
+  green while it runs, dark with the switch off, while playback or the Edit page suspends it and after a failure. It is
   drawn only when the card has a playback side (where the Monitor rows exist) and is not a button.
   **Use headphones.** With speakers the microphone hears the monitor and you get an echo or a howl; that is why the
   monitor is off by default and never plays during playback. A headset such as the Jabra Evolve 65 has its own hardware
@@ -124,10 +124,10 @@ The full map is [`docs/KEYS.md`](docs/KEYS.md).
 | Recordings | Up / Down | move the selection |
 | | Enter | PREVIEW the selected take (again on it: stop and rewind) |
 | | L | LOAD the selected take into the deck |
-| | N / T / Delete | RENAME / TRIM / DELETE (asks first) |
+| | N / T / Delete | RENAME / EDIT / DELETE (asks first) |
 | | S | the settings |
 | | Esc | back to the recorder |
-| Trim and split | Left / Right | move the marker 0.1 s (with Shift 1 s) |
+| Edit page | Left / Right | move the marker 0.1 s (with Shift 1 s) |
 | | Up / Down | zoom in / out |
 | | I / O | SET IN / SET OUT |
 | | Enter | SPLIT at the marker; REMOVE while a split flag is selected |
@@ -167,7 +167,7 @@ name pattern).
   original's name.
 - `~/Recordings/.journal/<take>.json`: one small journal per take, open while it records (see below).
 - `~/Recordings/<take>.wav.peaks` (`.flac.peaks`, `.opus.peaks`): the waveform overview of a take, built once when the
-  trim page first opens it (a FLAC or Opus take is decoded for it, with a progress bar) and checked against the take's
+  Edit page first opens it (a FLAC or Opus take is decoded for it, with a progress bar) and checked against the take's
   size and time on every use.
 - `~/.config/cassette/settings.json`: the settings, and per card its level, auto gain and mute, re-applied at every
   start (the card's mixer resets at every reboot). Written atomically. Delete it to reset.
@@ -231,7 +231,7 @@ choice in Settings (Codec, Sample rate and Bit depth / Bit rate, Bit depth only 
 `"rate"` in Hz and `"quality"`: 16 or 24 bits, or 16 to 128 kbps for Opus) is one the card and the libraries allow;
 otherwise it records WAV. Takes are named `.flac` / `.opus`, the list shows WAV, FLAC or OPUS in each row, and the take
 numbers run on across formats. They load, play, preview, scan at 5x both ways, jump 5 s, show their waveform on the
-trim page and are trimmed and split like WAV takes; the results keep the take's format (FLAC: decoded and encoded
+Edit page and are trimmed and split like WAV takes; the results keep the take's format (FLAC: decoded and encoded
 again, lossless and exact to the sample; Opus: the packets are copied, no second round of lossy coding, exact to the
 sample). Each of the three rows opens a picker with an estimated size per minute for every entry at the other two choices (the
 footer of the page says which: "Sizes for FLAC, 16-bit, this card"; without a sound input there are no sizes), a one-line
@@ -259,7 +259,7 @@ part of this repository.
 
 ## Screen layouts
 
-The recorder page has four layouts, chosen from the screen's shape; the other pages (settings, list, trim, boxes) keep
+The recorder page has four layouts, chosen from the screen's shape; the other pages (settings, list, edit, boxes) keep
 the landscape board scaled on a square screen.
 
 | Screen (width / height) | Layout |
@@ -324,7 +324,7 @@ the binary: the handwriting of the cassette label is Caveat SemiBold (Copyright 
 
 ## Changes
 
-- 0.1.0: first version: recorder, recordings list, trim and split, settings, save and confirm boxes; WAV / BWF takes
+- 0.1.0: first version: recorder, recordings list, Edit page (trim and split), settings, save and confirm boxes; WAV / BWF takes
   with journal and repair; meter with target zone, software gain, record timer, playback with 5x scan; 480x320 and
   320x480 minimum layouts and a square layout for 720x720 and 480x480; `cassette-probe` in the package. Cards that record at other rates than 48000 or 44100 Hz
   (16000 Hz speech headsets) are opened at their own rate. The PLAY / PAUSE key shows the current state (PLAY latched

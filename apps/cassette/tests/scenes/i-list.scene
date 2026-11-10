@@ -10,7 +10,7 @@ wait 400
 expect text "Take 007"
 expect text "Take 006"
 expect text "RENAME"
-expect text "TRIM"
+expect text "EDIT"
 expect text "DELETE"
 @480x320,640x480 expect text "Take 006 selected. Esc returns to the recorder."
 shot list

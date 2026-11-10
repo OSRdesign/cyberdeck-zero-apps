@@ -3,7 +3,7 @@
  *
  * Cassette UI: the recordings list (boards CassetteList-480x320 / -320x480): the strip (take count, folder, free
  * space), one row per take (the label sticker in the bold face, name, date / length / size, the length in the counter
- * face in landscape, the chevron; the selected row darker), the boards' scroll bar, PLAY, RENAME, TRIM, DELETE (red)
+ * face in landscape, the chevron; the selected row darker), the boards' scroll bar, PLAY, RENAME, EDIT, DELETE (red)
  * and, in landscape, the hint line. A tap selects a row, a tap on the selected row activates it (Enter too: it previews
  * the take, a second one on the previewing row stops the preview); LOAD (key L) puts the take into the deck and shows the
  * recorder, dimmed while a take records; the list
@@ -54,7 +54,7 @@ ListPage::ListPage(lv_obj_t *parent, const Frame &frame, const UiActions &action
     thumb_ = box(root_, fit_.x(tx), fit_.y(78), fit_.w(tx, 6), fit_.px(40), col::kHinge, fit_.px(3));
 
     static const Icon icons[4] = {Icon::Load, Icon::Pencil, Icon::Scissors, Icon::Delete};
-    static const char *const names[4] = {"LOAD", "RENAME", "TRIM", "DELETE"};
+    static const char *const names[4] = {"LOAD", "RENAME", "EDIT", "DELETE"};
     for (int i = 0; i < 4; ++i) {
         const DRect r = p ? DRect{16.0 + 70 * i, 396, 66, 64} : DRect{16.0 + 109 * i, 222, 104, 56};
         keys_[i] = std::make_unique<PianoKey>(root_, fit_, r, KeyType{12, 1.5, 4}, [this, i](KeyEdge e) {

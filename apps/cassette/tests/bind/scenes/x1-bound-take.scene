@@ -1,4 +1,4 @@
-title Cassette bound to the controller (CASSETTE_DEMO=1: the scripted sound system, a generated tone): REC, STOP, the list, TRIM to two splits, SAVE AS NEW FILES writes -1, -2, -3 (build.sh checks the files)
+title Cassette bound to the controller (CASSETTE_DEMO=1: the scripted sound system, a generated tone): REC, STOP, the list, EDIT (the trim page) to two splits, SAVE AS NEW FILES writes -1, -2, -3 (build.sh checks the files)
 sizes 480x320 320x480 640x480
 ppmm 608
 env CASSETTE_DEMO 1
@@ -26,7 +26,7 @@ key l
 wait 700
 expect text "Take 001"
 shot list
-tap "TRIM"
+tap "EDIT"
 wait 1500
 expect text "TAKE 001"
 shot trim-open

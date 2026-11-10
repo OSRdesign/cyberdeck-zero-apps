@@ -48,7 +48,7 @@
  *     otherwise as WAV. The capture is opened at the stored rate and bit depth the card offers (set_rec_params reopens it). The recorder's format text, the
  *     hours left and the journal follow the choice. FLAC/Opus takes play, preview, scan, show their peaks and trim like
  *     WAV takes (phase C, codec/decoder.hpp); when the take's decoder library is missing, LOAD, PLAY, the preview and
- *     TRIM refuse with one notice ("This take cannot be played: FLAC not installed (libflac14)").
+ *     EDIT refuse with one notice ("This take cannot be played: FLAC not installed (libflac14)").
  *   - changing the folder is refused while a take or countdown runs.
  *   - trim: moving IN or OUT removes the splits that fall outside (IN, OUT); the marker is the only thing the UI moves
  *     (set_in/set_out/add_split take the marker position); preview plays [IN, OUT) from the marker when it is inside, else

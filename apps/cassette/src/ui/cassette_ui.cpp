@@ -67,7 +67,7 @@ const char *screen_title(Screen s)
     case Screen::Recorder: return "Cassette";
     case Screen::Settings: return "Settings";
     case Screen::List: return "Recordings";
-    case Screen::Trim: return "Trim";
+    case Screen::Trim: return "Edit"; /* the trim and split page (its title) */
     }
     return "Cassette";
 }

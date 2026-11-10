@@ -1,4 +1,4 @@
-title Cassette bound (CASSETTE_DEMO=1) T6d: TRIM to two splits, SAVE, REPLACE ORIGINAL, DELETE: the trim page closes onto the list with the notice, the original is gone and the first result is selected
+title Cassette bound (CASSETTE_DEMO=1) T6d: EDIT to two splits, SAVE, REPLACE ORIGINAL, DELETE: the trim page closes onto the list with the notice, the original is gone and the first result is selected
 sizes 480x320 320x480 640x480
 ppmm 608
 env CASSETTE_DEMO 1
@@ -23,7 +23,7 @@ say STOP closed the take; the new take stays loaded on the cassette (no load ani
 key l
 wait 700
 expect text "Take 001"
-tap "TRIM"
+tap "EDIT"
 wait 1500
 expect text "TAKE 001"
 key right

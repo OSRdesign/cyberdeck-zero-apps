@@ -18,7 +18,7 @@ Contents:
 [Listening while you record](#listening-while-you-record-monitor) |
 [Playing](#playing) |
 [The recordings list](#the-recordings-list) |
-[Trim and split](#trim-and-split) |
+[Edit: trim and split](#edit-trim-and-split) |
 [Settings](#settings) |
 [Formats](#formats-wav-flac-and-ogg-opus) |
 [Take number](#take-number) |
@@ -192,7 +192,7 @@ Settings > **Monitor** is a switch (off by default); **Monitor level** is its vo
   changes the recording.
 - **Use headphones.** With speakers the microphone hears the monitor and you get an echo or a howl. This is why
   Monitor is off by default.
-- **It is off during playback.** The monitor stops when you play, scan or preview a take and while the trim page is
+- **It is off during playback.** The monitor stops when you play, scan or preview a take and while the Edit page is
   open; it comes back when playback ends.
 - If the monitor cannot start (for example another program holds the card's output) the notice *Monitor unavailable*
   shows and the monitor stays off. The recording is not affected.
@@ -252,7 +252,7 @@ screen) a row that would not fit leaves out its size first, then writes the date
 A name too long for one line wraps (at spaces; a single word wider than the row breaks by character) and its row grows
 to show every line, with the details line under it; the rows below move down. Names are never cut with an ellipsis.
 
-Four actions: **LOAD**, **RENAME**, **TRIM**, **DELETE**. A tap selects a row.
+Four actions: **LOAD**, **RENAME**, **EDIT**, **DELETE**. A tap selects a row.
 
 - **LOAD** puts the selected take into the deck and returns to the recorder. The cassette in the window drops out,
   the new one falls in with a small bounce, and its name is written onto the label in handwriting. It takes about
@@ -289,19 +289,19 @@ Four actions: **LOAD**, **RENAME**, **TRIM**, **DELETE**. A tap selects a row.
   |---|---|---|
   | ![9/24, muted](img/rename-counter-mid.png) | ![21/24, amber](img/rename-counter-amber.png) | ![24/24, red](img/rename-counter-full.png) |
 
-- **TRIM** opens the [trim and split page](#trim-and-split) for the take. It is refused while a take records.
+- **EDIT** opens the [Edit page](#edit-trim-and-split) (trim and split) for the take. It is refused while a take records.
 - **DELETE** asks first (a box with DELETE and CANCEL; Enter without moving means CANCEL). Deleting
   the loaded take empties the deck and the blank cassette returns at once. A take that plays or is open for trimming
   cannot be deleted.
 
   ![Delete asks first](img/confirm-delete.png)
 
-## Trim and split
+## Edit: trim and split
 
-Open it from the list with **TRIM** (key **T**). It cuts a take without losing quality. A WAV take is copied as it is. FLAC and Opus
-takes are cut as [described below](#trim-and-split-of-flac-and-opus-takes).
+The Edit page trims and splits a take. Open it from the list with **EDIT** (key **T**). It cuts a take without losing
+quality. A WAV take is copied as it is. FLAC and Opus takes are cut as [described below](#trim-and-split-of-flac-and-opus-takes).
 
-![The trim and split page](img/trim.png)
+![The Edit page: trim and split](img/trim.png)
 
 What you see: the top line with the take, IN, OUT, the kept length (LEN) and the number of splits; a thin **overview**
 strip of the whole take (the part to keep is amber, the cut part grey, the white frame is the part shown below); the
@@ -539,7 +539,7 @@ middle of a FLAC take is skipped, never cut. The same holds for a card that is u
 closed and kept, and it is a valid file.
 
 **Playing.** FLAC and Opus takes load, play, pause, preview from the list, scan at 5x forwards and backwards, jump 5 s
-and show their waveform on the trim page exactly as WAV takes. Playing a FLAC take is lossless; an Opus take is decoded
+and show their waveform on the Edit page exactly as WAV takes. Playing a FLAC take is lossless; an Opus take is decoded
 as it plays. A take of a format whose library is missing is refused with a notice (see
 [Troubleshooting](#troubleshooting)).
 
@@ -630,12 +630,12 @@ button in the header does the same.
 | Enter | preview (again on it: stop and rewind) |
 | L | LOAD |
 | N | RENAME |
-| T | TRIM |
+| T | EDIT |
 | Delete | DELETE (asks first) |
 | S | settings |
 | Esc | back to the recorder |
 
-**Trim and split**
+**Edit page (trim and split)**
 
 | Key | Does |
 |---|---|
@@ -666,7 +666,7 @@ The full map is in [KEYS.md](KEYS.md).
 | The take counter | `~/Recordings/.take-counter` (the last number handed out) |
 | One journal per take | `~/Recordings/.journal/<take>.json`, open while the take records |
 | Edit numbers already used | `~/Recordings/.edits/` (so a deleted `-2` is never handed out again) |
-| The waveform overview of a take | `<take>.wav.peaks` (`.flac.peaks`, `.opus.peaks`) next to the take, built the first time the trim page opens it; Cassette checks it against the take's size and time on every use and rebuilds it if they changed. Safe to delete. |
+| The waveform overview of a take | `<take>.wav.peaks` (`.flac.peaks`, `.opus.peaks`) next to the take, built the first time the Edit page opens it; Cassette checks it against the take's size and time on every use and rebuilds it if they changed. Safe to delete. |
 | Leftover temporary files | `.tmp-*` in the folder, from a save that was cut short; removed at the next start |
 | The settings | `~/.config/cassette/settings.json`; also each card's level, auto gain and mute. Delete it to reset everything. |
 
