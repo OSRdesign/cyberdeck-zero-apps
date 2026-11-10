@@ -1,5 +1,5 @@
-title Cassette: the recordings list shows the format at the end of each row's detail line (WAV, FLAC, OPUS) when a folder holds takes of several formats (not run at 320x480: there the longer detail line wraps to two lines and the layout check flags it, see the report)
-sizes 480x320 640x480
+title Cassette: the recordings list shows the format at the end of each row detail line (WAV, FLAC, OPUS) when a folder holds takes of several formats; on a narrow list the line stays one line (size dropped, then the date shortened, the tag kept)
+sizes 480x320 640x480 320x480 480x800 480x480
 ppmm 608
 env CASSETTE_DEMO idle
 env CASSETTE_DEMO_LIST_TAGS 1
@@ -10,8 +10,11 @@ key l
 wait 400
 expect text "Take 007"
 expect text "today 14:32 · 42 s · 4 MB · FLAC"
-expect text "today 11:05 · 12 min · 69 MB · WAV"
-expect text "yesterday 18:20 · 3 min · 17 MB · OPUS"
+@480x320,640x480,480x480 expect text "today 11:05 · 12 min · 69 MB · WAV"
+@480x320,640x480,480x480 expect text "yesterday 18:20 · 3 min · 17 MB · OPUS"
+@320x480,480x800 expect text "today 11:05 · 12 min · WAV"
+@320x480,480x800 expect text "yesterday 18:20 · 3 min · OPUS"
+@320x480,480x800 expect notext "69 MB"
 shot list-tags
 expect notext "LAYOUT FAIL"
 key esc

@@ -83,10 +83,13 @@ std::string size_text(uint64_t bytes);
 /* "42 s", "3 min", "1 h 02" */
 std::string length_text(double seconds);
 /* "today 14:32", "yesterday 18:20", "2 Nov", "2 Nov 2025", "nodate" from "YYYY-MM-DD HH:MM" */
-std::string date_part(const std::string &date_text, int64_t now_wall_s, bool utc);
+std::string date_part(const std::string &date_text, int64_t now_wall_s, bool utc, bool shortest = false);
 /* "today 14:32 · 42 s · 4 MB · FLAC" (the row's format tag when it has one); a damaged take "damaged · 4 MB"; a
  * repaired one ends in " · repaired" */
 std::string take_detail(const TakeRow &r, int64_t now_wall_s, bool utc);
+/* the detail line in its forms, longest first (the full one is take_detail): then without the size, then also with the
+ * date in its shortest form. The format tag is in every form. A narrow list shows the longest one that fits one line. */
+std::vector<std::string> take_detail_forms(const TakeRow &r, int64_t now_wall_s, bool utc);
 /* "48k/16 WAV" -> "WAV 48k" (the cassette label), "48k/16" (the list strip), "WAV 48 kHz 16-bit" (the Format row) */
 std::string tape_format(const std::string &format_text);
 std::string short_format(const std::string &format_text);

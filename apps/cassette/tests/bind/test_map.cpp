@@ -120,6 +120,38 @@ void test_helpers()
     CHECK_EQ(take_detail(r, kNow, true), "today 14:32 \xC2\xB7 42 s \xC2\xB7 4 MB \xC2\xB7 WAV");
     r.damaged = true;
     CHECK_EQ(take_detail(r, kNow, true), "damaged \xC2\xB7 4 MB");
+    /* the shorter forms of a narrow list: size dropped first, then the date shortest; the format tag always stays */
+    {
+        const char *D = "·";
+        auto j = [&](std::initializer_list<const char *> p) { std::string o; for (const char *x : p) { if (!o.empty()) o += std::string(" ") + D + " "; o += x; } return o; };
+        TakeRow o = row("take_005.opus", 180, 17ull << 20, "2026-11-07 18:20");
+        o.format_tag = "OPUS";
+        std::vector<std::string> f = take_detail_forms(o, kNow, true);
+        CHECK_EQ(f.size(), size_t(3));
+        CHECK_EQ(f[0], j({"yesterday 18:20", "3 min", "17 MB", "OPUS"}));
+        CHECK_EQ(f[1], j({"yesterday 18:20", "3 min", "OPUS"}));
+        CHECK_EQ(f[2], j({"yest 18:20", "3 min", "OPUS"}));
+        CHECK_EQ(take_detail(o, kNow, true), f[0]); /* the wide line is the full one */
+        o = row("take_007.flac", 42, 4ull << 20, "2026-11-08 14:32");
+        o.format_tag = "FLAC";
+        f = take_detail_forms(o, kNow, true);
+        CHECK_EQ(f[1], j({"today 14:32", "42 s", "FLAC"}));
+        CHECK_EQ(f[2], j({"14:32", "42 s", "FLAC"}));
+        o = row("take_003.wav", 3720, 357ull << 20, "2025-12-31 23:59");
+        o.format_tag = "WAV";
+        f = take_detail_forms(o, kNow, true);
+        CHECK_EQ(f[1], j({"31 Dec 2025", "1 h 02", "WAV"}));
+        CHECK_EQ(f[2], j({"31 Dec 25", "1 h 02", "WAV"}));
+        o.repaired = true;
+        CHECK_EQ(take_detail_forms(o, kNow, true)[2], j({"31 Dec 25", "1 h 02", "WAV", "repaired"}));
+        o = row("take_002.wav", 41, 4ull << 20, "");
+        f = take_detail_forms(o, kNow, true); /* no tag, no date: the forms that do not differ are not repeated */
+        CHECK_EQ(f.size(), size_t(2));
+        CHECK_EQ(f[1], j({"nodate", "41 s"}));
+        o.damaged = true;
+        CHECK_EQ(take_detail_forms(o, kNow, true).size(), size_t(1));
+        CHECK_EQ(date_part("2026-11-02 09:00", kNow, true, true), "2 Nov");
+    }
     /* the tape label and the names of an Opus or FLAC take */
     CHECK_EQ(tape_format("48k/16 OPUS"), "OPUS 48k");
     CHECK_EQ(display_name("take_009_20261108-1432.opus"), "Take 009");

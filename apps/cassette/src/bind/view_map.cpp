@@ -228,7 +228,7 @@ std::string length_text(double seconds)
     return b;
 }
 
-std::string date_part(const std::string &t, int64_t now_wall_s, bool utc)
+std::string date_part(const std::string &t, int64_t now_wall_s, bool utc, bool shortest)
 {
     int y = 0, mo = 0, d = 0, h = 0, mi = 0;
     if (t.empty() || std::sscanf(t.c_str(), "%d-%d-%d %d:%d", &y, &mo, &d, &h, &mi) < 3 || mo < 1 || mo > 12)
@@ -237,31 +237,45 @@ std::string date_part(const std::string &t, int64_t now_wall_s, bool utc)
     std::snprintf(hm, sizeof hm, "%02d:%02d", h, mi);
     DateTime today, yesterday;
     if (datetime_from_wall(now_wall_s, today, utc)) {
-        if (today.year == y && today.month == mo && today.day == d) return std::string("today ") + hm;
+        if (today.year == y && today.month == mo && today.day == d) return shortest ? std::string(hm) : std::string("today ") + hm;
         if (datetime_from_wall(now_wall_s - 86400, yesterday, utc) && yesterday.year == y && yesterday.month == mo &&
             yesterday.day == d)
-            return std::string("yesterday ") + hm;
+            return std::string(shortest ? "yest " : "yesterday ") + hm;
     }
     char b[32];
     if (today.year == y) std::snprintf(b, sizeof b, "%d %s", d, kMonths[mo - 1]);
+    else if (shortest) std::snprintf(b, sizeof b, "%d %s %02d", d, kMonths[mo - 1], y % 100);
     else std::snprintf(b, sizeof b, "%d %s %d", d, kMonths[mo - 1], y);
     return b;
 }
 
-std::string take_detail(const TakeRow &r, int64_t now_wall_s, bool utc)
+std::vector<std::string> take_detail_forms(const TakeRow &r, int64_t now_wall_s, bool utc)
 {
-    std::string out;
+    std::vector<std::string> forms;
     if (r.damaged) {
+        std::string out;
         join(out, "damaged");
         join(out, size_text(r.size));
-        return out;
+        forms.push_back(out);
+        return forms;
     }
-    join(out, date_part(r.date_text, now_wall_s, utc));
-    join(out, length_text(r.seconds));
-    join(out, size_text(r.size));
-    if (!r.format_tag.empty()) join(out, r.format_tag); /* WAV, FLAC, OPUS: a folder can hold all three */
-    if (r.repaired) join(out, "repaired");
-    return out;
+    /* longest first: everything; then without the size; then also the date in its shortest form. The format tag
+     * (WAV, FLAC, OPUS: a folder can hold all three) is in every form. */
+    for (int level = 0; level < 3; ++level) {
+        std::string out;
+        join(out, date_part(r.date_text, now_wall_s, utc, level >= 2));
+        join(out, length_text(r.seconds));
+        if (level == 0) join(out, size_text(r.size));
+        if (!r.format_tag.empty()) join(out, r.format_tag);
+        if (r.repaired) join(out, "repaired");
+        if (forms.empty() || forms.back() != out) forms.push_back(out);
+    }
+    return forms;
+}
+
+std::string take_detail(const TakeRow &r, int64_t now_wall_s, bool utc)
+{
+    return take_detail_forms(r, now_wall_s, utc).front();
 }
 
 std::string tape_format(const std::string &f)
@@ -567,7 +581,11 @@ ui::ViewModel map_view(const MapInput &in)
         o.id = t.name;
         o.sticker = t.label.empty() ? sticker_of(t.name) : t.label;
         o.name = display_name(t.name);
-        o.detail = take_detail(t, in.now_wall_s, in.utc);
+        {
+            std::vector<std::string> forms = take_detail_forms(t, in.now_wall_s, in.utc);
+            o.detail = forms.front();
+            o.detail_short.assign(forms.begin() + 1, forms.end());
+        }
         o.length_ms = std::llround(t.seconds * 1000.0);
         o.prefix = prefix_of(t.name);
         l.takes.push_back(o);

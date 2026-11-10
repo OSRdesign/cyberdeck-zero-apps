@@ -241,7 +241,9 @@ Press the list button (or **L**). The takes are listed newest first. Each row ha
 the name, when it was made (`today 11:05`, `yesterday 18:20`, a date, or `nodate`), its length and size, and its length
 again in large figures at the right. A take that was repaired after a power cut says
 `repaired`; a take that cannot be read says `damaged`. The detail line ends with the format of the file: `WAV`, `FLAC`
-or `OPUS` (a folder can hold all three). A strip shows how many takes there are, the folder and the free space.
+or `OPUS` (a folder can hold all three). The detail stays on one line: on a narrow screen (320 x 480, or a portrait
+screen) a row that would not fit leaves out its size first, then writes the date shorter (`yest 18:20`, `18:20`,
+`31 Dec 25`); the format is never left out. A strip shows how many takes there are, the folder and the free space.
 
 ![The recordings list](img/list.png)
 

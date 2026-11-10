@@ -166,12 +166,26 @@ void ListPage::update(const ListVm &l)
     const int ls = ls_screen(0.3, fit_.s);
     int name_px = fit_.px(19), detail_px = fit_.px(14);
     int name_ls = ls;
+    /* the detail stays one line: the longest form that fits at the smallest size of the font fit below (a board where
+     * the full line fits after shrinking keeps it; the shorter forms drop the size, then shorten the date; the format
+     * tag is in all of them); a row where none fits falls back to the font fit */
+    std::vector<std::string> detail_text(l.takes.size());
+    for (std::size_t i = 0; i < rows_.size() && i < l.takes.size(); ++i) {
+        const int w = lv_obj_get_style_width(rows_[i].detail, LV_PART_MAIN);
+        const lv_font_t *bf = font(Face::Medium, std::max(9, fit_.px(10))); /* the smallest size the fit goes down to */
+        detail_text[i] = l.takes[i].detail;
+        if (text_width(bf, detail_text[i].c_str(), 0) <= w) continue;
+        for (const std::string &f : l.takes[i].detail_short) {
+            detail_text[i] = f;
+            if (text_width(bf, f.c_str(), 0) <= w) break;
+        }
+    }
     for (std::size_t i = 0; i < rows_.size() && i < l.takes.size(); ++i) {
         const int w = lv_obj_get_style_width(rows_[i].name, LV_PART_MAIN);
         int l1 = ls;
         name_px = std::min(name_px, fit_px(Face::Bold, fit_.px(19), ls, l.takes[i].name, w, std::max(10, fit_.px(14)), &l1));
         name_ls = std::min(name_ls, l1);
-        detail_px = std::min(detail_px, fit_px(Face::Medium, fit_.px(14), 0, l.takes[i].detail, w, std::max(9, fit_.px(10)), nullptr));
+        detail_px = std::min(detail_px, fit_px(Face::Medium, fit_.px(14), 0, detail_text[i], w, std::max(9, fit_.px(10)), nullptr));
     }
     const lv_font_t *nf = font(Face::Bold, name_px), *df = font(Face::Medium, detail_px);
     for (std::size_t i = 0; i < rows_.size() && i < l.takes.size(); ++i) {
@@ -182,11 +196,11 @@ void ListPage::update(const ListVm &l)
         lv_obj_set_style_text_letter_space(r.name, name_ls, 0);
         set_text(r.name, t.name);
         lv_obj_set_style_text_font(r.detail, df, 0);
-        set_text(r.detail, t.detail);
+        set_text(r.detail, detail_text[i]);
         if (r.dur) set_text(r.dur, fmt_counter(t.length_ms));
         if (frame_.portrait) {
             /* the narrow board: the chevron follows the text block (no duration column pushes it to the edge) */
-            const int tw = std::max(text_width(nf, t.name.c_str(), name_ls), text_width(df, t.detail.c_str(), 0));
+            const int tw = std::max(text_width(nf, t.name.c_str(), name_ls), text_width(df, detail_text[i].c_str(), 0));
             const int x = lv_obj_get_style_x(r.name, LV_PART_MAIN) + tw + fit_.px(10);
             const int right = lv_obj_get_style_width(list_, LV_PART_MAIN) - 2 - fit_.px(10) - fit_.px(10);
             lv_obj_set_x(r.chevron, std::min(x, right));

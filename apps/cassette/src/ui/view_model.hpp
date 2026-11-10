@@ -160,6 +160,7 @@ struct TakeRow {
     std::string sticker;         /* the label sticker: "007", "006-1" */
     std::string name;            /* "Take 007" */
     std::string detail;          /* "today 14:32 · 42 s · 4 MB", "nodate · 41 s · 4 MB" */
+    std::vector<std::string> detail_short; /* the same line in shorter forms, longest first, for a narrow list (may be empty) */
     std::int64_t length_ms = 0;  /* the duration column (landscape) */
     std::string prefix;          /* the editable part of the name (rename) */
 };
@@ -245,7 +246,7 @@ inline bool operator==(const SettingRow &a, const SettingRow &b)
 inline bool operator==(const SettingsVm &a, const SettingsVm &b) { return a.rows == b.rows; }
 inline bool operator==(const TakeRow &a, const TakeRow &b)
 {
-    return a.id == b.id && a.sticker == b.sticker && a.name == b.name && a.detail == b.detail && a.length_ms == b.length_ms &&
+    return a.id == b.id && a.sticker == b.sticker && a.name == b.name && a.detail == b.detail && a.detail_short == b.detail_short && a.length_ms == b.length_ms &&
            a.prefix == b.prefix;
 }
 inline bool operator==(const ListVm &a, const ListVm &b)

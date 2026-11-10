@@ -320,6 +320,24 @@ ViewModel demo_model(const std::string &scene)
         static const char *const tags[] = {"FLAC", "WAV", "OPUS", "WAV", "FLAC"};
         for (size_t i = 0; i < l.takes.size() && i < 5; ++i) l.takes[i].detail += std::string(" \xC2\xB7 ") + tags[i];
     }
+    /* the shorter forms of a narrow list: without the size, then the date shortest (as the real mapping builds them) */
+    for (TakeRow &t : l.takes) {
+        const std::string dot = " · ";
+        std::vector<std::string> parts;
+        for (size_t at = 0, e; at <= t.detail.size(); at = e + dot.size()) {
+            e = t.detail.find(dot, at);
+            if (e == std::string::npos) e = t.detail.size();
+            parts.push_back(t.detail.substr(at, e - at));
+            if (e == t.detail.size()) break;
+        }
+        if (parts.size() < 3) continue;
+        parts.erase(parts.begin() + 2);
+        auto joined = [&] { std::string o; for (size_t i = 0; i < parts.size(); ++i) o += (i ? dot : "") + parts[i]; return o; };
+        t.detail_short.push_back(joined());
+        if (parts[0].rfind("today ", 0) == 0) parts[0] = parts[0].substr(6);
+        else if (parts[0].rfind("yesterday ", 0) == 0) parts[0] = "yest " + parts[0].substr(10);
+        t.detail_short.push_back(joined());
+    }
     if (scene == "notakes") {
         l.takes.clear();
         l.selected = 0;
