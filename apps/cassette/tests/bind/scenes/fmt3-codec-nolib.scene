@@ -10,7 +10,12 @@ env CASSETTE_LAYOUT_CHECK 1
 wait 1500
 key s
 wait 500
-tap "Format"
+key down
+key down
+key down
+key down
+key down
+key enter
 wait 500
 expect text "FLAC not installed (libflac14)"
 expect text "Opus not installed (libopusenc0)"
@@ -25,6 +30,6 @@ expect notext "LAYOUT FAIL"
 key up
 key enter
 wait 500
-expect text "WAV 48 kHz 16-bit"
+expect text "WAV"
 expect notext "LAYOUT FAIL"
 expect noquit

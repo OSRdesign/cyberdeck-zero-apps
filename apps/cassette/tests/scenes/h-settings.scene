@@ -12,7 +12,7 @@ expect text "Auto gain (card)"
 shot settings-top
 expect notext "LAYOUT FAIL"
 scrollmark
-dragon "Format" -0.12
+dragon "Codec" -0.12
 expect scrolled
 say a drag that starts on a row label scrolled the list
 drag 0.5 0.3 0.5 0.95

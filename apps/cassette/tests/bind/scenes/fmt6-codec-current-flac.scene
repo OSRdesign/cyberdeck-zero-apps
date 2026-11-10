@@ -1,22 +1,28 @@
-title Cassette bound (mono 48 kHz card): FLAC chosen with a tap, the Settings row says FLAC, the picker shows it selected (dot, darker row)
+title Cassette bound (mono 48 kHz card): FLAC chosen from the Codec picker, the Settings row says FLAC, the picker shows it selected (dot, darker row)
 sizes 480x320 320x480 640x480
 ppmm 608
 env CASSETTE_DEMO 1
 env CASSETTE_DEMO_HOME demo-home
-env CASSETTE_DEMO_CARD level
+env CASSETTE_DEMO_CARD plain
 env CASSETTE_DEMO_CODECS both
 env CASSETTE_LAYOUT_CHECK 1
 
 wait 1500
 key s
 wait 500
-tap "Format"
+key down
+key down
+key enter
 wait 500
-tap "FLAC"
+key down
+key enter
 wait 500
 expect text "FLAC"
 shot settings-flac
-tap "Format"
+expect notext "LAYOUT FAIL"
+key down
+key down
+key enter
 wait 500
 shot picker-current-flac
 expect notext "LAYOUT FAIL"

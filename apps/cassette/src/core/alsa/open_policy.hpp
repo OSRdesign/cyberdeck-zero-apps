@@ -3,7 +3,7 @@
  *
  * Cassette: how a capture card is opened. hw: first (never plughw: no resampling, no format conversion in ALSA); if the card is
  * busy (a sound server holds it while a client records, P0-f) open the server's ALSA "default" device and say so.
- * Rate: the card's own: 48000 first, then 44100, then the highest offered rate below 48000 (a speech headset records 16000),
+ * Rate (unless the user chose one the card offers, OpenOptions::want_rate): the card's own: 48000 first, then 44100, then the highest offered rate below 48000 (a speech headset records 16000),
  * and only when every offered rate is above 48000 the lowest one. Refused only when the card offers no rate. Channels follow the device (mono, else stereo). Format: native S16, else S24_3LE kept as
  * 24-bit packed, else S32_LE converted to 24-bit packed (the low byte is dropped).
  */
@@ -27,6 +27,13 @@ struct OpenOptions {
     bool allow_server = true;
     std::string server_device = "default";
     const CaptureOffer *server_hint = nullptr; /* channels to ask the server for when the card could not be queried (busy) */
+    /* The user's choice of rate and bit depth (the Settings Rate and Quality rows): a rate the card offers is used as it
+     * is, else the default order below; want_bits 24 prefers S24_3LE, then S32_LE converted, else the card's own; 16
+     * prefers S16_LE. 0: no preference (the default order). `prefer` fills both from the card's offer once it is known
+     * (open_capture calls it after the query), so the model that knows the codec's limits decides. */
+    uint32_t want_rate = 0;
+    unsigned want_bits = 0;
+    std::function<void(const CaptureOffer &, uint32_t &rate, unsigned &bits)> prefer;
 };
 
 enum class OpenStatus {

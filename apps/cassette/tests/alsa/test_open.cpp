@@ -266,10 +266,87 @@ void server_detection() {
     (void)sound_server_running_here();
 }
 
+/* The user's choice of rate and depth (Settings: Sample rate, Quality): a rate the card offers is used, else the default
+ * order; 24 prefers S24_3LE, then S32_LE converted; `prefer` fills both once the card's offer is known. */
+void chosen_rate_and_depth() {
+    CaptureOffer o;
+    o.rates = {16000, 44100, 48000, 96000};
+    o.min_channels = o.max_channels = 1;
+    o.formats = {SampleFormat::S16_LE, SampleFormat::S24_3LE, SampleFormat::S32_LE};
+    HwRequest req;
+    Conversion conv;
+    AudioFormat fmt;
+    std::string why;
+    OpenOptions opt;
+    CHECK(choose_params(o, opt, req, conv, fmt, &why)); /* no choice: as ever */
+    CHECK(fmt.rate == 48000 && fmt.bits == 16 && conv == Conversion::None);
+    opt.want_rate = 96000;
+    opt.want_bits = 24;
+    CHECK(choose_params(o, opt, req, conv, fmt, &why));
+    CHECK(fmt.rate == 96000 && fmt.bits == 24 && req.format == SampleFormat::S24_3LE && conv == Conversion::None);
+    CHECK_EQ(req.rate, 96000u);
+    opt.want_rate = 22050; /* not offered: the default order */
+    CHECK(choose_params(o, opt, req, conv, fmt, &why));
+    CHECK_EQ(fmt.rate, 48000u);
+    opt.want_rate = 16000;
+    opt.want_bits = 16;
+    CHECK(choose_params(o, opt, req, conv, fmt, &why));
+    CHECK(fmt.rate == 16000 && fmt.bits == 16 && req.format == SampleFormat::S16_LE);
+    CHECK_EQ(req.buffer_frames % 1024u, 0u);
+    CHECK(req.buffer_frames >= 8000u); /* 500 ms at the chosen rate */
+    /* S32 only: 24 means converted packed 24; a card without 24-bit keeps 16 */
+    o.formats = {SampleFormat::S16_LE, SampleFormat::S32_LE};
+    opt.want_bits = 24;
+    CHECK(choose_params(o, opt, req, conv, fmt, &why));
+    CHECK(fmt.bits == 24 && req.format == SampleFormat::S32_LE && conv == Conversion::S32_to_S24_3);
+    o.formats = {SampleFormat::S16_LE};
+    CHECK(choose_params(o, opt, req, conv, fmt, &why));
+    CHECK(fmt.bits == 16 && req.format == SampleFormat::S16_LE);
+    /* a 24-bit-only card asked for 16: its own 24 */
+    o.formats = {SampleFormat::S24_3LE};
+    opt.want_bits = 16;
+    CHECK(choose_params(o, opt, req, conv, fmt, &why));
+    CHECK_EQ(fmt.bits, 24u);
+
+    /* through open_capture: the callback decides from the offer, and the hardware request carries it */
+    FakeAlsa f;
+    f.cards_ = {fake_pcm2902(0)};
+    f.cards_[0].offer.rates = {16000, 44100, 48000};
+    f.cards_[0].offer.formats = {SampleFormat::S16_LE, SampleFormat::S24_3LE};
+    OpenOptions po;
+    unsigned seen_rates = 0;
+    po.prefer = [&seen_rates](const CaptureOffer &offer, uint32_t &rate, unsigned &bits) {
+        seen_rates = static_cast<unsigned>(offer.rates.size());
+        rate = 44100;
+        bits = 24;
+    };
+    OpenResult r = open_capture(f, f.cards_[0].info, po);
+    CHECK(r.ok());
+    CHECK_EQ(seen_rates, 3u);
+    CHECK(r.format.rate == 44100 && r.format.bits == 24 && r.hw.rate == 44100 && r.hw.format == SampleFormat::S24_3LE);
+    CHECK(f.requests.back().rate == 44100 && f.requests.back().format == SampleFormat::S24_3LE);
+    CHECK_EQ(r.offer.rates.size(), size_t(3)); /* the offer comes back for the model */
+    /* a preference of 0 (no choice): the default */
+    OpenOptions zero;
+    zero.prefer = [](const CaptureOffer &, uint32_t &rate, unsigned &bits) { rate = 0, bits = 0; };
+    r = open_capture(f, f.cards_[0].info, zero);
+    CHECK(r.ok() && r.format.rate == 48000 && r.format.bits == 16);
+    /* the busy card routed through the sound server ignores the choice (48 kHz S16, the server converts) */
+    FakeAlsa g;
+    g.cards_ = {fake_pcm2902(0)};
+    g.cards_[0].busy = true;
+    OpenOptions bo;
+    bo.want_rate = 16000;
+    bo.want_bits = 24;
+    OpenResult b = open_capture(g, g.cards_[0].info, bo);
+    CHECK(b.ok() && b.via_server && b.format.rate == 48000 && b.format.bits == 16);
+}
+
 void test_open() {
     server_detection();
     direct_open_and_rate_choice();
     rate_choice_table();
+    chosen_rate_and_depth();
     channels_and_formats();
     busy_falls_back_to_server();
     open_succeeds_after_a_race();

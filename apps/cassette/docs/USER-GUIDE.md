@@ -357,7 +357,9 @@ The card's own rows depend on what the selected card has:
 | **Input level** | The card's recording level (same as CARD on the recorder). | what the card has | only when the card has a level control |
 | **Auto gain (card)** | The card's own automatic gain, if it has one. | as set on the card, then remembered | only when the card has it |
 | **Mic mute (card)** | Mutes the card's microphone. | off | only when the card has it |
-| **Format** | The format of new takes. The row shows the choice in use (`WAV 48 kHz 16-bit`, `FLAC`, `Opus 32 kbps`; `WAV (FLAC unavailable)` when the stored choice cannot be used) and opens a [picker page](#formats-wav-flac-and-ogg-opus) with all formats. Cannot change while a take records. | WAV | always |
+| **Codec** | The file type of new takes: WAV, FLAC or Opus. The row shows the codec in use (`WAV (Opus unavailable)` when the stored choice cannot be used) and opens a [picker page](#formats-wav-flac-and-ogg-opus): six quick presets, then the three codecs. Cannot change while a take records. | WAV | always |
+| **Sample rate** | The rate the card records at, for example `48 kHz`. The picker lists the rates the card offers; the ones the codec cannot use are dimmed. Dimmed while a take records and with no sound input. | the card's own (48 kHz if it has it) | always |
+| **Bit depth** (WAV, FLAC) or **Bit rate** (Opus) | WAV and FLAC: `16-bit` or `24-bit` (24-bit is dimmed when the card has none). Opus: 16, 24, 32, 48, 64, 96 or 128 kbps. The row's name follows the codec. | 16-bit, Opus 32 kbps | always |
 | **Record timer** | Off, 3 s, 10 s, 20 s countdown before REC starts. | Off | always |
 | **REW / FWD** | *Fast scan 5x* (hold) or *Jump 5 s* (tap). | Fast scan 5x | always |
 | **Channels** | Mono or Stereo, what the card records. Read-only. | (the card) | always |
@@ -381,7 +383,9 @@ scrolls: drag it, or use Up / Down.
 
 ![Settings, bottom](img/settings-bottom.png)
 
-![Settings with Format set to FLAC](img/settings-format-flac.png)
+![Codec, Sample rate and Bit depth rows](img/settings-codec-rows.png)
+
+![Settings with Codec set to FLAC](img/settings-codec-flac.png)
 
 ## Formats: WAV, FLAC and Ogg Opus
 
@@ -390,54 +394,89 @@ Cassette records in one of three formats. **WAV** is the default: nothing is com
 speech compress best, noisy music least). **Ogg Opus** is lossy, made for voice: a take of a few hours fits in a few
 tens of megabytes, and the quality at the speech settings is good for talking.
 
-**Choosing.** Settings > **Format** opens a page that lists every format, always in this order, for the sound card you
-have now:
+**Choosing.** The format of a take is three settings, each on its own row in Settings: **Codec** (WAV, FLAC or Opus),
+**Sample rate** and **Bit depth** (WAV, FLAC) or **Bit rate** (Opus). Each row opens a page in the same style: one
+entry per choice, the name on the left and the **estimated size per minute** on the right (`5.8 MB/min`, `about 1.7 MB/min`,
+`190 kB/min` under a megabyte), and below a line with what the choice is for and **how many hours fit** in the free
+space of the recordings folder (for example `8433 h free`; the figure is in hours, or minutes when under an hour). WAV is
+exact; FLAC reads `about` because it depends on the sound; Opus is its bit rate (real files are usually a little
+smaller). The footer says what the sizes assume: the other two choices as they are now (`Sizes for FLAC, 16-bit, this card`
+on the rate page, `Sizes for FLAC, 48 kHz, this card` on the bit depth page; with no sound input there are no sizes).
+The choice in use has a dot before its name; the darker row is the one the keys are on (Up / Down move it, Enter chooses).
+Tap a row to choose it: the page closes and the Settings row shows the new value. Esc leaves the page without a change.
+Nothing can be changed while a take records or counts down (the rows are dimmed).
 
-| Entry | What it is |
+**Codec.** The page starts with **Quick presets**, six ready-made combinations that set the codec and its quality at once,
+then the three plain **Codecs**:
+
+| Entry | What it sets |
 |---|---|
-| WAV | uncompressed, plays everywhere |
-| FLAC | lossless, a third to half the size |
-| Opus 24 kbps | speech, smallest |
-| Opus 32 kbps | speech, clear (the preset used when the settings file says Opus and names none) |
-| Opus 64 kbps | music and voice |
-| Opus 128 kbps | music, best |
+| WAV, 48 kHz, 16-bit | WAV, uncompressed, plays everywhere (the rate and depth are the card's own defaults) |
+| FLAC, 48 kHz, 16-bit | FLAC, lossless, a third to half the size |
+| Opus speech 24 kbps | speech, smallest |
+| Opus speech 32 kbps | speech, clear (the preset used when the settings file says Opus and names none) |
+| Opus music 64 kbps | music and voice |
+| Opus music 128 kbps | music, best |
+| WAV, FLAC, Opus | only the codec; the sample rate and the quality stay as they are, unless the new codec cannot use them |
 
-Each row shows the **estimated size per minute** at your card's format and, below, a line with what the format is for
-and **how many hours fit** in the free space of the recordings folder (for example `8433 h free` for FLAC on a large card; the figure is in hours, or minutes when under an hour). WAV is exact; FLAC
-reads `about` because it depends on the sound; Opus is its bit rate (real files are usually a little smaller). The
-footer of the page says which card format the sizes are for (`Sizes at 48 kHz mono 16-bit, this card`; with no sound
-input there are no sizes). The format in use has a dot before its name; the darker row is the one the keys are on (Up / Down move it, Enter chooses). Tap a row to choose it: the page closes and the
-Settings row shows the new choice. Esc leaves the page without a change. The choice cannot be changed while a take
-records or counts down (the row is dimmed).
+A preset also puts the sample rate and the quality back to the card's defaults. Changing only the codec re-checks the
+other two: if the sample rate is not one the new codec can record, Cassette picks the nearest one it can (48 kHz, then
+16 kHz, for Opus) and a line at the bottom of the page says so (*Sample rate set to 48 kHz: Opus cannot record at 44.1 kHz*).
 
-![The Format picker at 640x480, everything available](img/format-picker-640x480.png)
+**Sample rate.** The rates the card offers, for example `16 kHz`, `44.1 kHz`, `48 kHz`, `96 kHz`. A rate the chosen codec
+cannot record is dimmed (Opus takes 8, 12, 16, 24 and 48 kHz). Choosing a rate reopens the card at once; the next take
+is written at it, and the strip and the list show it (`44.1k/16 WAV`). The **default** is the card's own: 48 kHz if it has
+it, else 44.1 kHz, else the highest below 48 kHz (Opus: 48 kHz, else 16 kHz).
 
-![The Format picker at 480x320](img/format-picker-480x320.png)
+**Bit depth and bit rate.** WAV and FLAC: `16-bit` or `24-bit`; a card without 24-bit capture shows `24-bit` dimmed (`this
+card records 16-bit only`). Opus: the bit rate, one of 16, 24, 32, 48, 64, 96 and 128 kbps; the hints say which suit speech
+(up to 32 kbps, coded as one channel) and which music (48 kbps and up, stereo kept). FLAC always uses compression level 5 (there
+is no setting for it).
+
+![The Codec picker at 640x480, everything available](img/codec-picker-640x480.png)
+
+![The Codec picker at 480x320](img/codec-picker-480x320.png)
 
 | The bottom of the list (the keys are on the last row) | FLAC chosen: the dot is on FLAC |
 |---|---|
-| ![The Opus rows at the bottom, scrolled with Down](img/format-picker-bottom.png) | ![FLAC is the format in use](img/format-picker-current-flac.png) |
+| ![The codecs at the bottom, scrolled with Down](img/codec-picker-bottom.png) | ![FLAC is the codec in use](img/codec-picker-current-flac.png) |
 
-**Entries that are not available.** A format the card or the board cannot record stays in the list, **dimmed**, and its
+| The Sample rate picker | The Bit depth picker |
+|---|---|
+| ![Every rate of a studio input with its size per minute](img/rate-picker.png) | ![16-bit and 24-bit](img/depth-picker.png) |
+
+| The Bit rate picker (Opus) | Opus dims the rates it cannot record |
+|---|---|
+| ![16 to 128 kbps with the speech and music hints](img/bitrate-picker.png) | ![44.1 and 96 kHz dimmed](img/rate-picker-opus.png) |
+
+![Opus chosen with 44.1 kHz set: the rate moved to 48 kHz and a line says so](img/codec-change-toast.png)
+
+**Entries that are not available.** A choice the card or the board cannot record stays in the list, **dimmed**, and its
 second line says why instead of the hours. A tap on it shows *Not available:* and the reason, and nothing changes. The
 reasons you can meet:
 
 | Reason | Meaning |
 |---|---|
-| `Opus cannot record at 44.1 kHz` | The card records at 44.1 kHz only. Opus takes 8, 12, 16, 24 and 48 kHz. Cassette does not resample. |
+| `Opus needs 8, 12, 16, 24 or 48 kHz; this card has 44.1 kHz` | The card records at 44.1 kHz only (or at other rates Opus does not take). Opus is dimmed on it; Cassette does not resample. |
+| `Opus needs 8, 12, 16, 24 or 48 kHz` | On the Sample rate page with Opus chosen: this rate is not one Opus takes. |
 | `Opus records at most 2 channels`, `more than 2 channels` | The card gives more than mono or stereo. |
+| `this card records 16-bit only` (or `24-bit only`) | On the Bit depth page: the card has no such depth. |
 | `FLAC not installed (libflac14)` | The library is missing (the package name differs by system: `libflac12t64` on Ubuntu 24.04, `libflac12` on Debian bookworm). |
 | `Opus not installed (libopusenc0)` | The library for recording Opus is missing. |
 | the card's own reason | The card cannot be recorded at all; then every row is dimmed with its reason. |
 
-![A stereo card at 44.1 kHz: both Opus rows dimmed with the reason](img/format-picker-unavailable.png)
+![A stereo card at 44.1 kHz: the Opus presets and the Opus codec dimmed with the reason](img/codec-picker-unavailable.png)
 
-![The notice after a tap on a dimmed row](img/format-picker-notice.png)
+![The notice after a tap on a dimmed row](img/codec-picker-notice.png)
 
-![Libraries missing: FLAC and Opus dimmed, WAV works](img/format-picker-nolib.png)
+![Libraries missing: FLAC and Opus dimmed, WAV works](img/codec-picker-nolib.png)
+
+Old settings files keep working: a file that holds only `"format"` (and `"format_preset"`) records exactly as before,
+and the new keys `"rate"` and `"quality"` are written only when you choose a rate or a quality (see
+[Files](#files-and-where-they-live)).
 
 If the stored choice stops being possible (you unplug the stereo card for a mono one, or a library is removed),
-Cassette records **WAV** instead and the Settings row reads `WAV (FLAC unavailable)` or `WAV (Opus unavailable)`. The
+Cassette records **WAV** instead and the Codec row reads `WAV (FLAC unavailable)` or `WAV (Opus unavailable)`. The
 stored choice is kept and comes back when it is possible again.
 
 **What each format needs on the board.** The libraries are opened when needed; nothing is linked in.
@@ -669,15 +708,16 @@ level (peaks around -17 to -7 dBFS at full card level in the first tests), so sp
 
 **A 16 kHz headset.** A USB headset in its call profile can offer only 16000 Hz (for example the Jabra Evolve 65).
 Cassette records at the card's own rate: 48000 Hz if it offers it, else 44100 Hz, else the highest rate at or below
-48000 Hz. The strip then reads `16k/16 WAV`, Settings > Format reads `WAV 16 kHz 16-bit`, and playback runs at the right
+48000 Hz. The strip then reads `16k/16 WAV`, Settings > Sample rate reads `16 kHz`, and playback runs at the right
 speed on other outputs too. A 16 kHz take sounds like a phone call: that is the card, not the app.
 
 **"Unsupported card".** The card offers neither 16-bit nor 24-bit capture. It is not usable.
 
-**A format is dimmed in Settings > Format ("format not available").** Tap it: the notice says why. Not installed
+**A codec, rate or depth is dimmed in Settings ("not available").** Tap it: the notice says why. Not installed
 means a library is missing: install `libflac14` (or `libflac12t64` / `libflac12`) for FLAC, `libopusenc0` and
-`libopus0` for Opus. `Opus cannot record at 44.1 kHz` is a property of the card: Opus is not offered there, FLAC and WAV
-are. Until a format is possible Cassette records WAV, and Settings > Format says `WAV (Opus unavailable)`.
+`libopus0` for Opus. `Opus needs 8, 12, 16, 24 or 48 kHz; this card has 44.1 kHz` is a property of the card: Opus is dimmed there
+(Cassette does not resample), FLAC and WAV are not. Until a codec is possible Cassette records WAV, and Settings > Codec says
+`WAV (Opus unavailable)`.
 
 **"This take cannot be played: FLAC not installed (libflac14)".** A FLAC take cannot be loaded, played, previewed or
 trimmed without `libflac` (Opus: `Opus not installed (libopus0)`, and no `libopus0` means no playback). Install the

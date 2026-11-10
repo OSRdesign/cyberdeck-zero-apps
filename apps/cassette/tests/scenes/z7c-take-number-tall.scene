@@ -19,6 +19,8 @@ key down
 key down
 key down
 key down
+key down
+key down
 wait 300
 shot settings-take-number-row
 expect text "Take number"

@@ -77,6 +77,18 @@ public:
                 for (unsigned c = 0; c < hw_.channels; ++c) *p++ = static_cast<int16_t>(std::lround(v));
             }
             done_ += static_cast<uint64_t>(n);
+        } else if (n > 0 && hw_.format == SampleFormat::S24_3LE) { /* packed 24-bit: the same tone, three bytes a sample */
+            uint8_t *p = static_cast<uint8_t *>(buf);
+            for (long i = 0; i < n; ++i) {
+                const double v = amp_ * 8388607.0 * std::sin(2.0 * kPi * hz_ * static_cast<double>(done_ + static_cast<uint64_t>(i)) / hw_.rate);
+                const int32_t q = static_cast<int32_t>(std::lround(v));
+                for (unsigned c = 0; c < hw_.channels; ++c) {
+                    *p++ = static_cast<uint8_t>(q & 0xFF);
+                    *p++ = static_cast<uint8_t>((q >> 8) & 0xFF);
+                    *p++ = static_cast<uint8_t>((q >> 16) & 0xFF);
+                }
+            }
+            done_ += static_cast<uint64_t>(n);
         }
         return n;
     }

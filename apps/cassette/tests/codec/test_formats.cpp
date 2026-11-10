@@ -3,7 +3,9 @@
  *
  * Cassette codec tests: the format model for every kind of card (mono 48 kHz S16 headset, stereo 44.1 kHz, a 16 kHz-only
  * speech headset, a 24-bit card, an 8-channel card), libraries present or missing, the size model, the stored keys, and
- * the settings file's new "format_preset" key.
+ * the settings file's new "format_preset" key; then the three-parameter model (codec, sample rate, quality): every legal
+ * combination per codec, the dimming rules, the 44.1 kHz-only card, the re-validation on a codec change, old settings
+ * files and the "rate" and "quality" keys, the size estimates.
  */
 #include "check.hpp"
 
@@ -286,6 +288,311 @@ void test_settings_key() {
     std::filesystem::remove_all(dir, ec);
 }
 
+/* ---- the three parameters: codec, sample rate, quality ---- */
+
+FormatInputs card_in(std::vector<uint32_t> rates, unsigned ch, std::vector<SampleFormat> fmts, CodecAvailability libs) {
+    return inputs_for_offer(offer(std::move(rates), ch, ch, std::move(fmts)), libs);
+}
+
+RecStored stored(RecFormat c, const char *preset = "", int rate = 0, int quality = 0) {
+    RecStored s;
+    s.codec = c;
+    s.preset = preset;
+    s.rate = rate;
+    s.quality = quality;
+    return s;
+}
+
+/* every legal combination per codec on a card with all the common rates, mono, 16 and 24-bit */
+void test_params_all_combinations() {
+    const std::vector<uint32_t> rates = {8000, 12000, 16000, 24000, 44100, 48000, 96000};
+    const FormatInputs in = card_in(rates, 1, {SampleFormat::S16_LE, SampleFormat::S24_3LE}, both());
+    CHECK(in.has16 && in.has24);
+    CHECK(card_rates(in) == rates);
+    CHECK(card_bits(in) == (std::vector<unsigned>{16, 24}));
+    /* WAV and FLAC: every rate, both depths */
+    for (RecFormat f : {RecFormat::Wav, RecFormat::Flac}) {
+        CHECK(codec_usable(in, f));
+        CHECK(codec_rates(in, f) == rates);
+        for (uint32_t r : rates)
+            for (int bits : {16, 24}) {
+                const RecParams p = resolve_params(in, stored(f, "", static_cast<int>(r), bits));
+                CHECK_EQ(p.rate, r);
+                CHECK_EQ(p.bits, static_cast<unsigned>(bits));
+                const FormatChoice c = choice_for(in, p);
+                CHECK(c.compatible);
+                const uint64_t pcm = uint64_t(r) * (bits / 8) * 60;
+                if (f == RecFormat::Wav) {
+                    CHECK(c.size.kind == SizeKind::Exact);
+                    CHECK_EQ(c.size.bytes_per_minute, pcm);
+                } else {
+                    CHECK(c.size.kind == SizeKind::About);
+                    CHECK(c.size.bytes_per_minute < pcm && c.size.low_per_minute <= c.size.bytes_per_minute &&
+                          c.size.bytes_per_minute <= c.size.high_per_minute);
+                    CHECK_EQ(c.flac_level, 5u);
+                }
+            }
+    }
+    /* Opus: 8, 12, 16, 24, 48 kHz only; every bit rate of the list */
+    CHECK(codec_usable(in, RecFormat::Opus));
+    CHECK(codec_rates(in, RecFormat::Opus) == (std::vector<uint32_t>{8000, 12000, 16000, 24000, 48000}));
+    CHECK(!rate_legal(RecFormat::Opus, 44100) && !rate_legal(RecFormat::Opus, 96000));
+    CHECK(rate_legal(RecFormat::Wav, 44100) && rate_legal(RecFormat::Flac, 96000));
+    for (uint32_t r : {8000u, 12000u, 16000u, 24000u, 48000u})
+        for (int k : kOpusKbps) {
+            const RecParams p = resolve_params(in, stored(RecFormat::Opus, "", static_cast<int>(r), k));
+            CHECK_EQ(p.rate, r);
+            CHECK_EQ(p.kbps, k);
+            const FormatChoice c = choice_for(in, p);
+            CHECK(c.compatible);
+            CHECK(c.size.kind == SizeKind::Target);
+            CHECK_EQ(c.opus_bitrate_bps, k * 1000);
+            CHECK_EQ(c.size.bytes_per_minute, opus_bytes_per_minute(k * 1000));
+            CHECK_EQ(c.opus_force_mono, k <= 32);
+            CHECK(c.opus_app == (k <= 32 ? OpusApplication::Speech : OpusApplication::Music));
+        }
+    /* a rate the codec cannot use, or a value not in the list, falls to the default */
+    CHECK_EQ(resolve_params(in, stored(RecFormat::Opus, "", 44100)).rate, 48000u);
+    CHECK_EQ(resolve_params(in, stored(RecFormat::Opus, "", 0, 40)).kbps, 32);
+    CHECK_EQ(resolve_params(in, stored(RecFormat::Wav, "", 12345)).rate, 48000u);
+    CHECK_EQ(resolve_params(in, stored(RecFormat::Wav, "", 0, 20)).bits, 16u);
+    CHECK_EQ(opus_kbps_ok(16) && opus_kbps_ok(128) && !opus_kbps_ok(0) && !opus_kbps_ok(40), true);
+}
+
+void test_params_defaults_and_old_files() {
+    const FormatInputs in = card_in({16000, 44100, 48000}, 1, {SampleFormat::S16_LE}, both());
+    /* an old file: format and preset only. The same capture as before: 48 kHz, 16-bit; Opus at the preset's bit rate */
+    RecParams p = resolve_params(in, stored(RecFormat::Wav));
+    CHECK(p.rate == 48000 && p.bits == 16);
+    p = resolve_params(in, stored(RecFormat::Opus, "speech24"));
+    CHECK(p.rate == 48000 && p.kbps == 24);
+    p = resolve_params(in, stored(RecFormat::Opus, "music128"));
+    CHECK(p.kbps == 128);
+    p = resolve_params(in, stored(RecFormat::Opus));
+    CHECK(p.kbps == 32); /* no preset: speech32 */
+    p = resolve_params(in, stored(RecFormat::Opus, "gibberish"));
+    CHECK(p.kbps == 32);
+    /* the quality key beats the preset */
+    p = resolve_params(in, stored(RecFormat::Opus, "speech24", 0, 96));
+    CHECK(p.kbps == 96);
+    /* the default rate: WAV and FLAC as open_policy, Opus 48 then 16 then the rest */
+    CHECK_EQ(default_rate(in, RecFormat::Wav), 48000u);
+    CHECK_EQ(default_rate(in, RecFormat::Opus), 48000u);
+    const FormatInputs two = card_in({16000, 44100}, 1, {SampleFormat::S16_LE}, both());
+    CHECK_EQ(default_rate(two, RecFormat::Wav), 44100u);
+    CHECK_EQ(default_rate(two, RecFormat::Opus), 16000u);
+    const FormatInputs odd = card_in({8000, 12000, 24000, 96000}, 1, {SampleFormat::S16_LE}, both());
+    CHECK_EQ(default_rate(odd, RecFormat::Opus), 24000u);
+    CHECK_EQ(default_rate(odd, RecFormat::Wav), 24000u); /* the highest at or below 48 kHz */
+    /* the same capture rate and bits the recorder opens with (choose_params) */
+    for (const CaptureOffer &o : {offer({16000, 44100, 48000}, 1, 1, {SampleFormat::S16_LE}),
+                                  offer({44100}, 2, 2, {SampleFormat::S16_LE}),
+                                  offer({48000, 96000}, 2, 2, {SampleFormat::S24_3LE}),
+                                  offer({16000}, 1, 1, {SampleFormat::S16_LE})}) {
+        const FormatInputs fi = inputs_for_offer(o, both());
+        const RecParams rp = resolve_params(fi, stored(RecFormat::Wav));
+        CHECK_EQ(rp.rate, fi.capture.rate);
+        CHECK_EQ(rp.bits, fi.capture.bits);
+    }
+    /* the default depth: 16 when the card has it, else 24 */
+    CHECK_EQ(default_bits(card_in({48000}, 1, {SampleFormat::S24_3LE}, both())), 24u);
+    CHECK_EQ(default_bits(card_in({48000}, 1, {SampleFormat::S32_LE}, both())), 24u);
+    CHECK_EQ(default_bits(card_in({48000}, 1, {SampleFormat::S16_LE, SampleFormat::S24_3LE}, both())), 16u);
+    /* a 24-bit choice on a card with S32 only (converted to packed 24) */
+    const FormatInputs s32 = card_in({48000}, 2, {SampleFormat::S16_LE, SampleFormat::S32_LE}, both());
+    CHECK(s32.has24);
+    CHECK_EQ(resolve_params(s32, stored(RecFormat::Wav, "", 0, 24)).bits, 24u);
+    /* 24-bit asked of a card without it: 16 */
+    CHECK_EQ(resolve_params(in, stored(RecFormat::Flac, "", 0, 24)).bits, 16u);
+}
+
+/* The 44.1 kHz-only card: Opus is dimmed (never resampled), with a reason that names the card's rate */
+void test_params_44k_only() {
+    const FormatInputs in = card_in({44100}, 2, {SampleFormat::S16_LE}, both());
+    std::string why;
+    CHECK(codec_usable(in, RecFormat::Wav) && codec_usable(in, RecFormat::Flac));
+    CHECK(!codec_usable(in, RecFormat::Opus, &why));
+    CHECK_EQ(why, "Opus needs 8, 12, 16, 24 or 48 kHz; this card has 44.1 kHz");
+    CHECK(codec_rates(in, RecFormat::Opus).empty());
+    CHECK_EQ(default_rate(in, RecFormat::Opus), 0u);
+    CHECK_EQ(default_rate(in, RecFormat::Wav), 44100u);
+    const FormatChoice c = choice_for(in, resolve_params(in, stored(RecFormat::Opus, "speech32")));
+    CHECK(!c.compatible);
+    CHECK_EQ(c.why_not, why);
+    CHECK(c.size.kind == SizeKind::Target && c.size.bytes_per_minute > 0); /* the figure stays for the dimmed row */
+    /* the safety net: a stored Opus choice records as WAV at 44.1 kHz */
+    bool fell = false;
+    const FormatChoice e = effective_for(in, stored(RecFormat::Opus, "speech32"), &fell);
+    CHECK(fell && e.compatible && e.key.format == RecFormat::Wav);
+    CHECK_EQ(effective_params(in, stored(RecFormat::Opus, "music64")).rate, 44100u);
+    CHECK_EQ(effective_params(in, stored(RecFormat::Opus, "music64")).codec == RecFormat::Wav, true);
+    /* the Opus codec change from the settings: no change offered, stored unchanged */
+    const StoredChange ch = change_codec(in, stored(RecFormat::Wav), RecFormat::Opus);
+    CHECK(ch.stored.codec == RecFormat::Opus && ch.stored.rate == 0); /* the caller dims the row first */
+    /* two rates, none legal for Opus */
+    const FormatInputs two = card_in({22050, 44100}, 1, {SampleFormat::S16_LE}, both());
+    CHECK(!codec_usable(two, RecFormat::Opus, &why));
+    CHECK_EQ(why, "Opus needs 8, 12, 16, 24 or 48 kHz; this card has 22.05 or 44.1 kHz");
+    /* more than two channels: no Opus even at 48 kHz */
+    FormatInputs six = card_in({48000}, 1, {SampleFormat::S16_LE}, both());
+    six.capture.channels = 6; /* the open policy never gets here; the model still refuses */
+    CHECK(!codec_usable(six, RecFormat::Opus, &why) && why == "Opus records at most 2 channels");
+}
+
+void test_params_revalidation() {
+    const FormatInputs in = card_in({16000, 44100, 48000, 96000}, 1, {SampleFormat::S16_LE, SampleFormat::S24_3LE}, both());
+    /* WAV 44.1 -> Opus: the nearest legal rate, 48 kHz, and a line that says so */
+    StoredChange c = change_codec(in, stored(RecFormat::Wav, "", 44100), RecFormat::Opus);
+    CHECK(c.stored.codec == RecFormat::Opus && c.stored.rate == 48000);
+    CHECK_EQ(c.message, "Sample rate set to 48 kHz: Opus cannot record at 44.1 kHz");
+    /* 96 kHz -> 48 kHz too */
+    c = change_codec(in, stored(RecFormat::Flac, "", 96000), RecFormat::Opus);
+    CHECK(c.stored.rate == 48000 && !c.message.empty());
+    /* a legal rate stays, no message */
+    c = change_codec(in, stored(RecFormat::Wav, "", 16000), RecFormat::Opus);
+    CHECK(c.stored.rate == 16000 && c.message.empty());
+    /* the default rate (0) of a card whose WAV default is 44.1 kHz: Opus lands on 16 kHz (no 48) */
+    const FormatInputs two = card_in({16000, 44100}, 1, {SampleFormat::S16_LE}, both());
+    c = change_codec(two, stored(RecFormat::Wav), RecFormat::Opus);
+    CHECK(c.stored.rate == 16000);
+    CHECK_EQ(c.message, "Sample rate set to 16 kHz: Opus cannot record at 44.1 kHz");
+    /* back to WAV: the rate stays where Opus left it, nothing to say */
+    c = change_codec(two, c.stored, RecFormat::Wav);
+    CHECK(c.stored.codec == RecFormat::Wav && c.stored.rate == 16000 && c.message.empty());
+    /* quality: bit depth survives WAV <-> FLAC, kbps and bits never mix */
+    c = change_codec(in, stored(RecFormat::Wav, "", 0, 24), RecFormat::Flac);
+    CHECK(c.stored.quality == 24);
+    c = change_codec(in, stored(RecFormat::Wav, "", 0, 24), RecFormat::Opus);
+    CHECK_EQ(c.stored.quality, 0);
+    CHECK_EQ(resolve_params(in, c.stored).kbps, 32);
+    c = change_codec(in, stored(RecFormat::Opus, "", 0, 64), RecFormat::Wav);
+    CHECK_EQ(c.stored.quality, 0);
+    CHECK_EQ(resolve_params(in, c.stored).bits, 16u);
+    /* the same codec again: no change */
+    c = change_codec(in, stored(RecFormat::Opus, "music64", 16000, 96), RecFormat::Opus);
+    CHECK(c.stored.preset == "music64" && c.stored.rate == 16000 && c.stored.quality == 96 && c.message.empty());
+    /* a preset: codec and bit rate, everything else back to the defaults */
+    c = change_preset(stored(RecFormat::Wav, "", 44100, 24), FormatKey{RecFormat::Opus, "speech24"});
+    CHECK(c.stored.codec == RecFormat::Opus && c.stored.preset == "speech24" && c.stored.rate == 0 && c.stored.quality == 0);
+    CHECK_EQ(resolve_params(in, c.stored).kbps, 24);
+    CHECK_EQ(resolve_params(in, c.stored).rate, 48000u);
+    /* a plain bit rate is no longer a preset's */
+    c = change_quality(stored(RecFormat::Opus, "speech24"), 96);
+    CHECK(c.stored.preset.empty() && c.stored.quality == 96);
+    c = change_rate(stored(RecFormat::Opus, "speech24", 0, 0), 16000);
+    CHECK(c.stored.rate == 16000 && c.stored.preset == "speech24");
+    /* presets keep their meaning: key, bit rate, mode */
+    const FormatChoice p = choice_for(in, resolve_params(in, stored(RecFormat::Opus, "music64")));
+    CHECK(p.key == (FormatKey{RecFormat::Opus, "music64"}) && p.opus_bitrate_bps == 64000 && !p.opus_force_mono);
+    const FormatChoice q = choice_for(in, resolve_params(in, stored(RecFormat::Opus, "", 0, 48)));
+    CHECK(q.key == (FormatKey{RecFormat::Opus, ""}) && q.opus_bitrate_bps == 48000);
+    /* the six presets as list_formats gives them equal their three-parameter form */
+    const std::vector<FormatChoice> old = list_formats(in);
+    for (const FormatChoice &o : old) {
+        const FormatChoice n = choice_for(in, resolve_params(in, stored(o.key.format, o.key.preset.c_str())));
+        CHECK_EQ(n.compatible, o.compatible);
+        CHECK_EQ(n.opus_bitrate_bps, o.opus_bitrate_bps);
+        CHECK(n.opus_app == o.opus_app || o.key.format != RecFormat::Opus);
+        CHECK_EQ(n.opus_force_mono, o.opus_force_mono);
+        CHECK_EQ(n.size.bytes_per_minute, o.size.bytes_per_minute);
+    }
+}
+
+void test_params_libraries_and_nocard() {
+    CodecAvailability none;
+    FormatInputs in = card_in({48000}, 1, {SampleFormat::S16_LE}, none);
+    std::string why;
+    CHECK(codec_usable(in, RecFormat::Wav));
+    CHECK(!codec_usable(in, RecFormat::Flac, &why) && why == "FLAC not installed (libflac14)");
+    CHECK(!codec_usable(in, RecFormat::Opus, &why) && why == "Opus not installed (libopusenc0)");
+    bool fell = false;
+    CHECK(effective_for(in, stored(RecFormat::Flac), &fell).key.format == RecFormat::Wav && fell);
+    /* no card: nothing known, no rates, only the libraries decide */
+    FormatInputs nc;
+    nc.codecs = both();
+    CHECK(card_rates(nc).empty());
+    CHECK(codec_usable(nc, RecFormat::Opus));
+    CHECK_EQ(default_rate(nc, RecFormat::Wav), 0u);
+    CHECK(choice_for(nc, resolve_params(nc, stored(RecFormat::Flac))).size.kind == SizeKind::Unknown);
+    /* a card that cannot record: nothing */
+    FormatInputs un = inputs_for_offer(offer({48000}, 8, 8, {SampleFormat::S16_LE}), both());
+    CHECK(!codec_usable(un, RecFormat::Wav, &why) && !why.empty());
+    CHECK(!effective_for(un, stored(RecFormat::Wav)).compatible);
+    /* a busy card (the sound server's 48 kHz, no offer): the capture rate is the only one */
+    FormatInputs busy;
+    busy.state = CaptureState::Known;
+    busy.capture.rate = 48000;
+    busy.capture.channels = 1;
+    busy.capture.bits = 16;
+    busy.codecs = both();
+    CHECK(card_rates(busy) == (std::vector<uint32_t>{48000}));
+    CHECK(codec_usable(busy, RecFormat::Opus));
+    /* the observed FLAC ratio applies at the depth it was observed at only */
+    FormatInputs ob = card_in({48000}, 1, {SampleFormat::S16_LE, SampleFormat::S24_3LE}, both());
+    ob.flac_ratio = 0.62;
+    CHECK_EQ(choice_for(ob, resolve_params(ob, stored(RecFormat::Flac))).size.bytes_per_minute, uint64_t(5760000 * 0.62 + 0.5));
+    const FormatChoice f24 = choice_for(ob, resolve_params(ob, stored(RecFormat::Flac, "", 0, 24)));
+    CHECK(f24.size.bytes_per_minute != uint64_t(8640000 * 0.62 + 0.5));
+}
+
+void test_rate_labels() {
+    CHECK_EQ(rate_label(48000), std::string("48 kHz"));
+    CHECK_EQ(rate_label(44100), std::string("44.1 kHz"));
+    CHECK_EQ(rate_label(22050), std::string("22.05 kHz"));
+    CHECK_EQ(rates_label({44100}), std::string("44.1 kHz"));
+    CHECK_EQ(rates_label({16000, 44100, 48000}), std::string("16, 44.1 or 48 kHz"));
+}
+
+void test_settings_rate_quality_keys() {
+    const std::string dir = temp_dir();
+    const std::string path = dir + "/settings.json";
+    FileOps &ops = posix_file_ops();
+    {
+        /* an old file loads with no rate and no quality and writes neither */
+        std::ofstream(path) << "{\"version\":1,\"format\":\"opus\",\"format_preset\":\"music64\"}";
+        SettingsStore s(ops, path);
+        CHECK_EQ(s.load(), 0);
+        CHECK(s.values().rate == 0 && s.values().quality == 0 && s.values().format_preset == "music64");
+        CHECK_EQ(s.save(), 0);
+        const std::string body = slurp(path);
+        CHECK(body.find("\"rate\"") == std::string::npos && body.find("\"quality\"") == std::string::npos);
+        CHECK(body.find("music64") != std::string::npos);
+    }
+    {
+        /* the new keys round trip */
+        SettingsStore s(ops, path);
+        CHECK_EQ(s.load(), 0);
+        s.values().rate = 16000;
+        s.values().quality = 96;
+        CHECK_EQ(s.save(), 0);
+        SettingsStore t(ops, path);
+        CHECK_EQ(t.load(), 0);
+        CHECK(t.values().rate == 16000 && t.values().quality == 96 && t.values().format == RecFormat::Opus);
+        const RecStored st = stored_of(t.values());
+        CHECK(st.codec == RecFormat::Opus && st.rate == 16000 && st.quality == 96 && st.preset == "music64");
+        t.values().rate = 0;
+        t.values().quality = 0;
+        CHECK_EQ(t.save(), 0);
+        const std::string body = slurp(path);
+        CHECK(body.find("\"rate\"") == std::string::npos && body.find("\"quality\"") == std::string::npos);
+    }
+    {
+        /* values out of range or of the wrong type: the default */
+        std::ofstream(path) << "{\"version\":1,\"format\":\"flac\",\"rate\":\"fast\",\"quality\":-3}";
+        SettingsStore s(ops, path);
+        CHECK_EQ(s.load(), 0);
+        CHECK(s.values().rate == 0 && s.values().quality == 0 && s.values().format == RecFormat::Flac);
+        std::ofstream(path) << "{\"version\":1,\"rate\":5,\"quality\":99999}";
+        CHECK_EQ(s.load(), 0);
+        CHECK(s.values().rate == 0 && s.values().quality == 0);
+        std::ofstream(path) << "{\"version\":1,\"format\":\"wav\",\"rate\":44100,\"quality\":24}";
+        CHECK_EQ(s.load(), 0);
+        CHECK(s.values().rate == 44100 && s.values().quality == 24);
+    }
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+}
+
 }  // namespace
 
 void test_formats() {
@@ -298,4 +605,11 @@ void test_formats() {
     test_libraries_missing();
     test_observed_ratio();
     test_settings_key();
+    test_params_all_combinations();
+    test_params_defaults_and_old_files();
+    test_params_44k_only();
+    test_params_revalidation();
+    test_params_libraries_and_nocard();
+    test_rate_labels();
+    test_settings_rate_quality_keys();
 }

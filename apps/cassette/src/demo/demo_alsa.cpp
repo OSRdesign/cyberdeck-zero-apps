@@ -124,6 +124,24 @@ DemoCard stereo_card(int index)
     return c;
 }
 
+/* A studio-style input: mono, 16000, 44100, 48000 and 96000 Hz, 16-bit and 24-bit, a level and a mute switch (the card the
+ * Codec / Sample rate / Quality pickers show off: every rate and both depths, Opus on 16 and 48 kHz only). */
+DemoCard rich_card(int index)
+{
+    DemoCard c;
+    c.info.index = index;
+    c.info.id = "DemoRich";
+    c.info.name = "Demo Studio Input";
+    c.info.long_name = "Demo Studio Input (scripted, no hardware, 16 to 96 kHz, 16 and 24 bits)";
+    c.info.capture = true;
+    c.offer.rates = {16000, 44100, 48000, 96000};
+    c.offer.min_channels = c.offer.max_channels = 1;
+    c.offer.formats = {SampleFormat::S16_LE, SampleFormat::S24_3LE};
+    c.ctls = {int_ctl(kLevelCtl, 0, kLevelSteps, 0, static_cast<long>(kLevelMaxDb * 100)), bool_ctl(kSwitchCtl)};
+    c.values = {{kLevelCtl, kLevelStart}, {kSwitchCtl, 1}};
+    return c;
+}
+
 DemoCard plain_card(int index)
 {
     DemoCard c;
@@ -211,6 +229,7 @@ public:
         if (s.cards == "plain" || s.cards == "both") cards_.push_back(plain_card(static_cast<int>(cards_.size())));
         if (s.cards == "speech") cards_.push_back(speech_card(static_cast<int>(cards_.size())));
         if (s.cards == "stereo") cards_.push_back(stereo_card(static_cast<int>(cards_.size())));
+        if (s.cards == "rich") cards_.push_back(rich_card(static_cast<int>(cards_.size())));
     }
 
     double seconds() const { return std::chrono::duration<double>(SteadyClock::now() - start_).count(); }
@@ -374,8 +393,24 @@ long DemoPcm::readi(void *buf, size_t frames)
     const double t = a_->seconds();
     const double amp = muted ? 0.0 : std::pow(10.0, (tone_level_db(t) + gain_db) / 20.0) * 32767.0;
     const double step = 2.0 * kPi * kToneHz / rate;
-    int16_t *p = static_cast<int16_t *>(buf);
     const unsigned ch = hw_.channels ? hw_.channels : 1;
+    if (hw_.format == SampleFormat::S24_3LE) { /* packed 24-bit: the same tone, three bytes a sample */
+        uint8_t *q = static_cast<uint8_t *>(buf);
+        for (size_t i = 0; i < frames; ++i) {
+            const double v = std::max(-8388608.0, std::min(8388607.0, amp * 256.0 * std::sin(phase_)));
+            phase_ += step;
+            if (phase_ > 2.0 * kPi) phase_ -= 2.0 * kPi;
+            const int32_t s = static_cast<int32_t>(std::lround(v));
+            for (unsigned c = 0; c < ch; ++c) {
+                *q++ = static_cast<uint8_t>(s & 0xFF);
+                *q++ = static_cast<uint8_t>((s >> 8) & 0xFF);
+                *q++ = static_cast<uint8_t>((s >> 16) & 0xFF);
+            }
+        }
+        delivered_ += frames;
+        return static_cast<long>(frames);
+    }
+    int16_t *p = static_cast<int16_t *>(buf);
     for (size_t i = 0; i < frames; ++i) {
         const double v = std::max(-32768.0, std::min(32767.0, amp * std::sin(phase_)));
         phase_ += step;
@@ -424,7 +459,7 @@ Script script_from_env()
     Script s;
     if (const char *c = std::getenv("CASSETTE_DEMO_CARD"); c && *c) {
         const std::string v = c;
-        if (v == "level" || v == "plain" || v == "both" || v == "speech" || v == "stereo" || v == "none") s.cards = v;
+        if (v == "level" || v == "plain" || v == "both" || v == "speech" || v == "stereo" || v == "rich" || v == "none") s.cards = v;
     }
     s.unplug_ms = env_ms("CASSETTE_DEMO_UNPLUG_MS");
     s.replug_ms = env_ms("CASSETTE_DEMO_REPLUG_MS");

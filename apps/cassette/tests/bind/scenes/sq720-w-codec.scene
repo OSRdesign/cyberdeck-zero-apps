@@ -1,6 +1,6 @@
-title square screen: Cassette: the Format picker (stereo 44.1 kHz card, Opus rows dimmed, a tap on one shows the notice)
-sizes 480x480
-ppmm 667
+title square screen: Cassette: the Codec picker (stereo 44.1 kHz card, Opus rows dimmed, a tap on one shows the notice)
+sizes 720x720
+ppmm 800
 env CASSETTE_DEMO 1
 env CASSETTE_DEMO_HOME demo-home
 env CASSETTE_DEMO_CARD stereo
@@ -10,16 +10,19 @@ env CASSETTE_LAYOUT_CHECK 1
 wait 1500
 key s
 wait 500
-tap "Format"
+shot settings
+expect notext "LAYOUT FAIL"
+key down
+key down
+key enter
 wait 500
 shot picker
 expect notext "LAYOUT FAIL"
 key down
 key down
-key down
 key enter
 wait 300
-expect text "Not available: Opus cannot record at 44.1 kHz"
+expect text "Not available: Opus needs 8, 12, 16, 24 or 48 kHz; this card has 44.1 kHz"
 shot picker-notice
 expect notext "LAYOUT FAIL"
 expect noquit

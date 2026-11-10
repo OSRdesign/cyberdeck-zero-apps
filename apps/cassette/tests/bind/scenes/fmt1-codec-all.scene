@@ -1,0 +1,58 @@
+title Cassette bound (mono card with 44.1 and 48 kHz, both libraries): Settings shows Codec, Sample rate and Bit depth; the Codec picker lists the six quick presets then WAV, FLAC and Opus with sizes per minute at the card's format, hours free and the footer; Esc keeps the choice
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO 1
+env CASSETTE_DEMO_HOME demo-home
+env CASSETTE_DEMO_CARD level
+env CASSETTE_DEMO_CODECS both
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 1500
+key s
+wait 500
+expect text "Codec"
+shot settings
+expect notext "LAYOUT FAIL"
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 300
+expect text "Sample rate"
+expect text "Bit depth"
+expect text "48 kHz"
+expect text "16-bit"
+shot settings-rows
+expect notext "LAYOUT FAIL"
+key esc
+wait 300
+key s
+wait 500
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 500
+expect text "Quick presets"
+expect text "Opus speech 24 kbps"
+expect text "5.8 MB/min"
+expect text "Sizes for 48 kHz, 16-bit, this card"
+shot picker-top
+expect notext "LAYOUT FAIL"
+key down
+key down
+wait 300
+shot picker-bottom
+expect text "Codecs"
+expect notext "LAYOUT FAIL"
+key esc
+wait 300
+expect text "Codec"
+say Esc closed the picker without a change (no setting_choice)
+expect notext "LAYOUT FAIL"
+expect noquit

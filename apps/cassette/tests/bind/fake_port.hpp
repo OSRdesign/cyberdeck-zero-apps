@@ -156,6 +156,19 @@ public:
         std::lock_guard<std::mutex> g(mu);
         snap.settings.format = f;
         snap.settings.format_preset = preset;
+        snap.settings.rate = 0;
+        snap.settings.quality = 0;
+        return format_choice_result;
+    }
+    bool set_rec_params(RecFormat f, const std::string &preset, int rate, int quality) override
+    {
+        log(std::string("set_rec_params ") + format_key(f) + " " + (preset.empty() ? "-" : preset) + " " + std::to_string(rate) +
+            " " + std::to_string(quality));
+        std::lock_guard<std::mutex> g(mu);
+        snap.settings.format = f;
+        snap.settings.format_preset = preset;
+        snap.settings.rate = rate;
+        snap.settings.quality = quality;
         return format_choice_result;
     }
     bool set_folder(const std::string &f) override

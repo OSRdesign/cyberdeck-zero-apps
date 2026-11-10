@@ -15,7 +15,7 @@
  *   countdown      a tap on the panel or Esc -> TapOverlay (cancels; nothing outside a countdown)
  *   CARD / SOFT    one step (1 dB; CARD: a larger step when the card's own step is coarser) from the controller's value
  *                  at the time the job runs, so quick taps add up
- *   settings       input -> select_card, level -> set_level_db, agc -> set_auto_gain, format -> set_format_choice (the Format picker: a compatible entry of the model, else a notice),
+ *   settings       input -> select_card, level -> set_level_db, agc -> set_auto_gain, codec, rate, quality -> set_rec_params / set_format_choice (a preset) (the three pickers: a compatible entry of the model, else a notice; a codec change that moves the rate says so),
  *                  timer -> set_record_timer, rewfwd -> set_scan_mode, lowcut / limiter, monitor -> set_monitor, monitor_level (steps of 5 %) -> set_monitor_level, folder -> set_folder, prefix ->
  *                  set_prefix (a refused prefix gives a notice), split -> set_auto_split; channels: nothing
  *   pages          Settings -> refresh_cards; List -> refresh_takes and the highlight back on the current take; leaving

@@ -1,0 +1,36 @@
+title Cassette bound (studio input, 16 to 96 kHz, 16 and 24-bit): the Sample rate picker lists every rate with its size per minute and hours free; 96 kHz chosen, the row says so
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO 1
+env CASSETTE_DEMO_HOME demo-home
+env CASSETTE_DEMO_CARD rich
+env CASSETTE_DEMO_CODECS both
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 1500
+key s
+wait 500
+expect text "48 kHz"
+shot settings
+expect notext "LAYOUT FAIL"
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 500
+expect text "96 kHz"
+expect text "44.1 kHz"
+expect text "12 MB/min"
+expect text "Sizes for WAV, 16-bit, this card"
+shot picker-top
+expect notext "LAYOUT FAIL"
+key down
+key enter
+wait 800
+expect text "96 kHz"
+shot settings-96k
+expect notext "LAYOUT FAIL"
+say the capture reopened at 96 kHz (the next take is written at it)
+expect noquit

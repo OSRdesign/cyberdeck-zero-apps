@@ -8,12 +8,36 @@ env CASSETTE_LAYOUT_CHECK 1
 wait 1200
 key s
 wait 500
-@480x320 dragon "Format" -0.25
-@480x320 wait 300
-tap "Record timer"
-wait 400
-tap "3 s"
-wait 500
+@480x320 key down
+@480x320 key down
+@480x320 key down
+@480x320 key down
+@480x320 key down
+@480x320 key down
+@480x320 key down
+@480x320 key down
+@480x320 key enter
+@480x320 wait 400
+@480x320 key down
+@480x320 key enter
+@480x320 wait 500
+@640x480 key down
+@640x480 key down
+@640x480 key down
+@640x480 key down
+@640x480 key down
+@640x480 key down
+@640x480 key down
+@640x480 key down
+@640x480 key enter
+@640x480 wait 400
+@640x480 key down
+@640x480 key enter
+@640x480 wait 500
+@320x480 tap "Record timer"
+@320x480 wait 400
+@320x480 tap "3 s"
+@320x480 wait 500
 expect text "3 s"
 shot settings-timer
 key esc

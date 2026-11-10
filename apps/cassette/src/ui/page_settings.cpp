@@ -161,7 +161,7 @@ void SettingsPage::refresh()
     if (!numpage_ && picker_ >= 0 && picker_ < static_cast<int>(s.rows.size())) {
         const SettingRow &fr = s.rows[static_cast<std::size_t>(picker_)];
         for (const FormatEntry &e : fr.formats)
-            key += e.name + "|" + e.size + "|" + e.detail + "|" + e.reason + (e.compatible ? "+" : "-") + ";";
+            key += e.name + "|" + e.size + "|" + e.detail + "|" + e.reason + (e.compatible ? "+" : "-") + (e.header ? "H" : "") + ";";
         if (!fr.formats.empty()) key += "cur" + std::to_string(fr.choice);
     }
     if (numpage_ && (picker_ < 0 || picker_ >= static_cast<int>(s.rows.size()) ||
@@ -295,6 +295,24 @@ void SettingsPage::build_format_rows(const SettingRow &sr)
         const FormatEntry &e = sr.formats[i];
         Row r;
         r.index = static_cast<int>(i);
+        if (e.header) {
+            /* a group heading: small bold muted text on the page itself, not tappable */
+            const lv_font_t *fh = font(Face::Bold, fit_.px(15));
+            const int hw = right - (pad - 1) + 1;
+            lv_point_t hsz;
+            lv_text_get_size(&hsz, e.name.c_str(), fh, 0, 0, hw, LV_TEXT_FLAG_NONE);
+            const int th = std::max(lv_font_get_line_height(fh), static_cast<int>(hsz.y));
+            const int hh = th + fit_.px(8);
+            r.obj = box(list_, 0, y, row_w_, hh, col::kRow, 0, LV_OPA_TRANSP);
+            lv_obj_remove_flag(r.obj, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_add_flag(r.obj, LV_OBJ_FLAG_SCROLL_CHAIN_VER);
+            r.label = label(r.obj, Face::Bold, fit_.px(15), col::kInkMuted, pad - 1, fit_.px(6), hw, LV_TEXT_ALIGN_LEFT);
+            lv_label_set_long_mode(r.label, LV_LABEL_LONG_MODE_WRAP);
+            lv_label_set_text(r.label, e.name.c_str());
+            y += hh + gap;
+            rows_.push_back(r);
+            continue;
+        }
         /* the size: the largest size that fits beside the name (the name keeps its line, up to 62 % of the width), else
          * it wraps */
         int value_w = 0, value_h = 0;
@@ -460,6 +478,7 @@ void SettingsPage::activate(int i, int touch_x)
         if (!s.formats.empty()) {
             if (i >= static_cast<int>(s.formats.size())) return;
             const FormatEntry &e = s.formats[static_cast<std::size_t>(i)];
+            if (e.header) return; /* a group heading */
             if (!e.compatible) { /* stays in the picker; the notice line says why */
                 local_notice_ = "Not available: " + e.reason;
                 apply_notice();
@@ -551,6 +570,15 @@ bool SettingsPage::on_key(std::uint32_t k)
             sel_ = vm_.rows[static_cast<std::size_t>(picker_)].choice;
         if (sel_ < 0) sel_ = k == LV_KEY_DOWN ? 0 : n - 1;
         else sel_ = std::clamp(sel_ + (k == LV_KEY_DOWN ? 1 : -1), 0, n - 1);
+        /* a group heading cannot hold the highlight: on to the next entry (the edge: back to where it was) */
+        const int step = k == LV_KEY_DOWN ? 1 : -1;
+        const int from = sel_;
+        while (sel_ >= 0 && sel_ < n && is_heading(sel_)) sel_ += step;
+        if (sel_ < 0 || sel_ >= n) {
+            sel_ = from;
+            while (sel_ >= 0 && sel_ < n && is_heading(sel_)) sel_ -= step;
+            if (sel_ < 0 || sel_ >= n) sel_ = -1;
+        }
         highlight(sel_);
         return true;
     }
@@ -559,6 +587,13 @@ bool SettingsPage::on_key(std::uint32_t k)
         return true;
     }
     return false;
+}
+
+bool SettingsPage::is_heading(int i) const
+{
+    if (picker_ < 0 || numpage_ || picker_ >= static_cast<int>(vm_.rows.size())) return false;
+    const SettingRow &r = vm_.rows[static_cast<std::size_t>(picker_)];
+    return i >= 0 && i < static_cast<int>(r.formats.size()) && r.formats[static_cast<std::size_t>(i)].header;
 }
 
 bool SettingsPage::on_right()

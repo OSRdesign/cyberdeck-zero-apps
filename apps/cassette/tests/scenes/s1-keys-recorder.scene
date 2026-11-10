@@ -43,7 +43,7 @@ key esc
 wait 300
 key s
 wait 300
-expect text "Record timer"
+expect text "Codec"
 key esc
 wait 300
 expect text "SOFT"

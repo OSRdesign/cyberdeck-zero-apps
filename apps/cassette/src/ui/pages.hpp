@@ -175,6 +175,7 @@ private:
     void update_scrollbar();
     void update_hint();
     void highlight(int i);
+    bool is_heading(int i) const; /* the open picker's entry i is a group heading */
     int row_h() const;
     /* The Take number page (a sub-page of the same list, like a picker): the draft number large, Reset / Set, and the
      * -1 / +1, -10 / +10, -100 / +100 steppers. Esc or back() drops the draft. */

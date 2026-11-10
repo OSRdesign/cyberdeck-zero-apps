@@ -223,16 +223,17 @@ It writes no file and changes no setting; `--no-open` only lists.
 
 WAV (Broadcast Wave) is the format of 0.1 and stays the default. FLAC (lossless) and Ogg Opus (small) are being added.
 The recorder writes them, crash-safe like WAV (a take cut by a power loss is repaired at the next start), when the
-choice in Settings > Format (stored in `~/.config/cassette/settings.json` as `"format": "flac"` or `"format": "opus"`
-with `"format_preset"`: `speech24`, `speech32`, `music64` or `music128`) is one the card and the libraries allow;
+choice in Settings (Codec, Sample rate and Bit depth / Bit rate; stored in `~/.config/cassette/settings.json` as
+`"format": "wav"`, `"flac"` or `"opus"`, the optional `"format_preset"` (`speech24`, `speech32`, `music64`, `music128`),
+`"rate"` in Hz and `"quality"`: 16 or 24 bits, or 16 to 128 kbps for Opus) is one the card and the libraries allow;
 otherwise it records WAV. Takes are named `.flac` / `.opus`, the list shows WAV, FLAC or OPUS in each row, and the take
 numbers run on across formats. They load, play, preview, scan at 5x both ways, jump 5 s, show their waveform on the
 trim page and are trimmed and split like WAV takes; the results keep the take's format (FLAC: decoded and encoded
 again, lossless and exact to the sample; Opus: the packets are copied, no second round of lossy coding, exact to the
-sample). Settings > Format lists every format, in this order, each with an estimated size per minute at the selected
-card's capture format (the footer of the page says which: "Sizes at 48 kHz mono 16-bit, this card"; without a sound
-input there are no sizes), the model's one-line description and how many hours fit in the recordings folder's free
-space; the choice cannot be changed while a take records. Sizes read like this:
+sample). Each of the three rows opens a picker with an estimated size per minute for every entry at the other two choices (the
+footer of the page says which: "Sizes for FLAC, 16-bit, this card"; without a sound input there are no sizes), a one-line
+description and how many hours fit in the recordings folder's free space; the Codec picker starts with six quick presets;
+Opus is dimmed on a card that cannot record at 8, 12, 16, 24 or 48 kHz; nothing can be changed while a take records. Sizes read like this:
 
 | Format | Size per minute at 48 kHz mono 16-bit | Records with | Plays and trims with |
 |---|---|---|---|

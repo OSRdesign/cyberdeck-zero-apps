@@ -18,11 +18,13 @@
  *             message goes to the strip when a card is listed but cannot be used (busy, unsupported).
  *   names     "Take 006-1": the file's prefix with its first letter raised, then its label ("006-1", take_label).
  *   settings  the board's rows; Input level and Auto gain only when the card has them; Channels shown and dimmed (the
- *             controller has no channel setting); Format lists every format of the model (codec/formats.hpp) with its size
- *             per minute at the card's capture format and its free hours, a format this card or the libraries cannot
- *             record dimmed with the reason (format_picker()); its value is the effective choice ("FLAC", "Opus 32 kbps",
- *             "WAV 48 kHz 16-bit", "WAV (FLAC unavailable)" when the stored choice cannot be used); Format, Folder and
- *             Input dimmed while a take or the countdown runs.
+ *             controller has no channel setting); the recording format is three rows, Codec, Sample rate and Quality (Bit
+ *             depth for WAV and FLAC, Bit rate for Opus), each with a picker of its own (codec_picker(), rate_picker(),
+ *             quality_picker(): the model of codec/formats.hpp with the size per minute of every entry at the other two
+ *             choices and its free hours, an entry this card or the libraries cannot record dimmed with the reason); the
+ *             values are the effective choice ("FLAC", "48 kHz", "16-bit" / "32 kbps"; "WAV (Opus unavailable)" when
+ *             the stored codec cannot be used); Codec, Sample rate, Quality, Folder and Input dimmed while a take or the
+ *             countdown runs.
  *   list      newest first (the controller's order); the highlight = the take the user moved it to, else the current take.
  *   trim      times in ms from frames at the take's rate; span = the frames the zoom shows; the window's peaks are centred on
  *             the marker; a flag shows selected only after a tap on it and while the marker stays on it.
@@ -30,6 +32,7 @@
 #pragma once
 
 #include "core/app/controller.hpp"
+#include "core/codec/formats.hpp"
 #include "ui/view_model.hpp"
 
 #include <cstdint>
@@ -94,22 +97,38 @@ std::vector<std::string> take_detail_forms(const TakeRow &r, int64_t now_wall_s,
 std::string tape_format(const std::string &format_text);
 std::string short_format(const std::string &format_text);
 std::string format_words(const std::string &format_text);
-/* The Format picker. size_per_minute_text: "5.8 MB/min" (1 MB = 10^6 bytes; one decimal under 10 MB, none from 10), under
+/* The pickers' size. size_per_minute_text: "5.8 MB/min" (1 MB = 10^6 bytes; one decimal under 10 MB, none from 10), under
  * 1 MB "190 kB/min" rounded to 5 kB; "about " in front of an estimate (SizeKind::About, FLAC); "" without a figure. */
 std::string size_per_minute_text(const SizeEstimate &size);
-/* "Sizes at 48 kHz mono 16-bit, this card"; "No sound input: sizes unknown" without a capture format */
+/* "Sizes at 48 kHz mono 16-bit, this card"; "No sound input: sizes unknown" without a capture format (the three pickers
+ * word their own footers: the other two choices) */
 std::string formats_footer_text(const FormatInputs &in);
-struct FormatPicker {
-    std::vector<FormatChoice> list;        /* the model's list for this card, in the Format row's order */
-    std::vector<ui::FormatEntry> entries;  /* the same, as the page shows it */
-    int current = -1;                      /* the entry the recorder uses (effective_choice), -1: none */
-    std::string value;                     /* the Settings row's value text */
-    std::string footer;
+/* The three pickers (Settings: Codec, Sample rate, Quality). Entries in the page's order: the Codec picker has two
+ * group headings ("Quick presets", "Codecs"), which items skip (header). Choosing an entry: a preset sets the codec and its
+ * bit rate (rate and quality back to their defaults); any other entry carries the stored values it leads to (change), with
+ * the notice naming what else moved (a rate the new codec cannot record). */
+struct ParamItem {
+    bool header = false;
+    bool preset = false;
+    FormatKey key;          /* preset */
+    StoredChange change;    /* not a preset */
+    bool compatible = true; /* false: dimmed, a tap says why */
+    std::string why;
 };
-FormatPicker format_picker(const Snapshot &s);
-/* The selection rule: the entry `index` of the list when it can be chosen; null when the index is out of range (notice
+struct ParamPicker {
+    std::string label;                    /* the row's label ("Bit depth" or "Bit rate" for the third) */
+    std::vector<ParamItem> items;
+    std::vector<ui::FormatEntry> entries; /* the same, as the page shows it */
+    int current = -1;                     /* the entry the recorder uses, -1: none */
+    std::string value;                    /* the Settings row's value text ("FLAC", "48 kHz", "16-bit", "32 kbps") */
+    std::string footer;                   /* what the sizes assume: the other two choices */
+};
+ParamPicker codec_picker(const Snapshot &s);
+ParamPicker rate_picker(const Snapshot &s);
+ParamPicker quality_picker(const Snapshot &s);
+/* The selection rule: the entry `index` when it can be chosen; null when the index is out of range or a heading (notice
  * stays empty) or the entry is not compatible (*notice = "Not available: <reason>"). */
-const FormatChoice *selectable_format(const std::vector<FormatChoice> &list, int index, std::string *notice);
+const ParamItem *selectable_param(const ParamPicker &p, int index, std::string *notice);
 /* 0..1 from a 16-bit min/max pair (the louder side) */
 float peak_level(const PeakBar &b);
 std::vector<float> peak_levels(const std::vector<PeakBar> &bars);

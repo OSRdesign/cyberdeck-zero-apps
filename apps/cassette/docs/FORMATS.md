@@ -7,21 +7,23 @@ default), D4 (FLAC and Opus as options), D7 (libraries loaded at run time with `
 **Status (2026-11-10).** Phase A (the encoders, the library loading, the format list with its size estimates, the
 stored key), phase B (recording: the writer, names, the list, the journal, the repair) and phase C (playback, preview,
 the 5x scan and the 5 s jump, the peak cache, trim and split of FLAC and Opus takes) are done. The recorder writes
-FLAC and Ogg Opus takes when the stored setting asks for it and `effective_choice()` allows it. The Settings Format row
-(the owner's design) is done too (2026-11-10, branch `cassette-fmtui`): it opens a picker page listing every format of
-the model with its size per minute, the model's detail line and the hours that fit in the free space; entries the card
-or the libraries cannot record stay in the list, dimmed, with the model's reason. See "The Format picker" below. A
+FLAC and Ogg Opus takes when the stored setting asks for it and `effective_choice()` allows it. The Settings
+Format row (the owner's design, 2026-11-10, branch `cassette-fmtui`) listed the six entries below; since 2026-11-10
+(branch `cassette-r7`) the format is **three settings**, Codec, Sample rate and Quality, each with a picker of its own
+(the six entries are now the Codec picker's quick presets). Entries the card or the libraries cannot record stay in
+the lists, dimmed, with the model's reason; Opus is dimmed (never resampled) on a card with no rate it can record. See
+"The Codec, Sample rate and Quality pickers" below. A
 FLAC / Opus take whose decoder library is missing is refused with a notice. Code: `src/core/codec/`,
 `src/core/writer.*`, `src/core/repair.*`, `src/core/takes/`, `src/core/playback/player.*`, `src/core/edit/`; tests:
 `tests/codec/`, `tests/test_stream_scan.cpp`, `tests/test_codec_writer.cpp`, `tests/test_codec_crash.cpp`,
 `tests/takes/test_formats.cpp`, `tests/app/test_formats.cpp`, `tests/codec/test_writer_real.cpp`, and for phase C
 `tests/codec/test_decoders.cpp`, `tests/codec/test_decoders_real.cpp`, `tests/playback/test_codec_play.cpp`,
 `tests/edit/test_codec_edit.cpp`, `tests/fake_decoders.hpp`. Board tests: B17 (recording), B18 (playback and
-editing) and B19 (the Format picker) in `tests/BOARD-TESTS.md`.
+editing) and B19 (the pickers) in `tests/BOARD-TESTS.md`.
 
 ## What is offered
 
-The Settings Format row will list every entry below in this order, each with a name, a one-line detail (the wording
+The Codec picker lists every entry below in this order (as its quick presets), each with a name, a one-line detail (the wording
 here is a placeholder for the owner), whether it works with the selected card (and a short reason when not) and an
 estimated size per minute at the card's current capture format.
 
@@ -34,9 +36,48 @@ estimated size per minute at the card's current capture format.
 | `opus-music64` | `"format": "opus", "format_preset": "music64"` | Opus 64 kbps | music and voice | AUDIO mode, music signal |
 | `opus-music128` | `"format": "opus", "format_preset": "music128"` | Opus 128 kbps | music, best | AUDIO mode, music signal |
 
+The six entries are **presets** of the three-parameter model (next section): each is one combination of codec and quality
+at the card's default rate and depth.
+
 `format_preset` is a new, optional key. Absent or unknown means the format's default (Opus: `speech32`; FLAC and WAV
 have one entry), so every settings file written before keeps its meaning, and older app versions keep the key on
 their next write (unknown keys are preserved). An empty preset is not written.
+
+### The three parameters
+
+The model (`src/core/codec/formats.*`) separates what the user chooses into a codec, a sample rate and a quality:
+
+| Parameter | settings.json | Values | Default when absent or 0 |
+|---|---|---|---|
+| codec | `"format"` | `wav`, `flac`, `opus` | `wav` |
+| sample rate | `"rate"` (Hz) | any rate the card offers and the codec can record | WAV and FLAC: the card's own (`choose_rate`: 48 kHz, then 44.1, then the highest below 48, else the lowest); Opus: 48 kHz, then 16, then the highest of 24, 12, 8 |
+| quality | `"quality"` | WAV and FLAC: bit depth 16 or 24; Opus: 16, 24, 32, 48, 64, 96 or 128 kbps | 16-bit (24 when the card has no 16); Opus: the preset's bit rate, else 32 kbps |
+
+- **Old files load unchanged.** `"format"` and `"format_preset"` keep their meaning: a file with only those records at the card's
+  default rate and depth and the preset's bit rate, exactly as before. `"rate"` and `"quality"` are written only when
+  non-zero; a value out of range or of the wrong type is read as 0. `quality` holds a bit depth or a bit rate depending on the
+  codec (one key, as the owner asked), so a change between Opus and WAV / FLAC puts it back to 0; between WAV and FLAC the
+  bit depth stays.
+- **Presets.** `set_format_choice(format, preset)` stores the codec and the preset and sets rate and quality to 0: the
+  combination of the preset on whatever card is there. A plain bit rate (the Bit rate row) clears the preset and sets `quality`;
+  the effective bit rate is `quality`, else the preset's, else 32 kbps.
+- **Opus modes by bit rate.** Up to 32 kbps: speech (VOIP mode, one coded channel on a stereo card); 48 kbps and up: music
+  (AUDIO mode, stereo kept). This reproduces the presets (24 and 32: speech, 64 and 128: music); 16 is speech, 48 and 96 music.
+  The journal's `preset` is the preset whose bit rate it is ("" for 16, 48 and 96); `bitrate` is the bit rate in bit/s and
+  reaches libopusenc (`OPUS_SET_BITRATE`) for every value of the list.
+- **Legal rates.** Opus: 8, 12, 16, 24, 48 kHz and at most 2 channels. WAV and FLAC: any rate the card offers (FLAC's own
+  limits aside). A card whose offer has no Opus-legal rate has Opus **dimmed** with the reason `Opus needs 8, 12, 16, 24 or 48
+  kHz; this card has 44.1 kHz`; nothing is resampled. The stored choice is kept and `effective_for()` records WAV at the card's
+  default rate instead (the safety net: it is never an illegal state on the screen, but a settings file or a card swap can reach it).
+- **A change of codec re-validates the other two** (`change_codec`): if the current rate is not legal for the new codec the
+  nearest legal one is stored (Opus: 48 kHz, then 16 kHz, then the nearest of the rest) and the page says so in one line
+  (`Sample rate set to 48 kHz: Opus cannot record at 44.1 kHz`). The bit depth is not applicable to Opus: it stays in the
+  settings only as far as the one `quality` key can hold it (see above) and the Opus row shows the bit rate instead.
+- **The capture follows the choice.** `OpenOptions::want_rate` / `want_bits` (filled by a callback once the card's offer is known)
+  make `choose_params` open the card at the chosen rate (when offered) and depth (24: packed `S24_3LE`, else `S32_LE` converted;
+  16: `S16_LE`). Choosing a rate or a depth in Settings reopens the capture at once (never while a take or the countdown runs); a
+  card that refuses what it offered is opened with its own defaults and a notice says so. A card busy and recorded through the
+  sound server stays at 48 kHz 16-bit: the model then knows only that rate.
 
 ### Why these four Opus presets
 
@@ -299,8 +340,8 @@ the writer. A Pi Zero 2 W core is very roughly 15-25x slower, so about 3-5 % (FL
 measured on the board (B17 step 12; P0-e measured mono speech Opus at 7-10 %).
 
 **Left for later (not phase B).**
-- A notice when the stored choice falls back to WAV at the start of a take (the Format row already says so, for
-  example `WAV (FLAC unavailable)`; the Format row itself is done, see "The Format picker").
+- A notice when the stored choice falls back to WAV at the start of a take (the Codec row already says so, for
+  example `WAV (FLAC unavailable)`; the pickers are done, see "The Codec, Sample rate and Quality pickers").
 - The observed FLAC ratio fed back into the estimate during a take (`FormatInputs::flac_ratio`).
 - `decision_delay_ms` for Opus stays libopusenc's 2 s (a power cut loses the sync interval plus up to 2 s); lowering
   it needs a listening check.
@@ -309,30 +350,45 @@ measured on the board (B17 step 12; P0-e measured mono speech Opus at 7-10 %).
   failed).
 - The packaging (Recommends or Depends for libflac/libopusenc, see above) is the owner's step.
 
-## The Format picker (done)
+## The Codec, Sample rate and Quality pickers (done)
 
-Code: `src/bind/view_map.cpp` (`format_picker()`, `size_per_minute_text()`, `formats_footer_text()`,
-`selectable_format()`), `src/ui/page_settings.cpp` (`build_format_rows()`), `Controller::set_format_choice()`.
-Tests: `tests/bind/test_map.cpp` (size text, entries, selection rule), `tests/bind/test_binder.cpp`, `tests/app/test_formats.cpp`
-(`t_set_format_choice`); scenes `tests/bind/scenes/fmt*.scene`, `sq480-w-format`, `sq720-w-format`. Board test: B19.
+Code: `src/bind/view_map.cpp` (`codec_picker()`, `rate_picker()`, `quality_picker()`, `selectable_param()`,
+`size_per_minute_text()`), `src/core/codec/formats.cpp` (the model: `resolve_params()`, `choice_for()`, `effective_for()`,
+`change_codec()` ...), `src/ui/page_settings.cpp` (`build_format_rows()`, with the group headings),
+`Controller::set_rec_params()` and `set_format_choice()`. Tests: `tests/codec/test_formats.cpp` (every legal combination,
+the dimming, the 44.1 kHz-only card, the re-validation, old and new settings keys, sizes), `tests/bind/test_map.cpp`,
+`tests/bind/test_binder.cpp`, `tests/alsa/test_open.cpp` (rate and depth choice), `tests/app/test_formats.cpp`
+(`t_rec_params`, `t_rec_params_old_and_44k`); scenes `tests/bind/scenes/fmt*.scene`, `sq480-w-*`, `sq720-w-*`. Board test: B19.
 
-- The snapshot carries `Snapshot::format_inputs` (the capture format the recorder uses, state `Known` while the card
-  delivers, else `NoCard`; the libraries found). `format_picker()` builds the list with `list_formats()` from it and
-  maps each entry: name and size on line 1, the model's detail and, when the free space is known, the hours that fit
-  there (`hours_for_space`) on line 2; an entry that is not compatible shows `why_not` on line 2 and is not selectable.
+- The snapshot carries `Snapshot::format_inputs`: the capture format the recorder uses (state `Known` while the card delivers,
+  else `NoCard`), the libraries found, and what the card offers (`rates`, `has16`, `has24`). Three pickers are built from it:
+  - **Codec**: the group heading `Quick presets`, the six presets (WAV and FLAC named with the rate and depth they get on this
+    card, `WAV, 48 kHz, 16-bit`; Opus as `Opus speech 24 kbps` ...), the heading `Codecs`, then WAV, FLAC and Opus. The three
+    plain codecs show the size they would give after the re-validation. The current marker is on the plain codec row. Footer:
+    `Sizes for 48 kHz, 16-bit, this card`.
+  - **Sample rate**: every rate of the card, ascending, with a hint (`CD`, `video and most devices`, `high resolution`), sizes at
+    the current codec and quality; a rate the codec cannot record is dimmed with its reason. Footer: `Sizes for FLAC, 16-bit, this card`
+    (Opus: `Opus, 32 kbps`).
+  - **Quality**: WAV and FLAC: `16-bit` and `24-bit` (the one the card lacks dimmed with `this card records 16-bit only`); Opus: the
+    seven bit rates with the speech and music hint. The row's label is `Bit depth` or `Bit rate`. Footer: `Sizes for FLAC, 48 kHz, this card`.
+  Each entry: name and size on line 1; on line 2 the hint and the hours that fit in the free space (`hours_for_space`), or, when the
+  entry is dimmed, the reason. The page is the one the Format picker had; the group headings are the one addition
+  (`FormatEntry::header`: small bold text, not tappable, skipped by Up / Down).
 - Size text: 1 MB = 10^6 bytes; from 1 MB `5.8 MB/min` (one decimal under 10, none from 10); under 1 MB `190 kB/min`
   rounded to 5 kB; `about ` in front of an estimate (FLAC); a bitrate target (Opus) and an exact size (WAV) have none;
-  no card: blank. The footer says which capture format the sizes are for.
-- The row's value is the effective choice: `WAV 48 kHz 16-bit`, `FLAC`, `Opus 32 kbps`; `WAV (FLAC unavailable)` when the
-  stored choice cannot be used (library missing, rate or channels the codec does not take). The current entry of the
-  picker is the effective one.
-- Choosing: the binder maps the entry index to the model's key and calls `set_format_choice(format, preset)`, which
-  stores both through the settings store (WAV and FLAC with an empty preset, Opus with its preset) and refreshes the
-  recorder's format text and hours left. It is refused while a take or the countdown runs (the row is dimmed then
-  too) and for a key the model does not have. The controller does not check the card: the picker does not offer an
-  incompatible entry, and a stored one that stops being compatible falls back to WAV when a take starts.
-- Demo and scenes: `CASSETTE_DEMO_CARD=stereo` (44.1 kHz stereo only) and `CASSETTE_DEMO_CODECS=none|flac|opus|both`
-  (which libraries the picker finds) make the cases reproducible without hardware.
+  no card: blank.
+- The rows' values are the effective choice: `FLAC`, `48 kHz`, `16-bit` or `32 kbps`; `WAV (Opus unavailable)` on the Codec row when the
+  stored codec cannot be used (library missing, no rate or channel count the codec takes), and then Sample rate and Quality show
+  WAV's. The Sample rate row is dimmed with no sound input.
+- Choosing: the binder maps the entry to the model's change. A preset: `set_format_choice(format, preset)`; anything else:
+  `set_rec_params(codec, preset, rate, quality)`, which validates the values (rate 8000..768000, depth 16 or 24, a bit rate of
+  the list, a preset of Opus only), stores them, reopens the capture when the rate or depth changed and refreshes the recorder's
+  format text and the hours left. A codec change that moved the rate shows its one-line message. Refused while a take or the
+  countdown runs (the rows are dimmed then too). The controller does not check the card: the pickers do not offer an incompatible entry, and a
+  stored one that stops being compatible falls back to WAV when a take starts.
+- Demo and scenes: `CASSETTE_DEMO_CARD=stereo` (44.1 kHz stereo only), `speech` (16 kHz), `rich` (mono, 16 / 44.1 / 48 / 96 kHz,
+  16 and 24-bit) and `CASSETTE_DEMO_CODECS=none|flac|opus|both` make the cases reproducible without hardware.
+- Not done: a compression level setting for FLAC (fixed at 5), resampling, a separate memory of the bit depth while Opus is chosen.
 
 ## Phase C: playback and editing (done)
 

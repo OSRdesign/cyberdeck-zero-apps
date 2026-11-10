@@ -160,48 +160,235 @@ std::string formats_footer_text(const FormatInputs &in)
     return std::string(b) + ch + " " + std::to_string(f.bits) + "-bit, this card";
 }
 
-const FormatChoice *selectable_format(const std::vector<FormatChoice> &list, int index, std::string *notice)
+const ParamItem *selectable_param(const ParamPicker &p, int index, std::string *notice)
 {
-    if (index < 0 || index >= static_cast<int>(list.size())) return nullptr;
-    const FormatChoice &c = list[static_cast<size_t>(index)];
-    if (c.compatible) return &c;
-    if (notice) *notice = "Not available: " + c.why_not;
+    if (index < 0 || index >= static_cast<int>(p.items.size())) return nullptr;
+    const ParamItem &it = p.items[static_cast<size_t>(index)];
+    if (it.header) return nullptr;
+    if (it.compatible) return &it;
+    if (notice) *notice = "Not available: " + it.why;
     return nullptr;
 }
 
-FormatPicker format_picker(const Snapshot &s)
-{
-    FormatPicker p;
-    p.list = list_formats(s.format_inputs);
-    const FormatChoice *stored = find_choice(p.list, FormatKey{s.settings.format, s.settings.format_preset});
-    const FormatChoice *eff = effective_choice(p.list, FormatKey{s.settings.format, s.settings.format_preset});
-    for (size_t i = 0; i < p.list.size(); ++i) {
-        const FormatChoice &c = p.list[i];
-        ui::FormatEntry e;
-        e.name = c.name;
-        e.size = size_per_minute_text(c.size);
-        e.compatible = c.compatible;
-        e.reason = c.why_not;
-        if (c.compatible) {
-            e.detail = c.detail;
-            if (s.take.free_bytes > 0) {
-                const std::string h = hours_text(hours_for_space(s.take.free_bytes, c.size));
-                if (!h.empty()) e.detail += std::string(kDot) + h + " free";
-            }
-        } else {
-            e.detail = c.why_not;
+namespace {
+
+/* the numbers every picker works from */
+struct ParamCtx {
+    const Snapshot &s;
+    FormatInputs in;
+    RecStored st;     /* what is stored */
+    RecParams eff;    /* what records (the stored choice, else WAV) */
+    bool fell_back = false;
+    RecStored base;   /* the stored values a rate or quality change builds on: the effective codec when the stored one cannot record */
+    bool known = false;
+
+    explicit ParamCtx(const Snapshot &snap) : s(snap), in(snap.format_inputs), st(stored_of(snap.settings))
+    {
+        known = in.state == CaptureState::Known;
+        eff = effective_params(in, st, &fell_back);
+        base = st;
+        if (fell_back) {
+            base.codec = eff.codec;
+            base.preset.clear();
+            base.quality = 0;
         }
+    }
+};
+
+const char *codec_name(RecFormat f) { return f == RecFormat::Opus ? "Opus" : f == RecFormat::Flac ? "FLAC" : "WAV"; }
+
+std::string kbps_text(int kbps) { return std::to_string(kbps) + " kbps"; }
+std::string bits_text(unsigned bits) { return std::to_string(bits) + "-bit"; }
+
+std::string free_hours(const ParamCtx &c, const SizeEstimate &size)
+{
+    if (c.s.take.free_bytes == 0) return "";
+    const std::string h = hours_text(hours_for_space(c.s.take.free_bytes, size));
+    return h.empty() ? "" : h + " free";
+}
+
+/* line 2: the hint, then the hours that fit; a combination that cannot record: the reason */
+ui::FormatEntry param_entry(const ParamCtx &c, const std::string &name, const std::string &hint, const FormatChoice &ch,
+                            bool ok, const std::string &why)
+{
+    ui::FormatEntry e;
+    e.name = name;
+    e.size = size_per_minute_text(ch.size);
+    e.compatible = ok;
+    e.reason = ok ? std::string() : why;
+    if (ok) {
+        join(e.detail, hint);
+        join(e.detail, free_hours(c, ch.size));
+    } else {
+        e.detail = why;
+    }
+    return e;
+}
+
+std::string rate_hint(uint32_t r)
+{
+    switch (r) {
+    case 8000: return "telephone";
+    case 11025: return "very low";
+    case 12000: return "low";
+    case 16000: return "speech";
+    case 22050: return "low";
+    case 24000: return "wide speech";
+    case 32000: return "broadcast";
+    case 44100: return "CD";
+    case 48000: return "video and most devices";
+    case 88200:
+    case 96000: return "high resolution";
+    case 176400:
+    case 192000: return "very high resolution";
+    default: return "";
+    }
+}
+
+std::string kbps_hint(int kbps)
+{
+    switch (kbps) {
+    case 16: return "speech, very small";
+    case 24: return "speech, smallest";
+    case 32: return "speech, clear";
+    case 48: return "voice and light music";
+    case 64: return "music and voice";
+    case 96: return "music, good";
+    case 128: return "music, best";
+    default: return "";
+    }
+}
+
+/* the Settings row's value text for the quality of the effective choice */
+std::string quality_value(const RecParams &p) { return p.codec == RecFormat::Opus ? kbps_text(p.kbps) : bits_text(p.bits); }
+
+} // namespace
+
+ParamPicker codec_picker(const Snapshot &s)
+{
+    const ParamCtx c(s);
+    ParamPicker p;
+    p.label = "Codec";
+    /* the value: the codec that records; a stored one that cannot says so */
+    p.value = codec_name(c.eff.codec);
+    if (c.fell_back) p.value += std::string(" (") + codec_name(c.st.codec) + " unavailable)";
+
+    auto header = [&](const char *t) {
+        ParamItem it;
+        it.header = true;
+        p.items.push_back(it);
+        ui::FormatEntry e;
+        e.name = t;
+        e.header = true;
         p.entries.push_back(e);
-        if (eff == &c) p.current = static_cast<int>(i);
+    };
+    header("Quick presets");
+    const std::vector<FormatChoice> presets = list_formats(FormatInputs()); /* the keys, names and hints of the six */
+    for (const FormatChoice &pc : presets) {
+        RecParams rp;
+        rp.codec = pc.key.format;
+        rp.rate = default_rate(c.in, rp.codec);
+        rp.bits = default_bits(c.in);
+        rp.kbps = pc.opus_bitrate_bps / 1000;
+        const FormatChoice ch = choice_for(c.in, rp);
+        std::string name = codec_name(rp.codec);
+        if (rp.codec == RecFormat::Opus) name += std::string(kbps_is_speech(rp.kbps) ? " speech " : " music ") + kbps_text(rp.kbps);
+        else if (rp.rate) name += ", " + rate_label(rp.rate) + ", " + bits_text(rp.bits);
+        ParamItem it;
+        it.preset = true;
+        it.key = pc.key;
+        it.compatible = ch.compatible;
+        it.why = ch.why_not;
+        p.items.push_back(it);
+        p.entries.push_back(param_entry(c, name, pc.detail, ch, ch.compatible, ch.why_not));
     }
-    const bool known = s.format_inputs.state == CaptureState::Known;
-    if (eff && eff->key.format != RecFormat::Wav) p.value = eff->name;
-    else {
-        p.value = known ? format_words(s.take.format_text) : std::string("WAV");
-        if (stored && stored->key.format != RecFormat::Wav && !stored->compatible)
-            p.value = std::string("WAV (") + (stored->key.format == RecFormat::Flac ? "FLAC" : "Opus") + " unavailable)";
+    header("Codecs");
+    const RecFormat codecs[3] = {RecFormat::Wav, RecFormat::Flac, RecFormat::Opus};
+    for (RecFormat f : codecs) {
+        ParamItem it;
+        it.change = change_codec(c.in, c.st, f);
+        const RecParams rp = resolve_params(c.in, it.change.stored);
+        const FormatChoice ch = choice_for(c.in, rp);
+        it.compatible = ch.compatible;
+        it.why = ch.why_not;
+        if (f == c.eff.codec) p.current = static_cast<int>(p.items.size());
+        p.items.push_back(it);
+        p.entries.push_back(param_entry(c, codec_name(f), ch.detail, ch, ch.compatible, ch.why_not));
     }
-    p.footer = formats_footer_text(s.format_inputs);
+    if (!c.known) p.footer = "No sound input: sizes unknown";
+    else p.footer = "Sizes for " + rate_label(c.eff.rate) + ", " + bits_text(c.eff.bits) + ", this card";
+    return p;
+}
+
+ParamPicker rate_picker(const Snapshot &s)
+{
+    const ParamCtx c(s);
+    ParamPicker p;
+    p.label = "Sample rate";
+    p.value = c.known && c.eff.rate ? rate_label(c.eff.rate) : std::string("-");
+    for (uint32_t r : card_rates(c.in)) {
+        std::string why;
+        const bool legal = rate_legal(c.eff.codec, r, &why);
+        RecParams rp = c.eff;
+        rp.rate = r;
+        const FormatChoice ch = choice_for(c.in, rp);
+        const bool ok = legal && ch.compatible;
+        ParamItem it;
+        it.change = change_rate(c.base, r);
+        it.compatible = ok;
+        it.why = legal ? ch.why_not : why;
+        if (r == c.eff.rate) p.current = static_cast<int>(p.items.size());
+        p.items.push_back(it);
+        p.entries.push_back(param_entry(c, rate_label(r), rate_hint(r), ch, ok, it.why));
+    }
+    if (!c.known) p.footer = "No sound input: sizes unknown";
+    else p.footer = std::string("Sizes for ") + codec_name(c.eff.codec) + ", " +
+                    (c.eff.codec == RecFormat::Opus ? kbps_text(c.eff.kbps) : bits_text(c.eff.bits)) + ", this card";
+    return p;
+}
+
+ParamPicker quality_picker(const Snapshot &s)
+{
+    const ParamCtx c(s);
+    ParamPicker p;
+    const bool opus = c.eff.codec == RecFormat::Opus;
+    p.label = opus ? "Bit rate" : "Bit depth";
+    p.value = quality_value(c.eff);
+    if (opus) {
+        for (int k : kOpusKbps) {
+            RecParams rp = c.eff;
+            rp.kbps = k;
+            const FormatChoice ch = choice_for(c.in, rp);
+            ParamItem it;
+            it.change = change_quality(c.base, k);
+            it.compatible = ch.compatible;
+            it.why = ch.why_not;
+            if (k == c.eff.kbps) p.current = static_cast<int>(p.items.size());
+            p.items.push_back(it);
+            p.entries.push_back(param_entry(c, kbps_text(k), kbps_hint(k), ch, ch.compatible, ch.why_not));
+        }
+    } else {
+        const std::vector<unsigned> has = card_bits(c.in);
+        for (unsigned b : {16u, 24u}) {
+            RecParams rp = c.eff;
+            rp.bits = b;
+            const FormatChoice ch = choice_for(c.in, rp);
+            const bool offered = std::find(has.begin(), has.end(), b) != has.end();
+            std::string why = ch.why_not;
+            if (!offered) why = std::string("this card records ") + bits_text(has.front()) + " only";
+            const bool ok = ch.compatible && offered;
+            ParamItem it;
+            it.change = change_quality(c.base, static_cast<int>(b));
+            it.compatible = ok;
+            it.why = why;
+            if (b == c.eff.bits) p.current = static_cast<int>(p.items.size());
+            p.items.push_back(it);
+            p.entries.push_back(param_entry(c, bits_text(b), b == 16 ? "CD quality, plays everywhere" : "more headroom, larger files",
+                                            ch, ok, why));
+        }
+    }
+    if (!c.known) p.footer = "No sound input: sizes unknown";
+    else p.footer = std::string("Sizes for ") + codec_name(c.eff.codec) + ", " + rate_label(c.eff.rate) + ", this card";
     return p;
 }
 
@@ -366,13 +553,20 @@ std::vector<ui::SettingRow> settings_rows(const Snapshot &s, uint64_t next_take)
     if (c.present && c.has_agc) rows.push_back(toggle_row("agc", "Auto gain (card)", c.auto_gain));
     if (c.present && c.has_mute) rows.push_back(toggle_row("mute", "Mic mute (card)", c.mute));
     {
-        const FormatPicker fp = format_picker(s);
-        ui::SettingRow r = choice_row("format", "Format", {fp.value}, 0);
-        r.enabled = !busy;
-        r.formats = fp.entries;
-        r.choice = fp.current;
-        r.formats_footer = fp.footer;
-        rows.push_back(r);
+        /* Codec, Sample rate and Quality (Bit depth for WAV and FLAC, Bit rate for Opus): each opens a picker of its own */
+        const bool known = s.format_inputs.state == CaptureState::Known;
+        const ParamPicker cp = codec_picker(s), rp = rate_picker(s), qp = quality_picker(s);
+        auto param_row = [&](const char *id, const std::string &label, const ParamPicker &pk, bool enabled) {
+            ui::SettingRow r = choice_row(id, label.c_str(), {pk.value}, 0);
+            r.enabled = enabled;
+            r.formats = pk.entries;
+            r.choice = pk.current;
+            r.formats_footer = pk.footer;
+            return r;
+        };
+        rows.push_back(param_row("codec", "Codec", cp, !busy));
+        rows.push_back(param_row("rate", "Sample rate", rp, !busy && known && !rp.entries.empty()));
+        rows.push_back(param_row("quality", qp.label, qp, !busy));
     }
     {
         int pick = 0;

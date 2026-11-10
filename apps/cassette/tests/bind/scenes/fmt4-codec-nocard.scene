@@ -1,4 +1,4 @@
-title Cassette bound (no sound input): no sizes, the footer says so; the formats still list in order
+title Cassette bound (no sound input): no sizes, the footer says so; the presets and codecs still list in order; Sample rate is dimmed
 sizes 480x320 320x480 640x480
 ppmm 608
 env CASSETTE_DEMO 1
@@ -10,10 +10,12 @@ env CASSETTE_LAYOUT_CHECK 1
 wait 1500
 key s
 wait 500
-tap "Format"
+key down
+key down
+key enter
 wait 500
 expect text "No sound input: sizes unknown"
-expect text "Opus 24 kbps"
+expect text "Opus speech 24 kbps"
 shot picker-top
 expect notext "LAYOUT FAIL"
 key esc

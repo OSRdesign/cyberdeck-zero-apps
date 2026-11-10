@@ -79,7 +79,7 @@ bool choose_params(const CaptureOffer &offer, const OpenOptions &opt, HwRequest 
         if (why) *why = m;
         return false;
     };
-    const uint32_t rate = choose_rate(offer);
+    const uint32_t rate = opt.want_rate && offer.has_rate(opt.want_rate) ? opt.want_rate : choose_rate(offer);
     if (rate == 0) return no("the card offers no sample rate");
     req.rate = rate;
 
@@ -88,7 +88,14 @@ bool choose_params(const CaptureOffer &offer, const OpenOptions &opt, HwRequest 
     if (req.channels < offer.min_channels) req.channels = offer.min_channels;
 
     conv = Conversion::None;
-    if (offer.has_format(SampleFormat::S16_LE)) {
+    if (opt.want_bits == 24 && offer.has_format(SampleFormat::S24_3LE)) {
+        req.format = SampleFormat::S24_3LE;
+        fmt.bits = 24;
+    } else if (opt.want_bits == 24 && offer.has_format(SampleFormat::S32_LE)) {
+        req.format = SampleFormat::S32_LE;
+        conv = Conversion::S32_to_S24_3;
+        fmt.bits = 24;
+    } else if (offer.has_format(SampleFormat::S16_LE)) {
         req.format = SampleFormat::S16_LE;
         fmt.bits = 16;
     } else if (offer.has_format(SampleFormat::S24_3LE)) {
@@ -108,7 +115,8 @@ bool choose_params(const CaptureOffer &offer, const OpenOptions &opt, HwRequest 
     return true;
 }
 
-OpenResult open_capture(AlsaApi &api, const CardInfo &card, const OpenOptions &opt) {
+OpenResult open_capture(AlsaApi &api, const CardInfo &card, const OpenOptions &opt_in) {
+    OpenOptions opt = opt_in;
     OpenResult r;
     r.device = pcm_device(card);
     std::string why;
@@ -122,6 +130,7 @@ OpenResult open_capture(AlsaApi &api, const CardInfo &card, const OpenOptions &o
     if (err == 0) {
         HwRequest req;
         std::string reason;
+        if (opt.prefer) opt.prefer(r.offer, opt.want_rate, opt.want_bits);
         if (!choose_params(r.offer, opt, req, r.conv, r.format, &reason)) {
             fail(r, OpenStatus::Unsupported, -EINVAL, "Unsupported card: " + reason);
             return r;

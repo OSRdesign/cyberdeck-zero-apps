@@ -250,7 +250,9 @@ ViewModel demo_model(const std::string &scene)
         s.rows.push_back(toggle("agc", "Auto gain (card)", true));
         if (full_settings) s.rows.push_back(toggle("mute", "Mic mute (card)", false));
     }
-    s.rows.push_back(choice("format", "Format", {"WAV 48 kHz 16-bit", "WAV 48 kHz 24-bit", "WAV 44.1 kHz 16-bit"}, 0));
+    s.rows.push_back(choice("codec", "Codec", {"WAV", "FLAC", "Opus"}, 0));
+    s.rows.push_back(choice("rate", "Sample rate", {"48 kHz", "44.1 kHz"}, 0));
+    s.rows.push_back(choice("quality", "Bit depth", {"16-bit", "24-bit"}, 0));
     s.rows.push_back(choice("timer", "Record timer", {"Off", "3 s", "10 s", "20 s"}, 0));
     const char *rf = std::getenv("CASSETTE_DEMO_REWFWD");
     s.rows.push_back(choice("rewfwd", "REW / FWD", {"Fast scan 5x", "Jump 5 s"}, rf && std::string(rf) == "jump" ? 1 : 0));
@@ -305,7 +307,7 @@ ViewModel demo_model(const std::string &scene)
     if (full_settings) s.rows.push_back(choice("output", "Output", {"USB Audio Device", "Default output"}, 0));
     if (r.transport == Transport::Recording)
         for (SettingRow &row : s.rows)
-            if (row.id == "format" || row.id == "folder") row.enabled = false;
+            if (row.id == "codec" || row.id == "rate" || row.id == "quality" || row.id == "folder") row.enabled = false;
 
     /* the recordings: five synthetic takes, Take 006 selected */
     ListVm &l = vm.list;

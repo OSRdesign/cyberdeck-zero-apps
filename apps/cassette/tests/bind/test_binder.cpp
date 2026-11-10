@@ -129,25 +129,74 @@ void test_steppers()
     CHECK(!r.binder.vm().rec.card.shown);
 }
 
-/* The Format picker's entries: the model's order (WAV, FLAC, Opus 24, 32, 64, 128); a compatible one sets format and preset
- * through the controller; one this card cannot record sets nothing and says why */
+/* The three pickers' entries. Codec: a heading, the six quick presets (WAV, FLAC, Opus 24, 32, 64, 128 kbps), a heading, then
+ * WAV, FLAC, Opus; a preset sets the codec and its bit rate through the controller (rate and quality back to the defaults),
+ * a plain codec sets the three stored values; one this card cannot record sets nothing and says why */
 void test_format_choice()
 {
     Rig r;
-    r.act.setting_choice("format", 1);
+    r.act.setting_choice("codec", 2);
     CHECK(r.calls() == std::vector<std::string>{"set_format_choice flac"});
-    r.act.setting_choice("format", 3);
+    r.act.setting_choice("codec", 4);
     CHECK(r.calls() == std::vector<std::string>{"set_format_choice opus speech32"});
-    r.act.setting_choice("format", 5);
+    r.act.setting_choice("codec", 6);
     CHECK(r.calls() == std::vector<std::string>{"set_format_choice opus music128"});
-    r.act.setting_choice("format", 0);
+    r.act.setting_choice("codec", 1);
     CHECK(r.calls() == std::vector<std::string>{"set_format_choice wav"});
-    r.act.setting_choice("format", 6); /* out of range: nothing */
-    r.act.setting_choice("format", -1);
+    r.act.setting_choice("codec", 9);
+    CHECK(r.calls() == std::vector<std::string>{"set_rec_params flac - 0 0"});
+    r.act.setting_choice("codec", 10);
+    CHECK(r.calls() == std::vector<std::string>{"set_rec_params opus - 0 0"});
+    r.act.setting_choice("codec", 8);
+    CHECK(r.calls() == std::vector<std::string>{"set_rec_params wav - 0 0"});
+    r.act.setting_choice("codec", 0); /* a heading, out of range: nothing, no notice */
+    r.act.setting_choice("codec", 7);
+    r.act.setting_choice("codec", 11);
+    r.act.setting_choice("codec", -1);
     CHECK(r.calls().empty());
+    r.tick();
+    CHECK_EQ(r.binder.vm().notice, "");
+    /* rate and quality: the entry's value */
+    r.act.setting_choice("rate", 0);
+    CHECK(r.calls() == std::vector<std::string>{"set_rec_params wav - 48000 0"});
+    r.act.setting_choice("quality", 0);
+    CHECK(r.calls() == std::vector<std::string>{"set_rec_params wav - 0 16"});
+    r.act.setting_choice("quality", 1); /* this card has no 24-bit */
+    CHECK(r.calls().empty());
+    r.tick();
+    CHECK_EQ(r.binder.vm().notice, "Not available: this card records 16-bit only");
+    /* a card with several rates and 24-bit: Opus bit rates, a codec change that moves the rate says so */
+    Rig m;
+    m.port.snap.format_inputs.rates = {16000, 44100, 48000};
+    m.port.snap.format_inputs.has24 = true;
+    m.port.snap.settings.rate = 44100;
+    m.tick();
+    m.act.setting_choice("codec", 10);
+    CHECK(m.calls() == std::vector<std::string>{"set_rec_params opus - 48000 0"});
+    m.tick();
+    m.tick();
+    CHECK_EQ(m.binder.vm().notice, "Sample rate set to 48 kHz: Opus cannot record at 44.1 kHz");
+    m.port.snap.settings.format = RecFormat::Wav; /* the fake port took the choice: back to WAV at 44.1 kHz */
+    m.port.snap.settings.rate = 44100;
+    m.port.snap.settings.quality = 0;
+    m.tick();
+    m.act.setting_choice("quality", 1);
+    CHECK(m.calls() == std::vector<std::string>{"set_rec_params wav - 44100 24"});
+    m.port.snap.settings.format = RecFormat::Opus;
+    m.tick();
+    m.act.setting_choice("quality", 4); /* Opus: 64 kbps */
+    CHECK(m.calls() == std::vector<std::string>{"set_rec_params opus - 44100 64"});
     /* the controller refuses (a take is running): a notice */
+    r.act.notice_dismiss();
+    r.tick();
     r.port.format_choice_result = false;
-    r.act.setting_choice("format", 1);
+    r.act.setting_choice("codec", 2);
+    r.tick();
+    r.tick();
+    CHECK_EQ(r.binder.vm().notice, "The format cannot be changed now");
+    r.act.notice_dismiss();
+    r.tick();
+    r.act.setting_choice("rate", 0);
     r.tick();
     r.tick();
     CHECK_EQ(r.binder.vm().notice, "The format cannot be changed now");
@@ -156,11 +205,13 @@ void test_format_choice()
     q.port.snap.format_inputs.capture.rate = 44100;
     q.port.snap.format_inputs.capture.channels = 2;
     q.tick();
-    q.act.setting_choice("format", 4);
+    q.act.setting_choice("codec", 5);
     CHECK(q.calls().empty());
     q.tick();
-    CHECK_EQ(q.binder.vm().notice, "Not available: Opus cannot record at 44.1 kHz");
-    q.act.setting_choice("format", 1); /* FLAC works there */
+    CHECK_EQ(q.binder.vm().notice, "Not available: Opus needs 8, 12, 16, 24 or 48 kHz; this card has 44.1 kHz");
+    q.act.setting_choice("codec", 10);
+    CHECK(q.calls().empty());
+    q.act.setting_choice("codec", 2); /* FLAC works there */
     CHECK(q.calls() == std::vector<std::string>{"set_format_choice flac"});
 }
 
@@ -168,7 +219,7 @@ void test_settings_actions()
 {
     Rig r;
     r.act.setting_choice("input", 1);
-    r.act.setting_choice("format", 0);
+    r.act.setting_choice("codec", 1);
     r.act.setting_choice("timer", 2);
     r.act.setting_choice("timer", 9); /* out of range: nothing */
     r.act.setting_choice("rewfwd", 1);

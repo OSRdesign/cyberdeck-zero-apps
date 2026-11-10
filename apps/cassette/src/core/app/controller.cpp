@@ -217,6 +217,8 @@ struct Controller::Impl : public DeckCommands {
      * (effective_choice), else WAV; recomputed with the free space (every 2 s) and when a take starts */
     FormatChoice rec_choice;  /* valid when rec_compressed */
     bool rec_compressed = false;
+    CaptureOffer active_offer;    /* what the open card offered (empty: it was busy, recording through the sound server) */
+    bool ignore_prefs = false;    /* the card refused the chosen rate or depth: open with its own defaults until the next choice */
 
     /* trim page */
     struct Trim {
@@ -364,20 +366,70 @@ struct Controller::Impl : public DeckCommands {
         return false;
     }
 
+    CodecAvailability codecs_now() const { return cfg.codecs ? cfg.codecs() : codec_availability_here(); }
+
+    /* The model's inputs for the capture that runs now: its format and what the card offers (the Rate and Quality pickers). */
+    void fill_inputs(FormatInputs &in) const {
+        in.codecs = codecs_now();
+        if (!(fmt.rate && fmt.channels && fmt.bits)) return;
+        in.state = CaptureState::Known;
+        in.capture = fmt;
+        in.rates = active_offer.rates;
+        if (active_offer.rates.empty()) { /* busy: the server's format is all there is */
+            in.has16 = fmt.bits == 16;
+            in.has24 = fmt.bits == 24;
+        } else {
+            in.has16 = active_offer.has_format(SampleFormat::S16_LE);
+            in.has24 = active_offer.has_format(SampleFormat::S24_3LE) || active_offer.has_format(SampleFormat::S32_LE);
+        }
+    }
+
+    /* The rate and depth to open a card with: the stored choice (codec, rate, quality) on what the card offers. */
+    void prefer_capture(const CaptureOffer &o, uint32_t &rate, unsigned &bits) const {
+        rate = 0;
+        bits = 0;
+        if (ignore_prefs) return;
+        const FormatInputs in = inputs_for_offer(o, codecs_now());
+        if (in.state != CaptureState::Known) return;
+        const RecParams p = effective_params(in, stored_of(store.values()));
+        rate = p.rate;
+        bits = p.bits;
+    }
+
     void update_rec_choice() {
         rec_compressed = false;
         const Settings &s = store.values();
         if (s.format == RecFormat::Wav || !(fmt.rate && fmt.channels && fmt.bits)) return; /* WAV: no library is loaded */
         FormatInputs in;
-        in.state = CaptureState::Known;
-        in.capture = fmt;
-        in.codecs = cfg.codecs ? cfg.codecs() : codec_availability_here();
-        const std::vector<FormatChoice> list = list_formats(in);
-        const FormatChoice *c = effective_choice(list, FormatKey{s.format, s.format_preset});
-        if (c && c->key.format != RecFormat::Wav) {
-            rec_choice = *c;
+        fill_inputs(in);
+        const FormatChoice c = effective_for(in, stored_of(s));
+        if (c.compatible && c.key.format != RecFormat::Wav) {
+            /* the capture that runs may differ from the resolved one (a card busy: the server's 48 kHz): the encoder must
+             * accept what actually arrives */
+            const bool ok = c.key.format == RecFormat::Flac ? flac_format_ok(fmt) : opus_format_ok(fmt);
+            if (!ok) return;
+            rec_choice = c;
             rec_compressed = true;
         }
+    }
+
+    /* After a choice of codec, rate or quality: reopens the capture when the rate or depth it runs at is not the one the
+     * stored choice asks for now. Nothing running (no card, a busy card, a take): nothing to do, the next open follows
+     * the choice. A card that refuses what it offered is opened with its own defaults and the choice stays stored. */
+    void apply_capture_choice() {
+        if (!have_card || !cap || via_server || take_active || active_offer.rates.empty()) return;
+        uint32_t rate = 0;
+        unsigned bits = 0;
+        prefer_capture(active_offer, rate, bits);
+        if (!rate || (rate == fmt.rate && bits == fmt.bits)) return;
+        if (deck.state() != DeckState::Idle) run_deck(DeckEvent::Stop);
+        close_capture();
+        lost = false;
+        if (!try_open_capture() && !cap) {
+            ignore_prefs = true;
+            if (try_open_capture()) add_notice(Notice::Info, "The card would not record at that rate: using its own");
+        }
+        rebuild_output();
     }
 
     void refresh_space() {
@@ -487,8 +539,11 @@ struct Controller::Impl : public DeckCommands {
             return false;
         }
         const CardInfo info = infos[static_cast<size_t>(pos)];
-        OpenResult r = open_capture(*cap_api(), info);
+        OpenOptions oopt;
+        oopt.prefer = [this](const CaptureOffer &o, uint32_t &rate, unsigned &bits) { prefer_capture(o, rate, bits); };
+        OpenResult r = open_capture(*cap_api(), info, oopt);
         active = info;
+        active_offer = r.offer;
         have_card = true;
         active_key = key_of(info);
         sel = pos;
@@ -1120,11 +1175,8 @@ struct Controller::Impl : public DeckCommands {
         s.take.free_bytes = space.free_bytes;
         s.take.hours_left = space.hours_left;
         /* the Format picker's inputs */
-        s.format_inputs.codecs = cfg.codecs ? cfg.codecs() : codec_availability_here();
-        if (s.card.present && fmt.rate && fmt.channels && fmt.bits) {
-            s.format_inputs.state = CaptureState::Known;
-            s.format_inputs.capture = fmt;
-        }
+        s.format_inputs.codecs = codecs_now();
+        if (s.card.present && fmt.rate && fmt.channels && fmt.bits) fill_inputs(s.format_inputs);
         /* problems */
         s.problems = prob;
         s.notices = notices;
@@ -1419,8 +1471,31 @@ bool Controller::set_format_choice(RecFormat f, const std::string &preset) {
     if (!known) return false;
     d.store.values().format = f;
     d.store.values().format_preset = preset;
+    d.store.values().rate = 0; /* a preset: its codec and bit rate, rate and quality at their defaults */
+    d.store.values().quality = 0;
+    d.ignore_prefs = false;
     d.persist();
+    d.apply_capture_choice();
     d.refresh_space(); /* the format text and the hours left follow the choice */
+    d.publish();
+    return true;
+}
+bool Controller::set_rec_params(RecFormat f, const std::string &preset, int rate, int quality) {
+    Locked l(p_->mu);
+    Impl &d = *p_;
+    if (d.take_active || d.deck.state() == DeckState::Countdown) return false;
+    if (!preset.empty() && !(f == RecFormat::Opus && preset_kbps(preset) > 0)) return false;
+    if (rate != 0 && (rate < 8000 || rate > 768000)) return false;
+    if (quality != 0 && !(f == RecFormat::Opus ? opus_kbps_ok(quality) : (quality == 16 || quality == 24))) return false;
+    Settings &s = d.store.values();
+    s.format = f;
+    s.format_preset = preset;
+    s.rate = rate;
+    s.quality = quality;
+    d.ignore_prefs = false;
+    d.persist();
+    d.apply_capture_choice();
+    d.refresh_space();
     d.publish();
     return true;
 }

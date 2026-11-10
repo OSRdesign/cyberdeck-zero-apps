@@ -9,7 +9,7 @@ wait 300
 expect text "RENAME"
 key s
 wait 300
-expect text "Record timer"
+expect text "Codec"
 key esc
 wait 300
 expect text "SOFT"
@@ -26,7 +26,7 @@ wait 300
 @640x480 tapxy 0.897 0.231
 @320x480 tapxy 0.558 0.6597
 wait 300
-expect text "Record timer"
+expect text "Codec"
 say the Settings button opened the settings
 key esc
 wait 300

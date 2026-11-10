@@ -14,6 +14,8 @@
  *   speech one speech headset: mono, 16000 Hz only, a level and a mute switch, no auto gain
  *   both   both cards, the one with a level first (Settings > Input switches)
  *   stereo a stereo line input: 44100 Hz only, two channels, no mixer controls (Opus cannot record at 44.1 kHz)
+ *   rich   a studio input: mono, 16000 / 44100 / 48000 / 96000 Hz, 16-bit and 24-bit (every Sample rate and Quality row
+ *          open; Opus dimmed at 44.1 and 96 kHz)
  *   none   no card at all (the "no sound input" page)
  * CASSETTE_DEMO_UNPLUG_MS=<ms> unplugs every card that long after the app started (reads fail as a pulled USB card's
  * do, the card leaves the list); CASSETTE_DEMO_REPLUG_MS=<ms> brings them back (the controller finds them by itself).
@@ -34,7 +36,7 @@ namespace cassette {
 namespace demo {
 
 struct Script {
-    std::string cards = "level"; /* level | plain | both | speech | stereo | none */
+    std::string cards = "level"; /* level | plain | both | speech | stereo | rich | none */
     int64_t unplug_ms = -1;      /* -1: never */
     int64_t replug_ms = -1;
 };

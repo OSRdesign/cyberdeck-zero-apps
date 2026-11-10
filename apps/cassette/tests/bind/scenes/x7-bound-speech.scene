@@ -12,7 +12,7 @@ expect text "SOFT"
 shot speech-card
 key s
 wait 500
-expect text "Record timer"
+expect text "Codec"
 expect notext "Auto gain (card)"
 shot speech-settings
 key esc

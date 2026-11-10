@@ -35,6 +35,10 @@ public:
     bool set_soft_gain_db(double db) override { return c_.set_soft_gain_db(db); }
     bool set_format(RecFormat f) override { return c_.set_format(f); }
     bool set_format_choice(RecFormat f, const std::string &p) override { return c_.set_format_choice(f, p); }
+    bool set_rec_params(RecFormat f, const std::string &p, int rate, int quality) override
+    {
+        return c_.set_rec_params(f, p, rate, quality);
+    }
     bool set_folder(const std::string &f) override { return c_.set_folder(f); }
     bool set_prefix(const std::string &p) override { return c_.set_prefix(p); }
     int set_next_take(uint64_t n, uint64_t &landed) override { return c_.set_next_take_number(n, &landed); }

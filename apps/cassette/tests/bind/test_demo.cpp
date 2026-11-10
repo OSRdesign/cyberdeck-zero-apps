@@ -423,8 +423,12 @@ void test_speech_card()
     CHECK(e.until([](const ui::ViewModel &v) { return v.rec.input_present; }, 2000));
     CHECK_EQ(e.vm().rec.info.format, "16k/16 WAV");
     CHECK_EQ(e.vm().rec.tape.format, "WAV 16k");
-    const ui::SettingRow *fmt = find_row(e.vm(), "format");
-    CHECK(fmt && fmt->choices.size() == 1 && fmt->choices[0] == "WAV 16 kHz 16-bit");
+    const ui::SettingRow *fmt = find_row(e.vm(), "codec");
+    CHECK(fmt && fmt->choices.size() == 1 && fmt->choices[0] == "WAV");
+    const ui::SettingRow *rate = find_row(e.vm(), "rate");
+    CHECK(rate && rate->choices.size() == 1 && rate->choices[0] == "16 kHz");
+    const ui::SettingRow *depth = find_row(e.vm(), "quality");
+    CHECK(depth && depth->choices.size() == 1 && depth->choices[0] == "16-bit");
     CHECK(e.vm().rec.card.shown);              /* it has a level */
     CHECK(!find_row(e.vm(), "agc"));           /* no auto gain */
     CHECK(find_row(e.vm(), "mute"));

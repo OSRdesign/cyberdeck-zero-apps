@@ -120,13 +120,14 @@ enum class SettingKind {
 };
 
 /* One entry of the Format picker (a Choice row with `formats`): two lines, the name and the size per minute over the
- * detail (or, for a format this card cannot record, the reason). */
+ * detail (or, for a format this card cannot record, the reason). The three pickers (Codec, Sample rate, Quality) use it. */
 struct FormatEntry {
     std::string name;            /* "Opus 32 kbps" */
     std::string size;            /* "5.8 MB/min", "about 2 MB/min", "" when unknown (no card) */
     std::string detail;          /* line 2: "lossless, a third to half the size · 117 h free", or the reason when !compatible */
     std::string reason;          /* !compatible: why ("Opus cannot record at 44.1 kHz"); the page's notice says it */
     bool compatible = true;      /* false: dimmed, a tap shows the notice instead of choosing it */
+    bool header = false;         /* a group heading ("Quick presets"): only `name`, no tap, no marker, the keys skip it */
 };
 
 struct SettingRow {
@@ -234,7 +235,8 @@ struct ViewModel {
 /* Equality of the parts the pages compare to skip work when nothing changed (the meter updates 30 times a second). */
 inline bool operator==(const FormatEntry &a, const FormatEntry &b)
 {
-    return a.name == b.name && a.size == b.size && a.detail == b.detail && a.reason == b.reason && a.compatible == b.compatible;
+    return a.name == b.name && a.size == b.size && a.detail == b.detail && a.reason == b.reason && a.compatible == b.compatible &&
+           a.header == b.header;
 }
 inline bool operator==(const SettingRow &a, const SettingRow &b)
 {

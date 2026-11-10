@@ -18,6 +18,8 @@ key down
 key down
 key down
 key down
+key down
+key down
 wait 300
 expect text "Monitor"
 expect text "Monitor level"

@@ -42,6 +42,7 @@ public:
     virtual bool set_soft_gain_db(double db) = 0;
     virtual bool set_format(RecFormat f) = 0;
     virtual bool set_format_choice(RecFormat f, const std::string &preset) = 0;
+    virtual bool set_rec_params(RecFormat f, const std::string &preset, int rate, int quality) = 0;
     virtual bool set_folder(const std::string &folder) = 0;
     virtual bool set_prefix(const std::string &prefix) = 0;
     /* The Take number setting (Controller::set_next_take_number): 0, or -errno (-EINVAL range, -EBUSY recording). */

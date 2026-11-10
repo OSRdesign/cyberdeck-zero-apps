@@ -297,8 +297,8 @@ Goal: a card that records at neither 48000 nor 44100 Hz (a USB headset in its ca
 65: `mono S16 at 16000 Hz`) opens and plays back at the right speed.
 
 1. `cassette-probe --card <the headset>`. Expected: `open: ... OK direct: 16000 Hz, 1 ch, 16-bit` (no `Unsupported card`).
-2. Open Cassette with only that headset plugged in. Expected: the strip says `16k/16 WAV`, Settings > Format reads
-   `WAV 16 kHz 16-bit`, the meter moves when you speak.
+2. Open Cassette with only that headset plugged in. Expected: the strip says `16k/16 WAV`, Settings > Sample rate reads
+   `16 kHz` (Codec `WAV`, Bit depth `16-bit`), the meter moves when you speak.
 3. Say the numbers 1 to 30 aloud, one a second, and press REC with a watch in view; record 30 s, STOP. Expected: the
    counter at STOP reads about 0:30 (not 0:10 and not 1:30); the list shows the take at about 0:30.
 4. PLAY it through the headset (its output may play 16000 Hz only) and through another output (Settings > Output, one that
@@ -396,7 +396,7 @@ Report: what the row read at each step, the names of the takes recorded in 3 and
 ## B17. FLAC and Opus takes (any board with the libraries; zero8 or deck for the power pull, 30 min)
 
 Goal: takes record as FLAC and as Ogg Opus, play on the PC, and survive a power pull and an unplug like WAV takes.
-The Format picker (B19) can choose them; here the format is set in the settings file, which also tests the stored key.
+The pickers (B19) can choose them; here the format is set in the settings file, which also tests the stored key.
 Playing, previewing and trimming them in the app is B18 (phase C); here the takes are also checked on the PC.
 
 1. The libraries (the controller can do this): `ldconfig -p | grep -E 'libFLAC|libopusenc'`. Expected: `libFLAC.so.14`
@@ -406,8 +406,8 @@ Playing, previewing and trimming them in the app is B18 (phase C); here the take
    nothing): a running Cassette writes its own settings back over the edit. Then:
    `sed -i 's/"format": *"[a-z]*"/"format": "flac"/' ~/.config/cassette/settings.json` and check it with
    `grep format ~/.config/cassette/settings.json` (expected: `"format": "flac"`).
-3. Open Cassette. Expected: the format on the window reads `48k/16 FLAC` (`FLAC 48 kHz 16-bit` in Settings > Format);
-   the time left is about three times what it was with WAV. Do not pick a value in Settings > Format during B17
+3. Open Cassette. Expected: the format on the window reads `48k/16 FLAC` (Codec `FLAC`, Sample rate `48 kHz`, Bit depth `16-bit` in Settings);
+   the time left is about three times what it was with WAV. Do not pick a value in Settings > Codec, Sample rate or Bit depth during B17
    (that is B19): it would overwrite the setting under test.
 4. REC, talk for 1 minute, STOP. The list: the new take `take_NNN_...flac` on top, its row ends in `FLAC` (the WAV
    takes end in `WAV`). Its take number follows the WAV takes (never a number already used). Press LOAD and PLAY once:
@@ -451,7 +451,7 @@ last number heard, notice text) for FLAC and Opus, the unplug result, the CPU % 
 
 Goal: a FLAC and an Opus take play, scan and trim in the app exactly like a WAV take, the results keep their format
 and their lengths are right, and the 5x scan of an Opus take does not starve a Pi Zero 2 W. Needs B17's settings
-recipe or the Format picker (B19) to choose the format. Phase C decodes FLAC with libFLAC and Opus with libopus (no
+recipe or the pickers (B19) to choose the format. Phase C decodes FLAC with libFLAC and Opus with libopus (no
 libopusfile).
 
 1. The libraries (the controller can do this): `ldconfig -p | grep -E 'libFLAC|libopus'`. Expected: `libFLAC.so.14`
@@ -494,40 +494,62 @@ Report: the libraries present, the row lengths, what was heard in steps 3-6 (the
 stopped), the part names and row lengths, the `flac -t` / ffprobe / opusinfo lines, the CPU % of step 10 and the trim
 time, anything that stuttered or clicked.
 
-## B19. The Format picker (any board with the libraries, 20 min)
+## B19. The Codec, Sample rate and Quality pickers (any board with the libraries, 30 min)
 
-Goal: Settings > Format lists every format with sizes that match what a recording really takes.
+Goal: Settings > Codec, Sample rate and Bit depth / Bit rate list every choice with sizes that match what a recording really takes, and each choice reaches the file.
 
-1. Open Settings and read the Format row. Expected: the choice in use (`WAV 48 kHz 16-bit` on a mono 48 kHz card).
-   Tap it (or Right / Enter). Expected: the page is titled `Format`; six two-line rows in this order: WAV, FLAC,
-   Opus 24 kbps, Opus 32 kbps, Opus 64 kbps, Opus 128 kbps; each shows the size per minute on the right (`5.8 MB/min`,
-   `about ... MB/min` for FLAC, `... kB/min` or `... MB/min` for Opus) and a grey line under the name (the one-line
-   description and `... h free`); the row in use has a dot and is darker; the footer under the list reads
-   `Sizes at <rate> kHz <mono|stereo> <bits>-bit, this card`. Scroll to the last row (drag, or Down keys).
+1. Open Settings and read the three rows. Expected: `Codec` (`WAV`), `Sample rate` (`48 kHz` on a card that has it) and
+   `Bit depth` (`16-bit`). Tap Codec (or Right / Enter). Expected: the page is titled `Codec`; the heading `Quick
+   presets` and six two-line rows (WAV, FLAC, Opus speech 24 kbps, Opus speech 32 kbps, Opus music 64 kbps, Opus music
+   128 kbps), then the heading `Codecs` and WAV, FLAC, Opus; each row shows the size per minute on the right (`5.8
+   MB/min`, `about ... MB/min` for FLAC, `... kB/min` or `... MB/min` for Opus) and a grey line under the name (the
+   one-line description and `... h free`); the codec in use (in the second group) has a dot and is darker; the footer
+   under the list reads `Sizes for <rate>, <bits>-bit, this card`. The headings cannot be selected (Up / Down skip them).
+   Scroll to the last row (drag, or Down keys).
 2. A card or library that cannot do it: with the PC's `ldconfig -p | grep -E 'libFLAC|libopusenc'` as the reference, a
    missing library's rows must be dimmed with `FLAC not installed (libflac14)` or `Opus not installed (libopusenc0)`
    in place of the description. On a card that records only 44.1 kHz (or any rate Opus does not take) the four Opus
-   rows are dimmed with `Opus cannot record at 44.1 kHz`. Tap a dimmed row. Expected: nothing is chosen, the notice
+   preset rows and the Opus codec are dimmed with `Opus needs 8, 12, 16, 24 or 48 kHz; this card has 44.1 kHz`. Tap a dimmed row. Expected: nothing is chosen, the notice
    line says `Not available: <the same reason>`; Esc leaves the page.
-3. Choose FLAC. Expected: the page closes, the Format row reads `FLAC`, the window's format text reads
+3. Choose FLAC (the codec row). Expected: the page closes, the Codec row reads `FLAC`, the window's format text reads
    `48k/16 FLAC`, the time left grows to about three times the WAV figure. Close Cassette and open it again: still
-   `FLAC` (the choice is stored). Repeat for `Opus 32 kbps` (row reads `Opus 32 kbps`) and back to WAV.
-4. **Sizes against files.** For each of WAV, FLAC, Opus 24, 32, 64 and 128 kbps (the ones the card allows): choose it,
+   `FLAC` (the choice is stored). Repeat with the preset `Opus speech 32 kbps` (Codec `Opus`, the third row now reads
+   `Bit rate` and `32 kbps`) and back to WAV.
+4. **Sizes against files.** For each of WAV, FLAC, Opus 24, 32, 64 and 128 kbps (the ones the card allows; the presets
+   or Codec plus Bit rate): choose it,
    REC for exactly 1 minute by the counter, STOP, and read the file size in the list row (or `ls -l ~/Recordings`).
    Write down the picker's figure and the file's size. Expected: WAV within 1 % of the figure; Opus within 10 % of
    the figure (a take with pauses is smaller, never much larger); FLAC within the range of the take's content (speech
    about 30 %, music about 55 % of WAV) and the picker's `about` figure of the same order.
 5. A stored choice that stops working: choose Opus on a card that allows it, close Cassette, start it with a card that
-   records 44.1 kHz only (or with the library removed). Expected: the Format row reads `WAV (Opus unavailable)`, a
+   records 44.1 kHz only (or with the library removed). Expected: the Codec row reads `WAV (Opus unavailable)`, a
    take records as WAV, the picker marks WAV as in use and shows the Opus rows dimmed.
-6. Without a sound input (unplug the card, Cassette open): the picker lists all formats with no sizes and the footer
-   `No sound input: sizes unknown`. During a take the Format row is dimmed and does not open.
+6. Without a sound input (unplug the card, Cassette open): the Codec picker lists all entries with no sizes and the
+   footer `No sound input: sizes unknown`; the Sample rate row is dimmed. During a take the Codec, Sample rate and
+   Bit depth / Bit rate rows are dimmed and do not open.
 7. By touch on a narrow screen (zero8 upright, 320x480): every row readable, nothing cut or overlapping, the footer
    under the list (a notice, when shown, takes its place).
+8. **Every codec, rate and quality reaches the file** (a card with more than one rate; a USB card with 44.1 and 48 kHz is
+   enough, 24-bit and 96 kHz if the card has them). For each of the following, choose it in Settings, REC for 10 s by the
+   counter, STOP, and read the take's row in the list and `file` / `soxi` / `ffprobe` on the file (rate, channels, bits,
+   codec):
+   - Codec WAV, Sample rate 44.1 kHz, Bit depth 16-bit: the row ends `44.1k/16 WAV`; the file says 44100 Hz, 16 bit.
+   - the same at 48 kHz, and at 24-bit if the card offers it (`48k/24 WAV`; the Bit depth page dims 24-bit with `this
+     card records 16-bit only` on a card without it).
+   - Codec FLAC at 44.1 or 48 kHz, 16-bit (and 24-bit if offered): `.flac`, the rate and depth chosen.
+   - Codec Opus at 48 kHz with Bit rate 16, 24, 32, 48, 64, 96 and 128 kbps in turn (seven takes of 10 s): `.opus`;
+     `ffprobe` reports the bit rate near the one chosen (within about 15 % for 10 s), 48 kHz.
+   - Opus at 16 kHz if the card has it (or another of 8, 12, 24 kHz): `.opus` at that rate. On the Sample rate page with
+     Opus chosen, 44.1 kHz is dimmed (`Opus needs 8, 12, 16, 24 or 48 kHz`).
+   - Set 44.1 kHz with Codec WAV, then choose Codec Opus. Expected: the Sample rate row now reads `48 kHz` (or 16 kHz) and a
+     line says `Sample rate set to 48 kHz: Opus cannot record at 44.1 kHz`; the take is at that rate.
+   - A quick preset (`Opus speech 24 kbps`) puts the Sample rate back to the card's default.
+   Close Cassette and open it: the last choice of the three rows is back. `~/.config/cassette/settings.json` holds `format`,
+   `rate` and `quality` (and `format_preset` after a preset).
 
 Report: the row texts (value and every line) as read, the picker figure against the file size per format (a small
 table), the notice texts, the window's format text after choosing FLAC and Opus, what the page looked like when a row
-was dimmed, any cut or overlapping text.
+was dimmed, any cut or overlapping text, and for step 8 a table: choice, rate / bits / codec read from the file.
 
 ## Results
 
@@ -552,7 +574,7 @@ was dimmed, any cut or overlapping text.
 | B16 square screen |  |  |  |
 | B17 FLAC and Opus |  |  |  |
 | B18 FLAC and Opus playback, trim |  |  |  |
-| B19 Format picker |  |  |  |
+| B19 Codec, rate and quality pickers |  |  |  |
 
 **What to send back:** the table; the probe output per board (B0); the `watch` and `take` outputs of B1, B3, B4; the
 `ui` log line per board; the notice texts as you read them; screenshots or photos of anything cut, overlapping or odd.

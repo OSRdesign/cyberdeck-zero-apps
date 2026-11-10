@@ -148,20 +148,30 @@ ui::UiActions Binder::actions()
     a.setting_choice = [this](const std::string &id, int c) {
         if (id == "input") {
             post([this, c] { port_.select_card(c); });
-        } else if (id == "format") {
-            /* the Format picker's entry: the model's list for this card, in the row's order */
+        } else if (id == "codec" || id == "rate" || id == "quality") {
+            /* the picker's entry: the model's list for this card, in the row's order (a preset sets the codec and its
+             * bit rate; any other entry carries the stored values it leads to, and the notice naming what else moved) */
             const Snapshot s = have_snap_ ? snap_ : Snapshot();
-            const std::vector<FormatChoice> list = format_picker(s).list;
+            const ParamPicker pk = id == "codec" ? codec_picker(s) : id == "rate" ? rate_picker(s) : quality_picker(s);
             std::string why;
-            const FormatChoice *f = selectable_format(list, c, &why);
-            if (!f) {
+            const ParamItem *it = selectable_param(pk, c, &why);
+            if (!it) {
                 if (!why.empty()) push_notice(why);
                 return;
             }
-            const FormatKey key = f->key;
-            post([this, key] {
-                if (!port_.set_format_choice(key.format, key.preset)) notice_from_job("The format cannot be changed now");
-            });
+            if (it->preset) {
+                const FormatKey key = it->key;
+                post([this, key] {
+                    if (!port_.set_format_choice(key.format, key.preset)) notice_from_job("The format cannot be changed now");
+                });
+            } else {
+                const RecStored st = it->change.stored;
+                post([this, st] {
+                    if (!port_.set_rec_params(st.codec, st.preset, st.rate, st.quality))
+                        notice_from_job("The format cannot be changed now");
+                });
+                if (!it->change.message.empty()) push_notice(it->change.message);
+            }
         } else if (id == "timer") {
             if (c < 0 || c > 3) return;
             const int secs = kTimerChoices[c];

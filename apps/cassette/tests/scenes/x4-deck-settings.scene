@@ -10,7 +10,7 @@ wait 400
 shot deck-settings
 expect notext "LAYOUT FAIL"
 scrollmark
-dragon "Format" -0.2
+dragon "Codec" -0.2
 expect scrolled
 drag 0.5 0.8 0.5 0.15
 drag 0.5 0.8 0.5 0.15

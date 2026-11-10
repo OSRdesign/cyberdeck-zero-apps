@@ -506,6 +506,176 @@ void t_set_format_choice() {
     CHECK(r.wait_state(kDeckIdle));
 }
 
+/* what the controller asked the fake card for (under the fake's lock: the controller thread opens it) */
+HwRequest last_request(Rig &r) {
+    HwRequest q;
+    r.alsa.with([&q](ToneAlsa &a) { q = a.requests.back(); });
+    return q;
+}
+size_t request_count(Rig &r) {
+    size_t n = 0;
+    r.alsa.with([&n](ToneAlsa &a) { n = a.requests.size(); });
+    return n;
+}
+
+/* The three parameters on a card with several rates and 24-bit capture: the stored rate and quality reopen the capture at once
+ * (the hardware request follows), the take is written in them, Opus gets any bit rate of the list, a refused value or a take
+ * running changes nothing, and the settings file keeps the new keys beside the old ones. */
+void t_rec_params() {
+    std::vector<FakeCard> cards = one_card(); /* mono */
+    cards[0].offer.rates = {16000, 44100, 48000};
+    cards[0].offer.formats = {SampleFormat::S16_LE, SampleFormat::S24_3LE};
+    Rig r(cards);
+    use_test_codecs(r);
+    static std::atomic<int> seen_bps;
+    seen_bps = 0;
+    r.cfg.make_encoder = [](const FormatChoice &c, const AudioFormat &f) -> std::unique_ptr<Encoder> {
+        seen_bps = c.opus_bitrate_bps;
+        if (c.key.format == RecFormat::Flac) return std::unique_ptr<Encoder>(new fx::VerbatimFlac(f, 4096));
+        return std::unique_ptr<Encoder>(new fx::PlainOggOpus(f, static_cast<unsigned>(c.opus_bitrate_bps / 8 / 50), 50));
+    };
+    r.cfg.writer_sync_ms = 500;
+    r.open();
+    Controller &c = r.ctl();
+    CHECK(r.wait_meter());
+    Snapshot s = r.snap();
+    CHECK(s.format_inputs.rates == (std::vector<uint32_t>{16000, 44100, 48000}));
+    CHECK(s.format_inputs.has16 && s.format_inputs.has24);
+    CHECK_EQ(s.take.format_text, "48k/16 WAV"); /* no rate and no quality stored: the card's default, as before */
+    CHECK(last_request(r).rate == 48000 && last_request(r).format == SampleFormat::S16_LE);
+
+    /* a rate: the capture reopens at it */
+    CHECK(c.set_rec_params(RecFormat::Wav, "", 44100, 0));
+    CHECK(r.wait_meter());
+    s = r.snap();
+    CHECK_EQ(s.take.format_text, "44.1k/16 WAV");
+    CHECK(s.settings.rate == 44100 && s.settings.quality == 0 && s.settings.format == RecFormat::Wav);
+    CHECK_EQ(last_request(r).rate, 44100u);
+    CHECK(record(r, 1.0));
+    std::vector<TakeRow> rows = c.takes();
+    CHECK(rows.size() == 1 && rows[0].rate == 44100u && rows[0].bits == 16);
+    /* a bit depth: the card's 24-bit format, packed */
+    CHECK(c.set_rec_params(RecFormat::Wav, "", 0, 24)); /* rate back to the default (48 kHz) */
+    CHECK(r.wait_meter());
+    s = r.snap();
+    CHECK_EQ(s.take.format_text, "48k/24 WAV");
+    CHECK(last_request(r).rate == 48000 && last_request(r).format == SampleFormat::S24_3LE);
+    CHECK(record(r, 0.5));
+    rows = c.takes();
+    CHECK(rows.size() == 2 && rows[0].bits == 24 && rows[0].rate == 48000u);
+    /* FLAC at 16 kHz 16-bit */
+    CHECK(c.set_rec_params(RecFormat::Flac, "", 16000, 16));
+    CHECK(r.wait_meter());
+    CHECK_EQ(r.snap().take.format_text, "16k/16 FLAC");
+    CHECK(record(r, 0.5));
+    rows = c.takes();
+    CHECK(rows.size() == 3 && rows[0].format_tag == "FLAC" && rows[0].rate == 16000u);
+    /* Opus: every bit rate of the list reaches the encoder (and the journal), at 48 kHz and at 16 kHz */
+    for (int k : kOpusKbps) {
+        CHECK(c.set_rec_params(RecFormat::Opus, "", k % 32 == 0 ? 16000 : 0, k));
+        CHECK(r.wait_meter());
+        const bool at16 = k % 32 == 0;
+        CHECK_EQ(r.snap().take.format_text, at16 ? "16k/16 OPUS" : "48k/16 OPUS");
+        seen_bps = 0;
+        CHECK(record(r, 0.3));
+        CHECK_EQ(seen_bps.load(), k * 1000);
+        rows = c.takes();
+        const JournalEntry je = journal_of(r, rows[0].name);
+        CHECK_EQ(je.bitrate_bps, k * 1000);
+        CHECK_EQ(je.codec, "opus");
+        CHECK_EQ(je.fmt.rate, at16 ? 16000u : 48000u);
+        CHECK_EQ(je.codec_preset, preset_of_kbps(k));
+        CHECK(!je.force_mono); /* a mono card: nothing to fold */
+    }
+    /* a stored Opus rate the codec cannot use (hand-edited file, 44.1 kHz): the card's own default for Opus, 48 kHz */
+    CHECK(c.set_rec_params(RecFormat::Opus, "", 44100, 64));
+    CHECK(r.wait_meter());
+    CHECK_EQ(r.snap().take.format_text, "48k/16 OPUS");
+
+    /* refused values and a running take: nothing changes */
+    CHECK(!c.set_rec_params(RecFormat::Opus, "", 0, 40));      /* not in the list */
+    CHECK(!c.set_rec_params(RecFormat::Wav, "", 0, 20));       /* not a depth */
+    CHECK(!c.set_rec_params(RecFormat::Wav, "", 100, 0));      /* not a rate */
+    CHECK(!c.set_rec_params(RecFormat::Wav, "speech24", 0, 0)); /* a preset of another codec */
+    CHECK(!c.set_rec_params(RecFormat::Opus, "bogus", 0, 0));
+    s = r.snap();
+    CHECK(s.settings.format == RecFormat::Opus && s.settings.rate == 44100 && s.settings.quality == 64);
+    CHECK(c.set_rec_params(RecFormat::Wav, "", 0, 0));
+    CHECK(r.wait_meter());
+    c.key_event(KeyEvent::Rec);
+    CHECK(r.wait_state(kDeckRecording));
+    const size_t reqs = request_count(r);
+    CHECK(!c.set_rec_params(RecFormat::Wav, "", 16000, 0));
+    CHECK(!c.set_format_choice(RecFormat::Flac, ""));
+    CHECK(r.snap().settings.rate == 0 && request_count(r) == reqs); /* no reopen while recording */
+    c.key_event(KeyEvent::Stop);
+    CHECK(r.wait_state(kDeckIdle));
+
+    /* the file keeps the new keys beside the old ones; a preset resets rate and quality */
+    CHECK(c.set_rec_params(RecFormat::Opus, "", 16000, 96));
+    std::string body = slurp(r.home + "/.config/cassette/settings.json");
+    CHECK(body.find("\"rate\": 16000") != std::string::npos || body.find("\"rate\":16000") != std::string::npos);
+    CHECK(body.find("96") != std::string::npos && body.find("\"opus\"") != std::string::npos);
+    CHECK(c.set_format_choice(RecFormat::Opus, "speech24"));
+    CHECK(r.wait_meter());
+    s = r.snap();
+    CHECK(s.settings.rate == 0 && s.settings.quality == 0 && s.settings.format_preset == "speech24");
+    CHECK_EQ(s.take.format_text, "48k/16 OPUS");
+    body = slurp(r.home + "/.config/cassette/settings.json");
+    CHECK(body.find("\"rate\"") == std::string::npos && body.find("\"quality\"") == std::string::npos);
+    /* the next start reads them back */
+    CHECK(c.set_rec_params(RecFormat::Flac, "", 44100, 24));
+    r.close();
+    r.open();
+    CHECK(r.wait_meter());
+    s = r.snap();
+    CHECK(s.settings.format == RecFormat::Flac && s.settings.rate == 44100 && s.settings.quality == 24);
+    CHECK_EQ(s.take.format_text, "44.1k/24 FLAC");
+    CHECK_EQ(last_request(r).rate, 44100u);
+    CHECK(last_request(r).format == SampleFormat::S24_3LE);
+}
+
+/* An old settings file (format and preset only) records exactly as before on a card with several rates, and on a card that
+ * has only 44.1 kHz an Opus choice can be stored and records as WAV at the card's rate (Opus dimmed, never resampled). */
+void t_rec_params_old_and_44k() {
+    {
+        std::vector<FakeCard> cards = one_card();
+        cards[0].offer.rates = {16000, 44100, 48000};
+        Rig r(cards);
+        use_test_codecs(r);
+        write_settings(r.home, "{\"version\": 1, \"format\": \"opus\", \"format_preset\": \"music64\"}");
+        r.cfg.writer_sync_ms = 500;
+        r.open();
+        CHECK(r.wait_meter());
+        CHECK_EQ(r.snap().take.format_text, "48k/16 OPUS");
+        CHECK_EQ(last_request(r).rate, 48000u);
+        CHECK(record(r, 0.4));
+        const std::vector<TakeRow> rows = r.ctl().takes();
+        CHECK(rows.size() == 1 && rows[0].format_tag == "OPUS");
+        const JournalEntry je = journal_of(r, rows[0].name);
+        CHECK_EQ(je.bitrate_bps, 64000);
+        CHECK_EQ(je.codec_preset, "music64");
+    }
+    {
+        std::vector<FakeCard> cards = one_card();
+        cards[0].offer.rates = {44100};
+        Rig r(cards);
+        use_test_codecs(r);
+        r.cfg.writer_sync_ms = 500;
+        r.open();
+        Controller &c = r.ctl();
+        CHECK(r.wait_meter());
+        CHECK_EQ(r.snap().take.format_text, "44.1k/16 WAV");
+        CHECK(codec_rates(r.snap().format_inputs, RecFormat::Opus).empty());
+        CHECK(c.set_rec_params(RecFormat::Opus, "", 0, 64)); /* stored (the UI never offers it) */
+        CHECK_EQ(r.snap().take.format_text, "44.1k/16 WAV"); /* the safety net: WAV */
+        CHECK_EQ(last_request(r).rate, 44100u);
+        CHECK(record(r, 0.4));
+        const std::vector<TakeRow> rows = c.takes();
+        CHECK(rows.size() == 1 && rows[0].format_tag == "WAV" && rows[0].rate == 44100u);
+    }
+}
+
 }  // namespace
 
 void test_formats_app() {
@@ -517,4 +687,6 @@ void test_formats_app() {
     t_repair_at_launch();
     t_flac_disk_full();
     t_set_format_choice();
+    t_rec_params();
+    t_rec_params_old_and_44k();
 }

@@ -43,8 +43,9 @@
  *     user loaded (load(); select_take / play_take also set it); deleting it leaves the deck empty.
  *   - wind mode and low cut are the same switch (the 80 Hz high-pass, D18); set_wind_mode() is an alias.
  *   - set_format() still accepts only Wav (the Format row is the owner's design, a later task). A take records as FLAC
- *     or Ogg Opus when the STORED setting ("format" + "format_preset") asks for it and effective_choice() allows it on
- *     the capture format and the libraries found (codec/formats.hpp); otherwise as WAV. The recorder's format text, the
+ *     or Ogg Opus when the STORED setting ("format", "format_preset", "rate", "quality": codec, sample rate, quality)
+ *     asks for it and effective_for() allows it on the card's offer and the libraries found (codec/formats.hpp);
+ *     otherwise as WAV. The capture is opened at the stored rate and bit depth the card offers (set_rec_params reopens it). The recorder's format text, the
  *     hours left and the journal follow the choice. FLAC/Opus takes play, preview, scan, show their peaks and trim like
  *     WAV takes (phase C, codec/decoder.hpp); when the take's decoder library is missing, LOAD, PLAY, the preview and
  *     TRIM refuse with one notice ("This take cannot be played: FLAC not installed (libflac14)").
@@ -332,6 +333,12 @@ public:
      * "speech24" .. "music128" for Opus). false: not a format of the model, or a take or the countdown is running. Not
      * checked against the card: a stored choice the card cannot record falls back to WAV when a take starts. */
     bool set_format_choice(RecFormat f, const std::string &preset);
+    /* The three parameters (Settings: Codec, Sample rate, Quality) as settings.json stores them: the codec, an Opus
+     * preset or "", the rate in Hz (0: the card's default), the quality (WAV, FLAC: 16 or 24; Opus: 16, 24, 32, 48, 64,
+     * 96 or 128 kbps; 0: the default). A change of rate or bit depth reopens the capture at once (nothing runs then);
+     * never while a take or the countdown runs (false). A combination the card cannot record is stored all the same and
+     * falls back to WAV when a take starts (codec/formats.hpp effective_for). false also: a value outside those lists. */
+    bool set_rec_params(RecFormat f, const std::string &preset, int rate, int quality);
     bool set_folder(const std::string &folder);
     bool set_prefix(const std::string &prefix);
     /* The Take number setting: the next take gets `n` (1..9999), moved forward past numbers the file prefix already

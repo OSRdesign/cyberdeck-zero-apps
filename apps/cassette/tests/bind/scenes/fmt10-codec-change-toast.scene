@@ -1,0 +1,83 @@
+title Cassette bound (studio input): 44.1 kHz chosen, then the Opus codec: the rate moves to 48 kHz and a line names it; the Bit rate picker; Opus dims 44.1 and 96 kHz in the Sample rate picker
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO 1
+env CASSETTE_DEMO_HOME demo-home
+env CASSETTE_DEMO_CARD rich
+env CASSETTE_DEMO_CODECS both
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 1500
+key s
+wait 500
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 500
+key up
+key enter
+wait 800
+expect text "44.1 kHz"
+shot settings-44k
+expect notext "LAYOUT FAIL"
+key down
+key down
+key down
+key down
+key enter
+wait 500
+key down
+key down
+key enter
+wait 800
+expect text "Sample rate set to 48 kHz: Opus cannot record at 44.1 kHz"
+shot settings-opus-toast
+expect notext "LAYOUT FAIL"
+say the line stays a few seconds; the footer of the next page shows when it has gone
+wait 4500
+key down
+key down
+key down
+key down
+key down
+key down
+wait 300
+expect text "Bit rate"
+shot settings-opus-rows
+expect notext "LAYOUT FAIL"
+key up
+key enter
+wait 500
+expect text "Opus needs 8, 12, 16, 24 or 48 kHz"
+expect text "Sizes for Opus, 32 kbps, this card"
+shot rate-opus
+expect notext "LAYOUT FAIL"
+key down
+key enter
+wait 300
+expect text "Not available: Opus needs 8, 12, 16, 24 or 48 kHz"
+shot rate-opus-notice
+expect notext "LAYOUT FAIL"
+key esc
+wait 300
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 500
+shot bitrate-picker
+expect notext "LAYOUT FAIL"
+key down
+key down
+key enter
+wait 800
+expect text "64 kbps"
+shot settings-64
+expect notext "LAYOUT FAIL"
+expect noquit

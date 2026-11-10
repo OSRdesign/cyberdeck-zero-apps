@@ -67,6 +67,8 @@ const char *format_key(RecFormat f) {
 const char *scan_mode_key(ScanMode m) { return m == ScanMode::Jump ? "jump" : "scan"; }
 
 void clamp_settings(Settings &s) {
+    if (s.rate < 0) s.rate = 0;
+    if (s.quality < 0) s.quality = 0;
     if (s.sync_interval_s < kSyncMin) s.sync_interval_s = kSyncMin;
     if (s.sync_interval_s > kSyncMax) s.sync_interval_s = kSyncMax;
     int best = kRecordTimerChoices[0];
@@ -102,6 +104,9 @@ int SettingsStore::load() {
     if (get_str(root, "format_preset", str) && str.size() <= 32 &&
         str.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789-") == std::string::npos)
         s_.format_preset = str;
+    /* "rate" and "quality" (the three-parameter Format flow); absent or out of range: 0, the default */
+    if (get_num(root, "rate", d) && d >= 8000 && d <= 768000) s_.rate = static_cast<int>(std::lround(d));
+    if (get_num(root, "quality", d) && d >= 1 && d <= 1000) s_.quality = static_cast<int>(std::lround(d));
     if (get_str(root, "folder", str) && valid_folder(str)) s_.folder = str;
     if (get_str(root, "prefix", str) && valid_prefix(str)) s_.prefix = str;
     if (get_num(root, "sync_interval_s", d)) s_.sync_interval_s = static_cast<int>(std::lround(clampd(d, -1e6, 1e6)));
@@ -145,6 +150,10 @@ int SettingsStore::save() {
     root.set("format", json::Value::string(format_key(s_.format)));
     if (s_.format_preset.empty()) root.erase("format_preset"); /* absent = the format's default (older files) */
     else root.set("format_preset", json::Value::string(s_.format_preset));
+    if (s_.rate <= 0) root.erase("rate"); /* absent = the default (older files) */
+    else root.set("rate", json::Value::number(s_.rate));
+    if (s_.quality <= 0) root.erase("quality");
+    else root.set("quality", json::Value::number(s_.quality));
     root.set("folder", json::Value::string(s_.folder));
     root.set("prefix", json::Value::string(s_.prefix));
     root.set("sync_interval_s", json::Value::number(s_.sync_interval_s));

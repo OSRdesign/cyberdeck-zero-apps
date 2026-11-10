@@ -12,7 +12,8 @@
  * carries no identity and is left out. LVGL-free.
  *
  * File format (all keys optional):
- *   { "version": 1, "format": "wav"|"flac"|"opus", "folder": "~/Recordings", "prefix": "take",
+ *   { "version": 1, "format": "wav"|"flac"|"opus", "format_preset": "speech24"|..., "rate": Hz, "quality": 16|24|kbps,
+ *     "folder": "~/Recordings", "prefix": "take",
  *     "sync_interval_s": 5..30, "auto_split": true (4 GiB parts) | false (one RF64 file),
  *     "record_timer_s": 0|3|10|20, "rew_fwd": "scan" (5x, held) | "jump" (5 s per tap),
  *     "low_cut": bool, "limiter": bool, "soft_gain_db": 0..24,
@@ -43,6 +44,9 @@ extern const int kRecordTimerChoices[4];                       /* 0 (Off), 3, 10
 struct Settings {
     RecFormat format = RecFormat::Wav;
     std::string format_preset; /* "format_preset": a preset of the format (codec/formats.hpp), "" = its default */
+    int rate = 0;    /* "rate": the capture sample rate in Hz the user chose; 0 = the card's default for the codec */
+    int quality = 0; /* "quality": WAV / FLAC: the bit depth (16 or 24); Opus: the bit rate in kbps; 0 = the default (a
+                      * preset's bit rate, else 16-bit, else Opus 32 kbps) */
     std::string folder = "~/Recordings";
     std::string prefix = "take";
     int sync_interval_s = kSyncDefault;
