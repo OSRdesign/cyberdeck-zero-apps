@@ -21,8 +21,20 @@ std::string error_text(int r)
 {
     if (r == -EBUSY) return "the take is in use";
     if (r == -EEXIST) return "that name is taken";
-    if (r == -EINVAL) return "use letters, digits, - and _ (1 to 24)";
+    if (r == -EINVAL || r == kRenameBadChar) return "use letters, digits, space, - and _";
+    if (r == kRenameTooLong) return "up to 24 characters";
+    if (r == kRenameEmpty) return "the name is empty";
+    if (r == kRenameNotTake) return "this file is not a Cassette take and cannot be renamed";
     return std::strerror(-r);
+}
+
+const char *prefix_problem_text(PrefixProblem p)
+{
+    switch (p) {
+    case PrefixProblem::Empty: return "the name is empty";
+    case PrefixProblem::TooLong: return "up to 24 characters";
+    default: return "use letters, digits, space, - and _";
+    }
 }
 
 } // namespace
@@ -190,10 +202,16 @@ ui::UiActions Binder::actions()
             if (c.has_level) port_.set_level_db(std::clamp(c.level_min_db + pos, c.level_min_db, c.level_max_db));
         });
     };
-    a.setting_text = [this](const std::string &id, const std::string &text) {
+    a.setting_text = [this](const std::string &id, const std::string &typed) {
         if (id != "prefix") return;
+        const std::string text = trim_prefix(typed);
+        const PrefixProblem pp = prefix_problem(text);
+        if (pp != PrefixProblem::Ok) {
+            push_notice(std::string("Prefix not changed: ") + prefix_problem_text(pp));
+            return;
+        }
         post([this, text] {
-            if (!port_.set_prefix(text)) notice_from_job("Prefix not changed: use letters, digits, - and _ (1 to 24)");
+            if (!port_.set_prefix(text)) notice_from_job("Prefix not changed: use letters, digits, space, - and _ (1 to 24)");
         });
     };
 
@@ -245,8 +263,9 @@ ui::UiActions Binder::actions()
             if (!port_.load(name)) notice_from_job("The take could not be loaded");
         });
     };
-    a.list_rename = [this](int i, const std::string &prefix) {
+    a.list_rename = [this](int i, const std::string &typed) {
         const std::string name = take_at(i);
+        const std::string prefix = trim_prefix(typed); /* spaces around the name never count */
         if (name.empty() || prefix == vm_.list.takes[static_cast<size_t>(i)].prefix) return;
         post([this, name, prefix] {
             const int r = port_.rename_take(name, prefix);

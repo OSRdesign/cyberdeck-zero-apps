@@ -5,12 +5,12 @@
  *
  * Grammar of a take file name (D15, amended for edits):
  *   <prefix>_<take>_<when>[_p<part>][-<edit>].wav
- *   prefix  1..24 of [A-Za-z0-9_-], not starting with '.' (so never "." or ".."), no path separators
+ *   prefix  1..24 of [A-Za-z0-9 _-], not starting with '.' (so never "." or ".."), no path separators, no space first or last
  *   take    decimal, zero-padded to at least 3 digits ("006", "999", "1000")
  *   when    YYYYMMDD-HHMM (local time) or "nodate" while the clock has not been set
  *   part    auto-split part 2, 3, ... (part 1, the first file of a take, has no suffix)
  *   edit    1, 2, 3 ... : results of trim/split, never reused for the same take (and part)
- * The name is parsed from the right, so a prefix may itself contain '_' and '-'.
+ * The name is parsed from the right, so a prefix may itself contain '_', '-' and inner spaces.
  *
  * The take counter lives in <recordings>/.take-counter (the last take number handed out, decimal) and is replaced
  * atomically. A new number is counter + 1, moved forward past any number the same prefix already uses in the folder's
@@ -66,8 +66,13 @@ private:
     std::string marker_;
 };
 
-/* Prefix rule: 1..kMaxPrefix characters of letters, digits, '-' and '_'; never starting with '.' (implied). */
+/* Prefix rule: 1..kMaxPrefix characters of letters, digits, space, '-' and '_'; never starting with '.', never starting
+ * or ending with a space (inner spaces, one or several, are fine). */
+enum class PrefixProblem { Ok, Empty, TooLong, BadChar };
+PrefixProblem prefix_problem(const std::string &prefix); /* why a prefix is refused (too long wins over a bad character) */
 bool valid_prefix(const std::string &prefix);
+/* Without leading and trailing spaces (what a text entry hands over before it is validated). */
+std::string trim_prefix(const std::string &prefix);
 
 struct TakeName {
     std::string prefix;

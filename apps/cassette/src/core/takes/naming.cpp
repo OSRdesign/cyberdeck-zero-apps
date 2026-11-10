@@ -148,14 +148,25 @@ bool datetime_from_wall(int64_t wall_s, DateTime &out, bool utc) {
 
 bool TimesyncClockState::synchronized() { return path_exists(ops_, marker_); }
 
-bool valid_prefix(const std::string &p) {
-    if (p.empty() || p.size() > kMaxPrefix || p[0] == '.') return false;
+PrefixProblem prefix_problem(const std::string &p) {
+    if (p.empty()) return PrefixProblem::Empty;
+    if (p.size() > kMaxPrefix) return PrefixProblem::TooLong;
+    if (p[0] == '.' || p[0] == ' ' || p.back() == ' ') return PrefixProblem::BadChar;
     for (char c : p) {
         const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' ||
-                        c == '_';
-        if (!ok) return false;
+                        c == '_' || c == ' ';
+        if (!ok) return PrefixProblem::BadChar;
     }
-    return true;
+    return PrefixProblem::Ok;
+}
+
+bool valid_prefix(const std::string &p) { return prefix_problem(p) == PrefixProblem::Ok; }
+
+std::string trim_prefix(const std::string &p) {
+    size_t a = 0, b = p.size();
+    while (a < b && p[a] == ' ') ++a;
+    while (b > a && p[b - 1] == ' ') --b;
+    return p.substr(a, b - a);
 }
 
 std::string take_number_text(uint64_t take) {

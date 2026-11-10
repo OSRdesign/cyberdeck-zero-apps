@@ -128,6 +128,42 @@ void test_naming() {
     CHECK(parse_take_name("a_001_nodate_002_nodate.wav", t));
     CHECK_EQ(t.prefix, std::string("a_001_nodate"));
     CHECK_EQ(t.take, static_cast<uint64_t>(2));
+    /* prefixes with '_' and '-' (the owner's rename report): parsed from the right, every combination round-trips */
+    for (const char *pre : {"a_b", "a-b", "my_take-2", "a_b-c_d", "_", "-", "x_1", "x-1", "a_p2", "a-2", "take_007", "1_2_3"})
+        for (uint64_t n : {1ull, 7ull, 999ull, 1000ull, 4096ull, 9999ull, 123456ull})
+            for (bool dated : {true, false})
+                for (uint32_t part : {1u, 3u})
+                    for (uint32_t edit : {0u, 2u}) {
+                        const TakeName x = tn(pre, n, dated, part, edit);
+                        TakeName y;
+                        const std::string f = format_take_name(x);
+                        CHECK(parse_take_name(f, y));
+                        CHECK_EQ(y.prefix, std::string(pre));
+                        CHECK_EQ(y.take, n);
+                        CHECK_EQ(y.part, part);
+                        CHECK_EQ(y.edit, edit);
+                        CHECK_EQ(format_take_name(y), f);
+                    }
+    /* spaces in a prefix: round trip, labels, edit names */
+    {
+        TakeName y;
+        CHECK(parse_take_name("my  band 2_007_20261109-1403.wav", y));
+        CHECK_EQ(y.prefix, std::string("my  band 2"));
+        CHECK_EQ(y.take, static_cast<uint64_t>(7));
+        CHECK_EQ(format_take_name(y), std::string("my  band 2_007_20261109-1403.wav"));
+        CHECK(parse_take_name("my band_007_nodate_p2-3.wav", y));
+        CHECK_EQ(y.prefix, std::string("my band"));
+        CHECK_EQ(y.part, 2u);
+        CHECK_EQ(y.edit, 3u);
+        CHECK(!parse_take_name(" lead_007_nodate.wav", y));
+        CHECK(!parse_take_name("trail _007_nodate.wav", y));
+        const std::vector<std::string> en = next_edit_names("my band_007_20261109-1403.wav", 2, {});
+        CHECK_EQ(en.size(), 2u);
+        CHECK_EQ(en[0], std::string("my band_007_20261109-1403-1.wav"));
+        CHECK_EQ(en[1], std::string("my band_007_20261109-1403-2.wav"));
+        CHECK_EQ(edit_record_key("my band_007_20261109-1403_p2-1.wav"), std::string("007_p2"));
+        CHECK_EQ(file_stem("my band_007_nodate.wav"), std::string("my band_007_nodate"));
+    }
     /* round trip */
     for (const TakeName &x : {tn("take", 6, true), tn("x-y_z", 1001, false, 1, 9), tn("Q", 0, true, 4, 0),
                               tn("take", 42, false, 2, 5)}) {
@@ -159,7 +195,26 @@ void test_naming() {
     CHECK(!valid_prefix("a\\b"));
     CHECK(!valid_prefix(".hidden"));
     CHECK(!valid_prefix(".."));
-    CHECK(!valid_prefix("a b"));
+    CHECK(valid_prefix("a b"));
+    CHECK(valid_prefix("my  band 2")); /* inner spaces, several in a row */
+    CHECK(!valid_prefix(" a"));
+    CHECK(!valid_prefix("a "));
+    CHECK(!valid_prefix(" "));
+    CHECK(!valid_prefix("a	b"));
+    CHECK(valid_prefix(std::string(24, 'a')));
+    CHECK(valid_prefix("a" + std::string(22, ' ') + "b"));
+    CHECK(!valid_prefix("a" + std::string(23, ' ') + "b")); /* 25 */
+    CHECK(prefix_problem("ok name") == PrefixProblem::Ok);
+    CHECK(prefix_problem("") == PrefixProblem::Empty);
+    CHECK(prefix_problem(std::string(25, 'a')) == PrefixProblem::TooLong);
+    CHECK(prefix_problem("a/b") == PrefixProblem::BadChar);
+    CHECK(prefix_problem(".x") == PrefixProblem::BadChar);
+    CHECK(prefix_problem(" x") == PrefixProblem::BadChar);
+    CHECK(prefix_problem("café") == PrefixProblem::BadChar);
+    CHECK_EQ(trim_prefix("  my band  "), std::string("my band"));
+    CHECK_EQ(trim_prefix("a  b"), std::string("a  b"));
+    CHECK_EQ(trim_prefix("   "), std::string());
+    CHECK_EQ(trim_prefix(""), std::string());
     CHECK(!valid_prefix("caf\xC3\xA9"));
     CHECK(!valid_prefix(std::string("a\0b", 3)));
 }
@@ -316,6 +371,22 @@ void test_take_number_setting() {
     CHECK_EQ(format_take_name(big), std::string("take_10000_nodate.wav"));
     TakeName p;
     CHECK(parse_take_name(format_take_name(big), p) && p.take == 10000);
+
+    /* a prefix with spaces: its own numbers are skipped, another prefix's are not */
+    {
+        TempDir d3;
+        const std::string dir3 = d3.file("Rec");
+        CHECK_EQ(make_dirs(ops, dir3), 0);
+        make_wav(dir3 + "/my band_001_nodate.wav", 10);
+        make_wav(dir3 + "/my band_002_nodate-1.wav", 10);
+        make_wav(dir3 + "/my_band_003_nodate.wav", 10);
+        CHECK_EQ(set_next_take_number(ops, dir3, "my band", 1, landed), 0);
+        CHECK_EQ(landed, static_cast<uint64_t>(3)); /* "my_band" 003 is another prefix */
+        CHECK_EQ(set_next_take_number(ops, dir3, "my_band", 1, landed), 0);
+        CHECK_EQ(landed, static_cast<uint64_t>(1));
+        CHECK_EQ(reserve_take_number(ops, dir3, t, "my band"), 0);
+        CHECK_EQ(t, static_cast<uint64_t>(3));
+    }
 
     /* collision guard: takes 001..003 exist, reset to 1 lands on 004 */
     TempDir d2;

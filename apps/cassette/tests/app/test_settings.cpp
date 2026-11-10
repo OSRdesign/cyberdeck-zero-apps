@@ -167,6 +167,69 @@ void t_take_number() {
     r.close();
 }
 
+/* A prefix with spaces on the real controller: the setting sticks across a restart, a recording and its journal and peak
+ * names carry it, a rename (with '_' and '-') works and says why when refused. */
+std::vector<std::string> posix_file_ops_list(const std::string &dir) {
+    std::vector<std::string> n;
+    posix_file_ops().list_dir(dir, n);
+    return n;
+}
+
+int c_rename(Rig &r, const std::string &name, const std::string &prefix, std::string *nn, RenameRefusal *why) {
+    std::string out;
+    const int rc = r.ctl().rename_take(name, prefix, &out, why);
+    if (nn && rc == 0) *nn = out;
+    return rc;
+}
+
+void t_prefix_spaces() {
+    Rig r(one_card());
+    r.open();
+    Controller &c = r.ctl();
+    CHECK(r.wait_meter());
+    CHECK(c.set_prefix("my  band 2"));
+    CHECK(!c.set_prefix(" lead"));
+    CHECK(!c.set_prefix("trail "));
+    CHECK(!c.set_prefix(std::string(25, 'a')));
+    CHECK(c.set_prefix(std::string(10, 'a') + " " + std::string(13, 'b'))); /* 24 */
+    CHECK(c.set_prefix("my  band 2"));
+    CHECK(c.set_record_timer(0));
+    c.key_event(KeyEvent::Rec);
+    CHECK(r.wait_state(kDeckRecording));
+    CHECK(r.wait([](const Snapshot &x) { return x.time.elapsed_s >= 0.4; }));
+    c.key_event(KeyEvent::Stop);
+    CHECK(r.wait_state(kDeckIdle));
+    std::vector<TakeRow> rows = c.takes();
+    CHECK_EQ(rows.size(), 1u);
+    if (rows.empty()) return;
+    const std::string name = rows[0].name;
+    CHECK(name.compare(0, 16, "my  band 2_001_2") == 0 || name.compare(0, 18, "my  band 2_001_nod") == 0);
+    TakeName tn;
+    CHECK(parse_take_name(name, tn));
+    CHECK_EQ(tn.prefix, "my  band 2");
+    bool journal = false;
+    for (const std::string &f : posix_file_ops_list(r.rec() + "/.journal"))
+        if (f.compare(0, 10, "my  band 2") == 0) journal = true;
+    CHECK(journal);
+    /* restart: the prefix is back, the next take uses it */
+    r.close();
+    r.open();
+    CHECK_EQ(r.snap().settings.prefix, "my  band 2");
+    /* rename with '_' and '-', and the reasons */
+    std::string nn;
+    RenameRefusal why = RenameRefusal::None;
+    CHECK_EQ(c_rename(r, name, "my_take-2", &nn, &why), 0);
+    CHECK_EQ(nn.compare(0, 14, "my_take-2_001_"), 0);
+    CHECK_EQ(c_rename(r, nn, "a b", &nn, &why), 0);
+    CHECK_EQ(nn.compare(0, 8, "a b_001_"), 0);
+    CHECK_EQ(c_rename(r, nn, std::string(25, 'x'), nullptr, &why), -EINVAL);
+    CHECK(why == RenameRefusal::TooLong);
+    CHECK_EQ(c_rename(r, nn, "no!", nullptr, &why), -EINVAL);
+    CHECK(why == RenameRefusal::BadChar);
+    CHECK_EQ(c_rename(r, nn, "", nullptr, &why), -EINVAL);
+    CHECK(why == RenameRefusal::Empty);
+}
+
 }  // namespace
 
 void test_settings() {
@@ -174,4 +237,5 @@ void test_settings() {
     t_persistence();
     t_corrupt_settings();
     t_take_number();
+    t_prefix_spaces();
 }

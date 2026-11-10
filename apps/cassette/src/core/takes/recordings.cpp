@@ -203,10 +203,21 @@ int delete_take(FileOps &ops, const std::string &dir, const std::string &take_fi
 }
 
 int rename_take(FileOps &ops, const std::string &dir, const std::string &take_file_name, const std::string &new_prefix,
-                std::string &new_name) {
+                std::string &new_name, RenameRefusal *why) {
+    if (why) *why = RenameRefusal::None;
     const std::string name = base_name(take_file_name);
     TakeName t;
-    if (!valid_prefix(new_prefix) || !parse_take_name(name, t)) return -EINVAL;
+    const PrefixProblem pp = prefix_problem(new_prefix);
+    if (pp != PrefixProblem::Ok || !parse_take_name(name, t)) {
+        if (why) {
+            /* the file comes first: a file that is no take cannot be renamed whatever the new name is */
+            *why = !parse_take_name(name, t)         ? RenameRefusal::NotTake
+                   : pp == PrefixProblem::Empty      ? RenameRefusal::Empty
+                   : pp == PrefixProblem::TooLong    ? RenameRefusal::TooLong
+                                                     : RenameRefusal::BadChar;
+        }
+        return -EINVAL;
+    }
     t.prefix = new_prefix;
     const std::string target = format_take_name(t);
     if (target == name) {

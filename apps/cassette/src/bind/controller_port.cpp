@@ -54,7 +54,19 @@ public:
     bool play_take(const std::string &n) override { return c_.play_take(n); }
     bool load(const std::string &n) override { return c_.load(n); }
     bool preview_take(const std::string &n) override { return c_.preview_take(n); }
-    int rename_take(const std::string &n, const std::string &p) override { return c_.rename_take(n, p); }
+    int rename_take(const std::string &n, const std::string &p) override
+    {
+        RenameRefusal why = RenameRefusal::None;
+        const int r = c_.rename_take(n, p, nullptr, &why);
+        if (r != -EINVAL) return r;
+        switch (why) {
+        case RenameRefusal::Empty: return kRenameEmpty;
+        case RenameRefusal::TooLong: return kRenameTooLong;
+        case RenameRefusal::BadChar: return kRenameBadChar;
+        case RenameRefusal::NotTake: return kRenameNotTake;
+        default: return r;
+        }
+    }
     int delete_take(const std::string &n) override { return c_.delete_take(n); }
     bool open_trim(const std::string &n) override { return c_.open_trim(n); }
     void close_trim() override { c_.close_trim(); }

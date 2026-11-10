@@ -13,6 +13,7 @@
 
 #include "core/app/controller.hpp"
 
+#include <cerrno>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -20,6 +21,9 @@
 
 namespace cassette {
 namespace bind {
+
+constexpr int kRenameEmpty = -ENODATA, kRenameTooLong = -ENAMETOOLONG, kRenameBadChar = -EILSEQ,
+              kRenameNotTake = -ENOTSUP;
 
 class Port {
 public:
@@ -58,6 +62,8 @@ public:
     virtual bool play_take(const std::string &name) = 0;
     virtual bool load(const std::string &name) = 0;         /* LOAD: the take into the deck, nothing playing */
     virtual bool preview_take(const std::string &name) = 0; /* the list's preview: plays without loading */
+    /* 0 or -errno. The Controller's -EINVAL is split by cause (the old -EINVAL, an invalid prefix, stays the answer of the
+     * core): kRenameEmpty, kRenameTooLong, kRenameBadChar for the new name, kRenameNotTake for a file that is no take. */
     virtual int rename_take(const std::string &name, const std::string &new_prefix) = 0;
     virtual int delete_take(const std::string &name) = 0;
     virtual bool open_trim(const std::string &take_name) = 0;

@@ -16,6 +16,7 @@
 
 #include "view_model.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -33,6 +34,14 @@ std::string fmt_short(std::int64_t ms);
 std::string fmt_ruler(std::int64_t ms);
 std::string fmt_zoom(std::int64_t span_ms);
 std::string fmt_db(double db, bool decimal);
+
+/* The name box's remaining-characters counter (owner, 2026-11-10): "<used>/<limit>" under the entry, right aligned. Muted
+ * under 20 used, amber for the last four before full (20 to 23 of 24), red when full (used >= limit). used counts bytes (the name is ASCII). */
+constexpr int kNameLimit = 24;
+enum class CountTone { Muted, Amber, Red };
+std::string name_count_text(std::size_t used, std::size_t limit = kNameLimit);
+CountTone name_count_tone(std::size_t used, std::size_t limit = kNameLimit);
+std::uint32_t name_count_color(CountTone t); /* theme: kHint, kAmber, kRingRed */
 
 /* The LED bar: lit steps for a sample peak in dBFS (the core meter's rule: step i, 0..14, lit when db >= -40 + i*40/14),
  * and the colour band of step i: 0..9 green, 10..12 amber, 13..14 red. */
