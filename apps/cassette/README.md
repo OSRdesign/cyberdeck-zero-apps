@@ -133,10 +133,17 @@ The full map is [`docs/KEYS.md`](docs/KEYS.md).
 Text entry (rename, the file prefix) uses a Bluetooth or USB keyboard; the launcher's fallback keyboard appears only
 when none is connected.
 
+Names (the File prefix setting and RENAME): up to 24 characters of letters, digits, spaces, `-` and `_`, no space first
+or last (spaces typed around a name are dropped), not starting with a dot. RENAME changes only that prefix; the take
+number, date, time, part and edit suffix stay. The box shows `<used>/24` under the entry (grey, amber from 20, red at
+24) and refuses more than 24. A refusal says its cause: `up to 24 characters`, `use letters, digits, space, - and _`,
+`the name is empty`, or `this file is not a Cassette take and cannot be renamed` (a file that does not follow the take
+name pattern).
+
 ## Files the app keeps
 
 - `~/Recordings/` (setting Folder): the takes, `<prefix>_<take>_<YYYYMMDD-HHMM>.wav` (prefix `take` by default, for
-  example `take_006_20261108-1105.wav`). The take number counts up and never repeats, even after a delete (Settings > Take number moves the
+  example `take_006_20261108-1105.wav`; a prefix may hold spaces: `my band_006_20261108-1105.wav`). The take number counts up and never repeats, even after a delete (Settings > Take number moves the
   next number to any value from 1 to 9999: only the next take changes, existing files are never renamed; a number
   that the same prefix already uses in the folder is skipped, so the next free one is taken and the row shows it). The
   number has at least 3 digits (`007`) and grows past 999 (`1000`); the counter is the file `.take-counter` in the folder. The date reads `nodate`

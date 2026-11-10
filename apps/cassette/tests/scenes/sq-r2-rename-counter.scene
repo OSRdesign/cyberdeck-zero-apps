@@ -1,0 +1,38 @@
+title Cassette (square screens): the RENAME box and its remaining-characters counter, empty, mid, 20+ and full
+sizes 720x720 480x480
+ppmm 800
+env CASSETTE_DEMO idle
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key l
+wait 300
+tap "RENAME"
+wait 500
+expect text "Name"
+expect text "4/24"
+key backspace
+key backspace
+key backspace
+key backspace
+wait 300
+expect text "0/24"
+shot rename-count-empty
+type my_take-2
+wait 300
+expect text "9/24"
+shot rename-count-mid
+type _abcdefghijk
+wait 300
+expect text "21/24"
+shot rename-count-amber
+type xyzq
+wait 300
+expect text "24/24"
+shot rename-count-full
+key backspace
+wait 300
+expect text "23/24"
+key esc
+wait 300
+expect noquit

@@ -271,9 +271,15 @@ Report: what came back and what did not.
    (leaves about 230 MB: about 5 minutes of mono). REC and wait. Expected: the notice `Recording stopped: free space is
    low: the take was closed. The take was kept.`; the take plays; REC again is refused with a notice (`... not enough
    free space`). Then **`rm ~/cassette-filler`** and check with `df -h ~`.
-2. **Rename with an invalid name.** List > RENAME: type `a b/c` (a space and a slash). Expected: a notice `Not renamed:
-   ...` (exact text: to confirm), the name unchanged. Settings > File prefix with the same text: `Prefix not changed:
-   use letters, digits, - and _ (1 to 24)`. A valid rename (e.g. `walk`) works and keeps the number, date and time.
+2. **Rename: names and refusals.** List > RENAME: the box shows `4/24` under the entry (a take called `take`). Type
+   `my_take-2`: `9/24` in grey; accepted, the list shows `My_take-2 007`, the number, date and time stay. Rename
+   again to `my band 2` (spaces inside): accepted; the cassette label shows the spaces. Type 20 or more characters: the
+   counter turns amber (20 to 23), red at `24/24`, and further keys add nothing. Refusals: `a b/c` gives `Not renamed:
+   use letters, digits, space, - and _`; an empty name gives `Not renamed: the name is empty`; spaces only are trimmed
+   to empty. Settings > File prefix with the same texts: `Prefix not changed: ...` with the same causes. A name with
+   spaces around (` walk `) is accepted as `walk`. A foreign file in the folder (copy any
+   `interview.wav` in: the list shows it): RENAME on it says `Not renamed: this file is not a Cassette take and cannot
+   be renamed`.
 3. **Delete.** List > DELETE: `Delete this take?` with DELETE and CANCEL; Enter without moving = CANCEL (nothing
    deleted); move to DELETE, Enter: gone from the list and from `~/Recordings`.
 4. **No card.** Unplug every card, open Cassette: `No sound input found. Plug in a USB sound card or headset.`; plug one:

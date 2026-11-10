@@ -10,6 +10,24 @@ using namespace cassette::ui;
 
 namespace {
 
+void name_counter()
+{
+    CHECK_EQ(name_count_text(0), "0/24");
+    CHECK_EQ(name_count_text(9), "9/24");
+    CHECK_EQ(name_count_text(24), "24/24");
+    for (std::size_t n = 0; n <= 19; ++n) {
+        CHECK(name_count_tone(n) == CountTone::Muted);
+        CHECK_EQ(name_count_color(name_count_tone(n)), 0x9B9FA3u);
+    }
+    for (std::size_t n = 20; n <= 23; ++n) {
+        CHECK(name_count_tone(n) == CountTone::Amber);
+        CHECK_EQ(name_count_color(name_count_tone(n)), 0xF0B400u);
+    }
+    CHECK(name_count_tone(24) == CountTone::Red);
+    CHECK_EQ(name_count_color(name_count_tone(24)), 0xE5372Bu);
+    CHECK(name_count_tone(30) == CountTone::Red); /* never more than the limit in practice; still red */
+}
+
 void times()
 {
     CHECK_EQ(fmt_counter(0), "00:00");
@@ -237,6 +255,7 @@ void play_key_and_hubs()
 void test_format()
 {
     times();
+    name_counter();
     levels();
     info();
     list_and_trim();

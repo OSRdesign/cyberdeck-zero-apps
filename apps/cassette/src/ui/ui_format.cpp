@@ -5,6 +5,8 @@
  */
 #include "ui_format.hpp"
 
+#include "theme.hpp"
+
 #include <cmath>
 #include <cstdio>
 
@@ -333,6 +335,23 @@ std::string more_below_fit(const std::vector<std::string> &labels, const std::fu
         out = next;
     }
     return out + (out == "more below: " ? "..." : ", ...");
+}
+
+std::string name_count_text(std::size_t used, std::size_t limit)
+{
+    return std::to_string(used) + "/" + std::to_string(limit);
+}
+
+CountTone name_count_tone(std::size_t used, std::size_t limit)
+{
+    if (used >= limit) return CountTone::Red;
+    if (used + 4 >= limit) return CountTone::Amber; /* the last four before full: 20..23 of 24 */
+    return CountTone::Muted;
+}
+
+std::uint32_t name_count_color(CountTone t)
+{
+    return t == CountTone::Red ? col::kRingRed : t == CountTone::Amber ? col::kAmber : col::kHint;
 }
 
 } // namespace ui

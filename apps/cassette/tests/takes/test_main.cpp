@@ -19,6 +19,7 @@ int main() {
     test_edits();
     test_take_number_setting();
     test_recordings();
+    test_rename_prefixes();
     test_settings();
     std::printf("cassette takes tests: %d checks passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;

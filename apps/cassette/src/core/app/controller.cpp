@@ -1492,12 +1492,13 @@ bool Controller::preview_take(const std::string &name) {
     d.publish();
     return ok;
 }
-int Controller::rename_take(const std::string &name, const std::string &new_prefix, std::string *new_name) {
+int Controller::rename_take(const std::string &name, const std::string &new_prefix, std::string *new_name,
+                            RenameRefusal *why) {
     Locked l(p_->mu);
     Impl &d = *p_;
     if (d.in_use(name)) return -EBUSY;
     std::string out;
-    const int r = cassette::rename_take(*d.ops, d.folder, name, new_prefix, out);
+    const int r = cassette::rename_take(*d.ops, d.folder, name, new_prefix, out, why);
     if (r == 0) {
         if (d.target == name) d.target = out;
         if (new_name) *new_name = out;

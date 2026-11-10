@@ -175,7 +175,21 @@ void test_settings_actions()
     Rig q;
     q.act.setting_text("prefix", "bad name!");
     q.tick();
-    CHECK_EQ(q.binder.vm().notice, "Prefix not changed: use letters, digits, - and _ (1 to 24)");
+    CHECK_EQ(q.binder.vm().notice, "Prefix not changed: use letters, digits, space, - and _");
+    CHECK(!has(q.calls(), "set_prefix bad name!"));
+    /* spaces: inner ones pass, outer ones are trimmed before the check; empty and too long say so */
+    Rig q2;
+    q2.act.setting_text("prefix", "  my band  ");
+    q2.tick();
+    CHECK(has(q2.calls(), "set_prefix my band"));
+    Rig q3;
+    q3.act.setting_text("prefix", "    ");
+    q3.tick();
+    CHECK_EQ(q3.binder.vm().notice, "Prefix not changed: the name is empty");
+    Rig q4;
+    q4.act.setting_text("prefix", std::string(25, 'a'));
+    q4.tick();
+    CHECK_EQ(q4.binder.vm().notice, "Prefix not changed: up to 24 characters");
 }
 
 void test_take_number_action()
@@ -247,6 +261,31 @@ void test_pages_and_list()
     r.tick();
     CHECK_EQ(r.binder.vm().notice, "Not renamed: that name is taken");
     CHECK(has(r.calls(), "rename_take take_007_20261108-1432.wav x"));
+    /* names with '_', '-' and inner spaces reach the port as typed; outer spaces are trimmed */
+    r.port.rename_result = 0;
+    r.act.list_rename(0, "my_take-2");
+    CHECK(has(r.calls(), "rename_take take_007_20261108-1432.wav my_take-2"));
+    r.act.list_rename(0, "  my band 2 ");
+    CHECK(has(r.calls(), "rename_take take_007_20261108-1432.wav my band 2"));
+    /* every refusal says its own cause */
+    const struct { int code; const char *text; } causes[] = {
+        {kRenameTooLong, "Not renamed: up to 24 characters"},
+        {kRenameBadChar, "Not renamed: use letters, digits, space, - and _"},
+        {kRenameEmpty, "Not renamed: the name is empty"},
+        {kRenameNotTake, "Not renamed: this file is not a Cassette take and cannot be renamed"},
+        {-EINVAL, "Not renamed: use letters, digits, space, - and _"},
+        {-EBUSY, "Not renamed: the take is in use"},
+    };
+    r.tick(4100); /* the earlier notice is gone */
+    for (const auto &k : causes) {
+        r.port.rename_result = k.code;
+        r.act.list_rename(0, "zz");
+        r.tick();
+        CHECK_EQ(r.binder.vm().notice, std::string(k.text));
+        r.calls();
+        r.tick(4100);
+    }
+    r.port.rename_result = 0;
 
     /* DELETE asks first */
     r.act.list_delete(1);

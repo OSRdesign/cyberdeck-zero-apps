@@ -52,6 +52,7 @@ void test_counter();
 void test_take_number_setting();
 void test_edits();
 void test_recordings();
+void test_rename_prefixes();
 void test_settings();
 
 namespace tk {

@@ -55,6 +55,7 @@
 #include "../fileops.hpp"
 #include "../frame_sink.hpp"
 #include "../takes/naming.hpp"
+#include "../takes/recordings.hpp"
 #include "../takes/settings.hpp"
 
 #include <cstdint>
@@ -341,7 +342,8 @@ public:
     /* The list's preview: plays a take from its start WITHOUT loading it (the loaded take stays); a second call for
      * another take switches. Stop it with key_event(Stop). Refused while recording. */
     bool preview_take(const std::string &name);
-    int rename_take(const std::string &name, const std::string &new_prefix, std::string *new_name = nullptr); /* 0 or -errno */
+    int rename_take(const std::string &name, const std::string &new_prefix, std::string *new_name = nullptr,
+                    RenameRefusal *why = nullptr); /* 0 or -errno; -EINVAL: see RenameRefusal */
     int delete_take(const std::string &name);    /* 0 or -errno; -EBUSY while it plays or is open for trimming */
 
     /* ---- trim page ---- */

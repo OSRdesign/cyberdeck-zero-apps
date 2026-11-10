@@ -11,6 +11,7 @@
 #include "paint.hpp"
 #include "theme.hpp"
 #include "ui_check.hpp"
+#include "ui_format.hpp"
 
 #include "cp0_ui_metrics_lvgl.h"
 #include "cp0_ui_widgets.hpp"
@@ -20,6 +21,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
@@ -135,6 +137,7 @@ struct CassetteUi::Impl {
     /* the text box (File prefix, RENAME) */
     std::unique_ptr<cp0::ui::Dialog> dialog;
     std::unique_ptr<cp0::ui::TextField> field;
+    lv_obj_t *counter = nullptr; /* the "<used>/24" label under the entry (a child of the dialog's body) */
     std::function<void(const std::string &)> on_text;
     bool closing = false;
     bool held[static_cast<int>(KeyId::kCount)] = {}; /* deck keys held on the keyboard */
@@ -157,6 +160,7 @@ struct CassetteUi::Impl {
     void open_text(const std::string &title, const std::string &label, const std::string &text,
                    std::function<void(const std::string &)> done);
     void close_text();
+    void update_counter(const std::string &text);
     bool box_up() const { return (save && save->shown()) || (confirm && confirm->shown()); }
     PageBase *current() const
     {
@@ -422,9 +426,10 @@ void CassetteUi::Impl::open_text(const std::string &title, const std::string &la
     dialog = std::make_unique<cp0::ui::Dialog>(page->root(), page->layout(), spec);
     cp0::ui::TextFieldSpec fs;
     fs.label = label;
-    fs.text = text;
-    fs.max_bytes = 64;
+    fs.text = text.size() > static_cast<std::size_t>(kNameLimit) ? text.substr(0, kNameLimit) : text;
+    fs.max_bytes = kNameLimit; /* the entry refuses input beyond the limit; the counter shows how much is left */
     cp0::ui::TextFieldEvents fe;
+    fe.changed = [this](const std::string &t) { update_counter(t); };
     fe.submit = [this](const std::string &t) {
         auto cb = on_text;
         close_text();
@@ -433,6 +438,13 @@ void CassetteUi::Impl::open_text(const std::string &title, const std::string &la
     fe.escape = [this] { close_text(); };
     fe.back = [this] { close_text(); };
     field = std::make_unique<cp0::ui::TextField>(dialog->body(), dialog->field_layout(), fs, fe);
+    {
+        const int px = std::max(12, static_cast<int>(std::lround(12 * frame.scale())));
+        counter = ui::label(dialog->body(), Face::Medium, px, col::kHint, 0, 0, dialog->field_layout().roller_w,
+                            LV_TEXT_ALIGN_RIGHT);
+        lv_obj_remove_flag(counter, LV_OBJ_FLAG_CLICKABLE);
+        update_counter(fs.text);
+    }
     dialog->relayout();
     if (lv_group_t *g = cdk::input_group()) {
         lv_group_add_obj(g, field->focus_object());
@@ -445,10 +457,19 @@ void CassetteUi::Impl::open_text(const std::string &title, const std::string &la
     log_line("text box: %s", title.c_str());
 }
 
+void CassetteUi::Impl::update_counter(const std::string &text)
+{
+    if (!counter) return;
+    const CountTone tone = name_count_tone(text.size());
+    set_text(counter, name_count_text(text.size()));
+    lv_obj_set_style_text_color(counter, lv_color_hex(name_count_color(tone)), 0);
+}
+
 void CassetteUi::Impl::close_text()
 {
     if (!dialog || closing) return;
     closing = true;
+    counter = nullptr; /* it goes with the dialog */
     /* never delete the box inside its own event: hand the objects to the next LVGL cycle */
     auto *pending = new std::pair<std::unique_ptr<cp0::ui::TextField>, std::unique_ptr<cp0::ui::Dialog>>(std::move(field),
                                                                                                        std::move(dialog));

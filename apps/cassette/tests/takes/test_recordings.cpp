@@ -35,6 +35,70 @@ JournalEntry journal_for(const std::string &dir, const std::string &name, const 
 
 }  // namespace
 
+/* Renames of ordinary takes with '_' and '-' in the old and the new prefix, big take numbers, and spaces end to end:
+ * the file, its peak cache, its journal, and the names an edit gets afterwards. */
+void test_rename_prefixes() {
+    TempDir d;
+    FailOps ops;
+    const std::string dir = d.path;
+    std::string nn;
+    /* (old file name, new prefix, new file name) */
+    const char *cases[][3] = {
+        {"take_007_20261109-1403.wav", "my_take-2", "my_take-2_007_20261109-1403.wav"},
+        {"take_007_20261109-1403.wav", "a-b", "a-b_007_20261109-1403.wav"},
+        {"take_007_20261109-1403.wav", "a_b", "a_b_007_20261109-1403.wav"},
+        {"a_b_007_20261109-1403.wav", "c-d", "c-d_007_20261109-1403.wav"},
+        {"a-b_007_20261109-1403.wav", "c_d", "c_d_007_20261109-1403.wav"},
+        {"a-b_007_20261109-0903.wav", "c_d", "c_d_007_20261109-0903.wav"},
+        {"x_1000_20261109-1403.wav", "y_z-1", "y_z-1_1000_20261109-1403.wav"},
+        {"x_12345_nodate.wav", "y-z", "y-z_12345_nodate.wav"},
+        {"x-9_001_nodate.wav", "-", "-_001_nodate.wav"},
+        {"take_007_20261109-1403.wav", "my take", "my take_007_20261109-1403.wav"},
+        {"my take_007_20261109-1403.wav", "your  take 2", "your  take 2_007_20261109-1403.wav"},
+        {"my take_007_nodate_p2.wav", "a_b-c d", "a_b-c d_007_nodate_p2.wav"},
+        {"a b_007_20261109-1403-2.wav", "q r", "q r_007_20261109-1403-2.wav"},
+    };
+    for (auto &c : cases) {
+        make_wav(d.file(c[0]), 10);
+        RenameRefusal why = RenameRefusal::BadChar;
+        CHECK_EQ(rename_take(ops, dir, c[0], c[1], nn, &why), 0);
+        CHECK(why == RenameRefusal::None);
+        CHECK_EQ(nn, std::string(c[2]));
+        CHECK(exists(d.file(c[2])));
+        CHECK(!exists(d.file(c[0])));
+        ops.unlink(d.file(c[2]));
+    }
+    /* a take with spaces: peak cache and journal follow, a rename back works, edits continue its numbering */
+    const std::string a = "my band_005_20261109-1403.wav", b = "other one_005_20261109-1403.wav";
+    make_wav(d.file(a), 10);
+    write_text(d.file("my band_005_20261109-1403.peaks"), "pk");
+    CHECK_EQ(journal_write(ops, dir, journal_for(dir, a, "closed")), 0);
+    CHECK_EQ(rename_take(ops, dir, a, "other one", nn), 0);
+    CHECK_EQ(nn, b);
+    CHECK(exists(d.file("other one_005_20261109-1403.peaks")));
+    CHECK(!exists(d.file("my band_005_20261109-1403.peaks")));
+    {
+        const std::string jf = find_journal_for(ops, dir, b);
+        CHECK(!jf.empty());
+        JournalEntry e;
+        CHECK_EQ(journal_read(ops, jf, e), 0);
+        CHECK_EQ(e.path, dir + "/" + b);
+        CHECK_EQ(e.parts[0], dir + "/" + b);
+    }
+    std::vector<TakeInfo> list;
+    CHECK_EQ(list_takes(ops, dir, list), 0);
+    CHECK(find(list, b) != nullptr);
+    CHECK_EQ(peaks_name(b), std::string("other one_005_20261109-1403.peaks"));
+    std::vector<std::string> en;
+    CHECK_EQ(reserve_edit_names(ops, dir, b, 2, en), 0);
+    CHECK_EQ(en.size(), 2u);
+    CHECK_EQ(en[0], std::string("other one_005_20261109-1403-1.wav"));
+    CHECK_EQ(en[1], std::string("other one_005_20261109-1403-2.wav"));
+    CHECK_EQ(delete_take(ops, dir, b), 0);
+    CHECK(!exists(d.file("other one_005_20261109-1403.peaks")));
+    CHECK(find_journal_for(ops, dir, b).empty());
+}
+
 void test_recordings() {
     TempDir d;
     FailOps ops;
@@ -173,6 +237,26 @@ void test_recordings() {
     CHECK_EQ(rename_take(ops, dir, "take_009_nodate_p2.wav", "x", nn), 0);
     CHECK_EQ(nn, std::string("x_009_nodate_p2.wav"));
     CHECK_EQ(rename_take(ops, dir, "gone_099_nodate.wav", "x", nn), -ENOENT);
+
+    /* refusal causes: the answer stays -EINVAL, `why` says which */
+    {
+        RenameRefusal why = RenameRefusal::BadChar;
+        const std::string tk = "take_006_20261108-1105.wav";
+        CHECK_EQ(rename_take(ops, dir, tk, "", nn, &why), -EINVAL);
+        CHECK(why == RenameRefusal::Empty);
+        CHECK_EQ(rename_take(ops, dir, tk, std::string(25, 'a'), nn, &why), -EINVAL);
+        CHECK(why == RenameRefusal::TooLong);
+        CHECK_EQ(rename_take(ops, dir, tk, "a/b", nn, &why), -EINVAL);
+        CHECK(why == RenameRefusal::BadChar);
+        CHECK_EQ(rename_take(ops, dir, tk, " lead", nn, &why), -EINVAL);
+        CHECK(why == RenameRefusal::BadChar);
+        CHECK_EQ(rename_take(ops, dir, "interview.wav", "talk", nn, &why), -EINVAL);
+        CHECK(why == RenameRefusal::NotTake);
+        CHECK_EQ(rename_take(ops, dir, "interview.wav", "", nn, &why), -EINVAL);
+        CHECK(why == RenameRefusal::NotTake); /* the file decides first */
+        CHECK_EQ(rename_take(ops, dir, "gone_099_nodate.wav", "x", nn, &why), -ENOENT);
+        CHECK(why == RenameRefusal::None);
+    }
 
     /* delete: the file, its journal and its peak cache */
     CHECK_EQ(delete_take(ops, dir, "band_006_20261108-1105.wav"), 0);

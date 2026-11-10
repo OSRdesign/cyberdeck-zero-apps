@@ -80,10 +80,13 @@ std::string find_journal_for(FileOps &ops, const std::string &dir, const std::st
  * unlink is an error; a missing journal or cache is fine). */
 int delete_take(FileOps &ops, const std::string &dir, const std::string &take_file_name);
 
+/* Why rename_take answered -EINVAL (the optional `why` out parameter; None for every other result). */
+enum class RenameRefusal { None, Empty, TooLong, BadChar, NotTake };
+
 /* Renames the prefix of a take: the take number, date/time, part and edit suffix stay. -EINVAL for an invalid prefix
- * or a name outside the grammar, -EEXIST when the new name exists. The file is renamed atomically (rename), then the
+ * or a name outside the grammar (`why` says which), -EEXIST when the new name exists. The file is renamed atomically (rename), then the
  * peak cache, then the journal's path/parts are updated. new_name receives the new file name. */
 int rename_take(FileOps &ops, const std::string &dir, const std::string &take_file_name, const std::string &new_prefix,
-                std::string &new_name);
+                std::string &new_name, RenameRefusal *why = nullptr);
 
 }  // namespace cassette
