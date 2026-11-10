@@ -109,7 +109,9 @@ void names() {
     n = next_edit_names("song.WAV", 1, {});
     CHECK(n.size() == 1 && n[0] == "song-1.wav"); /* WAV as before */
     CHECK_EQ(edit_record_key("take_009_nodate_p2.opus"), "009_p2");
-    CHECK_EQ(peaks_name("take_009_nodate.flac"), "take_009_nodate.peaks");
+    CHECK_EQ(peaks_name("take_009_nodate.flac"), "take_009_nodate.flac.peaks"); /* as PeakPyramid::cache_path */
+    CHECK_EQ(peaks_name("song.opus"), "song.opus.peaks");
+    CHECK_EQ(legacy_peaks_name("take_009_nodate.flac"), "take_009_nodate.peaks");
     /* (the phase B playback gate is gone: phase C plays, previews and trims FLAC and Opus takes) */
 }
 
@@ -192,8 +194,10 @@ void mixed_folder() {
     /* rename keeps the extension and follows the journal */
     std::string nn;
     RenameRefusal why = RenameRefusal::None;
+    write_bytes(d.file("take_002_nodate.flac.peaks"), {7, 8});
     CHECK_EQ(rename_take(ops, d.path, "take_002_nodate.flac", "field rec", nn, &why), 0);
     CHECK_EQ(nn, "field rec_002_nodate.flac");
+    CHECK(exists(d.file("field rec_002_nodate.flac.peaks")) && !exists(d.file("take_002_nodate.flac.peaks")));
     CHECK(why == RenameRefusal::None);
     CHECK(exists(d.file("field rec_002_nodate.flac")) && !exists(d.file("take_002_nodate.flac")));
     const std::string jf = find_journal_for(ops, d.path, "field rec_002_nodate.flac");
@@ -207,7 +211,8 @@ void mixed_folder() {
     std::filesystem::remove(d.file("x_003_20261110-0915.opus"));
 
     /* delete: the file, its peak cache, its journal */
-    write_bytes(d.file("take_003_20261110-0915.peaks"), {1, 2, 3});
+    write_bytes(d.file("take_003_20261110-0915.opus.peaks"), {1, 2, 3});
+    write_bytes(d.file("take_003_20261110-0915.peaks"), {1}); /* the name older versions looked for */
     JournalEntry j3;
     j3.take = "take_003_20261110-0915";
     j3.path = d.file("take_003_20261110-0915.opus");
@@ -216,11 +221,16 @@ void mixed_folder() {
     CHECK_EQ(journal_write(ops, d.path, j3), 0);
     CHECK_EQ(delete_take(ops, d.path, "take_003_20261110-0915.opus"), 0);
     CHECK(!exists(d.file("take_003_20261110-0915.opus")));
+    CHECK(!exists(d.file("take_003_20261110-0915.opus.peaks")));
     CHECK(!exists(d.file("take_003_20261110-0915.peaks")));
     CHECK(!exists(journal_file(d.path, "take_003_20261110-0915")));
     CHECK_EQ(delete_take(ops, d.path, "notes.txt"), -EINVAL);
     /* the deleted Opus take's number is not handed out again: the counter is past it */
     CHECK_EQ(peek_take_number(ops, d.path, "take"), uint64_t(6));
+    /* the renamed FLAC take: its cache goes with it */
+    CHECK_EQ(delete_take(ops, d.path, "field rec_002_nodate.flac"), 0);
+    CHECK(!exists(d.file("field rec_002_nodate.flac")));
+    CHECK(!exists(d.file("field rec_002_nodate.flac.peaks")));
 }
 
 }  // namespace

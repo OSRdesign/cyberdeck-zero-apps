@@ -8,7 +8,7 @@
  * FileOps. LVGL-free.
  *
  * Files next to a take: its journal <dir>/.journal/<take>.json (journal.hpp; found by the file name in the journal's
- * path/parts, so a renamed take keeps its journal) and its peak cache <stem>.peaks (written by the trim page, T5b).
+ * path/parts, so a renamed take keeps its journal) and its peak cache <take>.peaks (written by the trim page, T5b).
  */
 #pragma once
 
@@ -72,9 +72,11 @@ struct SpaceInfo {
 /* free_space() of the folder (the statvfs seam). 0 or -errno. */
 int folder_space(FileOps &ops, const std::string &dir, const AudioFormat &fmt, SpaceInfo &out);
 
-/* The peak cache file of a take file name ("take_006_x.wav" -> "take_006_x.peaks"; the same for .flac / .opus: take
- * numbers never repeat across formats, so the stems are distinct). */
+/* The peak cache file name of a take file name, as the trim page writes it (PeakPyramid::cache_path):
+ * "take_006_x.wav" -> "take_006_x.wav.peaks"; the same for .flac / .opus ("take_006_x.flac.peaks"). */
 std::string peaks_name(const std::string &take_file_name);
+/* The name older versions looked for ("take_006_x.wav" -> "take_006_x.peaks"); delete_take() removes it too. */
+std::string legacy_peaks_name(const std::string &take_file_name);
 
 /* Finds the journal whose path or parts name this file (by file name). Empty when none. */
 std::string find_journal_for(FileOps &ops, const std::string &dir, const std::string &take_file_name);

@@ -71,12 +71,15 @@ void test_rename_prefixes() {
     /* a take with spaces: peak cache and journal follow, a rename back works, edits continue its numbering */
     const std::string a = "my band_005_20261109-1403.wav", b = "other one_005_20261109-1403.wav";
     make_wav(d.file(a), 10);
-    write_text(d.file("my band_005_20261109-1403.peaks"), "pk");
+    write_text(d.file("my band_005_20261109-1403.wav.peaks"), "pk");
+    write_text(d.file("my band_005_20261109-1403.peaks"), "old"); /* the name older versions looked for */
     CHECK_EQ(journal_write(ops, dir, journal_for(dir, a, "closed")), 0);
     CHECK_EQ(rename_take(ops, dir, a, "other one", nn), 0);
     CHECK_EQ(nn, b);
-    CHECK(exists(d.file("other one_005_20261109-1403.peaks")));
-    CHECK(!exists(d.file("my band_005_20261109-1403.peaks")));
+    CHECK(exists(d.file("other one_005_20261109-1403.wav.peaks")));
+    CHECK(!exists(d.file("my band_005_20261109-1403.wav.peaks")));
+    CHECK(!exists(d.file("my band_005_20261109-1403.peaks"))); /* the old-style cache is removed, not carried */
+    CHECK(!exists(d.file("other one_005_20261109-1403.peaks")));
     {
         const std::string jf = find_journal_for(ops, dir, b);
         CHECK(!jf.empty());
@@ -88,14 +91,17 @@ void test_rename_prefixes() {
     std::vector<TakeInfo> list;
     CHECK_EQ(list_takes(ops, dir, list), 0);
     CHECK(find(list, b) != nullptr);
-    CHECK_EQ(peaks_name(b), std::string("other one_005_20261109-1403.peaks"));
+    CHECK_EQ(peaks_name(b), std::string("other one_005_20261109-1403.wav.peaks"));
+    CHECK_EQ(legacy_peaks_name(b), std::string("other one_005_20261109-1403.peaks"));
+    write_text(d.file("other one_005_20261109-1403.peaks"), "old");
     std::vector<std::string> en;
     CHECK_EQ(reserve_edit_names(ops, dir, b, 2, en), 0);
     CHECK_EQ(en.size(), 2u);
     CHECK_EQ(en[0], std::string("other one_005_20261109-1403-1.wav"));
     CHECK_EQ(en[1], std::string("other one_005_20261109-1403-2.wav"));
     CHECK_EQ(delete_take(ops, dir, b), 0);
-    CHECK(!exists(d.file("other one_005_20261109-1403.peaks")));
+    CHECK(!exists(d.file("other one_005_20261109-1403.wav.peaks")));
+    CHECK(!exists(d.file("other one_005_20261109-1403.peaks"))); /* old-style cache removed too */
     CHECK(find_journal_for(ops, dir, b).empty());
 }
 
@@ -139,7 +145,7 @@ void test_recordings() {
     write_text(d.file("take_012_nodate.tmp.wav"), "x");
     write_text(d.file(".hidden.wav"), "x");
     write_text(d.file("notes.txt"), "x");
-    write_text(d.file("take_006_20261108-1105.peaks"), "peaks");
+    write_text(d.file("take_006_20261108-1105.wav.peaks"), "peaks");
     make_wav(d.file("interview.wav"), 480);
     std::filesystem::create_directory(d.file("subdir"));
 
@@ -222,7 +228,8 @@ void test_recordings() {
     CHECK_EQ(nn, std::string("band_006_20261108-1105.wav"));
     CHECK(!exists(d.file("take_006_20261108-1105.wav")));
     CHECK(exists(d.file("band_006_20261108-1105.wav")));
-    CHECK(exists(d.file("band_006_20261108-1105.peaks")));
+    CHECK(exists(d.file("band_006_20261108-1105.wav.peaks")));
+    CHECK(!exists(d.file("take_006_20261108-1105.wav.peaks")));
     {
         const std::string jf = find_journal_for(ops, dir, nn);
         CHECK(!jf.empty());
@@ -259,8 +266,10 @@ void test_recordings() {
     }
 
     /* delete: the file, its journal and its peak cache */
+    write_text(d.file("band_006_20261108-1105.peaks"), "old"); /* the name older versions looked for */
     CHECK_EQ(delete_take(ops, dir, "band_006_20261108-1105.wav"), 0);
     CHECK(!exists(d.file("band_006_20261108-1105.wav")));
+    CHECK(!exists(d.file("band_006_20261108-1105.wav.peaks")));
     CHECK(!exists(d.file("band_006_20261108-1105.peaks")));
     CHECK(find_journal_for(ops, dir, "band_006_20261108-1105.wav").empty());
     CHECK(!exists(journal_file(dir, "take_006_20261108-1105")));

@@ -2,6 +2,7 @@
  * SPDX-License-Identifier: MIT
  */
 #include "recordings.hpp"
+#include "../edit/peaks.hpp"
 
 #include "../codec/stream_scan.hpp"
 #include "../journal.hpp"
@@ -189,7 +190,9 @@ int folder_space(FileOps &ops, const std::string &dir, const AudioFormat &fmt, S
     return 0;
 }
 
-std::string peaks_name(const std::string &take_file_name) { return file_stem(take_file_name) + ".peaks"; }
+std::string peaks_name(const std::string &take_file_name) { return PeakPyramid::cache_path(base_name(take_file_name)); }
+
+std::string legacy_peaks_name(const std::string &take_file_name) { return file_stem(take_file_name) + ".peaks"; }
 
 std::string find_journal_for(FileOps &ops, const std::string &dir, const std::string &name) {
     const std::vector<JournalRef> js = read_journals(ops, dir);
@@ -203,6 +206,7 @@ int delete_take(FileOps &ops, const std::string &dir, const std::string &take_fi
     int r = ops.unlink(dir + "/" + name);
     if (r < 0) return r;
     ops.unlink(dir + "/" + peaks_name(name));
+    ops.unlink(dir + "/" + legacy_peaks_name(name)); /* left by versions before the fix */
     const std::vector<JournalRef> js = read_journals(ops, dir);
     for (const JournalRef &j : js) {
         if (!journal_names(j.e, name)) continue;
@@ -251,6 +255,7 @@ int rename_take(FileOps &ops, const std::string &dir, const std::string &take_fi
     new_name = target;
     if (path_exists(ops, dir + "/" + peaks_name(name)))
         ops.rename(dir + "/" + peaks_name(name), dir + "/" + peaks_name(target));
+    ops.unlink(dir + "/" + legacy_peaks_name(name)); /* left by versions before the fix, never read */
     ops.fsync_dir(dir);
     const std::vector<JournalRef> js = read_journals(ops, dir);
     for (const JournalRef &j : js) {
