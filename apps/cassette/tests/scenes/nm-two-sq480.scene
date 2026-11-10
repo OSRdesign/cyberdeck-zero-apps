@@ -1,0 +1,15 @@
+title Cassette with the longest real label name (WEEKLY MEETING WITH THE TEAM 12, 31 characters, all capitals): two lines on the label, no ruled line through them, the info box still one codec line over the time left
+sizes 480x480
+ppmm 667
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_CODEC opus:128
+env CASSETTE_DEMO_NAME "WEEKLY MEETING WITH THE TEAM 12"
+env CASSETTE_DEMO_LEFT "955 h"
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot name-two-sq480
+expect esc
+expect notext "SIDE A"
+expect notext "LAYOUT FAIL"
+expect noquit

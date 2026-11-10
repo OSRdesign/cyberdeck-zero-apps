@@ -138,6 +138,7 @@ ViewModel demo_model(const std::string &scene)
     r.tape.format = "WAV 48k";
     r.info.take = "TAKE 007";
     r.info.format = "48k/16 WAV";
+    r.info.codec = "WAV 48k";
     r.info.time_left = "12 h 40";
     r.info.limiter = true;
     r.info.low_cut = true;
@@ -408,6 +409,22 @@ ViewModel demo_model(const std::string &scene)
         if (vm.rec.info.server && vm.rec.transport == Transport::Idle) vm.rec.info.card = "USB AUDIO CODEC";
     }
     if (const char *lm = std::getenv("CASSETTE_DEMO_LOST_MS")) vm.rec.info.lost_ms = std::atoll(lm);
+    /* CASSETTE_DEMO_CODEC=wav|flac|opus[:<kbps>]: the codec of the recording choice (the info box's first line, Opus with its bit
+     * rate, default 32) and of the take in the deck; CASSETTE_DEMO_NAME=<text>: the name on the cassette label only (a long
+     * one, up to 24 characters with spaces, wraps to two lines; the landscape strip keeps its "TAKE 007") */
+    if (const char *c = std::getenv("CASSETTE_DEMO_CODEC")) {
+        const std::string s = c;
+        const std::string tag = s.compare(0, 4, "opus") == 0 ? "OPUS" : s.compare(0, 4, "flac") == 0 ? "FLAC" : "WAV";
+        vm.rec.info.codec = vm.rec.tape.format = tag + " 48k";
+        vm.rec.info.format = std::string("48k/16 ") + tag;
+        const std::size_t colon = s.find(':');
+        vm.rec.info.kbps = tag == "OPUS" ? (colon == std::string::npos ? 32 : std::atoi(s.c_str() + colon + 1)) : 0;
+    }
+    if (const char *n = std::getenv("CASSETTE_DEMO_NAME"); n && *n && !vm.rec.tape.label.empty()) {
+        vm.rec.tape.label = n;
+    }
+    /* CASSETTE_DEMO_LEFT=<text>: the time left ("955 h": the box adds " left") */
+    if (const char *l = std::getenv("CASSETTE_DEMO_LEFT"); l && *l) vm.rec.info.time_left = l;
     if (const char *b = std::getenv("CASSETTE_DEMO_BOX")) {
         if (std::string(b) == "save") vm.save.shown = true;
         if (std::string(b) == "confirm") vm.confirm.shown = true;

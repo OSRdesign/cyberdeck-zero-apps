@@ -7,6 +7,7 @@ env CASSETTE_LAYOUT_CHECK 1
 
 wait 600
 shot lost
-expect text "TAKE 007"
+expect text "WAV 48k"
+expect notext "TAKE 007"
 expect notext "LAYOUT FAIL"
 expect noquit

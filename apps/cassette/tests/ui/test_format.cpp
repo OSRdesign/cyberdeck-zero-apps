@@ -86,20 +86,8 @@ void info()
     r.info.format = "48k/16 WAV";
     r.info.time_left = "12 h 40";
     CHECK_EQ(info_line(r), "TAKE 007 \xC2\xB7 48k/16 WAV \xC2\xB7 12 h 40 left");
-    CHECK_EQ(info_title(r), "TAKE 007");
     CHECK_EQ(info_detail(r), "12 h 40 left");
     CHECK_EQ(info_state(r), "REC");
-    /* the square layout's wide detail: the format in front, while recording or idle */
-    CHECK_EQ(info_detail_wide(r), "48k/16 WAV \xC2\xB7 12 h 40 left");
-    r.info.lost_ms = 300;
-    CHECK_EQ(info_detail_wide(r), "48k/16 WAV \xC2\xB7 lost 0.3 s");
-    r.info.lost_ms = 0;
-    r.info.notice = "Saved";
-    CHECK_EQ(info_detail_wide(r), "Saved");
-    r.info.notice.clear();
-    r.info.format.clear();
-    CHECK_EQ(info_detail_wide(r), "12 h 40 left");
-    r.info.format = "48k/16 WAV";
 
     r.transport = Transport::ScanReverse;
     r.info.take = "TAKE 006";
@@ -107,7 +95,6 @@ void info()
     r.info.play_len_ms = 12 * 60000 + 8000;
     CHECK_EQ(info_line(r), "PLAYING TAKE 006 \xC2\xB7 05:44 / 12:08 \xC2\xB7 REW 5x");
     CHECK_EQ(info_detail(r), "05:44 / 12:08");
-    CHECK_EQ(info_detail_wide(r), "05:44 / 12:08");
     CHECK_EQ(info_state(r), "PLAY");
     r.transport = Transport::ScanForward;
     CHECK_EQ(info_line(r), "PLAYING TAKE 006 \xC2\xB7 05:44 / 12:08 \xC2\xB7 FWD 5x");
@@ -115,7 +102,6 @@ void info()
     CHECK_EQ(info_state(r), "");
     /* a paused take reads PAUSED, not PLAYING (the strip only; the portrait box is unchanged); scanning keeps PLAYING */
     CHECK_EQ(info_line(r), "PAUSED TAKE 006 \xC2\xB7 05:44 / 12:08");
-    CHECK_EQ(info_title(r), "TAKE 006");
     CHECK_EQ(info_detail(r), "05:44 / 12:08");
     r.transport = Transport::Playing;
     CHECK_EQ(info_line(r), "PLAYING TAKE 006 \xC2\xB7 05:44 / 12:08");
@@ -140,7 +126,6 @@ void info()
     sv.info.time_left = "12 h 40";
     sv.info.server = true;
     CHECK_EQ(info_line(sv), "TAKE 007 \xC2\xB7 48k/16 WAV (server) \xC2\xB7 12 h 40 left");
-    CHECK_EQ(info_title(sv), "TAKE 007");
     CHECK_EQ(info_detail(sv), "(server) 12 h 40");
     sv.transport = Transport::Idle;
     sv.info.card = "USB AUDIO CODEC";
@@ -170,6 +155,159 @@ void info()
     CHECK_EQ(info_line(lo), "TAKE 007 \xC2\xB7 48k/16 WAV (server) \xC2\xB7 lost 0.3 s");
     lo.transport = Transport::Idle;
     CHECK_EQ(info_lost(lo), ""); /* the count belongs to a take */
+}
+
+/* The info box beside the counter: line 1 the codec (never the take's name), line 2 the time left as before */
+void info_box()
+{
+    RecorderVm r;
+    r.info.take = "TAKE 007 WITH A LONG NAME";
+    r.info.time_left = "955 h";
+    r.info.format = "48k/16 WAV";
+    r.info.codec = "WAV 48k";
+    for (Transport t : {Transport::Idle, Transport::Countdown, Transport::Recording, Transport::RecordingPaused}) {
+        r.transport = t;
+        CHECK_EQ(info_codec(r), "WAV 48k");
+        CHECK_EQ(info_detail(r), "955 h left");
+    }
+    r.info.codec = "FLAC 44.1k";
+    CHECK_EQ(info_codec(r), "FLAC 44.1k");
+    r.info.codec = "OPUS 48k";
+    CHECK_EQ(info_codec(r), "OPUS 48k"); /* no bit rate known: none shown */
+    for (int kbps : {16, 24, 32, 48, 64, 96, 128}) {
+        r.info.kbps = kbps;
+        CHECK_EQ(info_codec(r), "OPUS 48k \xC2\xB7 " + std::to_string(kbps) + " kbps");
+    }
+    r.transport = Transport::Recording;
+    r.info.lost_ms = 300;
+    CHECK_EQ(info_codec(r), "OPUS 48k \xC2\xB7 128 kbps"); /* lost audio only changes line 2 */
+    CHECK_EQ(info_detail(r), "lost 0.3 s");
+    r.info.lost_ms = 0;
+    r.info.server = true;
+    CHECK_EQ(info_detail(r), "(server) 955 h");
+    r.info.server = false;
+    /* a take plays: the codec and rate of the take in the deck (the tape's), line 2 the position over the length */
+    r.transport = Transport::Playing;
+    r.tape.format = "FLAC 44.1k";
+    r.info.play_pos_ms = 5000;
+    r.info.play_len_ms = 60000;
+    CHECK_EQ(info_codec(r), "FLAC 44.1k");
+    CHECK_EQ(info_detail(r), "00:05 / 01:00");
+    r.transport = Transport::PlayingPaused;
+    CHECK_EQ(info_codec(r), "FLAC 44.1k");
+    r.transport = Transport::Idle;
+    CHECK_EQ(info_codec(r), "OPUS 48k \xC2\xB7 128 kbps"); /* idle again: the Settings choice, not the loaded take */
+    /* no input: the codec of the Settings, line 2 as it was (the notice, else the time left) */
+    RecorderVm n;
+    n.info.codec = "WAV";
+    n.info.notice = "No sound input found";
+    CHECK_EQ(info_codec(n), "WAV");
+    CHECK_EQ(info_detail(n), "No sound input found");
+    n.info.notice.clear();
+    CHECK_EQ(info_detail(n), "");
+}
+
+/* The font rule: the largest size at which the text fits one line */
+void font_fit_rule()
+{
+    auto width = [](int px) { return px * 10; }; /* a text 10 px wide per px of size */
+    CHECK_EQ(largest_fit_px(15, 6, 1000, width), 15); /* fits at the top: the top */
+    CHECK_EQ(largest_fit_px(15, 6, 150, width), 15);
+    CHECK_EQ(largest_fit_px(15, 6, 149, width), 14);
+    CHECK_EQ(largest_fit_px(15, 6, 100, width), 10);
+    CHECK_EQ(largest_fit_px(15, 6, 61, width), 6);
+    CHECK_EQ(largest_fit_px(15, 6, 10, width), 6); /* nothing fits: the smallest */
+    CHECK_EQ(largest_fit_px(6, 6, 10, width), 6);
+    CHECK_EQ(largest_fit_px(4, 6, 1000, width), 4); /* a maximum under the minimum stays the maximum */
+    /* a width that grows with the size, the longest box line: the result fits and one more would not */
+    const std::string longest = "OPUS 48k \xC2\xB7 128 kbps";
+    auto w2 = [&](int px) { return static_cast<int>(longest.size()) * px * 6 / 10 - 2 * px / 10; };
+    for (int box = 40; box <= 400; box += 7) {
+        const int p = largest_fit_px(30, 6, box, w2);
+        if (p > 6) CHECK(w2(p) <= box);
+        if (p < 30) CHECK(w2(p + 1) > box);
+    }
+}
+
+/* the cassette label's name: 8 px per character, a writing area of 160 px (20 characters on a line) */
+void label_wrap()
+{
+    auto width = [](const std::string &s) {
+        int n = 0;
+        for (unsigned char c : s)
+            if ((c & 0xC0) != 0x80) ++n;
+        return n * 8;
+    };
+    const int W = 160;
+    const std::string base = "Interview with Mary Ann 2026 ok";
+    for (std::size_t n = 1; n <= 24; ++n) {
+        std::string name = base.substr(0, n); /* every cut: with and without spaces in it */
+        while (!name.empty() && name.back() == ' ') name.pop_back();
+        const NameWrap w = wrap_name(name, W, 2, width);
+        CHECK(w.fits);
+        CHECK(w.lines.size() >= 1 && w.lines.size() <= 2);
+        for (const std::string &l : w.lines) {
+            CHECK(width(l) <= W);
+            CHECK(!l.empty());
+        }
+        std::string joined = w.lines[0];
+        if (w.lines.size() == 2) joined += " " + w.lines[1];
+        CHECK_EQ(joined, name);
+        CHECK_EQ(w.lines.size() == 1, width(name) <= W); /* one line exactly when it fits */
+    }
+    /* 25 characters: two lines, split at the space that balances them */
+    NameWrap w = wrap_name("Interview with Mary Ann 2", W, 2, width);
+    CHECK_EQ(w.lines.size(), 2u);
+    CHECK_EQ(w.lines[0], "Interview with");
+    CHECK_EQ(w.lines[1], "Mary Ann 2");
+    w = wrap_name("aaaa bbbb cccc dddd eeee ffff", 170, 2, width);
+    CHECK(w.fits);
+    CHECK_EQ(w.lines[0], "aaaa bbbb cccc");
+    CHECK_EQ(w.lines[1], "dddd eeee ffff");
+    /* a word wider than a line is broken inside it */
+    w = wrap_name("Supercalifragilisticexpialidocious", W, 2, width); /* 34 characters: 20 + 14 */
+    CHECK(w.fits);
+    CHECK_EQ(w.lines.size(), 2u);
+    CHECK_EQ(w.lines[0].size() + w.lines[1].size(), 34u);
+    CHECK(width(w.lines[0]) <= W && width(w.lines[1]) <= W);
+    /* too long for two lines: the last ends with dots and fits */
+    w = wrap_name(std::string(60, 'x'), W, 2, width);
+    CHECK(!w.fits);
+    CHECK_EQ(w.lines.size(), 2u);
+    CHECK(width(w.lines[1]) <= W);
+    CHECK_EQ(w.lines[1].substr(w.lines[1].size() - 3), "...");
+    /* multi-byte characters are not cut in the middle */
+    std::string uml;
+    for (int i = 0; i < 24; ++i) uml += "\xC3\xA4";
+    w = wrap_name(uml, W, 2, width);
+    CHECK(w.fits);
+    CHECK_EQ(w.lines[0].size(), 40u); /* 20 two-byte characters */
+    CHECK_EQ(w.lines[1].size(), 8u);
+
+    /* the rung: the largest at which the name fits the area, one line before two */
+    const std::vector<int> rungs = {31, 29, 22, 15};
+    auto rw = [](int r, const std::string &s) { return static_cast<int>(s.size()) * r * 4 / 10; }; /* 0.4 em per character */
+    auto lh = [](int r) { return r * 5 / 4; };
+    NameLayout l = layout_name_text("Take 007", rungs, 22, 160, 36, rw, lh);
+    CHECK_EQ(l.rung, 22);
+    CHECK_EQ(l.wrap.lines.size(), 1u);
+    CHECK_EQ(l.text_h, lh(22));
+    l = layout_name_text("Interview with Mary Ann 2", rungs, 22, 160, 36, rw, lh); /* one line needs 220 px at 22 */
+    CHECK(l.wrap.fits);
+    CHECK(l.text_h <= 36);
+    CHECK(l.rung < 22 || l.wrap.lines.size() == 1);
+    for (const std::string &s : l.wrap.lines) CHECK(rw(l.rung, s) <= 160);
+    /* a wanted size above the ladder's top is the top, below it the smallest rung */
+    l = layout_name_text("Take 007", rungs, 40, 400, 100, rw, lh);
+    CHECK_EQ(l.rung, 31);
+    l = layout_name_text("Take 007", rungs, 10, 400, 100, rw, lh);
+    CHECK_EQ(l.rung, 15);
+    /* a pitch of rung + 1, the second line adds one pitch */
+    l = layout_name_text("abcdefghij klmnopqrstu", rungs, 15, 100, 36, rw, lh);
+    CHECK_EQ(l.wrap.lines.size(), 2u);
+    CHECK_EQ(l.pitch, 16);
+    CHECK_EQ(l.text_h, 16 + lh(15));
+    CHECK(l.text_h <= 36);
 }
 
 void list_and_trim()
@@ -288,6 +426,9 @@ void test_format()
     name_counter();
     levels();
     info();
+    info_box();
+    font_fit_rule();
+    label_wrap();
     list_and_trim();
     play_key_and_hubs();
 }

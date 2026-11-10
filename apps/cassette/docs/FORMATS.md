@@ -276,7 +276,8 @@ probe to repeat: `ldconfig -p | grep -E 'libFLAC|libopus|libogg'` and `dpkg-quer
 **Which format a take gets.** At REC the controller builds the format list for the capture format the card was opened
 with and the libraries found (`codec_availability_here()`, loaded only when the stored format is not WAV) and takes
 `effective_choice()` of the stored key: the stored choice when compatible, else WAV. The recorder's format text
-(`48k/16 FLAC`, `48k/16 stereo OPUS`) and the hours left (from the choice's size estimate) follow the same choice,
+(`48k/16 FLAC`, `48k/16 stereo OPUS`; the info box beside the counter shows it as `FLAC 48k`, and for Opus as
+`OPUS 48k · 32 kbps` with the choice's bit rate, `TakeSnap::opus_kbps`) and the hours left (from the choice's size estimate) follow the same choice,
 recomputed with the free space every 2 s. Encoders: `FlacEncoder` level 5, or `OpusEncoder` with the preset's bitrate,
 application and, for the speech presets on a stereo card, one coded channel (`OPUS_SET_FORCE_CHANNELS(1)`). Tags
 (Vorbis comments): `TITLE` (the part's file name without extension), `DATE` (only with a set clock, D15), `ENCODER=Cassette`.

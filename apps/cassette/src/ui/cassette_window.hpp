@@ -4,9 +4,9 @@
  * Cassette UI: the cassette window of the recorder page.
  *
  * The dark window with its 3 px frame and, inside, the cassette: one object (cass_) that holds the canvas the cassette is
- * drawn into once from primitives (shell, cream label with the red stripe, SIDE A, the format, the hub window, the head
- * opening, two screws; no tape: the shell hides it), the two hub images and the take name. The canvas is drawn again only
- * when SIDE A or the format change. The name is a label in the handwriting face (handwriting.hpp) inside a container that
+ * drawn into once from primitives (shell, cream label with the red stripe, the hub window, the head opening, two screws;
+ * no tape: the shell hides it), the two hub images and the take name (the label carries nothing else: no SIDE A, no codec).
+ * The canvas is drawn again only when the cassette appears or goes. The name is a label in the handwriting face (handwriting.hpp) inside a container that
  * clips it: the container's width is the reveal of the load animation (the label inside is laid out at full width, so the
  * letters do not move). The whole cassette object sits in a second container (clip_) that is the window's inner area and
  * clips it, so the load animation moves ONE object (cass_) per frame: nothing else redraws because of it, nothing is
@@ -121,6 +121,7 @@ private:
     lv_obj_t *clip_ = nullptr;  /* the window's inner area: clips the moving cassette */
     lv_obj_t *cass_ = nullptr;  /* THE moving object: canvas, hubs and name */
     lv_obj_t *canvas_ = nullptr;
+    lv_obj_t *rule_ = nullptr;  /* the ruled line under a one-line name */
     lv_obj_t *name_clip_ = nullptr, *name_label_ = nullptr; /* the reveal container and the handwritten name inside it */
     lv_draw_buf_t *tape_buf_ = nullptr;
     lv_obj_t *hub_[2] = {};
@@ -143,9 +144,9 @@ private:
     std::string badge_text_;
     lv_obj_t *empty_ = nullptr, *empty_msg_ = nullptr, *empty_hint_ = nullptr;
 
-    std::string label_, side_, format_; /* what the cassette shows now */
+    std::string label_;                 /* what the cassette shows now */
     bool loaded_ = true;                /* a cassette is in the window */
-    std::string t_label_, t_side_, t_format_; /* what the model says (reached at once, or at the swap of a load) */
+    std::string t_label_;               /* what the model says (reached at once, or at the swap of a load) */
     bool t_loaded_ = true;
     bool have_seq_ = false;
     bool pending_load_ = false; /* a load came while another page was in front: it plays when the recorder shows */
@@ -155,7 +156,7 @@ private:
     int load_ticks_ = 0;
     std::uint32_t load_last_ms_ = 0;
     int base_y_ = 0;       /* cass_'s y at rest, in clip_ */
-    int box_w_ = 0;        /* the name's full width (118 draw units) */
+    int box_w_ = 0;        /* the name's full width (160 draw units) */
     int name_w_ = 0;       /* the revealed name's width at 100 % */
     int reveal_w_ = -1;
     int cass_y_ = 0;

@@ -16,6 +16,7 @@ key l
 wait 600
 shot load-t000ms
 @480x320 expect text "TAKE 006 · 48k/16 WAV · 12 h 40 left"
-@320x480 expect text "TAKE 006"
+@320x480 expect text "WAV 48k"
+@320x480 expect notext "TAKE 006"
 expect notext "LAYOUT FAIL"
 expect noquit

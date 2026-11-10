@@ -1,0 +1,18 @@
+title Cassette OPUS with a 24-character name with spaces (Morning walk with my dog): the info box beside the counter shows the codec (OPUS 48k · 128 kbps) and the time left, never the name; the label holds only the name, up to two lines, no SIDE A, no codec text
+sizes 720x720
+ppmm 800
+env CASSETTE_DEMO recording
+env CASSETTE_DEMO_CODEC opus:128
+env CASSETTE_DEMO_NAME "Morning walk with my dog"
+env CASSETTE_DEMO_LEFT "955 h"
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot name-opus-sq720
+expect esc
+expect text "OPUS 48k · 128 kbps"
+expect text "955 h left"
+expect notext "TAKE 007"
+expect notext "SIDE A"
+expect notext "LAYOUT FAIL"
+expect noquit

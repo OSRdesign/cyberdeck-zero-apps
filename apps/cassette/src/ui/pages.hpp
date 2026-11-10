@@ -123,7 +123,10 @@ private:
     bool first_ = true;
     /* the info box (title, detail, state lamp: portrait and square) instead of the strip with its lamps (landscape) */
     bool info_box_ = false;
-    double title_px_ = 15, title_min_ = 11, title_ls_ = 0.5, detail_px_ = 13, detail_min_ = 10, mon_glow_ = 4;
+    double title_px_ = 15, detail_px_ = 13, detail_min_ = 10, mon_glow_ = 4;
+    void set_box_codec(const std::string &text); /* the box's first line (the codec), fitted to one line */
+    std::string box_codec_;
+    int box_codec_px_ = 0, box_title_cy_ = -1;
     /* the square layout: the meter panel is as tall as two channels need; one channel moves its contents (square_stereo) */
     bool square_ = false, sq_stereo_ = false;
     lv_obj_t *sq_panel_ = nullptr;

@@ -346,7 +346,7 @@ Report: pass or fail per step, how the delay felt (none / small / annoying), any
 Goal: with no take loaded the recorder shows a blank cassette in the deck, never an empty window.
 
 1. Start with an empty recordings folder (move `~/Recordings` aside) and open Cassette. Expected: from the first frame the
-   cassette is in the window (shell, window, still hubs, SIDE A, the format such as `WAV 48k`), the label is blank paper
+   cassette is in the window (shell, window, still hubs), the label is blank paper
    with no handwriting, no OPEN word on the window, the strip names the take REC would write next.
 2. Press REC (after the countdown, if one is set). Expected: the hubs start to turn; the cassette does not drop in or
    appear again.
@@ -551,6 +551,27 @@ Report: the row texts (value and every line) as read, the picker figure against 
 table), the notice texts, the window's format text after choosing FLAC and Opus, what the page looked like when a row
 was dimmed, any cut or overlapping text, and for step 8 a table: choice, rate / bits / codec read from the file.
 
+## B20. The info box and the cassette label with a long name (any board, 5 min)
+
+Goal: on the portrait and square screens the box beside the counter shows the codec over the time left, never the take's
+name; the label shows only the name, whole, with no ruled line through it.
+
+1. Rename a take (Recordings, RENAME) so its name has 24 characters with spaces, for example `Morning walk with my dog`, and
+   LOAD it. Expected: the label shows the whole name in handwriting, on one line or two, nothing cut, no `SIDE A`, no
+   codec text on the label, and no ruled line through the letters.
+2. On a portrait or square screen (480x800 Pi 3A+, 320x480, HackBerry): the box beside the counter has two lines, bold
+   `WAV 48k` (or `FLAC 48k`, or `OPUS 48k` followed by the bit rate with a middle dot, `OPUS 48k . 32 kbps`) over the
+   time left (`955 h left`). The take's name is not in the box; neither line wraps or overlaps the other or the REC lamp.
+   Read the smallest type you can still read in the codec line and report it.
+3. In Settings choose Opus 128 kbps (the longest text, `OPUS 48k . 128 kbps`), Esc. Expected: the box names it at once
+   while idle; press REC and STOP: the same text during the take and after it.
+4. Choose WAV and FLAC in turn: the box follows (`WAV 48k`, `FLAC 48k`). LOAD a take of another codec and press PLAY: while
+   it plays the box names that take's codec; STOP: back to the Settings choice.
+5. On a wide screen (480x320, 640x480, 800x480) the strip is as before: take name, format, time left. A 24-character name
+   there may be clipped; report it.
+
+Report: pass or fail per step, the name used, the screens tried, and the smallest legible codec text.
+
 ## Results
 
 | Test | Board | Pass / fail | Notes |
@@ -575,6 +596,7 @@ was dimmed, any cut or overlapping text, and for step 8 a table: choice, rate / 
 | B17 FLAC and Opus |  |  |  |
 | B18 FLAC and Opus playback, trim |  |  |  |
 | B19 Codec, rate and quality pickers |  |  |  |
+| B20 Info box and label with a long name |  |  |  |
 
 **What to send back:** the table; the probe output per board (B0); the `watch` and `take` outputs of B1, B3, B4; the
 `ui` log line per board; the notice texts as you read them; screenshots or photos of anything cut, overlapping or odd.

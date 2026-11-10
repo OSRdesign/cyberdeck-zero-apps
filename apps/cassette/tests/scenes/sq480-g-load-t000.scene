@@ -15,7 +15,8 @@ wait 200
 key l
 wait 600
 shot load-t000ms
-expect text "TAKE 006"
+expect text "WAV 48k"
+expect notext "TAKE 006"
 expect notext "Take 007"
 expect notext "LAYOUT FAIL"
 expect noquit

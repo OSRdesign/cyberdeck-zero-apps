@@ -231,7 +231,23 @@ void test_recorder()
     CHECK_EQ(vm.rec.tape.label, "Take 006");
     CHECK_EQ(vm.rec.tape.load_seq, 3u);
     CHECK_EQ(vm.rec.info.take, "TAKE 006");
-    CHECK_EQ(vm.rec.tape.side, "SIDE A");
+    CHECK_EQ(vm.rec.info.codec, "WAV 48k");
+    CHECK_EQ(vm.rec.info.kbps, 0);
+    /* the codec line follows format_text (the take being recorded, idle the Settings choice): FLAC, stereo Opus with its bit rate */
+    s.take.format_text = "44.1k/16 stereo FLAC";
+    vm = map(s, {}, local);
+    CHECK_EQ(vm.rec.info.codec, "FLAC 44.1k");
+    CHECK_EQ(vm.rec.info.kbps, 0);
+    s.take.format_text = "48k/16 stereo OPUS";
+    s.take.opus_kbps = 128;
+    vm = map(s, {}, local);
+    CHECK_EQ(vm.rec.info.codec, "OPUS 48k");
+    CHECK_EQ(vm.rec.info.kbps, 128);
+    CHECK_EQ(ui::info_codec(vm.rec), "OPUS 48k \xC2\xB7 128 kbps");
+    CHECK_EQ(vm.rec.tape.format, "OPUS 48k"); /* the cassette's take is the loaded one: here the same row-less format */
+    s.take.format_text = "48k/16 WAV";
+    s.take.opus_kbps = 0;
+    vm = map(s, {}, local);
     CHECK_EQ(vm.rec.tape.format, "WAV 48k");
     CHECK_EQ(vm.rec.info.format, "48k/16 WAV");
     CHECK_EQ(vm.rec.info.time_left, "12 h 40");
@@ -398,6 +414,20 @@ void test_recorder()
     CHECK(!vm.rec.tape.loaded);
     CHECK_EQ(vm.rec.info.take, "NO INPUT");
     CHECK_EQ(vm.rec.info.format, "");
+    /* the info box still names the codec of the Settings (WAV stored: the default rate, no bit rate) */
+    CHECK_EQ(vm.rec.info.codec, "WAV 48k");
+    CHECK_EQ(vm.rec.info.kbps, 0);
+    s.settings.format = RecFormat::Opus;
+    s.settings.quality = 64;
+    vm = map(s, {}, local);
+    CHECK(vm.rec.info.codec.compare(0, 4, "OPUS") == 0);
+    CHECK_EQ(vm.rec.info.kbps, 64);
+    s.settings.format = RecFormat::Flac;
+    vm = map(s, {}, local);
+    CHECK(vm.rec.info.codec.compare(0, 4, "FLAC") == 0);
+    CHECK_EQ(vm.rec.info.kbps, 0);
+    s.settings.format = RecFormat::Wav;
+    s.settings.quality = 0;
     CHECK_EQ(vm.rec.info.notice, ""); /* the page says it */
     CHECK(!key(vm, ui::KeyId::Rec).enabled);
     CHECK(!vm.rec.card.shown);

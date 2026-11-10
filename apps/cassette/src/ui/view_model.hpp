@@ -58,8 +58,7 @@ struct TapeVm {
                                   * (the blank cassette) with nothing in the deck */
     std::uint32_t load_seq = 0;  /* counts LOADs from the list: when it moves the window plays the cassette load animation
                                   * (ui/load_anim.hpp). A new recording, a rename and the take loaded at launch do not move it */
-    std::string side = "SIDE A";
-    std::string format;          /* "WAV 48k" */
+    std::string format;          /* "WAV 48k": the codec and rate of the take in the deck (the info box shows it while that take plays) */
 };
 
 /* A gain stepper (CARD = the sound card's capture level, SOFT = software gain on top). */
@@ -73,6 +72,9 @@ struct GainVm {
 struct InfoVm {
     std::string take;            /* "TAKE 007" (recording, idle) or the playing take "TAKE 006" */
     std::string format;          /* "48k/16 WAV" */
+    std::string codec;           /* the info box's first line: the codec and rate of the take being recorded, idle: of the Settings
+                                  * choice (what a take would use), "WAV 48k", "FLAC 44.1k", "OPUS 48k"; with no rate known just "WAV" */
+    int kbps = 0;                /* Opus: the bit rate of that choice (the box appends " · 32 kbps"), else 0 */
     std::string time_left;       /* "12 h 40" (the strip adds " left") */
     std::int64_t play_pos_ms = 0, play_len_ms = 0; /* while a take plays or is paused */
     bool limiter = false;        /* LIM lamp */

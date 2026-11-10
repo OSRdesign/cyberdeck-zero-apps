@@ -270,9 +270,9 @@ void RecorderPage::build_portrait()
     counter_ = std::make_unique<Counter>(root_, fit_, 16, 294, 88, 44, 15, 30, 8, 24, 6);
     list_btn_ = std::make_unique<IconButton>(root_, fit_, DRect{108, 294, 44, 44}, Icon::List, [this] { if (!window_->loading()) nav_.go(Screen::List); });
     gear_btn_ = std::make_unique<IconButton>(root_, fit_, DRect{156, 294, 44, 44}, Icon::Gear, [this] { if (!window_->loading()) nav_.go(Screen::Settings); });
-    /* the info box: take over time left, the state lamp at the top right */
+    /* the info box: the codec over the time left, the state lamp at the top right; the codec line ends before the lamp */
     box(root_, fit_.x(204), fit_.y(294), fit_.w(204, 100), fit_.h(294, 44), col::kStrip, fit_.px(6));
-    box_title_ = fit_label(root_, fit_, Face::Bold, 15, col::kInk, 212, 299, 66, 18, LV_TEXT_ALIGN_LEFT, 0.5);
+    box_title_ = fit_label(root_, fit_, Face::Bold, 15, col::kInk, 212, 299, 70, 18, LV_TEXT_ALIGN_LEFT, 0);
     box_detail_ = fit_label(root_, fit_, Face::Medium, 13, col::kInkSoft, 212, 317, 84, 16);
     lv_label_set_recolor(box_detail_, true); /* the lost-audio part is red (red_tail) */
     state_lamp_ = std::make_unique<Lamp>(root_, fit_.x(285), fit_.y(302), fit_.px(11), col::kLampRed, fit_.px(6));
@@ -304,11 +304,9 @@ void RecorderPage::build_square()
     lv_obj_t *strip = box(root_, fit_.x(428), fit_.y(g_.row_y), fit_.w(428, 268), fit_.h(g_.row_y, g_.row_h), col::kStrip, fit_.px(8));
     border(strip, 1, kSqStripEdge);
     title_px_ = 30;
-    title_min_ = 20;
-    title_ls_ = 1;
     detail_px_ = 24;
     detail_min_ = 16;
-    box_title_ = fit_label(root_, fit_, Face::Bold, 30, col::kInk, 444, g_.row_y + 8 + (g_.row_h - 72) / 2, 206, 30, LV_TEXT_ALIGN_LEFT, 1);
+    box_title_ = fit_label(root_, fit_, Face::Bold, 30, col::kInk, 444, g_.row_y + 8 + (g_.row_h - 72) / 2, 206, 30, LV_TEXT_ALIGN_LEFT, 0);
     box_detail_ = fit_label(root_, fit_, Face::Medium, 24, col::kInkSoft, 444, g_.row_y + 44 + (g_.row_h - 72) / 2, 236, 24);
     lv_label_set_recolor(box_detail_, true); /* the lost-audio part is red (red_tail) */
     state_lamp_ = std::make_unique<Lamp>(root_, fit_.x(662), fit_.y(g_.row_y + 14 + (g_.row_h - 72) / 2), fit_.px(18), col::kLampRed, fit_.px(6));
@@ -442,6 +440,25 @@ void RecorderPage::place_strip_right(const std::string &state)
     lv_obj_set_width(strip_text_, std::max(10, x - strip_x_));
 }
 
+/* The info box's first line, bold, one line: the largest size (ui_format.hpp largest_fit_px) at which it fits the label's
+ * width, down to the font ladder's smallest (6 px); centred on the line's place whatever the size. */
+void RecorderPage::set_box_codec(const std::string &text)
+{
+    if (text == box_codec_ && box_codec_px_ > 0) return;
+    const int w = lv_obj_get_style_width(box_title_, LV_PART_MAIN);
+    const int px = largest_fit_px(fit_.px(title_px_), 6, w,
+                                  [&](int p) { return text_width(font(Face::Bold, p), text.c_str(), 0); });
+    const lv_font_t *f = font(Face::Bold, px);
+    if (box_title_cy_ < 0)
+        box_title_cy_ = lv_obj_get_style_y(box_title_, LV_PART_MAIN) + lv_font_get_line_height(lv_obj_get_style_text_font(box_title_, LV_PART_MAIN)) / 2;
+    lv_obj_set_style_text_font(box_title_, f, 0);
+    lv_obj_set_style_text_letter_space(box_title_, 0, 0);
+    lv_obj_set_y(box_title_, box_title_cy_ - lv_font_get_line_height(f) / 2);
+    set_text(box_title_, text);
+    box_codec_ = text;
+    box_codec_px_ = px;
+}
+
 void RecorderPage::update(const RecorderVm &rec, const std::string &notice)
 {
     last_rec_ = &rec;
@@ -513,14 +530,9 @@ void RecorderPage::update_deck(const RecorderVm &rec)
         set_fitted(strip_text_, Face::Bold, fit_.px(14), ls_screen(0.5, fit_.s), std::max(8, fit_.px(9)),
                    red_tail(info_line(rec), info_lost(rec)));
     } else {
-        set_fitted(box_title_, Face::Bold, fit_.px(title_px_), ls_screen(title_ls_, fit_.s), std::max(9, fit_.px(title_min_)),
-                   info_title(rec));
-        /* the square box's detail leads with the format; when that does not fit one line at the smallest size, the plain detail */
-        std::string detail = square_ ? info_detail_wide(rec) : info_detail(rec);
-        const int dmin = std::max(9, fit_.px(detail_min_));
-        if (square_ && text_width(font(Face::Medium, dmin), detail.c_str(), 0) > fit_.w(444, 236))
-            detail = info_detail(rec);
-        set_fitted(box_detail_, Face::Medium, fit_.px(detail_px_), 0, dmin, red_tail(detail, info_lost(rec)));
+        set_box_codec(info_codec(rec));
+        set_fitted(box_detail_, Face::Medium, fit_.px(detail_px_), 0, std::max(9, fit_.px(detail_min_)),
+                   red_tail(info_detail(rec), info_lost(rec)));
         state_lamp_->set(!state.empty(), state == "PLAY" ? col::kLampGreen : col::kLampRed);
     }
 

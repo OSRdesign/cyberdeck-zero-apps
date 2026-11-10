@@ -6,16 +6,19 @@ env CASSETTE_DEMO_HOME demo-home
 env CASSETTE_LAYOUT_CHECK 1
 
 wait 1500
-@320x480 expect text "TAKE 001"
+@320x480 expect text "WAV 48k"
+@320x480 expect notext "TAKE 001"
 expect text "CARD"
 expect text "SOFT"
 expect notext "No sound input found. Plug in a USB sound card or headset."
 tap "REC"
 wait 3300
-@320x480 expect text "TAKE 001"
+@320x480 expect text "WAV 48k"
+@320x480 expect notext "TAKE 001"
 tap "STOP"
 wait 1000
-@320x480 expect text "TAKE 001"
+@320x480 expect text "WAV 48k"
+@320x480 expect notext "TAKE 001"
 say STOP closed the take; the new take stays loaded on the cassette (no load animation)
 key l
 wait 700

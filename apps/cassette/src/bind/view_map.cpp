@@ -738,6 +738,22 @@ ui::ViewModel map_view(const MapInput &in)
     r.tape.format = tape_format(tape_fmt);
     r.info.take = present || rec_side || play_side ? upper(take_name) : "NO INPUT";
     r.info.format = present ? s.take.format_text : std::string();
+    if (present) {
+        /* the box's codec line: the take being recorded, idle the Settings choice (both are the controller's format_text) */
+        r.info.codec = tape_format(s.take.format_text);
+        r.info.kbps = s.take.opus_kbps;
+    } else {
+        /* no input: the codec of the Settings choice, with the rate when one is stored or known */
+        const RecParams p = resolve_params(s.format_inputs, stored_of(s.settings));
+        std::string c = upper(codec_name(p.codec));
+        if (p.rate) {
+            char b[24];
+            std::snprintf(b, sizeof b, " %gk", p.rate / 1000.0);
+            c += b;
+        }
+        r.info.codec = c;
+        r.info.kbps = p.codec == RecFormat::Opus ? p.kbps : 0;
+    }
     r.info.time_left = time_left_text(s.take.hours_left);
     if (play_side) {
         r.info.play_pos_ms = std::llround(s.time.position_s * 1000.0);
@@ -850,11 +866,11 @@ bool same(const ui::RecorderVm &a, const ui::RecorderVm &b)
             a.meter.ch[i].peak_lamp != b.meter.ch[i].peak_lamp)
             return false;
     if (a.monitor_shown != b.monitor_shown || a.monitor_active != b.monitor_active) return false;
-    if (a.tape.loaded != b.tape.loaded || a.tape.label != b.tape.label || a.tape.side != b.tape.side ||
+    if (a.tape.loaded != b.tape.loaded || a.tape.label != b.tape.label ||
         a.tape.format != b.tape.format || a.tape.load_seq != b.tape.load_seq)
         return false;
     const ui::InfoVm &x = a.info, &y = b.info;
-    if (x.take != y.take || x.format != y.format || x.time_left != y.time_left || x.play_pos_ms != y.play_pos_ms ||
+    if (x.take != y.take || x.format != y.format || x.codec != y.codec || x.kbps != y.kbps || x.time_left != y.time_left || x.play_pos_ms != y.play_pos_ms ||
         x.play_len_ms != y.play_len_ms || x.server != y.server || x.card != y.card || x.lost_ms != y.lost_ms || x.limiter != y.limiter || x.low_cut != y.low_cut || x.notice != y.notice)
         return false;
     auto gain = [](const ui::GainVm &g, const ui::GainVm &h) {

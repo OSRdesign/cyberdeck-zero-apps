@@ -87,18 +87,44 @@ PlayKeyLook play_key_look(Transport t);
 constexpr double kHubPlayDps = 150.0;
 double hub_speed_dps(Transport t, int jump_dir = 0);
 
-/* The recorder's info strip (landscape, one line) and the portrait info box (title over detail):
- *   recording / idle   "TAKE 007 · 48k/16 WAV · 12 h 40 left"          box "TAKE 007" / "12 h 40 left"
- *   playing            "PLAYING TAKE 006 · 05:44 / 12:08"               box "TAKE 006" / "05:44 / 12:08"
+/* The recorder's info strip (landscape, one line) and the info box beside the counter (portrait, square: codec over detail;
+ * the take's name is on the cassette label, not in the box):
+ *   recording / idle   "TAKE 007 · 48k/16 WAV · 12 h 40 left"          box "WAV 48k" / "12 h 40 left"
+ *   playing            "PLAYING TAKE 006 · 05:44 / 12:08"               box "WAV 48k" / "05:44 / 12:08"
  *   paused             "PAUSED TAKE 006 · 05:44 / 12:08"                (the strip only; the box is the same)
  *   scanning           "PLAYING TAKE 006 · 05:44 / 12:08 · REW 5x"      (FWD 5x forward)
  * Empty parts are left out with their separator. A notice replaces the line (and the box's detail). */
 std::string info_line(const RecorderVm &rec);
-std::string info_title(const RecorderVm &rec);
+/* The box's first line: the codec and rate of the take being recorded, idle the Settings choice ("WAV 48k", "FLAC 44.1k",
+ * "OPUS 48k · 32 kbps": Opus adds its bit rate); while a take plays, the codec and rate of the take in the deck (no bit
+ * rate: it is not stored with a take). Never the take's name. */
+std::string info_codec(const RecorderVm &rec);
+/* The box's second line: what the strip shows after the take and format: the time left ("12 h 40 left"), the position over
+ * the length while playing, the lost audio, the notice. */
 std::string info_detail(const RecorderVm &rec);
-/* The square layout's wide box detail: the format in front of info_detail ("48k/16 WAV · 12 h 40 left") while idle or
- * recording; while playing and with a notice it is info_detail alone. */
-std::string info_detail_wide(const RecorderVm &rec);
+/* The largest size in [min_px, max_px] at which width_at(px) is at most max_w (the font ladder walked from the top: the text
+ * stays one line); min_px when none fits. */
+int largest_fit_px(int max_px, int min_px, int max_w, const std::function<int(int)> &width_at);
+/* A cassette-label name set in at most max_lines lines no wider than max_w (width = the text's width in px at the font in
+ * use). One line when it fits; else split at a space, the split that makes the longer line shortest; a word too wide for a
+ * line is broken inside the word. fits = false: it does not fit (the last line then ends with "..." and fits). The spaces at
+ * a split are not in the lines. */
+struct NameWrap {
+    std::vector<std::string> lines;
+    bool fits = true;
+};
+NameWrap wrap_name(const std::string &name, int max_w, int max_lines, const std::function<int(const std::string &)> &width);
+/* The label's name: the largest rung (rungs largest first, none above wanted) in which the name fits the writing area
+ * (max_w x max_h px) in at most two lines of that rung (line pitch = rung + 1, at most the font's line height); the smallest
+ * rung (lines then ending with "...") when none does. */
+struct NameLayout {
+    int rung = 0;
+    NameWrap wrap;
+    int pitch = 0;  /* px between the lines' tops */
+    int text_h = 0; /* the whole text's height: (lines - 1) * pitch + the font's line height */
+};
+NameLayout layout_name_text(const std::string &name, const std::vector<int> &rungs, int wanted, int max_w, int max_h,
+                            const std::function<int(int, const std::string &)> &width, const std::function<int(int)> &line_h);
 /* The state lamp at the strip's right end: "REC" (recording, paused, countdown), "PLAY" (playing, scanning), "" none. */
 std::string info_state(const RecorderVm &rec);
 /* The lost-audio part of the strip: "lost 0.3 s" (one decimal; "lost <0.1 s" under 50 ms) while a take records and audio was

@@ -189,6 +189,7 @@ struct TakeSnap {
                                 * gets now ("48k/16 FLAC" when the stored choice is FLAC and usable) */
     uint64_t free_bytes = 0;
     double hours_left = 0;     /* at the current format (FLAC / Opus: from the choice's size estimate) */
+    int opus_kbps = 0;         /* the bit rate of the Opus choice a take gets now (the take being recorded), else 0 */
     bool recording = false;
 };
 

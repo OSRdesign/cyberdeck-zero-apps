@@ -1174,6 +1174,7 @@ struct Controller::Impl : public DeckCommands {
         s.take.format_text = format_text(f, rec_compressed ? format_tag(rec_choice.key.format) : "WAV");
         s.take.free_bytes = space.free_bytes;
         s.take.hours_left = space.hours_left;
+        s.take.opus_kbps = rec_compressed && rec_choice.key.format == RecFormat::Opus ? rec_choice.opus_bitrate_bps / 1000 : 0;
         /* the Format picker's inputs */
         s.format_inputs.codecs = codecs_now();
         if (s.card.present && fmt.rate && fmt.channels && fmt.bits) fill_inputs(s.format_inputs);

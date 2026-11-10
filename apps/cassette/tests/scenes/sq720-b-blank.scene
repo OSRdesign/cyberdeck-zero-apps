@@ -7,7 +7,8 @@ env CASSETTE_LAYOUT_CHECK 1
 wait 500
 shot blank
 expect notext "Take 0"
-expect text "TAKE 008"
+expect text "WAV 48k"
+expect notext "TAKE 008"
 expect notext "OPEN"
 expect notext "LAYOUT FAIL"
 expect noquit

@@ -8,6 +8,7 @@ env CASSETTE_LAYOUT_CHECK 1
 wait 600
 shot recording-mon-dark
 expect text "MON"
-expect text "TAKE 007"
+expect text "WAV 48k"
+expect notext "TAKE 007"
 expect notext "LAYOUT FAIL"
 expect noquit

@@ -45,7 +45,7 @@ Each comes from a scene in `tests/scenes` (named below): the build writes its PN
 Four pages and two boxes:
 
 - **Recorder** (the first page). The cassette window with two hubs that turn while the deck runs (no tape is drawn),
-  the take's name on the label (with no take loaded, at first start or after the last one is deleted, a blank cassette
+  the take's name on the label, in handwriting and nothing else (up to two lines for a long name; with no take loaded, at first start or after the last one is deleted, a blank cassette
   sits in the deck with an empty label, so REC only starts the hubs), the counter, the **Recordings** (L) and **Settings** (S) buttons beside it, the LED
   meter (15 steps over -40 to 0 dBFS, one bar per channel, peak hold, the PEAK lamp, the target zone from -18 to
   -6 dBFS marked on the scale), the **CARD** stepper (the card's own level, only when the card has a level control) and
@@ -267,7 +267,7 @@ the landscape board scaled on a square screen.
 
 The square layout is the 720x720 mockup scaled by screen width / 720 (the toolkit's header takes the top 64 px): the
 cassette window 498x260 with the cassette drawn at 2.3x (459x239) and no OPEN word; under it the counter, the
-Recordings and Settings buttons and the info box (take name and REC lamp over the format and the time left); the LED
+Recordings and Settings buttons and the info box (the codec and rate, for Opus with the bit rate, and the REC lamp over the time left; the take's name is on the cassette label); the LED
 meter panel across the full width, thin (24 px bars, the scale on one row, TARGET right of its bracket, MON under IN, PEAK
 at the right), as tall for one channel as for two (L over R; one channel sits centred in it, so nothing below ever moves); CARD and SOFT side by side (CARD hidden when the card has no level
 control, SOFT then takes the full width); the five keys across the full width. Left and right margins are equal

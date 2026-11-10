@@ -9,6 +9,7 @@
 #include "paint.hpp"
 #include "theme.hpp"
 #include "ui_check.hpp"
+#include "ui_format.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -70,7 +71,7 @@ CassetteWindow::CassetteWindow(lv_obj_t *parent, const Fit &fit, const Layout &l
     base_y_ = ty - (wy + bw);
     lv_obj_set_pos(cass_, tx - (wx + bw), base_y_);
     lv_obj_set_size(cass_, cw, ch);
-    box_w_ = static_cast<int>(std::lround(118 * k_));
+    box_w_ = static_cast<int>(std::lround(160 * k_)); /* the writing area: the label's width inside the 20 unit margins */
     canvas_ = lv_canvas_create(cass_);
     lv_obj_remove_flag(canvas_, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_pos(canvas_, 0, 0);
@@ -92,6 +93,10 @@ CassetteWindow::CassetteWindow(lv_obj_t *parent, const Fit &fit, const Layout &l
         lv_obj_set_size(hub_[i], hub_box_, hub_box_);
         if (frames_[0]) lv_image_set_src(hub_[i], frames_[0]);
     }
+
+    /* the label's ruled line under a one-line name (gone with a two-line name, which fills the writing area) */
+    rule_ = box(cass_, static_cast<int>(std::lround(20 * k_)), static_cast<int>(std::lround(46 * k_)), box_w_, 1, col::kPaperLine, 0);
+    lv_obj_add_flag(rule_, LV_OBJ_FLAG_HIDDEN);
 
     /* the take name: a label in the handwriting face inside a container whose width is the reveal */
     name_clip_ = lv_obj_create(cass_);
@@ -226,14 +231,8 @@ void CassetteWindow::render_tape()
         lv_draw_rect(&layer, &d, &shell);
         fill(&layer, area(X(10), X(8), X(180), X(46)), col::kPaper, X(3));
         fill(&layer, area(X(10), X(8), X(180), X(8)), col::kStripe, X(3));
-        line(&layer, X(20), X(46), X(180), X(46), 1, col::kPaperLine);
-        /* the take name is not in the canvas: it is a label of its own (name_label_), written in by the load animation */
-        const lv_font_t *fs = font(Face::Bold, X(10));
-        text(&layer, fs, side_.c_str(), area(X(100), top_for_baseline(fs, X(31)), X(76), lv_font_get_line_height(fs)),
-             col::kLabelInk, LV_TEXT_ALIGN_RIGHT, std::max(0, X(1) - 1));
-        const lv_font_t *ff = font(Face::Medium, X(9));
-        text(&layer, ff, format_.c_str(), area(X(100), top_for_baseline(ff, X(51)), X(76), lv_font_get_line_height(ff)),
-             col::kLabelGrey, LV_TEXT_ALIGN_RIGHT, std::max(0, X(1) - 1));
+        /* the label carries nothing but the handwritten name: a label of its own (name_label_), written in by the load
+         * animation; the ruled line under a one-line name is an object of its own too (rule_) */
         lv_draw_rect_dsc_init(&d);
         d.radius = X(16);
         d.bg_color = lv_color_hex(col::kHubWindow);
@@ -258,8 +257,6 @@ void CassetteWindow::update(const RecorderVm &rec)
     /* what the model says */
     t_loaded_ = rec.input_present && rec.tape.loaded;
     if (t_label_ != rec.tape.label) t_label_ = rec.tape.label;
-    if (t_side_ != rec.tape.side) t_side_ = rec.tape.side;
-    if (t_format_ != rec.tape.format) t_format_ = rec.tape.format;
     const bool event = have_seq_ && rec.tape.load_seq != seq_;
     seq_ = rec.tape.load_seq;
     have_seq_ = true;
@@ -283,7 +280,7 @@ void CassetteWindow::update(const RecorderVm &rec)
         if (!t_loaded_) {
             finish_load();
             apply_target();
-        } else if (swapped_ && (t_loaded_ != loaded_ || t_label_ != label_ || t_side_ != side_ || t_format_ != format_)) {
+        } else if (swapped_ && (t_loaded_ != loaded_ || t_label_ != label_)) {
             apply_target(); /* a text changed under the animation (rename): shown at once */
         }
     } else {
@@ -325,13 +322,11 @@ void CassetteWindow::update(const RecorderVm &rec)
 /* The cassette as the model says, at rest (the target's texts, in its place); during a load only the texts follow. */
 void CassetteWindow::apply_target()
 {
-    const bool changed = t_loaded_ != loaded_ || t_label_ != label_ || t_side_ != side_ || t_format_ != format_;
+    const bool changed = t_loaded_ != loaded_ || t_label_ != label_;
     if (changed) {
-        const bool canvas_changed = t_loaded_ != loaded_ || t_side_ != side_ || t_format_ != format_;
+        const bool canvas_changed = t_loaded_ != loaded_;
         loaded_ = t_loaded_;
         label_ = t_label_;
-        side_ = t_side_;
-        format_ = t_format_;
         if (canvas_changed) render_tape();
         layout_name();
     }
@@ -347,32 +342,44 @@ void CassetteWindow::apply_target()
     show(canvas_, tape_buf_ != nullptr);
 }
 
-/* The font rung, the size and the place of the name label; the reveal at 100 %. */
+/* The font rung, the lines, the size and the place of the name label; the reveal at 100 %. The name has the label's whole
+ * writing area (160 x 36 units under the red stripe): the largest rung of the handwriting ladder (at most 22 units, as
+ * before) in which it fits on one line, else on two lines (ui_format.hpp layout_name_text). One line sits where it always
+ * sat (baseline 40, on the ruled line at 46); two lines are centred in the writing area and the ruled line is left out. */
 void CassetteWindow::layout_name()
 {
     const bool has = loaded_ && !label_.empty();
     show(name_clip_, has);
-    if (!has) return;
+    if (!has) {
+        show(rule_, loaded_);
+        return;
+    }
     const double k = k_;
     auto X = [k](double v) { return static_cast<int>(std::lround(v * k)); };
-    /* the label's largest size is the old Bold face's X(22); the ladder of fonts has a few rungs, the next smaller one when
-     * the name is too wide; the last rung ends with dots */
-    int rung = hand_rung(X(22));
-    const lv_font_t *f = handwriting_font(rung);
-    while (text_width(f, label_.c_str(), 0) > box_w_) {
-        const int below = hand_rung_below(rung);
-        if (below == 0) break;
-        rung = below;
-        f = handwriting_font(rung);
-    }
-    const int tw = text_width(f, label_.c_str(), 0);
-    lv_obj_set_style_text_font(name_label_, f, 0);
-    lv_label_set_long_mode(name_label_, tw > box_w_ ? LV_LABEL_LONG_MODE_DOTS : LV_LABEL_LONG_MODE_CLIP);
-    set_text(name_label_, label_);
+    std::vector<int> rungs;
+    for (int i = kHandRungCount - 1; i >= 0; --i) rungs.push_back(kHandRungs[i]);
+    const NameLayout nl = layout_name_text(
+        label_, rungs, hand_rung(X(22)), box_w_, X(36),
+        [](int r, const std::string &s) { return text_width(handwriting_font(r), s.c_str(), 0); },
+        [](int r) { return static_cast<int>(lv_font_get_line_height(handwriting_font(r))); });
+    const lv_font_t *f = handwriting_font(nl.rung);
     const int lh = lv_font_get_line_height(f);
-    lv_obj_set_size(name_label_, box_w_, lh);
-    lv_obj_set_pos(name_clip_, X(20), top_for_baseline(f, X(40)));
-    lv_obj_set_height(name_clip_, lh);
+    std::string text;
+    int tw = 0;
+    for (std::size_t i = 0; i < nl.wrap.lines.size(); ++i) {
+        if (i) text += '\n';
+        text += nl.wrap.lines[i];
+        tw = std::max(tw, text_width(f, nl.wrap.lines[i].c_str(), 0));
+    }
+    const bool two = nl.wrap.lines.size() > 1;
+    show(rule_, !two);
+    lv_obj_set_style_text_font(name_label_, f, 0);
+    lv_obj_set_style_text_line_space(name_label_, nl.pitch - lh, 0);
+    lv_label_set_long_mode(name_label_, LV_LABEL_LONG_MODE_CLIP);
+    set_text(name_label_, text);
+    lv_obj_set_size(name_label_, box_w_, nl.text_h);
+    lv_obj_set_pos(name_clip_, X(20), two ? X(17) + (X(36) - nl.text_h) / 2 : top_for_baseline(f, X(40)));
+    lv_obj_set_height(name_clip_, nl.text_h);
     name_w_ = std::min(box_w_, tw + 2);
     reveal_w_ = -1;
     set_reveal(name_w_);
@@ -402,11 +409,9 @@ void CassetteWindow::begin_load()
 /* The new cassette's texts into the canvas and the name label; called when nothing of the cassette is in view. */
 void CassetteWindow::swap_to_target()
 {
-    const bool canvas_changed = t_loaded_ != loaded_ || t_side_ != side_ || t_format_ != format_ || !load_.had_old();
+    const bool canvas_changed = t_loaded_ != loaded_ || !load_.had_old();
     loaded_ = t_loaded_;
     label_ = t_label_;
-    side_ = t_side_;
-    format_ = t_format_;
     if (canvas_changed) render_tape();
     /* the hubs at rest on their first frame */
     angle_[0] = angle_[1] = 0;

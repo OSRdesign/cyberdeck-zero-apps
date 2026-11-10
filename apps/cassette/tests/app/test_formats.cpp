@@ -481,10 +481,12 @@ void t_set_format_choice() {
     s = r.snap();
     CHECK(s.settings.format == RecFormat::Flac && s.settings.format_preset.empty());
     CHECK_EQ(s.take.format_text, "48k/16 FLAC");
+    CHECK_EQ(s.take.opus_kbps, 0);
     CHECK(c.set_format_choice(RecFormat::Opus, "music64"));
     s = r.snap();
     CHECK(s.settings.format == RecFormat::Opus && s.settings.format_preset == "music64");
     CHECK_EQ(s.take.format_text, "48k/16 OPUS");
+    CHECK_EQ(s.take.opus_kbps, 64);
     CHECK(!c.set_format_choice(RecFormat::Opus, "speech99")); /* not a preset of the model: unchanged */
     CHECK(!c.set_format_choice(RecFormat::Flac, "music64"));
     CHECK(!c.set_format_choice(RecFormat::Wav, "speech24"));
@@ -496,6 +498,7 @@ void t_set_format_choice() {
     CHECK(c.set_format_choice(RecFormat::Wav, ""));
     s = r.snap();
     CHECK_EQ(s.take.format_text, "48k/16 WAV");
+    CHECK_EQ(s.take.opus_kbps, 0);
     CHECK(s.settings.format_preset.empty());
     /* not while a take runs */
     c.key_event(KeyEvent::Rec);
@@ -576,6 +579,7 @@ void t_rec_params() {
         CHECK(r.wait_meter());
         const bool at16 = k % 32 == 0;
         CHECK_EQ(r.snap().take.format_text, at16 ? "16k/16 OPUS" : "48k/16 OPUS");
+        CHECK_EQ(r.snap().take.opus_kbps, k); /* the info box names the bit rate of the choice */
         seen_bps = 0;
         CHECK(record(r, 0.3));
         CHECK_EQ(seen_bps.load(), k * 1000);

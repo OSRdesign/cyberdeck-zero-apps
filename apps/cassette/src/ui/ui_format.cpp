@@ -7,6 +7,7 @@
 
 #include "theme.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
@@ -187,9 +188,117 @@ std::string info_line(const RecorderVm &r)
     return out;
 }
 
-std::string info_title(const RecorderVm &r)
+std::string info_codec(const RecorderVm &r)
 {
-    return r.info.take;
+    if (playing(r.transport) && !r.tape.format.empty()) return r.tape.format;
+    std::string out = r.info.codec;
+    if (r.info.kbps > 0) join(out, std::to_string(r.info.kbps) + " kbps");
+    return out;
+}
+
+int largest_fit_px(int max_px, int min_px, int max_w, const std::function<int(int)> &width_at)
+{
+    for (int p = max_px; p > min_px; --p)
+        if (width_at(p) <= max_w) return p;
+    return min_px < max_px ? min_px : max_px;
+}
+
+namespace {
+
+/* the longest prefix of s (cut at a UTF-8 character boundary) that fits, at least one character */
+std::size_t prefix_fitting(const std::string &s, int max_w, const std::function<int(const std::string &)> &width)
+{
+    std::size_t best = 0;
+    for (std::size_t i = 1; i <= s.size(); ++i) {
+        if (i < s.size() && (static_cast<unsigned char>(s[i]) & 0xC0) == 0x80) continue;
+        if (width(s.substr(0, i)) > max_w) break;
+        best = i;
+    }
+    if (best == 0) { /* not even one character fits: take it anyway */
+        best = 1;
+        while (best < s.size() && (static_cast<unsigned char>(s[best]) & 0xC0) == 0x80) ++best;
+    }
+    return best;
+}
+
+/* s cut (at a character boundary) so that s + "..." fits */
+std::string with_dots(const std::string &s, int max_w, const std::function<int(const std::string &)> &width)
+{
+    std::string t = s;
+    while (!t.empty()) {
+        if (width(t + "...") <= max_w) return t + "...";
+        std::size_t n = t.size() - 1;
+        while (n > 0 && (static_cast<unsigned char>(t[n]) & 0xC0) == 0x80) --n;
+        t.erase(n);
+    }
+    return "...";
+}
+
+} // namespace
+
+NameWrap wrap_name(const std::string &name, int max_w, int max_lines, const std::function<int(const std::string &)> &width)
+{
+    NameWrap w;
+    if (name.empty() || width(name) <= max_w || max_lines < 2) {
+        w.lines.push_back(name);
+        if (width(name) > max_w) {
+            w.fits = false;
+            w.lines[0] = with_dots(name, max_w, width);
+        }
+        return w;
+    }
+    /* two lines: the space whose split leaves the shorter longer line */
+    int best = -1, best_w = 0;
+    for (std::size_t i = 1; i + 1 < name.size(); ++i) {
+        if (name[i] != ' ') continue;
+        std::size_t a = i, b = i + 1;
+        while (a > 0 && name[a - 1] == ' ') --a;
+        while (b < name.size() && name[b] == ' ') ++b;
+        if (a == 0 || b >= name.size()) continue;
+        const int w1 = width(name.substr(0, a)), w2 = width(name.substr(b));
+        if (w1 > max_w || w2 > max_w) continue;
+        const int m = std::max(w1, w2);
+        if (best < 0 || m < best_w) best = static_cast<int>(i), best_w = m;
+    }
+    if (best >= 0) {
+        std::size_t a = static_cast<std::size_t>(best), b = a + 1;
+        while (a > 0 && name[a - 1] == ' ') --a;
+        while (b < name.size() && name[b] == ' ') ++b;
+        w.lines = {name.substr(0, a), name.substr(b)};
+        return w;
+    }
+    /* no space split fits: the first line takes what fits (up to a space when there is one), the rest is the second */
+    std::size_t cut = prefix_fitting(name, max_w, width);
+    const std::size_t sp = name.rfind(' ', cut);
+    if (sp != std::string::npos && sp > 0 && cut < name.size()) cut = sp;
+    std::string l1 = name.substr(0, cut), l2 = name.substr(cut);
+    while (!l2.empty() && l2[0] == ' ') l2.erase(0, 1);
+    while (!l1.empty() && l1.back() == ' ') l1.pop_back();
+    w.lines = {l1, l2};
+    if (width(l2) > max_w) {
+        w.fits = false;
+        w.lines[1] = with_dots(l2, max_w, width);
+    }
+    return w;
+}
+
+NameLayout layout_name_text(const std::string &name, const std::vector<int> &rungs, int wanted, int max_w, int max_h,
+                            const std::function<int(int, const std::string &)> &width, const std::function<int(int)> &line_h)
+{
+    NameLayout best;
+    for (std::size_t i = 0; i < rungs.size(); ++i) {
+        const int r = rungs[i];
+        if (r > wanted && i + 1 < rungs.size()) continue;
+        NameLayout l;
+        l.rung = r;
+        const int lh = line_h(r);
+        l.pitch = std::min(lh, r + 1);
+        l.wrap = wrap_name(name, max_w, 2, [&](const std::string &s) { return width(r, s); });
+        l.text_h = (static_cast<int>(l.wrap.lines.size()) - 1) * l.pitch + lh;
+        best = l;
+        if (l.wrap.fits && l.text_h <= max_h) return l;
+    }
+    return best;
 }
 
 std::string info_detail(const RecorderVm &r)
@@ -201,15 +310,6 @@ std::string info_detail(const RecorderVm &r)
     if (r.info.server && (recording(r.transport) || r.transport == Transport::Idle))
         return r.info.time_left.empty() ? std::string("(server)") : "(server) " + r.info.time_left;
     return r.info.time_left.empty() ? std::string() : r.info.time_left + " left";
-}
-
-std::string info_detail_wide(const RecorderVm &r)
-{
-    const std::string d = info_detail(r);
-    if (!r.info.notice.empty() || playing(r.transport) || r.info.format.empty()) return d;
-    std::string out = r.info.format;
-    join(out, d);
-    return out;
 }
 
 std::string info_lost(const RecorderVm &r)
