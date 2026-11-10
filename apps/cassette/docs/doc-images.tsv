@@ -42,3 +42,15 @@ size-800x480.png	y-other-sizes	800x480	other-recording
 size-720x720.png	sq720-a-idle	720x720	idle
 size-480x480.png	sq480-a-idle	480x480	idle
 square-stereo.png	sq720-i-stereo	720x720	stereo
+settings-format-flac.png	fmt6-format-current-flac	480x320	settings-flac
+format-picker-640x480.png	fmt1-format-all	640x480	picker-top
+format-picker-480x320.png	fmt1-format-all	480x320	picker-top
+format-picker-bottom.png	fmt1-format-all	480x320	picker-bottom
+format-picker-current-flac.png	fmt6-format-current-flac	480x320	picker-current-flac
+format-picker-unavailable.png	fmt2-format-stereo	480x320	picker-top
+format-picker-notice.png	fmt2-format-stereo	480x320	picker-notice
+format-picker-nolib.png	fmt3-format-nolib	480x320	picker-top
+rename-counter-mid.png	r2-rename-counter	480x320	rename-count-mid
+rename-counter-amber.png	r2-rename-counter	480x320	rename-count-amber
+rename-counter-full.png	r2-rename-counter	480x320	rename-count-full
+list-tags.png	r8-list-tags	480x320	list-tags

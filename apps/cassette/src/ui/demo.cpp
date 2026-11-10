@@ -315,6 +315,11 @@ ViewModel demo_model(const std::string &scene)
                take("004", "nodate \xC2\xB7 41 s \xC2\xB7 4 MB", 41000),
                take("003", "2 Nov \xC2\xB7 1 h 02 \xC2\xB7 357 MB", 3720000)};
     l.selected = 1;
+    /* CASSETTE_DEMO_LIST_TAGS=1: the format tag the real list adds at the end of the detail line (a folder can hold all three) */
+    if (const char *lt = std::getenv("CASSETTE_DEMO_LIST_TAGS"); lt && *lt && std::string(lt) != "0") {
+        static const char *const tags[] = {"FLAC", "WAV", "OPUS", "WAV", "FLAC"};
+        for (size_t i = 0; i < l.takes.size() && i < 5; ++i) l.takes[i].detail += std::string(" \xC2\xB7 ") + tags[i];
+    }
     if (scene == "notakes") {
         l.takes.clear();
         l.selected = 0;

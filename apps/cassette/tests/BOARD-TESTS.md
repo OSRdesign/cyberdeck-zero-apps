@@ -554,7 +554,7 @@ was dimmed, any cut or overlapping text.
 `ui` log line per board; the notice texts as you read them; screenshots or photos of anything cut, overlapping or odd.
 No audio files.
 
-**Known limits of 0.1:** WAV only (FLAC and Opus come in 0.2); no background recording (leaving the app ends the take,
+**Known limits:** WAV is the default format (FLAC and Opus are optional: they need libflac / libopusenc0 and libopus0, and Opus is not offered at 44.1 kHz; the boards' CPU for them is measured in B17 and B18); no background recording (leaving the app ends the take,
 which is kept); the card is found again after a replug but the take that was running is closed, not continued; the
 headset's own level is weak (peaks around -17 to -7 dBFS at full level in P0): use SOFT on top of it.
 

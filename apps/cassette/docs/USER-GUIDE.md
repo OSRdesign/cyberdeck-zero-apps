@@ -1,10 +1,11 @@
 # Cassette: user guide
 
 Cassette is a sound recorder that looks like a tape deck. You plug a USB sound card or a USB headset into a
-CyberDeck board, press REC, and the sound goes into a WAV file in the `Recordings` folder. You can listen again, cut
-a take with trim and split, and watch a level meter while you record.
+CyberDeck board, press REC, and the sound goes into a file in the `Recordings` folder: a WAV file, or, if you choose
+it, a smaller FLAC or Ogg Opus file. You can listen again, cut a take with trim and split, and watch a level meter
+while you record.
 
-This guide describes version 0.1.0 as it is in the source. Pictures are rendered on a PC from the app's test scenes
+This guide describes the app as it is in the source (the 0.1 line, with FLAC and Ogg Opus). Pictures are rendered on a PC from the app's test scenes
 (a made-up sound source: the tones and levels are not real audio); the two captures at the end of
 [Screen sizes](#screen-sizes-and-layouts) come from real boards. How to refresh the pictures:
 [MAKING-SCREENSHOTS.md](MAKING-SCREENSHOTS.md).
@@ -19,6 +20,7 @@ Contents:
 [The recordings list](#the-recordings-list) |
 [Trim and split](#trim-and-split) |
 [Settings](#settings) |
+[Formats](#formats-wav-flac-and-ogg-opus) |
 [Take number](#take-number) |
 [Screen sizes](#screen-sizes-and-layouts) |
 [Keys](#keyboard-shortcuts) |
@@ -36,7 +38,9 @@ Contents:
   screens such as the HackBerry's 720x720 and 480x480 have their own layout.
 - Your user must be in the `audio` group. The board images do this for the first user; otherwise run
   `sudo usermod -aG audio $USER` and log out and in again.
-- Nothing else. There is no network code in the app: nothing you record leaves the board.
+- Nothing else for WAV. For **FLAC** and **Ogg Opus** the board needs a few libraries (`libflac`, `libopusenc0`,
+  `libopus0`; see [Formats](#formats-wav-flac-and-ogg-opus)); without them those formats are simply not offered and
+  Cassette records WAV. There is no network code in the app: nothing you record leaves the board.
 
 **Cards used so far** (named by the owner; the source does not hold the results of the board tests, so what each
 card does is described only where the code says it): the PCM2902 USB sound card with a microphone, the UC02 USB-C
@@ -136,14 +140,15 @@ nothing is written. At zero the take starts. The timer makes no sound.
 
 ![The record countdown](img/countdown.png)
 
-**Names and numbers.** Each take is a file named `take_006_20261108-1105.wav`: the prefix (`take` by default),
-the take number (at least 3 digits), and the date and time. The take number only goes up and **never repeats**, even
+**Names and numbers.** Each take is a file named `take_006_20261108-1105.wav` (`.flac` or `.opus` for those formats):
+the prefix (`take` by default), the take number (at least 3 digits), and the date and time. The take number only goes up and **never repeats**, even
 after you delete takes (see [Take number](#take-number) to move it). Until the board's clock is set from the
 network, the date reads `nodate`: a wrong date in a name would be worse than none. On screen the name shows as
-`Take 006`. You can change the prefix in Settings (*File prefix*: letters, digits, `-` and `_`, 1 to 24 characters)
-or rename a take in the list.
+`Take 006`. You can change the prefix in Settings (*File prefix*) or rename a take in the list; both follow the
+[same rules](#the-recordings-list): a name may hold spaces (`my band_006_20261108-1105.wav`).
 
-**Long takes: auto-split.** A WAV file cannot hold more than 4 GiB the usual way. With *Auto-split* at **At 4 GiB**
+**Long takes: auto-split.** A WAV file cannot hold more than 4 GiB the usual way (FLAC and Opus takes are split at
+the same size, each part a complete file of its own). With *Auto-split* at **At 4 GiB**
 (default) a take that reaches 4 GiB goes on in a new file with `_p2` added to the name, then `_p3`. With **Off**, the
 take is one RF64 file (a WAV variant for big files; most players read it). For scale: 4 GiB is about 12 hours of mono
 audio at 48 kHz and 16 bit (a stereo card fills it in about 6).
@@ -235,9 +240,12 @@ If the playback device is lost, the deck pauses and the notice *The sound output
 Press the list button (or **L**). The takes are listed newest first. Each row has the take number on a small sticker,
 the name, when it was made (`today 11:05`, `yesterday 18:20`, a date, or `nodate`), its length and size, and its length
 again in large figures at the right. A take that was repaired after a power cut says
-`repaired`; a take that cannot be read says `damaged`. A strip shows how many takes there are, the folder and the free space.
+`repaired`; a take that cannot be read says `damaged`. The detail line ends with the format of the file: `WAV`, `FLAC`
+or `OPUS` (a folder can hold all three). A strip shows how many takes there are, the folder and the free space.
 
 ![The recordings list](img/list.png)
+
+![Takes of three formats: the row ends in WAV, FLAC or OPUS](img/list-tags.png)
 
 Four actions: **LOAD**, **RENAME**, **TRIM**, **DELETE**. A tap selects a row.
 
@@ -257,11 +265,24 @@ Four actions: **LOAD**, **RENAME**, **TRIM**, **DELETE**. A tap selects a row.
   ![Previewing a take](img/list-preview.png)
 
 - **RENAME** opens a text box to change the **prefix** of the name (the first part of the file name); the take
-  number, the date and the time stay. The prefix takes letters, digits, `-` and `_`, 1 to 24 characters. With no
-  keyboard connected the launcher shows its on-screen keyboard. If the name is not allowed, a notice says *Not
-  renamed* and why. The loaded take stays loaded under its new name.
+  number, the date, the time and the extension (`.wav`, `.flac`, `.opus`) stay. With no keyboard connected the launcher
+  shows its on-screen keyboard. The loaded take stays loaded under its new name.
+
+  The rules, the same for RENAME and for the File prefix setting:
+
+  - Letters, digits, **spaces**, `-` and `_`; 1 to 24 characters. Spaces typed before or after the name are dropped.
+  - A **counter** under the entry shows how many of the 24 characters are used (`9/24`). It is muted grey, turns
+    amber from 20 to 23 and red at 24; the entry takes no more than 24.
+  - A refusal says why: *Not renamed: up to 24 characters*, *use letters, digits, space, - and _*, *the name is
+    empty*, or *this file is not a Cassette take and cannot be renamed* (a file you put in the folder yourself that
+    does not follow the take name pattern). Two more causes can appear: *that name is taken* and *the take is in
+    use*. The File prefix setting says *Prefix not changed:* followed by the same reasons.
 
   ![Rename](img/rename.png)
+
+  | 9 of 24 | 21 of 24 | 24 of 24 |
+  |---|---|---|
+  | ![9/24, muted](img/rename-counter-mid.png) | ![21/24, amber](img/rename-counter-amber.png) | ![24/24, red](img/rename-counter-full.png) |
 
 - **TRIM** opens the [trim and split page](#trim-and-split) for the take. It is refused while a take records.
 - **DELETE** asks first (a box with DELETE and CANCEL; Enter without moving means CANCEL). Deleting
@@ -272,8 +293,8 @@ Four actions: **LOAD**, **RENAME**, **TRIM**, **DELETE**. A tap selects a row.
 
 ## Trim and split
 
-Open it from the list with **TRIM** (key **T**). It cuts a take without changing the audio: Cassette copies the sound
-as it is, nothing is decoded or converted.
+Open it from the list with **TRIM** (key **T**). It cuts a take without losing quality. A WAV take is copied as it is. FLAC and Opus
+takes are cut as [described below](#trim-and-split-of-flac-and-opus-takes).
 
 ![The trim and split page](img/trim.png)
 
@@ -287,7 +308,7 @@ at the edge when they are outside the window); and any number of numbered green 
 - **ZOOM** from the whole take down to a window of about 2 s (the stepper shows the window's length; Up / Down keys).
   The waveform scrolls with the marker.
   The first time you open a take, Cassette builds its waveform overview (the `.peaks` file); for a long take that
-  may take a moment.
+  may take a moment (a FLAC or Opus take is decoded for it, with a progress bar).
 - **SET IN / SET OUT** (keys I and O) set the start and end of the kept part at the marker. They are refused if IN
   would not be before OUT. Moving IN or OUT removes split flags that fall outside.
 - **SPLIT** (Enter) puts a split flag at the marker, between IN and OUT. Add as many as you like. A tap on a flag
@@ -311,7 +332,7 @@ will be written: one file for each part between IN, the split flags and OUT, wit
 
 ![Replace asks again](img/confirm-replace.png)
 
-Saving is safe against a power cut: each result is written to a temporary file, synced, then renamed into place. A
+A result keeps the format of its take (`-1.wav`, `-1.flac`, `-1.opus`). Saving is safe against a power cut: each result is written to a temporary file, synced, then renamed into place. A
 crash leaves the original or the finished results, never half a file. A notice tells the result (*Saved 3 new files*,
 *Saved, original replaced*, or *Save failed* and the reason).
 
@@ -331,7 +352,7 @@ The card's own rows depend on what the selected card has:
 | **Input level** | The card's recording level (same as CARD on the recorder). | what the card has | only when the card has a level control |
 | **Auto gain (card)** | The card's own automatic gain, if it has one. | as set on the card, then remembered | only when the card has it |
 | **Mic mute (card)** | Mutes the card's microphone. | off | only when the card has it |
-| **Format** | Shows what the take is: rate, depth, channels (for example `WAV 48 kHz 16-bit`). Read-only: WAV is the only format in this version. | WAV | always |
+| **Format** | The format of new takes. The row shows the choice in use (`WAV 48 kHz 16-bit`, `FLAC`, `Opus 32 kbps`; `WAV (FLAC unavailable)` when the stored choice cannot be used) and opens a [picker page](#formats-wav-flac-and-ogg-opus) with all formats. Cannot change while a take records. | WAV | always |
 | **Record timer** | Off, 3 s, 10 s, 20 s countdown before REC starts. | Off | always |
 | **REW / FWD** | *Fast scan 5x* (hold) or *Jump 5 s* (tap). | Fast scan 5x | always |
 | **Channels** | Mono or Stereo, what the card records. Read-only. | (the card) | always |
@@ -341,7 +362,7 @@ The card's own rows depend on what the selected card has:
 | **Monitor level** | Its volume, 0 to 100 % in steps of 5. | 50 % | with Monitor; dimmed while Monitor is off |
 | **Sync every** | How often the take is written safely to the card: 5, 10, 20 or 30 s. See [Crash safety](#crash-safety). | 10 s | always |
 | **Folder** | Shows where takes are kept. The list offers the current folder and `~/Recordings`; for another folder edit `folder` in `settings.json` (see Files). Cannot change while a take records. | `~/Recordings` | always |
-| **File prefix** | The first part of new take names (1 to 24 of letters, digits, `-`, `_`). | `take` | always |
+| **File prefix** | The first part of new take names. Same rules as RENAME: 1 to 24 characters of letters, digits, spaces, `-`, `_`. | `take` | always |
 | **Take number** | The number the next take gets. See below. | one more than the last take | always; dimmed while a take records |
 | **Auto-split** | *At 4 GiB* (new file) or *Off (one RF64 file)*. | At 4 GiB | always |
 | **Output** | The playback device. | automatic | only when there is more than one |
@@ -354,6 +375,127 @@ scrolls: drag it, or use Up / Down.
 ![Settings with Monitor](img/settings-monitor.png)
 
 ![Settings, bottom](img/settings-bottom.png)
+
+![Settings with Format set to FLAC](img/settings-format-flac.png)
+
+## Formats: WAV, FLAC and Ogg Opus
+
+Cassette records in one of three formats. **WAV** is the default: nothing is compressed and every player opens it.
+**FLAC** is lossless: it sounds exactly like the WAV, in a file about a third to a half of the size (a quiet room and
+speech compress best, noisy music least). **Ogg Opus** is lossy, made for voice: a take of a few hours fits in a few
+tens of megabytes, and the quality at the speech settings is good for talking.
+
+**Choosing.** Settings > **Format** opens a page that lists every format, always in this order, for the sound card you
+have now:
+
+| Entry | What it is |
+|---|---|
+| WAV | uncompressed, plays everywhere |
+| FLAC | lossless, a third to half the size |
+| Opus 24 kbps | speech, smallest |
+| Opus 32 kbps | speech, clear (the preset used when the settings file says Opus and names none) |
+| Opus 64 kbps | music and voice |
+| Opus 128 kbps | music, best |
+
+Each row shows the **estimated size per minute** at your card's format and, below, a line with what the format is for
+and **how many hours fit** in the free space of the recordings folder (for example `8433 h free` for FLAC on a large card; the figure is in hours, or minutes when under an hour). WAV is exact; FLAC
+reads `about` because it depends on the sound; Opus is its bit rate (real files are usually a little smaller). The
+footer of the page says which card format the sizes are for (`Sizes at 48 kHz mono 16-bit, this card`; with no sound
+input there are no sizes). The format in use has a dot before its name; the darker row is the one the keys are on (Up / Down move it, Enter chooses). Tap a row to choose it: the page closes and the
+Settings row shows the new choice. Esc leaves the page without a change. The choice cannot be changed while a take
+records or counts down (the row is dimmed).
+
+![The Format picker at 640x480, everything available](img/format-picker-640x480.png)
+
+![The Format picker at 480x320](img/format-picker-480x320.png)
+
+| The bottom of the list (the keys are on the last row) | FLAC chosen: the dot is on FLAC |
+|---|---|
+| ![The Opus rows at the bottom, scrolled with Down](img/format-picker-bottom.png) | ![FLAC is the format in use](img/format-picker-current-flac.png) |
+
+**Entries that are not available.** A format the card or the board cannot record stays in the list, **dimmed**, and its
+second line says why instead of the hours. A tap on it shows *Not available:* and the reason, and nothing changes. The
+reasons you can meet:
+
+| Reason | Meaning |
+|---|---|
+| `Opus cannot record at 44.1 kHz` | The card records at 44.1 kHz only. Opus takes 8, 12, 16, 24 and 48 kHz. Cassette does not resample. |
+| `Opus records at most 2 channels`, `more than 2 channels` | The card gives more than mono or stereo. |
+| `FLAC not installed (libflac14)` | The library is missing (the package name differs by system: `libflac12t64` on Ubuntu 24.04, `libflac12` on Debian bookworm). |
+| `Opus not installed (libopusenc0)` | The library for recording Opus is missing. |
+| the card's own reason | The card cannot be recorded at all; then every row is dimmed with its reason. |
+
+![A stereo card at 44.1 kHz: both Opus rows dimmed with the reason](img/format-picker-unavailable.png)
+
+![The notice after a tap on a dimmed row](img/format-picker-notice.png)
+
+![Libraries missing: FLAC and Opus dimmed, WAV works](img/format-picker-nolib.png)
+
+If the stored choice stops being possible (you unplug the stereo card for a mono one, or a library is removed),
+Cassette records **WAV** instead and the Settings row reads `WAV (FLAC unavailable)` or `WAV (Opus unavailable)`. The
+stored choice is kept and comes back when it is possible again.
+
+**What each format needs on the board.** The libraries are opened when needed; nothing is linked in.
+
+| | Record | Play, preview, scan, waveform | Trim and split |
+|---|---|---|---|
+| WAV | nothing | nothing | nothing |
+| FLAC | `libflac` (`libflac14`, `libflac12t64` or `libflac12`) | `libflac` | `libflac` |
+| Ogg Opus | `libopusenc0` and `libopus0` | `libopus0` | nothing |
+
+If a library is missing the format is unavailable in the picker and Cassette uses WAV. Install the package with
+`sudo apt install libflac14 libopusenc0 libopus0` (use `libflac12t64` instead of `libflac14` on Ubuntu 24.04). The Cassette
+package does not install them by itself.
+
+**Names and the list.** Takes are named `.flac` or `.opus` instead of `.wav`; the strip shows the format (`48k/16 FLAC`,
+`48k/16 OPUS`), and the take numbers run on across all formats. The recordings list ends each row with `WAV`, `FLAC` or
+`OPUS`. RENAME keeps the extension.
+
+**FLAC.** Level 5 FLAC, 16 or 24 bit as the card gives it, mono or stereo. The take is exactly what a WAV would have
+held. A rough size at 48 kHz mono 16 bit (the picker shows `about 1.7 MB/min`, a WAV minute is 5.8 MB): speech 27 to 41 % of the WAV,
+music about half. With a 24-bit card FLAC saves less (about 53 to 70 %), because the lowest bits of a real card are noise.
+
+**Ogg Opus.** Four settings, all variable bit rate, 20 ms frames:
+
+| Preset | Bit rate | Size per hour (at most) | Meant for |
+|---|---|---|---|
+| speech 24 | 24 kbps | about 11 MB | long voice notes and meetings, smallest |
+| speech 32 | 32 kbps | about 15 MB | interviews and lectures (the default) |
+| music 64 | 64 kbps | about 29 MB | voice with music, field sounds |
+| music 128 | 128 kbps | about 58 MB | rehearsals and concerts, near transparent |
+
+The speech settings code **one channel**: on a stereo card the take still says two channels, but the encoder
+codes only one of them (Cassette has no mixing code), so expect no stereo picture from a speech take. The music settings keep stereo. Opus is
+not offered when the card records at 44.1 kHz. An Opus take plays at the card's rate (8, 12, 16, 24 or 48 kHz).
+
+**The Opus delay and a power cut.** The Opus encoder holds back about **2 s** of sound before it can write it. At STOP
+it writes it all out (that takes a fraction of a second), so a normal take loses nothing. After a **power cut** a take
+loses the time since the last sync (10 s by default, see *Sync every*) **plus up to about 2 s**. FLAC loses the sync
+interval plus under 0.1 s.
+
+**Crash repair.** FLAC and Opus takes are repaired at the next start like WAV takes, from the journal or, for a file
+with no journal, when it looks unfinished: the file is cut after the last whole FLAC frame or Opus page and its length
+fields are set. The take is marked `repaired` in the list and the notice says how much was kept. A damaged piece in the
+middle of a FLAC take is skipped, never cut. The same holds for a card that is unplugged or a full disk: the take is
+closed and kept, and it is a valid file.
+
+**Playing.** FLAC and Opus takes load, play, pause, preview from the list, scan at 5x forwards and backwards, jump 5 s
+and show their waveform on the trim page exactly as WAV takes. Playing a FLAC take is lossless; an Opus take is decoded
+as it plays. A take of a format whose library is missing is refused with a notice (see
+[Troubleshooting](#troubleshooting)).
+
+### Trim and split of FLAC and Opus takes
+
+The results keep the format of the take (`-1.flac`, `-1.opus`); the save box, the names, *Save as new files* and
+*Replace original* work as for WAV, with the same safety against a power cut.
+
+- **FLAC: lossless, re-encoded.** The kept part is decoded and encoded again as FLAC, so it is **exactly** the cut of
+  the original, to the sample. It takes more time than copying: the save box shows the progress. For a long stereo
+  take expect minutes (an estimate of 2 to 4 minutes for one hour on a Pi Zero 2 W; not measured on a board yet).
+- **Opus: no re-encoding.** The sound packets of the part are **copied**, so there is no second round of lossy coding
+  and no loss at all. A part starts exactly at IN and ends exactly at OUT when played. The file holds a little
+  audio before IN, about 0.3 s, that players skip (it lets the decoder settle, so the start does not click); the
+  file is a few kilobytes longer than the sound you hear. Trimming Opus needs no library.
 
 ## Take number
 
@@ -391,7 +533,9 @@ The recorder has four layouts, chosen by the shape of the screen:
 | ![720x720](img/size-720x720.png) | ![480x480](img/size-480x480.png) | ![720x720 stereo](img/square-stereo.png) |
 
 On a square screen the other pages (settings, list, trim, boxes) keep the landscape layout, scaled. The LIM and LOW
-CUT lamps are shown only in the landscape strip.
+CUT lamps are shown only in the landscape strip. The **level meter panel keeps one height in every state**: a mono card
+(one row, centred in the panel) and a stereo card (L over R) fill the same space, so nothing below the panel moves when
+a card is changed or a take starts.
 
 Real captures from boards: the HackBerry (720x720, square) and a Pi 3A+ (480x800 portrait).
 
@@ -457,18 +601,20 @@ The full map is in [KEYS.md](KEYS.md).
 
 | What | Where |
 |---|---|
-| The takes | `~/Recordings/` (setting *Folder*): `<prefix>_<number>_<YYYYMMDD-HHMM>.wav`, for example `take_006_20261108-1105.wav` |
+| The takes | `~/Recordings/` (setting *Folder*): `<prefix>_<number>_<YYYYMMDD-HHMM>.wav` (or `.flac`, `.opus`), for example `take_006_20261108-1105.wav`; a prefix may hold spaces (`my band_006_20261108-1105.wav`) |
 | A second part of a long take | `take_006_20261108-1105_p2.wav` |
-| A trim or split result | the source name plus `-1`, `-2` ...: `take_006_20261108-1105-1.wav` |
+| A trim or split result | the source name plus `-1`, `-2` ...: `take_006_20261108-1105-1.wav` (the extension of the source) |
 | The take counter | `~/Recordings/.take-counter` (the last number handed out) |
 | One journal per take | `~/Recordings/.journal/<take>.json`, open while the take records |
 | Edit numbers already used | `~/Recordings/.edits/` (so a deleted `-2` is never handed out again) |
-| The waveform overview of a take | `<take>.wav.peaks` next to the take, built the first time the trim page opens it; Cassette checks it against the take's size and time on every use and rebuilds it if they changed. Safe to delete. |
+| The waveform overview of a take | `<take>.wav.peaks` (`.flac.peaks`, `.opus.peaks`) next to the take, built the first time the trim page opens it; Cassette checks it against the take's size and time on every use and rebuilds it if they changed. Safe to delete. |
 | Leftover temporary files | `.tmp-*` in the folder, from a save that was cut short; removed at the next start |
 | The settings | `~/.config/cassette/settings.json`; also each card's level, auto gain and mute. Delete it to reset everything. |
 
-The WAV files are standard (Broadcast Wave). Any player or editor opens them. Copy them off the board with `scp`
-or a USB stick. Files you put in the folder yourself show in the list if they are WAV files.
+The WAV files are standard (Broadcast Wave), and the FLAC and Ogg Opus files are standard too (the take's name and,
+when the clock is set, the date are in the file's Vorbis comments). Any player or editor opens them. Copy them off the
+board with `scp` or a USB stick. Files you put in the folder yourself show in the list if they are WAV, FLAC or Opus
+files; one that does not follow the take name pattern shows but cannot be renamed.
 
 ## Crash safety
 
@@ -480,6 +626,9 @@ or a USB stick. Files you put in the folder yourself show in the list if they ar
   placeholders, repairs the header from the file's real length (a partial last frame is cut off) and shows a notice
   such as *Recovered take_006... after an interrupted recording (2 min kept, about 8 s at the end lost)*. The
   list marks the take `repaired`. The audio itself is not rewritten, and repair can be interrupted and run again.
+- **FLAC and Opus** are synced at the same interval and repaired the same way (see
+  [Formats](#formats-wav-flac-and-ogg-opus)). An Opus take can lose up to about 2 s more than the sync interval, because
+  the encoder holds that much sound back.
 - **Card unplugged during a take:** the take is closed and kept, a notice says *The sound card was unplugged: the
   take was closed and kept*. When you plug it back the notice *The sound card is back* shows and the card's settings
   are applied again. A new take is needed: the one that was running is not continued.
@@ -520,22 +669,34 @@ speed on other outputs too. A 16 kHz take sounds like a phone call: that is the 
 
 **"Unsupported card".** The card offers neither 16-bit nor 24-bit capture. It is not usable.
 
-**"This take cannot be played" / "damaged".** The file is not a valid PCM WAV file. Copy it off the board and
-check it on a PC.
+**A format is dimmed in Settings > Format ("format not available").** Tap it: the notice says why. Not installed
+means a library is missing: install `libflac14` (or `libflac12t64` / `libflac12`) for FLAC, `libopusenc0` and
+`libopus0` for Opus. `Opus cannot record at 44.1 kHz` is a property of the card: Opus is not offered there, FLAC and WAV
+are. Until a format is possible Cassette records WAV, and Settings > Format says `WAV (Opus unavailable)`.
+
+**"This take cannot be played: FLAC not installed (libflac14)".** A FLAC take cannot be loaded, played, previewed or
+trimmed without `libflac` (Opus: `Opus not installed (libopus0)`, and no `libopus0` means no playback). Install the
+package named in the notice; the take is not damaged. WAV takes always play.
+
+**"This take cannot be played" / "damaged".** The file is not a valid WAV, FLAC or Ogg Opus file, or it is cut off. Copy
+it off the board and check it on a PC.
 
 **Settings were not saved.** The notice *The settings could not be saved: ...* names the reason (a read-only or full
 card). Delete `~/.config/cassette/settings.json` to start with the defaults.
 
 ## Limits
 
-Not in this version (0.1.0):
-
-- **WAV only.** FLAC and Opus are planned; today the Format row only shows the take's rate, depth and channels.
 - **No Bluetooth audio.** Cassette records from sound cards that Linux presents as capture devices (USB, or a board's
   own input). It has no Bluetooth audio code. (A Bluetooth *keyboard* works as usual.)
 - **No recording in the background.** Leaving the app stops the take (and keeps it).
 - **No merge.** Trim and split cut a take into parts; there is no way to join takes in the app.
+- **No hot-plug re-open of a running take.** After an unplug the take that was running is closed, not continued; a
+  new take is needed after the card is back.
+- **Opus is not offered at 44.1 kHz** (Cassette does not resample). Use FLAC or WAV for such a card.
+- FLAC and Opus need their libraries (see [Formats](#formats-wav-flac-and-ogg-opus)); without them Cassette uses WAV
+  and refuses to play such takes.
 - The record timer makes no sound.
-- Playback plays the app's own WAV takes.
-- Not yet measured on the boards: how much the turning hubs cost a Pi Zero 2 W, and how every card behaves. The
-  board test list is in [`../tests/BOARD-TESTS.md`](../tests/BOARD-TESTS.md).
+- Playback plays the app's own takes (WAV, FLAC, Ogg Opus).
+- Not yet measured on the boards: the CPU cost of FLAC and Opus recording and of the 5x scan of an Opus take on a
+  Pi Zero 2 W, how much the turning hubs cost it, and how every card behaves. The board test list is in
+  [`../tests/BOARD-TESTS.md`](../tests/BOARD-TESTS.md).
