@@ -252,8 +252,38 @@ void play_key_and_hubs()
 
 } // namespace
 
+void list_row_heights()
+{
+    /* the deck: 57 px row, name box 20, detail box 16, a 22 px name line: one line leaves the row as it was */
+    ListRowGeom g = list_row_geom(57, 20, 16, 22, 22);
+    CHECK_EQ(g.h, 57);
+    CHECK_EQ(g.name_box, 20);
+    CHECK_EQ(g.detail_y, (57 - 2 - 36) / 2 + 20);
+    CHECK_EQ(g.name_y, (57 - 2 - 36) / 2 + (20 - 22) / 2);
+    /* two lines (44 px of name): the row grows by the name box's growth, the detail sits under the name, the block stays centred */
+    g = list_row_geom(57, 20, 16, 44, 22);
+    CHECK_EQ(g.name_box, 44);
+    CHECK_EQ(g.h, 57 + 24);
+    CHECK_EQ(g.name_y, (g.h - 2 - 60) / 2);
+    CHECK_EQ(g.detail_y, g.name_y + 44);
+    CHECK(g.name_y + 44 + 16 <= g.h - 2); /* nothing runs out of the row */
+    /* three lines grow it further, monotonic */
+    const ListRowGeom g3 = list_row_geom(57, 20, 16, 66, 22);
+    CHECK(g3.h > g.h);
+    CHECK_EQ(g3.h - g.h, 22);
+    CHECK(g3.name_y >= 0);
+    /* a small row (the 320 x 170 style 42 px row) keeps its one-line geometry too */
+    g = list_row_geom(42, 20, 16, 22, 22);
+    CHECK_EQ(g.h, 42);
+    CHECK_EQ(g.detail_y, (42 - 2 - 36) / 2 + 20);
+    /* a text height equal to the line is one line, never a growth */
+    CHECK_EQ(list_row_geom(42, 20, 16, 19, 19).h, 42);
+    CHECK_EQ(list_row_geom(42, 20, 16, 38, 19).h, 42 + 18);
+}
+
 void test_format()
 {
+    list_row_heights();
     times();
     name_counter();
     levels();

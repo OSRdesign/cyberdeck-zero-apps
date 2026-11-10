@@ -249,6 +249,9 @@ screen) a row that would not fit leaves out its size first, then writes the date
 
 ![Takes of three formats: the row ends in WAV, FLAC or OPUS](img/list-tags.png)
 
+A name too long for one line wraps (at spaces; a single word wider than the row breaks by character) and its row grows
+to show every line, with the details line under it; the rows below move down. Names are never cut with an ellipsis.
+
 Four actions: **LOAD**, **RENAME**, **TRIM**, **DELETE**. A tap selects a row.
 
 - **LOAD** puts the selected take into the deck and returns to the recorder. The cassette in the window drops out,

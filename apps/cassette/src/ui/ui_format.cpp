@@ -234,6 +234,18 @@ std::string info_state(const RecorderVm &r)
     }
 }
 
+ListRowGeom list_row_geom(int std_h, int name_box1, int detail_box, int name_text_h, int name_line_h)
+{
+    ListRowGeom g;
+    const bool multi = name_text_h > name_line_h;
+    g.name_box = multi ? name_text_h : name_box1;
+    g.h = std_h + (g.name_box - name_box1);
+    const int top = (g.h - 2 - (g.name_box + detail_box)) / 2; /* inside the 1 px border, as the one-line row centres it */
+    g.name_y = top + (g.name_box - (multi ? name_text_h : name_line_h)) / 2;
+    g.detail_y = top + g.name_box;
+    return g;
+}
+
 std::string list_strip_left(const ListVm &l, bool narrow)
 {
     std::string out = std::to_string(l.take_count) + (l.take_count == 1 ? " TAKE" : " TAKES");

@@ -235,6 +235,7 @@ private:
     static void row_cb(lv_event_t *e);
     static void scroll_cb(lv_event_t *e);
     void rebuild();
+    void layout_rows(const lv_font_t *name_font, int name_ls);
     void style_row(int i);
     void select(int i, bool from_touch);
     void update_scrollbar();

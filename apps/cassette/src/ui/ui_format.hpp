@@ -43,6 +43,18 @@ std::string name_count_text(std::size_t used, std::size_t limit = kNameLimit);
 CountTone name_count_tone(std::size_t used, std::size_t limit = kNameLimit);
 std::uint32_t name_count_color(CountTone t); /* theme: kHint, kAmber, kRingRed */
 
+/* The recordings list's row geometry. A name that wraps to more than one line makes its row taller (no ellipsis): the name
+ * box grows to the wrapped text, the detail line sits under it, the row is the standard height plus the growth. A name of
+ * one line leaves the standard row exactly as it was (the name's one-line box name_box1, the detail's detail_box). All
+ * sizes in pixels. name_text_h is the wrapped name's height, name_line_h one line of the name's font. */
+struct ListRowGeom {
+    int h = 0;          /* the row's height (border included) */
+    int name_box = 0;   /* the height reserved for the name */
+    int name_y = 0;     /* the name label's top inside the row (inside the border) */
+    int detail_y = 0;   /* the top of the detail's box (the line is centred in detail_box there) */
+};
+ListRowGeom list_row_geom(int std_h, int name_box1, int detail_box, int name_text_h, int name_line_h);
+
 /* The LED bar: lit steps for a sample peak in dBFS (the core meter's rule: step i, 0..14, lit when db >= -40 + i*40/14),
  * and the colour band of step i: 0..9 green, 10..12 amber, 13..14 red. */
 int bar_steps(float db);

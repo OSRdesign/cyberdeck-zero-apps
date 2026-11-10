@@ -186,6 +186,10 @@ Goal: all five screens usable at 320x480.
    the on-screen keyboard (no keyboard plugged in).
 3. Look for: text cut or overlapping, keys too small to hit (the toolkit's target is 44 px or more; only the two small
    header-side buttons are 40 x 44), notices that do not fit their box.
+4. Rename a take to a 24 character name with spaces (for example `Field recording of birds`) and open the list: the
+   name wraps over two or three lines, the row grows, the details line sits under the name (nothing over it, no
+   ellipsis), the chevron and sticker stay centred in the row, and the rows below move down. Select it, step up and down
+   with the arrow keys and scroll to the last row: the selected row is always fully in view and the scroll bar follows.
 
 Report: `LAYOUT FAIL` seen or not (and the log line), anything cut or hard to hit, per screen.
 

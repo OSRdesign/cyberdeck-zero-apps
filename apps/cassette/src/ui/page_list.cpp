@@ -207,6 +207,7 @@ void ListPage::update(const ListVm &l)
         }
         style_row(static_cast<int>(i));
     }
+    layout_rows(nf, name_ls);
     if (hint_) set_fitted(hint_, Face::Medium, fit_.px(13), 0, std::max(9, fit_.px(11)), list_hint(l));
     const bool any = l.selected >= 0 && l.selected < static_cast<int>(l.takes.size());
     /* all four dimmed (35 %) without a selected row; LOAD also while a take records (can_load) */
@@ -215,6 +216,36 @@ void ListPage::update(const ListVm &l)
                                      static_cast<lv_opa_t>(any && (i != 0 || l.can_load) ? 255 : 89), 0);
     if (l.selected != old_sel && any) lv_obj_scroll_to_view(rows_[static_cast<std::size_t>(l.selected)].obj, LV_ANIM_OFF);
     update_scrollbar();
+}
+
+/* Stacks the rows: a name that wraps to several lines at the row's text width (breaks at spaces, a word wider than the
+ * row by character) grows its row (ui_format.hpp list_row_geom); the chevron, sticker and duration stay centred in their
+ * row, the rows below move down. A one-line name leaves the standard row as it was. */
+void ListPage::layout_rows(const lv_font_t *nf, int name_ls)
+{
+    /* a one-line row keeps the positions of the standard row (the board's size 19 / 14 line boxes, whatever size the fit chose) */
+    const int nlh = lv_font_get_line_height(nf), nlh_ref = lv_font_get_line_height(font(Face::Bold, fit_.px(19)));
+    const int dlh = lv_font_get_line_height(font(Face::Medium, fit_.px(14)));
+    const int box1 = fit_.px(20), dbox = fit_.px(16);
+    int y = 0;
+    for (std::size_t i = 0; i < rows_.size() && i < vm_.takes.size(); ++i) {
+        Row &r = rows_[i];
+        lv_point_t sz;
+        lv_text_get_size(&sz, vm_.takes[i].name.c_str(), nf, name_ls, 0, lv_obj_get_style_width(r.name, LV_PART_MAIN),
+                         LV_TEXT_FLAG_NONE);
+        const bool multi = sz.y > nlh;
+        const ListRowGeom g = list_row_geom(row_h_, box1, dbox, multi ? static_cast<int>(sz.y) : nlh_ref, nlh_ref);
+        const int inner_h = g.h - 2;
+        lv_obj_set_y(r.obj, y);
+        lv_obj_set_height(r.obj, g.h);
+        y += g.h + row_gap_;
+        lv_obj_set_y(r.sticker, (inner_h - fit_.px(34)) / 2);
+        lv_obj_set_y(r.chevron, (inner_h - fit_.px(16)) / 2);
+        if (r.dur) lv_obj_set_y(r.dur, (inner_h - lv_font_get_line_height(font(Face::Mono, fit_.px(20)))) / 2);
+        lv_obj_set_y(r.name, g.name_y);
+        lv_obj_set_y(r.detail, g.detail_y + (dbox - dlh) / 2);
+    }
+    lv_obj_update_layout(list_);
 }
 
 void ListPage::rebuild()
@@ -256,6 +287,7 @@ void ListPage::rebuild()
         const int dlh = lv_font_get_line_height(font(Face::Medium, fit_.px(14)));
         r.name = label(r.obj, Face::Bold, fit_.px(19), col::kInk, tx, top + (fit_.px(20) - nlh) / 2, text_right - tx,
                        LV_TEXT_ALIGN_LEFT, ls_screen(0.3, fit_.s));
+        lv_label_set_long_mode(r.name, LV_LABEL_LONG_MODE_WRAP); /* a long name wraps and its row grows (layout_rows) */
         r.detail = label(r.obj, Face::Medium, fit_.px(14), col::kInkMuted, tx, top + fit_.px(20) + (fit_.px(16) - dlh) / 2,
                          text_right - tx);
         rows_.push_back(r);

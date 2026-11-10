@@ -320,6 +320,26 @@ ViewModel demo_model(const std::string &scene)
         static const char *const tags[] = {"FLAC", "WAV", "OPUS", "WAV", "FLAC"};
         for (size_t i = 0; i < l.takes.size() && i < 5; ++i) l.takes[i].detail += std::string(" \xC2\xB7 ") + tags[i];
     }
+    /* CASSETTE_DEMO_LIST_LONG: take names that wrap (a name is up to 24 characters of prefix, spaces allowed, plus the number).
+     * 1: three long names (24-character prefixes with spaces, a 27-character word with no space), Take 006 -> the second row
+     * selected; 2: one long row (the third, selected) among normal ones; 3: every name long, the first row selected (the scene steps down to the last) */
+    if (const char *ll = std::getenv("CASSETTE_DEMO_LIST_LONG"); ll && *ll && std::string(ll) != "0") {
+        const std::string mode = ll;
+        const char *long_names[] = {"Field recording of birds 006", "Interview with the mayor 005", "ABCDEFGHIJKLMNOPQRSTUVWX004"};
+        if (mode == "2") {
+            l.takes[2].name = long_names[1];
+            l.selected = 2;
+        } else {
+            l.takes[1].name = long_names[0];
+            l.takes[2].name = long_names[1];
+            l.takes[3].name = long_names[2];
+            if (mode == "3") {
+                l.takes[0].name = "Morning walk with the dog 007";
+                l.takes[4].name = "Lecture on naval history 003";
+                l.selected = 0;
+            }
+        }
+    }
     /* the shorter forms of a narrow list: without the size, then the date shortest (as the real mapping builds them) */
     for (TakeRow &t : l.takes) {
         const std::string dot = " · ";

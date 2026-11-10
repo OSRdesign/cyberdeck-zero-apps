@@ -1,0 +1,25 @@
+title Cassette: the recordings list with every name long, the last row selected (stepped down to it with the arrow keys)
+sizes 320x480 480x320 640x480 480x800 480x480 720x720
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_LIST_LONG 3
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key l
+wait 400
+expect text "Morning walk with the dog 007"
+key down
+wait 200
+key down
+wait 200
+key down
+wait 200
+key down
+wait 200
+expect text "Lecture on naval history 003"
+shot r9c-list-long-last
+expect notext "LAYOUT FAIL"
+key esc
+wait 300
+expect noquit
