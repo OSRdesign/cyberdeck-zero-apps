@@ -821,7 +821,7 @@ ui::ViewModel map_view(const MapInput &in)
         o.sticker = sticker_of(t.take);
         o.take = upper(display_name(t.take));
         o.length_ms = frames_to_ms(t.frames, t.rate);
-        o.marker_ms = frames_to_ms(t.position, t.rate);
+        o.marker_ms = frames_to_ms(in.trim_position >= 0 ? static_cast<uint64_t>(in.trim_position) : t.position, t.rate);
         o.span_ms = std::max<int64_t>(1, frames_to_ms(t.visible_frames, t.rate));
         o.in_ms = frames_to_ms(t.in_frame, t.rate);
         o.out_ms = frames_to_ms(t.out_frame, t.rate);
@@ -831,7 +831,14 @@ ui::ViewModel map_view(const MapInput &in)
                                    t.splits[static_cast<size_t>(sel)] == t.position
                                ? sel
                                : -1;
-        if (in.window) o.window_peaks = peak_levels(*in.window);
+        if (in.window) {
+            o.window_peaks = peak_levels(*in.window);
+            if (in.window_fpb > 0 && !in.window->empty()) {
+                o.bar_first = in.window_first;
+                o.bar_frames = in.window_fpb;
+                o.rate = t.rate ? t.rate : 48000;
+            }
+        }
         if (in.overview) o.overview_peaks = peak_levels(*in.overview);
         /* the whole take's loudest peak = the loudest bar of the overview (it covers the take; each bar keeps its maximum) */
         float take_peak = 0.0f;

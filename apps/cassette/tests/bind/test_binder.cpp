@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdlib>
 
 using namespace cassette;
 using namespace cassette::bind;
@@ -519,6 +520,101 @@ void open_trim(Rig &r)
     r.tick();
 }
 
+/* The page's bars across set the grid: one bar read per bar drawn */
+void test_trim_bars_across()
+{
+    Rig r;
+    r.binder.set_window_bars(109.75); /* the 480x320 trim page: 439 px at a 4 px pitch */
+    r.calls();
+    open_trim(r);
+    /* 3072000 / 109.75 = 27990.9 frames a bar; the window from -1536000 is in bar -55; 113 bars from -56 */
+    CHECK(has(r.calls(), "peak_range -1567496 3162983 113"));
+    CHECK_EQ(r.binder.vm().trim.bar_frames, 27991);
+    CHECK_EQ(r.binder.vm().trim.window_peaks.size(), 113u);
+    r.binder.set_window_bars(0); /* nonsense: at least one */
+    r.port.snap.trim.position = 5000;
+    r.tick();
+    CHECK(has(r.calls(), "peak_range -6144000 12288000 4"));
+}
+
+/* A playing preview: the player reports its position in steps (one per sound period, here 64 ms at 16 kHz) that do not
+ * line up with the 33 ms tick; the marker shown runs on smoothly at the take's rate, pulled toward the reports, never
+ * backwards, never past OUT; a seek snaps; when the preview stops the marker is the reported position again. */
+void test_trim_follow()
+{
+    Rig r;
+    open_trim(r);
+    TrimSnap &t = r.port.snap.trim;
+    t.rate = 16000;
+    t.frames = 16000 * 60;
+    t.out_frame = 16000 * 60;
+    t.visible_frames = 52800;
+    t.position = 16000;
+    r.tick();
+    CHECK_EQ(r.binder.vm().trim.marker_ms, 1000);
+    t.previewing = true;
+    std::vector<int64_t> shown;
+    const float gain0 = r.binder.vm().trim.fit_gain;
+    int gain_moved = 0, peak_reads = 0;
+    r.calls(); /* the reads of the new take and window before the preview */
+    int64_t played_ms = 0; /* the sound actually heard, ms since the start */
+    for (int i = 0; i < 90; ++i) {
+        played_ms += 33;
+        /* the player's report: the last whole 64 ms period, 20 ms late (the controller's service tick) */
+        const int64_t heard = std::max<int64_t>(0, played_ms - 20) / 64 * 64;
+        t.position = static_cast<uint64_t>(16000 + heard * 16);
+        r.tick(33);
+        shown.push_back(r.binder.vm().trim.marker_ms);
+        if (r.binder.vm().trim.fit_gain != gain0) ++gain_moved;
+        for (const std::string &c : r.calls()) peak_reads += c.compare(0, 11, "peak_range ") == 0;
+    }
+    /* the FIT gain is the take's: it never moves with the window */
+    CHECK(gain0 > 0.0f);
+    CHECK_EQ(gain_moved, 0);
+    /* 3 s played over 240-frame bars (15 ms, 220 across): the marker moves into another bar at almost every tick, one read
+     * of the window then; the overview is never read again */
+    CHECK(peak_reads >= 70 && peak_reads <= 90);
+    /* the marker moves at every tick once settled (no stalls, no jumps): each step 33 ms give or take 12 ms, never back */
+    int stalls = 0, uneven = 0, back = 0;
+    for (size_t i = 30; i < shown.size(); ++i) {
+        const int64_t d = shown[i] - shown[i - 1];
+        if (d < 0) ++back;
+        if (d == 0) ++stalls;
+        if (d < 21 || d > 45) ++uneven;
+    }
+    CHECK_EQ(back, 0);
+    CHECK_EQ(stalls, 0);
+    CHECK_EQ(uneven, 0);
+    /* it keeps up with the reports: within 60 ms of the last one at the end */
+    CHECK(std::llabs(shown.back() - static_cast<int64_t>(t.position / 16)) < 60);
+    /* the reports alone would move it in 64 ms jumps with stalls between: what the page did before */
+    int report_stalls = 0;
+    {
+        int64_t last = -1;
+        int64_t pm = 0;
+        for (int i = 0; i < 60; ++i) {
+            pm += 33;
+            const int64_t heard = std::max<int64_t>(0, pm - 20) / 64 * 64;
+            if (heard == last) ++report_stalls;
+            last = heard;
+        }
+    }
+    CHECK(report_stalls > 20);
+    /* a seek (a report 5 s away): there at once */
+    t.position = 16000 * 40;
+    r.tick(33);
+    CHECK_EQ(r.binder.vm().trim.marker_ms, 40000);
+    /* never past OUT */
+    t.out_frame = 16000 * 40 + 800; /* 40.05 s */
+    for (int i = 0; i < 10; ++i) r.tick(33);
+    CHECK(r.binder.vm().trim.marker_ms <= 40050);
+    /* the preview stops: the reported position, exactly */
+    t.previewing = false;
+    t.position = 16000 * 12 + 160;
+    r.tick(33);
+    CHECK_EQ(r.binder.vm().trim.marker_ms, 12010);
+}
+
 void test_trim_actions()
 {
     Rig r;
@@ -528,16 +624,29 @@ void test_trim_actions()
     CHECK(has(r.calls(), "open_trim take_006_20261108-1105.wav"));
     open_trim(r);
     CHECK_EQ(r.binder.vm().trim.take, "TAKE 006");
-    CHECK_EQ(r.binder.vm().trim.window_peaks.size(), 220u);
+    /* the window's bars on the take's grid (ui::bar_grid): 220 across a 64 s window = 13964 frames a bar; the window
+     * starts at -1536000 (centred on the marker at 0), in bar -110; one bar more at each side: 223 bars from bar -111 */
+    CHECK_EQ(r.binder.vm().trim.window_peaks.size(), 223u);
+    CHECK_EQ(r.binder.vm().trim.bar_first, -111);
+    CHECK_EQ(r.binder.vm().trim.bar_frames, 13964);
+    CHECK_EQ(r.binder.vm().trim.rate, 48000u);
     CHECK_EQ(r.binder.vm().trim.overview_peaks.size(), 110u);
     std::vector<std::string> c = r.calls();
     CHECK(has(c, "peak_range 0 3072000 110"));
-    CHECK(has(c, "peak_range -1536000 3072000 220")); /* centred on the marker at 0 */
+    CHECK(has(c, "peak_range -1550004 3113972 223")); /* -111 * 13964, 223 * 13964 */
     r.tick();
     CHECK(r.calls().empty()); /* the window did not move: no read */
+    /* moved less than to the next bar: the same bars (they only move on the screen), no read */
+    r.port.snap.trim.position = 3000;
+    r.tick();
+    CHECK(r.calls().empty());
+    CHECK_EQ(r.binder.vm().trim.bar_first, -111);
+    CHECK_EQ(r.binder.vm().trim.marker_ms, 62);
+    /* one second on: the window starts in bar -107; the read starts on the grid (a multiple of 13964) */
     r.port.snap.trim.position = 48000;
     r.tick();
-    CHECK(has(r.calls(), "peak_range -1488000 3072000 220"));
+    CHECK(has(r.calls(), "peak_range -1508112 3113972 223"));
+    CHECK_EQ(r.binder.vm().trim.bar_first, -108);
 
     r.act.trim_zoom(+1);
     CHECK(has(r.calls(), "set_zoom 1"));
@@ -963,6 +1072,8 @@ void test_binder()
     test_pages_and_list();
     test_preview_and_load();
     test_trim_actions();
+    test_trim_bars_across();
+    test_trim_follow();
     test_save_flow();
     test_leaving_trim();
     test_notices();

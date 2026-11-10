@@ -11,9 +11,25 @@
 namespace cassette {
 namespace ui {
 
+namespace {
+
+std::int64_t floor_div(std::int64_t a, std::int64_t b)
+{
+    std::int64_t q = a / b;
+    if (a % b != 0 && ((a < 0) != (b < 0))) --q;
+    return q;
+}
+
+} // namespace
+
 double WaveWindow::x_of(std::int64_t t) const
 {
     return x + static_cast<double>(t - start_ms) * w / static_cast<double>(span_ms);
+}
+
+double WaveWindow::x_of_ms(double t) const
+{
+    return x + (t - static_cast<double>(start_ms)) * w / static_cast<double>(span_ms);
 }
 
 std::int64_t WaveWindow::t_of(double px) const
@@ -67,6 +83,39 @@ std::vector<float> resample_max(const std::vector<float> &in, int n)
         out[static_cast<std::size_t>(i)] = std::clamp(v, 0.0f, 1.0f);
     }
     return out;
+}
+
+BarGrid bar_grid(std::int64_t marker_frame, std::int64_t visible_frames, double across)
+{
+    BarGrid g;
+    const std::int64_t vis = std::max<std::int64_t>(1, visible_frames);
+    if (!(across >= 1.0)) across = 1.0;
+    g.fpb = std::max<std::int64_t>(1, std::llround(static_cast<double>(vis) / across));
+    /* the window [a, a + vis] touches at most ceil(vis / fpb) + 1 bars from the one holding a: one more at each side */
+    const std::int64_t a = marker_frame - vis / 2;
+    g.first = floor_div(a, g.fpb) - 1;
+    g.count = static_cast<int>((vis + g.fpb - 1) / g.fpb + 3);
+    return g;
+}
+
+double bars_across(double w, double pitch)
+{
+    if (!(pitch > 0)) return 1.0;
+    return std::max(1.0, w / pitch);
+}
+
+double grid_bar_x(const WaveWindow &win, std::int64_t k, std::int64_t fpb, std::uint32_t rate)
+{
+    const double r = rate ? static_cast<double>(rate) : 48000.0;
+    return win.x_of_ms(static_cast<double>(k) * static_cast<double>(std::max<std::int64_t>(1, fpb)) * 1000.0 / r);
+}
+
+BarSpan clip_bar(int x, int w, int left, int right)
+{
+    BarSpan s;
+    s.x1 = std::max(x, left);
+    s.x2 = std::max(s.x1, std::min(x + w, right));
+    return s;
 }
 
 float fit_gain_for(float take_peak)
@@ -155,6 +204,67 @@ std::vector<RulerTick> ruler_ticks(const WaveWindow &win, int n)
         ticks.push_back(t);
     }
     return ticks;
+}
+
+RulerRow ruler_row(int inner_bottom, int line_h, int tick_h, int gap, int pad, int main_bottom)
+{
+    RulerRow r;
+    r.label_h = std::max(0, line_h);
+    r.label_y = inner_bottom - std::max(0, pad) - r.label_h;
+    r.tick_h = std::max(0, tick_h);
+    r.tick_y = r.label_y - std::max(0, gap) - r.tick_h;
+    r.main_bottom = std::min(main_bottom, r.tick_y - std::max(0, gap));
+    return r;
+}
+
+std::vector<RulerLabel> ruler_labels(const std::vector<RulerTick> &ticks, const std::vector<int> &widths, int left, int right,
+                                     int gap)
+{
+    std::vector<RulerLabel> out(ticks.size());
+    bool have_prev = false;
+    int prev_x2 = 0;
+    for (std::size_t i = 0; i < ticks.size(); ++i) {
+        const int w = i < widths.size() ? widths[i] : 0;
+        if (w <= 0 || w > right - left) continue;
+        const int x1 = std::clamp(static_cast<int>(std::lround(ticks[i].x)) - w / 2, left, right - w);
+        if (have_prev && x1 < prev_x2 + gap) continue;
+        out[i] = RulerLabel{x1, x1 + w, true};
+        prev_x2 = x1 + w;
+        have_prev = true;
+    }
+    return out;
+}
+
+Fit trim_fit(int screen_w, int screen_h, int body_y, bool portrait, double t)
+{
+    if (portrait)
+        return make_fit(screen_w, screen_h, body_y, 320, 480, 40, {200},
+                        {{122, 272, 0, 0, true}, {306, 350, t, 0, false}, {392, 456, t, 0, false}});
+    return make_fit(screen_w, screen_h, body_y, 480, 320, 40, {145},
+                    {{114, 176, 0, 0, true}, {198, 242, t, 0, false}, {252, 302, t, 0, false}});
+}
+
+WavePanel wave_panel(const Fit &fit, bool p, int ruler_line_h)
+{
+    WavePanel g;
+    const double py = p ? 90 : 86, pw = p ? 288 : 448, ph = p ? 210 : 108;
+    g.x = fit.x(16), g.y = fit.y(py), g.w = fit.w(16, pw), g.h = fit.h(py, ph);
+    g.border = fit.px(3);
+    if (p) {
+        g.over_x = fit.x(24), g.over_y = fit.y(96), g.over_w = fit.w(24, 272), g.over_h = fit.h(96, 18);
+        g.main_x = fit.x(24), g.main_y = fit.y(122), g.main_w = fit.w(24, 272), g.main_h = fit.h(122, 150);
+    } else {
+        g.over_x = fit.x(20), g.over_y = fit.y(90), g.over_w = fit.w(20, 440), g.over_h = fit.h(90, 18);
+        g.main_x = fit.x(20), g.main_y = fit.y(114), g.main_w = fit.w(20, 440), g.main_h = fit.h(114, 62);
+    }
+    g.pitch = 4 * fit.s;
+    g.bar_w = 3 * fit.s;
+    g.bars = bar_count(g.main_w + (g.pitch - g.bar_w), g.pitch);
+    g.bars_w = std::max(1, static_cast<int>(std::lround(g.bars * g.pitch - (g.pitch - g.bar_w))));
+    /* the ruler: its labels' line box inside the frame (2 px clear of it), the ticks above them, the waveform above those */
+    g.ruler = ruler_row(g.y + g.h - g.border, ruler_line_h, fit.px(4), fit.px(1), fit.px(2), g.main_y + g.main_h);
+    g.main_h = std::max(1, g.ruler.main_bottom - g.main_y);
+    return g;
 }
 
 } // namespace ui

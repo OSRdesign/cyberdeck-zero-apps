@@ -626,5 +626,10 @@ Screen CassetteUi::screen() const
     return d_->cur;
 }
 
+double CassetteUi::trim_bars_across() const
+{
+    return d_->trim->bars_across();
+}
+
 } // namespace ui
 } // namespace cassette

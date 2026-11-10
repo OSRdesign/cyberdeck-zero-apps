@@ -193,11 +193,15 @@ struct TrimVm {
     std::int64_t in_ms = 0, out_ms = 0;
     std::vector<std::int64_t> splits; /* split points, ascending; flags are numbered 1.. in this order */
     int selected_split = -1;     /* the flag with the white outline (-1: none); the SPLIT key then reads REMOVE */
-    /* Peaks 0..1 (any count; the UI resamples to its bar count with the maximum of each bucket):
-     * window_peaks cover marker - span/2 .. marker + span/2 (zero where that is outside the take),
-     * overview_peaks cover the whole take. */
+    /* Peaks 0..1. overview_peaks cover the whole take (any count; the UI resamples to its bar count with the maximum of
+     * each bucket). window_peaks: with bar_frames > 0 they lie on the take's bar grid (wave_geom.hpp BarGrid):
+     * window_peaks[i] is grid bar bar_first + i, bar_frames frames of a take of rate frames per second, drawn where its
+     * frames are in the window, so a bar moves with the take and keeps its height; bar_frames 0 (the demo pages): any
+     * count spread evenly over marker - span/2 .. marker + span/2 (zero where that is outside the take). */
     std::vector<float> window_peaks;
     std::vector<float> overview_peaks;
+    std::int64_t bar_first = 0, bar_frames = 0;
+    std::uint32_t rate = 0;
     /* The waveform's vertical scale (settings wave_fit): fit false = TRUE (peaks as they are), true = FIT: the UI multiplies every
      * bar of both waveforms by fit_gain (wave_geom.hpp fit_gain_for of the whole take's peak, so it never changes with zoom or
      * scroll; 0 = no gain, a silent take or peaks not ready) and clamps to 1. */
@@ -268,7 +272,8 @@ inline bool operator==(const TrimVm &a, const TrimVm &b)
     return a.take_id == b.take_id && a.sticker == b.sticker && a.take == b.take && a.length_ms == b.length_ms &&
            a.marker_ms == b.marker_ms && a.span_ms == b.span_ms && a.in_ms == b.in_ms && a.out_ms == b.out_ms &&
            a.splits == b.splits && a.selected_split == b.selected_split && a.window_peaks == b.window_peaks &&
-           a.overview_peaks == b.overview_peaks && a.fit == b.fit && a.fit_gain == b.fit_gain && a.playing == b.playing;
+           a.overview_peaks == b.overview_peaks && a.bar_first == b.bar_first && a.bar_frames == b.bar_frames && a.rate == b.rate &&
+           a.fit == b.fit && a.fit_gain == b.fit_gain && a.playing == b.playing;
 }
 inline bool operator==(const SaveFile &a, const SaveFile &b) { return a.name == b.name && a.length_ms == b.length_ms; }
 inline bool operator==(const SaveVm &a, const SaveVm &b) { return a.shown == b.shown && a.files == b.files; }

@@ -62,6 +62,11 @@ struct MapInput {
     const std::vector<TakeRow> *rows = nullptr;
     const std::vector<PeakBar> *window = nullptr;   /* the trim window's peaks (centred on the marker) */
     const std::vector<PeakBar> *overview = nullptr; /* the whole take */
+    /* window on the take's bar grid (ui::BarGrid): window[i] is grid bar window_first + i of window_fpb frames;
+     * window_fpb 0: spread evenly over the window */
+    int64_t window_first = 0, window_fpb = 0;
+    /* the trim marker shown (frames), when the binding follows a playing preview smoothly (Binder); -1: the snapshot's */
+    int64_t trim_position = -1;
     const LocalState *local = nullptr;
     int64_t now_wall_s = 0;  /* "today" / "yesterday" in the list */
     bool utc = false;        /* tests: dates in UTC instead of local time */

@@ -1,0 +1,14 @@
+title trim page time ruler: the window ends at the take's end (marker 11:38, ZOOM 60 s): the last ruler label "12:08" ends at the window's right edge, inside the panel; every label and tick inside the frame, the label row under the waveform
+sizes 480x480
+ppmm 667
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_PAGE trim
+env CASSETTE_LAYOUT_CHECK 1
+env CASSETTE_DEMO_TRIM_MARKER 698000
+
+wait 600
+shot ruler-end
+expect text "ZOOM"
+expect text "SAVE"
+expect notext "LAYOUT FAIL"
+expect noquit

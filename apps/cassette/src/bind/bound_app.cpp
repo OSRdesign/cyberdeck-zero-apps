@@ -111,6 +111,7 @@ std::shared_ptr<void> build_bound_app(lv_obj_t *screen)
     app->worker = std::make_unique<Worker>(true);
     app->binder = std::make_unique<Binder>(*app->port, *app->worker);
     app->ui = std::make_unique<ui::CassetteUi>(screen, app->binder->actions());
+    app->binder->set_window_bars(app->ui->trim_bars_across()); /* one bar read per bar drawn, on the take's grid */
     const Snapshot s = app->controller->snapshot();
     std::fprintf(stderr, "[cassette] recordings in %s; sound input: %s\n", s.folder.c_str(),
                  s.card.present ? s.card.label.c_str() : "none (looking for one every second)");

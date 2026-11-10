@@ -271,6 +271,9 @@ public:
     void press(Command c);
     /* The notice replaces the top strip (take label, IN / OUT / LEN). */
     void set_notice(const std::string &text);
+    /* The main waveform's width in bar pitches (wave_geom.hpp bars_across): the binding reads the bars for this many
+     * across, on the take's grid (bar_grid), so one grid bar is one bar on the screen. */
+    double bars_across() const;
 
 private:
     static void wave_draw_cb(lv_event_t *e);
@@ -294,7 +297,8 @@ private:
     /* the waveform's parts in screen px (relative to the screen) */
     int over_x_ = 0, over_y_ = 0, over_w_ = 0, over_h_ = 0;
     int main_x_ = 0, main_y_ = 0, main_w_ = 0, main_h_ = 0;
-    int ruler_y_ = 0;
+    int main_n_ = 0, main_win_w_ = 1; /* the bars across the main window and its width (bars * pitch less one gap) */
+    RulerRow ruler_;                  /* the ruler's ticks and labels, inside the panel's frame */
     double pitch_ = 4, bar_w_ = 3;
     /* the drag in progress */
     bool dragging_ = false;

@@ -5,7 +5,8 @@
  *
  * The waveform window is ONE custom-drawn object: the overview strip of the whole take (amber = kept, grey = cut, cream
  * IN / OUT ticks, green split lines, the white frame of the part shown below), the main bars of the window around the
- * fixed red marker (bars outside IN..OUT grey), the IN / OUT handles (a chip at the edge when outside the window), the
+ * fixed red marker (bars outside IN..OUT grey; on the take's bar grid, wave_geom.hpp BarGrid, so a bar moves with the take
+ * and keeps its height while it scrolls), the IN / OUT handles (a chip at the edge when outside the window), the
  * numbered split flags (the selected one solid white with a white-framed number), the marker with its triangle and
  * the time ruler. Back to front (kWaveDrawOrder): the IN / OUT tags and the TRUE / FIT chip lie above every vertical line
  * (IN / OUT lines, split lines, the marker), each with an outline in the panel colour; the split flag boxes come last. A
@@ -37,9 +38,7 @@ TrimPage::TrimPage(lv_obj_t *parent, const Frame &frame, const UiActions &action
     const bool p = frame.portrait;
     /* the steppers and the keys get the toolkit's touch target (the deck: 79 px); the main waveform takes what is left
      * (it grows on a larger screen, it gives height back for taller controls) */
-    const double t = frame.target;
-    fit_ = frame.fit({145}, {200}, {{114, 176, 0, 0, true}, {198, 242, t, 0, false}, {252, 302, t, 0, false}},
-                     {{122, 272, 0, 0, true}, {306, 350, t, 0, false}, {392, 456, t, 0, false}});
+    fit_ = trim_fit(frame.w, frame.h, frame.body_y, p, frame.target);
     deck_body(root_, fit_);
 
     /* the strip: sticker, TAKE, the in / out / length / splits text at the right */
@@ -52,17 +51,18 @@ TrimPage::TrimPage(lv_obj_t *parent, const Frame &frame, const UiActions &action
 
     /* the waveform window and its parts */
     framed_panel(root_, fit_, p ? DRect{16, 90, 288, 210} : DRect{16, 86, 448, 108}, col::kWindow);
-    if (p) {
-        over_x_ = fit_.x(24), over_y_ = fit_.y(96), over_w_ = fit_.w(24, 272), over_h_ = fit_.h(96, 18);
-        main_x_ = fit_.x(24), main_y_ = fit_.y(122), main_w_ = fit_.w(24, 272), main_h_ = fit_.h(122, 150);
-        ruler_y_ = fit_.y(279);
-    } else {
-        over_x_ = fit_.x(20), over_y_ = fit_.y(90), over_w_ = fit_.w(20, 440), over_h_ = fit_.h(90, 18);
-        main_x_ = fit_.x(20), main_y_ = fit_.y(114), main_w_ = fit_.w(20, 440), main_h_ = fit_.h(114, 62);
-        ruler_y_ = fit_.y(179);
+    {
+        /* wave_panel: the parts in screen px; the ruler's row (its font's line height) inside the frame, the main
+         * waveform above it */
+        const WavePanel g = wave_panel(fit_, p, lv_font_get_line_height(font(Face::Medium, fit_.px(9))));
+        over_x_ = g.over_x, over_y_ = g.over_y, over_w_ = g.over_w, over_h_ = g.over_h;
+        main_x_ = g.main_x, main_y_ = g.main_y, main_w_ = g.main_w, main_h_ = g.main_h;
+        pitch_ = g.pitch;
+        bar_w_ = g.bar_w;
+        main_n_ = g.bars;
+        main_win_w_ = g.bars_w;
+        ruler_ = g.ruler;
     }
-    pitch_ = 4 * fit_.s;
-    bar_w_ = 3 * fit_.s;
     const DRect wr = p ? DRect{16, 90, 288, 210} : DRect{16, 86, 448, 108};
     wave_ = lv_obj_create(root_);
     plain(wave_);
@@ -163,7 +163,9 @@ void TrimPage::update(const TrimVm &t)
     const bool sel = t.selected_split >= 0 && t.selected_split < static_cast<int>(t.splits.size());
     keys_[2]->set(sel ? Icon::Remove : Icon::Scissors, sel ? kRemove : kSplit, sel ? KeyLook::Red : KeyLook::Charcoal, true, false);
     keys_[3]->set(Icon::Play, "PLAY", KeyLook::Charcoal, true, t.playing);
-    main_bars_ = resample_max(t.window_peaks, bar_count(main_w_ + (pitch_ - bar_w_), pitch_));
+    /* the main bars: on the take's grid as they come (one per grid bar), or (no grid) resampled to the bars across */
+    main_bars_ = t.bar_frames > 0 ? resample_max(t.window_peaks, static_cast<int>(t.window_peaks.size()))
+                                  : resample_max(t.window_peaks, main_n_);
     over_bars_ = resample_max(t.overview_peaks, bar_count(over_w_ + (pitch_ - bar_w_), pitch_));
     lv_obj_invalidate(wave_);
 }
@@ -206,8 +208,12 @@ void TrimPage::wave_draw_cb(lv_event_t *e)
 
 int TrimPage::main_bars_w() const
 {
-    const int mn = static_cast<int>(main_bars_.size());
-    return std::max(1, static_cast<int>(std::lround(mn * pitch_ - (pitch_ - bar_w_))));
+    return main_win_w_;
+}
+
+double TrimPage::bars_across() const
+{
+    return ui::bars_across(main_win_w_, pitch_);
 }
 
 lv_area_t TrimPage::mode_chip_area() const
@@ -230,7 +236,7 @@ void TrimPage::draw_wave(lv_layer_t *layer)
 
     const float gain = t.fit ? t.fit_gain : 0.0f; /* FIT: one gain for the take, for both waveforms */
     const int mn = static_cast<int>(main_bars_.size());
-    const int mw = std::max(1, static_cast<int>(std::lround(mn * pitch_ - (pitch_ - bar_w_))));
+    const int mw = main_win_w_;
     const WaveWindow win = wave_window(t.marker_ms, t.span_ms, main_x_, mw);
     const int top = main_y_ + px(2), bottom = main_y_ + main_h_ - px(2);
 
@@ -302,16 +308,29 @@ void TrimPage::draw_wave(lv_layer_t *layer)
             break;
         }
         case WaveLayer::Bars: {
-            /* the window around the marker */
+            /* the window around the marker. On the take's grid (bar_frames > 0) each bar is drawn where its frames are, so
+             * it moves with the take and keeps its height; a bar at the window's edge is cut to it. */
             const int max_m = main_h_ - px(2);
+            const int bw = std::max(1, static_cast<int>(std::lround(bar_w_)));
+            const bool grid = t.bar_frames > 0;
+            const double bar_ms = grid ? static_cast<double>(t.bar_frames) * 1000.0 / (t.rate ? t.rate : 48000) : 0.0;
             for (int i = 0; i < mn; ++i) {
-                const std::int64_t mid_t = win.t_of(main_x_ + (i + 0.5) * pitch_);
+                double x0, mid_t;
+                if (grid) {
+                    const std::int64_t k = t.bar_first + i;
+                    x0 = grid_bar_x(win, k, t.bar_frames, t.rate);
+                    mid_t = (static_cast<double>(k) + 0.5) * bar_ms;
+                } else {
+                    x0 = main_x_ + i * pitch_;
+                    mid_t = static_cast<double>(win.t_of(main_x_ + (i + 0.5) * pitch_));
+                }
                 if (mid_t < 0 || mid_t > len) continue;
+                const BarSpan sp = clip_bar(static_cast<int>(std::lround(x0)), bw, main_x_, main_x_ + mw);
+                if (sp.x2 <= sp.x1) continue;
                 const bool kept = mid_t >= t.in_ms && mid_t <= t.out_ms;
                 const int h = std::max(px(3), static_cast<int>(px(3) + fit_level(main_bars_[static_cast<std::size_t>(i)], gain) * (max_m - px(3))));
-                const int x = main_x_ + static_cast<int>(std::lround(i * pitch_));
-                fill(layer, area(x, main_y_ + (main_h_ - h) / 2, std::max(1, static_cast<int>(std::lround(bar_w_))), h),
-                     kept ? col::kAmber : col::kWaveCut, 0, static_cast<lv_opa_t>(kept ? 255 : 140));
+                fill(layer, area(sp.x1, main_y_ + (main_h_ - h) / 2, sp.x2 - sp.x1, h), kept ? col::kAmber : col::kWaveCut, 0,
+                     static_cast<lv_opa_t>(kept ? 255 : 140));
             }
             break;
         }
@@ -378,20 +397,23 @@ void TrimPage::draw_wave(lv_layer_t *layer)
             }
             break;
         case WaveLayer::Ruler: {
-            /* the time ruler */
+            /* the time ruler: its row inside the panel's frame (wave_panel), every label inside the window (ruler_labels) */
             const lv_font_t *rf = font(Face::Medium, px(9));
-            const int rlh = lv_font_get_line_height(rf);
             const std::vector<RulerTick> ticks = ruler_ticks(win, 5);
+            std::vector<std::string> labs(ticks.size());
+            std::vector<int> widths(ticks.size(), 0);
             for (std::size_t i = 0; i < ticks.size(); ++i) {
-                const int x = static_cast<int>(std::lround(ticks[i].x)) - (i + 1 == ticks.size() ? 0 : 0);
-                fill(layer, area(std::min(x, main_x_ + mw - 1), ruler_y_, 1, px(4)), col::kWaveCut, 0);
                 if (ticks[i].t < 0 || ticks[i].t > len) continue;
-                const std::string lab = fmt_ruler(ticks[i].t);
-                const int w = px(28);
-                const int ty = ruler_y_ + px(5) + (px(10) - rlh) / 2;
-                if (i == 0) text(layer, rf, lab.c_str(), area(x, ty, w * 2, rlh), col::kRuler, LV_TEXT_ALIGN_LEFT);
-                else if (i + 1 == ticks.size()) text(layer, rf, lab.c_str(), area(x - 2 * w, ty, 2 * w, rlh), col::kRuler, LV_TEXT_ALIGN_RIGHT);
-                else text(layer, rf, lab.c_str(), area(x - w, ty, 2 * w, rlh), col::kRuler, LV_TEXT_ALIGN_CENTER);
+                labs[i] = fmt_ruler(ticks[i].t);
+                widths[i] = text_width(rf, labs[i].c_str(), 0) + 1;
+            }
+            const std::vector<RulerLabel> placed = ruler_labels(ticks, widths, main_x_, main_x_ + mw, px(4));
+            for (std::size_t i = 0; i < ticks.size(); ++i) {
+                const int x = static_cast<int>(std::lround(ticks[i].x));
+                fill(layer, area(std::clamp(x, main_x_, main_x_ + mw - 1), ruler_.tick_y, 1, ruler_.tick_h), col::kWaveCut, 0);
+                if (!placed[i].shown) continue;
+                text(layer, rf, labs[i].c_str(), area(placed[i].x1, ruler_.label_y, placed[i].x2 - placed[i].x1, ruler_.label_h),
+                     col::kRuler, LV_TEXT_ALIGN_LEFT);
             }
             break;
         }

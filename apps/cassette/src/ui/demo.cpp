@@ -428,6 +428,9 @@ ViewModel demo_model(const std::string &scene)
         t.selected_split = -1;
     }
     if (const char *v = std::getenv("CASSETTE_DEMO_TRIM_SELECTED"); v && *v) t.selected_split = std::atoi(v);
+    /* CASSETTE_DEMO_TRIM_MARKER=<ms>: the marker elsewhere (scenes for the ruler at the take's start and end) */
+    if (const char *v = std::getenv("CASSETTE_DEMO_TRIM_MARKER"); v && *v)
+        t.marker_ms = std::clamp<std::int64_t>(std::atoll(v), 0, t.length_ms);
     t.window_peaks = demo_window_peaks(t.length_ms, t.marker_ms, t.span_ms, 220);
     t.overview_peaks = demo_overview_peaks(t.length_ms, 110);
     scale_all(t.window_peaks);

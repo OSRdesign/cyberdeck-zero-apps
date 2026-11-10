@@ -251,7 +251,10 @@ void test_take_trim_save()
     float top = 0;
     for (float p : e.vm().trim.overview_peaks) top = std::max(top, p);
     CHECK(top > 0.05f && top < 0.9f); /* the tone, -20 to -4 dBFS */
-    CHECK_EQ(e.vm().trim.window_peaks.size(), 220u);
+    /* the window's bars on the take's grid: 220 across (no UI here), one more bar at each side and one for the rounding */
+    CHECK(e.vm().trim.window_peaks.size() >= 223u && e.vm().trim.window_peaks.size() <= 224u);
+    CHECK(e.vm().trim.bar_frames > 0);
+    CHECK_EQ(e.vm().trim.rate, 48000u);
     /* the waveform scale: TRUE until the chip (or F) switches to FIT; the gain is 0.9 over the take's loudest peak, whatever
      * the zoom; the choice is saved in settings.json (wave_fit) and TRUE removes it again */
     CHECK(!e.vm().trim.fit);

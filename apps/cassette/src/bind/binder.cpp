@@ -39,7 +39,10 @@ const char *prefix_problem_text(PrefixProblem p)
 
 } // namespace
 
-Binder::Binder(Port &port, Worker &worker, Options opt) : port_(port), worker_(worker), opt_(opt) {}
+Binder::Binder(Port &port, Worker &worker, Options opt) : port_(port), worker_(worker), opt_(opt)
+{
+    set_window_bars(opt_.window_bars);
+}
 
 Binder::~Binder()
 {
@@ -472,6 +475,48 @@ void Binder::drain_inbox()
     }
 }
 
+void Binder::follow_position()
+{
+    /* A playing preview: the player's position comes in steps (one per sound period it writes: 64 ms at 16 kHz, 21 ms at
+     * 48 kHz) that do not line up with this 30 Hz tick, so the marker would jump by uneven steps. The marker shown runs on
+     * at the take's rate from tick to tick and is pulled a part of the way (kFollowPull) toward the reported position
+     * each tick; it never runs backwards while playing and never past OUT. A seek (or a report far away) snaps it there.
+     * Not playing: the marker is the reported position, exactly. */
+    const TrimSnap &t = snap_.trim;
+    const int64_t reported = static_cast<int64_t>(t.position);
+    if (!t.open || !t.previewing || t.rate == 0) {
+        following_ = false;
+        shown_pos_ = static_cast<double>(reported);
+        return;
+    }
+    const double rate = static_cast<double>(t.rate);
+    if (!following_) {
+        following_ = true;
+        shown_pos_ = static_cast<double>(reported);
+        follow_ms_ = now_ms_;
+        return;
+    }
+    const double dt = static_cast<double>(std::clamp<int64_t>(now_ms_ - follow_ms_, 0, 250));
+    follow_ms_ = now_ms_;
+    const double run = shown_pos_ + dt * rate / 1000.0;
+    const double err = static_cast<double>(reported) - run;
+    double next;
+    if (std::fabs(err) > kFollowSnapS * rate) {
+        next = static_cast<double>(reported); /* a seek: go there */
+    } else {
+        /* never more than kFollowLeadS ahead of the report (the reports stopped: the marker waits), never backwards */
+        next = std::min(run + kFollowPull * err, static_cast<double>(reported) + kFollowLeadS * rate);
+        next = std::max(shown_pos_, next);
+    }
+    const double end = static_cast<double>(std::min<uint64_t>(t.out_frame > 0 ? t.out_frame : t.frames, t.frames));
+    shown_pos_ = std::clamp(next, 0.0, std::max(0.0, end));
+}
+
+int64_t Binder::trim_position() const
+{
+    return following_ ? static_cast<int64_t>(std::llround(shown_pos_)) : static_cast<int64_t>(snap_.trim.position);
+}
+
 void Binder::update_peaks()
 {
     const TrimSnap &t = snap_.trim;
@@ -487,12 +532,15 @@ void Binder::update_peaks()
         overview_ = port_.peak_range(0, t.frames, opt_.overview_bars);
         overview_key_ = overview_.empty() ? std::string() : base;
     }
-    const uint64_t vis = std::max<uint64_t>(1, t.visible_frames);
-    const int64_t start = static_cast<int64_t>(t.position) - static_cast<int64_t>(vis / 2);
-    const std::string key = base + "|" + std::to_string(start) + "|" + std::to_string(vis);
+    /* the window's bars on the take's grid (ui::bar_grid): re-read only when the window moved into another bar or the
+     * zoom changed; between those the UI moves the same bars */
+    const int64_t vis = static_cast<int64_t>(std::max<uint64_t>(1, t.visible_frames));
+    const ui::BarGrid g = ui::bar_grid(trim_position(), vis, window_bars_);
+    const std::string key = base + "|" + std::to_string(g.first) + "|" + std::to_string(g.fpb) + "|" + std::to_string(g.count);
     if (peaks_key_ != key || window_.empty()) {
-        window_ = port_.peak_range(start, vis, opt_.window_bars);
+        window_ = port_.peak_range(g.first * g.fpb, static_cast<uint64_t>(g.count) * static_cast<uint64_t>(g.fpb), g.count);
         peaks_key_ = window_.empty() ? std::string() : key;
+        window_grid_ = g;
     }
 }
 
@@ -570,6 +618,7 @@ bool Binder::tick(int64_t now_mono_ms, int64_t now_wall_s)
             }
         });
     }
+    follow_position();
     update_peaks();
 
     /* the shown notice: each for notice_ms, then the next */
@@ -587,6 +636,9 @@ bool Binder::tick(int64_t now_mono_ms, int64_t now_wall_s)
     in.rows = &rows_;
     in.window = &window_;
     in.overview = &overview_;
+    in.window_first = window_grid_.first;
+    in.window_fpb = window_.empty() ? 0 : window_grid_.fpb;
+    in.trim_position = following_ ? trim_position() : -1;
     in.local = &local_;
     in.now_wall_s = now_wall_s;
     in.utc = opt_.utc;

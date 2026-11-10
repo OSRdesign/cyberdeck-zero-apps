@@ -62,6 +62,9 @@ public:
     /* Shows a page (as the user's navigation does; UiActions::open is called). */
     void go(Screen s);
     Screen screen() const;
+    /* The trim page's main waveform width in bar pitches (TrimPage::bars_across): the binding reads that many bars across
+     * the window (Binder::set_window_bars). */
+    double trim_bars_across() const;
 
 private:
     struct Impl;

@@ -8,6 +8,7 @@
 #include "wave_geom.hpp"
 
 #include <cmath>
+#include <cstdio>
 
 using namespace cassette::ui;
 
@@ -225,6 +226,163 @@ void tags()
     CHECK_EQ(wide.x2, R);
 }
 
+/* The main bars on the take's grid: bar k always covers frames [k * fpb, (k + 1) * fpb), whatever the window, so a bar
+ * keeps its height while the take scrolls; only its x moves, by the window's own mapping, the same for every bar. */
+void bar_grid_rule()
+{
+    /* a 64 s window at 48 kHz, 220 bars across (the binding's default) */
+    BarGrid g = bar_grid(0, 3072000, 220);
+    CHECK_EQ(g.fpb, 13964);   /* 3072000 / 220 = 13963.6 */
+    CHECK_EQ(g.first, -111);  /* the window starts at -1536000, in bar -110; one more before it */
+    CHECK_EQ(g.count, 223);   /* ceil(3072000 / 13964) + 3 */
+    /* the HackBerry: 3.3 s at 16 kHz, 109.75 bars across (the 720x720 trim page) */
+    g = bar_grid(17600, 52800, 109.75);
+    CHECK_EQ(g.fpb, 481);
+    CHECK_EQ(g.first, -20);   /* the window starts at frame -8800, in bar -19 (frames -9139 .. -8659); one more */
+    /* every marker: the window [m - vis / 2, m + vis / 2] lies inside the bars read, with a whole bar to spare at each
+     * side, the count is the same, and the first bar moves only by whole bars */
+    int bad = 0;
+    const std::int64_t vis = 52800;
+    const BarGrid g0 = bar_grid(100000, vis, 109.75);
+    for (std::int64_t d : {1, 7, 160, 240, 480, 481, 482, 1000, 4811, 52801, -1, -481, -99999}) {
+        const std::int64_t m = 100000 + d;
+        const BarGrid gm = bar_grid(m, vis, 109.75);
+        const std::int64_t a = m - vis / 2, b = a + vis;
+        if (gm.fpb != g0.fpb || gm.count != g0.count) ++bad;
+        if (gm.first * gm.fpb > a - gm.fpb) ++bad;
+        if ((gm.first + gm.count) * gm.fpb < b + gm.fpb) ++bad;
+    }
+    CHECK_EQ(bad, 0);
+    CHECK_EQ(bar_grid(5, 0, 0).fpb, 1); /* a zero window or width: at least one frame per bar */
+    CHECK(near(bars_across(437, 4), 109.25, 1e-9));
+    CHECK(near(bars_across(0, 4), 1.0, 1e-9));
+    CHECK(near(bars_across(100, 0), 1.0, 1e-9));
+
+    /* the x of a grid bar: the window's mapping (ms) at sub-ms precision. 16 kHz, 481 frames per bar = 30.0625 ms; the
+     * 720x720 window: 3300 ms over 657 px (from x 30) */
+    const WaveWindow w1 = wave_window(1100, 3300, 30, 657), w2 = wave_window(1117, 3300, 30, 657);
+    const double step = grid_bar_x(w1, 11, 481, 16000) - grid_bar_x(w1, 10, 481, 16000);
+    CHECK(near(step, 30.0625 * 657 / 3300, 1e-9)); /* 5.985 px: the page's 6 px pitch within 0.3 % */
+    CHECK(near(grid_bar_x(w1, 0, 481, 16000), w1.x_of(0), 1e-9));
+    /* the marker 17 ms later: every bar 3.38 px further left, the same for all (the bars move together, as the take) */
+    bad = 0;
+    for (std::int64_t k = -2; k < 120; ++k) {
+        const double shift = grid_bar_x(w1, k, 481, 16000) - grid_bar_x(w2, k, 481, 16000);
+        if (!near(shift, 17.0 * 657 / 3300, 1e-6)) ++bad;
+    }
+    CHECK_EQ(bad, 0);
+    CHECK(near(grid_bar_x(w1, 3, 100, 0), w1.x_of_ms(3 * 100 * 1000.0 / 48000), 1e-9)); /* no rate: 48 kHz */
+    CHECK(near(w1.x_of_ms(1100.5), w1.x_of(1100) + 0.5 * 657 / 3300, 1e-9));
+
+    /* a bar at the window's edge is cut to it, a bar outside it shows nothing */
+    BarSpan sp = clip_bar(27, 5, 30, 687);
+    CHECK(sp.x1 == 30 && sp.x2 == 32);
+    sp = clip_bar(685, 5, 30, 687);
+    CHECK(sp.x1 == 685 && sp.x2 == 687);
+    sp = clip_bar(100, 5, 30, 687);
+    CHECK(sp.x1 == 100 && sp.x2 == 105);
+    sp = clip_bar(20, 5, 30, 687);
+    CHECK(sp.x2 <= sp.x1);
+    sp = clip_bar(700, 5, 30, 687);
+    CHECK(sp.x2 <= sp.x1);
+}
+
+/* The ruler's row at the 480x320 board: the frame's inner edge at 191, a 12 px line, 4 px ticks */
+void ruler_rule()
+{
+    const RulerRow r = ruler_row(191, 12, 4, 1, 2, 176);
+    CHECK_EQ(r.label_y, 177); /* 191 - 2 - 12 */
+    CHECK_EQ(r.label_h, 12);
+    CHECK_EQ(r.tick_y, 172);  /* 177 - 1 - 4 */
+    CHECK_EQ(r.tick_h, 4);
+    CHECK_EQ(r.main_bottom, 171); /* the waveform gives 5 px back to the ruler */
+    CHECK_EQ(ruler_row(300, 12, 4, 1, 2, 200).main_bottom, 200); /* room enough: the waveform keeps its place */
+
+    /* the labels: the first starts at the window's left edge, the last ends at its right edge, the others centred */
+    const WaveWindow w = wave_window(30000, 60000, 20, 437);
+    const std::vector<RulerTick> t = ruler_ticks(w, 5);
+    std::vector<RulerLabel> l = ruler_labels(t, {20, 20, 20, 20, 20}, 20, 457, 4);
+    CHECK(l.size() == 5 && l[0].shown && l[4].shown);
+    CHECK(l[0].x1 == 20 && l[0].x2 == 40);
+    CHECK(l[4].x1 == 437 && l[4].x2 == 457);
+    CHECK(l[2].shown && l[2].x1 == 229 && l[2].x2 == 249); /* centred on 239 (238.5 rounded) */
+    /* a label near an edge is moved inward, never cut: the window starting at 0 (first label 0:00 at the left edge) */
+    l = ruler_labels({{25, 0}, {130, 1}}, {30, 30}, 20, 457, 4);
+    CHECK(l[0].x1 == 20 && l[1].x1 == 115);
+    l = ruler_labels({{450, 0}}, {30}, 20, 457, 4);
+    CHECK(l[0].x2 == 457);
+    /* no label for a tick outside the take (width 0); its neighbours still placed */
+    l = ruler_labels(t, {0, 20, 20, 20, 0}, 20, 457, 4);
+    CHECK(!l[0].shown && l[1].shown && l[3].shown && !l[4].shown);
+    /* a label that would touch the one before it (within the gap) is left out, its tick stays */
+    l = ruler_labels({{20, 0}, {45, 1}, {120, 2}}, {30, 30, 30}, 20, 457, 4);
+    CHECK(l[0].shown && !l[1].shown && l[2].shown);
+    /* a label wider than the window: none */
+    l = ruler_labels({{100, 0}}, {500}, 20, 457, 4);
+    CHECK(!l[0].shown);
+    CHECK(ruler_labels({}, {}, 0, 10, 4).empty());
+}
+
+/* The trim page's waveform panel at every layout the app meets (the screen sizes of the scenes, headers from 30 to 64 px,
+ * touch targets 44 to 79 px): the ruler's labels and ticks lie inside the panel's frame, under the main waveform, and the
+ * labels inside the window (a label of h:mm:ss too); the waveform keeps a usable height. */
+void panel_every_layout()
+{
+    struct Size {
+        int w, h;
+    };
+    const Size sizes[] = {{320, 480}, {480, 320}, {480, 480}, {480, 800}, {640, 480}, {720, 720}, {800, 480}};
+    int bad = 0, cases = 0;
+    for (const Size &z : sizes)
+        for (int body : {30, 40, 48, 64})
+            for (double target : {44.0, 47.0, 56.0, 60.0, 64.0, 70.0, 79.0}) {
+                const bool portrait = z.h > z.w && !square_screen(z.w, z.h);
+                const Fit f = trim_fit(z.w, z.h, body, portrait, target);
+                const int lh = static_cast<int>(std::lround(1.3 * f.px(9))) + 1; /* above Montserrat's 1.22 em */
+                const WavePanel g = wave_panel(f, portrait, lh);
+                ++cases;
+                const int in_top = g.y + g.border, in_bottom = g.y + g.h - g.border;
+                const int in_left = g.x + g.border, in_right = g.x + g.w - g.border;
+                bool ok = g.ruler.label_y + g.ruler.label_h <= in_bottom - 1 && g.ruler.label_y >= in_top;
+                ok = ok && g.ruler.tick_y + g.ruler.tick_h <= g.ruler.label_y && g.ruler.tick_h >= 1;
+                ok = ok && g.main_y + g.main_h <= g.ruler.tick_y && g.main_h >= 20;
+                ok = ok && g.main_x >= in_left && g.main_x + g.bars_w <= in_right && g.bars >= 40;
+                ok = ok && g.over_y >= in_top && g.over_y + g.over_h <= g.main_y;
+                /* the labels at a window starting at 0 and one ending at the take's end, "0:00" .. "1:01:01" wide */
+                const WaveWindow w = wave_window(30000, 60000, g.main_x, g.bars_w);
+                auto tw = [&f](int digits, int colons) { /* Montserrat Medium: digits 0.62 em, a colon 0.3 em (above) */
+                    return static_cast<int>(std::lround((0.62 * digits + 0.3 * colons) * f.px(9))) + 1;
+                };
+                const std::vector<RulerLabel> l = ruler_labels(ruler_ticks(w, 5), {tw(3, 1), tw(3, 1), tw(3, 1), tw(5, 2), tw(5, 2)},
+                                                               g.main_x, g.main_x + g.bars_w, f.px(4));
+                ok = ok && l.front().shown && l.back().shown;
+                for (const RulerLabel &x : l)
+                    if (x.shown && (x.x1 < g.main_x || x.x2 > g.main_x + g.bars_w)) ok = false;
+                if (!ok) {
+                    ++bad;
+                    std::printf("  panel %dx%d body %d target %.0f: label %d+%d tick %d+%d main %d+%d (x %d+%d, %d bars) inner %d..%d "
+                                "x %d..%d, overview %d+%d, labels %d %d\n",
+                                z.w, z.h, body, target, g.ruler.label_y, g.ruler.label_h, g.ruler.tick_y, g.ruler.tick_h, g.main_y,
+                                g.main_h, g.main_x, g.bars_w, g.bars, in_top, in_bottom, in_left, in_right, g.over_y, g.over_h,
+                                l.front().shown, l.back().shown);
+                }
+            }
+    CHECK_EQ(bad, 0);
+    CHECK_EQ(cases, 7 * 4 * 7);
+    /* the boards at their own size: 480x320 gives the waveform 57 px (was 62) for a 12 px ruler line; 320x480 has room */
+    const WavePanel b = wave_panel(trim_fit(480, 320, 40, false, 44), false, 12);
+    CHECK_EQ(b.main_y, 114);
+    CHECK_EQ(b.main_h, 57);
+    CHECK_EQ(b.ruler.label_y, 177);
+    CHECK_EQ(b.bars, 110);
+    CHECK_EQ(b.bars_w, 439);
+    const WavePanel q = wave_panel(trim_fit(320, 480, 40, true, 44), true, 12);
+    CHECK_EQ(q.main_y, 122);
+    CHECK_EQ(q.main_h, 150);
+    CHECK_EQ(q.ruler.label_y, 283);
+    CHECK_EQ(q.bars, 68);
+}
+
 } // namespace
 
 void test_wave()
@@ -234,4 +392,7 @@ void test_wave()
     flags_scrub_ruler();
     fit_rule();
     tags();
+    bar_grid_rule();
+    ruler_rule();
+    panel_every_layout();
 }

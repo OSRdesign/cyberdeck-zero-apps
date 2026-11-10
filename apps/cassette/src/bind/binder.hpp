@@ -41,6 +41,7 @@
 #include "worker.hpp"
 
 #include "ui/view_model.hpp"
+#include "ui/wave_geom.hpp"
 
 #include <atomic>
 #include <cstdint>
@@ -57,7 +58,8 @@ class Binder {
 public:
     struct Options {
         int64_t notice_ms = 4000;
-        int window_bars = 220;   /* the UI resamples them to its bar count */
+        /* the trim window's width in bars (the UI's bars across: set_window_bars); its bars are read on the take's grid */
+        double window_bars = 220;
         int overview_bars = 110;
         double card_step_db = 1.0;
         double soft_step_db = 1.0;
@@ -80,6 +82,8 @@ public:
     bool take_nav(ui::Screen &screen);
     /* A notice of the binding's own (UI thread). */
     void push_notice(const std::string &text);
+    /* The trim page's main waveform width in bars (CassetteUi::trim_bars_across), so one bar read is one bar drawn. */
+    void set_window_bars(double across) { window_bars_ = across >= 1.0 ? across : 1.0; }
     /* The app ends: the queued commands run, then app_leave() and shutdown(). Blocks; idempotent. */
     void leave();
 
@@ -101,6 +105,8 @@ private:
     void drain_inbox();
     void leave_trim();
     std::string take_at(int index) const;
+    void follow_position();
+    int64_t trim_position() const; /* the marker shown: the followed position while a preview plays, else the reported */
     void update_peaks();
 
     Port &port_;
@@ -134,9 +140,18 @@ private:
     bool nav_pending_ = false;
     ui::Screen nav_ = ui::Screen::List;
     std::string select_after_nav_; /* the list's selection when the page opens by itself (after a replace save) */
-    /* the trim waveform: re-read only when the window moved */
+    /* the trim waveform: re-read only when the window moved into another bar of the take's grid */
     std::vector<PeakBar> window_, overview_;
     std::string peaks_key_, overview_key_;
+    ui::BarGrid window_grid_;
+    double window_bars_ = 220;
+    /* the marker while a preview plays (follow_position): runs on at the take's rate, pulled toward the reported position */
+    static constexpr double kFollowPull = 0.15; /* the part of the gap closed per tick */
+    static constexpr double kFollowSnapS = 0.4; /* a gap larger than this (seconds): snap */
+    static constexpr double kFollowLeadS = 0.15; /* at most this far ahead of the last report (seconds) */
+    bool following_ = false;
+    double shown_pos_ = 0;
+    int64_t follow_ms_ = 0;
     /* a drag on the waveform: only the latest marker is sent */
     std::atomic<int64_t> scrub_frame_{0};
     std::atomic<bool> scrub_posted_{false};

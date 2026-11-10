@@ -70,6 +70,25 @@ void t_trim_state() {
         for (const PeakBar &b : bars) CHECK(b.min <= b.max);
     }
 
+    /* the trim page reads its bars on the take's grid (binder: ui::bar_grid): a read starting on a multiple of the bar
+     * size gives every grid bar the same pair as any other such read, and bars before frame 0 are empty */
+    {
+        const uint64_t fpb = 4801; /* not a multiple of the pyramid's blocks */
+        const std::vector<PeakBar> a = c.peak_range(-3 * static_cast<int64_t>(fpb), 12 * fpb, 12);
+        const std::vector<PeakBar> b = c.peak_range(0, 9 * fpb, 9);
+        const std::vector<PeakBar> e = c.peak_range(5 * static_cast<int64_t>(fpb), 7 * fpb, 7);
+        CHECK(a.size() == 12 && b.size() == 9 && e.size() == 7);
+        if (a.size() == 12 && b.size() == 9 && e.size() == 7) {
+            for (int i = 0; i < 3; ++i) CHECK(a[static_cast<size_t>(i)].min == 0 && a[static_cast<size_t>(i)].max == 0);
+            int bad = 0;
+            for (size_t k = 0; k < 9; ++k)
+                if (a[k + 3].min != b[k].min || a[k + 3].max != b[k].max) ++bad;
+            for (size_t k = 5; k < 9; ++k)
+                if (e[k - 5].min != b[k].min || e[k - 5].max != b[k].max) ++bad;
+            CHECK_EQ(bad, 0);
+        }
+    }
+
     /* zoom: whole take, then closer; the window follows the marker */
     CHECK(c.set_zoom(3));
     s = r.snap();

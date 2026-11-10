@@ -9,6 +9,7 @@
 #include "peaks.hpp"
 
 #include <atomic>
+#include <cmath>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <utime.h>
@@ -507,7 +508,75 @@ static void t_rates_peaks() {
     }
 }
 
+/* The trim page's bars on the take's grid (ui::bar_grid; the binding reads window(first * fpb, fpb, count)): a bar of the
+ * grid has the same height whatever window it is read in, so the waveform keeps its shape while it scrolls. Bars tied to
+ * the window's start (the old reading) give the frames under one screen bar another maximum at almost every step. */
+static void t_grid_heights() {
+    Dir d;
+    /* 16 kHz mono (the Jabra headset of the HackBerry), 30 s of bursts: the envelope changes within a few hundred frames */
+    AudioFormat fmt;
+    fmt.rate = 16000;
+    fmt.channels = 1;
+    fmt.bits = 16;
+    const uint64_t frames = 16000 * 30;
+    Bytes audio(static_cast<size_t>(frames) * 2);
+    for (uint64_t i = 0; i < frames; i++) {
+        const double env = 0.03 + 0.97 * std::pow(std::fabs(std::sin(static_cast<double>(i) * 3.14159265 / 1733.0)), 6.0);
+        const double v = env * 30000.0 * (static_cast<int>(i % 37) - 18) / 18.0 + static_cast<int>(tst::mix(i) & 63) - 32;
+        const int16_t x = static_cast<int16_t>(std::clamp(v, -32768.0, 32767.0));
+        audio[static_cast<size_t>(2 * i)] = static_cast<unsigned char>(static_cast<uint16_t>(x) & 0xFF);
+        audio[static_cast<size_t>(2 * i + 1)] = static_cast<unsigned char>(static_cast<uint16_t>(x) >> 8);
+    }
+    BwfInfo info;
+    Bytes file = build_header(fmt, info, audio.size());
+    file.insert(file.end(), audio.begin(), audio.end());
+    write_bytes(d.file("g.wav"), file);
+    CountOps ops;
+    std::string err;
+    auto P = PeakPyramid::open_or_build(ops, d.file("g.wav"), &err);
+    CHECK(P != nullptr);
+    if (!P) return;
+    auto floor_div = [](int64_t a, int64_t b) { return a / b - ((a % b != 0) && ((a < 0) != (b < 0)) ? 1 : 0); };
+    int bad = 0, compared = 0, old_changed = 0, old_compared = 0;
+    /* windows of 1 s (exact bars, under 256 frames a bar), 2 s, 3.3 s and 10 s (the pyramid), 109.75 bars across */
+    for (int64_t vis : {int64_t(16000), int64_t(32000), int64_t(52800), int64_t(160000)}) {
+        const int64_t fpb = std::max<int64_t>(1, std::llround(static_cast<double>(vis) / 109.75));
+        const int64_t count = (vis + fpb - 1) / fpb + 3;
+        const int64_t m0 = 200000;
+        const int64_t f0 = floor_div(m0 - vis / 2, fpb) - 1;
+        const std::vector<PeakPair> w0 = P->window(static_cast<uint64_t>(f0 * fpb), static_cast<uint64_t>(fpb), static_cast<size_t>(count));
+        for (int64_t step : {int64_t(1), int64_t(7), fpb / 3, fpb / 2 + 1, fpb - 1, fpb + 5, 3 * fpb + 11, int64_t(1024), int64_t(-333)}) {
+            const int64_t m = m0 + step;
+            const int64_t f = floor_div(m - vis / 2, fpb) - 1;
+            const std::vector<PeakPair> w = P->window(static_cast<uint64_t>(f * fpb), static_cast<uint64_t>(fpb), static_cast<size_t>(count));
+            for (int64_t k = std::max(f, f0); k < std::min(f, f0) + count; k++) {
+                ++compared;
+                if (!(w[static_cast<size_t>(k - f)] == w0[static_cast<size_t>(k - f0)])) ++bad;
+            }
+            /* the old reading: bar i of the window from its own start; the screen bar over frame X = m0 + j * fpb */
+            const std::vector<PeakPair> o0 = P->window(static_cast<uint64_t>(m0 - vis / 2), static_cast<uint64_t>(fpb), static_cast<size_t>(count));
+            const std::vector<PeakPair> o = P->window(static_cast<uint64_t>(m - vis / 2), static_cast<uint64_t>(fpb), static_cast<size_t>(count));
+            if (step % fpb == 0) continue;
+            for (int64_t j = -20; j <= 20; j++) {
+                const int64_t x = m0 + j * fpb;
+                const int64_t i0 = (x - (m0 - vis / 2)) / fpb, i1 = (x - (m - vis / 2)) / fpb;
+                if (i0 < 0 || i1 < 0 || i0 >= count || i1 >= count) continue;
+                ++old_compared;
+                if (!(o[static_cast<size_t>(i1)] == o0[static_cast<size_t>(i0)])) ++old_changed;
+            }
+        }
+    }
+    CHECK_EQ(bad, 0);
+    CHECK(compared > 3000);
+    /* the old way: after a step that is not a whole bar, a good part of the bars over the same frames changed height (a
+     * quarter here, over steps from 1 frame to a few bars) */
+    std::printf("  grid bars: %d compared, %d differ; old start-aligned bars: %d of %d changed height\n", compared, bad,
+                old_changed, old_compared);
+    CHECK(old_changed * 5 > old_compared);
+}
+
 void test_peaks() {
+    t_grid_heights();
     t_zoom_mono();
     t_formats();
     t_rates_peaks();
