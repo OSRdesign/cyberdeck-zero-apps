@@ -7,6 +7,7 @@
 
 #include "core/takes/naming.hpp"
 #include "ui/ui_format.hpp"
+#include "ui/wave_geom.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -832,6 +833,11 @@ ui::ViewModel map_view(const MapInput &in)
                                : -1;
         if (in.window) o.window_peaks = peak_levels(*in.window);
         if (in.overview) o.overview_peaks = peak_levels(*in.overview);
+        /* the whole take's loudest peak = the loudest bar of the overview (it covers the take; each bar keeps its maximum) */
+        float take_peak = 0.0f;
+        for (float v : o.overview_peaks) take_peak = std::max(take_peak, v);
+        o.fit = s.settings.wave_fit;
+        o.fit_gain = ui::fit_gain_for(take_peak);
         o.playing = t.previewing;
     }
 

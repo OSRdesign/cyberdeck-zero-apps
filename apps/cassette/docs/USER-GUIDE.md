@@ -80,7 +80,7 @@ numbers are explained below. The other layouts hold the same parts in another or
 | 1 | **Cassette window** | The cassette with its label, which carries only the take's name in handwriting (a long name uses the whole label and wraps to up to two lines). The two hubs turn while the deck runs: counterclockwise while recording and playing. They stand still when stopped or paused. With no card, the window shows the message about no sound input instead. |
 | 2 | **Counter** | The time of the take: while recording, how long the take is; while playing or paused, the position in the take. It reads 00:00 when the deck is idle. The **PEAK** lamp beside it is explained below. |
 | 3 | **Recordings** and **Settings** buttons | Open the recordings list (key **L**) and the settings (key **S**). |
-| 4 | **Info strip** | The take's name in capitals, the format and the time left on the card (for example `TAKE 007 · 48k/16 WAV · 12 h 40 left`); while a take plays it reads `PLAYING TAKE 006 · 05:44 / 12:08`. At the right: the **LIM** and **LOW CUT** lamps (lit when those switches in Settings are on) and, while the deck works, a red **REC** or green **PLAY** word with a lamp. A notice replaces the strip for a few seconds (a take saved, the card unplugged, a refusal). On narrow and square screens this is a box next to the counter instead: its first line, in bold, is the codec and rate (`WAV 48k`, `FLAC 48k`, `OPUS 48k · 32 kbps`: Opus adds its bit rate), its second line the time left (`12 h 40 left`) or, while a take plays, the position (`05:44 / 12:08`). The box does not show the take's name (it is on the cassette label). While recording it names the codec of the take being recorded; when idle, the choice in Settings (what the next take would use); while a take plays, that take's codec and rate. With no sound input it still names the Settings choice. Neither line wraps: the codec line uses the largest type size at which it fits the box. |
+| 4 | **Info strip** | The take's name in capitals, the format and the time left on the card (for example `TAKE 007 · 48k/16 WAV · 12 h 40 left`); while a take plays it reads `PLAYING TAKE 006 · 05:44 / 12:08`. At the right: the **LIM** and **LOW CUT** lamps (lit when those switches in Settings are on) and, while the deck works, a red **REC** or green **PLAY** word with a lamp. A notice replaces the strip for a few seconds (a take saved, the card unplugged, a refusal). On narrow and square screens this is a box next to the counter instead: its first line, in bold, is the codec and rate (`WAV 48k`, `FLAC 48k`, `OPUS 48k · 32 kbps`: Opus adds its bit rate), its second line the time left (`12 h 40 left`) or, while a take plays, the position (`05:44 / 12:08`). The box does not show the take's name (it is on the cassette label). While recording it names the codec of the take being recorded; when idle, the choice in Settings (what the next take would use); while a take plays, that take's codec and rate. With no sound input it still names the Settings choice. The REC or PLAY lamp sits at the right end of the second line, so the codec line has the whole width of the box. Neither line wraps: the codec line uses the largest type size at which it fits the box. |
 | 5 | **Level meter** | 15 bars from -40 to 0 dBFS, one row per channel (a mono card has one row, a stereo card two: L over R). Details below. |
 | 6 | **CARD** and **SOFT** gain | CARD is the sound card's own level (shown only when the card has a level control). SOFT is gain added by Cassette, 0 to +24 dB. Each has a minus and a plus button, 1 dB a step. |
 | 7 | **The five keys** | REW, PLAY / PAUSE, FWD, STOP, REC. |
@@ -319,6 +319,17 @@ at the edge when they are outside the window); and any number of numbered green 
 - **SPLIT** (Enter) puts a split flag at the marker, between IN and OUT. Add as many as you like. A tap on a flag
   selects it (white); then the key reads **REMOVE** and removes it. Tab selects the next flag.
 - **PLAY** (Space) plays the kept part from the marker (or from IN) and stops at OUT.
+- **TRUE / FIT** (the small chip at the top right corner of the waveform, or key **F**) sets the vertical scale of the
+  waveform and of the overview strip. **TRUE** draws the real level: a quiet take is a thin line. **FIT** multiplies
+  every bar by one gain so that the loudest peak of the whole take fills 90 % of the panel; the chip then reads
+  `FIT x8` (the gain, rounded to a whole number; `FIT x1` for a take that is already loud). The gain belongs to the
+  take: it does not change when you zoom or scroll, and no bar is drawn taller than the panel. A take whose peak is
+  below -60 dBFS (practically silence) gets no gain, so noise is not blown up: the chip reads `FIT`. The gain is at
+  most x64. Only the drawing changes, never the audio or the saved files. The choice is kept in Settings
+  (`wave_fit` in `settings.json`, written only when FIT is on) and every take opens in it. A tag that would touch the
+  chip (an OUT beyond the right edge) moves to the row below it.
+
+  ![A quiet take in FIT: the chip reads FIT x8](img/trim-fit.png)
 - **SAVE** (S) opens the save box. Esc goes back to the list and saves nothing.
 
 ![Zoomed in, a flag selected](img/trim-zoomed.png)

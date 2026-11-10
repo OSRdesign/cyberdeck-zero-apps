@@ -561,7 +561,8 @@ name; the label shows only the name, whole, with no ruled line through it.
    codec text on the label, and no ruled line through the letters.
 2. On a portrait or square screen (480x800 Pi 3A+, 320x480, HackBerry): the box beside the counter has two lines, bold
    `WAV 48k` (or `FLAC 48k`, or `OPUS 48k` followed by the bit rate with a middle dot, `OPUS 48k . 32 kbps`) over the
-   time left (`955 h left`). The take's name is not in the box; neither line wraps or overlaps the other or the REC lamp.
+   time left (`955 h left`), the REC lamp at the right end of the second line (it no longer squeezes the codec line). The
+   take's name is not in the box; neither line wraps or overlaps the other or the REC lamp.
    Read the smallest type you can still read in the codec line and report it.
 3. In Settings choose Opus 128 kbps (the longest text, `OPUS 48k . 128 kbps`), Esc. Expected: the box names it at once
    while idle; press REC and STOP: the same text during the take and after it.
@@ -571,6 +572,22 @@ name; the label shows only the name, whole, with no ruled line through it.
    there may be clipped; report it.
 
 Report: pass or fail per step, the name used, the screens tried, and the smallest legible codec text.
+
+## B21. Waveform scale TRUE / FIT (any board, 5 min)
+
+Goal: a quiet take is readable on the trim page, and the chip and the key switch the scale.
+
+1. Record a quiet take of about 20 s (speak softly, card level low), TRIM it. Expected: the waveform chip at the top right
+   corner of the waveform reads `TRUE` (the first time) and the bars are low.
+2. Tap the chip (or press F on a keyboard). Expected: it reads `FIT x` and a number (more than 1 for a quiet take), the
+   bars of the main waveform and of the overview strip grow, the loudest part of the whole take reaches about nine tenths
+   of the panel height. ZOOM and scroll: the gain number and the bar scale do not change. Tap again: `TRUE`, low bars.
+3. Set an IN or an OUT beyond the right edge (zoom in): the OUT tag is not hidden behind the chip. Report if any tag or the
+   red marker touches the chip.
+4. Leave FIT on, Esc to the list, open another take, then close Cassette and open it again. Expected: every take opens in
+   FIT. Switch back to TRUE before you go on.
+
+Report: pass or fail per step, the number shown after `FIT x`, the screen.
 
 ## Results
 

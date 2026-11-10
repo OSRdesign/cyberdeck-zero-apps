@@ -60,3 +60,4 @@ depth-picker.png	fmt9-quality-depth	480x320	picker-top
 bitrate-picker.png	fmt10-codec-change-toast	480x320	bitrate-picker
 rate-picker-opus.png	fmt10-codec-change-toast	480x320	rate-opus
 codec-change-toast.png	fmt10-codec-change-toast	480x320	settings-opus-toast
+trim-fit.png	wfq-fit-small	480x320	trim-fit

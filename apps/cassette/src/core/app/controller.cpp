@@ -1589,6 +1589,13 @@ bool Controller::set_monitor(bool on) {
     p_->publish();
     return true;
 }
+bool Controller::set_wave_fit(bool on) {
+    Locked l(p_->mu);
+    p_->store.values().wave_fit = on;
+    p_->persist();
+    p_->publish();
+    return true;
+}
 bool Controller::set_monitor_level(int percent) {
     Locked l(p_->mu);
     p_->store.values().monitor_level = monitor_level_clamp(percent);

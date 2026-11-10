@@ -11,6 +11,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace cassette {
@@ -42,6 +43,17 @@ int bar_count(double w, double pitch);
 /* Peaks resampled to n bars: each bar is the maximum of the input values its bucket covers (at least one value), so a
  * short loud click is never lost; an empty input gives n zeros. Values are clamped to 0..1. */
 std::vector<float> resample_max(const std::vector<float> &in, int n);
+
+/* The waveform's vertical scale (trim page chip: TRUE or FIT). TRUE draws the real level (0..1 of full scale). FIT multiplies every
+ * bar, in the main waveform and the overview alike, by ONE gain per take: the loudest peak of the whole take then reaches
+ * kFitTarget (90 %) of the panel height. The gain never changes with zoom or scroll. Gain 0 means "no gain" (a take whose peak
+ * is under kFitSilent, -60 dBFS: a silent take is not inflated); the gain is capped at kFitMaxGain (x64). */
+constexpr float kFitTarget = 0.9f, kFitSilent = 0.001f, kFitMaxGain = 64.0f;
+float fit_gain_for(float take_peak);
+/* level * gain clamped to 0..1; a gain of 0 (none) or 1 leaves the level as is */
+float fit_level(float level, float gain);
+/* The chip's text: "TRUE"; FIT with its gain "FIT x8" (rounded to a whole number); FIT without a gain (gain 0) "FIT" */
+std::string wave_chip_text(bool fit, float gain);
 
 /* The split flag a tap at x hits: the nearest flag inside the window within slop_px, -1 for none. */
 int flag_at(const WaveWindow &win, const std::vector<std::int64_t> &splits, double x, double slop_px);

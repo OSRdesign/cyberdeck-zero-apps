@@ -1,0 +1,15 @@
+title trim page, quiet take (loudest peak -18 dBFS) opened in FIT (the saved scale): chip "FIT x8", the loudest peak at 90 % of the panel
+sizes 720x720
+ppmm 800
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_PAGE trim
+env CASSETTE_LAYOUT_CHECK 1
+env CASSETTE_DEMO_TRIM_QUIET 0.12
+env CASSETTE_DEMO_WAVE_FIT 1
+
+wait 600
+shot trim-fit
+expect text "ZOOM"
+expect text "SAVE"
+expect notext "LAYOUT FAIL"
+expect noquit

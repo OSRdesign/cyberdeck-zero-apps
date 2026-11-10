@@ -360,6 +360,7 @@ public:
      * the sink cannot open, it stays off and a notice "Monitor unavailable" is raised once. */
     bool set_monitor(bool on);
     bool set_monitor_level(int percent);   /* 0..100, rounded to steps of 5 */
+    bool set_wave_fit(bool on);            /* the trim waveform's scale (settings wave_fit): TRUE (false) or FIT (true); persisted at once */
     bool select_card(int index);           /* index into snapshot().card.labels; refused while a take runs */
     bool select_output(const std::string &device); /* "" for automatic */
     void refresh_cards();                  /* re-lists the capture cards (the labels), e.g. on opening Settings */

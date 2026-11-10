@@ -198,8 +198,12 @@ struct TrimVm {
      * overview_peaks cover the whole take. */
     std::vector<float> window_peaks;
     std::vector<float> overview_peaks;
-    bool playing = false;        /* PLAY latched */
-};
+    /* The waveform's vertical scale (settings wave_fit): fit false = TRUE (peaks as they are), true = FIT: the UI multiplies every
+     * bar of both waveforms by fit_gain (wave_geom.hpp fit_gain_for of the whole take's peak, so it never changes with zoom or
+     * scroll; 0 = no gain, a silent take or peaks not ready) and clamps to 1. */
+    bool fit = false;
+    float fit_gain = 0.0f;
+    bool playing = false;        /* PLAY latched */};
 
 /* The save box (opened by SAVE on the trim page; UiActions::trim_save asks for it). */
 struct SaveFile {
@@ -264,7 +268,7 @@ inline bool operator==(const TrimVm &a, const TrimVm &b)
     return a.take_id == b.take_id && a.sticker == b.sticker && a.take == b.take && a.length_ms == b.length_ms &&
            a.marker_ms == b.marker_ms && a.span_ms == b.span_ms && a.in_ms == b.in_ms && a.out_ms == b.out_ms &&
            a.splits == b.splits && a.selected_split == b.selected_split && a.window_peaks == b.window_peaks &&
-           a.overview_peaks == b.overview_peaks && a.playing == b.playing;
+           a.overview_peaks == b.overview_peaks && a.fit == b.fit && a.fit_gain == b.fit_gain && a.playing == b.playing;
 }
 inline bool operator==(const SaveFile &a, const SaveFile &b) { return a.name == b.name && a.length_ms == b.length_ms; }
 inline bool operator==(const SaveVm &a, const SaveVm &b) { return a.shown == b.shown && a.files == b.files; }
@@ -316,6 +320,7 @@ struct UiActions {
     std::function<void()> trim_split;                 /* add a split point at the marker */
     std::function<void(int split)> trim_remove_split; /* SPLIT reads REMOVE while a flag is selected */
     std::function<void(int split)> trim_select_split; /* a tap on a flag: select it and move the marker to it (-1: none) */
+    std::function<void(bool fit)> trim_wave_fit;      /* the waveform chip / key F: the vertical scale, TRUE (false) or FIT (true) */
     std::function<void()> trim_play;
     std::function<void()> trim_save;                  /* SAVE: show the save box (SaveVm::shown) */
     /* boxes */

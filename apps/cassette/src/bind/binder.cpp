@@ -370,6 +370,9 @@ ui::UiActions Binder::actions()
         local_.tap_selected = n >= 0;
         if (n >= 0) post([this, n] { port_.select_split(n); });
     };
+    a.trim_wave_fit = [this](bool fit) {
+        post([this, fit] { port_.set_wave_fit(fit); });
+    };
     a.trim_play = [this] {
         post([this] { port_.preview(!port_.snapshot().trim.previewing); });
     };

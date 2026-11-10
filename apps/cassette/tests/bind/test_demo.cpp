@@ -16,6 +16,8 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <fstream>
+#include <iterator>
 #include <ctime>
 #include <ftw.h>
 #include <functional>
@@ -250,6 +252,27 @@ void test_take_trim_save()
     for (float p : e.vm().trim.overview_peaks) top = std::max(top, p);
     CHECK(top > 0.05f && top < 0.9f); /* the tone, -20 to -4 dBFS */
     CHECK_EQ(e.vm().trim.window_peaks.size(), 220u);
+    /* the waveform scale: TRUE until the chip (or F) switches to FIT; the gain is 0.9 over the take's loudest peak, whatever
+     * the zoom; the choice is saved in settings.json (wave_fit) and TRUE removes it again */
+    CHECK(!e.vm().trim.fit);
+    CHECK(std::fabs(e.vm().trim.fit_gain - 0.9f / top) < 1e-3f);
+    e.act.trim_wave_fit(true);
+    CHECK(e.until([](const ui::ViewModel &v) { return v.trim.fit; }, 1000));
+    {
+        std::ifstream f(e.home + "/.config/cassette/settings.json");
+        const std::string txt((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        CHECK(txt.find("wave_fit") != std::string::npos);
+    }
+    e.act.trim_zoom(+1);
+    CHECK(std::fabs(e.vm().trim.fit_gain - 0.9f / top) < 1e-3f);
+    e.act.trim_wave_fit(false);
+    CHECK(e.until([](const ui::ViewModel &v) { return !v.trim.fit; }, 1000));
+    {
+        std::ifstream f(e.home + "/.config/cassette/settings.json");
+        const std::string txt((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        CHECK(txt.find("wave_fit") == std::string::npos);
+    }
+    e.act.trim_zoom(-1);
 
     /* two splits at 0.5 s and 1.0 s */
     e.act.trim_nudge(500);

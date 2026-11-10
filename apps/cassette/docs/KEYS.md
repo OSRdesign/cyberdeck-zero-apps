@@ -72,6 +72,7 @@ and then acts as usual.
 | Tab | select the next split flag (the marker moves to it) |
 | Space | PLAY |
 | S | SAVE (the save box) |
+| F | waveform scale: TRUE (real level) / FIT (the take's loudest peak fills the panel); the chip at the waveform's top right shows which |
 | Esc | back to the list, nothing saved |
 
 ## Save box and confirm box

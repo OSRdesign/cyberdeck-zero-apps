@@ -18,6 +18,7 @@
  *     "record_timer_s": 0|3|10|20, "rew_fwd": "scan" (5x, held) | "jump" (5 s per tap),
  *     "low_cut": bool, "limiter": bool, "soft_gain_db": 0..24,
  *     "monitor": bool (default false), "monitor_level": 0..100 in steps of 5 (default 50),
+ *     "wave_fit": true (the trim waveform is scaled to fit) | absent (true level; written only when true),
  *     "card": "<descriptor>", "output_device": "<alsa device>",
  *     "cards": { "<descriptor>": { "level_db": number (absent: no level control), "auto_gain": bool, "mute": bool } } }
  */
@@ -58,6 +59,7 @@ struct Settings {
     double soft_gain_db = 0.0;
     bool monitor = false;      /* hear the microphone in the card's playback side while the recorder runs (never during playback) */
     int monitor_level = 50;    /* percent 0..100, steps of 5 */
+    bool wave_fit = false;     /* the trim page's waveform scale: false TRUE (real level), true FIT (the take's loudest peak fills the panel); every take opens in it */
     std::string card;          /* the chosen capture card as card_descriptor() text; empty: the first capture card */
     std::string output_device; /* the playback device the user picked ("hw:CARD=..,DEV=0" or "default"); empty: automatic */
 };

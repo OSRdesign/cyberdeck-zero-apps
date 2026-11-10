@@ -120,6 +120,7 @@ int SettingsStore::load() {
     get_bool(root, "limiter", s_.limiter);
     if (get_num(root, "soft_gain_db", d)) s_.soft_gain_db = d;
     get_bool(root, "monitor", s_.monitor);
+    get_bool(root, "wave_fit", s_.wave_fit);
     if (get_num(root, "monitor_level", d)) s_.monitor_level = static_cast<int>(std::lround(clampd(d, -1e6, 1e6)));
     if (get_str(root, "card", str) && valid_folder(str)) s_.card = str;
     if (get_str(root, "output_device", str) && valid_folder(str)) s_.output_device = str;
@@ -165,6 +166,8 @@ int SettingsStore::save() {
     root.set("soft_gain_db", json::Value::number(s_.soft_gain_db));
     root.set("monitor", json::Value::boolean(s_.monitor));
     root.set("monitor_level", json::Value::number(s_.monitor_level));
+    if (s_.wave_fit) root.set("wave_fit", json::Value::boolean(true));
+    else root.erase("wave_fit"); /* absent = TRUE (older files) */
     root.set("card", json::Value::string(s_.card));
     root.set("output_device", json::Value::string(s_.output_device));
 

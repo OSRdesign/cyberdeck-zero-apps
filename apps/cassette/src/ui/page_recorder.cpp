@@ -270,12 +270,13 @@ void RecorderPage::build_portrait()
     counter_ = std::make_unique<Counter>(root_, fit_, 16, 294, 88, 44, 15, 30, 8, 24, 6);
     list_btn_ = std::make_unique<IconButton>(root_, fit_, DRect{108, 294, 44, 44}, Icon::List, [this] { if (!window_->loading()) nav_.go(Screen::List); });
     gear_btn_ = std::make_unique<IconButton>(root_, fit_, DRect{156, 294, 44, 44}, Icon::Gear, [this] { if (!window_->loading()) nav_.go(Screen::Settings); });
-    /* the info box: the codec over the time left, the state lamp at the top right; the codec line ends before the lamp */
+    /* the info box: the codec over the time left; the state lamp at the right end of the time line, so the codec line has
+     * the whole box width (the time line ends before the lamp) */
     box(root_, fit_.x(204), fit_.y(294), fit_.w(204, 100), fit_.h(294, 44), col::kStrip, fit_.px(6));
-    box_title_ = fit_label(root_, fit_, Face::Bold, 15, col::kInk, 212, 299, 70, 18, LV_TEXT_ALIGN_LEFT, 0);
-    box_detail_ = fit_label(root_, fit_, Face::Medium, 13, col::kInkSoft, 212, 317, 84, 16);
+    box_title_ = fit_label(root_, fit_, Face::Bold, 15, col::kInk, 212, 299, 84, 18, LV_TEXT_ALIGN_LEFT, 0);
+    box_detail_ = fit_label(root_, fit_, Face::Medium, 13, col::kInkSoft, 212, 317, 69, 16);
     lv_label_set_recolor(box_detail_, true); /* the lost-audio part is red (red_tail) */
-    state_lamp_ = std::make_unique<Lamp>(root_, fit_.x(285), fit_.y(302), fit_.px(11), col::kLampRed, fit_.px(6));
+    state_lamp_ = std::make_unique<Lamp>(root_, fit_.x(285), fit_.y(319.5), fit_.px(11), col::kLampRed, fit_.px(6));
 
     card_ = std::make_unique<Stepper>(root_, fit_, DRect{16, 352, 142, 44}, "CARD", 14, Icon::Minus, Icon::Plus,
                                       [this](int d) { if (act_.card_gain && !window_->loading()) act_.card_gain(d); });
@@ -306,10 +307,10 @@ void RecorderPage::build_square()
     title_px_ = 30;
     detail_px_ = 24;
     detail_min_ = 16;
-    box_title_ = fit_label(root_, fit_, Face::Bold, 30, col::kInk, 444, g_.row_y + 8 + (g_.row_h - 72) / 2, 206, 30, LV_TEXT_ALIGN_LEFT, 0);
-    box_detail_ = fit_label(root_, fit_, Face::Medium, 24, col::kInkSoft, 444, g_.row_y + 44 + (g_.row_h - 72) / 2, 236, 24);
+    box_title_ = fit_label(root_, fit_, Face::Bold, 30, col::kInk, 444, g_.row_y + 8 + (g_.row_h - 72) / 2, 236, 30, LV_TEXT_ALIGN_LEFT, 0);
+    box_detail_ = fit_label(root_, fit_, Face::Medium, 24, col::kInkSoft, 444, g_.row_y + 44 + (g_.row_h - 72) / 2, 210, 24);
     lv_label_set_recolor(box_detail_, true); /* the lost-audio part is red (red_tail) */
-    state_lamp_ = std::make_unique<Lamp>(root_, fit_.x(662), fit_.y(g_.row_y + 14 + (g_.row_h - 72) / 2), fit_.px(18), col::kLampRed, fit_.px(6));
+    state_lamp_ = std::make_unique<Lamp>(root_, fit_.x(662), fit_.y(g_.row_y + 47 + (g_.row_h - 72) / 2), fit_.px(18), col::kLampRed, fit_.px(6));
 
     /* the meter panel across the full width: IN / L R, the bars, the scale, TARGET, PEAK, MON */
     sq_panel_ = framed_panel(root_, fit_, {kSqMargin, g_.meter_y, 672, g_.meter_h}, col::kPanel);

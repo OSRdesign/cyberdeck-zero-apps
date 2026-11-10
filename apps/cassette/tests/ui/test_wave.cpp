@@ -97,6 +97,47 @@ void flags_scrub_ruler()
     CHECK_EQ(ruler_ticks(w, 1).size(), std::size_t(2));
 }
 
+/* FIT: one gain for the take (its loudest peak at 90 %), none for a silent take, capped at x64; the chip's words */
+void fit_rule()
+{
+    auto eq = [](float a, float b) { return std::fabs(a - b) < 1e-3f; };
+    /* a loud take (-1 dBFS, 0.89): the gain is just over 1; a full-scale take is trimmed to 90 % */
+    CHECK(eq(fit_gain_for(0.89f), 0.9f / 0.89f));
+    CHECK(eq(fit_gain_for(1.0f), 0.9f));
+    CHECK(eq(fit_gain_for(1.7f), 0.9f)); /* a peak is never above full scale */
+    /* a quiet take: 0.12 (-18 dBFS) gets x7.5, 0.05 gets x18 */
+    CHECK(eq(fit_gain_for(0.12f), 7.5f));
+    CHECK(eq(fit_gain_for(0.05f), 18.0f));
+    /* the cap: x64 from a peak of 0.9 / 64 (-37 dBFS) down to the silence limit (0.001, -60 dBFS) */
+    CHECK(eq(fit_gain_for(0.9f / 64.0f), 64.0f));
+    CHECK(eq(fit_gain_for(0.005f), 64.0f));
+    CHECK(eq(fit_gain_for(0.001f), 64.0f));
+    CHECK(eq(fit_gain_for(0.02f), 45.0f));
+    /* a silent take: no gain (0 = none), noise is not inflated */
+    CHECK(fit_gain_for(0.0f) == 0.0f);
+    CHECK(fit_gain_for(0.00099f) == 0.0f);
+    CHECK(fit_gain_for(-1.0f) == 0.0f);
+    CHECK(fit_gain_for(std::nanf("")) == 0.0f);
+    /* the level: times the gain, clamped to 1; no gain (0) or 1 leaves it; never below 0 */
+    CHECK(eq(fit_level(0.1f, 7.5f), 0.75f));
+    CHECK(fit_level(0.5f, 7.5f) == 1.0f);
+    CHECK(fit_level(1.0f, 0.9f) == 0.9f);
+    CHECK(fit_level(0.3f, 0.0f) == 0.3f);
+    CHECK(fit_level(0.3f, 1.0f) == 0.3f);
+    CHECK(fit_level(-0.2f, 8.0f) == 0.0f);
+    /* the loudest peak of the take fills 90 % whatever the take's level (above the cap's range) */
+    for (float peak : {0.9f, 0.3f, 0.12f, 0.02f, 0.0142f}) CHECK(eq(fit_level(peak, fit_gain_for(peak)), 0.9f));
+    /* the chip text: TRUE, FIT with the gain rounded to a whole number (x1 allowed), FIT alone when there is no gain */
+    CHECK_EQ(wave_chip_text(false, 7.5f), std::string("TRUE"));
+    CHECK_EQ(wave_chip_text(false, 0.0f), std::string("TRUE"));
+    CHECK_EQ(wave_chip_text(true, 7.5f), std::string("FIT x8"));
+    CHECK_EQ(wave_chip_text(true, 7.4f), std::string("FIT x7"));
+    CHECK_EQ(wave_chip_text(true, 0.9f), std::string("FIT x1"));
+    CHECK_EQ(wave_chip_text(true, 1.01f), std::string("FIT x1"));
+    CHECK_EQ(wave_chip_text(true, 64.0f), std::string("FIT x64"));
+    CHECK_EQ(wave_chip_text(true, 0.0f), std::string("FIT"));
+}
+
 } // namespace
 
 void test_wave()
@@ -104,4 +145,5 @@ void test_wave()
     window();
     overview_and_bars();
     flags_scrub_ruler();
+    fit_rule();
 }

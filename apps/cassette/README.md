@@ -70,7 +70,9 @@ Four pages and two boxes:
   closing the list stops it. Previewing never changes the loaded take.
 - **Trim and split.** The take as a waveform that scrolls under a fixed play marker (drag, a 0.1 s stepper or the keys),
   ZOOM from the whole take down to a 2 s window, a thin overview strip of the whole take, the IN and OUT handles and any
-  number of numbered split points (a tap selects one and the SPLIT key becomes REMOVE). SAVE opens the save box.
+  number of numbered split points (a tap selects one and the SPLIT key becomes REMOVE). A chip at the waveform's top right
+  (key F) switches its scale between TRUE (real level) and FIT (the take's loudest peak fills the panel, `FIT x8`: one gain
+  per take, at most x64, none for a silent take; kept across launches). SAVE opens the save box.
 - **Settings.** Input (the capture card), Input level, Auto gain (card) and Mic mute (card) (only when the card has
   those controls), Format (opens a page with every format: WAV, FLAC and Opus at 24, 32, 64 and 128 kbps, each with its estimated size
   per minute at this card's format and the hours that fit in the free space; one the card or the libraries cannot
@@ -130,6 +132,7 @@ The full map is [`docs/KEYS.md`](docs/KEYS.md).
 | | I / O | SET IN / SET OUT |
 | | Enter | SPLIT at the marker; REMOVE while a split flag is selected |
 | | Tab | select the next split flag (the marker moves to it) |
+| | F | waveform scale TRUE / FIT |
 | | Space | PLAY |
 | | S | SAVE (the save box) |
 | | Esc | back to the list, nothing saved |

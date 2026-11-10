@@ -404,6 +404,7 @@ void CassetteUi::Impl::on_keyboard(const key_item &item)
         else if (tab) trim->press(TrimPage::NextFlag);
         else if (is(KEY_SPACE, ' ')) trim->press(TrimPage::Play);
         else if (is(KEY_S, 's')) trim->press(TrimPage::Save);
+        else if (is(KEY_F, 'f')) trim->press(TrimPage::ToggleFit);
         break;
     }
 }

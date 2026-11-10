@@ -183,6 +183,7 @@ void TrimPage::press(Command c)
     case Save: if (act_.trim_save) act_.trim_save(); break;
     case ZoomIn: if (act_.trim_zoom) act_.trim_zoom(1); break;
     case ZoomOut: if (act_.trim_zoom) act_.trim_zoom(-1); break;
+    case ToggleFit: if (act_.trim_wave_fit) act_.trim_wave_fit(!vm_.fit); break;
     case NextFlag:
         if (!vm_.splits.empty() && act_.trim_select_split)
             act_.trim_select_split(sel ? (vm_.selected_split + 1) % static_cast<int>(vm_.splits.size()) : 0);
@@ -201,6 +202,22 @@ void TrimPage::wave_draw_cb(lv_event_t *e)
     self->draw_wave(lv_event_get_layer(e));
 }
 
+int TrimPage::main_bars_w() const
+{
+    const int mn = static_cast<int>(main_bars_.size());
+    return std::max(1, static_cast<int>(std::lround(mn * pitch_ - (pitch_ - bar_w_))));
+}
+
+lv_area_t TrimPage::mode_chip_area() const
+{
+    const double s = fit_.s;
+    auto px = [s](double v) { return std::max(1, static_cast<int>(std::lround(v * s))); };
+    const std::string label = wave_chip_text(vm_.fit, vm_.fit_gain);
+    const int w = text_width(font(Face::Bold, px(11)), label.c_str(), 0) + 2 * px(6);
+    const int right = main_x_ + main_bars_w();
+    return area(right - w, main_y_ + px(2), w, px(16));
+}
+
 void TrimPage::draw_wave(lv_layer_t *layer)
 {
     const TrimVm &t = vm_;
@@ -210,12 +227,13 @@ void TrimPage::draw_wave(lv_layer_t *layer)
     const std::int64_t len = std::max<std::int64_t>(1, t.length_ms);
 
     /* ---- overview: the whole take */
+    const float gain = t.fit ? t.fit_gain : 0.0f; /* FIT: one gain for the take, for both waveforms */
     const int ovn = static_cast<int>(over_bars_.size());
     const int max_ov = over_h_ - px(2);
     for (int i = 0; i < ovn; ++i) {
         const double mid_t = (i + 0.5) * len / std::max(1, ovn);
         const bool kept = mid_t >= t.in_ms && mid_t <= t.out_ms;
-        const int h = std::max(px(3), static_cast<int>(px(3) + over_bars_[static_cast<std::size_t>(i)] * (max_ov - px(3))));
+        const int h = std::max(px(3), static_cast<int>(px(3) + fit_level(over_bars_[static_cast<std::size_t>(i)], gain) * (max_ov - px(3))));
         const int x = over_x_ + static_cast<int>(std::lround(i * pitch_));
         fill(layer, area(x, over_y_ + (over_h_ - h) / 2, std::max(1, static_cast<int>(std::lround(bar_w_))), h),
              kept ? col::kAmber : col::kWaveCut, 0, static_cast<lv_opa_t>(kept ? 255 : 140));
@@ -240,7 +258,7 @@ void TrimPage::draw_wave(lv_layer_t *layer)
         const std::int64_t mid_t = win.t_of(main_x_ + (i + 0.5) * pitch_);
         if (mid_t < 0 || mid_t > len) continue;
         const bool kept = mid_t >= t.in_ms && mid_t <= t.out_ms;
-        const int h = std::max(px(3), static_cast<int>(px(3) + main_bars_[static_cast<std::size_t>(i)] * (max_m - px(3))));
+        const int h = std::max(px(3), static_cast<int>(px(3) + fit_level(main_bars_[static_cast<std::size_t>(i)], gain) * (max_m - px(3))));
         const int x = main_x_ + static_cast<int>(std::lround(i * pitch_));
         fill(layer, area(x, main_y_ + (main_h_ - h) / 2, std::max(1, static_cast<int>(std::lround(bar_w_))), h),
              kept ? col::kAmber : col::kWaveCut, 0, static_cast<lv_opa_t>(kept ? 255 : 140));
@@ -249,13 +267,18 @@ void TrimPage::draw_wave(lv_layer_t *layer)
     const lv_font_t *chip_f = font(Face::Bold, px(11));
     const int chip_h = px(16), chip_pad = px(6), tri = px(6);
     const int top = main_y_ + px(2), bottom = main_y_ + main_h_ - px(2);
+    /* the mode chip owns the corner: an IN / OUT tag that would touch it drops to the row below (an OUT beyond the right edge
+     * always does) */
+    const lv_area_t mode = mode_chip_area();
     auto chip = [&](const std::string &label, int x, bool arrow_left, bool arrow_right, bool align_right) {
         const int tw = text_width(chip_f, label.c_str(), 0);
         const int w = tw + 2 * chip_pad + (arrow_left || arrow_right ? tri + px(3) : 0);
         const int cx = align_right ? x - w : x;
-        fill(layer, area(cx, top, w, chip_h), col::kChip, px(3));
+        int ctop = top;
+        if (cx <= mode.x2 + px(2) && cx + w >= mode.x1 - px(2)) ctop = top + chip_h + px(2);
+        fill(layer, area(cx, ctop, w, chip_h), col::kChip, px(3));
         int tx = cx + chip_pad;
-        const int cy = top + chip_h / 2;
+        const int cy = ctop + chip_h / 2;
         if (arrow_left) {
             triangle(layer, tx + tri, cy - tri / 2 - 1, tx, cy, tx + tri, cy + tri / 2 + 1, col::kChipText);
             tx += tri + px(3);
@@ -282,6 +305,15 @@ void TrimPage::draw_wave(lv_layer_t *layer)
     };
     handle(t.in_ms, "IN");
     handle(t.out_ms, "OUT");
+    {
+        /* the mode chip: outlined (the tags are solid), TRUE or FIT xN; a tap toggles */
+        const std::string label = wave_chip_text(t.fit, t.fit_gain);
+        fill(layer, mode, col::kWindow, px(3));
+        frame(layer, mode, col::kChip, std::max(1, px(1)), px(3));
+        const int lh = lv_font_get_line_height(chip_f);
+        text(layer, chip_f, label.c_str(), area(mode.x1, mode.y1 + (px(16) - lh) / 2, mode.x2 - mode.x1 + 1, lh), col::kChip,
+             LV_TEXT_ALIGN_CENTER);
+    }
 
     /* split flags */
     for (std::size_t i = 0; i < t.splits.size(); ++i) {
@@ -345,23 +377,37 @@ void TrimPage::wave_event_cb(lv_event_t *e)
     if (!indev) return;
     lv_point_t pt;
     lv_indev_get_point(indev, &pt);
-    const int mn = static_cast<int>(self->main_bars_.size());
-    const int mw = std::max(1, static_cast<int>(std::lround(mn * self->pitch_ - (self->pitch_ - self->bar_w_))));
+    const int mw = self->main_bars_w();
     const WaveWindow win = wave_window(self->press_marker_, self->vm_.span_ms, self->main_x_, mw);
     switch (lv_event_get_code(e)) {
     case LV_EVENT_PRESSED:
         self->press_ = pt;
         self->press_marker_ = self->vm_.marker_ms;
         self->dragging_ = false;
+        {
+            /* the chip's touch target: its box grown by 6 design px all round (the box itself is 16 px high) */
+            const lv_area_t c = self->mode_chip_area();
+            const int g = std::max(1, static_cast<int>(std::lround(6 * self->fit_.s)));
+            self->chip_press_ = pt.x >= c.x1 - g && pt.x <= c.x2 + g && pt.y >= c.y1 - g && pt.y <= c.y2 + g;
+        }
         break;
     case LV_EVENT_PRESSING: {
         const int dx = pt.x - self->press_.x;
+        if (self->chip_press_) break;
         if (!self->dragging_ && std::abs(dx) >= self->fit_.px(8)) self->dragging_ = true;
         if (self->dragging_ && self->act_.trim_scrub)
             self->act_.trim_scrub(scrub_marker(win, self->press_marker_, dx, self->vm_.length_ms));
         break;
     }
     case LV_EVENT_RELEASED:
+        if (self->chip_press_) {
+            self->chip_press_ = false;
+            const lv_area_t c = self->mode_chip_area();
+            const int g = std::max(1, static_cast<int>(std::lround(6 * self->fit_.s)));
+            if (pt.x >= c.x1 - g && pt.x <= c.x2 + g && pt.y >= c.y1 - g && pt.y <= c.y2 + g && self->act_.trim_wave_fit)
+                self->act_.trim_wave_fit(!self->vm_.fit);
+            break;
+        }
         if (!self->dragging_) {
             /* a tap: the flag under it (a 44 px wide target around each flag line) */
             const WaveWindow now = wave_window(self->vm_.marker_ms, self->vm_.span_ms, self->main_x_, mw);

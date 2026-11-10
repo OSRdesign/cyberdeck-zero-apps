@@ -35,6 +35,7 @@ void test_settings() {
     CHECK_EQ(s.values().soft_gain_db, 0.0);
     CHECK(!s.values().monitor); /* the live monitor is off by default, at 50 % */
     CHECK_EQ(s.values().monitor_level, 50);
+    CHECK(!s.values().wave_fit); /* the trim waveform opens in TRUE */
     CHECK(s.values().card.empty() && s.values().output_device.empty());
 
     /* round trip, the folder is created */
@@ -51,6 +52,7 @@ void test_settings() {
     v.soft_gain_db = 12.5;
     v.monitor = true;
     v.monitor_level = 35;
+    v.wave_fit = true;
     v.card = "UC02||";
     v.output_device = "hw:CARD=UC02,DEV=0";
     /* two cards with the same name, different by-id; the first has no USB identity */
@@ -85,6 +87,7 @@ void test_settings() {
     CHECK_EQ(s2.values().soft_gain_db, 12.5);
     CHECK(s2.values().monitor);
     CHECK_EQ(s2.values().monitor_level, 35);
+    CHECK(s2.values().wave_fit);
     CHECK_EQ(s2.values().card, "UC02||");
     CHECK_EQ(s2.values().output_device, "hw:CARD=UC02,DEV=0");
     CardState r;
@@ -140,6 +143,39 @@ void test_settings() {
         CHECK_EQ(sm.load(), 0);
         CHECK(sm.values().monitor);
         CHECK_EQ(sm.values().monitor_level, pr.second);
+    }
+    /* wave_fit: written only when true (back to TRUE removes the key); an older file without it opens in TRUE; a wrong type is ignored */
+    {
+        SettingsStore sw(ops, path);
+        sw.load();
+        sw.values().wave_fit = true;
+        CHECK_EQ(sw.save(), 0);
+        CHECK(read_text(path).find("wave_fit") != std::string::npos);
+        sw.values().wave_fit = false;
+        CHECK_EQ(sw.save(), 0);
+        CHECK(read_text(path).find("wave_fit") == std::string::npos);
+        SettingsStore sw2(ops, path);
+        CHECK_EQ(sw2.load(), 0);
+        CHECK(!sw2.values().wave_fit);
+    }
+    write_text(path, "{\"version\": 1, \"format\": \"flac\", \"monitor\": true}"); /* an old file */
+    {
+        SettingsStore so(ops, path);
+        CHECK_EQ(so.load(), 0);
+        CHECK(!so.values().wave_fit);
+        CHECK(so.values().format == RecFormat::Flac && so.values().monitor);
+    }
+    write_text(path, "{\"version\": 1, \"wave_fit\": \"yes\"}");
+    {
+        SettingsStore sw(ops, path);
+        CHECK_EQ(sw.load(), 0);
+        CHECK(!sw.values().wave_fit);
+    }
+    write_text(path, "{\"version\": 1, \"wave_fit\": true}");
+    {
+        SettingsStore sw(ops, path);
+        CHECK_EQ(sw.load(), 0);
+        CHECK(sw.values().wave_fit);
     }
     write_text(path, "{\"version\": 1, \"monitor\": \"yes\"}");
     {

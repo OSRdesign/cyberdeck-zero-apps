@@ -1079,6 +1079,29 @@ void test_trim()
     CHECK(t.window_peaks[10] == 1.0f && t.window_peaks[0] == 0.0f);
     CHECK_EQ(t.overview_peaks.size(), 110u);
     CHECK(std::fabs(t.overview_peaks[5] - 0.5f) < 0.001f);
+    /* the waveform scale: TRUE by default; the gain follows the whole take's loudest peak (the overview's): 0.5 -> 0.9 / 0.5 */
+    CHECK(!t.fit);
+    CHECK(std::fabs(t.fit_gain - 1.8f) < 1e-4f);
+    s.settings.wave_fit = true;
+    vm = map(s, {}, local, &window, &overview);
+    CHECK(vm.trim.fit && std::fabs(vm.trim.fit_gain - 1.8f) < 1e-4f);
+    /* scrolling or zooming changes the window's peaks, never the gain; the peaks themselves stay the true levels */
+    std::vector<PeakBar> window2(220);
+    window2[3].max = 100;
+    CHECK(std::fabs(map(s, {}, local, &window2, &overview).trim.fit_gain - 1.8f) < 1e-4f);
+    CHECK(std::fabs(map(s, {}, local, &window, &overview).trim.window_peaks[10] - 1.0f) < 1e-6f);
+    /* a quiet take: 0.01 (-40 dBFS) would need x90: capped at x64; 0.1 gets x9 */
+    std::vector<PeakBar> quiet(110);
+    quiet[7].max = 328;
+    CHECK(std::fabs(map(s, {}, local, &window, &quiet).trim.fit_gain - 64.0f) < 1e-3f);
+    quiet[7].max = 3277;
+    CHECK(std::fabs(map(s, {}, local, &window, &quiet).trim.fit_gain - 9.0f) < 0.01f);
+    /* a silent take (under -60 dBFS), or no overview yet: no gain (0) */
+    quiet[7].max = 20;
+    CHECK(map(s, {}, local, &window, &quiet).trim.fit_gain == 0.0f);
+    CHECK(map(s, {}, local, &window, nullptr).trim.fit_gain == 0.0f);
+    s.settings.wave_fit = false;
+    vm = map(s, {}, local, &window, &overview);
     /* a tap selected it and the marker is on it */
     local.tap_selected = true;
     s.trim.position = s.trim.splits[1];

@@ -220,6 +220,11 @@ public:
         log(std::string("set_monitor ") + (on ? "on" : "off"));
         return true;
     }
+    bool set_wave_fit(bool on) override
+    {
+        log(std::string("set_wave_fit ") + (on ? "on" : "off"));
+        return true;
+    }
     bool set_monitor_level(int p) override
     {
         log("set_monitor_level " + std::to_string(p));

@@ -19,8 +19,8 @@
  *               into the deck, the recorder shows; dimmed while recording), N RENAME, T TRIM, Delete DELETE (the
  *               controller asks in the confirm box), S the settings, Esc the recorder (the preview stops)
  *   Trim        Left / Right move the marker 0.1 s (Shift 1 s), Up zoom in, Down zoom out, I SET IN, O SET OUT,
- *               Enter SPLIT (REMOVE while a flag is selected), Tab select the next flag, Space PLAY, S SAVE, Esc back
- *               to the list (nothing saved)
+ *               Enter SPLIT (REMOVE while a flag is selected), Tab select the next flag, Space PLAY, S SAVE, F waveform TRUE / FIT, Esc
+ *               back to the list (nothing saved)
  *   Boxes       Left / Right or Tab move between the buttons (a white outline from the first move), Enter chooses
  *               (the save box: SAVE AS NEW FILES; the confirm box: CANCEL, when nothing was moved), Esc cancels
  *   Settings    Up / Down move, Enter or Right change / open (Left / Right step a slider row), Esc back (a picker

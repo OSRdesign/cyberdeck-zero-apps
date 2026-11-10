@@ -557,6 +557,10 @@ void test_trim_actions()
     CHECK(has(r.calls(), "set_position 120000"));
     r.act.trim_scrub(-50);
     CHECK(has(r.calls(), "set_position 0"));
+    r.act.trim_wave_fit(true);
+    r.act.trim_wave_fit(false);
+    c = r.calls();
+    CHECK(c.size() == 2 && c[0] == "set_wave_fit on" && c[1] == "set_wave_fit off");
     r.act.trim_set_in();
     r.act.trim_set_out();
     r.act.trim_split();

@@ -6,6 +6,7 @@
 #include "demo.hpp"
 
 #include "ui_format.hpp"
+#include "wave_geom.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -30,6 +31,25 @@ float wave_at(long i, long seed)
     const double a = 0.30 + 0.50 * std::fabs(std::sin(k * 0.37)) * std::fabs(std::sin(k * 0.083 + 1)) +
                      0.18 * (static_cast<double>(((i + seed) * 7919) % 13) / 13.0);
     return static_cast<float>(std::min(1.0, a));
+}
+
+/* CASSETTE_DEMO_TRIM_QUIET=<peak 0..1>: the trim page's demo take is quiet, its loudest peak at that level (0.12 = -18 dBFS):
+ * the factor the synthetic wave is multiplied by (1 when not set); CASSETTE_DEMO_WAVE_FIT=1: the saved waveform scale is FIT */
+float quiet_factor()
+{
+    const char *q = std::getenv("CASSETTE_DEMO_TRIM_QUIET");
+    if (!q || !*q) return 1.0f;
+    float top = 0.0f;
+    for (int i = 0; i < 110; ++i) top = std::max(top, wave_at(i, 0));
+    const float want = std::clamp(static_cast<float>(std::atof(q)), 0.0f, 1.0f);
+    return top > 0.0f ? want / top : 1.0f;
+}
+
+void scale_all(std::vector<float> &v)
+{
+    const float k = quiet_factor();
+    if (k != 1.0f)
+        for (float &x : v) x *= k;
 }
 
 SettingRow choice(const char *id, const char *label, std::vector<std::string> choices, int pick)
@@ -394,6 +414,15 @@ ViewModel demo_model(const std::string &scene)
     }
     t.window_peaks = demo_window_peaks(t.length_ms, t.marker_ms, t.span_ms, 220);
     t.overview_peaks = demo_overview_peaks(t.length_ms, 110);
+    scale_all(t.window_peaks);
+    scale_all(t.overview_peaks);
+    {
+        const char *wf = std::getenv("CASSETTE_DEMO_WAVE_FIT");
+        t.fit = wf && *wf && std::string(wf) != "0";
+        float top = 0.0f;
+        for (float v : t.overview_peaks) top = std::max(top, v);
+        t.fit_gain = fit_gain_for(top);
+    }
 
     vm.save.files = {{"take_006_20261108-1105-1.wav", 142300}, {"take_006_20261108-1105-2.wav", 44000},
                      {"take_006_20261108-1105-3.wav", 263700}};
@@ -543,6 +572,7 @@ void DemoDriver::refresh_trim()
     TrimVm &t = vm_.trim;
     t.marker_ms = std::clamp<std::int64_t>(t.marker_ms, 0, t.length_ms);
     t.window_peaks = demo_window_peaks(t.length_ms, t.marker_ms, t.span_ms, 220);
+    scale_all(t.window_peaks);
 }
 
 UiActions DemoDriver::actions()
@@ -727,6 +757,11 @@ UiActions DemoDriver::actions()
         t.selected_split = i;
         if (i >= 0 && i < static_cast<int>(t.splits.size())) t.marker_ms = t.splits[static_cast<std::size_t>(i)];
         refresh_trim();
+        emit();
+    };
+    a.trim_wave_fit = [this](bool fit) {
+        log_action(std::string("trim_wave_fit ") + (fit ? "fit" : "true"));
+        vm_.trim.fit = fit;
         emit();
     };
     a.trim_play = [this] {

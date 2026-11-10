@@ -69,6 +69,25 @@ std::vector<float> resample_max(const std::vector<float> &in, int n)
     return out;
 }
 
+float fit_gain_for(float take_peak)
+{
+    if (!(take_peak >= kFitSilent)) return 0.0f;
+    return std::min(kFitMaxGain, kFitTarget / std::min(1.0f, take_peak));
+}
+
+float fit_level(float level, float gain)
+{
+    if (gain > 0.0f) level *= gain;
+    return std::clamp(level, 0.0f, 1.0f);
+}
+
+std::string wave_chip_text(bool fit, float gain)
+{
+    if (!fit) return "TRUE";
+    if (!(gain > 0.0f)) return "FIT";
+    return "FIT x" + std::to_string(std::max(1L, std::lround(gain)));
+}
+
 int flag_at(const WaveWindow &win, const std::vector<std::int64_t> &splits, double x, double slop_px)
 {
     int best = -1;

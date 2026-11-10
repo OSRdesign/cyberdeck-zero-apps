@@ -123,7 +123,7 @@ private:
     bool first_ = true;
     /* the info box (title, detail, state lamp: portrait and square) instead of the strip with its lamps (landscape) */
     bool info_box_ = false;
-    double title_px_ = 15, detail_px_ = 13, detail_min_ = 10, mon_glow_ = 4;
+    double title_px_ = 15, detail_px_ = 13, detail_min_ = 9, mon_glow_ = 4;
     void set_box_codec(const std::string &text); /* the box's first line (the codec), fitted to one line */
     std::string box_codec_;
     int box_codec_px_ = 0, box_title_cy_ = -1;
@@ -267,7 +267,7 @@ public:
     /* Left / Right: one POSITION step (100 ms, Shift 1 s). */
     void nudge(int dir, bool shift);
     /* The keyboard's commands (the keys' and steppers' own actions; NextFlag selects the flag after the selected one). */
-    enum Command { SetIn, SetOut, Split, Play, Save, ZoomIn, ZoomOut, NextFlag };
+    enum Command { SetIn, SetOut, Split, Play, Save, ZoomIn, ZoomOut, NextFlag, ToggleFit };
     void press(Command c);
     /* The notice replaces the top strip (take label, IN / OUT / LEN). */
     void set_notice(const std::string &text);
@@ -276,6 +276,9 @@ private:
     static void wave_draw_cb(lv_event_t *e);
     static void wave_event_cb(lv_event_t *e);
     void draw_wave(lv_layer_t *layer);
+    /* the chip at the main waveform's top right corner (TRUE / FIT xN), in screen px; the width follows its text */
+    lv_area_t mode_chip_area() const;
+    int main_bars_w() const;
 
     const UiActions &act_;
     Nav nav_;
@@ -297,6 +300,7 @@ private:
     bool dragging_ = false;
     lv_point_t press_{};
     std::int64_t press_marker_ = 0;
+    bool chip_press_ = false; /* the press began on the mode chip: no scrub, a release on it toggles TRUE / FIT */
 };
 
 class SaveBox {
