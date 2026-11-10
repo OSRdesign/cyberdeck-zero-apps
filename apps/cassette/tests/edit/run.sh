@@ -17,6 +17,6 @@ san=""
 work=$(mktemp -d "${TMPDIR:-/tmp}/cassette-edit-build-XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/app/tests"
-(cd "$app" && tar cf - src tests/edit) | (cd "$work/app" && tar xf -)
+(cd "$app" && tar cf - src tests/edit tests/fixture_codecs.hpp tests/fake_decoders.hpp) | (cd "$work/app" && tar xf -)
 find "$work/app" -type f \( -name '*.cpp' -o -name '*.hpp' -o -name Makefile \) -exec sed -i 's/\r$//' {} +
 make -C "$work/app/tests/edit" APP="$work/app" BUILD="$work/build" $san -j3 test

@@ -15,15 +15,23 @@
  * (the louder side wins in each direction).
  * The audio length is the real length of the file (data offset to end of file, whole frames), so the placeholder header
  * of an unrepaired take (arecord) works; a header that declares LESS audio than the file holds is honoured.
+ *
+ * FLAC and Ogg Opus takes (phase C): the same pyramid and cache file ("<take>.flac.peaks", keyed by the take's size and
+ * mtime like WAV), built from the decoded audio in one streaming pass (a DecodedSource read front to back in chunks of
+ * kPeakDecodeChunk frames, so a take of hours needs no more memory than a short one); frames and rate are the decoder's
+ * output (Opus: codec/decoder.hpp). The controller runs the build on its worker thread with progress, as for WAV. The
+ * exact bars (fewer than 256 frames per bar) decode the few frames they need.
  */
 #pragma once
 
+#include "../codec/codec_libs.hpp"
 #include "fileops.hpp"
 
 #include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -31,6 +39,9 @@ namespace cassette {
 
 constexpr uint32_t kPeakBlock = 256;            /* frames per level-0 block */
 constexpr size_t kPeakReadChunk = 1u << 20;     /* the largest single read of the take while building */
+constexpr size_t kPeakDecodeChunk = 65536;      /* frames decoded per step for a FLAC / Opus take (a multiple of 256) */
+
+class PcmSource;
 
 struct PeakPair {
     int16_t min = 0, max = 0;
@@ -40,6 +51,7 @@ struct PeakPair {
 struct PeakBuildOptions {
     std::function<void(uint64_t done, uint64_t total)> progress; /* frames of the take read so far (monotonic) */
     const std::atomic<bool> *cancel = nullptr;
+    const DecoderLibs *decoders = nullptr; /* FLAC / Opus takes: the decoders (null: the real libraries) */
 };
 
 class PeakPyramid {
@@ -77,7 +89,11 @@ private:
     static constexpr int kMemCacheFd = 0x3fffff01;
     PeakPyramid() = default;
     int64_t cache_read(void *buf, size_t n, uint64_t off);
+    int64_t take_read(uint64_t frame, size_t n, unsigned char *buf); /* frames, from the WAV bytes or the decoder */
     std::vector<unsigned char> mem_;
+    DecoderLibs libs_;                /* FLAC / Opus: the decoders src_ uses */
+    std::unique_ptr<PcmSource> src_;  /* FLAC / Opus: the decoded take (exact bars) */
+    std::mutex src_mu_;
     FileOps *ops_ = nullptr;
     int cache_fd_ = -1, take_fd_ = -1;
     uint64_t frames_ = 0, data_offset_ = 0;

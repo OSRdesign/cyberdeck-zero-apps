@@ -154,14 +154,6 @@ bool is_take_file_name(const std::string &name) {
     return true;
 }
 
-std::string playback_refusal(const std::string &take_file_name) {
-    RecFormat f = RecFormat::Wav;
-    if (!take_format_of(base_name(take_file_name), f)) return "";
-    if (f == RecFormat::Flac) return "FLAC playback is not available yet";
-    if (f == RecFormat::Opus) return "Opus playback is not available yet";
-    return "";
-}
-
 TakeInfo read_take_info(FileOps &ops, const std::string &dir, const std::string &name) {
     return read_one(ops, dir, name, read_journals(ops, dir));
 }

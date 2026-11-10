@@ -393,9 +393,7 @@ Report: what the row read at each step, the names of the takes recorded in 3 and
 
 Goal: takes record as FLAC and as Ogg Opus, play on the PC, and survive a power pull and an unplug like WAV takes.
 The Format row cannot choose them yet (the owner's design comes later): the format is set in the settings file.
-Playing, previewing and trimming FLAC/Opus takes in the app comes later too (phase C): in this version LOAD, PLAY,
-the list's preview and TRIM answer with the notice `FLAC playback is not available yet` (or `Opus ...`). That is
-expected; the takes are checked on the PC.
+Playing, previewing and trimming them in the app is B18 (phase C); here the takes are also checked on the PC.
 
 1. The libraries (the controller can do this): `ldconfig -p | grep -E 'libFLAC|libopusenc'`. Expected: `libFLAC.so.14`
    (or `.so.12`) and `libopusenc.so.0`. If missing: `sudo apt install libflac14 libopusenc0` (Debian trixie;
@@ -409,8 +407,7 @@ expected; the takes are checked on the PC.
    this version it only offers WAV and choosing it sets WAV back.
 4. REC, talk for 1 minute, STOP. The list: the new take `take_NNN_...flac` on top, its row ends in `FLAC` (the WAV
    takes end in `WAV`). Its take number follows the WAV takes (never a number already used). Press LOAD and PLAY once:
-   the notice above, nothing hangs, the app stays usable. Rename it (a new prefix) and check the name still ends in
-   `.flac`.
+   it plays (B18 goes further). Rename it (a new prefix) and check the name still ends in `.flac`.
 5. On the board: `cat ~/Recordings/.journal/<take name without .flac>.json`. Expected: `"state": "closed"` and a line
    `"codec": {"format": "flac", ...}`. (The helper's `take` command reads WAV files only.)
 6. On the PC: `scp <user>@<board>:Recordings/<file>.flac .`, then `flac -t <file>.flac` (expected: `ok`) and
@@ -446,6 +443,53 @@ Report: which libraries were present, the window's format text, the list rows (F
 ffprobe and opusinfo lines, whether both play on the PC and the phone, the power-pull results (timer, kept length,
 last number heard, notice text) for FLAC and Opus, the unplug result, the CPU % of step 12.
 
+## B18. Play, scan, trim and split FLAC and Opus takes (any board with the libraries; zero8 or deck for the CPU, 30 min)
+
+Goal: a FLAC and an Opus take play, scan and trim in the app exactly like a WAV take, the results keep their format
+and their lengths are right, and the 5x scan of an Opus take does not starve a Pi Zero 2 W. Needs B17's settings
+recipe (the format is set in the settings file). Phase C decodes FLAC with libFLAC and Opus with libopus (no
+libopusfile).
+
+1. The libraries (the controller can do this): `ldconfig -p | grep -E 'libFLAC|libopus'`. Expected: `libFLAC.so.14`
+   (or `.so.12`), `libopus.so.0`, `libopusenc.so.0`. Report which were there.
+2. Record a FLAC take of about 1 minute (B17 steps 2-4: count aloud "one, two, three ..." once a second, so the
+   position can be heard), then an Opus `music128` take of about 1 minute the same way (B17 step 8). For each take, in
+   the list: note the length the row shows.
+3. **Play.** LOAD the FLAC take, PLAY: the counter runs from 0:00, the numbers are heard in time, the hubs turn, the
+   meter reads the playback. PAUSE in the middle, wait, PLAY: it goes on from the same word (nothing lost, nothing
+   repeated). Let it play to the end: the deck stops by itself at the length the row shows.
+4. **Scan.** PLAY again, hold FWD (Settings > REW / FWD: Fast scan 5x): fast, high-pitched but audible speech, the
+   counter runs 5x; release: normal play from there. Hold REW: the same backwards; keep holding until the start: the
+   deck stops at 0:00 by itself (REW stops at the start), the hubs stop. Hold FWD until the end: the take ends.
+5. **Jump.** Settings > REW / FWD: Jump 5 s. While playing, tap FWD: +5 s (the number heard jumps by 5); tap REW
+   three times: -15 s, never before 0:00. Set it back to Fast scan.
+6. **Preview** from the list (double tap the row, or Enter): it plays from the start without loading; double tap again
+   stops it.
+7. **Trim and split.** TRIM on the FLAC take: the waveform appears after a short progress (it is decoded once, then
+   the `.flac.peaks` file is reused: close and open TRIM again, it is instant). Zoom in to the closest level and back.
+   Set IN at about 0:10 (on a counted word), OUT at about 0:50, a split at about 0:30; preview the kept part. Save as
+   new files. Expected: two new rows `take_NNN_...-1.flac` and `-2.flac`, about 20 s each (row lengths), rows end in
+   `FLAC`. Play each: the first starts at the word where IN was, the second at the split's word; nothing missing at the
+   joins. Then trim the Opus take the same way: `-1.opus`, `-2.opus`, rows end in `OPUS`.
+8. **Replace original.** TRIM a part, set IN at 0:02, save with REPLACE ORIGINAL and confirm: the row keeps its name,
+   its length is 2 s shorter, it plays from the new start.
+9. **On the PC** (the controller can do this): copy the four parts and check them: `flac -t <part>.flac` says `ok`;
+   `ffprobe -hide_banner <part>` shows the durations the rows showed; `opusinfo <part>.opus` (if opus-tools are
+   installed) shows no errors. Play them in VLC: they start and end on the words chosen, no clicks at the cuts.
+   Expected: each part's length equals OUT - IN (or the split points) to the frame (`ffprobe -show_entries
+   stream=duration_ts`).
+10. **CPU** (zero8 or deck): `sh ~/cassette-check.sh watch 10 12` while holding FWD on the Opus take for 10 s, then
+    while holding REW for 10 s, then during normal play. Report the CPU % of each (expected: well under one core; the
+    sound must not stutter while scanning). Also the time the FLAC trim of step 7 took (from SAVE to the new rows).
+11. **Without the library** (optional, a board where it can be removed and put back): `sudo apt remove libflac14`
+    (or move the take to a board without it). LOAD on a FLAC take: the notice `This take cannot be played: FLAC not
+    installed (libflac14)`, nothing hangs, WAV takes still play. Reinstall afterwards.
+12. Put the settings back to WAV (B17 step 13).
+
+Report: the libraries present, the row lengths, what was heard in steps 3-6 (the words at pause/resume, where REW
+stopped), the part names and row lengths, the `flac -t` / ffprobe / opusinfo lines, the CPU % of step 10 and the trim
+time, anything that stuttered or clicked.
+
 ## Results
 
 | Test | Board | Pass / fail | Notes |
@@ -468,6 +512,7 @@ last number heard, notice text) for FLAC and Opus, the unplug result, the CPU % 
 | B15 take number |  |  |  |
 | B16 square screen |  |  |  |
 | B17 FLAC and Opus |  |  |  |
+| B18 FLAC and Opus playback, trim |  |  |  |
 
 **What to send back:** the table; the probe output per board (B0); the `watch` and `take` outputs of B1, B3, B4; the
 `ui` log line per board; the notice texts as you read them; screenshots or photos of anything cut, overlapping or odd.

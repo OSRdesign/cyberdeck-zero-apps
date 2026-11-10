@@ -133,7 +133,8 @@ struct Player::Cmd {
     int result = 0;
 };
 
-Player::Player(FileOps &ops, PlaybackSink &sink, Mode mode) : ops_(ops), sink_(sink), mode_(mode), reader_(ops) {
+Player::Player(FileOps &ops, PlaybackSink &sink, Mode mode, const DecoderLibs *libs)
+    : ops_(ops), sink_(sink), mode_(mode), wav_(ops), decoded_(ops, libs) {
     if (mode_ == Mode::Threaded) th_ = std::thread([this] { run(); });
 }
 
@@ -156,7 +157,8 @@ Player::~Player() {
     }
     done_cv_.notify_all();
     do_stop(0);
-    reader_.close();
+    wav_.close();
+    decoded_.close();
 }
 
 int Player::submit(std::shared_ptr<Cmd> c) {
@@ -214,13 +216,13 @@ bool Player::step() {
 int Player::ensure_sink() {
     if (sink_open_) return 0;
     SinkFormat f;
-    int r = sink_.open(reader_.format(), f);
+    int r = sink_.open(src_->format(), f);
     if (r < 0) return r;
     if (f.channels == 0) {
         sink_.close();
         return -EINVAL;
     }
-    if (f.rate != 0 && f.rate != reader_.format().rate) { /* the Player sends source frames: another rate would play at the wrong speed */
+    if (f.rate != 0 && f.rate != src_->format().rate) { /* the Player sends source frames: another rate would play at the wrong speed */
         sink_.close();
         return -EINVAL;
     }
@@ -289,7 +291,7 @@ void Player::publish() {
     snap_.held = held_;
     snap_.heard = heard;
     snap_.len = len_;
-    snap_.fmt = reader_.format();
+    snap_.fmt = src_->format();
     snap_.sfmt = sfmt_;
     snap_.underruns = underruns_;
 }
@@ -298,14 +300,18 @@ int Player::apply(Cmd &c) {
     switch (c.kind) {
     case Cmd::Open: {
         do_stop(0);
-        reader_.close();
-        int r = reader_.open(c.path);
-        len_ = r == 0 ? reader_.frames() : 0;
+        wav_.close();
+        decoded_.close();
+        /* FLAC and Ogg Opus through the decoder, WAV as bytes */
+        src_ = is_compressed_take(ops_, c.path) ? static_cast<PcmSource *>(&decoded_) : static_cast<PcmSource *>(&wav_);
+        int r = src_->open(c.path);
+        len_ = r == 0 ? src_->frames() : 0;
         return r;
     }
     case Cmd::Close:
         do_stop(0);
-        reader_.close();
+        wav_.close();
+        decoded_.close();
         len_ = 0;
         return 0;
     case Cmd::Stop:
@@ -313,7 +319,7 @@ int Player::apply(Cmd &c) {
         return 0;
     default: break;
     }
-    if (!reader_.is_open()) return -ENOENT;
+    if (!src_->is_open()) return -ENOENT;
     switch (c.kind) {
     case Cmd::Play: {
         if (st_ == PlayerState::Playing) return 0;
@@ -351,7 +357,7 @@ int Player::apply(Cmd &c) {
     case Cmd::Jump: {
         drop_and_rewind();
         held_ = false;
-        const uint64_t delta = static_cast<uint64_t>(c.n) * reader_.format().rate;
+        const uint64_t delta = static_cast<uint64_t>(c.n) * src_->format().rate;
         if (c.dir == Direction::Forward) pos_ = std::min(len_, pos_ + delta);
         else pos_ -= std::min(pos_, delta);
         return 0;
@@ -413,7 +419,7 @@ bool Player::write_out(size_t frames, size_t *written) {
 
 bool Player::pump() {
     if (!running()) return false;
-    const AudioFormat &f = reader_.format();
+    const AudioFormat &f = src_->format();
     const unsigned sch = f.channels, sbytes = f.bits / 8;
     const uint64_t period = sfmt_.period_frames ? sfmt_.period_frames : kPlaybackPeriod;
     const bool scanning = st_ == PlayerState::Scanning;
@@ -446,8 +452,8 @@ bool Player::pump() {
     const uint64_t nout = std::min<uint64_t>(period, (room + g - 1) / g);
     const uint64_t src = std::min<uint64_t>(room, nout * g);
     const uint64_t start = reverse ? pos_ - src : pos_;
-    in_.resize(static_cast<size_t>(src) * reader_.block_align());
-    long got = reader_.read(start, static_cast<size_t>(src), in_.data());
+    in_.resize(static_cast<size_t>(src) * src_->block_align());
+    long got = src_->read(start, static_cast<size_t>(src), in_.data());
     if (got < static_cast<long>(src)) { /* the file shrank or cannot be read: end the take */
         do_stop(len_);
         post(scanning ? PlayerEvent::ReachedEnd : PlayerEvent::TakeEnded);

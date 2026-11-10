@@ -7,9 +7,11 @@
 #include "../alsa/card.hpp"
 #include "../alsa/mixer.hpp"
 #include "../alsa/open_policy.hpp"
+#include "../codec/decoder.hpp"
 #include "../codec/flac_encoder.hpp"
 #include "../codec/formats.hpp"
 #include "../codec/opus_encoder.hpp"
+#include "../codec/stream_scan.hpp"
 #include "../dsp/processing_sink.hpp"
 #include "../edit/peaks.hpp"
 #include "../edit/trim_split.hpp"
@@ -175,6 +177,10 @@ struct Controller::Impl : public DeckCommands {
     /* playback */
     std::unique_ptr<PlaybackSink> sink;
     std::unique_ptr<Player> player;
+    /* the decoders of FLAC / Opus takes (Player, peaks, trim): resolved once, at the first take that needs them
+     * (cfg.decoders, else the real libraries with dlopen); written under mu before any user reads it */
+    DecoderLibs dlibs;
+    bool dlibs_ready = false;
     OutputPlan plan;
     /* the playback meter (service thread, under mu): fed from the Player's level tap while a take plays or is paused */
     Meter play_meter{play_meter_format()};
@@ -554,7 +560,7 @@ struct Controller::Impl : public DeckCommands {
         plan = choose_output(cap_api()->cards(), have_card ? active.id : std::string(), store.values().output_device);
         if (cfg.make_sink) sink = cfg.make_sink(plan.chosen.device);
         else sink.reset(new AlsaPlaybackSink(*cap_api(), plan.chosen.device));
-        player.reset(new Player(*ops, *sink, Player::Mode::Threaded));
+        player.reset(new Player(*ops, *sink, Player::Mode::Threaded, &dlibs));
     }
 
     /* ================================================================================================================ */
@@ -725,22 +731,34 @@ struct Controller::Impl : public DeckCommands {
     /* ================================================================================================================ */
     /* Deck commands */
 
-    /* Phase C gate: a FLAC / Opus take cannot be played yet. true (and the notice) when `name` is such a take. */
-    bool refuse_playback(const std::string &name) {
-        const std::string why = playback_refusal(name);
-        if (why.empty()) return false;
-        add_notice(Notice::Info, why);
+    const DecoderLibs &decoders() {
+        if (!dlibs_ready) {
+            dlibs = cfg.decoders ? cfg.decoders() : real_decoder_libs();
+            dlibs_ready = true;
+        }
+        return dlibs;
+    }
+
+    /* A FLAC / Opus take whose decoder library is not installed: true (and one notice "This take cannot be played:
+     * FLAC not installed (libflac14)") instead of opening it. WAV and takes with their library: false. */
+    bool refuse_missing_codec(const std::string &name, const char *what = "played") {
+        const Container c = container_of_name(name);
+        if (c != Container::Flac && c != Container::OggOpus) return false;
+        const DecoderLibs &d = decoders();
+        if ((c == Container::Flac && d.flac) || (c == Container::OggOpus && d.opus)) return false;
+        add_notice(Notice::Info, std::string("This take cannot be ") + what + ": " + decode_error_text(kCodecMissing, name));
         return true;
     }
 
     bool open_target() {
         stop_preview();
-        if (refuse_playback(play_target())) return false;
+        if (refuse_missing_codec(play_target())) return false;
         monitor_stop(); /* the Player is about to open the card's playback side: the monitor lets go first */
         if (!player || play_target().empty()) return false;
-        const int r = player->open(folder + "/" + play_target());
+        const std::string path = folder + "/" + play_target();
+        const int r = player->open(path);
         if (r < 0) {
-            add_notice(Notice::Info, "This take cannot be played: " + std::string(std::strerror(-r)));
+            add_notice(Notice::Info, "This take cannot be played: " + decode_error_text(r, path));
             return false;
         }
         return true;
@@ -895,10 +913,12 @@ struct Controller::Impl : public DeckCommands {
         peaks_done.store(0);
         peaks_total.store(frames);
         peaks_mem.store(false);
+        decoders(); /* resolved here, before the worker reads it */
         peaks_th = std::thread([this, path] {
             PeakBuildOptions o;
             o.progress = [this](uint64_t done, uint64_t) { peaks_done.store(done); };
             o.cancel = &peaks_cancel;
+            o.decoders = &dlibs;
             std::string err;
             std::unique_ptr<PeakPyramid> p = PeakPyramid::open_or_build(*ops, path, &err, o);
             if (p) {
@@ -1540,7 +1560,7 @@ bool Controller::play_take(const std::string &name) {
     Locked l(p_->mu);
     Impl &d = *p_;
     if (!d.has_take(name) || d.take_active || d.deck.state() == DeckState::Countdown) return false;
-    if (d.refuse_playback(name)) {
+    if (d.refuse_missing_codec(name)) {
         d.publish();
         return false;
     }
@@ -1559,7 +1579,7 @@ bool Controller::load(const std::string &name) {
     Impl &d = *p_;
     /* refused while recording (a take, a paused take, the countdown) or when the take is not in the list */
     if (!d.has_take(name) || d.take_active || d.recording_family()) return false;
-    if (d.refuse_playback(name)) {
+    if (d.refuse_missing_codec(name)) {
         d.publish();
         return false;
     }
@@ -1578,7 +1598,7 @@ bool Controller::preview_take(const std::string &name) {
     Locked l(p_->mu);
     Impl &d = *p_;
     if (!d.has_take(name) || d.take_active || d.recording_family()) return false;
-    if (d.refuse_playback(name)) {
+    if (d.refuse_missing_codec(name)) {
         d.publish();
         return false;
     }
@@ -1621,7 +1641,7 @@ bool Controller::open_trim(const std::string &take_name) {
     Locked l(p_->mu);
     Impl &d = *p_;
     if (!d.started || d.take_active || d.deck.state() != DeckState::Idle) return false;
-    if (d.refuse_playback(take_name)) { /* trim and the peak cache read PCM: phase C */
+    if (d.refuse_missing_codec(take_name, "trimmed")) { /* the peaks and the preview decode it */
         d.publish();
         return false;
     }
@@ -1744,6 +1764,7 @@ bool Controller::preview(bool on) {
     if (d.take_active || d.deck.state() != DeckState::Idle || !d.player || d.tr.out <= d.tr.in) return false;
     const uint64_t from = (d.tr.pos >= d.tr.in && d.tr.pos < d.tr.out) ? d.tr.pos : d.tr.in;
     d.monitor_stop();
+    d.decoders();
     if (d.player->open(d.tr.path) < 0) return false;
     d.player->seek(from);
     if (d.player->play() < 0) return false;
@@ -1776,6 +1797,7 @@ bool Controller::save(SaveKind kind) {
     d.save_outputs.clear();
     Impl *dp = &d;
     const std::string dir = d.folder;
+    d.decoders(); /* resolved before the worker reads it */
     d.save_th = std::thread([dp, req, dir] {
         EditOptions o;
         o.ops = dp->ops;
@@ -1791,6 +1813,17 @@ bool Controller::save(SaveKind kind) {
         };
         o.cancel = &dp->save_cancel;
         o.block_bytes = dp->cfg.save_block_bytes;
+        o.decoders = &dp->dlibs;
+        if (dp->cfg.make_encoder) { /* a FLAC result through the configured encoder (the tests' fixture), else FlacEncoder */
+            auto make = dp->cfg.make_encoder;
+            o.make_flac_encoder = [make](const AudioFormat &f) {
+                FormatChoice c;
+                c.id = "flac";
+                c.key.format = RecFormat::Flac;
+                c.flac_level = 5;
+                return make(c, f);
+            };
+        }
         EditResult r = trim_split(req, o);
         {
             std::lock_guard<std::mutex> g(dp->wmu);

@@ -4,13 +4,17 @@
  * Cassette app tests: recording FLAC and Ogg Opus takes end to end (phase B) on the fake sound system, with the test
  * encoders (tests/fixture_codecs.hpp) in place of libFLAC / libopusenc. The stored setting chooses ("format" and
  * "format_preset" in settings.json; the Format row is not part of this), effective_choice() decides per card and per
- * library; the take name, the list row, the journal, the recorder's format text and the hours left follow; LOAD, PLAY,
- * the preview and trim refuse a FLAC / Opus take with one notice; take numbers run on across formats; repair at launch;
- * a full card.
+ * library; the take name, the list row, the journal, the recorder's format text and the hours left follow; take numbers
+ * run on across formats; repair at launch; a full card. Phase C: with the fake decoders (tests/fake_decoders.hpp) a FLAC
+ * or Opus take loads, plays to its end (every sample checked), previews, opens on the trim page with its peaks, and its
+ * trim and split are saved in its own format; without its decoder library LOAD, PLAY, the preview and TRIM refuse with
+ * one notice and nothing opens the file.
  */
 #include "helpers.hpp"
 
+#include "../fake_decoders.hpp"
 #include "../fixture_codecs.hpp"
+#include "codec/opus_decoder.hpp"
 #include "codec/formats.hpp"
 #include "codec/stream_scan.hpp"
 #include "recordings.hpp"
@@ -30,8 +34,19 @@ void write_settings(const std::string &home, const std::string &json) {
     std::fclose(f);
 }
 
-/* The libraries "found" and the test encoders in place of libFLAC / libopusenc. */
-void use_test_codecs(Rig &r, bool flac = true, bool opus = true) {
+/* The fake decoders (one table each for the whole run). */
+DecoderLibs fake_decoders() {
+    static const FlacDecLib flac = fakedec::make_flac_dec_lib();
+    static const OpusDecLib opus = fakedec::make_opus_dec_lib();
+    DecoderLibs d;
+    d.flac = &flac;
+    d.opus = &opus;
+    return d;
+}
+
+/* The libraries "found" and the test encoders in place of libFLAC / libopusenc; the fake decoders unless `decoders` is
+ * false (then no decoder library is "installed"). */
+void use_test_codecs(Rig &r, bool flac = true, bool opus = true, bool decoders = true) {
     r.cfg.codecs = [flac, opus] {
         CodecAvailability a;
         a.flac = flac;
@@ -42,6 +57,7 @@ void use_test_codecs(Rig &r, bool flac = true, bool opus = true) {
         if (c.key.format == RecFormat::Flac) return std::unique_ptr<Encoder>(new fx::VerbatimFlac(f, 4096));
         return std::unique_ptr<Encoder>(new fx::PlainOggOpus(f, static_cast<unsigned>(c.opus_bitrate_bps / 8 / 50), 50));
     };
+    r.cfg.decoders = [decoders] { return decoders ? fake_decoders() : DecoderLibs(); };
 }
 
 std::vector<unsigned char> read_file_bytes(const std::string &p) {
@@ -73,6 +89,92 @@ JournalEntry journal_of(Rig &r, const std::string &name) {
     JournalEntry je;
     CHECK_EQ(journal_read(posix_file_ops(), journal_file(r.rec(), file_stem(name)), je), 0);
     return je;
+}
+
+bool wait_peaks(Rig &r) {
+    return r.wait([](const Snapshot &x) { return x.trim.open && x.trim.peaks_state == 2; }, 8000);
+}
+bool wait_save(Rig &r, int state) {
+    return r.wait([state](const Snapshot &x) { return x.trim.save_state == state; }, 8000);
+}
+
+/* The samples a fake-decoded take delivers (interleaved, output scale). */
+std::vector<int32_t> decoded(const std::string &path, DecodedInfo *info_out = nullptr) {
+    std::vector<int32_t> out;
+    DecodedInfo info;
+    int err = 0;
+    std::unique_ptr<Decoder> d = make_decoder(posix_file_ops(), path, fake_decoders(), info, &err);
+    if (!d) return out;
+    const unsigned bytes = info.output.bits / 8u, ch = info.output.channels;
+    std::vector<unsigned char> b(4096 * bytes * ch);
+    for (;;) {
+        const long n = d->read(b.data(), 4096);
+        if (n <= 0) break;
+        for (long i = 0; i < n * static_cast<long>(ch); ++i) out.push_back(tp::decode(&b[static_cast<size_t>(i) * bytes], bytes));
+    }
+    if (info_out) *info_out = info;
+    return out;
+}
+
+/* PLAY on the loaded take: the deck plays it to its end (the fake sink takes it at once) and the sink heard all of it. */
+bool play_through(Rig &r, const std::string &path, uint64_t frames) {
+    r.sink.clear_heard();
+    const unsigned opens = r.sink.opens();
+    r.ctl().key_event(KeyEvent::PlayPause);
+    if (!r.wait([](const Snapshot &x) { return x.deck.state == kDeckIdle; }, 5000)) return false;
+    if (r.sink.opens() <= opens) return false;
+    const std::vector<int32_t> want = decoded(path);
+    const std::vector<int32_t> got = r.sink.heard();
+    if (got.size() != want.size() || want.size() / std::max<size_t>(1, r.sink.format().channels) != frames) {
+        std::fprintf(stderr, "  played %zu samples, the take has %zu (%llu frames)\n", got.size(), want.size(),
+                     static_cast<unsigned long long>(frames));
+        return false;
+    }
+    return got == want;
+}
+
+/* The trim page on a compressed take: peaks, then a split saved as new files in the take's format. */
+void trim_and_split(Rig &r, const TakeRow &row, const char *ext) {
+    Controller &c = r.ctl();
+    CHECK(c.open_trim(row.name));
+    CHECK(wait_peaks(r));
+    Snapshot s = r.snap();
+    CHECK_EQ(s.trim.frames, row.frames);
+    const std::vector<PeakBar> bars = c.peak_window(100);
+    CHECK_EQ(bars.size(), 100u);
+    int loud = 0;
+    for (const PeakBar &b : bars) loud += (b.max - b.min) > 1000 ? 1 : 0;
+    CHECK(loud > 50); /* the take's audio, not silence */
+    CHECK(c.set_zoom(s.trim.max_zoom));
+    CHECK_EQ(c.peak_window(80).size(), 80u); /* the exact bars at the closest zoom decode the take */
+    const uint64_t F = row.frames;
+    CHECK(c.set_position(F / 10));
+    CHECK(c.set_in());
+    CHECK(c.set_position(F - F / 10));
+    CHECK(c.set_out());
+    CHECK(c.set_position(F / 2));
+    CHECK(c.add_split());
+    CHECK(c.preview(true));
+    CHECK(r.wait([](const Snapshot &x) { return !x.trim.previewing || x.trim.position > 0; }, 3000));
+    CHECK(c.preview(false));
+    CHECK(c.save(SaveKind::NewFiles));
+    CHECK(wait_save(r, 2));
+    s = r.snap();
+    CHECK_EQ(s.trim.save_outputs.size(), 2u);
+    const std::vector<int32_t> src = decoded(row.path);
+    const unsigned ch = static_cast<unsigned>(row.channels);
+    const uint64_t cuts[] = {F / 10, F / 2, F - F / 10};
+    for (size_t i = 0; i < s.trim.save_outputs.size() && i < 2; ++i) {
+        const std::string &n = s.trim.save_outputs[i];
+        CHECK(ends_with(n, std::string("-") + std::to_string(i + 1) + ext));
+        DecodedInfo info;
+        const std::vector<int32_t> part = decoded(r.rec() + "/" + n, &info);
+        CHECK_EQ(info.total_frames, cuts[i + 1] - cuts[i]);
+        CHECK(part == std::vector<int32_t>(src.begin() + static_cast<long>(cuts[i] * ch), src.begin() + static_cast<long>(cuts[i + 1] * ch)));
+    }
+    c.close_trim();
+    const std::vector<TakeRow> rows = c.takes();
+    CHECK_EQ(rows.size(), 3u); /* the original and the two parts, all listed */
 }
 
 void t_flac_take() {
@@ -122,33 +224,25 @@ void t_flac_take() {
     CHECK_EQ(je.fmt.rate, 48000u);
     CHECK_EQ(je.frames, row.frames);
 
-    /* phase C gate: one notice, nothing plays, nothing hangs */
+    /* phase C: LOAD, PLAY to the end, the preview, PLAY from the list, the trim page and a split */
     c.ack_notices();
-    CHECK(!c.load(row.name));
-    CHECK(notice_has(r.snap(), "FLAC playback is not available yet"));
-    c.ack_notices();
-    CHECK(!c.preview_take(row.name));
-    CHECK(notice_has(r.snap(), "FLAC playback is not available yet"));
-    c.ack_notices();
-    CHECK(!c.open_trim(row.name));
-    CHECK(!r.snap().trim.open);
-    CHECK(notice_has(r.snap(), "FLAC playback is not available yet"));
-    c.ack_notices();
-    CHECK(!c.play_take(row.name));
-    c.ack_notices();
-    c.key_event(KeyEvent::PlayPause); /* the loaded take is this FLAC take */
-    CHECK(r.wait_state(kDeckIdle, 2000));
-    CHECK(notice_has(r.snap(), "FLAC playback is not available yet"));
-    CHECK_EQ(r.sink.opens(), 0u); /* the player never opened the output */
+    CHECK(c.load(row.name));
+    CHECK(play_through(r, row.path, row.frames));
+    CHECK(r.snap().notices.empty());
+    CHECK(c.preview_take(row.name));
+    CHECK(r.wait_state(kDeckIdle, 5000));
+    CHECK(c.play_take(row.name));
+    CHECK(r.wait_state(kDeckIdle, 5000));
+    trim_and_split(r, row, ".flac");
     /* rename and delete work on FLAC takes */
     std::string nn;
     CHECK_EQ(c.rename_take(row.name, "field rec", &nn), 0);
     CHECK(nn.compare(0, 14, "field rec_001_") == 0 && ends_with(nn, ".flac"));
     rows = c.takes();
-    CHECK(rows.size() == 1 && rows[0].name == nn && rows[0].format_tag == "FLAC");
+    CHECK(rows.size() == 3 && rows[0].format_tag == "FLAC");
     CHECK_EQ(r.snap().take.name, nn); /* still loaded under its new name */
     CHECK_EQ(c.delete_take(nn), 0);
-    CHECK(c.takes().empty());
+    CHECK_EQ(c.takes().size(), 2u);
 }
 
 /* A stereo card at 48 kHz with the Opus speech preset: one coded channel, the file still says stereo. */
@@ -182,9 +276,52 @@ void t_opus_take() {
     CHECK_EQ(je.bitrate_bps, 24000);
     CHECK(je.force_mono);
     CHECK_EQ(je.state, "closed");
+    /* phase C: it plays (at 48 kHz, stereo, every sample of the decoder), previews, trims and splits as Opus */
     r.ctl().ack_notices();
-    CHECK(!r.ctl().load(rows[0].name));
-    CHECK(notice_has(r.snap(), "Opus playback is not available yet"));
+    CHECK(r.ctl().load(rows[0].name));
+    CHECK(play_through(r, rows[0].path, rows[0].frames));
+    CHECK_EQ(r.sink.format().rate, 48000u);
+    CHECK(r.ctl().preview_take(rows[0].name));
+    CHECK(r.wait_state(kDeckIdle, 5000));
+    trim_and_split(r, rows[0], ".opus");
+}
+
+/* No decoder library: LOAD, PLAY from the list, the preview and TRIM refuse with one notice; nothing opens the file;
+ * WAV takes still play. */
+void t_missing_decoder() {
+    Rig r(one_card());
+    use_test_codecs(r, true, true, false);
+    write_settings(r.home, "{\"version\": 1, \"format\": \"flac\"}");
+    r.open();
+    Controller &c = r.ctl();
+    CHECK(record(r, 1.0));
+    const std::vector<TakeRow> rows = c.takes();
+    CHECK_EQ(rows.size(), 1u);
+    if (rows.empty()) return;
+    const std::string name = rows[0].name;
+    c.ack_notices();
+    CHECK(!c.load(name));
+    CHECK(notice_has(r.snap(), "This take cannot be played: FLAC not installed (libflac14)"));
+    c.ack_notices();
+    CHECK(!c.preview_take(name));
+    CHECK(notice_has(r.snap(), "FLAC not installed (libflac14)"));
+    c.ack_notices();
+    CHECK(!c.play_take(name));
+    CHECK(notice_has(r.snap(), "FLAC not installed (libflac14)"));
+    c.ack_notices();
+    CHECK(!c.open_trim(name));
+    CHECK(!r.snap().trim.open);
+    CHECK(notice_has(r.snap(), "This take cannot be trimmed: FLAC not installed (libflac14)"));
+    c.ack_notices();
+    c.key_event(KeyEvent::PlayPause); /* the loaded take is this FLAC take (the new recording) */
+    CHECK(r.wait_state(kDeckIdle, 2000));
+    CHECK(notice_has(r.snap(), "FLAC not installed (libflac14)"));
+    CHECK_EQ(r.sink.opens(), 0u); /* the player never opened the output */
+    make_take(r.rec(), "take_009_20261108-1105.wav", 1.0);
+    c.refresh_takes();
+    CHECK(c.load("take_009_20261108-1105.wav"));
+    c.key_event(KeyEvent::PlayPause);
+    CHECK(r.wait([&](const Snapshot &) { return r.sink.opens() > 0; }, 3000));
 }
 
 /* The stored choice cannot record here: WAV, as effective_choice() says. */
@@ -330,6 +467,7 @@ void t_flac_disk_full() {
 void test_formats_app() {
     t_flac_take();
     t_opus_take();
+    t_missing_decoder();
     t_fallback_to_wav();
     t_mixed_folder();
     t_repair_at_launch();

@@ -3,6 +3,7 @@
  */
 #include "peaks.hpp"
 
+#include "../codec/decoded_source.hpp"
 #include "edit_util.hpp"
 #include "wav.hpp"
 
@@ -110,13 +111,30 @@ void scan(const unsigned char *p, size_t n, unsigned bytes, int &mn, int &mx) {
     }
 }
 
-int fill(FileOps &ops, int fd, int take_fd, const Meta &m, const Layout &l, const PeakBuildOptions &opt) {
+/* Reads `want` frames of the take at `frame` (WAV: the bytes at the data offset; FLAC / Opus: the decoder). */
+int64_t read_take(FileOps &ops, int take_fd, PcmSource *src, const Meta &m, uint64_t frame, size_t want, unsigned char *buf) {
+    if (src) {
+        size_t got = 0;
+        while (got < want) {
+            const long k = src->read(frame + got, want - got, buf + got * m.block_align);
+            if (k < 0) return k;
+            if (k == 0) break;
+            got += static_cast<size_t>(k);
+        }
+        return static_cast<int64_t>(got);
+    }
+    const int64_t b = pread_full(ops, take_fd, buf, want * m.block_align, m.data_offset + frame * m.block_align);
+    return b < 0 ? b : b / static_cast<int64_t>(m.block_align);
+}
+
+int fill(FileOps &ops, int fd, int take_fd, PcmSource *src, const Meta &m, const Layout &l, const PeakBuildOptions &opt) {
     const std::vector<unsigned char> hdr = encode_header(m, l);
     int r = pwrite_all(ops, fd, hdr.data(), hdr.size(), 0);
     if (r < 0) return r;
     if (l.counts.empty()) return 0;
     const unsigned sb = m.bits / 8u;
-    const size_t chunk_frames = std::max<size_t>(kPeakBlock, (kPeakReadChunk / m.block_align / kPeakBlock) * kPeakBlock);
+    const size_t chunk_frames = src ? kPeakDecodeChunk
+                                    : std::max<size_t>(kPeakBlock, (kPeakReadChunk / m.block_align / kPeakBlock) * kPeakBlock);
     std::vector<unsigned char> buf(chunk_frames * m.block_align);
     std::vector<unsigned char> out((chunk_frames / kPeakBlock) * kPairBytes);
     uint64_t done = 0;
@@ -124,10 +142,9 @@ int fill(FileOps &ops, int fd, int take_fd, const Meta &m, const Layout &l, cons
     while (done < m.frames) {
         if (opt.cancel && opt.cancel->load()) return -ECANCELED;
         const uint64_t want = std::min<uint64_t>(chunk_frames, m.frames - done);
-        const size_t bytes = static_cast<size_t>(want) * m.block_align;
-        int64_t got = pread_full(ops, take_fd, buf.data(), bytes, m.data_offset + done * m.block_align);
+        int64_t got = read_take(ops, take_fd, src, m, done, static_cast<size_t>(want), buf.data());
         if (got < 0) return static_cast<int>(got);
-        if (static_cast<size_t>(got) != bytes) return -EIO; /* the take shrank under us */
+        if (static_cast<uint64_t>(got) != want) return -EIO; /* the take shrank under us */
         const size_t nblocks = static_cast<size_t>((want + kPeakBlock - 1) / kPeakBlock);
         for (size_t b = 0; b < nblocks; b++) {
             const size_t f0 = b * kPeakBlock;
@@ -171,14 +188,14 @@ int fill(FileOps &ops, int fd, int take_fd, const Meta &m, const Layout &l, cons
 }
 
 /* Builds the cache into a temporary file and renames it into place. 0 or -errno; -ECANCELED on cancel. */
-int build(FileOps &ops, const std::string &take_path, int take_fd, const Meta &m, const Layout &l,
+int build(FileOps &ops, const std::string &take_path, int take_fd, PcmSource *src, const Meta &m, const Layout &l,
           const PeakBuildOptions &opt) {
     const std::string dir = dir_of(take_path), cache = PeakPyramid::cache_path(take_path);
     const std::string tmp = tmp_name(dir, "pk");
     int fd = ops.open(tmp, O_RDWR | O_CREAT | O_EXCL, 0644);
     if (fd < 0) return fd;
     FdGuard g(ops, fd);
-    int r = fill(ops, fd, take_fd, m, l, opt);
+    int r = fill(ops, fd, take_fd, src, m, l, opt);
     if (r == 0) r = ops.fdatasync(fd);
     const int c = ops.close(g.release());
     if (r == 0) r = c;
@@ -229,12 +246,12 @@ private:
 };
 
 /* 0, -EFBIG when the pyramid would exceed kMemCacheMax, -ECANCELED, or another -errno. */
-int build_memory(FileOps &ops, int take_fd, const Meta &m, const Layout &l, const PeakBuildOptions &opt,
+int build_memory(FileOps &ops, int take_fd, PcmSource *src, const Meta &m, const Layout &l, const PeakBuildOptions &opt,
                  std::vector<unsigned char> &mem) {
     if (l.total > kMemCacheMax) return -EFBIG;
     mem.assign(static_cast<size_t>(l.total), 0);
     MemCacheOps mo(ops, mem);
-    return fill(mo, kMemFd, take_fd, m, l, opt);
+    return fill(mo, kMemFd, take_fd, src, m, l, opt);
 }
 
 }  // namespace
@@ -250,27 +267,49 @@ std::unique_ptr<PeakPyramid> PeakPyramid::open_or_build(FileOps &ops, const std:
         if (error) *error = why;
         return std::unique_ptr<PeakPyramid>();
     };
-    HeaderInfo h = parse_header(ops, take_path);
-    if (!h.ok) return fail("unreadable take: " + h.error);
-    StatInfo st;
-    int r = ops.stat(take_path, st);
-    if (r < 0) return fail("cannot stat the take (" + std::to_string(-r) + ")");
-    uint64_t avail = h.actual_data;
-    if (!h.suspicious() && h.declared_data < avail) avail = h.declared_data;
-
+    std::unique_ptr<PeakPyramid> p(new PeakPyramid());
     Meta m;
-    m.take_size = st.size;
-    m.take_mtime = st.mtime;
-    m.frames = avail / h.block_align;
-    m.data_offset = h.data_offset;
-    m.rate = h.fmt.rate;
-    m.channels = h.fmt.channels;
-    m.bits = h.fmt.bits;
-    m.block_align = h.block_align;
+    int take_fd = -1;
+    PcmSource *src = nullptr;
+    StatInfo st;
+    int r;
+    if (is_compressed_take(ops, take_path)) {
+        /* FLAC / Ogg Opus: the decoded audio (the cache header records the decoder's output format) */
+        p->libs_ = opt.decoders ? *opt.decoders : real_decoder_libs();
+        DecodedSource *ds = new DecodedSource(ops, &p->libs_);
+        p->src_.reset(ds);
+        r = ds->open(take_path);
+        if (r < 0) return fail("cannot decode the take: " + decode_error_text(r, take_path));
+        r = ops.stat(take_path, st);
+        if (r < 0) return fail("cannot stat the take (" + std::to_string(-r) + ")");
+        m.take_size = st.size;
+        m.take_mtime = st.mtime;
+        m.frames = ds->frames();
+        m.data_offset = 0;
+        m.rate = ds->format().rate;
+        m.channels = ds->format().channels;
+        m.bits = ds->format().bits;
+        m.block_align = ds->block_align();
+        src = ds;
+    } else {
+        HeaderInfo h = parse_header(ops, take_path);
+        if (!h.ok) return fail("unreadable take: " + h.error);
+        r = ops.stat(take_path, st);
+        if (r < 0) return fail("cannot stat the take (" + std::to_string(-r) + ")");
+        uint64_t avail = h.actual_data;
+        if (!h.suspicious() && h.declared_data < avail) avail = h.declared_data;
+        m.take_size = st.size;
+        m.take_mtime = st.mtime;
+        m.frames = avail / h.block_align;
+        m.data_offset = h.data_offset;
+        m.rate = h.fmt.rate;
+        m.channels = h.fmt.channels;
+        m.bits = h.fmt.bits;
+        m.block_align = h.block_align;
+        take_fd = ops.open(take_path, O_RDONLY, 0);
+        if (take_fd < 0) return fail("cannot open the take (" + std::to_string(-take_fd) + ")");
+    }
     const Layout l = compute_layout(m.frames);
-
-    int take_fd = ops.open(take_path, O_RDONLY, 0);
-    if (take_fd < 0) return fail("cannot open the take (" + std::to_string(-take_fd) + ")");
     FdGuard tg(ops, take_fd);
 
     const std::string cache = cache_path(take_path);
@@ -282,7 +321,7 @@ std::unique_ptr<PeakPyramid> PeakPyramid::open_or_build(FileOps &ops, const std:
         cfd = -1;
     }
     if (cfd < 0) {
-        r = build(ops, take_path, take_fd, m, l, opt);
+        r = build(ops, take_path, take_fd, src, m, l, opt);
         if (r == -ECANCELED) return fail("cancelled");
         if (r == 0) {
             rebuilt = true;
@@ -290,14 +329,14 @@ std::unique_ptr<PeakPyramid> PeakPyramid::open_or_build(FileOps &ops, const std:
             if (cfd < 0) r = cfd;
         }
         if (r < 0) { /* the cache cannot be stored: keep the pyramid in memory instead (bounded) */
-            r = build_memory(ops, take_fd, m, l, opt, mem);
+            r = build_memory(ops, take_fd, src, m, l, opt, mem);
             if (r == -ECANCELED) return fail("cancelled");
+            if (r < 0 && src) return fail("cannot build the peaks: " + decode_error_text(r, take_path));
             if (r < 0) return fail("cannot write the peak cache (" + std::to_string(-r) + ")");
             rebuilt = true;
             cfd = kMemFd;
         }
     }
-    std::unique_ptr<PeakPyramid> p(new PeakPyramid());
     p->ops_ = &ops;
     p->cache_fd_ = cfd;
     p->take_fd_ = tg.release();
@@ -322,6 +361,22 @@ int64_t PeakPyramid::cache_read(void *buf, size_t n, uint64_t off) {
     return static_cast<int64_t>(k);
 }
 
+int64_t PeakPyramid::take_read(uint64_t frame, size_t n, unsigned char *buf) {
+    if (src_) {
+        std::lock_guard<std::mutex> g(src_mu_); /* window() may be called from several threads; the decoder is one */
+        size_t got = 0;
+        while (got < n) {
+            const long k = src_->read(frame + got, n - got, buf + got * block_align_);
+            if (k < 0) return k;
+            if (k == 0) break;
+            got += static_cast<size_t>(k);
+        }
+        return static_cast<int64_t>(got);
+    }
+    const int64_t b = pread_full(*ops_, take_fd_, buf, n * block_align_, data_offset_ + frame * block_align_);
+    return b < 0 ? b : b / static_cast<int64_t>(block_align_);
+}
+
 size_t PeakPyramid::level_for(uint64_t fpb) const {
     size_t k = 0;
     while (k + 1 < counts_.size() && k + 1 < 56 && (static_cast<uint64_t>(kPeakBlock) << (k + 1)) <= fpb) k++;
@@ -337,9 +392,9 @@ std::vector<PeakPair> PeakPyramid::window(uint64_t start, uint64_t fpb, size_t b
     if (fpb < kPeakBlock) { /* exact, from the take */
         const uint64_t want = std::min<uint64_t>(frames_ - start, static_cast<uint64_t>(bars) * fpb);
         std::vector<unsigned char> buf(static_cast<size_t>(want) * block_align_);
-        int64_t got = pread_full(*ops_, take_fd_, buf.data(), buf.size(), data_offset_ + start * block_align_);
+        int64_t got = take_read(start, static_cast<size_t>(want), buf.data());
         if (got < 0) return res;
-        const uint64_t have = static_cast<uint64_t>(got) / block_align_;
+        const uint64_t have = static_cast<uint64_t>(got);
         for (size_t i = 0; i < bars; i++) {
             const uint64_t f0 = i * fpb;
             if (f0 >= have) break;

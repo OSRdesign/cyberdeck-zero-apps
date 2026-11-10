@@ -58,3 +58,4 @@ void test_deck();
 void test_threads();
 void test_rates();
 void test_monitor();
+void test_codec_play();

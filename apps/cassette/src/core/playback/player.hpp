@@ -2,7 +2,9 @@
  * SPDX-License-Identifier: MIT
  *
  * Cassette playback: a streaming WAV reader and the Player (play, pause, seek, the 5x tape-cue scan, the 5 s jump).
- * LVGL-free; files through the FileOps seam, sound through the PlaybackSink seam.
+ * LVGL-free; files through the FileOps seam, sound through the PlaybackSink seam. FLAC and Ogg Opus takes (phase C) are
+ * read through a DecodedSource (codec/decoded_source.hpp) with the same frame interface, so everything below applies to
+ * every format; positions and lengths are frames at the decoder's output rate (Opus: see codec/decoder.hpp).
  *
  * Threads. In Threaded mode the Player owns one playback thread: it alone reads the file and touches the sink; every
  * command (open, play, pause, seek, scan ...) is queued to it and the caller waits until it has been applied (at most
@@ -30,10 +32,12 @@
  */
 #pragma once
 
-#include "fileops.hpp"
-#include "frame_sink.hpp"
+#include "../codec/decoded_source.hpp"
+#include "../fileops.hpp"
+#include "../frame_sink.hpp"
+#include "../pcm_source.hpp"
+#include "../wav.hpp"
 #include "sink.hpp"
-#include "wav.hpp"
 
 #include <atomic>
 #include <condition_variable>
@@ -50,22 +54,22 @@ namespace cassette {
 /* Reads the audio of a WAV file in blocks (never the whole file) through FileOps. The playable length is the declared data
  * size when it fits the file; a placeholder or oversized header (a take whose header was never updated: a crash, a power
  * cut, or a take still open) uses the real file length instead. A partial last frame is ignored. */
-class WavReader {
+class WavReader final : public PcmSource {
 public:
     explicit WavReader(FileOps &ops) : ops_(ops) {}
-    ~WavReader() { close(); }
+    ~WavReader() override { close(); }
     WavReader(const WavReader &) = delete;
     WavReader &operator=(const WavReader &) = delete;
 
-    int open(const std::string &path); /* 0, or a negative errno (-EINVAL: not a PCM WAV we can play) */
-    void close();
-    bool is_open() const { return fd_ >= 0; }
-    const AudioFormat &format() const { return fmt_; }
-    uint32_t block_align() const { return align_; }
-    uint64_t frames() const { return frames_; }
+    int open(const std::string &path) override; /* 0, or a negative errno (-EINVAL: not a PCM WAV we can play) */
+    void close() override;
+    bool is_open() const override { return fd_ >= 0; }
+    const AudioFormat &format() const override { return fmt_; }
+    uint32_t block_align() const override { return align_; }
+    uint64_t frames() const override { return frames_; }
     bool used_file_length() const { return used_file_length_; } /* the header's sizes were not trusted */
     /* Reads up to n frames from `frame` into buf (n * block_align bytes): frames read (0 at the end) or a negative errno. */
-    long read(uint64_t frame, size_t n, void *buf);
+    long read(uint64_t frame, size_t n, void *buf) override;
 
 private:
     FileOps &ops_;
@@ -90,7 +94,10 @@ constexpr int kCommandWaitMs = 1000;
 class Player {
 public:
     enum class Mode { Threaded, Manual };
-    Player(FileOps &ops, PlaybackSink &sink, Mode mode = Mode::Threaded);
+    /* libs: the decoders for FLAC / Opus takes (null: the real libraries, loaded at the first compressed take). A WAV
+     * take is read by WavReader; a FLAC or Ogg Opus take (.flac / .opus) by a DecodedSource in the playback thread, so
+     * play, pause, seek, the 5x scan both ways and the 5 s jump work the same for every format. */
+    Player(FileOps &ops, PlaybackSink &sink, Mode mode = Mode::Threaded, const DecoderLibs *libs = nullptr);
     ~Player(); /* stops, closes the sink, joins the thread */
     Player(const Player &) = delete;
     Player &operator=(const Player &) = delete;
@@ -151,7 +158,9 @@ private:
     const Mode mode_;
 
     /* owned by the playback thread (or by the caller in Manual mode) */
-    WavReader reader_;
+    WavReader wav_;
+    DecodedSource decoded_;
+    PcmSource *src_ = &wav_; /* the reader of the open take */
     PlayerState st_ = PlayerState::Stopped, prev_ = PlayerState::Paused;
     Direction dir_ = Direction::Forward;
     unsigned speed_ = kScanSpeed;

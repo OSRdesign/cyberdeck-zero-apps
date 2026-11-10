@@ -5,13 +5,16 @@ default), D4 (FLAC and Opus as options), D7 (libraries loaded at run time with `
 (the card's native rate, no resampling in 0.1), D16 (Vorbis comments for metadata).
 
 **Status (2026-11-10).** Phase A (the encoders, the library loading, the format list with its size estimates, the
-stored key) and phase B (recording: the writer, names, the list, the journal, the repair) are done. The recorder writes
+stored key), phase B (recording: the writer, names, the list, the journal, the repair) and phase C (playback, preview,
+the 5x scan and the 5 s jump, the peak cache, trim and split of FLAC and Opus takes) are done. The recorder writes
 FLAC and Ogg Opus takes when the stored setting asks for it and `effective_choice()` allows it; the Settings Format row
-(the owner's design) still offers WAV only, so for now the format is set in `settings.json`. Playing, previewing,
-trimming and the peak cache of FLAC/Opus takes are phase C: until then those refuse with a notice. Code:
-`src/core/codec/`, `src/core/writer.*`, `src/core/repair.*`, `src/core/takes/`; tests: `tests/codec/`,
-`tests/test_stream_scan.cpp`, `tests/test_codec_writer.cpp`, `tests/test_codec_crash.cpp`, `tests/takes/test_formats.cpp`,
-`tests/app/test_formats.cpp`, `tests/codec/test_writer_real.cpp`. Board test: B17 in `tests/BOARD-TESTS.md`.
+(the owner's design) still offers WAV only, so for now the format is set in `settings.json`. Code: `src/core/codec/`,
+`src/core/writer.*`, `src/core/repair.*`, `src/core/takes/`, `src/core/playback/player.*`, `src/core/edit/`; tests:
+`tests/codec/`, `tests/test_stream_scan.cpp`, `tests/test_codec_writer.cpp`, `tests/test_codec_crash.cpp`,
+`tests/takes/test_formats.cpp`, `tests/app/test_formats.cpp`, `tests/codec/test_writer_real.cpp`, and for phase C
+`tests/codec/test_decoders.cpp`, `tests/codec/test_decoders_real.cpp`, `tests/playback/test_codec_play.cpp`,
+`tests/edit/test_codec_edit.cpp`, `tests/fake_decoders.hpp`. Board tests: B17 (recording) and B18 (playback and
+editing) in `tests/BOARD-TESTS.md`.
 
 ## What is offered
 
@@ -164,13 +167,23 @@ would leave up to 1 s more audio behind. The pull API is the same library, same 
 
 | Library | File loaded | Debian / Ubuntu package | Needed for |
 |---|---|---|---|
-| libFLAC | `libFLAC.so.14`, else `libFLAC.so.12` | `libflac14` (trixie, Ubuntu 26.04 likely), `libflac12t64` (Ubuntu 24.04), `libflac12` (bookworm) | FLAC recording (and FLAC playback in phase C) |
+| libFLAC | `libFLAC.so.14`, else `libFLAC.so.12` | `libflac14` (trixie, Ubuntu 26.04 likely), `libflac12t64` (Ubuntu 24.04), `libflac12` (bookworm) | FLAC recording, playback, peaks, trim and split |
 | libopusenc | `libopusenc.so.0` | `libopusenc0` (0.2.1 in trixie) | Opus recording |
-| libopus | (needed by libopusenc) | `libopus0` | Opus |
-| libogg | (needed by libFLAC and libopusfile) | `libogg0` | not used by libopusenc (it has its own page writer) |
-| libopusfile | `libopusfile.so.0` (phase C) | `libopusfile0` | Opus playback |
+| libopus | `libopus.so.0` (phase C loads it for playback; libopusenc needs it for recording) | `libopus0` | Opus recording (through libopusenc), playback, preview, peaks |
+| libogg | (needed by libFLAC: Debian links libFLAC with Ogg support) | `libogg0` | pulled in by the libflac package; Cassette itself does not use it |
+| libopusfile | not used | (`libopusfile0`) | phase A planned it for playback; phase C reads the Ogg pages itself (below) |
 
-The encoder calls are the same in FLAC 1.4 and 1.5 (the soname moved for decoder changes); both were tested.
+The encoder calls are the same in FLAC 1.4 and 1.5 (the soname moved for decoder changes); both were tested. The
+decoder calls Cassette uses are the same too: FLAC 1.5 only appended enum values (chained Ogg FLAC) that native FLAC
+never produces; checked against both header sets (`check_codec_abi.cpp`).
+
+**What each format needs at run time (phase C):**
+
+| | Record | Play, preview, scan, peaks | Trim and split |
+|---|---|---|---|
+| WAV | nothing | nothing | nothing |
+| FLAC | libFLAC | libFLAC | libFLAC (decode and encode) |
+| Ogg Opus | libopusenc + libopus | libopus | nothing (a copy of packets) |
 
 **Proposed for the package (not applied; packaging is the owner's step):**
 
@@ -179,8 +192,11 @@ The encoder calls are the same in FLAC 1.4 and 1.5 (the soname moved for decoder
 "recommends": "libflac14 | libflac12t64 | libflac12, libopusenc0, libopus0"
 ```
 
-and in phase C add `libopusfile0` (it pulls `libogg0`). The app runs with none of them (WAV only; FLAC and Opus rows
-greyed with the package to install). Caveat: the launcher's Store installs a package with plain `dpkg --install` when
+Phase C adds nothing to that list (phase A expected `libopusfile0` here; it is not needed: `libopus0` plays Opus, and
+`libopusenc0` already depends on it). The app runs with none of them: WAV records and plays, the FLAC and Opus rows are
+greyed with the package to install, and a FLAC / Opus take whose library is missing is refused by LOAD, PLAY, the
+preview and TRIM with one notice (`This take cannot be played: FLAC not installed (libflac14)`, `... Opus not installed
+(libopus0)`). Caveat: the launcher's Store installs a package with plain `dpkg --install` when
 its Depends are already met (`appstore_native.cpp`), and dpkg never installs Recommends; only `apt install` does. So
 with the current Store, Recommends only help users who install by apt. If the owner wants FLAC and Opus to work after
 a Store install on every board, the alternatives are moving the two libraries to Depends (installed sizes in trixie:
@@ -193,10 +209,11 @@ probe to repeat: `ldconfig -p | grep -E 'libFLAC|libopus|libogg'` and `dpkg-quer
 ## ABI and tests
 
 - `codec_abi.hpp` declares the C ABI by hand; `check_codec_abi.cpp` compares it with real headers when present
-  (constants, the two structures used, and the shape of every function and callback) and does not compile on a
+  (constants, the structures used, and the shape of every function and callback) and does not compile on a
   mismatch. Checked against FLAC 1.4.3 + libopus 1.4 + libopusenc 0.2.1 (Ubuntu 24.04 packages) and FLAC 1.5.0 +
   libopus 1.5.2 + libopusenc 0.3 (Debian packages). arm64 headers were not checked (same C ABI rules; the layouts are
-  plain `uint32_t` and pointers).
+  plain `uint32_t` and pointers). Phase C added libFLAC's stream decoder (its states and statuses, the `FrameHeader`
+  layout field by field, the eight callbacks, the ten functions) and libopus' decoder (its constants and five functions).
 - Fakes (`tests/codec/fake_codecs.*`) behave like the libraries where the encoders depend on it: block and page
   boundaries, the decision delay, the STREAMINFO rewrite, end of stream, errors; the encoders' conversion, settings,
   statistics and error paths are tested on them.
@@ -258,9 +275,9 @@ ID3 tag is left alone):
   the last valid page with a granule, the end-of-stream flag is set on it (flag and CRC in one 21-byte pwrite).
 - Idempotent and safe to interrupt; the take gets the same notice and the same "repaired" mark as a WAV take.
 
-**Phase C gate.** `playback_refusal()` (takes/recordings) is the one place: LOAD, PLAY / PLAY-PAUSE on a loaded
-FLAC/Opus take, the list's preview and TRIM (so the peak cache too) answer `FLAC playback is not available yet` /
-`Opus playback is not available yet` and nothing opens the file.
+**The phase B gate** (`playback_refusal()` in takes/recordings and its five calls in the controller: LOAD, PLAY on a
+loaded take, PLAY from the list, the preview, TRIM) is gone since phase C. In its place the controller refuses only a
+take whose decoder library is missing, with the notice above.
 
 **Tests.** The test encoders `tests/fixture_codecs.hpp` (a real FLAC stream with verbatim subframes, an Ogg Opus stream
 with real pages, no library) make every writer, list and repair path testable byte for byte: the cadence and what each
@@ -289,20 +306,119 @@ measured on the board (B17 step 12; P0-e measured mono speech Opus at 7-10 %).
   failed).
 - The packaging (Recommends or Depends for libflac/libopusenc, see above) is the owner's step.
 
-## Next: phase C, playback and editing
+## Phase C: playback and editing (done)
 
-0. Remove the gate: `playback_refusal()` in takes/recordings and its callers in the controller (load, play_take,
-   preview_take, open_target, open_trim); the app tests that expect the notice (`tests/app/test_formats.cpp`) then
-   expect playback.
-1. Decoders (decoder.hpp designed): FLAC through libFLAC's stream decoder, Opus through libopusfile, WAV behind the
-   same interface; the player, peaks and trim read through it. Opus plays at 48 kHz whatever the input rate. The
-   player's progress and the list read the length from the stream (`read_stream_info()` already gives it).
-2. Peaks for compressed takes: decode once on the worker thread (FLAC is fast; Opus decodes at about 30x real time on
-   a Pi 3 class CPU per report 058: a one-hour take takes a couple of minutes on the zero8, so show progress or build
-   the peaks while recording, from the PCM the writer already has).
-3. Trim/split: FLAC by re-encoding (simplest: decode and encode the kept range; or keep whole frames and re-encode
-   the edge frames); Opus by cutting at pages and setting pre-skip / end trimming for sample accuracy, or re-encoding
-   (a second generation of lossy coding).
-4. Notes editing in place: the FLAC padding and the OpusTags padding allow it without rewriting the file.
-5. The edit names already keep the source's extension (`next_edit_names`); trim_split must write the results in the
-   source's format (or WAV, if the owner prefers: then the names need the target format).
+FLAC and Ogg Opus takes load, play, pause and resume, seek, scan at 5x both ways (REW stops at the start, FWD ends the
+take at its end), jump 5 s, preview from the list, open on the trim page with their peaks, preview there, and are
+trimmed and split into results of their own format, exactly as WAV takes. WAV keeps its own code paths (WavReader,
+its peak builder, its byte-copy trim): nothing changed for WAV.
+
+**Decision: Opus is decoded with libopus and Cassette's own Ogg reader, not libopusfile.** The brief allowed
+libopusfile with a fallback to libopus plus an own page reader when libopusfile is missing; the smallest set of
+dependencies is the fallback alone, so it is the only path:
+- `libopus0` is needed anyway (libopusenc depends on it for recording); libopusfile would add `libopusfile0` and
+  `libogg0` for playback, and a second, fallback code path to test.
+- Trim needs the packets and their exact granule positions in Cassette's hands anyway (the remux below); the decoder
+  reuses that reader (`codec/ogg_opus.*`, built on the page format the phase B repair already parses).
+- libopusfile always delivers 48 kHz; libopus decodes at any Opus rate, so a 16 kHz take plays at 16 kHz on a 16 kHz
+  headset without resampling, and the length the player shows equals the list's.
+- Checked against libopusfile (loaded by the tests only): the linear decode is within 1 LSB of libopusfile's on the
+  48 kHz streams (libopusfile decodes at 48 kHz only, so the 16 kHz stream is compared by its length), and libopusfile
+  reads every trimmed file, at 48 and 16 kHz, at exactly the requested length and decodes it to the end cleanly.
+Without libopus Opus takes are refused with a notice; WAV and FLAC are not affected (each library is optional).
+
+**Decoders** (`codec/decoder.hpp`; `make_decoder()` picks by the file's magic):
+- `FlacDecoder`: libFLAC's stream decoder over FileOps callbacks, MD5 checking off. Output: the recorded format (16 or
+  24 bits packed, as WAV). Seeks: `FLAC__stream_decoder_seek_absolute`, sample exact, libFLAC's own bisection over the
+  frames (a few small reads; 0.07-0.09 ms per seek on this PC). No index is built at open: a frame scan would read the
+  whole take (100-200 MB per hour of FLAC on an SD card), which is not cheap; libFLAC's seek is. A frame lost to damage
+  becomes silence of its length, so every later sample keeps its place. A STREAMINFO that says 0 samples (a take still
+  recording, a failed repair) gets its length from the frame scan of `stream_scan`.
+- `OpusFileDecoder`: libopus over `oggopus::OggOpusFile`. Output: 16 bits at the take's input rate when that is an Opus
+  rate (8, 12, 16, 24, 48 kHz), else 48 kHz (a foreign 44.1 kHz stream). The mapping (`oggopus::Timeline`): output
+  frame o is decoded sample o + pre-skip/k (k = 48000 / output rate); packet boundaries fall on whole output samples at
+  every Opus rate; a pre-skip that is not a multiple of k is rounded down (less than one output sample). Seeks: a
+  bisection over the pages by granule position (no index, no read of the whole file: 7.8 probes and 33 KB read per
+  seek on a 20-minute take, with a small map of the pages already seen as hints), the decoder reset, 80 ms of pre-roll
+  decoded and dropped (RFC 7845 section 4.6), then decode-and-drop to the exact sample. The end trimming of the last
+  page is honoured (positions on the end-of-stream page are counted forward from the page before). A damaged page
+  becomes silence of its packets' length; a packet libopus refuses is concealed (PLC) with its own duration; a stream
+  without its end-of-stream page (before its repair) plays to its last page and is marked damaged.
+- Accuracy with the real libraries: FLAC decodes, seeks (107 positions per stream) and reverse-scans sample exact at
+  16 and 24 bits, mono and stereo; an Opus seek lands on the sample (the best match against the linear decode is at lag
+  0 for 60 positions per stream) and agrees with the linear decode to 36-41 dB (the decoder's convergence after 80 ms;
+  libopusfile's seek has the same property).
+
+**The Player** (`playback/player.*`) reads a FLAC / Opus take through `DecodedSource` (`codec/decoded_source.hpp`), the
+same random-access frame interface as WavReader, in its playback thread: reading on from where the decoder stands
+(normal play, the forward 5x scan) decodes just what each period needs; a read just before the window (the reverse
+scan reads its blocks backwards) decodes a whole window of half a second ending where the read ends, plus the frames
+the decoder had to decode anyway to get there (an Opus seek starts at a page and decodes the pre-roll: those frames are
+kept), so the reverse scan decodes 1.05-1.17 frames per frame it plays; a jump repositions the decoder. The 500 ms
+device buffer absorbs the decoding time of a window. Proven by twin files (`tests/playback/test_codec_play.cpp`): a WAV
+holding exactly the PCM a FLAC / Opus take decodes to, the same scripts on both Players (play to the end, pause and
+resume, scan forward to the end, reverse to the start, REW at the start and FWD at the end, jumps, a change of scan
+direction, seeks while paused, stop and play), at two device latencies: state, position, events and every sample the
+device received are identical.
+
+**CPU** (this PC, one x86 core, 60 s of 48 kHz stereo music, real libraries; share of one core):
+
+| Take | Normal play | 5x forward scan | 5x reverse scan | x real time |
+|---|---|---|---|---|
+| FLAC 16-bit | 0.07-0.08 % | 0.33-0.41 % | 0.38-0.48 % | about 1200-1500 |
+| Opus 128 kbps | 0.22 % | 1.1 % | 1.3 % | about 450 |
+| Opus 32 kbps (one coded channel) | 0.17-0.23 % | 0.9-1.1 % | 1.0-1.7 % | about 450-580 |
+
+A Pi Zero 2 W core is very roughly 15-25x slower (the phase B estimate), so the 5x scan of a 128 kbps Opus take needs
+about 17-28 % of one core forward and 20-40 % in reverse; FLAC under 12 %. That stays audible without starving the
+board, so the seek-skip scan (short slices every N ms) the brief offered as a fallback was not needed; B18 measures it
+on the board. The Player's own work per period with the fakes: 23 us (FLAC) and 56-58 us (Opus) against 11-19 us for
+the WAV twins, for a period of 21.3 ms.
+
+**Peaks** (`edit/peaks.*`): the same pyramid and cache file (`<take>.flac.peaks`, `<take>.opus.peaks`), keyed by the
+take's size and mtime and recording the decoder's output format, built from the decoded audio in one streaming pass of
+65536-frame steps (a take of hours needs no more memory than a short one) on the controller's worker thread with the
+progress the trim page already shows; the UI never waits. Exact bars (fewer than 256 frames per bar) decode the few
+frames they need, under a lock (the UI may ask from several threads). A missing decoder: `cannot decode the take: FLAC
+not installed (libflac14)`.
+
+**Trim and split** (`edit/trim_split.*`): the results keep the source's format, names (`-N.flac`, `-N.opus`), the
+temporaries, the order of renames and the checks of the WAV engine, so every guarantee holds (the original untouched
+until every result is synced; replace removes it only after; a kill leaves the original or complete results).
+- FLAC: the part is decoded and encoded again (libFLAC level 5, streamable subset, 4096 bytes of padding, as a
+  recording); lossless and sample exact at both cuts; STREAMINFO gets the part's length and MD5 (libFLAC verifies it in
+  the tests). Keeping the whole frames between re-encoded edge frames was not done: a fixed-block-size stream needs
+  every frame but the last of the same size, so the frames can be kept only when IN falls on a frame boundary; otherwise
+  the copied frames' headers must be rewritten as a variable-block-size stream (sample numbers, CRC-8 and CRC-16
+  again), which libFLAC cannot write and some players handle badly. A full re-encode is simpler and just as lossless.
+  Cost: decode and encode run at about 400x real time on this PC (stereo music), so a one-hour stereo take takes
+  roughly 2-4 minutes on a Pi Zero 2 W (estimate; B18 measures a short one); the save box shows the progress.
+- Opus: no re-encoding. The packets of the part plus 320 ms before it are copied into new pages
+  (`oggopus::remux_opus_range`); the new pre-skip drops that pre-roll and the part of the first packet before IN, the
+  last page's granule trims the end at OUT, granules restart at 0, the comments are copied. Sample exact (the fakes
+  check every sample; libopusfile reads exactly the requested length). Why 320 ms: with the minimum 80 ms the decoder
+  had not settled at IN (CELT predicts band energies from the frame before) and the first 100 ms of a part differed from
+  the take (13-24 dB SNR in the first 20 ms); with 320 ms the parts match the take's own decode to 96 dB or better for
+  music at 48 kHz and 48 dB or better for 16 kHz speech, many bit for bit. No codec library is needed for the cut.
+- Both: a TITLE comment that named the source file names the result; the rest is copied unchanged.
+- Crash safety, as for WAV (`tests/edit/test_codec_edit.cpp`): every file operation of eight FLAC and Opus saves (trim,
+  split, replace with one part and with several, mono and stereo, 16 and 24 bits, 48 and 16 kHz) made to fail with EIO
+  and with ENOSPC, and to be the point of a kill: afterwards the original is byte-identical or every result is complete
+  and decodes to exactly its slice, never a half file under a final name, and `cleanup_temporaries()` leaves nothing.
+  The same sweep for a peak build of a FLAC and an Opus take.
+
+**Tests.** Fakes everywhere (`tests/fake_decoders.hpp`: a libFLAC decoder for the test encoder's VERBATIM frames with
+libFLAC's calling conventions, seek_absolute included; a stateless libopus decoder whose samples identify their packet,
+so positions are checked to the sample): the codec suite (framing, decoders, seeks at four rates, bisection on a long
+take, damage, the window cache, remux of 60 ranges), the playback suite (the twin scripts), the edit suite (results,
+errors, crash sweeps, peaks), the app suite (a FLAC and an Opus take recorded, loaded, played to the end with every
+sample checked, previewed, trimmed and split from the trim page; the notices without the libraries). The real-library
+group (`tests/codec/test_decoders_real.cpp`) runs with both private roots: FLAC 1.4.3 / libopus 1.4 and FLAC 1.5.0 /
+libopus 1.5.2, libopusfile 0.12 as the reference.
+
+**Left for later (not phase C).**
+- Notes editing in place: the FLAC padding and the OpusTags padding allow it without rewriting the file.
+- An Opus take with more than two channels (mapping family 1) is refused (Cassette records mono or stereo).
+- A seek in an Opus take uses the 80 ms pre-roll of RFC 7845 (fast, 36-41 dB against the linear decode at the landing
+  point); a longer one would cost a little more decoding per seek and reverse-scan window.
+- FLAC MD5 is not checked during playback (libFLAC turns it off after any seek anyway).

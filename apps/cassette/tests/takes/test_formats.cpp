@@ -4,7 +4,7 @@
  * Cassette takes tests: FLAC and Opus take names next to WAV (phase B). The grammar with .flac / .opus, the extension
  * kept by edits and renames, a folder that mixes the three formats (the list, the order, the format of each take, its
  * length from the stream headers), take numbers shared by all formats (never reused), delete with the peak cache and the
- * journal, and the phase C gate text. The FLAC and Opus files are real streams from the test encoders.
+ * journal. The FLAC and Opus files are real streams from the test encoders.
  */
 #include "check.hpp"
 
@@ -110,11 +110,7 @@ void names() {
     CHECK(n.size() == 1 && n[0] == "song-1.wav"); /* WAV as before */
     CHECK_EQ(edit_record_key("take_009_nodate_p2.opus"), "009_p2");
     CHECK_EQ(peaks_name("take_009_nodate.flac"), "take_009_nodate.peaks");
-    /* phase C gate */
-    CHECK_EQ(playback_refusal("take_009_nodate.flac"), "FLAC playback is not available yet");
-    CHECK_EQ(playback_refusal("/x/take_009_nodate.opus"), "Opus playback is not available yet");
-    CHECK_EQ(playback_refusal("take_009_nodate.wav"), "");
-    CHECK_EQ(playback_refusal(""), "");
+    /* (the phase B playback gate is gone: phase C plays, previews and trims FLAC and Opus takes) */
 }
 
 /* A folder with WAV, FLAC and Opus takes: one list, one numbering. */

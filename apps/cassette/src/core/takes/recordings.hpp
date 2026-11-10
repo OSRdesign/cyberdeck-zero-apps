@@ -52,11 +52,6 @@ struct TakeInfo {
 /* Is this folder entry a take file to list? (".wav", ".flac" or ".opus" in either case, not hidden, not a temp file.) */
 bool is_take_file_name(const std::string &name);
 
-/* Playback of FLAC and Opus takes is phase C. Until then LOAD, PLAY, the list preview, trim and the peak cache refuse
- * such a take with this text ("FLAC playback is not available yet"); empty when the take can be played. The one place
- * phase C removes. */
-std::string playback_refusal(const std::string &take_file_name);
-
 /* Reads one file. Fills damaged instead of failing. */
 TakeInfo read_take_info(FileOps &ops, const std::string &dir, const std::string &name);
 
