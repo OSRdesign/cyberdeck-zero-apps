@@ -412,6 +412,22 @@ ViewModel demo_model(const std::string &scene)
         t.splits = {321154, 365063};
         t.selected_split = trim_mode == "unselected" ? -1 : 1;
     }
+    /* CASSETTE_DEMO_TRIM_IN / _OUT=<ms>: the handles elsewhere; CASSETTE_DEMO_TRIM_SPLITS=<ms,ms,...> the splits,
+     * CASSETTE_DEMO_TRIM_SELECTED=<index, -1 none> the selected one (scenes for the tags above the lines) */
+    if (const char *v = std::getenv("CASSETTE_DEMO_TRIM_IN"); v && *v) t.in_ms = std::atoll(v);
+    if (const char *v = std::getenv("CASSETTE_DEMO_TRIM_OUT"); v && *v) t.out_ms = std::atoll(v);
+    if (const char *v = std::getenv("CASSETTE_DEMO_TRIM_SPLITS"); v && *v) {
+        t.splits.clear();
+        for (const char *c = v; *c;) {
+            char *end = nullptr;
+            const long long ms = std::strtoll(c, &end, 10);
+            if (end == c) break;
+            t.splits.push_back(ms);
+            c = *end == ',' ? end + 1 : end;
+        }
+        t.selected_split = -1;
+    }
+    if (const char *v = std::getenv("CASSETTE_DEMO_TRIM_SELECTED"); v && *v) t.selected_split = std::atoi(v);
     t.window_peaks = demo_window_peaks(t.length_ms, t.marker_ms, t.span_ms, 220);
     t.overview_peaks = demo_overview_peaks(t.length_ms, 110);
     scale_all(t.window_peaks);

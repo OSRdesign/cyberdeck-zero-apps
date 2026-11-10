@@ -55,6 +55,31 @@ float fit_level(float level, float gain);
 /* The chip's text: "TRUE"; FIT with its gain "FIT x8" (rounded to a whole number); FIT without a gain (gain 0) "FIT" */
 std::string wave_chip_text(bool fit, float gain);
 
+/* The IN / OUT tags above the main waveform (screen px). A tag's x: an edge tag (handle outside the window) sits at its
+ * edge, the IN tag at left + inset, the OUT tag right-aligned at right; an inside IN tag starts at its line, an inside OUT
+ * tag ends at its line. Either way the tag is kept within [left, right]. */
+struct TagSpan {
+    int x1 = 0, x2 = 0; /* [x1, x2) */
+    bool overlaps(const TagSpan &o, int gap) const { return x1 < o.x2 + gap && o.x1 < x2 + gap; }
+};
+TagSpan tag_span(WaveEdge edge, bool is_out, int line_x, int w, int left, int right, int inset);
+/* The tags' rows (0 = the top row, each row one tag high below the last): the mode chip (row 0, right corner) owns its
+ * place, a tag that would touch it (within gap) drops a row; the OUT tag also drops below the IN tag when the two would
+ * touch. A tag never goes below max_rows - 1 (the rows that fit in the panel; at least 1). The tags do not avoid the
+ * vertical lines (IN / OUT lines, the play marker, split lines): they are drawn above them (kWaveDrawOrder). */
+struct TagRows {
+    int in = 0, out = 0;
+};
+TagRows tag_rows(const TagSpan &in, const TagSpan &out, const TagSpan &chip, int gap, int max_rows);
+
+/* The order the trim page draws its waveform in, back to front: the tags and the mode chip (opaque, each with an outline
+ * in the panel colour) cover every vertical line, so a line stops short of a tag and never strikes its text; the split
+ * flag boxes come last. */
+enum class WaveLayer { Overview, Bars, HandleLines, SplitLines, PlayMarker, Tags, ModeChip, FlagBoxes, Ruler };
+constexpr WaveLayer kWaveDrawOrder[] = {WaveLayer::Overview,   WaveLayer::Bars, WaveLayer::HandleLines,
+                                        WaveLayer::SplitLines, WaveLayer::PlayMarker, WaveLayer::Tags,
+                                        WaveLayer::ModeChip,   WaveLayer::FlagBoxes, WaveLayer::Ruler};
+
 /* The split flag a tap at x hits: the nearest flag inside the window within slop_px, -1 for none. */
 int flag_at(const WaveWindow &win, const std::vector<std::int64_t> &splits, double x, double slop_px);
 

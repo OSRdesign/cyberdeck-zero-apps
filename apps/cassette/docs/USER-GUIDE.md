@@ -327,7 +327,9 @@ at the edge when they are outside the window); and any number of numbered green 
   below -60 dBFS (practically silence) gets no gain, so noise is not blown up: the chip reads `FIT`. The gain is at
   most x64. Only the drawing changes, never the audio or the saved files. The choice is kept in Settings
   (`wave_fit` in `settings.json`, written only when FIT is on) and every take opens in it. A tag that would touch the
-  chip (an OUT beyond the right edge) moves to the row below it.
+  chip (an OUT beyond the right edge) moves to the row below it; the OUT tag also moves below the IN tag when the two
+  are close. The tags and the chip lie over the lines (IN, OUT, the red marker, the split lines), so no line runs through
+  their text.
 
   ![A quiet take in FIT: the chip reads FIT x8](img/trim-fit.png)
 - **SAVE** (S) opens the save box. Esc goes back to the list and saves nothing.

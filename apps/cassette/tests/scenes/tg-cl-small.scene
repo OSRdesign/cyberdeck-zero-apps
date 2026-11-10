@@ -1,0 +1,21 @@
+title trim page tags above the lines: IN (5:43.0) and OUT (5:45.5) close together around the play marker: the OUT tag drops below the IN tag, both cover the play marker and each other's line; TRUE, then key F: FIT x8
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_PAGE trim
+env CASSETTE_LAYOUT_CHECK 1
+env CASSETTE_DEMO_TRIM_QUIET 0.12
+env CASSETTE_DEMO_TRIM_IN 343000
+env CASSETTE_DEMO_TRIM_OUT 345500
+env CASSETTE_DEMO_TRIM_SPLITS 344600
+env CASSETTE_DEMO_TRIM_SELECTED 0
+
+wait 600
+shot tags-cl-true
+expect text "ZOOM"
+key f
+wait 300
+shot tags-cl-fit
+expect text "SAVE"
+expect notext "LAYOUT FAIL"
+expect noquit

@@ -103,6 +103,34 @@ int flag_at(const WaveWindow &win, const std::vector<std::int64_t> &splits, doub
     return best;
 }
 
+TagSpan tag_span(WaveEdge edge, bool is_out, int line_x, int w, int left, int right, int inset)
+{
+    w = std::max(0, std::min(w, right - left));
+    int x1;
+    switch (edge) {
+    case WaveEdge::Left: x1 = left + inset; break;
+    case WaveEdge::Right: x1 = right - w; break;
+    default: x1 = is_out ? line_x - w : line_x; break;
+    }
+    x1 = std::clamp(x1, left, right - w);
+    return {x1, x1 + w};
+}
+
+TagRows tag_rows(const TagSpan &in, const TagSpan &out, const TagSpan &chip, int gap, int max_rows)
+{
+    const int last = std::max(1, max_rows) - 1;
+    TagRows r;
+    r.in = std::min(last, in.overlaps(chip, gap) ? 1 : 0);
+    r.out = last;
+    for (int row = 0; row <= last; ++row) {
+        if (row == 0 && out.overlaps(chip, gap)) continue;
+        if (row == r.in && out.overlaps(in, gap)) continue;
+        r.out = row;
+        break;
+    }
+    return r;
+}
+
 std::int64_t scrub_marker(const WaveWindow &win, std::int64_t marker_at_start, double dx_px, std::int64_t length_ms)
 {
     const double ms = -dx_px * static_cast<double>(win.span_ms) / win.w;

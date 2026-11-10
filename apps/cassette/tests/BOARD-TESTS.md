@@ -582,8 +582,9 @@ Goal: a quiet take is readable on the trim page, and the chip and the key switch
 2. Tap the chip (or press F on a keyboard). Expected: it reads `FIT x` and a number (more than 1 for a quiet take), the
    bars of the main waveform and of the overview strip grow, the loudest part of the whole take reaches about nine tenths
    of the panel height. ZOOM and scroll: the gain number and the bar scale do not change. Tap again: `TRUE`, low bars.
-3. Set an IN or an OUT beyond the right edge (zoom in): the OUT tag is not hidden behind the chip. Report if any tag or the
-   red marker touches the chip.
+3. Set an IN or an OUT beyond the right edge (zoom in): the OUT tag is not hidden behind the chip. Select a split near the
+   right edge and one near the left edge: its line stops short of the OUT / IN tag, no line runs through a tag's text.
+   Report if any tag or the red marker touches the chip.
 4. Leave FIT on, Esc to the list, open another take, then close Cassette and open it again. Expected: every take opens in
    FIT. Switch back to TRUE before you go on.
 

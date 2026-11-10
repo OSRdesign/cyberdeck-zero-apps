@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  *
  * Cassette UI tests: the waveform geometry (wave_geom.hpp): the window, handles and flags inside or as edge chips, the
- * overview, resampling, the tap on a flag, the scrub and the ruler.
+ * overview, resampling, the tap on a flag, the scrub and the ruler; the IN / OUT tags' place and rows, the draw order.
  */
 #include "check.hpp"
 #include "wave_geom.hpp"
@@ -138,6 +138,93 @@ void fit_rule()
     CHECK_EQ(wave_chip_text(true, 0.0f), std::string("FIT"));
 }
 
+/* the IN / OUT tags at the 480x320 board: the main waveform over [20, 460), the mode chip "FIT x8" at [404, 458), rows
+ * one tag high, a 2 px gap, 3 rows fit in the panel */
+int order_of(WaveLayer l)
+{
+    int i = 0;
+    for (WaveLayer o : kWaveDrawOrder) {
+        if (o == l) return i;
+        ++i;
+    }
+    return -1;
+}
+
+void tags()
+{
+    const int L = 20, R = 460, inset = 4, gap = 2;
+    const TagSpan chip{404, 458};
+    /* OUT at the right edge (its line at 458, inside): the tag ends at its line, under the chip -> row 1 */
+    const TagSpan out_edge = tag_span(WaveEdge::Inside, true, 458, 40, L, R, inset);
+    CHECK_EQ(out_edge.x1, 418);
+    CHECK_EQ(out_edge.x2, 458);
+    const TagSpan in_far = tag_span(WaveEdge::Left, false, 0, 80, L, R, inset);
+    CHECK_EQ(in_far.x1, 24);
+    CHECK_EQ(in_far.x2, 104);
+    TagRows r = tag_rows(in_far, out_edge, chip, gap, 3);
+    CHECK_EQ(r.in, 0);
+    CHECK_EQ(r.out, 1);
+    /* OUT beyond the right edge: right-aligned at the edge, under the chip, inside the panel */
+    const TagSpan out_past = tag_span(WaveEdge::Right, true, 9999, 90, L, R, inset);
+    CHECK_EQ(out_past.x2, R);
+    CHECK_EQ(out_past.x1, R - 90);
+    CHECK_EQ(tag_rows(in_far, out_past, chip, gap, 3).out, 1);
+    /* an OUT just inside the left part of the window: clamped into the panel, never before its left edge */
+    const TagSpan out_left = tag_span(WaveEdge::Inside, true, 30, 40, L, R, inset);
+    CHECK_EQ(out_left.x1, L);
+    CHECK_EQ(out_left.x2, 60);
+    /* IN at the left edge: inside at the window's first px the tag starts at its line; beyond the edge at left + inset */
+    const TagSpan in_first = tag_span(WaveEdge::Inside, false, 20, 30, L, R, inset);
+    CHECK_EQ(in_first.x1, 20);
+    CHECK_EQ(in_first.x2, 50);
+    CHECK_EQ(tag_rows(in_first, out_past, chip, gap, 3).in, 0);
+    /* an IN near the right edge: kept inside the panel (ends at its right edge), touches the chip -> row 1 */
+    const TagSpan in_right = tag_span(WaveEdge::Inside, false, 450, 30, L, R, inset);
+    CHECK_EQ(in_right.x1, 430);
+    CHECK_EQ(in_right.x2, R);
+    /* the play marker near a tag: the rows do not depend on lines (the tag covers the line: drawn above it) */
+    CHECK(order_of(WaveLayer::Tags) > order_of(WaveLayer::PlayMarker));
+    CHECK(order_of(WaveLayer::Tags) > order_of(WaveLayer::HandleLines));
+    CHECK(order_of(WaveLayer::Tags) > order_of(WaveLayer::SplitLines));
+    CHECK(order_of(WaveLayer::Tags) > order_of(WaveLayer::Bars));
+    CHECK(order_of(WaveLayer::ModeChip) > order_of(WaveLayer::PlayMarker));
+    CHECK(order_of(WaveLayer::ModeChip) > order_of(WaveLayer::SplitLines));
+    CHECK(order_of(WaveLayer::FlagBoxes) > order_of(WaveLayer::ModeChip));
+    CHECK(order_of(WaveLayer::FlagBoxes) > order_of(WaveLayer::Tags));
+    CHECK(order_of(WaveLayer::FlagBoxes) > order_of(WaveLayer::PlayMarker));
+    const TagSpan in_mid = tag_span(WaveEdge::Inside, false, 230, 30, L, R, inset); /* the marker at 240 crosses it */
+    r = tag_rows(in_mid, out_past, chip, gap, 3);
+    CHECK_EQ(r.in, 0);
+    CHECK_EQ(r.out, 1);
+    /* IN and OUT close together: the IN tag right of its line, the OUT tag left of its own; they would touch -> OUT drops */
+    const TagSpan in_c = tag_span(WaveEdge::Inside, false, 200, 30, L, R, inset);
+    const TagSpan out_c = tag_span(WaveEdge::Inside, true, 215, 40, L, R, inset);
+    CHECK(in_c.overlaps(out_c, gap));
+    r = tag_rows(in_c, out_c, chip, gap, 3);
+    CHECK_EQ(r.in, 0);
+    CHECK_EQ(r.out, 1);
+    /* ... and do not when apart by more than the gap */
+    const TagSpan out_apart = tag_span(WaveEdge::Inside, true, 273, 40, L, R, inset);
+    CHECK(!in_c.overlaps(out_apart, gap));
+    CHECK_EQ(tag_rows(in_c, out_apart, chip, gap, 3).out, 0);
+    CHECK(in_c.overlaps(tag_span(WaveEdge::Inside, true, 271, 40, L, R, inset), gap)); /* 1 px gap: too close */
+    /* the chip: a tag clear of it stays on row 0; both under it -> IN row 1, OUT row 2; never below the last row */
+    CHECK_EQ(tag_rows(in_c, tag_span(WaveEdge::Inside, true, 400, 40, L, R, inset), chip, gap, 3).out, 0);
+    const TagSpan in_u = tag_span(WaveEdge::Inside, false, 410, 30, L, R, inset);
+    const TagSpan out_u = tag_span(WaveEdge::Inside, true, 450, 40, L, R, inset);
+    r = tag_rows(in_u, out_u, chip, gap, 3);
+    CHECK_EQ(r.in, 1);
+    CHECK_EQ(r.out, 2);
+    r = tag_rows(in_u, out_u, chip, gap, 1);
+    CHECK_EQ(r.in, 0);
+    CHECK_EQ(r.out, 0);
+    CHECK_EQ(tag_rows(in_u, out_u, chip, gap, 0).out, 0);
+    /* a tag wider than the panel is cut to it */
+    const TagSpan wide = tag_span(WaveEdge::Right, true, 0, 1000, L, R, inset);
+    CHECK_EQ(wide.x1, L);
+    CHECK_EQ(wide.x2, R);
+}
+
 } // namespace
 
 void test_wave()
@@ -146,4 +233,5 @@ void test_wave()
     overview_and_bars();
     flags_scrub_ruler();
     fit_rule();
+    tags();
 }

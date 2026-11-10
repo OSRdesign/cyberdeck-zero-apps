@@ -7,7 +7,9 @@
  * IN / OUT ticks, green split lines, the white frame of the part shown below), the main bars of the window around the
  * fixed red marker (bars outside IN..OUT grey), the IN / OUT handles (a chip at the edge when outside the window), the
  * numbered split flags (the selected one solid white with a white-framed number), the marker with its triangle and
- * the time ruler. A sideways drag scrubs (UiActions::trim_scrub), a tap on a flag selects it (trim_select_split);
+ * the time ruler. Back to front (kWaveDrawOrder): the IN / OUT tags and the TRUE / FIT chip lie above every vertical line
+ * (IN / OUT lines, split lines, the marker), each with an outline in the panel colour; the split flag boxes come last. A
+ * sideways drag scrubs (UiActions::trim_scrub), a tap on a flag selects it (trim_select_split);
  * flags and handles are never dragged (note n7).
  */
 #include "pages.hpp"
@@ -226,147 +228,174 @@ void TrimPage::draw_wave(lv_layer_t *layer)
     const bool p = frame_.portrait;
     const std::int64_t len = std::max<std::int64_t>(1, t.length_ms);
 
-    /* ---- overview: the whole take */
     const float gain = t.fit ? t.fit_gain : 0.0f; /* FIT: one gain for the take, for both waveforms */
-    const int ovn = static_cast<int>(over_bars_.size());
-    const int max_ov = over_h_ - px(2);
-    for (int i = 0; i < ovn; ++i) {
-        const double mid_t = (i + 0.5) * len / std::max(1, ovn);
-        const bool kept = mid_t >= t.in_ms && mid_t <= t.out_ms;
-        const int h = std::max(px(3), static_cast<int>(px(3) + fit_level(over_bars_[static_cast<std::size_t>(i)], gain) * (max_ov - px(3))));
-        const int x = over_x_ + static_cast<int>(std::lround(i * pitch_));
-        fill(layer, area(x, over_y_ + (over_h_ - h) / 2, std::max(1, static_cast<int>(std::lround(bar_w_))), h),
-             kept ? col::kAmber : col::kWaveCut, 0, static_cast<lv_opa_t>(kept ? 255 : 140));
-    }
-    const int ow = std::max(1, static_cast<int>(std::lround(ovn * pitch_ - (pitch_ - bar_w_))));
-    auto ox = [&](std::int64_t tt) { return static_cast<int>(std::lround(overview_x(tt, len, over_x_, ow))); };
-    fill(layer, area(ox(t.in_ms), over_y_, px(2), over_h_), col::kChip, 0);
-    fill(layer, area(ox(t.out_ms) - px(2), over_y_, px(2), over_h_), col::kChip, 0);
-    for (std::int64_t sp : t.splits) fill(layer, area(ox(sp), over_y_, px(2), over_h_), col::kFlag, 0);
-    {
-        const std::int64_t a = t.marker_ms - t.span_ms / 2, b = a + t.span_ms;
-        const int x1 = ox(a) - px(2), x2 = std::max(ox(b) + px(2), x1 + px(8));
-        frame(layer, area(x1, over_y_ - px(2), x2 - x1, over_h_ + px(4)), col::kWhite, px(2), px(3));
-    }
-
-    /* ---- main bars: the window around the marker */
     const int mn = static_cast<int>(main_bars_.size());
     const int mw = std::max(1, static_cast<int>(std::lround(mn * pitch_ - (pitch_ - bar_w_))));
     const WaveWindow win = wave_window(t.marker_ms, t.span_ms, main_x_, mw);
-    const int max_m = main_h_ - px(2);
-    for (int i = 0; i < mn; ++i) {
-        const std::int64_t mid_t = win.t_of(main_x_ + (i + 0.5) * pitch_);
-        if (mid_t < 0 || mid_t > len) continue;
-        const bool kept = mid_t >= t.in_ms && mid_t <= t.out_ms;
-        const int h = std::max(px(3), static_cast<int>(px(3) + fit_level(main_bars_[static_cast<std::size_t>(i)], gain) * (max_m - px(3))));
-        const int x = main_x_ + static_cast<int>(std::lround(i * pitch_));
-        fill(layer, area(x, main_y_ + (main_h_ - h) / 2, std::max(1, static_cast<int>(std::lround(bar_w_))), h),
-             kept ? col::kAmber : col::kWaveCut, 0, static_cast<lv_opa_t>(kept ? 255 : 140));
-    }
-
-    const lv_font_t *chip_f = font(Face::Bold, px(11));
-    const int chip_h = px(16), chip_pad = px(6), tri = px(6);
     const int top = main_y_ + px(2), bottom = main_y_ + main_h_ - px(2);
-    /* the mode chip owns the corner: an IN / OUT tag that would touch it drops to the row below (an OUT beyond the right edge
-     * always does) */
+
+    /* the IN / OUT tags (tag_span, tag_rows): placed here, drawn above every vertical line (kWaveDrawOrder) */
+    const lv_font_t *chip_f = font(Face::Bold, px(11));
+    const int chip_h = px(16), chip_pad = px(6), tri = px(6), row_gap = px(2), halo = px(2);
     const lv_area_t mode = mode_chip_area();
-    auto chip = [&](const std::string &label, int x, bool arrow_left, bool arrow_right, bool align_right) {
-        const int tw = text_width(chip_f, label.c_str(), 0);
-        const int w = tw + 2 * chip_pad + (arrow_left || arrow_right ? tri + px(3) : 0);
-        const int cx = align_right ? x - w : x;
-        int ctop = top;
-        if (cx <= mode.x2 + px(2) && cx + w >= mode.x1 - px(2)) ctop = top + chip_h + px(2);
+    struct Tag {
+        std::string label;
+        WaveEdge edge = WaveEdge::Inside;
+        int line_x = 0;
+        TagSpan span;
+    };
+    auto make_tag = [&](std::int64_t at, const char *name, bool is_out) {
+        Tag g;
+        g.edge = wave_edge(win, at);
+        g.line_x = static_cast<int>(std::lround(win.x_of(at)));
+        g.label = g.edge == WaveEdge::Inside ? std::string(name) : std::string(name) + " " + (p ? fmt_short(at) : fmt_tenths(at));
+        const int w = text_width(chip_f, g.label.c_str(), 0) + 2 * chip_pad + (g.edge == WaveEdge::Inside ? 0 : tri + px(3));
+        g.span = tag_span(g.edge, is_out, g.line_x, w, main_x_, main_x_ + mw, px(4));
+        return g;
+    };
+    const Tag in_tag = make_tag(t.in_ms, "IN", false), out_tag = make_tag(t.out_ms, "OUT", true);
+    const TagRows rows = tag_rows(in_tag.span, out_tag.span, TagSpan{mode.x1, mode.x2 + 1}, row_gap,
+                                  (bottom - top + row_gap) / (chip_h + row_gap));
+    auto draw_tag = [&](const Tag &g, int row) {
+        const int cx = g.span.x1, w = g.span.x2 - g.span.x1;
+        const int ctop = top + row * (chip_h + row_gap);
+        /* the outline in the panel colour: a line behind the tag stops short of it */
+        fill(layer, area(cx - halo, ctop - halo, w + 2 * halo, chip_h + 2 * halo), col::kWindow, px(3) + halo);
         fill(layer, area(cx, ctop, w, chip_h), col::kChip, px(3));
+        const int tw = text_width(chip_f, g.label.c_str(), 0);
         int tx = cx + chip_pad;
         const int cy = ctop + chip_h / 2;
-        if (arrow_left) {
+        if (g.edge == WaveEdge::Left) {
             triangle(layer, tx + tri, cy - tri / 2 - 1, tx, cy, tx + tri, cy + tri / 2 + 1, col::kChipText);
             tx += tri + px(3);
         }
         const int lh = lv_font_get_line_height(chip_f);
-        text(layer, chip_f, label.c_str(), area(tx, cy - lh / 2, tw + 2, lh), col::kChipText);
-        if (arrow_right) {
+        text(layer, chip_f, g.label.c_str(), area(tx, cy - lh / 2, tw + 2, lh), col::kChipText);
+        if (g.edge == WaveEdge::Right) {
             const int ax = tx + tw + px(3);
             triangle(layer, ax, cy - tri / 2 - 1, ax + tri, cy, ax, cy + tri / 2 + 1, col::kChipText);
         }
     };
-    auto handle = [&](std::int64_t at, const char *name) {
-        const std::string tm = p ? fmt_short(at) : fmt_tenths(at);
-        switch (wave_edge(win, at)) {
-        case WaveEdge::Left: chip(std::string(name) + " " + tm, main_x_ + px(4), true, false, false); break;
-        case WaveEdge::Right: chip(std::string(name) + " " + tm, main_x_ + mw, false, true, true); break;
-        case WaveEdge::Inside: {
-            const int x = static_cast<int>(std::lround(win.x_of(at)));
-            fill(layer, area(x - px(1), top, px(2), bottom - top), col::kChip, 0);
-            chip(name, x, false, false, std::string(name) == "OUT");
+
+    for (WaveLayer l : kWaveDrawOrder) {
+        switch (l) {
+        case WaveLayer::Overview: {
+            /* the whole take */
+            const int ovn = static_cast<int>(over_bars_.size());
+            const int max_ov = over_h_ - px(2);
+            for (int i = 0; i < ovn; ++i) {
+                const double mid_t = (i + 0.5) * len / std::max(1, ovn);
+                const bool kept = mid_t >= t.in_ms && mid_t <= t.out_ms;
+                const int h = std::max(px(3), static_cast<int>(px(3) + fit_level(over_bars_[static_cast<std::size_t>(i)], gain) * (max_ov - px(3))));
+                const int x = over_x_ + static_cast<int>(std::lround(i * pitch_));
+                fill(layer, area(x, over_y_ + (over_h_ - h) / 2, std::max(1, static_cast<int>(std::lround(bar_w_))), h),
+                     kept ? col::kAmber : col::kWaveCut, 0, static_cast<lv_opa_t>(kept ? 255 : 140));
+            }
+            const int ow = std::max(1, static_cast<int>(std::lround(ovn * pitch_ - (pitch_ - bar_w_))));
+            auto ox = [&](std::int64_t tt) { return static_cast<int>(std::lround(overview_x(tt, len, over_x_, ow))); };
+            fill(layer, area(ox(t.in_ms), over_y_, px(2), over_h_), col::kChip, 0);
+            fill(layer, area(ox(t.out_ms) - px(2), over_y_, px(2), over_h_), col::kChip, 0);
+            for (std::int64_t sp : t.splits) fill(layer, area(ox(sp), over_y_, px(2), over_h_), col::kFlag, 0);
+            const std::int64_t a = t.marker_ms - t.span_ms / 2, b = a + t.span_ms;
+            const int x1 = ox(a) - px(2), x2 = std::max(ox(b) + px(2), x1 + px(8));
+            frame(layer, area(x1, over_y_ - px(2), x2 - x1, over_h_ + px(4)), col::kWhite, px(2), px(3));
+            break;
+        }
+        case WaveLayer::Bars: {
+            /* the window around the marker */
+            const int max_m = main_h_ - px(2);
+            for (int i = 0; i < mn; ++i) {
+                const std::int64_t mid_t = win.t_of(main_x_ + (i + 0.5) * pitch_);
+                if (mid_t < 0 || mid_t > len) continue;
+                const bool kept = mid_t >= t.in_ms && mid_t <= t.out_ms;
+                const int h = std::max(px(3), static_cast<int>(px(3) + fit_level(main_bars_[static_cast<std::size_t>(i)], gain) * (max_m - px(3))));
+                const int x = main_x_ + static_cast<int>(std::lround(i * pitch_));
+                fill(layer, area(x, main_y_ + (main_h_ - h) / 2, std::max(1, static_cast<int>(std::lround(bar_w_))), h),
+                     kept ? col::kAmber : col::kWaveCut, 0, static_cast<lv_opa_t>(kept ? 255 : 140));
+            }
+            break;
+        }
+        case WaveLayer::HandleLines:
+            for (const Tag *g : {&in_tag, &out_tag})
+                if (g->edge == WaveEdge::Inside) fill(layer, area(g->line_x - px(1), top, px(2), bottom - top), col::kChip, 0);
+            break;
+        case WaveLayer::SplitLines:
+            for (std::size_t i = 0; i < t.splits.size(); ++i) {
+                if (wave_edge(win, t.splits[i]) != WaveEdge::Inside) continue;
+                const int x = static_cast<int>(std::lround(win.x_of(t.splits[i])));
+                if (static_cast<int>(i) == t.selected_split) fill(layer, area(x, top, px(3), bottom - top), col::kWhite, 0);
+                else line(layer, x + px(1), top, x + px(1), bottom, px(2), col::kFlag, LV_OPA_COVER, false, px(4), px(4));
+            }
+            break;
+        case WaveLayer::PlayMarker: {
+            /* fixed in the middle */
+            const int mx = main_x_ + mw / 2;
+            fill(layer, area(mx, main_y_, px(2), main_h_), col::kMarker, 0);
+            triangle(layer, mx - px(4), main_y_ - px(2), mx + px(6), main_y_ - px(2), mx + px(1), main_y_ + px(5), col::kMarker);
+            break;
+        }
+        case WaveLayer::Tags:
+            draw_tag(in_tag, rows.in);
+            draw_tag(out_tag, rows.out);
+            break;
+        case WaveLayer::ModeChip: {
+            /* outlined (the tags are solid), TRUE or FIT xN; a tap toggles */
+            const std::string label = wave_chip_text(t.fit, t.fit_gain);
+            fill(layer, area(mode.x1 - halo, mode.y1 - halo, mode.x2 - mode.x1 + 1 + 2 * halo, mode.y2 - mode.y1 + 1 + 2 * halo),
+                 col::kWindow, px(3) + halo);
+            frame(layer, mode, col::kChip, std::max(1, px(1)), px(3));
+            const int lh = lv_font_get_line_height(chip_f);
+            text(layer, chip_f, label.c_str(), area(mode.x1, mode.y1 + (px(16) - lh) / 2, mode.x2 - mode.x1 + 1, lh), col::kChip,
+                 LV_TEXT_ALIGN_CENTER);
+            break;
+        }
+        case WaveLayer::FlagBoxes:
+            for (std::size_t i = 0; i < t.splits.size(); ++i) {
+                if (wave_edge(win, t.splits[i]) != WaveEdge::Inside) continue;
+                const int x = static_cast<int>(std::lround(win.x_of(t.splits[i])));
+                const std::string num = std::to_string(i + 1);
+                if (static_cast<int>(i) == t.selected_split) {
+                    const int w = px(22), h = px(18);
+                    lv_draw_rect_dsc_t d;
+                    lv_draw_rect_dsc_init(&d);
+                    d.radius = px(4);
+                    d.bg_color = lv_color_hex(col::kFlag);
+                    d.border_color = lv_color_hex(col::kWhite);
+                    d.border_width = px(2);
+                    const lv_area_t a = area(x - px(10), bottom - h, w, h);
+                    lv_draw_rect(layer, &d, &a);
+                    const lv_font_t *f = font(Face::Bold, px(12));
+                    const int lh = lv_font_get_line_height(f);
+                    text(layer, f, num.c_str(), area(a.x1, a.y1 + (h - lh) / 2, w, lh), col::kFlagText, LV_TEXT_ALIGN_CENTER);
+                } else {
+                    const int w = px(18), h = px(16);
+                    const lv_area_t a = area(x - px(8), bottom - h, w, h);
+                    fill(layer, a, col::kFlag, px(3));
+                    const lv_font_t *f = font(Face::Bold, px(11));
+                    const int lh = lv_font_get_line_height(f);
+                    text(layer, f, num.c_str(), area(a.x1, a.y1 + (h - lh) / 2, w, lh), col::kFlagText, LV_TEXT_ALIGN_CENTER);
+                }
+            }
+            break;
+        case WaveLayer::Ruler: {
+            /* the time ruler */
+            const lv_font_t *rf = font(Face::Medium, px(9));
+            const int rlh = lv_font_get_line_height(rf);
+            const std::vector<RulerTick> ticks = ruler_ticks(win, 5);
+            for (std::size_t i = 0; i < ticks.size(); ++i) {
+                const int x = static_cast<int>(std::lround(ticks[i].x)) - (i + 1 == ticks.size() ? 0 : 0);
+                fill(layer, area(std::min(x, main_x_ + mw - 1), ruler_y_, 1, px(4)), col::kWaveCut, 0);
+                if (ticks[i].t < 0 || ticks[i].t > len) continue;
+                const std::string lab = fmt_ruler(ticks[i].t);
+                const int w = px(28);
+                const int ty = ruler_y_ + px(5) + (px(10) - rlh) / 2;
+                if (i == 0) text(layer, rf, lab.c_str(), area(x, ty, w * 2, rlh), col::kRuler, LV_TEXT_ALIGN_LEFT);
+                else if (i + 1 == ticks.size()) text(layer, rf, lab.c_str(), area(x - 2 * w, ty, 2 * w, rlh), col::kRuler, LV_TEXT_ALIGN_RIGHT);
+                else text(layer, rf, lab.c_str(), area(x - w, ty, 2 * w, rlh), col::kRuler, LV_TEXT_ALIGN_CENTER);
+            }
             break;
         }
         }
-    };
-    handle(t.in_ms, "IN");
-    handle(t.out_ms, "OUT");
-    {
-        /* the mode chip: outlined (the tags are solid), TRUE or FIT xN; a tap toggles */
-        const std::string label = wave_chip_text(t.fit, t.fit_gain);
-        fill(layer, mode, col::kWindow, px(3));
-        frame(layer, mode, col::kChip, std::max(1, px(1)), px(3));
-        const int lh = lv_font_get_line_height(chip_f);
-        text(layer, chip_f, label.c_str(), area(mode.x1, mode.y1 + (px(16) - lh) / 2, mode.x2 - mode.x1 + 1, lh), col::kChip,
-             LV_TEXT_ALIGN_CENTER);
-    }
-
-    /* split flags */
-    for (std::size_t i = 0; i < t.splits.size(); ++i) {
-        if (wave_edge(win, t.splits[i]) != WaveEdge::Inside) continue;
-        const int x = static_cast<int>(std::lround(win.x_of(t.splits[i])));
-        const bool sel = static_cast<int>(i) == t.selected_split;
-        const std::string num = std::to_string(i + 1);
-        if (sel) {
-            fill(layer, area(x, top, px(3), bottom - top), col::kWhite, 0);
-            const int w = px(22), h = px(18);
-            lv_draw_rect_dsc_t d;
-            lv_draw_rect_dsc_init(&d);
-            d.radius = px(4);
-            d.bg_color = lv_color_hex(col::kFlag);
-            d.border_color = lv_color_hex(col::kWhite);
-            d.border_width = px(2);
-            const lv_area_t a = area(x - px(10), bottom - h, w, h);
-            lv_draw_rect(layer, &d, &a);
-            const lv_font_t *f = font(Face::Bold, px(12));
-            const int lh = lv_font_get_line_height(f);
-            text(layer, f, num.c_str(), area(a.x1, a.y1 + (h - lh) / 2, w, lh), col::kFlagText, LV_TEXT_ALIGN_CENTER);
-        } else {
-            line(layer, x + px(1), top, x + px(1), bottom, px(2), col::kFlag, LV_OPA_COVER, false, px(4), px(4));
-            const int w = px(18), h = px(16);
-            const lv_area_t a = area(x - px(8), bottom - h, w, h);
-            fill(layer, a, col::kFlag, px(3));
-            const lv_font_t *f = font(Face::Bold, px(11));
-            const int lh = lv_font_get_line_height(f);
-            text(layer, f, num.c_str(), area(a.x1, a.y1 + (h - lh) / 2, w, lh), col::kFlagText, LV_TEXT_ALIGN_CENTER);
-        }
-    }
-
-    /* the marker: fixed in the middle */
-    {
-        const int mx = main_x_ + mw / 2;
-        fill(layer, area(mx, main_y_, px(2), main_h_), col::kMarker, 0);
-        triangle(layer, mx - px(4), main_y_ - px(2), mx + px(6), main_y_ - px(2), mx + px(1), main_y_ + px(5), col::kMarker);
-    }
-
-    /* the time ruler */
-    const lv_font_t *rf = font(Face::Medium, px(9));
-    const int rlh = lv_font_get_line_height(rf);
-    const std::vector<RulerTick> ticks = ruler_ticks(win, 5);
-    for (std::size_t i = 0; i < ticks.size(); ++i) {
-        const int x = static_cast<int>(std::lround(ticks[i].x)) - (i + 1 == ticks.size() ? 0 : 0);
-        fill(layer, area(std::min(x, main_x_ + mw - 1), ruler_y_, 1, px(4)), col::kWaveCut, 0);
-        if (ticks[i].t < 0 || ticks[i].t > len) continue;
-        const std::string lab = fmt_ruler(ticks[i].t);
-        const int w = px(28);
-        const int ty = ruler_y_ + px(5) + (px(10) - rlh) / 2;
-        if (i == 0) text(layer, rf, lab.c_str(), area(x, ty, w * 2, rlh), col::kRuler, LV_TEXT_ALIGN_LEFT);
-        else if (i + 1 == ticks.size()) text(layer, rf, lab.c_str(), area(x - 2 * w, ty, 2 * w, rlh), col::kRuler, LV_TEXT_ALIGN_RIGHT);
-        else text(layer, rf, lab.c_str(), area(x - w, ty, 2 * w, rlh), col::kRuler, LV_TEXT_ALIGN_CENTER);
     }
 }
 
