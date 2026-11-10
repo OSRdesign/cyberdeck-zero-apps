@@ -99,6 +99,9 @@ int SettingsStore::load() {
         else if (str == "flac") s_.format = RecFormat::Flac;
         else if (str == "opus") s_.format = RecFormat::Opus;
     }
+    if (get_str(root, "format_preset", str) && str.size() <= 32 &&
+        str.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789-") == std::string::npos)
+        s_.format_preset = str;
     if (get_str(root, "folder", str) && valid_folder(str)) s_.folder = str;
     if (get_str(root, "prefix", str) && valid_prefix(str)) s_.prefix = str;
     if (get_num(root, "sync_interval_s", d)) s_.sync_interval_s = static_cast<int>(std::lround(clampd(d, -1e6, 1e6)));
@@ -140,6 +143,8 @@ int SettingsStore::save() {
     json::Value root = raw_.is_obj() ? raw_ : json::Value::object();
     root.set("version", json::Value::number(1));
     root.set("format", json::Value::string(format_key(s_.format)));
+    if (s_.format_preset.empty()) root.erase("format_preset"); /* absent = the format's default (older files) */
+    else root.set("format_preset", json::Value::string(s_.format_preset));
     root.set("folder", json::Value::string(s_.folder));
     root.set("prefix", json::Value::string(s_.prefix));
     root.set("sync_interval_s", json::Value::number(s_.sync_interval_s));

@@ -42,6 +42,7 @@ extern const int kRecordTimerChoices[4];                       /* 0 (Off), 3, 10
 
 struct Settings {
     RecFormat format = RecFormat::Wav;
+    std::string format_preset; /* "format_preset": a preset of the format (codec/formats.hpp), "" = its default */
     std::string folder = "~/Recordings";
     std::string prefix = "take";
     int sync_interval_s = kSyncDefault;

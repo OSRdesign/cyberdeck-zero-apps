@@ -198,6 +198,23 @@ It writes no file and changes no setting; `--no-open` only lists.
 - Not yet measured on a board: the animation cost on a Pi Zero 2 W and the behaviour of every card (board tests,
   [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md)).
 
+## Formats
+
+WAV (Broadcast Wave) is the format of 0.1 and stays the default. FLAC (lossless) and Ogg Opus (small) are being added:
+the core layer is in `src/core/codec/` (tested in `tests/codec/`), the recorder does not use it yet. When it does, the
+Format row lists every format the selected card allows, each with an estimated size per minute:
+
+| Format | Size per minute at 48 kHz mono 16-bit | Needs |
+|---|---|---|
+| WAV | 5.76 MB (exact) | nothing |
+| FLAC, level 5 | about 1.7 MB (speech; 27-41 % of WAV measured, music about half) | `libflac14` (or `libflac12t64`) |
+| Opus 24 / 32 kbps, speech | 0.18 / 0.24 MB | `libopusenc0`, a card at 8, 12, 16, 24 or 48 kHz |
+| Opus 64 / 128 kbps, music | 0.48 / 0.97 MB | `libopusenc0`, a card at 8, 12, 16, 24 or 48 kHz |
+
+The libraries are opened at run time: without them the app records WAV and the other rows say which package is
+missing. Opus is not offered on a 44.1 kHz-only card (no resampling in 0.1). Metadata goes into Vorbis comments. Design,
+measurements and the next steps: [`docs/FORMATS.md`](docs/FORMATS.md).
+
 ## Privacy
 
 The recordings are private: the app has no network code, sends nothing anywhere and keeps the takes in the folder you
