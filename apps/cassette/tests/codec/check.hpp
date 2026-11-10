@@ -49,3 +49,5 @@ void test_opus();
 void test_formats();
 void test_real();
 void test_writer_real();
+void test_decoders();
+void test_decoders_real();

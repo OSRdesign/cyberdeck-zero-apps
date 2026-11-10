@@ -5,13 +5,16 @@
  * function tables of codec_libs.hpp; the app opens the libraries at run time and includes no codec header) matches the
  * real headers. Built by tests/codec/run.sh with -I<include root> -I<include root>/opus for every header set it finds
  * (FLAC 1.4.3 and 1.5.0, libopus 1.4 / 1.5.2, libopusenc 0.2.1 / 0.3 were checked); a mismatch does not compile.
- * Checked: every constant, the two structures Cassette touches (VorbisComment_Entry, the head of StreamMetadata), and the
- * shape of every function and callback (number of parameters, and per parameter: a pointer for a pointer, an integer or
- * enum of the same size for an integer or enum, a structure of the same size and alignment for a structure).
+ * Checked: every constant, the structures Cassette touches (VorbisComment_Entry, the head of StreamMetadata, the
+ * FrameHeader the decoder's write callback reads), and the shape of every function and callback (number of parameters,
+ * and per parameter: a pointer for a pointer, an integer or enum of the same size for an integer or enum, a structure of
+ * the same size and alignment for a structure). Phase C adds libFLAC's stream decoder and libopus' decoder.
  */
 #include <FLAC/format.h>
 #include <FLAC/metadata.h>
+#include <FLAC/stream_decoder.h>
 #include <FLAC/stream_encoder.h>
+#include <opus/opus.h>
 #include <opus/opusenc.h>
 
 #include "codec_libs.hpp"
@@ -23,7 +26,10 @@
 
 namespace f = cassette::flac;
 namespace o = cassette::ope;
+namespace od = cassette::opus;
+using cassette::FlacDecLib;
 using cassette::FlacLib;
+using cassette::OpusDecLib;
 using cassette::OpusEncLib;
 
 /* ------------------------------------------------------------------ shapes */
@@ -72,6 +78,8 @@ template <typename Real, typename Ours> constexpr bool same_shape() {
 
 #define SHAPE(real, ours) static_assert(same_shape<decltype(&real), decltype(FlacLib::ours)>(), #real)
 #define OSHAPE(real, ours) static_assert(same_shape<decltype(&real), decltype(OpusEncLib::ours)>(), #real)
+#define DSHAPE(real, ours) static_assert(same_shape<decltype(&real), decltype(FlacDecLib::ours)>(), #real)
+#define PSHAPE(real, ours) static_assert(same_shape<decltype(&real), decltype(OpusDecLib::ours)>(), #real)
 
 /* ------------------------------------------------------------------ libFLAC */
 
@@ -147,6 +155,85 @@ SHAPE(FLAC__metadata_object_new, metadata_new);
 SHAPE(FLAC__metadata_object_delete, metadata_delete);
 SHAPE(FLAC__metadata_object_vorbiscomment_entry_from_name_value_pair, vc_entry_from_pair);
 SHAPE(FLAC__metadata_object_vorbiscomment_append_comment, vc_append_comment);
+
+/* ------------------------------------------------------------------ libFLAC's stream decoder (phase C) */
+
+static_assert(sizeof(FLAC__StreamDecoderState) == sizeof(int) && sizeof(FLAC__FrameNumberType) == sizeof(int) &&
+                  sizeof(FLAC__ChannelAssignment) == sizeof(int),
+              "decoder enum sizes");
+static_assert(f::kDecSearchForMetadata == FLAC__STREAM_DECODER_SEARCH_FOR_METADATA &&
+                  f::kDecReadMetadata == FLAC__STREAM_DECODER_READ_METADATA &&
+                  f::kDecSearchForFrameSync == FLAC__STREAM_DECODER_SEARCH_FOR_FRAME_SYNC &&
+                  f::kDecReadFrame == FLAC__STREAM_DECODER_READ_FRAME &&
+                  f::kDecEndOfStream == FLAC__STREAM_DECODER_END_OF_STREAM &&
+                  f::kDecOggError == FLAC__STREAM_DECODER_OGG_ERROR && f::kDecSeekError == FLAC__STREAM_DECODER_SEEK_ERROR &&
+                  f::kDecAborted == FLAC__STREAM_DECODER_ABORTED &&
+                  f::kDecMemoryError == FLAC__STREAM_DECODER_MEMORY_ALLOCATION_ERROR &&
+                  f::kDecUninitialized == FLAC__STREAM_DECODER_UNINITIALIZED,
+              "FLAC__StreamDecoderState");
+static_assert(f::kDecInitOk == FLAC__STREAM_DECODER_INIT_STATUS_OK, "FLAC__StreamDecoderInitStatus");
+static_assert(f::kReadContinue == FLAC__STREAM_DECODER_READ_STATUS_CONTINUE &&
+                  f::kReadEndOfStream == FLAC__STREAM_DECODER_READ_STATUS_END_OF_STREAM &&
+                  f::kReadAbort == FLAC__STREAM_DECODER_READ_STATUS_ABORT &&
+                  f::kDecSeekStatusOk == FLAC__STREAM_DECODER_SEEK_STATUS_OK &&
+                  f::kDecSeekStatusError == FLAC__STREAM_DECODER_SEEK_STATUS_ERROR &&
+                  f::kDecSeekStatusUnsupported == FLAC__STREAM_DECODER_SEEK_STATUS_UNSUPPORTED &&
+                  f::kDecTellOk == FLAC__STREAM_DECODER_TELL_STATUS_OK &&
+                  f::kDecTellError == FLAC__STREAM_DECODER_TELL_STATUS_ERROR &&
+                  f::kDecTellUnsupported == FLAC__STREAM_DECODER_TELL_STATUS_UNSUPPORTED &&
+                  f::kLengthOk == FLAC__STREAM_DECODER_LENGTH_STATUS_OK &&
+                  f::kLengthError == FLAC__STREAM_DECODER_LENGTH_STATUS_ERROR &&
+                  f::kLengthUnsupported == FLAC__STREAM_DECODER_LENGTH_STATUS_UNSUPPORTED &&
+                  f::kWriteContinue == FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE &&
+                  f::kWriteAbort == FLAC__STREAM_DECODER_WRITE_STATUS_ABORT,
+              "decoder callback statuses");
+static_assert(f::kFrameNumberTypeFrame == FLAC__FRAME_NUMBER_TYPE_FRAME_NUMBER &&
+                  f::kFrameNumberTypeSample == FLAC__FRAME_NUMBER_TYPE_SAMPLE_NUMBER,
+              "FLAC__FrameNumberType");
+static_assert(sizeof(f::FrameHeader) == sizeof(FLAC__FrameHeader) && alignof(f::FrameHeader) == alignof(FLAC__FrameHeader),
+              "FrameHeader size");
+static_assert(offsetof(f::FrameHeader, blocksize) == offsetof(FLAC__FrameHeader, blocksize) &&
+                  offsetof(f::FrameHeader, sample_rate) == offsetof(FLAC__FrameHeader, sample_rate) &&
+                  offsetof(f::FrameHeader, channels) == offsetof(FLAC__FrameHeader, channels) &&
+                  offsetof(f::FrameHeader, channel_assignment) == offsetof(FLAC__FrameHeader, channel_assignment) &&
+                  offsetof(f::FrameHeader, bits_per_sample) == offsetof(FLAC__FrameHeader, bits_per_sample) &&
+                  offsetof(f::FrameHeader, number_type) == offsetof(FLAC__FrameHeader, number_type) &&
+                  offsetof(f::FrameHeader, number) == offsetof(FLAC__FrameHeader, number) &&
+                  offsetof(f::FrameHeader, crc) == offsetof(FLAC__FrameHeader, crc),
+              "FrameHeader fields");
+static_assert(offsetof(FLAC__Frame, header) == 0, "the header comes first in FLAC__Frame");
+
+static_assert(same_shape<FLAC__StreamDecoderReadCallback, f::ReadCb>(), "decoder read callback");
+static_assert(same_shape<FLAC__StreamDecoderSeekCallback, f::DecSeekCb>(), "decoder seek callback");
+static_assert(same_shape<FLAC__StreamDecoderTellCallback, f::DecTellCb>(), "decoder tell callback");
+static_assert(same_shape<FLAC__StreamDecoderLengthCallback, f::LengthCb>(), "decoder length callback");
+static_assert(same_shape<FLAC__StreamDecoderEofCallback, f::EofCb>(), "decoder eof callback");
+static_assert(same_shape<FLAC__StreamDecoderWriteCallback, f::DecWriteCb>(), "decoder write callback");
+static_assert(same_shape<FLAC__StreamDecoderMetadataCallback, f::DecMetadataCb>(), "decoder metadata callback");
+static_assert(same_shape<FLAC__StreamDecoderErrorCallback, f::ErrorCb>(), "decoder error callback");
+
+DSHAPE(FLAC__stream_decoder_new, decoder_new);
+DSHAPE(FLAC__stream_decoder_delete, decoder_delete);
+DSHAPE(FLAC__stream_decoder_set_md5_checking, set_md5_checking);
+DSHAPE(FLAC__stream_decoder_init_stream, init_stream);
+DSHAPE(FLAC__stream_decoder_process_single, process_single);
+DSHAPE(FLAC__stream_decoder_process_until_end_of_metadata, process_until_end_of_metadata);
+DSHAPE(FLAC__stream_decoder_seek_absolute, seek_absolute);
+DSHAPE(FLAC__stream_decoder_flush, flush);
+DSHAPE(FLAC__stream_decoder_get_state, get_state);
+DSHAPE(FLAC__stream_decoder_finish, finish);
+
+/* ------------------------------------------------------------------ libopus' decoder (phase C) */
+
+static_assert(od::kOk == OPUS_OK && od::kBadArg == OPUS_BAD_ARG && od::kBufferTooSmall == OPUS_BUFFER_TOO_SMALL &&
+                  od::kInternalError == OPUS_INTERNAL_ERROR && od::kInvalidPacket == OPUS_INVALID_PACKET &&
+                  od::kResetState == OPUS_RESET_STATE && od::kSetGainRequest == OPUS_SET_GAIN_REQUEST,
+              "libopus decoder constants");
+PSHAPE(opus_decoder_create, decoder_create);
+PSHAPE(opus_decoder_destroy, decoder_destroy);
+PSHAPE(opus_decode, decode);
+PSHAPE(opus_decoder_ctl, decoder_ctl);
+PSHAPE(opus_strerror, strerror);
 
 /* ------------------------------------------------------------------ libopusenc / libopus */
 

@@ -152,10 +152,12 @@ name pattern).
   number has at least 3 digits (`007`) and grows past 999 (`1000`); the counter is the file `.take-counter` in the folder. The date reads `nodate`
   until the clock has been set (the boards have no clock that runs while they are off: a wrong date in a name is worse
   than none). A trim or a split is named after its source plus the next free number (`take_006_20261108-1105-1.wav`,
-  `-2.wav`, ...); a trim saved with REPLACE ORIGINAL keeps the original's name.
+  `-2.wav`, ...; a FLAC or Opus take's results keep `.flac` / `.opus`); a trim saved with REPLACE ORIGINAL keeps the
+  original's name.
 - `~/Recordings/.journal/<take>.json`: one small journal per take, open while it records (see below).
-- `~/Recordings/<take>.wav.peaks`: the waveform overview of a take, built once when the trim page first opens it and
-  checked against the take's size and time on every use.
+- `~/Recordings/<take>.wav.peaks` (`.flac.peaks`, `.opus.peaks`): the waveform overview of a take, built once when the
+  trim page first opens it (a FLAC or Opus take is decoded for it, with a progress bar) and checked against the take's
+  size and time on every use.
 - `~/.config/cassette/settings.json`: the settings, and per card its level, auto gain and mute, re-applied at every
   start (the card's mixer resets at every reboot). Written atomically. Delete it to reset.
 
@@ -199,11 +201,12 @@ It writes no file and changes no setting; `--no-open` only lists.
 
 ## Known limits
 
-- The Format row can choose FLAC and Ogg Opus (see Formats below), but the app cannot play, preview or trim those
-  takes yet: those refuse with a notice.
+- FLAC and Ogg Opus takes need their decoder library to play, preview, scan and trim (see Formats below): a take
+  whose library is missing is refused with a notice.
 - No background recording (plan 016, D10): the app owns the screen while it records, and leaving it stops the take
   safely. `X-Background` is not set; this is revisited when multitasking is switched on.
-- Playback plays the app's own takes (WAV) through the card's playback side when it has one, else the default device.
+- Playback plays the app's own takes (WAV, FLAC, Ogg Opus) through the card's playback side when it has one, else the
+  default device.
 - The record timer makes no sound.
 - Not yet measured on a board: the animation cost on a Pi Zero 2 W and the behaviour of every card (board tests,
   [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md)).
@@ -215,23 +218,26 @@ The recorder writes them, crash-safe like WAV (a take cut by a power loss is rep
 choice in Settings > Format (stored in `~/.config/cassette/settings.json` as `"format": "flac"` or `"format": "opus"`
 with `"format_preset"`: `speech24`, `speech32`, `music64` or `music128`) is one the card and the libraries allow;
 otherwise it records WAV. Takes are named `.flac` / `.opus`, the list shows WAV, FLAC or OPUS in each row, and the take
-numbers run on across formats. Playing and trimming them in the app comes next. Settings > Format lists every format,
-in this order, each with an estimated size per minute at the selected card's capture format (the footer of the page
-says which: "Sizes at 48 kHz mono 16-bit, this card"; without a sound input there are no sizes), the model's one-line
-description and how many hours fit in the recordings folder's free space; the choice cannot be changed while a take
-records. Sizes read like this:
+numbers run on across formats. They load, play, preview, scan at 5x both ways, jump 5 s, show their waveform on the
+trim page and are trimmed and split like WAV takes; the results keep the take's format (FLAC: decoded and encoded
+again, lossless and exact to the sample; Opus: the packets are copied, no second round of lossy coding, exact to the
+sample). Settings > Format lists every format, in this order, each with an estimated size per minute at the selected
+card's capture format (the footer of the page says which: "Sizes at 48 kHz mono 16-bit, this card"; without a sound
+input there are no sizes), the model's one-line description and how many hours fit in the recordings folder's free
+space; the choice cannot be changed while a take records. Sizes read like this:
 
-| Format | Size per minute at 48 kHz mono 16-bit | Needs |
-|---|---|---|
-| WAV | 5.76 MB (exact) | nothing |
-| FLAC, level 5 | about 1.7 MB (speech; 27-41 % of WAV measured, music about half) | `libflac14` (or `libflac12t64`) |
-| Opus 24 / 32 kbps, speech | 0.18 / 0.24 MB | `libopusenc0`, a card at 8, 12, 16, 24 or 48 kHz |
-| Opus 64 / 128 kbps, music | 0.48 / 0.97 MB | `libopusenc0`, a card at 8, 12, 16, 24 or 48 kHz |
+| Format | Size per minute at 48 kHz mono 16-bit | Records with | Plays and trims with |
+|---|---|---|---|
+| WAV | 5.76 MB (exact) | nothing | nothing |
+| FLAC, level 5 | about 1.7 MB (speech; 27-41 % of WAV measured, music about half) | `libflac14` (or `libflac12t64`) | the same |
+| Opus 24 / 32 kbps, speech | 0.18 / 0.24 MB | `libopusenc0` (pulls `libopus0`), a card at 8, 12, 16, 24 or 48 kHz | `libopus0` (trim: nothing) |
+| Opus 64 / 128 kbps, music | 0.48 / 0.97 MB | `libopusenc0` (pulls `libopus0`), a card at 8, 12, 16, 24 or 48 kHz | `libopus0` (trim: nothing) |
 
-The libraries are opened at run time: without them the app records WAV and the other rows say which package is
-missing. Opus is not offered on a 44.1 kHz-only card (no resampling in 0.1). Metadata goes into Vorbis comments (the
-take name, the date when the clock is set). Design, measurements, the status and the next steps:
-[`docs/FORMATS.md`](docs/FORMATS.md).
+The libraries are opened at run time: without them the app records and plays WAV, the other rows say which package is
+missing, and a FLAC / Opus take whose library is missing is refused with a notice (`This take cannot be played: FLAC
+not installed (libflac14)`). Opus is not offered on a 44.1 kHz-only card (no resampling in 0.1). Metadata goes into
+Vorbis comments (the take name, the date when the clock is set); trim and split copy them. Design, measurements, the
+status and the next steps: [`docs/FORMATS.md`](docs/FORMATS.md).
 
 ## Privacy
 

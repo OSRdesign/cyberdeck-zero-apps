@@ -58,7 +58,62 @@ using SeekCb = int (*)(const Encoder *, uint64_t absolute_byte_offset, void *cli
 using TellCb = int (*)(const Encoder *, uint64_t *absolute_byte_offset, void *client);
 using MetadataCb = void (*)(const Encoder *, const Metadata *, void *client);
 
+/* ---- the stream DECODER (phase C: playback, peaks and trim of FLAC takes). The values below are the same in FLAC 1.4
+ * and 1.5; 1.5 only appended values (END_OF_LINK for chained Ogg FLAC, two error statuses) that native FLAC never gives. */
+struct Decoder; /* FLAC__StreamDecoder (opaque) */
+
+/* FLAC__FrameHeader, the first member of the FLAC__Frame the write callback gets (only the header is read). */
+struct FrameHeader {
+    uint32_t blocksize;
+    uint32_t sample_rate;
+    uint32_t channels;
+    int channel_assignment; /* FLAC__ChannelAssignment */
+    uint32_t bits_per_sample;
+    int number_type;        /* FLAC__FrameNumberType: 0 frame number, 1 sample number */
+    union {
+        uint32_t frame_number;
+        uint64_t sample_number;
+    } number;
+    uint8_t crc;
+};
+constexpr int kFrameNumberTypeFrame = 0, kFrameNumberTypeSample = 1;
+
+/* FLAC__StreamDecoderState */
+constexpr int kDecSearchForMetadata = 0, kDecReadMetadata = 1, kDecSearchForFrameSync = 2, kDecReadFrame = 3,
+              kDecEndOfStream = 4, kDecOggError = 5, kDecSeekError = 6, kDecAborted = 7, kDecMemoryError = 8,
+              kDecUninitialized = 9;
+/* FLAC__StreamDecoderInitStatus */
+constexpr int kDecInitOk = 0;
+/* FLAC__StreamDecoderReadStatus, SeekStatus, TellStatus, LengthStatus, WriteStatus */
+constexpr int kReadContinue = 0, kReadEndOfStream = 1, kReadAbort = 2;
+constexpr int kDecSeekStatusOk = 0, kDecSeekStatusError = 1, kDecSeekStatusUnsupported = 2;
+constexpr int kDecTellOk = 0, kDecTellError = 1, kDecTellUnsupported = 2;
+constexpr int kLengthOk = 0, kLengthError = 1, kLengthUnsupported = 2;
+constexpr int kWriteContinue = 0, kWriteAbort = 1;
+
+using ReadCb = int (*)(const Decoder *, uint8_t buffer[], size_t *bytes, void *client);
+using DecSeekCb = int (*)(const Decoder *, uint64_t absolute_byte_offset, void *client);
+using DecTellCb = int (*)(const Decoder *, uint64_t *absolute_byte_offset, void *client);
+using LengthCb = int (*)(const Decoder *, uint64_t *stream_length, void *client);
+using EofCb = Bool (*)(const Decoder *, void *client);
+/* `frame` points at a FLAC__Frame whose first member is the FrameHeader; buffer[c] holds blocksize samples of channel c */
+using DecWriteCb = int (*)(const Decoder *, const FrameHeader *frame, const int32_t *const buffer[], void *client);
+using DecMetadataCb = void (*)(const Decoder *, const Metadata *, void *client);
+using ErrorCb = void (*)(const Decoder *, int status, void *client);
+
 }  // namespace flac
+
+/* libopus' decoder (phase C: Opus playback; the Ogg layer is Cassette's own, codec/ogg_opus.*). */
+namespace opus {
+
+struct Decoder; /* OpusDecoder (opaque) */
+
+/* opus_defines.h */
+constexpr int kOk = 0, kBadArg = -1, kBufferTooSmall = -2, kInternalError = -3, kInvalidPacket = -4;
+constexpr int kResetState = 4028;    /* OPUS_RESET_STATE: no argument */
+constexpr int kSetGainRequest = 4034; /* OPUS_SET_GAIN(x): one int32, Q8 dB (OpusHead's output gain) */
+
+}  // namespace opus
 
 namespace ope {
 

@@ -3,6 +3,12 @@
  */
 #include "trim_split.hpp"
 
+#include "../codec/byte_sink.hpp"
+#include "../codec/decoder.hpp"
+#include "../codec/flac_decoder.hpp"
+#include "../codec/flac_encoder.hpp"
+#include "../codec/ogg_opus.hpp"
+#include "../codec/stream_scan.hpp"
 #include "edit_util.hpp"
 #include "peaks.hpp"
 
@@ -78,9 +84,83 @@ EditResult fail(EditResult &r, EditError e, const std::string &msg) {
 
 std::string errtxt(const char *what, int err) { return std::string(what) + " failed (errno " + std::to_string(-err) + ")"; }
 
+bool codec_err(int err) { return err <= kCodecMissing && err >= kCodecBadStream; }
+
+std::string stem_of(const std::string &name) {
+    const size_t dot = name.rfind('.');
+    return dot == std::string::npos ? name : name.substr(0, dot);
+}
+
+/* FLAC / Ogg Opus: the length, the format frames count in, the comments. No codec library needed. */
+EditTakeInfo inspect_compressed(FileOps &ops, const std::string &path, Container c) {
+    EditTakeInfo t;
+    if (c == Container::Flac) {
+        const StreamInfo si = read_stream_info(ops, path);
+        if (!si.ok) {
+            t.error = "cannot read the take: " + si.error;
+            return t;
+        }
+        t.kind = EditKind::Flac;
+        t.fmt = si.fmt;
+        t.fmt.bits = si.fmt.bits <= 16 ? 16 : si.fmt.bits <= 24 ? 24 : 32; /* what the decoder delivers */
+        t.frames = si.frames;
+        if (!si.frames_known) { /* STREAMINFO says "unknown": the valid frames */
+            const StreamScan sc = scan_flac(ops, path);
+            if (!sc.ok) {
+                t.error = "cannot read the take: " + sc.error;
+                return t;
+            }
+            t.frames = sc.frames;
+            t.data_offset = sc.audio_offset;
+        }
+        int e = 0;
+        if (!read_flac_tags(ops, path, t.vendor, t.tags, &e)) {
+            t.error = "cannot read the take's metadata";
+            return t;
+        }
+    } else {
+        oggopus::OggOpusFile f(ops);
+        std::string why;
+        const int r = f.open(path, &why);
+        if (r < 0) {
+            t.error = "cannot read the take: " + (why.empty() ? decode_error_text(r, path) : why);
+            return t;
+        }
+        if (f.head().mapping_family != 0 || f.head().channels > 2) {
+            t.error = "Opus with more than 2 channels cannot be trimmed";
+            return t;
+        }
+        t.kind = EditKind::OggOpus;
+        t.fmt.rate = oggopus::decode_rate(f.head().input_rate);
+        t.fmt.channels = static_cast<uint16_t>(f.head().channels);
+        t.fmt.bits = 16;
+        t.opus_k = 48000u / t.fmt.rate;
+        oggopus::Timeline tl;
+        tl.start48 = f.start48();
+        tl.preskip = f.head().preskip;
+        tl.k = t.opus_k;
+        t.frames = tl.length(f.end48());
+        t.data_offset = f.audio_offset();
+        t.tags = f.tags();
+        t.vendor = f.vendor();
+    }
+    t.block_align = static_cast<uint32_t>(t.fmt.channels) * (t.fmt.bits / 8u);
+    StatInfo st;
+    if (ops.stat(path, st) == 0) {
+        t.size = st.size;
+        t.mtime = st.mtime;
+    }
+    t.bwf.originator = "Cassette";
+    t.ok = true;
+    return t;
+}
+
 }  // namespace
 
 EditTakeInfo inspect_take(FileOps &ops, const std::string &path) {
+    Container c = container_of_name(path); /* the extension, as the take list does (no extra read for a WAV take) */
+    if (c == Container::Unknown) c = container_of(ops, path);
+    if (c == Container::Flac || c == Container::OggOpus) return inspect_compressed(ops, path, c);
     EditTakeInfo t;
     HeaderInfo h = parse_header(ops, path);
     if (!h.ok) {
@@ -187,6 +267,10 @@ private:
     }
     EditResult validate(bool &single_over);
     int copy_part(Part &p);
+    int write_compressed(Part &p);
+    int encode_flac(Part &p, ByteSink &sink, const Tags &tags);
+    int remux_opus(Part &p, ByteSink &sink, const Tags &tags);
+    Tags result_tags(const Part &p) const;
     EditResult commit(bool single_over);
 };
 
@@ -231,9 +315,20 @@ EditResult Job::validate(bool &single_over) {
             parts[i].final_path = dir + "/" + n;
         }
     }
-    for (const Part &p : parts) total_bytes += p.frames * take.block_align;
     uint64_t need = opt.free_margin;
-    for (const Part &p : parts) need += kDataOffset + p.frames * take.block_align;
+    if (take.kind == EditKind::Wav) {
+        for (const Part &p : parts) total_bytes += p.frames * take.block_align;
+        for (const Part &p : parts) need += kDataOffset + p.frames * take.block_align;
+    } else {
+        /* FLAC / Opus: the source's bytes per frame, 15 % on top (a re-encode may come out a little larger, Opus copies
+         * 320 ms of pre-roll), plus the headers and padding; progress counts frames */
+        const uint64_t audio = take.size > take.data_offset ? take.size - take.data_offset : take.size;
+        const double bpf = take.frames ? static_cast<double>(audio) / static_cast<double>(take.frames) : 0.0;
+        for (const Part &p : parts) {
+            total_bytes += p.frames;
+            need += 65536 + static_cast<uint64_t>(static_cast<double>(p.frames) * bpf * 1.15);
+        }
+    }
     uint64_t avail = 0;
     int r = ops.free_space(dir, avail);
     if (r < 0) return fail(res, EditError::Io, errtxt("checking free space", r));
@@ -244,8 +339,106 @@ EditResult Job::validate(bool &single_over) {
     return res;
 }
 
+/* The comments of a result: the source's, a TITLE that named the source file now names the result. */
+Tags Job::result_tags(const Part &p) const {
+    Tags t = take.tags;
+    const std::string from = stem_of(base), to = stem_of(base_of(p.final_path));
+    for (Tag &g : t) {
+        std::string n = g.name;
+        for (char &ch : n) ch = static_cast<char>(ch >= 'a' && ch <= 'z' ? ch - 32 : ch);
+        if (n == "TITLE" && g.value == from) g.value = to;
+    }
+    return t;
+}
+
+/* FLAC: decode the part and encode it again (lossless, sample exact). */
+int Job::encode_flac(Part &p, ByteSink &sink, const Tags &tags) {
+    DecoderLibs real;
+    if (!opt.decoders) real = real_decoder_libs();
+    DecodedInfo di;
+    int err = 0;
+    std::unique_ptr<Decoder> dec = make_decoder(ops, req.source_path, opt.decoders ? *opt.decoders : real, di, &err);
+    if (!dec) return err < 0 ? err : kCodecBadStream;
+    if (di.total_frames != take.frames) return -ESTALE;
+    std::unique_ptr<Encoder> enc;
+    if (opt.make_flac_encoder) {
+        enc = opt.make_flac_encoder(di.output);
+    } else {
+        FlacConfig fc;
+        fc.fmt = di.output;
+        fc.level = 5;
+        enc.reset(new FlacEncoder(real_flac(), fc));
+    }
+    if (!enc) return kCodecMissing;
+    int r = enc->start(sink, tags);
+    if (r < 0) return r;
+    r = dec->seek(p.start);
+    if (r < 0) return r;
+    const size_t align = static_cast<size_t>(di.output.channels) * (di.output.bits / 8u);
+    const size_t chunk = std::max<size_t>(1024, opt.block_bytes / std::max<size_t>(align, 1));
+    std::vector<unsigned char> buf(chunk * align);
+    uint64_t left = p.frames;
+    while (left > 0) {
+        if (cancelled()) return -ECANCELED;
+        const size_t n = static_cast<size_t>(std::min<uint64_t>(chunk, left));
+        const long got = dec->read(buf.data(), n);
+        if (got < 0) return static_cast<int>(got);
+        if (got == 0) return -EIO; /* the take is shorter than it was */
+        r = enc->write(buf.data(), static_cast<size_t>(got));
+        if (r < 0) return r;
+        left -= static_cast<uint64_t>(got);
+        done_bytes += static_cast<uint64_t>(got);
+        if (opt.progress) opt.progress(done_bytes, total_bytes);
+    }
+    return enc->finish();
+}
+
+/* Opus: copy the part's packets into a new stream (no re-encoding). */
+int Job::remux_opus(Part &p, ByteSink &sink, const Tags &tags) {
+    oggopus::OggOpusFile src(ops);
+    int r = src.open(req.source_path);
+    if (r < 0) return r;
+    oggopus::RemuxRequest rq;
+    rq.first = p.start;
+    rq.frames = p.frames;
+    rq.rate_k = take.opus_k;
+    rq.tags = tags;
+    rq.vendor = take.vendor;
+    rq.serial = src.serial() + static_cast<uint32_t>(&p - &parts[0]) + 1u;
+    const uint64_t base_done = done_bytes;
+    r = oggopus::remux_opus_range(
+        src, rq, sink, nullptr,
+        [&](uint64_t d, uint64_t) {
+            const uint64_t now = base_done + std::min(d, p.frames);
+            if (now > done_bytes) done_bytes = now;
+            if (opt.progress) opt.progress(done_bytes, total_bytes);
+        },
+        opt.cancel);
+    if (r == 0) done_bytes = base_done + p.frames;
+    return r;
+}
+
+int Job::write_compressed(Part &p) {
+    p.tmp = tmp_name(dir);
+    int fd = ops.open(p.tmp, O_WRONLY | O_CREAT | O_EXCL, 0644);
+    if (fd < 0) {
+        p.tmp.clear();
+        return fd;
+    }
+    FdGuard out(ops, fd);
+    FileByteSink sink(ops, fd, 0);
+    const Tags tags = result_tags(p);
+    int r = take.kind == EditKind::Flac ? encode_flac(p, sink, tags) : remux_opus(p, sink, tags);
+    if (r < 0) return r;
+    r = ops.fdatasync(fd);
+    if (r < 0) return r;
+    r = ops.close(out.release());
+    return r < 0 ? r : 0;
+}
+
 /* Writes one result into its temporary file. 0, or -errno (-ECANCELED on cancel, -ESTALE when the source changed). */
 int Job::copy_part(Part &p) {
+    if (take.kind != EditKind::Wav) return write_compressed(p);
     p.tmp = tmp_name(dir);
     int fd = ops.open(p.tmp, O_WRONLY | O_CREAT | O_EXCL, 0644);
     if (fd < 0) {
@@ -339,6 +532,8 @@ EditResult Job::run() {
         if (cancelled()) return abort_with(EditError::Cancelled, "cancelled");
         int r = copy_part(p);
         if (r == -ECANCELED) return abort_with(EditError::Cancelled, "cancelled");
+        if (r == -ESTALE) return abort_with(EditError::SourceChanged, "the take changed while it was being copied");
+        if (codec_err(r)) return abort_with(EditError::Io, "cannot write the result: " + decode_error_text(r, req.source_path));
         if (r < 0) {
             EditError e = (r == -ENOSPC || r == -EDQUOT) ? EditError::NoSpace : EditError::Io;
             return abort_with(e, e == EditError::NoSpace ? "the disk is full" : errtxt("writing the result", r));

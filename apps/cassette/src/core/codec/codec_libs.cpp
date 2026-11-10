@@ -20,6 +20,7 @@ std::string codec_error_text(int err) {
     case kCodecRefused: return "codec refused the recording format";
     case kCodecFailed: return "codec failed while encoding";
     case kCodecState: return "codec used out of order";
+    case kCodecBadStream: return "not a FLAC or Ogg Opus stream Cassette can read";
     default: break;
     }
     if (err >= 0) return "no error";
@@ -148,6 +149,77 @@ struct OpusHolder {
     }
 };
 
+struct FlacDecHolder {
+    std::once_flag once;
+    FlacDecLib lib;
+    bool ok = false;
+    std::string why;
+    void load() {
+        static const char *const names[] = {"libFLAC.so.14", "libFLAC.so.12"};
+        void *h = open_first(names, 2, lib.name, why);
+        if (!h) {
+            why = "FLAC library not installed (" + why + ")";
+            return;
+        }
+        why.clear();
+        bool all = true;
+        all &= sym(h, lib.decoder_new, "FLAC__stream_decoder_new", lib.name, why);
+        all &= sym(h, lib.decoder_delete, "FLAC__stream_decoder_delete", lib.name, why);
+        all &= sym(h, lib.set_md5_checking, "FLAC__stream_decoder_set_md5_checking", lib.name, why);
+        all &= sym(h, lib.init_stream, "FLAC__stream_decoder_init_stream", lib.name, why);
+        all &= sym(h, lib.process_single, "FLAC__stream_decoder_process_single", lib.name, why);
+        all &= sym(h, lib.process_until_end_of_metadata, "FLAC__stream_decoder_process_until_end_of_metadata",
+                   lib.name, why);
+        all &= sym(h, lib.seek_absolute, "FLAC__stream_decoder_seek_absolute", lib.name, why);
+        all &= sym(h, lib.flush, "FLAC__stream_decoder_flush", lib.name, why);
+        all &= sym(h, lib.get_state, "FLAC__stream_decoder_get_state", lib.name, why);
+        all &= sym(h, lib.finish, "FLAC__stream_decoder_finish", lib.name, why);
+        if (void *v = ::dlsym(h, "FLAC__VERSION_STRING")) {
+            const char *s = *static_cast<const char *const *>(v);
+            if (s) lib.version = s;
+        }
+        if (!all) {
+            ::dlclose(h);
+            lib = FlacDecLib();
+            return;
+        }
+        ok = true;
+    }
+};
+
+struct OpusDecHolder {
+    std::once_flag once;
+    OpusDecLib lib;
+    bool ok = false;
+    std::string why;
+    void load() {
+        static const char *const names[] = {"libopus.so.0"};
+        void *h = open_first(names, 1, lib.name, why);
+        if (!h) {
+            why = "Opus library not installed (" + why + ")";
+            return;
+        }
+        why.clear();
+        bool all = true;
+        all &= sym(h, lib.decoder_create, "opus_decoder_create", lib.name, why);
+        all &= sym(h, lib.decoder_destroy, "opus_decoder_destroy", lib.name, why);
+        all &= sym(h, lib.decode, "opus_decode", lib.name, why);
+        all &= sym(h, lib.decoder_ctl, "opus_decoder_ctl", lib.name, why);
+        all &= sym(h, lib.strerror, "opus_strerror", lib.name, why);
+        const char *(*get_version)() = nullptr;
+        std::string ignore;
+        if (sym(h, get_version, "opus_get_version_string", lib.name, ignore) && get_version) {
+            if (const char *s = get_version()) lib.version = s;
+        }
+        if (!all) {
+            ::dlclose(h);
+            lib = OpusDecLib();
+            return;
+        }
+        ok = true;
+    }
+};
+
 FlacHolder &flac_holder() {
     static FlacHolder h;
     return h;
@@ -156,8 +228,44 @@ OpusHolder &opus_holder() {
     static OpusHolder h;
     return h;
 }
+FlacDecHolder &flac_dec_holder() {
+    static FlacDecHolder h;
+    return h;
+}
+OpusDecHolder &opus_dec_holder() {
+    static OpusDecHolder h;
+    return h;
+}
 
 }  // namespace
+
+bool FlacDecLib::complete() const {
+    return decoder_new && decoder_delete && set_md5_checking && init_stream && process_single &&
+           process_until_end_of_metadata && seek_absolute && flush && get_state && finish;
+}
+
+bool OpusDecLib::complete() const { return decoder_create && decoder_destroy && decode && decoder_ctl && strerror; }
+
+const FlacDecLib *real_flac_decoder(std::string *why) {
+    FlacDecHolder &h = flac_dec_holder();
+    std::call_once(h.once, [&h] { h.load(); });
+    if (!h.ok && why) *why = h.why;
+    return h.ok ? &h.lib : nullptr;
+}
+
+const OpusDecLib *real_opus_decoder(std::string *why) {
+    OpusDecHolder &h = opus_dec_holder();
+    std::call_once(h.once, [&h] { h.load(); });
+    if (!h.ok && why) *why = h.why;
+    return h.ok ? &h.lib : nullptr;
+}
+
+DecoderLibs real_decoder_libs() {
+    DecoderLibs d;
+    d.flac = real_flac_decoder();
+    d.opus = real_opus_decoder();
+    return d;
+}
 
 const FlacLib *real_flac(std::string *why) {
     FlacHolder &h = flac_holder();

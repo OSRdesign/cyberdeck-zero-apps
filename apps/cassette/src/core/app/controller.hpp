@@ -45,8 +45,9 @@
  *   - set_format() still accepts only Wav (the Format row is the owner's design, a later task). A take records as FLAC
  *     or Ogg Opus when the STORED setting ("format" + "format_preset") asks for it and effective_choice() allows it on
  *     the capture format and the libraries found (codec/formats.hpp); otherwise as WAV. The recorder's format text, the
- *     hours left and the journal follow the choice. FLAC/Opus takes cannot be played, previewed or trimmed before
- *     phase C: those commands refuse with playback_refusal()'s notice (takes/recordings.hpp).
+ *     hours left and the journal follow the choice. FLAC/Opus takes play, preview, scan, show their peaks and trim like
+ *     WAV takes (phase C, codec/decoder.hpp); when the take's decoder library is missing, LOAD, PLAY, the preview and
+ *     TRIM refuse with one notice ("This take cannot be played: FLAC not installed (libflac14)").
  *   - changing the folder is refused while a take or countdown runs.
  *   - trim: moving IN or OUT removes the splits that fall outside (IN, OUT); the marker is the only thing the UI moves
  *     (set_in/set_out/add_split take the marker position); preview plays [IN, OUT) from the marker when it is inside, else
@@ -105,6 +106,10 @@ struct ControllerConfig {
      * and the capture format: null builds FlacEncoder / OpusEncoder on the real libraries. Tests give fakes. */
     std::function<CodecAvailability()> codecs;
     std::function<std::unique_ptr<Encoder>(const FormatChoice &choice, const AudioFormat &capture)> make_encoder;
+    /* The decoders of FLAC / Opus takes (playback, preview, the peak cache, trim): null asks the system
+     * (real_decoder_libs(): libFLAC and libopus with dlopen, at the first such take). A FLAC trim writes its results
+     * through make_encoder (a FLAC choice) when that is set, else FlacEncoder on the real libFLAC. Tests give fakes. */
+    std::function<DecoderLibs()> decoders;
 };
 
 /* ---- keys ---- */
