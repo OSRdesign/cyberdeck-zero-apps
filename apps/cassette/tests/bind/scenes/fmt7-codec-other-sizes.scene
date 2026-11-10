@@ -1,4 +1,4 @@
-title Cassette bound at 480x800 and 800x480 (their own densities): Settings with the three rows and the Codec picker on a stereo 44.1 kHz card
+title Cassette bound at 480x800 and 800x480 (their own densities): Settings with Codec and Sample rate (no Bit depth row: the card records 16-bit only) and the Codec picker on a stereo 44.1 kHz card
 sizes 480x800 800x480
 env CASSETTE_DEMO 1
 env CASSETTE_DEMO_HOME demo-home
@@ -11,7 +11,7 @@ key s
 wait 500
 expect text "Codec"
 expect text "Sample rate"
-expect text "Bit depth"
+expect notext "Bit depth"
 shot settings
 expect notext "LAYOUT FAIL"
 key down

@@ -154,6 +154,24 @@ void SettingsPage::update(const SettingsVm &s)
 void SettingsPage::refresh()
 {
     const SettingsVm &s = vm_;
+    if (picker_ >= 0) {
+        /* the open row moved (a row above came or went) or went away (a card with one bit depth has no Bit depth row) */
+        int at = -1;
+        for (std::size_t i = 0; i < s.rows.size(); ++i)
+            if (s.rows[i].id == picker_id_) at = static_cast<int>(i);
+        if (at != picker_) {
+            picker_ = at;
+            if (at < 0) {
+                sel_ = -1;
+                numpage_ = false;
+                if (!local_notice_.empty()) {
+                    local_notice_.clear();
+                    apply_notice();
+                }
+                if (nav_.set_title) nav_.set_title("Settings");
+            }
+        }
+    }
     std::string key = std::to_string(picker_) + (numpage_ ? "n|" : "|");
     for (const SettingRow &r : s.rows) key += r.id + ":" + std::to_string(static_cast<int>(r.kind)) + ";";
     if (picker_ >= 0 && picker_ < static_cast<int>(s.rows.size()))
@@ -494,6 +512,7 @@ void SettingsPage::activate(int i, int touch_x)
     switch (s.kind) {
     case SettingKind::Choice:
         picker_ = i;
+        picker_id_ = s.id;
         sel_ = -1;
         if (nav_.set_title) nav_.set_title(s.label);
         refresh();
@@ -518,6 +537,7 @@ void SettingsPage::activate(int i, int touch_x)
     }
     case SettingKind::Number:
         picker_ = i;
+        picker_id_ = s.id;
         numpage_ = true;
         draft_ = std::clamp(s.pos, s.min, s.max);
         sel_ = -1;

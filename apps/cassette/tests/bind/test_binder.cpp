@@ -161,10 +161,10 @@ void test_format_choice()
     CHECK(r.calls() == std::vector<std::string>{"set_rec_params wav - 48000 0"});
     r.act.setting_choice("quality", 0);
     CHECK(r.calls() == std::vector<std::string>{"set_rec_params wav - 0 16"});
-    r.act.setting_choice("quality", 1); /* this card has no 24-bit */
+    r.act.setting_choice("quality", 1); /* this card has no 24-bit: no such entry, nothing, no notice */
     CHECK(r.calls().empty());
     r.tick();
-    CHECK_EQ(r.binder.vm().notice, "Not available: this card records 16-bit only");
+    CHECK_EQ(r.binder.vm().notice, "");
     /* a card with several rates and 24-bit: Opus bit rates, a codec change that moves the rate says so */
     Rig m;
     m.port.snap.format_inputs.rates = {16000, 44100, 48000};

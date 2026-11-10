@@ -15,13 +15,11 @@ wait 500
 @480x320 key down
 @480x320 key down
 @480x320 key down
-@480x320 key down
 @480x320 key enter
 @480x320 wait 400
 @480x320 key down
 @480x320 key enter
 @480x320 wait 500
-@640x480 key down
 @640x480 key down
 @640x480 key down
 @640x480 key down

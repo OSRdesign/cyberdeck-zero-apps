@@ -223,7 +223,7 @@ It writes no file and changes no setting; `--no-open` only lists.
 
 WAV (Broadcast Wave) is the format of 0.1 and stays the default. FLAC (lossless) and Ogg Opus (small) are being added.
 The recorder writes them, crash-safe like WAV (a take cut by a power loss is repaired at the next start), when the
-choice in Settings (Codec, Sample rate and Bit depth / Bit rate; stored in `~/.config/cassette/settings.json` as
+choice in Settings (Codec, Sample rate and Bit depth / Bit rate, Bit depth only on a card that records both 16 and 24-bit; stored in `~/.config/cassette/settings.json` as
 `"format": "wav"`, `"flac"` or `"opus"`, the optional `"format_preset"` (`speech24`, `speech32`, `music64`, `music128`),
 `"rate"` in Hz and `"quality"`: 16 or 24 bits, or 16 to 128 kbps for Opus) is one the card and the libraries allow;
 otherwise it records WAV. Takes are named `.flac` / `.opus`, the list shows WAV, FLAC or OPUS in each row, and the take

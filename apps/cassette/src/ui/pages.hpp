@@ -207,6 +207,7 @@ private:
     lv_obj_t *list_ = nullptr, *track_ = nullptr, *thumb_ = nullptr, *hint_ = nullptr;
     std::vector<Row> rows_;
     int picker_ = -1;             /* the setting whose choices show, -1: the settings */
+    std::string picker_id_;       /* its row id: rows come and go (a card swap), the index follows the id */
     int sel_ = -1;                /* the keyboard highlight, -1: none (touch) */
     std::string layout_key_;
     int list_x_ = 0, list_y_ = 0, list_w_ = 0, list_h_ = 0, row_w_ = 0;

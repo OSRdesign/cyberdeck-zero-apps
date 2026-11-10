@@ -427,8 +427,7 @@ void test_speech_card()
     CHECK(fmt && fmt->choices.size() == 1 && fmt->choices[0] == "WAV");
     const ui::SettingRow *rate = find_row(e.vm(), "rate");
     CHECK(rate && rate->choices.size() == 1 && rate->choices[0] == "16 kHz");
-    const ui::SettingRow *depth = find_row(e.vm(), "quality");
-    CHECK(depth && depth->choices.size() == 1 && depth->choices[0] == "16-bit");
+    CHECK(!find_row(e.vm(), "quality")); /* 16-bit only: no Bit depth row for WAV */
     CHECK(e.vm().rec.card.shown);              /* it has a level */
     CHECK(!find_row(e.vm(), "agc"));           /* no auto gain */
     CHECK(find_row(e.vm(), "mute"));

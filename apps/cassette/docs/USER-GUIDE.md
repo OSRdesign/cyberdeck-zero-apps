@@ -359,7 +359,7 @@ The card's own rows depend on what the selected card has:
 | **Mic mute (card)** | Mutes the card's microphone. | off | only when the card has it |
 | **Codec** | The file type of new takes: WAV, FLAC or Opus. The row shows the codec in use (`WAV (Opus unavailable)` when the stored choice cannot be used) and opens a [picker page](#formats-wav-flac-and-ogg-opus): six quick presets, then the three codecs. Cannot change while a take records. | WAV | always |
 | **Sample rate** | The rate the card records at, for example `48 kHz`. The picker lists the rates the card offers; the ones the codec cannot use are dimmed. Dimmed while a take records and with no sound input. | the card's own (48 kHz if it has it) | always |
-| **Bit depth** (WAV, FLAC) or **Bit rate** (Opus) | WAV and FLAC: `16-bit` or `24-bit` (24-bit is dimmed when the card has none). Opus: 16, 24, 32, 48, 64, 96 or 128 kbps. The row's name follows the codec. | 16-bit, Opus 32 kbps | always |
+| **Bit depth** (WAV, FLAC) or **Bit rate** (Opus) | WAV and FLAC: `16-bit` or `24-bit`, the depths the card can record. Opus: 16, 24, 32, 48, 64, 96 or 128 kbps. The row's name follows the codec. | 16-bit, Opus 32 kbps | Bit rate: always with Opus. Bit depth: only when the card records both 16-bit and 24-bit (most cards record 16-bit only: then there is no row and takes are 16-bit) |
 | **Record timer** | Off, 3 s, 10 s, 20 s countdown before REC starts. | Off | always |
 | **REW / FWD** | *Fast scan 5x* (hold) or *Jump 5 s* (tap). | Fast scan 5x | always |
 | **Channels** | Mono or Stereo, what the card records. Read-only. | (the card) | always |
@@ -383,7 +383,7 @@ scrolls: drag it, or use Up / Down.
 
 ![Settings, bottom](img/settings-bottom.png)
 
-![Codec, Sample rate and Bit depth rows](img/settings-codec-rows.png)
+![Codec and Sample rate rows on a 16-bit card: no Bit depth row](img/settings-codec-rows.png)
 
 ![Settings with Codec set to FLAC](img/settings-codec-flac.png)
 
@@ -395,7 +395,8 @@ speech compress best, noisy music least). **Ogg Opus** is lossy, made for voice:
 tens of megabytes, and the quality at the speech settings is good for talking.
 
 **Choosing.** The format of a take is three settings, each on its own row in Settings: **Codec** (WAV, FLAC or Opus),
-**Sample rate** and **Bit depth** (WAV, FLAC) or **Bit rate** (Opus). Each row opens a page in the same style: one
+**Sample rate** and **Bit depth** (WAV, FLAC) or **Bit rate** (Opus); the Bit depth row is there only when the card
+records more than one depth. Each row opens a page in the same style: one
 entry per choice, the name on the left and the **estimated size per minute** on the right (`5.8 MB/min`, `about 1.7 MB/min`,
 `190 kB/min` under a megabyte), and below a line with what the choice is for and **how many hours fit** in the free
 space of the recordings folder (for example `8433 h free`; the figure is in hours, or minutes when under an hour). WAV is
@@ -428,8 +429,9 @@ cannot record is dimmed (Opus takes 8, 12, 16, 24 and 48 kHz). Choosing a rate r
 is written at it, and the strip and the list show it (`44.1k/16 WAV`). The **default** is the card's own: 48 kHz if it has
 it, else 44.1 kHz, else the highest below 48 kHz (Opus: 48 kHz, else 16 kHz).
 
-**Bit depth and bit rate.** WAV and FLAC: `16-bit` or `24-bit`; a card without 24-bit capture shows `24-bit` dimmed (`this
-card records 16-bit only`). Opus: the bit rate, one of 16, 24, 32, 48, 64, 96 and 128 kbps; the hints say which suit speech
+**Bit depth and bit rate.** WAV and FLAC: `16-bit` or `24-bit`, only the depths the card can record. A card with one
+depth (most USB cards and headsets record 16-bit only) has nothing to choose, so Settings shows **no Bit depth row** and
+takes are written in the card's depth (16-bit); with Opus the row is there as **Bit rate**. Opus: the bit rate, one of 16, 24, 32, 48, 64, 96 and 128 kbps; the hints say which suit speech
 (up to 32 kbps, coded as one channel) and which music (48 kbps and up, stereo kept). FLAC always uses compression level 5 (there
 is no setting for it).
 
@@ -452,7 +454,8 @@ is no setting for it).
 ![Opus chosen with 44.1 kHz set: the rate moved to 48 kHz and a line says so](img/codec-change-toast.png)
 
 **Entries that are not available.** A choice the card or the board cannot record stays in the list, **dimmed**, and its
-second line says why instead of the hours. A tap on it shows *Not available:* and the reason, and nothing changes. The
+second line says why instead of the hours. The one exception is a bit depth the card cannot record: it is not listed at all
+(see Bit depth above). A tap on it shows *Not available:* and the reason, and nothing changes. The
 reasons you can meet:
 
 | Reason | Meaning |
@@ -460,7 +463,6 @@ reasons you can meet:
 | `Opus needs 8, 12, 16, 24 or 48 kHz; this card has 44.1 kHz` | The card records at 44.1 kHz only (or at other rates Opus does not take). Opus is dimmed on it; Cassette does not resample. |
 | `Opus needs 8, 12, 16, 24 or 48 kHz` | On the Sample rate page with Opus chosen: this rate is not one Opus takes. |
 | `Opus records at most 2 channels`, `more than 2 channels` | The card gives more than mono or stereo. |
-| `this card records 16-bit only` (or `24-bit only`) | On the Bit depth page: the card has no such depth. |
 | `FLAC not installed (libflac14)` | The library is missing (the package name differs by system: `libflac12t64` on Ubuntu 24.04, `libflac12` on Debian bookworm). |
 | `Opus not installed (libopusenc0)` | The library for recording Opus is missing. |
 | the card's own reason | The card cannot be recorded at all; then every row is dimmed with its reason. |

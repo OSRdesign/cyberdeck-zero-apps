@@ -21,7 +21,9 @@
  *             controller has no channel setting); the recording format is three rows, Codec, Sample rate and Quality (Bit
  *             depth for WAV and FLAC, Bit rate for Opus), each with a picker of its own (codec_picker(), rate_picker(),
  *             quality_picker(): the model of codec/formats.hpp with the size per minute of every entry at the other two
- *             choices and its free hours, an entry this card or the libraries cannot record dimmed with the reason); the
+ *             choices and its free hours, an entry this card or the libraries cannot record dimmed with the reason, except
+ *             a bit depth the card cannot record, which is left out; WAV and FLAC on a card with one depth have no Quality
+ *             row at all, the depth being the card's); the
  *             values are the effective choice ("FLAC", "48 kHz", "16-bit" / "32 kbps"; "WAV (Opus unavailable)" when
  *             the stored codec cannot be used); Codec, Sample rate, Quality, Folder and Input dimmed while a take or the
  *             countdown runs.

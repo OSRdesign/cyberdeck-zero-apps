@@ -576,8 +576,8 @@ void test_codec_picker()
     CHECK(!p.entries[4].compatible);
     CHECK_EQ(p.entries[4].detail, "Opus not installed (libopusenc0)");
 
-    /* while a take runs the rows are dimmed */
-    s = base_snapshot();
+    /* while a take runs the rows are dimmed (a card with both depths: the Bit depth row is there) */
+    s = rich_snapshot();
     s.deck.state = kDeckRecording;
     vm = map(s);
     CHECK(!find_row(vm, "codec")->enabled && !find_row(vm, "rate")->enabled && !find_row(vm, "quality")->enabled);
@@ -640,7 +640,7 @@ void test_rate_quality_pickers()
     CHECK(p.entries.empty());
     CHECK(!find_row(map(s), "rate")->enabled);
 
-    /* bit depth (WAV, FLAC): 24-bit offered by the rich card, dimmed with the reason on a 16-bit card */
+    /* bit depth (WAV, FLAC): both depths on the rich card; a depth the card cannot record is left out (not dimmed) */
     s = rich_snapshot();
     p = quality_picker(s);
     CHECK_EQ(p.label, "Bit depth");
@@ -658,21 +658,42 @@ void test_rate_quality_pickers()
     p = quality_picker(s);
     CHECK_EQ(p.current, 1);
     CHECK_EQ(p.value, "24-bit");
+    CHECK(find_row(map(s), "quality")->enabled);
+    s.settings.format = RecFormat::Flac; /* FLAC: the same two */
+    p = quality_picker(s);
+    CHECK(p.entries.size() == 2 && p.entries[0].compatible && p.entries[1].compatible);
+    CHECK(find_row(map(s), "quality") && find_row(map(s), "quality")->label == "Bit depth");
+    /* a 16-bit only card: one entry, 16-bit; nothing to choose, so no Bit depth row (WAV and FLAC) */
     s = base_snapshot();
     p = quality_picker(s);
-    CHECK(p.entries[0].compatible && !p.entries[1].compatible);
-    CHECK_EQ(p.entries[1].reason, "this card records 16-bit only");
-    s.settings.quality = 24; /* stored, but this card has no 24-bit: 16 records */
-    p = quality_picker(s);
+    CHECK_EQ(p.entries.size(), size_t(1));
+    CHECK_EQ(p.items.size(), size_t(1));
+    CHECK_EQ(p.entries[0].name, "16-bit");
+    CHECK(p.entries[0].compatible && p.entries[0].reason.empty());
     CHECK_EQ(p.current, 0);
-    /* a 24-bit only card: 16-bit dimmed */
+    CHECK_EQ(p.value, "16-bit");
+    CHECK(!find_row(map(s), "quality"));
+    s.settings.format = RecFormat::Flac;
+    CHECK(!find_row(map(s), "quality"));
+    s.settings.format = RecFormat::Wav;
+    s.settings.quality = 24; /* stored, but this card has no 24-bit: 16 records, no entry and no row for 24 */
+    p = quality_picker(s);
+    CHECK(p.entries.size() == 1 && p.current == 0 && p.value == "16-bit");
+    CHECK(!find_row(map(s), "quality"));
+    CHECK(!selectable_param(p, 1, &why)); /* the index the 24-bit entry had: out of range now */
+    /* Opus on the same card: the Bit rate row stays */
+    s.settings.format = RecFormat::Opus;
+    s.settings.quality = 0;
+    CHECK(find_row(map(s), "quality") && find_row(map(s), "quality")->label == "Bit rate");
+    /* a 24-bit only card: one entry, 24-bit, and no row either */
     s = base_snapshot();
     s.format_inputs.has16 = false;
     s.format_inputs.has24 = true;
     s.format_inputs.capture.bits = 24;
     p = quality_picker(s);
-    CHECK(!p.entries[0].compatible && p.entries[1].compatible && p.current == 1);
-    CHECK_EQ(p.entries[0].reason, "this card records 24-bit only");
+    CHECK(p.entries.size() == 1 && p.entries[0].name == "24-bit" && p.entries[0].compatible && p.current == 0);
+    CHECK_EQ(p.value, "24-bit");
+    CHECK(!find_row(map(s), "quality"));
 
     /* bit rate (Opus): the seven rates, the speech and music hints, 32 kbps by default, a preset's own */
     s = rich_snapshot();
@@ -706,6 +727,7 @@ void test_rate_quality_pickers()
     CHECK_EQ(p.label, "Bit depth");
     CHECK_EQ(p.value, "16-bit");
     CHECK(p.items[0].change.stored.codec == RecFormat::Wav && p.items[0].change.stored.quality == 16);
+    CHECK(!find_row(map(s), "quality")); /* WAV records, the card has 16-bit only: no row */
 }
 
 void test_param_changes()
@@ -735,7 +757,8 @@ void test_settings()
     ui::ViewModel vm = map(s);
     std::vector<std::string> ids;
     for (const ui::SettingRow &r : vm.settings.rows) ids.push_back(r.id);
-    const std::vector<std::string> want = {"input", "level", "agc", "codec", "rate", "quality", "timer", "rewfwd",
+    /* a 16-bit only card: no Bit depth row (WAV) */
+    const std::vector<std::string> want = {"input", "level", "agc", "codec", "rate", "timer", "rewfwd",
                                            "channels", "lowcut", "limiter", "sync", "folder", "prefix", "takenum", "split"};
     CHECK(ids == want);
     const ui::SettingRow *r = find_row(vm, "input");
@@ -751,8 +774,17 @@ void test_settings()
     CHECK(r && r->value == "WAV" && r->choices.size() == 1 && r->enabled);
     r = find_row(vm, "rate");
     CHECK(r && r->value == "48 kHz" && r->label == "Sample rate" && r->enabled);
-    r = find_row(vm, "quality");
-    CHECK(r && r->value == "16-bit" && r->label == "Bit depth" && r->enabled);
+    CHECK(!find_row(vm, "quality"));
+    {
+        Snapshot b = s;
+        b.format_inputs.has24 = true; /* both depths: the row is back, after Sample rate */
+        ui::ViewModel bv = map(b);
+        std::vector<std::string> bids;
+        for (const ui::SettingRow &row : bv.settings.rows) bids.push_back(row.id);
+        CHECK(bids.size() == want.size() + 1 && bids[4] == "rate" && bids[5] == "quality" && bids[6] == "timer");
+        r = find_row(bv, "quality");
+        CHECK(r && r->value == "16-bit" && r->label == "Bit depth" && r->enabled && r->formats.size() == 2);
+    }
     r = find_row(vm, "timer");
     CHECK(r && r->choices.size() == 4 && r->choice == 0 && r->value == "Off");
     r = find_row(vm, "rewfwd");
@@ -801,6 +833,7 @@ void test_settings()
     /* T6d: the final order with the conditional rows, and their values */
     {
         Snapshot f = base_snapshot();
+        f.format_inputs.has24 = true; /* both depths: the Bit depth row is in the list */
         f.card.has_mute = true;
         f.card.mute = true;
         f.card.output_labels = {"USB Audio Device", "Default output"};
@@ -837,7 +870,7 @@ void test_settings()
         ui::ViewModel mv = map(m);
         std::vector<std::string> mids;
         for (const ui::SettingRow &row : mv.settings.rows) mids.push_back(row.id);
-        const std::vector<std::string> mwant = {"input", "level", "agc", "codec", "rate", "quality", "timer", "rewfwd",
+        const std::vector<std::string> mwant = {"input", "level", "agc", "codec", "rate", "timer", "rewfwd",
                                                 "channels", "lowcut", "limiter", "monitor", "monitor_level", "sync", "folder", "prefix", "takenum",
                                                 "split"};
         CHECK(mids == mwant);
@@ -921,7 +954,7 @@ void test_settings()
     s.card.has_level = s.card.has_agc = false;
     vm = map(s);
     CHECK(!find_row(vm, "level") && !find_row(vm, "agc"));
-    CHECK(vm.settings.rows.size() == 14);
+    CHECK(vm.settings.rows.size() == 13); /* and no Bit depth row: 16-bit only */
     /* no card at all */
     s.card.present = false;
     s.card.labels.clear();

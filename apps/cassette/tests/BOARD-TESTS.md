@@ -298,7 +298,7 @@ Goal: a card that records at neither 48000 nor 44100 Hz (a USB headset in its ca
 
 1. `cassette-probe --card <the headset>`. Expected: `open: ... OK direct: 16000 Hz, 1 ch, 16-bit` (no `Unsupported card`).
 2. Open Cassette with only that headset plugged in. Expected: the strip says `16k/16 WAV`, Settings > Sample rate reads
-   `16 kHz` (Codec `WAV`, Bit depth `16-bit`), the meter moves when you speak.
+   `16 kHz` (Codec `WAV`, no Bit depth row: the headset records 16-bit only), the meter moves when you speak.
 3. Say the numbers 1 to 30 aloud, one a second, and press REC with a watch in view; record 30 s, STOP. Expected: the
    counter at STOP reads about 0:30 (not 0:10 and not 1:30); the list shows the take at about 0:30.
 4. PLAY it through the headset (its output may play 16000 Hz only) and through another output (Settings > Output, one that
@@ -406,7 +406,7 @@ Playing, previewing and trimming them in the app is B18 (phase C); here the take
    nothing): a running Cassette writes its own settings back over the edit. Then:
    `sed -i 's/"format": *"[a-z]*"/"format": "flac"/' ~/.config/cassette/settings.json` and check it with
    `grep format ~/.config/cassette/settings.json` (expected: `"format": "flac"`).
-3. Open Cassette. Expected: the format on the window reads `48k/16 FLAC` (Codec `FLAC`, Sample rate `48 kHz`, Bit depth `16-bit` in Settings);
+3. Open Cassette. Expected: the format on the window reads `48k/16 FLAC` (Codec `FLAC`, Sample rate `48 kHz` in Settings; Bit depth `16-bit` only on a card that also has 24-bit);
    the time left is about three times what it was with WAV. Do not pick a value in Settings > Codec, Sample rate or Bit depth during B17
    (that is B19): it would overwrite the setting under test.
 4. REC, talk for 1 minute, STOP. The list: the new take `take_NNN_...flac` on top, its row ends in `FLAC` (the WAV
@@ -498,8 +498,8 @@ time, anything that stuttered or clicked.
 
 Goal: Settings > Codec, Sample rate and Bit depth / Bit rate list every choice with sizes that match what a recording really takes, and each choice reaches the file.
 
-1. Open Settings and read the three rows. Expected: `Codec` (`WAV`), `Sample rate` (`48 kHz` on a card that has it) and
-   `Bit depth` (`16-bit`). Tap Codec (or Right / Enter). Expected: the page is titled `Codec`; the heading `Quick
+1. Open Settings and read the rows. Expected: `Codec` (`WAV`), `Sample rate` (`48 kHz` on a card that has it) and,
+   only on a card that records both 16 and 24-bit, `Bit depth` (`16-bit`); a 16-bit only card has no Bit depth row. Tap Codec (or Right / Enter). Expected: the page is titled `Codec`; the heading `Quick
    presets` and six two-line rows (WAV, FLAC, Opus speech 24 kbps, Opus speech 32 kbps, Opus music 64 kbps, Opus music
    128 kbps), then the heading `Codecs` and WAV, FLAC, Opus; each row shows the size per minute on the right (`5.8
    MB/min`, `about ... MB/min` for FLAC, `... kB/min` or `... MB/min` for Opus) and a grey line under the name (the
@@ -534,8 +534,8 @@ Goal: Settings > Codec, Sample rate and Bit depth / Bit rate list every choice w
    counter, STOP, and read the take's row in the list and `file` / `soxi` / `ffprobe` on the file (rate, channels, bits,
    codec):
    - Codec WAV, Sample rate 44.1 kHz, Bit depth 16-bit: the row ends `44.1k/16 WAV`; the file says 44100 Hz, 16 bit.
-   - the same at 48 kHz, and at 24-bit if the card offers it (`48k/24 WAV`; the Bit depth page dims 24-bit with `this
-     card records 16-bit only` on a card without it).
+   - the same at 48 kHz, and at 24-bit if the card offers it (`48k/24 WAV`; a card without 24-bit has no Bit depth row
+     at all for WAV and FLAC, and with Opus the row reads Bit rate).
    - Codec FLAC at 44.1 or 48 kHz, 16-bit (and 24-bit if offered): `.flac`, the rate and depth chosen.
    - Codec Opus at 48 kHz with Bit rate 16, 24, 32, 48, 64, 96 and 128 kbps in turn (seven takes of 10 s): `.opus`;
      `ffprobe` reports the bit rate near the one chosen (within about 15 % for 10 s), 48 kHz.

@@ -1,4 +1,4 @@
-title Cassette bound (mono card with 44.1 and 48 kHz, both libraries): Settings shows Codec, Sample rate and Bit depth; the Codec picker lists the six quick presets then WAV, FLAC and Opus with sizes per minute at the card's format, hours free and the footer; Esc keeps the choice
+title Cassette bound (mono card with 44.1 and 48 kHz, both libraries): Settings shows Codec and Sample rate (a 16-bit only card: no Bit depth row); the Codec picker lists the six quick presets then WAV, FLAC and Opus with sizes per minute at the card's format, hours free and the footer; Esc keeps the choice
 sizes 480x320 320x480 640x480
 ppmm 608
 env CASSETTE_DEMO 1
@@ -22,9 +22,9 @@ key down
 key down
 wait 300
 expect text "Sample rate"
-expect text "Bit depth"
+expect notext "Bit depth"
 expect text "48 kHz"
-expect text "16-bit"
+expect text "Record timer"
 shot settings-rows
 expect notext "LAYOUT FAIL"
 key esc

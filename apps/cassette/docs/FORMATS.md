@@ -369,8 +369,11 @@ the dimming, the 44.1 kHz-only card, the re-validation, old and new settings key
   - **Sample rate**: every rate of the card, ascending, with a hint (`CD`, `video and most devices`, `high resolution`), sizes at
     the current codec and quality; a rate the codec cannot record is dimmed with its reason. Footer: `Sizes for FLAC, 16-bit, this card`
     (Opus: `Opus, 32 kbps`).
-  - **Quality**: WAV and FLAC: `16-bit` and `24-bit` (the one the card lacks dimmed with `this card records 16-bit only`); Opus: the
-    seven bit rates with the speech and music hint. The row's label is `Bit depth` or `Bit rate`. Footer: `Sizes for FLAC, 48 kHz, this card`.
+  - **Quality**: WAV and FLAC: the depths the card can record (`card_bits`: `16-bit`, `24-bit` or both); a depth the card lacks
+    is left out, not dimmed (owner decision; the Sample rate rows and Opus at 44.1 kHz stay dimmed with the reason). With one
+    depth there is nothing to choose, so the Settings list has no Quality row for WAV and FLAC (the take gets the card's depth;
+    the row ids, not their positions, tie the page to the rows). Opus: the seven bit rates with the speech and music hint, the
+    row always shown. The row's label is `Bit depth` or `Bit rate`. Footer: `Sizes for FLAC, 48 kHz, this card`.
   Each entry: name and size on line 1; on line 2 the hint and the hours that fit in the free space (`hours_for_space`), or, when the
   entry is dimmed, the reason. The page is the one the Format picker had; the group headings are the one addition
   (`FormatEntry::header`: small bold text, not tappable, skipped by Up / Down).

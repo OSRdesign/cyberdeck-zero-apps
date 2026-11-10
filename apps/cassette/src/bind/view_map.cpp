@@ -368,23 +368,20 @@ ParamPicker quality_picker(const Snapshot &s)
             p.entries.push_back(param_entry(c, kbps_text(k), kbps_hint(k), ch, ch.compatible, ch.why_not));
         }
     } else {
-        const std::vector<unsigned> has = card_bits(c.in);
-        for (unsigned b : {16u, 24u}) {
+        /* only the depths the card can record (owner: a depth the card cannot record is hidden, not dimmed); a depth
+         * the codec cannot store at this rate stays, dimmed with the reason */
+        for (unsigned b : card_bits(c.in)) {
             RecParams rp = c.eff;
             rp.bits = b;
             const FormatChoice ch = choice_for(c.in, rp);
-            const bool offered = std::find(has.begin(), has.end(), b) != has.end();
-            std::string why = ch.why_not;
-            if (!offered) why = std::string("this card records ") + bits_text(has.front()) + " only";
-            const bool ok = ch.compatible && offered;
             ParamItem it;
             it.change = change_quality(c.base, static_cast<int>(b));
-            it.compatible = ok;
-            it.why = why;
+            it.compatible = ch.compatible;
+            it.why = ch.why_not;
             if (b == c.eff.bits) p.current = static_cast<int>(p.items.size());
             p.items.push_back(it);
             p.entries.push_back(param_entry(c, bits_text(b), b == 16 ? "CD quality, plays everywhere" : "more headroom, larger files",
-                                            ch, ok, why));
+                                            ch, ch.compatible, ch.why_not));
         }
     }
     if (!c.known) p.footer = "No sound input: sizes unknown";
@@ -566,7 +563,9 @@ std::vector<ui::SettingRow> settings_rows(const Snapshot &s, uint64_t next_take)
         };
         rows.push_back(param_row("codec", "Codec", cp, !busy));
         rows.push_back(param_row("rate", "Sample rate", rp, !busy && known && !rp.entries.empty()));
-        rows.push_back(param_row("quality", qp.label, qp, !busy));
+        /* WAV and FLAC on a card with one depth: nothing to choose, no Bit depth row (the depth is the card's) */
+        const bool opus = effective_params(s.format_inputs, stored_of(s.settings)).codec == RecFormat::Opus;
+        if (opus || qp.entries.size() > 1) rows.push_back(param_row("quality", qp.label, qp, !busy));
     }
     {
         int pick = 0;
