@@ -4,9 +4,14 @@ Design note for the codec layer (phase A, 2026-11-10). Decisions it follows: rep
 default), D4 (FLAC and Opus as options), D7 (libraries loaded at run time with `dlopen`, no link-time dependency), D11
 (the card's native rate, no resampling in 0.1), D16 (Vorbis comments for metadata).
 
-**Status.** Phase A is the core only: the encoders, the library loading, the format list with its size estimates, and
-the stored key. The app still records WAV: the writer, the Settings Format row, playback and editing of FLAC/Opus
-takes are phases B and C (end of this note). Code: `src/core/codec/`; tests: `tests/codec/`.
+**Status (2026-11-10).** Phase A (the encoders, the library loading, the format list with its size estimates, the
+stored key) and phase B (recording: the writer, names, the list, the journal, the repair) are done. The recorder writes
+FLAC and Ogg Opus takes when the stored setting asks for it and `effective_choice()` allows it; the Settings Format row
+(the owner's design) still offers WAV only, so for now the format is set in `settings.json`. Playing, previewing,
+trimming and the peak cache of FLAC/Opus takes are phase C: until then those refuse with a notice. Code:
+`src/core/codec/`, `src/core/writer.*`, `src/core/repair.*`, `src/core/takes/`; tests: `tests/codec/`,
+`tests/test_stream_scan.cpp`, `tests/test_codec_writer.cpp`, `tests/test_codec_crash.cpp`, `tests/takes/test_formats.cpp`,
+`tests/app/test_formats.cpp`, `tests/codec/test_writer_real.cpp`. Board test: B17 in `tests/BOARD-TESTS.md`.
 
 ## What is offered
 
@@ -205,27 +210,93 @@ probe to repeat: `ldconfig -p | grep -E 'libFLAC|libopus|libogg'` and `dpkg-quer
   `CODEC_MEASURE=1` adds the synthetic measurement table; `cassette-codec-measure FILE.wav ...` (built by the same
   Makefile) measures real files.
 
-## Next phases (not done here)
+## Phase B: recording (done)
 
-**Phase B: recording.**
-1. Writer integration: an encoder per part instead of raw PCM writes; `flush()` before each `fdatasync`; `finish()` at
-   stop; the free-space check uses `bytes_out` (no header patches for FLAC/Opus); auto-split for FLAC/Opus by size or
-   time (no 4 GiB limit applies; a part per 4 GiB keeps one rule), or never split.
-2. Journal: record the format, the rate and the encoder (repair must know what it reads).
-3. Repair (study table 4.3): FLAC: find the last frame whose CRC-16 is valid, cut after it, count the samples, rewrite
-   STREAMINFO (total samples; MD5 left 0 = unknown). Opus: cut after the last page whose CRC is valid, set the EOS flag
-   on it (rewriting its CRC); duration from its granule. Both need a frame/page scanner (no decoder needed for the cut;
-   a decoder to verify).
-4. Take names with `.flac` / `.opus`: naming and the take list (`is_take_file_name`, peaks file name, rename, delete,
-   journal lookup) assume `.wav` today.
-5. Controller and Settings: `set_format()` accepts every compatible choice; the Format row (UI, the owner's design)
-   from `list_formats()`; the time left from the choice's estimate; the observed FLAC ratio fed back during a take.
-6. Tags: TITLE (the take name), DATE (only with a set clock, D15), ENCODER, the take's notes as COMMENT, SCENE/TAKE.
-7. CPU on the boards: Opus 128 kbps stereo on a Pi Zero 2 W is not measured (mono speech: 7-10 % of a core).
+**Which format a take gets.** At REC the controller builds the format list for the capture format the card was opened
+with and the libraries found (`codec_availability_here()`, loaded only when the stored format is not WAV) and takes
+`effective_choice()` of the stored key: the stored choice when compatible, else WAV. The recorder's format text
+(`48k/16 FLAC`, `48k/16 stereo OPUS`) and the hours left (from the choice's size estimate) follow the same choice,
+recomputed with the free space every 2 s. Encoders: `FlacEncoder` level 5, or `OpusEncoder` with the preset's bitrate,
+application and, for the speech presets on a stereo card, one coded channel (`OPUS_SET_FORCE_CHANNELS(1)`). Tags
+(Vorbis comments): `TITLE` (the part's file name without extension), `DATE` (only with a set clock, D15), `ENCODER=Cassette`.
 
-**Phase C: playback and editing.**
+**Writer** (`WriterConfig::make_encoder`, null = WAV exactly as before). Each part gets a fresh encoder writing through a
+`FileByteSink` on the writer's descriptor. The ring, the block size, the flush time and the sync cadence are the WAV
+ones; at each sync the writer calls `Encoder::flush()` and then `fdatasync`, and counts as synced the encoder's
+`frames_out` (whole FLAC frames; Opus: the granule of the last page, so libopusenc's 2 s decision delay is never
+counted as safe). Stop: `finish()` (FLAC rewrites STREAMINFO with the totals and the MD5; Opus drains and writes the
+end-of-stream page), then `fdatasync`. No header patches, no RF64. Auto-split (same setting, same `split_bytes`): a part
+ends before its file could pass `split_bytes` (the check before each block counts the file, the PCM size of what the
+encoder holds and of the block, and `split_slack`, 256 KB, for frame and page headers); the next part `_p2`, `_p3`
+... is a new stream with its own encoder and headers. Disk full, EIO, a failing `fdatasync`: the take stops as for WAV
+(the same reasons and notices); the encoder is dropped without `finish()` and the file is mended in place at once
+(the cut frame or page removed, STREAMINFO / end of stream set), so even an "error" take is a valid file. The encoder
+runs on the writer thread; the capture thread only writes into the ring (a 20 ms-per-call encoder never made a ring
+write wait: 2-4 us worst).
+
+**Journal.** A compressed take's journal has `"codec": {"format": "flac"|"opus", "preset", "bitrate", "force_mono",
+"encoder"}` next to the capture format; a WAV journal is unchanged (no `codec` = WAV).
+
+**Names and the list.** `<prefix>_<take>_<when>[_pN][-N].wav|flac|opus` (`TakeName::format`, WAV by default). Take
+numbers are shared: the counter and the guards read every take file and journal whatever the extension, so a number
+is never used twice for a prefix. Rename keeps the extension; delete takes the peak cache and the journal along; edit
+results keep the source's format. The list reads FLAC's STREAMINFO (a take being recorded says 0 = unknown: 0 s) and
+Opus's OpusHead plus the granule of the last page (the last 128 KB of the file); each row has `format_tag`
+(WAV/FLAC/OPUS), shown at the end of the row's detail line (`today 14:32 · 42 s · 4 MB · FLAC`).
+
+**Repair** (`codec/stream_scan.*`, study 058 table 4.3), for open journals and, without a journal, for `.flac`/`.opus`
+files that look unfinished (FLAC total 0, Opus without end of stream; a finished file with a foreign tail such as an
+ID3 tag is left alone):
+- FLAC: frames are walked from the first one; a frame counts when its header passes CRC-8 and its end passes CRC-16.
+  The end of a middle frame is where the CRC-16 matches and the next frame's header (the next number) starts; the last
+  frame's exact length comes from walking its subframes (CONSTANT, VERBATIM, FIXED, LPC, Rice residuals), because with
+  this CRC a frame whose CRC ends in 0x00 also "matches" one byte early, and in a zero-filled tail at every later byte.
+  A damaged frame in the middle is skipped (resync), never cut. The file is cut after the last valid frame (one
+  ftruncate, first), then STREAMINFO's total samples are rewritten (from the last frame's number); a set MD5 that no
+  longer fits is zeroed first.
+- Ogg Opus: pages are walked checking each CRC; OpusHead gives the pre-skip and the input rate; the file is cut after
+  the last valid page with a granule, the end-of-stream flag is set on it (flag and CRC in one 21-byte pwrite).
+- Idempotent and safe to interrupt; the take gets the same notice and the same "repaired" mark as a WAV take.
+
+**Phase C gate.** `playback_refusal()` (takes/recordings) is the one place: LOAD, PLAY / PLAY-PAUSE on a loaded
+FLAC/Opus take, the list's preview and TRIM (so the peak cache too) answer `FLAC playback is not available yet` /
+`Opus playback is not available yet` and nothing opens the file.
+
+**Tests.** The test encoders `tests/fixture_codecs.hpp` (a real FLAC stream with verbatim subframes, an Ogg Opus stream
+with real pages, no library) make every writer, list and repair path testable byte for byte: the cadence and what each
+sync makes durable, a power cut emulated at every step of a take (and cut back into the unsynced part), SIGKILL crash
+runs, `fdatasync` failing at each sync, a full card and EIO, short writes, auto-split, pause, the free-space stop, a
+missing codec, the repair at every byte offset of small files (recording and finished state), mid-file damage, zero
+tails, mixed folders, the app end to end. With the real libraries (`tests/codec/run.sh` with the private roots, libFLAC
+1.4.3 and 1.5.0, libopusenc 0.2.1, libopus 1.4 and 1.5.2): FLAC takes through the writer decode sample-exact with
+libFLAC (MD5 checked), Opus takes have exactly the recorded length in libopusfile and decode to the end, power cuts
+after each sync are repaired and decode, the repair at every byte offset of a short real FLAC (17 248 cuts) and Opus
+stream (9 571 cuts) holds, and libFLAC / libopusfile accept the test encoders' streams.
+
+**CPU measured** (this PC, WSL, one x86 core; 20 s of synthetic 48 kHz stereo 16-bit music): FLAC level 5: 0.2 % of a
+core (about 640x real time), the same through the writer; Opus 128 kbps: 0.7 % (about 140x real time), 0.7-0.9 % through
+the writer. A Pi Zero 2 W core is very roughly 15-25x slower, so about 3-5 % (FLAC) and 10-20 % (Opus 128 stereo): to be
+measured on the board (B17 step 12; P0-e measured mono speech Opus at 7-10 %).
+
+**Left for later (not phase B).**
+- The Format row (the owner's design) and `set_format()` accepting the compatible choices; a notice when the stored
+  choice falls back to WAV (today it does so silently, the format text shows WAV).
+- The observed FLAC ratio fed back into the estimate during a take (`FormatInputs::flac_ratio`).
+- `decision_delay_ms` for Opus stays libopusenc's 2 s (a power cut loses the sync interval plus up to 2 s); lowering
+  it needs a listening check.
+- The take's notes as COMMENT and SCENE/TAKE tags.
+- The list shows 0 s for a FLAC take whose STREAMINFO says "unknown" (only a take being recorded, or one whose repair
+  failed).
+- The packaging (Recommends or Depends for libflac/libopusenc, see above) is the owner's step.
+
+## Next: phase C, playback and editing
+
+0. Remove the gate: `playback_refusal()` in takes/recordings and its callers in the controller (load, play_take,
+   preview_take, open_target, open_trim); the app tests that expect the notice (`tests/app/test_formats.cpp`) then
+   expect playback.
 1. Decoders (decoder.hpp designed): FLAC through libFLAC's stream decoder, Opus through libopusfile, WAV behind the
-   same interface; the player, peaks and trim read through it. Opus plays at 48 kHz whatever the input rate.
+   same interface; the player, peaks and trim read through it. Opus plays at 48 kHz whatever the input rate. The
+   player's progress and the list read the length from the stream (`read_stream_info()` already gives it).
 2. Peaks for compressed takes: decode once on the worker thread (FLAC is fast; Opus decodes at about 30x real time on
    a Pi 3 class CPU per report 058: a one-hour take takes a couple of minutes on the zero8, so show progress or build
    the peaks while recording, from the PCM the writer already has).
@@ -233,3 +304,5 @@ probe to repeat: `ldconfig -p | grep -E 'libFLAC|libopus|libogg'` and `dpkg-quer
    the edge frames); Opus by cutting at pages and setting pre-skip / end trimming for sample accuracy, or re-encoding
    (a second generation of lossy coding).
 4. Notes editing in place: the FLAC padding and the OpusTags padding allow it without rewriting the file.
+5. The edit names already keep the source's extension (`next_edit_names`); trim_split must write the results in the
+   source's format (or WAV, if the owner prefers: then the names need the target format).

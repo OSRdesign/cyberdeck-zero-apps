@@ -4,12 +4,14 @@
 # Run it on a WSL native-filesystem copy (tests/run.sh does that).
 APP   ?= ..
 BUILD ?= build
-CORE  := $(wildcard $(APP)/src/core/*.cpp)
+CORE  := $(wildcard $(APP)/src/core/*.cpp) \
+         $(APP)/src/core/codec/byte_sink.cpp $(APP)/src/core/codec/codec_libs.cpp $(APP)/src/core/codec/encoder.cpp \
+         $(APP)/src/core/codec/stream_scan.cpp
 TESTS := $(wildcard $(APP)/tests/*.cpp)
 OBJS  := $(patsubst $(APP)/%.cpp,$(BUILD)/%.o,$(CORE) $(TESTS))
 CXXFLAGS ?= -std=c++17 -O1 -g -Wall -Wextra -Werror
 CXXFLAGS += -I$(APP)/src/core -I$(APP)/tests
-LIBS := -lpthread
+LIBS := -ldl -lpthread
 
 $(BUILD)/test-cassette: $(OBJS)
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS)

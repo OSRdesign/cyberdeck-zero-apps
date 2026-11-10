@@ -2,8 +2,10 @@
  * SPDX-License-Identifier: MIT
  *
  * Cassette takes: the recordings folder (default ~/Recordings, D14). Lists the takes from the files themselves (the
- * WAV header is the truth: format, length, bext date and time), marks repaired and damaged takes, reports free space
- * and the hours left at a format, deletes and renames takes. Every file call goes through FileOps. LVGL-free.
+ * WAV header is the truth: format, length, bext date and time; for FLAC the STREAMINFO, for Ogg Opus the OpusHead and
+ * the last page's granule position), marks repaired and damaged takes, reports free space and the hours left at a
+ * format, deletes and renames takes (of every format: a rename keeps the extension). Every file call goes through
+ * FileOps. LVGL-free.
  *
  * Files next to a take: its journal <dir>/.journal/<take>.json (journal.hpp; found by the file name in the journal's
  * path/parts, so a renamed take keeps its journal) and its peak cache <stem>.peaks (written by the trim page, T5b).
@@ -28,17 +30,18 @@ std::string expand_home(const std::string &path, const std::string &home);
 struct TakeInfo {
     std::string name;      /* file name */
     std::string path;      /* dir + "/" + name */
-    std::string label;     /* "006", "006-1"; the stem for a .wav outside the naming grammar */
+    std::string label;     /* "006", "006-1"; the stem for a file outside the naming grammar */
     bool named = false;    /* the name follows the grammar (tn is valid) */
     TakeName tn;
+    RecFormat format = RecFormat::Wav; /* by the extension */
     uint64_t size = 0;     /* bytes on disk */
     int64_t mtime = 0;
     bool damaged = false;  /* the header could not be parsed (error says why) */
     std::string error;
     bool repaired = false; /* the journal says "repaired" */
     std::string journal;   /* the journal file of the take, empty when none */
-    AudioFormat fmt;
-    uint64_t frames = 0;   /* audio frames in the file */
+    AudioFormat fmt;       /* Opus: the input rate and channels from OpusHead, 16 bits */
+    uint64_t frames = 0;   /* audio frames in the file (FLAC: 0 while STREAMINFO says unknown, a take being recorded) */
     double seconds = 0;
     bool has_bext = false;
     std::string origination_date; /* bext "YYYY-MM-DD", empty when absent or not set */
@@ -46,8 +49,13 @@ struct TakeInfo {
     uint64_t time_reference = 0;  /* bext samples since midnight */
 };
 
-/* Is this folder entry a take file to list? (".wav"/".WAV", not hidden, not a temp file.) */
+/* Is this folder entry a take file to list? (".wav", ".flac" or ".opus" in either case, not hidden, not a temp file.) */
 bool is_take_file_name(const std::string &name);
+
+/* Playback of FLAC and Opus takes is phase C. Until then LOAD, PLAY, the list preview, trim and the peak cache refuse
+ * such a take with this text ("FLAC playback is not available yet"); empty when the take can be played. The one place
+ * phase C removes. */
+std::string playback_refusal(const std::string &take_file_name);
 
 /* Reads one file. Fills damaged instead of failing. */
 TakeInfo read_take_info(FileOps &ops, const std::string &dir, const std::string &name);
@@ -69,7 +77,8 @@ struct SpaceInfo {
 /* free_space() of the folder (the statvfs seam). 0 or -errno. */
 int folder_space(FileOps &ops, const std::string &dir, const AudioFormat &fmt, SpaceInfo &out);
 
-/* The peak cache file of a take file name ("take_006_x.wav" -> "take_006_x.peaks"). */
+/* The peak cache file of a take file name ("take_006_x.wav" -> "take_006_x.peaks"; the same for .flac / .opus: take
+ * numbers never repeat across formats, so the stems are distinct). */
 std::string peaks_name(const std::string &take_file_name);
 
 /* Finds the journal whose path or parts name this file (by file name). Empty when none. */

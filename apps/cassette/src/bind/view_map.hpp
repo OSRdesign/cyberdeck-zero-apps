@@ -81,7 +81,8 @@ std::string size_text(uint64_t bytes);
 std::string length_text(double seconds);
 /* "today 14:32", "yesterday 18:20", "2 Nov", "2 Nov 2025", "nodate" from "YYYY-MM-DD HH:MM" */
 std::string date_part(const std::string &date_text, int64_t now_wall_s, bool utc);
-/* "today 14:32 · 42 s · 4 MB"; a damaged take "damaged · 4 MB"; a repaired one ends in " · repaired" */
+/* "today 14:32 · 42 s · 4 MB · FLAC" (the row's format tag when it has one); a damaged take "damaged · 4 MB"; a
+ * repaired one ends in " · repaired" */
 std::string take_detail(const TakeRow &r, int64_t now_wall_s, bool utc);
 /* "48k/16 WAV" -> "WAV 48k" (the cassette label), "48k/16" (the list strip), "WAV 48 kHz 16-bit" (the Format row) */
 std::string tape_format(const std::string &format_text);

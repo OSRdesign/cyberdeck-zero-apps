@@ -3,14 +3,17 @@
  *
  * Cassette takes: file names, the take counter and the edit-suffix numbers. LVGL-free.
  *
- * Grammar of a take file name (D15, amended for edits):
- *   <prefix>_<take>_<when>[_p<part>][-<edit>].wav
+ * Grammar of a take file name (D15, amended for edits and, in phase B of the formats, for FLAC and Opus):
+ *   <prefix>_<take>_<when>[_p<part>][-<edit>].<ext>
  *   prefix  1..24 of [A-Za-z0-9 _-], not starting with '.' (so never "." or ".."), no path separators, no space first or last
  *   take    decimal, zero-padded to at least 3 digits ("006", "999", "1000")
  *   when    YYYYMMDD-HHMM (local time) or "nodate" while the clock has not been set
  *   part    auto-split part 2, 3, ... (part 1, the first file of a take, has no suffix)
  *   edit    1, 2, 3 ... : results of trim/split, never reused for the same take (and part)
- * The name is parsed from the right, so a prefix may itself contain '_', '-' and inner spaces.
+ *   ext     wav, flac or opus (lower case; TakeName::format)
+ * The name is parsed from the right, so a prefix may itself contain '_', '-' and inner spaces. Take numbers are shared by
+ * the three formats: the counter and the guards below look at every take file, so a number is never used twice for a
+ * prefix whatever the format.
  *
  * The take counter lives in <recordings>/.take-counter (the last take number handed out, decimal) and is replaced
  * atomically. A new number is counter + 1, moved forward past any number the same prefix already uses in the folder's
@@ -22,6 +25,7 @@
 #pragma once
 
 #include "../fileops.hpp"
+#include "settings.hpp"
 
 #include <cstdint>
 #include <string>
@@ -81,11 +85,20 @@ struct TakeName {
     DateTime when;
     uint32_t part = 1;     /* auto-split part, 1 = the first file (no suffix) */
     uint32_t edit = 0;     /* 0 = not an edit result */
+    RecFormat format = RecFormat::Wav; /* the extension: .wav, .flac or .opus */
 };
+
+/* ".wav", ".flac", ".opus". */
+const char *take_extension(RecFormat f);
+/* The format a file name's extension names (.wav/.WAV, .flac/.FLAC, .opus/.OPUS); false for any other name. */
+bool take_format_of(const std::string &file_name, RecFormat &f);
+bool has_take_extension(const std::string &file_name);
+/* "WAV", "FLAC", "OPUS": the short tag the take list shows. */
+const char *format_tag(RecFormat f);
 
 /* "006", "1000". */
 std::string take_number_text(uint64_t take);
-/* The file name with ".wav". The prefix is not validated here (see valid_prefix). */
+/* The file name with the format's extension (".wav" by default). The prefix is not validated here (see valid_prefix). */
 std::string format_take_name(const TakeName &t);
 /* Parses a file name (no directory). False when it does not follow the grammar. */
 bool parse_take_name(const std::string &file_name, TakeName &out);
@@ -93,7 +106,7 @@ bool parse_take_name(const std::string &file_name, TakeName &out);
 std::string take_label(const TakeName &t);
 /* The name of a new take: date and time from the clock when it is synchronized, else "nodate". */
 TakeName new_take_name(const std::string &prefix, uint64_t take, ClockState &cs, Clock &clock);
-/* File name without a trailing ".wav" / ".WAV". */
+/* File name without a trailing take extension (".wav", ".flac", ".opus", either case). */
 std::string file_stem(const std::string &file_name);
 bool has_wav_extension(const std::string &file_name);
 
@@ -124,7 +137,8 @@ int set_next_take_number(FileOps &ops, const std::string &recordings_dir, const 
  * edit suffix plus -N, -N+1, ... where N is one more than the highest number already used for that take and part:
  * in `existing` (file names in the folder, any prefix, since a rename changes only the prefix) and in `used` (the
  * take's record). Cutting "take_006_20261108-1105-1.wav" again therefore continues the numbering of take 006. The
- * take number and the take counter never change. A source that does not follow the grammar gets "<stem>-N.wav". */
+ * take number and the take counter never change. A source that does not follow the grammar gets "<stem>-N.wav"
+ * ("<stem>-N.flac" / ".opus" for a FLAC or Opus source). Results keep the source's format. */
 std::vector<std::string> next_edit_names(const std::string &source_name, unsigned count,
                                          const std::vector<std::string> &existing,
                                          const std::vector<uint32_t> &used = {});

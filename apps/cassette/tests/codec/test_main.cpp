@@ -14,6 +14,7 @@ int main() {
     test_opus();
     test_formats();
     test_real();
+    test_writer_real();
     std::printf("cassette codec tests: %d checks passed, %d failed, %d skipped\n", g_pass, g_fail, g_skip);
     return g_fail ? 1 : 0;
 }

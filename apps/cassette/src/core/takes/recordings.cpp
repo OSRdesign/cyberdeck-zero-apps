@@ -3,6 +3,7 @@
  */
 #include "recordings.hpp"
 
+#include "../codec/stream_scan.hpp"
 #include "../journal.hpp"
 #include "../wav.hpp"
 #include "atomic_file.hpp"
@@ -60,7 +61,24 @@ const JournalRef *journal_of(const std::vector<JournalRef> &js, const std::strin
     return nullptr;
 }
 
+/* FLAC and Ogg Opus: the stream headers (and the last page of an Opus take); no bext. */
+void fill_stream(FileOps &ops, TakeInfo &t) {
+    const StreamInfo i = read_stream_info(ops, t.path);
+    if (!i.ok) {
+        t.damaged = true;
+        t.error = i.error.empty() ? "unreadable header" : i.error;
+        return;
+    }
+    t.fmt = i.fmt;
+    t.frames = i.frames;
+    t.seconds = i.fmt.rate ? static_cast<double>(t.frames) / i.fmt.rate : 0;
+}
+
 void fill_header(FileOps &ops, TakeInfo &t) {
+    if (t.format != RecFormat::Wav) {
+        fill_stream(ops, t);
+        return;
+    }
     HeaderInfo h = parse_header(ops, t.path);
     if (!h.ok || h.block_align == 0) {
         t.damaged = true;
@@ -94,6 +112,7 @@ TakeInfo read_one(FileOps &ops, const std::string &dir, const std::string &name,
     t.path = dir + "/" + name;
     t.named = parse_take_name(name, t.tn);
     t.label = t.named ? take_label(t.tn) : file_stem(name);
+    take_format_of(name, t.format);
     StatInfo st;
     if (ops.stat(t.path, st) == 0) {
         t.size = st.size;
@@ -129,9 +148,18 @@ std::string expand_home(const std::string &path, const std::string &home) {
 
 bool is_take_file_name(const std::string &name) {
     if (name.empty() || name[0] == '.') return false;
-    if (!has_wav_extension(name) || name.size() <= 4) return false;
+    RecFormat f;
+    if (!take_format_of(name, f) || name.size() <= std::string(take_extension(f)).size()) return false;
     if (name.find(".tmp") != std::string::npos) return false; /* "x.wav.tmp", "x.tmp.wav": unfinished writes */
     return true;
+}
+
+std::string playback_refusal(const std::string &take_file_name) {
+    RecFormat f = RecFormat::Wav;
+    if (!take_format_of(base_name(take_file_name), f)) return "";
+    if (f == RecFormat::Flac) return "FLAC playback is not available yet";
+    if (f == RecFormat::Opus) return "Opus playback is not available yet";
+    return "";
 }
 
 TakeInfo read_take_info(FileOps &ops, const std::string &dir, const std::string &name) {

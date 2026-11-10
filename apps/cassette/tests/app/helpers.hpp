@@ -169,7 +169,8 @@ public:
 class FaultOps final : public FileOps {
 public:
     FileOps &b = posix_file_ops();
-    std::atomic<int64_t> enospc_after{-1};  /* bytes written to .wav files, then -ENOSPC */
+    std::atomic<int64_t> enospc_after{-1};  /* bytes written to .wav files (write) and to .flac / .opus files past their end
+                                               (pwrite: the encoders' sink), then -ENOSPC */
     std::atomic<int64_t> free_override{-1}; /* bytes reported free for every path, when >= 0 */
     std::atomic<unsigned> tmp_delay_us{0};  /* each write to a ".tmp-" file sleeps this long */
     std::atomic<bool> fail_peak_rename{false};
@@ -179,6 +180,7 @@ public:
         if (fd >= 0) {
             std::lock_guard<std::mutex> g(mu_);
             if (ends_with(p, ".wav")) wav_fds_.insert(fd);
+            if (ends_with(p, ".flac") || ends_with(p, ".opus")) enc_fds_.insert(fd);
             if (p.find(".tmp-") != std::string::npos) tmp_fds_.insert(fd);
         }
         return fd;
@@ -187,6 +189,7 @@ public:
         {
             std::lock_guard<std::mutex> g(mu_);
             wav_fds_.erase(fd);
+            enc_fds_.erase(fd);
             tmp_fds_.erase(fd);
         }
         return b.close(fd);
@@ -197,6 +200,21 @@ public:
     }
     ssize_t pwrite(int fd, const void *x, size_t n, uint64_t o) override {
         if (is_tmp(fd) && tmp_delay_us.load()) std::this_thread::sleep_for(std::chrono::microseconds(tmp_delay_us.load()));
+        bool enc;
+        {
+            std::lock_guard<std::mutex> g(mu_);
+            enc = enc_fds_.count(fd) != 0;
+        }
+        const int64_t lim = enospc_after.load();
+        if (enc && lim >= 0) { /* only what grows the file needs space */
+            StatInfo st;
+            b.fstat(fd, st);
+            const uint64_t grow = o + n > st.size ? o + n - std::max<uint64_t>(st.size, o) : 0;
+            if (grow > 0) {
+                const int64_t total = written_.fetch_add(static_cast<int64_t>(grow)) + static_cast<int64_t>(grow);
+                if (total > lim) return -ENOSPC;
+            }
+        }
         return b.pwrite(fd, x, n, o);
     }
     ssize_t pread(int fd, void *x, size_t n, uint64_t o) override { return b.pread(fd, x, n, o); }
@@ -247,7 +265,7 @@ private:
         return 0;
     }
     std::mutex mu_;
-    std::set<int> wav_fds_, tmp_fds_;
+    std::set<int> wav_fds_, enc_fds_, tmp_fds_;
     std::atomic<int64_t> written_{0};
 };
 

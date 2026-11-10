@@ -186,6 +186,7 @@ std::string take_detail(const TakeRow &r, int64_t now_wall_s, bool utc)
     join(out, date_part(r.date_text, now_wall_s, utc));
     join(out, length_text(r.seconds));
     join(out, size_text(r.size));
+    if (!r.format_tag.empty()) join(out, r.format_tag); /* WAV, FLAC, OPUS: a folder can hold all three */
     if (r.repaired) join(out, "repaired");
     return out;
 }

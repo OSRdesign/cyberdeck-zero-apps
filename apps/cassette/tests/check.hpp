@@ -42,3 +42,6 @@ void test_journal();
 void test_repair();
 void test_crash();
 void test_rates();
+void test_stream_scan();
+void test_codec_writer();
+void test_codec_crash();

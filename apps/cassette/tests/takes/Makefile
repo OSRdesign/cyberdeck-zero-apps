@@ -6,7 +6,7 @@
 APP   ?= ../..
 BUILD ?= build
 CORE  := $(APP)/src/core/fileops.cpp $(APP)/src/core/wav.cpp $(APP)/src/core/journal.cpp \
-         $(wildcard $(APP)/src/core/takes/*.cpp)
+         $(APP)/src/core/codec/stream_scan.cpp $(APP)/src/core/codec/byte_sink.cpp $(wildcard $(APP)/src/core/takes/*.cpp)
 TESTS := $(wildcard $(APP)/tests/takes/*.cpp)
 OBJS  := $(patsubst $(APP)/%.cpp,$(BUILD)/%.o,$(CORE) $(TESTS))
 CXXFLAGS ?= -std=c++17 -O1 -g -Wall -Wextra -Werror

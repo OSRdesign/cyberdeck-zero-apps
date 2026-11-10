@@ -109,6 +109,22 @@ void test_helpers()
     CHECK_EQ(take_detail(r, kNow, true), "nodate \xC2\xB7 41 s \xC2\xB7 4 MB");
     r.damaged = true;
     CHECK_EQ(take_detail(r, kNow, true), "damaged \xC2\xB7 4 MB");
+    /* the format tag of the row (a folder can mix WAV, FLAC and Opus takes) */
+    r = row("take_009_20261108-1432.flac", 42, 4ull << 20, "2026-11-08 14:32");
+    r.format_tag = "FLAC";
+    CHECK_EQ(take_detail(r, kNow, true), "today 14:32 \xC2\xB7 42 s \xC2\xB7 4 MB \xC2\xB7 FLAC");
+    r.repaired = true;
+    CHECK_EQ(take_detail(r, kNow, true), "today 14:32 \xC2\xB7 42 s \xC2\xB7 4 MB \xC2\xB7 FLAC \xC2\xB7 repaired");
+    r.format_tag = "WAV";
+    r.repaired = false;
+    CHECK_EQ(take_detail(r, kNow, true), "today 14:32 \xC2\xB7 42 s \xC2\xB7 4 MB \xC2\xB7 WAV");
+    r.damaged = true;
+    CHECK_EQ(take_detail(r, kNow, true), "damaged \xC2\xB7 4 MB");
+    /* the tape label and the names of an Opus or FLAC take */
+    CHECK_EQ(tape_format("48k/16 OPUS"), "OPUS 48k");
+    CHECK_EQ(display_name("take_009_20261108-1432.opus"), "Take 009");
+    CHECK_EQ(sticker_of("take_009_20261108-1432_p2-1.flac"), "009 p2-1");
+    CHECK_EQ(prefix_of("field rec_012_nodate.opus"), "field rec");
 
     /* formats */
     CHECK_EQ(tape_format("48k/16 WAV"), "WAV 48k");

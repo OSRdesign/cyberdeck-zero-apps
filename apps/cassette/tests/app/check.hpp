@@ -69,3 +69,4 @@ void test_rates();       /* a card that records at 16000 Hz: counter, take lengt
 void test_settings();    /* persistence across a restart */
 void test_monitor_app(); /* the live monitor: settings, the transport table, the stalled sink, persistence */
 void test_playmeter();   /* the played level in the snapshot (16000 and 48000 Hz) and the 5 s jump flash */
+void test_formats_app(); /* FLAC and Opus takes end to end on the test encoders: names, list, journal, gate, repair */

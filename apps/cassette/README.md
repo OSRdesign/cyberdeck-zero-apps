@@ -196,8 +196,8 @@ It writes no file and changes no setting; `--no-open` only lists.
 
 ## Known limits
 
-- WAV only in 0.1. FLAC and Opus come later (the Format row shows the take's rate, depth and channels; there is no
-  other choice yet).
+- The Format row offers WAV only. The recorder can already write FLAC and Ogg Opus takes (set in the settings file,
+  see Formats below), but the app cannot play, preview or trim them yet: those refuse with a notice.
 - No background recording (plan 016, D10): the app owns the screen while it records, and leaving it stops the take
   safely. `X-Background` is not set; this is revisited when multitasking is switched on.
 - Playback plays the app's own takes (WAV) through the card's playback side when it has one, else the default device.
@@ -207,9 +207,13 @@ It writes no file and changes no setting; `--no-open` only lists.
 
 ## Formats
 
-WAV (Broadcast Wave) is the format of 0.1 and stays the default. FLAC (lossless) and Ogg Opus (small) are being added:
-the core layer is in `src/core/codec/` (tested in `tests/codec/`), the recorder does not use it yet. When it does, the
-Format row lists every format the selected card allows, each with an estimated size per minute:
+WAV (Broadcast Wave) is the format of 0.1 and stays the default. FLAC (lossless) and Ogg Opus (small) are being added.
+The recorder writes them already, crash-safe like WAV (a take cut by a power loss is repaired at the next start), when
+`~/.config/cassette/settings.json` says `"format": "flac"` or `"format": "opus"` (with `"format_preset"`:
+`speech24`, `speech32`, `music64` or `music128`) and the card and the libraries allow it; otherwise it records WAV.
+Takes are named `.flac` / `.opus`, the list shows WAV, FLAC or OPUS in each row, and the take numbers run on across
+formats. Playing and trimming them in the app, and the Format row to choose them, come next. The Format row will list
+every format the selected card allows, each with an estimated size per minute:
 
 | Format | Size per minute at 48 kHz mono 16-bit | Needs |
 |---|---|---|
@@ -219,8 +223,9 @@ Format row lists every format the selected card allows, each with an estimated s
 | Opus 64 / 128 kbps, music | 0.48 / 0.97 MB | `libopusenc0`, a card at 8, 12, 16, 24 or 48 kHz |
 
 The libraries are opened at run time: without them the app records WAV and the other rows say which package is
-missing. Opus is not offered on a 44.1 kHz-only card (no resampling in 0.1). Metadata goes into Vorbis comments. Design,
-measurements and the next steps: [`docs/FORMATS.md`](docs/FORMATS.md).
+missing. Opus is not offered on a 44.1 kHz-only card (no resampling in 0.1). Metadata goes into Vorbis comments (the
+take name, the date when the clock is set). Design, measurements, the status and the next steps:
+[`docs/FORMATS.md`](docs/FORMATS.md).
 
 ## Privacy
 

@@ -32,7 +32,7 @@
 
 namespace cassette {
 
-enum class RecFormat { Wav, Flac, Opus }; /* only Wav is implemented now */
+enum class RecFormat { Wav, Flac, Opus }; /* FLAC and Opus record when the card and the libraries allow (codec/formats.hpp) */
 enum class ScanMode { Fast, Jump };       /* REW/FWD: fast scan at 5x while held, or a 5 s jump per tap */
 
 constexpr int kSyncMin = 5, kSyncMax = 30, kSyncDefault = 10;

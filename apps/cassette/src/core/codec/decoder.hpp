@@ -4,9 +4,9 @@
  * Cassette codecs: the DECODER seam, designed in phase A, implemented with playback of FLAC/Opus takes (phase C).
  * Nothing implements it yet and nothing calls it; tests/codec only checks that it compiles.
  *
- * Who will use it: the player (core/playback, today a WAV reader), the peak scanner (core/edit/peaks), trim/split
- * (core/edit/trim_split) and the repair of a cut FLAC/Opus take (core/repair, which needs the frame count of the
- * readable prefix). All of them read through FileOps (pread) like the WAV code does, so the fault-injecting test FileOps
+ * Who will use it: the player (core/playback, today a WAV reader), the peak scanner (core/edit/peaks) and trim/split
+ * (core/edit/trim_split). (The repair of a cut FLAC/Opus take needs no decoder: codec/stream_scan walks the frames and
+ * pages, phase B.) All of them read through FileOps (pread) like the WAV code does, so the fault-injecting test FileOps
  * keep working.
  *
  * Planned implementations:

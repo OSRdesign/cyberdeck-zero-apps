@@ -1,8 +1,8 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * Cassette codecs: the encoder seam the writer drives (phase B). One encoder per take part, used by the writer thread
- * only:
+ * Cassette codecs: the encoder seam the writer drives (phase B: WriterConfig::make_encoder). One encoder per take part,
+ * used by the writer thread only:
  *   start(sink, tags)   the stream headers go out at once (FLAC: fLaC, STREAMINFO with "0 = unknown" totals, the Vorbis
  *                       comments, padding; Opus: the OpusHead and OpusTags pages), so an empty take is a valid file
  *   write(pcm, frames)  any block size, interleaved PCM in the capture format (16-bit or packed 24-bit little endian,

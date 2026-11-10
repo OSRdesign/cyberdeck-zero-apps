@@ -168,6 +168,10 @@ std::string journal_to_json(const JournalEntry &e) {
     o += "],\n";
     o += "  \"format\": {\"rate\": " + std::to_string(e.fmt.rate) + ", \"channels\": " + std::to_string(e.fmt.channels) +
          ", \"bits\": " + std::to_string(e.fmt.bits) + "},\n";
+    if (!e.codec.empty())
+        o += "  \"codec\": {\"format\": " + esc(e.codec) + ", \"preset\": " + esc(e.codec_preset) + ", \"bitrate\": " +
+             std::to_string(e.bitrate_bps) + ", \"force_mono\": " + (e.force_mono ? "true" : "false") +
+             ", \"encoder\": " + esc(e.encoder) + "},\n";
     o += "  \"device\": {\"name\": " + esc(e.device_name) + ", \"by_id\": " + esc(e.device_id) + "},\n";
     o += "  \"started\": {\"mono_ms\": " + std::to_string(e.started_mono_ms) + ", \"wall\": " + std::to_string(e.started_wall) + "},\n";
     o += "  \"writer\": {\"sync_interval_ms\": " + std::to_string(e.sync_interval_ms) + ", \"auto_split\": " +
@@ -202,6 +206,14 @@ bool journal_from_json(const std::string &textIn, JournalEntry &e) {
         r.fmt.rate = static_cast<uint32_t>(num(f->get("rate"), 48000));
         r.fmt.channels = static_cast<uint16_t>(num(f->get("channels"), 1));
         r.fmt.bits = static_cast<uint16_t>(num(f->get("bits"), 16));
+    }
+    if (const J *c = root.get("codec"); c && c->t == J::Obj) {
+        r.codec = text(c->get("format"));
+        r.codec_preset = text(c->get("preset"));
+        r.bitrate_bps = static_cast<int>(num(c->get("bitrate")));
+        const J *fm = c->get("force_mono");
+        r.force_mono = fm && fm->t == J::Bool && fm->b;
+        r.encoder = text(c->get("encoder"));
     }
     if (const J *d = root.get("device")) {
         r.device_name = text(d->get("name"));

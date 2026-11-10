@@ -20,7 +20,14 @@ struct JournalEntry {
     std::string take;
     std::string path;                /* the first file of the take */
     std::vector<std::string> parts;  /* every file of the take, in order (path is parts[0]) */
-    AudioFormat fmt;
+    AudioFormat fmt;                 /* the capture format (what went into the encoder) */
+    /* The file format (phase B of FLAC/Opus): written as "codec" only for compressed takes, so a WAV journal is unchanged
+     * and a journal without it means WAV. Repair reads it to know what it mends. */
+    std::string codec;               /* "flac" or "opus"; empty: WAV */
+    std::string codec_preset;        /* "speech24", "speech32", "music64", "music128"; empty: the format's one entry */
+    int bitrate_bps = 0;             /* Opus */
+    bool force_mono = false;         /* Opus speech presets on a stereo card: one coded channel */
+    std::string encoder;             /* the library that encoded ("libFLAC.so.12 1.4.3"), informative */
     std::string device_name;
     std::string device_id;           /* /dev/snd/by-id name */
     int64_t started_mono_ms = 0;

@@ -187,27 +187,65 @@ std::string format_take_name(const TakeName &t) {
     }
     if (t.part >= 2) s += "_p" + std::to_string(t.part);
     if (t.edit >= 1) s += "-" + std::to_string(t.edit);
-    return s + ".wav";
+    return s + take_extension(t.format);
+}
+
+const char *take_extension(RecFormat f) {
+    switch (f) {
+    case RecFormat::Flac: return ".flac";
+    case RecFormat::Opus: return ".opus";
+    case RecFormat::Wav: break;
+    }
+    return ".wav";
+}
+
+const char *format_tag(RecFormat f) {
+    switch (f) {
+    case RecFormat::Flac: return "FLAC";
+    case RecFormat::Opus: return "OPUS";
+    case RecFormat::Wav: break;
+    }
+    return "WAV";
+}
+
+bool take_format_of(const std::string &n, RecFormat &f) {
+    if (ends_with(n, ".wav") || ends_with(n, ".WAV")) f = RecFormat::Wav;
+    else if (ends_with(n, ".flac") || ends_with(n, ".FLAC")) f = RecFormat::Flac;
+    else if (ends_with(n, ".opus") || ends_with(n, ".OPUS")) f = RecFormat::Opus;
+    else return false;
+    return true;
+}
+
+bool has_take_extension(const std::string &n) {
+    RecFormat f;
+    return take_format_of(n, f);
 }
 
 bool has_wav_extension(const std::string &n) { return ends_with(n, ".wav") || ends_with(n, ".WAV"); }
 
-std::string file_stem(const std::string &n) { return has_wav_extension(n) ? n.substr(0, n.size() - 4) : n; }
+std::string file_stem(const std::string &n) {
+    RecFormat f;
+    if (!take_format_of(n, f)) return n;
+    return n.substr(0, n.size() - std::string(take_extension(f)).size());
+}
 
 bool parse_take_name(const std::string &file_name, TakeName &out) {
-    if (!ends_with(file_name, ".wav")) return false;
-    const std::string s = file_name.substr(0, file_name.size() - 4);
+    RecFormat fmt = RecFormat::Wav;
+    if (!take_format_of(file_name, fmt) || !ends_with(file_name, take_extension(fmt))) return false; /* lower case only */
+    const std::string s = file_name.substr(0, file_name.size() - std::string(take_extension(fmt)).size());
     TakeName t;
     uint32_t edit = 0;
     size_t cut = 0;
     if (trailing_number(s, "-", edit, cut) && parse_core(s.substr(0, s.size() - cut), t)) {
         t.edit = edit;
+        t.format = fmt;
         out = t;
         return true;
     }
     t = TakeName{};
     if (!parse_core(s, t)) return false;
     t.edit = 0;
+    t.format = fmt;
     out = t;
     return true;
 }
@@ -338,7 +376,9 @@ std::vector<std::string> next_edit_names(const std::string &source_name, unsigne
             b.size() - cut == stem.size())
             top = std::max(top, v);
     }
-    for (unsigned k = 1; k <= count; k++) out.push_back(stem + "-" + std::to_string(top + k) + ".wav");
+    RecFormat fmt = RecFormat::Wav;
+    take_format_of(src, fmt); /* a WAV source in either case gets ".wav", as always */
+    for (unsigned k = 1; k <= count; k++) out.push_back(stem + "-" + std::to_string(top + k) + take_extension(fmt));
     return out;
 }
 

@@ -389,6 +389,63 @@ Report: what the row read at each step, the names of the takes recorded in 3 and
 4. A photo of idle, recording and the stereo state if possible, and of the countdown. Expected: the touch targets feel
    right (the steppers' - and + buttons and the keys are 7 mm or more).
 
+## B17. FLAC and Opus takes (any board with the libraries; zero8 or deck for the power pull, 30 min)
+
+Goal: takes record as FLAC and as Ogg Opus, play on the PC, and survive a power pull and an unplug like WAV takes.
+The Format row cannot choose them yet (the owner's design comes later): the format is set in the settings file.
+Playing, previewing and trimming FLAC/Opus takes in the app comes later too (phase C): in this version LOAD, PLAY,
+the list's preview and TRIM answer with the notice `FLAC playback is not available yet` (or `Opus ...`). That is
+expected; the takes are checked on the PC.
+
+1. The libraries (the controller can do this): `ldconfig -p | grep -E 'libFLAC|libopusenc'`. Expected: `libFLAC.so.14`
+   (or `.so.12`) and `libopusenc.so.0`. If missing: `sudo apt install libflac14 libopusenc0` (Debian trixie;
+   `libflac12t64 libopusenc0` on Ubuntu 24.04). Report which were there before.
+2. **FLAC.** Close Cassette (Esc on the recorder) and check it is not running (`pgrep -a cassette` prints
+   nothing): a running Cassette writes its own settings back over the edit. Then:
+   `sed -i 's/"format": *"[a-z]*"/"format": "flac"/' ~/.config/cassette/settings.json` and check it with
+   `grep format ~/.config/cassette/settings.json` (expected: `"format": "flac"`).
+3. Open Cassette. Expected: the format on the window reads `48k/16 FLAC` (`FLAC 48 kHz 16-bit` in Settings > Format);
+   the time left is about three times what it was with WAV. Do not pick a value in the Format row during B17: in
+   this version it only offers WAV and choosing it sets WAV back.
+4. REC, talk for 1 minute, STOP. The list: the new take `take_NNN_...flac` on top, its row ends in `FLAC` (the WAV
+   takes end in `WAV`). Its take number follows the WAV takes (never a number already used). Press LOAD and PLAY once:
+   the notice above, nothing hangs, the app stays usable. Rename it (a new prefix) and check the name still ends in
+   `.flac`.
+5. On the board: `cat ~/Recordings/.journal/<take name without .flac>.json`. Expected: `"state": "closed"` and a line
+   `"codec": {"format": "flac", ...}`. (The helper's `take` command reads WAV files only.)
+6. On the PC: `scp <user>@<board>:Recordings/<file>.flac .`, then `flac -t <file>.flac` (expected: `ok`) and
+   `ffprobe -hide_banner <file>.flac` (expected: `Duration: 00:01:0x`, `flac, 48000 Hz, mono, s16`). Play it in VLC
+   (or `ffplay <file>.flac`) and on the phone: no gaps, no clicks. Compare its size with a 1-minute WAV take (expected:
+   about a third to a half).
+7. **Power pull with FLAC** (as B3, read its warning). Settings > Sync every: 10 s. REC, start a phone timer, count
+   aloud every 10 s for about 2 minutes, pull the power. Boot; before opening Cassette:
+   `cat ~/Recordings/.journal/<take>.json` (expected: `"state": "open"`) and `ls -l ~/Recordings/<take>.flac`.
+   Open Cassette. Expected: the notice `Recovered <take> after an interrupted recording (... kept ...)`, the row says
+   `repaired`. The journal now says `"state": "repaired"`. On the PC: `flac -t` says `ok` (no error, no `lost sync`),
+   ffprobe's duration matches what was kept; the last number you hear against the timer. Expected loss: about the sync
+   interval (10 s) or less.
+8. **Opus.** Close Cassette, then
+   `sed -i 's/"format": *"[a-z]*"/"format": "opus", "format_preset": "music128"/' ~/.config/cassette/settings.json`.
+   Open Cassette. Expected: `48k/16 OPUS` (with a 44.1 kHz-only card the app records WAV instead: Opus needs 8, 12, 16,
+   24 or 48 kHz; report it if that happens). REC 1 minute, STOP; the row ends in `OPUS`; the journal has
+   `"codec": {"format": "opus", "preset": "music128", "bitrate": 128000, ...}`.
+9. On the PC: `ffprobe -hide_banner <file>.opus` (expected: `Duration: 00:01:0x`, `opus, 48000 Hz`), and if opus-tools
+   are installed `opusinfo <file>.opus` (no errors, about 128 kbit/s) or `opusdec <file>.opus out.wav`. Play it in VLC.
+10. **Power pull with Opus**: as step 7 with the Opus setting. Expected after the repair: the notice and `repaired`;
+    ffprobe and VLC play it to the end; expected loss: the sync interval plus up to about 2 s (the Opus encoder holds
+    2 s of look-ahead that is not in the file yet).
+11. **Unplug** (as B2) during a FLAC take: the take is closed and kept, `flac -t` says `ok` on the PC.
+12. **CPU** (zero8 or deck): `sh ~/cassette-check.sh watch 10 12` during a 2-minute FLAC take and a 2-minute Opus
+    128 kbps take (with the stereo card if one is at hand, else the mono one). Report the CPU % of each.
+13. Put it back: close Cassette, then
+    `sed -i -e 's/"format": *"[a-z]*"/"format": "wav"/' -e '/"format_preset"/d' ~/.config/cassette/settings.json`
+    (the second expression removes the preset line; if `format_preset` was written on the same line as another key,
+    edit the file by hand with `nano`).
+
+Report: which libraries were present, the window's format text, the list rows (FLAC/OPUS tags), the `flac -t`,
+ffprobe and opusinfo lines, whether both play on the PC and the phone, the power-pull results (timer, kept length,
+last number heard, notice text) for FLAC and Opus, the unplug result, the CPU % of step 12.
+
 ## Results
 
 | Test | Board | Pass / fail | Notes |
@@ -410,6 +467,7 @@ Report: what the row read at each step, the names of the takes recorded in 3 and
 | B14 blank cassette |  |  |  |
 | B15 take number |  |  |  |
 | B16 square screen |  |  |  |
+| B17 FLAC and Opus |  |  |  |
 
 **What to send back:** the table; the probe output per board (B0); the `watch` and `take` outputs of B1, B3, B4; the
 `ui` log line per board; the notice texts as you read them; screenshots or photos of anything cut, overlapping or odd.

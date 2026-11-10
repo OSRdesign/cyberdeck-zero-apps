@@ -3,6 +3,9 @@
  */
 #include "writer.hpp"
 
+#include "codec/codec_libs.hpp"
+#include "codec/stream_scan.hpp"
+
 #include <algorithm>
 #include <cerrno>
 #include <cstring>
@@ -16,6 +19,9 @@ std::string dir_of(const std::string &p) {
     if (s == std::string::npos) return ".";
     return s == 0 ? "/" : p.substr(0, s);
 }
+
+/* An error code as text: errno values as strerror, the codec layer's own values by name (err > 0). */
+std::string error_text(int err) { return codec_error_text(-err); }
 
 }  // namespace
 
@@ -55,12 +61,19 @@ int Writer::start() {
     je_.started_wall = clk_.wall_s();
     je_.sync_interval_ms = sync_ms_;
     je_.auto_split = cfg_.auto_split;
+    if (cfg_.make_encoder) {
+        je_.codec = cfg_.codec;
+        je_.codec_preset = cfg_.codec_preset;
+        je_.bitrate_bps = cfg_.bitrate_bps;
+        je_.force_mono = cfg_.force_mono;
+        je_.encoder = cfg_.encoder_name;
+    }
     int r = open_part(0);
     if (r < 0) {
         state_ = WriterState::Failed;
         reason_ = StopReason::IoError;
         error_ = -r;
-        reason_text_ = std::string("cannot start the file: ") + std::strerror(-r);
+        reason_text_ = std::string("cannot start the file: ") + error_text(-r);
         publish();
         return r;
     }
@@ -83,17 +96,32 @@ int Writer::start() {
     return 0;
 }
 
+int Writer::open_encoder(int fd, int part) {
+    enc_ = cfg_.make_encoder(part);
+    if (!enc_) return kCodecMissing;
+    sink_.reset(new FileByteSink(ops_, fd, 0));
+    const Tags tags = cfg_.tags ? cfg_.tags(part) : Tags();
+    return enc_->start(*sink_, tags); /* the stream headers: an empty take is a valid file */
+}
+
 int Writer::open_part(int part) {
     const std::string path = cfg_.namer(part);
     int fd = ops_.open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
     if (fd < 0) return fd;
-    BwfInfo b = cfg_.bwf;
-    b.time_reference += total_bytes_ / (fb_ ? fb_ : 1); /* a later part continues where the last one ended */
-    std::vector<unsigned char> h = build_header(cfg_.fmt, b, 0, false);
-    int r = write_all(ops_, fd, h.data(), h.size());
+    int r;
+    if (cfg_.make_encoder) {
+        r = open_encoder(fd, part);
+    } else {
+        BwfInfo b = cfg_.bwf;
+        b.time_reference += total_bytes_ / (fb_ ? fb_ : 1); /* a later part continues where the last one ended */
+        std::vector<unsigned char> h = build_header(cfg_.fmt, b, 0, false);
+        r = write_all(ops_, fd, h.data(), h.size());
+    }
     if (r == 0) r = ops_.fsync(fd);
     if (r == 0) r = ops_.fsync_dir(dir_of(path)); /* the file exists after a power cut */
     if (r < 0) {
+        enc_.reset(); /* before its sink; an unfinished encoder writes nothing more */
+        sink_.reset();
         ops_.close(fd);
         ops_.unlink(path);
         return r;
@@ -102,6 +130,7 @@ int Writer::open_part(int part) {
     path_ = path;
     part_ = part;
     part_data_ = 0;
+    part_frames_ = 0;
     unsynced_ = 0;
     rf64_ = false;
     if (je_.parts.size() <= static_cast<size_t>(part)) je_.parts.push_back(path);
@@ -128,6 +157,23 @@ int Writer::switch_rf64() {
 }
 
 int Writer::finalize_part() {
+    if (enc_) {
+        /* the stream's end (FLAC: the last partial block, then STREAMINFO rewritten; Opus: the decision delay drained
+         * and the end-of-stream page), then the data is made durable. On an error the descriptor stays open: fail()
+         * mends the file and closes it. */
+        int r = enc_->finish();
+        if (r == 0) r = ops_.fdatasync(fd_);
+        if (r < 0) return r;
+        const uint64_t bytes = sink_->size();
+        enc_.reset();
+        sink_.reset();
+        const int c = ops_.close(fd_);
+        fd_ = -1;
+        done_frames_ += part_frames_;
+        done_bytes_ += bytes;
+        part_frames_ = 0;
+        return c;
+    }
     int r = ops_.fdatasync(fd_);
     if (r < 0) return r;
     HeaderLayout l;
@@ -141,6 +187,19 @@ int Writer::finalize_part() {
 }
 
 int Writer::do_sync() {
+    if (enc_) {
+        /* everything the library lets out goes to the file first; then the file is durable up to frames_out */
+        int r = enc_->flush();
+        if (r == 0) r = ops_.fdatasync(fd_);
+        if (r < 0) return r;
+        synced_frames_ = done_frames_ + enc_->stats().frames_out;
+        if (cfg_.on_sync) cfg_.on_sync(synced_frames_);
+        unsynced_ = 0;
+        last_sync_ms_ = clk_.mono_ms();
+        syncs_++;
+        if (!cfg_.recordings_dir.empty()) journal_update("open", ""); /* a failed journal write must not stop the audio */
+        return 0;
+    }
     int r = ops_.fdatasync(fd_);
     if (r < 0) return r;
     synced_frames_ = total_bytes_ / fb_;
@@ -174,7 +233,39 @@ bool Writer::rotate() {
     return true;
 }
 
+bool Writer::encode_frames(const unsigned char *p, size_t nframes) {
+    while (nframes > 0) {
+        size_t can = nframes;
+        if (cfg_.auto_split && part_frames_ > 0) {
+            /* the part ends before its file could pass split_bytes: every frame the encoder still holds and every frame
+             * of this block reach the file at most at their PCM size (plus split_slack for frame and page headers) */
+            const uint64_t held = enc_->stats().pending_frames() * fb_;
+            const uint64_t used = sink_->size() + held + cfg_.split_slack;
+            const uint64_t room = cfg_.split_bytes > used ? cfg_.split_bytes - used : 0;
+            can = static_cast<size_t>(std::min<uint64_t>(nframes, room / fb_));
+            if (can == 0) {
+                if (!rotate()) return false;
+                continue;
+            }
+        }
+        const int r = enc_->write(p, can);
+        if (r < 0) {
+            fail(-r);
+            return false;
+        }
+        const uint64_t bytes = static_cast<uint64_t>(can) * fb_;
+        part_frames_ += can;
+        part_data_ += bytes;
+        total_bytes_ += bytes;
+        unsynced_ += bytes;
+        p += bytes;
+        nframes -= can;
+    }
+    return true;
+}
+
 bool Writer::write_frames(const unsigned char *p, size_t nframes) {
+    if (enc_) return encode_frames(p, nframes);
     while (nframes > 0) {
         size_t can = nframes;
         if (cfg_.auto_split) {
@@ -295,6 +386,21 @@ bool Writer::pump(bool *busy) {
 
 void Writer::abandon_file() {
     if (fd_ < 0) return;
+    if (enc_) {
+        /* no finish(): the sink failed or the library broke. The file may end in a cut frame or page; it is mended in
+         * place from what it holds, exactly as the repair at the next launch would (best effort) */
+        enc_.reset();
+        sink_.reset();
+        ops_.fdatasync(fd_);
+        ops_.close(fd_);
+        fd_ = -1;
+        const Container k = cfg_.codec == "flac" ? Container::Flac
+                            : cfg_.codec == "opus" ? Container::OggOpus
+                                                   : container_of(ops_, path_);
+        if (k == Container::Flac) fix_flac(ops_, path_, true);
+        else if (k == Container::OggOpus) fix_ogg_opus(ops_, path_, true);
+        return;
+    }
     HeaderLayout l;
     l.block_align = ba_;
     l.rf64 = rf64_;
@@ -308,7 +414,7 @@ void Writer::fail(int err) {
     if (state_ == WriterState::Failed || state_ == WriterState::Stopped) return;
     error_ = err;
     reason_ = err == ENOSPC ? StopReason::LowSpace : StopReason::IoError;
-    reason_text_ = std::string(err == ENOSPC ? "disk full: " : "write error: ") + std::strerror(err);
+    reason_text_ = std::string(err == ENOSPC ? "disk full: " : "write error: ") + error_text(err);
     abandon_file();
     state_ = WriterState::Failed;
     if (!cfg_.recordings_dir.empty()) journal_update("error", reason_text_);
@@ -356,6 +462,7 @@ void Writer::publish() {
     pub_.error = error_;
     pub_.frames_written = total_bytes_ / (fb_ ? fb_ : 1);
     pub_.frames_synced = synced_frames_;
+    pub_.bytes_out = done_bytes_ + (sink_ ? sink_->size() : 0);
     pub_.paused_frames = paused_frames_;
     pub_.dropped_frames = ring_.frames_dropped();
     pub_.part = part_;

@@ -42,7 +42,11 @@
  *   - the target of PLAY/REW/FWD is the LOADED take: the newest take at start, the one just recorded, or the one the
  *     user loaded (load(); select_take / play_take also set it); deleting it leaves the deck empty.
  *   - wind mode and low cut are the same switch (the 80 Hz high-pass, D18); set_wind_mode() is an alias.
- *   - only WAV is implemented: set_format() refuses Flac and Opus (returns false).
+ *   - set_format() still accepts only Wav (the Format row is the owner's design, a later task). A take records as FLAC
+ *     or Ogg Opus when the STORED setting ("format" + "format_preset") asks for it and effective_choice() allows it on
+ *     the capture format and the libraries found (codec/formats.hpp); otherwise as WAV. The recorder's format text, the
+ *     hours left and the journal follow the choice. FLAC/Opus takes cannot be played, previewed or trimmed before
+ *     phase C: those commands refuse with playback_refusal()'s notice (takes/recordings.hpp).
  *   - changing the folder is refused while a take or countdown runs.
  *   - trim: moving IN or OUT removes the splits that fall outside (IN, OUT); the marker is the only thing the UI moves
  *     (set_in/set_out/add_split take the marker position); preview plays [IN, OUT) from the marker when it is inside, else
@@ -52,6 +56,7 @@
 #pragma once
 
 #include "../alsa/alsa_api.hpp"
+#include "../codec/codec_libs.hpp"
 #include "../fileops.hpp"
 #include "../frame_sink.hpp"
 #include "../takes/naming.hpp"
@@ -67,6 +72,8 @@
 namespace cassette {
 
 class PlaybackSink;
+class Encoder;
+struct FormatChoice;
 
 /* ---- construction ---- */
 
@@ -92,6 +99,11 @@ struct ControllerConfig {
     /* Seconds, monotonic, for the capture thread's overrun estimate (the gap since the last good read). Null: steady_clock.
      * Tests give the fake sound system's clock, so a scripted stall is a measurable gap. */
     std::function<double()> capture_now;
+    /* Compressed takes. Which encoder libraries can be used: null asks the system (codec_availability_here(): libFLAC and
+     * libopusenc loaded with dlopen, only once the stored format is not WAV). The encoder of a part for a format choice
+     * and the capture format: null builds FlacEncoder / OpusEncoder on the real libraries. Tests give fakes. */
+    std::function<CodecAvailability()> codecs;
+    std::function<std::unique_ptr<Encoder>(const FormatChoice &choice, const AudioFormat &capture)> make_encoder;
 };
 
 /* ---- keys ---- */
@@ -166,9 +178,10 @@ struct TakeSnap {
     std::string playing_name;  /* the take the player has open while one plays, scans or is paused (a loaded take, or a
                                 * list preview of another one), else empty */
     unsigned load_seq = 0;     /* counts load() calls (not the load at launch, a new recording, rename or replace) */
-    std::string format_text;   /* "48k/16 WAV", "44.1k/16 stereo WAV" */
+    std::string format_text;   /* "48k/16 WAV", "44.1k/16 stereo WAV": the capture format and the file format a take
+                                * gets now ("48k/16 FLAC" when the stored choice is FLAC and usable) */
     uint64_t free_bytes = 0;
-    double hours_left = 0;     /* at the current format */
+    double hours_left = 0;     /* at the current format (FLAC / Opus: from the choice's size estimate) */
     bool recording = false;
 };
 
@@ -254,7 +267,8 @@ struct TakeRow {
     uint64_t frames = 0, size = 0;
     uint32_t rate = 0;
     int channels = 0, bits = 0;
-    std::string format_text;
+    std::string format_text;     /* "48k/16 WAV", "44.1k/16 stereo FLAC", "48k/16 OPUS" (Opus: the input rate, 16 bits) */
+    std::string format_tag;      /* "WAV", "FLAC", "OPUS": by the file's extension */
     std::string date_text;       /* "2026-11-08 11:05", empty when not set */
     bool damaged = false, repaired = false;
     bool current = false;        /* the take PLAY, REW and FWD act on */

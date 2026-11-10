@@ -9,6 +9,7 @@
 #include "fileops.hpp"
 #include "wav.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -123,11 +124,21 @@ public:
         return n;
     }
 
-    std::set<int> wav_fds; /* write faults apply to the take files only, not to the journal's small files */
+    std::set<int> wav_fds; /* write faults apply to the take files only (.wav, .flac, .opus), not to the journal's small files */
+    int64_t grow_budget = -1;   /* encoder takes: bytes pwrite() may still add past the end of take files, then write_errno
+                                   (a full card: rewriting bytes inside a file never fails for lack of space) */
+    size_t pwrite_short_max = 0; /* pwrite() to take files takes at most this many bytes per call */
+    static bool take_path(const std::string &p) {
+        auto ends = [&](const char *s) {
+            const size_t n = std::strlen(s);
+            return p.size() > n && p.compare(p.size() - n, n, s) == 0;
+        };
+        return ends(".wav") || ends(".flac") || ends(".opus");
+    }
     int open(const std::string &p, int f, int m) override {
         rec("open");
         int fd = base.open(p, f, m);
-        if (fd >= 0 && p.size() > 4 && p.compare(p.size() - 4, 4, ".wav") == 0) wav_fds.insert(fd);
+        if (fd >= 0 && take_path(p)) wav_fds.insert(fd);
         return fd;
     }
     int close(int fd) override {
@@ -147,6 +158,26 @@ public:
     }
     ssize_t pwrite(int fd, const void *b, size_t n, uint64_t off) override {
         rec("pwrite", off, n);
+        if (wav_fds.count(fd)) {
+            if (pwrite_short_max && n > pwrite_short_max) n = pwrite_short_max;
+            if (grow_budget >= 0) {
+                StatInfo st;
+                base.fstat(fd, st);
+                const uint64_t from = std::max<uint64_t>(st.size, off);
+                const uint64_t grow = off + n > from ? off + n - from : 0;
+                if (grow > static_cast<uint64_t>(grow_budget)) {
+                    const uint64_t keep = n - (grow - static_cast<uint64_t>(grow_budget));
+                    if (keep == 0) return -write_errno;
+                    n = static_cast<size_t>(keep);
+                }
+                const ssize_t w = base.pwrite(fd, b, n, off);
+                if (w > 0) {
+                    const uint64_t g = off + static_cast<uint64_t>(w) > from ? off + static_cast<uint64_t>(w) - from : 0;
+                    grow_budget -= static_cast<int64_t>(std::min<uint64_t>(g, static_cast<uint64_t>(grow_budget)));
+                }
+                return w;
+            }
+        }
         return base.pwrite(fd, b, n, off);
     }
     ssize_t pread(int fd, void *b, size_t n, uint64_t off) override { return base.pread(fd, b, n, off); }

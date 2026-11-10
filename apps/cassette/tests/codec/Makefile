@@ -9,6 +9,7 @@ BUILD ?= build
 SRCS  := $(wildcard $(APP)/src/core/codec/*.cpp) \
          $(APP)/src/core/alsa/alsa_api.cpp $(APP)/src/core/alsa/card.cpp $(APP)/src/core/alsa/open_policy.cpp \
          $(APP)/src/core/fileops.cpp $(APP)/src/core/wav.cpp $(APP)/src/core/journal.cpp \
+         $(APP)/src/core/writer.cpp $(APP)/src/core/ring.cpp $(APP)/src/core/repair.cpp \
          $(wildcard $(APP)/src/core/takes/*.cpp)
 TESTS := $(filter-out %/measure_main.cpp %/check_codec_abi.cpp,$(wildcard $(APP)/tests/codec/*.cpp))
 OBJS  := $(patsubst $(APP)/%.cpp,$(BUILD)/%.o,$(SRCS) $(TESTS))

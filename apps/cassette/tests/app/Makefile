@@ -8,7 +8,7 @@ APP   ?= ../..
 BUILD ?= build
 SRCS  := $(wildcard $(APP)/src/core/*.cpp) $(wildcard $(APP)/src/core/dsp/*.cpp) $(wildcard $(APP)/src/core/takes/*.cpp) \
          $(wildcard $(APP)/src/core/edit/*.cpp) $(wildcard $(APP)/src/core/playback/*.cpp) \
-         $(wildcard $(APP)/src/core/app/*.cpp) \
+         $(wildcard $(APP)/src/core/app/*.cpp) $(wildcard $(APP)/src/core/codec/*.cpp) \
          $(APP)/src/core/alsa/alsa_api.cpp $(APP)/src/core/alsa/card.cpp $(APP)/src/core/alsa/capture.cpp \
          $(APP)/src/core/alsa/mixer.cpp $(APP)/src/core/alsa/open_policy.cpp $(APP)/tests/alsa/fake_alsa.cpp
 TESTS := $(wildcard $(APP)/tests/app/*.cpp)

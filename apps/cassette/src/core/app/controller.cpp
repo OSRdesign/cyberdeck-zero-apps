@@ -7,6 +7,9 @@
 #include "../alsa/card.hpp"
 #include "../alsa/mixer.hpp"
 #include "../alsa/open_policy.hpp"
+#include "../codec/flac_encoder.hpp"
+#include "../codec/formats.hpp"
+#include "../codec/opus_encoder.hpp"
 #include "../dsp/processing_sink.hpp"
 #include "../edit/peaks.hpp"
 #include "../edit/trim_split.hpp"
@@ -60,13 +63,32 @@ void copy_meter(const MeterSnapshot &m, MeterSnap &o) {
     }
 }
 
-std::string format_text(const AudioFormat &f) {
+std::string format_text(const AudioFormat &f, const char *tag = "WAV") {
     char b[64];
     std::snprintf(b, sizeof b, "%gk/%u", f.rate / 1000.0, static_cast<unsigned>(f.bits));
     std::string s = b;
     if (f.channels == 2) s += " stereo";
     else if (f.channels > 2) s += " " + std::to_string(f.channels) + "ch";
-    return s + " WAV";
+    return s + " " + tag;
+}
+
+/* The production encoders: FLAC and Ogg Opus on the libraries loaded with dlopen. */
+std::unique_ptr<Encoder> real_encoder(const FormatChoice &c, const AudioFormat &capture) {
+    if (c.key.format == RecFormat::Flac) {
+        FlacConfig fc;
+        fc.fmt = capture;
+        fc.level = c.flac_level;
+        return std::unique_ptr<Encoder>(new FlacEncoder(real_flac(), fc));
+    }
+    if (c.key.format == RecFormat::Opus) {
+        OpusConfig oc;
+        oc.fmt = capture;
+        oc.bitrate_bps = c.opus_bitrate_bps;
+        oc.application = c.opus_app;
+        oc.force_mono = c.opus_force_mono;
+        return std::unique_ptr<Encoder>(new OpusEncoder(real_opusenc(), oc));
+    }
+    return nullptr;
 }
 
 std::string secs_text(double s) {
@@ -185,6 +207,10 @@ struct Controller::Impl : public DeckCommands {
     unsigned load_seq = 0;    /* counts load() calls: the UI plays its cassette animation when this moves */
     SpaceInfo space;
     uint64_t last_space_ms = 0;
+    /* the file format a take gets now: the stored choice when the capture format and the libraries allow it
+     * (effective_choice), else WAV; recomputed with the free space (every 2 s) and when a take starts */
+    FormatChoice rec_choice;  /* valid when rec_compressed */
+    bool rec_compressed = false;
 
     /* trim page */
     struct Trim {
@@ -309,7 +335,8 @@ struct Controller::Impl : public DeckCommands {
             r.rate = t.fmt.rate;
             r.channels = t.fmt.channels;
             r.bits = t.fmt.bits;
-            r.format_text = t.damaged ? std::string() : format_text(t.fmt);
+            r.format_text = t.damaged ? std::string() : format_text(t.fmt, format_tag(t.format));
+            r.format_tag = format_tag(t.format);
             r.date_text = date_text(t);
             r.damaged = t.damaged;
             r.repaired = t.repaired;
@@ -331,10 +358,28 @@ struct Controller::Impl : public DeckCommands {
         return false;
     }
 
+    void update_rec_choice() {
+        rec_compressed = false;
+        const Settings &s = store.values();
+        if (s.format == RecFormat::Wav || !(fmt.rate && fmt.channels && fmt.bits)) return; /* WAV: no library is loaded */
+        FormatInputs in;
+        in.state = CaptureState::Known;
+        in.capture = fmt;
+        in.codecs = cfg.codecs ? cfg.codecs() : codec_availability_here();
+        const std::vector<FormatChoice> list = list_formats(in);
+        const FormatChoice *c = effective_choice(list, FormatKey{s.format, s.format_preset});
+        if (c && c->key.format != RecFormat::Wav) {
+            rec_choice = *c;
+            rec_compressed = true;
+        }
+    }
+
     void refresh_space() {
         AudioFormat f = fmt;
         if (!(f.rate && f.channels && f.bits)) f = AudioFormat();
         if (folder_space(*ops, folder, f, space) < 0) space = SpaceInfo();
+        update_rec_choice();
+        if (rec_compressed) space.hours_left = hours_for_space(space.free_bytes, rec_choice.size);
         last_space_ms = clk->mono_ms();
     }
 
@@ -536,7 +581,9 @@ struct Controller::Impl : public DeckCommands {
             add_notice(Notice::Info, prob.message);
             return false;
         }
-        const TakeName tn = new_take_name(s.prefix, number, *cstate, *clk);
+        update_rec_choice(); /* FLAC / Opus when the stored choice can record on this card, else WAV */
+        TakeName tn = new_take_name(s.prefix, number, *cstate, *clk);
+        if (rec_compressed) tn.format = rec_choice.key.format;
         const std::string first = format_take_name(tn);
         WriterConfig wc;
         wc.fmt = fmt;
@@ -573,6 +620,36 @@ struct Controller::Impl : public DeckCommands {
             }
         }
         wc.bwf.description = "Cassette " + wc.take;
+        if (rec_compressed) {
+            /* a fresh encoder per part; the Vorbis comments: the part's name, the date when the clock is set (D15) */
+            const FormatChoice choice = rec_choice;
+            const AudioFormat capture = fmt;
+            auto make = cfg.make_encoder;
+            wc.make_encoder = [choice, capture, make](int) {
+                return make ? make(choice, capture) : real_encoder(choice, capture);
+            };
+            const std::string date = wc.bwf.origination_date;
+            wc.tags = [tn, date](int part) {
+                TakeName t = tn;
+                t.part = static_cast<uint32_t>(part) + 1;
+                Tags g{{"TITLE", file_stem(format_take_name(t))}};
+                if (!date.empty()) g.push_back({"DATE", date});
+                g.push_back({"ENCODER", "Cassette"});
+                return g;
+            };
+            const bool flac = choice.key.format == RecFormat::Flac;
+            wc.codec = flac ? "flac" : "opus";
+            wc.codec_preset = choice.key.preset;
+            wc.bitrate_bps = choice.opus_bitrate_bps;
+            wc.force_mono = !flac && choice.opus_force_mono && fmt.channels == 2;
+            if (!cfg.make_encoder) {
+                if (flac) {
+                    if (const FlacLib *l = real_flac()) wc.encoder_name = l->name + " " + l->version;
+                } else if (const OpusEncLib *l = real_opusenc()) {
+                    wc.encoder_name = l->name + " " + l->version;
+                }
+            }
+        }
         ring.reset(new Ring(fmt, 8.0));
         writer.reset(new Writer(*ring, *ops, *clk, wc));
         r = writer->start();
@@ -648,8 +725,17 @@ struct Controller::Impl : public DeckCommands {
     /* ================================================================================================================ */
     /* Deck commands */
 
+    /* Phase C gate: a FLAC / Opus take cannot be played yet. true (and the notice) when `name` is such a take. */
+    bool refuse_playback(const std::string &name) {
+        const std::string why = playback_refusal(name);
+        if (why.empty()) return false;
+        add_notice(Notice::Info, why);
+        return true;
+    }
+
     bool open_target() {
         stop_preview();
+        if (refuse_playback(play_target())) return false;
         monitor_stop(); /* the Player is about to open the card's playback side: the monitor lets go first */
         if (!player || play_target().empty()) return false;
         const int r = player->open(folder + "/" + play_target());
@@ -1010,7 +1096,7 @@ struct Controller::Impl : public DeckCommands {
         s.take.name = take_active ? take_name : target;
         s.take.playing_name = playing_family() ? play_target() : std::string();
         s.take.load_seq = load_seq;
-        s.take.format_text = format_text(f);
+        s.take.format_text = format_text(f, rec_compressed ? format_tag(rec_choice.key.format) : "WAV");
         s.take.free_bytes = space.free_bytes;
         s.take.hours_left = space.hours_left;
         /* problems */
@@ -1454,6 +1540,10 @@ bool Controller::play_take(const std::string &name) {
     Locked l(p_->mu);
     Impl &d = *p_;
     if (!d.has_take(name) || d.take_active || d.deck.state() == DeckState::Countdown) return false;
+    if (d.refuse_playback(name)) {
+        d.publish();
+        return false;
+    }
     d.stop_preview();
     if (d.playing_family()) d.run_deck(DeckEvent::Stop);
     d.preview_name.clear();
@@ -1469,6 +1559,10 @@ bool Controller::load(const std::string &name) {
     Impl &d = *p_;
     /* refused while recording (a take, a paused take, the countdown) or when the take is not in the list */
     if (!d.has_take(name) || d.take_active || d.recording_family()) return false;
+    if (d.refuse_playback(name)) {
+        d.publish();
+        return false;
+    }
     d.stop_preview();
     if (d.playing_family()) d.run_deck(DeckEvent::Stop);
     d.preview_name.clear();
@@ -1484,6 +1578,10 @@ bool Controller::preview_take(const std::string &name) {
     Locked l(p_->mu);
     Impl &d = *p_;
     if (!d.has_take(name) || d.take_active || d.recording_family()) return false;
+    if (d.refuse_playback(name)) {
+        d.publish();
+        return false;
+    }
     d.stop_preview();
     if (d.playing_family()) d.run_deck(DeckEvent::Stop);
     d.preview_name = name == d.target ? std::string() : name;
@@ -1523,6 +1621,10 @@ bool Controller::open_trim(const std::string &take_name) {
     Locked l(p_->mu);
     Impl &d = *p_;
     if (!d.started || d.take_active || d.deck.state() != DeckState::Idle) return false;
+    if (d.refuse_playback(take_name)) { /* trim and the peak cache read PCM: phase C */
+        d.publish();
+        return false;
+    }
     const std::string path = d.folder + "/" + take_name;
     const EditTakeInfo ti = inspect_take(*d.ops, path);
     if (!ti.ok) {

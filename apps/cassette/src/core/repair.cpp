@@ -3,6 +3,7 @@
  */
 #include "repair.hpp"
 
+#include "codec/stream_scan.hpp"
 #include "journal.hpp"
 #include "wav.hpp"
 
@@ -19,16 +20,50 @@ std::string base_of(const std::string &p) {
     return s == std::string::npos ? p : p.substr(s + 1);
 }
 
+std::string lower_suffix(const std::string &n, size_t len) {
+    std::string e = n.substr(n.size() - len);
+    for (char &c : e) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return e;
+}
+
 bool has_wav_suffix(const std::string &n) {
     if (n.size() < 5) return false;
-    std::string e = n.substr(n.size() - 4);
-    for (char &c : e) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    return e == ".wav";
+    return lower_suffix(n, 4) == ".wav";
+}
+
+/* ".flac" / ".opus" (either case): the compressed takes */
+bool has_stream_suffix(const std::string &n) {
+    if (n.size() < 6) return false;
+    const std::string e = lower_suffix(n, 5);
+    return e == ".flac" || e == ".opus";
+}
+
+/* "x.wav" -> "x", "x.flac" -> "x" */
+std::string stem_of(const std::string &n) { return n.substr(0, n.rfind('.')); }
+
+FileRepair repair_stream(FileOps &ops, const std::string &path, bool force, Container k) {
+    const StreamFix x = k == Container::Flac ? fix_flac(ops, path, force) : fix_ogg_opus(ops, path, force);
+    FileRepair r;
+    r.ok = x.ok;
+    r.error = x.error;
+    r.changed = x.changed;
+    r.fmt = x.fmt;
+    r.frames = x.frames;
+    r.data_bytes = 0;
+    r.truncated_bytes = static_cast<uint32_t>(std::min<uint64_t>(x.truncated_bytes, 0xFFFFFFFFull));
+    return r;
 }
 
 }  // namespace
 
 FileRepair repair_file(FileOps &ops, const std::string &path, bool force) {
+    if (has_stream_suffix(path)) { /* FLAC or Ogg Opus: by the file's own magic, the extension as a fallback */
+        const Container k = container_of(ops, path);
+        if (k == Container::Flac || k == Container::OggOpus) return repair_stream(ops, path, force, k);
+        FileRepair r;
+        r.error = "not a FLAC or Ogg Opus file";
+        return r;
+    }
     FileRepair r;
     HeaderInfo h = parse_header(ops, path);
     if (!h.ok) {
@@ -153,7 +188,7 @@ RepairReport repair_all(FileOps &ops, const std::string &dir) {
     if (ops.list_dir(dir, files) == 0) {
         std::sort(files.begin(), files.end());
         for (const std::string &f : files) {
-            if (!has_wav_suffix(f) || claimed.count(f)) continue;
+            if (!(has_wav_suffix(f) || has_stream_suffix(f)) || claimed.count(f)) continue;
             const std::string path = dir + "/" + f;
             FileRepair fr = repair_file(ops, path, false);
             if (!fr.ok) {
@@ -162,7 +197,7 @@ RepairReport repair_all(FileOps &ops, const std::string &dir) {
             }
             if (!fr.changed) continue;
             RepairedTake t;
-            t.take = f.substr(0, f.size() - 4);
+            t.take = stem_of(f);
             t.path = path;
             t.frames = fr.frames;
             t.seconds = static_cast<double>(fr.frames) / (fr.fmt.rate ? fr.fmt.rate : 48000);

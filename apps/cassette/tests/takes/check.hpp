@@ -54,6 +54,7 @@ void test_edits();
 void test_recordings();
 void test_rename_prefixes();
 void test_settings();
+void test_formats_takes();
 
 namespace tk {
 
