@@ -12,6 +12,14 @@ category Tools. Plan: launcher `docs/dev/tasks/016-cassette-recorder.md`; study:
 - **Any USB sound card.** The card is found by its name and USB identity, never by its number (the number changes across
   reboots). The card's own level, auto gain and mute are shown when the card has them, and left as found otherwise.
 
+## Documentation
+
+- [`docs/USER-GUIDE.md`](docs/USER-GUIDE.md): the user guide (what you need, the recorder screen, recording, monitoring,
+  playing, the list, trim and split, settings, files, crash safety, troubleshooting, limits), with pictures.
+- [`docs/KEYS.md`](docs/KEYS.md): the keyboard map.
+- [`docs/MAKING-SCREENSHOTS.md`](docs/MAKING-SCREENSHOTS.md): how to render the guide's pictures again after a change
+  (`docs/make-doc-images.sh`).
+
 ## Screenshots
 
 All ten were rendered on a PC by the headless harness (`build.sh host`, version 0.1.0) from the UI's scenes on
