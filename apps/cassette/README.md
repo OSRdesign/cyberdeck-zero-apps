@@ -188,7 +188,7 @@ when the free space falls under 200 MB or the card is unplugged. A take that rea
 
 A screen of at least 480x320 (portrait 320x480 in PDA mode), a USB sound card, a USB headset or a board's own input,
 and the user in the `audio` group (the images add the first user to it; else `sudo usermod -aG audio $USER`, then log
-out and in). CyberdeckZero Launcher with full-screen app support. Packages: `libfreetype6, libinput10, libxkbcommon0`
+out and in). CyberdeckZero Launcher with full-screen app support. Packages: `libstdc++6, libgcc-s1, libfreetype6, libinput10, libxkbcommon0`
 and `libasound2t64 | libasound2` (the ALSA library: it is opened at run time, never linked). When a sound server holds
 the card, the app falls back to the server's ALSA device. arm64 and amd64.
 

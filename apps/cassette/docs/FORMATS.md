@@ -232,7 +232,7 @@ never produces; checked against both header sets (`check_codec_abi.cpp`).
 **Proposed for the package (not applied; packaging is the owner's step):**
 
 ```
-"depends": "libfreetype6, libinput10, libxkbcommon0, libasound2t64 | libasound2",
+"depends": "libstdc++6, libgcc-s1, libfreetype6, libinput10, libxkbcommon0, libasound2t64 | libasound2",
 "recommends": "libflac14 | libflac12t64 | libflac12, libopusenc0, libopus0"
 ```
 

@@ -9,7 +9,7 @@
   "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
   "license": "MIT",
   "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/cassette",
-  "depends": "libfreetype6, libinput10, libxkbcommon0, libasound2t64 | libasound2",
+  "depends": "libstdc++6, libgcc-s1, libfreetype6, libinput10, libxkbcommon0, libasound2t64 | libasound2",
   "arch": ["arm64", "amd64"],
   "permissions": {"microphone": true, "additional_hardware": true}
 }
