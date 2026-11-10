@@ -1,0 +1,21 @@
+title square screen, LOAD animation frame at 0 ms
+sizes 480x480
+ppmm 667
+env CASSETTE_DEMO idle
+env CASSETTE_ANIM_TICKS 1
+env CASSETTE_ANIM_FPS 60
+env CASSETTE_LOAD_STEP_MS 0
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key l
+wait 400
+key up
+wait 200
+key l
+wait 600
+shot load-t000ms
+expect text "TAKE 006"
+expect notext "Take 007"
+expect notext "LAYOUT FAIL"
+expect noquit

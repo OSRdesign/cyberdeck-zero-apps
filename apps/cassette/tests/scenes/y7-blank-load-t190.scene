@@ -1,4 +1,4 @@
-title Cassette LOAD from the blank cassette, frame 3 of 5 (190 ms): the empty window: only the OPEN word; same 900 ms swap as between two named cassettes
+title Cassette LOAD from the blank cassette, frame 3 of 5 (190 ms): the empty window; same 900 ms swap as between two named cassettes
 sizes 480x320 320x480 640x480
 ppmm 608
 env CASSETTE_DEMO deckempty
@@ -15,6 +15,6 @@ wait 200
 key l
 wait 900
 shot blank-load-t190ms
-expect text "OPEN"
+expect notext "OPEN"
 expect notext "LAYOUT FAIL"
 expect noquit

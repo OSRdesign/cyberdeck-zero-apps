@@ -63,6 +63,15 @@ struct Fit {
 Fit make_fit(int screen_w, int screen_h, int body_y, int design_w, int design_h, int design_body,
              std::vector<double> seams, std::vector<Band> bands = {});
 
+/* The square layout of the recorder page (HackBerry 720x720): chosen when width / height is within 0.9 .. 1.1 (both ends
+ * included). Its design is the 720x720 screen of the mockup; everything is scaled by screen width / 720. */
+bool square_screen(int screen_w, int screen_h);
+
+/* The plain linear Fit of the square layout: design x 0..720 on the screen's width (centred if the height is the
+ * limit), design y `kSquareBody` (the toolkit header's bottom in the mockup) on body_y; no bands, nothing stretched. */
+constexpr double kSquareDesign = 720, kSquareBody = 64;
+Fit square_fit(int screen_w, int screen_h, int body_y);
+
 /* The bands of one design range [d0, d1] laid into avail_px (no weighted band: nothing is added): the segments, as
  * Fit::segs. For a box of its own (the save box) whose height follows its content. */
 std::vector<Fit::Seg> fit_segments(double d0, double d1, double s, const std::vector<Band> &bands, double avail_px,

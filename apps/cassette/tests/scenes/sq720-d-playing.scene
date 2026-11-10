@@ -1,0 +1,12 @@
+title square screen, playing Take 006 (L R, PLAY latched)
+sizes 720x720
+ppmm 800
+env CASSETTE_DEMO playing
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot playing
+expect text "PLAY"
+expect notext "PAUSE"
+expect notext "LAYOUT FAIL"
+expect noquit

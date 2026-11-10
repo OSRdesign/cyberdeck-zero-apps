@@ -185,7 +185,8 @@ void CassetteUi::Impl::build(AnimOptions anim)
     frame.w = layout.w;
     frame.h = layout.h;
     frame.body_y = layout.body_y;
-    frame.portrait = layout.h > layout.w;
+    frame.square = square_screen(layout.w, layout.h);
+    frame.portrait = layout.h > layout.w && !frame.square;
     frame.target = m->tok[CP0_TOK_TARGET];
     frame.row = m->tok[CP0_TOK_ROW_H];
     frame.list_row = std::min(m->tok[CP0_TOK_ROW_H], m->tok[CP0_TOK_LIST_ROW_H]);
@@ -229,7 +230,7 @@ void CassetteUi::Impl::build(AnimOptions anim)
     trim->set_shown(false);
 
     log_line("ui %dx%d%s%s, %.2f px/mm, touch target %d px, row %d px, list row %d px, animation %s at %d fps", frame.w,
-             frame.h, frame.portrait ? " portrait" : "", cp0_ui_narrow_portrait(m) ? " (narrow shell)" : "",
+             frame.h, frame.portrait ? " portrait" : frame.square ? " square" : "", cp0_ui_narrow_portrait(m) ? " (narrow shell)" : "",
              m->ppmm_x100 / 100.0, frame.target, frame.row, frame.list_row, anim.enabled ? "on" : "off", anim.fps);
 
     if (env_on("CASSETTE_LAYOUT_CHECK")) check_timer = lv_timer_create(check_cb, 250, this);

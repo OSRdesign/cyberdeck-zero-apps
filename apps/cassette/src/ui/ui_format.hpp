@@ -75,6 +75,9 @@ double hub_speed_dps(Transport t, int jump_dir = 0);
 std::string info_line(const RecorderVm &rec);
 std::string info_title(const RecorderVm &rec);
 std::string info_detail(const RecorderVm &rec);
+/* The square layout's wide box detail: the format in front of info_detail ("48k/16 WAV · 12 h 40 left") while idle or
+ * recording; while playing and with a notice it is info_detail alone. */
+std::string info_detail_wide(const RecorderVm &rec);
 /* The state lamp at the strip's right end: "REC" (recording, paused, countdown), "PLAY" (playing, scanning), "" none. */
 std::string info_state(const RecorderVm &rec);
 /* The lost-audio part of the strip: "lost 0.3 s" (one decimal; "lost <0.1 s" under 50 ms) while a take records and audio was

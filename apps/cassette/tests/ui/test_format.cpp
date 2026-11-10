@@ -71,6 +71,17 @@ void info()
     CHECK_EQ(info_title(r), "TAKE 007");
     CHECK_EQ(info_detail(r), "12 h 40 left");
     CHECK_EQ(info_state(r), "REC");
+    /* the square layout's wide detail: the format in front, while recording or idle */
+    CHECK_EQ(info_detail_wide(r), "48k/16 WAV \xC2\xB7 12 h 40 left");
+    r.info.lost_ms = 300;
+    CHECK_EQ(info_detail_wide(r), "48k/16 WAV \xC2\xB7 lost 0.3 s");
+    r.info.lost_ms = 0;
+    r.info.notice = "Saved";
+    CHECK_EQ(info_detail_wide(r), "Saved");
+    r.info.notice.clear();
+    r.info.format.clear();
+    CHECK_EQ(info_detail_wide(r), "12 h 40 left");
+    r.info.format = "48k/16 WAV";
 
     r.transport = Transport::ScanReverse;
     r.info.take = "TAKE 006";
@@ -78,6 +89,7 @@ void info()
     r.info.play_len_ms = 12 * 60000 + 8000;
     CHECK_EQ(info_line(r), "PLAYING TAKE 006 \xC2\xB7 05:44 / 12:08 \xC2\xB7 REW 5x");
     CHECK_EQ(info_detail(r), "05:44 / 12:08");
+    CHECK_EQ(info_detail_wide(r), "05:44 / 12:08");
     CHECK_EQ(info_state(r), "PLAY");
     r.transport = Transport::ScanForward;
     CHECK_EQ(info_line(r), "PLAYING TAKE 006 \xC2\xB7 05:44 / 12:08 \xC2\xB7 FWD 5x");

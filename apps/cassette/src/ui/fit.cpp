@@ -146,5 +146,26 @@ Fit make_fit(int screen_w, int screen_h, int body_y, int design_w, int design_h,
     return f;
 }
 
+bool square_screen(int screen_w, int screen_h)
+{
+    if (screen_w <= 0 || screen_h <= 0) return false;
+    return screen_w * 10 >= screen_h * 9 && screen_w * 10 <= screen_h * 11;
+}
+
+Fit square_fit(int screen_w, int screen_h, int body_y)
+{
+    Fit f;
+    f.sw = screen_w;
+    f.sh = screen_h;
+    f.dbody = kSquareBody;
+    const double sx = screen_w / kSquareDesign;
+    const double sy = (screen_h - body_y) / (kSquareDesign - kSquareBody);
+    f.s = std::min(sx, sy);
+    if (f.s > 0.985 && f.s < 1.0) f.s = 1.0; /* a header one px taller is not a reason to shrink every font */
+    f.ox = (screen_w - kSquareDesign * f.s) / 2.0;
+    f.oy = body_y;
+    return f; /* no segments: yd() is linear */
+}
+
 } // namespace ui
 } // namespace cassette

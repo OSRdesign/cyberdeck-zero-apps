@@ -10,7 +10,7 @@
  *   a take is loaded over another one (900 ms)
  *     0..140 ms     the old cassette drops out through the bottom of the window: 0 -> +130 units, ease in
  *                   (cubic-bezier .42 0 1 1). It keeps its own name on the label.
- *     140..240 ms   the window is empty (only the OPEN word shows)
+ *     140..240 ms   the window is empty
  *     240..600 ms   the new cassette falls in from above: -130 -> +4 units over the first 300 ms (cubic-bezier .2 .7 .3 1,
  *                   fast, slowing down), then settles back from +4 to 0 over 60 ms (ease in-out): it overshoots 4 units
  *                   at 540 ms, 83 % of the way, and lands at 600 ms

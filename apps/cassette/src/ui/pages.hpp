@@ -49,6 +49,9 @@ struct Nav {
 struct Frame {
     int w = 480, h = 320, body_y = 40;
     bool portrait = false;
+    /* a (nearly) square screen (width / height 0.9 .. 1.1, fit.hpp square_screen): the recorder gets its own single-column
+     * layout; the other pages keep the landscape board scaled (portrait is false then) */
+    bool square = false;
     /* the toolkit's touch sizes for this panel (cp0_ui_metrics: TARGET and ROW 7 mm, LIST_ROW 5 mm, with floors):
      * the minimum height of the keys, steppers and buttons, of a row that acts on a tap, of a row a tap selects */
     int target = 44, row = 40, list_row = 24;
@@ -72,6 +75,11 @@ protected:
     bool shown_ = true;
 };
 
+/* The square layout's rows (design px of the 720x720 mockup; recorder page, see page_recorder.cpp sq_geometry). */
+struct SqGeo {
+    double win_h = 260, row_y = 356, row_h = 72, meter_y = 440, bar_y = 452, step_y = 544, step_h = 58, key_y = 614, key_h = 72;
+};
+
 class RecorderPage : public PageBase {
 public:
     RecorderPage(lv_obj_t *parent, const Frame &frame, const UiActions &actions, const Nav &nav, AnimOptions anim);
@@ -89,6 +97,8 @@ private:
     void update_deck(const RecorderVm &rec);
     void build_landscape();
     void build_portrait();
+    void build_square();
+    void square_stereo(bool stereo);
     void place_strip_right(const std::string &state);
     void place_steppers(bool card);
 
@@ -107,7 +117,6 @@ private:
     lv_obj_t *mon_lamp_ = nullptr, *mon_label_ = nullptr; /* the MON lamp (live monitor running), bottom left of the meter */
     bool mon_shown_ = false, mon_lit_ = false;
     lv_obj_t *in_label_ = nullptr, *ch_l_ = nullptr, *ch_r_ = nullptr; /* IN (mono), L / R (stereo) */
-    lv_obj_t *open_ = nullptr;
     lv_obj_t *strip_text_ = nullptr, *strip_lim_ = nullptr, *strip_cut_ = nullptr, *strip_state_ = nullptr;
     lv_obj_t *box_title_ = nullptr, *box_detail_ = nullptr;
     std::string state_shown_ = "?";
@@ -116,6 +125,18 @@ private:
     bool limiter_ = false, low_cut_ = false;
     double btn_h_ = 44; /* the Recordings / Settings buttons' height (landscape) */
     bool first_ = true;
+    /* the info box (title, detail, state lamp: portrait and square) instead of the strip with its lamps (landscape) */
+    bool info_box_ = false;
+    double title_px_ = 15, title_min_ = 11, title_ls_ = 0.5, detail_px_ = 13, detail_min_ = 10, mon_glow_ = 4;
+    /* the square layout: the meter panel grows for two channels; what is under it moves down (square_stereo) */
+    bool square_ = false, sq_stereo_ = false;
+    lv_obj_t *sq_panel_ = nullptr;
+    SqGeo g_;
+    struct Moved {
+        lv_obj_t *obj;
+        int y;
+    };
+    std::vector<Moved> sq_moved_;
     std::unique_ptr<NoticeBox> notice_;
     std::vector<lv_obj_t *> notice_covers_; /* hidden while the notice shows (the parts under it) */
     bool notice_on_ = false;

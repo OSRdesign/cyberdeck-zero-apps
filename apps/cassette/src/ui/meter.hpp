@@ -21,16 +21,24 @@
 namespace cassette {
 namespace ui {
 
+/* How far the white tick reaches over the bars at both ends, its width and the LEDs' corner radius, in board px. */
+struct LedStyle {
+    double over = 3, tick_w = 2, radius = 1;
+};
+
 class LedBar {
 public:
     /* x0, y: the first LED's top-left in board px; led_w x led_h, gap: one step. */
-    LedBar(lv_obj_t *parent, const Fit &fit, double x0, double y, double led_w, double led_h, double gap);
+    LedBar(lv_obj_t *parent, const Fit &fit, double x0, double y, double led_w, double led_h, double gap,
+           const LedStyle &style = LedStyle());
+    /* The whole bar's height (one row, or two rows stacked): the square layout grows it for two channels. */
+    void set_height(const Fit &fit, double y, double led_h);
     void update(const MeterVm &m);
 
 private:
     static void draw_cb(lv_event_t *e);
     lv_obj_t *obj_ = nullptr;
-    int led_w_ = 9, led_h_ = 22, gap_ = 2, over_ = 3, tick_w_ = 2;
+    int led_w_ = 9, led_h_ = 22, gap_ = 2, over_ = 3, tick_w_ = 2, radius_ = 1, w_ = 0;
     MeterVm shown_;
     bool first_ = true;
 };

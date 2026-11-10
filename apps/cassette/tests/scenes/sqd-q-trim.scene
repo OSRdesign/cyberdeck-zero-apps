@@ -1,0 +1,16 @@
+title square screen: Cassette: trim and split (board CassetteTrim): Take 006, a 60 s window, IN and OUT outside as edge chips, two splits with the second selected (SPLIT reads REMOVE)
+sizes 720x720
+ppmm 1000
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_PAGE trim
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot trim
+expect text "REMOVE"
+expect text "ZOOM"
+expect text "POSITION"
+expect text "SET IN"
+expect text "SAVE"
+expect notext "LAYOUT FAIL"
+expect noquit

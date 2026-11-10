@@ -1,0 +1,17 @@
+title square screen, the record countdown over the cassette window
+sizes 480x480
+ppmm 667
+env CASSETTE_DEMO countdown
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot countdown
+expect text "RECORDING IN"
+expect text "3"
+expect text "tap here, STOP or Esc cancels"
+expect notext "LAYOUT FAIL"
+tap "RECORDING IN"
+wait 300
+expect notext "RECORDING IN"
+shot countdown-cancelled
+expect noquit

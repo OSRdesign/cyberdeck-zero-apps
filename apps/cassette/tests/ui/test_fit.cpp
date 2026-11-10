@@ -86,6 +86,44 @@ void test_fit()
         CHECK_EQ(share, 0.0);
     }
 
+    /* the layout chosen by the screen's shape: square from 0.9 to 1.1 (both included), else the four boards as before */
+    CHECK(square_screen(720, 720));
+    CHECK(square_screen(480, 480));
+    CHECK(square_screen(900, 1000));   /* 0.90 */
+    CHECK(!square_screen(899, 1000));
+    CHECK(square_screen(1100, 1000));  /* 1.10 */
+    CHECK(!square_screen(1101, 1000));
+    CHECK(square_screen(720, 800) && square_screen(720, 660));
+    CHECK(!square_screen(720, 801) && !square_screen(720, 654));
+    CHECK(!square_screen(480, 320));   /* landscape */
+    CHECK(!square_screen(640, 480));   /* the deck */
+    CHECK(!square_screen(320, 480));   /* portrait */
+    CHECK(!square_screen(480, 800));
+    CHECK(!square_screen(800, 480) && !square_screen(1280, 720) && !square_screen(0, 0));
+
+    /* the square fit: width / 720, linear in y, the design header bottom (64) on the toolkit's, content centred */
+    {
+        const Fit q = square_fit(720, 720, 64);
+        CHECK(std::fabs(q.s - 1.0) < 1e-9);
+        CHECK_EQ(q.x(24), 24);
+        CHECK_EQ(q.x(696), 696);
+        CHECK_EQ(q.y(72), 72);
+        CHECK_EQ(q.y(614), 614);
+        CHECK_EQ(q.w(24, 672) + 2 * q.x(24), 720);  /* equal left and right margins */
+        const Fit h = square_fit(480, 480, 42);
+        CHECK(std::fabs(h.s - 2.0 / 3.0) < 1e-9);
+        CHECK_EQ(h.x(24), 16);
+        CHECK_EQ(h.x(696), 464);
+        CHECK_EQ(h.y(64), 42);
+        CHECK_EQ(h.y(72), 42 + 5);       /* 8 * 2/3 = 5.3 */
+        CHECK_EQ(h.px(12), 8);
+        /* a header taller than the mockup's gives back height: the width no longer decides */
+        const Fit t = square_fit(720, 720, 100);
+        CHECK(t.s < 1.0);
+        CHECK(t.y(720) <= 720);
+        CHECK(t.x(0) > 0);
+    }
+
     /* a size of 0 or less scales to 0, anything else to at least 1 */
     CHECK_EQ(d.px(0), 0);
     CHECK_EQ(a.px(0.4), 1);

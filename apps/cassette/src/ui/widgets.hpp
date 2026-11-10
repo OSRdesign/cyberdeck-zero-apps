@@ -37,6 +37,7 @@ enum class KeyLook { Charcoal, Red, Green };
 /* The caption of a key: font px, letter spacing and the gap between icon and caption, in board px. */
 struct KeyType {
     double px = 12, ls = 1.5, gap = 3;
+    double icon = 1; /* the icon's size against the board's (the square layout draws it larger) */
 };
 
 class PianoKey {
@@ -54,7 +55,7 @@ private:
 
     lv_obj_t *obj_ = nullptr;
     lv_obj_t *caption_ = nullptr;
-    double s_ = 1;
+    double s_ = 1, icon_k_ = 1;
     int body_h_ = 0, lip_ = 4, off_ = 3, radius_ = 6, gap_ = 3, icon_h_ = 15, px_ = 12, ls_ = 1;
     Icon icon_ = Icon::None;
     KeyLook look_ = KeyLook::Charcoal;
@@ -65,7 +66,7 @@ private:
 
 class IconButton {
 public:
-    IconButton(lv_obj_t *parent, const Fit &fit, DRect r, Icon icon, std::function<void()> on_click);
+    IconButton(lv_obj_t *parent, const Fit &fit, DRect r, Icon icon, std::function<void()> on_click, double icon_scale = 1);
     void set_enabled(bool enabled);
     void set_icon(Icon icon);
     lv_obj_t *obj() const { return obj_; }
@@ -75,16 +76,23 @@ private:
     static void click_cb(lv_event_t *e);
     lv_obj_t *obj_ = nullptr;
     Icon icon_ = Icon::None;
-    double s_ = 1;
+    double s_ = 1, icon_k_ = 1;
     bool enabled_ = true;
     std::function<void()> on_click_;
+};
+
+/* The stepper's inner measures in board px (the defaults are the 44 px boards'): the - / + buttons' width, the text block
+ * (centred in the stepper), the caption's size, letter spacing, top and line, the value's top and line, the buttons' icons. */
+struct StepperLook {
+    double btn_w = 44, block_h = 44, cap_px = 11, cap_ls = 1.2, cap_top = 6, cap_line = 15, val_top = 21, val_line = 20,
+           icon = 1;
 };
 
 /* The value's font px per layout (17 landscape, 14 / 15 / 16 narrow on the boards). */
 class Stepper {
 public:
     Stepper(lv_obj_t *parent, const Fit &fit, DRect r, const char *caption, double value_px, Icon minus, Icon plus,
-            std::function<void(int dir)> on_step);
+            std::function<void(int dir)> on_step, const StepperLook &look = StepperLook());
     /* Moves the stepper (the CARD row hides, SOFT takes the full width). */
     void place(const Fit &fit, DRect r, double value_px);
     void set_value(const std::string &value);
@@ -99,6 +107,7 @@ private:
     double value_px_ = 17;
     std::string value_text_;
     double s_ = 1;
+    StepperLook look_;
 };
 
 class Lamp {

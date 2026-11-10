@@ -17,18 +17,28 @@ namespace ui {
 
 /* ------------------------------------------------------------------------------------------------ LedBar */
 
-LedBar::LedBar(lv_obj_t *parent, const Fit &fit, double x0, double y, double led_w, double led_h, double gap)
+LedBar::LedBar(lv_obj_t *parent, const Fit &fit, double x0, double y, double led_w, double led_h, double gap,
+               const LedStyle &style)
 {
     led_w_ = fit.px(led_w);
     led_h_ = fit.h(y, led_h);
     gap_ = fit.px(gap);
-    over_ = fit.px(3);
-    tick_w_ = fit.px(2);
+    over_ = fit.px(style.over);
+    tick_w_ = fit.px(style.tick_w);
+    radius_ = style.radius <= 1 ? 1 : fit.px(style.radius); /* the boards' 1 px stays 1 px */
     obj_ = lv_obj_create(parent);
     plain(obj_);
     lv_obj_set_pos(obj_, fit.x(x0), fit.y(y) - over_);
-    lv_obj_set_size(obj_, 15 * led_w_ + 14 * gap_ + gap_, led_h_ + 2 * over_);
+    w_ = 15 * led_w_ + 14 * gap_ + gap_;
+    lv_obj_set_size(obj_, w_, led_h_ + 2 * over_);
     lv_obj_add_event_cb(obj_, draw_cb, LV_EVENT_DRAW_MAIN, this);
+}
+
+void LedBar::set_height(const Fit &fit, double y, double led_h)
+{
+    led_h_ = fit.h(y, led_h);
+    lv_obj_set_size(obj_, w_, led_h_ + 2 * over_);
+    lv_obj_invalidate(obj_);
 }
 
 void LedBar::update(const MeterVm &m)
@@ -60,7 +70,7 @@ void LedBar::draw_cb(lv_event_t *e)
             const LedBand b = led_band(i);
             const std::uint32_t rgb = b == LedBand::Green ? col::kLedGreen : b == LedBand::Amber ? col::kLedAmber : col::kLedRed;
             const bool lit = i < ch.bar;
-            fill(layer, area(a.x1 + i * pitch, y, self->led_w_, bh), rgb, 1, static_cast<lv_opa_t>(lit ? 255 : 46));
+            fill(layer, area(a.x1 + i * pitch, y, self->led_w_, bh), rgb, self->radius_, static_cast<lv_opa_t>(lit ? 255 : 46));
         }
         if (ch.hold_bar > 0) {
             const int hold = std::min(ch.hold_bar, 15);

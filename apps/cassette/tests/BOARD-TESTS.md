@@ -337,7 +337,7 @@ Goal: with no take loaded the recorder shows a blank cassette in the deck, never
 
 1. Start with an empty recordings folder (move `~/Recordings` aside) and open Cassette. Expected: from the first frame the
    cassette is in the window (shell, window, still hubs, SIDE A, the format such as `WAV 48k`), the label is blank paper
-   with no handwriting, OPEN stays at the window corner, the strip names the take REC would write next.
+   with no handwriting, no OPEN word on the window, the strip names the take REC would write next.
 2. Press REC (after the countdown, if one is set). Expected: the hubs start to turn; the cassette does not drop in or
    appear again.
 3. STOP, then open Recordings, LOAD the new take. Expected: the same 0.9 s swap as between two named cassettes (the old
@@ -368,6 +368,21 @@ Goal: Settings > Take number sets where the next take counts from; nothing exist
 
 Report: what the row read at each step, the names of the takes recorded in 3 and 4, and whether the restart kept it.
 
+## B16. Square screen (HackBerry 720x720, 10 min)
+
+1. Open Cassette on the HackBerry (or any square screen). Expected: the cassette fills its window (no OPEN word), the
+   counter, the Recordings and Settings buttons and the take box sit in one row under it, the meter panel is thin, CARD and
+   SOFT stand side by side, the five keys run across the full width. The left and right margins are equal all the way
+   down; nothing is cut or overlapping.
+2. Go through the states and look at each: idle with a take; recording (the MON lamp lit and dark if the card has a
+   playback side: the lamp sits under IN); playing (the meter reads L R); paused; the record timer's countdown over the
+   cassette window; LOAD from the list (the old cassette drops out, the new one falls in, the name is written); a blank
+   cassette (an empty recordings folder); a card without a level control (no CARD, SOFT full width, if one is at hand);
+   a stereo card (the meter grows by two rows, everything under it moves down a little, the keys stay inside the body).
+3. Open Settings, the list, trim and the save box once: nothing cut.
+4. A photo of idle, recording and the stereo state if possible, and of the countdown. Expected: the touch targets feel
+   right (the steppers' - and + buttons and the keys are 7 mm or more).
+
 ## Results
 
 | Test | Board | Pass / fail | Notes |
@@ -388,6 +403,7 @@ Report: what the row read at each step, the names of the takes recorded in 3 and
 | B13 live monitor |  |  |  |
 | B14 blank cassette |  |  |  |
 | B15 take number |  |  |  |
+| B16 square screen |  |  |  |
 
 **What to send back:** the table; the probe output per board (B0); the `watch` and `take` outputs of B1, B3, B4; the
 `ui` log line per board; the notice texts as you read them; screenshots or photos of anything cut, overlapping or odd.

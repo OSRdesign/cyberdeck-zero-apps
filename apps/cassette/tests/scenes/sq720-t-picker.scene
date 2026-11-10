@@ -1,0 +1,26 @@
+title square screen: Cassette: a choice row opens its picker in the same list (the chosen entry darker); a tap takes a value; a switch row flips
+sizes 720x720
+ppmm 800
+env CASSETTE_DEMO idle
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key s
+wait 300
+tap "Record timer"
+wait 300
+expect text "10 s"
+expect text "20 s"
+shot picker
+expect notext "LAYOUT FAIL"
+tap "10 s"
+wait 300
+expect text "Record timer"
+expect text "10 s"
+say the picker set the record timer (setting_choice timer 2)
+tap "Auto gain (card)"
+wait 300
+say the switch row flipped (setting_toggle agc off)
+shot settings-after
+expect notext "LAYOUT FAIL"
+expect noquit

@@ -18,7 +18,7 @@ wait 300
 shot blank-delete-list
 key esc
 wait 300
-expect text "OPEN"
+expect notext "OPEN"
 expect notext "Take 006"
 @480x320 expect text "TAKE 008 · 48k/16 WAV · 12 h 40 left"
 shot blank-after-delete

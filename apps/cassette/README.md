@@ -204,6 +204,28 @@ The recordings are private: the app has no network code, sends nothing anywhere 
 chose. Its test fixtures are synthetic (generated tones, noise and hand-built truncated files); no real recording is
 part of this repository.
 
+## Screen layouts
+
+The recorder page has four layouts, chosen from the screen's shape; the other pages (settings, list, trim, boxes) keep
+the landscape board scaled on a square screen.
+
+| Screen (width / height) | Layout |
+|---|---|
+| portrait (height above width, the narrow PDA shell), 320x480, 480x800 | portrait: counter row with the info box, meter panel, steppers, keys |
+| landscape, 480x320, 640x480, 800x480 | landscape: window left, meter panel and buttons right, info strip, steppers, keys |
+| **square: width / height from 0.9 to 1.1 (both included), such as the HackBerry's 720x720 and 480x480** | **square: one column, see below** |
+
+The square layout is the 720x720 mockup scaled by screen width / 720 (the toolkit's header takes the top 64 px): the
+cassette window 498x260 with the cassette drawn at 2.3x (459x239) and no OPEN word; under it the counter, the
+Recordings and Settings buttons and the info box (take name and REC lamp over the format and the time left); the LED
+meter panel across the full width, thin (24 px bars, the scale on one row, TARGET right of its bracket, MON under IN, PEAK
+at the right) and growing for two channels (L over R); CARD and SOFT side by side (CARD hidden when the card has no level
+control, SOFT then takes the full width); the five keys across the full width. Left and right margins are equal
+everywhere, all gaps 12 px, what is left over stays under the keys. A control row is never lower than the toolkit's touch
+target: where the panel's density asks for more than the mockup's 58 / 72 px (a 10 px/mm panel wants 70), the window
+gives the height and the cassette scales to fit. The LIM and LOW CUT lamps of the landscape strip are not shown (as in
+portrait; the settings list has the switches).
+
 ## The code
 
 - `src/core/` (no LVGL, unit tested on a PC, a fake for every system call): `alsa/` (libasound through `dlopen`, card
@@ -231,7 +253,7 @@ Nine test suites: the core (ring, WAV header, writer, journal, repair, a writer 
 scripted ALSA: busy fallback, unplug, overruns, two cards, index change), dsp, takes, edit (trim and split compared
 byte for byte, a killed editor), playback, app (the controller), ui and bind. `build.sh host` also runs the scenes:
 the UI's own on its synthetic model (`tests/scenes`) and the bound app on the scripted sound system
-(`tests/bind/scenes`), at 480x320, 320x480, 640x480 and further sizes, with the layout checks; the PNGs land in
+(`tests/bind/scenes`), at 480x320, 320x480, 640x480, 720x720 and 480x480 (`sq720-*`, `sq480-*`, `sqd-*`) and further sizes, with the layout checks; the PNGs land in
 `$CDK_BUILD/host/out/<scene>/<size>/`. Builds run from a WSL native-filesystem LF copy with fresh build folders
 (`CDK_BUILD`, `LVBUILD`). Board protocol: [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md).
 
@@ -251,7 +273,7 @@ the binary: the handwriting of the cassette label is Caveat SemiBold (Copyright 
 
 - 0.1.0: first version: recorder, recordings list, trim and split, settings, save and confirm boxes; WAV / BWF takes
   with journal and repair; meter with target zone, software gain, record timer, playback with 5x scan; 480x320 and
-  320x480 minimum layouts; `cassette-probe` in the package. Cards that record at other rates than 48000 or 44100 Hz
+  320x480 minimum layouts and a square layout for 720x720 and 480x480; `cassette-probe` in the package. Cards that record at other rates than 48000 or 44100 Hz
   (16000 Hz speech headsets) are opened at their own rate. The PLAY / PAUSE key shows the current state (PLAY latched
   while playing, PAUSE latched while paused); both hubs turn the same way (3x for REW / FWD, clockwise for REW); the
   meter shows the played level while a take plays. The recordings list has LOAD (the take goes into the deck with a

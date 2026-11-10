@@ -1,0 +1,13 @@
+title square screen, a card without a level control: no CARD stepper, SOFT full width
+sizes 720x720
+ppmm 800
+env CASSETTE_DEMO nocard
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot nocard
+expect esc
+expect notext "CARD"
+expect text "SOFT"
+expect notext "LAYOUT FAIL"
+expect noquit

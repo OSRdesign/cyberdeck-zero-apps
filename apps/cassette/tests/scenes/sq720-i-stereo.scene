@@ -1,0 +1,12 @@
+title square screen, a stereo card (two bar rows, L over R): the meter panel grows, the rows under it move down
+sizes 720x720
+ppmm 800
+env CASSETTE_DEMO stereo
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot stereo
+expect text "L"
+expect text "R"
+expect notext "LAYOUT FAIL"
+expect noquit

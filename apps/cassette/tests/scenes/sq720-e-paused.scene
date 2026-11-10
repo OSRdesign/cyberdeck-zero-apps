@@ -1,0 +1,10 @@
+title square screen, a recording paused (REC and PAUSE latched)
+sizes 720x720
+ppmm 800
+env CASSETTE_DEMO paused
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot paused
+expect notext "LAYOUT FAIL"
+expect noquit

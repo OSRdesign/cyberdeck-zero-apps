@@ -1,0 +1,21 @@
+title square screen, Settings
+sizes 480x480
+ppmm 667
+env CASSETTE_DEMO idle
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key s
+wait 400
+expect text "Input level"
+expect text "Auto gain (card)"
+shot settings-top
+expect notext "LAYOUT FAIL"
+drag 0.5 0.8 0.5 0.1
+wait 400
+shot settings-scrolled
+expect notext "LAYOUT FAIL"
+key esc
+wait 300
+expect text "SOFT"
+expect noquit

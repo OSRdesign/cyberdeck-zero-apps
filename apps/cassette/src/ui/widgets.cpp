@@ -51,7 +51,8 @@ PianoKey::PianoKey(lv_obj_t *parent, const Fit &fit, DRect r, KeyType type, std:
     off_ = fit.px(3);
     radius_ = fit.px(6);
     gap_ = fit.px(type.gap);
-    icon_h_ = fit.px(15);
+    icon_k_ = type.icon;
+    icon_h_ = fit.px(15 * type.icon);
     px_ = fit.px(type.px);
     ls_ = ls_px(type.ls, fit.s);
     lv_obj_set_pos(obj_, fit.x(r.x), fit.y(r.y));
@@ -154,7 +155,7 @@ void PianoKey::draw_cb(lv_event_t *e)
     const int content = self->icon_h_ + self->gap_ + lh;
     const int icon_cy = body.y1 + (self->body_h_ - content) / 2 + self->icon_h_ / 2;
     const std::uint32_t ink = self->look_ == KeyLook::Charcoal && !self->latched_ ? col::kKeyText : col::kWhite;
-    icon(layer, self->icon_, (a.x1 + a.x2) / 2, icon_cy, self->s_, ink);
+    icon(layer, self->icon_, (a.x1 + a.x2) / 2, icon_cy, self->s_ * self->icon_k_, ink);
 }
 
 void PianoKey::event_cb(lv_event_t *e)
@@ -184,8 +185,9 @@ void PianoKey::event_cb(lv_event_t *e)
 
 /* ------------------------------------------------------------------------------------------------ IconButton */
 
-IconButton::IconButton(lv_obj_t *parent, const Fit &fit, DRect r, Icon icon, std::function<void()> on_click)
-    : icon_(icon), s_(fit.s), on_click_(std::move(on_click))
+IconButton::IconButton(lv_obj_t *parent, const Fit &fit, DRect r, Icon icon, std::function<void()> on_click,
+                       double icon_scale)
+    : icon_(icon), s_(fit.s), icon_k_(icon_scale), on_click_(std::move(on_click))
 {
     obj_ = lv_button_create(parent);
     lv_obj_remove_style_all(obj_);
@@ -219,7 +221,7 @@ void IconButton::draw_cb(lv_event_t *e)
     const bool pressed = lv_obj_has_state(self->obj_, LV_STATE_PRESSED);
     fill_vgrad(layer, a, pressed ? col::kKeyBottom : col::kKeyTop, pressed ? col::kKeyTop : col::kKeyBottom, r);
     line(layer, a.x1 + r, a.y1, a.x2 - r, a.y1, 1, col::kKeyHi);
-    icon(layer, self->icon_, (a.x1 + a.x2 + 1) / 2, (a.y1 + a.y2 + 1) / 2, self->s_, col::kKeyText);
+    icon(layer, self->icon_, (a.x1 + a.x2 + 1) / 2, (a.y1 + a.y2 + 1) / 2, self->s_ * self->icon_k_, col::kKeyText);
 }
 
 void IconButton::click_cb(lv_event_t *e)
@@ -231,18 +233,21 @@ void IconButton::click_cb(lv_event_t *e)
 /* ------------------------------------------------------------------------------------------------ Stepper */
 
 Stepper::Stepper(lv_obj_t *parent, const Fit &fit, DRect r, const char *caption, double value_px, Icon minus, Icon plus,
-                 std::function<void(int)> on_step)
-    : value_px_(value_px), s_(fit.s)
+                 std::function<void(int)> on_step, const StepperLook &look)
+    : value_px_(value_px), s_(fit.s), look_(look)
 {
+    const double bw = look.btn_w;
     frame_ = box(parent, 0, 0, 10, 10, col::kPanel, fit.px(8));
     border(frame_, fit.px(3), col::kFrame);
-    caption_ = label(parent, Face::Bold, fit.px(11), col::kScale, 0, 0, fit.w(r.x + 44, r.w - 88), LV_TEXT_ALIGN_CENTER,
-                     ls_px(1.2, fit.s));
-    set_fitted(caption_, Face::Bold, fit.px(11), ls_px(1.2, fit.s), std::max(8, fit.px(9)), caption);
+    caption_ = label(parent, Face::Bold, fit.px(look.cap_px), col::kScale, 0, 0, fit.w(r.x + bw, r.w - 2 * bw),
+                     LV_TEXT_ALIGN_CENTER, ls_px(look.cap_ls, fit.s));
+    set_fitted(caption_, Face::Bold, fit.px(look.cap_px), ls_px(look.cap_ls, fit.s),
+               std::max(8, fit.px(look.cap_px * 9 / 11)), caption);
     value_ = label(parent, Face::Mono, fit.px(value_px), col::kDigit, 0, 0, 10, LV_TEXT_ALIGN_CENTER);
     auto step = on_step;
-    down_ = std::make_unique<IconButton>(parent, fit, DRect{r.x, r.y, 44, r.h}, minus, [step] { if (step) step(-1); });
-    up_ = std::make_unique<IconButton>(parent, fit, DRect{r.x + r.w - 44, r.y, 44, r.h}, plus, [step] { if (step) step(1); });
+    down_ = std::make_unique<IconButton>(parent, fit, DRect{r.x, r.y, bw, r.h}, minus, [step] { if (step) step(-1); }, look.icon);
+    up_ = std::make_unique<IconButton>(parent, fit, DRect{r.x + r.w - bw, r.y, bw, r.h}, plus, [step] { if (step) step(1); },
+                                       look.icon);
     place(fit, r, value_px);
 }
 
@@ -252,20 +257,20 @@ void Stepper::place(const Fit &fit, DRect r, double value_px)
     lv_obj_set_pos(frame_, fit.x(r.x), fit.y(r.y));
     lv_obj_set_size(frame_, fit.w(r.x, r.w), fit.h(r.y, r.h));
     lv_obj_set_pos(down_->obj(), fit.x(r.x), fit.y(r.y));
-    lv_obj_set_pos(up_->obj(), fit.x(r.x + r.w - 44), fit.y(r.y));
-    const int cx = fit.x(r.x + 44), cw = fit.w(r.x + 44, r.w - 88);
+    lv_obj_set_pos(up_->obj(), fit.x(r.x + r.w - look_.btn_w), fit.y(r.y));
+    const int cx = fit.x(r.x + look_.btn_w), cw = fit.w(r.x + look_.btn_w, r.w - 2 * look_.btn_w);
     /* caption: line 15 under a 6 px padding; value: line 20 under it (the boards' text boxes), the 44 px block centred in
      * a taller stepper (the deck's touch target) */
-    const int top = fit.y(r.y) + (fit.h(r.y, r.h) - fit.px(44)) / 2;
+    const int top = fit.y(r.y) + (fit.h(r.y, r.h) - fit.px(look_.block_h)) / 2;
     const lv_font_t *cf = lv_obj_get_style_text_font(caption_, LV_PART_MAIN);
-    lv_obj_set_pos(caption_, cx, top + fit.px(6) + (fit.px(15) - lv_font_get_line_height(cf)) / 2);
+    lv_obj_set_pos(caption_, cx, top + fit.px(look_.cap_top) + (fit.px(look_.cap_line) - lv_font_get_line_height(cf)) / 2);
     lv_obj_set_width(caption_, cw);
     lv_obj_set_width(value_, cw);
     const std::string keep = value_text_;
     value_text_.clear();
     set_value(keep);
     const lv_font_t *vf = lv_obj_get_style_text_font(value_, LV_PART_MAIN);
-    lv_obj_set_pos(value_, cx, top + fit.px(21) + (fit.px(20) - lv_font_get_line_height(vf)) / 2);
+    lv_obj_set_pos(value_, cx, top + fit.px(look_.val_top) + (fit.px(look_.val_line) - lv_font_get_line_height(vf)) / 2);
 }
 
 void Stepper::set_value(const std::string &value)

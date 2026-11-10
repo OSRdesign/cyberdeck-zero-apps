@@ -6,7 +6,7 @@ env CASSETTE_ANIM_TICKS 19
 env CASSETTE_LOAD_STEP_MS 10
 env CASSETTE_ANIM_FPS 60
 wait 500
-expect text "OPEN"
+expect notext "OPEN"
 shot blank-tall-idle
 expect notext "LAYOUT FAIL"
 key r

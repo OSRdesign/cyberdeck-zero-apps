@@ -201,6 +201,15 @@ std::string info_detail(const RecorderVm &r)
     return r.info.time_left.empty() ? std::string() : r.info.time_left + " left";
 }
 
+std::string info_detail_wide(const RecorderVm &r)
+{
+    const std::string d = info_detail(r);
+    if (!r.info.notice.empty() || playing(r.transport) || r.info.format.empty()) return d;
+    std::string out = r.info.format;
+    join(out, d);
+    return out;
+}
+
 std::string info_lost(const RecorderVm &r)
 {
     if (!recording(r.transport) || r.info.lost_ms <= 0) return std::string();

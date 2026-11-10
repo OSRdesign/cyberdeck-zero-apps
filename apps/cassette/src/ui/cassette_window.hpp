@@ -73,6 +73,7 @@ public:
         double tape_x, tape_y, tape_scale;
         double ring_d, ring_y, number_px, number_y, label_y, hint_y;
         DRect badge;
+        double text_scale = 1.0; /* the countdown's, the empty window's and the badge's texts against the board's (square layout) */
     };
     CassetteWindow(lv_obj_t *parent, const Fit &fit, const Layout &lay, AnimOptions anim, std::function<void()> on_cancel);
     ~CassetteWindow();

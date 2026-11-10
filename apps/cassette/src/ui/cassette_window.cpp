@@ -111,9 +111,9 @@ CassetteWindow::CassetteWindow(lv_obj_t *parent, const Fit &fit, const Layout &l
     empty_ = box(parent, wx, wy, ww, wh, col::kWindow, fit.px(8), LV_OPA_TRANSP);
     const int pad = fit.px(12);
     const int ew = ww - 2 * pad;
-    empty_msg_ = label(empty_, Face::Bold, fit.px(15), col::kKeyText, pad, 0, ew, LV_TEXT_ALIGN_CENTER);
+    empty_msg_ = label(empty_, Face::Bold, fit.px(15 * lay.text_scale), col::kKeyText, pad, 0, ew, LV_TEXT_ALIGN_CENTER);
     lv_label_set_long_mode(empty_msg_, LV_LABEL_LONG_MODE_WRAP);
-    empty_hint_ = label(empty_, Face::Medium, fit.px(12), col::kHint, pad, 0, ew, LV_TEXT_ALIGN_CENTER);
+    empty_hint_ = label(empty_, Face::Medium, fit.px(12 * lay.text_scale), col::kHint, pad, 0, ew, LV_TEXT_ALIGN_CENTER);
     lv_label_set_long_mode(empty_hint_, LV_LABEL_LONG_MODE_WRAP);
     lv_label_set_text(empty_msg_, "No sound input found. Plug in a USB sound card or headset.");
     lv_label_set_text(empty_hint_, "Found by itself when plugged in.");
@@ -136,8 +136,8 @@ CassetteWindow::CassetteWindow(lv_obj_t *parent, const Fit &fit, const Layout &l
     border(shade, fit.px(3), col::kFrame);
     /* the ring and the number centred on the board's centre line (2 px under the window's middle) */
     const int ring_cy = oh / 2 + fit.px(lay.ring_y + lay.ring_d / 2 - (w.y + w.h / 2));
-    count_title_ = label(count_, Face::Bold, fit.px(12), col::kScale, 0, fit.px(lay.label_y - w.y), ow, LV_TEXT_ALIGN_CENTER,
-                         static_cast<int>(2.5 * fit.s));
+    count_title_ = label(count_, Face::Bold, fit.px(12 * lay.text_scale), col::kScale, 0, fit.px(lay.label_y - w.y), ow,
+                         LV_TEXT_ALIGN_CENTER, static_cast<int>(2.5 * fit.s * lay.text_scale));
     lv_label_set_text(count_title_, "RECORDING IN");
     const int rd = fit.px(lay.ring_d);
     count_ring_ = lv_obj_create(count_);
@@ -148,7 +148,7 @@ CassetteWindow::CassetteWindow(lv_obj_t *parent, const Fit &fit, const Layout &l
     const int npx = fit.px(lay.number_px);
     count_number_ = label(count_, Face::Mono, npx, col::kAmber, 0, 0, ow, LV_TEXT_ALIGN_CENTER);
     lv_obj_set_y(count_number_, ring_cy - lv_font_get_line_height(font(Face::Mono, npx)) / 2);
-    count_hint_ = label(count_, Face::Medium, fit.px(12), col::kHint, 0, oh - fit.px(w.y + w.h - lay.hint_y), ow,
+    count_hint_ = label(count_, Face::Medium, fit.px(12 * lay.text_scale), col::kHint, 0, oh - fit.px(w.y + w.h - lay.hint_y), ow,
                         LV_TEXT_ALIGN_CENTER);
     lv_label_set_text(count_hint_, "tap here, STOP or Esc cancels");
     lv_obj_add_flag(count_, LV_OBJ_FLAG_HIDDEN);
@@ -559,9 +559,9 @@ void CassetteWindow::badge_draw_cb(lv_event_t *e)
     lv_layer_t *layer = lv_event_get_layer(e);
     lv_area_t a;
     lv_obj_get_coords(self->badge_, &a);
-    const double s = self->fit_.s;
-    fill(layer, a, col::kAmber, self->fit_.px(4));
-    const lv_font_t *f = font(Face::Bold, self->fit_.px(14));
+    const double s = self->fit_.s * self->lay_.text_scale;
+    fill(layer, a, col::kAmber, self->fit_.px(4 * self->lay_.text_scale));
+    const lv_font_t *f = font(Face::Bold, self->fit_.px(14 * self->lay_.text_scale));
     const int tw = text_width(f, self->badge_text_.c_str(), 0);
     /* the board's "◀◀" glyphs: two triangles about 9 x 11 px, 1 px apart */
     const int tri_w = static_cast<int>(std::lround(10 * s)), tri_h = static_cast<int>(std::lround(12 * s));

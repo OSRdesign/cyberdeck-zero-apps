@@ -1,0 +1,13 @@
+title square screen, blank cassette (no take at all): no handwriting, no OPEN word
+sizes 480x480
+ppmm 667
+env CASSETTE_DEMO notakes
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+shot blank
+expect notext "Take 0"
+expect text "TAKE 008"
+expect notext "OPEN"
+expect notext "LAYOUT FAIL"
+expect noquit

@@ -1,0 +1,13 @@
+title square screen, recording with the MON lamp dark
+sizes 720x720
+ppmm 800
+env CASSETTE_DEMO recording
+env CASSETTE_DEMO_MONITOR off
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot recording-mon-dark
+expect text "MON"
+expect text "TAKE 007"
+expect notext "LAYOUT FAIL"
+expect noquit
