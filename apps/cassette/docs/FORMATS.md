@@ -229,23 +229,25 @@ never produces; checked against both header sets (`check_codec_abi.cpp`).
 | FLAC | libFLAC | libFLAC | libFLAC (decode and encode) |
 | Ogg Opus | libopusenc + libopus | libopus | nothing (a copy of packets) |
 
-**Proposed for the package (not applied; packaging is the owner's step):**
+**In the package (owner, 2026-11-11): the codec libraries are Depends**, so the Store (and apt) installs them with
+Cassette:
 
 ```
-"depends": "libstdc++6, libgcc-s1, libfreetype6, libinput10, libxkbcommon0, libasound2t64 | libasound2",
-"recommends": "libflac14 | libflac12t64 | libflac12, libopusenc0, libopus0"
+"depends": "libstdc++6, libgcc-s1, libfreetype6, libinput10, libxkbcommon0, libasound2t64 | libasound2, libopus0, libopusenc0, libflac14 | libflac12t64 | libflac12"
 ```
 
-Phase C adds nothing to that list (phase A expected `libopusfile0` here; it is not needed: `libopus0` plays Opus, and
-`libopusenc0` already depends on it). The app runs with none of them: WAV records and plays, the FLAC and Opus rows are
-greyed with the package to install, and a FLAC / Opus take whose library is missing is refused by LOAD, PLAY, the
-preview and EDIT with one notice (`This take cannot be played: FLAC not installed (libflac14)`, `... Opus not installed
-(libopus0)`). Caveat: the launcher's Store installs a package with plain `dpkg --install` when
-its Depends are already met (`appstore_native.cpp`), and dpkg never installs Recommends; only `apt install` does. So
-with the current Store, Recommends only help users who install by apt. If the owner wants FLAC and Opus to work after
-a Store install on every board, the alternatives are moving the two libraries to Depends (installed sizes in trixie:
-libflac14 479 KB, libopusenc0 70 KB, libopus0 3.5 MB (libopus 1.5 carries its neural models), libogg0 55 KB; the Store
-then goes through `apt-get install`, which needs the network) or a Store change.
+The libFLAC alternatives cover Debian trixie (`libflac14`), Ubuntu 24.04 (`libflac12t64`) and Debian bookworm
+(`libflac12`); `libopus0` and `libopusenc0` have these names in all three (checked 2026-11-11: trixie on the zero8 and
+the HackBerry with `apt-cache policy`, noble and bookworm on packages.ubuntu.com / packages.debian.org). Installed
+sizes in trixie: libflac14 479 KB, libopusenc0 70 KB, libopus0 3.5 MB (libopus 1.5 carries its neural models), libogg0
+55 KB. With missing Depends the launcher's Store goes through `apt-get install` (`appstore_native.cpp`), which needs the
+network.
+
+The binary still does not link them: it opens them at run time (`dlopen`), so the app keeps working if someone removes
+them: WAV records and plays, the FLAC and Opus rows are dimmed with the reason (the package to install), and a FLAC /
+Opus take whose library is missing is refused by LOAD, PLAY, the preview and EDIT with one notice (`This take cannot be
+played: FLAC not installed (libflac14)`, `... Opus not installed (libopus0)`). Phase C added nothing to that list
+(phase A expected `libopusfile0`; it is not needed: `libopus0` plays Opus, and `libopusenc0` already depends on it).
 
 Which boards already carry the libraries is not known yet: the six boards were offline during phase A (read-only
 probe to repeat: `ldconfig -p | grep -E 'libFLAC|libopus|libogg'` and `dpkg-query -W 'libflac*' 'libopus*' 'libogg*'`).
@@ -349,7 +351,7 @@ measured on the board (B17 step 12; P0-e measured mono speech Opus at 7-10 %).
 - The take's notes as COMMENT and SCENE/TAKE tags.
 - The list shows 0 s for a FLAC take whose STREAMINFO says "unknown" (only a take being recorded, or one whose repair
   failed).
-- The packaging (Recommends or Depends for libflac/libopusenc, see above) is the owner's step.
+- The packaging: done, the libraries are Depends (owner, 2026-11-11, see above).
 
 ## The Codec, Sample rate and Quality pickers (done)
 
@@ -413,7 +415,8 @@ dependencies is the fallback alone, so it is the only path:
 - Checked against libopusfile (loaded by the tests only): the linear decode is within 1 LSB of libopusfile's on the
   48 kHz streams (libopusfile decodes at 48 kHz only, so the 16 kHz stream is compared by its length), and libopusfile
   reads every trimmed file, at 48 and 16 kHz, at exactly the requested length and decodes it to the end cleanly.
-Without libopus Opus takes are refused with a notice; WAV and FLAC are not affected (each library is optional).
+Without libopus Opus takes are refused with a notice; WAV and FLAC are not affected (the package depends on each library,
+but each is opened at run time, so a removed one only disables its format).
 
 **Decoders** (`codec/decoder.hpp`; `make_decoder()` picks by the file's magic):
 - `FlacDecoder`: libFLAC's stream decoder over FileOps callbacks, MD5 checking off. Output: the recorded format (16 or

@@ -511,9 +511,10 @@ stored choice is kept and comes back when it is possible again.
 | FLAC | `libflac` (`libflac14`, `libflac12t64` or `libflac12`) | `libflac` | `libflac` |
 | Ogg Opus | `libopusenc0` and `libopus0` | `libopus0` | nothing |
 
-If a library is missing the format is unavailable in the picker and Cassette uses WAV. Install the package with
-`sudo apt install libflac14 libopusenc0 libopus0` (use `libflac12t64` instead of `libflac14` on Ubuntu 24.04). The Cassette
-package does not install them by itself.
+The Cassette package depends on these libraries: the Store (or `apt`) installs them with Cassette. If one is missing
+anyway (removed by hand) the format is unavailable in the picker and Cassette uses WAV. Install the package again with
+`sudo apt install libflac14 libopusenc0 libopus0` (use `libflac12t64` instead of `libflac14` on Ubuntu 24.04,
+`libflac12` on Debian bookworm).
 
 **Names and the list.** Takes are named `.flac` or `.opus` instead of `.wav`; the strip shows the format (`48k/16 FLAC`,
 `48k/16 OPUS`), and the take numbers run on across all formats. The recordings list ends each row with `WAV`, `FLAC` or
@@ -738,8 +739,8 @@ speed on other outputs too. A 16 kHz take sounds like a phone call: that is the 
 **"Unsupported card".** The card offers neither 16-bit nor 24-bit capture. It is not usable.
 
 **A codec, rate or depth is dimmed in Settings ("not available").** Tap it: the notice says why. Not installed
-means a library is missing: install `libflac14` (or `libflac12t64` / `libflac12`) for FLAC, `libopusenc0` and
-`libopus0` for Opus. `Opus needs 8, 12, 16, 24 or 48 kHz; this card has 44.1 kHz` is a property of the card: Opus is dimmed there
+means a library is missing (the Store installs them with Cassette; this happens only when one was removed): install
+`libflac14` (or `libflac12t64` / `libflac12`) for FLAC, `libopusenc0` and `libopus0` for Opus. `Opus needs 8, 12, 16, 24 or 48 kHz; this card has 44.1 kHz` is a property of the card: Opus is dimmed there
 (Cassette does not resample), FLAC and WAV are not. Until a codec is possible Cassette records WAV, and Settings > Codec says
 `WAV (Opus unavailable)`.
 

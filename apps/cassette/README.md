@@ -245,8 +245,9 @@ Opus is dimmed on a card that cannot record at 8, 12, 16, 24 or 48 kHz; nothing 
 | Opus 24 / 32 kbps, speech | 0.18 / 0.24 MB | `libopusenc0` (pulls `libopus0`), a card at 8, 12, 16, 24 or 48 kHz | `libopus0` (trim: nothing) |
 | Opus 64 / 128 kbps, music | 0.48 / 0.97 MB | `libopusenc0` (pulls `libopus0`), a card at 8, 12, 16, 24 or 48 kHz | `libopus0` (trim: nothing) |
 
-The libraries are opened at run time: without them the app records and plays WAV, the other rows say which package is
-missing, and a FLAC / Opus take whose library is missing is refused with a notice (`This take cannot be played: FLAC
+The package depends on these libraries (`libopus0`, `libopusenc0`, `libflac14 | libflac12t64 | libflac12`), so the
+Store installs them with Cassette. They are opened at run time: if one is removed the app still records and plays WAV,
+the other rows say which package is missing, and a FLAC / Opus take whose library is missing is refused with a notice (`This take cannot be played: FLAC
 not installed (libflac14)`). Opus is not offered on a 44.1 kHz-only card (no resampling in 0.1). Metadata goes into
 Vorbis comments (the take name, the date when the clock is set); trim and split copy them. Design, measurements, the
 status and the next steps: [`docs/FORMATS.md`](docs/FORMATS.md).

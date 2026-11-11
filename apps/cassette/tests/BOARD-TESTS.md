@@ -400,7 +400,8 @@ The pickers (B19) can choose them; here the format is set in the settings file, 
 Playing, previewing and trimming them in the app is B18 (phase C); here the takes are also checked on the PC.
 
 1. The libraries (the controller can do this): `ldconfig -p | grep -E 'libFLAC|libopusenc'`. Expected: `libFLAC.so.14`
-   (or `.so.12`) and `libopusenc.so.0`. If missing: `sudo apt install libflac14 libopusenc0` (Debian trixie;
+   (or `.so.12`) and `libopusenc.so.0`: the package depends on them, so installing Cassette installs them. If missing
+   (an older build installed by hand): `sudo apt install libflac14 libopusenc0` (Debian trixie;
    `libflac12t64 libopusenc0` on Ubuntu 24.04). Report which were there before.
 2. **FLAC.** Close Cassette (Esc on the recorder) and check it is not running (`pgrep -a cassette` prints
    nothing): a running Cassette writes its own settings back over the edit. Then:
