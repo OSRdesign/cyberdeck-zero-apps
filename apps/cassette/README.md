@@ -20,6 +20,8 @@ category Tools. Plan: launcher `docs/dev/tasks/016-cassette-recorder.md`; study:
 - [`docs/KEYS.md`](docs/KEYS.md): the keyboard map.
 - [`docs/MAKING-SCREENSHOTS.md`](docs/MAKING-SCREENSHOTS.md): how to render the guide's pictures again after a change
   (`docs/make-doc-images.sh`).
+- [`docs/PULSE.md`](docs/PULSE.md): the sound-server backend (PipeWire / PulseAudio through libpulse) for Bluetooth
+  devices: design, events, and the contract for the controller (developer note; not used by the app yet).
 
 ## Screenshots
 
@@ -305,7 +307,10 @@ PEAK is at the panel's bottom left.
   enumeration by name and by-id, the open policy with the sound-server fallback, the capture thread, the mixer
   controls; `tools/probe_main.cpp` is `cassette-probe`), `ring`, `wav` (WAV / BWF / RF64 header), `writer`, `journal`,
   `repair`, `dsp/` (meter, gain, DC blocker, low cut, limiter), `takes/` (naming, the take list, settings), `edit/`
-  (the peak overview, trim and split), `playback/`, `app/` (the controller: the five-key state machine and the timer).
+  (the peak overview, trim and split), `playback/`, `app/` (the controller: the five-key state machine and the timer),
+  `pulse/` (the sound-server backend: libpulse through `dlopen`, capture and playback streams on an exact device, the
+  Bluetooth summary; not wired into the controller yet, [`docs/PULSE.md`](docs/PULSE.md)).
+- `tools/pulse_capture_test.cpp`: `pulse-capture-test`, a board CLI for the sound-server backend (not packaged).
 - `src/ui/`: the pages, the cassette window, the meter, the steppers, the boxes, the layout fitting.
 - `src/bind/`: the controller bound to the UI (the view mapping, the actions, the worker thread).
 - `src/demo/`: the scripted sound system of the bound scenes and of `CASSETTE_DEMO=1` (no sound hardware).
@@ -314,7 +319,7 @@ PEAK is at the panel's bottom left.
 
 ```sh
 wsl -e sh <repo>/apps/cassette/tests/run.sh             # the core tests (no LVGL)
-wsl -e sh <repo>/apps/cassette/tests/<suite>/run.sh     # alsa, dsp, takes, edit, playback, app, ui, bind
+wsl -e sh <repo>/apps/cassette/tests/<suite>/run.sh     # alsa, dsp, takes, edit, playback, app, ui, bind, pulse
 wsl -e sh <repo>/apps/cassette/build.sh host            # UI and binding tests + the headless scenes
 wsl -e sh <repo>/apps/cassette/build.sh cross           # arm64 binary and cassette-probe into root/
 wsl -e sh <repo>/apps/cassette/build.sh cross --arch amd64   # amd64 binary and cassette-probe into root.amd64/
@@ -322,10 +327,11 @@ python3 tools/make_registry.py --only cassette --out <dir outside the repo>   # 
 python apps/cassette/tools/make_icon.py                 # the icon
 ```
 
-Nine test suites: the core (ring, WAV header, writer, journal, repair, a writer killed at random points), alsa (a
+Ten test suites: the core (ring, WAV header, writer, journal, repair, a writer killed at random points), alsa (a
 scripted ALSA: busy fallback, unplug, overruns, two cards, index change), dsp, takes, edit (trim and split compared
-byte for byte, a killed editor, merges of every format with a kill at every step), playback, app (the controller), ui and
-bind. `build.sh host` also runs the scenes:
+byte for byte, a killed editor, merges of every format with a kill at every step), playback, app (the controller), ui,
+bind and pulse (the sound-server backend on a scripted server: device loss, moves, silence, threads; plus the libpulse
+ABI check and a real-server smoke test, see [`docs/PULSE.md`](docs/PULSE.md#tests)). `build.sh host` also runs the scenes:
 the UI's own on its synthetic model (`tests/scenes`) and the bound app on the scripted sound system
 (`tests/bind/scenes`), at 480x320, 320x480, 640x480, 720x720 and 480x480 (`sq720-*`, `sq480-*`, `sqd-*`) and further sizes, with the layout checks; the PNGs land in
 `$CDK_BUILD/host/out/<scene>/<size>/`. Builds run from a WSL native-filesystem LF copy with fresh build folders
