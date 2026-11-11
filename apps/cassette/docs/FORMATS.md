@@ -517,7 +517,7 @@ libopus 1.5.2, libopusfile 0.12 as the reference.
 
 ## Merging takes
 
-MERGE (the recordings list's fifth key, branch `cassette-merge`, 2026-11-11, planned for 0.2.0) joins two or more
+MERGE (the recordings list's fifth key, branch `cassette-merge`, added in 0.2.0, 2026-11-11) joins two or more
 takes, in the order the user chose them, into one new take of the same format. Code: `src/core/edit/merge.*` (the engine: the compatibility rule,
 `plan_merge()`, `merge_takes()`), `Controller::plan_merge()`, `start_merge()`, `cancel_merge()`, `src/bind/view_map.cpp`
 (`merge_row_reason()`, the merge strip) and `binder.cpp`, `src/ui/page_list.cpp` (merge mode), `src/ui/boxes.cpp`

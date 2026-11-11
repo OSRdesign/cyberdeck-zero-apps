@@ -372,7 +372,7 @@ crash leaves the original or the finished results, never half a file. A notice t
 
 ## Merging takes
 
-New after 0.1.0 (planned for 0.2.0). **MERGE** joins several takes into one new take, in the order you choose them,
+New in 0.2.0. **MERGE** joins several takes into one new take, in the order you choose them,
 without any loss of quality. The takes must be of one kind: the same codec (WAV, FLAC or Opus), the same sample rate
 and number of channels and, for WAV and FLAC, the same bit depth. An Opus take's bit rate is not stored with it and may
 differ (see *Opus joins* below).
