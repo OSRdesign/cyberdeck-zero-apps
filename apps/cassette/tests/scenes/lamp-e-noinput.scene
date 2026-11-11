@@ -1,0 +1,12 @@
+title portrait and square recorder, no input: both lamps dim
+sizes 320x480 480x800 480x480 720x720
+ppmm 608
+env CASSETTE_DEMO noinput
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot lamp-e-noinput
+expect text "LIM"
+expect text "PEAK"
+expect notext "LAYOUT FAIL"
+expect noquit

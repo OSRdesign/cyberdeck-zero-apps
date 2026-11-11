@@ -330,7 +330,7 @@ compare the lengths.
 howl). Press STOP: it resumes. Also try REW / FWD held, and the list's preview (double tap): off while it plays, back
 after. With the record timer on (3 s): the monitor runs during the countdown.
 
-(c2) Watch the small **MON** lamp at the bottom left of the meter panel (under IN): the MON lamp is lit while the monitor
+(c2) Watch the small **MON** lamp at the bottom left of the meter panel (under IN; on a portrait or square screen: the top lamp of the list at the right edge of the meter): the MON lamp is lit while the monitor
 runs, dark during PLAY and with the switch off. (A card without a playback side shows no MON lamp at all.)
 
 (d) With the Jabra Evolve 65 selected and Monitor Off: you still hear yourself, that is the headset's own hardware
@@ -573,6 +573,23 @@ name; the label shows only the name, whole, with no ruled line through it.
 
 Report: pass or fail per step, the name used, the screens tried, and the smallest legible codec text.
 
+## B22. LIM and LOW CUT lamps in the meter panel (portrait and square boards, 3 min)
+
+Goal: the two lamps show on the narrow and square screens as they do in the landscape strip.
+
+1. Open Cassette on a portrait (320x480, 480x800) or square (480x480, 720x720) board. In Settings switch Low cut and
+   Limiter off, go back. Expected: the meter panel's right edge shows a list of lamps with labels, top to bottom `MON` (only
+   with a playback side), `LIM`, `CUT` (or `LOW CUT`), the dots in one column, the labels in one column; LIM and CUT are
+   dim. The PEAK lamp (dark red) with its label is at the bottom left, under IN. Nothing overlaps the scale numbers, the
+   TARGET bracket or the bars.
+2. Switch only Limiter on. Expected: the LIM lamp turns green with a glow, the other stays dim. Then only Low cut on:
+   the other way round. Then both: both lit.
+3. Record a few seconds with both on, then play the take. Expected: both lamps stay lit and do not move; with two
+   channels (a stereo card) and with one the lamps stay at the same place and the panel keeps its height.
+4. Unplug the sound card. Expected: the lamps still show the switches' state (dim if both are off, lit if on).
+
+Report: pass or fail per step, the screen, and whether the lamps were readable.
+
 ## B21. Waveform scale TRUE / FIT (any board, 5 min)
 
 Goal: a quiet take is readable on the Edit page, and the chip and the key switch the scale.
@@ -615,6 +632,7 @@ Report: pass or fail per step, the number shown after `FIT x`, the screen.
 | B18 FLAC and Opus playback, trim |  |  |  |
 | B19 Codec, rate and quality pickers |  |  |  |
 | B20 Info box and label with a long name |  |  |  |
+| B22 LIM and LOW CUT lamps |  |  |  |
 
 **What to send back:** the table; the probe output per board (B0); the `watch` and `take` outputs of B1, B3, B4; the
 `ui` log line per board; the notice texts as you read them; screenshots or photos of anything cut, overlapping or odd.

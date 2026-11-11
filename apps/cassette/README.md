@@ -94,7 +94,7 @@ Four pages and two boxes:
   card and Esc close it. It cannot cost the take anything: the monitor reads a private copy through a lock-free ring that
   drops when it is full, and a monitor that fails or hangs only switches itself off (the info line says **Monitor
   unavailable**, for instance when another program holds the card's output); the recording goes on untouched.
-  The **MON** lamp at the bottom left of the meter panel (under IN) shows whether the monitor is playing right now: lit
+  The **MON** lamp at the bottom left of the meter panel (under IN; on portrait and square screens the first lamp of the list at the right edge) shows whether the monitor is playing right now: lit
   green while it runs, dark with the switch off, while playback or the Edit page suspends it and after a failure. It is
   drawn only when the card has a playback side (where the Monitor rows exist) and is not a button.
   **Use headphones.** With speakers the microphone hears the monitor and you get an echo or a howl; that is why the
@@ -271,13 +271,14 @@ the landscape board scaled on a square screen.
 The square layout is the 720x720 mockup scaled by screen width / 720 (the toolkit's header takes the top 64 px): the
 cassette window 498x260 with the cassette drawn at 2.3x (459x239) and no OPEN word; under it the counter, the
 Recordings and Settings buttons and the info box (the codec and rate, for Opus with the bit rate, and the REC lamp over the time left; the take's name is on the cassette label); the LED
-meter panel across the full width, thin (24 px bars, the scale on one row, TARGET right of its bracket, MON under IN, PEAK
-at the right), as tall for one channel as for two (L over R; one channel sits centred in it, so nothing below ever moves); CARD and SOFT side by side (CARD hidden when the card has no level
+meter panel across the full width, thin (24 px bars, the scale on one row, TARGET right of its bracket, PEAK under IN, MON / LIM /
+LOW CUT as a list at the right), as tall for one channel as for two (L over R; one channel sits centred in it, so nothing below ever moves); CARD and SOFT side by side (CARD hidden when the card has no level
 control, SOFT then takes the full width); the five keys across the full width. Left and right margins are equal
 everywhere, all gaps 12 px, what is left over stays under the keys. A control row is never lower than the toolkit's touch
 target: where the panel's density asks for more than the mockup's 58 / 72 px (a 10 px/mm panel wants 70), the window
-gives the height and the cassette scales to fit. The LIM and LOW CUT lamps of the landscape strip are not shown (as in
-portrait; the settings list has the switches).
+gives the height and the cassette scales to fit. MON, LIM and LOW CUT ("CUT" where the label does not fit) are one list of three lamps at the right edge of the meter panel, as in
+portrait (LIM and LOW CUT are lit when the switches in Settings are on, dim otherwise; landscape has them in the info strip), and
+PEAK is at the panel's bottom left.
 
 ## The code
 

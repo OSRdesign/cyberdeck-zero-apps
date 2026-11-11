@@ -80,7 +80,7 @@ numbers are explained below. The other layouts hold the same parts in another or
 | 1 | **Cassette window** | The cassette with its label, which carries only the take's name in handwriting (a long name uses the whole label and wraps to up to two lines). The two hubs turn while the deck runs: counterclockwise while recording and playing. They stand still when stopped or paused. With no card, the window shows the message about no sound input instead. |
 | 2 | **Counter** | The time of the take: while recording, how long the take is; while playing or paused, the position in the take. It reads 00:00 when the deck is idle. The **PEAK** lamp beside it is explained below. |
 | 3 | **Recordings** and **Settings** buttons | Open the recordings list (key **L**) and the settings (key **S**). |
-| 4 | **Info strip** | The take's name in capitals, the format and the time left on the card (for example `TAKE 007 · 48k/16 WAV · 12 h 40 left`); while a take plays it reads `PLAYING TAKE 006 · 05:44 / 12:08`. At the right: the **LIM** and **LOW CUT** lamps (lit when those switches in Settings are on) and, while the deck works, a red **REC** or green **PLAY** word with a lamp. A notice replaces the strip for a few seconds (a take saved, the card unplugged, a refusal). On narrow and square screens this is a box next to the counter instead: its first line, in bold, is the codec and rate (`WAV 48k`, `FLAC 48k`, `OPUS 48k · 32 kbps`: Opus adds its bit rate), its second line the time left (`12 h 40 left`) or, while a take plays, the position (`05:44 / 12:08`). The box does not show the take's name (it is on the cassette label). While recording it names the codec of the take being recorded; when idle, the choice in Settings (what the next take would use); while a take plays, that take's codec and rate. With no sound input it still names the Settings choice. The REC or PLAY lamp sits at the right end of the second line, so the codec line has the whole width of the box. Neither line wraps: the codec line uses the largest type size at which it fits the box. |
+| 4 | **Info strip** | The take's name in capitals, the format and the time left on the card (for example `TAKE 007 · 48k/16 WAV · 12 h 40 left`); while a take plays it reads `PLAYING TAKE 006 · 05:44 / 12:08`. At the right: the **LIM** and **LOW CUT** lamps (lit when those switches in Settings are on) and, while the deck works, a red **REC** or green **PLAY** word with a lamp. A notice replaces the strip for a few seconds (a take saved, the card unplugged, a refusal). On narrow and square screens this is a box next to the counter instead (the two lamps then sit in the meter panel, see *Low cut and Limiter*): its first line, in bold, is the codec and rate (`WAV 48k`, `FLAC 48k`, `OPUS 48k · 32 kbps`: Opus adds its bit rate), its second line the time left (`12 h 40 left`) or, while a take plays, the position (`05:44 / 12:08`). The box does not show the take's name (it is on the cassette label). While recording it names the codec of the take being recorded; when idle, the choice in Settings (what the next take would use); while a take plays, that take's codec and rate. With no sound input it still names the Settings choice. The REC or PLAY lamp sits at the right end of the second line, so the codec line has the whole width of the box. Neither line wraps: the codec line uses the largest type size at which it fits the box. |
 | 5 | **Level meter** | 15 bars from -40 to 0 dBFS, one row per channel (a mono card has one row, a stereo card two: L over R). Details below. |
 | 6 | **CARD** and **SOFT** gain | CARD is the sound card's own level (shown only when the card has a level control). SOFT is gain added by Cassette, 0 to +24 dB. Each has a minus and a plus button, 1 dB a step. |
 | 7 | **The five keys** | REW, PLAY / PAUSE, FWD, STOP, REC. |
@@ -95,7 +95,8 @@ numbers are explained below. The other layouts hold the same parts in another or
   the recording may be clipping. Turn the level down.
 - The meter shows the live input when the deck is idle, counting down or recording. While a take plays or is paused it
   shows the **played** level on L and R (a mono take on both rows); the PEAK lamp stays off then.
-- The **MON** lamp (bottom left of the meter, under IN) is explained in the next-but-one section.
+- The **MON** lamp (bottom left of the meter, under IN, in the landscape layout; in a list at the right of the meter on narrow
+  and square screens) is explained in the next-but-one section.
 
 | Level in the TARGET zone | Level too low |
 |---|---|
@@ -170,7 +171,13 @@ stereo card gets two meter rows.
 
 **Low cut and Limiter.** Two switches in Settings. *Low cut 80 Hz* removes rumble and wind noise (a high-pass filter).
 *Limiter* is a simple peak limiter without look-ahead. Both are off by default; when on, small `LIM` and `LOW CUT`
-lamps show in the info strip of the landscape layout. They change the recording.
+lamps are lit (a dim lamp means off). In the landscape layout they sit in the info strip, left of the REC / PLAY word. On
+narrow (portrait) and square screens, where the info box has no room, they sit in the **meter panel**: MON, LIM and LOW CUT
+are one list of three lamps at the right edge of the meter, top to bottom, each a dot and a small label (the label reads
+`CUT` where `LOW CUT` does not fit the list: on the 320x480, 480x800, 480x480 and 720x720 screens it is `CUT`). There the PEAK
+lamp moves to the bottom left of the panel, under IN. The MON row is empty when the card has no playback side. The lamps follow the two switches in every
+state (idle, recording, playing, with no sound input): lit when the switch is on, dim when it is off. They change the
+recording.
 
 **Sound server.** If another program (the sound server of a desktop board) holds the card, Cassette records through the
 server instead and says so: *Recording through the sound server: the card is in use*, and `(server)` appears next to
@@ -201,7 +208,7 @@ Settings > **Monitor** is a switch (off by default); **Monitor level** is its vo
   later copy on top: leave Monitor off for that headset. Monitor is meant for cards without sidetone (a cheap USB
   dongle, the UC02 headset).
 
-The **MON lamp** shows whether the monitor is playing right now: lit green while it runs, dark when the switch is off,
+The **MON lamp** (on narrow and square screens in the list at the right of the meter) shows whether the monitor is playing right now: lit green while it runs, dark when the switch is off,
 during playback, or after a failure. It is drawn only when the card has a playback side.
 
 ![Recording with the MON lamp lit](img/recording-mon-lit.png)
@@ -591,8 +598,8 @@ The recorder has four layouts, chosen by the shape of the screen:
 |---|---|---|
 | ![720x720](img/size-720x720.png) | ![480x480](img/size-480x480.png) | ![720x720 stereo](img/square-stereo.png) |
 
-On a square screen the other pages (settings, list, trim, boxes) keep the landscape layout, scaled. The LIM and LOW
-CUT lamps are shown only in the landscape strip. The **level meter panel keeps one height in every state**: a mono card
+On a square screen the other pages (settings, list, trim, boxes) keep the landscape layout, scaled. MON, LIM and LOW
+CUT are a list of three lamps at the right of the meter panel and PEAK is at its bottom left. The **level meter panel keeps one height in every state**: a mono card
 (one row, centred in the panel) and a stereo card (L over R) fill the same space, so nothing below the panel moves when
 a card is changed or a take starts.
 

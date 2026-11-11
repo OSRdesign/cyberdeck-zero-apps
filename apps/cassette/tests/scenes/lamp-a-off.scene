@@ -1,0 +1,14 @@
+title portrait and square recorder, recording, LIM and LOW CUT both off (dim lamps in the meter panel)
+sizes 320x480 480x800 480x480 720x720
+ppmm 608
+env CASSETTE_DEMO recording
+env CASSETTE_DEMO_LIM off
+env CASSETTE_DEMO_LOWCUT off
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot lamp-a-off
+expect text "LIM"
+expect text "PEAK"
+expect notext "LAYOUT FAIL"
+expect noquit

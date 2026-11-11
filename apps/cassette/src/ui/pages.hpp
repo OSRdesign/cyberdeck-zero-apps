@@ -22,6 +22,7 @@
 #include "cassette_window.hpp"
 #include "fit.hpp"
 #include "meter.hpp"
+#include "meter_lamps.hpp"
 #include "sq_geom.hpp"
 #include "view_model.hpp"
 #include "widgets.hpp"
@@ -95,6 +96,8 @@ private:
     void build_portrait();
     void build_square();
     void square_stereo(bool stereo);
+    void build_meter_lamps(const MeterLampSpec &spec, double ls, std::uint32_t label_rgb);
+    void lamp_level(Lamp &l, bool on, int glow = 0);
     void place_strip_right(const std::string &state);
     void place_steppers(bool card);
 
@@ -119,6 +122,7 @@ private:
     int strip_x_ = 0, strip_w_ = 0, strip_y_ = 0, strip_h_ = 0;
     bool card_shown_ = true;
     bool limiter_ = false, low_cut_ = false;
+    int lamp_glow_ = 2; /* the meter panel lamps' glow (portrait, square) */
     double btn_h_ = 44; /* the Recordings / Settings buttons' height (landscape) */
     bool first_ = true;
     /* the info box (title, detail, state lamp: portrait and square) instead of the strip with its lamps (landscape) */

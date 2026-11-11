@@ -248,8 +248,10 @@ void RecorderPage::build_portrait()
     ch_r_ = fit_label(root_, fit_, Face::Bold, 9, col::kInLabel, 30, 237, 0, 10);
     lv_label_set_text(ch_r_, "R");
     bar_ = std::make_unique<LedBar>(root_, fit_, 46, 227, 11, 20, 3);
-    peak_ = peak_lamp(root_, fit_, 272, 229);
-    lv_obj_t *peak = fit_label(root_, fit_, Face::Bold, 10, col::kScale, 264, 243, 0, 11, LV_TEXT_ALIGN_LEFT, 1);
+    /* PEAK at the bottom left, where MON was; MON, LIM and LOW CUT are the list at the right edge (build_meter_lamps) */
+    const PeakGeo pk = portrait_peak();
+    peak_ = peak_lamp(root_, fit_, pk.lamp.x, pk.lamp.y, pk.lamp.w);
+    lv_obj_t *peak = fit_label(root_, fit_, Face::Bold, 10, col::kScale, pk.label.x, pk.label.y, 0, pk.label.h, LV_TEXT_ALIGN_LEFT, 1);
     lv_label_set_text(peak, "PEAK");
     const double sx[4] = {4, 94, 138, 182};
     const char *const st[4] = {"-40", "-20", "-10", "0"};
@@ -262,10 +264,7 @@ void RecorderPage::build_portrait()
     lv_obj_set_style_border_side(br, static_cast<lv_border_side_t>(LV_BORDER_SIDE_LEFT | LV_BORDER_SIDE_RIGHT | LV_BORDER_SIDE_BOTTOM), 0);
     lv_obj_t *tg = fit_label(root_, fit_, Face::Bold, 9, col::kAmber, 158, 270, 54, 11, LV_TEXT_ALIGN_CENTER, 1.2);
     lv_label_set_text(tg, "TARGET");
-    /* MON: bottom left, under IN and the -40 label, on the TARGET caption's row (as in landscape) */
-    mon_lamp_ = mon_lamp(root_, fit_, 26, 275.5);
-    mon_label_ = fit_label(root_, fit_, Face::Bold, 10, col::kScale, 38, 270, 0, 11, LV_TEXT_ALIGN_LEFT, 1);
-    lv_label_set_text(mon_label_, "MON");
+    build_meter_lamps(portrait_lamp_spec(), 0.5, col::kScale);
 
     counter_ = std::make_unique<Counter>(root_, fit_, 16, 294, 88, 44, 15, 30, 8, 24, 6);
     list_btn_ = std::make_unique<IconButton>(root_, fit_, DRect{108, 294, 44, 44}, Icon::List, [this] { if (!window_->loading()) nav_.go(Screen::List); });
@@ -326,11 +325,13 @@ void RecorderPage::build_square()
     ls.tick_w = 3;
     ls.radius = 3;
     bar_ = std::make_unique<LedBar>(root_, fit_, 112, g_.bar_y, 30, kSqStereoBarH, 4, ls);
-    peak_ = peak_lamp(root_, fit_, 645, my + 446, 22);
-    moved(peak_, half);
-    lv_obj_t *peak = fit_label(root_, fit_, Face::Bold, 18, col::kScale, 625, my + 472, 62, 18, LV_TEXT_ALIGN_CENTER, 1);
+    /* PEAK at the bottom left (lamp over label, under IN); MON, LIM and LOW CUT are the list at the right edge. Neither moves
+     * with the channel count (the list and PEAK are clear of both states' rows). */
+    const PeakGeo pk = square_peak(g_);
+    peak_ = peak_lamp(root_, fit_, pk.lamp.x, pk.lamp.y, pk.lamp.w);
+    lv_obj_t *peak = fit_label(root_, fit_, Face::Bold, 18, col::kScale, pk.label.x, pk.label.y, pk.label.w, pk.label.h,
+                               LV_TEXT_ALIGN_CENTER, 1);
     lv_label_set_text(peak, "PEAK");
-    moved(peak, half);
     const double sx[4] = {107, 345, 464, 583};
     const char *const st[4] = {"-40", "-20", "-10", "0"};
     for (int i = 0; i < 4; ++i) {
@@ -345,12 +346,7 @@ void RecorderPage::build_square()
     lv_obj_t *tg = fit_label(root_, fit_, Face::Bold, 16, col::kAmber, 541, sy + 505, 0, 16, LV_TEXT_ALIGN_LEFT, 2);
     lv_label_set_text(tg, "TARGET");
     moved(tg, -half);
-    mon_glow_ = 8;
-    mon_lamp_ = mon_lamp(root_, fit_, 45, sy + 500, 16);
-    mon_label_ = fit_label(root_, fit_, Face::Bold, 13, col::kInLabel, 69, sy + 491, 0, 18, LV_TEXT_ALIGN_LEFT, 0);
-    lv_label_set_text(mon_label_, "MON");
-    moved(mon_lamp_, -half);
-    moved(mon_label_, -half);
+    build_meter_lamps(square_lamp_spec(g_), 1, col::kInLabel);
 
     StepperLook look;
     look.btn_w = std::max(60.0, 41.0 / fit_.s); /* at least the toolkit's 40 px wide: more design px under scale 0.68 */
@@ -370,6 +366,34 @@ void RecorderPage::build_square()
                                       look);
     sq_stereo_ = true; /* drawn for two channels; the default (one) is applied now */
     square_stereo(false);
+}
+
+/* The list at the meter panel's right edge (portrait and square: their info box has no room for LIM and LOW CUT, landscape
+ * has them in the strip): MON, LIM, LOW CUT, one lamp and one label per row, the dots at one x, the labels at one x, equal
+ * size and pitch. The places are the pure geometry of meter_lamps.hpp; the label texts are measured here, so "LOW CUT"
+ * becomes "CUT" only where the list is too narrow for it. LIM and LOW CUT are the strip's lamps (Lamp, green, glow, dim at
+ * opacity 46 while off; see update_deck); MON keeps its own look (dark green off, the low bars' green with a glow on). */
+void RecorderPage::build_meter_lamps(const MeterLampSpec &spec, double ls, std::uint32_t label_rgb)
+{
+    const int lpx = fit_.px(spec.px);
+    auto width = [&](const std::string &t, double) {
+        return text_width(font(Face::Bold, lpx), t.c_str(), ls_screen(ls, fit_.s)) / fit_.s;
+    };
+    const MeterLampGeo g = meter_lamps_column(spec, width);
+    const int d = fit_.px(spec.lamp_d);
+    lamp_glow_ = fit_.px(spec.lamp_d * 0.5);
+    mon_glow_ = spec.lamp_d * 0.5;
+    mon_lamp_ = mon_lamp(root_, fit_, g.lamp[0].x, g.lamp[0].y + spec.lamp_d / 2, spec.lamp_d);
+    lv_obj_set_pos(mon_lamp_, fit_.x(g.lamp[0].x), fit_.y(g.lamp[0].y)); /* the same rounding as the two Lamps */
+    lv_obj_set_size(mon_lamp_, d, d);
+    lim_ = std::make_unique<Lamp>(root_, fit_.x(g.lamp[1].x), fit_.y(g.lamp[1].y), d, col::kLampGreen, lamp_glow_);
+    cut_ = std::make_unique<Lamp>(root_, fit_.x(g.lamp[2].x), fit_.y(g.lamp[2].y), d, col::kLampGreen, lamp_glow_);
+    for (int i = 0; i < kLampRows; ++i) {
+        lv_obj_t *l = fit_label(root_, fit_, Face::Bold, spec.px, label_rgb, g.label[i].x, g.label[i].y, 0, g.label[i].h,
+                                LV_TEXT_ALIGN_LEFT, ls);
+        lv_label_set_text(l, g.text(i));
+        if (i == 0) mon_label_ = l;
+    }
 }
 
 /* The square layout's meter panel is always as tall as two channels need (kSqStereoGrow more than one), so nothing under
@@ -518,12 +542,8 @@ void RecorderPage::update_deck(const RecorderVm &rec)
             state_shown_ = state;
             place_strip_right(state);
         }
-        auto lamp = [this](Lamp &l, bool on) {
-            lv_obj_set_style_opa(l.obj(), static_cast<lv_opa_t>(on ? 255 : 46), 0);
-            lv_obj_set_style_shadow_width(l.obj(), on ? fit_.px(5) : 0, 0);
-        };
-        if (first_ || rec.info.limiter != limiter_) lamp(*lim_, rec.info.limiter);
-        if (first_ || rec.info.low_cut != low_cut_) lamp(*cut_, rec.info.low_cut);
+        if (first_ || rec.info.limiter != limiter_) lamp_level(*lim_, rec.info.limiter, fit_.px(5));
+        if (first_ || rec.info.low_cut != low_cut_) lamp_level(*cut_, rec.info.low_cut, fit_.px(5));
         limiter_ = rec.info.limiter;
         low_cut_ = rec.info.low_cut;
         /* the largest size that fits one line, down to the smallest the strip allows (the REW / FWD text at 640x480 needs the
@@ -535,6 +555,13 @@ void RecorderPage::update_deck(const RecorderVm &rec)
         set_fitted(box_detail_, Face::Medium, fit_.px(detail_px_), 0, std::max(9, fit_.px(detail_min_)),
                    red_tail(info_detail(rec), info_lost(rec)));
         state_lamp_->set(!state.empty(), state == "PLAY" ? col::kLampGreen : col::kLampRed);
+    }
+
+    if (info_box_) { /* the meter panel's lamps (not under the notice: it covers the counter row only) */
+        if (first_ || rec.info.limiter != limiter_) lamp_level(*lim_, rec.info.limiter);
+        if (first_ || rec.info.low_cut != low_cut_) lamp_level(*cut_, rec.info.low_cut);
+        limiter_ = rec.info.limiter;
+        low_cut_ = rec.info.low_cut;
     }
 
     place_steppers(rec.card.shown);
@@ -559,6 +586,13 @@ void RecorderPage::update_deck(const RecorderVm &rec)
         keys_[i]->set(ic, name, i == 4 ? KeyLook::Red : KeyLook::Charcoal, k.enabled, k.latched);
     }
     first_ = false;
+}
+
+/* LIM / LOW CUT lit (the function is on in Settings) or dim: full opacity with its glow, or opacity 46 and no glow. */
+void RecorderPage::lamp_level(Lamp &l, bool on, int glow)
+{
+    lv_obj_set_style_opa(l.obj(), static_cast<lv_opa_t>(on ? 255 : 46), 0);
+    lv_obj_set_style_shadow_width(l.obj(), on ? (glow > 0 ? glow : lamp_glow_) : 0, 0);
 }
 
 void RecorderPage::press_key(int key, bool down)
