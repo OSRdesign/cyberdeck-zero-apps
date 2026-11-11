@@ -273,10 +273,18 @@ void test_output() {
         CHECK_EQ(m.chosen.device, std::string("bt:9E:0C:81:E6:5D:1A"));
         CHECK(!m.chosen.connected);
         CHECK_EQ(m.chosen.label, std::string("Bluetooth device"));
-        /* the only choice besides "Default output" is a Bluetooth device: the list is offered */
-        OutputPlan only = choose_output({}, "", "", &bt);
+        /* the only choice besides "Default output" is a Bluetooth device: the list is offered (one device: two choices) */
+        const std::vector<BtOutput> one = {h};
+        OutputPlan only = choose_output({}, "", "", &one);
         CHECK_EQ(only.choices.size(), 2u);
+        CHECK_EQ(only.choices[0].device, std::string("bt:70:BF:92:53:6B:8B"));
         CHECK_EQ(only.chosen.device, std::string("default"));
+        /* no card, both devices: both listed before "Default output", automatic still the default output */
+        OutputPlan both = choose_output({}, "", "", &bt);
+        CHECK_EQ(both.choices.size(), 3u);
+        CHECK_EQ(both.choices[1].device, std::string("bt:9E:0C:81:E6:5D:1A"));
+        CHECK_EQ(both.choices.back().device, std::string("default"));
+        CHECK_EQ(both.chosen.device, std::string("default"));
         /* two devices with one alias: the end of the address tells them apart */
         BtOutput twin = h;
         twin.mac = "AA:BB:CC:DD:EE:FF";
