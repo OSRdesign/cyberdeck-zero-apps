@@ -19,7 +19,8 @@ boards with a sound server. Everything else is as in [0.2.0](RELEASE-0.2.0.md); 
   headset...* while it switches (about 0.7 s) and *Switching to music mode...* before playing to it; REC while connecting
   starts the take at the first real audio.
 - **A take is never continued from another microphone.** If the headset disconnects, the take ends and is kept; when the
-  headset comes back it is used again without restarting the app.
+  headset comes back it is used again without restarting the app, as the input and as the output (no need to choose it
+  again); while it is away the cassette window says *The Bluetooth headset is not connected.*
 - **Silent headsets are caught.** A headset that connects but sends pure silence gets the notice *The headset is connected
   but sends no sound.* after 3 s.
 - **`cassette-probe --server`** lists what the sound server sees (sources, sinks, Bluetooth cards, their modes);

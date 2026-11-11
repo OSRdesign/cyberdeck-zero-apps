@@ -119,6 +119,69 @@ void test_bt_output() {
         CHECK_EQ(l[0].hint_profile, "unknown");
         CHECK_EQ(l[0].label, "Evolve 65");
     }
+    /* T9: the node and the card re-created with NEW indexes (a reconnect, a profile switch): the entry is found by MAC, the sink by
+     * its name, which does not change */
+    {
+        FakePulse f;
+        PulseDevice s = fake_bt_sink(kEvolve, 1305);
+        s.index = 1271;
+        s.rate = 16000;
+        s.channels = 1;
+        s.bt_profile = "headset-head-unit";
+        f.sinks.push_back(s);
+        f.cards.push_back(fake_bt_card(kEvolve, 1305, true, "headset-head-unit"));
+        const std::vector<BtOutput> l = list_of(f);
+        CHECK_EQ(l.size(), 1u);
+        if (l.size() != 1) return;
+        CHECK_EQ(l[0].id, "bt:70:BF:92:53:6B:8B");
+        CHECK_EQ(l[0].sink, "bluez_output.70_BF_92_53_6B_8B.1");
+        CHECK_EQ(l[0].card, "bluez_card.70_BF_92_53_6B_8B");
+        CHECK(l[0].connected && l[0].usable);
+        CHECK_EQ(l[0].rate, 16000u);
+        CHECK_EQ(l[0].hint_profile, "call");
+        CHECK_EQ(l[0].sink_profile, "call");
+    }
+    /* the sink is listed before its card (the card list was read a moment earlier): matched by the MAC in its name, usable */
+    {
+        FakePulse f;
+        PulseDevice s = fake_bt_sink(kEvolve, 999);
+        s.bt_address.clear();
+        f.sinks.push_back(s);
+        const std::vector<BtOutput> l = list_of(f);
+        CHECK_EQ(l.size(), 1u);
+        if (l.size() != 1) return;
+        CHECK_EQ(l[0].mac, kEvolve);
+        CHECK(l[0].usable);
+        CHECK_EQ(l[0].sink, "bluez_output.70_BF_92_53_6B_8B.1");
+    }
+    /* the music-mode virtual source has a colon name, the sink an underscore name: one device, one MAC, one output entry */
+    {
+        FakePulse f;
+        PulseDevice v = fake_bt_source(kEvolve, 48000, kPulseNoIndex);
+        v.name = "bluez_input.70:BF:92:53:6B:8B";
+        v.bt_address.clear();
+        f.sources.push_back(v);
+        f.sinks.push_back(fake_bt_sink(kEvolve, 70));
+        f.cards.push_back(fake_bt_card(kEvolve, 70, true, "a2dp-sink"));
+        const std::vector<BtOutput> l = list_of(f);
+        CHECK_EQ(l.size(), 1u);
+        if (l.size() == 1) CHECK_EQ(l[0].sink, "bluez_output.70_BF_92_53_6B_8B.1");
+    }
+    /* the card already says music while the call node is still listed (the switch is half done): the node says call */
+    {
+        FakePulse f;
+        PulseDevice s = fake_bt_sink(kEvolve, 70);
+        s.rate = 16000;
+        s.channels = 1;
+        s.bt_profile = "headset-head-unit";
+        f.sinks.push_back(s);
+        f.cards.push_back(fake_bt_card(kEvolve, 70, true, "a2dp-sink"));
+        const std::vector<BtOutput> l = list_of(f);
+        CHECK_EQ(l.size(), 1u);
+        if (l.size() != 1) return;
+        CHECK_EQ(l[0].hint_profile, "music");
+        CHECK_EQ(l[0].sink_profile, "call");
+    }
     /* nothing Bluetooth: no entry (USB sinks are the ALSA cards' business) */
     {
         FakePulse f;

@@ -347,6 +347,29 @@ void apply_bt_demo(ViewModel &vm, const std::string &st)
             r.meter.ch[0] = ChannelMeter();
         }
         if (st == "gone") vm.notice = "The Bluetooth headset disconnected: the take was closed and kept.";
+    } else if (st == "notconnected") { /* T9 (B27): the chosen headset is not connected: the window and the box say so */
+        bt_input_rows(vm, usb_and_bt, bt_entries, 1, true);
+        r.input_present = false;
+        r.tape.loaded = false;
+        r.bt_missing = true;
+        r.meter.ch[0] = ChannelMeter();
+        r.keys[static_cast<int>(KeyId::Rec)].enabled = false;
+        r.info.take = "NO INPUT";
+        r.info.format.clear();
+        r.info.codec = "FLAC";
+        r.info.notice = kBtMissingMessage; /* the controller's text: the strip (landscape) */
+        r.info.box_notice = kBtMissingShort;
+    } else if (st == "micclosed") { /* T9 (B29): the headset's microphone closed on purpose: the normal view, BT, the meter dark */
+        bt_input_rows(vm, usb_and_bt, bt_entries, 1, true);
+        r.info.codec = r.tape.format = "WAV 16k";
+        r.info.format = "16k/16 WAV";
+        r.meter.ch[0] = ChannelMeter();
+    } else if (st == "switching-mic") { /* T9 (B29): PLAY waits for the music mode of the headset that is also the input */
+        bt_input_rows(vm, usb_and_bt, bt_entries, 1, true);
+        r.info.play_status = switching_text(1.3, 4.0);
+        meter_played(r, 0, 0); /* nothing plays yet: the play meter (L and R) */
+        r.info.play_pos_ms = 0;
+        r.counter_ms = 0;
     } else if (st == "switching" || st == "callq") {
         r.bluetooth = false; /* the input is the USB card; the output is the headset */
         if (st == "switching") {

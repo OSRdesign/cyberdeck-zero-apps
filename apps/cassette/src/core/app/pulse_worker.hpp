@@ -56,6 +56,7 @@ struct CardResult {
 struct IdentityResult {
     unsigned seq = 0;
     bool ok = false;
+    std::string actual; /* the source the server has the stream on ("" when it names none: T9, a moment of a profile switch) */
 };
 
 class PulseWorker {

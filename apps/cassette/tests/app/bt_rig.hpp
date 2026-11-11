@@ -199,6 +199,123 @@ struct ProfileSim {
     }
 };
 
+/* ---- T9: PipeWire as the owner's board tests showed it (B27-B29) ---- */
+
+inline const std::string kSinkName = "bluez_output.70_BF_92_53_6B_8B.1";
+
+/* The Evolve 65 on the HackBerry's PipeWire: a profile switch DESTROYS the headset's sink node and creates a new one gap_ms later (a new
+ * index, the same name); the call profile adds the real source ".0"; the music-mode virtual source (colon name) stays through every switch
+ * (on the board one source index served every flap). The card follows the microphone like ProfileSim: to the call profile down_ms after a
+ * capture opened on a headset source, back to music up_ms after the last one closed (up_ms < 0: WirePlumber never switches back). off()
+ * switches the headset off (its nodes go, then the card); on() switches it on again: the card first, its nodes gap_ms later, every one
+ * with a NEW index. Each step sends the server's change event. */
+struct BoardSim {
+    FakePulse &f;
+    int down_ms, up_ms;
+    std::atomic<int> gap_ms;
+    std::atomic<bool> stop{false}, powered{true}, autoswitch{true};
+    std::atomic<int> to_call{0}, to_music{0}, gaps{0};
+    std::recursive_mutex step; /* one switch, off or on at a time */
+    std::thread th;
+    BoardSim(FakePulse &p, int down, int up, int gap, bool on_at_start = true) : f(p), down_ms(down), up_ms(up), gap_ms(gap) {
+        powered = on_at_start;
+        th = std::thread([this] { run(); });
+    }
+    ~BoardSim() {
+        stop = true;
+        th.join();
+    }
+    std::string profile() {
+        std::lock_guard<std::recursive_mutex> g(f.lock());
+        for (const PulseCard &c : f.cards)
+            if (c.name == kCard) return c.active_profile;
+        return "";
+    }
+    uint32_t card_index() {
+        std::lock_guard<std::recursive_mutex> g(f.lock());
+        for (const PulseCard &c : f.cards)
+            if (c.name == kCard) return c.index;
+        return kPulseNoIndex;
+    }
+    bool has(const std::vector<PulseDevice> &l, const std::string &name) {
+        std::lock_guard<std::recursive_mutex> g(f.lock());
+        for (const PulseDevice &d : l)
+            if (d.name == name) return true;
+        return false;
+    }
+    PulseDevice sink_for(const std::string &prof, uint32_t card) {
+        PulseDevice d = fake_bt_sink(kMac, card);
+        const bool call = pulse_profile_is_call(prof);
+        d.rate = call ? 16000 : 48000;
+        d.channels = call ? 1 : 2;
+        d.bt_profile = prof;
+        d.bt_codec = call ? "msbc" : "sbc";
+        return d;
+    }
+    void nap() {
+        const int g = gap_ms.load();
+        if (g > 0) std::this_thread::sleep_for(std::chrono::milliseconds(g));
+    }
+    /* the card's profile changes: the old sink goes at once, the new one comes gap_ms later */
+    void switch_to(const std::string &prof) {
+        std::lock_guard<std::recursive_mutex> g(step);
+        if (!powered.load()) return;
+        const uint32_t card = card_index();
+        if (!pulse_profile_is_call(prof) && has(f.sources, kReal)) f.remove_source(kReal);
+        if (has(f.sinks, kSinkName)) f.remove_sink(kSinkName);
+        f.set_profile(kCard, prof);
+        ++gaps;
+        nap();
+        if (!powered.load()) return;
+        f.add_sink(sink_for(prof, card));
+        if (pulse_profile_is_call(prof)) f.add_source(fake_bt_source(kMac, 16000, card));
+        if (pulse_profile_is_call(prof)) ++to_call;
+        else ++to_music;
+    }
+    void off() {
+        std::lock_guard<std::recursive_mutex> g(step);
+        powered = false;
+        if (has(f.sources, kReal)) f.remove_source(kReal);
+        if (has(f.sources, kVirt)) f.remove_source(kVirt);
+        if (has(f.sinks, kSinkName)) f.remove_sink(kSinkName);
+        f.remove_card(kCard);
+    }
+    void on(const std::string &prof) {
+        std::lock_guard<std::recursive_mutex> g(step);
+        const uint32_t card = f.add_card(fake_bt_card(kMac, kPulseNoIndex, true, prof));
+        nap();
+        f.add_sink(sink_for(prof, card));
+        PulseDevice v = virtual_source();
+        f.add_source(v);
+        if (pulse_profile_is_call(prof)) f.add_source(fake_bt_source(kMac, 16000, card));
+        powered = true;
+    }
+    void run() {
+        using clk = std::chrono::steady_clock;
+        clk::time_point open_since{}, closed_since = clk::now();
+        bool was_open = false;
+        while (!stop.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            if (!powered.load() || !autoswitch.load()) continue;
+            bool open = false;
+            {
+                std::lock_guard<std::recursive_mutex> g(f.lock());
+                for (const FakeStream &s : f.streams)
+                    if (s.capture && s.open && s.cap && s.attached.rfind("bluez_input", 0) == 0) open = true;
+            }
+            const auto now = clk::now();
+            if (open && !was_open) open_since = now;
+            if (!open && was_open) closed_since = now;
+            was_open = open;
+            const std::string prof = profile();
+            if (prof.empty()) continue;
+            const bool call = pulse_profile_is_call(prof);
+            if (open && !call && now - open_since >= std::chrono::milliseconds(down_ms)) switch_to("headset-head-unit");
+            else if (!open && call && up_ms >= 0 && now - closed_since >= std::chrono::milliseconds(up_ms)) switch_to("a2dp-sink");
+        }
+    }
+};
+
 /* The fake sound server's playback side in real time: every 10 ms each open playback stream plays rate/100 frames of what it holds
  * (short of audio after it started = an underflow), and keeps them. got(i) = what stream i played, including the end-of-take drain. */
 struct PlaySrv {

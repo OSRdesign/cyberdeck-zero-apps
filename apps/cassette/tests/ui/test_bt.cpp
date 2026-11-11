@@ -219,10 +219,101 @@ void text_contrast()
     CHECK(contrast_ratio(name_count_color(CountTone::Red), kDialogBox) >= 3.0);
 }
 
+/* T9 (B27): the chosen headset not connected. The window's two lines (never the USB text); the info box (portrait, square) shows
+ * the short form, the strip keeps the controller's full text. The full text (39 characters) wrapped to two lines in the box at
+ * 720x720 and ran over its border (the box's line is a one-line label fitted down to its floor size; a longer text grows the label
+ * downwards). The real-font fit is measured by the scenes' layout check (bt13-rec-notconnected, the seven sizes). */
+void missing_texts()
+{
+    CHECK_EQ(std::string(kBtMissingMessage), "The Bluetooth headset is not connected.");
+    CHECK_EQ(std::string(kBtMissingHint), "Found by itself when it connects.");
+    CHECK_EQ(std::string(kNoInputMessage), "No sound input found. Plug in a USB sound card or headset.");
+    CHECK_EQ(std::string(kNoInputHint), "Found by itself when plugged in.");
+    CHECK_EQ(std::string(kBtMissingShort), "Not connected");
+    RecorderVm r;
+    r.input_present = false;
+    r.bt_missing = true;
+    r.info.notice = kBtMissingMessage;
+    r.info.box_notice = kBtMissingShort;
+    CHECK_EQ(info_detail(r), "Not connected");
+    CHECK_EQ(info_line(r), "The Bluetooth headset is not connected."); /* the landscape strip: the whole text, one fitted line */
+    CHECK(std::string(kBtMissingShort).size() * 2 < std::string(kBtMissingMessage).size()); /* under half the full text */
+    /* without the short form the box shows the notice (USB reasons are unchanged) */
+    r.info.box_notice.clear();
+    CHECK_EQ(info_detail(r), "The Bluetooth headset is not connected.");
+}
+
+/* T9: "Not connected" on ONE line in the info box at the four layouts that have the box. The geometry is the recorder page's: the box's
+ * second line is x 212, 69 wide on the portrait board (fitted from 13 down to the floor 9, scaled), x 444, 210 wide on the square one
+ * (24 down to 16); s = 1 at 320x480 and 720x720, 1.5 at 480x800 (480 / 320; its body is taller), 2/3 at 480x480; positions round,
+ * sizes are round(v * s). Text widths: Montserrat Medium (the TTF the boards and the scenes draw with, unitsPerEm 1000) advance per
+ * glyph, each rounded to whole px as FreeType's hinted advances are: "Not connected" is 109 px at 14 px, the figure the scenes' layout
+ * check measured at 480x800, where the box is 104 px. */
+int not_connected_width(int px)
+{
+    int w = 0;
+    for (char c : std::string("Not connected")) {
+        int adv = 0;
+        switch (c) {
+        case 'N': adv = 812; break;
+        case 'o': adv = 635; break;
+        case 't': adv = 414; break;
+        case ' ': adv = 269; break;
+        case 'c': adv = 571; break;
+        case 'n': adv = 681; break;
+        case 'e': adv = 612; break;
+        case 'd': adv = 682; break;
+        default: break;
+        }
+        w += static_cast<int>(std::lround(adv * px / 1000.0));
+    }
+    return w;
+}
+
+void box_geometry()
+{
+    CHECK_EQ(not_connected_width(14), 109); /* the layout check's measurement at 480x800 */
+    CHECK_EQ(not_connected_width(13), 97);
+    struct L {
+        const char *name;
+        double s, x, w, max_px, floor_px;
+    };
+    const L layouts[] = {{"320x480", 1.0, 212, 69, 13, 9},
+                         {"480x800", 1.5, 212, 69, 13, 9},
+                         {"480x480", 480.0 / 720.0, 444, 210, 24, 16},
+                         {"720x720", 1.0, 444, 210, 24, 16}};
+    for (const L &l : layouts) {
+        const int box = static_cast<int>(std::lround((l.x + l.w) * l.s) - std::lround(l.x * l.s));
+        const int top = std::max(1, static_cast<int>(std::lround(l.max_px * l.s)));
+        const int floor_px = std::max(9, static_cast<int>(std::lround(l.floor_px * l.s)));
+        const int with_rule = largest_fit_px(top, box_detail_min_px(floor_px, true), box, not_connected_width);
+        const int without = largest_fit_px(top, floor_px, box, not_connected_width);
+        const bool one_line = not_connected_width(with_rule) <= box + 1; /* the layout check's tolerance */
+        if (!one_line) std::printf("  %s: \"Not connected\" %d px at %d px, the box %d px\n", l.name, not_connected_width(with_rule), with_rule, box);
+        CHECK(one_line);
+        const bool needs_rule = not_connected_width(without) > box + 1;
+        CHECK_EQ(needs_rule, std::string(l.name) == "480x800"); /* one px under the floor is needed there only */
+        if (std::string(l.name) == "480x800") {
+            CHECK_EQ(box, 104);
+            CHECK_EQ(floor_px, 14);
+            CHECK_EQ(with_rule, 13);
+        } else {
+            CHECK_EQ(with_rule, without); /* elsewhere the size it already had */
+        }
+    }
+    /* the rule itself: one px under the floor for the short form only, never under 9 */
+    CHECK_EQ(box_detail_min_px(14, true), 13);
+    CHECK_EQ(box_detail_min_px(14, false), 14);
+    CHECK_EQ(box_detail_min_px(9, true), 9);
+    CHECK_EQ(box_detail_min_px(16, true), 15);
+}
+
 } // namespace
 
 void test_bt()
 {
+    missing_texts();
+    box_geometry();
     text_contrast();
     rates();
     input_rows();

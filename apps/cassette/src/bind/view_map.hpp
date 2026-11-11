@@ -170,6 +170,9 @@ ui::BtDeviceFacts bt_facts(const InputSnap &in);
 ui::BtDeviceFacts bt_facts(const OutputSnap &o);
 std::string standing_notice_text(const CaptureSnap &c);
 std::string monitor_detail_text(const MonitorSnap &m);
+/* T9: the chosen Bluetooth headset is there and its microphone is closed on purpose (CaptureSnap::mic_closed: the list, the Edit
+ * page, playback): the recorder and the Settings rows keep their normal look (not the no-sound-input state). */
+bool mic_held(const Snapshot &s);
 /* The call-quality notice (ui::kCallQualityNotice), once per play: fed every snapshot, step() is true once while a take plays
  * through a Bluetooth output at call quality (playback.quality "call") or after the wait for the music mode timed out. After
  * a wait that did reach music mode a "call" reading counts only from kCallQualityGraceMs into the play (the profile shown is

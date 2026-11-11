@@ -57,6 +57,7 @@ public:
     std::vector<PulseCard> cards;
     std::vector<FakeStream> streams; /* in open order; read them under lock() when a server thread runs */
     unsigned callbacks = 0;          /* change callbacks made */
+    std::atomic<unsigned> listings{0}; /* list_sources calls (one per re-listing) */
 
     FakePulse();
     ~FakePulse() override;
@@ -91,6 +92,9 @@ public:
     void remove_source(const std::string &name); /* kills its streams (or moves them: honour_dont_move = false) */
     void add_sink(const PulseDevice &d);
     void remove_sink(const std::string &name);
+    /* a card appears (a new index unless it has one) or goes away, with the server's change event */
+    uint32_t add_card(const PulseCard &c);
+    void remove_card(const std::string &name);
     void suspend(const std::string &device, bool on);
     /* the server moves one stream (whatever the flags say) */
     void move(size_t stream, const std::string &to);

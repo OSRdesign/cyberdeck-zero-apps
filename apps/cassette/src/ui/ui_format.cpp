@@ -196,6 +196,11 @@ std::string info_codec(const RecorderVm &r)
     return out;
 }
 
+int box_detail_min_px(int floor_px, bool short_form)
+{
+    return short_form ? std::max(9, floor_px - 1) : floor_px;
+}
+
 int largest_fit_px(int max_px, int min_px, int max_w, const std::function<int(int)> &width_at)
 {
     for (int p = max_px; p > min_px; --p)
@@ -303,7 +308,7 @@ NameLayout layout_name_text(const std::string &name, const std::vector<int> &run
 
 std::string info_detail(const RecorderVm &r)
 {
-    if (!r.info.notice.empty()) return r.info.notice;
+    if (!r.info.notice.empty()) return r.info.box_notice.empty() ? r.info.notice : r.info.box_notice;
     if (playing(r.transport)) return r.info.play_status.empty() ? pos_len(r) : r.info.play_status;
     const std::string lost = info_lost(r);
     if (!lost.empty()) return lost;
@@ -315,6 +320,11 @@ std::string info_detail(const RecorderVm &r)
 const char *const kCallQualityNotice = "Playing in call quality: this headset has no music mode.";
 const char *const kBtConnectingNotice = "Connecting the headset...";
 const char *const kBtNoSoundNotice = "The headset is connected but sends no sound.";
+const char *const kNoInputMessage = "No sound input found. Plug in a USB sound card or headset.";
+const char *const kNoInputHint = "Found by itself when plugged in.";
+const char *const kBtMissingMessage = "The Bluetooth headset is not connected.";
+const char *const kBtMissingHint = "Found by itself when it connects.";
+const char *const kBtMissingShort = "Not connected";
 
 std::string bt_rate_text(std::uint32_t rate)
 {

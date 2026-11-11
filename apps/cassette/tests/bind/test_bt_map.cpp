@@ -520,6 +520,74 @@ void binder_bt()
     }
 }
 
+/* T9 (B27, B29): the chosen headset not connected says so (window, short box text); a microphone closed on purpose keeps the view */
+void missing_and_held()
+{
+    /* not connected: the empty window with the Bluetooth text, the strip the controller's text, the box the short form */
+    Snapshot s = bt_inputs_snapshot(1);
+    s.card.present = false;
+    s.card.message = "The Bluetooth headset is not connected.";
+    s.capture.bt_gone = true;
+    s.meter = MeterSnap();
+    ui::ViewModel vm = map(s);
+    CHECK(!vm.rec.input_present);
+    CHECK(vm.rec.bt_missing);
+    CHECK(vm.rec.bluetooth);
+    CHECK(!vm.rec.tape.loaded);
+    CHECK_EQ(vm.rec.info.notice, "The Bluetooth headset is not connected.");
+    CHECK_EQ(vm.rec.info.box_notice, "Not connected");
+    CHECK_EQ(ui::info_detail(vm.rec), "Not connected");                         /* the box: one short line */
+    CHECK_EQ(ui::info_line(vm.rec), "The Bluetooth headset is not connected."); /* the strip: the whole text */
+    CHECK(!vm.rec.keys[static_cast<int>(ui::KeyId::Rec)].enabled);
+    /* a USB card that is not there: the USB window text, no short form */
+    Snapshot u = base_snapshot();
+    u.card.present = false;
+    u.card.message = "The chosen sound card is not connected";
+    vm = map(u);
+    CHECK(!vm.rec.input_present);
+    CHECK(!vm.rec.bt_missing);
+    CHECK_EQ(vm.rec.info.box_notice, "");
+    CHECK_EQ(ui::info_detail(vm.rec), "The chosen sound card is not connected");
+    /* the headset there, its microphone closed on purpose (the list, the Edit page, playback): the normal view, BT */
+    Snapshot h = bt_inputs_snapshot(1);
+    h.card.present = false;
+    h.card.message.clear();
+    h.capture.mic_closed = true;
+    h.meter = MeterSnap();
+    for (int ds : {kDeckIdle, kDeckPlaying}) {
+        h.deck.state = ds;
+        h.take.name = "take_006_20261108-1105.wav";
+        vm = map(h);
+        CHECK(vm.rec.input_present);
+        CHECK(vm.rec.tape.loaded);
+        CHECK(!vm.rec.bt_missing);
+        CHECK(vm.rec.bluetooth);
+        CHECK_EQ(vm.rec.info.notice, "");
+        CHECK(vm.rec.info.take != "NO INPUT");
+        if (ds == kDeckIdle) CHECK_EQ(vm.rec.meter.channels, 1); /* the one bar, labelled BT */
+    }
+    CHECK(mic_held(h));
+    /* ... the Settings page keeps the Monitor rows (the controller keeps has_playback while the microphone is held) */
+    h.deck.state = kDeckIdle;
+    h.card.has_playback = true;
+    vm = map(h);
+    CHECK(find_row(vm, "monitor") != nullptr);
+    /* closed on purpose but the headset went away meanwhile: that is the not-connected state */
+    h.capture.bt_gone = true;
+    h.card.message = "The Bluetooth headset is not connected.";
+    CHECK(!mic_held(h));
+    vm = map(h);
+    CHECK(!vm.rec.input_present);
+    CHECK(vm.rec.bt_missing);
+    /* same() sees the new fields */
+    ui::RecorderVm a = map(base_snapshot()).rec, b = a;
+    b.bt_missing = true;
+    CHECK(!same(a, b));
+    b = a;
+    b.info.box_notice = "x";
+    CHECK(!same(a, b));
+}
+
 } // namespace
 
 void test_bt_map()
@@ -530,4 +598,5 @@ void test_bt_map()
     recorder();
     call_quality_watch();
     binder_bt();
+    missing_and_held();
 }

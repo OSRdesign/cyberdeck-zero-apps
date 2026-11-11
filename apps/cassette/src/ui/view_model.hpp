@@ -84,6 +84,8 @@ struct InfoVm {
     std::int64_t lost_ms = 0;    /* recording: audio lost to capture overruns so far (0 = none); shown in red */
     std::string notice;          /* a standing message that replaces the strip's text (the card's "no sound input" reason); the
                                   * timed notices of the controller and the binding are ViewModel::notice */
+    std::string box_notice;      /* the info box's shorter form of `notice` (portrait, square: one line at every layout), "Not
+                                  * connected" for a Bluetooth headset that is not connected; "" = the box shows `notice` (T9) */
     std::string play_status;     /* while a take plays: replaces the position / length in the strip's time slot (landscape; the
                                   * info box has no room for it: portrait and square show it in the notice place, as a standing
                                   * notice), "Switching to music mode... 1 s" while a Bluetooth headset leaves its call profile; "" */
@@ -111,6 +113,10 @@ struct RecorderVm {
     InfoVm info;
     /* The input is a Bluetooth headset: the meter's one-bar label reads "BT" instead of "IN". */
     bool bluetooth = false;
+    /* The no-sound-input state (input_present false) is the chosen Bluetooth headset not being connected: the empty window says
+     * so (ui_format.hpp kBtMissingMessage / kBtMissingHint) instead of the USB text (T9). A microphone closed on purpose (the list,
+     * the Edit page, playback) is not this state: the window keeps the cassette. */
+    bool bt_missing = false;
     /* A state of the input that stands as long as it lasts ("Connecting the headset...", "The headset is connected but sends
      * no sound."): shown in the notice place of the recorder while no timed notice (ViewModel::notice) shows; "" none. */
     std::string standing_notice;

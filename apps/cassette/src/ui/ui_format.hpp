@@ -112,7 +112,7 @@ std::string info_line(const RecorderVm &rec);
 std::string info_codec(const RecorderVm &rec);
 /* The box's second line: what the strip shows after the take and format: the time left ("12 h 40 left"), the position over
  * the length while playing (InfoVm::play_status instead when set: "Switching to music mode... 1 s", also in the strip), the
- * lost audio, the notice. */
+ * lost audio, the notice (its short form InfoVm::box_notice when set: one line at every layout). */
 std::string info_detail(const RecorderVm &rec);
 /* The largest size in [min_px, max_px] at which width_at(px) is at most max_w (the font ladder walked from the top: the text
  * stays one line); min_px when none fits. */
@@ -212,6 +212,19 @@ extern const char *const kCallQualityNotice; /* "Playing in call quality: this h
  * exactly zero. */
 extern const char *const kBtConnectingNotice; /* "Connecting the headset..." */
 extern const char *const kBtNoSoundNotice;    /* "The headset is connected but sends no sound." */
+/* The empty cassette window (no sound input, RecorderVm::input_present false), two lines: the message and the muted hint. A USB
+ * card (or nothing chosen): kNoInputMessage / kNoInputHint; the chosen Bluetooth headset is not connected (RecorderVm::bt_missing,
+ * T9): kBtMissingMessage / kBtMissingHint. */
+extern const char *const kNoInputMessage;   /* "No sound input found. Plug in a USB sound card or headset." */
+extern const char *const kNoInputHint;      /* "Found by itself when plugged in." */
+extern const char *const kBtMissingMessage; /* "The Bluetooth headset is not connected." */
+extern const char *const kBtMissingHint;    /* "Found by itself when it connects." */
+/* The info box's short form of that state (InfoVm::box_notice; the strip keeps the controller's full text): "Not connected". */
+extern const char *const kBtMissingShort;
+/* The smallest font px of the info box's second line: the box's floor (`floor_px`, the layout's), or for the short form of a
+ * standing notice one px under it, never under 9: at 480x800 the floor is 14 px and "Not connected" needs 109 px of the box's 104
+ * at 14 px, 97 at 13 px (T9). The fitted size stays the largest that fits, so wherever the text fits at the floor nothing changes. */
+int box_detail_min_px(int floor_px, bool short_form);
 
 /* "more below: REW / FWD, Channels, Low cut" for the labels of the rows under the visible part ("" for none). */
 std::string more_below(const std::vector<std::string> &labels);

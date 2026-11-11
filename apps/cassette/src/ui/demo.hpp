@@ -46,6 +46,11 @@
  *   gone         the headset went away during a take: the controller's notice (the take closed and kept)
  *   switching    PLAY waits for the headset's music mode: "Switching to music mode... 1 s" in the time slot
  *   callq        a take playing at call quality: the one-time notice "Playing in call quality: this headset has no music mode."
+ *   notconnected (T9) the chosen headset is not connected: the empty window "The Bluetooth headset is not connected." over
+ *                "Found by itself when it connects.", the strip the controller's text, the info box "Not connected", REC dimmed
+ *   micclosed    (T9) the recorder idle while the headset's microphone is closed on purpose: the cassette, BT, the meter dark
+ *   switching-mic (T9) on a playing scene: PLAY waits for the music mode of the headset that is also the input (its microphone
+ *                closed): the cassette stays in the window
  *
  * DemoDriver's UiActions change the model the way the controller would in simple cases (the steppers step, toggles
  * flip, a choice is taken, a tap on the countdown cancels it, the trim marker, zoom, flags, IN / OUT and the boxes

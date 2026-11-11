@@ -8,7 +8,7 @@ codecs) and its HackBerry measurements P1-P9 and items C15-C19.
 the board CLI `tools/pulse_capture_test.cpp`. **T2 (capture) is wired into the controller** (section "What T2 uses"
 below): a paired Bluetooth headset is an input next to the ALSA cards. **T3 (playback and the live monitor over Bluetooth, and
 the worker thread for the server's questions) is wired in too** (section "What T3 uses"); **T4, the UI, shows it** (section
-"What T4 shows"). The ALSA path
+"What T4 shows"); **T9** fixed what the board tests B27-B29 found (section "What T9 changed"). The ALSA path
 (including its `(server)` fallback through ALSA `default`, `alsa/open_policy.*`) is exactly as before.
 
 ## Files
@@ -323,7 +323,8 @@ service tick takes the answer (`bt_apply_scan()`), rebuilds the lists and re-pub
 opens at once; after that nothing waits. Measured on the fake with a server that takes 1.5 s per call: the slowest of 40+ commands (`refresh_cards`,
 `set_soft_gain_db`, `snapshot`, `set_page`) stayed under 120 ms (a few ms in practice), `start()` returned in 0.3 s, a take recorded on the USB card through the hang.
 What still waits for the server, by the user's own action: the open of a stream (`open_capture`, `open_playback`: playback and the monitor ask for a 0.4 s accept
-timeout, a slower server gets a stream that is still connecting) and the identity check at the start of a take. Shutdown stops the worker first (a call in progress
+timeout, a slower server gets a stream that is still connecting) and the identity check at the start of a take (up to 1 s when the server names no
+source, T9). Shutdown stops the worker first (a call in progress
 is bounded by the library's 3 s).
 
 ### Output choices
@@ -448,7 +449,74 @@ scenes `tests/scenes/bt1-*` to `bt12-*` (the seven layouts each).
 ### Constants (one place each)
 
 `PulseSinkOptions` (playback 60 / 100 / 20 ms, accept timeout 0.4 s, stuck 3 s), `pulse_monitor_sink_options()` (40 / 20 / 16 ms), `MonitorOptions` (prefill 10 ms, drift 15 + 5 ms),
-`kMusicWaitMaxMs` 4000, `kMusicWaitMinMs` 900, `kQualityPollMs` 1000, `kMonitorNoticeDelayMs` 150 (controller.cpp).
+`kMusicWaitMaxMs` 4000, `kMusicWaitMinMs` 900, `kSinkWaitMs` 3000, `kBtRelistMs` 1000, `kBtRelistWaitMs` 250, `kQualityPollMs` 1000, `kMonitorNoticeDelayMs` 150 (controller.cpp).
+
+## What T9 changed (the board tests B27-B29, HackBerry, 2026-11-11)
+
+**What the board showed.** PipeWire (1.4.2, WirePlumber with `bluetooth.autoswitch-to-headset-profile`) **destroys the headset's sink node at
+every profile switch and creates a new one** a moment later: same name (`bluez_output.70_BF_92_53_6B_8B.1`), new index, 48 kHz stereo in music
+mode, 16 kHz mono in call mode. A headset switched off and on comes back with **new indexes** for every node and the card (sink 281, then 1271).
+The music-mode virtual source (`bluez_input.<MAC with colons>`) kept one index through every flap. B29: every PLAY to the same headset closed the
+microphone, the card went back to music about 2 s later, and at that very moment Cassette said *The Bluetooth output is not connected.* and stopped
+(the microphone opened again at once, so the card flapped back to call mode); no sink-input ever appeared on the server.
+
+**The root cause.** Not the reconnect and not the MAC forms: the output list is keyed by MAC (`bt_outputs`), the sink is opened by its name (the
+same in both profiles and after a reconnect), the plan is rebuilt from every applied scan, and the colon and underscore MAC forms parse to one MAC.
+The controller treated **"the device is listed but its sink node is not, for a moment"** (`BtOutput::connected` true, `usable` false) as **"not
+connected"**, and resolved the sink from **one** listing: `bt_wait_tick()` ended the music wait at the first scan taken in the gap of the switch
+(the scan is asked on the switch's first event: the old node's removal) and `prepare_output()` refused PLAY the same way when PLAY came during a
+switch. The profile switch is exactly what PLAY causes (the microphone closes), so the wait failed every time. Replayed on FakePulse with a server
+that re-creates the node (`BoardSim`, tests/app/bt_rig.hpp): the same refusal 1.88 s into the wait (`usable=0 connected=1`), and at PLAY during a
+switch.
+
+**The fix (controller.cpp).**
+
+- PLAY (and CUE, REW / FWD from idle) to a Bluetooth output whose device is listed but has no sink node now: the deck waits for the node in the
+  state of the music wait (`playback.state` `switching_to_music`, "Switching to music mode... N s"; `PlayWait::need_music` false).
+- The music wait no longer ends when the node is missing: a missing node is waited for **`kSinkWaitMs` (3 s) from when it went missing**; the whole
+  wait never exceeds `kMusicWaitMaxMs + kSinkWaitMs` (7 s); then *The Bluetooth output is not connected.* and the deck stops. A device that is not
+  listed at all (switched off) is refused at once, as before.
+- When the card says music, the take opens on the **new** node: a listing **asked after** that card reading (scans now carry their request time,
+  `bt_scan_ms`) that lists the node, and not the call node on its way out (`BtOutput::sink_profile`, the node's own `api.bluez5.profile`, is not
+  `call`). After the 4 s timeout it plays on whatever node exists (call quality), as T3 designed.
+- An open that finds no node after all (`kPulseNoDevice`: gone between the listing and the open) goes back to waiting (within the bounds) and tries
+  again on a listing asked after the failure, instead of stopping.
+- RESUME and a scan of a take whose stream is open do not ask the listing (the open stream is the proof); a closed one is resolved again.
+- **The lists follow the server without events too:** while the chosen output has no node, or the last listing failed, they are read again every
+  `kBtRelistMs` (1 s), every `kBtRelistWaitMs` (250 ms) while PLAY waits for a node; a failed listing is no longer final until the next server event.
+- **No scan loop while the chosen input is absent:** every applied scan used to count as a change, and each change made the controller try the input
+  again, which asked for another scan: with the headset off Cassette re-listed the server at the tick rate (171 listings in 2 s on the fake with a
+  10 ms tick). Now only a scan that lists something else counts (`bt_digest`); the replug timer still retries every `replug_retry_ms`.
+- **The identity guard (C16) and a stream on no source.** The B29 log showed a source output attached to no source for a moment (index
+  4294967295) while WirePlumber relinked the virtual source at a switch. An answer that names no source is no longer a refusal at once: at REC
+  it is asked again every `kBtIdentityRetryStepMs` (0.1 s) for up to `kBtIdentityRetryMs` (1 s, on the controller's thread: REC is the user's
+  own action), during a take again after 0.2 s, and only when it lasts 1 s is REC refused (*The headset microphone could not be confirmed: the
+  take did not start.*) or the take ended and kept as a loss. A stream on ANOTHER source is refused or ended at once, as before.
+
+**The screens.** A microphone closed on purpose (`CaptureSnap::mic_closed`: the list, the Edit page, playback) with the headset there is not a
+missing input: the binding (`mic_held()`) keeps the recorder's normal view (the cassette, `BT`, the info box's codec), and the controller keeps
+`card.has_playback` and the format inputs as they were while open (the Settings Monitor rows and the Codec picker's sizes stay). The chosen headset
+**not connected** (`capture.bt_gone`): the empty window says *The Bluetooth headset is not connected.* over the muted *Found by itself when it
+connects.* (`RecorderVm::bt_missing`; a USB card keeps its own text), the landscape strip keeps the controller's text, and the info box (portrait,
+square) shows the short form *Not connected* (`InfoVm::box_notice`): the full text wrapped to two lines there and ran over the box's border at
+720x720 (the scenes' layout check measures that line at its fitted size; no scene showed this state before). The short form may use one px
+under the box's floor size (`box_detail_min_px`, never under 9): only 480x800 needs it, where the floor is 14 px, the box 104 px and *Not connected*
+109 px at 14 px, 97 px at 13 px; at the other layouts it keeps the size it had (`tests/ui/test_bt.cpp` `box_geometry`, with Montserrat Medium's
+advances). Scenes `bt13-rec-notconnected`, `bt14-rec-micclosed`, `bt15-switching-mic` (the seven layouts each).
+
+During playback the meter shows the PLAYED level on L and R for every input (the playback meter, by design since 0.1): the `BT` label belongs to the
+input meter and comes back when the deck stops.
+
+**Tests.** `tests/app/test_bt_reconnect.cpp` (`test-cassette-app --bt-reconnect`, also in `--bt`): the output entry after each server event (the node
+gone with the card there, the call node with a new index, off, the card back without a node, the node back) and PLAY to the new node; B27-B29 (chosen
+while connected, off, on in call mode with new indexes, Settings > Output connected again without a reselection, PLAY plays the take sample-exact,
+twice); the choice saved earlier with the headset off at start, then on (and fewer than 40 listings in 2 s while it is off); three list -> recorder
+-> list profile flaps, then PLAY; PLAY right after the microphone closed and PLAY during a switch (the node missing for 400 ms); the headset staying
+in call mode (PLAY waits 4 s, plays at call quality); the stream on no source for 0.4 s at REC (the take starts) and for 0.3 s around a check
+during a take (it goes on), for longer than 1 s (REC refused after about 1 s, not for good; the take ended and kept), another source (refused at
+once). `tests/pulse/test_bt_output.cpp`: new indexes, a sink listed before its card, the colon and
+underscore forms of one MAC, the call node listed while the card says music (`sink_profile`). `tests/bind/test_bt_map.cpp` (`missing_and_held`) and
+`tests/ui/test_bt.cpp` (`missing_texts`: the window's texts, the box's short form, the strip's full text).
 
 ## Tests
 

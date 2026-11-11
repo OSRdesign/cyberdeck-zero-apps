@@ -120,13 +120,9 @@ CassetteWindow::CassetteWindow(lv_obj_t *parent, const Fit &fit, const Layout &l
     lv_label_set_long_mode(empty_msg_, LV_LABEL_LONG_MODE_WRAP);
     empty_hint_ = label(empty_, Face::Medium, fit.px(12 * lay.text_scale), col::kHint, pad, 0, ew, LV_TEXT_ALIGN_CENTER);
     lv_label_set_long_mode(empty_hint_, LV_LABEL_LONG_MODE_WRAP);
-    lv_label_set_text(empty_msg_, "No sound input found. Plug in a USB sound card or headset.");
-    lv_label_set_text(empty_hint_, "Found by itself when plugged in.");
-    lv_obj_update_layout(empty_);
-    const int mh = lv_obj_get_height(empty_msg_), hh = lv_obj_get_height(empty_hint_), gap = fit.px(8);
-    const int top = (wh - (mh + gap + hh)) / 2;
-    lv_obj_set_y(empty_msg_, top);
-    lv_obj_set_y(empty_hint_, top + mh + gap);
+    empty_h_ = wh;
+    empty_gap_ = fit.px(8);
+    set_empty_text(false);
     lv_obj_add_flag(empty_, LV_OBJ_FLAG_HIDDEN);
 
     /* the countdown: a clickable shell, the framed shade, the texts and the ring */
@@ -162,6 +158,21 @@ CassetteWindow::CassetteWindow(lv_obj_t *parent, const Fit &fit, const Layout &l
     last_ms_ = lv_tick_get();
     render_tape();
     layout_name();
+}
+
+void CassetteWindow::set_empty_text(bool bt)
+{
+    empty_bt_ = bt;
+    lv_label_set_text(empty_msg_, bt ? kBtMissingMessage : kNoInputMessage);
+    lv_label_set_text(empty_hint_, bt ? kBtMissingHint : kNoInputHint);
+    const bool hidden = lv_obj_has_flag(empty_, LV_OBJ_FLAG_HIDDEN);
+    if (hidden) lv_obj_remove_flag(empty_, LV_OBJ_FLAG_HIDDEN); /* measured as shown */
+    lv_obj_update_layout(empty_);
+    if (hidden) lv_obj_add_flag(empty_, LV_OBJ_FLAG_HIDDEN);
+    const int mh = lv_obj_get_height(empty_msg_), hh = lv_obj_get_height(empty_hint_);
+    const int top = (empty_h_ - (mh + empty_gap_ + hh)) / 2;
+    lv_obj_set_y(empty_msg_, top);
+    lv_obj_set_y(empty_hint_, top + mh + empty_gap_);
 }
 
 CassetteWindow::~CassetteWindow()
@@ -286,6 +297,7 @@ void CassetteWindow::update(const RecorderVm &rec)
     } else {
         apply_target();
     }
+    if (!rec.input_present && rec.bt_missing != empty_bt_) set_empty_text(rec.bt_missing);
     show(empty_, !rec.input_present);
 
     if (rec.hub_dps[0] != speed_[0] || rec.hub_dps[1] != speed_[1]) {

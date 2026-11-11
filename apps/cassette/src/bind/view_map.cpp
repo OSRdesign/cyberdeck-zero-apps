@@ -642,6 +642,11 @@ std::vector<ui::FormatEntry> output_entries(const std::vector<OutputSnap> &outs,
 
 } // namespace
 
+bool mic_held(const Snapshot &s)
+{
+    return s.card.bluetooth && s.capture.mic_closed && !s.capture.bt_gone;
+}
+
 std::string standing_notice_text(const CaptureSnap &c)
 {
     if (c.connecting) return ui::kBtConnectingNotice;
@@ -758,7 +763,7 @@ std::vector<ui::SettingRow> settings_rows(const Snapshot &s, uint64_t next_take)
     }
     rows.push_back(toggle_row("lowcut", "Low cut 80 Hz", s.settings.low_cut));
     rows.push_back(toggle_row("limiter", "Limiter", s.settings.limiter));
-    if (c.present && c.has_playback) { /* only a card with a playback side can be monitored */
+    if ((c.present || mic_held(s)) && c.has_playback) { /* only a card with a playback side can be monitored */
         ui::SettingRow mr = toggle_row("monitor", "Monitor", s.settings.monitor);
         mr.detail = monitor_detail_text(s.monitor); /* the delay (Bluetooth), amber with the echo notice */
         mr.detail_warn = !mr.detail.empty() && s.monitor.notice == "delay";
@@ -852,7 +857,10 @@ ui::ViewModel map_view(const MapInput &in)
     const int ds = s.deck.state;
     const bool rec_side = recording_family(ds) && ds != kDeckCountdown;
     const bool play_side = playing_family(ds);
-    const bool present = s.card.present;
+    /* a Bluetooth microphone closed on purpose (the list, the Edit page, playback: CaptureSnap::mic_closed) with the headset there
+     * is not a missing input: the recorder keeps its normal view (T9) */
+    const bool held = mic_held(s);
+    const bool present = s.card.present || held;
 
     /* ---- recorder ---- */
     ui::RecorderVm &r = vm.rec;
@@ -961,8 +969,11 @@ ui::ViewModel map_view(const MapInput &in)
     r.info.limiter = s.settings.limiter;
     r.info.low_cut = s.settings.low_cut;
     vm.notice = local.notice;
-    /* the standing reason why there is no input stays in the strip until a card is found */
+    /* the standing reason why there is no input stays in the strip until a card is found; the chosen Bluetooth headset not
+     * connected: the window says so, the info box has the short form (the controller's text does not fit it on one line) */
     if (!present && !s.card.labels.empty()) r.info.notice = s.card.message;
+    r.bt_missing = !present && s.card.bluetooth && s.capture.bt_gone;
+    if (r.bt_missing && !r.info.notice.empty()) r.info.box_notice = ui::kBtMissingShort;
 
     /* Bluetooth: the meter label, the standing state of the headset, PLAY waiting for the music mode */
     r.bluetooth = s.card.bluetooth;
@@ -1115,14 +1126,14 @@ bool same(const ui::RecorderVm &a, const ui::RecorderVm &b)
             a.meter.ch[i].peak_lamp != b.meter.ch[i].peak_lamp)
             return false;
     if (a.monitor_shown != b.monitor_shown || a.monitor_active != b.monitor_active) return false;
-    if (a.bluetooth != b.bluetooth || a.standing_notice != b.standing_notice) return false;
+    if (a.bluetooth != b.bluetooth || a.bt_missing != b.bt_missing || a.standing_notice != b.standing_notice) return false;
     if (a.tape.loaded != b.tape.loaded || a.tape.label != b.tape.label ||
         a.tape.format != b.tape.format || a.tape.load_seq != b.tape.load_seq)
         return false;
     const ui::InfoVm &x = a.info, &y = b.info;
     if (x.take != y.take || x.format != y.format || x.codec != y.codec || x.kbps != y.kbps || x.time_left != y.time_left || x.play_pos_ms != y.play_pos_ms ||
         x.play_len_ms != y.play_len_ms || x.server != y.server || x.card != y.card || x.lost_ms != y.lost_ms || x.limiter != y.limiter || x.low_cut != y.low_cut || x.notice != y.notice ||
-        x.play_status != y.play_status)
+        x.play_status != y.play_status || x.box_notice != y.box_notice)
         return false;
     auto gain = [](const ui::GainVm &g, const ui::GainVm &h) {
         return g.shown == h.shown && g.db == h.db && g.can_down == h.can_down && g.can_up == h.can_up;

@@ -610,7 +610,9 @@ void RecorderPage::update_deck(const RecorderVm &rec)
             plain.info.play_status.clear();
             detail = info_detail(plain);
         }
-        set_fitted(box_detail_, Face::Medium, fit_.px(detail_px_), 0, std::max(9, fit_.px(detail_min_)),
+        /* the box's floor size; the short form of a standing notice ("Not connected") may go one px under it (480x800: 13 px) */
+        const bool short_form = !rec.info.notice.empty() && !rec.info.box_notice.empty();
+        set_fitted(box_detail_, Face::Medium, fit_.px(detail_px_), 0, box_detail_min_px(std::max(9, fit_.px(detail_min_)), short_form),
                    red_tail(detail, info_lost(rec)));
         state_lamp_->set(!state.empty(), state == "PLAY" ? col::kLampGreen : col::kLampRed);
     }

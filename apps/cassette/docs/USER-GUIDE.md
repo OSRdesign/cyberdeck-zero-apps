@@ -62,7 +62,8 @@ live monitoring), some record only at 16000 Hz (see [Troubleshooting](#troublesh
 4. Press **REC** (red key, or **R**) to start a take, **STOP** (or **X**) to end it.
 
 If no card is found, the cassette window says *No sound input found. Plug in a USB sound card or headset.* REC is
-dimmed. Plug a card in: Cassette finds it by itself within a few seconds.
+dimmed. Plug a card in: Cassette finds it by itself within a few seconds. (With a Bluetooth headset chosen that is not
+connected it says *The Bluetooth headset is not connected.* instead, see [Bluetooth](#bluetooth).)
 
 ![No sound input](img/no-input.png)
 
@@ -743,7 +744,13 @@ microphone:
 - **REC while connecting is allowed**: the take waits and starts at the first real audio, so the first moment you speak
   from music mode may be lost; nothing silent is recorded in its place.
 - **PLAY to the same headset** waits for music mode: *Switching to music mode... 1 s* shows (up to 4 s), then the take
-  plays at music quality. If the headset has no music mode, it plays at once in call quality.
+  plays at music quality. If the headset has no music mode, it plays at once in call quality; if it stays in call mode,
+  it plays in call quality after the 4 s. Each switch makes the sound server rebuild the headset's output for a moment:
+  PLAY waits for it (a few seconds at most), also right after the headset was switched off and on again; you never have
+  to choose the output again.
+- While the microphone is closed on purpose (the list, the Edit page, playback) the recorder still shows the cassette and
+  **BT**: nothing is missing. When the chosen headset is **not connected**, the cassette window says *The Bluetooth headset
+  is not connected.* and under it *Found by itself when it connects.*; the box beside the counter says *Not connected*.
 - **One music device at a time on the HackBerry.** With a Bluetooth speaker connected, a headset gets call quality only
   (and the other way round): the Output picker shows *Call quality (16 kHz)* and PLAY says *Playing in call quality: this
   headset has no music mode.* once. Disconnect the other device in Settings > Bluetooth to get music quality back.
@@ -788,11 +795,11 @@ goes on.* and comes back by itself when the device is back (while Monitor is on)
 | *Connecting the headset...* | The headset is switching to call mode (about 0.7 s, longer for some headsets). | Wait; REC is allowed and starts at the first audio. |
 | *The headset is connected but sends no sound.* | The headset delivers pure silence (digital zero) for 3 s: its call link did not open (the Beats Fit Pro does this). The take keeps running; the notice clears when sound arrives. | Stop, switch the headset off and on, or use another headset or a USB card. |
 | *The Bluetooth headset disconnected: the take was closed and kept.* (*... disconnected.* without a take) | The headset was switched off or went out of range. Cassette never continues from another microphone: the file ends at the cut. | Switch it back on: *The Bluetooth headset is back* and it is used again without restarting the app. Start a new take. |
-| *The Bluetooth headset is not connected.* | REC with the chosen headset absent. | Connect it in Settings > Bluetooth, or choose another Input. |
-| *The headset microphone could not be confirmed: the take did not start.* | The sound server could not confirm that the stream is on the headset's microphone. | Try REC again; reconnect the headset. |
-| *Switching to music mode... 1 s* | PLAY to the headset that was just in call mode. | Wait (at most 4 s). |
+| *The Bluetooth headset is not connected.* | REC with the chosen headset absent (the cassette window says it too while it is absent, with *Found by itself when it connects.*). | Connect it in Settings > Bluetooth, or choose another Input. |
+| *The headset microphone could not be confirmed: the take did not start.* | The sound server could not confirm that the stream is on the headset's microphone (Cassette asks again for a second first). | Try REC again; reconnect the headset. |
+| *Switching to music mode... 1 s* | PLAY to the headset that was just in call mode. | Wait (normally under 4 s; a few seconds more while the sound server rebuilds the headset's output). |
 | *Playing in call quality: this headset has no music mode.* | The headset has no music mode now (another Bluetooth audio device holds it, or it never had one). | Disconnect the other device for music quality. |
-| *The Bluetooth output disconnected.* / *The Bluetooth output is not connected.* | The output went away during playback (the deck pauses) / PLAY with the chosen output absent. | Reconnect it, or choose another Output. |
+| *The Bluetooth output disconnected.* / *The Bluetooth output is not connected.* | The output went away during playback (the deck pauses) / PLAY with the chosen output absent, or its output did not come back within a few seconds. | Reconnect it, or choose another Output. |
 | *The monitor output disconnected: the recording goes on.* | The monitor's Bluetooth output went away. | Nothing: it comes back by itself. |
 | *Bluetooth audio is not set up on this board* (Input picker) | No sound server (or no `libpulse0`) on this board. | Use a USB card; see What the board needs above. |
 | *The sound server stopped: the take was closed and kept.* | PipeWire or PulseAudio stopped during a take. | Restart the session or the board. |

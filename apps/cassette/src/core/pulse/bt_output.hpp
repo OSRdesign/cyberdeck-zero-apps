@@ -34,6 +34,9 @@ struct BtOutput {
     bool music_offered = false, music_available = false, call_offered = false;
     std::string reason;       /* not usable: why */
     std::string sink;         /* the node to open ("" when none) */
+    std::string sink_profile; /* the sink node's OWN profile: "music", "call", "" when it does not say (T9: PipeWire re-creates the node
+                               * at every profile switch; for a moment the card may already say music while the call node is still
+                               * listed) */
     std::string card;         /* the owner card's name ("" when none) */
 };
 

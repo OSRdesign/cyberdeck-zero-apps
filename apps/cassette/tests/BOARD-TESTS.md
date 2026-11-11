@@ -712,7 +712,9 @@ Report: the three takes' lengths against the counter, how the voice sounds, the 
 2. From the list again: back to the recorder and press REC at once, while it still says Connecting; start counting aloud
    at the moment you press REC.
 3. Expected: no error notice; the take starts at the first real audio: its first second is your voice (maybe without the
-   very first syllable), not a second recorded as silence; the counter starts when the sound starts.
+   very first syllable), not a second recorded as silence; the counter starts when the sound starts. (T9) Never `The headset
+   microphone could not be confirmed: the take did not start.` here: a stream that the sound server shows on no source
+   for a moment during the switch is asked again for up to 1 s (REC may take that long to start).
 
 Report: what the screen showed and for how long, the first second of the take (the controller can print its level per
 100 ms), pass or fail.
@@ -725,6 +727,9 @@ Report: what the screen showed and for how long, the first second of the take (t
    closed and kept.`; the take in the list is about 15 s long; played back it ends at the cut and holds **no audio from
    another microphone** after it.
 3. REC with the headset still off: `The Bluetooth headset is not connected.`, nothing is recorded.
+4. (T9) While it is off the cassette window reads `The Bluetooth headset is not connected.` over the muted `Found by
+   itself when it connects.` (never `No sound input found. Plug in a USB sound card or headset.`), the meter label stays
+   `BT`, and the box beside the counter (720x720) reads `Not connected` on one line, inside the box.
 
 Report: the notice texts, the take's length, whether anything after the cut is heard, pass or fail.
 
@@ -733,7 +738,8 @@ Report: the notice texts, the take's length, whether anything after the cut is h
 1. After B27 switch the headset on again (it reconnects by itself; if not, Connect in the launcher's Settings >
    Bluetooth). Do not restart Cassette.
 2. Expected: `The Bluetooth headset is back`, the meter moves again (after Connecting), Settings > Input still has the
-   headset chosen, REC records from it.
+   headset chosen, REC records from it. (T9) Settings > Output lists the headset as connected again (`Call quality (16
+   kHz)` or `Music quality`, not `Not connected`) without choosing anything.
 
 Report: the time from switching on to the meter moving, pass or fail.
 
@@ -741,8 +747,13 @@ Report: the time from switching on to the meter moving, pass or fail.
 
 1. Settings > Output: the Evolve 65 is listed (`Call quality (16 kHz)` while the recorder holds its microphone, else `Music
    quality`). Choose it. Go to the recorder and PLAY the take of B25 at once.
-2. Expected: `Switching to music mode... 1 s` (then 2 s; never more than 4 s), then the take plays in the headset, clearly
-   better than a phone call (music mode). The counter follows the sound.
+2. Expected: `Switching to music mode... 1 s` (then 2 s; normally under 4 s, at most about 7 s while the sound server
+   rebuilds the headset's output), then the take plays in the headset, clearly better than a phone call (music mode). The
+   counter follows the sound. Never `The Bluetooth output is not connected.` (T9: B29 failed so every time after B28).
+   While it waits and plays the cassette stays in the window (never `No sound input found...`); the meter shows the
+   played level on L and R (the playback meter of every input) and reads `BT` again after STOP.
+   Do it right after B28 (headset off and on) without choosing the output again, then once more after opening the list
+   and coming back to the recorder (the headset flaps between its modes): it must play each time.
 3. Press the board's volume keys while it plays: the level in the headset follows. PAUSE, PLAY, REW / FWD held: they work.
 4. STOP and go back to the recorder: Connecting, then the meter (call mode again).
 

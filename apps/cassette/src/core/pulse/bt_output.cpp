@@ -55,6 +55,8 @@ std::vector<BtOutput> bt_outputs(const PulseProbe &probe) {
             b.rate = d->rate;
             b.channels = d->channels;
             if (b.card.empty()) b.card = d->card;
+            if (pulse_profile_is_music(d->profile)) b.sink_profile = "music";
+            else if (pulse_profile_is_call(d->profile)) b.sink_profile = "call";
             if (b.hint_profile == "unknown" && !d->profile.empty()) {
                 if (pulse_profile_is_music(d->profile)) b.hint_profile = "music";
                 else if (pulse_profile_is_call(d->profile)) b.hint_profile = "call";

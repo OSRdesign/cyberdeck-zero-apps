@@ -88,7 +88,7 @@ bool PulseWorker::request_identity(std::shared_ptr<PulseCapture> stream) {
         ident_busy_ = true;
         jobs_.push_back([this, stream] {
             IdentityResult r;
-            r.ok = stream->source_identity_ok();
+            r.ok = stream->source_identity_ok(&r.actual);
             std::lock_guard<std::mutex> g2(mu_);
             r.seq = ++seq_;
             ident_ = r;

@@ -148,6 +148,7 @@ int FakePulse::server_info(PulseServerInfo &out) {
 }
 
 int FakePulse::list_sources(std::vector<PulseDevice> &out) {
+    ++listings;
     nap();
     std::lock_guard<std::recursive_mutex> g(mu_);
     out.clear();
@@ -420,6 +421,27 @@ void FakePulse::remove_source(const std::string &name) {
 void FakePulse::remove_sink(const std::string &name) {
     std::lock_guard<std::recursive_mutex> g(mu_);
     lose(name, true);
+}
+
+uint32_t FakePulse::add_card(const PulseCard &c) {
+    std::lock_guard<std::recursive_mutex> g(mu_);
+    PulseCard v = c;
+    if (v.index == kPulseNoIndex) v.index = next_index_++;
+    cards.push_back(v);
+    notify(PulseChange::What::Card, PulseChange::Kind::New, v.index);
+    return v.index;
+}
+
+void FakePulse::remove_card(const std::string &name) {
+    std::lock_guard<std::recursive_mutex> g(mu_);
+    for (auto it = cards.begin(); it != cards.end(); ++it) {
+        if (it->name == name) {
+            const uint32_t index = it->index;
+            cards.erase(it);
+            notify(PulseChange::What::Card, PulseChange::Kind::Remove, index);
+            return;
+        }
+    }
 }
 
 void FakePulse::suspend(const std::string &device, bool on) {
