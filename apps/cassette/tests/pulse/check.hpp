@@ -69,4 +69,5 @@ void test_playback();
 void test_threads();
 void test_pcm();
 void test_bt_input(); /* the Bluetooth input model (identity, source, call rate, hint) and the connecting gate */
+void test_bt_output(); /* the Bluetooth output model (T3) */
 void test_real_lib();

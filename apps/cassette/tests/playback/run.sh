@@ -15,6 +15,6 @@ fi
 work=$(mktemp -d "${TMPDIR:-/tmp}/cassette-playback-XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/app"
-(cd "$app" && tar cf - src/core tests/alsa tests/playback tests/fixture_codecs.hpp tests/fake_decoders.hpp) | (cd "$work/app" && tar xf -)
+(cd "$app" && tar cf - src/core tests/alsa tests/pulse tests/playback tests/fixture_codecs.hpp tests/fake_decoders.hpp) | (cd "$work/app" && tar xf -)
 find "$work/app" -type f \( -name '*.cpp' -o -name '*.hpp' -o -name Makefile \) -exec sed -i 's/\r$//' {} +
 make -C "$work/app/tests/playback" APP="$work/app" BUILD="$work/build" -j3 "$@" test

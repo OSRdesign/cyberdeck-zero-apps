@@ -19,7 +19,8 @@
  *     "low_cut": bool, "limiter": bool, "soft_gain_db": 0..24,
  *     "monitor": bool (default false), "monitor_level": 0..100 in steps of 5 (default 50),
  *     "wave_fit": true (the trim waveform is scaled to fit) | absent (true level; written only when true),
- *     "card": "<descriptor>", "output_device": "<alsa device>",
+ *     "card": "<descriptor>", "output_device": "<alsa device>" | "bt:AA:BB:CC:DD:EE:FF",
+     "monitor_output": "" (automatic) | "bt:AA:BB:CC:DD:EE:FF" | "<alsa device>" (absent: automatic),
  *     "cards": { "<descriptor>": { "level_db": number (absent: no level control), "auto_gain": bool, "mute": bool } } }
  */
 #pragma once
@@ -61,7 +62,9 @@ struct Settings {
     int monitor_level = 50;    /* percent 0..100, steps of 5 */
     bool wave_fit = false;     /* the trim page's waveform scale: false TRUE (real level), true FIT (the take's loudest peak fills the panel); every take opens in it */
     std::string card;          /* the chosen capture card as card_descriptor() text; empty: the first capture card */
-    std::string output_device; /* the playback device the user picked ("hw:CARD=..,DEV=0" or "default"); empty: automatic */
+    std::string output_device; /* the playback device the user picked ("hw:CARD=..,DEV=0", "default" or "bt:<MAC>"); empty: automatic */
+    std::string monitor_output; /* where the live monitor plays: "" automatic (the capture card's playback side, or the Bluetooth headset
+                                 * that is the input), "bt:<MAC>" or an ALSA device as output_device spells it */
 };
 
 struct CardState {

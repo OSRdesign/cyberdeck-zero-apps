@@ -21,6 +21,14 @@
  * device queue under kMonitorMaxQueueMs and the ring backlog under kMonitorMaxBacklogMs: on an underrun it recovers and goes
  * on, on a backlog it drops the oldest audio ("resync"): the delay never accumulates. Buffering granted above the target is
  * reported in stats() (latency_ms), not refused.
+ *
+ * Through the sound server (task T3, docs/PULSE.md): MonitorOptions switch on the millisecond-sized margins and the drift control
+ * for a PulsePlaybackSink. The capture stream and the playback stream run on different clocks. The ring between them is the
+ * MonitorTap's. The policy: a sink that is SLOWER than the capture lets the backlog grow; above drift_target_ms + drift_band_ms the
+ * thread drops ONE frame of the next chunk (a skip: at most 1 frame in 256, inaudible on speech) until the backlog is inside the band
+ * again; the hard resync above max_backlog_ms stays as the safety net. A sink that is FASTER than the capture runs dry: the
+ * underrun is recovered and the device is refilled with prefill_ms of silence (an insert, a gap of prefill_ms every margin/drift
+ * seconds: 100 ppm of drift and a 20 ms margin: one gap in 200 s). Counted in stats() (drift_skips, underruns, resyncs).
  */
 #pragma once
 
@@ -66,12 +74,24 @@ private:
     std::atomic<bool> active_{false};
 };
 
+/* Defaults reproduce the ALSA monitor exactly (frame-sized prefill, no drift control). */
+struct MonitorOptions {
+    uint32_t prefill_ms = 0;       /* silence written first and after an underrun; 0: kMonitorPrefillFrames */
+    double max_queue_ms = kMonitorMaxQueueMs;
+    double max_backlog_ms = kMonitorMaxBacklogMs;
+    bool drift_control = false;    /* skip single frames while the backlog is above the band */
+    double drift_target_ms = 15.0; /* the backlog the thread aims for (the tap's ring, after each read of a chunk) */
+    double drift_band_ms = 5.0;    /* skip only above target + band */
+};
+
 struct MonitorStats {
     bool running = false;
     int error = 0;                  /* the negative error that ended the thread by itself, else 0 */
     uint64_t frames_played = 0;     /* frames written to the sink */
     uint64_t underruns = 0;         /* -EPIPE recovered */
     uint64_t resyncs = 0;           /* times audio was dropped to keep the delay small */
+    uint64_t drift_skips = 0;       /* single frames dropped by the drift control */
+    uint64_t backlog_frames = 0;    /* the tap's ring now: audio captured and not yet handed to the sink */
     uint64_t frames_dropped_in = 0; /* the tap's ring was full */
     uint32_t sink_period = 0, sink_buffer = 0, sink_rate = 0;
     unsigned sink_channels = 0;
@@ -91,7 +111,7 @@ public:
 
     /* Opens `sink` for the tap's format asking for a small buffer, starts the thread and activates the tap. 0, or a negative
      * error: the sink could not be opened or cannot play this signal (the monitor stays off, the sink is closed). */
-    int start(std::unique_ptr<PlaybackSink> sink);
+    int start(std::unique_ptr<PlaybackSink> sink, const MonitorOptions &opt = MonitorOptions());
     /* Deactivates the tap, ends the thread (waits at most kMonitorStopWaitMs), closes the sink. Safe twice and when the
      * thread ended by itself. */
     void stop();
@@ -100,6 +120,8 @@ public:
     void set_level_pct(int pct);
     int level_pct() const;
     MonitorStats stats() const;
+    /* The sink the thread plays into, for the owner's own queries (its delay); null when stopped. Valid until stop(). */
+    PlaybackSink *sink() const;
 
 private:
     MonitorTap &tap_;

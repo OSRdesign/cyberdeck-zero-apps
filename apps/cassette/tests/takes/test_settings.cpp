@@ -9,6 +9,7 @@
 #include "settings.hpp"
 
 #include <cerrno>
+#include <filesystem>
 
 using namespace cassette;
 using namespace tk;
@@ -37,6 +38,7 @@ void test_settings() {
     CHECK_EQ(s.values().monitor_level, 50);
     CHECK(!s.values().wave_fit); /* the trim waveform opens in TRUE */
     CHECK(s.values().card.empty() && s.values().output_device.empty());
+    CHECK(s.values().monitor_output.empty()); /* the monitor target is automatic by default */
 
     /* round trip, the folder is created */
     Settings &v = s.values();
@@ -55,6 +57,7 @@ void test_settings() {
     v.wave_fit = true;
     v.card = "UC02||";
     v.output_device = "hw:CARD=UC02,DEV=0";
+    v.monitor_output = "bt:70:BF:92:53:6B:8B";
     /* two cards with the same name, different by-id; the first has no USB identity */
     const std::string c1 = card_descriptor("UC02", "usb-UC02_UC02_UC02-00", "0000:0000");
     const std::string c2 = card_descriptor("UC02", "usb-UC02_UC02_UC02-01", "0d8c:0014");
@@ -90,6 +93,7 @@ void test_settings() {
     CHECK(s2.values().wave_fit);
     CHECK_EQ(s2.values().card, "UC02||");
     CHECK_EQ(s2.values().output_device, "hw:CARD=UC02,DEV=0");
+    CHECK_EQ(s2.values().monitor_output, "bt:70:BF:92:53:6B:8B");
     CardState r;
     CHECK(s2.card_state(c1, r));
     CHECK(r.has_level);
@@ -250,4 +254,44 @@ void test_settings() {
     CHECK_EQ(sa.save(), 0);
     CHECK_EQ(sb.load(), 0);
     CHECK_EQ(sb.values().prefix, std::string("new"));
+}
+
+/* T3: a Bluetooth output and a monitor target are plain strings: they round trip, an older file loads unchanged, and an automatic
+ * monitor target is not written at all */
+void test_settings_bt() {
+    TempDir d;
+    FailOps ops;
+    const std::string path = default_settings_path(d.path);
+    {   /* output_device "bt:<MAC>" */
+        SettingsStore s(ops, path);
+        s.load();
+        s.values().output_device = "bt:9E:0C:81:E6:5D:1A";
+        s.values().monitor_output = "hw:CARD=UC02,DEV=0";
+        CHECK_EQ(s.save(), 0);
+        SettingsStore t(ops, path);
+        CHECK_EQ(t.load(), 0);
+        CHECK_EQ(t.values().output_device, "bt:9E:0C:81:E6:5D:1A");
+        CHECK_EQ(t.values().monitor_output, "hw:CARD=UC02,DEV=0");
+        t.values().monitor_output.clear(); /* automatic again: the key goes away */
+        CHECK_EQ(t.save(), 0);
+        CHECK(read_text(path).find("monitor_output") == std::string::npos);
+        SettingsStore u(ops, path);
+        CHECK_EQ(u.load(), 0);
+        CHECK(u.values().monitor_output.empty());
+        CHECK_EQ(u.values().output_device, "bt:9E:0C:81:E6:5D:1A");
+    }
+    {   /* a file from 0.2.0 (no monitor_output) loads unchanged and saves without inventing the key */
+        TempDir d2;
+        const std::string p2 = default_settings_path(d2.path);
+        std::filesystem::create_directories(std::filesystem::path(p2).parent_path());
+        write_text(p2, "{\"version\":1,\"format\":\"opus\",\"monitor\":true,\"card\":\"UC02||\",\"output_device\":\"default\"}");
+        SettingsStore s(ops, p2);
+        CHECK_EQ(s.load(), 0);
+        CHECK(s.values().format == RecFormat::Opus);
+        CHECK(s.values().monitor);
+        CHECK_EQ(s.values().output_device, "default");
+        CHECK(s.values().monitor_output.empty());
+        CHECK_EQ(s.save(), 0);
+        CHECK(read_text(p2).find("monitor_output") == std::string::npos);
+    }
 }

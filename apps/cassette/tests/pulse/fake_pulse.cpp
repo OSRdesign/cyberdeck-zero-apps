@@ -2,6 +2,8 @@
 #include "fake_pulse.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <thread>
 
 namespace cassette {
 
@@ -47,7 +49,11 @@ public:
         if (!s || !s->play) return kPulseState;
         std::vector<unsigned char> buf(4096);
         const size_t per = buf.size() / (2u * (s->channels ? s->channels : 1u));
-        while (s->play->take(buf.data(), per) > 0) {
+        for (;;) {
+            const size_t got = s->play->take(buf.data(), per);
+            if (got == 0) break;
+            const int16_t *p = reinterpret_cast<const int16_t *>(buf.data());
+            s->drained.insert(s->drained.end(), p, p + got * (s->channels ? s->channels : 1u));
         }
         return 0;
     }
@@ -87,7 +93,13 @@ void FakePulse::notify(PulseChange::What what, PulseChange::Kind kind, uint32_t 
     cb_(ch);
 }
 
+void FakePulse::nap() {
+    const int d = call_delay_ms.load();
+    if (d > 0) std::this_thread::sleep_for(std::chrono::milliseconds(d));
+}
+
 int FakePulse::connect(const std::string &, int) {
+    nap();
     std::lock_guard<std::recursive_mutex> g(mu_);
     if (lib_missing) {
         err_ = "libpulse not installed (libpulse0): libpulse.so.0: cannot open shared object file";
@@ -128,6 +140,7 @@ std::string FakePulse::last_error() {
 }
 
 int FakePulse::server_info(PulseServerInfo &out) {
+    nap();
     std::lock_guard<std::recursive_mutex> g(mu_);
     if (!connected_) return kPulseState;
     out = server;
@@ -135,6 +148,7 @@ int FakePulse::server_info(PulseServerInfo &out) {
 }
 
 int FakePulse::list_sources(std::vector<PulseDevice> &out) {
+    nap();
     std::lock_guard<std::recursive_mutex> g(mu_);
     out.clear();
     if (!connected_) return kPulseState;
@@ -143,6 +157,7 @@ int FakePulse::list_sources(std::vector<PulseDevice> &out) {
 }
 
 int FakePulse::list_sinks(std::vector<PulseDevice> &out) {
+    nap();
     std::lock_guard<std::recursive_mutex> g(mu_);
     out.clear();
     if (!connected_) return kPulseState;
@@ -151,6 +166,7 @@ int FakePulse::list_sinks(std::vector<PulseDevice> &out) {
 }
 
 int FakePulse::list_cards(std::vector<PulseCard> &out) {
+    nap();
     std::lock_guard<std::recursive_mutex> g(mu_);
     out.clear();
     if (!connected_) return kPulseState;
@@ -159,6 +175,7 @@ int FakePulse::list_cards(std::vector<PulseCard> &out) {
 }
 
 int FakePulse::card_by_name(const std::string &name, PulseCard &out) {
+    nap();
     std::lock_guard<std::recursive_mutex> g(mu_);
     if (!connected_) return kPulseState;
     for (const PulseCard &c : cards) {

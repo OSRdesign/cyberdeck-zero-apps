@@ -28,6 +28,13 @@
  *   (dropped), the no-sound state, a lost headset (the take is closed and kept) and the mic policy (open on the recorder, closed
  *   on the list and Edit pages and in playback: set_page) are described in snapshot().capture / card. USB behaviour is unchanged.
  *
+ * Bluetooth output and monitor (docs/PULSE.md "What T3 uses", task T3): the output list gains the Bluetooth sinks ("bt:<MAC>"); a take
+ *   plays through a PulsePlaybackSink at its own rate, waiting (state "switching_to_music", at most 4 s) for the headset to leave the
+ *   call profile when it is also the input. The monitor target is explicit (settings monitor_output: "" automatic = the capture
+ *   card's own playback side, or the SAME headset for a Bluetooth input, "bt:<MAC>", or an ALSA device) and its figures are in
+ *   snapshot().monitor. Everything that only asks the sound server a question runs on a PulseWorker thread: the controller's mutex is
+ *   never held across such a round trip (the opening of a stream, started by the user, still waits for the server up to 0.4-2 s).
+ *
  * Thread model:
  *   - UI thread: calls commands and snapshot()/takes()/peak_window(). Commands take one internal mutex `mu_`; a command
  *     that talks to the Player may wait for the playback thread (at most kCommandWaitMs, normally a few ms). snapshot(),
@@ -192,6 +199,20 @@ struct InputSnap {
     bool hw_level = true;    /* the hardware input level row applies (false for Bluetooth: software gain only) */
 };
 
+/* One entry of the output chooser (CardSnap::outputs, same order as output_labels / output_devices; MonitorSnap::outputs). */
+struct OutputSnap {
+    std::string id;          /* the settings value: an ALSA device ("hw:CARD=X,DEV=0", "default"), or "bt:AA:BB:CC:DD:EE:FF"; the monitor's
+                              * automatic entry: "" */
+    std::string label;       /* the card's name, "Default output", the server's description of a Bluetooth device, "Automatic" */
+    bool bluetooth = false;
+    std::string kind;        /* Bluetooth: "headset", "headphones", "speaker", "other"; else "" */
+    uint32_t rate = 0;       /* Bluetooth: the sink's own rate now; else 0 */
+    bool connected = true;   /* false: chosen earlier, not there now (a placeholder) */
+    bool usable = true;      /* false: it cannot play now (see `reason`) */
+    std::string hint_profile; /* Bluetooth: the card's profile now: "music", "call" or "unknown"; else "" */
+    std::string reason;
+};
+
 struct CardSnap {
     bool present = false;      /* the capture path is open and delivering */
     std::string label;         /* the chosen card's label, empty when none */
@@ -210,6 +231,7 @@ struct CardSnap {
     std::vector<std::string> output_labels; /* only when there is more than one to pick from */
     std::vector<std::string> output_devices; /* the device of each label (select_output's argument), same order */
     int output_selected = -1;  /* index of the output in use in output_labels, -1 when not listed */
+    std::vector<OutputSnap> outputs; /* one per output_labels entry, same order: ALSA cards, the Bluetooth devices, "Default output" */
     /* One entry per label, same order: ALSA cards first, then the Bluetooth devices of the sound server. */
     std::vector<InputSnap> inputs;
     bool bluetooth = false;    /* the input in use (or chosen) is a Bluetooth headset: level = software gain only (has_level false) */
@@ -226,6 +248,37 @@ struct CaptureSnap {
     bool no_sound = false;     /* the headset is connected but sends exactly zero (3 s): "The headset is connected but sends no sound." */
     bool bt_gone = false;      /* the chosen Bluetooth headset is not there (disconnected or never seen this run) */
     bool mic_closed = false;   /* the microphone is closed on purpose (list or Edit page, playback) so the headset returns to music mode */
+};
+
+/* Playback through the output in use (all quiet for a card or the default output, except `state`). */
+struct PlaybackSnap {
+    std::string state = "idle"; /* "idle", "switching_to_music" (PLAY pressed, the headset is leaving the call profile: nothing plays
+                                 * yet), "playing" (a take plays, is paused or scans: DeckSnap says which) */
+    std::string quality;        /* "" when the output is not Bluetooth, else "music", "call" (the headset plays through its call link:
+                                 * 'call quality') or "unknown" */
+    bool bluetooth = false;     /* the output in use is a Bluetooth device */
+    double switch_elapsed_s = 0; /* switching_to_music: the time waited so far */
+    double switch_timeout_s = 4.0; /* ... and when playback starts anyway, at call quality */
+    bool switch_timed_out = false; /* the last PLAY did not get the music profile in time */
+    unsigned underruns = 0;     /* the Player's underrun count for the take being played */
+};
+
+/* The live monitor (settings monitor, monitor_level, monitor_output). */
+struct MonitorSnap {
+    bool active = false;        /* the microphone is being played right now */
+    std::string route;          /* "same_headset" (a Bluetooth input to its own headset), "other_output" (another output: a Bluetooth sink
+                                 * for a local microphone, or another sound card), "card" (the capture card's own playback side); ""
+                                 * when there is no target */
+    double delay_ms = 0;        /* active: capture latency + ring + playback latency, refreshed about once a second; else 0 */
+    std::string notice;         /* "" or "delay": the monitor will be (or is) heard late, over 150 ms or an A2DP sink: 'about 0.2-0.3 s:
+                                 * you will hear an echo' */
+    std::string output;         /* the monitor_output setting ("" automatic) */
+    bool available = false;     /* a target exists now (Monitor settings make sense) */
+    std::string target_label;   /* the target's label ("" when none) */
+    std::string reason;         /* no target / it is not there: why */
+    std::vector<OutputSnap> outputs; /* the choice list: [0] automatic (id ""), then every output */
+    int output_selected = 0;    /* index into outputs of the setting (0 automatic; a Bluetooth or ALSA output that is not there is
+                                 * listed with connected false) */
 };
 
 struct TakeSnap {
@@ -329,6 +382,8 @@ struct Snapshot {
     MeterSnap play_meter;
     CardSnap card;
     CaptureSnap capture;
+    PlaybackSnap playback;
+    MonitorSnap monitor;
     TakeSnap take;
     ProblemSnap problems;
     std::vector<Notice> notices; /* one-time: shown once, then ack_notices() */
@@ -432,9 +487,13 @@ public:
      * the sink cannot open, it stays off and a notice "Monitor unavailable" is raised once. */
     bool set_monitor(bool on);
     bool set_monitor_level(int percent);   /* 0..100, rounded to steps of 5 */
+    /* Where the monitor plays: "" automatic, "bt:<MAC>", or an ALSA device as snapshot().monitor.outputs spells it. false: not a
+     * valid value. Applied live (a running monitor on another target restarts); a target that is not there keeps the monitor off
+     * and snapshot().monitor says why. */
+    bool set_monitor_output(const std::string &id);
     bool set_wave_fit(bool on);            /* the trim waveform's scale (settings wave_fit): TRUE (false) or FIT (true); persisted at once */
     bool select_card(int index);           /* index into snapshot().card.labels (ALSA cards, then Bluetooth devices); refused while a take runs */
-    bool select_output(const std::string &device); /* "" for automatic */
+    bool select_output(const std::string &device); /* "" for automatic; "bt:<MAC>" a Bluetooth output (a placeholder stays when it is not there) */
     void refresh_cards();                  /* re-lists the capture cards (the labels), e.g. on opening Settings */
     /* The screen now showing (the binding calls it on every page change): with a Bluetooth input the microphone stays open on
      * the recorder and settings screens and closes on the list and Edit pages and during playback (never during a take);

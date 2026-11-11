@@ -8,6 +8,8 @@ APP   ?= ../..
 BUILD ?= build
 SRCS  := $(APP)/src/core/wav.cpp $(APP)/src/core/ring.cpp $(APP)/src/core/fileops.cpp $(APP)/src/core/alsa/alsa_api.cpp \
          $(APP)/src/core/alsa/card.cpp $(wildcard $(APP)/src/core/playback/*.cpp) $(APP)/tests/alsa/fake_alsa.cpp \
+         $(wildcard $(APP)/src/core/pulse/*.cpp) $(APP)/tests/pulse/fake_pulse.cpp $(APP)/src/core/alsa/capture.cpp \
+         $(APP)/src/core/alsa/open_policy.cpp \
          $(patsubst %,$(APP)/src/core/codec/%.cpp,codec_libs stream_scan ogg_opus decoder flac_decoder opus_decoder \
                                                    decoded_source encoder byte_sink)
 TESTS := $(wildcard $(APP)/tests/playback/*.cpp)
@@ -17,7 +19,7 @@ ifneq ($(SAN),)
 CXXFLAGS += -fsanitize=$(SAN) -fno-omit-frame-pointer
 LDFLAGS  += -fsanitize=$(SAN)
 endif
-CXXFLAGS += -I$(APP)/src/core -I$(APP)/src/core/alsa -I$(APP)/src/core/playback -I$(APP)/tests/alsa -I$(APP)/tests/playback \
+CXXFLAGS += -I$(APP)/src/core -I$(APP)/src/core/alsa -I$(APP)/src/core/playback -I$(APP)/src/core/pulse -I$(APP)/tests/pulse -I$(APP)/tests/alsa -I$(APP)/tests/playback \
             -I$(APP)/tests
 LIBS := -ldl -lpthread
 

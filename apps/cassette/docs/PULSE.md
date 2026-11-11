@@ -6,8 +6,9 @@ codecs) and its HackBerry measurements P1-P9 and items C15-C19.
 
 **Status (2026-11-11).** The module is done and tested on its own: `src/core/pulse/` (no LVGL), tests in `tests/pulse/`,
 the board CLI `tools/pulse_capture_test.cpp`. **T2 (capture) is wired into the controller** (section "What T2 uses"
-below): a paired Bluetooth headset is an input next to the ALSA cards. Playback and the monitor over Bluetooth are T3's;
-the ALSA path (including its `(server)` fallback through ALSA `default`, `alsa/open_policy.*`) is exactly as before.
+below): a paired Bluetooth headset is an input next to the ALSA cards. **T3 (playback and the live monitor over Bluetooth, and
+the worker thread for the server's questions) is wired in too** (section "What T3 uses"); the UI is T4's. The ALSA path
+(including its `(server)` fallback through ALSA `default`, `alsa/open_policy.*`) is exactly as before.
 
 ## Files
 
@@ -21,6 +22,9 @@ the ALSA path (including its `(server)` fallback through ALSA `default`, `alsa/o
 | `src/core/pulse/pulse_probe.hpp/.cpp` | a pure-data summary of the lists for choosers and the probe: Bluetooth or not, MAC, kind hint, music profile available, active profile |
 | `src/core/pulse/pulse_pcm.hpp/.cpp` | a capture stream seen as an `AlsaPcm`, so the existing capture thread (`alsa/capture.*`) runs on it unchanged; T2: the optional `PulseLeadGate` (the connecting gate, below) |
 | `src/core/pulse/bt_input.hpp/.cpp` | T2: the Bluetooth INPUT model: `bt:<MAC>` identity, which source to open (virtual or real), the call rate, the profile hint, per device |
+| `src/core/pulse/bt_output.hpp/.cpp` | T3: the Bluetooth OUTPUT model: which sink to open for `bt:<MAC>`, label, kind, rate now, profile hint, whether a music profile is available |
+| `src/core/playback/pulse_sink.hpp/.cpp` | T3: `PulsePlaybackSink`, a `PlaybackSink` on a `PulsePlayback` stream: the Player and the Monitor use it like the ALSA sink |
+| `src/core/app/pulse_worker.hpp/.cpp` | T3: the thread that asks the server its questions (scan, card profile, identity) so the controller never waits for it |
 | `tests/pulse/fake_pulse.hpp/.cpp` | `FakePulse`: a scriptable server for the unit tests |
 | `tests/pulse/test_*.cpp`, `run.sh` | the unit tests (fake server), the real-library group, the ABI check runner |
 | `tests/pulse/check_pulse_abi.cpp` | compile-time comparison of `pulse_abi.hpp` and `pulse_lib.hpp` with the real headers |
@@ -297,6 +301,133 @@ USB cards keep their behaviour.
 audio is speech only: Opus up to 32 kbps"); speech presets, FLAC and WAV record at 8 / 16 kHz; the Sample rate row has the one
 rate (`rates` = {16000}); a stored music preset falls back to WAV like any incompatible choice.
 
+## What T3 uses (playback and the live monitor over Bluetooth)
+
+Everything below is in the controller, `playback/pulse_sink.*`, `playback/output.*`, `playback/monitor.*` and `app/pulse_worker.*`; the UI (T4) reads the
+snapshot. Nothing changes for an ALSA output or an ALSA monitor: the Player, the Monitor and their tests are the same, the new behaviour is
+reached only through a `bt:<MAC>` choice.
+
+### The server is asked on a worker thread
+
+`PulseWorker` (`app/pulse_worker.*`) owns one thread and three kinds of job, each with one request in flight and one answer waiting:
+
+| Job | Does | The controller uses it for |
+|---|---|---|
+| scan | (re)connect when the controller decided it is time (`pulse_retry_ms`, a lost connection at once), install the change callback, list sources, sinks and cards | `bt_list`, the Bluetooth outputs, `bt_status`; every re-listing |
+| card | `card_by_name` | the connecting gate (call profile up), the wait for the music profile, the playback quality |
+| identity | `source_identity_ok()` of the open capture stream | the 3 s guard during a take |
+
+The controller's mutex is **never held across these round trips** (a hung server answers in up to 3 s per call). `bt_request_scan()` only posts the job; the
+service tick takes the answer (`bt_apply_scan()`), rebuilds the lists and re-publishes. `start()` waits at most 0.3 s for the first scan so a chosen headset
+opens at once; after that nothing waits. Measured on the fake with a server that takes 1.5 s per call: the slowest of 40+ commands (`refresh_cards`,
+`set_soft_gain_db`, `snapshot`, `set_page`) stayed under 120 ms (a few ms in practice), `start()` returned in 0.3 s, a take recorded on the USB card through the hang.
+What still waits for the server, by the user's own action: the open of a stream (`open_capture`, `open_playback`: playback and the monitor ask for a 0.4 s accept
+timeout, a slower server gets a stream that is still connecting) and the identity check at the start of a take. Shutdown stops the worker first (a call in progress
+is bounded by the library's 3 s).
+
+### Output choices
+
+`choose_output()` takes the Bluetooth outputs (`bt_outputs(probe)`, from the same scan as the inputs) and puts them between the cards and `Default output`: id `bt:AA:BB:CC:DD:EE:FF`
+(upper case), label = the server's description, `kind`, `rate` (the sink's rate now: 48000 in music mode, 16000 or 8000 in call mode), `hint_profile` (`music`, `call`,
+`unknown`), `connected`, `usable`, `reason`. The automatic choice is unchanged (the capture card's own playback side, else the default output). `output_device` accepts
+`bt:<MAC>` (stored in upper case); a chosen output that is absent stays as a placeholder (`connected` false, the last label) and PLAY says "The Bluetooth output is not connected.";
+nothing Bluetooth is listed while the server is unreachable (the same rule as the inputs), except that placeholder. Old settings files load unchanged.
+
+### Playback
+
+`PulsePlaybackSink` is a `PlaybackSink` over `PulsePlayback`; the Player is not aware of it.
+
+- **Rate and format.** The stream is the TAKE's rate and channel count (1, or 2; more than two: the first two), S16 (24-bit takes are converted by the Player): the server resamples,
+  the plughw rule does not apply. Verified sample-exact at 8, 16, 44.1 and 48 kHz.
+- **Buffers.** `buffer_ms` 60 (the server target, `tlength`), client ring 100 ms, a 20 ms period. A 60 ms target keeps pause, seek and the 5x scan quick (what is queued is
+  discarded on a change) while the 100 ms ring rides out a stalled SD card or a busy decoder; the server adds its own A2DP latency on top. T1's 100 ms default would make the
+  counter and a pause lag more, 40 ms would risk underruns on a Zero 2 W under load. Constants: `PulseSinkOptions`.
+- **DONT_MOVE** on the stream (T1), the sink looked up by name just before the open (`prepare_output()`), never `default`.
+- **Underruns** are the server's: the next `write()` after the stream's underflow counter moved returns `-EPIPE` once and `recover()` succeeds, so `Player::underruns()` counts them as for ALSA
+  (`snapshot().playback.underruns`). Underflows while nothing is written (a pause) are not underruns.
+- **The counter** is the frame being heard: `delay()` = the stream's ring plus the server's latency report (which includes the A2DP device's own latency), and the Player already
+  rewinds its position by it (the counter does not run ahead of the sound).
+- **Pause: drop, keep the stream.** The stream API has no pause. Pause = stop writing and `drop()` (the client ring and the server buffer are flushed, `pa_stream_flush`); the stream stays
+  open, the counter rewinds by what was queued, resume writes again from the counter. No cork and no reopen: a reopen costs a sink wake-up (the A2DP sink suspends when idle) and
+  would be one more place to lose the stream. Seek, the 5x scan and the 5 s jump are the Player's own (they drop and rewrite), unchanged.
+- **Disconnect during playback.** The stream ends (`Killed` / `Moved`), `write()` fails with `-ENODEV`, the Player reports `DeviceLost` and the deck pauses at the frame heard with the notice
+  "The Bluetooth output disconnected." (Info kind `CardLost`); while paused the controller notices the ended stream itself (`Player::release_sink()`: the sink is closed, the position kept).
+  Nothing is ever opened on another sink. PLAY again re-resolves the sink: gone means the notice "The Bluetooth output is not connected." and the deck stops. A server that takes nothing
+  for 3 s counts as lost (`-EIO`), so the Player thread is never stuck.
+
+### The same headset as input and output: waiting for the music profile (study C19)
+
+PLAY (or REW / FWD from idle) with `output_device` = the headset that is also the input (or whose microphone stream is open):
+
+1. The deck goes to Playing as usual; the controller defers the real start. `snapshot().playback.state` is `switching_to_music`, `switch_elapsed_s` runs, `switch_timeout_s` is 4.0,
+   `playback.quality` is `call`. The microphone closes at once (T2 policy: playback is a closed-microphone state).
+2. Every 100 ms the card's profile is read on the worker. Playback starts when a MUSIC profile is the active one. A microphone that was open also needs `saw_call` (a call reading was
+   seen) or 0.9 s of waiting (the switch down takes 0.65 s, P4: an early "music" reading is not yet the answer). PAUSE, RESUME, REW / FWD (a scan) and STOP during the wait change what
+   will happen at the end or cancel it; nothing is opened before.
+3. After 4 s without music (`kMusicWaitMaxMs`) it plays anyway, on whatever sink exists: `quality` `call`, `switch_timed_out` true. PLAY is never stuck.
+4. **No wait** when the headset has no AVAILABLE music profile (another A2DP device holds the link, P6; `music_available` false), when the output is another device (a speaker), or when the
+   profile already is music: it plays at once. For the call-only headset `quality` is `call`.
+
+While a take plays through a Bluetooth output the card's profile is read about once a second and `quality` follows it (`music`, `call`, `unknown`; `""` for any other output).
+
+### The live monitor over Bluetooth
+
+**Target.** The setting `monitor_output` (`""` automatic, `bt:<MAC>`, or an ALSA device as the output list spells it; absent from the file = automatic; default `""`):
+
+| Input | `monitor_output` | Plays to | `monitor.route` |
+|---|---|---|---|
+| ALSA card with a playback side | `""` | the card's own playback side (as before) | `card` |
+| ALSA card without one | `""` | nothing (as before) | `""` |
+| Bluetooth headset | `""` | the SAME headset's sink (call mode: the mSBC / CVSD mono sink) | `same_headset` |
+| any | `bt:<MAC>` | that sink (the same headset's: `same_headset`; another device: `other_output`) | |
+| any | an ALSA device | that device (the capture card's own: `card`; else `other_output`) | |
+
+The `Monitor` setting stays Off by default (a Bluetooth input starts with it off: it runs only when the user turned it on; the global default is unchanged). A local microphone to a Bluetooth sink needs the
+explicit `monitor_output = bt:<MAC>`.
+
+**Path.** The capture stream's frames go through `ProcessingSink` to the `MonitorTap` ring (as for ALSA), the monitor thread reads it and writes a `PulsePlaybackSink` opened with
+`pulse_monitor_sink_options()`: server target 40 ms, client ring 20 ms, 16 ms period, role `production`, DONT_MOVE, the capture's rate (16000 / 8000: the server resamples to the sink). The capture side is
+the T1 stream with 20 ms fragments (`PulseCapturePcm::readi` hands over whatever is there, not 1024-frame periods). `MonitorOptions` (monitor.hpp) switch on what a server sink needs: `prefill_ms` 10
+(silence after an open or an underrun, instead of 512 frames), `max_queue_ms` 2000 (the stream's delay includes the device's own latency, never a reason to drop), and the drift control below.
+The ALSA monitor uses the defaults of `MonitorOptions` and behaves exactly as before.
+
+**Drift policy.** The capture stream and the playback stream run on different clocks (the server rate-matches each to its own device, so the drift is small: the policy is a safety net, tested on a fake
+with 1 % and 2 % drift):
+
+- the sink is SLOWER than the capture: the tap's ring backlog grows. Above `drift_target_ms + drift_band_ms` (15 + 5 ms) the thread drops ONE frame of the next chunk (a skip: at most 1 frame in 128 to 256,
+  i.e. under 0.8 % speed change, inaudible on speech) until the backlog is inside the band; the hard resync above `max_backlog_ms` (60 ms: the oldest audio is dropped) stays as the last resort;
+- the sink is FASTER: it runs dry. The underrun is recovered (`write()` returns `-EPIPE` once) and the device is refilled with `prefill_ms` (10 ms) of silence: an insert of 10 ms every margin/drift seconds
+  (a 40 ms margin and 100 ppm of drift: one gap in 400 s);
+- counted in `Monitor::stats()`: `drift_skips`, `underruns`, `resyncs`, `backlog_frames`.
+
+**Delay figure.** `monitor.delay_ms` = the capture stream's latency (`PulseCapture::latency`, the server's report; a card's capture counts its 1024-frame period) + the tap ring's fill + the playback stream's delay
+(ring + the server's report, `PulsePlaybackSink::delay_ms`). First value 0.3 s after the monitor starts, then once a second; 0 while it is not running. `monitor.notice` is `delay` when the route is
+`other_output` to a Bluetooth sink on a music profile (A2DP: about 0.2-0.3 s, "you will hear an echo"), or while the figure is above 150 ms; else `""`. The notice for an A2DP target is already there before the
+monitor is switched on (the Settings row can say it). The measured figure for the Evolve 65 is the owner's (a step in the T3 report); the expectation is 80-150 ms on the same headset.
+
+**When it runs.** `monitor_wanted()`: capture running, Monitor setting on, a target exists, not after AppLeave, no playback / preview / trim (as before), and for a Bluetooth input the microphone is NOT connecting
+(`CaptureSnap::connecting` false: the profile switch is over). So it is off while connecting, off during playback (the microphone is closed then), and starts by itself after the profile switch when the microphone
+comes back. If the monitor's Bluetooth sink disappears (the stream ends, or the lists drop it) the monitor stops with the notice "The monitor output disconnected: the recording goes on."; the capture and the
+take are never touched (the tap never blocks: a full ring drops); it restarts by itself when the sink is back while Monitor is still on. A headset that has sidetone: nothing to do (the guide says so).
+
+### Snapshot fields for the UI (T4)
+
+All additive; a UI that ignores them compiles and behaves as before.
+
+- `card.outputs[]` (`OutputSnap`: `id`, `label`, `bluetooth`, `kind`, `rate`, `connected`, `usable`, `hint_profile`, `reason`), parallel to `output_labels` / `output_devices`; `card.output_selected` as before.
+  `select_output(id)` accepts `bt:<MAC>`.
+- `playback.state` (`idle`, `switching_to_music`, `playing` = a take plays, is paused or scans: the deck says which), `playback.quality` (`""`, `music`, `call`, `unknown`), `playback.bluetooth`,
+  `playback.switch_elapsed_s`, `playback.switch_timeout_s` (4.0), `playback.switch_timed_out`, `playback.underruns`.
+- `monitor.active`, `monitor.route` (`same_headset`, `other_output`, `card`, `""`), `monitor.delay_ms`, `monitor.notice` (`""`, `delay`), `monitor.output` (the setting), `monitor.available`, `monitor.target_label`,
+  `monitor.reason` (no target), `monitor.outputs[]` (the choice list: `[0]` = automatic with id `""`, then every output; an absent choice is listed with `connected` false), `monitor.output_selected`;
+  `set_monitor_output(id)` (false for a bad `bt:` address).
+- `card.has_playback` now means "the Monitor settings make sense": a target exists (the capture card's playback side, the same headset, or an explicit target).
+
+### Constants (one place each)
+
+`PulseSinkOptions` (playback 60 / 100 / 20 ms, accept timeout 0.4 s, stuck 3 s), `pulse_monitor_sink_options()` (40 / 20 / 16 ms), `MonitorOptions` (prefill 10 ms, drift 15 + 5 ms),
+`kMusicWaitMaxMs` 4000, `kMusicWaitMinMs` 900, `kQualityPollMs` 1000, `kMonitorNoticeDelayMs` 150 (controller.cpp).
+
 ## Tests
 
 `wsl -e sh tests/pulse/run.sh [SAN=thread|SAN=address,undefined]`:
@@ -319,7 +450,15 @@ rate (`rates` = {16000}); a stored music preset falls back to WAV like any incom
   `test-cassette-app --bt` for that group alone): list, music-mode open at 16 kHz, call mode, CVSD 8 kHz, the profile-switch
   zeros dropped, the call-profile rule and the no-sound notice, killed and moved mid-take, identity refusals, absent headset,
   hot-plug and reconnect, server missing / not running / hung / late, the mic policy on every page and in playback, settings
-  round trip and an old file, Opus presets at 16 kHz.
+  round trip and an old file, Opus presets at 16 kHz;
+- T3: `test_bt_output.cpp` (the output model) here; `tests/playback/test_pulse_sink.cpp` (the Player on `PulsePlaybackSink`: sample-exact at 8 / 16 / 44.1 / 48 kHz,
+  the position counter, underruns, pause / resume, scan, jump, a sink that goes away, a server that takes nothing) and `test_pulse_monitor.cpp` (the monitor with drifting
+  playback clocks: same clocks, 1 % slow, 2 % fast, the sink lost); `tests/playback/test_output.cpp` (the output list with Bluetooth, placeholders, no server);
+  `tests/takes/test_settings.cpp` (`bt:` output, `monitor_output`, an old file); `tests/app/test_bt_out.cpp` on the whole controller (`test-cassette-app --bt` runs it with T2's):
+  the output list and its placeholder, playback at 8 / 16 / 48 kHz, pause and scan, a disconnect while playing and while paused, the wait for the music profile against a
+  fake card that follows the microphone (650 ms down, 1850 ms up), the 4 s timeout, the call-only headset, STOP during the wait, the monitor on the same headset (data,
+  buffers, delay from the fakes' latencies, the notice), not while connecting, off during playback and back, a local microphone to a Bluetooth speaker, a lost monitor sink while
+  the take records on, and a server that takes 1.5 s per call (the controller stays responsive).
 
 A private root needs no install: `apt-get download libpulse-dev libpulse0 libsndfile1 libasyncns0 libflac12t64 libogg0
 libopus0 libvorbis0a libvorbisenc2 libmpg123-0t64 libmp3lame0`, `dpkg-deb -x` each into one folder, then

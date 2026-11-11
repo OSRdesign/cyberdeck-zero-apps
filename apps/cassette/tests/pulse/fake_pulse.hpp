@@ -36,6 +36,7 @@ struct FakeStream {
     uint64_t latency_us = 20000;
     uint64_t delivered_after_close = 0; /* frames the server tried to deliver after the close (dropped by the fake) */
     unsigned identity_queries = 0;
+    std::vector<int16_t> drained;  /* playback: what drain() played out at once (the end of a take), in order */
 };
 
 class FakePulse : public PulseApi {
@@ -44,6 +45,8 @@ public:
     bool lib_missing = false;      /* connect -> kPulseMissing */
     bool server_down = false;      /* connect -> kPulseNoServer */
     bool server_hangs = false;     /* connect -> kPulseTimeout */
+    std::atomic<int> call_delay_ms{0}; /* a HUNG server: connect, the lists and card_by_name take this long to answer (a real sleep, taken
+                                        * before the fake's lock so the streams keep running) */
     bool honour_dont_move = true;  /* removing a device kills its streams; false: moves them to the default source/sink */
     std::string attach_elsewhere;  /* non-empty: the next stream is attached to this device instead (identity check) */
     bool defer_ready = false;      /* open returns before the server accepts the stream (ready() later) */
@@ -101,6 +104,7 @@ private:
     friend class FakeLink;
     void notify(PulseChange::What what, PulseChange::Kind kind, uint32_t index);
     FakeStream *at(size_t i);
+    void nap();
     void lose(const std::string &device, bool sink);
 
     std::recursive_mutex mu_;

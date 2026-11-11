@@ -124,6 +124,7 @@ int SettingsStore::load() {
     if (get_num(root, "monitor_level", d)) s_.monitor_level = static_cast<int>(std::lround(clampd(d, -1e6, 1e6)));
     if (get_str(root, "card", str) && valid_folder(str)) s_.card = str;
     if (get_str(root, "output_device", str) && valid_folder(str)) s_.output_device = str;
+    if (get_str(root, "monitor_output", str) && valid_folder(str)) s_.monitor_output = str;
     clamp_settings(s_);
 
     if (const json::Value *cards = root.get("cards")) {
@@ -170,6 +171,8 @@ int SettingsStore::save() {
     else root.erase("wave_fit"); /* absent = TRUE (older files) */
     root.set("card", json::Value::string(s_.card));
     root.set("output_device", json::Value::string(s_.output_device));
+    if (s_.monitor_output.empty()) root.erase("monitor_output"); /* absent = automatic (older files stay byte-compatible) */
+    else root.set("monitor_output", json::Value::string(s_.monitor_output));
 
     json::Value cards = json::Value::object();
     if (const json::Value *old = root.get("cards"))

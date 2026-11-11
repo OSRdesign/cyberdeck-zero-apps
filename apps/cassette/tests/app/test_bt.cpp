@@ -7,136 +7,18 @@
  * to the call profile after about 0.65 s; the stream says Running at once but the first second is digital zero; a headset
  * that goes away kills the stream; another headset can deliver zeros forever. All audio is synthetic.
  */
-#include "helpers.hpp"
-
-#include "../fixture_codecs.hpp"
-#include "bt_input.hpp"
-#include "fake_pulse.hpp"
-
-#include <cmath>
-#include <thread>
+#include "bt_rig.hpp"
 
 using namespace ta;
+using namespace tbt;
 
 namespace {
 
-const std::string kMac = "70:BF:92:53:6B:8B";
-const std::string kId = "bt:70:BF:92:53:6B:8B";
-const std::string kVirt = "bluez_input.70:BF:92:53:6B:8B";
-const std::string kReal = "bluez_input.70_BF_92_53_6B_8B.0";
-const std::string kCard = "bluez_card.70_BF_92_53_6B_8B";
 const char *kNoSound = "The headset is connected but sends no sound.";
 const char *kLostTake = "The Bluetooth headset disconnected: the take was closed and kept.";
 const char *kNotConnected = "The Bluetooth headset is not connected.";
 const char *kNotSetUp = "Bluetooth audio is not set up";
 
-/* The music-mode virtual source: colon name, 48 kHz float32 mono, no card index. */
-PulseDevice virtual_source() {
-    PulseDevice d = fake_bt_source(kMac, 48000, kPulseNoIndex);
-    d.name = kVirt;
-    d.format = "float32le";
-    d.bt_address.clear();
-    d.bt_profile.clear();
-    d.bt_codec.clear();
-    d.form_factor.clear();
-    d.bus.clear();
-    d.device_api.clear();
-    return d;
-}
-
-/* Delivers what the "server" captures into the newest open capture stream, 10 ms at a time, in real time. */
-struct Feeder {
-    enum Mode { Tone, Zeros, Off };
-    FakePulse &f;
-    std::atomic<int> mode{Tone};
-    std::atomic<uint64_t> tone_frames{0}, zero_frames{0};
-    std::atomic<bool> stop{false};
-    std::thread th;
-    explicit Feeder(FakePulse &p) : f(p) { th = std::thread([this] { run(); }); }
-    ~Feeder() {
-        stop = true;
-        th.join();
-    }
-    void run() {
-        uint64_t n = 0;
-        auto next = std::chrono::steady_clock::now();
-        while (!stop.load()) {
-            next += std::chrono::milliseconds(10);
-            std::this_thread::sleep_until(next);
-            const int m = mode.load();
-            if (m == Off) continue;
-            std::lock_guard<std::recursive_mutex> g(f.lock());
-            size_t idx = static_cast<size_t>(-1);
-            for (size_t i = f.streams.size(); i-- > 0;)
-                if (f.streams[i].capture && f.streams[i].open && f.streams[i].cap) {
-                    idx = i;
-                    break;
-                }
-            if (idx == static_cast<size_t>(-1)) continue;
-            const uint32_t rate = f.streams[idx].rate;
-            const size_t frames = rate / 100;
-            std::vector<int16_t> buf(frames);
-            for (size_t i = 0; i < frames; ++i)
-                buf[i] = m == Tone ? static_cast<int16_t>(std::lround(0.5 * 32767.0 * std::sin(2.0 * kPi * 440.0 * static_cast<double>(n + i + 1) / rate)))
-                                   : 0;
-            if (f.deliver(idx, buf.data(), frames)) (m == Tone ? tone_frames : zero_frames) += frames;
-            n += frames;
-            f.advance(0.01);
-        }
-    }
-};
-
-/* A controller with a Bluetooth headset (Evolve 65) on the fake server; `usb` are ALSA cards. */
-struct BtRig {
-    Rig r;
-    FakePulse pulse;
-    std::unique_ptr<Feeder> feed;
-
-    explicit BtRig(std::vector<FakeCard> usb = {}, const std::string &active = "a2dp-sink", bool with_headset = true)
-        : r(std::move(usb)) {
-        r.cfg.pulse = &pulse;
-        r.cfg.server_running = [] { return true; };
-        r.cfg.pulse_retry_ms = 100;
-        r.cfg.pulse_refresh_ms = 20;
-        r.cfg.writer_sync_ms = 300;
-        pulse.server.default_source = "alsa_input.other";
-        PulseDevice other = fake_usb_source("other");
-        other.name = "alsa_input.other";
-        pulse.sources.push_back(other);
-        if (with_headset) add_headset(active);
-        feed.reset(new Feeder(pulse));
-    }
-    void add_headset(const std::string &active) {
-        const bool call = active.rfind("headset", 0) == 0;
-        std::lock_guard<std::recursive_mutex> g(pulse.lock());
-        pulse.sources.push_back(call ? fake_bt_source(kMac, 16000, 70) : virtual_source());
-        pulse.cards.push_back(fake_bt_card(kMac, 70, true, active));
-        pulse.sinks.push_back(fake_bt_sink(kMac, 70));
-    }
-    int bt_index() {
-        const Snapshot s = r.snap();
-        for (size_t i = 0; i < s.card.inputs.size(); ++i)
-            if (s.card.inputs[i].bluetooth) return static_cast<int>(i);
-        return -1;
-    }
-    bool wait_inputs(size_t n, int ms = 4000) {
-        return r.wait([n](const Snapshot &s) { return s.card.inputs.size() >= n; }, ms);
-    }
-    bool pick() {
-        if (!wait_inputs(1)) return false;
-        const int i = bt_index();
-        return i >= 0 && r.ctl().select_card(i);
-    }
-    bool wait_present(int ms = 4000) { return r.wait([](const Snapshot &s) { return s.card.present; }, ms); }
-    size_t streams() {
-        std::lock_guard<std::recursive_mutex> g(pulse.lock());
-        return pulse.streams.size();
-    }
-    bool stream_open(size_t i) {
-        std::lock_guard<std::recursive_mutex> g(pulse.lock());
-        return i < pulse.streams.size() && pulse.streams[i].open;
-    }
-};
 
 bool has_text(const Snapshot &s, const std::string &text) {
     for (const Notice &n : s.notices)
@@ -204,7 +86,7 @@ void t_list_and_music_mode_open() {
     CHECK(!s.card.has_level && !s.card.has_agc && !s.card.has_mute);
     CHECK(!c.set_level_db(6.0)); /* no hardware level: software gain only */
     CHECK(c.set_soft_gain_db(6.0));
-    CHECK(!s.card.has_playback && !s.card.monitor_active);
+    CHECK(s.card.has_playback && !s.card.monitor_active); /* T3: the same headset is a monitor target; the monitor itself is off */
     CHECK(!s.capture.bt_gone);
     {
         std::lock_guard<std::recursive_mutex> g(b.pulse.lock());
