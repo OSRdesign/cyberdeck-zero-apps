@@ -581,4 +581,37 @@ PulseCard fake_bt_card(const std::string &mac, uint32_t index, bool music_availa
     return c;
 }
 
+void fake_hackberry(FakePulse &f) {
+    const std::string evolve = "70:BF:92:53:6B:8B", beats = "F8:66:5A:18:D3:69", xwf = "9E:0C:81:E6:5D:1A";
+    f.server.server_name = "PulseAudio (on PipeWire 1.4.2)";
+    f.server.server_version = "15.0.0";
+    f.server.library_version = "17.0.0";
+    f.server.rate = 48000;
+    PulseDevice null_mon;
+    null_mon.name = "auto_null.monitor";
+    null_mon.description = "Monitor of Dummy Output";
+    null_mon.rate = 48000;
+    null_mon.channels = 2;
+    null_mon.is_monitor = true;
+    null_mon.monitor_of = "auto_null";
+    f.sources.push_back(null_mon);
+    f.sources.push_back(fake_bt_source(evolve, 16000, 70));
+    f.sources.push_back(fake_bt_monitor(evolve, 70));
+    f.sources.push_back(fake_usb_source("Jabra_EVOLVE_LINK", 16000, 1, 50));
+    f.sources.push_back(fake_bt_source(beats, 16000, 90));
+    f.sources.push_back(fake_bt_monitor(xwf, 80));
+    f.sinks.push_back(fake_bt_sink(evolve, 70, "headset"));
+    f.sinks.push_back(fake_bt_sink(xwf, 80, "speaker"));
+    f.sinks.push_back(fake_bt_sink(beats, 90, "headphone"));
+    f.sinks.push_back(fake_usb_sink("Jabra_EVOLVE_LINK", 50));
+    f.cards.push_back(fake_bt_card(evolve, 70, true, "headset-head-unit"));
+    PulseCard x = fake_bt_card(xwf, 80, true, "a2dp-sink", false);
+    x.form_factor = "speaker";
+    x.description = "XWF-M18-M28-M38";
+    f.cards.push_back(x);
+    f.cards.push_back(fake_bt_card(beats, 90, false, "headset-head-unit"));
+    f.server.default_source = fake_bt_source(beats).name;
+    f.server.default_sink = fake_bt_sink(xwf, 80, "speaker").name;
+}
+
 }  // namespace cassette

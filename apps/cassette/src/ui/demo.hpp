@@ -38,7 +38,7 @@
  *                a headset that is not connected and Default output
  *   monitor      Settings: the headset as input, Monitor on with "Delay about 90 ms" under it, Monitor to Automatic
  *   echo         Settings: a USB microphone monitored to the speaker (an A2DP sink): "Delay about 0.25 s: you will hear an
- *                echo" in amber, Monitor to the speaker
+ *                echo" in dark amber (col::kAmberText), Monitor to the speaker
  *   monitor-none Settings: a USB card without a playback side: no Monitor switch, Monitor to greyed with the reason (it opens)
  *   rec          the recorder idle with the headset as input: BT instead of IN
  *   connecting   the same while the headset connects: "Connecting the headset..." in the notice place, the meter dark

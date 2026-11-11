@@ -437,7 +437,7 @@ scenes `tests/scenes/bt1-*` to `bt12-*` (the seven layouts each).
   device is listed). The Input picker's footer (`formats_footer`): the speech-quality line, or "Bluetooth audio is not set up on this
   board" when `bt_status` is the not-set-up text (the Input row then opens even with no card). Input level is a greyed Info row
   ("Not applicable") for a Bluetooth input.
-- **Monitor.** `SettingRow::detail` / `detail_warn`: the delay line under Monitor (amber with `monitor.notice == "delay"`). Monitor to
+- **Monitor.** `SettingRow::detail` / `detail_warn`: the delay line under Monitor (dark amber `col::kAmberText` #7C5D00 with `monitor.notice == "delay"`: 4.6:1 on the row, 3.0:1 on the selected row; the panels' `kAmber` read 1.4:1 there). Monitor to
   appears where Bluetooth is in play (a Bluetooth input or output, or a target chosen earlier); without a target it is drawn greyed
   (`SettingRow::dimmed`) with `monitor.reason` as its value and still opens. `set_monitor_output` is the Port's.
 - **Recorder.** `RecorderVm::bluetooth` (BT for IN), `RecorderVm::standing_notice` (connecting, no sound: in the notice place while no

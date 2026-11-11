@@ -198,6 +198,11 @@ std::string bt_input_footer(bool any_bt_input, bool not_set_up);
  * hear an echo" (seconds: two decimals under 1 s, one from 1 s), and without a figure "Delay about 0.2-0.3 s: you will hear
  * an echo" (the A2DP estimate, before the monitor runs). */
 std::string monitor_delay_text(double delay_ms, bool echo);
+/* Its colour on the cream row: kAmberText with the echo notice (warn), else kInkMuted (theme.hpp). */
+std::uint32_t monitor_detail_color(bool warn);
+/* The WCAG 2 contrast ratio of two 0xRRGGBB colours (1 to 21; the lighter one's relative luminance + 0.05 over the
+ * darker one's): the checks of the text colours in tests/ui. */
+double contrast_ratio(std::uint32_t a, std::uint32_t b);
 /* The info box's second line (and the strip's time slot) while PLAY waits for the headset's music mode: "Switching to music
  * mode... 1 s" (whole seconds elapsed, at most the timeout's). */
 std::string switching_text(double elapsed_s, double timeout_s);

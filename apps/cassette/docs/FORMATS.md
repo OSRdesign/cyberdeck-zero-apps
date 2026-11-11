@@ -118,6 +118,23 @@ Examples (tests/codec/test_formats.cpp): a mono 48 kHz headset allows all six; a
 and FLAC; a 16 kHz speech headset allows all six (16 kHz is an Opus rate); a 24-bit card allows all six; an 8-channel
 card offering 1..8 channels records stereo and allows all six.
 
+### A Bluetooth headset as the input (8 and 16 kHz)
+
+A Bluetooth headset records through its call link only, at the rate of its codec: **16000 Hz** (mSBC, wideband) or
+**8000 Hz** (CVSD, narrowband), always **mono, 16-bit** (the controller asks the sound server for S16 mono at that rate:
+docs/PULSE.md, "What T2 uses"). The Sample rate row has that one rate. What that means for the formats:
+
+| Format | With a Bluetooth headset |
+|---|---|
+| WAV | as usual, at 8 or 16 kHz mono 16-bit (16 kHz: 1.92 MB per minute, exact) |
+| FLAC | as usual, lossless at 8 or 16 kHz |
+| Opus speech 24 / 32 kbps (and 16 kbps) | offered, listed first: 8 and 16 kHz are Opus rates |
+| Opus music 64 / 128 kbps (and 48, 96 kbps) | **dimmed** with "Bluetooth call audio is speech only: Opus up to 32 kbps" (`FormatInputs::speech_only`): a music bit rate would only spend bytes on a 16 kHz mono call signal |
+
+A stored music preset falls back to WAV like any choice the input cannot record (the stored choice is kept and comes back
+with a USB card). No resampling: a Bluetooth take is 8 or 16 kHz in the file. Playback of any take to a Bluetooth output
+goes through the sound server, which resamples to the device (the take's own rate is sent).
+
 Note on D11: libopusenc always codes at 48 kHz and upsamples any other input rate inside the library (speex resampler,
 quality 5; `opusenc.c`). So 8-24 kHz cards already go through a resampler, inside libopusenc. Allowing 44.1 kHz cards
 the same way would be a one-line change (`opus_rate_ok`) if the owner wants it; the D11 rule is kept as decided.
@@ -234,8 +251,15 @@ never produces; checked against both header sets (`check_codec_abi.cpp`).
 Cassette:
 
 ```
-"depends": "libstdc++6, libgcc-s1, libfreetype6, libinput10, libxkbcommon0, libasound2t64 | libasound2, libopus0, libopusenc0, libflac14 | libflac12t64 | libflac12"
+"depends": "libstdc++6, libgcc-s1, libfreetype6, libinput10, libxkbcommon0, libasound2t64 | libasound2, libopus0, libopusenc0, libflac14 | libflac12t64 | libflac12, libpulse0"
 ```
+
+`libpulse0` (the Bluetooth release, 2026-11-11) is the sound server's client library, for Bluetooth devices through
+PipeWire (pipewire-pulse) or PulseAudio. It is opened at run time like the codecs (`src/core/pulse/pulse_lib.cpp`, never
+linked) and only when a sound server runs; without it, or without a server, Cassette records from USB cards as before and
+says "Bluetooth audio is not set up on this board". The name is `libpulse0` in Debian bookworm (16.1), trixie (17.0) and
+Ubuntu 24.04 (1:16.1) (checked 2026-11-11 on packages.debian.org and with `apt-cache policy` on Ubuntu 24.04). It pulls
+in a few small libraries (libsndfile1, libasyncns0, ...), not a sound server: Cassette does not depend on PipeWire.
 
 The libFLAC alternatives cover Debian trixie (`libflac14`), Ubuntu 24.04 (`libflac12t64`) and Debian bookworm
 (`libflac12`); `libopus0` and `libopusenc0` have these names in all three (checked 2026-11-11: trixie on the zero8 and

@@ -88,6 +88,21 @@ Source of truth: `docs/doc-images.tsv` (tab separated: image, scene, size, shot)
 | `size-720x720.png` | `sq720-a-idle` | 720x720 | `idle` | Idle recorder 720x720 square |
 | `size-480x480.png` | `sq480-a-idle` | 480x480 | `idle` | Idle recorder 480x480 square |
 | `square-stereo.png` | `sq720-i-stereo` | 720x720 | `stereo` | 720x720 with a stereo card |
+| `bt-input-picker.png` | `bt1-input-picker` | 480x320 | `input-picker` | Bluetooth: the Input picker with a headset (two-line row, 16 kHz) |
+| `bt-input-not-connected.png` | `bt1-input-picker` | 480x320 | `input-picker-not-connected` | The chosen headset not connected (dimmed, the reason) |
+| `bt-settings.png` | `bt1-input-picker` | 480x320 | `settings` | Settings with the headset as Input, Input level Not applicable |
+| `bt-input-notsetup.png` | `bt2-input-notsetup` | 480x320 | `input-notsetup` | No sound server: "Bluetooth audio is not set up on this board" |
+| `bt-output-picker.png` | `bt3-output-picker` | 480x320 | `output-picker` | The Output picker: music quality, call quality, not connected |
+| `bt-monitor-delay.png` | `bt4-monitor-delay` | 480x320 | `monitor-delay` | "Delay about 90 ms" under Monitor |
+| `bt-monitor-to-picker.png` | `bt4-monitor-delay` | 480x320 | `monitor-to-picker` | The Monitor to picker |
+| `bt-monitor-echo.png` | `bt5-monitor-echo` | 480x320 | `monitor-echo` | The echo notice in dark amber (Monitor to a speaker) |
+| `bt-monitor-none.png` | `bt6-monitor-none` | 480x320 | `monitor-none` | Monitor to greyed with the reason |
+| `bt-recorder.png` | `bt7-rec-label` | 480x320 | `rec-bt-label` | The recorder with BT instead of IN |
+| `bt-connecting.png` | `bt8-rec-connecting` | 480x320 | `rec-connecting` | "Connecting the headset..." |
+| `bt-no-sound.png` | `bt9-rec-nosound` | 480x320 | `rec-nosound` | "The headset is connected but sends no sound." |
+| `bt-headset-gone.png` | `bt10-rec-gone` | 480x320 | `rec-gone` | The headset disconnected during a take |
+| `bt-switching.png` | `bt11-switching` | 480x320 | `switching` | "Switching to music mode... 1 s" |
+| `bt-call-quality.png` | `bt12-callq` | 480x320 | `callq` | "Playing in call quality: this headset has no music mode." |
 
 Not rendered by the script:
 

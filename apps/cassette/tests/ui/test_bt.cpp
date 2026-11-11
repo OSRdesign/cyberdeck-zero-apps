@@ -6,7 +6,10 @@
  */
 #include "check.hpp"
 #include "meter_lamps.hpp"
+#include "theme.hpp"
 #include "ui_format.hpp"
+
+#include <cmath>
 
 using namespace cassette::ui;
 
@@ -187,10 +190,40 @@ void bt_label_gap()
     CHECK(bt.x >= 261); /* inside the panel's 3 px frame (258 + 3) */
 }
 
+/* The echo line under Monitor (T5a): kAmber (the dark panels' amber) read 1.4:1 on the cream row and 1.09:1 on the selected
+ * row. kAmberText is the same hue darkened to the lightest step with at least 4.5:1 on the row and 3:1 on the selected row. */
+void text_contrast()
+{
+    using namespace cassette::ui::col;
+    CHECK(contrast_ratio(0xFFFFFF, 0x000000) > 20.99 && contrast_ratio(0xFFFFFF, 0x000000) < 21.01);
+    CHECK(contrast_ratio(kRow, kRow) == 1.0);
+    CHECK(contrast_ratio(kAmber, kRow) == contrast_ratio(kRow, kAmber));
+    CHECK(contrast_ratio(kAmber, kRow) < 1.5);     /* 1.40: the finding */
+    CHECK(contrast_ratio(kAmber, kStrip) < 1.1);   /* 1.09 */
+    CHECK(contrast_ratio(kAmberText, kRow) >= 4.5);   /* 4.61 */
+    CHECK(contrast_ratio(kAmberText, kStrip) >= 3.0); /* 3.00 */
+    CHECK(contrast_ratio(kAmberText, kRow) < 4.7);    /* the lightest such step, not just any dark colour */
+    /* the same hue: G / R = 0xB4 / 0xF0 = 0.75, no blue */
+    CHECK((kAmberText & 0xFF) == 0);
+    CHECK(std::abs(double((kAmberText >> 8) & 0xFF) / double((kAmberText >> 16) & 0xFF) - 0.75) < 0.01);
+    CHECK_EQ(monitor_detail_color(true), kAmberText);
+    CHECK_EQ(monitor_detail_color(false), kInkMuted);
+    CHECK(contrast_ratio(kInkMuted, kRow) >= 4.5);   /* the plain delay line: 7.10 */
+    CHECK(contrast_ratio(kInkMuted, kStrip) >= 4.5); /* 4.63 */
+    /* The name box's counter (amber from 20 of 24) is on the toolkit's dark dialog box (#1C1C1C, cp0_ui_dialog_widget.cpp),
+     * not on cream: kAmber stays there (9.1:1); muted and red read too. */
+    const std::uint32_t kDialogBox = 0x1C1C1C;
+    CHECK_EQ(name_count_color(CountTone::Amber), kAmber);
+    CHECK(contrast_ratio(kAmber, kDialogBox) >= 4.5);
+    CHECK(contrast_ratio(name_count_color(CountTone::Muted), kDialogBox) >= 4.5);
+    CHECK(contrast_ratio(name_count_color(CountTone::Red), kDialogBox) >= 3.0);
+}
+
 } // namespace
 
 void test_bt()
 {
+    text_contrast();
     rates();
     input_rows();
     output_rows();

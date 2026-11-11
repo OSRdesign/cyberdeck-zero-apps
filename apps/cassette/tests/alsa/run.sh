@@ -14,6 +14,7 @@ fi
 work=$(mktemp -d "${TMPDIR:-/tmp}/cassette-alsa-XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/app"
-(cd "$app" && tar cf - src/core/frame_sink.hpp src/core/alsa tests/alsa) | (cd "$work/app" && tar xf -)
+(cd "$app" && tar cf - src/core/frame_sink.hpp src/core/ring.hpp src/core/ring.cpp src/core/alsa src/core/pulse tests/alsa \
+    tests/pulse/fake_pulse.hpp tests/pulse/fake_pulse.cpp) | (cd "$work/app" && tar xf -)
 find "$work/app" -type f \( -name '*.cpp' -o -name '*.hpp' -o -name Makefile \) -exec sed -i 's/\r$//' {} +
 make -C "$work/app/tests/alsa" APP="$work/app" BUILD="$work/build" -j3 "$@" test

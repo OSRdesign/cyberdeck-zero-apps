@@ -123,5 +123,9 @@ PulseDevice fake_usb_sink(const std::string &id, uint32_t card = 50);
 /* A Bluetooth card: music (a2dp-sink, a2dp-sink-sbc_xq) and call (headset-head-unit, -cvsd) profiles. */
 PulseCard fake_bt_card(const std::string &mac, uint32_t index, bool music_available, const std::string &active,
                        bool has_call = true);
+/* A HackBerry-like set (study 12): the Evolve 65 in call mode (music available), the XWF speaker on A2DP, the Beats Fit Pro
+ * limited to call profiles (P6), a USB headset, monitors and the dummy output; server name and versions as on the board.
+ * For cassette-probe --server --fake and the report tests. */
+void fake_hackberry(FakePulse &f);
 
 }  // namespace cassette

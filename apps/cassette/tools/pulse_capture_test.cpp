@@ -20,6 +20,7 @@
  */
 #include "pulse_api.hpp"
 #include "pulse_probe.hpp"
+#include "pulse_report.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -108,16 +109,7 @@ int list(PulseApi &api) {
                         p.description.c_str());
     }
     const PulseProbe probe = pulse_probe(src, snk, cards, &si);
-    std::printf("summary:\n");
-    for (const PulseProbeDevice &d : probe.devices)
-        std::printf("  %-6s %-50s bt=%s mac=%-17s kind=%-10s %u Hz%s%s\n", d.source ? "source" : "sink", d.name.c_str(),
-                    d.bluetooth ? "yes" : "no", d.mac.c_str(), pulse_kind_name(d.kind), d.rate, d.monitor ? " monitor" : "",
-                    d.is_default ? " (default)" : "");
-    for (const PulseProbeCard &k : probe.cards)
-        std::printf("  card %s: music %s, call %s, active %s (%s)\n", k.name.c_str(),
-                    k.music_available ? "available" : (k.music_offered ? "OFFERED BUT UNAVAILABLE" : "not offered"),
-                    k.call_offered ? "offered" : "not offered", k.active_profile.c_str(),
-                    k.active_is_music ? "music" : (k.active_is_call ? "call" : "other"));
+    std::fputs(pulse_probe_summary(probe).c_str(), stdout); /* the same lines as cassette-probe --server */
     return 0;
 }
 

@@ -522,7 +522,7 @@ void SettingsPage::fill_row(Row &r, const SettingRow &s)
         lv_obj_set_y(r.label, top);
         lv_obj_set_width(r.detail, dw);
         lv_obj_set_pos(r.detail, pad - 1, top + lh19 + l2gap);
-        lv_obj_set_style_text_color(r.detail, lv_color_hex(s.detail_warn ? name_count_color(CountTone::Amber) : col::kInkMuted), 0);
+        lv_obj_set_style_text_color(r.detail, lv_color_hex(monitor_detail_color(s.detail_warn)), 0);
         set_text(r.detail, s.detail);
     }
 }

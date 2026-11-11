@@ -23,6 +23,7 @@ Contents:
 [Settings](#settings) |
 [Formats](#formats-wav-flac-and-ogg-opus) |
 [Take number](#take-number) |
+[Bluetooth](#bluetooth) |
 [Screen sizes](#screen-sizes-and-layouts) |
 [Keys](#keyboard-shortcuts) |
 [Files](#files-and-where-they-live) |
@@ -39,6 +40,8 @@ Contents:
   screens such as the HackBerry's 720x720 and 480x480 have their own layout.
 - Your user must be in the `audio` group. The board images do this for the first user; otherwise run
   `sudo usermod -aG audio $USER` and log out and in again.
+- **Or a Bluetooth headset**, on a board with a sound server (PipeWire or PulseAudio, the desktop boards such as the
+  HackBerry): speech quality, 16 or 8 kHz mono. See [Bluetooth](#bluetooth).
 - Nothing else for WAV. For **FLAC** and **Ogg Opus** the board needs a few libraries (`libflac`, `libopusenc0`,
   `libopus0`; see [Formats](#formats-wav-flac-and-ogg-opus)); without them those formats are simply not offered and
   Cassette records WAV. There is no network code in the app: nothing you record leaves the board.
@@ -236,7 +239,8 @@ the list. Its name is on the cassette label.
 - REC during playback stops it and starts a new take (or its countdown).
 
 The sound goes out of the card's own playback side when it has one, otherwise the default device. If the board has
-more than one output, Settings > **Output** lets you choose.
+more than one output, Settings > **Output** lets you choose, Bluetooth headsets and speakers included (see
+[Bluetooth](#bluetooth): a headset that was just recording first switches to music mode).
 
 | Playing | Paused | REW held |
 |---|---|---|
@@ -464,8 +468,8 @@ The card's own rows depend on what the selected card has:
 
 | Row | What it does | Default | Appears |
 |---|---|---|---|
-| **Input** | The capture card. Cassette remembers it. | the first card | always; cannot change while a take records |
-| **Input level** | The card's recording level (same as CARD on the recorder). | what the card has | only when the card has a level control |
+| **Input** | The capture card, or a connected Bluetooth headset (listed after the cards, see [Bluetooth](#bluetooth)). Cassette remembers it. | the first card | always; cannot change while a take records |
+| **Input level** | The card's recording level (same as CARD on the recorder). With a Bluetooth headset: *Not applicable* (greyed). | what the card has | only when the card has a level control, or greyed for a headset |
 | **Auto gain (card)** | The card's own automatic gain, if it has one. | as set on the card, then remembered | only when the card has it |
 | **Mic mute (card)** | Mutes the card's microphone. | off | only when the card has it |
 | **Codec** | The file type of new takes: WAV, FLAC or Opus. The row shows the codec in use (`WAV (Opus unavailable)` when the stored choice cannot be used) and opens a [picker page](#formats-wav-flac-and-ogg-opus): the three codecs, then six quick presets. Cannot change while a take records. | WAV | always |
@@ -476,14 +480,15 @@ The card's own rows depend on what the selected card has:
 | **Channels** | Mono or Stereo, what the card records. Read-only. | (the card) | always |
 | **Low cut 80 Hz** | High-pass filter against rumble and wind. | off | always |
 | **Limiter** | Peak limiter. | off | always |
-| **Monitor** | Hear the microphone in the card's headphones. | off | only when the card can play sound |
+| **Monitor** | Hear the microphone in the card's headphones (or the Bluetooth headset). With Bluetooth a line under it shows the delay. | off | only when the card can play sound, or with a Bluetooth headset |
 | **Monitor level** | Its volume, 0 to 100 % in steps of 5. | 50 % | with Monitor; dimmed while Monitor is off |
+| **Monitor to** | Where the monitor plays: *Automatic* (the headset itself, or the card's own playback side), a Bluetooth device or another output. Greyed with the reason when there is no target (it still opens). | Automatic | only where Bluetooth is in play (a Bluetooth input or output) |
 | **Sync every** | How often the take is written safely to the card: 5, 10, 20 or 30 s. See [Crash safety](#crash-safety). | 10 s | always |
 | **Folder** | Shows where takes are kept. The list offers the current folder and `~/Recordings`; for another folder edit `folder` in `settings.json` (see Files). Cannot change while a take records. | `~/Recordings` | always |
 | **File prefix** | The first part of new take names. Same rules as RENAME: 1 to 24 characters of letters, digits, spaces, `-`, `_`. | `take` | always |
 | **Take number** | The number the next take gets. See below. | one more than the last take | always; dimmed while a take records |
 | **Auto-split** | *At 4 GiB* (new file) or *Off (one RF64 file)*. | At 4 GiB | always |
-| **Output** | The playback device. | automatic | only when there is more than one |
+| **Output** | The playback device: the cards, the connected Bluetooth devices (*Music quality* or *Call quality (16 kHz)*) and *Default output*. | automatic | only when there is more than one |
 
 The SOFT gain is set on the recorder screen (it is also stored). Where the rows do not fit the screen the list
 scrolls: drag it, or use Up / Down.
@@ -605,6 +610,9 @@ anyway (removed by hand) the format is unavailable in the picker and Cassette us
 `sudo apt install libflac14 libopusenc0 libopus0` (use `libflac12t64` instead of `libflac14` on Ubuntu 24.04,
 `libflac12` on Debian bookworm).
 
+The package also depends on `libpulse0`, the sound server's client library, for [Bluetooth](#bluetooth). It is opened at
+run time too and only when a sound server runs; without it Cassette records from USB cards as before.
+
 **Names and the list.** Takes are named `.flac` or `.opus` instead of `.wav`; the strip shows the format (`48k/16 FLAC`,
 `48k/16 OPUS`), and the take numbers run on across all formats. The recordings list ends each row with `WAV`, `FLAC` or
 `OPUS`. RENAME keeps the extension.
@@ -669,6 +677,151 @@ page without changing anything.
   row shows it. So *Reset to 1* with takes 001 to 003 in the folder gives `Next: 004`.
 - The number is stored in the file `.take-counter` in the recordings folder and survives a restart. The row is
   dimmed while a take records.
+
+## Bluetooth
+
+Cassette can record from a **Bluetooth headset** and play to Bluetooth headsets and speakers, through the board's
+**sound server**. A USB card or headset keeps working exactly as before, with or without Bluetooth.
+
+**What works.**
+
+- **Recording from a Bluetooth headset**, at speech quality: **16 kHz** (the mSBC codec) or **8 kHz** (CVSD, older
+  headsets), always **mono**. That is the headset's call link: no Bluetooth headset records music quality on our boards.
+- **Playback** of takes to Bluetooth headsets and speakers, at music quality when the device can (see the mic policy
+  below).
+- **The live monitor** over Bluetooth: you hear the headset's microphone in the same headset, or any microphone in a
+  Bluetooth speaker. Expect a clear delay (below).
+
+**Pairing.** Pair and connect the device in the launcher, **Settings > Bluetooth**. Cassette never pairs or connects
+anything; it lists the devices the sound server has connected. A device that is paired but not connected does not show.
+
+**What the board needs.** A sound server: **PipeWire with pipewire-pulse**, or **PulseAudio**, plus the client library
+`libpulse0`, which the Cassette package depends on (the Store installs it). Cassette never starts a sound server itself.
+
+- The desktop boards such as the **HackBerry** run PipeWire: Bluetooth works there.
+- The Lite boards (**zero8, Pi 3A+, the deck**) have no sound server today. Cassette says *Bluetooth audio is not set up
+  on this board* in the Input picker and records from USB cards as before. Use a USB sound card or headset there.
+
+### Choosing the headset: Settings > Input and Output
+
+The **Input** picker lists the USB cards first, then the Bluetooth headsets. A headset row has two lines: its name with
+the rate on the right (`16 kHz`), and under it *Bluetooth headset · speech quality*. A headset that cannot be used now
+stays in the list, dimmed, with the reason under its name (*The headset microphone is off*, *Not connected*); a tap on it
+says *Not available:* and the reason. The footer says *Bluetooth headsets record speech quality (16 kHz)*. A chosen
+headset that is switched off stays in the list as *Not connected* and is opened again when it comes back.
+
+| Input picker with a headset | A headset that cannot be used | No sound server on this board |
+|---|---|---|
+| ![Input picker: a USB card and the Evolve 65 at 16 kHz](img/bt-input-picker.png) | ![The chosen headset, not connected, dimmed](img/bt-input-not-connected.png) | ![The footer: Bluetooth audio is not set up on this board](img/bt-input-notsetup.png) |
+
+With a headset as the input, **Input level** reads *Not applicable* (a headset has no level control: use SOFT on the
+recorder) and the recorder's meter label reads **BT** instead of IN.
+
+| Settings with the headset | The recorder with the headset |
+|---|---|
+| ![Settings: the headset as Input, Input level Not applicable](img/bt-settings.png) | ![The recorder: BT instead of IN](img/bt-recorder.png) |
+
+(The pictures come from the UI's demo model: its Codec and Sample rate rows keep the demo card's 48 kHz; with a real
+headset the Sample rate row shows its one rate, 16 or 8 kHz.)
+
+The **Output** picker lists the Bluetooth devices next to the cards and *Default output*: *Music quality* (the device
+plays in its music mode), *Call quality (16 kHz)* (it can only play through its call link now), or dimmed with the
+reason (*Not connected*).
+
+![Output picker: a speaker in music quality, the headset in call quality, one headset not connected](img/bt-output-picker.png)
+
+### The headset's two modes (the mic policy)
+
+A Bluetooth headset is either in **music mode** (good sound to the ears, no microphone) or in **call mode**
+(microphone on, speech-quality sound both ways). It cannot be in both. Cassette switches it by opening and closing the
+microphone:
+
+- The headset is in **call mode while the recorder or the Settings screen is open** (the meter needs the microphone).
+- It goes back to **music mode when you leave for the recordings list, the Edit page or playback**, about 2 s later.
+- Switching takes about **0.7 s into call mode** and about **2 s back** to music mode. While it switches into call mode
+  the recorder shows *Connecting the headset...* and the meter stays dark.
+- **REC while connecting is allowed**: the take waits and starts at the first real audio, so the first moment you speak
+  from music mode may be lost; nothing silent is recorded in its place.
+- **PLAY to the same headset** waits for music mode: *Switching to music mode... 1 s* shows (up to 4 s), then the take
+  plays at music quality. If the headset has no music mode, it plays at once in call quality.
+- **One music device at a time on the HackBerry.** With a Bluetooth speaker connected, a headset gets call quality only
+  (and the other way round): the Output picker shows *Call quality (16 kHz)* and PLAY says *Playing in call quality: this
+  headset has no music mode.* once. Disconnect the other device in Settings > Bluetooth to get music quality back.
+
+| Connecting | Switching to music mode | Call quality |
+|---|---|---|
+| ![Connecting the headset...](img/bt-connecting.png) | ![Switching to music mode... 1 s](img/bt-switching.png) | ![Playing in call quality: this headset has no music mode.](img/bt-call-quality.png) |
+
+### Monitor over Bluetooth
+
+**Monitor** stays **off by default**, also for a Bluetooth headset. Where Bluetooth is in play (a Bluetooth input or
+output) Settings has a **Monitor to** row: *Automatic* plays the monitor to the headset itself (with a Bluetooth
+input) or to the card's own playback side (with a USB card); you can also pick a Bluetooth speaker or another output.
+Without any target the row is greyed with the reason, but it still opens so you can choose one.
+
+Under **Monitor** a line shows the **delay** the app measures: *Delay about 90 ms*. To a Bluetooth speaker or headphones in
+music mode it says *Delay about 0.25 s: you will hear an echo* (in dark amber), and before the monitor runs *Delay about
+0.2-0.3 s: you will hear an echo*.
+
+What to expect (**estimates until they are measured on the boards**, see the board tests B30 and B31 in
+[`../tests/BOARD-TESTS.md`](../tests/BOARD-TESTS.md)):
+
+| Route | Delay |
+|---|---|
+| The headset's microphone to the same headset | about 60 to 150 ms: clearly late, fine for checking the voice |
+| Any microphone to a Bluetooth speaker or headphones (music mode) | about 150 to 350 ms: an echo, only for checking that it records |
+| The headset's own **sidetone** (if it has one) | none: the best monitor. Leave Cassette's Monitor off then |
+
+| Monitor on the headset | Monitor to a speaker: the echo notice | Monitor to |
+|---|---|---|
+| ![Delay about 90 ms under Monitor](img/bt-monitor-delay.png) | ![Delay about 0.25 s: you will hear an echo](img/bt-monitor-echo.png) | ![The Monitor to picker](img/bt-monitor-to-picker.png) |
+
+![A USB card without a playback side: Monitor to greyed with the reason](img/bt-monitor-none.png)
+
+If the monitor's Bluetooth output disconnects, the monitor stops with *The monitor output disconnected: the recording
+goes on.* and comes back by itself when the device is back (while Monitor is on).
+
+### Notices and what to do
+
+| Notice | What happened | What to do |
+|---|---|---|
+| *Connecting the headset...* | The headset is switching to call mode (about 0.7 s, longer for some headsets). | Wait; REC is allowed and starts at the first audio. |
+| *The headset is connected but sends no sound.* | The headset delivers pure silence (digital zero) for 3 s: its call link did not open (the Beats Fit Pro does this). The take keeps running; the notice clears when sound arrives. | Stop, switch the headset off and on, or use another headset or a USB card. |
+| *The Bluetooth headset disconnected: the take was closed and kept.* (*... disconnected.* without a take) | The headset was switched off or went out of range. Cassette never continues from another microphone: the file ends at the cut. | Switch it back on: *The Bluetooth headset is back* and it is used again without restarting the app. Start a new take. |
+| *The Bluetooth headset is not connected.* | REC with the chosen headset absent. | Connect it in Settings > Bluetooth, or choose another Input. |
+| *The headset microphone could not be confirmed: the take did not start.* | The sound server could not confirm that the stream is on the headset's microphone. | Try REC again; reconnect the headset. |
+| *Switching to music mode... 1 s* | PLAY to the headset that was just in call mode. | Wait (at most 4 s). |
+| *Playing in call quality: this headset has no music mode.* | The headset has no music mode now (another Bluetooth audio device holds it, or it never had one). | Disconnect the other device for music quality. |
+| *The Bluetooth output disconnected.* / *The Bluetooth output is not connected.* | The output went away during playback (the deck pauses) / PLAY with the chosen output absent. | Reconnect it, or choose another Output. |
+| *The monitor output disconnected: the recording goes on.* | The monitor's Bluetooth output went away. | Nothing: it comes back by itself. |
+| *Bluetooth audio is not set up on this board* (Input picker) | No sound server (or no `libpulse0`) on this board. | Use a USB card; see What the board needs above. |
+| *The sound server stopped: the take was closed and kept.* | PipeWire or PulseAudio stopped during a take. | Restart the session or the board. |
+
+| No sound | Headset gone during a take |
+|---|---|
+| ![The headset is connected but sends no sound.](img/bt-no-sound.png) | ![The Bluetooth headset disconnected: the take was closed and kept.](img/bt-headset-gone.png) |
+
+### Formats with a Bluetooth headset
+
+The headset records at 16 or 8 kHz mono. **WAV and FLAC** record as usual. **Opus**: the speech presets (24 and 32 kbps)
+are offered first; the music presets (64 and 128 kbps) are dimmed with *Bluetooth call audio is speech only: Opus up to 32
+kbps*. The Sample rate row has the one rate. See [Formats](#formats-wav-flac-and-ogg-opus).
+
+### Tested devices
+
+Tested on the **HackBerry (PipeWire 1.4.2)**:
+
+| Device | Result |
+|---|---|
+| Jabra Evolve 65 (paired directly, not through its USB dongle) | Recording OK at 16 kHz mSBC. Music mode OK when no other music (A2DP) device is connected. |
+| Beats Fit Pro | Connects, but sends no microphone audio (it never opens its call link with this board): Cassette reports *The headset is connected but sends no sound.* |
+| XWF-M18-M28-M38 speaker | Playback OK (music mode only; it has no microphone). |
+
+LE Audio devices (Bluetooth 5.2 and later, LC3) are not supported: our boards' radios are Bluetooth 5.0 or older.
+
+**On a terminal:** `/usr/share/APPLaunch/bin/cassette-probe --server` lists what the sound server sees: every source and
+sink with its rate, Bluetooth address, kind (headset, speaker) and monitor flag, and per Bluetooth device the active mode
+and whether music mode is available. `--card bt:<MAC>` shows one device. It only lists: nothing is opened or changed.
 
 ## Screen sizes and layouts
 
@@ -815,7 +968,13 @@ files; one that does not follow the take name pattern shows but cannot be rename
 
 **"No sound input found."** Cassette sees no capture card. Plug the card in again; check that the user is in the
 `audio` group (see above); on a terminal, `/usr/share/APPLaunch/bin/cassette-probe` lists the cards, what each offers and its mixer controls,
-and opens each for 2 seconds (listen-only, it writes nothing). Run it with `--no-open` to list only.
+and opens each for 2 seconds (listen-only, it writes nothing). Run it with `--no-open` to list only, and with `--server`
+to list what the sound server sees (the Bluetooth devices).
+
+**A Bluetooth headset.** Not in the Input list: connect it in the launcher's Settings > Bluetooth (paired is not
+enough), and check that the board has a sound server (*Bluetooth audio is not set up on this board* means it has not).
+*The headset is connected but sends no sound.*: the headset's call link did not open; try another headset. Every
+Bluetooth notice is explained in [Bluetooth](#bluetooth).
 
 **The meter does not move.** Check the right card is chosen in Settings > Input, that *Mic mute (card)* is not on, and
 that the headset's own mute is off. Raise CARD. Some headsets in call profile deliver a weak signal: use SOFT.
@@ -868,8 +1027,9 @@ card). Delete `~/.config/cassette/settings.json` to start with the defaults.
 
 ## Limits
 
-- **No Bluetooth audio.** Cassette records from sound cards that Linux presents as capture devices (USB, or a board's
-  own input). It has no Bluetooth audio code. (A Bluetooth *keyboard* works as usual.)
+- **Bluetooth needs a sound server** (PipeWire or PulseAudio): not on the Lite boards today (zero8, Pi 3A+, the deck).
+  A Bluetooth headset records speech quality only (16 or 8 kHz mono); some headsets send no microphone audio at all;
+  only one music (A2DP) device at a time on the HackBerry; LE Audio is not supported. See [Bluetooth](#bluetooth).
 - **No recording in the background.** Leaving the app stops the take (and keeps it).
 - **Merging joins takes of one kind only**: the same codec, rate, channels and (WAV, FLAC) bit depth; nothing is
   converted. An Opus merge adds a few milliseconds at each join and, with the music settings, can blip briefly there

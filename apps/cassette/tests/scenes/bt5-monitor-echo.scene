@@ -1,4 +1,4 @@
-title Cassette Bluetooth (T4, synthetic names): a USB microphone monitored to a Bluetooth speaker (an A2DP sink, 250 ms): the line under Monitor in amber, "Delay about 0.25 s: you will hear an echo"; Monitor to names the speaker
+title Cassette Bluetooth (T4, synthetic names): a USB microphone monitored to a Bluetooth speaker (an A2DP sink, 250 ms): the line under Monitor in dark amber (kAmberText #7C5D00: 4.6:1 on the row, 3.0:1 selected), "Delay about 0.25 s: you will hear an echo"; Monitor to names the speaker
 sizes 320x480 480x320 480x800 640x480 800x480 480x480 720x720
 ppmm 608
 env CASSETTE_DEMO idle

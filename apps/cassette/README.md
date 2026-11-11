@@ -11,17 +11,22 @@ category Tools. Plan: launcher `docs/dev/tasks/016-cassette-recorder.md`; study:
 - **Private.** No cloud, no network: nothing leaves the board. The takes stay in `~/Recordings`.
 - **Any USB sound card.** The card is found by its name and USB identity, never by its number (the number changes across
   reboots). The card's own level, auto gain and mute are shown when the card has them, and left as found otherwise.
+- **Bluetooth headsets and speakers** through the board's sound server (PipeWire with pipewire-pulse, or PulseAudio):
+  record from a headset at speech quality (16 kHz mSBC or 8 kHz CVSD, mono), play takes to headsets and speakers, monitor
+  live over Bluetooth with the delay shown. Pairing stays in the launcher (Settings > Bluetooth). A take is never
+  continued from another microphone: a headset that disconnects ends and keeps the take. See the user guide's
+  [Bluetooth](docs/USER-GUIDE.md#bluetooth) chapter.
 
 ## Documentation
 
 - [`docs/USER-GUIDE.md`](docs/USER-GUIDE.md): the user guide (what you need, the recorder screen, recording, monitoring,
-  playing, the list, the Edit page (trim and split), merging takes, settings, files, crash safety, troubleshooting,
-  limits), with pictures.
+  playing, the list, the Edit page (trim and split), merging takes, settings, Bluetooth, files, crash safety,
+  troubleshooting, limits), with pictures.
 - [`docs/KEYS.md`](docs/KEYS.md): the keyboard map.
 - [`docs/MAKING-SCREENSHOTS.md`](docs/MAKING-SCREENSHOTS.md): how to render the guide's pictures again after a change
   (`docs/make-doc-images.sh`).
 - [`docs/PULSE.md`](docs/PULSE.md): the sound-server backend (PipeWire / PulseAudio through libpulse) for Bluetooth
-  devices: design, events, and the contract for the controller (developer note; not used by the app yet).
+  devices: design, events, threading, and what the controller and the UI use (developer note).
 
 ## Screenshots
 
@@ -104,7 +109,9 @@ Four pages and four boxes:
   **Use headphones.** With speakers the microphone hears the monitor and you get an echo or a howl; that is why the
   monitor is off by default and never plays during playback. A headset such as the Jabra Evolve 65 has its own hardware
   sidetone: you hear yourself even with Monitor off, it is not an ALSA control and Cassette cannot change or switch it
-  off; Monitor adds a second, delayed copy on top, so leave it off there.
+  off; Monitor adds a second, delayed copy on top, so leave it off there. Over Bluetooth (setting **Monitor to**: the
+  headset itself, a Bluetooth speaker or another output) the delay is larger and shown under the Monitor row (estimates:
+  60-150 ms on the same headset, 150-350 ms to a speaker, "you will hear an echo").
 - **Merge takes.** MERGE (key M) turns the list into merge mode on the same page: the takes are chosen in the order they
   should play (a numbered badge each; a tap again drops one and the rest renumber); the first take chosen decides what can
   join, every take that cannot be joined to it without converting it (another codec, rate, channel count or bit depth) is
@@ -206,12 +213,18 @@ when the free space falls under 200 MB or the card is unplugged. A take that rea
 
 ## Requirements
 
-A screen of at least 480x320 (portrait 320x480 in PDA mode), a USB sound card, a USB headset or a board's own input,
+A screen of at least 480x320 (portrait 320x480 in PDA mode), a USB sound card, a USB headset or a board's own input
+(or a Bluetooth headset on a board with a sound server),
 and the user in the `audio` group (the images add the first user to it; else `sudo usermod -aG audio $USER`, then log
 out and in). CyberdeckZero Launcher with full-screen app support. Packages: `libstdc++6, libgcc-s1, libfreetype6, libinput10, libxkbcommon0`,
 `libasound2t64 | libasound2` (the ALSA library: it is opened at run time, never linked) and the codec libraries `libopus0`,
-`libopusenc0` and `libflac14 | libflac12t64 | libflac12` (also opened at run time, see Formats). When a sound server holds
-the card, the app falls back to the server's ALSA device. arm64 and amd64.
+`libopusenc0` and `libflac14 | libflac12t64 | libflac12` (also opened at run time, see Formats) and `libpulse0` (the
+sound server's client library, for Bluetooth; opened at run time, only when PipeWire or PulseAudio runs). When a sound
+server holds the card, the app falls back to the server's ALSA device. arm64 and amd64.
+
+Bluetooth needs a sound server: PipeWire with pipewire-pulse (the desktop boards, such as the HackBerry) or PulseAudio.
+The Lite boards (zero8, Pi 3A+, the deck) have none today: Cassette says "Bluetooth audio is not set up on this board"
+and records from USB as before.
 
 The app records at the card's own sample rate: 48000 Hz, else 44100 Hz, else the highest rate the card offers at or below
 48000 Hz (a USB headset in its call profile records 16000 Hz only), and only when every offered rate is above 48000 Hz the
@@ -226,7 +239,9 @@ Settings > Apps (category Tools). By hand: `sudo apt install ./cassette_0.2.0_ar
 The package also installs `/usr/share/APPLaunch/bin/cassette-probe`, a listen-only command line tool for the board
 tests: it lists the capture cards, what each offers and its mixer controls, then opens each card (or the one given
 with `--card NAME_OR_BY-ID_PATH`) for 2 s (`--seconds N`) and counts the frames, including the sound-server fallback.
-It writes no file and changes no setting; `--no-open` only lists.
+It writes no file and changes no setting; `--no-open` only lists. `cassette-probe --server` lists the sound server's
+sources, sinks and Bluetooth cards instead (rate, Bluetooth address, kind, monitor flag, the card's active profile and
+whether music mode is available; `--card bt:<MAC>` for one device); it opens no stream and never starts a server.
 
 ## Known limits
 
@@ -237,6 +252,11 @@ It writes no file and changes no setting; `--no-open` only lists.
 - Playback plays the app's own takes (WAV, FLAC, Ogg Opus) through the card's playback side when it has one, else the
   default device.
 - The record timer makes no sound.
+- **Bluetooth:** a headset records speech quality only (16 or 8 kHz mono, its call link); some headsets connect but send
+  no microphone audio (the Beats Fit Pro on the HackBerry: Cassette says "The headset is connected but sends no sound.");
+  only one music (A2DP) device at a time on the HackBerry (the second gets call quality only); the Lite boards need a
+  sound server first (they have none today); LE Audio is not supported (our radios are Bluetooth 5.0 or older). The monitor
+  delays over Bluetooth are estimates until measured on the boards (B30, B31).
 - Not yet measured on a board: the animation cost on a Pi Zero 2 W and the behaviour of every card (board tests,
   [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md)).
 
@@ -309,7 +329,7 @@ PEAK is at the panel's bottom left.
   `repair`, `dsp/` (meter, gain, DC blocker, low cut, limiter), `takes/` (naming, the take list, settings), `edit/`
   (the peak overview, trim and split), `playback/`, `app/` (the controller: the five-key state machine and the timer),
   `pulse/` (the sound-server backend: libpulse through `dlopen`, capture and playback streams on an exact device, the
-  Bluetooth summary; not wired into the controller yet, [`docs/PULSE.md`](docs/PULSE.md)).
+  Bluetooth input and output models, the summary report of `cassette-probe --server`; [`docs/PULSE.md`](docs/PULSE.md)).
 - `tools/pulse_capture_test.cpp`: `pulse-capture-test`, a board CLI for the sound-server backend (not packaged).
 - `src/ui/`: the pages, the cassette window, the meter, the steppers, the boxes, the layout fitting.
 - `src/bind/`: the controller bound to the UI (the view mapping, the actions, the worker thread).

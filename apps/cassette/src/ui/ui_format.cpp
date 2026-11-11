@@ -374,6 +374,24 @@ std::string monitor_delay_text(double delay_ms, bool echo)
     return echo ? std::string(b) + ": you will hear an echo" : std::string(b);
 }
 
+std::uint32_t monitor_detail_color(bool warn)
+{
+    return warn ? col::kAmberText : col::kInkMuted;
+}
+
+double contrast_ratio(std::uint32_t a, std::uint32_t b)
+{
+    auto lum = [](std::uint32_t c) {
+        auto lin = [](unsigned v) {
+            const double s = v / 255.0;
+            return s <= 0.03928 ? s / 12.92 : std::pow((s + 0.055) / 1.055, 2.4);
+        };
+        return 0.2126 * lin((c >> 16) & 0xFF) + 0.7152 * lin((c >> 8) & 0xFF) + 0.0722 * lin(c & 0xFF);
+    };
+    const double la = lum(a), lb = lum(b);
+    return (std::max(la, lb) + 0.05) / (std::min(la, lb) + 0.05);
+}
+
 std::string switching_text(double elapsed_s, double timeout_s)
 {
     double e = std::max(0.0, elapsed_s);
