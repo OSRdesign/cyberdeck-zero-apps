@@ -1,0 +1,77 @@
+title Cassette bound to the controller (CASSETTE_DEMO=1: the scripted sound system, a generated tone): REC, STOP, the list, EDIT (the trim page) to two splits, SAVE AS NEW FILES writes -1, -2, -3 (build.sh checks the files)
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO 1
+env CASSETTE_DEMO_HOME demo-home
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 1500
+@320x480 expect text "WAV 48k"
+@320x480 expect notext "TAKE 001"
+expect text "CARD"
+expect text "SOFT"
+expect notext "No sound input found. Plug in a USB sound card or headset."
+shot idle
+tap "REC"
+wait 3300
+shot recording
+@320x480 expect text "WAV 48k"
+@320x480 expect notext "TAKE 001"
+tap "STOP"
+wait 1000
+@320x480 expect text "WAV 48k"
+@320x480 expect notext "TAKE 001"
+say STOP closed the take; the new take stays loaded on the cassette (no load animation)
+key l
+wait 700
+expect text "Take 001"
+shot list
+tap "EDIT"
+wait 1500
+expect text "TAKE 001"
+shot trim-open
+key right
+key right
+key right
+key right
+key right
+wait 300
+tap "SPLIT"
+wait 400
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+wait 300
+tap "SPLIT"
+wait 500
+expect text "SPLIT"
+expect notext "REMOVE"
+shot trim-two-splits
+tap "SAVE"
+wait 700
+expect text "SAVE AS NEW FILES"
+shot save-box
+tap "SAVE AS NEW FILES"
+wait 2000
+expect notext "SAVE AS NEW FILES"
+key esc
+wait 1000
+expect text "Take 001"
+expect text "Take 001-1"
+expect text "Take 001-2"
+shot list-after-save
+key down
+key down
+key down
+wait 600
+expect text "Take 001-3"
+shot list-after-save-end
+expect notext "LAYOUT FAIL"
+expect noquit

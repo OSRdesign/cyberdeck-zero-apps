@@ -1,0 +1,17 @@
+title square screen, recorder idle with Take 006 loaded
+sizes 720x720
+ppmm 800
+env CASSETTE_DEMO idle
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot idle
+expect esc
+expect text "CARD"
+expect text "SOFT"
+expect text "WAV 48k"
+expect notext "TAKE 006"
+expect text "12 h 40 left"
+expect notext "OPEN"
+expect notext "LAYOUT FAIL"
+expect noquit

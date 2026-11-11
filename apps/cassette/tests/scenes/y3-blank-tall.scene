@@ -1,0 +1,19 @@
+title Cassette blank cassette at 480x800: idle, REC only starts the hubs (the label stays as it is), LOAD frame at 190 ms
+sizes 480x800
+env CASSETTE_DEMO notakes
+env CASSETTE_LAYOUT_CHECK 1
+env CASSETTE_ANIM_TICKS 19
+env CASSETTE_LOAD_STEP_MS 10
+env CASSETTE_ANIM_FPS 60
+wait 500
+expect notext "OPEN"
+shot blank-tall-idle
+expect notext "LAYOUT FAIL"
+key r
+wait 300
+expect text "PAUSE"
+shot blank-tall-rec
+expect notext "LAYOUT FAIL"
+key x
+wait 300
+expect noquit

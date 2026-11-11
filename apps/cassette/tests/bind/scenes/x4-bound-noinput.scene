@@ -1,0 +1,17 @@
+title Cassette bound (CASSETTE_DEMO=1, CASSETTE_DEMO_CARD=none): no card at all: the no sound input page, REC dimmed, no CARD stepper
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO 1
+env CASSETTE_DEMO_HOME demo-home
+env CASSETTE_DEMO_CARD none
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 1200
+expect text "No sound input found. Plug in a USB sound card or headset."
+expect notext "CARD"
+shot noinput
+tap "REC"
+wait 500
+expect text "No sound input found. Plug in a USB sound card or headset."
+expect notext "LAYOUT FAIL"
+expect noquit

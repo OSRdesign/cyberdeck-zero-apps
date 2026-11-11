@@ -1,0 +1,11 @@
+title Cassette recorder at 480x800 (its own density), Monitor on and running: MON lit
+sizes 480x800
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_MONITOR on
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot mon-lamp-on-tall
+expect text "MON"
+expect notext "LAYOUT FAIL"
+expect noquit

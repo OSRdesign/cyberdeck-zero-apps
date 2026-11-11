@@ -1,0 +1,18 @@
+title Cassette notice on the recorder page (T6d): Save failed: not enough space on the card replaces the info strip (landscape) or the counter row (narrow, a tap dismisses it); the layout check passes while it shows
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_NOTICE "Save failed: not enough space on the card"
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+expect text "Save failed: not enough space on the card"
+shot recorder-savefail
+expect notext "LAYOUT FAIL"
+expect text "SOFT"
+@320x480 tap "Save failed: not enough space on the card"
+@320x480 wait 300
+@320x480 expect notext "Save failed: not enough space on the card"
+@320x480 say a tap on the notice dismissed it
+@320x480 expect text "CARD"
+expect noquit

@@ -1,0 +1,19 @@
+title Cassette: the record countdown at 3 over the cassette window (board CassetteCount); a tap on the panel cancels it
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO countdown
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot countdown
+expect esc
+expect text "RECORDING IN"
+expect text "3"
+expect text "tap here, STOP or Esc cancels"
+expect notext "LAYOUT FAIL"
+tap "RECORDING IN"
+wait 300
+expect notext "RECORDING IN"
+say a tap on the countdown panel cancelled it (countdown_cancel)
+shot countdown-cancelled
+expect noquit

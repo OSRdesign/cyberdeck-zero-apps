@@ -1,0 +1,13 @@
+title Cassette holds the card directly while a sound server runs (T6e): the notice that other apps cannot use the card
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO recording
+env CASSETTE_DEMO_NOTICE "Other apps cannot use this card while Cassette records"
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+expect text "Other apps cannot use this card while Cassette records"
+shot direct-notice
+expect notext "LAYOUT FAIL"
+expect text "SOFT"
+expect noquit

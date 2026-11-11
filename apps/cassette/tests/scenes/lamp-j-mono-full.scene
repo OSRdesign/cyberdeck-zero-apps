@@ -1,0 +1,16 @@
+title portrait and square recorder, one channel at full scale (every step lit, the hold tick after the last one) with every meter lamp lit: the list keeps clear of the bar
+sizes 320x480 480x800 480x480 720x720
+ppmm 608
+env CASSETTE_DEMO long
+env CASSETTE_DEMO_MONITOR on
+env CASSETTE_DEMO_LIM on
+env CASSETTE_DEMO_LOWCUT on
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot lamp-j-mono-full
+expect text "MON"
+expect text "LIM"
+expect text "PEAK"
+expect notext "LAYOUT FAIL"
+expect noquit

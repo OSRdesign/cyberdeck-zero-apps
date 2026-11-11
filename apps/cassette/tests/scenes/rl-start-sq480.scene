@@ -1,0 +1,14 @@
+title trim page time ruler: the window starts at the take's start (marker 0:30, ZOOM 60 s): the first ruler label "0:00" begins at the window's left edge, inside the panel; every label and tick inside the frame, the label row under the waveform
+sizes 480x480
+ppmm 667
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_PAGE trim
+env CASSETTE_LAYOUT_CHECK 1
+env CASSETTE_DEMO_TRIM_MARKER 30000
+
+wait 600
+shot ruler-start
+expect text "ZOOM"
+expect text "SAVE"
+expect notext "LAYOUT FAIL"
+expect noquit

@@ -1,0 +1,17 @@
+title trim page, quiet take (loudest peak -18 dBFS): the waveform scale TRUE (chip "TRUE", low bars), then key F switches to FIT (chip "FIT x8", bars scaled in the main waveform and the overview)
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_PAGE trim
+env CASSETTE_LAYOUT_CHECK 1
+env CASSETTE_DEMO_TRIM_QUIET 0.12
+
+wait 600
+shot trim-true
+expect text "ZOOM"
+key f
+wait 300
+shot trim-fit-after-key
+expect text "SAVE"
+expect notext "LAYOUT FAIL"
+expect noquit

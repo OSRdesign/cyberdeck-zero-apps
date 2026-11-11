@@ -1,0 +1,12 @@
+title Cassette state (PLAY/PAUSE key, hubs, meter): a recording paused: REC and PAUSE latched, the hubs still
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO paused
+env CASSETTE_ANIM_TICKS 2
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot state-rec-paused
+expect text "PAUSE"
+expect notext "LAYOUT FAIL"
+expect noquit

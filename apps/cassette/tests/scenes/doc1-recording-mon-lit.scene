@@ -1,0 +1,13 @@
+title Cassette: recording with the MON lamp lit (Monitor on and running), for the user guide (docs/doc-images.tsv)
+sizes 480x320 640x480
+ppmm 608
+env CASSETTE_DEMO recording
+env CASSETTE_DEMO_MONITOR on
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot recording-mon-lit
+expect text "MON"
+expect text "SOFT"
+expect notext "LAYOUT FAIL"
+expect noquit

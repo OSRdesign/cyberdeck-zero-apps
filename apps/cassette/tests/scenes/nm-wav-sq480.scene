@@ -1,0 +1,18 @@
+title Cassette WAV with a 24-character name with spaces (Morning walk with my dog): the info box beside the counter shows the codec (WAV 48k) and the time left, never the name; the label holds only the name, up to two lines, no SIDE A, no codec text
+sizes 480x480
+ppmm 667
+env CASSETTE_DEMO recording
+env CASSETTE_DEMO_CODEC wav
+env CASSETTE_DEMO_NAME "Morning walk with my dog"
+env CASSETTE_DEMO_LEFT "955 h"
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot name-wav-sq480
+expect esc
+expect text "WAV 48k"
+expect text "955 h left"
+expect notext "TAKE 007"
+expect notext "SIDE A"
+expect notext "LAYOUT FAIL"
+expect noquit

@@ -1,0 +1,15 @@
+title Cassette notice on the settings page (T6d): Saved 3 new files replaces the 'more below' line (landscape) or a strip at the bottom of the list (narrow); the layout check passes while it shows
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_NOTICE "Saved 3 new files"
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key s
+wait 400
+expect text "Saved 3 new files"
+shot settings-saved
+expect notext "LAYOUT FAIL"
+expect text "Input"
+expect noquit

@@ -1,0 +1,32 @@
+title Cassette bound (CASSETTE_DEMO=1), square screen: a 6 s take on the Edit (trim) page, ZOOM in once, PLAY: the waveform scrolls under the marker with its bars on the take's grid (each bar keeps its height as it moves), the marker followed smoothly, the time ruler inside the panel
+sizes 720x720
+ppmm 800
+env CASSETTE_DEMO 1
+env CASSETTE_DEMO_HOME demo-home
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 1500
+expect text "SOFT"
+tap "REC"
+wait 6300
+tap "STOP"
+wait 1000
+key l
+wait 700
+expect text "Take 001"
+tap "EDIT"
+wait 1500
+expect text "TAKE 001"
+key up
+wait 500
+shot trim-zoomed
+key space
+wait 1200
+shot trim-playing-a
+wait 300
+shot trim-playing-b
+expect notext "LAYOUT FAIL"
+key esc
+wait 800
+expect text "Take 001"
+expect noquit

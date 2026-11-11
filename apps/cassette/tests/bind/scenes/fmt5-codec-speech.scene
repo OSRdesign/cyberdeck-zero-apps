@@ -1,0 +1,53 @@
+title Cassette bound (16 kHz speech headset): sizes at 16 kHz; Opus chosen with the codec row, its Bit rate row says so; the Bit rate picker lists 16 to 128 kbps with the speech and music hints
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO 1
+env CASSETTE_DEMO_HOME demo-home
+env CASSETTE_DEMO_CARD speech
+env CASSETTE_DEMO_CODECS both
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 1500
+key s
+wait 500
+key down
+key down
+key down
+key down
+key enter
+wait 500
+expect text "Sizes for 16 kHz, 16-bit, this card"
+shot picker-top
+expect notext "LAYOUT FAIL"
+key down
+key down
+key enter
+wait 500
+expect text "Opus"
+shot settings-opus
+expect notext "LAYOUT FAIL"
+key down
+key down
+key down
+key down
+key down
+key down
+wait 300
+expect text "Bit rate"
+expect text "32 kbps"
+shot settings-opus-rows
+expect notext "LAYOUT FAIL"
+key enter
+wait 500
+expect text "Sizes for Opus, 16 kHz, this card"
+shot bitrate-picker
+expect notext "LAYOUT FAIL"
+key down
+key down
+key down
+key down
+wait 300
+expect text "128 kbps"
+shot bitrate-bottom
+expect notext "LAYOUT FAIL"
+expect noquit

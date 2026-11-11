@@ -1,0 +1,21 @@
+title Cassette (deck, 640x480 at 11.3 px/mm): settings, rows of the toolkit ROW (79 px), the top and scrolled; a drag from a label scrolls
+sizes 640x480
+ppmm 1130
+env CASSETTE_DEMO idle
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key s
+wait 400
+shot deck-settings
+expect notext "LAYOUT FAIL"
+scrollmark
+dragon "Codec" -0.2
+expect scrolled
+drag 0.5 0.8 0.5 0.15
+drag 0.5 0.8 0.5 0.15
+drag 0.5 0.8 0.5 0.15
+wait 500
+shot deck-settings-scrolled
+expect notext "LAYOUT FAIL"
+expect noquit

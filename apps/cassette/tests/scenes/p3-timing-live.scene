@@ -1,0 +1,10 @@
+title Cassette: the recorder's whole cost while recording: the hubs at 20 fps plus a moving level and the counter updated 30 times a second (CASSETTE_DEMO_LIVE=1, as the controller will)
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO recording
+env CASSETTE_DEMO_LIVE 1
+env CASSETTE_TIMING 1
+
+wait 11000
+shot timing-live
+expect noquit

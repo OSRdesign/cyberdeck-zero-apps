@@ -1,0 +1,12 @@
+title Cassette playing at 480x800 (its own density) with Monitor on: MON drawn but dark
+sizes 480x800
+env CASSETTE_DEMO playing
+env CASSETTE_DEMO_MONITOR on
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot mon-lamp-playing-tall
+expect text "MON"
+expect text "PLAY"
+expect notext "LAYOUT FAIL"
+expect noquit

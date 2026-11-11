@@ -1,0 +1,87 @@
+title Cassette bound (a 16-bit only card, both libraries): WAV and FLAC have no Bit depth row (one depth, nothing to choose; never a dimmed 24-bit), Opus brings the Bit rate row back
+sizes 480x320 320x480 720x720
+ppmm 608
+env CASSETTE_DEMO 1
+env CASSETTE_DEMO_HOME demo-home
+env CASSETTE_DEMO_CARD level
+env CASSETTE_DEMO_CODECS both
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 1500
+key s
+wait 500
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 300
+expect text "Sample rate"
+expect text "Record timer"
+expect notext "Bit depth"
+expect notext "24-bit"
+shot settings-wav
+expect notext "LAYOUT FAIL"
+key esc
+wait 300
+key s
+wait 500
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 500
+key down
+key enter
+wait 500
+expect text "FLAC"
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 300
+expect text "Record timer"
+expect notext "Bit depth"
+expect notext "24-bit"
+shot settings-flac
+expect notext "LAYOUT FAIL"
+key esc
+wait 300
+key s
+wait 500
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 500
+key down
+key enter
+wait 500
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 300
+expect text "Bit rate"
+expect text "32 kbps"
+expect notext "Bit depth"
+shot settings-opus
+expect notext "LAYOUT FAIL"
+key enter
+wait 500
+expect text "Sizes for Opus, 48 kHz, this card"
+shot bitrate-picker
+expect notext "LAYOUT FAIL"
+expect noquit

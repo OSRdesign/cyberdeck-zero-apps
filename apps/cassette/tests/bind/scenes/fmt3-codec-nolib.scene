@@ -1,0 +1,35 @@
+title Cassette bound (both libraries missing): FLAC and Opus rows dimmed with 'not installed'; WAV works
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO 1
+env CASSETTE_DEMO_HOME demo-home
+env CASSETTE_DEMO_CARD level
+env CASSETTE_DEMO_CODECS none
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 1500
+key s
+wait 500
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 500
+expect text "FLAC not installed (libflac14)"
+expect text "Opus not installed (libopusenc0)"
+shot picker-top
+expect notext "LAYOUT FAIL"
+key down
+key enter
+wait 300
+expect text "Not available: FLAC not installed (libflac14)"
+shot picker-notice
+expect notext "LAYOUT FAIL"
+key up
+key enter
+wait 500
+expect text "WAV"
+expect notext "LAYOUT FAIL"
+expect noquit

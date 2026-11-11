@@ -1,0 +1,17 @@
+title square screen, a notice replaces the counter row (a tap dismisses it)
+sizes 480x480
+ppmm 667
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_NOTICE "Saved 3 new files"
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+expect text "Saved 3 new files"
+shot notice
+expect notext "LAYOUT FAIL"
+expect text "SOFT"
+tap "Saved 3 new files"
+wait 300
+expect notext "Saved 3 new files"
+expect text "CARD"
+expect noquit

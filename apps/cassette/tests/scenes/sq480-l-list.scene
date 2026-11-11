@@ -1,0 +1,20 @@
+title square screen, the recordings list
+sizes 480x480
+ppmm 667
+env CASSETTE_DEMO idle
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key l
+wait 400
+expect text "Take 007"
+expect text "Take 006"
+expect text "RENAME"
+expect text "EDIT"
+expect text "DELETE"
+shot list
+expect notext "LAYOUT FAIL"
+key esc
+wait 300
+expect text "SOFT"
+expect noquit

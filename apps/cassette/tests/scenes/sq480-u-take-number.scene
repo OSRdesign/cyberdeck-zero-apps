@@ -1,0 +1,88 @@
+title square screen: Cassette: Take number page (synthetic): the row opens it; -1/+1, -10/+10, -100/+100 steppers (keys: Down picks a line, Left/Right press the left/right button), Reset to 1, Set (Enter), Esc cancels
+sizes 480x480
+ppmm 667
+env CASSETTE_DEMO idle
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key s
+wait 300
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 300
+shot settings-take-number-row
+expect text "Take number"
+expect text "Next: 007"
+expect notext "LAYOUT FAIL"
+key right
+wait 300
+shot take-number-page
+expect text "007"
+expect text "Reset to 1"
+expect text "+100"
+expect notext "LAYOUT FAIL"
+key down
+key down
+key right
+wait 200
+expect text "008"
+key down
+key right
+wait 200
+expect text "018"
+key down
+key right
+wait 200
+expect text "118"
+shot take-number-stepped
+expect notext "LAYOUT FAIL"
+key left
+key up
+key left
+key up
+key left
+wait 200
+expect text "007"
+key esc
+wait 300
+expect text "Next: 007"
+say Esc closed the page and nothing was applied (no setting_number)
+tap "Take number"
+wait 300
+key down
+key down
+key right
+wait 200
+expect text "008"
+key up
+key right
+wait 300
+expect text "Next: 008"
+say Set applied 8 (setting_number takenum 8) and the row shows Next: 008
+tap "Take number"
+wait 300
+key down
+key left
+wait 300
+expect text "001"
+shot take-number-reset
+expect notext "LAYOUT FAIL"
+key enter
+wait 300
+expect text "Next: 001"
+say Reset to 1 then Enter (Set) applied 1 (setting_number takenum 1)
+expect notext "LAYOUT FAIL"
+expect noquit

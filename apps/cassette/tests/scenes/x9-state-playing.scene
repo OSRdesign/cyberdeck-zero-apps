@@ -1,0 +1,13 @@
+title Cassette state (PLAY/PAUSE key, hubs, meter): a take playing: PLAY latched, both hubs counterclockwise (150 degrees a second), the played level on L and R
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO playing
+env CASSETTE_ANIM_TICKS 2
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot state-playing
+expect text "PLAY"
+expect notext "PAUSE"
+expect notext "LAYOUT FAIL"
+expect noquit

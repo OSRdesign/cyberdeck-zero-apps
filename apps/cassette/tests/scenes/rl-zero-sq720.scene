@@ -1,0 +1,13 @@
+title trim page time ruler at the very start (marker 0:00, ZOOM 60 s): the window reaches 30 s before the take; the ticks before it have no label, "0:00" sits under the marker, every label inside the panel
+sizes 720x720
+ppmm 800
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_PAGE trim
+env CASSETTE_LAYOUT_CHECK 1
+env CASSETTE_DEMO_TRIM_MARKER 0
+
+wait 600
+shot ruler-zero
+expect text "ZOOM"
+expect notext "LAYOUT FAIL"
+expect noquit

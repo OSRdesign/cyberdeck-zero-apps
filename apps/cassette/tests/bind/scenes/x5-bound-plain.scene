@@ -1,0 +1,22 @@
+title Cassette bound (CASSETTE_DEMO=1, CASSETTE_DEMO_CARD=plain): a card without a level control: SOFT takes the full width, Settings without Input level and Auto gain
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO 1
+env CASSETTE_DEMO_HOME demo-home
+env CASSETTE_DEMO_CARD plain
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 1500
+expect notext "CARD"
+expect text "SOFT"
+shot plain-card
+key s
+wait 500
+expect text "Record timer"
+expect notext "Input level"
+expect notext "Auto gain (card)"
+shot plain-settings
+key esc
+wait 300
+expect notext "LAYOUT FAIL"
+expect noquit

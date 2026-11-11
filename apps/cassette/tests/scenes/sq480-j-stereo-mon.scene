@@ -1,0 +1,12 @@
+title square screen, a stereo card with the MON lamp lit
+sizes 480x480
+ppmm 667
+env CASSETTE_DEMO stereo
+env CASSETTE_DEMO_MONITOR on
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot stereo-mon
+expect text "MON"
+expect notext "LAYOUT FAIL"
+expect noquit

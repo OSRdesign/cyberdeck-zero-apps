@@ -1,0 +1,51 @@
+title Cassette keys on the recorder: R records, Space pauses, X stops, Space plays Take 006, comma and period jump 5 s (REW / FWD set to Jump 5 s), L and S open the pages
+sizes 480x320 320x480
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_REWFWD jump
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+expect text "PLAY"
+key r
+wait 300
+expect text "PAUSE"
+@480x320 expect text "TAKE 008 · 48k/16 WAV · 12 h 40 left"
+say R pressed REC (deck_key REC down, up, click): recording
+key space
+wait 300
+shot keys-paused
+key x
+wait 300
+expect text "PLAY"
+expect notext "PAUSE"
+say X pressed STOP
+key space
+wait 300
+@480x320 expect text "PLAYING TAKE 006 · 05:44 / 12:08"
+@320x480 expect text "05:44 / 12:08"
+say Space pressed PLAY/PAUSE: playing
+type ,
+wait 300
+@480x320 expect text "PLAYING TAKE 006 · 05:39 / 12:08"
+@320x480 expect text "05:39 / 12:08"
+type .
+type .
+wait 300
+@480x320 expect text "PLAYING TAKE 006 · 05:49 / 12:08"
+@320x480 expect text "05:49 / 12:08"
+say comma and period reached REW and FWD (jumps of 5 s)
+shot keys-playing
+key l
+wait 300
+expect text "RENAME"
+key esc
+wait 300
+key s
+wait 300
+expect text "Codec"
+key esc
+wait 300
+expect text "SOFT"
+expect notext "LAYOUT FAIL"
+expect noquit

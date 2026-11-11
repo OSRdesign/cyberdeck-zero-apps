@@ -1,0 +1,22 @@
+title Cassette at 480x800 (its own density): a long capture card name (synthetic) wraps in the Settings row and the Input picker, rows grow
+sizes 480x800
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_CARD "USB-C to 3.5mm Headphone Jack Audio Adapter Stereo"
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key s
+wait 300
+shot tall-longname-settings
+expect notext "LAYOUT FAIL"
+tap "Input"
+wait 300
+expect text "USB-C to 3.5mm Headphone Jack Audio Adapter Stereo"
+expect text "USB Headset"
+shot tall-longname-picker
+expect notext "LAYOUT FAIL"
+tap "USB Headset"
+wait 300
+expect text "Input"
+say the picker took the second card (setting_choice input 1)
+expect noquit

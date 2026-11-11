@@ -1,0 +1,11 @@
+title Cassette recorder, a card without a playback side: no Monitor rows, no MON lamp
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot mon-lamp-none
+expect notext "MON"
+expect notext "LAYOUT FAIL"
+expect noquit

@@ -1,0 +1,42 @@
+title Cassette bound (studio input): the Bit depth picker offers 16-bit and 24-bit with sizes per minute; 24-bit chosen, the row follows
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO 1
+env CASSETTE_DEMO_HOME demo-home
+env CASSETTE_DEMO_CARD rich
+env CASSETTE_DEMO_CODECS both
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 1500
+key s
+wait 500
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 500
+expect text "24-bit"
+expect text "8.6 MB/min"
+expect text "Sizes for WAV, 48 kHz, this card"
+shot picker-top
+expect notext "LAYOUT FAIL"
+key down
+key enter
+wait 800
+expect text "24-bit"
+shot settings-24
+expect notext "LAYOUT FAIL"
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 500
+shot picker-current-24
+expect notext "LAYOUT FAIL"
+expect noquit

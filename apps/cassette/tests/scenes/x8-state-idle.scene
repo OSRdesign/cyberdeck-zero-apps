@@ -1,0 +1,13 @@
+title Cassette state (PLAY/PAUSE key, hubs, meter): idle: PLAY not latched, the hubs still, the live INPUT level on the meter
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_ANIM_TICKS 2
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot state-idle
+expect text "PLAY"
+expect notext "PAUSE"
+expect notext "LAYOUT FAIL"
+expect noquit

@@ -1,0 +1,17 @@
+title Cassette FLAC with a 24-character name with spaces (Morning walk with my dog): the info box beside the counter shows the codec (FLAC 48k) and the time left, never the name; the label holds only the name, up to two lines, no SIDE A, no codec text
+sizes 800x480 480x800
+env CASSETTE_DEMO recording
+env CASSETTE_DEMO_CODEC flac
+env CASSETTE_DEMO_NAME "Morning walk with my dog"
+env CASSETTE_DEMO_LEFT "955 h"
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot name-flac-other
+expect esc
+@320x480,480x800 expect text "FLAC 48k"
+@320x480,480x800 expect text "955 h left"
+@320x480,480x800 expect notext "TAKE 007"
+expect notext "SIDE A"
+expect notext "LAYOUT FAIL"
+expect noquit

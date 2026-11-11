@@ -1,0 +1,26 @@
+title Cassette: deleting the last (loaded) take brings the blank cassette back at once: no name on the label, no animation; the strip names the take REC would write next
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO onetake
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+expect text "Take 006"
+key l
+wait 400
+key delete
+wait 300
+expect text "Delete Take 006?"
+key tab
+wait 200
+key enter
+wait 300
+shot blank-delete-list
+key esc
+wait 300
+expect notext "OPEN"
+expect notext "Take 006"
+@480x320 expect text "TAKE 008 · 48k/16 WAV · 12 h 40 left"
+shot blank-after-delete
+expect notext "LAYOUT FAIL"
+expect noquit

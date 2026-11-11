@@ -1,0 +1,9 @@
+# The files each bound scene must leave in its demo home (<out>/<scene>/<WxH>/runtime/applaunch/demo-home/Recordings),
+# checked by tests/bind/check_scene_files.sh after the scenes (build.sh host). One line: <scene> <glob> [<glob> ...]; a|b accepts either
+# (the original take: a dated name, or nodate while the clock is not set).
+x1-bound-take take_001_*[0-9][0-9][0-9][0-9].wav|take_001_nodate.wav take_001_*-1.wav take_001_*-2.wav take_001_*-3.wav
+x2-bound-countdown take_001_*[0-9][0-9][0-9][0-9].wav|take_001_nodate.wav
+x3-bound-unplug take_001_*[0-9][0-9][0-9][0-9].wav|take_001_nodate.wav
+x6-bound-replace take_001_*-1.wav take_001_*-2.wav take_001_*-3.wav
+x7-bound-speech take_001_*[0-9][0-9][0-9][0-9].wav|take_001_nodate.wav
+x8-bound-trim-play take_001_*[0-9][0-9][0-9][0-9].wav|take_001_nodate.wav

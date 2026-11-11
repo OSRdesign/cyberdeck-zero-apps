@@ -1,0 +1,21 @@
+title Cassette LOAD animation, frame 4 of 5 (420 ms): the new cassette (Take 007) falls in from the top, its label still blank
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_ANIM_TICKS 42
+env CASSETTE_ANIM_FPS 60
+env CASSETTE_LOAD_STEP_MS 10
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key l
+wait 400
+key up
+wait 200
+key l
+wait 1300
+shot load-t420ms
+@480x320 expect text "TAKE 006 · 48k/16 WAV · 12 h 40 left"
+expect notext "Take 007"
+expect notext "LAYOUT FAIL"
+expect noquit

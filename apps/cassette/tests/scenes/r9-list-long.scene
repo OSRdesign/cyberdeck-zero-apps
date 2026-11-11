@@ -1,0 +1,19 @@
+title Cassette: the recordings list with names that wrap (24 character prefixes with spaces, one word with no space): the row grows, no ellipsis, the second row (a long one) selected
+sizes 320x480 480x320 640x480 480x800 480x480 720x720
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_LIST_LONG 1
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key l
+wait 400
+expect text "Take 007"
+expect text "Field recording of birds 006"
+expect text "Interview with the mayor 005"
+@320x480,640x480,480x800,480x480,720x720 expect text "ABCDEFGHIJKLMNOPQRSTUVWX004"
+shot r9-list-long
+expect notext "LAYOUT FAIL"
+key esc
+wait 300
+expect noquit

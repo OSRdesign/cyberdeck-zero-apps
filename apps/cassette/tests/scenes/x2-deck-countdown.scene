@@ -1,0 +1,11 @@
+title Cassette (deck, 640x480 at 11.3 px/mm): the record countdown at the deck density; every control at least the toolkit touch target (79 px)
+sizes 640x480
+ppmm 1130
+env CASSETTE_DEMO countdown
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot deck-countdown
+expect esc
+expect notext "LAYOUT FAIL"
+expect noquit

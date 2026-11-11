@@ -1,0 +1,22 @@
+title square screen: Cassette: SAVE on the trim page opens the save box (board CassetteSave): what is written, the files, SAVE AS NEW FILES, REPLACE ORIGINAL, CANCEL
+sizes 720x720
+ppmm 800
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_PAGE trim
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+tap "SAVE"
+wait 400
+expect text "SAVE AS NEW FILES"
+expect text "REPLACE ORIGINAL"
+expect text "CANCEL"
+expect text "take_006_20261108-1105-1.wav"
+expect text "Keep 02:58.7 to 10:28.7, cut at 2 splits: 3 files."
+shot save
+expect notext "LAYOUT FAIL"
+tap "CANCEL"
+wait 300
+expect notext "SAVE AS NEW FILES"
+say CANCEL closed the box (save_choose cancel)
+expect noquit

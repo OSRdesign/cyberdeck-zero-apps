@@ -1,0 +1,14 @@
+title trim page, loud take opened in FIT: chip "FIT x1", bars as in TRUE (the gain is 0.9 / peak, never taller than the panel)
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_PAGE trim
+env CASSETTE_LAYOUT_CHECK 1
+env CASSETTE_DEMO_WAVE_FIT 1
+
+wait 600
+shot trim-loud-fit
+expect text "ZOOM"
+expect text "SAVE"
+expect notext "LAYOUT FAIL"
+expect noquit

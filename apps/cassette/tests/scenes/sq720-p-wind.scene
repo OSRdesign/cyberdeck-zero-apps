@@ -1,0 +1,10 @@
+title square screen, REW scan badge
+sizes 720x720
+ppmm 800
+env CASSETTE_DEMO wind
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot wind
+expect notext "LAYOUT FAIL"
+expect noquit

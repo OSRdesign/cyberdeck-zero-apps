@@ -1,0 +1,12 @@
+title square screen, no sound input found
+sizes 720x720
+ppmm 800
+env CASSETTE_DEMO noinput
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+shot noinput
+expect text "No sound input found. Plug in a USB sound card or headset."
+expect notext "CARD"
+expect notext "LAYOUT FAIL"
+expect noquit

@@ -1,0 +1,48 @@
+title square screen: Cassette: the Sample rate and Bit rate pickers (studio input, Opus chosen: 44.1 and 96 kHz dimmed)
+sizes 480x480
+ppmm 667
+env CASSETTE_DEMO 1
+env CASSETTE_DEMO_HOME demo-home
+env CASSETTE_DEMO_CARD rich
+env CASSETTE_DEMO_CODECS both
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 1500
+key s
+wait 500
+shot settings
+expect notext "LAYOUT FAIL"
+key down
+key down
+key down
+key down
+key enter
+wait 500
+key down
+key down
+key enter
+wait 800
+shot settings-opus
+expect notext "LAYOUT FAIL"
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 500
+shot rate-picker
+expect notext "LAYOUT FAIL"
+key esc
+wait 300
+key down
+key down
+key down
+key down
+key down
+key down
+key enter
+wait 500
+shot bitrate-picker
+expect notext "LAYOUT FAIL"
+expect noquit

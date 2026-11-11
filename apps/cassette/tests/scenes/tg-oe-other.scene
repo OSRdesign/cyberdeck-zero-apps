@@ -1,0 +1,19 @@
+title trim page tags above the lines: OUT just inside the right edge (6:13.6) under the chip, the selected split 2 at 6:12.6 behind the OUT tag, split 1 at 5:15.5 behind the IN edge tag: the tags and the chip cover every line (outline in the panel colour), OUT drops one row below the chip; TRUE, then key F: FIT x8
+sizes 480x800
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_PAGE trim
+env CASSETTE_LAYOUT_CHECK 1
+env CASSETTE_DEMO_TRIM_QUIET 0.12
+env CASSETTE_DEMO_TRIM_OUT 373600
+env CASSETTE_DEMO_TRIM_SPLITS 315500,372600
+env CASSETTE_DEMO_TRIM_SELECTED 1
+
+wait 600
+shot tags-oe-true
+expect text "ZOOM"
+key f
+wait 300
+shot tags-oe-fit
+expect text "SAVE"
+expect notext "LAYOUT FAIL"
+expect noquit

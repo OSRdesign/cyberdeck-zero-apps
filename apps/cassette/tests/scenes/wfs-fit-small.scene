@@ -1,0 +1,14 @@
+title trim page, silent take (peak under -60 dBFS) in FIT: no gain, chip "FIT", the bars stay flat
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_PAGE trim
+env CASSETTE_LAYOUT_CHECK 1
+env CASSETTE_DEMO_TRIM_QUIET 0.0005
+env CASSETTE_DEMO_WAVE_FIT 1
+
+wait 600
+shot trim-silent-fit
+expect text "ZOOM"
+expect notext "LAYOUT FAIL"
+expect noquit

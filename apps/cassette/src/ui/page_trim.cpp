@@ -1,0 +1,475 @@
+/*
+ * SPDX-License-Identifier: MIT
+ *
+ * Cassette UI: the trim and split page (boards CassetteTrim-480x320 / -320x480, note n7).
+ *
+ * The waveform window is ONE custom-drawn object: the overview strip of the whole take (amber = kept, grey = cut, cream
+ * IN / OUT ticks, green split lines, the white frame of the part shown below), the main bars of the window around the
+ * fixed red marker (bars outside IN..OUT grey; on the take's bar grid, wave_geom.hpp BarGrid, so a bar moves with the take
+ * and keeps its height while it scrolls), the IN / OUT handles (a chip at the edge when outside the window), the
+ * numbered split flags (the selected one solid white with a white-framed number), the marker with its triangle and
+ * the time ruler. Back to front (kWaveDrawOrder): the IN / OUT tags and the TRUE / FIT chip lie above every vertical line
+ * (IN / OUT lines, split lines, the marker), each with an outline in the panel colour; the split flag boxes come last. A
+ * sideways drag scrubs (UiActions::trim_scrub), a tap on a flag selects it (trim_select_split);
+ * flags and handles are never dragged (note n7).
+ */
+#include "pages.hpp"
+
+#include "paint.hpp"
+#include "theme.hpp"
+#include "ui_format.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
+
+namespace cassette {
+namespace ui {
+
+namespace {
+
+const char *kRemove = "REMOVE", *kSplit = "SPLIT";
+
+} // namespace
+
+TrimPage::TrimPage(lv_obj_t *parent, const Frame &frame, const UiActions &actions, const Nav &nav)
+    : PageBase(parent, frame), act_(actions), nav_(nav)
+{
+    const bool p = frame.portrait;
+    /* the steppers and the keys get the toolkit's touch target (the deck: 79 px); the main waveform takes what is left
+     * (it grows on a larger screen, it gives height back for taller controls) */
+    fit_ = trim_fit(frame.w, frame.h, frame.body_y, p, frame.target);
+    deck_body(root_, fit_);
+
+    /* the strip: sticker, TAKE, the in / out / length / splits text at the right */
+    const double sy = p ? 54 : 52, sw = p ? 288 : 448;
+    box(root_, fit_.x(16), fit_.y(sy), fit_.w(16, sw), fit_.h(sy, 28), col::kStrip, fit_.px(5));
+    sticker_ = make_sticker(root_, fit_, 44, 20, 4, 15, 4, 3 + 1.5, fit_.px(2));
+    lv_obj_set_pos(sticker_, fit_.x(24), fit_.y(sy + 4));
+    take_ = fit_label(root_, fit_, Face::Bold, p ? 14 : 15, col::kInk, 76, sy + 6, 80, 16, LV_TEXT_ALIGN_LEFT, 0.4);
+    info_ = fit_label(root_, fit_, Face::Medium, p ? 13 : 14, col::kInkSoft, 150, sy + 6, sw - 150 + 16 - 8, 16, LV_TEXT_ALIGN_RIGHT);
+
+    /* the waveform window and its parts */
+    framed_panel(root_, fit_, p ? DRect{16, 90, 288, 210} : DRect{16, 86, 448, 108}, col::kWindow);
+    {
+        /* wave_panel: the parts in screen px; the ruler's row (its font's line height) inside the frame, the main
+         * waveform above it */
+        const WavePanel g = wave_panel(fit_, p, lv_font_get_line_height(font(Face::Medium, fit_.px(9))));
+        over_x_ = g.over_x, over_y_ = g.over_y, over_w_ = g.over_w, over_h_ = g.over_h;
+        main_x_ = g.main_x, main_y_ = g.main_y, main_w_ = g.main_w, main_h_ = g.main_h;
+        pitch_ = g.pitch;
+        bar_w_ = g.bar_w;
+        main_n_ = g.bars;
+        main_win_w_ = g.bars_w;
+        ruler_ = g.ruler;
+    }
+    const DRect wr = p ? DRect{16, 90, 288, 210} : DRect{16, 86, 448, 108};
+    wave_ = lv_obj_create(root_);
+    plain(wave_);
+    lv_obj_add_flag(wave_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_pos(wave_, fit_.x(wr.x), fit_.y(wr.y));
+    lv_obj_set_size(wave_, fit_.w(wr.x, wr.w), fit_.h(wr.y, wr.h));
+    lv_obj_add_event_cb(wave_, wave_draw_cb, LV_EVENT_DRAW_MAIN, this);
+    lv_obj_add_event_cb(wave_, wave_event_cb, LV_EVENT_PRESSED, this);
+    lv_obj_add_event_cb(wave_, wave_event_cb, LV_EVENT_PRESSING, this);
+    lv_obj_add_event_cb(wave_, wave_event_cb, LV_EVENT_RELEASED, this);
+
+    /* ZOOM and POSITION */
+    const double ky = p ? 306 : 198;
+    const DRect zr = p ? DRect{16, ky, 142, 44} : DRect{16, ky, 220, 44};
+    const DRect pr = p ? DRect{162, ky, 142, 44} : DRect{244, ky, 220, 44};
+    zoom_ = std::make_unique<Stepper>(root_, fit_, zr, "ZOOM", p ? 15 : 17, Icon::Minus, Icon::Plus,
+                                      [this](int d) { if (act_.trim_zoom) act_.trim_zoom(d); });
+    pos_ = std::make_unique<Stepper>(root_, fit_, pr, "POSITION", p ? 15 : 17, Icon::Left, Icon::Right,
+                                     [this](int d) { nudge(d, false); });
+    if (p) {
+        box(root_, fit_.x(16), fit_.y(356), fit_.w(16, 288), fit_.h(356, 26), col::kStrip, fit_.px(5));
+        bottom_left_ = fit_label(root_, fit_, Face::Bold, 13, col::kInk, 24, 356, 150, 26, LV_TEXT_ALIGN_LEFT, 0.5);
+        bottom_right_ = fit_label(root_, fit_, Face::Bold, 13, col::kInk, 170, 356, 126, 26, LV_TEXT_ALIGN_RIGHT, 0.5);
+    }
+
+    /* the keys */
+    static const Icon icons[5] = {Icon::SetIn, Icon::SetOut, Icon::Scissors, Icon::Play, Icon::Check};
+    static const char *const names[5] = {"SET IN", "SET OUT", "SPLIT", "PLAY", "SAVE"};
+    for (int i = 0; i < 5; ++i) {
+        const DRect r = p ? DRect{16.0 + 59 * i, 392, 52, 64} : DRect{16.0 + 91 * i, 252, 84, 50};
+        const KeyType t = p ? KeyType{10, 1, 5} : KeyType{12, 1.5, 3};
+        keys_[i] = std::make_unique<PianoKey>(root_, fit_, r, t, [this, i](KeyEdge e) {
+            if (e != KeyEdge::Click) return;
+            switch (i) {
+            case 0: if (act_.trim_set_in) act_.trim_set_in(); break;
+            case 1: if (act_.trim_set_out) act_.trim_set_out(); break;
+            case 2:
+                if (vm_.selected_split >= 0) {
+                    if (act_.trim_remove_split) act_.trim_remove_split(vm_.selected_split);
+                } else if (act_.trim_split) {
+                    act_.trim_split();
+                }
+                break;
+            case 3: if (act_.trim_play) act_.trim_play(); break;
+            case 4: if (act_.trim_save) act_.trim_save(); break;
+            default: break;
+            }
+        });
+        keys_[i]->set(icons[i], names[i], i == 4 ? KeyLook::Green : KeyLook::Charcoal, true, false);
+    }
+
+    /* the notice: over the top strip, growing down into the gap above the waveform window */
+    NoticeSpec ns;
+    ns.x = fit_.x(16);
+    ns.y = fit_.y(sy);
+    ns.w = fit_.w(16, sw);
+    ns.h_min = fit_.h(sy, 28);
+    ns.h_max = std::max(ns.h_min, fit_.y(p ? 88 : 84) - fit_.y(sy));
+    ns.px = fit_.px(p ? 13 : 14);
+    ns.min_px = std::max(9, fit_.px(11));
+    ns.ls = ls_screen(0.4, fit_.s);
+    ns.pad = fit_.px(8);
+    notice_ = std::make_unique<NoticeBox>(root_, ns);
+}
+
+void TrimPage::set_notice(const std::string &text)
+{
+    const bool on = notice_->set(text);
+    show(sticker_, !on);
+    show(take_, !on);
+    show(info_, !on);
+}
+
+void TrimPage::update(const TrimVm &t)
+{
+    if (have_ && t == vm_) return; /* nothing changed */
+    have_ = true;
+    vm_ = t;
+    const bool p = frame_.portrait;
+    set_sticker(sticker_, t.sticker);
+    set_text(take_, t.take);
+    lv_obj_update_layout(take_);
+    {
+        const int tx = lv_obj_get_style_x(take_, LV_PART_MAIN) + text_width(lv_obj_get_style_text_font(take_, LV_PART_MAIN), t.take.c_str(),
+                                                         lv_obj_get_style_text_letter_space(take_, LV_PART_MAIN));
+        const int right = fit_.x(16 + (p ? 288 : 448) - 8);
+        lv_obj_set_x(info_, tx + fit_.px(8));
+        lv_obj_set_width(info_, std::max(10, right - tx - fit_.px(8)));
+        set_fitted(info_, Face::Medium, fit_.px(p ? 13 : 14), 0, std::max(9, fit_.px(10)),
+                   p ? trim_strip_narrow_top(t) : trim_strip_wide(t));
+    }
+    zoom_->set_value(fmt_zoom(t.span_ms));
+    pos_->set_value(p ? fmt_tenths_short(t.marker_ms) : fmt_tenths(t.marker_ms));
+    if (p) {
+        set_fitted(bottom_left_, Face::Bold, fit_.px(13), ls_screen(0.5, fit_.s), std::max(9, fit_.px(10)), trim_strip_narrow_left(t));
+        set_fitted(bottom_right_, Face::Bold, fit_.px(13), ls_screen(0.5, fit_.s), std::max(9, fit_.px(10)), trim_strip_narrow_right(t));
+    }
+    const bool sel = t.selected_split >= 0 && t.selected_split < static_cast<int>(t.splits.size());
+    keys_[2]->set(sel ? Icon::Remove : Icon::Scissors, sel ? kRemove : kSplit, sel ? KeyLook::Red : KeyLook::Charcoal, true, false);
+    keys_[3]->set(Icon::Play, "PLAY", KeyLook::Charcoal, true, t.playing);
+    /* the main bars: on the take's grid as they come (one per grid bar), or (no grid) resampled to the bars across */
+    main_bars_ = t.bar_frames > 0 ? resample_max(t.window_peaks, static_cast<int>(t.window_peaks.size()))
+                                  : resample_max(t.window_peaks, main_n_);
+    over_bars_ = resample_max(t.overview_peaks, bar_count(over_w_ + (pitch_ - bar_w_), pitch_));
+    lv_obj_invalidate(wave_);
+}
+
+void TrimPage::press(Command c)
+{
+    const bool sel = vm_.selected_split >= 0 && vm_.selected_split < static_cast<int>(vm_.splits.size());
+    switch (c) {
+    case SetIn: if (act_.trim_set_in) act_.trim_set_in(); break;
+    case SetOut: if (act_.trim_set_out) act_.trim_set_out(); break;
+    case Split:
+        if (sel) {
+            if (act_.trim_remove_split) act_.trim_remove_split(vm_.selected_split);
+        } else if (act_.trim_split) {
+            act_.trim_split();
+        }
+        break;
+    case Play: if (act_.trim_play) act_.trim_play(); break;
+    case Save: if (act_.trim_save) act_.trim_save(); break;
+    case ZoomIn: if (act_.trim_zoom) act_.trim_zoom(1); break;
+    case ZoomOut: if (act_.trim_zoom) act_.trim_zoom(-1); break;
+    case ToggleFit: if (act_.trim_wave_fit) act_.trim_wave_fit(!vm_.fit); break;
+    case NextFlag:
+        if (!vm_.splits.empty() && act_.trim_select_split)
+            act_.trim_select_split(sel ? (vm_.selected_split + 1) % static_cast<int>(vm_.splits.size()) : 0);
+        break;
+    }
+}
+
+void TrimPage::nudge(int dir, bool shift)
+{
+    if (act_.trim_nudge) act_.trim_nudge(dir * nudge_step_ms(shift));
+}
+
+void TrimPage::wave_draw_cb(lv_event_t *e)
+{
+    auto *self = static_cast<TrimPage *>(lv_event_get_user_data(e));
+    self->draw_wave(lv_event_get_layer(e));
+}
+
+int TrimPage::main_bars_w() const
+{
+    return main_win_w_;
+}
+
+double TrimPage::bars_across() const
+{
+    return ui::bars_across(main_win_w_, pitch_);
+}
+
+lv_area_t TrimPage::mode_chip_area() const
+{
+    const double s = fit_.s;
+    auto px = [s](double v) { return std::max(1, static_cast<int>(std::lround(v * s))); };
+    const std::string label = wave_chip_text(vm_.fit, vm_.fit_gain);
+    const int w = text_width(font(Face::Bold, px(11)), label.c_str(), 0) + 2 * px(6);
+    const int right = main_x_ + main_bars_w();
+    return area(right - w, main_y_ + px(2), w, px(16));
+}
+
+void TrimPage::draw_wave(lv_layer_t *layer)
+{
+    const TrimVm &t = vm_;
+    const double s = fit_.s;
+    auto px = [s](double v) { return std::max(1, static_cast<int>(std::lround(v * s))); };
+    const bool p = frame_.portrait;
+    const std::int64_t len = std::max<std::int64_t>(1, t.length_ms);
+
+    const float gain = t.fit ? t.fit_gain : 0.0f; /* FIT: one gain for the take, for both waveforms */
+    const int mn = static_cast<int>(main_bars_.size());
+    const int mw = main_win_w_;
+    const WaveWindow win = wave_window(t.marker_ms, t.span_ms, main_x_, mw);
+    const int top = main_y_ + px(2), bottom = main_y_ + main_h_ - px(2);
+
+    /* the IN / OUT tags (tag_span, tag_rows): placed here, drawn above every vertical line (kWaveDrawOrder) */
+    const lv_font_t *chip_f = font(Face::Bold, px(11));
+    const int chip_h = px(16), chip_pad = px(6), tri = px(6), row_gap = px(2), halo = px(2);
+    const lv_area_t mode = mode_chip_area();
+    struct Tag {
+        std::string label;
+        WaveEdge edge = WaveEdge::Inside;
+        int line_x = 0;
+        TagSpan span;
+    };
+    auto make_tag = [&](std::int64_t at, const char *name, bool is_out) {
+        Tag g;
+        g.edge = wave_edge(win, at);
+        g.line_x = static_cast<int>(std::lround(win.x_of(at)));
+        g.label = g.edge == WaveEdge::Inside ? std::string(name) : std::string(name) + " " + (p ? fmt_short(at) : fmt_tenths(at));
+        const int w = text_width(chip_f, g.label.c_str(), 0) + 2 * chip_pad + (g.edge == WaveEdge::Inside ? 0 : tri + px(3));
+        g.span = tag_span(g.edge, is_out, g.line_x, w, main_x_, main_x_ + mw, px(4));
+        return g;
+    };
+    const Tag in_tag = make_tag(t.in_ms, "IN", false), out_tag = make_tag(t.out_ms, "OUT", true);
+    const TagRows rows = tag_rows(in_tag.span, out_tag.span, TagSpan{mode.x1, mode.x2 + 1}, row_gap,
+                                  (bottom - top + row_gap) / (chip_h + row_gap));
+    auto draw_tag = [&](const Tag &g, int row) {
+        const int cx = g.span.x1, w = g.span.x2 - g.span.x1;
+        const int ctop = top + row * (chip_h + row_gap);
+        /* the outline in the panel colour: a line behind the tag stops short of it */
+        fill(layer, area(cx - halo, ctop - halo, w + 2 * halo, chip_h + 2 * halo), col::kWindow, px(3) + halo);
+        fill(layer, area(cx, ctop, w, chip_h), col::kChip, px(3));
+        const int tw = text_width(chip_f, g.label.c_str(), 0);
+        int tx = cx + chip_pad;
+        const int cy = ctop + chip_h / 2;
+        if (g.edge == WaveEdge::Left) {
+            triangle(layer, tx + tri, cy - tri / 2 - 1, tx, cy, tx + tri, cy + tri / 2 + 1, col::kChipText);
+            tx += tri + px(3);
+        }
+        const int lh = lv_font_get_line_height(chip_f);
+        text(layer, chip_f, g.label.c_str(), area(tx, cy - lh / 2, tw + 2, lh), col::kChipText);
+        if (g.edge == WaveEdge::Right) {
+            const int ax = tx + tw + px(3);
+            triangle(layer, ax, cy - tri / 2 - 1, ax + tri, cy, ax, cy + tri / 2 + 1, col::kChipText);
+        }
+    };
+
+    for (WaveLayer l : kWaveDrawOrder) {
+        switch (l) {
+        case WaveLayer::Overview: {
+            /* the whole take */
+            const int ovn = static_cast<int>(over_bars_.size());
+            const int max_ov = over_h_ - px(2);
+            for (int i = 0; i < ovn; ++i) {
+                const double mid_t = (i + 0.5) * len / std::max(1, ovn);
+                const bool kept = mid_t >= t.in_ms && mid_t <= t.out_ms;
+                const int h = std::max(px(3), static_cast<int>(px(3) + fit_level(over_bars_[static_cast<std::size_t>(i)], gain) * (max_ov - px(3))));
+                const int x = over_x_ + static_cast<int>(std::lround(i * pitch_));
+                fill(layer, area(x, over_y_ + (over_h_ - h) / 2, std::max(1, static_cast<int>(std::lround(bar_w_))), h),
+                     kept ? col::kAmber : col::kWaveCut, 0, static_cast<lv_opa_t>(kept ? 255 : 140));
+            }
+            const int ow = std::max(1, static_cast<int>(std::lround(ovn * pitch_ - (pitch_ - bar_w_))));
+            auto ox = [&](std::int64_t tt) { return static_cast<int>(std::lround(overview_x(tt, len, over_x_, ow))); };
+            fill(layer, area(ox(t.in_ms), over_y_, px(2), over_h_), col::kChip, 0);
+            fill(layer, area(ox(t.out_ms) - px(2), over_y_, px(2), over_h_), col::kChip, 0);
+            for (std::int64_t sp : t.splits) fill(layer, area(ox(sp), over_y_, px(2), over_h_), col::kFlag, 0);
+            const std::int64_t a = t.marker_ms - t.span_ms / 2, b = a + t.span_ms;
+            const int x1 = ox(a) - px(2), x2 = std::max(ox(b) + px(2), x1 + px(8));
+            frame(layer, area(x1, over_y_ - px(2), x2 - x1, over_h_ + px(4)), col::kWhite, px(2), px(3));
+            break;
+        }
+        case WaveLayer::Bars: {
+            /* the window around the marker. On the take's grid (bar_frames > 0) each bar is drawn where its frames are, so
+             * it moves with the take and keeps its height; a bar at the window's edge is cut to it. */
+            const int max_m = main_h_ - px(2);
+            const int bw = std::max(1, static_cast<int>(std::lround(bar_w_)));
+            const bool grid = t.bar_frames > 0;
+            const double bar_ms = grid ? static_cast<double>(t.bar_frames) * 1000.0 / (t.rate ? t.rate : 48000) : 0.0;
+            for (int i = 0; i < mn; ++i) {
+                double x0, mid_t;
+                if (grid) {
+                    const std::int64_t k = t.bar_first + i;
+                    x0 = grid_bar_x(win, k, t.bar_frames, t.rate);
+                    mid_t = (static_cast<double>(k) + 0.5) * bar_ms;
+                } else {
+                    x0 = main_x_ + i * pitch_;
+                    mid_t = static_cast<double>(win.t_of(main_x_ + (i + 0.5) * pitch_));
+                }
+                if (mid_t < 0 || mid_t > len) continue;
+                const BarSpan sp = clip_bar(static_cast<int>(std::lround(x0)), bw, main_x_, main_x_ + mw);
+                if (sp.x2 <= sp.x1) continue;
+                const bool kept = mid_t >= t.in_ms && mid_t <= t.out_ms;
+                const int h = std::max(px(3), static_cast<int>(px(3) + fit_level(main_bars_[static_cast<std::size_t>(i)], gain) * (max_m - px(3))));
+                fill(layer, area(sp.x1, main_y_ + (main_h_ - h) / 2, sp.x2 - sp.x1, h), kept ? col::kAmber : col::kWaveCut, 0,
+                     static_cast<lv_opa_t>(kept ? 255 : 140));
+            }
+            break;
+        }
+        case WaveLayer::HandleLines:
+            for (const Tag *g : {&in_tag, &out_tag})
+                if (g->edge == WaveEdge::Inside) fill(layer, area(g->line_x - px(1), top, px(2), bottom - top), col::kChip, 0);
+            break;
+        case WaveLayer::SplitLines:
+            for (std::size_t i = 0; i < t.splits.size(); ++i) {
+                if (wave_edge(win, t.splits[i]) != WaveEdge::Inside) continue;
+                const int x = static_cast<int>(std::lround(win.x_of(t.splits[i])));
+                if (static_cast<int>(i) == t.selected_split) fill(layer, area(x, top, px(3), bottom - top), col::kWhite, 0);
+                else line(layer, x + px(1), top, x + px(1), bottom, px(2), col::kFlag, LV_OPA_COVER, false, px(4), px(4));
+            }
+            break;
+        case WaveLayer::PlayMarker: {
+            /* fixed in the middle */
+            const int mx = main_x_ + mw / 2;
+            fill(layer, area(mx, main_y_, px(2), main_h_), col::kMarker, 0);
+            triangle(layer, mx - px(4), main_y_ - px(2), mx + px(6), main_y_ - px(2), mx + px(1), main_y_ + px(5), col::kMarker);
+            break;
+        }
+        case WaveLayer::Tags:
+            draw_tag(in_tag, rows.in);
+            draw_tag(out_tag, rows.out);
+            break;
+        case WaveLayer::ModeChip: {
+            /* outlined (the tags are solid), TRUE or FIT xN; a tap toggles */
+            const std::string label = wave_chip_text(t.fit, t.fit_gain);
+            fill(layer, area(mode.x1 - halo, mode.y1 - halo, mode.x2 - mode.x1 + 1 + 2 * halo, mode.y2 - mode.y1 + 1 + 2 * halo),
+                 col::kWindow, px(3) + halo);
+            frame(layer, mode, col::kChip, std::max(1, px(1)), px(3));
+            const int lh = lv_font_get_line_height(chip_f);
+            text(layer, chip_f, label.c_str(), area(mode.x1, mode.y1 + (px(16) - lh) / 2, mode.x2 - mode.x1 + 1, lh), col::kChip,
+                 LV_TEXT_ALIGN_CENTER);
+            break;
+        }
+        case WaveLayer::FlagBoxes:
+            for (std::size_t i = 0; i < t.splits.size(); ++i) {
+                if (wave_edge(win, t.splits[i]) != WaveEdge::Inside) continue;
+                const int x = static_cast<int>(std::lround(win.x_of(t.splits[i])));
+                const std::string num = std::to_string(i + 1);
+                if (static_cast<int>(i) == t.selected_split) {
+                    const int w = px(22), h = px(18);
+                    lv_draw_rect_dsc_t d;
+                    lv_draw_rect_dsc_init(&d);
+                    d.radius = px(4);
+                    d.bg_color = lv_color_hex(col::kFlag);
+                    d.border_color = lv_color_hex(col::kWhite);
+                    d.border_width = px(2);
+                    const lv_area_t a = area(x - px(10), bottom - h, w, h);
+                    lv_draw_rect(layer, &d, &a);
+                    const lv_font_t *f = font(Face::Bold, px(12));
+                    const int lh = lv_font_get_line_height(f);
+                    text(layer, f, num.c_str(), area(a.x1, a.y1 + (h - lh) / 2, w, lh), col::kFlagText, LV_TEXT_ALIGN_CENTER);
+                } else {
+                    const int w = px(18), h = px(16);
+                    const lv_area_t a = area(x - px(8), bottom - h, w, h);
+                    fill(layer, a, col::kFlag, px(3));
+                    const lv_font_t *f = font(Face::Bold, px(11));
+                    const int lh = lv_font_get_line_height(f);
+                    text(layer, f, num.c_str(), area(a.x1, a.y1 + (h - lh) / 2, w, lh), col::kFlagText, LV_TEXT_ALIGN_CENTER);
+                }
+            }
+            break;
+        case WaveLayer::Ruler: {
+            /* the time ruler: its row inside the panel's frame (wave_panel), every label inside the window (ruler_labels) */
+            const lv_font_t *rf = font(Face::Medium, px(9));
+            const std::vector<RulerTick> ticks = ruler_ticks(win, 5);
+            std::vector<std::string> labs(ticks.size());
+            std::vector<int> widths(ticks.size(), 0);
+            for (std::size_t i = 0; i < ticks.size(); ++i) {
+                if (ticks[i].t < 0 || ticks[i].t > len) continue;
+                labs[i] = fmt_ruler(ticks[i].t);
+                widths[i] = text_width(rf, labs[i].c_str(), 0) + 1;
+            }
+            const std::vector<RulerLabel> placed = ruler_labels(ticks, widths, main_x_, main_x_ + mw, px(4));
+            for (std::size_t i = 0; i < ticks.size(); ++i) {
+                const int x = static_cast<int>(std::lround(ticks[i].x));
+                fill(layer, area(std::clamp(x, main_x_, main_x_ + mw - 1), ruler_.tick_y, 1, ruler_.tick_h), col::kWaveCut, 0);
+                if (!placed[i].shown) continue;
+                text(layer, rf, labs[i].c_str(), area(placed[i].x1, ruler_.label_y, placed[i].x2 - placed[i].x1, ruler_.label_h),
+                     col::kRuler, LV_TEXT_ALIGN_LEFT);
+            }
+            break;
+        }
+        }
+    }
+}
+
+void TrimPage::wave_event_cb(lv_event_t *e)
+{
+    auto *self = static_cast<TrimPage *>(lv_event_get_user_data(e));
+    lv_indev_t *indev = lv_indev_active();
+    if (!indev) return;
+    lv_point_t pt;
+    lv_indev_get_point(indev, &pt);
+    const int mw = self->main_bars_w();
+    const WaveWindow win = wave_window(self->press_marker_, self->vm_.span_ms, self->main_x_, mw);
+    switch (lv_event_get_code(e)) {
+    case LV_EVENT_PRESSED:
+        self->press_ = pt;
+        self->press_marker_ = self->vm_.marker_ms;
+        self->dragging_ = false;
+        {
+            /* the chip's touch target: its box grown by 6 design px all round (the box itself is 16 px high) */
+            const lv_area_t c = self->mode_chip_area();
+            const int g = std::max(1, static_cast<int>(std::lround(6 * self->fit_.s)));
+            self->chip_press_ = pt.x >= c.x1 - g && pt.x <= c.x2 + g && pt.y >= c.y1 - g && pt.y <= c.y2 + g;
+        }
+        break;
+    case LV_EVENT_PRESSING: {
+        const int dx = pt.x - self->press_.x;
+        if (self->chip_press_) break;
+        if (!self->dragging_ && std::abs(dx) >= self->fit_.px(8)) self->dragging_ = true;
+        if (self->dragging_ && self->act_.trim_scrub)
+            self->act_.trim_scrub(scrub_marker(win, self->press_marker_, dx, self->vm_.length_ms));
+        break;
+    }
+    case LV_EVENT_RELEASED:
+        if (self->chip_press_) {
+            self->chip_press_ = false;
+            const lv_area_t c = self->mode_chip_area();
+            const int g = std::max(1, static_cast<int>(std::lround(6 * self->fit_.s)));
+            if (pt.x >= c.x1 - g && pt.x <= c.x2 + g && pt.y >= c.y1 - g && pt.y <= c.y2 + g && self->act_.trim_wave_fit)
+                self->act_.trim_wave_fit(!self->vm_.fit);
+            break;
+        }
+        if (!self->dragging_) {
+            /* a tap: the flag under it (a 44 px wide target around each flag line) */
+            const WaveWindow now = wave_window(self->vm_.marker_ms, self->vm_.span_ms, self->main_x_, mw);
+            const int f = flag_at(now, self->vm_.splits, pt.x, self->fit_.px(22));
+            if (f >= 0 && self->act_.trim_select_split) self->act_.trim_select_split(f);
+        }
+        self->dragging_ = false;
+        break;
+    default: break;
+    }
+}
+
+} // namespace ui
+} // namespace cassette

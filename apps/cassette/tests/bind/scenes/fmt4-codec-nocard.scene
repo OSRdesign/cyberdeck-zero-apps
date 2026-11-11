@@ -1,0 +1,25 @@
+title Cassette bound (no sound input): no sizes, the footer says so; the codecs and presets still list in order; Sample rate is dimmed
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO 1
+env CASSETTE_DEMO_HOME demo-home
+env CASSETTE_DEMO_CARD none
+env CASSETTE_DEMO_CODECS both
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 1500
+key s
+wait 500
+key down
+key down
+key enter
+wait 500
+expect text "No sound input: sizes unknown"
+expect text "Codecs"
+shot picker-top
+expect notext "LAYOUT FAIL"
+key esc
+wait 300
+shot settings
+expect notext "LAYOUT FAIL"
+expect noquit

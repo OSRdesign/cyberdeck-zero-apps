@@ -1,0 +1,11 @@
+[Desktop Entry]
+# No X-Background: no background recording for now (plan 016, D10). The app owns the screen while it records;
+# leaving it stops the take safely.
+Name=Cassette
+Exec=/usr/share/APPLaunch/bin/cassette
+Terminal=false
+Icon=share/images/cassette.png
+Type=Application
+X-Fullscreen=true
+X-MinSize=480x320
+X-Portrait=320x480
