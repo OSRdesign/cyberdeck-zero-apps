@@ -1,0 +1,87 @@
+title Cassette MERGE TAKES on the recordings list: the five keys (LOAD, RENAME, EDIT, MERGE, DELETE); M enters merge mode with the selected take as number 1 (the takes that cannot join it dimmed with the reason); Enter drops it (nothing chosen: every take can be chosen) and chooses it again; three takes chosen in an order (006, 007, 004); M opens the merge box; DELETE ORIGINALS asks first (Esc goes back to the box); KEEP ORIGINALS shows the progress box; Esc stops the merge; a tap on a dimmed take says why; Esc leaves merge mode
+sizes 800x480 480x800
+env CASSETTE_DEMO idle
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key l
+wait 400
+expect text "LOAD"
+expect text "RENAME"
+expect text "EDIT"
+expect text "MERGE"
+expect text "DELETE"
+shot list-keys
+expect notext "LAYOUT FAIL"
+key m
+wait 300
+expect text "CANCEL"
+expect text "Different format: FLAC 44.1 kHz"
+expect notext "RENAME"
+shot mode-1
+expect notext "LAYOUT FAIL"
+key enter
+wait 300
+expect notext "Different format: FLAC 44.1 kHz"
+expect text "Merge · 0 takes"
+shot mode-0
+expect notext "LAYOUT FAIL"
+key enter
+wait 200
+key up
+wait 200
+key enter
+wait 200
+key down
+key down
+key down
+wait 200
+key enter
+wait 300
+expect text "Merge · 3 takes · 13:31 · about 77 MB"
+expect text "Different format: FLAC 44.1 kHz"
+shot mode-3
+expect notext "LAYOUT FAIL"
+key m
+wait 300
+expect text "Merge 3 takes?"
+expect text "take_008_20261111-1502.wav"
+expect text "13:31 · about 77 MB"
+expect text "KEEP ORIGINALS"
+shot merge-box
+expect notext "LAYOUT FAIL"
+tap "DELETE ORIGINALS"
+wait 300
+expect text "Delete the originals?"
+expect text "They are deleted only after the new file is written and synced."
+shot confirm-delete-originals
+expect notext "LAYOUT FAIL"
+key esc
+wait 300
+expect notext "Delete the originals?"
+expect text "KEEP ORIGINALS"
+say Esc answered no: the merge box stays
+key enter
+wait 300
+expect text "Merging... 37%"
+expect text "3 takes into take_008_20261111-1502.wav"
+shot progress
+expect notext "LAYOUT FAIL"
+key esc
+wait 300
+expect notext "Merging... 37%"
+expect text "Merge cancelled"
+shot cancelled
+expect notext "LAYOUT FAIL"
+tap "Different format: FLAC 44.1 kHz"
+wait 300
+expect text "Not available: Different format: FLAC 44.1 kHz"
+say a tap on a dimmed take says why and chooses nothing
+key esc
+wait 300
+expect text "RENAME"
+expect notext "Different format: FLAC 44.1 kHz"
+key esc
+wait 300
+expect text "SOFT"
+expect noquit

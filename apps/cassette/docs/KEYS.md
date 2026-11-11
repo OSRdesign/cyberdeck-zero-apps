@@ -41,6 +41,7 @@ does not change (it plays, pauses and resumes). The same at every screen size:
 | L | LOAD the selected take into the deck (the recorder shows, the take ready at 00:00, nothing playing) |
 | N | RENAME (the text box) |
 | T | EDIT (the Edit page: trim and split) |
+| M | MERGE: merge mode with the selected take chosen first (dimmed with fewer than two takes: a press says `Merging needs two takes`) |
 | Delete | DELETE (asks in the confirm box) |
 | S | the settings |
 | Esc | back to the recorder (a running preview stops) |
@@ -59,6 +60,19 @@ a blank cassette, with no name on the label, at once; PLAY is dimmed). LOAD over
 between two named cassettes. Keys and touches are ignored during the animation, except Esc, which ends the animation at once
 and then acts as usual.
 
+## Merge mode (the recordings list after MERGE)
+
+| Key | Does |
+|---|---|
+| Up / Down | move the highlight |
+| Enter | choose the highlighted take (it gets the next number) or drop it (the later ones move up); a dimmed take says why (`Not available: Different rate`) |
+| M | MERGE: the merge box, from two takes on (with fewer: `Merging needs two takes`) |
+| Esc | CANCEL: back to the list's five keys, the choice forgotten |
+
+A tap on a row does what Enter does (and moves the highlight there). L, N, T, Delete and S do nothing in merge mode.
+The CANCEL and MERGE keys on the screen do what Esc and M do. Leaving the list (Esc twice, the header's Esc) ends merge
+mode.
+
 ## Edit page (trim and split)
 
 | Key | Does |
@@ -75,13 +89,21 @@ and then acts as usual.
 | F | waveform scale: TRUE (real level) / FIT (the take's loudest peak fills the panel); the chip at the waveform's top right shows which |
 | Esc | back to the list, nothing saved |
 
-## Save box and confirm box
+## Save box, merge box and confirm box
 
 | Key | Does |
 |---|---|
 | Left / Right, Tab | move between the buttons (a white outline shows the one chosen) |
-| Enter | choose; without a move: SAVE AS NEW FILES in the save box, CANCEL in the confirm box |
+| Enter | choose; without a move: SAVE AS NEW FILES in the save box, KEEP ORIGINALS in the merge box, CANCEL in the confirm box |
 | Esc | cancel |
+
+## Progress box (a merge running)
+
+| Key | Does |
+|---|---|
+| Esc | CANCEL: the merge stops, nothing is kept, the takes stay as they were |
+| Left / Right, Tab | outline CANCEL |
+| Enter | CANCEL, but only once a move has outlined it (a stray Enter does not stop the merge) |
 
 ## Settings
 

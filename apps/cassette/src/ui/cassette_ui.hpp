@@ -7,8 +7,8 @@
  *
  *   CassetteUi ui(screen, actions);  ui.update(vm);  ...  ui.update(vm);
  *
- * Pages: Recorder (the root), Settings, Recordings (list), Trim; the save and confirm boxes over them (shown while the
- * model says so); the record countdown and the scan badge are states of the recorder page.
+ * Pages: Recorder (the root), Settings, Recordings (list), Trim; the save, merge, confirm and progress boxes over them
+ * (shown while the model says so); the record countdown and the scan badge are states of the recorder page.
  *
  * Keys (a Bluetooth or USB keyboard; docs/KEYS.md is the same map). Esc is back everywhere (the recorder's Esc ends
  * the app as in every app, during the countdown it cancels it; a picker, a box or a text field closes first); the
@@ -16,13 +16,16 @@
  *   Recorder    R REC, Space PLAY/PAUSE, X STOP, comma REW, period FWD (the press and the release reach the deck:
  *               holding REW / FWD scans), L the recordings, S the settings
  *   Recordings  Up / Down move the selection, Enter PREVIEW (again on the previewing row: stop), L LOAD (the take goes
- *               into the deck, the recorder shows; dimmed while recording), N RENAME, T EDIT, Delete DELETE (the
- *               controller asks in the confirm box), S the settings, Esc the recorder (the preview stops)
+ *               into the deck, the recorder shows; dimmed while recording), N RENAME, T EDIT, M MERGE (merge mode),
+ *               Delete DELETE (the controller asks in the confirm box), S the settings, Esc the recorder (the preview
+ *               stops). Merge mode: Up / Down move, Enter chooses or drops the take, M MERGE (the merge box), Esc CANCEL
  *   Trim        Left / Right move the marker 0.1 s (Shift 1 s), Up zoom in, Down zoom out, I SET IN, O SET OUT,
  *               Enter SPLIT (REMOVE while a flag is selected), Tab select the next flag, Space PLAY, S SAVE, F waveform TRUE / FIT, Esc
  *               back to the list (nothing saved)
  *   Boxes       Left / Right or Tab move between the buttons (a white outline from the first move), Enter chooses
- *               (the save box: SAVE AS NEW FILES; the confirm box: CANCEL, when nothing was moved), Esc cancels
+ *               (the save box: SAVE AS NEW FILES; the merge box: KEEP ORIGINALS; the confirm box: CANCEL, when nothing
+ *               was moved; the progress box: nothing until a move outlines CANCEL), Esc cancels (the progress box: stops
+ *               the merge)
  *   Settings    Up / Down move, Enter or Right change / open (Left / Right step a slider row), Esc back (a picker
  *               first), L the recordings
  *

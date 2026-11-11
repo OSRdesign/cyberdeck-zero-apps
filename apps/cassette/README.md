@@ -2,7 +2,7 @@
 
 A sound recorder for the cyberdeck with the look of a tape deck: it records from any USB sound card or headset to WAV
 (Broadcast Wave), FLAC or Ogg Opus files, shows a level meter with a target zone, adds software gain, starts on a timer,
-trims and splits takes, and plays them back with a 5x scan. Native fullscreen app on the launcher's `cp0_lvgl`, MIT, version 0.1.0,
+trims, splits and merges takes, and plays them back with a 5x scan. Native fullscreen app on the launcher's `cp0_lvgl`, MIT, version 0.1.0,
 category Tools. Plan: launcher `docs/dev/tasks/016-cassette-recorder.md`; study: launcher report 058.
 
 - **Crash-safe.** A take is synced to the card every 10 s (5-30 s, setting) and its header is rewritten after every
@@ -15,7 +15,8 @@ category Tools. Plan: launcher `docs/dev/tasks/016-cassette-recorder.md`; study:
 ## Documentation
 
 - [`docs/USER-GUIDE.md`](docs/USER-GUIDE.md): the user guide (what you need, the recorder screen, recording, monitoring,
-  playing, the list, the Edit page (trim and split), settings, files, crash safety, troubleshooting, limits), with pictures.
+  playing, the list, the Edit page (trim and split), merging takes, settings, files, crash safety, troubleshooting,
+  limits), with pictures.
 - [`docs/KEYS.md`](docs/KEYS.md): the keyboard map.
 - [`docs/MAKING-SCREENSHOTS.md`](docs/MAKING-SCREENSHOTS.md): how to render the guide's pictures again after a change
   (`docs/make-doc-images.sh`).
@@ -35,7 +36,7 @@ Each comes from a scene in `tests/scenes` (named below): the build writes its PN
 | ![Recorder, 320x480](screenshots/03-recording-320x480.png) | ![Record countdown, 480x320](screenshots/04-countdown-480x320.png) |
 | Recorder in portrait (PDA mode), 320x480, rendered on a PC (`a-recording`) | The record timer's countdown over the cassette window, 480x320, rendered on a PC (`c-countdown`) |
 | ![Recordings, 480x320](screenshots/05-list-480x320.png) | ![Edit page, 640x480](screenshots/06-trim-640x480.png) |
-| Recordings list with the free space and the four actions, 480x320, rendered on a PC (`i-list`) | The Edit page (trim and split): IN, OUT, two split points (one selected: REMOVE), the overview strip, 640x480, rendered on a PC (`j-trim`) |
+| Recordings list with the free space and the five actions, 480x320, rendered on a PC (`i-list`) | The Edit page (trim and split): IN, OUT, two split points (one selected: REMOVE), the overview strip, 640x480, rendered on a PC (`j-trim`) |
 | ![Edit page, 320x480](screenshots/07-trim-320x480.png) | ![Save box, 480x320](screenshots/08-save-480x320.png) |
 | The Edit page in portrait, 320x480, rendered on a PC (`j-trim`) | The save box: three files from two split points, save as new files or replace the original, 480x320, rendered on a PC (`k-save`) |
 | ![Settings, 320x480](screenshots/09-settings-320x480.png) | ![Card without a level control, 480x320](screenshots/10-nocard-480x320.png) |
@@ -43,7 +44,7 @@ Each comes from a scene in `tests/scenes` (named below): the build writes its PN
 
 ## What it does
 
-Four pages and two boxes:
+Four pages and four boxes:
 
 - **Recorder** (the first page). The cassette window with two hubs that turn while the deck runs (no tape is drawn),
   the take's name on the label, in handwriting and nothing else (up to two lines for a long name; with no take loaded, at first start or after the last one is deleted, a blank cassette
@@ -63,8 +64,8 @@ Four pages and two boxes:
   REC starts a countdown over the cassette window instead: the meter stays live, a tap, STOP or Esc cancels it (nothing
   is written), at zero the take starts. Without a card the cassette window reads "No sound input found. Plug in a USB
   sound card or headset." and a card plugged in later is found by itself.
-- **Recordings.** The takes in the folder, newest first, with their length and size; LOAD, RENAME, EDIT and DELETE
-  (which asks first). A take repaired after a power cut is marked as such. LOAD puts the take into the deck with a
+- **Recordings.** The takes in the folder, newest first, with their length and size; LOAD, RENAME, EDIT, MERGE and
+  DELETE (which asks first). A take repaired after a power cut is marked as such. LOAD puts the take into the deck with a
   cassette animation (the old cassette, or the blank one, drops out, the new one falls in with a small bounce, the name is written onto the
   label in handwriting; 0.9 s, keys are ignored meanwhile but Esc) and PLAY then plays that take; it is dimmed while a
   take records. A double tap or Enter on a row previews the take, again on the same row stops the preview and rewinds it;
@@ -102,8 +103,17 @@ Four pages and two boxes:
   monitor is off by default and never plays during playback. A headset such as the Jabra Evolve 65 has its own hardware
   sidetone: you hear yourself even with Monitor off, it is not an ALSA control and Cassette cannot change or switch it
   off; Monitor adds a second, delayed copy on top, so leave it off there.
+- **Merge takes.** MERGE (key M) turns the list into merge mode on the same page: the takes are chosen in the order they
+  should play (a numbered badge each; a tap again drops one and the rest renumber); the first take chosen decides what can
+  join, every take that cannot be joined to it without converting it (another codec, rate, channel count or bit depth) is
+  dimmed with the reason; a strip shows how many takes, their length and size. MERGE opens the merge box (the new take's
+  name: the next take number with the first take's prefix; KEEP ORIGINALS or DELETE ORIGINALS, which asks once more), a
+  progress box with CANCEL follows. WAV is copied and FLAC re-encoded, both sample exact; Opus packets are copied without
+  re-encoding (each join adds a few ms, see [`docs/FORMATS.md`](docs/FORMATS.md#merging-takes)). The originals are deleted,
+  when asked, only after the new take is written, synced and checked; a cancel or a power cut leaves them as they were.
 - **Save box.** SAVE AS NEW FILES (the default: the original stays) or REPLACE ORIGINAL (asks once more; the original is
-  deleted only after every result is written and synced). **Confirm box** for delete and replace.
+  deleted only after every result is written and synced). **Merge box** (KEEP ORIGINALS, DELETE ORIGINALS, CANCEL) and
+  the merge's **progress box**. **Confirm box** for delete, replace and delete originals.
 
 A short notice at the bottom of every page tells what happened (a take saved, the card unplugged, a save that failed
 and why, an action refused while recording).
@@ -125,9 +135,11 @@ The full map is [`docs/KEYS.md`](docs/KEYS.md).
 | Recordings | Up / Down | move the selection |
 | | Enter | PREVIEW the selected take (again on it: stop and rewind) |
 | | L | LOAD the selected take into the deck |
-| | N / T / Delete | RENAME / EDIT / DELETE (asks first) |
+| | N / T / M / Delete | RENAME / EDIT / MERGE (merge mode) / DELETE (asks first) |
 | | S | the settings |
 | | Esc | back to the recorder |
+| Merge mode | Up / Down, Enter | move; choose the take (the next number) or drop it |
+| | M / Esc | MERGE (the merge box) / CANCEL (leave merge mode) |
 | Edit page | Left / Right | move the marker 0.1 s (with Shift 1 s) |
 | | Up / Down | zoom in / out |
 | | I / O | SET IN / SET OUT |
@@ -137,9 +149,9 @@ The full map is [`docs/KEYS.md`](docs/KEYS.md).
 | | Space | PLAY |
 | | S | SAVE (the save box) |
 | | Esc | back to the list, nothing saved |
-| Save and confirm boxes | Left / Right, Tab | move between the buttons |
-| | Enter | choose (without a move: SAVE AS NEW FILES, or CANCEL in the confirm box) |
-| | Esc | cancel |
+| Save, merge and confirm boxes | Left / Right, Tab | move between the buttons |
+| | Enter | choose (without a move: SAVE AS NEW FILES, KEEP ORIGINALS in the merge box, CANCEL in the confirm box) |
+| | Esc | cancel (the progress box: stops the merge) |
 | Settings | Up / Down | move |
 | | Enter, Right | change or open the row; on a slider row Left / Right step it |
 | | L | the recordings list |
@@ -165,7 +177,8 @@ name pattern).
   until the clock has been set (the boards have no clock that runs while they are off: a wrong date in a name is worse
   than none). A trim or a split is named after its source plus the next free number (`take_006_20261108-1105-1.wav`,
   `-2.wav`, ...; a FLAC or Opus take's results keep `.flac` / `.opus`); a trim saved with REPLACE ORIGINAL keeps the
-  original's name.
+  original's name. A merged take is named like a new take: the next take number, the first take's prefix, the date and
+  time of the merge, the takes' extension.
 - `~/Recordings/.journal/<take>.json`: one small journal per take, open while it records (see below).
 - `~/Recordings/<take>.wav.peaks` (`.flac.peaks`, `.opus.peaks`): the waveform overview of a take, built once when the
   Edit page first opens it (a FLAC or Opus take is decoded for it, with a progress bar) and checked against the take's
@@ -184,7 +197,8 @@ is cut off). The audio itself is never rewritten. Repair is safe to interrupt: r
 take is then marked **repaired** in the list.
 
 Trim, split and replace write each result to a temporary file, sync it and rename it into place: a crash at any point
-leaves either the original or the finished result, never half a file. The writer stops a take cleanly, with a notice,
+leaves either the original or the finished result, never half a file. A merge does the same with its new take (and
+deletes the originals, when asked, only after it is in place and checked). The writer stops a take cleanly, with a notice,
 when the free space falls under 200 MB or the card is unplugged. A take that reaches 4 GiB continues in a new file
 (Auto-split, default) or becomes one RF64 file (Auto-split Off).
 
@@ -240,12 +254,12 @@ footer of the page says which: "Sizes for FLAC, 16-bit, this card"; without a so
 description and how many hours fit in the recordings folder's free space; the Codec picker lists WAV, FLAC and Opus, then six quick presets;
 Opus is dimmed on a card that cannot record at 8, 12, 16, 24 or 48 kHz; nothing can be changed while a take records. Sizes read like this:
 
-| Format | Size per minute at 48 kHz mono 16-bit | Records with | Plays and trims with |
+| Format | Size per minute at 48 kHz mono 16-bit | Records with | Plays, trims and merges with |
 |---|---|---|---|
 | WAV | 5.76 MB (exact) | nothing | nothing |
 | FLAC, level 5 | about 1.7 MB (speech; 27-41 % of WAV measured, music about half) | `libflac14` (or `libflac12t64`) | the same |
-| Opus 24 / 32 kbps, speech | 0.18 / 0.24 MB | `libopusenc0` (pulls `libopus0`), a card at 8, 12, 16, 24 or 48 kHz | `libopus0` (trim: nothing) |
-| Opus 64 / 128 kbps, music | 0.48 / 0.97 MB | `libopusenc0` (pulls `libopus0`), a card at 8, 12, 16, 24 or 48 kHz | `libopus0` (trim: nothing) |
+| Opus 24 / 32 kbps, speech | 0.18 / 0.24 MB | `libopusenc0` (pulls `libopus0`), a card at 8, 12, 16, 24 or 48 kHz | `libopus0` (trim and merge: nothing) |
+| Opus 64 / 128 kbps, music | 0.48 / 0.97 MB | `libopusenc0` (pulls `libopus0`), a card at 8, 12, 16, 24 or 48 kHz | `libopus0` (trim and merge: nothing) |
 
 The package depends on these libraries (`libopus0`, `libopusenc0`, `libflac14 | libflac12t64 | libflac12`), so the
 Store installs them with Cassette. They are opened at run time: if one is removed the app still records and plays WAV,
@@ -310,7 +324,8 @@ python apps/cassette/tools/make_icon.py                 # the icon
 
 Nine test suites: the core (ring, WAV header, writer, journal, repair, a writer killed at random points), alsa (a
 scripted ALSA: busy fallback, unplug, overruns, two cards, index change), dsp, takes, edit (trim and split compared
-byte for byte, a killed editor), playback, app (the controller), ui and bind. `build.sh host` also runs the scenes:
+byte for byte, a killed editor, merges of every format with a kill at every step), playback, app (the controller), ui and
+bind. `build.sh host` also runs the scenes:
 the UI's own on its synthetic model (`tests/scenes`) and the bound app on the scripted sound system
 (`tests/bind/scenes`), at 480x320, 320x480, 640x480, 720x720 and 480x480 (`sq720-*`, `sq480-*`, `sqd-*`) and further sizes, with the layout checks; the PNGs land in
 `$CDK_BUILD/host/out/<scene>/<size>/`. Builds run from a WSL native-filesystem LF copy with fresh build folders
@@ -341,3 +356,5 @@ time from the system, neither linked nor shipped; the package depends on them. S
   meter shows the played level while a take plays. The recordings list has LOAD (the take goes into the deck with a
   cassette animation, PLAY plays it; the name on the cassette label is handwriting, Caveat SemiBold) and a preview that
   stops on a second double tap; a paused take reads PAUSED in the strip.
+- Unreleased (planned for 0.2.0; app.json still says 0.1.0): MERGE, the list's fifth key, joins takes of one format (WAV,
+  FLAC, Opus) into one new take in the order chosen, in merge mode on the list page (branch `cassette-merge`).

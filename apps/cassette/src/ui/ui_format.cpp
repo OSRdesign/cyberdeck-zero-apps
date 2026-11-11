@@ -334,16 +334,29 @@ std::string info_state(const RecorderVm &r)
     }
 }
 
-ListRowGeom list_row_geom(int std_h, int name_box1, int detail_box, int name_text_h, int name_line_h)
+ListRowGeom list_row_geom(int std_h, int name_box1, int detail_box, int name_text_h, int name_line_h, int detail_text_h)
 {
     ListRowGeom g;
     const bool multi = name_text_h > name_line_h;
     g.name_box = multi ? name_text_h : name_box1;
-    g.h = std_h + (g.name_box - name_box1);
-    const int top = (g.h - 2 - (g.name_box + detail_box)) / 2; /* inside the 1 px border, as the one-line row centres it */
+    const int dbox = std::max(detail_box, detail_text_h);
+    g.h = std_h + (g.name_box - name_box1) + (dbox - detail_box);
+    const int top = (g.h - 2 - (g.name_box + dbox)) / 2; /* inside the 1 px border, as the one-line row centres it */
     g.name_y = top + (g.name_box - (multi ? name_text_h : name_line_h)) / 2;
     g.detail_y = top + g.name_box;
     return g;
+}
+
+KeyBox list_key_box(int index, int count, bool portrait)
+{
+    const double x0 = 16, span = portrait ? 288 : 448, gap = 7;
+    const int n = std::max(1, count);
+    KeyBox k;
+    k.w = (span - gap * (n - 1)) / n;
+    k.x = x0 + (k.w + gap) * std::clamp(index, 0, n - 1);
+    k.y = portrait ? 396 : 222;
+    k.h = portrait ? 64 : 56;
+    return k;
 }
 
 std::string list_strip_left(const ListVm &l, bool narrow)
@@ -367,6 +380,7 @@ std::string list_strip_right(const ListVm &l, bool narrow)
 
 std::string list_hint(const ListVm &l)
 {
+    if (l.merge_mode) return "Choose the takes in order, then MERGE. Esc cancels.";
     if (l.selected < 0 || l.selected >= static_cast<int>(l.takes.size())) return "Esc returns to the recorder.";
     return l.takes[static_cast<std::size_t>(l.selected)].name + " selected. Esc returns to the recorder.";
 }

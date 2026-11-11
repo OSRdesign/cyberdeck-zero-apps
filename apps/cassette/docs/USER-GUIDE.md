@@ -2,8 +2,8 @@
 
 Cassette is a sound recorder that looks like a tape deck. You plug a USB sound card or a USB headset into a
 CyberDeck board, press REC, and the sound goes into a file in the `Recordings` folder: a WAV file, or, if you choose
-it, a smaller FLAC or Ogg Opus file. You can listen again, cut a take with trim and split, and watch a level meter
-while you record.
+it, a smaller FLAC or Ogg Opus file. You can listen again, cut a take with trim and split, join takes into one, and
+watch a level meter while you record.
 
 This guide describes the app as it is in the source (the 0.1 line, with FLAC and Ogg Opus). Pictures are rendered on a PC from the app's test scenes
 (a made-up sound source: the tones and levels are not real audio); the two captures at the end of
@@ -19,6 +19,7 @@ Contents:
 [Playing](#playing) |
 [The recordings list](#the-recordings-list) |
 [Edit: trim and split](#edit-trim-and-split) |
+[Merging takes](#merging-takes) |
 [Settings](#settings) |
 [Formats](#formats-wav-flac-and-ogg-opus) |
 [Take number](#take-number) |
@@ -261,7 +262,11 @@ screen) a row that would not fit leaves out its size first, then writes the date
 A name too long for one line wraps (at spaces; a single word wider than the row breaks by character) and its row grows
 to show every line, with the details line under it; the rows below move down. Names are never cut with an ellipsis.
 
-Four actions: **LOAD**, **RENAME**, **EDIT**, **DELETE**. A tap selects a row.
+Five actions: **LOAD**, **RENAME**, **EDIT**, **MERGE**, **DELETE**. A tap selects a row. On the narrow screens
+(320x480, 480x800) the five keys are as narrow as the Edit page's five, and their captions are drawn a little smaller
+to fit.
+
+![The five keys at 320x480](img/list-keys-320x480.png)
 
 - **LOAD** puts the selected take into the deck and returns to the recorder. The cassette in the window drops out,
   the new one falls in with a small bounce, and its name is written onto the label in handwriting. It takes about
@@ -299,6 +304,8 @@ Four actions: **LOAD**, **RENAME**, **EDIT**, **DELETE**. A tap selects a row.
   | ![9/24, muted](img/rename-counter-mid.png) | ![21/24, amber](img/rename-counter-amber.png) | ![24/24, red](img/rename-counter-full.png) |
 
 - **EDIT** opens the [Edit page](#edit-trim-and-split) (trim and split) for the take. It is refused while a take records.
+- **MERGE** (key **M**) joins several takes into one new take: see [Merging takes](#merging-takes). It is dimmed while
+  the list holds fewer than two takes (a press says *Merging needs two takes*).
 - **DELETE** asks first (a box with DELETE and CANCEL; Enter without moving means CANCEL). Deleting
   the loaded take empties the deck and the blank cassette returns at once. A take that plays or is open for trimming
   cannot be deleted.
@@ -362,6 +369,88 @@ will be written: one file for each part between IN, the split flags and OUT, wit
 A result keeps the format of its take (`-1.wav`, `-1.flac`, `-1.opus`). Saving is safe against a power cut: each result is written to a temporary file, synced, then renamed into place. A
 crash leaves the original or the finished results, never half a file. A notice tells the result (*Saved 3 new files*,
 *Saved, original replaced*, or *Save failed* and the reason).
+
+## Merging takes
+
+New after 0.1.0 (planned for 0.2.0). **MERGE** joins several takes into one new take, in the order you choose them,
+without any loss of quality. The takes must be of one kind: the same codec (WAV, FLAC or Opus), the same sample rate
+and number of channels and, for WAV and FLAC, the same bit depth. An Opus take's bit rate is not stored with it and may
+differ (see *Opus joins* below).
+
+![Merge mode: three takes chosen in an order, the takes that cannot join dimmed](img/merge-mode.png)
+
+1. In the recordings list, select the take that should come first and press **MERGE** (key **M**). The list changes to
+   **merge mode**: each row's sticker becomes a round badge, the take you were on shows **1**, and the strip at the top
+   reads `Merge · 1 take · 12:08 · about 69 MB` (how many takes are chosen, their length and their size together).
+2. Tap the other takes in the order you want them (or move with Up / Down and press Enter). Each gets the next number in a
+   green badge. A tap on a chosen take drops it; the takes after it move up a number.
+3. The **first** take chosen decides what can join it: a take that cannot be joined to it without loss is dimmed and its
+   second line says why: `Different format: FLAC 44.1 kHz` (another codec: its codec and rate), `Different rate`,
+   `Different channels`, `Different bit depth`, `Not a Cassette take` (a file whose name does not follow the take name
+   pattern), `Damaged take`, `Playing: stop it first`. A tap on a dimmed take only says why (*Not available: Different
+   rate*). With nothing chosen, every take can be chosen but one that is not a Cassette take, damaged or playing. A long
+   reason wraps and its row grows, like a long name.
+4. Press **MERGE** (key **M**; it works from two takes on) for the merge box, or **CANCEL** (or Esc) to leave merge mode;
+   the choice is then forgotten.
+
+| Merge mode at 320x480 | The merge box |
+|---|---|
+| ![Merge mode on the narrow screen](img/merge-mode-320x480.png) | ![Merge 3 takes?](img/merge-box.png) |
+
+**The merge box** says `Merge 3 takes?`, the new take's length and about how large it will be, and its file name. The
+new take is named like a new recording: the next take number (see [Take number](#take-number)), the **first** take's
+prefix, the date and time now (`nodate` while the clock is not set) and the takes' extension, for example
+`take_008_20261111-1502.wav`. It is a normal take: rename it afterwards if you like.
+
+- **KEEP ORIGINALS** (the default; Enter without moving): the takes stay as they are.
+- **DELETE ORIGINALS**: asks once more (*Delete the originals?* "They are deleted only after the new file is written
+  and synced."). The originals (with their waveform overview and journal) are deleted only after the new take is
+  complete, synced and checked (its length must be what the takes add up to); if anything fails before that, they stay.
+- **CANCEL**: back to merge mode.
+
+![Delete the originals asks first](img/merge-confirm.png)
+
+**While it runs** a box shows `Merging... 37%` with **CANCEL** (or Esc). Cancel stops the merge, removes what was
+written and leaves the takes untouched. A WAV or Opus merge is a copy and takes seconds; a FLAC merge decodes the audio
+and encodes it again (an estimate for a Pi Zero 2 W: 2 to 4 minutes per hour of stereo; not measured on a board yet).
+
+![Merging, with CANCEL](img/merge-progress.png)
+
+When it is done, merge mode ends, the list shows the new take on top, highlighted, and the notice says *Merged 3 takes
+into Take 008* (*, originals deleted* is added when you chose so). If the loaded take was one of the deleted originals,
+the new take is loaded in its place. A failure says *Merge failed:* and why, a cancelled merge *Merge cancelled*; in both
+cases merge mode stays, with your choice.
+
+![After the merge: the new take on top](img/merged.png)
+
+**Refused with a notice:** fewer than two takes in the list (*Merging needs two takes*; MERGE is dimmed), a take
+recording or counting down (*Stop the recording to merge takes*), too little free space (*Not enough free space*: a
+merge needs the takes' total size plus 5 % free), a FLAC take without its library (*This take cannot be merged: FLAC not
+installed (libflac14)*). Opus needs no library to merge.
+
+**How each format is joined** (details in [FORMATS.md](FORMATS.md#merging-takes)):
+
+| | Join | Exact |
+|---|---|---|
+| WAV | the samples are copied end to end into a new Broadcast Wave file (RF64 when it passes 4 GiB) | to the sample |
+| FLAC | decoded and encoded again as FLAC (level 5, as a recording) | to the sample (lossless) |
+| Ogg Opus | the sound packets are copied into one new stream, no re-encoding | no quality loss; the joins are explained below |
+
+**Opus joins.** An Ogg Opus file can leave out sound only at its very start and at its very end, so at each join the new
+take keeps what each take hid when it played alone: the end of the earlier take's last packet (up to 20 ms of the
+encoder's padding) and the start of the later take's first packet (6.5 ms for a take straight from the recorder; for an
+edited take a little of the sound before its cut). So each join adds about 7 to 27 ms between takes straight from the
+recorder (always under 40 ms), and the new take is that much longer than the takes together. The decoder also runs on
+from the earlier take, so the first moments of each later take are decoded a little differently from that take alone.
+Measured on synthetic signals: with the speech settings (24 and 32 kbps) a later take matched its own decode to 42 dB and
+better from its first millisecond, and the joins are quiet; in the music mode of the 64 and 128 kbps settings (measured
+at 96 kbps) its first 20 ms differed about as much as the sound itself and the next 80 ms clearly, settling after about
+a tenth of a second: that can be heard as a short blip at each join. Opus takes of different bit rates can be merged (the packets decode in one
+stream).
+
+**Crash safety.** The new take is written under a temporary name (`.tmp-merge-...`) and gets its own name only once it is
+complete and synced; a power cut or a crash during a merge leaves the takes as they were, and the temporary file is
+removed at the next start. The take number is used only by a merge that succeeded.
 
 ## Settings
 
@@ -505,11 +594,11 @@ stored choice is kept and comes back when it is possible again.
 
 **What each format needs on the board.** The libraries are opened when needed; nothing is linked in.
 
-| | Record | Play, preview, scan, waveform | Trim and split |
-|---|---|---|---|
-| WAV | nothing | nothing | nothing |
-| FLAC | `libflac` (`libflac14`, `libflac12t64` or `libflac12`) | `libflac` | `libflac` |
-| Ogg Opus | `libopusenc0` and `libopus0` | `libopus0` | nothing |
+| | Record | Play, preview, scan, waveform | Trim and split | Merge |
+|---|---|---|---|---|
+| WAV | nothing | nothing | nothing | nothing |
+| FLAC | `libflac` (`libflac14`, `libflac12t64` or `libflac12`) | `libflac` | `libflac` | `libflac` |
+| Ogg Opus | `libopusenc0` and `libopus0` | `libopus0` | nothing | nothing |
 
 The Cassette package depends on these libraries: the Store (or `apt`) installs them with Cassette. If one is missing
 anyway (removed by hand) the format is unavailable in the picker and Cassette uses WAV. Install the package again with
@@ -643,9 +732,19 @@ button in the header does the same.
 | L | LOAD |
 | N | RENAME |
 | T | EDIT |
+| M | MERGE: merge mode, the selected take chosen first |
 | Delete | DELETE (asks first) |
 | S | settings |
 | Esc | back to the recorder |
+
+**Merge mode** (on the recordings list)
+
+| Key | Does |
+|---|---|
+| Up / Down | move the highlight |
+| Enter | choose the highlighted take (the next number) or drop it |
+| M | MERGE: the merge box (from two takes on) |
+| Esc | CANCEL: leave merge mode, the choice forgotten |
 
 **Edit page (trim and split)**
 
@@ -660,8 +759,9 @@ button in the header does the same.
 | S | SAVE |
 | Esc | back to the list, nothing saved |
 
-**Save and confirm boxes:** Left / Right or Tab move between buttons; Enter chooses (with no move: SAVE AS NEW FILES
-in the save box, CANCEL in the confirm box); Esc cancels.
+**Save, merge and confirm boxes:** Left / Right or Tab move between buttons; Enter chooses (with no move: SAVE AS NEW
+FILES in the save box, KEEP ORIGINALS in the merge box, CANCEL in the confirm box); Esc cancels. The progress box of a
+merge: Esc stops the merge (Enter only after Left / Right / Tab has outlined CANCEL).
 
 **Settings:** Up / Down move; Enter or Right change or open a row; on a slider Left / Right step it; L the list; Esc
 back (a choice list first, then the recorder).
@@ -675,11 +775,12 @@ The full map is in [KEYS.md](KEYS.md).
 | The takes | `~/Recordings/` (setting *Folder*): `<prefix>_<number>_<YYYYMMDD-HHMM>.wav` (or `.flac`, `.opus`), for example `take_006_20261108-1105.wav`; a prefix may hold spaces (`my band_006_20261108-1105.wav`) |
 | A second part of a long take | `take_006_20261108-1105_p2.wav` |
 | A trim or split result | the source name plus `-1`, `-2` ...: `take_006_20261108-1105-1.wav` (the extension of the source) |
+| A merged take | named like a new take: the next take number, the first take's prefix, the date and time of the merge, the takes' extension (`take_008_20261111-1502.wav`) |
 | The take counter | `~/Recordings/.take-counter` (the last number handed out) |
 | One journal per take | `~/Recordings/.journal/<take>.json`, open while the take records |
 | Edit numbers already used | `~/Recordings/.edits/` (so a deleted `-2` is never handed out again) |
 | The waveform overview of a take | `<take>.wav.peaks` (`.flac.peaks`, `.opus.peaks`) next to the take, built the first time the Edit page opens it; Cassette checks it against the take's size and time on every use and rebuilds it if they changed. Safe to delete. |
-| Leftover temporary files | `.tmp-*` in the folder, from a save that was cut short; removed at the next start |
+| Leftover temporary files | `.tmp-*` in the folder (`.tmp-merge-*` from a merge), from a save or a merge that was cut short; removed at the next start |
 | The settings | `~/.config/cassette/settings.json`; also each card's level, auto gain and mute. Delete it to reset everything. |
 
 The WAV files are standard (Broadcast Wave), and the FLAC and Ogg Opus files are standard too (the take's name and,
@@ -706,6 +807,9 @@ files; one that does not follow the take name pattern shows but cannot be rename
 - **Disk full:** the take stops cleanly when under 200 MB are free, and the take is kept.
 - **Trim, split, replace** use temporary files and renames (see above): a power cut gives the old file or the new
   ones, never half a file.
+- **Merge** writes the new take under a temporary name and renames it into place only when it is complete, synced and
+  checked; the originals are deleted (when you chose so) only after that. A power cut during a merge leaves the takes as
+  they were, without the new take; the temporary file goes at the next start. See [Merging takes](#merging-takes).
 
 ## Troubleshooting
 
@@ -753,6 +857,12 @@ package named in the notice; the take is not damaged. WAV takes always play.
 **"This take cannot be played" / "damaged".** The file is not a valid WAV, FLAC or Ogg Opus file, or it is cut off. Copy
 it off the board and check it on a PC.
 
+**A merge is refused.** *Merging needs two takes*: the list holds one take. *Not enough free space*: a merge needs
+the takes' total size plus 5 % free on the card; delete or copy off some takes. *Not available: ...* on a take in merge
+mode: it cannot be joined to the first take chosen without converting it (another codec, rate, channel count or bit
+depth), it is not a Cassette take, it is damaged, or it plays (stop it first). *This take cannot be merged: FLAC not
+installed (libflac14)*: install the library (see the note above).
+
 **Settings were not saved.** The notice *The settings could not be saved: ...* names the reason (a read-only or full
 card). Delete `~/.config/cassette/settings.json` to start with the defaults.
 
@@ -761,7 +871,9 @@ card). Delete `~/.config/cassette/settings.json` to start with the defaults.
 - **No Bluetooth audio.** Cassette records from sound cards that Linux presents as capture devices (USB, or a board's
   own input). It has no Bluetooth audio code. (A Bluetooth *keyboard* works as usual.)
 - **No recording in the background.** Leaving the app stops the take (and keeps it).
-- **No merge.** Trim and split cut a take into parts; there is no way to join takes in the app.
+- **Merging joins takes of one kind only**: the same codec, rate, channels and (WAV, FLAC) bit depth; nothing is
+  converted. An Opus merge adds a few milliseconds at each join and, with the music settings, can blip briefly there
+  (see [Merging takes](#merging-takes)).
 - **No hot-plug re-open of a running take.** After an unplug the take that was running is closed, not continued; a
   new take is needed after the card is back.
 - **Opus is not offered at 44.1 kHz** (Cassette does not resample). Use FLAC or WAV for such a card.

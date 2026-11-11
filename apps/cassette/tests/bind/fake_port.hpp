@@ -357,6 +357,47 @@ public:
         log(std::string("save ") + (k == SaveKind::NewFiles ? "new" : "replace"));
         return save_result;
     }
+    /* merge takes: plan_merge answers merge_answer (its count set to the takes asked for); start_merge starts a merge in the
+     * snapshot (a new sequence number, state 1) when merge_start_result */
+    MergeInfo merge_answer = default_merge_answer();
+    bool merge_start_result = true;
+    static MergeInfo default_merge_answer()
+    {
+        MergeInfo m;
+        m.ok = true;
+        m.name = "take_009_20261111-0400.wav";
+        m.seconds = 760;
+        m.bytes = 61ull << 20;
+        return m;
+    }
+    static std::string names_text(const std::vector<std::string> &n)
+    {
+        std::string s;
+        for (const std::string &x : n) s += (s.empty() ? "" : ",") + x;
+        return s;
+    }
+    MergeInfo plan_merge(const std::vector<std::string> &n) override
+    {
+        log("plan_merge " + names_text(n));
+        MergeInfo m = merge_answer;
+        m.count = static_cast<int>(n.size());
+        return m;
+    }
+    bool start_merge(const std::vector<std::string> &n, bool del) override
+    {
+        log("start_merge " + names_text(n) + (del ? " delete" : " keep"));
+        if (!merge_start_result) return false;
+        std::lock_guard<std::mutex> g(mu);
+        snap.merge.seq++;
+        snap.merge.state = 1;
+        snap.merge.progress = 0;
+        snap.merge.sources = static_cast<int>(n.size());
+        snap.merge.output = merge_answer.name;
+        snap.merge.message.clear();
+        snap.merge.originals_deleted = false;
+        return true;
+    }
+    void cancel_merge() override { log("cancel_merge"); }
     void app_leave() override { log("app_leave"); }
     void shutdown() override { log("shutdown"); }
     uint64_t next_take_number() override
@@ -419,6 +460,7 @@ inline TakeRow row(const std::string &name, double seconds, uint64_t size, const
     r.format_text = "48k/16 WAV";
     r.date_text = date;
     r.current = current;
+    r.named = parse_take_name(name, tn); /* format_tag stays empty: the detail lines of the tests have none (merge: WAV) */
     return r;
 }
 

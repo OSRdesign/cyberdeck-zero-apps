@@ -19,7 +19,8 @@ FLAC / Opus take whose decoder library is missing is refused with a notice. Code
 `tests/takes/test_formats.cpp`, `tests/app/test_formats.cpp`, `tests/codec/test_writer_real.cpp`, and for phase C
 `tests/codec/test_decoders.cpp`, `tests/codec/test_decoders_real.cpp`, `tests/playback/test_codec_play.cpp`,
 `tests/edit/test_codec_edit.cpp`, `tests/fake_decoders.hpp`. Board tests: B17 (recording), B18 (playback and
-editing) and B19 (the pickers) in `tests/BOARD-TESTS.md`.
+editing) and B19 (the pickers) in `tests/BOARD-TESTS.md`. Merging takes of one format (2026-11-11): see
+[Merging takes](#merging-takes) at the end, board test B23.
 
 ## What is offered
 
@@ -223,11 +224,11 @@ never produces; checked against both header sets (`check_codec_abi.cpp`).
 
 **What each format needs at run time (phase C):**
 
-| | Record | Play, preview, scan, peaks | Trim and split |
-|---|---|---|---|
-| WAV | nothing | nothing | nothing |
-| FLAC | libFLAC | libFLAC | libFLAC (decode and encode) |
-| Ogg Opus | libopusenc + libopus | libopus | nothing (a copy of packets) |
+| | Record | Play, preview, scan, peaks | Trim and split | Merge |
+|---|---|---|---|---|
+| WAV | nothing | nothing | nothing | nothing |
+| FLAC | libFLAC | libFLAC | libFLAC (decode and encode) | libFLAC (decode and encode) |
+| Ogg Opus | libopusenc + libopus | libopus | nothing (a copy of packets) | nothing (a copy of packets) |
 
 **In the package (owner, 2026-11-11): the codec libraries are Depends**, so the Store (and apt) installs them with
 Cassette:
@@ -513,3 +514,107 @@ libopus 1.5.2, libopusfile 0.12 as the reference.
 - A seek in an Opus take uses the 80 ms pre-roll of RFC 7845 (fast, 36-41 dB against the linear decode at the landing
   point); a longer one would cost a little more decoding per seek and reverse-scan window.
 - FLAC MD5 is not checked during playback (libFLAC turns it off after any seek anyway).
+
+## Merging takes
+
+MERGE (the recordings list's fifth key, branch `cassette-merge`, 2026-11-11, planned for 0.2.0) joins two or more
+takes, in the order the user chose them, into one new take of the same format. Code: `src/core/edit/merge.*` (the engine: the compatibility rule,
+`plan_merge()`, `merge_takes()`), `Controller::plan_merge()`, `start_merge()`, `cancel_merge()`, `src/bind/view_map.cpp`
+(`merge_row_reason()`, the merge strip) and `binder.cpp`, `src/ui/page_list.cpp` (merge mode), `src/ui/boxes.cpp`
+(`MergeBox`, `ProgressBox`). Tests: `tests/edit/test_merge.cpp`, `tests/codec/test_merge_real.cpp`,
+`tests/app/test_merge.cpp`, `tests/bind/test_binder.cpp` (`test_merge_flow`), `tests/ui/test_format.cpp`; scenes
+`mg1-merge-*`, `mg2-merged-*`, `mg3-merge-one-take`, `tests/bind/scenes/x9-bound-merge`. Board test: B23.
+
+**What can be joined.** The first take chosen sets the group; a take joins it only when nothing has to be converted:
+
+| | Must be equal | Not compared |
+|---|---|---|
+| WAV | codec, sample rate, channels, bit depth | |
+| FLAC | codec, sample rate, channels, bit depth | the compression (one level, 5) |
+| Ogg Opus | codec, input rate (OpusHead), channels (and the output gain) | the bit rate (not stored with a take; packets of any bit rate decode in one stream) |
+
+The reasons the list shows, in this order: `Not a Cassette take` (the name does not follow the take grammar),
+`Damaged take`, `Different format: FLAC 44.1 kHz` (another codec: the other take's codec and rate), `Different rate`,
+`Different channels`, `Different bit depth`; and from the controller's state `Playing: stop it first`, `Open on the Edit
+page`, `Being recorded`. The rule is one pure function (`merge_join_reason`) used by the list (from the take rows) and by
+the engine (from the files).
+
+**The join, per codec.** Memory is bounded for takes of any length (WAV: blocks of 256 KB; FLAC: decode and encode steps
+of 256 KB of PCM; Opus: one packet at a time).
+
+- **WAV**: the PCM of each take is copied as it is behind a fresh header from `wav.hpp` (`build_header`: the sizes of the
+  whole, RF64 with `ds64` when the data passes 4 GiB; a `bext` with the date, the time, the time reference and the
+  description `Cassette <name>` exactly as a new recording gets them; the coding history and iXML generated as for a
+  recording). Sample exact. The RF64 boundary is tested with two generated 2.5 GiB takes.
+- **FLAC**: every take is decoded (libFLAC, `FlacDecoder`) and the samples go through **one** `FlacEncoder` at the takes'
+  rate, channels and depth (level 5, streamable subset, 4096 bytes of padding, the Vorbis comments of a new take: `TITLE`,
+  `DATE` when the clock is set, `ENCODER=Cassette`). Lossless and sample exact; STREAMINFO says the sum of the lengths and
+  its MD5 is the whole's (libFLAC 1.4.3 and 1.5.0 accept it). Keeping the frames as they are was not possible: each take's
+  frame numbers start at 0 and the last frame of a take is short, which a fixed-block-size stream does not allow in the
+  middle (the trim engine met the same, see phase C). CPU: the trim engine's figure applies, about 400x real time on this
+  PC for stereo music; an estimate of 2 to 4 minutes per hour of stereo on a Pi Zero 2 W (not measured on a board yet).
+- **Ogg Opus**: no re-encoding. The packets of every take are copied into **one** logical stream: a new serial number,
+  the page sequence from 0, new CRCs, granule positions counted on from take to take (pages of whole packets, at most
+  about one second and 255 lacing values each, as `remux_opus_range` writes them). OpusHead is the first take's (its
+  pre-skip, channels, input rate, gain), OpusTags carries the new take's comments with the first take's vendor string. The
+  first take keeps its pre-skip, the last take keeps its end trimming (the end-of-stream page's granule). Packets that lie
+  wholly inside a later take's pre-skip are left out (an edited take keeps 320 ms of pre-roll there, see phase C: it would
+  otherwise be heard twice). A take whose packets do not add up to its page granules (a damaged page in the middle) stops
+  the merge: never a take with a hole.
+
+**Opus: why one stream, and what a join does.** An Ogg Opus stream can drop decoded samples only at its start (pre-skip)
+and at its end (end trimming, RFC 7845 sections 4.2 and 4.4); nothing in the middle. Each take hides samples at both ends:
+the encoder's look-ahead at the start (312 samples, 6.5 ms, for libopusenc at 48 kHz; for an edited take the part of its
+first packet before IN) and the padding of its last 20 ms frame at the end (0 to 20 ms; for an edited take the part of its
+last packet after OUT). In one stream those samples of the inner takes are played. So:
+
+- each join adds the earlier take's tail plus the later take's lead: 7 to 27 ms between takes straight from the recorder,
+  always under 40 ms. `MergePlan::seam_frames` says exactly how much, and the new take's length (verified after writing) is
+  the sum of the takes' lengths plus the seams;
+- the decoder runs on across the join with the state of the earlier take, while the later take's first packets were coded
+  from a fresh encoder state (CELT predicts each band's energy from the frame before; SILK carries pitch and LPC history),
+  so the first packets of the later take decode differently from the take alone until the state has converged.
+
+Measured with the real libraries (`tests/codec/test_merge_real.cpp`: three consecutive pieces of one synthetic signal,
+each coded as its own take by libopusenc, merged, decoded by libopus; libopusfile 0.12 reads the merged file to the end at
+exactly the plan's length; identical with libopus 1.4 and 1.5.2):
+
+| Takes | Seams (tail + lead) | Seam level vs the audio before | Later take vs its own decode: first 20 ms / 20-100 ms / rest |
+|---|---|---|---|
+| 48 kHz stereo music, 96 kbps (CELT) | 17.4 ms (10.9 + 6.5), 20.0 ms (13.5 + 6.5) | -31 dBFS vs -22, -39 vs -18 | -3.9 / 8.5 / 46.3 dB and -2.2 / 5.3 / 45.5 dB |
+| 16 kHz mono speech, 24 kbps (SILK) | 12.3 ms, 20.0 ms | -44 vs -38, -35 vs -21 | 47.4 / 51.7 / 60.4 dB and 53.3 / 46.3 / 49.9 dB |
+| 48 kHz mono speech, 32 kbps | 17.4 ms, 20.0 ms | -66 vs -42, -45 vs -28 | 41.9 / 50.6 / 53.5 dB and 48.7 / 46.0 / 54.7 dB |
+
+Against the source signal itself, the music take decodes alone at 19-22 dB in its first 100 ms and in the merge at
+-3 / 5-9 dB, and both at 20.6-20.8 dB after that; the speech takes are the same alone and merged (within 0.1 dB). The
+first take always decodes exactly as alone. Reading: with the speech settings a join is a quiet gap of 12-20 ms and nothing
+else; with the music settings the first 20 ms of the later take are wrong (an error as large as the signal) and the next
+80 ms clearly off, settling after about 100 ms: a short blip, to be confirmed by listening (B23 step 6).
+
+Alternatives considered (none implemented):
+- **A chained Ogg stream** (each take a link with its own OpusHead, pre-skip and end trimming, RFC 7845 section 3) would be
+  gap-free and sample exact in a reader that handles chains (libopusfile resets the decoder per link). Cassette's own
+  reader does not: `OggOpusFile` follows one serial number, finds the length from the last page's granule and seeks by
+  granule over one stream; the list (`read_stream_info`), the repair (`scan_ogg_opus` / `fix_ogg_opus`), the trim remux,
+  the peaks and the player would all need chain support (a link table, per-link timelines, seeks across links). Not done.
+- **Re-encoding** the seams or the takes would be a second round of lossy coding: not done.
+- A Cassette-only marker (a tag listing the join granules, our decoder resetting there) would fix playback in Cassette
+  only and change the timeline the list, the peaks and other players see. Not done.
+
+**Safety** (the trim engine's rules): the new take is written to `<dir>/.tmp-merge-<random>`, `fdatasync`ed, closed and
+**read back** (WAV: the header's format and sizes; FLAC: STREAMINFO's total; Opus: the end-of-stream page and the length
+by the timeline) before anything else happens; the takes must still have the size and time they had (else
+`a take changed while it was being merged`); then the temporary is renamed to the final name and the folder is fsynced
+(a failing fsync removes the new take again). Only then the take counter moves on to the new take's number
+(`note_take_number_used`: never back; a merge that fails or is cancelled uses no number) and, with DELETE ORIGINALS, the
+originals are deleted one by one through `delete_take` (the take, its peak cache, its journal), the folder fsynced again;
+a delete that fails is a warning (`1 original could not be deleted`), the merge stands. A cancel, an error or a kill
+before the rename leaves the takes untouched and no take under the new name; `cleanup_temporaries()` removes the
+temporary at the next start. Free space: the takes' total size + 5 % (refused before anything is written). The new take's
+name is a new recording's: `peek_take_number` with the first take's prefix, the date and time now (or `nodate`), the
+takes' extension; recording waits while a merge runs (the merge holds that number).
+
+Crash tests (`tests/edit/test_merge.cpp`): every file operation of six merges (WAV mono and stereo 24-bit, FLAC mono and
+stereo 24-bit, Opus 48 kHz mono and 16 kHz stereo with an edited take, keeping and deleting the originals) made to fail
+with EIO and with ENOSPC and to be the point of a kill (834 runs): afterwards every original is as it was, or deleted only
+when the new take is complete, never a broken take under the new name, and the cleanup leaves no temporary.

@@ -1,0 +1,14 @@
+title Cassette after a merge: the recordings list with the new take (Take 008) on top and highlighted, the notice Merged 3 takes into Take 008
+sizes 800x480 480x800
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_MERGE done
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key l
+wait 400
+expect text "Take 008"
+expect text "Merged 3 takes into Take 008"
+shot merged
+expect notext "LAYOUT FAIL"
+expect noquit

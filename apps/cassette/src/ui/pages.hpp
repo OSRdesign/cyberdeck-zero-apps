@@ -12,10 +12,11 @@
  *   SettingsPage  the setting rows in a scrolling list with the boards' scroll bar; a choice row opens its picker in
  *                 the same list (the chosen entry in the selected-row look)
  *   ListPage      the strip, the take rows (label sticker, name, details, duration, chevron; the selected row
- *                 darker), PLAY, RENAME, EDIT, DELETE, the hint
+ *                 darker), LOAD, RENAME, EDIT, MERGE, DELETE, the hint; merge mode on the same page (badges, dimmed rows
+ *                 with their reasons, the merge strip, CANCEL and MERGE)
  *   TrimPage      the strip, the waveform window (overview, main bars, handles, flags, marker, ruler), ZOOM and
  *                 POSITION, SET IN, SET OUT, SPLIT / REMOVE, PLAY, SAVE
- *   SaveBox, ConfirmBox  the dim overlay over the whole screen and the cream box
+ *   SaveBox, ConfirmBox, MergeBox, ProgressBox  the dim overlay over the whole screen and the cream box
  */
 #pragma once
 
@@ -237,22 +238,30 @@ public:
     int selected() const { return vm_.selected; }
     /* The notice replaces the hint line (landscape) or the top strip (narrow; the list moves down for a taller one). */
     void set_notice(const std::string &text);
-    /* The four keys on the selected take: 0 LOAD, 1 RENAME, 2 EDIT (the trim page), 3 DELETE. LOAD does nothing while the model says
-     * can_load = false (recording); otherwise it loads the take and shows the recorder. */
+    /* The five keys on the selected take: 0 LOAD, 1 RENAME, 2 EDIT (the trim page), 3 MERGE (merge mode), 4 DELETE. LOAD does
+     * nothing while the model says can_load = false (recording); otherwise it loads the take and shows the recorder. None of
+     * them in merge mode. */
     void key(int which);
-    /* Enter or a second tap on the selected row: PREVIEW the take (a second one on the previewing row stops it). */
+    /* Enter or a second tap on the selected row: PREVIEW the take (a second one on the previewing row stops it); in merge mode
+     * Enter chooses the highlighted take or drops it. */
     void activate();
+    bool merge_mode() const { return vm_.merge_mode; }
+    /* Merge mode: the highlighted take chosen or dropped (Enter); MERGE (the key, M): the merge box. */
+    void merge_toggle();
+    void merge_run();
 
 private:
     struct Row {
         lv_obj_t *obj = nullptr, *sticker = nullptr, *name = nullptr, *detail = nullptr, *dur = nullptr,
-                 *chevron = nullptr;
+                 *chevron = nullptr, *badge = nullptr, *badge_num = nullptr;
     };
     static void row_cb(lv_event_t *e);
     static void scroll_cb(lv_event_t *e);
     void rebuild();
-    void layout_rows(const lv_font_t *name_font, int name_ls);
+    void layout_rows(const lv_font_t *name_font, int name_ls, const lv_font_t *detail_font, const std::vector<bool> &reason);
     void style_row(int i);
+    void style_badge(Row &r, const TakeRow &t);
+    void highlight(int i, bool from_touch);
     void select(int i, bool from_touch);
     void update_scrollbar();
 
@@ -264,7 +273,8 @@ private:
     lv_obj_t *strip_left_ = nullptr, *strip_right_ = nullptr, *list_ = nullptr, *track_ = nullptr, *thumb_ = nullptr,
              *hint_ = nullptr;
     std::vector<Row> rows_;
-    std::unique_ptr<PianoKey> keys_[4];
+    std::unique_ptr<PianoKey> keys_[5];
+    std::unique_ptr<PianoKey> mkeys_[2]; /* merge mode: CANCEL, MERGE */
     int row_h_ = 42, row_gap_ = 4;
     std::string rows_key_;
     std::unique_ptr<NoticeBox> notice_;
@@ -356,6 +366,49 @@ private:
     lv_obj_t *dim_ = nullptr, *title_ = nullptr, *body_ = nullptr, *yes_label_ = nullptr;
     std::vector<lv_obj_t *> buttons_;
     int focus_ = 1;
+    bool focus_shown_ = false;
+    const UiActions &act_;
+    Fit fit_;
+    bool shown_ = false;
+};
+
+/* The merge box: the save box's look and keys. Title "Merge 3 takes?", the new take's length and size, its file name in the
+ * strip (wrapping, the strip growing; never cut), KEEP ORIGINALS (the default), DELETE ORIGINALS, CANCEL. */
+class MergeBox {
+public:
+    MergeBox(lv_obj_t *parent, const Frame &frame, const UiActions &actions);
+    void update(const MergeBoxVm &m);
+    bool shown() const { return shown_; }
+    lv_obj_t *root() const { return dim_; }
+    void key_move(int dir);
+    void key_choose(); /* KEEP ORIGINALS when nothing was moved */
+
+private:
+    static void button_cb(lv_event_t *e);
+    lv_obj_t *dim_ = nullptr, *title_ = nullptr, *summary_ = nullptr, *strip_ = nullptr, *name_ = nullptr;
+    std::vector<lv_obj_t *> buttons_;
+    int focus_ = 0;
+    bool focus_shown_ = false;
+    const UiActions &act_;
+    Fit fit_;
+    bool shown_ = false;
+    std::string key_;
+};
+
+/* The progress box of a long job (the merge): the confirm box's look, its title ("Merging... 37%"), one line under it and
+ * one CANCEL key. Esc is CANCEL; Enter chooses CANCEL only after a move has shown the outline (a stray Enter keeps the job). */
+class ProgressBox {
+public:
+    ProgressBox(lv_obj_t *parent, const Frame &frame, const UiActions &actions);
+    void update(const ProgressVm &p);
+    bool shown() const { return shown_; }
+    lv_obj_t *root() const { return dim_; }
+    void key_move(int dir);
+    void key_choose();
+
+private:
+    static void button_cb(lv_event_t *e);
+    lv_obj_t *dim_ = nullptr, *title_ = nullptr, *body_ = nullptr, *cancel_ = nullptr;
     bool focus_shown_ = false;
     const UiActions &act_;
     Fit fit_;

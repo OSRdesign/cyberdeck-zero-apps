@@ -129,6 +129,8 @@ struct CassetteUi::Impl {
     std::unique_ptr<TrimPage> trim;
     std::unique_ptr<SaveBox> save;
     std::unique_ptr<ConfirmBox> confirm;
+    std::unique_ptr<MergeBox> merge_box;
+    std::unique_ptr<ProgressBox> progress;
     ViewModel vm;
     bool have_vm = false;
     Screen cur = Screen::Recorder;
@@ -161,7 +163,11 @@ struct CassetteUi::Impl {
                    std::function<void(const std::string &)> done);
     void close_text();
     void update_counter(const std::string &text);
-    bool box_up() const { return (save && save->shown()) || (confirm && confirm->shown()); }
+    bool box_up() const
+    {
+        return (save && save->shown()) || (confirm && confirm->shown()) || (merge_box && merge_box->shown()) ||
+               (progress && progress->shown());
+    }
     PageBase *current() const
     {
         switch (cur) {
@@ -229,6 +235,8 @@ void CassetteUi::Impl::build(AnimOptions anim)
     trim = std::make_unique<TrimPage>(root, frame, act, nav);
     save = std::make_unique<SaveBox>(root, frame, act);
     confirm = std::make_unique<ConfirmBox>(root, frame, act);
+    merge_box = std::make_unique<MergeBox>(root, frame, act);
+    progress = std::make_unique<ProgressBox>(root, frame, act);
     settings->set_shown(false);
     list->set_shown(false);
     trim->set_shown(false);
@@ -282,6 +290,14 @@ void CassetteUi::Impl::back()
         if (act.save_choose) act.save_choose(SaveMode::Cancel);
         return;
     }
+    if (progress->shown()) { /* the merge's CANCEL: it stops, nothing is kept */
+        if (act.merge_stop) act.merge_stop();
+        return;
+    }
+    if (merge_box->shown()) {
+        if (act.merge_choose) act.merge_choose(MergeChoice::Cancel);
+        return;
+    }
     switch (cur) {
     case Screen::Recorder:
         if (vm.rec.transport == Transport::Countdown) {
@@ -293,7 +309,13 @@ void CassetteUi::Impl::back()
     case Screen::Settings:
         if (!settings->back()) go(Screen::Recorder);
         break;
-    case Screen::List: go(Screen::Recorder); break;
+    case Screen::List:
+        if (list->merge_mode()) { /* Esc leaves merge mode first */
+            if (act.merge_cancel) act.merge_cancel();
+        } else {
+            go(Screen::Recorder);
+        }
+        break;
     case Screen::Trim: go(Screen::List); break;
     }
 }
@@ -363,6 +385,12 @@ void CassetteUi::Impl::on_keyboard(const key_item &item)
         if (confirm->shown()) {
             if (dir) confirm->key_move(dir);
             else if (enter) confirm->key_choose();
+        } else if (progress->shown()) {
+            if (dir) progress->key_move(dir);
+            else if (enter) progress->key_choose();
+        } else if (merge_box->shown()) {
+            if (dir) merge_box->key_move(dir);
+            else if (enter) merge_box->key_choose();
         } else {
             if (dir) save->key_move(dir);
             else if (enter) save->key_choose();
@@ -386,11 +414,14 @@ void CassetteUi::Impl::on_keyboard(const key_item &item)
         if (up) list->on_key(LV_KEY_UP);
         else if (down) list->on_key(LV_KEY_DOWN);
         else if (!press) break;
-        else if (enter) list->activate();
-        else if (is(KEY_L, 'l')) list->key(0);
+        else if (enter) list->activate(); /* merge mode: chooses or drops the highlighted take */
+        else if (list->merge_mode()) {
+            if (is(KEY_M, 'm')) list->merge_run();
+        } else if (is(KEY_L, 'l')) list->key(0);
         else if (is(KEY_N, 'n')) list->key(1);
         else if (is(KEY_T, 't')) list->key(2);
-        else if (code == KEY_DELETE) list->key(3);
+        else if (is(KEY_M, 'm')) list->key(3);
+        else if (code == KEY_DELETE) list->key(4);
         else if (is(KEY_S, 's')) go(Screen::Settings);
         break;
     case Screen::Trim:
@@ -508,6 +539,8 @@ void CassetteUi::Impl::run_check()
 {
     lv_obj_t *root = rec->root();
     if (confirm->shown()) root = confirm->root();
+    else if (progress->shown()) root = progress->root();
+    else if (merge_box->shown()) root = merge_box->root();
     else if (save->shown()) root = save->root();
     else if (cur == Screen::Settings) root = settings->root();
     else if (cur == Screen::List) root = list->root();
@@ -591,6 +624,8 @@ CassetteUi::~CassetteUi()
         lv_obj_remove_event_cb_with_user_data(d_->screen, Impl::keyboard_cb, d_.get());
     d_->field.reset();
     d_->dialog.reset();
+    d_->progress.reset();
+    d_->merge_box.reset();
     d_->confirm.reset();
     d_->save.reset();
     d_->trim.reset();
@@ -612,7 +647,9 @@ void CassetteUi::update(const ViewModel &vm)
     d.list->update(vm.list);
     d.trim->update(vm.trim);
     d.save->update(vm.save, vm.trim);
-    d.confirm->update(vm.confirm);
+    d.merge_box->update(vm.merge_box);
+    d.confirm->update(vm.confirm); /* after the merge box: the confirm opened from it comes to the front */
+    d.progress->update(vm.progress);
     d.have_vm = true;
 }
 

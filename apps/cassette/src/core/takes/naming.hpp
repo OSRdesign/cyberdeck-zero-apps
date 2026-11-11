@@ -126,6 +126,9 @@ uint64_t peek_take_number(FileOps &ops, const std::string &recordings_dir, const
  * error no number is handed out. */
 int reserve_take_number(FileOps &ops, const std::string &recordings_dir, uint64_t &take,
                         const std::string &prefix = kDefaultPrefix);
+/* A take numbered `take` now exists (a merge's new take, named with peek_take_number() and renamed into place only when it was
+ * complete): the counter moves on to it when it is behind, never back. 0 or -errno. */
+int note_take_number_used(FileOps &ops, const std::string &recordings_dir, uint64_t take);
 /* The Take number setting: the next take is `wanted` (kTakeNumberMin..kTakeNumberMax, else -EINVAL), moved forward past
  * numbers this prefix already uses; `landed` is the number it ended on. Stores the counter atomically (wanted - 1 or
  * the landed number - 1). Existing files are never touched. 0 or -errno; on an error nothing changes. */

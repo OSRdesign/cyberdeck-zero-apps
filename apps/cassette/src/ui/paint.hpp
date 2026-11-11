@@ -69,6 +69,7 @@ enum class Icon {
     None, Rew, Fwd, Play, Pause, Stop, Rec,  /* the five piano keys (viewBox 22 x 16, drawn 22 x 15) */
     SetIn, SetOut, Remove, Check,            /* trim keys */
     Pencil, Scissors, Delete, Load,          /* list keys (Load: a cassette above its slot) */
+    Merge,                                   /* list key MERGE: two arrows joining into one */
     List, Gear,                              /* the Recordings and Settings buttons (viewBox 24, drawn 22) */
     Minus, Plus, Left, Right,                /* stepper buttons (the boards' 24 px "−" "+", 22 px "◀" "▶") */
     Chevron,                                 /* row chevron (viewBox 10 x 16) */

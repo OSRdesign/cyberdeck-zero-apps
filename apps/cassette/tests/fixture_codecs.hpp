@@ -240,9 +240,10 @@ private:
 
 class PlainOggOpus final : public Encoder {
 public:
+    /* seed: the start of the packets' pseudo-random bytes (streams of different seeds hold different packets: the merge tests) */
     explicit PlainOggOpus(const AudioFormat &f, unsigned packet_bytes = 80, unsigned page_packets = 50,
-                          uint32_t preskip = 312)
-        : fmt_(f), packet_bytes_(packet_bytes), page_packets_(page_packets), preskip_(preskip) {}
+                          uint32_t preskip = 312, uint32_t seed = 1)
+        : fmt_(f), packet_bytes_(packet_bytes), page_packets_(page_packets), preskip_(preskip), seed_(seed) {}
 
     int start(ByteSink &sink, const Tags &tags) override {
         if (st_.error) return st_.error;

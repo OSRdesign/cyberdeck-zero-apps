@@ -317,6 +317,12 @@ int reserve_take_number(FileOps &ops, const std::string &dir, uint64_t &take, co
     return 0;
 }
 
+int note_take_number_used(FileOps &ops, const std::string &dir, uint64_t take) {
+    uint64_t last = 0;
+    if (read_counter_file(ops, dir, last) && last >= take) return 0;
+    return atomic_write_file(ops, take_counter_path(dir), std::to_string(take) + "\n");
+}
+
 int set_next_take_number(FileOps &ops, const std::string &dir, const std::string &prefix, uint64_t wanted,
                          uint64_t &landed) {
     if (wanted < kTakeNumberMin || wanted > kTakeNumberMax) return -EINVAL;

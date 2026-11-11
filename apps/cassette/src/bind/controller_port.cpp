@@ -86,6 +86,9 @@ public:
     bool set_zoom(int z) override { return c_.set_zoom(z); }
     bool preview(bool on) override { return c_.preview(on); }
     bool save(SaveKind k) override { return c_.save(k); }
+    MergeInfo plan_merge(const std::vector<std::string> &n) override { return c_.plan_merge(n); }
+    bool start_merge(const std::vector<std::string> &n, bool del) override { return c_.start_merge(n, del); }
+    void cancel_merge() override { c_.cancel_merge(); }
     void app_leave() override { c_.app_leave(); }
     void shutdown() override { c_.shutdown(); }
 

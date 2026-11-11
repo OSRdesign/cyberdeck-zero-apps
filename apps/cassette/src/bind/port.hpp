@@ -81,6 +81,10 @@ public:
     virtual bool set_zoom(int level) = 0;
     virtual bool preview(bool on) = 0;
     virtual bool save(SaveKind kind) = 0;
+    /* merge takes (Controller::plan_merge, start_merge, cancel_merge) */
+    virtual MergeInfo plan_merge(const std::vector<std::string> &names) = 0;
+    virtual bool start_merge(const std::vector<std::string> &names, bool delete_originals) = 0;
+    virtual void cancel_merge() = 0;
     virtual void app_leave() = 0;
     virtual void shutdown() = 0;
 

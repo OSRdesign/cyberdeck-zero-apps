@@ -53,7 +53,18 @@ struct ListRowGeom {
     int name_y = 0;     /* the name label's top inside the row (inside the border) */
     int detail_y = 0;   /* the top of the detail's box (the line is centred in detail_box there) */
 };
-ListRowGeom list_row_geom(int std_h, int name_box1, int detail_box, int name_text_h, int name_line_h);
+ListRowGeom list_row_geom(int std_h, int name_box1, int detail_box, int name_text_h, int name_line_h, int detail_text_h = 0);
+/* detail_text_h: the detail's wrapped height when it is taller than its one-line box (merge mode: a dimmed row's reason that
+ * does not fit one line at the list's detail size wraps); the row grows by the difference, the name stays on top. */
+
+/* The recordings list's row keys in board px (the page's 480 x 320 landscape / 320 x 480 portrait board): `count` keys side by
+ * side over the span of the trim page's five keys (landscape x 16 to 464 at y 222, 56 high; portrait x 16 to 304 at y 396, 64
+ * high; 7 px apart). Five keys (LOAD, RENAME, EDIT, MERGE, DELETE) are exactly the trim page's (84 x 56 landscape, 52 x 64
+ * portrait); the two keys of merge mode (CANCEL, MERGE) share the same span. */
+struct KeyBox {
+    double x = 0, y = 0, w = 0, h = 0;
+};
+KeyBox list_key_box(int index, int count, bool portrait);
 
 /* The LED bar: lit steps for a sample peak in dBFS (the core meter's rule: step i, 0..14, lit when db >= -40 + i*40/14),
  * and the colour band of step i: 0..9 green, 10..12 amber, 13..14 red. */
@@ -138,7 +149,8 @@ std::string info_lost(const RecorderVm &rec);
  * portrait "12 TAKES" | "41 GB FREE · 117 h". "1 TAKE" for one. */
 std::string list_strip_left(const ListVm &l, bool narrow);
 std::string list_strip_right(const ListVm &l, bool narrow);
-/* The hint under the keys (landscape): "Take 006 selected. Esc returns to the recorder." */
+/* The hint under the keys (landscape): "Take 006 selected. Esc returns to the recorder."; in merge mode "Choose the takes in
+ * order, then MERGE. Esc cancels." */
 std::string list_hint(const ListVm &l);
 
 /* The trim page's strips:

@@ -139,6 +139,7 @@ ui::UiActions Binder::actions()
             });
         }
         if (was == ui::Screen::Trim && s != ui::Screen::Trim) leave_trim();
+        if (was == ui::Screen::List && s != ui::Screen::List && local_.merge_mode && !local_.merge_running) end_merge_mode();
         if (s == ui::Screen::Settings) post([this] { port_.refresh_cards(); });
         if (s == ui::Screen::List) {
             list_preview_ = false;
@@ -327,6 +328,51 @@ ui::UiActions Binder::actions()
         local_.confirm = LocalState::Confirm::Delete;
         local_.confirm_take = name;
     };
+    a.list_merge = [this](int i) {
+        if (rows_.size() < 2) {
+            push_notice("Merging needs two takes");
+            return;
+        }
+        if (recording_family(snap_.deck.state)) {
+            push_notice("Stop the recording to merge takes");
+            return;
+        }
+        local_.merge_mode = true;
+        local_.merge_sel.clear();
+        local_.merge_box = false;
+        toggle_merge(i); /* the focused take is chosen first (or the notice says why it cannot be) */
+    };
+    a.merge_toggle = [this](int i) { toggle_merge(i); };
+    a.merge_cancel = [this] {
+        if (!local_.merge_running) end_merge_mode();
+    };
+    a.merge_run = [this] {
+        if (!local_.merge_mode || local_.merge_running || local_.merge_box) return;
+        if (local_.merge_sel.size() < 2) {
+            push_notice("Merging needs two takes");
+            return;
+        }
+        const unsigned token = ++merge_token_;
+        const std::vector<std::string> names = local_.merge_sel;
+        post([this, names, token] {
+            MergeInfo info = port_.plan_merge(names);
+            std::lock_guard<std::mutex> g(inbox_.mu);
+            inbox_.have_merge_plan = true;
+            inbox_.merge_token = token;
+            inbox_.merge_plan = info;
+        });
+    };
+    a.merge_choose = [this](ui::MergeChoice c) {
+        switch (c) {
+        case ui::MergeChoice::KeepOriginals:
+            local_.merge_box = false;
+            begin_merge(false);
+            break;
+        case ui::MergeChoice::DeleteOriginals: local_.confirm = LocalState::Confirm::MergeDelete; break;
+        case ui::MergeChoice::Cancel: local_.merge_box = false; break;
+        }
+    };
+    a.merge_stop = [this] { post([this] { port_.cancel_merge(); }); };
 
     a.trim_zoom = [this](int dir) {
         if (dir == 0) return;
@@ -432,9 +478,100 @@ ui::UiActions Binder::actions()
                 const int r = port_.delete_take(take);
                 if (r < 0) notice_from_job("Not deleted: " + error_text(r));
             });
+        } else if (what == LocalState::Confirm::MergeDelete) {
+            local_.merge_box = false;
+            begin_merge(true);
         }
     };
     return a;
+}
+
+/* ---- merge takes ---- */
+
+void Binder::toggle_merge(int i)
+{
+    if (!local_.merge_mode || local_.merge_running || local_.merge_box) return;
+    const std::string name = take_at(i);
+    if (name.empty()) return;
+    std::vector<std::string> &sel = local_.merge_sel;
+    const auto it = std::find(sel.begin(), sel.end(), name);
+    if (it != sel.end()) { /* dropped: the later ones move up a number */
+        sel.erase(it);
+        return;
+    }
+    size_t row = rows_.size();
+    for (size_t k = 0; k < rows_.size(); ++k)
+        if (rows_[k].name == name) row = k;
+    const std::string why = merge_row_reason(snap_, rows_, sel, row);
+    if (!why.empty()) {
+        push_notice("Not available: " + why);
+        return;
+    }
+    sel.push_back(name);
+}
+
+void Binder::end_merge_mode()
+{
+    local_.merge_mode = false;
+    local_.merge_sel.clear();
+    local_.merge_box = false;
+    if (local_.confirm == LocalState::Confirm::MergeDelete) local_.confirm = LocalState::Confirm::None;
+    ++merge_token_; /* a plan still on its way opens no box */
+}
+
+void Binder::begin_merge(bool delete_originals)
+{
+    if (local_.merge_running || local_.merge_sel.size() < 2) return;
+    local_.merge_running = true;
+    local_.merge_shown_pct = 0;
+    local_.merge_count = static_cast<int>(local_.merge_sel.size());
+    local_.merge_name = local_.merge_info.name;
+    merge_wait_start_ = true;
+    const std::vector<std::string> names = local_.merge_sel;
+    post([this, names, delete_originals] {
+        const bool ok = port_.start_merge(names, delete_originals);
+        const unsigned seq = port_.snapshot().merge.seq;
+        std::lock_guard<std::mutex> g(inbox_.mu);
+        inbox_.have_merge_start = true;
+        inbox_.merge_started = ok;
+        inbox_.merge_seq = seq;
+    });
+}
+
+/* The merge the binding started: its progress, then its end (the notice; merge mode ends on success). */
+void Binder::follow_merge()
+{
+    if (local_.merge_mode) { /* takes that left the list leave the choice */
+        std::vector<std::string> &sel = local_.merge_sel;
+        sel.erase(std::remove_if(sel.begin(), sel.end(),
+                                 [this](const std::string &n) {
+                                     for (const TakeRow &r : rows_)
+                                         if (r.name == n) return false;
+                                     return true;
+                                 }),
+                  sel.end());
+    }
+    if (!local_.merge_running || merge_wait_start_) return;
+    const MergeSnap &m = snap_.merge;
+    if (m.seq != merge_seq_) return;
+    if (m.state == 1) {
+        local_.merge_shown_pct = std::clamp(static_cast<int>(m.progress * 100.0f), 0, 99);
+        if (!m.output.empty()) local_.merge_name = m.output;
+    } else if (m.state == 2) {
+        std::string t = "Merged " + std::to_string(m.sources) + " takes into " + display_name(m.output);
+        if (m.originals_deleted) t += ", originals deleted";
+        if (!m.message.empty()) t += "; " + m.message;
+        push_notice(t);
+        local_.merge_running = false;
+        end_merge_mode();
+        local_.list_sel = m.output; /* the new take, highlighted */
+    } else if (m.state == 3) {
+        push_notice("Merge failed: " + m.message);
+        local_.merge_running = false;
+    } else if (m.state == 4) {
+        push_notice("Merge cancelled");
+        local_.merge_running = false;
+    }
 }
 
 void Binder::drain_inbox()
@@ -444,8 +581,17 @@ void Binder::drain_inbox()
     uint64_t next = 0;
     unsigned token = 0;
     ui::Screen nav = ui::Screen::List;
+    bool have_plan = false, have_start = false, started = false;
+    unsigned plan_token = 0, seq = 0;
+    MergeInfo plan;
     {
         std::lock_guard<std::mutex> g(inbox_.mu);
+        std::swap(have_plan, inbox_.have_merge_plan);
+        plan_token = inbox_.merge_token;
+        plan = inbox_.merge_plan;
+        std::swap(have_start, inbox_.have_merge_start);
+        started = inbox_.merge_started;
+        seq = inbox_.merge_seq;
         notices.swap(inbox_.notices);
         std::swap(done, inbox_.notices_done);
         std::swap(have_next, inbox_.have_next);
@@ -472,6 +618,19 @@ void Binder::drain_inbox()
     if (have_nav) {
         nav_pending_ = true;
         nav_ = nav;
+    }
+    if (have_plan && plan_token == merge_token_ && local_.merge_mode && !local_.merge_running) {
+        if (plan.ok) {
+            local_.merge_info = plan;
+            local_.merge_box = true;
+        } else {
+            push_notice(plan.message);
+        }
+    }
+    if (have_start) {
+        merge_wait_start_ = false;
+        if (started) merge_seq_ = seq;
+        else local_.merge_running = false; /* refused: the controller's notice says why */
     }
 }
 
@@ -620,6 +779,7 @@ bool Binder::tick(int64_t now_mono_ms, int64_t now_wall_s)
     }
     follow_position();
     update_peaks();
+    follow_merge();
 
     /* the shown notice: each for notice_ms, then the next */
     if (!local_.notice.empty() && now_ms_ - notice_since_ >= opt_.notice_ms) local_.notice.clear();

@@ -5,6 +5,7 @@
  */
 #include "view_map.hpp"
 
+#include "core/edit/merge.hpp"
 #include "core/takes/naming.hpp"
 #include "ui/ui_format.hpp"
 #include "ui/wave_geom.hpp"
@@ -463,6 +464,72 @@ std::string take_detail(const TakeRow &r, int64_t now_wall_s, bool utc)
     return take_detail_forms(r, now_wall_s, utc).front();
 }
 
+namespace {
+
+MergeFacts merge_facts(const TakeRow &r)
+{
+    MergeFacts f;
+    f.named = r.named;
+    f.readable = !r.damaged;
+    f.kind = r.format_tag == "FLAC" ? EditKind::Flac : r.format_tag == "OPUS" ? EditKind::OggOpus : EditKind::Wav;
+    f.rate = r.rate;
+    f.channels = static_cast<uint16_t>(r.channels);
+    f.bits = static_cast<uint16_t>(r.bits);
+    return f;
+}
+
+} // namespace
+
+std::string merge_row_reason(const Snapshot &s, const std::vector<TakeRow> &rows, const std::vector<std::string> &chosen,
+                             size_t i)
+{
+    if (i >= rows.size()) return "";
+    const TakeRow &r = rows[i];
+    const int ds = s.deck.state;
+    if (recording_family(ds) && ds != kDeckCountdown && s.take.name == r.name) return "Being recorded";
+    if (s.trim.open && s.trim.take == r.name) return "Open on the Edit page";
+    if (playing_family(ds) && (s.take.playing_name.empty() ? s.take.name : s.take.playing_name) == r.name)
+        return "Playing: stop it first";
+    const TakeRow *first = nullptr;
+    for (const std::string &n : chosen) {
+        for (const TakeRow &x : rows)
+            if (x.name == n) first = &x;
+        if (first) break;
+    }
+    if (!first || first->name == r.name) return merge_take_reason(merge_facts(r));
+    return merge_join_reason(merge_facts(*first), merge_facts(r));
+}
+
+std::string merge_detail_text(double seconds, uint64_t bytes)
+{
+    std::string out = ui::fmt_mmss(std::llround(std::max(0.0, seconds) * 1000.0));
+    join(out, "about " + size_text(bytes));
+    return out;
+}
+
+std::string merge_strip_text(const std::vector<TakeRow> &rows, const std::vector<std::string> &chosen)
+{
+    int n = 0;
+    double secs = 0;
+    uint64_t bytes = 0;
+    for (const std::string &c : chosen)
+        for (const TakeRow &r : rows)
+            if (r.name == c) {
+                ++n;
+                secs += r.seconds;
+                bytes += r.size;
+            }
+    std::string out = "Merge";
+    join(out, std::to_string(n) + (n == 1 ? " take" : " takes"));
+    if (n > 0) join(out, merge_detail_text(secs, bytes));
+    return out;
+}
+
+std::string merging_title(int percent)
+{
+    return "Merging... " + std::to_string(std::clamp(percent, 0, 100)) + "%";
+}
+
 std::string tape_format(const std::string &f)
 {
     const size_t slash = f.find('/');
@@ -812,6 +879,24 @@ ui::ViewModel map_view(const MapInput &in)
     l.free_space = s.take.free_bytes ? size_text(s.take.free_bytes) : std::string();
     l.free_hours = hours_text(s.take.hours_left);
     l.format_short = short_format(s.take.format_text);
+    /* merge takes: MERGE needs two takes; in merge mode each row's number in the order chosen and whether it can join */
+    l.can_merge = rows.size() >= 2;
+    if (local.merge_mode) {
+        l.merge_mode = true;
+        std::vector<std::string> chosen;
+        for (const std::string &n : local.merge_sel)
+            for (const TakeRow &t : rows)
+                if (t.name == n) chosen.push_back(n);
+        for (size_t i = 0; i < rows.size(); ++i) {
+            ui::TakeRow &o = l.takes[i];
+            const auto it = std::find(chosen.begin(), chosen.end(), rows[i].name);
+            o.merge_order = it == chosen.end() ? 0 : static_cast<int>(it - chosen.begin()) + 1;
+            o.merge_reason = o.merge_order ? std::string() : merge_row_reason(s, rows, chosen, i);
+            o.merge_ok = o.merge_reason.empty();
+        }
+        l.merge_strip = merge_strip_text(rows, chosen);
+        l.merge_ready = chosen.size() >= 2;
+    }
 
     /* ---- trim ---- */
     if (s.trim.open) {
@@ -861,6 +946,22 @@ ui::ViewModel map_view(const MapInput &in)
         vm.confirm.title = "Delete this take?";
         vm.confirm.body = local.confirm_take;
         vm.confirm.yes = "DELETE";
+    } else if (local.confirm == LocalState::Confirm::MergeDelete) {
+        vm.confirm.shown = true;
+        vm.confirm.title = "Delete the originals?";
+        vm.confirm.body = "They are deleted only after the new file is written and synced.";
+        vm.confirm.yes = "DELETE";
+    }
+    if (local.merge_box) {
+        vm.merge_box.shown = true;
+        vm.merge_box.title = "Merge " + std::to_string(local.merge_info.count) + " takes?";
+        vm.merge_box.name = local.merge_info.name;
+        vm.merge_box.detail = merge_detail_text(local.merge_info.seconds, local.merge_info.bytes);
+    }
+    if (local.merge_running) {
+        vm.progress.shown = true;
+        vm.progress.title = merging_title(local.merge_shown_pct);
+        vm.progress.body = std::to_string(local.merge_count) + " takes into " + local.merge_name;
     }
     return vm;
 }
@@ -895,7 +996,7 @@ bool same(const ui::RecorderVm &a, const ui::RecorderVm &b)
 bool same(const ui::ViewModel &a, const ui::ViewModel &b)
 {
     return a.notice == b.notice && same(a.rec, b.rec) && a.settings == b.settings && a.list == b.list && a.trim == b.trim && a.save == b.save &&
-           a.confirm == b.confirm;
+           a.confirm == b.confirm && a.merge_box == b.merge_box && a.progress == b.progress;
 }
 
 } // namespace bind

@@ -1,0 +1,48 @@
+title Cassette bound (CASSETTE_DEMO=1): two takes recorded; in the list MERGE (key M) chooses the highlighted take (Take 002) first, Down and Enter choose Take 001 second, M opens the merge box with the new take's name (take 003), KEEP ORIGINALS merges: the notice names Take 003, the new take is highlighted, the originals stay
+sizes 480x320 320x480
+ppmm 608
+env CASSETTE_DEMO 1
+env CASSETTE_DEMO_HOME demo-home
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 1500
+expect text "SOFT"
+tap "REC"
+wait 2300
+tap "STOP"
+wait 1000
+tap "REC"
+wait 2300
+tap "STOP"
+wait 1000
+key l
+wait 700
+expect text "Take 002"
+expect text "Take 001"
+expect text "MERGE"
+key m
+wait 500
+expect text "CANCEL"
+expect notext "RENAME"
+key down
+wait 200
+key enter
+wait 300
+key m
+wait 1000
+expect text "Merge 2 takes?"
+expect text "KEEP ORIGINALS"
+shot merge-box
+expect notext "LAYOUT FAIL"
+key enter
+wait 3000
+expect text "Merged 2 takes into Take 003"
+expect text "Take 003"
+expect text "Take 002"
+expect text "RENAME"
+shot merged
+expect notext "LAYOUT FAIL"
+key esc
+wait 500
+expect text "SOFT"
+expect noquit
