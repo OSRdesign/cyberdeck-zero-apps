@@ -277,7 +277,8 @@ control, SOFT then takes the full width); the five keys across the full width. L
 everywhere, all gaps 12 px, what is left over stays under the keys. A control row is never lower than the toolkit's touch
 target: where the panel's density asks for more than the mockup's 58 / 72 px (a 10 px/mm panel wants 70), the window
 gives the height and the cassette scales to fit. MON, LIM and LOW CUT ("CUT" where the label does not fit) are one list of three lamps at the right edge of the meter panel, as in
-portrait (LIM and LOW CUT are lit when the switches in Settings are on, dim otherwise; landscape has them in the info strip), and
+portrait (LIM and LOW CUT are lit when the switches in Settings are on, a grey dot with a dimmed label otherwise, like MON while
+the monitor is off; all three the same size; landscape has them in the info strip), and
 PEAK is at the panel's bottom left.
 
 ## The code

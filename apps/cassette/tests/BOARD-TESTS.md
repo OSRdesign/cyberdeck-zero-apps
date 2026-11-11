@@ -579,10 +579,11 @@ Goal: the two lamps show on the narrow and square screens as they do in the land
 
 1. Open Cassette on a portrait (320x480, 480x800) or square (480x480, 720x720) board. In Settings switch Low cut and
    Limiter off, go back. Expected: the meter panel's right edge shows a list of lamps with labels, top to bottom `MON` (only
-   with a playback side), `LIM`, `CUT` (or `LOW CUT`), the dots in one column, the labels in one column; LIM and CUT are
-   dim. The PEAK lamp (dark red) with its label is at the bottom left, under IN. Nothing overlaps the scale numbers, the
+   with a playback side), `LIM`, `CUT` (or `LOW CUT`), the dots in one column, the labels in one column, all three dots and labels the same size; LIM and CUT are
+   grey dots with dimmed labels (MON too while the monitor is off). The PEAK lamp (dark red) with its label is at the
+   bottom left, under IN. Nothing overlaps the scale numbers, the
    TARGET bracket or the bars.
-2. Switch only Limiter on. Expected: the LIM lamp turns green with a glow, the other stays dim. Then only Low cut on:
+2. Switch only Limiter on. Expected: the LIM lamp turns green with a glow and its label brightens, the other stays grey. Then only Low cut on:
    the other way round. Then both: both lit.
 3. Record a few seconds with both on, then play the take. Expected: both lamps stay lit and do not move; with two
    channels (a stereo card) and with one the lamps stay at the same place and the panel keeps its height.

@@ -6,7 +6,8 @@
  *
  * Landscape shows LIM and LOW CUT in the info strip; these layouts have an info box instead, so the panel carries them:
  * one aligned list at the panel's right edge, top to bottom MON, LIM, LOW CUT (a lamp dot and a mono-caps label per row,
- * the dots in one column, the labels left aligned in another, the rows evenly spaced). PEAK sits at the bottom left,
+ * the dots in one column, the labels left aligned in another, the rows evenly spaced; every row the same dot diameter and
+ * the same label size). PEAK sits at the bottom left,
  * where MON was.
  *
  * The page measures the label texts and hands the widths in; the test hands in estimates. "LOW CUT" is used when it fits
@@ -80,14 +81,14 @@ struct PeakGeo {
 /* ------------------------------------------------------------------------------------------------ portrait (320 wide) */
 
 /* The panel is {16, 220, 288, 68} (3 px frame). The list takes the strip right of the bars (they end at x 253), from the
- * panel's top padding to its bottom: 3 rows of 20. */
+ * panel's top padding to its bottom: 3 rows of 20; 7 px lamps, 10 px labels. */
 inline MeterLampSpec portrait_lamp_spec()
 {
     MeterLampSpec s;
     s.panel = {16, 220, 288, 68};
     s.area = {256, 224, 40, 60};
     s.lamp_d = 7;
-    s.px = 9;
+    s.px = 10; /* MON at 10 px bold is 26 px wide: the block (7 + 3 + 27) fits the 40 px strip */
     s.gap = 3;
     return s;
 }
@@ -121,7 +122,7 @@ inline MeterLampSpec square_lamp_spec(const SqGeo &g)
     const double my = g.meter_y - 440;
     MeterLampSpec s;
     s.panel = {24, g.meter_y, 672, g.meter_h};
-    s.area = {630, my + 446, 56, 90};
+    s.area = {628, my + 446, 58, 90}; /* MON at 14 px bold (36 + 2 spacing) needs 57 with lamp and gap */
     s.lamp_d = 14;
     s.px = 14;
     s.gap = 5;

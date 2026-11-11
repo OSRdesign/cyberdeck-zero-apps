@@ -98,6 +98,7 @@ private:
     void square_stereo(bool stereo);
     void build_meter_lamps(const MeterLampSpec &spec, double ls, std::uint32_t label_rgb);
     void lamp_level(Lamp &l, bool on, int glow = 0);
+    void list_lamp_level(lv_obj_t *dot, lv_obj_t *label, bool on); /* a lamp of the meter panel's list (portrait, square) */
     void place_strip_right(const std::string &state);
     void place_steppers(bool card);
 
@@ -123,6 +124,7 @@ private:
     bool card_shown_ = true;
     bool limiter_ = false, low_cut_ = false;
     int lamp_glow_ = 2; /* the meter panel lamps' glow (portrait, square) */
+    lv_obj_t *lim_label_ = nullptr, *cut_label_ = nullptr; /* the list's LIM and LOW CUT labels (portrait, square) */
     double btn_h_ = 44; /* the Recordings / Settings buttons' height (landscape) */
     bool first_ = true;
     /* the info box (title, detail, state lamp: portrait and square) instead of the strip with its lamps (landscape) */

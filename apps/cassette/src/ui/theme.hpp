@@ -39,6 +39,10 @@ constexpr std::uint32_t kLedGreen = 0x3FD166, kLedAmber = 0xF0B400, kLedRed = 0x
 constexpr std::uint32_t kInLabel = 0xD8DCDF, kScale = 0xC9CDD0, kAmber = 0xF0B400;
 constexpr std::uint32_t kPeakOff = 0x4A1612, kPeakOn = 0xE5372B, kPeakEdge = 0x14171A;
 constexpr std::uint32_t kMonOff = 0x163F22, kMonOn = kLedGreen; /* the MON lamp: dark green, the low bars' green */
+/* the meter panel's list (portrait, square): MON, LIM and LOW CUT off are a neutral dark grey dot (no glow) with the label at
+ * 55 % opacity; on, the lamp green with its glow and the label at full opacity */
+constexpr std::uint32_t kListLampOff = 0x3A3F3F;
+constexpr unsigned kListLabelOffOpa = 140;
 constexpr std::uint32_t kCounterBox = 0x0A0A0A, kCounterEdge = 0x3A3F44, kCell = 0x141516, kDigit = 0xF4F1E8;
 
 /* cassette */

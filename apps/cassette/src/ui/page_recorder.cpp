@@ -371,8 +371,9 @@ void RecorderPage::build_square()
 /* The list at the meter panel's right edge (portrait and square: their info box has no room for LIM and LOW CUT, landscape
  * has them in the strip): MON, LIM, LOW CUT, one lamp and one label per row, the dots at one x, the labels at one x, equal
  * size and pitch. The places are the pure geometry of meter_lamps.hpp; the label texts are measured here, so "LOW CUT"
- * becomes "CUT" only where the list is too narrow for it. LIM and LOW CUT are the strip's lamps (Lamp, green, glow, dim at
- * opacity 46 while off; see update_deck); MON keeps its own look (dark green off, the low bars' green with a glow on). */
+ * becomes "CUT" only where the list is too narrow for it. The three lamps are drawn alike: one diameter, the same 1 px
+ * rim, the same green and glow when on, the same neutral grey without glow and the same dimmed label when off
+ * (list_lamp_level, from update_deck). LIM and LOW CUT are Lamp objects (landscape's type), MON a plain box. */
 void RecorderPage::build_meter_lamps(const MeterLampSpec &spec, double ls, std::uint32_t label_rgb)
 {
     const int lpx = fit_.px(spec.px);
@@ -388,11 +389,12 @@ void RecorderPage::build_meter_lamps(const MeterLampSpec &spec, double ls, std::
     lv_obj_set_size(mon_lamp_, d, d);
     lim_ = std::make_unique<Lamp>(root_, fit_.x(g.lamp[1].x), fit_.y(g.lamp[1].y), d, col::kLampGreen, lamp_glow_);
     cut_ = std::make_unique<Lamp>(root_, fit_.x(g.lamp[2].x), fit_.y(g.lamp[2].y), d, col::kLampGreen, lamp_glow_);
+    for (lv_obj_t *o : {lim_->obj(), cut_->obj()}) border(o, 1, col::kPeakEdge); /* MON's rim (mon_lamp) */
     for (int i = 0; i < kLampRows; ++i) {
         lv_obj_t *l = fit_label(root_, fit_, Face::Bold, spec.px, label_rgb, g.label[i].x, g.label[i].y, 0, g.label[i].h,
                                 LV_TEXT_ALIGN_LEFT, ls);
         lv_label_set_text(l, g.text(i));
-        if (i == 0) mon_label_ = l;
+        (i == 0 ? mon_label_ : i == 1 ? lim_label_ : cut_label_) = l;
     }
 }
 
@@ -526,7 +528,10 @@ void RecorderPage::update_deck(const RecorderVm &rec)
         show(mon_label_, mon_shown_);
     }
     const bool mon_lit = rec.monitor_shown && rec.monitor_active;
-    if (first_ || mon_lit != mon_lit_) {
+    if (info_box_ && (first_ || mon_lit != mon_lit_)) {
+        mon_lit_ = mon_lit;
+        list_lamp_level(mon_lamp_, mon_label_, mon_lit);
+    } else if (first_ || mon_lit != mon_lit_) {
         mon_lit_ = mon_lit;
         lv_obj_set_style_bg_color(mon_lamp_, lv_color_hex(mon_lit ? col::kMonOn : col::kMonOff), 0);
         lv_obj_set_style_shadow_width(mon_lamp_, mon_lit ? fit_.px(mon_glow_) : 0, 0);
@@ -558,8 +563,8 @@ void RecorderPage::update_deck(const RecorderVm &rec)
     }
 
     if (info_box_) { /* the meter panel's lamps (not under the notice: it covers the counter row only) */
-        if (first_ || rec.info.limiter != limiter_) lamp_level(*lim_, rec.info.limiter);
-        if (first_ || rec.info.low_cut != low_cut_) lamp_level(*cut_, rec.info.low_cut);
+        if (first_ || rec.info.limiter != limiter_) list_lamp_level(lim_->obj(), lim_label_, rec.info.limiter);
+        if (first_ || rec.info.low_cut != low_cut_) list_lamp_level(cut_->obj(), cut_label_, rec.info.low_cut);
         limiter_ = rec.info.limiter;
         low_cut_ = rec.info.low_cut;
     }
@@ -593,6 +598,17 @@ void RecorderPage::lamp_level(Lamp &l, bool on, int glow)
 {
     lv_obj_set_style_opa(l.obj(), static_cast<lv_opa_t>(on ? 255 : 46), 0);
     lv_obj_set_style_shadow_width(l.obj(), on ? (glow > 0 ? glow : lamp_glow_) : 0, 0);
+}
+
+/* MON, LIM or LOW CUT of the meter panel's list: on, the lamp green with its glow and the label at full opacity; off, the
+ * neutral grey dot without glow and the label at 55 %. The dot keeps its size and rim in both states. */
+void RecorderPage::list_lamp_level(lv_obj_t *dot, lv_obj_t *label, bool on)
+{
+    lv_obj_set_style_opa(dot, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(dot, lv_color_hex(on ? col::kLampGreen : col::kListLampOff), 0);
+    lv_obj_set_style_shadow_color(dot, lv_color_hex(col::kLampGreen), 0);
+    lv_obj_set_style_shadow_width(dot, on ? lamp_glow_ : 0, 0);
+    lv_obj_set_style_text_opa(label, static_cast<lv_opa_t>(on ? 255 : col::kListLabelOffOpa), 0);
 }
 
 void RecorderPage::press_key(int key, bool down)
