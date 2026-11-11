@@ -176,7 +176,8 @@ narrow (portrait) and square screens, where the info box has no room, they sit i
 are one list of three lamps at the right edge of the meter, top to bottom, each a dot and a small label (the label reads
 `CUT` where `LOW CUT` does not fit the list: on the 320x480, 480x800, 480x480 and 720x720 screens it is `CUT`). There the PEAK
 lamp moves to the bottom left of the panel, under IN. The three lamps of the list are the same size; each is a green dot with
-a glow when on and a grey dot with a dimmed label when off. The MON row is empty when the card has no playback side. The lamps follow the two switches in every
+a glow when on and a grey dot with a dimmed label when off. The list keeps its size; where the screen would bring the bars
+nearer the dots than a small gap, the meter's steps are drawn a little narrower (all 15 alike) and the scale follows them. The MON row is empty when the card has no playback side. The lamps follow the two switches in every
 state (idle, recording, playing, with no sound input): lit when the switch is on, dim when it is off. They change the
 recording.
 

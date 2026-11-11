@@ -96,7 +96,12 @@ private:
     void build_portrait();
     void build_square();
     void square_stereo(bool stereo);
-    void build_meter_lamps(const MeterLampSpec &spec, double ls, std::uint32_t label_rgb);
+    /* the meter panel of portrait and square (meter_lamps.hpp): its layout on this screen, a text placed by it, the list */
+    TextWidthFn text_width_fn() const;
+    lv_obj_t *meter_text(const MeterText &t, std::uint32_t rgb, lv_text_align_t align);
+    lv_obj_t *meter_bracket(const MeterSpec &spec);
+    void build_meter_lamps(const MeterSpec &spec, std::uint32_t label_rgb);
+    MeterLayout meter_;
     void lamp_level(Lamp &l, bool on, int glow = 0);
     void list_lamp_level(lv_obj_t *dot, lv_obj_t *label, bool on); /* a lamp of the meter panel's list (portrait, square) */
     void place_strip_right(const std::string &state);

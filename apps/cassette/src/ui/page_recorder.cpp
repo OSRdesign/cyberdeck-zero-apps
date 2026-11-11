@@ -240,31 +240,26 @@ void RecorderPage::build_landscape()
 
 void RecorderPage::build_portrait()
 {
-    framed_panel(root_, fit_, {16, 220, 288, 68}, col::kPanel);
+    const MeterSpec ms = portrait_meter_spec();
+    framed_panel(root_, fit_, {ms.panel.x, ms.panel.y, ms.panel.w, ms.panel.h}, col::kPanel);
     in_label_ = fit_label(root_, fit_, Face::Bold, 13, col::kInLabel, 26, 227, 0, 22, LV_TEXT_ALIGN_LEFT, 1);
     lv_label_set_text(in_label_, "IN");
     ch_l_ = fit_label(root_, fit_, Face::Bold, 9, col::kInLabel, 30, 227, 0, 10);
     lv_label_set_text(ch_l_, "L");
     ch_r_ = fit_label(root_, fit_, Face::Bold, 9, col::kInLabel, 30, 237, 0, 10);
     lv_label_set_text(ch_r_, "R");
-    bar_ = std::make_unique<LedBar>(root_, fit_, 46, 227, 11, 20, 3);
+    /* the bar's steps as this screen draws them, narrowed where the list at the right edge needs the room */
+    meter_ = meter_layout(fit_, ms, text_width_fn());
+    bar_ = std::make_unique<LedBar>(root_, fit_, meter_.bar, ms.y, ms.led_h);
     /* PEAK at the bottom left, where MON was; MON, LIM and LOW CUT are the list at the right edge (build_meter_lamps) */
-    const PeakGeo pk = portrait_peak();
+    const PeakGeo &pk = ms.peak;
     peak_ = peak_lamp(root_, fit_, pk.lamp.x, pk.lamp.y, pk.lamp.w);
     lv_obj_t *peak = fit_label(root_, fit_, Face::Bold, 10, col::kScale, pk.label.x, pk.label.y, 0, pk.label.h, LV_TEXT_ALIGN_LEFT, 1);
     lv_label_set_text(peak, "PEAK");
-    const double sx[4] = {4, 94, 138, 182};
-    const char *const st[4] = {"-40", "-20", "-10", "0"};
-    for (int i = 0; i < 4; ++i) {
-        lv_obj_t *l = fit_label(root_, fit_, Face::Bold, 10, col::kScale, 46 + sx[i], 251, 0, 12);
-        lv_label_set_text(l, st[i]);
-    }
-    lv_obj_t *br = box(root_, fit_.x(158), fit_.y(264), fit_.w(158, 54), fit_.h(264, 5), 0, 0, LV_OPA_TRANSP);
-    border(br, fit_.px(2), col::kAmber);
-    lv_obj_set_style_border_side(br, static_cast<lv_border_side_t>(LV_BORDER_SIDE_LEFT | LV_BORDER_SIDE_RIGHT | LV_BORDER_SIDE_BOTTOM), 0);
-    lv_obj_t *tg = fit_label(root_, fit_, Face::Bold, 9, col::kAmber, 158, 270, 54, 11, LV_TEXT_ALIGN_CENTER, 1.2);
-    lv_label_set_text(tg, "TARGET");
-    build_meter_lamps(portrait_lamp_spec(), 0.5, col::kScale);
+    for (const MeterText &t : ms.scale) meter_text(t, col::kScale, LV_TEXT_ALIGN_LEFT);
+    meter_bracket(ms);
+    meter_text(ms.target, col::kAmber, LV_TEXT_ALIGN_CENTER);
+    build_meter_lamps(ms, col::kScale);
 
     counter_ = std::make_unique<Counter>(root_, fit_, 16, 294, 88, 44, 15, 30, 8, 24, 6);
     list_btn_ = std::make_unique<IconButton>(root_, fit_, DRect{108, 294, 44, 44}, Icon::List, [this] { if (!window_->loading()) nav_.go(Screen::List); });
@@ -286,8 +281,6 @@ void RecorderPage::build_portrait()
 /* The square layout: one column, every number the 720x720 mockup's (design px, scaled by width / 720). */
 void RecorderPage::build_square()
 {
-    const double my = g_.meter_y - 440; /* the panel against the mockup (the window may have shrunk) */
-    const double sy = my + kSqStereoGrow; /* the content's rows as drawn with two channels; one channel moves them (square_stereo) */
     /* what moves with the channel count: down for the rows that sit at the panel's top, up for those at its bottom */
     auto moved = [this](lv_obj_t *o, double mono_dy) {
         sq_moved_.push_back({o, lv_obj_get_style_y(o, LV_PART_MAIN), mono_dy});
@@ -312,6 +305,7 @@ void RecorderPage::build_square()
     state_lamp_ = std::make_unique<Lamp>(root_, fit_.x(662), fit_.y(g_.row_y + 47 + (g_.row_h - 72) / 2), fit_.px(18), col::kLampRed, fit_.px(6));
 
     /* the meter panel across the full width: IN / L R, the bars, the scale, TARGET, PEAK, MON */
+    const MeterSpec ms = square_meter_spec(g_);
     sq_panel_ = framed_panel(root_, fit_, {kSqMargin, g_.meter_y, 672, g_.meter_h}, col::kPanel);
     in_label_ = fit_label(root_, fit_, Face::Bold, 28, col::kInLabel, 45, g_.bar_y, 0, 28, LV_TEXT_ALIGN_LEFT, 1);
     lv_label_set_text(in_label_, "IN");
@@ -321,32 +315,23 @@ void RecorderPage::build_square()
     ch_r_ = fit_label(root_, fit_, Face::Bold, 16, col::kInLabel, 48, g_.bar_y + 21, 0, 17);
     lv_label_set_text(ch_r_, "R");
     LedStyle ls;
-    ls.over = 6;
-    ls.tick_w = 3;
-    ls.radius = 3;
-    bar_ = std::make_unique<LedBar>(root_, fit_, 112, g_.bar_y, 30, kSqStereoBarH, 4, ls);
+    ls.over = ms.over;
+    ls.tick_w = ms.tick_w;
+    ls.radius = ms.radius;
+    /* the bar's steps as this screen draws them, narrowed where the list at the right edge needs the room */
+    meter_ = meter_layout(fit_, ms, text_width_fn());
+    bar_ = std::make_unique<LedBar>(root_, fit_, meter_.bar, g_.bar_y, kSqStereoBarH, ls);
     /* PEAK at the bottom left (lamp over label, under IN); MON, LIM and LOW CUT are the list at the right edge. Neither moves
      * with the channel count (the list and PEAK are clear of both states' rows). */
-    const PeakGeo pk = square_peak(g_);
+    const PeakGeo &pk = ms.peak;
     peak_ = peak_lamp(root_, fit_, pk.lamp.x, pk.lamp.y, pk.lamp.w);
     lv_obj_t *peak = fit_label(root_, fit_, Face::Bold, 18, col::kScale, pk.label.x, pk.label.y, pk.label.w, pk.label.h,
                                LV_TEXT_ALIGN_CENTER, 1);
     lv_label_set_text(peak, "PEAK");
-    const double sx[4] = {107, 345, 464, 583};
-    const char *const st[4] = {"-40", "-20", "-10", "0"};
-    for (int i = 0; i < 4; ++i) {
-        lv_obj_t *l = fit_label(root_, fit_, Face::Medium, 22, col::kInLabel, sx[i], sy + 482, 40, 22, LV_TEXT_ALIGN_CENTER);
-        lv_label_set_text(l, st[i]);
-        moved(l, -half);
-    }
-    lv_obj_t *br = box(root_, fit_.x(388), fit_.y(sy + 510), fit_.w(388, 143), fit_.h(sy + 510, 6), 0, 0, LV_OPA_TRANSP);
-    border(br, fit_.px(2), col::kAmber);
-    lv_obj_set_style_border_side(br, static_cast<lv_border_side_t>(LV_BORDER_SIDE_LEFT | LV_BORDER_SIDE_RIGHT | LV_BORDER_SIDE_BOTTOM), 0);
-    moved(br, -half);
-    lv_obj_t *tg = fit_label(root_, fit_, Face::Bold, 16, col::kAmber, 541, sy + 505, 0, 16, LV_TEXT_ALIGN_LEFT, 2);
-    lv_label_set_text(tg, "TARGET");
-    moved(tg, -half);
-    build_meter_lamps(square_lamp_spec(g_), 1, col::kInLabel);
+    for (const MeterText &t : ms.scale) moved(meter_text(t, col::kInLabel, LV_TEXT_ALIGN_CENTER), -half);
+    moved(meter_bracket(ms), -half);
+    moved(meter_text(ms.target, col::kAmber, LV_TEXT_ALIGN_LEFT), -half);
+    build_meter_lamps(ms, col::kInLabel);
 
     StepperLook look;
     look.btn_w = std::max(60.0, 41.0 / fit_.s); /* at least the toolkit's 40 px wide: more design px under scale 0.68 */
@@ -368,32 +353,58 @@ void RecorderPage::build_square()
     square_stereo(false);
 }
 
+TextWidthFn RecorderPage::text_width_fn() const
+{
+    return [](const std::string &t, bool bold, int px, int ls) {
+        return static_cast<double>(text_width(font(bold ? Face::Bold : Face::Medium, px), t.c_str(), ls));
+    };
+}
+
+/* A text of the meter panel (scale, TARGET) at its board place, its x following the bar's steps (meter_text_px). */
+lv_obj_t *RecorderPage::meter_text(const MeterText &t, std::uint32_t rgb, lv_text_align_t align)
+{
+    lv_obj_t *l = fit_label(root_, fit_, t.bold ? Face::Bold : Face::Medium, t.px, rgb, t.x, t.y, t.w, t.h, align, t.ls);
+    lv_label_set_text(l, t.text);
+    lv_obj_set_x(l, static_cast<int>(meter_text_px(fit_, meter_, t, text_width_fn()).x));
+    return l;
+}
+
+/* The TARGET bracket: an amber line on three sides, its ends on the bar's steps (meter_bracket_px). */
+lv_obj_t *RecorderPage::meter_bracket(const MeterSpec &spec)
+{
+    const DRectF r = meter_bracket_px(fit_, meter_, spec);
+    lv_obj_t *br = box(root_, static_cast<int>(r.x), static_cast<int>(r.y), static_cast<int>(r.w), static_cast<int>(r.h), 0, 0,
+                       LV_OPA_TRANSP);
+    border(br, fit_.px(2), col::kAmber);
+    lv_obj_set_style_border_side(br, static_cast<lv_border_side_t>(LV_BORDER_SIDE_LEFT | LV_BORDER_SIDE_RIGHT | LV_BORDER_SIDE_BOTTOM), 0);
+    return br;
+}
+
 /* The list at the meter panel's right edge (portrait and square: their info box has no room for LIM and LOW CUT, landscape
  * has them in the strip): MON, LIM, LOW CUT, one lamp and one label per row, the dots at one x, the labels at one x, equal
- * size and pitch. The places are the pure geometry of meter_lamps.hpp; the label texts are measured here, so "LOW CUT"
- * becomes "CUT" only where the list is too narrow for it. The three lamps are drawn alike: one diameter, the same 1 px
- * rim, the same green and glow when on, the same neutral grey without glow and the same dimmed label when off
- * (list_lamp_level, from update_deck). LIM and LOW CUT are Lamp objects (landscape's type), MON a plain box. */
-void RecorderPage::build_meter_lamps(const MeterLampSpec &spec, double ls, std::uint32_t label_rgb)
+ * size and pitch. The places are meter_layout's (meter_lamps.hpp, with the real label widths: "LOW CUT" becomes "CUT" where
+ * the board's bar leaves too little room, and the bar is narrowed where it would come nearer the dots than 6 design px).
+ * The three lamps are drawn alike: one diameter, the same 1 px rim, the same green and glow when on, the same neutral grey
+ * without glow and the same dimmed label when off (list_lamp_level, from update_deck). LIM and LOW CUT are Lamp objects
+ * (landscape's type), MON a plain box. */
+void RecorderPage::build_meter_lamps(const MeterSpec &spec, std::uint32_t label_rgb)
 {
-    const int lpx = fit_.px(spec.px);
-    auto width = [&](const std::string &t, double) {
-        return text_width(font(Face::Bold, lpx), t.c_str(), ls_screen(ls, fit_.s)) / fit_.s;
-    };
-    const MeterLampGeo g = meter_lamps_column(spec, width);
-    const int d = fit_.px(spec.lamp_d);
-    lamp_glow_ = fit_.px(spec.lamp_d * 0.5);
-    mon_glow_ = spec.lamp_d * 0.5;
-    mon_lamp_ = mon_lamp(root_, fit_, g.lamp[0].x, g.lamp[0].y + spec.lamp_d / 2, spec.lamp_d);
-    lv_obj_set_pos(mon_lamp_, fit_.x(g.lamp[0].x), fit_.y(g.lamp[0].y)); /* the same rounding as the two Lamps */
+    const MeterLampSpec &ls = spec.lamps;
+    const int d = meter_.lamp_d;
+    lamp_glow_ = fit_.px(ls.lamp_d * 0.5);
+    mon_glow_ = ls.lamp_d * 0.5;
+    mon_lamp_ = mon_lamp(root_, fit_, 0, 0, ls.lamp_d);
+    lv_obj_set_pos(mon_lamp_, static_cast<int>(meter_.lamp[0].x), static_cast<int>(meter_.lamp[0].y));
     lv_obj_set_size(mon_lamp_, d, d);
-    lim_ = std::make_unique<Lamp>(root_, fit_.x(g.lamp[1].x), fit_.y(g.lamp[1].y), d, col::kLampGreen, lamp_glow_);
-    cut_ = std::make_unique<Lamp>(root_, fit_.x(g.lamp[2].x), fit_.y(g.lamp[2].y), d, col::kLampGreen, lamp_glow_);
+    for (int i = 1; i < kLampRows; ++i)
+        (i == 1 ? lim_ : cut_) = std::make_unique<Lamp>(root_, static_cast<int>(meter_.lamp[i].x), static_cast<int>(meter_.lamp[i].y), d,
+                                                        col::kLampGreen, lamp_glow_);
     for (lv_obj_t *o : {lim_->obj(), cut_->obj()}) border(o, 1, col::kPeakEdge); /* MON's rim (mon_lamp) */
     for (int i = 0; i < kLampRows; ++i) {
-        lv_obj_t *l = fit_label(root_, fit_, Face::Bold, spec.px, label_rgb, g.label[i].x, g.label[i].y, 0, g.label[i].h,
-                                LV_TEXT_ALIGN_LEFT, ls);
-        lv_label_set_text(l, g.text(i));
+        lv_obj_t *l = fit_label(root_, fit_, Face::Bold, ls.px, label_rgb, 0, meter_.label_dy[i], 0, ls.px * 1.2,
+                                LV_TEXT_ALIGN_LEFT, ls.ls);
+        lv_label_set_text(l, meter_.text(i));
+        lv_obj_set_x(l, static_cast<int>(meter_.label_x));
         (i == 0 ? mon_label_ : i == 1 ? lim_label_ : cut_label_) = l;
     }
 }

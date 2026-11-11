@@ -12,6 +12,7 @@
 #pragma once
 
 #include "fit.hpp"
+#include "meter_lamps.hpp"
 #include "view_model.hpp"
 
 #include "lvgl/lvgl.h"
@@ -31,6 +32,9 @@ public:
     /* x0, y: the first LED's top-left in board px; led_w x led_h, gap: one step. */
     LedBar(lv_obj_t *parent, const Fit &fit, double x0, double y, double led_w, double led_h, double gap,
            const LedStyle &style = LedStyle());
+    /* The steps as placed on the screen (meter_lamps.hpp LedPx; the portrait and square panels narrow them for the lamps);
+     * y, led_h in board px. */
+    LedBar(lv_obj_t *parent, const Fit &fit, const LedPx &steps, double y, double led_h, const LedStyle &style = LedStyle());
     /* The whole bar's height (one row, or two rows stacked): the square layout grows it for two channels. */
     void set_height(const Fit &fit, double y, double led_h);
     void update(const MeterVm &m);

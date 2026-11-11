@@ -19,16 +19,21 @@ namespace ui {
 
 LedBar::LedBar(lv_obj_t *parent, const Fit &fit, double x0, double y, double led_w, double led_h, double gap,
                const LedStyle &style)
+    : LedBar(parent, fit, led_px(fit, x0, led_w, gap, style.tick_w), y, led_h, style)
 {
-    led_w_ = fit.px(led_w);
+}
+
+LedBar::LedBar(lv_obj_t *parent, const Fit &fit, const LedPx &steps, double y, double led_h, const LedStyle &style)
+{
+    led_w_ = steps.led_w;
     led_h_ = fit.h(y, led_h);
-    gap_ = fit.px(gap);
+    gap_ = steps.gap;
     over_ = fit.px(style.over);
-    tick_w_ = fit.px(style.tick_w);
+    tick_w_ = steps.tick_w;
     radius_ = style.radius <= 1 ? 1 : fit.px(style.radius); /* the boards' 1 px stays 1 px */
     obj_ = lv_obj_create(parent);
     plain(obj_);
-    lv_obj_set_pos(obj_, fit.x(x0), fit.y(y) - over_);
+    lv_obj_set_pos(obj_, steps.x0, fit.y(y) - over_);
     w_ = 15 * led_w_ + 14 * gap_ + gap_;
     lv_obj_set_size(obj_, w_, led_h_ + 2 * over_);
     lv_obj_add_event_cb(obj_, draw_cb, LV_EVENT_DRAW_MAIN, this);

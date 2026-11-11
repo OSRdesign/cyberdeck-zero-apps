@@ -169,7 +169,8 @@ ViewModel demo_model(const std::string &scene)
     r.meter.ch[0].bar = 11;
     r.meter.ch[0].hold_bar = 12;
 
-    if (scene == "recording" || scene == "nocard" || scene == "stereo" || scene == "long" || scene == "recording-low") {
+    if (scene == "recording" || scene == "nocard" || scene == "stereo" || scene == "long" || scene == "recording-low" ||
+        scene == "stereo-full") {
         r.transport = Transport::Recording;
         keys_recording(r);
         r.counter_ms = 42000;
@@ -182,6 +183,15 @@ ViewModel demo_model(const std::string &scene)
             r.meter.channels = 2;
             r.meter.ch[1].bar = 9;
             r.meter.ch[1].hold_bar = 11;
+            r.info.format = "48k/16 WAV stereo";
+        }
+        if (scene == "stereo-full") { /* both bars at full scale with the hold tick after the last step, PEAK lit */
+            r.meter.channels = 2;
+            for (ChannelMeter &c : r.meter.ch) {
+                c.bar = 15;
+                c.hold_bar = 15;
+                c.peak_lamp = true;
+            }
             r.info.format = "48k/16 WAV stereo";
         }
         if (scene == "long") {

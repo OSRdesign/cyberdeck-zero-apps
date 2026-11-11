@@ -588,6 +588,9 @@ Goal: the two lamps show on the narrow and square screens as they do in the land
 3. Record a few seconds with both on, then play the take. Expected: both lamps stay lit and do not move; with two
    channels (a stereo card) and with one the lamps stay at the same place and the panel keeps its height.
 4. Unplug the sound card. Expected: the lamps still show the switches' state (dim if both are off, lit if on).
+5. With MON, LIM and LOW CUT lit, make a loud sound (clap or tap the mic) so every step of the bar lights and the white
+   hold tick stands after the last one; with a stereo card and with a mono one. Expected: a clear dark gap between the last
+   step (and the tick) and the lamp dots on every row; no dot touches a step. The steps are evenly spaced.
 
 Report: pass or fail per step, the screen, and whether the lamps were readable.
 
