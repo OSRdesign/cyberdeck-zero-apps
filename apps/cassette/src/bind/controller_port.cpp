@@ -55,6 +55,7 @@ public:
     bool select_output(const std::string &d) override { return c_.select_output(d); }
     bool select_card(int i) override { return c_.select_card(i); }
     void refresh_cards() override { c_.refresh_cards(); }
+    void set_page(UiPage p) override { c_.set_page(p); }
     void refresh_takes() override { c_.refresh_takes(); }
     bool select_take(const std::string &n) override { return c_.select_take(n); }
     bool play_take(const std::string &n) override { return c_.play_take(n); }

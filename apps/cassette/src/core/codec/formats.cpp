@@ -59,6 +59,7 @@ void evaluate(const FormatInputs &in, FormatChoice &c, const AudioFormat &cap, R
         if (known && cap.channels > 2) ok = false, why = "Opus records at most 2 channels";
         else if (known && !opus_rate_ok(cap.rate)) ok = false, why = "Opus cannot record at " + rate_text(cap.rate);
         else if (known && !opus_format_ok(cap, &why)) ok = false;
+        else if (known && in.speech_only && bitrate > 32000) ok = false, why = "Bluetooth call audio is speech only: Opus up to 32 kbps";
         else if (!in.codecs.opus) ok = false, why = "Opus not installed (libopusenc0)";
     }
     c.compatible = ok;

@@ -21,6 +21,7 @@
 #include "../alsa/open_policy.hpp"
 #include "pulse_api.hpp"
 
+#include <atomic>
 #include <memory>
 
 namespace cassette {
@@ -29,9 +30,23 @@ namespace cassette {
  * kPulseDisconnected, -EIO otherwise. */
 int pulse_end_errno(int pulse_err);
 
+/* The connecting gate of a Bluetooth microphone (study C5, C18). A headset opened from music mode delivers digital zeros for
+ * about a second while its profile switches (P4): the stream says Running at once, but nothing real has arrived. While the
+ * gate is closed the PCM drops the leading frames that are exactly zero (they are neither written to a take nor counted as
+ * recording time) and hands over audio from the first non-zero sample on. The gate opens by itself at that sample, or the
+ * owner opens it (a call profile is active and the stream has run a while: the zeros are the headset's own). Once open it
+ * stays open for the life of the stream: later zeros are real silence (the stream's silence detector reports them). */
+struct PulseLeadGate {
+    std::atomic<bool> open{false};
+    std::atomic<bool> by_audio{false};          /* it opened because a non-zero sample arrived */
+    std::atomic<uint64_t> dropped_frames{0};    /* leading zero frames dropped */
+};
+
 class PulseCapturePcm final : public AlsaPcm {
 public:
-    explicit PulseCapturePcm(std::shared_ptr<PulseCapture> stream, int read_timeout_ms = 50);
+    /* `gate`: null passes everything through (the default). */
+    explicit PulseCapturePcm(std::shared_ptr<PulseCapture> stream, int read_timeout_ms = 50,
+                             std::shared_ptr<PulseLeadGate> gate = nullptr);
     ~PulseCapturePcm() override;
     long readi(void *buf, size_t frames) override;
     int recover(int err) override { return err < 0 ? err : -EIO; }
@@ -42,10 +57,13 @@ public:
 private:
     std::shared_ptr<PulseCapture> s_;
     int timeout_ms_;
+    std::shared_ptr<PulseLeadGate> gate_;
+    unsigned channels_ = 1;
 };
 
 /* An OpenResult for Capture: status Ok, via_server, the stream's rate and channels as 16-bit frames (no conversion), the
  * device = the source name, the PCM = a PulseCapturePcm sharing the stream (keep your own share for the events). */
-OpenResult pulse_open_result(std::shared_ptr<PulseCapture> stream, int read_timeout_ms = 50);
+OpenResult pulse_open_result(std::shared_ptr<PulseCapture> stream, int read_timeout_ms = 50,
+                             std::shared_ptr<PulseLeadGate> gate = nullptr);
 
 }  // namespace cassette

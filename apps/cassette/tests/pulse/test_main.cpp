@@ -17,6 +17,7 @@ int main() {
     test_playback();
     test_threads();
     test_pcm();
+    test_bt_input();
     test_real_lib();
     std::printf("cassette-pulse tests: %d checks passed, %d failed, %d skipped\n", g_pass, g_fail, g_skip);
     return g_fail ? 1 : 0;

@@ -22,6 +22,12 @@
  *   the playing family, no list / trim preview, trim page closed, and not after AppLeave. The Player's open_target() and the
  *   trim preview stop it first. See monitor.hpp.
  *
+ * Bluetooth input (docs/PULSE.md, task T2): a connected headset the sound server lists is an input next to the ALSA cards
+ *   (ControllerConfig::pulse; settings value "bt:AA:BB:CC:DD:EE:FF"). Its microphone opens through libpulse on the exact source at
+ *   the call rate (16000 / 8000), software gain only; the stream's connecting state, the leading zeros of the profile switch
+ *   (dropped), the no-sound state, a lost headset (the take is closed and kept) and the mic policy (open on the recorder, closed
+ *   on the list and Edit pages and in playback: set_page) are described in snapshot().capture / card. USB behaviour is unchanged.
+ *
  * Thread model:
  *   - UI thread: calls commands and snapshot()/takes()/peak_window(). Commands take one internal mutex `mu_`; a command
  *     that talks to the Player may wait for the playback thread (at most kCommandWaitMs, normally a few ms). snapshot(),
@@ -62,6 +68,7 @@
 #include "../codec/formats.hpp"
 #include "../fileops.hpp"
 #include "../frame_sink.hpp"
+#include "../pulse/pulse_api.hpp"
 #include "../takes/naming.hpp"
 #include "../takes/recordings.hpp"
 #include "../takes/settings.hpp"
@@ -111,7 +118,17 @@ struct ControllerConfig {
      * (real_decoder_libs(): libFLAC and libopus with dlopen, at the first such take). A FLAC trim writes its results
      * through make_encoder (a FLAC choice) when that is set, else FlacEncoder on the real libFLAC. Tests give fakes. */
     std::function<DecoderLibs()> decoders;
+    /* Bluetooth input through the sound server (docs/PULSE.md). The server connection (make_real_pulse() in production, a
+     * FakePulse in tests); null: no Bluetooth (the snapshot says "Bluetooth audio is not set up"). The controller connects
+     * only when `server_running` says a server runs, never starts one, and never needs the server for USB cards. */
+    PulseApi *pulse = nullptr;
+    uint32_t pulse_retry_ms = 5000;  /* how often a connection to the server is tried again while there is none */
+    uint32_t pulse_refresh_ms = 200; /* the shortest time between two re-listings after a server change */
 };
+
+/* The screen the UI shows, told by the binding (Controller::set_page): the Bluetooth microphone is open on the recorder (and
+ * settings) screen and closed on the list and the Edit page, so the headset returns to music mode (study C6, decision 5). */
+enum class UiPage { Recorder, Settings, List, Edit };
 
 /* ---- keys ---- */
 
@@ -160,6 +177,21 @@ struct MeterSnap {
     unsigned clips = 0; /* samples saturated by SOFT gain since the pipeline opened */
 };
 
+/* One entry of the input chooser (CardSnap::inputs, same order as CardSnap::labels): an ALSA card, or a Bluetooth device
+ * the sound server lists. */
+struct InputSnap {
+    std::string id;          /* the settings value: the card descriptor, or "bt:AA:BB:CC:DD:EE:FF" (upper-case MAC) */
+    std::string label;       /* the card's label; Bluetooth: the server's description (the BlueZ alias) */
+    bool bluetooth = false;
+    std::string kind;        /* Bluetooth: "headset", "headphones", "speaker", "other"; else "" */
+    uint32_t rate = 0;       /* Bluetooth: the call rate that is requested (16000 mSBC, 8000 CVSD); else 0 */
+    bool connected = true;   /* false: chosen but not seen now (a Bluetooth headset that went away) */
+    bool usable = true;      /* false: it cannot be opened now (see `reason`) */
+    std::string hint_profile; /* Bluetooth: the card's profile now: "music", "call" or "unknown"; else "" */
+    std::string reason;      /* not usable: why, else "" */
+    bool hw_level = true;    /* the hardware input level row applies (false for Bluetooth: software gain only) */
+};
+
 struct CardSnap {
     bool present = false;      /* the capture path is open and delivering */
     std::string label;         /* the chosen card's label, empty when none */
@@ -178,6 +210,22 @@ struct CardSnap {
     std::vector<std::string> output_labels; /* only when there is more than one to pick from */
     std::vector<std::string> output_devices; /* the device of each label (select_output's argument), same order */
     int output_selected = -1;  /* index of the output in use in output_labels, -1 when not listed */
+    /* One entry per label, same order: ALSA cards first, then the Bluetooth devices of the sound server. */
+    std::vector<InputSnap> inputs;
+    bool bluetooth = false;    /* the input in use (or chosen) is a Bluetooth headset: level = software gain only (has_level false) */
+    uint32_t bt_rate = 0;      /* ... and the rate it records at */
+    /* "" or why there are no Bluetooth entries: "Bluetooth audio is not set up" (no libpulse, no sound server, or the server
+     * does not answer) */
+    std::string bt_status;
+};
+
+/* The state of the capture path that the recorder screen shows for a Bluetooth microphone (all false for a card). */
+struct CaptureSnap {
+    bool connecting = false;   /* the microphone is open but nothing real has arrived (the headset is switching to call mode):
+                                * a take started now begins at the first real audio */
+    bool no_sound = false;     /* the headset is connected but sends exactly zero (3 s): "The headset is connected but sends no sound." */
+    bool bt_gone = false;      /* the chosen Bluetooth headset is not there (disconnected or never seen this run) */
+    bool mic_closed = false;   /* the microphone is closed on purpose (list or Edit page, playback) so the headset returns to music mode */
 };
 
 struct TakeSnap {
@@ -280,6 +328,7 @@ struct Snapshot {
      * it is the recording's clip warning. channels is the take's (1 mono, 2 stereo). */
     MeterSnap play_meter;
     CardSnap card;
+    CaptureSnap capture;
     TakeSnap take;
     ProblemSnap problems;
     std::vector<Notice> notices; /* one-time: shown once, then ack_notices() */
@@ -384,9 +433,13 @@ public:
     bool set_monitor(bool on);
     bool set_monitor_level(int percent);   /* 0..100, rounded to steps of 5 */
     bool set_wave_fit(bool on);            /* the trim waveform's scale (settings wave_fit): TRUE (false) or FIT (true); persisted at once */
-    bool select_card(int index);           /* index into snapshot().card.labels; refused while a take runs */
+    bool select_card(int index);           /* index into snapshot().card.labels (ALSA cards, then Bluetooth devices); refused while a take runs */
     bool select_output(const std::string &device); /* "" for automatic */
     void refresh_cards();                  /* re-lists the capture cards (the labels), e.g. on opening Settings */
+    /* The screen now showing (the binding calls it on every page change): with a Bluetooth input the microphone stays open on
+     * the recorder and settings screens and closes on the list and Edit pages and during playback (never during a take);
+     * it opens again, in the connecting state, on return. Cards: no effect. */
+    void set_page(UiPage page);
 
     /* ---- takes ---- */
     void refresh_takes();

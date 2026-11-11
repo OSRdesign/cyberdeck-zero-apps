@@ -60,6 +60,7 @@ public:
     virtual bool select_output(const std::string &device) = 0;
     virtual bool select_card(int index) = 0;
     virtual void refresh_cards() = 0;
+    virtual void set_page(UiPage page) = 0; /* the screen now showing (Controller::set_page) */
     virtual void refresh_takes() = 0;
     virtual bool select_take(const std::string &name) = 0;
     virtual bool play_take(const std::string &name) = 0;

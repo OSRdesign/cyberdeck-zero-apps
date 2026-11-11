@@ -251,6 +251,7 @@ public:
         return true;
     }
     void refresh_cards() override { log("refresh_cards"); }
+    void set_page(UiPage) override {} /* not logged: the binding tells the page on every screen change */
     void refresh_takes() override { log("refresh_takes"); }
     bool select_take(const std::string &n) override
     {

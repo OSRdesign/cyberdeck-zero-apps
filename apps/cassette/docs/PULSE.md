@@ -5,10 +5,9 @@ study (Option A: Cassette reaches Bluetooth devices through the sound server, `l
 codecs) and its HackBerry measurements P1-P9 and items C15-C19.
 
 **Status (2026-11-11).** The module is done and tested on its own: `src/core/pulse/` (no LVGL), tests in `tests/pulse/`,
-the board CLI `tools/pulse_capture_test.cpp`. **Nothing calls it yet**: the controller, the settings, the pickers and the
-UI are unchanged and the ALSA path (including its `(server)` fallback through ALSA `default`, `alsa/open_policy.*`) is
-exactly as before. T2 wires capture into the controller, T3 playback and the monitor, following the contract at the end
-of this note.
+the board CLI `tools/pulse_capture_test.cpp`. **T2 (capture) is wired into the controller** (section "What T2 uses"
+below): a paired Bluetooth headset is an input next to the ALSA cards. Playback and the monitor over Bluetooth are T3's;
+the ALSA path (including its `(server)` fallback through ALSA `default`, `alsa/open_policy.*`) is exactly as before.
 
 ## Files
 
@@ -20,7 +19,8 @@ of this note.
 | `src/core/pulse/pulse_stream.cpp` | the shared parts: error texts, name and profile helpers, flags, properties, formats, buffer attributes from milliseconds, and the two stream classes (ring, events, silence detector, start timeout) |
 | `src/core/pulse/real_pulse.cpp` | the production `PulseApi` on libpulse (threaded main loop) |
 | `src/core/pulse/pulse_probe.hpp/.cpp` | a pure-data summary of the lists for choosers and the probe: Bluetooth or not, MAC, kind hint, music profile available, active profile |
-| `src/core/pulse/pulse_pcm.hpp/.cpp` | a capture stream seen as an `AlsaPcm`, so the existing capture thread (`alsa/capture.*`) runs on it unchanged |
+| `src/core/pulse/pulse_pcm.hpp/.cpp` | a capture stream seen as an `AlsaPcm`, so the existing capture thread (`alsa/capture.*`) runs on it unchanged; T2: the optional `PulseLeadGate` (the connecting gate, below) |
+| `src/core/pulse/bt_input.hpp/.cpp` | T2: the Bluetooth INPUT model: `bt:<MAC>` identity, which source to open (virtual or real), the call rate, the profile hint, per device |
 | `tests/pulse/fake_pulse.hpp/.cpp` | `FakePulse`: a scriptable server for the unit tests |
 | `tests/pulse/test_*.cpp`, `run.sh` | the unit tests (fake server), the real-library group, the ABI check runner |
 | `tests/pulse/check_pulse_abi.cpp` | compile-time comparison of `pulse_abi.hpp` and `pulse_lib.hpp` with the real headers |
@@ -28,8 +28,8 @@ of this note.
 | `tools/pulse_capture_test.cpp` | `pulse-capture-test`, the board CLI (lists, watches, records, plays a tone); not packaged |
 
 The app build compiles the module (everything under `src/` is built) but links nothing new: `readelf -d` of the arm64
-binary lists the same NEEDED entries as 0.2.0 (no libpulse, no `pa_` import), and until T2 calls the module the linker
-leaves it out (the arm64 binary is byte-for-byte the size of 0.2.0's).
+binary lists the same NEEDED entries as 0.2.0 (no libpulse, no `pa_` import: the library is only `dlopen`ed, and only when a
+sound server runs).
 
 ## Why libpulse, loaded at run time
 
@@ -229,6 +229,74 @@ pb->drain(2000);  pb->drop();  pb->delay_frames();  pb->underruns();  pb->latenc
 call `close()` while another thread is inside `read()` / `write()` of the same stream (stop that thread first, as
 `Capture::stop()` does); keep a raw `PulseCapture *` once it is handed to `pulse_open_result` (keep the `shared_ptr`).
 
+## What T2 uses (the controller, `src/core/app/controller.*`)
+
+Everything below is in the controller; the UI (T4) only reads the snapshot. `ControllerConfig::pulse` is the `PulseApi`
+(`make_real_pulse()` in `bind/bound_app.cpp` for the real app, a `FakePulse` in the tests, null in the demo: then the
+snapshot says "Bluetooth audio is not set up" and nothing else changes).
+
+**Connection and discovery.** The controller connects (`connect("Cassette", 2000)`) only when `server_running()` (the
+existing `ControllerConfig::server_running`, default `sound_server_running_here()`) is true, at start and then at most
+every `pulse_retry_ms` (5 s) while there is no connection; it never starts a server. `kPulseMissing` / `kPulseNoServer` or no
+running server: `CardSnap::bt_status` = "Bluetooth audio is not set up", no Bluetooth entries, USB cards unaffected;
+`kPulseTimeout` or a failing list: "Bluetooth audio is not responding". It lists sources, sinks and cards
+(`pulse_probe`) when the Settings page opens (`refresh_cards`), on every capture (re)open attempt and, after a server change,
+from the service tick: the change callback only sets two atomics (`bt_dirty`, `bt_gone`), the controller thread re-lists at
+most every `pulse_refresh_ms` (200 ms). A lost connection (`PulseChange::Kind::Disconnected`) is reconnected at once. Paired
+but not connected devices are not listed: the sound server only knows connected ones (launcher facts, `bt_audio_dev`, are T8).
+
+**The input list.** `bt_inputs()` (bt_input.cpp) gives one entry per Bluetooth device that has a microphone: a non-monitor source,
+or a card offering a call profile (`headset-head-unit*`; without a source now it is listed unusable, "The headset microphone
+is off"). Speakers (no microphone profile) and monitors are never listed. The chooser order is the ALSA cards, then the
+Bluetooth devices; `CardSnap::labels` carries both and `CardSnap::inputs` has one `InputSnap` per label; `select_card(index)`
+takes an index into them. A chosen headset that is not there stays in the list as a placeholder (`connected` false, its last
+label). Identity `bt:AA:BB:CC:DD:EE:FF` (upper case) is the `card` setting and the key of the per-card map (`cards`); an old
+settings file loads unchanged (the value is just a string). No hardware level: `has_level` is false, `set_level_db` refuses,
+the soft gain works (`InputSnap::hw_level`, `CardSnap::bluetooth`).
+
+**Which node, which rate.** The real source (`bluez_input.<MAC with underscores>.0`) when the card is on a call profile, else the
+music-mode VIRTUAL source (`bluez_input.<MAC with colons>`, 48 kHz float: never opened at its own rate). The rate is asked
+for explicitly, S16 mono: the real source's own rate when it is 8000 or 16000, else 16000 when the card offers
+`headset-head-unit` (mSBC), 8000 when only `-cvsd` is available or active; the server resamples. `open_capture` (T1) does the
+lookup, DONT_MOVE and the identity check at the open; `PulseCapture::source_identity_ok()` is checked again before a take
+starts (refused: "The headset microphone could not be confirmed: the take did not start.") and every 3 s during one (a silent
+relink ends and keeps the take like a loss). The stream becomes an `OpenResult` through `pulse_open_result(stream, 50, gate)`
+and runs on the existing `Capture` / `ProcessingSink` / `RecordGate` / writer path: WAV, FLAC and Opus writers are unchanged at
+8 and 16 kHz.
+
+**Connecting (study C5, C18).** From music mode the stream says `Running` after ~25 ms but the first second is digital zero (the
+profile switch). `PulseLeadGate` (pulse_pcm.hpp) sits in the capture PCM: while it is closed the leading frames that are exactly
+zero are dropped (not written, not recording time), and audio is handed over from the first non-zero sample, which opens the
+gate. The controller also opens it when the card's active profile is a call profile and the stream has run 300 ms
+(`kBtCallLinkMs`; the card is asked every 100 ms): the zeros are then the headset's own. `CaptureSnap::connecting` is true
+from the open until the gate opens. REC while connecting is allowed: the take starts at the first real audio and its time is 0
+until then. The silence detector (T1: 3 s of exact zeros) is read as a state only once the gate is open
+(`stats().silent && gate open`), so the profile switch can never raise it.
+
+**No sound (C15).** `CaptureSnap::no_sound` and the notice "The headset is connected but sends no sound." (Info) on the rising
+edge; the take keeps running, nothing auto-stops; the state and the notice clear when the first sound arrives (the Beats Fit Pro
+case, P3).
+
+**Loss.** `Killed`, `Moved` (and a lost connection) end the stream; the capture thread stops with `Unplugged` after the frames
+before the end were written, the existing DeviceLost path closes and keeps the take: notice and `ProblemSnap::message` "The
+Bluetooth headset disconnected: the take was closed and kept." ("... disconnected." when no take ran; "The sound server
+stopped ..." for a lost connection). The controller never reopens on another device; `CaptureSnap::bt_gone` is true until the
+chosen headset is back. REC with the chosen headset absent: "The Bluetooth headset is not connected."
+
+**Reconnect.** The existing `replug_retry_ms` loop retries; a re-listing after a server change (the device-added event) tries at once.
+A headset that connects after the app started appears in the list (the change flag); a chosen one is opened without a restart
+("The Bluetooth headset is back" when it had been lost).
+
+**Mic open policy (decision 5, C6).** The Bluetooth microphone is open on the recorder and settings screens, closed on the
+list and the Edit page (`Controller::set_page(UiPage)`, called by the binder on every screen change) and while a take plays
+or previews, so the headset returns to music mode; it opens again (connecting again) on return. Never closed during a take
+or the countdown; closed after `AppLeave`. `CaptureSnap::mic_closed` says it is closed on purpose (`card.present` is false then).
+USB cards keep their behaviour.
+
+**Formats (C12).** `FormatInputs::speech_only` (set for a Bluetooth input) dims the Opus presets above 32 kbps ("Bluetooth call
+audio is speech only: Opus up to 32 kbps"); speech presets, FLAC and WAV record at 8 / 16 kHz; the Sample rate row has the one
+rate (`rates` = {16000}); a stored music preset falls back to WAV like any incompatible choice.
+
 ## Tests
 
 `wsl -e sh tests/pulse/run.sh [SAN=thread|SAN=address,undefined]`:
@@ -245,7 +313,13 @@ call `close()` while another thread is inside `read()` / `write()` of the same s
   that is not there;
 - `real-pulse-test`: the real server's lists (skipped without libpulse or a server; on a WSLg PC it lists WSLg's
   PulseAudio);
-- the ABI check against `PULSE_INCLUDES` (or `/usr/include` with libpulse-dev).
+- the ABI check against `PULSE_INCLUDES` (or `/usr/include` with libpulse-dev);
+- T2: `test_bt_input.cpp` (identity, music-mode virtual source, call-mode real source, the rate rules, devices without a source,
+  the connecting gate) here, and `tests/app/test_bt.cpp` on the whole controller with FakePulse (`tests/app/run.sh`, or
+  `test-cassette-app --bt` for that group alone): list, music-mode open at 16 kHz, call mode, CVSD 8 kHz, the profile-switch
+  zeros dropped, the call-profile rule and the no-sound notice, killed and moved mid-take, identity refusals, absent headset,
+  hot-plug and reconnect, server missing / not running / hung / late, the mic policy on every page and in playback, settings
+  round trip and an old file, Opus presets at 16 kHz.
 
 A private root needs no install: `apt-get download libpulse-dev libpulse0 libsndfile1 libasyncns0 libflac12t64 libogg0
 libopus0 libvorbis0a libvorbisenc2 libmpg123-0t64 libmp3lame0`, `dpkg-deb -x` each into one folder, then

@@ -131,6 +131,12 @@ ui::UiActions Binder::actions()
     a.open = [this](ui::Screen s) {
         const ui::Screen was = screen_;
         screen_ = s;
+        /* a Bluetooth microphone is open on the recorder and closed on the list and Edit pages (the controller decides) */
+        const UiPage up = s == ui::Screen::Recorder ? UiPage::Recorder
+                          : s == ui::Screen::Settings ? UiPage::Settings
+                          : s == ui::Screen::List ? UiPage::List
+                                                  : UiPage::Edit;
+        post([this, up] { port_.set_page(up); });
         if (was == ui::Screen::List && s != ui::Screen::List && list_preview_) {
             /* closing the list ends the preview the list started (a playback the recorder started goes on) */
             list_preview_ = false;

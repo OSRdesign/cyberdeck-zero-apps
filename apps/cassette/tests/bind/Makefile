@@ -10,7 +10,7 @@ BUILD ?= build
 SRCS  := $(wildcard $(APP)/src/core/*.cpp) $(wildcard $(APP)/src/core/dsp/*.cpp) $(wildcard $(APP)/src/core/takes/*.cpp) \
          $(wildcard $(APP)/src/core/edit/*.cpp) $(wildcard $(APP)/src/core/playback/*.cpp) \
          $(wildcard $(APP)/src/core/app/*.cpp) $(wildcard $(APP)/src/core/codec/*.cpp) \
-         $(APP)/src/core/alsa/alsa_api.cpp $(APP)/src/core/alsa/card.cpp $(APP)/src/core/alsa/capture.cpp \
+         $(wildcard $(APP)/src/core/pulse/*.cpp) $(APP)/src/core/alsa/alsa_api.cpp $(APP)/src/core/alsa/card.cpp $(APP)/src/core/alsa/capture.cpp \
          $(APP)/src/core/alsa/mixer.cpp $(APP)/src/core/alsa/open_policy.cpp \
          $(APP)/src/bind/binder.cpp $(APP)/src/bind/view_map.cpp $(APP)/src/bind/worker.cpp \
          $(APP)/src/bind/controller_port.cpp $(APP)/src/demo/demo_alsa.cpp $(APP)/src/ui/ui_format.cpp $(APP)/src/ui/wave_geom.cpp \
