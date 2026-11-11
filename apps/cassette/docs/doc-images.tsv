@@ -1,7 +1,7 @@
 # The images of USER-GUIDE.md. One line per image, fields separated by a TAB:
 #   name (file in docs/img)   scene (file in tests/scenes, without .scene)   size   shot (the "shot" line in the scene)
 # make-doc-images.sh renders exactly these scenes and copies each shot to docs/img/<name>.
-# Names starting with "annot-" are drawn on by annotate.py (docs/annotate.py) after the copy.
+# Names starting with "annot-" are drawn on by finish-images.py (docs/finish-images.py) after the copy.
 # Add a line here and a picture in USER-GUIDE.md to add an image; change the scene/size/shot to change what it shows.
 recorder-landscape.png	x8-state-idle	480x320	state-idle
 annot-recorder-deck.png	x1-deck-recording	640x480	deck-recording

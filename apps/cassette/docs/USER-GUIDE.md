@@ -606,7 +606,9 @@ CUT are a list of three lamps at the right of the meter panel and PEAK is at its
 (one row, centred in the panel) and a stereo card (L over R) fill the same space, so nothing below the panel moves when
 a card is changed or a take starts.
 
-Real captures from boards: the HackBerry (720x720, square) and a Pi 3A+ (480x800 portrait).
+Real captures from boards, with the lamps lit: the HackBerry (720x720, square, an Opus take on the cassette) and a
+Pi 3A+ (480x800 portrait, a FLAC take). The header clock and the take names differ from the test-scene pictures: these are
+the boards' own screens.
 
 | HackBerry, 720x720 | Pi 3A+, portrait |
 |---|---|

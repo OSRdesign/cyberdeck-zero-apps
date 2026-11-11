@@ -249,8 +249,8 @@ Opus take whose library is missing is refused by LOAD, PLAY, the preview and EDI
 played: FLAC not installed (libflac14)`, `... Opus not installed (libopus0)`). Phase C added nothing to that list
 (phase A expected `libopusfile0`; it is not needed: `libopus0` plays Opus, and `libopusenc0` already depends on it).
 
-Which boards already carry the libraries is not known yet: the six boards were offline during phase A (read-only
-probe to repeat: `ldconfig -p | grep -E 'libFLAC|libopus|libogg'` and `dpkg-query -W 'libflac*' 'libopus*' 'libogg*'`).
+Which boards already carry the libraries: with the package's Depends the Store installs them with Cassette (read-only
+probe to check a board: `ldconfig -p | grep -E 'libFLAC|libopus|libogg'` and `dpkg-query -W 'libflac*' 'libopus*' 'libogg*'`).
 
 ## ABI and tests
 

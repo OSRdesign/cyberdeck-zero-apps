@@ -26,6 +26,17 @@ img="$here/img"
 [ -f "$tsv" ] || { echo "missing $tsv" >&2; exit 1; }
 [ -n "$LAUNCHER_TREE" ] || { echo "set LAUNCHER_SRC and LAUNCHER_TREE (the launcher tree the apps build against)" >&2; exit 1; }
 
+# The header's clock (HH:MM) comes from the launcher's toolkit with no option to fix it: freeze the wall clock for the
+# build and the scene run (an LD_PRELOAD shim, docs/freeze-clock.c, 2026-11-11 12:00 UTC) so a re-render changes an
+# image only where the UI changed. Without a C compiler the images show the time of the run.
+if command -v cc > /dev/null 2>&1; then
+    mkdir -p "$CDK_BUILD"
+    if cc -shared -fPIC -o "$CDK_BUILD/freeze-clock.so" "$here/freeze-clock.c"; then
+        export LD_PRELOAD="$CDK_BUILD/freeze-clock.so"
+    fi
+fi
+[ -n "$LD_PRELOAD" ] || echo "NOTE: clock not frozen: the header clock in the images shows the time of this run." >&2
+
 # 1. stage (the same files as build.sh host stages), then drop every scene the table does not need
 st="$CDK_BUILD/stage-docs/cassette"
 rm -rf "$st"

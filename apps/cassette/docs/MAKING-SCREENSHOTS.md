@@ -21,10 +21,13 @@ copy an earlier `_lvgl-host` folder into `$CDK_BUILD` to skip that).
 What the script does:
 
 1. Stages the app like `build.sh host` (an LF copy under `$CDK_BUILD/stage-docs`) and keeps only the scenes named in
-   [`doc-images.tsv`](doc-images.tsv), so it renders about 36 scenes, not 160.
+   [`doc-images.tsv`](doc-images.tsv), so it renders about 60 scenes, not 160.
 2. Builds the headless host with `_common/build_app.sh` and runs those scenes. Their own checks (`expect text ...`,
    the layout check) must pass, or the script stops. The PNGs are written to `$CDK_BUILD/host/out/<scene>/<size>/<shot>.png`.
 3. Copies each wanted PNG to `docs/img/<name>` (the table below is `doc-images.tsv`).
+   The header clock is frozen at 12:00 (UTC) for the run by `freeze-clock.c`, a four-line `LD_PRELOAD` shim that
+   `make-doc-images.sh` compiles with the host's `cc`; so two renders of the same UI give the same bytes. Without a C
+   compiler the script says so and the clock shows the time of the run.
 4. Runs [`finish-images.py`](finish-images.py) with the first Python that has Pillow (`python3`, `python`,
    `python.exe`): draws the numbered markers on `annot-*` images, makes `layouts.png` (the screen sizes side by
    side) and shrinks any PNG over 100 KB. If there is no Pillow, the raw PNGs stay in place and the script says
@@ -83,8 +86,12 @@ Not rendered by the script:
 
 - `layouts.png`: made by `finish-images.py` from `recorder-landscape.png`, `size-*.png`.
 - `real-hackberry-720.png` and `real-pi3a-portrait.png`: real board screenshots, copied by hand from
-  `atlas-board-work/hackberry/20261110-014928-cassette8.png` and `atlas-board-work/pi3a/20261110-002511-monitor.png`.
-  Replace them with newer captures when a layout changes (the Pi 3A+ one is 480x800).
+  `atlas-board-work/hackberry/20261111-023804-lamps9l.png` (an Opus take, the lamps lit) and
+  `atlas-board-work/pi3a/20261111-024138-lamps9l.png` (a FLAC take; 480x800), both from the cassette9l build. Replace them
+  with newer captures when a layout changes (`python shot.py <board> <label>` in `atlas-board-work`).
+- `../screenshots/01..10-*.png`: the ten Store pictures, copied by hand from the same render
+  (`$CDK_BUILD/host/out/<scene>/<size>/`: `a-recording` 640x480, 480x320 and 320x480, `c-countdown`, `i-list`, `j-trim`
+  at 640x480 and 320x480, `k-save`, `h-settings` 320x480 and `b-nocard`; the scene names are in the README's table).
 
 ## Change what an image shows
 

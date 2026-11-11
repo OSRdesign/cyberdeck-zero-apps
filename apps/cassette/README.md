@@ -1,8 +1,8 @@
 # Cassette (`cassette`)
 
 A sound recorder for the cyberdeck with the look of a tape deck: it records from any USB sound card or headset to WAV
-(Broadcast Wave) files, shows a level meter with a target zone, adds software gain, starts on a timer, trims and splits
-takes, and plays them back with a 5x scan. Native fullscreen app on the launcher's `cp0_lvgl`, MIT, version 0.1.0,
+(Broadcast Wave), FLAC or Ogg Opus files, shows a level meter with a target zone, adds software gain, starts on a timer,
+trims and splits takes, and plays them back with a 5x scan. Native fullscreen app on the launcher's `cp0_lvgl`, MIT, version 0.1.0,
 category Tools. Plan: launcher `docs/dev/tasks/016-cassette-recorder.md`; study: launcher report 058.
 
 - **Crash-safe.** A take is synced to the card every 10 s (5-30 s, setting) and its header is rewritten after every
@@ -23,7 +23,8 @@ category Tools. Plan: launcher `docs/dev/tasks/016-cassette-recorder.md`; study:
 ## Screenshots
 
 All ten were rendered on a PC by the headless harness (`build.sh host`, version 0.1.0) from the UI's scenes on
-their synthetic model (generated levels and takes, no sound hardware); real-hardware captures will replace them.
+their synthetic model (generated levels and takes, no sound hardware, the header clock frozen at 12:00). Real-board
+captures (a HackBerry 720x720 and a Pi 3A+ in portrait) are in the user guide's "Screen sizes" section.
 Each comes from a scene in `tests/scenes` (named below): the build writes its PNGs to
 `<CDK_BUILD>/host/out/<scene>/<size>/`. The Store shows the same ten pictures, in this order.
 
@@ -191,8 +192,9 @@ when the free space falls under 200 MB or the card is unplugged. A take that rea
 
 A screen of at least 480x320 (portrait 320x480 in PDA mode), a USB sound card, a USB headset or a board's own input,
 and the user in the `audio` group (the images add the first user to it; else `sudo usermod -aG audio $USER`, then log
-out and in). CyberdeckZero Launcher with full-screen app support. Packages: `libstdc++6, libgcc-s1, libfreetype6, libinput10, libxkbcommon0`
-and `libasound2t64 | libasound2` (the ALSA library: it is opened at run time, never linked). When a sound server holds
+out and in). CyberdeckZero Launcher with full-screen app support. Packages: `libstdc++6, libgcc-s1, libfreetype6, libinput10, libxkbcommon0`,
+`libasound2t64 | libasound2` (the ALSA library: it is opened at run time, never linked) and the codec libraries `libopus0`,
+`libopusenc0` and `libflac14 | libflac12t64 | libflac12` (also opened at run time, see Formats). When a sound server holds
 the card, the app falls back to the server's ALSA device. arm64 and amd64.
 
 The app records at the card's own sample rate: 48000 Hz, else 44100 Hz, else the highest rate the card offers at or below
@@ -203,7 +205,7 @@ speed. Through the sound server the take is S16 at 48000 Hz.
 
 ## Install
 
-Settings > Apps (category Tools). By hand: `sudo dpkg -i cassette_0.1.0_arm64.deb`.
+Settings > Apps (category Tools). By hand: `sudo apt install ./cassette_0.1.0_arm64.deb` (apt fetches the codec libraries; plain `dpkg -i` needs them already installed).
 
 The package also installs `/usr/share/APPLaunch/bin/cassette-probe`, a listen-only command line tool for the board
 tests: it lists the capture cards, what each offers and its mixer controls, then opens each card (or the one given
@@ -224,7 +226,7 @@ It writes no file and changes no setting; `--no-open` only lists.
 
 ## Formats
 
-WAV (Broadcast Wave) is the format of 0.1 and stays the default. FLAC (lossless) and Ogg Opus (small) are being added.
+WAV (Broadcast Wave) is the default. FLAC (lossless) and Ogg Opus (small) are the other two choices.
 The recorder writes them, crash-safe like WAV (a take cut by a power loss is repaired at the next start), when the
 choice in Settings (Codec, Sample rate and Bit depth / Bit rate, Bit depth only on a card that records both 16 and 24-bit; stored in `~/.config/cassette/settings.json` as
 `"format": "wav"`, `"flac"` or `"opus"`, the optional `"format_preset"` (`speech24`, `speech32`, `music64`, `music128`),
@@ -318,18 +320,21 @@ the UI's own on its synthetic model (`tests/scenes`) and the bound app on the sc
 
 Our code, MIT, written from scratch from the published format documents (EBU Tech 3285 Broadcast Wave, EBU Tech 3306
 RF64) and the ALSA library's API documentation. Linked: `cp0_lvgl` of the CyberdeckZero launcher (MIT) and LVGL (MIT);
-the fonts (Montserrat and JetBrains Mono, SIL OFL 1.1) are the launcher's, read at run time. One font is compiled into
+the fonts Montserrat and JetBrains Mono (SIL OFL 1.1) are the launcher's, read at run time and not shipped in the package. One font is compiled into
 the binary: the handwriting of the cassette label is Caveat SemiBold (Copyright 2014 The Caveat Project Authors,
 <https://github.com/googlefonts/caveat>, SIL OFL 1.1, no Reserved Font Name; licence text in
 [`src/ui/fonts/OFL-Caveat.txt`](src/ui/fonts/OFL-Caveat.txt), regenerated by
 [`tools/make_handwriting_font.sh`](tools/make_handwriting_font.sh)). The ALSA library
-(alsa-lib, LGPL-2.1-or-later) is opened at run time from the system, neither linked nor shipped. See the package's
+(alsa-lib, LGPL-2.1-or-later) and the codec libraries (libFLAC, libopus and libopusenc, BSD-style licences) are opened at run
+time from the system, neither linked nor shipped; the package depends on them. See the package's
 `copyright` file.
 
 ## Changes
 
-- 0.1.0: first version: recorder, recordings list, Edit page (trim and split), settings, save and confirm boxes; WAV / BWF takes
-  with journal and repair; meter with target zone, software gain, record timer, playback with 5x scan; 480x320 and
+- 0.1.0: first version: recorder, recordings list, Edit page (trim and split, with a TRUE / FIT waveform scale), settings,
+  save and confirm boxes; WAV / BWF takes with journal and repair; FLAC and Ogg Opus takes (Codec, Sample rate and Bit
+  depth / Bit rate pickers, trim and split of all three); live Monitor and the MON, LIM and LOW CUT lamps; take number
+  page; format tags in the list; meter with target zone, software gain, record timer, playback with 5x scan; 480x320 and
   320x480 minimum layouts and a square layout for 720x720 and 480x480; `cassette-probe` in the package. Cards that record at other rates than 48000 or 44100 Hz
   (16000 Hz speech headsets) are opened at their own rate. The PLAY / PAUSE key shows the current state (PLAY latched
   while playing, PAUSE latched while paused); both hubs turn the same way (3x for REW / FWD, clockwise for REW); the
