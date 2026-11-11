@@ -38,6 +38,7 @@
 
 #include "core/app/controller.hpp"
 #include "core/codec/formats.hpp"
+#include "ui/ui_format.hpp"
 #include "ui/view_model.hpp"
 
 #include <cstdint>
@@ -161,6 +162,24 @@ std::string merge_strip_text(const std::vector<TakeRow> &rows, const std::vector
 std::string merge_detail_text(double seconds, uint64_t bytes);
 /* The progress box's title: "Merging... 37%". */
 std::string merging_title(int percent);
+
+/* Bluetooth (T4). The pickers' facts of a device; the recorder's standing notice of the capture state ("Connecting the
+ * headset...", "The headset is connected but sends no sound.", ""); the muted line under Monitor (ui::monitor_delay_text of
+ * the delay while it runs, the echo wording with notice "delay"; "" otherwise). */
+ui::BtDeviceFacts bt_facts(const InputSnap &in);
+ui::BtDeviceFacts bt_facts(const OutputSnap &o);
+std::string standing_notice_text(const CaptureSnap &c);
+std::string monitor_detail_text(const MonitorSnap &m);
+/* The call-quality notice (ui::kCallQualityNotice), once per play: fed every snapshot, step() is true once while a take plays
+ * through a Bluetooth output at call quality (playback.quality "call") or after the wait for the music mode timed out. After
+ * a wait that did reach music mode a "call" reading counts only from kCallQualityGraceMs into the play (the profile shown is
+ * the last scan's until the next card reading). Leaving the play (stop) arms it again. */
+constexpr int64_t kCallQualityGraceMs = 1500;
+struct CallQualityWatch {
+    bool in_play = false, fired = false, saw_switch = false;
+    int64_t play_ms = -1;
+    bool step(const Snapshot &s, int64_t now_ms);
+};
 
 /* 0..1 from a 16-bit min/max pair (the louder side) */
 float peak_level(const PeakBar &b);

@@ -1,0 +1,12 @@
+title Cassette Bluetooth (T4, synthetic names): the headset went away during a take: the controller's notice, as it comes (the take closed and kept)
+sizes 320x480 480x320 480x800 640x480 800x480 480x480 720x720
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_BT gone
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+expect text "The Bluetooth headset disconnected: the take was closed and kept."
+shot rec-gone
+expect notext "LAYOUT FAIL"
+expect noquit

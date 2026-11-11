@@ -1,0 +1,17 @@
+title Cassette Bluetooth (T4, synthetic names): the headset is connecting: "Connecting the headset..." in the notice place (the strip, or the counter row) while the meter stays dark; a tap on the narrow screens hides it
+sizes 320x480 480x320 480x800 640x480 800x480 480x480 720x720
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_BT connecting
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+expect text "Connecting the headset..."
+shot rec-connecting
+expect notext "LAYOUT FAIL"
+@320x480 tap "Connecting the headset..."
+@320x480 wait 300
+@320x480 expect notext "Connecting the headset..."
+@320x480 say a tap hid the standing notice
+@320x480 expect text "SOFT"
+expect noquit

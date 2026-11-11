@@ -9,6 +9,7 @@ int main(int argc, char **argv)
 {
     const bool quick = argc > 1 && std::strcmp(argv[1], "--quick") == 0; /* leaves out the real-time end-to-end runs */
     test_map();
+    test_bt_map();
     test_worker();
     test_binder();
     if (!quick) test_demo();

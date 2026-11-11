@@ -1,0 +1,43 @@
+title Cassette Bluetooth (T4, synthetic names): the headset as input, Monitor on: "Delay about 90 ms" (muted) under the switch; Monitor to Automatic opens a picker of the outputs (the headset at call quality, the speaker at music quality)
+sizes 320x480 480x320 480x800 640x480 800x480 480x480 720x720
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_BT monitor
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key s
+wait 300
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 200
+expect text "Monitor"
+expect text "Delay about 90 ms"
+shot monitor-delay
+expect notext "LAYOUT FAIL"
+key down
+key down
+wait 200
+expect text "Monitor to"
+key enter
+wait 300
+expect text "Automatic"
+expect text "Call quality (16 kHz)"
+expect text "Music quality"
+shot monitor-to-picker
+expect notext "LAYOUT FAIL"
+key esc
+wait 300
+key esc
+wait 300
+expect text "SOFT"
+expect noquit

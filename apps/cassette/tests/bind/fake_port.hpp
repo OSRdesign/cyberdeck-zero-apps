@@ -230,6 +230,11 @@ public:
         log("set_monitor_level " + std::to_string(p));
         return true;
     }
+    bool set_monitor_output(const std::string &id) override
+    {
+        log("set_monitor_output " + id);
+        return true;
+    }
     bool set_mute(bool on) override
     {
         log(std::string("set_mute ") + (on ? "on" : "off"));

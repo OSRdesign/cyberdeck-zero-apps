@@ -1,0 +1,13 @@
+title Cassette Bluetooth (T4, synthetic names): the recorder idle with the headset as input: the meter label reads BT instead of IN (same font, size and place); no CARD stepper
+sizes 320x480 480x320 480x800 640x480 800x480 480x480 720x720
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_BT rec
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+expect text "BT"
+expect text "SOFT"
+shot rec-bt-label
+expect notext "LAYOUT FAIL"
+expect noquit

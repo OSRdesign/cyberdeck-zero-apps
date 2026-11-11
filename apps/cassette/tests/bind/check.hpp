@@ -50,5 +50,6 @@ template <typename F> bool wait_until(F pred, int ms) {
 
 void test_map();     /* every snapshot field to the view model, the text helpers */
 void test_binder();  /* every UI action to its command, the notices, the boxes, the trim page, leave() */
+void test_bt_map();  /* the Bluetooth rows, footer, delay line, recorder fields, call-quality notice (T4) */
 void test_worker();  /* order, finish, inline mode, the scrub coalescing */
 void test_demo();    /* end to end on the scripted sound system: record, list, trim to two splits, save; unplug; no input */

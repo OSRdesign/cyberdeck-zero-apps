@@ -50,6 +50,7 @@ public:
     bool set_monitor(bool on) override { return c_.set_monitor(on); }
     bool set_wave_fit(bool on) override { return c_.set_wave_fit(on); }
     bool set_monitor_level(int p) override { return c_.set_monitor_level(p); }
+    bool set_monitor_output(const std::string &id) override { return c_.set_monitor_output(id); }
     bool set_mute(bool on) override { return c_.set_mute(on); }
     bool set_sync_interval(int s) override { return c_.set_sync_interval(s); }
     bool select_output(const std::string &d) override { return c_.select_output(d); }

@@ -1,0 +1,12 @@
+title Cassette Bluetooth (T4, synthetic names): recording from a headset that sends exact zeros: "The headset is connected but sends no sound." in the notice place
+sizes 320x480 480x320 480x800 640x480 800x480 480x480 720x720
+ppmm 608
+env CASSETTE_DEMO recording
+env CASSETTE_DEMO_BT nosound
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+expect text "The headset is connected but sends no sound."
+shot rec-nosound
+expect notext "LAYOUT FAIL"
+expect noquit

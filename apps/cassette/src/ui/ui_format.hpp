@@ -111,7 +111,8 @@ std::string info_line(const RecorderVm &rec);
  * rate: it is not stored with a take). Never the take's name. */
 std::string info_codec(const RecorderVm &rec);
 /* The box's second line: what the strip shows after the take and format: the time left ("12 h 40 left"), the position over
- * the length while playing, the lost audio, the notice. */
+ * the length while playing (InfoVm::play_status instead when set: "Switching to music mode... 1 s", also in the strip), the
+ * lost audio, the notice. */
 std::string info_detail(const RecorderVm &rec);
 /* The largest size in [min_px, max_px] at which width_at(px) is at most max_w (the font ladder walked from the top: the text
  * stays one line); min_px when none fits. */
@@ -169,6 +170,43 @@ std::string trim_strip_narrow_right(const TrimVm &t);
 std::string save_summary(const TrimVm &t, std::size_t files, bool narrow);
 /* A file name without its ".wav" (the narrow save box). */
 std::string strip_wav(const std::string &name);
+
+/* Bluetooth (task T4 of the Bluetooth release). The pickers' two-line rows of a Bluetooth device (FormatEntry: name, `size` =
+ * the right-hand detail, `detail` = line 2, `compatible`, `reason`); the facts are the controller's InputSnap / OutputSnap:
+ *   input   name = the label (the BlueZ name), size = the call rate "16 kHz" / "8 kHz" ("%g kHz", the Format picker's), line 2
+ *           "Bluetooth headset · speech quality" (kind headset) or "Bluetooth device" (speaker, other kinds)
+ *   output  name = the label, no size, line 2 "Music quality" (profile music), "Call quality (16 kHz)" (call), "Bluetooth"
+ *           (unknown)
+ * Not usable or not connected: compatible = false and line 2 is the reason ("Not connected" when none is given), the page dims
+ * the name and the size and a tap says "Not available: <reason>". */
+struct BtDeviceFacts {
+    std::string label;
+    std::string kind;          /* "headset", "headphones", "speaker", "other" */
+    std::uint32_t rate = 0;    /* input: the call rate; output: unused */
+    std::string hint_profile;  /* output: "music", "call", "unknown" */
+    bool connected = true, usable = true;
+    std::string reason;
+};
+std::string bt_rate_text(std::uint32_t rate); /* "16 kHz", "8 kHz", "44.1 kHz"; "" for 0 */
+FormatEntry bt_input_entry(const BtDeviceFacts &f);
+FormatEntry bt_output_entry(const BtDeviceFacts &f);
+/* The Input picker's footer: "Bluetooth headsets record speech quality (16 kHz)" when a Bluetooth input is listed, else
+ * "Bluetooth audio is not set up on this board" when the sound server is missing or not running (not_set_up), else "". */
+std::string bt_input_footer(bool any_bt_input, bool not_set_up);
+/* The muted line under Monitor: "Delay about 90 ms" (rounded to 10 ms, under 1 s), "Delay about 1.2 s" (from 1000 ms, one
+ * decimal); "" without a figure (0 or less). With the echo notice (echo, amber on the page): "Delay about 0.25 s: you will
+ * hear an echo" (seconds: two decimals under 1 s, one from 1 s), and without a figure "Delay about 0.2-0.3 s: you will hear
+ * an echo" (the A2DP estimate, before the monitor runs). */
+std::string monitor_delay_text(double delay_ms, bool echo);
+/* The info box's second line (and the strip's time slot) while PLAY waits for the headset's music mode: "Switching to music
+ * mode... 1 s" (whole seconds elapsed, at most the timeout's). */
+std::string switching_text(double elapsed_s, double timeout_s);
+/* The one notice per play when the headset plays through its call link. */
+extern const char *const kCallQualityNotice; /* "Playing in call quality: this headset has no music mode." */
+/* The recorder's standing notices of a Bluetooth microphone (RecorderVm::standing_notice): while it connects, while it sends
+ * exactly zero. */
+extern const char *const kBtConnectingNotice; /* "Connecting the headset..." */
+extern const char *const kBtNoSoundNotice;    /* "The headset is connected but sends no sound." */
 
 /* "more below: REW / FWD, Channels, Low cut" for the labels of the rows under the visible part ("" for none). */
 std::string more_below(const std::vector<std::string> &labels);

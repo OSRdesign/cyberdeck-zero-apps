@@ -1,0 +1,37 @@
+title Cassette Bluetooth (T4, synthetic names): a USB microphone monitored to a Bluetooth speaker (an A2DP sink, 250 ms): the line under Monitor in amber, "Delay about 0.25 s: you will hear an echo"; Monitor to names the speaker
+sizes 320x480 480x320 480x800 640x480 800x480 480x480 720x720
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_BT echo
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key s
+wait 300
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 200
+expect text "Delay about 0.25 s: you will hear an echo"
+shot monitor-echo
+expect notext "LAYOUT FAIL"
+key down
+key down
+wait 200
+expect text "Monitor to"
+expect text "XWF-M18 Speaker"
+shot monitor-echo-target
+expect notext "LAYOUT FAIL"
+key esc
+wait 300
+expect text "SOFT"
+expect noquit

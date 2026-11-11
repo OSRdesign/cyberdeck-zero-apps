@@ -84,6 +84,9 @@ struct InfoVm {
     std::int64_t lost_ms = 0;    /* recording: audio lost to capture overruns so far (0 = none); shown in red */
     std::string notice;          /* a standing message that replaces the strip's text (the card's "no sound input" reason); the
                                   * timed notices of the controller and the binding are ViewModel::notice */
+    std::string play_status;     /* while a take plays: replaces the position / length in the strip's time slot (landscape; the
+                                  * info box has no room for it: portrait and square show it in the notice place, as a standing
+                                  * notice), "Switching to music mode... 1 s" while a Bluetooth headset leaves its call profile; "" */
 };
 
 struct RecorderVm {
@@ -106,6 +109,11 @@ struct RecorderVm {
     bool monitor_active = false;
     TapeVm tape;
     InfoVm info;
+    /* The input is a Bluetooth headset: the meter's one-bar label reads "BT" instead of "IN". */
+    bool bluetooth = false;
+    /* A state of the input that stands as long as it lasts ("Connecting the headset...", "The headset is connected but sends
+     * no sound."): shown in the notice place of the recorder while no timed notice (ViewModel::notice) shows; "" none. */
+    std::string standing_notice;
     GainVm card;                 /* CARD stepper */
     GainVm soft;                 /* SOFT stepper */
 };
@@ -149,6 +157,16 @@ struct SettingRow {
      * picker) and the one-line footer under the list ("Sizes at 48 kHz mono 16-bit, this card") */
     std::vector<FormatEntry> formats;
     std::string formats_footer;
+    /* Choice without `formats` (Input, Output, Monitor to): optional, one entry per choice. An entry with a `detail` is drawn as
+     * a two-line row (a Bluetooth device: name, `size` on the right, detail or reason under it; dimmed when !compatible, a tap
+     * then shows "Not available: <reason>"); an entry without one is the plain one-line row of `choices`. formats_footer is
+     * the picker's footer line here too. Empty: every row plain. */
+    std::vector<FormatEntry> choice_entries;
+    /* A muted second line under the row's label ("Delay about 90 ms" under Monitor); detail_warn: in amber. "" none. */
+    std::string detail;
+    bool detail_warn = false;
+    /* Drawn greyed like a disabled row, yet a tap still opens it (Monitor to without a target: the value is the reason). */
+    bool dimmed = false;
 };
 
 /* The rows in order. The controller leaves out what the card does not have (Input level, Auto gain). */
@@ -279,7 +297,8 @@ inline bool operator==(const SettingRow &a, const SettingRow &b)
     return a.id == b.id && a.label == b.label && a.kind == b.kind && a.enabled == b.enabled && a.value == b.value &&
            a.choices == b.choices && a.choice == b.choice && a.on == b.on && a.min == b.min && a.max == b.max &&
            a.pos == b.pos && a.value_text == b.value_text && a.value_mul == b.value_mul && a.value_suffix == b.value_suffix &&
-           a.formats == b.formats && a.formats_footer == b.formats_footer;
+           a.formats == b.formats && a.formats_footer == b.formats_footer && a.choice_entries == b.choice_entries &&
+           a.detail == b.detail && a.detail_warn == b.detail_warn && a.dimmed == b.dimmed;
 }
 inline bool operator==(const SettingsVm &a, const SettingsVm &b) { return a.rows == b.rows; }
 inline bool operator==(const TakeRow &a, const TakeRow &b)

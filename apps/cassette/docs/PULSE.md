@@ -7,7 +7,8 @@ codecs) and its HackBerry measurements P1-P9 and items C15-C19.
 **Status (2026-11-11).** The module is done and tested on its own: `src/core/pulse/` (no LVGL), tests in `tests/pulse/`,
 the board CLI `tools/pulse_capture_test.cpp`. **T2 (capture) is wired into the controller** (section "What T2 uses"
 below): a paired Bluetooth headset is an input next to the ALSA cards. **T3 (playback and the live monitor over Bluetooth, and
-the worker thread for the server's questions) is wired in too** (section "What T3 uses"); the UI is T4's. The ALSA path
+the worker thread for the server's questions) is wired in too** (section "What T3 uses"); **T4, the UI, shows it** (section
+"What T4 shows"). The ALSA path
 (including its `(server)` fallback through ALSA `default`, `alsa/open_policy.*`) is exactly as before.
 
 ## Files
@@ -422,6 +423,27 @@ All additive; a UI that ignores them compiles and behaves as before.
   `monitor.reason` (no target), `monitor.outputs[]` (the choice list: `[0]` = automatic with id `""`, then every output; an absent choice is listed with `connected` false), `monitor.output_selected`;
   `set_monitor_output(id)` (false for a bad `bt:` address).
 - `card.has_playback` now means "the Monitor settings make sense": a target exists (the capture card's playback side, the same headset, or an explicit target).
+
+## What T4 shows (the UI)
+
+The binding (`bind/view_map.*`) turns the snapshot fields above into the view model; the texts are built in `ui/ui_format.*`
+(`bt_input_entry`, `bt_output_entry`, `bt_input_footer`, `monitor_delay_text`, `switching_text`, the notice constants), so the
+demo states (`CASSETTE_DEMO_BT`, `ui/demo.hpp`) use the same words. Tests: `tests/ui/test_bt.cpp`, `tests/bind/test_bt_map.cpp`;
+scenes `tests/scenes/bt1-*` to `bt12-*` (the seven layouts each).
+
+- **Pickers.** `SettingRow::choice_entries` (one `FormatEntry` per choice) on Input, Output and Monitor to: a Bluetooth device is the
+  Format picker's two-line row (name, rate on the right for an input, line 2 the kind and quality, or the reason, dimmed, "Not
+  available: <reason>" on a tap), every other entry the plain one-line row as before (no `choice_entries` at all when no Bluetooth
+  device is listed). The Input picker's footer (`formats_footer`): the speech-quality line, or "Bluetooth audio is not set up on this
+  board" when `bt_status` is the not-set-up text (the Input row then opens even with no card). Input level is a greyed Info row
+  ("Not applicable") for a Bluetooth input.
+- **Monitor.** `SettingRow::detail` / `detail_warn`: the delay line under Monitor (amber with `monitor.notice == "delay"`). Monitor to
+  appears where Bluetooth is in play (a Bluetooth input or output, or a target chosen earlier); without a target it is drawn greyed
+  (`SettingRow::dimmed`) with `monitor.reason` as its value and still opens. `set_monitor_output` is the Port's.
+- **Recorder.** `RecorderVm::bluetooth` (BT for IN), `RecorderVm::standing_notice` (connecting, no sound: in the notice place while no
+  timed notice shows; a tap hides it until it changes), `InfoVm::play_status` (the switching line: the landscape strip's time slot; the info box is too narrow for it, so portrait and square show it in the notice place like a standing notice). The
+  controller's own notices (the headset gone, not connected, refusals) pass through the timed notice queue unchanged; the binding adds
+  the call-quality notice once per play (`CallQualityWatch`).
 
 ### Constants (one place each)
 

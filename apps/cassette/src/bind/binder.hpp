@@ -148,6 +148,7 @@ private:
     std::deque<std::string> notices_;
     int64_t notice_since_ = 0, now_ms_ = 0;
     bool notice_job_ = false;
+    CallQualityWatch callq_; /* the call-quality notice, once per play */
     bool pending_close_ = false;
     std::string pending_open_;
     unsigned names_token_ = 0;

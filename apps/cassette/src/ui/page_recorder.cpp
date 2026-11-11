@@ -145,9 +145,7 @@ RecorderPage::RecorderPage(lv_obj_t *parent, const Frame &frame, const UiActions
         ns.ls = ls_screen(1, fit_.s);
         ns.pad = fit_.px(16);
         ns.radius = fit_.px(8);
-        notice_ = std::make_unique<NoticeBox>(root_, ns, [this] {
-            if (act_.notice_dismiss) act_.notice_dismiss();
-        });
+        notice_ = std::make_unique<NoticeBox>(root_, ns, [this] { notice_tapped(); });
         notice_covers_ = {counter_->obj(), list_btn_->obj(), gear_btn_->obj(), box_title_, box_detail_};
     } else if (frame.portrait) {
         ns.x = fit_.x(16);
@@ -156,9 +154,7 @@ RecorderPage::RecorderPage(lv_obj_t *parent, const Frame &frame, const UiActions
         ns.h_min = ns.h_max = fit_.h(294, 44);
         ns.px = fit_.px(14);
         ns.radius = fit_.px(6);
-        notice_ = std::make_unique<NoticeBox>(root_, ns, [this] {
-            if (act_.notice_dismiss) act_.notice_dismiss();
-        });
+        notice_ = std::make_unique<NoticeBox>(root_, ns, [this] { notice_tapped(); });
         notice_covers_ = {counter_->obj(), list_btn_->obj(), gear_btn_->obj(), box_title_, box_detail_};
     } else {
         ns.x = fit_.x(16);
@@ -191,8 +187,15 @@ void RecorderPage::build_landscape()
         lv_obj_set_y(b->obj(), row_y);
         lv_obj_set_height(b->obj(), bh);
     }
-    in_label_ = fit_label(root_, lo, Face::Bold, 13, col::kInLabel, 268, 112, 0, 22, LV_TEXT_ALIGN_LEFT, 1);
-    lv_label_set_text(in_label_, "IN");
+    {
+        const InLabelGeo in = landscape_in_label(false), bt = landscape_in_label(true);
+        in_label_ = fit_label(root_, lo, Face::Bold, in.px, col::kInLabel, in.x, 112, 0, 22, LV_TEXT_ALIGN_LEFT, in.ls);
+        lv_label_set_text(in_label_, in.text);
+        /* a Bluetooth input: BT, a step smaller and 2 px further left (it is wider than IN) */
+        bt_label_land_ = fit_label(root_, lo, Face::Bold, bt.px, col::kInLabel, bt.x, 112, 0, 22, LV_TEXT_ALIGN_LEFT, bt.ls);
+        lv_label_set_text(bt_label_land_, bt.text);
+        show(bt_label_land_, false);
+    }
     ch_l_ = fit_label(root_, lo, Face::Bold, 9, col::kInLabel, 271, 112, 0, 11);
     lv_label_set_text(ch_l_, "L");
     ch_r_ = fit_label(root_, lo, Face::Bold, 9, col::kInLabel, 271, 123, 0, 11);
@@ -497,11 +500,35 @@ void RecorderPage::set_box_codec(const std::string &text)
     box_codec_px_ = px;
 }
 
+void RecorderPage::notice_tapped()
+{
+    if (standing_on_) { /* the standing state: hidden until it changes (or ends and comes back) */
+        standing_dismissed_ = standing_shown_;
+        if (last_rec_) update(*last_rec_, std::string());
+        return;
+    }
+    if (act_.notice_dismiss) act_.notice_dismiss();
+}
+
 void RecorderPage::update(const RecorderVm &rec, const std::string &notice)
 {
     last_rec_ = &rec;
+    /* the timed notice first; else the input's standing state (Bluetooth: connecting, no sound) in the same place */
+    /* the info box (portrait, square) has no room for the switching line ("Switching to music mode... 1 s"): it stands in
+     * the notice place there; the landscape strip shows it in its time slot */
+    const std::string &standing = !rec.standing_notice.empty() ? rec.standing_notice
+                                  : info_box_                  ? rec.info.play_status
+                                                               : rec.standing_notice;
+    if (standing.empty()) standing_dismissed_.clear();
+    std::string text = notice;
+    standing_on_ = false;
+    if (text.empty() && !standing.empty() && standing != standing_dismissed_) {
+        text = standing;
+        standing_on_ = true;
+    }
+    standing_shown_ = standing_on_ ? text : std::string();
     const bool was_on = notice_on_;
-    notice_on_ = notice_->set(notice);
+    notice_on_ = notice_->set(text);
     if (notice_on_ != was_on) {
         /* the state label (REC / PLAY) comes back with place_strip_right, when the strip is placed again */
         for (lv_obj_t *o : notice_covers_)
@@ -522,7 +549,16 @@ void RecorderPage::update_deck(const RecorderVm &rec)
     const bool stereo = rec.meter.channels >= 2;
     if (square_ && stereo != sq_stereo_) square_stereo(stereo);
     bar_->update(rec.meter);
-    show(in_label_, !stereo);
+    if (bt_label_land_) { /* landscape: the BT label of its own (landscape_in_label) */
+        show(in_label_, !stereo && !rec.bluetooth);
+        show(bt_label_land_, !stereo && rec.bluetooth);
+    } else {
+        show(in_label_, !stereo);
+        if (first_ || rec.bluetooth != bt_label_) { /* portrait, square: BT in IN's place (same font, size and place) */
+            bt_label_ = rec.bluetooth;
+            set_text(in_label_, rec.bluetooth ? "BT" : "IN");
+        }
+    }
     show(ch_l_, stereo);
     show(ch_r_, stereo);
     const bool lit = rec.meter.ch[0].peak_lamp || (stereo && rec.meter.ch[1].peak_lamp);
@@ -568,8 +604,14 @@ void RecorderPage::update_deck(const RecorderVm &rec)
                    red_tail(info_line(rec), info_lost(rec)));
     } else {
         set_box_codec(info_codec(rec));
+        std::string detail = info_detail(rec);
+        if (!rec.info.play_status.empty()) { /* the switching line stands in the notice place: the box keeps the position */
+            RecorderVm plain = rec;
+            plain.info.play_status.clear();
+            detail = info_detail(plain);
+        }
         set_fitted(box_detail_, Face::Medium, fit_.px(detail_px_), 0, std::max(9, fit_.px(detail_min_)),
-                   red_tail(info_detail(rec), info_lost(rec)));
+                   red_tail(detail, info_lost(rec)));
         state_lamp_->set(!state.empty(), state == "PLAY" ? col::kLampGreen : col::kLampRed);
     }
 

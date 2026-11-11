@@ -1,0 +1,43 @@
+title Cassette Bluetooth (T4, synthetic names): the Input picker: a USB card (plain row), a connected headset (Evolve 65, 16 kHz, Bluetooth headset, speech quality), a headset whose microphone is off and the chosen headset that is not connected (both dimmed, the reason under the name; the long name wraps and its row grows); the footer; Enter on a dimmed row says why and stays; Input level greyed (Not applicable)
+sizes 320x480 480x320 480x800 640x480 800x480 480x480 720x720
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_BT input
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key s
+wait 300
+expect text "Input level"
+expect text "Not applicable"
+shot settings
+expect notext "LAYOUT FAIL"
+key down
+key enter
+wait 300
+expect text "USB Audio Device"
+expect text "Evolve 65"
+expect text "16 kHz"
+expect text "Bluetooth headsets record speech quality (16 kHz)"
+shot input-picker
+expect notext "LAYOUT FAIL"
+key up
+key enter
+wait 300
+expect text "Not available: The headset microphone is off"
+say Enter on the headset with its microphone off: the notice says why, the picker stays
+shot input-picker-mic-off
+expect notext "LAYOUT FAIL"
+key down
+key enter
+wait 300
+expect text "Not available: Not connected"
+shot input-picker-not-connected
+expect notext "LAYOUT FAIL"
+key esc
+wait 300
+key esc
+wait 300
+expect text "SOFT"
+expect text "BT"
+expect noquit

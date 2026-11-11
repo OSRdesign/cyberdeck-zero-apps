@@ -43,3 +43,4 @@ void test_lamps();
 void test_wave();
 void test_fit();
 void test_load_anim();
+void test_bt(); /* the Bluetooth texts (T4) */

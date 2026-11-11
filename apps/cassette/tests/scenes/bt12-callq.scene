@@ -1,0 +1,12 @@
+title Cassette Bluetooth (T4, synthetic names): a take playing through a headset without a music mode: the one-time notice "Playing in call quality: this headset has no music mode."
+sizes 320x480 480x320 480x800 640x480 800x480 480x480 720x720
+ppmm 608
+env CASSETTE_DEMO playing
+env CASSETTE_DEMO_BT callq
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+expect text "Playing in call quality: this headset has no music mode."
+shot callq
+expect notext "LAYOUT FAIL"
+expect noquit
