@@ -71,4 +71,5 @@ void test_pcm();
 void test_bt_input(); /* the Bluetooth input model (identity, source, call rate, hint) and the connecting gate */
 void test_bt_output(); /* the Bluetooth output model (T3) */
 void test_report();    /* cassette-probe --server: the server report (T5) */
+void test_launcher_facts(); /* the launcher's Bluetooth audio facts: parser, provider, merge (T8) */
 void test_real_lib();

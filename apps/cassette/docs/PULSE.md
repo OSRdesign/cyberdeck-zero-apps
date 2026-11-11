@@ -8,7 +8,8 @@ codecs) and its HackBerry measurements P1-P9 and items C15-C19.
 the board CLI `tools/pulse_capture_test.cpp`. **T2 (capture) is wired into the controller** (section "What T2 uses"
 below): a paired Bluetooth headset is an input next to the ALSA cards. **T3 (playback and the live monitor over Bluetooth, and
 the worker thread for the server's questions) is wired in too** (section "What T3 uses"); **T4, the UI, shows it** (section
-"What T4 shows"); **T9** fixed what the board tests B27-B29 found (section "What T9 changed"). The ALSA path
+"What T4 shows"); **T9** fixed what the board tests B27-B29 found (section "What T9 changed"); **T8** reads the launcher's
+Bluetooth audio facts (section "What T8 uses"). The ALSA path
 (including its `(server)` fallback through ALSA `default`, `alsa/open_policy.*`) is exactly as before.
 
 ## Files
@@ -248,7 +249,7 @@ running server: `CardSnap::bt_status` = "Bluetooth audio is not set up", no Blue
 (`pulse_probe`) when the Settings page opens (`refresh_cards`), on every capture (re)open attempt and, after a server change,
 from the service tick: the change callback only sets two atomics (`bt_dirty`, `bt_gone`), the controller thread re-lists at
 most every `pulse_refresh_ms` (200 ms). A lost connection (`PulseChange::Kind::Disconnected`) is reconnected at once. Paired
-but not connected devices are not listed: the sound server only knows connected ones (launcher facts, `bt_audio_dev`, are T8).
+but not connected devices are not known to the sound server; with the launcher's facts they are listed dimmed (T8, section "What T8 uses").
 
 **The input list.** `bt_inputs()` (bt_input.cpp) gives one entry per Bluetooth device that has a microphone: a non-monitor source,
 or a card offering a call profile (`headset-head-unit*`; without a source now it is listed unusable, "The headset microphone
@@ -517,6 +518,81 @@ during a take (it goes on), for longer than 1 s (REC refused after about 1 s, no
 once). `tests/pulse/test_bt_output.cpp`: new indexes, a sink listed before its card, the colon and
 underscore forms of one MAC, the call node listed while the card says music (`sink_profile`). `tests/bind/test_bt_map.cpp` (`missing_and_held`) and
 `tests/ui/test_bt.cpp` (`missing_texts`: the window's texts, the box's short form, the strip's full text).
+
+## What T8 uses (the launcher's Bluetooth audio facts, `src/core/pulse/launcher_facts.*`)
+
+The launcher (0.10.1 and later, contract sections 5b and 5c) publishes read-only facts that the sound server cannot give: which
+Bluetooth audio devices are **paired** (also the ones that are not connected), what **kind** each one is, which music or call
+profile BlueZ says it has, and which **sound stack** owns the Bluetooth endpoints of the board. Cassette reads them without the
+SDK (no new link, `readelf` still shows no libpulse) and falls back to exactly the behaviour of T2-T9 when they are absent
+(an older launcher, no launcher: a standalone run, the scenes, the tests).
+
+| File | Key | Used for |
+|---|---|---|
+| `status.state` | `bt_audio_dev=MAC:kind:connected[:a2dp\|hfp];...` | paired devices, their kind, the profile hint |
+| `board.state` | `bt_audio=pipewire\|pulseaudio\|bluealsa\|none` | which text to show when the sound server is unreachable; no dimmed rows with `none` |
+| `board.state` | `bt_hfp`, `bt_le_audio` | parsed and kept in `LauncherFacts`; nothing in the UI uses them yet |
+
+**Where and when.** Both files are in `$APPLAUNCH_STATE_DIR`, else `$XDG_RUNTIME_DIR/applaunch/`, else
+`/tmp/applaunch-status.state` / `/tmp/applaunch-board.state` (the SDK's `cp0_app_state_path()` order; read on the HackBerry under
+launcher 0.10.0: `/run/user/1000/applaunch/status.state` and `board.state`, `v=1`, `pid`, no Bluetooth key yet). The launcher
+rewrites them by atomic rename; a file is trusted only with `v=1` and a `pid` that is alive (`kill(pid, 0)`, EPERM counts as alive: the
+SDK's rule), so a crashed launcher's file is ignored. `LauncherFactsProvider` (one per app, polled from the controller's service
+tick under its lock) looks at both files at most once a second (`stat`: mtime, size and inode; the text is read only when the stamp
+changed, at most 16 KiB; the pid is checked at every look) and never waits for anything else. `FactsIo` is the file-system seam: the
+POSIX one in production, `FakeFactsIo` (tests/pulse/fake_facts.hpp) in the tests. A change of the facts rebuilds the Bluetooth lists
+at once (the sound server's own events still drive the live nodes).
+
+**The parser** (`parse_bt_audio_dev`, pure and tolerant). An entry is `MAC:kind:connected[:profile[:...]]`, entries separated by `;`,
+MAC with underscores (colons accepted too), upper-cased with colons. Entries that do not parse are skipped (no MAC, no kind,
+`connected` not 0 or 1), fields after the profile and unknown `profile` words are ignored (`profile` stays empty), an unknown `kind`
+word is kept but treated as "other", at most 8 entries are read. `board.state`: an unknown `bt_audio` word or a value other than
+0 or 1 is "absent" (`bt_audio` empty, `bt_hfp` / `bt_le_audio` -1). A missing key is never taken for 0.
+
+**What the controller does with them** (`bt_compose()` in controller.cpp: the server's lists are kept raw, the facts are applied on
+top, so they can change at any time without a new server scan):
+
+- **Kind.** The launcher's kind wins for a device both know: `headset` / `headphones` / `speaker` goes to `BtInput::kind` and
+  `BtOutput::kind`. A **connected** device whose launcher kind is not `headset` is **never an input** (a speaker, or headphones that
+  the server shows with a call card), but stays an output. A kind the launcher does not know changes nothing.
+- **Paired, not connected.** A paired device that the server does not list and the launcher says is not connected is a dimmed row:
+  **Settings > Input** for kind `headset` only (it has a microphone), **Settings > Output** (and Monitor to) for headset, headphones
+  and speaker. `connected` false, `usable` false, `paired` true, reason **`Not connected: connect it in Settings > Bluetooth`**
+  (`kBtPairedReason`), rate 0; the picker rows are the T4 two-line rows (name, dimmed, the reason under it; a tap shows
+  `Not available: <reason>`). They come after the live entries (the chosen-but-absent placeholder, then Default output, as before).
+  No dimmed rows while the server is not answering (the cause is the server: the footer says so) or with `bt_audio=none`.
+- **The name** of such a device: the label of this session, else the remembered one (settings `bt_names`: upper-case MAC with colons
+  -> the label last seen, written when the device was last listed by the server; at most 16; an old settings file loads unchanged and
+  the key is absent while empty), else `Bluetooth device <last 5 characters of the MAC>` (`Bluetooth device 6B:8B`).
+- **Choosing one** is refused: `select_card`, `select_output` and `set_monitor_output` on a paired-but-not-connected device add the
+  notice with the reason and change nothing. A device chosen earlier that is paired but not connected is that same row (the T2/T3
+  placeholder shape with the launcher's reason); without the launcher's facts it is the old placeholder (*Not connected*, the label
+  of this session or *Bluetooth device*).
+- **The profile hint.** `hint_profile` `unknown` (the server gave neither a card nor a node profile) becomes `music` for the launcher's
+  `a2dp` and `call` for `hfp`; the sound server's card wins whenever it says something.
+- **The not-set-up text** (`CardSnap::bt_status`, the Input picker's footer). The server is unreachable with no key: *Bluetooth audio is
+  not set up* (footer *... on this board*), as before. With `board.state` `bt_audio=none` or `bluealsa`: the same. With
+  `bt_audio=pipewire` or `pulseaudio` and no server answering (`kPulseNoServer`, or no server socket): **The sound server is not
+  running** (`kBtServerDown`; the footer is that text). No libpulse (`kPulseMissing`) stays *not set up* whatever the launcher says;
+  a server that does not answer in time stays *not responding*. A server that answers is the empty status whatever the launcher says
+  (a PulseAudio with no `bluez_*` nodes is not taken for "not running": it simply lists no Bluetooth device, and a connected device
+  the launcher knows but the server does not list yet is not shown).
+
+**Tests.** `tests/pulse/test_launcher_facts.cpp` (the parser on the contract's examples, unknown trailing fields, malformed and empty
+text, 8 entries, the state-file rules including the real HackBerry 0.10.0 text; the provider on a fake file system: the once-a-second
+look, re-read only on a change, a dead pid, a removed file, a file that is not `v=1`; the merge: kinds, hints, paired rows per list),
+`tests/app/test_bt_facts.cpp` (`test-cassette-app --bt-facts`, also in `--bt` and the full run: the whole controller with FakePulse and
+the fake files: fallback identical with no provider, no files, and a launcher file without our keys; paired rows in both lists and the
+refusals; the rows following the file and going with a dead launcher; `bt_audio=none`; kinds and the connected speaker that is never an
+input; the hint; the three not-set-up texts and following the file; the remembered name across a restart; settings round trip),
+`tests/takes/test_settings.cpp` (`bt_names`), `tests/ui/test_bt.cpp` and `tests/bind/test_bt_map.cpp` (rows and footers), the
+scenes `bt16-input-paired`, `bt17-output-paired`, `bt18-notsetup-sound-server` (demo states `CASSETTE_DEMO_BT` `input-paired`,
+`output-paired`, `notsetup-server`; the seven layouts each). The earlier T2/T3/T4/T9 tests run unchanged without a provider: they are the
+proof of the fallback.
+
+**On a board.** Needs launcher 0.10.1 (or a dev launcher): board tests B35 (paired but not connected) and B36 (a launcher without the
+keys: as before) in `tests/BOARD-TESTS.md`. To try it without a launcher: write `v=1`, a live `pid` and the keys to
+`$APPLAUNCH_STATE_DIR/status.state` and `board.state` (the provider follows them within a second).
 
 ## Tests
 

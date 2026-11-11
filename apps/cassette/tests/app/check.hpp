@@ -74,4 +74,5 @@ void test_bt_app();      /* a Bluetooth headset as the input through the sound s
                          * silence, loss, reconnect, mic policy, settings, formats */
 void test_bt_out_app();  /* T3: playback and the live monitor over Bluetooth, the wait for the music profile, a hung server */
 void test_bt_reconnect_app(); /* T9: the board tests B27-B29 on PipeWire's habits: sink nodes re-created, new ids after a reconnect, PLAY */
+void test_bt_facts_app(); /* T8: the launcher's Bluetooth audio facts: paired rows, kinds, hints, not-set-up texts, remembered names */
 void test_merge_app();   /* merge takes: the plan and its refusals, WAV and FLAC merges, cancel, delete originals */

@@ -38,6 +38,7 @@ struct BtOutput {
                                * at every profile switch; for a moment the card may already say music while the call node is still
                                * listed) */
     std::string card;         /* the owner card's name ("" when none) */
+    bool paired = false;      /* T8: not from the sound server: a paired device the launcher says is not connected (connected false) */
 };
 
 /* One entry per Bluetooth device that has a sink now, or a card with an audio profile (no sink while its profile is off). */

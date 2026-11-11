@@ -13,7 +13,8 @@ category Tools. Plan: launcher `docs/dev/tasks/016-cassette-recorder.md`; study:
   reboots). The card's own level, auto gain and mute are shown when the card has them, and left as found otherwise.
 - **Bluetooth headsets and speakers** through the board's sound server (PipeWire with pipewire-pulse, or PulseAudio):
   record from a headset at speech quality (16 kHz mSBC or 8 kHz CVSD, mono), play takes to headsets and speakers, monitor
-  live over Bluetooth with the delay shown. Pairing stays in the launcher (Settings > Bluetooth). A take is never
+  live over Bluetooth with the delay shown. Pairing stays in the launcher (Settings > Bluetooth); with launcher 0.10.1 or later the paired devices that are
+  not connected are listed dimmed. A take is never
   continued from another microphone: a headset that disconnects ends and keeps the take. See the user guide's
   [Bluetooth](docs/USER-GUIDE.md#bluetooth) chapter.
 

@@ -51,6 +51,13 @@
  *   micclosed    (T9) the recorder idle while the headset's microphone is closed on purpose: the cassette, BT, the meter dark
  *   switching-mic (T9) on a playing scene: PLAY waits for the music mode of the headset that is also the input (its microphone
  *                closed): the cassette stays in the window
+ *   input-paired (T8) Settings: the Input picker with a USB card, a connected headset (Evolve 65) and two paired devices the launcher
+ *                says are not connected (Beats Fit Pro, and one without a remembered name: "Bluetooth device 5D:1A"), dimmed with the
+ *                reason "Not connected: connect it in Settings > Bluetooth"; Enter on one says "Not available: <reason>"
+ *   output-paired (T8) Settings: the Output picker with the USB card, a connected speaker (chosen), the headset and the same two paired
+ *                devices dimmed (a headset and a speaker: outputs list both kinds), Default output
+ *   notsetup-server (T8) Settings: the Input picker with the two USB cards and the footer "The sound server is not running" (the
+ *                launcher says a sound server owns the Bluetooth endpoints, none answers)
  *
  * DemoDriver's UiActions change the model the way the controller would in simple cases (the steppers step, toggles
  * flip, a choice is taken, a tap on the countdown cancels it, the trim marker, zoom, flags, IN / OUT and the boxes

@@ -7,6 +7,11 @@ int g_pass = 0, g_fail = 0, g_skip = 0;
 
 int main(int argc, char **argv) {
     const bool quick = argc > 1 && std::strcmp(argv[1], "--quick") == 0; /* leaves out the slow real-time takes */
+    if (argc > 1 && std::strcmp(argv[1], "--bt-facts") == 0) { /* only the T8 group */
+        test_bt_facts_app();
+        std::printf("cassette-app tests: %d checks passed, %d failed, %d skipped\n", g_pass, g_fail, g_skip);
+        return g_fail ? 1 : 0;
+    }
     if (argc > 1 && std::strcmp(argv[1], "--bt-reconnect") == 0) { /* only the T9 group (B27-B29 on the fake) */
         test_bt_reconnect_app();
         std::printf("cassette-app tests: %d checks passed, %d failed, %d skipped\n", g_pass, g_fail, g_skip);
@@ -16,6 +21,7 @@ int main(int argc, char **argv) {
         test_bt_app();
         test_bt_out_app();
         test_bt_reconnect_app();
+        test_bt_facts_app();
         std::printf("cassette-app tests: %d checks passed, %d failed, %d skipped\n", g_pass, g_fail, g_skip);
         return g_fail ? 1 : 0;
     }
@@ -36,6 +42,7 @@ int main(int argc, char **argv) {
     test_bt_app();
     test_bt_out_app();
     test_bt_reconnect_app();
+    test_bt_facts_app();
     std::printf("cassette-app tests: %d checks passed, %d failed, %d skipped\n", g_pass, g_fail, g_skip);
     return g_fail ? 1 : 0;
 }

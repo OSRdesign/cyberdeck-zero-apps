@@ -695,7 +695,7 @@ std::vector<ui::SettingRow> settings_rows(const Snapshot &s, uint64_t next_take)
         /* Bluetooth: the headsets as two-line rows, the footer (or why there are none) */
         bool any_bt = false;
         for (const InputSnap &in : c.inputs) any_bt = any_bt || in.bluetooth;
-        r.formats_footer = ui::bt_input_footer(any_bt, c.bt_status == "Bluetooth audio is not set up");
+        r.formats_footer = ui::bt_input_footer_for_status(any_bt, c.bt_status);
         if (any_bt && c.inputs.size() == c.labels.size())
             for (size_t i = 0; i < c.inputs.size(); ++i)
                 r.choice_entries.push_back(c.inputs[i].bluetooth ? ui::bt_input_entry(bt_facts(c.inputs[i])) : plain_entry(c.labels[i]));

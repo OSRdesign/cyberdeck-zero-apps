@@ -21,6 +21,8 @@
  *     "wave_fit": true (the trim waveform is scaled to fit) | absent (true level; written only when true),
  *     "card": "<descriptor>", "output_device": "<alsa device>" | "bt:AA:BB:CC:DD:EE:FF",
      "monitor_output": "" (automatic) | "bt:AA:BB:CC:DD:EE:FF" | "<alsa device>" (absent: automatic),
+ *     "bt_names": { "AA:BB:CC:DD:EE:FF": "<last label seen>" } (T8: the names of Bluetooth devices, for a paired one that is not
+ *     connected; at most 16, absent when empty),
  *     "cards": { "<descriptor>": { "level_db": number (absent: no level control), "auto_gain": bool, "mute": bool } } }
  */
 #pragma once
@@ -40,6 +42,7 @@ enum class ScanMode { Fast, Jump };       /* REW/FWD: fast scan at 5x while held
 
 constexpr int kSyncMin = 5, kSyncMax = 30, kSyncDefault = 10;
 constexpr double kSoftGainMin = 0.0, kSoftGainMax = 24.0;
+constexpr size_t kBtNamesMax = 16;       /* "bt_names": the most devices whose last label is remembered */
 constexpr double kCardLevelMin = -120.0, kCardLevelMax = 60.0; /* a sanity range only; the mixer clamps further */
 extern const int kRecordTimerChoices[4];                       /* 0 (Off), 3, 10, 20 seconds */
 
@@ -65,6 +68,7 @@ struct Settings {
     std::string output_device; /* the playback device the user picked ("hw:CARD=..,DEV=0", "default" or "bt:<MAC>"); empty: automatic */
     std::string monitor_output; /* where the live monitor plays: "" automatic (the capture card's playback side, or the Bluetooth headset
                                  * that is the input), "bt:<MAC>" or an ALSA device as output_device spells it */
+    std::map<std::string, std::string> bt_names; /* "bt_names": upper-case MAC with colons -> the last label seen (T8; empty: absent) */
 };
 
 struct CardState {

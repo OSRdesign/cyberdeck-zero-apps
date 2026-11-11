@@ -694,7 +694,8 @@ Cassette can record from a **Bluetooth headset** and play to Bluetooth headsets 
   Bluetooth speaker. Expect a clear delay (below).
 
 **Pairing.** Pair and connect the device in the launcher, **Settings > Bluetooth**. Cassette never pairs or connects
-anything; it lists the devices the sound server has connected. A device that is paired but not connected does not show.
+anything. It lists the devices the sound server has connected; with launcher 0.10.1 or later the devices that are **paired but
+not connected** also show, dimmed (next section). With an older launcher they do not show.
 
 **What the board needs.** A sound server: **PipeWire with pipewire-pulse**, or **PulseAudio**, plus the client library
 `libpulse0`, which the Cassette package depends on (the Store installs it). Cassette never starts a sound server itself.
@@ -710,6 +711,15 @@ the rate on the right (`16 kHz`), and under it *Bluetooth headset · speech qual
 stays in the list, dimmed, with the reason under its name (*The headset microphone is off*, *Not connected*); a tap on it
 says *Not available:* and the reason. The footer says *Bluetooth headsets record speech quality (16 kHz)*. A chosen
 headset that is switched off stays in the list as *Not connected* and is opened again when it comes back.
+
+**Paired but not connected** (launcher 0.10.1 or later). A headset you paired in Settings > Bluetooth but that is switched off
+or asleep shows in **Input** (headsets only: they have a microphone) and in **Output** (headsets, headphones and speakers),
+dimmed, under the connected ones. The name is the one Cassette saw when the device was last connected; if it never saw it,
+the row says *Bluetooth device* and the last two bytes of its address (*Bluetooth device 6B:8B*). Under the name:
+*Not connected: connect it in Settings > Bluetooth*; a tap says *Not available:* and the same words, and nothing changes.
+**What to do:** switch the device on and let the launcher connect it (or connect it in Settings > Bluetooth); the row becomes a
+normal one by itself, a second or two later. A speaker or a pair of headphones is never offered as an input, even when it is
+connected: it has no microphone. With an older launcher the dimmed rows do not appear, nothing else changes.
 
 | Input picker with a headset | A headset that cannot be used | No sound server on this board |
 |---|---|---|
@@ -779,6 +789,10 @@ What to expect (**estimates until they are measured on the boards**, see the boa
 | Any microphone to a Bluetooth speaker or headphones (music mode) | about 150 to 350 ms: an echo, only for checking that it records |
 | The headset's own **sidetone** (if it has one) | none: the best monitor. Leave Cassette's Monitor off then |
 
+The delay under Monitor is **Cassette's own**: it counts what Cassette itself buffers and what the sound server reports for the
+stream. In call mode the **headset adds its own link** on top, which the figure does not include. Measured with a Jabra Evolve 65:
+about 0.25 s felt, against 0.1 s shown. Trust your ears for the headset, and use the headset's sidetone if it has one.
+
 | Monitor on the headset | Monitor to a speaker: the echo notice | Monitor to |
 |---|---|---|
 | ![Delay about 90 ms under Monitor](img/bt-monitor-delay.png) | ![Delay about 0.25 s: you will hear an echo](img/bt-monitor-echo.png) | ![The Monitor to picker](img/bt-monitor-to-picker.png) |
@@ -802,6 +816,8 @@ goes on.* and comes back by itself when the device is back (while Monitor is on)
 | *The Bluetooth output disconnected.* / *The Bluetooth output is not connected.* | The output went away during playback (the deck pauses) / PLAY with the chosen output absent, or its output did not come back within a few seconds. | Reconnect it, or choose another Output. |
 | *The monitor output disconnected: the recording goes on.* | The monitor's Bluetooth output went away. | Nothing: it comes back by itself. |
 | *Bluetooth audio is not set up on this board* (Input picker) | No sound server (or no `libpulse0`) on this board. | Use a USB card; see What the board needs above. |
+| *The sound server is not running* (Input picker) | The launcher says PipeWire or PulseAudio is the board's sound stack, but none answers (launcher 0.10.1 or later). | Restart the desktop session or the board; USB cards still work. |
+| *Not connected: connect it in Settings > Bluetooth* (a dimmed row) | A paired device that is switched off or asleep. | Switch it on and connect it (Settings > Bluetooth); the row comes alive by itself. |
 | *The sound server stopped: the take was closed and kept.* | PipeWire or PulseAudio stopped during a take. | Restart the session or the board. |
 
 | No sound | Headset gone during a take |

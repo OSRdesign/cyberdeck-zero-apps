@@ -308,6 +308,37 @@ void box_geometry()
     CHECK_EQ(box_detail_min_px(16, true), 15);
 }
 
+/* T8: the launcher's facts: a paired device that is not connected is a dimmed two-line row with its reason; the footer for the
+ * controller's bt_status words */
+void launcher_rows()
+{
+    const char *reason = "Not connected: connect it in Settings > Bluetooth";
+    FormatEntry e = bt_input_entry(dev("Beats Fit Pro", "headset", 0, "unknown", false, false, reason));
+    CHECK(!e.compatible);
+    CHECK_EQ(e.name, "Beats Fit Pro");
+    CHECK_EQ(e.size, "");
+    CHECK_EQ(e.detail, reason);
+    CHECK_EQ(e.reason, reason); /* the page's tap: "Not available: Not connected: connect it in Settings > Bluetooth" */
+    e = bt_output_entry(dev("XWF Speaker", "speaker", 0, "unknown", false, false, reason));
+    CHECK(!e.compatible);
+    CHECK_EQ(e.detail, reason);
+    CHECK_EQ(e.reason, reason);
+    /* a connected speaker or headphones next to it: unchanged */
+    CHECK(bt_output_entry(dev("XWF Speaker", "speaker", 48000, "music")).compatible);
+    /* the footer */
+    CHECK_EQ(bt_input_footer_for_status(true, ""), "Bluetooth headsets record speech quality (16 kHz)");
+    CHECK_EQ(bt_input_footer_for_status(true, "The sound server is not running"), "Bluetooth headsets record speech quality (16 kHz)");
+    CHECK_EQ(bt_input_footer_for_status(false, "Bluetooth audio is not set up"), "Bluetooth audio is not set up on this board");
+    CHECK_EQ(bt_input_footer_for_status(false, "The sound server is not running"), "The sound server is not running");
+    CHECK_EQ(bt_input_footer_for_status(false, kBtServerDownText), "The sound server is not running");
+    CHECK_EQ(bt_input_footer_for_status(false, ""), "");
+    CHECK_EQ(bt_input_footer_for_status(false, "Bluetooth audio is not responding"), "");
+    /* the same answers as bt_input_footer for the words it knew */
+    CHECK_EQ(bt_input_footer_for_status(false, "Bluetooth audio is not set up"), bt_input_footer(false, true));
+    CHECK_EQ(bt_input_footer_for_status(false, ""), bt_input_footer(false, false));
+    CHECK_EQ(bt_input_footer_for_status(true, ""), bt_input_footer(true, false));
+}
+
 } // namespace
 
 void test_bt()
@@ -323,4 +354,5 @@ void test_bt()
     switching_line();
     notices();
     bt_label_gap();
+    launcher_rows();
 }

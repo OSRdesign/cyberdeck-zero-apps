@@ -55,6 +55,7 @@ constexpr uint64_t kPlayLevelStaleMs = 150; /* no new played period for this lon
 /* Bluetooth input (docs/PULSE.md, study C5 C9 C15 C16 C18) */
 const char kBtNotSetUp[] = "Bluetooth audio is not set up";
 const char kBtNotResponding[] = "Bluetooth audio is not responding";
+const char kBtServerDown[] = "The sound server is not running"; /* T8: the launcher says a sound server owns the endpoints, none answers */
 const char kBtNotConnected[] = "The Bluetooth headset is not connected.";
 const char kBtNoSound[] = "The headset is connected but sends no sound.";
 const char kBtLostTake[] = "The Bluetooth headset disconnected: the take was closed and kept.";
@@ -236,7 +237,15 @@ struct Controller::Impl : public DeckCommands {
      * card poll and the identity check; the service tick takes the answers */
     std::unique_ptr<PulseWorker> pw;
     std::vector<BtInput> bt_scan_in;              /* what the last scan listed (no placeholder) */
-    std::vector<BtOutput> bt_outs;                /* the Bluetooth sinks the last scan listed */
+    std::vector<BtOutput> bt_outs;                /* the Bluetooth sinks the last scan listed (T8: with the launcher's kind and profile) */
+    /* T8: the launcher's facts. bt_raw_* is what the server listed; bt_scan_in / bt_outs are those with the facts applied; bt_paired_*
+     * are the paired devices that are not connected (dimmed rows). Without facts: bt_scan_in == bt_raw_in and nothing is paired. */
+    LauncherFacts facts;
+    std::vector<BtInput> bt_raw_in;
+    std::vector<BtOutput> bt_raw_outs;
+    std::vector<BtInput> bt_paired_in;
+    std::vector<BtOutput> bt_paired_out;
+    bool bt_no_server = false;                    /* bt_status is "not set up" because no server answers (not: libpulse missing, no worker) */
     bool bt_is_connected = false;                 /* the worker's last word on the connection */
     bool bt_rescan = false;                       /* a change arrived while a scan was running */
     uint64_t bt_scan_ms = 0;                      /* when the applied scan was requested */
@@ -601,8 +610,10 @@ struct Controller::Impl : public DeckCommands {
         PulseWorker *w = worker();
         if (!w) {
             bt_status = kBtNotSetUp;
-            bt_scan_in.clear();
-            bt_outs.clear();
+            bt_no_server = false;
+            bt_raw_in.clear();
+            bt_raw_outs.clear();
+            bt_compose();
             return;
         }
         ScanRequest rq;
@@ -618,8 +629,10 @@ struct Controller::Impl : public DeckCommands {
             const uint64_t now = clk->mono_ms();
             if (!running) {
                 bt_status = kBtNotSetUp;
-                bt_scan_in.clear();
-                bt_outs.clear();
+                bt_no_server = true;
+                bt_raw_in.clear();
+                bt_raw_outs.clear();
+                bt_compose();
                 if (lost_conn) bt_gone.store(true);
                 return;
             }
@@ -661,6 +674,10 @@ struct Controller::Impl : public DeckCommands {
         for (const BtOutput &b : bt_outs)
             d += b.id + "," + b.sink + "," + b.sink_profile + "," + std::to_string(b.rate) + "," + (b.usable ? "u" : "-") + b.hint_profile +
                  (b.music_available ? "m" : "-") + "," + b.label + ";";
+        d += "|"; /* T8: the paired devices that are not connected (empty without facts) */
+        for (const BtInput &b : bt_paired_in) d += b.id + "," + b.label + ";";
+        d += "|";
+        for (const BtOutput &b : bt_paired_out) d += b.id + "," + b.label + "," + b.kind + ";";
         return d;
     }
 
@@ -673,22 +690,28 @@ struct Controller::Impl : public DeckCommands {
         bt_is_connected = r.connected;
         if (r.connect_result != 1 && r.connect_result != 0) {
             bt_status = (r.connect_result == kPulseMissing || r.connect_result == kPulseNoServer) ? kBtNotSetUp : kBtNotResponding;
-            bt_scan_in.clear();
-            bt_outs.clear();
+            bt_no_server = r.connect_result == kPulseNoServer;
+            bt_raw_in.clear();
+            bt_raw_outs.clear();
         } else if (!r.connected || !r.listed) {
             bt_status = kBtNotResponding;
-            bt_scan_in.clear();
-            bt_outs.clear();
+            bt_no_server = false;
+            bt_raw_in.clear();
+            bt_raw_outs.clear();
         } else {
             bt_status.clear();
+            bt_no_server = false;
             const PulseProbe probe = pulse_probe(r.sources, r.sinks, r.cards);
-            bt_scan_in = bt_inputs(probe);
-            bt_outs = bt_outputs(probe);
-            for (const BtInput &b : bt_scan_in)
-                if (b.usable) bt_labels[b.id] = b.label;
-            for (const BtOutput &b : bt_outs)
-                if (b.usable) bt_labels[b.id] = b.label;
+            bt_raw_in = bt_inputs(probe);
+            bt_raw_outs = bt_outputs(probe);
+            bool names_changed = false;
+            for (const BtInput &b : bt_raw_in)
+                if (b.usable) names_changed = remember_name(b.id, b.label) || names_changed;
+            for (const BtOutput &b : bt_raw_outs)
+                if (b.usable) names_changed = remember_name(b.id, b.label) || names_changed;
+            if (names_changed) persist();
         }
+        bt_compose();
         /* only a scan that lists something else is a reason to try the input again: each try asks for a new scan, so "every scan"
          * kept the server busy at the tick rate while the chosen input was absent (T9); the replug timer still retries */
         std::string digest = bt_scan_digest();
@@ -705,6 +728,7 @@ struct Controller::Impl : public DeckCommands {
     /* bt_list = what the last scan listed, plus a placeholder for a chosen headset that is not listed (connected false). */
     void bt_rebuild() {
         bt_list = bt_scan_in;
+        bt_list.insert(bt_list.end(), bt_paired_in.begin(), bt_paired_in.end()); /* T8: dimmed, with the launcher's reason */
         const std::string mac = bt_mac_of_id(want_text);
         if (mac.empty()) return;
         for (const BtInput &b : bt_list)
@@ -717,6 +741,84 @@ struct Controller::Impl : public DeckCommands {
         ph.kind = "headset";
         ph.reason = "Not connected";
         bt_list.push_back(ph);
+    }
+
+    /* ---- the launcher's facts (T8) ---- */
+
+    /* Remembers the last label seen for a device, in memory (the session) and in the settings (bt_names, written by the caller when
+     * this says true). */
+    bool remember_name(const std::string &id, const std::string &label) {
+        bt_labels[id] = label;
+        const std::string mac = bt_mac_of_id(id);
+        if (mac.empty() || label.empty()) return false;
+        auto &names = store.values().bt_names;
+        auto it = names.find(mac);
+        if (it != names.end()) {
+            if (it->second == label) return false;
+            it->second = label;
+            return true;
+        }
+        if (names.size() >= kBtNamesMax) return false;
+        names[mac] = label;
+        return true;
+    }
+
+    /* MAC -> the name to show for a device the server does not list: this session's label, else the remembered one. */
+    std::map<std::string, std::string> bt_name_map() const {
+        std::map<std::string, std::string> m = store.values().bt_names;
+        for (const auto &kv : bt_labels) {
+            const std::string mac = bt_mac_of_id(kv.first);
+            if (!mac.empty() && !kv.second.empty()) m[mac] = kv.second;
+        }
+        return m;
+    }
+
+    /* The lists the controller works with: what the server listed plus the launcher's kind and profile, and the paired devices
+     * that are not connected (only while the server answered and the launcher does not say there is no Bluetooth audio stack). */
+    void bt_compose() {
+        bt_scan_in = bt_raw_in;
+        bt_outs = bt_raw_outs;
+        bt_facts_apply_inputs(bt_scan_in, facts);
+        bt_facts_apply_outputs(bt_outs, facts);
+        bt_paired_in.clear();
+        bt_paired_out.clear();
+        if (bt_status.empty() && !facts.stack_none()) {
+            const std::map<std::string, std::string> names = bt_name_map();
+            bt_paired_in = bt_paired_inputs(bt_raw_in, facts, names);
+            bt_paired_out = bt_paired_outputs(bt_raw_outs, facts, names);
+        }
+    }
+
+    /* bt_outs plus the paired devices that are not connected: the list the output chooser is built from. */
+    std::vector<BtOutput> bt_outs_view() const {
+        std::vector<BtOutput> v = bt_outs;
+        v.insert(v.end(), bt_paired_out.begin(), bt_paired_out.end());
+        return v;
+    }
+
+    bool bt_is_paired_out(const std::string &mac) const {
+        for (const BtOutput &b : bt_paired_out)
+            if (b.mac == mac) return true;
+        return false;
+    }
+
+    /* Looks at the launcher's files (about once a second) and, when the facts changed, builds the lists again. */
+    void bt_facts_poll(uint64_t now) {
+        if (!cfg.facts || !cfg.facts->poll(now)) return;
+        facts = cfg.facts->facts();
+        bt_compose();
+        bt_rebuild();
+        fix_sel();
+        std::string digest = bt_scan_digest();
+        if (digest != bt_digest) bt_changed = true;
+        bt_digest = std::move(digest);
+        refresh_plan();
+    }
+
+    /* The status the snapshot carries: the server's, with the launcher's words when it says why there is no Bluetooth. */
+    std::string bt_status_view() const {
+        if (bt_status == kBtNotSetUp && bt_no_server && facts.stack_server()) return kBtServerDown;
+        return bt_status;
     }
 
     /* Startup only: waits a little for the first scan so a chosen headset opens at once. */
@@ -1132,7 +1234,8 @@ struct Controller::Impl : public DeckCommands {
         const std::string saved = store.values().output_device;
         const std::string mac = bt_mac_of_id(saved);
         auto l = mac.empty() ? bt_labels.end() : bt_labels.find(bt_id_of(mac));
-        plan = choose_output(cap_api()->cards(), have_card ? active.id : std::string(), saved, bt_status.empty() ? &bt_outs : nullptr,
+        const std::vector<BtOutput> view = bt_outs_view();
+        plan = choose_output(cap_api()->cards(), have_card ? active.id : std::string(), saved, bt_status.empty() ? &view : nullptr,
                              l != bt_labels.end() ? l->second : std::string());
         if (plan.chosen.device != built_device && !take_active && !playing_family() && !pwait.active && !tr.previewing &&
             (!player || player->state() == PlayerState::Stopped))
@@ -1144,8 +1247,9 @@ struct Controller::Impl : public DeckCommands {
         player.reset();
         sink.reset();
         bt_sink = nullptr;
+        const std::vector<BtOutput> view = bt_outs_view();
         plan = choose_output(cap_api()->cards(), have_card ? active.id : std::string(), store.values().output_device,
-                             bt_status.empty() ? &bt_outs : nullptr,
+                             bt_status.empty() ? &view : nullptr,
                              [&] {
                                  auto l = bt_labels.find(bt_id_of(bt_mac_of_id(store.values().output_device)));
                                  return l != bt_labels.end() ? l->second : std::string();
@@ -2000,6 +2104,7 @@ struct Controller::Impl : public DeckCommands {
         bt_changed = false;
         PulseApi *pa = cfg.pulse;
         if (!pa) return;
+        bt_facts_poll(now);
         if (bt_apply_scan()) {
             bt_rebuild();
             fix_sel();
@@ -2235,7 +2340,7 @@ struct Controller::Impl : public DeckCommands {
             in.hw_level = false;
             s.card.inputs.push_back(in);
         }
-        s.card.bt_status = bt_status;
+        s.card.bt_status = bt_status_view();
         s.card.selected = sel;
         if (sel >= 0 && sel < static_cast<int>(s.card.labels.size())) s.card.label = s.card.labels[static_cast<size_t>(sel)];
         else if (have_card) s.card.label = active.name;
@@ -2431,6 +2536,7 @@ struct Controller::Impl : public DeckCommands {
         refresh_takes_locked();
         load_newest_if_empty(); /* the last take is loaded at launch, without a load animation */
         want_text = s.card;
+        if (cfg.pulse) bt_facts_poll(clk->mono_ms()); /* T8: the launcher's facts before the first lists */
         if (cfg.pulse) bt_wait_scan(300); /* the first scan: a chosen headset opens at once (startup only) */
         try_open_capture();
         rebuild_output();
@@ -2785,6 +2891,11 @@ bool Controller::set_monitor_output(const std::string &id) {
     for (unsigned char c : id)
         if (c < 0x20 || c == 0x7F) return false;
     if (id.size() > 256) return false;
+    if (!mac.empty() && d.bt_is_paired_out(mac)) { /* T8: paired, not connected: say why, change nothing */
+        d.add_notice(Notice::Info, kBtPairedReason);
+        d.publish();
+        return false;
+    }
     d.store.values().monitor_output = mac.empty() ? id : bt_id_of(mac);
     d.mon_failed = false; /* a new target: a new try */
     d.mon_lost_bt = false;
@@ -2827,7 +2938,7 @@ bool Controller::select_card(int index) {
         if (bi >= d.bt_list.size()) return false;
         const BtInput &b = d.bt_list[bi];
         if (!b.usable) { /* absent or without a microphone: say why, change nothing */
-            d.add_notice(Notice::Info, b.connected ? b.reason : std::string(kBtNotConnected));
+            d.add_notice(Notice::Info, (b.connected || b.paired) ? b.reason : std::string(kBtNotConnected));
             d.publish();
             return false;
         }
@@ -2851,6 +2962,11 @@ bool Controller::select_output(const std::string &device) {
     if (d.take_active || d.deck.state() != DeckState::Idle || d.tr.previewing) return false;
     const std::string mac = bt_mac_of_id(device);
     if (device.compare(0, 3, "bt:") == 0 && mac.empty()) return false; /* not an address */
+    if (!mac.empty() && d.bt_is_paired_out(mac)) { /* T8: paired, not connected: say why, change nothing */
+        d.add_notice(Notice::Info, kBtPairedReason);
+        d.publish();
+        return false;
+    }
     d.store.values().output_device = mac.empty() ? device : bt_id_of(mac);
     d.rebuild_output();
     d.persist();

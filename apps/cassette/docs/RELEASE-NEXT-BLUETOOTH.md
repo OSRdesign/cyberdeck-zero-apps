@@ -23,6 +23,11 @@ boards with a sound server. Everything else is as in [0.2.0](RELEASE-0.2.0.md); 
   again); while it is away the cassette window says *The Bluetooth headset is not connected.*
 - **Silent headsets are caught.** A headset that connects but sends pure silence gets the notice *The headset is connected
   but sends no sound.* after 3 s.
+- **Paired devices that are not connected are listed** (with launcher 0.10.1 or later): dimmed in Settings > Input (headsets) and
+  Settings > Output (headsets, headphones, speakers), *Not connected: connect it in Settings > Bluetooth*. A speaker or headphones
+  are never offered as an input. Cassette remembers the names of the devices it has seen. With an older launcher nothing changes.
+- **The Input footer says *The sound server is not running*** when the launcher says PipeWire or PulseAudio is the board's sound
+  stack but none answers (*Bluetooth audio is not set up on this board* stays for a board with no sound stack).
 - **`cassette-probe --server`** lists what the sound server sees (sources, sinks, Bluetooth cards, their modes);
   `--card bt:<MAC>` for one device.
 - The echo line under Monitor is drawn in a darker amber so it can be read on the cream rows.
@@ -46,8 +51,10 @@ boards with a sound server. Everything else is as in [0.2.0](RELEASE-0.2.0.md); 
 - Some headsets send no microphone audio at all (see above).
 - Only one music (A2DP) device at a time on the HackBerry: the second one gets call quality only.
 - LE Audio is not supported (our boards' radios are Bluetooth 5.0 or older).
-- The monitor delays over Bluetooth (estimated 60-150 ms on the same headset, 150-350 ms to a speaker) are not yet measured
-  on a board. The limits of 0.2.0 otherwise stand.
+- The monitor delay under Monitor is Cassette's own figure: in call mode the headset's own link adds more (about 0.25 s felt with
+  the Evolve 65 against 0.1 s shown). The estimates for a speaker (150-350 ms) are not yet measured. The limits of 0.2.0 otherwise
+  stand.
+- The paired-device list needs launcher 0.10.1 (or later); the launcher's other facts (`bt_hfp`, `bt_le_audio`) are read but not used yet.
 
 More: [`USER-GUIDE.md`](USER-GUIDE.md#bluetooth), [`README.md`](../README.md), [`FORMATS.md`](FORMATS.md),
 [`PULSE.md`](PULSE.md).

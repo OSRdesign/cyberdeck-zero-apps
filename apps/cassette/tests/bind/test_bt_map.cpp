@@ -588,6 +588,60 @@ void missing_and_held()
     CHECK(!same(a, b));
 }
 
+/* T8: the launcher's facts in the rows: paired devices that are not connected are dimmed two-line rows; the footer by bt_status */
+void launcher_facts_rows()
+{
+    const std::string reason = "Not connected: connect it in Settings > Bluetooth";
+    Snapshot s = bt_inputs_snapshot(1);
+    InputSnap paired = bt_in("Bluetooth device D3:69", "headset", 0, false, false, reason);
+    paired.id = "bt:F8:66:5A:18:D3:69";
+    paired.hint_profile = "unknown";
+    s.card.inputs.push_back(paired);
+    s.card.labels.push_back(paired.label);
+    ui::ViewModel vm = map(s);
+    const ui::SettingRow *in = find_row(vm, "input");
+    CHECK(in != nullptr);
+    if (in && in->choice_entries.size() == 5) {
+        const ui::FormatEntry &p = in->choice_entries[4];
+        CHECK_EQ(p.name, "Bluetooth device D3:69");
+        CHECK(!p.compatible);
+        CHECK_EQ(p.detail, reason);
+        CHECK_EQ(p.reason, reason);
+        CHECK_EQ(p.size, "");
+    } else {
+        CHECK(false);
+    }
+    /* the output picker: a paired speaker, dimmed, after the live entries */
+    Snapshot o = base_snapshot();
+    o.card.output_labels = {"Demo Speaker", "XWF Speaker", "Default output"};
+    o.card.output_devices = {"hw:CARD=Demo,DEV=0", "bt:9E:0C:81:E6:5D:1A", "default"};
+    o.card.outputs = {alsa_out("Demo Speaker", "hw:CARD=Demo,DEV=0"), bt_out("XWF Speaker", "speaker", "unknown", false, false, reason),
+                      alsa_out("Default output", "default")};
+    o.card.output_selected = 0;
+    vm = map(o);
+    const ui::SettingRow *out = find_row(vm, "output");
+    CHECK(out != nullptr);
+    if (out && out->choice_entries.size() == 3) {
+        CHECK(out->choice_entries[0].compatible);
+        CHECK(!out->choice_entries[1].compatible);
+        CHECK_EQ(out->choice_entries[1].detail, reason);
+        CHECK_EQ(out->choice_entries[1].size, "");
+    } else {
+        CHECK(false);
+    }
+    /* the footer follows bt_status when no Bluetooth input is listed */
+    Snapshot n = base_snapshot();
+    n.card.bt_status = "Bluetooth audio is not set up";
+    CHECK_EQ(find_row(map(n), "input")->formats_footer, "Bluetooth audio is not set up on this board");
+    n.card.bt_status = "The sound server is not running";
+    CHECK_EQ(find_row(map(n), "input")->formats_footer, "The sound server is not running");
+    n.card.bt_status = "";
+    CHECK_EQ(find_row(map(n), "input")->formats_footer, "");
+    /* a listed Bluetooth entry wins over the status */
+    s.card.bt_status = "The sound server is not running";
+    CHECK_EQ(find_row(map(s), "input")->formats_footer, "Bluetooth headsets record speech quality (16 kHz)");
+}
+
 } // namespace
 
 void test_bt_map()
@@ -599,4 +653,5 @@ void test_bt_map()
     call_quality_watch();
     binder_bt();
     missing_and_held();
+    launcher_facts_rows();
 }

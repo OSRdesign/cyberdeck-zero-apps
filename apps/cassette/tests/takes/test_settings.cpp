@@ -293,5 +293,40 @@ void test_settings_bt() {
         CHECK(s.values().monitor_output.empty());
         CHECK_EQ(s.save(), 0);
         CHECK(read_text(p2).find("monitor_output") == std::string::npos);
+        CHECK(read_text(p2).find("bt_names") == std::string::npos); /* T8: nor this one */
+        CHECK(s.values().bt_names.empty());
+    }
+    {   /* T8: bt_names, the last label seen per device: round trip, upper-case MAC, bad entries dropped, at most 16, absent when empty */
+        TempDir d3;
+        const std::string p3 = default_settings_path(d3.path);
+        std::filesystem::create_directories(std::filesystem::path(p3).parent_path());
+        write_text(p3, "{\"version\":1,\"bt_names\":{\"70:bf:92:53:6b:8b\":\"Evolve 65\",\"9E:0C:81:E6:5D:1A\":\"XWF-M18\",\"bad\":\"x\","
+                       "\"AA:BB:CC:DD:EE:FF\":7,\"11:22:33:44:55:66\":\"\"},\"unknown_key\":[1]}");
+        SettingsStore s(ops, p3);
+        CHECK_EQ(s.load(), 0);
+        CHECK_EQ(s.values().bt_names.size(), 2u);
+        CHECK_EQ(s.values().bt_names["70:BF:92:53:6B:8B"], "Evolve 65");
+        CHECK_EQ(s.values().bt_names["9E:0C:81:E6:5D:1A"], "XWF-M18");
+        s.values().bt_names["01:02:03:04:05:06"] = "Third";
+        CHECK_EQ(s.save(), 0);
+        SettingsStore t(ops, p3);
+        CHECK_EQ(t.load(), 0);
+        CHECK_EQ(t.values().bt_names.size(), 3u);
+        CHECK_EQ(t.values().bt_names["01:02:03:04:05:06"], "Third");
+        CHECK(read_text(p3).find("unknown_key") != std::string::npos); /* unknown keys are kept */
+        t.values().bt_names.clear();
+        CHECK_EQ(t.save(), 0);
+        CHECK(read_text(p3).find("bt_names") == std::string::npos);
+        /* more than 16 in a file: the first 16 */
+        std::string many = "{\"version\":1,\"bt_names\":{";
+        for (int i = 0; i < 20; ++i) {
+            char b[64];
+            std::snprintf(b, sizeof b, "%s\"00:00:00:00:00:%02X\":\"n%d\"", i ? "," : "", i, i);
+            many += b;
+        }
+        write_text(p3, many + "}}");
+        SettingsStore u(ops, p3);
+        CHECK_EQ(u.load(), 0);
+        CHECK_EQ(u.values().bt_names.size(), kBtNamesMax);
     }
 }

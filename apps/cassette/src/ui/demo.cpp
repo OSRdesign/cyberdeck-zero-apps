@@ -263,6 +263,7 @@ void bt_input_rows(ViewModel &vm, std::vector<std::string> labels, std::vector<F
     vm.rec.card.shown = false;
 }
 
+const char *const kBtPairedDemoReason = "Not connected: connect it in Settings > Bluetooth";
 const char *const kEvolve = "Evolve 65";
 const char *const kSpeaker = "XWF-M18 Speaker";
 
@@ -317,6 +318,29 @@ void apply_bt_demo(ViewModel &vm, const std::string &st)
         bt_input_rows(vm, usb_and_bt, bt_entries, 3, true);
     } else if (st == "notsetup") {
         if (SettingRow *in = find_row(vm.settings, "input")) in->formats_footer = bt_input_footer(false, true);
+    } else if (st == "input-paired") { /* T8: paired devices the launcher says are not connected, dimmed, in the Input picker */
+        const char *reason = kBtPairedDemoReason;
+        const std::vector<std::string> labels = {"USB Audio Device", kEvolve, "Beats Fit Pro", "Bluetooth device 5D:1A"};
+        bt_input_rows(vm, labels,
+                      {plain_entry("USB Audio Device"), bt_input_entry(bt_dev(kEvolve, "headset", 16000, "music", true, true, "")),
+                       bt_input_entry(bt_dev("Beats Fit Pro", "headset", 0, "unknown", false, false, reason)),
+                       bt_input_entry(bt_dev("Bluetooth device 5D:1A", "headset", 0, "unknown", false, false, reason))},
+                      1, true);
+    } else if (st == "output-paired") { /* T8: the Output picker with a connected speaker and paired devices that are not connected */
+        SettingsVm &s = vm.settings;
+        const char *reason = kBtPairedDemoReason;
+        erase_row(s, "output");
+        SettingRow out = choice("output", "Output",
+                                {"USB Audio Device", kSpeaker, kEvolve, "Beats Fit Pro", "Bluetooth device 5D:1A", "Default output"}, 1);
+        out.choice_entries = {plain_entry("USB Audio Device"),
+                              bt_output_entry(bt_dev(kSpeaker, "speaker", 48000, "music", true, true, "")),
+                              bt_output_entry(bt_dev(kEvolve, "headset", 16000, "call", true, true, "")),
+                              bt_output_entry(bt_dev("Beats Fit Pro", "headset", 0, "unknown", false, false, reason)),
+                              bt_output_entry(bt_dev("Bluetooth device 5D:1A", "speaker", 0, "unknown", false, false, reason)),
+                              plain_entry("Default output")};
+        s.rows.push_back(out);
+    } else if (st == "notsetup-server") { /* T8: the launcher says a sound server owns the endpoints and none runs */
+        if (SettingRow *in = find_row(vm.settings, "input")) in->formats_footer = bt_input_footer_for_status(false, kBtServerDownText);
     } else if (st == "output") {
         SettingsVm &s = vm.settings;
         erase_row(s, "output");

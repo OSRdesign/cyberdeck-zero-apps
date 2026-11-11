@@ -7,6 +7,7 @@
 #include "naming.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cerrno>
 #include <cmath>
 #include <cstdlib>
@@ -125,6 +126,22 @@ int SettingsStore::load() {
     if (get_str(root, "card", str) && valid_folder(str)) s_.card = str;
     if (get_str(root, "output_device", str) && valid_folder(str)) s_.output_device = str;
     if (get_str(root, "monitor_output", str) && valid_folder(str)) s_.monitor_output = str;
+    if (const json::Value *names = root.get("bt_names")) {
+        if (names->is_obj()) {
+            for (const auto &kv : names->obj) {
+                if (s_.bt_names.size() >= kBtNamesMax) break;
+                if (kv.second.type != json::Value::Str || kv.second.s.empty() || kv.second.s.size() > 96) continue;
+                if (kv.first.size() != 17) continue;
+                bool mac = true;
+                for (size_t i = 0; i < 17; ++i)
+                    mac = mac && (i % 3 == 2 ? kv.first[i] == ':' : std::isxdigit(static_cast<unsigned char>(kv.first[i])) != 0);
+                if (!mac) continue;
+                std::string k = kv.first;
+                for (char &c : k) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                s_.bt_names[k] = kv.second.s;
+            }
+        }
+    }
     clamp_settings(s_);
 
     if (const json::Value *cards = root.get("cards")) {
@@ -173,6 +190,15 @@ int SettingsStore::save() {
     root.set("output_device", json::Value::string(s_.output_device));
     if (s_.monitor_output.empty()) root.erase("monitor_output"); /* absent = automatic (older files stay byte-compatible) */
     else root.set("monitor_output", json::Value::string(s_.monitor_output));
+    if (s_.bt_names.empty()) {
+        root.erase("bt_names"); /* absent = none remembered (older files stay byte-compatible) */
+    } else {
+        json::Value names = json::Value::object();
+        size_t n = 0;
+        for (const auto &kv : s_.bt_names)
+            if (n++ < kBtNamesMax) names.set(kv.first, json::Value::string(kv.second));
+        root.set("bt_names", names);
+    }
 
     json::Value cards = json::Value::object();
     if (const json::Value *old = root.get("cards"))

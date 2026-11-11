@@ -40,6 +40,7 @@ struct BtInput {
     std::string source;       /* the node to open ("" when none) */
     std::string card;         /* the owner card's name ("" when none): its profile tells when the call link is up */
     bool virtual_source = false; /* `source` is the music-mode virtual node */
+    bool paired = false;      /* T8: not from the sound server: a paired device the launcher says is not connected (connected false) */
 };
 
 /* "bt:AA:BB:..." for a MAC in any case; "" when the text is not a MAC. */

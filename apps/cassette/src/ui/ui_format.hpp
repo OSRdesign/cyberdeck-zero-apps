@@ -193,6 +193,10 @@ FormatEntry bt_output_entry(const BtDeviceFacts &f);
 /* The Input picker's footer: "Bluetooth headsets record speech quality (16 kHz)" when a Bluetooth input is listed, else
  * "Bluetooth audio is not set up on this board" when the sound server is missing or not running (not_set_up), else "". */
 std::string bt_input_footer(bool any_bt_input, bool not_set_up);
+/* T8: the footer for the controller's CardSnap::bt_status: as bt_input_footer, and "The sound server is not running" (the launcher
+ * says a sound server owns the Bluetooth endpoints and none answers) when no Bluetooth input is listed. */
+extern const char *const kBtServerDownText; /* "The sound server is not running" */
+std::string bt_input_footer_for_status(bool any_bt_input, const std::string &bt_status);
 /* The muted line under Monitor: "Delay about 90 ms" (rounded to 10 ms, under 1 s), "Delay about 1.2 s" (from 1000 ms, one
  * decimal); "" without a figure (0 or less). With the echo notice (echo, amber on the page): "Delay about 0.25 s: you will
  * hear an echo" (seconds: two decimals under 1 s, one from 1 s), and without a figure "Delay about 0.2-0.3 s: you will hear

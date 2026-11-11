@@ -660,7 +660,7 @@ Report: pass or fail per step; the new takes' names; what was heard at the joins
 the FLAC merge time; the ffprobe / flac -t / opusinfo lines; after the power pull, what the list showed and `ls -a
 ~/Recordings`.
 
-## B24-B34. Bluetooth (HackBerry with PipeWire; B34 on zero8 or Pi 3A+; about 60 min in all)
+## B24-B36. Bluetooth (HackBerry with PipeWire; B34 on zero8 or Pi 3A+; B35 needs launcher 0.10.1 or a dev launcher; about 75 min in all)
 
 Goal: the Bluetooth path on real devices: a headset as the input, playback to a headset and a speaker, the live monitor
 over Bluetooth, the notices, and a board without a sound server. The guide: `docs/USER-GUIDE.md`, chapter Bluetooth. The
@@ -812,6 +812,40 @@ Report: the Output row text, the notice, pass or fail.
 
 Report: the probe output, the footer text, pass or fail.
 
+## B35. Paired but not connected (HackBerry, launcher 0.10.1 or a dev launcher, 5 min)
+
+Needs the launcher's Bluetooth audio facts: launcher 0.10.1, or the dev launcher the controller installs. Have the Evolve 65 and the
+Beats Fit Pro (or the XWF speaker) paired in the launcher; connect the Evolve, switch the other device off.
+
+1. As the controller, before opening Cassette: `cat /run/user/1000/applaunch/status.state | grep bt_audio_dev` and
+   `grep bt_ /run/user/1000/applaunch/board.state`. Expected: `bt_audio_dev=70_BF_92_53_6B_8B:headset:1[:a2dp];<the other MAC>:headset:0`
+   (or `speaker:0`), `bt_audio=pipewire`, `bt_hfp=1`. Report both lines.
+2. Open Cassette, Settings > Input. Expected: the USB card, the Evolve (16 kHz), then the other headset **dimmed**, named as the
+   launcher or Cassette knew it (*Bluetooth device XX:XX* the first time, its real name once it has been connected while Cassette ran),
+   with *Not connected: connect it in Settings > Bluetooth* under it. A paired **speaker** is not listed in Input. A tap on the dimmed
+   row says *Not available: Not connected: connect it in Settings > Bluetooth*, the Input stays as it was.
+3. Settings > Output: the Evolve, the dimmed headset and the dimmed speaker; a tap on either says the same, the Output does not change.
+4. Switch the other headset on. Expected: within a few seconds the dimmed row is replaced by a normal one, with its real name, and
+   it can be chosen. Switch it off again: the dimmed row returns (after the launcher notices, up to about 10 s).
+5. Choose that headset as the Input while it is on, leave Cassette, switch the headset off, open Cassette: the chosen Input shows
+   as the dimmed row, the cassette window says *The Bluetooth headset is not connected.*
+6. Stop the sound server (`systemctl --user stop pipewire-pulse`, restart it afterwards) with Cassette open: the Input footer says
+   *The sound server is not running*; USB cards still work. Report what the Input picker shows.
+
+Report: the two state lines, what each picker showed, the texts as you read them, pass or fail.
+
+## B36. A launcher without the new keys (HackBerry, launcher 0.10.0, 3 min)
+
+On the launcher that is installed today (0.10.0: its `status.state` has no `bt_audio_dev`, its `board.state` no `bt_audio`).
+
+1. `grep -c bt_audio /run/user/1000/applaunch/status.state /run/user/1000/applaunch/board.state` prints `0` for both.
+2. Open Cassette: Settings > Input and Output list **only** the connected Bluetooth devices, no dimmed row for a paired one, exactly as
+   before this version; B24, B25 and B29 behave as before. With the sound server stopped the footer says *Bluetooth audio is not set up
+   on this board* (not *The sound server is not running*).
+3. A device chosen earlier and switched off shows the old placeholder: *Not connected* (a long name wraps), not the long reason.
+
+Report: pass or fail, anything that differs from B24-B34 as you saw them last.
+
 ## Results
 
 | Test | Board | Pass / fail | Notes |
@@ -851,6 +885,8 @@ Report: the probe output, the footer text, pass or fail.
 | B33 call-quality-only headset | HackBerry |  |  |
 | B34 no sound server | zero8 |  |  |
 | B34 no sound server | Pi 3A+ |  |  |
+| B35 paired but not connected | HackBerry |  |  |
+| B36 launcher without the keys | HackBerry |  |  |
 
 **What to send back:** the table; the probe output per board (B0) and `cassette-probe --server` (B24, B34); the measured
 monitor delays (B30, B31); the `watch` and `take` outputs of B1, B3, B4; the

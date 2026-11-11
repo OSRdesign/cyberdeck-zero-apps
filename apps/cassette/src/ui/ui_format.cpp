@@ -373,6 +373,15 @@ std::string bt_input_footer(bool any_bt_input, bool not_set_up)
     return "";
 }
 
+const char *const kBtServerDownText = "The sound server is not running";
+
+std::string bt_input_footer_for_status(bool any_bt_input, const std::string &bt_status)
+{
+    if (any_bt_input) return bt_input_footer(true, false);
+    if (bt_status == kBtServerDownText) return kBtServerDownText;
+    return bt_input_footer(false, bt_status == "Bluetooth audio is not set up");
+}
+
 std::string monitor_delay_text(double delay_ms, bool echo)
 {
     char b[48];
