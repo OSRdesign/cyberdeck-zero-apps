@@ -70,6 +70,13 @@ Source of truth: `docs/doc-images.tsv` (tab separated: image, scene, size, shot)
 | `trim-zoomed.png` | `j2-trim-tapflag` | 480x320 | `trim-zoomed` | Edit page zoomed, one flag |
 | `save-box.png` | `k-save` | 480x320 | `save` | Save box, three files |
 | `confirm-replace.png` | `l-confirm` | 480x320 | `confirm` | Replace original confirm |
+| `list-keys-320x480.png` | `mg1-merge-small` | 320x480 | `list-keys` | The list's five keys on the narrow screen |
+| `merge-mode.png` | `mg1-merge-small` | 480x320 | `mode-3` | Merge mode: three takes chosen, the takes that cannot join dimmed |
+| `merge-mode-320x480.png` | `mg1-merge-small` | 320x480 | `mode-3` | The same, 320x480 (a reason wraps, its row grows) |
+| `merge-box.png` | `mg1-merge-small` | 480x320 | `merge-box` | The merge box |
+| `merge-confirm.png` | `mg1-merge-small` | 480x320 | `confirm-delete-originals` | Delete the originals? |
+| `merge-progress.png` | `mg1-merge-small` | 480x320 | `progress` | Merging... 37% with CANCEL |
+| `merged.png` | `mg2-merged-small` | 480x320 | `merged` | The list after a merge, the notice |
 | `settings-top.png` | `h-settings` | 480x320 | `settings-top` | Settings, top |
 | `settings-picker.png` | `o-settings-picker` | 480x320 | `picker` | A choice row's list (Record timer) |
 | `settings-monitor.png` | `r7a-settings-all-rows` | 480x320 | `all-rows-monitor` | Settings with Monitor and Monitor level |

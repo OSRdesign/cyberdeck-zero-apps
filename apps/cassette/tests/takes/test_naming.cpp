@@ -460,4 +460,18 @@ void test_take_number_setting() {
     CHECK_EQ(out[0], std::string("take_060_20261108-1105-1.wav"));
     CHECK_EQ(out[1], std::string("take_060_20261108-1105-2.wav"));
     CHECK_EQ(peek_take_number(ops, dir2, "take"), static_cast<uint64_t>(61)); /* unchanged by the edits */
+
+    /* a merge's new take (note_take_number_used): the counter moves on to it, never back */
+    const std::string dir4 = d.file("Merge");
+    ops.mkdir(dir4);
+    CHECK_EQ(note_take_number_used(ops, dir4, 7), 0); /* no counter yet: written */
+    CHECK_EQ(read_text(take_counter_path(dir4)), std::string("7\n"));
+    CHECK_EQ(note_take_number_used(ops, dir4, 5), 0); /* behind: unchanged */
+    CHECK_EQ(read_text(take_counter_path(dir4)), std::string("7\n"));
+    CHECK_EQ(note_take_number_used(ops, dir4, 12), 0);
+    CHECK_EQ(peek_take_number(ops, dir4, "take"), static_cast<uint64_t>(13));
+    ops.rename_errno = EIO; /* a failed write keeps the old counter */
+    CHECK_EQ(note_take_number_used(ops, dir4, 20), -EIO);
+    CHECK_EQ(read_text(take_counter_path(dir4)), std::string("12\n"));
+    ops.rename_errno = 0;
 }

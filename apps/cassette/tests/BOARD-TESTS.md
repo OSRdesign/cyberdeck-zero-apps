@@ -612,6 +612,53 @@ Goal: a quiet take is readable on the Edit page, and the chip and the key switch
 
 Report: pass or fail per step, the number shown after `FIT x`, the screen.
 
+## B23. Merge takes (any board with the libraries; zero8 or deck for the power pull, 30 min)
+
+Goal: MERGE joins takes, in the order chosen, into one new take of the same format, for WAV, FLAC and Opus; the new take
+plays across the joins; the originals are deleted only after a merge that succeeded; a cancel and a power pull leave the
+originals as they were. The guide: `docs/USER-GUIDE.md`, section Merging takes.
+
+1. Record three WAV takes of about 20 s each, counting aloud with a letter ("A one, A two ..." in the first, "B one ..."
+   in the second, "C one ..." in the third), so each take and each position can be heard. Note their numbers.
+2. **The keys and merge mode.** Recordings list: the keys read LOAD, RENAME, EDIT, MERGE, DELETE (portrait boards: say if
+   a caption is hard to read). Select the C take, press MERGE (or M). Expected: round badges instead of the stickers, the C
+   take shows 1, the strip reads `Merge · 1 take · 00:20 · about 2 MB` (about), the keys are CANCEL and MERGE (MERGE
+   dimmed). Tap the A take (2), then the B take (3). Tap the A take again: it is dropped and B shows 2; tap A again: A
+   shows 3. The order is now C, B, A; the strip says 3 takes and about 01:00.
+3. **The box.** MERGE: the box says `Merge 3 takes?`, about 01:00 and the size, and the new name: the next take number,
+   the C take's prefix, the date and time now, `.wav`. KEEP ORIGINALS. Expected: `Merging...` for a moment, then the list
+   with the new take on top and highlighted, the notice `Merged 3 takes into Take NNN`; the three originals are still there.
+4. **Play across the joins.** LOAD the new take and PLAY: C one ... then B one ... then A one ..., no gap, no click, no
+   word repeated or missing at the joins; its row's length is the sum of the three. On the PC (the controller can do this):
+   `ffprobe -show_entries stream=duration_ts` of the new take equals the sum of the three takes'.
+5. **FLAC.** Settings > Codec FLAC; record three takes as in step 1 and merge them in an order of your choice (KEEP
+   ORIGINALS). Expected: the new row ends in `FLAC` and plays as in step 4. Report the time from KEEP ORIGINALS to the
+   notice. On the PC: `flac -t` says ok and its sample count is the sum.
+6. **Opus.** Settings > Codec Opus: record three takes with the speech preset (32 kbps) and merge them; then three with
+   music 128 and merge those. Expected: `.opus` rows that play across the joins. Listen closely at every join and report
+   what you hear: the guide says a join adds 7 to 27 ms (a short quiet gap) and, with the music settings, the first tenth
+   of a second of the later take may sound like a short blip. On the PC `opusinfo` shows no errors.
+7. **What cannot join.** Merge mode with a WAV take as number 1: the FLAC and Opus rows are dimmed and read `Different
+   format: FLAC 48 kHz` / `Different format: Opus 48 kHz`; a tap on one says `Not available: ...` and chooses nothing.
+   Drop the WAV take: nothing chosen, every take can be chosen again. Preview a take (double tap), then MERGE: the playing
+   take is dimmed with `Playing: stop it first`.
+8. **Delete originals.** Merge two WAV takes with DELETE ORIGINALS: the box asks `Delete the originals?`; CANCEL keeps the
+   merge box, DELETE merges. Expected: the new take appears, the two originals are gone from the list and from
+   `~/Recordings` (their `.peaks` too), the notice ends in `, originals deleted`.
+9. **Cancel.** Record a FLAC take of about 10 minutes and a short one; merge them (KEEP ORIGINALS) and press CANCEL in the
+   progress box (or Esc) after a few percent. Expected: `Merge cancelled`, merge mode stays with the two takes chosen, no
+   new take, `ls -a ~/Recordings` shows no `.tmp-merge-*` file, both takes play as before. Merge again with DELETE
+   ORIGINALS and CANCEL halfway: both originals are still there.
+10. **Power pull during a merge** (zero8 or deck): note Settings > Take number, then start the merge of step 9 with
+    DELETE ORIGINALS and pull the board's power at about 50 %. Power up, open Cassette. Expected: both originals in the
+    list and unchanged (play them), no new take, no `.tmp-merge-*` file in `~/Recordings` (`ls -a`), Settings > Take
+    number shows the same next number as before.
+11. **One take only:** with one take in the folder MERGE is dimmed; a press says `Merging needs two takes`.
+
+Report: pass or fail per step; the new takes' names; what was heard at the joins (WAV, FLAC, Opus speech, Opus music);
+the FLAC merge time; the ffprobe / flac -t / opusinfo lines; after the power pull, what the list showed and `ls -a
+~/Recordings`.
+
 ## Results
 
 | Test | Board | Pass / fail | Notes |
@@ -638,6 +685,7 @@ Report: pass or fail per step, the number shown after `FIT x`, the screen.
 | B19 Codec, rate and quality pickers |  |  |  |
 | B20 Info box and label with a long name |  |  |  |
 | B22 LIM and LOW CUT lamps |  |  |  |
+| B23 merge takes |  |  |  |
 
 **What to send back:** the table; the probe output per board (B0); the `watch` and `take` outputs of B1, B3, B4; the
 `ui` log line per board; the notice texts as you read them; screenshots or photos of anything cut, overlapping or odd.

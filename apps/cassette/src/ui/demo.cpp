@@ -126,6 +126,76 @@ void monitor_looks(ViewModel &vm)
     r.monitor_active = sw && sw->on && !playing && vm.list.previewing < 0;
 }
 
+/* MERGE TAKES in the demo: each synthetic take's codec and rate (the folder's takes are WAV 48 kHz but Take 005, a FLAC take at
+ * 44.1 kHz, and Take 003, a WAV take at 44.1 kHz) and its size in MB (the detail lines' figures) */
+std::string demo_format(const TakeRow &t)
+{
+    if (t.sticker == "005") return "FLAC 44.1 kHz";
+    if (t.sticker == "003") return "WAV 44.1 kHz";
+    return "WAV 48 kHz";
+}
+int demo_mb(const TakeRow &t)
+{
+    static const struct {
+        const char *sticker;
+        int mb;
+    } sizes[] = {{"008", 90}, {"007", 4}, {"006", 69}, {"005", 17}, {"004", 4}, {"003", 357}};
+    for (const auto &x : sizes)
+        if (t.sticker == x.sticker) return x.mb;
+    return 1;
+}
+/* Why row i cannot join a merge whose first take is row `first` (-1: none chosen yet): the merge rule's texts. */
+std::string demo_reason(const ListVm &l, int first, int i)
+{
+    if (first < 0 || first == i) return "";
+    const std::string a = demo_format(l.takes[static_cast<std::size_t>(first)]), b = demo_format(l.takes[static_cast<std::size_t>(i)]);
+    if (a == b) return "";
+    if (a.substr(0, a.find(' ')) != b.substr(0, b.find(' '))) return "Different format: " + b;
+    return "Different rate";
+}
+const char *const kMergeName = "take_008_20261111-1502.wav";
+/* The list in merge mode for the chosen rows (in the order chosen): the badges' numbers, the dimmed rows, the strip. */
+void demo_apply_merge(ListVm &l, const std::vector<int> &sel)
+{
+    const int first = sel.empty() ? -1 : sel.front();
+    std::int64_t ms = 0;
+    int mb = 0;
+    for (std::size_t i = 0; i < l.takes.size(); ++i) {
+        TakeRow &t = l.takes[i];
+        const auto it = std::find(sel.begin(), sel.end(), static_cast<int>(i));
+        t.merge_order = it == sel.end() ? 0 : static_cast<int>(it - sel.begin()) + 1;
+        t.merge_reason = t.merge_order ? std::string() : demo_reason(l, first, static_cast<int>(i));
+        t.merge_ok = t.merge_reason.empty();
+        if (t.merge_order) {
+            ms += t.length_ms;
+            mb += demo_mb(t);
+        }
+    }
+    const std::string dot = " \xC2\xB7 ";
+    l.merge_strip = "Merge" + dot + std::to_string(sel.size()) + (sel.size() == 1 ? " take" : " takes");
+    if (!sel.empty()) l.merge_strip += dot + fmt_mmss(ms) + dot + "about " + std::to_string(mb) + " MB";
+    l.merge_ready = sel.size() >= 2;
+}
+void demo_merge_box(ViewModel &vm, const std::vector<int> &sel)
+{
+    std::int64_t ms = 0;
+    int mb = 0;
+    for (int i : sel) {
+        ms += vm.list.takes[static_cast<std::size_t>(i)].length_ms;
+        mb += demo_mb(vm.list.takes[static_cast<std::size_t>(i)]);
+    }
+    vm.merge_box.shown = true;
+    vm.merge_box.title = "Merge " + std::to_string(sel.size()) + " takes?";
+    vm.merge_box.name = kMergeName;
+    vm.merge_box.detail = fmt_mmss(ms) + " \xC2\xB7 about " + std::to_string(mb) + " MB";
+}
+void demo_progress(ViewModel &vm, std::size_t n)
+{
+    vm.progress.shown = true;
+    vm.progress.title = "Merging... 37%";
+    vm.progress.body = std::to_string(n) + " takes into " + kMergeName;
+}
+
 } // namespace
 
 std::vector<float> demo_window_peaks(std::int64_t length_ms, std::int64_t marker_ms, std::int64_t span_ms, int n)
@@ -405,6 +475,29 @@ ViewModel demo_model(const std::string &scene)
     l.free_space = "41 GB";
     l.free_hours = "117 h";
     l.format_short = "48k/16";
+    l.can_merge = l.takes.size() >= 2;
+    /* CASSETTE_DEMO_MERGE=0|1|3|box|confirm|progress|done: merge mode with nothing chosen, Take 006 chosen, three takes chosen
+     * (006, 007, 004), then the merge box, the confirm before deleting the originals, the progress box; done: the list after
+     * a merge (the new Take 008 on top, highlighted, the notice) */
+    if (const char *mg = std::getenv("CASSETTE_DEMO_MERGE"); mg && *mg && l.takes.size() >= 5) {
+        const std::string m = mg;
+        if (m == "done") {
+            TakeRow t8 = take("008", "today 15:02 \xC2\xB7 16 min \xC2\xB7 90 MB", 971000);
+            t8.detail_short = {"today 15:02 \xC2\xB7 16 min", "15:02 \xC2\xB7 16 min"};
+            l.takes.insert(l.takes.begin(), t8);
+            l.selected = 0;
+            l.take_count = 13;
+            vm.notice = "Merged 3 takes into Take 008";
+        } else {
+            l.merge_mode = true;
+            std::vector<int> sel;
+            if (m == "1") sel = {1};
+            else if (m != "0") sel = {1, 0, 3};
+            demo_apply_merge(l, sel);
+            if (m == "box" || m == "confirm") demo_merge_box(vm, sel);
+            if (m == "progress") demo_progress(vm, sel.size());
+        }
+    }
 
     /* the trim page: Take 006, a 60 s window at 5:44.2, two splits (the second selected) */
     TrimVm &t = vm.trim;
@@ -458,6 +551,11 @@ ViewModel demo_model(const std::string &scene)
     vm.confirm.title = "Delete the original take?";
     vm.confirm.body = "It is deleted only after every new file is written and synced.";
     vm.confirm.yes = "DELETE";
+    if (const char *mg = std::getenv("CASSETTE_DEMO_MERGE"); mg && std::string(mg) == "confirm") {
+        vm.confirm.title = "Delete the originals?";
+        vm.confirm.body = "They are deleted only after the new file is written and synced.";
+        vm.confirm.shown = true;
+    }
     /* CASSETTE_DEMO_NOTICE=<text>: a notice that stays until a tap dismisses it (the narrow recorder) or the scene ends */
     if (const char *n = std::getenv("CASSETTE_DEMO_NOTICE")) vm.notice = n;
     /* CASSETTE_DEMO_LIM / CASSETTE_DEMO_LOWCUT = on|off: the LIM and LOW CUT lamps (lit: the function is on in Settings) */
@@ -591,6 +689,23 @@ void DemoDriver::tick_live(std::uint32_t elapsed_ms)
         ch.hold_bar = std::max(ch.bar, ch.hold_bar - ((elapsed_ms / 33) % 15 == 0 ? 1 : 0));
     }
     if (r.transport == Transport::Recording || r.transport == Transport::Playing) r.counter_ms += 33;
+    emit();
+}
+
+/* Merge mode: row i chosen next, or dropped (the later ones move up); a row that cannot join says why. */
+void DemoDriver::merge_toggle(int i)
+{
+    ListVm &l = vm_.list;
+    if (!l.merge_mode || vm_.merge_box.shown || i < 0 || i >= static_cast<int>(l.takes.size())) return;
+    const auto it = std::find(merge_sel_.begin(), merge_sel_.end(), i);
+    if (it != merge_sel_.end()) {
+        merge_sel_.erase(it);
+    } else {
+        const std::string why = demo_reason(l, merge_sel_.empty() ? -1 : merge_sel_.front(), i);
+        if (!why.empty()) vm_.notice = "Not available: " + why;
+        else merge_sel_.push_back(i);
+    }
+    demo_apply_merge(l, merge_sel_);
     emit();
 }
 
@@ -741,6 +856,55 @@ UiActions DemoDriver::actions()
         vm_.confirm.shown = true;
         emit();
     };
+    a.list_merge = [this](int i) {
+        log_action("list_merge " + std::to_string(i));
+        if (vm_.list.takes.size() < 2) {
+            vm_.notice = "Merging needs two takes";
+            emit();
+            return;
+        }
+        vm_.list.merge_mode = true;
+        merge_sel_.clear();
+        merge_toggle(i);
+    };
+    a.merge_toggle = [this](int i) {
+        log_action("merge_toggle " + std::to_string(i));
+        merge_toggle(i);
+    };
+    a.merge_cancel = [this] {
+        log_action("merge_cancel");
+        vm_.list.merge_mode = false;
+        merge_sel_.clear();
+        demo_apply_merge(vm_.list, merge_sel_);
+        emit();
+    };
+    a.merge_run = [this] {
+        log_action("merge_run");
+        if (merge_sel_.size() < 2) vm_.notice = "Merging needs two takes";
+        else demo_merge_box(vm_, merge_sel_);
+        emit();
+    };
+    a.merge_choose = [this](MergeChoice c) {
+        static const char *const n[3] = {"keep", "delete", "cancel"};
+        log_action(std::string("merge_choose ") + n[static_cast<int>(c)]);
+        if (c == MergeChoice::DeleteOriginals) {
+            pending_delete_ = -2;
+            vm_.confirm.title = "Delete the originals?";
+            vm_.confirm.body = "They are deleted only after the new file is written and synced.";
+            vm_.confirm.yes = "DELETE";
+            vm_.confirm.shown = true;
+        } else {
+            vm_.merge_box.shown = false;
+            if (c == MergeChoice::KeepOriginals) demo_progress(vm_, merge_sel_.size());
+        }
+        emit();
+    };
+    a.merge_stop = [this] {
+        log_action("merge_stop");
+        vm_.progress.shown = false;
+        vm_.notice = "Merge cancelled";
+        emit();
+    };
     a.trim_zoom = [this](int d) {
         log_action("trim_zoom " + std::to_string(d));
         TrimVm &t = vm_.trim;
@@ -823,6 +987,15 @@ UiActions DemoDriver::actions()
     a.confirm_answer = [this](bool yes) {
         log_action(std::string("confirm_answer ") + (yes ? "yes" : "no"));
         vm_.confirm.shown = false;
+        if (pending_delete_ == -2) { /* the merge's "Delete the originals?" */
+            pending_delete_ = -1;
+            if (yes) {
+                vm_.merge_box.shown = false;
+                demo_progress(vm_, merge_sel_.size());
+            }
+            emit();
+            return;
+        }
         if (yes && pending_delete_ >= 0 && pending_delete_ < static_cast<int>(vm_.list.takes.size())) {
             vm_.list.takes.erase(vm_.list.takes.begin() + pending_delete_);
             if (pending_delete_ == loaded_) { /* the loaded take is gone: the blank cassette, nothing to play */

@@ -24,6 +24,13 @@
  *                  preview_take, or Stop (stop and rewind) when that take is the one playing; LOAD -> load (refused while
  *                  recording); leaving the list stops the preview it started; RENAME -> rename_take; EDIT -> stop a
  *                  playback, open_trim (refused: back to the list); DELETE -> the confirm box, then delete_take
+ *   merge          MERGE (fewer than two takes, or recording: a notice) -> merge mode with the take chosen first; a tap or
+ *                  Enter chooses a row (merge_row_reason: else "Not available: <reason>") or drops it (the rest renumber);
+ *                  CANCEL / Esc leaves merge mode; MERGE -> plan_merge, then the merge box (or its refusal as a notice);
+ *                  KEEP ORIGINALS -> start_merge(keep); DELETE ORIGINALS -> the confirm box, then start_merge(delete);
+ *                  the progress box follows snapshot().merge (CANCEL -> cancel_merge); the end: "Merged 3 takes into
+ *                  Take 009" (merge mode ends, the new take highlighted), "Merge failed: ...", "Merge cancelled" (merge
+ *                  mode stays, the choice kept). Leaving the list ends merge mode.
  *   trim           ZOOM -> set_zoom (down to a 2 s window), POSITION / keys -> move_position, a drag -> set_position
  *                  (coalesced), SET IN / SET OUT / SPLIT / REMOVE / a flag tap -> set_in / set_out / add_split /
  *                  remove_split / select_split, PLAY -> preview(toggle), SAVE -> the save box with the names a save would
@@ -99,6 +106,12 @@ private:
         std::vector<std::string> names;
         bool have_nav = false;
         ui::Screen nav = ui::Screen::List;
+        bool have_merge_plan = false;
+        unsigned merge_token = 0;
+        MergeInfo merge_plan;
+        bool have_merge_start = false;
+        bool merge_started = false;
+        unsigned merge_seq = 0;
     };
     void post(std::function<void()> job) { worker_.post(std::move(job)); }
     void notice_from_job(const std::string &text);
@@ -108,6 +121,11 @@ private:
     void follow_position();
     int64_t trim_position() const; /* the marker shown: the followed position while a preview plays, else the reported */
     void update_peaks();
+    /* merge takes */
+    void toggle_merge(int index);
+    void end_merge_mode();
+    void begin_merge(bool delete_originals);
+    void follow_merge();
 
     Port &port_;
     Worker &worker_;
@@ -155,6 +173,10 @@ private:
     /* a drag on the waveform: only the latest marker is sent */
     std::atomic<int64_t> scrub_frame_{0};
     std::atomic<bool> scrub_posted_{false};
+    /* merge takes: the plan asked for (a newer request makes an older answer stale), the merge started */
+    unsigned merge_token_ = 0;
+    bool merge_wait_start_ = false; /* start_merge was posted, its answer not back yet */
+    unsigned merge_seq_ = 0;        /* the controller's sequence number of the merge the binding follows */
 };
 
 } // namespace bind

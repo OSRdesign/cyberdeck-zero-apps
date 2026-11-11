@@ -33,9 +33,9 @@
  *     failed Writer, retries a lost card once a second, follows the preview, and publishes the snapshot.
  *   - capture thread (Capture) and writer thread (Writer): no controller locks; they talk through atomics, the Ring and
  *     the gate. The meter is read lock-free.
- *   - workers: one thread builds the peak pyramid (open_trim), one runs save() (trim_split). They touch only atomics and a
- *     small result mutex; the service thread merges their results into the snapshot. app_leave()/the destructor cancel and
- *     join them.
+ *   - workers: one thread builds the peak pyramid (open_trim), one runs save() (trim_split), one runs start_merge()
+ *     (merge_takes). They touch only atomics and a small result mutex; the service thread merges their results into the
+ *     snapshot. app_leave()/the destructor cancel and join them.
  *   Lock order: mu_ -> (result mutex | publish mutex | peak-pointer mutex). A command never waits for a worker.
  *
  * Decisions the plan did not fix (also listed in the T6a report):
@@ -247,6 +247,27 @@ struct TrimSnap {
     bool save_replaced = false;  /* the last save replaced the original */
 };
 
+/* MERGE TAKES (core/edit/merge.hpp): the merge running on its worker (start_merge ... cancel_merge). */
+struct MergeSnap {
+    int state = 0;               /* 0 none, 1 running, 2 done, 3 failed, 4 cancelled */
+    unsigned seq = 0;            /* counts the merges started (the binding tells the end of one merge from the next) */
+    float progress = 0.f;        /* 0..1 while running */
+    int sources = 0;             /* how many takes */
+    std::string output;          /* the new take's file name: the planned one while running, the real one when done */
+    std::string message;         /* failed: why; done: a warning ("1 original could not be deleted"), else "" */
+    bool originals_deleted = false; /* done: every original was deleted */
+};
+
+/* What a merge of `names` would do (plan_merge): the merge box's line, or why it is refused. */
+struct MergeInfo {
+    bool ok = false;
+    std::string message;         /* refused: the notice ("Not enough free space", "Stop the recording to merge takes" ...) */
+    std::string name;            /* the new take's file name (the next take number, the first take's prefix, now, the extension) */
+    double seconds = 0;          /* its length */
+    uint64_t bytes = 0;          /* about its size */
+    int count = 0;               /* the takes */
+};
+
 struct Snapshot {
     bool started = false;
     DeckSnap deck;
@@ -264,6 +285,7 @@ struct Snapshot {
     std::vector<Notice> notices; /* one-time: shown once, then ack_notices() */
     ScanSnap scan;
     TrimSnap trim;
+    MergeSnap merge;
     unsigned takes_revision = 0; /* changes whenever takes() would return something different */
     std::string folder;          /* the recordings folder, "~" expanded */
     Settings settings;           /* the current settings */
@@ -283,6 +305,7 @@ struct TakeRow {
     std::string date_text;       /* "2026-11-08 11:05", empty when not set */
     bool damaged = false, repaired = false;
     bool current = false;        /* the take PLAY, REW and FWD act on */
+    bool named = false;          /* the file name follows the take grammar (a Cassette take: it can be renamed and merged) */
 };
 
 struct PeakBar { int min = 0, max = 0; }; /* 16-bit scale */
@@ -396,6 +419,22 @@ public:
     bool preview(bool on);                        /* plays the kept part; only with the deck idle */
     bool save(SaveKind kind);                     /* runs on a worker; false when invalid or already saving */
     void cancel_save();
+
+    /* ---- merge takes (core/edit/merge.hpp) ----
+     * The takes in the order chosen, all of one codec, rate, channel count and (WAV, FLAC) bit depth. Refused (MergeInfo
+     * message / false with a notice): fewer than two takes, a take not in the list, not a Cassette take or damaged, a take in
+     * use (playing, paused or previewing, open on the Edit page), a recording or countdown running, a merge already running,
+     * FLAC without libFLAC ("This take cannot be merged: FLAC not installed (libflac14)"; Opus needs no library), anything
+     * merge.hpp's plan refuses ("Not enough free space": the takes' total size + 5 %). The new take is named like a new
+     * recording: the next take number (Take number setting) with the FIRST take's prefix, the date and time now (nodate while
+     * the clock is not set), the takes' extension; the take counter moves on only when the merge succeeds. */
+    MergeInfo plan_merge(const std::vector<std::string> &names);
+    /* Starts the merge on a worker (snapshot().merge). With delete_originals the originals are deleted (the take, its peak
+     * cache, its journal) only after the new take is written, synced, verified and renamed into place; a loaded original that is
+     * deleted leaves the new take loaded (no load animation). The new take becomes the list's newest; the list reloads. */
+    bool start_merge(const std::vector<std::string> &names, bool delete_originals);
+    /* Stops a running merge: the partial new take is removed, the originals stay as they were. */
+    void cancel_merge();
 
 private:
     struct Impl;

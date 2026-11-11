@@ -7,3 +7,4 @@ x3-bound-unplug take_001_*[0-9][0-9][0-9][0-9].wav|take_001_nodate.wav
 x6-bound-replace take_001_*-1.wav take_001_*-2.wav take_001_*-3.wav
 x7-bound-speech take_001_*[0-9][0-9][0-9][0-9].wav|take_001_nodate.wav
 x8-bound-trim-play take_001_*[0-9][0-9][0-9][0-9].wav|take_001_nodate.wav
+x9-bound-merge take_001_*[0-9][0-9][0-9][0-9].wav|take_001_nodate.wav take_002_*[0-9][0-9][0-9][0-9].wav|take_002_nodate.wav take_003_*[0-9][0-9][0-9][0-9].wav|take_003_nodate.wav

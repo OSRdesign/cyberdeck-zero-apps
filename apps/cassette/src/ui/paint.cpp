@@ -372,6 +372,15 @@ void icon(lv_layer_t *layer, Icon ic, int cx, int cy, double s, std::uint32_t c,
         ring(layer, k.x(4), k.y(13), r, stroke(1.6, s), 0, 360, c, false, opa);
         break;
     }
+    case Icon::Merge: {
+        /* two strokes from the left corners meet in the middle and go on as one arrow to the right */
+        const int w = stroke(2.4, s);
+        line(layer, k.x(2.5), k.y(2), k.x(9.5), k.y(8), w, c, opa, true);
+        line(layer, k.x(2.5), k.y(14), k.x(9.5), k.y(8), w, c, opa, true);
+        line(layer, k.x(9.5), k.y(8), k.x(15), k.y(8), w, c, opa, true);
+        triangle(layer, k.x(14), k.y(3.5), k.x(20.5), k.y(8), k.x(14), k.y(12.5), c, opa);
+        break;
+    }
     case Icon::List:
         for (int i = 0; i < 3; ++i) {
             const double yy = 6 + 6 * i;

@@ -13,6 +13,7 @@ int main() {
     test_crash_steps();
     test_crash_fork();
     test_codec_edit();
+    test_merge();
     std::printf("cassette edit tests: %d checks passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }

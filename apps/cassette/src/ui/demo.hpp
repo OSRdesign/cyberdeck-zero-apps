@@ -26,7 +26,9 @@
  * plus, for every state, the settings rows, five takes and the trim state of Take 006 (two splits, the second
  * selected); CASSETTE_DEMO_TRIM=none starts the trim page without splits, =unselected with none selected;
  * CASSETTE_DEMO_BOX=save|confirm opens a box; CASSETTE_DEMO_NOTICE=<text> shows a notice (until a tap dismisses it);
- * CASSETTE_DEMO_SETTINGS=full adds the card-dependent rows (Mic mute) and the Output row; CASSETTE_DEMO_PAGE=settings|list|trim starts on that page.
+ * CASSETTE_DEMO_SETTINGS=full adds the card-dependent rows (Mic mute) and the Output row; CASSETTE_DEMO_PAGE=settings|list|trim starts on that page;
+ * CASSETTE_DEMO_MERGE=0|1|3|box|confirm|progress|done shows merge takes (merge mode with 0, 1 or 3 takes chosen and the
+ * incompatible takes dimmed, the merge box, the delete-originals confirm, the progress box, the list after a merge).
  *
  * DemoDriver's UiActions change the model the way the controller would in simple cases (the steppers step, toggles
  * flip, a choice is taken, a tap on the countdown cancels it, the trim marker, zoom, flags, IN / OUT and the boxes
@@ -55,6 +57,14 @@ class DemoDriver {
 public:
     explicit DemoDriver(ViewModel vm) : vm_(std::move(vm))
     {
+        /* merge mode from the model (CASSETTE_DEMO_MERGE): the chosen rows in their order */
+        for (int n = 1;; ++n) {
+            int found = -1;
+            for (std::size_t i = 0; i < vm_.list.takes.size(); ++i)
+                if (vm_.list.takes[i].merge_order == n) found = static_cast<int>(i);
+            if (found < 0) break;
+            merge_sel_.push_back(found);
+        }
         loaded_ = -1;
         if (vm_.rec.tape.loaded && !vm_.rec.tape.label.empty()) {
             loaded_ = std::min(1, static_cast<int>(vm_.list.takes.size()) - 1); /* Take 006: the second row, the only one in "onetake" */
@@ -81,7 +91,9 @@ private:
     void set_transport(Transport t);
     void show_take(int index); /* the cassette and the strip name list row `index`, counter at its start */
     void stop_preview();
+    void merge_toggle(int i);
     ViewModel vm_;
+    std::vector<int> merge_sel_; /* merge mode: the chosen rows, in the order chosen */
     int loaded_ = 1;      /* the list row in the deck (Take 006: what PLAY plays) */
     int previewing_ = -1; /* the list row previewing (list_activate), -1 none */
     Transport before_scan_ = Transport::Playing;

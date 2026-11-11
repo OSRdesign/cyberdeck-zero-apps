@@ -28,6 +28,9 @@
  *             the stored codec cannot be used); Codec, Sample rate, Quality, Folder and Input dimmed while a take or the
  *             countdown runs.
  *   list      newest first (the controller's order); the highlight = the take the user moved it to, else the current take.
+ *             MERGE is dimmed with fewer than two takes. Merge mode (LocalState::merge_mode): each row's order number in the
+ *             choice (0: not chosen), whether it can be chosen and why not (merge_row_reason), the merge strip; the merge box
+ *             (the plan the controller gave), the confirm before deleting the originals, the progress box while a merge runs.
  *   trim      times in ms from frames at the take's rate; span = the frames the zoom shows; the window's peaks are centred on
  *             the marker; a flag shows selected only after a tap on it and while the marker stays on it.
  */
@@ -48,8 +51,17 @@ namespace bind {
 struct LocalState {
     bool save_shown = false;
     std::vector<ui::SaveFile> save_files;
-    enum class Confirm { None, Replace, Delete };
+    enum class Confirm { None, Replace, Delete, MergeDelete };
     Confirm confirm = Confirm::None;
+    /* MERGE TAKES: merge mode on the list page, the merge box, the merge the binding started */
+    bool merge_mode = false;
+    std::vector<std::string> merge_sel; /* the chosen takes (file names), in the order chosen */
+    bool merge_box = false;             /* the merge box shows merge_info */
+    MergeInfo merge_info;               /* the controller's plan of the chosen takes */
+    bool merge_running = false;         /* a merge was asked for and its end has not been seen */
+    int merge_shown_pct = 0;            /* the progress box's percent */
+    int merge_count = 0;                /* the takes of the running merge */
+    std::string merge_name;             /* its new take's name (the plan's until the controller says) */
     std::string confirm_take;    /* Delete: the take's file name */
     std::string list_sel;        /* the highlighted take (file name); empty or gone: the current take */
     bool tap_selected = false;   /* the trim page's selected flag came from a tap */
@@ -136,6 +148,20 @@ ParamPicker quality_picker(const Snapshot &s);
 /* The selection rule: the entry `index` when it can be chosen; null when the index is out of range or a heading (notice
  * stays empty) or the entry is not compatible (*notice = "Not available: <reason>"). */
 const ParamItem *selectable_param(const ParamPicker &p, int index, std::string *notice);
+/* MERGE TAKES. Why row `i` cannot be chosen now ("" when it can): a take in use first ("Playing: stop it first", "Open on
+ * the Edit page", "Being recorded"), then core/edit/merge.hpp's rule against the FIRST take chosen ("Different format: FLAC
+ * 44.1 kHz", "Different rate", "Different channels", "Different bit depth"), or, with nothing chosen yet (or for the first
+ * take itself), the take's own ("Not a Cassette take", "Damaged take"). */
+std::string merge_row_reason(const Snapshot &s, const std::vector<TakeRow> &rows, const std::vector<std::string> &chosen,
+                             size_t i);
+/* The merge strip: "Merge · 3 takes · 12:40 · about 61 MB" (the chosen takes' lengths and sizes added up; "Merge · 0 takes"
+ * with none). */
+std::string merge_strip_text(const std::vector<TakeRow> &rows, const std::vector<std::string> &chosen);
+/* The merge box's second line: "12:40 · about 61 MB". */
+std::string merge_detail_text(double seconds, uint64_t bytes);
+/* The progress box's title: "Merging... 37%". */
+std::string merging_title(int percent);
+
 /* 0..1 from a 16-bit min/max pair (the louder side) */
 float peak_level(const PeakBar &b);
 std::vector<float> peak_levels(const std::vector<PeakBar> &bars);

@@ -6,6 +6,8 @@
 #include "check.hpp"
 #include "ui_format.hpp"
 
+#include <cmath>
+
 using namespace cassette::ui;
 
 namespace {
@@ -417,11 +419,47 @@ void list_row_heights()
     /* a text height equal to the line is one line, never a growth */
     CHECK_EQ(list_row_geom(42, 20, 16, 19, 19).h, 42);
     CHECK_EQ(list_row_geom(42, 20, 16, 38, 19).h, 42 + 18);
+    /* merge mode: a reason that wraps to two lines (34 px against the 16 px detail box) grows the row by 18, the name on top */
+    g = list_row_geom(57, 20, 16, 22, 22, 34);
+    CHECK_EQ(g.h, 57 + 18);
+    CHECK_EQ(g.name_box, 20);
+    CHECK_EQ(g.detail_y, (g.h - 2 - (20 + 34)) / 2 + 20);
+    CHECK(g.detail_y + 34 <= g.h - 2);
+    /* a reason of one line (or none) changes nothing; with a wrapped name both add up */
+    CHECK_EQ(list_row_geom(57, 20, 16, 22, 22, 16).h, 57);
+    CHECK_EQ(list_row_geom(57, 20, 16, 22, 22, 0).h, 57);
+    CHECK_EQ(list_row_geom(57, 20, 16, 44, 22, 34).h, 57 + 24 + 18);
+}
+
+/* the list's row keys: five keys are exactly the trim page's five; merge mode's two keys share the same span */
+void list_keys()
+{
+    for (int i = 0; i < 5; ++i) {
+        const KeyBox l = list_key_box(i, 5, false), p = list_key_box(i, 5, true);
+        CHECK(std::fabs(l.x - (16.0 + 91 * i)) < 1e-9 && std::fabs(l.w - 84) < 1e-9 && l.y == 222 && l.h == 56);
+        CHECK(std::fabs(p.x - (16.0 + 59 * i)) < 1e-9 && std::fabs(p.w - 52) < 1e-9 && p.y == 396 && p.h == 64);
+    }
+    const KeyBox c = list_key_box(0, 2, false), m = list_key_box(1, 2, false);
+    CHECK(std::fabs(c.x - 16) < 1e-9 && std::fabs(m.x + m.w - 464) < 1e-9 && std::fabs(m.x - (c.x + c.w) - 7) < 1e-9);
+    const KeyBox pc = list_key_box(0, 2, true), pm = list_key_box(1, 2, true);
+    CHECK(std::fabs(pc.w - 140.5) < 1e-9 && std::fabs(pm.x + pm.w - 304) < 1e-9);
+    /* every key keeps the toolkit's minimum on the 320 x 480 board (44 px wide and high at scale 1) */
+    for (int n : {2, 5}) {
+        CHECK(list_key_box(0, n, true).w >= 44);
+        CHECK(list_key_box(0, n, true).h >= 44);
+    }
+    /* out of range indexes stay on the row */
+    CHECK(std::fabs(list_key_box(9, 5, false).x - list_key_box(4, 5, false).x) < 1e-9);
+    /* merge mode's hint */
+    ListVm l;
+    l.merge_mode = true;
+    CHECK_EQ(list_hint(l), "Choose the takes in order, then MERGE. Esc cancels.");
 }
 
 void test_format()
 {
     list_row_heights();
+    list_keys();
     times();
     name_counter();
     levels();

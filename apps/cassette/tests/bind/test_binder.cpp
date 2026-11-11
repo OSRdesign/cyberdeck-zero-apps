@@ -1061,8 +1061,281 @@ void test_replace_save()
     CHECK_EQ(q.binder.vm().notice, "Saved 2 files, original removed");
 }
 
+/* MERGE TAKES: the fifth key, merge mode (badges, dimmed rows and their reasons, the strip), the merge box, the confirm, the
+ * progress box, the end of a merge (cancelled, failed, done), and the pure pieces of the mapping. */
+void merge_dismiss(Rig &r)
+{
+    r.act.notice_dismiss();
+    r.tick();
+}
+
+void test_merge_flow()
+{
+    /* one take: MERGE dimmed, a press says why */
+    {
+        Rig r;
+        r.port.rows = {row("take_007_20261108-1432.wav", 42, 4ull << 20, "2026-11-08 14:32", true)};
+        r.port.snap.takes_revision = 3;
+        r.tick();
+        CHECK(!r.binder.vm().list.can_merge);
+        r.act.list_merge(0);
+        r.tick();
+        CHECK(!r.binder.vm().list.merge_mode);
+        CHECK_EQ(r.binder.vm().notice, "Merging needs two takes");
+    }
+    /* recording: refused */
+    {
+        Rig r;
+        r.port.snap.deck.state = kDeckRecording;
+        r.tick();
+        r.act.list_merge(0);
+        r.tick();
+        CHECK(!r.binder.vm().list.merge_mode);
+        CHECK_EQ(r.binder.vm().notice, "Stop the recording to merge takes");
+    }
+    Rig r;
+    TakeRow other = row("take_005_20261108-1000.wav", 30, 3ull << 20, "2026-11-08 10:00");
+    other.rate = 44100;
+    TakeRow flac = row("take_004_20261108-0900.flac", 20, 2ull << 20, "2026-11-08 09:00");
+    flac.format_tag = "FLAC";
+    TakeRow stereo = row("take_003_20261108-0800.wav", 20, 2ull << 20, "2026-11-08 08:00");
+    stereo.channels = 2;
+    TakeRow deep = row("take_002_20261108-0700.wav", 20, 2ull << 20, "2026-11-08 07:00");
+    deep.bits = 24;
+    const TakeRow foreign = row("field notes.wav", 10, 1ull << 20, "");
+    TakeRow broken = row("take_001_20261108-0600.wav", 0, 1ull << 10, "");
+    broken.damaged = true;
+    r.port.rows = {row("take_007_20261108-1432.wav", 42, 4ull << 20, "2026-11-08 14:32", true),
+                   row("take_006_20261108-1105.wav", 728, 69ull << 20, "2026-11-08 11:05"),
+                   other, flac, stereo, deep, foreign, broken};
+    r.port.snap.takes_revision = 4;
+    r.tick();
+    CHECK(r.binder.vm().list.can_merge);
+    CHECK(!r.binder.vm().list.merge_mode);
+    /* MERGE on the focused take: merge mode, that take number 1 */
+    r.act.list_merge(1);
+    r.tick();
+    {
+        const ui::ListVm &l = r.binder.vm().list;
+        CHECK(l.merge_mode);
+        CHECK_EQ(l.takes[1].merge_order, 1);
+        CHECK(l.takes[1].merge_ok);
+        CHECK_EQ(l.takes[0].merge_order, 0);
+        CHECK(l.takes[0].merge_ok);
+        CHECK(!l.takes[2].merge_ok);
+        CHECK_EQ(l.takes[2].merge_reason, "Different rate");
+        CHECK_EQ(l.takes[3].merge_reason, "Different format: FLAC 48 kHz");
+        CHECK_EQ(l.takes[4].merge_reason, "Different channels");
+        CHECK_EQ(l.takes[5].merge_reason, "Different bit depth");
+        CHECK_EQ(l.takes[6].merge_reason, "Not a Cassette take");
+        CHECK_EQ(l.takes[7].merge_reason, "Damaged take");
+        CHECK_EQ(l.merge_strip, "Merge · 1 take · 12:08 · about 69 MB");
+        CHECK(!l.merge_ready);
+    }
+    /* a dimmed row: the notice, nothing chosen */
+    r.act.merge_toggle(2);
+    r.tick();
+    CHECK_EQ(r.binder.vm().notice, "Not available: Different rate");
+    CHECK_EQ(r.binder.vm().list.takes[2].merge_order, 0);
+    merge_dismiss(r);
+    /* a second take: number 2, ready */
+    r.act.merge_toggle(0);
+    r.tick();
+    CHECK_EQ(r.binder.vm().list.takes[0].merge_order, 2);
+    CHECK(r.binder.vm().list.merge_ready);
+    CHECK_EQ(r.binder.vm().list.merge_strip, "Merge · 2 takes · 12:50 · about 73 MB");
+    /* dropping number 1 renumbers: 007 is number 1 now; choosing 006 again makes it number 2 */
+    r.act.merge_toggle(1);
+    r.tick();
+    CHECK_EQ(r.binder.vm().list.takes[0].merge_order, 1);
+    CHECK_EQ(r.binder.vm().list.takes[1].merge_order, 0);
+    CHECK(!r.binder.vm().list.merge_ready);
+    r.act.merge_toggle(1);
+    r.tick();
+    CHECK_EQ(r.binder.vm().list.takes[1].merge_order, 2);
+    /* nothing chosen: every take can be chosen but the foreign and the damaged one */
+    r.act.merge_toggle(0);
+    r.act.merge_toggle(1);
+    r.tick();
+    for (int i = 0; i < 6; ++i) CHECK(r.binder.vm().list.takes[static_cast<size_t>(i)].merge_ok);
+    CHECK(!r.binder.vm().list.takes[6].merge_ok && !r.binder.vm().list.takes[7].merge_ok);
+    CHECK_EQ(r.binder.vm().list.merge_strip, "Merge · 0 takes");
+    /* the FIRST take chosen sets the group: the 44.1 kHz take first, then the 48 kHz ones are the odd ones */
+    r.act.merge_toggle(2);
+    r.tick();
+    CHECK_EQ(r.binder.vm().list.takes[0].merge_reason, "Different rate");
+    r.act.merge_toggle(2);
+    /* MERGE with one take: refused */
+    r.act.merge_toggle(1);
+    r.calls();
+    r.act.merge_run();
+    r.tick();
+    CHECK_EQ(r.binder.vm().notice, "Merging needs two takes");
+    CHECK(r.calls().empty());
+    merge_dismiss(r);
+    r.act.merge_toggle(0); /* order: 006, 007 */
+    /* MERGE: the plan, then the box */
+    r.act.merge_run();
+    r.tick();
+    CHECK(has(r.calls(), "plan_merge take_006_20261108-1105.wav,take_007_20261108-1432.wav"));
+    {
+        const ui::MergeBoxVm &b = r.binder.vm().merge_box;
+        CHECK(b.shown);
+        CHECK_EQ(b.title, "Merge 2 takes?");
+        CHECK_EQ(b.name, "take_009_20261111-0400.wav");
+        CHECK_EQ(b.detail, "12:40 · about 61 MB");
+    }
+    /* while the box shows, a tap on a row changes nothing */
+    r.act.merge_toggle(0);
+    r.tick();
+    CHECK_EQ(r.binder.vm().list.takes[0].merge_order, 2);
+    /* DELETE ORIGINALS asks first; CANCEL there keeps the box */
+    r.act.merge_choose(ui::MergeChoice::DeleteOriginals);
+    r.tick();
+    CHECK(r.binder.vm().confirm.shown);
+    CHECK_EQ(r.binder.vm().confirm.title, "Delete the originals?");
+    CHECK_EQ(r.binder.vm().confirm.body, "They are deleted only after the new file is written and synced.");
+    CHECK_EQ(r.binder.vm().confirm.yes, "DELETE");
+    r.act.confirm_answer(false);
+    r.tick();
+    CHECK(!r.binder.vm().confirm.shown);
+    CHECK(r.binder.vm().merge_box.shown);
+    r.act.merge_choose(ui::MergeChoice::DeleteOriginals);
+    r.act.confirm_answer(true);
+    r.tick();
+    CHECK(has(r.calls(), "start_merge take_006_20261108-1105.wav,take_007_20261108-1432.wav delete"));
+    {
+        const ui::ViewModel &vm = r.binder.vm();
+        CHECK(!vm.merge_box.shown && !vm.confirm.shown);
+        CHECK(vm.progress.shown);
+        CHECK_EQ(vm.progress.title, "Merging... 0%");
+        CHECK_EQ(vm.progress.body, "2 takes into take_009_20261111-0400.wav");
+    }
+    r.port.snap.merge.progress = 0.374f;
+    r.tick();
+    CHECK_EQ(r.binder.vm().progress.title, "Merging... 37%");
+    /* the progress box's CANCEL */
+    r.act.merge_stop();
+    r.tick();
+    CHECK(has(r.calls(), "cancel_merge"));
+    r.port.snap.merge.state = 4;
+    r.tick();
+    CHECK(!r.binder.vm().progress.shown);
+    CHECK_EQ(r.binder.vm().notice, "Merge cancelled");
+    CHECK(r.binder.vm().list.merge_mode); /* the choice is kept */
+    CHECK_EQ(r.binder.vm().list.takes[0].merge_order, 2);
+    merge_dismiss(r);
+    /* again, it fails */
+    r.act.merge_run();
+    r.tick();
+    r.act.merge_choose(ui::MergeChoice::KeepOriginals);
+    r.tick();
+    CHECK(has(r.calls(), "start_merge take_006_20261108-1105.wav,take_007_20261108-1432.wav keep"));
+    r.port.snap.merge.state = 3;
+    r.port.snap.merge.message = "the disk is full";
+    r.tick();
+    CHECK_EQ(r.binder.vm().notice, "Merge failed: the disk is full");
+    CHECK(r.binder.vm().list.merge_mode);
+    merge_dismiss(r);
+    /* again, it succeeds: merge mode ends, the new take is highlighted */
+    r.act.merge_run();
+    r.tick();
+    r.act.merge_choose(ui::MergeChoice::KeepOriginals);
+    r.tick();
+    r.port.rows.insert(r.port.rows.begin(), row("take_009_20261111-0400.wav", 770, 73ull << 20, "2026-11-11 04:00"));
+    r.port.snap.takes_revision = 5;
+    r.port.snap.merge.state = 2;
+    r.port.snap.merge.message.clear();
+    r.tick();
+    CHECK_EQ(r.binder.vm().notice, "Merged 2 takes into Take 009");
+    CHECK(!r.binder.vm().list.merge_mode);
+    CHECK(!r.binder.vm().progress.shown);
+    CHECK_EQ(r.binder.vm().list.selected, 0);
+    CHECK_EQ(r.binder.vm().list.takes[0].id, "take_009_20261111-0400.wav");
+    merge_dismiss(r);
+    /* with the originals deleted and one that could not be */
+    r.act.list_merge(1);
+    r.act.merge_toggle(2);
+    r.act.merge_run();
+    r.tick();
+    r.act.merge_choose(ui::MergeChoice::DeleteOriginals);
+    r.act.confirm_answer(true);
+    r.tick();
+    r.port.snap.merge.state = 2;
+    r.port.snap.merge.originals_deleted = false;
+    r.port.snap.merge.message = "1 original could not be deleted";
+    r.tick();
+    CHECK_EQ(r.binder.vm().notice, "Merged 2 takes into Take 009; 1 original could not be deleted");
+    merge_dismiss(r);
+    /* a refused plan: its notice, no box */
+    r.port.merge_answer.ok = false;
+    r.port.merge_answer.message = "Not enough free space";
+    r.act.list_merge(1);
+    r.act.merge_toggle(2);
+    r.act.merge_run();
+    r.tick();
+    CHECK(!r.binder.vm().merge_box.shown);
+    CHECK_EQ(r.binder.vm().notice, "Not enough free space");
+    merge_dismiss(r);
+    /* a refused start (the controller's notice says why): no progress box */
+    r.port.merge_answer.ok = true;
+    r.port.merge_start_result = false;
+    r.act.merge_run();
+    r.tick();
+    r.act.merge_choose(ui::MergeChoice::KeepOriginals);
+    r.tick();
+    CHECK(!r.binder.vm().progress.shown);
+    CHECK(r.binder.vm().list.merge_mode);
+    /* CANCEL (and Esc) leaves merge mode; so does leaving the list */
+    r.act.merge_cancel();
+    r.tick();
+    CHECK(!r.binder.vm().list.merge_mode);
+    r.act.open(ui::Screen::List);
+    r.act.list_merge(1);
+    r.tick();
+    CHECK(r.binder.vm().list.merge_mode);
+    r.act.open(ui::Screen::Settings);
+    r.tick();
+    CHECK(!r.binder.vm().list.merge_mode);
+    /* a playing take cannot be chosen */
+    r.port.snap.deck.state = kDeckPlaying;
+    r.port.snap.take.playing_name = "take_007_20261108-1432.wav";
+    r.act.open(ui::Screen::List);
+    r.act.list_merge(2);
+    r.tick();
+    CHECK_EQ(r.binder.vm().list.takes[2].merge_order, 1);
+    CHECK_EQ(r.binder.vm().list.takes[1].merge_reason, "Playing: stop it first");
+    CHECK(!r.binder.vm().list.takes[1].merge_ok);
+}
+
+/* the pure pieces */
+void test_merge_map()
+{
+    std::vector<TakeRow> rows = {row("take_002_20261108-1101.wav", 61.4, 5ull << 20, "2026-11-08 11:01"),
+                                 row("take_001_20261108-1100.wav", 3600 + 125, 300ull << 20, "2026-11-08 11:00")};
+    CHECK_EQ(merge_strip_text(rows, {}), "Merge · 0 takes");
+    CHECK_EQ(merge_strip_text(rows, {"take_001_20261108-1100.wav"}), "Merge · 1 take · 1:02:05 · about 300 MB");
+    CHECK_EQ(merge_strip_text(rows, {"take_001_20261108-1100.wav", "take_002_20261108-1101.wav", "gone.wav"}),
+             "Merge · 2 takes · 1:03:06 · about 305 MB");
+    CHECK_EQ(merge_detail_text(42.0, 4ull << 20), "00:42 · about 4 MB");
+    CHECK_EQ(merging_title(37), "Merging... 37%");
+    CHECK_EQ(merging_title(140), "Merging... 100%");
+    Snapshot s = base_snapshot();
+    CHECK_EQ(merge_row_reason(s, rows, {}, 0), "");
+    s.trim.open = true;
+    s.trim.take = "take_002_20261108-1101.wav";
+    CHECK_EQ(merge_row_reason(s, rows, {}, 0), "Open on the Edit page");
+    s.trim.open = false;
+    s.deck.state = kDeckRecording;
+    s.take.name = "take_001_20261108-1100.wav";
+    CHECK_EQ(merge_row_reason(s, rows, {}, 1), "Being recorded");
+    CHECK_EQ(merge_row_reason(s, rows, {}, 5), ""); /* out of range */
+}
+
 void test_binder()
 {
+    test_merge_flow();
+    test_merge_map();
     test_new_settings_actions();
     test_replace_save();
     test_deck_keys();

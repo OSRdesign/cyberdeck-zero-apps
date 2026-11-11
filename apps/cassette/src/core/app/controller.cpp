@@ -13,6 +13,7 @@
 #include "../codec/opus_encoder.hpp"
 #include "../codec/stream_scan.hpp"
 #include "../dsp/processing_sink.hpp"
+#include "../edit/merge.hpp"
 #include "../edit/peaks.hpp"
 #include "../edit/trim_split.hpp"
 #include "../playback/deck.hpp"
@@ -250,6 +251,18 @@ struct Controller::Impl : public DeckCommands {
     int save_seen = 0;
     std::mutex pyr_mu;
     std::shared_ptr<PeakPyramid> pyr;
+    /* the merge worker (atomics, or guarded by wmu; merge_names, merge_out, merge_msg ... by mu) */
+    MergeResult merge_result;
+    std::atomic<int> merge_state{0};
+    std::atomic<uint64_t> merge_done{0}, merge_total{1};
+    std::atomic<bool> merge_cancel{false};
+    std::thread merge_th;
+    int merge_seen = 0;
+    unsigned merge_seq = 0;
+    std::vector<std::string> merge_names; /* the takes of the running merge (in_use) */
+    std::string merge_out, merge_msg;
+    bool merge_deleted_all = false;
+    int merge_count = 0;
 
     /* service thread */
     std::thread svc;
@@ -286,7 +299,8 @@ struct Controller::Impl : public DeckCommands {
     /* Is `name` in use (playing or previewing, recording, open for trimming)? rename and delete refuse such a take. */
     bool in_use(const std::string &name) const {
         return (tr.open && tr.take == name) || (take_active && take_name == name) ||
-               (deck.state() != DeckState::Idle && play_target() == name);
+               (deck.state() != DeckState::Idle && play_target() == name) ||
+               (merge_state.load() == 1 && std::find(merge_names.begin(), merge_names.end(), name) != merge_names.end());
     }
     void load_newest_if_empty() {
         if (target.empty() && !rows.empty()) target = rows.front().name;
@@ -348,6 +362,7 @@ struct Controller::Impl : public DeckCommands {
             r.date_text = date_text(t);
             r.damaged = t.damaged;
             r.repaired = t.repaired;
+            r.named = t.named;
             rows.push_back(r);
         }
         /* a loaded take that is gone (deleted) leaves the deck empty; start(), a new folder and the end of a recording
@@ -624,6 +639,10 @@ struct Controller::Impl : public DeckCommands {
     bool begin_take() {
         stop_preview();
         if (take_active) return false;
+        if (merge_state.load() == 1) { /* the merge holds the next take number until it ends */
+            add_notice(Notice::Info, "Wait until the merge has finished");
+            return false;
+        }
         if (!cap || !cap->running()) {
             prob = ProblemSnap();
             prob.message = "No sound card is recording: the take cannot start";
@@ -962,6 +981,119 @@ struct Controller::Impl : public DeckCommands {
         refresh_takes_locked();
     }
 
+    /* ================================================================================================================ */
+    /* merge takes */
+
+    void join_merge() {
+        merge_cancel.store(true);
+        if (merge_th.joinable()) merge_th.join();
+        merge_finish();
+    }
+
+    /* A finished merge: join the worker, take its result, refresh the list. */
+    void merge_finish() {
+        const int st = merge_state.load();
+        if (st < 2 || st == merge_seen) return;
+        if (merge_th.joinable()) merge_th.join();
+        MergeResult r;
+        {
+            std::lock_guard<std::mutex> g(wmu);
+            r = merge_result;
+        }
+        merge_seen = st;
+        merge_msg = st == 4 ? std::string("cancelled") : st == 3 ? r.message : r.warning;
+        merge_deleted_all = false;
+        if (st == 2) {
+            merge_out = base_name(r.output);
+            merge_deleted_all = r.deleted.size() == merge_names.size();
+            for (const std::string &p : r.deleted)
+                if (target == base_name(p)) target = merge_out; /* a loaded original went: the new take stays in the deck */
+        }
+        merge_names.clear();
+        refresh_takes_locked();
+        refresh_space();
+    }
+
+    MergeOptions merge_options() {
+        MergeOptions o;
+        o.ops = ops;
+        o.block_bytes = cfg.save_block_bytes;
+        o.decoders = &decoders();
+        if (cfg.make_encoder) { /* the tests' fixture encoder for a FLAC result, else FlacEncoder on libFLAC */
+            auto make = cfg.make_encoder;
+            o.make_flac_encoder = [make](const AudioFormat &f) {
+                FormatChoice c;
+                c.id = "flac";
+                c.key.format = RecFormat::Flac;
+                c.flac_level = 5;
+                return make(c, f);
+            };
+        }
+        return o;
+    }
+
+    /* Why `name` cannot be merged now (the take list's facts and what is in use), "" when it can. */
+    std::string merge_take_why(const std::string &name) const {
+        const TakeRow *row = nullptr;
+        for (const TakeRow &r : rows)
+            if (r.name == name) row = &r;
+        if (!row) return "A take to merge is no longer in the list";
+        if (!row->named) return "Not available: Not a Cassette take";
+        if (row->damaged) return "Not available: Damaged take";
+        if (take_active && take_name == name) return "Not available: Being recorded";
+        if (tr.open && tr.take == name) return "Not available: Open on the Edit page";
+        if (in_use(name)) return "Not available: Playing: stop it first";
+        return "";
+    }
+
+    /* The request of a merge of `names`: the checks the controller owns (merge.hpp's plan does the rest), the new take's name,
+     * comments and bext as a new recording gets them. "" or the notice. */
+    std::string merge_request(const std::vector<std::string> &names, bool del, MergeRequest &req, uint64_t &number) {
+        if (merge_state.load() == 1) return "A merge is running";
+        if (names.size() < 2) return "Merging needs two takes";
+        if (take_active || recording_family()) return "Stop the recording to merge takes";
+        for (const std::string &n : names) {
+            const std::string why = merge_take_why(n);
+            if (!why.empty()) return why;
+        }
+        TakeName t0;
+        if (!parse_take_name(names.front(), t0)) return "Not available: Not a Cassette take";
+        if (t0.format == RecFormat::Flac) { /* decoded and encoded again: libFLAC both ways (Opus needs no library) */
+            const bool dec = decoders().flac != nullptr;
+            const bool enc = cfg.make_encoder || real_flac() != nullptr;
+            if (!dec || !enc) return "This take cannot be merged: " + decode_error_text(kCodecMissing, names.front());
+        }
+        number = peek_take_number(*ops, folder, t0.prefix);
+        TakeName nt = new_take_name(t0.prefix, number, *cstate, *clk);
+        nt.format = t0.format;
+        req = MergeRequest();
+        req.output_name = format_take_name(nt);
+        for (const std::string &n : names) req.sources.push_back(folder + "/" + n);
+        req.delete_originals = del;
+        const std::string stem = file_stem(req.output_name);
+        uint32_t rate = 48000;
+        for (const TakeRow &r : rows)
+            if (r.name == names.front() && r.rate) rate = r.rate;
+        req.bwf.description = "Cassette " + stem;
+        if (cstate->synchronized()) {
+            const int64_t now = clk->wall_s();
+            DateTime dt;
+            if (datetime_from_wall(now, dt)) {
+                char b[32];
+                const int sec = static_cast<int>(((now % 60) + 60) % 60);
+                std::snprintf(b, sizeof b, "%04d-%02d-%02d", dt.year, dt.month, dt.day);
+                req.bwf.origination_date = b;
+                std::snprintf(b, sizeof b, "%02d:%02d:%02d", dt.hour, dt.minute, sec);
+                req.bwf.origination_time = b;
+                req.bwf.time_reference = static_cast<uint64_t>(dt.hour * 3600 + dt.minute * 60 + sec) * rate;
+            }
+        }
+        req.tags = {{"TITLE", stem}};
+        if (!req.bwf.origination_date.empty()) req.tags.push_back({"DATE", req.bwf.origination_date});
+        req.tags.push_back({"ENCODER", "Cassette"});
+        return "";
+    }
+
     void start_peaks(const std::string &path, uint64_t frames) {
         peaks_cancel.store(false);
         peaks_state.store(1);
@@ -1091,6 +1223,7 @@ struct Controller::Impl : public DeckCommands {
             fit_window();
         }
         merge_save();
+        merge_finish();
         if (now - last_space_ms >= kSpaceRefreshMs) refresh_space();
         update_play_meter(now);
         publish();
@@ -1224,6 +1357,20 @@ struct Controller::Impl : public DeckCommands {
             t.save_outputs = save_outputs;
             t.save_replaced = tr.replace_kind && t.save_state == 2;
         }
+        /* merge: a result the service tick has not taken yet still shows as running */
+        {
+            const int st = merge_state.load();
+            MergeSnap &m = s.merge;
+            m.state = (st >= 2 && st != merge_seen) ? 1 : st;
+            m.seq = merge_seq;
+            const uint64_t mt = merge_total.load();
+            m.progress = mt ? static_cast<float>(static_cast<double>(merge_done.load()) / static_cast<double>(mt)) : 0.f;
+            if (m.state == 2) m.progress = 1.f;
+            m.sources = merge_count;
+            m.output = merge_out;
+            m.message = merge_msg;
+            m.originals_deleted = merge_deleted_all;
+        }
         std::lock_guard<std::mutex> g(pub_mu);
         pub = s;
         pub_rows = rows;
@@ -1277,6 +1424,7 @@ struct Controller::Impl : public DeckCommands {
         if (take_active || deck.state() != DeckState::Idle) run_deck(DeckEvent::AppLeave);
         end_take();
         close_trim_locked();
+        join_merge(); /* a merge in progress is cancelled: the partial new take goes, the originals stay */
         player.reset();
         sink.reset();
         close_capture();
@@ -1397,6 +1545,7 @@ bool Controller::key_event(KeyEvent e) {
         d.stop_preview();
         d.run_deck(de);
         d.join_save(); /* a save in progress is cancelled: the temporaries go, the original stays */
+        d.join_merge(); /* the same for a merge: the partial new take goes, the originals stay */
         d.join_peaks();
         d.persist();
         d.publish();
@@ -1503,7 +1652,8 @@ bool Controller::set_rec_params(RecFormat f, const std::string &preset, int rate
 bool Controller::set_folder(const std::string &folder) {
     Locked l(p_->mu);
     Impl &d = *p_;
-    if (d.take_active || d.deck.state() == DeckState::Countdown || d.save_state.load() == 1) return false;
+    if (d.take_active || d.deck.state() == DeckState::Countdown || d.save_state.load() == 1 || d.merge_state.load() == 1)
+        return false;
     if (folder.empty() || folder.size() > 1024) return false;
     const std::string expanded = expand_home(folder, d.cfg.home);
     if (make_dirs(*d.ops, expanded) < 0) return false;
@@ -1531,7 +1681,8 @@ bool Controller::set_prefix(const std::string &prefix) {
 int Controller::set_next_take_number(uint64_t n, uint64_t *landed) {
     Locked l(p_->mu);
     Impl &d = *p_;
-    if (d.take_active || d.deck.state() == DeckState::Countdown || d.save_state.load() == 1) return -EBUSY;
+    if (d.take_active || d.deck.state() == DeckState::Countdown || d.save_state.load() == 1 || d.merge_state.load() == 1)
+        return -EBUSY;
     uint64_t got = 0;
     const int r = cassette::set_next_take_number(*d.ops, d.folder, d.store.values().prefix, n, got);
     if (r < 0) return r;
@@ -1941,6 +2092,86 @@ bool Controller::save(SaveKind kind) {
 }
 void Controller::cancel_save() {
     p_->save_cancel.store(true);
+}
+
+/* ---- merge takes ---- */
+
+MergeInfo Controller::plan_merge(const std::vector<std::string> &names) {
+    Locked l(p_->mu);
+    Impl &d = *p_;
+    MergeInfo info;
+    info.count = static_cast<int>(names.size());
+    MergeRequest req;
+    uint64_t number = 0;
+    std::string why = d.merge_request(names, false, req, number);
+    if (why.empty()) {
+        const MergePlan p = cassette::plan_merge(req, d.merge_options());
+        if (!p.ok) {
+            why = p.error == MergeError::NoSpace ? p.message : "Cannot merge: " + p.message;
+        } else {
+            info.ok = true;
+            info.name = req.output_name;
+            info.seconds = p.fmt.rate ? static_cast<double>(p.frames) / p.fmt.rate : 0.0;
+            info.bytes = p.estimate_bytes;
+        }
+    }
+    info.message = why;
+    return info;
+}
+
+bool Controller::start_merge(const std::vector<std::string> &names, bool delete_originals) {
+    Locked l(p_->mu);
+    Impl &d = *p_;
+    MergeRequest req;
+    uint64_t number = 0;
+    std::string why = d.merge_request(names, delete_originals, req, number);
+    if (why.empty()) { /* the engine's checks too (compatible, the name, the free space), before anything starts */
+        const MergePlan p = cassette::plan_merge(req, d.merge_options());
+        if (!p.ok) why = p.error == MergeError::NoSpace ? p.message : "Cannot merge: " + p.message;
+    }
+    if (!why.empty()) {
+        d.add_notice(Notice::Info, why);
+        d.publish();
+        return false;
+    }
+    d.merge_finish();
+    if (d.merge_th.joinable()) d.merge_th.join();
+    d.merge_cancel.store(false);
+    d.merge_done.store(0);
+    d.merge_total.store(1);
+    d.merge_seen = 0;
+    ++d.merge_seq;
+    d.merge_names = names;
+    d.merge_count = static_cast<int>(names.size());
+    d.merge_out = req.output_name;
+    d.merge_msg.clear();
+    d.merge_deleted_all = false;
+    MergeOptions o = d.merge_options(); /* the decoders are resolved here, before the worker reads them */
+    Impl *dp = &d;
+    const std::string dir = d.folder;
+    d.merge_state.store(1);
+    d.merge_th = std::thread([dp, req, number, dir, o]() mutable {
+        o.progress = [dp](uint64_t done, uint64_t total) {
+            dp->merge_total.store(total ? total : 1);
+            dp->merge_done.store(done);
+        };
+        o.cancel = &dp->merge_cancel;
+        /* the number is used only by a merge that succeeded: the counter moves on once the new take is in place */
+        o.on_committed = [dp, dir, number](const std::string &) { note_take_number_used(*dp->ops, dir, number); };
+        o.delete_original = [dp, dir](const std::string &path) { return cassette::delete_take(*dp->ops, dir, base_name(path)); };
+        MergeResult r = merge_takes(req, o);
+        {
+            std::lock_guard<std::mutex> g(dp->wmu);
+            dp->merge_result = r;
+        }
+        dp->merge_state.store(r.ok ? 2 : (r.error == MergeError::Cancelled ? 4 : 3));
+    });
+    d.publish();
+    return true;
+}
+
+void Controller::cancel_merge() {
+    p_->merge_cancel.store(true);
 }
 
 }  // namespace cassette

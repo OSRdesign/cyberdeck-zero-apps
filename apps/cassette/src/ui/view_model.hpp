@@ -166,11 +166,15 @@ struct TakeRow {
     std::vector<std::string> detail_short; /* the same line in shorter forms, longest first, for a narrow list (may be empty) */
     std::int64_t length_ms = 0;  /* the duration column (landscape) */
     std::string prefix;          /* the editable part of the name (rename) */
+    /* merge mode (ListVm::merge_mode): the badge instead of the sticker, and whether the take can join the merge */
+    int merge_order = 0;         /* the take's number in the order chosen (1, 2, 3 ...): a filled badge; 0: not chosen (a ring) */
+    bool merge_ok = true;        /* false: dimmed and not choosable; merge_reason replaces the detail line */
+    std::string merge_reason;    /* "Different format: FLAC 44.1 kHz", "Different rate", "Not a Cassette take" ... */
 };
 
 struct ListVm {
     std::vector<TakeRow> takes;  /* newest first */
-    int selected = 0;            /* the darker row; the four keys act on it (-1: none) */
+    int selected = 0;            /* the darker row; the five keys act on it (-1: none) */
     int previewing = -1;         /* the row whose take plays now (a list preview, or the loaded take playing), -1: none;
                                   * a double tap / Enter on it stops the preview, on another row it switches */
     bool can_load = true;        /* false while recording, paused or in the record countdown: LOAD is dimmed */
@@ -179,6 +183,11 @@ struct ListVm {
     std::string free_space;      /* "41 GB" */
     std::string free_hours;      /* "117 h" */
     std::string format_short;    /* "48k/16" */
+    /* MERGE TAKES: the fifth row key, then merge mode on the same page */
+    bool can_merge = true;       /* false with fewer than two takes: MERGE is dimmed (a press shows "Merging needs two takes") */
+    bool merge_mode = false;     /* the rows show badges, the strip is merge_strip, the keys are CANCEL and MERGE */
+    std::string merge_strip;     /* "Merge · 3 takes · 12:40 · about 61 MB" */
+    bool merge_ready = false;    /* two or more takes chosen: MERGE (the merge-mode key) works */
 };
 
 /* ------------------------------------------------------------------------------------------------ trim and split */
@@ -228,6 +237,21 @@ struct ConfirmVm {
     std::string yes = "DELETE";  /* the red key; the other one is CANCEL */
 };
 
+/* The merge box (MERGE in merge mode): the new take's name and what it will hold; KEEP ORIGINALS, DELETE ORIGINALS, CANCEL. */
+struct MergeBoxVm {
+    bool shown = false;
+    std::string title;           /* "Merge 3 takes?" */
+    std::string name;            /* the new take's file name: "take_009_20261111-0412.flac" (wraps, never cut) */
+    std::string detail;          /* "12:40 · about 61 MB" */
+};
+
+/* A box that shows a long job and its CANCEL key (the merge). */
+struct ProgressVm {
+    bool shown = false;
+    std::string title;           /* "Merging... 37%" */
+    std::string body;            /* "3 takes into take_009_20261111-0412.flac" */
+};
+
 /* ------------------------------------------------------------------------------------------------ everything */
 
 struct ViewModel {
@@ -240,6 +264,8 @@ struct ViewModel {
     TrimVm trim;
     SaveVm save;
     ConfirmVm confirm;
+    MergeBoxVm merge_box;
+    ProgressVm progress;
 };
 
 /* Equality of the parts the pages compare to skip work when nothing changed (the meter updates 30 times a second). */
@@ -259,13 +285,14 @@ inline bool operator==(const SettingsVm &a, const SettingsVm &b) { return a.rows
 inline bool operator==(const TakeRow &a, const TakeRow &b)
 {
     return a.id == b.id && a.sticker == b.sticker && a.name == b.name && a.detail == b.detail && a.detail_short == b.detail_short && a.length_ms == b.length_ms &&
-           a.prefix == b.prefix;
+           a.prefix == b.prefix && a.merge_order == b.merge_order && a.merge_ok == b.merge_ok && a.merge_reason == b.merge_reason;
 }
 inline bool operator==(const ListVm &a, const ListVm &b)
 {
     return a.takes == b.takes && a.selected == b.selected && a.previewing == b.previewing && a.can_load == b.can_load &&
            a.take_count == b.take_count && a.folder == b.folder &&
-           a.free_space == b.free_space && a.free_hours == b.free_hours && a.format_short == b.format_short;
+           a.free_space == b.free_space && a.free_hours == b.free_hours && a.format_short == b.format_short &&
+           a.can_merge == b.can_merge && a.merge_mode == b.merge_mode && a.merge_strip == b.merge_strip && a.merge_ready == b.merge_ready;
 }
 inline bool operator==(const TrimVm &a, const TrimVm &b)
 {
@@ -281,6 +308,14 @@ inline bool operator==(const ConfirmVm &a, const ConfirmVm &b)
 {
     return a.shown == b.shown && a.title == b.title && a.body == b.body && a.yes == b.yes;
 }
+inline bool operator==(const MergeBoxVm &a, const MergeBoxVm &b)
+{
+    return a.shown == b.shown && a.title == b.title && a.name == b.name && a.detail == b.detail;
+}
+inline bool operator==(const ProgressVm &a, const ProgressVm &b)
+{
+    return a.shown == b.shown && a.title == b.title && a.body == b.body;
+}
 
 /* The pages. The UI owns which one shows (L, S, Esc, the header buttons, EDIT) and reports every change. */
 enum class Screen { Recorder, Settings, List, Trim };
@@ -291,6 +326,7 @@ enum class Screen { Recorder, Settings, List, Trim };
 enum class KeyEdge { Down, Up, Click };
 
 enum class SaveMode { NewFiles, Replace, Cancel };
+enum class MergeChoice { KeepOriginals, DeleteOriginals, Cancel };
 
 struct UiActions {
     /* recorder */
@@ -316,6 +352,13 @@ struct UiActions {
     std::function<void(int index, const std::string &prefix)> list_rename; /* the edited prefix, after RENAME */
     std::function<void(int index)> list_trim;         /* EDIT: the UI shows the trim page (titled Edit); load TrimVm for that take */
     std::function<void(int index)> list_delete;       /* DELETE: confirm first (ConfirmVm), delete on confirm_answer(true) */
+    /* merge takes (index into ListVm::takes) */
+    std::function<void(int index)> list_merge;        /* MERGE (key M): merge mode, with this take chosen first */
+    std::function<void(int index)> merge_toggle;      /* merge mode: a tap or Enter on a row: chosen next, or dropped (renumbers) */
+    std::function<void()> merge_cancel;               /* merge mode: CANCEL or Esc: back to the list, the choice forgotten */
+    std::function<void()> merge_run;                  /* merge mode: MERGE (key M): the merge box (MergeBoxVm) */
+    std::function<void(MergeChoice)> merge_choose;    /* the merge box: keep or delete the originals (delete asks first), cancel */
+    std::function<void()> merge_stop;                 /* the progress box's CANCEL: the merge stops, nothing is kept */
     /* trim and split */
     std::function<void(int dir)> trim_zoom;           /* ZOOM -1 (wider window) / +1 (narrower) */
     std::function<void(std::int64_t delta_ms)> trim_nudge; /* POSITION buttons, Left / Right: 100 ms, Shift 1000 ms */

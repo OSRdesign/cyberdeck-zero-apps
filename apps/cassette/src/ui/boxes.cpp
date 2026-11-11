@@ -2,8 +2,10 @@
  * SPDX-License-Identifier: MIT
  *
  * Cassette UI: the save box (boards CassetteSave-480x320 / -320x480, note n8) and the small confirm box ("Delete the
- * original take?", not drawn on the boards: the save box's look, two keys). Both dim the whole screen (66 % black,
- * the header too, as the board) and take every tap meant for the page under them; Esc is their CANCEL (the root).
+ * original take?", not drawn on the boards: the save box's look, two keys); the merge box (the save box's frame and keys:
+ * KEEP ORIGINALS, DELETE ORIGINALS, CANCEL) and the progress box (the confirm box's frame, one CANCEL key). All dim the
+ * whole screen (66 % black, the header too, as the board) and take every tap meant for the page under them; Esc is their
+ * CANCEL (the root).
  */
 #include "pages.hpp"
 
@@ -267,6 +269,136 @@ void ConfirmBox::button_cb(lv_event_t *e)
     auto *self = static_cast<ConfirmBox *>(lv_event_get_user_data(e));
     const intptr_t id = reinterpret_cast<intptr_t>(lv_obj_get_user_data(lv_event_get_current_target_obj(e)));
     if (self->act_.confirm_answer) self->act_.confirm_answer(id == 1);
+}
+
+/* ------------------------------------------------------------------------------------------------ MergeBox */
+
+MergeBox::MergeBox(lv_obj_t *parent, const Frame &frame, const UiActions &actions) : act_(actions)
+{
+    const bool p = frame.portrait;
+    const Fit page = frame.fit({}, {});
+    const double t = frame.target;
+    /* the save box's frame and keys */
+    fit_ = p ? box_fit(page, frame.w, frame.h, 320, 480, 12, 48, 296, 369,
+                       {{183, 239, t, 0, false}, {249, 305, t, 0, false}, {317, 361, t, 0, false}})
+             : box_fit(page, frame.w, frame.h, 480, 320, 40, 28, 400, 261, {{157, 209, t, 0, false}, {221, 265, t, 0, false}});
+    dim_ = dim_layer(parent, frame.w, frame.h);
+    const double bx = p ? 12 : 40, by = p ? 48 : 28, bw = p ? 296 : 400, bh = p ? 369 : 261;
+    cream_box(dim_, fit_, {bx, by, bw, bh});
+    const double cx = bx + 14, cw = bw - 28;
+    title_ = fit_label(dim_, fit_, Face::Bold, 20, col::kInk, cx, by + 8, cw, 22, LV_TEXT_ALIGN_LEFT, 1.5);
+    summary_ = fit_label(dim_, fit_, Face::Medium, 14, col::kInkSoft, cx, by + 32, cw, 16);
+    strip_ = box(dim_, fit_.x(cx), fit_.y(by + 54), fit_.w(cx, cw), fit_.px(25), col::kStrip, fit_.px(5));
+    const int pad_x = fit_.px(8);
+    name_ = label(strip_, Face::Bold, fit_.px(13), col::kInk, pad_x, fit_.px(4), lv_obj_get_style_width(strip_, LV_PART_MAIN) - 2 * pad_x,
+                  LV_TEXT_ALIGN_LEFT, ls_screen(0.3, fit_.s));
+    lv_label_set_long_mode(name_, LV_LABEL_LONG_MODE_WRAP); /* a long name wraps, never cut */
+    if (p) {
+        buttons_.push_back(box_button(dim_, fit_, {26, 183, 268, 56}, BoxKey::Green, "KEEP ORIGINALS", "originals kept", button_cb, this, 0));
+        buttons_.push_back(box_button(dim_, fit_, {26, 249, 268, 56}, BoxKey::Outline, "DELETE ORIGINALS", "deleted after merging", button_cb, this, 1));
+        buttons_.push_back(box_button(dim_, fit_, {26, 317, 268, 44}, BoxKey::Charcoal, "CANCEL", nullptr, button_cb, this, 2));
+    } else {
+        buttons_.push_back(box_button(dim_, fit_, {54, 157, 182, 52}, BoxKey::Green, "KEEP ORIGINALS", "originals kept", button_cb, this, 0));
+        buttons_.push_back(box_button(dim_, fit_, {244, 157, 182, 52}, BoxKey::Outline, "DELETE ORIGINALS", "deleted after merging", button_cb, this, 1));
+        buttons_.push_back(box_button(dim_, fit_, {54, 221, 372, 44}, BoxKey::Charcoal, "CANCEL", nullptr, button_cb, this, 2));
+    }
+}
+
+void MergeBox::update(const MergeBoxVm &m)
+{
+    if (m.shown != shown_ && m.shown) {
+        lv_obj_move_foreground(dim_);
+        focus_ = 0; /* KEEP ORIGINALS, the default */
+        focus_shown_ = false;
+        for (lv_obj_t *b : buttons_) outline(b, fit_, false);
+    }
+    shown_ = m.shown;
+    show(dim_, m.shown);
+    if (!m.shown) return;
+    const std::string key = m.title + "|" + m.name + "|" + m.detail;
+    if (key == key_) return;
+    key_ = key;
+    set_fitted(title_, Face::Bold, fit_.px(20), ls_screen(1.5, fit_.s), std::max(10, fit_.px(14)), m.title);
+    set_fitted(summary_, Face::Medium, fit_.px(14), 0, std::max(9, fit_.px(11)), m.detail);
+    set_text(name_, m.name);
+    /* the strip as tall as the name's lines inside 4 px padding */
+    lv_point_t sz;
+    lv_text_get_size(&sz, m.name.c_str(), lv_obj_get_style_text_font(name_, LV_PART_MAIN), ls_screen(0.3, fit_.s), 0,
+                     lv_obj_get_style_width(name_, LV_PART_MAIN), LV_TEXT_FLAG_NONE);
+    const int lh = lv_font_get_line_height(lv_obj_get_style_text_font(name_, LV_PART_MAIN));
+    lv_obj_set_height(strip_, 2 * fit_.px(4) + std::max(lh, static_cast<int>(sz.y)));
+}
+
+void MergeBox::key_move(int dir)
+{
+    focus_ = (focus_ + dir + 3) % 3; /* from the default (KEEP ORIGINALS) */
+    focus_shown_ = true;
+    for (std::size_t i = 0; i < buttons_.size(); ++i) outline(buttons_[i], fit_, static_cast<int>(i) == focus_);
+}
+
+void MergeBox::key_choose()
+{
+    if (act_.merge_choose)
+        act_.merge_choose(focus_ == 0 ? MergeChoice::KeepOriginals : focus_ == 1 ? MergeChoice::DeleteOriginals : MergeChoice::Cancel);
+}
+
+void MergeBox::button_cb(lv_event_t *e)
+{
+    auto *self = static_cast<MergeBox *>(lv_event_get_user_data(e));
+    const intptr_t id = reinterpret_cast<intptr_t>(lv_obj_get_user_data(lv_event_get_current_target_obj(e)));
+    if (!self->act_.merge_choose) return;
+    self->act_.merge_choose(id == 0 ? MergeChoice::KeepOriginals : id == 1 ? MergeChoice::DeleteOriginals : MergeChoice::Cancel);
+}
+
+/* ------------------------------------------------------------------------------------------------ ProgressBox */
+
+ProgressBox::ProgressBox(lv_obj_t *parent, const Frame &frame, const UiActions &actions) : act_(actions)
+{
+    const bool p = frame.portrait;
+    const Fit page = frame.fit({}, {});
+    /* the confirm box's frame: title, the line, one key across */
+    const double bx = p ? 12 : 40, bw = p ? 296 : 400, bh = 160;
+    const double dh = p ? 480 : 320, by = (dh - bh) / 2;
+    const double kyd = by + bh - 14 - 52;
+    fit_ = box_fit(page, frame.w, frame.h, p ? 320 : 480, dh, bx, by, bw, bh, {{kyd, kyd + 52, double(frame.target), 0, false}});
+    dim_ = dim_layer(parent, frame.w, frame.h);
+    cream_box(dim_, fit_, {bx, by, bw, bh});
+    const double cx = bx + 14, cw = bw - 28;
+    title_ = fit_label(dim_, fit_, Face::Bold, 20, col::kInk, cx, by + 10, cw, 22);
+    body_ = fit_label(dim_, fit_, Face::Medium, 14, col::kInkSoft, cx, by + 36, cw, 16);
+    lv_label_set_long_mode(body_, LV_LABEL_LONG_MODE_WRAP);
+    cancel_ = box_button(dim_, fit_, {cx, kyd, cw, 52}, BoxKey::Charcoal, "CANCEL", nullptr, button_cb, this, 0);
+}
+
+void ProgressBox::update(const ProgressVm &pv)
+{
+    if (pv.shown != shown_ && pv.shown) {
+        lv_obj_move_foreground(dim_);
+        focus_shown_ = false;
+        outline(cancel_, fit_, false);
+    }
+    shown_ = pv.shown;
+    show(dim_, pv.shown);
+    if (!pv.shown) return;
+    set_fitted(title_, Face::Bold, fit_.px(20), 0, std::max(10, fit_.px(14)), pv.title);
+    set_text(body_, pv.body);
+}
+
+void ProgressBox::key_move(int)
+{
+    focus_shown_ = true;
+    outline(cancel_, fit_, true);
+}
+
+void ProgressBox::key_choose()
+{
+    if (focus_shown_ && act_.merge_stop) act_.merge_stop();
+}
+
+void ProgressBox::button_cb(lv_event_t *e)
+{
+    auto *self = static_cast<ProgressBox *>(lv_event_get_user_data(e));
+    if (self->act_.merge_stop) self->act_.merge_stop();
 }
 
 } // namespace ui

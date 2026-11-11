@@ -40,3 +40,4 @@ void test_trim();
 void test_crash_steps();
 void test_crash_fork();
 void test_codec_edit();
+void test_merge();

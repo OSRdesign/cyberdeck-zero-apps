@@ -61,3 +61,10 @@ bitrate-picker.png	fmt10-codec-change-toast	480x320	bitrate-picker
 rate-picker-opus.png	fmt10-codec-change-toast	480x320	rate-opus
 codec-change-toast.png	fmt10-codec-change-toast	480x320	settings-opus-toast
 trim-fit.png	wfq-fit-small	480x320	trim-fit
+list-keys-320x480.png	mg1-merge-small	320x480	list-keys
+merge-mode.png	mg1-merge-small	480x320	mode-3
+merge-mode-320x480.png	mg1-merge-small	320x480	mode-3
+merge-box.png	mg1-merge-small	480x320	merge-box
+merge-confirm.png	mg1-merge-small	480x320	confirm-delete-originals
+merge-progress.png	mg1-merge-small	480x320	progress
+merged.png	mg2-merged-small	480x320	merged
