@@ -25,7 +25,8 @@ the owner's words are quoted exactly; everything else says who decided. The stud
 - **D9 Media keys:** Vinyl reads the media-key devices itself in the MVP; launcher forwarding later.
 - **D10 AVRCP metadata / MPRIS** (BlueZ `RegisterPlayer`): P2.
 - **D11 Volume:** the system volume (the launcher's keys) on the default sink; an in-app stream volume when an explicit
-  non-default sink plays; software volume only without a mixer.
+  non-default sink plays; software volume only without a mixer. **Changed by the owner on 2026-11-12: see "D11 changed"
+  below.**
 - **D12 Library store:** SQLite through dlopen, `~/Music` and chosen mounts, an incremental idle scan (P2).
 - **D13 Hi-res:** 24-bit kept (S32/F32 streams), the server resamples, no bit-perfect mode.
 - **D14 Out of scope:** MIDI, native DSD/DoP (DSF as PCM through FFmpeg only), SACD images, tag editing, video.
@@ -78,24 +79,32 @@ Each accepted for P1 by the coordinator, owner informed (no owner wording record
   overlapping: their touch areas overlap their neighbours' (the strip open or not). Accepted as a WARN by the
   coordinator under R-4 (2026-11-12).
 
-## Volume after the board tests (the coordinator, 2026-11-12)
+## D11 changed: the volume of the playing output (owner, 2026-11-12)
 
-The owner's results: B7 "partial pass: when evolve reconnects the volume is not the same as set before"; B9 "partial
-pass, on evolve 65 the vol chip makes more than a second to reflect."
+The owner accepted a change to report 059's D11 (relayed by the coordinator; no owner wording recorded here). The
+reason, from the boards: on the HackBerry Vinyl played to an explicitly chosen USB DAC; the chip, the strip and the
+in-app volume only moved Vinyl's own level (already 100 %, so nothing could get louder), while the playing sink stayed at
+its own 40 % (-23.9 dB) and the launcher's keys moved the default sink, another device: Vinyl's "100 %" was about -24 dB.
+On zero8 (no sound server) the same adapter's mixer sat at -20 dB. The owner's board results that led there: B7
+"partial pass: when evolve reconnects the volume is not the same as set before"; B9 "partial pass, on evolve 65 the vol
+chip makes more than a second to reflect."
 
-- Vinyl's own volume (decision D11: the software gain for an output the system volume does not reach) is kept per
-  output (`bt:<MAC>`, `pulse:<sink>`, `alsa:<device>` in state.json) and applied again when that output plays, after a
-  reconnect or a switch back; an output never set starts from the last level set.
-- Every playback stream is opened unmuted at 100 % (0 dB) with its own restore key
-  (`module-stream-restore.id` `sink-input-by-application-id:vinyl`) and WirePlumber's `state.restore-props` /
-  `state.restore-target` false: the servers restored stream volumes by media role, shared with every app playing music,
-  so a reconnect could bring back another app's level. The stream's identity says vinyl (it said cassette, a leftover of
+- The Vol chip, the volume strip and the `-` / `=` keys set the volume of the output Vinyl actually plays on, and the
+  chip shows that real level.
+- With a sound server: the sink's own volume (set with pa_context_set_sink_volume_by_name, read from the sink list), in
+  the server's own percent (the number pactl / wpctl show), default sink or not, Bluetooth included: a headset keeps its
+  level across a reconnect, and if the device changes it the chip shows the real value. Vinyl's stream stays at 100 %.
+- Without a sound server: the card's playback mixer control, percent linear in dB where the driver reports dB (else in
+  steps), never above 0 dB; the control's switch mutes at 0 %. Only a card with no playback mixer gets Vinyl's software
+  volume (kept per output in state.json).
+- The separate in-app volume is gone from the UI; an older state.json's `app_volume` is read and kept, never applied.
+- The chip refreshes on the server's change events (pa_context_subscribe) within a tick and a list round trip; the mixer
+  is read every 300 ms. When the playing output is the default sink, the launcher's volume keys show through the same
+  events (the keys themselves still act only on the default sink: a launcher matter).
+- Every playback stream opens unmuted at 100 % with its own restore key (`module-stream-restore.id`
+  `sink-input-by-application-id:vinyl`) and WirePlumber's `state.restore-props` / `state.restore-target` false, so no
+  server re-applies another music app's stream level; the stream's identity says vinyl (it said cassette, a leftover of
   the copied code).
-- The chip shows the system volume from the sound server's own sink list, refreshed on its change events
-  (pa_context_subscribe) within a tick and a list round trip; the launcher's status.state stays the source without a
-  server (ALSA boards).
-- The sink's own volume after a reconnect (WirePlumber's stored route volume, a headset's absolute volume) is the
-  system's; Vinyl shows it at once and does not change it.
 
 ## Volume strip touch areas (the coordinator, 2026-11-12)
 

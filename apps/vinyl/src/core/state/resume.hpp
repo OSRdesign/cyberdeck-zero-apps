@@ -32,16 +32,16 @@ struct ResumeState {
     uint64_t position_ms = 0;
     std::string output = "auto"; /* "auto", "bt:AA:BB:..", "pulse:<sink>", "alsa:<device>" */
     std::string browse;          /* the folder the browser shows */
-    int app_volume = 100;        /* 0..100, the in-app stream volume (decision D11): the last level set, for an output
-                                    that has none of its own yet */
-    std::map<std::string, int> app_volumes; /* the level per output (output_volume_key): kept across a reconnect and an
-                                               output switch (board test B7); at most kMaxAppVolumes */
+    int app_volume = 100;        /* the old in-app volume (D11 before the owner's change of 2026-11-12): read from an older
+                                    state.json and written back unchanged, never applied */
+    std::map<std::string, int> app_volumes; /* the software level of an output WITHOUT a playback mixer, per output
+                                               (output_volume_key); at most kMaxAppVolumes */
 };
 
 constexpr size_t kMaxAppVolumes = 32;
-/* Vinyl's own volume for the output `key` (its own level, else the last level set). */
+/* The software level of the output `key` (an ALSA card without a playback mixer): its own, else 100. */
 int app_volume_of(const ResumeState &s, const std::string &key);
-/* Sets it (0..100) for `key` and as the last level set. */
+/* Sets it (0..100) for `key`. */
 void set_app_volume(ResumeState &s, const std::string &key, int level);
 
 constexpr size_t kMaxResumeItems = 5000;

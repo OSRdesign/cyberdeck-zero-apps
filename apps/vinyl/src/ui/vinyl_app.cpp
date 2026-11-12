@@ -22,6 +22,7 @@
 #include "pulse/pulse_api.hpp"
 #include "state/resume.hpp"
 #include "transport/transport_press.hpp"
+#include "volume/output_volume.hpp"
 
 #include "app.hpp"
 #include "keyboard_input.h"
@@ -136,9 +137,15 @@ struct VinylApp::Impl final : TransportHost {
      * on-screen buttons and the media keys, all the same */
     TransportPress transport{*this};
     bool scan_muted = false;
-    /* the system volume the strip asked the launcher for, shown until status.state has it (or 2.5 s) */
-    int sys_pending = -1;
-    uint64_t sys_pending_until = 0;
+    /* the playing output's volume (D11 as changed 2026-11-12): a sink level asked for and shown until the server's event
+     * brings it (1.5 s at most), the card mixer Vinyl reads when there is no server */
+    int pending_level = -1;
+    std::string pending_sink;
+    uint64_t pending_until = 0;
+    std::string mixer_card, mixer_choice_card;
+    MixerChoice mixer_choice;
+    MixerLevel mixer_level;
+    uint64_t last_mixer_read = 0;
 
     /* ------------------------------------------------------------------------------------------ start */
 
@@ -156,7 +163,10 @@ struct VinylApp::Impl final : TransportHost {
             sinks = make_demo_sink_provider();
             world = demo_output_world(lite);
             status = demo_launcher_status();
-            if (env_on("VINYL_DEMO_NOVOLUME")) status.volume = -1; /* a launcher that reports no volume: the strip cannot open */
+            if (env_on("VINYL_DEMO_NOVOLUME")) { /* the server reports no level for its sinks: the strip cannot open */
+                status.volume = -1;
+                for (PulseDevice &d : world.sinks) d.volume_pct = -1;
+            }
         } else {
             roots = system_roots();
             resume_file = resume_path();
@@ -682,99 +692,149 @@ struct VinylApp::Impl final : TransportHost {
         case K_C:
             if (p == Page::Queue) queue_button(3);
             break;
-        case K_MINUS: app_volume(-5); break;
-        case K_EQUAL: app_volume(5); break;
+        case K_MINUS: volume_step(-kVolumeStep); break; /* the playing output's volume (D11 as changed) */
+        case K_EQUAL: volume_step(kVolumeStep); break;
         default: break;
         }
     }
 
     /* ------------------------------------------------------------------------------------------ volume (D11) */
 
-    /* the target is the server's default sink (the launcher's volume keys reach it) */
-    bool target_is_default() const {
-        if (target.kind == OutputTarget::Kind::Auto) return true;
-        if (target.kind == OutputTarget::Kind::Pulse) return target.id == world.default_sink;
-        if (target.kind == OutputTarget::Kind::Bt) {
-            std::string mac = pulse_mac_from_name(world.default_sink);
-            for (char &c : mac) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-            return !mac.empty() && mac == target.id;
+    /* D11 as the owner changed it (2026-11-12): the Vol chip, the strip and the - / = keys set the volume of the output
+     * Vinyl plays on, and the chip shows its real level (core/volume/output_volume.hpp). */
+    struct VolTarget {
+        enum class Kind { None, Sink, Mixer } kind = Kind::None;
+        std::string sink;      /* Sink: the sink's name */
+        unsigned channels = 2; /* Sink: its channels */
+        std::string card;      /* Mixer: "hw:CARD=<id>" or "default" */
+        std::string key;       /* output_volume_key: a card without a mixer keeps its software level under it */
+    };
+
+    /* the sink of the server that a target plays to, "" when it is not there (a Bluetooth device switched off) */
+    std::string sink_for_target() const {
+        if (target.kind == OutputTarget::Kind::Auto) return world.default_sink;
+        if (target.kind == OutputTarget::Kind::Pulse) return target.id;
+        if (target.kind == OutputTarget::Kind::Bt)
+            for (const PulseDevice &d : world.sinks) {
+                std::string mac = pulse_mac_from_name(d.name);
+                for (char &c : mac) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                if (!mac.empty() && mac == target.id && d.name.compare(0, 6, "bluez_") == 0) return d.name;
+            }
+        return "";
+    }
+
+    /* the output Vinyl plays on (or will play on: nothing is open while paused at start) */
+    VolTarget volume_target() const {
+        VolTarget t;
+        std::string sink;
+        if (!snap.output_name.empty() && snap.output_pulse) sink = snap.output_name;
+        else if (snap.output_name.empty() && world.server && target.kind != OutputTarget::Kind::Alsa) sink = sink_for_target();
+        if (!sink.empty()) {
+            t.kind = VolTarget::Kind::Sink;
+            t.sink = sink;
+            for (const PulseDevice &d : world.sinks)
+                if (d.name == sink && d.channels > 0) t.channels = d.channels;
+            t.key = output_volume_key(sink, true, target);
+            return t;
         }
-        return false;
-    }
-
-    bool app_volume_applies() const {
-        if (snap.output_name.empty()) {
-            if (world.server) return !world.default_sink.empty() && !target_is_default();
-            return status.volume < 0; /* ALSA without a mixer the launcher drives */
+        if (!snap.output_name.empty() && !snap.output_pulse) {
+            t.kind = VolTarget::Kind::Mixer;
+            t.card = mixer_card_for(snap.output_name);
+        } else if (target.kind == OutputTarget::Kind::Alsa || (!world.server && target.kind == OutputTarget::Kind::Auto)) {
+            t.kind = VolTarget::Kind::Mixer;
+            t.card = mixer_card_for(target.kind == OutputTarget::Kind::Alsa ? target.id : std::string("default"));
         }
-        if (snap.output_pulse) return world.server && !world.default_sink.empty() && snap.output_name != world.default_sink;
-        return status.volume < 0;
+        t.key = output_volume_key(snap.output_name, snap.output_pulse, target);
+        return t;
     }
 
-    /* the output Vinyl's own level belongs to (board test B7: kept per output, the same after a reconnect) */
-    std::string volume_key() const { return output_volume_key(snap.output_name, snap.output_pulse, target); }
-    int own_volume() const { return app_volume_of(resume, volume_key()); }
+    /* an ALSA output without a playback mixer (or no mixer could be read): Vinyl's software gain */
+    bool software_volume(const VolTarget &t) const { return t.kind == VolTarget::Kind::Mixer && !mixer_level.has_mixer; }
 
-    void app_volume(int d) {
-        if (!app_volume_applies()) return; /* the system volume is the launcher's keys' */
-        set_app_volume(resume, volume_key(), own_volume() + d);
-        apply_gain();
-        dirty = true;
-        refresh(true);
+    /* reads the playing card's mixer (at most every 300 ms, at once when forced) */
+    void read_output_mixer(uint64_t now, bool force) {
+        const VolTarget t = volume_target();
+        if (t.kind != VolTarget::Kind::Mixer || !alsa) {
+            mixer_level = MixerLevel();
+            return;
+        }
+        if (!force && t.card == mixer_card && now - last_mixer_read < 300) return;
+        last_mixer_read = now;
+        if (t.card != mixer_card) mixer_choice_card.clear();
+        mixer_card = t.card;
+        read_mixer(*alsa, t.card, mixer_choice_card, mixer_choice, mixer_level);
     }
 
-    /* the engine's gain: silent while a long press scans, the output's own level where it applies, else unity. It is
-     * the level of the output in use, so a reconnect or a switch back gets that output's level again (B7). */
-    void apply_gain() {
-        if (!engine) return;
-        engine->set_gain(scan_muted ? 0.0f : app_volume_applies() ? volume_gain(own_volume()) : 1.0f);
-    }
-
-    /* the system volume as the server or the launcher reports it: the sink Vinyl plays to (or the default sink) from the
-     * server's lists, which follow its change events (B9); else status.state (ALSA boards, no server) */
-    int reported_volume(bool *muted = nullptr) const {
-        int pct = -1;
-        bool m = false;
-        if (sink_volume_of(world, snap.output_pulse ? snap.output_name : std::string(), pct, m)) {
+    /* the level the chip shows: the sink's own, the mixer's, or the software level; -1 = not known */
+    int output_level(bool *muted = nullptr) const {
+        if (muted) *muted = false;
+        const VolTarget t = volume_target();
+        if (t.kind == VolTarget::Kind::Sink) {
+            int pct = -1;
+            bool m = false;
+            if (!sink_volume_of(world, t.sink, pct, m)) return -1;
+            if (pending_level >= 0 && pending_sink == t.sink && mono_ms_now() < pending_until && pct != pending_level)
+                return pending_level; /* asked for, the server's event not back yet */
             if (muted) *muted = m;
             return pct;
         }
-        if (muted) *muted = status.mute;
-        return status.volume;
+        if (t.kind == VolTarget::Kind::Mixer) {
+            if (software_volume(t)) return app_volume_of(resume, t.key);
+            if (muted) *muted = mixer_level.muted;
+            return mixer_level.pct;
+        }
+        return -1;
     }
 
-    /* the system volume as shown: the level the strip asked for until the server or the launcher reports it */
-    int system_volume() const {
-        const int now = reported_volume();
-        if (sys_pending >= 0 && mono_ms_now() < sys_pending_until && now != sys_pending) return sys_pending;
-        return now;
+    /* the strip and the keys can change it */
+    bool output_level_adjustable() const {
+        const VolTarget t = volume_target();
+        if (t.kind == VolTarget::Kind::Sink) return output_level() >= 0 && (demo || worker);
+        return t.kind == VolTarget::Kind::Mixer;
     }
 
-    /* the strip can change the system volume: the launcher answers `volume` on this board (decision D11, report 059:
-     * "volume only behind an explicit in-app system-volume control"); the demonstration world stands for it */
-    bool system_volume_adjustable() const {
-        if (reported_volume() < 0) return false;
-        return demo || (requests && status.has_request("volume"));
+    /* the engine's gain: silent while a long press scans; the software level only for a card without a mixer; else
+     * unity (the output's own volume does the work, Vinyl's stream stays at 100 %) */
+    void apply_gain() {
+        if (!engine) return;
+        const VolTarget t = volume_target();
+        engine->set_gain(scan_muted ? 0.0f : software_volume(t) ? volume_gain(app_volume_of(resume, t.key)) : 1.0f);
     }
 
-    /* the volume strip's "-" / "+" (design QA D-28): the in-app volume where it applies (as the - and = keys), else the
-     * system volume through the launcher ("volume set N", which also un-mutes) */
+    /* the volume strip's "-" / "+" and the - / = keys: the playing output's volume, kVolumeStep at a time */
     void volume_step(int d) {
-        if (app_volume_applies()) {
-            app_volume(d);
-            return;
+        const VolTarget t = volume_target();
+        const int cur = output_level();
+        if (t.kind == VolTarget::Kind::Sink) {
+            if (cur < 0) return;
+            const int to = volume_after_step(cur, d);
+            if (demo) {
+                for (PulseDevice &s2 : world.sinks)
+                    if (s2.name == t.sink) {
+                        s2.volume_pct = to;
+                        s2.muted = to == 0 ? s2.muted : false;
+                    }
+            } else if (worker) {
+                worker->request_sink_level(t.sink, t.channels, to);
+                pending_level = to;
+                pending_sink = t.sink;
+                pending_until = mono_ms_now() + 1500;
+            }
+            std::fprintf(stderr, "[vinyl] volume: %s set to %d %%\n", t.sink.c_str(), to);
+        } else if (t.kind == VolTarget::Kind::Mixer) {
+            if (software_volume(t)) {
+                set_app_volume(resume, t.key, volume_after_step(app_volume_of(resume, t.key), d));
+                dirty = true;
+                apply_gain();
+                std::fprintf(stderr, "[vinyl] volume: software %d %% for %s (no playback mixer)\n", app_volume_of(resume, t.key),
+                             t.key.c_str());
+            } else if (alsa) {
+                const int to = volume_after_step(std::max(0, cur), d);
+                const int r = write_mixer(*alsa, t.card, mixer_choice, to);
+                if (r < 0) std::fprintf(stderr, "[vinyl] volume: %s %s: %s\n", t.card.c_str(), mixer_choice.volume.c_str(), alsa_error_text(r).c_str());
+                read_output_mixer(mono_ms_now(), true);
+            }
         }
-        if (!system_volume_adjustable()) return;
-        const int to = std::clamp(system_volume() + d, 0, 100);
-        if (demo) {
-            status.volume = to;
-            status.mute = false;
-        } else {
-            requests->send("volume set " + std::to_string(to));
-            sys_pending = to;
-            sys_pending_until = mono_ms_now() + 2500;
-        }
-        std::fprintf(stderr, "[vinyl] system volume %d (the volume strip)\n", to);
         refresh(true);
     }
 
@@ -882,29 +942,31 @@ struct VinylApp::Impl final : TransportHost {
     }
 
     std::string vol_text() const {
-        if (app_volume_applies()) return "Vol " + std::to_string(own_volume());
         bool muted = false;
-        const int reported = reported_volume(&muted);
-        const int v = system_volume();
+        const int v = output_level(&muted);
         if (v < 0) return "Vol --";
-        if (muted && v == reported) return "Muted";
+        if (muted) return "Muted";
         return "Vol " + std::to_string(v);
     }
 
-    /* one log line when the level Vinyl applies or shows changes (for the board probes: which volume is in force) */
+    /* one log line when the level shown or the control changes (for the board probes: which volume is in force) */
     void log_volume() {
+        const VolTarget t = volume_target();
+        bool m = false;
+        const int v = output_level(&m);
         std::string line;
-        if (app_volume_applies()) line = "Vinyl's own " + std::to_string(own_volume()) + " % for " + volume_key();
-        else {
-            int pct = -1;
-            bool m = false;
-            const bool from_sink = sink_volume_of(world, snap.output_pulse ? snap.output_name : std::string(), pct, m);
-            line = "system " + std::to_string(from_sink ? pct : status.volume) + " %" + ((from_sink ? m : status.mute) ? " (muted)" : "") +
-                   (from_sink ? " from the sink" : " from status.state");
-        }
+        if (t.kind == VolTarget::Kind::Sink) line = "sink " + t.sink + " " + std::to_string(v) + " %";
+        else if (t.kind == VolTarget::Kind::Mixer && software_volume(t))
+            line = "software " + std::to_string(v) + " % for " + t.key + " (" + t.card + ": no playback mixer)";
+        else if (t.kind == VolTarget::Kind::Mixer) {
+            char db[32] = "";
+            if (mixer_choice.has_db) std::snprintf(db, sizeof db, ", %.1f dB", mixer_level.cdb / 100.0);
+            line = "mixer " + t.card + " '" + mixer_choice.volume + "' " + std::to_string(v) + " %" + db;
+        } else line = "no output";
+        if (m) line += " (muted)";
         if (line == vol_logged) return;
         vol_logged = line;
-        std::fprintf(stderr, "[vinyl] volume: %s (output %s)\n", line.c_str(), snap.output_name.empty() ? "none open" : snap.output_name.c_str());
+        std::fprintf(stderr, "[vinyl] volume: %s\n", line.c_str());
     }
 
     std::string format_text(bool short_form) const {
@@ -966,13 +1028,8 @@ struct VinylApp::Impl final : TransportHost {
         v.count = cnt;
         v.vol = vol_text();
         v.vol_bt = output_is_bt();
-        if (app_volume_applies()) {
-            v.vol_level = own_volume();
-            v.vol_adjustable = true;
-        } else {
-            v.vol_level = system_volume();
-            v.vol_adjustable = system_volume_adjustable();
-        }
+        v.vol_level = output_level();
+        v.vol_adjustable = output_level_adjustable();
         const std::string path = !snap.path.empty() ? snap.path : (queue.current_path() ? *queue.current_path() : "");
         if (!path.empty()) {
             TrackTags t;
@@ -1219,7 +1276,8 @@ struct VinylApp::Impl final : TransportHost {
             last_scan = now;
             scan(true);
         }
-        /* the in-app volume follows the output in use (and the scan's silence) */
+        /* the playing output's volume: the card's mixer without a server (the server's sinks come with the scans) */
+        read_output_mixer(now, false);
         apply_gain();
         log_volume();
         /* cover */

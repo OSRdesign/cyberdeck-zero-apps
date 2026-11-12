@@ -207,15 +207,20 @@ OutputWorld demo_output_world(bool lite) {
     evolve.bt_profile = "a2dp-sink";
     evolve.rate = 48000;
     evolve.channels = 2;
+    evolve.volume_pct = 60; /* the levels the chip shows (D11 as changed: the playing sink's own volume) */
     PulseDevice usb;
     usb.name = "alsa_output.usb-UC02.analog-stereo";
     usb.description = "USB sound card UC02";
     usb.bus = "usb";
     usb.rate = 48000;
+    usb.channels = 2;
+    usb.volume_pct = 40;
     PulseDevice hdmi;
     hdmi.name = "alsa_output.platform-107c701400.hdmi.hdmi-stereo";
     hdmi.description = "Built-in Audio Digital Stereo (HDMI)";
     hdmi.rate = 48000;
+    hdmi.channels = 2;
+    hdmi.volume_pct = 100;
     o.sinks = {evolve, usb, hdmi};
     o.default_sink = evolve.name;
     LauncherBtDev xwf;

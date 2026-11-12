@@ -132,6 +132,11 @@ bool load_pulse_lib(const char *file, PulseLib &out, std::string &why) {
     all &= sym(h, l.proplist_gets, "pa_proplist_gets", l.name, why);
     all &= sym(h, l.strerror, "pa_strerror", l.name, why);
     all &= sym(h, l.get_library_version, "pa_get_library_version", l.name, why);
+    /* VINYL: optional; without them the chip shows the sink's level but cannot change it */
+    l.context_set_sink_volume_by_name = reinterpret_cast<decltype(l.context_set_sink_volume_by_name)>(
+        ::dlsym(h, "pa_context_set_sink_volume_by_name"));
+    l.context_set_sink_mute_by_name = reinterpret_cast<decltype(l.context_set_sink_mute_by_name)>(
+        ::dlsym(h, "pa_context_set_sink_mute_by_name"));
     if (!all) {
         ::dlclose(h);
         out = PulseLib();

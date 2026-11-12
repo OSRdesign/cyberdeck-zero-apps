@@ -17,8 +17,10 @@
 #include "fake_pulse.hpp"
 #include "pulse/pulse_abi.hpp"
 #include "state/resume.hpp"
+#include "volume/output_volume.hpp"
 
 #include <algorithm>
+#include <map>
 #include <cctype>
 #include <chrono>
 #include <thread>
@@ -151,7 +153,7 @@ void test_volume_per_output() {
     set_app_volume(s, "pulse:B", 75);
     CHECK_EQ(app_volume_of(s, "bt:A"), 40); /* each output keeps its own */
     CHECK_EQ(app_volume_of(s, "pulse:B"), 75);
-    CHECK_EQ(app_volume_of(s, "bt:C"), 75); /* one never set: the last level set, never louder than what was chosen last */
+    CHECK_EQ(app_volume_of(s, "bt:C"), 100); /* one never set: 100 (unity: the software level of a card without a mixer) */
     set_app_volume(s, "bt:A", 140);
     CHECK_EQ(app_volume_of(s, "bt:A"), 100);
     set_app_volume(s, "bt:A", 35);
@@ -160,11 +162,14 @@ void test_volume_per_output() {
     CHECK(resume_from_json(resume_to_json(s), r));
     CHECK_EQ(app_volume_of(r, "bt:A"), 35);
     CHECK_EQ(app_volume_of(r, "pulse:B"), 75);
-    CHECK_EQ(r.app_volume, 35);
-    /* an older state.json without the map: every output starts from app_volume */
+    /* an older state.json with the old in-app volume: read without trouble, written back, never applied (D11 as changed) */
     CHECK(resume_from_json("{\"v\": 1, \"app_volume\": 62}", r));
     CHECK(r.app_volumes.empty());
-    CHECK_EQ(app_volume_of(r, "bt:A"), 62);
+    CHECK_EQ(r.app_volume, 62);
+    CHECK_EQ(app_volume_of(r, "bt:A"), 100);
+    ResumeState back;
+    CHECK(resume_from_json(resume_to_json(r), back));
+    CHECK_EQ(back.app_volume, 62);
     /* bounded */
     ResumeState many;
     for (int i = 0; i < 50; ++i) set_app_volume(many, "k" + std::to_string(i), i);
@@ -253,10 +258,241 @@ void test_stream_identity() {
     f.disconnect();
 }
 
+/* a card's mixer controls, as snd_hctl lists them, with their values */
+class FakeAlsa final : public AlsaApi {
+public:
+    std::vector<CtlInfo> ctls;
+    std::map<std::string, long> values;
+    int sets = 0;
+    bool gone = false; /* the card is unplugged */
+    bool available(std::string *) override { return true; }
+    std::vector<CardInfo> cards() override { return {}; }
+    int query_capture(const std::string &, CaptureOffer &) override { return -ENOSYS; }
+    int open_capture(const std::string &, const HwRequest &, std::unique_ptr<AlsaPcm> &, HwGranted &) override { return -ENOSYS; }
+    int mixer_list(const std::string &card, std::vector<CtlInfo> &out) override {
+        last_card = card;
+        if (gone) return -ENODEV;
+        out = ctls;
+        return 0;
+    }
+    int mixer_get(const std::string &, const std::string &name, long &value) override {
+        if (gone) return -ENODEV;
+        auto it = values.find(name);
+        if (it == values.end()) return -ENOENT;
+        value = it->second;
+        return 0;
+    }
+    int mixer_set(const std::string &, const std::string &name, long value) override {
+        if (gone) return -ENODEV;
+        values[name] = value;
+        ++sets;
+        return 0;
+    }
+    std::string last_card;
+};
+
+CtlInfo vol_ctl(const std::string &name, long min, long max, bool db = false, long dmin = 0, long dmax = 0) {
+    CtlInfo c;
+    c.name = name;
+    c.type = CtlInfo::Type::Integer;
+    c.capture = name.find("Capture") != std::string::npos;
+    c.count = 2;
+    c.min = min;
+    c.max = max;
+    c.has_db = db;
+    c.db_min_cdb = dmin;
+    c.db_max_cdb = dmax;
+    return c;
+}
+
+CtlInfo switch_ctl(const std::string &name) {
+    CtlInfo c;
+    c.name = name;
+    c.type = CtlInfo::Type::Boolean;
+    c.count = 2;
+    c.max = 1;
+    return c;
+}
+
+/* D11 as the owner changed it (2026-11-12) without a sound server: the playing card's own mixer */
+void test_output_mixer() {
+    /* the choice: Master, PCM, Speaker, Headphone, Headset, else any playback volume; never a capture control */
+    MixerChoice m;
+    CHECK(choose_playback_mixer({vol_ctl("Mic Capture Volume", 0, 30), vol_ctl("PCM Playback Volume", 0, 45),
+                                 vol_ctl("Master Playback Volume", 0, 87)},
+                                m));
+    CHECK_EQ(m.volume, std::string("Master Playback Volume"));
+    CHECK(choose_playback_mixer({vol_ctl("Mic Capture Volume", 0, 30), vol_ctl("Line Out Playback Volume", 0, 20),
+                                 switch_ctl("Line Out Playback Switch")},
+                                m));
+    CHECK_EQ(m.volume, std::string("Line Out Playback Volume"));
+    CHECK_EQ(m.sw, std::string("Line Out Playback Switch"));
+    CHECK(!choose_playback_mixer({vol_ctl("Mic Capture Volume", 0, 30), switch_ctl("Mic Capture Switch")}, m));
+    CHECK(!choose_playback_mixer({}, m));
+
+    /* zero8's Apple adapter: 'Headset Playback Volume' 0..120 = -60..0 dB (0.5 dB a step), at 80 = -20 dB: 67 % (linear
+     * in dB), and 67 % sets it back to 80 */
+    CHECK(choose_playback_mixer({vol_ctl("Headset Playback Volume", 0, 120, true, -6000, 0), switch_ctl("Headset Playback Switch")}, m));
+    CHECK(m.has_db);
+    CHECK_EQ(m.top, 120L);
+    CHECK_EQ(mixer_pct_for(m, 80), 67);
+    CHECK_EQ(mixer_cdb_for(m, 80), -2000L);
+    CHECK_EQ(mixer_raw_for(m, 67), 80L);
+    CHECK_EQ(mixer_raw_for(m, 100), 120L);
+    CHECK_EQ(mixer_raw_for(m, 0), 0L);
+    CHECK_EQ(mixer_raw_for(m, 50), 60L); /* -30 dB */
+    /* the HackBerry's Sharkoon: 'PCM' 0..45, 1 dB a step, -45..0 dB; 22 = -23 dB */
+    CHECK(choose_playback_mixer({vol_ctl("PCM Playback Volume", 0, 45, true, -4500, 0)}, m));
+    CHECK_EQ(mixer_pct_for(m, 22), 49);
+    CHECK_EQ(mixer_raw_for(m, 49), 22L);
+    /* a control that goes above 0 dB: never past 0 dB (-60..+6 dB over 0..110: 0 dB at step 100) */
+    CHECK(choose_playback_mixer({vol_ctl("Speaker Playback Volume", 0, 110, true, -6000, 600)}, m));
+    CHECK_EQ(m.top, 100L);
+    CHECK_EQ(m.db_top, 0L);
+    CHECK_EQ(mixer_raw_for(m, 100), 100L);
+    CHECK_EQ(mixer_pct_for(m, 100), 100);
+    CHECK(mixer_pct_for(m, 110) > 100); /* someone else set it louder: shown as it is */
+    /* a headset whose driver gives no dB (the kernel drops bogus values): linear in steps */
+    CHECK(choose_playback_mixer({vol_ctl("Headset Playback Volume", 0, 37)}, m));
+    CHECK(!m.has_db);
+    CHECK_EQ(mixer_raw_for(m, 50), 19L);
+    CHECK_EQ(mixer_pct_for(m, 19), 51);
+    CHECK_EQ(mixer_raw_for(m, 150), 37L);
+
+    /* the card behind an ALSA device */
+    CHECK_EQ(mixer_card_for("plughw:CARD=UC02,DEV=0"), std::string("hw:CARD=UC02"));
+    CHECK_EQ(mixer_card_for("hw:CARD=Device"), std::string("hw:CARD=Device"));
+    CHECK_EQ(mixer_card_for("default"), std::string("default"));
+    CHECK_EQ(mixer_card_for("plughw:1,0"), std::string("default"));
+
+    /* read and write through the card (the fake mixer) */
+    FakeAlsa a;
+    a.ctls = {vol_ctl("Headset Playback Volume", 0, 120, true, -6000, 0), switch_ctl("Headset Playback Switch")};
+    a.values["Headset Playback Volume"] = 80;
+    a.values["Headset Playback Switch"] = 1;
+    std::string chosen;
+    MixerChoice c;
+    MixerLevel lv;
+    CHECK_EQ(read_mixer(a, "hw:CARD=A", chosen, c, lv), 0);
+    CHECK(lv.has_mixer);
+    CHECK_EQ(lv.pct, 67);
+    CHECK(!lv.muted);
+    CHECK_EQ(chosen, std::string("hw:CARD=A"));
+    CHECK_EQ(write_mixer(a, "hw:CARD=A", c, 72), 0); /* a step up from 67 */
+    CHECK_EQ(a.values["Headset Playback Volume"], 86L);
+    CHECK_EQ(read_mixer(a, "hw:CARD=A", chosen, c, lv), 0);
+    CHECK_EQ(lv.pct, 72);
+    CHECK_EQ(write_mixer(a, "hw:CARD=A", c, 0), 0); /* 0 %: the switch mutes */
+    CHECK_EQ(a.values["Headset Playback Switch"], 0L);
+    CHECK_EQ(read_mixer(a, "hw:CARD=A", chosen, c, lv), 0);
+    CHECK(lv.muted);
+    CHECK_EQ(write_mixer(a, "hw:CARD=A", c, 5), 0); /* back up: un-muted */
+    CHECK_EQ(a.values["Headset Playback Switch"], 1L);
+    /* the card unplugged: an error, no mixer; plugged back: found again */
+    a.gone = true;
+    CHECK(read_mixer(a, "hw:CARD=A", chosen, c, lv) < 0);
+    CHECK(!lv.has_mixer);
+    a.gone = false;
+    CHECK_EQ(read_mixer(a, "hw:CARD=A", chosen, c, lv), 0);
+    CHECK(lv.has_mixer);
+    /* a card without a playback mixer: none, Vinyl's software level then */
+    FakeAlsa bare;
+    bare.ctls = {vol_ctl("Mic Capture Volume", 0, 30)};
+    chosen.clear();
+    CHECK_EQ(read_mixer(bare, "hw:CARD=B", chosen, c, lv), 0);
+    CHECK(!lv.has_mixer);
+    CHECK_EQ(write_mixer(bare, "hw:CARD=B", c, 50), -ENOENT);
+    CHECK_EQ(bare.sets, 0);
+
+    /* the steps of the strip and the keys */
+    CHECK_EQ(volume_after_step(98, kVolumeStep), 100);
+    CHECK_EQ(volume_after_step(120, kVolumeStep), 120); /* never louder than 100 by a step */
+    CHECK_EQ(volume_after_step(120, -kVolumeStep), 115);
+    CHECK_EQ(volume_after_step(3, -kVolumeStep), 0);
+    CHECK_EQ(volume_after_step(-1, kVolumeStep), 5);
+}
+
+/* D11 as changed with a sound server: the playing sink's own volume, set on the worker, shown from the server's event */
+void test_output_sink_level() {
+    FakePulse f;
+    PulseDevice dac = fake_usb_sink("Sharkoon", 50);
+    dac.volume_pct = 40;
+    PulseDevice xwf = fake_bt_sink(kXwf, 80, "speaker");
+    xwf.volume_pct = 50;
+    f.sinks = {dac, xwf};
+    f.server.default_sink = xwf.name; /* the launcher's keys reach the XWF, Vinyl plays on the DAC */
+    PulseWorker w(f);
+    SinkWatch watch;
+    ScanRequest rq;
+    rq.connect = true;
+    rq.callback = watch.callback();
+    CHECK(w.request_scan(rq));
+    ScanResult r;
+    CHECK(wait_scan(w, r));
+    watch.scanned(r);
+    OutputWorld world;
+    world.server = true;
+    world.sinks = r.sinks;
+    world.default_sink = r.info.default_sink;
+    int pct = -1;
+    bool muted = false;
+    CHECK(sink_volume_of(world, dac.name, pct, muted));
+    CHECK_EQ(pct, 40); /* the chip shows the DAC's real 40 %, not a stream level */
+
+    /* a step up sets the DAC (never the default sink), the server's event brings the level back */
+    CHECK(w.request_sink_level(dac.name, 2, volume_after_step(pct, kVolumeStep)));
+    for (int i = 0; i < 200 && w.sink_levels_done() < 1; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    CHECK(watch.take_change());
+    ScanRequest again;
+    again.connect = true;
+    CHECK(w.request_scan(again));
+    CHECK(wait_scan(w, r));
+    world.sinks = r.sinks;
+    CHECK(sink_volume_of(world, dac.name, pct, muted));
+    CHECK_EQ(pct, 45);
+    CHECK(sink_volume_of(world, xwf.name, pct, muted));
+    CHECK_EQ(pct, 50); /* the default sink untouched */
+    {
+        std::lock_guard<std::recursive_mutex> g(f.lock());
+        CHECK(!f.levels_set.empty() && f.levels_set.back().first == dac.name);
+    }
+    /* quick presses: the newest level wins, no queue */
+    f.call_delay_ms.store(20);
+    for (int lv = 50; lv <= 70; lv += 5) CHECK(w.request_sink_level(dac.name, 2, lv));
+    for (int i = 0; i < 300; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        std::lock_guard<std::recursive_mutex> g(f.lock());
+        if (!f.levels_set.empty() && f.levels_set.back().second == 70) break;
+    }
+    f.call_delay_ms.store(0);
+    {
+        std::lock_guard<std::recursive_mutex> g(f.lock());
+        CHECK_EQ(f.levels_set.back().second, 70);
+        CHECK(f.levels_set.size() < 7); /* 45 plus at most a few of the five: not one call each */
+    }
+    /* a sink that is gone: refused, nothing set */
+    CHECK_EQ(f.set_sink_level("bluez_output.00_11_22_33_44_55.1", 2, 30), kPulseNoDevice);
+    /* a reconnect: the device's own level comes back as the server reports it; the chip shows that */
+    f.remove_sink(xwf.name);
+    PulseDevice back = xwf;
+    back.index = kPulseNoIndex;
+    back.volume_pct = 35;
+    f.add_sink(back);
+    CHECK(watch.take_change());
+    CHECK(w.request_scan(again));
+    CHECK(wait_scan(w, r));
+    world.sinks = r.sinks;
+    CHECK(sink_volume_of(world, xwf.name, pct, muted));
+    CHECK_EQ(pct, 35);
+    w.stop();
+}
+
 }  // namespace
 
 void test_volume() {
     test_volume_pct();
+    test_output_mixer();
+    test_output_sink_level();
     test_stream_identity();
     test_sink_volume_follows();
     test_volume_per_output();

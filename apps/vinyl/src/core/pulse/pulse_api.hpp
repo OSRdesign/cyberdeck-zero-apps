@@ -477,6 +477,10 @@ public:
                              std::string *why = nullptr) = 0;
     virtual int open_playback(const PulsePlaybackRequest &req, std::unique_ptr<PulsePlayback> &out,
                               std::string *why = nullptr) = 0;
+    /* VINYL: sets a sink's volume to `pct` percent of the normal volume on its `channels` channels (the server's own
+     * percent, as pactl shows it) and un-mutes it above 0 %. A round trip: call it from the worker, never the UI thread.
+     * 0, kPulseMissing (libpulse lacks the call), kPulseNoDevice, kPulseState, kPulseTimeout. */
+    virtual int set_sink_level(const std::string &sink, unsigned channels, int pct) = 0;
 };
 
 /* The production implementation: loads libpulse.so.0 on the first connect(). Never null. */

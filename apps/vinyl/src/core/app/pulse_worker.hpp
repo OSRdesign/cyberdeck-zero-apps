@@ -74,6 +74,10 @@ public:
     bool request_scan(const ScanRequest &rq);
     bool request_card(const std::string &name);
     bool request_identity(std::shared_ptr<PulseCapture> stream);
+    /* VINYL: sets a sink's volume (PulseApi::set_sink_level) on the worker; a newer request replaces one still waiting, so
+     * quick presses never queue up. false only after stop(). */
+    bool request_sink_level(const std::string &sink, unsigned channels, int pct);
+    int sink_levels_done() const;
     bool scan_pending() const;
     bool card_pending() const;
     bool identity_pending() const;
@@ -95,6 +99,10 @@ private:
     std::deque<std::function<void()>> jobs_;
     bool quit_ = false;
     bool scan_busy_ = false, card_busy_ = false, ident_busy_ = false;
+    bool level_busy_ = false, level_have_ = false; /* VINYL */
+    std::string level_sink_;
+    unsigned level_channels_ = 2;
+    int level_pct_ = 0, levels_done_ = 0;
     bool scan_ready_ = false, card_ready_ = false, ident_ready_ = false;
     ScanResult scan_;
     CardResult card_;

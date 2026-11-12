@@ -55,12 +55,11 @@ std::string resume_to_json(const ResumeState &s) {
 
 int app_volume_of(const ResumeState &s, const std::string &key) {
     auto it = s.app_volumes.find(key);
-    return it != s.app_volumes.end() ? it->second : s.app_volume;
+    return it != s.app_volumes.end() ? it->second : 100;
 }
 
 void set_app_volume(ResumeState &s, const std::string &key, int level) {
     level = std::max(0, std::min(100, level));
-    s.app_volume = level;
     if (key.empty()) return;
     if (!s.app_volumes.count(key) && s.app_volumes.size() >= kMaxAppVolumes) s.app_volumes.erase(s.app_volumes.begin());
     s.app_volumes[key] = level;

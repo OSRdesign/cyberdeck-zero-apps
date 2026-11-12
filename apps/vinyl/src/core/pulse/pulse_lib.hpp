@@ -88,6 +88,11 @@ struct PulseLib {
     const char *(*proplist_gets)(const pa::Proplist *, const char *key) = nullptr;
     const char *(*strerror)(int) = nullptr;
     const char *(*get_library_version)() = nullptr;
+    /* VINYL, optional (not in complete()): the Vol chip sets the volume of the sink Vinyl plays on (D11 as changed by the
+     * owner, 2026-11-12) */
+    pa::Operation *(*context_set_sink_volume_by_name)(pa::Context *, const char *, const pa::CVolume *, pa::ContextSuccessCb,
+                                                      void *) = nullptr;
+    pa::Operation *(*context_set_sink_mute_by_name)(pa::Context *, const char *, int, pa::ContextSuccessCb, void *) = nullptr;
     bool complete() const; /* every function is set */
 };
 

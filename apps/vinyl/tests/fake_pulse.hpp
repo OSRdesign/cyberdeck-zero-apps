@@ -77,6 +77,8 @@ public:
     void set_change_callback(PulseChangeCallback cb) override;
     int open_capture(const PulseCaptureRequest &req, std::unique_ptr<PulseCapture> &out, std::string *why) override;
     int open_playback(const PulsePlaybackRequest &req, std::unique_ptr<PulsePlayback> &out, std::string *why) override;
+    int set_sink_level(const std::string &sink, unsigned channels, int pct) override; /* VINYL */
+    std::vector<std::pair<std::string, int>> levels_set; /* VINYL: every set_sink_level (sink, pct), in order */
 
     /* the server's side, driven by the tests (any thread) */
     void advance(double seconds) { clock.store(clock.load() + seconds); }

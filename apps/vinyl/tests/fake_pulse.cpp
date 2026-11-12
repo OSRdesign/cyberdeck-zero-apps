@@ -380,6 +380,22 @@ void FakePulse::add_sink(const PulseDevice &d) {
     notify(PulseChange::What::Sink, PulseChange::Kind::New, v.index);
 }
 
+int FakePulse::set_sink_level(const std::string &sink, unsigned channels, int pct) {
+    (void)channels;
+    nap();
+    std::lock_guard<std::recursive_mutex> g(mu_);
+    if (!connected_) return kPulseState;
+    bool found = false;
+    for (const PulseDevice &d : sinks) found = found || d.name == sink;
+    if (!found) return kPulseNoDevice;
+    levels_set.emplace_back(sink, pct);
+    bool was_muted = false;
+    for (const PulseDevice &d : sinks)
+        if (d.name == sink) was_muted = d.muted;
+    set_sink_volume(sink, pct, pct > 0 ? false : was_muted); /* the server's change event follows, as on a real one */
+    return 0;
+}
+
 void FakePulse::set_sink_volume(const std::string &name, int pct, bool muted) {
     std::lock_guard<std::recursive_mutex> g(mu_);
     for (PulseDevice &d : sinks)

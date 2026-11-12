@@ -65,6 +65,47 @@ bool PulseWorker::request_scan(const ScanRequest &rq) {
     return true;
 }
 
+bool PulseWorker::request_sink_level(const std::string &sink, unsigned channels, int pct) { /* VINYL */
+    {
+        std::lock_guard<std::mutex> g(mu_);
+        if (quit_) return false;
+        level_sink_ = sink;
+        level_channels_ = channels;
+        level_pct_ = pct;
+        level_have_ = true;
+        if (level_busy_) return true; /* the running loop takes the newest */
+        level_busy_ = true;
+        jobs_.push_back([this] {
+            for (;;) {
+                std::string s;
+                unsigned ch = 2;
+                int pc = 0;
+                {
+                    std::lock_guard<std::mutex> g2(mu_);
+                    if (!level_have_ || quit_) {
+                        level_busy_ = false;
+                        return;
+                    }
+                    s = level_sink_;
+                    ch = level_channels_;
+                    pc = level_pct_;
+                    level_have_ = false;
+                }
+                api_.set_sink_level(s, ch, pc);
+                std::lock_guard<std::mutex> g2(mu_);
+                ++levels_done_;
+            }
+        });
+    }
+    cv_.notify_all();
+    return true;
+}
+
+int PulseWorker::sink_levels_done() const {
+    std::lock_guard<std::mutex> g(mu_);
+    return levels_done_;
+}
+
 bool PulseWorker::request_card(const std::string &name) {
     {
         std::lock_guard<std::mutex> g(mu_);

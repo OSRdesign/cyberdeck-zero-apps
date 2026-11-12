@@ -51,7 +51,7 @@ output lists are read in the background).
 | Folder up | Left or Backspace (browser) | the ".." row |
 | Queue pane (800x480 and wider) | Up / Down pick a track, Enter plays it | tap picks, tap again plays |
 | Queue editing | U move up, D move down, Delete or X remove, C clear all | the four buttons |
-| Volume | `-` / `=`: Vinyl's own volume, only for an output the system volume does not reach | tap the volume chip: the volume strip ("-", the level, its bar, "+") replaces the seek row for 4 s (a second tap closes it); its buttons change Vinyl's own volume there, and the system volume (through the launcher) on an output it reaches; where nothing can change the volume a tap shows "Volume is not available on this board" |
+| Volume | `-` / `=`: the volume of the output Vinyl plays on, 5 % a step | tap the volume chip: the volume strip ("-", the level, its bar, "+") replaces the seek row for 4 s (a second tap closes it); its buttons set the playing output's volume, the chip and the strip show its real level; where nothing can change it a tap shows "Volume is not available on this board" |
 | Close a notice | Esc | tap it (it also goes after 6 s, 8 s for a disconnect) |
 | Back; at the browser, quit | Esc | the header's Esc |
 | Headset, speaker, keyboard media keys | Play/Pause, PlayCD, PauseCD (a toggle), Next, Previous (as Right / Left above, held too), Stop (pause and back to the start) | |
@@ -93,13 +93,16 @@ Korean titles draw with the launcher's Noto Sans CJK.
   (the node re-created) is followed on the same device; a device that goes away pauses playback.
 - **Without one** (the Lite boards: the deck, zero8, Pi 3A+): ALSA `default` (Automatic) and the cards with a playback
   device (through `plughw`, never `hw:`); the output page says "Bluetooth audio is not set up on this board."
-- **Volume**: the volume keys are the launcher's and act on the default output; the volume chip shows that level, and
-  the volume strip's buttons set it through the launcher (`volume set`, where board.state's `requests` lists `volume`).
-  For an output the system volume does not reach (a chosen output that is not the default, or ALSA without a mixer the
-  launcher drives) the chip shows Vinyl's own volume, changed with `-` / `=` or the strip and kept per output (the same
-  after a headset reconnects). With a sound server the chip follows the sink's volume through the server's change events
-  (a volume key or a headset's buttons show within about half a second). Vinyl's stream itself always plays at 100 %,
-  with its own restore key, so a server never brings back another app's stream level.
+- **Volume** (decision D11 as the owner changed it, 2026-11-12): the volume chip, the strip and `-` / `=` set the volume
+  of the output Vinyl plays on and show its real level. With a sound server that is the sink's own volume, in the
+  server's percent (the number `pactl` and `wpctl` show), whether it is the default sink or not; a Bluetooth headset
+  keeps its level across a reconnect, and if the headset or the system changes it, the chip shows the new value. The
+  chip follows the server's change events, so the launcher's volume keys (on the default sink) and a headset's own
+  buttons show within about half a second. Without a sound server it is the card's playback mixer control (`Master`,
+  `PCM`, `Speaker`, `Headphone`, `Headset`...), linear in dB where the driver reports dB, never above 0 dB; only a card
+  with no playback mixer gets Vinyl's software volume. Vinyl's stream itself always plays at 100 %, with its own restore
+  key, so a server never brings back another app's stream level. The launcher's volume keys still act on the default
+  output only (a launcher matter).
 
 ## Background playback
 
@@ -129,7 +132,7 @@ dependencies), `sudo dpkg -r vinyl` to remove it.
 
 | Path | What |
 |---|---|
-| `~/.config/vinyl/state.json` | the queue, its order, shuffle, repeat, the position, the output, the browser's folder, the in-app volume |
+| `~/.config/vinyl/state.json` | the queue, its order, shuffle, repeat, the position, the output, the browser's folder, the software level of an output without a mixer |
 
 Delete it to start fresh. Vinyl writes nothing else (it never writes tags or music files).
 

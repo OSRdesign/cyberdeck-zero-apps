@@ -654,6 +654,23 @@ public:
         return c.run_op(c.L->context_get_sink_info_list(c.ctx, sink_cb, &d), kOpTimeoutMs);
     }
 
+    int set_sink_level(const std::string &sink, unsigned channels, int pct) override { /* VINYL */
+        std::lock_guard<std::mutex> g(mu_);
+        if (!conn_) return kPulseState;
+        Conn &c = *conn_;
+        if (!c.L->context_set_sink_volume_by_name) return kPulseMissing;
+        LockGuard lg(c);
+        if (!c.ready()) return kPulseDisconnected;
+        pa::CVolume cv{};
+        cv.channels = static_cast<uint8_t>(std::max(1u, std::min(channels, pa::kChannelsMax)));
+        const uint32_t v = static_cast<uint32_t>((static_cast<uint64_t>(std::max(0, std::min(pct, 100))) * 0x10000 + 50) / 100);
+        for (unsigned ch = 0; ch < cv.channels; ++ch) cv.values[ch] = v;
+        int r = c.run_op(c.L->context_set_sink_volume_by_name(c.ctx, sink.c_str(), &cv, nullptr, nullptr), kOpTimeoutMs);
+        if (r == 0 && pct > 0 && c.L->context_set_sink_mute_by_name)
+            r = c.run_op(c.L->context_set_sink_mute_by_name(c.ctx, sink.c_str(), 0, nullptr, nullptr), kOpTimeoutMs);
+        return r;
+    }
+
     int list_cards(std::vector<PulseCard> &out) override {
         std::lock_guard<std::mutex> g(mu_);
         out.clear();
