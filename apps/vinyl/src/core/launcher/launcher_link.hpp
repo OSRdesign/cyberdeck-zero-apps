@@ -8,8 +8,10 @@
  *                    (the files and the parser are Cassette's launcher_facts). The volume chip shows the system volume
  *                    from here: the launcher draws nothing over a fullscreen app.
  *   LauncherRequests launcher.sock requests on a worker thread (never the LVGL thread, at most about 200 ms, silent without
- *                    the socket): "dim allow" while music plays in front on a battery board (decision D16), "dim deny" when
- *                    it stops for a while.
+ *                    the socket): "dim allow" while music plays in front where board.state's `requests` lists `dim` (a
+ *                    battery board with backlight levels; decision D16), "dim deny" when it stops for a while; "volume set
+ *                    N" from the volume strip's buttons where `requests` lists `volume` and the system volume is the
+ *                    output's (decision D11: an explicit in-app system-volume control).
  * LVGL-free.
  */
 #pragma once
@@ -34,9 +36,12 @@ struct LauncherStatus {
     int battery = -1;         /* board.state battery: 0 none, 1 present, 2 not set up, -1 unknown */
     std::string backlight;    /* "none" | "onoff" | "levels" | "" */
     int sound = -1;           /* board.state sound: 0 / 1 / 2, -1 unknown */
-    std::string requests;     /* the verbs launcher.sock answers */
+    std::string requests;     /* the verbs launcher.sock answers on this board ("hello,caps,toast,beep,volume,...") */
     LauncherFacts facts;      /* bt_audio_dev, bt_audio, bt_hfp */
     bool battery_board() const { return battery == 1 && backlight == "levels"; }
+    /* `requests` lists the verb (APP-CONTRACT 5c: dim only on a battery board with levels, volume only with sound); an
+     * older launcher without the key lists none */
+    bool has_request(const std::string &verb) const;
     bool operator==(const LauncherStatus &o) const;
     bool operator!=(const LauncherStatus &o) const { return !(*this == o); }
 };

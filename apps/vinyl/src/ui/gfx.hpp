@@ -40,7 +40,7 @@ void set_bg(lv_obj_t *o, std::uint32_t color);
 /* The drafts' icons (SVG, viewBox 24), redrawn from lines, triangles and rectangles. */
 enum class Icon {
     None, Bluetooth, Shuffle, Prev, Play, Pause, Next, Repeat, Queue, Output, Browse, Sleep, Equalizer, Info, Phone,
-    Warning, Chevron, Up, Down, Minus, Trash,
+    Warning, Chevron, Up, Down, Minus, Plus, Trash,
 };
 /* Draws `ic` px big, centred on (cx, cy), in a draw event's layer. */
 void draw_icon(lv_layer_t *layer, Icon ic, int cx, int cy, int px, std::uint32_t rgb, lv_opa_t opa = LV_OPA_COVER);

@@ -103,6 +103,37 @@ bool Dedupe::accept(MediaAction a, uint64_t now_ms) {
     return true;
 }
 
+bool MediaPresses::feed(const std::string &source, MediaAction a, int value, uint64_t now_ms, MediaEvent &ev) {
+    if (a == MediaAction::None || value == 2) return false;
+    const bool held_kind = a == MediaAction::Next || a == MediaAction::Prev;
+    const int k = static_cast<int>(a);
+    if (value == 1) {
+        if (!dedupe_.accept(a, now_ms)) return false;
+        if (held_kind) held_[k] = source;
+        ev = MediaEvent{a, true};
+        return true;
+    }
+    if (value != 0 || !held_kind) return false;
+    auto it = held_.find(k);
+    if (it == held_.end() || it->second != source) return false; /* the release of a press that did not act */
+    held_.erase(it);
+    ev = MediaEvent{a, false};
+    return true;
+}
+
+std::vector<MediaEvent> MediaPresses::drop_source(const std::string &source) {
+    std::vector<MediaEvent> out;
+    for (auto it = held_.begin(); it != held_.end();) {
+        if (it->second == source) {
+            out.push_back(MediaEvent{static_cast<MediaAction>(it->first), false});
+            it = held_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    return out;
+}
+
 MediaKeyReader::~MediaKeyReader() { stop(); }
 
 void MediaKeyReader::start(const std::string &devices_path, const std::string &dev_dir) {
@@ -122,9 +153,9 @@ void MediaKeyReader::stop() {
     names_.clear();
 }
 
-std::vector<MediaAction> MediaKeyReader::take() {
+std::vector<MediaEvent> MediaKeyReader::take() {
     std::lock_guard<std::mutex> g(mu_);
-    std::vector<MediaAction> v(pending_.begin(), pending_.end());
+    std::vector<MediaEvent> v(pending_.begin(), pending_.end());
     pending_.clear();
     return v;
 }
@@ -136,9 +167,19 @@ std::vector<std::string> MediaKeyReader::open_nodes() const {
     return v;
 }
 
-bool MediaKeyReader::accept_other(MediaAction a) {
+bool MediaKeyReader::accept_other(MediaAction a, int value, MediaEvent &ev) {
     std::lock_guard<std::mutex> g(mu_);
-    return dedupe_.accept(a, mono_ms_now());
+    return presses_.feed("lvgl", a, value, mono_ms_now(), ev);
+}
+
+void MediaKeyReader::close_node(const std::string &event) {
+    auto it = fds_.find(event);
+    if (it != fds_.end()) {
+        ::close(it->second);
+        fds_.erase(it);
+    }
+    names_.erase(event);
+    for (const MediaEvent &e : presses_.drop_source(event)) pending_.push_back(e); /* a held button whose node went away */
 }
 
 void MediaKeyReader::rescan() {
@@ -159,15 +200,10 @@ void MediaKeyReader::rescan() {
         names_[d.event] = d.name;
         std::fprintf(stderr, "[vinyl] media keys: reading \"%s\" (%s)\n", d.name.c_str(), d.event.c_str());
     }
-    for (auto it = fds_.begin(); it != fds_.end();) {
-        if (!want.count(it->first)) {
-            ::close(it->second);
-            names_.erase(it->first);
-            it = fds_.erase(it);
-        } else {
-            ++it;
-        }
-    }
+    std::vector<std::string> gone;
+    for (const auto &kv : fds_)
+        if (!want.count(kv.first)) gone.push_back(kv.first);
+    for (const std::string &e : gone) close_node(e);
 }
 
 void MediaKeyReader::run() {
@@ -196,12 +232,7 @@ void MediaKeyReader::run() {
         for (size_t i = 0; i < pfds.size(); ++i) {
             if (pfds[i].revents & (POLLERR | POLLHUP | POLLNVAL)) {
                 std::lock_guard<std::mutex> g(mu_);
-                auto it = fds_.find(names[i]);
-                if (it != fds_.end()) {
-                    ::close(it->second);
-                    fds_.erase(it);
-                    names_.erase(names[i]);
-                }
+                close_node(names[i]);
                 continue;
             }
             if (!(pfds[i].revents & POLLIN)) continue;
@@ -211,11 +242,12 @@ void MediaKeyReader::run() {
                 if (n <= 0) break;
                 const size_t count = static_cast<size_t>(n) / sizeof(input_event);
                 for (size_t k = 0; k < count; ++k) {
-                    if (ev[k].type != EV_KEY || ev[k].value != 1) continue;
+                    if (ev[k].type != EV_KEY) continue;
                     const MediaAction a = media_action_for(ev[k].code);
                     if (a == MediaAction::None) continue;
                     std::lock_guard<std::mutex> g(mu_);
-                    if (dedupe_.accept(a, mono_ms_now())) pending_.push_back(a);
+                    MediaEvent me;
+                    if (presses_.feed(names[i], a, ev[k].value, mono_ms_now(), me)) pending_.push_back(me);
                 }
                 if (static_cast<size_t>(n) < sizeof ev) break;
             }

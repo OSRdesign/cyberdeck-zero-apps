@@ -70,6 +70,13 @@ const Track kTracks[] = {
     {"Hercules", "Hercules - You Belong", "You Belong", "Hercules and Love Affair", "Hercules and Love Affair", "2008", 305},
 };
 
+/* the "cjk" variant (file names and tags in Japanese, Chinese and Korean) */
+const Track kCjkTracks[] = {
+    {"東アジア", "久石譲 - あの夏へ", "あの夏へ", "久石譲", "千と千尋の神隠し サウンドトラック", "2001", 395},
+    {"東アジア", "邓丽君 - 月亮代表我的心", "月亮代表我的心", "邓丽君", "岛国之情歌第四集", "1977", 207},
+    {"東アジア/한국", "김광석 - 서른 즈음에", "서른 즈음에", "김광석", "김광석 네번째", "1994", 287},
+};
+
 int rm_cb(const char *p, const struct stat *, int, struct FTW *) { return ::remove(p); }
 
 }  // namespace
@@ -108,7 +115,7 @@ bool write_demo_wav(const std::string &path, double seconds, uint32_t rate, cons
     return ok;
 }
 
-bool make_demo_world(DemoWorld &w, bool lite, const std::string &state) {
+bool make_demo_world(DemoWorld &w, bool lite, const std::string &state, const std::string &variant) {
     const char *tmp = std::getenv("TMPDIR");
     std::string base = (tmp && *tmp) ? tmp : "/tmp";
     w.root = base + "/vinyl-demo-" + std::to_string(::getpid());
@@ -116,7 +123,9 @@ bool make_demo_world(DemoWorld &w, bool lite, const std::string &state) {
     w.config = w.root + "/config";
     w.playlist = w.music + "/Playlist SKI.m3u";
     w.lite = lite;
+    w.empty = variant == "empty";
     FileOps &ops = posix_file_ops();
+    if (w.empty) return make_dirs(ops, w.config + "/vinyl") >= 0; /* no music folder, no saved state */
     if (make_dirs(ops, w.music) < 0 || make_dirs(ops, w.config + "/vinyl") < 0) return false;
     std::string m3u = "#EXTM3U\n";
     std::vector<std::string> items;
@@ -143,6 +152,23 @@ bool make_demo_world(DemoWorld &w, bool lite, const std::string &state) {
     s.browse = w.music + "/Phoenix";
     s.repeat = Repeat::All; /* the drafts show the repeat mark */
     s.output = "auto";
+    if (variant == "cjk") {
+        s.items.clear();
+        s.order.clear();
+        int k = 0;
+        for (const Track &t : kCjkTracks) {
+            const std::string dir = w.music + "/" + t.folder;
+            make_dirs(ops, dir);
+            const std::string path = dir + "/" + t.file + ".wav";
+            write_demo_wav(path, t.seconds, 44100, t.title, t.artist, t.album, t.date, ++k);
+            s.order.push_back(static_cast<int>(s.items.size()));
+            s.items.push_back(path);
+        }
+        s.current = 0;
+        s.position_ms = 61000;
+        s.source = w.music + "/" + kCjkTracks[0].folder;
+        s.browse = s.source;
+    }
     (void)state;
     return save_resume(w.config + "/vinyl/state.json", s) == 0;
 }

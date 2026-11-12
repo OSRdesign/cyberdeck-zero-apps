@@ -382,6 +382,11 @@ void draw_icon(lv_layer_t *layer, Icon ic, int cx, int cy, int px, std::uint32_t
         p.width = 2.4;
         p.seg(5, 12, 19, 12);
         break;
+    case Icon::Plus: /* the volume strip's "+" (the Minus with its upright) */
+        p.width = 2.4;
+        p.seg(5, 12, 19, 12);
+        p.seg(12, 5, 12, 19);
+        break;
     case Icon::Trash:
         p.width = 2.2;
         p.seg(5, 7, 19, 7);

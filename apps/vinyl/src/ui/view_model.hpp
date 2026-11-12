@@ -27,11 +27,10 @@ struct RowView {
     Mark mark = Mark::Dot;
     bool playing = false;       /* blue dot: the playing track / the chosen output */
     bool dimmed = false;        /* paired, not connected */
-    bool chevron_too = false;   /* the output rows: a dot and a chevron */
     bool mono_value = true;     /* the value in JetBrains Mono (durations) */
     bool operator==(const RowView &o) const {
         return text == o.text && value == o.value && mark == o.mark && playing == o.playing && dimmed == o.dimmed &&
-               chevron_too == o.chevron_too && mono_value == o.mono_value;
+               mono_value == o.mono_value;
     }
 };
 
@@ -40,6 +39,9 @@ struct NowView {
     std::string count;      /* "03/20" */
     std::string vol;        /* "Vol 60" */
     bool vol_bt = false;
+    int vol_level = -1;     /* the level the volume strip shows, 0..100 (-1: not known) */
+    bool vol_adjustable = false; /* the strip's "-" / "+" change it (the in-app volume, or the system volume through the
+                                  * launcher's volume request); false: a tap on the chip does nothing */
     std::string title, artist, album;
     std::string format;     /* "FLAC 44.1 kHz / 16 bit" */
     std::string output;     /* "Evolve 65, music quality" */
@@ -97,6 +99,8 @@ struct Actions {
     std::function<void(Page, int)> row;              /* a tap on a row */
     std::function<void(int)> queue_button;           /* 0 move up, 1 move down, 2 remove, 3 clear all */
     std::function<void()> mini_open;                 /* the mini player (opens now playing) */
+    std::function<void(bool, int)> transport;        /* previous (false) / next (true): 0 press, 1 release, 2 cancel */
+    std::function<void(int)> volume_step;            /* the volume strip's "-" / "+": -5 / +5 */
 };
 
 } // namespace ui

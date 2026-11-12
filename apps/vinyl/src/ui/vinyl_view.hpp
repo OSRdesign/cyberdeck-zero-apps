@@ -6,13 +6,16 @@
  *   Now      now playing: the header chips (queue position, centred Esc, volume), the cream panel, the sleeve with the
  *            record sliding out behind it (turning only while playing), title / artist / album, the format and output
  *            chips, the time row with the seek bar (a tap seeks: no dragging), the transport keys, the class's extras
- *            (up next, the bottom row, the queue pane of the large class);
+ *            (up next, the bottom row, the queue pane of the large class); a tap on the volume chip puts the volume
+ *            strip ("-", the level and its bar, "+") in place of the seek row for 4 s;
  *   Browser  the folder list with the mini player;
  *   Queue    the play order with Move up, Move down, Remove, Clear all (no dragging);
  *   Output   the output chooser with its hint strip (or the "not set up" notice strip);
  *   Notices  (a demonstration page for the scenes only: the four notices of the notices draft).
  * Where the drawing makes a control smaller than the toolkit's touch target, the control keeps its look and gets a larger
- * transparent hit box. The view only draws: every action goes to the controller through Actions. LVGL thread only.
+ * transparent hit box, never overlapping a neighbour's (layout::separate_hits). The previous and next buttons report
+ * press, release and cancel (the transport press decides). The view only draws: every action goes to the controller
+ * through Actions. LVGL thread only.
  */
 #pragma once
 

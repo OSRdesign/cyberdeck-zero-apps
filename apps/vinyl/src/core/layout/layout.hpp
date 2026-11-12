@@ -114,5 +114,18 @@ ui::Fit now_fit(const NowGeom &g, int screen_w, int screen_h, int body_y);
 /* Where a notice strip goes on the now-playing page (design px): across the seek row, its bottom on the row's bottom. */
 R notice_box_now(const NowGeom &g, double height);
 
+/* The touch areas of a page (screen px). A control drawn smaller than the toolkit's TARGET gets a larger invisible area
+ * (grow_hit: the drawn box grown to min_w x min_h around its centre). split_pair keeps two neighbours' areas apart
+ * (design QA D-33, 2026-11-12: the mini player's play and next keys) without making either smaller than `min` (the
+ * harness's size check): the areas meet at the middle of the gap between the drawn boxes, along the axis where the
+ * drawn boxes are farther apart, and an area that became smaller than min there grows away from the other one again.
+ * Areas that do not overlap, and drawn boxes that overlap each other, are left as they are. */
+struct HitArea {
+    R drawn, area;
+};
+R grow_hit(const R &drawn, double min_w, double min_h);
+void split_pair(HitArea &a, HitArea &b, double min);
+bool overlaps(const R &a, const R &b);
+
 }  // namespace layout
 }  // namespace vinyl

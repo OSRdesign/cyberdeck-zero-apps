@@ -12,6 +12,9 @@
  *             but not connected), or, with VINYL_DEMO_LITE=1, a board without a server (ALSA cards, Bluetooth not set up);
  *   sinks     a null output that takes the frames at the speed they would be heard;
  *   launcher  the volume 60.
+ * Two variants for the design-QA scenes: "empty" (VINYL_DEMO_EMPTY=1: no music folder at all and no saved state, the first
+ * start on a board without ~/Music) and "cjk" (VINYL_DEMO_CJK=1: a folder 東アジア with a sub-folder 한국 and three tracks
+ * whose file names and tags are Japanese, Chinese and Korean, the Japanese one playing).
  * LVGL-free.
  */
 #pragma once
@@ -30,10 +33,12 @@ struct DemoWorld {
     std::string config;     /* <root>/config (XDG_CONFIG_HOME) */
     std::string playlist;   /* <music>/Playlist SKI.m3u */
     bool lite = false;
+    bool empty = false;     /* the "empty" variant: no music folder (the app gets no root) */
 };
 
-/* Creates the folder (under $TMPDIR or /tmp, unique per process) with its files and the resume file. */
-bool make_demo_world(DemoWorld &w, bool lite, const std::string &state);
+/* Creates the folder (under $TMPDIR or /tmp, unique per process) with its files and the resume file. variant: "",
+ * "empty" or "cjk" (above). */
+bool make_demo_world(DemoWorld &w, bool lite, const std::string &state, const std::string &variant = "");
 void remove_demo_world(const DemoWorld &w);
 
 OutputWorld demo_output_world(bool lite);

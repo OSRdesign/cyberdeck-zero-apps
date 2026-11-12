@@ -197,6 +197,37 @@ R notice_box_now(const NowGeom &g, double height) {
     return R{x0, bottom - height, x1 - x0, height};
 }
 
+R grow_hit(const R &d, double min_w, double min_h) {
+    const double w = std::max(d.w, min_w), h = std::max(d.h, min_h);
+    return R{d.x - (w - d.w) / 2, d.y - (h - d.h) / 2, w, h};
+}
+
+bool overlaps(const R &a, const R &b) { return a.x < b.right() && b.x < a.right() && a.y < b.bottom() && b.y < a.bottom(); }
+
+void split_pair(HitArea &a, HitArea &b, double min) {
+    if (!overlaps(a.area, b.area)) return;
+    const double gx = std::max(b.drawn.x - a.drawn.right(), a.drawn.x - b.drawn.right());
+    const double gy = std::max(b.drawn.y - a.drawn.bottom(), a.drawn.y - b.drawn.bottom());
+    if (gx < 0 && gy < 0) return; /* the drawings themselves overlap */
+    if (gx >= gy) {
+        HitArea &l = a.drawn.x <= b.drawn.x ? a : b, &r = &l == &a ? b : a;
+        const double m = (l.drawn.right() + r.drawn.x) / 2;
+        const double l0 = std::min(l.area.x, m - min), r1 = std::max(r.area.right(), m + min);
+        l.area.x = l0;
+        l.area.w = m - l0;
+        r.area.x = m;
+        r.area.w = r1 - m;
+    } else {
+        HitArea &t = a.drawn.y <= b.drawn.y ? a : b, &u = &t == &a ? b : a;
+        const double m = (t.drawn.bottom() + u.drawn.y) / 2;
+        const double t0 = std::min(t.area.y, m - min), u1 = std::max(u.area.bottom(), m + min);
+        t.area.y = t0;
+        t.area.h = m - t0;
+        u.area.y = m;
+        u.area.h = u1 - m;
+    }
+}
+
 ListGeom list_geom(ListPage page, int sw, int sh, int body_y) {
     ListGeom l;
     const NowGeom g = now_geom(size_class(sw, sh));

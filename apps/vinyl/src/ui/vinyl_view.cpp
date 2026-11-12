@@ -61,6 +61,50 @@ lv_obj_t *hit(lv_obj_t *parent, int x, int y, int w, int h, int min_w, int min_h
     return o;
 }
 
+/* The press phases of a held button (the transport press: previous and next act on the release, a long press scans). */
+enum Phase { kPress = 0, kRelease = 1, kCancel = 2 };
+
+struct HoldData {
+    std::function<void(int)> fn;
+};
+
+void hold_event_cb(lv_event_t *e) {
+    auto *d = static_cast<HoldData *>(lv_obj_get_user_data(lv_event_get_target_obj(e)));
+    if (!d || !d->fn) return;
+    const lv_event_code_t c = lv_event_get_code(e);
+    if (c == LV_EVENT_PRESSED) d->fn(kPress);
+    else if (c == LV_EVENT_RELEASED) d->fn(kRelease);
+    else if (c == LV_EVENT_PRESS_LOST) d->fn(kCancel); /* the finger slid off: no short action */
+}
+void hold_delete_cb(lv_event_t *e) {
+    lv_obj_t *o = lv_event_get_target_obj(e);
+    delete static_cast<HoldData *>(lv_obj_get_user_data(o));
+    lv_obj_set_user_data(o, nullptr);
+}
+
+/* hit() for a held button: press, release and cancel instead of a click */
+lv_obj_t *hold_hit(lv_obj_t *parent, int x, int y, int w, int h, int min_w, int min_h, std::function<void(int)> fn) {
+    const int hw = std::max(w, min_w), hh = std::max(h, min_h);
+    lv_obj_t *o = lv_obj_create(parent);
+    plain(o);
+    lv_obj_add_flag(o, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_pos(o, x - (hw - w) / 2, y - (hh - h) / 2);
+    lv_obj_set_size(o, hw, hh);
+    lv_obj_set_user_data(o, new HoldData{std::move(fn)});
+    lv_obj_add_event_cb(o, hold_event_cb, LV_EVENT_PRESSED, nullptr);
+    lv_obj_add_event_cb(o, hold_event_cb, LV_EVENT_RELEASED, nullptr);
+    lv_obj_add_event_cb(o, hold_event_cb, LV_EVENT_PRESS_LOST, nullptr);
+    lv_obj_add_event_cb(o, hold_delete_cb, LV_EVENT_DELETE, nullptr);
+    return o;
+}
+
+/* places a touch area (screen px, rounded edge by edge so that two areas that meet never overlap) */
+void place_area(lv_obj_t *o, const layout::R &a) {
+    const int x0 = ri(a.x), y0 = ri(a.y), x1 = ri(a.right()), y1 = ri(a.bottom());
+    lv_obj_set_pos(o, x0, y0);
+    lv_obj_set_size(o, std::max(1, x1 - x0), std::max(1, y1 - y0));
+}
+
 /* ------------------------------------------------------------------------------------------------ images */
 
 struct Img {
@@ -169,7 +213,7 @@ private:
         r.chev = icon_obj(r.row, Icon::Chevron, w_ - ri(chev_r_) - cw, (row_h_ - cw) / 2, cw, cw, cw, col::kRowValue);
         r.text = label(r.row, Face::Bold, text_px_, col::kRowText, ri(text_x_), 0, 10);
         lv_obj_set_style_text_line_space(r.text, 0, 0);
-        r.value = label(r.row, Face::Mono, value_px_, col::kRowValue, 0, 0, 0, LV_TEXT_ALIGN_RIGHT);
+        r.value = label(r.row, Face::Mono, value_px_, col::kRowValue, 0, 0, 10, LV_TEXT_ALIGN_RIGHT); /* one line, dots */
         lv_obj_add_flag(r.row, LV_OBJ_FLAG_HIDDEN);
         return r;
     }
@@ -180,8 +224,10 @@ private:
         lv_obj_set_y(w.row, i * row_h_);
         show(w.row, true);
         lv_obj_set_style_bg_opa(w.row, i == selected_ ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
+        /* the row's kind (design QA D-45): a chevron opens (folders, playlists), a dot acts (tracks, queue rows, outputs;
+         * blue for the playing track and the chosen output), no mark informs */
         const bool dot = v.mark == RowView::Mark::Dot;
-        const bool chev = v.mark == RowView::Mark::Chevron || v.chevron_too;
+        const bool chev = v.mark == RowView::Mark::Chevron;
         show(w.dot, dot);
         if (dot) set_bg(w.dot, v.dimmed ? col::kDotDim : v.playing ? col::kPlaying : col::kWhite);
         show(w.chev, chev);
@@ -189,16 +235,26 @@ private:
         const lv_font_t *vf = font(v.mono_value ? Face::Mono : Face::Bold, value_px_);
         if (lv_obj_get_style_text_font(w.value, LV_PART_MAIN) != vf) lv_obj_set_style_text_font(w.value, vf, 0);
         set_text(w.value, v.value);
-        const int vw = v.value.empty() ? 0 : text_width(vf, v.value) + 2;
-        const int right = chev && !v.chevron_too ? ri(chev_r_) + ri(16 * s_) + ri(4 * s_) : ri(value_r_);
+        const lv_font_t *tf = font(Face::Bold, text_px_);
+        const int right = chev ? ri(chev_r_) + ri(16 * s_) + ri(4 * s_) : ri(value_r_);
+        /* the name and the value share the row; when both do not fit, the name keeps its width up to 60 % of the room
+         * and the value ends with dots (a narrow screen: "Auto" before "follows system: Evolve 65") */
+        const int room = std::max(20, w_ - ri(text_x_) - right - ri(8 * s_));
+        const int vnat = v.value.empty() ? 0 : text_width(vf, v.value) + 2;
+        const int tnat = text_width(tf, v.text) + 2;
+        int vw = vnat, tw = room - vnat;
+        if (vnat > 0 && tnat + vnat > room) {
+            tw = std::min(tnat, std::max(room - vnat, room * 3 / 5));
+            vw = std::max(0, room - tw);
+        }
+        tw = std::max(10, tw);
+        show(w.value, vw > 0);
+        lv_obj_set_size(w.value, std::max(1, vw), lv_font_get_line_height(vf));
         lv_obj_set_pos(w.value, w_ - right - vw, (row_h_ - lv_font_get_line_height(vf)) / 2);
-        lv_obj_set_width(w.value, std::max(1, vw));
         const uint32_t tc = v.dimmed ? col::kRowDim : col::kRowText;
         lv_obj_set_style_text_color(w.text, lv_color_hex(tc), 0);
         lv_obj_set_style_text_color(w.value, lv_color_hex(v.dimmed ? col::kDotDim : col::kRowValue), 0);
         set_text(w.text, v.text);
-        const lv_font_t *tf = font(Face::Bold, text_px_);
-        const int tw = std::max(10, w_ - ri(text_x_) - right - vw - ri(8 * s_));
         lv_obj_set_width(w.text, tw);
         lv_obj_set_y(w.text, (row_h_ - lv_font_get_line_height(tf)) / 2);
     }
@@ -268,6 +324,12 @@ struct Chip {
         lv_label_set_long_mode(text, LV_LABEL_LONG_MODE_DOTS);
     }
 
+    /* the width the text needs (0: no chip) */
+    int natural(const std::string &t, bool bt) const {
+        if (t.empty() || !box) return 0;
+        return pad + (bt ? icon_px + gap : 0) + text_width(font(face, px), t) + pad + 1;
+    }
+
     /* the chip's width follows its text */
     void set(const std::string &t, bool bt, int at_x = -1) {
         show(box, !t.empty());
@@ -278,7 +340,7 @@ struct Chip {
         if (at_x >= 0) x = at_x;
         const lv_font_t *f = font(face, px);
         const int iw = bt ? icon_px + gap : 0;
-        int tw = text_width(f, t);
+        int tw = text_width(f, t) + 1;
         int w = pad + iw + tw + pad;
         if (max_w > 0 && w > max_w) {
             w = max_w;
@@ -345,7 +407,6 @@ struct View::Impl {
     Fit fit;
     int target = 44;
     int list_row = 24; /* the toolkit's LIST_ROW: 5 mm */
-    bool portrait = false; /* no title in the band */
     cp0_ui_roller_page_t tk{};
     std::unique_ptr<cp0::ui::Page> page; /* the toolkit's header: title, Esc, the shared status strip */
     int body_y = 0;
@@ -364,8 +425,16 @@ struct View::Impl {
     lv_obj_t *title = nullptr, *artist = nullptr, *album = nullptr;
     Chip chips[4]; /* format, volume, output, gapless */
     lv_obj_t *out_hit = nullptr; /* the output chip opens the chooser (the 480x320 draft has no Output key) */
+    lv_obj_t *vol_hit = nullptr; /* the volume chip shows the volume strip (design QA D-28) */
     lv_obj_t *time = nullptr, *remain = nullptr, *seek_track = nullptr, *seek_fill = nullptr, *seek_knob = nullptr;
+    lv_obj_t *seek_hit = nullptr;
     int seek_x = 0, seek_w = 1;
+    /* the volume strip: for a few seconds in place of the seek row, "-", the level, its bar, "+" */
+    lv_obj_t *vol_root = nullptr, *vol_num = nullptr, *vol_track = nullptr, *vol_fill = nullptr;
+    Button vol_minus, vol_plus;
+    lv_timer_t *vol_timer = nullptr;
+    bool vol_mode = false;
+    static constexpr uint32_t kVolStripMs = 4000;
     std::map<std::string, Button> btns;
     lv_obj_t *repeat_dash = nullptr, *shuffle_dash = nullptr, *repeat_one = nullptr;
     lv_obj_t *up_box = nullptr, *up_cap = nullptr, *up_text = nullptr;
@@ -388,7 +457,9 @@ struct View::Impl {
         /* browser mini player */
         lv_obj_t *mini_disc = nullptr, *mini_title = nullptr, *mini_sub = nullptr, *mini_bar = nullptr, *mini_fill = nullptr;
         Button mini_play, mini_next;
+        lv_obj_t *mini_open_hit = nullptr;
         Img mini_disc_img, mini_label_img;
+        int strip_y0 = 0, strip_h0 = 0, list_y = 0; /* the output page's hint strip as laid out (it grows to its text) */
         std::vector<Button> qbtns;
         uint64_t rows_gen = UINT64_MAX, rows_ver = UINT64_MAX;
         int rows = 0, sel = -2;
@@ -435,8 +506,15 @@ struct View::Impl {
             return bt;
         }
         const std::string id = b.id;
-        bt.hitbox = hit(root, x, y, w, h, target, target, [this, id] { press(id); });
+        if (id == "prev" || id == "next") /* the transport press: acts on the release, a long press scans */
+            bt.hitbox = hold_hit(root, x, y, w, h, target, target, [this, id](int ph) { transport(id == "next", ph); });
+        else
+            bt.hitbox = hit(root, x, y, w, h, target, target, [this, id] { press(id); });
         return bt;
+    }
+
+    void transport(bool next, int phase) {
+        if (act.transport) act.transport(next, phase);
     }
 
     void press(const std::string &id) {
@@ -533,6 +611,7 @@ struct View::Impl {
         out_hit = hit(r, 0, 0, 1, 1, 0, 0, [this] {
             if (act.button) act.button("output");
         });
+        vol_hit = hit(r, 0, 0, 1, 1, 0, 0, [this] { toggle_vol_strip(); });
         /* time row */
         time = label(r, Face::Mono, P(g.time.px), col::kInk, X(g.time.box.x), Y(g.time.box.y), Wd(g.time.box));
         remain = label(r, Face::Mono, P(g.remain.px), col::kInk2, X(g.remain.box.x), Y(g.remain.box.y), Wd(g.remain.box),
@@ -548,7 +627,7 @@ struct View::Impl {
         seek_fill = box(seek_track, 0, 0, sh, sh, col::kTeal, sh / 2);
         const int kd = P(18);
         seek_knob = box(r, seek_x - kd / 2, Y(g.seek.y) + sh / 2 - kd / 2, kd, kd, col::kInk, LV_RADIUS_CIRCLE);
-        hit(r, seek_x - kd / 2, Y(g.seek.y) + sh / 2 - kd / 2, seek_w + kd, kd, 0, target, [this] {
+        seek_hit = hit(r, seek_x - kd / 2, Y(g.seek.y) + sh / 2 - kd / 2, seek_w + kd, kd, 0, target, [this] {
             lv_point_t p{};
             if (lv_indev_t *in = lv_indev_active()) lv_indev_get_point(in, &p);
             const double frac = std::clamp((p.x - seek_x) / static_cast<double>(seek_w), 0.0, 1.0);
@@ -582,6 +661,99 @@ struct View::Impl {
                             Wd(g.upnext) - P(24));
         }
         for (const layout::Btn &b : g.bottom) btns[b.id] = make_button(r, b);
+        build_vol_strip(r);
+    }
+
+    /* The volume strip (design QA D-28): a tap on the volume chip puts it in place of the seek row for kVolStripMs (each
+     * "-" / "+" starts the time again; a second tap on the chip closes it): the transport keys' cream buttons "-" and
+     * "+" (aligned with the first and the last transport key, as wide as the first), the level and its bar between them.
+     * The buttons are the touch target high where the band between the chips and the transport keys allows it (P(4)
+     * clear of each); where the band is lower they fill it, and their touch areas grow to the target as every key's. */
+    void build_vol_strip(lv_obj_t *r) {
+        vol_root = lv_obj_create(r);
+        plain(vol_root);
+        lv_obj_set_pos(vol_root, 0, 0);
+        lv_obj_set_size(vol_root, W, H);
+        const int x0 = X(g.time.box.x), x1 = X(g.remain.box.right());
+        const int sh = std::max(2, Hd(g.seek));
+        const int cy = Y(g.seek.y) + sh / 2;
+        const int top_lim = Y(g.chip0.y + (static_cast<double>(g.chip_layout.size()) - 1) * g.chip_step) + P(g.chip0.h) + P(4);
+        int bot_lim = H;
+        for (const layout::Btn &b : g.transport) bot_lim = std::min(bot_lim, Y(b.box.y));
+        bot_lim -= P(4);
+        const int row_h = std::max(P(g.time.lh), sh);
+        const int bh = std::max(row_h, std::min(target, bot_lim - top_lim));
+        const int by = std::max(top_lim, std::min(cy - bh / 2, bot_lim - bh));
+        const int bw = Wd(g.transport.front().box);
+        auto make = [&](Button &b, int x, Icon ic, int delta) {
+            b.vis = box(vol_root, x, by, bw, bh, col::kButton, P(8));
+            b.ic = ic;
+            const int ip = P(22);
+            b.icon = icon_obj(b.vis, ic, (bw - ip) / 2, (bh - ip) / 2, ip, ip, ip, col::kInk);
+            b.hitbox = hit(vol_root, x, by, bw, bh, target, target, [this, delta] {
+                if (act.volume_step) act.volume_step(delta);
+                restart_vol_timer();
+            });
+        };
+        make(vol_minus, x0, Icon::Minus, -5);
+        make(vol_plus, x1 - bw, Icon::Plus, 5);
+        const int my = by + bh / 2; /* the level and its bar on the buttons' middle */
+        const lv_font_t *nf = font(Face::Mono, P(g.time.px));
+        const int nw = text_width(nf, "100") + 2;
+        const int nx = x0 + bw + P(10);
+        vol_num = label(vol_root, Face::Mono, P(g.time.px), col::kInk, nx, my - lv_font_get_line_height(nf) / 2, nw,
+                        LV_TEXT_ALIGN_CENTER);
+        const int tx = nx + nw + P(8), tw = std::max(P(20), x1 - bw - P(12) - tx);
+        vol_track = box(vol_root, tx, my - sh / 2, tw, sh, col::kChip, sh / 2);
+        vol_fill = box(vol_track, 0, 0, sh, sh, col::kTeal, sh / 2);
+        lv_obj_add_flag(vol_root, LV_OBJ_FLAG_HIDDEN);
+        std::fprintf(stderr, "[vinyl] volume strip: buttons %dx%d (band %d, target %d), + at %.3f %.3f\n", bw, bh,
+                     bot_lim - top_lim, target, (x1 - bw / 2.0) / W, (by + bh / 2.0) / H);
+    }
+
+    void set_vol_mode(bool on) {
+        if (on == vol_mode) return;
+        vol_mode = on;
+        show(vol_root, on);
+        for (lv_obj_t *o : {time, remain, seek_track, seek_knob, seek_hit}) show(o, !on);
+        if (on) restart_vol_timer();
+        else if (vol_timer) {
+            lv_timer_delete(vol_timer);
+            vol_timer = nullptr;
+        }
+    }
+
+    void restart_vol_timer() {
+        if (!vol_mode) return;
+        if (!vol_timer) {
+            vol_timer = lv_timer_create([](lv_timer_t *t) { static_cast<Impl *>(lv_timer_get_user_data(t))->vol_timeout(); },
+                                        kVolStripMs, this);
+            lv_timer_set_repeat_count(vol_timer, 1);
+            lv_timer_set_auto_delete(vol_timer, false);
+        } else {
+            lv_timer_set_period(vol_timer, kVolStripMs);
+            lv_timer_reset(vol_timer);
+            lv_timer_set_repeat_count(vol_timer, 1);
+            lv_timer_resume(vol_timer);
+        }
+    }
+
+    void vol_timeout() { set_vol_mode(false); /* deletes the timer from its own callback: LVGL 9 allows it */ }
+
+    void toggle_vol_strip() {
+        if (!vol_mode && !last_now.vol_adjustable) return; /* nothing the strip could change (the launcher's keys only) */
+        set_vol_mode(!vol_mode);
+        if (vol_mode) update_vol_strip(last_now);
+    }
+
+    void update_vol_strip(const NowView &v) {
+        if (!vol_root) return;
+        const int lvl = std::clamp(v.vol_level, 0, 100);
+        set_text(vol_num, v.vol_level < 0 ? "--" : std::to_string(lvl));
+        const int tw = lv_obj_get_width(vol_track), sh = lv_obj_get_height(vol_track);
+        lv_obj_set_width(vol_fill, std::max(sh, tw * lvl / 100));
+        show(vol_fill, v.vol_level > 0);
+        if (vol_mode && !v.vol_adjustable) set_vol_mode(false);
     }
 
     void set_cover(const std::shared_ptr<const PixelImage> &c) {
@@ -610,23 +782,39 @@ struct View::Impl {
         const bool bt[4] = {false, false, v.output_bt, false};
         const int x0 = X(g.chip0.x);
         const int row_right = X(g.title.box.right()); /* the info column's right edge */
+        const int space = P(g.chip_space);
         for (const std::vector<int> &row : g.chip_layout) {
+            /* the volume chip keeps its whole width ("Vol 60", design QA D-18); the others share what is left, the last
+             * of a full row ending with dots */
+            int vol_need = 0;
+            for (int i : row)
+                if (i == 1 && chips[1].box) vol_need = chips[1].natural(texts[1], bt[1]);
             int x = x0;
+            bool vol_placed = false;
             for (int i : row) {
                 if (i < 0 || i > 3 || !chips[i].box) continue;
-                chips[i].max_w = std::max(P(30), row_right - x); /* the last chip of a full row ends with dots */
+                const int reserve = (i != 1 && !vol_placed && vol_need > 0) ? vol_need + space : 0;
+                chips[i].max_w = i == 1 ? 0 : std::max(P(30), row_right - x - reserve);
                 chips[i].set(texts[i], bt[i], x);
-                if (chips[i].width) x += chips[i].width + P(g.chip_space);
+                if (i == 1) vol_placed = true;
+                if (chips[i].width) x += chips[i].width + space;
             }
         }
-        /* the hit box over the output chip, at least the touch target high */
-        if (out_hit && chips[2].box) {
-            const int cw = chips[2].width, ch = chips[2].h;
-            const int hh = std::max(ch, target), hw = std::max(cw, target);
-            lv_obj_set_pos(out_hit, chips[2].x - (hw - cw) / 2, chips[2].y - (hh - ch) / 2);
-            lv_obj_set_size(out_hit, std::max(1, hw), hh);
-            show(out_hit, cw > 0);
+        /* the touch areas over the output and the volume chips, at least the touch target; stacked (480x320: the
+         * volume on the first row, the output on the second) they meet in the middle of the gap (layout::split_pair) */
+        if (out_hit && vol_hit) {
+            const Chip &oc = chips[2], &vc = chips[1];
+            layout::HitArea ao{R{double(oc.x), double(oc.y), double(oc.width), double(oc.h)}, R{}};
+            layout::HitArea av{R{double(vc.x), double(vc.y), double(vc.width), double(vc.h)}, R{}};
+            ao.area = layout::grow_hit(ao.drawn, target, target);
+            av.area = layout::grow_hit(av.drawn, target, target);
+            if (oc.width > 0 && vc.width > 0) layout::split_pair(av, ao, target);
+            show(out_hit, oc.width > 0);
+            show(vol_hit, vc.width > 0);
+            if (oc.width > 0) place_area(out_hit, ao.area);
+            if (vc.width > 0) place_area(vol_hit, av.area);
         }
+        update_vol_strip(v);
         /* time */
         const uint64_t total = v.total_ms;
         const uint64_t pos = std::min(v.pos_ms, total ? total : v.pos_ms);
@@ -699,7 +887,7 @@ struct View::Impl {
             L.sort_text = label(L.sort_box, Face::Bold, S(12), col::kRowText, S(10), 0, 0);
         }
         const int text_px = S(15), value_px = S(13);
-        const double dot_x = 16 * s, text_x = 40 * s, value_r = (p == Page::Output ? 38 : 16) * s, chev_r = 14 * s;
+        const double dot_x = 16 * s, text_x = 40 * s, value_r = 16 * s, chev_r = 14 * s;
         L.list = std::make_unique<RowList>(r, ri(lg.list.x), ri(lg.list.y), ri(lg.list.w), std::max(1, ri(lg.list.h)),
                                            std::max(ri(lg.row_h), list_row), s, text_px, p == Page::Output ? S(12) : value_px, dot_x, text_x,
                                            value_r, chev_r, [this, p](int i) {
@@ -720,8 +908,11 @@ struct View::Impl {
             L.mini_sub = label(L.strip, Face::Medium, S(11), col::kInk3, S(48), S(21), sw - S(48) - S(100));
             L.mini_bar = box(L.strip, S(8), shh - S(3), sw - S(16), S(3), col::kChip, 0);
             L.mini_fill = box(L.mini_bar, 0, 0, 1, S(3), col::kTeal, 0);
-            /* the whole strip opens now playing; its two buttons act */
-            hit(r, sx, sy, sw - S(100), shh, 0, target, [this] {
+            /* the whole strip opens now playing; its two buttons act (next: the transport press). Their touch areas never
+             * overlap (design QA D-33) and keep the touch target: play and next meet in the middle of the gap between
+             * them (layout::split_pair), the open area ends where play's begins; all three are the target high from
+             * the strip's top down, moved up where the screen's bottom is nearer (the list then ends where they begin). */
+            L.mini_open_hit = hit(r, sx, sy, sw - S(100), shh, 0, 0, [this] {
                 if (act.mini_open) act.mini_open();
             });
             auto mini_btn = [&](Button &b, int x, int w, Icon ic, const char *id) {
@@ -730,10 +921,33 @@ struct View::Impl {
                 const int ip = S(20);
                 b.icon = icon_obj(b.vis, ic, (w - ip) / 2, (h - ip) / 2, ip, ip, ip, col::kInk);
                 const std::string sid = id;
-                b.hitbox = hit(r, x, y, w, h, target, target, [this, sid] { press(sid); });
+                if (sid == "next")
+                    b.hitbox = hold_hit(r, x, y, w, h, 0, 0, [this](int ph) { transport(true, ph); });
+                else
+                    b.hitbox = hit(r, x, y, w, h, 0, 0, [this, sid] { press(sid); });
             };
-            mini_btn(L.mini_play, sx + sw - S(94), S(44), Icon::Pause, "play");
-            mini_btn(L.mini_next, sx + sw - S(46), S(40), Icon::Next, "next");
+            const int px = sx + sw - S(94), pw = S(44), nx = sx + sw - S(46), nw = S(40);
+            mini_btn(L.mini_play, px, pw, Icon::Pause, "play");
+            mini_btn(L.mini_next, nx, nw, Icon::Next, "next");
+            const int hit_h = std::min(H, std::max(shh, target));
+            const int hit_y = std::min(sy, H - hit_h); /* from the strip's top down, moved up only as far as the screen asks */
+            layout::HitArea ap{R{double(px), double(sy), double(pw), double(shh)}, R{}}, an{R{double(nx), double(sy), double(nw), double(shh)}, R{}};
+            ap.area = layout::grow_hit(ap.drawn, target, 0);
+            an.area = layout::grow_hit(an.drawn, target, 0);
+            layout::split_pair(ap, an, target);
+            if (an.area.right() > W) { /* never past the screen's edge: both move left */
+                const double d = an.area.right() - W;
+                an.area.x -= d;
+                ap.area.x -= d;
+            }
+            for (layout::HitArea *a : {&ap, &an}) {
+                a->area.y = hit_y;
+                a->area.h = hit_h;
+            }
+            place_area(L.mini_play.hitbox, ap.area);
+            place_area(L.mini_next.hitbox, an.area);
+            place_area(L.mini_open_hit, R{double(sx), double(hit_y), std::max(1.0, ap.area.x - sx), double(hit_h)});
+            if (hit_y < sy) lv_obj_set_height(L.list->obj(), std::max(1, hit_y - ri(lg.list.y)));
         } else if (p == Page::Queue) {
             static const struct {
                 const char *word;
@@ -766,6 +980,9 @@ struct View::Impl {
             lv_label_set_long_mode(L.strip_text, LV_LABEL_LONG_MODE_WRAP);
             lv_obj_set_height(L.strip_text, LV_SIZE_CONTENT);
             lv_obj_set_style_text_line_space(L.strip_text, S(16) - lv_font_get_line_height(font(Face::Bold, S(12))), 0);
+            L.strip_y0 = sy;
+            L.strip_h0 = shh;
+            L.list_y = ri(lg.list.y);
         }
         lv_obj_add_flag(L.root, LV_OBJ_FLAG_HIDDEN);
     }
@@ -795,6 +1012,7 @@ struct View::Impl {
         }
         if (p == Page::Browser && L.strip) {
             show(L.strip, v.mini.shown);
+            show(L.mini_open_hit, v.mini.shown);
             show(L.mini_play.vis, v.mini.shown);
             show(L.mini_play.hitbox, v.mini.shown);
             show(L.mini_next.vis, v.mini.shown);
@@ -810,7 +1028,18 @@ struct View::Impl {
             lv_obj_set_style_text_color(L.strip_text, lv_color_hex(v.hint_notice ? col::kInk : col::kInk2), 0);
             set_text(L.strip_text, v.hint);
             lv_obj_update_layout(L.strip_text);
-            lv_obj_set_y(L.strip_text, (lv_obj_get_height(L.strip) - lv_obj_get_height(L.strip_text)) / 2);
+            /* the strip grows upwards to its text (three lines on a narrow screen: design QA D-18), the list above it
+             * gives the height up */
+            const double s = layout::list_geom(layout::ListPage::Output, W, H, body_y).s;
+            const int th = lv_obj_get_height(L.strip_text);
+            const int h = std::max(L.strip_h0, th + 2 * std::max(1, ri(8 * s)));
+            const int y = L.strip_y0 + L.strip_h0 - h;
+            lv_obj_set_y(L.strip, y);
+            lv_obj_set_height(L.strip, h);
+            lv_obj_set_height(L.list->obj(), std::max(1, y - L.list_y));
+            lv_obj_set_y(L.strip_text, (h - th) / 2);
+            const int ip = lv_obj_get_height(L.strip_icon);
+            lv_obj_set_y(L.strip_icon, (h - ip) / 2);
         }
     }
 
@@ -948,9 +1177,9 @@ View::View(lv_obj_t *screen, Actions actions) : d_(std::make_unique<Impl>()) {
         if (d.act.back) d.act.back();
     });
     cp0::ui::StatusStrip::add(d.page->header());
-    /* portrait (owner, 2026-11-12): the band shows no app title, only the Esc at the left and the strip at the right */
-    d.portrait = d.H > d.W;
-    if (!d.portrait) d.page->set_title({"Vinyl"});
+    /* the title as the toolkit places it: none at the narrow portrait 320x480 (the toolkit's title_hidden), the last part
+     * of the path everywhere else, portrait 480x640 and 480x800 included */
+    d.page->set_title({"Vinyl"});
     d.body_y = d.tk.body_y;
     d.g = layout::now_geom(layout::size_class(d.W, d.H));
     d.fit = layout::now_fit(d.g, d.W, d.H, d.body_y);
@@ -964,6 +1193,8 @@ View::View(lv_obj_t *screen, Actions actions) : d_(std::make_unique<Impl>()) {
 
 View::~View() {
     d_->hide_notice();
+    if (d_->vol_timer) lv_timer_delete(d_->vol_timer);
+    d_->vol_timer = nullptr;
     d_->qlist.reset();
     d_->br.list.reset();
     d_->qu.list.reset();
@@ -983,9 +1214,8 @@ void View::show_page(Page p) {
     show(d.qu.root, p == Page::Queue);
     show(d.out.root, p == Page::Output);
     show(d.not_root, p == Page::Notices);
-    /* the title per page in landscape and square (Browse: the toolkit shows the last part on a narrow header); none in
-     * portrait */
-    if (d.portrait) return;
+    if (p != Page::Now) d.set_vol_mode(false);
+    /* the title per page (Browse: the toolkit shows the last part on a narrow header; at 320x480 it shows none) */
     switch (p) {
     case Page::Browser: d.page->set_title({"Vinyl", "Browse"}); break;
     case Page::Queue: d.page->set_title({"Queue"}); break;

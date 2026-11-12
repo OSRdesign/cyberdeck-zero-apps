@@ -82,7 +82,26 @@ void test_media_keys() {
     CHECK(d.accept(MediaAction::Toggle, 1300));
     CHECK(!d.accept(MediaAction::None, 5000));
 
-    /* the reader on a FIFO standing for /dev/input/event10: presses act once, releases and repeats do not */
+    /* presses and releases: next and previous report their release from the source whose press acted (a held button is
+     * a long press), play / pause only its press; repeats never */
+    MediaPresses mp;
+    MediaEvent e;
+    CHECK(mp.feed("event10", MediaAction::Next, 1, 1000, e) && e == (MediaEvent{MediaAction::Next, true}));
+    CHECK(!mp.feed("event10", MediaAction::Next, 2, 1300, e));         /* auto-repeat */
+    CHECK(!mp.feed("lvgl", MediaAction::Next, 1, 1100, e));            /* the same press by another path */
+    CHECK(!mp.feed("lvgl", MediaAction::Next, 0, 1150, e));            /* and its release */
+    CHECK(mp.feed("event10", MediaAction::Next, 0, 1800, e) && e == (MediaEvent{MediaAction::Next, false}));
+    CHECK(!mp.feed("event10", MediaAction::Next, 0, 1900, e));         /* a second release */
+    CHECK(mp.feed("event10", MediaAction::Toggle, 1, 2000, e) && e.down);
+    CHECK(!mp.feed("event10", MediaAction::Toggle, 0, 2100, e));       /* play / pause: no release */
+    CHECK(mp.feed("event11", MediaAction::Prev, 1, 3000, e) && e == (MediaEvent{MediaAction::Prev, true}));
+    const std::vector<MediaEvent> dropped = mp.drop_source("event11"); /* the headset went away while held */
+    CHECK_EQ(dropped.size(), static_cast<size_t>(1));
+    if (!dropped.empty()) CHECK(dropped[0] == (MediaEvent{MediaAction::Prev, false}));
+    CHECK(!mp.feed("event11", MediaAction::Prev, 0, 3500, e));
+    CHECK(mp.drop_source("event11").empty());
+
+    /* the reader on a FIFO standing for /dev/input/event10: presses act once, repeats never, the release of next counts */
     const std::string dir = make_temp_dir("keys");
     write_file(dir + "/devices", devices_text());
     const std::string fifo = dir + "/event10";
@@ -109,18 +128,20 @@ void test_media_keys() {
     send(200, 2);
     send(163, 1);
     send(163, 0);
-    std::vector<MediaAction> got;
-    for (int i = 0; i < 100 && got.size() < 2; ++i) {
+    std::vector<MediaEvent> got;
+    for (int i = 0; i < 100 && got.size() < 3; ++i) {
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
-        for (MediaAction a : r.take()) got.push_back(a);
+        for (const MediaEvent &a : r.take()) got.push_back(a);
     }
-    CHECK_EQ(got.size(), static_cast<size_t>(2));
-    if (got.size() == 2) {
-        CHECK(got[0] == MediaAction::Toggle);
-        CHECK(got[1] == MediaAction::Next);
+    CHECK_EQ(got.size(), static_cast<size_t>(3));
+    if (got.size() == 3) {
+        CHECK(got[0] == (MediaEvent{MediaAction::Toggle, true}));
+        CHECK(got[1] == (MediaEvent{MediaAction::Next, true}));
+        CHECK(got[2] == (MediaEvent{MediaAction::Next, false}));
     }
     /* the same press through the keyboard path right after: a duplicate */
-    CHECK(!r.accept_other(MediaAction::Toggle));
+    MediaEvent other;
+    CHECK(!r.accept_other(MediaAction::Toggle, 1, other));
     r.stop();
     ::close(wfd);
     rm_tree(dir);
@@ -236,18 +257,28 @@ void test_launcher() {
     LauncherStatus s;
     parse_launcher_status("v=1\npid=826\ngen=4\nvolume=60\nmute=0\nbt=connected\nbt_audio_dev=70_BF_92_53_6B_8B:headset:0;"
                           "9E_0C_81_E6_5D_1A:speaker:1:a2dp\n",
-                          true, "v=1\npid=826\nbattery=1\nbacklight=levels\nsound=1\nbt_audio=pipewire\nbt_hfp=1\nrequests=beep toast dim\n",
+                          true, "v=1\npid=826\nbattery=1\nbacklight=levels\nsound=1\nbt_audio=pipewire\nbt_hfp=1\nrequests=hello,caps,toast,beep,volume,brightness,dim\n",
                           true, s);
     CHECK(s.have_status && s.have_board);
     CHECK_EQ(s.volume, 60);
     CHECK(!s.mute);
     CHECK(s.battery_board());
+    CHECK(s.has_request("dim"));
+    CHECK(s.has_request("volume"));
+    CHECK(s.has_request("hello"));
+    CHECK(!s.has_request("di"));
+    CHECK(!s.has_request("brightnes"));
+    CHECK(!s.has_request(""));
     CHECK_EQ(s.facts.devices.size(), static_cast<size_t>(2));
     CHECK(s.facts.stack_server());
     parse_launcher_status("v=1\npid=1\nvolume=-1\nmute=1\n", true, "", false, s);
     CHECK_EQ(s.volume, -1);
     CHECK(s.mute);
     CHECK(!s.have_board);
+    CHECK(!s.has_request("dim")); /* no board.state: no request */
+    parse_launcher_status("", false, "v=1\npid=1\nbattery=1\nbacklight=levels\nrequests=hello,caps,toast,beep\n", true, s);
+    CHECK(s.battery_board());
+    CHECK(!s.has_request("dim")); /* the launcher does not answer dim here: Vinyl does not send it */
     parse_launcher_status("v=1\npid=1\nvolume=40\n", false, "", false, s);
     CHECK(!s.have_status);
     CHECK_EQ(s.volume, -1);

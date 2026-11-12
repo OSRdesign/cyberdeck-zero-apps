@@ -20,6 +20,7 @@
 #include "library/tag_jobs.hpp"
 #include "pulse/pulse_api.hpp"
 #include "state/resume.hpp"
+#include "transport/transport_press.hpp"
 
 #include "app.hpp"
 #include "keyboard_input.h"
@@ -66,12 +67,12 @@ std::string khz(uint32_t rate) {
 /* evdev codes of the letter keys used (the physical key, not its text: the guidelines' rule) */
 enum : uint32_t {
     K_MINUS = 12, K_EQUAL = 13, K_Q = 16, K_R = 19, K_U = 22, K_O = 24, K_S = 31, K_D = 32, K_X = 45, K_C = 46,
-    K_B = 48, K_COMMA = 51, K_DOT = 52, K_SPACE = 57, K_DELETE = 111,
+    K_B = 48, K_COMMA = 51, K_DOT = 52, K_SPACE = 57, K_LEFT = 105, K_RIGHT = 106, K_DELETE = 111,
 };
 
 }  // namespace
 
-struct VinylApp::Impl {
+struct VinylApp::Impl final : TransportHost {
     lv_obj_t *screen = nullptr;
     lv_obj_t *focus = nullptr;
     lv_timer_t *timer = nullptr;
@@ -128,6 +129,13 @@ struct VinylApp::Impl {
     uint64_t last_scan = 0;
     unsigned scan_seq = 0;
     std::vector<OutputRow> out_rows;
+    /* the transport press (core/transport): previous / next from the arrows on now playing, the comma and dot keys, the
+     * on-screen buttons and the media keys, all the same */
+    TransportPress transport{*this};
+    bool scan_muted = false;
+    /* the system volume the strip asked the launcher for, shown until status.state has it (or 2.5 s) */
+    int sys_pending = -1;
+    uint64_t sys_pending_until = 0;
 
     /* ------------------------------------------------------------------------------------------ start */
 
@@ -136,8 +144,11 @@ struct VinylApp::Impl {
         demo = env_on("VINYL_DEMO");
         lite = env_on("VINYL_DEMO_LITE");
         if (demo) {
-            make_demo_world(demo_world, lite, env_str("VINYL_DEMO_STATE"));
-            roots = {Root{"Music", demo_world.music}};
+            /* the design-QA variants: no music at all, or CJK names and tags */
+            const std::string variant = env_on("VINYL_DEMO_EMPTY") ? "empty" : env_on("VINYL_DEMO_CJK") ? "cjk" : "";
+            make_demo_world(demo_world, lite, env_str("VINYL_DEMO_STATE"), variant);
+            if (demo_world.empty) roots.clear();
+            else roots = {Root{"Music", demo_world.music}};
             resume_file = demo_world.config + "/vinyl/state.json";
             sinks = make_demo_sink_provider();
             world = demo_output_world(lite);
@@ -160,8 +171,14 @@ struct VinylApp::Impl {
         Actions a;
         a.back = [this] { back(); };
         a.toggle = [this] { toggle(); };
-        a.prev = [this] { prev(); };
-        a.next = [this] { next(true); };
+        a.prev = [this] { /* a tap: press and release at once */
+            transport_key(false, 1);
+            transport_key(false, 0);
+        };
+        a.next = [this] {
+            transport_key(true, 1);
+            transport_key(true, 0);
+        };
         a.shuffle = [this] { shuffle(); };
         a.repeat = [this] { repeat(); };
         a.button = [this](const std::string &id) { button(id); };
@@ -169,6 +186,15 @@ struct VinylApp::Impl {
         a.row = [this](Page p, int i) { row(p, i); };
         a.queue_button = [this](int i) { queue_button(i); };
         a.mini_open = [this] { go(Page::Now); };
+        a.transport = [this](bool next, int phase) {
+            const uint64_t now = mono_ms_now();
+            const TransportKey k = next ? TransportKey::Next : TransportKey::Prev;
+            if (phase == 0) transport.press(k, now);
+            else if (phase == 1) transport.release(k, now);
+            else transport.cancel(k, now);
+            refresh(true);
+        };
+        a.volume_step = [this](int d) { volume_step(d); };
         view = std::make_unique<View>(screen, a);
         std::fprintf(stderr, "[vinyl] canvas %dx%d, class %s\n", cdk::screen_w(), cdk::screen_h(),
                      layout::class_name(view->size_class()));
@@ -188,7 +214,7 @@ struct VinylApp::Impl {
         load_resume(resume_file, resume);
         target = OutputTarget::from_key(resume.output);
         engine->set_output(target);
-        engine->set_gain(1.0f);
+        apply_gain();
         Page first = Page::Browser;
         if (!resume.items.empty()) {
             queue_from_resume(resume, queue);
@@ -277,8 +303,6 @@ struct VinylApp::Impl {
 
     /* ------------------------------------------------------------------------------------------ playback */
 
-    bool has_track() const { return snap.pos >= 0 && !snap.path.empty(); }
-
     void play_pos(int pos, bool play) {
         if (pos < 0 || pos >= queue.size()) return;
         queue.set_current(pos);
@@ -302,19 +326,39 @@ struct VinylApp::Impl {
         dirty = true;
     }
 
-    void next(bool user) {
-        const int n = queue.next_pos(user);
-        if (n < 0) return;
-        play_pos(n, snap.state == PlayState::Playing || !user);
+    /* ---- the transport host (core/transport/transport_press.hpp): the module decides, these do */
+    bool has_track() const override { return snap.pos >= 0 && !snap.path.empty(); }
+    uint64_t position_ms() const override { return snap.pos_ms(); }
+    uint64_t duration_ms() const override { return snap.total_ms(); }
+    void seek(uint64_t ms) override { engine->seek_ms(ms); }
+    bool go_next() override {
+        const int n = transport_next_pos(queue);
+        if (n < 0) return false;
+        play_pos(n, snap.state == PlayState::Playing); /* playing or paused as it was */
+        return true;
+    }
+    bool go_prev() override {
+        const int n = transport_prev_pos(queue);
+        if (n < 0) return false;
+        play_pos(n, snap.state == PlayState::Playing);
+        return true;
+    }
+    void mute(bool on) override {
+        scan_muted = on;
+        apply_gain();
     }
 
-    void prev() {
-        if (snap.pos_ms() > 3000 || queue.prev_pos() < 0) {
-            engine->seek_ms(0);
-            return;
-        }
-        play_pos(queue.prev_pos(), snap.state == PlayState::Playing);
+    /* a previous / next key (state as the keyboard's: 1 press, 0 release, 2 auto-repeat, which the module ignores) */
+    void transport_key(bool next, int state) {
+        const uint64_t now = mono_ms_now();
+        const TransportKey k = next ? TransportKey::Next : TransportKey::Prev;
+        if (state == 1) transport.press(k, now);
+        else if (state == 0) transport.release(k, now);
+        refresh(true);
     }
+
+    /* the heard position, or the scan's while a long press scans */
+    uint64_t shown_pos_ms() const { return transport.scanning() ? transport.scan_position() : snap.pos_ms(); }
 
     void shuffle() {
         queue.set_shuffle(!queue.shuffle());
@@ -538,19 +582,19 @@ struct VinylApp::Impl {
             else if (k == LV_KEY_LEFT || k == LV_KEY_BACKSPACE) {
                 if (!entries.empty() && entries.front().kind == Entry::Kind::Up) browser_act(0);
             }
-        } else if (p == Page::Queue) {
+        } else if (p == Page::Queue) { /* Left goes back, Right acts as Enter (design QA D-29) */
             if (k == LV_KEY_UP) list_move(qu_sel, queue.size(), -1);
             else if (k == LV_KEY_DOWN) list_move(qu_sel, queue.size(), 1);
-            else if (k == LV_KEY_ENTER) play_pos(qu_sel, true);
+            else if (k == LV_KEY_ENTER || k == LV_KEY_RIGHT) play_pos(qu_sel, true);
+            else if (k == LV_KEY_LEFT) back();
             else if (k == LV_KEY_DEL) queue_button(2);
         } else if (p == Page::Output) {
             if (k == LV_KEY_UP) list_move(out_sel, static_cast<int>(out_rows.size()), -1);
             else if (k == LV_KEY_DOWN) list_move(out_sel, static_cast<int>(out_rows.size()), 1);
-            else if (k == LV_KEY_ENTER) choose_output(out_sel);
-        } else if (p == Page::Now) {
-            if (k == LV_KEY_LEFT) seek_by(-10000);
-            else if (k == LV_KEY_RIGHT) seek_by(10000);
-            else if (k == LV_KEY_UP && view->size_class() == layout::SizeClass::Large)
+            else if (k == LV_KEY_ENTER || k == LV_KEY_RIGHT) choose_output(out_sel);
+            else if (k == LV_KEY_LEFT) back();
+        } else if (p == Page::Now) { /* Left / Right: now_arrow() (the keyboard path, press and release) */
+            if (k == LV_KEY_UP && view->size_class() == layout::SizeClass::Large)
                 list_move(pane_sel, queue.size(), pane_sel < 0 ? queue.current() : -1);
             else if (k == LV_KEY_DOWN && view->size_class() == layout::SizeClass::Large)
                 list_move(pane_sel, queue.size(), pane_sel < 0 ? queue.current() + 1 : 1);
@@ -561,29 +605,55 @@ struct VinylApp::Impl {
         }
     }
 
-    void media(MediaAction a) {
-        switch (a) {
-        case MediaAction::Toggle: toggle(); break;
-        case MediaAction::Next: next(true); break;
-        case MediaAction::Prev: prev(); break;
-        case MediaAction::Stop: engine->stop(); break;
+    void media(const MediaEvent &e) {
+        switch (e.action) {
+        case MediaAction::Toggle:
+            if (e.down) toggle();
+            break;
+        case MediaAction::Next: transport_key(true, e.down ? 1 : 0); break; /* held: a scan */
+        case MediaAction::Prev: transport_key(false, e.down ? 1 : 0); break;
+        case MediaAction::Stop:
+            if (e.down) engine->stop();
+            break;
         default: break;
         }
-        std::fprintf(stderr, "[vinyl] media key: %s\n", media_action_name(a));
+        std::fprintf(stderr, "[vinyl] media key: %s%s\n", media_action_name(e.action), e.down ? "" : " (released)");
+    }
+
+    /* Now playing's Left / Right: the transport press (owner ruling 2026-11-12; the one exception to the Left = back,
+     * Right = Enter rule of design QA D-29, kept here and in the transport module). Shift+Left / Shift+Right seek 10 s
+     * back / ahead (each press and its auto-repeat). A release always reaches the module (Shift let go first, or the page
+     * changed while the key was held). */
+    void now_arrow(const key_item &it) {
+        const bool right = it.key_code == K_RIGHT;
+        if (it.key_state == 0) {
+            transport_key(right, 0);
+            return;
+        }
+        if (view->page() != Page::Now) return;
+        if (it.mods & KBD_MOD_SHIFT) seek_by(right ? 10000 : -10000);
+        else transport_key(right, it.key_state);
     }
 
     void on_keyboard(const key_item &it) {
-        if (it.key_state != 1) return;
         const MediaAction ma = media_action_for(it.key_code);
         if (ma != MediaAction::None) {
-            if (keys.accept_other(ma)) media(ma);
+            MediaEvent me;
+            if (keys.accept_other(ma, it.key_state, me)) media(me);
             return;
         }
+        if (it.key_code == K_LEFT || it.key_code == K_RIGHT) {
+            now_arrow(it); /* the other pages take the arrows from the LVGL keypad (on_key) */
+            return;
+        }
+        if (it.key_code == K_COMMA || it.key_code == K_DOT) { /* previous / next on every page: the transport press */
+            transport_key(it.key_code == K_DOT, it.key_state);
+            return;
+        }
+        if (it.key_state != 1) return;
         const Page p = view->page();
         switch (it.key_code) {
         case K_SPACE: toggle(); break;
-        case K_COMMA: prev(); break;
-        case K_DOT: next(true); break;
         case K_S: shuffle(); break;
         case K_R: repeat(); break;
         case K_Q:
@@ -639,8 +709,48 @@ struct VinylApp::Impl {
     void app_volume(int d) {
         if (!app_volume_applies()) return; /* the system volume is the launcher's keys' */
         resume.app_volume = std::clamp(resume.app_volume + d, 0, 100);
-        engine->set_gain(volume_gain(resume.app_volume));
+        apply_gain();
         dirty = true;
+        refresh(true);
+    }
+
+    /* the engine's gain: silent while a long press scans, the in-app volume where it applies, else unity */
+    void apply_gain() {
+        if (!engine) return;
+        engine->set_gain(scan_muted ? 0.0f : app_volume_applies() ? volume_gain(resume.app_volume) : 1.0f);
+    }
+
+    /* the system volume as shown: the level the strip asked for until status.state has it */
+    int system_volume() const {
+        if (sys_pending >= 0 && mono_ms_now() < sys_pending_until && status.volume != sys_pending) return sys_pending;
+        return status.volume;
+    }
+
+    /* the strip can change the system volume: the launcher answers `volume` on this board (decision D11, report 059:
+     * "volume only behind an explicit in-app system-volume control"); the demonstration world stands for it */
+    bool system_volume_adjustable() const {
+        if (status.volume < 0) return false;
+        return demo || (requests && status.has_request("volume"));
+    }
+
+    /* the volume strip's "-" / "+" (design QA D-28): the in-app volume where it applies (as the - and = keys), else the
+     * system volume through the launcher ("volume set N", which also un-mutes) */
+    void volume_step(int d) {
+        if (app_volume_applies()) {
+            app_volume(d);
+            return;
+        }
+        if (!system_volume_adjustable()) return;
+        const int to = std::clamp(system_volume() + d, 0, 100);
+        if (demo) {
+            status.volume = to;
+            status.mute = false;
+        } else {
+            requests->send("volume set " + std::to_string(to));
+            sys_pending = to;
+            sys_pending_until = mono_ms_now() + 2500;
+        }
+        std::fprintf(stderr, "[vinyl] system volume %d (the volume strip)\n", to);
         refresh(true);
     }
 
@@ -746,9 +856,10 @@ struct VinylApp::Impl {
 
     std::string vol_text() const {
         if (app_volume_applies()) return "Vol " + std::to_string(resume.app_volume);
-        if (status.volume < 0) return "Vol --";
-        if (status.mute) return "Muted";
-        return "Vol " + std::to_string(status.volume);
+        const int v = system_volume();
+        if (v < 0) return "Vol --";
+        if (status.mute && v == status.volume) return "Muted";
+        return "Vol " + std::to_string(v);
     }
 
     std::string format_text(bool short_form) const {
@@ -768,7 +879,7 @@ struct VinylApp::Impl {
         return s;
     }
 
-    uint64_t duration_ms(const std::string &path) {
+    uint64_t tag_duration_ms(const std::string &path) {
         TrackTags t;
         return jobs.tags(path, t) ? t.duration_ms : 0;
     }
@@ -810,6 +921,13 @@ struct VinylApp::Impl {
         v.count = cnt;
         v.vol = vol_text();
         v.vol_bt = output_is_bt();
+        if (app_volume_applies()) {
+            v.vol_level = resume.app_volume;
+            v.vol_adjustable = true;
+        } else {
+            v.vol_level = system_volume();
+            v.vol_adjustable = system_volume_adjustable();
+        }
         const std::string path = !snap.path.empty() ? snap.path : (queue.current_path() ? *queue.current_path() : "");
         if (!path.empty()) {
             TrackTags t;
@@ -822,8 +940,10 @@ struct VinylApp::Impl {
             else if (al.empty()) al = y;
             v.album = al;
         } else {
+            /* on two lines: one line is too narrow for the hint in the square and large info column (design QA D-18) */
             v.title = queue.empty() ? "Nothing playing" : "";
-            v.artist = queue.empty() ? "Pick a folder or a playlist" : "";
+            v.artist = queue.empty() ? "Pick a folder" : "";
+            v.album = queue.empty() ? "or a playlist" : "";
         }
         v.format = format_text(!sm || g.short_format);
         const std::string ol = output_label();
@@ -840,8 +960,8 @@ struct VinylApp::Impl {
                 if (jobs.tags(queue.at(n), nt) && nt.rate == snap.info.out.rate) v.extra_chip = "Gapless";
             }
         }
-        v.pos_ms = snap.pos_ms();
-        v.total_ms = snap.total_ms() ? snap.total_ms() : duration_ms(path);
+        v.pos_ms = shown_pos_ms();
+        v.total_ms = snap.total_ms() ? snap.total_ms() : tag_duration_ms(path);
         v.playing = snap.state == PlayState::Playing;
         v.shuffle = queue.shuffle();
         v.repeat = queue.repeat();
@@ -908,12 +1028,15 @@ struct VinylApp::Impl {
             }
             out->push_back(r);
         }
-        if (out->empty()) {
-            RowView r;
-            r.text = folder.empty() ? "No music folder: copy music to ~/Music" : "No music in this folder";
-            r.mark = RowView::Mark::None;
-            r.dimmed = true;
-            out->push_back(r);
+        if (out->empty()) { /* information rows (no mark); the first start's hint on two rows, whole at 320 px wide */
+            for (const char *t : folder.empty() ? std::vector<const char *>{"No music folder", "Copy music to ~/Music"}
+                                                : std::vector<const char *>{"No music in this folder"}) {
+                RowView r;
+                r.text = t;
+                r.mark = RowView::Mark::None;
+                r.dimmed = true;
+                out->push_back(r);
+            }
         }
         browser_cache.rows = out;
         browser_cache.key = bkey;
@@ -932,9 +1055,9 @@ struct VinylApp::Impl {
             const uint64_t total = snap.total_ms() ? snap.total_ms() : (known ? t.duration_ms : 0);
             std::string sub = known ? t.artist : "";
             if (!sub.empty()) sub += ", ";
-            sub += mmss(snap.pos_ms()) + " / " + (total ? mmss(total) : std::string("--:--"));
+            sub += mmss(shown_pos_ms()) + " / " + (total ? mmss(total) : std::string("--:--"));
             v.mini.sub = sub;
-            v.mini.progress = total ? static_cast<double>(snap.pos_ms()) / total : 0;
+            v.mini.progress = total ? static_cast<double>(shown_pos_ms()) / total : 0;
             v.mini.playing = snap.state == PlayState::Playing;
         }
         return v;
@@ -949,7 +1072,7 @@ struct VinylApp::Impl {
         uint64_t left_ms = 0;
         bool all_known = true;
         for (int i = std::max(0, cur); i < queue.size(); ++i) {
-            const uint64_t d = duration_ms(queue.at(i));
+            const uint64_t d = tag_duration_ms(queue.at(i));
             if (!d) all_known = false;
             left_ms += (i == cur) ? (d > snap.pos_ms() ? d - snap.pos_ms() : 0) : d;
         }
@@ -984,8 +1107,7 @@ struct VinylApp::Impl {
             RowView rv;
             rv.text = r.label;
             rv.value = r.value;
-            rv.mark = RowView::Mark::Dot;
-            rv.chevron_too = true;
+            rv.mark = RowView::Mark::Dot; /* a tap chooses it: the action dot (blue: the chosen one), no chevron (D-45) */
             rv.playing = r.chosen;
             rv.dimmed = r.dimmed;
             rv.mono_value = false;
@@ -1032,7 +1154,9 @@ struct VinylApp::Impl {
         while (engine->poll_event(ev)) on_engine(ev);
         snap = engine->snapshot();
         /* media keys from the headset and keyboard nodes */
-        for (MediaAction a : keys.take()) media(a);
+        for (const MediaEvent &e : keys.take()) media(e);
+        /* a held previous / next becomes a scan, and the scan moves */
+        transport.tick(now);
         /* the launcher's files, the sound server's lists */
         if (launcher && launcher->poll(now)) {
             status = launcher->status();
@@ -1044,8 +1168,8 @@ struct VinylApp::Impl {
             last_scan = now;
             scan(true);
         }
-        /* the in-app volume follows the output in use */
-        engine->set_gain(app_volume_applies() ? volume_gain(resume.app_volume) : 1.0f);
+        /* the in-app volume follows the output in use (and the scan's silence) */
+        apply_gain();
         /* cover */
         TagJobs::CoverResult cr;
         if (jobs.take_cover(cr) && cr.path == cover_for) {
@@ -1060,8 +1184,14 @@ struct VinylApp::Impl {
         /* dim allow while playing in front on a battery board (D16) */
         const bool hidden = cdk::hidden();
         if (was_hidden && !hidden) dim_sent = false; /* the launcher took the panel back meanwhile */
+        if (!was_hidden && hidden) { /* a key held while the launcher takes the keyboards back never sends its release */
+            transport.cancel(TransportKey::Next, now);
+            transport.cancel(TransportKey::Prev, now);
+        }
         was_hidden = hidden;
-        if (requests && status.battery_board()) {
+        /* only where the launcher answers dim on this board (board.state requests: a battery board with backlight levels;
+         * APP-CONTRACT 5c and 14, design QA D-72) */
+        if (requests && status.has_request("dim")) {
             if (snap.state == PlayState::Playing) {
                 paused_since = 0;
                 if (!hidden && !dim_sent) {

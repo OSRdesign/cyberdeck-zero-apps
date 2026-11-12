@@ -24,6 +24,18 @@ bool LauncherStatus::operator==(const LauncherStatus &o) const {
            facts == o.facts;
 }
 
+bool LauncherStatus::has_request(const std::string &verb) const {
+    if (verb.empty()) return false;
+    size_t i = 0;
+    while (i < requests.size()) {
+        const size_t j = requests.find_first_of(", \t", i);
+        const size_t end = j == std::string::npos ? requests.size() : j;
+        if (requests.compare(i, end - i, verb) == 0 && end - i == verb.size()) return true;
+        i = end + 1;
+    }
+    return false;
+}
+
 namespace {
 int int_of(const StateText &st, const char *key, int dflt) {
     auto it = st.kv.find(key);

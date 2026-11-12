@@ -14,8 +14,11 @@
  *   KEY_PREVIOUSSONG (165)                                     previous track
  *   KEY_STOPCD (166)                                           stop (pause, back to the start of the track)
  *
- * Only presses count (value 1: not the release, not the auto-repeat). A press seen twice within 250 ms (the same button
- * on two nodes, or here and through the toolkit's keyboard path while the app is in front) acts once (Dedupe). While
+ * Presses count (value 1, not the auto-repeat 2); for next and previous the release (value 0) counts too, from the node
+ * whose press acted, so a held button is a long press (the transport press, core/transport: a scan; owner ruling
+ * 2026-11-12). A node that goes away while its button is held gives the release. A press seen twice within 250 ms (the
+ * same button on two nodes, or here and through the toolkit's keyboard path while the app is in front) acts once
+ * (Dedupe), and so does its release (MediaPresses). While
  * the app is hidden the launcher grabs the keyboards, so a keyboard's own media keys reach Vinyl only in front; headset
  * and speaker nodes are no keyboards and keep working while hidden. LVGL-free.
  */
@@ -58,6 +61,28 @@ private:
     std::map<int, uint64_t> last_;
 };
 
+/* A press (down) or, for next and previous, a release (up). */
+struct MediaEvent {
+    MediaAction action = MediaAction::None;
+    bool down = true;
+    bool operator==(const MediaEvent &o) const { return action == o.action && down == o.down; }
+};
+
+/* The key events of every source ("event10", "lvgl") into media events: presses through the Dedupe, the release of next
+ * and previous only from the source whose press acted. */
+class MediaPresses {
+public:
+    explicit MediaPresses(uint64_t window_ms = 250) : dedupe_(window_ms) {}
+    /* value: 1 press, 0 release, 2 auto-repeat. True when it acts (`ev` filled). */
+    bool feed(const std::string &source, MediaAction a, int value, uint64_t now_ms, MediaEvent &ev);
+    /* The source went away: the releases of the presses it holds. */
+    std::vector<MediaEvent> drop_source(const std::string &source);
+
+private:
+    Dedupe dedupe_;
+    std::map<int, std::string> held_; /* next / previous -> the source whose press acted */
+};
+
 class MediaKeyReader {
 public:
     MediaKeyReader() = default;
@@ -65,12 +90,12 @@ public:
     /* `devices_path` / `dev_dir`: the tests point them at fixtures. */
     void start(const std::string &devices_path = "/proc/bus/input/devices", const std::string &dev_dir = "/dev/input");
     void stop();
-    /* The actions since the last call, oldest first (already deduplicated among the nodes). */
-    std::vector<MediaAction> take();
+    /* The events since the last call, oldest first (already deduplicated among the nodes). */
+    std::vector<MediaEvent> take();
     /* The nodes open now, for the log ("XWF-M18-M28-M38 (AVRCP) event10"). */
     std::vector<std::string> open_nodes() const;
-    /* An action that came another way (the keyboard path in front): true when it should act (not a duplicate). */
-    bool accept_other(MediaAction a);
+    /* A key that came another way (the keyboard path in front; value as MediaPresses::feed): true when it acts. */
+    bool accept_other(MediaAction a, int value, MediaEvent &ev);
 
 private:
     void run();
@@ -80,10 +105,11 @@ private:
     std::thread th_;
     std::atomic<bool> quit_{false};
     mutable std::mutex mu_;
-    std::deque<MediaAction> pending_;
+    std::deque<MediaEvent> pending_;
     std::map<std::string, int> fds_;   /* event name -> fd */
     std::map<std::string, std::string> names_;
-    Dedupe dedupe_;
+    MediaPresses presses_;
+    void close_node(const std::string &event); /* with mu_ held */
 };
 
 uint64_t mono_ms_now();

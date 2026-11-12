@@ -70,6 +70,7 @@ int main(int argc, char **argv) {
         {"tags", test_tags},       {"decoders", test_decoders}, {"queue", test_queue},   {"browse", test_browse},
         {"resume", test_resume},   {"media_keys", test_media_keys}, {"engine", test_engine}, {"outputs", test_outputs},
         {"launcher", test_launcher}, {"art", test_art},         {"layout", test_layout}, {"real_libs", test_real_libs},
+        {"transport", test_transport}, {"hits", test_hits},
     };
     for (const Group &g : groups) {
         if (only && std::strcmp(only, g.name) != 0) continue;
