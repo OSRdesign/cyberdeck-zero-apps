@@ -79,7 +79,7 @@ or click, and has no such object inside it (a scroll area that only drags is not
 | header | no interactive element of the body reaches under the header |
 | keyboard | while the on-screen keyboard is up, the field it is for is visible above it and no element of the page lies under it |
 | band | the same while the writing zone's band shows (`band` scenes): the field above the band's top row, nothing of the page under it |
-| notice | under the app's minimum screen, the notice is the only thing to press |
+| notice | under the app's minimum screen (only an app that declares one), the notice is the only thing to press |
 
 The report line of each shot also gives the smallest row, button, header element and key it found (and the smallest
 compact list row when there is one).

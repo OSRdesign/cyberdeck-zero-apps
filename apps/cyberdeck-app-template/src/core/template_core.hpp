@@ -14,9 +14,11 @@
 
 namespace tpl {
 
-/* The smallest screen the template supports: X-MinSize of its .desktop file (tests/test_core.cpp compares them). */
-constexpr int kMinW = 640;
-constexpr int kMinH = 480;
+/* The smallest screen the template supports: 0 x 0 = no minimum, so no X-MinSize in its .desktop file. A minimum is
+ * only for an app whose UI cannot fit a smaller screen: set both here to the smallest size the layouts are tested at
+ * and add the same X-MinSize=WxH line to the .desktop file (tests/test_core.cpp compares them). */
+constexpr int kMinW = 0;
+constexpr int kMinH = 0;
 
 /* ------------------------------------------------------------------ navigation */
 

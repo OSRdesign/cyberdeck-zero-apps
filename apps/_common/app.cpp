@@ -108,6 +108,7 @@ std::string min_size_notice(const AppSpec &spec, int w, int h)
     const std::string title = spec.title && spec.title[0] ? spec.title : "This app";
     int mw = 0, mh = 0;
     min_for(spec, w, h, &mw, &mh);
+    if (mw <= 0 && mh <= 0) return title + " has no minimum screen size.\nThis screen is " + size_text(w, h) + ".";
     return title + " needs a screen of at least " + size_text(mw, mh) + ".\nThis screen is " + size_text(w, h) +
            ".\n\nPress any key or tap the screen to close.";
 }
@@ -117,8 +118,10 @@ std::string version_text(const AppSpec &spec)
     std::string text = std::string(spec.title) + " (" + spec.id + ") " + CDK_APP_VERSION + "\n";
     text += std::string("launcher ") + CDK_LAUNCHER_REF + " (cp0_lvgl " + CDK_LAUNCHER_PIN + "), " + CDK_BUILD_TARGET +
             " build " + CDK_BUILD_DATE + "\n";
-    text += "needs a screen of at least " + size_text(spec.min_w, spec.min_h);
-    if (has_portrait(spec)) text += ", in portrait " + size_text(spec.portrait_w, spec.portrait_h);
+    const bool has_min = spec.min_w > 0 || spec.min_h > 0;
+    if (has_min) text += "needs a screen of at least " + size_text(spec.min_w, spec.min_h);
+    else text += "runs on any screen size";
+    if (has_portrait(spec)) text += (has_min ? ", in portrait " : ", in portrait at least ") + size_text(spec.portrait_w, spec.portrait_h);
     return text + "\n";
 }
 

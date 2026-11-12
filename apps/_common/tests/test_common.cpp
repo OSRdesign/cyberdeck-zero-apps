@@ -316,10 +316,49 @@ void test_async_run()
     }
 }
 
+/* The default AppSpec has no minimum: the app always runs, on any screen, in any orientation. */
+void test_no_minimum()
+{
+    cdk::AppSpec spec;
+    spec.title = "Tiny";
+    spec.id = "tiny-app";
+    CHECK(spec.min_w == 0 && spec.min_h == 0);
+    CHECK(spec.portrait_w == 0 && spec.portrait_h == 0);
+    int mw = -1, mh = -1;
+    cdk::min_for(spec, 640, 480, &mw, &mh);
+    CHECK(mw == 0 && mh == 0);
+    cdk::min_for(spec, 320, 480, &mw, &mh);
+    CHECK(mw == 0 && mh == 0);
+    const int sizes[][2] = {{320, 170}, {480, 320}, {320, 480}, {640, 480}, {720, 720}, {800, 1280}, {1, 1}};
+    for (const auto &sz : sizes) CHECK(cdk::screen_fits(spec, sz[0], sz[1]));
+    // the text builders never print "at least 0x0"
+    const std::string notice = cdk::min_size_notice(spec, 320, 170);
+    CHECK(notice.find("at least") == std::string::npos && notice.find("0x0") == std::string::npos);
+    CHECK(notice.find("Tiny") == 0 && notice.find("320x170") != std::string::npos);
+    const std::string version = cdk::version_text(spec);
+    CHECK(version.find("at least") == std::string::npos && version.find("runs on any screen size\n") != std::string::npos);
+    // only a portrait minimum: landscape and square always fit, a portrait canvas is held against it
+    spec.portrait_w = 320;
+    spec.portrait_h = 480;
+    CHECK(cdk::screen_fits(spec, 480, 320) && cdk::screen_fits(spec, 640, 480));
+    CHECK(cdk::screen_fits(spec, 320, 480) && !cdk::screen_fits(spec, 240, 400));
+    CHECK(cdk::min_size_notice(spec, 240, 400).find("Tiny needs a screen of at least 320x480") == 0);
+    CHECK(cdk::version_text(spec).find("runs on any screen size, in portrait at least 320x480\n") != std::string::npos);
+    // an explicit minimum below the old 640x480 shows the notice under it and none at or above it
+    spec.portrait_w = spec.portrait_h = 0;
+    spec.min_w = 480;
+    spec.min_h = 320;
+    CHECK(cdk::screen_fits(spec, 480, 320) && cdk::screen_fits(spec, 800, 480));
+    CHECK(!cdk::screen_fits(spec, 320, 170) && !cdk::screen_fits(spec, 479, 320) && !cdk::screen_fits(spec, 480, 319));
+    CHECK(cdk::min_size_notice(spec, 320, 170).find("Tiny needs a screen of at least 480x320") == 0);
+}
+
 void test_min_size()
 {
     cdk::AppSpec spec;
     spec.title = "Template";
+    spec.min_w = 640; /* an explicit minimum (the default is none) */
+    spec.min_h = 480;
     CHECK(cdk::screen_fits(spec, 640, 480));
     CHECK(cdk::screen_fits(spec, 720, 720));
     CHECK(!cdk::screen_fits(spec, 480, 320));
@@ -417,6 +456,7 @@ int main()
     test_osk_file();
     test_osk_hand();
     test_split_lines();
+    test_no_minimum();
     test_min_size();
     headless::platform_init(320, 240, 0, "/nonexistent"); /* LVGL for lv_async_call */
     test_async_run();

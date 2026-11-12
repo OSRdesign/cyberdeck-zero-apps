@@ -6,7 +6,7 @@ never publishes it.
 
 It is a native `X-Fullscreen=true` app linking the launcher's `cp0_lvgl` (report 024, platform (a)): the launcher's
 own display backend, keyboard reader, widgets and on-screen keyboard run inside the app's process, so the app looks and
-behaves like the launcher's Settings on every screen from 640x480 up.
+behaves like the launcher's Settings on every screen: it declares no minimum screen (`AppSpec` min 0, no `X-MinSize`).
 
 Rules and good practice (with a checklist to tick before publishing): [`docs/APP-GUIDELINES.md`](../../docs/APP-GUIDELINES.md).
 
@@ -26,7 +26,7 @@ a computer. The template's own `app.json` is an example; `python3 tools/check_de
 | TextField with the app-side on-screen keyboard (shown only when no physical keyboard is connected, the launcher's rule; `_common/osk_policy`) | Name |
 | Dialog with Cancel (Esc) and a primary button (Enter) | Reset |
 | A background command whose lines arrive live in a Busy row, with a timeout (`_common/async_run`) | Run a command |
-| The "needs a 640x480 screen" notice on a smaller screen (an older launcher ignores `X-MinSize`) | at start |
+| Under a declared minimum, the "needs WxH" notice (the template declares none, so it never shows; it appears once you add `X-MinSize`) | at start (only with a minimum) |
 
 Keys: Up / Down move, Enter or Right opens, Esc or Left goes back; at the root a short Esc (or the header's Esc) ends
 the app. Holding Esc 3 s is the launcher's watchdog. Touch: a tap on a row moves the highlight, a tap on the
@@ -41,11 +41,11 @@ in `src/`.
 app.json                      "draft": true, version, depends (libfreetype6, libinput10, libxkbcommon0)
 build.sh                      calls ../_common/build_app.sh (cross | host | all)
 src/main.cpp                  cdk::run(cdk::app_spec(), argc, argv): the device runner
-src/ui/app_spec.cpp           id, title, minimum screen (= X-MinSize), the UI builder
+src/ui/app_spec.cpp           id, title, minimum screen (none; = X-MinSize if you declare one), the UI builder
 src/ui/template_app.*         the pages (LVGL)
 src/core/template_core.*      the logic without LVGL: navigation, the name rule, the command state, the info rows
 tests/test_core.cpp           unit tests of core/ and of the package files (.desktop keys, app.json)
-tests/scenes/*.scene          headless scenes: every widget at 5 sizes, the notice under 640x480, a start without
+tests/scenes/*.scene          headless scenes: every widget at 5 sizes, a start without
                               the launcher
 root/                         the package tree (the binary is written by build.sh cross)
 ```
