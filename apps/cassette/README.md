@@ -3,7 +3,7 @@
 A sound recorder for the cyberdeck with the look of a tape deck: it records from any USB sound card or headset (or a Bluetooth headset, on boards with a sound server) to WAV
 (Broadcast Wave), FLAC or Ogg Opus files, shows a level meter with a target zone, adds software gain, starts on a timer,
 trims, splits and merges takes, and plays them back with a 5x scan. Native fullscreen app on the launcher's `cp0_lvgl`, MIT, version 0.3.0,
-category Tools. Plan: launcher `docs/dev/tasks/016-cassette-recorder.md`; study: launcher report 058.
+category Tools. Plan: [launcher `docs/dev/tasks/016-cassette-recorder.md`](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/dev/tasks/016-cassette-recorder.md); study: [launcher report 058](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/dev/reports/058-sound-recorder-study.md).
 
 - **Crash-safe.** A take is synced to the card every 10 s (5-30 s, setting) and its header is rewritten after every
   sync, so a power cut loses at most the audio since the last sync; the next start repairs the take (see
@@ -83,16 +83,17 @@ Four pages and four boxes:
   number of numbered split points (a tap selects one and the SPLIT key becomes REMOVE). A chip at the waveform's top right
   (key F) switches its scale between TRUE (real level) and FIT (the take's loudest peak fills the panel, `FIT x8`: one gain
   per take, at most x64, none for a silent take; kept across launches). SAVE opens the save box.
-- **Settings.** Input (the capture card), Input level, Auto gain (card) and Mic mute (card) (only when the card has
-  those controls), Format (opens a page with every format: WAV, FLAC and Opus at 24, 32, 64 and 128 kbps, each with its estimated size
-  per minute at this card's format and the hours that fit in the free space; one the card or the libraries cannot
-  record stays in the list dimmed with the reason, and a tap on it says "Not available: ..."; the row shows the choice
-  in use, "WAV (FLAC unavailable)" when the stored one cannot be used), Record timer, REW / FWD (Fast scan 5x or Jump 5 s), Channels (what the card
-  records, read-only), Low cut 80 Hz, Limiter, Monitor and Monitor level (only when the card has a playback side;
-  see Live monitor), Sync every (5, 10, 20, 30 s), Folder, File prefix, Take number (the number the next take gets; a page
-  with the number large, -1 / +1, -10 / +10 and -100 / +100 steppers, Reset to 1 and Set; Esc cancels; 1 to 9999),
-  Auto-split (at 4 GiB,
-  or Off: one RF64 file) and Output (the playback device, when there is more than one).
+- **Settings.** Input (the capture card, or a connected Bluetooth headset), Input level, Auto gain (card) and Mic mute (card)
+  (only when the card has those controls), Codec (WAV, FLAC and Opus, then six quick presets), Sample rate and Bit depth or
+  Bit rate (Opus 16 to 128 kbps), each a picker with its estimated size per minute and the hours that fit in the free space (one the card or the
+  libraries cannot record stays in the list dimmed with the reason, and a tap on it says "Not available: ..."; the Codec row shows the
+  choice in use, "WAV (FLAC unavailable)" when the stored one cannot be used), Record timer, REW / FWD (Fast scan 5x or Jump 5 s), Channels
+  (what the card records, read-only), Low cut 80 Hz, Limiter, Monitor and Monitor level (only when the card has a playback side or a
+  Bluetooth headset is in play; see Live monitor), Monitor to (where Bluetooth is in play), Sync every (5, 10, 20, 30 s), Folder, File
+  prefix, Take number (the number the next take gets; a page with the number large, -1 / +1, -10 / +10 and -100 / +100 steppers, Reset to 1
+  and Set; Esc cancels; 1 to 9999), Auto-split (at 4 GiB, or Off: one RF64 file) and Output (the playback device, with Bluetooth
+  headsets and speakers listed, when there is more than one). Every key of `settings.json` is listed in
+  [`docs/SETTINGS.md`](docs/SETTINGS.md).
 - **Live monitor.** Settings > **Monitor** (a switch, off by default) plays the microphone into the earphones of the same
   card while the recorder screen runs (idle with the live meter, the record countdown, recording, recording paused), with
   its own **Monitor level** (0 to 100 % in steps of 5, 50 % by default; dimmed while Monitor is off). Both rows appear
@@ -111,8 +112,9 @@ Four pages and four boxes:
   monitor is off by default and never plays during playback. A headset such as the Jabra Evolve 65 has its own hardware
   sidetone: you hear yourself even with Monitor off, it is not an ALSA control and Cassette cannot change or switch it
   off; Monitor adds a second, delayed copy on top, so leave it off there. Over Bluetooth (setting **Monitor to**: the
-  headset itself, a Bluetooth speaker or another output) the delay is larger and shown under the Monitor row (estimates:
-  60-150 ms on the same headset, 150-350 ms to a speaker, "you will hear an echo").
+  headset itself, a Bluetooth speaker or another output) the delay is larger and shown under the Monitor row (measured on the HackBerry: the same
+  headset, call mode, shows about 0.1 s and felt about 0.25 s; a USB microphone to an A2DP speaker shows 0.18 s and felt about 0.2 s,
+  "you will hear an echo"; other devices can be later, up to about 0.35 s).
 - **Merge takes.** MERGE (key M) turns the list into merge mode on the same page: the takes are chosen in the order they
   should play (a numbered badge each; a tap again drops one and the rest renumber); the first take chosen decides what can
   join, every take that cannot be joined to it without converting it (another codec, rate, channel count or bit depth) is
@@ -254,10 +256,12 @@ whether music mode is available; `--card bt:<MAC>` for one device); it opens no 
   default device.
 - The record timer makes no sound.
 - **Bluetooth:** a headset records speech quality only (16 or 8 kHz mono, its call link); some headsets connect but send
-  no microphone audio (the Beats Fit Pro on the HackBerry: Cassette says "The headset is connected but sends no sound.");
+  no microphone audio (the Beats Fit Pro: connects, opens no call-audio link and gives a silent source, observed with a probe on the HackBerry;
+  Cassette's notice for it, "The headset is connected but sends no sound.", is covered by the unit tests and was not run on the hardware, B32);
   only one music (A2DP) device at a time on the HackBerry (the second gets call quality only); the Lite boards need a
   sound server first (they have none today); LE Audio is not supported (our radios are Bluetooth 5.0 or older). The monitor
-  delays over Bluetooth are estimates until measured on the boards (B30, B31).
+  delay shown is Cassette's own figure without the headset's link: measured B30 (same headset, call mode) about 0.1 s shown, about 0.25 s felt;
+  B31 (USB microphone to an A2DP speaker) 0.18 s shown, about 0.2 s felt; other devices are not measured.
 - Not yet measured on a board: the animation cost on a Pi Zero 2 W and the behaviour of every card (board tests,
   [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md)).
 
@@ -287,7 +291,7 @@ Opus is dimmed on a card that cannot record at 8, 12, 16, 24 or 48 kHz; nothing 
 The package depends on these libraries (`libopus0`, `libopusenc0`, `libflac14 | libflac12t64 | libflac12`), so the
 Store installs them with Cassette. They are opened at run time: if one is removed the app still records and plays WAV,
 the other rows say which package is missing, and a FLAC / Opus take whose library is missing is refused with a notice (`This take cannot be played: FLAC
-not installed (libflac14)`). Opus is not offered on a 44.1 kHz-only card (no resampling in 0.1). Metadata goes into
+not installed (libflac14)`). Opus is not offered on a 44.1 kHz-only card (Cassette does not resample). Metadata goes into
 Vorbis comments (the take name, the date when the clock is set); trim and split copy them. Design, measurements, the
 status and the next steps: [`docs/FORMATS.md`](docs/FORMATS.md).
 
@@ -340,7 +344,7 @@ PEAK is at the panel's bottom left.
 
 ```sh
 wsl -e sh <repo>/apps/cassette/tests/run.sh             # the core tests (no LVGL)
-wsl -e sh <repo>/apps/cassette/tests/<suite>/run.sh     # alsa, dsp, takes, edit, playback, app, ui, bind, pulse
+wsl -e sh <repo>/apps/cassette/tests/<suite>/run.sh     # alsa, app, bind, codec, dsp, edit, playback, pulse, takes, ui
 wsl -e sh <repo>/apps/cassette/build.sh host            # UI and binding tests + the headless scenes
 wsl -e sh <repo>/apps/cassette/build.sh cross           # arm64 binary and cassette-probe into root/
 wsl -e sh <repo>/apps/cassette/build.sh cross --arch amd64   # amd64 binary and cassette-probe into root.amd64/
@@ -348,8 +352,9 @@ python3 tools/make_registry.py --only cassette --out <dir outside the repo>   # 
 python apps/cassette/tools/make_icon.py                 # the icon
 ```
 
-Ten test suites: the core (ring, WAV header, writer, journal, repair, a writer killed at random points), alsa (a
-scripted ALSA: busy fallback, unplug, overruns, two cards, index change), dsp, takes, edit (trim and split compared
+Eleven test suites: the core (ring, WAV header, writer, journal, repair, a writer killed at random points), alsa (a
+scripted ALSA: busy fallback, unplug, overruns, two cards, index change), codec (the FLAC and Opus encoders and decoders, see
+[`docs/FORMATS.md`](docs/FORMATS.md)), dsp, takes, edit (trim and split compared
 byte for byte, a killed editor, merges of every format with a kill at every step), playback, app (the controller), ui,
 bind and pulse (the sound-server backend on a scripted server: device loss, moves, silence, threads; plus the libpulse
 ABI check and a real-server smoke test, see [`docs/PULSE.md`](docs/PULSE.md#tests)). `build.sh host` also runs the scenes:
@@ -373,6 +378,14 @@ time from the system, neither linked nor shipped; the package depends on them. S
 
 ## Changes
 
+- 0.3.0: Bluetooth audio: record from a Bluetooth headset (16 kHz mSBC or 8 kHz CVSD, mono), play to Bluetooth headsets and speakers, live
+  monitor over Bluetooth (Monitor to row, delay shown), headset reconnects handled, paired devices that are not connected listed (launcher
+  0.10.1 or later), `cassette-probe --server`; the package now depends on `libpulse0`. Boards without a sound server are unchanged. See
+  [`docs/RELEASE-0.3.0.md`](docs/RELEASE-0.3.0.md).
+- 0.2.0: MERGE, the recordings list's fifth key (key M), joins takes of one format (WAV, FLAC, Opus) into one new take in the order
+  chosen, in merge mode on the list page: WAV is copied sample exact, FLAC is decoded and re-encoded without loss, Opus packets
+  are copied into one stream (a seam of 12 to 20 ms at each join; with the music presets it can be heard as a blip). See
+  [`docs/RELEASE-0.2.0.md`](docs/RELEASE-0.2.0.md). The HackBerry photo in the user guide is a fresh capture while recording.
 - 0.1.0: first version: recorder, recordings list, Edit page (trim and split, with a TRUE / FIT waveform scale), settings,
   save and confirm boxes; WAV / BWF takes with journal and repair; FLAC and Ogg Opus takes (Codec, Sample rate and Bit
   depth / Bit rate pickers, trim and split of all three); live Monitor and the MON, LIM and LOW CUT lamps; take number
@@ -383,11 +396,3 @@ time from the system, neither linked nor shipped; the package depends on them. S
   meter shows the played level while a take plays. The recordings list has LOAD (the take goes into the deck with a
   cassette animation, PLAY plays it; the name on the cassette label is handwriting, Caveat SemiBold) and a preview that
   stops on a second double tap; a paused take reads PAUSED in the strip.
-- 0.3.0: Bluetooth audio: record from a Bluetooth headset (16 kHz mSBC or 8 kHz CVSD, mono), play to Bluetooth headsets and speakers, live
-  monitor over Bluetooth (Monitor to row, delay shown), headset reconnects handled, paired devices that are not connected listed (launcher
-  0.10.1 or later), `cassette-probe --server`; the package now depends on `libpulse0`. Boards without a sound server are unchanged. See
-  [`docs/RELEASE-0.3.0.md`](docs/RELEASE-0.3.0.md).
-- 0.2.0: MERGE, the recordings list's fifth key (key M), joins takes of one format (WAV, FLAC, Opus) into one new take in the order
-  chosen, in merge mode on the list page: WAV is copied sample exact, FLAC is decoded and re-encoded without loss, Opus packets
-  are copied into one stream (a seam of 12 to 20 ms at each join; with the music presets it can be heard as a blip). See
-  [`docs/RELEASE-0.2.0.md`](docs/RELEASE-0.2.0.md). The HackBerry photo in the user guide is a fresh capture while recording.

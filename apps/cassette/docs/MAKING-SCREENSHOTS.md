@@ -9,9 +9,9 @@ the screen.
 From Windows, in a WSL shell (the build runs in WSL, as `build.sh host` does):
 
 ```sh
-export LAUNCHER_SRC=/home/<you>/zero7/pinfix-tree      # the launcher tree the apps build against
+export LAUNCHER_SRC=<path to a checkout of the launcher repository>   # the launcher tree the apps build against
 export LAUNCHER_TREE=$LAUNCHER_SRC
-wsl -e sh /mnt/c/CLAUDE/zero7/<worktree>/apps/cassette/docs/make-doc-images.sh
+wsl -e sh <path to this repository>/apps/cassette/docs/make-doc-images.sh
 ```
 
 Optional: `CDK_BUILD=~/cdk-build/<new folder>` (default `~/cdk-build/cassette-docs-img`; use a new folder per
@@ -21,7 +21,7 @@ copy an earlier `_lvgl-host` folder into `$CDK_BUILD` to skip that).
 What the script does:
 
 1. Stages the app like `build.sh host` (an LF copy under `$CDK_BUILD/stage-docs`) and keeps only the scenes named in
-   [`doc-images.tsv`](doc-images.tsv), so it renders about 60 scenes, not 160.
+   [`doc-images.tsv`](doc-images.tsv), so it renders only those scenes (about 60), not all of them (about 160).
 2. Builds the headless host with `_common/build_app.sh` and runs those scenes. Their own checks (`expect text ...`,
    the layout check) must pass, or the script stops. The PNGs are written to `$CDK_BUILD/host/out/<scene>/<size>/<shot>.png`.
 3. Copies each wanted PNG to `docs/img/<name>` (the table below is `doc-images.tsv`).
@@ -38,7 +38,7 @@ The images are 10 to 70 KB each, so the folder stays small. Commit `docs/img` wi
 
 ## The images
 
-Source of truth: `docs/doc-images.tsv` (tab separated: image, scene, size, shot). The table is the same list.
+Source of truth: `docs/doc-images.tsv` (tab separated: image, scene, size, shot). The table is the same list (the rows after `bt-call-quality.png` were added later, so they are not in render order).
 
 | Image (in `docs/img`) | Scene (`tests/scenes`) | Size | Shot | Shows |
 |---|---|---|---|---|
@@ -103,14 +103,35 @@ Source of truth: `docs/doc-images.tsv` (tab separated: image, scene, size, shot)
 | `bt-headset-gone.png` | `bt10-rec-gone` | 480x320 | `rec-gone` | The headset disconnected during a take |
 | `bt-switching.png` | `bt11-switching` | 480x320 | `switching` | "Switching to music mode... 1 s" |
 | `bt-call-quality.png` | `bt12-callq` | 480x320 | `callq` | "Playing in call quality: this headset has no music mode." |
+| `rename-counter-mid.png` | `r2-rename-counter` | 480x320 | `rename-count-mid` | The rename box with its character counter, part way |
+| `rename-counter-amber.png` | `r2-rename-counter` | 480x320 | `rename-count-amber` | The rename box, counter near the limit (amber) |
+| `rename-counter-full.png` | `r2-rename-counter` | 480x320 | `rename-count-full` | The rename box, counter at the limit |
+| `list-tags.png` | `r8-list-tags` | 480x320 | `list-tags` | The recordings list with the format tag in each row |
+| `settings-codec-rows.png` | `fmt1-codec-all` | 480x320 | `settings-rows` | Settings with the Codec, Sample rate and Bit depth rows |
+| `settings-codec-flac.png` | `fmt6-codec-current-flac` | 480x320 | `settings-flac` | Settings with FLAC chosen |
+| `codec-picker-640x480.png` | `fmt1-codec-all` | 640x480 | `picker-top` | The Codec picker, 640x480 |
+| `codec-picker-480x320.png` | `fmt1-codec-all` | 480x320 | `picker-top` | The Codec picker, top, 480x320 |
+| `codec-picker-bottom.png` | `fmt1-codec-all` | 480x320 | `picker-bottom` | The Codec picker, bottom (the quick presets) |
+| `codec-picker-current-flac.png` | `fmt6-codec-current-flac` | 480x320 | `picker-current-flac` | The Codec picker with FLAC as the current choice |
+| `codec-picker-unavailable.png` | `fmt2-codec-44k-only` | 480x320 | `picker-top` | The Codec picker on a 44.1 kHz-only card: Opus dimmed |
+| `codec-picker-notice.png` | `fmt2-codec-44k-only` | 480x320 | `picker-notice` | A tap on a dimmed entry: "Not available: ..." |
+| `codec-picker-nolib.png` | `fmt3-codec-nolib` | 480x320 | `picker-top` | The Codec picker with a codec library missing |
+| `rate-picker.png` | `fmt8-rate-picker` | 480x320 | `picker-top` | The Sample rate picker |
+| `depth-picker.png` | `fmt9-quality-depth` | 480x320 | `picker-top` | The Bit depth picker |
+| `bitrate-picker.png` | `fmt10-codec-change-toast` | 480x320 | `bitrate-picker` | The Bit rate picker (Opus) |
+| `rate-picker-opus.png` | `fmt10-codec-change-toast` | 480x320 | `rate-opus` | The Sample rate picker with Opus chosen |
+| `codec-change-toast.png` | `fmt10-codec-change-toast` | 480x320 | `settings-opus-toast` | Settings after a codec change, with its notice |
+| `trim-fit.png` | `wfq-fit-small` | 480x320 | `trim-fit` | Edit page with the FIT waveform scale |
+| `bt-input-paired.png` | `bt16-input-paired` | 480x320 | `input-paired` | The Input picker with a paired headset that is not connected (dimmed) |
+| `bt-output-paired.png` | `bt17-output-paired` | 480x320 | `output-paired-refused` | The Output picker, a paired device refused (not connected) |
+| `bt-input-notsetup-server.png` | `bt18-notsetup-sound-server` | 480x320 | `input-notsetup-server` | The Input footer "The sound server is not running" |
 
 Not rendered by the script:
 
 - `layouts.png`: made by `finish-images.py` from `recorder-landscape.png`, `size-*.png`.
-- `real-hackberry-720.png` and `real-pi3a-portrait.png`: real board screenshots, copied by hand from
-  `atlas-board-work/hackberry/20261111-023804-lamps9l.png` (an Opus take, the lamps lit) and
-  `atlas-board-work/pi3a/20261111-024138-lamps9l.png` (a FLAC take; 480x800), both from the cassette9l build. Replace them
-  with newer captures when a layout changes (`python shot.py <board> <label>` in `atlas-board-work`).
+- `real-hackberry-720.png` and `real-pi3a-portrait.png`: real board screenshots, copied by hand: the HackBerry (an Opus take, the lamps lit) and
+  the Pi 3A+ (a FLAC take; 480x800), both taken with the cassette9l build. Replace them with newer captures when a layout
+  changes (take a screenshot of the board's screen).
 - `../screenshots/01..10-*.png`: the ten Store pictures, copied by hand from the same render
   (`$CDK_BUILD/host/out/<scene>/<size>/`: `a-recording` 640x480, 480x320 and 320x480, `c-countdown`, `i-list`, `j-trim`
   at 640x480 and 320x480, `k-save`, `h-settings` 320x480 and `b-nocard`; the scene names are in the README's table).

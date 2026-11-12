@@ -5,7 +5,7 @@ CyberDeck board (or pair a Bluetooth headset, see [Bluetooth](#bluetooth)), pres
 it, a smaller FLAC or Ogg Opus file. You can listen again, cut a take with trim and split, join takes into one, and
 watch a level meter while you record.
 
-This guide describes the app as it is in the source (the 0.1 line, with FLAC and Ogg Opus). Pictures are rendered on a PC from the app's test scenes
+This guide describes the app as it is in the source (version 0.3.0: WAV, FLAC and Ogg Opus, merging, Bluetooth audio). Pictures are rendered on a PC from the app's test scenes
 (a made-up sound source: the tones and levels are not real audio); the two captures at the end of
 [Screen sizes](#screen-sizes-and-layouts) come from real boards. How to refresh the pictures:
 [MAKING-SCREENSHOTS.md](MAKING-SCREENSHOTS.md).
@@ -43,11 +43,12 @@ Contents:
 - **Or a Bluetooth headset**, on a board with a sound server (PipeWire or PulseAudio, the desktop boards such as the
   HackBerry): speech quality, 16 or 8 kHz mono. See [Bluetooth](#bluetooth).
 - Nothing else for WAV. For **FLAC** and **Ogg Opus** the board needs a few libraries (`libflac`, `libopusenc0`,
-  `libopus0`; see [Formats](#formats-wav-flac-and-ogg-opus)); without them those formats are simply not offered and
+  `libopus0`; for Bluetooth `libpulse0`; the package depends on all of them, so the Store installs them; see [Formats](#formats-wav-flac-and-ogg-opus)); without them those formats are simply not offered and
   Cassette records WAV. There is no network code in the app: nothing you record leaves the board.
 
-**Cards used so far** (named by the owner; the source does not hold the results of the board tests, so what each
-card does is described only where the code says it): the PCM2902 USB sound card with a microphone, the UC02 USB-C
+**Cards used so far** (the cards the owner has used with the app; the Bluetooth results are in
+[Tested devices](#tested-devices), the other board-test results are not kept in the source, so what each card does is described only
+where the code says it): the PCM2902 USB sound card with a microphone, the UC02 USB-C
 headset, the Jabra Evolve 65, the Link 370 headset, the Apple USB-C dongle. Cards differ in what they offer, and the
 app adapts: some have a level control, some have auto gain or a mute switch, some can also play sound out (needed for
 live monitoring), some record only at 16000 Hz (see [Troubleshooting](#troubleshooting)).
@@ -57,7 +58,8 @@ live monitoring), some record only at 16000 Hz (see [Troubleshooting](#troublesh
 1. Plug the card in, then open **Cassette** from the home grid (category Tools).
 2. Cassette picks the first capture card it finds and opens it at once. The level meter moves when you make a sound,
    even before you record anything. The folder `~/Recordings` is created if it is not there.
-3. If you have more than one card, open Settings (the gear button or the **S** key) and choose the card in the
+3. If you have more than one card, or you want a Bluetooth headset (pair it first in the launcher's Settings > Bluetooth, see
+   [Bluetooth](#bluetooth)), open Settings (the gear button or the **S** key) and choose it in the
    **Input** row. Cassette remembers your choice, and the card's own level, auto gain and mute for each card.
 4. Press **REC** (red key, or **R**) to start a take, **STOP** (or **X**) to end it.
 
@@ -139,6 +141,8 @@ records or is paused.
 2. Press **REC**. The hubs start to turn and the counter runs. The take is a new file; its name is on the label.
 3. **PLAY / PAUSE** pauses the take (the counter stops, the hubs stop); press it again to go on in the same file.
 4. **STOP** ends the take. It becomes the loaded take (the one PLAY plays). A short notice says what happened.
+
+![Recording paused](img/recording-paused.png)
 
 **Record timer.** In Settings, *Record timer* can be Off (default), 3 s, 10 s or 20 s. With a timer, REC starts a
 countdown over the cassette window (3, 2, 1 ...). The meter stays live. A tap on the window, STOP or Esc cancels it:
@@ -377,7 +381,7 @@ crash leaves the original or the finished results, never half a file. A notice t
 
 ## Merging takes
 
-New in 0.2.0. **MERGE** joins several takes into one new take, in the order you choose them,
+**MERGE** joins several takes into one new take, in the order you choose them,
 without any loss of quality. The takes must be of one kind: the same codec (WAV, FLAC or Opus), the same sample rate
 and number of channels and, for WAV and FLAC, the same bit depth. An Opus take's bit rate is not stored with it and may
 differ (see *Opus joins* below).
@@ -485,7 +489,7 @@ The card's own rows depend on what the selected card has:
 | **Monitor level** | Its volume, 0 to 100 % in steps of 5. | 50 % | with Monitor; dimmed while Monitor is off |
 | **Monitor to** | Where the monitor plays: *Automatic* (the headset itself, or the card's own playback side), a Bluetooth device or another output. Greyed with the reason when there is no target (it still opens). | Automatic | only where Bluetooth is in play (a Bluetooth input or output) |
 | **Sync every** | How often the take is written safely to the card: 5, 10, 20 or 30 s. See [Crash safety](#crash-safety). | 10 s | always |
-| **Folder** | Shows where takes are kept. The list offers the current folder and `~/Recordings`; for another folder edit `folder` in `settings.json` (see Files). Cannot change while a take records. | `~/Recordings` | always |
+| **Folder** | Shows where takes are kept. The list offers the current folder and `~/Recordings`; for another folder edit `folder` in `settings.json` (see [SETTINGS.md](SETTINGS.md)). Cannot change while a take records. | `~/Recordings` | always |
 | **File prefix** | The first part of new take names. Same rules as RENAME: 1 to 24 characters of letters, digits, spaces, `-`, `_`. | `take` | always |
 | **Take number** | The number the next take gets. See below. | one more than the last take | always; dimmed while a take records |
 | **Auto-split** | *At 4 GiB* (new file) or *Off (one RF64 file)*. | At 4 GiB | always |
@@ -784,18 +788,19 @@ Under **Monitor** a line shows the **delay** the app measures: *Delay about 90 m
 music mode it says *Delay about 0.25 s: you will hear an echo* (in dark amber), and before the monitor runs *Delay about
 0.2-0.3 s: you will hear an echo*.
 
-What to expect (**estimates until they are measured on the boards**, see the board tests B30 and B31 in
-[`../tests/BOARD-TESTS.md`](../tests/BOARD-TESTS.md)):
+What to expect (measured on the HackBerry, see the board tests B30 and B31 in
+[`../tests/BOARD-TESTS.md`](../tests/BOARD-TESTS.md); one device each, other devices differ):
 
-| Route | Delay |
-|---|---|
-| The headset's microphone to the same headset | about 60 to 150 ms: clearly late, fine for checking the voice |
-| Any microphone to a Bluetooth speaker or headphones (music mode) | about 150 to 350 ms: an echo, only for checking that it records |
-| The headset's own **sidetone** (if it has one) | none: the best monitor. Leave Cassette's Monitor off then |
+| Route | Delay shown by Cassette | Felt |
+|---|---|---|
+| A Bluetooth headset's microphone to the same headset (call mode; Jabra Evolve 65, B30) | about 0.1 s | about 0.25 s: clearly late, fine for checking the voice |
+| A USB microphone to a Bluetooth speaker (music mode; XWF-M18-M28-M38, B31) | 0.18 s | about 0.2 s: an echo, only for checking that it records |
+| Other speakers and headphones in music mode | not measured; expect up to about 0.35 s | an echo |
+| The headset's own **sidetone** (if it has one) | none | the best monitor. Leave Cassette's Monitor off then |
 
 The delay under Monitor is **Cassette's own**: it counts what Cassette itself buffers and what the sound server reports for the
-stream. In call mode the **headset adds its own link** on top, which the figure does not include. Measured with a Jabra Evolve 65:
-about 0.25 s felt, against 0.1 s shown. Trust your ears for the headset, and use the headset's sidetone if it has one.
+stream. In call mode the **headset adds its own link and buffering** on top, which the figure does not include (the Evolve 65: about
+0.1 s shown, about 0.25 s felt). Trust your ears for the headset, and use the headset's sidetone if it has one.
 
 | Monitor on the headset | Monitor to a speaker: the echo notice | Monitor to |
 |---|---|---|
@@ -810,12 +815,12 @@ goes on.* and comes back by itself when the device is back (while Monitor is on)
 
 | Notice | What happened | What to do |
 |---|---|---|
-| *Connecting the headset...* | The headset is switching to call mode (about 0.7 s, longer for some headsets). | Wait; REC is allowed and starts at the first audio. |
-| *The headset is connected but sends no sound.* | The headset delivers pure silence (digital zero) for 3 s: its call link did not open (the Beats Fit Pro does this). The take keeps running; the notice clears when sound arrives. | Stop, switch the headset off and on, or use another headset or a USB card. |
+| *Connecting the headset...* | The headset is switching to call mode (about 0.65 s on the HackBerry with the Evolve 65, longer for some headsets). | Wait; REC is allowed and starts at the first audio. |
+| *The headset is connected but sends no sound.* | The headset delivers pure silence (digital zero) for 3 s: its call link did not open (the Beats Fit Pro does this, observed with a probe). The take keeps running; the notice clears when sound arrives. | Stop, switch the headset off and on, or use another headset or a USB card. |
 | *The Bluetooth headset disconnected: the take was closed and kept.* (*... disconnected.* without a take) | The headset was switched off or went out of range. Cassette never continues from another microphone: the file ends at the cut. | Switch it back on: *The Bluetooth headset is back* and it is used again without restarting the app. Start a new take. |
 | *The Bluetooth headset is not connected.* | REC with the chosen headset absent (the cassette window says it too while it is absent, with *Found by itself when it connects.*). | Connect it in Settings > Bluetooth, or choose another Input. |
 | *The headset microphone could not be confirmed: the take did not start.* | The sound server could not confirm that the stream is on the headset's microphone (Cassette asks again for a second first). | Try REC again; reconnect the headset. |
-| *Switching to music mode... 1 s* | PLAY to the headset that was just in call mode. | Wait (normally under 4 s; a few seconds more while the sound server rebuilds the headset's output). |
+| *Switching to music mode... 1 s* | PLAY to the headset that was just in call mode. | Wait (about 1.9 s on the HackBerry with the Evolve 65 after the microphone closes, normally under 4 s; a few seconds more while the sound server rebuilds the headset's output). |
 | *Playing in call quality: this headset has no music mode.* | The headset has no music mode now (another Bluetooth audio device holds it, or it never had one). | Disconnect the other device for music quality. |
 | *The Bluetooth output disconnected.* / *The Bluetooth output is not connected.* | The output went away during playback (the deck pauses) / PLAY with the chosen output absent, or its output did not come back within a few seconds. | Reconnect it, or choose another Output. |
 | *The monitor output disconnected: the recording goes on.* | The monitor's Bluetooth output went away. | Nothing: it comes back by itself. |
@@ -836,15 +841,18 @@ kbps*. The Sample rate row has the one rate. See [Formats](#formats-wav-flac-and
 
 ### Tested devices
 
-Tested on the **HackBerry (PipeWire 1.4.2)**:
+Tested on the **HackBerry (PipeWire 1.4.2)** with launcher 0.10.1, Cassette builds bt2 and bt3 and then 0.3.0 (2026-11-11 and 12): board tests B24 to B31,
+B33 and B35 passed (the results are in [`../tests/BOARD-TESTS.md`](../tests/BOARD-TESTS.md#results)). Not run on hardware: B32 (a
+silent headset through Cassette), B34 (a board without a sound server) and B36 (an older launcher; covered by the unit tests).
 
 | Device | Result |
 |---|---|
-| Jabra Evolve 65 (paired directly, not through its USB dongle) | Recording OK at 16 kHz mSBC. Music mode OK when no other music (A2DP) device is connected. |
-| Beats Fit Pro | Connects, but sends no microphone audio (it never opens its call link with this board): Cassette reports *The headset is connected but sends no sound.* |
-| XWF-M18-M28-M38 speaker | Playback OK (music mode only; it has no microphone). |
+| Jabra Evolve 65 (paired directly, not through its USB dongle) | Recording OK at 16 kHz mSBC. Music mode OK when no other music (A2DP) device is connected. Monitor to the same headset: about 0.1 s shown, about 0.25 s felt. On the HackBerry the switch into call mode took about 0.65 s when the microphone opened, and about 1.9 s back to music mode after it closed. |
+| Beats Fit Pro | Observed with a probe on the HackBerry: it connects, but opens no call-audio link and its source is silent (with both mSBC and CVSD). Cassette's notice for this, *The headset is connected but sends no sound.*, is covered by the unit tests; it was not run on the hardware (B32). |
+| XWF-M18-M28-M38 speaker | Playback OK (music mode only; it has no microphone). Monitor from a USB microphone: 0.18 s shown, about 0.2 s felt. |
+| Spacetouch USB sound card | Used as the USB microphone for the speaker monitor test (B31). |
 
-LE Audio devices (Bluetooth 5.2 and later, LC3) are not supported: our boards' radios are Bluetooth 5.0 or older.
+LE Audio devices (Bluetooth 5.2 and later, LC3) are not supported: our boards' radios are Bluetooth 5.0 or older. Bluetooth audio was not tested on amd64 boards (nor on the FZ-M1 tablet).
 
 **On a terminal:** `/usr/share/APPLaunch/bin/cassette-probe --server` lists what the sound server sees: every source and
 sink with its rate, Bluetooth address, kind (headset, speaker) and monitor flag, and per Bluetooth device the active mode
@@ -961,7 +969,7 @@ The full map is in [KEYS.md](KEYS.md).
 | Edit numbers already used | `~/Recordings/.edits/` (so a deleted `-2` is never handed out again) |
 | The waveform overview of a take | `<take>.wav.peaks` (`.flac.peaks`, `.opus.peaks`) next to the take, built the first time the Edit page opens it; Cassette checks it against the take's size and time on every use and rebuilds it if they changed. Safe to delete. |
 | Leftover temporary files | `.tmp-*` in the folder (`.tmp-merge-*` from a merge), from a save or a merge that was cut short; removed at the next start |
-| The settings | `~/.config/cassette/settings.json`; also each card's level, auto gain and mute. Delete it to reset everything. |
+| The settings | `~/.config/cassette/settings.json`; also each card's level, auto gain and mute. Delete it to reset everything. Every key is listed in [SETTINGS.md](SETTINGS.md). |
 
 The WAV files are standard (Broadcast Wave), and the FLAC and Ogg Opus files are standard too (the take's name and,
 when the clock is set, the date are in the file's Vorbis comments). Any player or editor opens them. Copy them off the
