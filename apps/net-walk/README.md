@@ -1,15 +1,26 @@
 # Net Walk (`net-walk`)
 
 A network-wiring puzzle for the cyberdeck, played by touch or keyboard: turn the tiles until the server's power reaches every
-computer. Native fullscreen app on the launcher's `cp0_lvgl` (like Mine Field and Klondike Solitaire), MIT, no network, no
+computer. Native fullscreen app on the launcher's `cp0_lvgl` (like Mine Field and Klondike Solitaire), MIT, version 0.1.0, category Games, no network, no
 hardware. Written from scratch: no code, art or text of other programs of its kind. Drawn in the look of Palm OS 4 colour
 (2001) inside the launcher's shared page header: a #CCCCCC window with white and #666666 bevels, bold bitmap text, navy dialog
 title bars; the computers are beige CRT monitors and the server is a grey rack tower (see Devices).
 
 ## Screenshots
 
-`screenshots/` (rendered by the PC harness, `build.sh host`): `01-deck-480x320`, `02-powered-640x480`, `03-win-800x480`,
-`04-size-480x320`, `05-scores-640x480`, `06-expert-1024x600`, `07-portrait-480x800`, `08-portrait-win-480x640`.
+The eight in `screenshots/` were rendered on a PC by the headless harness (`build.sh host`); the Store shows the same
+eight, in this order.
+
+| | |
+| --- | --- |
+| ![New board, 480x320](screenshots/01-deck-480x320.png) | ![Game in progress, 640x480](screenshots/02-powered-640x480.png) |
+| A new Normal board at 480x320, the power only at the server, rendered on a PC | A game in progress at 640x480: the reached cables green, three tiles locked, rendered on a PC |
+| ![Won, 800x480](screenshots/03-win-800x480.png) | ![Size, 480x320](screenshots/04-size-480x320.png) |
+| The "Network up!" window with the moves, the time and new bests, 800x480, rendered on a PC | The Size window: Easy 5x5, Normal 7x7, Hard 9x9, Expert 9x9 wrap, 480x320, rendered on a PC |
+| ![Scores, 640x480](screenshots/05-scores-640x480.png) | ![Expert wrap, 1024x600](screenshots/06-expert-1024x600.png) |
+| The Scores window: best moves and best time per size, 640x480, rendered on a PC | Expert with wrap (dashed frame), 1024x600, rendered on a PC |
+| ![Portrait, 480x800](screenshots/07-portrait-480x800.png) | ![Portrait win, 480x640](screenshots/08-portrait-win-480x640.png) |
+| Portrait (PDA mode), 480x800: the panel and buttons under the board, rendered on a PC | A won board in portrait, 480x640, rendered on a PC |
 
 ## What it does
 
@@ -131,6 +142,9 @@ it was frozen (a gap of more than a second between two clock ticks is dropped).
 ## Requirements
 
 A screen of at least 480x320 (portrait 480x640 in PDA mode). Touch or keyboard. No network, no sound.
+
+In PDA mode on a panel whose portrait canvas is smaller than 480x640 (a 480x320 panel gives 320x480), Net Walk is not
+shown upright: the launcher runs it turned, on the 480x320 landscape canvas (`X-Portrait=480x640`, `X-MinSize=480x320`).
 
 ## Known limits
 

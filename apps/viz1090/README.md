@@ -152,7 +152,9 @@ The headless scenes `tests/scenes/portrait*.scene` check the intro at 480x800, 4
   to it.
 * `python3` and the libraries listed in `app.json` (installed with the package): SDL2, SDL2_ttf, SDL2_gfx (viz1090),
   librtlsdr, libusb, ncurses, zstd, zlib (readsb), FreeType (the bridge and the intro), libinput and libxkbcommon
-  (the intro's keyboard and touch).
+  (the intro's keyboard and touch). The packages, from `depends` in `app.json`: `python3`, `libsdl2-2.0-0`,
+  `libsdl2-ttf-2.0-0`, `libsdl2-gfx-1.0-0`, `librtlsdr0`, `libusb-1.0-0`, `libncurses6`, `libzstd1`, `zlib1g`,
+  `libfreetype6`, `libinput10`, `libxkbcommon0`.
 * Memory: the intro screen ends before the map starts (it is a native app like the others of this repository: about
   13-15 MB while it runs, the launcher's report 024; not yet measured on a board for this one). The package is a
   6.7 MB download and 13.4 MB installed: the world map 5.7 MB, the intro 3.0 MB (LVGL and the launcher's widgets

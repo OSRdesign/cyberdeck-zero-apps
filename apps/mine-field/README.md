@@ -1,14 +1,26 @@
 # Mine Field (`mine-field`)
 
 A mine-clearing puzzle for the cyberdeck, played by touch or keyboard: dig the safe cells, flag the mines, clear the
-board. Native fullscreen app on the launcher's `cp0_lvgl` (like Klondike Solitaire), MIT, no network, no hardware.
+board. Native fullscreen app on the launcher's `cp0_lvgl` (like Klondike Solitaire), MIT, version 0.1.1, category Games, no network, no hardware.
 Written from scratch: no code, art or text of other programs of its kind.
 
 ## Screenshots
 
-`screenshots/` (rendered by the PC harness, `build.sh host`): `01-deck-640x480`, `02-pi4b-dug-800x480`,
-`03-portrait-board-480x800`, `04-expert-portrait-480x800`, `05-hint-640x480`, `06-loss-640x480`, `07-win-640x480`,
-`08-settings-640x480`.
+The eight in `screenshots/` were rendered on a PC by the headless harness (`build.sh host`); the Store shows the same
+eight, in this order.
+
+| | |
+| --- | --- |
+| ![New game, 640x480](screenshots/01-deck-640x480.png) | ![Board dug open, 800x480](screenshots/02-pi4b-dug-800x480.png) |
+| A new board at the deck's 640x480, the dock on the right, rendered on a PC | A board dug open at 800x480 (the Pi 4B's screen size), rendered on a PC |
+| ![Portrait board, 480x800](screenshots/03-portrait-board-480x800.png) | ![Expert in portrait, 480x800](screenshots/04-expert-portrait-480x800.png) |
+| Portrait (PDA mode), 480x800: the dock under the board, rendered on a PC | A new Expert board in portrait, 480x800, rendered on a PC |
+| ![Hint, 640x480](screenshots/05-hint-640x480.png) | ![Lost game, 640x480](screenshots/06-loss-640x480.png) |
+| A hint: "Safe: dig here", +10 s, 640x480, rendered on a PC | A lost game: the mines shown, the wrong flags crossed, Close / New game / Try again, 640x480, rendered on a PC |
+| ![Won game, 640x480](screenshots/07-win-640x480.png) | ![Settings, 640x480](screenshots/08-settings-640x480.png) |
+| A won game, "New best!", Close / Same board / New game, 640x480, rendered on a PC | Settings: Fair boards, Animations, Show timer, 640x480, rendered on a PC |
+
+Captured on a board (not in the Store):
 
 ![Mine Field, portrait on the Pi 4B](../../docs/screenshots/mine-field-pi4b-portrait.png)
 

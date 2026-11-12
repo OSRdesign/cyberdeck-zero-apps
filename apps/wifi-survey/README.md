@@ -1,6 +1,6 @@
 # Wi-Fi Survey
 
-Version 0.1.0, package `wifi-survey`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.1.1, package `wifi-survey`. Part of [cyberdeck-zero-apps](../../README.md).
 
 > **Net Toolbox replaces it.** Net Toolbox 0.4.0 has the same feature as "Wi-Fi networks", on a full-screen layout. This app stays available for now.
 
@@ -62,6 +62,11 @@ Taken on the deck with test scan data.
 * The touch behaviour was checked with test touch events, not with a finger, until the owner of the deck has tried it.
 * After an upgrade through the Apps menu the tile moves to the end of the launcher grid.
 * The app uses the launcher's standard window (640x340), not the full screen.
+
+## Changes
+
+* **0.1.1**: a short Esc never quits the app: on Networks and Channels it only shows the hint "Hold Esc 3 s to exit",
+  in the detail it goes back to the list. Hold Esc for 3 seconds to exit.
 
 ## Build from source
 
