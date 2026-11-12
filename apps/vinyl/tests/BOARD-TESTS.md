@@ -3,7 +3,8 @@
 Controller-led: the Controller installs the package and copies the test music; the owner runs the steps and says what
 was seen. First board: the HackBerry (CM5, 720x720 square, PipeWire, the XWF case speaker and the Evolve 65 over
 Bluetooth); a Lite board (zero8 or the deck, a USB sound card) for B11. Numbers follow report 059 section 9 (B1-B12),
-trimmed to what 0.1.0 has.
+trimmed to what 0.1.0 has; B13-B16 are the design-QA round (the transport press of the owner ruling of 2026-11-12, the
+volume strip).
 
 ## Preparation (Controller)
 
@@ -29,7 +30,11 @@ trimmed to what 0.1.0 has.
 | B9 | The volume keys while playing on the default output | the level changes; the "Vol" chip follows within a second or two |
 | B10 | Esc at the browser (quit), open Vinyl again | the same track at the same time, paused; Space plays on |
 | B11 | Lite board (zero8 or the deck) with the USB card: Output > the card, play | it plays; no Bluetooth row; the strip "Bluetooth audio is not set up on this board." |
-| B12 | Portrait (zero8 in PDA mode or the Pi 3A+) and square (HackBerry): every page | no app title in the portrait band; nothing off the screen; the drafts' layout |
+| B12 | Portrait (zero8 in PDA mode or the Pi 3A+) and square (HackBerry): every page | no app title in the band at 320x480 (the title shows at 480x640 and 480x800); nothing off the screen; the drafts' layout |
+| B13 | Now playing, a keyboard in front: Left within the first 2 s of a track; Left again after 5 s of it; Right | Left within 2 s: the previous track; Left after 2 s: the same track from 0:00; Right: the next track. Each press acts once, on its release |
+| B14 | Hold Right (about 2 s), let go; hold Left (about 2 s), let go; once playing, once paused | after half a second the time runs ahead (back) at about 3x with no sound, no scratch; on release the sound comes back from there; paused stays paused; holding Left stops at 0:00 (never the previous track); holding Right past the end goes on into the next track. No extra skip on release |
+| B15 | The same short and held presses with the headset's / speaker's next and previous buttons, in front and hidden, and on the touch keys beside play (and the mini player's next key) | the same results as B13 and B14 (if a headset sends no release while held, say what happened: the log has `media key: next` and `(released)` lines) |
+| B16 | Tap the "Vol" chip; tap "+" twice, "-" once; wait; tap the chip twice | the strip "-", the level, its bar, "+" replaces the seek row; the level goes up 10, down 5 (the launcher's volume on the default output: the volume keys show the same level); it closes 4 s after the last tap, and a second tap on the chip closes it at once |
 
 ## Cleanup
 

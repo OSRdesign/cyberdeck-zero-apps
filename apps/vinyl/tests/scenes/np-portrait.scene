@@ -1,4 +1,4 @@
-title Vinyl now playing in portrait (draft NowPlaying-320x480): no app title in the band (Esc left, strip right), one row of chips
+title Vinyl now playing in portrait (draft NowPlaying-320x480): no app title in the band at the narrow portrait (the toolkit's rule: Esc left, strip right), one row of chips
 sizes 320x480
 ppmm 667
 env VINYL_DEMO 1

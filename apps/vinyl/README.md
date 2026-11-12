@@ -20,7 +20,8 @@ Headless harness, demonstration world (`VINYL_DEMO=1`):
 | ![queue](screenshots/03-queue-480x320.png) | ![output](screenshots/04-output-480x320.png) |
 | ![portrait](screenshots/05-now-playing-320x480.png) | ![disconnected](screenshots/08-output-lost-480x320.png) |
 
-Square (720x720, the HackBerry) and large (800x480, two panes):
+The deck (640x480) with the volume strip, square (720x720, the HackBerry) and large (800x480, two panes):
+![deck](screenshots/09-now-playing-640x480.png) ![volume strip](screenshots/10-volume-strip-640x480.png)
 ![square](screenshots/06-now-playing-720x720.png) ![large](screenshots/07-now-playing-800x480.png)
 
 ## What it does
@@ -32,26 +33,38 @@ Square (720x720, the HackBerry) and large (800x480, two panes):
 | **Queue** | the play order from the playing track, "3 OF 20, 1 H 24 MIN LEFT"; Move up, Move down, Remove, Clear all (keeps the playing track). No dragging anywhere. |
 | **Output** | Automatic (the system's default output), the Bluetooth devices (music or call quality), the wired outputs, a paired device that is off (dimmed). Vinyl never switches output by itself: when the output in use goes away, playback pauses ("Evolve 65 disconnected. Paused."). |
 
-The top band is the launcher's: the toolkit's header with the title (none in portrait), the Esc and the shared status strip.
+The top band is the launcher's: the toolkit's header with the title (none at 320x480, the toolkit's narrow portrait), the
+Esc and the shared status strip. No page has a busy state: nothing waits in front of the user (tags, covers and the
+output lists are read in the background).
 
 ### Keys and touch
 
 | Function | Key | Touch |
 |---|---|---|
 | Play / pause | Space (Enter on now playing) | the teal key; the mini player's key |
-| Previous / next track | `,` / `.` | the keys beside play (previous restarts a track after 3 s) |
-| Seek back / forward 10 s | Left / Right (now playing) | tap the seek bar where to go |
+| Previous / next track | Left / Right on now playing; `,` / `.` on every page; the media keys | the keys beside play; the mini player's next key |
+| Scan back / ahead (muted, 3x) | hold Left / Right on now playing (or `,` / `.`, or a media key) | hold the previous / next key |
+| Seek back / forward 10 s | Shift+Left / Shift+Right (now playing) | tap the seek bar where to go |
 | Shuffle / repeat | S / R | the keys left and right of the transport |
 | Queue, Output, Browser | Q, O, B | the Queue key, the output chip or Output key, Browse (or Esc from now playing) |
-| Lists: move, act | Up / Down, Enter (Right opens a folder) | browser: tap a row; queue: tap selects, tap again plays; output: tap chooses |
+| Lists: move, act, back | Up / Down, Enter; Right acts as Enter and Left goes back (queue, output; in the browser Right opens a folder) | browser: tap a row; queue: tap selects, tap again plays; output: tap chooses |
 | Folder up | Left or Backspace (browser) | the ".." row |
+| Queue pane (800x480 and wider) | Up / Down pick a track, Enter plays it | tap picks, tap again plays |
 | Queue editing | U move up, D move down, Delete or X remove, C clear all | the four buttons |
-| In-app volume (only for an output the system volume does not reach) | `-` / `=` | none in 0.1.0 |
+| Volume | `-` / `=`: Vinyl's own volume, only for an output the system volume does not reach | tap the volume chip: the volume strip ("-", the level, its bar, "+") replaces the seek row for 4 s (a second tap closes it); its buttons change Vinyl's own volume there, and the system volume (through the launcher) on an output it reaches |
+| Close a notice | Esc | tap it (it also goes after 6 s, 8 s for a disconnect) |
 | Back; at the browser, quit | Esc | the header's Esc |
-| Headset, speaker, keyboard media keys | Play/Pause, PlayCD, PauseCD (a toggle), Next, Previous, Stop (pause and back to the start) | |
+| Headset, speaker, keyboard media keys | Play/Pause, PlayCD, PauseCD (a toggle), Next, Previous (as Right / Left above, held too), Stop (pause and back to the start) | |
 
-The volume, mute and brightness keys stay the launcher's (the app shows the level it reads from `status.state`). A media
-key seen twice within 250 ms (the same button on two input nodes) acts once.
+Previous and next act when the key is released, the same from every path (the transport press, owner ruling
+2026-11-12): next plays the next track (at the end of the queue with repeat off it stays on the last one; repeat all and
+repeat one wrap to the first); previous goes back to the start of the track when more than 2 s of it have played, else
+to the previous track (the first track starts again). Held for half a second they scan through the track at three times
+its speed with the sound muted; on release the sound comes back from there, playing or paused as before. A forward scan
+goes on into the next track; a backward one stops at 0:00. Left / Right on now playing are the one exception to the
+Left = back, Right = Enter rule of the other pages. The volume, mute and brightness keys stay the launcher's (the app
+shows the level it reads from `status.state`). A media key seen twice within 250 ms (the same button on two input nodes)
+acts once.
 
 ## Formats
 
@@ -80,21 +93,25 @@ Korean titles draw with the launcher's Noto Sans CJK.
   (the node re-created) is followed on the same device; a device that goes away pauses playback.
 - **Without one** (the Lite boards: the deck, zero8, Pi 3A+): ALSA `default` (Automatic) and the cards with a playback
   device (through `plughw`, never `hw:`); the output page says "Bluetooth audio is not set up on this board."
-- **Volume**: the volume keys are the launcher's and act on the default output; the volume chip shows that level. For an
-  output the system volume does not reach (a chosen output that is not the default, or ALSA without a mixer the launcher
-  drives) the chip shows Vinyl's own volume, changed with `-` / `=`.
+- **Volume**: the volume keys are the launcher's and act on the default output; the volume chip shows that level, and
+  the volume strip's buttons set it through the launcher (`volume set`, where board.state's `requests` lists `volume`).
+  For an output the system volume does not reach (a chosen output that is not the default, or ALSA without a mixer the
+  launcher drives) the chip shows Vinyl's own volume, changed with `-` / `=` or the strip.
 
 ## Background playback
 
 `.desktop` `X-Background=run`: on a launcher with multitasking (canvases 480 px and more on the short side) Super, Alt+Tab
 or the three-finger hold hide Vinyl and the music plays on; nothing is drawn while hidden. Below 480 px (zero8 in
 landscape or portrait) the app owns the panel and Esc at the browser ends playback. The queue and the position are saved
-as they change, so a close by the launcher (memory) resumes paused at the same place. On battery boards Vinyl asks the
-launcher to let the idle panel dim while it plays in front (`dim allow`, decision D16).
+as they change, so a close by the launcher (memory) resumes paused at the same place. Where the launcher answers `dim`
+(board.state `requests`: the battery boards with backlight levels), Vinyl asks it to let the idle panel dim while it
+plays in front (`dim allow`, decision D16).
 
 ## Requirements
 
-- A screen of 480x320 or more (`X-MinSize=480x320`); a portrait layout for 320x480 and taller (`X-Portrait=320x480`).
+- A screen of 480x320 or more (`X-MinSize=480x320`): the smallest approved draft is 480x320, where the sleeve beside the
+  title, artist and chips and a row of six transport keys at the touch size already take the whole width; a smaller
+  screen gets the launcher's notice. A portrait layout for 320x480 and taller (`X-Portrait=320x480`).
 - CyberdeckZero Launcher with the app contract; built at the shared pin (`apps/_common/LAUNCHER_REF`).
 - Packages (Debian 13 names): libmpg123-0t64, libvorbisfile3, libflac14, libopus0, libasound2t64, libpulse0 (Depends);
   libavformat61, libavcodec61, libavutil59, libswresample5 or their 62/60/6 versions (Recommends).
@@ -121,7 +138,6 @@ Delete it to start fresh. Vinyl writes nothing else (it never writes tags or mus
 - No metadata to headsets or car displays (MPRIS / AVRCP, P2); headset keys work when BlueZ hands them to an input node.
 - A cover larger than 1200 px on its long side is not decoded (the memory cap on the Pi Zero 2 W): the drawn sleeve shows.
 - FFmpeg seeks land on the packet at or before the position; the AAC length is the container's.
-- The in-app volume has no touch control in 0.1.0 (keys only).
 - MIDI, native DSD, SACD images, tag editing and video are out of scope (decision D14).
 
 ## Credits and licences
@@ -139,7 +155,7 @@ the FLAC / Opus readers come from this repository's Cassette (same author, MIT).
 
 ```sh
 wsl -e sh apps/vinyl/tests/run.sh               # the unit tests (-Werror) and the real-library fixtures
-wsl -e sh apps/vinyl/build.sh host              # harness, unit tests, 20 scenes, contact sheets
+wsl -e sh apps/vinyl/build.sh host              # harness, unit tests, 25 scenes (qa* for the design QA), sheets
 wsl -e sh apps/vinyl/build.sh cross             # the arm64 binary; --arch amd64 for PCs
 wsl -e sh apps/vinyl/tests/abi/run.sh [root]    # the hand-written FFmpeg / mpg123 / vorbisfile ABI against headers
 python3 tools/make_registry.py --only vinyl --out <folder>    # a local .deb (not published)
@@ -150,4 +166,6 @@ Board protocol: [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md).
 
 ## Changes
 
-- **0.1.0** (not published yet): the P1 MVP of report 059 (decisions D1-D18).
+- **0.1.0** (not published yet): the P1 MVP of report 059 (decisions D1-D18), with the design-QA round: the transport
+  press (owner ruling 2026-11-12), the volume strip, Left / Right on the queue and output pages, the output rows' action
+  dot, the title as the toolkit places it, the icon inside its margin.

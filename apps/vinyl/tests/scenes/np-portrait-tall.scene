@@ -1,4 +1,4 @@
-title Vinyl now playing in portrait (the 320x480 draft scaled, PDA 480x800 and 480x640): no app title in the band (Esc left, strip right), one row of chips
+title Vinyl now playing in portrait (the 320x480 draft scaled, PDA 480x800 and 480x640): the toolkit's header with the app title (design QA D-10), one row of chips
 sizes 480x800 480x640
 env VINYL_DEMO 1
 env VINYL_DEMO_STATE playing
@@ -6,7 +6,7 @@ env VINYL_DEMO_STATE playing
 wait 1200
 shot now-playing
 expect esc
-expect notext "Vinyl"
+expect text "Vinyl"
 expect text "Phoenix"
 expect text "Vol 60"
 expect text "Queue"

@@ -1,0 +1,53 @@
+title Vinyl: design QA walk at 480x320 and 320x480 (their real density)
+sizes 480x320 320x480
+ppmm 610
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+
+wait 1200
+shot 01-now
+expect esc
+@480x320 expect text "Vinyl"
+@320x480 expect notext "Vinyl"
+expect text "Vol 60"
+tap "Vol 60"
+wait 300
+shot 02-now-volume
+expect text "60"
+# the strip's "+" (an icon: no text to tap), measured on each size's 02 shot
+@480x320 tapxy 0.899 0.723
+@320x480 tapxy 0.858 0.718
+wait 300
+shot 03-now-volume-up
+expect text "Vol 65"
+expect text "65"
+wait 4300
+shot 04-now-volume-closed
+expect notext "65"
+expect text "Vol 65"
+# a tap on the chip opens the strip, a second tap closes it
+tap "Vol 65"
+wait 300
+expect text "65"
+tap "Vol 65"
+wait 300
+expect notext "65"
+key b
+wait 400
+shot 05-browser
+expect text "MUSIC / PHOENIX"
+key q
+wait 400
+shot 06-queue
+expect text "Move down"
+key left
+wait 300
+key o
+wait 400
+shot 07-output
+expect text "Automatic"
+key left
+wait 300
+expect text "MUSIC / PHOENIX"
+key esc
+expect quit
