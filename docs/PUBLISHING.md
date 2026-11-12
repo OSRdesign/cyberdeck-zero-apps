@@ -105,7 +105,7 @@ Written by `make_registry.py`, never by hand:
 | `download.sha256`, `download.size` | the same package, for the Store and for the checks |
 | `published_at`, `updated_at` | first publish, and the last time the package changed |
 | `review.status` | always `approved`: the Store installs only approved entries, and you are the reviewer of your own repository |
-| `min_size`, `portrait_min_size` | the screen requirements, from `X-MinSize` and `X-Portrait` of the packaged `.desktop` (the launcher hides an app that does not fit) |
+| `min_size`, `portrait_min_size` | the app's own screen requirements, from `X-MinSize` and `X-Portrait` of the packaged `.desktop`, only when declared (the launcher hides an app that does not fit; an app without them is listed everywhere) |
 | `icon`, `screenshots` | the raw URLs of `apps/<id>/icon.png` and of every `apps/<id>/screenshots/*.png`, in sorted file-name order |
 | `depends`, `permissions`, `categories`, `license` ... | copied from `app.json` ([APP-JSON.md](APP-JSON.md)) |
 

@@ -18,16 +18,21 @@ The starting point of a native app: [`apps/cyberdeck-app-template`](../apps/cybe
 | Board | Screen (logical) | Input | Notes |
 |---|---|---|---|
 | Pi Zero 2 W deck (the reference) | 640x480, 512 MB RAM, 4 cores | Bluetooth keyboard + touch | tokens below are the deck's |
-| Pi 3A+ + Waveshare 4.3" DSI | 800x480 | touch only (USB keyboard optional) | the touch-only reference. Its earlier 480x320 SPI panel is best effort only |
+| Pi 3A+ + Waveshare 4.3" DSI | 800x480 | touch only (USB keyboard optional) | the touch-only reference. Its earlier 480x320 SPI panel runs every app that does not declare a larger `X-MinSize` |
 | HackBerry CM5 | 720x720 square, desktop session | built-in keyboard + touch | the on-screen keyboard rule is forced |
 | Pi 5 + HyperPixel 4" | 800x480, rotated | touch (+ keyboard) | rotation and 16/32 bpp handled by the launcher's display backend |
 | Panasonic FZ-M1 tablet (x86-64 PC, amd64) | 1280x800, desktop session (XFCE) | touch + USB or Bluetooth keyboard | the PC reference; runs only apps with an amd64 package ([README](../README.md#amd64-x86-64-pcs)); the touch panel reports at most 2 contacts (no three-finger gesture) |
 
-**Owner decision (2026-10-13): new work targets 640x480 as the minimum screen.** 480x320 is best effort. A new native
-app declares `X-MinSize=640x480` and is hidden on a smaller screen. **Exception:** an app may declare `X-MinSize=480x320`
-when its layouts are tested there (headless scenes at 480x320 and, with `X-Portrait`, 320x480) and its README says so;
-Cassette, Deck Atlas, Home Assistant, mmWave Radar and Net Walk do. If fitting a smaller screen would cost heavy rework,
-we do not do it ([section 12](#12-when-not-to-build-it)). Landscape only: the launcher rotates portrait panels for you.
+**Owner decision (2026-11-12, replaces the 640x480 minimum of 2026-10-13): there is no global minimum screen.** An app
+adapts to the screen it is given (layout from the tokens and widgets, section 2); 480x320 and, in portrait, 320x480 are
+normal sizes. 640x480 stays the deck's **reference** size (the tokens below, the screenshots) but is not a floor. An app
+declares `X-MinSize=WxH` **only when its UI genuinely cannot fit a smaller screen**, with the smallest size its layouts
+are tested at; the launcher then hides it on a smaller screen. The default is no `X-MinSize`: the app is shown
+everywhere. Today Cassette, Deck Atlas, Home Assistant, mmWave Radar and Net Walk declare `480x320`; Klondike
+Solitaire, Markdown Notes, Mesh Hop, Mine Field, Net Toolbox, RSS Reader, Serial Console, System Monitor and viz1090
+declare `640x480` (each app's own requirement, from before this decision). If fitting a smaller screen would cost heavy
+rework, declare the size the app needs rather than squeezing it ([section 12](#12-when-not-to-build-it)). Landscape
+only: the launcher rotates portrait panels for you.
 
 **Portrait (PDA mode, launcher 0.8.8 and later) is optional.** A portrait launcher (Settings > Screen > PDA mode:
 480x800, 480x640, the 800x1280 tablet) runs a landscape app turned by a quarter, so nothing has to change. An app that
@@ -80,11 +85,12 @@ Rules:
 | lay out from `cp0_ui_metrics_get()`, `cp0_ui_roller_page()` and the `cp0::ui` widgets | write `lv_obj_set_size(x, 120, 48)` or any pixel constant |
 | size things in millimetres (`ppmm`) when you must draw your own | assume 11.3 px/mm; the HyperPixel is 9.2, the HackBerry 10.0, the FZ-M1 tablet 8.6 |
 | read the canvas from `APPLAUNCH_CANVAS`, or `screen.state`, or the framebuffer | hard-code 640x480, 320x170 or `/dev/fb0` |
-| support all of 640x480 (standard), 800x480 (wide), 720x720 (square), 1280x720 (large), plus 1024x600 | design only for the deck |
+| support every screen you are given: 480x320 (small), 640x480 (standard), 800x480 (wide), 720x720 (square), 1280x720 (large), plus 1024x600 | design only for the deck |
 | keep every interactive element at least `row` high (buttons `target`) | squeeze controls to fit; scroll instead |
-| show "needs 640x480" and a way out when the screen is too small (an older launcher ignores `X-MinSize`) | draw off the edge |
+| if the app declares `X-MinSize`: show "needs WxH" and a way out when the screen is smaller (an older launcher ignores `X-MinSize`) | draw off the edge |
 
-The template does this for you: `AppSpec` carries the minimum, `_common/app.cpp` shows the notice.
+The template does this for you: `AppSpec` carries the minimum, `_common/app.cpp` shows the notice. The template declares
+`640x480`; lower it to what your layouts are tested at, or drop the `X-MinSize` line when they fit every screen.
 
 ### Portrait layout (`X-Portrait`)
 
@@ -522,7 +528,9 @@ X-MinSize=640x480
 X-Background=freeze
 ```
 
-(`X-Background`: section 3, multitasking; leave it out for an app that must not be paused.)
+(`X-Background`: section 3, multitasking; leave it out for an app that must not be paused. `X-MinSize`: only when the
+UI cannot fit a smaller screen, with the smallest size it was tested at; this example app needs 640x480. Without the
+line the app is shown on every screen.)
 
 `app.json` (checked by `tools/make_registry.py`; `share_code`, `package`, `version`, `title`, `summary` are required): every
 field, with its rule, is in **[APP-JSON.md](APP-JSON.md)**: the descriptor limits (summary at most 80 characters, summary +
@@ -591,11 +599,11 @@ deploys; the **owner runs the physical steps** from a written protocol.
 | Layer | What | Where |
 |---|---|---|
 | **1. Unit tests** | the app's logic without LVGL (`core/`): navigation, parsers (fixtures of `/proc`, `/sys` and command output), rules, state machines; plus the package files: the `.desktop` has `X-Fullscreen`, `X-MinSize` equal to `AppSpec`, `Exec` and `Icon` resolve to files of `root/`, `app.json` is complete | `tests/test_core.cpp` in the template; `build.sh host` runs it |
-| **2. Headless scenes** | the real UI on a plain LVGL display at 640x480, 800x480, 720x720, 1280x720 and 1024x600 (480x320 for the "needs 640x480" notice): scripted keys and taps, PNG shots, layout checks (nothing off-screen, rows and targets at least 5/7 mm, nothing under the header or the on-screen keyboard), one contact sheet per scene | `tests/scenes/*.scene`; [`_common/headless/README.md`](../apps/_common/headless/README.md) |
+| **2. Headless scenes** | the real UI on a plain LVGL display at 640x480, 800x480, 720x720, 1280x720 and 1024x600, plus 480x320 (and 320x480 with `X-Portrait`) when the app runs there; an app that declares `X-MinSize` also shows its "needs WxH" notice under it: scripted keys and taps, PNG shots, layout checks (nothing off-screen, rows and targets at least 5/7 mm, nothing under the header or the on-screen keyboard), one contact sheet per scene | `tests/scenes/*.scene`; [`_common/headless/README.md`](../apps/_common/headless/README.md) |
 | **3. Board protocol** | a written `tests/BOARD-TESTS.md` in the style of the template's: numbered steps with the exact command, the expected picture or log line, the cleanup | [`BOARD-TESTS.md`](../apps/cyberdeck-app-template/tests/BOARD-TESTS.md) |
 
 Scenes every app has: each page; the form with the on-screen keyboard (`keyboards 0`, then `keyboards 1`, then `osk force`); an error line; a dialog;
-a busy row; exit by Esc; the notice under 640x480; a start with no contract (`nocontract`). A layout change that fails a
+a busy row; exit by Esc; the notice under the declared `X-MinSize` (only for an app that declares one); a start with no contract (`nocontract`). A layout change that fails a
 check is fixed in the layout, never by loosening the check.
 
 **What the owner tests physically** (a protocol, T-numbers as in the template's):
@@ -622,10 +630,10 @@ afterwards (`dpkg -r <id>`). A change to a board that is not yours (launcher, St
 | Section | Content |
 |---|---|
 | Title and one-paragraph description | what it does, for whom, the version |
-| Screenshots | taken on a board or in the headless harness at the size the app is tested at (**640x480**; 480x320 and 320x480 for an app that declares them; PNG; the old 320x170 size is stale). Two places are in use: `docs/screenshots/<id>-<page>.png` (the old apps) and `apps/<id>/screenshots/NN-name.png` (newer ones; **these are the Store's**: `make_registry.py` lists every PNG there in sorted file-name order, so number them). The README should show, or link, every Store screenshot, with at least the main page and one form, and one at 720x720 or 800x480 if the layout differs. Show the real UI, no mock-ups |
+| Screenshots | taken on a board or in the headless harness at the sizes the app is tested at (640x480 is the deck's reference size; 480x320 and 320x480 for an app that runs there; PNG; the old 320x170 size is stale). Two places are in use: `docs/screenshots/<id>-<page>.png` (the old apps) and `apps/<id>/screenshots/NN-name.png` (newer ones; **these are the Store's**: `make_registry.py` lists every PNG there in sorted file-name order, so number them). The README should show, or link, every Store screenshot, with at least the main page and one form, and one at 720x720 or 800x480 if the layout differs. Show the real UI, no mock-ups |
 | What it does / how to use | pages and functions |
 | Keys and touch | one table: every function, its key and its touch action |
-| Requirements | minimum screen (`640x480`), hardware, groups, packages, network, launcher version (full-screen support) |
+| Requirements | minimum screen only when the app declares one (`X-MinSize`, the app's own requirement), hardware, groups, packages, network, launcher version (full-screen support) |
 | Install | Settings > Apps flow; manual `dpkg -i` |
 | Files the app keeps | every path it writes, and how to reset |
 | Known limits | honest list (boards where it does not run, missing features) |
@@ -679,9 +687,9 @@ Ctrl+O); a short Esc of the keyboard at Home says "Hold Esc 3 s to exit" (the he
 
 Do not start (or stop, and say so) when:
 
-- **It needs heavy rework to fit 640x480.** A dense desktop UI (many columns, tiny controls, a mouse-only editor, a
-  map with hover) is not squeezed in. Redesign it into the roller/page model or leave it. The same holds for 480x320: not worth
-  heavy rework; declare `X-MinSize=640x480`.
+- **It needs heavy rework to fit the deck's 640x480.** A dense desktop UI (many columns, tiny controls, a mouse-only editor, a
+  map with hover) is not squeezed in. Redesign it into the roller/page model or leave it. For a smaller screen such as 480x320
+  the same holds: when fitting it would cost heavy rework, declare the size the app needs (`X-MinSize`) instead.
 - **It is x86-only** (binary blobs, a vendor driver, a Wine app). Every app runs on the decks (arm64); an amd64 build for PCs comes in addition, never instead.
 - **It is GPU-heavy** (3D, video decode at high resolution, a browser, an emulator). The Zero 2 W has a software-drawn LVGL
   screen, 512 MB RAM and a thermal limit; the rule is idle CPU a few percent and VmRSS under 25 MB.
@@ -700,14 +708,14 @@ Copy into the pull request and tick.
 | # | Check | Done |
 |---|---|---|
 | 1 | Kind chosen (A native default / B terminal / C wrapped) and the reason written in the README | [ ] |
-| 2 | `.desktop`: `X-Fullscreen=true`, `X-MinSize=640x480` (native; `480x320` only when the layouts are tested there and the README says so), absolute `Exec`, `Icon` relative | [ ] |
+| 2 | `.desktop`: `X-Fullscreen=true`, `X-MinSize` only if the UI cannot fit smaller, with the smallest size it was tested at (and the README says so), absolute `Exec`, `Icon` relative | [ ] |
 | 3 | No pixel constants: layout from tokens and widgets; no hard-coded 640x480 or `/dev/fb0` | [ ] |
 | 4 | Header via `Page`, title and shared `StatusStrip`; no own clock or icons | [ ] |
 | 5 | Every function reachable by keys and by touch; Esc goes back, short Esc at the root quits | [ ] |
 | 6 | On-screen keyboard only by `cp0_app_osk_allowed`, no manual summon, field stays visible | [ ] |
 | 7 | SIGTERM, SIGINT, SIGHUP end the app cleanly; hold-Esc works; no child process left | [ ] |
 | 8 | Works with no contract (ssh, older launcher): one log line, no crash | [ ] |
-| 9 | Under 640x480 shows the "needs 640x480" notice | [ ] |
+| 9 | With `X-MinSize`: under it the app shows the "needs WxH" notice | [ ] |
 | 10 | No blocking call on the LVGL thread; every job has a cancel and a timeout | [ ] |
 | 11 | Writes only to `~/.config/<id>`, documented dirs; atomic writes | [ ] |
 | 12 | Permission, missing-hardware and offline cases give a message with the exact fix | [ ] |
@@ -719,9 +727,9 @@ Copy into the pull request and tick.
 | 18 | the package builds; `dpkg-deb -I` and `-c` look right; both registries regenerated with `make_registry.py --no-build` and the diff shows only this app's entries ([PUBLISHING.md](PUBLISHING.md)) | [ ] |
 | 19 | Unit tests green; headless scenes pass at the five sizes; contact sheets reviewed | [ ] |
 | 20 | `tests/BOARD-TESTS.md` written; the owner ran it on the deck (and the other boards that apply) | [ ] |
-| 21 | README complete (section 8) with 640x480 screenshots; repository README table updated | [ ] |
+| 21 | README complete (section 8) with screenshots at the sizes the app is tested at; repository README table updated | [ ] |
 | 22 | `sh tools/branding/check-branding.sh` clean for the new files | [ ] |
-| 23 | **Declare `X-MinSize`** (and `X-Portrait` when the layout passes on 480x640): the registry's `min_size` / `portrait_min_size` come from it, and the launcher hides the app on a screen that cannot run it; `python3 tools/check_registry.py` passes | [ ] |
+| 23 | **Declare `X-MinSize` only if the UI cannot fit smaller**, with the smallest size it was tested at (and `X-Portrait` when the layout passes on its portrait canvas): the registry's `min_size` / `portrait_min_size` come from it, and the launcher hides the app on a screen that cannot run it; no `X-MinSize` means shown everywhere; `python3 tools/check_registry.py` passes | [ ] |
 | 24 | Icon follows [ICON-PALETTE.md](ICON-PALETTE.md): 100x100 square transparent PNG, own hue (not green, not shared), own silhouette, two colours, strokes >= 9 px | [ ] |
 | 25 | Icon checked at 32 px and in greyscale on the review sheet (`python tools/icons/make_icons.py`), distinct from every other tile | [ ] |
 | 26 | Data and app lists on `CompactList`; no status shown by colour alone | [ ] |

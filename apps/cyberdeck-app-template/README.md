@@ -12,7 +12,7 @@ Rules and good practice (with a checklist to tick before publishing): [`docs/APP
 
 **Descriptor.** The `summary` and `description` of `app.json` are the only text the launcher shows (Settings > Apps):
 a summary line of at most 80 characters, then what the app is, its main features and what it needs (keyboard, USB
-dongle, network, minimum screen), nothing more. Summary + description together: at most 500 characters (the launcher
+dongle, network, a minimum screen when the app declares one), nothing more. Summary + description together: at most 500 characters (the launcher
 cuts a longer text at 500 with dots). The long documentation lives in the app's README, like this one, for reading on
 a computer. The template's own `app.json` is an example; `python3 tools/check_descriptors.py` checks the rule.
 
