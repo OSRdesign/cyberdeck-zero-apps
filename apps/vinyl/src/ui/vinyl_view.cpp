@@ -518,13 +518,16 @@ struct View::Impl {
 
         /* chips */
         const int chip_max = g.chips_in_row ? Wd(g.panel) - 2 * (X(g.chip0.x) - X(g.panel.x)) : X(g.panel.right()) - X(g.chip0.x) - P(12);
-        /* landscape: row 0 format + volume, row 1 output, row 2 gapless; portrait: one row */
-        static const int row_of[4] = {0, 0, 1, 2};
-        for (int i = 0; i < 4; ++i) {
-            if (!g.chips_in_row && row_of[i] >= g.chip_rows) continue;
-            const int cy = g.chips_in_row ? Y(g.chip0.y) : Y(g.chip0.y + row_of[i] * g.chip_step);
-            chips[i].build(r, X(g.chip0.x), cy, P(g.chip0.h), P(g.chip_pad), P(g.chip_gap), P(g.chip_icon), P(g.chip_px),
-                           col::kChip, col::kInk, P(5), chip_max);
+        /* the chip rows of the class (layout.hpp); the volume chip teal with white text */
+        for (size_t row = 0; row < g.chip_layout.size(); ++row) {
+            for (int id : g.chip_layout[row]) {
+                if (id < 0 || id > 3) continue;
+                const int cy = Y(g.chip0.y + static_cast<double>(row) * g.chip_step);
+                const bool vol = id == 1;
+                chips[id].build(r, X(g.chip0.x), cy, P(g.chip0.h), P(vol ? g.vol_pad : g.chip_pad), P(g.chip_gap), P(g.chip_icon),
+                                P(vol ? g.vol_px : g.chip_px), vol ? col::kTeal : col::kChip, vol ? col::kWhite : col::kInk, P(5),
+                                chip_max);
+            }
         }
 
         out_hit = hit(r, 0, 0, 1, 1, 0, 0, [this] {
@@ -607,13 +610,14 @@ struct View::Impl {
         const bool bt[4] = {false, false, v.output_bt, false};
         const int x0 = X(g.chip0.x);
         const int row_right = X(g.title.box.right()); /* the info column's right edge */
-        int x = x0;
-        for (int i = 0; i < 4; ++i) {
-            if (!chips[i].box) continue;
-            if (!g.chips_in_row && i != 1) x = x0; /* a new row (the volume follows the format chip on its row) */
-            chips[i].max_w = std::max(P(30), row_right - x); /* the last chip of a full row ends with dots */
-            chips[i].set(texts[i], bt[i], x);
-            if (chips[i].width) x += chips[i].width + P(g.chip_space);
+        for (const std::vector<int> &row : g.chip_layout) {
+            int x = x0;
+            for (int i : row) {
+                if (i < 0 || i > 3 || !chips[i].box) continue;
+                chips[i].max_w = std::max(P(30), row_right - x); /* the last chip of a full row ends with dots */
+                chips[i].set(texts[i], bt[i], x);
+                if (chips[i].width) x += chips[i].width + P(g.chip_space);
+            }
         }
         /* the hit box over the output chip, at least the touch target high */
         if (out_hit && chips[2].box) {

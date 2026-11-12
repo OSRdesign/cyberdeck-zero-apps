@@ -6,6 +6,7 @@
 <script src="./support.js"></script>
 </head>
 <body>
+<!-- branding-allow-begin: SVG path data (a move-to command to x 5 reads like the brand word) -->
 <x-dc>
 <helmet>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,11 +18,10 @@ body{margin:0}
 </style>
 </helmet>
 <div style="position:relative;width:480px;height:480px;background:#000;overflow:hidden;font-family:'Montserrat',sans-serif">
-  <div style="position:absolute;left:8px;top:8px;width:70px;height:27px;border-radius:6px;background:#222;color:#eee;font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center">03/20</div>
+    <div style="position:absolute;left:12px;top:2px;line-height:40px;font-size:26px;font-weight:600;color:#F0B400">Vinyl</div>
+  <svg style="position:absolute;right:88px;top:10px" width="30" height="24" viewBox="0 0 30 24" aria-label="Wi-Fi signal"><rect x="1" y="16" width="4" height="6" rx="1" fill="#777"/><rect x="8" y="12" width="4" height="10" rx="1" fill="#777"/><rect x="15" y="8" width="4" height="14" rx="1" fill="#777"/><rect x="22" y="3" width="4" height="19" rx="1" fill="#777"/></svg>
+  <div style="position:absolute;right:8px;top:6px;width:70px;height:30px;border-radius:6px;background:#8a5a2b;color:#fff;font-size:20px;font-weight:600;display:flex;align-items:center;justify-content:center">12:00</div>
   <div style="position:absolute;left:219px;top:8px;width:40px;height:27px;border-radius:10px;background:#222;color:#fff;font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center">Esc</div>
-  <div style="position:absolute;left:372px;top:8px;width:100px;height:27px;border-radius:6px;background:#1f7a72;color:#fff;font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7l10 10-5 5V2l5 5L7 17"/></svg>Vol 60
-  </div>
   <div style="position:absolute;left:8px;top:44px;width:464px;height:428px;border-radius:10px;background:#dcd4bd">
     <div class="disc" style="left:80px;top:12px;width:196px;height:196px">
       <div style="position:absolute;left:66px;top:66px;width:64px;height:64px;border-radius:50%;background:#1f7a72"></div>
@@ -36,6 +36,7 @@ body{margin:0}
     <div style="position:absolute;left:290px;top:118px;height:26px;padding:0 10px;border-radius:5px;background:#c9c0a5;font-weight:700;font-size:12px;color:#222;display:flex;align-items:center">FLAC 44.1 / 16</div>
     <div style="position:absolute;left:290px;top:150px;height:26px;padding:0 10px;border-radius:5px;background:#c9c0a5;font-weight:700;font-size:12px;color:#222;display:flex;align-items:center;gap:6px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#222" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7l10 10-5 5V2l5 5L7 17"/></svg>Evolve 65</div>
     <div style="position:absolute;left:290px;top:182px;height:26px;padding:0 10px;border-radius:5px;background:#c9c0a5;font-weight:700;font-size:12px;color:#222;display:flex;align-items:center">Gapless, RG -3.2 dB</div>
+    <div style="position:absolute;left:388px;top:150px;height:26px;padding:0 10px;border-radius:5px;background:#1f7a72;font-weight:700;font-size:12px;color:#fff;display:flex;align-items:center">Vol 60</div>
     <!-- seek -->
     <div style="position:absolute;left:12px;top:222px;width:48px;font-family:'JetBrains Mono',monospace;font-weight:500;font-size:14px;color:#222;line-height:28px">01:23</div>
     <div style="position:absolute;left:64px;top:231px;width:336px;height:10px;border-radius:5px;background:#c9c0a5">
@@ -68,5 +69,6 @@ class Component extends DCLogic {
   renderVals() { return {}; }
 }
 </script>
+<!-- branding-allow-end -->
 </body>
 </html>

@@ -11,5 +11,5 @@ expect text "Phoenix"
 expect text "Fences Remixes, 2013"
 expect text "Vol 60"
 expect text "Evolve 65, music quality"
-expect text "WAV 44.1 kHz / 16 bit"
+expect text "WAV 44.1 / 16"
 expect noquit

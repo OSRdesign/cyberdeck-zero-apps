@@ -326,6 +326,11 @@ void test_layout() {
         for (const Btn &b : g.transport) CHECK(inside(b.box));
         for (const Btn &b : g.bottom) CHECK(inside(b.box));
         for (size_t i = 1; i < g.transport.size(); ++i) CHECK(g.transport[i].box.x >= g.transport[i - 1].box.right());
+        /* every chip id once */
+        int ids = 0;
+        for (const std::vector<int> &row : g.chip_layout)
+            for (int id : row) ids |= 1 << id;
+        CHECK_EQ(ids, c == SizeClass::Small || c == SizeClass::Portrait ? 7 : 15);
         /* the notice box across the seek row */
         const R n = notice_box_now(g, 50);
         CHECK(n.x >= g.panel.x && n.right() <= g.panel.right());

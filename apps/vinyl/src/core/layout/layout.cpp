@@ -82,7 +82,8 @@ NowGeom now_geom(SizeClass c) {
         g.chip_icon = 12;
         g.chip_step = 32;
         g.chip_rows = 2;
-        g.short_format = false;
+        g.chip_layout = {{0, 1}, {2}};
+        g.short_format = true;
         g.quality_in_chip = true;
         g.time = text(20, 220, 48, 28, 14, false, 28);
         g.remain = text(412, 220, 48, 28, 14, false, 28);
@@ -109,7 +110,8 @@ NowGeom now_geom(SizeClass c) {
         g.chip_gap = 5;
         g.chip_icon = 11;
         g.chips_in_row = true;
-        g.chip_rows = 2;
+        g.chip_rows = 1;
+        g.chip_layout = {{0, 2, 1}};
         g.short_format = true;
         g.quality_in_chip = false;
         g.time = text(24, 332, 44, 24, 13, false, 24);
@@ -135,6 +137,7 @@ NowGeom now_geom(SizeClass c) {
         g.chip0 = R{298, 162, 0, 26};
         g.chip_step = 32;
         g.chip_rows = 3;
+        g.chip_layout = {{0}, {2, 1}, {3}};
         g.short_format = true;
         g.quality_in_chip = false;
         g.time = text(20, 266, 48, 28, 14, false, 28);
@@ -167,6 +170,7 @@ NowGeom now_geom(SizeClass c) {
         g.chip0 = R{590, 164, 0, 26};
         g.chip_step = 32;
         g.chip_rows = 3;
+        g.chip_layout = {{0}, {2, 1}, {3}};
         g.short_format = true;
         g.quality_in_chip = false;
         g.time = text(330, 274, 48, 28, 14, false, 28);

@@ -68,8 +68,10 @@ struct NowGeom {
     R sleeve, disc;
     double label_d = 50, hole_d = 6;
     Text title, artist, album;
-    /* the chips: landscape rows (1: format + volume, 2: output, 3: gapless on square and large), portrait one row
-     * (format, volume, output) */
+    /* the chips (the drafts as updated 2026-11-12): small rows [format, volume] [output]; square and large [format]
+     * [output, volume] [gapless]; portrait one row [format, output, volume]. The volume chip is teal with white text. */
+    std::vector<std::vector<int>> chip_layout; /* ids: 0 format, 1 volume, 2 output, 3 gapless */
+    double vol_px = 12, vol_pad = 10;
     R chip0;                  /* the first chip's position; height in h */
     double chip_px = 12, chip_pad = 10, chip_gap = 6, chip_icon = 12;
     double chip_space = 8;     /* between two chips of a row */
