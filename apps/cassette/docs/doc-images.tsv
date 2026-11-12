@@ -83,3 +83,6 @@ bt-no-sound.png	bt9-rec-nosound	480x320	rec-nosound
 bt-headset-gone.png	bt10-rec-gone	480x320	rec-gone
 bt-switching.png	bt11-switching	480x320	switching
 bt-call-quality.png	bt12-callq	480x320	callq
+bt-input-paired.png	bt16-input-paired	480x320	input-paired
+bt-output-paired.png	bt17-output-paired	480x320	output-paired-refused
+bt-input-notsetup-server.png	bt18-notsetup-sound-server	480x320	input-notsetup-server

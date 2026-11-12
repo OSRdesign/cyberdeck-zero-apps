@@ -1,10 +1,10 @@
 {
   "share_code": "cassette",
   "package": "cassette",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "title": "Cassette",
-  "summary": "A tape-deck sound recorder: WAV, FLAC and Opus takes, trim, split, merge.",
-  "description": "Records from any USB sound card or headset to WAV, FLAC or Opus files: a level meter with a target zone, software gain, a record timer, live monitor, trim, split and merge of takes, and playback with 5x scan. Crash-safe: a take survives a power cut up to the last sync. No cloud: nothing leaves the board. Needs a screen of at least 480x320 (portrait 320x480 in PDA mode).",
+  "summary": "A tape-deck sound recorder: WAV, FLAC, Opus, USB and Bluetooth headsets.",
+  "description": "Records from USB sound cards and headsets, and Bluetooth headsets on boards with a sound server (PipeWire), to WAV, FLAC or Opus: level meter, gain, timer, live monitor, trim, split, merge, playback with 5x scan, also to Bluetooth speakers. Crash-safe: a take survives a power cut. No cloud: nothing leaves the board. Needs a screen of 480x320 or more.",
   "categories": ["Tools"],
   "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
   "license": "MIT",

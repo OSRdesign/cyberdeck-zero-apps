@@ -1,8 +1,8 @@
 # Cassette (`cassette`)
 
-A sound recorder for the cyberdeck with the look of a tape deck: it records from any USB sound card or headset to WAV
+A sound recorder for the cyberdeck with the look of a tape deck: it records from any USB sound card or headset (or a Bluetooth headset, on boards with a sound server) to WAV
 (Broadcast Wave), FLAC or Ogg Opus files, shows a level meter with a target zone, adds software gain, starts on a timer,
-trims, splits and merges takes, and plays them back with a 5x scan. Native fullscreen app on the launcher's `cp0_lvgl`, MIT, version 0.2.0,
+trims, splits and merges takes, and plays them back with a 5x scan. Native fullscreen app on the launcher's `cp0_lvgl`, MIT, version 0.3.0,
 category Tools. Plan: launcher `docs/dev/tasks/016-cassette-recorder.md`; study: launcher report 058.
 
 - **Crash-safe.** A take is synced to the card every 10 s (5-30 s, setting) and its header is rewritten after every
@@ -31,7 +31,7 @@ category Tools. Plan: launcher `docs/dev/tasks/016-cassette-recorder.md`; study:
 
 ## Screenshots
 
-All ten were rendered on a PC by the headless harness (`build.sh host`, version 0.2.0) from the UI's scenes on
+All ten were rendered on a PC by the headless harness (`build.sh host`, version 0.3.0) from the UI's scenes on
 their synthetic model (generated levels and takes, no sound hardware, the header clock frozen at 12:00). Real-board
 captures (a HackBerry 720x720 and a Pi 3A+ in portrait) are in the user guide's "Screen sizes" section.
 Each comes from a scene in `tests/scenes` (named below): the build writes its PNGs to
@@ -235,7 +235,7 @@ speed. Through the sound server the take is S16 at 48000 Hz.
 
 ## Install
 
-Settings > Apps (category Tools). By hand: `sudo apt install ./cassette_0.2.0_arm64.deb` (apt fetches the codec libraries; plain `dpkg -i` needs them already installed).
+Settings > Apps (category Tools). By hand: `sudo apt install ./cassette_0.3.0_arm64.deb` (apt fetches the codec libraries; plain `dpkg -i` needs them already installed).
 
 The package also installs `/usr/share/APPLaunch/bin/cassette-probe`, a listen-only command line tool for the board
 tests: it lists the capture cards, what each offers and its mixer controls, then opens each card (or the one given
@@ -383,6 +383,10 @@ time from the system, neither linked nor shipped; the package depends on them. S
   meter shows the played level while a take plays. The recordings list has LOAD (the take goes into the deck with a
   cassette animation, PLAY plays it; the name on the cassette label is handwriting, Caveat SemiBold) and a preview that
   stops on a second double tap; a paused take reads PAUSED in the strip.
+- 0.3.0: Bluetooth audio: record from a Bluetooth headset (16 kHz mSBC or 8 kHz CVSD, mono), play to Bluetooth headsets and speakers, live
+  monitor over Bluetooth (Monitor to row, delay shown), headset reconnects handled, paired devices that are not connected listed (launcher
+  0.10.1 or later), `cassette-probe --server`; the package now depends on `libpulse0`. Boards without a sound server are unchanged. See
+  [`docs/RELEASE-0.3.0.md`](docs/RELEASE-0.3.0.md).
 - 0.2.0: MERGE, the recordings list's fifth key (key M), joins takes of one format (WAV, FLAC, Opus) into one new take in the order
   chosen, in merge mode on the list page: WAV is copied sample exact, FLAC is decoded and re-encoded without loss, Opus packets
   are copied into one stream (a seam of 12 to 20 ms at each join; with the music presets it can be heard as a blip). See
