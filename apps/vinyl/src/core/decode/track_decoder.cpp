@@ -369,10 +369,10 @@ private:
 /* ------------------------------------------------------------------- FLAC and Opus: Cassette's decoders, adapted */
 
 /* Cassette's Decoder delivers 16-bit, packed 24-bit or 32-bit little-endian samples; Vinyl plays int16 or int32. */
-class CassetteDecoder final : public TrackDecoder {
+class CopiedDecoder final : public TrackDecoder {
 public:
-    CassetteDecoder(std::unique_ptr<Decoder> d, Codec c) : d_(std::move(d)), codec_(c) {}
-    ~CassetteDecoder() override { close(); }
+    CopiedDecoder(std::unique_ptr<Decoder> d, Codec c) : d_(std::move(d)), codec_(c) {}
+    ~CopiedDecoder() override { close(); }
 
     int open(const std::string &path, TrackInfo &info) override {
         DecodedInfo di;
@@ -657,10 +657,10 @@ private:
 std::unique_ptr<TrackDecoder> make_mp3_decoder(const Mpg123Lib *lib) { return std::make_unique<Mp3Decoder>(lib); }
 std::unique_ptr<TrackDecoder> make_vorbis_decoder(const VorbisFileLib *lib) { return std::make_unique<VorbisDecoder>(lib); }
 std::unique_ptr<TrackDecoder> make_flac_decoder(const FlacDecLib *lib) {
-    return std::make_unique<CassetteDecoder>(std::make_unique<FlacDecoder>(lib), Codec::Flac);
+    return std::make_unique<CopiedDecoder>(std::make_unique<FlacDecoder>(lib), Codec::Flac);
 }
 std::unique_ptr<TrackDecoder> make_opus_decoder(const OpusDecLib *lib) {
-    return std::make_unique<CassetteDecoder>(std::make_unique<OpusFileDecoder>(lib), Codec::Opus);
+    return std::make_unique<CopiedDecoder>(std::make_unique<OpusFileDecoder>(lib), Codec::Opus);
 }
 std::unique_ptr<TrackDecoder> make_pcm_decoder() { return std::make_unique<PcmDecoder>(); }
 

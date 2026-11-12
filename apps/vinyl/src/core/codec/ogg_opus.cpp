@@ -68,7 +68,7 @@ bool parse_head(const unsigned char *p, size_t n, Head &h, std::string *why) {
     };
     if (n < 19 || std::memcmp(p, "OpusHead", 8) != 0) return no("not an Ogg Opus file");
     h.version = p[8];
-    if ((h.version & 0xF0) != 0) return no("an Opus version Cassette does not read");
+    if ((h.version & 0xF0) != 0) return no("an Opus version Vinyl does not read"); /* VINYL */
     h.channels = p[9];
     if (h.channels == 0) return no("OpusHead says 0 channels");
     h.preskip = le16(p + 10);
