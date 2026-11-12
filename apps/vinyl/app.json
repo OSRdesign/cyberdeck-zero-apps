@@ -1,0 +1,16 @@
+{
+  "share_code": "vinyl",
+  "package": "vinyl",
+  "version": "0.1.0",
+  "title": "Vinyl",
+  "summary": "A music player: MP3, FLAC, Vorbis, Opus, WAV, AAC; wired and Bluetooth.",
+  "description": "Plays the music in ~/Music and on USB drives, folder by folder or from M3U playlists: gapless, shuffle, repeat, cover art, resume where you stopped. Plays on while you use other apps. Wired outputs, and Bluetooth headsets and speakers on boards with a sound server; headset and keyboard play keys. AAC, ALAC, WMA and more need the FFmpeg libraries. Needs a screen of 480x320 or more.",
+  "categories": ["Tools"],
+  "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
+  "license": "MIT",
+  "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/vinyl",
+  "depends": "libstdc++6, libgcc-s1, libfreetype6, libinput10, libxkbcommon0, libasound2t64 | libasound2, libmpg123-0t64 | libmpg123-0, libvorbisfile3, libflac14 | libflac12t64 | libflac12, libopus0, libpulse0",
+  "recommends": "libavformat61 | libavformat62, libavcodec61 | libavcodec62, libavutil59 | libavutil60, libswresample5 | libswresample6",
+  "arch": ["arm64", "amd64"],
+  "permissions": {"additional_hardware": true}
+}

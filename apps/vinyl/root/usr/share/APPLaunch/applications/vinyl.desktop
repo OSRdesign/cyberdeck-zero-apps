@@ -1,0 +1,12 @@
+[Desktop Entry]
+# X-Background=run: the music plays on while the app is hidden (report 059, decision D7); below 480 px on the short
+# side the launcher has no multitasking and Vinyl owns the panel until it exits.
+Name=Vinyl
+Exec=/usr/share/APPLaunch/bin/vinyl
+Terminal=false
+Icon=share/images/vinyl.png
+Type=Application
+X-Fullscreen=true
+X-MinSize=480x320
+X-Portrait=320x480
+X-Background=run

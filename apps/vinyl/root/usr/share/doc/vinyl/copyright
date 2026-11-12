@@ -1,0 +1,92 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Vinyl
+Upstream-Contact: OSRdesign <https://github.com/OSRdesign/cyberdeck-zero-apps>
+Source: https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/vinyl
+Comment: The application is linked against the LVGL based cp0_lvgl runtime of the
+ CardputerZero launcher by M5Stack (Copyright M5Stack Technology CO LTD, MIT) and LVGL
+ (Copyright LVGL Kft, MIT), which are part of the binary and are therefore listed in
+ its Copyright field below. The fonts it draws with are the launcher's, read at run
+ time from /usr/share/APPLaunch/share/font (Montserrat: SIL OFL 1.1; JetBrains Mono:
+ SIL OFL 1.1; DejaVu Sans: the Bitstream Vera / DejaVu licence; Noto Sans CJK: SIL
+ OFL 1.1, for Chinese, Japanese and Korean titles); none is shipped in this package.
+ .
+ The player engine, the queue, the folder browser, the tag readers (ID3, FLAC, Ogg,
+ MP4, WAV and AIFF metadata), the WAV / AIFF reader, the media-key reader and the
+ screens are the app's own code, written from the published format descriptions. The
+ sound-server and ALSA layers and the FLAC and Ogg Opus readers are copied from the
+ same repository's Cassette app (same author, MIT). The package holds no code of other
+ music players and no codec code: every codec is a system library, loaded at run time.
+ .
+ Embedded cover pictures (JPEG, PNG) are decoded by stb_image v2.30 (Copyright 2017
+ Sean Barrett and the stb contributors; public domain / MIT, either at your choice),
+ one header compiled into the binary. LVGL's own lodepng (Copyright Lode Vandevenne,
+ zlib licence) is also linked into the binary but the app does not use it.
+ .
+ Third-party libraries. None of the libraries below is part of this package: they are
+ the system's own, provided by the OS packages named in the package's Depends and
+ Recommends fields, which apt installs with it.
+ .
+ System libraries the binary is linked against at build time (named NEEDED in the
+ binary): libfreetype6 (FreeType License or GPL-2.0-or-later), libinput10 (MIT),
+ libxkbcommon0 (MIT), libstdc++6 and libgcc-s1 (GPL-3.0-or-later with the GCC Runtime
+ Library Exception 3.1). They are not copied into this package.
+ .
+ Libraries opened at run time with dlopen, only when the feature needs them, from the
+ system when present; neither linked into the binary nor shipped in this package:
+  - libmpg123.so.0 (mpg123, Copyright Michael Hipp, Thomas Orgis and the mpg123
+    project; LGPL-2.1), for MP3. Package libmpg123-0t64.
+  - libvorbisfile.so.3, with libvorbis and libogg (Copyright Xiph.Org Foundation;
+    BSD-3-Clause), for Ogg Vorbis. Package libvorbisfile3.
+  - libFLAC (Copyright 2000-2009 Josh Coalson, 2011 and later Xiph.Org Foundation;
+    BSD-3-Clause), for FLAC. Package libflac14, libflac12t64 or libflac12.
+  - libopus.so.0 (Copyright Xiph.Org, Skype Limited, Octasic, Jean-Marc Valin, Timothy
+    B. Terriberry, CSIRO, Gregory Maxwell, Mark Borgerding, Erik de Castro Lopo,
+    Mozilla, Amazon; BSD-3-Clause), for Opus. Package libopus0.
+  - libasound.so.2, the ALSA library (alsa-lib, Copyright Jaroslav Kysela, Abramo
+    Bagnara and others, LGPL-2.1-or-later), for the wired outputs of a board without a
+    sound server. Package libasound2t64 or libasound2.
+  - libpulse.so.0, the PulseAudio and PipeWire client library (PulseAudio, Copyright
+    Lennart Poettering and others, LGPL-2.1-or-later), only when a sound server runs,
+    for its outputs and Bluetooth audio. Package libpulse0.
+  - FFmpeg: libavformat, libavcodec, libavutil and libswresample (Copyright the FFmpeg
+    developers), only when a file needs them (AAC / ALAC / M4A, WMA, APE, WavPack and
+    other formats), never at start-up. FFmpeg is LGPL-2.1-or-later upstream; Debian and
+    Raspberry Pi OS build it with --enable-gpl, so the system libraries are
+    GPL-2.0-or-later as built. Source: https://ffmpeg.org/ and the Debian source package
+    "ffmpeg" (https://sources.debian.org/src/ffmpeg/). Packages libavformat61 (or 62),
+    libavcodec61 (or 62), libavutil59 (or 60), libswresample5 (or 6), recommended: Vinyl
+    works without them and says so when a file needs them.
+ The licence texts of these libraries are in their own packages, under
+ /usr/share/doc/<package>/copyright.
+
+Files: usr/share/APPLaunch/bin/vinyl
+Copyright: 2026 OSRdesign
+ M5Stack Technology CO LTD (cp0_lvgl runtime linked into the binary)
+ LVGL Kft (LVGL, linked into the binary)
+ Lode Vandevenne (lodepng, in LVGL: zlib licence)
+ 2017 Sean Barrett and the stb contributors (stb_image: public domain / MIT)
+License: MIT
+
+Files: usr/share/APPLaunch/applications/vinyl.desktop
+       usr/share/APPLaunch/share/images/vinyl.png
+       usr/share/doc/vinyl/*
+Copyright: 2026 OSRdesign
+License: MIT
+
+License: MIT
+ Permission is hereby granted, free of charge, to any person obtaining a copy of this
+ software and associated documentation files (the "Software"), to deal in the Software
+ without restriction, including without limitation the rights to use, copy, modify,
+ merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+ permit persons to whom the Software is furnished to do so, subject to the following
+ conditions:
+ .
+ The above copyright notice and this permission notice shall be included in all copies
+ or substantial portions of the Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+ INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+ PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+ CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
+ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
