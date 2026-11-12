@@ -5,7 +5,7 @@ CyberDeck board (or pair a Bluetooth headset, see [Bluetooth](#bluetooth)), pres
 it, a smaller FLAC or Ogg Opus file. You can listen again, cut a take with trim and split, join takes into one, and
 watch a level meter while you record.
 
-This guide describes the app as it is in the source (version 0.3.0: WAV, FLAC and Ogg Opus, merging, Bluetooth audio). Pictures are rendered on a PC from the app's test scenes
+This guide describes the app as it is in the source (version 0.3.1: WAV, FLAC and Ogg Opus, merging, Bluetooth audio). Pictures are rendered on a PC from the app's test scenes
 (a made-up sound source: the tones and levels are not real audio); the two captures at the end of
 [Screen sizes](#screen-sizes-and-layouts) come from real boards. How to refresh the pictures:
 [MAKING-SCREENSHOTS.md](MAKING-SCREENSHOTS.md).
