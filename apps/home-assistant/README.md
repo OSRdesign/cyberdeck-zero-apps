@@ -17,15 +17,30 @@ house with a signal, ink on a very light cool grey badge `#E6EBF0`; `tools/make_
 
 ## Screenshots
 
-Rendered by the PC harness with the simulated Home Assistant (`build.sh host`, `HA_DEMO=<world>`), in `screenshots/`:
-`01-connect-640x480`, `02-home-640x480` (Favourites), `03-room-800x480` (an area's tab), `04-light-640x480` (a light's
-page), `05-confirm-640x480` (a lock's tile asks), `06-settings-640x480`, `07-offline-640x480`, `08-connect-480x320`,
-`09-home-480x800` (portrait), `10-panel-480x320` (the Pi 3A+'s 3.5" panel: three columns), `11-focus-640x480` (the
-keyboard's focus on a slider row); 0.3.0, the stored dashboard (`HA_DEMO=dash`, the owner-shaped fixture):
-`12-dash-640x480` (its view, one column), `13-dash-weather-640x480` (a sensor card's line and the weather card),
-`14-dash-1280x800` (two masonry columns), `15-dash-480x800` (portrait), `16-dash-unsupported-640x480` (cards the deck
-does not draw), `17-dash-offline-640x480` (a start without a connection), `18-dash-settings-640x480` (Settings >
-Dashboard).
+Rendered on a PC by the headless harness with the simulated Home Assistant (`build.sh host`, `HA_DEMO=<world>`); 12 to
+18 show the stored dashboard of 0.3.0 (`HA_DEMO=dash`, the owner-shaped fixture). The Store shows the same eighteen, in
+this order.
+
+| | |
+| --- | --- |
+| ![Connect, 640x480](screenshots/01-connect-640x480.png) | ![Favourites, 640x480](screenshots/02-home-640x480.png) |
+| Connect page (sign in by QR code), 640x480 | Favourites tab, 640x480 |
+| ![Area tab, 800x480](screenshots/03-room-800x480.png) | ![Light page, 640x480](screenshots/04-light-640x480.png) |
+| An area's tab, 800x480 | A light's page, 640x480 |
+| ![Confirmation, 640x480](screenshots/05-confirm-640x480.png) | ![Settings, 640x480](screenshots/06-settings-640x480.png) |
+| A lock's tile asks for a confirmation, 640x480 | Settings, 640x480 |
+| ![Offline, 640x480](screenshots/07-offline-640x480.png) | ![Connect, 480x320](screenshots/08-connect-480x320.png) |
+| Offline, 640x480 | Connect page, 480x320 |
+| ![Portrait, 480x800](screenshots/09-home-480x800.png) | ![3.5" panel, 480x320](screenshots/10-panel-480x320.png) |
+| Portrait (PDA mode), 480x800 | The Pi 3A+'s 3.5" panel, 480x320: three columns |
+| ![Keyboard focus, 640x480](screenshots/11-focus-640x480.png) | ![Stored dashboard, 640x480](screenshots/12-dash-640x480.png) |
+| The keyboard's focus on a slider row, 640x480 | 0.3.0, the stored dashboard: its view, one column, 640x480 |
+| ![Sensor and weather cards, 640x480](screenshots/13-dash-weather-640x480.png) | ![Stored dashboard, 1280x800](screenshots/14-dash-1280x800.png) |
+| A sensor card's line and the weather card, 640x480 | Two masonry columns, 1280x800 |
+| ![Stored dashboard, portrait, 480x800](screenshots/15-dash-480x800.png) | ![Unsupported cards, 640x480](screenshots/16-dash-unsupported-640x480.png) |
+| The stored dashboard in portrait, 480x800 | Cards the deck does not draw, 640x480 |
+| ![Dashboard offline, 640x480](screenshots/17-dash-offline-640x480.png) | ![Settings > Dashboard, 640x480](screenshots/18-dash-settings-640x480.png) |
+| A start without a connection, 640x480 | Settings > Dashboard, 640x480 |
 
 ## Pages
 

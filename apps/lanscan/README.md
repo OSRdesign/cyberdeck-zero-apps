@@ -1,6 +1,6 @@
 # LAN Scan
 
-Version 0.1.2, package `lanscan`. Part of [cyberdeck-zero-apps](../../README.md).
+Version 0.1.3, package `lanscan`. Part of [cyberdeck-zero-apps](../../README.md).
 
 > **Net Toolbox replaces it.** Net Toolbox 0.4.0 has the same feature as "Local devices", on a full-screen layout. This app stays available for now.
 
@@ -21,8 +21,8 @@ open ports of the one you select.
 
 On the deck: **Settings > Apps > Sources > + Add a GitHub source**, enter `OSRdesign/cyberdeck-zero-apps`, go to the
 **Apps** tab, pick **LAN Scan** and press Enter. Installing asks for the deck user's sudo password. See the
-[repository README](../../README.md) for details. If an older version is installed, the deck offers 0.1.2 as an
-update in the same menu.
+[repository README](../../README.md) for details. While it was published, the deck offered
+0.1.3 as an update to an older version in the same menu.
 
 LAN Scan was unpublished from the Store on 2026-11-02 (marked draft in the registry): [Net Toolbox](../net-toolbox/README.md)
 replaces it, and the deck no longer offers it in the Apps tab.
@@ -64,6 +64,8 @@ The port list of one device:
 
 ## Changes
 
+* **0.1.3**: a short Esc never quits the app: on the device list it only shows the hint "Hold Esc 3 s to exit",
+  on the port list it goes back to the device list. Hold Esc for 3 seconds to exit.
 * **0.1.1**: the source now lives in this repository, in `apps/lanscan/src`, and is built with
   `apps/lanscan/build/build.sh` (same method as Wi-Fi Survey: the script copies the source into a scratch project of
   a launcher checkout, runs `scons` and puts the binary in `apps/lanscan/root/`). It was moved unchanged: on the deck

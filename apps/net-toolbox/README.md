@@ -693,8 +693,9 @@ network's channel width, so a 40 or 80 MHz network counts on its main channel on
 * Ping needs unprivileged ICMP sockets (`net.ipv4.ping_group_range` covering the user's group; the default on
   Raspberry Pi OS). Without them ping says so with the fix, and the diagnosis uses TCP connections instead.
 * `iw` (package `iw`) for the Wi-Fi network name and bit rate; optional.
-* `depends` = the template's `libfreetype6, libinput10, libxkbcommon0` and, from 0.2, `curl, ca-certificates` (the
-  HTTP check and the public address); no root. The `openssl` program (installed on both boards) reads the dates of a
+* `depends` = the template's `libfreetype6, libinput10, libxkbcommon0`, from 0.2 `curl, ca-certificates` (the
+  HTTP check and the public address) and, from 0.4, `network-manager` (Wi-Fi networks and the walk test read its scan
+  results with `nmcli`); all are installed with the app; no root. The `openssl` program (installed on both boards) reads the dates of a
   certificate curl refused; without it that certificate shows no dates.
 * From 0.3: the speed test uses `curl` too (already in `depends`); the BLE scan needs BlueZ's `bluetoothctl` (package
   `bluez`, installed on Raspberry Pi OS) and a running `bluetoothd`; it stays optional (not in `depends`): without it
