@@ -74,11 +74,15 @@ Each accepted for P1 by the coordinator, owner informed (no owner wording record
   WARN by the coordinator, 2026-11-12; the sizes are on the `volume_strip_buttons` line of the QA hand-off).
 - The icon: four colours (cream sleeve, teal ring and label, black record, grey grooves) and thin groove rings, an
   exception to the palette's rule 3; the coordinator's design call (2026-11-12).
+- At 480x480 the six transport keys cannot all be the target wide (80 px: 6 x 80 is more than the row) without
+  overlapping: their touch areas overlap their neighbours' (the strip open or not). Accepted as a WARN by the
+  coordinator under R-4 (2026-11-12).
 
-## Open
+## Volume strip touch areas (the coordinator, 2026-11-12)
 
-- While the volume strip is open no touch area overlaps another one (design QA run 2). At 480x480 and 480x640 the gap
-  between the volume chip and the transport keys is 79 and 61 px, under the target (80 and 63): the "+" area is the
-  whole gap there and the harness's size check reports it (R-4: the owner's call on usability).
-- At 480x480 the six transport keys cannot all be the target wide (80 px) without overlapping: their touch areas overlap
-  their neighbours' as before (the strip open or not).
+While the volume strip is open no touch area of now playing overlaps another one (design QA run 2,
+`layout::place_strip_hits`). The drafts' geometry left the band between the volume / output chips and the transport keys
+1 px short of the touch target at 480x480 (79 of 80) and 2 px short at 480x640 (61 of 63): there the transport keys (and
+their repeat / shuffle marks) sit that much lower, so the band is the target high and the harness's size check passes.
+Solved by geometry, not by an R-4 exception. The same rule moves them 1 px at 320x480 on a 6.67 px/mm panel (target 47,
+band 46); every other size draws as before.

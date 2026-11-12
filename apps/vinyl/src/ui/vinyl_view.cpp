@@ -527,9 +527,34 @@ struct View::Impl {
         for (size_t i = 0; i < pc.size(); ++i) place_area(pc[i]->obj, set.chips[i].area);
     }
 
+    /* The few px the volume strip's touch band lacks (design QA run 2, the coordinator's decision): the band between
+     * the volume / output chips and the transport keys must be the touch target high, so that the strip's touch areas
+     * neither overlap a neighbour nor come out under the target. Where the drafts' geometry misses it by at most P(4)
+     * (480x480: 1 px, 480x640: 2 px) the transport keys move down by that much, as long as P(4) stay clear above the
+     * next thing under them (the up-next box, the bottom row or the panel's edge); everywhere else 0. */
+    int keys_dy = 0;
+    int strip_band_shortfall() const {
+        int row = 0; /* the lowest chip row holding the volume or the output chip (the tappable ones) */
+        for (size_t r = 0; r < g.chip_layout.size(); ++r)
+            for (int id : g.chip_layout[r])
+                if (id == 1 || id == 2) row = static_cast<int>(r);
+        const int chips_bottom = Y(g.chip0.y + row * g.chip_step) + P(g.chip0.h);
+        int keys_top = H, keys_bottom = 0;
+        for (const layout::Btn &b : g.transport) {
+            keys_top = std::min(keys_top, Y(b.box.y));
+            keys_bottom = std::max(keys_bottom, Y(b.box.y) + Hd(b.box));
+        }
+        const int short_by = target - (keys_top - chips_bottom);
+        if (short_by <= 0 || short_by > P(4)) return 0;
+        int below = Y(g.panel.bottom()) - P(4);
+        if (g.has_upnext) below = std::min(below, Y(g.upnext.y));
+        for (const layout::Btn &b : g.bottom) below = std::min(below, Y(b.box.y));
+        return below - (keys_bottom + short_by) >= P(4) ? short_by : 0;
+    }
+
     Button make_button(lv_obj_t *root, const layout::Btn &b, HitKind kind) {
         Button bt;
-        const int x = X(b.box.x), y = Y(b.box.y), w = Wd(b.box), h = Hd(b.box);
+        const int x = X(b.box.x), y = Y(b.box.y) + (kind == kKey ? keys_dy : 0), w = Wd(b.box), h = Hd(b.box);
         bt.vis = box(root, x, y, w, h, b.teal ? col::kTeal : col::kButton, P(8));
         bt.ink = b.teal ? col::kWhite : col::kInk;
         bt.ic = icon_of(b.id);
@@ -684,8 +709,9 @@ struct View::Impl {
                                   kSeek});
 
         /* transport */
+        keys_dy = strip_band_shortfall();
         for (const layout::Btn &b : g.transport) btns[b.id] = make_button(r, b, kKey);
-        repeat_dash = box(r, X(g.repeat_dash.x), Y(g.repeat_dash.y), Wd(g.repeat_dash), std::max(2, Hd(g.repeat_dash)), col::kTeal,
+        repeat_dash = box(r, X(g.repeat_dash.x), Y(g.repeat_dash.y) + keys_dy, Wd(g.repeat_dash), std::max(2, Hd(g.repeat_dash)), col::kTeal,
                           P(2));
         /* the same mark under shuffle when it is on (the draft draws the repeat one) */
         const layout::Btn *sb = nullptr, *rb = nullptr;
@@ -695,9 +721,9 @@ struct View::Impl {
         }
         if (sb && rb) {
             const double dx = g.repeat_dash.x - rb->box.x;
-            shuffle_dash = box(r, X(sb->box.x + dx), Y(g.repeat_dash.y), Wd(g.repeat_dash), std::max(2, Hd(g.repeat_dash)),
+            shuffle_dash = box(r, X(sb->box.x + dx), Y(g.repeat_dash.y) + keys_dy, Wd(g.repeat_dash), std::max(2, Hd(g.repeat_dash)),
                                col::kTeal, P(2));
-            repeat_one = label(r, Face::Bold, P(10), col::kTeal, X(rb->box.right() - 13), Y(rb->box.y + 3), 0);
+            repeat_one = label(r, Face::Bold, P(10), col::kTeal, X(rb->box.right() - 13), Y(rb->box.y + 3) + keys_dy, 0);
             set_text(repeat_one, "1");
         }
 
@@ -729,7 +755,7 @@ struct View::Impl {
         const int cy = Y(g.seek.y) + sh / 2;
         const int top_lim = Y(g.chip0.y + (static_cast<double>(g.chip_layout.size()) - 1) * g.chip_step) + P(g.chip0.h) + P(4);
         int bot_lim = H;
-        for (const layout::Btn &b : g.transport) bot_lim = std::min(bot_lim, Y(b.box.y));
+        for (const layout::Btn &b : g.transport) bot_lim = std::min(bot_lim, Y(b.box.y) + keys_dy);
         bot_lim -= P(4);
         const int row_h = std::max(P(g.time.lh), sh);
         const int bh = std::max(row_h, std::min(target, bot_lim - top_lim));
