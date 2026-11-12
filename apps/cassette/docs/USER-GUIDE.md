@@ -1,7 +1,7 @@
 # Cassette: user guide
 
 Cassette is a sound recorder that looks like a tape deck. You plug a USB sound card or a USB headset into a
-CyberDeck board, press REC, and the sound goes into a file in the `Recordings` folder: a WAV file, or, if you choose
+CyberDeck board (or pair a Bluetooth headset, see [Bluetooth](#bluetooth)), press REC, and the sound goes into a file in the `Recordings` folder: a WAV file, or, if you choose
 it, a smaller FLAC or Ogg Opus file. You can listen again, cut a take with trim and split, join takes into one, and
 watch a level meter while you record.
 
@@ -33,7 +33,7 @@ Contents:
 
 ## What you need
 
-- **A USB sound card or a USB headset with a microphone.** Cassette records from any sound card that Linux sees as a
+- **A USB sound card or a USB headset with a microphone** (or a Bluetooth headset on a board with a sound server). Cassette records from any sound card that Linux sees as a
   capture device. It finds the card by its name and USB identity, never by its number, so a card that gets a different
   number after a reboot is still the same card for Cassette.
 - A CyberDeck board with the launcher and a screen of at least 480x320 (portrait 320x480 in PDA mode). Square
@@ -720,6 +720,10 @@ the row says *Bluetooth device* and the last two bytes of its address (*Bluetoot
 **What to do:** switch the device on and let the launcher connect it (or connect it in Settings > Bluetooth); the row becomes a
 normal one by itself, a second or two later. A speaker or a pair of headphones is never offered as an input, even when it is
 connected: it has no microphone. With an older launcher the dimmed rows do not appear, nothing else changes.
+
+| Input: a paired headset, not connected | Output: a paired device, not connected (tapped) | The sound server is not running |
+|---|---|---|
+| ![Input picker: a paired headset that is not connected, dimmed](img/bt-input-paired.png) | ![Output picker: a paired headset that is not connected, dimmed, after a tap](img/bt-output-paired.png) | ![The footer: The sound server is not running](img/bt-input-notsetup-server.png) |
 
 | Input picker with a headset | A headset that cannot be used | No sound server on this board |
 |---|---|---|
