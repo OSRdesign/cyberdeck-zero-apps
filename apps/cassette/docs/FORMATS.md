@@ -2,16 +2,15 @@
 
 Design note for the codec layer (phase A, 2026-11-10). Decisions it follows: report 058 D3 (WAV/BWF stays the
 default), D4 (FLAC and Opus as options), D7 (libraries loaded at run time with `dlopen`, no link-time dependency), D11
-(the card's native rate, no resampling in 0.1), D16 (Vorbis comments for metadata).
+(the card's native rate, Cassette does not resample), D16 (Vorbis comments for metadata).
 
-**Status (2026-11-10).** Phase A (the encoders, the library loading, the format list with its size estimates, the
-stored key), phase B (recording: the writer, names, the list, the journal, the repair) and phase C (playback, preview,
-the 5x scan and the 5 s jump, the peak cache, trim and split of FLAC and Opus takes) are done. The recorder writes
-FLAC and Ogg Opus takes when the stored setting asks for it and `effective_choice()` allows it. The Settings
-Format row (the owner's design, 2026-11-10, branch `cassette-fmtui`) listed the six entries below; since 2026-11-10
-(branch `cassette-r7`) the format is **three settings**, Codec, Sample rate and Quality, each with a picker of its own
-(the six entries are now the Codec picker's quick presets). Entries the card or the libraries cannot record stay in
-the lists, dimmed, with the model's reason; Opus is dimmed (never resampled) on a card with no rate it can record. See
+**Status (shipped in 0.1.0, merging in 0.2.0).** The encoders, the library loading, the format list with its size estimates, the
+stored key, recording (the writer, names, the list, the journal, the repair) and playback (preview, the 5x scan and the 5 s jump,
+the peak cache, trim and split of FLAC and Opus takes) are done. The recorder writes
+FLAC and Ogg Opus takes when the stored setting asks for it and `effective_choice()` allows it. The format is **three settings**,
+Codec, Sample rate and Quality (the row is named Bit depth or Bit rate in the app), each with a picker of its own; the six entries below
+are the Codec picker's quick presets. Entries the card or the libraries cannot record stay in the lists, dimmed, with the model's
+reason; Opus is dimmed (never resampled) on a card with no rate it can record. See
 "The Codec, Sample rate and Quality pickers" below. A
 FLAC / Opus take whose decoder library is missing is refused with a notice. Code: `src/core/codec/`,
 `src/core/writer.*`, `src/core/repair.*`, `src/core/takes/`, `src/core/playback/player.*`, `src/core/edit/`; tests:

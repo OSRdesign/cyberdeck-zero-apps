@@ -41,7 +41,7 @@ five screens before the card is at hand. Not a test of the sound path.
 2 seconds and counts the frames. It only listens: no file is written, no mixer control is changed. Where it is
 installed: `/usr/share/APPLaunch/bin/cassette-probe` **(to confirm: whether the package carries it; if not, the
 controller copies it to the board)**. Options: `--card NAME`, `--seconds N`, `--no-open`; `--server` (and `--card
-bt:<MAC>`) lists the sound server's devices instead, for the Bluetooth tests (B24-B34). What its lines mean:
+bt:<MAC>`) lists the sound server's devices instead, for the Bluetooth tests (B24-B36). What its lines mean:
 
 | Line | Meaning |
 |---|---|
@@ -165,7 +165,7 @@ get silence while Cassette holds the card.
 2. `cassette-probe`: expected `OK VIA SERVER` and the `note:` line.
 3. Open Cassette. Before any take the info strip leads with the card name and `(server)`. REC 30 s, STOP, play it: it
    holds your voice. Expected on screen: when REC starts, a 4 s notice "Recording through the sound server: the card is
-   in use"; during the take the strip reads like `TAKE 007 · 48k/16 WAV (server) · 12 h 40 left` (on the narrow screen
+   in use"; during the take the strip reads like `TAKE 007 Â· 48k/16 WAV (server) Â· 12 h 40 left` (on the narrow screen
    the small box says `(server)` before the time left). Report exactly what the screen shows.
 4. Stop `pw-record` (Ctrl+C). Close and open Cassette (it now opens the card directly). REC, and while it records start
    `pw-record /tmp/other2.wav` for 10 s. Expected from P0: `other2.wav` holds silence. Expected on screen: when REC
@@ -623,7 +623,7 @@ originals as they were. The guide: `docs/USER-GUIDE.md`, section Merging takes.
    in the second, "C one ..." in the third), so each take and each position can be heard. Note their numbers.
 2. **The keys and merge mode.** Recordings list: the keys read LOAD, RENAME, EDIT, MERGE, DELETE (portrait boards: say if
    a caption is hard to read). Select the C take, press MERGE (or M). Expected: round badges instead of the stickers, the C
-   take shows 1, the strip reads `Merge · 1 take · 00:20 · about 2 MB` (about), the keys are CANCEL and MERGE (MERGE
+   take shows 1, the strip reads `Merge Â· 1 take Â· 00:20 Â· about 2 MB` (about), the keys are CANCEL and MERGE (MERGE
    dimmed). Tap the A take (2), then the B take (3). Tap the A take again: it is dropped and B shows 2; tap A again: A
    shows 3. The order is now C, B, A; the strip says 3 takes and about 01:00.
 3. **The box.** MERGE: the box says `Merge 3 takes?`, about 01:00 and the size, and the new name: the next take number,
@@ -686,7 +686,7 @@ the five. Report the five values. (The click through the air reaches the phone i
 
 1. Evolve 65 connected (the launcher's Settings > Bluetooth shows it Connected). Open Cassette, Settings > Input.
 2. Expected: the USB cards first, then a two-line row: `Evolve 65` (the name the launcher shows) with `16 kHz` on the
-   right, under it `Bluetooth headset · speech quality`. The footer reads `Bluetooth headsets record speech quality
+   right, under it `Bluetooth headset Â· speech quality`. The footer reads `Bluetooth headsets record speech quality
    (16 kHz)`.
 3. Choose it. Expected: the Input row names it, Input level reads `Not applicable` (greyed), no CARD stepper on the
    recorder, the meter label reads `BT` instead of `IN`, and the meter moves when you speak (after `Connecting the
@@ -834,9 +834,9 @@ Beats Fit Pro (or the XWF speaker) paired in the launcher; connect the Evolve, s
 
 Report: the two state lines, what each picker showed, the texts as you read them, pass or fail.
 
-## B36. A launcher without the new keys (HackBerry, launcher 0.10.0, 3 min)
+## B36. A launcher without the new keys (HackBerry, launcher 0.10.0 or older, 3 min)
 
-On the launcher that is installed today (0.10.0: its `status.state` has no `bt_audio_dev`, its `board.state` no `bt_audio`).
+On a launcher 0.10.0 (or any build without the `bt_audio*` keys: its `status.state` has no `bt_audio_dev`, its `board.state` no `bt_audio`). The HackBerry now runs 0.10.1, so this needs the older launcher installed first.
 
 1. `grep -c bt_audio /run/user/1000/applaunch/status.state /run/user/1000/applaunch/board.state` prints `0` for both.
 2. Open Cassette: Settings > Input and Output list **only** the connected Bluetooth devices, no dimmed row for a paired one, exactly as
@@ -844,9 +844,13 @@ On the launcher that is installed today (0.10.0: its `status.state` has no `bt_a
    on this board* (not *The sound server is not running*).
 3. A device chosen earlier and switched off shows the old placeholder: *Not connected* (a long name wraps), not the long reason.
 
-Report: pass or fail, anything that differs from B24-B34 as you saw them last.
+Report: pass or fail, anything that differs from B24-B35 as you saw them last.
 
 ## Results
+
+B24 to B31, B33 and B35 are filled from the owner's HackBerry session (PipeWire 1.4.2, launcher 0.10.1, a Jabra Evolve 65 paired directly,
+an XWF-M18-M28-M38 A2DP speaker, a Spacetouch USB sound card). The rows B0 to B23 are left blank here: their results are kept
+outside the repository (the owner's log); this table is the blank form for them.
 
 | Test | Board | Pass / fail | Notes |
 |---|---|---|---|
@@ -873,20 +877,20 @@ Report: pass or fail, anything that differs from B24-B34 as you saw them last.
 | B20 Info box and label with a long name |  |  |  |
 | B22 LIM and LOW CUT lamps |  |  |  |
 | B23 merge takes |  |  |  |
-| B24 Bluetooth headset in Input | HackBerry |  |  |
-| B25 30 s take from the headset | HackBerry |  |  |
-| B26 start from music mode | HackBerry |  |  |
-| B27 headset off during a take | HackBerry |  |  |
-| B28 headset back on | HackBerry |  |  |
-| B29 playback to the same headset | HackBerry |  |  |
-| B30 monitor on the same headset (delay ms) | HackBerry |  |  |
-| B31 monitor USB mic to BT speaker (delay ms) | HackBerry |  |  |
-| B32 silent headset (Beats) | HackBerry |  |  |
-| B33 call-quality-only headset | HackBerry |  |  |
-| B34 no sound server | zero8 |  |  |
-| B34 no sound server | Pi 3A+ |  |  |
-| B35 paired but not connected | HackBerry |  |  |
-| B36 launcher without the keys | HackBerry |  |  |
+| B24 Bluetooth headset in Input | HackBerry | PASS | 2026-11-11/12; build bt2/bt3, then 0.3.0; launcher 0.10.1 |
+| B25 30 s take from the headset | HackBerry | PASS | 2026-11-11/12; build bt2/bt3, then 0.3.0; launcher 0.10.1 |
+| B26 start from music mode | HackBerry | PASS | 2026-11-11/12; build bt2/bt3, then 0.3.0; launcher 0.10.1 |
+| B27 headset off during a take | HackBerry | PASS | 2026-11-11/12; build bt2/bt3, then 0.3.0; launcher 0.10.1 |
+| B28 headset back on | HackBerry | PASS | 2026-11-11/12; build bt2/bt3, then 0.3.0; launcher 0.10.1 |
+| B29 playback to the same headset | HackBerry | PASS | 2026-11-11/12; build bt2/bt3, then 0.3.0; launcher 0.10.1 |
+| B30 monitor on the same headset (delay ms) | HackBerry | PASS | 2026-11-11/12; Evolve 65 mic to the same Evolve, call mode: Cassette showed about 100 ms, felt about 0.25 s (the figure excludes the headset's own link and buffering); build bt2/bt3, then 0.3.0 |
+| B31 monitor USB mic to BT speaker (delay ms) | HackBerry | PASS | 2026-11-11/12; Spacetouch USB sound card to the XWF-M18-M28-M38 over A2DP: Cassette showed 0.18 s, felt about 0.2 s; build bt2/bt3, then 0.3.0 |
+| B32 silent headset (Beats) | HackBerry | not run | Beats Fit Pro behaviour (connects, no call-audio link, silent source for mSBC and CVSD) was observed with a probe on the HackBerry, not through Cassette; the notice is covered by the unit tests |
+| B33 call-quality-only headset | HackBerry | PASS | 2026-11-11/12; build bt2/bt3, then 0.3.0; launcher 0.10.1 |
+| B34 no sound server | zero8 | not run |  |
+| B34 no sound server | Pi 3A+ | not run |  |
+| B35 paired but not connected | HackBerry | PASS | 2026-11-11/12; build bt2/bt3, then 0.3.0; launcher 0.10.1 |
+| B36 launcher without the keys | HackBerry | not run | needs a launcher older than 0.10.1; covered by the unit tests |
 
 **What to send back:** the table; the probe output per board (B0) and `cassette-probe --server` (B24, B34); the measured
 monitor delays (B30, B31); the `watch` and `take` outputs of B1, B3, B4; the
@@ -895,7 +899,7 @@ No audio files.
 
 **Known limits:** WAV is the default format (FLAC and Opus are optional: they need libflac / libopusenc0 and libopus0, and Opus is not offered at 44.1 kHz; the boards' CPU for them is measured in B17 and B18); no background recording (leaving the app ends the take,
 which is kept); the card is found again after a replug but the take that was running is closed, not continued; the
-headset's own level is weak (peaks around -17 to -7 dBFS at full level in P0): use SOFT on top of it. Bluetooth (B24-B34)
+headset's own level is weak (peaks around -17 to -7 dBFS at full level in P0): use SOFT on top of it. Bluetooth (B24-B36)
 needs a sound server (not on the Lite boards today), records speech quality only (16 or 8 kHz mono), allows one music
 (A2DP) device at a time on the HackBerry, and some headsets send no microphone audio (Beats Fit Pro).
 

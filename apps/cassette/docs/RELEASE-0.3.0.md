@@ -37,11 +37,16 @@ cards work exactly as before.
 - **Launcher 0.10.1 or later only for the dimmed paired-device rows.** Everything else works without it; with an older
   launcher those rows simply do not appear.
 
-## Tested devices (HackBerry, PipeWire 1.4.2)
+## Tested devices (HackBerry, PipeWire 1.4.2, launcher 0.10.1)
 
-- Jabra Evolve 65: recording OK at 16 kHz mSBC; music mode OK when no other music device is connected.
-- Beats Fit Pro: connects but sends no microphone audio; Cassette reports it.
-- XWF-M18-M28-M38 speaker: playback OK.
+Board tests B24 to B31, B33 and B35 passed (2026-11-11 and 12; builds bt2, bt3, then 0.3.0), with a Jabra Evolve 65 paired directly,
+an XWF-M18-M28-M38 A2DP speaker and a Spacetouch USB sound card.
+
+- Jabra Evolve 65: recording OK at 16 kHz mSBC; music mode OK when no other music device is connected. Monitor to the same
+  headset: about 0.1 s shown, about 0.25 s felt.
+- XWF-M18-M28-M38 speaker: playback OK; monitor from a USB microphone 0.18 s shown, about 0.2 s felt.
+- Beats Fit Pro: observed with a probe on the HackBerry, not through Cassette: it connects but opens no call-audio link and its
+  source is silent. Cassette's notice for it is covered by the unit tests.
 
 ## Known limits
 
@@ -52,8 +57,9 @@ cards work exactly as before.
   board* and records from USB as before.
 - LE Audio is not supported (our boards' radios are Bluetooth 5.0 or older).
 - The delay under Monitor is Cassette's own figure and excludes the headset's own link: in call mode that link adds more
-  (about 0.25 s felt with the Evolve 65 against 0.1 s shown). The estimates for a speaker (150-350 ms) are not measured.
-- Board tests B32 and B34 have not been run on hardware.
+  (about 0.25 s felt with the Evolve 65 against 0.1 s shown). A USB microphone to an A2DP speaker showed 0.18 s and felt about 0.2 s; other speakers are not measured (expect up to about 0.35 s).
+- Board tests not run: B32 (a silent headset on hardware), B34 (a board without a sound server) and B36 (an older launcher; covered by
+  the unit tests). B35 (paired but not connected, launcher 0.10.1) passed.
 
 More: [`USER-GUIDE.md`](USER-GUIDE.md#bluetooth), [`README.md`](../README.md), [`FORMATS.md`](FORMATS.md),
 [`PULSE.md`](PULSE.md).

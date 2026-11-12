@@ -1,15 +1,17 @@
 # Cassette: the sound-server backend (PipeWire / PulseAudio through libpulse)
 
-Design note for the second audio backend (task T1 of the Bluetooth release, 2026-11-11). It follows the Bluetooth
+Design note for the second audio backend (shipped in Cassette 0.3.0, 2026-11-12; written as task T1 of the Bluetooth release). It follows the Bluetooth
 study (Option A: Cassette reaches Bluetooth devices through the sound server, `libpulse` loaded at run time like the
-codecs) and its HackBerry measurements P1-P9 and items C15-C19.
+codecs) and its HackBerry measurements P1-P9 and items C15-C19. The study, the task plans and their reports (T1 to T9) are
+kept in the launcher project's dev documents (`docs/dev`), not in this repository; the section names below ("What T2 uses" and
+so on) are the steps of that task.
 
-**Status (2026-11-11).** The module is done and tested on its own: `src/core/pulse/` (no LVGL), tests in `tests/pulse/`,
-the board CLI `tools/pulse_capture_test.cpp`. **T2 (capture) is wired into the controller** (section "What T2 uses"
-below): a paired Bluetooth headset is an input next to the ALSA cards. **T3 (playback and the live monitor over Bluetooth, and
-the worker thread for the server's questions) is wired in too** (section "What T3 uses"); **T4, the UI, shows it** (section
-"What T4 shows"); **T9** fixed what the board tests B27-B29 found (section "What T9 changed"); **T8** reads the launcher's
-Bluetooth audio facts (section "What T8 uses"). The ALSA path
+**Status (0.3.0).** All of it is shipped and board-tested on the HackBerry (B24 to B31, B33, B35 passed, see
+[`../tests/BOARD-TESTS.md`](../tests/BOARD-TESTS.md#results)): the module `src/core/pulse/` (no LVGL), tests in `tests/pulse/`, the
+board CLI `tools/pulse_capture_test.cpp`. T2 (capture) is wired into the controller (section "What T2 uses"): a paired Bluetooth
+headset is an input next to the ALSA cards. T3 (playback and the live monitor over Bluetooth, and the worker thread for the server's
+questions) is wired in too (section "What T3 uses"); T4, the UI, shows it (section "What T4 shows"); T9 fixed what the board tests
+B27-B29 found (section "What T9 changed"); T8 reads the launcher's Bluetooth audio facts (section "What T8 uses"). The ALSA path
 (including its `(server)` fallback through ALSA `default`, `alsa/open_policy.*`) is exactly as before.
 
 ## Files
@@ -143,7 +145,7 @@ Measured on the HackBerry (PipeWire 1.4.2, 2026-11-11): a capture connected to a
 the lookup skipped so the server alone decides (`pulse-capture-test --no-lookup`), was **refused by pipewire-pulse**
 (stream failed, "no such entity" -> `kPulseNoDevice`, no source output left behind), where P5's `parecord` without
 these flags ran on another source. The mid-take case (the headset switched off during a capture) needs the owner and is
-in the board steps of the T1 report.
+in the board tests (B27, headset off during a take; passed).
 
 ### Silence detection (P3)
 
@@ -406,7 +408,7 @@ with 1 % and 2 % drift):
 **Delay figure.** `monitor.delay_ms` = the capture stream's latency (`PulseCapture::latency`, the server's report; a card's capture counts its 1024-frame period) + the tap ring's fill + the playback stream's delay
 (ring + the server's report, `PulsePlaybackSink::delay_ms`). First value 0.3 s after the monitor starts, then once a second; 0 while it is not running. `monitor.notice` is `delay` when the route is
 `other_output` to a Bluetooth sink on a music profile (A2DP: about 0.2-0.3 s, "you will hear an echo"), or while the figure is above 150 ms; else `""`. The notice for an A2DP target is already there before the
-monitor is switched on (the Settings row can say it). The measured figure for the Evolve 65 is the owner's (a step in the T3 report); the expectation is 80-150 ms on the same headset.
+monitor is switched on (the Settings row can say it). Measured on the HackBerry (B30, B31): the Evolve 65 microphone to the same Evolve in call mode showed about 100 ms and felt about 0.25 s (the figure excludes the headset's own link and buffering); a USB microphone to the XWF-M18-M28-M38 speaker over A2DP showed 0.18 s and felt about 0.2 s.
 
 **When it runs.** `monitor_wanted()`: capture running, Monitor setting on, a target exists, not after AppLeave, no playback / preview / trim (as before), and for a Bluetooth input the microphone is NOT connecting
 (`CaptureSnap::connecting` false: the profile switch is over). So it is off while connecting, off during playback (the microphone is closed then), and starts by itself after the profile switch when the microphone
@@ -531,7 +533,7 @@ SDK (no new link, `readelf` still shows no libpulse) and falls back to exactly t
 |---|---|---|
 | `status.state` | `bt_audio_dev=MAC:kind:connected[:a2dp\|hfp];...` | paired devices, their kind, the profile hint |
 | `board.state` | `bt_audio=pipewire\|pulseaudio\|bluealsa\|none` | which text to show when the sound server is unreachable; no dimmed rows with `none` |
-| `board.state` | `bt_hfp`, `bt_le_audio` | parsed and kept in `LauncherFacts`; nothing in the UI uses them yet |
+| `board.state` | `bt_hfp`, `bt_le_audio` | parsed and kept in `LauncherFacts`; nothing else in the source uses them (checked against the 0.3.0 source) |
 
 **Where and when.** Both files are in `$APPLAUNCH_STATE_DIR`, else `$XDG_RUNTIME_DIR/applaunch/`, else
 `/tmp/applaunch-status.state` / `/tmp/applaunch-board.state` (the SDK's `cp0_app_state_path()` order; read on the HackBerry under
