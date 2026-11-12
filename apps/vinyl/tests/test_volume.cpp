@@ -487,10 +487,51 @@ void test_output_sink_level() {
     w.stop();
 }
 
+/* B18 (2026-11-13): an unknown level is never shown or logged as a number: the sink removed, its info not read (the
+ * list failed), a sink the server reports no volume for; a muted sink says Muted */
+void test_unknown_level() {
+    OutputWorld w;
+    w.server = true;
+    PulseDevice ev = fake_bt_sink(kEvolve, 70, "headset");
+    ev.volume_pct = 45;
+    w.sinks = {ev};
+    w.default_sink = ev.name;
+    int pct = -1;
+    bool muted = false;
+    CHECK(sink_volume_of(w, ev.name, pct, muted));
+    CHECK_EQ(volume_chip_text(pct, muted), std::string("Vol 45"));
+    /* the headset switched off: the sink is gone from the list */
+    w.sinks.clear();
+    pct = -7;
+    CHECK(!sink_volume_of(w, ev.name, pct, muted));
+    CHECK_EQ(volume_chip_text(-1, false), std::string("Vol --"));
+    CHECK_EQ(volume_log_text(-1), std::string("-- (not known)"));
+    /* the list could not be read (a server error): no server in the world, nothing known */
+    OutputWorld lost;
+    CHECK(!sink_volume_of(lost, ev.name, pct, muted));
+    /* the server lists the sink without a level */
+    ev.volume_pct = -1;
+    w.sinks = {ev};
+    CHECK(!sink_volume_of(w, ev.name, pct, muted));
+    /* muted: Muted while the level is known, "--" when it is not */
+    ev.volume_pct = 30;
+    ev.muted = true;
+    w.sinks = {ev};
+    CHECK(sink_volume_of(w, ev.name, pct, muted));
+    CHECK_EQ(volume_chip_text(pct, muted), std::string("Muted"));
+    CHECK_EQ(volume_chip_text(-1, true), std::string("Vol --"));
+    CHECK_EQ(volume_log_text(30), std::string("30 %"));
+    for (int v : {-1, -2, -100}) {
+        CHECK(volume_chip_text(v, false).find('-' + std::to_string(-v)) == std::string::npos);
+        CHECK(volume_log_text(v).find(std::to_string(v)) == std::string::npos);
+    }
+}
+
 }  // namespace
 
 void test_volume() {
     test_volume_pct();
+    test_unknown_level();
     test_output_mixer();
     test_output_sink_level();
     test_stream_identity();

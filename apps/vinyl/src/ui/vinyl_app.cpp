@@ -944,9 +944,7 @@ struct VinylApp::Impl final : TransportHost {
     std::string vol_text() const {
         bool muted = false;
         const int v = output_level(&muted);
-        if (v < 0) return "Vol --";
-        if (muted) return "Muted";
-        return "Vol " + std::to_string(v);
+        return volume_chip_text(v, muted);
     }
 
     /* one log line when the level shown or the control changes (for the board probes: which volume is in force) */
@@ -955,15 +953,15 @@ struct VinylApp::Impl final : TransportHost {
         bool m = false;
         const int v = output_level(&m);
         std::string line;
-        if (t.kind == VolTarget::Kind::Sink) line = "sink " + t.sink + " " + std::to_string(v) + " %";
+        if (t.kind == VolTarget::Kind::Sink) line = "sink " + t.sink + " " + volume_log_text(v);
         else if (t.kind == VolTarget::Kind::Mixer && software_volume(t))
-            line = "software " + std::to_string(v) + " % for " + t.key + " (" + t.card + ": no playback mixer)";
+            line = "software " + volume_log_text(v) + " for " + t.key + " (" + t.card + ": no playback mixer)";
         else if (t.kind == VolTarget::Kind::Mixer) {
             char db[32] = "";
             if (mixer_choice.has_db) std::snprintf(db, sizeof db, ", %.1f dB", mixer_level.cdb / 100.0);
-            line = "mixer " + t.card + " '" + mixer_choice.volume + "' " + std::to_string(v) + " %" + db;
+            line = "mixer " + t.card + " '" + mixer_choice.volume + "' " + volume_log_text(v) + (v >= 0 ? db : "");
         } else line = "no output";
-        if (m) line += " (muted)";
+        if (m && v >= 0) line += " (muted)";
         if (line == vol_logged) return;
         vol_logged = line;
         std::fprintf(stderr, "[vinyl] volume: %s\n", line.c_str());

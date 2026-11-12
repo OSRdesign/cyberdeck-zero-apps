@@ -60,6 +60,12 @@ int read_mixer(AlsaApi &alsa, const std::string &card, std::string &choice_card,
 /* Sets the control to `pct` (all channels) and its switch (off at 0 %, on above). 0 or a negative error. */
 int write_mixer(AlsaApi &alsa, const std::string &card, const MixerChoice &choice, int pct);
 
+/* The chip's text for a level: "Vol 45", "Muted", and "Vol --" when the level is not known (negative: the sink is gone,
+ * not read yet, or the server reports none): a negative value is never shown or logged (board test B18, 2026-11-13). */
+std::string volume_chip_text(int level, bool muted);
+/* The level as the log writes it: "45 %", or "-- (not known)". */
+std::string volume_log_text(int level);
+
 /* The step the strip and the keys move the level by (percent). */
 constexpr int kVolumeStep = 5;
 /* The next level after a step: 0..100, never above 100 by a step up (a level someone set above 100 only goes down). */

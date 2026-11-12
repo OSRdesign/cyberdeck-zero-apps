@@ -104,7 +104,12 @@ chip makes more than a second to reflect."
 - Every playback stream opens unmuted at 100 % with its own restore key (`module-stream-restore.id`
   `sink-input-by-application-id:vinyl`) and WirePlumber's `state.restore-props` / `state.restore-target` false, so no
   server re-applies another music app's stream level; the stream's identity says vinyl (it said cassette, a leftover of
-  the copied code).
+  the copied code). Board check (HackBerry, 2026-11-13): pw-dump shows `sink-input-by-application-id:vinyl` and
+  `state.restore-props` / `state.restore-target` false on Vinyl's node, while `pactl list sink-inputs` shows
+  `sink-input-by-media-role:music`: pipewire-pulse displays its own computed key there. Harmless as long as restore is
+  off for the node (the stream also opens at its own 100 %).
+- A level that is not known (the sink gone, not read yet, or reported without a volume) shows as "Vol --" and is
+  logged as "--", never as a negative number (board test B18, 2026-11-13).
 
 ## Volume strip touch areas (the coordinator, 2026-11-12)
 

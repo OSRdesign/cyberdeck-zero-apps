@@ -44,7 +44,7 @@ Retests after the B7 / B9 fixes (2026-11-12):
 | # | Do | Expected |
 |---|---|---|
 | B17 | B9 again: the volume keys, then the Evolve 65's own volume buttons, while playing on the default output | the "Vol" chip follows each press within about half a second; the journal has `[vinyl] volume: system NN % from the sink` |
-| B18 | B7 again with Output > Evolve 65 chosen: set a level (the strip or the keys), switch the headset off, on again, play | the chip shows the Evolve's own level after the reconnect: the level set before, unless the headset or the system changed it (then the chip shows that value, and nothing plays louder than the chip says); the journal's `[vinyl] volume: sink ...` lines give it |
+| B18 | B7 again with Output > Evolve 65 chosen: set a level (the strip or the keys), switch the headset off, on again, play | the chip shows the Evolve's own level after the reconnect: the level set before, unless the headset or the system changed it (then the chip shows that value, and nothing plays louder than the chip says); while the headset is gone or its level is not read yet the chip shows "Vol --" (never a negative number, in the chip or the journal); the journal's `[vinyl] volume: sink ...` lines give it |
 | B19 | Output > the USB DAC (not the default output): read the chip, then `pactl list sinks` (or `wpctl status`); tap "+" twice, "-" once | the chip shows the DAC's own level, the same number as pactl / wpctl; the strip changes the DAC (never the default sink, whose level stays); on zero8 (no sound server) the same with the card's mixer: the chip's level follows `amixer -c <card>` (linear in dB), "+" never past 0 dB |
 
 ## Cleanup

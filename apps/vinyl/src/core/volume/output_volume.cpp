@@ -142,6 +142,14 @@ int write_mixer(AlsaApi &alsa, const std::string &card, const MixerChoice &choic
     return 0;
 }
 
+std::string volume_chip_text(int level, bool muted) {
+    if (level < 0) return "Vol --";
+    if (muted) return "Muted";
+    return "Vol " + std::to_string(level);
+}
+
+std::string volume_log_text(int level) { return level < 0 ? std::string("-- (not known)") : std::to_string(level) + " %"; }
+
 int volume_after_step(int current, int delta) {
     if (current < 0) current = 0;
     const int to = current + delta;
