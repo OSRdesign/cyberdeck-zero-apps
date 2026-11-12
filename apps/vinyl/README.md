@@ -51,7 +51,7 @@ output lists are read in the background).
 | Folder up | Left or Backspace (browser) | the ".." row |
 | Queue pane (800x480 and wider) | Up / Down pick a track, Enter plays it | tap picks, tap again plays |
 | Queue editing | U move up, D move down, Delete or X remove, C clear all | the four buttons |
-| Volume | `-` / `=`: Vinyl's own volume, only for an output the system volume does not reach | tap the volume chip: the volume strip ("-", the level, its bar, "+") replaces the seek row for 4 s (a second tap closes it); its buttons change Vinyl's own volume there, and the system volume (through the launcher) on an output it reaches |
+| Volume | `-` / `=`: Vinyl's own volume, only for an output the system volume does not reach | tap the volume chip: the volume strip ("-", the level, its bar, "+") replaces the seek row for 4 s (a second tap closes it); its buttons change Vinyl's own volume there, and the system volume (through the launcher) on an output it reaches; where nothing can change the volume a tap shows "Volume is not available on this board" |
 | Close a notice | Esc | tap it (it also goes after 6 s, 8 s for a disconnect) |
 | Back; at the browser, quit | Esc | the header's Esc |
 | Headset, speaker, keyboard media keys | Play/Pause, PlayCD, PauseCD (a toggle), Next, Previous (as Right / Left above, held too), Stop (pause and back to the start) | |
@@ -155,7 +155,7 @@ the FLAC / Opus readers come from this repository's Cassette (same author, MIT).
 
 ```sh
 wsl -e sh apps/vinyl/tests/run.sh               # the unit tests (-Werror) and the real-library fixtures
-wsl -e sh apps/vinyl/build.sh host              # harness, unit tests, 25 scenes (qa* for the design QA), sheets
+wsl -e sh apps/vinyl/build.sh host              # harness, unit tests, 26 scenes (qa* for the design QA), sheets
 wsl -e sh apps/vinyl/build.sh cross             # the arm64 binary; --arch amd64 for PCs
 wsl -e sh apps/vinyl/tests/abi/run.sh [root]    # the hand-written FFmpeg / mpg123 / vorbisfile ABI against headers
 python3 tools/make_registry.py --only vinyl --out <folder>    # a local .deb (not published)

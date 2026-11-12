@@ -228,6 +228,70 @@ void split_pair(HitArea &a, HitArea &b, double min) {
     }
 }
 
+namespace {
+bool across(const R &a, const R &b) { return a.x < b.right() && b.x < a.right(); } /* the x ranges overlap */
+
+/* the area starts at `start` (never below its drawn top) and reaches at least `min` down, at most to `limit` */
+void start_at(R &a, const R &drawn, double start, double min, double limit) {
+    start = std::min(start, drawn.y);
+    const double bottom = std::min(limit, std::max(a.bottom(), start + min));
+    a.y = start;
+    a.h = std::max(0.0, bottom - start);
+}
+}  // namespace
+
+void place_strip_hits(NowHitSet &h, double target, double top_limit, double screen_h) {
+    /* the strip's buttons: the band between the chips above and the keys below them */
+    for (HitArea &st : h.strip) {
+        double upper = top_limit, lower = screen_h;
+        for (const HitArea &c : h.chips)
+            if (across(c.area, st.area) && c.drawn.bottom() <= st.drawn.y) upper = std::max(upper, c.drawn.bottom());
+        for (const HitArea &k : h.keys)
+            if (across(k.area, st.area) && k.drawn.y >= st.drawn.bottom()) lower = std::min(lower, k.drawn.y);
+        upper = std::min(upper, st.drawn.y);
+        lower = std::max(lower, st.drawn.bottom());
+        if (lower - upper >= target) {
+            const double cy = st.drawn.y + st.drawn.h / 2;
+            st.area.h = target;
+            st.area.y = std::clamp(cy - target / 2, upper, lower - target);
+        } else {
+            st.area.y = upper;
+            st.area.h = lower - upper;
+        }
+    }
+    /* the chips, the lowest first: each stops above the areas below it that it reaches and grows upwards */
+    std::vector<HitArea *> chips;
+    for (HitArea &c : h.chips) chips.push_back(&c);
+    std::stable_sort(chips.begin(), chips.end(), [](const HitArea *a, const HitArea *b) { return a->drawn.y > b->drawn.y; });
+    std::vector<const HitArea *> below;
+    for (const HitArea &st : h.strip) below.push_back(&st);
+    for (HitArea *c : chips) {
+        double limit = c->area.bottom();
+        for (const HitArea *o : below)
+            if (overlaps(c->area, o->area)) limit = std::min(limit, o->area.y);
+        if (limit < c->area.bottom()) {
+            limit = std::max(limit, c->drawn.bottom());
+            const double top = std::max(top_limit, std::min(c->area.y, limit - target));
+            c->area.y = std::min(top, c->drawn.y);
+            c->area.h = limit - c->area.y;
+        }
+        below.push_back(c);
+    }
+    /* the transport keys start below the strip areas they reach, the bottom row below the keys it reaches */
+    for (HitArea &k : h.keys) {
+        double start = k.area.y;
+        for (const HitArea &st : h.strip)
+            if (overlaps(k.area, st.area)) start = std::max(start, st.area.bottom());
+        if (start > k.area.y) start_at(k.area, k.drawn, start, target, screen_h);
+    }
+    for (HitArea &b : h.bottom) {
+        double start = b.area.y;
+        for (const HitArea &k : h.keys)
+            if (overlaps(b.area, k.area)) start = std::max(start, k.area.bottom());
+        if (start > b.area.y) start_at(b.area, b.drawn, start, target, screen_h);
+    }
+}
+
 ListGeom list_geom(ListPage page, int sw, int sh, int body_y) {
     ListGeom l;
     const NowGeom g = now_geom(size_class(sw, sh));

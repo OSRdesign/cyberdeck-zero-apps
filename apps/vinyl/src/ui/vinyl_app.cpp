@@ -153,6 +153,7 @@ struct VinylApp::Impl final : TransportHost {
             sinks = make_demo_sink_provider();
             world = demo_output_world(lite);
             status = demo_launcher_status();
+            if (env_on("VINYL_DEMO_NOVOLUME")) status.volume = -1; /* a launcher that reports no volume: the strip cannot open */
         } else {
             roots = system_roots();
             resume_file = resume_path();
@@ -195,6 +196,7 @@ struct VinylApp::Impl final : TransportHost {
             refresh(true);
         };
         a.volume_step = [this](int d) { volume_step(d); };
+        a.volume_unavailable = [this] { notice(Notice::Kind::Info, "Volume is not available on this board"); };
         view = std::make_unique<View>(screen, a);
         std::fprintf(stderr, "[vinyl] canvas %dx%d, class %s\n", cdk::screen_w(), cdk::screen_h(),
                      layout::class_name(view->size_class()));

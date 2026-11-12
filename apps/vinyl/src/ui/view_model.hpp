@@ -101,6 +101,7 @@ struct Actions {
     std::function<void()> mini_open;                 /* the mini player (opens now playing) */
     std::function<void(bool, int)> transport;        /* previous (false) / next (true): 0 press, 1 release, 2 cancel */
     std::function<void(int)> volume_step;            /* the volume strip's "-" / "+": -5 / +5 */
+    std::function<void()> volume_unavailable;        /* a tap on the volume chip where nothing can change the volume */
 };
 
 } // namespace ui

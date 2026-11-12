@@ -20,6 +20,96 @@ bool contains(const R &outer, const R &inner) {
            inner.bottom() <= outer.bottom() + 1e-9;
 }
 
+/* every strip area against every other area of now playing; the keys against the bottom row */
+bool strip_apart(const NowHitSet &h) {
+    for (const HitArea &st : h.strip) {
+        for (const HitArea &o : h.chips)
+            if (overlaps(st.area, o.area)) return false;
+        for (const HitArea &o : h.keys)
+            if (overlaps(st.area, o.area)) return false;
+        for (const HitArea &o : h.bottom)
+            if (overlaps(st.area, o.area)) return false;
+        for (const HitArea &o : h.strip)
+            if (&o != &st && overlaps(st.area, o.area)) return false;
+    }
+    for (const HitArea &k : h.keys)
+        for (const HitArea &b : h.bottom)
+            if (overlaps(k.area, b.area)) return false;
+    for (size_t i = 0; i < h.chips.size(); ++i)
+        for (size_t j = i + 1; j < h.chips.size(); ++j)
+            if (overlaps(h.chips[i].area, h.chips[j].area)) return false;
+    return true;
+}
+
+HitArea grown(const R &d, double target) { return HitArea{d, grow_hit(d, target, target)}; }
+
+/* now playing with the volume strip open, screen px of the renders (design QA run 2, D-33) */
+void test_strip_hits() {
+    /* 480x480 (TARGET 80): the output and volume chips side by side, the strip under them, six transport keys, the
+     * word row; the QA saw the keys' tops act as "-" / "+" and "+" cover the volume chip's bottom edge */
+    {
+        const double t = 80;
+        NowHitSet h;
+        h.chips = {grown(R{295, 205, 100, 25}, t), grown(R{403, 205, 53, 25}, t)};
+        split_pair(h.chips[0], h.chips[1], t);
+        h.strip = {grown(R{28, 262, 54, 41}, t), grown(R{398, 262, 54, 41}, t)};
+        const double kx[6] = {28, 95, 163, 261, 329, 396}, kw[6] = {54, 54, 85, 54, 54, 56};
+        for (int i = 0; i < 6; ++i) h.keys.push_back(grown(R{kx[i], 310, kw[i], 46}, t));
+        for (int i = 0; i < 3; ++i) h.bottom.push_back(grown(R{28 + i * 144.5, 422, 135, 40}, t));
+        bool before = false;
+        for (const HitArea &st : h.strip)
+            for (const HitArea &k : h.keys) before = before || overlaps(st.area, k.area);
+        CHECK(before); /* the overlap the QA measured */
+        place_strip_hits(h, t, 56, 480);
+        CHECK(strip_apart(h));
+        for (const HitArea &st : h.strip) {
+            CHECK_NEAR(st.area.y, 230.0, 1e-9); /* the band: the chips' bottom to the keys' top, 80 px */
+            CHECK_NEAR(st.area.h, 80.0, 1e-9);
+            CHECK(contains(st.area, st.drawn));
+        }
+        for (const HitArea &c : h.chips) {
+            CHECK(c.area.h >= t - 1e-9);
+            CHECK(c.area.y >= 56);
+            CHECK(contains(c.area, c.drawn));
+        }
+        for (const HitArea &k : h.keys) {
+            CHECK(k.area.h >= t - 1e-9);
+            CHECK(contains(k.area, k.drawn));
+        }
+        for (const HitArea &b : h.bottom) CHECK(contains(b.area, b.drawn));
+    }
+    /* 800x480 (TARGET 64): the keys pushed down meet the word row, which moves down in turn */
+    {
+        const double t = 64;
+        NowHitSet h;
+        h.chips = {grown(R{570, 245, 90, 25}, t), grown(R{668, 245, 52, 25}, t)};
+        split_pair(h.chips[0], h.chips[1], t);
+        h.strip = {grown(R{325, 277, 54, 34}, t), grown(R{712, 277, 54, 34}, t)};
+        for (int i = 0; i < 6; ++i) h.keys.push_back(grown(R{325 + i * 67.5, 318, i == 2 ? 85.0 : 54.0, 46}, t));
+        for (int i = 0; i < 2; ++i) h.bottom.push_back(grown(R{325 + i * 144.5, 387.5, 135, 40}, t));
+        place_strip_hits(h, t, 56, 480);
+        CHECK(strip_apart(h));
+        for (const HitArea &k : h.keys) CHECK(k.area.h >= t - 1e-9);
+        for (const HitArea &b : h.bottom) {
+            CHECK(b.area.h >= t - 1e-9);
+            CHECK(b.area.bottom() <= 480);
+        }
+    }
+    /* 480x320 (TARGET 44): the volume chip on the first row, the output chip under it, the strip lower: a band wider
+     * than the target leaves the strip areas the target high, centred on the buttons */
+    {
+        const double t = 44;
+        NowHitSet h;
+        h.chips = {grown(R{330, 136, 60, 26}, t), grown(R{228, 168, 230, 26}, t)};
+        split_pair(h.chips[0], h.chips[1], t);
+        h.strip = {grown(R{20, 210, 56, 44}, t), grown(R{404, 210, 56, 44}, t)};
+        for (int i = 0; i < 6; ++i) h.keys.push_back(grown(R{20 + i * 70.0, 258, 56, 48}, t));
+        place_strip_hits(h, t, 40, 320);
+        CHECK(strip_apart(h));
+        for (const HitArea &st : h.strip) CHECK_NEAR(st.area.h, 44.0, 1e-9);
+    }
+}
+
 }  // namespace
 
 void test_hits() {
@@ -74,4 +164,6 @@ void test_hits() {
     CHECK_NEAR(ha.area.w, a0.w, 1e-9);
     split_pair(ha, hc, 20);
     CHECK_NEAR(ha.area.w, a0.w, 1e-9);
+
+    test_strip_hits();
 }

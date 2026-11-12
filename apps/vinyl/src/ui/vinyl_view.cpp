@@ -484,7 +484,50 @@ struct View::Impl {
         return o;
     }
 
-    Button make_button(lv_obj_t *root, const layout::Btn &b) {
+    /* the touch areas of now playing, by kind (layout_now_hits) */
+    enum HitKind { kKey, kBottom, kStrip, kChip, kSeek };
+    struct NowHit {
+        lv_obj_t *obj = nullptr;
+        R drawn;
+        HitKind kind = kKey;
+    };
+    std::vector<NowHit> now_hits;
+    int hits_sig[5] = {-1, -1, -1, -1, -1};
+
+    /* Every area grown to the target around its drawing, the stacked chips split (layout::split_pair); while the volume
+     * strip is open its buttons take the band between the chips and the transport keys and the neighbours give way
+     * (layout::place_strip_hits, design QA run 2): no strip area overlaps another one. */
+    void layout_now_hits() {
+        layout::NowHitSet set;
+        std::vector<NowHit *> pk, pb, ps, pc;
+        for (NowHit &e : now_hits) {
+            if (!e.obj || e.drawn.w <= 0) continue;
+            const layout::HitArea a{e.drawn, layout::grow_hit(e.drawn, e.kind == kSeek ? 0 : target, target)};
+            if (e.kind == kKey) {
+                pk.push_back(&e);
+                set.keys.push_back(a);
+            } else if (e.kind == kBottom) {
+                pb.push_back(&e);
+                set.bottom.push_back(a);
+            } else if (e.kind == kStrip && vol_mode) {
+                ps.push_back(&e);
+                set.strip.push_back(a);
+            } else if (e.kind == kChip) {
+                pc.push_back(&e);
+                set.chips.push_back(a);
+            } else if (e.kind == kSeek && !vol_mode) {
+                place_area(e.obj, a.area);
+            }
+        }
+        if (set.chips.size() == 2) layout::split_pair(set.chips[0], set.chips[1], target);
+        if (vol_mode) layout::place_strip_hits(set, target, body_y, H);
+        for (size_t i = 0; i < pk.size(); ++i) place_area(pk[i]->obj, set.keys[i].area);
+        for (size_t i = 0; i < pb.size(); ++i) place_area(pb[i]->obj, set.bottom[i].area);
+        for (size_t i = 0; i < ps.size(); ++i) place_area(ps[i]->obj, set.strip[i].area);
+        for (size_t i = 0; i < pc.size(); ++i) place_area(pc[i]->obj, set.chips[i].area);
+    }
+
+    Button make_button(lv_obj_t *root, const layout::Btn &b, HitKind kind) {
         Button bt;
         const int x = X(b.box.x), y = Y(b.box.y), w = Wd(b.box), h = Hd(b.box);
         bt.vis = box(root, x, y, w, h, b.teal ? col::kTeal : col::kButton, P(8));
@@ -510,6 +553,7 @@ struct View::Impl {
             bt.hitbox = hold_hit(root, x, y, w, h, target, target, [this, id](int ph) { transport(id == "next", ph); });
         else
             bt.hitbox = hit(root, x, y, w, h, target, target, [this, id] { press(id); });
+        now_hits.push_back(NowHit{bt.hitbox, R{double(x), double(y), double(w), double(h)}, kind});
         return bt;
     }
 
@@ -612,6 +656,8 @@ struct View::Impl {
             if (act.button) act.button("output");
         });
         vol_hit = hit(r, 0, 0, 1, 1, 0, 0, [this] { toggle_vol_strip(); });
+        now_hits.push_back(NowHit{out_hit, R{}, kChip});
+        now_hits.push_back(NowHit{vol_hit, R{}, kChip});
         /* time row */
         time = label(r, Face::Mono, P(g.time.px), col::kInk, X(g.time.box.x), Y(g.time.box.y), Wd(g.time.box));
         remain = label(r, Face::Mono, P(g.remain.px), col::kInk2, X(g.remain.box.x), Y(g.remain.box.y), Wd(g.remain.box),
@@ -633,9 +679,12 @@ struct View::Impl {
             const double frac = std::clamp((p.x - seek_x) / static_cast<double>(seek_w), 0.0, 1.0);
             if (act.seek_to) act.seek_to(frac);
         });
+        now_hits.push_back(NowHit{seek_hit, R{double(seek_x - kd / 2), double(Y(g.seek.y) + sh / 2 - kd / 2), double(seek_w + kd),
+                                              double(kd)},
+                                  kSeek});
 
         /* transport */
-        for (const layout::Btn &b : g.transport) btns[b.id] = make_button(r, b);
+        for (const layout::Btn &b : g.transport) btns[b.id] = make_button(r, b, kKey);
         repeat_dash = box(r, X(g.repeat_dash.x), Y(g.repeat_dash.y), Wd(g.repeat_dash), std::max(2, Hd(g.repeat_dash)), col::kTeal,
                           P(2));
         /* the same mark under shuffle when it is on (the draft draws the repeat one) */
@@ -660,7 +709,7 @@ struct View::Impl {
             up_text = label(up_box, Face::Bold, P(14), col::kInk, P(12), P(6) + lv_font_get_line_height(font(Face::Bold, P(11))),
                             Wd(g.upnext) - P(24));
         }
-        for (const layout::Btn &b : g.bottom) btns[b.id] = make_button(r, b);
+        for (const layout::Btn &b : g.bottom) btns[b.id] = make_button(r, b, kBottom);
         build_vol_strip(r);
     }
 
@@ -668,7 +717,8 @@ struct View::Impl {
      * "-" / "+" starts the time again; a second tap on the chip closes it): the transport keys' cream buttons "-" and
      * "+" (aligned with the first and the last transport key, as wide as the first), the level and its bar between them.
      * The buttons are the touch target high where the band between the chips and the transport keys allows it (P(4)
-     * clear of each); where the band is lower they fill it, and their touch areas grow to the target as every key's. */
+     * clear of each); where the band is lower they fill it. Their touch areas take the band between the interactive
+     * chips and the keys, and the neighbours' areas give way while the strip is open (layout_now_hits). */
     void build_vol_strip(lv_obj_t *r) {
         vol_root = lv_obj_create(r);
         plain(vol_root);
@@ -694,6 +744,7 @@ struct View::Impl {
                 if (act.volume_step) act.volume_step(delta);
                 restart_vol_timer();
             });
+            now_hits.push_back(NowHit{b.hitbox, R{double(x), double(by), double(bw), double(bh)}, kStrip});
         };
         make(vol_minus, x0, Icon::Minus, -5);
         make(vol_plus, x1 - bw, Icon::Plus, 5);
@@ -721,6 +772,7 @@ struct View::Impl {
             lv_timer_delete(vol_timer);
             vol_timer = nullptr;
         }
+        layout_now_hits();
     }
 
     void restart_vol_timer() {
@@ -741,7 +793,10 @@ struct View::Impl {
     void vol_timeout() { set_vol_mode(false); /* deletes the timer from its own callback: LVGL 9 allows it */ }
 
     void toggle_vol_strip() {
-        if (!vol_mode && !last_now.vol_adjustable) return; /* nothing the strip could change (the launcher's keys only) */
+        if (!vol_mode && !last_now.vol_adjustable) { /* nothing the strip could change: say so (design QA run 2) */
+            if (act.volume_unavailable) act.volume_unavailable();
+            return;
+        }
         set_vol_mode(!vol_mode);
         if (vol_mode) update_vol_strip(last_now);
     }
@@ -800,19 +855,17 @@ struct View::Impl {
                 if (chips[i].width) x += chips[i].width + space;
             }
         }
-        /* the touch areas over the output and the volume chips, at least the touch target; stacked (480x320: the
-         * volume on the first row, the output on the second) they meet in the middle of the gap (layout::split_pair) */
-        if (out_hit && vol_hit) {
-            const Chip &oc = chips[2], &vc = chips[1];
-            layout::HitArea ao{R{double(oc.x), double(oc.y), double(oc.width), double(oc.h)}, R{}};
-            layout::HitArea av{R{double(vc.x), double(vc.y), double(vc.width), double(vc.h)}, R{}};
-            ao.area = layout::grow_hit(ao.drawn, target, target);
-            av.area = layout::grow_hit(av.drawn, target, target);
-            if (oc.width > 0 && vc.width > 0) layout::split_pair(av, ao, target);
-            show(out_hit, oc.width > 0);
-            show(vol_hit, vc.width > 0);
-            if (oc.width > 0) place_area(out_hit, ao.area);
-            if (vc.width > 0) place_area(vol_hit, av.area);
+        /* the touch areas over the output and the volume chips follow the chips (layout_now_hits) */
+        for (NowHit &e : now_hits) {
+            const Chip *c = e.obj == out_hit ? &chips[2] : e.obj == vol_hit ? &chips[1] : nullptr;
+            if (!c) continue;
+            show(e.obj, c->width > 0);
+            e.drawn = c->width > 0 ? R{double(c->x), double(c->y), double(c->width), double(c->h)} : R{};
+        }
+        const int sig[5] = {chips[1].x, chips[1].width, chips[2].x, chips[2].width, vol_mode ? 2 : 1};
+        if (!std::equal(sig, sig + 5, hits_sig)) { /* the chips moved, or the strip opened or closed */
+            std::copy(sig, sig + 5, hits_sig);
+            layout_now_hits();
         }
         update_vol_strip(v);
         /* time */

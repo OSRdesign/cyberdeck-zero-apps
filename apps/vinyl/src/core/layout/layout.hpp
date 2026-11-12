@@ -127,5 +127,18 @@ R grow_hit(const R &drawn, double min_w, double min_h);
 void split_pair(HitArea &a, HitArea &b, double min);
 bool overlaps(const R &a, const R &b);
 
+/* The touch areas of now playing while the volume strip is open (design QA run 2, D-33): no strip area overlaps another
+ * area. The strip's "-" and "+" take the band between the interactive chips above them and the transport keys below
+ * them (the target high where the band allows it, else the whole band). A chip whose area reaches into a strip area
+ * stops at it and grows upwards instead (a chip it then reaches moves up the same way, never under top_limit, the
+ * header); a transport key's area starts below the strip areas it reaches and grows downwards, and a bottom-row key's
+ * starts below the transport keys' areas it reaches and grows downwards (never past screen_h). The areas come in as
+ * grow_hit gives them, the chips already split_pair'ed. A row that has no room for its keys at the target width keeps
+ * its own overlaps (the six transport keys at 480x480); this only keeps the strip and its neighbours apart. */
+struct NowHitSet {
+    std::vector<HitArea> chips, strip, keys, bottom;
+};
+void place_strip_hits(NowHitSet &h, double target, double top_limit, double screen_h);
+
 }  // namespace layout
 }  // namespace vinyl
