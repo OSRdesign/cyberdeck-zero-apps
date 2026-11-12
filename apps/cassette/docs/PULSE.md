@@ -3,7 +3,7 @@
 Design note for the second audio backend (shipped in Cassette 0.3.0, 2026-11-12; written as task T1 of the Bluetooth release). It follows the Bluetooth
 study (Option A: Cassette reaches Bluetooth devices through the sound server, `libpulse` loaded at run time like the
 codecs) and its HackBerry measurements P1-P9 and items C15-C19. The study, the task plans and their reports (T1 to T9) are
-kept in the launcher project's dev documents (`docs/dev`), not in this repository; the section names below ("What T2 uses" and
+kept in the [launcher repository](https://github.com/OSRdesign/cyberdeck-zero-launcher) (the [study](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/dev/reports/058-sound-recorder-study.md), the [Cassette plan](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/dev/tasks/016-cassette-recorder.md)), not in this one; the section names below ("What T2 uses" and
 so on) are the steps of that task.
 
 **Status (0.3.0).** All of it is shipped and board-tested on the HackBerry (B24 to B31, B33, B35 passed, see
@@ -523,7 +523,7 @@ underscore forms of one MAC, the call node listed while the card says music (`si
 
 ## What T8 uses (the launcher's Bluetooth audio facts, `src/core/pulse/launcher_facts.*`)
 
-The launcher (0.10.1 and later, contract sections 5b and 5c) publishes read-only facts that the sound server cannot give: which
+The launcher (0.10.1 and later, [contract](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/APP-CONTRACT.md) sections 5b and 5c) publishes read-only facts that the sound server cannot give: which
 Bluetooth audio devices are **paired** (also the ones that are not connected), what **kind** each one is, which music or call
 profile BlueZ says it has, and which **sound stack** owns the Bluetooth endpoints of the board. Cassette reads them without the
 SDK (no new link, `readelf` still shows no libpulse) and falls back to exactly the behaviour of T2-T9 when they are absent

@@ -852,7 +852,7 @@ silent headset through Cassette), B34 (a board without a sound server) and B36 (
 | XWF-M18-M28-M38 speaker | Playback OK (music mode only; it has no microphone). Monitor from a USB microphone: 0.18 s shown, about 0.2 s felt. |
 | Spacetouch USB sound card | Used as the USB microphone for the speaker monitor test (B31). |
 
-LE Audio devices (Bluetooth 5.2 and later, LC3) are not supported: our boards' radios are Bluetooth 5.0 or older.
+LE Audio devices (Bluetooth 5.2 and later, LC3) are not supported: our boards' radios are Bluetooth 5.0 or older. Bluetooth audio was not tested on amd64 boards (nor on the FZ-M1 tablet).
 
 **On a terminal:** `/usr/share/APPLaunch/bin/cassette-probe --server` lists what the sound server sees: every source and
 sink with its rate, Bluetooth address, kind (headset, speaker) and monitor flag, and per Bluetooth device the active mode

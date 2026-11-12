@@ -3,7 +3,7 @@
 A sound recorder for the cyberdeck with the look of a tape deck: it records from any USB sound card or headset (or a Bluetooth headset, on boards with a sound server) to WAV
 (Broadcast Wave), FLAC or Ogg Opus files, shows a level meter with a target zone, adds software gain, starts on a timer,
 trims, splits and merges takes, and plays them back with a 5x scan. Native fullscreen app on the launcher's `cp0_lvgl`, MIT, version 0.3.0,
-category Tools.
+category Tools. Plan: [launcher `docs/dev/tasks/016-cassette-recorder.md`](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/dev/tasks/016-cassette-recorder.md); study: [launcher report 058](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/dev/reports/058-sound-recorder-study.md).
 
 - **Crash-safe.** A take is synced to the card every 10 s (5-30 s, setting) and its header is rewritten after every
   sync, so a power cut loses at most the audio since the last sync; the next start repairs the take (see
