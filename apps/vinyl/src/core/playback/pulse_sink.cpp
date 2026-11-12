@@ -16,7 +16,7 @@ PulseSinkOptions pulse_monitor_sink_options() {
     o.ring_ms = 20;
     o.period_ms = 16;
     o.write_timeout_ms = 10;
-    o.stream_name = "Cassette monitor";
+    o.stream_name = "Vinyl monitor"; /* VINYL */
     o.role = "production";
     return o;
 }

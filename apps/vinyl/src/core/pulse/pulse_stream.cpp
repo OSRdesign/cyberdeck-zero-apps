@@ -20,6 +20,13 @@
 
 namespace vinyl {
 
+int pulse_volume_pct(const uint32_t *values, unsigned channels) { /* VINYL */
+    if (!values || channels == 0) return -1;
+    uint32_t top = 0;
+    for (unsigned c = 0; c < channels && c < 32; ++c) top = std::max(top, values[c]);
+    return static_cast<int>((static_cast<uint64_t>(top) * 100 + 0x8000) / 0x10000);
+}
+
 /* ------------------------------------------------------------------------------------------------ texts */
 
 std::string pulse_error_text(int err) {
@@ -164,17 +171,37 @@ uint32_t pulse_capture_flags(const PulseCaptureRequest &req) {
 
 uint32_t pulse_playback_flags(const PulsePlaybackRequest &req) {
     uint32_t f = pa::kStreamDontMove | pa::kStreamAdjustLatency | pa::kStreamInterpolateTiming |
-                 pa::kStreamAutoTimingUpdate;
+                 pa::kStreamAutoTimingUpdate | pa::kStreamStartUnmuted; /* VINYL: START_UNMUTED */
     if (req.fail_on_suspend) f |= pa::kStreamFailOnSuspend;
     return f;
 }
 
+std::vector<std::pair<std::string, std::string>> pulse_context_props(const std::string &app_name) { /* VINYL */
+    return {{"application.name", app_name.empty() ? std::string("Vinyl") : app_name},
+            {"application.id", kPulseAppId},
+            {"application.process.binary", kPulseAppId},
+            {"application.icon_name", kPulseAppId}};
+}
+
+PulseVolume pulse_norm_volume(unsigned channels) { /* VINYL */
+    PulseVolume v;
+    v.channels = std::min(std::max(channels, 1u), 32u);
+    for (unsigned c = 0; c < v.channels; ++c) v.values[c] = 0x10000; /* PA_VOLUME_NORM */
+    return v;
+}
+
 std::vector<std::pair<std::string, std::string>> pulse_stream_props(const std::string &stream_name, const std::string &role,
-                                                                    const std::string &app_name) {
+                                                                    const std::string &app_name, bool playback) {
     std::vector<std::pair<std::string, std::string>> p;
     p.emplace_back("media.name", stream_name);
     if (!role.empty()) p.emplace_back("media.role", role);
-    p.emplace_back("application.name", app_name.empty() ? std::string("Cassette") : app_name);
+    p.emplace_back("application.name", app_name.empty() ? std::string("Vinyl") : app_name);
+    /* VINYL: its own identity and restore key, no restored volume or target (see pulse_api.hpp) */
+    p.emplace_back("application.id", kPulseAppId);
+    p.emplace_back("module-stream-restore.id",
+                   std::string(playback ? "sink-input" : "source-output") + "-by-application-id:" + kPulseAppId);
+    p.emplace_back("state.restore-props", "false");
+    p.emplace_back("state.restore-target", "false");
     /* PipeWire: pipewire-pulse copies the stream's properties onto its node. WirePlumber then destroys the stream when its
      * device goes away (dont-reconnect) and refuses to link it to another device when the target is missing
      * (dont-fallback) instead of the silent relink measured in P5. */

@@ -94,6 +94,8 @@ public:
     void remove_source(const std::string &name); /* kills its streams (or moves them: honour_dont_move = false) */
     void add_sink(const PulseDevice &d);
     void remove_sink(const std::string &name);
+    /* VINYL: a sink's volume or mute changes (a volume key, a headset's buttons), with the server's change event */
+    void set_sink_volume(const std::string &name, int pct, bool muted = false);
     /* a card appears (a new index unless it has one) or goes away, with the server's change event */
     uint32_t add_card(const PulseCard &c);
     void remove_card(const std::string &name);

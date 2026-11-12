@@ -84,7 +84,12 @@ struct PulseDevice {
     std::string bt_codec;           /* api.bluez5.codec / bluetooth.codec: "msbc", "cvsd", "sbc", ... */
     std::string device_description; /* device.description */
     std::string device_api;         /* device.api: "bluez5", "alsa" */
+    int volume_pct = -1;            /* VINYL: sinks: the loudest channel in percent of the normal volume (pa_cvolume_max,
+                                       as pactl shows it); -1 = not reported */
+    bool muted = false;             /* VINYL: sinks */
 };
+/* VINYL: a pa_cvolume's loudest channel in percent of PA_VOLUME_NORM (0x10000), rounded. */
+int pulse_volume_pct(const uint32_t *values, unsigned channels);
 
 struct PulseProfile {
     std::string name;        /* "a2dp-sink", "a2dp-sink-sbc_xq", "headset-head-unit", "headset-head-unit-cvsd", "off" */
@@ -189,7 +194,7 @@ struct PulseCaptureRequest {
     double silence_seconds = 3.0;    /* SilenceDetected after this long of exactly-zero samples; 0 turns it off */
     uint32_t first_frame_timeout_ms = 3000; /* StartTimeout after this long without a frame (P4: 0.65 s switch) */
     uint32_t ready_timeout_ms = 2000; /* open waits this long for the server to accept the stream (see open_capture) */
-    std::string stream_name = "Cassette recording";
+    std::string stream_name = "Vinyl recording"; /* VINYL */
     std::string role = "production"; /* media.role */
     /* Diagnostics only (the probe CLI): false skips the source lookup (and with it the native rate, 48000 unless `rate`
      * says, and the monitor refusal), so the stream is connected to a name that may not exist and the SERVER's own
@@ -479,13 +484,32 @@ std::unique_ptr<PulseApi> make_real_pulse();
 
 /* ---- the parts of a stream open that are the same for every implementation (tested on the fake, used by the real one) */
 
-/* The stream flags: DONT_MOVE always, ADJUST_LATENCY, INTERPOLATE_TIMING, AUTO_TIMING_UPDATE, FAIL_ON_SUSPEND on request. */
+/* The stream flags: DONT_MOVE always, ADJUST_LATENCY, INTERPOLATE_TIMING, AUTO_TIMING_UPDATE, FAIL_ON_SUSPEND on request.
+ * VINYL: playback also START_UNMUTED (a mute the server restored never silences a new stream). */
 uint32_t pulse_capture_flags(const PulseCaptureRequest &req);
 uint32_t pulse_playback_flags(const PulsePlaybackRequest &req);
-/* The stream properties: media.name, media.role, application.name, and PipeWire's node.dont-reconnect and
- * node.dont-fallback (= true), node.dont-move (= true). */
+
+/* VINYL: the app's identity towards the sound server (board probe 2026-11-12: the copied code said "cassette"). */
+constexpr const char *kPulseAppId = "vinyl";
+/* The context's properties: application.name, application.id, application.process.binary and application.icon_name. */
+std::vector<std::pair<std::string, std::string>> pulse_context_props(const std::string &app_name);
+/* The stream properties: media.name, media.role, application.name, application.id, and PipeWire's node.dont-reconnect,
+ * node.dont-fallback and node.dont-move (= true). VINYL, board test B7 and the probe of 2026-11-12: the servers restore a
+ * stream's volume by media role ("sink-input-by-media-role:music"), shared by every app playing music, so a reconnect
+ * could bring back another app's level. A stream gets its own restore key (module-stream-restore.id
+ * "sink-input-by-application-id:vinyl", "source-output-by-..." for capture: PulseAudio's module-stream-restore uses it
+ * before the role) and WirePlumber's state.restore-props / state.restore-target = false (it applies no stored volume or
+ * target to Vinyl's stream); the playback stream is then opened at its own volume (pulse_norm_volume). */
 std::vector<std::pair<std::string, std::string>> pulse_stream_props(const std::string &stream_name, const std::string &role,
-                                                                    const std::string &app_name);
+                                                                    const std::string &app_name, bool playback = true);
+/* VINYL: the initial volume of every playback stream Vinyl opens (passed to pa_stream_connect_playback): 100 % (0 dB) on
+ * each channel. Vinyl's own level is its software gain (decision D11), so the stream itself stays at unity and no
+ * restored value can make it louder or quieter after a reconnect. */
+struct PulseVolume {
+    unsigned channels = 0;
+    uint32_t values[32] = {};
+};
+PulseVolume pulse_norm_volume(unsigned channels);
 /* The capture format for a request on `source`: rate 0 -> the source's rate; channels 0 -> the source's, limited to 1..2.
  * false with `why` when the request cannot be served (an empty or "default" name, a monitor source, no rate). */
 bool pulse_capture_format(const PulseCaptureRequest &req, const PulseDevice &source, PulseStreamFormat &fmt,

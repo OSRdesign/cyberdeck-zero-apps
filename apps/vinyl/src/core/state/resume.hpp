@@ -16,6 +16,7 @@
 #include "../queue/queue.hpp"
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -31,8 +32,17 @@ struct ResumeState {
     uint64_t position_ms = 0;
     std::string output = "auto"; /* "auto", "bt:AA:BB:..", "pulse:<sink>", "alsa:<device>" */
     std::string browse;          /* the folder the browser shows */
-    int app_volume = 100;        /* 0..100, the in-app stream volume (decision D11) */
+    int app_volume = 100;        /* 0..100, the in-app stream volume (decision D11): the last level set, for an output
+                                    that has none of its own yet */
+    std::map<std::string, int> app_volumes; /* the level per output (output_volume_key): kept across a reconnect and an
+                                               output switch (board test B7); at most kMaxAppVolumes */
 };
+
+constexpr size_t kMaxAppVolumes = 32;
+/* Vinyl's own volume for the output `key` (its own level, else the last level set). */
+int app_volume_of(const ResumeState &s, const std::string &key);
+/* Sets it (0..100) for `key` and as the last level set. */
+void set_app_volume(ResumeState &s, const std::string &key, int level);
 
 constexpr size_t kMaxResumeItems = 5000;
 

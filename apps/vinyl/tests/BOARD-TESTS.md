@@ -36,6 +36,16 @@ volume strip).
 | B15 | The same short and held presses with the headset's / speaker's next and previous buttons, in front and hidden, and on the touch keys beside play (and the mini player's next key) | the same results as B13 and B14 (if a headset sends no release while held, say what happened: the log has `media key: next` and `(released)` lines) | pass
 | B16 | Tap the "Vol" chip; tap "+" twice, "-" once; wait; tap the chip twice | the strip "-", the level, its bar, "+" replaces the seek row; the level goes up 10, down 5 (the launcher's volume on the default output: the volume keys show the same level); it closes 4 s after the last tap, and a second tap on the chip closes it at once; a tap at the bottom edge of the chip closes the strip (never "+"), a tap at the top edge of a transport key plays that key (never "-" / "+") | pass
 
+B8 note (2026-11-12): only the Evolve 65's volume buttons could be tried (it has no play/pause or next button); the
+play/pause and next keys of a headset or speaker remain untested.
+
+Retests after the B7 / B9 fixes (2026-11-12):
+
+| # | Do | Expected |
+|---|---|---|
+| B17 | B9 again: the volume keys, then the Evolve 65's own volume buttons, while playing on the default output | the "Vol" chip follows each press within about half a second; the journal has `[vinyl] volume: system NN % from the sink` |
+| B18 | B7 again with Output > Evolve 65 chosen: set a level (the strip or the keys), switch the headset off, on again, play | the level heard is the one set before; the chip shows it; the journal's `[vinyl] volume:` lines say which volume is in force (Vinyl's own for an output that is not the default, else the system's) |
+
 ## Cleanup
 
 `sudo dpkg -r vinyl`; `rm -r ~/.config/vinyl`; remove the test music the Controller copied.

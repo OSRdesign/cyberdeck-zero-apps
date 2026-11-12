@@ -10,6 +10,7 @@
 
 #include "alsa/alsa_api.hpp"
 #include "app/pulse_worker.hpp"
+#include "app/sink_watch.hpp"
 #include "decode/decode_libs.hpp"
 #include "demo/demo_world.hpp"
 #include "engine/engine.hpp"
@@ -85,6 +86,8 @@ struct VinylApp::Impl final : TransportHost {
     std::unique_ptr<AlsaApi> alsa;
     std::unique_ptr<SinkProvider> sinks;
     std::unique_ptr<PulseWorker> worker;
+    SinkWatch sink_watch; /* the server's sink changes between the scans (board test B9) */
+    std::string vol_logged; /* the last volume line logged */
     std::unique_ptr<Engine> engine;
     TagJobs jobs;
     MediaKeyReader keys;
@@ -708,30 +711,49 @@ struct VinylApp::Impl final : TransportHost {
         return status.volume < 0;
     }
 
+    /* the output Vinyl's own level belongs to (board test B7: kept per output, the same after a reconnect) */
+    std::string volume_key() const { return output_volume_key(snap.output_name, snap.output_pulse, target); }
+    int own_volume() const { return app_volume_of(resume, volume_key()); }
+
     void app_volume(int d) {
         if (!app_volume_applies()) return; /* the system volume is the launcher's keys' */
-        resume.app_volume = std::clamp(resume.app_volume + d, 0, 100);
+        set_app_volume(resume, volume_key(), own_volume() + d);
         apply_gain();
         dirty = true;
         refresh(true);
     }
 
-    /* the engine's gain: silent while a long press scans, the in-app volume where it applies, else unity */
+    /* the engine's gain: silent while a long press scans, the output's own level where it applies, else unity. It is
+     * the level of the output in use, so a reconnect or a switch back gets that output's level again (B7). */
     void apply_gain() {
         if (!engine) return;
-        engine->set_gain(scan_muted ? 0.0f : app_volume_applies() ? volume_gain(resume.app_volume) : 1.0f);
+        engine->set_gain(scan_muted ? 0.0f : app_volume_applies() ? volume_gain(own_volume()) : 1.0f);
     }
 
-    /* the system volume as shown: the level the strip asked for until status.state has it */
-    int system_volume() const {
-        if (sys_pending >= 0 && mono_ms_now() < sys_pending_until && status.volume != sys_pending) return sys_pending;
+    /* the system volume as the server or the launcher reports it: the sink Vinyl plays to (or the default sink) from the
+     * server's lists, which follow its change events (B9); else status.state (ALSA boards, no server) */
+    int reported_volume(bool *muted = nullptr) const {
+        int pct = -1;
+        bool m = false;
+        if (sink_volume_of(world, snap.output_pulse ? snap.output_name : std::string(), pct, m)) {
+            if (muted) *muted = m;
+            return pct;
+        }
+        if (muted) *muted = status.mute;
         return status.volume;
+    }
+
+    /* the system volume as shown: the level the strip asked for until the server or the launcher reports it */
+    int system_volume() const {
+        const int now = reported_volume();
+        if (sys_pending >= 0 && mono_ms_now() < sys_pending_until && now != sys_pending) return sys_pending;
+        return now;
     }
 
     /* the strip can change the system volume: the launcher answers `volume` on this board (decision D11, report 059:
      * "volume only behind an explicit in-app system-volume control"); the demonstration world stands for it */
     bool system_volume_adjustable() const {
-        if (status.volume < 0) return false;
+        if (reported_volume() < 0) return false;
         return demo || (requests && status.has_request("volume"));
     }
 
@@ -776,13 +798,15 @@ struct VinylApp::Impl final : TransportHost {
 
     /* ------------------------------------------------------------------------------------------ outputs */
 
-    void scan(bool connect) {
-        if (!worker) return;
+    /* false: a scan is already running (ask again later) */
+    bool scan(bool connect) {
+        if (!worker) return false;
         ScanRequest rq;
         rq.connect = connect;
         rq.app_name = "Vinyl";
         rq.connect_timeout_ms = 1500;
-        worker->request_scan(rq);
+        rq.callback = sink_watch.callback(); /* the server's change events, once per connection (B9) */
+        return worker->request_scan(rq);
     }
 
     void refresh_outputs(bool rescan) {
@@ -798,6 +822,7 @@ struct VinylApp::Impl final : TransportHost {
         if (!worker) return;
         ScanResult r;
         if (!worker->take_scan(r)) return;
+        sink_watch.scanned(r);
         world.server = r.connected;
         world.sinks.clear();
         for (const PulseDevice &s : r.sinks)
@@ -857,11 +882,29 @@ struct VinylApp::Impl final : TransportHost {
     }
 
     std::string vol_text() const {
-        if (app_volume_applies()) return "Vol " + std::to_string(resume.app_volume);
+        if (app_volume_applies()) return "Vol " + std::to_string(own_volume());
+        bool muted = false;
+        const int reported = reported_volume(&muted);
         const int v = system_volume();
         if (v < 0) return "Vol --";
-        if (status.mute && v == status.volume) return "Muted";
+        if (muted && v == reported) return "Muted";
         return "Vol " + std::to_string(v);
+    }
+
+    /* one log line when the level Vinyl applies or shows changes (for the board probes: which volume is in force) */
+    void log_volume() {
+        std::string line;
+        if (app_volume_applies()) line = "Vinyl's own " + std::to_string(own_volume()) + " % for " + volume_key();
+        else {
+            int pct = -1;
+            bool m = false;
+            const bool from_sink = sink_volume_of(world, snap.output_pulse ? snap.output_name : std::string(), pct, m);
+            line = "system " + std::to_string(from_sink ? pct : status.volume) + " %" + ((from_sink ? m : status.mute) ? " (muted)" : "") +
+                   (from_sink ? " from the sink" : " from status.state");
+        }
+        if (line == vol_logged) return;
+        vol_logged = line;
+        std::fprintf(stderr, "[vinyl] volume: %s (output %s)\n", line.c_str(), snap.output_name.empty() ? "none open" : snap.output_name.c_str());
     }
 
     std::string format_text(bool short_form) const {
@@ -924,7 +967,7 @@ struct VinylApp::Impl final : TransportHost {
         v.vol = vol_text();
         v.vol_bt = output_is_bt();
         if (app_volume_applies()) {
-            v.vol_level = resume.app_volume;
+            v.vol_level = own_volume();
             v.vol_adjustable = true;
         } else {
             v.vol_level = system_volume();
@@ -1166,12 +1209,19 @@ struct VinylApp::Impl final : TransportHost {
             out_rows = build_output_rows(world, target);
         }
         take_scan();
+        /* a sink changed (a volume key, a headset's buttons, a reconnect): look again now, not at the next periodic
+         * scan; a scan already running keeps the change for the next tick */
+        if (worker && sink_watch.take_change()) {
+            if (scan(true)) last_scan = now;
+            else sink_watch.keep_change();
+        }
         if (worker && now - last_scan > (view->page() == Page::Output ? 2000u : 5000u)) {
             last_scan = now;
             scan(true);
         }
         /* the in-app volume follows the output in use (and the scan's silence) */
         apply_gain();
+        log_volume();
         /* cover */
         TagJobs::CoverResult cr;
         if (jobs.take_cover(cr) && cr.path == cover_for) {

@@ -78,6 +78,25 @@ Each accepted for P1 by the coordinator, owner informed (no owner wording record
   overlapping: their touch areas overlap their neighbours' (the strip open or not). Accepted as a WARN by the
   coordinator under R-4 (2026-11-12).
 
+## Volume after the board tests (the coordinator, 2026-11-12)
+
+The owner's results: B7 "partial pass: when evolve reconnects the volume is not the same as set before"; B9 "partial
+pass, on evolve 65 the vol chip makes more than a second to reflect."
+
+- Vinyl's own volume (decision D11: the software gain for an output the system volume does not reach) is kept per
+  output (`bt:<MAC>`, `pulse:<sink>`, `alsa:<device>` in state.json) and applied again when that output plays, after a
+  reconnect or a switch back; an output never set starts from the last level set.
+- Every playback stream is opened unmuted at 100 % (0 dB) with its own restore key
+  (`module-stream-restore.id` `sink-input-by-application-id:vinyl`) and WirePlumber's `state.restore-props` /
+  `state.restore-target` false: the servers restored stream volumes by media role, shared with every app playing music,
+  so a reconnect could bring back another app's level. The stream's identity says vinyl (it said cassette, a leftover of
+  the copied code).
+- The chip shows the system volume from the sound server's own sink list, refreshed on its change events
+  (pa_context_subscribe) within a tick and a list round trip; the launcher's status.state stays the source without a
+  server (ALSA boards).
+- The sink's own volume after a reconnect (WirePlumber's stored route volume, a headset's absolute volume) is the
+  system's; Vinyl shows it at once and does not change it.
+
 ## Volume strip touch areas (the coordinator, 2026-11-12)
 
 While the volume strip is open no touch area of now playing overlaps another one (design QA run 2,

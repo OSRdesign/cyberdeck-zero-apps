@@ -61,6 +61,16 @@ struct OutputRow {
 };
 
 std::vector<OutputRow> build_output_rows(const OutputWorld &w, const OutputTarget &chosen);
+
+/* The output a level is remembered for (Vinyl's own volume, per output: board test B7): "bt:<MAC>" for a Bluetooth sink
+ * (the same key after a reconnect, whatever the node's suffix), "pulse:<sink>" for another sink of the server, else the
+ * chosen target's key ("alsa:<device>", "auto"). */
+std::string output_volume_key(const std::string &sink_name, bool pulse, const OutputTarget &target);
+
+/* The system volume of the sink Vinyl plays to as the sound server reports it (board test B9: the chip follows the
+ * server's change events, not the launcher's file): the sink `sink`, else (nothing open yet) the server's default sink.
+ * false when the server does not report it (no server, the sink is not listed): the caller uses status.state. */
+bool sink_volume_of(const OutputWorld &w, const std::string &sink, int &pct, bool &muted);
 /* The quality word of a Bluetooth sink ("music quality", "call quality", "" when unknown). */
 std::string bt_quality(const PulseDevice &sink, const std::vector<PulseCard> &cards);
 /* The name the screen gives a server sink (its description; "HDMI" for an HDMI one). */

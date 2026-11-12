@@ -47,7 +47,23 @@ std::string resume_to_json(const ResumeState &s) {
     root.set("output", json::Value::string(s.output));
     root.set("browse", json::Value::string(s.browse));
     root.set("app_volume", json::Value::number(s.app_volume));
+    json::Value vols = json::Value::object();
+    for (const auto &kv : s.app_volumes) vols.set(kv.first, json::Value::number(kv.second));
+    root.set("app_volumes", vols);
     return json::write(root);
+}
+
+int app_volume_of(const ResumeState &s, const std::string &key) {
+    auto it = s.app_volumes.find(key);
+    return it != s.app_volumes.end() ? it->second : s.app_volume;
+}
+
+void set_app_volume(ResumeState &s, const std::string &key, int level) {
+    level = std::max(0, std::min(100, level));
+    s.app_volume = level;
+    if (key.empty()) return;
+    if (!s.app_volumes.count(key) && s.app_volumes.size() >= kMaxAppVolumes) s.app_volumes.erase(s.app_volumes.begin());
+    s.app_volumes[key] = level;
 }
 
 bool resume_from_json(const std::string &text, ResumeState &out) {
@@ -74,6 +90,10 @@ bool resume_from_json(const std::string &text, ResumeState &out) {
     if (const json::Value *b = root.get("browse"); b && b->type == json::Value::Str) out.browse = b->s;
     if (const json::Value *a = root.get("app_volume"); a && a->type == json::Value::Num)
         out.app_volume = std::max(0, std::min(100, static_cast<int>(a->n)));
+    if (const json::Value *vs = root.get("app_volumes"); vs && vs->is_obj())
+        for (const auto &kv : vs->obj)
+            if (kv.second.type == json::Value::Num && !kv.first.empty() && out.app_volumes.size() < kMaxAppVolumes)
+                out.app_volumes[kv.first] = std::max(0, std::min(100, static_cast<int>(kv.second.n)));
     if (out.current >= static_cast<int>(out.items.size())) out.current = -1;
     return true;
 }

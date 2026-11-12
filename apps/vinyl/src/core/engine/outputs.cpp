@@ -309,4 +309,29 @@ std::unique_ptr<SinkProvider> make_real_sink_provider(PulseApi *pulse, AlsaApi &
     return std::make_unique<RealSinkProvider>(pulse, alsa);
 }
 
+std::string output_volume_key(const std::string &sink_name, bool pulse, const OutputTarget &target) {
+    if (pulse && !sink_name.empty()) {
+        std::string mac = pulse_mac_from_name(sink_name);
+        if (!mac.empty() && sink_name.compare(0, 6, "bluez_") == 0) {
+            for (char &c : mac) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+            return "bt:" + mac;
+        }
+        return "pulse:" + sink_name;
+    }
+    return target.key();
+}
+
+bool sink_volume_of(const OutputWorld &w, const std::string &sink, int &pct, bool &muted) {
+    if (!w.server) return false;
+    const std::string &name = sink.empty() ? w.default_sink : sink;
+    if (name.empty()) return false;
+    for (const PulseDevice &d : w.sinks)
+        if (d.name == name && d.volume_pct >= 0) {
+            pct = d.volume_pct;
+            muted = d.muted;
+            return true;
+        }
+    return false;
+}
+
 }  // namespace vinyl

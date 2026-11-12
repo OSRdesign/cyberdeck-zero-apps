@@ -92,3 +92,4 @@ void test_layout();
 void test_real_libs();
 void test_transport();
 void test_hits();
+void test_volume();

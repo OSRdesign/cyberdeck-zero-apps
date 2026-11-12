@@ -235,7 +235,7 @@ int FakePulse::open_capture(const PulseCaptureRequest &req, std::unique_ptr<Puls
     rec.channels = fmt.channels;
     rec.flags = fmt.flags;
     rec.attr = fmt.requested;
-    rec.props = pulse_stream_props(req.stream_name, req.role, "Cassette");
+    rec.props = pulse_stream_props(req.stream_name, req.role, "Vinyl", false);
     streams.push_back(rec);
     const size_t i = streams.size() - 1;
     std::unique_ptr<PulseCapture> cap(new PulseCapture(req, fmt, [this] { return clock.load(); }));
@@ -290,7 +290,7 @@ int FakePulse::open_playback(const PulsePlaybackRequest &req, std::unique_ptr<Pu
     rec.channels = fmt.channels;
     rec.flags = fmt.flags;
     rec.attr = fmt.requested;
-    rec.props = pulse_stream_props(req.stream_name, req.role, "Cassette");
+    rec.props = pulse_stream_props(req.stream_name, req.role, "Vinyl");
     streams.push_back(rec);
     const size_t i = streams.size() - 1;
     std::unique_ptr<PulsePlayback> pb(new PulsePlayback(req, fmt, [this] { return clock.load(); }));
@@ -378,6 +378,16 @@ void FakePulse::add_sink(const PulseDevice &d) {
     if (v.index == kPulseNoIndex) v.index = next_index_++;
     sinks.push_back(v);
     notify(PulseChange::What::Sink, PulseChange::Kind::New, v.index);
+}
+
+void FakePulse::set_sink_volume(const std::string &name, int pct, bool muted) {
+    std::lock_guard<std::recursive_mutex> g(mu_);
+    for (PulseDevice &d : sinks)
+        if (d.name == name) {
+            d.volume_pct = pct;
+            d.muted = muted;
+            notify(PulseChange::What::Sink, PulseChange::Kind::Change, d.index);
+        }
 }
 
 void FakePulse::lose(const std::string &device, bool sink) {

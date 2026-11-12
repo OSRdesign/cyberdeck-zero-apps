@@ -96,7 +96,10 @@ Korean titles draw with the launcher's Noto Sans CJK.
 - **Volume**: the volume keys are the launcher's and act on the default output; the volume chip shows that level, and
   the volume strip's buttons set it through the launcher (`volume set`, where board.state's `requests` lists `volume`).
   For an output the system volume does not reach (a chosen output that is not the default, or ALSA without a mixer the
-  launcher drives) the chip shows Vinyl's own volume, changed with `-` / `=` or the strip.
+  launcher drives) the chip shows Vinyl's own volume, changed with `-` / `=` or the strip and kept per output (the same
+  after a headset reconnects). With a sound server the chip follows the sink's volume through the server's change events
+  (a volume key or a headset's buttons show within about half a second). Vinyl's stream itself always plays at 100 %,
+  with its own restore key, so a server never brings back another app's stream level.
 
 ## Background playback
 

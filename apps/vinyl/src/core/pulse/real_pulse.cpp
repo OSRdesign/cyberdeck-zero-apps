@@ -184,6 +184,8 @@ void sink_cb(pa::Context *, const pa::SinkInfo *i, int eol, void *ud) {
     v.format = pulse_format_name(i->sample_spec.format);
     v.card = i->card;
     v.state = state_of(i->state);
+    v.volume_pct = pulse_volume_pct(i->volume.values, i->volume.channels); /* VINYL: the Vol chip follows it */
+    v.muted = i->mute != 0;
     read_props(d->L, i->proplist, v);
     d->out->push_back(v);
 }
@@ -527,7 +529,7 @@ public:
             if (conn_->ready()) return 0;
         }
         conn_.reset();
-        app_ = app_name.empty() ? std::string("Cassette") : app_name;
+        app_ = app_name.empty() ? std::string("Vinyl") : app_name;
         std::string why;
         const PulseLib *L = real_pulse_lib(&why);
         if (!L) {
@@ -541,7 +543,7 @@ public:
             err_ = "cannot create the libpulse main loop";
             return kPulseFailed;
         }
-        pa::Proplist *pl = make_props(L, {{"application.name", app_}, {"application.process.binary", "cassette"}});
+        pa::Proplist *pl = make_props(L, pulse_context_props(app_)); /* VINYL: vinyl, not the copied code's cassette */
         c->ctx = L->context_new_with_proplist(L->threaded_mainloop_get_api(c->ml), app_.c_str(), pl);
         if (pl) L->proplist_free(pl);
         if (!c->ctx) {
@@ -730,7 +732,7 @@ public:
         CaptureLink *link = new CaptureLink(cp, cap.get(), fmt.channels);
         cap->attach(std::unique_ptr<PulseStreamLink>(link)); /* closes the stream if anything below fails */
         const pa::SampleSpec ss{pa::kSampleS16LE, fmt.rate, static_cast<uint8_t>(fmt.channels)};
-        pa::Proplist *pl = make_props(L, pulse_stream_props(req.stream_name, req.role, app_));
+        pa::Proplist *pl = make_props(L, pulse_stream_props(req.stream_name, req.role, app_, false));
         pa::Stream *s = L->stream_new_with_proplist(c.ctx, req.stream_name.c_str(), &ss, nullptr, pl);
         if (pl) L->proplist_free(pl);
         if (!s) {
@@ -813,7 +815,12 @@ public:
         L->stream_set_moved_callback(s, PlaybackLink::moved_cb, link);
         L->stream_set_suspended_callback(s, PlaybackLink::suspended_cb, link);
         const pa::BufferAttr a = to_pa(fmt.requested);
-        if (L->stream_connect_playback(s, req.sink.c_str(), &a, static_cast<int>(fmt.flags), nullptr, nullptr) < 0) {
+        /* VINYL: the stream's own volume at every (re)open, 100 % (board test B7: never a restored value) */
+        const PulseVolume nv = pulse_norm_volume(fmt.channels);
+        pa::CVolume cv{};
+        cv.channels = static_cast<uint8_t>(nv.channels);
+        for (unsigned ch = 0; ch < nv.channels && ch < pa::kChannelsMax; ++ch) cv.values[ch] = nv.values[ch];
+        if (L->stream_connect_playback(s, req.sink.c_str(), &a, static_cast<int>(fmt.flags), &cv, nullptr) < 0) {
             const int e = pulse_error_from_pa(c.err());
             const std::string t = c.err_text();
             link->close_locked();
@@ -864,7 +871,7 @@ private:
     std::shared_ptr<Conn> conn_;
     PulseChangeCallback cb_;
     std::string err_;
-    std::string app_ = "Cassette";
+    std::string app_ = "Vinyl";
 };
 
 }  // namespace
