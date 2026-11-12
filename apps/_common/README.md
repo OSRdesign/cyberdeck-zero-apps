@@ -25,7 +25,8 @@ The starting point of a new app is `apps/cyberdeck-app-template` (a draft that u
 
 ## Rules every app follows
 
-- `.desktop`: `X-Fullscreen=true`, `X-MinSize=640x480` (decision 2026-10-13), the same numbers in `AppSpec`. An app
+- `.desktop`: `X-Fullscreen=true`; `X-MinSize=WxH` only when the app's UI cannot fit a smaller screen (owner decision
+  2026-11-12: no global minimum screen), and then the same numbers in `AppSpec`. An app
   with a portrait layout (PDA mode) also declares `X-Portrait=WxH` and the same numbers in `AppSpec.portrait_w/h`
   ([guidelines, portrait layout](../../docs/APP-GUIDELINES.md#portrait-layout-x-portrait)); without it the launcher
   runs the app turned on a portrait panel.

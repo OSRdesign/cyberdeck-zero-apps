@@ -113,8 +113,9 @@ launcher bundles, so a source you create here also works in the Store app.
 
 Your app is a normal **aarch64 Linux executable**. **New apps are native full-screen apps** built from
 [`apps/cyberdeck-app-template`](apps/cyberdeck-app-template/README.md) on the launcher's LVGL based `cp0_lvgl`
-runtime: they fill the whole screen, **640x480 and up** (the minimum screen for new apps; `X-MinSize=640x480` in the
-`.desktop` file), and take keys and touch directly. The [app guidelines](docs/APP-GUIDELINES.md) give the screen
+runtime: they fill the whole screen they are given and adapt their layout to it (640x480 is the deck's reference size,
+not a minimum; 480x320 and 320x480 are normal sizes), and take keys and touch directly. An app declares `X-MinSize` in
+its `.desktop` file only when its UI cannot fit a smaller screen. The [app guidelines](docs/APP-GUIDELINES.md) give the screen
 sizes, the input rules, the packaging and the tests. Native apps build against one launcher commit,
 [`apps/_common/LAUNCHER_REF`](apps/_common/LAUNCHER_REF) (today `28817a5`, launcher main after v0.9.4 with the map engine and its first fixes, off by default; Cassette 0.3.0, Deck Atlas 0.2.0, Mesh Hop 0.8.3 and mmWave Radar 0.1.1 are built at `28817a5`, the other published apps (Home Assistant, Klondike Solitaire, Markdown Notes, Mine Field, Net Toolbox, Net Walk, RSS Reader, Serial Console, System Monitor, viz1090) are still built at `3f6579f`, the SSH indicator commit of launcher v0.8.12); what each launcher version adds for
 apps, and when it needs a rebuild: [launcher versions](docs/APP-GUIDELINES.md#launcher-versions-and-what-each-added-for-apps).
