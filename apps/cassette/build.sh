@@ -3,7 +3,8 @@
 #   wsl -e sh <app>/build.sh cross [--arch arm64|amd64]   the device binary: root/usr/share/APPLaunch/bin/cassette (arm64)
 #                                   or root.amd64/... (amd64), stripped, with usr/share/doc/cassette/build-info (both
 #                                   untracked); libasound is loaded at run time (dlopen), never linked; also the
-#                                   listen-only board probe bin/cassette-probe beside it (see probe() below)
+#                                   listen-only board probe bin/cassette-probe beside it (see probe() below; its --server
+#                                   mode lists the sound server's devices through libpulse, also loaded at run time)
 #   wsl -e sh <app>/build.sh host   the UI helper tests (tests/ui), the binding tests (tests/bind: the mapping, the
 #                                   actions, end to end on the demo's scripted sound system), then the headless scenes:
 #                                   the UI's own on its synthetic model (tests/scenes) and the bound app on the scripted
@@ -62,18 +63,21 @@ cross() {
     probe
 }
 
-# the board probe (listen-only CLI, src/core/alsa/tools/probe_main.cpp, without the test fake), shipped in the package as
-# /usr/share/APPLaunch/bin/cassette-probe: the ALSA layer and its main() alone, libasound loaded at run time (dlopen)
+# the board probe (listen-only CLI, src/core/alsa/tools/probe_main.cpp, without the test fakes), shipped in the package as
+# /usr/share/APPLaunch/bin/cassette-probe: the ALSA layer and its main(), plus the sound-server report of --server
+# (src/core/pulse); libasound and libpulse are loaded at run time (dlopen), never linked
 probe() {
     pst="$CDK_BUILD/stage-probe-$arch/cassette"
     rm -rf "$pst"
     mkdir -p "$pst"
-    (cd "$here" && tar cf - src/core/alsa src/core/frame_sink.hpp) | (cd "$pst" && tar xf -)
+    (cd "$here" && tar cf - src/core/alsa src/core/pulse src/core/frame_sink.hpp src/core/ring.hpp src/core/ring.cpp) |
+        (cd "$pst" && tar xf -)
     find "$pst" -type f \( -name '*.cpp' -o -name '*.hpp' \) -exec sed -i 's/\r$//' {} +
     tools=aarch64-linux-gnu-
     [ "$arch" = amd64 ] && tools=
-    "${tools}g++" -std=c++17 -O2 -Wall -Wextra -Werror -I"$pst/src/core/alsa" -o "$pst/cassette-probe" \
-        "$pst"/src/core/alsa/*.cpp "$pst/src/core/alsa/tools/probe_main.cpp" -ldl -lpthread
+    "${tools}g++" -std=c++17 -O2 -Wall -Wextra -Werror -I"$pst/src/core/alsa" -I"$pst/src/core" -I"$pst/src/core/pulse" \
+        -o "$pst/cassette-probe" "$pst"/src/core/alsa/*.cpp "$pst"/src/core/pulse/*.cpp "$pst/src/core/ring.cpp" \
+        "$pst/src/core/alsa/tools/probe_main.cpp" -ldl -lpthread
     "${tools}strip" "$pst/cassette-probe"
     cp "$pst/cassette-probe" "$here/$root/usr/share/APPLaunch/bin/cassette-probe"
     chmod 755 "$here/$root/usr/share/APPLaunch/bin/cassette-probe"

@@ -7,6 +7,10 @@
 #include "../alsa/card.hpp"
 #include "../alsa/mixer.hpp"
 #include "../alsa/open_policy.hpp"
+#include "../pulse/bt_input.hpp"
+#include "../pulse/bt_output.hpp"
+#include "../pulse/pulse_pcm.hpp"
+#include "../pulse/pulse_probe.hpp"
 #include "../codec/decoder.hpp"
 #include "../codec/flac_encoder.hpp"
 #include "../codec/formats.hpp"
@@ -20,12 +24,14 @@
 #include "../playback/monitor.hpp"
 #include "../playback/output.hpp"
 #include "../playback/player.hpp"
+#include "../playback/pulse_sink.hpp"
 #include "../playback/sink.hpp"
 #include "../repair.hpp"
 #include "../ring.hpp"
 #include "../takes/atomic_file.hpp"
 #include "../takes/recordings.hpp"
 #include "../writer.hpp"
+#include "pulse_worker.hpp"
 #include "record_gate.hpp"
 
 #include <algorithm>
@@ -36,6 +42,7 @@
 #include <cstdio>
 #include <cstring>
 #include <deque>
+#include <map>
 #include <mutex>
 #include <thread>
 
@@ -44,6 +51,45 @@ namespace {
 
 constexpr uint64_t kSpaceRefreshMs = 2000;
 constexpr uint64_t kPlayLevelStaleMs = 150; /* no new played period for this long: the playback level falls */
+
+/* Bluetooth input (docs/PULSE.md, study C5 C9 C15 C16 C18) */
+const char kBtNotSetUp[] = "Bluetooth audio is not set up";
+const char kBtNotResponding[] = "Bluetooth audio is not responding";
+const char kBtServerDown[] = "The sound server is not running"; /* T8: the launcher says a sound server owns the endpoints, none answers */
+const char kBtNotConnected[] = "The Bluetooth headset is not connected.";
+const char kBtNoSound[] = "The headset is connected but sends no sound.";
+const char kBtLostTake[] = "The Bluetooth headset disconnected: the take was closed and kept.";
+const char kBtLostIdle[] = "The Bluetooth headset disconnected.";
+const char kBtServerLostTake[] = "The sound server stopped: the take was closed and kept.";
+const char kBtServerLostIdle[] = "The sound server stopped.";
+const char kBtBack[] = "The Bluetooth headset is back";
+const char kBtIdentity[] = "The headset microphone could not be confirmed: the take did not start.";
+constexpr uint64_t kBtCallLinkMs = 300;    /* a call profile and this long running: the zeros are the headset's own (C18) */
+constexpr uint64_t kBtProfilePollMs = 100; /* while connecting: how often the card's profile is asked */
+constexpr uint64_t kBtIdentityMs = 3000;   /* during a take: how often the stream's source is checked (C16) */
+constexpr uint64_t kBtIdentityRetryMs = 1000; /* T9: the server may report the stream attached to NO source for a moment (seen on the
+                                               * HackBerry while WirePlumber relinks the virtual source at a profile switch): such an
+                                               * answer is asked again for this long before REC is refused or a take is ended */
+constexpr uint64_t kBtIdentityRetryStepMs = 100; /* ... this often (at REC: on the controller's thread, the user's own action) */
+
+/* Bluetooth output and monitor (docs/PULSE.md "What T3 uses", study C7 C8 C17 C19) */
+const char kBtOutNotConnected[] = "The Bluetooth output is not connected.";
+const char kBtOutLost[] = "The Bluetooth output disconnected.";
+const char kBtMonitorGone[] = "The monitor output disconnected: the recording goes on.";
+const char kBtMonitorNotThere[] = "The monitor output is not connected.";
+constexpr uint64_t kMusicWaitMaxMs = 4000;  /* PLAY waits at most this long for the music profile, then plays at call quality */
+constexpr uint64_t kMusicWaitMinMs = 900;   /* a microphone that was open: the switch to call takes 0.65 s, so a music reading before
+                                             * this is not yet the answer (P4) */
+constexpr uint64_t kSinkWaitMs = 3000;      /* T9: a Bluetooth sink that is missing while its device is there (PipeWire destroys the
+                                             * node at every profile switch and creates a new one a moment later; a reconnect too):
+                                             * PLAY waits this long for it, then says the output is not connected */
+constexpr uint64_t kBtRelistMs = 1000;      /* T9: while the chosen output (or the chosen input) has no usable node, or the server failed
+                                             * a listing, the lists are read again this often even without a server event */
+constexpr uint64_t kBtRelistWaitMs = 250;   /* ... and this often while PLAY waits for a missing sink */
+constexpr uint64_t kQualityPollMs = 1000;   /* while a take plays through a Bluetooth output: how often the card's profile is read */
+constexpr uint64_t kMonitorDelayFirstMs = 300; /* the first delay figure after the monitor starts, then once a second */
+constexpr uint64_t kMonitorDelayMs = 1000;
+constexpr double kMonitorNoticeDelayMs = 150.0; /* above this the monitor says 'delay' */
 
 AudioFormat play_meter_format() {
     AudioFormat f;
@@ -131,7 +177,11 @@ struct Controller::Impl : public DeckCommands {
           store(*ops, cfg.settings_path.empty() ? default_settings_path(cfg.home) : cfg.settings_path),
           deck(*clk, *this) {}
 
-    ~Impl() override { shutdown(); }
+    ~Impl() override {
+        shutdown();
+        if (pw) pw->stop();
+        if (cfg.pulse && bt_cb_set) cfg.pulse->set_change_callback(nullptr);
+    }
 
     /* ---- configuration and fixed members ---- */
     ControllerConfig cfg;
@@ -150,6 +200,7 @@ struct Controller::Impl : public DeckCommands {
     std::vector<Notice> notices;
     bool settings_error_shown = false;
     std::string lost_text = "The sound card was unplugged";
+    std::string unplug_msg;       /* ProblemSnap::message of a take ended by a lost input (empty: the card text) */
 
     /* cards */
     std::vector<CaptureCard> cards;
@@ -175,9 +226,73 @@ struct Controller::Impl : public DeckCommands {
     AudioFormat fmt;
     bool via_server = false;
 
+    /* Bluetooth input through the sound server (cfg.pulse). Under mu, except the two flags the change callback sets. */
+    std::vector<BtInput> bt_list;                 /* what the server lists now, plus the chosen one when it is absent */
+    std::map<std::string, std::string> bt_labels; /* the last label seen for an id (a headset that went away keeps its name) */
+    std::string bt_status = kBtNotSetUp;          /* "" when the server answered */
+    bool bt_cb_set = false, bt_connect_tried = false, bt_changed = false;
+    uint64_t bt_last_connect_ms = 0, bt_last_refresh_ms = 0;
+    std::atomic<bool> bt_dirty{false}, bt_gone{false}; /* set by the server's change callback, read by the service tick */
+    /* everything that asks the server a question runs on the worker (docs/PULSE.md): the scan (connect + the three lists), the
+     * card poll and the identity check; the service tick takes the answers */
+    std::unique_ptr<PulseWorker> pw;
+    std::vector<BtInput> bt_scan_in;              /* what the last scan listed (no placeholder) */
+    std::vector<BtOutput> bt_outs;                /* the Bluetooth sinks the last scan listed (T8: with the launcher's kind and profile) */
+    /* T8: the launcher's facts. bt_raw_* is what the server listed; bt_scan_in / bt_outs are those with the facts applied; bt_paired_*
+     * are the paired devices that are not connected (dimmed rows). Without facts: bt_scan_in == bt_raw_in and nothing is paired. */
+    LauncherFacts facts;
+    std::vector<BtInput> bt_raw_in;
+    std::vector<BtOutput> bt_raw_outs;
+    std::vector<BtInput> bt_paired_in;
+    std::vector<BtOutput> bt_paired_out;
+    bool bt_no_server = false;                    /* bt_status is "not set up" because no server answers (not: libpulse missing, no worker) */
+    bool bt_is_connected = false;                 /* the worker's last word on the connection */
+    bool bt_rescan = false;                       /* a change arrived while a scan was running */
+    uint64_t bt_scan_ms = 0;                      /* when the applied scan was requested */
+    uint64_t bt_scan_asked_ms = 0;                /* when the scan in flight (or the last one) was requested */
+    std::string bt_digest;                        /* what the applied scan listed, as text: a re-listing that changed nothing is no
+                                                   * reason to try the input again (T9: no scan loop while the input is absent) */
+    std::string bt_card_asked;                    /* the card of the pending card poll, and when it was asked */
+    uint64_t bt_card_ask_ms = 0;
+    CardResult bt_card;                           /* the latest card poll answer ... */
+    uint64_t bt_card_ms = 0;                      /* ... and when it was asked (answers older than an event of interest are ignored) */
+    const void *bt_ident_for = nullptr;           /* the stream of the pending identity check */
+    bool active_is_bt = false;                    /* the chosen input is a Bluetooth headset (open or not) */
+    std::shared_ptr<PulseCapture> bt_stream;      /* the open microphone stream (events, identity); null when closed */
+    std::shared_ptr<PulseLeadGate> bt_gate;       /* the connecting gate shared with the capture PCM */
+    std::string bt_card_name;
+    uint64_t bt_running_ms = 0, bt_profile_poll_ms = 0, bt_ident_ms = 0;
+    uint64_t bt_ident_unknown_ms = 0;             /* during a take: since when the stream has been reported on no source (0: not) */
+    bool bt_silent = false;                       /* the no-sound notice is in force */
+    bool bt_policy_closed = false;                /* the microphone is closed on purpose (list, Edit page, playback) */
+    UiPage page = UiPage::Recorder;
+
     /* playback */
     std::unique_ptr<PlaybackSink> sink;
+    PulsePlaybackSink *bt_sink = nullptr;  /* `sink` when the output is a Bluetooth device (owned by `sink`) */
+    std::string built_device;              /* the device `sink` was built for */
     std::unique_ptr<Player> player;
+    /* PLAY with the headset still on the call profile (it is also the input): nothing plays until the music profile is back. T9: also
+     * PLAY to a Bluetooth output whose device is there but whose sink node is not (a profile switch re-creates it): nothing plays until
+     * it is listed again (need_music false), at most kSinkWaitMs */
+    struct PlayWait {
+        bool active = false;
+        enum After { Play, Cued, ScanFwd, ScanRev } after = Play;
+        uint64_t start_ms = 0, last_poll_ms = 0;
+        bool mic_was_open = false, saw_call = false, cue_origin = false;
+        bool need_music = true;   /* false: only the sink is waited for */
+        uint64_t missing_ms = 0;  /* since when the sink has been missing (0: it is listed) */
+        uint64_t music_ms = 0;    /* when the card poll that first said music was asked (0: not yet) */
+        uint64_t rescan_ms = 0;   /* an open found no node: the next try waits for a listing asked after this (0: none) */
+    } pwait;
+    bool pb_timed_out = false;             /* the last PLAY gave up waiting for the music profile */
+    std::string pb_quality;                /* "" / "music" / "call" / "unknown" for the output in use */
+    uint64_t pb_quality_ms = 0;
+    /* the live monitor: its target and its figures */
+    std::string mon_key;                   /* route + device the running monitor plays to */
+    bool mon_lost_bt = false;              /* the monitor's Bluetooth sink went away: restart when it is back */
+    double mon_delay_ms = 0;
+    uint64_t mon_started_ms = 0, mon_delay_at_ms = 0;
     /* the decoders of FLAC / Opus takes (Player, peaks, trim): resolved once, at the first take that needs them
      * (cfg.decoders, else the real libraries with dlopen); written under mu before any user reads it */
     DecoderLibs dlibs;
@@ -386,6 +501,7 @@ struct Controller::Impl : public DeckCommands {
     /* The model's inputs for the capture that runs now: its format and what the card offers (the Rate and Quality pickers). */
     void fill_inputs(FormatInputs &in) const {
         in.codecs = codecs_now();
+        in.speech_only = active_is_bt; /* Bluetooth call audio: no Opus music presets */
         if (!(fmt.rate && fmt.channels && fmt.bits)) return;
         in.state = CaptureState::Known;
         in.capture = fmt;
@@ -432,7 +548,7 @@ struct Controller::Impl : public DeckCommands {
      * stored choice asks for now. Nothing running (no card, a busy card, a take): nothing to do, the next open follows
      * the choice. A card that refuses what it offered is opened with its own defaults and the choice stays stored. */
     void apply_capture_choice() {
-        if (!have_card || !cap || via_server || take_active || active_offer.rates.empty()) return;
+        if (!have_card || !cap || via_server || active_is_bt || take_active || active_offer.rates.empty()) return;
         uint32_t rate = 0;
         unsigned bits = 0;
         prefer_capture(active_offer, rate, bits);
@@ -459,12 +575,278 @@ struct Controller::Impl : public DeckCommands {
     /* ================================================================================================================ */
     /* cards, mixer, capture path */
 
-    void refresh_cards_locked() {
-        cards = list_capture_cards(*cap_api(), false);
+    /* The index of the chosen input in the combined list (ALSA cards, then the Bluetooth devices). */
+    void fix_sel() {
         sel = -1;
-        if (have_card)
+        if (!have_card) return;
+        if (active_is_bt) {
+            for (size_t i = 0; i < bt_list.size(); ++i)
+                if (bt_list[i].id == active_key) sel = static_cast<int>(cards.size() + i);
+        } else {
             for (size_t i = 0; i < cards.size(); ++i)
                 if (cards[i].info.id == active.id) sel = static_cast<int>(i);
+        }
+    }
+
+    void refresh_cards_locked() {
+        cards = list_capture_cards(*cap_api(), false);
+        bt_request_scan();
+        bt_apply_scan();
+        bt_rebuild();
+        fix_sel();
+    }
+
+    /* ---- Bluetooth: discovery (the server is asked on the worker; the answers are taken here) ---- */
+
+    PulseWorker *worker() {
+        if (!pw && cfg.pulse) pw.reset(new PulseWorker(*cfg.pulse));
+        return pw.get();
+    }
+
+    /* Asks the worker to (re)connect when one runs and there is no connection (at most once per cfg.pulse_retry_ms) and to list
+     * sources, sinks and cards. Never waits for the server. */
+    void bt_request_scan() {
+        bt_last_refresh_ms = clk->mono_ms();
+        PulseWorker *w = worker();
+        if (!w) {
+            bt_status = kBtNotSetUp;
+            bt_no_server = false;
+            bt_raw_in.clear();
+            bt_raw_outs.clear();
+            bt_compose();
+            return;
+        }
+        ScanRequest rq;
+        const bool lost_conn = bt_gone.exchange(false); /* the connection was lost: connect again at once */
+        if (lost_conn) {
+            rq.disconnect_first = true;
+            bt_cb_set = false;
+            bt_connect_tried = false;
+            bt_is_connected = false;
+        }
+        if (!bt_is_connected) {
+            const bool running = cfg.server_running ? cfg.server_running() : sound_server_running_here();
+            const uint64_t now = clk->mono_ms();
+            if (!running) {
+                bt_status = kBtNotSetUp;
+                bt_no_server = true;
+                bt_raw_in.clear();
+                bt_raw_outs.clear();
+                bt_compose();
+                if (lost_conn) bt_gone.store(true);
+                return;
+            }
+            if (bt_connect_tried && now - bt_last_connect_ms < cfg.pulse_retry_ms) { /* the last answer stands */
+                if (lost_conn) bt_gone.store(true);
+                return;
+            }
+            bt_connect_tried = true;
+            bt_last_connect_ms = now;
+            rq.connect = true;
+        }
+        if (!bt_cb_set) { /* follow the server's changes (a new device, a lost connection) from the service tick */
+            rq.callback = [this](const PulseChange &c) {
+                if (c.kind == PulseChange::Kind::Disconnected) bt_gone.store(true);
+                bt_dirty.store(true);
+            };
+        }
+        if (!w->request_scan(rq)) { /* one is running: ask again soon */
+            if (lost_conn) bt_gone.store(true);
+            bt_rescan = true;
+        } else {
+            bt_scan_asked_ms = clk->mono_ms();
+        }
+    }
+
+    /* A fresh listing as soon as possible (now when none is running, else right after it). */
+    void bt_refresh_soon() {
+        PulseWorker *w = worker();
+        if (w && !w->scan_pending()) bt_request_scan();
+        else bt_rescan = true;
+    }
+
+    /* The applied scan as text: the entries and the facts the controller acts on. */
+    std::string bt_scan_digest() const {
+        std::string d = bt_status + "|";
+        for (const BtInput &b : bt_scan_in)
+            d += b.id + "," + b.source + "," + std::to_string(b.rate) + "," + (b.usable ? "u" : "-") + b.hint_profile + "," + b.label + ";";
+        d += "|";
+        for (const BtOutput &b : bt_outs)
+            d += b.id + "," + b.sink + "," + b.sink_profile + "," + std::to_string(b.rate) + "," + (b.usable ? "u" : "-") + b.hint_profile +
+                 (b.music_available ? "m" : "-") + "," + b.label + ";";
+        d += "|"; /* T8: the paired devices that are not connected (empty without facts) */
+        for (const BtInput &b : bt_paired_in) d += b.id + "," + b.label + ";";
+        d += "|";
+        for (const BtOutput &b : bt_paired_out) d += b.id + "," + b.label + "," + b.kind + ";";
+        return d;
+    }
+
+    /* Takes the worker's finished scan, if any, into bt_scan_in / bt_outs / bt_status. true when one was applied. */
+    bool bt_apply_scan() {
+        ScanResult r;
+        if (!pw || !pw->take_scan(r)) return false;
+        bt_scan_ms = bt_scan_asked_ms; /* the request's time: an answer counts from when the server was asked */
+        if (r.callback_set) bt_cb_set = true;
+        bt_is_connected = r.connected;
+        if (r.connect_result != 1 && r.connect_result != 0) {
+            bt_status = (r.connect_result == kPulseMissing || r.connect_result == kPulseNoServer) ? kBtNotSetUp : kBtNotResponding;
+            bt_no_server = r.connect_result == kPulseNoServer;
+            bt_raw_in.clear();
+            bt_raw_outs.clear();
+        } else if (!r.connected || !r.listed) {
+            bt_status = kBtNotResponding;
+            bt_no_server = false;
+            bt_raw_in.clear();
+            bt_raw_outs.clear();
+        } else {
+            bt_status.clear();
+            bt_no_server = false;
+            const PulseProbe probe = pulse_probe(r.sources, r.sinks, r.cards);
+            bt_raw_in = bt_inputs(probe);
+            bt_raw_outs = bt_outputs(probe);
+            bool names_changed = false;
+            for (const BtInput &b : bt_raw_in)
+                if (b.usable) names_changed = remember_name(b.id, b.label) || names_changed;
+            for (const BtOutput &b : bt_raw_outs)
+                if (b.usable) names_changed = remember_name(b.id, b.label) || names_changed;
+            if (names_changed) persist();
+        }
+        bt_compose();
+        /* only a scan that lists something else is a reason to try the input again: each try asks for a new scan, so "every scan"
+         * kept the server busy at the tick rate while the chosen input was absent (T9); the replug timer still retries */
+        std::string digest = bt_scan_digest();
+        if (digest != bt_digest) bt_changed = true;
+        bt_digest = std::move(digest);
+        if (mon_lost_bt && monitor_target().ok) {
+            mon_lost_bt = false;
+            mon_failed = false; /* the monitor's output is back */
+        }
+        refresh_plan();
+        return true;
+    }
+
+    /* bt_list = what the last scan listed, plus a placeholder for a chosen headset that is not listed (connected false). */
+    void bt_rebuild() {
+        bt_list = bt_scan_in;
+        bt_list.insert(bt_list.end(), bt_paired_in.begin(), bt_paired_in.end()); /* T8: dimmed, with the launcher's reason */
+        const std::string mac = bt_mac_of_id(want_text);
+        if (mac.empty()) return;
+        for (const BtInput &b : bt_list)
+            if (b.mac == mac) return;
+        BtInput ph;
+        ph.mac = mac;
+        ph.id = bt_id_of(mac);
+        auto l = bt_labels.find(ph.id);
+        ph.label = l != bt_labels.end() ? l->second : std::string("Bluetooth headset");
+        ph.kind = "headset";
+        ph.reason = "Not connected";
+        bt_list.push_back(ph);
+    }
+
+    /* ---- the launcher's facts (T8) ---- */
+
+    /* Remembers the last label seen for a device, in memory (the session) and in the settings (bt_names, written by the caller when
+     * this says true). */
+    bool remember_name(const std::string &id, const std::string &label) {
+        bt_labels[id] = label;
+        const std::string mac = bt_mac_of_id(id);
+        if (mac.empty() || label.empty()) return false;
+        auto &names = store.values().bt_names;
+        auto it = names.find(mac);
+        if (it != names.end()) {
+            if (it->second == label) return false;
+            it->second = label;
+            return true;
+        }
+        if (names.size() >= kBtNamesMax) return false;
+        names[mac] = label;
+        return true;
+    }
+
+    /* MAC -> the name to show for a device the server does not list: this session's label, else the remembered one. */
+    std::map<std::string, std::string> bt_name_map() const {
+        std::map<std::string, std::string> m = store.values().bt_names;
+        for (const auto &kv : bt_labels) {
+            const std::string mac = bt_mac_of_id(kv.first);
+            if (!mac.empty() && !kv.second.empty()) m[mac] = kv.second;
+        }
+        return m;
+    }
+
+    /* The lists the controller works with: what the server listed plus the launcher's kind and profile, and the paired devices
+     * that are not connected (only while the server answered and the launcher does not say there is no Bluetooth audio stack). */
+    void bt_compose() {
+        bt_scan_in = bt_raw_in;
+        bt_outs = bt_raw_outs;
+        bt_facts_apply_inputs(bt_scan_in, facts);
+        bt_facts_apply_outputs(bt_outs, facts);
+        bt_paired_in.clear();
+        bt_paired_out.clear();
+        if (bt_status.empty() && !facts.stack_none()) {
+            const std::map<std::string, std::string> names = bt_name_map();
+            bt_paired_in = bt_paired_inputs(bt_raw_in, facts, names);
+            bt_paired_out = bt_paired_outputs(bt_raw_outs, facts, names);
+        }
+    }
+
+    /* bt_outs plus the paired devices that are not connected: the list the output chooser is built from. */
+    std::vector<BtOutput> bt_outs_view() const {
+        std::vector<BtOutput> v = bt_outs;
+        v.insert(v.end(), bt_paired_out.begin(), bt_paired_out.end());
+        return v;
+    }
+
+    bool bt_is_paired_out(const std::string &mac) const {
+        for (const BtOutput &b : bt_paired_out)
+            if (b.mac == mac) return true;
+        return false;
+    }
+
+    /* Looks at the launcher's files (about once a second) and, when the facts changed, builds the lists again. */
+    void bt_facts_poll(uint64_t now) {
+        if (!cfg.facts || !cfg.facts->poll(now)) return;
+        facts = cfg.facts->facts();
+        bt_compose();
+        bt_rebuild();
+        fix_sel();
+        std::string digest = bt_scan_digest();
+        if (digest != bt_digest) bt_changed = true;
+        bt_digest = std::move(digest);
+        refresh_plan();
+    }
+
+    /* The status the snapshot carries: the server's, with the launcher's words when it says why there is no Bluetooth. */
+    std::string bt_status_view() const {
+        if (bt_status == kBtNotSetUp && bt_no_server && facts.stack_server()) return kBtServerDown;
+        return bt_status;
+    }
+
+    /* Startup only: waits a little for the first scan so a chosen headset opens at once. */
+    void bt_wait_scan(unsigned ms) {
+        PulseWorker *w = worker();
+        if (!w) return;
+        bt_request_scan();
+        const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+        while (w->scan_pending() && std::chrono::steady_clock::now() < end) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        bt_apply_scan();
+        bt_rebuild();
+    }
+
+    const BtInput *bt_find(const std::string &mac) const {
+        for (const BtInput &b : bt_list)
+            if (b.mac == mac) return &b;
+        return nullptr;
+    }
+
+    /* Is the Bluetooth microphone wanted open now? Open on the recorder (and settings) screen, closed on the list and
+     * Edit pages and during playback so the headset returns to music mode (decision 5); never closed during a take. */
+    bool bt_mic_wanted() const {
+        if (take_active || recording_family()) return true;
+        if (page == UiPage::List || page == UiPage::Edit) return false;
+        if (tr.open || tr.previewing || !preview_name.empty() || playing_family()) return false;
+        if (player && player->state() != PlayerState::Stopped) return false;
+        if (app_left) return false;
+        return true;
     }
 
     AlsaApi *cap_api() const { return cfg.api; }
@@ -489,43 +871,170 @@ struct Controller::Impl : public DeckCommands {
     }
 
     /* ---- live monitor ---- */
+
+    /* Where the monitor plays (docs/PULSE.md "Monitor routes"): settings monitor_output ("" = automatic). */
+    struct MonTarget {
+        bool ok = false;        /* a target exists now */
+        bool bt = false;        /* a Bluetooth sink (through the sound server) */
+        std::string route;      /* "same_headset", "other_output", "card"; "" when there is none */
+        std::string device;     /* ALSA device, or the sink's node name */
+        std::string id;         /* the output's id as the lists spell it */
+        std::string label;
+        bool a2dp = false;      /* a Bluetooth sink on a music profile: the delay is a few tenths of a second */
+        std::string why;        /* not ok: why */
+    };
+
+    MonTarget monitor_target() const {
+        MonTarget t;
+        if (!have_card) {
+            t.why = "No input";
+            return t;
+        }
+        const std::string want = store.values().monitor_output;
+        const std::string in_mac = active_is_bt ? bt_mac_of_id(active_key) : std::string();
+        std::string mac = bt_mac_of_id(want);
+        if (want.empty() && active_is_bt) mac = in_mac;
+        if (!mac.empty()) { /* a Bluetooth sink: the same headset, or another device */
+            t.bt = true;
+            t.id = bt_id_of(mac);
+            t.route = (!in_mac.empty() && in_mac == mac) ? "same_headset" : "other_output";
+            auto l = bt_labels.find(t.id);
+            t.label = l != bt_labels.end() ? l->second : std::string("Bluetooth device");
+            const BtOutput *o = bt_status.empty() ? bt_out_find(mac) : nullptr;
+            if (!o || !o->usable || !o->connected) {
+                t.why = o && o->connected ? o->reason : std::string(kBtMonitorNotThere);
+                return t;
+            }
+            t.ok = true;
+            t.device = o->sink;
+            t.label = o->label;
+            t.a2dp = o->hint_profile == "music" || (o->hint_profile == "unknown" && !o->call_offered);
+            return t;
+        }
+        if (want.empty()) { /* automatic, an ALSA input: its own playback side */
+            if (!active.playback) {
+                t.why = "The sound card has no playback side";
+                return t;
+            }
+            t.ok = true;
+            t.route = "card";
+            t.device = pcm_device(active);
+            t.id = t.device;
+            t.label = active.name;
+            return t;
+        }
+        /* an explicit ALSA device */
+        t.id = want;
+        t.device = want;
+        t.route = (!active_is_bt && want == pcm_device(active)) ? "card" : "other_output";
+        t.label = want;
+        const std::vector<OutputOption> &opts = plan.choices.empty() ? std::vector<OutputOption>{plan.chosen} : plan.choices;
+        for (const OutputOption &o : opts)
+            if (!o.bluetooth && o.device == want) {
+                t.ok = true;
+                t.label = o.label;
+            }
+        if (!t.ok) t.why = kBtMonitorNotThere;
+        return t;
+    }
+
     bool monitor_wanted() const {
-        if (!started || down || !cap || !cap->running() || !mtap || !have_card || !active.playback) return false;
+        if (!started || down || !cap || !cap->running() || !mtap || !have_card) return false;
         if (!store.values().monitor || app_left) return false;
         if (playing_family() || tr.previewing || tr.open || !preview_name.empty()) return false;
         if (player && player->state() != PlayerState::Stopped) return false; /* the Player holds (or opens) the card */
-        return true;
+        if (active_is_bt && !(bt_gate && bt_gate->open.load() && bt_stream && !bt_stream->ended())) return false; /* connecting */
+        return monitor_target().ok;
     }
     void monitor_stop() {
         if (mon) mon->stop();
         mon.reset();
+        mon_key.clear();
+        mon_delay_ms = 0;
     }
     /* Brings the monitor in line with the state; called from publish() (every command and every service tick). */
     void monitor_sync() {
-        if (mon && !mon->running()) { /* the sink died (a device error) */
+        if (mon && !mon->running()) { /* the sink died (a device error, the headset went away) */
+            const bool was_bt = mon_key.compare(0, 3, "bt:") == 0;
             monitor_stop();
             mon_failed = true;
-            add_notice(Notice::Info, "Monitor unavailable");
+            if (was_bt) {
+                mon_lost_bt = true;
+                add_notice(Notice::Info, kBtMonitorGone);
+            } else {
+                add_notice(Notice::Info, "Monitor unavailable");
+            }
+        }
+        if (mon && mon_key.compare(0, 3, "bt:") == 0 && store.values().monitor && !app_left && cap && cap->running() &&
+            !monitor_target().ok) { /* its Bluetooth output is gone from the lists: say so, the recording is not touched */
+            monitor_stop();
+            mon_failed = true;
+            mon_lost_bt = true;
+            add_notice(Notice::Info, kBtMonitorGone);
+            return;
         }
         if (!monitor_wanted()) {
             if (mon) monitor_stop();
             return;
         }
+        const MonTarget t = monitor_target();
+        const std::string key = (t.bt ? "bt:" : "alsa:") + t.device;
+        if (mon && mon_key != key) monitor_stop(); /* the target changed: play to the new one */
         if (!mon && !mon_failed) {
             std::unique_ptr<PlaybackSink> sk;
-            const std::string dev = pcm_device(active);
-            if (cfg.make_sink) sk = cfg.make_sink(dev);
-            else sk.reset(new AlsaPlaybackSink(*cap_api(), dev));
+            MonitorOptions mo;
+            if (t.bt) {
+                if (!cfg.pulse) return;
+                std::unique_ptr<PulsePlaybackSink> ps(new PulsePlaybackSink(*cfg.pulse, pulse_monitor_sink_options()));
+                ps->set_sink(t.device);
+                sk = std::move(ps);
+                mo.prefill_ms = 10;
+                mo.drift_control = true;
+                mo.max_queue_ms = 2000; /* the stream's delay includes the device's own latency: never a reason to drop */
+            } else if (cfg.make_sink) {
+                sk = cfg.make_sink(t.device);
+            } else {
+                sk.reset(new AlsaPlaybackSink(*cap_api(), t.device));
+            }
             std::unique_ptr<Monitor> m(new Monitor(*mtap));
             m->set_level_pct(store.values().monitor_level);
-            if (m->start(std::move(sk)) < 0) {
+            if (m->start(std::move(sk), mo) < 0) {
                 mon_failed = true;
                 add_notice(Notice::Info, "Monitor unavailable");
                 return;
             }
             mon = std::move(m);
+            mon_key = key;
+            mon_delay_ms = 0;
+            mon_started_ms = clk->mono_ms();
+            mon_delay_at_ms = 0;
         }
         if (mon) mon->set_level_pct(store.values().monitor_level);
+    }
+
+    /* The monitor's delay figure (capture latency + ring + playback latency), refreshed about once a second while it runs. For a
+     * Bluetooth input the capture and playback figures are the server's own reports; a card's capture is its nominal period. */
+    void monitor_delay_tick(uint64_t now) {
+        if (!mon || !mon->running()) {
+            mon_delay_ms = 0;
+            return;
+        }
+        if (mon_delay_at_ms && now - mon_delay_at_ms < kMonitorDelayMs) return;
+        if (!mon_delay_at_ms && now - mon_started_ms < kMonitorDelayFirstMs) return;
+        mon_delay_at_ms = now;
+        const MonitorStats st = mon->stats();
+        const double rate = fmt.rate ? static_cast<double>(fmt.rate) : 48000.0;
+        double cap_ms = 1000.0 * 1024.0 / rate;
+        PulseLatency l;
+        if (bt_stream && bt_stream->latency(l) == 0) cap_ms = l.total_ms;
+        const double ring_ms = 1000.0 * static_cast<double>(st.backlog_frames) / rate;
+        double play_ms = st.latency_ms;
+        if (PlaybackSink *sk = mon->sink())
+            if (PulsePlaybackSink *ps = dynamic_cast<PulsePlaybackSink *>(sk)) {
+                double d = 0;
+                if (ps->delay_ms(d)) play_ms = d;
+            }
+        mon_delay_ms = cap_ms + ring_ms + play_ms;
     }
 
     void close_capture() {
@@ -534,11 +1043,19 @@ struct Controller::Impl : public DeckCommands {
         proc.reset();
         mixer.reset();
         mstate = MixerState();
+        bt_stream.reset(); /* the capture's PCM closed the stream; ours was the second share */
+        bt_gate.reset();
+        bt_silent = false;
+        notices.erase(std::remove_if(notices.begin(), notices.end(), [](const Notice &n) { return n.text == kBtNoSound; }),
+                      notices.end());
     }
 
     /* Finds the wanted card and opens the capture path. true when the meter is running. */
     bool try_open_capture() {
         refresh_cards_locked();
+        if (!bt_mac_of_id(want_text).empty()) return try_open_bt();
+        active_is_bt = false;
+        bt_policy_closed = false;
         std::vector<CardInfo> infos;
         for (const CaptureCard &c : cards) infos.push_back(c.info);
         int pos = -1;
@@ -606,12 +1123,100 @@ struct Controller::Impl : public DeckCommands {
         return true;
     }
 
+    /* The chosen input is a Bluetooth headset (want_text "bt:<MAC>"): opens its microphone through the sound server on the
+     * exact source, at the call rate asked for explicitly, S16 mono, never moved (T1). false: not there, not usable, closed
+     * on purpose (bt_policy_closed) or refused; cap_message says why. */
+    bool try_open_bt() {
+        const std::string mac = bt_mac_of_id(want_text);
+        const BtInput *b = bt_find(mac);
+        active = CardInfo();
+        active.id = bt_id_of(mac);
+        active.name = b ? b->label : std::string("Bluetooth headset");
+        active.capture = true;
+        active_key = active.id;
+        active_offer = CaptureOffer();
+        active_is_bt = true;
+        have_card = true;
+        via_server = false;
+        fix_sel();
+        if (!b || !b->connected) {
+            cap_message = kBtNotConnected;
+            return false;
+        }
+        if (!b->usable) {
+            cap_message = b->reason;
+            return false;
+        }
+        if (!bt_mic_wanted()) { /* the list, the Edit page, playback: the headset goes back to music mode */
+            bt_policy_closed = true;
+            cap_message.clear();
+            return false;
+        }
+        bt_policy_closed = false;
+        PulseCaptureRequest rq;
+        rq.source = b->source;
+        rq.rate = b->rate;
+        rq.channels = 1;
+        std::unique_ptr<PulseCapture> pc;
+        std::string why;
+        const int r = cfg.pulse ? cfg.pulse->open_capture(rq, pc, &why) : kPulseState;
+        if (r != 0 || !pc) {
+            if (r == kPulseNoDevice) cap_message = kBtNotConnected;
+            else if (r == kPulseMoved) cap_message = "The sound server attached the microphone to another device: not used";
+            else cap_message = "The Bluetooth microphone could not be opened: " + (why.empty() ? pulse_error_text(r) : why);
+            return false;
+        }
+        std::shared_ptr<PulseCapture> stream(std::move(pc));
+        std::shared_ptr<PulseLeadGate> lead(new PulseLeadGate());
+        OpenResult r2 = pulse_open_result(stream, 50, lead);
+        mixer.reset(); /* no hardware level: software gain only */
+        mstate = MixerState();
+        fmt = r2.format;
+        active_offer.rates = {fmt.rate};
+        active_offer.min_channels = active_offer.max_channels = fmt.channels;
+        active_offer.formats = {SampleFormat::S16_LE};
+        mon_failed = false;
+        mtap.reset(new MonitorTap(fmt));
+        proc.reset(new ProcessingSink(fmt, &gate));
+        proc->set_tap(mtap.get());
+        apply_dsp_settings();
+        CaptureOptions copt;
+        copt.now = cfg.capture_now;
+        std::unique_ptr<Capture> c(new Capture(std::move(r2), *proc, std::move(copt)));
+        if (!c->start()) {
+            cap_message = "The Bluetooth microphone stopped answering";
+            proc.reset();
+            return false;
+        }
+        cap = std::move(c);
+        bt_stream = stream;
+        bt_gate = lead;
+        bt_card_name = b->card;
+        bt_running_ms = bt_profile_poll_ms = 0;
+        bt_ident_ms = clk->mono_ms();
+        bt_silent = false;
+        cap_message.clear();
+        if (lost) {
+            lost = false;
+            add_notice(Notice::CardBack, kBtBack);
+        }
+        return true;
+    }
+
     void on_capture_lost(const CaptureStats &st) {
         (void)st;
         lost = true;
         want_text = active_key; /* wait for this very card to come back */
-        cap_message = "The sound card was unplugged";
-        lost_text = "The sound card was unplugged";
+        unplug_msg.clear();
+        if (active_is_bt) {
+            const bool server = bt_stream && bt_stream->end_code() == kPulseDisconnected;
+            cap_message = kBtNotConnected;
+            lost_text = take_active ? (server ? kBtServerLostTake : kBtLostTake) : (server ? kBtServerLostIdle : kBtLostIdle);
+            unplug_msg = lost_text;
+        } else {
+            cap_message = "The sound card was unplugged";
+            lost_text = "The sound card was unplugged";
+        }
         if (recording_family()) {
             unplug_flag = true;
             run_deck(DeckEvent::DeviceLost); /* ends the take (kept) or cancels the countdown, then the notice */
@@ -623,15 +1228,48 @@ struct Controller::Impl : public DeckCommands {
         last_retry_ms = clk->mono_ms();
     }
 
+    /* The output list and the choice in use, from the cards, the saved choice and (when the server answered) the Bluetooth sinks.
+     * Does not touch the Player; rebuild_output() does when the chosen device changed and nothing plays. */
+    void refresh_plan() {
+        const std::string saved = store.values().output_device;
+        const std::string mac = bt_mac_of_id(saved);
+        auto l = mac.empty() ? bt_labels.end() : bt_labels.find(bt_id_of(mac));
+        const std::vector<BtOutput> view = bt_outs_view();
+        plan = choose_output(cap_api()->cards(), have_card ? active.id : std::string(), saved, bt_status.empty() ? &view : nullptr,
+                             l != bt_labels.end() ? l->second : std::string());
+        if (plan.chosen.device != built_device && !take_active && !playing_family() && !pwait.active && !tr.previewing &&
+            (!player || player->state() == PlayerState::Stopped))
+            rebuild_output();
+    }
+
     void rebuild_output() {
         if (take_active) return;
         player.reset();
         sink.reset();
-        plan = choose_output(cap_api()->cards(), have_card ? active.id : std::string(), store.values().output_device);
-        if (cfg.make_sink) sink = cfg.make_sink(plan.chosen.device);
-        else sink.reset(new AlsaPlaybackSink(*cap_api(), plan.chosen.device));
+        bt_sink = nullptr;
+        const std::vector<BtOutput> view = bt_outs_view();
+        plan = choose_output(cap_api()->cards(), have_card ? active.id : std::string(), store.values().output_device,
+                             bt_status.empty() ? &view : nullptr,
+                             [&] {
+                                 auto l = bt_labels.find(bt_id_of(bt_mac_of_id(store.values().output_device)));
+                                 return l != bt_labels.end() ? l->second : std::string();
+                             }());
+        built_device = plan.chosen.device;
+        if (plan.chosen.bluetooth && cfg.pulse) { /* a Bluetooth sink, through the sound server at the take's rate */
+            std::unique_ptr<PulsePlaybackSink> ps(new PulsePlaybackSink(*cfg.pulse));
+            bt_sink = ps.get();
+            sink = std::move(ps);
+        } else if (plan.chosen.bluetooth) { /* no sound server in this build (the demo): never opens (resolve_output refuses) */
+            sink.reset(new AlsaPlaybackSink(*cap_api(), kDefaultOutput));
+        } else if (cfg.make_sink) {
+            sink = cfg.make_sink(plan.chosen.device);
+        } else {
+            sink.reset(new AlsaPlaybackSink(*cap_api(), plan.chosen.device));
+        }
         player.reset(new Player(*ops, *sink, Player::Mode::Threaded, &dlibs));
     }
+
+    const BtOutput *bt_out_find(const std::string &mac) const { return bt_output_find(bt_outs, mac); }
 
     /* ================================================================================================================ */
     /* recording */
@@ -643,9 +1281,16 @@ struct Controller::Impl : public DeckCommands {
             add_notice(Notice::Info, "Wait until the merge has finished");
             return false;
         }
+        if (!cap && active_is_bt) try_open_capture(); /* REC while the headset microphone was closed or lost */
         if (!cap || !cap->running()) {
             prob = ProblemSnap();
-            prob.message = "No sound card is recording: the take cannot start";
+            prob.message = active_is_bt ? std::string(kBtNotConnected) : "No sound card is recording: the take cannot start";
+            add_notice(Notice::Info, prob.message);
+            return false;
+        }
+        if (bt_stream && !bt_identity_at_start()) { /* the stream is not on the headset's source (C16) */
+            prob = ProblemSnap();
+            prob.message = kBtIdentity;
             add_notice(Notice::Info, prob.message);
             return false;
         }
@@ -752,15 +1397,32 @@ struct Controller::Impl : public DeckCommands {
         take_name = base_name(first);
         target = take_name;
         take_active = true;
+        bt_ident_unknown_ms = 0;
         gate.attach(ring.get());
         /* what the screen must say about the capture path (the planned notices of study 058) */
-        if (via_server) {
+        if (active_is_bt) {
+            /* no card notice: the headset's own state is on the recorder screen (connecting, no sound) */
+        } else if (via_server) {
             add_notice(Notice::Info, "Recording through the sound server: the card is in use");
         } else {
             const bool running = cfg.server_running ? cfg.server_running() : sound_server_running_here();
             if (running) add_notice(Notice::Info, "Other apps cannot use this card while Cassette records");
         }
         return true;
+    }
+
+    /* C16 at the start of a take: the stream must be on the headset's source. Attached to another source, or ended: refused at once.
+     * Attached to no source (the server's answer names none): asked again every kBtIdentityRetryStepMs for up to kBtIdentityRetryMs
+     * (T9), then refused. Waits on the controller's thread: REC is the user's own action (docs/PULSE.md). */
+    bool bt_identity_at_start() {
+        const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(kBtIdentityRetryMs);
+        for (;;) {
+            std::string actual;
+            if (bt_stream->source_identity_ok(&actual)) return true;
+            if (!actual.empty() || bt_stream->ended()) return false;
+            if (std::chrono::steady_clock::now() >= end) return false;
+            std::this_thread::sleep_for(std::chrono::milliseconds(kBtIdentityRetryStepMs));
+        }
     }
 
     void end_take() {
@@ -778,7 +1440,7 @@ struct Controller::Impl : public DeckCommands {
         }
         if (unplug_flag) {
             prob.unplugged = true;
-            prob.message = "The sound card was unplugged: the take was closed and kept";
+            prob.message = unplug_msg.empty() ? std::string("The sound card was unplugged: the take was closed and kept") : unplug_msg;
         }
         if (st.state == WriterState::Failed || st.reason == StopReason::LowSpace) {
             prob.disk_full = st.reason == StopReason::LowSpace;
@@ -824,17 +1486,251 @@ struct Controller::Impl : public DeckCommands {
         return true;
     }
 
-    bool open_target() {
+    /* ---- playback through a Bluetooth output ---- */
+
+    static const char *profile_class(const std::string &p) {
+        return pulse_profile_is_music(p) ? "music" : (pulse_profile_is_call(p) ? "call" : "unknown");
+    }
+
+    /* The chosen Bluetooth output's entry in the last scan, found by MAC; null when the output is not Bluetooth, the server is not
+     * reachable or the device is not listed (switched off, out of range). */
+    const BtOutput *bt_out_chosen() const {
+        if (!plan.chosen.bluetooth || !bt_status.empty()) return nullptr;
+        return bt_out_find(bt_mac_of_id(plan.chosen.device));
+    }
+    /* A device that is listed with a sink node now. */
+    static bool sink_listed(const BtOutput *o) { return o && o->connected && o->usable && !o->sink.empty(); }
+
+    /* The Bluetooth sink to play through: the node of the chosen device's MAC in the last scan (its name is the same in both profiles
+     * and after a reconnect; PulsePlaybackSink looks it up again by name when it opens). Sets the quality shown. false when the scan
+     * lists no sink for it now. A card or the default output: nothing to do. No notice: the callers decide (wait, or say why). */
+    bool resolve_output() {
+        if (!plan.chosen.bluetooth) {
+            pb_quality.clear();
+            return true;
+        }
+        const BtOutput *o = bt_out_chosen();
+        if (!bt_sink || !sink_listed(o)) return false;
+        bt_sink->set_sink(o->sink);
+        pb_quality = o->hint_profile;
+        return true;
+    }
+
+    /* The device of the chosen Bluetooth output is listed (a card or a sink), even when its sink node is missing for a moment. */
+    bool bt_out_device_there() const {
+        const BtOutput *o = bt_out_chosen();
+        return o && o->connected;
+    }
+
+    /* RESUME / scan of a take that is open: its stream is the proof while it is open (a re-listing in between may miss the node for a
+     * moment); else the output is resolved again from the last scan. false (and the notice): it cannot play now. */
+    bool prepare_resume() {
+        if (plan.chosen.bluetooth && bt_sink && bt_sink->is_open() && !bt_sink->ended()) return true;
+        if (resolve_output()) return true;
+        add_notice(Notice::Info, kBtOutNotConnected);
+        return false;
+    }
+
+    /* The card's profile class as far as is known now: the last card poll when it is newer than the last scan, else the scan. */
+    std::string bt_profile_now(const BtOutput &o) const {
+        if (bt_card.found && bt_card.name == o.card && bt_card_ms >= bt_scan_ms) return profile_class(bt_card.card.active_profile);
+        return o.hint_profile;
+    }
+
+    /* PLAY with the headset still (or about to be) on the call profile: it must go back to music first (study C19). Not needed for a
+     * speaker, another device, or a headset whose music profile is not available (it plays at call quality at once, P6). The device
+     * must be listed; its sink may be missing for a moment (T9: the node is re-created at each profile switch). */
+    bool bt_music_wait_needed() {
+        if (!plan.chosen.bluetooth || !active_is_bt) return false;
+        const BtOutput *o = bt_out_chosen();
+        if (!o || !o->connected) return false;
+        if (!(o->music_offered && o->music_available)) return false;
+        if (bt_mac_of_id(active_key) != o->mac) return false;
+        const bool mic_open = cap && bt_stream;
+        return mic_open || bt_profile_now(*o) != "music";
+    }
+
+    void bt_ask_card(const std::string &name, uint64_t now) {
+        PulseWorker *w = worker();
+        if (w && !name.empty() && w->request_card(name)) {
+            bt_card_asked = name;
+            bt_card_ask_ms = now;
+        }
+    }
+
+    void begin_wait(PlayWait::After after, bool cue_origin, bool need_music) {
         stop_preview();
-        if (refuse_missing_codec(play_target())) return false;
+        monitor_stop();
+        pwait = PlayWait();
+        pwait.active = true;
+        pwait.after = after;
+        pwait.cue_origin = cue_origin;
+        pwait.need_music = need_music;
+        pwait.start_ms = clk->mono_ms();
+        pwait.mic_was_open = cap && bt_stream;
+        pb_timed_out = false;
+        const BtOutput *o = bt_out_chosen();
+        pb_quality = need_music ? std::string("call") : (o ? o->hint_profile : std::string("unknown"));
+        if (o && need_music) bt_ask_card(o->card, pwait.start_ms);
+        pwait.last_poll_ms = pwait.start_ms;
+        if (!sink_listed(o)) {
+            pwait.missing_ms = pwait.start_ms ? pwait.start_ms : 1;
+            bt_refresh_soon(); /* ask the server now, not only when it sends an event */
+        }
+    }
+
+    /* Why a take did not start: a codec, a file or the Player (Failed), or the Bluetooth sink was not there (SinkMissing: listed
+     * without a node, or gone between the listing and the open, kPulseNoDevice). */
+    enum class Start { Ok, Failed, SinkMissing };
+
+    /* Opens the take and does `after` (play, cue, scan). */
+    Start open_and_start(PlayWait::After after) {
+        stop_preview();
+        if (refuse_missing_codec(play_target())) return Start::Failed;
         monitor_stop(); /* the Player is about to open the card's playback side: the monitor lets go first */
-        if (!player || play_target().empty()) return false;
+        if (!player || play_target().empty()) return Start::Failed;
+        if (!resolve_output()) return Start::SinkMissing;
         const std::string path = folder + "/" + play_target();
-        const int r = player->open(path);
+        int r = player->open(path);
         if (r < 0) {
             add_notice(Notice::Info, "This take cannot be played: " + decode_error_text(r, path));
-            return false;
+            return Start::Failed;
         }
+        switch (after) {
+        case PlayWait::Play: r = player->play(); break;
+        case PlayWait::ScanFwd: r = player->scan(Direction::Forward, kScanSpeed); break;
+        case PlayWait::ScanRev: r = player->scan(Direction::Reverse, kScanSpeed); break;
+        case PlayWait::Cued: r = 0; break;
+        }
+        if (r >= 0) return Start::Ok;
+        return plan.chosen.bluetooth && r == -ENODEV ? Start::SinkMissing : Start::Failed;
+    }
+
+    /* PLAY / CUE of a deck that is not playing, without a wait or at the end of one. A Bluetooth sink that is missing while its device is
+     * listed is waited for (T9) within the wait's bounds; a device that is not listed at all: the notice. false: the deck stops. */
+    bool start_or_wait(PlayWait::After after, bool cue_origin, const PlayWait *from) {
+        const Start s = open_and_start(after);
+        if (s == Start::Ok) return true;
+        if (s == Start::SinkMissing) {
+            const uint64_t now = clk->mono_ms();
+            const bool device = bt_out_device_there();
+            if (!from && device) { /* a fresh PLAY: the node is being re-created */
+                begin_wait(after, cue_origin, false);
+                pwait.missing_ms = now ? now : 1;
+                pwait.rescan_ms = now ? now : 1;
+                bt_refresh_soon();
+                return true;
+            }
+            if (from && now - from->start_ms < kMusicWaitMaxMs + kSinkWaitMs &&
+                (device || (from->missing_ms && now - from->missing_ms < kSinkWaitMs))) { /* the end of a wait: back to waiting */
+                pwait = *from;
+                pwait.active = true;
+                pwait.need_music = false; /* music was reached (or given up): only the node is missing */
+                if (!pwait.missing_ms) pwait.missing_ms = now ? now : 1;
+                pwait.rescan_ms = now ? now : 1; /* the next try: on a listing asked after this failure */
+                bt_refresh_soon();
+                return true;
+            }
+            add_notice(Notice::Info, kBtOutNotConnected);
+        }
+        return false;
+    }
+
+    /* The wait is over (music is back, or the time is up, and the sink is listed): open the take and do what the deck asked meanwhile. */
+    void finish_wait() {
+        const PlayWait w = pwait;
+        pwait = PlayWait();
+        if (!start_or_wait(w.after, w.cue_origin, &w)) run_deck(DeckEvent::Stop);
+        else if (!pwait.active && pb_timed_out) pb_quality = "call"; /* played on whatever sink exists */
+    }
+
+    /* The wait is given up: the sink never came back. */
+    void give_up_wait() {
+        pwait = PlayWait();
+        add_notice(Notice::Info, kBtOutNotConnected);
+        run_deck(DeckEvent::Stop);
+    }
+
+    /* Once per service tick: follows the wait for the music profile and for the sink node. */
+    void bt_wait_tick(uint64_t now) {
+        if (!pwait.active) return;
+        if (!playing_family()) { /* Stop was pressed (or the deck went idle) */
+            pwait.active = false;
+            return;
+        }
+        const BtOutput *o = bt_out_chosen();
+        const bool hard = now - pwait.start_ms >= kMusicWaitMaxMs + kSinkWaitMs; /* the longest a PLAY ever waits */
+        /* after an open that found no node: only a listing asked since then tells whether it is back */
+        const bool listed = sink_listed(o) && (!pwait.rescan_ms || bt_scan_ms >= pwait.rescan_ms || hard);
+        if (!listed) { /* a profile switch (the node is re-created), a reconnect, or the headset went away: bounded */
+            if (!pwait.missing_ms) {
+                pwait.missing_ms = now ? now : 1;
+                bt_refresh_soon();
+            }
+            if (now - pwait.missing_ms >= kSinkWaitMs || hard) {
+                give_up_wait();
+                return;
+            }
+        } else {
+            pwait.missing_ms = 0;
+        }
+        bool music = false;
+        if (pwait.need_music && o) {
+            if (now - pwait.last_poll_ms >= kBtProfilePollMs) {
+                pwait.last_poll_ms = now;
+                bt_ask_card(o->card, now);
+            }
+            if (bt_card.found && bt_card.name == o->card && bt_card_ms >= pwait.start_ms) {
+                music = pulse_profile_is_music(bt_card.card.active_profile);
+                if (pulse_profile_is_call(bt_card.card.active_profile)) pwait.saw_call = true;
+            }
+            if (music && !pwait.music_ms) {
+                pwait.music_ms = bt_card_ms ? bt_card_ms : 1;
+                bt_refresh_soon(); /* the music node is new: list it */
+            }
+        }
+        if (!listed) return;
+        if (!pwait.need_music) { /* only the node was missing: it is back */
+            finish_wait();
+            return;
+        }
+        const bool timed_out = now - pwait.start_ms >= kMusicWaitMaxMs;
+        const bool min_ok = pwait.saw_call || !pwait.mic_was_open || now - pwait.start_ms >= kMusicWaitMinMs;
+        bool ready = (music && min_ok) || timed_out;
+        /* music: open the NEW node, not the call node on its way out (a listing asked after the music reading, and the node itself says
+         * it is not the call one) */
+        if (ready && music && !hard && (bt_scan_ms < pwait.music_ms || o->sink_profile == "call")) ready = false;
+        if (ready) {
+            pb_timed_out = timed_out && !music;
+            finish_wait();
+        }
+    }
+
+    /* While a take plays through a Bluetooth output: the profile now (music, or call quality), read about once a second. */
+    void bt_quality_tick(uint64_t now) {
+        if (!plan.chosen.bluetooth || !playing_family() || pwait.active) return;
+        const BtOutput *o = bt_out_chosen();
+        if (!o) return;
+        if (now - pb_quality_ms >= kQualityPollMs) {
+            pb_quality_ms = now;
+            bt_ask_card(o->card, now);
+        }
+        if (bt_card.found && bt_card.name == o->card) pb_quality = profile_class(bt_card.card.active_profile);
+    }
+
+    /* PLAY / REW / FWD of a deck that is not playing: waits for the music profile when the headset needs it, or for the sink node when
+     * the device is listed without one (true: waiting, or refused). */
+    bool defer_for_output(PlayWait::After after, bool cue_origin) {
+        if (!plan.chosen.bluetooth) return false;
+        const bool music = bt_music_wait_needed();
+        const BtOutput *o = bt_out_chosen();
+        const bool missing = o && o->connected && !sink_listed(o);
+        if (!music && !missing) return false;
+        if (refuse_missing_codec(play_target()) || !player || play_target().empty()) {
+            pend.push_back(DeckEvent::Stop);
+            return true;
+        }
+        begin_wait(after, cue_origin, music);
         return true;
     }
 
@@ -859,27 +1755,61 @@ struct Controller::Impl : public DeckCommands {
             break;
         case DeckCommand::StopRecording: end_take(); break;
         case DeckCommand::PlayLast:
-            if (!open_target() || player->play() < 0) pend.push_back(DeckEvent::Stop);
+            if (defer_for_output(PlayWait::Play, false)) break;
+            if (!start_or_wait(PlayWait::Play, false, nullptr)) pend.push_back(DeckEvent::Stop);
             break;
         case DeckCommand::CueLast:
-            if (!open_target()) pend.push_back(DeckEvent::Stop);
+            if (defer_for_output(PlayWait::Cued, true)) break;
+            if (!start_or_wait(PlayWait::Cued, true, nullptr)) pend.push_back(DeckEvent::Stop);
             break;
         case DeckCommand::PausePlayback:
+            if (pwait.active) { /* still waiting for the music profile: it will open cued */
+                pwait.after = PlayWait::Cued;
+                break;
+            }
             if (player) player->pause();
             break;
         case DeckCommand::ResumePlayback:
-            if (player) player->resume();
+            if (pwait.active) {
+                pwait.after = PlayWait::Play;
+                break;
+            }
+            if (!prepare_resume()) { /* the Bluetooth output went away while paused: say so, stop */
+                pend.push_back(DeckEvent::Stop);
+                break;
+            }
+            if (player && player->resume() < 0 && plan.chosen.bluetooth) { /* the stream could not open: the output is gone */
+                add_notice(Notice::Info, kBtOutNotConnected);
+                pend.push_back(DeckEvent::Stop);
+            }
             break;
         case DeckCommand::StopPlayback:
+            pwait = PlayWait();
             if (player) player->stop();
             break;
         case DeckCommand::BeginScan:
-            if (player) player->scan(c.dir, kScanSpeed);
+            if (pwait.active) {
+                pwait.after = c.dir == Direction::Forward ? PlayWait::ScanFwd : PlayWait::ScanRev;
+                break;
+            }
+            if (!prepare_resume()) {
+                pend.push_back(DeckEvent::Stop);
+                break;
+            }
+            if (player && player->scan(c.dir, kScanSpeed) < 0 && plan.chosen.bluetooth) {
+                add_notice(Notice::Info, kBtOutNotConnected);
+                pend.push_back(DeckEvent::Stop);
+            }
             break;
         case DeckCommand::EndScan:
+            if (pwait.active) {
+                pwait.after = pwait.cue_origin ? PlayWait::Cued : PlayWait::Play;
+                break;
+            }
             if (player) player->end_scan();
             break;
         case DeckCommand::Jump: {
+            if (pwait.active) break;
             /* the hubs flash only when the jump moved the tape (not at the start or the end) */
             const uint64_t before = player ? player->position() : 0;
             if (player) player->jump(c.dir, kJumpSeconds);
@@ -1168,6 +2098,95 @@ struct Controller::Impl : public DeckCommands {
         }
     }
 
+    /* The Bluetooth input's upkeep, once per service tick: re-lists after a server change, follows the open stream (the
+     * connecting gate, the no-sound state, the identity during a take) and closes the microphone when it is not wanted. */
+    void bt_tick(uint64_t now) {
+        bt_changed = false;
+        PulseApi *pa = cfg.pulse;
+        if (!pa) return;
+        bt_facts_poll(now);
+        if (bt_apply_scan()) {
+            bt_rebuild();
+            fix_sel();
+        }
+        const bool dirty = bt_dirty.load() || bt_gone.load() || bt_rescan;
+        /* T9: the lists follow the server even when an event is missed or a listing failed: read again while the chosen output has no
+         * node (often while PLAY waits for it) or the last listing failed */
+        const bool unresolved = bt_is_connected && (bt_status == kBtNotResponding || (plan.chosen.bluetooth && !sink_listed(bt_out_chosen())));
+        const bool relist = pwait.active && pwait.missing_ms ? now - bt_last_refresh_ms >= kBtRelistWaitMs
+                                                             : unresolved && now - bt_last_refresh_ms >= kBtRelistMs;
+        if (dirty ? now - bt_last_refresh_ms >= cfg.pulse_refresh_ms
+                  : ((!bt_is_connected && now - bt_last_refresh_ms >= cfg.pulse_retry_ms) || relist)) {
+            bt_dirty.store(false);
+            bt_rescan = false;
+            bt_request_scan();
+        }
+        PulseWorker *w = worker();
+        CardResult cr;
+        if (w && w->take_card(cr)) {
+            bt_card = cr;
+            bt_card_ms = bt_card_ask_ms;
+        }
+        IdentityResult ir;
+        if (w && w->take_identity(ir) && bt_ident_for && bt_stream.get() == bt_ident_for) {
+            bt_ident_for = nullptr;
+            /* a silent relink without a move notice (C16): another source ends the take at once; NO source is asked again soon and
+             * ends it only when it lasts kBtIdentityRetryMs (T9: a moment of it at a profile switch is the server's, not a loss) */
+            if (ir.ok || !take_active) {
+                bt_ident_unknown_ms = 0;
+            } else if (bt_stream && !bt_stream->ended()) {
+                if (!ir.actual.empty()) {
+                    bt_ident_unknown_ms = 0;
+                    on_capture_lost(CaptureStats());
+                } else {
+                    if (!bt_ident_unknown_ms) bt_ident_unknown_ms = now ? now : 1;
+                    if (now - bt_ident_unknown_ms >= kBtIdentityRetryMs) {
+                        bt_ident_unknown_ms = 0;
+                        on_capture_lost(CaptureStats());
+                    } else {
+                        /* ask again in 0.2 s (the regular check comes kBtIdentityMs after bt_ident_ms) */
+                        if (now >= kBtIdentityMs) bt_ident_ms = now - kBtIdentityMs + 2 * kBtIdentityRetryStepMs;
+                    }
+                }
+            }
+        }
+        if (bt_stream && bt_gate && cap && cap->running()) {
+            PulseStreamEvent ev;
+            while (bt_stream->poll_event(ev))
+                if (ev.kind == PulseEvent::Running && !bt_running_ms) bt_running_ms = now ? now : 1;
+            /* connecting ends at the first non-zero sample (the PCM opens the gate), or when the card is on a call profile
+             * and the stream has run a while: the zeros are then the headset's own (study C18). The profile is read on the
+             * worker; an answer counts when it was asked after the link had time to come up. */
+            if (!bt_gate->open.load() && bt_running_ms && now - bt_running_ms >= kBtCallLinkMs) {
+                if (now - bt_profile_poll_ms >= kBtProfilePollMs) {
+                    bt_profile_poll_ms = now;
+                    bt_ask_card(bt_card_name, now);
+                }
+                if (bt_card.found && bt_card.name == bt_card_name && bt_card_ms >= bt_running_ms + kBtCallLinkMs &&
+                    pulse_profile_is_call(bt_card.card.active_profile))
+                    bt_gate->open.store(true);
+            }
+            /* no sound: the silence detector is armed only once connecting has ended (its 3 s of zeros then say the
+             * headset sends nothing); it is a state, so a first sound clears it */
+            const bool silent = bt_gate->open.load() && bt_stream->stats().silent;
+            if (silent && !bt_silent) {
+                add_notice(Notice::Info, kBtNoSound);
+            } else if (!silent && bt_silent) {
+                notices.erase(std::remove_if(notices.begin(), notices.end(), [](const Notice &n) { return n.text == kBtNoSound; }),
+                              notices.end());
+            }
+            bt_silent = silent;
+            if (take_active && now - bt_ident_ms >= kBtIdentityMs) {
+                bt_ident_ms = now;
+                if (!bt_stream->ended() && w && w->request_identity(bt_stream)) bt_ident_for = bt_stream.get();
+            }
+        }
+        if (cap && active_is_bt && !bt_mic_wanted()) { /* the list, the Edit page, playback: let the headset back to music mode */
+            close_capture();
+            bt_policy_closed = true;
+        }
+    }
+
     void tick() {
         std::lock_guard<std::mutex> g(mu);
         if (!started || down) return;
@@ -1178,9 +2197,15 @@ struct Controller::Impl : public DeckCommands {
             if (ev == PlayerEvent::TakeEnded || ev == PlayerEvent::ReachedEnd || ev == PlayerEvent::ReachedStart)
                 run_deck(DeckEvent::TakeEnded);
             else if (ev == PlayerEvent::DeviceLost && playing_family()) {
-                lost_text = "The sound output was lost";
+                lost_text = plan.chosen.bluetooth ? kBtOutLost : "The sound output was lost";
                 run_deck(DeckEvent::DeviceLost);
             }
+        }
+        if (playing_family() && bt_sink && bt_sink->ended() && player) { /* the headset went away (paused, or between writes) */
+            player->release_sink(); /* closed, the position kept: the deck then pauses there, never another sink */
+            lost_text = kBtOutLost;
+            if (deck.state() == DeckState::PlayingPaused) add_notice(Notice::CardLost, kBtOutLost); /* the deck ignores it paused */
+            else run_deck(DeckEvent::DeviceLost);
         }
         if (cap && !cap->running()) {
             const CaptureStats st = cap->stats();
@@ -1203,9 +2228,15 @@ struct Controller::Impl : public DeckCommands {
                 if (!cs.message.empty() && cs.last_error != CaptureError::None) prob.message = cs.message;
             }
         }
-        if (!cap && now - last_retry_ms >= cfg.replug_retry_ms) {
+        bt_tick(now);
+        bt_wait_tick(now);
+        bt_quality_tick(now);
+        const bool bt_hold = active_is_bt && bt_policy_closed && !bt_mic_wanted();     /* closed on purpose, still not wanted */
+        const bool bt_reopen = active_is_bt && bt_policy_closed && bt_mic_wanted();    /* back on the recorder: open at once */
+        if (!cap && !bt_hold && (bt_reopen || bt_changed || now - last_retry_ms >= cfg.replug_retry_ms)) {
             last_retry_ms = now;
-            if (try_open_capture() && !take_active && !playing_family() && deck.state() == DeckState::Idle && !tr.previewing)
+            if (try_open_capture() && !bt_reopen && !take_active && !playing_family() && deck.state() == DeckState::Idle &&
+                !tr.previewing)
                 rebuild_output();
         }
         if (tr.previewing && player) {
@@ -1226,7 +2257,22 @@ struct Controller::Impl : public DeckCommands {
         merge_finish();
         if (now - last_space_ms >= kSpaceRefreshMs) refresh_space();
         update_play_meter(now);
+        monitor_delay_tick(now);
         publish();
+    }
+
+    static OutputSnap output_snap(const OutputOption &o) {
+        OutputSnap x;
+        x.id = o.device;
+        x.label = o.label;
+        x.bluetooth = o.bluetooth;
+        x.kind = o.kind;
+        x.rate = o.rate;
+        x.connected = o.connected;
+        x.usable = o.usable;
+        x.hint_profile = o.hint_profile;
+        x.reason = o.reason;
+        return x;
     }
 
     void publish() {
@@ -1271,11 +2317,42 @@ struct Controller::Impl : public DeckCommands {
         if (play_meter_on && playing_family()) copy_meter(play_meter.snapshot(), s.play_meter);
         /* card */
         s.card.present = cap && cap->running();
-        s.card.via_server = cap && via_server;
-        for (const CaptureCard &c : cards) s.card.labels.push_back(c.label);
+        s.card.via_server = cap && via_server && !active_is_bt;
+        for (const CaptureCard &c : cards) {
+            s.card.labels.push_back(c.label);
+            InputSnap in;
+            in.id = key_of(c.info);
+            in.label = c.label;
+            s.card.inputs.push_back(in);
+        }
+        for (const BtInput &b : bt_list) {
+            s.card.labels.push_back(b.label);
+            InputSnap in;
+            in.id = b.id;
+            in.label = b.label;
+            in.bluetooth = true;
+            in.kind = b.kind;
+            in.rate = b.rate;
+            in.connected = b.connected;
+            in.usable = b.usable;
+            in.hint_profile = b.hint_profile;
+            in.reason = b.reason;
+            in.hw_level = false;
+            s.card.inputs.push_back(in);
+        }
+        s.card.bt_status = bt_status_view();
         s.card.selected = sel;
-        if (sel >= 0 && sel < static_cast<int>(cards.size())) s.card.label = cards[static_cast<size_t>(sel)].label;
+        if (sel >= 0 && sel < static_cast<int>(s.card.labels.size())) s.card.label = s.card.labels[static_cast<size_t>(sel)];
         else if (have_card) s.card.label = active.name;
+        if (have_card && active_is_bt) {
+            s.card.bluetooth = true;
+            const BtInput *b = bt_find(bt_mac_of_id(active_key));
+            s.card.bt_rate = b ? b->rate : 0;
+            s.capture.connecting = cap && cap->running() && bt_gate && !bt_gate->open.load();
+            s.capture.no_sound = bt_silent;
+            s.capture.mic_closed = bt_policy_closed && !cap;
+            s.capture.bt_gone = lost || !b || !b->connected;
+        }
         s.card.message = s.card.present ? std::string() : cap_message;
         if (mixer) {
             s.card.has_level = mixer->caps().has_level;
@@ -1291,13 +2368,72 @@ struct Controller::Impl : public DeckCommands {
             s.card.mute = mstate.mute_valid && mstate.mute;
         }
         s.card.soft_gain_db = store.values().soft_gain_db;
-        s.card.has_playback = s.card.present && have_card && active.playback;
+        /* T9: the Bluetooth microphone closed on purpose, the headset there: what depends on the capture stays as it was open (the
+         * format it records, the Monitor rows), so nothing looks like a missing input */
+        const bool mic_held = s.capture.mic_closed && !s.capture.bt_gone;
+        const MonTarget mt = monitor_target();
+        s.card.has_playback = (s.card.present || mic_held) && have_card && mt.ok;
         s.card.monitor_active = mon && mon->running();
         s.card.output_label = plan.chosen.label;
         for (const OutputOption &o : plan.choices) {
             if (o.device == plan.chosen.device) s.card.output_selected = static_cast<int>(s.card.output_labels.size());
             s.card.output_labels.push_back(o.label);
             s.card.output_devices.push_back(o.device);
+            s.card.outputs.push_back(output_snap(o));
+        }
+        /* playback */
+        s.playback.bluetooth = plan.chosen.bluetooth;
+        s.playback.switch_timeout_s = static_cast<double>(kMusicWaitMaxMs) / 1000.0;
+        s.playback.switch_timed_out = pb_timed_out;
+        if (pwait.active) {
+            s.playback.state = "switching_to_music";
+            s.playback.switch_elapsed_s = static_cast<double>(clk->mono_ms() - pwait.start_ms) / 1000.0;
+        } else if (playing_family()) {
+            s.playback.state = "playing";
+        }
+        if (plan.chosen.bluetooth)
+            s.playback.quality = (pwait.active || playing_family()) && !pb_quality.empty()
+                                     ? pb_quality
+                                     : (plan.chosen.hint_profile.empty() ? std::string("unknown") : plan.chosen.hint_profile);
+        if (player && playing_family()) s.playback.underruns = player->underruns();
+        /* monitor */
+        MonitorSnap &m = s.monitor;
+        m.active = mon && mon->running();
+        m.route = mt.route;
+        m.available = mt.ok;
+        m.target_label = mt.ok ? mt.label : std::string();
+        m.reason = mt.ok ? std::string() : mt.why;
+        m.output = store.values().monitor_output;
+        m.delay_ms = m.active ? mon_delay_ms : 0.0;
+        if (mt.ok && mt.route == "other_output" && mt.a2dp) m.notice = "delay";
+        if (m.active && m.delay_ms > kMonitorNoticeDelayMs) m.notice = "delay";
+        {
+            OutputSnap autosnap;
+            autosnap.label = "Automatic";
+            m.outputs.push_back(autosnap);
+            const std::vector<OutputOption> opts = plan.choices.empty() ? std::vector<OutputOption>{plan.chosen} : plan.choices;
+            for (const OutputOption &o : opts) m.outputs.push_back(output_snap(o));
+            m.output_selected = 0;
+            if (!m.output.empty()) {
+                m.output_selected = -1;
+                const std::string want_mac = bt_mac_of_id(m.output);
+                const std::string want = want_mac.empty() ? m.output : bt_id_of(want_mac);
+                for (size_t i = 1; i < m.outputs.size(); ++i)
+                    if (m.outputs[i].id == want) m.output_selected = static_cast<int>(i);
+                if (m.output_selected < 0) { /* chosen earlier, not there now: a placeholder entry */
+                    OutputSnap ph;
+                    ph.id = want;
+                    auto l = bt_labels.find(want);
+                    ph.label = l != bt_labels.end() ? l->second : (want_mac.empty() ? want : std::string("Bluetooth device"));
+                    ph.bluetooth = !want_mac.empty();
+                    ph.kind = ph.bluetooth ? "other" : "";
+                    ph.connected = false;
+                    ph.usable = false;
+                    ph.reason = "Not connected";
+                    m.outputs.push_back(ph);
+                    m.output_selected = static_cast<int>(m.outputs.size() - 1);
+                }
+            }
         }
         /* take */
         s.take.recording = take_active;
@@ -1310,7 +2446,7 @@ struct Controller::Impl : public DeckCommands {
         s.take.opus_kbps = rec_compressed && rec_choice.key.format == RecFormat::Opus ? rec_choice.opus_bitrate_bps / 1000 : 0;
         /* the Format picker's inputs */
         s.format_inputs.codecs = codecs_now();
-        if (s.card.present && fmt.rate && fmt.channels && fmt.bits) fill_inputs(s.format_inputs);
+        if ((s.card.present || mic_held) && fmt.rate && fmt.channels && fmt.bits) fill_inputs(s.format_inputs);
         /* problems */
         s.problems = prob;
         s.notices = notices;
@@ -1400,6 +2536,8 @@ struct Controller::Impl : public DeckCommands {
         refresh_takes_locked();
         load_newest_if_empty(); /* the last take is loaded at launch, without a load animation */
         want_text = s.card;
+        if (cfg.pulse) bt_facts_poll(clk->mono_ms()); /* T8: the launcher's facts before the first lists */
+        if (cfg.pulse) bt_wait_scan(300); /* the first scan: a chosen headset opens at once (startup only) */
         try_open_capture();
         rebuild_output();
         refresh_space();
@@ -1421,6 +2559,11 @@ struct Controller::Impl : public DeckCommands {
         std::lock_guard<std::mutex> g(mu);
         if (down) return;
         down = true;
+        if (pw) pw->stop(); /* no more questions to the server (a call in progress is bounded by the server's own timeout) */
+        if (cfg.pulse && bt_cb_set) { /* no change callback after this: it points into this object */
+            cfg.pulse->set_change_callback(nullptr);
+            bt_cb_set = false;
+        }
         if (take_active || deck.state() != DeckState::Idle) run_deck(DeckEvent::AppLeave);
         end_take();
         close_trim_locked();
@@ -1740,6 +2883,26 @@ bool Controller::set_monitor(bool on) {
     p_->publish();
     return true;
 }
+bool Controller::set_monitor_output(const std::string &id) {
+    Locked l(p_->mu);
+    Impl &d = *p_;
+    const std::string mac = bt_mac_of_id(id);
+    if (id.compare(0, 3, "bt:") == 0 && mac.empty()) return false; /* not an address */
+    for (unsigned char c : id)
+        if (c < 0x20 || c == 0x7F) return false;
+    if (id.size() > 256) return false;
+    if (!mac.empty() && d.bt_is_paired_out(mac)) { /* T8: paired, not connected: say why, change nothing */
+        d.add_notice(Notice::Info, kBtPairedReason);
+        d.publish();
+        return false;
+    }
+    d.store.values().monitor_output = mac.empty() ? id : bt_id_of(mac);
+    d.mon_failed = false; /* a new target: a new try */
+    d.mon_lost_bt = false;
+    d.persist();
+    d.publish();
+    return true;
+}
 bool Controller::set_wave_fit(bool on) {
     Locked l(p_->mu);
     p_->store.values().wave_fit = on;
@@ -1766,14 +2929,28 @@ bool Controller::select_card(int index) {
     Locked l(p_->mu);
     Impl &d = *p_;
     if (d.take_active || d.deck.state() == DeckState::Countdown) return false;
-    if (index < 0 || index >= static_cast<int>(d.cards.size())) return false;
-    const std::string key = key_of(d.cards[static_cast<size_t>(index)].info);
+    if (index < 0) return false;
+    std::string key;
+    if (index < static_cast<int>(d.cards.size())) {
+        key = key_of(d.cards[static_cast<size_t>(index)].info);
+    } else { /* a Bluetooth device: the entries follow the cards */
+        const size_t bi = static_cast<size_t>(index) - d.cards.size();
+        if (bi >= d.bt_list.size()) return false;
+        const BtInput &b = d.bt_list[bi];
+        if (!b.usable) { /* absent or without a microphone: say why, change nothing */
+            d.add_notice(Notice::Info, (b.connected || b.paired) ? b.reason : std::string(kBtNotConnected));
+            d.publish();
+            return false;
+        }
+        key = b.id;
+    }
     if (d.deck.state() != DeckState::Idle) d.run_deck(DeckEvent::Stop);
     d.close_capture();
     d.want_text = key;
     d.store.values().card = key;
     d.lost = false;
-    const bool ok = d.try_open_capture();
+    d.bt_policy_closed = false;
+    const bool ok = d.try_open_capture() || (d.active_is_bt && d.bt_policy_closed);
     d.rebuild_output();
     d.persist();
     d.publish();
@@ -1783,7 +2960,14 @@ bool Controller::select_output(const std::string &device) {
     Locked l(p_->mu);
     Impl &d = *p_;
     if (d.take_active || d.deck.state() != DeckState::Idle || d.tr.previewing) return false;
-    d.store.values().output_device = device;
+    const std::string mac = bt_mac_of_id(device);
+    if (device.compare(0, 3, "bt:") == 0 && mac.empty()) return false; /* not an address */
+    if (!mac.empty() && d.bt_is_paired_out(mac)) { /* T8: paired, not connected: say why, change nothing */
+        d.add_notice(Notice::Info, kBtPairedReason);
+        d.publish();
+        return false;
+    }
+    d.store.values().output_device = mac.empty() ? device : bt_id_of(mac);
     d.rebuild_output();
     d.persist();
     d.publish();
@@ -1792,6 +2976,11 @@ bool Controller::select_output(const std::string &device) {
 void Controller::refresh_cards() {
     Locked l(p_->mu);
     p_->refresh_cards_locked();
+    p_->publish();
+}
+void Controller::set_page(UiPage page) {
+    Locked l(p_->mu);
+    p_->page = page;
     p_->publish();
 }
 

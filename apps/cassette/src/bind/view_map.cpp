@@ -593,6 +593,97 @@ int zoom_limit(const TrimSnap &t, double min_window_s)
     return z;
 }
 
+ui::BtDeviceFacts bt_facts(const InputSnap &in)
+{
+    ui::BtDeviceFacts f;
+    f.label = in.label;
+    f.kind = in.kind;
+    f.rate = in.rate;
+    f.hint_profile = in.hint_profile;
+    f.connected = in.connected;
+    f.usable = in.usable;
+    f.reason = in.reason;
+    return f;
+}
+
+ui::BtDeviceFacts bt_facts(const OutputSnap &o)
+{
+    ui::BtDeviceFacts f;
+    f.label = o.label;
+    f.kind = o.kind;
+    f.rate = o.rate;
+    f.hint_profile = o.hint_profile;
+    f.connected = o.connected;
+    f.usable = o.usable;
+    f.reason = o.reason;
+    return f;
+}
+
+namespace {
+
+ui::FormatEntry plain_entry(const std::string &label)
+{
+    ui::FormatEntry e;
+    e.name = label;
+    return e;
+}
+
+/* the two-line rows of a picker whose list holds a Bluetooth output (empty when none does: every row plain, as before) */
+std::vector<ui::FormatEntry> output_entries(const std::vector<OutputSnap> &outs, const std::vector<std::string> &labels)
+{
+    std::vector<ui::FormatEntry> v;
+    bool any = false;
+    for (const OutputSnap &o : outs) any = any || o.bluetooth;
+    if (!any || outs.size() != labels.size()) return v;
+    for (size_t i = 0; i < outs.size(); ++i)
+        v.push_back(outs[i].bluetooth ? ui::bt_output_entry(bt_facts(outs[i])) : plain_entry(labels[i]));
+    return v;
+}
+
+} // namespace
+
+bool mic_held(const Snapshot &s)
+{
+    return s.card.bluetooth && s.capture.mic_closed && !s.capture.bt_gone;
+}
+
+std::string standing_notice_text(const CaptureSnap &c)
+{
+    if (c.connecting) return ui::kBtConnectingNotice;
+    if (c.no_sound) return ui::kBtNoSoundNotice;
+    return "";
+}
+
+std::string monitor_detail_text(const MonitorSnap &m)
+{
+    const bool echo = m.notice == "delay";
+    if (m.active && m.delay_ms > 0) return ui::monitor_delay_text(m.delay_ms, echo);
+    return echo ? ui::monitor_delay_text(0, true) : std::string();
+}
+
+bool CallQualityWatch::step(const Snapshot &s, int64_t now_ms)
+{
+    if (!playing_family(s.deck.state)) {
+        *this = CallQualityWatch();
+        return false;
+    }
+    if (!in_play) {
+        *this = CallQualityWatch();
+        in_play = true;
+    }
+    if (s.playback.state == "switching_to_music") {
+        saw_switch = true;
+        return false;
+    }
+    if (fired || !s.playback.bluetooth || s.playback.state != "playing") return false;
+    if (play_ms < 0) play_ms = now_ms;
+    /* after a wait that reached music the first readings may still say call (the last scan's profile): a grace period */
+    const bool due = (saw_switch && s.playback.switch_timed_out) ||
+                     (s.playback.quality == "call" && (!saw_switch || now_ms - play_ms >= kCallQualityGraceMs));
+    if (due) fired = true;
+    return due;
+}
+
 std::vector<ui::SettingRow> settings_rows(const Snapshot &s, uint64_t next_take)
 {
     std::vector<ui::SettingRow> rows;
@@ -601,10 +692,29 @@ std::vector<ui::SettingRow> settings_rows(const Snapshot &s, uint64_t next_take)
     {
         ui::SettingRow r = choice_row("input", "Input", c.labels, c.selected);
         if (c.labels.empty()) r.value = c.label.empty() ? "None" : c.label;
-        r.enabled = !c.labels.empty() && !busy;
+        /* Bluetooth: the headsets as two-line rows, the footer (or why there are none) */
+        bool any_bt = false;
+        for (const InputSnap &in : c.inputs) any_bt = any_bt || in.bluetooth;
+        r.formats_footer = ui::bt_input_footer_for_status(any_bt, c.bt_status);
+        if (any_bt && c.inputs.size() == c.labels.size())
+            for (size_t i = 0; i < c.inputs.size(); ++i)
+                r.choice_entries.push_back(c.inputs[i].bluetooth ? ui::bt_input_entry(bt_facts(c.inputs[i])) : plain_entry(c.labels[i]));
+        /* no card at all: the picker still opens for its footer */
+        r.enabled = (!c.labels.empty() || !r.formats_footer.empty()) && !busy;
         rows.push_back(r);
     }
-    if (c.present && c.has_level) {
+    const bool sel_ok = c.selected >= 0 && c.selected < static_cast<int>(c.inputs.size());
+    const bool bt_in = c.bluetooth || (sel_ok && !c.inputs[static_cast<size_t>(c.selected)].hw_level);
+    if (bt_in) {
+        /* a Bluetooth headset has no hardware level (software gain only): the row greyed, as Channels */
+        ui::SettingRow r;
+        r.id = "level";
+        r.label = "Input level";
+        r.kind = ui::SettingKind::Info;
+        r.enabled = false;
+        r.value = "Not applicable";
+        rows.push_back(r);
+    } else if (c.present && c.has_level) {
         ui::SettingRow r;
         r.id = "level";
         r.label = "Input level";
@@ -653,8 +763,11 @@ std::vector<ui::SettingRow> settings_rows(const Snapshot &s, uint64_t next_take)
     }
     rows.push_back(toggle_row("lowcut", "Low cut 80 Hz", s.settings.low_cut));
     rows.push_back(toggle_row("limiter", "Limiter", s.settings.limiter));
-    if (c.present && c.has_playback) { /* only a card with a playback side can be monitored */
-        rows.push_back(toggle_row("monitor", "Monitor", s.settings.monitor));
+    if ((c.present || mic_held(s)) && c.has_playback) { /* only a card with a playback side can be monitored */
+        ui::SettingRow mr = toggle_row("monitor", "Monitor", s.settings.monitor);
+        mr.detail = monitor_detail_text(s.monitor); /* the delay (Bluetooth), amber with the echo notice */
+        mr.detail_warn = !mr.detail.empty() && s.monitor.notice == "delay";
+        rows.push_back(mr);
         ui::SettingRow r;
         r.id = "monitor_level";
         r.label = "Monitor level";
@@ -667,6 +780,24 @@ std::vector<ui::SettingRow> settings_rows(const Snapshot &s, uint64_t next_take)
         r.value_suffix = " %";
         r.value_text = std::to_string(r.pos * 5) + " %";
         rows.push_back(r);
+    }
+    {
+        /* Monitor to: where Bluetooth is in play (a Bluetooth input or output, or a target chosen earlier) */
+        const MonitorSnap &m = s.monitor;
+        bool bt_mon = c.bluetooth || !m.output.empty();
+        for (const OutputSnap &o : m.outputs) bt_mon = bt_mon || o.bluetooth;
+        if (bt_mon && !m.outputs.empty()) {
+            std::vector<std::string> labels;
+            for (const OutputSnap &o : m.outputs) labels.push_back(o.label);
+            ui::SettingRow r = choice_row("monitor_to", "Monitor to", labels, m.output_selected);
+            if (m.output_selected <= 0) r.value = "Automatic";
+            r.choice_entries = output_entries(m.outputs, labels);
+            if (!m.available) { /* greyed with the reason; the picker still opens (a target can be chosen) */
+                r.value = m.reason.empty() ? std::string("No target") : m.reason;
+                r.dimmed = true;
+            }
+            rows.push_back(r);
+        }
     }
     {
         int pick = 0; /* the nearest choice (the setting may hold any value from 5 to 30) */
@@ -707,6 +838,7 @@ std::vector<ui::SettingRow> settings_rows(const Snapshot &s, uint64_t next_take)
     if (c.output_labels.size() > 1) {
         ui::SettingRow r = choice_row("output", "Output", c.output_labels, c.output_selected);
         r.enabled = !busy;
+        r.choice_entries = output_entries(c.outputs, c.output_labels);
         rows.push_back(r);
     }
     return rows;
@@ -725,7 +857,10 @@ ui::ViewModel map_view(const MapInput &in)
     const int ds = s.deck.state;
     const bool rec_side = recording_family(ds) && ds != kDeckCountdown;
     const bool play_side = playing_family(ds);
-    const bool present = s.card.present;
+    /* a Bluetooth microphone closed on purpose (the list, the Edit page, playback: CaptureSnap::mic_closed) with the headset there
+     * is not a missing input: the recorder keeps its normal view (T9) */
+    const bool held = mic_held(s);
+    const bool present = s.card.present || held;
 
     /* ---- recorder ---- */
     ui::RecorderVm &r = vm.rec;
@@ -834,8 +969,19 @@ ui::ViewModel map_view(const MapInput &in)
     r.info.limiter = s.settings.limiter;
     r.info.low_cut = s.settings.low_cut;
     vm.notice = local.notice;
-    /* the standing reason why there is no input stays in the strip until a card is found */
+    /* the standing reason why there is no input stays in the strip until a card is found; the chosen Bluetooth headset not
+     * connected: the window says so, the info box has the short form (the controller's text does not fit it on one line) */
     if (!present && !s.card.labels.empty()) r.info.notice = s.card.message;
+    r.bt_missing = !present && s.card.bluetooth && s.capture.bt_gone;
+    if (r.bt_missing && !r.info.notice.empty()) r.info.box_notice = ui::kBtMissingShort;
+
+    /* Bluetooth: the meter label, the standing state of the headset, PLAY waiting for the music mode */
+    r.bluetooth = s.card.bluetooth;
+    r.standing_notice = standing_notice_text(s.capture);
+    if (s.capture.connecting && !play_side)
+        for (int i = 0; i < 2; ++i) r.meter.ch[i] = ui::ChannelMeter(); /* nothing real yet: the segments dark, as idle */
+    if (play_side && s.playback.state == "switching_to_music")
+        r.info.play_status = ui::switching_text(s.playback.switch_elapsed_s, s.playback.switch_timeout_s);
 
     r.card.shown = present && s.card.has_level;
     r.card.db = s.card.level_db;
@@ -980,12 +1126,14 @@ bool same(const ui::RecorderVm &a, const ui::RecorderVm &b)
             a.meter.ch[i].peak_lamp != b.meter.ch[i].peak_lamp)
             return false;
     if (a.monitor_shown != b.monitor_shown || a.monitor_active != b.monitor_active) return false;
+    if (a.bluetooth != b.bluetooth || a.bt_missing != b.bt_missing || a.standing_notice != b.standing_notice) return false;
     if (a.tape.loaded != b.tape.loaded || a.tape.label != b.tape.label ||
         a.tape.format != b.tape.format || a.tape.load_seq != b.tape.load_seq)
         return false;
     const ui::InfoVm &x = a.info, &y = b.info;
     if (x.take != y.take || x.format != y.format || x.codec != y.codec || x.kbps != y.kbps || x.time_left != y.time_left || x.play_pos_ms != y.play_pos_ms ||
-        x.play_len_ms != y.play_len_ms || x.server != y.server || x.card != y.card || x.lost_ms != y.lost_ms || x.limiter != y.limiter || x.low_cut != y.low_cut || x.notice != y.notice)
+        x.play_len_ms != y.play_len_ms || x.server != y.server || x.card != y.card || x.lost_ms != y.lost_ms || x.limiter != y.limiter || x.low_cut != y.low_cut || x.notice != y.notice ||
+        x.play_status != y.play_status || x.box_notice != y.box_notice)
         return false;
     auto gain = [](const ui::GainVm &g, const ui::GainVm &h) {
         return g.shown == h.shown && g.db == h.db && g.can_down == h.can_down && g.can_up == h.can_up;

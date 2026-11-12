@@ -1,0 +1,24 @@
+title Cassette Bluetooth (T8): the Input picker on a board whose launcher says a sound server owns the Bluetooth endpoints, but none runs: the two USB cards and the footer "The sound server is not running"
+sizes 320x480 480x320 480x800 640x480 800x480 480x480 720x720
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_BT notsetup-server
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key s
+wait 300
+key down
+key enter
+wait 300
+expect text "USB Audio Device"
+expect text "USB Headset"
+expect text "The sound server is not running"
+shot input-notsetup-server
+expect notext "LAYOUT FAIL"
+key esc
+wait 300
+key esc
+wait 300
+expect text "SOFT"
+expect noquit

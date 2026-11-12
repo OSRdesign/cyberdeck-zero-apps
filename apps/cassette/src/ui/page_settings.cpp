@@ -114,7 +114,7 @@ void SettingsPage::apply_notice()
 void SettingsPage::apply_list_height()
 {
     if (!frame_.portrait) return;
-    const SettingRow *fp = format_picker();
+    const SettingRow *fp = footer_picker();
     const bool foot = fp && !fp->formats_footer.empty() && foot_h_ > 0;
     int h = list_h_;
     if (notice_h_ > 0) h -= notice_h_;
@@ -135,6 +135,22 @@ const SettingRow *SettingsPage::format_picker() const
     if (numpage_ || picker_ < 0 || picker_ >= static_cast<int>(vm_.rows.size())) return nullptr;
     const SettingRow &r = vm_.rows[static_cast<std::size_t>(picker_)];
     return r.formats.empty() ? nullptr : &r;
+}
+
+const SettingRow *SettingsPage::footer_picker() const
+{
+    if (numpage_ || picker_ < 0 || picker_ >= static_cast<int>(vm_.rows.size())) return nullptr;
+    const SettingRow &r = vm_.rows[static_cast<std::size_t>(picker_)];
+    return r.formats.empty() && r.formats_footer.empty() ? nullptr : &r;
+}
+
+const FormatEntry *SettingsPage::choice_entry(int i) const
+{
+    if (numpage_ || picker_ < 0 || picker_ >= static_cast<int>(vm_.rows.size())) return nullptr;
+    const SettingRow &r = vm_.rows[static_cast<std::size_t>(picker_)];
+    if (!r.formats.empty() || i < 0 || i >= static_cast<int>(r.choice_entries.size())) return nullptr;
+    const FormatEntry &e = r.choice_entries[static_cast<std::size_t>(i)];
+    return e.detail.empty() ? nullptr : &e;
 }
 
 int SettingsPage::row_h() const
@@ -173,9 +189,13 @@ void SettingsPage::refresh()
         }
     }
     std::string key = std::to_string(picker_) + (numpage_ ? "n|" : "|");
-    for (const SettingRow &r : s.rows) key += r.id + ":" + std::to_string(static_cast<int>(r.kind)) + ";";
-    if (picker_ >= 0 && picker_ < static_cast<int>(s.rows.size()))
-        for (const std::string &c : s.rows[static_cast<std::size_t>(picker_)].choices) key += c + ",";
+    for (const SettingRow &r : s.rows) key += r.id + ":" + std::to_string(static_cast<int>(r.kind)) + (r.detail.empty() ? ";" : "d;");
+    if (picker_ >= 0 && picker_ < static_cast<int>(s.rows.size())) {
+        const SettingRow &pr = s.rows[static_cast<std::size_t>(picker_)];
+        for (const std::string &c : pr.choices) key += c + ",";
+        for (const FormatEntry &e : pr.choice_entries)
+            key += e.name + "|" + e.size + "|" + e.detail + "|" + e.reason + (e.compatible ? "+" : "-") + ";";
+    }
     if (!numpage_ && picker_ >= 0 && picker_ < static_cast<int>(s.rows.size())) {
         const SettingRow &fr = s.rows[static_cast<std::size_t>(picker_)];
         for (const FormatEntry &e : fr.formats)
@@ -246,6 +266,11 @@ void SettingsPage::rebuild()
     const int text_w = row_w_ - 2 * pad;
     int y = 0;
     for (std::size_t i = 0; i < labels.size(); ++i) {
+        if (const FormatEntry *ce = picker_ >= 0 ? choice_entry(static_cast<int>(i)) : nullptr) {
+            /* a Bluetooth device: the two-line row of the Format picker, its name where the plain rows' names are */
+            y += build_entry_row(*ce, static_cast<int>(i), y, false, false) + gap;
+            continue;
+        }
         Row r;
         r.index = static_cast<int>(i);
         /* a picker entry (a long card name) wraps at the row's width and its row grows to fit every line; the
@@ -272,6 +297,10 @@ void SettingsPage::rebuild()
         lv_label_set_text(r.label, labels[i].c_str());
         if (picker_ < 0) {
             const SettingRow &s = vm_.rows[i];
+            if (!s.detail.empty()) { /* the muted second line (fill_row places it and grows the row) */
+                r.detail = label(r.obj, Face::Medium, fit_.px(15), col::kInkMuted, pad - 1, 0, 10, LV_TEXT_ALIGN_LEFT);
+                lv_label_set_long_mode(r.detail, LV_LABEL_LONG_MODE_WRAP);
+            }
             const int lh17 = lv_font_get_line_height(font(Face::Medium, fit_.px(17)));
             r.value = label(r.obj, Face::Medium, fit_.px(17), col::kInkMuted, 0, (h - 2 - lh17) / 2, 10, LV_TEXT_ALIGN_RIGHT);
             lv_label_set_long_mode(r.value, LV_LABEL_LONG_MODE_WRAP); /* fill_row grows the row to fit it */
@@ -297,17 +326,10 @@ void SettingsPage::rebuild()
  * height. */
 void SettingsPage::build_format_rows(const SettingRow &sr)
 {
-    const int h = row_h();
     const int gap = fit_.px(row_gap(frame_.portrait));
     const int pad = fit_.px(12);
     const int inner = row_w_ - 2; /* inside the 1 px border */
-    const int dot = fit_.px(10), dgap = fit_.px(8), vpad = fit_.px(10), l2gap = fit_.px(2), vgap = fit_.px(10);
-    const int name_x = pad - 1 + dot + dgap;
     const int right = inner - pad;
-    const lv_font_t *f19 = font(Face::Bold, fit_.px(19));
-    const int ls19 = ls_screen(0.3, fit_.s);
-    const lv_font_t *f15 = font(Face::Medium, fit_.px(15));
-    const int lh19 = lv_font_get_line_height(f19);
     int y = 0;
     for (std::size_t i = 0; i < sr.formats.size(); ++i) {
         const FormatEntry &e = sr.formats[i];
@@ -331,6 +353,26 @@ void SettingsPage::build_format_rows(const SettingRow &sr)
             rows_.push_back(r);
             continue;
         }
+        y += build_entry_row(e, static_cast<int>(i), y, static_cast<int>(i) == sr.choice, true) + gap;
+    }
+    lv_obj_update_layout(list_);
+}
+
+int SettingsPage::build_entry_row(const FormatEntry &e, int index, int y, bool current, bool dot_col)
+{
+    const int h = row_h();
+    const int pad = fit_.px(12);
+    const int inner = row_w_ - 2; /* inside the 1 px border */
+    const int dot = fit_.px(10), dgap = fit_.px(8), vpad = fit_.px(10), l2gap = fit_.px(2), vgap = fit_.px(10);
+    const int name_x = dot_col ? pad - 1 + dot + dgap : pad - 1;
+    const int right = inner - pad;
+    const lv_font_t *f19 = font(Face::Bold, fit_.px(19));
+    const int ls19 = ls_screen(0.3, fit_.s);
+    const lv_font_t *f15 = font(Face::Medium, fit_.px(15));
+    const int lh19 = lv_font_get_line_height(f19);
+    {
+        Row r;
+        r.index = index;
         /* the size: the largest size that fits beside the name (the name keeps its line, up to 62 % of the width), else
          * it wraps */
         int value_w = 0, value_h = 0;
@@ -361,16 +403,15 @@ void SettingsPage::build_format_rows(const SettingRow &sr)
         const int rh = std::max(h, content + 2 + 2 * vpad);
         const int top = (rh - 2 - content) / 2;
         r.obj = box(list_, 0, y, row_w_, rh, col::kRow, fit_.px(6));
-        y += rh + gap;
         border(r.obj, 1, col::kBodyEdge);
         lv_obj_add_flag(r.obj, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_flag(r.obj, LV_OBJ_FLAG_SCROLL_CHAIN_VER);
-        lv_obj_set_user_data(r.obj, reinterpret_cast<void *>(static_cast<intptr_t>(i)));
+        lv_obj_set_user_data(r.obj, reinterpret_cast<void *>(static_cast<intptr_t>(index)));
         lv_obj_add_event_cb(r.obj, row_cb, LV_EVENT_CLICKED, this);
         lv_obj_add_event_cb(r.obj, row_cb, LV_EVENT_PRESSED, this);
         lv_obj_add_event_cb(r.obj, row_cb, LV_EVENT_PRESSING, this);
         lv_obj_add_event_cb(r.obj, row_cb, LV_EVENT_RELEASED, this);
-        if (static_cast<int>(i) == sr.choice) {
+        if (dot_col && current) {
             r.dot = box(r.obj, pad - 1, top + (lh19 - dot) / 2, dot, dot, col::kHinge, dot / 2);
             lv_obj_remove_flag(r.dot, LV_OBJ_FLAG_CLICKABLE);
         }
@@ -394,15 +435,15 @@ void SettingsPage::build_format_rows(const SettingRow &sr)
             if (r.value) lv_obj_set_style_text_opa(r.value, 128, 0);
         }
         rows_.push_back(r);
+        return rh;
     }
-    lv_obj_update_layout(list_);
 }
 
 void SettingsPage::fill_row(Row &r, const SettingRow &s)
 {
     const int h = row_h(), pad = fit_.px(12), gap = fit_.px(10);
     const int inner = row_w_ - 2; /* inside the 1 px border */
-    lv_obj_set_style_opa_layered(r.obj, static_cast<lv_opa_t>(s.enabled ? 255 : 89), 0);
+    lv_obj_set_style_opa_layered(r.obj, static_cast<lv_opa_t>(s.enabled && !s.dimmed ? 255 : 89), 0);
     int right = inner - pad; /* the right edge of the value part */
     std::string value;
     if (r.chevron) {
@@ -460,6 +501,30 @@ void SettingsPage::fill_row(Row &r, const SettingRow &s)
     }
     lv_obj_set_width(r.label, std::max(10, label_right - pad + 1));
     set_fitted(r.label, Face::Bold, fit_.px(19), ls_screen(0.3, fit_.s), std::max(10, fit_.px(14)), s.label);
+    if (r.detail) {
+        /* the second line under the label (the label's width; it wraps): the row grows to hold both, the label on top, the
+         * one-line parts on the right stay centred */
+        const lv_font_t *f15 = font(Face::Medium, fit_.px(15));
+        const int dw = std::max(10, label_right - pad + 1);
+        lv_point_t dsz;
+        lv_text_get_size(&dsz, s.detail.c_str(), f15, 0, 0, dw, LV_TEXT_FLAG_NONE);
+        const int detail_h = std::max(lv_font_get_line_height(f15), static_cast<int>(dsz.y));
+        const int l2gap = fit_.px(2);
+        const int content = lh19 + l2gap + detail_h;
+        const int rh2 = std::max(rh, content + 2 + 2 * fit_.px(10));
+        const int dy2 = (rh2 - h) / 2;
+        lv_obj_set_height(r.obj, rh2);
+        if (r.chevron) lv_obj_set_y(r.chevron, (h - 2 - fit_.px(16)) / 2 + dy2);
+        if (r.toggle) lv_obj_set_y(r.toggle, (h - 2 - fit_.px(24)) / 2 + dy2);
+        if (r.slider) lv_obj_set_y(r.slider, (h - 2 - fit_.px(20)) / 2 + dy2);
+        if (r.value && !value.empty()) lv_obj_set_y(r.value, (rh2 - 2 - value_h) / 2);
+        const int top = (rh2 - 2 - content) / 2;
+        lv_obj_set_y(r.label, top);
+        lv_obj_set_width(r.detail, dw);
+        lv_obj_set_pos(r.detail, pad - 1, top + lh19 + l2gap);
+        lv_obj_set_style_text_color(r.detail, lv_color_hex(monitor_detail_color(s.detail_warn)), 0);
+        set_text(r.detail, s.detail);
+    }
 }
 
 void SettingsPage::highlight(int i)
@@ -499,6 +564,12 @@ void SettingsPage::activate(int i, int touch_x)
             if (e.header) return; /* a group heading */
             if (!e.compatible) { /* stays in the picker; the notice line says why */
                 local_notice_ = "Not available: " + e.reason;
+                apply_notice();
+                return;
+            }
+        } else if (const FormatEntry *ce = choice_entry(i)) {
+            if (!ce->compatible) { /* a Bluetooth device that is not there or cannot be used: stays, the notice says why */
+                local_notice_ = "Not available: " + ce->reason;
                 apply_notice();
                 return;
             }
@@ -835,8 +906,8 @@ void SettingsPage::update_scrollbar()
 
 void SettingsPage::update_hint()
 {
-    if (const SettingRow *fp = format_picker()) {
-        /* the Format picker: the footer takes the place of 'more below' (landscape) or sits under the list (narrow) */
+    if (const SettingRow *fp = footer_picker()) {
+        /* the Format picker (or a picker with a footer, Input): the footer takes the place of 'more below' (landscape) or sits under the list (narrow) */
         if (foot_) {
             const std::string &t = fp->formats_footer;
             int fh = 0;

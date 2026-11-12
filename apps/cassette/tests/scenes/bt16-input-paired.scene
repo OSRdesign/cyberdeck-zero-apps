@@ -1,0 +1,40 @@
+title Cassette Bluetooth (T8, synthetic names): the Input picker with paired devices the launcher says are not connected: a USB card (plain row), a connected headset (Evolve 65, 16 kHz) and two dimmed rows (Beats Fit Pro; and one without a remembered name, "Bluetooth device 5D:1A") with the reason "Not connected: connect it in Settings > Bluetooth" under the name; Enter on a dimmed row says why and stays
+sizes 320x480 480x320 480x800 640x480 800x480 480x480 720x720
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_BT input-paired
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key s
+wait 300
+key down
+key enter
+wait 300
+expect text "USB Audio Device"
+expect text "Evolve 65"
+expect text "Beats Fit Pro"
+expect text "Bluetooth device 5D:1A"
+expect text "Not connected: connect it in Settings > Bluetooth"
+shot input-paired
+expect notext "LAYOUT FAIL"
+key down
+key enter
+wait 300
+expect text "Not available: Not connected: connect it in Settings > Bluetooth"
+say Enter on a paired device that is not connected: the notice says why, the picker stays
+shot input-paired-refused
+expect notext "LAYOUT FAIL"
+key down
+key enter
+wait 300
+expect text "Not available: Not connected: connect it in Settings > Bluetooth"
+shot input-paired-refused-2
+expect notext "LAYOUT FAIL"
+key esc
+wait 300
+key esc
+wait 300
+expect text "SOFT"
+expect text "BT"
+expect noquit

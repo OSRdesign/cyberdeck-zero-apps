@@ -111,6 +111,7 @@ private:
     void layout_name();       /* font rung, size and place of the name label for label_ */
     void set_reveal(int w);
     void step_load(std::uint32_t now);
+    void set_empty_text(bool bt); /* the empty window's two lines: the USB text or the Bluetooth one (T9), centred again */
 
     Fit fit_;
     Layout lay_;
@@ -143,6 +144,8 @@ private:
     bool badge_reverse_ = true;
     std::string badge_text_;
     lv_obj_t *empty_ = nullptr, *empty_msg_ = nullptr, *empty_hint_ = nullptr;
+    int empty_h_ = 0, empty_gap_ = 0;
+    bool empty_bt_ = false;             /* the empty window says the Bluetooth headset is not connected */
 
     std::string label_;                 /* what the cassette shows now */
     bool loaded_ = true;                /* a cassette is in the window */

@@ -124,7 +124,7 @@ int32_t mean(int64_t sum, int64_t k) {
 /* ---------------------------------------------------------------- Player */
 
 struct Player::Cmd {
-    enum Kind { Open, Close, Play, Pause, Resume, Stop, Seek, Scan, EndScan, Jump } kind = Play;
+    enum Kind { Open, Close, Play, Pause, Resume, Stop, Seek, Scan, EndScan, Jump, Release } kind = Play;
     std::string path;
     uint64_t arg = 0;
     Direction dir = Direction::Forward;
@@ -316,6 +316,16 @@ int Player::apply(Cmd &c) {
         return 0;
     case Cmd::Stop:
         do_stop(0);
+        return 0;
+    case Cmd::Release:
+        if (sink_open_) {
+            drop_and_rewind(); /* the position goes back to the frame heard, as a pause does */
+            close_sink();
+        }
+        if (st_ == PlayerState::Playing || st_ == PlayerState::Scanning) {
+            st_ = PlayerState::Paused;
+            held_ = false;
+        }
         return 0;
     default: break;
     }
@@ -546,6 +556,10 @@ int Player::resume() {
 }
 int Player::stop() {
     CASSETTE_CMD(Stop);
+    return submit(c);
+}
+int Player::release_sink() {
+    CASSETTE_CMD(Release);
     return submit(c);
 }
 int Player::seek(uint64_t frame) {

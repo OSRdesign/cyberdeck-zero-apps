@@ -89,6 +89,16 @@ struct PeakGeo {
     DRectF lamp, label;
 };
 
+/* Landscape: the one-bar label left of the bar (whose first step starts at board x 286): IN, or BT for a Bluetooth input. BT
+ * is wider than IN, so it is one font step smaller (12 instead of 13) and 2 px further left: it ends at least kLandInLabelGap
+ * board px before the bar (owner, 2026-11-11). Portrait and square keep IN's place and size for BT (they have the room). */
+struct InLabelGeo {
+    double x, px, ls;
+    const char *text;
+};
+constexpr double kLandBarX = 286, kLandInLabelGap = 2;
+inline InLabelGeo landscape_in_label(bool bt) { return bt ? InLabelGeo{266, 12, 1, "BT"} : InLabelGeo{268, 13, 1, "IN"}; }
+
 /* The whole panel as the board draws it with two channels. One channel: the bar is mono_h high and starts mono_dy lower,
  * IN moves down by mono_dy and the scale, the bracket and TARGET move up by it (square; portrait has no such change). */
 struct MeterSpec {

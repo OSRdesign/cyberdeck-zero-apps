@@ -1,0 +1,16 @@
+title Cassette Bluetooth (T9, synthetic names): the headset's microphone closed on purpose (the list, the Edit page, playback; B29): the recorder keeps its normal view (the cassette in the window, the meter label BT, the meter dark), never the no-input text
+sizes 320x480 480x320 480x800 640x480 800x480 480x480 720x720
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_BT micclosed
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+expect text "BT"
+expect text "SOFT"
+expect notext "No sound input found. Plug in a USB sound card or headset."
+expect notext "The Bluetooth headset is not connected."
+expect notext "NO INPUT"
+shot rec-micclosed
+expect notext "LAYOUT FAIL"
+expect noquit

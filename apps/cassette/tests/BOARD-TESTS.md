@@ -17,7 +17,7 @@ Anything marked **(to confirm)** is a point the controller could not settle from
 |---|---|---|
 | zero8 (Zero 2 W class) | 480x320 panel, now run upright (320x480) | main target: B0-B4, B6, B8, B9 (touch) |
 | deck (Zero 2 W) | 640x480 | main target: B0-B4, B8, B9 (keyboard) |
-| HackBerry CM5 | 720x720, desktop with PipeWire | B5 (sound server) |
+| HackBerry CM5 | 720x720, desktop with PipeWire | B5 (sound server), B24-B33 (Bluetooth) |
 | Pi 4B (landscape), Pi 3A+ (portrait) | 800x480, 480x800 | optional: a quick B1 and B9 if time allows |
 
 The zero8 and the deck are the lowest-powered boards and the ones that matter. For a landscape 480x320 run of B1/B4 the
@@ -40,7 +40,8 @@ five screens before the card is at hand. Not a test of the sound path.
 **The probe.** `cassette-probe` lists the capture cards, their formats and mixer controls, then opens each card for
 2 seconds and counts the frames. It only listens: no file is written, no mixer control is changed. Where it is
 installed: `/usr/share/APPLaunch/bin/cassette-probe` **(to confirm: whether the package carries it; if not, the
-controller copies it to the board)**. Options: `--card NAME`, `--seconds N`, `--no-open`. What its lines mean:
+controller copies it to the board)**. Options: `--card NAME`, `--seconds N`, `--no-open`; `--server` (and `--card
+bt:<MAC>`) lists the sound server's devices instead, for the Bluetooth tests (B24-B34). What its lines mean:
 
 | Line | Meaning |
 |---|---|
@@ -659,6 +660,192 @@ Report: pass or fail per step; the new takes' names; what was heard at the joins
 the FLAC merge time; the ffprobe / flac -t / opusinfo lines; after the power pull, what the list showed and `ls -a
 ~/Recordings`.
 
+## B24-B36. Bluetooth (HackBerry with PipeWire; B34 on zero8 or Pi 3A+; B35 needs launcher 0.10.1 or a dev launcher; about 75 min in all)
+
+Goal: the Bluetooth path on real devices: a headset as the input, playback to a headset and a speaker, the live monitor
+over Bluetooth, the notices, and a board without a sound server. The guide: `docs/USER-GUIDE.md`, chapter Bluetooth. The
+PC tests ran all of it on a scripted sound server; what only a board can tell: real profile switches, real delays, real
+disconnects.
+
+**Have ready.** The HackBerry (PipeWire 1.4.2), the Jabra Evolve 65 (paired directly in the launcher's Settings >
+Bluetooth, not through its USB dongle), the Beats Fit Pro (B32), the XWF-M18-M28-M38 speaker (B31, B33), a USB headset or
+card with a microphone (B31), a phone that records (B30, B31; a voice memo app is enough) and the PC with Audacity (or any
+editor that shows the waveform and a time scale). Pair and connect each device in the launcher, never in Cassette.
+
+**Before B24.** The controller runs `cassette-probe --server` on the HackBerry (it only lists) and keeps the output:
+every source and sink with `bt=yes mac=... kind=headset|speaker ... Hz`, and per Bluetooth card `music available|OFFERED
+BUT UNAVAILABLE|not offered, call offered|not offered, active <profile> (music|call)`. `--card bt:<MAC>` shows one device.
+
+**The phone-tap method (B30, B31).** Put the phone's microphone about 2 cm from the headset's ear cup (or the speaker) and
+start recording on the phone. Tap the headset's microphone (or the USB microphone) sharply with a fingernail, five times,
+about two seconds apart. The phone hears each tap twice: first through the air (the tap itself), then from the monitor.
+On the PC open the phone's file, zoom in on each pair of clicks and read the time between them; the delay is the median of
+the five. Report the five values. (The click through the air reaches the phone in well under 1 ms: it is the reference.)
+
+## B24. A Bluetooth headset in Settings > Input (HackBerry, 3 min)
+
+1. Evolve 65 connected (the launcher's Settings > Bluetooth shows it Connected). Open Cassette, Settings > Input.
+2. Expected: the USB cards first, then a two-line row: `Evolve 65` (the name the launcher shows) with `16 kHz` on the
+   right, under it `Bluetooth headset · speech quality`. The footer reads `Bluetooth headsets record speech quality
+   (16 kHz)`.
+3. Choose it. Expected: the Input row names it, Input level reads `Not applicable` (greyed), no CARD stepper on the
+   recorder, the meter label reads `BT` instead of `IN`, and the meter moves when you speak (after `Connecting the
+   headset...` for under a second).
+
+Report: the picker text as you read it (the rate: 16 kHz or 8 kHz), a photo of the picker, pass or fail.
+
+## B25. A 30 s take from the headset (HackBerry, 5 min)
+
+1. Input = the Evolve 65, Codec WAV. REC, speak for 30 s (count aloud once a second), STOP.
+2. Expected: the take's length in the list equals the counter (30 s, give or take one), the voice is clear when played on
+   the PC, and the file is 16 kHz mono (the controller checks with `sh ~/cassette-check.sh take` or `ffprobe`).
+3. Settings > Codec: FLAC, WAV and the Opus speech presets (24, 32 kbps) can be chosen; the Opus music presets (64, 128
+   kbps) are dimmed and a tap says `Not available: Bluetooth call audio is speech only: Opus up to 32 kbps`. Record 10 s in
+   FLAC and 10 s in Opus speech 32: both play.
+
+Report: the three takes' lengths against the counter, how the voice sounds, the dimmed rows of the picker.
+
+## B26. Start from music mode (HackBerry, 5 min)
+
+1. Open the recordings list (the headset goes back to music mode about 2 s later), wait 5 s, go back to the recorder.
+   Expected: `Connecting the headset...` in the notice place, the meter dark, then the meter moves (within about 1 s).
+2. From the list again: back to the recorder and press REC at once, while it still says Connecting; start counting aloud
+   at the moment you press REC.
+3. Expected: no error notice; the take starts at the first real audio: its first second is your voice (maybe without the
+   very first syllable), not a second recorded as silence; the counter starts when the sound starts. (T9) Never `The headset
+   microphone could not be confirmed: the take did not start.` here: a stream that the sound server shows on no source
+   for a moment during the switch is asked again for up to 1 s (REC may take that long to start).
+
+Report: what the screen showed and for how long, the first second of the take (the controller can print its level per
+100 ms), pass or fail.
+
+## B27. Headset switched off during a take (HackBerry, 5 min)
+
+1. Input = the Evolve 65. REC, speak, switch the headset off at about 15 s. Keep speaking towards the HackBerry's other
+   microphones (a USB card plugged in, if any) for 10 s more.
+2. Expected: the take ends at the cut and is kept; the notice reads `The Bluetooth headset disconnected: the take was
+   closed and kept.`; the take in the list is about 15 s long; played back it ends at the cut and holds **no audio from
+   another microphone** after it.
+3. REC with the headset still off: `The Bluetooth headset is not connected.`, nothing is recorded.
+4. (T9) While it is off the cassette window reads `The Bluetooth headset is not connected.` over the muted `Found by
+   itself when it connects.` (never `No sound input found. Plug in a USB sound card or headset.`), the meter label stays
+   `BT`, and the box beside the counter (720x720) reads `Not connected` on one line, inside the box.
+
+Report: the notice texts, the take's length, whether anything after the cut is heard, pass or fail.
+
+## B28. Headset back on (HackBerry, 3 min)
+
+1. After B27 switch the headset on again (it reconnects by itself; if not, Connect in the launcher's Settings >
+   Bluetooth). Do not restart Cassette.
+2. Expected: `The Bluetooth headset is back`, the meter moves again (after Connecting), Settings > Input still has the
+   headset chosen, REC records from it. (T9) Settings > Output lists the headset as connected again (`Call quality (16
+   kHz)` or `Music quality`, not `Not connected`) without choosing anything.
+
+Report: the time from switching on to the meter moving, pass or fail.
+
+## B29. Playback to the same headset (HackBerry, 5 min)
+
+1. Settings > Output: the Evolve 65 is listed (`Call quality (16 kHz)` while the recorder holds its microphone, else `Music
+   quality`). Choose it. Go to the recorder and PLAY the take of B25 at once.
+2. Expected: `Switching to music mode... 1 s` (then 2 s; normally under 4 s, at most about 7 s while the sound server
+   rebuilds the headset's output), then the take plays in the headset, clearly better than a phone call (music mode). The
+   counter follows the sound. Never `The Bluetooth output is not connected.` (T9: B29 failed so every time after B28).
+   While it waits and plays the cassette stays in the window (never `No sound input found...`); the meter shows the
+   played level on L and R (the playback meter of every input) and reads `BT` again after STOP.
+   Do it right after B28 (headset off and on) without choosing the output again, then once more after opening the list
+   and coming back to the recorder (the headset flaps between its modes): it must play each time.
+3. Press the board's volume keys while it plays: the level in the headset follows. PAUSE, PLAY, REW / FWD held: they work.
+4. STOP and go back to the recorder: Connecting, then the meter (call mode again).
+
+Report: the switching time, how it sounds, whether the volume keys work, pass or fail.
+
+## B30. Monitor on the same headset (HackBerry, 10 min)
+
+1. First, with Monitor Off: does the Evolve 65 play your voice back by itself (its own sidetone over Bluetooth)? Yes or no.
+2. Input = the Evolve 65, Settings > Monitor On, Monitor to `Automatic`. Expected: under Monitor a line `Delay about NN ms`
+   (report the figure); you hear yourself in the headset, late.
+3. Measure the delay with the phone-tap method (above), Monitor On.
+4. Rate it: usable to check the voice / annoying / unusable. The estimate is 60-150 ms.
+5. Open the list and come back: the monitor stops while the microphone is closed and comes back after Connecting.
+
+Report: the figure on the screen, the five measured values and their median, the sidetone answer, the rating.
+
+## B31. Monitor from a USB microphone to a Bluetooth speaker (HackBerry, 10 min)
+
+1. Disconnect the Evolve 65 (one music device at a time on the HackBerry), connect the XWF speaker. Input = the USB headset
+   or card.
+2. Settings > Monitor to: choose the speaker. Expected before Monitor is on: under Monitor `Delay about 0.2-0.3 s: you
+   will hear an echo`, in dark amber, readable on the plain row and on the highlighted row. Monitor On: the figure becomes
+   `Delay about 0.NN s: you will hear an echo`.
+3. Measure with the phone-tap method, the phone next to the speaker, tapping the USB microphone. The estimate is 150-350 ms.
+4. Switch the speaker off while the monitor runs and a take records: `The monitor output disconnected: the recording goes
+   on.`, the take goes on and plays fine.
+
+Report: the line's text and whether it is readable, the five values and their median, step 4, pass or fail.
+
+## B32. A headset that sends no sound (HackBerry, Beats Fit Pro, 5 min)
+
+1. Connect the Beats Fit Pro, choose it in Settings > Input, go to the recorder.
+2. Expected: Connecting, then about 3 s after the meter starts `The headset is connected but sends no sound.` in the notice
+   place; the meter stays flat. REC works (the take is silent), nothing stops by itself, no crash.
+
+Report: the time until the notice, its text, pass or fail. (The headset's own fault, study P3: it never opens its call
+link with this board.)
+
+## B33. A headset limited to call quality (HackBerry, 5 min)
+
+1. Connect the XWF speaker first, then the Evolve 65 (the speaker holds the music link, so the headset gets call profiles
+   only; `cassette-probe --server` shows `music OFFERED BUT UNAVAILABLE` for the headset's card).
+2. Settings > Output: the headset reads `Call quality (16 kHz)`. Choose it and PLAY a take.
+3. Expected: it plays at once (no switching wait), in call quality, and `Playing in call quality: this headset has no
+   music mode.` shows once for that play (not again while it plays).
+
+Report: the Output row text, the notice, pass or fail.
+
+## B34. A board without a sound server (zero8 or Pi 3A+, 5 min)
+
+1. On the zero8 or the Pi 3A+ (no PipeWire, no PulseAudio): `cassette-probe --server`. Expected: `connect: ...` and
+   `Bluetooth audio is not set up on this board (USB cards work as before)`, exit status 1 (`echo $?`).
+2. Open Cassette with the USB card plugged in. Settings > Input: the USB card, the footer `Bluetooth audio is not set up on
+   this board`, no Bluetooth row, no Monitor to row.
+3. Record 10 s from the USB card and play it: everything as before.
+
+Report: the probe output, the footer text, pass or fail.
+
+## B35. Paired but not connected (HackBerry, launcher 0.10.1 or a dev launcher, 5 min)
+
+Needs the launcher's Bluetooth audio facts: launcher 0.10.1, or the dev launcher the controller installs. Have the Evolve 65 and the
+Beats Fit Pro (or the XWF speaker) paired in the launcher; connect the Evolve, switch the other device off.
+
+1. As the controller, before opening Cassette: `cat /run/user/1000/applaunch/status.state | grep bt_audio_dev` and
+   `grep bt_ /run/user/1000/applaunch/board.state`. Expected: `bt_audio_dev=70_BF_92_53_6B_8B:headset:1[:a2dp];<the other MAC>:headset:0`
+   (or `speaker:0`), `bt_audio=pipewire`, `bt_hfp=1`. Report both lines.
+2. Open Cassette, Settings > Input. Expected: the USB card, the Evolve (16 kHz), then the other headset **dimmed**, named as the
+   launcher or Cassette knew it (*Bluetooth device XX:XX* the first time, its real name once it has been connected while Cassette ran),
+   with *Not connected: connect it in Settings > Bluetooth* under it. A paired **speaker** is not listed in Input. A tap on the dimmed
+   row says *Not available: Not connected: connect it in Settings > Bluetooth*, the Input stays as it was.
+3. Settings > Output: the Evolve, the dimmed headset and the dimmed speaker; a tap on either says the same, the Output does not change.
+4. Switch the other headset on. Expected: within a few seconds the dimmed row is replaced by a normal one, with its real name, and
+   it can be chosen. Switch it off again: the dimmed row returns (after the launcher notices, up to about 10 s).
+5. Choose that headset as the Input while it is on, leave Cassette, switch the headset off, open Cassette: the chosen Input shows
+   as the dimmed row, the cassette window says *The Bluetooth headset is not connected.*
+6. Stop the sound server (`systemctl --user stop pipewire-pulse`, restart it afterwards) with Cassette open: the Input footer says
+   *The sound server is not running*; USB cards still work. Report what the Input picker shows.
+
+Report: the two state lines, what each picker showed, the texts as you read them, pass or fail.
+
+## B36. A launcher without the new keys (HackBerry, launcher 0.10.0, 3 min)
+
+On the launcher that is installed today (0.10.0: its `status.state` has no `bt_audio_dev`, its `board.state` no `bt_audio`).
+
+1. `grep -c bt_audio /run/user/1000/applaunch/status.state /run/user/1000/applaunch/board.state` prints `0` for both.
+2. Open Cassette: Settings > Input and Output list **only** the connected Bluetooth devices, no dimmed row for a paired one, exactly as
+   before this version; B24, B25 and B29 behave as before. With the sound server stopped the footer says *Bluetooth audio is not set up
+   on this board* (not *The sound server is not running*).
+3. A device chosen earlier and switched off shows the old placeholder: *Not connected* (a long name wraps), not the long reason.
+
+Report: pass or fail, anything that differs from B24-B34 as you saw them last.
+
 ## Results
 
 | Test | Board | Pass / fail | Notes |
@@ -686,14 +873,31 @@ the FLAC merge time; the ffprobe / flac -t / opusinfo lines; after the power pul
 | B20 Info box and label with a long name |  |  |  |
 | B22 LIM and LOW CUT lamps |  |  |  |
 | B23 merge takes |  |  |  |
+| B24 Bluetooth headset in Input | HackBerry |  |  |
+| B25 30 s take from the headset | HackBerry |  |  |
+| B26 start from music mode | HackBerry |  |  |
+| B27 headset off during a take | HackBerry |  |  |
+| B28 headset back on | HackBerry |  |  |
+| B29 playback to the same headset | HackBerry |  |  |
+| B30 monitor on the same headset (delay ms) | HackBerry |  |  |
+| B31 monitor USB mic to BT speaker (delay ms) | HackBerry |  |  |
+| B32 silent headset (Beats) | HackBerry |  |  |
+| B33 call-quality-only headset | HackBerry |  |  |
+| B34 no sound server | zero8 |  |  |
+| B34 no sound server | Pi 3A+ |  |  |
+| B35 paired but not connected | HackBerry |  |  |
+| B36 launcher without the keys | HackBerry |  |  |
 
-**What to send back:** the table; the probe output per board (B0); the `watch` and `take` outputs of B1, B3, B4; the
+**What to send back:** the table; the probe output per board (B0) and `cassette-probe --server` (B24, B34); the measured
+monitor delays (B30, B31); the `watch` and `take` outputs of B1, B3, B4; the
 `ui` log line per board; the notice texts as you read them; screenshots or photos of anything cut, overlapping or odd.
 No audio files.
 
 **Known limits:** WAV is the default format (FLAC and Opus are optional: they need libflac / libopusenc0 and libopus0, and Opus is not offered at 44.1 kHz; the boards' CPU for them is measured in B17 and B18); no background recording (leaving the app ends the take,
 which is kept); the card is found again after a replug but the take that was running is closed, not continued; the
-headset's own level is weak (peaks around -17 to -7 dBFS at full level in P0): use SOFT on top of it.
+headset's own level is weak (peaks around -17 to -7 dBFS at full level in P0): use SOFT on top of it. Bluetooth (B24-B34)
+needs a sound server (not on the Lite boards today), records speech quality only (16 or 8 kHz mono), allows one music
+(A2DP) device at a time on the HackBerry, and some headsets send no microphone audio (Beats Fit Pro).
 
 **Cleanup:** `sudo dpkg -r cassette`; the takes stay in `~/Recordings` (with `.journal/`, `.edits/`, `.take-counter`),
 the settings in `~/.config/cassette/`; delete them to reset. `rm ~/cassette-check.sh`.

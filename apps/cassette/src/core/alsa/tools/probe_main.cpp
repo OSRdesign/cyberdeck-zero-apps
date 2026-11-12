@@ -6,8 +6,13 @@
  * Listen-only: no file is written and no mixer control is changed. Safe to run on a board.
  *
  *   cassette-probe [--card NAME_OR_BY-ID_PATH] [--seconds N] [--no-open] [--fake]
+ *   cassette-probe --server [--card bt:<MAC>] [--fake]
  *
- * --fake runs the same code against the test fake (only in the test build).
+ * --server lists the sound server's sources, sinks and Bluetooth cards instead (PipeWire through pipewire-pulse, or
+ * PulseAudio; libpulse loaded at run time; it never starts a server and opens no stream): the summary lines of the T1 board
+ * CLI pulse-capture-test (src/core/pulse/pulse_report.*). --card bt:<MAC> (implies --server) keeps that device only. Exit
+ * status 1 when the library or the server is missing, the listing failed or the device is not there.
+ * --fake runs the same code against the test fakes (only in the test build).
  */
 #include <chrono>
 #include <cstdio>
@@ -19,9 +24,11 @@
 #include "../card.hpp"
 #include "../mixer.hpp"
 #include "../open_policy.hpp"
+#include "pulse_report.hpp"
 
 #ifdef CASSETTE_PROBE_WITH_FAKE
 #include "fake_alsa.hpp"
+#include "fake_pulse.hpp"
 #endif
 
 using namespace cassette;
@@ -102,21 +109,60 @@ bool try_open(AlsaApi &api, const CardInfo &card, double seconds) {
 int main(int argc, char **argv) {
     std::string want;
     double seconds = 2.0;
-    bool do_open = true, fake = false;
+    bool do_open = true, fake = false, server = false;
+#ifdef CASSETTE_PROBE_WITH_FAKE
+    const char *fake_opt = " [--fake]";
+#else
+    const char *fake_opt = "";
+#endif
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--card") && i + 1 < argc) want = argv[++i];
         else if (!std::strcmp(argv[i], "--seconds") && i + 1 < argc) seconds = std::atof(argv[++i]);
         else if (!std::strcmp(argv[i], "--no-open")) do_open = false;
         else if (!std::strcmp(argv[i], "--fake")) fake = true;
+        else if (!std::strcmp(argv[i], "--server")) server = true;
         else {
-            std::fprintf(stderr, "usage: cassette-probe [--card NAME|/dev/snd/by-id/PATH] [--seconds N] [--no-open]%s\n",
-#ifdef CASSETTE_PROBE_WITH_FAKE
-                         " [--fake]");
-#else
-                         "");
-#endif
+            std::fprintf(stderr,
+                         "usage: cassette-probe [--card NAME|/dev/snd/by-id/PATH] [--seconds N] [--no-open]%s\n"
+                         "       cassette-probe --server [--card bt:MAC]%s   (the sound server's devices: Bluetooth)\n",
+                         fake_opt, fake_opt);
             return 2;
         }
+    }
+    /* the sound server's list (Bluetooth): --server, or --card bt:<MAC> */
+    std::string bt_mac;
+    if (want.compare(0, 3, "bt:") == 0) {
+        bt_mac = pulse_parse_mac(want.substr(3));
+        if (bt_mac.empty()) {
+            std::fprintf(stderr, "--card bt:MAC needs a Bluetooth address such as bt:70:BF:92:53:6B:8B\n");
+            return 2;
+        }
+        server = true;
+    } else if (server && !want.empty()) {
+        std::fprintf(stderr, "--server takes --card bt:MAC only (a sound card name goes without --server)\n");
+        return 2;
+    }
+    if (server) {
+        std::unique_ptr<PulseApi> real_server;
+        PulseApi *papi = nullptr;
+#ifdef CASSETTE_PROBE_WITH_FAKE
+        FakePulse fp;
+        fake_hackberry(fp);
+        if (fake) papi = &fp;
+#else
+        if (fake) {
+            std::fprintf(stderr, "--fake is not in this build\n");
+            return 2;
+        }
+#endif
+        if (!papi) {
+            real_server = make_real_pulse();
+            papi = real_server.get();
+        }
+        std::string out;
+        const int src = pulse_server_report(*papi, bt_mac, out);
+        std::fputs(out.c_str(), stdout);
+        return src;
     }
     std::unique_ptr<AlsaApi> real;
     AlsaApi *api = nullptr;

@@ -34,6 +34,8 @@ std::string user_home()
 
 struct BoundApp {
     std::unique_ptr<AlsaApi> api;
+    std::unique_ptr<PulseApi> pulse; /* the sound server (Bluetooth input); outlives the controller */
+    std::unique_ptr<LauncherFactsProvider> facts; /* the launcher's Bluetooth audio facts (T8); outlives the controller */
     std::unique_ptr<Controller> controller;
     std::unique_ptr<Port> port;
     std::unique_ptr<Worker> worker;
@@ -51,6 +53,8 @@ struct BoundApp {
         worker.reset();
         port.reset();
         controller.reset();
+        pulse.reset();
+        facts.reset();
         api.reset();
         std::fprintf(stderr, "[cassette] ended cleanly\n");
     }
@@ -102,6 +106,10 @@ std::shared_ptr<void> build_bound_app(lv_obj_t *screen)
                      cfg.home.c_str());
     } else {
         app->api = make_real_alsa();
+        app->pulse = make_real_pulse(); /* libpulse is loaded at the first connect, only when a sound server runs */
+        cfg.pulse = app->pulse.get();
+        app->facts = std::make_unique<LauncherFactsProvider>(); /* status.state / board.state of the launcher; absent: no facts */
+        cfg.facts = app->facts.get();
         cfg.home = user_home();
     }
     cfg.api = app->api.get();

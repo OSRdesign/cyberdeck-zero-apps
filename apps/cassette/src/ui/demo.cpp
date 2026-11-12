@@ -196,6 +196,217 @@ void demo_progress(ViewModel &vm, std::size_t n)
     vm.progress.body = std::to_string(n) + " takes into " + kMergeName;
 }
 
+/* CASSETTE_DEMO_BT (demo.hpp): the Bluetooth states, built with the same text helpers as the real mapping (ui_format.hpp). */
+BtDeviceFacts bt_dev(const char *label, const char *kind, std::uint32_t rate, const char *profile, bool connected, bool usable,
+                     const char *reason)
+{
+    BtDeviceFacts f;
+    f.label = label;
+    f.kind = kind;
+    f.rate = rate;
+    f.hint_profile = profile;
+    f.connected = connected;
+    f.usable = usable;
+    f.reason = reason;
+    return f;
+}
+
+FormatEntry plain_entry(const std::string &label)
+{
+    FormatEntry e;
+    e.name = label;
+    return e;
+}
+
+SettingRow *find_row(SettingsVm &s, const char *id)
+{
+    for (SettingRow &r : s.rows)
+        if (r.id == id) return &r;
+    return nullptr;
+}
+
+void erase_row(SettingsVm &s, const char *id)
+{
+    s.rows.erase(std::remove_if(s.rows.begin(), s.rows.end(), [id](const SettingRow &r) { return r.id == id; }), s.rows.end());
+}
+
+/* rows inserted after the row `after` */
+void insert_after(SettingsVm &s, const char *after, const std::vector<SettingRow> &rows)
+{
+    auto it = std::find_if(s.rows.begin(), s.rows.end(), [after](const SettingRow &r) { return r.id == after; });
+    if (it != s.rows.end()) ++it;
+    s.rows.insert(it, rows.begin(), rows.end());
+}
+
+/* the headset as the input: no hardware level (the row greyed), no Auto gain, the meter label BT */
+void bt_input_rows(ViewModel &vm, std::vector<std::string> labels, std::vector<FormatEntry> entries, int pick, bool footer)
+{
+    SettingsVm &s = vm.settings;
+    if (SettingRow *in = find_row(s, "input")) {
+        in->choices = std::move(labels);
+        in->choice = pick;
+        in->value = in->choices[static_cast<std::size_t>(pick)];
+        in->choice_entries = std::move(entries);
+        if (footer) in->formats_footer = bt_input_footer(true, false);
+    }
+    erase_row(s, "agc");
+    erase_row(s, "mute");
+    SettingRow lvl;
+    lvl.id = "level";
+    lvl.label = "Input level";
+    lvl.kind = SettingKind::Info;
+    lvl.enabled = false;
+    lvl.value = "Not applicable";
+    if (SettingRow *old = find_row(s, "level")) *old = lvl;
+    else insert_after(s, "input", {lvl});
+    vm.rec.bluetooth = true;
+    vm.rec.card.shown = false;
+}
+
+const char *const kBtPairedDemoReason = "Not connected: connect it in Settings > Bluetooth";
+const char *const kEvolve = "Evolve 65";
+const char *const kSpeaker = "XWF-M18 Speaker";
+
+/* Monitor, Monitor level (and its delay line), Monitor to (the picker's choices), after Limiter */
+void bt_monitor_rows(ViewModel &vm, bool with_switch, const std::string &detail, bool warn, int pick, bool available,
+                     const std::string &reason)
+{
+    SettingsVm &s = vm.settings;
+    erase_row(s, "monitor");
+    erase_row(s, "monitor_level");
+    std::vector<SettingRow> rows;
+    if (with_switch) {
+        SettingRow sw = toggle("monitor", "Monitor", true);
+        sw.detail = detail;
+        sw.detail_warn = warn;
+        rows.push_back(sw);
+        SettingRow ml;
+        ml.id = "monitor_level";
+        ml.label = "Monitor level";
+        ml.kind = SettingKind::Slider;
+        ml.min = 0;
+        ml.max = 20;
+        ml.pos = 10;
+        ml.value_mul = 5;
+        ml.value_suffix = " %";
+        ml.value_text = "50 %";
+        rows.push_back(ml);
+    }
+    SettingRow to = choice("monitor_to", "Monitor to", {"Automatic", "USB Audio Device", kEvolve, kSpeaker}, pick);
+    to.choice_entries = {plain_entry("Automatic"), plain_entry("USB Audio Device"),
+                         bt_output_entry(bt_dev(kEvolve, "headset", 16000, "call", true, true, "")),
+                         bt_output_entry(bt_dev(kSpeaker, "speaker", 48000, "music", true, true, ""))};
+    if (pick == 0) to.value = "Automatic";
+    if (!available) {
+        to.value = reason;
+        to.dimmed = true;
+    }
+    rows.push_back(to);
+    insert_after(s, "limiter", rows);
+}
+
+void apply_bt_demo(ViewModel &vm, const std::string &st)
+{
+    RecorderVm &r = vm.rec;
+    const std::vector<std::string> usb_and_bt = {"USB Audio Device", kEvolve, "Beats Fit Pro",
+                                                 "WH-1000XM4 Wireless Noise Cancelling Headphones"};
+    const std::vector<FormatEntry> bt_entries = {
+        plain_entry("USB Audio Device"), bt_input_entry(bt_dev(kEvolve, "headset", 16000, "call", true, true, "")),
+        bt_input_entry(bt_dev("Beats Fit Pro", "headset", 16000, "music", true, false, "The headset microphone is off")),
+        bt_input_entry(bt_dev("WH-1000XM4 Wireless Noise Cancelling Headphones", "other", 0, "", false, false, "Not connected"))};
+    if (st == "input") {
+        bt_input_rows(vm, usb_and_bt, bt_entries, 3, true);
+    } else if (st == "notsetup") {
+        if (SettingRow *in = find_row(vm.settings, "input")) in->formats_footer = bt_input_footer(false, true);
+    } else if (st == "input-paired") { /* T8: paired devices the launcher says are not connected, dimmed, in the Input picker */
+        const char *reason = kBtPairedDemoReason;
+        const std::vector<std::string> labels = {"USB Audio Device", kEvolve, "Beats Fit Pro", "Bluetooth device 5D:1A"};
+        bt_input_rows(vm, labels,
+                      {plain_entry("USB Audio Device"), bt_input_entry(bt_dev(kEvolve, "headset", 16000, "music", true, true, "")),
+                       bt_input_entry(bt_dev("Beats Fit Pro", "headset", 0, "unknown", false, false, reason)),
+                       bt_input_entry(bt_dev("Bluetooth device 5D:1A", "headset", 0, "unknown", false, false, reason))},
+                      1, true);
+    } else if (st == "output-paired") { /* T8: the Output picker with a connected speaker and paired devices that are not connected */
+        SettingsVm &s = vm.settings;
+        const char *reason = kBtPairedDemoReason;
+        erase_row(s, "output");
+        SettingRow out = choice("output", "Output",
+                                {"USB Audio Device", kSpeaker, kEvolve, "Beats Fit Pro", "Bluetooth device 5D:1A", "Default output"}, 1);
+        out.choice_entries = {plain_entry("USB Audio Device"),
+                              bt_output_entry(bt_dev(kSpeaker, "speaker", 48000, "music", true, true, "")),
+                              bt_output_entry(bt_dev(kEvolve, "headset", 16000, "call", true, true, "")),
+                              bt_output_entry(bt_dev("Beats Fit Pro", "headset", 0, "unknown", false, false, reason)),
+                              bt_output_entry(bt_dev("Bluetooth device 5D:1A", "speaker", 0, "unknown", false, false, reason)),
+                              plain_entry("Default output")};
+        s.rows.push_back(out);
+    } else if (st == "notsetup-server") { /* T8: the launcher says a sound server owns the endpoints and none runs */
+        if (SettingRow *in = find_row(vm.settings, "input")) in->formats_footer = bt_input_footer_for_status(false, kBtServerDownText);
+    } else if (st == "output") {
+        SettingsVm &s = vm.settings;
+        erase_row(s, "output");
+        SettingRow out = choice("output", "Output", {"USB Audio Device", kSpeaker, kEvolve, "Beats Fit Pro", "Default output"}, 1);
+        out.choice_entries = {plain_entry("USB Audio Device"),
+                              bt_output_entry(bt_dev(kSpeaker, "speaker", 48000, "music", true, true, "")),
+                              bt_output_entry(bt_dev(kEvolve, "headset", 16000, "call", true, true, "")),
+                              bt_output_entry(bt_dev("Beats Fit Pro", "other", 0, "", false, false, "Not connected")),
+                              plain_entry("Default output")};
+        s.rows.push_back(out);
+    } else if (st == "monitor") {
+        bt_input_rows(vm, usb_and_bt, bt_entries, 1, true);
+        bt_monitor_rows(vm, true, monitor_delay_text(90, false), false, 0, true, "");
+    } else if (st == "echo") {
+        bt_monitor_rows(vm, true, monitor_delay_text(250, true), true, 3, true, "");
+    } else if (st == "monitor-none") {
+        bt_monitor_rows(vm, false, "", false, 0, false, "The sound card has no playback side");
+    } else if (st == "rec" || st == "connecting" || st == "nosound" || st == "gone") {
+        bt_input_rows(vm, usb_and_bt, bt_entries, 1, true);
+        r.info.codec = r.tape.format = "WAV 16k";
+        r.info.format = "16k/16 WAV";
+        if (st == "connecting") {
+            r.standing_notice = kBtConnectingNotice;
+            r.meter.ch[0] = ChannelMeter(); /* nothing real yet: the segments dark */
+        }
+        if (st == "nosound") {
+            r.standing_notice = kBtNoSoundNotice;
+            r.meter.ch[0] = ChannelMeter();
+        }
+        if (st == "gone") vm.notice = "The Bluetooth headset disconnected: the take was closed and kept.";
+    } else if (st == "notconnected") { /* T9 (B27): the chosen headset is not connected: the window and the box say so */
+        bt_input_rows(vm, usb_and_bt, bt_entries, 1, true);
+        r.input_present = false;
+        r.tape.loaded = false;
+        r.bt_missing = true;
+        r.meter.ch[0] = ChannelMeter();
+        r.keys[static_cast<int>(KeyId::Rec)].enabled = false;
+        r.info.take = "NO INPUT";
+        r.info.format.clear();
+        r.info.codec = "FLAC";
+        r.info.notice = kBtMissingMessage; /* the controller's text: the strip (landscape) */
+        r.info.box_notice = kBtMissingShort;
+    } else if (st == "micclosed") { /* T9 (B29): the headset's microphone closed on purpose: the normal view, BT, the meter dark */
+        bt_input_rows(vm, usb_and_bt, bt_entries, 1, true);
+        r.info.codec = r.tape.format = "WAV 16k";
+        r.info.format = "16k/16 WAV";
+        r.meter.ch[0] = ChannelMeter();
+    } else if (st == "switching-mic") { /* T9 (B29): PLAY waits for the music mode of the headset that is also the input */
+        bt_input_rows(vm, usb_and_bt, bt_entries, 1, true);
+        r.info.play_status = switching_text(1.3, 4.0);
+        meter_played(r, 0, 0); /* nothing plays yet: the play meter (L and R) */
+        r.info.play_pos_ms = 0;
+        r.counter_ms = 0;
+    } else if (st == "switching" || st == "callq") {
+        r.bluetooth = false; /* the input is the USB card; the output is the headset */
+        if (st == "switching") {
+            r.info.play_status = switching_text(1.3, 4.0);
+            meter_played(r, 0, 0); /* nothing plays yet */
+            r.info.play_pos_ms = 0;
+            r.counter_ms = 0;
+        } else {
+            vm.notice = kCallQualityNotice;
+        }
+    }
+}
+
 } // namespace
 
 std::vector<float> demo_window_peaks(std::int64_t length_ms, std::int64_t marker_ms, std::int64_t span_ms, int n)
@@ -588,6 +799,7 @@ ViewModel demo_model(const std::string &scene)
         if (std::string(b) == "save") vm.save.shown = true;
         if (std::string(b) == "confirm") vm.confirm.shown = true;
     }
+    if (const char *bt = std::getenv("CASSETTE_DEMO_BT"); bt && *bt) apply_bt_demo(vm, bt);
     monitor_looks(vm);
     return vm;
 }

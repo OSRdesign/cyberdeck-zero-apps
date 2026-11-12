@@ -171,7 +171,7 @@ std::string info_line(const RecorderVm &r)
     if (playing(r.transport)) {
         const char *verb = r.transport == Transport::PlayingPaused ? "PAUSED" : "PLAYING";
         out = r.info.take.empty() ? std::string(verb) : std::string(verb) + " " + r.info.take;
-        join(out, pos_len(r));
+        join(out, r.info.play_status.empty() ? pos_len(r) : r.info.play_status);
         if (r.transport == Transport::ScanReverse) join(out, "REW " + std::to_string(r.scan_speed) + "x");
         if (r.transport == Transport::ScanForward) join(out, "FWD " + std::to_string(r.scan_speed) + "x");
         return out;
@@ -194,6 +194,11 @@ std::string info_codec(const RecorderVm &r)
     std::string out = r.info.codec;
     if (r.info.kbps > 0) join(out, std::to_string(r.info.kbps) + " kbps");
     return out;
+}
+
+int box_detail_min_px(int floor_px, bool short_form)
+{
+    return short_form ? std::max(9, floor_px - 1) : floor_px;
 }
 
 int largest_fit_px(int max_px, int min_px, int max_w, const std::function<int(int)> &width_at)
@@ -303,13 +308,114 @@ NameLayout layout_name_text(const std::string &name, const std::vector<int> &run
 
 std::string info_detail(const RecorderVm &r)
 {
-    if (!r.info.notice.empty()) return r.info.notice;
-    if (playing(r.transport)) return pos_len(r);
+    if (!r.info.notice.empty()) return r.info.box_notice.empty() ? r.info.notice : r.info.box_notice;
+    if (playing(r.transport)) return r.info.play_status.empty() ? pos_len(r) : r.info.play_status;
     const std::string lost = info_lost(r);
     if (!lost.empty()) return lost;
     if (r.info.server && (recording(r.transport) || r.transport == Transport::Idle))
         return r.info.time_left.empty() ? std::string("(server)") : "(server) " + r.info.time_left;
     return r.info.time_left.empty() ? std::string() : r.info.time_left + " left";
+}
+
+const char *const kCallQualityNotice = "Playing in call quality: this headset has no music mode.";
+const char *const kBtConnectingNotice = "Connecting the headset...";
+const char *const kBtNoSoundNotice = "The headset is connected but sends no sound.";
+const char *const kNoInputMessage = "No sound input found. Plug in a USB sound card or headset.";
+const char *const kNoInputHint = "Found by itself when plugged in.";
+const char *const kBtMissingMessage = "The Bluetooth headset is not connected.";
+const char *const kBtMissingHint = "Found by itself when it connects.";
+const char *const kBtMissingShort = "Not connected";
+
+std::string bt_rate_text(std::uint32_t rate)
+{
+    if (rate == 0) return "";
+    char b[32];
+    std::snprintf(b, sizeof b, "%g kHz", rate / 1000.0);
+    return b;
+}
+
+namespace {
+
+FormatEntry bt_entry(const BtDeviceFacts &f, const std::string &size, const std::string &line2)
+{
+    FormatEntry e;
+    e.name = f.label;
+    e.size = size;
+    e.compatible = f.connected && f.usable;
+    if (e.compatible) {
+        e.detail = line2;
+    } else {
+        e.reason = !f.connected ? (f.reason.empty() ? std::string("Not connected") : f.reason)
+                                : (f.reason.empty() ? std::string("Not available") : f.reason);
+        e.detail = e.reason;
+    }
+    return e;
+}
+
+} // namespace
+
+FormatEntry bt_input_entry(const BtDeviceFacts &f)
+{
+    return bt_entry(f, bt_rate_text(f.rate),
+                    f.kind == "headset" ? std::string("Bluetooth headset") + kDot + "speech quality" : std::string("Bluetooth device"));
+}
+
+FormatEntry bt_output_entry(const BtDeviceFacts &f)
+{
+    const std::string l2 = f.hint_profile == "music" ? "Music quality" : f.hint_profile == "call" ? "Call quality (16 kHz)" : "Bluetooth";
+    return bt_entry(f, std::string(), l2);
+}
+
+std::string bt_input_footer(bool any_bt_input, bool not_set_up)
+{
+    if (any_bt_input) return "Bluetooth headsets record speech quality (16 kHz)";
+    if (not_set_up) return "Bluetooth audio is not set up on this board";
+    return "";
+}
+
+const char *const kBtServerDownText = "The sound server is not running";
+
+std::string bt_input_footer_for_status(bool any_bt_input, const std::string &bt_status)
+{
+    if (any_bt_input) return bt_input_footer(true, false);
+    if (bt_status == kBtServerDownText) return kBtServerDownText;
+    return bt_input_footer(false, bt_status == "Bluetooth audio is not set up");
+}
+
+std::string monitor_delay_text(double delay_ms, bool echo)
+{
+    char b[48];
+    if (!(delay_ms > 0)) return echo ? "Delay about 0.2-0.3 s: you will hear an echo" : "";
+    const long ms = std::max(10L, std::lround(delay_ms / 10.0) * 10); /* to 10 ms */
+    if (ms >= 1000) std::snprintf(b, sizeof b, "Delay about %.1f s", static_cast<double>(ms) / 1000.0);
+    else if (echo) std::snprintf(b, sizeof b, "Delay about %.2f s", static_cast<double>(ms) / 1000.0);
+    else std::snprintf(b, sizeof b, "Delay about %ld ms", ms);
+    return echo ? std::string(b) + ": you will hear an echo" : std::string(b);
+}
+
+std::uint32_t monitor_detail_color(bool warn)
+{
+    return warn ? col::kAmberText : col::kInkMuted;
+}
+
+double contrast_ratio(std::uint32_t a, std::uint32_t b)
+{
+    auto lum = [](std::uint32_t c) {
+        auto lin = [](unsigned v) {
+            const double s = v / 255.0;
+            return s <= 0.03928 ? s / 12.92 : std::pow((s + 0.055) / 1.055, 2.4);
+        };
+        return 0.2126 * lin((c >> 16) & 0xFF) + 0.7152 * lin((c >> 8) & 0xFF) + 0.0722 * lin(c & 0xFF);
+    };
+    const double la = lum(a), lb = lum(b);
+    return (std::max(la, lb) + 0.05) / (std::min(la, lb) + 0.05);
+}
+
+std::string switching_text(double elapsed_s, double timeout_s)
+{
+    double e = std::max(0.0, elapsed_s);
+    if (timeout_s > 0) e = std::min(e, timeout_s);
+    return "Switching to music mode... " + std::to_string(static_cast<long>(std::floor(e))) + " s";
 }
 
 std::string info_lost(const RecorderVm &r)

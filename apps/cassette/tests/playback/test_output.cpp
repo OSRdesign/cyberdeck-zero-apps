@@ -218,4 +218,80 @@ void test_output() {
         CHECK(t.choices[0].label != t.choices[1].label);
         CHECK_EQ(t.choices[0].label, std::string("USB Audio (A)"));
     }
+    /* T3: Bluetooth sinks join the list between the cards and the default output; `bt:<MAC>` is a choice like any device */
+    {
+        std::vector<CardInfo> cards = {fake_pcm2902(0).info};
+        BtOutput h;
+        h.mac = "70:BF:92:53:6B:8B";
+        h.id = "bt:70:BF:92:53:6B:8B";
+        h.label = "Evolve 65";
+        h.kind = "headset";
+        h.rate = 48000;
+        h.connected = h.usable = true;
+        h.hint_profile = "music";
+        BtOutput k = h;
+        k.mac = "9E:0C:81:E6:5D:1A";
+        k.id = "bt:9E:0C:81:E6:5D:1A";
+        k.label = "XWF-M18-M28-M38";
+        k.kind = "speaker";
+        std::vector<BtOutput> bt = {h, k};
+        OutputPlan p = choose_output(cards, "Device", "", &bt);
+        CHECK_EQ(p.choices.size(), 4u);
+        CHECK_EQ(p.choices[0].device, std::string("hw:CARD=Device,DEV=0"));
+        CHECK_EQ(p.choices[1].device, std::string("bt:70:BF:92:53:6B:8B"));
+        CHECK_EQ(p.choices[2].device, std::string("bt:9E:0C:81:E6:5D:1A"));
+        CHECK_EQ(p.choices[3].device, std::string("default"));
+        CHECK(p.choices[1].bluetooth && !p.choices[0].bluetooth && !p.choices[3].bluetooth);
+        CHECK_EQ(p.choices[1].label, std::string("Evolve 65"));
+        CHECK_EQ(p.choices[1].kind, std::string("headset"));
+        CHECK_EQ(p.choices[1].rate, 48000u);
+        CHECK_EQ(p.choices[1].hint_profile, std::string("music"));
+        CHECK(p.choices[1].connected && p.choices[1].usable);
+        CHECK_EQ(p.chosen.device, std::string("hw:CARD=Device,DEV=0")); /* automatic is unchanged */
+        /* the saved Bluetooth choice wins (any case), also over the capture card */
+        OutputPlan q = choose_output(cards, "Device", "bt:9e:0c:81:e6:5d:1a", &bt);
+        CHECK_EQ(q.chosen.device, std::string("bt:9E:0C:81:E6:5D:1A"));
+        CHECK(q.chosen.bluetooth);
+        /* a headset with a sink and no card yet or a card without a sink is listed unusable */
+        BtOutput off = h;
+        off.usable = false;
+        off.reason = "The device has no audio output now";
+        std::vector<BtOutput> bt2 = {off};
+        OutputPlan o = choose_output(cards, "Device", "", &bt2);
+        CHECK(!o.choices[1].usable && o.choices[1].connected);
+        /* the chosen device is not there: it stays as a placeholder, in the list and as the choice */
+        OutputPlan r = choose_output(cards, "Device", "bt:9E:0C:81:E6:5D:1A", &bt2, "XWF-M18-M28-M38");
+        CHECK_EQ(r.chosen.device, std::string("bt:9E:0C:81:E6:5D:1A"));
+        CHECK(!r.chosen.connected && !r.chosen.usable && r.chosen.bluetooth);
+        CHECK_EQ(r.chosen.label, std::string("XWF-M18-M28-M38"));
+        CHECK_EQ(r.choices.back().device, std::string("default"));
+        CHECK_EQ(r.choices[r.choices.size() - 2].device, std::string("bt:9E:0C:81:E6:5D:1A"));
+        /* the server is not reachable (no list): no Bluetooth entry, except the placeholder of the earlier choice */
+        OutputPlan n = choose_output(cards, "Device", "", nullptr);
+        CHECK_EQ(n.choices.size(), 2u);
+        OutputPlan m = choose_output(cards, "Device", "bt:9E:0C:81:E6:5D:1A", nullptr);
+        CHECK_EQ(m.chosen.device, std::string("bt:9E:0C:81:E6:5D:1A"));
+        CHECK(!m.chosen.connected);
+        CHECK_EQ(m.chosen.label, std::string("Bluetooth device"));
+        /* the only choice besides "Default output" is a Bluetooth device: the list is offered (one device: two choices) */
+        const std::vector<BtOutput> one = {h};
+        OutputPlan only = choose_output({}, "", "", &one);
+        CHECK_EQ(only.choices.size(), 2u);
+        CHECK_EQ(only.choices[0].device, std::string("bt:70:BF:92:53:6B:8B"));
+        CHECK_EQ(only.chosen.device, std::string("default"));
+        /* no card, both devices: both listed before "Default output", automatic still the default output */
+        OutputPlan both = choose_output({}, "", "", &bt);
+        CHECK_EQ(both.choices.size(), 3u);
+        CHECK_EQ(both.choices[1].device, std::string("bt:9E:0C:81:E6:5D:1A"));
+        CHECK_EQ(both.choices.back().device, std::string("default"));
+        CHECK_EQ(both.chosen.device, std::string("default"));
+        /* two devices with one alias: the end of the address tells them apart */
+        BtOutput twin = h;
+        twin.mac = "AA:BB:CC:DD:EE:FF";
+        twin.id = "bt:AA:BB:CC:DD:EE:FF";
+        std::vector<BtOutput> bt3 = {h, twin};
+        OutputPlan t = choose_output({}, "", "", &bt3);
+        CHECK(t.choices[0].label != t.choices[1].label);
+        CHECK_EQ(t.choices[1].label, std::string("Evolve 65 (EE:FF)"));
+    }
 }

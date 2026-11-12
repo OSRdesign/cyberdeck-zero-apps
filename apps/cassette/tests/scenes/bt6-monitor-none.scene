@@ -1,0 +1,39 @@
+title Cassette Bluetooth (T4, synthetic names): a USB card without a playback side and a Bluetooth speaker: no Monitor switch; Monitor to greyed with the reason (The sound card has no playback side), its picker still opens so a target can be chosen
+sizes 320x480 480x320 480x800 640x480 800x480 480x480 720x720
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_BT monitor-none
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+key s
+wait 300
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 200
+expect text "Monitor to"
+expect text "The sound card has no playback side"
+shot monitor-none
+expect notext "LAYOUT FAIL"
+key enter
+wait 300
+expect text "Automatic"
+expect text "Music quality"
+shot monitor-none-picker
+expect notext "LAYOUT FAIL"
+key esc
+wait 300
+key esc
+wait 300
+expect text "SOFT"
+expect noquit

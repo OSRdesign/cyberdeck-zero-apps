@@ -1,0 +1,20 @@
+title Cassette Bluetooth (T9, synthetic names): the chosen headset is not connected (B27): the empty window says so in its two-line style ("The Bluetooth headset is not connected." over the muted "Found by itself when it connects."), never the USB text; the strip (landscape) has the controller's text, the info box (portrait, square) its short form "Not connected" on one line inside the box; REC dimmed
+sizes 320x480 480x320 480x800 640x480 800x480 480x480 720x720
+ppmm 608
+env CASSETTE_DEMO idle
+env CASSETTE_DEMO_BT notconnected
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+expect text "The Bluetooth headset is not connected."
+expect text "Found by itself when it connects."
+expect notext "No sound input found. Plug in a USB sound card or headset."
+expect notext "Found by itself when plugged in."
+@320x480 expect text "Not connected"
+@480x800 expect text "Not connected"
+@480x480 expect text "Not connected"
+@720x720 expect text "Not connected"
+expect text "BT"
+shot rec-notconnected
+expect notext "LAYOUT FAIL"
+expect noquit

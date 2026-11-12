@@ -9,6 +9,7 @@
 #include "settings.hpp"
 
 #include <cerrno>
+#include <filesystem>
 
 using namespace cassette;
 using namespace tk;
@@ -37,6 +38,7 @@ void test_settings() {
     CHECK_EQ(s.values().monitor_level, 50);
     CHECK(!s.values().wave_fit); /* the trim waveform opens in TRUE */
     CHECK(s.values().card.empty() && s.values().output_device.empty());
+    CHECK(s.values().monitor_output.empty()); /* the monitor target is automatic by default */
 
     /* round trip, the folder is created */
     Settings &v = s.values();
@@ -55,6 +57,7 @@ void test_settings() {
     v.wave_fit = true;
     v.card = "UC02||";
     v.output_device = "hw:CARD=UC02,DEV=0";
+    v.monitor_output = "bt:70:BF:92:53:6B:8B";
     /* two cards with the same name, different by-id; the first has no USB identity */
     const std::string c1 = card_descriptor("UC02", "usb-UC02_UC02_UC02-00", "0000:0000");
     const std::string c2 = card_descriptor("UC02", "usb-UC02_UC02_UC02-01", "0d8c:0014");
@@ -90,6 +93,7 @@ void test_settings() {
     CHECK(s2.values().wave_fit);
     CHECK_EQ(s2.values().card, "UC02||");
     CHECK_EQ(s2.values().output_device, "hw:CARD=UC02,DEV=0");
+    CHECK_EQ(s2.values().monitor_output, "bt:70:BF:92:53:6B:8B");
     CardState r;
     CHECK(s2.card_state(c1, r));
     CHECK(r.has_level);
@@ -250,4 +254,79 @@ void test_settings() {
     CHECK_EQ(sa.save(), 0);
     CHECK_EQ(sb.load(), 0);
     CHECK_EQ(sb.values().prefix, std::string("new"));
+}
+
+/* T3: a Bluetooth output and a monitor target are plain strings: they round trip, an older file loads unchanged, and an automatic
+ * monitor target is not written at all */
+void test_settings_bt() {
+    TempDir d;
+    FailOps ops;
+    const std::string path = default_settings_path(d.path);
+    {   /* output_device "bt:<MAC>" */
+        SettingsStore s(ops, path);
+        s.load();
+        s.values().output_device = "bt:9E:0C:81:E6:5D:1A";
+        s.values().monitor_output = "hw:CARD=UC02,DEV=0";
+        CHECK_EQ(s.save(), 0);
+        SettingsStore t(ops, path);
+        CHECK_EQ(t.load(), 0);
+        CHECK_EQ(t.values().output_device, "bt:9E:0C:81:E6:5D:1A");
+        CHECK_EQ(t.values().monitor_output, "hw:CARD=UC02,DEV=0");
+        t.values().monitor_output.clear(); /* automatic again: the key goes away */
+        CHECK_EQ(t.save(), 0);
+        CHECK(read_text(path).find("monitor_output") == std::string::npos);
+        SettingsStore u(ops, path);
+        CHECK_EQ(u.load(), 0);
+        CHECK(u.values().monitor_output.empty());
+        CHECK_EQ(u.values().output_device, "bt:9E:0C:81:E6:5D:1A");
+    }
+    {   /* a file from 0.2.0 (no monitor_output) loads unchanged and saves without inventing the key */
+        TempDir d2;
+        const std::string p2 = default_settings_path(d2.path);
+        std::filesystem::create_directories(std::filesystem::path(p2).parent_path());
+        write_text(p2, "{\"version\":1,\"format\":\"opus\",\"monitor\":true,\"card\":\"UC02||\",\"output_device\":\"default\"}");
+        SettingsStore s(ops, p2);
+        CHECK_EQ(s.load(), 0);
+        CHECK(s.values().format == RecFormat::Opus);
+        CHECK(s.values().monitor);
+        CHECK_EQ(s.values().output_device, "default");
+        CHECK(s.values().monitor_output.empty());
+        CHECK_EQ(s.save(), 0);
+        CHECK(read_text(p2).find("monitor_output") == std::string::npos);
+        CHECK(read_text(p2).find("bt_names") == std::string::npos); /* T8: nor this one */
+        CHECK(s.values().bt_names.empty());
+    }
+    {   /* T8: bt_names, the last label seen per device: round trip, upper-case MAC, bad entries dropped, at most 16, absent when empty */
+        TempDir d3;
+        const std::string p3 = default_settings_path(d3.path);
+        std::filesystem::create_directories(std::filesystem::path(p3).parent_path());
+        write_text(p3, "{\"version\":1,\"bt_names\":{\"70:bf:92:53:6b:8b\":\"Evolve 65\",\"9E:0C:81:E6:5D:1A\":\"XWF-M18\",\"bad\":\"x\","
+                       "\"AA:BB:CC:DD:EE:FF\":7,\"11:22:33:44:55:66\":\"\"},\"unknown_key\":[1]}");
+        SettingsStore s(ops, p3);
+        CHECK_EQ(s.load(), 0);
+        CHECK_EQ(s.values().bt_names.size(), 2u);
+        CHECK_EQ(s.values().bt_names["70:BF:92:53:6B:8B"], "Evolve 65");
+        CHECK_EQ(s.values().bt_names["9E:0C:81:E6:5D:1A"], "XWF-M18");
+        s.values().bt_names["01:02:03:04:05:06"] = "Third";
+        CHECK_EQ(s.save(), 0);
+        SettingsStore t(ops, p3);
+        CHECK_EQ(t.load(), 0);
+        CHECK_EQ(t.values().bt_names.size(), 3u);
+        CHECK_EQ(t.values().bt_names["01:02:03:04:05:06"], "Third");
+        CHECK(read_text(p3).find("unknown_key") != std::string::npos); /* unknown keys are kept */
+        t.values().bt_names.clear();
+        CHECK_EQ(t.save(), 0);
+        CHECK(read_text(p3).find("bt_names") == std::string::npos);
+        /* more than 16 in a file: the first 16 */
+        std::string many = "{\"version\":1,\"bt_names\":{";
+        for (int i = 0; i < 20; ++i) {
+            char b[64];
+            std::snprintf(b, sizeof b, "%s\"00:00:00:00:00:%02X\":\"n%d\"", i ? "," : "", i, i);
+            many += b;
+        }
+        write_text(p3, many + "}}");
+        SettingsStore u(ops, p3);
+        CHECK_EQ(u.load(), 0);
+        CHECK_EQ(u.values().bt_names.size(), kBtNamesMax);
+    }
 }

@@ -131,6 +131,12 @@ ui::UiActions Binder::actions()
     a.open = [this](ui::Screen s) {
         const ui::Screen was = screen_;
         screen_ = s;
+        /* a Bluetooth microphone is open on the recorder and closed on the list and Edit pages (the controller decides) */
+        const UiPage up = s == ui::Screen::Recorder ? UiPage::Recorder
+                          : s == ui::Screen::Settings ? UiPage::Settings
+                          : s == ui::Screen::List ? UiPage::List
+                                                  : UiPage::Edit;
+        post([this, up] { port_.set_page(up); });
         if (was == ui::Screen::List && s != ui::Screen::List && list_preview_) {
             /* closing the list ends the preview the list started (a playback the recorder started goes on) */
             list_preview_ = false;
@@ -198,6 +204,14 @@ ui::UiActions Binder::actions()
             if (c < 0 || c > 3) return;
             const int secs = kSyncChoices[c];
             post([this, secs] { port_.set_sync_interval(secs); });
+        } else if (id == "monitor_to") {
+            /* the Monitor to picker: the snapshot's choice list (automatic first) */
+            const Snapshot s = have_snap_ ? snap_ : Snapshot();
+            if (c < 0 || c >= static_cast<int>(s.monitor.outputs.size())) return;
+            const std::string target = s.monitor.outputs[static_cast<size_t>(c)].id;
+            post([this, target] {
+                if (!port_.set_monitor_output(target)) notice_from_job("The monitor output cannot be changed now");
+            });
         } else if (id == "output") {
             /* the picker's entry to the controller's device string (the snapshot lists both in the same order) */
             const Snapshot s = have_snap_ ? snap_ : Snapshot();
@@ -780,6 +794,8 @@ bool Binder::tick(int64_t now_mono_ms, int64_t now_wall_s)
     follow_position();
     update_peaks();
     follow_merge();
+    /* Bluetooth: one call-quality notice per play */
+    if (callq_.step(snap_, now_ms_)) push_notice(ui::kCallQualityNotice);
 
     /* the shown notice: each for notice_ms, then the next */
     if (!local_.notice.empty() && now_ms_ - notice_since_ >= opt_.notice_ms) local_.notice.clear();

@@ -109,6 +109,9 @@ public:
     int pause();  /* Playing or Scanning -> Paused at the frame heard */
     int resume(); /* Paused (or Stopped, a cued take) -> Playing */
     int stop();   /* -> Stopped at 0; the sink is closed */
+    /* Closes the sink and keeps the position: a Playing or Scanning take becomes Paused at the frame heard. For an output that
+     * went away while nothing was written (a pause): the next play or resume opens the sink again. */
+    int release_sink();
     int seek(uint64_t frame); /* clamped to [0, length]; keeps the state */
     /* From Playing, Paused or Stopped (a cued take: it counts as Paused); while scanning, changes the direction. */
     int scan(Direction dir, unsigned speed = kScanSpeed);

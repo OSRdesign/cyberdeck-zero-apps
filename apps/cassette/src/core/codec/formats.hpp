@@ -101,6 +101,10 @@ struct FormatInputs {
      * rates: only capture.rate is known (a busy card recorded through the sound server). */
     std::vector<uint32_t> rates;
     bool has16 = true, has24 = false;
+    /* Bluetooth call audio (8 or 16 kHz, mSBC / CVSD): speech only. The Opus music presets (above 32 kbps) are dimmed with
+     * a reason; speech presets, FLAC and WAV are unaffected. false (the default) for every other input, so USB and card
+     * behaviour is unchanged. */
+    bool speech_only = false;
 };
 
 /* Every format, in the stable order above. */

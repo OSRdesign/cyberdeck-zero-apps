@@ -54,12 +54,14 @@ public:
     virtual bool set_limiter(bool on) = 0;
     virtual bool set_monitor(bool on) = 0;
     virtual bool set_monitor_level(int percent) = 0;
+    virtual bool set_monitor_output(const std::string &id) = 0; /* "" automatic, "bt:<MAC>", an ALSA device */
     virtual bool set_wave_fit(bool on) = 0;
     virtual bool set_mute(bool on) = 0;
     virtual bool set_sync_interval(int seconds) = 0;
     virtual bool select_output(const std::string &device) = 0;
     virtual bool select_card(int index) = 0;
     virtual void refresh_cards() = 0;
+    virtual void set_page(UiPage page) = 0; /* the screen now showing (Controller::set_page) */
     virtual void refresh_takes() = 0;
     virtual bool select_take(const std::string &name) = 0;
     virtual bool play_take(const std::string &name) = 0;

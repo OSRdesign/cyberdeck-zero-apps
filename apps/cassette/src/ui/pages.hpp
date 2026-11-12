@@ -152,6 +152,12 @@ private:
     std::unique_ptr<NoticeBox> notice_;
     std::vector<lv_obj_t *> notice_covers_; /* hidden while the notice shows (the parts under it) */
     bool notice_on_ = false;
+    /* RecorderVm::standing_notice: shown in the notice's place while no timed notice shows; a tap hides it until it changes */
+    bool standing_on_ = false;
+    std::string standing_shown_, standing_dismissed_;
+    void notice_tapped();
+    bool bt_label_ = false; /* the one-bar label reads BT (a Bluetooth input) */
+    lv_obj_t *bt_label_land_ = nullptr; /* landscape: the BT label (smaller, further left: landscape_in_label) */
     const RecorderVm *last_rec_ = nullptr; /* the model of the last update (the landing of a load updates from it) */
 };
 
@@ -182,7 +188,12 @@ private:
     void refresh();
     void rebuild();
     void build_format_rows(const SettingRow &s);
+    /* One two-line entry (a Format picker entry, or a Bluetooth device in the Input / Output / Monitor to picker) at list y;
+     * dot_col: the Format picker's column for the current-choice dot. Returns the entry's height. */
+    int build_entry_row(const FormatEntry &e, int index, int y, bool current, bool dot_col);
     const SettingRow *format_picker() const; /* the open picker's row when it is the Format picker, else null */
+    const SettingRow *footer_picker() const; /* the open picker's row when it has a footer line (or is a Format picker) */
+    const FormatEntry *choice_entry(int i) const; /* the open plain picker's two-line entry i, else null */
     void apply_notice();
     void apply_list_height();
     void fill_row(Row &r, const SettingRow &s);

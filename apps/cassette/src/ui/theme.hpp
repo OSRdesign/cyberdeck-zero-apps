@@ -37,6 +37,11 @@ constexpr std::uint32_t kWhite = 0xFFFFFF;
 /* meter */
 constexpr std::uint32_t kLedGreen = 0x3FD166, kLedAmber = 0xF0B400, kLedRed = 0xFF4D3A;
 constexpr std::uint32_t kInLabel = 0xD8DCDF, kScale = 0xC9CDD0, kAmber = 0xF0B400;
+/* amber TEXT on the cream rows (the echo line under Monitor): kAmber is for the dark panels (9.1:1 on kWindow) and is
+ * unreadable on cream (1.4:1 on kRow, 1.09:1 on kStrip). This is kAmber's hue (45 deg, full saturation) darkened to the
+ * lightest step that reads: 4.61:1 on kRow (WCAG AA for body text), 3.00:1 on the selected row kStrip (AA large / UI).
+ * tests/ui/test_bt.cpp computes both ratios. */
+constexpr std::uint32_t kAmberText = 0x7C5D00;
 constexpr std::uint32_t kPeakOff = 0x4A1612, kPeakOn = 0xE5372B, kPeakEdge = 0x14171A;
 constexpr std::uint32_t kMonOff = 0x163F22, kMonOn = kLedGreen; /* the MON lamp: dark green, the low bars' green */
 /* the meter panel's list (portrait, square): MON, LIM and LOW CUT off are a neutral dark grey dot (no glow) with the label at

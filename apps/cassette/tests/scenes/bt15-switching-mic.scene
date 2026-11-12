@@ -1,0 +1,20 @@
+title Cassette Bluetooth (T9, synthetic names): PLAY waits for the music mode of the headset that is also the input (its microphone closed on purpose, B29): the cassette stays in the window, "Switching to music mode... 1 s" in the time slot (landscape) or the notice place (portrait, square); the meter is the play meter (L and R, nothing plays yet)
+sizes 320x480 480x320 480x800 640x480 800x480 480x480 720x720
+ppmm 608
+env CASSETTE_DEMO playing
+env CASSETTE_DEMO_BT switching-mic
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 500
+@480x320 expect text "PLAYING TAKE 006 · Switching to music mode... 1 s"
+@640x480 expect text "PLAYING TAKE 006 · Switching to music mode... 1 s"
+@800x480 expect text "PLAYING TAKE 006 · Switching to music mode... 1 s"
+@320x480 expect text "Switching to music mode... 1 s"
+@480x800 expect text "Switching to music mode... 1 s"
+@480x480 expect text "Switching to music mode... 1 s"
+@720x720 expect text "Switching to music mode... 1 s"
+expect notext "No sound input found. Plug in a USB sound card or headset."
+expect notext "The Bluetooth headset is not connected."
+shot switching-mic
+expect notext "LAYOUT FAIL"
+expect noquit

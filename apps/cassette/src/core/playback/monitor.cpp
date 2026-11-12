@@ -7,6 +7,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <thread>
 #include <vector>
 
@@ -37,7 +38,8 @@ struct MonitorShared {
     SinkFormat out;
     std::atomic<bool> quit{false}, running{false}, done{true}, abandoned{false};
     std::atomic<int> level{kMonitorLevelDefault}, error{0};
-    std::atomic<uint64_t> played{0}, underruns{0}, resyncs{0};
+    std::atomic<uint64_t> played{0}, underruns{0}, resyncs{0}, skips{0};
+    MonitorOptions opt;
     ~MonitorShared() {
         if (sink) sink->close();
     }
@@ -84,19 +86,23 @@ void run(std::shared_ptr<MonitorShared> sh) {
     const size_t out_fb = out_bps * out_ch;
     const size_t chunk =
         std::clamp<size_t>(s.out.period_frames ? s.out.period_frames : kMonitorPeriodFrames, 64, kMonitorPeriodFrames);
-    const size_t max_backlog = static_cast<size_t>(kMonitorMaxBacklogMs * s.src.rate / 1000.0);
-    const long max_queue = static_cast<long>(kMonitorMaxQueueMs * s.src.rate / 1000.0);
+    const size_t max_backlog = static_cast<size_t>(s.opt.max_backlog_ms * s.src.rate / 1000.0);
+    const long max_queue = static_cast<long>(s.opt.max_queue_ms * s.src.rate / 1000.0);
+    const size_t prefill_frames =
+        s.opt.prefill_ms ? std::max<size_t>(1, static_cast<size_t>(static_cast<uint64_t>(s.src.rate) * s.opt.prefill_ms / 1000))
+                         : static_cast<size_t>(kMonitorPrefillFrames);
+    const size_t drift_hi = static_cast<size_t>((s.opt.drift_target_ms + s.opt.drift_band_ms) * s.src.rate / 1000.0);
     std::vector<uint8_t> in(chunk * in_fb), out(chunk * out_fb);
     std::vector<float> fr(in_ch);
     float cur = monitor_gain(s.level.load(std::memory_order_relaxed));
     bool failed = false;
     /* a little silence in front: the capture delivers 1024 frames at a time, so the device must hold some margin or every
      * bit of jitter would be an underrun; the same after a recovered underrun */
-    std::vector<uint8_t> hush(static_cast<size_t>(kMonitorPrefillFrames) * out_fb, 0);
-    auto prefill = [&s, &hush, out_fb]() {
-        size_t left = kMonitorPrefillFrames;
+    std::vector<uint8_t> hush(prefill_frames * out_fb, 0);
+    auto prefill = [&s, &hush, out_fb, prefill_frames]() {
+        size_t left = prefill_frames;
         while (left > 0 && !s.quit.load(std::memory_order_acquire)) {
-            const long w = s.sink->write(hush.data() + (kMonitorPrefillFrames - left) * out_fb, left);
+            const long w = s.sink->write(hush.data() + (prefill_frames - left) * out_fb, left);
             if (w <= 0) return;
             left -= static_cast<size_t>(w);
         }
@@ -118,8 +124,14 @@ void run(std::shared_ptr<MonitorShared> sh) {
             }
             s.resyncs.fetch_add(1, std::memory_order_relaxed);
         }
-        const size_t n = s.ring->read(in.data(), chunk);
+        size_t n = s.ring->read(in.data(), chunk);
         if (n == 0) continue;
+        if (s.opt.drift_control && n >= 2 && s.ring->available() > drift_hi) { /* the sink is slower: drop one frame (a skip) */
+            const size_t k = n / 2;
+            std::memmove(in.data() + k * in_fb, in.data() + (k + 1) * in_fb, (n - k - 1) * in_fb);
+            --n;
+            s.skips.fetch_add(1, std::memory_order_relaxed);
+        }
         const float target = monitor_gain(s.level.load(std::memory_order_relaxed));
         const float step = (target - cur) / static_cast<float>(n);
         float g = cur;
@@ -182,11 +194,12 @@ Monitor::Monitor(MonitorTap &tap) : tap_(tap), sh_(std::make_shared<MonitorShare
 
 Monitor::~Monitor() { stop(); }
 
-int Monitor::start(std::unique_ptr<PlaybackSink> sink) {
+int Monitor::start(std::unique_ptr<PlaybackSink> sink, const MonitorOptions &opt) {
     if (!sink) return -EINVAL;
     stop(); /* an earlier run: reaped (or abandoned) */
     auto sh = std::make_shared<MonitorShared>();
     sh->level.store(sh_->level.load());
+    sh->opt = opt;
     sh->src = tap_.format();
     sh->ring = tap_.ring();
     if (!pcm::supported(sh->src.bits) || sh->src.channels == 0) return -EINVAL;
@@ -228,6 +241,8 @@ void Monitor::stop() {
     if (!s.done.load(std::memory_order_acquire)) s.abandoned.store(true); /* a write that does not return: it cleans up itself */
 }
 
+PlaybackSink *Monitor::sink() const { return sh_->running.load(std::memory_order_acquire) ? sh_->sink.get() : nullptr; }
+
 bool Monitor::running() const { return sh_->running.load(std::memory_order_acquire); }
 
 void Monitor::set_level_pct(int pct) { sh_->level.store(std::clamp(pct, 0, 100), std::memory_order_relaxed); }
@@ -242,6 +257,8 @@ MonitorStats Monitor::stats() const {
     st.frames_played = s.played.load();
     st.underruns = s.underruns.load();
     st.resyncs = s.resyncs.load();
+    st.drift_skips = s.skips.load();
+    st.backlog_frames = tap_.ring()->available();
     st.frames_dropped_in = tap_.dropped();
     st.sink_period = s.out.period_frames;
     st.sink_buffer = s.out.buffer_frames;
