@@ -21,10 +21,33 @@ Comment: The application is linked against the LVGL based cp0_lvgl runtime of th
  Broadcast Wave, EBU Tech 3306 RF64) and the ALSA library's API documentation. The
  package holds no code of other recorder programs.
  .
- Sound cards are reached through the ALSA library, libasound.so.2 of the system
- (alsa-lib, LGPL-2.1-or-later), opened at run time: it is neither linked into the
- binaries nor shipped in this package (the package depends on libasound2t64 or
- libasound2 so that apt installs it).
+ Third-party libraries. None of the libraries below is part of this package: they are
+ the system's own, provided by the OS packages named in the package's Depends field,
+ which apt installs with it.
+ .
+ System libraries the binaries are linked against at build time (named NEEDED in the
+ binaries): libfreetype6 (FreeType License or GPL-2.0-or-later), libinput10 (MIT),
+ libxkbcommon0 (MIT), libstdc++6 and libgcc-s1 (GPL-3.0-or-later with the GCC Runtime
+ Library Exception 3.1). They are not copied into this package.
+ .
+ Libraries opened at run time with dlopen, only when the feature needs them, from the
+ system when present; neither linked into the binaries nor shipped in this package (the
+ package depends on them so that apt installs them):
+  - libasound.so.2, the ALSA library (alsa-lib, Copyright Jaroslav Kysela, Abramo
+    Bagnara and others, LGPL-2.1-or-later), used for every sound card. Package
+    libasound2t64 or libasound2.
+  - libFLAC (Copyright 2000-2009 Josh Coalson, 2011 and later Xiph.Org Foundation;
+    BSD-3-Clause), used for FLAC takes. Package libflac14, libflac12t64 or libflac12.
+  - libopus (Copyright 2001-2023 Xiph.Org, Skype Limited, Octasic, Jean-Marc Valin,
+    Timothy B. Terriberry, CSIRO, Gregory Maxwell, Mark Borgerding, Erik de Castro Lopo,
+    Mozilla, Amazon; BSD-3-Clause), used for Opus takes. Package libopus0.
+  - libopusenc (Copyright 1994-2013 Xiph.Org Foundation and contributors, 2017
+    Jean-Marc Valin; BSD-3-Clause), used to write Ogg Opus files. Package libopusenc0.
+  - libpulse.so.0, the PulseAudio and PipeWire client library (PulseAudio, Copyright
+    Lennart Poettering and others, LGPL-2.1-or-later), used only when a sound server
+    runs, for Bluetooth audio, and by cassette-probe --server. Package libpulse0.
+ The licence texts of these libraries are in their own packages, under
+ /usr/share/doc/<package>/copyright.
  .
  usr/share/APPLaunch/bin/cassette-probe is a small listen-only command line tool built
  from the same capture layer (it lists the sound cards and their controls and opens

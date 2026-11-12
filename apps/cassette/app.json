@@ -1,7 +1,7 @@
 {
   "share_code": "cassette",
   "package": "cassette",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "title": "Cassette",
   "summary": "A tape-deck sound recorder: WAV, FLAC, Opus, USB and Bluetooth headsets.",
   "description": "Records from USB sound cards and headsets, and Bluetooth headsets on boards with a sound server (PipeWire), to WAV, FLAC or Opus: level meter, gain, timer, live monitor, trim, split, merge, playback with 5x scan, also to Bluetooth speakers. Crash-safe: a take survives a power cut. No cloud: nothing leaves the board. Needs a screen of 480x320 or more.",
