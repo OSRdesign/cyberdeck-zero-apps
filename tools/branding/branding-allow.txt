@@ -28,3 +28,14 @@ apps/meshzero/root/usr/share/APPLaunch/applications/meshzero.desktop  # remove a
 
 # --- Generated catalogue ---
 registry.json                                # remove at the next publish: make_registry.py now writes "CyberdeckZero"
+
+# --- Known false positives (not brand names) ---
+# "CardputerZero" as a device_targets value is the test input of the registry generator (it must keep a value it did not write)
+tools/test_registry_tools.py                                        # device_targets value under test
+# "m5-6Y57" is the Intel Core m5 CPU model of the x86 tablet (word start "m5" matches the brand check); real cpuinfo text and the strings derived from it
+apps/system-monitor/README.md                                       # Intel Core m5 CPU model string
+apps/system-monitor/src/core/parsers.cpp                            # Intel Core m5 CPU model string (comments)
+apps/system-monitor/tests/fixtures/x86-fz-m1/proc/cpuinfo           # captured /proc/cpuinfo of the tablet
+apps/system-monitor/tests/scenes/x86.scene                          # expected CPU text
+apps/system-monitor/tests/test_parsers.cpp                          # expected CPU text
+apps/system-monitor/tests/test_sampler.cpp                          # expected CPU text

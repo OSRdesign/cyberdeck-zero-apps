@@ -8,7 +8,7 @@ tokens at run time, never copy them).
 The app contract (environment variables, state files, `.desktop` keys, requests to the launcher) is specified in the
 launcher repository, and that text is normative:
 [APP-CONTRACT.md](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/APP-CONTRACT.md); what the
-launcher gives apps as of v0.9.3 is summarised in [section 3](#3-the-launcher-contract). Hosting and
+launcher gives apps as of v0.10.1 is summarised in [section 3](#3-the-launcher-contract). Hosting and
 the Settings > Apps flow: [HOSTING-APPS.md](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/HOSTING-APPS.md).
 The starting point of a native app: [`apps/cyberdeck-app-template`](../apps/cyberdeck-app-template/README.md) on the shared code in
 [`apps/_common`](../apps/_common/README.md). Repository overview: [README](../README.md).
@@ -24,14 +24,16 @@ The starting point of a native app: [`apps/cyberdeck-app-template`](../apps/cybe
 | Panasonic FZ-M1 tablet (x86-64 PC, amd64) | 1280x800, desktop session (XFCE) | touch + USB or Bluetooth keyboard | the PC reference; runs only apps with an amd64 package ([README](../README.md#amd64-x86-64-pcs)); the touch panel reports at most 2 contacts (no three-finger gesture) |
 
 **Owner decision (2026-10-13): new work targets 640x480 as the minimum screen.** 480x320 is best effort. A new native
-app declares `X-MinSize=640x480` and is hidden on a smaller screen. If fitting a smaller screen would cost heavy rework,
+app declares `X-MinSize=640x480` and is hidden on a smaller screen. **Exception:** an app may declare `X-MinSize=480x320`
+when its layouts are tested there (headless scenes at 480x320 and, with `X-Portrait`, 320x480) and its README says so;
+Cassette, Deck Atlas, Home Assistant, mmWave Radar and Net Walk do. If fitting a smaller screen would cost heavy rework,
 we do not do it ([section 12](#12-when-not-to-build-it)). Landscape only: the launcher rotates portrait panels for you.
 
 **Portrait (PDA mode, launcher 0.8.8 and later) is optional.** A portrait launcher (Settings > Screen > PDA mode:
 480x800, 480x640, the 800x1280 tablet) runs a landscape app turned by a quarter, so nothing has to change. An app that
 also has a portrait layout declares `X-Portrait=WxH` (its smallest portrait canvas, e.g. `480x640`) and is then shown
 upright ([portrait layout](#portrait-layout-x-portrait)). System Monitor 0.3.0 is the first, Serial Console 0.5.0 the
-first with text input; RSS Reader 0.2.0, Markdown Notes 0.2.0, Klondike Solitaire 0.1.0, Mine Field 0.1.0, Net Toolbox 0.5.0, viz1090 0.3.0, Net Walk 0.1.0, Home Assistant 0.3.0, mmWave Radar 0.1.0 and Deck Atlas 0.1.0 have one too.
+first with text input; RSS Reader, Markdown Notes, Klondike Solitaire, Mine Field, Net Toolbox, viz1090, Net Walk, Home Assistant, mmWave Radar, Deck Atlas and Cassette have one too (`X-Portrait=320x480` for the three that fit a 480x320 panel turned: mmWave Radar, Deck Atlas, Cassette).
 
 ## 1. Which kind of app
 
@@ -236,7 +238,7 @@ Full text: [APP-CONTRACT.md](https://github.com/OSRdesign/cyberdeck-zero-launche
 - The C reader (`cp0_app_contract.h`, no LVGL) is copy-ready; a native app already uses it through `cp0_lvgl`.
 - An app **never writes** `status.state` or `board.state` either, and never creates `launcher.sock`.
 
-APP-CONTRACT.md is the normative text; the sections below summarise what changed for apps up to launcher **v0.9.3**
+APP-CONTRACT.md is the normative text; the sections below summarise what changed for apps up to launcher **v0.10.1**
 and how to use it. A native app gets a feature only when it is built against a launcher commit that has it
 ([launcher versions](#launcher-versions-and-what-each-added-for-apps)).
 
@@ -251,6 +253,8 @@ and how to use it. A native app gets a feature only when it is built against a l
 | `status.state` | `pid`, `gen`, `wifi`, `wifi_pct`, `eth`, `bt` (`off` / `on` / `connected`), `battery` (-1 = none), `battery_state` | **0.8.5** | `cp0_app_status_read()` returns -1: read sysfs yourself (the strip does, below) |
 | `status.state` | `volume` (-1 = no sound output), `mute`, `brightness_pct` (-1 = no backlight to drive) | **0.8.6** | key missing: the reader gives -1 (`mute` 0); show no level bar |
 | `board.state` | `pid`, `gen`, `launcher` (version), `board`, `arch`, `ram_mb`, `battery` (0 none, 1 present, 2 not set up), `battery_source` (`power_supply:<name>` or `gauge:max17048`), `backlight` (`none` / `onoff` / `levels`), `backlight_steps`, `sound` (0 / 1 / 2), `sound_kind` (`alsa` / `server` / `bluetooth`), `sound_guess` (1 = `bluetooth` guessed from the sink's name), `requests` (the verbs `launcher.sock` answers on this board), `battery_note`, `backlight_note`, `sound_note` (hint text) | **0.8.6** | `cp0_app_board_read()` returns -1: assume nothing, hide what depends on it (no sound option, no beeps) |
+| `status.state` | `bt_audio_dev=MAC:kind:connected[:a2dp\|hfp];...` (the paired Bluetooth audio devices; always the last key; absent when there is none, Bluetooth is off or the launcher is older) | **0.10.1** | key missing: no device is known, ask the sound server yourself; reaches an app at any pin (a plain text file, see [Bluetooth audio](#bluetooth-audio-and-sound-servers)) |
+| `board.state` | `bt_audio=pipewire\|pulseaudio\|bluealsa\|none` (which sound stack owns the Bluetooth audio endpoints), `bt_hfp=0\|1` (the adapter offers call audio), `bt_le_audio=0\|1` (LE Audio streams) | **0.10.1** | key missing = not probed yet or an older launcher, never `0`: do not hide Bluetooth audio, say nothing is known |
 
 Rules for every row: **a missing key means its default** (the readers fill -1 or `""`), unknown keys and variables
 are ignored, and in `board.state` a fact the launcher does not know is an **absent key, never `0`** (right after the
@@ -365,9 +369,10 @@ fallback). One request line, one reply line, at most 254 bytes. Replies are `ok 
 ### Launcher versions and what each added for apps
 
 The apps build against one launcher commit, [`apps/_common/LAUNCHER_REF`](../apps/_common/LAUNCHER_REF) (today
-`28817a5`, launcher main after v0.9.4 with the map engine and its first fixes (#146), off by default; every published native app is still built at
-the previous pin `3f6579f`, the SSH indicator commit of launcher v0.8.12: the earlier ones were rebuilt by apps #116 to
-#119, Net Walk and Home Assistant came after, and each moves to the new pin at its next rebuild). Launcher features that live in the launcher process (the feed's values, the media keys,
+`28817a5`, launcher main after v0.9.4 with the map engine and its first fixes (#146), off by default; Cassette 0.3.0, Deck Atlas 0.2.0, Mesh Hop 0.8.3 and mmWave Radar 0.1.1 are built at it; the other published native apps
+(Home Assistant, Klondike Solitaire, Markdown Notes, Mine Field, Net Toolbox, Net Walk, RSS Reader, Serial Console, System
+Monitor, viz1090) are still built at the previous pin `3f6579f`, the SSH indicator commit of launcher v0.8.12, and each
+moves to the new pin at its next rebuild; `usr/share/doc/<app>/build-info` in a package names its pin). Launcher features that live in the launcher process (the feed's values, the media keys,
 the socket's server) work with any build; features that live in `cp0_lvgl` (the strip's drawing and reading, the
 readers, the client) reach an app only at a pin that has them. **Using a 0.8.6 feature from `cp0_lvgl` needs a re-pin
 to the v0.8.6 commit `aef009b`** (and then the rebuild of every app, as above); an app can also copy the plain-C
@@ -390,11 +395,37 @@ files of the contract and the client.
 | 0.9.4 | PDA mode on 480x320 panels: a 320x480 portrait canvas; the toolkit's narrow portrait shell on portrait canvases under 480 px wide (Compact tokens with 16 px body text, a 40 px bar with the Esc at the left edge, 44x30 with its tap area over the whole bar height, no page title, no writing band, overlays sized for it) | only an app that declares an `X-Portrait` under 480 px wide, built at a pin that has it; Deck Atlas 0.1.0 (`X-Portrait=320x480`) is the first |
 | main after 0.9.4 (`e3a2899`, the previous pin, launcher #145) | the offline map engine in `cp0_lvgl` (`include/cp0_map.h`: projection, MBTiles / PMTiles, the shared tile store, RAM tile cache, online sources and viewing cache, the LVGL map widget), compiled only with `CONFIG_CP0_LVGL_MAP=y` (default n; SQLite and libcurl loaded at run time, so a map app depends on `libsqlite3-0`, and on `libcurl4t64` and `ca-certificates` for online sources); also the render harness LVGL configuration without a draw thread (0.9.3, the PC harness only) | an app without the switch builds as before; a map app needs the pin and the switch in its own `apps/<id>/cp0_config.mk` (`CONFIG_CP0_LVGL_MAP=y`, read by `_common/build_app.sh` and `headless/Makefile`: [`_common` README](../apps/_common/README.md#toolkit-switches-of-one-app-cp0_configmk); Deck Atlas is the first) |
 | main after 0.9.4 (`28817a5`, **the current pin**, launcher #146) | the map engine's first fixes: `cp0_map_on_view_change()`, per-zoom coverage for converted folders, the `*` cache invalidation, `cp0_map_source_info_t` gains `tiles`, `imported`, `source_path`, `has_zoom_extents`; still compiled only with `CONFIG_CP0_LVGL_MAP=y` (#147 is docs only) | an app without the switch builds as before; the apps' builds differ only by the stamped commit hash |
+| 0.10.0 and 0.10.1 | 0.10.0: Settings > Apps checks for app updates when it opens (launcher only). 0.10.1: Bluetooth audio facts for apps, `status.state` `bt_audio_dev` and `board.state` `bt_audio`, `bt_hfp`, `bt_le_audio` (contract sections 5b and 5c; the C reader `cp0_app_bt_audio_dev_get()` is in the SDK file `cp0_app_contract.h`), and the board profile `pi5-dsi7` (Pi 5 + the official 7" DSI display). The pin stays `28817a5` (it is older than these) | the state keys are plain files: read them with your own parser at any pin, no rebuild (Cassette does); the C reader needs a pin that has it or a copy of the SDK file |
 
 **What needs a re-pin, in short.** An app pins a launcher commit. A change to the **drawing** of the shared widgets (the
 status strip) needs a re-pin and a rebuild of every app. A change to the **data** the launcher publishes (state-file
 values) or to the **keys** the launcher reads (media keys, Super) lives in the launcher process and reaches every app
 at once. A new reader or client in `cp0_lvgl` reaches an app only at a pin that has it.
+
+### Bluetooth audio and sound servers
+
+An app that records or plays through a Bluetooth headset or speaker needs two things from the launcher, and the launcher
+only **reports**: it does the pairing (Settings > Bluetooth), it never changes the default source or sink of the sound
+server and never moves a stream, so the app must open the node of its device **explicitly**. The facts (launcher
+**0.10.1** and later; text of the contract: sections 5b and 5c of
+[APP-CONTRACT.md](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/APP-CONTRACT.md)):
+
+* `status.state` `bt_audio_dev=ENTRY;ENTRY;...`, with `ENTRY = MAC:kind:connected[:profile[:...]]`. `MAC` is the device
+  address with underscores and capitals (`70_BF_92_53_6B_8B`); `kind` is `headset` (it has a microphone), `headphones` or
+  `speaker` (playback only), and an unknown kind means "other"; `connected` is `1` (BlueZ says connected now) or `0`
+  (paired, asleep or off); the optional fourth field is `a2dp` (music transport, stereo) or `hfp` (a connected headset
+  with call profiles only, so call quality), left out when not known. **Ignore what you do not know**: later fields,
+  entries that do not parse, unknown words. At most 8 entries, in address order. `connected=1` is a Bluetooth link, not
+  a sound stream.
+* `board.state` `bt_audio=pipewire|pulseaudio|bluealsa|none`: which stack carries Bluetooth audio. With `none` say
+  "Bluetooth audio is not set up on this board". `bt_hfp=0|1` (call audio, a headset microphone, can be set up) and
+  `bt_le_audio=0|1` (LE Audio streams). As everywhere in `board.state`, a missing key is **unknown, never `0`**.
+
+Both files are read like the others (trusted only while the launcher's `pid` lives; unknown keys ignored). An app
+that needs a sound server opens it at run time (`dlopen` of `libpulse`, then the `depends` rule of
+[APP-JSON.md](APP-JSON.md#depends-and-recommends)) and degrades with a message when none answers.
+A complete, tested example, with the device list, the explicit node choice, the delay and the notices:
+[`apps/cassette/docs/PULSE.md`](../apps/cassette/docs/PULSE.md) (module `src/core/pulse/`, parser `parse_bt_audio_dev`).
 
 ### Started without the launcher (ssh, a script, an older launcher)
 
@@ -457,7 +488,7 @@ phrases ("CardputerZero Store by M5Stack", "CardputerZero launcher by M5Stack") 
 <!-- branding-allow-end -->
 
 Check it: `sh tools/branding/check-branding.sh` (see [`tools/branding`](../tools/branding/check-branding.sh), allow-list
-[`branding-allow.txt`](../tools/branding/branding-allow.txt)). New files must pass without new allow-list entries.
+[`branding-allow.txt`](../tools/branding/branding-allow.txt)). New files must pass without new allow-list entries. The allow-list holds the known false positives (an Intel CPU model string in System Monitor's files and a `device_targets` test value, both listed in `branding-allow.txt`), each with its reason, so the check passes (`branding: OK`) and can gate a pull request.
 
 ## 5. Packaging and registry
 
@@ -493,39 +524,36 @@ X-Background=freeze
 
 (`X-Background`: section 3, multitasking; leave it out for an app that must not be paused.)
 
-`app.json` (checked by `tools/make_registry.py`; `share_code`, `package`, `version`, `title`, `summary` are required):
-
-| Field | Rule |
-|---|---|
-| `share_code` | lowercase id, stable forever (it gives the registry uuid) |
-| `package` | Debian package name, = the app id |
-| `version` | **raise it for every release**: the deck compares Debian-style (`dpkg --compare-versions`); the same version is not an update |
-| `title`, `summary`, `description` | what Settings > Apps shows, and the only text the launcher shows: the **descriptor** = a summary line (one line, at most 80 characters) + a description of what the app is, its main features and what it needs (hardware, groups, network, minimum screen), nothing more. Summary + newline + description **at most 500 characters** (characters, not bytes); the launcher cuts a longer text at 500 with dots. The long documentation lives in the app's README in this repository, for reading on a computer. Checked by `python3 tools/check_descriptors.py` (every app and both registries) and by `make_registry.py` |
-| `license` | SPDX expression of everything shipped (`MIT`, or `BSD-3-Clause AND GPL-3.0-or-later`) |
-| `depends` | Debian packages `apt` must add: **only what the binary links dynamically** (native apps: `libfreetype6, libinput10, libxkbcommon0`), plus tools you run (`curl`, `picocom`). Check the names exist on Debian 13 arm64 |
-| `recommends` | optional: Debian packages a feature uses when they are there (apt installs them by default; the app must work without them), e.g. Mesh Hop's `bluez` |
-| `permissions` | `network`, `additional_hardware`, `camera`, `microphone`, `imu`, `background_service`, `external_display` (honest: they are shown to the user) |
-| `draft` | `true` keeps the app out of the registry (`make_registry.py` skips it); build a local `.deb` with `--only <id> --out <dir outside packages/>` |
-| `min_size` | optional `"WxH"`: the landscape minimum screen, used **only when the `.desktop` has no `X-MinSize`** (the `.desktop` wins). Rarely needed: declare `X-MinSize` in the `.desktop` instead (an old package without it needs a rebuild to carry it, this field does not) |
-| `arch` | optional, default `["arm64"]`; `["arm64", "amd64"]` also packages the app for x86-64 PCs from `root.amd64/` into `registry-amd64.json` (README, amd64) |
-| `categories`, `author`, `source_repo` | shown in the catalogue |
+`app.json` (checked by `tools/make_registry.py`; `share_code`, `package`, `version`, `title`, `summary` are required): every
+field, with its rule, is in **[APP-JSON.md](APP-JSON.md)**: the descriptor limits (summary at most 80 characters, summary +
+description at most 500), `license`, `depends` (what the binary links, what it opens at run time with `dlopen`, and the
+tools it runs; alternatives `a | b`, bounds `(>= x)`) and `recommends`, `permissions`, `categories`, `arch`, `draft`,
+`min_size`, and the icon and screenshot rules.
 
 - **libc6 floor.** `tools/build_deb.py` adds `libc6 (>= 2.38)` to every package (the binaries are built for Debian 13); do not
   repeat it in `depends`, and never lower it. Build on the pinned toolchain (`build_app.sh`), not on an older system.
 - **arm64 first.** A binary for another CPU installs and does not run. An amd64 package is optional and comes from the
   same app folder: `"arch": ["arm64", "amd64"]` and the x86-64 binary in `root.amd64/` (`build.sh cross --arch amd64`;
   README, amd64). `build_deb.py` refuses a package holding an ELF file of the wrong architecture.
-- **Version bumps.** Change `version`, rebuild (`python3 tools/make_registry.py`), commit the new `.deb` and `registry.json`. After an upgrade the
-  tile keeps its place on the grid only if the `.desktop` file name is unchanged: **never rename it**.
+- **Version bumps.** Change `version`, build the package, write the registry entry, commit the new `.deb` of every
+  architecture and **both** registries ([PUBLISHING.md](PUBLISHING.md)). After an upgrade the tile keeps its place on the
+  grid only if the `.desktop` file name is unchanged: **never rename it**.
 - **Publish the package you tested.** Put the exact `.deb` that passed the board tests in `packages/`, remove `draft`,
-  and write the registry with `python3 tools/make_registry.py --no-build` (a fresh build is not byte-identical). Check
-  that only that app's entry (and `generated_at`) changed; every other entry, and `device_targets`, stay as on `main`.
+  and write the registry with `python3 tools/make_registry.py --no-build` (a fresh build is not byte-identical): it rebuilds each
+  entry from `app.json` and the package in `packages/`, and keeps the dates of an entry whose version and sha256 did not
+  change, so only that app's entry (and `generated_at`) differs, in `registry.json` and, for an amd64 app, in
+  `registry-amd64.json`. Read the diff: every other entry, and `device_targets`, stay as on `main`. A plain run without
+  `--no-build` builds every package again and changes every entry.
+- **Old packages stay.** Never delete an older `.deb` from `packages/`: registries of older commits and installed decks
+  point to its address; only the latest version is in the registry.
+- **One pull request per release**: sources, the `.deb` of each architecture, both registries, the README table row
+  (step by step: [PUBLISHING.md](PUBLISHING.md)).
 - **Installing.** Settings > Apps asks for the deck user's **sudo password** (the `.deb` is installed as root; there are no root-free installs) for install,
   update and removal, up to three tries. Do not write a postinst that needs interaction, network or more than a few seconds; a failed
   maintainer script shows as `dpkg error`. The package must be removable cleanly: `prerm` stops your own processes, `postrm` leaves the user's data in `~`.
 - **No root at run time.** The app runs as the deck user. If it needs a group (`dialout`, `video`, `bluetooth`), document it (section 6).
 - **Large packages.** Above 50 MB attach the `.deb` to a GitHub Release (README of this repository, "Publish").
-- **Source of truth.** Never hand-edit `registry.json`; regenerate it.
+- **Source of truth.** Never hand-edit `registry.json` or `registry-amd64.json`; regenerate them.
 - **Screen requirements in the registry.** `make_registry.py` copies the launcher's own reading of the packaged `.desktop`
   into every entry, so the launcher can show only the apps that fit the board it runs on (from launcher v0.9.2, Settings >
   Apps > Available leaves the others out, as the home grid hides an installed tile; installed apps stay listed):
@@ -594,7 +622,7 @@ afterwards (`dpkg -r <id>`). A change to a board that is not yours (launcher, St
 | Section | Content |
 |---|---|
 | Title and one-paragraph description | what it does, for whom, the version |
-| Screenshots | taken on a board or in the headless harness at **640x480** (PNG, `docs/screenshots/<id>-<page>.png`, linked relatively; put the ones the Store should show in `apps/<id>/screenshots/*.png`, which `make_registry.py` lists; the old 320x170 size is stale); at least the main page and one form, and one at 720x720 or 800x480 if the layout differs. Show the real UI, no mock-ups |
+| Screenshots | taken on a board or in the headless harness at the size the app is tested at (**640x480**; 480x320 and 320x480 for an app that declares them; PNG; the old 320x170 size is stale). Two places are in use: `docs/screenshots/<id>-<page>.png` (the old apps) and `apps/<id>/screenshots/NN-name.png` (newer ones; **these are the Store's**: `make_registry.py` lists every PNG there in sorted file-name order, so number them). The README should show, or link, every Store screenshot, with at least the main page and one form, and one at 720x720 or 800x480 if the layout differs. Show the real UI, no mock-ups |
 | What it does / how to use | pages and functions |
 | Keys and touch | one table: every function, its key and its touch action |
 | Requirements | minimum screen (`640x480`), hardware, groups, packages, network, launcher version (full-screen support) |
@@ -672,7 +700,7 @@ Copy into the pull request and tick.
 | # | Check | Done |
 |---|---|---|
 | 1 | Kind chosen (A native default / B terminal / C wrapped) and the reason written in the README | [ ] |
-| 2 | `.desktop`: `X-Fullscreen=true`, `X-MinSize=640x480` (native), absolute `Exec`, `Icon` relative | [ ] |
+| 2 | `.desktop`: `X-Fullscreen=true`, `X-MinSize=640x480` (native; `480x320` only when the layouts are tested there and the README says so), absolute `Exec`, `Icon` relative | [ ] |
 | 3 | No pixel constants: layout from tokens and widgets; no hard-coded 640x480 or `/dev/fb0` | [ ] |
 | 4 | Header via `Page`, title and shared `StatusStrip`; no own clock or icons | [ ] |
 | 5 | Every function reachable by keys and by touch; Esc goes back, short Esc at the root quits | [ ] |
@@ -687,8 +715,8 @@ Copy into the pull request and tick.
 | 14 | Logs to stderr with a tag, no secrets, bounded | [ ] |
 | 15 | Binary named after the app id; no stock-device prefix or logo; "CyberdeckZero Launcher" spelled right | [ ] |
 | 16 | Upstream credited, licences in `/usr/share/doc/<id>/copyright` (+ texts), GPL source URL given | [ ] |
-| 17 | `app.json` complete: `version` raised, `depends` correct (no libc6 line), `permissions` honest, `license` right; descriptor within the rule (summary <= 80 characters, summary + description <= 500; long text in the README): `python3 tools/check_descriptors.py` passes | [ ] |
-| 18 | `python3 tools/make_registry.py` builds; `dpkg-deb -I` and `-c` look right; `registry.json` regenerated | [ ] |
+| 17 | `app.json` complete: `version` raised, `depends` correct (links, run-time `dlopen` libraries and tools run; no libc6 line), `permissions` honest, `license` right; descriptor within the rule (summary <= 80 characters, summary + description <= 500; long text in the README): `python3 tools/check_descriptors.py` passes | [ ] |
+| 18 | the package builds; `dpkg-deb -I` and `-c` look right; both registries regenerated with `make_registry.py --no-build` and the diff shows only this app's entries ([PUBLISHING.md](PUBLISHING.md)) | [ ] |
 | 19 | Unit tests green; headless scenes pass at the five sizes; contact sheets reviewed | [ ] |
 | 20 | `tests/BOARD-TESTS.md` written; the owner ran it on the deck (and the other boards that apply) | [ ] |
 | 21 | README complete (section 8) with 640x480 screenshots; repository README table updated | [ ] |
@@ -772,9 +800,10 @@ B4); a custom editor on a line buffer is the fallback if it lags. Cap every text
 - **The amd64 binary.** Rebuild it with every release (the arm64 build does not touch `root.amd64/`). The steps, with a
   private root of the -dev packages when `sudo apt install` is not possible, are in the
   [Mesh Hop README](../apps/mesh-hop/README.md), paragraph *Building the amd64 package*.
-- **Publishing.** Use `python3 tools/make_registry.py --no-build` to ship the `.deb` files that were tested, and splice
-  only your own entry into `registry.json` and `registry-amd64.json`: a plain run rebuilds every package and rewrites every
-  `updated_at` (section 5).
+- **Publishing.** Use `python3 tools/make_registry.py --no-build` to ship the `.deb` files that were tested: there is no
+  splicing, the run touches only the entry of the app whose package changed (and `generated_at`) in each registry, and
+  you check that in the diff. A plain run without `--no-build` builds every package again, and each new file has a new
+  sha256, so it rewrites every entry (section 5, [PUBLISHING.md](PUBLISHING.md)).
 - **File modes.** Packaging from WSL on `/mnt/c` gives mode 755 to every file. Package with **Windows Python** from the
   checkout, so that the files get 644 and the binaries 755.
 
