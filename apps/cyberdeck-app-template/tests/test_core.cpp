@@ -139,7 +139,8 @@ static void test_info()
     CHECK(rule);
 }
 
-/* The package: X-Fullscreen, X-MinSize equal to the app's minimum, Exec and Icon pointing at files of root/, draft. */
+/* The package: X-Fullscreen, X-MinSize equal to the app's minimum (none declared == minimum 0), Exec and Icon pointing
+ * at files of root/, draft. */
 static void test_package()
 {
     const std::string app = CDK_APP_DIR;
@@ -147,8 +148,15 @@ static void test_package()
         read_file(app + "/root/usr/share/APPLaunch/applications/cyberdeck-app-template.desktop");
     CHECK(!desktop.empty());
     CHECK(desktop.find("\nX-Fullscreen=true") != std::string::npos);
-    const std::string min = "\nX-MinSize=" + std::to_string(tpl::kMinW) + "x" + std::to_string(tpl::kMinH);
-    CHECK(desktop.find(min) != std::string::npos);
+    const size_t key = desktop.find("\nX-MinSize=");
+    if (key == std::string::npos) {
+        CHECK(tpl::kMinW == 0 && tpl::kMinH == 0); /* no X-MinSize: the app has no minimum */
+    } else {
+        const size_t end = desktop.find('\n', key + 1);
+        const std::string line = desktop.substr(key + 1, end == std::string::npos ? end : end - key - 1);
+        CHECK(tpl::kMinW > 0 && tpl::kMinH > 0 &&
+              line == "X-MinSize=" + std::to_string(tpl::kMinW) + "x" + std::to_string(tpl::kMinH));
+    }
     CHECK(desktop.find("\nExec=/usr/share/APPLaunch/bin/cyberdeck-app-template") != std::string::npos);
     CHECK(desktop.find("\nIcon=share/images/cyberdeck-app-template.png") != std::string::npos);
     CHECK(desktop.find("\nX-Background=freeze\n") != std::string::npos); /* multitasking: the cheap default */

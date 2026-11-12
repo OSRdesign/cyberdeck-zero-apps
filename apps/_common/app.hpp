@@ -29,11 +29,12 @@ namespace cdk {
 struct AppSpec {
     const char *id = "";           /* package name / share_code, e.g. "cyberdeck-app-template" */
     const char *title = "";        /* the page title, also named in the notice */
-    int min_w = 640;               /* the smallest logical screen the app supports: keep it equal to X-MinSize in */
-    int min_h = 480;               /* the .desktop file (the template's tests compare them) */
+    int min_w = 0;                 /* the smallest logical screen the app supports, only when its UI cannot fit a */
+    int min_h = 0;                 /* smaller one: keep it equal to X-MinSize in the .desktop file (the template's tests */
+                                   /* compare them). 0 x 0 = no minimum (the default): no X-MinSize, the app always runs */
     /* The smallest portrait canvas (taller than wide) the app supports: keep it equal to X-Portrait in the .desktop
      * file (APP-CONTRACT section 6). 0 x 0 = landscape only: no X-Portrait, and a portrait launcher runs the app
-     * turned (it then gets a landscape canvas and min_w x min_h applies). */
+     * turned (it then gets a landscape canvas and min_w x min_h applies, if any). */
     int portrait_w = 0;
     int portrait_h = 0;
     /* Builds the app on `screen` (the native display's active screen, black, empty). Called once on the LVGL thread
@@ -50,9 +51,10 @@ const AppSpec &app_spec();
 /* The app declares a portrait canvas (portrait_w x portrait_h, X-Portrait). */
 bool has_portrait(const AppSpec &spec);
 /* The minimum that applies to a w x h canvas: portrait_w x portrait_h on a portrait canvas (h > w) of an app that
- * declares one, else min_w x min_h. */
+ * declares one, else min_w x min_h. 0 = no minimum on that axis. */
 void min_for(const AppSpec &spec, int w, int h, int *min_w, int *min_h);
-/* The screen is big enough: w x h at least min_for() (logical, as the launcher gives the canvas). */
+/* The screen is big enough: w x h at least min_for() (logical, as the launcher gives the canvas). Always true for an
+ * app without a minimum. */
 bool screen_fits(const AppSpec &spec, int w, int h);
 /* The notice for a screen that is too small (an older launcher ignores X-MinSize, APP-CONTRACT section 6). */
 std::string min_size_notice(const AppSpec &spec, int w, int h);

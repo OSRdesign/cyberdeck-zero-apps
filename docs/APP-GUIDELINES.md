@@ -90,7 +90,8 @@ Rules:
 | if the app declares `X-MinSize`: show "needs WxH" and a way out when the screen is smaller (an older launcher ignores `X-MinSize`) | draw off the edge |
 
 The template does this for you: `AppSpec` carries the minimum, `_common/app.cpp` shows the notice. The template declares
-`640x480`; lower it to what your layouts are tested at, or drop the `X-MinSize` line when they fit every screen.
+**no minimum** (`AppSpec` min 0 x 0, no `X-MinSize` line), as every new app should; add both, with the same numbers, only
+when your UI cannot fit a smaller screen. An app that declares one also adds a `notice` scene for the "needs WxH" notice.
 
 ### Portrait layout (`X-Portrait`)
 
@@ -529,7 +530,8 @@ X-Background=freeze
 ```
 
 (`X-Background`: section 3, multitasking; leave it out for an app that must not be paused. `X-MinSize`: only when the
-UI cannot fit a smaller screen, with the smallest size it was tested at; this example app needs 640x480. Without the
+UI cannot fit a smaller screen, with the smallest size it was tested at; this example app needs 640x480. The template
+declares none. Without the
 line the app is shown on every screen.)
 
 `app.json` (checked by `tools/make_registry.py`; `share_code`, `package`, `version`, `title`, `summary` are required): every

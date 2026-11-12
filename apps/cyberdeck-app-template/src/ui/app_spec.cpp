@@ -2,8 +2,11 @@
  * SPDX-License-Identifier: MIT
  *
  * What the template gives the shared runners (_common/app.hpp): its id, title, minimum screen and UI.
- * min_w x min_h must equal X-MinSize in root/usr/share/APPLaunch/applications/cyberdeck-app-template.desktop
- * (tests/test_core.cpp checks it).
+ * The template has NO minimum screen (min 0 x 0, no X-MinSize line in its .desktop file): it fits every screen.
+ * Declare a minimum only when your UI genuinely cannot fit a smaller screen: set tpl::kMinW / kMinH (src/core/
+ * template_core.hpp) to the smallest size the layouts are tested at, e.g. 640 x 480, and add the same line
+ * X-MinSize=640x480 to root/usr/share/APPLaunch/applications/cyberdeck-app-template.desktop. min_w x min_h must
+ * always equal X-MinSize there (tests/test_core.cpp checks it, also "no X-MinSize == 0 x 0").
  */
 #include "app.hpp"
 #include "template_app.hpp"

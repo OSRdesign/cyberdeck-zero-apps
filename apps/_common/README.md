@@ -12,7 +12,7 @@ The starting point of a new app is `apps/cyberdeck-app-template` (a draft that u
 
 | File | What |
 |---|---|
-| `app.{hpp,cpp}` | `AppSpec` (id, title, minimum screen = `X-MinSize`, minimum portrait canvas = `X-Portrait` when the app has a portrait layout, UI builder), `start()` / `stop()` (what both runners do once the display exists), `request_quit()`, the keypad input group, the "needs WxH" notice for a screen under the minimum (an older launcher ignores `X-MinSize`), `hidden()` / `leave_to_home()` (multitasking) |
+| `app.{hpp,cpp}` | `AppSpec` (id, title, minimum screen = `X-MinSize`, default 0 x 0 = none, minimum portrait canvas = `X-Portrait` when the app has a portrait layout, UI builder), `start()` / `stop()` (what both runners do once the display exists), `request_quit()`, the keypad input group, the "needs WxH" notice for a screen under a declared minimum (an older launcher ignores `X-MinSize`; an app without a minimum never shows it), `hidden()` / `leave_to_home()` (multitasking) |
 | `platform.{hpp,cpp}` | the device runner `cdk::run()`: cp0_lvgl's display backend switched to the native display, every keyboard read, SIGTERM / SIGINT / SIGHUP end the loop cleanly, `--version`; started by hand it still uses the launcher's backend (`APPLAUNCH_DISPLAY=dpi-scaled`); with the launcher's control socket, the multitasking lifecycle (`cp0_app_lifecycle_device_start()`: hide / show / close, below) |
 | `osk_policy.{hpp,cpp}` | the app-side on-screen keyboard rule: `cp0_app_osk_allowed()` on `input.state`, looked at once a second at most and parsed again only when the file changed (a new `gen`); never shown by hand, and off for 600 s after a Bluetooth keyboard went away (tests and the Settings line to show the rule: [guidelines, section 14](../../docs/APP-GUIDELINES.md#14-lessons-learned)); without the file `APPLAUNCH_OSK` and the keyboards of `/proc/bus/input/devices`. It also binds the PDA writing zone's band (`cp0::ui::zone_host`, launcher report 044): with `APPLAUNCH_PDA=1` (an app run upright by a launcher with the zone) and `input.state` `hand=1` the band shows where the keyboard would; a change of `hand=` is passed on at the next LVGL cycle |
 | `async_run.{hpp,cpp}` | background commands: fork + exec in their own process group, lines and the end delivered on the LVGL thread in order (`lv_async_call` under `lv_lock()`), timeout, cancel, PDEATHSIG, `shutdown()` at exit |
@@ -26,7 +26,8 @@ The starting point of a new app is `apps/cyberdeck-app-template` (a draft that u
 ## Rules every app follows
 
 - `.desktop`: `X-Fullscreen=true`; `X-MinSize=WxH` only when the app's UI cannot fit a smaller screen (owner decision
-  2026-11-12: no global minimum screen), and then the same numbers in `AppSpec`. An app
+  2026-11-12: no global minimum screen), and then the same numbers in `AppSpec` (its default is `min_w = min_h = 0`:
+  no minimum, as in the template). An app
   with a portrait layout (PDA mode) also declares `X-Portrait=WxH` and the same numbers in `AppSpec.portrait_w/h`
   ([guidelines, portrait layout](../../docs/APP-GUIDELINES.md#portrait-layout-x-portrait)); without it the launcher
   runs the app turned on a portrait panel.

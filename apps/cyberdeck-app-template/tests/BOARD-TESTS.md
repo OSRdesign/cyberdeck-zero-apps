@@ -9,7 +9,7 @@ board's shell). Nothing here uses `pkill -f`: the app's process name (`comm`) is
 line). It no longer collides with the launcher, whose binary is now `cyberdeckzero`.
 
 Expected pictures: the contact sheets `\\wsl.localhost\Ubuntu\home\osrde\cdk-build\cyberdeck-app-template\host\out\sheets\`
-(`template.png`: every page at 640x480, 800x480, 720x720, 1280x720, 1024x600; `notice.png`; `nocontract.png`), made by
+(`template.png`: every page at 640x480, 800x480, 720x720, 1280x720, 1024x600; `nocontract.png`; the template declares no minimum screen, so there is no `notice.png`), made by
 `build.sh host`.
 
 ## 0. Build and deploy
@@ -117,7 +117,7 @@ python deck.py run 'chmod 755 ~/applaunch-test/bin/cyberdeck-app-template; ~/app
 5. Log: `python deck.py run 'grep -E "cdk|display-profile" ~/applaunch-test/run.log | tail'`: `display 720x720`.
 6. `python board.py test-stop hackberry` (removes the test files, starts lightdm).
 
-## T6. Pi 3A+ (480x320): hidden, and the notice when started anyway
+## T6. Pi 3A+ (480x320): the template runs (it declares no minimum)
 
 ```
 set DECK_HOST=192.168.68.170
@@ -125,11 +125,11 @@ python deck.py put C:/CLAUDE/zero7/pkg-out/cyberdeck-app-template_0.1.0_arm64.de
 python deck.py sudo 'dpkg -i /tmp/cdk-template.deb'
 ```
 
-1. Home grid: no "App Template" tile; Settings > Apps does not list it either (X-MinSize=640x480).
-2. Started by hand (an older launcher would show the tile): stop the launcher and run the app with the board profile:
+1. Home grid: the "App Template" tile is shown and Settings > Apps lists it (no `X-MinSize`: no minimum screen).
+2. Started by hand: stop the launcher and run the app with the board profile:
    `python deck.py run 'systemctl --user stop cyberdeckzero.service; set -a; . /etc/applaunch/board.conf; set +a; APPLAUNCH_STD_KEYBOARD=1 timeout 60 /usr/share/APPLaunch/bin/cyberdeck-app-template; echo rc=$?'`
-   The panel (upright) shows "Template needs a screen of at least 640x480. This screen is 480x320. Press any key or
-   tap the screen to close." (`notice.png`). A key on the USB keyboard or a tap closes it: `rc=0`.
+   The panel (upright) shows the app's root page at 480x320, with no "needs a screen" notice (that notice only appears
+   for an app that declares a minimum and runs under it). Esc at the root closes it: `rc=0`.
 3. `python deck.py run 'setsid nohup systemctl --user restart cyberdeckzero.service > /dev/null 2>&1 < /dev/null &'`,
    then `python deck.py sudo 'dpkg -r cyberdeck-app-template'`.
    (The serial console part of T6 belongs to task A2.)
@@ -175,7 +175,7 @@ python deck.py run 'grep -E "^gen=" /run/user/1000/applaunch/screen.state; syste
 | I-8 | At `-O2` the roller, the on-screen keyboard and the spinner are smooth on the Zero 2 W; idle CPU low; VmRSS < 25 MB | T1.4, T7 |
 | I-9 | `/usr/share/APPLaunch/share/font/Montserrat-*.ttf` exist on every board (FreeType rows; else the builtin fallback, a different look) | T1, T4 |
 | I-10 | The package's Depends names exist on trixie arm64: `libinput10`, `libxkbcommon0`, `libfreetype6` | install |
-| I-11 | `X-MinSize=640x480` hides the tile on the Pi 3A+ home grid and in Settings > Apps | T6.1 |
+| I-11 | No `X-MinSize`: the tile shows on the Pi 3A+ home grid and in Settings > Apps (an app that declares one is hidden there) | T6.1 |
 | I-12 | HackBerry: its built-in keyboard counts as a real keyboard; touch (EP0110M09) maps right in buffer orientation | T4 |
 | I-13 | After the app exits (its backend cleared the framebuffer at start), the launcher repaints the whole home grid | T2 |
 | I-14 | `init_lvgl_env()` forces `XDG_RUNTIME_DIR=/run/user/1000` in every cp0_lvgl process: the deck user must be uid 1000 for a start by hand to find the state files | T8 |
