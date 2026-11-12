@@ -1,0 +1,8 @@
+title Vinyl started by hand (no launcher contract): it runs on its own probe
+sizes 480x320
+nocontract
+env VINYL_DEMO 1
+
+wait 800
+shot nocontract
+expect noquit

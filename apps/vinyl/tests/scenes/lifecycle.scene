@@ -1,0 +1,19 @@
+title Vinyl hidden and shown again (X-Background=run): no drawing while hidden, the music goes on, a full repaint on return
+sizes 640x480
+lifecycle
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+
+wait 800
+hide
+expect hidden
+stale space
+wait 600
+expect nowrite
+show
+expect visible
+wait 400
+expect repaint
+shot after-show
+close
+expect quit

@@ -1,0 +1,15 @@
+title Vinyl now playing, 480x320 (draft Main.dc.html): the demonstration queue playing track 3 of 20
+sizes 480x320
+ppmm 608
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+
+wait 1200
+shot now-playing
+expect esc
+expect text "Phoenix"
+expect text "Fences Remixes, 2013"
+expect text "Vol 60"
+expect text "Evolve 65, music quality"
+expect text "WAV 44.1 kHz / 16 bit"
+expect noquit

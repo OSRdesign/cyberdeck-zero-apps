@@ -1,0 +1,10 @@
+title Vinyl notices in place: the disconnect notice over the seek row of now playing
+sizes 480x320
+ppmm 608
+env VINYL_DEMO 1
+env VINYL_DEMO_NOTICE lost
+
+wait 800
+shot notice-lost
+expect text "Evolve 65 disconnected. Paused."
+expect noquit

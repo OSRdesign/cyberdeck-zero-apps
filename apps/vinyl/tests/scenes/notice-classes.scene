@@ -1,0 +1,9 @@
+title Vinyl notices in place at the other classes (call quality)
+sizes 800x480 720x720
+env VINYL_DEMO 1
+env VINYL_DEMO_NOTICE call
+
+wait 800
+shot notice-call
+expect text "Call quality (16 kHz): the headset is in call mode."
+expect noquit
