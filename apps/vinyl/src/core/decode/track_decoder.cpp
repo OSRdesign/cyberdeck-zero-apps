@@ -613,11 +613,13 @@ private:
             return static_cast<int32_t>(std::lround(v * 2147483647.0));
         }
         switch (bits_) {
-        case 8: return aiff_ ? static_cast<int32_t>(static_cast<int8_t>(p[0])) << 24
-                             : (static_cast<int32_t>(p[0]) - 128) << 24; /* WAV 8-bit is unsigned */
+        case 8: { /* WAV 8-bit is unsigned, AIFF signed; the sample moves to the top byte (no shift of a negative value) */
+            const uint32_t u = aiff_ ? static_cast<uint32_t>(p[0]) : static_cast<uint32_t>(p[0] ^ 0x80);
+            return static_cast<int32_t>(u << 24);
+        }
         case 16: {
-            const uint16_t u = big_ ? be16(p) : le16(p);
-            return static_cast<int32_t>(static_cast<int16_t>(u)) << 16;
+            const uint32_t u = big_ ? be16(p) : le16(p);
+            return static_cast<int32_t>(u << 16);
         }
         case 24: {
             const uint32_t u = big_ ? (static_cast<uint32_t>(p[0]) << 24 | p[1] << 16 | p[2] << 8)
