@@ -10,8 +10,8 @@ in teal #26A69A with a thick white ring (the drafts' sleeve ring); the record is
 sleeve by a gap of the tile background, its white label half out. No hue is free on the wheel (ICON-PALETTE, "Choosing a
 new hue", rule 4): the teal (hue 174) sits between Snake's teal (170, a launcher tile) and LAN Scan's cyan (186) and wins
 on lightness (L* about 61, darker than LAN Scan's 78 and Snake's bright teal) and on silhouette (a square with a disc
-behind it, not a lone circle). Two colours (teal and white), no stroke under 9 units, inside the 5 px margin, in the upper
-part (y 12-70) so a label never touches it. --sheet also writes vinyl-check.png: 100, 32 px and greyscale.
+behind it, not a lone circle). Two colours (teal and white), no stroke under 9 units, every pixel inside the 5 px margin
+(x 5-94), in the upper part (y 11-70) so a label never touches it. --sheet also writes vinyl-check.png: 100, 32 px and greyscale.
 """
 import argparse
 import os
@@ -28,21 +28,34 @@ from make_icons import N, SS, WHITE, Canvas  # noqa: E402
 TEAL = "#26A69A"
 
 
+# The drawing in its first coordinates (sleeve 5-63, record to x 95), scaled by K about (50, 41) so that the reduced
+# icon's edge pixels (LANCZOS spreads a shape about 2.5 px) stay inside the 5 px margin (design QA D-60, 2026-11-12).
+K = 0.945
+
+
+def _x(v):
+    return 50 + (v - 50) * K
+
+
+def _y(v):
+    return 41 + (v - 41) * K
+
+
 def icon_vinyl(teal, white):
     c = Canvas()
     # the record behind the sleeve
-    c.circle(68, 41, 27, teal)
+    c.circle(_x(68), _y(41), 27 * K, teal)
     # the gap of the tile background around the sleeve (cut out of the record)
     gap = Image.new("L", (N, N), 0)
-    ImageDraw.Draw(gap).rounded_rectangle([0, 7 * SS, 68 * SS, 75 * SS], radius=10 * SS, fill=255)
+    ImageDraw.Draw(gap).rounded_rectangle([0, _y(7) * SS, _x(68) * SS, _y(75) * SS], radius=10 * K * SS, fill=255)
     clear = Image.new("RGBA", (N, N), (0, 0, 0, 0))
     c.img.paste(clear, (0, 0), gap)
     # the record's label, half out of the sleeve
-    c.circle(68, 41, 8, white)
+    c.circle(_x(68), _y(41), 8 * K, white)
     c.img.paste(clear, (0, 0), gap)
     # the sleeve with its ring
-    c.rrect(5, 12, 63, 70, 6, teal)
-    c.stroke_ring(34, 41, 14, 9, white)
+    c.rrect(_x(5), _y(12), _x(63), _y(70), 6 * K, teal)
+    c.stroke_ring(_x(34), _y(41), 14 * K, 9, white)  # the stroke stays 9 units (the palette's minimum)
     return c.finish()
 
 
