@@ -263,7 +263,8 @@ The launcher also runs on x86-64 PCs (the Panasonic FZ-M1 tablet is the referenc
 
 The libraries the apps use, none of them part of this repository. **linked** = a shared library the binary needs at
 start (named in `depends`); **dlopen** = opened by the app at run time, only when the feature needs it (also named in
-`depends` or `recommends`, so the Store installs it); **built in** = compiled into the app or shipped in its package.
+`depends`, so Settings > Apps installs it; a library for an optional feature may be in `recommends` instead, which
+Settings > Apps does not install from launcher 0.10.2, older launchers did); **built in** = compiled into the app or shipped in its package.
 System libraries are not shipped: `apt` installs them.
 
 | Library | Licence | How | Apps |
