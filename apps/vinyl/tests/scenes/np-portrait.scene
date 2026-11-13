@@ -9,7 +9,7 @@ shot now-playing
 expect esc
 expect notext "Vinyl"
 expect text "Phoenix"
-expect text "Vol 60"
+expect text "60"
+expect text "Evolve 65"
 expect text "Queue"
-expect text "Output"
 expect noquit

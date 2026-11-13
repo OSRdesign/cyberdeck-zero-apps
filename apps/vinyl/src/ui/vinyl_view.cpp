@@ -305,6 +305,7 @@ struct Chip {
     uint32_t ink = col::kInk;
     int max_w = 0;
     int width = 0;
+    bool scroll = false; /* the output chip: a name too long for its row scrolls, never ends with dots */
 
     void build(lv_obj_t *parent, int x_, int y_, int h_, int pad_, int gap_, int icon_px_, int px_, uint32_t bg, uint32_t ink_,
                int radius, int max_w_) {
@@ -322,6 +323,11 @@ struct Chip {
         text = label(box, face, px, ink, pad, 0, 0);
         lv_obj_set_height(text, lv_font_get_line_height(font(face, px))); /* one line, dots when the row is full */
         lv_label_set_long_mode(text, LV_LABEL_LONG_MODE_DOTS);
+    }
+
+    void set_scroll() {
+        scroll = true;
+        lv_label_set_long_mode(text, LV_LABEL_LONG_MODE_SCROLL_CIRCULAR);
     }
 
     /* the width the text needs (0: no chip) */
@@ -345,7 +351,7 @@ struct Chip {
         if (max_w > 0 && w > max_w) {
             w = max_w;
             tw = w - 2 * pad - iw;
-            lv_label_set_long_mode(text, LV_LABEL_LONG_MODE_DOTS);
+            lv_label_set_long_mode(text, scroll ? LV_LABEL_LONG_MODE_SCROLL_CIRCULAR : LV_LABEL_LONG_MODE_DOTS);
         }
         lv_obj_set_width(text, std::max(1, tw + 1));
         show(icon, bt);
@@ -386,14 +392,6 @@ const char *word_of(const std::string &id) {
     return "";
 }
 
-std::string mmss(uint64_t ms, bool lead_zero) {
-    const uint64_t s = ms / 1000;
-    char b[32];
-    if (s >= 3600) std::snprintf(b, sizeof b, "%u:%02u:%02u", unsigned(s / 3600), unsigned((s / 60) % 60), unsigned(s % 60));
-    else if (lead_zero) std::snprintf(b, sizeof b, "%02u:%02u", unsigned(s / 60), unsigned(s % 60));
-    else std::snprintf(b, sizeof b, "%u:%02u", unsigned(s / 60), unsigned(s % 60));
-    return b;
-}
 
 }  // namespace
 
@@ -424,6 +422,10 @@ struct View::Impl {
     bool cover_shown = false;
     lv_obj_t *title = nullptr, *artist = nullptr, *album = nullptr;
     Chip chips[4]; /* format, volume, output, gapless */
+    /* the square and portrait layouts (owner, 2026-11-13): the output button, the bottom volume group */
+    lv_obj_t *outb_box = nullptr, *outb_icon = nullptr, *outb_text = nullptr, *outb_chev = nullptr;
+    Button grp_minus, grp_plus;
+    lv_obj_t *grp_value_box = nullptr, *grp_value = nullptr;
     lv_obj_t *out_hit = nullptr; /* the output chip opens the chooser (the 480x320 draft has no Output key) */
     lv_obj_t *vol_hit = nullptr; /* the volume chip shows the volume strip (design QA D-28) */
     lv_obj_t *time = nullptr, *remain = nullptr, *seek_track = nullptr, *seek_fill = nullptr, *seek_knob = nullptr;
@@ -492,7 +494,7 @@ struct View::Impl {
         HitKind kind = kKey;
     };
     std::vector<NowHit> now_hits;
-    int hits_sig[5] = {-1, -1, -1, -1, -1};
+    int hits_sig[7] = {-1, -1, -1, -1, -1, -1, -1};
 
     /* Every area grown to the target around its drawing, the stacked chips split (layout::split_pair); while the volume
      * strip is open its buttons take the band between the chips and the transport keys and the neighbours give way
@@ -520,6 +522,11 @@ struct View::Impl {
             }
         }
         if (set.chips.size() == 2) layout::split_pair(set.chips[0], set.chips[1], target);
+        /* the bottom row's neighbours meet in the middle of their gaps (the volume group's "-" beside Queue at 480x480) */
+        std::vector<size_t> order(set.bottom.size());
+        for (size_t i = 0; i < order.size(); ++i) order[i] = i;
+        std::sort(order.begin(), order.end(), [&](size_t a, size_t b) { return set.bottom[a].drawn.x < set.bottom[b].drawn.x; });
+        for (size_t i = 1; i < order.size(); ++i) layout::split_pair(set.bottom[order[i - 1]], set.bottom[order[i]], target);
         if (vol_mode) layout::place_strip_hits(set, target, body_y, H);
         for (size_t i = 0; i < pk.size(); ++i) place_area(pk[i]->obj, set.keys[i].area);
         for (size_t i = 0; i < pb.size(); ++i) place_area(pb[i]->obj, set.bottom[i].area);
@@ -534,6 +541,7 @@ struct View::Impl {
      * next thing under them (the up-next box, the bottom row or the panel's edge); everywhere else 0. */
     int keys_dy = 0;
     int strip_band_shortfall() const {
+        if (g.vol_group) return 0; /* no volume strip on the square and portrait layouts */
         int row = 0; /* the lowest chip row holding the volume or the output chip (the tappable ones) */
         for (size_t r = 0; r < g.chip_layout.size(); ++r)
             for (int id : g.chip_layout[r])
@@ -674,15 +682,19 @@ struct View::Impl {
                 chips[id].build(r, X(g.chip0.x), cy, P(g.chip0.h), P(vol ? g.vol_pad : g.chip_pad), P(g.chip_gap), P(g.chip_icon),
                                 P(vol ? g.vol_px : g.chip_px), vol ? col::kTeal : col::kChip, vol ? col::kWhite : col::kInk, P(5),
                                 chip_max);
+                if (id == 2) chips[id].set_scroll();
             }
         }
+        if (g.vol_group) build_out_button(r);
 
         out_hit = hit(r, 0, 0, 1, 1, 0, 0, [this] {
             if (act.button) act.button("output");
         });
-        vol_hit = hit(r, 0, 0, 1, 1, 0, 0, [this] { toggle_vol_strip(); });
         now_hits.push_back(NowHit{out_hit, R{}, kChip});
-        now_hits.push_back(NowHit{vol_hit, R{}, kChip});
+        if (!g.vol_group) { /* the Vol chip and its strip: the small and large layouts */
+            vol_hit = hit(r, 0, 0, 1, 1, 0, 0, [this] { toggle_vol_strip(); });
+            now_hits.push_back(NowHit{vol_hit, R{}, kChip});
+        }
         /* time row */
         time = label(r, Face::Mono, P(g.time.px), col::kInk, X(g.time.box.x), Y(g.time.box.y), Wd(g.time.box));
         remain = label(r, Face::Mono, P(g.remain.px), col::kInk2, X(g.remain.box.x), Y(g.remain.box.y), Wd(g.remain.box),
@@ -736,7 +748,81 @@ struct View::Impl {
                             Wd(g.upnext) - P(24));
         }
         for (const layout::Btn &b : g.bottom) btns[b.id] = make_button(r, b, kBottom);
-        build_vol_strip(r);
+        if (g.vol_group) build_vol_group(r);
+        else build_vol_strip(r);
+    }
+
+    /* The output button of the square and portrait layouts (owner, 2026-11-13): the chip colour, the Bluetooth or the
+     * speaker icon, the device's name (scrolls when too long), a chevron; full width of the info column (portrait: right
+     * of the format chip). A tap opens the Output page, the only way there on these layouts. */
+    void build_out_button(lv_obj_t *r) {
+        const int x = X(g.out_button.x), y = Y(g.out_button.y), w = Wd(g.out_button), h = P(g.chip0.h);
+        outb_box = box(r, x, y, w, h, col::kChip, P(5));
+        const int ip = P(g.chip_icon), pad = P(8), gp = P(6);
+        outb_icon = icon_obj(outb_box, Icon::Output, pad, (h - ip) / 2, ip, ip, ip, col::kInk);
+        outb_chev = icon_obj(outb_box, Icon::Chevron, w - pad - ip, (h - ip) / 2, ip, ip, ip, col::kInk);
+        outb_text = label(outb_box, Face::Bold, P(g.chip_px), col::kInk, pad + ip + gp, 0, std::max(1, w - 2 * pad - 2 * ip - 2 * gp));
+        lv_label_set_long_mode(outb_text, LV_LABEL_LONG_MODE_SCROLL_CIRCULAR);
+        lv_obj_set_y(outb_text, (h - lv_font_get_line_height(font(Face::Bold, P(g.chip_px)))) / 2);
+    }
+
+    void place_out_button(const NowView &v) {
+        if (!outb_box) return;
+        int x = X(g.out_button.x);
+        if (g.chips_in_row && chips[0].width > 0) x = std::max(x, chips[0].x + chips[0].width + P(g.chip_space));
+        const int right = X(g.out_button.right()), w = std::max(P(60), right - x), h = lv_obj_get_height(outb_box);
+        const int ip = P(g.chip_icon), pad = P(8), gp = P(6);
+        lv_obj_set_pos(outb_box, x, Y(g.out_button.y));
+        lv_obj_set_width(outb_box, w);
+        lv_obj_set_x(outb_chev, w - pad - ip);
+        lv_obj_set_width(outb_text, std::max(1, w - 2 * pad - 2 * ip - 2 * gp));
+        icon_set(outb_icon, v.output_bt ? Icon::Bluetooth : Icon::Output, col::kInk);
+        set_text(outb_text, v.output.empty() ? std::string("Output") : v.output);
+        for (NowHit &e : now_hits)
+            if (e.obj == out_hit) e.drawn = R{double(x), double(Y(g.out_button.y)), double(w), double(h)};
+        show(out_hit, true);
+    }
+
+    /* The bottom volume group of the square and portrait layouts (owner, 2026-11-13): "-", the level on teal, "+": the
+     * volume of the output Vinyl plays on (D11 as changed), 5 % a press; the level itself is no control. */
+    void build_vol_group(lv_obj_t *r) {
+        auto make = [&](Button &b, const R &bx, Icon ic, int delta) {
+            const int x = X(bx.x), y = Y(bx.y), w = Wd(bx), h = Hd(bx);
+            b.vis = box(r, x, y, w, h, col::kButton, P(8));
+            b.ic = ic;
+            const int ip = P(20);
+            b.icon = icon_obj(b.vis, ic, (w - ip) / 2, (h - ip) / 2, ip, ip, ip, col::kInk);
+            b.hitbox = hit(r, x, y, w, h, target, target, [this, delta] {
+                if (!last_now.vol_adjustable) { /* nothing can change it: say so (design QA run 2) */
+                    if (act.volume_unavailable) act.volume_unavailable();
+                    return;
+                }
+                if (act.volume_step) act.volume_step(delta);
+            });
+            now_hits.push_back(NowHit{b.hitbox, R{double(x), double(y), double(w), double(h)}, kBottom});
+        };
+        make(grp_minus, g.vol_minus, Icon::Minus, -5);
+        make(grp_plus, g.vol_plus, Icon::Plus, 5);
+        const int vx = X(g.vol_value.x), vy = Y(g.vol_value.y), vw = Wd(g.vol_value), vh = Hd(g.vol_value);
+        grp_value_box = box(r, vx, vy, vw, vh, col::kTeal, P(8));
+        const lv_font_t *f = font(Face::Bold, P(18));
+        grp_value = label(grp_value_box, Face::Bold, P(18), col::kWhite, 0, (vh - lv_font_get_line_height(f)) / 2, vw,
+                          LV_TEXT_ALIGN_CENTER);
+    }
+
+    /* the level in the group: the number, "Muted" (smaller when it needs to), "--" when not known */
+    void update_vol_group(const NowView &v) {
+        if (!grp_value) return;
+        std::string t = v.vol_level < 0 ? std::string("--") : v.vol.compare(0, 5, "Muted") == 0 ? std::string("Muted") : std::to_string(v.vol_level);
+        const int vw = lv_obj_get_width(grp_value_box), vh = lv_obj_get_height(grp_value_box);
+        const int px = fit_px(Face::Bold, P(18), t, vw - P(8), P(10));
+        const lv_font_t *f = font(Face::Bold, px);
+        if (lv_obj_get_style_text_font(grp_value, LV_PART_MAIN) != f) {
+            lv_obj_set_style_text_font(grp_value, f, 0);
+            lv_obj_set_height(grp_value, lv_font_get_line_height(f));
+            lv_obj_set_y(grp_value, (vh - lv_font_get_line_height(f)) / 2);
+        }
+        set_text(grp_value, t);
     }
 
     /* The volume strip (design QA D-28): a tap on the volume chip puts it in place of the seek row for kVolStripMs (each
@@ -837,6 +923,33 @@ struct View::Impl {
         if (vol_mode && !v.vol_adjustable) set_vol_mode(false);
     }
 
+    /* The time labels as wide as their widest text in this format (and never narrower than the drafts' boxes), the seek
+     * bar between them with the drafts' gaps (board screenshot 2026-11-13: a one-hour mixtape showed "-3..."). */
+    int time_hours = -1;
+    void layout_time_row(bool hours) {
+        if (time_hours == (hours ? 1 : 0)) return;
+        time_hours = hours ? 1 : 0;
+        const lv_font_t *f = font(Face::Mono, P(g.time.px));
+        const int tw = std::max(Wd(g.time.box), text_width(f, layout::track_time_widest(hours, false)) + 2);
+        const int rw = std::max(Wd(g.remain.box), text_width(f, layout::track_time_widest(hours, true)) + 2);
+        const int x0 = X(g.time.box.x), x1 = X(g.remain.box.right());
+        const int gap = std::max(1, X(g.seek.x) - X(g.time.box.right()));
+        lv_obj_set_width(time, tw);
+        lv_obj_set_x(remain, x1 - rw);
+        lv_obj_set_width(remain, rw);
+        seek_x = x0 + tw + gap;
+        seek_w = std::max(P(40), x1 - rw - gap - seek_x);
+        lv_obj_set_x(seek_track, seek_x);
+        lv_obj_set_width(seek_track, seek_w);
+        const int kd = lv_obj_get_width(seek_knob);
+        for (NowHit &e : now_hits)
+            if (e.kind == kSeek) {
+                e.drawn.x = seek_x - kd / 2;
+                e.drawn.w = seek_w + kd;
+            }
+        layout_now_hits();
+    }
+
     void set_cover(const std::shared_ptr<const PixelImage> &c) {
         if (c == cover) return;
         cover = c;
@@ -864,41 +977,58 @@ struct View::Impl {
         const int x0 = X(g.chip0.x);
         const int row_right = X(g.title.box.right()); /* the info column's right edge */
         const int space = P(g.chip_space);
-        for (const std::vector<int> &row : g.chip_layout) {
+        /* the rows of the class; the volume chip moves to another row when the chip beside it would end with dots and the
+         * other row has room for it (layout::flow_chip_rows: no dots while a wider row is free) */
+        int natural[4] = {0, 0, 0, 0};
+        for (int i = 0; i < 4; ++i)
+            if (chips[i].box) natural[i] = chips[i].natural(texts[i], bt[i]);
+        const std::vector<std::vector<int>> rows =
+            g.chips_in_row ? g.chip_layout : layout::flow_chip_rows(g.chip_layout, natural, row_right - x0, space);
+        for (size_t r = 0; r < rows.size(); ++r) {
             /* the volume chip keeps its whole width ("Vol 60", design QA D-18); the others share what is left, the last
              * of a full row ending with dots */
+            const std::vector<int> &row = rows[r];
             int vol_need = 0;
             for (int i : row)
-                if (i == 1 && chips[1].box) vol_need = chips[1].natural(texts[1], bt[1]);
+                if (i == 1 && chips[1].box) vol_need = natural[1];
             int x = x0;
             bool vol_placed = false;
             for (int i : row) {
                 if (i < 0 || i > 3 || !chips[i].box) continue;
                 const int reserve = (i != 1 && !vol_placed && vol_need > 0) ? vol_need + space : 0;
                 chips[i].max_w = i == 1 ? 0 : std::max(P(30), row_right - x - reserve);
+                chips[i].y = Y(g.chip0.y + static_cast<double>(r) * g.chip_step);
                 chips[i].set(texts[i], bt[i], x);
                 if (i == 1) vol_placed = true;
                 if (chips[i].width) x += chips[i].width + space;
             }
         }
-        /* the touch areas over the output and the volume chips follow the chips (layout_now_hits) */
+        /* the touch areas over the output and the volume chips follow the chips (layout_now_hits); the square and
+         * portrait layouts have the output button instead */
         for (NowHit &e : now_hits) {
-            const Chip *c = e.obj == out_hit ? &chips[2] : e.obj == vol_hit ? &chips[1] : nullptr;
+            if (g.vol_group && e.obj == out_hit) continue;
+            const Chip *c = e.obj == out_hit ? &chips[2] : (vol_hit && e.obj == vol_hit) ? &chips[1] : nullptr;
             if (!c) continue;
             show(e.obj, c->width > 0);
             e.drawn = c->width > 0 ? R{double(c->x), double(c->y), double(c->width), double(c->h)} : R{};
         }
-        const int sig[5] = {chips[1].x, chips[1].width, chips[2].x, chips[2].width, vol_mode ? 2 : 1};
-        if (!std::equal(sig, sig + 5, hits_sig)) { /* the chips moved, or the strip opened or closed */
-            std::copy(sig, sig + 5, hits_sig);
+        place_out_button(v);
+        update_vol_group(v);
+        const int outb_x = outb_box ? lv_obj_get_x(outb_box) : 0;
+        const int sig[7] = {chips[1].x, chips[1].width, g.vol_group ? outb_x : chips[2].x, chips[2].width, vol_mode ? 2 : 1,
+                            chips[1].y, chips[2].y};
+        if (!std::equal(sig, sig + 7, hits_sig)) { /* the chips moved, or the strip opened or closed */
+            std::copy(sig, sig + 7, hits_sig);
             layout_now_hits();
         }
         update_vol_strip(v);
-        /* time */
+        /* time: h:mm:ss for a track of an hour or more, the labels as wide as that format needs (never "-3...") */
         const uint64_t total = v.total_ms;
         const uint64_t pos = std::min(v.pos_ms, total ? total : v.pos_ms);
-        set_text(time, v.has_track ? mmss(pos, true) : "--:--");
-        set_text(remain, v.has_track && total ? "-" + mmss(total - pos, false) : "");
+        const bool hours = (total ? total : pos) >= 3600000;
+        layout_time_row(hours);
+        set_text(time, v.has_track ? layout::track_time_text(pos, hours, true) : "--:--");
+        set_text(remain, v.has_track && total ? "-" + layout::track_time_text(total - pos, hours, false) : "");
         const double frac = total ? static_cast<double>(pos) / total : 0.0;
         const int sh = lv_obj_get_height(seek_track);
         const int fw = std::max(sh, ri(frac * seek_w));

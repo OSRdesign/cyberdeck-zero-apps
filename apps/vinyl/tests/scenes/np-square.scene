@@ -1,4 +1,4 @@
-title Vinyl now playing, 480x480 (draft NowPlaying-480x480): up next, Browse / Queue / Output
+title Vinyl now playing, 480x480 (draft NowPlaying-480x480 as changed 2026-11-13): up next, Browse / Queue / the volume group, the output button
 sizes 480x480
 ppmm 800
 env VINYL_DEMO 1
@@ -10,5 +10,6 @@ expect esc
 expect text "UP NEXT"
 expect text "Amerie, 1 Thing (Siik Remix)"
 expect text "Browse"
-expect text "Vol 60"
+expect text "60"
+expect text "Evolve 65"
 expect noquit

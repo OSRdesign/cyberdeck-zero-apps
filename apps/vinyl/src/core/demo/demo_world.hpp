@@ -14,7 +14,9 @@
  *   launcher  the volume 60 (and the sinks their own levels: Evolve 65 at 60 %, the USB card 40 %, HDMI 100 %).
  * Two variants for the design-QA scenes: "empty" (VINYL_DEMO_EMPTY=1: no music folder at all and no saved state, the first
  * start on a board without ~/Music) and "cjk" (VINYL_DEMO_CJK=1: a folder 東アジア with a sub-folder 한국 and three tracks
- * whose file names and tags are Japanese, Chinese and Korean, the Japanese one playing).
+ * whose file names and tags are Japanese, Chinese and Korean, the Japanese one playing) and "long" (VINYL_DEMO_LONG=1:
+ * two one-hour mixtapes, the first playing at 0:01:14, on a USB DAC with a long name as the default output: the board
+ * screenshot of 2026-11-13).
  * LVGL-free.
  */
 #pragma once
@@ -41,9 +43,9 @@ struct DemoWorld {
 bool make_demo_world(DemoWorld &w, bool lite, const std::string &state, const std::string &variant = "");
 void remove_demo_world(const DemoWorld &w);
 
-OutputWorld demo_output_world(bool lite);
+OutputWorld demo_output_world(bool lite, const std::string &variant = "");
 LauncherStatus demo_launcher_status();
-std::unique_ptr<SinkProvider> make_demo_sink_provider();
+std::unique_ptr<SinkProvider> make_demo_sink_provider(const std::string &variant = "");
 
 /* A sparse WAV of `seconds` (16-bit stereo at `rate`) with a LIST/INFO chunk; for the demo and the tests. */
 bool write_demo_wav(const std::string &path, double seconds, uint32_t rate, const std::string &title, const std::string &artist,

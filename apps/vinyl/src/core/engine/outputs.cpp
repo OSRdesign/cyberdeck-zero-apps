@@ -82,6 +82,16 @@ std::string sink_label(const PulseDevice &sink) {
     std::string l = n;
     for (char &c : l) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     if (l.find("hdmi") != std::string::npos) return "HDMI";
+    /* VINYL: the server's profile words are not the device's name ("USB Audio Device Analog Stereo" -> "USB Audio
+     * Device"): the chip and the output list keep the card's own name (board screenshot 2026-11-13) */
+    for (const char *tail : {" Analog Stereo", " Analog Mono", " Analog Surround", " Digital Stereo", " Digital Surround",
+                             " Pro Audio"}) {
+        const size_t at = n.rfind(tail);
+        if (at != std::string::npos && at > 0) {
+            n.erase(at);
+            break;
+        }
+    }
     return n;
 }
 

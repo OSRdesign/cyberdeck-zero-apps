@@ -29,7 +29,7 @@ The deck (640x480) with the volume strip, square (720x720, the HackBerry) and la
 | Page | What |
 |---|---|
 | **Browser** (the root) | `~/Music` and the mounted drives (`/media/<user>`, `/run/media/<user>`, `/mnt`): folders A-Z, playlists (`.m3u`, `.m3u8`), tracks A-Z (natural order) with their title tags and lengths; the mini player at the bottom. A track plays its folder as the queue; a playlist plays its entries. |
-| **Now playing** | cover art (embedded JPEG or PNG, else the drawn sleeve), title (one line that scrolls, or two lines on the square and large screens), artist, album and year, the format, the volume, the output; the position with a seek bar (a tap seeks), previous, play / pause, next, shuffle, repeat (off, all, one: a teal mark, and a "1" for one); up next (square), the queue pane (large). |
+| **Now playing** | cover art (embedded JPEG or PNG, else the drawn sleeve), title (one line that scrolls, or two lines on the square and large screens), artist, album and year, the format, the output (a button on the square and portrait layouts), the volume (a chip on 480x320 and 800x480, the bottom volume group on the square and portrait layouts); the position with a seek bar (a tap seeks), previous, play / pause, next, shuffle, repeat (off, all, one: a teal mark, and a "1" for one); up next (square), the queue pane (large). |
 | **Queue** | the play order from the playing track, "3 OF 20, 1 H 24 MIN LEFT"; Move up, Move down, Remove, Clear all (keeps the playing track). No dragging anywhere. |
 | **Output** | Automatic (the system's default output), the Bluetooth devices (music or call quality), the wired outputs, a paired device that is off (dimmed). Vinyl never switches output by itself: when the output in use goes away, playback pauses ("Evolve 65 disconnected. Paused."). |
 
@@ -46,12 +46,12 @@ output lists are read in the background).
 | Scan back / ahead (muted, 3x) | hold Left / Right on now playing (or `,` / `.`, or a media key) | hold the previous / next key |
 | Seek back / forward 10 s | Shift+Left / Shift+Right (now playing) | tap the seek bar where to go |
 | Shuffle / repeat | S / R | the keys left and right of the transport |
-| Queue, Output, Browser | Q, O, B | the Queue key, the output chip or Output key, Browse (or Esc from now playing) |
+| Queue, Output, Browser | Q, O, B | the Queue key; the output chip (on the square and portrait layouts a full-width button with the device's name and a chevron, the only way to Output by touch there; on 800x480 also the Output key); Browse (or Esc from now playing) |
 | Lists: move, act, back | Up / Down, Enter; Right acts as Enter and Left goes back (queue, output; in the browser Right opens a folder) | browser: tap a row; queue: tap selects, tap again plays; output: tap chooses |
 | Folder up | Left or Backspace (browser) | the ".." row |
 | Queue pane (800x480 and wider) | Up / Down pick a track, Enter plays it | tap picks, tap again plays |
 | Queue editing | U move up, D move down, Delete or X remove, C clear all | the four buttons |
-| Volume | `-` / `=`: the volume of the output Vinyl plays on, 5 % a step | tap the volume chip: the volume strip ("-", the level, its bar, "+") replaces the seek row for 4 s (a second tap closes it); its buttons set the playing output's volume, the chip and the strip show its real level; where nothing can change it a tap shows "Volume is not available on this board" |
+| Volume | `-` / `=`: the volume of the output Vinyl plays on, 5 % a step | square and portrait layouts: "-" and "+" of the volume group in the bottom row, the level between them (teal); 480x320 and 800x480: tap the volume chip, the volume strip ("-", the level, its bar, "+") replaces the seek row for 4 s (a second tap closes it). Both set and show the playing output's real level; where nothing can change it a tap shows "Volume is not available on this board" |
 | Close a notice | Esc | tap it (it also goes after 6 s, 8 s for a disconnect) |
 | Back; at the browser, quit | Esc | the header's Esc |
 | Headset, speaker, keyboard media keys | Play/Pause, PlayCD, PauseCD (a toggle), Next, Previous (as Right / Left above, held too), Stop (pause and back to the start) | |
@@ -163,7 +163,7 @@ the FLAC / Opus readers come from this repository's Cassette (same author, MIT).
 
 ```sh
 wsl -e sh apps/vinyl/tests/run.sh               # the unit tests (-Werror) and the real-library fixtures
-wsl -e sh apps/vinyl/build.sh host              # harness, unit tests, 26 scenes (qa* for the design QA), sheets
+wsl -e sh apps/vinyl/build.sh host              # harness, unit tests, 28 scenes (qa* for the design QA), sheets
 wsl -e sh apps/vinyl/build.sh cross             # the arm64 binary; --arch amd64 for PCs
 wsl -e sh apps/vinyl/tests/abi/run.sh [root]    # the hand-written FFmpeg / mpg123 / vorbisfile ABI against headers
 python3 tools/make_registry.py --only vinyl --out <folder>    # a local .deb (not published)

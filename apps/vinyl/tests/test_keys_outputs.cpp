@@ -357,11 +357,21 @@ void test_layout() {
         for (const Btn &b : g.transport) CHECK(inside(b.box));
         for (const Btn &b : g.bottom) CHECK(inside(b.box));
         for (size_t i = 1; i < g.transport.size(); ++i) CHECK(g.transport[i].box.x >= g.transport[i - 1].box.right());
-        /* every chip id once */
+        /* every chip id once; the square and portrait drafts (owner, 2026-11-13): the format and gapless chips only, the
+         * output a button of its own, the volume the bottom group */
         int ids = 0;
         for (const std::vector<int> &row : g.chip_layout)
             for (int id : row) ids |= 1 << id;
-        CHECK_EQ(ids, c == SizeClass::Small || c == SizeClass::Portrait ? 7 : 15);
+        CHECK_EQ(ids, c == SizeClass::Small ? 7 : c == SizeClass::Portrait ? 1 : c == SizeClass::Square ? 9 : 15);
+        CHECK_EQ(g.vol_group, c == SizeClass::Square || c == SizeClass::Portrait);
+        if (g.vol_group) {
+            CHECK(inside(g.vol_minus) && inside(g.vol_value) && inside(g.vol_plus) && inside(g.out_button));
+            CHECK(g.vol_minus.right() < g.vol_value.x && g.vol_value.right() < g.vol_plus.x);
+            CHECK(g.bottom.back().box.right() < g.vol_minus.x);
+            CHECK_NEAR(g.vol_plus.right(), g.transport.back().box.right(), 1e-9); /* the group ends with the keys above */
+            CHECK_NEAR(g.out_button.right(), g.title.box.right(), 1e-9);         /* the button fills the info column */
+            for (const Btn &b : g.bottom) CHECK(b.id != "output");
+        }
         /* the notice box across the seek row */
         const R n = notice_box_now(g, 50);
         CHECK(n.x >= g.panel.x && n.right() <= g.panel.right());

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 namespace vinyl {
 namespace layout {
@@ -111,7 +112,7 @@ NowGeom now_geom(SizeClass c) {
         g.chip_icon = 11;
         g.chips_in_row = true;
         g.chip_rows = 1;
-        g.chip_layout = {{0, 2, 1}};
+        g.chip_layout = {{0}}; /* the output is the button beside the format chip, the volume the bottom group */
         g.short_format = true;
         g.quality_in_chip = false;
         g.time = text(24, 332, 44, 24, 13, false, 24);
@@ -120,7 +121,12 @@ NowGeom now_geom(SizeClass c) {
         g.transport = {btn("shuffle", 24, 368, 48, 48), btn("prev", 78, 368, 48, 48), btn("play", 132, 368, 56, 48, 26, true),
                        btn("next", 194, 368, 48, 48), btn("repeat", 248, 368, 48, 48)};
         g.repeat_dash = R{266, 408, 12, 4};
-        g.bottom = {word("queue", 24, 426, 134, 40), word("output", 162, 426, 134, 40)};
+        g.bottom = {word("queue", 24, 426, 100, 40)};
+        g.vol_group = true; /* owner, 2026-11-13: the Output key becomes the volume group */
+        g.vol_minus = R{132, 426, 48, 40};
+        g.vol_value = R{184, 426, 60, 40};
+        g.vol_plus = R{248, 426, 48, 40};
+        g.out_button = R{132, 298, 164, 24};
         g.seams = {224, 326, 362, 420};
         break;
     case SizeClass::Square: /* NowPlaying-480x480 */
@@ -137,7 +143,7 @@ NowGeom now_geom(SizeClass c) {
         g.chip0 = R{298, 162, 0, 26};
         g.chip_step = 32;
         g.chip_rows = 3;
-        g.chip_layout = {{0}, {2, 1}, {3}};
+        g.chip_layout = {{0}, {}, {3}}; /* row 1 is the output button (out_button) */
         g.short_format = true;
         g.quality_in_chip = false;
         g.time = text(20, 266, 48, 28, 14, false, 28);
@@ -149,7 +155,12 @@ NowGeom now_geom(SizeClass c) {
         g.repeat_dash = R{354, 344, 12, 4};
         g.has_upnext = true;
         g.upnext = R{20, 366, 440, 44};
-        g.bottom = {word("browse", 20, 420, 140, 42), word("queue", 170, 420, 140, 42), word("output", 320, 420, 140, 42)};
+        g.bottom = {word("browse", 20, 420, 120, 42), word("queue", 150, 420, 120, 42)};
+        g.vol_group = true; /* owner, 2026-11-13: the Output key becomes the volume group */
+        g.vol_minus = R{280, 420, 52, 42};
+        g.vol_value = R{336, 420, 68, 42};
+        g.vol_plus = R{408, 420, 52, 42};
+        g.out_button = R{298, 194, 162, 26};
         g.seams = {258, 300, 360, 414};
         break;
     case SizeClass::Large: /* NowPlaying-800x480 */
@@ -195,6 +206,54 @@ R notice_box_now(const NowGeom &g, double height) {
     const double x0 = g.time.box.x - 4, x1 = g.remain.box.right() + 4;
     const double bottom = g.time.box.bottom();
     return R{x0, bottom - height, x1 - x0, height};
+}
+
+std::string track_time_text(uint64_t ms, bool hours, bool lead_zero) {
+    const uint64_t t = ms / 1000;
+    char b[32];
+    if (hours) std::snprintf(b, sizeof b, "%u:%02u:%02u", unsigned(t / 3600), unsigned((t / 60) % 60), unsigned(t % 60));
+    else if (lead_zero) std::snprintf(b, sizeof b, "%02u:%02u", unsigned(t / 60), unsigned(t % 60));
+    else std::snprintf(b, sizeof b, "%u:%02u", unsigned(t / 60), unsigned(t % 60));
+    return b;
+}
+
+const char *track_time_widest(bool hours, bool remaining) {
+    if (hours) return remaining ? "-00:00:00" : "00:00:00"; /* up to 99 h: a wider label never cuts a long file */
+    return remaining ? "-00:00" : "00:00";
+}
+
+std::vector<std::vector<int>> flow_chip_rows(const std::vector<std::vector<int>> &rows, const int natural[4], int avail,
+                                             int space) {
+    auto width = [&](const std::vector<int> &row) {
+        int w = 0, n = 0;
+        for (int id : row)
+            if (id >= 0 && id <= 3 && natural[id] > 0) {
+                w += natural[id];
+                ++n;
+            }
+        return n > 1 ? w + (n - 1) * space : w;
+    };
+    std::vector<std::vector<int>> out = rows;
+    int vr = -1;
+    for (size_t r = 0; r < out.size(); ++r)
+        for (int id : out[r])
+            if (id == 1) vr = static_cast<int>(r);
+    if (vr < 0 || natural[1] <= 0 || width(out[static_cast<size_t>(vr)]) <= avail) return out;
+    bool shared = false;
+    for (int id : out[static_cast<size_t>(vr)])
+        if (id != 1 && id >= 0 && id <= 3 && natural[id] > 0) shared = true;
+    if (!shared) return out;
+    for (size_t r = 0; r < out.size(); ++r) {
+        if (static_cast<int>(r) == vr) continue;
+        const int w = width(out[r]);
+        if (natural[1] + (w > 0 ? w + space : 0) <= avail) {
+            std::vector<int> &from = out[static_cast<size_t>(vr)];
+            from.erase(std::remove(from.begin(), from.end(), 1), from.end());
+            out[r].push_back(1);
+            break;
+        }
+    }
+    return out;
 }
 
 R grow_hit(const R &d, double min_w, double min_h) {

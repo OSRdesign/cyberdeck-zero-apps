@@ -70,9 +70,11 @@ Each accepted for P1 by the coordinator, owner informed (no owner wording record
 - The sleep-timer and Equalizer keys of the square and large drafts are drawn dimmed with no action (P2 features).
 - Browser rows act on the first tap (open a folder, play a track) at the compact list height.
 - Controls drawn smaller than 7 mm keep their drawn look and get a larger invisible touch area (R-4 applies).
-- The volume strip's "-" and "+" are drawn lower than the touch target where the band between the chips and the
-  transport keys is lower (480x480, 800x480, 480x640, 720x720, 320x480); their touch areas take the band (accepted as a
-  WARN by the coordinator, 2026-11-12; the sizes are on the `volume_strip_buttons` line of the QA hand-off).
+- The volume strip's "-" and "+" (480x320, 800x480 and the other large canvases since 2026-11-13) are drawn lower than
+  the touch target where the band between the chips and the transport keys is lower; their touch areas take the band
+  (accepted as a WARN by the coordinator, 2026-11-12; the sizes are on the `volume_strip_buttons` line of the QA
+  hand-off). The volume group's "-" and "+" are drawn as the drafts give them, their touch areas at least the target
+  (`volume_group_buttons` line).
 - The icon: four colours (cream sleeve, teal ring and label, black record, grey grooves) and thin groove rings, an
   exception to the palette's rule 3; the coordinator's design call (2026-11-12).
 - At 480x480 the six transport keys cannot all be the target wide (80 px: 6 x 80 is more than the row) without
@@ -117,6 +119,28 @@ chip makes more than a second to reflect."
   off for the node (the stream also opens at its own 100 %).
 - A level that is not known (the sink gone, not read yet, or reported without a volume) shows as "Vol --" and is
   logged as "--", never as a negative number (board test B18, 2026-11-13).
+
+## Volume group and output button on the square and portrait layouts (owner, 2026-11-13)
+
+The owner (drafts NowPlaying-480x480 and NowPlaying-320x480 updated by the coordinator): "that label for the output is
+redundant with the output button, output is not something you change that often. I would replace for PDA mode and
+square the output button for volume controls with the volume value between - and + buttons (keeping the green
+background), remove the volume label and expand the output one that can be selected to change the output device."
+
+- Square (480x480, 720x720) and portrait (320x480, 480x640, 480x800, the other portrait canvases): the bottom row's
+  Output key is a volume group, "-", the level (the number on teal, white bold), "+"; 480x480: Browse 120, Queue 120, the
+  group 180 (52, 68, 52, 4 px gaps); 320x480: Queue 100, the group 164 (48, 60, 48). It sets and shows the volume of the
+  playing output (D11 as changed); the level itself is no control. No Vol chip and no volume strip on these layouts.
+- The output chip is a button there: the Bluetooth or speaker icon, the device's name only (call quality stays a
+  notice), a chevron; the full width of the info column (portrait: right of the format chip); a name too long for it
+  scrolls, never ends with dots; a tap opens the Output page (the only way there by touch on these layouts).
+- 480x320 and 800x480 stay as they were for now (the Vol chip and its strip, the large class's Output key); their output
+  chip stays tappable, takes a row of its own when the Vol chip beside it would cut it, and scrolls when it is still too
+  long. The owner is asked about these layouts separately; the group is layout data (`vol_group`), so they can take it
+  over by data.
+- The coordinator, same day: the time labels as wide as their format needs, h:mm:ss for a track of an hour or more on
+  both sides of the seek bar (a one-hour mixtape showed "-3..."); a sink's name without the server's profile words
+  ("USB Audio Device Analog Stereo" -> "USB Audio Device").
 
 ## Volume strip touch areas (the coordinator, 2026-11-12)
 

@@ -1,4 +1,4 @@
-title Vinyl: design QA walk (now playing, the volume strip by touch and its 4 s close, browser, queue, output; Left goes back on Queue and Output). Busy state: none (nothing in Vinyl waits in front of the user). Error states: the notices (notice-now, notice-classes, notices)
+title Vinyl: design QA walk (now playing with the volume strip on 640x480 / 800x480 and the volume group on the square and portrait layouts, browser, queue, output; Left goes back on Queue and Output). Busy state: none (nothing in Vinyl waits in front of the user). Error states: the notices (notice-now, notice-classes, notices)
 sizes 640x480 800x480 480x480 720x720 480x800 480x640
 env VINYL_DEMO 1
 env VINYL_DEMO_STATE playing
@@ -7,33 +7,44 @@ wait 1200
 shot 01-now
 expect esc
 expect text "Vinyl"
-expect text "Vol 60"
-tap "Vol 60"
+@640x480,800x480 expect text "Vol 60"
+# the small and large layouts: the Vol chip opens the volume strip
+@640x480,800x480 tap "Vol 60"
+@480x480,720x720,480x800,480x640 expect text "60"
+@480x480,720x720,480x800,480x640 expect text "Evolve 65"
+# the square and portrait layouts (owner, 2026-11-13): the bottom volume group, no Vol chip
 wait 300
 shot 02-now-volume
-expect text "60"
-# the strip's "+" (an icon: no text to tap), measured on each size's 02 shot
+@640x480,800x480 expect text "60"
+# the strip's or the group's "+" (an icon: no text to tap), measured on each size's shot
 @640x480 tapxy 0.899 0.696
 @800x480 tapxy 0.912 0.603
-@480x480 tapxy 0.877 0.602
-@720x720 tapxy 0.897 0.581
-@480x800 tapxy 0.857 0.692
-@480x640 tapxy 0.833 0.719
+@480x480 tapxy 0.881 0.922
+@720x720 tapxy 0.901 0.919
+@480x800 tapxy 0.849 0.936
+@480x640 tapxy 0.809 0.928
 wait 300
 shot 03-now-volume-up
-expect text "Vol 65"
 expect text "65"
+@640x480,800x480 expect text "Vol 65"
 wait 4300
 shot 04-now-volume-closed
-expect notext "65"
-expect text "Vol 65"
+@640x480,800x480 expect notext "65"
+@640x480,800x480 expect text "Vol 65"
 # a tap on the chip opens the strip, a second tap closes it
-tap "Vol 65"
+@640x480,800x480 tap "Vol 65"
 wait 300
-expect text "65"
-tap "Vol 65"
+@640x480,800x480 expect text "65"
+@640x480,800x480 tap "Vol 65"
 wait 300
-expect notext "65"
+@640x480,800x480 expect notext "65"
+@480x480,720x720,480x800,480x640 expect text "65"
+# the output button opens the Output page (the only way there by touch on these layouts)
+@480x480,720x720,480x800,480x640 tap "Evolve 65"
+wait 400
+@480x480,720x720,480x800,480x640 expect text "Automatic"
+@480x480,720x720,480x800,480x640 key left
+wait 300
 key b
 wait 400
 shot 05-browser

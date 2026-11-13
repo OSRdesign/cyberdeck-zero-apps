@@ -77,6 +77,14 @@ const Track kCjkTracks[] = {
     {"東アジア/한국", "김광석 - 서른 즈음에", "서른 즈음에", "김광석", "김광석 네번째", "1994", 287},
 };
 
+/* the "long" variant: one-hour mixtapes (the board screenshot of 2026-11-13) */
+const Track kLongTracks[] = {
+    {"Walter Sobcek", "Walter Sobcek - Mixtape The Classics Vol.1", "MIXTAPE - THE CLASSICS VOL.1", "Walter Sobcek", "", "2026", 3750},
+    {"Walter Sobcek", "Walter Sobcek - Mixtape The Classics Vol.2", "MIXTAPE - THE CLASSICS VOL.2", "Walter Sobcek", "", "2026", 3620},
+};
+const char *kLongSink = "alsa_output.usb-USB_Audio_Device-00.analog-stereo";
+const char *kLongSinkDescription = "USB Audio Device Analog Stereo";
+
 int rm_cb(const char *p, const struct stat *, int, struct FTW *) { return ::remove(p); }
 
 }  // namespace
@@ -152,6 +160,23 @@ bool make_demo_world(DemoWorld &w, bool lite, const std::string &state, const st
     s.browse = w.music + "/Phoenix";
     s.repeat = Repeat::All; /* the drafts show the repeat mark */
     s.output = "auto";
+    if (variant == "long") {
+        s.items.clear();
+        s.order.clear();
+        int k = 0;
+        for (const Track &t : kLongTracks) {
+            const std::string dir = w.music + "/" + t.folder;
+            make_dirs(ops, dir);
+            const std::string path = dir + "/" + t.file + ".wav";
+            write_demo_wav(path, t.seconds, 44100, t.title, t.artist, t.album, t.date, ++k);
+            s.order.push_back(static_cast<int>(s.items.size()));
+            s.items.push_back(path);
+        }
+        s.current = 0;
+        s.position_ms = 74000;
+        s.source = w.music + "/" + kLongTracks[0].folder;
+        s.browse = s.source;
+    }
     if (variant == "cjk") {
         s.items.clear();
         s.order.clear();
@@ -178,7 +203,7 @@ void remove_demo_world(const DemoWorld &w) {
     ::nftw(w.root.c_str(), rm_cb, 16, FTW_DEPTH | FTW_PHYS);
 }
 
-OutputWorld demo_output_world(bool lite) {
+OutputWorld demo_output_world(bool lite, const std::string &variant) {
     OutputWorld o;
     if (lite) {
         o.server = false;
@@ -223,6 +248,17 @@ OutputWorld demo_output_world(bool lite) {
     hdmi.volume_pct = 100;
     o.sinks = {evolve, usb, hdmi};
     o.default_sink = evolve.name;
+    if (variant == "long") { /* a USB DAC with a long name, the default output */
+        PulseDevice dac;
+        dac.name = kLongSink;
+        dac.description = kLongSinkDescription;
+        dac.bus = "usb";
+        dac.rate = 48000;
+        dac.channels = 2;
+        dac.volume_pct = 70;
+        o.sinks.push_back(dac);
+        o.default_sink = dac.name;
+    }
     LauncherBtDev xwf;
     xwf.mac = "9E:0C:81:E6:5D:1A";
     xwf.kind = "speaker";
@@ -302,11 +338,19 @@ private:
 
 class DemoSinks final : public SinkProvider {
 public:
+    explicit DemoSinks(bool long_dac) : long_dac_(long_dac) {}
     int open(const OutputTarget &t, OpenedSink &out, std::string &why) override {
         (void)why;
         out.sink = std::make_unique<NullSink>();
         out.pulse = true;
-        if (t.kind == OutputTarget::Kind::Auto || t.id == "70:BF:92:53:6B:8B") {
+        if (t.kind == OutputTarget::Kind::Auto && long_dac_) {
+            PulseDevice d;
+            d.name = kLongSink;
+            d.description = kLongSinkDescription;
+            out.name = d.name;
+            out.label = sink_label(d); /* "USB Audio Device", as the real provider names it */
+            out.device = d.name;
+        } else if (t.kind == OutputTarget::Kind::Auto || t.id == "70:BF:92:53:6B:8B") {
             out.name = "bluez_output.70_BF_92_53_6B_8B.1";
             out.label = "Evolve 65";
             out.device = "70:BF:92:53:6B:8B";
@@ -318,10 +362,15 @@ public:
         return 0;
     }
     bool still_there(const OpenedSink &) override { return true; }
+
+private:
+    bool long_dac_;
 };
 
 }  // namespace
 
-std::unique_ptr<SinkProvider> make_demo_sink_provider() { return std::make_unique<DemoSinks>(); }
+std::unique_ptr<SinkProvider> make_demo_sink_provider(const std::string &variant) {
+    return std::make_unique<DemoSinks>(variant == "long");
+}
 
 }  // namespace vinyl

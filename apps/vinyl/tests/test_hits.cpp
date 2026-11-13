@@ -110,6 +110,38 @@ void test_strip_hits() {
     }
 }
 
+/* the board screenshot of 2026-11-13: "-3..." beside the seek bar on a one-hour mixtape, "USB Audio..." beside "Vol 70" */
+void test_time_and_chips() {
+    CHECK_EQ(track_time_text(74000, false, true), std::string("01:14"));
+    CHECK_EQ(track_time_text(231000, false, false), std::string("3:51"));
+    CHECK_EQ(track_time_text(2190000, false, false), std::string("36:30"));
+    CHECK_EQ(track_time_text(74000, true, true), std::string("0:01:14")); /* a track of an hour or more: h:mm:ss */
+    CHECK_EQ(track_time_text(3676000, true, false), std::string("1:01:16"));
+    CHECK_EQ(track_time_text(0, true, false), std::string("0:00:00"));
+    /* the widest text of each format holds every value of it (mono digits: the length decides) */
+    CHECK(std::string(track_time_widest(false, true)).size() >= std::string("-") .size() + track_time_text(3599000, false, false).size());
+    CHECK(std::string(track_time_widest(true, true)).size() >= 1 + track_time_text(99 * 3600000ull - 1000, true, false).size());
+    CHECK(std::string(track_time_widest(true, false)).size() >= track_time_text(36000000, true, true).size());
+
+    /* the square class: [format] [output, volume] [gapless]; the info column 243 px at 720x720 */
+    const std::vector<std::vector<int>> square = {{0}, {2, 1}, {3}};
+    const int fits[4] = {150, 87, 140, 100};
+    CHECK(flow_chip_rows(square, fits, 243, 12) == square); /* 140 + 12 + 87 = 239: as drawn */
+    const int usb[4] = {166, 87, 160, 100};                /* "USB Audio Device": 259 with the volume */
+    const auto moved = flow_chip_rows(square, usb, 243, 12);
+    CHECK(moved == (std::vector<std::vector<int>>{{0}, {2}, {3, 1}})); /* the format row has no room, the gapless row has */
+    const int narrow_format[4] = {120, 87, 160, 100};
+    CHECK(flow_chip_rows(square, narrow_format, 243, 12) == (std::vector<std::vector<int>>{{0, 1}, {2}, {3}}));
+    const int no_gapless[4] = {200, 87, 200, 0};
+    CHECK(flow_chip_rows(square, no_gapless, 243, 12) == (std::vector<std::vector<int>>{{0}, {2}, {3, 1}}));
+    const int nowhere[4] = {200, 87, 200, 200};
+    CHECK(flow_chip_rows(square, nowhere, 243, 12) == square); /* no row has room: as drawn, the output ends with dots */
+    /* the small class: the volume beside the format, the output alone: nothing to gain */
+    const std::vector<std::vector<int>> small = {{0, 1}, {2}};
+    const int long_out[4] = {100, 60, 400, 0};
+    CHECK(flow_chip_rows(small, long_out, 232, 8) == small);
+}
+
 }  // namespace
 
 void test_hits() {
@@ -166,4 +198,5 @@ void test_hits() {
     CHECK_NEAR(ha.area.w, a0.w, 1e-9);
 
     test_strip_hits();
+    test_time_and_chips();
 }

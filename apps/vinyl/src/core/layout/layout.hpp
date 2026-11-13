@@ -26,6 +26,7 @@
 
 #include "fit.hpp"
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -70,7 +71,8 @@ struct NowGeom {
     Text title, artist, album;
     /* the chips (the drafts as updated 2026-11-12): small rows [format, volume] [output]; square and large [format]
      * [output, volume] [gapless]; portrait one row [format, output, volume]. The volume chip is teal with white text. */
-    std::vector<std::vector<int>> chip_layout; /* ids: 0 format, 1 volume, 2 output, 3 gapless */
+    std::vector<std::vector<int>> chip_layout; /* ids: 0 format, 1 volume, 2 output, 3 gapless (vol_group classes: no 1 and no
+                                                  2, the output is out_button; an empty row keeps its place) */
     double vol_px = 12, vol_pad = 10;
     R chip0;                  /* the first chip's position; height in h */
     double chip_px = 12, chip_pad = 10, chip_gap = 6, chip_icon = 12;
@@ -89,6 +91,14 @@ struct NowGeom {
     std::vector<Btn> bottom;
     bool has_queue_pane = false;
     R queue_pane;
+    /* The volume group of the square and portrait drafts (owner, 2026-11-13: NowPlaying-480x480 / -320x480): "-", the
+     * level on teal, "+" in the bottom row where the Output key was; no Vol chip and no volume strip on those layouts.
+     * The output chip is then a button of its own (icon, the device's name, a chevron) that opens the Output page:
+     * out_button is its box (portrait: x is the least, it starts right of a wider format chip and ends at the same
+     * right edge). The small and large classes keep the Vol chip, the strip (and the large class its Output key). */
+    bool vol_group = false;
+    R vol_minus, vol_value, vol_plus;
+    R out_button;
     double queue_row_h = 40, queue_heading_px = 11;
     std::vector<double> seams;
 };
@@ -113,6 +123,19 @@ ui::Fit now_fit(const NowGeom &g, int screen_w, int screen_h, int body_y);
 
 /* Where a notice strip goes on the now-playing page (design px): across the seek row, its bottom on the row's bottom. */
 R notice_box_now(const NowGeom &g, double height);
+
+/* The time row's texts (board screenshot, 2026-11-13: "-3..." on a one-hour mixtape): h:mm:ss for a track of an hour
+ * or more, elapsed and remaining alike ("0:01:14", "1:01:16"), mm:ss otherwise ("01:14" with lead_zero, "3:51"). */
+std::string track_time_text(uint64_t ms, bool hours, bool lead_zero);
+/* The widest text of each label for a format (the labels are sized for it, so a long track is never cut). */
+const char *track_time_widest(bool hours, bool remaining);
+
+/* The chip rows for the chips' natural widths (screen px; 0 = no chip): when the volume chip (id 1) shares a row with a
+ * chip that would end with dots, it moves to the end of another row where it fits whole (the first such row), so the
+ * other chip gets the whole row (board screenshot 2026-11-13: "USB Audio..." beside "Vol 70" at 720x720). A row that
+ * fits, or a volume chip that fits nowhere else, stays as it is. */
+std::vector<std::vector<int>> flow_chip_rows(const std::vector<std::vector<int>> &rows, const int natural[4], int avail,
+                                             int space);
 
 /* The touch areas of a page (screen px). A control drawn smaller than the toolkit's TARGET gets a larger invisible area
  * (grow_hit: the drawn box grown to min_w x min_h around its centre). split_pair keeps two neighbours' areas apart

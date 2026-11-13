@@ -579,10 +579,26 @@ void test_unknown_level() {
     }
 }
 
+/* the server's profile words are not a device's name (the board screenshot of 2026-11-13: "USB Audio...") */
+void test_sink_names() {
+    PulseDevice d;
+    d.description = "USB Audio Device Analog Stereo";
+    CHECK_EQ(sink_label(d), std::string("USB Audio Device"));
+    d.description = "Sharkoon Gaming DAC Pro S Digital Stereo (IEC958)";
+    CHECK_EQ(sink_label(d), std::string("Sharkoon Gaming DAC Pro S"));
+    d.description = "Built-in Audio Digital Stereo (HDMI)";
+    CHECK_EQ(sink_label(d), std::string("HDMI"));
+    d.description = "USB sound card UC02";
+    CHECK_EQ(sink_label(d), std::string("USB sound card UC02"));
+    d.description = "Analog Stereo"; /* nothing but the words: kept */
+    CHECK_EQ(sink_label(d), std::string("Analog Stereo"));
+}
+
 }  // namespace
 
 void test_volume() {
     test_volume_pct();
+    test_sink_names();
     test_unknown_level();
     test_output_mixer();
     test_output_sink_level();

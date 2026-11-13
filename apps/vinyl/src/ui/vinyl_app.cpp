@@ -155,13 +155,16 @@ struct VinylApp::Impl final : TransportHost {
         lite = env_on("VINYL_DEMO_LITE");
         if (demo) {
             /* the design-QA variants: no music at all, or CJK names and tags */
-            const std::string variant = env_on("VINYL_DEMO_EMPTY") ? "empty" : env_on("VINYL_DEMO_CJK") ? "cjk" : "";
+            const std::string variant = env_on("VINYL_DEMO_EMPTY") ? "empty"
+                                        : env_on("VINYL_DEMO_CJK")  ? "cjk"
+                                        : env_on("VINYL_DEMO_LONG") ? "long"
+                                                                    : "";
             make_demo_world(demo_world, lite, env_str("VINYL_DEMO_STATE"), variant);
             if (demo_world.empty) roots.clear();
             else roots = {Root{"Music", demo_world.music}};
             resume_file = demo_world.config + "/vinyl/state.json";
-            sinks = make_demo_sink_provider();
-            world = demo_output_world(lite);
+            sinks = make_demo_sink_provider(variant);
+            world = demo_output_world(lite, variant);
             status = demo_launcher_status();
             if (env_on("VINYL_DEMO_NOVOLUME")) { /* the server reports no level for its sinks: the strip cannot open */
                 status.volume = -1;
@@ -925,7 +928,7 @@ struct VinylApp::Impl final : TransportHost {
         if (!snap.output_label.empty()) return snap.output_label;
         if (target.kind == OutputTarget::Kind::Auto) {
             for (const PulseDevice &s : world.sinks)
-                if (s.name == world.default_sink) return s.description.empty() ? sink_label(s) : s.description;
+                if (s.name == world.default_sink) return sink_label(s); /* the device's name, not the profile words */
             return world.server ? "" : "Default output";
         }
         for (const OutputRow &r : out_rows)
