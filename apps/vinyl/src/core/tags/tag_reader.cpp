@@ -529,26 +529,30 @@ MpegFrame mpeg_frame(const unsigned char *p) {
 constexpr size_t kTextFrameBytes = 64u << 10;   /* a text frame (TIT2, TXXX...) larger than this is not read */
 constexpr size_t kUnsyncedTagBytes = 256u << 10; /* a tag unsynchronised as a whole: what is read without a picture asked */
 
-/* The ID3v2 tag at the start of the file, walked frame by frame in the file (report 060 finding 3): each frame header is
- * read, then only the bodies wanted (text frames up to 64 kB, a picture only when `pic` asks for one and it fits), so a
- * cover is skipped by its size. A tag unsynchronised as a whole (v2.2 / v2.3 flag) cannot be walked in the file: it is
- * read whole when a picture is asked for (up to kMaxTagBytes), else its first 256 kB (the text frames come first in
- * practice). Returns the bytes the tag occupies (0: none). */
-size_t read_id3v2_file(const File &f, TrackTags &t, Picture *pic, size_t max_pic) {
+/* An ID3v2 tag at `base` (the start of an MP3, or a WAV / AIFF id3 chunk ending at `limit`), walked frame by frame in the
+ * file (report 060 finding 3): each frame header is read, then only the bodies wanted (text frames up to 64 kB, a picture
+ * only when `pic` asks for one and it fits), so a cover (APIC / PIC) or an object (GEOB) is skipped by its size. A tag
+ * unsynchronised as a whole (v2.2 / v2.3 flag) cannot be walked in the file: it is read whole when a picture is asked
+ * for (up to kMaxTagBytes), else its first 256 kB (the text frames come first in practice). Returns the bytes the tag
+ * occupies (0: none). */
+size_t read_id3v2_file(const File &f, TrackTags &t, Picture *pic, size_t max_pic, uint64_t base = 0,
+                       uint64_t limit = UINT64_MAX) {
+    limit = std::min<uint64_t>(limit, f.size());
     unsigned char h[10];
-    if (!f.read(0, h, 10) || std::memcmp(h, "ID3", 3) != 0) return 0;
+    if (base + 10 > limit || !f.read(base, h, 10) || std::memcmp(h, "ID3", 3) != 0) return 0;
     const unsigned ver = h[3], flags = h[5];
     if (ver < 2 || ver > 4) return 0;
     const uint64_t tag_size = syncsafe(h + 6);
     const size_t total = 10 + tag_size + ((flags & 0x10) ? 10 : 0);
-    const uint64_t end = std::min<uint64_t>(10 + tag_size, f.size());
+    const uint64_t end = std::min<uint64_t>(base + 10 + tag_size, limit);
     if ((flags & 0x80) && ver < 4) {
         const uint64_t want = std::min<uint64_t>(total, pic ? kMaxTagBytes : kUnsyncedTagBytes);
         std::vector<unsigned char> tag;
-        if (f.read(0, tag, static_cast<size_t>(std::min<uint64_t>(want, f.size())))) parse_id3v2(tag.data(), tag.size(), t, pic, max_pic);
+        if (f.read(base, tag, static_cast<size_t>(std::min<uint64_t>(want, limit - base))))
+            parse_id3v2(tag.data(), tag.size(), t, pic, max_pic);
         return total;
     }
-    uint64_t pos = 10;
+    uint64_t pos = base + 10;
     if ((flags & 0x40) && ver >= 3) { /* extended header */
         unsigned char e[4];
         if (!f.read(pos, e, 4)) return total;
@@ -581,13 +585,197 @@ size_t read_id3v2_file(const File &f, TrackTags &t, Picture *pic, size_t max_pic
     return total;
 }
 
+/* ------------------------------------------------------------------------------------------------ scan mode */
+
+/* Bytes read in order from somewhere in the file, with skips that read nothing: the Vorbis comments of the scan mode
+ * (P2b) walk a FLAC block or an Ogg packet this way instead of reading it whole, so a picture comment costs its first
+ * 4 kB, not its megabytes. */
+class ByteSource {
+public:
+    virtual ~ByteSource() = default;
+    virtual bool read(void *dst, size_t n) = 0;
+    virtual bool skip(uint64_t n) = 0;
+};
+
+/* [pos, end) of the file */
+class FileRange : public ByteSource {
+public:
+    FileRange(const File &f, uint64_t pos, uint64_t end) : f_(f), pos_(pos), end_(std::min(end, f.size())) {}
+    bool read(void *dst, size_t n) override {
+        if (pos_ + n > end_ || !f_.read(pos_, dst, n)) return false;
+        pos_ += n;
+        return true;
+    }
+    bool skip(uint64_t n) override {
+        if (pos_ + n > end_) return false;
+        pos_ += n;
+        return true;
+    }
+
+private:
+    const File &f_;
+    uint64_t pos_, end_;
+};
+
+/* One packet of an Ogg logical stream, from the page at `page`, segment `seg` (where OggReader stands after the packet
+ * before it), across as many pages as it spans: only the page headers and the bytes asked for are read. */
+class OggPacketSource : public ByteSource {
+public:
+    OggPacketSource(const File &f, uint64_t page, unsigned seg, uint32_t serial)
+        : f_(f), serial_(serial), next_page_(page), seg_(seg) {
+        ok_ = load();
+    }
+    bool read(void *dst, size_t n) override { return take(static_cast<unsigned char *>(dst), n); }
+    bool skip(uint64_t n) override { return take(nullptr, n); }
+
+private:
+    /* the page at next_page_ (pages of other streams skipped); seg_ is kept for the first page */
+    bool load() {
+        for (int guard = 0; guard < 64; ++guard) {
+            unsigned char h[27];
+            if (!f_.read(next_page_, h, 27) || std::memcmp(h, "OggS", 4) != 0) return false;
+            const unsigned nseg = h[26];
+            unsigned char lace[255]; /* a local, as OggReader's (GCC's fortify check misreads a member array here) */
+            if (!f_.read(next_page_ + 27, lace, nseg)) return false;
+            std::memcpy(lace_, lace, nseg);
+            nseg_ = nseg;
+            body_ = next_page_ + 27 + nseg_;
+            uint64_t total = 0;
+            for (unsigned i = 0; i < nseg_; ++i) total += lace_[i];
+            next_page_ = body_ + total;
+            if (le32(h + 14) != serial_) {
+                seg_ = 0;
+                continue;
+            }
+            seg_off_ = 0;
+            for (unsigned i = 0; i < seg_ && i < nseg_; ++i) seg_off_ += lace_[i];
+            used_ = 0;
+            return true;
+        }
+        return false;
+    }
+    bool take(unsigned char *dst, uint64_t n) {
+        while (n > 0) {
+            if (!ok_ || ended_) return false;
+            if (seg_ >= nseg_) { /* the packet goes on in the next page */
+                seg_ = 0;
+                ok_ = load();
+                continue;
+            }
+            const unsigned len = lace_[seg_];
+            const unsigned avail = len - used_;
+            if (avail == 0) {
+                if (len < 255) { /* the packet ends in this segment */
+                    ended_ = true;
+                    return false;
+                }
+                seg_off_ += len;
+                ++seg_;
+                used_ = 0;
+                continue;
+            }
+            const unsigned k = static_cast<unsigned>(std::min<uint64_t>(avail, n));
+            if (dst) {
+                if (!f_.read(body_ + seg_off_ + used_, dst, k)) return ok_ = false;
+                dst += k;
+            }
+            used_ += k;
+            n -= k;
+        }
+        return true;
+    }
+
+    const File &f_;
+    uint32_t serial_;
+    uint64_t next_page_, body_ = 0, seg_off_ = 0;
+    unsigned seg_, nseg_ = 0, used_ = 0;
+    unsigned char lace_[255] = {0};
+    bool ok_ = false, ended_ = false;
+};
+
+constexpr size_t kCommentHead = 4096 + 64; /* what is read of one comment: the name and a value of up to 4 kB */
+
+/* Vorbis comments (after the packet signature) from a ByteSource: the fields as parse_vorbis_comments takes them, a
+ * METADATA_BLOCK_PICTURE only noted (has_picture), never read past its first kCommentHead bytes. */
+void stream_vorbis_comments(ByteSource &src, TrackTags &t) {
+    unsigned char b4[4];
+    if (!src.read(b4, 4) || !src.skip(le32(b4)) || !src.read(b4, 4)) return;
+    const uint32_t count = le32(b4);
+    std::string buf;
+    for (uint32_t i = 0; i < count && i < 100000; ++i) {
+        if (!src.read(b4, 4)) return;
+        const uint32_t l = le32(b4);
+        const size_t head = std::min<size_t>(l, kCommentHead);
+        buf.resize(head);
+        if (head && !src.read(&buf[0], head)) return;
+        const size_t eq = buf.find('=');
+        if (eq != std::string::npos && eq > 0) {
+            const std::string name = buf.substr(0, eq);
+            if (upper(name) == "METADATA_BLOCK_PICTURE") t.has_picture = true;
+            else if (head == l && l - eq - 1 < 4096) apply_named(t, name, buf.substr(eq + 1));
+        }
+        if (l > head && !src.skip(l - head)) return;
+    }
+}
+
+/* APEv2 (Monkey's Audio, WavPack, Musepack, TTA; mp3gain writes its ReplayGain into MP3s this way): the footer just
+ * before `end` (the file's end, or its ID3v1 tag), then the items walked in the file: text values up to 4 kB read,
+ * binary ones (the cover) skipped by their size unless a picture is asked for. Returns the bytes the tag occupies
+ * (0: none). Item keys are case-insensitive; Track and Disc are TRACKNUMBER and DISCNUMBER. */
+uint64_t read_apev2(const File &f, uint64_t end, TrackTags &t, Picture *pic, size_t max_pic) {
+    unsigned char ft[32];
+    if (end < 32 || end > f.size() || !f.read(end - 32, ft, 32) || std::memcmp(ft, "APETAGEX", 8) != 0) return 0;
+    const uint32_t ver = le32(ft + 8), size = le32(ft + 12), count = le32(ft + 16), flags = le32(ft + 20);
+    if ((ver != 1000 && ver != 2000) || size < 32 || size > end || (flags & (1u << 29))) return 0;
+    const uint64_t items_end = end - 32;
+    uint64_t pos = end - size;
+    std::vector<unsigned char> b;
+    for (uint32_t i = 0; i < count && i < 1024 && pos + 10 <= items_end; ++i) {
+        unsigned char h[8 + 256];
+        const size_t hn = static_cast<size_t>(std::min<uint64_t>(sizeof h, items_end - pos));
+        if (!f.read(pos, h, hn)) break;
+        const uint32_t vlen = le32(h), iflags = le32(h + 4);
+        size_t k = 8;
+        while (k < hn && h[k]) ++k;
+        if (k >= hn || k == 8) break; /* no key, or none ended within 255 bytes: damaged */
+        const std::string key = upper(std::string(reinterpret_cast<const char *>(h + 8), k - 8));
+        const uint64_t val = pos + k + 1;
+        if (vlen > items_end - val) break;
+        const unsigned kind = (iflags >> 1) & 3; /* 0 UTF-8 text, 1 binary, 2 a link */
+        if (kind == 1 && key.compare(0, 9, "COVER ART") == 0) {
+            t.has_picture = true;
+            const bool front = key == "COVER ART (FRONT)";
+            if (pic && vlen <= max_pic + 1024 && (pic->data.empty() || (front && pic->type != 3)) && f.read(val, b, vlen)) {
+                size_t z = 0;
+                while (z < b.size() && b[z]) ++z; /* a file name, NUL, the picture */
+                if (z + 1 < b.size()) {
+                    pic->data.assign(b.begin() + static_cast<long>(z) + 1, b.end());
+                    pic->mime = "";
+                    pic->type = front ? 3 : 0;
+                }
+            }
+        } else if (kind == 0 && vlen <= 4096 && f.read(val, b, vlen)) {
+            std::string v(b.begin(), b.end());
+            const size_t nul = v.find('\0'); /* the first of several values */
+            if (nul != std::string::npos) v.resize(nul);
+            apply_named(t, key == "TRACK" ? "TRACKNUMBER" : key == "DISC" ? "DISCNUMBER" : key, v);
+        }
+        pos = val + vlen;
+    }
+    return size + ((flags & (1u << 31)) ? 32 : 0);
+}
+
 void read_mp3(const File &f, TrackTags &t, Picture *pic, size_t max_pic) {
     t.codec = "MP3";
     uint64_t audio_start = 0, audio_end = f.size();
     audio_start = read_id3v2_file(f, t, pic, max_pic);
     unsigned char v1[128];
-    if (f.size() >= 128 && f.read(f.size() - 128, v1, 128) && std::memcmp(v1, "TAG", 3) == 0) {
-        audio_end -= 128;
+    const bool has_v1 = f.size() >= 128 && f.read(f.size() - 128, v1, 128) && std::memcmp(v1, "TAG", 3) == 0;
+    if (has_v1) audio_end -= 128;
+    /* an APEv2 tag before the ID3v1 one (mp3gain's ReplayGain); ID3v2 values stay first */
+    const uint64_t ape = read_apev2(f, audio_end, t, pic, max_pic);
+    if (ape && audio_end > audio_start && ape < audio_end - audio_start) audio_end -= ape;
+    if (has_v1) {
         auto field = [&](int off, int len) {
             int e = len;
             while (e > 0 && (v1[off + e - 1] == 0 || v1[off + e - 1] == ' ')) --e;
@@ -667,6 +855,9 @@ void read_flac(const File &f, TrackTags &t, Picture *pic, size_t max_pic, uint64
             const uint64_t total = (uint64_t(s[13] & 0x0F) << 32) | be32(s + 14);
             if (t.rate) t.duration_ms = total * 1000 / t.rate;
             t.ok = true;
+        } else if (type == 4 && !pic) { /* scan mode: walked in the file, a picture comment skipped */
+            FileRange src(f, pos + 4, pos + 4 + len);
+            stream_vorbis_comments(src, t);
         } else if (type == 4 && len <= kMaxTagBytes) {
             std::vector<unsigned char> b;
             if (f.read(pos + 4, b, len)) parse_vorbis_comments(b.data(), b.size(), t, pic, max_pic);
@@ -740,19 +931,23 @@ struct OggReader {
     unsigned seg_start_ = 0;
 };
 
-/* The granule position of the last page of the stream (scanning the last 64 kB). */
+/* The granule position of the last page of the stream: the last 16 kB scanned (an audio page is 4-8 kB), the last 64 kB
+ * when no page of the stream starts there (P2b: the scan reads less). */
 int64_t ogg_last_granule(const File &f, uint32_t serial) {
-    const uint64_t span = std::min<uint64_t>(f.size(), 64 * 1024);
     std::vector<unsigned char> b;
-    if (!f.read(f.size() - span, b, static_cast<size_t>(span))) return -1;
-    int64_t g = -1;
-    for (size_t i = 0; i + 27 <= b.size(); ++i) {
-        if (std::memcmp(b.data() + i, "OggS", 4) != 0) continue;
-        if (le32(b.data() + i + 14) != serial) continue;
-        const int64_t gp = static_cast<int64_t>(le64(b.data() + i + 6));
-        if (gp >= 0) g = gp;
+    for (const uint64_t want : {uint64_t(16 * 1024), uint64_t(64 * 1024)}) {
+        const uint64_t span = std::min<uint64_t>(f.size(), want);
+        if (!f.read(f.size() - span, b, static_cast<size_t>(span))) return -1;
+        int64_t g = -1;
+        for (size_t i = 0; i + 27 <= b.size(); ++i) {
+            if (std::memcmp(b.data() + i, "OggS", 4) != 0) continue;
+            if (le32(b.data() + i + 14) != serial) continue;
+            const int64_t gp = static_cast<int64_t>(le64(b.data() + i + 6));
+            if (gp >= 0) g = gp;
+        }
+        if (g >= 0 || span == f.size()) return g;
     }
-    return g;
+    return -1;
 }
 
 void read_ogg(const File &f, TrackTags &t, Picture *pic, size_t max_pic) {
@@ -781,7 +976,12 @@ void read_ogg(const File &f, TrackTags &t, Picture *pic, size_t max_pic) {
         return;
     }
     t.ok = true;
-    if (r.next(p, kMaxTagBytes)) {
+    if (!pic) { /* scan mode: the comment packet walked across its pages, a picture comment skipped */
+        OggPacketSource src(f, r.pos, r.seg_start_, r.serial);
+        unsigned char sig[8];
+        if (!opus && src.read(sig, 7) && sig[0] == 3 && std::memcmp(sig + 1, "vorbis", 6) == 0) stream_vorbis_comments(src, t);
+        else if (opus && src.read(sig, 8) && std::memcmp(sig, "OpusTags", 8) == 0) stream_vorbis_comments(src, t);
+    } else if (r.next(p, kMaxTagBytes)) {
         if (!opus && p.size() > 7 && p[0] == 3 && std::memcmp(p.data() + 1, "vorbis", 6) == 0)
             parse_vorbis_comments(p.data() + 7, p.size() - 7, t, pic, max_pic);
         else if (opus && p.size() > 8 && std::memcmp(p.data(), "OpusTags", 8) == 0)
@@ -988,9 +1188,8 @@ void read_wav(const File &f, TrackTags &t, Picture *pic, size_t max_pic) {
                     q += l + (l & 1);
                 }
             }
-        } else if ((std::memcmp(c, "id3 ", 4) == 0 || std::memcmp(c, "ID3 ", 4) == 0) && len <= kMaxTagBytes) {
-            std::vector<unsigned char> b;
-            if (f.read(pos + 8, b, len)) parse_id3v2(b.data(), b.size(), t, pic, max_pic);
+        } else if (std::memcmp(c, "id3 ", 4) == 0 || std::memcmp(c, "ID3 ", 4) == 0) {
+            read_id3v2_file(f, t, pic, max_pic, pos + 8, pos + 8 + len); /* frame by frame, a picture by its size */
         }
         pos += 8 + len + (len & 1);
     }
@@ -1027,9 +1226,8 @@ void read_aiff(const File &f, TrackTags &t, Picture *pic, size_t max_pic) {
                 if (c[0] == 'N') set_once(t.title, v);
                 else set_once(t.artist, v);
             }
-        } else if ((std::memcmp(c, "ID3 ", 4) == 0 || std::memcmp(c, "id3 ", 4) == 0) && len <= kMaxTagBytes) {
-            std::vector<unsigned char> b;
-            if (f.read(pos + 8, b, len)) parse_id3v2(b.data(), b.size(), t, pic, max_pic);
+        } else if (std::memcmp(c, "ID3 ", 4) == 0 || std::memcmp(c, "id3 ", 4) == 0) {
+            read_id3v2_file(f, t, pic, max_pic, pos + 8, pos + 8 + len); /* frame by frame, a picture by its size */
         }
         pos += 8 + len + (len & 1);
     }
@@ -1078,8 +1276,18 @@ bool read_tags(const std::string &path, TrackTags &out, Picture *pic, size_t max
         out.codec = upper(ext);
         for (const auto &n : names)
             if (ext == n[0]) out.codec = n[1];
+        if (ext == "ape" || ext == "wv" || ext == "mpc" || ext == "tta") { /* APEv2 at the end (before an ID3v1 tag) */
+            uint64_t end = f.size();
+            unsigned char v1[3];
+            if (end >= 128 && f.read(end - 128, v1, 3) && std::memcmp(v1, "TAG", 3) == 0) end -= 128;
+            read_apev2(f, end, out, pic, max_picture_bytes);
+        }
     }
     return true;
+}
+
+bool read_tags_scan(const std::string &path, TrackTags &out, uint64_t *bytes_read) {
+    return read_tags(path, out, nullptr, 0, bytes_read);
 }
 
 }  // namespace vinyl

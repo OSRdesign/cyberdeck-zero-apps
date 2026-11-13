@@ -16,8 +16,16 @@
  *         granule position;
  *   MP4   (.m4a, .m4b, .mp4): mvhd, the sample description (AAC or ALAC), the iTunes items of udta/meta/ilst, covr, the
  *         freeform ----:com.apple.iTunes:replaygain_* items;
- *   WAV   fmt and data (the length), LIST/INFO, an id3 chunk; AIFF: COMM, NAME / AUTH, an ID3 chunk.
- * Other formats (WMA, APE, WavPack...) get the codec name from the extension and no tags: the title is the file name.
+ *   WAV   fmt and data (the length), LIST/INFO, an id3 chunk; AIFF: COMM, NAME / AUTH, an ID3 chunk (both walked frame by
+ *         frame in the file, as the MP3 tag);
+ *   APEv2 at the end of APE, WavPack, Musepack and TTA files, and before an MP3's ID3v1 tag (mp3gain's ReplayGain): the
+ *         items walked in the file (P2b).
+ * Other formats (WMA...) get the codec name from the extension and no tags: the title is the file name.
+ *
+ * Scan mode (read_tags_scan, the library scanner's read, report 060 3a, P2b): no picture is asked for, so no picture body
+ * is ever read: ID3 APIC / PIC (and GEOB, never read), FLAC PICTURE blocks, METADATA_BLOCK_PICTURE comments in FLAC
+ * and Ogg (the comment block or packet is walked in the file, a picture comment costs its first 4 kB), MP4 covr and APEv2
+ * cover items are skipped by their size. A file with a 2 MB cover costs a few kB.
  *
  * ReplayGain (core/dsp/replaygain.hpp): ID3 TXXX, Vorbis comments, Opus R128 tags and the MP4 freeform items, into
  * TrackTags::rg.
@@ -61,6 +69,8 @@ struct TrackTags {
  * the bytes read from the file (the tests and the tag-read bench). */
 bool read_tags(const std::string &path, TrackTags &out, Picture *pic = nullptr, size_t max_picture_bytes = 4u << 20,
                uint64_t *bytes_read = nullptr);
+/* The scanner's read: read_tags without a picture (the scan mode above). */
+bool read_tags_scan(const std::string &path, TrackTags &out, uint64_t *bytes_read = nullptr);
 /* The ReplayGain tags of a file only (the engine, when it opens a track): read_tags without a picture. */
 bool read_replaygain(const std::string &path, ReplayGainTags &out);
 
