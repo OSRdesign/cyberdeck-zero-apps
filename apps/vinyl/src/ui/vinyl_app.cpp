@@ -73,8 +73,8 @@ enum : uint32_t {
 };
 
 /* The LVGL key the toolkit's keypad sends after a key event (cp0_keyboard_lvgl_input.c): the semantic key where it has
- * one. In the navigation context the CardputerZero's F / X / Z / C are also Up / Down / Left / Right (its arrows), so a
- * press of C (Clear all) reaches the keypad as Right, X (Remove) as Down. 0: not an arrow. */
+ * one. In the navigation context the toolkit makes F / X / Z / C also Up / Down / Left / Right (a small keyboard's
+ * arrows), so C (Clear all) reaches the keypad as Right, X (Remove) as Down. 0: not an arrow. */
 uint32_t arrow_echo(const key_item &it) {
     if (!it.semantic_key || it.semantic_key == it.key_code) return 0;
     switch (it.semantic_key) {
