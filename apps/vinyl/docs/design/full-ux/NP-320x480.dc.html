@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vinyl now playing portrait</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<!-- branding-allow-begin: SVG path data (a move-to command to x 5 reads like the brand word) -->
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Montserrat:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.b{position:absolute;display:flex;align-items:center;justify-content:center;border-radius:8px;background:#b9b19b}
+.disc{position:absolute;border-radius:50%;background:repeating-radial-gradient(circle,#141414 0 2px,#1f1f1f 2px 4px)}
+</style>
+</helmet>
+<div style="position:relative;width:320px;height:480px;background:#000;overflow:hidden;font-family:'Montserrat',sans-serif">
+  <svg style="position:absolute;right:88px;top:10px" width="30" height="24" viewBox="0 0 30 24" aria-label="Wi-Fi signal"><rect x="1" y="16" width="4" height="6" rx="1" fill="#777"/><rect x="8" y="12" width="4" height="10" rx="1" fill="#777"/><rect x="15" y="8" width="4" height="14" rx="1" fill="#777"/><rect x="22" y="3" width="4" height="19" rx="1" fill="#777"/></svg>
+  <div style="position:absolute;right:8px;top:6px;width:70px;height:30px;border-radius:6px;background:#8a5a2b;color:#fff;font-size:20px;font-weight:600;display:flex;align-items:center;justify-content:center">12:00</div>
+  <div style="position:absolute;left:8px;top:8px;width:40px;height:27px;border-radius:10px;background:#222;color:#fff;font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center">Esc</div>
+  <div style="position:absolute;left:8px;top:44px;width:304px;height:428px;border-radius:10px;background:#dcd4bd">
+    <div class="disc" style="left:108px;top:12px;width:164px;height:164px">
+      <div style="position:absolute;left:55px;top:55px;width:54px;height:54px;border-radius:50%;background:#1f7a72"></div>
+      <div style="position:absolute;left:79px;top:79px;width:6px;height:6px;border-radius:50%;background:#dcd4bd"></div>
+    </div>
+    <div style="position:absolute;left:20px;top:12px;width:164px;height:164px;border-radius:4px;background:linear-gradient(135deg,#c0392b,#8a5a2b 55%,#1f7a72);box-shadow:2px 0 6px rgba(0,0,0,.35)">
+      <div style="position:absolute;left:40px;top:40px;width:84px;height:84px;border-radius:50%;border:6px solid rgba(242,234,208,.8);box-sizing:border-box"></div>
+    </div>
+    <div style="position:absolute;left:16px;top:184px;width:272px;font-weight:700;font-size:18px;color:#222;white-space:nowrap;overflow:hidden">Fences (LeMarquis Remix)</div>
+    <div style="position:absolute;left:16px;top:210px;width:272px;font-weight:600;font-size:15px;color:#3b3828">Phoenix</div>
+    <div style="position:absolute;left:16px;top:230px;width:272px;font-size:12px;color:#6b6552">Fences Remixes, 2013</div>
+    <div style="position:absolute;left:16px;top:254px;height:24px;padding:0 9px;border-radius:5px;background:#c9c0a5;font-weight:700;font-size:11px;color:#222;display:flex;align-items:center">FLAC 44.1 / 16</div>
+    <div style="position:absolute;left:124px;top:254px;width:164px;height:24px;box-sizing:border-box;padding:0 8px;border-radius:5px;background:#c9c0a5;font-weight:700;font-size:11px;color:#222;display:flex;align-items:center;gap:6px"><span style="display:flex"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#222" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7l10 10-5 5V2l5 5L7 17"/></svg></span><span style="flex:1;white-space:nowrap;overflow:hidden">Evolve 65</span><span style="display:flex"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#222" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span></div>
+    <!-- seek -->
+    <div style="position:absolute;left:16px;top:288px;width:44px;font-family:'JetBrains Mono',monospace;font-weight:500;font-size:13px;color:#222;line-height:24px">01:23</div>
+    <div style="position:absolute;left:64px;top:295px;width:176px;height:10px;border-radius:5px;background:#c9c0a5">
+      <div style="position:absolute;left:0;top:0;width:67px;height:10px;border-radius:5px;background:#1f7a72"></div>
+      <div style="position:absolute;left:58px;top:-4px;width:18px;height:18px;border-radius:50%;background:#222"></div>
+    </div>
+    <div style="position:absolute;left:244px;top:288px;width:44px;font-family:'JetBrains Mono',monospace;font-weight:500;font-size:13px;color:#3b3828;line-height:24px;text-align:right">-2:41</div>
+    <!-- transport -->
+    <div class="b" style="left:16px;top:324px;width:48px;height:48px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#222" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Shuffle"><path d="M3 7h3c4 0 5 10 9 10h5M3 17h3c1.5 0 2.5-1.5 3.5-3M13.5 9.5C14.5 8 15 7 17 7h3M17 4l3 3-3 3M17 14l3 3-3 3"/></svg></div>
+    <div class="b" style="left:70px;top:324px;width:48px;height:48px"><svg width="22" height="22" viewBox="0 0 24 24" fill="#222" aria-label="Previous"><rect x="5" y="5" width="2.5" height="14"/><path d="M19 5v14L9 12z"/></svg></div>
+    <div class="b" style="left:124px;top:324px;width:56px;height:48px;background:#1f7a72"><svg width="26" height="26" viewBox="0 0 24 24" fill="#fff" aria-label="Pause"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg></div>
+    <div class="b" style="left:186px;top:324px;width:48px;height:48px"><svg width="22" height="22" viewBox="0 0 24 24" fill="#222" aria-label="Next"><path d="M5 5v14l10-7z"/><rect x="16.5" y="5" width="2.5" height="14"/></svg></div>
+    <div class="b" style="left:240px;top:324px;width:48px;height:48px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#222" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Repeat"><path d="M17 2l4 4-4 4M3 11V9a3 3 0 013-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 01-3 3H3"/></svg></div>
+    <div style="position:absolute;left:258px;top:364px;width:12px;height:4px;border-radius:2px;background:#1f7a72"></div>
+    <!-- bottom row: queue, output -->
+    <div class="b" style="left:16px;top:382px;width:48px;height:40px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#222" stroke-width="2" stroke-linecap="round" aria-label="Menu"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M8 14v6"/></svg></div>
+    <div class="b" style="left:70px;top:382px;width:48px;height:40px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#222" stroke-width="2" stroke-linecap="round" aria-label="Queue"><path d="M4 6h16M4 12h16M4 18h9"/></svg></div>
+    <div class="b" style="left:124px;top:382px;width:48px;height:40px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#222" stroke-width="2.6" stroke-linecap="round" aria-label="Volume down"><path d="M5 12h14"/></svg></div>
+    <div style="position:absolute;left:176px;top:382px;width:60px;height:40px;border-radius:8px;background:#1f7a72;color:#fff;font-weight:700;font-size:18px;display:flex;align-items:center;justify-content:center">60</div>
+    <div class="b" style="left:240px;top:382px;width:48px;height:40px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#222" stroke-width="2.6" stroke-linecap="round" aria-label="Volume up"><path d="M5 12h14M12 5v14"/></svg></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":320,"height":480}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+<!-- branding-allow-end -->
+</body>
+</html>

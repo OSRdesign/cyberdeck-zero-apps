@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vinyl map</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<!-- branding-allow-begin: SVG path data (a move-to command to x 5 reads like the brand word) -->
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.col{position:absolute;top:96px;width:440px;border-radius:12px;background:#fffaf0;border:2px solid #cfc6aa;box-sizing:border-box;padding:16px 18px}
+.h{font-size:22px;font-weight:700;color:#1b1e1e;margin:0 0 4px 0}
+.sub{font-size:14px;color:#5b5646;margin:0 0 12px 0;line-height:19px}
+.r{display:flex;align-items:center;gap:10px;min-height:30px;font-size:16px;font-weight:600;color:#222;line-height:20px}
+.t{flex:none;min-width:44px;text-align:center;font-size:12px;font-weight:700;border-radius:5px;padding:3px 6px;color:#fff}
+.mvp{background:#1f7a72}.p2{background:#8a5a2b}.p3{background:#6b6b6b}
+.ar{position:absolute;top:350px;font-size:34px;font-weight:700;color:#8a5a2b}
+.tb{position:absolute;left:0;top:520px;width:2000px;height:240px}
+.th{position:absolute;top:0;height:40px;font-size:14px;font-weight:700;color:#fff;background:#1b1e1e;display:flex;align-items:center;padding:0 12px;box-sizing:border-box}
+.td{position:absolute;height:42px;font-size:14px;font-weight:600;color:#222;display:flex;align-items:center;padding:0 12px;box-sizing:border-box;border-bottom:1px solid #cfc6aa;line-height:17px}
+</style>
+</helmet>
+<div style="position:relative;width:2000px;height:760px;background:#efe9d6;overflow:hidden;font-family:'Montserrat',sans-serif">
+  <div style="position:absolute;left:40px;top:28px;font-size:34px;font-weight:700;color:#1b1e1e">Where everything lives</div>
+  <div style="position:absolute;right:40px;top:36px;display:flex;gap:14px;align-items:center;font-size:14px;font-weight:600;color:#222">
+    <span class="t mvp">built</span><span>in 0.1.0</span>
+    <span class="t p2">next</span><span>planned (P2)</span>
+    <span class="t p3">later</span><span>idea (P3)</span>
+  </div>
+
+  <div class="col" style="left:40px;width:420px;background:#1b1e1e;border-color:#1b1e1e">
+    <p class="h" style="color:#f0b400">Now playing</p>
+    <p class="sub" style="color:#c9c0a5">The hub. You come back here from every page with Esc.</p>
+    <div class="r" style="color:#eee"><span class="t mvp">built</span>Transport, seek, shuffle, repeat</div>
+    <div class="r" style="color:#eee"><span class="t mvp">built</span>Output chip: tap to choose the output</div>
+    <div class="r" style="color:#eee"><span class="t mvp">built</span>Volume of the playing output</div>
+    <div class="r" style="color:#eee"><span class="t mvp">built</span>Queue and Browse keys</div>
+    <div class="r" style="color:#eee"><span class="t p2">next</span>Menu key: tools and settings</div>
+    <div class="r" style="color:#eee"><span class="t p3">later</span>Tap the cover: lyrics, visualiser</div>
+  </div>
+  <div class="ar" style="left:468px">&#8594;</div>
+
+  <div class="col" style="left:520px">
+    <p class="h">Library (Browse)</p>
+    <p class="sub">Content: what you can play. Opens first when you start the app.</p>
+    <div class="r"><span class="t mvp">built</span>Folders (the SD card, USB sticks)</div>
+    <div class="r"><span class="t p2">next</span>Playlists</div>
+    <div class="r"><span class="t p2">next</span>Artists, Albums, Songs, Genres</div>
+    <div class="r"><span class="t p2">next</span>Search</div>
+    <div class="r"><span class="t p3">later</span>Recently added, most played</div>
+    <div class="r"><span class="t p3">later</span>Radio, podcasts, audiobooks</div>
+    <div class="r" style="margin-top:10px;border-top:1px solid #cfc6aa;padding-top:10px"><span class="t p2">next</span>Track row: Enter plays, a hold opens Track actions: play next, add to queue, add to playlist, info</div>
+  </div>
+  <div class="ar" style="left:968px">&#8594;</div>
+
+  <div class="col" style="left:1020px;width:440px">
+    <p class="h">Queue</p>
+    <p class="sub">What plays next. Always one tap from Now playing.</p>
+    <div class="r"><span class="t mvp">built</span>Select a row and Play</div>
+    <div class="r"><span class="t mvp">built</span>Move up, Move down, Remove, Clear all</div>
+    <div class="r"><span class="t p2">next</span>Save queue as playlist</div>
+    <div class="r"><span class="t p2">next</span>Add from Library: play next, add to queue</div>
+  </div>
+
+  <div class="col" style="left:1520px;width:440px">
+    <p class="h">Menu (tools and settings)</p>
+    <p class="sub">Things you change now and then. The output chip stays a plain output chooser.</p>
+    <div class="r"><span class="t p2">next</span>Equalizer: 10 bands, presets</div>
+    <div class="r"><span class="t p2">next</span>Sleep timer</div>
+    <div class="r"><span class="t p2">next</span>Playback: gapless, crossfade, ReplayGain, resume</div>
+    <div class="r"><span class="t p3">later</span>Speed, A-B loop, scrobbling</div>
+    <div class="r"><span class="t p2">next</span>Library: folders, rescan, USB sticks</div>
+    <div class="r"><span class="t mvp">built</span>Output: choose the output device</div>
+    <div class="r"><span class="t mvp">built</span>About, keys, licences</div>
+  </div>
+
+  <!-- how to reach, per size -->
+  <div class="tb">
+    <div style="position:absolute;left:40px;top:-22px;font-size:20px;font-weight:700;color:#1b1e1e">How you reach each part at each screen size</div>
+    <div class="th" style="left:40px;width:200px">Screen</div>
+    <div class="th" style="left:240px;width:300px">Menu</div>
+    <div class="th" style="left:540px;width:250px">Queue</div>
+    <div class="th" style="left:790px;width:250px">Browse</div>
+    <div class="th" style="left:1040px;width:300px">Output</div>
+    <div class="th" style="left:1340px;width:280px">Volume</div>
+    <div class="th" style="left:1620px;width:340px">Equalizer, playlists</div>
+
+    <div class="td" style="left:40px;top:40px;width:200px;font-weight:700">480x320 landscape</div>
+    <div class="td" style="left:240px;top:40px;width:300px">Seventh transport key (list icon with a gear)</div>
+    <div class="td" style="left:540px;top:40px;width:250px">Sixth transport key</div>
+    <div class="td" style="left:790px;top:40px;width:250px">Esc from Now playing</div>
+    <div class="td" style="left:1040px;top:40px;width:300px">Tap the output chip</div>
+    <div class="td" style="left:1340px;top:40px;width:280px">Vol chip, tap for the - and + strip</div>
+    <div class="td" style="left:1620px;top:40px;width:340px">Menu, then Equalizer. Playlists in Library</div>
+
+    <div class="td" style="left:40px;top:82px;width:200px;font-weight:700">320x480 portrait (PDA)</div>
+    <div class="td" style="left:240px;top:82px;width:300px">Icon key at the left of the bottom row</div>
+    <div class="td" style="left:540px;top:82px;width:250px">Icon key next to Menu</div>
+    <div class="td" style="left:790px;top:82px;width:250px">Esc from Now playing</div>
+    <div class="td" style="left:1040px;top:82px;width:300px">Tap the output chip</div>
+    <div class="td" style="left:1340px;top:82px;width:280px">- 60 + group, bottom right</div>
+    <div class="td" style="left:1620px;top:82px;width:340px">Menu, then Equalizer. Playlists in Library</div>
+
+    <div class="td" style="left:40px;top:124px;width:200px;font-weight:700">480x480 square</div>
+    <div class="td" style="left:240px;top:124px;width:300px">Sixth transport key (replaces the sleep timer key)</div>
+    <div class="td" style="left:540px;top:124px;width:250px">Bottom row key</div>
+    <div class="td" style="left:790px;top:124px;width:250px">Bottom row key</div>
+    <div class="td" style="left:1040px;top:124px;width:300px">Tap the output chip</div>
+    <div class="td" style="left:1340px;top:124px;width:280px">- 60 + group, bottom right</div>
+    <div class="td" style="left:1620px;top:124px;width:340px">Menu, then Equalizer. Playlists in Library</div>
+
+    <div class="td" style="left:40px;top:166px;width:200px;font-weight:700">800x480 large</div>
+    <div class="td" style="left:240px;top:166px;width:300px">Bottom row key (replaces Equalizer and Output)</div>
+    <div class="td" style="left:540px;top:166px;width:250px">Always visible in the left pane</div>
+    <div class="td" style="left:790px;top:166px;width:250px">Bottom row key</div>
+    <div class="td" style="left:1040px;top:166px;width:300px">Tap the output chip</div>
+    <div class="td" style="left:1340px;top:166px;width:280px">- 60 + group, bottom right</div>
+    <div class="td" style="left:1620px;top:166px;width:340px">Menu, then Equalizer. Playlists in Library</div>
+
+    <div style="position:absolute;left:40px;top:216px;width:1920px;font-size:15px;font-weight:600;color:#3b3828;line-height:20px">Keys on a keyboard: M menu, B browse, Q queue, O output, E equalizer, T sleep timer, / search, Space play or pause, Left and Right as agreed (next, restart or previous, hold to scan), Esc back.</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":2000,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+<!-- branding-allow-end -->
+</body>
+</html>

@@ -1,14 +1,16 @@
 # Vinyl (`vinyl`)
 
 A music player for CyberdeckZero Launcher boards: it plays the music in `~/Music` and on USB drives, folder by folder or
-from M3U playlists, with gapless playback, shuffle, repeat, embedded cover art and resume where you stopped. It plays on
-while you use other apps (on boards with multitasking), to wired outputs and, on boards with a sound server, to
-Bluetooth headsets and speakers; headset, speaker and keyboard play keys work. Version **0.1.0** (phase P1 of the launcher
-repo's report 059, the MVP: folder first, no library database yet).
+from M3U playlists, with gapless playback, shuffle, repeat, embedded cover art, ReplayGain, a sleep timer and resume where
+you stopped (a long mix or audiobook keeps its own place). It plays on while you use other apps (on boards with
+multitasking), to wired outputs and, on boards with a sound server, to Bluetooth headsets and speakers; headset, speaker
+and keyboard play keys work. Version **0.2.0** (phase P2a of the launcher repo's report 060: the Menu with the sleep
+timer, the Playback settings, the keys and About; folder first, no library database yet).
 
 Kind: a native `cp0_lvgl` app (kind A of the guidelines): its own screens, touch and keys. The design is the owner-approved
-drafts in [`docs/design`](docs/design) (the `.dc.html` files): a cream panel in Cassette's family with its own teal accent,
-the record sliding out of its square sleeve and turning while it plays.
+drafts in [`docs/design`](docs/design) (the `.dc.html` files; the boards of 0.2.0, from the full-UX canvas, in
+[`docs/design/full-ux`](docs/design/full-ux)): a cream panel in Cassette's family with its own teal accent, the record
+sliding out of its square sleeve and turning while it plays.
 
 ## Screenshots
 
@@ -20,19 +22,28 @@ Headless harness, demonstration world (`VINYL_DEMO=1`):
 | ![queue](screenshots/03-queue-480x320.png) | ![output](screenshots/04-output-480x320.png) |
 | ![portrait](screenshots/05-now-playing-320x480.png) | ![disconnected](screenshots/08-output-lost-480x320.png) |
 | ![muted](screenshots/10-muted-480x320.png) | ![dragging the seek bar](screenshots/11-scrub-480x320.png) |
+| ![the Menu](screenshots/12-menu-480x320.png) | ![the sleep timer running](screenshots/13-sleep-timer-480x320.png) |
+| ![Playback](screenshots/14-playback-480x320.png) | ![ReplayGain](screenshots/15-replaygain-480x320.png) |
+| ![Keys](screenshots/16-keys-480x320.png) | ![About](screenshots/17-about-480x320.png) |
 
-The deck (640x480), square (480x480) and large (800x480, two panes):
+The deck (640x480), square (480x480) and large (800x480, two panes), the Menu and the Keys at 320x480:
 ![deck](screenshots/09-now-playing-640x480.png) ![square](screenshots/06-now-playing-480x480.png)
-![large](screenshots/07-now-playing-800x480.png)
+![large](screenshots/07-now-playing-800x480.png) ![Menu portrait](screenshots/18-menu-320x480.png)
+![Keys portrait](screenshots/19-keys-320x480.png)
 
 ## What it does
 
 | Page | What |
 |---|---|
 | **Browser** (the root) | `~/Music` and the mounted drives (`/media/<user>`, `/run/media/<user>`, `/mnt`): folders A-Z, playlists (`.m3u`, `.m3u8`), tracks A-Z (natural order) with their title tags and lengths; the mini player at the bottom. A track plays its folder as the queue; a playlist plays its entries. |
-| **Now playing** | cover art (embedded JPEG or PNG, else the drawn sleeve) with the record sliding out (its label about a third out, with a dot and a centre ring that show it turning), title (one line that scrolls, or two lines on the 640x480, square and large screens), artist, album and year, the format and Gapless as information (one line at 480x320, flat chips at 640x480, plain text elsewhere), the output (a full-width button with the device's name and a chevron; a chip on 800x480 and wider), the volume group ("-", the level on teal, "+"); the position with a seek bar (a tap seeks, a drag scrubs), previous, play / pause, next, shuffle, repeat (off, all, one: a teal mark, and a "1" for one); the queue key (480x320) or the Browse and Queue keys of the bottom row; up next (square), the queue pane (large). An empty queue dims the transport keys, which then do nothing (the Queue key stays: it opens the empty queue). |
+| **Now playing** | cover art (embedded JPEG or PNG, else the drawn sleeve) with the record sliding out (its label about a third out, with a dot and a centre ring that show it turning), title (one line that scrolls, or two lines on the 640x480, square and large screens), artist, album and year, the format and Gapless as information (one line at 480x320, flat chips at 640x480, plain text elsewhere; on the square and large screens the playing track's ReplayGain after it, "Gapless, RG -3.2 dB"), the output (a full-width button with the device's name and a chevron; a chip on 800x480 and wider), the volume group ("-", the level on teal, "+"); the position with a seek bar (a tap seeks, a drag scrubs), previous, play / pause, next, shuffle, repeat (off, all, one: a teal mark, and a "1" for one); the Menu key (the sliders icon: the seventh transport key at 480x320, the sixth on the square screens, an icon key at the left of the bottom row in portrait, a bottom-row key with its word on 640x480 and 800x480 and wider); the queue key (480x320) or the Queue key of the bottom row; the Browse key (640x480, square, large); up next (square), the queue pane and the sleep-timer key (large). An empty queue dims the transport keys, which then do nothing (the Queue, Browse, Menu and sleep-timer keys stay: they open their pages). |
 | **Queue** | the play order from the playing track, "3 OF 20, 1 H 24 MIN LEFT"; Move up, Move down, Remove, Clear all (asks first: "Clear the queue?", Cancel, the default, or Clear; it keeps the playing track). An empty queue dims the four buttons; with only the playing track, Move up, Move down and Clear all are dimmed. No dragging in the lists (the seek bar is the one control that drags). |
 | **Output** | Automatic (the system's default output), the Bluetooth devices (music or call quality), the wired outputs, a paired device that is off (dimmed). Vinyl never switches output by itself: when the output in use goes away, playback pauses ("Evolve 65 disconnected. Paused."). |
+| **Menu** (P2a) | TOOLS: Sleep timer (Off, the time left, or the track mode); SETTINGS: Playback, Output (the output's name: it opens the Output page), Keys, About. Only what is built is listed (the Equalizer and the Library come later). |
+| **Sleep timer** | Stop playing after: Off, 15, 30 or 60 minutes, This track, This album or queue (the chosen one has the blue dot); while it runs, "Stops in 29:12. The music fades out for the last 10 seconds." The minutes count from the choice, playing or paused; the last 10 s fade out, then the music pauses ("Sleep timer ended. Paused."). This track stops at the end of the track that plays, This album or queue before the next album (the album tag, else the folder) or at the end of the queue (a playlist plays to its end); the queue then waits on the next track, paused. The timer runs on while you change pages and while Vinyl is hidden; a restart forgets it; it pauses the music and nothing else. |
+| **Playback** | Gapless (On: the next track continues on the same stream when its format is the same; Off: a short gap at every change), ReplayGain (Off / Track / Album, Track by default: the loudness from the files' tags), Remember position in long files (On: a file longer than 20 minutes starts again where you left it). Enter or a tap turns Gapless and Remember on or off; ReplayGain opens its list. |
+| **Keys** | every key and what it does, the key on a key chip; it scrolls. |
+| **About** | the version, the formats, THIS OUTPUT (the playing output's range and levels, "Sharkoon Mobile DAC: -45.0 to 0.0 dB, 23 levels of 2.05 dB."), the libraries, where the licences are. |
 
 The top band is the launcher's: the toolkit's header with the title (none at 320x480, the toolkit's narrow portrait), the
 Esc and the shared status strip. No page has a busy state: nothing waits in front of the user (tags, covers and the
@@ -47,14 +58,16 @@ output lists are read in the background).
 | Scan back / ahead (muted, 3x) | hold Left / Right on now playing (or `,` / `.`, or a media key) | hold the previous / next key |
 | Seek | Shift+Left / Shift+Right: back / forward 10 s (now playing) | tap the seek bar where to go, or press on it and drag: the knob follows the finger, the times show where it will land, and the seek happens when you let go (playing or paused; nothing else starts from a press on the bar) |
 | Shuffle / repeat | S / R | the keys left and right of the transport |
-| Queue, Output, Browser | Q, O, B | the Queue key; the output button (the only way to Output by touch on every layout but 800x480 and wider, which have the output chip and the Output key); Browse (or Esc from now playing) |
+| Queue, Output, Browser | Q, O, B | the Queue key; the output button (the output chip on 800x480 and wider; the Menu's Output row too); Browse (or Esc from now playing) |
+| Menu, Sleep timer | M, T | the Menu key (the sliders icon, see Now playing); the sleep-timer key (800x480 and wider) or the Menu's Sleep timer row |
+| Menu pages: move, act, back | Up / Down (the headings skipped), Enter or Right acts, Left goes back; Keys and About: Up / Down scroll | a tap on a row acts (opens it, chooses it, turns it on or off); Keys and About scroll by a drag |
 | Lists: move, act, back | Up / Down, Enter; Right acts as Enter and Left goes back (queue, output; in the browser Right opens a folder) | browser: tap a row; queue: tap selects, tap again plays; output: tap chooses |
 | Folder up | Left or Backspace (browser) | the ".." row |
 | Queue pane (800x480 and wider) | Up / Down pick a track, Enter plays it | tap picks, tap again plays |
 | Queue editing | U move up, D move down, Delete or X remove, C clear all (then Y clears; Enter or Esc cancels, as the dialog says) | the four buttons; Clear all asks "Clear the queue?" (the toolkit's dialog: Cancel, Clear, or the header's Esc; a tap outside does nothing). A button that cannot act is dimmed and does nothing |
 | Volume | `-` / `=`: the volume of the output Vinyl plays on, one of its levels a press (about 2 dB) | "-" and "+" of the volume group, the level between them (teal): in the bottom row (640x480, square, portrait), under the output button (480x320), where the Equalizer key was (800x480). It sets and shows the playing output's real level as a percent of that output's levels; muted (by anything), the level box turns dark with the speaker-off mark in white and "Mute" beside it where both fit (480x320, 800x480 and the larger portrait and square screens), else the mark alone, large (640x480, 480x480, 480x640, 320x480), never a number; "-" does nothing and "+" brings the sound back at its level; "-" at the first level mutes. "--" when the level is not known; where nothing can change it a tap shows "Volume is not available on this board" |
 | Close a notice | Esc (it also goes back as Esc always does: at the browser Vinyl quits) | tap it (it also goes after 6 s, 8 s for a disconnect) |
-| Back; at the browser, quit | Esc | the header's Esc |
+| Back; at the browser, quit | Esc (from a Menu page: the Menu; from the Menu: the page it was opened from) | the header's Esc |
 | Headset, speaker, keyboard media keys | Play/Pause, PlayCD, PauseCD (a toggle), Next, Previous (as Right / Left above, held too), Stop (pause and back to the start) | |
 
 Previous and next act when the key is released, the same from every path (the transport press, owner ruling
@@ -131,10 +144,21 @@ Korean titles draw with the launcher's Noto Sans CJK.
   (`~/.config/vinyl/state.json`, `app_muted`). The sound server's placeholder output at start (`auto_null`) never shows a
   level.
 
+## ReplayGain
+
+From the files' tags only (decision D25: no analysis on the board; tag the files with a PC tool such as rsgain or
+foobar2000): ID3v2 TXXX `REPLAYGAIN_TRACK_GAIN` / `_PEAK` and `REPLAYGAIN_ALBUM_GAIN` / `_PEAK` (MP3, WAV and AIFF id3
+chunks), the same names as Vorbis comments (FLAC, Ogg Vorbis), Opus `R128_TRACK_GAIN` / `R128_ALBUM_GAIN` (their value
+/ 256 + 5 dB, on top of the header's output gain the decoder applies), MP4 `----:com.apple.iTunes:replaygain_*`. Track
+uses the track gain (the album gain when the file has none), Album the album gain (the track gain when it has none); an
+untagged file plays at 0 dB. The gain never lifts the file's peak (the peak tag) above full scale. Vinyl applies it to its
+own stream, before the output's volume: the volume group's levels, its percent and the output's own level do not move.
+A pre-amp is not offered (0 dB).
+
 ## Planned settings
 
-Not in 0.1.0 (the owner's roadmap, 2026-11-13; `docs/decisions.md`, "Later (not built)"), in the Playback settings of the
-Menu key (P2):
+Not in 0.2.0 (the owner's roadmap, 2026-11-13; `docs/decisions.md`, "Later (not built)"), in the Playback settings of the
+Menu (P2):
 
 - **Gain boost**: 0 to +4 dB of software gain in 1 dB steps, with a limiter against clipping, for outputs that are quiet
   even at their maximum (the Raspberry Pi headphone jack beside a USB DAC).
@@ -169,24 +193,25 @@ plays in front (`dim allow`, decision D16).
 
 ## Install
 
-Settings > Apps > Available > Vinyl, or by hand: `sudo apt install ./vinyl_0.1.0_arm64.deb` (apt installs the
+Settings > Apps > Available > Vinyl, or by hand: `sudo apt install ./vinyl_0.2.0_arm64.deb` (apt installs the
 dependencies), `sudo dpkg -r vinyl` to remove it.
 
 ## Files the app keeps
 
 | Path | What |
 |---|---|
-| `~/.config/vinyl/state.json` | the queue, its order, shuffle, repeat, the position, the output, the browser's folder, the software level of an output without a mixer |
+| `~/.config/vinyl/state.json` | the queue, its order, shuffle, repeat, the position, the output, the browser's folder, the software level of an output without a mixer; written on a change (a track, a pause, the queue, a folder, the exit) and at most once a minute while playing |
+| `~/.config/vinyl/settings.json` | Gapless, ReplayGain, Remember position in long files; written only when one changes |
+| `~/.config/vinyl/positions.json` | where each long file (over 20 minutes) was left, the 500 most recent; written on a pause, a track change, the exit and at most once a minute while a long file plays |
 
-Delete it to start fresh. Vinyl writes nothing else (it never writes tags or music files).
+Delete them to start fresh. Vinyl writes nothing else (it never writes tags or music files). The sleep timer is not saved.
 
-## Known limits (0.1.0)
+## Known limits (0.2.0)
 
-- Folder browsing only: no library database, no search, no artist / album views (P2).
-- No EQ, ReplayGain, crossfade or sleep timer: the drafts' sleep-timer key is drawn dimmed (the Equalizer key of 800x480
-  gave its place to the volume group), and the "Gapless" chip shows without the ReplayGain figure (P2). The Menu key (tools
-  and settings) is P2 too: the 640x480 bottom row and the 480x320 transport row leave it out until then. No sorting
-  control in the browser (folders and tracks are A-Z).
+- Folder browsing only: no library database, no search, no artist / album views, no playlists of Vinyl's own (P2b, P2c).
+- No EQ and no crossfade (P2d), no gain boost and no Volume steps yet (planned settings, above); no ReplayGain pre-amp.
+  The ReplayGain figure shows on the square and large screens only. No sorting control in the browser (folders and
+  tracks are A-Z).
 - No metadata to headsets or car displays (MPRIS / AVRCP, P2); headset keys work when BlueZ hands them to an input node.
 - A cover larger than 1200 px on its long side is not decoded (the memory cap on the Pi Zero 2 W): the drawn sleeve shows.
 - FFmpeg seeks land on the packet at or before the position; the AAC length is the container's.
@@ -209,7 +234,7 @@ the FLAC / Opus readers come from this repository's Cassette (same author, MIT).
 
 ```sh
 wsl -e sh apps/vinyl/tests/run.sh               # the unit tests (-Werror) and the real-library fixtures
-wsl -e sh apps/vinyl/build.sh host              # harness, unit tests, 49 scenes (qa* for the design QA), sheets
+wsl -e sh apps/vinyl/build.sh host              # harness, unit tests, 68 scenes (qa* for the design QA), sheets
 wsl -e sh apps/vinyl/build.sh cross             # the arm64 binary; --arch amd64 for PCs
 wsl -e sh apps/vinyl/tests/abi/run.sh [root]    # the hand-written FFmpeg / mpg123 / vorbisfile ABI against headers
 python3 tools/make_registry.py --only vinyl --out <folder>    # a local .deb (not published)
@@ -226,7 +251,13 @@ Board protocol: [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md).
 
 ## Changes
 
-- **0.1.0** (not published yet): the P1 MVP of report 059 (decisions D1-D18), with the design-QA rounds: the transport
+- **0.2.0** (not published yet): phase P2a of report 060 (the owner's decisions of 2026-11-13, D25 and D32): the Menu key
+  on every layout (480x320: the seventh transport key; square: the sixth; portrait: the bottom row's first key; 640x480
+  and large: a bottom-row key, Output a Menu row on large, the large layout's sleep-timer key acting) and the Menu: the
+  sleep timer (15, 30, 60 minutes, this track, this album or queue, a 10 s fade, a notice at its end), Playback (Gapless,
+  ReplayGain from tags with its clipping guard, positions in long files), Keys and About; M and T. state.json is written on
+  changes and at most once a minute while playing (0.1.0: every 5 s), the MP3 tag reader skips covers it does not need.
+- **0.1.0** (published 2026-11-13, apps PR #153): the P1 MVP of report 059 (decisions D1-D18), with the design-QA rounds: the transport
   press (owner ruling 2026-11-12), the volume group on every layout with the output button (owner, 2026-11-13), the
   approved 640x480 and 480x320 layouts, the record's label with its spin marks, a muted output shown the same way on
   every path and layout (the dark level box, the speaker-off mark, "Mute" where it fits), Clear all asks,

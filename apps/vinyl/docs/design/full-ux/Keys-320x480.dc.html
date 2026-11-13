@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vinyl keys portrait</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<!-- branding-allow-begin: SVG path data (a move-to command to x 5 reads like the brand word) -->
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Montserrat:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.row{position:absolute;left:0;width:304px;height:50px;color:#ddd;font-size:14px;font-weight:600}
+.k{position:absolute;left:12px;top:6px;height:20px;min-width:26px;padding:0 8px;box-sizing:border-box;border-radius:5px;background:#2a2a2a;border:1px solid #444;color:#fff;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;white-space:nowrap}
+.a{position:absolute;left:12px;top:28px;width:280px;line-height:18px;white-space:nowrap;overflow:hidden}
+</style>
+</helmet>
+<div style="position:relative;width:320px;height:480px;background:#000;overflow:hidden;font-family:'Montserrat',sans-serif">
+  <div style="position:absolute;left:8px;top:8px;width:40px;height:27px;border-radius:10px;background:#222;color:#fff;font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center">Esc</div>
+  <svg style="position:absolute;right:88px;top:10px" width="30" height="24" viewBox="0 0 30 24" aria-label="Wi-Fi signal"><rect x="1" y="16" width="4" height="6" rx="1" fill="#777"/><rect x="8" y="12" width="4" height="10" rx="1" fill="#777"/><rect x="15" y="8" width="4" height="14" rx="1" fill="#777"/><rect x="22" y="3" width="4" height="19" rx="1" fill="#777"/></svg>
+  <div style="position:absolute;right:8px;top:6px;width:70px;height:30px;border-radius:6px;background:#8a5a2b;color:#fff;font-size:20px;font-weight:600;display:flex;align-items:center;justify-content:center">12:00</div>
+  <div style="position:absolute;left:8px;top:44px;width:304px;height:428px;border-radius:10px;background:#1b1e1e;overflow:hidden">
+    <div style="position:absolute;left:0;top:4px;width:304px">
+      <div class="row" style="top:0"><div class="k">Space</div><div class="a">Play or pause</div></div>
+      <div class="row" style="top:50px"><div class="k">Left</div><div class="a">Restart, or previous; hold: rewind</div></div>
+      <div class="row" style="top:100px"><div class="k">Right</div><div class="a">Next; hold: fast forward</div></div>
+      <div class="row" style="top:150px"><div class="k">Shift+Left, Right</div><div class="a">Seek 10 seconds</div></div>
+      <div class="row" style="top:200px"><div class="k">S, R</div><div class="a">Shuffle, Repeat</div></div>
+      <div class="row" style="top:250px"><div class="k">Q, B, O, M</div><div class="a">Queue, Browse, Output, Menu</div></div>
+      <div class="row" style="top:300px"><div class="k">- and =</div><div class="a">Volume down and up</div></div>
+      <div class="row" style="top:350px"><div class="k">Esc</div><div class="a">Back</div></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":320,"height":480}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+<!-- branding-allow-end -->
+</body>
+</html>
