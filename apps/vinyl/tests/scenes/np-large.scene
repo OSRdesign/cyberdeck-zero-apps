@@ -1,4 +1,4 @@
-title Vinyl now playing, 800x480 (draft NowPlaying-800x480): the queue pane and now playing
+title Vinyl now playing, 800x480 (draft NowPlaying-800x480, NP-800x480 of P2a): the queue pane and now playing; the bottom row Browse, Menu (P2a: in the Output key's place) and the volume group
 sizes 800x480
 env VINYL_DEMO 1
 env VINYL_DEMO_STATE playing
@@ -8,7 +8,8 @@ shot now-playing
 expect esc
 expect text "QUEUE, 20 TRACKS"
 expect text "Amerie, 1 Thing (Siik Remix)"
-expect text "Output"
+expect text "Menu"
+expect notext "Output"
 expect notext "Equalizer"
 expect notext "Vol 60"
 expect text "60"

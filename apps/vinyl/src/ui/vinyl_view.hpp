@@ -11,7 +11,8 @@
  *   Browser  the folder list with the mini player;
  *   Queue    the play order with Move up, Move down, Remove, Clear all (no dragging);
  *   Output   the output chooser with its hint strip (or the "not set up" notice strip);
- *   Notices  (a demonstration page for the scenes only: the four notices of the notices draft).
+ *   Notices  (a demonstration page for the scenes only: the four notices of the notices draft);
+ *   Menu ... About  the Menu pages (P2a: ui/menu_pages.hpp).
  * Where the drawing makes a control smaller than the toolkit's touch target, the control keeps its look and gets a larger
  * transparent hit box, never overlapping a neighbour's (layout::place_now_hits). The previous and next buttons report
  * press, release and cancel (the transport press decides). The view only draws: every action goes to the controller
@@ -41,6 +42,11 @@ public:
     Page page() const;
     void update_now(const NowView &v);
     void update_list(Page p, const ListView &v);
+    /* the Menu pages (P2a): a list page's rows, the Keys page's table, the About page's texts; Keys and About scroll */
+    void update_menu(Page p, const MenuView &v);
+    void set_keys(const std::vector<menu::KeyHelp> &rows);
+    void set_about(const menu::About &a);
+    void scroll_page(Page p, int rows);
     void show_notice(const Notice &n);
     void hide_notice();
     bool notice_shown() const;

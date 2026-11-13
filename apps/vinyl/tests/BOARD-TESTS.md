@@ -1,4 +1,4 @@
-# Vinyl 0.1.0: board tests
+# Vinyl: board tests (0.1.0, and 0.2.0 from B32)
 
 Controller-led: the Controller installs the package and copies the test music; the owner runs the steps and says what
 was seen. First board: the HackBerry (CM5, 720x720 square, PipeWire, the XWF case speaker and the Evolve 65 over
@@ -6,7 +6,9 @@ Bluetooth); a Lite board (zero8 or the deck, a USB sound card) for B11. Numbers 
 trimmed to what 0.1.0 has; B13-B16 are the design-QA round (the transport press of the owner ruling of 2026-11-12, the
 volume group), B17-B19 the retests of 2026-11-12, B20-B24 the round of 2026-11-13 (Clear all, the seek tap, the
 Raspberry Pi headphone jack, the approved 640x480 and 480x320 layouts), B25-B28 the levels fitted to each output (the
-owner's decision of 2026-11-13, one test per kind of output), B29 the seek bar's drag.
+owner's decision of 2026-11-13, one test per kind of output), B29 the seek bar's drag. B32-B38 are 0.2.0 (P2a of report
+060: the Menu key, the sleep timer, ReplayGain, the Playback settings, positions in long files, Keys and About, the SD
+card): their own section at the end.
 
 ## Preparation (Controller)
 
@@ -69,6 +71,30 @@ Round of 2026-11-13:
 | B30 | The owner's mute report (2026-11-13): the deck zero7 (640x480, USB card with its switch) and RPI52 (800x480): mute with "-" at the first level, then with `amixer -c <card> sset PCM mute` (deck) or `pactl set-sink-mute @DEFAULT_SINK@ 1` (RPI52) | the deck: the dark level box with a large white speaker-off mark (about two thirds of the box high), no word; RPI52: the dark box with the mark and "Mute"; both read as muted at arm's length; "+" brings the level back |
 | B31 | zero8 on HDMI only (no playback mixer: Vinyl's software volume): press "-" to the first level, once more, then "-" again; quit Vinyl from the launcher and open it again; press "+" | the same muted box as B30 (480x320: the mark and "Mute"), no sound; "-" muted changes nothing; still muted after the restart; "+" plays again at the first level (log: `volume: software step ... (muted, level 1 kept)`, then `step 1/30`) |
 | B29 | Now playing, playing: press on the seek bar's knob and drag it slowly to the right and back, let go near the middle; then the same while paused; then press on the bar and drag off it (up onto the keys, sideways past its ends) before letting go; then a plain tap on the bar | while the finger is down the knob and the fill follow it and the elapsed time shows where it will land (the remaining time with it); the music plays on (or stays paused) without jumping; on release it continues from there, once; past the bar's ends the knob stops at the end; sliding onto a key neither presses that key nor stops the drag; the tap seeks where it lands as before |
+
+## 0.2.0 (P2a)
+
+Preparation (Controller), on the HackBerry (720x720, PipeWire) and one Zero 2 W (zero8 in PDA mode, 320x480, the Sharkoon
+DAC, or the deck at 640x480):
+
+1. `sudo apt install ./vinyl_0.2.0_arm64.deb` over 0.1.0 (state.json of 0.1.0 is read as it is).
+2. ReplayGain test files: two copies of one track tagged by hand, e.g. `ffmpeg -i LOUD.mp3 -c copy -id3v2_version 3
+   -metadata REPLAYGAIN_TRACK_GAIN="-9.00 dB" -metadata REPLAYGAIN_TRACK_PEAK="1.000000" ~/Music/rg/LOUD-rg.mp3` and a
+   quiet one with `REPLAYGAIN_TRACK_GAIN="+3.00 dB"` and its real peak (or rsgain on the PC); the untagged originals beside
+   them.
+3. A long file: a mix or an audiobook of more than 20 minutes in `~/Music/long` (`ffmpeg -f lavfi -i
+   "sine=frequency=440:duration=3600" -ac 2 ~/Music/long/hour.mp3` does).
+4. Logs: the launcher's journal, `[vinyl]` lines (`replaygain ...`, `sleep timer: ...`, `long file: starts at ...`).
+
+| # | Do | Expected |
+|---|---|---|
+| B32 | Every layout you have (the HackBerry square, PDA portrait, the deck's 640x480, a 480x320 board, 800x480): tap the Menu key (the sliders icon), Esc; then press M, Esc; press T, Esc; with a keyboard on the Menu press R and 9; on 800x480 also tap the sleep-timer key | the key sits where the drafts draw it: 480x320 the seventh transport key after Queue, square the sixth transport key, portrait the first key of the bottom row (then Queue, then the volume group), 640x480 Browse, Queue, Menu, then the volume group, 800x480 Browse, Menu, then the volume group (no Output key: the output chip opens Output); the Menu lists TOOLS: Sleep timer (Off), SETTINGS: Playback, Output (the output's name), Keys, About, nothing else (no Equalizer, no Library); Esc goes back to now playing; T opens the Sleep timer page and it stays (Esc goes back); R toggles repeat and nothing else (no row opens), 9 does nothing; the 800x480 sleep-timer key opens the Sleep timer page |
+| B33 | Sleep timer: in a track's last minute choose This track; then choose 15 minutes and leave it running during B34-B37 (on the HackBerry, hide Vinyl with Super for the last minutes) | a choice closes the page, the Menu row shows the mode or the time left. This track: the status line "Stops at the end of this track. ..." (open the page again); the last 10 s fade out evenly, the music pauses, the next track waits paused, the notice "Sleep timer ended. Paused."; the Menu's row back to Off. 15 minutes: "Stops in 14:59" counting down (the Menu row shows the time left), the last 10 s fade, then a pause on time, also while hidden; nothing else changes (the queue, the page) |
+| B34 | Menu > Playback > ReplayGain: Track, then Off; play LOUD-rg and QUIET-rg in turn (B31's files of report 060 if the Controller has them) | Track: the two play at about the same loudness (the journal's `replaygain LOUD-rg.mp3: track -9.00 dB ...`); Off: LOUD clearly louder; the volume group shows the same level all the time (ReplayGain never moves the output's level). On the HackBerry the chip reads "Gapless, RG -9.0 dB" |
+| B35 | Menu > Playback: Gapless Off, ReplayGain Album, Remember position Off; quit Vinyl (Esc at the browser), open it again, Menu > Playback; then set them back (On, Track, On) | the three values are kept after the restart (`~/.config/vinyl/settings.json`); with Gapless Off a change between two tracks of the same format has a short gap (an album that was gapless now clicks or pauses briefly) |
+| B36 | Play the hour-long file to about 20:00, open another track, then the long file again; then a 4-minute track from its folder; quit and open Vinyl, play the long file from the browser | the long file starts again at about 20:00 (the journal: `long file: starts at 0:20:..`), the short track at 0:00; after the restart the long file still starts at about 20:00 |
+| B37 | Menu > Keys, scroll to the end; Menu > About (on the Sharkoon DAC) | Keys: the key chips and their actions, Space to the media keys, the page scrolls by a drag and by Up / Down; About: "Vinyl 0.2.0", the formats, THIS OUTPUT "USB Audio Device: -45.0 to 0.0 dB, 23 levels of 2.05 dB." (the DAC's name as the output button shows it), the libraries, the licences' place; nothing is cut |
+| B38 | Controller (zero8 or the deck, SD card): while a track plays, `stat -c %y ~/.config/vinyl/state.json` every 20 s for 3 minutes; then pause; then `ls -l --time-style=full-iso ~/.config/vinyl/` | state.json changes at most once a minute while playing (0.1.0: every 5 s), and once at the pause; positions.json is not written while a short track plays; settings.json only when a setting changed |
 
 ## Cleanup
 

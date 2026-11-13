@@ -1,0 +1,30 @@
+title Vinyl P2a: the output's name on now playing, the Menu's Output row, About's THIS OUTPUT line and the Output page: a CJK output name (a Bluetooth headset named in Japanese) and CJK tags (the qa sizes and 1280x720)
+sizes 800x480 480x480 720x720 480x800 480x640 1280x720
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_BT_NAME "寝室のワイヤレスヘッドホン"
+env VINYL_DEMO_CJK 1
+
+wait 1200
+shot 01-now
+expect esc
+expect text "寝室のワイヤレスヘッドホン"
+key m
+wait 400
+shot 02-menu
+expect text "Output"
+expect text "寝室のワイヤレスヘッドホン"
+tap "About"
+wait 400
+shot 03-about
+expect text "THIS OUTPUT"
+key left
+wait 400
+tap "Output"
+wait 400
+shot 04-output
+expect text "Automatic"
+key left
+wait 400
+expect text "TOOLS"
+expect noquit

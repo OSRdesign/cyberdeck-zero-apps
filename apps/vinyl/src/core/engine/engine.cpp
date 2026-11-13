@@ -5,6 +5,9 @@
  */
 #include "engine.hpp"
 
+#include "../sleep/sleep_timer.hpp"
+#include "../tags/tag_reader.hpp"
+
 #include <algorithm>
 #include <cerrno>
 #include <chrono>
@@ -82,7 +85,9 @@ bool same_format(const SinkFormat &a, const SinkFormat &b) {
 }
 }  // namespace
 
-Engine::Engine(DecodeLibs libs, SinkProvider &sinks) : libs_(std::move(libs)), sinks_(sinks) {
+Engine::Engine(DecodeLibs libs, SinkProvider &sinks, ReplayGainReader rg)
+    : libs_(std::move(libs)), sinks_(sinks), rg_reader_(std::move(rg)) {
+    if (!rg_reader_) rg_reader_ = [](const std::string &path, ReplayGainTags &out) { return read_replaygain(path, out); };
     th_ = std::thread([this] { run(); });
 }
 
@@ -142,6 +147,14 @@ void Engine::set_output(const OutputTarget &t) {
     push(std::move(c), true);
 }
 void Engine::set_gain(float g) { gain_.store(g); }
+void Engine::set_replaygain(ReplayGainMode m) { rg_mode_.store(static_cast<int>(m)); }
+void Engine::set_gapless(bool on) { gapless_.store(on); }
+void Engine::set_end_fade(bool on) { end_fade_.store(on); }
+
+double Engine::replaygain_db_now() const {
+    std::lock_guard<std::mutex> g(mu_);
+    return replaygain_db(static_cast<ReplayGainMode>(rg_mode_.load()), snap_.rg);
+}
 
 EngineSnapshot Engine::snapshot() const {
     std::lock_guard<std::mutex> g(mu_);
@@ -186,9 +199,11 @@ void Engine::run() {
     dec_.reset();
 }
 
-bool Engine::open_decoder(int pos, const std::string &path, std::unique_ptr<TrackDecoder> &dec, TrackInfo &info, int &err) {
+bool Engine::open_decoder(int pos, const std::string &path, std::unique_ptr<TrackDecoder> &dec, TrackInfo &info, int &err,
+                          ReplayGainTags &rg) {
     (void)pos;
     err = 0;
+    rg = ReplayGainTags();
     dec = open_track(path, libs_, info, &err);
     if (!dec) return false;
     if (info.out.rate == 0 || info.out.channels == 0 || (info.out.bits != 16 && info.out.bits != 32)) {
@@ -196,7 +211,25 @@ bool Engine::open_decoder(int pos, const std::string &path, std::unique_ptr<Trac
         err = kDecodeFailed;
         return false;
     }
+    /* the track's ReplayGain tags (a small read: no picture, the MP3 tag walked frame by frame) */
+    if (rg_reader_ && rg_reader_(path, rg) && rg.any()) {
+        const size_t slash = path.rfind('/');
+        std::fprintf(stderr, "[vinyl] replaygain %s: track %s%.2f dB (peak %.3f), album %s%.2f dB (peak %.3f)\n",
+                     slash == std::string::npos ? path.c_str() : path.c_str() + slash + 1, rg.has_track ? "" : "none ",
+                     rg.track_db, rg.has_track_peak ? rg.track_peak : 0.0f, rg.has_album ? "" : "none ", rg.album_db,
+                     rg.has_album_peak ? rg.album_peak : 0.0f);
+    }
     return true;
+}
+
+float Engine::sample_gain(uint64_t frame_before) const {
+    float g = gain_.load() * replaygain_factor(static_cast<ReplayGainMode>(rg_mode_.load()), dec_rg_);
+    /* the sleep timer's end fade: the last 10 s of the decoded track when nothing is named next */
+    if (end_fade_.load() && next_pos_ < 0 && info_.total_frames && info_.out.rate) {
+        const uint64_t left = info_.total_frames > frame_before ? info_.total_frames - frame_before : 0;
+        g *= sleep_fade_gain(left * 1000 / info_.out.rate);
+    }
+    return g;
 }
 
 SinkFormat Engine::request_for(const TrackInfo &info) const {
@@ -212,17 +245,19 @@ void Engine::handle(const Cmd &c) {
     case Cmd::Kind::Load: {
         std::unique_ptr<TrackDecoder> d;
         TrackInfo inf;
+        ReplayGainTags rg;
         int err = 0;
-        if (!open_decoder(c.pos, c.path, d, inf, err)) {
+        if (!open_decoder(c.pos, c.path, d, inf, err, rg)) {
             close_output(false);
             dec_.reset();
             info_ = TrackInfo();
+            dec_rg_ = ReplayGainTags();
             dec_pos_ = c.pos;
             dec_path_ = c.path;
             next_pos_ = -1;
             next_path_.clear();
             segs_.clear();
-            segs_.push_back(Seg{written_, c.pos, c.path, 0, TrackInfo()});
+            segs_.push_back(Seg{written_, c.pos, c.path, 0, TrackInfo(), ReplayGainTags()});
             state_ = PlayState::Idle;
             heard_pos_ = c.pos;
             ++gen_;
@@ -247,12 +282,13 @@ void Engine::handle(const Cmd &c) {
         }
         dec_ = std::move(d);
         info_ = inf;
+        dec_rg_ = rg;
         dec_pos_ = c.pos;
         dec_path_ = c.path;
         next_pos_ = -1;
         next_path_.clear();
         segs_.clear();
-        segs_.push_back(Seg{written_, c.pos, c.path, start, inf});
+        segs_.push_back(Seg{written_, c.pos, c.path, start, inf, rg});
         state_ = c.play ? PlayState::Playing : PlayState::Paused;
         if (!c.play) close_output(false);
         heard_pos_ = c.pos;
@@ -282,7 +318,7 @@ void Engine::handle(const Cmd &c) {
         if (dec_) {
             dec_->seek(0);
             segs_.clear();
-            segs_.push_back(Seg{written_, dec_pos_, dec_path_, 0, info_});
+            segs_.push_back(Seg{written_, dec_pos_, dec_path_, 0, info_, dec_rg_});
             state_ = PlayState::Paused;
         }
         return;
@@ -299,7 +335,7 @@ void Engine::handle(const Cmd &c) {
         }
         f = dec_->position();
         segs_.clear();
-        segs_.push_back(Seg{written_, dec_pos_, dec_path_, f, info_});
+        segs_.push_back(Seg{written_, dec_pos_, dec_path_, f, info_, dec_rg_});
         return;
     }
     case Cmd::Kind::Next:
@@ -348,12 +384,14 @@ void Engine::reposition(const Seg &cur, uint64_t frame, PlayState next) {
          * one it had moved to as the next again */
         std::unique_ptr<TrackDecoder> d;
         TrackInfo inf;
+        ReplayGainTags rg;
         int err = 0;
         const int was_pos = dec_pos_;
         const std::string was_path = dec_path_;
-        if (open_decoder(cur.pos, cur.path, d, inf, err)) {
+        if (open_decoder(cur.pos, cur.path, d, inf, err, rg)) {
             dec_ = std::move(d);
             info_ = inf;
+            dec_rg_ = rg;
             dec_pos_ = cur.pos;
             dec_path_ = cur.path;
             next_pos_ = was_pos;
@@ -371,7 +409,7 @@ void Engine::reposition(const Seg &cur, uint64_t frame, PlayState next) {
         }
     }
     segs_.clear();
-    segs_.push_back(Seg{written_, dec_pos_, dec_path_, frame, info_});
+    segs_.push_back(Seg{written_, dec_pos_, dec_path_, frame, info_, dec_rg_});
     state_ = dec_ ? next : PlayState::Idle;
 }
 
@@ -493,6 +531,7 @@ void Engine::step() {
     }
     const size_t fb = info_.out.frame_bytes();
     dbuf_.resize(kPeriodFrames * fb);
+    const uint64_t frame_before = dec_->position();
     long n = dec_->read(dbuf_.data(), kPeriodFrames);
     if (n < 0) {
         std::fprintf(stderr, "[vinyl] decode error %ld in %s: the track ends here\n", n, dec_path_.c_str());
@@ -505,7 +544,7 @@ void Engine::step() {
     }
     obuf_.resize(static_cast<size_t>(n) * granted_.channels * format_bytes(granted_.format));
     convert_pcm(dbuf_.data(), info_.out.bits, info_.out.channels, obuf_.data(), granted_.format, granted_.channels,
-                static_cast<size_t>(n), gain_.load());
+                static_cast<size_t>(n), sample_gain(frame_before));
     write_all(obuf_.data(), static_cast<size_t>(n));
     update_snapshot();
 }
@@ -514,19 +553,21 @@ void Engine::end_of_track() {
     if (next_pos_ >= 0) {
         std::unique_ptr<TrackDecoder> d;
         TrackInfo inf;
+        ReplayGainTags rg;
         int err = 0;
         const int npos = next_pos_;
         const std::string npath = next_path_;
         next_pos_ = -1;
         next_path_.clear();
-        if (!open_decoder(npos, npath, d, inf, err)) {
+        if (!open_decoder(npos, npath, d, inf, err, rg)) {
             close_output(true);
             dec_.reset();
             info_ = TrackInfo();
+            dec_rg_ = ReplayGainTags();
             dec_pos_ = npos;
             dec_path_ = npath;
             segs_.clear();
-            segs_.push_back(Seg{written_, npos, npath, 0, TrackInfo()});
+            segs_.push_back(Seg{written_, npos, npath, 0, TrackInfo(), ReplayGainTags()});
             state_ = PlayState::Idle;
             EngineEvent ev;
             ev.kind = EngineEvent::Kind::OpenFailed;
@@ -538,14 +579,16 @@ void Engine::end_of_track() {
             post(ev);
             return;
         }
-        bool same = open_ && same_format(request_for(inf), req_);
+        /* gapless off (the Playback setting): every change drains the stream and opens it again */
+        bool same = gapless_.load() && open_ && same_format(request_for(inf), req_);
         if (same && target_.kind == OutputTarget::Kind::Auto && sinks_.default_moved(out_)) same = false;
         if (!same) close_output(true); /* the previous track's tail is played out first */
         dec_ = std::move(d);
         info_ = inf;
+        dec_rg_ = rg;
         dec_pos_ = npos;
         dec_path_ = npath;
-        segs_.push_back(Seg{written_, npos, npath, 0, inf});
+        segs_.push_back(Seg{written_, npos, npath, 0, inf, rg});
         EngineEvent ev;
         ev.kind = EngineEvent::Kind::Advanced;
         ev.pos = npos;
@@ -556,7 +599,7 @@ void Engine::end_of_track() {
     close_output(true);
     dec_->seek(0);
     segs_.clear();
-    segs_.push_back(Seg{written_, dec_pos_, dec_path_, 0, info_});
+    segs_.push_back(Seg{written_, dec_pos_, dec_path_, 0, info_, dec_rg_});
     state_ = PlayState::Paused;
     EngineEvent ev;
     ev.kind = EngineEvent::Kind::QueueEnd;
@@ -590,6 +633,7 @@ void Engine::update_snapshot() {
     snap_.output_pulse = last_pulse_;
     snap_.underruns = underruns_;
     snap_.gen = gen_;
+    snap_.rg = s.rg;
 }
 
 }  // namespace vinyl

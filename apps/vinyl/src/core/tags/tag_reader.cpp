@@ -54,6 +54,7 @@ public:
     }
     bool ok() const { return fd_ >= 0; }
     uint64_t size() const { return size_; }
+    uint64_t bytes_read() const { return bytes_read_; }
     /* exactly n bytes at off, or false */
     bool read(uint64_t off, void *buf, size_t n) const {
         if (off + n > size_) return false;
@@ -63,6 +64,7 @@ public:
             if (k < 0 && errno == EINTR) continue;
             if (k <= 0) return false;
             got += static_cast<size_t>(k);
+            bytes_read_ += static_cast<uint64_t>(k);
         }
         return true;
     }
@@ -74,6 +76,7 @@ public:
 private:
     int fd_ = -1;
     uint64_t size_ = 0;
+    mutable uint64_t bytes_read_ = 0;
 };
 
 std::string lower_ext(const std::string &path) {
@@ -134,6 +137,7 @@ void set_once(std::string &field, const std::string &v) {
 /* A Vorbis-comment / MP4 / INFO field by its name, into the tags. */
 void apply_named(TrackTags &t, const std::string &name_in, const std::string &v) {
     const std::string name = upper(name_in);
+    if (apply_replaygain_tag(t.rg, name, v)) return; /* REPLAYGAIN_*, R128_*_GAIN */
     if (name == "TITLE") set_once(t.title, v);
     else if (name == "ARTIST") set_once(t.artist, v);
     else if (name == "ALBUM") set_once(t.album, v);
@@ -215,9 +219,24 @@ std::vector<unsigned char> unsync(const unsigned char *p, size_t n) {
     return o;
 }
 
+/* TXXX / TXX: encoding, a description, a value; the ReplayGain ones go into t.rg */
+void id3_txxx(const unsigned char *b, size_t n, TrackTags &t) {
+    if (n < 2) return;
+    const unsigned enc = b[0];
+    const size_t desc_end = 1 + id3_skip_string(b + 1, n - 1, enc);
+    const std::string desc = id3_text(b, desc_end);
+    if (desc_end >= n) return;
+    std::vector<unsigned char> val;
+    val.reserve(n - desc_end + 1);
+    val.push_back(static_cast<unsigned char>(enc));
+    val.insert(val.end(), b + desc_end, b + n);
+    apply_replaygain_tag(t.rg, desc, id3_text(val.data(), val.size()));
+}
+
 void id3_frame(const std::string &id, const unsigned char *b, size_t n, bool v22, TrackTags &t, Picture *pic,
                size_t max_pic) {
-    if (id == "TIT2" || id == "TT2") set_once(t.title, id3_text(b, n));
+    if (id == "TXXX" || id == "TXX") id3_txxx(b, n, t);
+    else if (id == "TIT2" || id == "TT2") set_once(t.title, id3_text(b, n));
     else if (id == "TPE1" || id == "TP1") set_once(t.artist, id3_text(b, n));
     else if (id == "TALB" || id == "TAL") set_once(t.album, id3_text(b, n));
     else if (id == "TPE2" || id == "TP2") set_once(t.album_artist, id3_text(b, n));
@@ -226,6 +245,35 @@ void id3_frame(const std::string &id, const unsigned char *b, size_t n, bool v22
     else if ((id == "TRCK" || id == "TRK") && !t.track) t.track = leading_int(id3_text(b, n));
     else if ((id == "TPOS" || id == "TPA") && !t.disc) t.disc = leading_int(id3_text(b, n));
     else if (id == "APIC" || id == "PIC") id3_picture(b, n, v22, pic, max_pic, t);
+}
+
+/* A frame's body as stored (v2.4 frame flags: a data length indicator, per-frame unsynchronisation; compressed or
+ * encrypted frames are skipped) into the tags. */
+void id3_frame_raw(const std::string &id, const unsigned char *fb, size_t fn, unsigned ver, unsigned fflags, TrackTags &t,
+                   Picture *pic, size_t max_pic) {
+    std::vector<unsigned char> tmp;
+    if (ver == 4) {
+        if (fflags & 0x0001) { /* data length indicator */
+            if (fn < 4) return;
+            fb += 4;
+            fn -= 4;
+        }
+        if (fflags & 0x0002) { /* frame unsynchronised */
+            tmp = unsync(fb, fn);
+            fb = tmp.data();
+            fn = tmp.size();
+        }
+        if (fflags & 0x000C) return; /* compressed or encrypted */
+    } else if (ver == 3 && (fflags & 0x00C0)) {
+        return;
+    }
+    id3_frame(id, fb, fn, ver == 2, t, pic, max_pic);
+}
+
+bool id3_frame_id_ok(const unsigned char *f, size_t len) {
+    for (size_t i = 0; i < len; ++i)
+        if (!(std::isupper(f[i]) || std::isdigit(f[i]))) return false;
+    return true;
 }
 
 }  // namespace
@@ -250,39 +298,13 @@ size_t parse_id3v2(const unsigned char *p, size_t n, TrackTags &t, Picture *pic,
     while (q + hdr <= body.size()) {
         const unsigned char *f = body.data() + q;
         if (f[0] == 0) break; /* padding */
+        if (!id3_frame_id_ok(f, v22 ? 3 : 4)) return total;
         const std::string id(reinterpret_cast<const char *>(f), v22 ? 3 : 4);
-        for (char c : id)
-            if (!(std::isupper(static_cast<unsigned char>(c)) || std::isdigit(static_cast<unsigned char>(c)))) return total;
         size_t fsize = v22 ? be24(f + 3) : (ver == 4 ? syncsafe(f + 4) : be32(f + 4));
         unsigned fflags = v22 ? 0 : be16(f + 8);
         q += hdr;
         if (fsize > body.size() - q) break;
-        const unsigned char *fb = body.data() + q;
-        size_t fn = fsize;
-        std::vector<unsigned char> tmp;
-        if (ver == 4) {
-            if (fflags & 0x0001) { /* data length indicator */
-                if (fn < 4) {
-                    q += fsize;
-                    continue;
-                }
-                fb += 4;
-                fn -= 4;
-            }
-            if (fflags & 0x0002) { /* frame unsynchronised */
-                tmp = unsync(fb, fn);
-                fb = tmp.data();
-                fn = tmp.size();
-            }
-            if (fflags & 0x000C) { /* compressed or encrypted: skipped */
-                q += fsize;
-                continue;
-            }
-        } else if (ver == 3 && (fflags & 0x00C0)) {
-            q += fsize;
-            continue;
-        }
-        id3_frame(id, fb, fn, v22, t, pic, max_pic);
+        id3_frame_raw(id, body.data() + q, fsize, ver, fflags, t, pic, max_pic);
         q += fsize;
     }
     return total;
@@ -504,18 +526,65 @@ MpegFrame mpeg_frame(const unsigned char *p) {
     return f;
 }
 
+constexpr size_t kTextFrameBytes = 64u << 10;   /* a text frame (TIT2, TXXX...) larger than this is not read */
+constexpr size_t kUnsyncedTagBytes = 256u << 10; /* a tag unsynchronised as a whole: what is read without a picture asked */
+
+/* The ID3v2 tag at the start of the file, walked frame by frame in the file (report 060 finding 3): each frame header is
+ * read, then only the bodies wanted (text frames up to 64 kB, a picture only when `pic` asks for one and it fits), so a
+ * cover is skipped by its size. A tag unsynchronised as a whole (v2.2 / v2.3 flag) cannot be walked in the file: it is
+ * read whole when a picture is asked for (up to kMaxTagBytes), else its first 256 kB (the text frames come first in
+ * practice). Returns the bytes the tag occupies (0: none). */
+size_t read_id3v2_file(const File &f, TrackTags &t, Picture *pic, size_t max_pic) {
+    unsigned char h[10];
+    if (!f.read(0, h, 10) || std::memcmp(h, "ID3", 3) != 0) return 0;
+    const unsigned ver = h[3], flags = h[5];
+    if (ver < 2 || ver > 4) return 0;
+    const uint64_t tag_size = syncsafe(h + 6);
+    const size_t total = 10 + tag_size + ((flags & 0x10) ? 10 : 0);
+    const uint64_t end = std::min<uint64_t>(10 + tag_size, f.size());
+    if ((flags & 0x80) && ver < 4) {
+        const uint64_t want = std::min<uint64_t>(total, pic ? kMaxTagBytes : kUnsyncedTagBytes);
+        std::vector<unsigned char> tag;
+        if (f.read(0, tag, static_cast<size_t>(std::min<uint64_t>(want, f.size())))) parse_id3v2(tag.data(), tag.size(), t, pic, max_pic);
+        return total;
+    }
+    uint64_t pos = 10;
+    if ((flags & 0x40) && ver >= 3) { /* extended header */
+        unsigned char e[4];
+        if (!f.read(pos, e, 4)) return total;
+        pos += ver == 4 ? syncsafe(e) : be32(e) + 4;
+    }
+    const bool v22 = ver == 2;
+    const size_t hdr = v22 ? 6 : 10;
+    std::vector<unsigned char> body;
+    for (int frames = 0; frames < 4096 && pos + hdr <= end; ++frames) {
+        unsigned char fh[10];
+        if (!f.read(pos, fh, hdr) || fh[0] == 0) break; /* padding */
+        if (!id3_frame_id_ok(fh, v22 ? 3 : 4)) break;
+        const std::string id(reinterpret_cast<const char *>(fh), v22 ? 3 : 4);
+        const uint64_t fsize = v22 ? be24(fh + 3) : (ver == 4 ? syncsafe(fh + 4) : be32(fh + 4));
+        const unsigned fflags = v22 ? 0 : be16(fh + 8);
+        pos += hdr;
+        if (fsize > end - pos) break;
+        const bool picture = id == "APIC" || id == "PIC";
+        bool wanted = false;
+        if (picture) {
+            t.has_picture = true;
+            wanted = pic != nullptr && fsize <= max_pic + 1024; /* the picture's own header comes first */
+        } else {
+            wanted = fh[0] == 'T' && fsize <= kTextFrameBytes; /* the text frames and TXXX */
+        }
+        if (wanted && f.read(pos, body, static_cast<size_t>(fsize)))
+            id3_frame_raw(id, body.data(), body.size(), ver, fflags, t, pic, max_pic);
+        pos += fsize;
+    }
+    return total;
+}
+
 void read_mp3(const File &f, TrackTags &t, Picture *pic, size_t max_pic) {
     t.codec = "MP3";
     uint64_t audio_start = 0, audio_end = f.size();
-    unsigned char h[10];
-    if (f.read(0, h, 10) && std::memcmp(h, "ID3", 3) == 0) {
-        const size_t total = 10 + syncsafe(h + 6) + ((h[5] & 0x10) ? 10 : 0);
-        std::vector<unsigned char> tag;
-        if (total <= kMaxTagBytes && f.read(0, tag, std::min<uint64_t>(total, f.size()))) {
-            parse_id3v2(tag.data(), tag.size(), t, pic, max_pic);
-        }
-        audio_start = total;
-    }
+    audio_start = read_id3v2_file(f, t, pic, max_pic);
     unsigned char v1[128];
     if (f.size() >= 128 && f.read(f.size() - 128, v1, 128) && std::memcmp(v1, "TAG", 3) == 0) {
         audio_end -= 128;
@@ -530,10 +599,20 @@ void read_mp3(const File &f, TrackTags &t, Picture *pic, size_t max_pic) {
         set_once(t.date, field(93, 4));
         if (!t.track && v1[125] == 0 && v1[126]) t.track = v1[126];
     }
-    /* the first frame (skip zero padding and junk up to 64 kB) */
+    /* the first frame (skip zero padding and junk up to 64 kB: 4 kB first, which holds it in nearly every file) */
     std::vector<unsigned char> buf;
-    const size_t scan = static_cast<size_t>(std::min<uint64_t>(64 * 1024, audio_end > audio_start ? audio_end - audio_start : 0));
-    if (scan < 4 || !f.read(audio_start, buf, scan)) return;
+    const uint64_t room = audio_end > audio_start ? audio_end - audio_start : 0;
+    for (const size_t step : {size_t(4096), size_t(64 * 1024)}) {
+        const size_t scan = static_cast<size_t>(std::min<uint64_t>(step, room));
+        if (scan < 4 || !f.read(audio_start, buf, scan)) return;
+        bool found = false;
+        for (size_t i = 0; i + 4 <= buf.size() && !found; ++i) {
+            const MpegFrame fr = mpeg_frame(buf.data() + i);
+            /* a frame confirmed by the next header in the buffer (the loop below takes the same one) */
+            found = fr.ok && i + fr.size + 4 <= buf.size() && mpeg_frame(buf.data() + i + fr.size).ok;
+        }
+        if (found || scan == room) break;
+    }
     for (size_t i = 0; i + 4 <= buf.size(); ++i) {
         MpegFrame fr = mpeg_frame(buf.data() + i);
         if (!fr.ok) continue;
@@ -787,7 +866,37 @@ struct Mp4 {
         --depth;
     }
 
+    /* a freeform item: 'mean' (com.apple.iTunes), 'name' (replaygain_track_gain ...), 'data' (UTF-8 text) */
+    void freeform(uint64_t body, uint64_t blen) {
+        std::string mean, name, value;
+        uint64_t pos = body;
+        const uint64_t end = body + blen;
+        while (pos + 8 <= end) {
+            unsigned char h[8];
+            if (!f.read(pos, h, 8)) return;
+            const uint64_t size = be32(h);
+            if (size < 8 || pos + size > end) return;
+            const std::string type(reinterpret_cast<const char *>(h + 4), 4);
+            const uint64_t plen = size - 8;
+            if ((type == "mean" || type == "name") && plen >= 4 && plen <= 512) {
+                std::vector<unsigned char> b;
+                if (!f.read(pos + 12, b, static_cast<size_t>(plen - 4))) return;
+                (type == "mean" ? mean : name).assign(b.begin(), b.end());
+            } else if (type == "data" && plen >= 8 && plen <= 512) {
+                std::vector<unsigned char> b;
+                if (!f.read(pos + 16, b, static_cast<size_t>(plen - 8))) return;
+                value.assign(b.begin(), b.end());
+            }
+            pos += size;
+        }
+        if (mean == "com.apple.iTunes" && !name.empty()) apply_replaygain_tag(t.rg, name, value);
+    }
+
     void item(const std::string &type, uint64_t body, uint64_t blen) {
+        if (type == "----") {
+            freeform(body, blen);
+            return;
+        }
         /* the 'data' child: size, 'data', type (1 UTF-8, 13 JPEG, 14 PNG, 0 binary), locale, payload */
         unsigned char d[16];
         if (blen < 16 || !f.read(body, d, 16) || std::memcmp(d + 4, "data", 4) != 0) return;
@@ -928,11 +1037,26 @@ void read_aiff(const File &f, TrackTags &t, Picture *pic, size_t max_pic) {
 
 }  // namespace
 
-bool read_tags(const std::string &path, TrackTags &out, Picture *pic, size_t max_picture_bytes) {
+bool read_replaygain(const std::string &path, ReplayGainTags &out) {
+    TrackTags t;
+    const bool ok = read_tags(path, t, nullptr);
+    out = t.rg;
+    return ok;
+}
+
+bool read_tags(const std::string &path, TrackTags &out, Picture *pic, size_t max_picture_bytes, uint64_t *bytes_read) {
     out = TrackTags();
     if (pic) *pic = Picture();
+    if (bytes_read) *bytes_read = 0;
     File f(path);
     if (!f.ok()) return false;
+    struct Count {
+        const File &f;
+        uint64_t *out;
+        ~Count() {
+            if (out) *out = f.bytes_read();
+        }
+    } count{f, bytes_read};
     unsigned char h[12] = {0};
     const bool head = f.read(0, h, std::min<uint64_t>(12, f.size()));
     const std::string ext = lower_ext(path);

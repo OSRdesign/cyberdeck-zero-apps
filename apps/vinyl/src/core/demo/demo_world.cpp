@@ -95,10 +95,44 @@ const char *kLongSinkDescription = "USB Audio Device Analog Stereo";
 
 int rm_cb(const char *p, const struct stat *, int, struct FTW *) { return ::remove(p); }
 
+/* the headset's name (P2a, design QA of 0.2.0: the scenes show a long and a CJK output name on now playing, the Menu's
+ * Output row and About's THIS OUTPUT line): VINYL_DEMO_BT_NAME, else "Evolve 65" */
+std::string demo_bt_name() {
+    const char *v = std::getenv("VINYL_DEMO_BT_NAME");
+    return v && *v ? v : "Evolve 65";
+}
+
 }  // namespace
 
+/* an ID3v2.3 tag with the ReplayGain TXXX frames of a track gain (Latin-1, as rsgain and foobar2000 write them) */
+static std::string demo_rg_tag(double db) {
+    auto txxx = [](const std::string &desc, const std::string &val) {
+        std::string body;
+        body += '\0';
+        body += desc;
+        body += '\0';
+        body += val;
+        std::string f = "TXXX";
+        for (int i = 3; i >= 0; --i) f += static_cast<char>((body.size() >> (8 * i)) & 0xFF);
+        f += std::string("\0\0", 2);
+        return f + body;
+    };
+    char g[32];
+    std::snprintf(g, sizeof g, "%+.2f dB", db);
+    const std::string frames = txxx("REPLAYGAIN_TRACK_GAIN", g) + txxx("REPLAYGAIN_TRACK_PEAK", "0.950000");
+    std::string t = "ID3";
+    t += static_cast<char>(3);
+    t += std::string("\0\0", 2);
+    const uint32_t n = static_cast<uint32_t>(frames.size());
+    t += static_cast<char>((n >> 21) & 0x7F);
+    t += static_cast<char>((n >> 14) & 0x7F);
+    t += static_cast<char>((n >> 7) & 0x7F);
+    t += static_cast<char>(n & 0x7F);
+    return t + frames;
+}
+
 bool write_demo_wav(const std::string &path, double seconds, uint32_t rate, const std::string &title, const std::string &artist,
-                    const std::string &album, const std::string &date, int track) {
+                    const std::string &album, const std::string &date, int track, double rg_db) {
     std::string info = "INFO";
     info_item(info, "INAM", title);
     info_item(info, "IART", artist);
@@ -107,8 +141,14 @@ bool write_demo_wav(const std::string &path, double seconds, uint32_t rate, cons
     if (track > 0) info_item(info, "ITRK", std::to_string(track));
     const uint32_t frames = static_cast<uint32_t>(seconds * rate);
     const uint32_t data = frames * 4;
+    std::string id3;
+    if (rg_db != 0) {
+        id3 = demo_rg_tag(rg_db);
+        if (id3.size() & 1) id3 += '\0';
+    }
     std::string h = "RIFF";
-    le32(h, 4 + (8 + 16) + (8 + static_cast<uint32_t>(info.size())) + (8 + data));
+    le32(h, 4 + (8 + 16) + (8 + static_cast<uint32_t>(info.size())) + (id3.empty() ? 0 : 8 + static_cast<uint32_t>(id3.size())) +
+                (8 + data));
     h += "WAVE";
     h += "fmt ";
     le32(h, 16);
@@ -121,6 +161,11 @@ bool write_demo_wav(const std::string &path, double seconds, uint32_t rate, cons
     h += "LIST";
     le32(h, static_cast<uint32_t>(info.size()));
     h += info;
+    if (!id3.empty()) {
+        h += "id3 ";
+        le32(h, static_cast<uint32_t>(id3.size()));
+        h += id3;
+    }
     h += "data";
     le32(h, data);
     const int fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
@@ -150,7 +195,10 @@ bool make_demo_world(DemoWorld &w, bool lite, const std::string &state, const st
         const std::string dir = w.music + "/" + t.folder;
         make_dirs(ops, dir);
         const std::string path = dir + "/" + t.file + ".wav";
-        write_demo_wav(path, t.seconds, 44100, t.title, t.artist, t.album, t.date, ++n);
+        /* P2a: ReplayGain track gains on the tracks around the playing one (the canvas's "RG -3.2 dB") */
+        static const double kRg[] = {-6.1, -4.4, -3.2, -7.8, -5.0};
+        ++n;
+        write_demo_wav(path, t.seconds, 44100, t.title, t.artist, t.album, t.date, n, n <= 5 ? kRg[n - 1] : 0);
         m3u += std::string(t.folder) + "/" + t.file + ".wav\n";
         items.push_back(path);
     }
@@ -234,7 +282,7 @@ OutputWorld demo_output_world(bool lite, const std::string &variant) {
     o.server = true;
     PulseDevice evolve;
     evolve.name = "bluez_output.70_BF_92_53_6B_8B.1";
-    evolve.description = "Evolve 65";
+    evolve.description = demo_bt_name();
     evolve.bt_address = "70:BF:92:53:6B:8B";
     evolve.bus = "bluetooth";
     evolve.bt_profile = "a2dp-sink";
@@ -364,7 +412,7 @@ public:
             out.device = d.name;
         } else if (t.kind == OutputTarget::Kind::Auto || t.id == "70:BF:92:53:6B:8B") {
             out.name = "bluez_output.70_BF_92_53_6B_8B.1";
-            out.label = "Evolve 65";
+            out.label = demo_bt_name();
             out.device = "70:BF:92:53:6B:8B";
         } else {
             out.name = t.id;

@@ -1,4 +1,4 @@
-title Vinyl by touch: the output button opens the chooser, Esc goes back, the queue key opens the queue (480x320)
+title Vinyl by touch: the output button opens the chooser, Esc goes back, the queue key opens the queue, the Menu key the Menu (480x320)
 sizes 480x320
 ppmm 608
 env VINYL_DEMO 1
@@ -11,8 +11,15 @@ shot t-output
 expect text "Automatic"
 tap "Esc"
 wait 300
-tapxy 0.89 0.87
+# P2a: the Queue key is the sixth of seven transport keys, the Menu key the seventh
+tapxy 0.785 0.884
 wait 300
 shot t-queue
 expect text "Move up"
+tap "Esc"
+wait 300
+tapxy 0.910 0.884
+wait 300
+shot t-menu
+expect text "Sleep timer"
 expect noquit

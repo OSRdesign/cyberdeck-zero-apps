@@ -1,0 +1,12 @@
+title Vinyl P2a: the sleep timer's end (a 15-minute timer with 2 s left): the music paused, the notice "Sleep timer ended. Paused." on now playing (640x480 (9.01 px/mm))
+sizes 640x480
+ppmm 901
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_SLEEP 15
+env VINYL_DEMO_SLEEP_LEFT 2
+
+wait 3000
+shot 01-now-sleep-ended
+expect text "Sleep timer ended. Paused."
+expect noquit

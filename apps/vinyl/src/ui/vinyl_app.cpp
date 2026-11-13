@@ -16,16 +16,24 @@
 #include "engine/engine.hpp"
 #include "engine/outputs.hpp"
 #include "input/media_keys.hpp"
+#include "nav/key_echo.hpp"
 #include "nav/nav_rules.hpp"
 #include "launcher/launcher_link.hpp"
 #include "library/browse.hpp"
 #include "library/tag_jobs.hpp"
+#include "menu/menu_model.hpp"
 #include "pulse/pulse_api.hpp"
+#include "settings/settings.hpp"
+#include "sleep/sleep_timer.hpp"
+#include "state/positions.hpp"
 #include "state/resume.hpp"
+#include "state/write_policy.hpp"
 #include "transport/transport_press.hpp"
+#include "util/atomic_file.hpp"
 #include "volume/output_volume.hpp"
 
 #include "app.hpp"
+#include "build_info.hpp"
 #include "keyboard_input.h"
 
 #include <algorithm>
@@ -67,24 +75,23 @@ std::string khz(uint32_t rate) {
     return b;
 }
 
-/* evdev codes of the letter keys used (the physical key, not its text: the guidelines' rule) */
+/* evdev codes of the keys used (the physical key, not its text: the guidelines' rule); the letters' commands are
+ * core/menu shortcut_command, the table the Keys page shows (menu::key_help) */
 enum : uint32_t {
-    K_MINUS = 12, K_EQUAL = 13, K_Q = 16, K_R = 19, K_Y = 21, K_U = 22, K_O = 24, K_S = 31, K_D = 32, K_X = 45, K_C = 46,
-    K_B = 48, K_COMMA = 51, K_DOT = 52, K_SPACE = 57, K_UP = 103, K_LEFT = 105, K_RIGHT = 106, K_DOWN = 108, K_DELETE = 111,
+    K_Y = 21, K_COMMA = 51, K_DOT = 52, K_LEFT = 105, K_RIGHT = 106,
 };
 
-/* The LVGL key the toolkit's keypad sends after a key event (cp0_keyboard_lvgl_input.c): the semantic key where it has
- * one. In the navigation context the toolkit makes F / X / Z / C also Up / Down / Left / Right (a small keyboard's
- * arrows), so C (Clear all) reaches the keypad as Right, X (Remove) as Down. 0: not an arrow. */
-uint32_t arrow_echo(const key_item &it) {
-    if (!it.semantic_key || it.semantic_key == it.key_code) return 0;
-    switch (it.semantic_key) {
-    case K_UP: return LV_KEY_UP;
-    case K_DOWN: return LV_KEY_DOWN;
-    case K_LEFT: return LV_KEY_LEFT;
-    case K_RIGHT: return LV_KEY_RIGHT;
-    default: return 0;
-    }
+bool is_playlist_source(const std::string &src) {
+    std::string e;
+    const size_t dot = src.rfind('.');
+    if (dot != std::string::npos) e = src.substr(dot + 1);
+    for (char &c : e) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return e == "m3u" || e == "m3u8";
+}
+
+std::string parent_dir(const std::string &path) {
+    const size_t slash = path.rfind('/');
+    return slash == std::string::npos ? std::string() : path.substr(0, slash);
 }
 
 }  // namespace
@@ -117,8 +124,24 @@ struct VinylApp::Impl final : TransportHost {
     Queue queue;
     ResumeState resume;
     std::string resume_file;
-    bool dirty = false;
-    uint64_t last_save = 0;
+    bool dirty = false; /* an event state.json must hold (state_policy: written at the next tick) */
+    WritePolicy state_policy; /* report 060 finding 3: events at once, the position at most once a minute */
+    /* P2a: the settings (their own file, written on a change), the positions in long files (their own small file), the
+     * sleep timer (not saved), the Menu pages */
+    SettingsStore settings{posix_file_ops()};
+    Positions positions;
+    std::string positions_file;
+    WritePolicy pos_policy;
+    std::string long_path; /* the long file playing (its position noted every tick) */
+    uint64_t long_pos = 0, long_total = 0;
+    PlayState last_state = PlayState::Idle;
+    SleepTimer sleep;
+    bool sleep_armed = false; /* a track mode: nothing named next, the engine fades the track's end */
+    bool sleep_silent = false; /* a minute mode ended: silent until the engine has paused */
+    std::string about_shown;   /* the About page's THIS OUTPUT line as last drawn */
+    std::map<Page, Page> back_to; /* where Esc goes from a Menu page (and the Output page opened from the Menu) */
+    std::map<Page, int> menu_sel;
+    uint64_t menu_gen = 1;
     std::vector<Root> roots;
     std::string folder;      /* "" = the list of roots */
     std::vector<Entry> entries;
@@ -208,6 +231,23 @@ struct VinylApp::Impl final : TransportHost {
         std::fprintf(stderr, "[vinyl] %s, %d root(s), state %s\n", demo ? "demonstration world" : "started", static_cast<int>(roots.size()),
                      resume_file.c_str());
         engine = std::make_unique<Engine>(real_decode_libs(), *sinks);
+        /* P2a: the settings (their own file), the positions in long files */
+        const std::string cfg = demo ? demo_world.config + "/vinyl" : dir_name(resume_file);
+        settings.load(cfg + "/settings.json");
+        if (demo) { /* the scenes: the settings shown */
+            Settings ds = settings.get();
+            if (const std::string rg = env_str("VINYL_DEMO_RG"); !rg.empty()) ds.replaygain = replaygain_mode_from(rg, ds.replaygain);
+            if (env_on("VINYL_DEMO_NOGAPLESS")) ds.gapless = false;
+            if (env_on("VINYL_DEMO_NOREMEMBER")) ds.remember_long = false;
+            settings.set(ds);
+        }
+        engine->set_gapless(settings.get().gapless);
+        engine->set_replaygain(settings.get().replaygain);
+        positions_file = cfg + "/positions.json";
+        load_positions(posix_file_ops(), positions_file, positions);
+        std::fprintf(stderr, "[vinyl] settings: gapless %s, replaygain %s, remember position in long files %s; %d position(s)\n",
+                     settings.get().gapless ? "on" : "off", replaygain_mode_name(settings.get().replaygain),
+                     settings.get().remember_long ? "on" : "off", static_cast<int>(positions.size()));
 
         Actions a;
         a.back = [this] { escape(); }; /* the header's Esc: the same as the Esc key (a modal takes it, D-30) */
@@ -284,11 +324,40 @@ struct VinylApp::Impl final : TransportHost {
             else if (p == "queue") first = Page::Queue;
             else if (p == "output") first = Page::Output;
             else if (p == "notices") first = Page::Notices;
+            else if (p == "menu") first = Page::Menu;
+            else if (p == "sleep") first = Page::Sleep;
+            else if (p == "playback") first = Page::Playback;
+            else if (p == "replaygain") first = Page::ReplayGain;
+            else if (p == "keys") first = Page::Keys;
+            else if (p == "about") first = Page::About;
             else first = Page::Now;
         }
         back_from_queue = back_from_output = Page::Now;
-        if (first == Page::Queue || first == Page::Output) refresh_outputs(true);
+        view->set_keys(menu::key_help());
+        if (const std::string sl = env_str("VINYL_DEMO_SLEEP"); demo && !sl.empty()) { /* the scenes: a running timer */
+            SleepMode m = SleepMode::Off;
+            if (menu::sleep_from_id(sl, m)) {
+                const uint64_t now = mono_ms_now();
+                sleep.set(m, now);
+                if (const std::string left = env_str("VINYL_DEMO_SLEEP_LEFT"); !left.empty() && sleep.timed()) {
+                    /* "Stops in 29:12": the timer set as if chosen earlier */
+                    const uint64_t want = static_cast<uint64_t>(std::atoll(left.c_str())) * 1000;
+                    const uint64_t full = sleep.remaining_ms(now);
+                    if (want < full) sleep.set(m, now - (full - want));
+                }
+            }
+        }
+        if (first == Page::Sleep || first == Page::Playback || first == Page::Keys || first == Page::About)
+            back_to[first] = Page::Menu;
+        if (first == Page::ReplayGain) { /* the scenes: as if opened from Playback, itself from the Menu */
+            back_to[Page::ReplayGain] = Page::Playback;
+            back_to[Page::Playback] = Page::Menu;
+        }
+        if (first == Page::Menu || back_to.count(first)) back_to[Page::Menu] = Page::Now;
+        if (first == Page::Queue || first == Page::Output || first == Page::Menu || first == Page::About) refresh_outputs(true);
         go(first);
+        state_policy.wrote(mono_ms_now()); /* what is on disk is what was read */
+        pos_policy.wrote(mono_ms_now());
         if (worker) scan(true);
         timer = lv_timer_create(timer_cb, 100, this);
         tick();
@@ -300,7 +369,9 @@ struct VinylApp::Impl final : TransportHost {
     void stop_all() {
         if (timer) lv_timer_delete(timer);
         timer = nullptr;
+        note_long_file(true);
         save(true);
+        save_positions_now(true);
         keys.stop();
         if (engine) engine->shutdown();
         jobs.stop();
@@ -325,12 +396,37 @@ struct VinylApp::Impl final : TransportHost {
                 if (out_rows[i].chosen) out_sel = static_cast<int>(i);
         }
         if (p == Page::Browser) br_scroll = std::max(0, br_sel - 1);
+        if (is_menu_list(p)) { /* the selection where the page shows the chosen value, else its first row */
+            menu_sel[p] = menu::initial_item(menu::rows_of(menu_page(p), menu_state()));
+            ++menu_gen;
+        }
+        if (p == Page::About) view->set_about(about_now());
         view->show_page(p);
         refresh(true);
     }
 
+    static bool is_menu_list(Page p) { return p == Page::Menu || p == Page::Sleep || p == Page::Playback || p == Page::ReplayGain; }
+    static bool is_menu_page(Page p) { return is_menu_list(p) || p == Page::Keys || p == Page::About; }
+    static menu::Page menu_page(Page p) {
+        switch (p) {
+        case Page::Sleep: return menu::Page::Sleep;
+        case Page::Playback: return menu::Page::Playback;
+        case Page::ReplayGain: return menu::Page::ReplayGain;
+        case Page::Keys: return menu::Page::Keys;
+        case Page::About: return menu::Page::About;
+        default: return menu::Page::Menu;
+        }
+    }
+
+    /* a Menu page opened from `from` (Esc goes back there) */
+    void open_from(Page p, Page from) {
+        if (p != from) back_to[p] = from;
+        go(p);
+    }
+
     void back() {
-        switch (view->page()) {
+        const Page p = view->page();
+        switch (p) {
         case Page::Now: go(Page::Browser); break;
         case Page::Queue: go(back_from_queue); break;
         case Page::Output: go(back_from_output); break;
@@ -339,18 +435,30 @@ struct VinylApp::Impl final : TransportHost {
             std::fprintf(stderr, "[vinyl] Esc at the browser: quit\n");
             cdk::request_quit(0);
             break;
+        default: { /* the Menu pages: back where they were opened from (the Menu for its own rows) */
+            auto it = back_to.find(p);
+            go(it != back_to.end() ? it->second : (p == Page::Menu ? Page::Now : Page::Menu));
+            break;
+        }
         }
     }
 
     void button(const std::string &id) {
+        const Page p = view->page();
         if (id == "queue") {
-            back_from_queue = view->page();
+            back_from_queue = p;
             go(Page::Queue);
         } else if (id == "output") {
-            back_from_output = view->page();
+            back_from_output = p;
             go(Page::Output);
         } else if (id == "browse") {
             go(Page::Browser);
+        } else if (id == "menu") { /* the Menu key, M: Esc goes back to the page it was opened from */
+            if (p == Page::Menu) return;
+            if (!is_menu_page(p)) back_to[Page::Menu] = p;
+            go(Page::Menu);
+        } else if (id == "sleep") { /* the large class's sleep-timer key, T */
+            if (p != Page::Sleep) open_from(Page::Sleep, p);
         }
     }
 
@@ -361,7 +469,14 @@ struct VinylApp::Impl final : TransportHost {
         queue.set_current(pos);
         ++qgen;
         auto_skips = 0;
-        engine->load(pos, queue.at(pos), 0, play);
+        /* a file longer than 20 minutes starts where it was left (the Playback setting, On by default) */
+        uint64_t start = 0;
+        if (settings.get().remember_long) {
+            note_long_file(true); /* the one playing now keeps its place first */
+            start = positions.get(queue.at(pos));
+            if (start) std::fprintf(stderr, "[vinyl] long file: starts at %s (remembered)\n", layout::track_time_text(start, true, false).c_str());
+        }
+        engine->load(pos, queue.at(pos), start, play);
         dirty = true;
     }
 
@@ -443,10 +558,23 @@ struct VinylApp::Impl final : TransportHost {
         engine->seek_ms(static_cast<uint64_t>(std::max<int64_t>(0, t)));
     }
 
-    void update_next() {
-        const int pos = snap.pos >= 0 ? snap.pos : queue.current();
+    void update_next() { name_next(snap.pos >= 0 ? snap.pos : queue.current()); }
+
+    /* names the track after `pos` to the engine; the sleep timer's track modes name none where playback must stop (the
+     * end of this track; the next track of another album, or the queue's end) and let the engine fade that end */
+    void name_next(int pos) {
         const int n = queue.next_after(pos, false);
-        engine->set_next(n, n >= 0 ? queue.at(n) : std::string());
+        bool stop = false;
+        if (sleep.active() && !sleep.timed() && pos >= 0 && pos < queue.size()) {
+            const bool exists = n >= 0;
+            const bool same = exists && same_album(queue.at(pos), queue.at(n));
+            stop = sleep.stop_after_track(exists, same, is_playlist_source(queue.source()));
+        }
+        if (stop != sleep_armed) std::fprintf(stderr, "[vinyl] sleep timer: %s\n", stop ? "stops at the end of this track" : "not at this track's end");
+        sleep_armed = stop;
+        engine->set_end_fade(stop);
+        if (stop) engine->set_next(-1, std::string());
+        else engine->set_next(n, n >= 0 ? queue.at(n) : std::string());
     }
 
     /* ------------------------------------------------------------------------------------------ browser */
@@ -551,7 +679,108 @@ struct VinylApp::Impl final : TransportHost {
         } else if (p == Page::Output) {
             out_sel = i;
             choose_output(i);
+        } else if (is_menu_list(p)) {
+            menu_sel[p] = i;
+            menu_act(p, i);
         }
+    }
+
+    /* ------------------------------------------------------------------------------------------ the Menu pages (P2a) */
+
+    menu::State menu_state() const {
+        menu::State st;
+        st.sleep = sleep.mode();
+        st.sleep_left_ms = sleep.remaining_ms(mono_ms_now());
+        st.output = output_label();
+        st.settings = settings.get();
+        return st;
+    }
+
+    /* a row of a Menu list page tapped, or Enter / Right on it */
+    void menu_act(Page p, int i) {
+        const std::vector<menu::Row> rows = menu::rows_of(menu_page(p), menu_state());
+        if (i < 0 || i >= static_cast<int>(rows.size()) || rows[static_cast<size_t>(i)].kind == menu::Row::Kind::Heading) return;
+        const menu::Row &r = rows[static_cast<size_t>(i)];
+        if (p == Page::Menu) {
+            if (r.id == "sleep") open_from(Page::Sleep, Page::Menu);
+            else if (r.id == "playback") open_from(Page::Playback, Page::Menu);
+            else if (r.id == "keys") open_from(Page::Keys, Page::Menu);
+            else if (r.id == "about") open_from(Page::About, Page::Menu);
+            else if (r.id == "output") button("output"); /* Esc goes back to the Menu */
+            return;
+        }
+        if (p == Page::Sleep) { /* a choice closes the page (owner-approved, 2026-11-13): back where it was opened */
+            SleepMode m = SleepMode::Off;
+            if (menu::sleep_from_id(r.id, m)) set_sleep(m);
+            back();
+            return;
+        }
+        Settings st = settings.get();
+        if (p == Page::Playback) {
+            if (r.id == "gapless") st.gapless = !st.gapless; /* Enter or a tap toggles it */
+            else if (r.id == "remember") st.remember_long = !st.remember_long;
+            else if (r.id == "replaygain") {
+                open_from(Page::ReplayGain, Page::Playback);
+                return;
+            }
+        } else if (p == Page::ReplayGain) {
+            st.replaygain = replaygain_mode_from(r.id, st.replaygain);
+            apply_settings(st);
+            back(); /* a choice closes the pick list (owner-approved, 2026-11-13): Playback shows the new value */
+            return;
+        }
+        apply_settings(st);
+        refresh(true);
+    }
+
+    void apply_settings(const Settings &st) {
+        const Settings was = settings.get();
+        const int r = settings.set(st);
+        if (r == 1) return;
+        if (r < 0) std::fprintf(stderr, "[vinyl] cannot save %s: %s\n", settings.path().c_str(), std::strerror(-r));
+        engine->set_gapless(st.gapless);
+        engine->set_replaygain(st.replaygain);
+        if (was.remember_long && !st.remember_long) long_path.clear();
+        std::fprintf(stderr, "[vinyl] settings: gapless %s, replaygain %s, remember position in long files %s\n",
+                     st.gapless ? "on" : "off", replaygain_mode_name(st.replaygain), st.remember_long ? "on" : "off");
+    }
+
+    /* The sleep timer (core/sleep): the minute modes count on the monotonic clock and fade the gain over their last 10 s
+     * (apply_gain); the track modes name no next track at the end of what plays and let the engine fade it (name_next) */
+    void set_sleep(SleepMode m) {
+        sleep.set(m, mono_ms_now());
+        std::fprintf(stderr, "[vinyl] sleep timer: %s\n", sleep_mode_word(m));
+        update_next();
+        apply_gain();
+    }
+
+    /* the timer ended: the music paused, nothing else (the queue kept; a track mode moved to the next track, paused) */
+    void sleep_ended() {
+        sleep.finish();
+        sleep_armed = false;
+        engine->set_end_fade(false);
+        apply_gain();
+        notice(Notice::Kind::Info, kSleepEndedNotice);
+        std::fprintf(stderr, "[vinyl] sleep timer: ended, paused\n");
+        dirty = true;
+    }
+
+    /* the album of a track for "This album or queue": its album tag when both tracks have one, else its folder */
+    bool same_album(const std::string &a, const std::string &b) {
+        TrackTags ta, tb;
+        if (jobs.tags(a, ta) && jobs.tags(b, tb) && !ta.album.empty() && !tb.album.empty()) return ta.album == tb.album;
+        return parent_dir(a) == parent_dir(b);
+    }
+
+    /* the THIS OUTPUT line of About: the playing output's model */
+    menu::About about_now() const {
+        OutputVolumeModel m;
+        bool muted = false;
+        const int step = output_step(&muted, &m);
+        const VolTarget t = volume_target();
+        std::string label = output_label();
+        if (label.empty()) label = t.kind == VolTarget::Kind::None ? "No output" : "The output";
+        return menu::about(CDK_APP_VERSION, menu::about_output_line(label, m, step >= 0 || software_volume(t), software_volume(t)));
     }
 
     /* Esc and the header's Esc (core/nav back_step): the "Clear the queue?" dialog takes them until it closes (design QA
@@ -643,18 +872,37 @@ struct VinylApp::Impl final : TransportHost {
         refresh(true);
     }
 
-    /* the arrow the keypad sends right after a letter Vinyl acted on (arrow_echo): taken once and dropped, so C (Clear
-     * all) never also moves the dialog's highlight to Clear, nor X (Remove) the queue's selection */
-    uint32_t swallow_echo = 0;
+    /* the LVGL key the toolkit's keypad sends after each key event (core/nav/key_echo: design QA of 0.2.0, D-32; the
+     * launcher's decision of 2026-10-05): a letter's or a digit's raw code that is an LVGL key (T = Left, R = Right,
+     * W / E = Up / Down, 9 = Enter...) is dropped, and the arrow of an F / X / Z / C alias when Vinyl used the letter
+     * (X and C on the queue page), so a shortcut never also moves, opens or goes back */
+    KeyEcho key_echo;
 
     void on_key(uint32_t k) {
         const Page p = view->page();
-        const uint32_t echo = swallow_echo;
-        swallow_echo = 0;
-        if (echo && k == echo) return;
+        if (key_echo.drop(k, mono_ms_now())) return;
         if (view->dialog_shown() && view->dialog_key(k)) return; /* "Clear the queue?" takes the keys while it shows */
         if (k == LV_KEY_ESC) {
             escape();
+            return;
+        }
+        if (is_menu_list(p)) { /* the Menu pages: Up / Down move, Enter or Right act, Left goes back (design QA D-29) */
+            const std::vector<menu::Row> rows = menu::rows_of(menu_page(p), menu_state());
+            int sel = menu_sel.count(p) ? menu_sel[p] : menu::first_item(rows);
+            if (k == LV_KEY_UP) sel = menu::step_item(rows, sel, -1);
+            else if (k == LV_KEY_DOWN) sel = menu::step_item(rows, sel, 1);
+            else if (k == LV_KEY_ENTER || k == LV_KEY_RIGHT) menu_act(p, sel);
+            else if (k == LV_KEY_LEFT) back();
+            if (view->page() == p) {
+                menu_sel[p] = sel;
+                refresh(true);
+            }
+            return;
+        }
+        if (p == Page::Keys || p == Page::About) { /* nothing acts: Up / Down scroll, Left goes back */
+            if (k == LV_KEY_UP) view->scroll_page(p, -1);
+            else if (k == LV_KEY_DOWN) view->scroll_page(p, 1);
+            else if (k == LV_KEY_LEFT) back();
             return;
         }
         if (p == Page::Browser) {
@@ -718,13 +966,18 @@ struct VinylApp::Impl final : TransportHost {
     }
 
     void on_keyboard(const key_item &it) {
+        bool used = false; /* Vinyl acted on the key as a shortcut (an alias letter's arrow is then dropped too) */
+        on_keyboard_key(it, used);
+        key_echo.seen(it.key_code, it.semantic_key, static_cast<int>(it.key_state), used, mono_ms_now());
+    }
+
+    void on_keyboard_key(const key_item &it, bool &used) {
         const MediaAction ma = media_action_for(it.key_code);
         if (ma != MediaAction::None) {
             MediaEvent me;
             if (keys.accept_other(ma, it.key_state, me)) media(me);
             return;
         }
-        if (it.key_state == 1) swallow_echo = 0;
         if (view->dialog_shown()) { /* the dialog takes its keys: Enter / Esc through the keypad (on_key), Y here */
             if (it.key_state == 1 && it.key_code == K_Y) view->dialog_key(0, K_Y);
             return;
@@ -739,40 +992,31 @@ struct VinylApp::Impl final : TransportHost {
         }
         if (it.key_state != 1) return;
         const Page p = view->page();
-        switch (it.key_code) {
-        case K_SPACE: toggle(); break;
-        case K_S: shuffle(); break;
-        case K_R: repeat(); break;
-        case K_Q:
+        using menu::KeyCmd;
+        const KeyCmd cmd = menu::shortcut_command(it.key_code, it.mods, p == Page::Queue); /* Ctrl+O: the Menu */
+        used = cmd != KeyCmd::None;
+        switch (cmd) {
+        case KeyCmd::Toggle: toggle(); break;
+        case KeyCmd::Shuffle: shuffle(); break;
+        case KeyCmd::Repeat: repeat(); break;
+        case KeyCmd::Queue:
             if (p != Page::Queue) button("queue");
             break;
-        case K_O:
+        case KeyCmd::Output:
             if (p != Page::Output) button("output");
             break;
-        case K_B:
+        case KeyCmd::Browse:
             if (p != Page::Browser) go(Page::Browser);
             break;
-        case K_U:
-            if (p == Page::Queue) queue_button(0);
-            break;
-        case K_D:
-            if (p == Page::Queue) queue_button(1);
-            break;
-        case K_X:
-            if (p == Page::Queue) {
-                swallow_echo = arrow_echo(it);
-                queue_button(2);
-            }
-            break;
-        case K_C:
-            if (p == Page::Queue) {
-                swallow_echo = arrow_echo(it);
-                queue_button(3);
-            }
-            break;
-        case K_MINUS: volume_step(-1); break; /* the playing output's volume (D11 as changed), one level */
-        case K_EQUAL: volume_step(1); break;
-        default: break;
+        case KeyCmd::Menu: button("menu"); break;   /* M, Ctrl+O (P2a) */
+        case KeyCmd::Sleep: button("sleep"); break; /* T (P2a): the Sleep timer page */
+        case KeyCmd::QueueUp: queue_button(0); break;
+        case KeyCmd::QueueDown: queue_button(1); break;
+        case KeyCmd::QueueRemove: queue_button(2); break;
+        case KeyCmd::QueueClear: queue_button(3); break;
+        case KeyCmd::VolumeDown: volume_step(-1); break; /* the playing output's volume (D11 as changed), one level */
+        case KeyCmd::VolumeUp: volume_step(1); break;
+        default: break; /* comma and dot: the transport press above */
         }
     }
 
@@ -929,7 +1173,9 @@ struct VinylApp::Impl final : TransportHost {
         } else if (t.kind == VolTarget::Kind::Mixer && mixer_level.has_mixer && mute_by(mixer_choice) == MuteBy::Vinyl &&
                    mixer_level_shown(mixer_choice, mixer_level, resume, t.key).muted)
             gain = 0.0f;
-        engine->set_gain(scan_muted ? 0.0f : gain);
+        /* the sleep timer's minute modes fade over their last 10 s, and stay silent until the engine has paused */
+        const float fade = sleep_silent ? 0.0f : sleep.fade_gain(mono_ms_now());
+        engine->set_gain(scan_muted ? 0.0f : gain * fade);
     }
 
     /* the group's and the keys' "-" / "+" (core/volume: sink_press, mixer_press), one level of the output a press: while
@@ -1254,7 +1500,7 @@ struct VinylApp::Impl final : TransportHost {
         /* the Gapless chip of the square, large and medium drafts ("Gapless, RG -3.2 dB"), the end of the small draft's
          * format line ("AAC 44.1 / 161k, gapless"): when the next track continues on the same stream (ReplayGain is a P2
          * feature) */
-        if (layout::shows_gapless(g)) {
+        if (layout::shows_gapless(g) && settings.get().gapless) {
             const int n = queue.next_after(cur, false);
             if (n >= 0 && n != cur && snap.info.out.rate) {
                 TrackTags nt;
@@ -1264,6 +1510,11 @@ struct VinylApp::Impl final : TransportHost {
                 if (!v.format.empty()) v.format += ", gapless";
                 v.extra_chip.clear();
             }
+        }
+        /* P2a: the ReplayGain figure after Gapless where NP-480x480 and NP-800x480 draw it ("Gapless, RG -3.2 dB") */
+        if (view->size_class() == layout::SizeClass::Square || view->size_class() == layout::SizeClass::Large) {
+            const std::string rg = replaygain_chip_text(settings.get().replaygain, snap.rg);
+            if (!rg.empty()) v.extra_chip = v.extra_chip.empty() ? rg : v.extra_chip + ", " + rg;
         }
         v.pos_ms = shown_pos_ms();
         v.total_ms = snap.total_ms() ? snap.total_ms() : tag_duration_ms(path);
@@ -1448,6 +1699,28 @@ struct VinylApp::Impl final : TransportHost {
             view->update_list(p, queue_view());
             qu_scroll = -1;
         } else if (p == Page::Output) view->update_list(p, output_view());
+        else if (is_menu_list(p)) view->update_menu(p, menu_view(p));
+        else if (p == Page::About) {
+            const menu::About a = about_now();
+            if (a.output != about_shown) {
+                about_shown = a.output;
+                view->set_about(a);
+            }
+        }
+    }
+
+    MenuView menu_view(Page p) {
+        MenuView v;
+        const menu::State st = menu_state();
+        const menu::Page mp = menu_page(p);
+        v.rows = menu::rows_of(mp, st);
+        v.selected = menu_sel.count(p) ? menu_sel[p] : menu::first_item(v.rows);
+        v.heading = menu::page_heading(mp);
+        v.hint = menu::page_hint(mp, st);
+        v.hint_clock = p == Page::Sleep;
+        v.value_bright = p == Page::Playback;
+        v.gen = menu_gen;
+        return v;
     }
 
     /* ------------------------------------------------------------------------------------------ the 100 ms tick */
@@ -1521,10 +1794,46 @@ struct VinylApp::Impl final : TransportHost {
                 }
             }
         }
-        /* save as it goes: the launcher may close a hidden app */
+        /* the sleep timer: a minute mode at its end pauses (its fade is in apply_gain); silent until paused */
+        if (sleep.expired(now)) {
+            if (snap.state == PlayState::Playing) {
+                engine->pause();
+                sleep_silent = true;
+            }
+            sleep_ended();
+        }
+        if (sleep_silent && snap.state != PlayState::Playing) {
+            sleep_silent = false;
+            apply_gain();
+        }
+        /* a pause (by any path): state.json and positions.json hold it */
+        if (last_state == PlayState::Playing && snap.state != PlayState::Playing) {
+            dirty = true;
+            pos_policy.event();
+        }
+        last_state = snap.state;
+        /* the position in a long file (the Playback setting, On by default) */
+        if (settings.get().remember_long && !snap.path.empty() && snap.state != PlayState::Idle && is_long_file(snap.total_ms())) {
+            if (long_path != snap.path) {
+                note_long_file(true);
+                long_path = snap.path;
+            }
+            long_pos = snap.pos_ms();
+            long_total = snap.total_ms();
+            if (positions.note(long_path, long_pos, long_total)) {
+                if (snap.state == PlayState::Playing) pos_policy.progress();
+                else pos_policy.event();
+            }
+        } else if (!long_path.empty() && snap.path != long_path) {
+            note_long_file(true);
+            long_path.clear();
+        }
+        save_positions_now(false);
+        /* save as it goes (the launcher may close a hidden app), the SD card in mind (report 060 finding 3): events at
+         * once, the position while playing at most once a minute */
         if (snap.pos >= 0) {
             resume.position_ms = snap.pos_ms();
-            if (snap.state == PlayState::Playing && now - last_save > 5000) dirty = true;
+            if (snap.state == PlayState::Playing) state_policy.progress();
         }
         save(false);
         /* tags arrived: the rows show titles and durations */
@@ -1553,11 +1862,19 @@ struct VinylApp::Impl final : TransportHost {
             break;
         case EngineEvent::Kind::Advanced: {
             const int n = queue.next_after(ev.pos, false);
-            engine->set_next(n, n >= 0 ? queue.at(n) : std::string());
             if (n >= 0) jobs.want_tags({queue.at(n)});
+            name_next(ev.pos);
             break;
         }
-        case EngineEvent::Kind::QueueEnd: dirty = true; break;
+        case EngineEvent::Kind::QueueEnd:
+            if (sleep_armed) { /* the sleep timer's track mode: paused, on the next track (the next album's first) */
+                const int n = queue.next_after(ev.pos, false);
+                sleep_ended();
+                if (n >= 0 && n != ev.pos) play_pos(n, false);
+                update_next();
+            }
+            dirty = true;
+            break;
         case EngineEvent::Kind::OpenFailed:
             notice(Notice::Kind::Info, ev.text);
             if (ev.pos >= 0 && ev.pos < queue.size()) queue.set_current(ev.pos);
@@ -1587,14 +1904,36 @@ struct VinylApp::Impl final : TransportHost {
 
     int cover_side() const { return std::max(16, view->cover_side()); }
 
+    /* state.json: an event at the next tick, the position while playing at most once a minute (WritePolicy), and at
+     * exit */
     void save(bool force) {
-        if (!dirty && !force) return;
+        const uint64_t now = mono_ms_now();
+        if (dirty) state_policy.event();
+        dirty = false;
+        if (!force && !state_policy.due(now)) return;
         resume_from_queue(queue, resume);
         resume.output = target.key();
         const int r = save_resume(resume_file, resume);
         if (r < 0 && force) std::fprintf(stderr, "[vinyl] cannot save %s: %s\n", resume_file.c_str(), std::strerror(-r));
-        dirty = false;
-        last_save = mono_ms_now();
+        state_policy.wrote(now);
+    }
+
+    /* the long file left (a track change, a new track chosen, the exit): its place noted, the file written soon */
+    void note_long_file(bool event) {
+        if (long_path.empty() || !settings.get().remember_long) return;
+        if (positions.note(long_path, long_pos, long_total)) {
+            if (event) pos_policy.event();
+            else pos_policy.progress();
+        }
+    }
+
+    /* positions.json: on pause, a track change and exit, at most once a minute while a long file plays */
+    void save_positions_now(bool at_exit) {
+        const uint64_t now = mono_ms_now();
+        if (at_exit ? !pos_policy.pending() : !pos_policy.due(now)) return;
+        const int r = save_positions(posix_file_ops(), positions_file, positions);
+        if (r < 0) std::fprintf(stderr, "[vinyl] cannot save %s: %s\n", positions_file.c_str(), std::strerror(-r));
+        pos_policy.wrote(now);
     }
 };
 

@@ -1,4 +1,4 @@
-title Vinyl: design QA walk at 640x480, the approved NP-640x480 layout (owner, 2026-11-13: "that works"): cover 224 with the record, the flat format and Gapless chips, the output button, five transport keys, Browse, Queue and the volume group in the bottom row, no Up next, no Menu key (P2)
+title Vinyl: design QA walk at 640x480, the approved NP-640x480 layout (owner, 2026-11-13: "that works"): cover 224 with the record, the flat format and Gapless chips, the output button, five transport keys, Browse, Queue and the volume group in the bottom row, no Up next; P2a: Browse, Queue and Menu in the bottom row
 sizes 640x480
 # the deck's own density (11.3 px/mm) leaves the approved 640x480 layout's touch rows 70 px, under the 7 mm (79 px):
 # owner rule R-4, listed in qa-info.txt; the scene runs at a 3.5-inch 640x480 panel's 9.01 px/mm (the harness's own
@@ -17,7 +17,7 @@ expect text "Browse"
 expect text "Queue"
 expect notext "Vol 60"
 expect notext "UP NEXT"
-expect notext "Menu"
+expect text "Menu"
 wait 300
 shot 02-now-volume
 # the group's "+" (an icon: no text to tap); one level up: 60 % (level 18 of 30) to 63 %

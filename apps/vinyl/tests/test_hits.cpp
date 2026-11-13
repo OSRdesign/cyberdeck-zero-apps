@@ -174,6 +174,23 @@ void test_all_touch_areas() {
         }
         const double minh = now_rows_min_height(set);
         if (q.row > 0) CHECK(std::floor(minh + 1e-6) >= q.row);
+        /* P2a: the Menu key (and the large class's sleep-timer key) among the areas, none overlapping (above) */
+        for (const char *id : {"menu", "sleep"})
+            for (const std::vector<Btn> *row : {&g.transport, &g.bottom})
+                for (const Btn &b : *row) {
+                    if (b.id != id) continue;
+                    R d{double(f.x(b.box.x)), double(f.y(b.box.y)), double(f.w(b.box.x, b.box.w)), double(f.h(b.box.y, b.box.h))};
+                    if (row == &g.transport) d.y += dy;
+                    const HitArea *found = nullptr;
+                    for (const Named &n : all)
+                        if (std::fabs(n.a->drawn.x - d.x) < 0.5 && std::fabs(n.a->drawn.y - d.y) < 0.5 && std::fabs(n.a->drawn.w - d.w) < 0.5)
+                            found = n.a;
+                    CHECK(found != nullptr);
+                    if (found)
+                        std::fprintf(stderr, "  %s key %dx%d (%s): drawn %.0fx%.0f, touch area %.0fx%.0f at (%.0f,%.0f)\n", id, q.w, q.h,
+                                     q.what, d.w, d.h, std::floor(found->area.w + 1e-6), std::floor(found->area.h + 1e-6), found->area.x,
+                                     found->area.y);
+                }
         /* the heights under the target, for the QA notes */
         std::string under;
         for (const Named &n : all)

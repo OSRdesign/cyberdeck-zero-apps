@@ -11,5 +11,6 @@ expect notext "Vinyl"
 expect text "Phoenix"
 expect text "60"
 expect text "Evolve 65"
-expect text "Queue"
+# P2a (NP-320x480): the bottom row's Menu and Queue keys are icons, no word
+expect notext "Queue"
 expect noquit

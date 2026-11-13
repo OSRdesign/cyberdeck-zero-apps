@@ -71,6 +71,7 @@ int main(int argc, char **argv) {
         {"resume", test_resume},   {"media_keys", test_media_keys}, {"engine", test_engine}, {"outputs", test_outputs},
         {"launcher", test_launcher}, {"art", test_art},         {"layout", test_layout}, {"real_libs", test_real_libs},
         {"transport", test_transport}, {"hits", test_hits}, {"volume", test_volume},
+        {"settings", test_settings_state}, {"replaygain", test_replaygain}, {"menu", test_menu},
     };
     for (const Group &g : groups) {
         if (only && std::strcmp(only, g.name) != 0) continue;

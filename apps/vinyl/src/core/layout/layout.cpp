@@ -107,11 +107,12 @@ NowGeom now_geom(SizeClass c) {
         g.time = text(20, 220, 48, 28, 14, false, 28);
         g.remain = text(412, 220, 48, 28, 14, false, 28);
         g.seek = R{72, 229, 336, 10};
-        /* P1: six keys; the draft's seventh, Menu (P2), at 20 + 60 i with 46 wide keys and an 80 wide play key:
-         * shuffle 20, previous 80, play 140, next 234, repeat 294, queue 354, menu 414, all 48 high at y 258 */
-        g.transport = {btn("shuffle", 20, 258, 56, 48), btn("prev", 90, 258, 56, 48), btn("play", 160, 258, 88, 48, 26, true),
-                       btn("next", 262, 258, 56, 48), btn("repeat", 332, 258, 56, 48), btn("queue", 402, 258, 58, 48)};
-        g.repeat_dash = R{354, 298, 12, 4};
+        /* seven keys as NP-480x320 draws them (P2a: the Menu key is the seventh, after Queue): 46 wide, the play key 80,
+         * 14 apart: shuffle 20, previous 80, play 140, next 234, repeat 294, queue 354, menu 414, all 48 high at y 258 */
+        g.transport = {btn("shuffle", 20, 258, 46, 48), btn("prev", 80, 258, 46, 48), btn("play", 140, 258, 80, 48, 26, true),
+                       btn("next", 234, 258, 46, 48),   btn("repeat", 294, 258, 46, 48), btn("queue", 354, 258, 46, 48),
+                       btn("menu", 414, 258, 46, 48)};
+        g.repeat_dash = R{311, 298, 12, 4};
         g.seams = {215, 252, 309};
         break;
     case SizeClass::Medium: /* NP-640x480 of the full-UX canvas (owner, 2026-11-13: "try without the up next", "that works") */
@@ -151,9 +152,9 @@ NowGeom now_geom(SizeClass c) {
                        btn("play", 216, 336, 208, 56, 28, true), btn("next", 440, 336, 80, 56, 24),
                        btn("repeat", 536, 336, 80, 56, 24)};
         g.repeat_dash = R{570, 384, 12, 4};
-        /* P1 has no Menu key: Browse and Queue share its width (the draft, P2: Browse 24, Queue 160, Menu 296, each 128
-         * wide, 8 apart, at y 410, 52 high), the volume group as drawn */
-        g.bottom = {word("browse", 24, 410, 196, 52), word("queue", 228, 410, 196, 52)};
+        /* the bottom row as NP-640x480 draws it (P2a): Browse 24, Queue 160, Menu 296, each 128 wide, 8 apart, at y 410,
+         * 52 high (P1 gave Menu's width to Browse and Queue), the volume group as drawn */
+        g.bottom = {word("browse", 24, 410, 128, 52), word("queue", 160, 410, 128, 52), word("menu", 296, 410, 128, 52)};
         g.vol_minus = R{440, 410, 52, 52};
         g.vol_value = R{496, 410, 60, 52};
         g.vol_plus = R{560, 410, 56, 52};
@@ -186,7 +187,9 @@ NowGeom now_geom(SizeClass c) {
         g.transport = {btn("shuffle", 24, 368, 48, 48), btn("prev", 78, 368, 48, 48), btn("play", 132, 368, 56, 48, 26, true),
                        btn("next", 194, 368, 48, 48), btn("repeat", 248, 368, 48, 48)};
         g.repeat_dash = R{266, 408, 12, 4};
-        g.bottom = {word("queue", 24, 426, 100, 40)};
+        /* the bottom row as NP-320x480 draws it (P2a): the Menu icon key at the left, then the Queue icon key (P1: a
+         * Queue key with its word, 100 wide), then the volume group */
+        g.bottom = {btn("menu", 24, 426, 48, 40), btn("queue", 78, 426, 48, 40)};
         g.out_button_on = true; /* owner, 2026-11-13: the Output key becomes the volume group */
         g.out_px = 11;
         g.out_icon = 11;
@@ -217,8 +220,8 @@ NowGeom now_geom(SizeClass c) {
         g.remain = text(412, 266, 48, 28, 14, false, 28);
         g.seek = R{72, 275, 336, 10};
         g.transport = {btn("shuffle", 20, 304, 56, 48), btn("prev", 90, 304, 56, 48), btn("play", 160, 304, 88, 48, 26, true),
-                       btn("next", 262, 304, 56, 48), btn("repeat", 332, 304, 56, 48), btn("sleep", 402, 304, 58, 48)};
-        g.transport.back().enabled = false; /* sleep timer: P2 */
+                       btn("next", 262, 304, 56, 48), btn("repeat", 332, 304, 56, 48), btn("menu", 402, 304, 58, 48)};
+        /* P2a: the Menu key in the sixth slot (NP-480x480), where P1 drew the dimmed sleep-timer key */
         g.repeat_dash = R{354, 344, 12, 4};
         g.has_upnext = true;
         g.upnext = R{20, 366, 440, 44};
@@ -257,13 +260,13 @@ NowGeom now_geom(SizeClass c) {
         g.seek = R{382, 283, 336, 10};
         g.transport = {btn("shuffle", 330, 312, 56, 48), btn("prev", 400, 312, 56, 48), btn("play", 470, 312, 88, 48, 26, true),
                        btn("next", 572, 312, 56, 48), btn("repeat", 642, 312, 56, 48), btn("sleep", 712, 312, 58, 48)};
-        g.transport.back().enabled = false; /* sleep timer: P2 */
+        /* P2a: the sleep-timer key acts (NP-800x480 draws it so): it opens the Sleep timer page */
         g.repeat_dash = R{664, 352, 12, 4};
-        /* owner, 2026-11-13 (NP-800x480 of the full-UX canvas): Browse, Output (the Menu key's place, P2), the volume
-         * group where the dimmed Equalizer key was; the coordinator, 2026-11-13 (the owner's RPI52 report, "Mute" beside
-         * the mark): Browse and Output 118 wide, the group 184 ("-" 40, the level 96, "+" 40, 4 apart), the row's right
-         * edge the transport row's */
-        g.bottom = {word("browse", 330, 384, 118, 42), word("output", 458, 384, 118, 42)};
+        /* owner, 2026-11-13 (NP-800x480 of the full-UX canvas): Browse, Menu, the volume group where the dimmed Equalizer
+         * key was; the coordinator, 2026-11-13 (the owner's RPI52 report, "Mute" beside the mark): Browse and the next key
+         * 118 wide, the group 184 ("-" 40, the level 96, "+" 40, 4 apart), the row's right edge the transport row's.
+         * P2a: the Menu key takes the Output key's place (Output is a Menu row; the output chip stays the quick way) */
+        g.bottom = {word("browse", 330, 384, 118, 42), word("menu", 458, 384, 118, 42)};
         g.vol_minus = R{586, 384, 40, 42};
         g.vol_value = R{630, 384, 96, 42};
         g.vol_plus = R{730, 384, 40, 42};
@@ -309,8 +312,12 @@ MuteFit mute_fit(int box_w, int box_h, double s, int body_px, int caption_px, co
 
 bool key_active(const Btn &b, bool queue_empty) {
     if (!b.enabled) return false;
-    if (b.id == "queue" || b.id == "browse" || b.id == "output") return true;
+    if (opens_page(b)) return true;
     return !queue_empty;
+}
+
+bool opens_page(const Btn &b) {
+    return b.id == "queue" || b.id == "browse" || b.id == "output" || b.id == "menu" || b.id == "sleep";
 }
 
 bool shows_gapless(const NowGeom &g) {
@@ -711,6 +718,63 @@ ListGeom list_geom(ListPage page, int sw, int sh, int body_y) {
     l.heading = R{px0 + m16, py0, (px1 - px0) - 2 * m16, head_h};
     l.list = R{px0, py0 + head_h, px1 - px0, l.strip.y - (py0 + head_h)};
     return l;
+}
+
+MenuGeom menu_geom(int sw, int sh, int body_y, double row_design, bool heading, bool strip, double list_row) {
+    MenuGeom m;
+    SizeClass c = size_class(sw, sh);
+    if (c == SizeClass::Medium) c = SizeClass::Small;
+    const NowGeom g = now_geom(c);
+    const ui::Fit f = now_fit(g, sw, sh, body_y);
+    const double s = f.s;
+    m.s = s;
+    m.portrait = c == SizeClass::Portrait;
+    const double px0 = f.x(8), px1 = f.x(g.dw - 8), py0 = f.y(44), py1 = sh - std::round(8 * s);
+    m.panel = R{px0, py0, px1 - px0, py1 - py0};
+    auto S = [&](double v) { return std::round(v * s); };
+    /* the drawings: Menu-320x480 (rows 44, sections 22, text 16, the chevron 12 from the edge) in portrait,
+     * Menu-480x320 / SleepTimer / Playback elsewhere */
+    m.row_h = std::max(S(m.portrait ? 44 : row_design), list_row);
+    m.section_h = S(m.portrait ? 22 : 20);
+    m.text_px = (m.portrait ? 16 : 15) * s;
+    m.value_px = 13 * s;
+    m.section_px = 11 * s;
+    m.heading_px = 12 * s;
+    m.text_x = 16 * s;
+    m.choice_text_x = 40 * s;
+    m.dot_x = 16 * s;
+    m.value_r = (m.portrait ? 36 : 38) * s;
+    m.chev_r = (m.portrait ? 12 : 14) * s;
+    m.chev_w = 16 * s;
+    const double head_h = heading ? S(30) : 0;
+    m.heading = R{px0 + S(16), py0, (px1 - px0) - 2 * S(16), head_h};
+    const double strip_h = S(42), m8 = S(8);
+    m.strip = strip ? R{px0 + m8, py1 - m8 - strip_h, (px1 - px0) - 2 * m8, strip_h} : R{px0 + m8, py1, (px1 - px0) - 2 * m8, 0};
+    const double top = py0 + (heading ? head_h : S(m.portrait ? 4 : 2));
+    const double bottom = strip ? m.strip.y : py1 - S(4);
+    m.list = R{px0, top, px1 - px0, std::max(1.0, bottom - top)};
+    /* Keys-480x320 (rows 32, the chip at 12 and 5 down, 22 high; the action at 150) / Keys-320x480 (rows 50: the chip
+     * 6 down, 20 high, the action under it at 28, 18 high) */
+    m.keys_two_lines = m.portrait;
+    m.key_row_h = std::max(S(m.portrait ? 50 : 32), list_row);
+    m.chip_x = 12 * s;
+    m.chip_top = (m.portrait ? 6 : 5) * s;
+    m.chip_h = (m.portrait ? 20 : 22) * s;
+    m.chip_px = 12 * s;
+    m.chip_pad = 8 * s;
+    m.chip_min_w = 26 * s;
+    m.action_x = (m.portrait ? 12 : 150) * s;
+    m.action_top = (m.portrait ? 28 : 0) * s;
+    m.action_lh = (m.portrait ? 18 : 32) * s;
+    m.action_px = 14 * s;
+    /* About-480x320 */
+    m.about_pad = 16 * s;
+    m.about_disc = 44 * s;
+    m.about_name_px = 22 * s;
+    m.about_line_px = 12 * s;
+    m.about_text_px = 13 * s;
+    m.about_sec_px = 11 * s;
+    return m;
 }
 
 }  // namespace layout

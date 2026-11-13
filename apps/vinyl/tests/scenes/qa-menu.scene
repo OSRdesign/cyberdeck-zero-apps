@@ -1,0 +1,131 @@
+title Vinyl P2a: design QA walk of the Menu (the Menu key on now playing; the Menu: Sleep timer, Playback, Output, Keys, About, no row of a later phase; the Sleep timer page, a 30-minute timer chosen (the page closes, the Menu shows the time left), T opens the page with its status line and Esc goes back; Playback: R and 9 change nothing there (their keypad echo dropped), the ReplayGain pick list closes on Album, the Gapless toggle; Output and back; Keys scrolled, Esc back; About; Left goes back on every page; 800x480 the sleep-timer key). 480x320 and 320x480: qa-menu-small; 640x480: qa-menu-640 and qa-menu-deck; the wide canvases: qa-menu-wide. Busy state: none (nothing waits)
+sizes 800x480 480x480 720x720 480x800 480x640
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+
+wait 1200
+shot 01-now
+expect esc
+expect text "Vinyl"
+expect text "Evolve 65"
+# the Menu key: a tap where it has its word (800x480), M (its physical key) on the others
+@800x480 tap "Menu"
+@480x480 key m
+@720x720 key m
+@480x800 key m
+@480x640 key m
+wait 400
+shot 02-menu
+expect text "TOOLS"
+expect text "SETTINGS"
+expect text "Sleep timer"
+expect text "Playback"
+expect text "Output"
+expect text "Keys"
+expect text "About"
+expect notext "Equalizer"
+expect notext "Library"
+# 9's code is LVGL's Enter: its echo must not open the selected row
+key 9
+wait 300
+expect text "TOOLS"
+tap "Sleep timer"
+wait 400
+shot 03-sleep
+expect text "STOP PLAYING AFTER"
+expect text "This album or queue"
+# a choice closes the page (owner-approved): the Menu shows the time left
+tap "30 minutes"
+wait 400
+shot 04-menu-timer
+expect text "TOOLS"
+expect notext "STOP PLAYING AFTER"
+# T opens the Sleep timer page (its code is LVGL's Left: the echo must not go straight back)
+key t
+wait 400
+shot 05-sleep-by-t
+expect text "STOP PLAYING AFTER"
+# Esc on a Menu page goes back one level, never quits
+key esc
+wait 400
+expect text "TOOLS"
+expect noquit
+tap "Playback"
+wait 400
+shot 06-playback
+expect text "Gapless"
+expect text "Remember position in long files"
+expect notext "Speed (later)"
+expect notext "Off"
+expect text "ReplayGain evens out the loudness between tracks."
+# R toggles repeat; its code is LVGL's Right: the echo must not toggle the selected Gapless row
+key r
+wait 300
+expect notext "Off"
+expect text "Gapless"
+tap "ReplayGain"
+wait 400
+shot 07-replaygain
+expect text "Track"
+expect text "Album"
+# a choice closes the pick list: Playback shows the new value
+tap "Album"
+wait 400
+shot 08-playback-album
+expect text "Album"
+expect text "Remember position in long files"
+tap "Gapless"
+wait 400
+shot 09-playback-changed
+expect text "Album"
+key left
+wait 400
+tap "Output"
+wait 400
+expect text "Automatic"
+key left
+wait 400
+expect text "Playback"
+tap "Keys"
+wait 400
+shot 10-keys
+expect text "Play or pause"
+expect text "Queue, Browse, Output, Menu"
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 300
+shot 11-keys-scrolled
+key esc
+wait 400
+expect text "TOOLS"
+expect noquit
+tap "About"
+wait 400
+shot 12-about
+expect text "FORMATS"
+expect text "THIS OUTPUT"
+expect text "LIBRARIES"
+key left
+wait 400
+key left
+wait 400
+expect text "Evolve 65"
+# the large layout's sleep-timer key (an icon: no text to tap; measured on the shot) opens the Sleep timer page
+@800x480 tapxy 0.911 0.729
+@800x480 wait 400
+@800x480 shot 13-sleep-key
+@800x480 expect text "STOP PLAYING AFTER"
+@800x480 key esc
+@800x480 wait 400
+key esc
+wait 300
+expect text "MUSIC / PHOENIX"
+expect noquit

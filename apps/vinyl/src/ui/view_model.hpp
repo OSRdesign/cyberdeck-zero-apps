@@ -7,6 +7,7 @@
 #pragma once
 
 #include "art/cover.hpp"
+#include "menu/menu_model.hpp"
 #include "queue/queue.hpp"
 
 #include <cstdint>
@@ -18,7 +19,8 @@
 namespace vinyl {
 namespace ui {
 
-enum class Page { Now, Browser, Queue, Output, Notices };
+/* Notices: a demonstration page for the scenes only. Menu .. About: the Menu pages (P2a, ui/menu_pages.hpp). */
+enum class Page { Now, Browser, Queue, Output, Notices, Menu, Sleep, Playback, ReplayGain, Keys, About };
 
 struct RowView {
     enum class Mark { None, Chevron, Dot };
@@ -88,6 +90,17 @@ struct ListView {
     bool hint_notice = false; /* output: the strip is the "not set up" notice */
 };
 
+/* a Menu list page (Menu, Sleep timer, Playback, ReplayGain): core/menu's rows */
+struct MenuView {
+    std::vector<menu::Row> rows;
+    int selected = -1;
+    std::string heading;     /* the line over the rows ("STOP PLAYING AFTER"), "" for none */
+    std::string hint;        /* the strip under the rows ("" for none) */
+    bool hint_clock = false; /* the strip's icon: the clock (the sleep timer's status) instead of the info mark */
+    bool value_bright = false; /* Playback: the values white and bold (Playback-480x320), else grey (Menu-480x320) */
+    uint64_t gen = 0;        /* the page opened again: the selection scrolled into view */
+};
+
 struct Notice {
     enum class Kind { Info, Bluetooth, Call, Danger };
     Kind kind = Kind::Info;
@@ -98,9 +111,9 @@ struct Notice {
 /* What the pages ask the controller to do. */
 struct Actions {
     std::function<void()> back, toggle, prev, next, shuffle, repeat;
-    std::function<void(const std::string &)> button; /* "queue", "output", "browse" */
+    std::function<void(const std::string &)> button; /* "queue", "output", "browse", "menu", "sleep" */
     std::function<void(double)> seek_to;             /* 0..1 of the track */
-    std::function<void(Page, int)> row;              /* a tap on a row */
+    std::function<void(Page, int)> row;              /* a tap on a row (the list pages, the Menu pages) */
     std::function<void(int)> queue_button;           /* 0 move up, 1 move down, 2 remove, 3 clear all */
     std::function<void()> mini_open;                 /* the mini player (opens now playing) */
     std::function<void(bool, int)> transport;        /* previous (false) / next (true): 0 press, 1 release, 2 cancel */

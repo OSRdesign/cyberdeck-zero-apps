@@ -69,6 +69,8 @@ decide usability".
 Each accepted for P1 by the coordinator, owner informed (no owner wording recorded):
 
 - The sleep-timer and Equalizer keys of the square and large drafts are drawn dimmed with no action (P2 features).
+  **Superseded by P2a (0.2.0, below):** the square layout's sixth key is the Menu key, the large layout's sleep-timer
+  key opens the Sleep timer page; nothing is drawn dimmed any more.
 - Browser rows act on the first tap (open a folder, play a track) at the compact list height.
 - Controls drawn smaller than 7 mm keep their drawn look and get a larger invisible touch area (R-4 applies).
 - The volume group's "-" and "+" are drawn as the drafts give them (lower than the touch target on most layouts); their
@@ -397,7 +399,10 @@ Recorded on 2026-11-13; none of these is offered in 0.1.0.
   the percent shown) / 1 dB / 0.5 dB / 0.1 dB; in the dB modes the volume group shows the output's real level in dB (for
   example "-22.5 dB") instead of the percent. The model already takes the step (never finer than the control's own step)
   and formats a level in dB (`volume_level_text`, tested); the setting and its page are not built.
-- The Menu key and its pages (equalizer, sleep timer, playback, library, output, about): P2 (owner, 2026-11-13, above).
+- The Menu key and its pages: built in P2a (0.2.0, below) with the rows of the features built so far (owner decision
+  D32); the Equalizer and Library rows come with P2d and P2b.
+- The gain boost and "Volume steps" are not in 0.2.0: the P2a brief's Playback page has Gapless, ReplayGain and Remember
+  position in long files (report 060 had put both in P2a; the coordinator's brief of 2026-11-13 left them out).
 - The Equalizer's bars by drag (owner, 2026-11-13, "for D30 equalizer should also work by dragging the bars"): P2, with
   the Equalizer.
 
@@ -435,3 +440,118 @@ boundaries in the gaps between them, the target high where the screen has the ro
 can have, each area covering what it draws. Where the rows miss the target by a few px the transport keys (and their
 repeat / shuffle marks) sit up to 4 design px lower, P(4) clear of what is under them (the coordinator's rule of
 2026-11-12: solved by geometry, not by an R-4 exception): 2 px at 480x640 and at 480x320.
+
+## P2a: the Menu, the sleep timer, Playback, Keys, About (0.2.0, 2026-11-13)
+
+The owner approved the P2 plan (the launcher repo's report 060, its decisions in section 15) and said "start the P2a
+build" (2026-11-13). The owner's answers that shape 0.2.0, as section 15 of report 060 records them: D25 (ReplayGain from
+tags only, Off / Track / Album, default Track) "OK"; D32 (Menu and Playback show only built features: no dimmed rows, the
+"Speed (later)" row dropped) "OK"; D22 (five steps P2a-P2e) "OK". Everything else below is the coordinator's P2a brief
+(2026-11-13) or, where it says so, the builder's reading of it, for the owner to confirm.
+
+- **The Menu key** where the full-UX canvas draws it: 480x320 the seventh transport key after Queue (the sliders icon;
+  the seven keys 46 wide, the play key 80, as NP-480x320 draws them, where 0.1.0 had six wider keys); square
+  (480x480, 720x720) the sixth transport key, in the dimmed sleep-timer key's place; portrait and PDA (320x480, 480x640,
+  480x800) an icon key at the left of the bottom row, then the Queue icon key (it was a key with its word), then the volume
+  group; large (800x480 and the two-pane canvases) the bottom row Browse | Menu | the volume group, Output now a Menu row
+  (the output chip stays the quick way to the Output page); 640x480 Browse | Queue | Menu | the volume group, each 128
+  wide (the width 0.1.0 reserved). The large layout's sleep-timer key acts now: it opens the Sleep timer page (the
+  canvas draws it undimmed; the builder's reading). M opens the Menu and T the Sleep timer page on every layout (their
+  physical key codes, design QA D-32).
+- **The Menu page** in the Browser's look (the dark panel at the class's scale; the medium class the 480x320 drawing
+  scaled, portrait the Menu-320x480 drawing with 44 px rows): TOOLS: Sleep timer (Off, or the time left; "This track",
+  "This album" for the track modes); SETTINGS: Playback, Output (the output's name), Keys, About (the canvas has one row
+  "About and keys": two rows, the coordinator's decision, owner informed, below). No Equalizer and no Library row until their phases (D32). Rows act on the
+  first tap, as the Browser's and the Output page's; Up / Down move (the headings skipped), Enter or Right act, Left
+  goes back (design QA D-29). Esc goes back to the page the Menu was opened from; its pages go back to the Menu.
+- **The Sleep timer page:** STOP PLAYING AFTER: Off, 15 minutes, 30 minutes, 60 minutes, This track, This album or
+  queue (the canvas says "This album or playlist": the coordinator's decision, owner informed, below); the chosen one has
+  the blue dot, and a choice closes the page (the owner-approved behaviour, below). While the timer runs, the status line at the bottom: "Stops in 29:12. The music fades out for the
+  last 10 seconds." (the canvas's words), "Stops at the end of this track. ..." and "Stops at the end of this album or
+  queue. ..." for the track modes (the builder's words). The minute modes count on the monotonic clock whether the music
+  plays or not, and fade over their last 10 s, linear in dB to -60 dB; the track modes name no next track where playback
+  stops, and the engine fades that track's last 10 s; "This album or queue" stops before the next track of another album
+  (the album tag when both tracks have one, else the folder) or at the end of the queue, a playlist's queue only at its
+  end. "This track" and "This album" leave the queue on the next track, paused. The timer keeps running when the pages
+  change and while Vinyl is hidden (X-Background=run); it is not saved, so a restart forgets it. When it ends it pauses
+  the music and nothing else, and says so: "Sleep timer ended. Paused." (the builder's words).
+- **The Playback page:** Gapless (On by default; Off: every track change drains the stream and opens it again), ReplayGain
+  (Track by default, D25: its pick list Off / Track / Album, in the Sleep timer page's style; a choice closes it),
+  Remember position in long files (On by default); Enter or a tap toggles Gapless and Remember; no Speed and no Crossfade
+  row (D32). The canvas's strip keeps its first sentence, "ReplayGain evens out the loudness between tracks." ("Crossfade
+  needs a faster board" goes with the Crossfade row, and report 060 3c contradicts it). The pick list's strip: "Track:
+  every track as loud as the others. Album: an album keeps its own loudness steps. Files without ReplayGain tags play as
+  they are." (the builder's words). The settings live in `~/.config/vinyl/settings.json`, written only when one changes.
+- **ReplayGain** (report 060 3d, D25): read from the tags only (ID3v2 TXXX, Vorbis comments, Opus R128_TRACK_GAIN /
+  R128_ALBUM_GAIN as value / 256 + 5 dB, MP4 freeform items); the engine reads a track's tags when it opens it and applies
+  the gain to that track's own samples (a gapless change switches it at the boundary), before the output's volume, which
+  never moves: the output's levels, percent and dB stay the volume model's. Track takes the track gain (the album gain
+  without one), Album the album gain (the track gain without one), an untagged file 0 dB. The gain never passes
+  -20 log10(peak) when the peak tag exists, so the loudest sample stays at full scale. A pre-amp is later (0 dB now, report
+  060 7.2 #5). Square and large show the playing track's gain after Gapless, as NP-480x480 and NP-800x480 draw it
+  ("Gapless, RG -3.2 dB"); 480x320 and 640x480 show no figure (report 060 left them to the coordinator: an open question).
+- **Positions in long files:** a file longer than 20 minutes starts again where it was left (the browser, the queue, the
+  transport keys), kept in `~/.config/vinyl/positions.json` (the 500 most recent), written on pause, on a track change, at
+  exit and at most once a minute while a long file plays, never inside state.json; the first 5 s and the last 15 s of a file
+  keep no position.
+- **The state file and the SD card** (report 060 finding 3): state.json is written on events (a track change, a pause, a
+  stop, a queue or folder change, a setting, the exit) and at most once a minute while playing (0.1.0: every 5 s, the
+  whole queue each time). The MP3 tag reader walks the ID3 tag frame by frame in the file and skips a picture by its size
+  unless the cover is asked for (a 2 MB cover: about 1.5 kB read for the tags instead of the whole 2 MB tag); the cover
+  stays on demand, with the 1200 px decode cap.
+- **The Keys page:** two columns, the key on a key chip and what it does, the canvas's rows first (Space, Left, Right,
+  Shift+Left / Right, S, R, Q / B / O / M, - and =), then the rest of the real key map (T, comma and dot, the list keys,
+  the queue's U / D / X / C then Y, Esc, the media keys); one table in core/menu that the key handler dispatches from, so
+  the page cannot drift from the keys (tests/test_menu.cpp). It scrolls (a drag, Up / Down). The 320x480 drawing joins
+  "S, R" in one row; Vinyl keeps the 480x320 rows (S and R apart) at every size.
+- **The About page** as About-480x320 draws it: the name and version, "A music player for CyberdeckZero Launcher boards.
+  MIT licence." (the canvas's "CyberDeck Zero boards" in the branding's spelling), FORMATS (FFmpeg without its version:
+  Vinyl does not load it to learn it), THIS OUTPUT (the playing output's volume model: "Sharkoon Mobile DAC: -45.0 to 0.0
+  dB, 23 levels of 2.05 dB."), LIBRARIES (the canvas's list with libasound and stb_image added: Vinyl uses both), the
+  licences' place.
+- **Touch sizes** (R-4): the Menu rows keep the canvas's heights (34 design px, Playback 40, portrait 44), never under the
+  toolkit's LIST_ROW; they act on the first tap (as the Browser's rows, accepted for P1). The new 480x320 and 320x480
+  scenes run at the 3.5-inch panel's 6.3 px/mm (ppmm 630, design QA's rule for new scenes) with allow-small: the approved
+  480x320 layout's volume group and seek row are 43 px there, ROW 44 (the WARN lines of their report.txt).
+
+## Design QA of 0.2.0, run 1 (2026-11-13)
+
+The QA's three FAILs (D-01, D-32, D-55) and the coordinator's rulings on its WARNs and questions, in one rebuild:
+
+- **The keypad's echo (D-32):** after every key event the toolkit's keypad hands LVGL a key too: a navigation key's own,
+  an F / X / Z / C alias's arrow, and for any other key its raw code unchanged (cp0_keyboard_lvgl_input.c at the pin).
+  The raw codes of W, E, R, T (17-20) are LVGL's Up, Down, Right, Left, and those of the digits 1, 2, 7, 8, 9, 0 are
+  Home, End, Backspace, Next, Enter, Prev: T opened the Sleep timer page and its echo went straight back, R toggled repeat
+  and acted as Right on the selected row of every list page (since 0.1.0 on Queue and Output), 9 acted as Enter. Fixed as
+  the launcher's decision of 2026-10-05 says ("a real W/E/R/T press is recorded and the matching native key within 300 ms
+  is ignored"), generalised (`core/nav/key_echo`, tested with a fake keypad): the echo of any key that is not a
+  navigation key, when it is an LVGL key, is dropped; an alias's arrow only when Vinyl used the letter (X and C on the
+  queue page), so F / X / Z / C stay a small keyboard's arrows elsewhere. The scenes press M, T, R, 9 and Esc on the Menu
+  pages.
+- **Ctrl+O** (D-42, the pointer's held click, AC 10b): the options key opens the Menu; plain O stays Output. The Menu key
+  is drawn on every now-playing layout (tests/test_menu.cpp checks one per class), so a pointer reaches the Menu there
+  by a click too.
+- **Long and CJK output names (D-01, D-55):** the Menu's Output value scrolls in its own room when it is wider than what
+  the row's label leaves (the label keeps its width, up to 60 % of the row), as now playing's output button scrolls a long
+  name; About's THIS OUTPUT line breaks after ": " and ", " and wraps a long name. The scenes qa-names-cjk (a headset named
+  "寝室のワイヤレスヘッドホン", CJK tags) and qa-names-long ("Living room speaker, Bose SoundLink Revolve+ II") show now
+  playing, the Menu, About and the Output page at every QA size (the demonstration world's VINYL_DEMO_BT_NAME).
+- **Pick lists close after a choice** (the owner-approved behaviour, relayed by the coordinator, 2026-11-13): a choice on
+  the Sleep timer page or the ReplayGain pick list closes it and the page it was opened from shows the new value (the
+  Menu's time left, Playback's ReplayGain value); Esc and Left still go back without a change.
+- **The coordinator's decisions, owner informed (2026-11-13):** the canvas's Menu row "About and keys" is two rows, Keys
+  and About; "This album or queue" replaces the canvas's "This album or playlist". **The ReplayGain pick list** has no
+  board on the canvas: it is the coordinator's design, in the Sleep timer page's style (the heading "REPLAYGAIN", the
+  three choices with their dots, a help strip).
+- **The Sleep timer page's strip** (the deck's Sleep timer page hid "This album or queue" under it while a timer ran): it
+  stays at the panel's bottom where the rows fit above it, and otherwise follows the last row in the scrolling list, so
+  no row is ever under it (the strip comes into view by scrolling).
+- **The Keys page** (D-37, D-81): the key names are drawn flat (no key look: they do nothing), on their action's line
+  (landscape; they sat 7-14 px above it where LIST_ROW raised the row) or above it (portrait); a row grows to an action
+  of two lines. The rows of now playing say so ("On Now playing: ..."), Enter on now playing, Backspace in the browser,
+  the queue pane and Ctrl+O are listed.
+- **Texts for the owner to confirm** (the builder's words, kept): "Sleep timer ended. Paused."; the status lines "Stops
+  at the end of this track. The music fades out for its last 10 seconds." and "Stops at the end of this album or queue.
+  The music fades out for its last 10 seconds."; the Menu values "This track" and "This album"; the ReplayGain pick
+  list's strip "Track: every track as loud as the others. Album: an album keeps its own loudness steps. Files without
+  ReplayGain tags play as they are."; the Keys page's actions after the canvas's rows. Listed in the README too.

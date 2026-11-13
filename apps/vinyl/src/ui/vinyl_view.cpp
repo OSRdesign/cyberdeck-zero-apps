@@ -7,6 +7,7 @@
  */
 #include "vinyl_view.hpp"
 
+#include "menu_pages.hpp"
 #include "nav/nav_rules.hpp"
 #include "volume/output_volume.hpp"
 #include "seek/seek_scrub.hpp"
@@ -455,6 +456,7 @@ Icon icon_of(const std::string &id) {
     if (id == "repeat") return Icon::Repeat;
     if (id == "queue") return Icon::Queue;
     if (id == "sleep") return Icon::Sleep;
+    if (id == "menu") return Icon::Menu;
     if (id == "browse") return Icon::Browse;
     if (id == "output") return Icon::Output;
     if (id == "eq") return Icon::Equalizer;
@@ -465,7 +467,7 @@ const char *word_of(const std::string &id) {
     if (id == "queue") return "Queue";
     if (id == "browse") return "Browse";
     if (id == "output") return "Output";
-    if (id == "eq") return "Equalizer";
+    if (id == "menu") return "Menu";
     return "";
 }
 
@@ -561,6 +563,7 @@ struct View::Impl {
         int rows = 0, sel = -2;
     };
     ListW br, qu, out;
+    std::unique_ptr<MenuPages> menu; /* the Menu pages (P2a) */
 
     /* notice */
     lv_obj_t *notice = nullptr, *notice_icon = nullptr, *notice_text = nullptr, *notice_hit = nullptr;
@@ -1361,7 +1364,11 @@ struct View::Impl {
 
     void show_notice(const Notice &n) {
         hide_notice();
-        lv_obj_t *root = cur == Page::Now ? now_root : cur == Page::Browser ? br.root : cur == Page::Queue ? qu.root : out.root;
+        lv_obj_t *root = cur == Page::Now       ? now_root
+                         : cur == Page::Browser ? br.root
+                         : cur == Page::Queue   ? qu.root
+                         : MenuPages::is_menu_page(cur) && menu ? menu->root(cur)
+                                                : out.root;
         if (!root) return;
         const bool danger = n.kind == Notice::Kind::Danger;
         int x = 0, y = 0, w = 0, fit_h = 0;
@@ -1408,6 +1415,18 @@ struct View::Impl {
                 }
                 y = row_bottom > 0 ? row_top + (row_bottom - row_top - h) / 2 : Y(b.bottom()) - h;
             }
+        } else if (MenuPages::is_menu_page(cur) && menu) {
+            /* a Menu page: over its strip's place at the panel's bottom (the strip, or the last rows: the notice's area
+             * is its drawing, a tap dismisses it) */
+            const R room = menu->notice_room(cur);
+            s = layout::list_geom(layout::ListPage::Output, W, H, body_y).s;
+            const int h = ri((danger ? 30 : 50) * s);
+            x = ri(room.x);
+            w = ri(room.w);
+            y = ri(room.bottom()) - h;
+            /* its touch area the target high (a tap dismisses it), grown upwards over the rows it already covers */
+            const int ah = std::max(h, target);
+            notice_area = R{double(x), double(ri(room.bottom()) - ah), double(w), double(ah)};
         } else {
             const layout::ListPage lp = cur == Page::Browser ? layout::ListPage::Browser
                                         : cur == Page::Queue ? layout::ListPage::Queue
@@ -1565,6 +1584,9 @@ View::View(lv_obj_t *screen, Actions actions) : d_(std::make_unique<Impl>()) {
     d.build_list(d.qu, Page::Queue);
     d.build_list(d.out, Page::Output);
     d.build_notices_demo();
+    d.menu = std::make_unique<MenuPages>([&d] { return d.page_root(); }, d.W, d.H, d.body_y, d.list_row, [&d](Page p, int i) {
+        if (d.act.row) d.act.row(p, i);
+    });
     d.cur = Page::Now;
 }
 
@@ -1575,6 +1597,7 @@ View::~View() {
     d_->br.list.reset();
     d_->qu.list.reset();
     d_->out.list.reset();
+    d_->menu.reset();
     d_->page.reset(); /* deletes its root and every page on it */
 }
 
@@ -1591,11 +1614,18 @@ void View::show_page(Page p) {
     show(d.qu.root, p == Page::Queue);
     show(d.out.root, p == Page::Output);
     show(d.not_root, p == Page::Notices);
+    for (Page m : {Page::Menu, Page::Sleep, Page::Playback, Page::ReplayGain, Page::Keys, Page::About}) show(d.menu->root(m), p == m);
     /* the title per page (Browse: the toolkit shows the last part on a narrow header; at 320x480 it shows none) */
     switch (p) {
     case Page::Browser: d.page->set_title({"Vinyl", "Browse"}); break;
     case Page::Queue: d.page->set_title({"Queue"}); break;
     case Page::Output: d.page->set_title({"Output"}); break;
+    case Page::Menu: d.page->set_title({menu::page_title(menu::Page::Menu)}); break;
+    case Page::Sleep: d.page->set_title({menu::page_title(menu::Page::Sleep)}); break;
+    case Page::Playback: d.page->set_title({menu::page_title(menu::Page::Playback)}); break;
+    case Page::ReplayGain: d.page->set_title({menu::page_title(menu::Page::ReplayGain)}); break;
+    case Page::Keys: d.page->set_title({menu::page_title(menu::Page::Keys)}); break;
+    case Page::About: d.page->set_title({menu::page_title(menu::Page::About)}); break;
     default: d.page->set_title({"Vinyl"}); break;
     }
 }
@@ -1609,6 +1639,11 @@ void View::update_list(Page p, const ListView &v) {
     else if (p == Page::Queue) d.update_list(d.qu, p, v);
     else if (p == Page::Output) d.update_list(d.out, p, v);
 }
+
+void View::update_menu(Page p, const MenuView &v) { d_->menu->update(p, v); }
+void View::set_keys(const std::vector<menu::KeyHelp> &rows) { d_->menu->set_keys(rows); }
+void View::set_about(const menu::About &a) { d_->menu->set_about(a); }
+void View::scroll_page(Page p, int rows) { d_->menu->scroll(p, rows); }
 
 void View::show_notice(const Notice &n) { d_->show_notice(n); }
 void View::hide_notice() { d_->hide_notice(); }
@@ -1625,6 +1660,7 @@ int View::list_rows(Page p) const {
     if (p == Page::Browser) return d.br.rows;
     if (p == Page::Queue) return d.qu.rows;
     if (p == Page::Output) return d.out.rows;
+    if (MenuPages::is_menu_page(p)) return d.menu->rows(p);
     return 0;
 }
 
