@@ -56,6 +56,8 @@ Comment: The application is linked against the LVGL based cp0_lvgl runtime of th
     "ffmpeg" (https://sources.debian.org/src/ffmpeg/). Packages libavformat61 (or 62),
     libavcodec61 (or 62), libavutil59 (or 60), libswresample5 (or 6), in Depends: the
     common formats play out of the box (the owner's decision D20, 2026-11-13).
+  - libsqlite3.so.0, SQLite (public domain, https://sqlite.org/copyright.html), for
+    the music library's database and search. Package libsqlite3-0.
  The licence texts of these libraries are in their own packages, under
  /usr/share/doc/<package>/copyright.
 

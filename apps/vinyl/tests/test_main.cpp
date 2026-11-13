@@ -72,6 +72,7 @@ int main(int argc, char **argv) {
         {"launcher", test_launcher}, {"art", test_art},         {"layout", test_layout}, {"real_libs", test_real_libs},
         {"transport", test_transport}, {"hits", test_hits}, {"volume", test_volume},
         {"settings", test_settings_state}, {"replaygain", test_replaygain}, {"menu", test_menu},
+        {"sqlite", test_sqlite},
     };
     for (const Group &g : groups) {
         if (only && std::strcmp(only, g.name) != 0) continue;
