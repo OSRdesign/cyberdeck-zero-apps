@@ -1,0 +1,23 @@
+title Vinyl P2a: the sleep timer runs while Vinyl is hidden (X-Background=run): a 15-minute timer with 2 s left, hidden, it ends while hidden (the music paused), shown again: the notice, a full repaint, close quits
+sizes 640x480
+ppmm 901
+lifecycle
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_SLEEP 15
+env VINYL_DEMO_SLEEP_LEFT 2
+
+wait 600
+shot 01-now-before
+hide
+wait 2500
+expect hidden
+expect nowrite
+show
+wait 400
+expect visible
+expect repaint
+shot 02-now-after
+expect text "Sleep timer ended. Paused."
+close
+expect quit

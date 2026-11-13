@@ -1,0 +1,28 @@
+title Vinyl P2a: the sleep timer on "This track" (stops at the end of the track that plays, its last 10 s fading) and on "This album or queue" (480x320 and 320x480 at their real density)
+sizes 480x320 320x480
+ppmm 630
+# the 3.5-inch panel's 6.3 px/mm: ROW 44, the approved 480x320 layout's volume group and seek row 43 px (the owner's rule R-4)
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE sleep
+env VINYL_DEMO_SLEEP track
+
+wait 900
+shot 01-sleep-track
+expect text "Stops at the end of this track. The music fades out for its last 10 seconds."
+tap "This album or queue"
+wait 400
+shot 02-sleep-album
+expect text "Stops at the end of this album or queue. The music fades out for its last 10 seconds."
+key left
+wait 400
+shot 03-menu-album
+expect text "This album"
+tap "Sleep timer"
+wait 400
+tap "Off"
+wait 400
+shot 04-sleep-off
+expect notext "Stops at the end of this album or queue. The music fades out for its last 10 seconds."
+expect noquit

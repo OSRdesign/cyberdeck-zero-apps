@@ -1,0 +1,21 @@
+title Vinyl P2a: the sleep timer running (30 minutes chosen 48 s ago: "Stops in 29:12", the music fading over the last 10 s), the Sleep timer page with its status line and the Menu with the time left (640x480 (9.01 px/mm))
+sizes 640x480
+ppmm 901
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE sleep
+env VINYL_DEMO_SLEEP 30
+env VINYL_DEMO_SLEEP_LEFT 1753
+
+wait 900
+shot 01-sleep-running
+expect text "30 minutes"
+expect text "STOP PLAYING AFTER"
+key left
+wait 400
+shot 02-menu-running
+expect text "Sleep timer"
+key left
+wait 400
+shot 03-now-running
+expect noquit
