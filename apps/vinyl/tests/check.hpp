@@ -97,3 +97,6 @@ void test_settings_state();
 void test_replaygain();
 void test_menu();
 void test_sqlite();
+void test_sortkey();
+void test_library();
+void test_search();
