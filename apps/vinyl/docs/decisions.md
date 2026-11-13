@@ -94,9 +94,16 @@ chip makes more than a second to reflect."
 - With a sound server: the sink's own volume (set with pa_context_set_sink_volume_by_name, read from the sink list), in
   the server's own percent (the number pactl / wpctl show), default sink or not, Bluetooth included: a headset keeps its
   level across a reconnect, and if the device changes it the chip shows the real value. Vinyl's stream stays at 100 %.
-- Without a sound server: the card's playback mixer control, percent linear in dB where the driver reports dB (else in
-  steps), never above 0 dB; the control's switch mutes at 0 %. Only a card with no playback mixer gets Vinyl's software
-  volume (kept per output in state.json).
+- Without a sound server: the card's playback mixer control, never above 0 dB; the control's switch mutes at 0 %. Only a
+  card with no playback mixer gets Vinyl's software volume (kept per output in state.json).
+- Follow-up, the coordinator (UI design, 2026-11-13): one curve everywhere. The zero8 probe showed the ALSA mapping
+  linear in dB (50 % = -30 dB) while the sound server's percent is cubic (50 % = -18.06 dB): the same number was 12 dB
+  apart between boards, which is why the owner heard them as inconsistent. Without a server Vinyl now uses the server's
+  curve, dB = 60 log10(p / 100) (40 % = -23.88 dB, 25 % = -36.1 dB, 100 % = 0 dB), clamped to the control's range (a
+  range that starts higher clamps at its minimum, and the chip shows what is set: p = 100 * 10^(dB / 60), rounded), never
+  above 0 dB or the control's max; a step down that cannot move the control any more mutes. The software volume uses the
+  same curve (amplitude (p / 100)^3). A control without dB data stays linear in steps. Same percent, same loudness, on
+  every board.
 - The separate in-app volume is gone from the UI; an older state.json's `app_volume` is read and kept, never applied.
 - The chip refreshes on the server's change events (pa_context_subscribe) within a tick and a list round trip; the mixer
   is read every 300 ms. When the playing output is the default sink, the launcher's volume keys show through the same

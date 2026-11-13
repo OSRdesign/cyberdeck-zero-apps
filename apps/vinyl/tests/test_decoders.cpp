@@ -371,7 +371,8 @@ void test_decoders() {
         unsigned char p24[6];
         convert_pcm(stereo, 16, 2, p24, SampleFormat::S24_3LE, 2, 1, 1.0f);
         CHECK_EQ(static_cast<int>(p24[1] | (p24[2] << 8)), 1000);
-        CHECK_NEAR(volume_gain(50), 0.25, 1e-6);
+        CHECK_NEAR(volume_gain(50), 0.125, 1e-6); /* cubic: -18.06 dB, the server's curve */
+        CHECK_NEAR(volume_gain(40), 0.064, 1e-6); /* -23.88 dB */
         CHECK_NEAR(volume_gain(0), 0.0, 1e-9);
         CHECK_NEAR(volume_gain(100), 1.0, 1e-9);
     }

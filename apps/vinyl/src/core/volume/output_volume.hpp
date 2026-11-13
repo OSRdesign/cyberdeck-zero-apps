@@ -7,9 +7,14 @@
  *   a sink of the sound server   its own volume (pa_context_set_sink_volume_by_name), in the server's own percent (the
  *                                cubic scale pactl and wpctl show); Vinyl's stream stays at 100 %;
  *   an ALSA card (no server)     its playback mixer control ("Master", "PCM", "Speaker", "Headphone", "Headset", else any
- *                                "... Playback Volume"): percent linear in dB where the driver reports dB, else linear in
- *                                steps; never above 0 dB; the control's "... Playback Switch" mutes at 0 %;
- *   a card without a mixer       Vinyl's software gain, kept per output (output_volume_key) in state.json.
+ *                                "... Playback Volume"), on the sound server's own curve where the driver reports dB
+ *                                (the coordinator, 2026-11-13: the same percent is the same loudness on every board):
+ *                                dB = 60 log10(p / 100), so 50 % = -18.06 dB, 40 % = -23.88 dB, 25 % = -36.12 dB, 100 % =
+ *                                0 dB; clamped to the control's range, never above 0 dB; the chip shows what the control
+ *                                holds (p = 100 * 10^(dB / 60)). A control without dB data is linear in steps. The
+ *                                control's "... Playback Switch" mutes at 0 %;
+ *   a card without a mixer       Vinyl's software gain on the same curve (amplitude (p / 100)^3), kept per output
+ *                                (output_volume_key) in state.json.
  *
  * The pure helpers below are tested with a fake mixer; the controller (vinyl_app.cpp) reads the sink from the server's
  * lists (refreshed on its change events, app/sink_watch.hpp) and the mixer every 300 ms. LVGL-free.
@@ -37,10 +42,18 @@ struct MixerChoice {
 
 /* The playback control of a card's control list (none: the card has no playback mixer). */
 bool choose_playback_mixer(const std::vector<CtlInfo> &ctls, MixerChoice &out);
-/* The raw value for a percent (0..100), never above `top`. */
+/* The curve of the sound server (and of Vinyl everywhere): a percent's dB in hundredths, 60 log10(p / 100) (0 % = a
+ * very large negative value: the control's minimum), and back, rounded. */
+long volume_cdb_for(int pct);
+int volume_pct_for(long cdb);
+/* The raw value for a percent (0..100), never above `top`: on the curve where the control reports dB (clamped to its
+ * minimum), else linear in steps. */
 long mixer_raw_for(const MixerChoice &m, int pct);
-/* The percent of a raw value (0 at min, 100 at top; above top it reports more than 100). */
+/* The percent a raw value stands for, on the same curve (above top it reports more than 100). */
 int mixer_pct_for(const MixerChoice &m, long raw);
+/* The level a step of the strip or the keys sets: kVolumeStep further, or 0 (the switch mutes) when a step down would
+ * not move the control any more (its minimum already holds: a range that starts above the curve's level there). */
+int mixer_step_target(const MixerChoice &m, int current_pct, int delta);
 /* The dB of a raw value in hundredths (has_db only). */
 long mixer_cdb_for(const MixerChoice &m, long raw);
 

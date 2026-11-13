@@ -67,12 +67,20 @@ bool choose_playback_mixer(const std::vector<CtlInfo> &ctls, MixerChoice &out) {
     return out.top > out.min || out.ok();
 }
 
+long volume_cdb_for(int pct) {
+    if (pct <= 0) return -1000000; /* minus infinity: the control's minimum */
+    return static_cast<long>(std::lround(6000.0 * std::log10(std::min(pct, 100) / 100.0)));
+}
+
+int volume_pct_for(long cdb) { return static_cast<int>(std::lround(100.0 * std::pow(10.0, cdb / 6000.0))); }
+
 long mixer_raw_for(const MixerChoice &m, int pct) {
     pct = std::max(0, std::min(100, pct));
     if (m.top <= m.min) return m.min;
     if (m.has_db) {
-        /* linear in dB from db_min (0 %) to db_top (100 %), then the raw step for that dB */
-        const long cdb = m.db_min + round_div(static_cast<long long>(m.db_top - m.db_min) * pct, 100);
+        /* the server's curve, clamped to the control's range (never above db_top: 0 dB or the control's max) */
+        if (pct == 0) return m.min;
+        const long cdb = std::max(m.db_min, std::min(m.db_top, volume_cdb_for(pct)));
         const long raw = m.min + round_div(static_cast<long long>(cdb - m.db_min) * (m.max - m.min), m.db_max - m.db_min);
         return std::max(m.min, std::min(m.top, raw));
     }
@@ -81,12 +89,14 @@ long mixer_raw_for(const MixerChoice &m, int pct) {
 
 int mixer_pct_for(const MixerChoice &m, long raw) {
     if (m.top <= m.min) return raw > m.min ? 100 : 0;
-    if (m.has_db) {
-        const long cdb = mixer_cdb_for(m, raw);
-        if (m.db_top <= m.db_min) return 0;
-        return static_cast<int>(std::max(0L, round_div(static_cast<long long>(cdb - m.db_min) * 100, m.db_top - m.db_min)));
-    }
+    if (m.has_db) return std::max(0, volume_pct_for(mixer_cdb_for(m, raw)));
     return static_cast<int>(std::max(0L, round_div(static_cast<long long>(raw - m.min) * 100, m.top - m.min)));
+}
+
+int mixer_step_target(const MixerChoice &m, int current_pct, int delta) {
+    const int to = volume_after_step(current_pct, delta);
+    if (delta < 0 && to > 0 && mixer_raw_for(m, to) >= mixer_raw_for(m, std::max(0, current_pct))) return 0;
+    return to;
 }
 
 long mixer_cdb_for(const MixerChoice &m, long raw) {

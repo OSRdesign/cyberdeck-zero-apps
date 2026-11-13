@@ -99,8 +99,10 @@ Korean titles draw with the launcher's Noto Sans CJK.
   keeps its level across a reconnect, and if the headset or the system changes it, the chip shows the new value. The
   chip follows the server's change events, so the launcher's volume keys (on the default sink) and a headset's own
   buttons show within about half a second. Without a sound server it is the card's playback mixer control (`Master`,
-  `PCM`, `Speaker`, `Headphone`, `Headset`...), linear in dB where the driver reports dB, never above 0 dB; only a card
-  with no playback mixer gets Vinyl's software volume. Vinyl's stream itself always plays at 100 %, with its own restore
+  `PCM`, `Speaker`, `Headphone`, `Headset`...) on the sound server's own curve (dB = 60 log10(percent / 100): 50 % =
+  -18 dB, 40 % = -24 dB, 25 % = -36 dB), so the same percent is the same loudness on every board; never above 0 dB, and
+  the chip shows what the control really holds. Only a card with no playback mixer gets Vinyl's software volume, on the
+  same curve. Vinyl's stream itself always plays at 100 %, with its own restore
   key, so a server never brings back another app's stream level. The launcher's volume keys still act on the default
   output only (a launcher matter).
 

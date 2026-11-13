@@ -17,11 +17,13 @@
 #include "fake_pulse.hpp"
 #include "pulse/pulse_abi.hpp"
 #include "state/resume.hpp"
+#include "engine/engine.hpp"
 #include "volume/output_volume.hpp"
 
 #include <algorithm>
 #include <map>
 #include <cctype>
+#include <cmath>
 #include <chrono>
 #include <thread>
 
@@ -330,34 +332,84 @@ void test_output_mixer() {
     CHECK(!choose_playback_mixer({vol_ctl("Mic Capture Volume", 0, 30), switch_ctl("Mic Capture Switch")}, m));
     CHECK(!choose_playback_mixer({}, m));
 
-    /* zero8's Apple adapter: 'Headset Playback Volume' 0..120 = -60..0 dB (0.5 dB a step), at 80 = -20 dB: 67 % (linear
-     * in dB), and 67 % sets it back to 80 */
+    /* the sound server's curve (the coordinator, 2026-11-13): dB = 60 log10(p / 100) and back */
+    CHECK_EQ(volume_cdb_for(100), 0L);
+    CHECK_EQ(volume_cdb_for(50), -1806L);
+    CHECK_EQ(volume_cdb_for(40), -2388L);
+    CHECK_EQ(volume_cdb_for(25), -3612L);
+    CHECK(volume_cdb_for(0) < -100000);
+    CHECK_EQ(volume_pct_for(0), 100);
+    CHECK_EQ(volume_pct_for(-1806), 50);
+    CHECK_EQ(volume_pct_for(-2388), 40);
+    CHECK_EQ(volume_pct_for(-6000), 10);
+    for (int p = 1; p <= 100; ++p) CHECK_EQ(volume_pct_for(volume_cdb_for(p)), p);
+
+    /* zero8's Apple adapter: 'Headset Playback Volume' 0..120 = -60..0 dB (0.5 dB a step). The probe's 60/120 (-30 dB)
+     * is 32 % on the server's curve; 50 % is -18 dB (84), 40 % -24 dB (72), 25 % -36 dB (48), 100 % 0 dB (120) */
     CHECK(choose_playback_mixer({vol_ctl("Headset Playback Volume", 0, 120, true, -6000, 0), switch_ctl("Headset Playback Switch")}, m));
     CHECK(m.has_db);
     CHECK_EQ(m.top, 120L);
-    CHECK_EQ(mixer_pct_for(m, 80), 67);
-    CHECK_EQ(mixer_cdb_for(m, 80), -2000L);
-    CHECK_EQ(mixer_raw_for(m, 67), 80L);
+    CHECK_EQ(mixer_pct_for(m, 60), 32);
+    CHECK_EQ(mixer_raw_for(m, 50), 84L);
+    CHECK_EQ(mixer_pct_for(m, 84), 50);
+    CHECK_EQ(mixer_raw_for(m, 40), 72L);
+    CHECK_EQ(mixer_pct_for(m, 72), 40);
+    CHECK_EQ(mixer_raw_for(m, 25), 48L);
+    CHECK_EQ(mixer_pct_for(m, 48), 25);
     CHECK_EQ(mixer_raw_for(m, 100), 120L);
     CHECK_EQ(mixer_raw_for(m, 0), 0L);
-    CHECK_EQ(mixer_raw_for(m, 50), 60L); /* -30 dB */
-    /* the HackBerry's Sharkoon: 'PCM' 0..45, 1 dB a step, -45..0 dB; 22 = -23 dB */
+    CHECK_EQ(mixer_raw_for(m, 5), 0L);   /* -78 dB: below the control, clamped to its minimum */
+    CHECK_EQ(mixer_pct_for(m, 0), 10);   /* -60 dB is 10 % on the curve: the chip shows what is set */
+    CHECK_EQ(mixer_cdb_for(m, 80), -2000L);
+    CHECK_EQ(mixer_pct_for(m, 80), 46);
+    CHECK_EQ(mixer_raw_for(m, 46), 80L);
+    /* steps of 5 %: down from 15 to 10 (the minimum), then a step that cannot move the control mutes (0) */
+    CHECK_EQ(mixer_step_target(m, 15, -kVolumeStep), 10);
+    CHECK_EQ(mixer_step_target(m, 10, -kVolumeStep), 0);
+    CHECK_EQ(mixer_step_target(m, 0, kVolumeStep), 5);
+    CHECK_EQ(mixer_step_target(m, 50, kVolumeStep), 55);
+    CHECK_EQ(mixer_step_target(m, 100, kVolumeStep), 100);
+    /* a range that starts higher: -34..0 dB in 68 steps; 25 % (-36 dB) clamps at the minimum, which reads back 27 % */
+    CHECK(choose_playback_mixer({vol_ctl("PCM Playback Volume", 0, 68, true, -3400, 0)}, m));
+    CHECK_EQ(mixer_raw_for(m, 50), 32L);
+    CHECK_EQ(mixer_pct_for(m, 32), 50);
+    CHECK_EQ(mixer_raw_for(m, 25), 0L);
+    CHECK_EQ(mixer_pct_for(m, 0), 27);
+    CHECK_EQ(mixer_step_target(m, 30, -kVolumeStep), 25); /* moves the control (5 -> 0): kept */
+    CHECK_EQ(mixer_step_target(m, 27, -kVolumeStep), 0);  /* the minimum already: mute */
+    /* -87..+12 dB in 99 steps: never above 0 dB (step 87); 50 % = step 69 (-18 dB), 5 % = step 9 (-78 dB) */
+    CHECK(choose_playback_mixer({vol_ctl("Master Playback Volume", 0, 99, true, -8700, 1200)}, m));
+    CHECK_EQ(m.top, 87L);
+    CHECK_EQ(m.db_top, 0L);
+    CHECK_EQ(mixer_raw_for(m, 100), 87L);
+    CHECK_EQ(mixer_pct_for(m, 87), 100);
+    CHECK_EQ(mixer_raw_for(m, 50), 69L);
+    CHECK_EQ(mixer_pct_for(m, 69), 50);
+    CHECK_EQ(mixer_raw_for(m, 5), 9L);
+    CHECK_EQ(mixer_pct_for(m, 9), 5);
+    CHECK(mixer_pct_for(m, 99) > 100); /* someone else set it to +12 dB: shown as it is */
+    /* the HackBerry's Sharkoon: 'PCM' 0..45, 1 dB a step, -45..0 dB; 22 = -23 dB = 41 % */
     CHECK(choose_playback_mixer({vol_ctl("PCM Playback Volume", 0, 45, true, -4500, 0)}, m));
-    CHECK_EQ(mixer_pct_for(m, 22), 49);
-    CHECK_EQ(mixer_raw_for(m, 49), 22L);
+    CHECK_EQ(mixer_pct_for(m, 22), 41);
+    CHECK_EQ(mixer_raw_for(m, 41), 22L);
     /* a control that goes above 0 dB: never past 0 dB (-60..+6 dB over 0..110: 0 dB at step 100) */
     CHECK(choose_playback_mixer({vol_ctl("Speaker Playback Volume", 0, 110, true, -6000, 600)}, m));
     CHECK_EQ(m.top, 100L);
-    CHECK_EQ(m.db_top, 0L);
     CHECK_EQ(mixer_raw_for(m, 100), 100L);
     CHECK_EQ(mixer_pct_for(m, 100), 100);
-    CHECK(mixer_pct_for(m, 110) > 100); /* someone else set it louder: shown as it is */
-    /* a headset whose driver gives no dB (the kernel drops bogus values): linear in steps */
+    CHECK(mixer_pct_for(m, 110) > 100);
+    /* a headset whose driver gives no dB (the kernel drops bogus values): no dB to put on the curve, linear in steps */
     CHECK(choose_playback_mixer({vol_ctl("Headset Playback Volume", 0, 37)}, m));
     CHECK(!m.has_db);
     CHECK_EQ(mixer_raw_for(m, 50), 19L);
     CHECK_EQ(mixer_pct_for(m, 19), 51);
     CHECK_EQ(mixer_raw_for(m, 150), 37L);
+    CHECK_EQ(mixer_step_target(m, 0, kVolumeStep), 5);
+    /* the software volume of a card without a mixer: the same curve */
+    CHECK_NEAR(20.0 * std::log10(volume_gain(50)), -18.06, 0.01);
+    CHECK_NEAR(20.0 * std::log10(volume_gain(40)), -23.88, 0.01);
+    CHECK_NEAR(volume_gain(100), 1.0, 1e-9);
+    CHECK_NEAR(volume_gain(0), 0.0, 1e-9);
 
     /* the card behind an ALSA device */
     CHECK_EQ(mixer_card_for("plughw:CARD=UC02,DEV=0"), std::string("hw:CARD=UC02"));
@@ -375,13 +427,13 @@ void test_output_mixer() {
     MixerLevel lv;
     CHECK_EQ(read_mixer(a, "hw:CARD=A", chosen, c, lv), 0);
     CHECK(lv.has_mixer);
-    CHECK_EQ(lv.pct, 67);
+    CHECK_EQ(lv.pct, 46); /* -20 dB on the server's curve */
     CHECK(!lv.muted);
     CHECK_EQ(chosen, std::string("hw:CARD=A"));
-    CHECK_EQ(write_mixer(a, "hw:CARD=A", c, 72), 0); /* a step up from 67 */
-    CHECK_EQ(a.values["Headset Playback Volume"], 86L);
+    CHECK_EQ(write_mixer(a, "hw:CARD=A", c, 51), 0); /* a step up from 46 */
+    CHECK_EQ(a.values["Headset Playback Volume"], 85L);
     CHECK_EQ(read_mixer(a, "hw:CARD=A", chosen, c, lv), 0);
-    CHECK_EQ(lv.pct, 72);
+    CHECK_EQ(lv.pct, 51);
     CHECK_EQ(write_mixer(a, "hw:CARD=A", c, 0), 0); /* 0 %: the switch mutes */
     CHECK_EQ(a.values["Headset Playback Switch"], 0L);
     CHECK_EQ(read_mixer(a, "hw:CARD=A", chosen, c, lv), 0);

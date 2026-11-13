@@ -829,7 +829,7 @@ struct VinylApp::Impl final : TransportHost {
                 std::fprintf(stderr, "[vinyl] volume: software %d %% for %s (no playback mixer)\n", app_volume_of(resume, t.key),
                              t.key.c_str());
             } else if (alsa) {
-                const int to = volume_after_step(std::max(0, cur), d);
+                const int to = mixer_step_target(mixer_choice, std::max(0, cur), d);
                 const int r = write_mixer(*alsa, t.card, mixer_choice, to);
                 if (r < 0) std::fprintf(stderr, "[vinyl] volume: %s %s: %s\n", t.card.c_str(), mixer_choice.volume.c_str(), alsa_error_text(r).c_str());
                 read_output_mixer(mono_ms_now(), true);

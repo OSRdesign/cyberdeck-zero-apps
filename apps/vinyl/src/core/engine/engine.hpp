@@ -14,7 +14,7 @@
  *   loss      when the output fails (a Bluetooth device switched off, a USB card pulled): the same device is looked for
  *             during 2.5 s (a Bluetooth profile switch re-creates the node: play on), else playback PAUSES at the frame
  *             heard and OutputLost is reported; the engine never moves to another output (D8).
- *   volume    an optional software gain (the in-app volume of D11, for an output the system volume does not reach).
+ *   volume    an optional software gain (only for an output without a playback mixer: D11 as the owner changed it).
  *
  * Commands come from the controller's thread (any thread), events and snapshots go back to it. LVGL-free.
  */
@@ -77,7 +77,7 @@ struct EngineSnapshot {
  * first two; stereo or more to mono averages the first two. */
 void convert_pcm(const void *in, unsigned in_bits, unsigned in_ch, void *out, SampleFormat out_fmt, unsigned out_ch,
                  size_t frames, float gain);
-/* The software gain of the in-app volume 0..100 (a square law: 50 = -12 dB). */
+/* The software gain 0..100 of an output without a mixer, on the sound server's cubic curve (50 = -18.06 dB). */
 float volume_gain(int volume);
 
 class Engine {
