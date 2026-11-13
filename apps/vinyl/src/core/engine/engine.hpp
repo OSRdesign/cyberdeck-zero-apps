@@ -77,8 +77,9 @@ struct EngineSnapshot {
  * first two; stereo or more to mono averages the first two. */
 void convert_pcm(const void *in, unsigned in_bits, unsigned in_ch, void *out, SampleFormat out_fmt, unsigned out_ch,
                  size_t frames, float gain);
-/* The software gain 0..100 of an output without a mixer, on the sound server's cubic curve (50 = -18.06 dB). */
-float volume_gain(int volume);
+/* The software gain of an output without a mixer for a level in dB (core/volume: its model's dB of the level): the
+ * amplitude 10^(dB / 20); -infinity (mute) is 0, 0 dB and above 1. */
+float volume_gain_db(double db);
 
 class Engine {
 public:

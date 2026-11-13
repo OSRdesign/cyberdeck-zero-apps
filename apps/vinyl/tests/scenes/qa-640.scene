@@ -20,11 +20,11 @@ expect notext "UP NEXT"
 expect notext "Menu"
 wait 300
 shot 02-now-volume
-# the group's "+" (an icon: no text to tap)
+# the group's "+" (an icon: no text to tap); one level up: 60 % (level 18 of 30) to 63 %
 tapxy 0.904 0.912
 wait 300
 shot 03-now-volume-up
-expect text "65"
+expect text "63"
 # the output button opens the Output page
 tap "Evolve 65"
 wait 400

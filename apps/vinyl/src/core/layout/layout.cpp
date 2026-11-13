@@ -18,8 +18,11 @@ SizeClass size_class(int w, int h) {
     const double a = static_cast<double>(w) / h;
     if (a < 0.9) return SizeClass::Portrait;
     if (a < 1.2) return SizeClass::Square;
-    if (a < 1.6) return w < 800 && h >= 480 ? SizeClass::Medium : SizeClass::Small;
-    return SizeClass::Large;
+    if (a >= 1.6) return SizeClass::Large;
+    /* aspect 1.2..1.6 (the coordinator, 2026-11-13): two panes from 800 wide and 480 high (800x600, 1024x768), the 4:3
+     * single pane from 640 wide and 480 high, the 480x320 layout below */
+    if (h >= 480) return w >= 800 ? SizeClass::Large : (w >= 640 ? SizeClass::Medium : SizeClass::Small);
+    return SizeClass::Small;
 }
 
 const char *class_name(SizeClass c) {

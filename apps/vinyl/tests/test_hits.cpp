@@ -119,6 +119,8 @@ const QaSize kQaSizes[] = {
     {480, 320, 40, 44, 43, "480x320 scenes (ppmm 608, 610)"},
     {480, 320, 40, 46, 0, "a 3.5-inch 480x320 panel (6.5 px/mm)"},
     {320, 480, 40, 44, 43, "320x480 scenes (ppmm 610)"},
+    {800, 600, 56, 64, 64, "800x600 (two panes, 9.2 px/mm)"},
+    {1024, 768, 56, 79, 79, "1024x768 (two panes, 11.3 px/mm)"},
 };
 
 bool hits(const R &a, const R &b) {

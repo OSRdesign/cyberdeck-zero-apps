@@ -5,12 +5,13 @@
  * px"), and the size classes that pick one (pure, no LVGL; tests/test_layout.cpp):
  *
  *   Small     480x320 (NP-480x320 of the full-UX canvas, owner 2026-11-13: "ok for the 480x320 layout"): landscape
- *             canvases from aspect 1.2 to 1.6 that are not Medium (480x320, 1024x768)
- *   Medium    640x480 (NP-640x480, owner 2026-11-13: "that works"): the same aspects where the width is under 800 and the
- *             height 480 or more (the deck's 640x480, 720x540)
+ *             canvases from aspect 1.2 to 1.6 under 480 high or under 640 wide (480x320, 600x400)
+ *   Medium    640x480 (NP-640x480, owner 2026-11-13: "that works"): the same aspects 640 to 799 wide and 480 or more high
+ *             (the deck's 640x480, 720x540)
  *   Portrait  320x480 (NowPlaying-320x480): canvases taller than wide (aspect under 0.9: 320x480, PDA 480x800, 800x1280)
  *   Square    480x480 (NowPlaying-480x480): aspect 0.9 to 1.2 (the HackBerry's 720x720)
- *   Large     800x480 (NowPlaying-800x480): aspect 1.6 and more (800x480, 1024x600, 1280x720, 1280x800), two panes
+ *   Large     800x480 (NowPlaying-800x480): aspect 1.6 and more (800x480, 1024x600, 1280x720, 1280x800), and the
+ *             aspects 1.2 to 1.6 from 800 wide and 480 high (800x600, 1024x768: the coordinator, 2026-11-13), two panes
  *
  * The top band is the launcher's (owner correction 2026-11-12): every page has the toolkit's header (cp0::ui::Page, its
  * title, its Esc, the shared status strip); only the drafts' content below it is Vinyl's. As Cassette does, the drafts'

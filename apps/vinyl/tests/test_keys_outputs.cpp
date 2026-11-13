@@ -334,8 +334,9 @@ void test_layout() {
     CHECK(size_class(480, 320) == SizeClass::Small);
     CHECK(size_class(640, 480) == SizeClass::Medium); /* the deck: NP-640x480 (owner, 2026-11-13) */
     CHECK(size_class(720, 540) == SizeClass::Medium);
-    CHECK(size_class(800, 600) == SizeClass::Small);   /* not under 800 wide: the 480x320 layout scaled */
-    CHECK(size_class(1024, 768) == SizeClass::Small);
+    CHECK(size_class(800, 600) == SizeClass::Large);   /* from 800 wide and 480 high: two panes (the coordinator) */
+    CHECK(size_class(1024, 768) == SizeClass::Large);
+    CHECK(size_class(799, 600) == SizeClass::Medium);
     CHECK(size_class(600, 400) == SizeClass::Small);   /* under 480 high */
     CHECK(size_class(320, 480) == SizeClass::Portrait);
     CHECK(size_class(480, 800) == SizeClass::Portrait);

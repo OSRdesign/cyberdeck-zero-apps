@@ -371,10 +371,11 @@ void test_decoders() {
         unsigned char p24[6];
         convert_pcm(stereo, 16, 2, p24, SampleFormat::S24_3LE, 2, 1, 1.0f);
         CHECK_EQ(static_cast<int>(p24[1] | (p24[2] << 8)), 1000);
-        CHECK_NEAR(volume_gain(50), 0.125, 1e-6); /* cubic: -18.06 dB, the server's curve */
-        CHECK_NEAR(volume_gain(40), 0.064, 1e-6); /* -23.88 dB */
-        CHECK_NEAR(volume_gain(0), 0.0, 1e-9);
-        CHECK_NEAR(volume_gain(100), 1.0, 1e-9);
+        CHECK_NEAR(volume_gain_db(-20.0), 0.1, 1e-6); /* linear in dB: amplitude 10^(dB / 20) */
+        CHECK_NEAR(volume_gain_db(-60.0), 0.001, 1e-7);
+        CHECK_NEAR(volume_gain_db(-6.0206), 0.5, 1e-4);
+        CHECK_NEAR(volume_gain_db(-1e9), 0.0, 1e-9); /* mute */
+        CHECK_NEAR(volume_gain_db(0.0), 1.0, 1e-9);
     }
     rm_tree(dir);
 }

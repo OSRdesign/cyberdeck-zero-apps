@@ -105,7 +105,10 @@ as set before"; B9 "partial pass, on evolve 65 the vol chip makes more than a se
   above 0 dB or the control's max; a step down that cannot move the control any more mutes. The software volume uses the
   same curve (amplitude (p / 100)^3). A control without dB data stays linear in steps. Same percent, same loudness, on
   every board. The owner's listening test of the curve (2026-11-13): "yes volume at 50% is perceived the same, it's a
-  pass".
+  pass": the same output (the Sharkoon DAC) on two boards (the HackBerry and zero8), not a rule for every output. The
+  owner's correction, 2026-11-13: "50% sounds the same was for the same output DAC used on different boards not a
+  generic rule independent of the hardware used." **This curve is replaced by the levels of "Volume levels fitted to
+  each output" below.**
 - The volume controls the output Vinyl plays on; the launcher's volume keys still act on the default sink; when the
   chosen output is the default sink, Vinyl's level follows the launcher's keys (the README's rule, design QA run 3 D-71).
 - The separate in-app volume is gone from the UI; an older state.json's `app_volume` is read and kept, never applied.
@@ -163,10 +166,10 @@ coordinator's correction, 2026-11-13).
 
 - Muted, the volume group shows the speaker-off mark and "Muted" (the mark alone where the word does not fit), never the
   level it will come back at; the same for a mute from elsewhere (the launcher's mute key, alsamixer, a headset).
-- "+" while muted brings the sound back at the last level (one step above the card's lowest level when that is where it
-  was, so something is heard); "-" while muted does nothing; "-" at the card's lowest level mutes (the card's switch; a
-  card without one stays at its lowest level). The card's lowest level shows as what it is on the curve (the Sharkoon's
-  -45 dB is 18 %).
+- "+" while muted brings the sound back at the last level; "-" while muted does nothing; "-" at the first level mutes
+  (the card's switch, the sink's mute, or the control's own mute value; a card with none of them stays at its first
+  level). With the levels fitted to each output (below) the first level is the bottom of the output's window and sounds
+  (the Sharkoon's -45 dB is its level 1, 4 %), so the earlier "one step above the floor" is gone.
 - The sound server's placeholder output at start (`auto_null`) never shows a level ("--").
 
 ## The record (owner, 2026-11-13)
@@ -213,9 +216,54 @@ mono, on the Pi 4B and the Pi 3A+ alike; amixer read 391 (+3.91 dB) while Vinyl 
   puts the lowest step's real dB back (a dB scale is linear in steps); the lowest step counts as mute (shown Muted, 0 %;
   a level above 0 % never sets it). Without that symbol the control is taken as having no dB data (linear in steps).
 - Never above 0 dB (raw 0 here, not 400); a level above 0 dB set by something else reads 100 %. Each set is logged with
-  a fresh read of the control: `volume: set mixer <card> '<control>' P % raw=N (target X dB) read back raw=M`.
+  a fresh read of the control: `volume: set mixer <card> '<control>' P % raw=N (target X dB) read back raw=M`. Replaced
+  the same day by the owner's levels fitted to each output (above): the jack's real top, +4.00 dB, is its 100 % now, and
+  the log line is the new one.
 - A board-probe tool, `tools/mixer-probe` (`vinyl-mixer-probe`, arm64 and amd64, not packaged), lists a card's controls
   as Vinyl and as alsa-lib's simple mixer see them, sets a level with Vinyl's code and reads it back.
+
+## Volume levels fitted to each output (owner, 2026-11-13)
+
+The owner: "I think we're wrong trying to get all sound output to have the same dB at 50%, 50% should be the real mid
+output of the soundcard/DAC so if the pi's internal jack tops at +4dB as this forces us to have a specific curve. let's
+read the output characteristics and use steps adapted for each output so not necessarily 5% increments as described
+here: https://www.dr-lex.be/info-stuff/implement-a-volume-control.html where each step should be 1-2db Increment across
+the full range of the DAC/output". And, on the earlier listening pass: "50% sounds the same was for the same output DAC
+used on different boards not a generic rule independent of the hardware used."
+
+The evidence behind it (the coordinator): the Sharkoon DAC spans only -45..0 dB, so the common curve (5 % = -78 dB,
+20 % = -42 dB) left 5 to 18 % on the DAC's floor and then jumped (the owner: the sound barely changed from 5 to 20 %,
+then four to five times louder at 25 %); the Pi 3A+ jack at the same -18 dB is quieter than a USB DAC (the hardware's
+own sensitivity), and the Pi's control goes to +4 dB.
+
+Dr. Lex's article (read 2026-11-13): volume must be exponential in amplitude, which is linear in dB ("If your control
+already works in dB, don't apply a non-linear transformation. Just choose the range and step size."); "A sensible
+assumption for consumer equipment is that it will have a usable range of 60 dB"; for discrete controls "2 dB is pretty
+much ideal as step size", 1 to 3 dB acceptable (under 1 dB is not heard, 4 dB is the limit); "A volume control should
+not be based on percentages", unless the percentage maps onto a dB range; true silence only at the lowest position.
+
+- The rule "the same percent is the same dB on every output" is dropped. What holds instead: the same output (the same
+  DAC or card model, the same dB range) has the same levels at the same dB on every board, through a sound server or not
+  (a unit test: the Sharkoon range on two boards gives identical tables).
+- One model per output (`OutputVolumeModel`, `src/core/volume/output_volume.*`): the window is the output's real range,
+  its upper 60 dB at most, [max(lo, hi - 60), hi], hi the real top (the Pi jack's +4.00 dB included: 100 % is the
+  output's top, never above it); N = ceil(window / 2 dB) levels (the coordinator's rule; at least 2, a level never under
+  1 dB nor under the control's own step); level 0 is mute (the switch, the sink's mute, or the control's mute value),
+  level 1 the window's bottom, level N its top, dB(i) = lo + (i - 1) (hi - lo) / (N - 1); the percent shown is
+  round(100 i / N); a press moves one level. With N - 1 intervals a 60 dB window has levels of 60 / 29 = 2.07 dB.
+- Where the range comes from: an ALSA control's TLV (the mute-flag fix included), set by raw value with the control's
+  own dB scale and read back fresh; a sound-server sink's volume set as the server's dB (pa_sw_volume_from_dB), its window
+  the range of the ALSA card behind it (the sink's alsa.card / api.alsa.card / api.alsa.path) placed under the sink's 0 dB
+  (the server puts the hardware's top at the sink's 100 %), so a DAC with a -45 dB floor never gets a level below it; a
+  sink with no known range (Bluetooth A2DP absolute volume, software sinks) -60..0 dB. The sink's base volume, volume
+  steps and flags are logged once per sink for the probes. A level changed elsewhere reads as the nearest level.
+- The tables (unit tests, `tests/test_volume.cpp`): the Sharkoon -45..0 dB, 23 levels of 2.05 dB, the middle level 12 =
+  52 % = -22.5 dB (no level shows exactly 50 %: 23 is odd); the Pi jack -56..+4 dB, 30 levels of 2.07 dB, 50 % = level
+  15 = -27.03 dB (the window's middle, -26 dB, lies between levels 15 and 16); the Apple adapter -60..0 dB, 30 levels,
+  50 % = -31.03 dB; an unknown range -60..0 dB, the same.
+- The log line of a set: `volume: set <output> step i/N P % target X dB raw=M read back raw=K` (a sink's raw is its
+  pa_volume_t, its read-back a fresh ask of the sink). The software volume of a card without a mixer: -60..0 dB, the
+  amplitude 10^(dB / 20), kept as its percent in state.json.
 
 ## 640x480 and 480x320 (owner, 2026-11-13)
 
@@ -231,8 +279,10 @@ The owner, on the coordinator's proposals of the full-UX canvas (NP-640x480 and 
 - 480x320 (the small class): cover 148, the info column at 228: title, artist, album, one plain line for the format and
   gapless ("AAC 44.1 / 161k, gapless"), the output as a full-width button, the volume group under it (34 high; its "-"
   56 wide and its "+" 80, as the draft draws them), the seek row, six transport keys (shuffle, previous, play, next,
-  repeat, queue; the Menu key is the seventh in P2). Screens of that shape that are not medium (1024x768, 800x600: the
-  width rule) take this layout scaled.
+  repeat, queue; the Menu key is the seventh in P2).
+- The coordinator, same day: 800x600 and 1024x768 must not get the 480x320 layout: aspects 1.2 to 1.6 take the two-pane
+  large layout from 800 wide and 480 high, the 4:3 single pane from 640 to 799 wide (and 480 high), the 480x320 layout
+  below.
 - No Vol chip and no volume strip on any layout any more: square, portrait, large, 640x480 and 480x320 share the volume
   group (the strip's code is gone).
 - Touch: the drafts give the deck's 640x480 rows (output button, seek, keys, bottom row) less than 7 mm at its 11.3

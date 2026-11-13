@@ -185,7 +185,17 @@ void sink_cb(pa::Context *, const pa::SinkInfo *i, int eol, void *ud) {
     v.card = i->card;
     v.state = state_of(i->state);
     v.volume_pct = pulse_volume_pct(i->volume.values, i->volume.channels); /* VINYL: the Vol chip follows it */
+    if (i->volume.channels > 0) { /* VINYL: the volume model reads the raw value */
+        uint32_t top = 0;
+        for (unsigned ch = 0; ch < i->volume.channels && ch < pa::kChannelsMax; ++ch) top = std::max(top, i->volume.values[ch]);
+        v.volume_raw = top;
+    }
     v.muted = i->mute != 0;
+    v.base_volume = i->base_volume;
+    v.n_volume_steps = i->n_volume_steps;
+    v.sink_flags = i->flags;
+    v.alsa_card = pulse_alsa_card(prop(d->L, i->proplist, "alsa.card"), prop(d->L, i->proplist, "api.alsa.card"),
+                                  first_of(prop(d->L, i->proplist, "api.alsa.path"), prop(d->L, i->proplist, "device.string")));
     read_props(d->L, i->proplist, v);
     d->out->push_back(v);
 }
@@ -654,7 +664,7 @@ public:
         return c.run_op(c.L->context_get_sink_info_list(c.ctx, sink_cb, &d), kOpTimeoutMs);
     }
 
-    int set_sink_level(const std::string &sink, unsigned channels, int pct) override { /* VINYL */
+    int set_sink_volume_raw(const std::string &sink, unsigned channels, uint32_t volume, int mute) override { /* VINYL */
         std::lock_guard<std::mutex> g(mu_);
         if (!conn_) return kPulseState;
         Conn &c = *conn_;
@@ -663,12 +673,27 @@ public:
         if (!c.ready()) return kPulseDisconnected;
         pa::CVolume cv{};
         cv.channels = static_cast<uint8_t>(std::max(1u, std::min(channels, pa::kChannelsMax)));
-        const uint32_t v = static_cast<uint32_t>((static_cast<uint64_t>(std::max(0, std::min(pct, 100))) * 0x10000 + 50) / 100);
-        for (unsigned ch = 0; ch < cv.channels; ++ch) cv.values[ch] = v;
+        for (unsigned ch = 0; ch < cv.channels; ++ch) cv.values[ch] = volume;
         int r = c.run_op(c.L->context_set_sink_volume_by_name(c.ctx, sink.c_str(), &cv, nullptr, nullptr), kOpTimeoutMs);
-        if (r == 0 && pct > 0 && c.L->context_set_sink_mute_by_name)
-            r = c.run_op(c.L->context_set_sink_mute_by_name(c.ctx, sink.c_str(), 0, nullptr, nullptr), kOpTimeoutMs);
+        if (r == 0 && mute >= 0 && c.L->context_set_sink_mute_by_name)
+            r = c.run_op(c.L->context_set_sink_mute_by_name(c.ctx, sink.c_str(), mute ? 1 : 0, nullptr, nullptr), kOpTimeoutMs);
         return r;
+    }
+
+    int read_sink_volume(const std::string &sink, uint32_t &volume, bool &muted) override { /* VINYL */
+        std::lock_guard<std::mutex> g(mu_);
+        if (!conn_) return kPulseState;
+        Conn &c = *conn_;
+        LockGuard lg(c);
+        if (!c.ready()) return kPulseDisconnected;
+        std::vector<PulseDevice> one;
+        DeviceList d{c.L, &one};
+        const int r = c.run_op(c.L->context_get_sink_info_by_name(c.ctx, sink.c_str(), sink_cb, &d), kOpTimeoutMs);
+        if (r != 0) return r;
+        if (one.empty() || one.front().volume_raw < 0) return kPulseNoDevice;
+        volume = static_cast<uint32_t>(one.front().volume_raw);
+        muted = one.front().muted;
+        return 0;
     }
 
     int list_cards(std::vector<PulseCard> &out) override {

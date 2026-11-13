@@ -102,7 +102,7 @@ struct Actions {
     std::function<void(int)> queue_button;           /* 0 move up, 1 move down, 2 remove, 3 clear all */
     std::function<void()> mini_open;                 /* the mini player (opens now playing) */
     std::function<void(bool, int)> transport;        /* previous (false) / next (true): 0 press, 1 release, 2 cancel */
-    std::function<void(int)> volume_step;            /* the volume group's "-" / "+": -5 / +5 */
+    std::function<void(int)> volume_step;            /* the volume group's "-" / "+": one level down / up */
     std::function<void()> volume_unavailable;        /* a tap on the volume chip where nothing can change the volume */
     std::function<void()> queue_clear;               /* "Clear the queue?" answered Clear */
 };

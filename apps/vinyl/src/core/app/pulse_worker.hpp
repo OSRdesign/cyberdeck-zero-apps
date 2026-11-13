@@ -74,9 +74,10 @@ public:
     bool request_scan(const ScanRequest &rq);
     bool request_card(const std::string &name);
     bool request_identity(std::shared_ptr<PulseCapture> stream);
-    /* VINYL: sets a sink's volume (PulseApi::set_sink_level) on the worker; a newer request replaces one still waiting, so
-     * quick presses never queue up. false only after stop(). */
-    bool request_sink_level(const std::string &sink, unsigned channels, int pct);
+    /* VINYL: sets a sink's volume and mute (PulseApi::set_sink_volume_raw) on the worker, then asks the sink again and
+     * logs `log` + " raw=<volume> read back raw=<what the sink holds>" (a fresh read); a newer request replaces one still
+     * waiting, so quick presses never queue up. false only after stop(). */
+    bool request_sink_volume(const std::string &sink, unsigned channels, uint32_t volume, int mute, const std::string &log);
     int sink_levels_done() const;
     bool scan_pending() const;
     bool card_pending() const;
@@ -102,7 +103,9 @@ private:
     bool level_busy_ = false, level_have_ = false; /* VINYL */
     std::string level_sink_;
     unsigned level_channels_ = 2;
-    int level_pct_ = 0, levels_done_ = 0;
+    uint32_t level_volume_ = 0;
+    int level_mute_ = -1, levels_done_ = 0;
+    std::string level_log_;
     bool scan_ready_ = false, card_ready_ = false, ident_ready_ = false;
     ScanResult scan_;
     CardResult card_;

@@ -5,6 +5,8 @@
  */
 #include "pulse_worker.hpp"
 
+#include <cstdio> /* VINYL: the volume read-back line */
+
 namespace vinyl {
 
 PulseWorker::PulseWorker(PulseApi &api) : api_(api) { th_ = std::thread([this] { run(); }); }
@@ -65,21 +67,25 @@ bool PulseWorker::request_scan(const ScanRequest &rq) {
     return true;
 }
 
-bool PulseWorker::request_sink_level(const std::string &sink, unsigned channels, int pct) { /* VINYL */
+bool PulseWorker::request_sink_volume(const std::string &sink, unsigned channels, uint32_t volume, int mute,
+                                      const std::string &log) { /* VINYL */
     {
         std::lock_guard<std::mutex> g(mu_);
         if (quit_) return false;
         level_sink_ = sink;
         level_channels_ = channels;
-        level_pct_ = pct;
+        level_volume_ = volume;
+        level_mute_ = mute;
+        level_log_ = log;
         level_have_ = true;
         if (level_busy_) return true; /* the running loop takes the newest */
         level_busy_ = true;
         jobs_.push_back([this] {
             for (;;) {
-                std::string s;
+                std::string s, log;
                 unsigned ch = 2;
-                int pc = 0;
+                uint32_t vol = 0;
+                int mute = -1;
                 {
                     std::lock_guard<std::mutex> g2(mu_);
                     if (!level_have_ || quit_) {
@@ -88,10 +94,22 @@ bool PulseWorker::request_sink_level(const std::string &sink, unsigned channels,
                     }
                     s = level_sink_;
                     ch = level_channels_;
-                    pc = level_pct_;
+                    vol = level_volume_;
+                    mute = level_mute_;
+                    log = level_log_;
                     level_have_ = false;
                 }
-                api_.set_sink_level(s, ch, pc);
+                const int r = api_.set_sink_volume_raw(s, ch, vol, mute);
+                uint32_t back = 0;
+                bool back_muted = false;
+                const int rr = r == 0 ? api_.read_sink_volume(s, back, back_muted) : r;
+                if (!log.empty()) {
+                    if (rr == 0)
+                        std::fprintf(stderr, "[vinyl] volume: %s raw=%u read back raw=%u%s\n", log.c_str(), vol, back,
+                                     back_muted ? " (muted)" : "");
+                    else
+                        std::fprintf(stderr, "[vinyl] volume: %s raw=%u read back failed (%d)\n", log.c_str(), vol, rr);
+                }
                 std::lock_guard<std::mutex> g2(mu_);
                 ++levels_done_;
             }

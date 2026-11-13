@@ -77,8 +77,9 @@ public:
     void set_change_callback(PulseChangeCallback cb) override;
     int open_capture(const PulseCaptureRequest &req, std::unique_ptr<PulseCapture> &out, std::string *why) override;
     int open_playback(const PulsePlaybackRequest &req, std::unique_ptr<PulsePlayback> &out, std::string *why) override;
-    int set_sink_level(const std::string &sink, unsigned channels, int pct) override; /* VINYL */
-    std::vector<std::pair<std::string, int>> levels_set; /* VINYL: every set_sink_level (sink, pct), in order */
+    int set_sink_volume_raw(const std::string &sink, unsigned channels, uint32_t volume, int mute) override; /* VINYL */
+    int read_sink_volume(const std::string &sink, uint32_t &volume, bool &muted) override;              /* VINYL */
+    std::vector<std::pair<std::string, uint32_t>> levels_set; /* VINYL: every set_sink_volume_raw (sink, volume), in order */
 
     /* the server's side, driven by the tests (any thread) */
     void advance(double seconds) { clock.store(clock.load() + seconds); }
@@ -97,7 +98,8 @@ public:
     void add_sink(const PulseDevice &d);
     void remove_sink(const std::string &name);
     /* VINYL: a sink's volume or mute changes (a volume key, a headset's buttons), with the server's change event */
-    void set_sink_volume(const std::string &name, int pct, bool muted = false);
+    void set_sink_volume(const std::string &name, int pct, bool muted = false); /* pct of 0x10000 (the raw value follows) */
+    void set_sink_raw(const std::string &name, uint32_t volume, bool muted = false);
     /* a card appears (a new index unless it has one) or goes away, with the server's change event */
     uint32_t add_card(const PulseCard &c);
     void remove_card(const std::string &name);

@@ -86,8 +86,16 @@ struct PulseDevice {
     std::string device_api;         /* device.api: "bluez5", "alsa" */
     int volume_pct = -1;            /* VINYL: sinks: the loudest channel in percent of the normal volume (pa_cvolume_max,
                                        as pactl shows it); -1 = not reported */
+    int64_t volume_raw = -1;        /* VINYL: sinks: the loudest channel's pa_volume_t (0x10000 = 0 dB); -1 = not reported */
     bool muted = false;             /* VINYL: sinks */
+    uint32_t base_volume = 0;       /* VINYL: sinks: pa_sink_info.base_volume (the hardware's 0 dB under a louder top) */
+    uint32_t n_volume_steps = 0;    /* VINYL: sinks: pa_sink_info.n_volume_steps (a hardware volume without dB) */
+    int sink_flags = 0;             /* VINYL: sinks: pa_sink_flags_t (0x20 DECIBEL_VOLUME, 0x02 HW_VOLUME_CTRL) */
+    int alsa_card = -1;             /* VINYL: sinks: the ALSA card behind it (alsa.card, api.alsa.card, api.alsa.path) */
 };
+/* VINYL: the ALSA card number of a sink's properties: alsa.card, else api.alsa.card, else the N of an "hw:N" /
+ * "front:N" / "hw:N,0" api.alsa.path or device.string; -1 when none (Bluetooth, software sinks). */
+int pulse_alsa_card(const std::string &alsa_card, const std::string &api_alsa_card, const std::string &path);
 /* VINYL: a pa_cvolume's loudest channel in percent of PA_VOLUME_NORM (0x10000), rounded. */
 int pulse_volume_pct(const uint32_t *values, unsigned channels);
 
@@ -477,10 +485,12 @@ public:
                              std::string *why = nullptr) = 0;
     virtual int open_playback(const PulsePlaybackRequest &req, std::unique_ptr<PulsePlayback> &out,
                               std::string *why = nullptr) = 0;
-    /* VINYL: sets a sink's volume to `pct` percent of the normal volume on its `channels` channels (the server's own
-     * percent, as pactl shows it) and un-mutes it above 0 %. A round trip: call it from the worker, never the UI thread.
-     * 0, kPulseMissing (libpulse lacks the call), kPulseNoDevice, kPulseState, kPulseTimeout. */
-    virtual int set_sink_level(const std::string &sink, unsigned channels, int pct) = 0;
+    /* VINYL: sets a sink's volume to the pa_volume_t `volume` on its `channels` channels (Vinyl computes it from a dB
+     * target: pa_sw_volume_from_dB) and its mute: mute < 0 leaves it, 0 un-mutes, 1 mutes. A round trip: call it from the
+     * worker, never the UI thread. 0, kPulseMissing (libpulse lacks the call), kPulseNoDevice, kPulseState, kPulseTimeout. */
+    virtual int set_sink_volume_raw(const std::string &sink, unsigned channels, uint32_t volume, int mute) = 0;
+    /* VINYL: a sink's volume asked again (pa_context_get_sink_info_by_name: the loudest channel) and its mute. */
+    virtual int read_sink_volume(const std::string &sink, uint32_t &volume, bool &muted) = 0;
 };
 
 /* The production implementation: loads libpulse.so.0 on the first connect(). Never null. */

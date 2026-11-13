@@ -13,7 +13,7 @@ expect notext "Vol 60"
 # the volume group on every layout (owner, 2026-11-13): no Vol chip, no strip
 wait 300
 shot 02-now-volume
-# the group's "+" (an icon: no text to tap), measured on each size's shot
+# the group's "+" (an icon: no text to tap), measured on each size's shot; one level up: 60 % (level 18 of 30) to 63 %
 @800x480 tapxy 0.922 0.849
 @480x480 tapxy 0.881 0.922
 @720x720 tapxy 0.901 0.919
@@ -21,7 +21,7 @@ shot 02-now-volume
 @480x640 tapxy 0.809 0.928
 wait 300
 shot 03-now-volume-up
-expect text "65"
+expect text "63"
 # the output button (square, portrait) or chip (large) opens the Output page
 tap "Evolve 65"
 wait 400

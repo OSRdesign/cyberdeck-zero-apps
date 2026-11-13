@@ -7,6 +7,7 @@
 
 #include "../state/resume.hpp"
 #include "../util/atomic_file.hpp"
+#include "../volume/output_volume.hpp"
 
 #include <chrono>
 #include <cstdio>
@@ -22,6 +23,13 @@
 namespace vinyl {
 
 namespace {
+
+/* a demonstration sink at the level of an output without a known range (-60..0 dB) that shows `pct` */
+void demo_volume(PulseDevice &d, int pct) {
+    const OutputVolumeModel m = default_volume_model();
+    d.volume_raw = sink_volume_for_db(m.db_of(m.from_pct(pct)));
+    d.volume_pct = static_cast<int>((d.volume_raw * 100 + 0x8000) / 0x10000);
+}
 
 void le16(std::string &s, uint16_t v) {
     s += static_cast<char>(v & 0xFF);
@@ -232,20 +240,20 @@ OutputWorld demo_output_world(bool lite, const std::string &variant) {
     evolve.bt_profile = "a2dp-sink";
     evolve.rate = 48000;
     evolve.channels = 2;
-    evolve.volume_pct = 60; /* the levels the chip shows (D11 as changed: the playing sink's own volume) */
+    demo_volume(evolve, 60); /* the levels the group shows (D11 as changed: the playing sink's own volume) */
     PulseDevice usb;
     usb.name = "alsa_output.usb-UC02.analog-stereo";
     usb.description = "USB sound card UC02";
     usb.bus = "usb";
     usb.rate = 48000;
     usb.channels = 2;
-    usb.volume_pct = 40;
+    demo_volume(usb, 40);
     PulseDevice hdmi;
     hdmi.name = "alsa_output.platform-107c701400.hdmi.hdmi-stereo";
     hdmi.description = "Built-in Audio Digital Stereo (HDMI)";
     hdmi.rate = 48000;
     hdmi.channels = 2;
-    hdmi.volume_pct = 100;
+    demo_volume(hdmi, 100);
     o.sinks = {evolve, usb, hdmi};
     o.default_sink = evolve.name;
     if (variant == "long") { /* a USB DAC with a long name, the default output */
@@ -255,7 +263,7 @@ OutputWorld demo_output_world(bool lite, const std::string &variant) {
         dac.bus = "usb";
         dac.rate = 48000;
         dac.channels = 2;
-        dac.volume_pct = 70;
+        demo_volume(dac, 70);
         o.sinks.push_back(dac);
         o.default_sink = dac.name;
     }

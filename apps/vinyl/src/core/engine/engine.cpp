@@ -22,11 +22,10 @@ const char *play_state_name(PlayState s) {
     }
 }
 
-float volume_gain(int volume) {
-    if (volume <= 0) return 0.0f;
-    if (volume >= 100) return 1.0f;
-    const float v = volume / 100.0f;
-    return v * v * v; /* the sound server's cubic curve: 60 log10(p / 100) dB, the same loudness for the same percent */
+float volume_gain_db(double db) {
+    if (!(db > -200.0)) return 0.0f; /* mute (and NaN) */
+    if (db >= 0.0) return 1.0f;
+    return static_cast<float>(std::pow(10.0, db / 20.0)); /* linear in dB (Dr. Lex: exponential amplitude) */
 }
 
 void convert_pcm(const void *in, unsigned in_bits, unsigned in_ch, void *out, SampleFormat out_fmt, unsigned out_ch,

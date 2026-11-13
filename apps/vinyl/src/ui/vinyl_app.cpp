@@ -151,8 +151,9 @@ struct VinylApp::Impl final : TransportHost {
      * on-screen buttons and the media keys, all the same */
     TransportPress transport{*this};
     bool scan_muted = false;
-    /* the playing output's volume (D11 as changed 2026-11-12): a sink level asked for and shown until the server's event
-     * brings it (1.5 s at most), the card mixer Vinyl reads when there is no server */
+    /* the playing output's volume (D11 as changed 2026-11-12), in its own levels (core/volume, the owner's decision of
+     * 2026-11-13): a sink level asked for and shown until the server's event brings it (1.5 s at most), the card mixer
+     * Vinyl reads when there is no server, the model of the sink (its card's range) found once per sink */
     int pending_level = -1;
     std::string pending_sink;
     uint64_t pending_until = 0;
@@ -160,6 +161,9 @@ struct VinylApp::Impl final : TransportHost {
     MixerChoice mixer_choice;
     MixerLevel mixer_level;
     uint64_t last_mixer_read = 0;
+    mutable std::string model_sink;
+    mutable int model_card = -2;
+    mutable OutputVolumeModel model_of_sink;
 
     /* ------------------------------------------------------------------------------------------ start */
 
@@ -184,7 +188,10 @@ struct VinylApp::Impl final : TransportHost {
                 for (PulseDevice &d : world.sinks) d.muted = true;
             if (env_on("VINYL_DEMO_NOVOLUME")) { /* the server reports no level for its sinks: "--", nothing to change */
                 status.volume = -1;
-                for (PulseDevice &d : world.sinks) d.volume_pct = -1;
+                for (PulseDevice &d : world.sinks) {
+                    d.volume_pct = -1;
+                    d.volume_raw = -1;
+                }
             }
         } else {
             roots = system_roots();
@@ -740,8 +747,8 @@ struct VinylApp::Impl final : TransportHost {
                 queue_button(3);
             }
             break;
-        case K_MINUS: volume_step(-kVolumeStep); break; /* the playing output's volume (D11 as changed) */
-        case K_EQUAL: volume_step(kVolumeStep); break;
+        case K_MINUS: volume_step(-1); break; /* the playing output's volume (D11 as changed), one level */
+        case K_EQUAL: volume_step(1); break;
         default: break;
         }
     }
@@ -809,29 +816,71 @@ struct VinylApp::Impl final : TransportHost {
         if (!force && t.card == mixer_card && now - last_mixer_read < 300) return;
         last_mixer_read = now;
         if (t.card != mixer_card) mixer_choice_card.clear();
+        const bool changed = t.card != mixer_card || !mixer_choice.ok();
         mixer_card = t.card;
         read_mixer(*alsa, t.card, mixer_choice_card, mixer_choice, mixer_level);
+        if (changed && mixer_choice.ok())
+            std::fprintf(stderr, "[vinyl] volume: %s '%s' raw %ld..%ld%s: %s\n", t.card.c_str(), mixer_choice.volume.c_str(),
+                         mixer_choice.min, mixer_choice.max, mixer_choice.min_is_mute ? " (min is mute)" : "",
+                         volume_model_text(mixer_choice.model).c_str());
     }
 
-    /* the level the chip shows: the sink's own, the mixer's, or the software level; -1 = not known */
-    int output_level(bool *muted = nullptr) const {
+    /* A sink's levels (core/volume sink_volume_model): the range of the ALSA card behind it (its proplist), moved under
+     * the sink's 0 dB; -60..0 dB for a sink without one (Bluetooth, software sinks). Found once per sink and card. */
+    const OutputVolumeModel &sink_model(const PulseDevice &d) const {
+        if (d.name == model_sink && d.alsa_card == model_card) return model_of_sink;
+        model_sink = d.name;
+        model_card = d.alsa_card;
+        MixerChoice mc;
+        bool have = false;
+        std::string card;
+        if (d.alsa_card >= 0 && alsa) {
+            card = "hw:" + std::to_string(d.alsa_card);
+            std::vector<CtlInfo> ctls;
+            if (alsa->mixer_list(card, ctls) >= 0) have = choose_playback_mixer(ctls, mc) && mc.has_db;
+        }
+        model_of_sink = sink_volume_model(have ? &mc : nullptr);
+        std::string from = have ? card + " '" + mc.volume + "' " + volume_model_text(mc.model) : std::string("no card range known");
+        std::fprintf(stderr, "[vinyl] volume: sink %s: %s (%s; base volume 0x%x, %u volume steps, flags 0x%x)\n", d.name.c_str(),
+                     volume_model_text(model_of_sink).c_str(), from.c_str(), d.base_volume, d.n_volume_steps, d.sink_flags);
+        return model_of_sink;
+    }
+
+    /* the software level of a card without a mixer: -60..0 dB, kept as its percent */
+    static OutputVolumeModel software_model() { return default_volume_model(); }
+
+    /* The playing output's model and level (-1: not known; 0: muted by the control's own mute value or a silent sink). */
+    int output_step(bool *muted = nullptr, OutputVolumeModel *model = nullptr) const {
         if (muted) *muted = false;
         const VolTarget t = volume_target();
         if (t.kind == VolTarget::Kind::Sink) {
-            int pct = -1;
-            bool m = false;
-            if (!sink_volume_of(world, t.sink, pct, m)) return -1;
-            if (pending_level >= 0 && pending_sink == t.sink && mono_ms_now() < pending_until && pct != pending_level)
+            const PulseDevice *d = sink_device_of(world, t.sink);
+            if (!d || d->volume_raw < 0) return -1;
+            const OutputVolumeModel &m = sink_model(*d);
+            if (model) *model = m;
+            int lv = sink_level_for_volume(m, static_cast<uint32_t>(d->volume_raw));
+            if (pending_level >= 0 && pending_sink == t.sink && mono_ms_now() < pending_until && lv != pending_level)
                 return pending_level; /* asked for, the server's event not back yet */
-            if (muted) *muted = m;
-            return pct;
+            if (muted) *muted = d->muted || lv == 0;
+            return lv;
         }
         if (t.kind == VolTarget::Kind::Mixer) {
-            if (software_volume(t)) return app_volume_of(resume, t.key);
+            if (software_volume(t)) {
+                if (model) *model = software_model();
+                return software_model().from_pct(app_volume_of(resume, t.key));
+            }
+            if (model) *model = mixer_choice.model;
             if (muted) *muted = mixer_level.muted;
-            return mixer_level.pct;
+            return mixer_level.level;
         }
         return -1;
+    }
+
+    /* the percent the group shows: the level's place among the output's levels; -1 = not known */
+    int output_level(bool *muted = nullptr) const {
+        OutputVolumeModel m;
+        const int lv = output_step(muted, &m);
+        return lv < 0 ? -1 : m.pct_of(lv);
     }
 
     /* the group and the keys can change it */
@@ -841,47 +890,71 @@ struct VinylApp::Impl final : TransportHost {
         return t.kind == VolTarget::Kind::Mixer;
     }
 
-    /* the engine's gain: silent while a long press scans; the software level only for a card without a mixer; else
-     * unity (the output's own volume does the work, Vinyl's stream stays at 100 %) */
+    /* the engine's gain: silent while a long press scans; the software level only for a card without a mixer (linear in
+     * dB over -60..0); else unity (the output's own volume does the work, Vinyl's stream stays at 100 %) */
     void apply_gain() {
         if (!engine) return;
         const VolTarget t = volume_target();
-        engine->set_gain(scan_muted ? 0.0f : software_volume(t) ? volume_gain(app_volume_of(resume, t.key)) : 1.0f);
+        float gain = 1.0f;
+        if (software_volume(t)) {
+            const OutputVolumeModel m = software_model();
+            const int lv = m.from_pct(app_volume_of(resume, t.key));
+            gain = lv <= 0 ? 0.0f : volume_gain_db(m.db_of(lv));
+        }
+        engine->set_gain(scan_muted ? 0.0f : gain);
     }
 
-    /* the group's and the keys' "-" / "+" (core/volume: sink_press, mixer_press), kVolumeStep at a time: while muted "-" does
-     * nothing and "+" brings the sound back at its level; "-" at the card's floor mutes */
+    /* the group's and the keys' "-" / "+" (core/volume: sink_press, mixer_press), one level of the output a press: while
+     * muted "-" does nothing and "+" brings the sound back at its level; "-" at level 1 mutes */
     void volume_step(int d) {
         const VolTarget t = volume_target();
         bool muted = false;
-        const int cur = output_level(&muted);
+        OutputVolumeModel m;
+        const int cur = output_step(&muted, &m);
         if (t.kind == VolTarget::Kind::Sink) {
-            const VolumePress p = sink_press(cur, muted, d);
-            if (p.kind != VolumePress::Kind::Set) return;
+            const VolumePress p = sink_press(m, cur, muted, d);
+            if (p.kind == VolumePress::Kind::None) return;
+            const int level = p.kind == VolumePress::Kind::Mute ? cur : p.level;
+            const uint32_t vol = sink_volume_for_db(m.db_of(level));
+            const int mute = p.kind == VolumePress::Kind::Mute ? 1 : 0;
             if (demo) {
                 for (PulseDevice &s2 : world.sinks)
                     if (s2.name == t.sink) {
-                        s2.volume_pct = p.pct;
-                        if (p.pct > 0) s2.muted = false;
+                        s2.volume_raw = vol;
+                        s2.volume_pct = static_cast<int>((static_cast<uint64_t>(vol) * 100 + 0x8000) / 0x10000);
+                        s2.muted = mute != 0;
                     }
             } else if (worker) {
-                worker->request_sink_level(t.sink, t.channels, p.pct); /* above 0 % it also un-mutes */
-                pending_level = p.pct;
-                pending_sink = t.sink;
-                pending_until = mono_ms_now() + 1500;
+                /* "set sink <name> step i/N P % target X dB"; the worker adds " raw=<set> read back raw=<what the sink
+                 * holds>" from a fresh read */
+                std::string log = mute ? "set sink " + t.sink + " muted (level " + std::to_string(level) + " kept)"
+                                       : volume_set_log_text("sink " + t.sink, m, level, vol, -1, 0);
+                if (const size_t cut_at = log.find(" raw="); cut_at != std::string::npos) log.resize(cut_at);
+                worker->request_sink_volume(t.sink, t.channels, vol, mute, log);
+                if (!mute) {
+                    pending_level = level;
+                    pending_sink = t.sink;
+                    pending_until = mono_ms_now() + 1500;
+                }
             }
-            std::fprintf(stderr, "[vinyl] volume: %s set to %d %%%s\n", t.sink.c_str(), p.pct, muted ? " (un-muted)" : "");
+            if (demo) std::fprintf(stderr, "[vinyl] volume: %s\n", volume_set_log_text("sink " + t.sink, m, mute ? 0 : level, vol, 0, vol).c_str());
         } else if (t.kind == VolTarget::Kind::Mixer) {
             if (software_volume(t)) {
-                set_app_volume(resume, t.key, volume_after_step(app_volume_of(resume, t.key), d));
+                const OutputVolumeModel sm = software_model();
+                const VolumePress p = sink_press(sm, sm.from_pct(app_volume_of(resume, t.key)), false, d);
+                if (p.kind == VolumePress::Kind::None) return;
+                const int level = p.kind == VolumePress::Kind::Mute ? 0 : p.level;
+                set_app_volume(resume, t.key, sm.pct_of(level));
                 dirty = true;
                 apply_gain();
-                std::fprintf(stderr, "[vinyl] volume: software %d %% for %s (no playback mixer)\n", app_volume_of(resume, t.key),
-                             t.key.c_str());
+                char db[24] = "mute";
+                if (level > 0) std::snprintf(db, sizeof db, "%.2f dB", sm.db_of(level));
+                std::fprintf(stderr, "[vinyl] volume: software step %d/%d %d %% (%s) for %s (no playback mixer)\n", level, sm.n,
+                             sm.pct_of(level), db, t.key.c_str());
             } else if (alsa) {
                 const VolumePress p = mixer_press(mixer_choice, mixer_level, d);
                 int r = 0;
-                if (p.kind == VolumePress::Kind::Set) r = write_mixer(*alsa, t.card, mixer_choice, p.pct);
+                if (p.kind == VolumePress::Kind::Set) r = write_mixer_level(*alsa, t.card, mixer_choice, p.level);
                 else if (p.kind == VolumePress::Kind::Mute) r = write_mixer_switch(*alsa, t.card, mixer_choice, false);
                 else if (p.kind == VolumePress::Kind::Unmute) r = write_mixer_switch(*alsa, t.card, mixer_choice, true);
                 else return;
@@ -890,9 +963,11 @@ struct VinylApp::Impl final : TransportHost {
                     long back = 0;
                     const int rr = alsa->mixer_get(t.card, mixer_choice.volume, back); /* a fresh read of the control */
                     std::fprintf(stderr, "[vinyl] volume: %s\n",
-                                 mixer_set_log_text(t.card, mixer_choice, p.pct, mixer_raw_for(mixer_choice, p.pct), rr, back).c_str());
+                                 volume_set_log_text(t.card + " '" + mixer_choice.volume + "'", mixer_choice.model, p.level,
+                                                     mixer_raw_for_level(mixer_choice, p.level), rr, back)
+                                     .c_str());
                 } else if (r >= 0)
-                    std::fprintf(stderr, "[vinyl] volume: set mixer %s '%s' %s\n", t.card.c_str(), mixer_choice.sw.c_str(),
+                    std::fprintf(stderr, "[vinyl] volume: set %s '%s' %s\n", t.card.c_str(), mixer_choice.sw.c_str(),
                                  p.kind == VolumePress::Kind::Mute ? "off (muted)" : "on (un-muted)");
                 read_output_mixer(mono_ms_now(), true);
             }
@@ -1015,12 +1090,26 @@ struct VinylApp::Impl final : TransportHost {
         bool m = false;
         const int v = output_level(&m);
         std::string line;
-        if (t.kind == VolTarget::Kind::Sink) line = "sink " + t.sink + " " + volume_log_text(v);
+        OutputVolumeModel model;
+        const int step = output_step(nullptr, &model);
+        if (t.kind == VolTarget::Kind::Sink) {
+            line = "sink " + t.sink + " " + volume_log_text(v);
+            if (step >= 0) {
+                char b[64];
+                std::snprintf(b, sizeof b, ", step %d/%d%s", step, model.n, step > 0 ? "" : " (silent)");
+                line += b;
+                if (step > 0) {
+                    std::snprintf(b, sizeof b, ", %.2f dB", model.db_of(step));
+                    line += b;
+                }
+            }
+        }
         else if (t.kind == VolTarget::Kind::Mixer && software_volume(t))
             line = "software " + volume_log_text(v) + " for " + t.key + " (" + t.card + ": no playback mixer)";
         else if (t.kind == VolTarget::Kind::Mixer) {
-            char db[32] = "";
-            if (mixer_choice.has_db) std::snprintf(db, sizeof db, ", %.2f dB", mixer_level.cdb / 100.0);
+            char db[64] = "";
+            if (mixer_choice.has_db) std::snprintf(db, sizeof db, ", step %d/%d, %.2f dB", step, model.n, mixer_level.cdb / 100.0);
+            else std::snprintf(db, sizeof db, ", step %d/%d", step, model.n);
             line = "mixer " + t.card + " '" + mixer_choice.volume + "' " + volume_log_text(v) + (v >= 0 ? db : "") +
                    (v >= 0 ? ", raw=" + std::to_string(mixer_level.raw) : std::string());
         } else line = "no output";

@@ -25,6 +25,7 @@
 #include <cctype>
 #include <cmath>
 #include <chrono>
+#include <cstdio>
 #include <thread>
 
 using namespace vinyl;
@@ -316,7 +317,76 @@ CtlInfo switch_ctl(const std::string &name) {
     return c;
 }
 
-/* D11 as the owner changed it (2026-11-12) without a sound server: the playing card's own mixer */
+/* The owner's decision (2026-11-13): levels fitted to each output, linear in dB, about 2 dB a level over at most the top
+ * 60 dB of its real range (Dr. Lex). The model's arithmetic and its bounds. */
+void test_volume_model() {
+    /* an output whose range is not known (Bluetooth, software sinks): -60..0 dB, 30 levels of 60 / 29 dB */
+    const OutputVolumeModel d = default_volume_model();
+    CHECK_NEAR(d.lo_db, -60.0, 1e-9);
+    CHECK_NEAR(d.hi_db, 0.0, 1e-9);
+    CHECK_EQ(d.n, 30);
+    CHECK_NEAR(d.step_db(), 60.0 / 29, 1e-9);
+    CHECK_NEAR(d.db_of(1), -60.0, 1e-9); /* level 1: the window's bottom */
+    CHECK_NEAR(d.db_of(30), 0.0, 1e-9);  /* level N: its top */
+    CHECK_EQ(d.pct_of(0), 0);
+    CHECK_EQ(d.pct_of(1), 3);
+    CHECK_EQ(d.pct_of(15), 50);
+    CHECK_EQ(d.pct_of(30), 100);
+    for (int i = 1; i <= d.n; ++i) {
+        CHECK_EQ(d.nearest(d.db_of(i)), i);
+        CHECK_EQ(d.from_pct(d.pct_of(i)), i);
+        if (i > 1) CHECK_NEAR(d.db_of(i) - d.db_of(i - 1), d.step_db(), 1e-9); /* linear in dB */
+    }
+    CHECK_EQ(d.from_pct(0), 0);
+    CHECK_EQ(d.nearest(-500), 1); /* under the window: its first level */
+    CHECK_EQ(d.nearest(12), 30);  /* over it: its top */
+    CHECK_EQ(d.step(30, 1), 30);
+    CHECK_EQ(d.step(1, -1), 1);
+    /* a range wider than 60 dB keeps its top 60 dB; narrower ranges keep themselves */
+    const OutputVolumeModel wide = volume_model(-102.38, 4.0, 0.01);
+    CHECK_NEAR(wide.lo_db, -56.0, 1e-9);
+    CHECK_NEAR(wide.hi_db, 4.0, 1e-9);
+    CHECK_EQ(wide.n, 30);
+    /* N = ceil(window / 2 dB): steps about 2 dB, never under 1 dB nor under the control's own step, at least 2 levels */
+    for (double w : {60.0, 45.0, 34.0, 20.0, 10.0, 3.0, 2.0, 1.5, 1.0}) {
+        const OutputVolumeModel m = volume_model(-w, 0);
+        CHECK(m.n >= 2);
+        CHECK_EQ(m.n, std::max(2, static_cast<int>(std::ceil(w / 2 - 1e-9))));
+        CHECK(m.step_db() >= 1.0 - 1e-9);
+        CHECK(m.step_db() <= 3.0 + 1e-9);
+    }
+    CHECK_EQ(volume_model(-45, 0).n, 23);
+    CHECK_EQ(volume_model(-10, 0).n, 5);
+    const OutputVolumeModel coarse = volume_model(-30, 0, 3.0); /* a control of 3 dB steps: its own steps */
+    CHECK_EQ(coarse.n, 11);
+    CHECK_NEAR(coarse.step_db(), 3.0, 1e-9);
+    const OutputVolumeModel tiny = volume_model(-0.5, 0); /* half a dB: two levels, as close as the range allows */
+    CHECK_EQ(tiny.n, 2);
+    const OutputVolumeModel one = volume_model(0, 0); /* one value */
+    CHECK_EQ(one.n, 1);
+    CHECK_EQ(one.pct_of(1), 100);
+    /* the sound server's dB (pa_sw_volume_from_dB / to_dB: the cube of the linear factor) */
+    CHECK_EQ(sink_volume_for_db(0), 0x10000u);
+    CHECK_EQ(sink_volume_for_db(-60), 6554u);   /* 0x10000 / 10 */
+    CHECK_EQ(sink_volume_for_db(-1e9), 0u);
+    CHECK_NEAR(sink_db_for_volume(0x10000), 0.0, 1e-9);
+    CHECK_NEAR(sink_db_for_volume(0x8000), 60.0 * std::log10(0.5), 1e-9);
+    CHECK(std::isinf(sink_db_for_volume(0)));
+    for (int i = 1; i <= d.n; ++i) CHECK_EQ(sink_level_for_volume(d, sink_volume_for_db(d.db_of(i))), i);
+    CHECK_EQ(sink_level_for_volume(d, 0), 0); /* a silent sink */
+    /* the ALSA card behind a sink, from its properties */
+    CHECK_EQ(pulse_alsa_card("1", "", ""), 1);
+    CHECK_EQ(pulse_alsa_card("", "2", "hw:5"), 2);
+    CHECK_EQ(pulse_alsa_card("", "", "hw:3"), 3);
+    CHECK_EQ(pulse_alsa_card("", "", "front:1"), 1);
+    CHECK_EQ(pulse_alsa_card("", "", "hw:1,0"), 1);
+    CHECK_EQ(pulse_alsa_card("", "", "hw:CARD=2,DEV=0"), 2);
+    CHECK_EQ(pulse_alsa_card("", "", "hw:CARD=Device"), -1); /* a name, not a number */
+    CHECK_EQ(pulse_alsa_card("", "", "70:BF:92:53:6B:8B"), -1);
+    CHECK_EQ(pulse_alsa_card("", "", ""), -1);
+}
+
+/* D11 as the owner changed it (2026-11-12) without a sound server: the playing card's own mixer, in its own levels */
 void test_output_mixer() {
     /* the choice: Master, PCM, Speaker, Headphone, Headset, else any playback volume; never a capture control */
     MixerChoice m;
@@ -331,86 +401,21 @@ void test_output_mixer() {
     CHECK_EQ(m.sw, std::string("Line Out Playback Switch"));
     CHECK(!choose_playback_mixer({vol_ctl("Mic Capture Volume", 0, 30), switch_ctl("Mic Capture Switch")}, m));
     CHECK(!choose_playback_mixer({}, m));
-
-    /* the sound server's curve (the coordinator, 2026-11-13): dB = 60 log10(p / 100) and back */
-    CHECK_EQ(volume_cdb_for(100), 0L);
-    CHECK_EQ(volume_cdb_for(50), -1806L);
-    CHECK_EQ(volume_cdb_for(40), -2388L);
-    CHECK_EQ(volume_cdb_for(25), -3612L);
-    CHECK(volume_cdb_for(0) < -100000);
-    CHECK_EQ(volume_pct_for(0), 100);
-    CHECK_EQ(volume_pct_for(-1806), 50);
-    CHECK_EQ(volume_pct_for(-2388), 40);
-    CHECK_EQ(volume_pct_for(-6000), 10);
-    for (int p = 1; p <= 100; ++p) CHECK_EQ(volume_pct_for(volume_cdb_for(p)), p);
-
-    /* the deck zero7's Apple adapter (first noted as zero8's: the coordinator's correction, 2026-11-13): 'Headset
-     * Playback Volume' 0..120 = -60..0 dB (0.5 dB a step). The probe's 60/120 (-30 dB) is 32 % on the server's curve;
-     * 50 % is -18 dB (84), 40 % -24 dB (72), 25 % -36 dB (48), 100 % 0 dB (120) */
-    CHECK(choose_playback_mixer({vol_ctl("Headset Playback Volume", 0, 120, true, -6000, 0), switch_ctl("Headset Playback Switch")}, m));
-    CHECK(m.has_db);
-    CHECK_EQ(m.top, 120L);
-    CHECK_EQ(mixer_pct_for(m, 60), 32);
-    CHECK_EQ(mixer_raw_for(m, 50), 84L);
-    CHECK_EQ(mixer_pct_for(m, 84), 50);
-    CHECK_EQ(mixer_raw_for(m, 40), 72L);
-    CHECK_EQ(mixer_pct_for(m, 72), 40);
-    CHECK_EQ(mixer_raw_for(m, 25), 48L);
-    CHECK_EQ(mixer_pct_for(m, 48), 25);
-    CHECK_EQ(mixer_raw_for(m, 100), 120L);
-    CHECK_EQ(mixer_raw_for(m, 0), 0L);
-    CHECK_EQ(mixer_raw_for(m, 5), 0L);   /* -78 dB: below the control, clamped to its minimum */
-    CHECK_EQ(mixer_pct_for(m, 0), 10);   /* -60 dB is 10 % on the curve: the chip shows what is set */
-    CHECK_EQ(mixer_cdb_for(m, 80), -2000L);
-    CHECK_EQ(mixer_pct_for(m, 80), 46);
-    CHECK_EQ(mixer_raw_for(m, 46), 80L);
-    /* steps of 5 %: down from 15 to 10 (the minimum), then a step that cannot move the control mutes (0) */
-    CHECK_EQ(mixer_step_target(m, 15, -kVolumeStep), 10);
-    CHECK_EQ(mixer_step_target(m, 10, -kVolumeStep), 0);
-    CHECK_EQ(mixer_step_target(m, 0, kVolumeStep), 5);
-    CHECK_EQ(mixer_step_target(m, 50, kVolumeStep), 55);
-    CHECK_EQ(mixer_step_target(m, 100, kVolumeStep), 100);
-    /* a range that starts higher: -34..0 dB in 68 steps; 25 % (-36 dB) clamps at the minimum, which reads back 27 % */
-    CHECK(choose_playback_mixer({vol_ctl("PCM Playback Volume", 0, 68, true, -3400, 0)}, m));
-    CHECK_EQ(mixer_raw_for(m, 50), 32L);
-    CHECK_EQ(mixer_pct_for(m, 32), 50);
-    CHECK_EQ(mixer_raw_for(m, 25), 0L);
-    CHECK_EQ(mixer_pct_for(m, 0), 27);
-    CHECK_EQ(mixer_step_target(m, 30, -kVolumeStep), 25); /* moves the control (5 -> 0): kept */
-    CHECK_EQ(mixer_step_target(m, 27, -kVolumeStep), 0);  /* the minimum already: mute */
-    /* -87..+12 dB in 99 steps: never above 0 dB (step 87); 50 % = step 69 (-18 dB), 5 % = step 9 (-78 dB) */
+    /* a control whose real top is above 0 dB keeps it (100 % = the output's top): -87..+12 dB over 0..99 */
     CHECK(choose_playback_mixer({vol_ctl("Master Playback Volume", 0, 99, true, -8700, 1200)}, m));
-    CHECK_EQ(m.top, 87L);
-    CHECK_EQ(m.db_top, 0L);
-    CHECK_EQ(mixer_raw_for(m, 100), 87L);
-    CHECK_EQ(mixer_pct_for(m, 87), 100);
-    CHECK_EQ(mixer_raw_for(m, 50), 69L);
-    CHECK_EQ(mixer_pct_for(m, 69), 50);
-    CHECK_EQ(mixer_raw_for(m, 5), 9L);
-    CHECK_EQ(mixer_pct_for(m, 9), 5);
-    CHECK_EQ(mixer_pct_for(m, 99), 100); /* someone else set it to +12 dB: 100 % (the coordinator, 2026-11-13: above 0 dB reads 100 %) */
-    /* the HackBerry's Sharkoon: 'PCM' 0..45, 1 dB a step, -45..0 dB; 22 = -23 dB = 41 % */
-    CHECK(choose_playback_mixer({vol_ctl("PCM Playback Volume", 0, 45, true, -4500, 0)}, m));
-    CHECK_EQ(mixer_pct_for(m, 22), 41);
-    CHECK_EQ(mixer_raw_for(m, 41), 22L);
-    /* a control that goes above 0 dB: never past 0 dB (-60..+6 dB over 0..110: 0 dB at step 100) */
-    CHECK(choose_playback_mixer({vol_ctl("Speaker Playback Volume", 0, 110, true, -6000, 600)}, m));
-    CHECK_EQ(m.top, 100L);
-    CHECK_EQ(mixer_raw_for(m, 100), 100L);
-    CHECK_EQ(mixer_pct_for(m, 100), 100);
-    CHECK_EQ(mixer_pct_for(m, 110), 100);
-    /* a headset whose driver gives no dB (the kernel drops bogus values): no dB to put on the curve, linear in steps */
+    CHECK_NEAR(m.model.hi_db, 12.0, 1e-9);
+    CHECK_NEAR(m.model.lo_db, -48.0, 1e-9);
+    CHECK_EQ(mixer_raw_for_level(m, m.model.n), 99L);
+    /* a headset whose driver gives no dB (the kernel drops bogus values): its raw steps, at most 30 levels */
     CHECK(choose_playback_mixer({vol_ctl("Headset Playback Volume", 0, 37)}, m));
     CHECK(!m.has_db);
-    CHECK_EQ(mixer_raw_for(m, 50), 19L);
-    CHECK_EQ(mixer_pct_for(m, 19), 51);
-    CHECK_EQ(mixer_raw_for(m, 150), 37L);
-    CHECK_EQ(mixer_step_target(m, 0, kVolumeStep), 5);
-    /* the software volume of a card without a mixer: the same curve */
-    CHECK_NEAR(20.0 * std::log10(volume_gain(50)), -18.06, 0.01);
-    CHECK_NEAR(20.0 * std::log10(volume_gain(40)), -23.88, 0.01);
-    CHECK_NEAR(volume_gain(100), 1.0, 1e-9);
-    CHECK_NEAR(volume_gain(0), 0.0, 1e-9);
+    CHECK(!m.model.db);
+    CHECK_EQ(m.model.n, 30);
+    CHECK_EQ(mixer_raw_for_level(m, 30), 37L);
+    CHECK(mixer_raw_for_level(m, 1) > 0); /* level 1 is above the minimum */
+    for (int i = 1; i <= 30; ++i) CHECK_EQ(mixer_level_for_raw(m, mixer_raw_for_level(m, i)), i);
+    CHECK(choose_playback_mixer({vol_ctl("Headset Playback Volume", 0, 7)}, m));
+    CHECK_EQ(m.model.n, 7); /* fewer raw steps than 30: one level each */
 
     /* the card behind an ALSA device */
     CHECK_EQ(mixer_card_for("plughw:CARD=UC02,DEV=0"), std::string("hw:CARD=UC02"));
@@ -418,29 +423,36 @@ void test_output_mixer() {
     CHECK_EQ(mixer_card_for("default"), std::string("default"));
     CHECK_EQ(mixer_card_for("plughw:1,0"), std::string("default"));
 
-    /* read and write through the card (the fake mixer) */
+    /* read and write through the card (the fake mixer): the Apple adapter, -60..0 dB in 0.5 dB steps */
     FakeAlsa a;
     a.ctls = {vol_ctl("Headset Playback Volume", 0, 120, true, -6000, 0), switch_ctl("Headset Playback Switch")};
-    a.values["Headset Playback Volume"] = 80;
+    a.values["Headset Playback Volume"] = 80; /* -20 dB, set by something else */
     a.values["Headset Playback Switch"] = 1;
     std::string chosen;
     MixerChoice c;
     MixerLevel lv;
     CHECK_EQ(read_mixer(a, "hw:CARD=A", chosen, c, lv), 0);
     CHECK(lv.has_mixer);
-    CHECK_EQ(lv.pct, 46); /* -20 dB on the server's curve */
+    CHECK_EQ(lv.level, 20); /* the nearest level: -60 + 19 * 60 / 29 = -20.69 dB */
+    CHECK_EQ(lv.pct, 67);
     CHECK(!lv.muted);
     CHECK_EQ(chosen, std::string("hw:CARD=A"));
-    CHECK_EQ(write_mixer(a, "hw:CARD=A", c, 51), 0); /* a step up from 46 */
-    CHECK_EQ(a.values["Headset Playback Volume"], 85L);
-    CHECK_EQ(read_mixer(a, "hw:CARD=A", chosen, c, lv), 0);
-    CHECK_EQ(lv.pct, 51);
-    CHECK_EQ(write_mixer(a, "hw:CARD=A", c, 0), 0); /* 0 %: the switch mutes */
+    CHECK_EQ(write_mixer_level(a, "hw:CARD=A", c, 21), 0); /* one level up: -18.62 dB */
+    CHECK_EQ(a.values["Headset Playback Volume"], 83L);
+    CHECK_EQ(read_mixer(a, "hw:CARD=A", chosen, c, lv), 0); /* a fresh read */
+    CHECK_EQ(lv.level, 21);
+    CHECK_EQ(lv.pct, 70);
+    CHECK_EQ(write_mixer_level(a, "hw:CARD=A", c, 0), 0); /* level 0: the switch mutes */
     CHECK_EQ(a.values["Headset Playback Switch"], 0L);
     CHECK_EQ(read_mixer(a, "hw:CARD=A", chosen, c, lv), 0);
     CHECK(lv.muted);
-    CHECK_EQ(write_mixer(a, "hw:CARD=A", c, 5), 0); /* back up: un-muted */
+    CHECK_EQ(write_mixer_level(a, "hw:CARD=A", c, 1), 0); /* back up: un-muted, the window's bottom */
     CHECK_EQ(a.values["Headset Playback Switch"], 1L);
+    CHECK_EQ(a.values["Headset Playback Volume"], 0L);
+    /* changed elsewhere (alsamixer): the nearest level shows */
+    a.values["Headset Playback Volume"] = 61; /* -29.5 dB */
+    CHECK_EQ(read_mixer(a, "hw:CARD=A", chosen, c, lv), 0);
+    CHECK_EQ(lv.level, 16); /* -28.97 dB is the nearest */
     /* the card unplugged: an error, no mixer; plugged back: found again */
     a.gone = true;
     CHECK(read_mixer(a, "hw:CARD=A", chosen, c, lv) < 0);
@@ -454,24 +466,105 @@ void test_output_mixer() {
     chosen.clear();
     CHECK_EQ(read_mixer(bare, "hw:CARD=B", chosen, c, lv), 0);
     CHECK(!lv.has_mixer);
-    CHECK_EQ(write_mixer(bare, "hw:CARD=B", c, 50), -ENOENT);
+    CHECK_EQ(write_mixer_level(bare, "hw:CARD=B", c, 5), -ENOENT);
     CHECK_EQ(bare.sets, 0);
-
-    /* the steps of the strip and the keys */
-    CHECK_EQ(volume_after_step(98, kVolumeStep), 100);
-    CHECK_EQ(volume_after_step(120, kVolumeStep), 120); /* never louder than 100 by a step */
-    CHECK_EQ(volume_after_step(120, -kVolumeStep), 115);
-    CHECK_EQ(volume_after_step(3, -kVolumeStep), 0);
-    CHECK_EQ(volume_after_step(-1, kVolumeStep), 5);
+    /* the software level of such a card: -60..0 dB, the amplitude of the level's dB */
+    const OutputVolumeModel sw = default_volume_model();
+    CHECK_NEAR(volume_gain_db(sw.db_of(30)), 1.0, 1e-6);
+    CHECK_NEAR(volume_gain_db(sw.db_of(1)), 0.001, 1e-6);
+    CHECK_NEAR(20.0 * std::log10(volume_gain_db(sw.db_of(15))), sw.db_of(15), 1e-4);
 }
 
-/* D11 as changed with a sound server: the playing sink's own volume, set on the worker, shown from the server's event */
+/* One table per output class (the board tests of the owner's decision, 2026-11-13). `name`: what the step table in the
+ * log says; the tables print for the QA notes. */
+void print_table(const char *name, const OutputVolumeModel &m) {
+    const int mid = (m.n + 1) / 2;
+    int at50 = 0;
+    for (int i = 1; i <= m.n; ++i)
+        if (m.pct_of(i) == 50) at50 = i;
+    std::fprintf(stderr, "  levels %s: %s; the middle level %d = %d %% = %.2f dB%s\n", name, volume_model_text(m).c_str(), mid,
+                 m.pct_of(mid), m.db_of(mid), at50 ? (", 50 % = level " + std::to_string(at50)).c_str() : ", no level shows 50 %");
+}
+
+void test_board_classes() {
+    /* the Sharkoon DAC (HackBerry through PipeWire, zero8 without a server): 'PCM Playback Volume' 0..45 = -45..0 dB,
+     * 1 dB a step, with its switch. 23 levels of 2.05 dB over the whole range; level 1 is the card's own -45 dB (not
+     * mute: it sounds), the middle level 12 is -22.5 dB */
+    MixerChoice dac;
+    CHECK(choose_playback_mixer({vol_ctl("PCM Playback Volume", 0, 45, true, -4500, 0), switch_ctl("PCM Playback Switch")}, dac));
+    CHECK_EQ(dac.model.n, 23);
+    CHECK_NEAR(dac.model.lo_db, -45.0, 1e-9);
+    CHECK_NEAR(dac.model.hi_db, 0.0, 1e-9);
+    CHECK_NEAR(dac.model.step_db(), 45.0 / 22, 1e-9);
+    CHECK_NEAR(dac.model.db_of(12), -22.5, 1e-9);
+    CHECK_EQ(mixer_raw_for_level(dac, 1), 0L);
+    CHECK_EQ(mixer_raw_for_level(dac, 23), 45L);
+    for (int i = 2; i <= dac.model.n; ++i) CHECK(mixer_raw_for_level(dac, i) > mixer_raw_for_level(dac, i - 1)); /* each level moves it */
+    print_table("Sharkoon DAC -45..0 dB", dac.model);
+
+    /* the same DAC on two boards: ALSA-direct (zero8) and as a sink of the server (the HackBerry, its card found from the
+     * sink's properties): the same levels at the same dB, and a sink never gets a target under the card's -45 dB floor */
+    const OutputVolumeModel through_server = sink_volume_model(&dac);
+    CHECK_EQ(through_server.n, dac.model.n);
+    CHECK_NEAR(through_server.lo_db, dac.model.lo_db, 1e-9);
+    CHECK_NEAR(through_server.hi_db, dac.model.hi_db, 1e-9);
+    for (int i = 1; i <= dac.model.n; ++i) {
+        CHECK_NEAR(through_server.db_of(i), dac.model.db_of(i), 1e-9);
+        CHECK_EQ(through_server.pct_of(i), dac.model.pct_of(i));
+        CHECK(sink_volume_for_db(through_server.db_of(i)) >= sink_volume_for_db(-45.0) - 1);
+    }
+    MixerChoice dac_again; /* the same card model on another board: the same table */
+    CHECK(choose_playback_mixer({vol_ctl("PCM Playback Volume", 0, 45, true, -4500, 0)}, dac_again));
+    CHECK_EQ(dac_again.model.n, dac.model.n);
+    for (int p = 0; p <= 100; ++p) CHECK_NEAR(dac_again.model.db_of(dac_again.model.from_pct(p)), dac.model.db_of(dac.model.from_pct(p)), 1e-9);
+
+    /* the Raspberry Pi headphone jack (Pi 4B, Pi 3A+): -102.39..+4.00 dB in 0.01 dB, mute at min, joined mono: the top
+     * 60 dB, -56..+4 dB (its +4 dB is its 100 %), 30 levels; level 1 (-56 dB) is far above the mute value */
+    CtlInfo pi = vol_ctl("PCM Playback Volume", -10239, 400, true, kAlsaDbGainMute, 400);
+    pi.count = 1;
+    alsa_fix_mute_db(pi, true, -10238);
+    MixerChoice jack;
+    CHECK(choose_playback_mixer({pi, switch_ctl("PCM Playback Switch")}, jack));
+    CHECK_EQ(jack.model.n, 30);
+    CHECK_NEAR(jack.model.lo_db, -56.0, 1e-9);
+    CHECK_NEAR(jack.model.hi_db, 4.0, 1e-9);
+    CHECK_EQ(mixer_raw_for_level(jack, 1), -5600L);
+    CHECK_EQ(mixer_raw_for_level(jack, 30), 400L);
+    CHECK(mixer_raw_for_level(jack, 1) > jack.min + 1); /* the first level sounds */
+    print_table("Pi headphone jack -102.39..+4.00 dB", jack.model);
+    /* through a server the same card's levels sit under the sink's 0 dB (the server puts the hardware's top there) */
+    const OutputVolumeModel jack_sink = sink_volume_model(&jack);
+    CHECK_EQ(jack_sink.n, 30);
+    CHECK_NEAR(jack_sink.lo_db, -60.0, 1e-9);
+    CHECK_NEAR(jack_sink.step_db(), jack.model.step_db(), 1e-9);
+
+    /* the Apple adapter (the deck zero7): 'Headset Playback Volume' 0..120 = -60..0 dB, 0.5 dB a step */
+    MixerChoice apple;
+    CHECK(choose_playback_mixer({vol_ctl("Headset Playback Volume", 0, 120, true, -6000, 0), switch_ctl("Headset Playback Switch")}, apple));
+    CHECK_EQ(apple.model.n, 30);
+    CHECK_NEAR(apple.model.step_db(), 60.0 / 29, 1e-9);
+    CHECK_EQ(mixer_raw_for_level(apple, 15), 58L); /* 50 %: -31.03 dB */
+    print_table("Apple adapter -60..0 dB", apple.model);
+
+    /* a sink with no known range (a Bluetooth headset's A2DP volume, a software sink): -60..0 dB */
+    const OutputVolumeModel bt = sink_volume_model(nullptr);
+    CHECK_EQ(bt.n, 30);
+    CHECK_NEAR(bt.lo_db, -60.0, 1e-9);
+    print_table("unknown range (Bluetooth, software sinks) -60..0 dB", bt);
+    MixerChoice nodb;
+    CHECK(choose_playback_mixer({vol_ctl("PCM Playback Volume", 0, 45)}, nodb));
+    CHECK_EQ(sink_volume_model(&nodb).n, 30); /* a card without dB data: the unknown window */
+}
+
+/* D11 as changed with a sound server: the playing sink's own volume, set on the worker as the dB of a level, shown from
+ * the server's event */
 void test_output_sink_level() {
+    const OutputVolumeModel m = default_volume_model();
     FakePulse f;
     PulseDevice dac = fake_usb_sink("Sharkoon", 50);
-    dac.volume_pct = 40;
+    dac.volume_raw = sink_volume_for_db(m.db_of(12)); /* 40 % */
     PulseDevice xwf = fake_bt_sink(kXwf, 80, "speaker");
-    xwf.volume_pct = 50;
+    xwf.volume_raw = sink_volume_for_db(m.db_of(15));
     f.sinks = {dac, xwf};
     f.server.default_sink = xwf.name; /* the launcher's keys reach the XWF, Vinyl plays on the DAC */
     PulseWorker w(f);
@@ -487,13 +580,13 @@ void test_output_sink_level() {
     world.server = true;
     world.sinks = r.sinks;
     world.default_sink = r.info.default_sink;
-    int pct = -1;
-    bool muted = false;
-    CHECK(sink_volume_of(world, dac.name, pct, muted));
-    CHECK_EQ(pct, 40); /* the chip shows the DAC's real 40 %, not a stream level */
+    const PulseDevice *d = sink_device_of(world, dac.name);
+    CHECK(d != nullptr);
+    if (!d) return;
+    CHECK_EQ(sink_level_for_volume(m, static_cast<uint32_t>(d->volume_raw)), 12);
 
-    /* a step up sets the DAC (never the default sink), the server's event brings the level back */
-    CHECK(w.request_sink_level(dac.name, 2, volume_after_step(pct, kVolumeStep)));
+    /* a level up sets the DAC (never the default sink), its mute cleared; the server's event brings the level back */
+    CHECK(w.request_sink_volume(dac.name, 2, sink_volume_for_db(m.db_of(13)), 0, ""));
     for (int i = 0; i < 200 && w.sink_levels_done() < 1; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(2));
     CHECK(watch.take_change());
     ScanRequest again;
@@ -501,42 +594,52 @@ void test_output_sink_level() {
     CHECK(w.request_scan(again));
     CHECK(wait_scan(w, r));
     world.sinks = r.sinks;
-    CHECK(sink_volume_of(world, dac.name, pct, muted));
-    CHECK_EQ(pct, 45);
-    CHECK(sink_volume_of(world, xwf.name, pct, muted));
-    CHECK_EQ(pct, 50); /* the default sink untouched */
+    d = sink_device_of(world, dac.name);
+    CHECK(d && sink_level_for_volume(m, static_cast<uint32_t>(d->volume_raw)) == 13);
+    d = sink_device_of(world, xwf.name);
+    CHECK(d && sink_level_for_volume(m, static_cast<uint32_t>(d->volume_raw)) == 15); /* the default sink untouched */
     {
         std::lock_guard<std::recursive_mutex> g(f.lock());
         CHECK(!f.levels_set.empty() && f.levels_set.back().first == dac.name);
     }
-    /* quick presses: the newest level wins, no queue */
+    /* the read-back is a fresh ask of the sink */
+    uint32_t back = 0;
+    bool back_muted = true;
+    CHECK_EQ(f.read_sink_volume(dac.name, back, back_muted), 0);
+    CHECK_EQ(back, sink_volume_for_db(m.db_of(13)));
+    CHECK(!back_muted);
+    /* a mute (level kept), then quick presses: the newest level wins, no queue */
+    CHECK(w.request_sink_volume(dac.name, 2, back, 1, ""));
+    for (int i = 0; i < 200 && w.sink_levels_done() < 2; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    CHECK_EQ(f.read_sink_volume(dac.name, back, back_muted), 0);
+    CHECK(back_muted);
     f.call_delay_ms.store(20);
-    for (int lv = 50; lv <= 70; lv += 5) CHECK(w.request_sink_level(dac.name, 2, lv));
+    for (int lv = 14; lv <= 18; ++lv) CHECK(w.request_sink_volume(dac.name, 2, sink_volume_for_db(m.db_of(lv)), 0, ""));
     for (int i = 0; i < 300; ++i) {
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
         std::lock_guard<std::recursive_mutex> g(f.lock());
-        if (!f.levels_set.empty() && f.levels_set.back().second == 70) break;
+        if (!f.levels_set.empty() && f.levels_set.back().second == sink_volume_for_db(m.db_of(18))) break;
     }
     f.call_delay_ms.store(0);
     {
         std::lock_guard<std::recursive_mutex> g(f.lock());
-        CHECK_EQ(f.levels_set.back().second, 70);
-        CHECK(f.levels_set.size() < 7); /* 45 plus at most a few of the five: not one call each */
+        CHECK_EQ(f.levels_set.back().second, sink_volume_for_db(m.db_of(18)));
+        CHECK(f.levels_set.size() < 8); /* two plus at most a few of the five: not one call each */
     }
     /* a sink that is gone: refused, nothing set */
-    CHECK_EQ(f.set_sink_level("bluez_output.00_11_22_33_44_55.1", 2, 30), kPulseNoDevice);
-    /* a reconnect: the device's own level comes back as the server reports it; the chip shows that */
+    CHECK_EQ(f.set_sink_volume_raw("bluez_output.00_11_22_33_44_55.1", 2, 0x8000, 0), kPulseNoDevice);
+    /* a reconnect: the device's own level comes back as the server reports it; the group shows its nearest level */
     f.remove_sink(xwf.name);
-    PulseDevice back = xwf;
-    back.index = kPulseNoIndex;
-    back.volume_pct = 35;
-    f.add_sink(back);
+    PulseDevice again_xwf = xwf;
+    again_xwf.index = kPulseNoIndex;
+    again_xwf.volume_raw = 0x4000; /* 25 % of 0x10000: -36.1 dB */
+    f.add_sink(again_xwf);
     CHECK(watch.take_change());
     CHECK(w.request_scan(again));
     CHECK(wait_scan(w, r));
     world.sinks = r.sinks;
-    CHECK(sink_volume_of(world, xwf.name, pct, muted));
-    CHECK_EQ(pct, 35);
+    d = sink_device_of(world, xwf.name);
+    CHECK(d && sink_level_for_volume(m, static_cast<uint32_t>(d->volume_raw)) == m.nearest(60.0 * std::log10(0.25)));
     w.stop();
 }
 
@@ -595,95 +698,111 @@ void test_sink_names() {
     CHECK_EQ(sink_label(d), std::string("Analog Stereo"));
 }
 
-/* The owner's report from the deck (2026-11-13): "zero7 is showing muted but volume bar shows 18". The Sharkoon's
- * 'PCM Playback Volume' 0..45 = -45..0 dB with its 'PCM Playback Switch': the floor (-45 dB) reads 18 % on the curve;
- * "-" at the floor mutes, "-" while muted does nothing, "+" brings the sound back (one step above the floor), a mute by
- * something else shows, and "+" then un-mutes at the level kept. */
+/* The owner's report from the deck (2026-11-13): "zero7 is showing muted but volume bar shows 18". With the levels of
+ * the Sharkoon (its 'PCM Playback Volume' 0..45 = -45..0 dB and its switch): "-" down to level 1 (the card's -45 dB,
+ * still heard), "-" there mutes, "-" while muted does nothing, "+" brings level 1 back; a mute by something else shows,
+ * and "+" then un-mutes at the level kept. */
 void test_mute_steps() {
     FakeAlsa a;
     a.ctls = {vol_ctl("PCM Playback Volume", 0, 45, true, -4500, 0), switch_ctl("PCM Playback Switch")};
-    a.values["PCM Playback Volume"] = mixer_raw_for([] {
-        MixerChoice m;
-        choose_playback_mixer({vol_ctl("PCM Playback Volume", 0, 45, true, -4500, 0)}, m);
-        return m;
-    }(), 23);
+    a.values["PCM Playback Volume"] = 23; /* -22 dB */
     a.values["PCM Playback Switch"] = 1;
     std::string chosen;
     MixerChoice c;
     MixerLevel lv;
     CHECK_EQ(read_mixer(a, "hw:CARD=S", chosen, c, lv), 0);
-    CHECK_EQ(lv.pct, 23);
+    CHECK_EQ(lv.level, 12);
+    CHECK_EQ(lv.pct, 52);
     auto press = [&](int d) {
         const VolumePress p = mixer_press(c, lv, d);
-        if (p.kind == VolumePress::Kind::Set) write_mixer(a, "hw:CARD=S", c, p.pct);
+        if (p.kind == VolumePress::Kind::Set) write_mixer_level(a, "hw:CARD=S", c, p.level);
         if (p.kind == VolumePress::Kind::Mute) write_mixer_switch(a, "hw:CARD=S", c, false);
         if (p.kind == VolumePress::Kind::Unmute) write_mixer_switch(a, "hw:CARD=S", c, true);
         read_mixer(a, "hw:CARD=S", chosen, c, lv);
         return p.kind;
     };
-    /* down to the floor: 23 -> 18 (-45 dB, the card's lowest) */
-    CHECK(press(-kVolumeStep) == VolumePress::Kind::Set);
-    CHECK_EQ(lv.pct, 18);
+    /* one level a press, down to level 1 (raw 0, -45 dB) */
+    for (int i = 11; i >= 1; --i) {
+        CHECK(press(-1) == VolumePress::Kind::Set);
+        CHECK_EQ(lv.level, i);
+    }
     CHECK_EQ(lv.raw, 0L);
     CHECK(!lv.muted);
-    /* "-" at the floor mutes (the switch); the level is kept */
-    CHECK(press(-kVolumeStep) == VolumePress::Kind::Mute);
+    CHECK_EQ(lv.pct, 4); /* round(100 / 23) */
+    /* "-" at level 1 mutes (the switch); the level is kept */
+    CHECK(press(-1) == VolumePress::Kind::Mute);
     CHECK(lv.muted);
     CHECK_EQ(a.values["PCM Playback Switch"], 0L);
-    CHECK_EQ(lv.pct, 18);
+    CHECK_EQ(lv.level, 1);
     /* "-" while muted does nothing */
     const int sets = a.sets;
-    CHECK(press(-kVolumeStep) == VolumePress::Kind::None);
+    CHECK(press(-1) == VolumePress::Kind::None);
     CHECK_EQ(a.sets, sets);
     CHECK(lv.muted);
-    /* "+" while muted at the floor: one step above it, un-muted, so something is heard */
-    CHECK(press(kVolumeStep) == VolumePress::Kind::Set);
+    /* "+" while muted: the level it had (level 1 sounds: the card's own floor) */
+    CHECK(press(1) == VolumePress::Kind::Unmute);
     CHECK(!lv.muted);
-    CHECK_EQ(lv.pct, 23);
-    /* muted by something else (alsamixer) at 23: shown muted; "+" un-mutes at 23, not a step above */
+    CHECK_EQ(lv.level, 1);
+    CHECK(press(1) == VolumePress::Kind::Set);
+    CHECK_EQ(lv.level, 2);
+    /* muted by something else (alsamixer) at level 12: shown muted; "+" un-mutes at 12, not a level above */
+    a.values["PCM Playback Volume"] = 23;
     a.values["PCM Playback Switch"] = 0;
     read_mixer(a, "hw:CARD=S", chosen, c, lv);
     CHECK(lv.muted);
-    CHECK(press(kVolumeStep) == VolumePress::Kind::Unmute);
+    CHECK_EQ(lv.level, 12);
+    CHECK(press(1) == VolumePress::Kind::Unmute);
     CHECK(!lv.muted);
-    CHECK_EQ(lv.pct, 23);
-    /* a card without a switch: the floor is as low as it goes */
+    CHECK_EQ(lv.level, 12);
+    /* the top: "+" does nothing more */
+    a.values["PCM Playback Volume"] = 45;
+    read_mixer(a, "hw:CARD=S", chosen, c, lv);
+    CHECK_EQ(lv.level, 23);
+    CHECK_EQ(lv.pct, 100);
+    CHECK(press(1) == VolumePress::Kind::None);
+    /* a card without a switch: level 1 is as low as it goes */
     MixerChoice nosw;
     choose_playback_mixer({vol_ctl("PCM Playback Volume", 0, 45, true, -4500, 0)}, nosw);
     MixerLevel floor;
     floor.has_mixer = true;
     floor.raw = 0;
-    floor.pct = 18;
-    CHECK(mixer_press(nosw, floor, -kVolumeStep).kind == VolumePress::Kind::None);
-    /* the sound server's sinks: floor 0 %, "+" un-mutes at the level, "-" muted does nothing */
-    CHECK(sink_press(40, true, -kVolumeStep).kind == VolumePress::Kind::None);
-    VolumePress p = sink_press(40, true, kVolumeStep);
-    CHECK(p.kind == VolumePress::Kind::Set && p.pct == 40);
-    p = sink_press(0, true, kVolumeStep);
-    CHECK(p.kind == VolumePress::Kind::Set && p.pct == 5);
-    p = sink_press(3, false, -kVolumeStep);
-    CHECK(p.kind == VolumePress::Kind::Set && p.pct == 0);
-    CHECK(sink_press(0, false, -kVolumeStep).kind == VolumePress::Kind::None);
-    CHECK(sink_press(-1, false, kVolumeStep).kind == VolumePress::Kind::None);
+    floor.level = 1;
+    CHECK(mixer_press(nosw, floor, -1).kind == VolumePress::Kind::None);
+    /* the sound server's sinks: "-" at level 1 mutes (the sink's mute, the level kept), "+" un-mutes at the level, "-"
+     * muted does nothing; a silent sink (volume 0) starts again at level 1 */
+    const OutputVolumeModel m = default_volume_model();
+    CHECK(sink_press(m, 12, true, -1).kind == VolumePress::Kind::None);
+    VolumePress p = sink_press(m, 12, true, 1);
+    CHECK(p.kind == VolumePress::Kind::Unmute && p.level == 12);
+    p = sink_press(m, 0, false, 1);
+    CHECK(p.kind == VolumePress::Kind::Set && p.level == 1);
+    p = sink_press(m, 1, false, -1);
+    CHECK(p.kind == VolumePress::Kind::Mute);
+    p = sink_press(m, 5, false, -1);
+    CHECK(p.kind == VolumePress::Kind::Set && p.level == 4);
+    CHECK(sink_press(m, 30, false, 1).kind == VolumePress::Kind::None);
+    CHECK(sink_press(m, -1, false, 1).kind == VolumePress::Kind::None);
     /* the server's placeholder at start never shows a level */
     OutputWorld w;
     w.server = true;
     PulseDevice null_sink;
     null_sink.name = "auto_null";
     null_sink.volume_pct = 100;
+    null_sink.volume_raw = 0x10000;
     w.sinks = {null_sink};
     w.default_sink = "auto_null";
     int pct = -1;
     bool muted = false;
     CHECK(!sink_volume_of(w, "", pct, muted));
+    CHECK(sink_device_of(w, "") == nullptr);
     CHECK(placeholder_sink("auto_null"));
     CHECK(!placeholder_sink("alsa_output.usb-Sharkoon.analog-stereo"));
 }
 
 /* The Pi 4B (2026-11-13, the owner: "i'm at 5% and it's like 80 to 100% perceived"): bcm2835 Headphones, 'PCM
  * Playback Volume' -10239..400 in hundredths of a dB (dBscale-min=-102.39dB step=0.01dB mute=1), joined mono, and
- * 'PCM Playback Switch'. snd_ctl_get_dB_range reports its min as SND_CTL_TLV_DB_GAIN_MUTE (-9999999): taken as is, 5 %
- * landed on raw 391 (+3.91 dB) and read back as 5 %; each step moved the control by one raw value. */
+ * 'PCM Playback Switch'. snd_ctl_get_dB_range reports its min as SND_CTL_TLV_DB_GAIN_MUTE (-9999999); taken as is, every
+ * level landed near raw 391 (+3.91 dB). The fixed range gives the jack its top 60 dB, -56..+4 dB, in 30 levels. */
 void test_pi4b_pcm() {
     const std::string card = "hw:CARD=Headphones";
     auto pcm = [] {
@@ -691,19 +810,11 @@ void test_pi4b_pcm() {
         c.count = 1;
         return c;
     };
-    /* the bug, reproduced: the sentinel taken as the dB of min */
+    /* unfixed, the sentinel is never taken for a dB value: no dB data then (raw steps), nothing near +3.91 dB for a low level */
     {
         MixerChoice bad;
-        bad.volume = "PCM Playback Volume";
-        bad.min = -10239;
-        bad.max = 400;
-        bad.has_db = true;
-        bad.db_min = kAlsaDbGainMute;
-        bad.db_max = 400;
-        bad.db_top = 0;
-        bad.top = 399;
-        CHECK_EQ(mixer_raw_for(bad, 5), 391L);
-        CHECK_EQ(mixer_pct_for(bad, 391), 5);
+        CHECK(choose_playback_mixer({pcm()}, bad));
+        CHECK(!bad.has_db);
     }
     /* mixer_list's fix: the dB of min + 1 (snd_ctl_convert_to_dB) gives the real dB of min back */
     CtlInfo c = pcm();
@@ -712,13 +823,11 @@ void test_pi4b_pcm() {
     CHECK(c.min_is_mute);
     CHECK_EQ(c.db_min_cdb, -10239L);
     CHECK_EQ(c.db_max_cdb, 400L);
-    /* without that dB: no dB data (linear in steps), still never mute for a level above 0 */
-    CtlInfo nodb = pcm();
+    CtlInfo nodb = pcm(); /* without that dB: no dB data (raw steps), still never mute for a level above 0 */
     alsa_fix_mute_db(nodb, false, 0);
     CHECK(!nodb.has_db);
     CHECK(nodb.min_is_mute);
-    /* a control without the mute flag is left alone */
-    CtlInfo plain = vol_ctl("PCM Playback Volume", 0, 45, true, -4500, 0);
+    CtlInfo plain = vol_ctl("PCM Playback Volume", 0, 45, true, -4500, 0); /* no mute flag: left alone */
     alsa_fix_mute_db(plain, true, -4400);
     CHECK(!plain.min_is_mute);
     CHECK_EQ(plain.db_min_cdb, -4500L);
@@ -733,77 +842,84 @@ void test_pi4b_pcm() {
     CHECK_EQ(read_mixer(a, card, chosen, m, lv), 0);
     CHECK(m.has_db);
     CHECK(m.min_is_mute);
-    CHECK_EQ(m.top, 0L); /* never above 0 dB: raw 0, not 400 */
-    CHECK_EQ(lv.pct, 100); /* above 0 dB reads 100 % */
+    CHECK_EQ(m.model.n, 30);
+    CHECK_EQ(lv.level, 30); /* +3.93 dB: the top level */
+    CHECK_EQ(lv.pct, 100);
     CHECK(!lv.muted);
-    /* the curve: 5 % = -78.06 dB, 50 % = -18.06 dB, 100 % = 0 dB; never above raw 0 */
-    CHECK_EQ(mixer_raw_for(m, 5), -7806L);
-    CHECK_EQ(mixer_raw_for(m, 50), -1806L);
-    CHECK_EQ(mixer_raw_for(m, 100), 0L);
-    CHECK_EQ(mixer_raw_for(m, 1), -10239L + 1); /* 1 % (-120 dB) is under the range: the lowest sound, not mute */
-    CHECK_EQ(mixer_raw_for(m, 0), -10239L);     /* 0 %: the value that is mute */
-    for (int p = 0; p <= 100; ++p) CHECK(mixer_raw_for(m, p) <= 0);
-    for (int p = 2; p <= 100; ++p) CHECK_EQ(mixer_pct_for(m, mixer_raw_for(m, p)), p);
-    /* the steps from 100 down write what the curve says, and the fresh read gives it back */
+    for (int i = 1; i <= 30; ++i) {
+        const long raw = mixer_raw_for_level(m, i);
+        CHECK(raw >= -5600 && raw <= 400); /* never under the window, never past the control's own top */
+        CHECK_EQ(mixer_level_for_raw(m, raw), i);
+    }
+    /* a level a press from the top: what the model says, read back fresh */
     auto press = [&](int d) {
         const VolumePress p = mixer_press(m, lv, d);
-        if (p.kind == VolumePress::Kind::Set) write_mixer(a, card, m, p.pct);
+        if (p.kind == VolumePress::Kind::Set) write_mixer_level(a, card, m, p.level);
         if (p.kind == VolumePress::Kind::Mute) write_mixer_switch(a, card, m, false);
         if (p.kind == VolumePress::Kind::Unmute) write_mixer_switch(a, card, m, true);
         read_mixer(a, card, chosen, m, lv);
         return p;
     };
-    CHECK(press(-kVolumeStep).pct == 95);
-    CHECK_EQ(a.values["PCM Playback Volume"], -134L); /* -1.34 dB */
-    CHECK_EQ(lv.pct, 95);
-    for (int i = 0; i < 17; ++i) press(-kVolumeStep);
-    CHECK_EQ(lv.pct, 10);
-    CHECK_EQ(a.values["PCM Playback Volume"], -6000L);
-    press(-kVolumeStep);
-    CHECK_EQ(lv.pct, 5);
-    CHECK_EQ(a.values["PCM Playback Volume"], -7806L);
-    /* "-" at 5 %: the switch mutes, the level kept; "+" brings 5 % back */
-    CHECK(press(-kVolumeStep).kind == VolumePress::Kind::Mute);
+    CHECK(press(-1).level == 29);
+    CHECK_EQ(a.values["PCM Playback Volume"], 193L); /* +4 - 2.07 = 1.93 dB */
+    for (int i = 0; i < 27; ++i) press(-1);
+    CHECK_EQ(lv.level, 2);
+    CHECK_EQ(a.values["PCM Playback Volume"], -5393L);
+    press(-1);
+    CHECK_EQ(lv.level, 1);
+    CHECK_EQ(a.values["PCM Playback Volume"], -5600L); /* -56 dB: quiet, not the 80-100 % the old build gave */
+    CHECK_EQ(lv.pct, 3);
+    /* "-" at level 1: the switch mutes, the level kept; "+" brings level 1 back */
+    CHECK(press(-1).kind == VolumePress::Kind::Mute);
     CHECK(lv.muted);
-    CHECK_EQ(a.values["PCM Playback Volume"], -7806L);
-    CHECK(press(kVolumeStep).kind == VolumePress::Kind::Unmute);
+    CHECK_EQ(a.values["PCM Playback Volume"], -5600L);
+    CHECK(press(1).kind == VolumePress::Kind::Unmute);
     CHECK(!lv.muted);
-    CHECK_EQ(lv.pct, 5);
-    /* the control at its mute value (alsamixer to 0): shown muted, 0 %; "+" sets 5 % */
+    CHECK_EQ(lv.level, 1);
+    /* the control at its mute value (alsamixer to 0): shown muted, level 0; "+" sets level 1 */
     a.values["PCM Playback Volume"] = -10239;
     read_mixer(a, card, chosen, m, lv);
     CHECK(lv.muted);
+    CHECK_EQ(lv.level, 0);
     CHECK_EQ(lv.pct, 0);
-    const VolumePress up = press(kVolumeStep);
-    CHECK(up.kind == VolumePress::Kind::Set && up.pct == 5);
-    CHECK_EQ(a.values["PCM Playback Volume"], -7806L);
+    const VolumePress up = press(1);
+    CHECK(up.kind == VolumePress::Kind::Set && up.level == 1);
+    CHECK_EQ(a.values["PCM Playback Volume"], -5600L);
     CHECK(!lv.muted);
-    /* the same card without its switch: "-" at 5 % goes to the mute value (0 %), "-" there does nothing */
+    /* below the window, set by something else (-80 dB): the first level shows */
+    a.values["PCM Playback Volume"] = -8000;
+    read_mixer(a, card, chosen, m, lv);
+    CHECK_EQ(lv.level, 1);
+    /* the same card without its switch: "-" at level 1 goes to the mute value, "-" there does nothing */
     MixerChoice nosw;
     CHECK(choose_playback_mixer({c}, nosw));
-    MixerLevel five;
-    five.has_mixer = true;
-    five.raw = -7806;
-    five.pct = 5;
-    const VolumePress down = mixer_press(nosw, five, -kVolumeStep);
-    CHECK(down.kind == VolumePress::Kind::Set && down.pct == 0);
+    MixerLevel one;
+    one.has_mixer = true;
+    one.raw = -5600;
+    one.level = 1;
+    const VolumePress down = mixer_press(nosw, one, -1);
+    CHECK(down.kind == VolumePress::Kind::Set && down.level == 0);
+    CHECK_EQ(mixer_raw_for_level(nosw, 0), -10239L);
     MixerLevel zero;
     zero.has_mixer = true;
     zero.raw = -10239;
-    zero.pct = 0;
+    zero.level = 0;
     zero.muted = true;
-    CHECK(mixer_press(nosw, zero, -kVolumeStep).kind == VolumePress::Kind::None);
+    CHECK(mixer_press(nosw, zero, -1).kind == VolumePress::Kind::None);
     /* the log line */
-    CHECK_EQ(mixer_set_log_text(card, m, 5, -7806, 0, -7806),
-             std::string("set mixer hw:CARD=Headphones 'PCM Playback Volume' 5 % raw=-7806 (target -78.06 dB) read back raw=-7806"));
-    CHECK_EQ(mixer_set_log_text(card, m, 5, -7806, -19, 0),
-             std::string("set mixer hw:CARD=Headphones 'PCM Playback Volume' 5 % raw=-7806 (target -78.06 dB) read back failed (-19)"));
+    CHECK_EQ(volume_set_log_text(card + " 'PCM Playback Volume'", m.model, 16, -2497, 0, -2497),
+             std::string("set hw:CARD=Headphones 'PCM Playback Volume' step 16/30 53 % target -24.97 dB raw=-2497 read back "
+                         "raw=-2497"));
+    CHECK_EQ(volume_set_log_text("sink x", m.model, 0, 0, -19, 0), std::string("set sink x step 0/30 0 % target mute raw=0 read back failed (-19)"));
+    CHECK_EQ(volume_model_text(m.model), std::string("-56.00..4.00 dB, 30 levels of 2.07 dB"));
 }
 
 }  // namespace
 
 void test_volume() {
     test_volume_pct();
+    test_volume_model();
+    test_board_classes();
     test_pi4b_pcm();
     test_mute_steps();
     test_sink_names();

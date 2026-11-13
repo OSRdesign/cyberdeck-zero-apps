@@ -796,8 +796,8 @@ struct View::Impl {
             });
             now_hits.push_back(NowHit{b.hitbox, R{double(x), double(y), double(w), double(h)}, kBottom});
         };
-        make(grp_minus, g.vol_minus, Icon::Minus, -5);
-        make(grp_plus, g.vol_plus, Icon::Plus, 5);
+        make(grp_minus, g.vol_minus, Icon::Minus, -1); /* one level of the output a press (core/volume) */
+        make(grp_plus, g.vol_plus, Icon::Plus, 1);
         const int vx = X(g.vol_value.x), vy = Y(g.vol_value.y), vw = Wd(g.vol_value), vh = Hd(g.vol_value);
         grp_value_box = box(r, vx, vy, vw, vh, col::kTeal, P(8));
         const lv_font_t *f = font(Face::Bold, P(g.vol_text_px));

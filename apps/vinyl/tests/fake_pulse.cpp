@@ -380,27 +380,45 @@ void FakePulse::add_sink(const PulseDevice &d) {
     notify(PulseChange::What::Sink, PulseChange::Kind::New, v.index);
 }
 
-int FakePulse::set_sink_level(const std::string &sink, unsigned channels, int pct) {
+int FakePulse::set_sink_volume_raw(const std::string &sink, unsigned channels, uint32_t volume, int mute) {
     (void)channels;
     nap();
     std::lock_guard<std::recursive_mutex> g(mu_);
     if (!connected_) return kPulseState;
-    bool found = false;
-    for (const PulseDevice &d : sinks) found = found || d.name == sink;
-    if (!found) return kPulseNoDevice;
-    levels_set.emplace_back(sink, pct);
-    bool was_muted = false;
+    bool found = false, was_muted = false;
     for (const PulseDevice &d : sinks)
-        if (d.name == sink) was_muted = d.muted;
-    set_sink_volume(sink, pct, pct > 0 ? false : was_muted); /* the server's change event follows, as on a real one */
+        if (d.name == sink) {
+            found = true;
+            was_muted = d.muted;
+        }
+    if (!found) return kPulseNoDevice;
+    levels_set.emplace_back(sink, volume);
+    set_sink_raw(sink, volume, mute < 0 ? was_muted : mute != 0); /* the server's change event follows, as on a real one */
     return 0;
 }
 
+int FakePulse::read_sink_volume(const std::string &sink, uint32_t &volume, bool &muted) {
+    std::lock_guard<std::recursive_mutex> g(mu_);
+    if (!connected_) return kPulseState;
+    for (const PulseDevice &d : sinks)
+        if (d.name == sink && d.volume_raw >= 0) {
+            volume = static_cast<uint32_t>(d.volume_raw);
+            muted = d.muted;
+            return 0;
+        }
+    return kPulseNoDevice;
+}
+
 void FakePulse::set_sink_volume(const std::string &name, int pct, bool muted) {
+    set_sink_raw(name, static_cast<uint32_t>((static_cast<uint64_t>(std::max(0, pct)) * 0x10000 + 50) / 100), muted);
+}
+
+void FakePulse::set_sink_raw(const std::string &name, uint32_t volume, bool muted) {
     std::lock_guard<std::recursive_mutex> g(mu_);
     for (PulseDevice &d : sinks)
         if (d.name == name) {
-            d.volume_pct = pct;
+            d.volume_raw = volume;
+            d.volume_pct = static_cast<int>((static_cast<uint64_t>(volume) * 100 + 0x8000) / 0x10000);
             d.muted = muted;
             notify(PulseChange::What::Sink, PulseChange::Kind::Change, d.index);
         }

@@ -27,6 +27,26 @@ int pulse_volume_pct(const uint32_t *values, unsigned channels) { /* VINYL */
     return static_cast<int>((static_cast<uint64_t>(top) * 100 + 0x8000) / 0x10000);
 }
 
+int pulse_alsa_card(const std::string &alsa_card, const std::string &api_alsa_card, const std::string &path) { /* VINYL */
+    auto number = [](const std::string &s) {
+        if (s.empty() || s.size() > 3) return -1;
+        int v = 0;
+        for (char c : s) {
+            if (c < '0' || c > '9') return -1;
+            v = v * 10 + (c - '0');
+        }
+        return v;
+    };
+    if (int n = number(alsa_card); n >= 0) return n;
+    if (int n = number(api_alsa_card); n >= 0) return n;
+    const size_t colon = path.find(':');
+    if (colon == std::string::npos) return -1;
+    std::string rest = path.substr(colon + 1);
+    if (rest.compare(0, 5, "CARD=") == 0) rest = rest.substr(5);
+    const size_t end = rest.find_first_of(",.");
+    return number(end == std::string::npos ? rest : rest.substr(0, end));
+}
+
 /* ------------------------------------------------------------------------------------------------ texts */
 
 std::string pulse_error_text(int err) {

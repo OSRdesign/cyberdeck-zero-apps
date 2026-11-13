@@ -9,11 +9,11 @@
  *   CARD           the control device, as Vinyl names it: hw:CARD=Headphones (default: "default")
  *   (no option)    lists the card's mixer controls as Vinyl reads them (src/core/alsa, after its dB fix) and as the
  *                  simple-mixer layer of alsa-lib (amixer's view) reports them, Vinyl's choice and its level
- *   --set PCT      sets PCT with Vinyl's own code path (write_mixer: the curve, never above 0 dB), then reads the control
- *                  back fresh both ways
- *   --selem-raw PCT  sets the raw value Vinyl computes for PCT with snd_mixer_selem_set_playback_volume_all
- *   --selem-db PCT   sets the curve's dB for PCT (60 log10(p / 100), never above 0 dB) with
- *                  snd_mixer_selem_set_playback_dB_all
+ *   --set PCT      sets the level whose percent is nearest PCT with Vinyl's own code path (write_mixer_level: the
+ *                  output's own levels, linear in dB over at most its top 60 dB), then reads the control back fresh both
+ *                  ways (PCT 0: mute)
+ *   --selem-raw PCT  sets the raw value Vinyl computes for that level with snd_mixer_selem_set_playback_volume_all
+ *   --selem-db PCT   sets that level's dB with snd_mixer_selem_set_playback_dB_all
  *   --loop N       after a set, reads N more times, 250 ms apart (does the driver move it?)
  *   --keep         leaves the last value set; without it the control's value from before the probe is put back at the end
  *
@@ -22,6 +22,7 @@
 #include "alsa/alsa_api.hpp"
 #include "volume/output_volume.hpp"
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -157,7 +158,11 @@ void read_back(AlsaApi &a, Selem &s, bool have_selem, const std::string &card, c
     const int r = a.mixer_get(card, c.volume, raw);
     std::printf("  %-10s vinyl read: ", tag);
     if (r < 0) std::printf("failed (%s)", alsa_error_text(r).c_str());
-    else std::printf("raw=%ld (%d %%%s)", raw, mixer_pct_for(c, raw), c.has_db ? (", " + db_text(mixer_cdb_for(c, raw))).c_str() : "");
+    else {
+        const int lv = mixer_level_for_raw(c, raw);
+        std::printf("raw=%ld (level %d/%d, %d %%%s)", raw, lv, c.model.n, c.model.pct_of(lv),
+                    c.has_db ? (", " + db_text(mixer_cdb_for(c, raw))).c_str() : "");
+    }
     if (have_selem) {
         if (void *m = s.open_card(card)) {
             if (void *e = s.find(m, selem_name)) {
@@ -250,19 +255,20 @@ int main(int argc, char **argv) {
     std::string selem_name = c.volume;
     if (selem_name.size() > 16 && selem_name.compare(selem_name.size() - 16, 16, " Playback Volume") == 0)
         selem_name.resize(selem_name.size() - 16);
-    std::printf("Vinyl's choice: '%s'%s, raw %ld..%ld, top raw=%ld", c.volume.c_str(),
-                c.sw.empty() ? "" : (" + '" + c.sw + "'").c_str(), c.min, c.max, c.top);
-    if (c.has_db) std::printf(" (%s), dB %s .. %s", db_text(c.db_top).c_str(), db_text(c.db_min).c_str(), db_text(c.db_max).c_str());
-    else std::printf(", linear in steps (no dB data)");
-    std::printf("%s\n", c.min_is_mute ? ", min is mute" : "");
+    std::printf("Vinyl's choice: '%s'%s, raw %ld..%ld", c.volume.c_str(), c.sw.empty() ? "" : (" + '" + c.sw + "'").c_str(), c.min,
+                c.max);
+    if (c.has_db) std::printf(", dB %s .. %s", db_text(c.db_min).c_str(), db_text(c.db_max).c_str());
+    else std::printf(", no dB data");
+    std::printf("%s\nVinyl's levels: %s\n", c.min_is_mute ? ", min is mute" : "", volume_model_text(c.model).c_str());
     std::string cc;
     MixerLevel lv;
     read_mixer(*alsa, card, cc, c, lv);
-    std::printf("Vinyl's level: %d %%%s, raw=%ld%s\n", lv.pct, lv.muted ? " (muted)" : "", lv.raw,
+    std::printf("Vinyl's level: %d/%d, %d %%%s, raw=%ld%s\n", lv.level, c.model.n, lv.pct, lv.muted ? " (muted)" : "", lv.raw,
                 c.has_db ? (", " + db_text(lv.cdb)).c_str() : "");
-    std::printf("the curve here: ");
-    for (int p : {5, 10, 25, 50, 75, 100}) std::printf("%d %% raw=%ld  ", p, mixer_raw_for(c, p));
-    std::printf("\n");
+    std::printf("the levels here:\n");
+    for (int i = 1; i <= c.model.n; ++i)
+        std::printf("  %2d %3d %% %s raw=%ld\n", i, c.model.pct_of(i), c.has_db ? db_text(lround(c.model.db_of(i) * 100)).c_str() : "",
+                    mixer_raw_for_level(c, i));
 
     const long before = lv.raw;
     bool changed = false;
@@ -277,13 +283,15 @@ int main(int argc, char **argv) {
         }
     };
     if (set_pct >= 0) {
-        const long raw = mixer_raw_for(c, set_pct);
-        std::printf("--set %d: Vinyl's write_mixer, raw=%ld (target %s)\n", set_pct, raw, c.has_db ? db_text(mixer_cdb_for(c, raw)).c_str() : "no dB data");
-        r = write_mixer(*alsa, card, c, set_pct);
-        if (r < 0) std::printf("  write_mixer: %s\n", alsa_error_text(r).c_str());
+        const int level = c.model.from_pct(set_pct);
+        const long raw = mixer_raw_for_level(c, level);
+        std::printf("--set %d: level %d/%d, Vinyl's write_mixer_level, raw=%ld\n", set_pct, level, c.model.n, raw);
+        r = write_mixer_level(*alsa, card, c, level);
+        if (r < 0) std::printf("  write_mixer_level: %s\n", alsa_error_text(r).c_str());
         long back = 0;
         const int rr = alsa->mixer_get(card, c.volume, back);
-        std::printf("  log line: volume: %s\n", mixer_set_log_text(card, c, set_pct, raw, rr, back).c_str());
+        std::printf("  log line: volume: %s\n",
+                    volume_set_log_text(card + " '" + c.volume + "'", c.model, level, raw, rr, back).c_str());
         after("after");
     }
     if ((raw_pct >= 0 || db_pct >= 0) && !have_selem) std::printf("the simple-mixer layer is missing: --selem-* skipped\n");
@@ -292,13 +300,13 @@ int main(int argc, char **argv) {
         void *e = m ? s.find(m, selem_name) : nullptr;
         if (!e) std::printf("simple-mixer element '%s' not found\n", selem_name.c_str());
         if (e && raw_pct >= 0) {
-            const long raw = mixer_raw_for(c, raw_pct);
+            const long raw = mixer_raw_for_level(c, std::max(1, c.model.from_pct(raw_pct)));
             r = s.set_pvol_all(e, raw);
             std::printf("--selem-raw %d: snd_mixer_selem_set_playback_volume_all(%ld): %s\n", raw_pct, raw, r < 0 ? s.err(r) : "ok");
             after("after");
         }
         if (e && db_pct >= 0) {
-            const long cdb = db_pct == 0 ? kAlsaDbGainMute : std::min(0L, volume_cdb_for(db_pct));
+            const long cdb = db_pct == 0 ? kAlsaDbGainMute : lround(c.model.db_of(c.model.from_pct(db_pct)) * 100);
             r = s.set_pdb_all(e, cdb, 0);
             std::printf("--selem-db %d: snd_mixer_selem_set_playback_dB_all(%s, dir 0): %s\n", db_pct, db_text(cdb).c_str(),
                         r < 0 ? s.err(r) : "ok");

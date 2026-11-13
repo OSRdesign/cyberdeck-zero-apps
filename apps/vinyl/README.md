@@ -51,7 +51,7 @@ output lists are read in the background).
 | Folder up | Left or Backspace (browser) | the ".." row |
 | Queue pane (800x480 and wider) | Up / Down pick a track, Enter plays it | tap picks, tap again plays |
 | Queue editing | U move up, D move down, Delete or X remove, C clear all (then Enter or Esc, Left / Right / Tab between Cancel and Clear) | the four buttons; Clear all asks "Clear the queue?" (a tap outside it cancels) |
-| Volume | `-` / `=`: the volume of the output Vinyl plays on, 5 % a step | "-" and "+" of the volume group, the level between them (teal): in the bottom row (640x480, square, portrait), under the output button (480x320), where the Equalizer key was (800x480). It sets and shows the playing output's real level; muted (by anything), it shows "Muted" with the speaker-off mark, "-" does nothing and "+" brings the sound back at its level (one step above the card's lowest level when that is where it was); "-" at the card's lowest level mutes. "--" when the level is not known; where nothing can change it a tap shows "Volume is not available on this board" |
+| Volume | `-` / `=`: the volume of the output Vinyl plays on, one of its levels a press (about 2 dB) | "-" and "+" of the volume group, the level between them (teal): in the bottom row (640x480, square, portrait), under the output button (480x320), where the Equalizer key was (800x480). It sets and shows the playing output's real level as a percent of that output's levels; muted (by anything), it shows "Muted" with the speaker-off mark, "-" does nothing and "+" brings the sound back at its level; "-" at the first level mutes. "--" when the level is not known; where nothing can change it a tap shows "Volume is not available on this board" |
 | Close a notice | Esc (it also goes back as Esc always does: at the browser Vinyl quits) | tap it (it also goes after 6 s, 8 s for a disconnect) |
 | Back; at the browser, quit | Esc | the header's Esc |
 | Headset, speaker, keyboard media keys | Play/Pause, PlayCD, PauseCD (a toggle), Next, Previous (as Right / Left above, held too), Stop (pause and back to the start) | |
@@ -94,22 +94,35 @@ Korean titles draw with the launcher's Noto Sans CJK.
   (the node re-created) is followed on the same device; a device that goes away pauses playback.
 - **Without one** (the Lite boards: the deck, zero8, Pi 3A+): ALSA `default` (Automatic) and the cards with a playback
   device (through `plughw`, never `hw:`); the output page says "Bluetooth audio is not set up on this board."
-- **Volume** (decision D11 as the owner changed it, 2026-11-12): the volume group and `-` / `=` set the volume of the
-  output Vinyl plays on and show its real level. With a sound server that is the sink's own volume, in the server's
-  percent (the number `pactl` and `wpctl` show), whether it is the default sink or not; a Bluetooth headset keeps its
-  level across a reconnect, and if the headset or the system changes it, the group shows the new value. The group
-  follows the server's change events, so a headset's own buttons, and the launcher's volume keys when Vinyl plays on the
-  default sink, show within about half a second (the launcher's keys act on the default sink only: a launcher matter).
+- **Volume** (decision D11 as the owner changed it, 2026-11-12; the levels as the owner decided on 2026-11-13): the
+  volume group and `-` / `=` set the volume of the output Vinyl plays on and show its real level. Each output gets its
+  own levels from its real range: the top 60 dB of it at most (a sensible usable range, after Dr. Lex's
+  [volume control article](https://www.dr-lex.be/info-stuff/implement-a-volume-control.html)), cut in levels about 2 dB
+  apart, linear in dB: level 1 is the bottom of that window (it sounds), the last level the output's own top (100 %), 0
+  is mute; the group shows the level as a percent of the output's levels, so 50 % is the middle of that output's range
+  and a press moves one level, not 5 %. The same output (the same DAC or card model) gets the same levels on every
+  board; different outputs differ, as their hardware does.
+
+  | Output | Range | Window | Levels | dB a level | 50 % |
+  |---|---|---|---|---|---|
+  | Sharkoon USB DAC (`PCM`, 1 dB steps) | -45..0 dB | -45..0 dB | 23 | 2.05 | 52 % = -22.5 dB (the middle) |
+  | Raspberry Pi headphone jack (`PCM`, 0.01 dB steps, mute at min) | -102.39..+4.00 dB | -56..+4 dB | 30 | 2.07 | -27.0 dB |
+  | Apple USB-C adapter (`Headset`, 0.5 dB steps) | -60..0 dB | -60..0 dB | 30 | 2.07 | -31.0 dB |
+  | a sink with no known range (Bluetooth, software sinks) | | -60..0 dB | 30 | 2.07 | -31.0 dB |
+
   Without a sound server it is the card's playback mixer control (`Master`, `PCM`, `Speaker`, `Headphone`,
-  `Headset`...) on the sound server's own curve (dB = 60 log10(percent / 100): 50 % = -18 dB, 40 % = -24 dB, 25 % =
-  -36 dB), so the same percent is the same loudness on every board; never above 0 dB (a level set above it by something
-  else shows 100 %), and the group shows what the control really holds. A control whose lowest step is "mute" (the
-  Raspberry Pi headphone jack's `PCM`, -102.39..+4.00 dB) has that step read as Muted, and its dB range is taken from
-  the step above (ALSA reports the mute step as -99999.99 dB). Each set is logged with what the control holds after it
-  (`volume: set mixer <card> '<control>' P % raw=N (target X dB) read back raw=M`). Only a card with no playback mixer
-  gets Vinyl's software volume, on the same curve. Vinyl's stream itself always plays at 100 %, with its own restore
-  key, so a server never brings back another app's stream level. A muted output shows "Muted" in the group, whoever
-  muted it; the sound server's placeholder output at start (`auto_null`) never shows a level.
+  `Headset`...), set by raw value and read back fresh; the control's switch mutes. A control whose lowest step is "mute"
+  (the Pi jack's) has that step read as Muted, and its dB range is taken from the step above (ALSA reports the mute step
+  as -99999.99 dB); a control without dB data gets its own raw steps (at most 30). With a sound server it is the sink's
+  own volume, set as the server's dB (`pa_sw_volume_from_dB`) whether it is the default sink or not; the window is the
+  range of the ALSA card behind the sink (found from the sink's properties), placed under the sink's 0 dB as the server
+  maps it, so a DAC whose floor is -45 dB never gets a level below it; a sink with no card (a Bluetooth headset) gets
+  -60..0 dB. A level changed elsewhere (a headset's buttons, the launcher's keys on the default sink, alsamixer) shows as
+  the nearest level within about half a second. Each set is logged with what the output holds after it
+  (`volume: set <output> step i/N P % target X dB raw=M read back raw=K`). Only a card with no playback mixer gets
+  Vinyl's software volume, over -60..0 dB. Vinyl's stream itself always plays at 100 %, with its own restore key, so a
+  server never brings back another app's stream level. A muted output shows "Muted" in the group, whoever muted it; the
+  sound server's placeholder output at start (`auto_null`) never shows a level.
 
 ## Background playback
 
@@ -125,9 +138,10 @@ plays in front (`dim allow`, decision D16).
 - A screen of 480x320 or more (`X-MinSize=480x320`): the smallest approved draft is 480x320, where the sleeve beside the
   title, artist, format line, output button and volume group and a row of six transport keys already take the whole
   width; a smaller screen gets the launcher's notice. A portrait layout for 320x480 and taller (`X-Portrait=320x480`).
-- The layouts (owner-approved drafts): 480x320 (and landscape screens of that shape under 480 px high, or 800 px wide and
-  more up to aspect 1.6, such as 1024x768), 640x480 (4:3 screens under 800 px wide and 480 px or more high: the deck),
-  square (480x480, 720x720), portrait, and 800x480 and wider (two panes). Where a layout has less room than the 7 mm
+- The layouts (owner-approved drafts): 480x320 (and landscape screens of that shape under 480 px high or under 640 px
+  wide), 640x480 (4:3 screens 640 to 799 px wide and 480 px or more high: the deck), square (480x480, 720x720),
+  portrait, and two panes from 800x480 (800x480, 1024x600, and the 4:3 screens from 800 wide and 480 high: 800x600,
+  1024x768). Where a layout has less room than the 7 mm
   touch size (the deck's 640x480 at 11.3 px/mm: 70 px rows; a 3.5-inch 480x320: 43 px for the volume group and the seek
   row), the touch areas share the room without overlapping (owner rule R-4).
 - CyberdeckZero Launcher with the app contract; built at the shared pin (`apps/_common/LAUNCHER_REF`).
