@@ -29,8 +29,8 @@ The deck (640x480), square (720x720, the HackBerry) and large (800x480, two pane
 | Page | What |
 |---|---|
 | **Browser** (the root) | `~/Music` and the mounted drives (`/media/<user>`, `/run/media/<user>`, `/mnt`): folders A-Z, playlists (`.m3u`, `.m3u8`), tracks A-Z (natural order) with their title tags and lengths; the mini player at the bottom. A track plays its folder as the queue; a playlist plays its entries. |
-| **Now playing** | cover art (embedded JPEG or PNG, else the drawn sleeve) with the record sliding out (its label about a third out, with a dot and a centre ring that show it turning), title (one line that scrolls, or two lines on the 640x480, square and large screens), artist, album and year, the format and Gapless as information (one line at 480x320, flat chips at 640x480, plain text elsewhere), the output (a full-width button with the device's name and a chevron; a chip on 800x480 and wider), the volume group ("-", the level on teal, "+"); the position with a seek bar (a tap seeks), previous, play / pause, next, shuffle, repeat (off, all, one: a teal mark, and a "1" for one); the queue key (480x320) or the Browse and Queue keys of the bottom row; up next (square), the queue pane (large). An empty queue dims the transport keys. |
-| **Queue** | the play order from the playing track, "3 OF 20, 1 H 24 MIN LEFT"; Move up, Move down, Remove, Clear all (asks first: "Clear the queue?", Cancel, the default, or Clear; it keeps the playing track). An empty queue dims the four buttons. No dragging anywhere. |
+| **Now playing** | cover art (embedded JPEG or PNG, else the drawn sleeve) with the record sliding out (its label about a third out, with a dot and a centre ring that show it turning), title (one line that scrolls, or two lines on the 640x480, square and large screens), artist, album and year, the format and Gapless as information (one line at 480x320, flat chips at 640x480, plain text elsewhere), the output (a full-width button with the device's name and a chevron; a chip on 800x480 and wider), the volume group ("-", the level on teal, "+"); the position with a seek bar (a tap seeks, a drag scrubs), previous, play / pause, next, shuffle, repeat (off, all, one: a teal mark, and a "1" for one); the queue key (480x320) or the Browse and Queue keys of the bottom row; up next (square), the queue pane (large). An empty queue dims the transport keys. |
+| **Queue** | the play order from the playing track, "3 OF 20, 1 H 24 MIN LEFT"; Move up, Move down, Remove, Clear all (asks first: "Clear the queue?", Cancel, the default, or Clear; it keeps the playing track). An empty queue dims the four buttons. No dragging in the lists (the seek bar is the one control that drags). |
 | **Output** | Automatic (the system's default output), the Bluetooth devices (music or call quality), the wired outputs, a paired device that is off (dimmed). Vinyl never switches output by itself: when the output in use goes away, playback pauses ("Evolve 65 disconnected. Paused."). |
 
 The top band is the launcher's: the toolkit's header with the title (none at 320x480, the toolkit's narrow portrait), the
@@ -44,7 +44,7 @@ output lists are read in the background).
 | Play / pause | Space (Enter on now playing) | the teal key; the mini player's key |
 | Previous / next track | Left / Right on now playing; `,` / `.` on every page; the media keys | the keys beside play; the mini player's next key |
 | Scan back / ahead (muted, 3x) | hold Left / Right on now playing (or `,` / `.`, or a media key) | hold the previous / next key |
-| Seek back / forward 10 s | Shift+Left / Shift+Right (now playing) | tap the seek bar where to go |
+| Seek | Shift+Left / Shift+Right: back / forward 10 s (now playing) | tap the seek bar where to go, or press on it and drag: the knob follows the finger, the times show where it will land, and the seek happens when you let go (playing or paused; nothing else starts from a press on the bar) |
 | Shuffle / repeat | S / R | the keys left and right of the transport |
 | Queue, Output, Browser | Q, O, B | the Queue key; the output button (the only way to Output by touch on every layout but 800x480 and wider, which have the output chip and the Output key); Browse (or Esc from now playing) |
 | Lists: move, act, back | Up / Down, Enter; Right acts as Enter and Left goes back (queue, output; in the browser Right opens a folder) | browser: tap a row; queue: tap selects, tap again plays; output: tap chooses |
@@ -202,7 +202,7 @@ the FLAC / Opus readers come from this repository's Cassette (same author, MIT).
 
 ```sh
 wsl -e sh apps/vinyl/tests/run.sh               # the unit tests (-Werror) and the real-library fixtures
-wsl -e sh apps/vinyl/build.sh host              # harness, unit tests, 41 scenes (qa* for the design QA), sheets
+wsl -e sh apps/vinyl/build.sh host              # harness, unit tests, 44 scenes (qa* for the design QA), sheets
 wsl -e sh apps/vinyl/build.sh cross             # the arm64 binary; --arch amd64 for PCs
 wsl -e sh apps/vinyl/tests/abi/run.sh [root]    # the hand-written FFmpeg / mpg123 / vorbisfile ABI against headers
 python3 tools/make_registry.py --only vinyl --out <folder>    # a local .deb (not published)

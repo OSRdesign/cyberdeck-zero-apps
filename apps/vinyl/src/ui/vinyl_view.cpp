@@ -7,6 +7,8 @@
  */
 #include "vinyl_view.hpp"
 
+#include "seek/seek_scrub.hpp"
+
 #include "gfx.hpp"
 #include "theme.hpp"
 
@@ -448,6 +450,28 @@ struct View::Impl {
     lv_obj_t *out_hit = nullptr; /* the output button (or the large class's output chip) opens the chooser */
     lv_obj_t *time = nullptr, *remain = nullptr, *seek_track = nullptr, *seek_fill = nullptr, *seek_knob = nullptr;
     lv_obj_t *seek_hit = nullptr;
+    SeekScrub scrub;                  /* the seek bar's tap and drag (core/seek) */
+    double hold_frac = -1;            /* after a release: the target shown until the engine's position gets there */
+    uint32_t hold_until = 0;
+
+    static void seek_event_cb(lv_event_t *e) { static_cast<Impl *>(lv_event_get_user_data(e))->seek_event(lv_event_get_code(e)); }
+
+    void seek_event(lv_event_code_t code) {
+        lv_point_t p{};
+        if (lv_indev_t *in = lv_indev_active()) lv_indev_get_point(in, &p);
+        scrub.set_bar(seek_x, seek_w);
+        if (code == LV_EVENT_PRESSED) scrub.press(p.x);
+        else if (code == LV_EVENT_PRESSING) scrub.move(p.x);
+        else if (code == LV_EVENT_PRESS_LOST) scrub.cancel();
+        else if (code == LV_EVENT_RELEASED) {
+            double f = 0;
+            if (!scrub.release(p.x, f)) return;
+            hold_frac = f; /* shown until the engine is there (at most 0.8 s): the knob never jumps back */
+            hold_until = lv_tick_get() + 800;
+            if (act.seek_to) act.seek_to(f);
+        }
+        draw_time_row(last_now);
+    }
     int seek_x = 0, seek_w = 1;
     std::map<std::string, Button> btns;
     lv_obj_t *repeat_dash = nullptr, *shuffle_dash = nullptr, *repeat_one = nullptr;
@@ -694,12 +718,18 @@ struct View::Impl {
         seek_fill = box(seek_track, 0, 0, sh, sh, col::kTeal, sh / 2);
         const int kd = P(18);
         seek_knob = box(r, seek_x - kd / 2, Y(g.seek.y) + sh / 2 - kd / 2, kd, kd, col::kInk, LV_RADIUS_CIRCLE);
-        seek_hit = hit(r, seek_x - kd / 2, Y(g.seek.y) + sh / 2 - kd / 2, seek_w + kd, kd, 0, target, [this] {
-            lv_point_t p{};
-            if (lv_indev_t *in = lv_indev_active()) lv_indev_get_point(in, &p);
-            const double frac = std::clamp((p.x - seek_x) / static_cast<double>(seek_w), 0.0, 1.0);
-            if (act.seek_to) act.seek_to(frac);
-        });
+        /* the seek bar: a tap seeks there, a drag scrubs (core/seek: the target follows the finger, the seek happens on the
+         * release; the owner, 2026-11-13); press-locked, so a finger that slides off keeps the scrub and starts nothing
+         * else */
+        seek_hit = lv_obj_create(r);
+        plain(seek_hit);
+        lv_obj_add_flag(seek_hit, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_flag(seek_hit, LV_OBJ_FLAG_PRESS_LOCK);
+        lv_obj_remove_flag(seek_hit, LV_OBJ_FLAG_GESTURE_BUBBLE);
+        lv_obj_set_pos(seek_hit, seek_x - kd / 2, Y(g.seek.y) + sh / 2 - kd / 2);
+        lv_obj_set_size(seek_hit, seek_w + kd, std::max(kd, target));
+        for (lv_event_code_t c : {LV_EVENT_PRESSED, LV_EVENT_PRESSING, LV_EVENT_RELEASED, LV_EVENT_PRESS_LOST})
+            lv_obj_add_event_cb(seek_hit, seek_event_cb, c, this);
         now_hits.push_back(NowHit{seek_hit, R{double(seek_x - kd / 2), double(Y(g.seek.y) + sh / 2 - kd / 2), double(seek_w + kd),
                                               double(kd)},
                                   kSeek});
@@ -873,6 +903,43 @@ struct View::Impl {
         layout_now_hits();
     }
 
+    /* The time row: h:mm:ss for a track of an hour or more, the labels as wide as that format needs (never "-3..."). While
+     * the seek bar is pressed it shows the target (the knob and the fill under the finger, the elapsed time the target's,
+     * the remaining time from it); after the release the target until the engine's position is there. */
+    void draw_time_row(const NowView &v) {
+        if (!time) return;
+        const uint64_t total = v.total_ms;
+        uint64_t pos = std::min(v.pos_ms, total ? total : v.pos_ms);
+        if (total && v.has_track) {
+            if (scrub.active()) {
+                pos = scrub.target_ms(total);
+            } else if (hold_frac >= 0) {
+                const uint64_t want = static_cast<uint64_t>(hold_frac * static_cast<double>(total));
+                const uint64_t gap = pos > want ? pos - want : want - pos;
+                if (gap > 1500 && static_cast<int32_t>(hold_until - lv_tick_get()) > 0) pos = want;
+                else hold_frac = -1;
+            }
+        }
+        const bool hours = (total ? total : pos) >= 3600000;
+        layout_time_row(hours);
+        set_text(time, v.has_track ? layout::track_time_text(pos, hours, true) : "--:--");
+        set_text(remain, v.has_track && total ? "-" + layout::track_time_text(total - pos, hours, false) : "");
+        const double frac = total ? static_cast<double>(pos) / total : 0.0;
+        const int sh = lv_obj_get_height(seek_track);
+        const int fw = std::max(sh, ri(frac * seek_w));
+        lv_obj_set_width(seek_fill, fw);
+        show(seek_fill, v.has_track && frac > 0);
+        const int kd = lv_obj_get_width(seek_knob);
+        lv_obj_set_x(seek_knob, seek_x + ri(frac * seek_w) - kd / 2);
+    }
+
+    /* the design-QA scenes: the scrubbing state as if a finger were held on the bar at `frac` */
+    void simulate_scrub(double frac) {
+        scrub.set_bar(seek_x, seek_w);
+        scrub.press(seek_x + frac * seek_w);
+        draw_time_row(last_now);
+    }
+
     void set_cover(const std::shared_ptr<const PixelImage> &c) {
         if (c == cover) return;
         cover = c;
@@ -925,20 +992,7 @@ struct View::Impl {
             std::copy(sig, sig + 4, hits_sig);
             layout_now_hits();
         }
-        /* time: h:mm:ss for a track of an hour or more, the labels as wide as that format needs (never "-3...") */
-        const uint64_t total = v.total_ms;
-        const uint64_t pos = std::min(v.pos_ms, total ? total : v.pos_ms);
-        const bool hours = (total ? total : pos) >= 3600000;
-        layout_time_row(hours);
-        set_text(time, v.has_track ? layout::track_time_text(pos, hours, true) : "--:--");
-        set_text(remain, v.has_track && total ? "-" + layout::track_time_text(total - pos, hours, false) : "");
-        const double frac = total ? static_cast<double>(pos) / total : 0.0;
-        const int sh = lv_obj_get_height(seek_track);
-        const int fw = std::max(sh, ri(frac * seek_w));
-        lv_obj_set_width(seek_fill, fw);
-        show(seek_fill, v.has_track && frac > 0);
-        const int kd = lv_obj_get_width(seek_knob);
-        lv_obj_set_x(seek_knob, seek_x + ri(frac * seek_w) - kd / 2);
+        draw_time_row(v);
         /* transport; with an empty queue the keys are dimmed: nothing to play (design QA run 3, D-81) */
         if (auto it = btns.find("play"); it != btns.end()) icon_set(it->second.icon, v.playing ? Icon::Pause : Icon::Play, col::kWhite);
         for (const layout::Btn &t : g.transport)
@@ -1498,6 +1552,7 @@ bool View::notice_shown() const { return d_->notice != nullptr; }
 void View::ask_clear_queue() { d_->ask_clear_queue(); }
 bool View::dialog_shown() const { return d_->dlg_box != nullptr; }
 bool View::dialog_key(uint32_t key) { return d_->dialog_key(key); }
+void View::simulate_scrub(double frac) { d_->simulate_scrub(frac); }
 void View::tick(bool playing) { d_->tick(playing); }
 int View::cover_side() const { return d_->Wd(d_->g.sleeve); }
 

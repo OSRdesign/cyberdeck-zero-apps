@@ -1,0 +1,12 @@
+title Vinyl: scrubbing the seek bar (the owner, 2026-11-13): a finger held on the bar at three quarters of a 4:04 track: the knob and the fill under it, the elapsed time the target's (03:03), the remaining time from it; the seek happens on the release (640x480: qa-640-scrub, 480x320 and 320x480: qa-scrub-small)
+sizes 800x480 480x480 720x720 480x800 480x640
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_SCRUB 0.75
+
+wait 1200
+shot 01-scrubbing
+expect esc
+expect text "03:03"
+expect text "-1:01"
+expect noquit

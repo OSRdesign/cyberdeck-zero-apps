@@ -288,6 +288,23 @@ is complicating the thing, let's make it work with all most common codecs out of
   22.5 MB of memory then). The notice for a tier-2 file is now a rare failure: "The FFmpeg libraries could not be
   loaded. Reinstall Vinyl." (the old "Install them from Settings, Apps" pointed to nothing).
 
+## Dragging a slider, the seek bar (owner, 2026-11-13)
+
+The owner: "for D30 equalizer should also work by dragging the bars and btw so should the track timeline to seek a
+specific point".
+
+- The ruling (relayed by the coordinator): dragging a slider-style control is allowed and wanted; this refines the "no
+  dragging" rule (design QA R-1 / D-34): a drag is fine for a slider when a key and a tap alternative exist.
+- Built in P1, every layout, touch and pointer (`src/core/seek`): a press on the seek bar (or its knob) starts a scrub;
+  the knob and the fill follow the finger, only its x counts, clamped to the bar's ends; the elapsed time shows the
+  target time and the remaining time follows; the seek is applied once, on the release (never while moving: the
+  decoders and the SD card); a tap is a press and release where it started (the same seek); playback runs on, or stays
+  paused; the bar's touch area is press-locked, so a finger that slides off keeps the scrub and starts nothing else;
+  after the release the target stays shown until the engine's position is there (at most 0.8 s), so the knob never
+  jumps back. Shift+Left / Shift+Right (10 s) stay. The touch area keeps its row of its own (the row height where there
+  is room, no overlap: the earlier rules).
+- The Equalizer's drag (D30) is P2, with the Equalizer.
+
 ## Later (not built)
 
 Recorded on 2026-11-13; none of these is offered in 0.1.0.
@@ -302,6 +319,8 @@ Recorded on 2026-11-13; none of these is offered in 0.1.0.
   example "-22.5 dB") instead of the percent. The model already takes the step (never finer than the control's own step)
   and formats a level in dB (`volume_level_text`, tested); the setting and its page are not built.
 - The Menu key and its pages (equalizer, sleep timer, playback, library, output, about): P2 (owner, 2026-11-13, above).
+- The Equalizer's bars by drag (owner, 2026-11-13, "for D30 equalizer should also work by dragging the bars"): P2, with
+  the Equalizer.
 
 ## 640x480 and 480x320 (owner, 2026-11-13)
 

@@ -7,6 +7,7 @@
  */
 #include "check.hpp"
 
+#include "seek/seek_scrub.hpp"
 #include "transport/transport_press.hpp"
 
 #include <vector>
@@ -294,9 +295,75 @@ void test_cancel_during_scan() {
     CHECK_EQ(h.nexts, 0);
 }
 
+/* The seek bar's tap and drag (the owner, 2026-11-13: "... so should the track timeline to seek a specific point"), with
+ * fake pointer events on a bar 72..408 px (the 480x320 layout): a tap seeks where it lands; a drag shows the target
+ * under the finger and seeks once, on the release, to where it ends; past either end the target stops at the end; a
+ * press lost seeks nothing; only x counts. */
+void test_seek_scrub() {
+    CHECK_NEAR(seek_fraction(72, 72, 336), 0.0, 1e-12);
+    CHECK_NEAR(seek_fraction(408, 72, 336), 1.0, 1e-12);
+    CHECK_NEAR(seek_fraction(240, 72, 336), 0.5, 1e-12);
+    CHECK_NEAR(seek_fraction(10, 72, 336), 0.0, 1e-12);  /* left of the bar: its start */
+    CHECK_NEAR(seek_fraction(470, 72, 336), 1.0, 1e-12); /* right of it: its end */
+    CHECK_NEAR(seek_fraction(100, 0, 0), 0.0, 1e-12);    /* no bar */
+
+    SeekScrub s;
+    s.set_bar(72, 336);
+    double f = -1;
+    /* no press: a release does nothing */
+    CHECK(!s.release(200, f));
+    CHECK(!s.active());
+    /* a tap: press and release on the same spot, one seek there */
+    s.press(156); /* a quarter */
+    CHECK(s.active());
+    CHECK_NEAR(s.target(), 0.25, 1e-12);
+    CHECK(s.release(156, f));
+    CHECK_NEAR(f, 0.25, 1e-12);
+    CHECK(!s.active());
+    CHECK(!s.dragged());
+    /* a drag: the target follows the finger, the release seeks once, where it ended */
+    s.press(100);
+    s.move(150);
+    CHECK_NEAR(s.target(), (150.0 - 72) / 336, 1e-12);
+    s.move(300);
+    CHECK_NEAR(s.target(), (300.0 - 72) / 336, 1e-12);
+    CHECK(s.dragged());
+    CHECK_EQ(s.target_ms(244000), static_cast<uint64_t>((300.0 - 72) / 336 * 244000 + 0.5)); /* the time the label shows */
+    CHECK(s.release(324, f));
+    CHECK_NEAR(f, 0.75, 1e-12);
+    CHECK(!s.release(324, f)); /* no second seek */
+    /* past both ends: the target stops at the bar's ends */
+    s.press(200);
+    s.move(-80);
+    CHECK_NEAR(s.target(), 0.0, 1e-12);
+    s.move(900);
+    CHECK_NEAR(s.target(), 1.0, 1e-12);
+    CHECK(s.release(900, f));
+    CHECK_NEAR(f, 1.0, 1e-12);
+    s.press(400);
+    CHECK(s.release(-20, f));
+    CHECK_NEAR(f, 0.0, 1e-12);
+    /* a press lost (the area deleted, the page changed): nothing */
+    s.press(200);
+    s.move(260);
+    s.cancel();
+    CHECK(!s.active());
+    CHECK(!s.release(260, f));
+    /* moves without a press change nothing */
+    s.move(300);
+    CHECK(!s.active());
+    /* the bar resized (an hour-long track widens the time labels): the target follows the new bar */
+    s.set_bar(90, 300);
+    s.press(240);
+    CHECK_NEAR(s.target(), 0.5, 1e-12);
+    s.cancel();
+    CHECK_EQ(s.target_ms(0), static_cast<uint64_t>(0));
+}
+
 }  // namespace
 
 void test_transport() {
+    test_seek_scrub();
     test_short_presses();
     test_no_double_action();
     test_scan_forward();

@@ -286,6 +286,8 @@ struct VinylApp::Impl final : TransportHost {
         if (worker) scan(true);
         timer = lv_timer_create(timer_cb, 100, this);
         tick();
+        if (const std::string f = env_str("VINYL_DEMO_SCRUB"); demo && !f.empty()) /* the scenes: a finger held on the bar */
+            view->simulate_scrub(std::atof(f.c_str()));
         if (const std::string n = env_str("VINYL_DEMO_NOTICE"); demo && !n.empty()) demo_notice(n);
     }
 

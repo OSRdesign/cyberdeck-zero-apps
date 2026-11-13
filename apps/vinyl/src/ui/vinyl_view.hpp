@@ -6,7 +6,7 @@
  *   Now      now playing: the header chips (queue position, centred Esc, volume), the cream panel, the sleeve with the
  *            record sliding out behind it (turning only while playing), title / artist / album, the format and output
  *            chips (information), the output button (the large class: its output chip), the volume group ("-", the level
- *            on teal, "+"), the time row with the seek bar (a tap seeks: no dragging), the transport keys, the class's
+ *            on teal, "+"), the time row with the seek bar (a tap seeks, a drag scrubs: core/seek), the transport keys, the class's
  *            extras (up next, the bottom row, the queue pane of the large class);
  *   Browser  the folder list with the mini player;
  *   Queue    the play order with Move up, Move down, Remove, Clear all (no dragging);
@@ -47,6 +47,8 @@ public:
     /* "Clear the queue?" over the queue buttons (Cancel the default): a tap outside or Esc cancels, Clear calls
      * Actions::queue_clear; while it shows every key goes to dialog_key (true: it took the key) */
     void ask_clear_queue();
+    /* the design-QA scenes (VINYL_DEMO_SCRUB): the seek bar's scrubbing state as if a finger were held at `frac` */
+    void simulate_scrub(double frac);
     bool dialog_shown() const;
     bool dialog_key(uint32_t key);
     /* the record turns while `playing` and the now-playing page shows; call it often (it keeps its own clock) */

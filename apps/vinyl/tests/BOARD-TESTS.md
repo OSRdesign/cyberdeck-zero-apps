@@ -6,7 +6,7 @@ Bluetooth); a Lite board (zero8 or the deck, a USB sound card) for B11. Numbers 
 trimmed to what 0.1.0 has; B13-B16 are the design-QA round (the transport press of the owner ruling of 2026-11-12, the
 volume group), B17-B19 the retests of 2026-11-12, B20-B24 the round of 2026-11-13 (Clear all, the seek tap, the
 Raspberry Pi headphone jack, the approved 640x480 and 480x320 layouts), B25-B28 the levels fitted to each output (the
-owner's decision of 2026-11-13, one test per kind of output).
+owner's decision of 2026-11-13, one test per kind of output), B29 the seek bar's drag.
 
 ## Preparation (Controller)
 
@@ -66,6 +66,7 @@ Round of 2026-11-13:
 | B26 | Pi 4B and Pi 3A+, the headphone jack (no server): from Muted press "+" through every level; at 3 %, 50 % and 100 %, `amixer -c 0 sget PCM` | 30 levels of about 2 dB: 3 % (level 1) is about -56 dB, quiet but heard; 50 % about -27 dB; 100 % +4.00 dB (the jack's own top, raw 400); never raw 391 at a low level again; each press logs `volume: set hw:CARD=Headphones 'PCM Playback Volume' step i/30 P % target X dB raw=M read back raw=M`. `vinyl-mixer-probe hw:CARD=Headphones` lists the same 30 levels |
 | B27 | The deck zero7 with the Apple USB-C adapter (no server): the same walk; `amixer -c <card> sget Headset` at 50 % and 100 % | 30 levels of about 2 dB over -60..0 dB; 50 % about -31 dB; 100 % 0 dB |
 | B28 | A Bluetooth headset or speaker (HackBerry or a Pi 5 board): the same walk, then the headset's own volume buttons | 30 levels over the server's -60..0 dB; the headset's buttons show as the nearest level within about half a second |
+| B29 | Now playing, playing: press on the seek bar's knob and drag it slowly to the right and back, let go near the middle; then the same while paused; then press on the bar and drag off it (up onto the keys, sideways past its ends) before letting go; then a plain tap on the bar | while the finger is down the knob and the fill follow it and the elapsed time shows where it will land (the remaining time with it); the music plays on (or stays paused) without jumping; on release it continues from there, once; past the bar's ends the knob stops at the end; sliding onto a key neither presses that key nor stops the drag; the tap seeks where it lands as before |
 
 ## Cleanup
 
