@@ -685,7 +685,7 @@ struct View::Impl {
                 if (id == 2) chips[id].set_scroll();
             }
         }
-        if (g.vol_group) build_out_button(r);
+        if (g.out_button_on) build_out_button(r);
 
         out_hit = hit(r, 0, 0, 1, 1, 0, 0, [this] {
             if (act.button) act.button("output");
@@ -1006,7 +1006,7 @@ struct View::Impl {
         /* the touch areas over the output and the volume chips follow the chips (layout_now_hits); the square and
          * portrait layouts have the output button instead */
         for (NowHit &e : now_hits) {
-            if (g.vol_group && e.obj == out_hit) continue;
+            if (g.out_button_on && e.obj == out_hit) continue;
             const Chip *c = e.obj == out_hit ? &chips[2] : (vol_hit && e.obj == vol_hit) ? &chips[1] : nullptr;
             if (!c) continue;
             show(e.obj, c->width > 0);
@@ -1015,7 +1015,7 @@ struct View::Impl {
         place_out_button(v);
         update_vol_group(v);
         const int outb_x = outb_box ? lv_obj_get_x(outb_box) : 0;
-        const int sig[7] = {chips[1].x, chips[1].width, g.vol_group ? outb_x : chips[2].x, chips[2].width, vol_mode ? 2 : 1,
+        const int sig[7] = {chips[1].x, chips[1].width, g.out_button_on ? outb_x : chips[2].x, chips[2].width, vol_mode ? 2 : 1,
                             chips[1].y, chips[2].y};
         if (!std::equal(sig, sig + 7, hits_sig)) { /* the chips moved, or the strip opened or closed */
             std::copy(sig, sig + 7, hits_sig);

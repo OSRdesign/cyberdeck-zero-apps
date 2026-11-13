@@ -123,6 +123,7 @@ NowGeom now_geom(SizeClass c) {
         g.repeat_dash = R{266, 408, 12, 4};
         g.bottom = {word("queue", 24, 426, 100, 40)};
         g.vol_group = true; /* owner, 2026-11-13: the Output key becomes the volume group */
+        g.out_button_on = true;
         g.vol_minus = R{132, 426, 48, 40};
         g.vol_value = R{184, 426, 60, 40};
         g.vol_plus = R{248, 426, 48, 40};
@@ -157,6 +158,7 @@ NowGeom now_geom(SizeClass c) {
         g.upnext = R{20, 366, 440, 44};
         g.bottom = {word("browse", 20, 420, 120, 42), word("queue", 150, 420, 120, 42)};
         g.vol_group = true; /* owner, 2026-11-13: the Output key becomes the volume group */
+        g.out_button_on = true;
         g.vol_minus = R{280, 420, 52, 42};
         g.vol_value = R{336, 420, 68, 42};
         g.vol_plus = R{408, 420, 52, 42};
@@ -181,7 +183,7 @@ NowGeom now_geom(SizeClass c) {
         g.chip0 = R{590, 164, 0, 26};
         g.chip_step = 32;
         g.chip_rows = 3;
-        g.chip_layout = {{0}, {2, 1}, {3}};
+        g.chip_layout = {{0}, {2}, {3}}; /* owner, 2026-11-13: no Vol chip, the volume is the bottom group */
         g.short_format = true;
         g.quality_in_chip = false;
         g.time = text(330, 274, 48, 28, 14, false, 28);
@@ -191,7 +193,13 @@ NowGeom now_geom(SizeClass c) {
                        btn("next", 572, 312, 56, 48), btn("repeat", 642, 312, 56, 48), btn("sleep", 712, 312, 58, 48)};
         g.transport.back().enabled = false; /* sleep timer: P2 */
         g.repeat_dash = R{664, 352, 12, 4};
-        g.bottom = {word("browse", 330, 384, 140, 42), word("output", 480, 384, 140, 42), word("eq", 630, 384, 140, 42, false)};
+        /* owner, 2026-11-13 (NP-800x480 of the full-UX canvas): Browse, Output (the Menu key's place, P2), the volume
+         * group where the dimmed Equalizer key was */
+        g.bottom = {word("browse", 330, 384, 140, 42), word("output", 480, 384, 140, 42)};
+        g.vol_group = true;
+        g.vol_minus = R{630, 384, 40, 42};
+        g.vol_value = R{674, 384, 52, 42};
+        g.vol_plus = R{730, 384, 40, 42};
         g.seams = {262, 306, 372};
         break;
     }

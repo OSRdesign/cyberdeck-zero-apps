@@ -362,15 +362,25 @@ void test_layout() {
         int ids = 0;
         for (const std::vector<int> &row : g.chip_layout)
             for (int id : row) ids |= 1 << id;
-        CHECK_EQ(ids, c == SizeClass::Small ? 7 : c == SizeClass::Portrait ? 1 : c == SizeClass::Square ? 9 : 15);
-        CHECK_EQ(g.vol_group, c == SizeClass::Square || c == SizeClass::Portrait);
+        /* the large class (owner, 2026-11-13): format, output, gapless chips, no Vol chip */
+        CHECK_EQ(ids, c == SizeClass::Small ? 7 : c == SizeClass::Portrait ? 1 : c == SizeClass::Square ? 9 : 13);
+        CHECK_EQ(g.vol_group, c != SizeClass::Small);
+        CHECK_EQ(g.out_button_on, c == SizeClass::Square || c == SizeClass::Portrait);
         if (g.vol_group) {
-            CHECK(inside(g.vol_minus) && inside(g.vol_value) && inside(g.vol_plus) && inside(g.out_button));
+            CHECK(inside(g.vol_minus) && inside(g.vol_value) && inside(g.vol_plus));
             CHECK(g.vol_minus.right() < g.vol_value.x && g.vol_value.right() < g.vol_plus.x);
             CHECK(g.bottom.back().box.right() < g.vol_minus.x);
             CHECK_NEAR(g.vol_plus.right(), g.transport.back().box.right(), 1e-9); /* the group ends with the keys above */
-            CHECK_NEAR(g.out_button.right(), g.title.box.right(), 1e-9);         /* the button fills the info column */
+            for (const Btn &b : g.bottom) CHECK(b.id != "eq");                    /* the dimmed Equalizer key is gone */
+        }
+        if (g.out_button_on) {
+            CHECK(inside(g.out_button));
+            CHECK_NEAR(g.out_button.right(), g.title.box.right(), 1e-9); /* the button fills the info column */
             for (const Btn &b : g.bottom) CHECK(b.id != "output");
+        } else if (g.vol_group) {
+            bool output_key = false; /* large: the Output key stays until the Menu key (P2) */
+            for (const Btn &b : g.bottom) output_key = output_key || b.id == "output";
+            CHECK(output_key);
         }
         /* the notice box across the seek row */
         const R n = notice_box_now(g, 50);

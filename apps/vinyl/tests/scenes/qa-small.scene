@@ -10,11 +10,11 @@ expect esc
 @480x320 expect text "Vinyl"
 @320x480 expect notext "Vinyl"
 @480x320 expect text "Vol 60"
-# the small and large layouts: the Vol chip opens the volume strip
+# the small layout (640x480, 480x320): the Vol chip opens the volume strip
 @480x320 tap "Vol 60"
 @320x480 expect text "60"
 @320x480 expect text "Evolve 65"
-# the square and portrait layouts (owner, 2026-11-13): the bottom volume group, no Vol chip
+# the large, square and portrait layouts (owner, 2026-11-13): the bottom volume group, no Vol chip
 wait 300
 shot 02-now-volume
 @480x320 expect text "60"
@@ -37,7 +37,7 @@ wait 300
 wait 300
 @480x320 expect notext "65"
 @320x480 expect text "65"
-# the output button opens the Output page (the only way there by touch on these layouts)
+# the output button (square, portrait) or chip (large) opens the Output page
 @320x480 tap "Evolve 65"
 wait 400
 @320x480 expect text "Automatic"

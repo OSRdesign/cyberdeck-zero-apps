@@ -91,12 +91,14 @@ struct NowGeom {
     std::vector<Btn> bottom;
     bool has_queue_pane = false;
     R queue_pane;
-    /* The volume group of the square and portrait drafts (owner, 2026-11-13: NowPlaying-480x480 / -320x480): "-", the
-     * level on teal, "+" in the bottom row where the Output key was; no Vol chip and no volume strip on those layouts.
-     * The output chip is then a button of its own (icon, the device's name, a chevron) that opens the Output page:
-     * out_button is its box (portrait: x is the least, it starts right of a wider format chip and ends at the same
-     * right edge). The small and large classes keep the Vol chip, the strip (and the large class its Output key). */
+    /* The volume group (owner, 2026-11-13): "-", the level on teal, "+" in the bottom row; no Vol chip and no volume
+     * strip where it is. Square and portrait (NowPlaying-480x480 / -320x480): it takes the Output key's place and the
+     * output chip becomes a button of its own (out_button_on: icon, the device's name, a chevron; out_button is its box,
+     * in portrait x is the least, it starts right of a wider format chip). Large (NP-800x480 of the full-UX canvas): it
+     * takes the dimmed Equalizer key's place, the Output key stays until the Menu key (P2) exists, the output chip stays
+     * a chip. The small class keeps the Vol chip and its strip. */
     bool vol_group = false;
+    bool out_button_on = false;
     R vol_minus, vol_value, vol_plus;
     R out_button;
     double queue_row_h = 40, queue_heading_px = 11;

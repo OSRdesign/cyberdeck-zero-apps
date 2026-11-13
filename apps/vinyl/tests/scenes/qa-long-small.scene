@@ -11,7 +11,7 @@ expect text "0:01:14"
 expect text "-1:01:16"
 @480x320 expect text "Vol 70"
 @320x480 expect text "70"
-@320x480 expect text "USB Audio Device"
+expect text "USB Audio Device"
 key b
 wait 400
 shot 02-browser-long

@@ -29,7 +29,7 @@ The deck (640x480) with the volume strip, square (720x720, the HackBerry) and la
 | Page | What |
 |---|---|
 | **Browser** (the root) | `~/Music` and the mounted drives (`/media/<user>`, `/run/media/<user>`, `/mnt`): folders A-Z, playlists (`.m3u`, `.m3u8`), tracks A-Z (natural order) with their title tags and lengths; the mini player at the bottom. A track plays its folder as the queue; a playlist plays its entries. |
-| **Now playing** | cover art (embedded JPEG or PNG, else the drawn sleeve), title (one line that scrolls, or two lines on the square and large screens), artist, album and year, the format, the output (a button on the square and portrait layouts), the volume (a chip on 480x320 and 800x480, the bottom volume group on the square and portrait layouts); the position with a seek bar (a tap seeks), previous, play / pause, next, shuffle, repeat (off, all, one: a teal mark, and a "1" for one); up next (square), the queue pane (large). |
+| **Now playing** | cover art (embedded JPEG or PNG, else the drawn sleeve), title (one line that scrolls, or two lines on the square and large screens), artist, album and year, the format, the output (a button on the square and portrait layouts), the volume (a chip on 480x320 and 640x480, the bottom volume group on the square, portrait and large layouts); the position with a seek bar (a tap seeks), previous, play / pause, next, shuffle, repeat (off, all, one: a teal mark, and a "1" for one); up next (square), the queue pane (large). |
 | **Queue** | the play order from the playing track, "3 OF 20, 1 H 24 MIN LEFT"; Move up, Move down, Remove, Clear all (keeps the playing track). No dragging anywhere. |
 | **Output** | Automatic (the system's default output), the Bluetooth devices (music or call quality), the wired outputs, a paired device that is off (dimmed). Vinyl never switches output by itself: when the output in use goes away, playback pauses ("Evolve 65 disconnected. Paused."). |
 
@@ -51,7 +51,7 @@ output lists are read in the background).
 | Folder up | Left or Backspace (browser) | the ".." row |
 | Queue pane (800x480 and wider) | Up / Down pick a track, Enter plays it | tap picks, tap again plays |
 | Queue editing | U move up, D move down, Delete or X remove, C clear all | the four buttons |
-| Volume | `-` / `=`: the volume of the output Vinyl plays on, 5 % a step | square and portrait layouts: "-" and "+" of the volume group in the bottom row, the level between them (teal); 480x320 and 800x480: tap the volume chip, the volume strip ("-", the level, its bar, "+") replaces the seek row for 4 s (a second tap closes it). Both set and show the playing output's real level; where nothing can change it a tap shows "Volume is not available on this board" |
+| Volume | `-` / `=`: the volume of the output Vinyl plays on, 5 % a step | square, portrait and large (800x480) layouts: "-" and "+" of the volume group in the bottom row, the level between them (teal); 480x320 (and the deck's 640x480): tap the volume chip, the volume strip ("-", the level, its bar, "+") replaces the seek row for 4 s (a second tap closes it). Both set and show the playing output's real level; where nothing can change it a tap shows "Volume is not available on this board" |
 | Close a notice | Esc | tap it (it also goes after 6 s, 8 s for a disconnect) |
 | Back; at the browser, quit | Esc | the header's Esc |
 | Headset, speaker, keyboard media keys | Play/Pause, PlayCD, PauseCD (a toggle), Next, Previous (as Right / Left above, held too), Stop (pause and back to the start) | |
@@ -141,8 +141,9 @@ Delete it to start fresh. Vinyl writes nothing else (it never writes tags or mus
 ## Known limits (0.1.0)
 
 - Folder browsing only: no library database, no search, no artist / album views (P2).
-- No EQ, ReplayGain, crossfade or sleep timer: the drafts' sleep-timer and Equalizer keys are drawn dimmed, and the
-  "Gapless" chip shows without the ReplayGain figure (P2).
+- No EQ, ReplayGain, crossfade or sleep timer: the drafts' sleep-timer key is drawn dimmed (the Equalizer key of 800x480
+  gave its place to the volume group), and the "Gapless" chip shows without the ReplayGain figure (P2). The Menu key (tools
+  and settings) is P2 too.
 - No metadata to headsets or car displays (MPRIS / AVRCP, P2); headset keys work when BlueZ hands them to an input node.
 - A cover larger than 1200 px on its long side is not decoded (the memory cap on the Pi Zero 2 W): the drawn sleeve shows.
 - FFmpeg seeks land on the packet at or before the position; the AAC length is the container's.

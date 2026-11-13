@@ -8,5 +8,8 @@ shot now-playing
 expect esc
 expect text "QUEUE, 20 TRACKS"
 expect text "Amerie, 1 Thing (Siik Remix)"
-expect text "Equalizer"
+expect text "Output"
+expect notext "Equalizer"
+expect notext "Vol 60"
+expect text "60"
 expect noquit

@@ -70,7 +70,7 @@ Each accepted for P1 by the coordinator, owner informed (no owner wording record
 - The sleep-timer and Equalizer keys of the square and large drafts are drawn dimmed with no action (P2 features).
 - Browser rows act on the first tap (open a folder, play a track) at the compact list height.
 - Controls drawn smaller than 7 mm keep their drawn look and get a larger invisible touch area (R-4 applies).
-- The volume strip's "-" and "+" (480x320, 800x480 and the other large canvases since 2026-11-13) are drawn lower than
+- The volume strip's "-" and "+" (480x320 and the deck's 640x480 since 2026-11-13) are drawn lower than
   the touch target where the band between the chips and the transport keys is lower; their touch areas take the band
   (accepted as a WARN by the coordinator, 2026-11-12; the sizes are on the `volume_strip_buttons` line of the QA
   hand-off). The volume group's "-" and "+" are drawn as the drafts give them, their touch areas at least the target
@@ -141,6 +141,20 @@ background), remove the volume label and expand the output one that can be selec
 - The coordinator, same day: the time labels as wide as their format needs, h:mm:ss for a track of an hour or more on
   both sides of the seek bar (a one-hour mixtape showed "-3..."); a sink's name without the server's profile words
   ("USB Audio Device Analog Stereo" -> "USB Audio Device").
+
+## The large layout and the Menu key (owner, 2026-11-13)
+
+The owner's answers on the full-UX canvas: the Menu key is accepted as the entry point for tools and settings
+(equalizer, sleep timer, playback, library, output, about; the Menu pages are P2, not built now); the large layout:
+"on large the volume label "Vol 60" is useless with the volume controls at the bottom of the screen"; landscape
+480x320 keeps its Vol chip and strip.
+
+- Large (800x480 and the other two-pane canvases): the bottom row is Browse | Output | the volume group ("-" 40, the
+  level 52 on teal, "+" 40, 4 px gaps; the keys 140 wide), as NP-800x480 of the canvas draws it with Output where its
+  Menu key will be; the dimmed Equalizer key is dropped. No Vol chip and no volume strip on large; the output chip stays
+  a chip that opens Output, on a row of its own, scrolling when a name is too long.
+- Not built now: the Menu key and its pages (P2). The layout data leaves room: a Menu key can take the dimmed sleep-timer
+  key's place on square and be a seventh key on landscape.
 
 ## Volume strip touch areas (the coordinator, 2026-11-12)
 
