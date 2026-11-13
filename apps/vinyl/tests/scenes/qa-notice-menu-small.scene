@@ -1,0 +1,19 @@
+title Vinyl P2a: a notice over a Menu page (a 15-minute timer with 2 s left ends while the Sleep timer page shows: "Sleep timer ended. Paused." over the page's bottom, the timer back to Off) (480x320 and 320x480 at their real density)
+sizes 480x320 320x480
+ppmm 630
+# the 3.5-inch panel's 6.3 px/mm: ROW 44, the approved 480x320 layout's volume group and seek row 43 px (the owner's rule R-4)
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE sleep
+env VINYL_DEMO_SLEEP 15
+env VINYL_DEMO_SLEEP_LEFT 2
+
+wait 600
+shot 01-sleep-running
+expect text "STOP PLAYING AFTER"
+wait 2600
+shot 02-sleep-ended
+expect text "Sleep timer ended. Paused."
+expect text "STOP PLAYING AFTER"
+expect noquit

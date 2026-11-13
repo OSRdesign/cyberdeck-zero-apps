@@ -21,36 +21,55 @@ expect text "Keys"
 expect text "About"
 expect notext "Equalizer"
 expect notext "Library"
+# 9's code is LVGL's Enter: its echo must not open the selected row
+key 9
+wait 300
+expect text "TOOLS"
 tap "Sleep timer"
 wait 400
 shot 03-sleep
 expect text "STOP PLAYING AFTER"
 expect text "This album or queue"
+# a choice closes the page (owner-approved): the Menu shows the time left
 tap "30 minutes"
 wait 400
-shot 04-sleep-30
-expect text "30 minutes"
-key left
+shot 04-menu-timer
+expect text "TOOLS"
+expect notext "STOP PLAYING AFTER"
+# T opens the Sleep timer page (its code is LVGL's Left: the echo must not go straight back)
+key t
 wait 400
-shot 05-menu-timer
-expect text "Sleep timer"
+shot 05-sleep-by-t
+expect text "STOP PLAYING AFTER"
+# Esc on a Menu page goes back one level, never quits
+key esc
+wait 400
+expect text "TOOLS"
+expect noquit
 tap "Playback"
 wait 400
 shot 06-playback
 expect text "Gapless"
 expect text "Remember position in long files"
 expect notext "Speed (later)"
+expect notext "Off"
 expect text "ReplayGain evens out the loudness between tracks."
+# R toggles repeat; its code is LVGL's Right: the echo must not toggle the selected Gapless row
+key r
+wait 300
+expect notext "Off"
+expect text "Gapless"
 tap "ReplayGain"
 wait 400
 shot 07-replaygain
 expect text "Track"
 expect text "Album"
+# a choice closes the pick list: Playback shows the new value
 tap "Album"
 wait 400
-shot 08-replaygain-album
-key left
-wait 400
+shot 08-playback-album
+expect text "Album"
+expect text "Remember position in long files"
 tap "Gapless"
 wait 400
 shot 09-playback-changed
@@ -76,10 +95,14 @@ key down
 key down
 key down
 key down
+key down
+key down
 wait 300
 shot 11-keys-scrolled
-key left
+key esc
 wait 400
+expect text "TOOLS"
+expect noquit
 tap "About"
 wait 400
 shot 12-about

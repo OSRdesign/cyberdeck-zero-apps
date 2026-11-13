@@ -1,4 +1,4 @@
-title Vinyl P2a: ReplayGain (from tags only, Off / Track / Album; the owner's decision D25): the pick list in each state and the Playback page with each value; square and large show the playing track's gain beside Gapless ("Gapless, RG -3.2 dB") (the qa sizes and 1280x720)
+title Vinyl P2a: ReplayGain (from tags only, Off / Track / Album; the owner's decision D25): the pick list (a choice closes it) and the Playback page with each value; square and large show the playing track's gain beside Gapless ("Gapless, RG -3.2 dB") (the qa sizes and 1280x720)
 sizes 800x480 480x480 720x720 480x800 480x640 1280x720
 env VINYL_DEMO 1
 env VINYL_DEMO_STATE playing
@@ -8,13 +8,17 @@ env VINYL_DEMO_RG off
 wait 900
 shot 01-rg-off
 expect text "REPLAYGAIN"
+# a choice closes the pick list (owner-approved): Playback shows the new value
 tap "Track"
 wait 400
-shot 02-rg-track
-tap "Album"
+shot 02-playback-track
+expect text "Track"
+expect text "Gapless"
+tap "ReplayGain"
 wait 400
-shot 03-rg-album
-key left
+shot 03-rg-track
+expect text "REPLAYGAIN"
+tap "Album"
 wait 400
 shot 04-playback-album
 expect text "Album"
