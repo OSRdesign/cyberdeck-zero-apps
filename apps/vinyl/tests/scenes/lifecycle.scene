@@ -1,5 +1,9 @@
 title Vinyl hidden and shown again (X-Background=run): no drawing while hidden, the music goes on, a full repaint on return
 sizes 640x480
+# the deck's own density (11.3 px/mm) leaves the approved 640x480 layout's touch rows 70 px, under the 7 mm (79 px):
+# owner rule R-4, listed in qa-info.txt; the scene runs at a 3.5-inch 640x480 panel's 9.01 px/mm (the harness's own
+# 480x640), whose 7 mm (63 px) the rows hold, the toolkit header as on the deck (56 px)
+ppmm 901
 lifecycle
 env VINYL_DEMO 1
 env VINYL_DEMO_STATE playing

@@ -12,7 +12,8 @@
  *   render_sleeve  the plain sleeve of the drafts (diagonal red-brown-teal gradient with a cream ring) for a file without
  *                  a cover;
  *   render_disc    the record: striped grooves (#141414 / #1f1f1f, 2 design px each), transparent outside;
- *   render_label   the teal centre label with the cream spindle hole and a faint printed arc, the only part that turns
+ *   render_label   the teal centre label with its spin marks (a cream dot near the rim, a cream ring round the dark
+ *                  spindle hole), the only part that turns
  *                  (the grooves look the same at any angle), so the turning is visible.
  * Buffers are ARGB8888 (LVGL's LV_COLOR_FORMAT_ARGB8888, little endian B G R A) or RGB565 (covers, opaque).
  */

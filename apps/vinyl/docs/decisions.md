@@ -70,26 +70,25 @@ Each accepted for P1 by the coordinator, owner informed (no owner wording record
 - The sleep-timer and Equalizer keys of the square and large drafts are drawn dimmed with no action (P2 features).
 - Browser rows act on the first tap (open a folder, play a track) at the compact list height.
 - Controls drawn smaller than 7 mm keep their drawn look and get a larger invisible touch area (R-4 applies).
-- The volume strip's "-" and "+" (480x320 and the deck's 640x480 since 2026-11-13) are drawn lower than
-  the touch target where the band between the chips and the transport keys is lower; their touch areas take the band
-  (accepted as a WARN by the coordinator, 2026-11-12; the sizes are on the `volume_strip_buttons` line of the QA
-  hand-off). The volume group's "-" and "+" are drawn as the drafts give them, their touch areas at least the target
-  (`volume_group_buttons` line).
+- The volume group's "-" and "+" are drawn as the drafts give them (lower than the touch target on most layouts); their
+  touch areas are the target high where the screen has the room (`volume_group_buttons` line of the QA hand-off). The
+  volume strip of 2026-11-12 is gone (see "640x480 and 480x320" below).
 - The icon: four colours (cream sleeve, teal ring and label, black record, grey grooves) and thin groove rings, an
   exception to the palette's rule 3; the coordinator's design call (2026-11-12).
-- At 480x480 the six transport keys cannot all be the target wide (80 px: 6 x 80 is more than the row) without
-  overlapping: their touch areas overlap their neighbours' (the strip open or not). Accepted as a WARN by the
-  coordinator under R-4 (2026-11-12).
+- At 480x480 the six transport keys cannot all be the target wide (80 px: 6 x 80 is more than the row). Accepted as a
+  WARN by the coordinator under R-4 (2026-11-12), first as overlapping touch areas; since 2026-11-13 the areas meet in
+  the middle of the gaps (70 px wide each) and nothing overlaps.
 
 ## D11 changed: the volume of the playing output (owner, 2026-11-12)
 
-The owner accepted a change to report 059's D11 (relayed by the coordinator; no owner wording recorded here). The
-reason, from the boards: on the HackBerry Vinyl played to an explicitly chosen USB DAC; the chip, the strip and the
-in-app volume only moved Vinyl's own level (already 100 %, so nothing could get louder), while the playing sink stayed at
-its own 40 % (-23.9 dB) and the launcher's keys moved the default sink, another device: Vinyl's "100 %" was about -24 dB.
-On zero8 (no sound server) the same adapter's mixer sat at -20 dB. The owner's board results that led there: B7
-"partial pass: when evolve reconnects the volume is not the same as set before"; B9 "partial pass, on evolve 65 the vol
-chip makes more than a second to reflect."
+The owner accepted a change to report 059's D11, relayed by the coordinator; the owner's words, recorded on
+2026-11-13: "accept the D11 change, send it to the worker". The reason, from the boards: on the HackBerry Vinyl played to
+an explicitly chosen USB DAC; the chip, the strip and the in-app volume only moved Vinyl's own level (already 100 %, so
+nothing could get louder), while the playing sink stayed at its own 40 % (-23.9 dB) and the launcher's keys moved the
+default sink, another device: Vinyl's "100 %" was about -24 dB. On the deck zero7 (no sound server) the same adapter's
+mixer sat at -20 dB (this line first said zero8: the coordinator's correction of 2026-11-13, the board was the deck
+zero7). The owner's board results that led there: B7 "partial pass: when evolve reconnects the volume is not the same
+as set before"; B9 "partial pass, on evolve 65 the vol chip makes more than a second to reflect."
 
 - The Vol chip, the volume strip and the `-` / `=` keys set the volume of the output Vinyl actually plays on, and the
   chip shows that real level.
@@ -98,14 +97,17 @@ chip makes more than a second to reflect."
   level across a reconnect, and if the device changes it the chip shows the real value. Vinyl's stream stays at 100 %.
 - Without a sound server: the card's playback mixer control, never above 0 dB; the control's switch mutes at 0 %. Only a
   card with no playback mixer gets Vinyl's software volume (kept per output in state.json).
-- Follow-up, the coordinator (UI design, 2026-11-13): one curve everywhere. The zero8 probe showed the ALSA mapping
+- Follow-up, the coordinator (UI design, 2026-11-13): one curve everywhere. The deck zero7's probe showed the ALSA mapping
   linear in dB (50 % = -30 dB) while the sound server's percent is cubic (50 % = -18.06 dB): the same number was 12 dB
   apart between boards, which is why the owner heard them as inconsistent. Without a server Vinyl now uses the server's
   curve, dB = 60 log10(p / 100) (40 % = -23.88 dB, 25 % = -36.1 dB, 100 % = 0 dB), clamped to the control's range (a
   range that starts higher clamps at its minimum, and the chip shows what is set: p = 100 * 10^(dB / 60), rounded), never
   above 0 dB or the control's max; a step down that cannot move the control any more mutes. The software volume uses the
   same curve (amplitude (p / 100)^3). A control without dB data stays linear in steps. Same percent, same loudness, on
-  every board.
+  every board. The owner's listening test of the curve (2026-11-13): "yes volume at 50% is perceived the same, it's a
+  pass".
+- The volume controls the output Vinyl plays on; the launcher's volume keys still act on the default sink; when the
+  chosen output is the default sink, Vinyl's level follows the launcher's keys (the README's rule, design QA run 3 D-71).
 - The separate in-app volume is gone from the UI; an older state.json's `app_volume` is read and kept, never applied.
 - The chip refreshes on the server's change events (pa_context_subscribe) within a tick and a list round trip; the mixer
   is read every 300 ms. When the playing output is the default sink, the launcher's volume keys show through the same
@@ -134,10 +136,8 @@ background), remove the volume label and expand the output one that can be selec
 - The output chip is a button there: the Bluetooth or speaker icon, the device's name only (call quality stays a
   notice), a chevron; the full width of the info column (portrait: right of the format chip); a name too long for it
   scrolls, never ends with dots; a tap opens the Output page (the only way there by touch on these layouts).
-- 480x320 and 800x480 stay as they were for now (the Vol chip and its strip, the large class's Output key); their output
-  chip stays tappable, takes a row of its own when the Vol chip beside it would cut it, and scrolls when it is still too
-  long. The owner is asked about these layouts separately; the group is layout data (`vol_group`), so they can take it
-  over by data.
+- 480x320 and 800x480 stayed as they were at first (the Vol chip and its strip); both have the group since (the large
+  layout below, 480x320 in "640x480 and 480x320").
 - The coordinator, same day: the time labels as wide as their format needs, h:mm:ss for a track of an hour or more on
   both sides of the seek bar (a one-hour mixtape showed "-3..."); a sink's name without the server's profile words
   ("USB Audio Device Analog Stereo" -> "USB Audio Device").
@@ -147,7 +147,7 @@ background), remove the volume label and expand the output one that can be selec
 The owner's answers on the full-UX canvas: the Menu key is accepted as the entry point for tools and settings
 (equalizer, sleep timer, playback, library, output, about; the Menu pages are P2, not built now); the large layout:
 "on large the volume label "Vol 60" is useless with the volume controls at the bottom of the screen"; landscape
-480x320 keeps its Vol chip and strip.
+480x320 kept its Vol chip and strip that day, until the owner approved NP-480x320 (below).
 
 - Large (800x480 and the other two-pane canvases): the bottom row is Browse | Output | the volume group ("-" 40, the
   level 52 on teal, "+" 40, 4 px gaps; the keys 140 wide), as NP-800x480 of the canvas draws it with Output where its
@@ -156,11 +156,96 @@ The owner's answers on the full-UX canvas: the Menu key is accepted as the entry
 - Not built now: the Menu key and its pages (P2). The layout data leaves room: a Menu key can take the dimmed sleep-timer
   key's place on square and be a seventh key on landscape.
 
-## Volume strip touch areas (the coordinator, 2026-11-12)
+## Muted shows as muted (owner, 2026-11-13)
 
-While the volume strip is open no touch area of now playing overlaps another one (design QA run 2,
-`layout::place_strip_hits`). The drafts' geometry left the band between the volume / output chips and the transport keys
-1 px short of the touch target at 480x480 (79 of 80) and 2 px short at 480x640 (61 of 63): there the transport keys (and
-their repeat / shuffle marks) sit that much lower, so the band is the target high and the harness's size check passes.
-Solved by geometry, not by an R-4 exception. The same rule moves them 1 px at 320x480 on a 6.67 px/mm panel (target 47,
-band 46); every other size draws as before.
+The owner's report from the deck: "zero7 is showing muted but volume bar shows 18" (the deck zero7, not zero8: the
+coordinator's correction, 2026-11-13).
+
+- Muted, the volume group shows the speaker-off mark and "Muted" (the mark alone where the word does not fit), never the
+  level it will come back at; the same for a mute from elsewhere (the launcher's mute key, alsamixer, a headset).
+- "+" while muted brings the sound back at the last level (one step above the card's lowest level when that is where it
+  was, so something is heard); "-" while muted does nothing; "-" at the card's lowest level mutes (the card's switch; a
+  card without one stays at its lowest level). The card's lowest level shows as what it is on the curve (the Sharkoon's
+  -45 dB is 18 %).
+- The sound server's placeholder output at start (`auto_null`) never shows a level ("--").
+
+## The record (owner, 2026-11-13)
+
+The owner, on a deck screenshot: "the disc going out of the song cover picture seems to be too low, it appears under the
+cover".
+
+- The record is 94 % of the sleeve's height and vertically centred on it, on every layout.
+- The coordinator, with the approved 640x480 and 480x320 layouts: the label is about 40 % of the record and about a
+  third of it shows out of the sleeve (the coordinator said the centre sits about a tenth of a label diameter inside the
+  sleeve's edge; the approved drafts measure 12 of 84 and 9.5 of 57, so Vinyl uses 0.15 of the label: it matches both
+  drafts within 2 px); the label carries spin marks, a cream dot near its rim and a cream ring round the dark spindle
+  hole, so the turning shows even with most of the label hidden. The record never reaches into the info column beside
+  the sleeve (2 px clear): on 800x480 its label then shows less (about a fifth), on 480x480 a third less 1 px.
+
+## Design QA run 3 (the coordinator, 2026-11-13)
+
+- Notices on now playing cover nothing that matters: over the seek row when the band between the output button (or the
+  chips, or the 480x320 volume group) and the transport keys holds the notice; else over the up-next box (square); else
+  in that band at its own height when it is at least the danger strip's 30 px (480x320: 38 px, two lines of text fit);
+  else over the bottom row.
+- The mini player's times are always whole ("01:14 / 4:04", h:mm:ss for an hour or more); the artist before them takes
+  the dots.
+- No two touch areas overlap anywhere (a unit test checks every one of now playing, the queue page and the mini player
+  at every QA size). Clear all asks first: "Clear the queue?", Cancel (the default) or Clear; Esc, Cancel and a tap
+  outside cancel.
+- The drafts' "A-Z" pill is not built (sorting is no control in P1); the format and Gapless chips are information,
+  not keys (plain text, flat chips at 640x480); with an empty queue the transport keys and the queue buttons are dimmed.
+- The scene `nocontract` runs at 6.08 px/mm (`ppmm 608`): at the harness's default 11.3 px/mm for 480x320 (ROW 80) the
+  480x320 drawing has no room for its rows without overlaps; the other 480x320 scenes already ran at that density.
+
+## The Raspberry Pi headphone jack (Pi 4B, Pi 3A+, 2026-11-13)
+
+The owner, on the Pi 4B: "i'm at 5% and it's like 80 to 100% perceived". The coordinator's probes: 'PCM Playback Volume'
+of the bcm2835 Headphones card, raw -10239..400 in hundredths of a dB (dBscale-min=-102.39dB step=0.01dB mute=1), joined
+mono, on the Pi 4B and the Pi 3A+ alike; amixer read 391 (+3.91 dB) while Vinyl showed 5 %.
+
+- The cause: `snd_ctl_get_dB_range` reports the lowest value of a dB scale with the mute flag as
+  SND_CTL_TLV_DB_GAIN_MUTE (-9999999), not as -102.39 dB. Vinyl took it as the range's real bottom, so each raw step
+  looked like 9.4 dB: 5 % became raw 391 (+3.91 dB) and read back as 5 %; each "-" or "+" moved the control by one raw
+  step (the journal's 5 %, 9 %, 13 % were raw 391, 393, 394; amixer's 393 was Vinyl's own last write). The writes did
+  reach the control.
+- The fix: Vinyl reads the dB of the step above the lowest (`snd_ctl_convert_to_dB`, loaded as an optional symbol) and
+  puts the lowest step's real dB back (a dB scale is linear in steps); the lowest step counts as mute (shown Muted, 0 %;
+  a level above 0 % never sets it). Without that symbol the control is taken as having no dB data (linear in steps).
+- Never above 0 dB (raw 0 here, not 400); a level above 0 dB set by something else reads 100 %. Each set is logged with
+  a fresh read of the control: `volume: set mixer <card> '<control>' P % raw=N (target X dB) read back raw=M`.
+- A board-probe tool, `tools/mixer-probe` (`vinyl-mixer-probe`, arm64 and amd64, not packaged), lists a card's controls
+  as Vinyl and as alsa-lib's simple mixer see them, sets a level with Vinyl's code and reads it back.
+
+## 640x480 and 480x320 (owner, 2026-11-13)
+
+The owner, on the coordinator's proposals of the full-UX canvas (NP-640x480 and NP-480x320): "try without the up next"
+(640x480), then "that works, would it fit on 480x320?" and "ok for the 480x320 layout".
+
+- 640x480 (the medium class: aspect 1.2 to 1.6 where the width is under 800 and the height 480 or more; the deck): one
+  pane as on large without the queue list: cover 224 with the record, title (22 px, two lines), artist, album, the
+  format and Gapless as flat chips ("AAC 44.1 kHz / 161k"), the output as a full-width button (icon, name, chevron), the
+  seek row, five transport keys 56 high (shuffle, previous, play, next, repeat), the bottom row 52 high: Browse | Queue
+  | the volume group. No Up next. P1 has no Menu key: Browse and Queue share its width (196 each); the draft's widths
+  with the Menu key are kept in the layout's comments for P2. The list pages keep the 480x320 drawing scaled 4/3.
+- 480x320 (the small class): cover 148, the info column at 228: title, artist, album, one plain line for the format and
+  gapless ("AAC 44.1 / 161k, gapless"), the output as a full-width button, the volume group under it (34 high; its "-"
+  56 wide and its "+" 80, as the draft draws them), the seek row, six transport keys (shuffle, previous, play, next,
+  repeat, queue; the Menu key is the seventh in P2). Screens of that shape that are not medium (1024x768, 800x600: the
+  width rule) take this layout scaled.
+- No Vol chip and no volume strip on any layout any more: square, portrait, large, 640x480 and 480x320 share the volume
+  group (the strip's code is gone).
+- Touch: the drafts give the deck's 640x480 rows (output button, seek, keys, bottom row) less than 7 mm at its 11.3
+  px/mm: the touch rows meet at boundaries in their gaps, 70 px each (6.2 mm); 480x320 gives the volume group and the
+  seek row 43 px (the transport keys 2 px lower, the rule of 2026-11-12), 6.6 mm on a 3.5-inch panel. Accepted
+  warnings under the owner's rule R-4, listed in qa-info.txt. The design-QA scenes of 640x480 run at 9.01 px/mm (a
+  3.5-inch 640x480 panel, the harness's own 480x640), where the rows are the 7 mm (63 px) and the header is the deck's.
+
+## Now playing touch areas (the coordinator, 2026-11-12; rows since 2026-11-13)
+
+No touch area of now playing overlaps another one (design QA runs 2 and 3, `layout::place_now_hits`): the areas whose
+drawn controls share a height form a row, neighbours in a row meet in the middle of their gap, the rows meet at
+boundaries in the gaps between them, the target high where the screen has the room, else the largest height every row
+can have, each area covering what it draws. Where the rows miss the target by a few px the transport keys (and their
+repeat / shuffle marks) sit up to 4 design px lower, P(4) clear of what is under them (the coordinator's rule of
+2026-11-12: solved by geometry, not by an R-4 exception): 2 px at 480x640 and at 480x320.

@@ -332,7 +332,11 @@ void test_launcher() {
 void test_layout() {
     using namespace vinyl::layout;
     CHECK(size_class(480, 320) == SizeClass::Small);
-    CHECK(size_class(640, 480) == SizeClass::Small);
+    CHECK(size_class(640, 480) == SizeClass::Medium); /* the deck: NP-640x480 (owner, 2026-11-13) */
+    CHECK(size_class(720, 540) == SizeClass::Medium);
+    CHECK(size_class(800, 600) == SizeClass::Small);   /* not under 800 wide: the 480x320 layout scaled */
+    CHECK(size_class(1024, 768) == SizeClass::Small);
+    CHECK(size_class(600, 400) == SizeClass::Small);   /* under 480 high */
     CHECK(size_class(320, 480) == SizeClass::Portrait);
     CHECK(size_class(480, 800) == SizeClass::Portrait);
     CHECK(size_class(800, 1280) == SizeClass::Portrait);
@@ -343,7 +347,7 @@ void test_layout() {
     CHECK(size_class(1024, 600) == SizeClass::Large);
     CHECK(size_class(1280, 800) == SizeClass::Large);
     /* at the drawn size the fit is the drafts' pixels */
-    for (SizeClass c : {SizeClass::Small, SizeClass::Portrait, SizeClass::Square, SizeClass::Large}) {
+    for (SizeClass c : {SizeClass::Small, SizeClass::Medium, SizeClass::Portrait, SizeClass::Square, SizeClass::Large}) {
         const NowGeom g = now_geom(c);
         const ui::Fit f = now_fit(g, g.dw, g.dh, 40); /* the toolkit header is 40 px at the drawn sizes */
         CHECK_NEAR(f.s, 1.0, 1e-9);
@@ -357,22 +361,28 @@ void test_layout() {
         for (const Btn &b : g.transport) CHECK(inside(b.box));
         for (const Btn &b : g.bottom) CHECK(inside(b.box));
         for (size_t i = 1; i < g.transport.size(); ++i) CHECK(g.transport[i].box.x >= g.transport[i - 1].box.right());
-        /* every chip id once; the square and portrait drafts (owner, 2026-11-13): the format and gapless chips only, the
-         * output a button of its own, the volume the bottom group */
+        /* every chip id once, never the old Vol chip (id 1): small, the format line (Gapless at its end); medium and
+         * square, format and gapless; portrait, the format beside the output button; large, format, output, gapless */
         int ids = 0;
         for (const std::vector<int> &row : g.chip_layout)
             for (int id : row) ids |= 1 << id;
-        /* the large class (owner, 2026-11-13): format, output, gapless chips, no Vol chip */
-        CHECK_EQ(ids, c == SizeClass::Small ? 7 : c == SizeClass::Portrait ? 1 : c == SizeClass::Square ? 9 : 13);
-        CHECK_EQ(g.vol_group, c != SizeClass::Small);
-        CHECK_EQ(g.out_button_on, c == SizeClass::Square || c == SizeClass::Portrait);
-        if (g.vol_group) {
-            CHECK(inside(g.vol_minus) && inside(g.vol_value) && inside(g.vol_plus));
-            CHECK(g.vol_minus.right() < g.vol_value.x && g.vol_value.right() < g.vol_plus.x);
+        CHECK_EQ(ids, c == SizeClass::Small || c == SizeClass::Portrait ? 1 : c == SizeClass::Large ? 13 : 9);
+        CHECK(shows_gapless(g) == (c != SizeClass::Portrait));
+        CHECK(g.vol_group); /* owner, 2026-11-13: the volume group on every class, no Vol chip, no strip */
+        CHECK_EQ(g.out_button_on, c != SizeClass::Large);
+        CHECK(!g.has_upnext || c == SizeClass::Square); /* 640x480: "try without the up next" */
+        CHECK(inside(g.vol_minus) && inside(g.vol_value) && inside(g.vol_plus));
+        CHECK(g.vol_minus.right() < g.vol_value.x && g.vol_value.right() < g.vol_plus.x);
+        CHECK_NEAR(g.vol_plus.right(), g.transport.back().box.right(), 1e-9); /* the group ends with the keys above */
+        if (c == SizeClass::Small) { /* in the info column under the output button, above the seek row */
+            CHECK(g.bottom.empty());
+            CHECK_NEAR(g.vol_minus.x, g.out_button.x, 1e-9);
+            CHECK(g.vol_minus.y > g.out_button.bottom() && g.vol_minus.bottom() < g.time.box.y);
+            CHECK_EQ(g.transport.size(), static_cast<size_t>(6)); /* P1: no Menu key */
+        } else {
             CHECK(g.bottom.back().box.right() < g.vol_minus.x);
-            CHECK_NEAR(g.vol_plus.right(), g.transport.back().box.right(), 1e-9); /* the group ends with the keys above */
-            for (const Btn &b : g.bottom) CHECK(b.id != "eq");                    /* the dimmed Equalizer key is gone */
         }
+        for (const Btn &b : g.bottom) CHECK(b.id != "eq" && b.id != "menu"); /* no Equalizer, no Menu (P2) */
         if (g.out_button_on) {
             CHECK(inside(g.out_button));
             CHECK_NEAR(g.out_button.right(), g.title.box.right(), 1e-9); /* the button fills the info column */
@@ -394,12 +404,15 @@ void test_layout() {
             CHECK(f2.x(0) >= 0);
         }
     }
-    /* the deck: the small design scaled 4/3, the extra height in the panel */
-    const NowGeom sg = now_geom(SizeClass::Small);
-    const ui::Fit deck = now_fit(sg, 640, 480, 56);
-    CHECK_NEAR(deck.s, 4.0 / 3.0, 1e-6);
-    CHECK(deck.y(sg.dh) <= 480 && deck.y(sg.dh) >= 470);
+    /* the deck: the 640x480 draft under the deck's 56 px header, scaled 424 / 440 */
+    const NowGeom mg = now_geom(SizeClass::Medium);
+    const ui::Fit deck = now_fit(mg, 640, 480, 56);
+    CHECK_NEAR(deck.s, 424.0 / 440.0, 1e-6);
+    CHECK(deck.y(mg.dh) <= 480 && deck.y(mg.dh) >= 470);
     CHECK_EQ(deck.y(40), 56); /* the drafts' y 40 on the toolkit header's bottom */
+    /* its list pages keep the 480x320 drawing scaled 4/3 */
+    const ListGeom bdeck = list_geom(ListPage::Browser, 640, 480, 56);
+    CHECK_NEAR(bdeck.s, 4.0 / 3.0, 1e-6);
     /* the list pages: the queue buttons in one row at 480 wide, two rows at 320 */
     const ListGeom q480 = list_geom(ListPage::Queue, 480, 320, 40);
     CHECK_EQ(q480.queue_buttons.size(), static_cast<size_t>(4));

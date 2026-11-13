@@ -338,6 +338,11 @@ void draw_icon(lv_layer_t *layer, Icon ic, int cx, int cy, int px, std::uint32_t
         p.poly({{4, 9}, {4, 15}, {8, 15}, {13, 19}, {13, 5}, {8, 9}}, true);
         p.arc(13.35, 12, 4, -48.6, 48.6);
         break;
+    case Icon::Muted: /* the speaker with a cross: the muted level (the owner's deck report, 2026-11-13) */
+        p.poly({{3, 9}, {3, 15}, {7, 15}, {12, 19}, {12, 5}, {7, 9}}, true);
+        p.seg(15, 9, 21, 15);
+        p.seg(21, 9, 15, 15);
+        break;
     case Icon::Browse: p.poly({{3, 7}, {10, 7}, {12, 9}, {21, 9}, {21, 19}, {3, 19}}, true); break;
     case Icon::Sleep:
         p.arc(12, 13, 8, 0, 360);

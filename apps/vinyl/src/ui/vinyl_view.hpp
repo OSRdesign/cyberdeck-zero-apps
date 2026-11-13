@@ -5,15 +5,15 @@
  *
  *   Now      now playing: the header chips (queue position, centred Esc, volume), the cream panel, the sleeve with the
  *            record sliding out behind it (turning only while playing), title / artist / album, the format and output
- *            chips, the time row with the seek bar (a tap seeks: no dragging), the transport keys, the class's extras
- *            (up next, the bottom row, the queue pane of the large class); a tap on the volume chip puts the volume
- *            strip ("-", the level and its bar, "+") in place of the seek row for 4 s;
+ *            chips (information), the output button (the large class: its output chip), the volume group ("-", the level
+ *            on teal, "+"), the time row with the seek bar (a tap seeks: no dragging), the transport keys, the class's
+ *            extras (up next, the bottom row, the queue pane of the large class);
  *   Browser  the folder list with the mini player;
  *   Queue    the play order with Move up, Move down, Remove, Clear all (no dragging);
  *   Output   the output chooser with its hint strip (or the "not set up" notice strip);
  *   Notices  (a demonstration page for the scenes only: the four notices of the notices draft).
  * Where the drawing makes a control smaller than the toolkit's touch target, the control keeps its look and gets a larger
- * transparent hit box, never overlapping a neighbour's (layout::separate_hits). The previous and next buttons report
+ * transparent hit box, never overlapping a neighbour's (layout::place_now_hits). The previous and next buttons report
  * press, release and cancel (the transport press decides). The view only draws: every action goes to the controller
  * through Actions. LVGL thread only.
  */
@@ -44,6 +44,11 @@ public:
     void show_notice(const Notice &n);
     void hide_notice();
     bool notice_shown() const;
+    /* "Clear the queue?" over the queue buttons (Cancel the default): a tap outside or Esc cancels, Clear calls
+     * Actions::queue_clear; while it shows every key goes to dialog_key (true: it took the key) */
+    void ask_clear_queue();
+    bool dialog_shown() const;
+    bool dialog_key(uint32_t key);
     /* the record turns while `playing` and the now-playing page shows; call it often (it keeps its own clock) */
     void tick(bool playing);
     /* the row a list page shows as selected (for the keys) */

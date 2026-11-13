@@ -69,8 +69,22 @@ std::string khz(uint32_t rate) {
 /* evdev codes of the letter keys used (the physical key, not its text: the guidelines' rule) */
 enum : uint32_t {
     K_MINUS = 12, K_EQUAL = 13, K_Q = 16, K_R = 19, K_U = 22, K_O = 24, K_S = 31, K_D = 32, K_X = 45, K_C = 46,
-    K_B = 48, K_COMMA = 51, K_DOT = 52, K_SPACE = 57, K_LEFT = 105, K_RIGHT = 106, K_DELETE = 111,
+    K_B = 48, K_COMMA = 51, K_DOT = 52, K_SPACE = 57, K_UP = 103, K_LEFT = 105, K_RIGHT = 106, K_DOWN = 108, K_DELETE = 111,
 };
+
+/* The LVGL key the toolkit's keypad sends after a key event (cp0_keyboard_lvgl_input.c): the semantic key where it has
+ * one. In the navigation context the CardputerZero's F / X / Z / C are also Up / Down / Left / Right (its arrows), so a
+ * press of C (Clear all) reaches the keypad as Right, X (Remove) as Down. 0: not an arrow. */
+uint32_t arrow_echo(const key_item &it) {
+    if (!it.semantic_key || it.semantic_key == it.key_code) return 0;
+    switch (it.semantic_key) {
+    case K_UP: return LV_KEY_UP;
+    case K_DOWN: return LV_KEY_DOWN;
+    case K_LEFT: return LV_KEY_LEFT;
+    case K_RIGHT: return LV_KEY_RIGHT;
+    default: return 0;
+    }
+}
 
 }  // namespace
 
@@ -166,7 +180,9 @@ struct VinylApp::Impl final : TransportHost {
             sinks = make_demo_sink_provider(variant);
             world = demo_output_world(lite, variant);
             status = demo_launcher_status();
-            if (env_on("VINYL_DEMO_NOVOLUME")) { /* the server reports no level for its sinks: the strip cannot open */
+            if (env_on("VINYL_DEMO_MUTED")) /* the output muted (by the launcher's key, another app): Muted everywhere */
+                for (PulseDevice &d : world.sinks) d.muted = true;
+            if (env_on("VINYL_DEMO_NOVOLUME")) { /* the server reports no level for its sinks: "--", nothing to change */
                 status.volume = -1;
                 for (PulseDevice &d : world.sinks) d.volume_pct = -1;
             }
@@ -202,6 +218,10 @@ struct VinylApp::Impl final : TransportHost {
         a.seek_to = [this](double f) { seek_frac(f); };
         a.row = [this](Page p, int i) { row(p, i); };
         a.queue_button = [this](int i) { queue_button(i); };
+        a.queue_clear = [this] {
+            std::fprintf(stderr, "[vinyl] the queue cleared (asked, Clear)\n");
+            queue_edit(3);
+        };
         a.mini_open = [this] { go(Page::Now); };
         a.transport = [this](bool next, int phase) {
             const uint64_t now = mono_ms_now();
@@ -519,6 +539,15 @@ struct VinylApp::Impl final : TransportHost {
 
     void queue_button(int i) {
         if (queue.empty()) return;
+        if (i == 3) { /* Clear all asks first (design QA run 3): "Clear the queue?", Cancel the default */
+            view->ask_clear_queue();
+            return;
+        }
+        queue_edit(i);
+    }
+
+    void queue_edit(int i) {
+        if (queue.empty()) return;
         const int cur = queue.current();
         if (i == 0 && queue.move_up(qu_sel)) --qu_sel;
         else if (i == 1 && queue.move_down(qu_sel)) ++qu_sel;
@@ -586,8 +615,16 @@ struct VinylApp::Impl final : TransportHost {
         refresh(true);
     }
 
+    /* the arrow the keypad sends right after a letter Vinyl acted on (arrow_echo): taken once and dropped, so C (Clear
+     * all) never also moves the dialog's highlight to Clear, nor X (Remove) the queue's selection */
+    uint32_t swallow_echo = 0;
+
     void on_key(uint32_t k) {
         const Page p = view->page();
+        const uint32_t echo = swallow_echo;
+        swallow_echo = 0;
+        if (echo && k == echo) return;
+        if (view->dialog_shown() && view->dialog_key(k)) return; /* "Clear the queue?" takes the keys while it shows */
         if (k == LV_KEY_ESC) {
             if (view->notice_shown()) view->hide_notice();
             back();
@@ -660,6 +697,8 @@ struct VinylApp::Impl final : TransportHost {
             if (keys.accept_other(ma, it.key_state, me)) media(me);
             return;
         }
+        if (it.key_state == 1) swallow_echo = 0;
+        if (view->dialog_shown()) return; /* the dialog takes its keys through the keypad (on_key) */
         if (it.key_code == K_LEFT || it.key_code == K_RIGHT) {
             now_arrow(it); /* the other pages take the arrows from the LVGL keypad (on_key) */
             return;
@@ -690,10 +729,16 @@ struct VinylApp::Impl final : TransportHost {
             if (p == Page::Queue) queue_button(1);
             break;
         case K_X:
-            if (p == Page::Queue) queue_button(2);
+            if (p == Page::Queue) {
+                swallow_echo = arrow_echo(it);
+                queue_button(2);
+            }
             break;
         case K_C:
-            if (p == Page::Queue) queue_button(3);
+            if (p == Page::Queue) {
+                swallow_echo = arrow_echo(it);
+                queue_button(3);
+            }
             break;
         case K_MINUS: volume_step(-kVolumeStep); break; /* the playing output's volume (D11 as changed) */
         case K_EQUAL: volume_step(kVolumeStep); break;
@@ -703,8 +748,8 @@ struct VinylApp::Impl final : TransportHost {
 
     /* ------------------------------------------------------------------------------------------ volume (D11) */
 
-    /* D11 as the owner changed it (2026-11-12): the Vol chip, the strip and the - / = keys set the volume of the output
-     * Vinyl plays on, and the chip shows its real level (core/volume/output_volume.hpp). */
+    /* D11 as the owner changed it (2026-11-12): the volume group and the - / = keys set the volume of the output Vinyl
+     * plays on, and the group shows its real level (core/volume/output_volume.hpp). */
     struct VolTarget {
         enum class Kind { None, Sink, Mixer } kind = Kind::None;
         std::string sink;      /* Sink: the sink's name */
@@ -789,7 +834,7 @@ struct VinylApp::Impl final : TransportHost {
         return -1;
     }
 
-    /* the strip and the keys can change it */
+    /* the group and the keys can change it */
     bool output_level_adjustable() const {
         const VolTarget t = volume_target();
         if (t.kind == VolTarget::Kind::Sink) return output_level() >= 0 && (demo || worker);
@@ -804,26 +849,28 @@ struct VinylApp::Impl final : TransportHost {
         engine->set_gain(scan_muted ? 0.0f : software_volume(t) ? volume_gain(app_volume_of(resume, t.key)) : 1.0f);
     }
 
-    /* the volume strip's "-" / "+" and the - / = keys: the playing output's volume, kVolumeStep at a time */
+    /* the group's and the keys' "-" / "+" (core/volume: sink_press, mixer_press), kVolumeStep at a time: while muted "-" does
+     * nothing and "+" brings the sound back at its level; "-" at the card's floor mutes */
     void volume_step(int d) {
         const VolTarget t = volume_target();
-        const int cur = output_level();
+        bool muted = false;
+        const int cur = output_level(&muted);
         if (t.kind == VolTarget::Kind::Sink) {
-            if (cur < 0) return;
-            const int to = volume_after_step(cur, d);
+            const VolumePress p = sink_press(cur, muted, d);
+            if (p.kind != VolumePress::Kind::Set) return;
             if (demo) {
                 for (PulseDevice &s2 : world.sinks)
                     if (s2.name == t.sink) {
-                        s2.volume_pct = to;
-                        s2.muted = to == 0 ? s2.muted : false;
+                        s2.volume_pct = p.pct;
+                        if (p.pct > 0) s2.muted = false;
                     }
             } else if (worker) {
-                worker->request_sink_level(t.sink, t.channels, to);
-                pending_level = to;
+                worker->request_sink_level(t.sink, t.channels, p.pct); /* above 0 % it also un-mutes */
+                pending_level = p.pct;
                 pending_sink = t.sink;
                 pending_until = mono_ms_now() + 1500;
             }
-            std::fprintf(stderr, "[vinyl] volume: %s set to %d %%\n", t.sink.c_str(), to);
+            std::fprintf(stderr, "[vinyl] volume: %s set to %d %%%s\n", t.sink.c_str(), p.pct, muted ? " (un-muted)" : "");
         } else if (t.kind == VolTarget::Kind::Mixer) {
             if (software_volume(t)) {
                 set_app_volume(resume, t.key, volume_after_step(app_volume_of(resume, t.key), d));
@@ -832,9 +879,21 @@ struct VinylApp::Impl final : TransportHost {
                 std::fprintf(stderr, "[vinyl] volume: software %d %% for %s (no playback mixer)\n", app_volume_of(resume, t.key),
                              t.key.c_str());
             } else if (alsa) {
-                const int to = mixer_step_target(mixer_choice, std::max(0, cur), d);
-                const int r = write_mixer(*alsa, t.card, mixer_choice, to);
+                const VolumePress p = mixer_press(mixer_choice, mixer_level, d);
+                int r = 0;
+                if (p.kind == VolumePress::Kind::Set) r = write_mixer(*alsa, t.card, mixer_choice, p.pct);
+                else if (p.kind == VolumePress::Kind::Mute) r = write_mixer_switch(*alsa, t.card, mixer_choice, false);
+                else if (p.kind == VolumePress::Kind::Unmute) r = write_mixer_switch(*alsa, t.card, mixer_choice, true);
+                else return;
                 if (r < 0) std::fprintf(stderr, "[vinyl] volume: %s %s: %s\n", t.card.c_str(), mixer_choice.volume.c_str(), alsa_error_text(r).c_str());
+                if (p.kind == VolumePress::Kind::Set && r >= 0) { /* what was written and what the control holds now */
+                    long back = 0;
+                    const int rr = alsa->mixer_get(t.card, mixer_choice.volume, back); /* a fresh read of the control */
+                    std::fprintf(stderr, "[vinyl] volume: %s\n",
+                                 mixer_set_log_text(t.card, mixer_choice, p.pct, mixer_raw_for(mixer_choice, p.pct), rr, back).c_str());
+                } else if (r >= 0)
+                    std::fprintf(stderr, "[vinyl] volume: set mixer %s '%s' %s\n", t.card.c_str(), mixer_choice.sw.c_str(),
+                                 p.kind == VolumePress::Kind::Mute ? "off (muted)" : "on (un-muted)");
                 read_output_mixer(mono_ms_now(), true);
             }
         }
@@ -961,8 +1020,9 @@ struct VinylApp::Impl final : TransportHost {
             line = "software " + volume_log_text(v) + " for " + t.key + " (" + t.card + ": no playback mixer)";
         else if (t.kind == VolTarget::Kind::Mixer) {
             char db[32] = "";
-            if (mixer_choice.has_db) std::snprintf(db, sizeof db, ", %.1f dB", mixer_level.cdb / 100.0);
-            line = "mixer " + t.card + " '" + mixer_choice.volume + "' " + volume_log_text(v) + (v >= 0 ? db : "");
+            if (mixer_choice.has_db) std::snprintf(db, sizeof db, ", %.2f dB", mixer_level.cdb / 100.0);
+            line = "mixer " + t.card + " '" + mixer_choice.volume + "' " + volume_log_text(v) + (v >= 0 ? db : "") +
+                   (v >= 0 ? ", raw=" + std::to_string(mixer_level.raw) : std::string());
         } else line = "no output";
         if (m && v >= 0) line += " (muted)";
         if (line == vol_logged) return;
@@ -970,11 +1030,12 @@ struct VinylApp::Impl final : TransportHost {
         std::fprintf(stderr, "[vinyl] volume: %s\n", line.c_str());
     }
 
-    std::string format_text(bool short_form) const {
+    /* "FLAC 44.1 kHz / 16 bit", short "FLAC 44.1 / 16"; with_khz (the 640x480 draft): "AAC 44.1 kHz / 161k" */
+    std::string format_text(bool short_form, bool with_khz = false) const {
         const TrackInfo &i = snap.info;
         if (i.label.empty() || !i.out.rate) return "";
         std::string s = i.label + " " + khz(i.out.rate);
-        if (!short_form) s += " kHz";
+        if (!short_form || with_khz) s += " kHz";
         if (!i.lossy && i.source_bits) s += short_form ? " / " + std::to_string(i.source_bits) : " / " + std::to_string(i.source_bits) + " bit";
         else if (i.lossy) {
             unsigned kbps = i.bitrate_kbps;
@@ -1029,8 +1090,11 @@ struct VinylApp::Impl final : TransportHost {
         v.count = cnt;
         v.vol = vol_text();
         v.vol_bt = output_is_bt();
-        v.vol_level = output_level();
+        bool vol_muted = false;
+        v.vol_level = output_level(&vol_muted);
+        v.vol_muted = vol_muted;
         v.vol_adjustable = output_level_adjustable();
+        v.queue_empty = queue.empty();
         const std::string path = !snap.path.empty() ? snap.path : (queue.current_path() ? *queue.current_path() : "");
         if (!path.empty()) {
             TrackTags t;
@@ -1048,19 +1112,24 @@ struct VinylApp::Impl final : TransportHost {
             v.artist = queue.empty() ? "Pick a folder" : "";
             v.album = queue.empty() ? "or a playlist" : "";
         }
-        v.format = format_text(!sm || g.short_format);
+        v.format = format_text(!sm || g.short_format, g.format_khz);
         const std::string ol = output_label();
         const std::string q = output_quality();
         v.output = ol;
         if (g.quality_in_chip && !q.empty() && !ol.empty()) v.output += ", " + q;
         v.output_bt = output_is_bt();
-        /* the third chip of the square and large drafts ("Gapless, RG -3.2 dB"): Gapless when the next track continues
-         * on the same stream (ReplayGain is a P2 feature) */
-        if (g.chip_rows >= 3) {
+        /* the Gapless chip of the square, large and medium drafts ("Gapless, RG -3.2 dB"), the end of the small draft's
+         * format line ("AAC 44.1 / 161k, gapless"): when the next track continues on the same stream (ReplayGain is a P2
+         * feature) */
+        if (layout::shows_gapless(g)) {
             const int n = queue.next_after(cur, false);
             if (n >= 0 && n != cur && snap.info.out.rate) {
                 TrackTags nt;
                 if (jobs.tags(queue.at(n), nt) && nt.rate == snap.info.out.rate) v.extra_chip = "Gapless";
+            }
+            if (g.gapless_in_format && !v.extra_chip.empty()) {
+                if (!v.format.empty()) v.format += ", gapless";
+                v.extra_chip.clear();
             }
         }
         v.pos_ms = shown_pos_ms();
@@ -1156,10 +1225,11 @@ struct VinylApp::Impl final : TransportHost {
             const bool known = jobs.tags(path, t);
             v.mini.title = known && !t.title.empty() ? t.title : title_from_path(path);
             const uint64_t total = snap.total_ms() ? snap.total_ms() : (known ? t.duration_ms : 0);
-            std::string sub = known ? t.artist : "";
-            if (!sub.empty()) sub += ", ";
-            sub += mmss(shown_pos_ms()) + " / " + (total ? mmss(total) : std::string("--:--"));
-            v.mini.sub = sub;
+            /* the artist (the view gives it the dots) and the times, whole, h:mm:ss for a track of an hour or more */
+            v.mini.sub = known ? t.artist : "";
+            const bool hours = (total ? total : shown_pos_ms()) >= 3600000;
+            v.mini.time = layout::track_time_text(shown_pos_ms(), hours, true) + " / " +
+                          (total ? layout::track_time_text(total, hours, true) : std::string("--:--"));
             v.mini.progress = total ? static_cast<double>(shown_pos_ms()) / total : 0;
             v.mini.playing = snap.state == PlayState::Playing;
         }

@@ -331,10 +331,12 @@ std::string output_volume_key(const std::string &sink_name, bool pulse, const Ou
     return target.key();
 }
 
+bool placeholder_sink(const std::string &name) { return name.compare(0, 9, "auto_null") == 0; }
+
 bool sink_volume_of(const OutputWorld &w, const std::string &sink, int &pct, bool &muted) {
     if (!w.server) return false;
     const std::string &name = sink.empty() ? w.default_sink : sink;
-    if (name.empty()) return false;
+    if (name.empty() || placeholder_sink(name)) return false;
     for (const PulseDevice &d : w.sinks)
         if (d.name == name && d.volume_pct >= 0) {
             pct = d.volume_pct;

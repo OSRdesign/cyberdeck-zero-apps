@@ -154,12 +154,16 @@ PixelImage render_disc(int diameter, double ds) {
 }
 
 PixelImage render_label(int label_d, int hole_d, double ds) {
+    (void)ds;
     PixelImage img;
     img.w = img.h = label_d;
     img.px.assign(static_cast<size_t>(label_d) * label_d * 4, 0);
+    /* the spin marks of the approved NP-640x480 / NP-480x320 drafts (2026-11-13), so a turn shows even with most of the
+     * label under the sleeve: a cream dot near the rim (0.14 of the label, its centre 0.36 from the label's centre) and
+     * a cream centre ring (0.24) round the dark spindle hole (hole_d; none: no ring either, the mini player's label) */
     const double r = label_d / 2.0, rh = hole_d / 2.0;
-    /* the printed arc: a quarter ring a shade darker than the teal, so a turn can be seen */
-    const double arc_r = r * 0.66, arc_w = std::max(1.5, 2.0 * ds);
+    const double dot_r = 0.07 * label_d, dot_y = r - 0.36 * label_d;
+    const double ring_r = hole_d > 0 ? 0.12 * label_d : 0.0;
     for (int y = 0; y < label_d; ++y) {
         for (int x = 0; x < label_d; ++x) {
             const double dx = x + 0.5 - r, dy = y + 0.5 - r;
@@ -167,13 +171,9 @@ PixelImage render_label(int label_d, int hole_d, double ds) {
             const double a = cover_of(d, r);
             if (a <= 0) continue;
             uint32_t c = 0x1F7A72;
-            const double ang = std::atan2(dy, dx);
-            if (ang > -2.6 && ang < -1.2) {
-                const double on = std::clamp(arc_w / 2 - std::fabs(d - arc_r) + 0.5, 0.0, 1.0);
-                c = mix(c, 0x175E58, on);
-            }
-            const double hole = cover_of(d, rh);
-            c = mix(c, 0xDCD4BD, hole);
+            c = mix(c, 0xDCD4BD, cover_of(std::hypot(x + 0.5 - r, y + 0.5 - dot_y), dot_r));
+            if (ring_r > 0) c = mix(c, 0xDCD4BD, cover_of(d, ring_r));
+            if (rh > 0) c = mix(c, 0x1B1E1E, cover_of(d, rh));
             put8888(img.px.data() + (static_cast<size_t>(y) * label_d + x) * 4, c, a);
         }
     }

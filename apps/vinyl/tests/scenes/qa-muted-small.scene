@@ -1,0 +1,28 @@
+title Vinyl: the output muted at 480x320 (the volume group under the output button) and 320x480 (the group in the bottom row), their real density
+sizes 480x320 320x480
+ppmm 610
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_MUTED 1
+
+wait 1200
+shot 01-now-muted
+expect esc
+expect notext "60"
+@480x320 expect text "Muted"
+wait 300
+shot 02-now-muted-volume
+# "-" while muted does nothing
+@480x320 tapxy 0.550 0.609
+@320x480 tapxy 0.486 0.928
+wait 300
+@480x320 expect text "Muted"
+expect notext "60"
+# "+" brings the sound back at its level
+@480x320 tapxy 0.875 0.609
+@320x480 tapxy 0.848 0.928
+wait 300
+shot 03-now-unmuted
+expect notext "Muted"
+expect text "60"
+expect noquit

@@ -71,6 +71,9 @@ std::string output_volume_key(const std::string &sink_name, bool pulse, const Ou
  * server's change events, not the launcher's file): the sink `sink`, else (nothing open yet) the server's default sink.
  * false when the server does not report it (no server, the sink is not listed): the caller uses status.state. */
 bool sink_volume_of(const OutputWorld &w, const std::string &sink, int &pct, bool &muted);
+/* The server's placeholder while no real output exists ("auto_null", PipeWire's and PulseAudio's dummy): no level of it
+ * is ever shown (the owner's deck log, 2026-11-13: "volume: sink auto_null 100 %" at start). */
+bool placeholder_sink(const std::string &name);
 /* The quality word of a Bluetooth sink ("music quality", "call quality", "" when unknown). */
 std::string bt_quality(const PulseDevice &sink, const std::vector<PulseCard> &cards);
 /* The name the screen gives a server sink (its description; "HDMI" for an HDMI one). */

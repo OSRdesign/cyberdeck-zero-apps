@@ -18,12 +18,13 @@ SizeClass size_class(int w, int h) {
     const double a = static_cast<double>(w) / h;
     if (a < 0.9) return SizeClass::Portrait;
     if (a < 1.2) return SizeClass::Square;
-    if (a < 1.6) return SizeClass::Small;
+    if (a < 1.6) return w < 800 && h >= 480 ? SizeClass::Medium : SizeClass::Small;
     return SizeClass::Large;
 }
 
 const char *class_name(SizeClass c) {
     switch (c) {
+    case SizeClass::Medium: return "medium";
     case SizeClass::Portrait: return "portrait";
     case SizeClass::Square: return "square";
     case SizeClass::Large: return "large";
@@ -65,34 +66,95 @@ NowGeom now_geom(SizeClass c) {
     NowGeom g;
     g.cls = c;
     switch (c) {
-    case SizeClass::Small: /* Main.dc.html, 480x320 */
+    case SizeClass::Small: /* NP-480x320 of the full-UX canvas (owner, 2026-11-13: "ok for the 480x320 layout") */
         g.dw = 480;
         g.dh = 320;
         g.panel = R{8, 44, 464, 268};
-        g.disc = R{64, 56, 148, 148};
+        g.disc = R{89, 61, 139, 139};
         g.sleeve = R{20, 56, 148, 148};
-        g.label_d = 50;
-        g.hole_d = 6;
-        g.title = text(228, 56, 232, 26, 19, true);
-        g.artist = text(228, 84, 232, 20, 15, true);
-        g.album = text(228, 106, 232, 16, 12, false);
-        g.chip0 = R{228, 136, 0, 26};
+        g.label_d = 57;
+        g.hole_d = 7;
+        g.title = text(236, 56, 224, 26, 19, true);
+        g.artist = text(236, 84, 224, 20, 15, true);
+        g.album = text(236, 106, 224, 16, 12, false);
+        /* one plain line: "AAC 44.1 / 161k, gapless" */
+        g.chip0 = R{236, 126, 0, 16};
         g.chip_px = 12;
-        g.chip_pad = 10;
+        g.chip_pad = 0;
         g.chip_gap = 6;
         g.chip_icon = 12;
-        g.chip_step = 32;
-        g.chip_rows = 2;
-        g.chip_layout = {{0, 1}, {2}};
+        g.chip_step = 20;
+        g.chip_rows = 1;
+        g.chip_layout = {{0}};
         g.short_format = true;
-        g.quality_in_chip = true;
+        g.gapless_in_format = true;
+        g.quality_in_chip = false;
+        g.out_button_on = true;
+        g.out_button = R{236, 146, 224, 28};
+        g.out_px = 12;
+        g.out_icon = 12;
+        g.out_pad = 8;
+        g.out_gap = 6;
+        /* the volume group under the output button, as drawn (the "-" narrower than the "+") */
+        g.vol_minus = R{236, 178, 56, 34};
+        g.vol_value = R{296, 178, 80, 34};
+        g.vol_plus = R{380, 178, 80, 34};
+        g.vol_text_px = 17;
+        g.vol_icon = 18;
         g.time = text(20, 220, 48, 28, 14, false, 28);
         g.remain = text(412, 220, 48, 28, 14, false, 28);
         g.seek = R{72, 229, 336, 10};
+        /* P1: six keys; the draft's seventh, Menu (P2), at 20 + 60 i with 46 wide keys and an 80 wide play key:
+         * shuffle 20, previous 80, play 140, next 234, repeat 294, queue 354, menu 414, all 48 high at y 258 */
         g.transport = {btn("shuffle", 20, 258, 56, 48), btn("prev", 90, 258, 56, 48), btn("play", 160, 258, 88, 48, 26, true),
                        btn("next", 262, 258, 56, 48), btn("repeat", 332, 258, 56, 48), btn("queue", 402, 258, 58, 48)};
         g.repeat_dash = R{354, 298, 12, 4};
-        g.seams = {170, 210, 264};
+        g.seams = {215, 252, 309};
+        break;
+    case SizeClass::Medium: /* NP-640x480 of the full-UX canvas (owner, 2026-11-13: "try without the up next", "that works") */
+        g.dw = 640;
+        g.dh = 480;
+        g.panel = R{8, 44, 624, 428};
+        g.disc = R{131, 63, 210, 210};
+        g.sleeve = R{24, 56, 224, 224};
+        g.label_d = 84;
+        g.hole_d = 8;
+        g.title = text(360, 56, 260, 56, 22, true, 28, 2);
+        g.artist = text(360, 120, 260, 22, 17, true);
+        g.album = text(360, 146, 260, 18, 13, false);
+        /* the format and gapless chips, flat, side by side */
+        g.chip0 = R{360, 178, 0, 28};
+        g.chip_px = 13;
+        g.chip_pad = 12;
+        g.chip_gap = 6;
+        g.chip_icon = 13;
+        g.chip_space = 8;
+        g.chip_step = 34;
+        g.chip_rows = 1;
+        g.chip_layout = {{0, 3}};
+        g.format_khz = true;
+        g.chip_flat = true;
+        g.quality_in_chip = false;
+        g.out_button_on = true;
+        g.out_button = R{360, 220, 260, 42};
+        g.out_px = 14;
+        g.out_icon = 16;
+        g.out_pad = 12;
+        g.out_gap = 8;
+        g.time = text(24, 292, 56, 28, 15, false, 28);
+        g.remain = text(560, 292, 60, 28, 15, false, 28);
+        g.seek = R{86, 302, 468, 10};
+        g.transport = {btn("shuffle", 24, 336, 80, 56, 24), btn("prev", 120, 336, 80, 56, 24),
+                       btn("play", 216, 336, 208, 56, 28, true), btn("next", 440, 336, 80, 56, 24),
+                       btn("repeat", 536, 336, 80, 56, 24)};
+        g.repeat_dash = R{570, 384, 12, 4};
+        /* P1 has no Menu key: Browse and Queue share its width (the draft, P2: Browse 24, Queue 160, Menu 296, each 128
+         * wide, 8 apart, at y 410, 52 high), the volume group as drawn */
+        g.bottom = {word("browse", 24, 410, 196, 52), word("queue", 228, 410, 196, 52)};
+        g.vol_minus = R{440, 410, 52, 52};
+        g.vol_value = R{496, 410, 60, 52};
+        g.vol_plus = R{560, 410, 56, 52};
+        g.seams = {286, 328, 401};
         break;
     case SizeClass::Portrait: /* NowPlaying-320x480 */
         g.dw = 320;
@@ -122,8 +184,9 @@ NowGeom now_geom(SizeClass c) {
                        btn("next", 194, 368, 48, 48), btn("repeat", 248, 368, 48, 48)};
         g.repeat_dash = R{266, 408, 12, 4};
         g.bottom = {word("queue", 24, 426, 100, 40)};
-        g.vol_group = true; /* owner, 2026-11-13: the Output key becomes the volume group */
-        g.out_button_on = true;
+        g.out_button_on = true; /* owner, 2026-11-13: the Output key becomes the volume group */
+        g.out_px = 11;
+        g.out_icon = 11;
         g.vol_minus = R{132, 426, 48, 40};
         g.vol_value = R{184, 426, 60, 40};
         g.vol_plus = R{248, 426, 48, 40};
@@ -157,8 +220,7 @@ NowGeom now_geom(SizeClass c) {
         g.has_upnext = true;
         g.upnext = R{20, 366, 440, 44};
         g.bottom = {word("browse", 20, 420, 120, 42), word("queue", 150, 420, 120, 42)};
-        g.vol_group = true; /* owner, 2026-11-13: the Output key becomes the volume group */
-        g.out_button_on = true;
+        g.out_button_on = true; /* owner, 2026-11-13: the Output key becomes the volume group */
         g.vol_minus = R{280, 420, 52, 42};
         g.vol_value = R{336, 420, 68, 42};
         g.vol_plus = R{408, 420, 52, 42};
@@ -184,6 +246,7 @@ NowGeom now_geom(SizeClass c) {
         g.chip_step = 32;
         g.chip_rows = 3;
         g.chip_layout = {{0}, {2}, {3}}; /* owner, 2026-11-13: no Vol chip, the volume is the bottom group */
+        g.out_button_on = false;
         g.short_format = true;
         g.quality_in_chip = false;
         g.time = text(330, 274, 48, 28, 14, false, 28);
@@ -196,14 +259,33 @@ NowGeom now_geom(SizeClass c) {
         /* owner, 2026-11-13 (NP-800x480 of the full-UX canvas): Browse, Output (the Menu key's place, P2), the volume
          * group where the dimmed Equalizer key was */
         g.bottom = {word("browse", 330, 384, 140, 42), word("output", 480, 384, 140, 42)};
-        g.vol_group = true;
         g.vol_minus = R{630, 384, 40, 42};
         g.vol_value = R{674, 384, 52, 42};
         g.vol_plus = R{730, 384, 40, 42};
         g.seams = {262, 306, 372};
         break;
     }
+    /* the record, one rule on every class: 94 % of the sleeve's height, centred on it (the owner's deck report,
+     * 2026-11-13: "the disc going out of the song cover picture seems to be too low, it appears under the cover"); the
+     * label 40 % of the record, about a third of it showing: the record's centre 0.15 label diameters inside the sleeve's
+     * right edge (the coordinator, 2026-11-13: about a tenth; the approved NP-640x480 and NP-480x320 drafts measure 12 of
+     * 84 and 9.5 of 57); never into the info column beside the sleeve (2 design px clear of it: the large class, whose
+     * record then shows less of its label, and 1 px less on the square class); the spindle hole a tenth of the label */
+    const double d = std::round(g.sleeve.h * 0.94);
+    g.label_d = std::round(d * 0.40);
+    g.hole_d = std::max(3.0, std::round(g.label_d * 0.10));
+    double cx = g.sleeve.right() - 0.15 * g.label_d;
+    if (g.title.box.x > g.sleeve.right()) cx = std::min(cx, g.title.box.x - 2 - d / 2);
+    g.disc = R{cx - d / 2, g.sleeve.y + (g.sleeve.h - d) / 2, d, d};
     return g;
+}
+
+bool shows_gapless(const NowGeom &g) {
+    if (g.gapless_in_format) return true;
+    for (const std::vector<int> &row : g.chip_layout)
+        for (int id : row)
+            if (id == 3) return true;
+    return false;
 }
 
 ui::Fit now_fit(const NowGeom &g, int screen_w, int screen_h, int body_y) {
@@ -228,40 +310,6 @@ std::string track_time_text(uint64_t ms, bool hours, bool lead_zero) {
 const char *track_time_widest(bool hours, bool remaining) {
     if (hours) return remaining ? "-00:00:00" : "00:00:00"; /* up to 99 h: a wider label never cuts a long file */
     return remaining ? "-00:00" : "00:00";
-}
-
-std::vector<std::vector<int>> flow_chip_rows(const std::vector<std::vector<int>> &rows, const int natural[4], int avail,
-                                             int space) {
-    auto width = [&](const std::vector<int> &row) {
-        int w = 0, n = 0;
-        for (int id : row)
-            if (id >= 0 && id <= 3 && natural[id] > 0) {
-                w += natural[id];
-                ++n;
-            }
-        return n > 1 ? w + (n - 1) * space : w;
-    };
-    std::vector<std::vector<int>> out = rows;
-    int vr = -1;
-    for (size_t r = 0; r < out.size(); ++r)
-        for (int id : out[r])
-            if (id == 1) vr = static_cast<int>(r);
-    if (vr < 0 || natural[1] <= 0 || width(out[static_cast<size_t>(vr)]) <= avail) return out;
-    bool shared = false;
-    for (int id : out[static_cast<size_t>(vr)])
-        if (id != 1 && id >= 0 && id <= 3 && natural[id] > 0) shared = true;
-    if (!shared) return out;
-    for (size_t r = 0; r < out.size(); ++r) {
-        if (static_cast<int>(r) == vr) continue;
-        const int w = width(out[r]);
-        if (natural[1] + (w > 0 ? w + space : 0) <= avail) {
-            std::vector<int> &from = out[static_cast<size_t>(vr)];
-            from.erase(std::remove(from.begin(), from.end(), 1), from.end());
-            out[r].push_back(1);
-            break;
-        }
-    }
-    return out;
 }
 
 R grow_hit(const R &d, double min_w, double min_h) {
@@ -296,72 +344,284 @@ void split_pair(HitArea &a, HitArea &b, double min) {
 }
 
 namespace {
-bool across(const R &a, const R &b) { return a.x < b.right() && b.x < a.right(); } /* the x ranges overlap */
 
-/* the area starts at `start` (never below its drawn top) and reaches at least `min` down, at most to `limit` */
-void start_at(R &a, const R &drawn, double start, double min, double limit) {
-    start = std::min(start, drawn.y);
-    const double bottom = std::min(limit, std::max(a.bottom(), start + min));
-    a.y = start;
-    a.h = std::max(0.0, bottom - start);
+/* the rows of now playing's areas (drawn boxes that share a height), top to bottom */
+struct HitRow {
+    std::vector<HitArea *> a;
+    double d0 = 0, d1 = 0;   /* drawn top and bottom */
+    double x0 = 0, x1 = 0;   /* the areas' x extent */
+    double top = 0, bottom = 0;
+};
+
+std::vector<HitRow> hit_rows(NowHitSet &h) {
+    std::vector<HitArea *> all;
+    for (std::vector<HitArea> *v : {&h.chips, &h.seek, &h.keys, &h.bottom})
+        for (HitArea &a : *v)
+            if (a.drawn.w > 0 && a.drawn.h > 0) all.push_back(&a);
+    std::stable_sort(all.begin(), all.end(), [](const HitArea *p, const HitArea *q) { return p->drawn.y < q->drawn.y; });
+    std::vector<HitRow> rows;
+    for (HitArea *a : all) {
+        if (rows.empty() || a->drawn.y >= rows.back().d1 - 1e-9) {
+            HitRow r;
+            r.d0 = a->drawn.y;
+            r.d1 = a->drawn.bottom();
+            rows.push_back(r);
+        }
+        HitRow &r = rows.back();
+        r.a.push_back(a);
+        r.d1 = std::max(r.d1, a->drawn.bottom());
+    }
+    return rows;
 }
+
+/* The rows' tops and bottoms for a common least height hh: false when they do not fit. lo_* the highest placement,
+ * hi_* the lowest; conflict[i]: row i and row i + 1 share x (they must not overlap). */
+bool rows_fit(const std::vector<HitRow> &rows, const std::vector<bool> &conflict, double hh, double top_limit, double screen_h,
+              std::vector<double> &lo_top, std::vector<double> &hi_top) {
+    const size_t n = rows.size();
+    lo_top.assign(n, 0);
+    hi_top.assign(n, 0);
+    std::vector<double> lo_bottom(n), hi_bottom(n);
+    for (size_t i = 0; i < n; ++i) {
+        lo_top[i] = (i > 0 && conflict[i - 1]) ? lo_bottom[i - 1] : top_limit;
+        if (lo_top[i] > rows[i].d0 + 1e-9) return false;
+        lo_bottom[i] = std::max(rows[i].d1, lo_top[i] + hh);
+    }
+    for (size_t k = n; k-- > 0;) {
+        hi_bottom[k] = (k + 1 < n && conflict[k]) ? hi_top[k + 1] : screen_h;
+        if (hi_bottom[k] < rows[k].d1 - 1e-9) return false;
+        hi_top[k] = std::min(rows[k].d0, hi_bottom[k] - hh);
+    }
+    for (size_t i = 0; i < n; ++i)
+        if (lo_top[i] > hi_top[i] + 1e-9) return false;
+    return true;
+}
+
 }  // namespace
 
-void place_strip_hits(NowHitSet &h, double target, double top_limit, double screen_h) {
-    /* the strip's buttons: the band between the chips above and the keys below them */
-    for (HitArea &st : h.strip) {
-        double upper = top_limit, lower = screen_h;
-        for (const HitArea &c : h.chips)
-            if (across(c.area, st.area) && c.drawn.bottom() <= st.drawn.y) upper = std::max(upper, c.drawn.bottom());
-        for (const HitArea &k : h.keys)
-            if (across(k.area, st.area) && k.drawn.y >= st.drawn.bottom()) lower = std::min(lower, k.drawn.y);
-        upper = std::min(upper, st.drawn.y);
-        lower = std::max(lower, st.drawn.bottom());
-        if (lower - upper >= target) {
-            const double cy = st.drawn.y + st.drawn.h / 2;
-            st.area.h = target;
-            st.area.y = std::clamp(cy - target / 2, upper, lower - target);
+void place_now_hits(NowHitSet &h, double target, double top_limit, double screen_w, double screen_h) {
+    std::vector<HitRow> rows = hit_rows(h);
+    /* across: in a row, neighbours meet in the middle of the gap between their drawn boxes; on the screen */
+    for (HitRow &r : rows) {
+        std::stable_sort(r.a.begin(), r.a.end(), [](const HitArea *p, const HitArea *q) { return p->drawn.x < q->drawn.x; });
+        for (size_t i = 0; i + 1 < r.a.size(); ++i) {
+            HitArea &l = *r.a[i], &u = *r.a[i + 1];
+            if (l.area.right() <= u.area.x || l.drawn.right() > u.drawn.x) continue;
+            const double m = (l.drawn.right() + u.drawn.x) / 2;
+            if (l.area.right() > m) l.area.w = m - l.area.x;
+            if (u.area.x < m) {
+                const double right = u.area.right();
+                u.area.x = m;
+                u.area.w = right - m;
+            }
+        }
+        r.x0 = screen_w;
+        r.x1 = 0;
+        for (HitArea *a : r.a) {
+            const double x0 = std::max(0.0, a->area.x), x1 = std::min(screen_w, a->area.right());
+            a->area.x = x0;
+            a->area.w = std::max(0.0, x1 - x0);
+            r.x0 = std::min(r.x0, x0);
+            r.x1 = std::max(r.x1, x1);
+        }
+    }
+    if (rows.empty()) return;
+    /* down: the largest common height up to the target, then each boundary as near the middle of its gap as that allows */
+    const size_t n = rows.size();
+    std::vector<bool> conflict(n, false);
+    for (size_t i = 0; i + 1 < n; ++i) conflict[i] = rows[i].x0 < rows[i + 1].x1 && rows[i + 1].x0 < rows[i].x1;
+    std::vector<double> lo_top, hi_top;
+    double hh = target;
+    if (!rows_fit(rows, conflict, hh, top_limit, screen_h, lo_top, hi_top)) {
+        double lo = 0, hi = target;
+        for (int it = 0; it < 40; ++it) {
+            const double mid = (lo + hi) / 2;
+            if (rows_fit(rows, conflict, mid, top_limit, screen_h, lo_top, hi_top)) lo = mid;
+            else hi = mid;
+        }
+        hh = std::floor((lo + 1e-6) * 4) / 4; /* to the quarter px under the limit */
+        if (!rows_fit(rows, conflict, hh, top_limit, screen_h, lo_top, hi_top)) {
+            hh = std::floor(lo * 4) / 4;
+            rows_fit(rows, conflict, hh, top_limit, screen_h, lo_top, hi_top);
+        }
+    }
+    for (size_t i = 0; i < n; ++i) {
+        HitRow &r = rows[i];
+        const double full = std::max(target, r.d1 - r.d0), nat_top = (r.d0 + r.d1) / 2 - full / 2;
+        const bool free_top = i == 0 || !conflict[i - 1];
+        if (free_top) r.top = std::clamp(nat_top, lo_top[i], hi_top[i]);
+        else r.top = rows[i - 1].bottom;
+        if (i + 1 < n && conflict[i]) {
+            const double lo_b = std::max(r.d1, r.top + hh), hi_b = hi_top[i + 1];
+            r.bottom = std::clamp(std::round((r.d1 + rows[i + 1].d0) / 2), lo_b, std::max(lo_b, hi_b));
         } else {
-            st.area.y = upper;
-            st.area.h = lower - upper;
+            r.bottom = std::min(screen_h, std::max({r.d1, r.top + target, nat_top + full}));
         }
+        if (free_top) r.top = std::max(top_limit, std::min(r.top, r.bottom - target)); /* the free side to the target */
     }
-    /* the chips, the lowest first: each stops above the areas below it that it reaches and grows upwards */
-    std::vector<HitArea *> chips;
-    for (HitArea &c : h.chips) chips.push_back(&c);
-    std::stable_sort(chips.begin(), chips.end(), [](const HitArea *a, const HitArea *b) { return a->drawn.y > b->drawn.y; });
-    std::vector<const HitArea *> below;
-    for (const HitArea &st : h.strip) below.push_back(&st);
-    for (HitArea *c : chips) {
-        double limit = c->area.bottom();
-        for (const HitArea *o : below)
-            if (overlaps(c->area, o->area)) limit = std::min(limit, o->area.y);
-        if (limit < c->area.bottom()) {
-            limit = std::max(limit, c->drawn.bottom());
-            const double top = std::max(top_limit, std::min(c->area.y, limit - target));
-            c->area.y = std::min(top, c->drawn.y);
-            c->area.h = limit - c->area.y;
+    /* no row higher than it needs (the target, or its drawn height): a boundary in the middle of a wide gap must not make
+     * a large invisible area over what lies between (the square class's up-next box) */
+    for (HitRow &r : rows) {
+        const double full = std::max(target, r.d1 - r.d0);
+        if (r.bottom - r.top <= full) continue;
+        const double t = std::clamp((r.d0 + r.d1) / 2 - full / 2, r.top, r.bottom - full);
+        r.top = t;
+        r.bottom = t + full;
+    }
+    for (HitRow &r : rows)
+        for (HitArea *a : r.a) {
+            a->area.y = r.top;
+            a->area.h = r.bottom - r.top;
         }
-        below.push_back(c);
+}
+
+double now_rows_min_height(const NowHitSet &h) {
+    double m = 1e9;
+    for (const std::vector<HitArea> *v : {&h.chips, &h.seek, &h.keys, &h.bottom})
+        for (const HitArea &a : *v)
+            if (a.drawn.w > 0) m = std::min(m, a.area.h);
+    return m;
+}
+
+namespace {
+double px_of(const ui::Fit &f, double v) { return std::max(1.0, std::round(v * f.s)); }
+R box_of(const ui::Fit &f, const R &r) { return R{double(f.x(r.x)), double(f.y(r.y)), double(f.w(r.x, r.w)), double(f.h(r.y, r.h))}; }
+}  // namespace
+
+NowHitSet now_hit_set(const NowGeom &g, const ui::Fit &f, double target, int keys_dy) {
+    NowHitSet h;
+    for (const Btn &b : g.transport)
+        if (b.enabled) {
+            R d = box_of(f, b.box);
+            d.y += keys_dy;
+            h.keys.push_back({d, grow_hit(d, target, target)});
+        }
+    for (const Btn &b : g.bottom)
+        if (b.enabled) {
+            const R d = box_of(f, b.box);
+            h.bottom.push_back({d, grow_hit(d, target, target)});
+        }
+    if (g.vol_group)
+        for (const R &r : {g.vol_minus, g.vol_plus}) {
+            const R d = box_of(f, r);
+            h.bottom.push_back({d, grow_hit(d, target, target)});
+        }
+    const double sx = f.x(g.seek.x), sw = std::max(1, f.w(g.seek.x, g.seek.w));
+    const double sh = std::max(2, f.h(g.seek.y, g.seek.h)), kd = px_of(f, 18);
+    const R d{sx - std::floor(kd / 2), f.y(g.seek.y) + std::floor(sh / 2) - std::floor(kd / 2), sw + kd, kd};
+    h.seek.push_back({d, grow_hit(d, 0, target)});
+    return h;
+}
+
+int now_keys_shift(const NowGeom &g, const ui::Fit &f, double target, const std::vector<R> &outputs, double top_limit,
+                   double screen_w, double screen_h) {
+    auto least = [&](int dy) {
+        NowHitSet h = now_hit_set(g, f, target, dy);
+        for (const R &o : outputs) h.chips.push_back({o, grow_hit(o, target, target)});
+        place_now_hits(h, target, top_limit, screen_w, screen_h);
+        return now_rows_min_height(h);
+    };
+    double best_h = least(0);
+    if (best_h >= target - 1e-6) return 0;
+    double keys_top = screen_h, keys_bottom = 0;
+    for (const Btn &b : g.transport) {
+        keys_top = std::min(keys_top, double(f.y(b.box.y)));
+        keys_bottom = std::max(keys_bottom, double(f.y(b.box.y) + f.h(b.box.y, b.box.h)));
     }
-    /* the transport keys start below the strip areas they reach, the bottom row below the keys it reaches */
-    for (HitArea &k : h.keys) {
-        double start = k.area.y;
-        for (const HitArea &st : h.strip)
-            if (overlaps(k.area, st.area)) start = std::max(start, st.area.bottom());
-        if (start > k.area.y) start_at(k.area, k.drawn, start, target, screen_h);
+    double below = f.y(g.panel.bottom());
+    if (g.has_upnext) below = std::min(below, double(f.y(g.upnext.y)));
+    for (const Btn &b : g.bottom) below = std::min(below, double(f.y(b.box.y)));
+    if (g.vol_group && f.y(g.vol_minus.y) > keys_top) below = std::min(below, double(f.y(g.vol_minus.y)));
+    const int four = static_cast<int>(px_of(f, 4));
+    int best = 0;
+    for (int dy = 1; dy <= four && keys_bottom + dy <= below - four + 1e-9; ++dy) {
+        const double m = least(dy);
+        if (m > best_h + 1e-6) {
+            best = dy;
+            best_h = m;
+        }
+        if (m >= target - 1e-6) break;
     }
-    for (HitArea &b : h.bottom) {
-        double start = b.area.y;
-        for (const HitArea &k : h.keys)
-            if (overlaps(b.area, k.area)) start = std::max(start, k.area.bottom());
-        if (start > b.area.y) start_at(b.area, b.drawn, start, target, screen_h);
+    return best;
+}
+
+std::vector<R> queue_touch_areas(const ListGeom &lg, int screen_h, double target, double &list_bottom) {
+    list_bottom = lg.list.bottom();
+    std::vector<R> areas;
+    const std::vector<R> &b = lg.queue_buttons;
+    if (b.empty()) return areas;
+    const bool two_rows = b.size() == 4 && b[2].y > b[0].y;
+    std::vector<HitArea> h;
+    for (const R &r : b) h.push_back({r, grow_hit(r, target, 0)});
+    /* across: neighbours in a row meet in the middle of their gap */
+    for (size_t i = 0; i < h.size(); ++i)
+        for (size_t j = i + 1; j < h.size(); ++j)
+            if (std::fabs(h[i].drawn.y - h[j].drawn.y) < 1) split_pair(h[i], h[j], target);
+    /* down: the target high; two rows meet in the middle of their gap; from the strip's top down, moved up where the
+     * screen's bottom is nearer */
+    const double hh = std::max(b[0].h, target);
+    if (!two_rows) {
+        const double y0 = std::min(b[0].y, screen_h - hh);
+        for (HitArea &a : h) {
+            a.area.y = y0;
+            a.area.h = hh;
+        }
+        list_bottom = std::min(list_bottom, y0);
+    } else {
+        double mid = (b[0].bottom() + b[2].y) / 2;
+        double low_bottom = std::max(b[2].bottom(), mid + hh);
+        if (low_bottom > screen_h) {
+            low_bottom = screen_h;
+            mid = low_bottom - hh;
+        }
+        const double top = std::min(b[0].y, mid - hh);
+        for (size_t i = 0; i < h.size(); ++i) {
+            if (i < 2) {
+                h[i].area.y = top;
+                h[i].area.h = mid - top;
+            } else {
+                h[i].area.y = mid;
+                h[i].area.h = low_bottom - mid;
+            }
+        }
+        list_bottom = std::min(list_bottom, top);
     }
+    for (const HitArea &a : h) areas.push_back(a.area);
+    return areas;
+}
+
+MiniBoxes mini_touch_areas(const ListGeom &lg, int screen_w, int screen_h, double target) {
+    MiniBoxes m;
+    auto S = [&](double v) { return std::max(1.0, std::round(v * lg.s)); };
+    const double sx = std::round(lg.strip.x), sy = std::round(lg.strip.y), sw = std::round(lg.strip.w), shh = std::round(lg.strip.h);
+    m.open = R{sx, sy, sw - S(100), shh};
+    m.play = R{sx + sw - S(94), sy + S(3), S(44), S(36)};
+    m.next = R{sx + sw - S(46), sy + S(3), S(40), S(36)};
+    const double hit_h = std::min(double(screen_h), std::max(shh, target));
+    const double hit_y = std::min(sy, screen_h - hit_h);
+    HitArea ap{R{m.play.x, sy, m.play.w, shh}, {}}, an{R{m.next.x, sy, m.next.w, shh}, {}};
+    ap.area = grow_hit(ap.drawn, target, 0);
+    an.area = grow_hit(an.drawn, target, 0);
+    split_pair(ap, an, target);
+    if (an.area.right() > screen_w) {
+        const double d = an.area.right() - screen_w;
+        an.area.x -= d;
+        ap.area.x -= d;
+    }
+    m.play_area = R{ap.area.x, hit_y, ap.area.w, hit_h};
+    m.next_area = R{an.area.x, hit_y, an.area.w, hit_h};
+    m.open_area = R{sx, hit_y, std::max(1.0, ap.area.x - sx), hit_h};
+    m.list_bottom = std::min(lg.list.bottom(), hit_y);
+    return m;
 }
 
 ListGeom list_geom(ListPage page, int sw, int sh, int body_y) {
     ListGeom l;
-    const NowGeom g = now_geom(size_class(sw, sh));
+    /* the list pages keep the 480x320 drawing on the medium class too (the deck: scaled 4/3, as before the 640x480
+     * now-playing draft): that draft is of now playing only */
+    SizeClass c = size_class(sw, sh);
+    if (c == SizeClass::Medium) c = SizeClass::Small;
+    const NowGeom g = now_geom(c);
     const ui::Fit f = now_fit(g, sw, sh, body_y);
     const double s = f.s;
     l.s = s;

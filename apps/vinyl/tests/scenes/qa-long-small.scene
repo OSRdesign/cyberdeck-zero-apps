@@ -9,8 +9,8 @@ shot 01-now-long
 expect esc
 expect text "0:01:14"
 expect text "-1:01:16"
-@480x320 expect text "Vol 70"
-@320x480 expect text "70"
+expect text "70"
+expect notext "Vol 70"
 expect text "USB Audio Device"
 key b
 wait 400

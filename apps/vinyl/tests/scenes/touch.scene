@@ -1,11 +1,11 @@
-title Vinyl by touch: the output chip opens the chooser, Esc goes back, the queue key opens the queue (480x320)
+title Vinyl by touch: the output button opens the chooser, Esc goes back, the queue key opens the queue (480x320)
 sizes 480x320
 ppmm 608
 env VINYL_DEMO 1
 env VINYL_DEMO_STATE playing
 
 wait 800
-tap "Evolve 65, music quality"
+tap "Evolve 65"
 wait 300
 shot t-output
 expect text "Automatic"

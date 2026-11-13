@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 namespace vinyl {
 
@@ -55,7 +56,8 @@ bool choose_playback_mixer(const std::vector<CtlInfo> &ctls, MixerChoice &out) {
     out.top = pick->max;
     if (const CtlInfo *sw = find(ctls, prefix + " Playback Switch"); sw && sw->type == CtlInfo::Type::Boolean && sw->writable)
         out.sw = sw->name;
-    if (pick->has_db && pick->db_max_cdb > pick->db_min_cdb) {
+    out.min_is_mute = pick->min_is_mute;
+    if (pick->has_db && pick->db_max_cdb > pick->db_min_cdb && pick->db_min_cdb > kAlsaDbGainMute) {
         out.has_db = true;
         out.db_min = pick->db_min_cdb;
         out.db_max = pick->db_max_cdb;
@@ -82,14 +84,19 @@ long mixer_raw_for(const MixerChoice &m, int pct) {
         if (pct == 0) return m.min;
         const long cdb = std::max(m.db_min, std::min(m.db_top, volume_cdb_for(pct)));
         const long raw = m.min + round_div(static_cast<long long>(cdb - m.db_min) * (m.max - m.min), m.db_max - m.db_min);
-        return std::max(m.min, std::min(m.top, raw));
+        const long lowest = m.min_is_mute ? std::min(m.min + 1, m.top) : m.min; /* min is mute there: the lowest sound */
+        return std::max(lowest, std::min(m.top, raw));
     }
-    return m.min + round_div(static_cast<long long>(m.top - m.min) * pct, 100);
+    const long raw = m.min + round_div(static_cast<long long>(m.top - m.min) * pct, 100);
+    return pct > 0 && m.min_is_mute ? std::max(std::min(m.min + 1, m.top), raw) : raw;
 }
 
 int mixer_pct_for(const MixerChoice &m, long raw) {
+    if (m.min_is_mute && raw <= m.min) return 0; /* the value that is mute */
     if (m.top <= m.min) return raw > m.min ? 100 : 0;
-    if (m.has_db) return std::max(0, volume_pct_for(mixer_cdb_for(m, raw)));
+    /* above top (0 dB: set by something else) it reads 100 %: Vinyl never sets it there */
+    if (raw >= m.top) return 100;
+    if (m.has_db) return std::max(0, std::min(100, volume_pct_for(mixer_cdb_for(m, raw))));
     return static_cast<int>(std::max(0L, round_div(static_cast<long long>(raw - m.min) * 100, m.top - m.min)));
 }
 
@@ -135,13 +142,26 @@ int read_mixer(AlsaApi &alsa, const std::string &card, std::string &choice_card,
         return r;
     }
     out.has_mixer = true;
+    out.raw = raw;
     out.pct = mixer_pct_for(choice, raw);
     out.cdb = mixer_cdb_for(choice, raw);
     if (!choice.sw.empty()) {
         long on = 1;
         if (alsa.mixer_get(card, choice.sw, on) >= 0) out.muted = on == 0;
     }
+    if (choice.min_is_mute && raw <= choice.min) out.muted = true; /* the value that is mute (the Pi 4B's PCM) */
     return 0;
+}
+
+std::string mixer_set_log_text(const std::string &card, const MixerChoice &m, int pct, long raw, int read_result, long read_raw) {
+    char target[48];
+    if (m.has_db) std::snprintf(target, sizeof target, "%.2f dB", mixer_cdb_for(m, raw) / 100.0);
+    else std::snprintf(target, sizeof target, "no dB data");
+    char back[48];
+    if (read_result >= 0) std::snprintf(back, sizeof back, "raw=%ld", read_raw);
+    else std::snprintf(back, sizeof back, "failed (%d)", read_result);
+    return "set mixer " + card + " '" + m.volume + "' " + std::to_string(pct) + " % raw=" + std::to_string(raw) + " (target " +
+           target + ") read back " + back;
 }
 
 int write_mixer(AlsaApi &alsa, const std::string &card, const MixerChoice &choice, int pct) {
@@ -159,6 +179,59 @@ std::string volume_chip_text(int level, bool muted) {
 }
 
 std::string volume_log_text(int level) { return level < 0 ? std::string("-- (not known)") : std::to_string(level) + " %"; }
+
+int write_mixer_switch(AlsaApi &alsa, const std::string &card, const MixerChoice &choice, bool on) {
+    if (choice.sw.empty()) return -ENOENT;
+    return alsa.mixer_set(card, choice.sw, on ? 1 : 0);
+}
+
+VolumePress mixer_press(const MixerChoice &m, const MixerLevel &lv, int delta) {
+    VolumePress p;
+    if (!lv.has_mixer || !m.ok() || delta == 0) return p;
+    if (lv.muted) {
+        if (delta < 0) return p; /* already silent */
+        if (lv.raw > m.min) {
+            p.kind = VolumePress::Kind::Unmute; /* the level it had */
+            return p;
+        }
+        /* at the floor: the first step that moves the control, so something is heard */
+        for (int q = std::max(0, lv.pct) + kVolumeStep; q <= 100; q += kVolumeStep)
+            if (mixer_raw_for(m, q) > m.min) {
+                p.kind = VolumePress::Kind::Set;
+                p.pct = q;
+                return p;
+            }
+        p.kind = VolumePress::Kind::Unmute;
+        return p;
+    }
+    const int to = mixer_step_target(m, std::max(0, lv.pct), delta);
+    if (delta < 0 && to == 0) {
+        if (m.sw.empty() && lv.raw <= m.min) return p; /* no switch: the floor is as low as it goes */
+        if (!m.sw.empty()) {
+            p.kind = VolumePress::Kind::Mute;
+            return p;
+        }
+    }
+    p.kind = VolumePress::Kind::Set;
+    p.pct = to;
+    return p;
+}
+
+VolumePress sink_press(int level, bool muted, int delta) {
+    VolumePress p;
+    if (level < 0 || delta == 0) return p;
+    if (muted) {
+        if (delta < 0) return p;
+        p.kind = VolumePress::Kind::Set; /* setting a level above 0 % un-mutes the sink */
+        p.pct = level > 0 ? std::min(level, 100) : kVolumeStep;
+        return p;
+    }
+    const int to = volume_after_step(level, delta);
+    if (to == level) return p;
+    p.kind = VolumePress::Kind::Set;
+    p.pct = to;
+    return p;
+}
 
 int volume_after_step(int current, int delta) {
     if (current < 0) current = 0;

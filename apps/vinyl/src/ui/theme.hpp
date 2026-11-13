@@ -15,6 +15,7 @@ constexpr std::uint32_t kScreen = 0x000000;
 constexpr std::uint32_t kCream = 0xDCD4BD;    /* the panel, the mini player, the notices */
 constexpr std::uint32_t kButton = 0xB9B19B;   /* buttons on cream */
 constexpr std::uint32_t kChip = 0xC9C0A5;     /* chips, the seek track, the up-next box */
+constexpr std::uint32_t kInfoChip = 0xE6DFC8; /* the flat information chips of the 640x480 draft (format, Gapless) */
 constexpr std::uint32_t kInk = 0x222222;      /* titles, icons */
 constexpr std::uint32_t kInk2 = 0x3B3828;     /* artist, remaining time, notice text */
 constexpr std::uint32_t kInk3 = 0x6B6552;     /* album, the mini player's second line, UP NEXT */

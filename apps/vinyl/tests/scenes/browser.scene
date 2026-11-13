@@ -9,7 +9,7 @@ wait 1200
 shot browser
 expect esc
 expect text "MUSIC / PHOENIX"
-expect text "A-Z"
+expect notext "A-Z"
 expect text "Fences Remixes"
 expect text "Lisztomania"
 expect text "04:04"

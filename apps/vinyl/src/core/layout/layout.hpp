@@ -4,7 +4,10 @@
  * Vinyl layout: the owner-approved drafts (docs/design (the .dc.html drafts), 2026-11-12) as data, in their own pixels ("design
  * px"), and the size classes that pick one (pure, no LVGL; tests/test_layout.cpp):
  *
- *   Small     480x320 (Main.dc.html): landscape canvases from aspect 1.2 to 1.6 (480x320, the deck's 640x480)
+ *   Small     480x320 (NP-480x320 of the full-UX canvas, owner 2026-11-13: "ok for the 480x320 layout"): landscape
+ *             canvases from aspect 1.2 to 1.6 that are not Medium (480x320, 1024x768)
+ *   Medium    640x480 (NP-640x480, owner 2026-11-13: "that works"): the same aspects where the width is under 800 and the
+ *             height 480 or more (the deck's 640x480, 720x540)
  *   Portrait  320x480 (NowPlaying-320x480): canvases taller than wide (aspect under 0.9: 320x480, PDA 480x800, 800x1280)
  *   Square    480x480 (NowPlaying-480x480): aspect 0.9 to 1.2 (the HackBerry's 720x720)
  *   Large     800x480 (NowPlaying-800x480): aspect 1.6 and more (800x480, 1024x600, 1280x720, 1280x800), two panes
@@ -33,7 +36,7 @@
 namespace vinyl {
 namespace layout {
 
-enum class SizeClass { Small, Portrait, Square, Large };
+enum class SizeClass { Small, Medium, Portrait, Square, Large };
 SizeClass size_class(int w, int h);
 const char *class_name(SizeClass c);
 
@@ -69,11 +72,12 @@ struct NowGeom {
     R sleeve, disc;
     double label_d = 50, hole_d = 6;
     Text title, artist, album;
-    /* the chips (the drafts as updated 2026-11-12): small rows [format, volume] [output]; square and large [format]
-     * [output, volume] [gapless]; portrait one row [format, output, volume]. The volume chip is teal with white text. */
-    std::vector<std::vector<int>> chip_layout; /* ids: 0 format, 1 volume, 2 output, 3 gapless (vol_group classes: no 1 and no
-                                                  2, the output is out_button; an empty row keeps its place) */
-    double vol_px = 12, vol_pad = 10;
+    /* the chips: information only (the format and Gapless), except the large class's output chip. Small: one plain
+     * line "AAC 44.1 / 161k, gapless" (gapless_in_format); medium: [format, gapless] flat (chip_flat); square [format]
+     * [] [gapless]; large [format] [output] [gapless]; portrait [format] beside the output button. No Vol chip on any
+     * class (owner, 2026-11-13): the volume is the group. */
+    std::vector<std::vector<int>> chip_layout; /* ids: 0 format, 2 output, 3 gapless (id 1, the old Vol chip, is gone; an
+                                                  empty row keeps its place) */
     R chip0;                  /* the first chip's position; height in h */
     double chip_px = 12, chip_pad = 10, chip_gap = 6, chip_icon = 12;
     double chip_space = 8;     /* between two chips of a row */
@@ -81,6 +85,9 @@ struct NowGeom {
     double chip_step = 32;     /* landscape: the next row's y offset */
     int chip_rows = 2;
     bool short_format = false; /* "FLAC 44.1 / 16" instead of "FLAC 44.1 kHz / 16 bit" */
+    bool format_khz = false;   /* medium: "AAC 44.1 kHz / 161k" (the kHz kept, the rest short) */
+    bool gapless_in_format = false; /* small: Gapless at the end of the format line, no chip of its own */
+    bool chip_flat = false;    /* medium: the format and gapless chips flat (the draft's light fill); else plain text */
     bool quality_in_chip = true; /* "Evolve 65, music quality" */
     Text time, remain;
     R seek;
@@ -91,21 +98,24 @@ struct NowGeom {
     std::vector<Btn> bottom;
     bool has_queue_pane = false;
     R queue_pane;
-    /* The volume group (owner, 2026-11-13): "-", the level on teal, "+" in the bottom row; no Vol chip and no volume
-     * strip where it is. Square and portrait (NowPlaying-480x480 / -320x480): it takes the Output key's place and the
-     * output chip becomes a button of its own (out_button_on: icon, the device's name, a chevron; out_button is its box,
-     * in portrait x is the least, it starts right of a wider format chip). Large (NP-800x480 of the full-UX canvas): it
-     * takes the dimmed Equalizer key's place, the Output key stays until the Menu key (P2) exists, the output chip stays
-     * a chip. The small class keeps the Vol chip and its strip. */
-    bool vol_group = false;
+    /* The volume group (owner, 2026-11-13): "-", the level on teal, "+", on every class (no Vol chip and no volume strip
+     * any more). Square, portrait, medium: in the bottom row; small: under the output button in the info column; large:
+     * the dimmed Equalizer key's place. The output is a button of its own (out_button_on: icon, the device's name, a
+     * chevron; out_button is its box, in portrait x is the least, it starts right of a wider format chip) except on the
+     * large class, where the output chip and the Output key stay until the Menu key (P2) exists. */
+    bool vol_group = true;
     bool out_button_on = false;
     R vol_minus, vol_value, vol_plus;
+    double vol_text_px = 18, vol_icon = 20; /* the level's text, the "-" / "+" icons */
     R out_button;
+    double out_px = 12, out_icon = 12, out_pad = 8, out_gap = 6; /* the output button's text, icons, padding, gaps */
     double queue_row_h = 40, queue_heading_px = 11;
     std::vector<double> seams;
 };
 
 NowGeom now_geom(SizeClass c);
+/* The class shows a Gapless mark (a chip, or the end of the format line). */
+bool shows_gapless(const NowGeom &g);
 
 /* The list pages at a scale: the dark panel, the list area and the bottom strip, in SCREEN px (already scaled and
  * centred), under the toolkit header that ends at body_y. */
@@ -132,13 +142,6 @@ std::string track_time_text(uint64_t ms, bool hours, bool lead_zero);
 /* The widest text of each label for a format (the labels are sized for it, so a long track is never cut). */
 const char *track_time_widest(bool hours, bool remaining);
 
-/* The chip rows for the chips' natural widths (screen px; 0 = no chip): when the volume chip (id 1) shares a row with a
- * chip that would end with dots, it moves to the end of another row where it fits whole (the first such row), so the
- * other chip gets the whole row (board screenshot 2026-11-13: "USB Audio..." beside "Vol 70" at 720x720). A row that
- * fits, or a volume chip that fits nowhere else, stays as it is. */
-std::vector<std::vector<int>> flow_chip_rows(const std::vector<std::vector<int>> &rows, const int natural[4], int avail,
-                                             int space);
-
 /* The touch areas of a page (screen px). A control drawn smaller than the toolkit's TARGET gets a larger invisible area
  * (grow_hit: the drawn box grown to min_w x min_h around its centre). split_pair keeps two neighbours' areas apart
  * (design QA D-33, 2026-11-12: the mini player's play and next keys) without making either smaller than `min` (the
@@ -152,18 +155,47 @@ R grow_hit(const R &drawn, double min_w, double min_h);
 void split_pair(HitArea &a, HitArea &b, double min);
 bool overlaps(const R &a, const R &b);
 
-/* The touch areas of now playing while the volume strip is open (design QA run 2, D-33): no strip area overlaps another
- * area. The strip's "-" and "+" take the band between the interactive chips above them and the transport keys below
- * them (the target high where the band allows it, else the whole band). A chip whose area reaches into a strip area
- * stops at it and grows upwards instead (a chip it then reaches moves up the same way, never under top_limit, the
- * header); a transport key's area starts below the strip areas it reaches and grows downwards, and a bottom-row key's
- * starts below the transport keys' areas it reaches and grows downwards (never past screen_h). The areas come in as
- * grow_hit gives them, the chips already split_pair'ed. A row that has no room for its keys at the target width keeps
- * its own overlaps (the six transport keys at 480x480); this only keeps the strip and its neighbours apart. */
+/* Every touch area of now playing, in one place (design QA run 3: no two areas may overlap; the view and the tests use
+ * this). The areas come in as grow_hit made them (the seek bar's the target high, its own width). Areas whose drawn
+ * boxes share a height form a row; in a row, neighbours meet in the middle of the gap between their drawn boxes. The
+ * rows (the output button or chip; the small class's volume group; the seek bar; the transport keys; the bottom row) are
+ * then laid down the screen: each covers its drawn boxes, a row that shares x with the next one meets it at a boundary
+ * in the gap between them, and the heights are the target where the screen has the room, else the largest height every
+ * row can have (the rest of the gap goes to the rows that have room: owner rule R-4, the 7 mm are a recommendation; the
+ * heights under the target are listed in the QA notes). A row's free side (above the first, below the last, or next to
+ * a row it shares no x with) grows to the target, never above top_limit (the header) or below screen_h. */
 struct NowHitSet {
-    std::vector<HitArea> chips, strip, keys, bottom;
+    std::vector<HitArea> chips, seek, keys, bottom;
 };
-void place_strip_hits(NowHitSet &h, double target, double top_limit, double screen_h);
+void place_now_hits(NowHitSet &h, double target, double top_limit, double screen_w, double screen_h);
+
+/* The drawn boxes of now playing at a size (screen px), as the view draws them: the enabled transport keys, the enabled
+ * bottom-row keys, the volume group's "-" and "+", the seek bar's touch box (the drafts' track, the knob high). The
+ * output button's (or chip's) box depends on its text: the caller adds it. Areas filled with grow_hit (place_now_hits
+ * does the rest). */
+NowHitSet now_hit_set(const NowGeom &g, const ui::Fit &f, double target, int keys_dy = 0);
+/* The smallest height place_now_hits gives a row (screen px): the target where the screen has room for it. */
+double now_rows_min_height(const NowHitSet &h);
+/* The few px the transport keys move down where the rows above them miss the target by a little (the coordinator's rule
+ * of 2026-11-12: no overlap, the geometry fixed by 1-3 px): the shift (0..P(4)) that gives the rows the most height,
+ * the keys staying P(4) clear of what is under them (the panel's edge, the up-next box, the bottom row); 0 where the
+ * target fits, or where moving the keys gains nothing. `outputs`: the output button's (or chip's) drawn box. */
+int now_keys_shift(const NowGeom &g, const ui::Fit &f, double target, const std::vector<R> &outputs, double top_limit,
+                   double screen_w, double screen_h);
+
+/* The queue page's four buttons' touch areas (one row of four, or two rows of two): the target wide and high, the
+ * neighbours meeting in the middle of their gaps, from the strip's top down (moved up where the screen's bottom is
+ * nearer: `list_bottom` then says where the list must end so its rows are not under them). */
+std::vector<R> queue_touch_areas(const ListGeom &lg, int screen_h, double target, double &list_bottom);
+/* The browser's mini player: its drawn boxes (the strip that opens now playing, play, next) and their touch areas, the
+ * target high from the strip's top down (moved up as above), play and next meeting in the middle of their gap, the
+ * open area ending where play's begins. */
+struct MiniBoxes {
+    R open, play, next;              /* drawn */
+    R open_area, play_area, next_area;
+    double list_bottom = 0;
+};
+MiniBoxes mini_touch_areas(const ListGeom &lg, int screen_w, int screen_h, double target);
 
 }  // namespace layout
 }  // namespace vinyl

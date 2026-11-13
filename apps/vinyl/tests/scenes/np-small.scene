@@ -1,4 +1,4 @@
-title Vinyl now playing, 480x320 (draft Main.dc.html): the demonstration queue playing track 3 of 20
+title Vinyl now playing, 480x320 (NP-480x320, owner 2026-11-13): the demonstration queue playing track 3 of 20; the format line, the output button, the volume group
 sizes 480x320
 ppmm 608
 env VINYL_DEMO 1
@@ -9,7 +9,8 @@ shot now-playing
 expect esc
 expect text "Phoenix"
 expect text "Fences Remixes, 2013"
-expect text "Vol 60"
-expect text "Evolve 65, music quality"
-expect text "WAV 44.1 / 16"
+expect notext "Vol 60"
+expect text "60"
+expect text "Evolve 65"
+expect notext "Evolve 65, music quality"
 expect noquit

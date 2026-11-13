@@ -344,8 +344,9 @@ void test_output_mixer() {
     CHECK_EQ(volume_pct_for(-6000), 10);
     for (int p = 1; p <= 100; ++p) CHECK_EQ(volume_pct_for(volume_cdb_for(p)), p);
 
-    /* zero8's Apple adapter: 'Headset Playback Volume' 0..120 = -60..0 dB (0.5 dB a step). The probe's 60/120 (-30 dB)
-     * is 32 % on the server's curve; 50 % is -18 dB (84), 40 % -24 dB (72), 25 % -36 dB (48), 100 % 0 dB (120) */
+    /* the deck zero7's Apple adapter (first noted as zero8's: the coordinator's correction, 2026-11-13): 'Headset
+     * Playback Volume' 0..120 = -60..0 dB (0.5 dB a step). The probe's 60/120 (-30 dB) is 32 % on the server's curve;
+     * 50 % is -18 dB (84), 40 % -24 dB (72), 25 % -36 dB (48), 100 % 0 dB (120) */
     CHECK(choose_playback_mixer({vol_ctl("Headset Playback Volume", 0, 120, true, -6000, 0), switch_ctl("Headset Playback Switch")}, m));
     CHECK(m.has_db);
     CHECK_EQ(m.top, 120L);
@@ -387,7 +388,7 @@ void test_output_mixer() {
     CHECK_EQ(mixer_pct_for(m, 69), 50);
     CHECK_EQ(mixer_raw_for(m, 5), 9L);
     CHECK_EQ(mixer_pct_for(m, 9), 5);
-    CHECK(mixer_pct_for(m, 99) > 100); /* someone else set it to +12 dB: shown as it is */
+    CHECK_EQ(mixer_pct_for(m, 99), 100); /* someone else set it to +12 dB: 100 % (the coordinator, 2026-11-13: above 0 dB reads 100 %) */
     /* the HackBerry's Sharkoon: 'PCM' 0..45, 1 dB a step, -45..0 dB; 22 = -23 dB = 41 % */
     CHECK(choose_playback_mixer({vol_ctl("PCM Playback Volume", 0, 45, true, -4500, 0)}, m));
     CHECK_EQ(mixer_pct_for(m, 22), 41);
@@ -397,7 +398,7 @@ void test_output_mixer() {
     CHECK_EQ(m.top, 100L);
     CHECK_EQ(mixer_raw_for(m, 100), 100L);
     CHECK_EQ(mixer_pct_for(m, 100), 100);
-    CHECK(mixer_pct_for(m, 110) > 100);
+    CHECK_EQ(mixer_pct_for(m, 110), 100);
     /* a headset whose driver gives no dB (the kernel drops bogus values): no dB to put on the curve, linear in steps */
     CHECK(choose_playback_mixer({vol_ctl("Headset Playback Volume", 0, 37)}, m));
     CHECK(!m.has_db);
@@ -594,10 +595,217 @@ void test_sink_names() {
     CHECK_EQ(sink_label(d), std::string("Analog Stereo"));
 }
 
+/* The owner's report from the deck (2026-11-13): "zero7 is showing muted but volume bar shows 18". The Sharkoon's
+ * 'PCM Playback Volume' 0..45 = -45..0 dB with its 'PCM Playback Switch': the floor (-45 dB) reads 18 % on the curve;
+ * "-" at the floor mutes, "-" while muted does nothing, "+" brings the sound back (one step above the floor), a mute by
+ * something else shows, and "+" then un-mutes at the level kept. */
+void test_mute_steps() {
+    FakeAlsa a;
+    a.ctls = {vol_ctl("PCM Playback Volume", 0, 45, true, -4500, 0), switch_ctl("PCM Playback Switch")};
+    a.values["PCM Playback Volume"] = mixer_raw_for([] {
+        MixerChoice m;
+        choose_playback_mixer({vol_ctl("PCM Playback Volume", 0, 45, true, -4500, 0)}, m);
+        return m;
+    }(), 23);
+    a.values["PCM Playback Switch"] = 1;
+    std::string chosen;
+    MixerChoice c;
+    MixerLevel lv;
+    CHECK_EQ(read_mixer(a, "hw:CARD=S", chosen, c, lv), 0);
+    CHECK_EQ(lv.pct, 23);
+    auto press = [&](int d) {
+        const VolumePress p = mixer_press(c, lv, d);
+        if (p.kind == VolumePress::Kind::Set) write_mixer(a, "hw:CARD=S", c, p.pct);
+        if (p.kind == VolumePress::Kind::Mute) write_mixer_switch(a, "hw:CARD=S", c, false);
+        if (p.kind == VolumePress::Kind::Unmute) write_mixer_switch(a, "hw:CARD=S", c, true);
+        read_mixer(a, "hw:CARD=S", chosen, c, lv);
+        return p.kind;
+    };
+    /* down to the floor: 23 -> 18 (-45 dB, the card's lowest) */
+    CHECK(press(-kVolumeStep) == VolumePress::Kind::Set);
+    CHECK_EQ(lv.pct, 18);
+    CHECK_EQ(lv.raw, 0L);
+    CHECK(!lv.muted);
+    /* "-" at the floor mutes (the switch); the level is kept */
+    CHECK(press(-kVolumeStep) == VolumePress::Kind::Mute);
+    CHECK(lv.muted);
+    CHECK_EQ(a.values["PCM Playback Switch"], 0L);
+    CHECK_EQ(lv.pct, 18);
+    /* "-" while muted does nothing */
+    const int sets = a.sets;
+    CHECK(press(-kVolumeStep) == VolumePress::Kind::None);
+    CHECK_EQ(a.sets, sets);
+    CHECK(lv.muted);
+    /* "+" while muted at the floor: one step above it, un-muted, so something is heard */
+    CHECK(press(kVolumeStep) == VolumePress::Kind::Set);
+    CHECK(!lv.muted);
+    CHECK_EQ(lv.pct, 23);
+    /* muted by something else (alsamixer) at 23: shown muted; "+" un-mutes at 23, not a step above */
+    a.values["PCM Playback Switch"] = 0;
+    read_mixer(a, "hw:CARD=S", chosen, c, lv);
+    CHECK(lv.muted);
+    CHECK(press(kVolumeStep) == VolumePress::Kind::Unmute);
+    CHECK(!lv.muted);
+    CHECK_EQ(lv.pct, 23);
+    /* a card without a switch: the floor is as low as it goes */
+    MixerChoice nosw;
+    choose_playback_mixer({vol_ctl("PCM Playback Volume", 0, 45, true, -4500, 0)}, nosw);
+    MixerLevel floor;
+    floor.has_mixer = true;
+    floor.raw = 0;
+    floor.pct = 18;
+    CHECK(mixer_press(nosw, floor, -kVolumeStep).kind == VolumePress::Kind::None);
+    /* the sound server's sinks: floor 0 %, "+" un-mutes at the level, "-" muted does nothing */
+    CHECK(sink_press(40, true, -kVolumeStep).kind == VolumePress::Kind::None);
+    VolumePress p = sink_press(40, true, kVolumeStep);
+    CHECK(p.kind == VolumePress::Kind::Set && p.pct == 40);
+    p = sink_press(0, true, kVolumeStep);
+    CHECK(p.kind == VolumePress::Kind::Set && p.pct == 5);
+    p = sink_press(3, false, -kVolumeStep);
+    CHECK(p.kind == VolumePress::Kind::Set && p.pct == 0);
+    CHECK(sink_press(0, false, -kVolumeStep).kind == VolumePress::Kind::None);
+    CHECK(sink_press(-1, false, kVolumeStep).kind == VolumePress::Kind::None);
+    /* the server's placeholder at start never shows a level */
+    OutputWorld w;
+    w.server = true;
+    PulseDevice null_sink;
+    null_sink.name = "auto_null";
+    null_sink.volume_pct = 100;
+    w.sinks = {null_sink};
+    w.default_sink = "auto_null";
+    int pct = -1;
+    bool muted = false;
+    CHECK(!sink_volume_of(w, "", pct, muted));
+    CHECK(placeholder_sink("auto_null"));
+    CHECK(!placeholder_sink("alsa_output.usb-Sharkoon.analog-stereo"));
+}
+
+/* The Pi 4B (2026-11-13, the owner: "i'm at 5% and it's like 80 to 100% perceived"): bcm2835 Headphones, 'PCM
+ * Playback Volume' -10239..400 in hundredths of a dB (dBscale-min=-102.39dB step=0.01dB mute=1), joined mono, and
+ * 'PCM Playback Switch'. snd_ctl_get_dB_range reports its min as SND_CTL_TLV_DB_GAIN_MUTE (-9999999): taken as is, 5 %
+ * landed on raw 391 (+3.91 dB) and read back as 5 %; each step moved the control by one raw value. */
+void test_pi4b_pcm() {
+    const std::string card = "hw:CARD=Headphones";
+    auto pcm = [] {
+        CtlInfo c = vol_ctl("PCM Playback Volume", -10239, 400, true, kAlsaDbGainMute, 400); /* as get_dB_range says */
+        c.count = 1;
+        return c;
+    };
+    /* the bug, reproduced: the sentinel taken as the dB of min */
+    {
+        MixerChoice bad;
+        bad.volume = "PCM Playback Volume";
+        bad.min = -10239;
+        bad.max = 400;
+        bad.has_db = true;
+        bad.db_min = kAlsaDbGainMute;
+        bad.db_max = 400;
+        bad.db_top = 0;
+        bad.top = 399;
+        CHECK_EQ(mixer_raw_for(bad, 5), 391L);
+        CHECK_EQ(mixer_pct_for(bad, 391), 5);
+    }
+    /* mixer_list's fix: the dB of min + 1 (snd_ctl_convert_to_dB) gives the real dB of min back */
+    CtlInfo c = pcm();
+    alsa_fix_mute_db(c, true, -10238);
+    CHECK(c.has_db);
+    CHECK(c.min_is_mute);
+    CHECK_EQ(c.db_min_cdb, -10239L);
+    CHECK_EQ(c.db_max_cdb, 400L);
+    /* without that dB: no dB data (linear in steps), still never mute for a level above 0 */
+    CtlInfo nodb = pcm();
+    alsa_fix_mute_db(nodb, false, 0);
+    CHECK(!nodb.has_db);
+    CHECK(nodb.min_is_mute);
+    /* a control without the mute flag is left alone */
+    CtlInfo plain = vol_ctl("PCM Playback Volume", 0, 45, true, -4500, 0);
+    alsa_fix_mute_db(plain, true, -4400);
+    CHECK(!plain.min_is_mute);
+    CHECK_EQ(plain.db_min_cdb, -4500L);
+
+    FakeAlsa a;
+    a.ctls = {c, switch_ctl("PCM Playback Switch")};
+    a.values["PCM Playback Volume"] = 393; /* where the old build left it (amixer: 393 [100%] [3.93dB]) */
+    a.values["PCM Playback Switch"] = 1;
+    std::string chosen;
+    MixerChoice m;
+    MixerLevel lv;
+    CHECK_EQ(read_mixer(a, card, chosen, m, lv), 0);
+    CHECK(m.has_db);
+    CHECK(m.min_is_mute);
+    CHECK_EQ(m.top, 0L); /* never above 0 dB: raw 0, not 400 */
+    CHECK_EQ(lv.pct, 100); /* above 0 dB reads 100 % */
+    CHECK(!lv.muted);
+    /* the curve: 5 % = -78.06 dB, 50 % = -18.06 dB, 100 % = 0 dB; never above raw 0 */
+    CHECK_EQ(mixer_raw_for(m, 5), -7806L);
+    CHECK_EQ(mixer_raw_for(m, 50), -1806L);
+    CHECK_EQ(mixer_raw_for(m, 100), 0L);
+    CHECK_EQ(mixer_raw_for(m, 1), -10239L + 1); /* 1 % (-120 dB) is under the range: the lowest sound, not mute */
+    CHECK_EQ(mixer_raw_for(m, 0), -10239L);     /* 0 %: the value that is mute */
+    for (int p = 0; p <= 100; ++p) CHECK(mixer_raw_for(m, p) <= 0);
+    for (int p = 2; p <= 100; ++p) CHECK_EQ(mixer_pct_for(m, mixer_raw_for(m, p)), p);
+    /* the steps from 100 down write what the curve says, and the fresh read gives it back */
+    auto press = [&](int d) {
+        const VolumePress p = mixer_press(m, lv, d);
+        if (p.kind == VolumePress::Kind::Set) write_mixer(a, card, m, p.pct);
+        if (p.kind == VolumePress::Kind::Mute) write_mixer_switch(a, card, m, false);
+        if (p.kind == VolumePress::Kind::Unmute) write_mixer_switch(a, card, m, true);
+        read_mixer(a, card, chosen, m, lv);
+        return p;
+    };
+    CHECK(press(-kVolumeStep).pct == 95);
+    CHECK_EQ(a.values["PCM Playback Volume"], -134L); /* -1.34 dB */
+    CHECK_EQ(lv.pct, 95);
+    for (int i = 0; i < 17; ++i) press(-kVolumeStep);
+    CHECK_EQ(lv.pct, 10);
+    CHECK_EQ(a.values["PCM Playback Volume"], -6000L);
+    press(-kVolumeStep);
+    CHECK_EQ(lv.pct, 5);
+    CHECK_EQ(a.values["PCM Playback Volume"], -7806L);
+    /* "-" at 5 %: the switch mutes, the level kept; "+" brings 5 % back */
+    CHECK(press(-kVolumeStep).kind == VolumePress::Kind::Mute);
+    CHECK(lv.muted);
+    CHECK_EQ(a.values["PCM Playback Volume"], -7806L);
+    CHECK(press(kVolumeStep).kind == VolumePress::Kind::Unmute);
+    CHECK(!lv.muted);
+    CHECK_EQ(lv.pct, 5);
+    /* the control at its mute value (alsamixer to 0): shown muted, 0 %; "+" sets 5 % */
+    a.values["PCM Playback Volume"] = -10239;
+    read_mixer(a, card, chosen, m, lv);
+    CHECK(lv.muted);
+    CHECK_EQ(lv.pct, 0);
+    const VolumePress up = press(kVolumeStep);
+    CHECK(up.kind == VolumePress::Kind::Set && up.pct == 5);
+    CHECK_EQ(a.values["PCM Playback Volume"], -7806L);
+    CHECK(!lv.muted);
+    /* the same card without its switch: "-" at 5 % goes to the mute value (0 %), "-" there does nothing */
+    MixerChoice nosw;
+    CHECK(choose_playback_mixer({c}, nosw));
+    MixerLevel five;
+    five.has_mixer = true;
+    five.raw = -7806;
+    five.pct = 5;
+    const VolumePress down = mixer_press(nosw, five, -kVolumeStep);
+    CHECK(down.kind == VolumePress::Kind::Set && down.pct == 0);
+    MixerLevel zero;
+    zero.has_mixer = true;
+    zero.raw = -10239;
+    zero.pct = 0;
+    zero.muted = true;
+    CHECK(mixer_press(nosw, zero, -kVolumeStep).kind == VolumePress::Kind::None);
+    /* the log line */
+    CHECK_EQ(mixer_set_log_text(card, m, 5, -7806, 0, -7806),
+             std::string("set mixer hw:CARD=Headphones 'PCM Playback Volume' 5 % raw=-7806 (target -78.06 dB) read back raw=-7806"));
+    CHECK_EQ(mixer_set_log_text(card, m, 5, -7806, -19, 0),
+             std::string("set mixer hw:CARD=Headphones 'PCM Playback Volume' 5 % raw=-7806 (target -78.06 dB) read back failed (-19)"));
+}
+
 }  // namespace
 
 void test_volume() {
     test_volume_pct();
+    test_pi4b_pcm();
+    test_mute_steps();
     test_sink_names();
     test_unknown_level();
     test_output_mixer();

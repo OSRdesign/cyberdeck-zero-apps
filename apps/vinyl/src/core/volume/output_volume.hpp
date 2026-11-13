@@ -37,6 +37,7 @@ struct MixerChoice {
     bool has_db = false;     /* the driver reports dB (percent is then linear in dB) */
     long db_min = 0, db_max = 0; /* hundredths of a dB of min and max, when has_db */
     long db_top = 0;         /* min(db_max, 0) */
+    bool min_is_mute = false; /* the control's lowest value is mute: the lowest sound is min + 1 */
     bool ok() const { return !volume.empty() && max > min; }
 };
 
@@ -49,7 +50,8 @@ int volume_pct_for(long cdb);
 /* The raw value for a percent (0..100), never above `top`: on the curve where the control reports dB (clamped to its
  * minimum), else linear in steps. */
 long mixer_raw_for(const MixerChoice &m, int pct);
-/* The percent a raw value stands for, on the same curve (above top it reports more than 100). */
+/* The percent a raw value stands for, on the same curve; top and above (0 dB and over, set by something else) read
+ * 100, the value that is mute (min_is_mute) reads 0. */
 int mixer_pct_for(const MixerChoice &m, long raw);
 /* The level a step of the strip or the keys sets: kVolumeStep further, or 0 (the switch mutes) when a step down would
  * not move the control any more (its minimum already holds: a range that starts above the curve's level there). */
@@ -65,6 +67,7 @@ struct MixerLevel {
     int pct = -1;
     bool muted = false;
     long cdb = 0;           /* its dB in hundredths (has_db) */
+    long raw = 0;           /* the control's value */
 };
 
 /* Finds the card's playback control (cached in `choice` for `card`; a different card is looked up again) and reads it.
@@ -72,6 +75,25 @@ struct MixerLevel {
 int read_mixer(AlsaApi &alsa, const std::string &card, std::string &choice_card, MixerChoice &choice, MixerLevel &out);
 /* Sets the control to `pct` (all channels) and its switch (off at 0 %, on above). 0 or a negative error. */
 int write_mixer(AlsaApi &alsa, const std::string &card, const MixerChoice &choice, int pct);
+/* Sets only the control's switch (mute / unmute), the level kept. -ENOENT without a switch. */
+int write_mixer_switch(AlsaApi &alsa, const std::string &card, const MixerChoice &choice, bool on);
+/* The log line of a set (the Pi 4B probe, 2026-11-13): "set mixer hw:CARD=Headphones 'PCM Playback Volume' 5 % raw=-7806
+ * (target -78.06 dB) read back raw=-7806"; read_result < 0: "read back failed (-19)". read_raw comes from a fresh read of
+ * the control (AlsaApi::mixer_get opens the card again). */
+std::string mixer_set_log_text(const std::string &card, const MixerChoice &m, int pct, long raw, int read_result, long read_raw);
+
+/* What one press of "-" (delta < 0) or "+" does (the owner's report from the deck, 2026-11-13: "zero7 is showing muted
+ * but volume bar shows 18"): while muted "-" does nothing and "+" brings the sound back at the level it had (one step
+ * above it when that level is the card's floor, so something is heard); not muted, a step, and "-" at the floor mutes
+ * (the card's switch; a card without one stays at its floor). */
+struct VolumePress {
+    enum class Kind { None, Set, Mute, Unmute } kind = Kind::None;
+    int pct = 0; /* Set: the level */
+};
+VolumePress mixer_press(const MixerChoice &m, const MixerLevel &lv, int delta);
+/* The same for a sink of the sound server: its floor is 0 % (no mute flag needed going down); "+" while it is muted (by
+ * anything) un-mutes it at its level (0 %: one step). */
+VolumePress sink_press(int level, bool muted, int delta);
 
 /* The chip's text for a level: "Vol 45", "Muted", and "Vol --" when the level is not known (negative: the sink is gone,
  * not read yet, or the server reports none): a negative value is never shown or logged (board test B18, 2026-11-13). */

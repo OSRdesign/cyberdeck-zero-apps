@@ -1,0 +1,27 @@
+title Vinyl: Clear all asks first, at 480x320 and 320x480 (their real density)
+sizes 480x320 320x480
+ppmm 610
+env VINYL_DEMO 1
+
+wait 1000
+key q
+wait 400
+key c
+wait 300
+shot 01-queue-clear-ask
+expect esc
+expect text "Clear the queue?"
+expect text "Cancel"
+key esc
+wait 300
+expect notext "Clear the queue?"
+expect text "3 OF 20, 1 H 24 MIN LEFT"
+tap "Clear all"
+wait 300
+expect text "Clear the queue?"
+tap "Clear"
+wait 400
+shot 02-queue-cleared
+expect notext "Clear the queue?"
+expect text "1 OF 1, 3 MIN LEFT"
+expect noquit

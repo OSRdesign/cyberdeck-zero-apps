@@ -100,7 +100,16 @@ struct CtlInfo {
     long min = 0, max = 0, step = 1;
     bool has_db = false;   /* the driver reports dB for min and max */
     long db_min_cdb = 0, db_max_cdb = 0; /* hundredths of a dB, when has_db */
+    bool min_is_mute = false; /* VINYL: the lowest value is "mute" (a dB scale with its mute flag): no sound at min */
 };
+
+/* VINYL: the dB range as a mapping needs it. snd_ctl_get_dB_range reports the lowest value of a dB scale that has its
+ * mute flag as SND_CTL_TLV_DB_GAIN_MUTE (-9999999), not as its real dB (the Pi 4B's 'PCM Playback Volume', 2026-11-13:
+ * -10239..400 in hundredths of a dB, mute=1, which made 5 % land on +3.91 dB). With the dB of the next value
+ * (snd_ctl_convert_to_dB at min + 1), the real dB of min is put back (a dB scale is linear in steps) and min_is_mute
+ * set. Without it (next_known false) the control is taken as having no dB data. */
+constexpr long kAlsaDbGainMute = -9999999;
+void alsa_fix_mute_db(CtlInfo &c, bool next_known, long db_next_cdb);
 
 class AlsaApi {
 public:

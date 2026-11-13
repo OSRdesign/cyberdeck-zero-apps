@@ -38,4 +38,15 @@ unsigned format_bytes(SampleFormat f) {
 bool CaptureOffer::has_rate(uint32_t r) const { return std::find(rates.begin(), rates.end(), r) != rates.end(); }
 bool CaptureOffer::has_format(SampleFormat f) const { return std::find(formats.begin(), formats.end(), f) != formats.end(); }
 
+void alsa_fix_mute_db(CtlInfo &c, bool next_known, long db_next_cdb) { /* VINYL */
+    if (!c.has_db || c.db_min_cdb > kAlsaDbGainMute) return;
+    c.min_is_mute = true;
+    if (!next_known || c.max <= c.min + 1 || c.db_max_cdb <= db_next_cdb) {
+        c.has_db = false; /* no real dB for min: linear in steps */
+        return;
+    }
+    const long step = (c.db_max_cdb - db_next_cdb) / (c.max - c.min - 1); /* hundredths of a dB a value */
+    c.db_min_cdb = db_next_cdb - step;
+}
+
 } // namespace vinyl

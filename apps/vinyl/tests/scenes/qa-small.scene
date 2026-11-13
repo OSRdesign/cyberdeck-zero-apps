@@ -1,4 +1,4 @@
-title Vinyl: design QA walk at 480x320 (the volume strip) and 320x480 (the volume group), their real density
+title Vinyl: design QA walk at 480x320 (the approved NP-480x320 layout, owner 2026-11-13: the format line, the output button and the volume group in the info column, six transport keys) and 320x480 (the volume group in the bottom row), their real density
 sizes 480x320 320x480
 ppmm 610
 env VINYL_DEMO 1
@@ -9,39 +9,22 @@ shot 01-now
 expect esc
 @480x320 expect text "Vinyl"
 @320x480 expect notext "Vinyl"
-@480x320 expect text "Vol 60"
-# the small layout (640x480, 480x320): the Vol chip opens the volume strip
-@480x320 tap "Vol 60"
-@320x480 expect text "60"
-@320x480 expect text "Evolve 65"
-# the large, square and portrait layouts (owner, 2026-11-13): the bottom volume group, no Vol chip
+expect text "60"
+expect text "Evolve 65"
+expect notext "Vol 60"
 wait 300
 shot 02-now-volume
-@480x320 expect text "60"
-# the strip's or the group's "+" (an icon: no text to tap), measured on each size's shot
-@480x320 tapxy 0.899 0.723
+# the group's "+" (an icon: no text to tap), measured on each size's shot
+@480x320 tapxy 0.875 0.609
 @320x480 tapxy 0.848 0.928
 wait 300
 shot 03-now-volume-up
 expect text "65"
-@480x320 expect text "Vol 65"
-wait 4300
-shot 04-now-volume-closed
-@480x320 expect notext "65"
-@480x320 expect text "Vol 65"
-# a tap on the chip opens the strip, a second tap closes it
-@480x320 tap "Vol 65"
-wait 300
-@480x320 expect text "65"
-@480x320 tap "Vol 65"
-wait 300
-@480x320 expect notext "65"
-@320x480 expect text "65"
-# the output button (square, portrait) or chip (large) opens the Output page
-@320x480 tap "Evolve 65"
+# the output button opens the Output page
+tap "Evolve 65"
 wait 400
-@320x480 expect text "Automatic"
-@320x480 key left
+expect text "Automatic"
+key left
 wait 300
 key b
 wait 400

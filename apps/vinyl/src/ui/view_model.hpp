@@ -39,9 +39,10 @@ struct NowView {
     std::string count;      /* "03/20" */
     std::string vol;        /* "Vol 60" */
     bool vol_bt = false;
-    int vol_level = -1;     /* the level the volume strip shows, 0..100 (-1: not known) */
-    bool vol_adjustable = false; /* the strip's "-" / "+" change it (the in-app volume, or the system volume through the
-                                  * launcher's volume request); false: a tap on the chip does nothing */
+    int vol_level = -1;     /* the level the volume group shows, 0..100 (-1: not known) */
+    bool vol_muted = false; /* muted: the group shows Muted (vol_level is the level it comes back at) */
+    bool queue_empty = false; /* nothing to play: the transport keys dimmed */
+    bool vol_adjustable = false; /* the group's "-" / "+" change it; false: a tap says the volume is not available */
     std::string title, artist, album;
     std::string format;     /* "FLAC 44.1 kHz / 16 bit" */
     std::string output;     /* "Evolve 65, music quality" */
@@ -62,7 +63,8 @@ struct NowView {
 
 struct MiniView {
     bool shown = false;
-    std::string title, sub;
+    std::string title, sub; /* sub: the artist (dots when long) */
+    std::string time;       /* "01:14 / 4:04", "0:01:14 / 1:02:30": always whole */
     double progress = 0;
     bool playing = false;
 };
@@ -100,8 +102,9 @@ struct Actions {
     std::function<void(int)> queue_button;           /* 0 move up, 1 move down, 2 remove, 3 clear all */
     std::function<void()> mini_open;                 /* the mini player (opens now playing) */
     std::function<void(bool, int)> transport;        /* previous (false) / next (true): 0 press, 1 release, 2 cancel */
-    std::function<void(int)> volume_step;            /* the volume strip's "-" / "+": -5 / +5 */
+    std::function<void(int)> volume_step;            /* the volume group's "-" / "+": -5 / +5 */
     std::function<void()> volume_unavailable;        /* a tap on the volume chip where nothing can change the volume */
+    std::function<void()> queue_clear;               /* "Clear the queue?" answered Clear */
 };
 
 } // namespace ui

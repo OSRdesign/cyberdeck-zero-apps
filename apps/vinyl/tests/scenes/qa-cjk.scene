@@ -1,5 +1,5 @@
-title Vinyl: CJK names and tags (Japanese, Chinese, Korean) on now playing and in the browser, through the launcher's Noto Sans CJK
-sizes 640x480 800x480 480x480 720x720 480x800 480x640
+title Vinyl: CJK names and tags (Japanese, Chinese, Korean) on now playing and in the browser, through the launcher's Noto Sans CJK (640x480: qa-640-cjk)
+sizes 800x480 480x480 720x720 480x800 480x640
 env VINYL_DEMO 1
 env VINYL_DEMO_CJK 1
 env VINYL_DEMO_STATE playing

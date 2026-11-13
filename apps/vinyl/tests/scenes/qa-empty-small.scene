@@ -1,0 +1,26 @@
+title Vinyl: the empty library at 480x320 and 320x480 (their real density): now playing with nothing, the browser's two hint rows, the empty queue (its buttons dimmed)
+sizes 480x320 320x480
+ppmm 610
+env VINYL_DEMO 1
+env VINYL_DEMO_EMPTY 1
+env VINYL_DEMO_PAGE now
+
+wait 1000
+shot 01-now-empty
+expect esc
+expect text "Nothing playing"
+expect text "Pick a folder"
+expect text "or a playlist"
+key esc
+wait 300
+shot 02-browser-empty
+expect text "No music folder"
+expect text "Copy music to ~/Music"
+key q
+wait 300
+shot 03-queue-empty
+expect text "EMPTY QUEUE"
+key left
+wait 300
+key esc
+expect quit

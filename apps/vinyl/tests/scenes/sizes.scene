@@ -1,5 +1,5 @@
-title Vinyl at the other canvases (their own densities): now playing, browser, queue, output
-sizes 640x480 720x720 1280x720 480x800 1024x600
+title Vinyl at the other canvases (their own densities): now playing, browser, queue, output (640x480: qa-640)
+sizes 720x720 1280x720 480x800 1024x600
 env VINYL_DEMO 1
 env VINYL_DEMO_STATE playing
 

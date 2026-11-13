@@ -4,7 +4,8 @@ Controller-led: the Controller installs the package and copies the test music; t
 was seen. First board: the HackBerry (CM5, 720x720 square, PipeWire, the XWF case speaker and the Evolve 65 over
 Bluetooth); a Lite board (zero8 or the deck, a USB sound card) for B11. Numbers follow report 059 section 9 (B1-B12),
 trimmed to what 0.1.0 has; B13-B16 are the design-QA round (the transport press of the owner ruling of 2026-11-12, the
-volume strip).
+volume group), B17-B19 the retests of 2026-11-12, B20-B24 the round of 2026-11-13 (Clear all, the seek tap, the
+Raspberry Pi headphone jack, the approved 640x480 and 480x320 layouts).
 
 ## Preparation (Controller)
 
@@ -34,10 +35,11 @@ volume strip).
 | B13 | Now playing, a keyboard in front: Left within the first 2 s of a track; Left again after 5 s of it; Right | Left within 2 s: the previous track; Left after 2 s: the same track from 0:00; Right: the next track. Each press acts once, on its release | pass
 | B14 | Hold Right (about 2 s), let go; hold Left (about 2 s), let go; once playing, once paused | after half a second the time runs ahead (back) at about 3x with no sound, no scratch; on release the sound comes back from there; paused stays paused; holding Left stops at 0:00 (never the previous track); holding Right past the end goes on into the next track. No extra skip on release | pass
 | B15 | The same short and held presses with the headset's / speaker's next and previous buttons, in front and hidden, and on the touch keys beside play (and the mini player's next key) | the same results as B13 and B14 (if a headset sends no release while held, say what happened: the log has `media key: next` and `(released)` lines) | pass
-| B16 | Square, portrait and large layouts (HackBerry, PDA mode, 800x480): tap "+" twice and "-" once in the bottom volume group, then the output button (square, portrait) or chip (large). 480x320: tap the "Vol" chip; tap "+" twice, "-" once; wait; tap the chip twice | the group: the level between "-" and "+" goes up 10, down 5, the playing output's own level (pactl / amixer agree); the output button or chip opens Output. The strip: "-", the level, its bar, "+" replace the seek row, the level goes up 10, down 5; it closes 4 s after the last tap, and a second tap on the chip closes it at once; a tap at the bottom edge of the chip closes the strip (never "+"), a tap at the top edge of a transport key plays that key (never "-" / "+") | pass
+| B16 | Every layout (HackBerry square, PDA mode portrait, 800x480, the deck's 640x480, a 480x320 board): tap "+" twice and "-" once in the volume group, then keep pressing "-" until it shows Muted; press "-" once more; press "+"; then tap the output button (the output chip on 800x480) | the level between "-" and "+" goes up 10, down 5, the playing output's own level (pactl / amixer agree); at the card's lowest level the next "-" mutes: the group shows the speaker-off mark and "Muted" (never a number); "-" while muted changes nothing; "+" brings the sound back at the last level (one step above the lowest when that is where it was). Muting from elsewhere (the launcher's mute key, alsamixer) shows Muted too. The output button or chip opens Output | pass (the strip, before this round: see the note)
 
-B16 note (2026-11-13): rewritten for the owner's design changes (the volume group on the square, portrait and large layouts);
-the result recorded beside it is the owner's for the strip as it was on every layout: the group needs a run.
+B16 note (2026-11-13): rewritten for the owner's design changes (the volume group on every layout, no Vol chip, no
+strip, and the muted step of the owner's deck report); the result recorded beside it is the owner's for the strip as it
+was on every layout: the group needs a run.
 
 B8 note (2026-11-12): only the Evolve 65's volume buttons could be tried (it has no play/pause or next button); the
 play/pause and next keys of a headset or speaker remain untested.
@@ -48,7 +50,17 @@ Retests after the B7 / B9 fixes (2026-11-12):
 |---|---|---|
 | B17 | B9 again: the volume keys, then the Evolve 65's own volume buttons, while playing on the default output | the "Vol" chip follows each press within about half a second; the journal has `[vinyl] volume: system NN % from the sink` |
 | B18 | B7 again with Output > Evolve 65 chosen: set a level (the strip or the keys), switch the headset off, on again, play | the chip shows the Evolve's own level after the reconnect: the level set before, unless the headset or the system changed it (then the chip shows that value, and nothing plays louder than the chip says); while the headset is gone or its level is not read yet the chip shows "Vol --" (never a negative number, in the chip or the journal); the journal's `[vinyl] volume: sink ...` lines give it |
-| B19 | Output > the USB DAC (not the default output): read the chip, then `pactl list sinks` (or `wpctl status`); tap "+" twice, "-" once | the chip shows the DAC's own level, the same number as pactl / wpctl; the strip changes the DAC (never the default sink, whose level stays); on zero8 (no sound server) the same with the card's mixer: the chip's level follows `amixer -c <card>` on the sound server's curve (50 % = -18 dB, 40 % = -24 dB, 25 % = -36 dB: the same loudness as the same percent on the HackBerry), "+" never past 0 dB |
+| B19 | Output > the USB DAC (not the default output): read the level, then `pactl list sinks` (or `wpctl status`); tap "+" twice, "-" once | the group shows the DAC's own level, the same number as pactl / wpctl; "-" / "+" change the DAC (never the default sink, whose level stays); on the deck zero7 (no sound server) the same with the card's mixer: the level follows `amixer -c <card>` on the sound server's curve (50 % = -18 dB, 40 % = -24 dB, 25 % = -36 dB: the same loudness as the same percent on the HackBerry), "+" never past 0 dB |
+
+Round of 2026-11-13:
+
+| # | Do | Expected |
+|---|---|---|
+| B20 | Queue: tap Clear all; tap Cancel. Clear all again, Esc. Clear all again, tap outside the question. Clear all again, tap Clear. With a keyboard: C, Right, Enter | each time "Clear the queue?" with Cancel (highlighted, the default) and Clear over the queue buttons; Cancel, Esc and a tap outside leave the queue as it was; Clear (or Enter on it) leaves only the playing track, which plays on. An empty queue shows the four buttons dimmed |
+| B21 | Now playing: tap the seek bar's line, then just above and just below it (half a finger off), then the top edge of a transport key under it and the bottom edge of the output button or the volume group above it | the taps on and near the line seek there; the key's edge plays that key, the button's edge opens Output, the group's edge changes the volume: a tap is never taken by a neighbour |
+| B22 | Pi 4B and Pi 3A+, the headphone jack (no sound server): Output > Headphones; set 5 %, 50 % and 100 % with the group; after each, `amixer -c 0 sget PCM`; listen at 5 % and 50 %, and compare 50 % with 50 % on the HackBerry | amixer shows about -78.06 dB at 5 %, -18.06 dB at 50 %, 0.00 dB at 100 % (never above 0 dB, never raw 391 / +3.91 dB again); 5 % is quiet, 50 % sounds about as loud as 50 % on the HackBerry; the journal has `volume: set mixer hw:CARD=Headphones 'PCM Playback Volume' 5 % raw=-7806 (target -78.06 dB) read back raw=-7806`. `vinyl-mixer-probe hw:CARD=Headphones --set 5` gives the same numbers |
+| B23 | The deck (640x480): now playing, playing; tap the group's "+" and "-", the output button, Browse, Queue | as the approved NP-640x480: the cover with the record sliding out, title on up to two lines, artist, album, the format and Gapless chips (flat, no action), the output button (icon, name, chevron), the seek row, five transport keys, Browse, Queue and the volume group in the bottom row; no Up next, no Vol chip, no Menu key. Each control does its job; the touch rows are 70 px on the deck (under the 7 mm, R-4): say whether they are easy to hit |
+| B24 | A 480x320 board (zero8 in landscape, or the Pi 3A+'s panel in landscape): now playing; tap the output button, the group's "-" and "+", the queue key | as the approved NP-480x320: title, artist, album, one plain line "WAV 44.1 / 16" (", gapless" at its end when the next track continues), the output button, the volume group under it (34 px high), the seek row, six transport keys; no Vol chip, no strip. The record's label shows about a third out of the sleeve, its cream dot turning while it plays. Say whether the group and the seek row (43 px touch rows) are easy to hit |
 
 ## Cleanup
 

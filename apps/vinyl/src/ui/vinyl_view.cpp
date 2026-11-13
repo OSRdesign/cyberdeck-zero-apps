@@ -325,19 +325,37 @@ struct Chip {
         lv_label_set_long_mode(text, LV_LABEL_LONG_MODE_DOTS);
     }
 
+    void set_plain() {
+        lv_obj_set_style_bg_opa(box, LV_OPA_TRANSP, 0);
+        pad = 0;
+    }
+
+    /* information on a flat light fill (the 640x480 draft's format and Gapless chips): no key look, no action */
+    void set_flat() {
+        lv_obj_set_style_bg_color(box, lv_color_hex(col::kInfoChip), 0);
+        ink = col::kInk2;
+        lv_obj_set_style_text_color(text, lv_color_hex(ink), 0);
+    }
+
+    void set_ink(uint32_t c) {
+        ink = c;
+        lv_obj_set_style_text_color(text, lv_color_hex(ink), 0);
+    }
+
     void set_scroll() {
         scroll = true;
         lv_label_set_long_mode(text, LV_LABEL_LONG_MODE_SCROLL_CIRCULAR);
     }
 
     /* the width the text needs (0: no chip) */
-    int natural(const std::string &t, bool bt) const {
+    int natural(const std::string &t, Icon ic) const {
         if (t.empty() || !box) return 0;
-        return pad + (bt ? icon_px + gap : 0) + text_width(font(face, px), t) + pad + 1;
+        return pad + (ic != Icon::None ? icon_px + gap : 0) + text_width(font(face, px), t) + pad + 1;
     }
 
-    /* the chip's width follows its text */
-    void set(const std::string &t, bool bt, int at_x = -1) {
+    /* the chip's width follows its text; `ic`: the Bluetooth mark of the output, the speaker-off mark of a muted level */
+    void set(const std::string &t, Icon ic, int at_x = -1) {
+        const bool bt = ic != Icon::None;
         show(box, !t.empty());
         if (t.empty()) {
             width = 0;
@@ -355,6 +373,7 @@ struct Chip {
         }
         lv_obj_set_width(text, std::max(1, tw + 1));
         show(icon, bt);
+        if (bt) icon_set(icon, ic, ink);
         lv_obj_set_pos(text, pad + iw, (h - lv_font_get_line_height(f)) / 2);
         set_text(text, t);
         lv_obj_set_pos(box, x, y);
@@ -421,22 +440,15 @@ struct View::Impl {
     Img cover_img;
     bool cover_shown = false;
     lv_obj_t *title = nullptr, *artist = nullptr, *album = nullptr;
-    Chip chips[4]; /* format, volume, output, gapless */
-    /* the square and portrait layouts (owner, 2026-11-13): the output button, the bottom volume group */
+    Chip chips[4]; /* format, (the old Vol chip: none), output, gapless */
+    /* the output button and the volume group (owner, 2026-11-13; every class but the large one has the button) */
     lv_obj_t *outb_box = nullptr, *outb_icon = nullptr, *outb_text = nullptr, *outb_chev = nullptr;
     Button grp_minus, grp_plus;
-    lv_obj_t *grp_value_box = nullptr, *grp_value = nullptr;
-    lv_obj_t *out_hit = nullptr; /* the output chip opens the chooser (the 480x320 draft has no Output key) */
-    lv_obj_t *vol_hit = nullptr; /* the volume chip shows the volume strip (design QA D-28) */
+    lv_obj_t *grp_value_box = nullptr, *grp_value = nullptr, *grp_glyph = nullptr;
+    lv_obj_t *out_hit = nullptr; /* the output button (or the large class's output chip) opens the chooser */
     lv_obj_t *time = nullptr, *remain = nullptr, *seek_track = nullptr, *seek_fill = nullptr, *seek_knob = nullptr;
     lv_obj_t *seek_hit = nullptr;
     int seek_x = 0, seek_w = 1;
-    /* the volume strip: for a few seconds in place of the seek row, "-", the level, its bar, "+" */
-    lv_obj_t *vol_root = nullptr, *vol_num = nullptr, *vol_track = nullptr, *vol_fill = nullptr;
-    Button vol_minus, vol_plus;
-    lv_timer_t *vol_timer = nullptr;
-    bool vol_mode = false;
-    static constexpr uint32_t kVolStripMs = 4000;
     std::map<std::string, Button> btns;
     lv_obj_t *repeat_dash = nullptr, *shuffle_dash = nullptr, *repeat_one = nullptr;
     lv_obj_t *up_box = nullptr, *up_cap = nullptr, *up_text = nullptr;
@@ -457,7 +469,9 @@ struct View::Impl {
         std::unique_ptr<RowList> list;
         lv_obj_t *strip = nullptr, *strip_icon = nullptr, *strip_text = nullptr;
         /* browser mini player */
-        lv_obj_t *mini_disc = nullptr, *mini_title = nullptr, *mini_sub = nullptr, *mini_bar = nullptr, *mini_fill = nullptr;
+        lv_obj_t *mini_disc = nullptr, *mini_title = nullptr, *mini_sub = nullptr, *mini_time = nullptr, *mini_bar = nullptr,
+                 *mini_fill = nullptr;
+        int mini_text_w = 0;
         Button mini_play, mini_next;
         lv_obj_t *mini_open_hit = nullptr;
         Img mini_disc_img, mini_label_img;
@@ -487,18 +501,21 @@ struct View::Impl {
     }
 
     /* the touch areas of now playing, by kind (layout_now_hits) */
-    enum HitKind { kKey, kBottom, kStrip, kChip, kSeek };
+    enum HitKind { kKey, kBottom, kChip, kSeek };
     struct NowHit {
         lv_obj_t *obj = nullptr;
         R drawn;
         HitKind kind = kKey;
     };
     std::vector<NowHit> now_hits;
-    int hits_sig[7] = {-1, -1, -1, -1, -1, -1, -1};
+    int hits_sig[4] = {-1, -1, -1, -1};
 
-    /* Every area grown to the target around its drawing, the stacked chips split (layout::split_pair); while the volume
-     * strip is open its buttons take the band between the chips and the transport keys and the neighbours give way
-     * (layout::place_strip_hits, design QA run 2): no strip area overlaps another one. */
+    /* Every area grown to the target around its drawing, then laid out by layout::place_now_hits: neighbours in a row
+     * meet in the middle of their gaps, the rows meet at boundaries in the gaps between them, the target high where the
+     * screen has the room (design QA run 3: no two areas overlap; tests/test_hits.cpp checks every layout). */
+    /* the transport keys' shift (layout::now_keys_shift): a few px down where the rows above them miss the target */
+    int keys_dy = 0;
+
     void layout_now_hits() {
         layout::NowHitSet set;
         std::vector<NowHit *> pk, pb, ps, pc;
@@ -511,53 +528,19 @@ struct View::Impl {
             } else if (e.kind == kBottom) {
                 pb.push_back(&e);
                 set.bottom.push_back(a);
-            } else if (e.kind == kStrip && vol_mode) {
+            } else if (e.kind == kSeek) {
                 ps.push_back(&e);
-                set.strip.push_back(a);
+                set.seek.push_back(a);
             } else if (e.kind == kChip) {
                 pc.push_back(&e);
                 set.chips.push_back(a);
-            } else if (e.kind == kSeek && !vol_mode) {
-                place_area(e.obj, a.area);
             }
         }
-        if (set.chips.size() == 2) layout::split_pair(set.chips[0], set.chips[1], target);
-        /* the bottom row's neighbours meet in the middle of their gaps (the volume group's "-" beside Queue at 480x480) */
-        std::vector<size_t> order(set.bottom.size());
-        for (size_t i = 0; i < order.size(); ++i) order[i] = i;
-        std::sort(order.begin(), order.end(), [&](size_t a, size_t b) { return set.bottom[a].drawn.x < set.bottom[b].drawn.x; });
-        for (size_t i = 1; i < order.size(); ++i) layout::split_pair(set.bottom[order[i - 1]], set.bottom[order[i]], target);
-        if (vol_mode) layout::place_strip_hits(set, target, body_y, H);
+        layout::place_now_hits(set, target, body_y, W, H);
         for (size_t i = 0; i < pk.size(); ++i) place_area(pk[i]->obj, set.keys[i].area);
         for (size_t i = 0; i < pb.size(); ++i) place_area(pb[i]->obj, set.bottom[i].area);
-        for (size_t i = 0; i < ps.size(); ++i) place_area(ps[i]->obj, set.strip[i].area);
+        for (size_t i = 0; i < ps.size(); ++i) place_area(ps[i]->obj, set.seek[i].area);
         for (size_t i = 0; i < pc.size(); ++i) place_area(pc[i]->obj, set.chips[i].area);
-    }
-
-    /* The few px the volume strip's touch band lacks (design QA run 2, the coordinator's decision): the band between
-     * the volume / output chips and the transport keys must be the touch target high, so that the strip's touch areas
-     * neither overlap a neighbour nor come out under the target. Where the drafts' geometry misses it by at most P(4)
-     * (480x480: 1 px, 480x640: 2 px) the transport keys move down by that much, as long as P(4) stay clear above the
-     * next thing under them (the up-next box, the bottom row or the panel's edge); everywhere else 0. */
-    int keys_dy = 0;
-    int strip_band_shortfall() const {
-        if (g.vol_group) return 0; /* no volume strip on the square and portrait layouts */
-        int row = 0; /* the lowest chip row holding the volume or the output chip (the tappable ones) */
-        for (size_t r = 0; r < g.chip_layout.size(); ++r)
-            for (int id : g.chip_layout[r])
-                if (id == 1 || id == 2) row = static_cast<int>(r);
-        const int chips_bottom = Y(g.chip0.y + row * g.chip_step) + P(g.chip0.h);
-        int keys_top = H, keys_bottom = 0;
-        for (const layout::Btn &b : g.transport) {
-            keys_top = std::min(keys_top, Y(b.box.y));
-            keys_bottom = std::max(keys_bottom, Y(b.box.y) + Hd(b.box));
-        }
-        const int short_by = target - (keys_top - chips_bottom);
-        if (short_by <= 0 || short_by > P(4)) return 0;
-        int below = Y(g.panel.bottom()) - P(4);
-        if (g.has_upnext) below = std::min(below, Y(g.upnext.y));
-        for (const layout::Btn &b : g.bottom) below = std::min(below, Y(b.box.y));
-        return below - (keys_bottom + short_by) >= P(4) ? short_by : 0;
     }
 
     Button make_button(lv_obj_t *root, const layout::Btn &b, HitKind kind) {
@@ -673,16 +656,21 @@ struct View::Impl {
 
         /* chips */
         const int chip_max = g.chips_in_row ? Wd(g.panel) - 2 * (X(g.chip0.x) - X(g.panel.x)) : X(g.panel.right()) - X(g.chip0.x) - P(12);
-        /* the chip rows of the class (layout.hpp); the volume chip teal with white text */
+        /* the chip rows of the class (layout.hpp): the format and Gapless are information (plain text at the column's
+         * edge; flat on the medium class's light fill; the small class's one line in the album's ink); the large class's
+         * output chip opens the chooser */
         for (size_t row = 0; row < g.chip_layout.size(); ++row) {
             for (int id : g.chip_layout[row]) {
-                if (id < 0 || id > 3) continue;
+                if (id != 0 && id != 2 && id != 3) continue;
                 const int cy = Y(g.chip0.y + static_cast<double>(row) * g.chip_step);
-                const bool vol = id == 1;
-                chips[id].build(r, X(g.chip0.x), cy, P(g.chip0.h), P(vol ? g.vol_pad : g.chip_pad), P(g.chip_gap), P(g.chip_icon),
-                                P(vol ? g.vol_px : g.chip_px), vol ? col::kTeal : col::kChip, vol ? col::kWhite : col::kInk, P(5),
-                                chip_max);
+                chips[id].build(r, X(g.chip0.x), cy, P(g.chip0.h), g.chip_pad > 0 ? P(g.chip_pad) : 0, P(g.chip_gap), P(g.chip_icon),
+                                P(g.chip_px), col::kChip, col::kInk, P(5), chip_max);
                 if (id == 2) chips[id].set_scroll();
+                if (id == 0 || id == 3) {
+                    if (g.chip_flat) chips[id].set_flat();
+                    else chips[id].set_plain();
+                    if (g.gapless_in_format) chips[id].set_ink(col::kInk3);
+                }
             }
         }
         if (g.out_button_on) build_out_button(r);
@@ -691,10 +679,6 @@ struct View::Impl {
             if (act.button) act.button("output");
         });
         now_hits.push_back(NowHit{out_hit, R{}, kChip});
-        if (!g.vol_group) { /* the Vol chip and its strip: the small and large layouts */
-            vol_hit = hit(r, 0, 0, 1, 1, 0, 0, [this] { toggle_vol_strip(); });
-            now_hits.push_back(NowHit{vol_hit, R{}, kChip});
-        }
         /* time row */
         time = label(r, Face::Mono, P(g.time.px), col::kInk, X(g.time.box.x), Y(g.time.box.y), Wd(g.time.box));
         remain = label(r, Face::Mono, P(g.remain.px), col::kInk2, X(g.remain.box.x), Y(g.remain.box.y), Wd(g.remain.box),
@@ -720,11 +704,23 @@ struct View::Impl {
                                               double(kd)},
                                   kSeek});
 
-        /* transport */
-        keys_dy = strip_band_shortfall();
+        /* transport (moved down a few px where the rows above them need it: layout::now_keys_shift) */
+        {
+            std::vector<R> outs;
+            if (g.out_button_on) outs.push_back(R{double(X(g.out_button.x)), double(Y(g.out_button.y)), double(Wd(g.out_button)),
+                                                  double(Hd(g.out_button))});
+            else
+                for (size_t row = 0; row < g.chip_layout.size(); ++row)
+                    for (int id : g.chip_layout[row])
+                        if (id == 2)
+                            outs.push_back(R{double(X(g.chip0.x)), double(Y(g.chip0.y + static_cast<double>(row) * g.chip_step)),
+                                             double(X(g.title.box.right()) - X(g.chip0.x)), double(P(g.chip0.h))});
+            keys_dy = layout::now_keys_shift(g, fit, target, outs, body_y, W, H);
+            if (keys_dy) std::fprintf(stderr, "[vinyl] the transport keys %d px lower (the rows above them need it)\n", keys_dy);
+        }
         for (const layout::Btn &b : g.transport) btns[b.id] = make_button(r, b, kKey);
-        repeat_dash = box(r, X(g.repeat_dash.x), Y(g.repeat_dash.y) + keys_dy, Wd(g.repeat_dash), std::max(2, Hd(g.repeat_dash)), col::kTeal,
-                          P(2));
+        repeat_dash = box(r, X(g.repeat_dash.x), Y(g.repeat_dash.y) + keys_dy, Wd(g.repeat_dash), std::max(2, Hd(g.repeat_dash)),
+                          col::kTeal, P(2));
         /* the same mark under shuffle when it is on (the draft draws the repeat one) */
         const layout::Btn *sb = nullptr, *rb = nullptr;
         for (const layout::Btn &b : g.transport) {
@@ -748,22 +744,21 @@ struct View::Impl {
                             Wd(g.upnext) - P(24));
         }
         for (const layout::Btn &b : g.bottom) btns[b.id] = make_button(r, b, kBottom);
-        if (g.vol_group) build_vol_group(r);
-        else build_vol_strip(r);
+        build_vol_group(r);
     }
 
-    /* The output button of the square and portrait layouts (owner, 2026-11-13): the chip colour, the Bluetooth or the
+    /* The output button (owner, 2026-11-13; every class but the large one): the chip colour, the Bluetooth or the
      * speaker icon, the device's name (scrolls when too long), a chevron; full width of the info column (portrait: right
      * of the format chip). A tap opens the Output page, the only way there on these layouts. */
     void build_out_button(lv_obj_t *r) {
-        const int x = X(g.out_button.x), y = Y(g.out_button.y), w = Wd(g.out_button), h = P(g.chip0.h);
-        outb_box = box(r, x, y, w, h, col::kChip, P(5));
-        const int ip = P(g.chip_icon), pad = P(8), gp = P(6);
+        const int x = X(g.out_button.x), y = Y(g.out_button.y), w = Wd(g.out_button), h = Hd(g.out_button);
+        outb_box = box(r, x, y, w, h, col::kChip, P(g.out_button.h >= 40 ? 8 : 5));
+        const int ip = P(g.out_icon), pad = P(g.out_pad), gp = P(g.out_gap);
         outb_icon = icon_obj(outb_box, Icon::Output, pad, (h - ip) / 2, ip, ip, ip, col::kInk);
         outb_chev = icon_obj(outb_box, Icon::Chevron, w - pad - ip, (h - ip) / 2, ip, ip, ip, col::kInk);
-        outb_text = label(outb_box, Face::Bold, P(g.chip_px), col::kInk, pad + ip + gp, 0, std::max(1, w - 2 * pad - 2 * ip - 2 * gp));
+        outb_text = label(outb_box, Face::Bold, P(g.out_px), col::kInk, pad + ip + gp, 0, std::max(1, w - 2 * pad - 2 * ip - 2 * gp));
         lv_label_set_long_mode(outb_text, LV_LABEL_LONG_MODE_SCROLL_CIRCULAR);
-        lv_obj_set_y(outb_text, (h - lv_font_get_line_height(font(Face::Bold, P(g.chip_px)))) / 2);
+        lv_obj_set_y(outb_text, (h - lv_font_get_line_height(font(Face::Bold, P(g.out_px)))) / 2);
     }
 
     void place_out_button(const NowView &v) {
@@ -771,7 +766,7 @@ struct View::Impl {
         int x = X(g.out_button.x);
         if (g.chips_in_row && chips[0].width > 0) x = std::max(x, chips[0].x + chips[0].width + P(g.chip_space));
         const int right = X(g.out_button.right()), w = std::max(P(60), right - x), h = lv_obj_get_height(outb_box);
-        const int ip = P(g.chip_icon), pad = P(8), gp = P(6);
+        const int ip = P(g.out_icon), pad = P(g.out_pad), gp = P(g.out_gap);
         lv_obj_set_pos(outb_box, x, Y(g.out_button.y));
         lv_obj_set_width(outb_box, w);
         lv_obj_set_x(outb_chev, w - pad - ip);
@@ -783,14 +778,14 @@ struct View::Impl {
         show(out_hit, true);
     }
 
-    /* The bottom volume group of the square and portrait layouts (owner, 2026-11-13): "-", the level on teal, "+": the
-     * volume of the output Vinyl plays on (D11 as changed), 5 % a press; the level itself is no control. */
+    /* The volume group (owner, 2026-11-13; every class): "-", the level on teal, "+": the volume of the output Vinyl
+     * plays on (D11 as changed), 5 % a press; the level itself is no control. */
     void build_vol_group(lv_obj_t *r) {
         auto make = [&](Button &b, const R &bx, Icon ic, int delta) {
             const int x = X(bx.x), y = Y(bx.y), w = Wd(bx), h = Hd(bx);
             b.vis = box(r, x, y, w, h, col::kButton, P(8));
             b.ic = ic;
-            const int ip = P(20);
+            const int ip = P(g.vol_icon);
             b.icon = icon_obj(b.vis, ic, (w - ip) / 2, (h - ip) / 2, ip, ip, ip, col::kInk);
             b.hitbox = hit(r, x, y, w, h, target, target, [this, delta] {
                 if (!last_now.vol_adjustable) { /* nothing can change it: say so (design QA run 2) */
@@ -805,122 +800,47 @@ struct View::Impl {
         make(grp_plus, g.vol_plus, Icon::Plus, 5);
         const int vx = X(g.vol_value.x), vy = Y(g.vol_value.y), vw = Wd(g.vol_value), vh = Hd(g.vol_value);
         grp_value_box = box(r, vx, vy, vw, vh, col::kTeal, P(8));
-        const lv_font_t *f = font(Face::Bold, P(18));
-        grp_value = label(grp_value_box, Face::Bold, P(18), col::kWhite, 0, (vh - lv_font_get_line_height(f)) / 2, vw,
+        const lv_font_t *f = font(Face::Bold, P(g.vol_text_px));
+        grp_value = label(grp_value_box, Face::Bold, P(g.vol_text_px), col::kWhite, 0, (vh - lv_font_get_line_height(f)) / 2, vw,
                           LV_TEXT_ALIGN_CENTER);
+        const int gp = P(14);
+        grp_glyph = icon_obj(grp_value_box, Icon::Muted, 0, (vh - gp) / 2, gp, gp, gp, col::kWhite);
+        lv_obj_add_flag(grp_glyph, LV_OBJ_FLAG_HIDDEN);
     }
 
-    /* the level in the group: the number, "Muted" (smaller when it needs to), "--" when not known */
+    /* The level in the group: the number, "--" when not known; muted, the speaker-off mark and "Muted" (smaller when it
+     * needs to; the mark alone where the word would go under P(10)), never the level it will come back at. */
     void update_vol_group(const NowView &v) {
         if (!grp_value) return;
-        std::string t = v.vol_level < 0 ? std::string("--") : v.vol.compare(0, 5, "Muted") == 0 ? std::string("Muted") : std::to_string(v.vol_level);
+        const bool muted = v.vol_muted && v.vol_level >= 0;
+        const std::string t = v.vol_level < 0 ? std::string("--") : muted ? std::string("Muted") : std::to_string(v.vol_level);
         const int vw = lv_obj_get_width(grp_value_box), vh = lv_obj_get_height(grp_value_box);
-        const int px = fit_px(Face::Bold, P(18), t, vw - P(8), P(10));
-        const lv_font_t *f = font(Face::Bold, px);
-        if (lv_obj_get_style_text_font(grp_value, LV_PART_MAIN) != f) {
-            lv_obj_set_style_text_font(grp_value, f, 0);
-            lv_obj_set_height(grp_value, lv_font_get_line_height(f));
-            lv_obj_set_y(grp_value, (vh - lv_font_get_line_height(f)) / 2);
-        }
-        set_text(grp_value, t);
-    }
-
-    /* The volume strip (design QA D-28): a tap on the volume chip puts it in place of the seek row for kVolStripMs (each
-     * "-" / "+" starts the time again; a second tap on the chip closes it): the transport keys' cream buttons "-" and
-     * "+" (aligned with the first and the last transport key, as wide as the first), the level and its bar between them.
-     * The buttons are the touch target high where the band between the chips and the transport keys allows it (P(4)
-     * clear of each); where the band is lower they fill it. Their touch areas take the band between the interactive
-     * chips and the keys, and the neighbours' areas give way while the strip is open (layout_now_hits). */
-    void build_vol_strip(lv_obj_t *r) {
-        vol_root = lv_obj_create(r);
-        plain(vol_root);
-        lv_obj_set_pos(vol_root, 0, 0);
-        lv_obj_set_size(vol_root, W, H);
-        const int x0 = X(g.time.box.x), x1 = X(g.remain.box.right());
-        const int sh = std::max(2, Hd(g.seek));
-        const int cy = Y(g.seek.y) + sh / 2;
-        const int top_lim = Y(g.chip0.y + (static_cast<double>(g.chip_layout.size()) - 1) * g.chip_step) + P(g.chip0.h) + P(4);
-        int bot_lim = H;
-        for (const layout::Btn &b : g.transport) bot_lim = std::min(bot_lim, Y(b.box.y) + keys_dy);
-        bot_lim -= P(4);
-        const int row_h = std::max(P(g.time.lh), sh);
-        const int bh = std::max(row_h, std::min(target, bot_lim - top_lim));
-        const int by = std::max(top_lim, std::min(cy - bh / 2, bot_lim - bh));
-        const int bw = Wd(g.transport.front().box);
-        auto make = [&](Button &b, int x, Icon ic, int delta) {
-            b.vis = box(vol_root, x, by, bw, bh, col::kButton, P(8));
-            b.ic = ic;
-            const int ip = P(22);
-            b.icon = icon_obj(b.vis, ic, (bw - ip) / 2, (bh - ip) / 2, ip, ip, ip, col::kInk);
-            b.hitbox = hit(vol_root, x, by, bw, bh, target, target, [this, delta] {
-                if (act.volume_step) act.volume_step(delta);
-                restart_vol_timer();
-            });
-            now_hits.push_back(NowHit{b.hitbox, R{double(x), double(by), double(bw), double(bh)}, kStrip});
-        };
-        make(vol_minus, x0, Icon::Minus, -5);
-        make(vol_plus, x1 - bw, Icon::Plus, 5);
-        const int my = by + bh / 2; /* the level and its bar on the buttons' middle */
-        const lv_font_t *nf = font(Face::Mono, P(g.time.px));
-        const int nw = text_width(nf, "100") + 2;
-        const int nx = x0 + bw + P(10);
-        vol_num = label(vol_root, Face::Mono, P(g.time.px), col::kInk, nx, my - lv_font_get_line_height(nf) / 2, nw,
-                        LV_TEXT_ALIGN_CENTER);
-        const int tx = nx + nw + P(8), tw = std::max(P(20), x1 - bw - P(12) - tx);
-        vol_track = box(vol_root, tx, my - sh / 2, tw, sh, col::kChip, sh / 2);
-        vol_fill = box(vol_track, 0, 0, sh, sh, col::kTeal, sh / 2);
-        lv_obj_add_flag(vol_root, LV_OBJ_FLAG_HIDDEN);
-        std::fprintf(stderr, "[vinyl] volume strip: buttons %dx%d (band %d, target %d), + at %.3f %.3f\n", bw, bh,
-                     bot_lim - top_lim, target, (x1 - bw / 2.0) / W, (by + bh / 2.0) / H);
-    }
-
-    void set_vol_mode(bool on) {
-        if (on == vol_mode) return;
-        vol_mode = on;
-        show(vol_root, on);
-        for (lv_obj_t *o : {time, remain, seek_track, seek_knob, seek_hit}) show(o, !on);
-        if (on) restart_vol_timer();
-        else if (vol_timer) {
-            lv_timer_delete(vol_timer);
-            vol_timer = nullptr;
-        }
-        layout_now_hits();
-    }
-
-    void restart_vol_timer() {
-        if (!vol_mode) return;
-        if (!vol_timer) {
-            vol_timer = lv_timer_create([](lv_timer_t *t) { static_cast<Impl *>(lv_timer_get_user_data(t))->vol_timeout(); },
-                                        kVolStripMs, this);
-            lv_timer_set_repeat_count(vol_timer, 1);
-            lv_timer_set_auto_delete(vol_timer, false);
+        const int gp = lv_obj_get_width(grp_glyph), gap = P(3), margin = P(4);
+        int px = P(g.vol_text_px), tx = 0, tw = vw;
+        bool word = true;
+        if (muted) {
+            const int room = vw - 2 * margin - gp - gap;
+            px = fit_px(Face::Bold, P(14), t, room, P(10));
+            const int w = text_width(font(Face::Bold, px), t);
+            word = w <= room;
+            const int total = gp + (word ? gap + w : 0);
+            const int gx = (vw - total) / 2;
+            lv_obj_set_x(grp_glyph, gx);
+            tx = gx + gp + gap;
+            tw = std::max(1, w + 2);
         } else {
-            lv_timer_set_period(vol_timer, kVolStripMs);
-            lv_timer_reset(vol_timer);
-            lv_timer_set_repeat_count(vol_timer, 1);
-            lv_timer_resume(vol_timer);
+            px = fit_px(Face::Bold, P(g.vol_text_px), t, vw - P(8), P(10));
         }
-    }
-
-    void vol_timeout() { set_vol_mode(false); /* deletes the timer from its own callback: LVGL 9 allows it */ }
-
-    void toggle_vol_strip() {
-        if (!vol_mode && !last_now.vol_adjustable) { /* nothing the strip could change: say so (design QA run 2) */
-            if (act.volume_unavailable) act.volume_unavailable();
-            return;
-        }
-        set_vol_mode(!vol_mode);
-        if (vol_mode) update_vol_strip(last_now);
-    }
-
-    void update_vol_strip(const NowView &v) {
-        if (!vol_root) return;
-        const int lvl = std::clamp(v.vol_level, 0, 100);
-        set_text(vol_num, v.vol_level < 0 ? "--" : std::to_string(lvl));
-        const int tw = lv_obj_get_width(vol_track), sh = lv_obj_get_height(vol_track);
-        lv_obj_set_width(vol_fill, std::max(sh, tw * lvl / 100));
-        show(vol_fill, v.vol_level > 0);
-        if (vol_mode && !v.vol_adjustable) set_vol_mode(false);
+        show(grp_glyph, muted);
+        show(grp_value, word);
+        const lv_font_t *f = font(Face::Bold, px);
+        if (lv_obj_get_style_text_font(grp_value, LV_PART_MAIN) != f) lv_obj_set_style_text_font(grp_value, f, 0);
+        lv_obj_set_height(grp_value, lv_font_get_line_height(f));
+        lv_obj_set_y(grp_value, (vh - lv_font_get_line_height(f)) / 2);
+        lv_obj_set_x(grp_value, tx);
+        lv_obj_set_width(grp_value, tw);
+        lv_obj_set_style_text_align(grp_value, muted ? LV_TEXT_ALIGN_LEFT : LV_TEXT_ALIGN_CENTER, 0);
+        set_text(grp_value, t);
     }
 
     /* The time labels as wide as their widest text in this format (and never narrower than the drafts' boxes), the seek
@@ -971,57 +891,37 @@ struct View::Impl {
         set_text(artist, v.artist);
         set_text(album, v.album);
         set_cover(v.cover);
-        /* chips */
-        const std::string texts[4] = {v.format, v.vol, v.output, v.extra_chip};
-        const bool bt[4] = {false, false, v.output_bt, false};
+        /* chips: the rows of the class; the last chip of a full row ends with dots (the output chip scrolls) */
+        const std::string texts[4] = {v.format, "", v.output, v.extra_chip};
+        const Icon bt[4] = {Icon::None, Icon::None, v.output_bt ? Icon::Bluetooth : Icon::None, Icon::None};
         const int x0 = X(g.chip0.x);
         const int row_right = X(g.title.box.right()); /* the info column's right edge */
         const int space = P(g.chip_space);
-        /* the rows of the class; the volume chip moves to another row when the chip beside it would end with dots and the
-         * other row has room for it (layout::flow_chip_rows: no dots while a wider row is free) */
-        int natural[4] = {0, 0, 0, 0};
-        for (int i = 0; i < 4; ++i)
-            if (chips[i].box) natural[i] = chips[i].natural(texts[i], bt[i]);
-        const std::vector<std::vector<int>> rows =
-            g.chips_in_row ? g.chip_layout : layout::flow_chip_rows(g.chip_layout, natural, row_right - x0, space);
-        for (size_t r = 0; r < rows.size(); ++r) {
-            /* the volume chip keeps its whole width ("Vol 60", design QA D-18); the others share what is left, the last
-             * of a full row ending with dots */
-            const std::vector<int> &row = rows[r];
-            int vol_need = 0;
-            for (int i : row)
-                if (i == 1 && chips[1].box) vol_need = natural[1];
+        for (size_t r = 0; r < g.chip_layout.size(); ++r) {
             int x = x0;
-            bool vol_placed = false;
-            for (int i : row) {
+            for (int i : g.chip_layout[r]) {
                 if (i < 0 || i > 3 || !chips[i].box) continue;
-                const int reserve = (i != 1 && !vol_placed && vol_need > 0) ? vol_need + space : 0;
-                chips[i].max_w = i == 1 ? 0 : std::max(P(30), row_right - x - reserve);
+                chips[i].max_w = std::max(P(30), row_right - x);
                 chips[i].y = Y(g.chip0.y + static_cast<double>(r) * g.chip_step);
                 chips[i].set(texts[i], bt[i], x);
-                if (i == 1) vol_placed = true;
                 if (chips[i].width) x += chips[i].width + space;
             }
         }
-        /* the touch areas over the output and the volume chips follow the chips (layout_now_hits); the square and
-         * portrait layouts have the output button instead */
+        /* the touch area over the large class's output chip follows the chip; the other classes have the button */
         for (NowHit &e : now_hits) {
-            if (g.out_button_on && e.obj == out_hit) continue;
-            const Chip *c = e.obj == out_hit ? &chips[2] : (vol_hit && e.obj == vol_hit) ? &chips[1] : nullptr;
-            if (!c) continue;
-            show(e.obj, c->width > 0);
-            e.drawn = c->width > 0 ? R{double(c->x), double(c->y), double(c->width), double(c->h)} : R{};
+            if (e.obj != out_hit || g.out_button_on) continue;
+            const Chip &c = chips[2];
+            show(e.obj, c.width > 0);
+            e.drawn = c.width > 0 ? R{double(c.x), double(c.y), double(c.width), double(c.h)} : R{};
         }
         place_out_button(v);
         update_vol_group(v);
         const int outb_x = outb_box ? lv_obj_get_x(outb_box) : 0;
-        const int sig[7] = {chips[1].x, chips[1].width, g.out_button_on ? outb_x : chips[2].x, chips[2].width, vol_mode ? 2 : 1,
-                            chips[1].y, chips[2].y};
-        if (!std::equal(sig, sig + 7, hits_sig)) { /* the chips moved, or the strip opened or closed */
-            std::copy(sig, sig + 7, hits_sig);
+        const int sig[4] = {g.out_button_on ? outb_x : chips[2].x, chips[2].width, chips[2].y, outb_box ? lv_obj_get_width(outb_box) : 0};
+        if (!std::equal(sig, sig + 4, hits_sig)) { /* the output chip or button moved */
+            std::copy(sig, sig + 4, hits_sig);
             layout_now_hits();
         }
-        update_vol_strip(v);
         /* time: h:mm:ss for a track of an hour or more, the labels as wide as that format needs (never "-3...") */
         const uint64_t total = v.total_ms;
         const uint64_t pos = std::min(v.pos_ms, total ? total : v.pos_ms);
@@ -1036,8 +936,12 @@ struct View::Impl {
         show(seek_fill, v.has_track && frac > 0);
         const int kd = lv_obj_get_width(seek_knob);
         lv_obj_set_x(seek_knob, seek_x + ri(frac * seek_w) - kd / 2);
-        /* transport */
+        /* transport; with an empty queue the keys are dimmed: nothing to play (design QA run 3, D-81) */
         if (auto it = btns.find("play"); it != btns.end()) icon_set(it->second.icon, v.playing ? Icon::Pause : Icon::Play, col::kWhite);
+        for (const layout::Btn &t : g.transport)
+            if (t.enabled)
+                if (auto it = btns.find(t.id); it != btns.end() && it->second.vis)
+                    lv_obj_set_style_opa(it->second.vis, v.queue_empty ? LV_OPA_40 : LV_OPA_COVER, 0);
         show(repeat_dash, v.repeat != Repeat::Off);
         show(repeat_one, v.repeat == Repeat::One);
         show(shuffle_dash, v.shuffle);
@@ -1086,14 +990,13 @@ struct View::Impl {
         lv_obj_t *r = L.root;
         box(r, ri(lg.panel.x), ri(lg.panel.y), ri(lg.panel.w), ri(lg.panel.h), col::kList, S(10));
         if (p != Page::Output) {
-            L.heading = label(r, Face::Bold, S(12), col::kRowValue, ri(lg.heading.x), ri(lg.heading.y), ri(lg.heading.w) - S(90),
+            L.heading = label(r, Face::Bold, S(12), col::kRowValue, ri(lg.heading.x), ri(lg.heading.y), ri(lg.heading.w),
                               LV_TEXT_ALIGN_LEFT, ri(0.04 * 12 * s));
             const lv_font_t *hf = font(Face::Bold, S(12));
             lv_obj_set_y(L.heading, ri(lg.heading.y) + (ri(lg.heading.h) - lv_font_get_line_height(hf)) / 2);
         }
         if (p == Page::Browser) {
-            L.sort_box = box(r, 0, ri(lg.panel.y) + S(4), S(40), S(22), col::kRowSel, S(5));
-            L.sort_text = label(L.sort_box, Face::Bold, S(12), col::kRowText, S(10), 0, 0);
+            /* the drafts' "A-Z" pill is not built: sorting is no control in P1 (design QA run 3, D-81) */
         }
         const int text_px = S(15), value_px = S(13);
         const double dot_x = 16 * s, text_x = 40 * s, value_r = 16 * s, chev_r = 14 * s;
@@ -1114,7 +1017,10 @@ struct View::Impl {
             lv_obj_t *lab = image(L.mini_disc, (md - ml) / 2, (md - ml) / 2);
             L.mini_label_img.bind(lab);
             L.mini_title = label(L.strip, Face::Bold, S(13), col::kInk, S(48), S(4), sw - S(48) - S(100));
+            /* the second line: the artist (dots when long) and the times, whole (design QA run 3, D-18) */
             L.mini_sub = label(L.strip, Face::Medium, S(11), col::kInk3, S(48), S(21), sw - S(48) - S(100));
+            L.mini_time = label(L.strip, Face::Medium, S(11), col::kInk3, S(48), S(21), 0);
+            L.mini_text_w = sw - S(48) - S(100);
             L.mini_bar = box(L.strip, S(8), shh - S(3), sw - S(16), S(3), col::kChip, 0);
             L.mini_fill = box(L.mini_bar, 0, 0, 1, S(3), col::kTeal, 0);
             /* the whole strip opens now playing; its two buttons act (next: the transport press). Their touch areas never
@@ -1135,28 +1041,14 @@ struct View::Impl {
                 else
                     b.hitbox = hit(r, x, y, w, h, 0, 0, [this, sid] { press(sid); });
             };
-            const int px = sx + sw - S(94), pw = S(44), nx = sx + sw - S(46), nw = S(40);
-            mini_btn(L.mini_play, px, pw, Icon::Pause, "play");
-            mini_btn(L.mini_next, nx, nw, Icon::Next, "next");
-            const int hit_h = std::min(H, std::max(shh, target));
-            const int hit_y = std::min(sy, H - hit_h); /* from the strip's top down, moved up only as far as the screen asks */
-            layout::HitArea ap{R{double(px), double(sy), double(pw), double(shh)}, R{}}, an{R{double(nx), double(sy), double(nw), double(shh)}, R{}};
-            ap.area = layout::grow_hit(ap.drawn, target, 0);
-            an.area = layout::grow_hit(an.drawn, target, 0);
-            layout::split_pair(ap, an, target);
-            if (an.area.right() > W) { /* never past the screen's edge: both move left */
-                const double d = an.area.right() - W;
-                an.area.x -= d;
-                ap.area.x -= d;
-            }
-            for (layout::HitArea *a : {&ap, &an}) {
-                a->area.y = hit_y;
-                a->area.h = hit_h;
-            }
-            place_area(L.mini_play.hitbox, ap.area);
-            place_area(L.mini_next.hitbox, an.area);
-            place_area(L.mini_open_hit, R{double(sx), double(hit_y), std::max(1.0, ap.area.x - sx), double(hit_h)});
-            if (hit_y < sy) lv_obj_set_height(L.list->obj(), std::max(1, hit_y - ri(lg.list.y)));
+            /* the touch areas from the core (layout::mini_touch_areas: no overlap, the target high; tests/test_hits.cpp) */
+            const layout::MiniBoxes mb = layout::mini_touch_areas(lg, W, H, target);
+            mini_btn(L.mini_play, ri(mb.play.x), ri(mb.play.w), Icon::Pause, "play");
+            mini_btn(L.mini_next, ri(mb.next.x), ri(mb.next.w), Icon::Next, "next");
+            place_area(L.mini_play.hitbox, mb.play_area);
+            place_area(L.mini_next.hitbox, mb.next_area);
+            place_area(L.mini_open_hit, mb.open_area);
+            if (mb.list_bottom < lg.list.bottom()) lv_obj_set_height(L.list->obj(), std::max(1, ri(mb.list_bottom) - ri(lg.list.y)));
         } else if (p == Page::Queue) {
             static const struct {
                 const char *word;
@@ -1176,11 +1068,17 @@ struct View::Impl {
                 bt.icon = icon_obj(bt.vis, qb[i].ic, (w - total) / 2, (h - ip) / 2, ip, ip, ip, ink);
                 bt.word = label(bt.vis, Face::Bold, S(12), ink, (w - total) / 2 + ip + S(6), (h - lv_font_get_line_height(f)) / 2, 0);
                 set_text(bt.word, qb[i].word);
-                bt.hitbox = hit(r, x, y, w, h, target, target, [this, i] {
+                bt.hitbox = hit(r, x, y, w, h, 0, 0, [this, i] {
                     if (act.queue_button) act.queue_button(i);
                 });
                 L.qbtns.push_back(bt);
             }
+            /* the touch areas (layout::queue_touch_areas): no two overlap, the target high, the list above them shorter
+             * where they reach over its last row (design QA run 3, D-33) */
+            double list_bottom = 0;
+            const std::vector<R> qa = layout::queue_touch_areas(lg, H, target, list_bottom);
+            for (size_t i = 0; i < qa.size() && i < L.qbtns.size(); ++i) place_area(L.qbtns[i].hitbox, qa[i]);
+            if (list_bottom < lg.list.bottom()) lv_obj_set_height(L.list->obj(), std::max(1, ri(list_bottom) - ri(lg.list.y)));
         } else {
             L.strip = box(r, sx, sy, sw, shh, col::kCream, S(8));
             const int ip = S(18);
@@ -1219,6 +1117,8 @@ struct View::Impl {
             L.sel = v.selected;
             L.rows = static_cast<int>(v.rows->size());
         }
+        if (p == Page::Queue) /* an empty queue: the buttons dimmed, they do nothing (design QA run 3, D-81) */
+            for (Button &b : L.qbtns) lv_obj_set_style_opa(b.vis, v.rows && !v.rows->empty() ? LV_OPA_COVER : LV_OPA_40, 0);
         if (p == Page::Browser && L.strip) {
             show(L.strip, v.mini.shown);
             show(L.mini_open_hit, v.mini.shown);
@@ -1227,6 +1127,15 @@ struct View::Impl {
             show(L.mini_next.vis, v.mini.shown);
             show(L.mini_next.hitbox, v.mini.shown);
             set_text(L.mini_title, v.mini.title);
+            /* the times right of the artist, whole; the artist gets the rest, with dots */
+            const lv_font_t *mf = font(Face::Medium, std::max(1, ri(11 * layout::list_geom(layout::ListPage::Browser, W, H, body_y).s)));
+            const std::string sep = v.mini.sub.empty() ? std::string() : std::string(", ");
+            const int tw = text_width(mf, sep + v.mini.time) + 2;
+            set_text(L.mini_time, sep + v.mini.time);
+            lv_obj_set_width(L.mini_time, tw);
+            const int aw = std::min(text_width(mf, v.mini.sub) + 2, std::max(1, L.mini_text_w - tw));
+            lv_obj_set_width(L.mini_sub, std::max(1, aw));
+            lv_obj_set_x(L.mini_time, lv_obj_get_x(L.mini_sub) + (v.mini.sub.empty() ? 0 : aw));
             set_text(L.mini_sub, v.mini.sub);
             const int bw = lv_obj_get_width(L.mini_bar);
             lv_obj_set_width(L.mini_fill, std::max(1, ri(std::clamp(v.mini.progress, 0.0, 1.0) * bw)));
@@ -1286,10 +1195,11 @@ struct View::Impl {
     }
 
     /* the notice strip of the draft: cream, 50 high, 13 px semibold with a 20 px icon; the danger one dark red, 30 high */
-    void make_notice(lv_obj_t *parent, Notice::Kind k, int x, int y, int w, double s, lv_obj_t *&o, lv_obj_t *&ic, lv_obj_t *&tx) {
+    void make_notice(lv_obj_t *parent, Notice::Kind k, int x, int y, int w, double s, lv_obj_t *&o, lv_obj_t *&ic, lv_obj_t *&tx,
+                     int fit_h = 0) {
         auto S = [&](double v) { return std::max(1, ri(v * s)); };
         const bool danger = k == Notice::Kind::Danger;
-        const int h = danger ? S(30) : S(50);
+        const int h = fit_h > 0 ? fit_h : danger ? S(30) : S(50);
         o = box(parent, x, y, w, h, danger ? col::kDanger : col::kCream, S(8));
         const int ip = danger ? S(16) : S(20);
         const Icon icon = k == Notice::Kind::Bluetooth ? Icon::Bluetooth
@@ -1310,13 +1220,44 @@ struct View::Impl {
         lv_obj_t *root = cur == Page::Now ? now_root : cur == Page::Browser ? br.root : cur == Page::Queue ? qu.root : out.root;
         if (!root) return;
         const bool danger = n.kind == Notice::Kind::Danger;
-        int x = 0, y = 0, w = 0;
+        int x = 0, y = 0, w = 0, fit_h = 0;
         double s = fit.s;
         if (cur == Page::Now) {
+            /* where it covers nothing that matters (design QA run 3, D-18): over the seek row when the band between the
+             * chips, the output button or the small class's volume group and the transport keys holds it; else over the
+             * up-next box (square); else in that band as high as it is when that is at least the danger strip's 30
+             * design px (the small class: 38 px, two lines of text still fit); else over the bottom row (the keys come
+             * back when it goes, 6-8 s, or with a tap on it) */
             const R b = layout::notice_box_now(g, danger ? 30 : 50);
+            const int h = ri((danger ? 30 : 50) * s);
             x = X(b.x);
-            y = Y(b.bottom()) - ri((danger ? 30 : 50) * s);
             w = Wd(b);
+            int bot_lim = H;
+            for (const layout::Btn &t : g.transport) bot_lim = std::min(bot_lim, Y(t.box.y) + keys_dy);
+            int top_lim = 0;
+            for (const Chip &c : chips)
+                if (c.box && c.width > 0) top_lim = std::max(top_lim, c.y + c.h);
+            if (outb_box) top_lim = std::max(top_lim, lv_obj_get_y(outb_box) + lv_obj_get_height(outb_box));
+            if (grp_value_box && lv_obj_get_y(grp_value_box) < bot_lim)
+                top_lim = std::max(top_lim, lv_obj_get_y(grp_value_box) + lv_obj_get_height(grp_value_box));
+            top_lim += P(4);
+            bot_lim -= P(4);
+            const int band = bot_lim - top_lim;
+            if (band >= h) {
+                y = top_lim + (band - h) / 2;
+            } else if (g.has_upnext) {
+                y = Y(g.upnext.y) + (Hd(g.upnext) - h) / 2;
+            } else if (band >= ri(30 * s)) {
+                y = top_lim;
+                fit_h = band;
+            } else {
+                int row_top = H, row_bottom = 0;
+                for (const layout::Btn &t : g.bottom) {
+                    row_top = std::min(row_top, Y(t.box.y));
+                    row_bottom = std::max(row_bottom, Y(t.box.y) + Hd(t.box));
+                }
+                y = row_bottom > 0 ? row_top + (row_bottom - row_top - h) / 2 : Y(b.bottom()) - h;
+            }
         } else {
             const layout::ListPage lp = cur == Page::Browser ? layout::ListPage::Browser
                                         : cur == Page::Queue ? layout::ListPage::Queue
@@ -1327,7 +1268,7 @@ struct View::Impl {
             w = ri(lg.strip.w);
             y = ri(lg.strip.bottom()) - ri((danger ? 30 : 50) * s);
         }
-        make_notice(root, n.kind, x, y, w, s, notice, notice_icon, notice_text);
+        make_notice(root, n.kind, x, y, w, s, notice, notice_icon, notice_text, fit_h);
         set_text(notice_text, n.text);
         lv_obj_update_layout(notice_text);
         lv_obj_set_y(notice_text, (lv_obj_get_height(notice) - lv_obj_get_height(notice_text)) / 2);
@@ -1339,6 +1280,112 @@ struct View::Impl {
                                        danger ? 8000 : 6000, this);
         lv_timer_set_repeat_count(notice_timer, 1);
         lv_timer_set_auto_delete(notice_timer, false);
+    }
+
+    /* "Clear the queue?" (design QA run 3: Clear all destroys the queue): a dialog in the notice style over the queue
+     * buttons, Cancel (the default) and Clear; modal: a tap anywhere but Clear cancels; Esc cancels, Enter takes the
+     * highlighted button, Left / Right / Tab move the highlight. */
+    lv_obj_t *dlg_scrim = nullptr, *dlg_box = nullptr;
+    Button dlg_btn[2];
+    int dlg_sel = 0;
+
+    void ask_clear_queue() {
+        close_dialog();
+        if (!qu.root) return;
+        const layout::ListGeom lg = layout::list_geom(layout::ListPage::Queue, W, H, body_y);
+        const double s = lg.s;
+        auto S = [&](double v) { return std::max(1, ri(v * s)); };
+        dlg_scrim = hit(qu.root, 0, body_y, W, H - body_y, 0, 0, [this] { /* the page under the header: a tap outside cancels */
+            lv_async_call([](void *p) { static_cast<Impl *>(p)->dialog_choose(0); }, this);
+        });
+        R area = lg.strip;
+        const bool two_rows = lg.queue_buttons.size() == 4 && lg.queue_buttons[2].y > lg.queue_buttons[0].y;
+        const int bx = ri(area.x), by = ri(area.y), bw = ri(area.w), bh = ri(area.h);
+        dlg_box = box(qu.root, bx, by, bw, bh, col::kCream, S(8));
+        const lv_font_t *f = font(Face::Bold, S(13));
+        const int pad = S(10), gap = S(8);
+        int tx, ty, tw, btn_y, btn_h, btn_w, b0x;
+        if (two_rows) { /* the question on the top half, the buttons side by side on the bottom half */
+            const int half = (bh - gap) / 2;
+            tx = pad;
+            tw = bw - 2 * pad;
+            ty = (half - lv_font_get_line_height(f)) / 2;
+            btn_y = half + gap;
+            btn_h = bh - btn_y - S(4);
+            btn_w = (bw - 2 * pad - gap) / 2;
+            b0x = pad;
+        } else { /* one row: the question at the left, the buttons at the right */
+            btn_h = bh - 2 * S(4);
+            btn_y = S(4);
+            btn_w = std::max(S(84), text_width(f, "Cancel") + 2 * pad);
+            b0x = bw - pad - 2 * btn_w - gap;
+            tx = pad;
+            tw = std::max(1, b0x - 2 * pad);
+            ty = (bh - lv_font_get_line_height(f)) / 2;
+        }
+        lv_obj_t *q = label(dlg_box, Face::Bold, S(13), col::kInk, tx, ty, tw);
+        set_text(q, "Clear the queue?");
+        const char *words[2] = {"Cancel", "Clear"};
+        for (int i = 0; i < 2; ++i) {
+            Button &b = dlg_btn[i];
+            const int x = b0x + i * (btn_w + gap);
+            b.vis = box(dlg_box, x, btn_y, btn_w, btn_h, i == 1 ? col::kDanger : col::kButton, S(8));
+            b.word = label(b.vis, Face::Bold, S(13), i == 1 ? col::kWhite : col::kInk, 0, (btn_h - lv_font_get_line_height(f)) / 2,
+                           btn_w, LV_TEXT_ALIGN_CENTER);
+            set_text(b.word, words[i]);
+            lv_obj_set_style_border_color(b.vis, lv_color_hex(col::kTeal), 0);
+            lv_obj_set_style_border_width(b.vis, 0, 0);
+        }
+        /* the two touch areas: the target high and wide where the screen allows, meeting in the middle of their gap */
+        layout::HitArea a0{R{double(bx + b0x), double(by + btn_y), double(btn_w), double(btn_h)}, R{}};
+        layout::HitArea a1{R{double(bx + b0x + btn_w + gap), double(by + btn_y), double(btn_w), double(btn_h)}, R{}};
+        for (layout::HitArea *a : {&a0, &a1}) {
+            a->area = layout::grow_hit(a->drawn, target, target);
+            if (a->area.bottom() > H) a->area.y = H - a->area.h;
+        }
+        layout::split_pair(a0, a1, target);
+        for (int i = 0; i < 2; ++i) {
+            dlg_btn[i].hitbox = hit(qu.root, 0, 0, 1, 1, 0, 0, [this, i] {
+                lv_async_call(i == 0 ? +[](void *p) { static_cast<Impl *>(p)->dialog_choose(0); }
+                                     : +[](void *p) { static_cast<Impl *>(p)->dialog_choose(1); },
+                              this);
+            });
+            place_area(dlg_btn[i].hitbox, i == 0 ? a0.area : a1.area);
+        }
+        dlg_sel = 0;
+        highlight_dialog();
+    }
+
+    void highlight_dialog() {
+        for (int i = 0; i < 2; ++i)
+            if (dlg_btn[i].vis) lv_obj_set_style_border_width(dlg_btn[i].vis, i == dlg_sel ? std::max(2, P(3)) : 0, 0);
+    }
+
+    void close_dialog() {
+        for (lv_obj_t **o : {&dlg_btn[0].hitbox, &dlg_btn[1].hitbox, &dlg_box, &dlg_scrim})
+            if (*o) {
+                lv_obj_delete(*o);
+                *o = nullptr;
+            }
+        dlg_btn[0] = Button();
+        dlg_btn[1] = Button();
+    }
+
+    void dialog_choose(int which) {
+        if (!dlg_box) return;
+        close_dialog();
+        if (which == 1 && act.queue_clear) act.queue_clear();
+    }
+
+    bool dialog_key(uint32_t k) {
+        if (!dlg_box) return false;
+        if (k == LV_KEY_ESC) dialog_choose(0);
+        else if (k == LV_KEY_ENTER) dialog_choose(dlg_sel);
+        else if (k == LV_KEY_LEFT || k == LV_KEY_RIGHT || k == LV_KEY_NEXT || k == LV_KEY_PREV || k == 9) {
+            dlg_sel = 1 - dlg_sel;
+            highlight_dialog();
+        }
+        return true;
     }
 
     void hide_notice() {
@@ -1402,8 +1449,7 @@ View::View(lv_obj_t *screen, Actions actions) : d_(std::make_unique<Impl>()) {
 
 View::~View() {
     d_->hide_notice();
-    if (d_->vol_timer) lv_timer_delete(d_->vol_timer);
-    d_->vol_timer = nullptr;
+    d_->close_dialog();
     d_->qlist.reset();
     d_->br.list.reset();
     d_->qu.list.reset();
@@ -1417,13 +1463,13 @@ void View::show_page(Page p) {
     Impl &d = *d_;
     if (p == d.cur) return;
     d.hide_notice();
+    d.close_dialog();
     d.cur = p;
     show(d.now_root, p == Page::Now);
     show(d.br.root, p == Page::Browser);
     show(d.qu.root, p == Page::Queue);
     show(d.out.root, p == Page::Output);
     show(d.not_root, p == Page::Notices);
-    if (p != Page::Now) d.set_vol_mode(false);
     /* the title per page (Browse: the toolkit shows the last part on a narrow header; at 320x480 it shows none) */
     switch (p) {
     case Page::Browser: d.page->set_title({"Vinyl", "Browse"}); break;
@@ -1446,6 +1492,9 @@ void View::update_list(Page p, const ListView &v) {
 void View::show_notice(const Notice &n) { d_->show_notice(n); }
 void View::hide_notice() { d_->hide_notice(); }
 bool View::notice_shown() const { return d_->notice != nullptr; }
+void View::ask_clear_queue() { d_->ask_clear_queue(); }
+bool View::dialog_shown() const { return d_->dlg_box != nullptr; }
+bool View::dialog_key(uint32_t key) { return d_->dialog_key(key); }
 void View::tick(bool playing) { d_->tick(playing); }
 int View::cover_side() const { return d_->Wd(d_->g.sleeve); }
 

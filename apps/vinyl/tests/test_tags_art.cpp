@@ -532,10 +532,16 @@ void test_art() {
         CHECK_EQ(static_cast<int>(d.px[3]), 0);  /* outside the disc */
         CHECK_EQ(static_cast<int>(d.px[mid + 3]), 255);
         CHECK(d.px[mid + 2] < 0x30); /* dark grooves */
-        const PixelImage l = render_label(50, 6, 1.0);
-        const size_t c = (25 * 50 + 25) * 4;
-        CHECK(l.px[c + 2] > 0xC0); /* the cream spindle hole in the middle */
-        const size_t teal = (25 * 50 + 4) * 4;
-        CHECK_EQ(static_cast<int>(l.px[teal + 1]), 0x7A); /* the teal label */
+        /* the label's spin marks (the approved NP-640x480 / NP-480x320 drafts): the dark spindle hole in a cream ring,
+         * a cream dot near the rim (up), the teal label elsewhere */
+        const PixelImage l = render_label(84, 8, 1.0);
+        auto at = [&](int x, int y) { return static_cast<size_t>(y * 84 + x) * 4; };
+        CHECK(l.px[at(42, 42) + 2] < 0x30);                          /* the hole: dark */
+        CHECK(l.px[at(42 + 7, 42) + 2] > 0xC0);                      /* the ring round it: cream */
+        CHECK(l.px[at(42, 12) + 2] > 0xC0);                          /* the dot near the rim */
+        CHECK_EQ(static_cast<int>(l.px[at(42, 72) + 1]), 0x7A);      /* the teal label (opposite the dot) */
+        CHECK_EQ(static_cast<int>(l.px[at(4, 42) + 1]), 0x7A);
+        const PixelImage mini = render_label(20, 0, 0.5);            /* the mini player's: the dot, no ring, no hole */
+        CHECK_EQ(static_cast<int>(mini.px[(10 * 20 + 10) * 4 + 1]), 0x7A);
     }
 }
