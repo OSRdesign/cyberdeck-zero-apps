@@ -15,6 +15,7 @@ the owner's words are quoted exactly; everything else says who decided. The stud
 - **D2 Decode:** small libraries for the common formats (mpg123, vorbisfile, libFLAC, libopus, own WAV/AIFF) and FFmpeg
   as the wide net for the rest.
 - **D3 FFmpeg packaging:** `Recommends` (61 or 62), loaded at run time only when a file needs it; Vinyl works without it.
+  **Replaced by D20 (owner, 2026-11-13): FFmpeg is a Depends; see "D20" below.**
 - **D4 MVP scope:** folder first; the library database is P2.
 - **D5 Output:** libpulse when a sound server runs, ALSA `default` otherwise; the codec is WirePlumber's choice; no
   direct `hw:` in the MVP.
@@ -268,6 +269,24 @@ not be based on percentages", unless the percentage maps onto a dB range; true s
   windows have levels of 2.07 dB.
 - The model takes the step aimed at and the group's unit as parameters (`volume_model(..., step_db)`, `VolumeUnit`,
   `volume_level_text`), so the planned settings below need no new model; the controller formats the group's text.
+
+## D20: FFmpeg in Depends, the common codecs out of the box (owner, 2026-11-13)
+
+The owner: "in that case for D20 let's make it universal and add FFmpeg as a dependency the route to optional, suggested
+is complicating the thing, let's make it work with all most common codecs out of the box."
+
+- The package Depends on `libavformat61 | libavformat62, libavcodec61 | libavcodec62, libavutil59 | libavutil60,
+  libswresample5 | libswresample6` (the Debian 13 / Raspberry Pi OS names first, Ubuntu 26.04's as the alternatives;
+  checked against packages.debian.org trixie, FFmpeg 7.1.5, and packages.ubuntu.com resolute, FFmpeg 8.0.1); the
+  Recommends line is gone.
+- Why: the launcher's installer installs a package's Recommends (it does not pass `--no-install-recommends`), so the
+  Recommends were never optional in practice; a Recommends only made the formats depend on how Vinyl was installed.
+- Sizes (the coordinator's measurements): on a Lite board the FFmpeg libraries and what they need are about 104 MB with
+  `--no-install-recommends`, about 462 MB through the launcher's installer today (their own Recommends come too); a
+  launcher change to pass `--no-install-recommends` is proposed separately.
+- Unchanged at run time: the libraries are loaded (dlopen) only when a tier-2 file is opened, never at start-up (about
+  22.5 MB of memory then). The notice for a tier-2 file is now a rare failure: "The FFmpeg libraries could not be
+  loaded. Reinstall Vinyl." (the old "Install them from Settings, Apps" pointed to nothing).
 
 ## Later (not built)
 

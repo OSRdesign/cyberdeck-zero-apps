@@ -1179,7 +1179,7 @@ struct View::Impl {
             const char *text;
             double y;
         };
-        const N ns[4] = {{"ON OPENING A FILE", Notice::Kind::Info, "This format needs the FFmpeg libraries. Install them from Settings, Apps.", 20},
+        const N ns[4] = {{"ON OPENING A FILE", Notice::Kind::Info, "The FFmpeg libraries could not be loaded. Reinstall Vinyl.", 20},
                          {"ON THE OUTPUT CHOOSER", Notice::Kind::Bluetooth, "Bluetooth audio is not set up on this board.", 90},
                          {"WHILE PLAYING ON A HEADSET IN CALL MODE", Notice::Kind::Call, "Call quality (16 kHz): the headset is in call mode.", 160},
                          {"WHEN THE OUTPUT DISCONNECTS", Notice::Kind::Danger, "Evolve 65 disconnected. Paused.", 230}};

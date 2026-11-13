@@ -331,7 +331,7 @@ void test_decoders() {
         CHECK(open_track(dir + "/y.m4a", libs, info, &err) == nullptr);
         CHECK_EQ(err, kNeedsFfmpeg);
         CHECK_EQ(track_error_text(err, dir + "/y.m4a"),
-                 std::string("This format needs the FFmpeg libraries. Install them from Settings, Apps."));
+                 std::string("The FFmpeg libraries could not be loaded. Reinstall Vinyl."));
         CHECK(track_error_text(-ENOENT, "x").find("gone") != std::string::npos);
         CHECK_EQ(ffmpeg_codec_label("aac"), std::string("AAC"));
         CHECK_EQ(ffmpeg_codec_label("alac"), std::string("ALAC"));

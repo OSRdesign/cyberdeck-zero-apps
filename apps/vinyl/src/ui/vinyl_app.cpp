@@ -987,7 +987,7 @@ struct VinylApp::Impl final : TransportHost {
     }
 
     void demo_notice(const std::string &n) {
-        if (n == "ffmpeg") notice(Notice::Kind::Info, "This format needs the FFmpeg libraries. Install them from Settings, Apps.");
+        if (n == "ffmpeg") notice(Notice::Kind::Info, "The FFmpeg libraries could not be loaded. Reinstall Vinyl.");
         else if (n == "bt") notice(Notice::Kind::Bluetooth, "Bluetooth audio is not set up on this board.");
         else if (n == "call") notice(Notice::Kind::Call, "Call quality (16 kHz): the headset is in call mode.");
         else if (n == "lost") notice(Notice::Kind::Danger, "Evolve 65 disconnected. Paused.");

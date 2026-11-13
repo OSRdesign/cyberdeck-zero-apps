@@ -10,8 +10,8 @@ owner's decision of 2026-11-13, one test per kind of output).
 
 ## Preparation (Controller)
 
-1. `sudo apt install ./vinyl_0.1.0_arm64.deb` (apt adds libmpg123-0t64 and libvorbisfile3 if missing; FFmpeg is already on
-   the HackBerry).
+1. `sudo apt install ./vinyl_0.1.0_arm64.deb` (apt adds what is missing, FFmpeg's libraries included: about 104 MB on a
+   Lite board with `--no-install-recommends`, about 462 MB through the launcher's installer today).
 2. Copy test music to `~/Music`: the study's set (`059-testset`: MP3 CBR and VBR, FLAC 16/44 and 24/48, Vorbis, Opus, AAC
    and ALAC M4A, WAV, the CJK MP3) in one folder, and a gapless album (an MP3 LAME album or two FLAC halves of one track) in
    another.
@@ -23,7 +23,7 @@ owner's decision of 2026-11-13, one test per kind of output).
 |---|---|---|
 | B1 | Open Vinyl, open the test folder, tap an MP3 | it plays on the default output; title, artist, cover (or the drawn sleeve), the record turns | pass
 | B2 | Play the FLAC 24/48, the Opus and the Vorbis files | they play; the time counts to the file's length; the chip says FLAC 48 / 24 | pass
-| B3 | Play the M4A (AAC, ALAC) | they play (FFmpeg is on the HackBerry). On a board without FFmpeg: the notice "This format needs the FFmpeg libraries..." and no crash | pass
+| B3 | Play the M4A (AAC, ALAC), on every board after installing the package (no FFmpeg step) | they play everywhere: FFmpeg comes with the package (decision D20, 2026-11-13); the journal has `FFmpeg loaded for a tier-2 file` at the first one, not at start. The notice "The FFmpeg libraries could not be loaded. Reinstall Vinyl." only if the libraries are broken | pass (HackBerry, before D20: retest on a Lite board)
 | B4 | Play the gapless album across a track change | no click, no gap; the title changes when the next track is heard | pass
 | B5 | Tap the seek bar at about 3/4 of a VBR MP3 | it continues within about a second of that point | pass
 | B6 | Super (hide) while playing; open two other apps; come back with Alt+Tab | the music went on; the right track and time show | pass

@@ -747,7 +747,7 @@ std::unique_ptr<TrackDecoder> open_track(const std::string &path, const DecodeLi
 std::string track_error_text(int err, const std::string &path) {
     const std::string e = lower_ext(path);
     switch (err) {
-    case kNeedsFfmpeg: return "This format needs the FFmpeg libraries. Install them from Settings, Apps.";
+    case kNeedsFfmpeg: return "The FFmpeg libraries could not be loaded. Reinstall Vinyl.";
     case kNeedsLibrary:
         if (e == "mp3" || e == "mp2") return std::string("MP3 needs ") + kMpg123Package + ". Install it from Settings, Apps.";
         if (e == "ogg" || e == "oga") return std::string("Vorbis needs ") + kVorbisPackage + ". Install it from Settings, Apps.";

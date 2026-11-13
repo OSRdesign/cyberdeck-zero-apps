@@ -72,12 +72,14 @@ twice within 250 ms (the same button on two input nodes) acts once.
 | Tier | Formats | Library (loaded at run time) |
 |---|---|---|
 | 1 (always) | MP3 (gapless with the LAME header), FLAC (16/24/32 bit kept), Ogg Vorbis, Ogg Opus, WAV (PCM, float, RF64), AIFF / AIFC | libmpg123, libvorbisfile, libFLAC, libopus (package Depends); WAV/AIFF: own reader |
-| 2 (when FFmpeg is installed) | AAC / ALAC / M4A, WMA, APE, WavPack, TTA, Musepack, DSF (as PCM), Ogg FLAC, trackers | libavformat, libavcodec, libswresample, libavutil 61 (Debian 13) or 62 (Ubuntu 26.04): **Recommends**, loaded only when such a file is opened, never at start |
+| 2 (FFmpeg, installed with Vinyl) | AAC / ALAC / M4A, WMA, APE, WavPack, TTA, Musepack, DSF (as PCM), Ogg FLAC, trackers | libavformat, libavcodec, libswresample, libavutil 61 (Debian 13, Raspberry Pi OS) or 62 (Ubuntu 26.04): package **Depends** (decision D20), loaded only when such a file is opened, never at start |
 
-Without FFmpeg a tier-2 file shows "This format needs the FFmpeg libraries. Install them from Settings, Apps." and the
-next track plays. FFmpeg costs about 22.5 MB of memory once loaded (report 059, 14.6) and about 100 MB of disk on a Lite
-image without its own recommends: to add it by hand, `sudo apt install --no-install-recommends libavformat61
-libavcodec61 libswresample5`. To install Vinyl without it: `sudo apt install --no-install-recommends ./vinyl_*.deb`.
+Every board plays the common formats out of the box (the owner's decision D20, 2026-11-13). FFmpeg costs about 22.5 MB
+of memory once loaded (report 059, 14.6), nothing before. On a Lite image the FFmpeg libraries and what they need are
+about 104 MB of disk with `apt install --no-install-recommends`; the launcher's installer today also installs their own
+recommends, about 462 MB (a launcher change to pass `--no-install-recommends` is proposed separately). If the libraries
+are there but cannot be loaded, a tier-2 file shows "The FFmpeg libraries could not be loaded. Reinstall Vinyl." and the
+next track plays.
 
 Gapless: the next track continues on the same stream when its format (rate, channels, sample size) is the same; another
 format drains the stream and opens a new one (a short gap). Tags come from Vinyl's own readers (ID3v2.2-2.4 and v1, FLAC
@@ -155,8 +157,9 @@ plays in front (`dim allow`, decision D16).
   touch size (the deck's 640x480 at 11.3 px/mm: 70 px rows; a 3.5-inch 480x320: 43 px for the volume group and the seek
   row), the touch areas share the room without overlapping (owner rule R-4).
 - CyberdeckZero Launcher with the app contract; built at the shared pin (`apps/_common/LAUNCHER_REF`).
-- Packages (Debian 13 names): libmpg123-0t64, libvorbisfile3, libflac14, libopus0, libasound2t64, libpulse0 (Depends);
-  libavformat61, libavcodec61, libavutil59, libswresample5 or their 62/60/6 versions (Recommends).
+- Packages (Debian 13 names, all Depends): libmpg123-0t64, libvorbisfile3, libflac14, libopus0, libasound2t64,
+  libpulse0, libavformat61, libavcodec61, libavutil59, libswresample5 (Ubuntu 26.04: libavformat62, libavcodec62,
+  libavutil60, libswresample6).
 - Reading the media keys needs read access to `/dev/input/event*` (the `input` group, as the launcher's user has).
 
 ## Install

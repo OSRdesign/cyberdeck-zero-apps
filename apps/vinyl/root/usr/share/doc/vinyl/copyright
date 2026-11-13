@@ -23,8 +23,8 @@ Comment: The application is linked against the LVGL based cp0_lvgl runtime of th
  zlib licence) is also linked into the binary but the app does not use it.
  .
  Third-party libraries. None of the libraries below is part of this package: they are
- the system's own, provided by the OS packages named in the package's Depends and
- Recommends fields, which apt installs with it.
+ the system's own, provided by the OS packages named in the package's Depends field,
+ which apt installs with it.
  .
  System libraries the binary is linked against at build time (named NEEDED in the
  binary): libfreetype6 (FreeType License or GPL-2.0-or-later), libinput10 (MIT),
@@ -54,8 +54,8 @@ Comment: The application is linked against the LVGL based cp0_lvgl runtime of th
     Raspberry Pi OS build it with --enable-gpl, so the system libraries are
     GPL-2.0-or-later as built. Source: https://ffmpeg.org/ and the Debian source package
     "ffmpeg" (https://sources.debian.org/src/ffmpeg/). Packages libavformat61 (or 62),
-    libavcodec61 (or 62), libavutil59 (or 60), libswresample5 (or 6), recommended: Vinyl
-    works without them and says so when a file needs them.
+    libavcodec61 (or 62), libavutil59 (or 60), libswresample5 (or 6), in Depends: the
+    common formats play out of the box (the owner's decision D20, 2026-11-13).
  The licence texts of these libraries are in their own packages, under
  /usr/share/doc/<package>/copyright.
 

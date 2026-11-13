@@ -88,8 +88,9 @@ Codec probe_codec(const std::string &path, int *err = nullptr);
  * kNeedsLibrary, kNotAudio, kDecodeFailed, a codec error or -errno). */
 std::unique_ptr<TrackDecoder> open_track(const std::string &path, const DecodeLibs &libs, TrackInfo &info, int *err);
 
-/* The sentence a notice shows for an open error ("This format needs the FFmpeg libraries. Install them from Settings,
- * Apps." for kNeedsFfmpeg, as the approved notice draft says). */
+/* The sentence a notice shows for an open error ("The FFmpeg libraries could not be loaded. Reinstall Vinyl." for
+ * kNeedsFfmpeg: FFmpeg is in the package's Depends since decision D20, so this is a broken install, not a missing
+ * option; the notice draft's wording "Install them from Settings, Apps" is dropped). */
 std::string track_error_text(int err, const std::string &path);
 
 /* Is the file name one the browser lists as a track (by extension, any case)? */
