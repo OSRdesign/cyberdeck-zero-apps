@@ -291,8 +291,8 @@ is complicating the thing, let's make it work with all most common codecs out of
 ## Design QA run 4 (2026-11-13)
 
 - **"Clear the queue?" is the toolkit's dialog** (`cp0::ui::Dialog`, D-61): title "Clear the queue?", its Cancel button
-  and its destructive Clear (the toolkit's red label). **Cancel is the default: the coordinator's decision, owner
-  informed 2026-11-13, awaiting the owner's confirmation**: Enter takes the highlighted button (Cancel at first), Left,
+  and its destructive Clear (the toolkit's red label). **Cancel is the default: the owner, 2026-11-13, asked whether
+  destructive confirmations default to Cancel: "yes default cancel"**: Enter takes the highlighted button (Cancel at first), Left,
   Right and Tab move the highlight to Clear and back, Esc cancels; a tap outside does nothing (the toolkit's backdrop).
   The toolkit's dialog has no key focus between its buttons (Enter presses its Primary, Esc its Cancel, a Destructive
   button no key), so Vinyl keeps the keys and draws the highlight as a teal outline on the toolkit's button, the only
