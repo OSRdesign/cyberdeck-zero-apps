@@ -291,13 +291,10 @@ is complicating the thing, let's make it work with all most common codecs out of
 ## Design QA run 4 (2026-11-13)
 
 - **"Clear the queue?" is the toolkit's dialog** (`cp0::ui::Dialog`, D-61): title "Clear the queue?", its Cancel button
-  and its destructive Clear (the toolkit's red label). **Cancel is the default: the owner, 2026-11-13, asked whether
-  destructive confirmations default to Cancel: "yes default cancel"**: Enter takes the highlighted button (Cancel at first), Left,
-  Right and Tab move the highlight to Clear and back, Esc cancels; a tap outside does nothing (the toolkit's backdrop).
-  The toolkit's dialog has no key focus between its buttons (Enter presses its Primary, Esc its Cancel, a Destructive
-  button no key), so Vinyl keeps the keys and draws the highlight as a teal outline on the toolkit's button, the only
-  thing it adds to the toolkit's dialog. Its buttons are their own touch areas (no invisible area of Vinyl's: the
-  12 px above the old box at 800x480 are gone).
+  and its destructive Clear (the toolkit's red label). **Cancel is the default.** Asked by the coordinator whether a
+  destructive confirmation defaults to Cancel, the owner answered (2026-11-13): "yes default cancel". Its buttons are
+  their own touch areas (no invisible area of Vinyl's: the 12 px above the old box at 800x480 are gone). Run 5 changed
+  how its keys work (below).
 - **A modal takes Esc and Back** (D-30): while the dialog shows, the Esc key and the header's Esc only cancel it
   (`core/nav` back_step, tested); the page stays.
 - **One dimmed look** (D-81): a control that cannot act is drawn at 40 % (alpha 102 of 255), its fill, its word and its
@@ -315,6 +312,24 @@ is complicating the thing, let's make it work with all most common codecs out of
   `qa-deck-novolume` render 640x480 at 11.3 px/mm (the harness's default for the deck; tools/boards/boards.json names no
   density). The harness's new scene option `allow-small` reports a size check under ROW / TARGET as a WARN line
   (the owner's R-4) instead of failing; every other scene keeps the strict check. The 640x480 scenes at 9.01 px/mm stay.
+
+## Design QA run 5 (2026-11-13)
+
+- **The toolkit's dialog unrestyled** (D-56; the coordinator's decision, to avoid restyling a toolkit widget): run 4's
+  teal outline on the dialog's buttons is gone, and with it the Left / Right / Tab highlight. The dialog's own
+  semantics carry the owner's default: Cancel is its Primary button, so Enter cancels (the owner's "yes default
+  cancel", unchanged); Esc and the header's Esc cancel too (Vinyl routes them: a modal takes them until it closes); the
+  destructive Clear is pressed by a tap or, on a keyboard, by the letter Y and nothing else. The dialog's text says so:
+  "Y = Clear, Enter or Esc = Cancel". A tap outside does nothing (`core/nav` modal_answer, tested).
+- **Dimmed means inert, inert means dimmed** (D-81): `layout::key_active` decides both, tested for every layout: with an
+  empty queue the transport keys are dimmed and do nothing (shuffle and repeat, which still acted, included; the S and R
+  keys too); the Queue key (480x320) and the bottom row's Browse, Queue and Output are never dimmed (they open their
+  pages, which show their empty states); the sleep-timer key is always dimmed and does nothing. The dimmed icon is drawn
+  opaque in the 40 % colour, so its strokes no longer show darker joints (run 4 drew them at 40 % alpha).
+- **The toolkit's text sizes** (D-53): the level in the volume group at the toolkit's BODY size (shrinking at most to
+  CAPTION in a narrow box), the time labels at CAPTION; the muted word at the level's size, down to CAPTION, then
+  "Mute", "Off" or the mark alone. Which sizes stay the drafts' and why: qa-info.txt `text_sizes`; what each size draws
+  muted: qa-info.txt `muted` (read from the muted scenes, which the harness checks).
 
 ## Dragging a slider, the seek bar (owner, 2026-11-13)
 

@@ -384,6 +384,15 @@ void test_layout() {
             CHECK(g.bottom.back().box.right() < g.vol_minus.x);
         }
         for (const Btn &b : g.bottom) CHECK(b.id != "eq" && b.id != "menu"); /* no Equalizer, no Menu (P2) */
+        /* design QA run 5 (D-81): a key drawn dimmed does nothing, a key that acts is never dimmed (the view dims exactly
+         * the keys key_active says are inert, and presses only the active ones) */
+        for (const std::vector<Btn> *row : {&g.transport, &g.bottom})
+            for (const Btn &b : *row) {
+                const bool opens_page = b.id == "queue" || b.id == "browse" || b.id == "output";
+                CHECK(key_active(b, false) == b.enabled);                     /* with music every enabled key acts */
+                CHECK(key_active(b, true) == (b.enabled && opens_page));      /* empty: only the page keys */
+                if (!b.enabled) CHECK(!key_active(b, false) && !key_active(b, true)); /* the sleep timer: never */
+            }
         if (g.out_button_on) {
             CHECK(inside(g.out_button));
             CHECK_NEAR(g.out_button.right(), g.title.box.right(), 1e-9); /* the button fills the info column */

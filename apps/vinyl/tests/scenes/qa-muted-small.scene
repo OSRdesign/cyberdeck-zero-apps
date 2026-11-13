@@ -10,6 +10,8 @@ shot 01-now-muted
 expect esc
 expect notext "60"
 @480x320 expect text "Muted"
+# the muted word as drawn (qa-info.txt's muted= line is read from these lines)
+@320x480 expect text "Off"
 wait 300
 shot 02-now-muted-volume
 # "-" while muted does nothing

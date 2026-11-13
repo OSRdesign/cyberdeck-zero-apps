@@ -66,6 +66,12 @@ struct Btn {
 
 constexpr double kDesignBody = 40; /* the drafts' y that sits on the toolkit header's bottom */
 
+/* Does a key of now playing act now (design QA run 5, D-81: a key drawn dimmed does nothing, a key that acts is never
+ * dimmed)? A key of a P2 feature (enabled false: the sleep timer) never; the Queue key and the bottom row's Browse,
+ * Queue and Output always (they open their pages, which show their own empty states); the transport keys (shuffle,
+ * previous, play, next, repeat) only with something in the queue. */
+bool key_active(const Btn &b, bool queue_empty);
+
 struct NowGeom {
     SizeClass cls = SizeClass::Small;
     int dw = 480, dh = 320;

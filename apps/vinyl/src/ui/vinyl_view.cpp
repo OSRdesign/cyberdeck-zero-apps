@@ -7,6 +7,7 @@
  */
 #include "vinyl_view.hpp"
 
+#include "nav/nav_rules.hpp"
 #include "seek/seek_scrub.hpp"
 
 #include "gfx.hpp"
@@ -391,14 +392,23 @@ struct Button {
     uint32_t ink = col::kInk;
 };
 
-/* One dimmed look across the app (design QA run 4, D-81): a control that cannot act is drawn at 40 % (alpha 102 of
- * 255): its fill, its word and its icon alike, over the cream panel: the key fill #B9B19B reads #CDC5AE, the teal play
- * key #1F7A72 reads #97A796, the ink #222222 reads #928D7F. The word follows the box's opacity (LVGL draws a label at
- * its parent's); the icon is drawn by Vinyl and takes the same opacity itself. */
+/* One dimmed look across the app (design QA runs 4 and 5, D-81): a control that cannot act is drawn at 40 % (alpha
+ * 102 of 255) over what is behind it, its fill, its word and its icon alike: on the cream panel the key fill #B9B19B
+ * reads #CDC5AE, the teal play key #1F7A72 #97A796, the ink #222222 #928D7F. The fill and the word take the box's
+ * opacity (LVGL draws a label at its parent's); the icon, which Vinyl draws itself with strokes that overlap at their
+ * joints, is drawn opaque in that same 40 % colour (an icon drawn at 40 % alpha showed darker joints), so the whole key
+ * reads as one even 40 %. A control that is dimmed does nothing (layout::key_active, nav queue_buttons_enabled). */
 constexpr lv_opa_t kDimOpa = LV_OPA_40;
-void set_dimmed(Button &b, bool dimmed, Icon ic = Icon::None) {
+uint32_t dim_rgb(uint32_t behind, uint32_t ink) {
+    auto ch = [&](int shift) {
+        const int a = (behind >> shift) & 0xFF, b = (ink >> shift) & 0xFF;
+        return static_cast<uint32_t>((a * (255 - kDimOpa) + b * kDimOpa + 127) / 255);
+    };
+    return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+}
+void set_dimmed(Button &b, bool dimmed, uint32_t behind, Icon ic = Icon::None) {
     if (b.vis) lv_obj_set_style_opa(b.vis, dimmed ? kDimOpa : LV_OPA_COVER, 0);
-    if (b.icon) icon_set(b.icon, ic != Icon::None ? ic : b.ic, b.ink, dimmed ? kDimOpa : LV_OPA_COVER);
+    if (b.icon) icon_set(b.icon, ic != Icon::None ? ic : b.ic, dimmed ? dim_rgb(behind, b.ink) : b.ink, LV_OPA_COVER);
 }
 
 Icon icon_of(const std::string &id) {
@@ -520,6 +530,13 @@ struct View::Impl {
     lv_obj_t *notice = nullptr, *notice_icon = nullptr, *notice_text = nullptr, *notice_hit = nullptr;
     lv_timer_t *notice_timer = nullptr;
 
+    /* The toolkit's text sizes (design QA run 5, D-53): the level in the volume group at BODY (shrinking at most to
+     * CAPTION where the box is narrower), the time labels at CAPTION; the other texts of now playing keep the drafts'
+     * sizes through the fit (qa-info.txt says which and why). */
+    static int caption_px() { return std::max(1, cp0_ui_metrics_get()->text_px[CP0_TEXT_CAPTION]); }
+    static int level_px() { return std::max(caption_px(), cp0_ui_metrics_get()->text_px[CP0_TEXT_BODY]); }
+    static int time_px() { return caption_px(); }
+
     int X(double x) const { return fit.x(x); }
     int Y(double y) const { return fit.y(y); }
     int Wd(const R &r) const { return fit.w(r.x, r.w); }
@@ -595,7 +612,7 @@ struct View::Impl {
             bt.icon = icon_obj(bt.vis, bt.ic, (w - ip) / 2, (h - ip) / 2, ip, ip, ip, bt.ink);
         }
         if (!b.enabled) {
-            set_dimmed(bt, true); /* a P2 feature: drawn, no action */
+            set_dimmed(bt, true, col::kCream); /* a P2 feature: drawn, no action */
             return bt;
         }
         const std::string id = b.id;
@@ -607,11 +624,22 @@ struct View::Impl {
         return bt;
     }
 
+    /* a key that is drawn dimmed does nothing (layout::key_active; a release always goes through, so a press that
+     * started while the key acted ends cleanly) */
+    bool key_acts(const std::string &id) const {
+        for (const std::vector<layout::Btn> *row : {&g.transport, &g.bottom})
+            for (const layout::Btn &b : *row)
+                if (b.id == id) return layout::key_active(b, last_now.queue_empty);
+        return true;
+    }
+
     void transport(bool next, int phase) {
+        if (phase == 0 && !key_acts(next ? "next" : "prev")) return;
         if (act.transport) act.transport(next, phase);
     }
 
     void press(const std::string &id) {
+        if (!key_acts(id)) return;
         if (id == "play") {
             if (act.toggle) act.toggle();
         } else if (id == "prev") {
@@ -714,11 +742,11 @@ struct View::Impl {
         });
         now_hits.push_back(NowHit{out_hit, R{}, kChip});
         /* time row */
-        time = label(r, Face::Mono, P(g.time.px), col::kInk, X(g.time.box.x), Y(g.time.box.y), Wd(g.time.box));
-        remain = label(r, Face::Mono, P(g.remain.px), col::kInk2, X(g.remain.box.x), Y(g.remain.box.y), Wd(g.remain.box),
+        time = label(r, Face::Mono, time_px(), col::kInk, X(g.time.box.x), Y(g.time.box.y), Wd(g.time.box));
+        remain = label(r, Face::Mono, time_px(), col::kInk2, X(g.remain.box.x), Y(g.remain.box.y), Wd(g.remain.box),
                        LV_TEXT_ALIGN_RIGHT);
         for (lv_obj_t *l : {time, remain}) {
-            const lv_font_t *f = font(Face::Mono, P(g.time.px));
+            const lv_font_t *f = font(Face::Mono, time_px());
             lv_obj_set_y(l, Y(g.time.box.y) + (P(g.time.lh) - lv_font_get_line_height(f)) / 2);
         }
         seek_x = X(g.seek.x);
@@ -840,8 +868,8 @@ struct View::Impl {
         make(grp_plus, g.vol_plus, Icon::Plus, 1);
         const int vx = X(g.vol_value.x), vy = Y(g.vol_value.y), vw = Wd(g.vol_value), vh = Hd(g.vol_value);
         grp_value_box = box(r, vx, vy, vw, vh, col::kTeal, P(8));
-        const lv_font_t *f = font(Face::Bold, P(g.vol_text_px));
-        grp_value = label(grp_value_box, Face::Bold, P(g.vol_text_px), col::kWhite, 0, (vh - lv_font_get_line_height(f)) / 2, vw,
+        const lv_font_t *f = font(Face::Bold, level_px());
+        grp_value = label(grp_value_box, Face::Bold, level_px(), col::kWhite, 0, (vh - lv_font_get_line_height(f)) / 2, vw,
                           LV_TEXT_ALIGN_CENTER);
         const int gp = P(14);
         grp_glyph = icon_obj(grp_value_box, Icon::Muted, 0, (vh - gp) / 2, gp, gp, gp, col::kWhite);
@@ -859,15 +887,15 @@ struct View::Impl {
                                                      : std::to_string(v.vol_level);
         const int vw = lv_obj_get_width(grp_value_box), vh = lv_obj_get_height(grp_value_box);
         const int gp = lv_obj_get_width(grp_glyph), gap = P(3), margin = P(4);
-        int px = P(g.vol_text_px), tx = 0, tw = vw;
+        int px = level_px(), tx = 0, tw = vw;
         bool word = true;
         std::string shown = t;
         if (muted) {
             /* the level's own size, down to the toolkit's caption size at most; else a shorter word, else the mark alone
              * (design QA run 4, D-53: 10 px was about 1 mm on the deck) */
             const int room = vw - 2 * margin - gp - gap;
-            const int base = P(g.vol_text_px);
-            const int floor_px = std::min(base, std::max(1, cp0_ui_metrics_get()->text_px[CP0_TEXT_CAPTION]));
+            const int base = level_px();
+            const int floor_px = std::min(base, caption_px());
             word = false;
             for (const char *wd : {"Muted", "Mute", "Off"}) {
                 const int fp = fit_px(Face::Bold, base, wd, room, floor_px);
@@ -885,7 +913,7 @@ struct View::Impl {
             tx = gx + gp + gap;
             tw = std::max(1, w + 2);
         } else {
-            px = fit_px(Face::Bold, P(g.vol_text_px), t, vw - P(8), P(10));
+            px = fit_px(Face::Bold, level_px(), t, vw - P(8), caption_px()); /* "100" in a narrow box: down to the caption */
         }
         show(grp_glyph, muted);
         show(grp_value, word);
@@ -905,7 +933,7 @@ struct View::Impl {
     void layout_time_row(bool hours) {
         if (time_hours == (hours ? 1 : 0)) return;
         time_hours = hours ? 1 : 0;
-        const lv_font_t *f = font(Face::Mono, P(g.time.px));
+        const lv_font_t *f = font(Face::Mono, time_px());
         const int tw = std::max(Wd(g.time.box), text_width(f, layout::track_time_widest(hours, false)) + 2);
         const int rw = std::max(Wd(g.remain.box), text_width(f, layout::track_time_widest(hours, true)) + 2);
         const int x0 = X(g.time.box.x), x1 = X(g.remain.box.right());
@@ -1016,11 +1044,14 @@ struct View::Impl {
             layout_now_hits();
         }
         draw_time_row(v);
-        /* transport; with an empty queue the keys are dimmed, icons included: nothing to play (design QA runs 3, 4) */
-        for (const layout::Btn &t : g.transport)
-            if (t.enabled)
-                if (auto it = btns.find(t.id); it != btns.end() && it->second.vis)
-                    set_dimmed(it->second, v.queue_empty, t.id == "play" ? (v.playing ? Icon::Pause : Icon::Play) : Icon::None);
+        /* the keys: dimmed exactly when they do nothing (layout::key_active: with an empty queue the transport keys; the
+         * Queue key and the bottom row's page keys never; the sleep timer always, set when it was built) */
+        for (const std::vector<layout::Btn> *row : {&g.transport, &g.bottom})
+            for (const layout::Btn &t : *row)
+                if (t.enabled)
+                    if (auto it = btns.find(t.id); it != btns.end() && it->second.vis)
+                        set_dimmed(it->second, !layout::key_active(t, v.queue_empty), col::kCream,
+                                   t.id == "play" ? (v.playing ? Icon::Pause : Icon::Play) : Icon::None);
         show(repeat_dash, v.repeat != Repeat::Off);
         show(repeat_one, v.repeat == Repeat::One);
         show(shuffle_dash, v.shuffle);
@@ -1197,7 +1228,7 @@ struct View::Impl {
             L.rows = static_cast<int>(v.rows->size());
         }
         if (p == Page::Queue) /* the buttons that cannot act dimmed, they do nothing (design QA runs 3, 4: D-81) */
-            for (size_t i = 0; i < L.qbtns.size(); ++i) set_dimmed(L.qbtns[i], !(v.queue_buttons & (1u << i)));
+            for (size_t i = 0; i < L.qbtns.size(); ++i) set_dimmed(L.qbtns[i], !(v.queue_buttons & (1u << i)), col::kList);
         if (p == Page::Browser && L.strip) {
             show(L.strip, v.mini.shown);
             show(L.mini_play.vis, v.mini.shown);
@@ -1388,15 +1419,12 @@ struct View::Impl {
         lv_timer_set_auto_delete(notice_timer, false);
     }
 
-    /* "Clear the queue?" (design QA runs 3 and 4): the toolkit's dialog (cp0::ui::Dialog, D-61) over the queue page, its
-     * Cancel and its destructive Clear. Cancel is the default (the coordinator's design call, owner informed 2026-11-13,
-     * awaiting the owner's confirmation): Enter takes the highlighted button, Left / Right / Tab move the highlight to
-     * Clear and back, Esc and the header's Esc cancel (a modal takes them until it closes, D-30); a tap outside does
-     * nothing (the toolkit's backdrop). The toolkit's dialog has no key focus between its buttons (Enter is its Primary,
-     * Esc its Cancel, a Destructive button no key): Vinyl keeps the keys and marks the highlighted button with a teal
-     * outline, the only thing it adds to the toolkit's dialog. */
+    /* "Clear the queue?" (design QA runs 3, 4 and 5): the toolkit's dialog (cp0::ui::Dialog), unrestyled. Its Primary
+     * button is Cancel (Enter = Cancel: the owner's "yes default cancel"), Esc and the header's Esc cancel too (a modal
+     * takes them until it closes); the destructive Clear is pressed by a tap or by the letter Y, which the dialog's text
+     * names ("Y = Clear, Enter or Esc = Cancel"); no other key does anything (core/nav modal_answer). A tap outside does
+     * nothing (the toolkit's backdrop). */
     std::unique_ptr<cp0::ui::Dialog> dlg;
-    int dlg_sel = 0;
 
     static void dialog_cancel_cb(void *p) { static_cast<Impl *>(p)->dialog_choose(0); }
     static void dialog_clear_cb(void *p) { static_cast<Impl *>(p)->dialog_choose(1); }
@@ -1407,32 +1435,12 @@ struct View::Impl {
         cp0::ui::DialogSpec spec;
         spec.title = "Clear the queue?";
         /* the actions run inside an LVGL event: the dialog goes after it (lv_async_call) */
-        spec.buttons.push_back({"Cancel", cp0::ui::ButtonRole::Cancel, [this] { lv_async_call(dialog_cancel_cb, this); }});
+        spec.buttons.push_back({"Cancel", cp0::ui::ButtonRole::Primary, [this] { lv_async_call(dialog_cancel_cb, this); }});
         spec.buttons.push_back({"Clear", cp0::ui::ButtonRole::Destructive, [this] { lv_async_call(dialog_clear_cb, this); }});
         spec.page = page.get();
         dlg = std::make_unique<cp0::ui::Dialog>(qu.root, tk, std::move(spec));
-        dlg_sel = 0;
-        highlight_dialog();
-    }
-
-    std::vector<lv_obj_t *> dialog_buttons() const {
-        std::vector<lv_obj_t *> out;
-        if (!dlg || !dlg->focus_object()) return out;
-        lv_obj_t *boxo = dlg->focus_object();
-        for (uint32_t i = 0; i < lv_obj_get_child_count(boxo); ++i) {
-            lv_obj_t *c = lv_obj_get_child(boxo, static_cast<int32_t>(i));
-            if (lv_obj_check_type(c, &lv_button_class)) out.push_back(c);
-        }
-        return out;
-    }
-
-    void highlight_dialog() {
-        const std::vector<lv_obj_t *> b = dialog_buttons();
-        for (size_t i = 0; i < b.size(); ++i) {
-            lv_obj_set_style_outline_color(b[i], lv_color_hex(col::kTeal), 0);
-            lv_obj_set_style_outline_pad(b[i], P(2), 0);
-            lv_obj_set_style_outline_width(b[i], static_cast<int>(i) == dlg_sel ? std::max(2, P(3)) : 0, 0);
-        }
+        dlg->add_text("Y = Clear, Enter or Esc = Cancel");
+        dlg->relayout();
     }
 
     void close_dialog() { dlg.reset(); }
@@ -1443,14 +1451,12 @@ struct View::Impl {
         if (which == 1 && act.queue_clear) act.queue_clear();
     }
 
-    bool dialog_key(uint32_t k) {
+    /* a key while the dialog shows (lv_key from the keypad, evdev the physical key): true while it shows (it takes them) */
+    bool dialog_key(uint32_t lv_key, uint32_t evdev) {
         if (!dlg) return false;
-        if (k == LV_KEY_ESC) dialog_choose(0);
-        else if (k == LV_KEY_ENTER) dialog_choose(dlg_sel);
-        else if (k == LV_KEY_LEFT || k == LV_KEY_RIGHT || k == LV_KEY_NEXT || k == LV_KEY_PREV || k == 9) {
-            dlg_sel = 1 - dlg_sel;
-            highlight_dialog();
-        }
+        const ModalAnswer a = modal_answer(lv_key, evdev);
+        if (a == ModalAnswer::Cancel) dialog_choose(0);
+        else if (a == ModalAnswer::Confirm) dialog_choose(1);
         return true;
     }
 
@@ -1574,7 +1580,7 @@ void View::hide_notice() { d_->hide_notice(); }
 bool View::notice_shown() const { return d_->notice != nullptr; }
 void View::ask_clear_queue() { d_->ask_clear_queue(); }
 bool View::dialog_shown() const { return d_->dlg != nullptr; }
-bool View::dialog_key(uint32_t key) { return d_->dialog_key(key); }
+bool View::dialog_key(uint32_t key, uint32_t evdev) { return d_->dialog_key(key, evdev); }
 void View::simulate_scrub(double frac) { d_->simulate_scrub(frac); }
 void View::tick(bool playing) { d_->tick(playing); }
 int View::cover_side() const { return d_->Wd(d_->g.sleeve); }

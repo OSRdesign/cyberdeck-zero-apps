@@ -8,6 +8,13 @@ wait 1200
 shot 01-now-muted
 expect esc
 expect notext "60"
+# the muted word as drawn (the level's size, down to the toolkit's caption size; else a shorter word; else the mark
+# alone): qa-info.txt's muted= line is read from these lines, which the harness checks against the screen
+@480x480,480x640 expect text "Off"
+@720x720,480x800 expect text "Mute"
+@800x480 expect notext "Muted"
+@800x480 expect notext "Mute"
+@800x480 expect notext "Off"
 wait 300
 shot 02-now-muted-volume
 expect notext "60"

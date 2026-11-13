@@ -283,6 +283,12 @@ NowGeom now_geom(SizeClass c) {
     return g;
 }
 
+bool key_active(const Btn &b, bool queue_empty) {
+    if (!b.enabled) return false;
+    if (b.id == "queue" || b.id == "browse" || b.id == "output") return true;
+    return !queue_empty;
+}
+
 bool shows_gapless(const NowGeom &g) {
     if (g.gapless_in_format) return true;
     for (const std::vector<int> &row : g.chip_layout)

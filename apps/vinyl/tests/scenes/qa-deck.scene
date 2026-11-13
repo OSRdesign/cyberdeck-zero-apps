@@ -1,4 +1,4 @@
-title Vinyl at the deck's own density (640x480, 11.3 px/mm): now playing, the volume group, the output page, the browser, the queue with "Clear the queue?" (the toolkit's dialog; the header's Esc only cancels it; C, Right, Enter clears), the output; the size check reports the rows under 7 mm as warnings (allow-small, the owner's rule R-4)
+title Vinyl at the deck's own density (640x480, 11.3 px/mm): now playing, the volume group, the output page, the browser, the queue with "Clear the queue?" (the toolkit's dialog unrestyled: Enter, Esc and the header's Esc cancel, Y clears), the output; the size check reports the rows under 7 mm as warnings (allow-small, the owner's rule R-4)
 sizes 640x480
 # the deck's own density (11.3 px/mm, the harness's default for 640x480): the approved layout's touch rows are 70 px
 # there, under the 7 mm (79 px): allow-small reports them as warnings (the owner's rule R-4) instead of failing
@@ -41,10 +41,16 @@ expect text "Move down"
 key c
 wait 300
 expect text "Clear the queue?"
-key right
-wait 200
-shot 07-queue-clear-highlight
+expect text "Y = Clear, Enter or Esc = Cancel"
+# Enter presses the dialog's Primary, Cancel (the owner: "yes default cancel")
 key enter
+wait 300
+expect notext "Clear the queue?"
+expect text "Move down"
+key c
+wait 300
+shot 07-queue-clear-ask-keys
+key y
 wait 400
 shot 08-queue-cleared
 expect notext "Clear the queue?"

@@ -69,7 +69,7 @@ std::string khz(uint32_t rate) {
 
 /* evdev codes of the letter keys used (the physical key, not its text: the guidelines' rule) */
 enum : uint32_t {
-    K_MINUS = 12, K_EQUAL = 13, K_Q = 16, K_R = 19, K_U = 22, K_O = 24, K_S = 31, K_D = 32, K_X = 45, K_C = 46,
+    K_MINUS = 12, K_EQUAL = 13, K_Q = 16, K_R = 19, K_Y = 21, K_U = 22, K_O = 24, K_S = 31, K_D = 32, K_X = 45, K_C = 46,
     K_B = 48, K_COMMA = 51, K_DOT = 52, K_SPACE = 57, K_UP = 103, K_LEFT = 105, K_RIGHT = 106, K_DOWN = 108, K_DELETE = 111,
 };
 
@@ -409,6 +409,7 @@ struct VinylApp::Impl final : TransportHost {
     uint64_t shown_pos_ms() const { return transport.scanning() ? transport.scan_position() : snap.pos_ms(); }
 
     void shuffle() {
+        if (queue.empty()) return; /* drawn dimmed with nothing to play: it does nothing (design QA run 5, D-81) */
         queue.set_shuffle(!queue.shuffle());
         ++qgen;
         update_next();
@@ -417,6 +418,7 @@ struct VinylApp::Impl final : TransportHost {
     }
 
     void repeat() {
+        if (queue.empty()) return; /* drawn dimmed with nothing to play: it does nothing (design QA run 5, D-81) */
         queue.cycle_repeat();
         update_next();
         dirty = true;
@@ -718,7 +720,10 @@ struct VinylApp::Impl final : TransportHost {
             return;
         }
         if (it.key_state == 1) swallow_echo = 0;
-        if (view->dialog_shown()) return; /* the dialog takes its keys through the keypad (on_key) */
+        if (view->dialog_shown()) { /* the dialog takes its keys: Enter / Esc through the keypad (on_key), Y here */
+            if (it.key_state == 1 && it.key_code == K_Y) view->dialog_key(0, K_Y);
+            return;
+        }
         if (it.key_code == K_LEFT || it.key_code == K_RIGHT) {
             now_arrow(it); /* the other pages take the arrows from the LVGL keypad (on_key) */
             return;

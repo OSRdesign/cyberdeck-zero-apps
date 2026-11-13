@@ -36,6 +36,12 @@ void test_queue() {
     CHECK_EQ(queue_buttons_enabled(1), kQueueRemove); /* only the playing track: Remove only */
     CHECK_EQ(queue_buttons_enabled(2), kQueueUp | kQueueDown | kQueueRemove | kQueueClear);
     CHECK_EQ(queue_buttons_enabled(20), kQueueUp | kQueueDown | kQueueRemove | kQueueClear);
+    /* design QA run 5: the toolkit's dialog unrestyled: Enter and Esc cancel, Y clears, nothing else does anything */
+    CHECK(modal_answer(kLvKeyEnter, 0) == ModalAnswer::Cancel);
+    CHECK(modal_answer(kLvKeyEsc, 0) == ModalAnswer::Cancel);
+    CHECK(modal_answer(0, kEvdevKeyY) == ModalAnswer::Confirm);
+    for (uint32_t k : {17u, 18u, 19u, 20u, 9u, 11u, 99u}) CHECK(modal_answer(k, 0) == ModalAnswer::None); /* arrows, Tab, letters */
+    CHECK(modal_answer(0, 46) == ModalAnswer::None); /* C again does not clear */
     Queue q;
     CHECK(q.empty());
     CHECK_EQ(q.next_pos(true), -1);

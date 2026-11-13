@@ -1,4 +1,4 @@
-title Vinyl: Clear all asks first ("Clear the queue?", Cancel the default; Esc and the header's Esc cancel, Clear clears all but the playing track), at 640x480
+title Vinyl: Clear all asks first ("Clear the queue?", the toolkit's dialog: Cancel is its Primary, so Enter cancels, as Esc and the header's Esc do; Y or a tap on Clear clears all but the playing track)
 sizes 640x480
 # the deck's own density (11.3 px/mm) leaves the approved 640x480 layout's touch rows 70 px, under the 7 mm (79 px):
 # owner rule R-4, listed in qa-info.txt; the scene runs at a 3.5-inch 640x480 panel's 9.01 px/mm (the harness's own
@@ -15,6 +15,13 @@ shot 01-queue-clear-ask
 expect esc
 expect text "Clear the queue?"
 expect text "Cancel"
+expect text "Y = Clear, Enter or Esc = Cancel"
+key enter
+wait 300
+expect notext "Clear the queue?"
+key c
+wait 300
+expect text "Clear the queue?"
 key esc
 wait 300
 expect notext "Clear the queue?"

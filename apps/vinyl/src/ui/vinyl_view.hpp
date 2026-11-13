@@ -44,13 +44,13 @@ public:
     void show_notice(const Notice &n);
     void hide_notice();
     bool notice_shown() const;
-    /* "Clear the queue?" over the queue buttons (Cancel the default): a tap outside or Esc cancels, Clear calls
-     * Actions::queue_clear; while it shows every key goes to dialog_key (true: it took the key) */
+    /* "Clear the queue?" (the toolkit's dialog): Cancel (its Primary: Enter), Esc and the header's Esc cancel; Clear (a
+     * tap, or the letter Y) calls Actions::queue_clear; while it shows every key goes to dialog_key (true: it took it) */
     void ask_clear_queue();
     /* the design-QA scenes (VINYL_DEMO_SCRUB): the seek bar's scrubbing state as if a finger were held at `frac` */
     void simulate_scrub(double frac);
     bool dialog_shown() const;
-    bool dialog_key(uint32_t key);
+    bool dialog_key(uint32_t key, uint32_t evdev = 0); /* evdev: the physical key (Y clears), 0 for a keypad key */
     /* the record turns while `playing` and the now-playing page shows; call it often (it keeps its own clock) */
     void tick(bool playing);
     /* the row a list page shows as selected (for the keys) */
