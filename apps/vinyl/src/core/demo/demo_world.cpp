@@ -95,6 +95,13 @@ const char *kLongSinkDescription = "USB Audio Device Analog Stereo";
 
 int rm_cb(const char *p, const struct stat *, int, struct FTW *) { return ::remove(p); }
 
+/* the headset's name (P2a, design QA of 0.2.0: the scenes show a long and a CJK output name on now playing, the Menu's
+ * Output row and About's THIS OUTPUT line): VINYL_DEMO_BT_NAME, else "Evolve 65" */
+std::string demo_bt_name() {
+    const char *v = std::getenv("VINYL_DEMO_BT_NAME");
+    return v && *v ? v : "Evolve 65";
+}
+
 }  // namespace
 
 /* an ID3v2.3 tag with the ReplayGain TXXX frames of a track gain (Latin-1, as rsgain and foobar2000 write them) */
@@ -275,7 +282,7 @@ OutputWorld demo_output_world(bool lite, const std::string &variant) {
     o.server = true;
     PulseDevice evolve;
     evolve.name = "bluez_output.70_BF_92_53_6B_8B.1";
-    evolve.description = "Evolve 65";
+    evolve.description = demo_bt_name();
     evolve.bt_address = "70:BF:92:53:6B:8B";
     evolve.bus = "bluetooth";
     evolve.bt_profile = "a2dp-sink";
@@ -405,7 +412,7 @@ public:
             out.device = d.name;
         } else if (t.kind == OutputTarget::Kind::Auto || t.id == "70:BF:92:53:6B:8B") {
             out.name = "bluez_output.70_BF_92_53_6B_8B.1";
-            out.label = "Evolve 65";
+            out.label = demo_bt_name();
             out.device = "70:BF:92:53:6B:8B";
         } else {
             out.name = t.id;

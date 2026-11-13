@@ -24,8 +24,6 @@ namespace {
 
 int ri(double v) { return static_cast<int>(std::lround(v)); }
 
-constexpr std::uint32_t kKeyChipBorder = 0x444444; /* Keys-480x320: the key chip's border */
-
 struct Img {
     PixelImage px;
     lv_image_dsc_t dsc{};
@@ -105,6 +103,7 @@ struct MenuPages::Impl {
         bool value_bright = false;
         std::string hint;
         bool clock = false;
+        bool strip_in_list = false; /* the strip follows the rows in the scrolling list (they do not fit above it) */
     };
     ListPage lists[4]; /* Menu, Sleep, Playback, ReplayGain */
 
@@ -179,6 +178,7 @@ struct MenuPages::Impl {
         bool same = L.objs.size() == L.rows.size();
         for (size_t i = 0; same && i < L.rows.size(); ++i) same = L.objs[i].kind == L.rows[i].kind;
         if (!same) {
+            if (L.strip && lv_obj_get_parent(L.strip) == L.cont) lv_obj_set_parent(L.strip, L.root);
             lv_obj_clean(L.cont);
             L.objs.clear();
             const layout::MenuGeom &g = L.g;
@@ -236,13 +236,26 @@ struct MenuPages::Impl {
                 const lv_font_t *vf = font(Face::Bold, vpx);
                 if (lv_obj_get_style_text_font(o.value, LV_PART_MAIN) != vf) lv_obj_set_style_text_font(o.value, vf, 0);
                 lv_obj_set_style_text_color(o.value, lv_color_hex(bright ? col::kRowText : col::kRowValue), 0);
-                const int vw = r.value.empty() ? 0 : text_width(vf, r.value) + 2;
+                const int vnat = r.value.empty() ? 0 : text_width(vf, r.value) + 2;
                 const int vr = w - ri(g.value_r);
+                /* the label keeps its own width (up to 60 % of the room); a value wider than what is left scrolls
+                 * there, never pushing the label or running off the panel (design QA of 0.2.0, D-01: a long or a CJK
+                 * output name; now playing's output button scrolls a long name the same way) */
+                const int gap = ri(8 * g.s);
+                const int room = vr - text_x;
+                const int tnat = text_width(font(Face::Bold, std::max(1, ri(g.text_px))), r.text) + 2;
+                int vw = vnat;
+                if (vnat > 0 && tnat + gap + vnat > room) {
+                    const int label_w = std::min(tnat, std::max(room * 3 / 5, room - vnat - gap));
+                    vw = std::max(ri(24 * g.s), std::min(vnat, room - label_w - gap));
+                }
                 show(o.value, vw > 0);
+                lv_label_set_long_mode(o.value, vw < vnat ? LV_LABEL_LONG_MODE_SCROLL_CIRCULAR : LV_LABEL_LONG_MODE_CLIP);
+                lv_obj_set_style_text_align(o.value, vw < vnat ? LV_TEXT_ALIGN_LEFT : LV_TEXT_ALIGN_RIGHT, 0);
                 lv_obj_set_size(o.value, std::max(1, vw), lv_font_get_line_height(vf));
                 lv_obj_set_pos(o.value, vr - vw, (o.h - lv_font_get_line_height(vf)) / 2);
                 set_text(o.value, r.value);
-                right = (vw > 0 ? vr - vw : w - ri(g.chev_r) - ri(g.chev_w)) - ri(8 * g.s);
+                right = (vw > 0 ? vr - vw : w - ri(g.chev_r) - ri(g.chev_w)) - gap;
             }
             /* the text: one line, or two in a narrow row (centred in the row) */
             lv_obj_set_width(o.text, std::max(10, right - text_x));
@@ -269,12 +282,14 @@ struct MenuPages::Impl {
     void update_list(ListPage &L, const MenuView &v) {
         const bool rows_changed = !(v.rows == L.rows) || v.value_bright != L.value_bright;
         L.value_bright = v.value_bright;
+        bool kinds_changed = rows_changed && L.rows.size() != v.rows.size();
+        for (size_t i = 0; rows_changed && !kinds_changed && i < v.rows.size(); ++i) kinds_changed = L.rows[i].kind != v.rows[i].kind;
         if (rows_changed) {
             L.rows = v.rows;
             layout_rows(L);
         }
         if (L.heading) set_text(L.heading, v.heading);
-        if (L.strip && (v.hint != L.hint || v.hint_clock != L.clock || L.gen == UINT64_MAX)) {
+        if (L.strip && (v.hint != L.hint || v.hint_clock != L.clock || L.gen == UINT64_MAX || kinds_changed)) {
             L.hint = v.hint;
             L.clock = v.hint_clock;
             place_strip(L);
@@ -294,6 +309,7 @@ struct MenuPages::Impl {
         if (L.hint.empty()) {
             lv_obj_add_flag(L.strip, LV_OBJ_FLAG_HIDDEN);
             lv_obj_set_height(L.cont, std::max(1, ri(g.panel.bottom() - 4 * s) - list_y));
+            L.strip_in_list = false;
             return;
         }
         lv_obj_remove_flag(L.strip, LV_OBJ_FLAG_HIDDEN);
@@ -304,11 +320,21 @@ struct MenuPages::Impl {
         const int th = lv_obj_get_height(L.strip_text);
         const int h = std::max(h0, th + 2 * std::max(1, ri(8 * s)));
         const int y = y0 + h0 - h;
-        lv_obj_set_y(L.strip, y);
         lv_obj_set_height(L.strip, h);
         lv_obj_set_y(L.strip_text, (h - th) / 2);
         lv_obj_set_y(L.strip_icon, (h - lv_obj_get_height(L.strip_icon)) / 2);
-        lv_obj_set_height(L.cont, std::max(1, y - list_y));
+        const int rows_h = L.objs.empty() ? 0 : L.objs.back().y + L.objs.back().h;
+        if (list_y + rows_h <= y) { /* the rows fit above it: at the panel's bottom, as drawn */
+            if (lv_obj_get_parent(L.strip) != L.root) lv_obj_set_parent(L.strip, L.root);
+            lv_obj_set_pos(L.strip, ri(g.strip.x), y);
+            lv_obj_set_height(L.cont, std::max(1, y - list_y));
+            L.strip_in_list = false;
+        } else { /* after the last row, scrolling with the rows: every row shows, the strip comes into view by scrolling */
+            if (lv_obj_get_parent(L.strip) != L.cont) lv_obj_set_parent(L.strip, L.cont);
+            lv_obj_set_pos(L.strip, ri(g.strip.x) - ri(g.list.x), rows_h + ri(8 * s));
+            lv_obj_set_height(L.cont, std::max(1, ri(g.panel.bottom() - 4 * s) - list_y));
+            L.strip_in_list = true;
+        }
     }
 
     /* ------------------------------------------------------------------------------------------------ Keys */
@@ -331,25 +357,16 @@ struct MenuPages::Impl {
         const lv_font_t *cf = font(Face::Mono, cpx);
         /* landscape: one column for the actions, right of the widest key chip (Keys-480x320: at 150) */
         int col_x = ri(kg.action_x);
-        for (const menu::KeyHelp &k : rows)
-            col_x = std::max(col_x, ri(kg.chip_x) + std::max(ri(kg.chip_min_w), text_width(cf, k.keys) + 2 * ri(kg.chip_pad) + 2) +
-                                        ri(8 * s));
+        for (const menu::KeyHelp &k : rows) col_x = std::max(col_x, ri(kg.chip_x) + text_width(cf, k.keys) + 2 + ri(16 * s));
+        const int pad = std::max(1, ri(4 * s));
+        const int key_lh = lv_font_get_line_height(cf);
         int y = 0;
         for (const menu::KeyHelp &k : rows) {
             lv_obj_t *row = lv_obj_create(keys_cont);
             plain(row);
             lv_obj_add_flag(row, LV_OBJ_FLAG_EVENT_BUBBLE);
             lv_obj_set_pos(row, 0, y);
-            lv_obj_set_size(row, w, rh);
-            const int pad = ri(kg.chip_pad), ch = ri(kg.chip_h);
-            const int cw = std::max(ri(kg.chip_min_w), text_width(cf, k.keys) + 2 * pad + 2);
-            lv_obj_t *chip = box(row, ri(kg.chip_x), ri(kg.chip_top), cw, ch, col::kRowSel, std::max(1, ri(5 * s)));
-            lv_obj_set_style_border_color(chip, lv_color_hex(kKeyChipBorder), 0);
-            lv_obj_set_style_border_width(chip, std::max(1, ri(s)), 0);
-            lv_obj_t *kt = label(chip, Face::Mono, cpx, col::kWhite, 0, 0, cw, LV_TEXT_ALIGN_CENTER);
-            lv_obj_set_y(kt, (ch - lv_font_get_line_height(cf)) / 2 - std::max(1, ri(s)));
-            set_text(kt, k.keys);
-            /* the action: right of the chip (landscape), under it (portrait); its column's width, two lines at most */
+            /* the action: right of the key (landscape: one column), under it (portrait) */
             const int ax = kg.keys_two_lines ? ri(kg.action_x) : col_x;
             const int aw = std::max(10, w - ax - ri(12 * s));
             lv_obj_t *at = label(row, Face::Bold, apx, col::kRowText, ax, 0, 0);
@@ -359,10 +376,23 @@ struct MenuPages::Impl {
             set_text(at, k.action);
             lv_obj_update_layout(at);
             const int ah = lv_obj_get_height(at);
-            const int ay = kg.keys_two_lines ? ri(kg.action_top) + (ri(kg.action_lh) - lv_font_get_line_height(font(Face::Bold, apx))) / 2
-                                             : (rh - ah) / 2;
-            lv_obj_set_y(at, ay);
-            y += rh;
+            lv_obj_t *kt = label(row, Face::Mono, cpx, col::kWhite, ri(kg.chip_x), 0, 0);
+            set_text(kt, k.keys);
+            int row_h = rh;
+            if (kg.keys_two_lines) { /* Keys-320x480: the key on the first line, the action under it */
+                const int key_y = ri(kg.chip_top) + (ri(kg.chip_h) - key_lh) / 2;
+                const int ay = ri(kg.action_top) + (ri(kg.action_lh) - lv_font_get_line_height(font(Face::Bold, apx))) / 2;
+                row_h = std::max(rh, ay + ah + pad);
+                lv_obj_set_y(kt, key_y);
+                lv_obj_set_y(at, ay);
+            } else { /* Keys-480x320: the key and its action on one line, centred in the row */
+                row_h = std::max(rh, ah + 2 * pad);
+                lv_obj_set_y(at, (row_h - ah) / 2);
+                const int first_line = lv_font_get_line_height(font(Face::Bold, apx));
+                lv_obj_set_y(kt, (row_h - ah) / 2 + (first_line - key_lh) / 2);
+            }
+            lv_obj_set_size(row, w, row_h);
+            y += row_h;
         }
         keys_count = static_cast<int>(rows.size());
     }

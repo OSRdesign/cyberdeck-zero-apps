@@ -1424,7 +1424,9 @@ struct View::Impl {
             x = ri(room.x);
             w = ri(room.w);
             y = ri(room.bottom()) - h;
-            notice_area = R{};
+            /* its touch area the target high (a tap dismisses it), grown upwards over the rows it already covers */
+            const int ah = std::max(h, target);
+            notice_area = R{double(x), double(ri(room.bottom()) - ah), double(w), double(ah)};
         } else {
             const layout::ListPage lp = cur == Page::Browser ? layout::ListPage::Browser
                                         : cur == Page::Queue ? layout::ListPage::Queue
