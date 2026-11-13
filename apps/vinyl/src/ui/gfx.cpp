@@ -329,6 +329,14 @@ void draw_icon(lv_layer_t *layer, Icon ic, int cx, int cy, int px, std::uint32_t
         p.arc(18, 15, 3, 0, 90);
         p.seg(18, 18, 3, 18);
         break;
+    case Icon::Menu: /* the drafts' Menu key: two sliders (M4 7h10 M18 7h2 M4 17h2 M10 17h10 M14 4v6 M8 14v6) */
+        p.seg(4, 7, 14, 7);
+        p.seg(18, 7, 20, 7);
+        p.seg(4, 17, 6, 17);
+        p.seg(10, 17, 20, 17);
+        p.seg(14, 4, 14, 10);
+        p.seg(8, 14, 8, 20);
+        break;
     case Icon::Queue:
         p.seg(4, 6, 20, 6);
         p.seg(4, 12, 20, 12);

@@ -7,12 +7,13 @@
  *
  * Pages: the Browser is the root (a short Esc there ends the app, owner decision 2026-10-13); Now playing opens over it
  * (from a track, the mini player, or at start when a queue is resumed); Queue and Output open from Now playing (or the
- * Browser) and Esc goes back to the page that opened them.
+ * Browser) and Esc goes back to the page that opened them. P2a: the Menu (the Menu key, M) and its pages (Sleep timer,
+ * Playback with its ReplayGain pick list, Output, Keys, About); Esc goes back to the Menu, and from the Menu to the page
+ * it was opened from. The controller owns the settings (core/settings), the sleep timer (core/sleep), the positions in
+ * long files (core/state/positions) and the write policy of the state files (core/state/write_policy).
  *
- * Keys (also in README.md): Space play / pause, Left / Right seek 10 s, comma / period previous / next, S shuffle,
- * R repeat, Q queue, O output, B browse, minus / equals the in-app volume (only for an output the system volume does not
- * reach, decision D11), Up / Down / Enter in the lists, U / D / Delete / C on the queue page, Esc back. The volume,
- * mute and brightness keys stay the launcher's. Transport keys of headsets and keyboards: media_keys.hpp. LVGL thread.
+ * Keys: core/menu letter_command (the table the Keys page shows, README.md "Keys and touch"); the volume, mute and
+ * brightness keys stay the launcher's. Transport keys of headsets and keyboards: media_keys.hpp. LVGL thread.
  */
 #pragma once
 
