@@ -15,18 +15,25 @@
  *             during 2.5 s (a Bluetooth profile switch re-creates the node: play on), else playback PAUSES at the frame
  *             heard and OutputLost is reported; the engine never moves to another output (D8).
  *   volume    an optional software gain (only for an output without a playback mixer: D11 as the owner changed it).
+ *   P2a       ReplayGain (core/dsp/replaygain.hpp): each track's gain from its tags, read when the engine opens it, applied
+ *             to that track's own samples (so a gapless change switches it exactly at the track boundary) and before the
+ *             output's volume, which it never touches; the mode can change while a track plays. Gapless can be turned
+ *             off (set_gapless: every change drains and reopens the stream). The sleep timer's end fade (set_end_fade):
+ *             while no next track is named, the last 10 s of the track fade out (the decoded position, per period).
  *
  * Commands come from the controller's thread (any thread), events and snapshots go back to it. LVGL-free.
  */
 #pragma once
 
 #include "../decode/track_decoder.hpp"
+#include "../dsp/replaygain.hpp"
 #include "outputs.hpp"
 
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -68,6 +75,7 @@ struct EngineSnapshot {
     bool output_pulse = false;
     uint64_t underruns = 0;
     uint64_t gen = 0;        /* changes with every heard track change */
+    ReplayGainTags rg;       /* the heard track's ReplayGain tags */
     uint64_t pos_ms() const { return rate ? frame * 1000 / rate : 0; }
     uint64_t total_ms() const { return rate ? total * 1000 / rate : 0; }
 };
@@ -81,9 +89,13 @@ void convert_pcm(const void *in, unsigned in_bits, unsigned in_ch, void *out, Sa
  * amplitude 10^(dB / 20); -infinity (mute) is 0, 0 dB and above 1. */
 float volume_gain_db(double db);
 
+/* Reads a file's ReplayGain tags (the engine's thread, when it opens a track): core/tags read_replaygain, a fake in the
+ * tests. false: none read. */
+using ReplayGainReader = std::function<bool(const std::string &path, ReplayGainTags &out)>;
+
 class Engine {
 public:
-    Engine(DecodeLibs libs, SinkProvider &sinks);
+    Engine(DecodeLibs libs, SinkProvider &sinks, ReplayGainReader rg = ReplayGainReader());
     ~Engine();
     Engine(const Engine &) = delete;
     Engine &operator=(const Engine &) = delete;
@@ -100,6 +112,13 @@ public:
     void set_next(int pos, const std::string &path);
     void set_output(const OutputTarget &t);
     void set_gain(float g);
+    /* P2a: the ReplayGain mode (applied at once, to the playing track too), gapless on or off (the next change), the
+     * sleep timer's end fade (the last 10 s of a track after which nothing is named) */
+    void set_replaygain(ReplayGainMode m);
+    void set_gapless(bool on);
+    void set_end_fade(bool on);
+    /* the gain ReplayGain applies to the heard track now, in dB (0: off or untagged) */
+    double replaygain_db_now() const;
 
     EngineSnapshot snapshot() const;
     bool poll_event(EngineEvent &ev);
@@ -126,6 +145,7 @@ private:
         std::string path;
         uint64_t start_frame = 0;
         TrackInfo info;
+        ReplayGainTags rg;
     };
 
     void push(Cmd c, bool interrupt);
@@ -142,11 +162,19 @@ private:
     void reposition(const Seg &cur, uint64_t frame, PlayState next);
     uint64_t heard_frame(Seg *seg);
     void update_snapshot();
-    bool open_decoder(int pos, const std::string &path, std::unique_ptr<TrackDecoder> &dec, TrackInfo &info, int &err);
+    bool open_decoder(int pos, const std::string &path, std::unique_ptr<TrackDecoder> &dec, TrackInfo &info, int &err,
+                      ReplayGainTags &rg);
     SinkFormat request_for(const TrackInfo &info) const;
+    /* the factor applied to the decoded samples: the controller's gain, the decoder's track's ReplayGain, the end fade */
+    float sample_gain(uint64_t frame_before) const;
 
     DecodeLibs libs_;
     SinkProvider &sinks_;
+    ReplayGainReader rg_reader_;
+    std::atomic<int> rg_mode_{static_cast<int>(ReplayGainMode::Off)};
+    std::atomic<bool> gapless_{true};
+    std::atomic<bool> end_fade_{false};
+    ReplayGainTags dec_rg_; /* the decoder's track's tags (the thread's) */
 
     /* commands */
     mutable std::mutex mu_;
