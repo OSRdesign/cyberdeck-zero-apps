@@ -391,6 +391,16 @@ struct Button {
     uint32_t ink = col::kInk;
 };
 
+/* One dimmed look across the app (design QA run 4, D-81): a control that cannot act is drawn at 40 % (alpha 102 of
+ * 255): its fill, its word and its icon alike, over the cream panel: the key fill #B9B19B reads #CDC5AE, the teal play
+ * key #1F7A72 reads #97A796, the ink #222222 reads #928D7F. The word follows the box's opacity (LVGL draws a label at
+ * its parent's); the icon is drawn by Vinyl and takes the same opacity itself. */
+constexpr lv_opa_t kDimOpa = LV_OPA_40;
+void set_dimmed(Button &b, bool dimmed, Icon ic = Icon::None) {
+    if (b.vis) lv_obj_set_style_opa(b.vis, dimmed ? kDimOpa : LV_OPA_COVER, 0);
+    if (b.icon) icon_set(b.icon, ic != Icon::None ? ic : b.ic, b.ink, dimmed ? kDimOpa : LV_OPA_COVER);
+}
+
 Icon icon_of(const std::string &id) {
     if (id == "shuffle") return Icon::Shuffle;
     if (id == "prev") return Icon::Prev;
@@ -585,7 +595,7 @@ struct View::Impl {
             bt.icon = icon_obj(bt.vis, bt.ic, (w - ip) / 2, (h - ip) / 2, ip, ip, ip, bt.ink);
         }
         if (!b.enabled) {
-            lv_obj_set_style_opa(bt.vis, LV_OPA_40, 0); /* a P2 feature: drawn, no action */
+            set_dimmed(bt, true); /* a P2 feature: drawn, no action */
             return bt;
         }
         const std::string id = b.id;
@@ -851,11 +861,24 @@ struct View::Impl {
         const int gp = lv_obj_get_width(grp_glyph), gap = P(3), margin = P(4);
         int px = P(g.vol_text_px), tx = 0, tw = vw;
         bool word = true;
+        std::string shown = t;
         if (muted) {
+            /* the level's own size, down to the toolkit's caption size at most; else a shorter word, else the mark alone
+             * (design QA run 4, D-53: 10 px was about 1 mm on the deck) */
             const int room = vw - 2 * margin - gp - gap;
-            px = fit_px(Face::Bold, P(14), t, room, P(10));
-            const int w = text_width(font(Face::Bold, px), t);
-            word = w <= room;
+            const int base = P(g.vol_text_px);
+            const int floor_px = std::min(base, std::max(1, cp0_ui_metrics_get()->text_px[CP0_TEXT_CAPTION]));
+            word = false;
+            for (const char *wd : {"Muted", "Mute", "Off"}) {
+                const int fp = fit_px(Face::Bold, base, wd, room, floor_px);
+                if (text_width(font(Face::Bold, fp), wd) <= room) {
+                    shown = wd;
+                    px = fp;
+                    word = true;
+                    break;
+                }
+            }
+            const int w = word ? text_width(font(Face::Bold, px), shown) : 0;
             const int total = gp + (word ? gap + w : 0);
             const int gx = (vw - total) / 2;
             lv_obj_set_x(grp_glyph, gx);
@@ -873,7 +896,7 @@ struct View::Impl {
         lv_obj_set_x(grp_value, tx);
         lv_obj_set_width(grp_value, tw);
         lv_obj_set_style_text_align(grp_value, muted ? LV_TEXT_ALIGN_LEFT : LV_TEXT_ALIGN_CENTER, 0);
-        set_text(grp_value, t);
+        set_text(grp_value, shown);
     }
 
     /* The time labels as wide as their widest text in this format (and never narrower than the drafts' boxes), the seek
@@ -993,12 +1016,11 @@ struct View::Impl {
             layout_now_hits();
         }
         draw_time_row(v);
-        /* transport; with an empty queue the keys are dimmed: nothing to play (design QA run 3, D-81) */
-        if (auto it = btns.find("play"); it != btns.end()) icon_set(it->second.icon, v.playing ? Icon::Pause : Icon::Play, col::kWhite);
+        /* transport; with an empty queue the keys are dimmed, icons included: nothing to play (design QA runs 3, 4) */
         for (const layout::Btn &t : g.transport)
             if (t.enabled)
                 if (auto it = btns.find(t.id); it != btns.end() && it->second.vis)
-                    lv_obj_set_style_opa(it->second.vis, v.queue_empty ? LV_OPA_40 : LV_OPA_COVER, 0);
+                    set_dimmed(it->second, v.queue_empty, t.id == "play" ? (v.playing ? Icon::Pause : Icon::Play) : Icon::None);
         show(repeat_dash, v.repeat != Repeat::Off);
         show(repeat_one, v.repeat == Repeat::One);
         show(shuffle_dash, v.shuffle);
@@ -1174,15 +1196,14 @@ struct View::Impl {
             L.sel = v.selected;
             L.rows = static_cast<int>(v.rows->size());
         }
-        if (p == Page::Queue) /* an empty queue: the buttons dimmed, they do nothing (design QA run 3, D-81) */
-            for (Button &b : L.qbtns) lv_obj_set_style_opa(b.vis, v.rows && !v.rows->empty() ? LV_OPA_COVER : LV_OPA_40, 0);
+        if (p == Page::Queue) /* the buttons that cannot act dimmed, they do nothing (design QA runs 3, 4: D-81) */
+            for (size_t i = 0; i < L.qbtns.size(); ++i) set_dimmed(L.qbtns[i], !(v.queue_buttons & (1u << i)));
         if (p == Page::Browser && L.strip) {
             show(L.strip, v.mini.shown);
-            show(L.mini_open_hit, v.mini.shown);
             show(L.mini_play.vis, v.mini.shown);
-            show(L.mini_play.hitbox, v.mini.shown);
             show(L.mini_next.vis, v.mini.shown);
-            show(L.mini_next.hitbox, v.mini.shown);
+            for (lv_obj_t *o : {L.mini_open_hit, L.mini_play.hitbox, L.mini_next.hitbox}) /* a notice over them keeps them hidden */
+                if (std::find(notice_covered.begin(), notice_covered.end(), o) == notice_covered.end()) show(o, v.mini.shown);
             set_text(L.mini_title, v.mini.title);
             /* the times right of the artist, whole; the artist gets the rest, with dots */
             const lv_font_t *mf = font(Face::Medium, std::max(1, ri(11 * layout::list_geom(layout::ListPage::Browser, W, H, body_y).s)));
@@ -1289,6 +1310,7 @@ struct View::Impl {
             const int h = ri((danger ? 30 : 50) * s);
             x = X(b.x);
             w = Wd(b);
+            notice_area = R{};
             int bot_lim = H;
             for (const layout::Btn &t : g.transport) bot_lim = std::min(bot_lim, Y(t.box.y) + keys_dy);
             int top_lim = 0;
@@ -1299,14 +1321,19 @@ struct View::Impl {
                 top_lim = std::max(top_lim, lv_obj_get_y(grp_value_box) + lv_obj_get_height(grp_value_box));
             top_lim += P(4);
             bot_lim -= P(4);
-            const int band = bot_lim - top_lim;
-            if (band >= h) {
-                y = top_lim + (band - h) / 2;
+            /* over the seek row, inside its touch area and the free band (layout::notice_in_seek_row): the seek row's area
+             * is the notice's while it shows (design QA run 4, D-33: nothing overlaps, the notice is all covered) */
+            R nbox, narea;
+            const R seek_area = seek_hit ? R{double(lv_obj_get_x(seek_hit)), double(lv_obj_get_y(seek_hit)),
+                                             double(lv_obj_get_width(seek_hit)), double(lv_obj_get_height(seek_hit))}
+                                         : R{};
+            if (seek_hit && layout::notice_in_seek_row(seek_area, top_lim, bot_lim, x, w, h, ri(30 * s), nbox, narea)) {
+                y = ri(nbox.y);
+                if (ri(nbox.h) != h) fit_h = ri(nbox.h);
+                notice_area = narea;
+                cover_for_notice({seek_hit});
             } else if (g.has_upnext) {
                 y = Y(g.upnext.y) + (Hd(g.upnext) - h) / 2;
-            } else if (band >= ri(30 * s)) {
-                y = top_lim;
-                fit_h = band;
             } else {
                 int row_top = H, row_bottom = 0;
                 for (const layout::Btn &t : g.bottom) {
@@ -1321,121 +1348,103 @@ struct View::Impl {
                                                              : layout::ListPage::Output;
             const layout::ListGeom lg = layout::list_geom(lp, W, H, body_y);
             s = lg.s;
-            x = ri(lg.strip.x);
-            w = ri(lg.strip.w);
-            y = ri(lg.strip.bottom()) - ri((danger ? 30 : 50) * s);
+            /* over the strip, under the list's end: its touch area holds the strip's areas it covers, hidden while it
+             * shows (design QA run 4, D-33) */
+            std::vector<lv_obj_t *> under;
+            if (cur == Page::Browser) under = {br.mini_open_hit, br.mini_play.hitbox, br.mini_next.hitbox};
+            else if (cur == Page::Queue)
+                for (Button &b : qu.qbtns) under.push_back(b.hitbox);
+            double list_end = lg.strip.y;
+            std::vector<R> covered;
+            for (lv_obj_t *o : under)
+                if (o && !lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN)) {
+                    const R a{double(lv_obj_get_x(o)), double(lv_obj_get_y(o)), double(lv_obj_get_width(o)), double(lv_obj_get_height(o))};
+                    covered.push_back(a);
+                    list_end = std::min(list_end, a.y);
+                }
+            const R nbox = layout::notice_box_over_strip(lg.strip, list_end, ri((danger ? 30 : 50) * s));
+            x = ri(nbox.x);
+            w = ri(nbox.w);
+            y = ri(nbox.y);
+            if (ri(nbox.h) != ri((danger ? 30 : 50) * s)) fit_h = ri(nbox.h);
+            notice_area = layout::notice_area_over(nbox, covered);
+            cover_for_notice(under);
         }
         make_notice(root, n.kind, x, y, w, s, notice, notice_icon, notice_text, fit_h);
         set_text(notice_text, n.text);
         lv_obj_update_layout(notice_text);
         lv_obj_set_y(notice_text, (lv_obj_get_height(notice) - lv_obj_get_height(notice_text)) / 2);
-        /* a tap dismisses it: its hit box is at least the touch target high (the danger strip is drawn 30 high) */
-        notice_hit = hit(root, x, lv_obj_get_y(notice), w, lv_obj_get_height(notice), 0, target, [this] {
+        /* a tap dismisses it: over the seek row its area is the seek row's, over a strip it holds the strip's areas (both
+         * hidden while it shows); elsewhere (no room in the seek row: not at the QA sizes) its drawing */
+        const R na = notice_area.w > 0 ? notice_area
+                                       : R{double(x), double(lv_obj_get_y(notice)), double(w), double(lv_obj_get_height(notice))};
+        notice_hit = hit(root, 0, 0, 1, 1, 0, 0, [this] {
             lv_async_call([](void *p) { static_cast<Impl *>(p)->hide_notice(); }, this);
         });
+        place_area(notice_hit, na);
         notice_timer = lv_timer_create([](lv_timer_t *t) { static_cast<Impl *>(lv_timer_get_user_data(t))->hide_notice(); },
                                        danger ? 8000 : 6000, this);
         lv_timer_set_repeat_count(notice_timer, 1);
         lv_timer_set_auto_delete(notice_timer, false);
     }
 
-    /* "Clear the queue?" (design QA run 3: Clear all destroys the queue): a dialog in the notice style over the queue
-     * buttons, Cancel (the default) and Clear; modal: a tap anywhere but Clear cancels; Esc cancels, Enter takes the
-     * highlighted button, Left / Right / Tab move the highlight. */
-    lv_obj_t *dlg_scrim = nullptr, *dlg_box = nullptr;
-    Button dlg_btn[2];
+    /* "Clear the queue?" (design QA runs 3 and 4): the toolkit's dialog (cp0::ui::Dialog, D-61) over the queue page, its
+     * Cancel and its destructive Clear. Cancel is the default (the coordinator's design call, owner informed 2026-11-13,
+     * awaiting the owner's confirmation): Enter takes the highlighted button, Left / Right / Tab move the highlight to
+     * Clear and back, Esc and the header's Esc cancel (a modal takes them until it closes, D-30); a tap outside does
+     * nothing (the toolkit's backdrop). The toolkit's dialog has no key focus between its buttons (Enter is its Primary,
+     * Esc its Cancel, a Destructive button no key): Vinyl keeps the keys and marks the highlighted button with a teal
+     * outline, the only thing it adds to the toolkit's dialog. */
+    std::unique_ptr<cp0::ui::Dialog> dlg;
     int dlg_sel = 0;
+
+    static void dialog_cancel_cb(void *p) { static_cast<Impl *>(p)->dialog_choose(0); }
+    static void dialog_clear_cb(void *p) { static_cast<Impl *>(p)->dialog_choose(1); }
 
     void ask_clear_queue() {
         close_dialog();
-        if (!qu.root) return;
-        const layout::ListGeom lg = layout::list_geom(layout::ListPage::Queue, W, H, body_y);
-        const double s = lg.s;
-        auto S = [&](double v) { return std::max(1, ri(v * s)); };
-        dlg_scrim = hit(qu.root, 0, body_y, W, H - body_y, 0, 0, [this] { /* the page under the header: a tap outside cancels */
-            lv_async_call([](void *p) { static_cast<Impl *>(p)->dialog_choose(0); }, this);
-        });
-        R area = lg.strip;
-        const bool two_rows = lg.queue_buttons.size() == 4 && lg.queue_buttons[2].y > lg.queue_buttons[0].y;
-        const int bx = ri(area.x), by = ri(area.y), bw = ri(area.w), bh = ri(area.h);
-        dlg_box = box(qu.root, bx, by, bw, bh, col::kCream, S(8));
-        const lv_font_t *f = font(Face::Bold, S(13));
-        const int pad = S(10), gap = S(8);
-        int tx, ty, tw, btn_y, btn_h, btn_w, b0x;
-        if (two_rows) { /* the question on the top half, the buttons side by side on the bottom half */
-            const int half = (bh - gap) / 2;
-            tx = pad;
-            tw = bw - 2 * pad;
-            ty = (half - lv_font_get_line_height(f)) / 2;
-            btn_y = half + gap;
-            btn_h = bh - btn_y - S(4);
-            btn_w = (bw - 2 * pad - gap) / 2;
-            b0x = pad;
-        } else { /* one row: the question at the left, the buttons at the right */
-            btn_h = bh - 2 * S(4);
-            btn_y = S(4);
-            btn_w = std::max(S(84), text_width(f, "Cancel") + 2 * pad);
-            b0x = bw - pad - 2 * btn_w - gap;
-            tx = pad;
-            tw = std::max(1, b0x - 2 * pad);
-            ty = (bh - lv_font_get_line_height(f)) / 2;
-        }
-        lv_obj_t *q = label(dlg_box, Face::Bold, S(13), col::kInk, tx, ty, tw);
-        set_text(q, "Clear the queue?");
-        const char *words[2] = {"Cancel", "Clear"};
-        for (int i = 0; i < 2; ++i) {
-            Button &b = dlg_btn[i];
-            const int x = b0x + i * (btn_w + gap);
-            b.vis = box(dlg_box, x, btn_y, btn_w, btn_h, i == 1 ? col::kDanger : col::kButton, S(8));
-            b.word = label(b.vis, Face::Bold, S(13), i == 1 ? col::kWhite : col::kInk, 0, (btn_h - lv_font_get_line_height(f)) / 2,
-                           btn_w, LV_TEXT_ALIGN_CENTER);
-            set_text(b.word, words[i]);
-            lv_obj_set_style_border_color(b.vis, lv_color_hex(col::kTeal), 0);
-            lv_obj_set_style_border_width(b.vis, 0, 0);
-        }
-        /* the two touch areas: the target high and wide where the screen allows, meeting in the middle of their gap */
-        layout::HitArea a0{R{double(bx + b0x), double(by + btn_y), double(btn_w), double(btn_h)}, R{}};
-        layout::HitArea a1{R{double(bx + b0x + btn_w + gap), double(by + btn_y), double(btn_w), double(btn_h)}, R{}};
-        for (layout::HitArea *a : {&a0, &a1}) {
-            a->area = layout::grow_hit(a->drawn, target, target);
-            if (a->area.bottom() > H) a->area.y = H - a->area.h;
-        }
-        layout::split_pair(a0, a1, target);
-        for (int i = 0; i < 2; ++i) {
-            dlg_btn[i].hitbox = hit(qu.root, 0, 0, 1, 1, 0, 0, [this, i] {
-                lv_async_call(i == 0 ? +[](void *p) { static_cast<Impl *>(p)->dialog_choose(0); }
-                                     : +[](void *p) { static_cast<Impl *>(p)->dialog_choose(1); },
-                              this);
-            });
-            place_area(dlg_btn[i].hitbox, i == 0 ? a0.area : a1.area);
-        }
+        if (!qu.root || !page) return;
+        cp0::ui::DialogSpec spec;
+        spec.title = "Clear the queue?";
+        /* the actions run inside an LVGL event: the dialog goes after it (lv_async_call) */
+        spec.buttons.push_back({"Cancel", cp0::ui::ButtonRole::Cancel, [this] { lv_async_call(dialog_cancel_cb, this); }});
+        spec.buttons.push_back({"Clear", cp0::ui::ButtonRole::Destructive, [this] { lv_async_call(dialog_clear_cb, this); }});
+        spec.page = page.get();
+        dlg = std::make_unique<cp0::ui::Dialog>(qu.root, tk, std::move(spec));
         dlg_sel = 0;
         highlight_dialog();
     }
 
-    void highlight_dialog() {
-        for (int i = 0; i < 2; ++i)
-            if (dlg_btn[i].vis) lv_obj_set_style_border_width(dlg_btn[i].vis, i == dlg_sel ? std::max(2, P(3)) : 0, 0);
+    std::vector<lv_obj_t *> dialog_buttons() const {
+        std::vector<lv_obj_t *> out;
+        if (!dlg || !dlg->focus_object()) return out;
+        lv_obj_t *boxo = dlg->focus_object();
+        for (uint32_t i = 0; i < lv_obj_get_child_count(boxo); ++i) {
+            lv_obj_t *c = lv_obj_get_child(boxo, static_cast<int32_t>(i));
+            if (lv_obj_check_type(c, &lv_button_class)) out.push_back(c);
+        }
+        return out;
     }
 
-    void close_dialog() {
-        for (lv_obj_t **o : {&dlg_btn[0].hitbox, &dlg_btn[1].hitbox, &dlg_box, &dlg_scrim})
-            if (*o) {
-                lv_obj_delete(*o);
-                *o = nullptr;
-            }
-        dlg_btn[0] = Button();
-        dlg_btn[1] = Button();
+    void highlight_dialog() {
+        const std::vector<lv_obj_t *> b = dialog_buttons();
+        for (size_t i = 0; i < b.size(); ++i) {
+            lv_obj_set_style_outline_color(b[i], lv_color_hex(col::kTeal), 0);
+            lv_obj_set_style_outline_pad(b[i], P(2), 0);
+            lv_obj_set_style_outline_width(b[i], static_cast<int>(i) == dlg_sel ? std::max(2, P(3)) : 0, 0);
+        }
     }
+
+    void close_dialog() { dlg.reset(); }
 
     void dialog_choose(int which) {
-        if (!dlg_box) return;
+        if (!dlg) return;
         close_dialog();
         if (which == 1 && act.queue_clear) act.queue_clear();
     }
 
     bool dialog_key(uint32_t k) {
-        if (!dlg_box) return false;
+        if (!dlg) return false;
         if (k == LV_KEY_ESC) dialog_choose(0);
         else if (k == LV_KEY_ENTER) dialog_choose(dlg_sel);
         else if (k == LV_KEY_LEFT || k == LV_KEY_RIGHT || k == LV_KEY_NEXT || k == LV_KEY_PREV || k == 9) {
@@ -1445,7 +1454,21 @@ struct View::Impl {
         return true;
     }
 
+    /* the touch areas a notice covers: hidden while it shows, back when it goes */
+    R notice_area;
+    std::vector<lv_obj_t *> notice_covered;
+    void cover_for_notice(const std::vector<lv_obj_t *> &objs) {
+        for (lv_obj_t *o : objs)
+            if (o && !lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN)) {
+                lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
+                notice_covered.push_back(o);
+            }
+    }
+
     void hide_notice() {
+        for (lv_obj_t *o : notice_covered) lv_obj_remove_flag(o, LV_OBJ_FLAG_HIDDEN);
+        notice_covered.clear();
+        notice_area = R{};
         if (notice_timer) {
             lv_timer_delete(notice_timer);
             notice_timer = nullptr;
@@ -1550,7 +1573,7 @@ void View::show_notice(const Notice &n) { d_->show_notice(n); }
 void View::hide_notice() { d_->hide_notice(); }
 bool View::notice_shown() const { return d_->notice != nullptr; }
 void View::ask_clear_queue() { d_->ask_clear_queue(); }
-bool View::dialog_shown() const { return d_->dlg_box != nullptr; }
+bool View::dialog_shown() const { return d_->dlg != nullptr; }
 bool View::dialog_key(uint32_t key) { return d_->dialog_key(key); }
 void View::simulate_scrub(double frac) { d_->simulate_scrub(frac); }
 void View::tick(bool playing) { d_->tick(playing); }

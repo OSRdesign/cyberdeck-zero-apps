@@ -7,6 +7,7 @@
 #include "check.hpp"
 
 #include "library/browse.hpp"
+#include "nav/nav_rules.hpp"
 #include "queue/queue.hpp"
 #include "state/resume.hpp"
 
@@ -25,6 +26,16 @@ std::vector<std::string> names(int n) {
 }  // namespace
 
 void test_queue() {
+    /* design QA run 4: the modal takes Esc and the header's Esc until it is closed (D-30); the queue buttons that cannot
+     * act are dimmed and do nothing (D-81) */
+    CHECK(back_step(true, false) == BackStep::CloseModal);
+    CHECK(back_step(true, true) == BackStep::CloseModal); /* a notice behind the dialog stays until the dialog is gone */
+    CHECK(back_step(false, true) == BackStep::HideNoticeAndBack);
+    CHECK(back_step(false, false) == BackStep::Back);
+    CHECK_EQ(queue_buttons_enabled(0), 0u);
+    CHECK_EQ(queue_buttons_enabled(1), kQueueRemove); /* only the playing track: Remove only */
+    CHECK_EQ(queue_buttons_enabled(2), kQueueUp | kQueueDown | kQueueRemove | kQueueClear);
+    CHECK_EQ(queue_buttons_enabled(20), kQueueUp | kQueueDown | kQueueRemove | kQueueClear);
     Queue q;
     CHECK(q.empty());
     CHECK_EQ(q.next_pos(true), -1);

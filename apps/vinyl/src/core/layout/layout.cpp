@@ -548,6 +548,34 @@ int now_keys_shift(const NowGeom &g, const ui::Fit &f, double target, const std:
     return best;
 }
 
+bool notice_in_seek_row(const R &seek_area, double top_lim, double bot_lim, double x, double w, double h, double min_h,
+                        R &box, R &area) {
+    const double top = std::ceil(std::max(seek_area.y, top_lim)), bottom = std::floor(std::min(seek_area.bottom(), bot_lim));
+    const double band = bottom - top;
+    if (band < min_h - 1e-9 || band <= 0) return false;
+    const double hh = std::floor(std::min(h, band));
+    box = R{x, top + std::floor((band - hh) / 2), w, hh};
+    area = R{x, seek_area.y, w, seek_area.h};
+    return true;
+}
+
+R notice_box_over_strip(const R &strip, double list_bottom, double h) {
+    const double bottom = std::round(strip.bottom());
+    const double top = std::max(bottom - std::round(h), std::ceil(list_bottom));
+    return R{std::round(strip.x), top, std::round(strip.w), std::max(1.0, bottom - top)};
+}
+
+R notice_area_over(const R &box, const std::vector<R> &covered) {
+    double x0 = box.x, y0 = box.y, x1 = box.right(), y1 = box.bottom();
+    for (const R &c : covered) {
+        x0 = std::min(x0, c.x);
+        y0 = std::min(y0, c.y);
+        x1 = std::max(x1, c.right());
+        y1 = std::max(y1, c.bottom());
+    }
+    return R{x0, y0, x1 - x0, y1 - y0};
+}
+
 std::vector<R> queue_touch_areas(const ListGeom &lg, int screen_h, double target, double &list_bottom) {
     list_bottom = lg.list.bottom();
     std::vector<R> areas;

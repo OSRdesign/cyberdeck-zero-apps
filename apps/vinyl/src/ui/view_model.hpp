@@ -83,6 +83,7 @@ struct ListView {
     int scroll_to = -1;     /* make this row the first visible one (the playing track), -1 = keep */
     uint64_t rows_gen = 0;  /* new contents (reset the scroll) */
     MiniView mini;          /* browser */
+    unsigned queue_buttons = 0xF; /* queue: the buttons that can act (core/nav queue_buttons_enabled), the others dimmed */
     std::string hint;       /* output: the strip's text */
     bool hint_notice = false; /* output: the strip is the "not set up" notice */
 };

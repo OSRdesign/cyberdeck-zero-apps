@@ -16,6 +16,14 @@ key esc
 wait 300
 expect notext "Clear the queue?"
 expect text "3 OF 20, 1 H 24 MIN LEFT"
+# the header's Esc while it shows: it only cancels (design QA run 4, D-30), the queue page stays
+tap "Clear all"
+wait 300
+expect text "Clear the queue?"
+tap "Esc"
+wait 300
+expect notext "Clear the queue?"
+expect text "3 OF 20, 1 H 24 MIN LEFT"
 tap "Clear all"
 wait 300
 expect text "Clear the queue?"

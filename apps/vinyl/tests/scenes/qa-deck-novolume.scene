@@ -1,0 +1,17 @@
+title Vinyl: where nothing can change the volume, at the deck's own density (640x480, 11.3 px/mm) (the group shows --, its "+" says so in a notice) and the notice over the seek row (allow-small: the rows under 7 mm are warnings)
+sizes 640x480
+# the deck's own density (11.3 px/mm, the harness's default for 640x480): the approved layout's touch rows are 70 px
+# there, under the 7 mm (79 px): allow-small reports them as warnings (the owner's rule R-4) instead of failing
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_NOVOLUME 1
+
+wait 1200
+expect esc
+expect text "--"
+tapxy 0.904 0.912
+wait 300
+shot 01-now-volume-unavailable
+expect text "Volume is not available on this board"
+expect noquit

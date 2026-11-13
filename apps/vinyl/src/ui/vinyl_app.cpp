@@ -16,6 +16,7 @@
 #include "engine/engine.hpp"
 #include "engine/outputs.hpp"
 #include "input/media_keys.hpp"
+#include "nav/nav_rules.hpp"
 #include "launcher/launcher_link.hpp"
 #include "library/browse.hpp"
 #include "library/tag_jobs.hpp"
@@ -209,7 +210,7 @@ struct VinylApp::Impl final : TransportHost {
         engine = std::make_unique<Engine>(real_decode_libs(), *sinks);
 
         Actions a;
-        a.back = [this] { back(); };
+        a.back = [this] { escape(); }; /* the header's Esc: the same as the Esc key (a modal takes it, D-30) */
         a.toggle = [this] { toggle(); };
         a.prev = [this] { /* a tap: press and release at once */
             transport_key(false, 1);
@@ -546,8 +547,19 @@ struct VinylApp::Impl final : TransportHost {
         }
     }
 
+    /* Esc and the header's Esc (core/nav back_step): the "Clear the queue?" dialog takes them until it closes (design QA
+     * run 4, D-30: cancelled, nothing else); else a notice goes with the step back */
+    void escape() {
+        switch (back_step(view->dialog_shown(), view->notice_shown())) {
+        case BackStep::CloseModal: view->dialog_key(LV_KEY_ESC); return;
+        case BackStep::HideNoticeAndBack: view->hide_notice(); back(); return;
+        case BackStep::Back: back(); return;
+        }
+    }
+
     void queue_button(int i) {
         if (queue.empty()) return;
+        if (!(queue_buttons_enabled(queue.size()) & (1u << i))) return; /* drawn dimmed: it does nothing (D-81) */
         if (i == 3) { /* Clear all asks first (design QA run 3): "Clear the queue?", Cancel the default */
             view->ask_clear_queue();
             return;
@@ -635,8 +647,7 @@ struct VinylApp::Impl final : TransportHost {
         if (echo && k == echo) return;
         if (view->dialog_shown() && view->dialog_key(k)) return; /* "Clear the queue?" takes the keys while it shows */
         if (k == LV_KEY_ESC) {
-            if (view->notice_shown()) view->hide_notice();
-            back();
+            escape();
             return;
         }
         if (p == Page::Browser) {
@@ -1332,6 +1343,7 @@ struct VinylApp::Impl final : TransportHost {
 
     ListView queue_view() {
         ListView v;
+        v.queue_buttons = queue_buttons_enabled(queue.size());
         v.left = "Queue";
         v.vol = vol_text();
         v.vol_bt = output_is_bt();

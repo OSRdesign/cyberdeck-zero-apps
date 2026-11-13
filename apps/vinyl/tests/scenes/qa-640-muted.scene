@@ -1,4 +1,4 @@
-title Vinyl: the output muted at 640x480 (the volume group in the bottom row shows Muted); "-" does nothing, "+" brings the sound back at its level
+title Vinyl: the output muted at 640x480 (the volume group in the bottom row shows the speaker-off mark and "Off": "Muted" does not fit its box at the level's size); "-" does nothing, "+" brings the sound back at its level
 sizes 640x480
 # the deck's own density (11.3 px/mm) leaves the approved 640x480 layout's touch rows 70 px, under the 7 mm (79 px):
 # owner rule R-4, listed in qa-info.txt; the scene runs at a 3.5-inch 640x480 panel's 9.01 px/mm (the harness's own
@@ -12,18 +12,18 @@ wait 1200
 shot 01-now-muted
 expect esc
 expect notext "60"
-expect text "Muted"
+expect text "Off"
 wait 300
 shot 02-now-muted-volume
 # "-" while muted does nothing
 tapxy 0.720 0.912
 wait 300
-expect text "Muted"
+expect text "Off"
 expect notext "60"
 # "+" brings the sound back at its level
 tapxy 0.904 0.912
 wait 300
 shot 03-now-unmuted
-expect notext "Muted"
+expect notext "Off"
 expect text "60"
 expect noquit

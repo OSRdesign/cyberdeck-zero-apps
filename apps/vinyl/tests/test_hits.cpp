@@ -185,10 +185,48 @@ void test_all_touch_areas() {
         std::fprintf(stderr, "  touch heights %dx%d, %s, target %d: least %.0f px%s%s%s\n", q.w, q.h, q.what, q.target,
                      std::floor(minh + 1e-6), under.empty() ? "" : ", under the target:", under.c_str(),
                      dy ? (", the keys " + std::to_string(dy) + " px lower").c_str() : "");
+        /* a notice on now playing (design QA run 4, D-33): inside the seek row's area and the free band above the keys,
+         * its touch area the seek row's (hidden while it shows): it holds the whole notice and overlaps no other area */
+        {
+            double top_lim = 0;
+            if (g.out_button_on) top_lim = f.y(g.out_button.y) + f.h(g.out_button.y, g.out_button.h);
+            for (size_t r = 0; r < g.chip_layout.size(); ++r)
+                if (!g.chip_layout[r].empty()) top_lim = std::max(top_lim, f.y(g.chip0.y + static_cast<double>(r) * g.chip_step) + P(g.chip0.h));
+            double keys_top = q.h;
+            for (const Btn &b : g.transport) keys_top = std::min(keys_top, double(f.y(b.box.y) + dy));
+            if (g.vol_group && f.y(g.vol_minus.y) < keys_top) top_lim = std::max(top_lim, double(f.y(g.vol_minus.y) + f.h(g.vol_minus.y, g.vol_minus.h)));
+            top_lim += P(4);
+            const double bot_lim = keys_top - P(4);
+            for (double hd : {50.0, 30.0}) {
+                const R nb = notice_box_now(g, hd);
+                R box, area;
+                const bool placed = notice_in_seek_row(set.seek[0].area, top_lim, bot_lim, f.x(nb.x), f.w(nb.x, nb.w), std::round(hd * f.s),
+                                                       std::round(30 * f.s), box, area);
+                CHECK(placed);
+                if (!placed) {
+                    std::fprintf(stderr, "  notice %dx%d (%s): no room in the seek row\n", q.w, q.h, q.what);
+                    continue;
+                }
+                CHECK(contains(area, box));
+                CHECK(box.y >= top_lim - 1e-6 && box.bottom() <= bot_lim + 1e-6); /* covers nothing drawn above or below */
+                CHECK(area.y >= q.body - 1e-6 && area.bottom() <= q.h + 1e-6 && area.x >= -1e-6 && area.right() <= q.w + 1e-6);
+                for (const Named &n : all)
+                    if (n.a != &set.seek[0]) CHECK(!hits(area, n.a->area));
+                if (q.row > 0) CHECK(std::floor(area.h + 1e-6) >= q.row);
+            }
+        }
         /* the queue page's buttons, and the list above them */
         const ListGeom lq = list_geom(ListPage::Queue, q.w, q.h, q.body);
         double list_bottom = 0;
         const std::vector<R> qa = queue_touch_areas(lq, q.h, q.target, list_bottom);
+        for (double hd : {50.0, 30.0}) { /* a notice over the queue buttons: under the list, holding what it covers */
+            const R box = notice_box_over_strip(lq.strip, list_bottom, std::round(hd * lq.s));
+            const R area = notice_area_over(box, qa);
+            CHECK(box.y >= list_bottom - 1e-6);
+            CHECK(area.y >= list_bottom - 1e-6 && area.bottom() <= q.h + 1e-6);
+            CHECK(contains(area, box));
+            for (const R &c : qa) CHECK(contains(area, c));
+        }
         CHECK_EQ(qa.size(), static_cast<size_t>(4));
         for (size_t i = 0; i < qa.size(); ++i) {
             CHECK(qa[i].h >= q.target - 1e-6);
@@ -209,6 +247,15 @@ void test_all_touch_areas() {
             CHECK(a.h >= std::min(double(q.target), double(q.h)) - 1e-6);
         }
         CHECK(m.play_area.w >= q.target - 1e-6 && m.next_area.w >= q.target - 1e-6);
+        for (double hd : {50.0, 30.0}) { /* a notice over the mini player: under the list, holding what it covers */
+            const R box = notice_box_over_strip(lb.strip, m.list_bottom, std::round(hd * lb.s));
+            const R area = notice_area_over(box, {m.open_area, m.play_area, m.next_area});
+            CHECK(box.y >= m.list_bottom - 1e-6);
+            CHECK(area.y >= m.list_bottom - 1e-6 && area.bottom() <= q.h + 1e-6);
+            CHECK(contains(area, box));
+        }
+        /* the "Clear the queue?" dialog is the toolkit's (cp0::ui::Dialog, design QA run 4 D-61): its buttons are their
+         * own touch areas, sized by the layout service (the harness's size check), no invisible area of Vinyl's */
     }
 }
 

@@ -184,6 +184,20 @@ double now_rows_min_height(const NowHitSet &h);
 int now_keys_shift(const NowGeom &g, const ui::Fit &f, double target, const std::vector<R> &outputs, double top_limit,
                    double screen_w, double screen_h);
 
+/* Where a notice goes on now playing (design QA runs 3 and 4): inside the seek row's touch area and inside the free band
+ * between what is drawn above the seek row (top_lim: the chips, the output button, the small class's volume group, with
+ * their margin) and the transport keys (bot_lim), centred; its own height h, or the band's when the band is lower but
+ * at least min_h (screen px). Its touch area is the seek row's (the notice covers the seek row, whose area is hidden
+ * while it shows), as wide as the notice: it holds the whole notice and overlaps no other area. false: no room. */
+bool notice_in_seek_row(const R &seek_area, double top_lim, double bot_lim, double x, double w, double h, double min_h,
+                        R &box, R &area);
+/* A notice over a list page's bottom strip: its bottom on the strip's, never above the list's end (list_bottom: the top
+ * of the strip's touch areas), so it covers no row (a notice taller than that room takes the room's height). */
+R notice_box_over_strip(const R &strip, double list_bottom, double h);
+/* A notice over a list page's bottom strip: its touch area holds its drawing and the strip's touch areas it covers
+ * (hidden while it shows). */
+R notice_area_over(const R &box, const std::vector<R> &covered);
+
 /* The queue page's four buttons' touch areas (one row of four, or two rows of two): the target wide and high, the
  * neighbours meeting in the middle of their gaps, from the strip's top down (moved up where the screen's bottom is
  * nearer: `list_bottom` then says where the list must end so its rows are not under them). */

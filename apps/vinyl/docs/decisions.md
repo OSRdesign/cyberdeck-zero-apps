@@ -196,7 +196,7 @@ cover".
   the dots.
 - No two touch areas overlap anywhere (a unit test checks every one of now playing, the queue page and the mini player
   at every QA size). Clear all asks first: "Clear the queue?", Cancel (the default) or Clear; Esc, Cancel and a tap
-  outside cancel.
+  outside cancel (run 4: the toolkit's dialog, a tap outside does nothing; see "Design QA run 4").
 - The drafts' "A-Z" pill is not built (sorting is no control in P1); the format and Gapless chips are information,
   not keys (plain text, flat chips at 640x480); with an empty queue the transport keys and the queue buttons are dimmed.
 - The scene `nocontract` runs at 6.08 px/mm (`ppmm 608`): at the harness's default 11.3 px/mm for 480x320 (ROW 80) the
@@ -288,6 +288,34 @@ is complicating the thing, let's make it work with all most common codecs out of
   22.5 MB of memory then). The notice for a tier-2 file is now a rare failure: "The FFmpeg libraries could not be
   loaded. Reinstall Vinyl." (the old "Install them from Settings, Apps" pointed to nothing).
 
+## Design QA run 4 (2026-11-13)
+
+- **"Clear the queue?" is the toolkit's dialog** (`cp0::ui::Dialog`, D-61): title "Clear the queue?", its Cancel button
+  and its destructive Clear (the toolkit's red label). **Cancel is the default: the coordinator's decision, owner
+  informed 2026-11-13, awaiting the owner's confirmation**: Enter takes the highlighted button (Cancel at first), Left,
+  Right and Tab move the highlight to Clear and back, Esc cancels; a tap outside does nothing (the toolkit's backdrop).
+  The toolkit's dialog has no key focus between its buttons (Enter presses its Primary, Esc its Cancel, a Destructive
+  button no key), so Vinyl keeps the keys and draws the highlight as a teal outline on the toolkit's button, the only
+  thing it adds to the toolkit's dialog. Its buttons are their own touch areas (no invisible area of Vinyl's: the
+  12 px above the old box at 800x480 are gone).
+- **A modal takes Esc and Back** (D-30): while the dialog shows, the Esc key and the header's Esc only cancel it
+  (`core/nav` back_step, tested); the page stays.
+- **One dimmed look** (D-81): a control that cannot act is drawn at 40 % (alpha 102 of 255), its fill, its word and its
+  icon alike (the key fill #B9B19B reads #CDC5AE on the cream panel, the ink #222222 #928D7F, the teal play key #97A796):
+  the transport keys with an empty queue, the dimmed sleep-timer key, the queue buttons that cannot act. With only the
+  playing track in the queue, Move up, Move down and Clear all are dimmed and do nothing (`queue_buttons_enabled`).
+- **Muted stays legible** (D-53): the word is drawn at the level number's own size, shrinking at most to the toolkit's
+  caption size (`text_px[CP0_TEXT_CAPTION]`); where "Muted" does not fit the box at that size the shorter "Mute", then
+  "Off", follow the speaker-off mark; where none fits, the mark alone.
+- **Notices touch what they cover, nothing more** (D-33): on now playing a notice sits inside the seek row's touch area
+  and the free band above the keys, and while it shows its touch area is the seek row's (the seek row's own is hidden);
+  over a list page's strip it stays under the list's end and its touch area holds the strip's touch areas it covers
+  (hidden while it shows). The touch-area test checks both, with the dialog's buttons left to the toolkit.
+- **The deck's own density** (D-01): the scenes `qa-deck`, `qa-deck-empty`, `qa-deck-muted`, `qa-deck-scrub` and
+  `qa-deck-novolume` render 640x480 at 11.3 px/mm (the harness's default for the deck; tools/boards/boards.json names no
+  density). The harness's new scene option `allow-small` reports a size check under ROW / TARGET as a WARN line
+  (the owner's R-4) instead of failing; every other scene keeps the strict check. The 640x480 scenes at 9.01 px/mm stay.
+
 ## Dragging a slider, the seek bar (owner, 2026-11-13)
 
 The owner: "for D30 equalizer should also work by dragging the bars and btw so should the track timeline to seek a
@@ -321,8 +349,6 @@ Recorded on 2026-11-13; none of these is offered in 0.1.0.
 - The Menu key and its pages (equalizer, sleep timer, playback, library, output, about): P2 (owner, 2026-11-13, above).
 - The Equalizer's bars by drag (owner, 2026-11-13, "for D30 equalizer should also work by dragging the bars"): P2, with
   the Equalizer.
-
-## 640x480 and 480x320 (owner, 2026-11-13)
 
 ## 640x480 and 480x320 (owner, 2026-11-13)
 

@@ -30,7 +30,7 @@ The deck (640x480), square (720x720, the HackBerry) and large (800x480, two pane
 |---|---|
 | **Browser** (the root) | `~/Music` and the mounted drives (`/media/<user>`, `/run/media/<user>`, `/mnt`): folders A-Z, playlists (`.m3u`, `.m3u8`), tracks A-Z (natural order) with their title tags and lengths; the mini player at the bottom. A track plays its folder as the queue; a playlist plays its entries. |
 | **Now playing** | cover art (embedded JPEG or PNG, else the drawn sleeve) with the record sliding out (its label about a third out, with a dot and a centre ring that show it turning), title (one line that scrolls, or two lines on the 640x480, square and large screens), artist, album and year, the format and Gapless as information (one line at 480x320, flat chips at 640x480, plain text elsewhere), the output (a full-width button with the device's name and a chevron; a chip on 800x480 and wider), the volume group ("-", the level on teal, "+"); the position with a seek bar (a tap seeks, a drag scrubs), previous, play / pause, next, shuffle, repeat (off, all, one: a teal mark, and a "1" for one); the queue key (480x320) or the Browse and Queue keys of the bottom row; up next (square), the queue pane (large). An empty queue dims the transport keys. |
-| **Queue** | the play order from the playing track, "3 OF 20, 1 H 24 MIN LEFT"; Move up, Move down, Remove, Clear all (asks first: "Clear the queue?", Cancel, the default, or Clear; it keeps the playing track). An empty queue dims the four buttons. No dragging in the lists (the seek bar is the one control that drags). |
+| **Queue** | the play order from the playing track, "3 OF 20, 1 H 24 MIN LEFT"; Move up, Move down, Remove, Clear all (asks first: "Clear the queue?", Cancel, the default, or Clear; it keeps the playing track). An empty queue dims the four buttons; with only the playing track, Move up, Move down and Clear all are dimmed. No dragging in the lists (the seek bar is the one control that drags). |
 | **Output** | Automatic (the system's default output), the Bluetooth devices (music or call quality), the wired outputs, a paired device that is off (dimmed). Vinyl never switches output by itself: when the output in use goes away, playback pauses ("Evolve 65 disconnected. Paused."). |
 
 The top band is the launcher's: the toolkit's header with the title (none at 320x480, the toolkit's narrow portrait), the
@@ -50,7 +50,7 @@ output lists are read in the background).
 | Lists: move, act, back | Up / Down, Enter; Right acts as Enter and Left goes back (queue, output; in the browser Right opens a folder) | browser: tap a row; queue: tap selects, tap again plays; output: tap chooses |
 | Folder up | Left or Backspace (browser) | the ".." row |
 | Queue pane (800x480 and wider) | Up / Down pick a track, Enter plays it | tap picks, tap again plays |
-| Queue editing | U move up, D move down, Delete or X remove, C clear all (then Enter or Esc, Left / Right / Tab between Cancel and Clear) | the four buttons; Clear all asks "Clear the queue?" (a tap outside it cancels) |
+| Queue editing | U move up, D move down, Delete or X remove, C clear all (then Enter takes the highlighted button, Cancel at first; Left / Right / Tab move it to Clear; Esc cancels) | the four buttons; Clear all asks "Clear the queue?" (the toolkit's dialog: Cancel, Clear, or the header's Esc; a tap outside does nothing). A button that cannot act is dimmed |
 | Volume | `-` / `=`: the volume of the output Vinyl plays on, one of its levels a press (about 2 dB) | "-" and "+" of the volume group, the level between them (teal): in the bottom row (640x480, square, portrait), under the output button (480x320), where the Equalizer key was (800x480). It sets and shows the playing output's real level as a percent of that output's levels; muted (by anything), it shows "Muted" with the speaker-off mark, "-" does nothing and "+" brings the sound back at its level; "-" at the first level mutes. "--" when the level is not known; where nothing can change it a tap shows "Volume is not available on this board" |
 | Close a notice | Esc (it also goes back as Esc always does: at the browser Vinyl quits) | tap it (it also goes after 6 s, 8 s for a disconnect) |
 | Back; at the browser, quit | Esc | the header's Esc |
@@ -202,7 +202,7 @@ the FLAC / Opus readers come from this repository's Cassette (same author, MIT).
 
 ```sh
 wsl -e sh apps/vinyl/tests/run.sh               # the unit tests (-Werror) and the real-library fixtures
-wsl -e sh apps/vinyl/build.sh host              # harness, unit tests, 44 scenes (qa* for the design QA), sheets
+wsl -e sh apps/vinyl/build.sh host              # harness, unit tests, 49 scenes (qa* for the design QA), sheets
 wsl -e sh apps/vinyl/build.sh cross             # the arm64 binary; --arch amd64 for PCs
 wsl -e sh apps/vinyl/tests/abi/run.sh [root]    # the hand-written FFmpeg / mpg123 / vorbisfile ABI against headers
 python3 tools/make_registry.py --only vinyl --out <folder>    # a local .deb (not published)
