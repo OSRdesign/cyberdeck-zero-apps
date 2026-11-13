@@ -93,3 +93,6 @@ void test_real_libs();
 void test_transport();
 void test_hits();
 void test_volume();
+void test_settings_state();
+void test_replaygain();
+void test_menu();

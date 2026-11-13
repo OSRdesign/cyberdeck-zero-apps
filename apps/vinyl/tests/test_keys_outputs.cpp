@@ -379,28 +379,29 @@ void test_layout() {
             CHECK(g.bottom.empty());
             CHECK_NEAR(g.vol_minus.x, g.out_button.x, 1e-9);
             CHECK(g.vol_minus.y > g.out_button.bottom() && g.vol_minus.bottom() < g.time.box.y);
-            CHECK_EQ(g.transport.size(), static_cast<size_t>(6)); /* P1: no Menu key */
+            CHECK_EQ(g.transport.size(), static_cast<size_t>(7)); /* P2a: the Menu key is the seventh */
         } else {
             CHECK(g.bottom.back().box.right() < g.vol_minus.x);
         }
-        for (const Btn &b : g.bottom) CHECK(b.id != "eq" && b.id != "menu"); /* no Equalizer, no Menu (P2) */
+        for (const Btn &b : g.bottom) CHECK(b.id != "eq"); /* no Equalizer (P2d) */
         /* design QA run 5 (D-81): a key drawn dimmed does nothing, a key that acts is never dimmed (the view dims exactly
          * the keys key_active says are inert, and presses only the active ones) */
         for (const std::vector<Btn> *row : {&g.transport, &g.bottom})
             for (const Btn &b : *row) {
-                const bool opens_page = b.id == "queue" || b.id == "browse" || b.id == "output";
-                CHECK(key_active(b, false) == b.enabled);                     /* with music every enabled key acts */
-                CHECK(key_active(b, true) == (b.enabled && opens_page));      /* empty: only the page keys */
-                if (!b.enabled) CHECK(!key_active(b, false) && !key_active(b, true)); /* the sleep timer: never */
+                const bool page_key = b.id == "queue" || b.id == "browse" || b.id == "output" || b.id == "menu" || b.id == "sleep";
+                CHECK(opens_page(b) == page_key);
+                CHECK(b.enabled);                                             /* P2a: nothing drawn dimmed (D32) */
+                CHECK(key_active(b, false));                                  /* with music every key acts */
+                CHECK(key_active(b, true) == page_key);                       /* empty: only the page keys */
             }
         if (g.out_button_on) {
             CHECK(inside(g.out_button));
             CHECK_NEAR(g.out_button.right(), g.title.box.right(), 1e-9); /* the button fills the info column */
             for (const Btn &b : g.bottom) CHECK(b.id != "output");
         } else if (g.vol_group) {
-            bool output_key = false; /* large: the Output key stays until the Menu key (P2) */
-            for (const Btn &b : g.bottom) output_key = output_key || b.id == "output";
-            CHECK(output_key);
+            bool menu_key = false; /* large: the Menu key in the Output key's place (P2a; the output chip opens Output) */
+            for (const Btn &b : g.bottom) menu_key = menu_key || b.id == "menu";
+            CHECK(menu_key);
         }
         /* the notice box across the seek row */
         const R n = notice_box_now(g, 50);

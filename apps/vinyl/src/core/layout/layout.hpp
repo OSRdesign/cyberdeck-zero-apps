@@ -57,21 +57,23 @@ struct Text {
 };
 
 struct Btn {
-    std::string id; /* "shuffle", "prev", "play", "next", "repeat", "queue", "sleep", "browse", "output", "eq" */
+    std::string id; /* "shuffle", "prev", "play", "next", "repeat", "queue", "menu", "sleep", "browse", "output" */
     R box;
     double icon = 22;
     bool teal = false;   /* the play button */
     bool label = false;  /* a bottom-row button with its word ("Queue") */
-    bool enabled = true; /* false: drawn as in the draft, dimmed, no action (a P2 feature) */
+    bool enabled = true; /* false: drawn dimmed, no action (none since P2a: nothing unbuilt is drawn, owner D32) */
 };
 
 constexpr double kDesignBody = 40; /* the drafts' y that sits on the toolkit header's bottom */
 
 /* Does a key of now playing act now (design QA run 5, D-81: a key drawn dimmed does nothing, a key that acts is never
- * dimmed)? A key of a P2 feature (enabled false: the sleep timer) never; the Queue key and the bottom row's Browse,
- * Queue and Output always (they open their pages, which show their own empty states); the transport keys (shuffle,
- * previous, play, next, repeat) only with something in the queue. */
+ * dimmed)? A key drawn disabled never; the keys that open a page always (Queue, Browse, Output, Menu, the large class's
+ * sleep timer: their pages show their own empty states); the transport keys (shuffle, previous, play, next, repeat)
+ * only with something in the queue. */
 bool key_active(const Btn &b, bool queue_empty);
+/* The key opens a page (Queue, Browse, Output, Menu, Sleep timer). */
+bool opens_page(const Btn &b);
 
 /* The muted level box (the owner, 2026-11-13: "zero 8 and pi52 are not showing mute" (zero7 meant), "no need for the
  * word muted if it doesn't fit the speaker off glyph is enough", "Mute is better than Muted"): the speaker-off mark and
@@ -126,7 +128,7 @@ struct NowGeom {
      * any more). Square, portrait, medium: in the bottom row; small: under the output button in the info column; large:
      * the dimmed Equalizer key's place. The output is a button of its own (out_button_on: icon, the device's name, a
      * chevron; out_button is its box, in portrait x is the least, it starts right of a wider format chip) except on the
-     * large class, where the output chip and the Output key stay until the Menu key (P2) exists. */
+     * large class, where the output chip opens Output (P2a: the Output key gave its place to the Menu key). */
     bool vol_group = true;
     bool out_button_on = false;
     R vol_minus, vol_value, vol_plus;
@@ -153,6 +155,30 @@ struct ListGeom {
 
 enum class ListPage { Browser, Queue, Output };
 ListGeom list_geom(ListPage page, int screen_w, int screen_h, int body_y);
+
+/* The Menu pages (P2a: Menu-480x320 / Menu-320x480, SleepTimer-480x320, Playback-480x320, Keys-480x320 / Keys-320x480,
+ * About-480x320), in SCREEN px: like the list pages, the dark panel at the class's scale (the medium class keeps the
+ * 480x320 drawing scaled, as the Browser does), the portrait class the 320x480 drawings (rows 44 high, two-line keys
+ * rows); every other class the 480x320 drawings. A list page: an optional heading line (30 high, "STOP PLAYING AFTER"),
+ * the rows from the panel's top (section headings 20 high, 22 in portrait), an optional strip at the bottom (the
+ * Browser's strip: 42 high, 8 from the edges; it grows upwards to its text). Rows are never under the toolkit's
+ * LIST_ROW (the caller passes it). */
+struct MenuGeom {
+    double s = 1;
+    bool portrait = false;
+    R panel, heading, list, strip;
+    double row_h = 34, section_h = 20, text_px = 15, value_px = 13, section_px = 11, heading_px = 12;
+    double text_x = 16, choice_text_x = 40, dot_x = 16, value_r = 38, chev_r = 14, chev_w = 16;
+    /* the Keys page */
+    double key_row_h = 32, chip_x = 12, chip_top = 5, chip_h = 22, chip_px = 12, chip_pad = 8, chip_min_w = 26;
+    double action_x = 150, action_top = 0, action_lh = 32, action_px = 14;
+    bool keys_two_lines = false;
+    /* the About page */
+    double about_pad = 16, about_disc = 44, about_name_px = 22, about_line_px = 12, about_text_px = 13, about_sec_px = 11;
+};
+/* row_design: the drawn row height at 480x320 (34: Menu, Sleep timer, the pick list; 40: Playback); list_row: the
+ * toolkit's LIST_ROW (the least row height) */
+MenuGeom menu_geom(int screen_w, int screen_h, int body_y, double row_design, bool heading, bool strip, double list_row);
 
 /* The Fit of the now-playing design on a screen whose toolkit header ends at body_y. */
 ui::Fit now_fit(const NowGeom &g, int screen_w, int screen_h, int body_y);
