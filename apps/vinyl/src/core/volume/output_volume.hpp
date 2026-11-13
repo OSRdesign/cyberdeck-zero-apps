@@ -10,7 +10,7 @@
  *   the window   the output's real dB range, at most its upper 60 dB (Dr. Lex: consumer equipment has a usable range
  *                of about 60 dB): [max(lo, hi - 60), hi], hi the output's real top (the Raspberry Pi jack's +4.00 dB
  *                included: 100 % is the output's own top, never above it);
- *   the levels   0 = mute (the switch off, the sink muted, or the control's mute value: "Muted"); 1 = the window's bottom
+ *   the levels   0 = mute (the switch off, the sink muted, or the control's mute value: "Mute"); 1 = the window's bottom
  *                (the first level that sounds), N = its top; linear in dB between them: dB(i) = lo + (i - 1) (hi - lo) /
  *                (N - 1), N = ceil(window / 2 dB) (the coordinator's rule), at least 2, the step never under 1 dB nor
  *                under the control's own step; the percent shown is round(100 i / N), so a press moves one level, not 5 %.
@@ -25,7 +25,11 @@
  *                                the hardware's top at the sink's 100 %), so a DAC whose floor is -45 dB never gets a
  *                                target below it; a sink without a known card (Bluetooth, software sinks): -60..0 dB;
  *   a card without a mixer       Vinyl's software gain over -60..0 dB, kept per output (output_volume_key) in state.json
- *                                as its percent.
+ *                                as its percent; its mute is Vinyl's own (state.json app_muted), the level kept.
+ * Muted (MuteBy): the switch; else the control's own mute value; else, and for a card without a mixer, Vinyl's own
+ * mute: its stream silent, the output's level kept (state.json app_muted). Every
+ * path shows the same muted state: the group's muted look, "-" does nothing, "+" brings the level back (the owner's
+ * reports of 2026-11-13 from the deck and RPI52).
  * The same output (the same card model, the same dB range) gets the same table on every board, through a server or not.
  *
  * The pure helpers below are tested with a fake mixer and fake sinks; the controller (vinyl_app.cpp) reads the sinks from
@@ -34,6 +38,7 @@
 #pragma once
 
 #include "../alsa/alsa_api.hpp"
+#include "../state/resume.hpp"
 
 #include <cstdint>
 #include <string>
@@ -123,16 +128,39 @@ int sink_level_for_volume(const OutputVolumeModel &m, uint32_t volume);
 
 /* What one press of "-" (delta < 0) or "+" does, one level a press (the owner's report from the deck, 2026-11-13: "zero7
  * is showing muted but volume bar shows 18"): while muted "-" does nothing and "+" brings the sound back at the level
- * it had (level 1 when it had none); not muted, a level, and "-" at level 1 mutes (the switch, the sink's mute, or the
- * control's mute value; a card with neither stays at level 1). */
+ * it had (level 1 when it had none); not muted, a level, and "-" at level 1 mutes (the switch, the sink's mute, the
+ * control's mute value, or Vinyl's own mute: MuteBy). */
 struct VolumePress {
     enum class Kind { None, Set, Mute, Unmute } kind = Kind::None;
-    int level = 0; /* Set: the level */
+    int level = 0; /* Set: the level; Unmute: the level that sounds again */
 };
+/* How an ALSA output goes silent: its switch; else its control's own mute value (the Raspberry Pi jack without a switch:
+ * Set level 0); else (no switch, no mute value, or no playback mixer at all) Vinyl's own mute, its stream silent and the
+ * card's level kept (state.json app_muted). */
+enum class MuteBy { Switch, MuteValue, Vinyl };
+MuteBy mute_by(const MixerChoice &m);
+/* `lv.muted` includes Vinyl's own mute (mixer_level_shown). Kind::Mute / Unmute mean the switch or Vinyl's own mute
+ * (mute_by); from the control's mute value "+" sets level 1 (the level "-" muted it from). */
 VolumePress mixer_press(const MixerChoice &m, const MixerLevel &lv, int delta);
 VolumePress sink_press(const OutputVolumeModel &m, int level, bool muted, int delta);
 
-/* The chip's text for a percent: "Vol 45", "Muted", and "Vol --" when the level is not known (negative: the sink is
+/* A card without a playback mixer (Vinyl's software gain, -60..0 dB): its level (state.json app_volumes, a percent, 100
+ * when none) and Vinyl's own mute (app_muted), the level kept while muted; an old stored 0 is level 0, muted with no
+ * level to come back at ("+" then gives level 1). */
+int software_level(const ResumeState &s, const std::string &key, bool *muted);
+/* One press on it, the state changed: "-" at level 1 mutes (the level kept), "-" muted does nothing, "+" muted un-mutes
+ * at the level, else one level. */
+VolumePress software_press(ResumeState &s, const std::string &key, int delta);
+/* The card's level as the group shows it: muted too while Vinyl's own mute holds on a control without a switch or a mute
+ * value. */
+MixerLevel mixer_level_shown(const MixerChoice &m, const MixerLevel &lv, const ResumeState &s, const std::string &key);
+/* After a press on a card was written: Vinyl's own mute set or cleared (MuteBy::Vinyl; nothing for the others). */
+void note_mixer_press(ResumeState &s, const std::string &key, const MixerChoice &m, const VolumePress &p);
+
+/* The word of a muted level, the same everywhere (the owner, 2026-11-13: "Mute is better than Muted"). */
+constexpr const char *kMuteWord = "Mute";
+
+/* The chip's text for a percent: "Vol 45", "Mute", and "Vol --" when the level is not known (negative: the sink is
  * gone, not read yet, or the server reports none): a negative value is never shown or logged (board test B18). */
 std::string volume_chip_text(int pct, bool muted);
 /* The level as the log writes it: "45 %", or "-- (not known)". */

@@ -8,6 +8,7 @@
 #include "vinyl_view.hpp"
 
 #include "nav/nav_rules.hpp"
+#include "volume/output_volume.hpp"
 #include "seek/seek_scrub.hpp"
 
 #include "gfx.hpp"
@@ -408,12 +409,35 @@ uint32_t dim_rgb(uint32_t behind, uint32_t ink) {
     };
     return (ch(16) << 16) | (ch(8) << 8) | ch(0);
 }
+/* The muted level box breaks the owner's rule (layout::mute_fit): the scenes stop on it; a board logs it. The look
+ * drawn goes to the log once per change (qa-info.txt's muted line: the scenes' expectations and this line). */
+void check_mute_fit(const layout::MuteFit &mf, int vw, int vh) {
+    static std::string last;
+    char line[160];
+    if (mf.word)
+        std::snprintf(line, sizeof line, "the mark (%d px) and \"%s\" at %d px in a %dx%d box", mf.glyph, kMuteWord, mf.px, vw, vh);
+    else
+        std::snprintf(line, sizeof line, "the mark alone, %d px (drawn %d px high) in a %dx%d box", mf.glyph,
+                      static_cast<int>(std::lround(mf.glyph * layout::kMuteGlyphDrawnH)), vw, vh);
+    if (line != last) {
+        last = line;
+        std::fprintf(stderr, "[vinyl] volume group muted: %s\n", line);
+        std::fflush(stderr); /* the harness's child leaves by _exit: nothing buffered survives it */
+    }
+    const bool bad = mf.word ? mf.glyph < layout::kMutePairGlyphMin : mf.glyph < layout::kMuteGlyphMin || mf.glyph > vh + 2;
+    if (!bad) return;
+    std::fprintf(stderr, "[vinyl] BUG: the muted level box breaks its rule (%s)\n", line);
+    std::fflush(stderr);
+    if (std::getenv("VINYL_DEMO")) std::abort();
+}
+
 /* A button redrawn without its icon is a bug (design QA run 6: the queue buttons' icons vanished on a refresh because
  * their icon id was never kept): the scenes (VINYL_DEMO) stop on it, so the harness fails at every size that shows it;
  * a board logs it. */
 void check_icon(const Button &b, Icon ic) {
     if (!b.icon || ic != Icon::None) return;
     std::fprintf(stderr, "[vinyl] BUG: a button redrawn without its icon\n");
+    std::fflush(stderr);
     if (std::getenv("VINYL_DEMO")) std::abort();
 }
 void set_dimmed(Button &b, bool dimmed, uint32_t behind, Icon ic = Icon::None) {
@@ -888,42 +912,37 @@ struct View::Impl {
         lv_obj_add_flag(grp_glyph, LV_OBJ_FLAG_HIDDEN);
     }
 
-    /* The level in the group: the number, "--" when not known; muted, the speaker-off mark and "Muted" (smaller when it
-     * needs to; the mark alone where the word would go under P(10)), never the level it will come back at. */
+    /* The level in the group: the number, "--" when not known. Muted (the owner, 2026-11-13: "zero 8 and pi52 are not
+     * showing mute" (zero7 meant), "no need for the word muted if it doesn't fit the speaker off glyph is enough", "Mute
+     * is better than Muted"): the box takes the muted look (col::kMutedFill, the mark and the word white) with the
+     * speaker-off mark and "Mute" where both fit (the word at BODY down to CAPTION), else the mark alone, large
+     * (layout::mute_fit); never another word, never the level it comes back at. */
     void update_vol_group(const NowView &v) {
         if (!grp_value) return;
         const bool muted = v.vol_muted && v.vol_level >= 0;
         const std::string t = v.vol_level < 0 ? std::string("--")
-                              : muted         ? std::string("Muted")
+                              : muted         ? std::string(kMuteWord)
                               : !v.vol_value.empty() ? v.vol_value
                                                      : std::to_string(v.vol_level);
         const int vw = lv_obj_get_width(grp_value_box), vh = lv_obj_get_height(grp_value_box);
-        const int gp = lv_obj_get_width(grp_glyph), gap = P(3), margin = P(4);
+        lv_obj_set_style_bg_color(grp_value_box, lv_color_hex(muted ? col::kMutedFill : col::kTeal), 0);
         int px = level_px(), tx = 0, tw = vw;
         bool word = true;
         std::string shown = t;
         if (muted) {
-            /* the level's own size, down to the toolkit's caption size at most; else a shorter word, else the mark alone
-             * (design QA run 4, D-53: 10 px was about 1 mm on the deck) */
-            const int room = vw - 2 * margin - gp - gap;
-            const int base = level_px();
-            const int floor_px = std::min(base, caption_px());
-            word = false;
-            for (const char *wd : {"Muted", "Mute", "Off"}) {
-                const int fp = fit_px(Face::Bold, base, wd, room, floor_px);
-                if (text_width(font(Face::Bold, fp), wd) <= room) {
-                    shown = wd;
-                    px = fp;
-                    word = true;
-                    break;
-                }
-            }
+            const layout::MuteFit mf = layout::mute_fit(vw, vh, fit.s, level_px(), caption_px(), [](int p) {
+                return text_width(font(Face::Bold, p), kMuteWord);
+            });
+            word = mf.word;
+            px = mf.px;
+            icon_resize(grp_glyph, mf.glyph);
             const int w = word ? text_width(font(Face::Bold, px), shown) : 0;
-            const int total = gp + (word ? gap + w : 0);
+            const int total = mf.glyph + (word ? mf.gap + w : 0);
             const int gx = (vw - total) / 2;
-            lv_obj_set_x(grp_glyph, gx);
-            tx = gx + gp + gap;
+            lv_obj_set_pos(grp_glyph, gx, (vh - mf.glyph) / 2);
+            tx = gx + mf.glyph + mf.gap;
             tw = std::max(1, w + 2);
+            check_mute_fit(mf, vw, vh);
         } else {
             px = fit_px(Face::Bold, level_px(), t, vw - P(8), caption_px()); /* "100" in a narrow box: down to the caption */
         }

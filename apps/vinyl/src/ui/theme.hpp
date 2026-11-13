@@ -23,6 +23,8 @@ constexpr std::uint32_t kHeaderChip = 0x222222;
 constexpr std::uint32_t kHeaderText = 0xEEEEEE;
 constexpr std::uint32_t kWhite = 0xFFFFFF;
 constexpr std::uint32_t kTeal = 0x1F7A72;     /* the accent: play, volume chip, seek fill, label */
+constexpr std::uint32_t kMutedFill = 0x222222; /* the level box while muted, its mark and word white (the coordinator's
+                                                  pick, 2026-11-13: the same on every layout) */
 constexpr std::uint32_t kList = 0x1B1E1E;     /* the dark list panel */
 constexpr std::uint32_t kRowSel = 0x2A2A2A;   /* the selected row, the A-Z chip */
 constexpr std::uint32_t kRowText = 0xDDDDDD;

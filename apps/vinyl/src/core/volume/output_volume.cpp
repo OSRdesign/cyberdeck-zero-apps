@@ -239,13 +239,19 @@ int sink_level_for_volume(const OutputVolumeModel &m, uint32_t volume) {
 
 /* ------------------------------------------------------------------------------------------------ presses, texts */
 
+MuteBy mute_by(const MixerChoice &m) {
+    if (!m.ok()) return MuteBy::Vinyl;
+    if (!m.sw.empty()) return MuteBy::Switch;
+    return m.min_is_mute ? MuteBy::MuteValue : MuteBy::Vinyl;
+}
+
 VolumePress mixer_press(const MixerChoice &m, const MixerLevel &lv, int delta) {
     VolumePress p;
     if (!lv.has_mixer || !m.ok() || delta == 0 || lv.level < 0) return p;
     if (lv.muted) {
         if (delta < 0) return p; /* already silent */
         if (lv.level >= 1) {
-            p.kind = !m.sw.empty() ? VolumePress::Kind::Unmute : VolumePress::Kind::Set; /* the level it had */
+            p.kind = VolumePress::Kind::Unmute; /* the switch on, or Vinyl's own mute off: the level it had */
             p.level = lv.level;
             return p;
         }
@@ -254,12 +260,15 @@ VolumePress mixer_press(const MixerChoice &m, const MixerLevel &lv, int delta) {
         return p;
     }
     if (delta < 0 && lv.level <= 1) {
-        if (!m.sw.empty()) p.kind = VolumePress::Kind::Mute;
-        else if (m.min_is_mute) {
-            p.kind = VolumePress::Kind::Set; /* the control's own mute value */
+        switch (mute_by(m)) {
+        case MuteBy::Switch: p.kind = VolumePress::Kind::Mute; break;
+        case MuteBy::MuteValue: /* the control's own mute value */
+            p.kind = VolumePress::Kind::Set;
             p.level = 0;
+            break;
+        case MuteBy::Vinyl: p.kind = VolumePress::Kind::Mute; break; /* Vinyl's stream silent, the card's level kept */
         }
-        return p; /* neither: level 1 is as low as it goes */
+        return p;
     }
     const int to = m.model.step(lv.level, delta);
     if (to == lv.level) return p;
@@ -293,9 +302,43 @@ VolumePress sink_press(const OutputVolumeModel &m, int level, bool muted, int de
     return p;
 }
 
+int software_level(const ResumeState &s, const std::string &key, bool *muted) {
+    const int lv = default_volume_model().from_pct(app_volume_of(s, key));
+    if (muted) *muted = app_muted_of(s, key) || lv == 0;
+    return lv;
+}
+
+VolumePress software_press(ResumeState &s, const std::string &key, int delta) {
+    const OutputVolumeModel m = default_volume_model();
+    bool muted = false;
+    const int lv = software_level(s, key, &muted);
+    const VolumePress p = sink_press(m, lv, muted, delta);
+    switch (p.kind) {
+    case VolumePress::Kind::None: break;
+    case VolumePress::Kind::Mute: set_app_muted(s, key, true); break; /* the level kept */
+    case VolumePress::Kind::Unmute: set_app_muted(s, key, false); break;
+    case VolumePress::Kind::Set:
+        set_app_volume(s, key, m.pct_of(p.level));
+        set_app_muted(s, key, false);
+        break;
+    }
+    return p;
+}
+
+MixerLevel mixer_level_shown(const MixerChoice &m, const MixerLevel &lv, const ResumeState &s, const std::string &key) {
+    MixerLevel out = lv;
+    if (lv.has_mixer && lv.level >= 1 && mute_by(m) == MuteBy::Vinyl && app_muted_of(s, key)) out.muted = true;
+    return out;
+}
+
+void note_mixer_press(ResumeState &s, const std::string &key, const MixerChoice &m, const VolumePress &p) {
+    if (p.kind == VolumePress::Kind::None || mute_by(m) != MuteBy::Vinyl) return;
+    set_app_muted(s, key, p.kind == VolumePress::Kind::Mute);
+}
+
 std::string volume_chip_text(int pct, bool muted) {
     if (pct < 0) return "Vol --";
-    if (muted) return "Muted";
+    if (muted) return kMuteWord;
     return "Vol " + std::to_string(pct);
 }
 

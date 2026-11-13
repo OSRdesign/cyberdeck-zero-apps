@@ -260,10 +260,12 @@ NowGeom now_geom(SizeClass c) {
         g.transport.back().enabled = false; /* sleep timer: P2 */
         g.repeat_dash = R{664, 352, 12, 4};
         /* owner, 2026-11-13 (NP-800x480 of the full-UX canvas): Browse, Output (the Menu key's place, P2), the volume
-         * group where the dimmed Equalizer key was */
-        g.bottom = {word("browse", 330, 384, 140, 42), word("output", 480, 384, 140, 42)};
-        g.vol_minus = R{630, 384, 40, 42};
-        g.vol_value = R{674, 384, 52, 42};
+         * group where the dimmed Equalizer key was; the coordinator, 2026-11-13 (the owner's RPI52 report, "Mute" beside
+         * the mark): Browse and Output 118 wide, the group 184 ("-" 40, the level 96, "+" 40, 4 apart), the row's right
+         * edge the transport row's */
+        g.bottom = {word("browse", 330, 384, 118, 42), word("output", 458, 384, 118, 42)};
+        g.vol_minus = R{586, 384, 40, 42};
+        g.vol_value = R{630, 384, 96, 42};
         g.vol_plus = R{730, 384, 40, 42};
         g.seams = {262, 306, 372};
         break;
@@ -281,6 +283,28 @@ NowGeom now_geom(SizeClass c) {
     if (g.title.box.x > g.sleeve.right()) cx = std::min(cx, g.title.box.x - 2 - d / 2);
     g.disc = R{cx - d / 2, g.sleeve.y + (g.sleeve.h - d) / 2, d, d};
     return g;
+}
+
+MuteFit mute_fit(int box_w, int box_h, double s, int body_px, int caption_px, const std::function<int(int)> &word_w) {
+    MuteFit f;
+    f.margin = std::max(1, static_cast<int>(std::lround(4 * s)));
+    f.gap = std::max(1, static_cast<int>(std::lround(3 * s)));
+    const int floor_px = std::max(1, std::min(body_px, caption_px));
+    for (int px = std::max(body_px, floor_px); px >= floor_px; --px) {
+        const int g = std::max(kMutePairGlyphMin, static_cast<int>(std::lround(px * 1.1)));
+        if (g > box_h) continue;
+        if (word_w(px) <= box_w - 2 * f.margin - g - f.gap) {
+            f.word = true;
+            f.px = px;
+            f.glyph = g;
+            return f;
+        }
+    }
+    const int by_h = static_cast<int>(std::lround(0.6 * box_h / kMuteGlyphDrawnH));
+    const int by_w = static_cast<int>((box_w - 2 * f.margin) / kMuteGlyphDrawnW);
+    f.glyph = std::max(kMuteGlyphMin, std::min(by_h, by_w));
+    f.px = floor_px;
+    return f;
 }
 
 bool key_active(const Btn &b, bool queue_empty) {

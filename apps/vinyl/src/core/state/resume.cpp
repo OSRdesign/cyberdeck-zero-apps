@@ -50,6 +50,10 @@ std::string resume_to_json(const ResumeState &s) {
     json::Value vols = json::Value::object();
     for (const auto &kv : s.app_volumes) vols.set(kv.first, json::Value::number(kv.second));
     root.set("app_volumes", vols);
+    json::Value muted;
+    muted.type = json::Value::Arr;
+    for (const std::string &k : s.app_muted) muted.arr.push_back(json::Value::string(k));
+    root.set("app_muted", muted);
     return json::write(root);
 }
 
@@ -63,6 +67,18 @@ void set_app_volume(ResumeState &s, const std::string &key, int level) {
     if (key.empty()) return;
     if (!s.app_volumes.count(key) && s.app_volumes.size() >= kMaxAppVolumes) s.app_volumes.erase(s.app_volumes.begin());
     s.app_volumes[key] = level;
+}
+
+bool app_muted_of(const ResumeState &s, const std::string &key) { return !key.empty() && s.app_muted.count(key) != 0; }
+
+void set_app_muted(ResumeState &s, const std::string &key, bool muted) {
+    if (key.empty()) return;
+    if (!muted) {
+        s.app_muted.erase(key);
+        return;
+    }
+    if (!s.app_muted.count(key) && s.app_muted.size() >= kMaxAppVolumes) s.app_muted.erase(s.app_muted.begin());
+    s.app_muted.insert(key);
 }
 
 bool resume_from_json(const std::string &text, ResumeState &out) {
@@ -93,6 +109,9 @@ bool resume_from_json(const std::string &text, ResumeState &out) {
         for (const auto &kv : vs->obj)
             if (kv.second.type == json::Value::Num && !kv.first.empty() && out.app_volumes.size() < kMaxAppVolumes)
                 out.app_volumes[kv.first] = std::max(0, std::min(100, static_cast<int>(kv.second.n)));
+    if (const json::Value *ms = root.get("app_muted"); ms && ms->type == json::Value::Arr)
+        for (const json::Value &e : ms->arr)
+            if (e.type == json::Value::Str && !e.s.empty() && out.app_muted.size() < kMaxAppVolumes) out.app_muted.insert(e.s);
     if (out.current >= static_cast<int>(out.items.size())) out.current = -1;
     return true;
 }

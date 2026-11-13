@@ -293,6 +293,56 @@ void test_disc_in_sleeve() {
     }
 }
 
+/* The muted level box at every QA size (layout::mute_fit; the owner, 2026-11-13: "no need for the word muted if it
+ * doesn't fit the speaker off glyph is enough", "Mute is better than Muted"): the mark and "Mute" side by side where
+ * both fit, the word between CAPTION and BODY; else the mark alone, 24 px or more, drawn about 60 % of the box high,
+ * inside the box. The word's width here is Montserrat Bold's "Mute" (2.55 em, a little wider than measured); the
+ * scenes check the real drawing. 800x480 (the coordinator's 184 px group) shows the word. */
+void test_mute_fit() {
+    struct Px {
+        int w, h, body, caption;
+    };
+    const Px px[] = {{480, 320, 18, 14}, {320, 480, 16, 14}, {640, 480, 24, 18}, {800, 480, 22, 18}, {480, 480, 24, 20},
+                     {720, 720, 24, 20}, {480, 800, 24, 18}, {480, 640, 24, 18}, {800, 600, 22, 18}, {1024, 768, 24, 20}};
+    auto word_w = [](int p) { return static_cast<int>(std::ceil(2.55 * p)); };
+    for (const QaSize &q : kQaSizes) {
+        const NowGeom g = now_geom(size_class(q.w, q.h));
+        const vinyl::ui::Fit f = now_fit(g, q.w, q.h, q.body);
+        const int bw = f.w(g.vol_value.x, g.vol_value.w), bh = f.h(g.vol_value.y, g.vol_value.h);
+        int body = 24, caption = 18;
+        for (const Px &p : px)
+            if (p.w == q.w && p.h == q.h) {
+                body = p.body;
+                caption = p.caption;
+            }
+        const MuteFit m = mute_fit(bw, bh, f.s, body, caption, word_w);
+        if (m.word) {
+            CHECK(m.px >= caption && m.px <= body);
+            CHECK(m.glyph >= kMutePairGlyphMin && m.glyph <= bh);
+            CHECK(2 * m.margin + m.glyph + m.gap + word_w(m.px) <= bw);
+        } else {
+            CHECK(m.glyph >= kMuteGlyphMin);
+            CHECK(m.glyph * kMuteGlyphDrawnW <= bw - 2 * m.margin + 1);
+            const double drawn = m.glyph * kMuteGlyphDrawnH;
+            CHECK(drawn >= 0.5 * bh && drawn <= 0.7 * bh);
+        }
+        if (q.w == 800 && q.h == 480) CHECK(m.word);
+        std::printf("  muted box %dx%d (%s): %dx%d, %s, mark %d px\n", q.w, q.h, q.what, bw, bh, m.word ? "the mark and Mute" : "the mark alone",
+                    m.glyph);
+    }
+    /* a word that never fits: the mark alone, never a smaller word than CAPTION */
+    const MuteFit none = mute_fit(60, 40, 1, 18, 14, [](int) { return 999; });
+    CHECK(!none.word);
+    CHECK_EQ(none.glyph, 36);
+    /* a wide box: the word at BODY */
+    const MuteFit wide = mute_fit(200, 40, 1, 18, 14, word_w);
+    CHECK(wide.word);
+    CHECK_EQ(wide.px, 18);
+    CHECK_EQ(wide.glyph, 20);
+    /* a tiny box still gets the 24 px mark */
+    CHECK_EQ(mute_fit(20, 20, 1, 18, 14, word_w).glyph, kMuteGlyphMin);
+}
+
 }  // namespace
 
 void test_hits() {
@@ -352,4 +402,5 @@ void test_hits() {
     test_time_and_chips();
     test_all_touch_areas();
     test_disc_in_sleeve();
+    test_mute_fit();
 }

@@ -47,6 +47,8 @@ void draw_icon(lv_layer_t *layer, Icon ic, int cx, int cy, int px, std::uint32_t
 /* A small object that draws one icon centred in itself (not clickable). */
 lv_obj_t *icon_obj(lv_obj_t *parent, Icon ic, int x, int y, int w, int h, int px, std::uint32_t rgb);
 void icon_set(lv_obj_t *o, Icon ic, std::uint32_t rgb, lv_opa_t opa = LV_OPA_COVER);
+/* Its size: the object px square and the icon drawn px big. */
+void icon_resize(lv_obj_t *o, int px);
 
 lv_area_t area(int x, int y, int w, int h);
 void fill(lv_layer_t *layer, const lv_area_t &a, std::uint32_t rgb, int radius, lv_opa_t opa = LV_OPA_COVER);

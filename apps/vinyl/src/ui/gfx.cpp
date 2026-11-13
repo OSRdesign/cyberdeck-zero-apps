@@ -423,5 +423,15 @@ void icon_set(lv_obj_t *o, Icon ic, std::uint32_t rgb, lv_opa_t opa) {
     lv_obj_invalidate(o);
 }
 
+void icon_resize(lv_obj_t *o, int px) {
+    auto *d = static_cast<IconData *>(lv_obj_get_user_data(o));
+    if (!d) return;
+    px = std::max(1, px);
+    if (d->px == px && lv_obj_get_width(o) == px && lv_obj_get_height(o) == px) return;
+    d->px = px;
+    lv_obj_set_size(o, px, px);
+    lv_obj_invalidate(o);
+}
+
 } // namespace ui
 } // namespace vinyl

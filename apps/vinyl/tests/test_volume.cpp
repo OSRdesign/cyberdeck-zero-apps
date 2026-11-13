@@ -667,7 +667,7 @@ void test_output_sink_level() {
 }
 
 /* B18 (2026-11-13): an unknown level is never shown or logged as a number: the sink removed, its info not read (the
- * list failed), a sink the server reports no volume for; a muted sink says Muted */
+ * list failed), a sink the server reports no volume for; a muted sink says Mute */
 void test_unknown_level() {
     OutputWorld w;
     w.server = true;
@@ -692,12 +692,12 @@ void test_unknown_level() {
     ev.volume_pct = -1;
     w.sinks = {ev};
     CHECK(!sink_volume_of(w, ev.name, pct, muted));
-    /* muted: Muted while the level is known, "--" when it is not */
+    /* muted: Mute while the level is known (the owner, 2026-11-13: "Mute is better than Muted"), "--" when it is not */
     ev.volume_pct = 30;
     ev.muted = true;
     w.sinks = {ev};
     CHECK(sink_volume_of(w, ev.name, pct, muted));
-    CHECK_EQ(volume_chip_text(pct, muted), std::string("Muted"));
+    CHECK_EQ(volume_chip_text(pct, muted), std::string("Mute"));
     CHECK_EQ(volume_chip_text(-1, true), std::string("Vol --"));
     CHECK_EQ(volume_log_text(30), std::string("30 %"));
     for (int v : {-1, -2, -100}) {
@@ -783,17 +783,21 @@ void test_mute_steps() {
     CHECK_EQ(lv.level, 23);
     CHECK_EQ(lv.pct, 100);
     CHECK(press(1) == VolumePress::Kind::None);
-    /* a card without a switch: level 1 is as low as it goes */
+    /* a card without a switch and without a mute value: "-" at level 1 is Vinyl's own mute (test_vinyl_mute) */
     MixerChoice nosw;
     choose_playback_mixer({vol_ctl("PCM Playback Volume", 0, 45, true, -4500, 0)}, nosw);
     MixerLevel floor;
     floor.has_mixer = true;
     floor.raw = 0;
     floor.level = 1;
-    CHECK(mixer_press(nosw, floor, -1).kind == VolumePress::Kind::None);
+    CHECK(mute_by(nosw) == MuteBy::Vinyl);
+    CHECK(mute_by(c) == MuteBy::Switch);
+    CHECK(mixer_press(nosw, floor, -1).kind == VolumePress::Kind::Mute);
     /* the sound server's sinks: "-" at level 1 mutes (the sink's mute, the level kept), "+" un-mutes at the level, "-"
      * muted does nothing; a silent sink (volume 0) starts again at level 1 */
     const OutputVolumeModel m = default_volume_model();
+    /* a sink muted from outside (pactl set-sink-mute ... 1, the launcher's mute key) at level 12: shown muted (the app's
+     * output_step: the sink's mute flag), "-" does nothing, "+" un-mutes at 12 */
     CHECK(sink_press(m, 12, true, -1).kind == VolumePress::Kind::None);
     VolumePress p = sink_press(m, 12, true, 1);
     CHECK(p.kind == VolumePress::Kind::Unmute && p.level == 12);
@@ -935,6 +939,133 @@ void test_pi4b_pcm() {
                          "raw=-2497"));
     CHECK_EQ(volume_set_log_text("sink x", m.model, 0, 0, -19, 0), std::string("set sink x step 0/30 0 % target mute raw=0 read back failed (-19)"));
     CHECK_EQ(volume_model_text(m.model), std::string("-56.00..4.00 dB, 30 levels of 2.07 dB"));
+    CHECK(mute_by(nosw) == MuteBy::MuteValue); /* the jack without its switch: its own mute value */
+    CHECK(mute_by(m) == MuteBy::Switch);
+}
+
+/* The same muted state on every path (the coordinator, 2026-11-13, after the owner's reports): a card without a playback
+ * mixer (HDMI on zero8: Vinyl's software gain) shows Mute at its lowest step, "-" does nothing, "+" brings the level
+ * back; the level is kept while muted and survives a restart (state.json app_muted); an old stored 0 is muted too. */
+void test_software_mute() {
+    ResumeState s;
+    const std::string key = "alsa:plughw:CARD=vc4hdmi0,DEV=0";
+    const OutputVolumeModel m = default_volume_model();
+    bool muted = true;
+    CHECK_EQ(software_level(s, key, &muted), m.n); /* nothing stored: 100 % */
+    CHECK(!muted);
+    set_app_volume(s, key, m.pct_of(2));
+    CHECK_EQ(software_level(s, key, &muted), 2);
+    VolumePress p = software_press(s, key, -1);
+    CHECK(p.kind == VolumePress::Kind::Set && p.level == 1);
+    CHECK_EQ(software_level(s, key, &muted), 1);
+    CHECK(!muted);
+    /* "-" at the lowest step mutes, the level kept */
+    p = software_press(s, key, -1);
+    CHECK(p.kind == VolumePress::Kind::Mute);
+    CHECK_EQ(software_level(s, key, &muted), 1);
+    CHECK(muted);
+    CHECK(app_muted_of(s, key));
+    /* "-" muted does nothing */
+    CHECK(software_press(s, key, -1).kind == VolumePress::Kind::None);
+    CHECK(app_muted_of(s, key));
+    /* across a restart */
+    ResumeState back;
+    CHECK(resume_from_json(resume_to_json(s), back));
+    CHECK(app_muted_of(back, key));
+    CHECK_EQ(software_level(back, key, &muted), 1);
+    CHECK(muted);
+    /* "+" un-mutes at the level kept */
+    p = software_press(back, key, 1);
+    CHECK(p.kind == VolumePress::Kind::Unmute && p.level == 1);
+    CHECK_EQ(software_level(back, key, &muted), 1);
+    CHECK(!muted);
+    CHECK(!app_muted_of(back, key));
+    p = software_press(back, key, 1);
+    CHECK(p.kind == VolumePress::Kind::Set && p.level == 2);
+    /* muted at 60 % (the scenes' state): "+" brings 60 % back, not a level above */
+    set_app_volume(back, key, 60);
+    set_app_muted(back, key, true);
+    CHECK_EQ(software_level(back, key, &muted), m.from_pct(60));
+    CHECK(muted);
+    p = software_press(back, key, 1);
+    CHECK(p.kind == VolumePress::Kind::Unmute);
+    CHECK_EQ(m.pct_of(software_level(back, key, &muted)), 60);
+    /* an older state.json stored the mute as 0: muted, "+" gives level 1 */
+    ResumeState old;
+    CHECK(resume_from_json("{\"v\":1,\"app_volumes\":{\"alsa:hdmi\":0}}", old));
+    CHECK_EQ(software_level(old, "alsa:hdmi", &muted), 0);
+    CHECK(muted);
+    CHECK(software_press(old, "alsa:hdmi", -1).kind == VolumePress::Kind::None);
+    p = software_press(old, "alsa:hdmi", 1);
+    CHECK(p.kind == VolumePress::Kind::Set && p.level == 1);
+    CHECK_EQ(software_level(old, "alsa:hdmi", &muted), 1);
+    CHECK(!muted);
+    /* other outputs keep their own state; a damaged entry is ignored; at most kMaxAppVolumes kept */
+    CHECK(!app_muted_of(old, key));
+    ResumeState bad;
+    CHECK(resume_from_json("{\"v\":1,\"app_muted\":[\"\",7,\"bt:AA\"]}", bad));
+    CHECK_EQ(bad.app_muted.size(), size_t(1));
+    CHECK(app_muted_of(bad, "bt:AA"));
+    for (int i = 0; i < 40; ++i) set_app_muted(bad, "k" + std::to_string(i), true);
+    CHECK(bad.app_muted.size() <= kMaxAppVolumes);
+    set_app_muted(bad, "", true);
+    CHECK(!app_muted_of(bad, ""));
+}
+
+/* A card whose playback control has neither a switch nor a mute value (a USB DAC without 'PCM Playback Switch'): "-" at
+ * level 1 is Vinyl's own mute (its stream silent, nothing written to the card, the level kept), shown as muted; "-" then
+ * does nothing; "+" un-mutes at the card's level, also one set by something else meanwhile. */
+void test_vinyl_mute() {
+    const std::string card = "hw:CARD=DAC", key = "alsa:plughw:CARD=DAC,DEV=0";
+    FakeAlsa a;
+    a.ctls = {vol_ctl("PCM Playback Volume", 0, 45, true, -4500, 0)};
+    a.values["PCM Playback Volume"] = 1; /* -44 dB: level 1 */
+    std::string chosen;
+    MixerChoice c;
+    MixerLevel lv;
+    ResumeState s;
+    CHECK_EQ(read_mixer(a, card, chosen, c, lv), 0);
+    CHECK(mute_by(c) == MuteBy::Vinyl);
+    CHECK_EQ(lv.level, 1);
+    auto press = [&](int d) {
+        const MixerLevel shown = mixer_level_shown(c, lv, s, key);
+        const VolumePress p = mixer_press(c, shown, d);
+        if (p.kind == VolumePress::Kind::Set) write_mixer_level(a, card, c, p.level);
+        note_mixer_press(s, key, c, p);
+        read_mixer(a, card, chosen, c, lv);
+        return p;
+    };
+    const int sets = a.sets;
+    CHECK(press(-1).kind == VolumePress::Kind::Mute);
+    CHECK_EQ(a.sets, sets); /* nothing written to the card */
+    CHECK(app_muted_of(s, key));
+    MixerLevel shown = mixer_level_shown(c, lv, s, key);
+    CHECK(shown.muted);
+    CHECK_EQ(shown.level, 1);
+    CHECK(press(-1).kind == VolumePress::Kind::None);
+    CHECK(mixer_level_shown(c, lv, s, key).muted);
+    /* the card raised by something else while muted: still muted (Vinyl's stream silent), "+" un-mutes at that level */
+    a.values["PCM Playback Volume"] = 23;
+    read_mixer(a, card, chosen, c, lv);
+    shown = mixer_level_shown(c, lv, s, key);
+    CHECK(shown.muted);
+    CHECK_EQ(shown.level, 12);
+    VolumePress p = press(1);
+    CHECK(p.kind == VolumePress::Kind::Unmute && p.level == 12);
+    CHECK(!app_muted_of(s, key));
+    CHECK(!mixer_level_shown(c, lv, s, key).muted);
+    CHECK_EQ(a.values["PCM Playback Volume"], 23L);
+    p = press(1);
+    CHECK(p.kind == VolumePress::Kind::Set && p.level == 13);
+    /* a card with a switch never takes Vinyl's mute (a stale entry does not mute it) */
+    MixerChoice sw;
+    choose_playback_mixer({vol_ctl("PCM Playback Volume", 0, 45, true, -4500, 0), switch_ctl("PCM Playback Switch")}, sw);
+    set_app_muted(s, key, true);
+    CHECK(!mixer_level_shown(sw, lv, s, key).muted);
+    VolumePress swp;
+    swp.kind = VolumePress::Kind::Mute;
+    note_mixer_press(s, "other", sw, swp);
+    CHECK(!app_muted_of(s, "other"));
 }
 
 }  // namespace
@@ -945,6 +1076,8 @@ void test_volume() {
     test_board_classes();
     test_pi4b_pcm();
     test_mute_steps();
+    test_software_mute();
+    test_vinyl_mute();
     test_sink_names();
     test_unknown_level();
     test_output_mixer();

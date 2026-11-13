@@ -45,7 +45,8 @@ void remove_demo_world(const DemoWorld &w);
 
 OutputWorld demo_output_world(bool lite, const std::string &variant = "");
 LauncherStatus demo_launcher_status();
-std::unique_ptr<SinkProvider> make_demo_sink_provider(const std::string &variant = "");
+/* lite: the outputs of a board without a sound server (ALSA devices, no playback mixer in the demonstration). */
+std::unique_ptr<SinkProvider> make_demo_sink_provider(const std::string &variant = "", bool lite = false);
 
 /* A sparse WAV of `seconds` (16-bit stereo at `rate`) with a LIST/INFO chunk; for the demo and the tests. */
 bool write_demo_wav(const std::string &path, double seconds, uint32_t rate, const std::string &title, const std::string &artist,

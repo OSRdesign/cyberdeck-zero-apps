@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -36,6 +37,9 @@ struct ResumeState {
                                     state.json and written back unchanged, never applied */
     std::map<std::string, int> app_volumes; /* the software level of an output WITHOUT a playback mixer, per output
                                                (output_volume_key); at most kMaxAppVolumes */
+    std::set<std::string> app_muted;        /* the outputs Vinyl muted itself, their level kept (a card without a playback
+                                               mixer, a control with neither a switch nor a mute value: core/volume
+                                               MuteBy::Vinyl); at most kMaxAppVolumes */
 };
 
 constexpr size_t kMaxAppVolumes = 32;
@@ -43,6 +47,9 @@ constexpr size_t kMaxAppVolumes = 32;
 int app_volume_of(const ResumeState &s, const std::string &key);
 /* Sets it (0..100) for `key`. */
 void set_app_volume(ResumeState &s, const std::string &key, int level);
+/* Vinyl's own mute of the output `key` (app_muted). */
+bool app_muted_of(const ResumeState &s, const std::string &key);
+void set_app_muted(ResumeState &s, const std::string &key, bool muted);
 
 constexpr size_t kMaxResumeItems = 5000;
 

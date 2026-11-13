@@ -173,6 +173,31 @@ coordinator's correction, 2026-11-13).
   (the Sharkoon's -45 dB is its level 1, 4 %), so the earlier "one step above the floor" is gone.
 - The sound server's placeholder output at start (`auto_null`) never shows a level ("--").
 
+## Muted on every layout and every path (owner, 2026-11-13)
+
+The owner's report on the final build: "zero 8 and pi52 are not showing mute", then "arf not zero8 , I meant zero7": on
+RPI52 (800x480) the group showed a speaker-off mark of about 14 px in its 52 px level box, on the deck (640x480) the
+mark and "Off"; neither read as mute. Then "no need for the word muted if it doesn't fit the speaker off glyph is
+enough" and "Mute is better than Muted". This replaces the "Muted, Mute, Off, the mark alone" chain (design QA run 4,
+D-53):
+
+- Muted, the level box takes the muted look, defined once and the same on every layout: a dark fill #222222 with the
+  speaker-off mark and the word in white (the coordinator's pick, 2026-11-13: no extra slash, the mark already has its
+  cross). The mark and "Mute" side by side where both fit with the word at the toolkit's CAPTION size or larger (BODY
+  first), the mark then at least 16 px; else the mark alone, large: its drawn height about 60 % of the box, 24 px or
+  more (core/layout `mute_fit`, tested at every QA size; the scenes stop on a box that breaks it). Never "Off", never
+  "Muted", never the level it comes back at. What each QA size draws: qa-info.txt `muted`.
+- 800x480 (the coordinator, 2026-11-13): Browse and Output 118 wide, the volume group 184 ("-" 40, the level 96, "+"
+  40, 4 apart), so "Mute" fits beside the mark; the other layouts keep their widths (the mark alone where the word does
+  not fit).
+- The same muted state on every path: the card's switch; the control's own mute value (the Pi jack without a switch);
+  the sink's mute (`pactl set-sink-mute`, the launcher's key: shown muted at the level it keeps, "+" un-mutes there);
+  and Vinyl's own mute for a card without a playback mixer (Vinyl's software volume, HDMI on zero8) and for a control
+  with neither a switch nor a mute value (before, "-" stopped at level 1 there and the software volume showed "0"):
+  Vinyl's stream silent, the output's level kept, saved per output in state.json (`app_muted`). Everywhere "-" muted
+  does nothing and "+" brings the level back. Tested: tests/test_volume.cpp (test_software_mute, test_vinyl_mute,
+  test_mute_steps), the scene qa-soft-muted at every QA size.
+
 ## The record (owner, 2026-11-13)
 
 The owner, on a deck screenshot: "the disc going out of the song cover picture seems to be too low, it appears under the
@@ -301,7 +326,7 @@ is complicating the thing, let's make it work with all most common codecs out of
   icon alike (the key fill #B9B19B reads #CDC5AE on the cream panel, the ink #222222 #928D7F, the teal play key #91B09E):
   the transport keys with an empty queue, the dimmed sleep-timer key, the queue buttons that cannot act. With only the
   playing track in the queue, Move up, Move down and Clear all are dimmed and do nothing (`queue_buttons_enabled`).
-- **Muted stays legible** (D-53): the word is drawn at the level number's own size, shrinking at most to the toolkit's
+- **Muted stays legible** (D-53; the word chain below replaced by "Muted on every layout and every path"): the word is drawn at the level number's own size, shrinking at most to the toolkit's
   caption size (`text_px[CP0_TEXT_CAPTION]`); where "Muted" does not fit the box at that size the shorter "Mute", then
   "Off", follow the speaker-off mark; where none fits, the mark alone.
 - **Notices touch what they cover, nothing more** (D-33): on now playing a notice sits inside the seek row's touch area

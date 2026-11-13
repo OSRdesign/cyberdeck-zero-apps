@@ -52,7 +52,7 @@ output lists are read in the background).
 | Folder up | Left or Backspace (browser) | the ".." row |
 | Queue pane (800x480 and wider) | Up / Down pick a track, Enter plays it | tap picks, tap again plays |
 | Queue editing | U move up, D move down, Delete or X remove, C clear all (then Y clears; Enter or Esc cancels, as the dialog says) | the four buttons; Clear all asks "Clear the queue?" (the toolkit's dialog: Cancel, Clear, or the header's Esc; a tap outside does nothing). A button that cannot act is dimmed and does nothing |
-| Volume | `-` / `=`: the volume of the output Vinyl plays on, one of its levels a press (about 2 dB) | "-" and "+" of the volume group, the level between them (teal): in the bottom row (640x480, square, portrait), under the output button (480x320), where the Equalizer key was (800x480). It sets and shows the playing output's real level as a percent of that output's levels; muted (by anything), it shows "Muted" with the speaker-off mark, "-" does nothing and "+" brings the sound back at its level; "-" at the first level mutes. "--" when the level is not known; where nothing can change it a tap shows "Volume is not available on this board" |
+| Volume | `-` / `=`: the volume of the output Vinyl plays on, one of its levels a press (about 2 dB) | "-" and "+" of the volume group, the level between them (teal): in the bottom row (640x480, square, portrait), under the output button (480x320), where the Equalizer key was (800x480). It sets and shows the playing output's real level as a percent of that output's levels; muted (by anything), the level box turns dark with the speaker-off mark in white and "Mute" beside it where both fit (480x320, 800x480 and the larger portrait and square screens), else the mark alone, large (640x480, 480x480, 480x640, 320x480), never a number; "-" does nothing and "+" brings the sound back at its level; "-" at the first level mutes. "--" when the level is not known; where nothing can change it a tap shows "Volume is not available on this board" |
 | Close a notice | Esc (it also goes back as Esc always does: at the browser Vinyl quits) | tap it (it also goes after 6 s, 8 s for a disconnect) |
 | Back; at the browser, quit | Esc | the header's Esc |
 | Headset, speaker, keyboard media keys | Play/Pause, PlayCD, PauseCD (a toggle), Next, Previous (as Right / Left above, held too), Stop (pause and back to the start) | |
@@ -115,7 +115,7 @@ Korean titles draw with the launcher's Noto Sans CJK.
 
   Without a sound server it is the card's playback mixer control (`Master`, `PCM`, `Speaker`, `Headphone`,
   `Headset`...), set by raw value and read back fresh; the control's switch mutes. A control whose lowest step is "mute"
-  (the Pi jack's) has that step read as Muted, and its dB range is taken from the step above (ALSA reports the mute step
+  (the Pi jack's) has that step read as muted, and its dB range is taken from the step above (ALSA reports the mute step
   as -99999.99 dB); a control without dB data gets its own raw steps (at most 30). With a sound server it is the sink's
   own volume, set as the server's dB (`pa_sw_volume_from_dB`) whether it is the default sink or not; the window is the
   range of the ALSA card behind the sink (found from the sink's properties), placed under the sink's 0 dB as the server
@@ -124,8 +124,12 @@ Korean titles draw with the launcher's Noto Sans CJK.
   the nearest level within about half a second. Each set is logged with what the output holds after it
   (`volume: set <output> step i/N P % target X dB raw=M read back raw=K`). Only a card with no playback mixer gets
   Vinyl's software volume, over -60..0 dB. Vinyl's stream itself always plays at 100 %, with its own restore key, so a
-  server never brings back another app's stream level. A muted output shows "Muted" in the group, whoever muted it; the
-  sound server's placeholder output at start (`auto_null`) never shows a level.
+  server never brings back another app's stream level. A muted output shows the same muted box in the group, whoever
+  muted it: the card's switch, the control's own mute value, the sink's mute (`pactl set-sink-mute`, the launcher's key)
+  or Vinyl's own mute, which it uses for a card with no playback mixer (the software volume) and for a control with
+  neither a switch nor a mute value: its stream goes silent, the output keeps its level, and the mute survives a restart
+  (`~/.config/vinyl/state.json`, `app_muted`). The sound server's placeholder output at start (`auto_null`) never shows a
+  level.
 
 ## Planned settings
 
@@ -224,6 +228,7 @@ Board protocol: [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md).
 
 - **0.1.0** (not published yet): the P1 MVP of report 059 (decisions D1-D18), with the design-QA rounds: the transport
   press (owner ruling 2026-11-12), the volume group on every layout with the output button (owner, 2026-11-13), the
-  approved 640x480 and 480x320 layouts, the record's label with its spin marks, Muted shown as muted, Clear all asks,
+  approved 640x480 and 480x320 layouts, the record's label with its spin marks, a muted output shown the same way on
+  every path and layout (the dark level box, the speaker-off mark, "Mute" where it fits), Clear all asks,
   the Raspberry Pi headphone jack's volume, Left / Right on the queue and output pages, the output rows' action dot,
   the title as the toolkit places it, the icon inside its margin.

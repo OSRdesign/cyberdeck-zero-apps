@@ -346,12 +346,16 @@ private:
 
 class DemoSinks final : public SinkProvider {
 public:
-    explicit DemoSinks(bool long_dac) : long_dac_(long_dac) {}
+    DemoSinks(bool long_dac, bool lite) : long_dac_(long_dac), lite_(lite) {}
     int open(const OutputTarget &t, OpenedSink &out, std::string &why) override {
         (void)why;
         out.sink = std::make_unique<NullSink>();
-        out.pulse = true;
-        if (t.kind == OutputTarget::Kind::Auto && long_dac_) {
+        out.pulse = !lite_;
+        if (lite_) { /* no sound server: the ALSA default device, a card without a playback mixer (Vinyl's software level) */
+            out.name = t.kind == OutputTarget::Kind::Alsa ? t.id : std::string("default");
+            out.label = t.kind == OutputTarget::Kind::Alsa ? t.id : std::string("system default");
+            out.device = out.name;
+        } else if (t.kind == OutputTarget::Kind::Auto && long_dac_) {
             PulseDevice d;
             d.name = kLongSink;
             d.description = kLongSinkDescription;
@@ -372,13 +376,13 @@ public:
     bool still_there(const OpenedSink &) override { return true; }
 
 private:
-    bool long_dac_;
+    bool long_dac_, lite_;
 };
 
 }  // namespace
 
-std::unique_ptr<SinkProvider> make_demo_sink_provider(const std::string &variant) {
-    return std::make_unique<DemoSinks>(variant == "long");
+std::unique_ptr<SinkProvider> make_demo_sink_provider(const std::string &variant, bool lite) {
+    return std::make_unique<DemoSinks>(variant == "long", lite);
 }
 
 }  // namespace vinyl

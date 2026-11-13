@@ -182,10 +182,10 @@ struct VinylApp::Impl final : TransportHost {
             if (demo_world.empty) roots.clear();
             else roots = {Root{"Music", demo_world.music}};
             resume_file = demo_world.config + "/vinyl/state.json";
-            sinks = make_demo_sink_provider(variant);
+            sinks = make_demo_sink_provider(variant, lite);
             world = demo_output_world(lite, variant);
             status = demo_launcher_status();
-            if (env_on("VINYL_DEMO_MUTED")) /* the output muted (by the launcher's key, another app): Muted everywhere */
+            if (env_on("VINYL_DEMO_MUTED")) /* the output muted (the launcher's key, another app, pactl): muted everywhere */
                 for (PulseDevice &d : world.sinks) d.muted = true;
             if (env_on("VINYL_DEMO_NOVOLUME")) { /* the server reports no level for its sinks: "--", nothing to change */
                 status.volume = -1;
@@ -260,6 +260,11 @@ struct VinylApp::Impl final : TransportHost {
         load_resume(resume_file, resume);
         target = OutputTarget::from_key(resume.output);
         engine->set_output(target);
+        if (demo && lite && env_on("VINYL_DEMO_MUTED")) { /* a board without a server: Vinyl's own mute, 60 % kept */
+            const std::string key = volume_target().key;
+            set_app_volume(resume, key, 60);
+            set_app_muted(resume, key, true);
+        }
         apply_gain();
         Page first = Page::Browser;
         if (!resume.items.empty()) {
@@ -885,11 +890,12 @@ struct VinylApp::Impl final : TransportHost {
         if (t.kind == VolTarget::Kind::Mixer) {
             if (software_volume(t)) {
                 if (model) *model = software_model();
-                return software_model().from_pct(app_volume_of(resume, t.key));
+                return software_level(resume, t.key, muted); /* Vinyl's own mute: the level kept */
             }
             if (model) *model = mixer_choice.model;
-            if (muted) *muted = mixer_level.muted;
-            return mixer_level.level;
+            const MixerLevel shown = mixer_level_shown(mixer_choice, mixer_level, resume, t.key);
+            if (muted) *muted = shown.muted;
+            return shown.level;
         }
         return -1;
     }
@@ -909,16 +915,20 @@ struct VinylApp::Impl final : TransportHost {
     }
 
     /* the engine's gain: silent while a long press scans; the software level only for a card without a mixer (linear in
-     * dB over -60..0); else unity (the output's own volume does the work, Vinyl's stream stays at 100 %) */
+     * dB over -60..0); silent while Vinyl's own mute holds (a card without a mixer, a control with neither a switch nor
+     * a mute value); else unity (the output's own volume does the work, Vinyl's stream stays at 100 %) */
     void apply_gain() {
         if (!engine) return;
         const VolTarget t = volume_target();
         float gain = 1.0f;
         if (software_volume(t)) {
             const OutputVolumeModel m = software_model();
-            const int lv = m.from_pct(app_volume_of(resume, t.key));
-            gain = lv <= 0 ? 0.0f : volume_gain_db(m.db_of(lv));
-        }
+            bool muted = false;
+            const int lv = software_level(resume, t.key, &muted);
+            gain = muted || lv <= 0 ? 0.0f : volume_gain_db(m.db_of(lv));
+        } else if (t.kind == VolTarget::Kind::Mixer && mixer_level.has_mixer && mute_by(mixer_choice) == MuteBy::Vinyl &&
+                   mixer_level_shown(mixer_choice, mixer_level, resume, t.key).muted)
+            gain = 0.0f;
         engine->set_gain(scan_muted ? 0.0f : gain);
     }
 
@@ -959,23 +969,35 @@ struct VinylApp::Impl final : TransportHost {
         } else if (t.kind == VolTarget::Kind::Mixer) {
             if (software_volume(t)) {
                 const OutputVolumeModel sm = software_model();
-                const VolumePress p = sink_press(sm, sm.from_pct(app_volume_of(resume, t.key)), false, d);
+                const VolumePress p = software_press(resume, t.key, d); /* Vinyl's own mute keeps the level */
                 if (p.kind == VolumePress::Kind::None) return;
-                const int level = p.kind == VolumePress::Kind::Mute ? 0 : p.level;
-                set_app_volume(resume, t.key, sm.pct_of(level));
                 dirty = true;
                 apply_gain();
-                char db[24] = "mute";
-                if (level > 0) std::snprintf(db, sizeof db, "%.2f dB", sm.db_of(level));
-                std::fprintf(stderr, "[vinyl] volume: software step %d/%d %d %% (%s) for %s (no playback mixer)\n", level, sm.n,
-                             sm.pct_of(level), db, t.key.c_str());
+                bool muted = false;
+                const int level = software_level(resume, t.key, &muted);
+                char db[48] = "";
+                if (muted) std::snprintf(db, sizeof db, "muted, level %d kept", level);
+                else std::snprintf(db, sizeof db, "%.2f dB", sm.db_of(level));
+                std::fprintf(stderr, "[vinyl] volume: software step %d/%d %d %% (%s) for %s (no playback mixer)\n", muted ? 0 : level,
+                             sm.n, muted ? 0 : sm.pct_of(level), db, t.key.c_str());
             } else if (alsa) {
-                const VolumePress p = mixer_press(mixer_choice, mixer_level, d);
+                const MixerLevel shown = mixer_level_shown(mixer_choice, mixer_level, resume, t.key);
+                const VolumePress p = mixer_press(mixer_choice, shown, d);
+                const MuteBy by = mute_by(mixer_choice);
+                const bool on_off = p.kind == VolumePress::Kind::Mute || p.kind == VolumePress::Kind::Unmute;
                 int r = 0;
                 if (p.kind == VolumePress::Kind::Set) r = write_mixer_level(*alsa, t.card, mixer_choice, p.level);
-                else if (p.kind == VolumePress::Kind::Mute) r = write_mixer_switch(*alsa, t.card, mixer_choice, false);
-                else if (p.kind == VolumePress::Kind::Unmute) r = write_mixer_switch(*alsa, t.card, mixer_choice, true);
-                else return;
+                else if (on_off && by == MuteBy::Switch)
+                    r = write_mixer_switch(*alsa, t.card, mixer_choice, p.kind == VolumePress::Kind::Unmute);
+                else if (!on_off) return;
+                if (r >= 0) {
+                    note_mixer_press(resume, t.key, mixer_choice, p);
+                    dirty = true;
+                }
+                if (on_off && by == MuteBy::Vinyl)
+                    std::fprintf(stderr, "[vinyl] volume: %s '%s' %s by Vinyl (no switch, no mute value; level %d kept)\n",
+                                 t.card.c_str(), mixer_choice.volume.c_str(), p.kind == VolumePress::Kind::Mute ? "muted" : "un-muted",
+                                 shown.level);
                 if (r < 0) std::fprintf(stderr, "[vinyl] volume: %s %s: %s\n", t.card.c_str(), mixer_choice.volume.c_str(), alsa_error_text(r).c_str());
                 if (p.kind == VolumePress::Kind::Set && r >= 0) { /* what was written and what the control holds now */
                     long back = 0;
@@ -984,10 +1006,11 @@ struct VinylApp::Impl final : TransportHost {
                                  volume_set_log_text(t.card + " '" + mixer_choice.volume + "'", mixer_choice.model, p.level,
                                                      mixer_raw_for_level(mixer_choice, p.level), rr, back)
                                      .c_str());
-                } else if (r >= 0)
+                } else if (r >= 0 && by == MuteBy::Switch)
                     std::fprintf(stderr, "[vinyl] volume: set %s '%s' %s\n", t.card.c_str(), mixer_choice.sw.c_str(),
                                  p.kind == VolumePress::Kind::Mute ? "off (muted)" : "on (un-muted)");
                 read_output_mixer(mono_ms_now(), true);
+                apply_gain();
             }
         }
         refresh(true);

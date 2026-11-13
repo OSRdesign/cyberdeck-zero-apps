@@ -31,6 +31,7 @@
 #include "fit.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -71,6 +72,22 @@ constexpr double kDesignBody = 40; /* the drafts' y that sits on the toolkit hea
  * Queue and Output always (they open their pages, which show their own empty states); the transport keys (shuffle,
  * previous, play, next, repeat) only with something in the queue. */
 bool key_active(const Btn &b, bool queue_empty);
+
+/* The muted level box (the owner, 2026-11-13: "zero 8 and pi52 are not showing mute" (zero7 meant), "no need for the
+ * word muted if it doesn't fit the speaker off glyph is enough", "Mute is better than Muted"): the speaker-off mark and
+ * the word side by side where both fit, the word at body_px down to caption_px (never smaller) and the mark 1.1 times the
+ * word, 16 px or more; else the mark alone, large: its drawn height about 60 % of the box (the icon's 24-unit square
+ * draws the speaker kMuteGlyphDrawnH of its size high and kMuteGlyphDrawnW wide), 24 px or more, never wider than the box
+ * less its margins. word_w(px): the word's width at px; s: the fit's scale (the margins and the gap). */
+constexpr double kMuteGlyphDrawnH = 16.0 / 24, kMuteGlyphDrawnW = 20.0 / 24;
+constexpr int kMuteGlyphMin = 24, kMutePairGlyphMin = 16;
+struct MuteFit {
+    bool word = false; /* the word is shown beside the mark */
+    int px = 0;        /* the word's size */
+    int glyph = 0;     /* the mark's size (its 24-unit square) */
+    int margin = 0, gap = 0;
+};
+MuteFit mute_fit(int box_w, int box_h, double s, int body_px, int caption_px, const std::function<int(int)> &word_w);
 
 struct NowGeom {
     SizeClass cls = SizeClass::Small;
