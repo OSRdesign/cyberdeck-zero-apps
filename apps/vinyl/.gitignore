@@ -1,0 +1,4 @@
+# built by build.sh cross, never committed: the binaries and their build-info
+root/usr/share/APPLaunch/bin/
+root/usr/share/doc/vinyl/build-info
+root.amd64/

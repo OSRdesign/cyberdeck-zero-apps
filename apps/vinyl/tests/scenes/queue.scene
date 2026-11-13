@@ -1,0 +1,20 @@
+title Vinyl queue, 480x320 (draft Queue-480x320): the play order from the playing track, the four buttons
+sizes 480x320
+ppmm 608
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE queue
+
+wait 1200
+shot queue
+expect esc
+expect text "3 OF 20, 1 H 24 MIN LEFT"
+expect text "Move up"
+expect text "Clear all"
+expect text "Amerie, 1 Thing (Siik Remix)"
+key down
+wait 200
+tap "Move up"
+wait 400
+shot queue-moved
+expect noquit

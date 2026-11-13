@@ -110,6 +110,9 @@ struct Scene {
     bool lifecycle = false;  /* a multitasking launcher: the control socket (APP-CONTRACT section 13) */
     int ppmm_x100 = 0;       /* `ppmm N` (px per mm x 100): the panel of a board, whatever the size (0: the size's default) */
     bool band = false;       /* a launcher with the PDA writing zone runs the app upright: APPLAUNCH_PDA=1, hand=1 */
+    bool allow_small = false; /* `allow-small`: a size check under ROW / TARGET is a WARN, not a failure (the owner's rule
+                                 that 7 mm is a recommendation, for an app whose approved layout is under it at a board's
+                                 real density); every other check stays a failure */
     std::vector<std::pair<std::string, std::string>> env; /* set before the app starts (an app's test fixture) */
 };
 
@@ -168,6 +171,10 @@ bool load_scene(const std::string &path, Scene &scene)
             scene.band = true;
             continue;
         }
+        if (line.words[0] == "allow-small") {
+            scene.allow_small = true;
+            continue;
+        }
         if (line.words[0] == "env") {
             if (line.words.size() != 3) {
                 std::fprintf(stderr, "%s:%d: env NAME VALUE\n", path.c_str(), number);
@@ -199,7 +206,9 @@ struct Run {
     int hand = 0; /* input.state hand= (report 044): Handwriting + keyboard */
     unsigned gen = 0;
     bool notice = false;
+    bool allow_small = false; /* the scene's allow-small: size findings are warnings */
     int failures = 0;
+    int warnings = 0;
     std::vector<std::string> shots;
     std::ofstream report;
 };
@@ -304,8 +313,19 @@ void shot(Run &run, const Line &line, const std::string &name, bool save)
         run.shots.push_back(name);
     }
     const headless::CheckResult r = headless::check_layout(run.notice);
-    for (const std::string &f : r.failures) fail(run, line, (save ? "shot " : "check ") + name + ": " + f);
-    run.report << (r.failures.empty() ? "PASS " : "FAIL ") << (save ? "shot " : "check ") << name;
+    int failed = 0;
+    for (const std::string &f : r.failures) {
+        if (run.allow_small && f.compare(0, 6, "size: ") == 0) { /* allow-small: reported, not failed */
+            ++run.warnings;
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), "line %d: ", line.number);
+            run.report << "WARN " << buf << (save ? "shot " : "check ") << name << ": " << f << "\n";
+            continue;
+        }
+        ++failed;
+        fail(run, line, (save ? "shot " : "check ") + name + ": " + f);
+    }
+    run.report << (failed == 0 ? "PASS " : "FAIL ") << (save ? "shot " : "check ") << name;
     for (const std::string &n : r.notes) run.report << " | " << n;
     run.report << "\n";
 }
@@ -584,6 +604,7 @@ int run_size(const Size &size, const Scene &scene, const std::string &out_dir, c
     unsetenv("APPLAUNCH_PDA"); /* band scenes: band_begin sets it where the size has a band */
     setenv("APPLAUNCH_STATE_DIR", run.runtime.c_str(), 1); /* never the real runtime directory */
     run.hand = scene.band ? 1 : 0; /* the PDA profile's default choice: Handwriting + keyboard */
+    run.allow_small = scene.allow_small;
     if (!scene.nocontract) {
         /* the per-launch environment of a fullscreen app (app_launch_env.cpp in the launcher) */
         setenv("APPLAUNCH_CONTRACT", "1", 1);
@@ -635,7 +656,9 @@ int run_size(const Size &size, const Scene &scene, const std::string &out_dir, c
         std::ofstream list(run.out + "/shots.list");
         for (const std::string &s : run.shots) list << s << "\n";
     }
-    run.report << (run.failures ? "FAILED " : "PASSED ") << run.failures << " failure(s)\n";
+    run.report << (run.failures ? "FAILED " : "PASSED ") << run.failures << " failure(s)";
+    if (run.warnings) run.report << ", " << run.warnings << " size warning(s) (allow-small)";
+    run.report << "\n";
     run.report.close();
     return std::min(run.failures, 100);
 }

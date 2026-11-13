@@ -1,0 +1,42 @@
+title Vinyl: Clear all asks first ("Clear the queue?", the toolkit's dialog: Cancel is its Primary, so Enter cancels, as Esc and the header's Esc do; Y or a tap on Clear clears all but the playing track)
+sizes 480x320 320x480
+ppmm 610
+env VINYL_DEMO 1
+
+wait 1000
+key q
+wait 400
+key c
+wait 300
+shot 01-queue-clear-ask
+expect esc
+expect text "Clear the queue?"
+expect text "Cancel"
+expect text "Y = Clear, Enter or Esc = Cancel"
+key enter
+wait 300
+expect notext "Clear the queue?"
+key c
+wait 300
+expect text "Clear the queue?"
+key esc
+wait 300
+expect notext "Clear the queue?"
+expect text "3 OF 20, 1 H 24 MIN LEFT"
+# the header's Esc while it shows: it only cancels (design QA run 4, D-30), the queue page stays
+tap "Clear all"
+wait 300
+expect text "Clear the queue?"
+tap "Esc"
+wait 300
+expect notext "Clear the queue?"
+expect text "3 OF 20, 1 H 24 MIN LEFT"
+tap "Clear all"
+wait 300
+expect text "Clear the queue?"
+tap "Clear"
+wait 400
+shot 02-queue-cleared
+expect notext "Clear the queue?"
+expect text "1 OF 1, 3 MIN LEFT"
+expect noquit

@@ -1,0 +1,20 @@
+title Vinyl lists at 320x480: the browser, the queue (its buttons on two rows) and the output chooser
+sizes 320x480
+ppmm 667
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+
+wait 800
+key b
+wait 300
+shot p-browser
+key q
+wait 300
+shot p-queue
+expect text "Move down"
+key esc
+wait 200
+key o
+wait 300
+shot p-output
+expect noquit

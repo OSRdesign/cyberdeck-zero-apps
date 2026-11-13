@@ -1,0 +1,19 @@
+title Vinyl: scrubbing the seek bar at 640x480 (a finger held at three quarters: 03:03), then a real drag from a quarter to three quarters of the bar and its release (the seek)
+sizes 640x480
+# the deck's own density (11.3 px/mm) leaves the approved 640x480 layout's touch rows 70 px, under the 7 mm (79 px):
+# owner rule R-4, listed in qa-info.txt; the scene runs at a 3.5-inch 640x480 panel's 9.01 px/mm (the harness's own
+# 480x640), whose 7 mm (63 px) the rows hold, the toolkit header as on the deck (56 px)
+ppmm 901
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_SCRUB 0.75
+
+wait 1200
+shot 01-scrubbing
+expect esc
+expect text "03:03"
+expect text "-1:01"
+drag 0.25 0.653 0.75 0.653
+wait 600
+shot 02-after-drag
+expect noquit

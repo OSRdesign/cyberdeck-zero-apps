@@ -1,0 +1,31 @@
+title Vinyl transport press by keys (owner ruling 2026-11-12): Right = the next track, Left within 2 s = the previous track, Left after 2 s = the same track from its start
+sizes 480x320
+ppmm 608
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+
+wait 800
+expect text "Fences (LeMarquis Remix)"
+key right
+wait 500
+shot tr-next
+expect text "1 Thing (Siik Remix)"
+key left
+wait 400
+shot tr-prev
+expect text "Fences (LeMarquis Remix)"
+wait 2600
+key left
+wait 400
+shot tr-restart
+expect text "Fences (LeMarquis Remix)"
+expect notext "Shooting Stars"
+key q
+wait 300
+key right
+wait 300
+expect text "Move down"
+key left
+wait 300
+expect text "Fences (LeMarquis Remix)"
+expect noquit

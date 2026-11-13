@@ -1,0 +1,49 @@
+title Vinyl: design QA walk (now playing with the volume group and the output button or chip on the large, square and portrait layouts, browser, queue, output; Left goes back on Queue and Output; 640x480: qa-640, 480x320 and 320x480: qa-small). Busy state: none (nothing in Vinyl waits in front of the user). Error states: the notices (notice-now, notice-classes, notices)
+sizes 800x480 480x480 720x720 480x800 480x640
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+
+wait 1200
+shot 01-now
+expect esc
+expect text "Vinyl"
+expect text "60"
+expect text "Evolve 65"
+expect notext "Vol 60"
+# the volume group on every layout (owner, 2026-11-13): no Vol chip, no strip
+wait 300
+shot 02-now-volume
+# the group's "+" (an icon: no text to tap), measured on each size's shot; one level up: 60 % (level 18 of 30) to 63 %
+@800x480 tapxy 0.922 0.849
+@480x480 tapxy 0.881 0.922
+@720x720 tapxy 0.901 0.919
+@480x800 tapxy 0.849 0.936
+@480x640 tapxy 0.809 0.928
+wait 300
+shot 03-now-volume-up
+expect text "63"
+# the output button (square, portrait) or chip (large) opens the Output page
+tap "Evolve 65"
+wait 400
+expect text "Automatic"
+key left
+wait 300
+key b
+wait 400
+shot 05-browser
+expect text "MUSIC / PHOENIX"
+key q
+wait 400
+shot 06-queue
+expect text "Move down"
+key left
+wait 300
+key o
+wait 400
+shot 07-output
+expect text "Automatic"
+key left
+wait 300
+expect text "MUSIC / PHOENIX"
+key esc
+expect quit

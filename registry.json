@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-11-12T07:52:13+00:00",
+  "generated_at": "2026-11-13T16:38:54+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CardputerZero"
@@ -1069,6 +1069,92 @@
       ],
       "min_size": "640x480",
       "portrait_min_size": "480x640"
+    },
+    {
+      "uuid": "e55dc84b-4a07-51e4-b551-4b09ffaa23a2",
+      "share_code": "vinyl",
+      "title": "Vinyl",
+      "summary": "A music player: MP3, FLAC, Vorbis, Opus, WAV, AAC; wired and Bluetooth.",
+      "description": "Plays the music in ~/Music and on USB drives, folder by folder or from M3U playlists: gapless, shuffle, repeat, cover art, resume where you stopped. Plays on while you use other apps. Wired outputs, and Bluetooth headsets and speakers on boards with a sound server; headset and keyboard play keys. AAC, ALAC, WMA and more through FFmpeg, installed with it. Needs a screen of 480x320 or more.",
+      "locales": {
+        "en": {
+          "title": "Vinyl",
+          "summary": "A music player: MP3, FLAC, Vorbis, Opus, WAV, AAC; wired and Bluetooth.",
+          "description": "Plays the music in ~/Music and on USB drives, folder by folder or from M3U playlists: gapless, shuffle, repeat, cover art, resume where you stopped. Plays on while you use other apps. Wired outputs, and Bluetooth headsets and speakers on boards with a sound server; headset and keyboard play keys. AAC, ALAC, WMA and more through FFmpeg, installed with it. Needs a screen of 480x320 or more."
+        }
+      },
+      "i18n": {
+        "en": {
+          "title": "Vinyl",
+          "summary": "A music player: MP3, FLAC, Vorbis, Opus, WAV, AAC; wired and Bluetooth.",
+          "description": "Plays the music in ~/Music and on USB drives, folder by folder or from M3U playlists: gapless, shuffle, repeat, cover art, resume where you stopped. Plays on while you use other apps. Wired outputs, and Bluetooth headsets and speakers on boards with a sound server; headset and keyboard play keys. AAC, ALAC, WMA and more through FFmpeg, installed with it. Needs a screen of 480x320 or more."
+        }
+      },
+      "categories": [
+        "Tools"
+      ],
+      "author": {
+        "github": "OSRdesign",
+        "display_name": "OSRdesign"
+      },
+      "version": "0.1.0",
+      "published_at": "2026-11-13T16:38:54+00:00",
+      "updated_at": "2026-11-13T16:38:54+00:00",
+      "review": {
+        "status": "approved"
+      },
+      "license": "MIT",
+      "source_repo": "https://github.com/OSRdesign/cyberdeck-zero-apps/tree/main/apps/vinyl",
+      "download": {
+        "type": "deb",
+        "package": "vinyl",
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/vinyl_0.1.0_arm64.deb",
+        "md5": "3b0642d793c52f637b51cc8c94a2e0a6",
+        "sha256": "c6b22a89618d4fa75e11f5f5c74bff7bf41471c3b8d4d312c57605e01920c8fa",
+        "size": 1775140
+      },
+      "depends": "libstdc++6, libgcc-s1, libfreetype6, libinput10, libxkbcommon0, libasound2t64 | libasound2, libmpg123-0t64 | libmpg123-0, libvorbisfile3, libflac14 | libflac12t64 | libflac12, libopus0, libpulse0, libavformat61 | libavformat62, libavcodec61 | libavcodec62, libavutil59 | libavutil60, libswresample5 | libswresample6",
+      "permissions": {
+        "camera": false,
+        "microphone": false,
+        "imu": false,
+        "network": false,
+        "additional_hardware": true,
+        "background_service": false,
+        "external_display": false
+      },
+      "assets": {
+        "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/icon.png",
+        "screenshots": [
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/01-now-playing-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/02-browser-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/03-queue-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/04-output-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/05-now-playing-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/06-now-playing-480x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/07-now-playing-800x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/08-output-lost-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/09-now-playing-640x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/10-muted-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/11-scrub-480x320.png"
+        ]
+      },
+      "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/icon.png",
+      "screenshots": [
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/01-now-playing-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/02-browser-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/03-queue-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/04-output-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/05-now-playing-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/06-now-playing-480x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/07-now-playing-800x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/08-output-lost-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/09-now-playing-640x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/10-muted-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/11-scrub-480x320.png"
+      ],
+      "min_size": "480x320",
+      "portrait_min_size": "320x480"
     },
     {
       "uuid": "b316a757-7d69-5f51-8ba3-1f47e9b229b6",

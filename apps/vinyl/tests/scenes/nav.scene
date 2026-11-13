@@ -1,0 +1,32 @@
+title Vinyl by keys: Q queue, Esc back, O output, B browser, up and Enter, Esc at the browser quits
+sizes 480x320
+ppmm 608
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+
+wait 800
+key q
+wait 300
+shot k-queue
+expect text "Move down"
+key esc
+wait 300
+key o
+wait 300
+shot k-output
+expect text "Automatic"
+key esc
+wait 300
+key b
+wait 300
+shot k-browser
+expect text "MUSIC / PHOENIX"
+key up
+key up
+key up
+key enter
+wait 400
+shot k-up
+expect text "Playlist SKI.m3u"
+key esc
+expect quit

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vinyl browser</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<!-- branding-allow-begin: SVG path data (a move-to command to x 5 reads like the brand word) -->
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Montserrat:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.row{position:absolute;left:0;width:464px;height:36px;color:#ddd;font-size:15px;font-weight:600}
+.dot{position:absolute;left:16px;top:13px;width:10px;height:10px;border-radius:50%}
+.t{position:absolute;left:40px;top:0;width:360px;line-height:36px;white-space:nowrap;overflow:hidden}
+.d{position:absolute;right:16px;top:0;line-height:36px;font-family:'JetBrains Mono',monospace;font-weight:500;font-size:13px;color:#9a9a9a}
+.ch{position:absolute;right:14px;top:10px}
+.disc{position:absolute;border-radius:50%;background:repeating-radial-gradient(circle,#141414 0 1px,#1f1f1f 1px 2px)}
+</style>
+</helmet>
+<div style="position:relative;width:480px;height:320px;background:#000;overflow:hidden;font-family:'Montserrat',sans-serif">
+    <div style="position:absolute;left:12px;top:2px;line-height:40px;font-size:26px;font-weight:600;color:#F0B400">Browse</div>
+  <svg style="position:absolute;right:88px;top:10px" width="30" height="24" viewBox="0 0 30 24" aria-label="Wi-Fi signal"><rect x="1" y="16" width="4" height="6" rx="1" fill="#777"/><rect x="8" y="12" width="4" height="10" rx="1" fill="#777"/><rect x="15" y="8" width="4" height="14" rx="1" fill="#777"/><rect x="22" y="3" width="4" height="19" rx="1" fill="#777"/></svg>
+  <div style="position:absolute;right:8px;top:6px;width:70px;height:30px;border-radius:6px;background:#8a5a2b;color:#fff;font-size:20px;font-weight:600;display:flex;align-items:center;justify-content:center">12:00</div>
+  <div style="position:absolute;left:219px;top:8px;width:40px;height:27px;border-radius:10px;background:#222;color:#fff;font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center">Esc</div>
+  <div style="position:absolute;left:8px;top:44px;width:464px;height:268px;border-radius:10px;background:#1b1e1e;overflow:hidden">
+    <div style="position:absolute;left:16px;top:0;width:360px;line-height:30px;font-size:12px;font-weight:700;letter-spacing:.04em;color:#9a9a9a">SD CARD / PHOENIX</div>
+    <div style="position:absolute;right:12px;top:4px;height:22px;padding:0 10px;border-radius:5px;background:#2a2a2a;color:#ddd;font-size:12px;font-weight:700;display:flex;align-items:center">A-Z</div>
+    <div style="position:absolute;left:0;top:30px;width:464px">
+      <div class="row" style="top:0"><div class="t">..</div><svg class="ch" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9a9a9a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></div>
+      <div class="row" style="top:36px"><div class="t">Fences Remixes</div><svg class="ch" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9a9a9a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></div>
+      <div class="row" style="top:72px;background:#2a2a2a"><div class="dot" style="background:#3b82f6"></div><div class="t">Fences (LeMarquis Remix)</div><div class="d">04:04</div></div>
+      <div class="row" style="top:108px"><div class="dot" style="background:#fff"></div><div class="t">1901</div><div class="d">03:13</div></div>
+      <div class="row" style="top:144px"><div class="dot" style="background:#fff"></div><div class="t">Lisztomania</div><div class="d">04:01</div></div>
+    </div>
+    <!-- mini player -->
+    <div style="position:absolute;left:8px;top:218px;width:448px;height:42px;border-radius:8px;background:#dcd4bd">
+      <div class="disc" style="left:8px;top:6px;width:30px;height:30px"><div style="position:absolute;left:10px;top:10px;width:10px;height:10px;border-radius:50%;background:#1f7a72"></div></div>
+      <div style="position:absolute;left:48px;top:4px;width:300px;font-weight:700;font-size:13px;color:#222;line-height:18px;white-space:nowrap;overflow:hidden">Fences (LeMarquis Remix)</div>
+      <div style="position:absolute;left:48px;top:21px;width:300px;font-weight:500;font-size:11px;color:#6b6552;line-height:14px">Phoenix, 01:23 / 04:04</div>
+      <div style="position:absolute;left:8px;right:8px;bottom:0;height:3px;background:#c9c0a5"><div style="width:34%;height:3px;background:#1f7a72"></div></div>
+      <div style="position:absolute;left:354px;top:3px;width:44px;height:36px;border-radius:8px;background:#b9b19b;display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="#222" aria-label="Pause"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg></div>
+      <div style="position:absolute;left:402px;top:3px;width:40px;height:36px;border-radius:8px;background:#b9b19b;display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="#222" aria-label="Next"><path d="M5 5v14l10-7z"/><rect x="16.5" y="5" width="2.5" height="14"/></svg></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":480,"height":320}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+<!-- branding-allow-end -->
+</body>
+</html>

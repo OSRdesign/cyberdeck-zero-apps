@@ -1,0 +1,15 @@
+title Vinyl output chooser, 480x320 (draft Output-480x320): Automatic, Bluetooth, wired, a paired device that is off
+sizes 480x320
+ppmm 608
+env VINYL_DEMO 1
+env VINYL_DEMO_PAGE output
+
+wait 1000
+shot output
+expect esc
+expect text "Automatic"
+expect text "follows system: Evolve 65"
+expect text "music quality"
+expect text "paired, not connected"
+expect text "Pairing is in Settings. Vinyl never switches output by itself while a track plays."
+expect noquit

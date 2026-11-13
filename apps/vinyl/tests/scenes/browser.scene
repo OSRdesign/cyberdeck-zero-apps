@@ -1,0 +1,19 @@
+title Vinyl browser, 480x320 (draft Browser-480x320): the Phoenix folder, the playing track, the mini player
+sizes 480x320
+ppmm 608
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE browser
+
+wait 1200
+shot browser
+expect esc
+expect text "MUSIC / PHOENIX"
+expect notext "A-Z"
+expect text "Fences Remixes"
+expect text "Lisztomania"
+expect text "04:04"
+key down
+wait 300
+shot browser-down
+expect noquit

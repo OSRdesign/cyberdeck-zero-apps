@@ -1,0 +1,23 @@
+title Vinyl: a one-hour track (h:mm:ss on both sides of the seek bar) on a USB DAC with a long name (the output chip on a row of its own on the large layout, the output button elsewhere; 640x480: qa-640-long, 480x320 and 320x480: qa-long-small)
+sizes 800x480 480x480 720x720 480x800 480x640
+env VINYL_DEMO 1
+env VINYL_DEMO_LONG 1
+
+wait 1200
+shot 01-now-long
+expect esc
+expect text "0:01:14"
+expect text "-1:01:16"
+expect text "70"
+expect text "USB Audio Device"
+key b
+wait 400
+shot 02-browser-long
+key o
+wait 400
+shot 03-output-long
+expect text "USB Audio Device"
+key left
+wait 300
+key esc
+expect quit

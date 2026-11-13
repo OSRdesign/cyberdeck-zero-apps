@@ -1,0 +1,15 @@
+title Vinyl now playing in portrait (draft NowPlaying-320x480): no app title in the band at the narrow portrait (the toolkit's rule: Esc left, strip right), one row of chips
+sizes 320x480
+ppmm 667
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+
+wait 1200
+shot now-playing
+expect esc
+expect notext "Vinyl"
+expect text "Phoenix"
+expect text "60"
+expect text "Evolve 65"
+expect text "Queue"
+expect noquit

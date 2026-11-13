@@ -1,0 +1,28 @@
+title Vinyl: an empty library (no music folder, no saved state): now playing with nothing, the browser's notice row, the empty queue, at the deck's own density (640x480, 11.3 px/mm) (allow-small: the rows under 7 mm are warnings)
+sizes 640x480
+# the deck's own density (11.3 px/mm, the harness's default for 640x480): the approved layout's touch rows are 70 px
+# there, under the 7 mm (79 px): allow-small reports them as warnings (the owner's rule R-4) instead of failing
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_EMPTY 1
+env VINYL_DEMO_PAGE now
+
+wait 1000
+shot 01-now-empty
+expect esc
+expect text "Nothing playing"
+expect text "Pick a folder"
+expect text "or a playlist"
+key esc
+wait 300
+shot 02-browser-empty
+expect text "No music folder"
+expect text "Copy music to ~/Music"
+key q
+wait 300
+shot 03-queue-empty
+expect text "EMPTY QUEUE"
+key left
+wait 300
+key esc
+expect quit

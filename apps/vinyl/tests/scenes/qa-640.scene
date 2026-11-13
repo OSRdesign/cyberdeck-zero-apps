@@ -1,0 +1,52 @@
+title Vinyl: design QA walk at 640x480, the approved NP-640x480 layout (owner, 2026-11-13: "that works"): cover 224 with the record, the flat format and Gapless chips, the output button, five transport keys, Browse, Queue and the volume group in the bottom row, no Up next, no Menu key (P2)
+sizes 640x480
+# the deck's own density (11.3 px/mm) leaves the approved 640x480 layout's touch rows 70 px, under the 7 mm (79 px):
+# owner rule R-4, listed in qa-info.txt; the scene runs at a 3.5-inch 640x480 panel's 9.01 px/mm (the harness's own
+# 480x640), whose 7 mm (63 px) the rows hold, the toolkit header as on the deck (56 px)
+ppmm 901
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+
+wait 1200
+shot 01-now
+expect esc
+expect text "Vinyl"
+expect text "60"
+expect text "Evolve 65"
+expect text "Browse"
+expect text "Queue"
+expect notext "Vol 60"
+expect notext "UP NEXT"
+expect notext "Menu"
+wait 300
+shot 02-now-volume
+# the group's "+" (an icon: no text to tap); one level up: 60 % (level 18 of 30) to 63 %
+tapxy 0.904 0.912
+wait 300
+shot 03-now-volume-up
+expect text "63"
+# the output button opens the Output page
+tap "Evolve 65"
+wait 400
+expect text "Automatic"
+key left
+wait 300
+key b
+wait 400
+shot 05-browser
+expect text "MUSIC / PHOENIX"
+key q
+wait 400
+shot 06-queue
+expect text "Move down"
+key left
+wait 300
+key o
+wait 400
+shot 07-output
+expect text "Automatic"
+key left
+wait 300
+expect text "MUSIC / PHOENIX"
+key esc
+expect quit

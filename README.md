@@ -43,6 +43,7 @@ Each app has its own page with the full description, keys, requirements, known l
 | [**RSS Reader**](apps/rss-reader/README.md) (`rss-reader`) | 0.2.1 | arm64, amd64 | A reader of RSS and Atom text feeds: pin your favorite news, tech and science feeds from a catalog of about 260 by country and topic, or add any site by its address, then read the articles full screen with their pictures, and save them to read offline, by touch or keyboard, on any screen from 640x480 up. Category Internet. |
 | [**Serial Console**](apps/serial-console/README.md) (`serial-console`) | 0.6.1 | arm64, amd64 | Finds your USB-serial adapters and boards, tells what is plugged in and what is behind it, recommends the settings, and talks to it. Category Tools. |
 | [**System Monitor**](apps/system-monitor/README.md) (`system-monitor`) | 0.3.1 | arm64, amd64 | A live look at the board or PC it runs on: CPU, temperature, memory, storage, network, processes, and the power supply or battery. Category Tools. |
+| [**Vinyl**](apps/vinyl/README.md) (`vinyl`) | 0.1.0 | arm64, amd64 | A music player for the music in `~/Music` and on USB drives: folder by folder or from M3U playlists, gapless, shuffle, repeat, embedded cover art and resume where you stopped, with a record that slides out of its sleeve and turns while it plays. MP3, FLAC, Ogg Vorbis and Opus, WAV and AIFF, and through FFmpeg (installed with it) AAC, ALAC, WMA, APE and more. Plays on while you use other apps; wired outputs, and Bluetooth headsets and speakers on boards with a sound server; the volume of the playing output in steps fitted to it; headset and keyboard play keys; drag the seek bar to a point. From 480x320 up: 480x320, 640x480, square, portrait (PDA mode) and two-pane layouts. Category Tools. |
 | [**viz1090**](apps/viz1090/README.md) (`viz1090`) | 0.3.2 | arm64, amd64 | The real viz1090 ADS-B display, full screen on any supported screen, fed by an RTL-SDR dongle, with an intro screen, the app header (Esc) and a world map, upright on portrait screens (PDA mode). Needs the dongle and a launcher with full-screen app support. Category Radio. |
 
 `arm64` packages run on the Raspberry Pi boards (the decks). The apps marked `amd64` also have a package for x86-64 PCs
@@ -270,11 +271,14 @@ System libraries are not shipped: `apt` installs them.
 | libfreetype6 | FreeType License or GPL-2.0-or-later | linked | every native app |
 | libinput10 | MIT | linked | every native app |
 | libxkbcommon0 | MIT | linked | every native app |
-| libasound2 (ALSA) | LGPL-2.1-or-later | dlopen | Cassette |
-| libFLAC | BSD-3-Clause | dlopen | Cassette |
-| libopus | BSD-3-Clause | dlopen | Cassette |
+| libasound2 (ALSA) | LGPL-2.1-or-later | dlopen | Cassette, Vinyl |
+| libFLAC | BSD-3-Clause | dlopen | Cassette, Vinyl |
+| libopus | BSD-3-Clause | dlopen | Cassette, Vinyl |
 | libopusenc | BSD-3-Clause | dlopen | Cassette |
-| libpulse (PulseAudio and PipeWire client) | LGPL-2.1-or-later | dlopen, only with a sound server (Bluetooth audio) | Cassette |
+| libpulse (PulseAudio and PipeWire client) | LGPL-2.1-or-later | dlopen, only with a sound server (Bluetooth audio) | Cassette, Vinyl |
+| libmpg123 | LGPL-2.1 | dlopen | Vinyl |
+| libvorbisfile, libvorbis, libogg | BSD-3-Clause | dlopen | Vinyl |
+| FFmpeg (libavformat, libavcodec, libavutil, libswresample) | GPL-2.0-or-later as Debian and Raspberry Pi OS build it (LGPL-2.1-or-later upstream) | dlopen, only when a file needs it (AAC, ALAC, WMA, APE...) | Vinyl |
 | libsqlite3 | public domain | dlopen | Deck Atlas |
 | libcurl4t64 | curl license (MIT style) | dlopen | Deck Atlas, Home Assistant |
 | libsystemd (sd-bus) | LGPL-2.1-or-later | dlopen, only for Bluetooth | Mesh Hop, mmWave Radar |
@@ -284,7 +288,7 @@ System libraries are not shipped: `apt` installs them.
 | libncurses6, zlib1g | X11 (MIT style), zlib | linked | viz1090 |
 | libzstd | BSD-3-Clause or GPL-2.0 | linked | viz1090 |
 | LVGL, the `cp0_lvgl` toolkit | MIT | built in | every native app |
-| stb_image 2.30 | public domain or MIT | built in | RSS Reader, Deck Atlas |
+| stb_image 2.30 | public domain or MIT | built in | RSS Reader, Deck Atlas, Vinyl |
 | md4c 0.6.0 | MIT | built in | Markdown Notes |
 | Nayuki QR Code generator 1.8.0 | MIT | built in | Home Assistant |
 | Material Design Icons 7.4.47 | Apache-2.0 | shipped (webfont) | Home Assistant |
@@ -329,6 +333,7 @@ Walk, Serial Console and System Monitor have none beyond the libraries of the
 * **viz1090** bundles viz1090 (BSD), readsb (GPL-3 or later), fonts (SIL OFL 1.1, Font Awesome icons CC BY 4.0) and
   map data (Natural Earth, OurAirports, public domain); see [its page](apps/viz1090/README.md).
 * **Cassette** has its own code (MIT) on the LVGL based `cp0_lvgl` runtime (MIT); the handwriting on the cassette label is Caveat SemiBold (SIL OFL 1.1, compiled into the binary, licence in the package's copyright file). It opens libasound, libFLAC, libopus and libopusenc from the system at run time and ships none of them; see [its page](apps/cassette/README.md).
+* **Vinyl** has its own code (MIT) on the LVGL based `cp0_lvgl` runtime (MIT), its sound-server and ALSA layers and the FLAC / Opus readers from this repository's Cassette (same author, MIT), and stb_image 2.30 (public domain or MIT) for embedded cover pictures. It opens libmpg123, libvorbisfile, libFLAC, libopus, libasound, libpulse and FFmpeg from the system at run time, never ships them; see [its page](apps/vinyl/README.md).
 * **Markdown Notes** parses Markdown with md4c v0.6.0 by Martin Mitas (MIT, vendored unchanged with its licence) and runs on
   the LVGL based `cp0_lvgl` runtime (MIT); see [its page](apps/markdown-notes/README.md).
 * **Mesh Hop** speaks the MeshCore protocol (MeshCore firmware and protocol, MIT; meshcore_py, MIT, as the

@@ -1,0 +1,17 @@
+title Vinyl: scrubbing the seek bar at 480x320 and 320x480 while paused (a finger held at three quarters: 03:03), then a real drag along the bar and its release (the seek; it stays paused)
+sizes 480x320 320x480
+ppmm 610
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE paused
+env VINYL_DEMO_SCRUB 0.75
+
+wait 1200
+shot 01-scrubbing
+expect esc
+expect text "03:03"
+expect text "-1:01"
+@480x320 drag 0.20 0.731 0.80 0.731
+@320x480 drag 0.25 0.717 0.75 0.717
+wait 600
+shot 02-after-drag
+expect noquit

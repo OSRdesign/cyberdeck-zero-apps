@@ -1,0 +1,20 @@
+title Vinyl at the other canvases (their own densities): now playing, browser, queue, output; 800x600 and 1024x768 take the two panes (640x480: qa-640)
+sizes 720x720 1280x720 480x800 1024x600 800x600 1024x768
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+
+wait 1200
+shot s-now
+expect esc
+key b
+wait 300
+shot s-browser
+key q
+wait 300
+shot s-queue
+key esc
+wait 200
+key o
+wait 300
+shot s-output
+expect noquit

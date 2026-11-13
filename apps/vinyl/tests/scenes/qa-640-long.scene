@@ -1,0 +1,27 @@
+title Vinyl: the one-hour track and the long output name at 640x480
+sizes 640x480
+# the deck's own density (11.3 px/mm) leaves the approved 640x480 layout's touch rows 70 px, under the 7 mm (79 px):
+# owner rule R-4, listed in qa-info.txt; the scene runs at a 3.5-inch 640x480 panel's 9.01 px/mm (the harness's own
+# 480x640), whose 7 mm (63 px) the rows hold, the toolkit header as on the deck (56 px)
+ppmm 901
+env VINYL_DEMO 1
+env VINYL_DEMO_LONG 1
+
+wait 1200
+shot 01-now-long
+expect esc
+expect text "0:01:14"
+expect text "-1:01:16"
+expect text "70"
+expect text "USB Audio Device"
+key b
+wait 400
+shot 02-browser-long
+key o
+wait 400
+shot 03-output-long
+expect text "USB Audio Device"
+key left
+wait 300
+key esc
+expect quit

@@ -1,0 +1,9 @@
+title Vinyl paused at the resumed position (as after a restart), 480x320: the play icon, the record still
+sizes 480x320
+ppmm 608
+env VINYL_DEMO 1
+
+wait 800
+shot paused
+expect text "01:22"
+expect noquit

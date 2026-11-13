@@ -1,0 +1,8 @@
+title Vinyl under its minimum screen (X-MinSize 480x320): the notice
+sizes 400x240
+env VINYL_DEMO 1
+
+wait 400
+shot under-minimum
+key esc
+expect quit

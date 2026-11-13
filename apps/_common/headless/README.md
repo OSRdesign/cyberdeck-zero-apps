@@ -59,6 +59,7 @@ After the app asks to quit, only `expect` lines are read.
 | `expect hidden\|visible` | the app's lifecycle state (`cdk::hidden()`) |
 | `expect nowrite` | no flush at all while the app was hidden (the helper turns LVGL's invalidation off; the harness writes nothing then anyway) |
 | `expect repaint` | every pixel of the screen was flushed since the last `show` (run a `wait` first) |
+| `allow-small` | (scene option) the size check reports a row, field or button under ROW / TARGET as a `WARN` line in report.txt instead of failing the scene (the board's real density where an owner-approved layout is under 7 mm: the owner's rule that 7 mm is a recommendation); the other checks still fail. The report's last line counts the warnings |
 | `band` | (scene option) a launcher with the PDA writing zone runs the app upright (launcher report 044): `APPLAUNCH_PDA=1`, `input.state` `hand=1`, and at a portrait size the harness builds the band as the display backend does (its own display laid over the app's bottom rows while it shows, the touch router, the band's pointer, the shipped Strokes tables of `--resources`/strokes, no user glyphs). A landscape size has no band (a landscape app on a portrait launcher runs turned) |
 | `hand 0\|1` | rewrite `input.state` (gen + 1): Settings > On-screen keyboard Handwriting + keyboard (1) or Auto / On (0) |
 | `write letters\|digits GLYPH ...` | each glyph's shipped stroke (its first template; a letter, a digit, or a gesture: `space enter bksp shift ext`) written 12 mm high in that box, through the touch path |

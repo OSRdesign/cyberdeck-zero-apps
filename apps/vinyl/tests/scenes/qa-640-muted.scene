@@ -1,0 +1,32 @@
+title Vinyl: the output muted at 640x480 (the volume group in the bottom row: the level box's muted look with the speaker-off mark alone, large: "Mute" does not fit its box at CAPTION beside the mark); "-" does nothing, "+" brings the sound back at its level
+sizes 640x480
+# the deck's own density (11.3 px/mm) leaves the approved 640x480 layout's touch rows 70 px, under the 7 mm (79 px):
+# owner rule R-4, listed in qa-info.txt; the scene runs at a 3.5-inch 640x480 panel's 9.01 px/mm (the harness's own
+# 480x640), whose 7 mm (63 px) the rows hold, the toolkit header as on the deck (56 px)
+ppmm 901
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_MUTED 1
+
+wait 1200
+shot 01-now-muted
+expect esc
+expect notext "60"
+# the mark alone (24 px or more, drawn about 60 % of the box high: the app stops a scene that breaks it); never a word
+expect notext "Mute"
+expect notext "Muted"
+expect notext "Off"
+wait 300
+shot 02-now-muted-volume
+# "-" while muted does nothing
+tapxy 0.720 0.912
+wait 300
+expect notext "Mute"
+expect notext "60"
+# "+" brings the sound back at its level
+tapxy 0.904 0.912
+wait 300
+shot 03-now-unmuted
+expect notext "Mute"
+expect text "60"
+expect noquit

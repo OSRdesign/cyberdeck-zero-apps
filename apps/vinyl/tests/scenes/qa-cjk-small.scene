@@ -1,0 +1,22 @@
+title Vinyl: CJK names and tags at 480x320 and 320x480 (their real density), through the launcher's Noto Sans CJK
+sizes 480x320 320x480
+ppmm 610
+env VINYL_DEMO 1
+env VINYL_DEMO_CJK 1
+env VINYL_DEMO_STATE playing
+
+wait 1200
+shot 01-now-cjk
+expect esc
+expect text "あの夏へ"
+expect text "久石譲"
+key b
+wait 400
+shot 02-browser-cjk
+expect text "한국"
+expect text "月亮代表我的心"
+tap "한국"
+wait 400
+shot 03-browser-cjk-folder
+expect text "서른 즈음에"
+expect noquit

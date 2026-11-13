@@ -1,0 +1,12 @@
+title Vinyl output chooser on a board without a sound server (Lite): ALSA cards, the not-set-up notice strip
+sizes 480x320 320x480
+ppmm 608
+env VINYL_DEMO 1
+env VINYL_DEMO_LITE 1
+env VINYL_DEMO_PAGE output
+
+wait 1000
+shot output-lite
+expect text "Bluetooth audio is not set up on this board."
+expect text "system default"
+expect noquit

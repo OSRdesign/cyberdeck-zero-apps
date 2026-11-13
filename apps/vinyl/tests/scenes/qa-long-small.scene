@@ -1,0 +1,25 @@
+title Vinyl: the one-hour track and the long output name at 480x320 and 320x480 (their real density)
+sizes 480x320 320x480
+ppmm 610
+env VINYL_DEMO 1
+env VINYL_DEMO_LONG 1
+
+wait 1200
+shot 01-now-long
+expect esc
+expect text "0:01:14"
+expect text "-1:01:16"
+expect text "70"
+expect notext "Vol 70"
+expect text "USB Audio Device"
+key b
+wait 400
+shot 02-browser-long
+key o
+wait 400
+shot 03-output-long
+expect text "USB Audio Device"
+key left
+wait 300
+key esc
+expect quit
