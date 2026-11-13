@@ -298,7 +298,7 @@ is complicating the thing, let's make it work with all most common codecs out of
 - **A modal takes Esc and Back** (D-30): while the dialog shows, the Esc key and the header's Esc only cancel it
   (`core/nav` back_step, tested); the page stays.
 - **One dimmed look** (D-81): a control that cannot act is drawn at 40 % (alpha 102 of 255), its fill, its word and its
-  icon alike (the key fill #B9B19B reads #CDC5AE on the cream panel, the ink #222222 #928D7F, the teal play key #97A796):
+  icon alike (the key fill #B9B19B reads #CDC5AE on the cream panel, the ink #222222 #928D7F, the teal play key #91B09E):
   the transport keys with an empty queue, the dimmed sleep-timer key, the queue buttons that cannot act. With only the
   playing track in the queue, Move up, Move down and Clear all are dimmed and do nothing (`queue_buttons_enabled`).
 - **Muted stays legible** (D-53): the word is drawn at the level number's own size, shrinking at most to the toolkit's
@@ -330,6 +330,17 @@ is complicating the thing, let's make it work with all most common codecs out of
   CAPTION in a narrow box), the time labels at CAPTION; the muted word at the level's size, down to CAPTION, then
   "Mute", "Off" or the mark alone. Which sizes stay the drafts' and why: qa-info.txt `text_sizes`; what each size draws
   muted: qa-info.txt `muted` (read from the muted scenes, which the harness checks).
+
+## Design QA run 6 (2026-11-13)
+
+- The queue page's four buttons keep their icon ids, so a redraw (the dimmed look) draws them again (their icons had
+  vanished since run 4); the scenes stop on any button redrawn without its icon, so every queue shot at every QA size
+  checks it.
+- The seek bar keeps the knob P(4) clear of the time labels at both ends ("--:--" touched it at 480x640).
+- **Accepted (the coordinator's decision, owner informed, 2026-11-13):** the Output page's paired device that is not
+  connected keeps the drafts' look, a grey dot and grey words, and a tap on it shows "... is not connected: connect it
+  in Settings, Bluetooth." It acts (it tells how to connect), so it is not the dimmed look of a control that does
+  nothing (D-81); the grey is the drafts' state colour for "not connected".
 
 ## Dragging a slider, the seek bar (owner, 2026-11-13)
 

@@ -19,9 +19,10 @@ Headless harness, demonstration world (`VINYL_DEMO=1`):
 | ![now playing](screenshots/01-now-playing-480x320.png) | ![browser](screenshots/02-browser-480x320.png) |
 | ![queue](screenshots/03-queue-480x320.png) | ![output](screenshots/04-output-480x320.png) |
 | ![portrait](screenshots/05-now-playing-320x480.png) | ![disconnected](screenshots/08-output-lost-480x320.png) |
+| ![muted](screenshots/10-muted-480x320.png) | ![dragging the seek bar](screenshots/11-scrub-480x320.png) |
 
-The deck (640x480), square (720x720, the HackBerry) and large (800x480, two panes):
-![deck](screenshots/09-now-playing-640x480.png) ![square](screenshots/06-now-playing-720x720.png)
+The deck (640x480), square (480x480) and large (800x480, two panes):
+![deck](screenshots/09-now-playing-640x480.png) ![square](screenshots/06-now-playing-480x480.png)
 ![large](screenshots/07-now-playing-800x480.png)
 
 ## What it does
@@ -185,6 +186,8 @@ Delete it to start fresh. Vinyl writes nothing else (it never writes tags or mus
 - No metadata to headsets or car displays (MPRIS / AVRCP, P2); headset keys work when BlueZ hands them to an input node.
 - A cover larger than 1200 px on its long side is not decoded (the memory cap on the Pi Zero 2 W): the drawn sleeve shows.
 - FFmpeg seeks land on the packet at or before the position; the AAC length is the container's.
+- The amd64 package targets Ubuntu 26.04, where FFmpeg is libavformat 62 (FFmpeg 8): Vinyl's FFmpeg 62 structure
+  offsets were checked against the FFmpeg 8 headers (`tests/abi`), not yet played on the tablet.
 - MIDI, native DSD, SACD images, tag editing and video are out of scope (decision D14).
 
 ## Credits and licences

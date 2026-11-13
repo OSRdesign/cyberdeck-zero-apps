@@ -21,6 +21,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <map>
@@ -394,7 +396,7 @@ struct Button {
 
 /* One dimmed look across the app (design QA runs 4 and 5, D-81): a control that cannot act is drawn at 40 % (alpha
  * 102 of 255) over what is behind it, its fill, its word and its icon alike: on the cream panel the key fill #B9B19B
- * reads #CDC5AE, the teal play key #1F7A72 #97A796, the ink #222222 #928D7F. The fill and the word take the box's
+ * reads #CDC5AE, the teal play key #1F7A72 #91B09E, the ink #222222 #928D7F. The fill and the word take the box's
  * opacity (LVGL draws a label at its parent's); the icon, which Vinyl draws itself with strokes that overlap at their
  * joints, is drawn opaque in that same 40 % colour (an icon drawn at 40 % alpha showed darker joints), so the whole key
  * reads as one even 40 %. A control that is dimmed does nothing (layout::key_active, nav queue_buttons_enabled). */
@@ -406,9 +408,19 @@ uint32_t dim_rgb(uint32_t behind, uint32_t ink) {
     };
     return (ch(16) << 16) | (ch(8) << 8) | ch(0);
 }
+/* A button redrawn without its icon is a bug (design QA run 6: the queue buttons' icons vanished on a refresh because
+ * their icon id was never kept): the scenes (VINYL_DEMO) stop on it, so the harness fails at every size that shows it;
+ * a board logs it. */
+void check_icon(const Button &b, Icon ic) {
+    if (!b.icon || ic != Icon::None) return;
+    std::fprintf(stderr, "[vinyl] BUG: a button redrawn without its icon\n");
+    if (std::getenv("VINYL_DEMO")) std::abort();
+}
 void set_dimmed(Button &b, bool dimmed, uint32_t behind, Icon ic = Icon::None) {
+    const Icon shown = ic != Icon::None ? ic : b.ic;
+    check_icon(b, shown);
     if (b.vis) lv_obj_set_style_opa(b.vis, dimmed ? kDimOpa : LV_OPA_COVER, 0);
-    if (b.icon) icon_set(b.icon, ic != Icon::None ? ic : b.ic, dimmed ? dim_rgb(behind, b.ink) : b.ink, LV_OPA_COVER);
+    if (b.icon) icon_set(b.icon, shown, dimmed ? dim_rgb(behind, b.ink) : b.ink, LV_OPA_COVER);
 }
 
 Icon icon_of(const std::string &id) {
@@ -937,7 +949,9 @@ struct View::Impl {
         const int tw = std::max(Wd(g.time.box), text_width(f, layout::track_time_widest(hours, false)) + 2);
         const int rw = std::max(Wd(g.remain.box), text_width(f, layout::track_time_widest(hours, true)) + 2);
         const int x0 = X(g.time.box.x), x1 = X(g.remain.box.right());
-        const int gap = std::max(1, X(g.seek.x) - X(g.time.box.right()));
+        /* the knob at either end stays P(4) clear of the time labels (design QA run 6: "--:--" touched it at 480x640) */
+        const int half_knob = lv_obj_get_width(seek_knob) / 2;
+        const int gap = std::max({1, X(g.seek.x) - X(g.time.box.right()), half_knob + P(4)});
         lv_obj_set_width(time, tw);
         lv_obj_set_x(remain, x1 - rw);
         lv_obj_set_width(remain, rw);
@@ -1171,6 +1185,8 @@ struct View::Impl {
                 const int x = ri(b.x), y = ri(b.y), w = ri(b.w), h = ri(b.h);
                 bt.vis = box(r, x, y, w, h, danger ? col::kDanger : col::kButton, S(8));
                 const uint32_t ink = danger ? col::kWhite : col::kInk;
+                bt.ic = qb[i].ic; /* kept: every redraw (the dimmed look) draws it again */
+                bt.ink = ink;
                 const int ip = S(16);
                 const lv_font_t *f = font(Face::Bold, S(12));
                 const int tw = text_width(f, qb[i].word);
