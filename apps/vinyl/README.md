@@ -260,12 +260,13 @@ Board protocol: [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md).
 
 ## Changes
 
-- **0.2.0** (not published yet): phase P2a of report 060 (the owner's decisions of 2026-11-13, D25 and D32): the Menu key
+- **0.2.0** (published 2026-11-14): phase P2a of report 060 (the owner's decisions of 2026-11-13, D25 and D32): the Menu key
   on every layout (480x320: the seventh transport key; square: the sixth; portrait: the bottom row's first key; 640x480
   and large: a bottom-row key, Output a Menu row on large, the large layout's sleep-timer key acting) and the Menu: the
   sleep timer (15, 30, 60 minutes, this track, this album or queue, a 10 s fade, a notice at its end), Playback (Gapless,
   ReplayGain from tags with its clipping guard, positions in long files), Keys and About; M and T. state.json is written on
-  changes and at most once a minute while playing (0.1.0: every 5 s), the MP3 tag reader skips covers it does not need.
+  changes and at most once a minute while playing (0.1.0: every 5 s), the MP3 tag reader skips covers it does not need (faster tag reads); shortcut letters no longer echo into
+  the page's text field (this also fixes R on Queue and Output).
 - **0.1.0** (published 2026-11-13, apps PR #153): the P1 MVP of report 059 (decisions D1-D18), with the design-QA rounds: the transport
   press (owner ruling 2026-11-12), the volume group on every layout with the output button (owner, 2026-11-13), the
   approved 640x480 and 480x320 layouts, the record's label with its spin marks, a muted output shown the same way on
