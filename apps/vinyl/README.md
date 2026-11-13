@@ -77,8 +77,8 @@ twice within 250 ms (the same button on two input nodes) acts once.
 
 Every board plays the common formats out of the box (the owner's decision D20, 2026-11-13). FFmpeg costs about 22.5 MB
 of memory once loaded (report 059, 14.6), nothing before. On a Lite image the FFmpeg libraries and what they need are
-about 104 MB of disk with `apt install --no-install-recommends`; the launcher's installer today also installs their own
-recommends, about 462 MB (a launcher change to pass `--no-install-recommends` is proposed separately). If the libraries
+about 104 MB of disk, which is what Settings > Apps installs from launcher 0.10.2 (it skips recommends); before 0.10.2
+the installer also installed their own recommends, about 462 MB. If the libraries
 are there but cannot be loaded, a tier-2 file shows "The FFmpeg libraries could not be loaded. Reinstall Vinyl." and the
 next track plays.
 
