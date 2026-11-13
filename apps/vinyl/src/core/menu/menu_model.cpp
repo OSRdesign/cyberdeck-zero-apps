@@ -184,27 +184,35 @@ KeyCmd letter_command(uint32_t evdev, bool queue_page) {
     }
 }
 
+KeyCmd shortcut_command(uint32_t evdev, uint32_t mods, bool queue_page) {
+    if (mods & (kModCtrl | kModAlt)) return evdev == kKeyO && !(mods & kModAlt) ? KeyCmd::Menu : KeyCmd::None;
+    return letter_command(evdev, queue_page);
+}
+
 std::vector<KeyHelp> key_help() {
     /* the canvas's rows (Keys-480x320, Keys-320x480) first, then the rest of the key map; the page scrolls */
     return {
-        {"Space", "Play or pause", {kKeySpace}, {KeyCmd::Toggle}, false},
-        {"Left", "Restart, or previous; hold: rewind", {}, {}, false},
-        {"Right", "Next; hold: fast forward", {}, {}, false},
-        {"Shift+Left, Right", "Seek 10 seconds", {}, {}, false},
-        {"S", "Shuffle", {kKeyS}, {KeyCmd::Shuffle}, false},
-        {"R", "Repeat", {kKeyR}, {KeyCmd::Repeat}, false},
+        {"Space", "Play or pause", {kKeySpace}, {KeyCmd::Toggle}, false, 0},
+        {"Left", "On Now playing: restart, or previous; hold: rewind", {}, {}, false, 0},
+        {"Right", "On Now playing: next; hold: fast forward", {}, {}, false, 0},
+        {"Shift+Left, Right", "On Now playing: seek 10 seconds", {}, {}, false, 0},
+        {"S", "Shuffle", {kKeyS}, {KeyCmd::Shuffle}, false, 0},
+        {"R", "Repeat", {kKeyR}, {KeyCmd::Repeat}, false, 0},
         {"Q, B, O, M", "Queue, Browse, Output, Menu", {kKeyQ, kKeyB, kKeyO, kKeyM},
-         {KeyCmd::Queue, KeyCmd::Browse, KeyCmd::Output, KeyCmd::Menu}, false},
-        {"- and =", "Volume down and up", {kKeyMinus, kKeyEqual}, {KeyCmd::VolumeDown, KeyCmd::VolumeUp}, false},
-        {"T", "Sleep timer", {kKeyT}, {KeyCmd::Sleep}, false},
-        {", and .", "Previous and next, on every page", {kKeyComma, kKeyDot}, {KeyCmd::Prev, KeyCmd::Next}, false},
-        {"Up, Down, Enter", "Lists: move, choose", {}, {}, false},
-        {"Left, Right", "Lists: back, choose", {}, {}, false},
-        {"U, D", "Queue: move up, move down", {kKeyU, kKeyD}, {KeyCmd::QueueUp, KeyCmd::QueueDown}, true},
-        {"X or Delete", "Queue: remove", {kKeyX}, {KeyCmd::QueueRemove}, true},
-        {"C, then Y", "Queue: clear all", {kKeyC}, {KeyCmd::QueueClear}, true},
-        {"Esc", "Back; at Browse: quit", {}, {}, false},
-        {"Media keys", "Play, pause, next, previous, stop", {}, {}, false},
+         {KeyCmd::Queue, KeyCmd::Browse, KeyCmd::Output, KeyCmd::Menu}, false, 0},
+        {"- and =", "Volume down and up", {kKeyMinus, kKeyEqual}, {KeyCmd::VolumeDown, KeyCmd::VolumeUp}, false, 0},
+        {"Enter", "On Now playing: play or pause", {}, {}, false, 0},
+        {"T", "Sleep timer", {kKeyT}, {KeyCmd::Sleep}, false, 0},
+        {"Ctrl+O", "Menu (the options key)", {kKeyO}, {KeyCmd::Menu}, false, kModCtrl},
+        {", and .", "Previous and next, on every page", {kKeyComma, kKeyDot}, {KeyCmd::Prev, KeyCmd::Next}, false, 0},
+        {"Up, Down, Enter", "Lists and the queue pane: move, choose", {}, {}, false, 0},
+        {"Left, Right", "Lists: back, choose", {}, {}, false, 0},
+        {"Backspace", "Browse: the folder above", {}, {}, false, 0},
+        {"U, D", "Queue: move up, move down", {kKeyU, kKeyD}, {KeyCmd::QueueUp, KeyCmd::QueueDown}, true, 0},
+        {"X or Delete", "Queue: remove", {kKeyX}, {KeyCmd::QueueRemove}, true, 0},
+        {"C, then Y", "Queue: clear all", {kKeyC}, {KeyCmd::QueueClear}, true, 0},
+        {"Esc", "Back; at Browse: quit", {}, {}, false, 0},
+        {"Media keys", "Play, pause, next, previous, stop", {}, {}, false, 0},
     };
 }
 

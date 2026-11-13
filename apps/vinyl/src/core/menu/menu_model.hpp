@@ -14,7 +14,7 @@
  *               the loudness between tracks."
  *   ReplayGain  the pick list: Off, Track, Album (the chosen one with the blue dot)
  *   Keys        two columns, the key and what it does: the app's real key map (key_help(), checked against
- *               letter_command() by the tests)
+ *               shortcut_command() by the tests); the rows that act on Now playing only say so
  *   About       name and version, a line, the formats, THIS OUTPUT (the playing output's levels, from its volume model),
  *               the libraries, where the licences are
  *
@@ -95,13 +95,18 @@ enum : uint32_t {
 };
 /* A letter or punctuation key's command; queue_page: the queue page's editing letters (U, D, X, C) act there only. */
 KeyCmd letter_command(uint32_t evdev, bool queue_page);
+/* With the modifiers (KBD_MOD_* bits; Ctrl is bit 1): Ctrl+O is the options key (design QA D-42, AC 10b: the pointer's
+ * held click sends it), so it opens the Menu; plain O stays Output. Any other Ctrl or Alt chord does nothing. */
+constexpr uint32_t kModCtrl = 1u << 1, kModAlt = 1u << 2;
+KeyCmd shortcut_command(uint32_t evdev, uint32_t mods, bool queue_page);
 
 struct KeyHelp {
-    std::string keys;   /* the key chip: "Space", "Q, B, O, M" */
+    std::string keys;   /* the key's name: "Space", "Q, B, O, M" */
     std::string action; /* "Play or pause" */
-    std::vector<uint32_t> codes;  /* the letter keys it names (evdev), checked against letter_command */
+    std::vector<uint32_t> codes;  /* the letter keys it names (evdev), checked against shortcut_command */
     std::vector<KeyCmd> cmds;     /* what each of them does (same order) */
     bool queue_page = false;      /* the letters act on the queue page */
+    uint32_t mods = 0;            /* the modifiers held with them (Ctrl+O) */
 };
 std::vector<KeyHelp> key_help();
 

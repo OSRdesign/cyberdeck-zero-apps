@@ -16,6 +16,7 @@
 #include "engine/engine.hpp"
 #include "engine/outputs.hpp"
 #include "input/media_keys.hpp"
+#include "nav/key_echo.hpp"
 #include "nav/nav_rules.hpp"
 #include "launcher/launcher_link.hpp"
 #include "library/browse.hpp"
@@ -75,9 +76,9 @@ std::string khz(uint32_t rate) {
 }
 
 /* evdev codes of the keys used (the physical key, not its text: the guidelines' rule); the letters' commands are
- * core/menu letter_command, the table the Keys page shows (menu::key_help) */
+ * core/menu shortcut_command, the table the Keys page shows (menu::key_help) */
 enum : uint32_t {
-    K_Y = 21, K_COMMA = 51, K_DOT = 52, K_UP = 103, K_LEFT = 105, K_RIGHT = 106, K_DOWN = 108,
+    K_Y = 21, K_COMMA = 51, K_DOT = 52, K_LEFT = 105, K_RIGHT = 106,
 };
 
 bool is_playlist_source(const std::string &src) {
@@ -91,20 +92,6 @@ bool is_playlist_source(const std::string &src) {
 std::string parent_dir(const std::string &path) {
     const size_t slash = path.rfind('/');
     return slash == std::string::npos ? std::string() : path.substr(0, slash);
-}
-
-/* The LVGL key the toolkit's keypad sends after a key event (cp0_keyboard_lvgl_input.c): the semantic key where it has
- * one. In the navigation context the toolkit makes F / X / Z / C also Up / Down / Left / Right (a small keyboard's
- * arrows), so C (Clear all) reaches the keypad as Right, X (Remove) as Down. 0: not an arrow. */
-uint32_t arrow_echo(const key_item &it) {
-    if (!it.semantic_key || it.semantic_key == it.key_code) return 0;
-    switch (it.semantic_key) {
-    case K_UP: return LV_KEY_UP;
-    case K_DOWN: return LV_KEY_DOWN;
-    case K_LEFT: return LV_KEY_LEFT;
-    case K_RIGHT: return LV_KEY_RIGHT;
-    default: return 0;
-    }
 }
 
 }  // namespace
@@ -722,10 +709,10 @@ struct VinylApp::Impl final : TransportHost {
             else if (r.id == "output") button("output"); /* Esc goes back to the Menu */
             return;
         }
-        if (p == Page::Sleep) {
+        if (p == Page::Sleep) { /* a choice closes the page (owner-approved, 2026-11-13): back where it was opened */
             SleepMode m = SleepMode::Off;
             if (menu::sleep_from_id(r.id, m)) set_sleep(m);
-            refresh(true);
+            back();
             return;
         }
         Settings st = settings.get();
@@ -738,6 +725,9 @@ struct VinylApp::Impl final : TransportHost {
             }
         } else if (p == Page::ReplayGain) {
             st.replaygain = replaygain_mode_from(r.id, st.replaygain);
+            apply_settings(st);
+            back(); /* a choice closes the pick list (owner-approved, 2026-11-13): Playback shows the new value */
+            return;
         }
         apply_settings(st);
         refresh(true);
@@ -882,15 +872,15 @@ struct VinylApp::Impl final : TransportHost {
         refresh(true);
     }
 
-    /* the arrow the keypad sends right after a letter Vinyl acted on (arrow_echo): taken once and dropped, so C (Clear
-     * all) never also moves the dialog's highlight to Clear, nor X (Remove) the queue's selection */
-    uint32_t swallow_echo = 0;
+    /* the LVGL key the toolkit's keypad sends after each key event (core/nav/key_echo: design QA of 0.2.0, D-32; the
+     * launcher's decision of 2026-10-05): a letter's or a digit's raw code that is an LVGL key (T = Left, R = Right,
+     * W / E = Up / Down, 9 = Enter...) is dropped, and the arrow of an F / X / Z / C alias when Vinyl used the letter
+     * (X and C on the queue page), so a shortcut never also moves, opens or goes back */
+    KeyEcho key_echo;
 
     void on_key(uint32_t k) {
         const Page p = view->page();
-        const uint32_t echo = swallow_echo;
-        swallow_echo = 0;
-        if (echo && k == echo) return;
+        if (key_echo.drop(k, mono_ms_now())) return;
         if (view->dialog_shown() && view->dialog_key(k)) return; /* "Clear the queue?" takes the keys while it shows */
         if (k == LV_KEY_ESC) {
             escape();
@@ -976,13 +966,18 @@ struct VinylApp::Impl final : TransportHost {
     }
 
     void on_keyboard(const key_item &it) {
+        bool used = false; /* Vinyl acted on the key as a shortcut (an alias letter's arrow is then dropped too) */
+        on_keyboard_key(it, used);
+        key_echo.seen(it.key_code, it.semantic_key, static_cast<int>(it.key_state), used, mono_ms_now());
+    }
+
+    void on_keyboard_key(const key_item &it, bool &used) {
         const MediaAction ma = media_action_for(it.key_code);
         if (ma != MediaAction::None) {
             MediaEvent me;
             if (keys.accept_other(ma, it.key_state, me)) media(me);
             return;
         }
-        if (it.key_state == 1) swallow_echo = 0;
         if (view->dialog_shown()) { /* the dialog takes its keys: Enter / Esc through the keypad (on_key), Y here */
             if (it.key_state == 1 && it.key_code == K_Y) view->dialog_key(0, K_Y);
             return;
@@ -998,7 +993,9 @@ struct VinylApp::Impl final : TransportHost {
         if (it.key_state != 1) return;
         const Page p = view->page();
         using menu::KeyCmd;
-        switch (menu::letter_command(it.key_code, p == Page::Queue)) {
+        const KeyCmd cmd = menu::shortcut_command(it.key_code, it.mods, p == Page::Queue); /* Ctrl+O: the Menu */
+        used = cmd != KeyCmd::None;
+        switch (cmd) {
         case KeyCmd::Toggle: toggle(); break;
         case KeyCmd::Shuffle: shuffle(); break;
         case KeyCmd::Repeat: repeat(); break;
@@ -1011,18 +1008,12 @@ struct VinylApp::Impl final : TransportHost {
         case KeyCmd::Browse:
             if (p != Page::Browser) go(Page::Browser);
             break;
-        case KeyCmd::Menu: button("menu"); break;   /* M (P2a) */
+        case KeyCmd::Menu: button("menu"); break;   /* M, Ctrl+O (P2a) */
         case KeyCmd::Sleep: button("sleep"); break; /* T (P2a): the Sleep timer page */
         case KeyCmd::QueueUp: queue_button(0); break;
         case KeyCmd::QueueDown: queue_button(1); break;
-        case KeyCmd::QueueRemove:
-            swallow_echo = arrow_echo(it);
-            queue_button(2);
-            break;
-        case KeyCmd::QueueClear:
-            swallow_echo = arrow_echo(it);
-            queue_button(3);
-            break;
+        case KeyCmd::QueueRemove: queue_button(2); break;
+        case KeyCmd::QueueClear: queue_button(3); break;
         case KeyCmd::VolumeDown: volume_step(-1); break; /* the playing output's volume (D11 as changed), one level */
         case KeyCmd::VolumeUp: volume_step(1); break;
         default: break; /* comma and dot: the transport press above */

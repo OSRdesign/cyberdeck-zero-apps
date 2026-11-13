@@ -11,6 +11,7 @@
 
 #include "layout/layout.hpp"
 #include "menu/menu_model.hpp"
+#include "nav/key_echo.hpp"
 #include "sleep/sleep_timer.hpp"
 
 #include <cmath>
@@ -107,8 +108,10 @@ void test_keys() {
     CHECK_EQ(rows[0].keys, std::string("Space"));
     CHECK_EQ(rows[0].action, std::string("Play or pause"));
     CHECK_EQ(rows[1].keys, std::string("Left"));
-    CHECK_EQ(rows[1].action, std::string("Restart, or previous; hold: rewind"));
-    CHECK_EQ(rows[2].action, std::string("Next; hold: fast forward"));
+    /* the rows of now playing only say so (design QA of 0.2.0, D-37): Left is "back" on every other page */
+    CHECK_EQ(rows[1].action, std::string("On Now playing: restart, or previous; hold: rewind"));
+    CHECK_EQ(rows[2].action, std::string("On Now playing: next; hold: fast forward"));
+    CHECK_EQ(rows[3].action, std::string("On Now playing: seek 10 seconds"));
     CHECK_EQ(rows[3].keys, std::string("Shift+Left, Right"));
     CHECK_EQ(rows[6].keys, std::string("Q, B, O, M"));
     CHECK_EQ(rows[6].action, std::string("Queue, Browse, Output, Menu"));
@@ -117,8 +120,8 @@ void test_keys() {
     for (const KeyHelp &k : rows) {
         CHECK_EQ(k.codes.size(), k.cmds.size());
         for (size_t i = 0; i < k.codes.size() && i < k.cmds.size(); ++i) {
-            CHECK(letter_command(k.codes[i], k.queue_page) == k.cmds[i]);
-            if (k.queue_page) CHECK(letter_command(k.codes[i], false) == KeyCmd::None); /* the queue's letters act there only */
+            CHECK(shortcut_command(k.codes[i], k.mods, k.queue_page) == k.cmds[i]);
+            if (k.queue_page) CHECK(shortcut_command(k.codes[i], k.mods, false) == KeyCmd::None); /* the queue's letters act there only */
             listed.insert(static_cast<int>(k.cmds[i]));
         }
         CHECK(!k.keys.empty() && !k.action.empty());
@@ -133,6 +136,19 @@ void test_keys() {
     CHECK(letter_command(kKeyM, false) == KeyCmd::Menu);
     CHECK(letter_command(kKeyT, false) == KeyCmd::Sleep);
     CHECK(letter_command(kKeyY, false) == KeyCmd::None); /* Y belongs to the dialog */
+    /* Ctrl+O is the options key (AC 10b: the pointer's held click; design QA D-42): the Menu; plain O stays Output;
+     * another chord does nothing */
+    CHECK(shortcut_command(kKeyO, kModCtrl, false) == KeyCmd::Menu);
+    CHECK(shortcut_command(kKeyO, 0, false) == KeyCmd::Output);
+    CHECK(shortcut_command(kKeyS, kModCtrl, false) == KeyCmd::None);
+    CHECK(shortcut_command(kKeyO, kModCtrl | kModAlt, false) == KeyCmd::None);
+    CHECK(shortcut_command(kKeyM, 1u /* Shift */, false) == KeyCmd::Menu);
+    bool backspace = false, enter = false;
+    for (const KeyHelp &k : rows) {
+        backspace = backspace || k.keys == "Backspace";
+        enter = enter || (k.keys == "Enter" && k.action.find("Now playing") != std::string::npos);
+    }
+    CHECK(backspace && enter);
     bool esc = false, media = false;
     for (const KeyHelp &k : rows) {
         esc = esc || k.keys == "Esc";
@@ -255,6 +271,69 @@ void test_menu_geom() {
     CHECK_NEAR(sl.strip.h, 42, 0.5);
 }
 
+/* The toolkit's keypad, faked as it works at the launcher pin (cp0_keyboard_lvgl_input.c): first the key event Vinyl
+ * reads its shortcuts from, then LVGL's key, the raw code of a letter or a digit unchanged (T = 20 = Left, R = 19 =
+ * Right, 9 = 10 = Enter...), an alias's arrow (F / X / Z / C), a navigation key's own key. KeyEcho drops the echo of
+ * every shortcut (design QA of 0.2.0, D-32; the launcher's decision of 2026-10-05). */
+void test_key_echo() {
+    struct Keypad {
+        KeyEcho echo;
+        uint64_t now = 1000;
+        /* a press: true when LVGL's key reaches Vinyl's on_key */
+        bool press(uint32_t code, uint32_t semantic = 0, bool used = false) {
+            echo.seen(code, semantic, 1, used, now);
+            const uint32_t lv = keypad_echo(code, semantic);
+            const bool reached = !echo.drop(lv, now + 2);
+            now += 1000; /* the next press later than the window */
+            return reached;
+        }
+    } k;
+    /* evdev codes (linux/input-event-codes.h) */
+    enum : uint32_t {
+        kT = 20, kR = 19, kW = 17, kE = 18, k1 = 2, k2 = 3, k7 = 8, k8 = 9, k9 = 10, k0 = 11, kS = 31, kQ = 16, kB = 48,
+        kO = 24, kM = 50, kY = 21, kMinus = 12, kEqual = 13, kF = 33, kZ = 44, kX = 45, kC = 46, kLeft = 105, kRight = 106,
+        kUp = 103, kDown = 108, kEnter = 28, kEsc = 1, kBackspace = 14, kDelete = 111, kSpace = 57
+    };
+    /* what the keypad hands LVGL */
+    CHECK_EQ(keypad_echo(kT, 0), kLvKeyLeft);
+    CHECK_EQ(keypad_echo(kR, 0), kLvKeyRight);
+    CHECK_EQ(keypad_echo(k9, 0), kLvKeyEnterKey);
+    CHECK_EQ(keypad_echo(kX, kDown), kLvKeyDown);
+    CHECK_EQ(keypad_echo(kLeft, 0), kLvKeyLeft);
+    CHECK_EQ(keypad_echo(kEnter, 0), kLvKeyEnterKey);
+    /* T and R (shortcuts), W and E: their echo never moves, opens or goes back */
+    CHECK(!k.press(kT, 0, true));
+    CHECK(!k.press(kR, 0, true));
+    CHECK(!k.press(kW));
+    CHECK(!k.press(kE));
+    /* the digits whose codes are LVGL keys: Home, End, Backspace, Next, Enter, Prev */
+    for (uint32_t d : {k1, k2, k7, k8, k9, k0}) CHECK(!k.press(d));
+    /* the other shortcuts' codes are no LVGL key: nothing to drop, nothing happens in on_key */
+    for (uint32_t c : {kS, kQ, kB, kO, kM, kY, kMinus, kEqual, kSpace}) CHECK(!is_lvgl_key(keypad_echo(c, 0)));
+    /* real navigation keys always reach on_key */
+    for (uint32_t c : {kLeft, kRight, kUp, kDown, kEnter, kEsc, kBackspace, kDelete}) CHECK(k.press(c));
+    /* F / X / Z / C stay a small keyboard's arrows, unless Vinyl used the letter (X and C on the queue page) */
+    CHECK(k.press(kF, kUp));
+    CHECK(k.press(kZ, kLeft));
+    CHECK(k.press(kX, kDown, false));
+    CHECK(!k.press(kX, kDown, true));
+    CHECK(!k.press(kC, kRight, true));
+    CHECK(k.press(kC, kRight, false));
+    /* the window: the echo comes within milliseconds; a real Left 300 ms after T is a Left */
+    KeyEcho e;
+    e.seen(kT, 0, 1, true, 5000);
+    CHECK(e.drop(kLvKeyLeft, 5001));
+    CHECK(!e.drop(kLvKeyRight, 5001));
+    CHECK(e.drop(kLvKeyLeft, 5300));
+    CHECK(!e.drop(kLvKeyLeft, 5301));
+    /* a held key's repeats keep dropping; its release records nothing */
+    e.seen(kR, 0, 1, true, 6000);
+    e.seen(kR, 0, 2, true, 6250);
+    CHECK(e.drop(kLvKeyRight, 6500));
+    e.seen(kT, 0, 0, true, 7000);
+    CHECK(!e.drop(kLvKeyLeft, 7001));
+}
+
 void test_sleep_timer() {
     SleepTimer t;
     uint64_t now = 1000000; /* a fake monotonic clock */
@@ -335,4 +414,5 @@ void test_menu() {
     test_menu_key();
     test_menu_geom();
     test_sleep_timer();
+    test_key_echo();
 }
