@@ -264,6 +264,27 @@ not be based on percentages", unless the percentage maps onto a dB range; true s
 - The log line of a set: `volume: set <output> step i/N P % target X dB raw=M read back raw=K` (a sink's raw is its
   pa_volume_t, its read-back a fresh ask of the sink). The software volume of a card without a mixer: -60..0 dB, the
   amplitude 10^(dB / 20), kept as its percent in state.json.
+- The step size (owner, 2026-11-13): "for the step size around 2 db is fine". N = ceil(window / 2 dB) stays: the 60 dB
+  windows have levels of 2.07 dB.
+- The model takes the step aimed at and the group's unit as parameters (`volume_model(..., step_db)`, `VolumeUnit`,
+  `volume_level_text`), so the planned settings below need no new model; the controller formats the group's text.
+
+## Later (not built)
+
+Recorded on 2026-11-13; none of these is offered in 0.1.0.
+
+- **Software gain boost** (owner: "add on the roadmap a setting for a software gain boost and limit to 4dB with 1dB
+  increment"): in the Playback settings (P2), 0 to +4 dB in 1 dB steps, with a limiter against clipping. The reason: the
+  Pi 3A+ and Pi 4B headphone jack at its real maximum is much quieter than a USB DAC at its maximum.
+- **Precise volume in dB** (owner: "I'll add a setting for later to allow user to control the volume more precisely
+  based on dB with a choice of 0.1 0.5 and 1dB increments, so the volume tag is not showing the % of maximum but the real
+  dB output. like on some high end hi-fi systems."): P2/P3, in the Playback settings, "Volume steps": Normal (about 2 dB,
+  the percent shown) / 1 dB / 0.5 dB / 0.1 dB; in the dB modes the volume group shows the output's real level in dB (for
+  example "-22.5 dB") instead of the percent. The model already takes the step (never finer than the control's own step)
+  and formats a level in dB (`volume_level_text`, tested); the setting and its page are not built.
+- The Menu key and its pages (equalizer, sleep timer, playback, library, output, about): P2 (owner, 2026-11-13, above).
+
+## 640x480 and 480x320 (owner, 2026-11-13)
 
 ## 640x480 and 480x320 (owner, 2026-11-13)
 

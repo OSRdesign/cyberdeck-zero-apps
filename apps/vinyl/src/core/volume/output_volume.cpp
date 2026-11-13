@@ -54,7 +54,13 @@ int OutputVolumeModel::from_pct(int pct) const {
     return std::max(1, std::min(n, static_cast<int>(std::lround(std::min(pct, 100) * n / 100.0))));
 }
 
-OutputVolumeModel volume_model(double lo_db, double hi_db, double native_step_db) {
+std::vector<double> OutputVolumeModel::levels_db() const {
+    std::vector<double> v;
+    for (int i = 1; i <= n; ++i) v.push_back(db_of(i));
+    return v;
+}
+
+OutputVolumeModel volume_model(double lo_db, double hi_db, double native_step_db, double step_db) {
     OutputVolumeModel m;
     m.hi_db = hi_db;
     m.lo_db = std::max(lo_db, hi_db - kVolumeWindowDb);
@@ -64,8 +70,9 @@ OutputVolumeModel volume_model(double lo_db, double hi_db, double native_step_db
         m.n = 1;
         return m;
     }
-    int n = std::max(2, static_cast<int>(std::ceil(w / kVolumeStepDb - 1e-9)));
-    const double min_step = std::max(kVolumeMinStepDb, native_step_db);
+    if (!(step_db > 0)) step_db = kVolumeStepDb;
+    int n = std::max(2, static_cast<int>(std::ceil(w / step_db - 1e-9)));
+    const double min_step = std::max(std::min(kVolumeMinStepDb, step_db), native_step_db);
     if (w / (n - 1) < min_step - 1e-9) n = std::max(2, static_cast<int>(std::floor(w / min_step + 1e-9)) + 1);
     m.n = n;
     return m;
@@ -305,6 +312,18 @@ std::string volume_set_log_text(const std::string &out, const OutputVolumeModel 
     else std::snprintf(back, sizeof back, "failed (%d)", read_result);
     return "set " + out + " step " + std::to_string(level) + "/" + std::to_string(m.n) + " " + std::to_string(m.pct_of(level)) +
            " % target " + target + " raw=" + std::to_string(raw) + " read back " + back;
+}
+
+std::string volume_level_text(const OutputVolumeModel &m, int level, VolumeUnit unit) {
+    if (unit == VolumeUnit::Percent || !m.db) return std::to_string(m.pct_of(level));
+    const double db = m.db_of(level);
+    const bool fine = m.step_db() < 0.5 - 1e-9;
+    char b[32];
+    const double shown = std::fabs(db) < (fine ? 0.005 : 0.05) ? 0.0 : db; /* never "-0.0" */
+    std::snprintf(b, sizeof b, fine ? "%+.2f dB" : "%+.1f dB", shown);
+    std::string s = b;
+    if (shown == 0.0 && !s.empty() && s[0] == '+') s.erase(0, 1); /* "0.0 dB" */
+    return s;
 }
 
 std::string volume_model_text(const OutputVolumeModel &m) {

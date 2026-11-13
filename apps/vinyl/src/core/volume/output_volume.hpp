@@ -42,8 +42,12 @@
 namespace vinyl {
 
 constexpr double kVolumeWindowDb = 60; /* the usable range kept at the top of an output's range */
-constexpr double kVolumeStepDb = 2;    /* the step aimed at: N = ceil(window / 2 dB) */
-constexpr double kVolumeMinStepDb = 1; /* a step is never smaller */
+constexpr double kVolumeStepDb = 2;    /* the step aimed at: N = ceil(window / 2 dB) (owner: "around 2 db is fine") */
+constexpr double kVolumeMinStepDb = 1; /* a step of the normal mode is never smaller */
+
+/* How the group shows a level: the percent of the output's levels (now), or the output's real level in dB (the owner's
+ * planned "Volume steps" setting, P2/P3: not offered yet; docs/decisions.md "Later (not built)"). */
+enum class VolumeUnit { Percent, Decibel };
 
 /* The levels of one output (see above). */
 struct OutputVolumeModel {
@@ -56,10 +60,13 @@ struct OutputVolumeModel {
     int nearest(double db) const;     /* the level nearest a dB value: 1..n */
     int from_pct(int pct) const;      /* the level a stored percent stands for: 0..n */
     int step(int level, int delta) const { return level + delta < 1 ? 1 : (level + delta > n ? n : level + delta); }
+    std::vector<double> levels_db() const; /* the dB of levels 1..n (the step list) */
 };
 /* The model of a range: lo the dB of the lowest sounding value, hi the top; native_step_db the control's own step (0:
- * continuous). A range wider than 60 dB keeps its upper 60 dB. */
-OutputVolumeModel volume_model(double lo_db, double hi_db, double native_step_db = 0);
+ * continuous); step_db the step aimed at (the normal mode's 2 dB; the planned 1, 0.5 and 0.1 dB modes pass theirs: a
+ * step is never under min(1 dB, step_db) nor under the control's own step). A range wider than 60 dB keeps its upper
+ * 60 dB. */
+OutputVolumeModel volume_model(double lo_db, double hi_db, double native_step_db = 0, double step_db = kVolumeStepDb);
 /* The window of an output whose range is not known: -60..0 dB. */
 OutputVolumeModel default_volume_model();
 
@@ -137,5 +144,8 @@ std::string volume_set_log_text(const std::string &out, const OutputVolumeModel 
                                 long read_raw);
 /* A model in one line for the log: "-45.00..0.00 dB, 23 levels of 2.05 dB" (or "23 raw steps" without dB). */
 std::string volume_model_text(const OutputVolumeModel &m);
+/* The group's text for a level 1..n: its percent ("52"), or in dB its real level ("-22.5 dB", "0.0 dB", "+4.0 dB"; two
+ * decimals for steps under 0.5 dB); a model without dB data always shows its percent. */
+std::string volume_level_text(const OutputVolumeModel &m, int level, VolumeUnit unit = VolumeUnit::Percent);
 
 }  // namespace vinyl

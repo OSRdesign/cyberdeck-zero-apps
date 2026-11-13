@@ -124,6 +124,16 @@ Korean titles draw with the launcher's Noto Sans CJK.
   server never brings back another app's stream level. A muted output shows "Muted" in the group, whoever muted it; the
   sound server's placeholder output at start (`auto_null`) never shows a level.
 
+## Planned settings
+
+Not in 0.1.0 (the owner's roadmap, 2026-11-13; `docs/decisions.md`, "Later (not built)"), in the Playback settings of the
+Menu key (P2):
+
+- **Gain boost**: 0 to +4 dB of software gain in 1 dB steps, with a limiter against clipping, for outputs that are quiet
+  even at their maximum (the Raspberry Pi headphone jack beside a USB DAC).
+- **Volume steps**: Normal (about 2 dB, the percent shown, as now) / 1 dB / 0.5 dB / 0.1 dB; in the dB modes the volume
+  group shows the output's real level in dB ("-22.5 dB"), as some hi-fi amplifiers do.
+
 ## Background playback
 
 `.desktop` `X-Background=run`: on a launcher with multitasking (canvases 480 px and more on the short side) Super, Alt+Tab

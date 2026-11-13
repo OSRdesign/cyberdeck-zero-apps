@@ -362,6 +362,29 @@ void test_volume_model() {
     CHECK_NEAR(coarse.step_db(), 3.0, 1e-9);
     const OutputVolumeModel tiny = volume_model(-0.5, 0); /* half a dB: two levels, as close as the range allows */
     CHECK_EQ(tiny.n, 2);
+    /* the step is a parameter (the owner's planned "Volume steps": 1, 0.5 and 0.1 dB, P2/P3, not offered yet) */
+    CHECK_EQ(volume_model(-60, 0, 0, 1.0).n, 60);
+    CHECK_EQ(volume_model(-60, 0, 0, 0.5).n, 120);
+    CHECK_EQ(volume_model(-60, 0, 0, 0.1).n, 600);
+    CHECK(volume_model(-60, 0, 0, 0.1).step_db() >= 0.1 - 1e-9);
+    CHECK_EQ(volume_model(-60, 0, 0.5, 0.1).n, 121); /* never finer than the control's own 0.5 dB */
+    CHECK_EQ(volume_model(-45, 0, 1.0, 0.5).n, 46);  /* the Sharkoon's 1 dB steps */
+    CHECK_EQ(volume_model(-60, 0, 0, 0).n, 30);      /* no step given: the normal 2 dB */
+    const std::vector<double> list = d.levels_db();
+    CHECK_EQ(list.size(), static_cast<size_t>(30));
+    CHECK_NEAR(list.front(), -60.0, 1e-9);
+    CHECK_NEAR(list.back(), 0.0, 1e-9);
+    /* the group's text: the percent now, the real dB in the planned mode */
+    const OutputVolumeModel dacm = volume_model(-45, 0, 1.0);
+    CHECK_EQ(volume_level_text(dacm, 12), std::string("52"));
+    CHECK_EQ(volume_level_text(dacm, 12, VolumeUnit::Decibel), std::string("-22.5 dB"));
+    CHECK_EQ(volume_level_text(dacm, 23, VolumeUnit::Decibel), std::string("0.0 dB"));
+    CHECK_EQ(volume_level_text(volume_model(-102.38, 4.0, 0.01), 30, VolumeUnit::Decibel), std::string("+4.0 dB"));
+    CHECK_EQ(volume_level_text(volume_model(-60, 0, 0, 0.1), 1, VolumeUnit::Decibel), std::string("-60.00 dB"));
+    OutputVolumeModel raw_steps;
+    raw_steps.db = false;
+    raw_steps.n = 10;
+    CHECK_EQ(volume_level_text(raw_steps, 5, VolumeUnit::Decibel), std::string("50")); /* no dB data: the percent */
     const OutputVolumeModel one = volume_model(0, 0); /* one value */
     CHECK_EQ(one.n, 1);
     CHECK_EQ(one.pct_of(1), 100);

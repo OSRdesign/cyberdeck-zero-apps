@@ -813,7 +813,10 @@ struct View::Impl {
     void update_vol_group(const NowView &v) {
         if (!grp_value) return;
         const bool muted = v.vol_muted && v.vol_level >= 0;
-        const std::string t = v.vol_level < 0 ? std::string("--") : muted ? std::string("Muted") : std::to_string(v.vol_level);
+        const std::string t = v.vol_level < 0 ? std::string("--")
+                              : muted         ? std::string("Muted")
+                              : !v.vol_value.empty() ? v.vol_value
+                                                     : std::to_string(v.vol_level);
         const int vw = lv_obj_get_width(grp_value_box), vh = lv_obj_get_height(grp_value_box);
         const int gp = lv_obj_get_width(grp_glyph), gap = P(3), margin = P(4);
         int px = P(g.vol_text_px), tx = 0, tw = vw;

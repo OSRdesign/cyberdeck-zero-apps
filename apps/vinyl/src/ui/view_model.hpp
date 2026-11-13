@@ -40,6 +40,7 @@ struct NowView {
     std::string vol;        /* "Vol 60" */
     bool vol_bt = false;
     int vol_level = -1;     /* the level the volume group shows, 0..100 (-1: not known) */
+    std::string vol_value;  /* its text as the controller formats it ("60"; "-22.5 dB" in the planned dB mode) */
     bool vol_muted = false; /* muted: the group shows Muted (vol_level is the level it comes back at) */
     bool queue_empty = false; /* nothing to play: the transport keys dimmed */
     bool vol_adjustable = false; /* the group's "-" / "+" change it; false: a tap says the volume is not available */

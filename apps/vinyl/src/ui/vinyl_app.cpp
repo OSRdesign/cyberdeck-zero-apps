@@ -1180,8 +1180,11 @@ struct VinylApp::Impl final : TransportHost {
         v.vol = vol_text();
         v.vol_bt = output_is_bt();
         bool vol_muted = false;
-        v.vol_level = output_level(&vol_muted);
+        OutputVolumeModel vol_model;
+        const int vol_step = output_step(&vol_muted, &vol_model);
+        v.vol_level = vol_step < 0 ? -1 : vol_model.pct_of(vol_step);
         v.vol_muted = vol_muted;
+        if (vol_step > 0) v.vol_value = volume_level_text(vol_model, vol_step, VolumeUnit::Percent); /* the dB mode: P2/P3 */
         v.vol_adjustable = output_level_adjustable();
         v.queue_empty = queue.empty();
         const std::string path = !snap.path.empty() ? snap.path : (queue.current_path() ? *queue.current_path() : "");
