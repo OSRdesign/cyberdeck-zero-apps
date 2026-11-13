@@ -61,7 +61,8 @@ it, or the feature fails at run time: Cassette lists `libopus0, libopusenc0, lib
 reason, Deck Atlas `libsqlite3-0` and `libcurl4t64`), and the **tools it runs** (`curl`, `picocom`, `network-manager`).
 A native app's usual start is `libfreetype6, libinput10, libxkbcommon0`.
 
-`recommends` is for an **optional** feature: apt installs the package by default but the app must work without it
+`recommends` is for an **optional** feature: Settings > Apps never installs recommends (`--no-install-recommends`,
+launcher 0.10.2), so the package must already be on the board or be installed by hand, and the app must work without it
 (Mesh Hop and mmWave Radar recommend `bluez`: the Bluetooth page needs it, the rest of the app does not). Rule of
 thumb: if the app is useless or crashes without the library, `depends`; if only one optional feature is missing,
 `recommends`. Every library opened at run time must also be named in the app's `copyright` file and README credits
