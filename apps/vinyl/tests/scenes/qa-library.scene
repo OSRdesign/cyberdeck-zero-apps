@@ -252,11 +252,11 @@ wait 300
 tap "Add a folder"
 wait 700
 shot 24-choose
-expect text "Use this folder"
+expect text "Use folder"
 tap "Amerie"
 wait 700
 shot 25-choose-folder
-tap "Use this folder"
+tap "Use folder"
 wait 700
 shot 26-already-there
 expect text "That folder is in the library already."
@@ -268,3 +268,11 @@ key esc
 wait 400
 expect text "Playback"
 expect noquit
+# Esc on the Menu goes back to the hub; Esc at the hub (the app's root) quits (D-30)
+key esc
+wait 400
+expect text "LIBRARY, 166 TRACKS"
+expect noquit
+key esc
+wait 400
+expect quit

@@ -1466,7 +1466,7 @@ struct VinylApp::Impl final : TransportHost {
         lib->enter();
     }
 
-    /* the Browser's choose mode: "Use this folder" */
+    /* the Browser's choose mode: "Use folder" */
     void use_folder() {
         if (!choose_mode || !lib_on()) return;
         if (folder.empty()) {
@@ -1872,7 +1872,7 @@ struct VinylApp::Impl final : TransportHost {
             v.mini = MiniView();
             v.mini.shown = true;
             v.mini.title = folder.empty() ? std::string("Choose a folder") : folder.substr(folder.rfind('/') == std::string::npos ? 0 : folder.rfind('/') + 1);
-            v.mini.sub = folder.empty() ? "Open a folder, then use it" : "Press U or tap Use this folder";
+            v.mini.sub = folder.empty() ? "Open a folder" : "Or press U";
         }
         return v;
     }

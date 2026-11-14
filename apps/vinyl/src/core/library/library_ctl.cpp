@@ -8,8 +8,10 @@
 #include "schema.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <ctime>
+#include <thread>
 
 namespace vinyl {
 namespace ui {
@@ -564,12 +566,11 @@ void LibraryCtl::button(Page p, int index) {
     }
     mine.erase(it);
     if (host_.set_folders) host_.set_folders(mine);
-    if (scan_) {
-        scan_->cancel();
-        scan_->wait();
-    }
+    ScanThread *st = scan_.get();
+    if (st) st->cancel(); /* returns at once; the worker waits for the scan to stop (never on the UI thread, D-63) */
     const int64_t id = root.id;
-    worker_.post([id](Library *lib) {
+    worker_.post([id, st](Library *lib) {
+        for (int i = 0; st && i < 250 && st->running(); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(20));
         if (lib) remove_root(lib->db(), id);
     }, [this] {
         reload();

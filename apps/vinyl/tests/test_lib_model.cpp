@@ -264,6 +264,8 @@ void test_lib_model() {
     CHECK_EQ(sett[0].value, std::string("2"));
     CHECK(!sett[1].dimmed);
     CHECK(sett[2].dimmed); /* the information row is inert */
+    CHECK(sett[2].mark == Row::Mark::None); /* and has no marker (D-45) */
+    CHECK(sett[1].mark == Row::Mark::Dot);
     CHECK(settings_rows(2, "x", true)[1].dimmed); /* Rescan now while scanning: inert */
 
     /* Track info */

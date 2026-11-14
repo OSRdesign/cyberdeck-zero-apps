@@ -16,8 +16,8 @@ expect noquit
 tap "Add a music folder"
 wait 700
 shot 02-choose-empty
-expect text "Use this folder"
-tap "Use this folder"
+expect text "Use folder"
+tap "Use folder"
 wait 400
 expect text "Open a folder first."
 key esc

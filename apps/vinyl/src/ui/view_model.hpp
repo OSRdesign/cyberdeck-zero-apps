@@ -97,7 +97,7 @@ struct ListView {
     unsigned queue_buttons = 0xF; /* queue: the buttons that can act (core/nav queue_buttons_enabled), the others dimmed */
     std::string hint;       /* output: the strip's text */
     bool hint_notice = false; /* output: the strip is the "not set up" notice */
-    /* browser, choose mode (P2b: Music folders > Add a folder): the strip asks "Use this folder", the mini player is away */
+    /* browser, choose mode (P2b: Music folders > Add a folder): the strip asks "Use folder", the mini player is away */
     bool choose = false;
     std::string choose_text; /* the strip's second line */
 };

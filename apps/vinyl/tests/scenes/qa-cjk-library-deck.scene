@@ -1,0 +1,94 @@
+title Vinyl P2b: CJK names and tags in the Library (Japanese, Chinese and Korean artists, titles and albums in the lists and found by Search through the launcher's Noto Sans CJK) (640x480 at the deck's own density, 11.3 px/mm: allow-small)
+sizes 640x480
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_LIBRARY full
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE library
+env VINYL_DEMO_CJK 1
+keyboards 1
+wait 1200
+shot 01-hub
+expect text "Folders"
+tap "Artists"
+wait 700
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 400
+shot 02-artists-cjk
+expect text "久石譲"
+expect text "坂本龍一"
+expect text "邓丽君"
+expect text "김광석"
+key esc
+wait 400
+tap "Search"
+wait 500
+type 夜明け
+wait 900
+shot 03-search-japanese
+expect text "夜明けの歌"
+key backspace
+key backspace
+key backspace
+type 서른
+wait 900
+shot 04-search-korean
+expect text "서른 즈음에"
+key backspace
+key backspace
+type 邓丽
+wait 900
+shot 05-search-chinese
+expect text "邓丽君"
+key enter
+wait 300
+key down
+key enter
+wait 700
+shot 06-artist-cjk
+expect text "邓丽君, 1 ALBUM, 1 TRACK"
+key esc
+wait 400
+key esc
+wait 400
+expect text "Folders"
+expect noquit

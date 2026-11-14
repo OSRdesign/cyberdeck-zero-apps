@@ -429,7 +429,7 @@ std::vector<Row> settings_rows(int folders, const std::string &last_scan, bool s
     r.key = "rescan";
     r.dimmed = scanning; /* a scan is running: nothing to start */
     rows.push_back(r);
-    Row l = item(Row::Type::None, 0, 2, last_scan, "", Row::Mark::Dot);
+    Row l = item(Row::Type::None, 0, 2, last_scan, "", Row::Mark::None); /* information: no marker (D-45) */
     l.key = "last";
     l.dimmed = true;
     rows.push_back(l);

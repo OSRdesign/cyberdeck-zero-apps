@@ -691,7 +691,7 @@ does nothing. The hint line is on the sheet. A tap on a sheet row acts, a tap ou
 row of the hub is drawn as the board draws it (normal) and shows the notice "Playlists arrive in a later version." The queue
 changes are `Queue::insert_next` / `append` (the playing track stays); the notices say "Will play next." / "Added to the queue."
 
-**Music folders.** Add a folder opens the Browser in **choose mode**: the mini player's strip becomes "Use this folder" (the key
+**Music folders.** Add a folder opens the Browser in **choose mode**: the mini player's strip becomes "Use folder" (the key
 U too), tracks and playlists do nothing, Esc goes back to the Music folders page. No board draws this; it is the cheapest use of
 the Browser's own strip and an open design question for the owner (a dedicated page would be a design task). Remove selected
 folder removes only the folders the user added (`library.folders`); Music and the USB drives are always indexed (a removal would

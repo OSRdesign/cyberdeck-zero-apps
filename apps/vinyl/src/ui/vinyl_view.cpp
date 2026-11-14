@@ -1043,7 +1043,7 @@ struct View::Impl {
                     b.hitbox = hold_hit(r, x, y, w, h, 0, 0, [this](int ph) { transport(true, ph); });
                 else
                     b.hitbox = hit(r, x, y, w, h, 0, 0, [this, sid, p] {
-                        if (sid == "play" && p == Page::Browser && browse_choose) { /* choose mode: the button is "Use this folder" */
+                        if (sid == "play" && p == Page::Browser && browse_choose) { /* choose mode: the button is "Use folder" */
                             if (act.lib_button) act.lib_button(Page::Browser, 0);
                             return;
                         }
@@ -1196,11 +1196,13 @@ struct View::Impl {
             show(L.mini_play.icon, false);
             if (!choose_word) {
                 const double s = layout::list_geom(layout::ListPage::Browser, W, H, body_y).s;
-                const int px = std::max(1, ri(13 * s));
-                choose_word = label(L.mini_play.vis, Face::Bold, px, col::kInk, 0, 0, 0, LV_TEXT_ALIGN_CENTER);
-                lv_obj_set_width(choose_word, right - L.ch_x);
+                const int bw = right - L.ch_x;
+                /* the label's size fits the widened key (down to 8 px); a label that still did not fit would end in dots, which
+                 * the scenes' expect text "Use folder" catches */
+                const int px = fit_px(Face::Bold, std::max(1, ri(13 * s)), "Use folder", bw - std::max(2, ri(8 * s)), 8);
+                choose_word = label(L.mini_play.vis, Face::Bold, px, col::kInk, 0, 0, bw, LV_TEXT_ALIGN_CENTER);
                 lv_obj_set_y(choose_word, (lv_obj_get_height(L.mini_play.vis) - lv_font_get_line_height(font(Face::Bold, px))) / 2);
-                set_text(choose_word, "Use this folder");
+                set_text(choose_word, "Use folder");
             }
             show(choose_word, true);
         } else {
