@@ -412,6 +412,14 @@ std::vector<Row> folder_rows(const std::vector<RootInfo> &roots, const std::stri
         row.key = key;
         rows.push_back(row);
     }
+    for (const DriveInfo &d : drives) { /* mounted, its root not made yet (a moment after a mount): the row is there already */
+        if (!d.mounted) continue;
+        const std::string key = (d.by_vinyl ? "vdrive:" : "sdrive:") + d.dev;
+        if (std::any_of(rows.begin(), rows.end(), [&](const Row &r) { return r.key == key; })) continue;
+        Row row = item(Row::Type::None, 0, -1, d.name() + " (USB drive)", d.by_vinyl ? "mounted by Vinyl" : size_text(d.size) + ", mounted", Row::Mark::None);
+        row.key = key;
+        rows.push_back(row);
+    }
     for (const DriveInfo &d : drives) {
         if (d.mounted) continue;
         Row row = item(Row::Type::None, 0, -1, d.name() + " (USB drive)", "not mounted", Row::Mark::Dot);

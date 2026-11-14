@@ -1458,6 +1458,11 @@ struct View::Impl {
             y = ri(nbox.y);
             if (ri(nbox.h) != ri((danger ? 30 : 50) * s)) fit_h = ri(nbox.h);
             notice_area = layout::notice_area_over(nbox, covered);
+            if (notice_area.h < target) { /* nothing of the strip under it (no mini player): its touch area still the target high, upwards */
+                const double bot = notice_area.bottom();
+                notice_area.y = std::max(lg.panel.y, bot - target);
+                notice_area.h = bot - notice_area.y;
+            }
             cover_for_notice(under);
         }
         make_notice(root, n.kind, x, y, w, s, notice, notice_icon, notice_text, fit_h);

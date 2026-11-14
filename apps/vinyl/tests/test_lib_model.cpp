@@ -272,6 +272,22 @@ void test_lib_model() {
     CHECK(fr[2].amber && fr[2].mark == Row::Mark::Dot);
     CHECK_EQ(fr[2].key, std::string("ndrive:/dev/sdc1"));
     CHECK_EQ(fr[2].index, -1);
+    /* mounted and its root not made yet: the row is there already (the selection does not jump) */
+    DriveInfo dm;
+    dm.dev = "/dev/sdd1";
+    dm.label = "NEW";
+    dm.mounted = true;
+    dm.by_vinyl = true;
+    dm.mount_dir = "/media/u/NEW";
+    dm.size = 8000000000ull;
+    fr = folder_rows({home}, "/home/osrde", {dm});
+    CHECK_EQ(fr.size(), static_cast<size_t>(2));
+    CHECK_EQ(fr[1].text, std::string("NEW (USB drive)"));
+    CHECK_EQ(fr[1].value, std::string("mounted by Vinyl"));
+    CHECK_EQ(fr[1].key, std::string("vdrive:/dev/sdd1"));
+    dm.by_vinyl = false;
+    fr = folder_rows({home}, "/home/osrde", {dm});
+    CHECK_EQ(fr[1].value, std::string("8.0 GB, mounted"));
     usb.online = false;
     CHECK(is_drive_path("/run/media/o/X"));
     CHECK(!is_drive_path("/home/o/media/x"));
