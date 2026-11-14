@@ -4,10 +4,10 @@ A music player for CyberdeckZero Launcher boards: it plays the music in `~/Music
 from M3U playlists, with gapless playback, shuffle, repeat, embedded cover art, ReplayGain, a sleep timer and resume where
 you stopped (a long mix or audiobook keeps its own place). It plays on while you use other apps (on boards with
 multitasking), to wired outputs and, on boards with a sound server, to Bluetooth headsets and speakers; headset, speaker
-and keyboard play keys work. Version **0.2.0** (phase P2a of the launcher repo's report 060: the Menu with the sleep
-timer, the Playback settings, the keys and About; folder first). The Library (phase P2b, **0.3.0**: a SQLite library kept
-up to date by a background scan, Artists, Albums, Songs, Genres, Search, Track info and the actions of a row) is built and
-**not published yet**; its rows below say "0.3.0".
+and keyboard play keys work. Version **0.3.0** (phase P2b of the launcher repo's report 060: the Library, a SQLite
+library kept up to date by a background scan, with Artists, Albums, Songs, Genres, Search, Track info and the actions of
+a row, and USB drives mounted on request; 0.2.0 brought the Menu with the sleep timer, the Playback settings, the keys
+and About).
 
 Kind: a native `cp0_lvgl` app (kind A of the guidelines): its own screens, touch and keys. The design is the owner-approved
 drafts in [`docs/design`](docs/design) (the `.dc.html` files; the boards of 0.2.0, from the full-UX canvas, in
@@ -27,22 +27,27 @@ Headless harness, demonstration world (`VINYL_DEMO=1`):
 | ![the Menu](screenshots/12-menu-480x320.png) | ![the sleep timer running](screenshots/13-sleep-timer-480x320.png) |
 | ![Playback](screenshots/14-playback-480x320.png) | ![ReplayGain](screenshots/15-replaygain-480x320.png) |
 | ![Keys](screenshots/16-keys-480x320.png) | ![About](screenshots/17-about-480x320.png) |
+| ![the Library hub](screenshots/20-library-hub-480x320.png) | ![Artists](screenshots/21-artists-480x320.png) |
+| ![an album](screenshots/22-album-480x320.png) | ![the actions of a track](screenshots/23-track-actions-480x320.png) |
+| ![Track info](screenshots/24-track-info-480x320.png) | ![Search](screenshots/25-search-480x320.png) |
+| ![the hub while the scan runs](screenshots/26-scanning-480x320.png) | ![a USB drive in Folders](screenshots/27-usb-drives-480x320.png) |
+| ![Music folders: Mount](screenshots/28-mount-button-480x320.png) | |
 
-The deck (640x480), square (480x480) and large (800x480, two panes), the Menu and the Keys at 320x480:
+The deck (640x480), square (480x480) and large (800x480, two panes), the Menu, the Keys and the Library hub at 320x480:
 ![deck](screenshots/09-now-playing-640x480.png) ![square](screenshots/06-now-playing-480x480.png)
 ![large](screenshots/07-now-playing-800x480.png) ![Menu portrait](screenshots/18-menu-320x480.png)
-![Keys portrait](screenshots/19-keys-320x480.png)
+![Keys portrait](screenshots/19-keys-320x480.png) ![Library portrait](screenshots/29-library-hub-320x480.png)
 
 ## What it does
 
 | Page | What |
 |---|---|
 | **Browser** (the root) | `~/Music` and the mounted drives (`/media/<user>`, `/run/media/<user>`, `/mnt`): folders A-Z, playlists (`.m3u`, `.m3u8`), tracks A-Z (natural order) with their title tags and lengths; the mini player at the bottom. A track plays its folder as the queue; a playlist plays its entries. |
-| **Library** (0.3.0, not published yet) | Browse opens the hub: Folders (the Browser), Playlists (a later version: a notice), Artists, Albums, Songs and Genres with their counts, Search, and the mini player. Lists show 40 rows and the next 40 as you reach the end; an artist's page lists its albums by year, an album its tracks by disc; a genre leads to its albums. A track tap plays the list from there. A **1.5 s hold** (a bar fills and says "Keep holding for options"; or Ctrl+O) on a song, album or artist opens its actions: Play, Play next, Add to queue, Track info (Add to playlist is drawn dimmed: playlists are P2c). Search finds songs, albums, artists and genres while you type (case and accents ignored; one or two letters match the start). The scan runs at launch and when you open a folder from the Library, and stops when you leave the Library; Menu > Library shows its progress, Rescan now and the Music folders (add one through the Browser, remove one you added). A drive that is plugged in and not mounted is a row in Folders ("Tap to mount": Vinyl mounts it through udisks2, no password, and opens it; what Vinyl mounted it unmounts when it quits, and Music folders has an Eject button for it, and Mount for a drive that is plugged in and not mounted); a drive that is gone (pulled, or a stale mount) is shown nowhere, and what was queued from it leaves the queue (Vinyl then shows the Library at the default music folder, and opens on the Library when there is nothing left to resume). Without SQLite Browse stays the folder list. |
+| **Library** (0.3.0) | Browse opens the hub: Folders (the Browser), Playlists (a later version: a notice), Artists, Albums, Songs and Genres with their counts, Search, and the mini player. Lists show 40 rows and the next 40 as you reach the end; an artist's page lists its albums by year, an album its tracks by disc; a genre leads to its albums. A track tap plays the list from there. A **1.5 s hold** (a bar fills and says "Keep holding for options"; or Ctrl+O) on a song, album or artist opens its actions: Play, Play next, Add to queue, Track info (Add to playlist is drawn dimmed: playlists are P2c). Search finds songs, albums, artists and genres while you type (case and accents ignored; one or two letters match the start). The scan runs at launch and when you open a folder from the Library, and stops when you leave the Library; Menu > Library shows its progress, Rescan now and the Music folders (add one through the Browser, remove one you added). A drive that is plugged in and not mounted is a row in Folders ("Tap to mount": Vinyl mounts it through udisks2, no password, and opens it; what Vinyl mounted it unmounts when it quits, and Music folders has an Eject button for it, and Mount for a drive that is plugged in and not mounted); a drive that is gone (pulled, or a stale mount) is shown nowhere, and what was queued from it leaves the queue (Vinyl then shows the Library at the default music folder, and opens on the Library when there is nothing left to resume). Without SQLite Browse stays the folder list. |
 | **Now playing** | cover art (embedded JPEG or PNG, else the drawn sleeve) with the record sliding out (its label about a third out, with a dot and a centre ring that show it turning), title (one line that scrolls, or two lines on the 640x480, square and large screens), artist, album and year, the format and Gapless as information (one line at 480x320, flat chips at 640x480, plain text elsewhere; on the square and large screens the playing track's ReplayGain after it, "Gapless, RG -3.2 dB"), the output (a full-width button with the device's name and a chevron; a chip on 800x480 and wider), the volume group ("-", the level on teal, "+"); the position with a seek bar (a tap seeks, a drag scrubs), previous, play / pause, next, shuffle, repeat (off, all, one: a teal mark, and a "1" for one); the Menu key (the sliders icon: the seventh transport key at 480x320, the sixth on the square screens, an icon key at the left of the bottom row in portrait, a bottom-row key with its word on 640x480 and 800x480 and wider); the queue key (480x320) or the Queue key of the bottom row; the Browse key (640x480, square, large); up next (square), the queue pane and the sleep-timer key (large). An empty queue dims the transport keys, which then do nothing (the Queue, Browse, Menu and sleep-timer keys stay: they open their pages). |
 | **Queue** | the play order from the playing track, "3 OF 20, 1 H 24 MIN LEFT"; Move up, Move down, Remove, Clear all (asks first: "Clear the queue?", Cancel, the default, or Clear; it keeps the playing track). An empty queue dims the four buttons; with only the playing track, Move up, Move down and Clear all are dimmed. No dragging in the lists (the seek bar is the one control that drags). |
 | **Output** | Automatic (the system's default output), the Bluetooth devices (music or call quality), the wired outputs, a paired device that is off (grey: a tap says how to connect it). Vinyl never switches output by itself: when the output in use goes away, playback pauses ("Evolve 65 disconnected. Paused."). |
-| **Menu** (P2a) | TOOLS: Sleep timer (Off, the time left, or the track mode); SETTINGS: Playback, Output (the output's name: it opens the Output page), Keys, About. Only what is built is listed (the Equalizer comes later; the Library row is 0.3.0, not published yet). |
+| **Menu** (P2a) | TOOLS: Sleep timer (Off, the time left, or the track mode); SETTINGS: Playback, Library (when the Library's database opened: its scan, Rescan now, Music folders), Output (the output's name: it opens the Output page), Keys, About. Only what is built is listed (the Equalizer comes later). |
 | **Sleep timer** | Stop playing after: Off, 15, 30 or 60 minutes, This track, This album or queue (the chosen one has the blue dot; a choice closes the page, the Menu shows the time left); while it runs, "Stops in 29:12. The music fades out for the last 10 seconds." The minutes count from the choice, playing or paused; the last 10 s fade out, then the music pauses ("Sleep timer ended. Paused."). This track stops at the end of the track that plays, This album or queue before the next album (the album tag, else the folder) or at the end of the queue (a playlist plays to its end); the queue then waits on the next track, paused. The timer runs on while you change pages and while Vinyl is hidden; a restart forgets it; it pauses the music and nothing else. |
 | **Playback** | Gapless (On: the next track continues on the same stream when its format is the same; Off: a short gap at every change), ReplayGain (Off / Track / Album, Track by default: the loudness from the files' tags), Remember position in long files (On: a file longer than 20 minutes starts again where you left it). Enter or a tap turns Gapless and Remember on or off; ReplayGain opens its list. |
 | **Keys** | every key and what it does (the key's name, then its action; the rows of now playing say so); it scrolls. |
@@ -173,7 +178,7 @@ A pre-amp is not offered (0 dB).
 
 ## Planned settings
 
-Not in 0.2.0 (the owner's roadmap, 2026-11-13; `docs/decisions.md`, "Later (not built)"), in the Playback settings of the
+Not in 0.3.0 (the owner's roadmap, 2026-11-13; `docs/decisions.md`, "Later (not built)"), in the Playback settings of the
 Menu (P2):
 
 - **Gain boost**: 0 to +4 dB of software gain in 1 dB steps, with a limiter against clipping, for outputs that are quiet
@@ -204,12 +209,12 @@ plays in front (`dim allow`, decision D16).
 - CyberdeckZero Launcher with the app contract; built at the shared pin (`apps/_common/LAUNCHER_REF`).
 - Packages (Debian 13 names, all Depends): libmpg123-0t64, libvorbisfile3, libflac14, libopus0, libasound2t64,
   libpulse0, libavformat61, libavcodec61, libavutil59, libswresample5 (Ubuntu 26.04: libavformat62, libavcodec62,
-  libavutil60, libswresample6).
+  libavutil60, libswresample6), libsqlite3-0 (the Library).
 - Reading the media keys needs read access to `/dev/input/event*` (the `input` group, as the launcher's user has).
 
 ## Install
 
-Settings > Apps > Available > Vinyl, or by hand: `sudo apt install ./vinyl_0.2.0_arm64.deb` (apt installs the
+Settings > Apps > Available > Vinyl, or by hand: `sudo apt install ./vinyl_0.3.0_arm64.deb` (apt installs the
 dependencies), `sudo dpkg -r vinyl` to remove it.
 
 ## Files the app keeps
@@ -218,19 +223,29 @@ dependencies), `sudo dpkg -r vinyl` to remove it.
 |---|---|
 | `~/.config/vinyl/state.json` | the queue, its order, shuffle, repeat, the position, the output, the browser's folder, the software level of an output without a mixer; written on a change (a track, a pause, the queue, a folder, the exit) and at most once a minute while playing |
 | `~/.config/vinyl/settings.json` | Gapless, ReplayGain, Remember position in long files; written only when one changes |
+| `~/.local/share/vinyl/library.db` | the Library: a cache of the tags and the play counts, rebuilt by a scan (a damaged file is moved aside as `library.db.bad`) |
 | `~/.config/vinyl/positions.json` | where each long file (over 20 minutes) was left, the 500 most recent; written on a pause, a track change, the exit and at most once a minute while a long file plays |
 
 Delete them to start fresh. Vinyl writes nothing else (it never writes tags or music files). The sleep timer is not saved.
 
-## Known limits (0.2.0; the Library is 0.3.0, not published yet)
+## Known limits (0.3.0)
 
-- Playlists of Vinyl's own come with P2c (the Library's Playlists row says so). The Library (0.3.0) indexes `~/Music`, the mounted
-  drives and the folders you add; it has no pinyin order for Han names (code-point order), reads no tags of WMA files
-  (the file name is the title), and a stick never seen before needs a scan (Rescan now, or open its folder from Folders). Mounting a drive needs the `udisks2` package and a session the system lets mount (the launcher's own, not an ssh login); it is a run-time need, not a dependency: without it the drives are listed and a tap says so. Vinyl unmounts only what it mounted.
+- Playlists of Vinyl's own come with P2c (the Library's Playlists row says so, and Add to playlist is dimmed). The Library
+  indexes `~/Music`, the mounted drives and the folders you add; it has no pinyin order for Han names (code-point order),
+  reads no tags of WMA files (the file name is the title), and a stick never seen before needs a scan (Rescan now, or open
+  its folder from Folders). A file the scan cannot read gets no row, without a notice (no "N files could not be read"
+  yet).
+- The search field draws typed Chinese, Japanese and Korean characters as boxes until the toolkit's text field gets the CJK
+  fallback.
+- Mounting a drive needs the `udisks2` package and a session allowed to mount: the polkit rule that launcher 0.10.3
+  installs for its user, or the same rule added by hand (an ssh login is refused). It is a run-time need, not a
+  dependency: without udisks2 the drives are listed and a tap says "Drives need the udisks2 package."; without the rule
+  Vinyl shows "Could not mount it: this session is not allowed to mount drives.". Vinyl unmounts only what it mounted.
 - No EQ and no crossfade (P2d), no gain boost and no Volume steps yet (planned settings, above); no ReplayGain pre-amp.
   The ReplayGain figure shows on the square and large screens only. No sorting control in the browser (folders and
   tracks are A-Z).
-- No metadata to headsets or car displays (MPRIS / AVRCP, P2); headset keys work when BlueZ hands them to an input node.
+- No metadata to headsets or car displays (MPRIS / AVRCP) and no folder art (a `cover.jpg` beside the tracks: only
+  embedded covers), both P2e; headset keys work when BlueZ hands them to an input node.
 - A cover larger than 1200 px on its long side is not decoded (the memory cap on the Pi Zero 2 W): the drawn sleeve shows.
 - FFmpeg seeks land on the packet at or before the position; the AAC length is the container's.
 - The amd64 package targets Ubuntu 26.04, where FFmpeg is libavformat 62 (FFmpeg 8): Vinyl's FFmpeg 62 structure
@@ -242,7 +257,7 @@ Delete them to start fresh. Vinyl writes nothing else (it never writes tags or m
 Vinyl is MIT (`2026 OSRdesign`). Linked into the binary: cp0_lvgl and LVGL (MIT), stb_image 2.30 (Sean Barrett and the
 stb contributors, public domain / MIT; `third_party/stb`). Loaded at run time from the system, not shipped: libmpg123
 (LGPL-2.1), libvorbisfile / libvorbis / libogg, libFLAC and libopus (BSD-3-Clause), libasound and libpulse
-(LGPL-2.1-or-later), FFmpeg (libavformat, libavcodec, libavutil, libswresample: GPL-2.0-or-later as Debian and Raspberry
+(LGPL-2.1-or-later), SQLite (libsqlite3, public domain), FFmpeg (libavformat, libavcodec, libavutil, libswresample: GPL-2.0-or-later as Debian and Raspberry
 Pi OS build it; source https://ffmpeg.org/ and the Debian source package `ffmpeg`). Fonts: the launcher's Montserrat,
 JetBrains Mono and Noto Sans CJK (SIL OFL 1.1) and DejaVu Sans, read at run time. The sound-server and ALSA layers and
 the FLAC / Opus readers come from this repository's Cassette (same author, MIT). Full text:
@@ -269,6 +284,14 @@ Board protocol: [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md).
 
 ## Changes
 
+- **0.3.0** (published 2026-11-14): phase P2b of report 060: the Library, a SQLite database (`libsqlite3-0`, loaded at
+  run time) scanned at launch and when a folder is opened from the Library: the hub with Folders, Artists, Albums, Songs
+  and Genres, Search, the actions of a row (Play, Play next, Add to queue, Track info) behind a 1.5 s hold with its bar
+  (or Ctrl+O), Track info, play counts, and Menu > Library (the scan, Rescan now, Music folders). USB drives mounted on
+  request through udisks2, with Eject in Music folders and the unmount at exit of what Vinyl mounted (needs the polkit
+  rule of launcher 0.10.3 or one added by hand; without it Vinyl shows the denial notice). A drive that is gone is shown
+  nowhere and its tracks leave the queue; Vinyl opens on the Library when there is nothing to resume; a page keeps its
+  position when you leave it and come back.
 - **0.2.0** (published 2026-11-14): phase P2a of report 060 (the owner's decisions of 2026-11-13, D25 and D32): the Menu key
   on every layout (480x320: the seventh transport key; square: the sixth; portrait: the bottom row's first key; 640x480
   and large: a bottom-row key, Output a Menu row on large, the large layout's sleep-timer key acting) and the Menu: the

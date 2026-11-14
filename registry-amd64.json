@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-11-13T23:27:09+00:00",
+  "generated_at": "2026-11-14T21:47:29+00:00",
   "registry_id": "cyberdeck-zero-apps",
   "device_targets": [
     "CyberdeckZero"
@@ -1075,19 +1075,19 @@
       "share_code": "vinyl",
       "title": "Vinyl",
       "summary": "A music player: MP3, FLAC, Vorbis, Opus, WAV, AAC; wired and Bluetooth.",
-      "description": "Plays the music in ~/Music and on USB drives, by folder or M3U playlist: gapless, shuffle, repeat, cover art, ReplayGain, a sleep timer, resume where you stopped (long mixes keep their place). Plays on while you use other apps. Wired outputs, and Bluetooth on boards with a sound server; headset and keyboard play keys. AAC, ALAC, WMA and more through FFmpeg, installed with it. Needs a screen of 480x320 or more.",
+      "description": "Plays ~/Music and USB drives (mounted on request): a Library of artists, albums, songs and genres with search, or by folder and M3U playlist. Gapless, shuffle, repeat, cover art, ReplayGain, a sleep timer, resume. Plays on while you use other apps. Wired outputs, and Bluetooth with a sound server; headset and keyboard play keys. AAC, ALAC, WMA and more through FFmpeg, installed with it. Needs 480x320 or more.",
       "locales": {
         "en": {
           "title": "Vinyl",
           "summary": "A music player: MP3, FLAC, Vorbis, Opus, WAV, AAC; wired and Bluetooth.",
-          "description": "Plays the music in ~/Music and on USB drives, by folder or M3U playlist: gapless, shuffle, repeat, cover art, ReplayGain, a sleep timer, resume where you stopped (long mixes keep their place). Plays on while you use other apps. Wired outputs, and Bluetooth on boards with a sound server; headset and keyboard play keys. AAC, ALAC, WMA and more through FFmpeg, installed with it. Needs a screen of 480x320 or more."
+          "description": "Plays ~/Music and USB drives (mounted on request): a Library of artists, albums, songs and genres with search, or by folder and M3U playlist. Gapless, shuffle, repeat, cover art, ReplayGain, a sleep timer, resume. Plays on while you use other apps. Wired outputs, and Bluetooth with a sound server; headset and keyboard play keys. AAC, ALAC, WMA and more through FFmpeg, installed with it. Needs 480x320 or more."
         }
       },
       "i18n": {
         "en": {
           "title": "Vinyl",
           "summary": "A music player: MP3, FLAC, Vorbis, Opus, WAV, AAC; wired and Bluetooth.",
-          "description": "Plays the music in ~/Music and on USB drives, by folder or M3U playlist: gapless, shuffle, repeat, cover art, ReplayGain, a sleep timer, resume where you stopped (long mixes keep their place). Plays on while you use other apps. Wired outputs, and Bluetooth on boards with a sound server; headset and keyboard play keys. AAC, ALAC, WMA and more through FFmpeg, installed with it. Needs a screen of 480x320 or more."
+          "description": "Plays ~/Music and USB drives (mounted on request): a Library of artists, albums, songs and genres with search, or by folder and M3U playlist. Gapless, shuffle, repeat, cover art, ReplayGain, a sleep timer, resume. Plays on while you use other apps. Wired outputs, and Bluetooth with a sound server; headset and keyboard play keys. AAC, ALAC, WMA and more through FFmpeg, installed with it. Needs 480x320 or more."
         }
       },
       "categories": [
@@ -1097,9 +1097,9 @@
         "github": "OSRdesign",
         "display_name": "OSRdesign"
       },
-      "version": "0.2.0",
+      "version": "0.3.0",
       "published_at": "2026-11-13T16:38:54+00:00",
-      "updated_at": "2026-11-13T23:27:09+00:00",
+      "updated_at": "2026-11-14T21:47:29+00:00",
       "review": {
         "status": "approved"
       },
@@ -1108,12 +1108,12 @@
       "download": {
         "type": "deb",
         "package": "vinyl",
-        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/vinyl_0.2.0_amd64.deb",
-        "md5": "5b3b21692541af636884e643d810998e",
-        "sha256": "f00b44ce6b85167f7dbf8a31e8c2b0cba576a577b4d0e5acf0bca40437921502",
-        "size": 1921632
+        "url": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/packages/vinyl_0.3.0_amd64.deb",
+        "md5": "4cce45769393a511f4c66e660ef52ea6",
+        "sha256": "d85fb4a13ddc59b0bd75dc16645849b90e9967591e754e16ddc2af19dec31b3d",
+        "size": 2236876
       },
-      "depends": "libstdc++6, libgcc-s1, libfreetype6, libinput10, libxkbcommon0, libasound2t64 | libasound2, libmpg123-0t64 | libmpg123-0, libvorbisfile3, libflac14 | libflac12t64 | libflac12, libopus0, libpulse0, libavformat61 | libavformat62, libavcodec61 | libavcodec62, libavutil59 | libavutil60, libswresample5 | libswresample6",
+      "depends": "libstdc++6, libgcc-s1, libfreetype6, libinput10, libxkbcommon0, libasound2t64 | libasound2, libmpg123-0t64 | libmpg123-0, libvorbisfile3, libflac14 | libflac12t64 | libflac12, libopus0, libpulse0, libavformat61 | libavformat62, libavcodec61 | libavcodec62, libavutil59 | libavutil60, libswresample5 | libswresample6, libsqlite3-0",
       "permissions": {
         "camera": false,
         "microphone": false,
@@ -1144,7 +1144,17 @@
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/16-keys-480x320.png",
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/17-about-480x320.png",
           "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/18-menu-320x480.png",
-          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/19-keys-320x480.png"
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/19-keys-320x480.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/20-library-hub-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/21-artists-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/22-album-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/23-track-actions-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/24-track-info-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/25-search-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/26-scanning-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/27-usb-drives-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/28-mount-button-480x320.png",
+          "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/29-library-hub-320x480.png"
         ]
       },
       "icon": "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/icon.png",
@@ -1167,7 +1177,17 @@
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/16-keys-480x320.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/17-about-480x320.png",
         "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/18-menu-320x480.png",
-        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/19-keys-320x480.png"
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/19-keys-320x480.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/20-library-hub-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/21-artists-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/22-album-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/23-track-actions-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/24-track-info-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/25-search-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/26-scanning-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/27-usb-drives-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/28-mount-button-480x320.png",
+        "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/apps/vinyl/screenshots/29-library-hub-320x480.png"
       ],
       "min_size": "480x320",
       "portrait_min_size": "320x480"
