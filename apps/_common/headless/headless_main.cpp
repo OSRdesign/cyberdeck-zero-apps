@@ -72,6 +72,8 @@ void mkdirs(const std::string &path)
     }
 }
 
+int g_press_x = 0, g_press_y = 0; /* the finger `press` left down */
+
 std::vector<std::string> split_words(const std::string &line)
 {
     std::vector<std::string> words;
@@ -400,6 +402,22 @@ void play(Run &run, const Scene &scene)
             headless::platform_touch(true, x, y);
             headless::run_for(std::atoi(arg(2).c_str()));
             headless::platform_touch(false, x, y);
+            headless::run_for(120);
+        } else if (cmd == "press") {
+            /* press TEXT: a finger goes down on the label's clickable parent and stays (an app's hold cue shows while it
+             * does); release lifts it. The app runs on during the next waits, and shots show it. */
+            lv_obj_t *label = headless::find_label(arg(1), false);
+            if (!label) {
+                fail(run, line, "nothing labelled \"" + arg(1) + "\" to press");
+                continue;
+            }
+            const lv_area_t a = headless::visible_area(headless::clickable_of(label));
+            g_press_x = (a.x1 + a.x2) / 2;
+            g_press_y = (a.y1 + a.y2) / 2;
+            headless::platform_touch(true, g_press_x, g_press_y);
+            headless::run_for(40);
+        } else if (cmd == "release") {
+            headless::platform_touch(false, g_press_x, g_press_y);
             headless::run_for(120);
         } else if (cmd == "tapxy") {
             tap_at(static_cast<int>(std::atof(arg(1).c_str()) * (run.size.w - 1)),

@@ -184,7 +184,7 @@ struct Actions {
     std::function<void()> queue_clear;               /* "Clear the queue?" answered Clear */
     /* P2b */
     std::function<void(Page, int)> lib_row;          /* a tap on a Library row */
-    std::function<void(Page, int)> lib_hold;         /* a 3 s hold on a Library row */
+    std::function<void(Page, int)> lib_hold;         /* a 1.5 s hold on a Library row */
     std::function<void(Page)> lib_chip;              /* the hub's Search chip, an album's Play album */
     std::function<void(Page, int)> lib_button;       /* Music folders' buttons, an empty page's button; Browser: choose mode's "Use this folder" */
     std::function<void(const std::string &)> lib_query; /* the search field's text changed */

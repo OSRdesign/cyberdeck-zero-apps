@@ -8,6 +8,7 @@
 #include "check.hpp"
 
 #include "library/lib_model.hpp"
+#include "nav/hold_tracker.hpp"
 #include "library/library.hpp"
 #include "library/schema.hpp"
 
@@ -318,6 +319,35 @@ void test_lib_model() {
     CHECK_EQ(info[8].second, std::string("Never"));
     CHECK_EQ(played_text(1, 0, true), std::string("1 time"));
 
+    /* the hold (owner, 2026-11-14: 1.5 s, the cue after 0.5 s): the cue shows late, fires once, a move or a release gives it up */
+    {
+        HoldTracker h;
+        CHECK_EQ(HoldTracker::kFireMs, static_cast<uint64_t>(1500));
+        CHECK(!h.active());
+        h.begin(5, 100, 100, 1000);
+        CHECK(h.active());
+        CHECK_EQ(h.target(), 5);
+        CHECK(!h.visible(1400)); /* a tap or a scroll never flashes the cue */
+        CHECK(h.visible(1500));
+        CHECK_NEAR(h.progress(1750), 0.5, 1e-9);
+        CHECK(!h.poll(2499));
+        CHECK(h.poll(2500)); /* 1.5 s: once */
+        CHECK(!h.poll(2600));
+        CHECK(!h.active());
+        CHECK(h.take_swallow()); /* the release's tap is dropped, once */
+        CHECK(!h.take_swallow());
+        h.begin(1, 10, 10, 0);
+        h.move(20, 20); /* inside the slop */
+        CHECK(h.active());
+        h.move(40, 10); /* a scroll: given up */
+        CHECK(!h.active());
+        CHECK(!h.poll(5000));
+        CHECK(!h.take_swallow());
+        h.begin(1, 10, 10, 0);
+        h.cancel(); /* a release before the time */
+        CHECK(!h.poll(5000));
+    }
+
     /* the sheets: the rows, their keys, Add to playlist drawn and inert */
     Sheet ts = track_sheet("Lisztomania", "Phoenix");
     CHECK_EQ(ts.title, std::string("LISZTOMANIA, PHOENIX"));
@@ -327,7 +357,7 @@ void test_lib_model() {
     CHECK_EQ(ts.rows[4].key, std::string("I"));
     CHECK(!ts.rows[sheet_index(ts, "playlist")].enabled);
     CHECK(ts.rows[sheet_index(ts, "next")].enabled);
-    CHECK_EQ(ts.hint, std::string("Hold a row for 3 s, or press Ctrl+O, to open this sheet."));
+    CHECK_EQ(ts.hint, std::string("Hold a row for 1.5 s, or press Ctrl+O, to open this sheet."));
     Sheet as = album_sheet("Wolfgang Amadeus Phoenix", 14);
     CHECK_EQ(as.title, std::string("WOLFGANG AMADEUS PHOENIX, 14 TRACKS"));
     CHECK_EQ(as.rows.size(), static_cast<size_t>(4));

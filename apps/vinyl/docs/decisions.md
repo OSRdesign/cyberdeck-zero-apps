@@ -649,7 +649,7 @@ confirm; the deviations from the boards are listed so that nothing is silent.
 **Where the code is.** `core/library/lib_model` (rows, headings, the pager, the scan strip and drive note, Track info, the
 sheets, the nav stack: pure, `tests/test_lib_model.cpp`), `core/library/library_ctl` (the worker and scanner wiring, the
 places, paging, search, sheets, Music folders, D27: `tests/test_lib_ctl.cpp`), `ui/library_pages` (the pages),
-`ui/row_list.hpp` (the Browser's row list, now shared: heading rows, a 3 s hold), the hub in `ui/vinyl_view.cpp` (the
+`ui/row_list.hpp` (the Browser's row list, now shared: heading rows, the hold), the hub in `ui/vinyl_view.cpp` (the
 Browser's list page, so the mini player stays), the controller in `ui/vinyl_app.cpp`.
 
 **Browse is the hub.** With the library's database open (it opens at start, a few ms) Browse (B, the Browse key, Esc on Now
@@ -683,7 +683,7 @@ shortcut acts and no letter goes anywhere else (D-32). The on-screen keyboard an
 `_common/osk_policy`'s; the results list shrinks by the keyboard's inset and is hidden when not even one row fits above it
 (480x320 with a keyboard up: only the field). `/` and Ctrl+F open Search on any Library page.
 
-**Actions sheets (D31).** A 3 s hold on a song, an album or an artist row, or Ctrl+O on the selected one, opens the cream sheet
+**Actions sheets (D31).** A 1.5 s hold (see the ruling below) on a song, an album or an artist row, or Ctrl+O on the selected one, opens the cream sheet
 (Ctrl+O keeps opening the Menu where the selection has no sheet). Track: Play (Enter), Play next (N), Add to queue (A), Add to
 playlist (P), Track info (I). Album: Play album, Play next, Add to queue, Add to playlist. Artist: Play all (its albums in year
 order), the same others. Add to playlist is drawn **dimmed and inert** in 0.3.0 (the boards draw it; playlists are P2c); P
@@ -745,3 +745,21 @@ as recommended. The owner's choices, by the options' own words:
 - **Search order and long album headings:** "Fine as is". Songs, Albums, Artists, Genres; a long heading is cut with dots at
   narrow widths.
 
+
+## Owner ruling: the hold is 1.5 s with a cue; a place is given back as it was left (2026-11-14, board test B44)
+
+The owner, on the HackBerry: "on touch, 3sec is long get it down to 1.5 sec and as we did in others apps (i.e markdown notes) show
+a progression bar and a message 'keep holding for options'", and "when exiting track info song list previous position is not
+maintained". Both are done.
+- **The hold** (Track, Album and Artist actions) is **1.5 s**, a departure from the launcher checklist's 3 s hold **for Vinyl
+  only**. From 0.5 s the cue shows over the bottom of the list, in Markdown Notes' look (a box with an accent border, a bar that
+  fills over the 1.5 s, the message "Keep holding for options"); a tap acts as before; a hold given up after the cue showed (the
+  finger lifted, or it moved more than 16 px: a scroll) opens nothing and is not a tap. `core/nav/hold_tracker` is Markdown Notes'
+  `HoldTracker` with these times (tested); the cue is `RowList::enable_hold_cue`. Ctrl+O is unchanged. The sheet's hint says
+  "Hold a row for 1.5 s, or press Ctrl+O, to open this sheet."
+- **The position**: a Library place keeps its selected row as it moves and its first row in view when another is opened from it
+  (Track info, an album, an artist, a genre's albums, a search result); Esc gives both back once the rows are in (a long list
+  loads the 40-row page the highlight is on at once; the placeholder before the rows arrived used to overwrite the saved row, so
+  the list came back at the top). `tests/test_lib_ctl.cpp restore_test`, scene `qa-library` (Songs, Track info, Esc).
+- The scene harness has two new commands, `press TEXT` and `release` (a finger held down while the app runs and a shot is made),
+  for the cue's shot.

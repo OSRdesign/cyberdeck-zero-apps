@@ -1,4 +1,4 @@
-title Vinyl P2b: design QA walk of the Library (Browse opens the hub; Playlists says it is for later; Artists with the artist's sheet by a 3 s hold; an artist's albums; an album and its track sheet (N, A, I); Track info; Esc one place back at a time; Albums, Songs (pages of 40), Genres and a genre's albums; Search with results while typing, an album of two discs, nothing found; the Library settings from the Menu; Music folders, Remove refused for Music, Add a folder through the Browser's choose mode). 480x320 and 320x480: qa-library-small; 640x480: qa-library-640; the wide canvases: qa-library-wide. Busy state: none shown (the scan is the strip of qa-library-scan)
+title Vinyl P2b: design QA walk of the Library (Browse opens the hub; Playlists says it is for later; Artists with the artist's sheet by a 1.5 s hold; an artist's albums; an album and its track sheet (N, A, I); Track info; Esc one place back at a time; Albums, Songs (pages of 40), Genres and a genre's albums; Search with results while typing, an album of two discs, nothing found; the Library settings from the Menu; Music folders, Remove refused for Music, Add a folder through the Browser's choose mode). 480x320 and 320x480: qa-library-small; 640x480: qa-library-640; the wide canvases: qa-library-wide. Busy state: none shown (the scan is the strip of qa-library-scan)
 sizes 800x480 480x480 720x720 480x800 480x640
 env VINYL_DEMO 1
 env VINYL_DEMO_LIBRARY full
@@ -27,13 +27,13 @@ expect text "Playlists arrive in a later version."
 tap "Playlists arrive in a later version."
 wait 300
 expect noquit
-# Artists: a chevron row opens, a hold of 3 s opens the artist's sheet
+# Artists: a chevron row opens, a hold of 1.5 s opens the artist's sheet
 tap "Artists"
 wait 700
 shot 04-artists
 expect text "ARTISTS, 25"
 expect text "Beach House"
-hold "Beach House" 3300
+hold "Beach House" 1800
 wait 400
 shot 05-artist-sheet
 expect text "BEACH HOUSE, 3 ALBUMS"
@@ -42,7 +42,7 @@ expect text "Play next"
 expect text "Add to queue"
 expect text "Add to playlist"
 expect notext "Track info"
-expect text "Hold a row for 3 s, or press Ctrl+O, to open this sheet."
+expect text "Hold a row for 1.5 s, or press Ctrl+O, to open this sheet."
 key esc
 wait 300
 expect notext "Play all"
@@ -60,8 +60,20 @@ expect text "TEEN DREAM, 2010, 5 TRACKS"
 expect text "Play album"
 expect text "1  Lisztomania"
 expect text "02:30"
-# the track's sheet: hold 3 s; N plays it next, A adds it, I opens its Track info
-hold "1  Lisztomania" 3300
+# a finger held on a row: after half a second the cue shows (a bar and "Keep holding for options"); letting go before
+# 1.5 s opens nothing and is not a tap (the owner, 2026-11-14)
+press "1  Lisztomania"
+wait 1000
+shot 07b-hold-cue
+expect text "Keep holding for options"
+expect notext "Play next"
+release
+wait 300
+expect notext "Keep holding for options"
+expect notext "Play next"
+expect text "TEEN DREAM, 2010, 5 TRACKS"
+# the track's sheet: hold 1.5 s; N plays it next, A adds it, I opens its Track info
+hold "1  Lisztomania" 1800
 wait 400
 shot 08-track-sheet
 expect text "LISZTOMANIA, BEACH HOUSE"
@@ -77,14 +89,14 @@ shot 09-play-next
 expect text "Will play next."
 tap "Will play next."
 wait 300
-hold "2  1901" 3300
+hold "2  1901" 1800
 wait 400
 key a
 wait 400
 expect text "Added to the queue."
 tap "Added to the queue."
 wait 300
-hold "3  Fences" 3300
+hold "3  Fences" 1800
 wait 400
 key i
 wait 500
@@ -169,6 +181,18 @@ key down
 wait 500
 shot 13-songs-paged
 expect text "SONGS, 166"
+# the place survives a visit (owner, B44): Track info and Esc give back the same rows and the same highlight
+hold "Demo song 21" 1800
+wait 400
+key i
+wait 600
+expect text "TRACK INFO"
+key esc
+wait 800
+shot 13b-songs-back
+expect text "SONGS, 166"
+expect text "Demo song 21"
+expect text "Demo song 16"
 key esc
 wait 400
 key down

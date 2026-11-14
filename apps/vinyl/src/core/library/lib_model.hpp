@@ -192,7 +192,8 @@ struct Loc {
     Place place = Place::Hub;
     int64_t id = 0;        /* artist, album, genre or track */
     std::string title;     /* what the page's heading names */
-    int sel = 0;
+    int sel = 0;    /* the selected row, kept as it moves */
+    int top = 0;    /* the first row in view when the place was left (given back with the selection by Esc) */
     int offset = 0;
 };
 class Nav {

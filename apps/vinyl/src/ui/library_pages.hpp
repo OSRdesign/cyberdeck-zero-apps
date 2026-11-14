@@ -103,6 +103,8 @@ public:
     lv_obj_t *root(Page p) const;
     void update(Page p, const LibView &v);
     int rows(Page p) const;
+    /* the first row in view of a page's list (0: none) */
+    int top_row(Page p) const;
     /* Track info: scroll by rows */
     void scroll(Page p, int rows);
 

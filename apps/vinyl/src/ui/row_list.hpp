@@ -4,15 +4,19 @@
  * Vinyl UI: the list of fixed-height rows the Browser, the Queue, the Output page and (P2b) the Library pages share. It
  * only builds the rows in view (a folder or a queue can hold thousands). A row is a text (bold) with a value at its right,
  * and a mark: a chevron opens, a dot acts (blue: the playing track, the chosen output), none informs (design QA D-45). A
- * heading row (P2b: "DISC 2", "SONGS" in the search results) is grey capitals, never tapped. A press held for 3 s on a
- * row calls on_hold (D-35: the Track and Album actions; the tap that follows the release is dropped); a drag scrolls and
- * cancels the hold. LVGL thread only.
+ * heading row (P2b: "DISC 2", "SONGS" in the search results) is grey capitals, never tapped. A press held for 1.5 s on a
+ * row calls on_hold (the Track, Album and Artist actions; owner ruling 2026-11-14, B44, down from the checklist's 3 s; the tap
+ * that follows the release is dropped); from 0.5 s on a cue shows over the bottom of the list, as Markdown Notes' does: a bar
+ * that fills and "Keep holding for options" (enable_hold_cue). A drag scrolls and gives the hold up, as a release does. LVGL
+ * thread only.
  */
 #pragma once
 
 #include "gfx.hpp"
 #include "theme.hpp"
 #include "view_model.hpp"
+
+#include "nav/hold_tracker.hpp"
 
 #include "lvgl/lvgl.h"
 
@@ -23,8 +27,6 @@
 
 namespace vinyl {
 namespace ui {
-
-constexpr uint32_t kHoldMs = 3000; /* D-35: a 3 s hold opens the actions sheet */
 
 struct RowW {
     lv_obj_t *row = nullptr, *dot = nullptr, *chev = nullptr, *text = nullptr, *value = nullptr;
@@ -57,8 +59,35 @@ public:
         for (int i = 0; i < visible_; ++i) pool_.push_back(make_row());
     }
 
-    /* a press held kHoldMs on a row (its index) */
+    /* a press held HoldTracker::kFireMs on a row (its index) */
     std::function<void(int)> on_hold;
+
+    /* the hold's cue (Markdown Notes' look: a box with an accent border, the message, a bar that fills): over the bottom of
+     * the area x .. x + w, `bottom` being its lowest edge, in `parent`'s coordinates */
+    void enable_hold_cue(lv_obj_t *parent, int x, int bottom, int w) {
+        cue_x_ = x;
+        cue_bottom_ = bottom;
+        const int pad = std::max(4, ri(8 * s_));
+        const int px = std::max(1, ri(12 * s_));
+        const lv_font_t *f = font(Face::Bold, px);
+        const int lh = lv_font_get_line_height(f);
+        const int cue_h = pad + lh + pad / 2 + pad + pad; /* (a hidden object's height is not laid out yet) */
+        cue_box_ = ui::box(parent, x, 0, w, cue_h, col::kRowSel, std::max(4, ri(8 * s_)));
+        lv_obj_set_style_border_width(cue_box_, 2, 0);
+        lv_obj_set_style_border_color(cue_box_, lv_color_hex(col::kTeal), 0);
+        lv_obj_set_style_border_opa(cue_box_, LV_OPA_COVER, 0);
+        cue_label_ = label(cue_box_, Face::Bold, px, col::kRowText, pad, pad - 2, w - 2 * pad - 4);
+        set_text(cue_label_, "Keep holding for options");
+        cue_track_w_ = std::max(1, w - 2 * pad - 4);
+        lv_obj_t *track = ui::box(cue_box_, pad, pad + lh + pad / 2 - 2, cue_track_w_, pad, col::kList, LV_RADIUS_CIRCLE);
+        cue_bar_ = ui::box(track, 0, 0, 1, pad, col::kTeal, LV_RADIUS_CIRCLE);
+        lv_obj_set_y(cue_box_, bottom - cue_h);
+        lv_obj_add_flag(cue_box_, LV_OBJ_FLAG_HIDDEN);
+    }
+    bool cue_shown() const { return cue_box_ && !lv_obj_has_flag(cue_box_, LV_OBJ_FLAG_HIDDEN); }
+
+    /* the first row in view (a page's place, kept when it is left and given back) */
+    int top_row() const { return std::max(0, lv_obj_get_scroll_y(cont_) / std::max(1, row_h_)); }
 
     void set_rows(const std::vector<RowView> &rows, int selected, bool reset_scroll, int scroll_to) {
         rows_ = rows;
@@ -66,6 +95,7 @@ public:
         lv_obj_set_pos(spacer_, 0, std::max(0, static_cast<int>(rows_.size()) * row_h_ - 1));
         if (reset_scroll) lv_obj_scroll_to_y(cont_, 0, LV_ANIM_OFF);
         if (scroll_to >= 0 && scroll_to < static_cast<int>(rows_.size())) {
+            lv_obj_update_layout(cont_);
             const int max_y = std::max(0, static_cast<int>(rows_.size()) * row_h_ - lv_obj_get_height(cont_));
             lv_obj_scroll_to_y(cont_, std::min(max_y, scroll_to * row_h_), LV_ANIM_OFF);
         }
@@ -216,29 +246,64 @@ private:
             self->hold_fired_ = false;
             return;
         }
+        if (self->swallow_tap_) { /* a hold given up after its cue showed: not a tap */
+            self->swallow_tap_ = false;
+            return;
+        }
         const int i = self->index_of(lv_event_get_target_obj(e));
         if (i >= 0 && !self->rows_[static_cast<size_t>(i)].heading && self->on_tap_) self->on_tap_(i);
     }
+    void hide_cue() {
+        if (cue_box_) lv_obj_add_flag(cue_box_, LV_OBJ_FLAG_HIDDEN);
+    }
+    static lv_point_t pointer() {
+        lv_point_t p{0, 0};
+        if (lv_indev_t *in = lv_indev_active()) lv_indev_get_point(in, &p);
+        return p;
+    }
     static void row_press_cb(lv_event_t *e) {
         auto *self = static_cast<RowList *>(lv_event_get_user_data(e));
+        const uint64_t now = lv_tick_get();
         switch (lv_event_get_code(e)) {
-        case LV_EVENT_PRESSED:
-            self->hold_idx_ = self->index_of(lv_event_get_target_obj(e));
-            self->hold_start_ = lv_tick_get();
+        case LV_EVENT_PRESSED: {
+            const int idx = self->index_of(lv_event_get_target_obj(e));
             self->hold_fired_ = false;
+            self->swallow_tap_ = false;
+            self->hold_.cancel();
+            self->hide_cue();
+            if (idx >= 0 && self->on_hold && !self->rows_[static_cast<size_t>(idx)].heading) {
+                const lv_point_t p = pointer();
+                self->hold_.begin(idx, p.x, p.y, now);
+            }
             break;
-        case LV_EVENT_PRESSING:
-            if (self->hold_idx_ < 0 || self->hold_fired_ || !self->on_hold) break;
-            if (lv_indev_get_scroll_obj(lv_indev_active())) { /* a drag: the list scrolls, no hold */
-                self->hold_idx_ = -1;
+        }
+        case LV_EVENT_PRESSING: {
+            if (!self->hold_.active() || self->hold_fired_) break;
+            const lv_point_t p = pointer();
+            self->hold_.move(p.x, p.y);
+            if (lv_indev_get_scroll_obj(lv_indev_active())) self->hold_.cancel(); /* a drag: the list scrolls, no hold */
+            if (!self->hold_.active()) {
+                self->hide_cue();
                 break;
             }
-            if (lv_tick_elaps(self->hold_start_) >= kHoldMs && !self->rows_[static_cast<size_t>(self->hold_idx_)].heading) {
+            const int idx = self->hold_.target();
+            if (self->hold_.poll(now)) {
                 self->hold_fired_ = true;
-                self->on_hold(self->hold_idx_);
+                self->hide_cue();
+                self->on_hold(idx);
+            } else if (self->cue_box_ && self->hold_.visible(now)) {
+                lv_obj_set_width(lv_obj_get_child(lv_obj_get_child(self->cue_box_, 1), 0),
+                                 std::max(1, static_cast<int>(self->hold_.progress(now) * self->cue_track_w_)));
+                lv_obj_remove_flag(self->cue_box_, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_move_foreground(self->cue_box_);
             }
             break;
-        default: self->hold_idx_ = -1; break;
+        }
+        default: /* released or lost: a hold given up after its cue showed is not a tap either */
+            if (lv_event_get_code(e) == LV_EVENT_RELEASED && self->hold_.visible(now)) self->swallow_tap_ = true;
+            self->hold_.cancel();
+            self->hide_cue();
+            break;
         }
     }
 
@@ -251,9 +316,10 @@ private:
     std::vector<RowW> pool_;
     std::vector<RowView> rows_;
     int visible_ = 1, first_ = -1, selected_ = -1, head_px_ = 12;
-    int hold_idx_ = -1;
-    uint32_t hold_start_ = 0;
-    bool hold_fired_ = false;
+    HoldTracker hold_;
+    bool hold_fired_ = false, swallow_tap_ = false;
+    lv_obj_t *cue_box_ = nullptr, *cue_label_ = nullptr, *cue_bar_ = nullptr;
+    int cue_x_ = 0, cue_bottom_ = 0, cue_track_w_ = 1;
 };
 
 } // namespace ui

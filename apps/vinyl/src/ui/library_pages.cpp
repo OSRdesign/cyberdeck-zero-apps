@@ -317,6 +317,7 @@ struct LibraryPages::Impl {
             L.list->on_hold = [this, p](int i) {
                 if (cb.on_hold) cb.on_hold(p, i);
             };
+            L.list->enable_hold_cue(r, ri(lg.panel.x) + S(8), ri(lg.panel.bottom()) - S(8), ri(lg.panel.w) - 2 * S(8));
         }
         if (p == Page::LibSearch) L.empty.build(r, R{lg.panel.x, double(L.list_y - S(40)), lg.panel.w, 0}, s, target, nullptr);
         if (p == Page::LibSettings) {
@@ -477,7 +478,7 @@ struct LibraryPages::Impl {
         L.rows_gen = v.rows_gen;
         if (v.rows && (reset || v.rows_ver != L.rows_ver || v.selected != L.sel)) {
             if (!reset && v.rows_ver == L.rows_ver) L.list->set_selected(v.selected, true);
-            else L.list->set_rows(*v.rows, v.selected, reset, reset ? v.scroll_to : -1);
+            else L.list->set_rows(*v.rows, v.selected, reset, v.scroll_to); /* a place given back: its top row, once its rows are in */
             L.rows_ver = v.rows_ver;
             L.sel = v.selected;
             L.nrows = static_cast<int>(v.rows->size());
@@ -628,6 +629,12 @@ void LibraryPages::update(Page p, const LibView &v) {
 }
 
 int LibraryPages::rows(Page p) const { return p == Page::LibHub ? 0 : d_->at(p).nrows; }
+
+int LibraryPages::top_row(Page p) const {
+    if (p == Page::LibHub) return 0;
+    const Impl::P &L = d_->at(p);
+    return L.list ? L.list->top_row() : 0;
+}
 
 void LibraryPages::search_open(const std::string &text, bool edit) {
     Impl::P &L = d_->at(Page::LibSearch);

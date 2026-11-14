@@ -53,6 +53,7 @@ struct LibHost {
     std::function<MiniView()> mini;
     std::function<void()> quit_library;                /* Esc at the hub: leave the Library (the host decides where) */
     std::function<void(Page, int)> scroll;             /* Track info: scroll by rows */
+    std::function<int()> top_row;                      /* the first row in view of the page shown (kept when a place is left) */
     std::function<void(const std::string &, bool)> search_open; /* the field's text, editing */
     std::function<void()> search_edit;
     std::function<void()> search_end_edit;
@@ -170,7 +171,7 @@ private:
     libm::Nav nav_, saved_nav_;
     uint64_t serial_ = 0;
     uint64_t view_gen_ = 1, rows_ver_ = 1, rows_gen_ = 1;
-    int sel_ = -1, scroll_to_ = -1;
+    int sel_ = -1, want_sel_ = -1, restore_top_ = -1; /* a place given back: its row and top row, once its rows are in */
 
     /* the data of the current place */
     struct Data {

@@ -211,7 +211,7 @@ std::vector<KeyHelp> key_help() {
         {"Left, Right", "Lists: back, choose", {}, {}, false, 0},
         {"Backspace", "Browse: the folder above", {}, {}, false, 0},
         {"/ or Ctrl+F", "Library: search", {}, {}, false, 0},
-        {"Hold 3 s, or Ctrl+O", "Library: the actions of a row (Enter, N, A, I)", {}, {}, false, 0},
+        {"Hold 1.5 s, or Ctrl+O", "Library: the actions of a row (Enter, N, A, I)", {}, {}, false, 0},
         {"U, D", "Queue: move up, move down", {kKeyU, kKeyD}, {KeyCmd::QueueUp, KeyCmd::QueueDown}, true, 0},
         {"X or Delete", "Queue: remove", {kKeyX}, {KeyCmd::QueueRemove}, true, 0},
         {"C, then Y", "Queue: clear all", {kKeyC}, {KeyCmd::QueueClear}, true, 0},

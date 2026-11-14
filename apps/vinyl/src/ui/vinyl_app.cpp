@@ -1410,6 +1410,7 @@ struct VinylApp::Impl final : TransportHost {
         };
         h.mini = [this] { return mini_view(); };
         h.scroll = [this](Page p, int rows) { view->scroll_page(p, rows); };
+        h.top_row = [this] { return view ? view->lib_top_row(view->page()) : 0; };
         h.search_open = [this](const std::string &t, bool edit) { view->search_open(t, edit); };
         h.search_edit = [this] { view->search_edit(); };
         h.search_end_edit = [this] { view->search_end_edit(); };

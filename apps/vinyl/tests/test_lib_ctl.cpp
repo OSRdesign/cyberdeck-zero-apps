@@ -42,6 +42,7 @@ struct Rec {
     std::vector<RootSpec> wanted;
     std::string playing;
     std::vector<std::string> searched;
+    int top = 0; /* the first row in view, as the view would tell */
 };
 
 LibHost make_host(Rec &r) {
@@ -65,6 +66,7 @@ LibHost make_host(Rec &r) {
     };
     h.mini = [] { return MiniView(); };
     h.scroll = [](Page, int) {};
+    h.top_row = [&r] { return r.top; };
     h.search_open = [&r](const std::string &t, bool edit) { r.searched.push_back(t + (edit ? "+edit" : "")); };
     h.search_edit = [] {};
     h.search_end_edit = [] {};
@@ -143,9 +145,105 @@ int count_rows(LibraryCtl &c, libm::Row::Kind k) {
     return n;
 }
 
+/* a place is given back as it was left: the selected row and the first row in view, for Track info, an album, an artist and
+ * search results (owner, B44: leaving Track info jumped to the top) */
+void restore_test() {
+    const std::string dir = make_temp_dir("libctl3");
+    make_library(dir + "/library.db");
+    Rec rec;
+    LibConfig cfg;
+    cfg.db_path = dir + "/library.db";
+    cfg.ram_mb = 416;
+    cfg.home = "/home/o";
+    cfg.demo = true;
+    LibraryCtl c(make_host(rec), cfg);
+    c.enter();
+    pump(c);
+    /* Songs -> Track info -> Esc */
+    c.row(Page::LibHub, 4);
+    pump(c);
+    CHECK_EQ(c.page(), Page::LibSongs);
+    for (int i = 0; i < 12; ++i) c.key(18);
+    CHECK_EQ(c.selected(), 12);
+    rec.top = 7;
+    c.hold(Page::LibSongs, 12);
+    CHECK(c.letter(libm::kKeyI, 0));
+    pump(c);
+    CHECK_EQ(c.page(), Page::LibInfo);
+    rec.top = 0;
+    CHECK(c.back());
+    CHECK_EQ(c.page(), Page::LibSongs);
+    CHECK_EQ(c.view().scroll_to, -1); /* the rows are not in yet: nothing is scrolled, the saved place is kept */
+    CHECK_EQ(c.selected(), -1);
+    pump(c);
+    CHECK_EQ(c.selected(), 12);
+    CHECK_EQ(c.view().scroll_to, 7); /* the top row, once */
+    CHECK_EQ(c.view().scroll_to, -1);
+    CHECK_EQ(c.selected(), 12);
+    CHECK(c.back());
+    pump(c);
+    CHECK_EQ(c.page(), Page::LibHub);
+    /* Artists (on the second page) -> an artist -> an album -> Esc twice */
+    c.row(Page::LibHub, 2);
+    pump(c);
+    for (int i = 0; i < 50; ++i) {
+        c.key(18);
+        if (i % 10 == 9) pump(c);
+    }
+    pump(c);
+    const int artist_sel = c.selected();
+    CHECK(artist_sel >= 40);
+    rec.top = 44;
+    c.row(Page::LibArtists, artist_sel);
+    pump(c);
+    CHECK_EQ(c.page(), Page::LibArtist);
+    rec.top = 0;
+    c.key(10);
+    pump(c);
+    CHECK_EQ(c.page(), Page::LibAlbum);
+    CHECK(c.back());
+    pump(c);
+    CHECK_EQ(c.page(), Page::LibArtist);
+    CHECK(c.back());
+    pump(c);
+    CHECK_EQ(c.page(), Page::LibArtists);
+    CHECK(c.rows().size() > static_cast<size_t>(artist_sel)); /* the page the highlight was on is loaded again at once */
+    CHECK_EQ(c.selected(), artist_sel);
+    CHECK_EQ(c.view().scroll_to, 44);
+    CHECK(c.back());
+    pump(c);
+    /* Search results -> an album -> Esc */
+    c.chip(Page::LibHub);
+    pump(c);
+    adv(c, 10);
+    c.query_changed("artist 05");
+    adv(c, 400);
+    pump(c);
+    c.submit();
+    int album_row = -1;
+    for (size_t i = 0; i < c.rows().size(); ++i)
+        if (c.rows()[i].type == libm::Row::Type::Album) {
+            album_row = static_cast<int>(i);
+            break;
+        }
+    CHECK(album_row > 2);
+    rec.top = 2;
+    c.row(Page::LibSearch, album_row);
+    pump(c);
+    CHECK_EQ(c.page(), Page::LibAlbum);
+    rec.top = 0;
+    CHECK(c.back());
+    pump(c, 4);
+    CHECK_EQ(c.page(), Page::LibSearch);
+    CHECK_EQ(c.selected(), album_row);
+    CHECK_EQ(c.view().scroll_to, 2);
+    rm_tree(dir);
+}
+
 }  // namespace
 
 void test_lib_ctl() {
+    restore_test();
     if (!have_sqlite()) return;
     const std::string dir = make_temp_dir("libctl");
     const std::string dbp = dir + "/library.db";

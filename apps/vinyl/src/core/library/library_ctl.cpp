@@ -228,6 +228,8 @@ bool LibraryCtl::back() {
 
 void LibraryCtl::open_place(libm::Loc loc, bool push) {
     close_sheet();
+    /* a place that is left for another keeps its first row in view (and its selection, kept as it moves) for Esc */
+    if (push && !nav_.empty() && host_.top_row) nav_.top().top = host_.top_row();
     if (push) nav_.push(loc);
     ++serial_;
     ++rows_gen_;
@@ -250,7 +252,8 @@ void LibraryCtl::open_place(libm::Loc loc, bool push) {
     ++rows_ver_;
     pager_.reset(0);
     sel_ = loc.sel;
-    scroll_to_ = std::max(0, loc.sel);
+    want_sel_ = loc.sel;
+    restore_top_ = push ? -1 : loc.top;
     results_mode_ = pl == libm::Place::Search && !push;
     if (pl == libm::Place::Search && push) {
         query_.clear();
@@ -442,9 +445,12 @@ void LibraryCtl::rebuild_rows() {
     rows_ = std::move(rows);
     rows_cache_.reset();
     ++rows_ver_;
-    /* keep the selection on a row that exists and is not a heading */
+    /* keep the selection on a row that exists and is not a heading; a place given back keeps its saved row until its rows are
+     * in (the empty placeholder must not overwrite it) */
     if (rows_.empty()) sel_ = -1;
     else {
+        if (want_sel_ >= 0) sel_ = want_sel_;
+        want_sel_ = -1;
         if (sel_ < 0 || sel_ >= static_cast<int>(rows_.size()) || rows_[static_cast<size_t>(sel_)].kind != libm::Row::Kind::Item) {
             int s = std::min(std::max(0, sel_), static_cast<int>(rows_.size()) - 1);
             if (rows_[static_cast<size_t>(s)].kind != libm::Row::Kind::Item) {
@@ -454,7 +460,7 @@ void LibraryCtl::rebuild_rows() {
             sel_ = rows_[static_cast<size_t>(s)].kind == libm::Row::Kind::Item ? s : -1;
         }
     }
-    if (!nav_.empty()) nav_.top().sel = std::max(0, sel_);
+    if (!nav_.empty() && !rows_.empty()) nav_.top().sel = std::max(0, sel_);
     ++view_gen_;
 }
 
@@ -891,8 +897,11 @@ LibView LibraryCtl::view() {
     v.rows_ver = rows_ver_;
     v.rows_gen = rows_gen_;
     v.selected = sel_;
-    v.scroll_to = scroll_to_;
-    scroll_to_ = -1;
+    v.scroll_to = -1;
+    if (restore_top_ >= 0 && !rows_.empty() && d_.loaded) { /* a place given back: its top row, once */
+        v.scroll_to = restore_top_;
+        restore_top_ = -1;
+    }
     ScanProgress prog = demo_progress_on_ ? demo_progress_ : (scan_ ? scan_->progress() : ScanProgress());
     const libm::ScanNote note = libm::scan_note(prog, prior_tracks_);
     switch (pl) {

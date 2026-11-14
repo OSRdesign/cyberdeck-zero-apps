@@ -498,7 +498,7 @@ std::vector<std::pair<std::string, std::string>> track_info(const TrackDetails &
 
 /* ------------------------------------------------------------------------------------------------ sheets */
 
-static const char *const kHoldHint = "Hold a row for 3 s, or press Ctrl+O, to open this sheet.";
+static const char *const kHoldHint = "Hold a row for 1.5 s, or press Ctrl+O, to open this sheet.";
 
 Sheet track_sheet(const std::string &title, const std::string &artist) {
     Sheet s;
