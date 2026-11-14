@@ -33,6 +33,14 @@ expect text "SANDISK ejected. You can unplug it."
 expect notext "mounted by Vinyl"
 tap "SANDISK ejected. You can unplug it."
 wait 300
+shot 04-ejected-listed
+expect text "Mount SANDISK"
+tap "Mount SANDISK"
+wait 250
+expect text "Mounting SANDISK..."
+wait 900
+shot 05-mounted-again
+expect text "Eject SANDISK"
 key esc
 wait 300
 key esc

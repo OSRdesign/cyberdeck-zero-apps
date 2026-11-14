@@ -64,9 +64,10 @@ struct Row {
     bool dimmed = false;
     bool playing = false; /* the track playing: the blue dot */
     bool mono_value = false;
+    bool amber = false; /* the action dot is amber: a drive that is plugged in and can be mounted from here */
     bool operator==(const Row &o) const {
         return kind == o.kind && mark == o.mark && type == o.type && text == o.text && value == o.value && key == o.key &&
-               id == o.id && index == o.index && dimmed == o.dimmed && playing == o.playing && mono_value == o.mono_value;
+               id == o.id && index == o.index && dimmed == o.dimmed && playing == o.playing && mono_value == o.mono_value && amber == o.amber;
     }
 };
 
@@ -139,9 +140,9 @@ std::string scan_heading(const ScanProgress &p, int prior_tracks);
 /* the Library settings' last-scan row: "Last scan 12 Nov, 22:41: 1,204 tracks, 96 albums" or "Not scanned yet" */
 std::string last_scan_text(const LibraryStats &s, bool utc = false);
 
-/* The Music folders rows (MusicFoldersDrives board): a folder's path (home as "~"), a drive "SANDISK (USB drive)" with its
+/* The Music folders rows (MusicFoldersDrives and MusicFoldersDriveMount boards): a folder's path (home as "~"), a drive "SANDISK (USB drive)" with its
  * tracks, or "mounted by Vinyl" (key "vdrive:<dev>": Eject acts on it), a drive the system mounted (key "sdrive:<dev>":
- * Eject is inert), and the drives that are plugged in and not mounted ("not mounted", dimmed, key "ndrive:<dev>"). A root
+ * Eject is inert), and the drives that are plugged in and not mounted ("not mounted" with the amber action dot, key "ndrive:<dev>": the button Mount acts on it). A root
  * that is gone (offline: a pulled drive, a stale mount) has no row at all (owner ruling 2026-11-14, B45); a row's `index` is
  * its place in `roots` (-1 for a drive that is not mounted). */
 std::vector<Row> folder_rows(const std::vector<RootInfo> &roots, const std::string &home, const std::vector<DriveInfo> &drives = {});

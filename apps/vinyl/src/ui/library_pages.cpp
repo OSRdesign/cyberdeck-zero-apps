@@ -402,6 +402,8 @@ struct LibraryPages::Impl {
                 lv_obj_set_pos(b.hitbox, x - (hw - bw) / 2, by - (hh - bh) / 2);
                 lv_obj_set_size(b.hitbox, hw, hh);
                 b.set_enabled(v.button_enabled[k]);
+                set_bg(b.vis, v.button_primary[k] ? col::kPrimary : col::kRowSel);
+                lv_obj_set_style_text_color(b.word, lv_color_hex(v.button_primary[k] ? col::kWhite : col::kRowText), 0);
                 x += bw + gap;
             }
         }

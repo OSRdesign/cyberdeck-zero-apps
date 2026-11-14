@@ -105,3 +105,4 @@ void test_scanner();
 void test_lib_model();
 void test_lib_ctl();
 void test_drives();
+void test_media_guard();

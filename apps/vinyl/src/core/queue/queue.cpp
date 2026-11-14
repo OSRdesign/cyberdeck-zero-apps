@@ -129,6 +129,23 @@ void Queue::remove(int pos) {
     else if (cur_ == pos && cur_ >= size()) cur_ = -1;
 }
 
+Queue::RemoveResult Queue::remove_under(const std::vector<std::string> &dirs) {
+    RemoveResult r;
+    auto under = [&](const std::string &p) {
+        for (const std::string &d : dirs)
+            if (!d.empty() && p.size() > d.size() && p.compare(0, d.size(), d) == 0 && p[d.size()] == '/') return true;
+        return false;
+    };
+    for (int pos = size() - 1; pos >= 0; --pos) {
+        if (!under(at(pos))) continue;
+        if (pos == cur_) r.current_removed = true;
+        remove(pos);
+        ++r.removed;
+    }
+    if (r.current_removed && cur_ < 0 && !empty()) cur_ = 0;
+    return r;
+}
+
 void Queue::clear_except_current() {
     if (cur_ < 0 || cur_ >= size()) {
         const std::string src = source_;

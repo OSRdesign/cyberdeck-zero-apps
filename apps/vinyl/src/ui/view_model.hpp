@@ -137,6 +137,7 @@ struct LibView {
     /* Music folders: the two buttons and the note under them */
     std::vector<std::string> buttons;
     bool button_enabled[3] = {true, true, true};
+    bool button_primary[3] = {true, false, false}; /* the brown look: Add a folder, or Mount <drive> when that is what the drive button does */
     std::string footnote;
     /* Search: the field's text and the line shown while it is empty */
     std::string query;

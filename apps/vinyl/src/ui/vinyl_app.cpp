@@ -22,6 +22,7 @@
 #include "launcher/launcher_link.hpp"
 #include "library/browse.hpp"
 #include "library/library_ctl.hpp"
+#include "library/media_guard.hpp"
 #include "library/lib_model.hpp"
 #include "library/roots.hpp"
 #include "library/schema.hpp"
@@ -49,6 +50,7 @@
 #include <map>
 #include <set>
 #include <sstream>
+#include <unistd.h>
 
 namespace vinyl {
 namespace ui {
@@ -124,8 +126,10 @@ struct VinylApp::Impl final : TransportHost {
     bool choose_mode = false;      /* ... in choose mode (Music folders > Add a folder) */
     bool pending_escape = false;   /* the search field's Esc, run at the next tick (outside the key event) */
     std::string play_path;         /* the track heard: its play count at its end */
-    std::string drive_for, drive_dir;
-    uint64_t drive_checked = 0;
+    uint64_t gone_checked = 0;
+    std::vector<DriveBase> drive_bases = default_drive_bases(); /* where the queue's files may be on a drive */
+    FakeDrives *demo_fake = nullptr;                            /* the scenes: the drive that is "pulled" */
+    uint64_t demo_pull_at = 0;
     bool lib_on() const { return lib && lib->available(); }
     /* "Mount on request in Vinyl" (owner, 2026-11-14): the removable drives, mounted by udisks off the UI thread */
     std::unique_ptr<DriveManager> drives;
@@ -356,6 +360,7 @@ struct VinylApp::Impl final : TransportHost {
         Page first = lib_on() ? Page::LibHub : Page::Browser;
         if (!resume.items.empty()) {
             queue_from_resume(resume, queue);
+            drop_gone_media(true); /* a drive that is not there at start: its entries go before anything is drawn (B50) */
             ++qgen;
             if (queue.current() >= 0) {
                 engine->load(queue.current(), *queue.current_path(), resume.position_ms, demo && env_str("VINYL_DEMO_STATE") == "playing");
@@ -715,6 +720,17 @@ struct VinylApp::Impl final : TransportHost {
     /* a removable drive is plugged in: the list of roots is the top of the Browser (a drive that is not mounted is a row there) */
     bool drives_listed() const { return drives && !drives->list().empty(); }
 
+    /* a tap on a drive's row in Folders, or the button Mount in Music folders: the same worker, the same notices */
+    void request_mount(const std::string &dev, const std::string &name) {
+        if (!drives || !drives->available()) {
+            notice(Notice::Kind::Info, "Drives need the udisks2 package.");
+            return;
+        }
+        if (drives->busy()) return;
+        notice(Notice::Kind::Info, "Mounting " + name + "...");
+        drives->mount_async(dev, name);
+    }
+
     void browser_move(int d) {
         int n = br_sel + d;
         while (n >= 0 && n < static_cast<int>(entries.size()) && entries[static_cast<size_t>(n)].kind == Entry::Kind::Heading) n += d;
@@ -732,7 +748,10 @@ struct VinylApp::Impl final : TransportHost {
                 std::fprintf(stderr, "[vinyl] drives: %s mounted at %s\n", r.dev.c_str(), r.mount_dir.c_str());
                 if (demo && std::none_of(roots.begin(), roots.end(), [&](const Root &x) { return x.path == r.mount_dir; })) roots.push_back(Root{r.name, r.mount_dir});
                 if (lib_on()) lib->drive_mounted(r.mount_dir);
-                if (view->page() == Page::Browser && !choose_mode) {
+                if (lib_on()) lib->mounts_changed(); /* Music folders: the row says "mounted by Vinyl" */
+                if (view->page() == Page::LibFolders) {
+                    refresh(true);
+                } else if (view->page() == Page::Browser && !choose_mode) {
                     open_folder(r.mount_dir, "");
                     refresh(true);
                 } else if (view->page() == Page::Browser) {
@@ -748,6 +767,7 @@ struct VinylApp::Impl final : TransportHost {
                 std::fprintf(stderr, "[vinyl] drives: %s unmounted\n", r.dev.c_str());
                 if (demo) roots.erase(std::remove_if(roots.begin(), roots.end(), [&](const Root &x) { return x.path == demo_drive_dir || x.label == r.name; }), roots.end());
                 if (lib_on()) lib->mounts_changed();
+                drop_gone_media(false); /* what was queued from it goes (B50) */
                 if (view->page() == Page::Browser && !folder.empty() && !root_of(roots, folder)) open_folder("", ""); /* it was open: its place is gone */
                 else if (view->page() == Page::Browser && folder.empty()) open_folder("", "");
                 refresh(true);
@@ -807,6 +827,25 @@ struct VinylApp::Impl final : TransportHost {
             demo_drive_dir = sd.mount_dir;
             roots.push_back(Root{"SANDISK", sd.mount_dir});
         }
+        drive_bases.push_back(DriveBase{base + "/", 1});
+        demo_fake = fake.get();
+        /* the scenes' saved queues (VINYL_DEMO_DRIVE_QUEUE): "drive" = the three songs of SANDISK (playing), "gone" = two songs of a
+         * drive that is not there */
+        const std::string dq = env_str("VINYL_DEMO_DRIVE_QUEUE");
+        if (!dq.empty()) {
+            ResumeState rs;
+            const std::string d = dq == "drive" ? base + "/SANDISK" : base + "/GONE";
+            for (const char *n : {"Flash Song.wav", "Flash Song 2.wav", "Flash Song 3.wav"}) {
+                if (dq == "drive") write_demo_wav(d + "/" + n, 120, 44100, std::string(n, std::strlen(n) - 4), "Flash Artist", "Flash Album", "2020", 1);
+                rs.items.push_back(d + "/" + n);
+            }
+            for (size_t i = 0; i < rs.items.size(); ++i) rs.order.push_back(static_cast<int>(i));
+            rs.current = 0;
+            rs.output = "auto";
+            rs.source = d;
+            save_resume(resume_file, rs);
+        }
+        if (const std::string pa = env_str("VINYL_DEMO_PULL_AFTER"); !pa.empty()) demo_pull_at = mono_ms_now() + static_cast<uint64_t>(std::atoll(pa.c_str()));
         drives = std::make_unique<DriveManager>(std::move(fake));
         if (mode == "vinyl") drives->note_mounted("/dev/sda1");
     }
@@ -817,13 +856,7 @@ struct VinylApp::Impl final : TransportHost {
         switch (e.kind) {
         case Entry::Kind::Heading: break;
         case Entry::Kind::Drive: /* a tap mounts it (no password): off the UI thread, then it opens */
-            if (!drives || !drives->available()) {
-                notice(Notice::Kind::Info, "Drives need the udisks2 package.");
-                break;
-            }
-            if (drives->busy()) break;
-            notice(Notice::Kind::Info, "Mounting " + e.name + "...");
-            drives->mount_async(e.path, e.name);
+            request_mount(e.path, e.name);
             break;
         case Entry::Kind::Up: {
             const std::string old = folder;
@@ -1555,6 +1588,7 @@ struct VinylApp::Impl final : TransportHost {
         if (drives) {
             h.drives = [this] { return drives ? drives->list() : std::vector<DriveInfo>(); };
             h.drives_available = [this] { return drives && drives->available(); };
+            h.mount = [this](const std::string &dev, const std::string &name) { request_mount(dev, name); };
             h.eject = [this](const std::string &dev, const std::string &name) {
                 if (drives && drives->by_vinyl(dev)) drives->unmount_async(dev, name);
             };
@@ -1656,23 +1690,71 @@ struct VinylApp::Impl final : TransportHost {
         refresh(true);
     }
 
-    /* the drive the playing track lives on: found when the track starts, checked while it plays */
-    void check_drive() {
-        const std::vector<MountEntry> mounts = parse_mounts(read_mounts());
-        if (drive_for != snap.path) {
-            drive_for = snap.path;
-            const MountEntry *m = mount_of(mounts, snap.path);
-            drive_dir = m && libm::is_drive_path(m->dir) ? m->dir : std::string();
-            return;
+    /* Is the drive directory there: listed in the mounts and readable (a stale mount is not)? The scenes' drives are the fake
+     * backend's. */
+    bool media_present(const std::string &dir) {
+        if (demo) {
+            if (!drives) return true;
+            for (const DriveInfo &d : drives->list())
+                if (d.mounted && d.mount_dir == dir) return true;
+            return false;
         }
-        if (drive_dir.empty()) return;
-        for (const MountEntry &m : mounts)
-            if (m.dir == drive_dir) return;
-        drive_dir.clear();
-        engine->pause();
+        return drive_present_real(dir);
+    }
+
+    /* A drive went away (pulled, a stale mount that cannot be read, ejected, unmounted at exit): every queue entry that lies on it
+     * is removed from the queue at once (owner ruling 2026-11-14, B50: "if media was removed vinyl should get back to default
+     * music folder and on reopen go to the library directly"). The playing track among them: playback stops cleanly (no "file is
+     * gone", no retry, no skipping through the dead entries), the next entry that is left is loaded paused (never started by
+     * itself: the sound ended with the drive), the queue empty when none is; the red notice says so once. An empty queue leaves
+     * Now playing (or the Queue) for the Library at the default music folder. true when something was removed. */
+    bool drop_gone_media(bool at_start) {
+        if (queue.empty()) return false;
+        const std::vector<std::string> gone =
+            gone_drive_dirs(queue.items(), [this](const std::string &d) { return media_present(d); }, drive_bases,
+                            [this](const std::string &p) { return !demo && ::access(p.c_str(), F_OK) == 0; });
+        if (gone.empty()) return false;
+        const Queue::RemoveResult r = queue.remove_under(gone);
+        std::fprintf(stderr, "[vinyl] media gone (%s): %d queue entr%s removed%s\n", gone.front().c_str(), r.removed, r.removed == 1 ? "y" : "ies",
+                     r.current_removed ? ", the playing one among them" : "");
+        ++qgen;
+        ++queue_set_gen;
         dirty = true;
-        notice(Notice::Kind::Danger, "Drive removed. Paused.");
-        std::fprintf(stderr, "[vinyl] the drive of %s was removed: paused\n", snap.path.c_str());
+        if (r.current_removed) resume.position_ms = 0;
+        if (at_start) return true;
+        if (r.current_removed || queue.empty()) {
+            engine->stop();
+            long_path.clear();
+            play_path.clear();
+        }
+        if (queue.empty()) {
+            std::fprintf(stderr, "[vinyl] the queue is empty: back to the default music folder\n");
+        } else if (r.current_removed) {
+            engine->load(queue.current(), *queue.current_path(), 0, false); /* the next one that is left, paused */
+            jobs.want_tags({*queue.current_path()});
+        } else {
+            engine_track_moved(); /* the playing track stays: only its place in the queue moved */
+        }
+        update_next();
+        notice(Notice::Kind::Danger, r.current_removed ? "Drive removed. Paused." : "Drive removed. Its tracks left the queue.");
+        if (queue.empty() && (view->page() == Page::Now || view->page() == Page::Queue)) go_default_folder();
+        refresh(true);
+        return true;
+    }
+
+    /* the Library at the default music folder: ~/Music when it is a root, else the first one (Esc: the hub) */
+    void go_default_folder() {
+        std::string def;
+        const char *hm = std::getenv("HOME");
+        const std::string music = hm ? std::string(hm) + "/Music" : std::string();
+        for (const Root &r : roots)
+            if (r.path == music) def = r.path;
+        if (def.empty() && !roots.empty()) def = roots.front().path;
+        browser_from_lib = lib_on();
+        choose_mode = false;
+        open_folder(def, "");
+        go(Page::Browser);
+        notice(Notice::Kind::Danger, "Drive removed. Paused."); /* go() took the first one away with the page: said again here, once */
     }
 
     /* ------------------------------------------------------------------------------------------ notices */
@@ -2045,7 +2127,7 @@ struct VinylApp::Impl final : TransportHost {
     MiniView mini_view() {
         MiniView m;
         const std::string *playing = queue.current_path();
-        const std::string path = !snap.path.empty() ? snap.path : (playing ? *playing : "");
+        const std::string path = queue.empty() ? std::string() : !snap.path.empty() ? snap.path : (playing ? *playing : "");
         m.shown = !path.empty();
         if (m.shown) {
             TrackTags t;
@@ -2204,10 +2286,17 @@ struct VinylApp::Impl final : TransportHost {
             last_scan = now;
             scan(true);
         }
-        /* a drive the playing track lives on was pulled: pause and say so (the read would fail anyway) */
-        if (!demo && snap.state == PlayState::Playing && !snap.path.empty() && now - drive_checked >= 2000) {
-            drive_checked = now;
-            check_drive();
+        /* the scenes: a drive is pulled after a while */
+        if (demo_pull_at && now >= demo_pull_at && demo_fake) {
+            demo_pull_at = 0;
+            demo_fake->devices.erase(std::remove_if(demo_fake->devices.begin(), demo_fake->devices.end(),
+                                                    [](const DriveInfo &d) { return d.mounted; }),
+                                     demo_fake->devices.end());
+        }
+        /* a drive the queue's files lie on went away: they leave the queue (B50) */
+        if (!queue.empty() && (!demo || drives) && now - gone_checked >= 1000) {
+            gone_checked = now;
+            drop_gone_media(false);
         }
         /* the playing output's volume: the card's mixer without a server (the server's sinks come with the scans) */
         read_output_mixer(now, false);
@@ -2334,6 +2423,7 @@ struct VinylApp::Impl final : TransportHost {
             dirty = true;
             break;
         case EngineEvent::Kind::OpenFailed:
+            if (drop_gone_media(false)) break; /* the file was on a drive that went away: no "file is gone" */
             notice(Notice::Kind::Info, ev.text);
             if (ev.pos >= 0 && ev.pos < queue.size()) queue.set_current(ev.pos);
             ++qgen;

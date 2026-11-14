@@ -59,6 +59,7 @@ struct LibHost {
     std::function<std::vector<DriveInfo>()> drives;
     std::function<bool()> drives_available;
     std::function<void(const std::string &dev, const std::string &name)> eject;
+    std::function<void(const std::string &dev, const std::string &name)> mount; /* the same as a tap on its row in Folders */
     std::function<void(const std::string &, bool)> search_open; /* the field's text, editing */
     std::function<void()> search_edit;
     std::function<void()> search_end_edit;

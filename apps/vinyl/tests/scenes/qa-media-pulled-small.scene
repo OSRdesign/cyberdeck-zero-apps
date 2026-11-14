@@ -1,0 +1,26 @@
+title Vinyl P2b: the drive Now playing plays from is pulled (owner ruling 2026-11-14, B50): its tracks leave the queue at once, no 'file is gone', the Library at the default music folder, Esc to the hub (480x320 and 320x480, their real density)
+sizes 480x320 320x480
+ppmm 630
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_LIBRARY full
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_DRIVES vinyl
+env VINYL_DEMO_DRIVE_QUEUE drive
+env VINYL_DEMO_PULL_AFTER 3000
+keyboards 1
+wait 1000
+shot 01-playing-from-the-drive
+expect text "Flash Song"
+wait 3200
+shot 02-drive-pulled
+expect text "Drive removed. Paused."
+expect notext "Flash Song"
+expect text "Amerie"
+expect noquit
+key esc
+wait 500
+shot 03-library-hub
+expect text "Folders"
+expect text "Playlists"
+expect noquit

@@ -765,6 +765,43 @@ using it I don't think that's correct, if en external source is gone so is gone 
   at its drive roots every 2 s while it is open (the probe's result is part of the mounts signature that triggers the sync).
   `tests/test_scanner.cpp` tests it with a fake probe (a stale mount, then readable again); `set_root_probe` is the seam.
 
+## Owner rulings of 2026-11-14 (B49 follow-ups): a gone drive leaves the queue; Mount in Music folders
+
+**Media that goes away.** The owner, on the Pi 4B: "if it disappear from the library all track are still in the queue list and the
+player screen tries to load them 'The file is gone...' message is displayed. that should not happen, if media was removed vinyl
+shoudl get back to default music folder and on reopen go to the library direclty for user to select from there what to load in the
+player."
+- When a drive goes away (pulled, a stale mount that cannot be read, Eject, unmounted at exit) every queue entry that lies on it is
+  removed at once (`Queue::remove_under`, `core/library/media_guard`: the drive directory a path lives on, /media/<user>/<label>,
+  /run/media/<user>/<label>, /mnt/<label>; gone = not on a listed, readable mount; a folder of the system disk under /mnt whose
+  files are there is not a drive). The app looks once a second and at once on Eject and on an open that failed.
+- **The playing track among them: playback stops cleanly** (no "file is gone", no retry, no skipping through the dead entries),
+  the next entry that is left is loaded **paused, never started by itself** (decision: whether it was playing or not, the sound
+  ended with the drive and a different song starting on its own would be a surprise; the queue is as the owner left it, one press
+  of play away), and the queue is empty when none is left. The red notice says it once: "Drive removed. Paused." (the playing
+  track was affected) or "Drive removed. Its tracks left the queue." (others only; the playing one goes on).
+- **An empty queue leaves Now playing (or the Queue) for the Library at the default music folder** (~/Music when it is a root, else
+  the first root; Esc goes to the hub). The mini player is hidden with an empty queue.
+- **At every start** the saved queue loses its entries on a drive that is not there before the first screen is drawn
+  (`drop_gone_media(true)`): with nothing left to resume Vinyl opens on the Library hub (without a Library: the Browser), the
+  dropped entries never reach the engine, so "The file is gone..." stays for one file deleted from a drive that is there.
+- A drive that returns later does not bring the entries back: they are gone from the queue; its library rows return as before.
+- Tests: `tests/test_media_guard.cpp` (the drive of a path, the gone drives, `remove_under` with the playing track on the gone
+  drive, some entries, all, a shuffled queue, a saved queue at start), scenes `qa-media-pulled` (a drive pulled while playing from
+  it: the Library at the default folder, no "file is gone") and `qa-media-gone-at-start` (the hub at start), each with `-small` and
+  `-deck`; the scenes' pull is `VINYL_DEMO_PULL_AFTER`, the saved queues `VINYL_DEMO_DRIVE_QUEUE`.
+
+**Mount from Music folders.** The owner: "unmounted drive from setting music folder shouls offer ability to mount drive, now we
+only have eject but no other option to mount which recquire to go back several screens to library and select folder -> mount".
+(Board MusicFoldersDriveMount.) A drive that is plugged in and not mounted is a row "<LABEL> (USB drive)  not mounted" with the
+amber action dot, no longer dimmed; with it selected the drive button is "Mount <LABEL>" in the brown look (the primary look moves
+from Add a folder to it), and it mounts exactly as a tap on the row in Folders does (`request_mount`: the same worker, "Mounting
+<name>...", the denial and error texts); the row then says "mounted by Vinyl" and the button "Eject <LABEL>". The button is Eject on
+a drive Vinyl mounted, Mount on one not mounted, Eject dimmed and inert for a drive the system mounted (and with no drive
+selected). After Eject the drive stays listed, not mounted, with Mount again; a drive that is gone is shown nowhere. Remove
+selected folder is as before (it explains for a drive). Tests: `test_lib_ctl` (the button for each state, Mount from the page, the
+state after an Eject), scene `qa-drives-mount` and the Mount-again steps of `qa-drives-eject`.
+
 ## Owner decision: mount on request in Vinyl (2026-11-14, board test B45; the mounting half of D28)
 
 The owner: "Mount on request in Vinyl". On the HackBerry a plugged stick (sda1, vfat) is never mounted: the desktop's file manager
@@ -784,7 +821,7 @@ DrivesFolders, MusicFoldersDrives, DriveNotices (the coordinator's).
   and "not mounted. Tap to mount" ("Mounting <LABEL>..." notice, then the drive opens and joins the Library: its root is synced
   and the folder is scanned, the D27 rule for a folder opened from the Library); a mounted drive is an ordinary root row with
   "<size>, mounted". Music folders lists "<LABEL> (USB drive)" with "mounted by Vinyl" or its tracks, the drives not mounted
-  ("not mounted", dimmed, inert), and the buttons Add a folder, "Eject <LABEL>" and Remove selected folder (they flow onto lines
+  ("not mounted", the amber dot: Mount acts on it, see the ruling above), and the buttons Add a folder, "Eject <LABEL>" and Remove selected folder (they flow onto lines
   by their words: one line at 640 wide, two at 480x320, three on a narrow panel). The notices are the board's: "Could not
   mount it: <reason>.", "<LABEL> ejected. You can unplug it.", "Drives need the udisks2 package."; reasons: "this session is not
   allowed to mount drives", "the disk has no readable filesystem", "it is in use", "it took too long", else the udisks message

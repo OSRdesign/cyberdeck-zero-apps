@@ -268,7 +268,8 @@ void test_lib_model() {
     CHECK_EQ(fr[1].value, std::string("mounted by Vinyl"));
     CHECK_EQ(fr[2].text, std::string("Generic Flash Disk (USB drive)"));
     CHECK_EQ(fr[2].value, std::string("not mounted"));
-    CHECK(fr[2].dimmed);
+    CHECK(!fr[2].dimmed); /* actionable: the button Mount (owner, 2026-11-14) */
+    CHECK(fr[2].amber && fr[2].mark == Row::Mark::Dot);
     CHECK_EQ(fr[2].key, std::string("ndrive:/dev/sdc1"));
     CHECK_EQ(fr[2].index, -1);
     usb.online = false;

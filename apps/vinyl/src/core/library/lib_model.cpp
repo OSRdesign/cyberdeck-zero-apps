@@ -414,9 +414,9 @@ std::vector<Row> folder_rows(const std::vector<RootInfo> &roots, const std::stri
     }
     for (const DriveInfo &d : drives) {
         if (d.mounted) continue;
-        Row row = item(Row::Type::None, 0, -1, d.name() + " (USB drive)", "not mounted", Row::Mark::None);
+        Row row = item(Row::Type::None, 0, -1, d.name() + " (USB drive)", "not mounted", Row::Mark::Dot);
         row.key = "ndrive:" + d.dev;
-        row.dimmed = true;
+        row.amber = true; /* it can be mounted from here (owner, 2026-11-14): not dimmed, not inert */
         rows.push_back(row);
     }
     return rows;

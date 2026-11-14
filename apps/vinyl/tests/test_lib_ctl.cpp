@@ -45,7 +45,7 @@ struct Rec {
     int top = 0; /* where the list is scrolled to (px), as the view would tell */
     bool with_drives = false, udisks = true;
     std::vector<DriveInfo> drive_list;
-    std::vector<std::string> ejected;
+    std::vector<std::string> ejected, mounted;
 };
 
 LibHost make_host(Rec &r) {
@@ -74,6 +74,7 @@ LibHost make_host(Rec &r) {
         h.drives = [&r] { return r.drive_list; };
         h.drives_available = [&r] { return r.udisks; };
         h.eject = [&r](const std::string &dev, const std::string &) { r.ejected.push_back(dev); };
+        h.mount = [&r](const std::string &dev, const std::string &) { r.mounted.push_back(dev); };
     }
     h.search_open = [&r](const std::string &t, bool edit) { r.searched.push_back(t + (edit ? "+edit" : "")); };
     h.search_edit = [] {};
@@ -278,7 +279,7 @@ void drives_ui_test() {
     CHECK_EQ(c.rows()[1].key, std::string("vdrive:/dev/sda1"));
     CHECK_EQ(c.rows()[1].value, std::string("mounted by Vinyl"));
     CHECK_EQ(c.rows()[2].key, std::string("ndrive:/dev/sdc1"));
-    CHECK(c.rows()[2].dimmed);
+    CHECK(!c.rows()[2].dimmed && c.rows()[2].amber);
     LibView lv = c.view();
     CHECK_EQ(lv.heading, std::string("MUSIC FOLDERS, 3"));
     CHECK_EQ(lv.buttons.size(), static_cast<size_t>(3));
@@ -293,14 +294,41 @@ void drives_ui_test() {
     c.button(Page::LibFolders, 1);
     CHECK_EQ(rec.ejected.size(), static_cast<size_t>(1));
     CHECK_EQ(rec.ejected[0], std::string("/dev/sda1"));
-    c.key(18); /* a drive that is not mounted: Eject and Remove are inert / explain */
+    c.key(18); /* a drive plugged in and not mounted: the button is Mount (brown, not dimmed), Remove explains (owner, 2026-11-14) */
+    CHECK(!c.rows()[2].dimmed && c.rows()[2].amber);
     lv = c.view();
-    CHECK_EQ(lv.buttons[1], std::string("Eject Generic Flash Disk"));
-    CHECK(!lv.button_enabled[1]);
+    CHECK_EQ(lv.buttons[1], std::string("Mount Generic Flash Disk"));
+    CHECK(lv.button_enabled[1]);
+    CHECK(lv.button_primary[1] && !lv.button_primary[0]);
     c.button(Page::LibFolders, 1);
-    CHECK_EQ(rec.ejected.size(), static_cast<size_t>(1));
+    CHECK_EQ(rec.mounted.size(), static_cast<size_t>(1));
+    CHECK_EQ(rec.mounted[0], std::string("/dev/sdc1"));
+    CHECK_EQ(rec.ejected.size(), static_cast<size_t>(1)); /* not an eject */
     c.button(Page::LibFolders, 2);
     CHECK_EQ(rec.notices.back(), std::string("Music and USB drives are always in the library. Only folders you added can be removed."));
+    /* after an Eject the drive is still plugged in: listed as not mounted, with Mount again; its root is hidden meanwhile */
+    rec.drive_list[0].mounted = false;
+    rec.drive_list[0].by_vinyl = false;
+    rec.drive_list[0].mount_dir.clear();
+    c.mounts_changed();
+    pump(c, 4);
+    CHECK_EQ(c.rows().size(), static_cast<size_t>(3)); /* Music and the two drives that are plugged in and not mounted */
+    CHECK_EQ(c.rows()[1].key, std::string("ndrive:/dev/sda1"));
+    c.key(17);
+    lv = c.view();
+    CHECK_EQ(lv.buttons[1], std::string("Mount STICK"));
+    CHECK(lv.button_enabled[1] && lv.button_primary[1]);
+    /* mounted again (by Vinyl): "mounted by Vinyl" and Eject */
+    rec.drive_list[0].mounted = true;
+    rec.drive_list[0].by_vinyl = true;
+    rec.drive_list[0].mount_dir = "/media/stick";
+    c.mounts_changed();
+    pump(c, 4);
+    CHECK_EQ(c.rows().size(), static_cast<size_t>(3));
+    CHECK_EQ(c.rows()[1].key, std::string("vdrive:/dev/sda1"));
+    CHECK_EQ(c.rows()[1].value, std::string("mounted by Vinyl"));
+    CHECK_EQ(c.view().buttons[1], std::string("Eject STICK"));
+    c.key(18);
     /* the system mounted it: Eject is dimmed */
     rec.drive_list[0].by_vinyl = false;
     c.mounts_changed();

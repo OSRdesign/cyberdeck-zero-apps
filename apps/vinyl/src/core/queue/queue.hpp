@@ -58,6 +58,14 @@ public:
     /* Removes the track; the current position follows (the current track itself may be removed: then current() becomes
      * the track that took its place, or -1). */
     void remove(int pos);
+    /* The tracks that lie under any of `dirs` (a drive that went away, owner ruling 2026-11-14): all of them are removed at once.
+     * The current track stays current when it survives; when it was one of them the track that took its place becomes current
+     * (the first one when none follows), -1 when the queue is empty. */
+    struct RemoveResult {
+        int removed = 0;
+        bool current_removed = false;
+    };
+    RemoveResult remove_under(const std::vector<std::string> &dirs);
     /* Removes every track but the current one (all of them when none is current). */
     void clear_except_current();
 

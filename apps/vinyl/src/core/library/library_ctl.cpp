@@ -569,15 +569,20 @@ void LibraryCtl::button(Page p, int index) {
         return;
     }
     const bool eject_shown = host_.drives && host_.drives_available && host_.drives_available();
-    if (eject_shown && index == 1) { /* Eject: only a drive Vinyl mounted */
+    if (eject_shown && index == 1) { /* Mount on a drive that is plugged in and not mounted; Eject on one Vinyl mounted */
         if (sel_ < 0 || sel_ >= static_cast<int>(rows_.size())) return;
         const std::string &key = rows_[static_cast<size_t>(sel_)].key;
-        if (key.compare(0, 7, "vdrive:") != 0) return; /* inert (dimmed) for any other row */
+        const bool mount = key.compare(0, 7, "ndrive:") == 0;
+        if (!mount && key.compare(0, 7, "vdrive:") != 0) return; /* inert (dimmed) for any other row: a drive the system mounted too */
         const std::string dev = key.substr(7);
         std::string name = "the drive";
         for (const DriveInfo &d : d_.drives)
             if (d.dev == dev) name = d.name();
-        if (host_.eject) host_.eject(dev, name);
+        if (mount) {
+            if (host_.mount) host_.mount(dev, name);
+        } else if (host_.eject) {
+            host_.eject(dev, name);
+        }
         return;
     }
     /* Remove selected folder: only the folders the user added; Music and the drives are always indexed */
@@ -867,8 +872,15 @@ void LibraryCtl::drive_mounted(const std::string &dir) {
     visited_ = in_library_;
     const std::vector<RootSpec> wanted = host_.wanted ? host_.wanted() : std::vector<RootSpec>();
     const std::string text = cfg_.demo ? std::string() : read_mounts();
-    worker_.post([wanted, text, demo = cfg_.demo](Library *lib) {
-        if (lib && !demo) sync_roots(lib->db(), wanted, parse_mounts(text), "/dev/disk/by-uuid");
+    worker_.post([wanted, text, dir, demo = cfg_.demo](Library *lib) {
+        if (!lib) return;
+        if (!demo) {
+            sync_roots(lib->db(), wanted, parse_mounts(text), "/dev/disk/by-uuid");
+        } else { /* the scenes have no /proc mounts: the drive's folder is made a root here */
+            LibraryWriter w(lib->db());
+            const size_t slash = dir.rfind('/');
+            w.root(dir, slash == std::string::npos ? dir : dir.substr(slash + 1), "", dir);
+        }
     }, [this, dir] {
         reload();
         if (scan_ && in_library_ && !scan_->running()) scan_->start_folder(dir, false);
@@ -947,6 +959,7 @@ LibView LibraryCtl::view() {
                                                          : RowView::Mark::None;
             rv.playing = r.playing;
             rv.dimmed = r.dimmed;
+            rv.amber = r.amber;
             rv.mono_value = r.mono_value;
             rv.flush = pl == libm::Place::Folders;
             out->push_back(rv);
@@ -1034,20 +1047,25 @@ LibView LibraryCtl::view() {
         v.heading = "MUSIC FOLDERS, " + std::to_string(rows_.size());
         v.buttons = {"Add a folder"};
         if (host_.drives && host_.drives_available && host_.drives_available()) {
+            /* the drive button: Mount on a drive plugged in and not mounted (the brown look), Eject on one Vinyl mounted, Eject
+             * dimmed for one the system mounted and with no drive selected (owner, 2026-11-14) */
             std::string label = "Eject";
-            bool can = false;
+            bool can = false, mount = false;
             if (sel_ >= 0 && sel_ < static_cast<int>(rows_.size())) {
                 const std::string &key = rows_[static_cast<size_t>(sel_)].key;
                 const size_t colon = key.find(':');
                 if (colon != std::string::npos) {
                     const std::string dev = key.substr(colon + 1);
+                    mount = key.compare(0, 7, "ndrive:") == 0;
                     for (const DriveInfo &d : d_.drives)
-                        if (d.dev == dev) label = "Eject " + d.name();
-                    can = key.compare(0, 7, "vdrive:") == 0; /* only a drive Vinyl mounted */
+                        if (d.dev == dev) label = (mount ? "Mount " : "Eject ") + d.name();
+                    can = mount || key.compare(0, 7, "vdrive:") == 0;
                 }
             }
             v.buttons.push_back(label);
             v.button_enabled[1] = can;
+            v.button_primary[1] = mount;
+            v.button_primary[0] = !mount;
         }
         v.buttons.push_back("Remove selected folder");
         v.footnote = host_.drives && host_.drives_available && host_.drives_available()
