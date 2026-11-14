@@ -308,7 +308,7 @@ bool make_demo_library(const DemoWorld &w, const std::string &db_path, const std
         std::atomic<bool> cancel{false};
         sc.scan_all({RootSpec{w.music, "Music"}}, cancel);
     }
-    if (mode != "full" && mode != "offline") return true;
+    if (mode != "full" && mode != "offline" && mode != "drives") return true;
     LibraryWriter lw(db);
     Transaction tx(db);
     const int64_t root = lw.root("/demo/synthetic", "Demo");
@@ -354,6 +354,14 @@ bool make_demo_library(const DemoWorld &w, const std::string &db_path, const std
         add(root, "Various/Demo Mix", std::string("Demo song ") + (i < 9 ? "0" : "") + std::to_string(i + 1), "Mix artist " + std::to_string(i % 7 + 1),
             "Demo Mix", 2020, "Pop", i + 1, 0, "Various artists");
     tx.commit();
+    if (mode == "drives") { /* SANDISK, mounted (by Vinyl) at <demo>/media/SANDISK: a root that is there */
+        const std::string dir = w.root + "/media/SANDISK";
+        const int64_t usb = lw.root(dir, "SANDISK", "DEMO-0002", dir);
+        Transaction tx2(db);
+        for (int i = 0; i < 12; ++i)
+            add(usb, "Stick/Album", "Stick song " + std::to_string(i + 1), "Stick artist", "Stick album", 2015, "Rock", i + 1, 0, "Stick artist");
+        tx2.commit();
+    }
     if (mode == "offline") {
         const int64_t usb = lw.root("/media/demo/SANDISK", "SANDISK", "DEMO-0001", "/media/demo/SANDISK");
         Transaction tx2(db);

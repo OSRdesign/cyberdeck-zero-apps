@@ -53,8 +53,8 @@ public:
     void search_edit();
     void search_end_edit();
     bool search_editing() const;
-    /* the first row in view of a Library page's list (kept when the place is left, given back by LibView::scroll_to) */
-    int lib_top_row(Page p) const;
+    /* where a Library page's list is scrolled to, in pixels (kept when the place is left, given back by LibView::scroll_to) */
+    int lib_scroll_y(Page p) const;
     void show_sheet(const SheetView &v);
     void hide_sheet();
     bool sheet_shown() const;

@@ -9,6 +9,7 @@
 #include "library.hpp"
 
 #include <algorithm>
+#include <cerrno>
 #include <climits>
 #include <cstdlib>
 #include <dirent.h>
@@ -132,9 +133,31 @@ std::vector<RootRow> load_roots(Db &db) {
     return out;
 }
 
-bool root_online(const RootRow &r, const std::vector<MountEntry> &mounts, const std::string &by_uuid_dir) {
+bool root_readable(const std::string &path) {
     struct stat st;
-    if (::stat(r.path.c_str(), &st) != 0 || !S_ISDIR(st.st_mode)) return false;
+    if (::stat(path.c_str(), &st) != 0 || !S_ISDIR(st.st_mode)) return false;
+    DIR *d = ::opendir(path.c_str());
+    if (!d) return false;
+    errno = 0;
+    (void)::readdir(d);
+    const int e = errno;
+    ::closedir(d);
+    return !(e == EIO || e == ENODEV || e == ENXIO || e == ESTALE || e == ENOTCONN);
+}
+
+namespace {
+RootProbe &probe_slot() {
+    static RootProbe p;
+    return p;
+}
+}  // namespace
+
+void set_root_probe(RootProbe probe) { probe_slot() = std::move(probe); }
+
+bool probe_root(const std::string &path) { return probe_slot() ? probe_slot()(path) : root_readable(path); }
+
+bool root_online(const RootRow &r, const std::vector<MountEntry> &mounts, const std::string &by_uuid_dir) {
+    if (!probe_root(r.path)) return false; /* not there, not a folder, or mounted but unreadable: gone */
     if (r.mount.empty()) return true; /* a folder of the system disk */
     const MountEntry *m = mount_of(mounts, r.path);
     if (!m || m->dir != r.mount) return false; /* the drive left: what is there is the folder it was mounted on */

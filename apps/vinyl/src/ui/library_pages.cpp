@@ -211,7 +211,7 @@ struct LibraryPages::Impl {
         lv_obj_t *block = nullptr, *block_title = nullptr, *block_bar = nullptr, *block_fill = nullptr, *block_text = nullptr;
         LibNote block_shown;
         /* Music folders */
-        LibButton buttons[2];
+        LibButton buttons[3];
         lv_obj_t *foot = nullptr;
         bool placed = false;
         bool last_empty = false;
@@ -337,7 +337,7 @@ struct LibraryPages::Impl {
             L.foot = label(r, Face::Bold, S(11), col::kRowValue, ri(lg.panel.x) + S(16), 0, 0);
             wrap_label(L.foot, ri(lg.panel.w) - 2 * S(16));
             lv_obj_set_style_text_line_space(L.foot, S(15) - lv_font_get_line_height(font(Face::Bold, S(11))), 0);
-            for (int i = 0; i < 2; ++i) {
+            for (int i = 0; i < 3; ++i) {
                 L.buttons[i].build(r, ri(lg.panel.x) + S(16), 0, S(100), S(30), S(13), i == 0 ? col::kPrimary : col::kRowSel,
                                    i == 0 ? col::kWhite : col::kRowText, "", target, [this, p, i] {
                                        if (cb.on_button) cb.on_button(p, i);
@@ -347,7 +347,8 @@ struct LibraryPages::Impl {
         lv_obj_add_flag(L.root, LV_OBJ_FLAG_HIDDEN);
     }
 
-    /* the Music folders page: the rows above, then the buttons and the note at the panel's bottom */
+    /* the Music folders page: the rows above, then the buttons and the note at the panel's bottom. The buttons flow onto lines as
+     * the words fit (one line when all fit, else two, else one over the other), each line filled edge to edge */
     void place_folders(P &L, const LibView &v) {
         const int px = ri(lg.panel.x), pw = ri(lg.panel.w), bottom = ri(lg.panel.bottom()) - S(8);
         set_text(L.foot, v.footnote);
@@ -357,33 +358,52 @@ struct LibraryPages::Impl {
         lv_obj_set_y(L.foot, bottom - fh);
         const int bh = std::max(S(30), 1), gap = S(8);
         const int total = pw - 2 * S(16);
-        const int n = static_cast<int>(v.buttons.size());
+        const int n = std::min(3, static_cast<int>(v.buttons.size()));
         const lv_font_t *bf = font(Face::Bold, S(13));
-        int need = 0;
-        for (const std::string &t : v.buttons) need += text_width(bf, t) + 2 * S(14);
-        /* side by side when both words fit, else one over the other (a narrow panel) */
-        const bool stacked = n >= 2 && need + gap > total;
-        const int rows_n = stacked ? n : 1;
+        std::vector<int> need(static_cast<size_t>(n));
+        for (int i = 0; i < n; ++i) need[static_cast<size_t>(i)] = text_width(bf, v.buttons[static_cast<size_t>(i)]) + 2 * S(14);
+        /* the lines: a button joins the line while the line still fits */
+        std::vector<std::vector<int>> lines;
+        for (int i = 0; i < n; ++i) {
+            int w = need[static_cast<size_t>(i)];
+            if (!lines.empty()) {
+                int cur = static_cast<int>(lines.back().size()) * gap;
+                for (int k : lines.back()) cur += need[static_cast<size_t>(k)];
+                if (cur + w <= total) {
+                    lines.back().push_back(i);
+                    continue;
+                }
+            }
+            lines.push_back({i});
+        }
         const int row_gap = std::max(gap, target - bh);
-        const int top = bottom - fh - (fh ? S(8) : 0) - rows_n * bh - (rows_n - 1) * row_gap;
-        const int bw0 = n >= 2 && !stacked ? std::min(S(200), (total - gap) * 9 / 20) : total;
-        for (int i = 0; i < 2; ++i) {
-            LibButton &b = L.buttons[i];
-            const bool on = i < n;
-            b.show(on);
-            if (!on) continue;
-            b.set_text(v.buttons[static_cast<size_t>(i)]);
-            const int bw = stacked || n < 2 ? total : (i == 0 ? bw0 : total - bw0 - gap);
-            const int by = stacked ? top + i * (bh + row_gap) : top;
-            b.x = px + S(16) + (stacked || i == 0 ? 0 : bw0 + gap);
-            b.w = bw;
-            lv_obj_set_pos(b.vis, b.x, by);
-            lv_obj_set_width(b.vis, bw);
-            lv_obj_set_width(b.word, bw);
-            const int hw = std::max(bw, target), hh = std::max(bh, target);
-            lv_obj_set_pos(b.hitbox, b.x - (hw - bw) / 2, by - (hh - bh) / 2);
-            lv_obj_set_size(b.hitbox, hw, hh);
-            b.set_enabled(v.button_enabled[i]);
+        const int rows_n = static_cast<int>(lines.size());
+        const int top = bottom - fh - (fh ? S(8) : 0) - rows_n * bh - std::max(0, rows_n - 1) * row_gap;
+        for (int i = 0; i < 3; ++i) L.buttons[i].show(i < n);
+        for (int li = 0; li < rows_n; ++li) {
+            const std::vector<int> &ln = lines[static_cast<size_t>(li)];
+            int sum = 0;
+            for (int k : ln) sum += need[static_cast<size_t>(k)];
+            const int room = total - static_cast<int>(ln.size() - 1) * gap;
+            int x = px + S(16);
+            for (size_t j = 0; j < ln.size(); ++j) {
+                const int k = ln[j];
+                LibButton &b = L.buttons[k];
+                int bw = sum > 0 ? need[static_cast<size_t>(k)] * room / sum : room;
+                if (j + 1 == ln.size()) bw = px + S(16) + total - x; /* the line ends at the edge */
+                const int by = top + li * (bh + row_gap);
+                b.set_text(v.buttons[static_cast<size_t>(k)]);
+                b.x = x;
+                b.w = bw;
+                lv_obj_set_pos(b.vis, x, by);
+                lv_obj_set_width(b.vis, bw);
+                lv_obj_set_width(b.word, bw);
+                const int hw = std::max(bw, target), hh = std::max(bh, target);
+                lv_obj_set_pos(b.hitbox, x - (hw - bw) / 2, by - (hh - bh) / 2);
+                lv_obj_set_size(b.hitbox, hw, hh);
+                b.set_enabled(v.button_enabled[k]);
+                x += bw + gap;
+            }
         }
         const int list_bottom = std::min(top - std::max(S(8), (target - bh) / 2), bottom);
         L.list_h = std::max(row_h(), list_bottom - L.list_y);
@@ -478,7 +498,8 @@ struct LibraryPages::Impl {
         L.rows_gen = v.rows_gen;
         if (v.rows && (reset || v.rows_ver != L.rows_ver || v.selected != L.sel)) {
             if (!reset && v.rows_ver == L.rows_ver) L.list->set_selected(v.selected, true);
-            else L.list->set_rows(*v.rows, v.selected, reset, v.scroll_to); /* a place given back: its top row, once its rows are in */
+            else L.list->set_rows(*v.rows, v.selected, reset, -1);
+            if (v.scroll_to >= 0) L.list->scroll_y_to(v.scroll_to); /* a place given back: where it was scrolled to, once its rows are in */
             L.rows_ver = v.rows_ver;
             L.sel = v.selected;
             L.nrows = static_cast<int>(v.rows->size());
@@ -630,10 +651,10 @@ void LibraryPages::update(Page p, const LibView &v) {
 
 int LibraryPages::rows(Page p) const { return p == Page::LibHub ? 0 : d_->at(p).nrows; }
 
-int LibraryPages::top_row(Page p) const {
+int LibraryPages::scroll_y(Page p) const {
     if (p == Page::LibHub) return 0;
     const Impl::P &L = d_->at(p);
-    return L.list ? L.list->top_row() : 0;
+    return L.list ? L.list->scroll_y() : 0;
 }
 
 void LibraryPages::search_open(const std::string &text, bool edit) {

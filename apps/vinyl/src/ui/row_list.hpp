@@ -86,8 +86,14 @@ public:
     }
     bool cue_shown() const { return cue_box_ && !lv_obj_has_flag(cue_box_, LV_OBJ_FLAG_HIDDEN); }
 
-    /* the first row in view (a page's place, kept when it is left and given back) */
-    int top_row() const { return std::max(0, lv_obj_get_scroll_y(cont_) / std::max(1, row_h_)); }
+    /* where the list is scrolled to, in pixels (a page's place, kept when it is left and given back by scroll_y_to) */
+    int scroll_y() const { return lv_obj_get_scroll_y(cont_); }
+    void scroll_y_to(int px) {
+        lv_obj_update_layout(cont_);
+        const int max_y = std::max(0, static_cast<int>(rows_.size()) * row_h_ - lv_obj_get_height(cont_));
+        lv_obj_scroll_to_y(cont_, std::clamp(px, 0, max_y), LV_ANIM_OFF);
+        rebind(true);
+    }
 
     void set_rows(const std::vector<RowView> &rows, int selected, bool reset_scroll, int scroll_to) {
         rows_ = rows;
@@ -186,7 +192,7 @@ private:
         const bool dot = v.mark == RowView::Mark::Dot;
         const bool chev = v.mark == RowView::Mark::Chevron;
         show(w.dot, dot);
-        if (dot) set_bg(w.dot, v.dimmed ? col::kDotDim : v.playing ? col::kPlaying : col::kWhite);
+        if (dot) set_bg(w.dot, v.dimmed ? col::kDotDim : v.playing ? col::kPlaying : v.amber ? col::kAmber : col::kWhite);
         show(w.chev, chev);
         if (chev) icon_set(w.chev, Icon::Chevron, v.dimmed ? col::kDotDim : col::kRowValue);
         const lv_font_t *vf = font(v.mono_value ? Face::Mono : Face::Bold, value_px_);

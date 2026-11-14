@@ -232,26 +232,46 @@ void test_lib_model() {
     usb.label = "SANDISK";
     usb.online = false;
     usb.tracks = 612;
-    CHECK_EQ(offline_note({home}), std::string(""));
-    CHECK_EQ(offline_note({home, usb}),
-             std::string("SANDISK is not connected. Its 612 tracks are hidden and come back when you plug it in."));
-    usb2 = usb;
-    usb2.id = 3;
-    usb2.label = "STICK";
-    usb2.tracks = 100;
-    CHECK_EQ(offline_note({home, usb, usb2}),
-             std::string("2 drives are not connected. Their 712 tracks are hidden and come back when you plug them in."));
-    usb.tracks = 0; /* an offline root with no rows says nothing */
-    CHECK_EQ(offline_note({home, usb}), std::string(""));
-    usb.tracks = 612;
+    (void)usb2;
+    /* a root that is gone (offline) has no row anywhere (owner, 2026-11-14): no row in Music folders, not counted */
     std::vector<Row> fr = folder_rows({home, usb}, "/home/osrde");
+    CHECK_EQ(fr.size(), static_cast<size_t>(1));
     CHECK_EQ(fr[0].text, std::string("~/Music"));
     CHECK_EQ(fr[0].value, std::string("1,204 tracks"));
     CHECK(!fr[0].dimmed);
+    CHECK_EQ(online_roots({home, usb}), 1);
+    usb.online = true; /* plugged in and mounted by the system */
+    fr = folder_rows({home, usb}, "/home/osrde");
+    CHECK_EQ(fr.size(), static_cast<size_t>(2));
     CHECK_EQ(fr[1].text, std::string("SANDISK (USB drive)"));
-    CHECK_EQ(fr[1].value, std::string("not connected"));
-    CHECK(fr[1].dimmed);
+    CHECK_EQ(fr[1].value, std::string("612 tracks"));
     CHECK_EQ(fr[1].id, 2);
+    CHECK_EQ(fr[1].key, std::string(""));
+    /* the drives: mounted by Vinyl (Eject acts), mounted by the system (Eject inert), plugged in and not mounted */
+    DriveInfo dv, ds, dn;
+    dv.dev = "/dev/sda1";
+    dv.label = "SANDISK";
+    dv.mounted = true;
+    dv.by_vinyl = true;
+    dv.mount_dir = usb.path;
+    ds.dev = "/dev/sdb1";
+    ds.label = "SYS";
+    ds.mounted = true;
+    ds.mount_dir = home.path;
+    dn.dev = "/dev/sdc1";
+    dn.label = "Generic Flash Disk";
+    fr = folder_rows({home, usb}, "/home/osrde", {dv, ds, dn});
+    CHECK_EQ(fr.size(), static_cast<size_t>(3));
+    CHECK_EQ(fr[0].key, std::string("sdrive:/dev/sdb1"));
+    CHECK_EQ(fr[0].value, std::string("1,204 tracks"));
+    CHECK_EQ(fr[1].key, std::string("vdrive:/dev/sda1"));
+    CHECK_EQ(fr[1].value, std::string("mounted by Vinyl"));
+    CHECK_EQ(fr[2].text, std::string("Generic Flash Disk (USB drive)"));
+    CHECK_EQ(fr[2].value, std::string("not mounted"));
+    CHECK(fr[2].dimmed);
+    CHECK_EQ(fr[2].key, std::string("ndrive:/dev/sdc1"));
+    CHECK_EQ(fr[2].index, -1);
+    usb.online = false;
     CHECK(is_drive_path("/run/media/o/X"));
     CHECK(!is_drive_path("/home/o/media/x"));
     LibraryStats st;

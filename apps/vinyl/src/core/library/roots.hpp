@@ -19,6 +19,7 @@
 #include "../db/sqlite_lib.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -54,6 +55,15 @@ struct RootRow {
 };
 
 std::vector<RootRow> load_roots(Db &db);
+
+/* Can the folder be read now? A stat of a directory, then opening it and reading an entry: a stick pulled while its mount is
+ * still listed (a stale mount: the kernel keeps it, every read fails with EIO, ENODEV, ENXIO or ESTALE) is not readable
+ * (owner ruling 2026-11-14, B45: a source that is gone is gone, nothing of it is shown). */
+bool root_readable(const std::string &path);
+/* The probe the roots use (root_readable): the tests put a fake filesystem's in its place (an empty function restores it). */
+using RootProbe = std::function<bool(const std::string &path)>;
+void set_root_probe(RootProbe probe);
+bool probe_root(const std::string &path);
 
 /* Is the root there now (see the top)? */
 bool root_online(const RootRow &r, const std::vector<MountEntry> &mounts, const std::string &by_uuid_dir);

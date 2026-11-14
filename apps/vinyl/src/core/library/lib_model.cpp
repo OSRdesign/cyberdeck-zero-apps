@@ -369,24 +369,6 @@ ScanNote scan_note(const ScanProgress &p, int prior_tracks) {
     return n;
 }
 
-std::string offline_note(const std::vector<RootInfo> &roots) {
-    int n = 0;
-    int64_t tracks = 0;
-    std::string name;
-    for (const RootInfo &r : roots)
-        if (!r.online && r.tracks > 0) {
-            ++n;
-            tracks += r.tracks;
-            name = r.label.empty() ? base_name(r.path) : r.label;
-        }
-    if (n == 0) return "";
-    if (n == 1)
-        return name + " is not connected. " + (tracks == 1 ? "Its 1 track is" : "Its " + count_text(tracks) + " tracks are") +
-               " hidden and come back when you plug it in.";
-    return std::to_string(n) + " drives are not connected. Their " + count_text(tracks) +
-           " tracks are hidden and come back when you plug them in.";
-}
-
 std::string scan_heading(const ScanProgress &p, int prior_tracks) {
     const int64_t files = static_cast<int64_t>(p.files);
     if (p.state == ScanProgress::State::Paused) return "PAUSED, THE BOARD IS HOT";
@@ -406,15 +388,35 @@ bool is_drive_path(const std::string &path) {
     return false;
 }
 
-std::vector<Row> folder_rows(const std::vector<RootInfo> &roots, const std::string &home) {
+int online_roots(const std::vector<RootInfo> &roots) {
+    int n = 0;
+    for (const RootInfo &r : roots) n += r.online;
+    return n;
+}
+
+std::vector<Row> folder_rows(const std::vector<RootInfo> &roots, const std::string &home, const std::vector<DriveInfo> &drives) {
     std::vector<Row> rows;
     for (size_t i = 0; i < roots.size(); ++i) {
         const RootInfo &r = roots[i];
+        if (!r.online) continue; /* gone is gone: no row (the rows stay in the database, hidden, for the day it is back) */
         std::string text = home_short(r.path, home);
+        std::string value = plural(r.tracks, "track", "tracks"), key;
         if (is_drive_path(r.path)) text = (r.label.empty() ? base_name(r.path) : r.label) + " (USB drive)";
-        Row row = item(Row::Type::None, r.id, static_cast<int>(i), text,
-                       r.online ? plural(r.tracks, "track", "tracks") : std::string("not connected"), Row::Mark::None);
-        row.dimmed = !r.online;
+        for (const DriveInfo &d : drives)
+            if (d.mounted && d.mount_dir == r.path) {
+                text = d.name() + " (USB drive)";
+                key = (d.by_vinyl ? "vdrive:" : "sdrive:") + d.dev;
+                if (d.by_vinyl) value = "mounted by Vinyl";
+            }
+        Row row = item(Row::Type::None, r.id, static_cast<int>(i), text, value, Row::Mark::None);
+        row.key = key;
+        rows.push_back(row);
+    }
+    for (const DriveInfo &d : drives) {
+        if (d.mounted) continue;
+        Row row = item(Row::Type::None, 0, -1, d.name() + " (USB drive)", "not mounted", Row::Mark::None);
+        row.key = "ndrive:" + d.dev;
+        row.dimmed = true;
         rows.push_back(row);
     }
     return rows;

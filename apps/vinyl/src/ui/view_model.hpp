@@ -39,9 +39,10 @@ struct RowView {
     bool mono_value = true;     /* the value in JetBrains Mono (durations) */
     bool heading = false;       /* P2b: a section heading ("DISC 2", "SONGS"): grey capitals, never tapped */
     bool flush = false;         /* P2b: no mark and the text at the left edge (the Music folders rows) */
+    bool amber = false;         /* the action dot is amber (a drive that is not mounted: a tap mounts it) */
     bool operator==(const RowView &o) const {
         return text == o.text && value == o.value && mark == o.mark && playing == o.playing && dimmed == o.dimmed &&
-               mono_value == o.mono_value && heading == o.heading && flush == o.flush;
+               mono_value == o.mono_value && heading == o.heading && flush == o.flush && amber == o.amber;
     }
 };
 
@@ -135,7 +136,7 @@ struct LibView {
     std::string block_title, block_text;
     /* Music folders: the two buttons and the note under them */
     std::vector<std::string> buttons;
-    bool button_enabled[2] = {true, true};
+    bool button_enabled[3] = {true, true, true};
     std::string footnote;
     /* Search: the field's text and the line shown while it is empty */
     std::string query;

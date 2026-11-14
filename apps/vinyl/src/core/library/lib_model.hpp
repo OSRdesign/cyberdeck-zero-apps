@@ -20,6 +20,7 @@
  */
 #pragma once
 
+#include "../drives/drives.hpp"
 #include "library.hpp"
 #include "scanner.hpp"
 
@@ -133,17 +134,19 @@ struct ScanNote {
 };
 /* prior_tracks: the tracks the library held before (the estimate "about 1,200"); 0 when none */
 ScanNote scan_note(const ScanProgress &p, int prior_tracks);
-/* "SANDISK is not connected. Its 612 tracks are hidden and come back when you plug it in." ("" when every root with
- * tracks is online) */
-std::string offline_note(const std::vector<RootInfo> &roots);
 /* the Library settings' strip: "SCANNING, 412 OF 1,204" */
 std::string scan_heading(const ScanProgress &p, int prior_tracks);
 /* the Library settings' last-scan row: "Last scan 12 Nov, 22:41: 1,204 tracks, 96 albums" or "Not scanned yet" */
 std::string last_scan_text(const LibraryStats &s, bool utc = false);
 
-/* The Music folders rows: a folder's path (home as "~"), a drive "SANDISK (USB drive)", its tracks or "not connected"
- * (dimmed). `removable`: the folders the user added (the others are Music and the drives, always included). */
-std::vector<Row> folder_rows(const std::vector<RootInfo> &roots, const std::string &home);
+/* The Music folders rows (MusicFoldersDrives board): a folder's path (home as "~"), a drive "SANDISK (USB drive)" with its
+ * tracks, or "mounted by Vinyl" (key "vdrive:<dev>": Eject acts on it), a drive the system mounted (key "sdrive:<dev>":
+ * Eject is inert), and the drives that are plugged in and not mounted ("not mounted", dimmed, key "ndrive:<dev>"). A root
+ * that is gone (offline: a pulled drive, a stale mount) has no row at all (owner ruling 2026-11-14, B45); a row's `index` is
+ * its place in `roots` (-1 for a drive that is not mounted). */
+std::vector<Row> folder_rows(const std::vector<RootInfo> &roots, const std::string &home, const std::vector<DriveInfo> &drives = {});
+/* the roots that are there (not offline) */
+int online_roots(const std::vector<RootInfo> &roots);
 bool is_drive_path(const std::string &path);
 
 /* The Library settings rows (Music folders n, Rescan now, last scan). */
@@ -193,7 +196,7 @@ struct Loc {
     int64_t id = 0;        /* artist, album, genre or track */
     std::string title;     /* what the page's heading names */
     int sel = 0;    /* the selected row, kept as it moves */
-    int top = 0;    /* the first row in view when the place was left (given back with the selection by Esc) */
+    int top = 0;    /* where the list was scrolled to (px) when the place was left (given back with the selection by Esc) */
     int offset = 0;
 };
 class Nav {

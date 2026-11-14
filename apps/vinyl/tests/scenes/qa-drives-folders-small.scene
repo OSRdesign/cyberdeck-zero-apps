@@ -1,0 +1,36 @@
+title Vinyl P2b: Mount on request (owner, 2026-11-14): the Folders root lists a drive that is plugged in and not mounted (the amber dot, Tap to mount); a tap mounts it (Mounting ..., no password) and opens it (480x320 and 320x480, their real density)
+sizes 480x320 320x480
+ppmm 630
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_LIBRARY full
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE library
+env VINYL_DEMO_DRIVES unmounted
+keyboards 1
+wait 1200
+shot 01-hub
+tap "Folders"
+wait 700
+shot 02-folders-drives
+expect text "USB DRIVES"
+expect text "Generic Flash Disk"
+@480x320,640x480,800x480,480x480,720x720 expect text "not mounted. Tap to mount"
+expect text "Music"
+tap "Generic Flash Disk"
+wait 250
+shot 03-mounting
+expect text "Mounting Generic Flash Disk..."
+wait 900
+shot 04-mounted-and-open
+expect text "Flash Song"
+expect text "GENERIC FLASH DISK"
+key backspace
+wait 500
+shot 05-root-list-mounted
+expect text "Music"
+expect notext "USB DRIVES"
+key esc
+wait 500
+expect text "Folders"
+expect noquit

@@ -1271,10 +1271,11 @@ struct View::Impl {
         lv.rows_ver = v.rows_ver;
         lv.rows_gen = v.rows_gen;
         lv.selected = v.selected;
-        lv.scroll_to = v.scroll_to;
+        lv.scroll_to = -1;
         lv.heading = v.heading;
         lv.mini = v.mini;
         update_list(hub, Page::LibHub, lv);
+        if (v.scroll_to >= 0) hub.list->scroll_y_to(v.scroll_to);
         if (v.heading != hub_heading_seen) {
             hub_heading_seen = v.heading;
             const layout::ListGeom g0 = layout::list_geom(layout::ListPage::Browser, W, H, body_y);
@@ -1707,9 +1708,9 @@ void View::update_lib(Page p, const LibView &v) {
     if (p == Page::LibHub) d.update_hub(v);
     else d.lib->update(p, v);
 }
-int View::lib_top_row(Page p) const {
-    if (p == Page::LibHub) return d_->hub.list ? d_->hub.list->top_row() : 0;
-    return is_lib_page(p) && d_->lib ? d_->lib->top_row(p) : 0;
+int View::lib_scroll_y(Page p) const {
+    if (p == Page::LibHub) return d_->hub.list ? d_->hub.list->scroll_y() : 0;
+    return is_lib_page(p) && d_->lib ? d_->lib->scroll_y(p) : 0;
 }
 void View::search_open(const std::string &text, bool edit) { d_->lib->search_open(text, edit); }
 void View::search_edit() { d_->lib->search_edit(); }

@@ -12,6 +12,7 @@
 #include "app/pulse_worker.hpp"
 #include "app/sink_watch.hpp"
 #include "decode/decode_libs.hpp"
+#include "drives/drives.hpp"
 #include "demo/demo_world.hpp"
 #include "engine/engine.hpp"
 #include "engine/outputs.hpp"
@@ -126,6 +127,9 @@ struct VinylApp::Impl final : TransportHost {
     std::string drive_for, drive_dir;
     uint64_t drive_checked = 0;
     bool lib_on() const { return lib && lib->available(); }
+    /* "Mount on request in Vinyl" (owner, 2026-11-14): the removable drives, mounted by udisks off the UI thread */
+    std::unique_ptr<DriveManager> drives;
+    std::string demo_drive_dir; /* the scenes: a drive Vinyl mounted (VINYL_DEMO_DRIVES=vinyl) */
     MediaKeyReader keys;
     std::unique_ptr<LauncherStatusReader> launcher;
     std::unique_ptr<LauncherRequests> requests;
@@ -323,6 +327,7 @@ struct VinylApp::Impl final : TransportHost {
             if (lib) lib->close_sheet();
         };
         view = std::make_unique<View>(screen, a);
+        make_drives();
         make_library();
         std::fprintf(stderr, "[vinyl] canvas %dx%d, class %s\n", cdk::screen_w(), cdk::screen_h(),
                      layout::class_name(view->size_class()));
@@ -419,6 +424,7 @@ struct VinylApp::Impl final : TransportHost {
         save_positions_now(true);
         keys.stop();
         if (engine) engine->shutdown();
+        if (drives) drives->shutdown(); /* what Vinyl mounted, Vinyl unmounts; never what the system mounted */
         lib.reset();
         jobs.stop();
         if (worker) worker->stop();
@@ -658,13 +664,17 @@ struct VinylApp::Impl final : TransportHost {
         entries.clear();
         folder = path;
         if (path.empty()) {
+            if (!demo) roots = system_roots(); /* a stick mounted or pulled since: the list is as the mounts are now */
             entries = root_entries(roots);
+            add_drive_entries();
         } else {
-            const bool top = roots.size() == 1 && roots.front().path == path;
+            const bool top = roots.size() == 1 && roots.front().path == path && !drives_listed();
             const int r = list_folder(path, top, entries);
             if (r < 0) std::fprintf(stderr, "[vinyl] cannot list %s: %s\n", path.c_str(), std::strerror(-r));
         }
         br_sel = entries.empty() ? -1 : 0;
+        while (br_sel >= 0 && br_sel < static_cast<int>(entries.size()) && entries[static_cast<size_t>(br_sel)].kind == Entry::Kind::Heading) ++br_sel;
+        if (br_sel >= static_cast<int>(entries.size())) br_sel = -1;
         std::vector<std::string> tracks;
         for (size_t i = 0; i < entries.size(); ++i) {
             if (entries[i].kind == Entry::Kind::Track) tracks.push_back(entries[i].path);
@@ -682,14 +692,143 @@ struct VinylApp::Impl final : TransportHost {
         if (browser_from_lib && !choose_mode && lib_on() && !path.empty()) lib->browser_opened(path); /* D27 */
     }
 
+    /* the root list's last rows: the removable drives that are plugged in and not mounted (a tap mounts them), and "mounted" on the
+     * mounted ones' rows */
+    void add_drive_entries() {
+        if (!drives) return;
+        const std::vector<DriveInfo> list = drives->list();
+        for (Entry &e : entries)
+            if (e.kind == Entry::Kind::Root)
+                for (const DriveInfo &d : list)
+                    if (d.mounted && d.mount_dir == e.path) e.extra = size_text(d.size) + ", mounted";
+        bool heading = false;
+        for (const DriveInfo &d : list) {
+            if (d.mounted) continue;
+            if (!heading) {
+                heading = true;
+                entries.push_back({Entry::Kind::Heading, "USB DRIVES", "", ""});
+            }
+            entries.push_back({Entry::Kind::Drive, d.name(), d.dev, "not mounted. Tap to mount"});
+        }
+    }
+
+    /* a removable drive is plugged in: the list of roots is the top of the Browser (a drive that is not mounted is a row there) */
+    bool drives_listed() const { return drives && !drives->list().empty(); }
+
+    void browser_move(int d) {
+        int n = br_sel + d;
+        while (n >= 0 && n < static_cast<int>(entries.size()) && entries[static_cast<size_t>(n)].kind == Entry::Kind::Heading) n += d;
+        if (n < 0 || n >= static_cast<int>(entries.size())) return;
+        br_sel = n;
+        refresh(true);
+    }
+
+    /* the answers of the drive thread: a mount opens the drive in the Browser and joins the Library, a failure says why */
+    void drive_results() {
+        DriveManager::Result r;
+        while (drives && drives->take(r)) {
+            switch (r.kind) {
+            case DriveManager::Result::Kind::Mounted:
+                std::fprintf(stderr, "[vinyl] drives: %s mounted at %s\n", r.dev.c_str(), r.mount_dir.c_str());
+                if (demo && std::none_of(roots.begin(), roots.end(), [&](const Root &x) { return x.path == r.mount_dir; })) roots.push_back(Root{r.name, r.mount_dir});
+                if (lib_on()) lib->drive_mounted(r.mount_dir);
+                if (view->page() == Page::Browser && !choose_mode) {
+                    open_folder(r.mount_dir, "");
+                    refresh(true);
+                } else if (view->page() == Page::Browser) {
+                    open_folder("", "");
+                    refresh(true);
+                }
+                break;
+            case DriveManager::Result::Kind::MountFailed:
+                std::fprintf(stderr, "[vinyl] drives: cannot mount %s: %s\n", r.dev.c_str(), r.reason.c_str());
+                notice(Notice::Kind::Info, "Could not mount it: " + r.reason + ".");
+                break;
+            case DriveManager::Result::Kind::Unmounted:
+                std::fprintf(stderr, "[vinyl] drives: %s unmounted\n", r.dev.c_str());
+                if (demo) roots.erase(std::remove_if(roots.begin(), roots.end(), [&](const Root &x) { return x.path == demo_drive_dir || x.label == r.name; }), roots.end());
+                if (lib_on()) lib->mounts_changed();
+                if (view->page() == Page::Browser && !folder.empty() && !root_of(roots, folder)) open_folder("", ""); /* it was open: its place is gone */
+                else if (view->page() == Page::Browser && folder.empty()) open_folder("", "");
+                refresh(true);
+                notice(Notice::Kind::Info, r.name + " ejected. You can unplug it.");
+                break;
+            case DriveManager::Result::Kind::UnmountFailed:
+                std::fprintf(stderr, "[vinyl] drives: cannot unmount %s: %s\n", r.dev.c_str(), r.reason.c_str());
+                notice(Notice::Kind::Info, "Could not eject it: " + r.reason + ".");
+                break;
+            }
+        }
+    }
+
+    /* the drives: the real ones through udisks; the scenes' (VINYL_DEMO_DRIVES = unmounted | denied | nofs | nodisks | vinyl) */
+    void make_drives() {
+        if (!demo) {
+            drives = std::make_unique<DriveManager>(make_udisks_backend());
+            return;
+        }
+        const std::string mode = env_str("VINYL_DEMO_DRIVES");
+        if (mode.empty()) return;
+        auto fake = std::make_unique<FakeDrives>();
+        fake->mount_base = demo_world.root + "/media";
+        const std::string base = fake->mount_base;
+        auto make_drive_dir = [](const std::string &dir) {
+            make_dirs(posix_file_ops(), dir);
+            write_demo_wav(dir + "/Flash Song.wav", 90, 44100, "Flash Song", "Flash Artist", "Flash Album", "2020", 1);
+        };
+        DriveInfo gen;
+        gen.dev = "/dev/sdb1";
+        gen.label = "Generic Flash Disk";
+        gen.fstype = "vfat";
+        gen.size = 15500000000ull;
+        fake->devices.push_back(gen);
+        if (mode == "nodisks") fake->has_udisks = false;
+        fake->on_mount = [base, mode, make_drive_dir](const std::string &dev) -> MountReply {
+            MountReply r;
+            if (mode == "denied") r.reason = "this session is not allowed to mount drives";
+            else if (mode == "nofs") r.reason = "the disk has no readable filesystem";
+            else {
+                r.ok = true;
+                r.mount_dir = base + (dev == "/dev/sda1" ? "/SANDISK" : "/Generic Flash Disk");
+                make_drive_dir(r.mount_dir);
+            }
+            return r;
+        };
+        if (mode == "vinyl") { /* SANDISK, mounted by Vinyl and a root of the library; the generic one plugged in, not mounted */
+            DriveInfo sd;
+            sd.dev = "/dev/sda1";
+            sd.label = "SANDISK";
+            sd.fstype = "vfat";
+            sd.size = 31000000000ull;
+            sd.mounted = true;
+            sd.mount_dir = base + "/SANDISK";
+            make_drive_dir(sd.mount_dir);
+            fake->devices.insert(fake->devices.begin(), sd);
+            demo_drive_dir = sd.mount_dir;
+            roots.push_back(Root{"SANDISK", sd.mount_dir});
+        }
+        drives = std::make_unique<DriveManager>(std::move(fake));
+        if (mode == "vinyl") drives->note_mounted("/dev/sda1");
+    }
+
     void browser_act(int i) {
         if (i < 0 || i >= static_cast<int>(entries.size())) return;
         const Entry e = entries[static_cast<size_t>(i)];
         switch (e.kind) {
+        case Entry::Kind::Heading: break;
+        case Entry::Kind::Drive: /* a tap mounts it (no password): off the UI thread, then it opens */
+            if (!drives || !drives->available()) {
+                notice(Notice::Kind::Info, "Drives need the udisks2 package.");
+                break;
+            }
+            if (drives->busy()) break;
+            notice(Notice::Kind::Info, "Mounting " + e.name + "...");
+            drives->mount_async(e.path, e.name);
+            break;
         case Entry::Kind::Up: {
             const std::string old = folder;
             std::string up = parent_folder(roots, folder);
-            if (up.empty() && roots.size() > 1) up = "";
+            if (up.empty() && (roots.size() > 1 || drives_listed())) up = ""; /* the list with the drives */
             else if (up.empty()) up = folder;
             open_folder(up, old);
             refresh(true);
@@ -998,8 +1137,8 @@ struct VinylApp::Impl final : TransportHost {
             return;
         }
         if (p == Page::Browser) {
-            if (k == LV_KEY_UP) list_move(br_sel, static_cast<int>(entries.size()), -1);
-            else if (k == LV_KEY_DOWN) list_move(br_sel, static_cast<int>(entries.size()), 1);
+            if (k == LV_KEY_UP) browser_move(-1);
+            else if (k == LV_KEY_DOWN) browser_move(1);
             else if (k == LV_KEY_ENTER || k == LV_KEY_RIGHT) browser_act(br_sel);
             else if (k == LV_KEY_LEFT || k == LV_KEY_BACKSPACE) {
                 if (!entries.empty() && entries.front().kind == Entry::Kind::Up) browser_act(0);
@@ -1373,6 +1512,7 @@ struct VinylApp::Impl final : TransportHost {
         if (demo) {
             std::vector<RootSpec> w;
             if (!demo_world.empty) w.push_back(RootSpec{demo_world.music, "Music"});
+            if (!demo_drive_dir.empty()) w.push_back(RootSpec{demo_drive_dir, "SANDISK"});
             return w;
         }
         const char *hm = std::getenv("HOME"), *us = std::getenv("USER");
@@ -1393,6 +1533,7 @@ struct VinylApp::Impl final : TransportHost {
         h.open_folders = [this] {
             browser_from_lib = true;
             choose_mode = false;
+            if (drives_listed()) open_folder("", ""); /* the drives are on the list of roots */
             go(Page::Browser);
         };
         h.choose_folder = [this] {
@@ -1410,7 +1551,14 @@ struct VinylApp::Impl final : TransportHost {
         };
         h.mini = [this] { return mini_view(); };
         h.scroll = [this](Page p, int rows) { view->scroll_page(p, rows); };
-        h.top_row = [this] { return view ? view->lib_top_row(view->page()) : 0; };
+        h.scroll_y = [this] { return view ? view->lib_scroll_y(view->page()) : 0; };
+        if (drives) {
+            h.drives = [this] { return drives ? drives->list() : std::vector<DriveInfo>(); };
+            h.drives_available = [this] { return drives && drives->available(); };
+            h.eject = [this](const std::string &dev, const std::string &name) {
+                if (drives && drives->by_vinyl(dev)) drives->unmount_async(dev, name);
+            };
+        }
         h.search_open = [this](const std::string &t, bool edit) { view->search_open(t, edit); };
         h.search_edit = [this] { view->search_edit(); };
         h.search_end_edit = [this] { view->search_end_edit(); };
@@ -1434,6 +1582,7 @@ struct VinylApp::Impl final : TransportHost {
             lc.db_path = demo_world.root + "/library.db";
             std::string mode = env_str("VINYL_DEMO_LIBRARY");
             if (mode == "1") mode = "scan";
+            if (mode == "full" && env_str("VINYL_DEMO_DRIVES") == "vinyl") mode = "drives";
             if (demo_world.empty) mode = "empty";
             make_demo_library(demo_world, lc.db_path, mode);
         } else {
@@ -1830,7 +1979,21 @@ struct VinylApp::Impl final : TransportHost {
             case Entry::Kind::Root:
             case Entry::Kind::Folder:
                 r.text = e.name;
+                r.value = e.extra;
+                r.mono_value = false;
                 r.mark = RowView::Mark::Chevron;
+                break;
+            case Entry::Kind::Heading:
+                r.text = e.name;
+                r.heading = true;
+                r.mark = RowView::Mark::None;
+                break;
+            case Entry::Kind::Drive: /* the amber action dot: a tap mounts it */
+                r.text = e.name;
+                r.value = e.extra;
+                r.mono_value = false;
+                r.mark = RowView::Mark::Dot;
+                r.amber = true;
                 break;
             case Entry::Kind::Playlist:
                 r.text = e.name;
@@ -2011,6 +2174,7 @@ struct VinylApp::Impl final : TransportHost {
     void tick() {
         const uint64_t now = mono_ms_now();
         if (lib) lib->tick(now);
+        drive_results();
         if (pending_escape) { /* the search field's Esc, outside the key event that made it */
             pending_escape = false;
             escape();

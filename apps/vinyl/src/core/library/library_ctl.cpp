@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <set>
 #include <cstdio>
 #include <ctime>
 #include <thread>
@@ -228,8 +229,8 @@ bool LibraryCtl::back() {
 
 void LibraryCtl::open_place(libm::Loc loc, bool push) {
     close_sheet();
-    /* a place that is left for another keeps its first row in view (and its selection, kept as it moves) for Esc */
-    if (push && !nav_.empty() && host_.top_row) nav_.top().top = host_.top_row();
+    /* a place that is left for another keeps its scroll position (and its selection, kept as it moves) for Esc */
+    if (push && !nav_.empty() && host_.scroll_y) nav_.top().top = host_.scroll_y();
     if (push) nav_.push(loc);
     ++serial_;
     ++rows_gen_;
@@ -434,12 +435,12 @@ void LibraryCtl::rebuild_rows() {
     case libm::Place::Info: break;
     case libm::Place::Settings: {
         const bool scanning = scan_running() || (demo_progress_on_ && libm::scan_note(demo_progress_, prior_tracks_).shown);
-        rows = libm::settings_rows(static_cast<int>(d_.roots.size()), libm::last_scan_text(d_.stats), scanning);
+        rows = libm::settings_rows(libm::online_roots(d_.roots), libm::last_scan_text(d_.stats), scanning);
         break;
     }
     case libm::Place::Folders:
-        rows = libm::folder_rows(d_.roots, cfg_.home);
-        for (libm::Row &r : rows) r.mark = libm::Row::Mark::None;
+        d_.drives = host_.drives ? host_.drives() : std::vector<DriveInfo>();
+        rows = libm::folder_rows(d_.roots, cfg_.home, d_.drives);
         break;
     }
     rows_ = std::move(rows);
@@ -567,10 +568,25 @@ void LibraryCtl::button(Page p, int index) {
         if (host_.choose_folder) host_.choose_folder();
         return;
     }
+    const bool eject_shown = host_.drives && host_.drives_available && host_.drives_available();
+    if (eject_shown && index == 1) { /* Eject: only a drive Vinyl mounted */
+        if (sel_ < 0 || sel_ >= static_cast<int>(rows_.size())) return;
+        const std::string &key = rows_[static_cast<size_t>(sel_)].key;
+        if (key.compare(0, 7, "vdrive:") != 0) return; /* inert (dimmed) for any other row */
+        const std::string dev = key.substr(7);
+        std::string name = "the drive";
+        for (const DriveInfo &d : d_.drives)
+            if (d.dev == dev) name = d.name();
+        if (host_.eject) host_.eject(dev, name);
+        return;
+    }
     /* Remove selected folder: only the folders the user added; Music and the drives are always indexed */
     if (sel_ < 0 || sel_ >= static_cast<int>(rows_.size())) return;
     const int ri = rows_[static_cast<size_t>(sel_)].index;
-    if (ri < 0 || ri >= static_cast<int>(d_.roots.size())) return;
+    if (ri < 0 || ri >= static_cast<int>(d_.roots.size())) { /* a drive that is not mounted: nothing of the library's to remove */
+        if (host_.notice) host_.notice(Notice::Kind::Info, "Music and USB drives are always in the library. Only folders you added can be removed.");
+        return;
+    }
     const RootInfo root = d_.roots[static_cast<size_t>(ri)];
     std::vector<std::string> mine = host_.folders ? host_.folders() : std::vector<std::string>();
     auto it = std::find(mine.begin(), mine.end(), root.path);
@@ -814,14 +830,49 @@ void LibraryCtl::tracks_job(libm::Row::Type type, int64_t id, int mode) {
 void LibraryCtl::sync_mounts(bool force) {
     if (cfg_.demo || !available_ || !host_.wanted) return;
     const std::string text = read_mounts();
-    const bool first = mounts_sig_.empty();
-    if (!force && text == mounts_sig_) return;
-    mounts_sig_ = text;
-    if (first && !force) return;
+    /* the drives that are mounted and unreadable (a stick pulled while its mount is still listed) are gone as well: the
+     * signature has each drive root's state (owner ruling 2026-11-14, B45) */
     const std::vector<RootSpec> wanted = host_.wanted();
+    std::string sig = text + "\n";
+    for (const RootSpec &r : wanted)
+        if (libm::is_drive_path(r.path)) sig += r.path + (probe_root(r.path) ? " ok\n" : " gone\n");
+    for (const RootInfo &r : d_.roots)
+        if (libm::is_drive_path(r.path)) sig += r.path + (probe_root(r.path) ? " ok\n" : " gone\n");
+    const bool first = mounts_sig_.empty();
+    if (!force && sig == mounts_sig_) return;
+    mounts_sig_ = sig;
+    if (first && !force) return;
     worker_.post([wanted, text](Library *lib) {
         if (lib) sync_roots(lib->db(), wanted, parse_mounts(text), "/dev/disk/by-uuid");
     }, [this] { reload(); });
+}
+
+void LibraryCtl::mounts_changed() {
+    if (cfg_.demo && host_.drives && available_) { /* the scenes have no /proc mounts: a drive root is there while its drive is mounted */
+        std::set<std::string> mounted;
+        for (const DriveInfo &d : host_.drives())
+            if (d.mounted) mounted.insert(d.mount_dir);
+        worker_.post([mounted](Library *lib) {
+            if (!lib) return;
+            for (const RootRow &r : load_roots(lib->db()))
+                if (!r.mount.empty()) set_root_online(lib->db(), r.id, mounted.count(r.path) != 0);
+        }, [this] { reload(); });
+    }
+    sync_mounts(true);
+    if (in_library_ && !nav_.empty() && nav_.top().place == libm::Place::Folders) rebuild_rows();
+}
+
+void LibraryCtl::drive_mounted(const std::string &dir) {
+    if (!available_ || dir.empty()) return;
+    visited_ = in_library_;
+    const std::vector<RootSpec> wanted = host_.wanted ? host_.wanted() : std::vector<RootSpec>();
+    const std::string text = cfg_.demo ? std::string() : read_mounts();
+    worker_.post([wanted, text, demo = cfg_.demo](Library *lib) {
+        if (lib && !demo) sync_roots(lib->db(), wanted, parse_mounts(text), "/dev/disk/by-uuid");
+    }, [this, dir] {
+        reload();
+        if (scan_ && in_library_ && !scan_->running()) scan_->start_folder(dir, false);
+    });
 }
 
 void LibraryCtl::tick(uint64_t now) {
@@ -859,6 +910,15 @@ void LibraryCtl::tick(uint64_t now) {
     if (!cfg_.demo && now - mounts_at_ >= 2000) {
         mounts_at_ = now;
         sync_mounts(false);
+    }
+    if (host_.drives && !nav_.empty() && nav_.top().place == libm::Place::Folders && now - drives_at_ >= 1000) { /* plugged in, mounted, pulled */
+        drives_at_ = now;
+        const std::vector<DriveInfo> now_drives = host_.drives();
+        if (now_drives.size() != d_.drives.size() ||
+            !std::equal(now_drives.begin(), now_drives.end(), d_.drives.begin(), [](const DriveInfo &a, const DriveInfo &b) {
+                return a.dev == b.dev && a.mounted == b.mounted && a.by_vinyl == b.by_vinyl && a.mount_dir == b.mount_dir;
+            }))
+            rebuild_rows();
     }
     const std::string playing = host_.playing_path ? host_.playing_path() : std::string();
     if (playing != playing_) {
@@ -906,8 +966,9 @@ LibView LibraryCtl::view() {
     const libm::ScanNote note = libm::scan_note(prog, prior_tracks_);
     switch (pl) {
     case libm::Place::Hub: {
-        int64_t hidden = 0;
-        for (const RootInfo &r : d_.roots) hidden += r.tracks;
+        int64_t hidden = 0; /* the rows of the roots that are there (a gone drive's stay hidden and count for nothing) */
+        for (const RootInfo &r : d_.roots)
+            if (r.online) hidden += r.tracks;
         v.heading = libm::hub_heading(d_.counts.tracks, note.shown);
         v.chip = "Search";
         v.mini = host_.mini ? host_.mini() : MiniView();
@@ -916,12 +977,6 @@ LibView LibraryCtl::view() {
             v.note.text = note.text;
             v.note.pct = note.pct;
             v.note.hot = note.hot;
-        } else {
-            const std::string off = libm::offline_note(d_.roots);
-            if (!off.empty()) {
-                v.note.kind = LibNote::Kind::Offline;
-                v.note.text = off;
-            }
         }
         if (d_.counts_known && d_.counts.tracks == 0 && hidden == 0 && !note.shown) {
             v.empty = true;
@@ -975,12 +1030,33 @@ LibView LibraryCtl::view() {
             v.block_text = "You can keep listening. The scan runs at low priority and stops when you leave the page or the board gets hot.";
         }
         break;
-    case libm::Place::Folders:
-        v.heading = "MUSIC FOLDERS, " + std::to_string(d_.roots.size());
-        v.buttons = {"Add a folder", "Remove selected folder"};
-        v.footnote = "Add opens the folder browser in choose mode. Removing a folder only removes its tracks from the library; no file is "
-                     "touched. A drive that is not connected keeps its entry.";
+    case libm::Place::Folders: {
+        v.heading = "MUSIC FOLDERS, " + std::to_string(rows_.size());
+        v.buttons = {"Add a folder"};
+        if (host_.drives && host_.drives_available && host_.drives_available()) {
+            std::string label = "Eject";
+            bool can = false;
+            if (sel_ >= 0 && sel_ < static_cast<int>(rows_.size())) {
+                const std::string &key = rows_[static_cast<size_t>(sel_)].key;
+                const size_t colon = key.find(':');
+                if (colon != std::string::npos) {
+                    const std::string dev = key.substr(colon + 1);
+                    for (const DriveInfo &d : d_.drives)
+                        if (d.dev == dev) label = "Eject " + d.name();
+                    can = key.compare(0, 7, "vdrive:") == 0; /* only a drive Vinyl mounted */
+                }
+            }
+            v.buttons.push_back(label);
+            v.button_enabled[1] = can;
+        }
+        v.buttons.push_back("Remove selected folder");
+        v.footnote = host_.drives && host_.drives_available && host_.drives_available()
+                         ? "Add opens the folder browser in choose mode. Eject unmounts a drive Vinyl mounted so you can unplug it; a drive the "
+                           "system mounted is left alone. Removing a folder only removes its tracks from the library; no file is touched."
+                         : "Add opens the folder browser in choose mode. Removing a folder only removes its tracks from the library; no file is "
+                           "touched.";
         break;
+    }
     }
     return v;
 }

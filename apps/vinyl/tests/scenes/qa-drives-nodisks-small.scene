@@ -1,0 +1,20 @@
+title Vinyl P2b: without udisks2 the drives are listed and a tap says what is missing (480x320 and 320x480, their real density)
+sizes 480x320 320x480
+ppmm 630
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_LIBRARY full
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE library
+env VINYL_DEMO_DRIVES nodisks
+keyboards 1
+wait 1200
+tap "Folders"
+wait 700
+tap "Generic Flash Disk"
+wait 900
+shot 01-notice
+expect text "Drives need the udisks2 package."
+expect text "USB DRIVES"
+expect text "Generic Flash Disk"
+expect noquit

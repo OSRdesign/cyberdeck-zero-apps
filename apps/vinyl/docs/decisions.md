@@ -746,6 +746,63 @@ as recommended. The owner's choices, by the options' own words:
   narrow widths.
 
 
+## Owner ruling: a source that is gone is shown nowhere (2026-11-14, board test B45)
+
+The owner, after pulling a USB stick: "once unmounted the USB stick folder remain in the library list and so do the track, after
+using it I don't think that's correct, if en external source is gone so is gone all its content we should no longer show it".
+- **Nothing of a gone root is shown**: no tracks, albums, artists, genres or search hits (the views already left out an offline
+  root's rows; the counts too), no folder row in the Folders browser, no row in Music folders ("not connected" is gone), no
+  "<LABEL> is not connected. Its N tracks are hidden ..." note on the hub (the DriveOffline board's note and the dimmed row are
+  dropped; the Music folders count and the hub's empty state count only the roots that are there). Track info and play counts are
+  reached from the views, so a gone drive's are never shown.
+- **The rows are kept in the database, hidden** (not purged): a drive plugged in again comes back without a rescan, and its play
+  counts with it. The owner's concern is what is shown, not storage; a purge would also cost every play count of a stick that is
+  only borrowed. (`Remove selected folder` still deletes a folder's rows, as before.)
+- **Mounted but unreadable is gone too.** The board's stick was mounted by hand and pulled: the kernel kept the mount listed in
+  /proc/self/mounts (a stale mount: reads fail with EIO or ENODEV) and the root still counted as online. `root_online` now probes
+  the folder (`root_readable`: a stat, then opening it and reading an entry; EIO, ENODEV, ENXIO, ESTALE and ENOTCONN mean gone),
+  the scanner's online checks use it, the Browser's list of roots leaves out a drive that cannot be read, and the Library looks
+  at its drive roots every 2 s while it is open (the probe's result is part of the mounts signature that triggers the sync).
+  `tests/test_scanner.cpp` tests it with a fake probe (a stale mount, then readable again); `set_root_probe` is the seam.
+
+## Owner decision: mount on request in Vinyl (2026-11-14, board test B45; the mounting half of D28)
+
+The owner: "Mount on request in Vinyl". On the HackBerry a plugged stick (sda1, vfat) is never mounted: the desktop's file manager
+does it and does not run while the launcher owns the screen, and Vinyl only read /proc/self/mounts. Boards:
+DrivesFolders, MusicFoldersDrives, DriveNotices (the coordinator's).
+- **Listing** (`core/drives`): the removable block devices that carry a file system, from sysfs (`/sys/block/<dev>/removable`,
+  partitions) and the udev database (`/run/udev/data/b<maj>:<min>`: ID_FS_TYPE, ID_FS_LABEL, ID_FS_UUID, ID_FS_USAGE), mounted or
+  not (/proc/self/mounts): no root, no library. A disk with no file system (a partition table, a RAID member) is not listed.
+- **Mounting through `udisksctl mount -b <dev> --no-user-interaction`** (exec with a 20 s limit, `LC_ALL=C`), not D-Bus through
+  sd-bus: the same polkit rules (the active session is allowed, an ssh login is refused with NotAuthorizedCanObtain), no library
+  to load or version, the answers are text that is parsed and tested (`parse_mount_reply`), and an unknown one is shown
+  shortened (its last sentence, at most 60 characters). udisks2 is a run-time need, not a Depends: `udisksctl` is looked for in
+  PATH; without it the drives are listed and a tap says "Drives need the udisks2 package.". The mount runs on a thread of its own
+  (`DriveManager`), never the UI's; the UI takes the answer at its next tick.
+- **The pages**: Folders (the Browser's root list; with a drive plugged in the hub's Folders row shows the root list, and ".." at
+  the top of the single root leads to it) gets a "USB DRIVES" heading and, per drive not mounted, a row with the amber action dot
+  and "not mounted. Tap to mount" ("Mounting <LABEL>..." notice, then the drive opens and joins the Library: its root is synced
+  and the folder is scanned, the D27 rule for a folder opened from the Library); a mounted drive is an ordinary root row with
+  "<size>, mounted". Music folders lists "<LABEL> (USB drive)" with "mounted by Vinyl" or its tracks, the drives not mounted
+  ("not mounted", dimmed, inert), and the buttons Add a folder, "Eject <LABEL>" and Remove selected folder (they flow onto lines
+  by their words: one line at 640 wide, two at 480x320, three on a narrow panel). The notices are the board's: "Could not
+  mount it: <reason>.", "<LABEL> ejected. You can unplug it.", "Drives need the udisks2 package."; reasons: "this session is not
+  allowed to mount drives", "the disk has no readable filesystem", "it is in use", "it took too long", else the udisks message
+  shortened.
+- **What Vinyl mounted is Vinyl's to undo, nothing else**: `DriveManager` records the devices it mounted (an AlreadyMounted
+  answer is not a mount of Vinyl's: it is recorded only when the mount worked). Eject (`udisksctl unmount`) and the unmount of
+  what is still mounted when Vinyl quits (`shutdown`, the journal says each) apply to those only; a drive the system mounted is
+  never unmounted and its Eject is dimmed (the manager refuses it too). A drive that was pulled is forgotten (a later mount by the
+  system is the system's). A drive pulled while Vinyl had mounted it is the gone-root path above.
+- **Tests**: `tests/test_drives.cpp` (the list on a fake sysfs and udev tree, udisks's answers, the manager on `FakeDrives`: mount
+  ok, denied, the exit unmount of Vinyl's only, Eject, a system-mounted drive left alone, a pulled drive, no udisks),
+  `test_lib_ctl` (Music folders with drives, Eject enabled for Vinyl's only, a gone drive's row and note, the rows back when it
+  is back), scenes `qa-drives-folders`, `qa-drives-eject`, `qa-drives-denied`, `qa-drives-nofs`, `qa-drives-nodisks` (each
+  with `-small` and `-deck`), `qa-library-offline` rewritten (nothing shown).
+- **Not verified without a board**: that polkit lets the launcher's session mount without a password (the owner's HackBerry is
+  the test, B49); udisksctl's exact English messages (`LC_ALL=C` is set; the parser keys on the udisks error names); a drive
+  with a label that has escapes; a hung stick (the 20 s limit kills the command and says "it took too long").
+
 ## Owner ruling: the hold is 1.5 s with a cue; a place is given back as it was left (2026-11-14, board test B44)
 
 The owner, on the HackBerry: "on touch, 3sec is long get it down to 1.5 sec and as we did in others apps (i.e markdown notes) show
@@ -757,7 +814,7 @@ maintained". Both are done.
   finger lifted, or it moved more than 16 px: a scroll) opens nothing and is not a tap. `core/nav/hold_tracker` is Markdown Notes'
   `HoldTracker` with these times (tested); the cue is `RowList::enable_hold_cue`. Ctrl+O is unchanged. The sheet's hint says
   "Hold a row for 1.5 s, or press Ctrl+O, to open this sheet."
-- **The position**: a Library place keeps its selected row as it moves and its first row in view when another is opened from it
+- **The position**: a Library place keeps its selected row as it moves and where it is scrolled to (in pixels) when another is opened from it
   (Track info, an album, an artist, a genre's albums, a search result); Esc gives both back once the rows are in (a long list
   loads the 40-row page the highlight is on at once; the placeholder before the rows arrived used to overwrite the saved row, so
   the list came back at the top). `tests/test_lib_ctl.cpp restore_test`, scene `qa-library` (Songs, Track info, Esc).

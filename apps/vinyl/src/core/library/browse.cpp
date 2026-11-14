@@ -5,6 +5,7 @@
  */
 #include "browse.hpp"
 
+#include "roots.hpp"
 #include "../decode/track_decoder.hpp"
 #include "../tags/tag_reader.hpp"
 
@@ -98,7 +99,12 @@ std::vector<Root> system_roots() {
         ss << f.rdbuf();
         mounts = ss.str();
     }
-    return list_roots(home ? home : "", user ? user : "", mounts);
+    std::vector<Root> all = list_roots(home ? home : "", user ? user : "", mounts), roots;
+    for (const Root &r : all) { /* a drive that is mounted but unreadable (pulled: a stale mount) is gone: no row */
+        const bool drive = r.path.compare(0, 7, "/media/") == 0 || r.path.compare(0, 11, "/run/media/") == 0 || r.path.compare(0, 5, "/mnt/") == 0;
+        if (!drive || probe_root(r.path)) roots.push_back(r);
+    }
+    return roots;
 }
 
 bool natural_less(const std::string &a, const std::string &b) {
@@ -144,9 +150,9 @@ int list_folder(const std::string &path, bool top, std::vector<Entry> &out, size
             if (::stat(full.c_str(), &st) != 0) continue;
             dir = S_ISDIR(st.st_mode);
         }
-        if (dir) folders.push_back({Entry::Kind::Folder, clean_utf8(name), full});
-        else if (is_playlist_name(name)) playlists.push_back({Entry::Kind::Playlist, clean_utf8(name), full});
-        else if (is_audio_name(name)) tracks.push_back({Entry::Kind::Track, clean_utf8(name), full});
+        if (dir) folders.push_back({Entry::Kind::Folder, clean_utf8(name), full, ""});
+        else if (is_playlist_name(name)) playlists.push_back({Entry::Kind::Playlist, clean_utf8(name), full, ""});
+        else if (is_audio_name(name)) tracks.push_back({Entry::Kind::Track, clean_utf8(name), full, ""});
         if (folders.size() + playlists.size() + tracks.size() >= cap) break;
     }
     ::closedir(d);
@@ -154,7 +160,7 @@ int list_folder(const std::string &path, bool top, std::vector<Entry> &out, size
     std::sort(folders.begin(), folders.end(), by_name);
     std::sort(playlists.begin(), playlists.end(), by_name);
     std::sort(tracks.begin(), tracks.end(), by_name);
-    if (!top) out.push_back({Entry::Kind::Up, "..", ""});
+    if (!top) out.push_back({Entry::Kind::Up, "..", "", ""});
     out.insert(out.end(), folders.begin(), folders.end());
     out.insert(out.end(), playlists.begin(), playlists.end());
     out.insert(out.end(), tracks.begin(), tracks.end());
@@ -163,7 +169,7 @@ int list_folder(const std::string &path, bool top, std::vector<Entry> &out, size
 
 std::vector<Entry> root_entries(const std::vector<Root> &roots) {
     std::vector<Entry> out;
-    for (const Root &r : roots) out.push_back({Entry::Kind::Root, r.label, r.path});
+    for (const Root &r : roots) out.push_back({Entry::Kind::Root, r.label, r.path, ""});
     return out;
 }
 

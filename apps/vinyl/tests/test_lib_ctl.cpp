@@ -42,7 +42,10 @@ struct Rec {
     std::vector<RootSpec> wanted;
     std::string playing;
     std::vector<std::string> searched;
-    int top = 0; /* the first row in view, as the view would tell */
+    int top = 0; /* where the list is scrolled to (px), as the view would tell */
+    bool with_drives = false, udisks = true;
+    std::vector<DriveInfo> drive_list;
+    std::vector<std::string> ejected;
 };
 
 LibHost make_host(Rec &r) {
@@ -66,7 +69,12 @@ LibHost make_host(Rec &r) {
     };
     h.mini = [] { return MiniView(); };
     h.scroll = [](Page, int) {};
-    h.top_row = [&r] { return r.top; };
+    h.scroll_y = [&r] { return r.top; };
+    if (r.with_drives) {
+        h.drives = [&r] { return r.drive_list; };
+        h.drives_available = [&r] { return r.udisks; };
+        h.eject = [&r](const std::string &dev, const std::string &) { r.ejected.push_back(dev); };
+    }
     h.search_open = [&r](const std::string &t, bool edit) { r.searched.push_back(t + (edit ? "+edit" : "")); };
     h.search_edit = [] {};
     h.search_end_edit = [] {};
@@ -121,7 +129,7 @@ void make_library(const std::string &db_path, const std::string &root2 = "") {
         }
     }
     if (!root2.empty()) {
-        const int64_t r2 = w.root(root2, "Extra");
+        const int64_t r2 = w.root(root2, "Extra", "AAAA-0000", root2);
         TrackTags tg;
         tg.title = "Extra song";
         tg.artist = "Extra artist";
@@ -240,9 +248,117 @@ void restore_test() {
     rm_tree(dir);
 }
 
+/* the Music folders page with drives (owner decision 2026-11-14: mount on request) and a root that is gone (nothing of it shown) */
+void drives_ui_test() {
+    const std::string dir = make_temp_dir("libctl4");
+    make_library(dir + "/library.db", "/media/stick");
+    Rec rec;
+    rec.with_drives = true;
+    DriveInfo v, n;
+    v.dev = "/dev/sda1";
+    v.label = "STICK";
+    v.mounted = true;
+    v.by_vinyl = true;
+    v.mount_dir = "/media/stick";
+    n.dev = "/dev/sdc1";
+    n.label = "Generic Flash Disk";
+    rec.drive_list = {v, n};
+    LibConfig cfg;
+    cfg.db_path = dir + "/library.db";
+    cfg.ram_mb = 416;
+    cfg.home = "/home/o";
+    cfg.demo = true;
+    LibraryCtl c(make_host(rec), cfg);
+    c.enter_settings();
+    pump(c);
+    c.row(Page::LibSettings, 0);
+    pump(c);
+    CHECK_EQ(c.page(), Page::LibFolders);
+    CHECK_EQ(c.rows().size(), static_cast<size_t>(3));
+    CHECK_EQ(c.rows()[1].key, std::string("vdrive:/dev/sda1"));
+    CHECK_EQ(c.rows()[1].value, std::string("mounted by Vinyl"));
+    CHECK_EQ(c.rows()[2].key, std::string("ndrive:/dev/sdc1"));
+    CHECK(c.rows()[2].dimmed);
+    LibView lv = c.view();
+    CHECK_EQ(lv.heading, std::string("MUSIC FOLDERS, 3"));
+    CHECK_EQ(lv.buttons.size(), static_cast<size_t>(3));
+    CHECK_EQ(lv.buttons[1], std::string("Eject")); /* Music is selected: nothing to eject */
+    CHECK(!lv.button_enabled[1]);
+    c.button(Page::LibFolders, 1);
+    CHECK(rec.ejected.empty());
+    c.key(18); /* the drive Vinyl mounted */
+    lv = c.view();
+    CHECK_EQ(lv.buttons[1], std::string("Eject STICK"));
+    CHECK(lv.button_enabled[1]);
+    c.button(Page::LibFolders, 1);
+    CHECK_EQ(rec.ejected.size(), static_cast<size_t>(1));
+    CHECK_EQ(rec.ejected[0], std::string("/dev/sda1"));
+    c.key(18); /* a drive that is not mounted: Eject and Remove are inert / explain */
+    lv = c.view();
+    CHECK_EQ(lv.buttons[1], std::string("Eject Generic Flash Disk"));
+    CHECK(!lv.button_enabled[1]);
+    c.button(Page::LibFolders, 1);
+    CHECK_EQ(rec.ejected.size(), static_cast<size_t>(1));
+    c.button(Page::LibFolders, 2);
+    CHECK_EQ(rec.notices.back(), std::string("Music and USB drives are always in the library. Only folders you added can be removed."));
+    /* the system mounted it: Eject is dimmed */
+    rec.drive_list[0].by_vinyl = false;
+    c.mounts_changed();
+    pump(c);
+    c.key(17);
+    CHECK_EQ(c.rows()[1].key, std::string("sdrive:/dev/sda1"));
+    lv = c.view();
+    CHECK_EQ(lv.buttons[1], std::string("Eject STICK"));
+    CHECK(!lv.button_enabled[1]);
+    c.button(Page::LibFolders, 1);
+    CHECK_EQ(rec.ejected.size(), static_cast<size_t>(1));
+    /* the drive is gone (pulled; or a stale mount, unreadable): nothing of it is shown, nowhere */
+    rec.drive_list = {n};
+    c.mounts_changed();
+    pump(c, 4);
+    CHECK_EQ(c.page(), Page::LibFolders);
+    CHECK_EQ(c.rows().size(), static_cast<size_t>(2)); /* Music and the drive that is not mounted: no row for STICK */
+    for (const libm::Row &r : c.rows()) CHECK(r.text.find("STICK") == std::string::npos && r.text.find("stick") == std::string::npos);
+    CHECK_EQ(c.view().heading, std::string("MUSIC FOLDERS, 2"));
+    c.enter();
+    pump(c);
+    LibView hv = c.view();
+    CHECK(hv.note.kind == LibNote::Kind::None); /* no "is not connected" note */
+    CHECK_EQ(hv.heading, std::string("LIBRARY, 200 TRACKS")); /* its track is not counted */
+    c.row(Page::LibHub, 4); /* Songs: none of its tracks */
+    pump(c);
+    for (const libm::Row &r : c.rows()) CHECK(r.text != "Extra song");
+    CHECK_EQ(c.view().heading, std::string("SONGS, 200"));
+    /* back: the rows are there again, nothing was deleted (no rescan) */
+    rec.drive_list = {v, n};
+    {
+        Db db;
+        std::string why;
+        CHECK(open_library_db(db, dir + "/library.db", 416, &why));
+        Library lib(db);
+        std::vector<RootInfo> ri;
+        CHECK(lib.roots_info(ri));
+        CHECK_EQ(ri.size(), static_cast<size_t>(2));
+        CHECK(!ri[1].online);
+        CHECK_EQ(ri[1].tracks, 1); /* kept, hidden */
+    }
+    c.back();
+    c.enter_settings();
+    c.row(Page::LibSettings, 0);
+    c.mounts_changed();
+    pump(c, 4);
+    CHECK_EQ(c.rows().size(), static_cast<size_t>(3));
+    CHECK_EQ(c.rows()[1].key, std::string("vdrive:/dev/sda1")); /* by_vinyl is back in the list: the drive is there again */
+    /* no udisks: no Eject */
+    rec.udisks = false;
+    CHECK_EQ(c.view().buttons.size(), static_cast<size_t>(2));
+    rm_tree(dir);
+}
+
 }  // namespace
 
 void test_lib_ctl() {
+    drives_ui_test();
     restore_test();
     if (!have_sqlite()) return;
     const std::string dir = make_temp_dir("libctl");

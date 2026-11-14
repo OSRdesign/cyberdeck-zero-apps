@@ -335,6 +335,24 @@ void test_scanner() {
     }
     CHECK_EQ(visible_tracks(db), 4);
 
+    /* mounted but unreadable: a stick pulled while its mount is still listed (a stale mount, every read fails) is gone as a
+     * pulled one is: offline, hidden, nothing shown (owner, 2026-11-14, B45); readable again, it is back */
+    set_root_probe([&](const std::string &p) { return p != usb1 && root_readable(p); });
+    {
+        Scanner sc(db, env.hooks(), opt);
+        CHECK(sc.scan_all(wanted, cancel) == ScanProgress::State::Done);
+    }
+    CHECK_EQ(db.scalar("select online from roots where id = " + std::to_string(usb_id)), 0LL);
+    CHECK_EQ(visible_tracks(db), 2);
+    set_root_probe(nullptr);
+    {
+        Scanner sc(db, env.hooks(), opt);
+        CHECK(sc.scan_all(wanted, cancel) == ScanProgress::State::Done);
+    }
+    CHECK_EQ(visible_tracks(db), 4);
+    CHECK(root_readable(music));
+    CHECK(!root_readable(T + "/no-such-folder"));
+
     /* cancel and resume: 6 folders of 3 files; cancelled at the 7th read (in the third folder) */
     const std::string big = T + "/big";
     for (int f = 1; f <= 6; ++f)

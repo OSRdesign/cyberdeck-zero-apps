@@ -53,7 +53,12 @@ struct LibHost {
     std::function<MiniView()> mini;
     std::function<void()> quit_library;                /* Esc at the hub: leave the Library (the host decides where) */
     std::function<void(Page, int)> scroll;             /* Track info: scroll by rows */
-    std::function<int()> top_row;                      /* the first row in view of the page shown (kept when a place is left) */
+    std::function<int()> scroll_y;                     /* where the page shown is scrolled to, in pixels (kept when a place is left) */
+    /* drives (owner decision 2026-11-14, "Mount on request in Vinyl"): the removable drives now (null: no drive support, the
+     * Music folders page has no Eject), whether udisks is there, and Eject (unmounts a drive Vinyl mounted) */
+    std::function<std::vector<DriveInfo>()> drives;
+    std::function<bool()> drives_available;
+    std::function<void(const std::string &dev, const std::string &name)> eject;
     std::function<void(const std::string &, bool)> search_open; /* the field's text, editing */
     std::function<void()> search_edit;
     std::function<void()> search_end_edit;
@@ -97,6 +102,11 @@ public:
     /* show the place on top of the stack again (the Browser opened from Folders was left) */
     void resume();
     bool in_library() const { return in_library_; }
+    /* the mounts changed (a drive was mounted or ejected): the roots are brought in line and the page asks again */
+    void mounts_changed();
+    /* a drive Vinyl mounted is open in the Browser: its root joins the library and the folder is scanned (D27: a folder
+     * opened from the Library) */
+    void drive_mounted(const std::string &dir);
     /* a track played to its end: its play count (one small write on the worker) */
     void note_played(const std::string &path);
     /* the host left the Library for a page that is not one of its own (Now playing, the Queue ...): the scan stops */
@@ -171,13 +181,14 @@ private:
     libm::Nav nav_, saved_nav_;
     uint64_t serial_ = 0;
     uint64_t view_gen_ = 1, rows_ver_ = 1, rows_gen_ = 1;
-    int sel_ = -1, want_sel_ = -1, restore_top_ = -1; /* a place given back: its row and top row, once its rows are in */
+    int sel_ = -1, want_sel_ = -1, restore_top_ = -1; /* a place given back: its row and scroll position, once its rows are in */
 
     /* the data of the current place */
     struct Data {
         LibraryCounts counts;
         bool counts_known = false;
         std::vector<RootInfo> roots;
+        std::vector<DriveInfo> drives;
         LibraryStats stats;
         std::vector<ArtistRow> artists;
         std::vector<AlbumRow> albums;
@@ -218,7 +229,7 @@ private:
     std::string sheet_title_;
     /* mounts */
     std::string mounts_sig_;
-    uint64_t mounts_at_ = 0;
+    uint64_t mounts_at_ = 0, drives_at_ = 0;
     uint64_t now_ms_ = 0;
     std::vector<std::string> folders_before_;
     bool choose_pending_ = false;
