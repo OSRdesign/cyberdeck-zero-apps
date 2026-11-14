@@ -300,7 +300,7 @@ void test_library() {
     CHECK_EQ(lib.find_track("/elsewhere/x.mp3"), -1LL);
     for (int i = 0; i < 5; ++i) CHECK(lib.record_play(id, 1763000000 + i));
     CHECK(lib.record_skip(id));
-    TrackInfo info;
+    TrackDetails info;
     CHECK(lib.track(id, info));
     CHECK_EQ(info.plays, 5);
     CHECK_EQ(info.skips, 1);

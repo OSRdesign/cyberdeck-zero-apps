@@ -73,7 +73,7 @@ struct TrackRow {
     std::string codec;
 };
 
-struct TrackInfo {
+struct TrackDetails {
     TrackRow row;
     std::string album_artist, genre, root_label;
     int year = 0;
@@ -133,7 +133,7 @@ public:
     bool album(int64_t album_id, AlbumRow &out);
     bool artist(int64_t artist_id, ArtistRow &out);
 
-    bool track(int64_t track_id, TrackInfo &out);
+    bool track(int64_t track_id, TrackDetails &out);
     /* The track of an absolute path (the queue's), or -1. */
     int64_t find_track(const std::string &path);
 

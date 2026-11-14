@@ -101,3 +101,4 @@ void test_sortkey();
 void test_library();
 void test_search();
 void test_tags_scan();
+void test_scanner();

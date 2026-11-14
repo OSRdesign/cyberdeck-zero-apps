@@ -197,8 +197,8 @@ bool Library::artist(int64_t artist_id, ArtistRow &out) {
     return true;
 }
 
-bool Library::track(int64_t track_id, TrackInfo &out) {
-    out = TrackInfo();
+bool Library::track(int64_t track_id, TrackDetails &out) {
+    out = TrackDetails();
     Stmt s = db_.prepare(std::string("select ") + kTrackCols +
                          ", coalesce(aa.name, ''), coalesce(g.name, ''), coalesce(r.label, ''), coalesce(al.year, 0), "
                          "coalesce(t.rate, 0), coalesce(t.bits, 0), coalesce(t.channels, 0), coalesce(t.kbps, 0), "
