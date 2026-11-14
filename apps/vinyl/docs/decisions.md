@@ -725,3 +725,23 @@ hub, paging of 101 artists, an album, the sheet keys, search with its debounce, 
 reader). Scenes: `qa-library` (800x480 480x480 720x720 480x800 480x640), `-640`, `-wide`, `-small` (480x320, 320x480);
 `qa-library-scan`, `-paused`, `-offline` (each with a `-small`); `qa-empty-library`, `qa-cjk-library` (each with a `-small`);
 `keyboard`, `keyboard-small`, `portrait-band` (480x800, 480x640).
+
+## Owner rulings on the P2b open questions (2026-11-14)
+
+The Controller put seven questions to the owner after design QA run 2 (BLOCKED only on D-55) and the owner answered each
+as recommended. The owner's choices, by the options' own words:
+
+- **CJK in the search field (D-55):** "Waive for 0.3.0". Typed CJK shows boxes in the toolkit TextField (the results and
+  every text the app sets draw correctly); the field is fixed later in a separate launcher/toolkit change. D-55 is waived
+  for 0.3.0 for the search field only.
+- **Playlists row and Add to playlist (D-81):** "Keep both". The hub's Playlists row opens the notice "Playlists arrive in
+  a later version." and Add to playlist is dimmed and inert until P2c.
+- **Launch scan nobody visited (D-68):** "Accept as built". The launch scan finishes at nice 19 (pausing above 75 C) even if
+  the Library is never opened; it stops when the Library is left after being looked at (D27).
+- **Hub at 480x320 while scanning:** "Accept as is". The scan strip sits above the mini player; the list scrolls.
+- **Unreadable files:** "Ship without it". No "N files could not be read" notice in 0.3.0; a file the scanner cannot read
+  gets no row.
+- **Folder-choose mode:** "Keep the strip button". The mini player's strip becomes the "Use folder" key (U also works).
+- **Search order and long album headings:** "Fine as is". Songs, Albums, Artists, Genres; a long heading is cut with dots at
+  narrow widths.
+
