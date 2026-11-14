@@ -167,7 +167,7 @@ private:
     std::unique_ptr<ScanThread> scan_;
     bool available_ = false;
     bool in_library_ = false, visited_ = false;
-    libm::Nav nav_;
+    libm::Nav nav_, saved_nav_;
     uint64_t serial_ = 0;
     uint64_t view_gen_ = 1, rows_ver_ = 1, rows_gen_ = 1;
     int sel_ = -1, scroll_to_ = -1;

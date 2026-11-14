@@ -159,6 +159,7 @@ void LibraryCtl::enter() {
     in_library_ = true;
     visited_ = true;
     nav_.clear();
+    saved_nav_.clear();
     libm::Loc hub;
     hub.place = libm::Place::Hub;
     sync_mounts(true);
@@ -168,6 +169,7 @@ void LibraryCtl::enter() {
 void LibraryCtl::enter_settings() {
     in_library_ = true;
     visited_ = true;
+    if (!nav_.empty() && nav_.top().place != libm::Place::Settings) saved_nav_ = nav_; /* Esc from the settings restores it */
     nav_.clear();
     libm::Loc l;
     l.place = libm::Place::Settings;
@@ -213,7 +215,13 @@ bool LibraryCtl::back() {
         close_sheet();
         return true;
     }
-    if (!nav_.pop()) return false;
+    if (!nav_.pop()) {
+        if (!saved_nav_.empty()) { /* the settings were opened from the Menu over a page: that page is the Library's place again */
+            nav_ = saved_nav_;
+            saved_nav_.clear();
+        }
+        return false;
+    }
     open_place(nav_.top(), false);
     return true;
 }

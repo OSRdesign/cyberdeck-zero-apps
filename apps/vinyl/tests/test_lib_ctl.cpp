@@ -368,6 +368,10 @@ void test_lib_ctl() {
             Library lib(db);
             CHECK_EQ(lib.counts().tracks, 200);
         }
+        /* Esc from the settings (opened from the Menu over the hub) leaves them and the hub is the Library's place again */
+        CHECK(c.back()); /* Music folders -> the settings */
+        CHECK(!c.back()); /* the settings were the first place: the host goes back to the Menu */
+        CHECK_EQ(c.page(), Page::LibHub);
         /* Add: a folder inside a root is in the library already; a new one joins and a scan starts */
         c.add_folder(dir + "/Music/sub");
         CHECK_EQ(rec.notices.back(), std::string("That folder is in the library already."));
