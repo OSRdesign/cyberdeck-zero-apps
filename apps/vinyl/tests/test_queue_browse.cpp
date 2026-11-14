@@ -143,6 +143,80 @@ void test_queue() {
     q.restore(names(3), {2, 0, 1}, 9, true, Repeat::Off, "/m");
     CHECK_EQ(q.at(0), std::string("/m/t2.mp3"));
     CHECK_EQ(q.current(), -1);
+
+    /* the Library's track actions (P2b): Play next, Add to queue */
+    auto is_perm = [](const Queue &qq) {
+        std::vector<int> o = qq.order();
+        std::sort(o.begin(), o.end());
+        for (size_t i = 0; i < o.size(); ++i)
+            if (o[i] != static_cast<int>(i)) return false;
+        return o.size() == qq.items().size();
+    };
+    q.restore({}, {}, -1, false, Repeat::Off, "");
+    q.set(names(5), 2, "/m");
+    CHECK_EQ(q.insert_next({"/x/a.mp3", "/x/b.mp3"}), 3);
+    CHECK_EQ(q.size(), 7);
+    CHECK_EQ(q.current(), 2);
+    CHECK_EQ(*q.current_path(), std::string("/m/t2.mp3"));
+    CHECK_EQ(q.at(3), std::string("/x/a.mp3"));
+    CHECK_EQ(q.at(4), std::string("/x/b.mp3"));
+    CHECK_EQ(q.at(5), std::string("/m/t3.mp3"));
+    CHECK_EQ(q.next_pos(false), 3);
+    CHECK_EQ(q.append({"/x/c.mp3"}), 7);
+    CHECK_EQ(q.at(7), std::string("/x/c.mp3"));
+    CHECK_EQ(q.source(), std::string("/m"));
+    CHECK(is_perm(q));
+    CHECK_EQ(q.insert_next({}), -1);
+    CHECK_EQ(q.append({}), -1);
+    CHECK_EQ(q.size(), 8);
+    /* no current track: Play next goes first and nothing becomes current */
+    q.set(names(3), -1, "/m");
+    CHECK_EQ(q.insert_next({"/x/a.mp3"}), 0);
+    CHECK_EQ(q.at(0), std::string("/x/a.mp3"));
+    CHECK_EQ(q.at(1), std::string("/m/t0.mp3"));
+    CHECK_EQ(q.current(), -1);
+    /* an empty queue */
+    q.clear();
+    CHECK_EQ(q.append({"/x/a.mp3", "/x/b.mp3"}), 0);
+    CHECK_EQ(q.size(), 2);
+    CHECK_EQ(q.current(), -1);
+    q.clear();
+    CHECK_EQ(q.insert_next({"/x/a.mp3"}), 0);
+    CHECK_EQ(q.size(), 1);
+    /* shuffle on: into the play order after the current track, in their own order; the list order keeps them after
+     * the current track, so shuffle off leaves them there */
+    q.set(names(10), 4, "/m");
+    q.seed(7);
+    q.set_shuffle(true);
+    CHECK_EQ(q.current(), 0);
+    CHECK_EQ(q.insert_next({"/x/x.mp3", "/x/y.mp3"}), 1);
+    CHECK_EQ(q.at(0), std::string("/m/t4.mp3"));
+    CHECK_EQ(q.at(1), std::string("/x/x.mp3"));
+    CHECK_EQ(q.at(2), std::string("/x/y.mp3"));
+    CHECK_EQ(q.append({"/x/z.mp3"}), 12);
+    CHECK_EQ(q.at(12), std::string("/x/z.mp3"));
+    CHECK(is_perm(q));
+    q.set_shuffle(false);
+    CHECK_EQ(*q.current_path(), std::string("/m/t4.mp3"));
+    CHECK_EQ(q.at(4), std::string("/m/t4.mp3"));
+    CHECK_EQ(q.at(5), std::string("/x/x.mp3"));
+    CHECK_EQ(q.at(6), std::string("/x/y.mp3"));
+    CHECK_EQ(q.at(7), std::string("/m/t5.mp3"));
+    CHECK_EQ(q.at(q.size() - 1), std::string("/x/z.mp3"));
+    std::set<std::string> all;
+    for (int i = 0; i < q.size(); ++i) all.insert(q.at(i));
+    CHECK_EQ(static_cast<int>(all.size()), 13);
+    /* shuffled, from another current position */
+    q.set(names(8), 0, "/m");
+    q.set_shuffle(true);
+    q.set_current(5);
+    const std::string cur5 = q.at(5), after5 = q.at(6);
+    CHECK_EQ(q.insert_next({"/x/w.mp3"}), 6);
+    CHECK_EQ(q.current(), 5);
+    CHECK_EQ(q.at(5), cur5);
+    CHECK_EQ(q.at(6), std::string("/x/w.mp3"));
+    CHECK_EQ(q.at(7), after5);
+    CHECK(is_perm(q));
 }
 
 void test_browse() {

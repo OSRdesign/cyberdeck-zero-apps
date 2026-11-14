@@ -58,8 +58,24 @@ public:
     /* Removes the track; the current position follows (the current track itself may be removed: then current() becomes
      * the track that took its place, or -1). */
     void remove(int pos);
+    /* The tracks that lie under any of `dirs` (a drive that went away, owner ruling 2026-11-14): all of them are removed at once.
+     * The current track stays current when it survives; when it was one of them the track that took its place becomes current
+     * (the first one when none follows), -1 when the queue is empty. */
+    struct RemoveResult {
+        int removed = 0;
+        bool current_removed = false;
+    };
+    RemoveResult remove_under(const std::vector<std::string> &dirs);
     /* Removes every track but the current one (all of them when none is current). */
     void clear_except_current();
+
+    /* The Library's track actions (P2b): "Play next" puts the tracks right after the current one (first when none is
+     * current), "Add to queue" at the end of the play order. With shuffle on they go into the play order at that place,
+     * in their own order (not shuffled in), and into the list order after the current track (or at its end), so turning
+     * shuffle off keeps them there. The current track stays current and the source stays. Returns the play-order
+     * position of the first track added (-1 when `paths` is empty). */
+    int insert_next(const std::vector<std::string> &paths);
+    int append(const std::vector<std::string> &paths);
 
     /* For the resume file: the items in their own order and the play order as item indices. */
     const std::vector<std::string> &items() const { return items_; }
@@ -73,6 +89,8 @@ public:
 private:
     void linear();
     void reshuffle(); /* keeps the current track first */
+    /* puts paths into items_ at item index item_at and into the play order at position pos */
+    int insert_at(int item_at, int pos, const std::vector<std::string> &paths);
 
     std::vector<std::string> items_;
     std::vector<int> order_; /* play order: indices into items_ */

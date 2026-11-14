@@ -10,8 +10,8 @@ Comment: The application is linked against the LVGL based cp0_lvgl runtime of th
  SIL OFL 1.1; DejaVu Sans: the Bitstream Vera / DejaVu licence; Noto Sans CJK: SIL
  OFL 1.1, for Chinese, Japanese and Korean titles); none is shipped in this package.
  .
- The player engine, the queue, the folder browser, the tag readers (ID3, FLAC, Ogg,
- MP4, WAV and AIFF metadata), the WAV / AIFF reader, the media-key reader and the
+ The player engine, the queue, the folder browser, the music library, the tag
+ readers (ID3, FLAC, Ogg, MP4, WAV, AIFF and APEv2 metadata), the WAV / AIFF reader, the media-key reader and the
  screens are the app's own code, written from the published format descriptions. The
  sound-server and ALSA layers and the FLAC and Ogg Opus readers are copied from the
  same repository's Cassette app (same author, MIT). The package holds no code of other
@@ -56,6 +56,8 @@ Comment: The application is linked against the LVGL based cp0_lvgl runtime of th
     "ffmpeg" (https://sources.debian.org/src/ffmpeg/). Packages libavformat61 (or 62),
     libavcodec61 (or 62), libavutil59 (or 60), libswresample5 (or 6), in Depends: the
     common formats play out of the box (the owner's decision D20, 2026-11-13).
+  - libsqlite3.so.0, SQLite (public domain, https://sqlite.org/copyright.html), for
+    the music library's database and search. Package libsqlite3-0.
  The licence texts of these libraries are in their own packages, under
  /usr/share/doc/<package>/copyright.
 

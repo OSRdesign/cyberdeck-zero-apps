@@ -11,6 +11,8 @@
  * Playback with its ReplayGain pick list, Output, Keys, About); Esc goes back to the Menu, and from the Menu to the page
  * it was opened from. The controller owns the settings (core/settings), the sleep timer (core/sleep), the positions in
  * long files (core/state/positions) and the write policy of the state files (core/state/write_policy).
+ * P2b: the Library (core/library/library_ctl: the database, the scanner, the hub and its pages). Browse opens the hub when the
+ * database opened (else the folder list), Folders opens the Browser, Esc steps back one place and at the hub ends the app.
  *
  * Keys: core/menu letter_command (the table the Keys page shows, README.md "Keys and touch"); the volume, mute and
  * brightness keys stay the launcher's. Transport keys of headsets and keyboards: media_keys.hpp. LVGL thread.

@@ -1,0 +1,40 @@
+# PDA mode (launcher report 044): the Search field's writing band at 480x800 and 480x640 (D-41): the band shows where the
+# keyboard would, the results above it, written letters reach the field
+title Vinyl P2b: Search with the PDA writing band (480x800, 480x640)
+band
+sizes 480x800 480x640
+env VINYL_DEMO 1
+env VINYL_DEMO_LIBRARY full
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE library
+
+keyboards 0
+wait 1200
+expect band hidden
+tap "Search"
+wait 800
+expect band shown
+expect osk off
+shot 01-search-band
+write letters f e n
+wait 900
+shot 02-search-written
+expect text "SONGS"
+zonekey Keyb
+wait 500
+expect osk on
+expect band hidden
+shot 03-search-keyb
+tapkey CLOSE
+wait 500
+expect band shown
+keyboards 1
+wait 1300
+expect osk off
+expect band hidden
+shot 04-search-keyboard
+keyboards 0
+wait 1300
+key esc
+wait 600
+expect text "Folders"

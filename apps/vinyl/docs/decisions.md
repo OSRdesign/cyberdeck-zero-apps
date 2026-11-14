@@ -555,3 +555,305 @@ The QA's three FAILs (D-01, D-32, D-55) and the coordinator's rulings on its WAR
   The music fades out for its last 10 seconds."; the Menu values "This track" and "This album"; the ReplayGain pick
   list's strip "Track: every track as loud as the others. Album: an album keeps its own loudness steps. Files without
   ReplayGain tags play as they are."; the Keys page's actions after the canvas's rows. Listed in the README too.
+
+## P2b core: the library without its pages (0.3.0 work, 2026-11-14)
+
+The core of the Library (report 060 2.3 and 3a; owner decisions D27 and D28 as section 15 changed them; D31 is the UI's):
+SQLite, the scanner, the views, search, the queue's track actions. No page draws it yet. The plan left the points below
+open; each is the builder's choice, the simplest one consistent with report 060, for the coordinator to confirm.
+
+- **SQLite** is loaded at run time (`core/db/sqlite_lib`, the cp0_map_sqlite.c pattern) and joins Depends
+  (`libsqlite3-0`, no version change yet). It needs 3.45 or later (the trigram tokenizer's `remove_diacritics`) and uses
+  FTS5's `contentless_delete=1` (3.43) so a track's FTS row can be deleted or replaced by rowid, instead of FTS5's
+  'delete' command, which needs the old values. Every board has 3.46.1, the build box 3.45.1. Without the library, or
+  with an older one, the Library is unavailable with a reason (`LibraryWorker::open_error()`); playback and the folder
+  browser do not use it.
+- **The file** is `$XDG_DATA_HOME/vinyl/library.db` (`~/.local/share/vinyl/library.db`). The schema version is
+  `PRAGMA user_version` (1). A file SQLite calls corrupt or not a database is moved to `library.db.bad` and made again (the
+  tags come back with a scan; the play counts are lost). A file of a newer schema is left alone and the Library is
+  unavailable, so a downgrade never destroys play counts.
+- **Schema v1** is the plan's DDL plus `tracks.root_id` (an offline drive's rows are hidden with `root_id not in (...)`,
+  without a join), `roots.mount` (the mount point a drive root was found at), and unique `artists.sort` /
+  `genres.sort`: one artist per sort key, so "Beyoncé", "BEYONCE" and "Beyonce" are one artist (the first spelling
+  seen is shown), while "The Beatles" and "Beatles" stay two (the moved article differs). The P2c playlist tables exist
+  already, so P2c needs no migration.
+- **Albums** are keyed by (album sort key, album artist), the album artist being the album-artist tag, else the track
+  artist: CD1 / CD2 folders join. A compilation without an album-artist tag splits by track artist (known limit, no
+  heuristic). A missing album tag is an album titled "" for each artist, a missing artist an artist "" (sorted last; the
+  UI names them). An album's year is the first non-zero year among its tracks.
+- **Sort keys:** only a leading "The " moves (the plan's words; not "A" / "An"). Numbers are padded to 8 digits; a longer
+  run of digits stays as written. Leading ASCII punctuation is skipped. Not folded: half-width katakana and Vietnamese
+  letters (Latin Extended Additional). Unknown names get U+FFFF and sort last.
+- **Views:** Artists lists album artists only (the plan); an artist's page also shows the albums the artist appears on
+  as a track artist (so an artist found by search always has a page). An album's tracks come in disc, folder, track order
+  (two untagged CD folders do not interleave). Songs page by LIMIT / OFFSET; the keyset cursor for 100k tracks is left to
+  P2e's tuning.
+- **Search:** the whole query is one FTS5 phrase (its words in that order, anywhere in the field). Songs match titles,
+  Artists the artist or album-artist fields, Albums the album, Genres the genre; 50 results each. Under three Unicode
+  characters, the start of the sort keys is matched instead (an index range): "ab" finds ABBA and "Abbey Road", "艺术"
+  titles that start with it; a digit query matches whole numbers ("2" finds "2 Become 1", not "25 Minutes"). The 250 ms
+  debounce is the UI's; `LibraryWorker::post(..., key)` replaces a waiting search and interrupts a running one.
+- **Roots:** ~/Music, the drives P1's browser lists (mounted under /media/<user>, /run/media/<user>, /mnt, /media), and
+  the folders of a new setting, `library.folders` in settings.json (written only once a folder was added). A folder that
+  overlaps another root is left out. A drive root keeps its mount point and file-system UUID; it is online only while that
+  mount point is in /proc/self/mounts with that UUID, so the empty folder a pulled stick leaves behind is offline, not an
+  empty drive. A drive mounted again under another name is matched by its UUID and its path updated. Offline roots keep
+  their rows, hidden, with no limit in time (P2e may prune them); removing a folder in the settings deletes its rows
+  (`remove_root`).
+- **Commits:** D27 says "database writes are batched per folder", report 060 "every 500 files or 2 s". Both hold: a
+  batch is committed at a folder boundary once 500 rows were written (1,000 on boards with more than 512 MB, report 060
+  section 4) or 2 s passed since it began; inside one big folder only at the row count. FTS rows and the pruning of empty
+  albums, artists and genres are in the same transaction. An unchanged rescan reads no tag and writes only each root's
+  last-scan time.
+- **Deletes:** a row whose file is not listed is deleted when `lstat` says ENOENT and the root is still online (its mount
+  read again); a folder that is gone goes the same way after a full walk of its root. A file whose tags cannot be read
+  gets no row (an existing row stays as it was). `scan_folder` (one folder) never removes other folders.
+- **Resume:** each commit of a full scan stores the last folder done (`meta.scan_resume`: the root id and the folder, in
+  the walk's fixed order). The next `start_all()` skips the roots and folders before it, then clears it. A scan cancelled
+  before any write keeps the older point (the walk repeats, nothing is read again). Files deleted in folders a resumed run
+  skips are found by the next full scan.
+- **Heat:** `/sys/class/thermal/thermal_zone0/temp`, read every 2 s at the next folder; at 75 °C the open batch is
+  committed and the scan waits, reading every second, until 70 °C. The progress says "paused" with the temperature.
+- **Threads:** the `ScanThread` lowers only itself (nice 19 on its thread id, `ioprio_set` IDLE); the `LibraryWorker`
+  that answers the pages runs at normal priority, each with its own connection (WAL lets the pages read while the scanner
+  writes; busy timeout 2 s). The UI posts jobs and runs their results with `drain()` on its own thread.
+- **D27 wiring is the UI's:** the core offers `start_all()`, `start_folder()` and `cancel()` and never starts by itself.
+  Whether the launch scan also stops when the user is not in the Library is for the UI task to settle with the
+  coordinator (D27's two sentences can be read either way).
+- **Play counts:** `record_play()` when a track played to its end, `record_skip()`; the engine wiring decides when. A
+  re-tagged file keeps its row (and count); a moved or renamed file is a new track. A deleted track's counts go with it
+  (row ids can be reused).
+- **Tags in scan mode** (`read_tags_scan`): FLAC and Ogg comments are walked in the file, so a picture comment costs its
+  first 4 kB; WAV / AIFF id3 chunks now go through the frame-by-frame ID3 walker in both modes; the Ogg length looks at
+  the last 16 kB before the last 64 kB (both modes). An MP3 tag unsynchronised as a whole still reads its first 256 kB
+  (rare). APEv2 is read for APE, WavPack, Musepack and TTA, and between an MP3's ID3v2 and ID3v1 (mp3gain's ReplayGain);
+  those formats get no duration from Vinyl's readers (unknown until played). ID3v1 numeric genres ("(17)") are not mapped.
+- **The queue's track actions:** `insert_next()` (after the current track, first when none) and `append()`; with shuffle
+  on they go into the play order at that place in their own order, and into the list order after the current track, so
+  turning shuffle off keeps them there. The queue's source stays.
+- **Memory (report 060 section 4):** the scan mode reads under 64 kB a file, the page cache is 2 MB on the 415 MB boards,
+  the scanner keeps one folder's rows and a (dev, ino) set. TagJobs' cache of 20,000 entries stays until the pages read
+  the database (the budget's 500 entries is a UI-task change: the folder browser still needs it).
+- **Measured on the build box** (x86, in memory): 1,000 tracks written in 7 ms, 25 Songs pages in 3.6 ms, a search in
+  0.2 ms; the scan mode reads 1.5 kB of an MP3 with a 2 MB cover, 4.3 kB of a FLAC with two, 33 kB of an Ogg Vorbis file
+  with one (mostly its page headers and the length's 16 kB). The board figures are B37-B45's.
+
+## P2b: the Library pages (0.3.0 work, 2026-11-14)
+
+The pages of report 060 2.3 on the core above, drawn from the approved canvas boards (the P2b set: Artists, Artist, Albums,
+Album, Songs, Genres, TrackInfo, EmptyNoMusic, EmptyNoResults, DriveOffline, Scanning, ScanPaused, MusicFolders,
+Search-320x480, TrackActions-320x480, AlbumActions, NoticesP2b; and the UX set's Library, Search, TrackActions,
+LibrarySettings; the boards are not in the repository yet). The version stays 0.2.0 until publish. Each point is the builder's choice, for the coordinator to
+confirm; the deviations from the boards are listed so that nothing is silent.
+
+**Where the code is.** `core/library/lib_model` (rows, headings, the pager, the scan strip and drive note, Track info, the
+sheets, the nav stack: pure, `tests/test_lib_model.cpp`), `core/library/library_ctl` (the worker and scanner wiring, the
+places, paging, search, sheets, Music folders, D27: `tests/test_lib_ctl.cpp`), `ui/library_pages` (the pages),
+`ui/row_list.hpp` (the Browser's row list, now shared: heading rows, the hold), the hub in `ui/vinyl_view.cpp` (the
+Browser's list page, so the mini player stays), the controller in `ui/vinyl_app.cpp`.
+
+**Browse is the hub.** With the library's database open (it opens at start, a few ms) Browse (B, the Browse key, Esc on Now
+playing) opens the Library hub, the app's first page when no queue is resumed, and Esc at the hub ends the app as Esc at the
+Browser did. Folders opens the Browser (Esc goes back to the hub). Without the Library (no SQLite, a newer schema) Browse is
+the folder list as in 0.2.0 and the Menu has no Library row. The scenes run the old Browser unless `VINYL_DEMO_LIBRARY` is set.
+The Menu's Library row (below Playback, as the Menu board draws it) opens the Library settings; Esc there goes back to the Menu.
+
+**D27 as wired.** The owner's words (2026-11-13): "scan at launch and when opening a folder from the library but not out of
+the library". The scan at launch runs once (`start_launch_scan`, after one worker job read the track count for "about N"); a
+folder opened in the Browser from the hub is scanned (`scan_folder`, not recursive); "Rescan now" and a folder just added in
+Music folders start a full scan; the user going into the Library and then leaving it for any page that is not a Library page or
+the Browser opened from Folders (Now playing after Play, the Queue, the Menu) cancels the scan, which resumes at the next
+start. A launch scan nobody went into the Library to look at is left to finish. No timer, no background scan. When the mounts
+change while the Library is open the roots are synced again (a pulled stick's tracks leave the views, hidden not deleted;
+plugged in again they come back); a stick never seen before needs a scan (Rescan now, or a folder opened from Folders). The
+boards' "Esc leaves the page; the scan goes on in the background" note and the settings board's "Scan USB sticks when plugged
+in" row are not drawn: they contradict D27. The settings strip says "...stops when you leave the page or the board gets hot",
+as drawn.
+
+**Pages.** Rows are the Browser's (chevron opens, dot plays, 15 px names, values at the right, the toolkit's compact list
+rows). Hub: Folders, Playlists, Artists n, Albums n, Songs n, Genres n, the Search chip, the mini player. Artists, Albums, Songs
+and Genres load 40 rows and the next 40 when the highlight is within 8 rows of the end (once; a reload by a scan commit keeps
+what was loaded). An artist's page lists albums by year with the albums it appears on; an album lists its tracks in disc order
+with a "DISC 2" row; a track tap plays the list from there (Songs: the loaded rows; album: the album; search: the songs found),
+"Play album" plays from the first. Genres show their track counts and lead to the albums. Esc steps back one place, Left too.
+Search is the toolkit's `TextField` (unrestyled; its label hidden), results after 250 ms on the worker, Songs, Albums, Artists
+then Genres each under a heading row; Enter hands the keys to the results (Up from the first row edits again); Esc leaves the
+field and the page at once (the toolkit's two-step Esc is replaced by the field's `escape` event). While the field edits, no
+shortcut acts and no letter goes anywhere else (D-32). The on-screen keyboard and the PDA band are the toolkit's and
+`_common/osk_policy`'s; the results list shrinks by the keyboard's inset and is hidden when not even one row fits above it
+(480x320 with a keyboard up: only the field). `/` and Ctrl+F open Search on any Library page.
+
+**Actions sheets (D31).** A 1.5 s hold (see the ruling below) on a song, an album or an artist row, or Ctrl+O on the selected one, opens the cream sheet
+(Ctrl+O keeps opening the Menu where the selection has no sheet). Track: Play (Enter), Play next (N), Add to queue (A), Add to
+playlist (P), Track info (I). Album: Play album, Play next, Add to queue, Add to playlist. Artist: Play all (its albums in year
+order), the same others. Add to playlist is drawn **dimmed and inert** in 0.3.0 (the boards draw it; playlists are P2c); P
+does nothing. The hint line is on the sheet. A tap on a sheet row acts, a tap outside or Esc or Left closes it. The Playlists
+row of the hub is drawn as the board draws it (normal) and shows the notice "Playlists arrive in a later version." The queue
+changes are `Queue::insert_next` / `append` (the playing track stays); the notices say "Will play next." / "Added to the queue."
+
+**Music folders.** Add a folder opens the Browser in **choose mode**: the mini player's strip becomes "Use folder" (the key
+U too), tracks and playlists do nothing, Esc goes back to the Music folders page. No board draws this; it is the cheapest use of
+the Browser's own strip and an open design question for the owner (a dedicated page would be a design task). Remove selected
+folder removes only the folders the user added (`library.folders`); Music and the USB drives are always indexed (a removal would
+come back at the next start), so the button says so in a notice. Removing deletes the folder's rows and nothing else.
+
+**Play counts, drives.** A track that played to its end (the engine's Advanced and QueueEnd events) adds a play on the worker.
+While a track plays from a drive, the mount point is checked every 2 s; when it has left /proc/self/mounts playback pauses and
+the red notice "Drive removed. Paused." shows (no engine change: `pause()`).
+
+**Deviations from the boards (the toolkit's widgets and the Browser's rows win over pixels).**
+- Hub rows are the Browser's 36 px (the board's 34); the list scrolls above the mini player. The board draws the mini player and
+  the scan strip over the last row; here the strip sits between the list and the mini player and the list gives up the height.
+- The heading band is as high as the touch target where a chip shares it (Search, Play album): 44 px at 6.3 px/mm against the
+  board's 30. At 320x480 "Play album" has its own line under the heading (it does not fit beside it).
+- Section headings ("DISC 2", "SONGS", "ALBUMS") take a full row, not the board's 18 px.
+- Search: the field is the toolkit's (its colours and cursor, not the board's cream and teal); the dim behind a sheet is 70 %.
+- The sheet sits at the bottom of the panel (the 320x480 board draws it lower than 120 px), its rows at least the touch target.
+- Track info: "Track, disc" says "1, disc 1" (the number of tracks is not in the row), the file is shown with "~"; long values wrap.
+- Music folders: the two buttons sit at the panel's bottom (one over the other on a narrow panel), not under the rows.
+- Not drawn: the Artist board's hint line (an annotation), "3 files could not be read" (the scanner keeps no count of unreadable
+  files: a core change), the Library settings' USB-stick row (D27). "Not enough space for the library" shows when a scan fails
+  with a full disk. Track info has no "of 14".
+- Pause on a pulled drive is polled (2 s), not an event.
+
+**TagJobs** keeps 2,000 entries (was 20,000), not the budget's 500: its cache still serves the Browser and the Queue, which ask
+for every file of a folder or queue, and it empties itself when full, so 500 would drop the first rows of a 600-track queue.
+A least-recently-used cache would allow 500.
+
+**Tests.** `test_lib_model` (rows, headings, the pager, notes, Track info, sheets, nav, the two new queries), `test_lib_ctl` (the
+hub, paging of 101 artists, an album, the sheet keys, search with its debounce, play counts, Music folders, D27 with a slow tag
+reader). Scenes: `qa-library` (800x480 480x480 720x720 480x800 480x640), `-640`, `-wide`, `-small` (480x320, 320x480);
+`qa-library-scan`, `-paused`, `-offline` (each with a `-small`); `qa-empty-library`, `qa-cjk-library` (each with a `-small`);
+`keyboard`, `keyboard-small`, `portrait-band` (480x800, 480x640).
+
+## Owner rulings on the P2b open questions (2026-11-14)
+
+The Controller put seven questions to the owner after design QA run 2 (BLOCKED only on D-55) and the owner answered each
+as recommended. The owner's choices, by the options' own words:
+
+- **CJK in the search field (D-55):** "Waive for 0.3.0". Typed CJK shows boxes in the toolkit TextField (the results and
+  every text the app sets draw correctly); the field is fixed later in a separate launcher/toolkit change. D-55 is waived
+  for 0.3.0 for the search field only.
+- **Playlists row and Add to playlist (D-81):** "Keep both". The hub's Playlists row opens the notice "Playlists arrive in
+  a later version." and Add to playlist is dimmed and inert until P2c.
+- **Launch scan nobody visited (D-68):** "Accept as built". The launch scan finishes at nice 19 (pausing above 75 C) even if
+  the Library is never opened; it stops when the Library is left after being looked at (D27).
+- **Hub at 480x320 while scanning:** "Accept as is". The scan strip sits above the mini player; the list scrolls.
+- **Unreadable files:** "Ship without it". No "N files could not be read" notice in 0.3.0; a file the scanner cannot read
+  gets no row.
+- **Folder-choose mode:** "Keep the strip button". The mini player's strip becomes the "Use folder" key (U also works).
+- **Search order and long album headings:** "Fine as is". Songs, Albums, Artists, Genres; a long heading is cut with dots at
+  narrow widths.
+
+
+## Owner ruling: a source that is gone is shown nowhere (2026-11-14, board test B45)
+
+The owner, after pulling a USB stick: "once unmounted the USB stick folder remain in the library list and so do the track, after
+using it I don't think that's correct, if en external source is gone so is gone all its content we should no longer show it".
+- **Nothing of a gone root is shown**: no tracks, albums, artists, genres or search hits (the views already left out an offline
+  root's rows; the counts too), no folder row in the Folders browser, no row in Music folders ("not connected" is gone), no
+  "<LABEL> is not connected. Its N tracks are hidden ..." note on the hub (the DriveOffline board's note and the dimmed row are
+  dropped; the Music folders count and the hub's empty state count only the roots that are there). Track info and play counts are
+  reached from the views, so a gone drive's are never shown.
+- **The rows are kept in the database, hidden** (not purged): a drive plugged in again comes back without a rescan, and its play
+  counts with it. The owner's concern is what is shown, not storage; a purge would also cost every play count of a stick that is
+  only borrowed. (`Remove selected folder` still deletes a folder's rows, as before.)
+- **Mounted but unreadable is gone too.** The board's stick was mounted by hand and pulled: the kernel kept the mount listed in
+  /proc/self/mounts (a stale mount: reads fail with EIO or ENODEV) and the root still counted as online. `root_online` now probes
+  the folder (`root_readable`: a stat, then opening it and reading an entry; EIO, ENODEV, ENXIO, ESTALE and ENOTCONN mean gone),
+  the scanner's online checks use it, the Browser's list of roots leaves out a drive that cannot be read, and the Library looks
+  at its drive roots every 2 s while it is open (the probe's result is part of the mounts signature that triggers the sync).
+  `tests/test_scanner.cpp` tests it with a fake probe (a stale mount, then readable again); `set_root_probe` is the seam.
+
+## Owner rulings of 2026-11-14 (B49 follow-ups): a gone drive leaves the queue; Mount in Music folders
+
+**Media that goes away.** The owner, on the Pi 4B: "if it disappear from the library all track are still in the queue list and the
+player screen tries to load them 'The file is gone...' message is displayed. that should not happen, if media was removed vinyl
+shoudl get back to default music folder and on reopen go to the library direclty for user to select from there what to load in the
+player."
+- When a drive goes away (pulled, a stale mount that cannot be read, Eject, unmounted at exit) every queue entry that lies on it is
+  removed at once (`Queue::remove_under`, `core/library/media_guard`: the drive directory a path lives on, /media/<user>/<label>,
+  /run/media/<user>/<label>, /mnt/<label>; gone = not on a listed, readable mount; a folder of the system disk under /mnt whose
+  files are there is not a drive). The app looks once a second and at once on Eject and on an open that failed.
+- **The playing track among them: playback stops cleanly** (no "file is gone", no retry, no skipping through the dead entries),
+  the next entry that is left is loaded **paused, never started by itself** (decision: whether it was playing or not, the sound
+  ended with the drive and a different song starting on its own would be a surprise; the queue is as the owner left it, one press
+  of play away), and the queue is empty when none is left. The red notice says it once: "Drive removed. Paused." (the playing
+  track was affected) or "Drive removed. Its tracks left the queue." (others only; the playing one goes on).
+- **An empty queue leaves Now playing (or the Queue) for the Library at the default music folder** (~/Music when it is a root, else
+  the first root; Esc goes to the hub). The mini player is hidden with an empty queue.
+- **At every start** the saved queue loses its entries on a drive that is not there before the first screen is drawn
+  (`drop_gone_media(true)`): with nothing left to resume Vinyl opens on the Library hub (without a Library: the Browser), the
+  dropped entries never reach the engine, so "The file is gone..." stays for one file deleted from a drive that is there.
+- A drive that returns later does not bring the entries back: they are gone from the queue; its library rows return as before.
+- Tests: `tests/test_media_guard.cpp` (the drive of a path, the gone drives, `remove_under` with the playing track on the gone
+  drive, some entries, all, a shuffled queue, a saved queue at start), scenes `qa-media-pulled` (a drive pulled while playing from
+  it: the Library at the default folder, no "file is gone") and `qa-media-gone-at-start` (the hub at start), each with `-small` and
+  `-deck`; the scenes' pull is `VINYL_DEMO_PULL_AFTER`, the saved queues `VINYL_DEMO_DRIVE_QUEUE`.
+
+**Mount from Music folders.** The owner: "unmounted drive from setting music folder shouls offer ability to mount drive, now we
+only have eject but no other option to mount which recquire to go back several screens to library and select folder -> mount".
+(Board MusicFoldersDriveMount.) A drive that is plugged in and not mounted is a row "<LABEL> (USB drive)  not mounted" with the
+amber action dot, no longer dimmed; with it selected the drive button is "Mount <LABEL>" in the brown look (the primary look moves
+from Add a folder to it), and it mounts exactly as a tap on the row in Folders does (`request_mount`: the same worker, "Mounting
+<name>...", the denial and error texts); the row then says "mounted by Vinyl" and the button "Eject <LABEL>". The button is Eject on
+a drive Vinyl mounted, Mount on one not mounted, Eject dimmed and inert for a drive the system mounted (and with no drive
+selected). After Eject the drive stays listed, not mounted, with Mount again; a drive that is gone is shown nowhere. Remove
+selected folder is as before (it explains for a drive). Tests: `test_lib_ctl` (the button for each state, Mount from the page, the
+state after an Eject), scene `qa-drives-mount` and the Mount-again steps of `qa-drives-eject`.
+
+## Owner decision: mount on request in Vinyl (2026-11-14, board test B45; the mounting half of D28)
+
+The owner: "Mount on request in Vinyl". On the HackBerry a plugged stick (sda1, vfat) is never mounted: the desktop's file manager
+does it and does not run while the launcher owns the screen, and Vinyl only read /proc/self/mounts. Boards:
+DrivesFolders, MusicFoldersDrives, DriveNotices (the coordinator's).
+- **Listing** (`core/drives`): the removable block devices that carry a file system, from sysfs (`/sys/block/<dev>/removable`,
+  partitions) and the udev database (`/run/udev/data/b<maj>:<min>`: ID_FS_TYPE, ID_FS_LABEL, ID_FS_UUID, ID_FS_USAGE), mounted or
+  not (/proc/self/mounts): no root, no library. A disk with no file system (a partition table, a RAID member) is not listed.
+- **Mounting through `udisksctl mount -b <dev> --no-user-interaction`** (exec with a 20 s limit, `LC_ALL=C`), not D-Bus through
+  sd-bus: the same polkit rules (the active session is allowed, an ssh login is refused with NotAuthorizedCanObtain), no library
+  to load or version, the answers are text that is parsed and tested (`parse_mount_reply`), and an unknown one is shown
+  shortened (its last sentence, at most 60 characters). udisks2 is a run-time need, not a Depends: `udisksctl` is looked for in
+  PATH; without it the drives are listed and a tap says "Drives need the udisks2 package.". The mount runs on a thread of its own
+  (`DriveManager`), never the UI's; the UI takes the answer at its next tick.
+- **The pages**: Folders (the Browser's root list; with a drive plugged in the hub's Folders row shows the root list, and ".." at
+  the top of the single root leads to it) gets a "USB DRIVES" heading and, per drive not mounted, a row with the amber action dot
+  and "not mounted. Tap to mount" ("Mounting <LABEL>..." notice, then the drive opens and joins the Library: its root is synced
+  and the folder is scanned, the D27 rule for a folder opened from the Library); a mounted drive is an ordinary root row with
+  "<size>, mounted". Music folders lists "<LABEL> (USB drive)" with "mounted by Vinyl" or its tracks, the drives not mounted
+  ("not mounted", the amber dot: Mount acts on it, see the ruling above), and the buttons Add a folder, "Eject <LABEL>" and Remove selected folder (they flow onto lines
+  by their words: one line at 640 wide, two at 480x320, three on a narrow panel). The notices are the board's: "Could not
+  mount it: <reason>.", "<LABEL> ejected. You can unplug it.", "Drives need the udisks2 package."; reasons: "this session is not
+  allowed to mount drives", "the disk has no readable filesystem", "it is in use", "it took too long", else the udisks message
+  shortened.
+- **What Vinyl mounted is Vinyl's to undo, nothing else**: `DriveManager` records the devices it mounted (an AlreadyMounted
+  answer is not a mount of Vinyl's: it is recorded only when the mount worked). Eject (`udisksctl unmount`) and the unmount of
+  what is still mounted when Vinyl quits (`shutdown`, the journal says each) apply to those only; a drive the system mounted is
+  never unmounted and its Eject is dimmed (the manager refuses it too). A drive that was pulled is forgotten (a later mount by the
+  system is the system's). A drive pulled while Vinyl had mounted it is the gone-root path above.
+- **Tests**: `tests/test_drives.cpp` (the list on a fake sysfs and udev tree, udisks's answers, the manager on `FakeDrives`: mount
+  ok, denied, the exit unmount of Vinyl's only, Eject, a system-mounted drive left alone, a pulled drive, no udisks),
+  `test_lib_ctl` (Music folders with drives, Eject enabled for Vinyl's only, a gone drive's row and note, the rows back when it
+  is back), scenes `qa-drives-folders`, `qa-drives-eject`, `qa-drives-denied`, `qa-drives-nofs`, `qa-drives-nodisks` (each
+  with `-small` and `-deck`), `qa-library-offline` rewritten (nothing shown).
+- **Not verified without a board**: that polkit lets the launcher's session mount without a password (the owner's HackBerry is
+  the test, B49); udisksctl's exact English messages (`LC_ALL=C` is set; the parser keys on the udisks error names); a drive
+  with a label that has escapes; a hung stick (the 20 s limit kills the command and says "it took too long").
+
+## Owner ruling: the hold is 1.5 s with a cue; a place is given back as it was left (2026-11-14, board test B44)
+
+The owner, on the HackBerry: "on touch, 3sec is long get it down to 1.5 sec and as we did in others apps (i.e markdown notes) show
+a progression bar and a message 'keep holding for options'", and "when exiting track info song list previous position is not
+maintained". Both are done.
+- **The hold** (Track, Album and Artist actions) is **1.5 s**, a departure from the launcher checklist's 3 s hold **for Vinyl
+  only**. From 0.5 s the cue shows over the bottom of the list, in Markdown Notes' look (a box with an accent border, a bar that
+  fills over the 1.5 s, the message "Keep holding for options"); a tap acts as before; a hold given up after the cue showed (the
+  finger lifted, or it moved more than 16 px: a scroll) opens nothing and is not a tap. `core/nav/hold_tracker` is Markdown Notes'
+  `HoldTracker` with these times (tested); the cue is `RowList::enable_hold_cue`. Ctrl+O is unchanged. The sheet's hint says
+  "Hold a row for 1.5 s, or press Ctrl+O, to open this sheet."
+- **The position**: a Library place keeps its selected row as it moves and where it is scrolled to (in pixels) when another is opened from it
+  (Track info, an album, an artist, a genre's albums, a search result); Esc gives both back once the rows are in (a long list
+  loads the 40-row page the highlight is on at once; the placeholder before the rows arrived used to overwrite the saved row, so
+  the list came back at the top). `tests/test_lib_ctl.cpp restore_test`, scene `qa-library` (Songs, Track info, Esc).
+- The scene harness has two new commands, `press TEXT` and `release` (a finger held down while the app runs and a shot is made),
+  for the cue's shot.

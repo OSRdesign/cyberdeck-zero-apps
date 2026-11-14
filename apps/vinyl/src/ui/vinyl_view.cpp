@@ -7,7 +7,9 @@
  */
 #include "vinyl_view.hpp"
 
+#include "library_pages.hpp"
 #include "menu_pages.hpp"
+#include "row_list.hpp"
 #include "nav/nav_rules.hpp"
 #include "volume/output_volume.hpp"
 #include "seek/seek_scrub.hpp"
@@ -138,170 +140,6 @@ lv_obj_t *image(lv_obj_t *parent, int x, int y) {
     lv_obj_set_pos(o, x, y);
     return o;
 }
-
-/* ------------------------------------------------------------------------------------------------ the row list */
-
-struct RowW {
-    lv_obj_t *row = nullptr, *dot = nullptr, *chev = nullptr, *text = nullptr, *value = nullptr;
-    int index = -1;
-};
-
-/* A list of fixed-height rows that only builds the rows in view (a folder or a queue can hold thousands). */
-class RowList {
-public:
-    RowList(lv_obj_t *parent, int x, int y, int w, int h, int row_h, double s, int text_px, int value_px, double dot_x,
-            double text_x, double value_r, double chev_r, std::function<void(int)> on_tap)
-        : row_h_(row_h), s_(s), w_(w), text_px_(text_px), value_px_(value_px), dot_x_(dot_x), text_x_(text_x),
-          value_r_(value_r), chev_r_(chev_r), on_tap_(std::move(on_tap)) {
-        cont_ = lv_obj_create(parent);
-        plain(cont_);
-        lv_obj_set_pos(cont_, x, y);
-        lv_obj_set_size(cont_, w, h);
-        lv_obj_add_flag(cont_, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_set_scroll_dir(cont_, LV_DIR_VER);
-        lv_obj_set_scrollbar_mode(cont_, LV_SCROLLBAR_MODE_ACTIVE);
-        lv_obj_set_style_width(cont_, std::max(2, ri(3 * s)), LV_PART_SCROLLBAR);
-        lv_obj_set_style_bg_color(cont_, lv_color_hex(col::kRowValue), LV_PART_SCROLLBAR);
-        lv_obj_set_style_bg_opa(cont_, LV_OPA_50, LV_PART_SCROLLBAR);
-        lv_obj_add_event_cb(cont_, scroll_cb, LV_EVENT_SCROLL, this);
-        spacer_ = lv_obj_create(cont_);
-        plain(spacer_);
-        lv_obj_set_size(spacer_, 1, 1);
-        visible_ = std::max(1, h / std::max(1, row_h)) + 2;
-        for (int i = 0; i < visible_; ++i) pool_.push_back(make_row());
-    }
-
-    void set_rows(const std::vector<RowView> &rows, int selected, bool reset_scroll, int scroll_to) {
-        const bool same = rows == rows_;
-        rows_ = rows;
-        selected_ = selected;
-        lv_obj_set_pos(spacer_, 0, std::max(0, static_cast<int>(rows_.size()) * row_h_ - 1));
-        if (reset_scroll) lv_obj_scroll_to_y(cont_, 0, LV_ANIM_OFF);
-        if (scroll_to >= 0 && scroll_to < static_cast<int>(rows_.size())) {
-            const int max_y = std::max(0, static_cast<int>(rows_.size()) * row_h_ - lv_obj_get_height(cont_));
-            lv_obj_scroll_to_y(cont_, std::min(max_y, scroll_to * row_h_), LV_ANIM_OFF);
-        }
-        (void)same;
-        if (!reset_scroll && scroll_to < 0 && selected >= 0) { /* keep the highlight in view (a row moved) */
-            const int top = lv_obj_get_scroll_y(cont_), h = lv_obj_get_height(cont_);
-            if (selected * row_h_ < top) lv_obj_scroll_to_y(cont_, selected * row_h_, LV_ANIM_OFF);
-            else if ((selected + 1) * row_h_ > top + h) lv_obj_scroll_to_y(cont_, (selected + 1) * row_h_ - h, LV_ANIM_OFF);
-        }
-        rebind(true);
-    }
-
-    void set_selected(int i, bool ensure_visible) {
-        selected_ = i;
-        if (ensure_visible && i >= 0) {
-            const int top = lv_obj_get_scroll_y(cont_), h = lv_obj_get_height(cont_);
-            if (i * row_h_ < top) lv_obj_scroll_to_y(cont_, i * row_h_, LV_ANIM_OFF);
-            else if ((i + 1) * row_h_ > top + h) lv_obj_scroll_to_y(cont_, (i + 1) * row_h_ - h, LV_ANIM_OFF);
-        }
-        rebind(true);
-    }
-
-    int size() const { return static_cast<int>(rows_.size()); }
-    lv_obj_t *obj() const { return cont_; }
-
-private:
-    RowW make_row() {
-        RowW r;
-        r.row = lv_obj_create(cont_);
-        plain(r.row);
-        lv_obj_add_flag(r.row, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_add_flag(r.row, LV_OBJ_FLAG_EVENT_BUBBLE); /* the drag scrolls the list */
-        lv_obj_set_size(r.row, w_, row_h_);
-        lv_obj_set_style_bg_color(r.row, lv_color_hex(col::kRowSel), 0);
-        lv_obj_set_style_bg_opa(r.row, LV_OPA_TRANSP, 0);
-        lv_obj_add_event_cb(r.row, row_click_cb, LV_EVENT_CLICKED, this);
-        const int dot = std::max(4, ri(10 * s_));
-        r.dot = box(r.row, ri(dot_x_), (row_h_ - dot) / 2, dot, dot, col::kWhite, LV_RADIUS_CIRCLE);
-        const int cw = std::max(8, ri(16 * s_));
-        r.chev = icon_obj(r.row, Icon::Chevron, w_ - ri(chev_r_) - cw, (row_h_ - cw) / 2, cw, cw, cw, col::kRowValue);
-        r.text = label(r.row, Face::Bold, text_px_, col::kRowText, ri(text_x_), 0, 10);
-        lv_obj_set_style_text_line_space(r.text, 0, 0);
-        r.value = label(r.row, Face::Mono, value_px_, col::kRowValue, 0, 0, 10, LV_TEXT_ALIGN_RIGHT); /* one line, dots */
-        lv_obj_add_flag(r.row, LV_OBJ_FLAG_HIDDEN);
-        return r;
-    }
-
-    void bind(RowW &w, int i) {
-        const RowView &v = rows_[static_cast<size_t>(i)];
-        w.index = i;
-        lv_obj_set_y(w.row, i * row_h_);
-        show(w.row, true);
-        lv_obj_set_style_bg_opa(w.row, i == selected_ ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
-        /* the row's kind (design QA D-45): a chevron opens (folders, playlists), a dot acts (tracks, queue rows, outputs;
-         * blue for the playing track and the chosen output), no mark informs */
-        const bool dot = v.mark == RowView::Mark::Dot;
-        const bool chev = v.mark == RowView::Mark::Chevron;
-        show(w.dot, dot);
-        if (dot) set_bg(w.dot, v.dimmed ? col::kDotDim : v.playing ? col::kPlaying : col::kWhite);
-        show(w.chev, chev);
-        if (chev) icon_set(w.chev, Icon::Chevron, v.dimmed ? col::kDotDim : col::kRowValue);
-        const lv_font_t *vf = font(v.mono_value ? Face::Mono : Face::Bold, value_px_);
-        if (lv_obj_get_style_text_font(w.value, LV_PART_MAIN) != vf) lv_obj_set_style_text_font(w.value, vf, 0);
-        set_text(w.value, v.value);
-        const lv_font_t *tf = font(Face::Bold, text_px_);
-        const int right = chev ? ri(chev_r_) + ri(16 * s_) + ri(4 * s_) : ri(value_r_);
-        /* the name and the value share the row; when both do not fit, the name keeps its width up to 60 % of the room
-         * and the value ends with dots (a narrow screen: "Auto" before "follows system: Evolve 65") */
-        const int room = std::max(20, w_ - ri(text_x_) - right - ri(8 * s_));
-        const int vnat = v.value.empty() ? 0 : text_width(vf, v.value) + 2;
-        const int tnat = text_width(tf, v.text) + 2;
-        int vw = vnat, tw = room - vnat;
-        if (vnat > 0 && tnat + vnat > room) {
-            tw = std::min(tnat, std::max(room - vnat, room * 3 / 5));
-            vw = std::max(0, room - tw);
-        }
-        tw = std::max(10, tw);
-        show(w.value, vw > 0);
-        lv_obj_set_size(w.value, std::max(1, vw), lv_font_get_line_height(vf));
-        lv_obj_set_pos(w.value, w_ - right - vw, (row_h_ - lv_font_get_line_height(vf)) / 2);
-        const uint32_t tc = v.dimmed ? col::kRowDim : col::kRowText;
-        lv_obj_set_style_text_color(w.text, lv_color_hex(tc), 0);
-        lv_obj_set_style_text_color(w.value, lv_color_hex(v.dimmed ? col::kDotDim : col::kRowValue), 0);
-        set_text(w.text, v.text);
-        lv_obj_set_width(w.text, tw);
-        lv_obj_set_y(w.text, (row_h_ - lv_font_get_line_height(tf)) / 2);
-    }
-
-    void rebind(bool force) {
-        const int top = lv_obj_get_scroll_y(cont_);
-        const int first = std::max(0, top / std::max(1, row_h_));
-        if (!force && first == first_) return;
-        first_ = first;
-        for (int k = 0; k < visible_; ++k) {
-            const int i = first + k;
-            if (i < static_cast<int>(rows_.size())) bind(pool_[static_cast<size_t>(k)], i);
-            else {
-                pool_[static_cast<size_t>(k)].index = -1;
-                show(pool_[static_cast<size_t>(k)].row, false);
-            }
-        }
-    }
-
-    static void scroll_cb(lv_event_t *e) { static_cast<RowList *>(lv_event_get_user_data(e))->rebind(false); }
-    static void row_click_cb(lv_event_t *e) {
-        auto *self = static_cast<RowList *>(lv_event_get_user_data(e));
-        lv_obj_t *row = lv_event_get_target_obj(e);
-        for (const RowW &w : self->pool_)
-            if (w.row == row && w.index >= 0 && self->on_tap_) {
-                self->on_tap_(w.index);
-                return;
-            }
-    }
-
-    lv_obj_t *cont_ = nullptr, *spacer_ = nullptr;
-    int row_h_;
-    double s_;
-    int w_, text_px_, value_px_;
-    double dot_x_, text_x_, value_r_, chev_r_;
-    std::function<void(int)> on_tap_;
-    std::vector<RowW> pool_;
-    std::vector<RowView> rows_;
-    int visible_ = 1, first_ = -1, selected_ = -1;
-};
 
 /* ------------------------------------------------------------------------------------------------ chips */
 
@@ -559,11 +397,30 @@ struct View::Impl {
         Img mini_disc_img, mini_label_img;
         int strip_y0 = 0, strip_h0 = 0, list_y = 0; /* the output page's hint strip as laid out (it grows to its text) */
         std::vector<Button> qbtns;
+        bool choose_on = false; /* the Browser's choose mode: the play button widened over the next button */
+        int ch_x = 0, ch_w = 0, ch_hx = 0, ch_hw = 0;
         uint64_t rows_gen = UINT64_MAX, rows_ver = UINT64_MAX;
         int rows = 0, sel = -2;
     };
     ListW br, qu, out;
     std::unique_ptr<MenuPages> menu; /* the Menu pages (P2a) */
+    /* P2b: the Library. The hub is the Browser's list page (the mini player stays) with the Search chip, the scan strip or
+     * drive note over the mini player, and the empty message; the other pages are ui/library_pages.cpp */
+    ListW hub;
+    std::unique_ptr<LibraryPages> lib;
+    LibButton hub_chip;
+    lv_obj_t *hub_chip_icon = nullptr;
+    LibEmpty hub_empty;
+    LibNoteStrip hub_note;
+    LibNote hub_note_shown;
+    bool hub_empty_on = false;
+    int hub_list_y0 = 0, hub_list_bottom0 = 0;
+    bool hub_band_below = false;
+    std::string hub_heading_seen;
+    std::string lib_title_shown;
+    /* the Browser's choose mode (Music folders > Add a folder) */
+    bool browse_choose = false;
+    lv_obj_t *choose_word = nullptr;
 
     /* notice */
     lv_obj_t *notice = nullptr, *notice_icon = nullptr, *notice_text = nullptr, *notice_hit = nullptr;
@@ -1126,9 +983,9 @@ struct View::Impl {
     /* ---------------------------------------------------------------------------------------- list pages */
 
     void build_list(ListW &L, Page p) {
-        const layout::ListPage lp = p == Page::Browser ? layout::ListPage::Browser
-                                    : p == Page::Queue ? layout::ListPage::Queue
-                                                       : layout::ListPage::Output;
+        const layout::ListPage lp = p == Page::Browser || p == Page::LibHub ? layout::ListPage::Browser
+                                    : p == Page::Queue                      ? layout::ListPage::Queue
+                                                                            : layout::ListPage::Output;
         const layout::ListGeom lg = layout::list_geom(lp, W, H, body_y);
         const double s = lg.s;
         auto S = [&](double v) { return std::max(1, ri(v * s)); };
@@ -1152,7 +1009,7 @@ struct View::Impl {
                                                if (act.row) act.row(p, i);
                                            });
         const int sx = ri(lg.strip.x), sy = ri(lg.strip.y), sw = ri(lg.strip.w), shh = ri(lg.strip.h);
-        if (p == Page::Browser) {
+        if (p == Page::Browser || p == Page::LibHub) {
             L.strip = box(r, sx, sy, sw, shh, col::kCream, S(8));
             const int md = S(30);
             L.mini_disc_img.px = render_disc(md, s * 0.5);
@@ -1185,7 +1042,13 @@ struct View::Impl {
                 if (sid == "next")
                     b.hitbox = hold_hit(r, x, y, w, h, 0, 0, [this](int ph) { transport(true, ph); });
                 else
-                    b.hitbox = hit(r, x, y, w, h, 0, 0, [this, sid] { press(sid); });
+                    b.hitbox = hit(r, x, y, w, h, 0, 0, [this, sid, p] {
+                        if (sid == "play" && p == Page::Browser && browse_choose) { /* choose mode: the button is "Use folder" */
+                            if (act.lib_button) act.lib_button(Page::Browser, 0);
+                            return;
+                        }
+                        press(sid);
+                    });
             };
             /* the touch areas from the core (layout::mini_touch_areas: no overlap, the target high; tests/test_hits.cpp) */
             const layout::MiniBoxes mb = layout::mini_touch_areas(lg, W, H, target);
@@ -1267,7 +1130,7 @@ struct View::Impl {
         }
         if (p == Page::Queue) /* the buttons that cannot act dimmed, they do nothing (design QA runs 3, 4: D-81) */
             for (size_t i = 0; i < L.qbtns.size(); ++i) set_dimmed(L.qbtns[i], !(v.queue_buttons & (1u << i)), col::kList);
-        if (p == Page::Browser && L.strip) {
+        if ((p == Page::Browser || p == Page::LibHub) && L.strip) {
             show(L.strip, v.mini.shown);
             show(L.mini_play.vis, v.mini.shown);
             show(L.mini_next.vis, v.mini.shown);
@@ -1276,7 +1139,7 @@ struct View::Impl {
             set_text(L.mini_title, v.mini.title);
             /* the times right of the artist, whole; the artist gets the rest, with dots */
             const lv_font_t *mf = font(Face::Medium, std::max(1, ri(11 * layout::list_geom(layout::ListPage::Browser, W, H, body_y).s)));
-            const std::string sep = v.mini.sub.empty() ? std::string() : std::string(", ");
+            const std::string sep = v.mini.sub.empty() || v.mini.time.empty() ? std::string() : std::string(", ");
             const int tw = text_width(mf, sep + v.mini.time) + 2;
             set_text(L.mini_time, sep + v.mini.time);
             lv_obj_set_width(L.mini_time, tw);
@@ -1287,6 +1150,14 @@ struct View::Impl {
             const int bw = lv_obj_get_width(L.mini_bar);
             lv_obj_set_width(L.mini_fill, std::max(1, ri(std::clamp(v.mini.progress, 0.0, 1.0) * bw)));
             icon_set(L.mini_play.icon, v.mini.playing ? Icon::Pause : Icon::Play, col::kInk);
+        }
+        if (p == Page::Browser && L.strip && v.choose != L.choose_on) apply_choose(L, v.choose);
+        if (p == Page::Browser && L.strip && v.choose) { /* the next button is away, the strip asks */
+            show(L.mini_next.vis, false);
+            show(L.mini_next.hitbox, false);
+            show(L.strip, true);
+            show(L.mini_play.vis, true);
+            show(L.mini_play.hitbox, true);
         }
         if (p == Page::Output && L.strip_text) {
             icon_set(L.strip_icon, v.hint_notice ? Icon::Bluetooth : Icon::Info, v.hint_notice ? col::kInk : col::kInk2);
@@ -1306,6 +1177,137 @@ struct View::Impl {
             const int ip = lv_obj_get_height(L.strip_icon);
             lv_obj_set_y(L.strip_icon, (h - ip) / 2);
         }
+    }
+
+    /* the Browser's choose mode (P2b, Music folders > Add a folder): the mini player's play key becomes the wide "Use this
+     * folder" key over the next key's place; back out of it, the play key is as it was */
+    void apply_choose(ListW &L, bool on) {
+        L.choose_on = on;
+        browse_choose = on;
+        if (on) {
+            L.ch_x = lv_obj_get_x(L.mini_play.vis);
+            L.ch_w = lv_obj_get_width(L.mini_play.vis);
+            L.ch_hx = lv_obj_get_x(L.mini_play.hitbox);
+            L.ch_hw = lv_obj_get_width(L.mini_play.hitbox);
+            const int right = lv_obj_get_x(L.mini_next.vis) + lv_obj_get_width(L.mini_next.vis);
+            const int hright = lv_obj_get_x(L.mini_next.hitbox) + lv_obj_get_width(L.mini_next.hitbox);
+            lv_obj_set_width(L.mini_play.vis, right - L.ch_x);
+            lv_obj_set_width(L.mini_play.hitbox, hright - L.ch_hx);
+            show(L.mini_play.icon, false);
+            if (!choose_word) {
+                const double s = layout::list_geom(layout::ListPage::Browser, W, H, body_y).s;
+                const int bw = right - L.ch_x;
+                /* the label's size fits the widened key (down to 8 px); a label that still did not fit would end in dots, which
+                 * the scenes' expect text "Use folder" catches */
+                const int px = fit_px(Face::Bold, std::max(1, ri(13 * s)), "Use folder", bw - std::max(2, ri(8 * s)), 8);
+                choose_word = label(L.mini_play.vis, Face::Bold, px, col::kInk, 0, 0, bw, LV_TEXT_ALIGN_CENTER);
+                lv_obj_set_y(choose_word, (lv_obj_get_height(L.mini_play.vis) - lv_font_get_line_height(font(Face::Bold, px))) / 2);
+                set_text(choose_word, "Use folder");
+            }
+            show(choose_word, true);
+        } else {
+            lv_obj_set_width(L.mini_play.vis, L.ch_w);
+            lv_obj_set_width(L.mini_play.hitbox, L.ch_hw);
+            show(L.mini_play.icon, true);
+            show(choose_word, false);
+            const bool strip_on = L.strip && !lv_obj_has_flag(L.strip, LV_OBJ_FLAG_HIDDEN);
+            show(L.mini_next.vis, strip_on);
+            show(L.mini_next.hitbox, strip_on);
+        }
+    }
+
+    /* ---------------------------------------------------------------------------------------- the Library hub */
+
+    void build_hub_extras() {
+        const layout::ListGeom lg = layout::list_geom(layout::ListPage::Browser, W, H, body_y);
+        const double s = lg.s;
+        auto S = [&](double v) { return std::max(1, ri(v * s)); };
+        lv_obj_t *r = hub.root;
+        const int band = std::max(ri(lg.heading.h), target);
+        const int cw = S(88), ch = S(24);
+        hub_chip.build(r, ri(lg.panel.right()) - S(12) - cw, ri(lg.panel.y) + (band - ch) / 2, cw, ch, S(12), col::kRowSel, col::kRowText,
+                       "Search", target, [this] {
+                           if (act.lib_chip) act.lib_chip(Page::LibHub);
+                       });
+        const int ip = S(14);
+        hub_chip_icon = icon_obj(hub_chip.vis, Icon::Search, S(10), (ch - ip) / 2, ip, ip, ip, col::kRowText);
+        const int wx = S(10) + ip + S(6);
+        lv_obj_set_x(hub_chip.word, wx);
+        lv_obj_set_width(hub_chip.word, cw - wx - S(6));
+        lv_obj_set_style_text_align(hub_chip.word, LV_TEXT_ALIGN_LEFT, 0);
+        hub_empty.build(r, lg.panel, s, target, [this] {
+            if (act.lib_button) act.lib_button(Page::LibHub, 0);
+        });
+        hub_note.build(r, ri(lg.strip.x), ri(lg.strip.w), s);
+        /* the heading band as tall as the chip's touch area; the list under it */
+        const layout::MiniBoxes mb = layout::mini_touch_areas(lg, W, H, target);
+        hub_list_bottom0 = ri(std::min(lg.list.bottom(), mb.list_bottom));
+        apply_hub_band(false);
+    }
+
+    /* the Search chip beside the heading (Library-480x320), or on a line of its own under it when the heading does not fit
+     * beside it ("LIBRARY, 388 TRACKS SO FAR" on a narrow panel) */
+    void apply_hub_band(bool below) {
+        const layout::ListGeom lg = layout::list_geom(layout::ListPage::Browser, W, H, body_y);
+        const double s = lg.s;
+        auto S = [&](double v) { return std::max(1, ri(v * s)); };
+        hub_band_below = below;
+        const int head_h = ri(lg.heading.h), ch = S(24), cw = S(88);
+        const int band = below ? head_h + std::max(S(30), target) : std::max(head_h, target);
+        const lv_font_t *hf = font(Face::Bold, S(12));
+        lv_obj_set_width(hub.heading, ri(lg.heading.w) - (below ? 0 : cw + S(12)));
+        lv_obj_set_y(hub.heading, ri(lg.panel.y) + ((below ? head_h : band) - lv_font_get_line_height(hf)) / 2);
+        const int cy = below ? ri(lg.panel.y) + head_h + (band - head_h - ch) / 2 : ri(lg.panel.y) + (band - ch) / 2;
+        lv_obj_set_y(hub_chip.vis, cy);
+        lv_obj_set_y(hub_chip.hitbox, cy - (std::max(ch, target) - ch) / 2);
+        hub_list_y0 = ri(lg.panel.y) + band;
+        lv_obj_set_y(hub.list->obj(), hub_list_y0);
+        hub.list->resize(std::max(1, hub_list_bottom0 - hub_list_y0));
+    }
+
+    void update_hub(const LibView &v) {
+        ListView lv;
+        lv.rows = v.rows;
+        lv.rows_ver = v.rows_ver;
+        lv.rows_gen = v.rows_gen;
+        lv.selected = v.selected;
+        lv.scroll_to = -1;
+        lv.heading = v.heading;
+        lv.mini = v.mini;
+        update_list(hub, Page::LibHub, lv);
+        if (v.scroll_to >= 0) hub.list->scroll_y_to(v.scroll_to);
+        if (v.heading != hub_heading_seen) {
+            hub_heading_seen = v.heading;
+            const layout::ListGeom g0 = layout::list_geom(layout::ListPage::Browser, W, H, body_y);
+            const double s0 = g0.s;
+            const int need = text_width(font(Face::Bold, std::max(1, ri(12 * s0))), v.heading, ri(0.04 * 12 * s0)) + std::max(1, ri(4 * s0));
+            const bool below = need > ri(g0.heading.w) - std::max(1, ri(88 * s0)) - std::max(1, ri(12 * s0));
+            if (below != hub_band_below) apply_hub_band(below);
+        }
+        hub_chip.show(!v.chip.empty());
+        show(hub_chip_icon, !v.chip.empty());
+        if (v.empty != hub_empty_on || v.empty) {
+            hub_empty_on = v.empty;
+            hub_empty.set(v.empty_title, v.empty_sub, v.empty_button);
+            hub_empty.show(v.empty);
+            show(hub.list->obj(), !v.empty);
+        }
+        /* the scan strip or the drive note over the mini player (the list gives up the height) */
+        const layout::ListGeom lg = layout::list_geom(layout::ListPage::Browser, W, H, body_y);
+        const double s = lg.s;
+        const int h = v.note.kind == LibNote::Kind::None ? 0 : hub_note.set(v.note);
+        if (h > 0 && !v.empty) {
+            const int gap = std::max(1, ri(6 * s));
+            const int top = v.mini.shown ? lv_obj_get_y(hub.strip) : ri(lg.panel.bottom()) - std::max(1, ri(8 * s));
+            const int y = top - (v.mini.shown ? gap : 0) - h;
+            hub_note.place(y, h);
+            hub_note.show(true);
+            hub.list->resize(std::max(1, y - std::max(1, ri(4 * s)) - hub_list_y0));
+        } else {
+            hub_note.show(false);
+            hub.list->resize(std::max(1, hub_list_bottom0 - hub_list_y0));
+        }
+        hub_note_shown = v.note;
     }
 
     /* ---------------------------------------------------------------------------------------- notices */
@@ -1366,7 +1368,9 @@ struct View::Impl {
         hide_notice();
         lv_obj_t *root = cur == Page::Now       ? now_root
                          : cur == Page::Browser ? br.root
+                         : cur == Page::LibHub  ? hub.root
                          : cur == Page::Queue   ? qu.root
+                         : is_lib_page(cur) && lib ? lib->root(cur)
                          : MenuPages::is_menu_page(cur) && menu ? menu->root(cur)
                                                 : out.root;
         if (!root) return;
@@ -1415,10 +1419,10 @@ struct View::Impl {
                 }
                 y = row_bottom > 0 ? row_top + (row_bottom - row_top - h) / 2 : Y(b.bottom()) - h;
             }
-        } else if (MenuPages::is_menu_page(cur) && menu) {
-            /* a Menu page: over its strip's place at the panel's bottom (the strip, or the last rows: the notice's area
-             * is its drawing, a tap dismisses it) */
-            const R room = menu->notice_room(cur);
+        } else if ((MenuPages::is_menu_page(cur) && menu) || (is_lib_page(cur) && cur != Page::LibHub && lib)) {
+            /* a Menu or Library page: over its strip's place at the panel's bottom (the strip, or the last rows: the
+             * notice's area is its drawing, a tap dismisses it) */
+            const R room = MenuPages::is_menu_page(cur) ? menu->notice_room(cur) : lib->notice_room(cur);
             s = layout::list_geom(layout::ListPage::Output, W, H, body_y).s;
             const int h = ri((danger ? 30 : 50) * s);
             x = ri(room.x);
@@ -1428,15 +1432,16 @@ struct View::Impl {
             const int ah = std::max(h, target);
             notice_area = R{double(x), double(ri(room.bottom()) - ah), double(w), double(ah)};
         } else {
-            const layout::ListPage lp = cur == Page::Browser ? layout::ListPage::Browser
-                                        : cur == Page::Queue ? layout::ListPage::Queue
-                                                             : layout::ListPage::Output;
+            const layout::ListPage lp = cur == Page::Browser || cur == Page::LibHub ? layout::ListPage::Browser
+                                        : cur == Page::Queue                      ? layout::ListPage::Queue
+                                                                                  : layout::ListPage::Output;
             const layout::ListGeom lg = layout::list_geom(lp, W, H, body_y);
             s = lg.s;
             /* over the strip, under the list's end: its touch area holds the strip's areas it covers, hidden while it
              * shows (design QA run 4, D-33) */
             std::vector<lv_obj_t *> under;
             if (cur == Page::Browser) under = {br.mini_open_hit, br.mini_play.hitbox, br.mini_next.hitbox};
+            else if (cur == Page::LibHub) under = {hub.mini_open_hit, hub.mini_play.hitbox, hub.mini_next.hitbox};
             else if (cur == Page::Queue)
                 for (Button &b : qu.qbtns) under.push_back(b.hitbox);
             double list_end = lg.strip.y;
@@ -1453,6 +1458,11 @@ struct View::Impl {
             y = ri(nbox.y);
             if (ri(nbox.h) != ri((danger ? 30 : 50) * s)) fit_h = ri(nbox.h);
             notice_area = layout::notice_area_over(nbox, covered);
+            if (notice_area.h < target) { /* nothing of the strip under it (no mini player): its touch area still the target high, upwards */
+                const double bot = notice_area.bottom();
+                notice_area.y = std::max(lg.panel.y, bot - target);
+                notice_area.h = bot - notice_area.y;
+            }
             cover_for_notice(under);
         }
         make_notice(root, n.kind, x, y, w, s, notice, notice_icon, notice_text, fit_h);
@@ -1581,12 +1591,46 @@ View::View(lv_obj_t *screen, Actions actions) : d_(std::make_unique<Impl>()) {
     d.fit = layout::now_fit(d.g, d.W, d.H, d.body_y);
     d.build_now();
     d.build_list(d.br, Page::Browser);
+    d.build_list(d.hub, Page::LibHub);
+    d.build_hub_extras();
     d.build_list(d.qu, Page::Queue);
     d.build_list(d.out, Page::Output);
     d.build_notices_demo();
     d.menu = std::make_unique<MenuPages>([&d] { return d.page_root(); }, d.W, d.H, d.body_y, d.list_row, [&d](Page p, int i) {
         if (d.act.row) d.act.row(p, i);
     });
+    {
+        LibraryCallbacks lc;
+        lc.on_row = [&d](Page p, int i) {
+            if (d.act.lib_row) d.act.lib_row(p, i);
+        };
+        lc.on_hold = [&d](Page p, int i) {
+            if (d.act.lib_hold) d.act.lib_hold(p, i);
+        };
+        lc.on_button = [&d](Page p, int i) {
+            if (d.act.lib_button) d.act.lib_button(p, i);
+        };
+        lc.on_chip = [&d](Page p) {
+            if (d.act.lib_chip) d.act.lib_chip(p);
+        };
+        lc.on_query = [&d](const std::string &q) {
+            if (d.act.lib_query) d.act.lib_query(q);
+        };
+        lc.on_submit = [&d] {
+            if (d.act.lib_submit) d.act.lib_submit();
+        };
+        lc.on_field_escape = [&d] {
+            if (d.act.lib_field_escape) d.act.lib_field_escape();
+        };
+        lc.on_sheet_pick = [&d](int i) {
+            if (d.act.sheet_pick) d.act.sheet_pick(i);
+        };
+        lc.on_sheet_dismiss = [&d] {
+            if (d.act.sheet_dismiss) d.act.sheet_dismiss();
+        };
+        d.lib = std::make_unique<LibraryPages>([&d] { return d.page_root(); }, nullptr, d.tk, d.W, d.H, d.body_y, d.target, d.list_row,
+                                               std::move(lc));
+    }
     d.cur = Page::Now;
 }
 
@@ -1594,7 +1638,9 @@ View::~View() {
     d_->hide_notice();
     d_->close_dialog();
     d_->qlist.reset();
+    d_->lib.reset();
     d_->br.list.reset();
+    d_->hub.list.reset();
     d_->qu.list.reset();
     d_->out.list.reset();
     d_->menu.reset();
@@ -1608,9 +1654,17 @@ void View::show_page(Page p) {
     if (p == d.cur) return;
     d.hide_notice();
     d.close_dialog();
+    if (d.lib) {
+        d.lib->hide_sheet();
+        if (d.cur == Page::LibSearch) d.lib->search_end_edit();
+    }
+    d.lib_title_shown.clear();
     d.cur = p;
     show(d.now_root, p == Page::Now);
     show(d.br.root, p == Page::Browser);
+    show(d.hub.root, p == Page::LibHub);
+    for (int i = static_cast<int>(Page::LibArtists); i <= static_cast<int>(Page::LibFolders); ++i)
+        show(d.lib->root(static_cast<Page>(i)), static_cast<int>(p) == i);
     show(d.qu.root, p == Page::Queue);
     show(d.out.root, p == Page::Output);
     show(d.not_root, p == Page::Notices);
@@ -1620,6 +1674,16 @@ void View::show_page(Page p) {
     case Page::Browser: d.page->set_title({"Vinyl", "Browse"}); break;
     case Page::Queue: d.page->set_title({"Queue"}); break;
     case Page::Output: d.page->set_title({"Output"}); break;
+    case Page::LibArtists: d.page->set_title({"Artists"}); break;
+    case Page::LibArtist: d.page->set_title({"Artist"}); break;
+    case Page::LibAlbums: d.page->set_title({"Albums"}); break;
+    case Page::LibAlbum: d.page->set_title({"Album"}); break;
+    case Page::LibSongs: d.page->set_title({"Songs"}); break;
+    case Page::LibGenres: d.page->set_title({"Genres"}); break;
+    case Page::LibSearch: d.page->set_title({"Search"}); break;
+    case Page::LibInfo: d.page->set_title({"Track info"}); break;
+    case Page::LibSettings: d.page->set_title({"Library"}); break;
+    case Page::LibFolders: d.page->set_title({"Music folders"}); break;
     case Page::Menu: d.page->set_title({menu::page_title(menu::Page::Menu)}); break;
     case Page::Sleep: d.page->set_title({menu::page_title(menu::Page::Sleep)}); break;
     case Page::Playback: d.page->set_title({menu::page_title(menu::Page::Playback)}); break;
@@ -1640,10 +1704,34 @@ void View::update_list(Page p, const ListView &v) {
     else if (p == Page::Output) d.update_list(d.out, p, v);
 }
 
+void View::update_lib(Page p, const LibView &v) {
+    Impl &d = *d_;
+    if (!v.title.empty() && v.title != d.lib_title_shown && d.cur == p) {
+        d.lib_title_shown = v.title;
+        d.page->set_title({v.title});
+    }
+    if (p == Page::LibHub) d.update_hub(v);
+    else d.lib->update(p, v);
+}
+int View::lib_scroll_y(Page p) const {
+    if (p == Page::LibHub) return d_->hub.list ? d_->hub.list->scroll_y() : 0;
+    return is_lib_page(p) && d_->lib ? d_->lib->scroll_y(p) : 0;
+}
+void View::search_open(const std::string &text, bool edit) { d_->lib->search_open(text, edit); }
+void View::search_edit() { d_->lib->search_edit(); }
+void View::search_end_edit() { d_->lib->search_end_edit(); }
+bool View::search_editing() const { return d_->lib->search_editing(); }
+void View::show_sheet(const SheetView &v) { d_->lib->show_sheet(v); }
+void View::hide_sheet() { d_->lib->hide_sheet(); }
+bool View::sheet_shown() const { return d_->lib->sheet_shown(); }
+void View::sheet_select(int i) { d_->lib->sheet_select(i); }
 void View::update_menu(Page p, const MenuView &v) { d_->menu->update(p, v); }
 void View::set_keys(const std::vector<menu::KeyHelp> &rows) { d_->menu->set_keys(rows); }
 void View::set_about(const menu::About &a) { d_->menu->set_about(a); }
-void View::scroll_page(Page p, int rows) { d_->menu->scroll(p, rows); }
+void View::scroll_page(Page p, int rows) {
+    if (p == Page::LibInfo) d_->lib->scroll(p, rows);
+    else d_->menu->scroll(p, rows);
+}
 
 void View::show_notice(const Notice &n) { d_->show_notice(n); }
 void View::hide_notice() { d_->hide_notice(); }
@@ -1660,6 +1748,8 @@ int View::list_rows(Page p) const {
     if (p == Page::Browser) return d.br.rows;
     if (p == Page::Queue) return d.qu.rows;
     if (p == Page::Output) return d.out.rows;
+    if (p == Page::LibHub) return d.hub.rows;
+    if (is_lib_page(p)) return d.lib->rows(p);
     if (MenuPages::is_menu_page(p)) return d.menu->rows(p);
     return 0;
 }

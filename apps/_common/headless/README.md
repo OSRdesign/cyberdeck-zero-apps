@@ -44,6 +44,7 @@ After the app asks to quit, only `expect` lines are read.
 | `type TEXT` | the characters, each as a key with its text (`cp0_keyboard_inject_key`, the on-screen keyboard's path) |
 | `tap TEXT` / `tapkey TEXT` | a tap on the visible label with exactly this text (its nearest clickable parent): on the page / on the on-screen keyboard |
 | `hold TEXT MS` | a press on the visible label's clickable parent held MS ms and then released (a long press) |
+| `press TEXT`, `release` | a finger goes down on the visible label's clickable parent and stays down (the app runs on in the next `wait`s, a `shot` shows what a held finger shows, e.g. a hold cue); `release` lifts it |
 | `tapxy FX FY`, `drag FX1 FY1 FX2 FY2` | a tap / a drag at fractions (0..1) of the screen |
 | `dragon TEXT DY` | a drag that starts at the centre of the visible label (a button: its label, so on the button) and moves DY (a fraction of the screen height, negative = up) |
 | `scrollmark`, `expect scrolled\|notscrolled` | `scrollmark` keeps the sum of every scroll offset of the shown objects; `expect scrolled` fails when it did not change since, `expect notscrolled` when it did |

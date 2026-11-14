@@ -1,0 +1,29 @@
+title Vinyl P2b: the scan paused because the board is hot (the strip's bar red: Paused: the board is hot. Resumes when it cools.) (480x320 and 320x480, their real density)
+sizes 480x320 320x480
+ppmm 630
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_LIBRARY full
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE library
+env VINYL_DEMO_SCAN paused
+keyboards 1
+wait 1200
+shot 01-hub-scanning
+expect text "LIBRARY, 166 TRACKS SO FAR"
+expect text "Paused: the board is hot. Resumes when it cools."
+expect text "Artists"
+expect text "Search"
+expect noquit
+# the Library settings while a scan runs: the cream block with its bar; Rescan now is inert
+key m
+wait 500
+tap "Library"
+wait 700
+shot 02-settings-scanning
+expect text "PAUSED, THE BOARD IS HOT"
+expect text "You can keep listening. The scan runs at low priority and stops when you leave the page or the board gets hot."
+expect text "Rescan now"
+key esc
+wait 400
+expect text "Playback"

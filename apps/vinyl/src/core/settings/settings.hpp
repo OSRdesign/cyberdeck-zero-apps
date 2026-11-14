@@ -7,6 +7,8 @@
  *                  every track change drains the stream and opens it again (a short gap)
  *   replaygain     Off / Track (default, D25) / Album: the gain from the files' tags (core/dsp/replaygain.hpp)
  *   remember_long  On (default): a file longer than 20 minutes keeps where it stopped (core/state/positions.hpp)
+ *   library        {"folders": [...]}: folders the library indexes besides ~/Music and the mounted drives (P2b,
+ *                  core/library/roots.hpp); written only once a folder was added
  *
  * ~/.config/vinyl/settings.json (XDG_CONFIG_HOME when set), a file of its own: written atomically, only when a setting
  * changes (never on a timer: SD wear), never by state.json's writes; keys Vinyl does not know (a newer version's) are kept.
@@ -18,6 +20,7 @@
 #include "../util/json.hpp"
 
 #include <string>
+#include <vector>
 
 namespace vinyl {
 
@@ -27,8 +30,10 @@ struct Settings {
     bool gapless = true;
     ReplayGainMode replaygain = ReplayGainMode::Track;
     bool remember_long = true;
+    std::vector<std::string> library_folders; /* absolute paths */
     bool operator==(const Settings &o) const {
-        return gapless == o.gapless && replaygain == o.replaygain && remember_long == o.remember_long;
+        return gapless == o.gapless && replaygain == o.replaygain && remember_long == o.remember_long &&
+               library_folders == o.library_folders;
     }
     bool operator!=(const Settings &o) const { return !(*this == o); }
 };

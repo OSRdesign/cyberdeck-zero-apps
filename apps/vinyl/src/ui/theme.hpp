@@ -33,6 +33,10 @@ constexpr std::uint32_t kRowDim = 0x7A7A7A;   /* a paired device that is not con
 constexpr std::uint32_t kDotDim = 0x555555;
 constexpr std::uint32_t kPlaying = 0x3B82F6;  /* the dot of the playing track / the chosen output */
 constexpr std::uint32_t kDanger = 0x8A2A22;   /* Clear all, the disconnect notice */
+constexpr std::uint32_t kPrimary = 0x8A5A2B;  /* the Library canvases' primary button (Add a folder, Play album chips) */
+constexpr std::uint32_t kAmber = 0xF0B400;    /* the scan bar, the drive note's edge */
+constexpr std::uint32_t kHot = 0xE0553A;      /* the scan bar while paused for heat */
+constexpr std::uint32_t kBarTrack = 0x1B1E1E; /* the scan strip's bar track */
 constexpr std::uint32_t kGroove1 = 0x141414, kGroove2 = 0x1F1F1F;
 
 } // namespace col

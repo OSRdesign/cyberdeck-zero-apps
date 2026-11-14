@@ -1,0 +1,37 @@
+title Vinyl P2b: Music folders offers Mount on a drive that is plugged in and not mounted (owner, 2026-11-14): the amber dot, the button Mount <LABEL> in the brown look, then mounted by Vinyl with Eject (480x320 and 320x480, their real density)
+sizes 480x320 320x480
+ppmm 630
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_LIBRARY full
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE library
+env VINYL_DEMO_DRIVES unmounted
+keyboards 1
+wait 1200
+key m
+wait 500
+tap "Library"
+wait 700
+tap "Music folders"
+wait 700
+shot 01-unmounted-row
+@480x320,640x480,800x480,480x480,720x720 expect text "Generic Flash Disk (USB drive)"
+@480x320,640x480,800x480,480x480,720x720 expect text "not mounted"
+key down
+key down
+shot 02-mount-button
+expect text "Mount Generic Flash Disk"
+expect text "Remove selected folder"
+tap "Mount Generic Flash Disk"
+wait 250
+expect text "Mounting Generic Flash Disk..."
+wait 900
+shot 03-mounted-by-vinyl
+@480x320,640x480,800x480,480x480,720x720 expect text "mounted by Vinyl"
+expect text "Eject Generic Flash Disk"
+key esc
+wait 300
+key esc
+wait 300
+expect text "Playback"

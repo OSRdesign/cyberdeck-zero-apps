@@ -55,6 +55,7 @@ struct State {
     SleepMode sleep = SleepMode::Off;
     uint64_t sleep_left_ms = 0;
     std::string output; /* the output's name as now playing shows it ("" when none is known) */
+    bool library = false; /* P2b: the Library is available (its database opened): the Library row, below Playback */
     Settings settings;
 };
 

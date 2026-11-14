@@ -13,6 +13,9 @@
  *   Output   the output chooser with its hint strip (or the "not set up" notice strip);
  *   Notices  (a demonstration page for the scenes only: the four notices of the notices draft);
  *   Menu ... About  the Menu pages (P2a: ui/menu_pages.hpp).
+ *   LibHub ... LibFolders  the Library (P2b): the hub is the Browser's list page with the Search chip, the scan strip or
+ *            the drive note over the mini player and the empty message; the other pages are ui/library_pages.hpp; the
+ *            Browser also has a choose mode (Music folders > Add a folder).
  * Where the drawing makes a control smaller than the toolkit's touch target, the control keeps its look and gets a larger
  * transparent hit box, never overlapping a neighbour's (layout::place_now_hits). The previous and next buttons report
  * press, release and cancel (the transport press decides). The view only draws: every action goes to the controller
@@ -44,6 +47,18 @@ public:
     void update_list(Page p, const ListView &v);
     /* the Menu pages (P2a): a list page's rows, the Keys page's table, the About page's texts; Keys and About scroll */
     void update_menu(Page p, const MenuView &v);
+    /* P2b: the Library pages (LibHub is the Browser's list page with the mini player), the search field and the actions sheet */
+    void update_lib(Page p, const LibView &v);
+    void search_open(const std::string &text, bool edit); /* the field's text; edit: it takes the keys (the page is shown) */
+    void search_edit();
+    void search_end_edit();
+    bool search_editing() const;
+    /* where a Library page's list is scrolled to, in pixels (kept when the place is left, given back by LibView::scroll_to) */
+    int lib_scroll_y(Page p) const;
+    void show_sheet(const SheetView &v);
+    void hide_sheet();
+    bool sheet_shown() const;
+    void sheet_select(int i);
     void set_keys(const std::vector<menu::KeyHelp> &rows);
     void set_about(const menu::About &a);
     void scroll_page(Page p, int rows);

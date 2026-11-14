@@ -12,6 +12,7 @@
 #include "app/pulse_worker.hpp"
 #include "app/sink_watch.hpp"
 #include "decode/decode_libs.hpp"
+#include "drives/drives.hpp"
 #include "demo/demo_world.hpp"
 #include "engine/engine.hpp"
 #include "engine/outputs.hpp"
@@ -20,6 +21,11 @@
 #include "nav/nav_rules.hpp"
 #include "launcher/launcher_link.hpp"
 #include "library/browse.hpp"
+#include "library/library_ctl.hpp"
+#include "library/media_guard.hpp"
+#include "library/lib_model.hpp"
+#include "library/roots.hpp"
+#include "library/schema.hpp"
 #include "library/tag_jobs.hpp"
 #include "menu/menu_model.hpp"
 #include "pulse/pulse_api.hpp"
@@ -44,6 +50,7 @@
 #include <map>
 #include <set>
 #include <sstream>
+#include <unistd.h>
 
 namespace vinyl {
 namespace ui {
@@ -113,6 +120,20 @@ struct VinylApp::Impl final : TransportHost {
     std::string vol_logged; /* the last volume line logged */
     std::unique_ptr<Engine> engine;
     TagJobs jobs;
+    /* P2b: the Library (its database, its worker and scanner; null without it: Browse is the folder list as in 0.2.0) */
+    std::unique_ptr<LibraryCtl> lib;
+    bool browser_from_lib = false; /* the Browser came from the hub's Folders row */
+    bool choose_mode = false;      /* ... in choose mode (Music folders > Add a folder) */
+    bool pending_escape = false;   /* the search field's Esc, run at the next tick (outside the key event) */
+    std::string play_path;         /* the track heard: its play count at its end */
+    uint64_t gone_checked = 0;
+    std::vector<DriveBase> drive_bases = default_drive_bases(); /* where the queue's files may be on a drive */
+    FakeDrives *demo_fake = nullptr;                            /* the scenes: the drive that is "pulled" */
+    uint64_t demo_pull_at = 0;
+    bool lib_on() const { return lib && lib->available(); }
+    /* "Mount on request in Vinyl" (owner, 2026-11-14): the removable drives, mounted by udisks off the UI thread */
+    std::unique_ptr<DriveManager> drives;
+    std::string demo_drive_dir; /* the scenes: a drive Vinyl mounted (VINYL_DEMO_DRIVES=vinyl) */
     MediaKeyReader keys;
     std::unique_ptr<LauncherStatusReader> launcher;
     std::unique_ptr<LauncherRequests> requests;
@@ -281,7 +302,37 @@ struct VinylApp::Impl final : TransportHost {
         };
         a.volume_step = [this](int d) { volume_step(d); };
         a.volume_unavailable = [this] { notice(Notice::Kind::Info, "Volume is not available on this board"); };
+        a.lib_row = [this](Page p, int i) {
+            if (lib) lib->row(p, i);
+            refresh(true);
+        };
+        a.lib_hold = [this](Page p, int i) {
+            if (lib) lib->hold(p, i);
+            refresh(true);
+        };
+        a.lib_chip = [this](Page p) {
+            if (lib) lib->chip(p);
+            refresh(true);
+        };
+        a.lib_button = [this](Page p, int i) { lib_button(p, i); };
+        a.lib_query = [this](const std::string &q) {
+            if (lib) lib->query_changed(q);
+        };
+        a.lib_submit = [this] {
+            if (lib) lib->submit();
+            refresh(true);
+        };
+        a.lib_field_escape = [this] { pending_escape = true; };
+        a.sheet_pick = [this](int i) {
+            if (lib) lib->sheet_pick(i);
+            refresh(true);
+        };
+        a.sheet_dismiss = [this] {
+            if (lib) lib->close_sheet();
+        };
         view = std::make_unique<View>(screen, a);
+        make_drives();
+        make_library();
         std::fprintf(stderr, "[vinyl] canvas %dx%d, class %s\n", cdk::screen_w(), cdk::screen_h(),
                      layout::class_name(view->size_class()));
 
@@ -306,9 +357,10 @@ struct VinylApp::Impl final : TransportHost {
             set_app_muted(resume, key, true);
         }
         apply_gain();
-        Page first = Page::Browser;
+        Page first = lib_on() ? Page::LibHub : Page::Browser;
         if (!resume.items.empty()) {
             queue_from_resume(resume, queue);
+            drop_gone_media(true); /* a drive that is not there at start: its entries go before anything is drawn (B50) */
             ++qgen;
             if (queue.current() >= 0) {
                 engine->load(queue.current(), *queue.current_path(), resume.position_ms, demo && env_str("VINYL_DEMO_STATE") == "playing");
@@ -321,6 +373,7 @@ struct VinylApp::Impl final : TransportHost {
         open_folder(f, "");
         if (const std::string p = env_str("VINYL_DEMO_PAGE"); demo && !p.empty()) {
             if (p == "browser") first = Page::Browser;
+            else if (p == "library") first = lib_on() ? Page::LibHub : Page::Browser;
             else if (p == "queue") first = Page::Queue;
             else if (p == "output") first = Page::Output;
             else if (p == "notices") first = Page::Notices;
@@ -355,7 +408,9 @@ struct VinylApp::Impl final : TransportHost {
         }
         if (first == Page::Menu || back_to.count(first)) back_to[Page::Menu] = Page::Now;
         if (first == Page::Queue || first == Page::Output || first == Page::Menu || first == Page::About) refresh_outputs(true);
-        go(first);
+        if (first == Page::LibHub && lib_on()) lib->enter();
+        else go(first);
+        if (lib_on() && !demo) lib->start_launch_scan(); /* D27: the scan at app launch */
         state_policy.wrote(mono_ms_now()); /* what is on disk is what was read */
         pos_policy.wrote(mono_ms_now());
         if (worker) scan(true);
@@ -374,6 +429,8 @@ struct VinylApp::Impl final : TransportHost {
         save_positions_now(true);
         keys.stop();
         if (engine) engine->shutdown();
+        if (drives) drives->shutdown(); /* what Vinyl mounted, Vinyl unmounts; never what the system mounted */
+        lib.reset();
         jobs.stop();
         if (worker) worker->stop();
         if (pulse) pulse->disconnect();
@@ -384,6 +441,14 @@ struct VinylApp::Impl final : TransportHost {
     /* ------------------------------------------------------------------------------------------ pages */
 
     void go(Page p) {
+        if (lib) {
+            if (lib->sheet_open()) lib->close_sheet();
+            const bool lib_side = is_lib_page(p) || (p == Page::Browser && browser_from_lib);
+            if (lib->in_library() && !lib_side) lib->left(); /* D27: leaving the Library stops the scan */
+            else if (!lib->in_library() && is_lib_page(p)) lib->reenter();
+        }
+        if (p != Page::Browser) choose_mode = false;
+        if (p != Page::Browser && !is_lib_page(p)) browser_from_lib = false;
         if (p == Page::Queue) {
             qu_sel = std::max(0, queue.current());
             qu_scroll = qu_sel;
@@ -427,15 +492,36 @@ struct VinylApp::Impl final : TransportHost {
     void back() {
         const Page p = view->page();
         switch (p) {
-        case Page::Now: go(Page::Browser); break;
+        case Page::Now: open_browse(); break;
         case Page::Queue: go(back_from_queue); break;
         case Page::Output: go(back_from_output); break;
         case Page::Notices: go(Page::Now); break;
         case Page::Browser:
+            if (choose_mode && lib_on()) { /* back to the Music folders page */
+                choose_mode = false;
+                lib->choose_cancelled();
+                break;
+            }
+            if (browser_from_lib && lib_on()) { /* back to the hub */
+                browser_from_lib = false;
+                lib->resume();
+                break;
+            }
             std::fprintf(stderr, "[vinyl] Esc at the browser: quit\n");
             cdk::request_quit(0);
             break;
         default: { /* the Menu pages: back where they were opened from (the Menu for its own rows) */
+            if (is_lib_page(p) && lib_on()) { /* the Library: back one place; at its first place where it was opened from, or quit */
+                if (lib->back()) break;
+                auto lt = back_to.find(p);
+                if (lt != back_to.end()) {
+                    go(lt->second);
+                    break;
+                }
+                std::fprintf(stderr, "[vinyl] Esc at the Library: quit\n");
+                cdk::request_quit(0);
+                break;
+            }
             auto it = back_to.find(p);
             go(it != back_to.end() ? it->second : (p == Page::Menu ? Page::Now : Page::Menu));
             break;
@@ -452,7 +538,7 @@ struct VinylApp::Impl final : TransportHost {
             back_from_output = p;
             go(Page::Output);
         } else if (id == "browse") {
-            go(Page::Browser);
+            open_browse();
         } else if (id == "menu") { /* the Menu key, M: Esc goes back to the page it was opened from */
             if (p == Page::Menu) return;
             if (!is_menu_page(p)) back_to[Page::Menu] = p;
@@ -583,13 +669,17 @@ struct VinylApp::Impl final : TransportHost {
         entries.clear();
         folder = path;
         if (path.empty()) {
+            if (!demo) roots = system_roots(); /* a stick mounted or pulled since: the list is as the mounts are now */
             entries = root_entries(roots);
+            add_drive_entries();
         } else {
-            const bool top = roots.size() == 1 && roots.front().path == path;
+            const bool top = roots.size() == 1 && roots.front().path == path && !drives_listed();
             const int r = list_folder(path, top, entries);
             if (r < 0) std::fprintf(stderr, "[vinyl] cannot list %s: %s\n", path.c_str(), std::strerror(-r));
         }
         br_sel = entries.empty() ? -1 : 0;
+        while (br_sel >= 0 && br_sel < static_cast<int>(entries.size()) && entries[static_cast<size_t>(br_sel)].kind == Entry::Kind::Heading) ++br_sel;
+        if (br_sel >= static_cast<int>(entries.size())) br_sel = -1;
         std::vector<std::string> tracks;
         for (size_t i = 0; i < entries.size(); ++i) {
             if (entries[i].kind == Entry::Kind::Track) tracks.push_back(entries[i].path);
@@ -604,16 +694,174 @@ struct VinylApp::Impl final : TransportHost {
         ++rows_gen;
         resume.browse = path;
         dirty = true;
+        if (browser_from_lib && !choose_mode && lib_on() && !path.empty()) lib->browser_opened(path); /* D27 */
+    }
+
+    /* the root list's last rows: the removable drives that are plugged in and not mounted (a tap mounts them), and "mounted" on the
+     * mounted ones' rows */
+    void add_drive_entries() {
+        if (!drives) return;
+        const std::vector<DriveInfo> list = drives->list();
+        for (Entry &e : entries)
+            if (e.kind == Entry::Kind::Root)
+                for (const DriveInfo &d : list)
+                    if (d.mounted && d.mount_dir == e.path) e.extra = size_text(d.size) + ", mounted";
+        bool heading = false;
+        for (const DriveInfo &d : list) {
+            if (d.mounted) continue;
+            if (!heading) {
+                heading = true;
+                entries.push_back({Entry::Kind::Heading, "USB DRIVES", "", ""});
+            }
+            entries.push_back({Entry::Kind::Drive, d.name(), d.dev, "not mounted. Tap to mount"});
+        }
+    }
+
+    /* a removable drive is plugged in: the list of roots is the top of the Browser (a drive that is not mounted is a row there) */
+    bool drives_listed() const { return drives && !drives->list().empty(); }
+
+    /* a tap on a drive's row in Folders, or the button Mount in Music folders: the same worker, the same notices */
+    void request_mount(const std::string &dev, const std::string &name) {
+        if (!drives || !drives->available()) {
+            notice(Notice::Kind::Info, "Drives need the udisks2 package.");
+            return;
+        }
+        if (drives->busy()) return;
+        notice(Notice::Kind::Info, "Mounting " + name + "...");
+        drives->mount_async(dev, name);
+    }
+
+    void browser_move(int d) {
+        int n = br_sel + d;
+        while (n >= 0 && n < static_cast<int>(entries.size()) && entries[static_cast<size_t>(n)].kind == Entry::Kind::Heading) n += d;
+        if (n < 0 || n >= static_cast<int>(entries.size())) return;
+        br_sel = n;
+        refresh(true);
+    }
+
+    /* the answers of the drive thread: a mount opens the drive in the Browser and joins the Library, a failure says why */
+    void drive_results() {
+        DriveManager::Result r;
+        while (drives && drives->take(r)) {
+            switch (r.kind) {
+            case DriveManager::Result::Kind::Mounted:
+                std::fprintf(stderr, "[vinyl] drives: %s mounted at %s\n", r.dev.c_str(), r.mount_dir.c_str());
+                if (demo && std::none_of(roots.begin(), roots.end(), [&](const Root &x) { return x.path == r.mount_dir; })) roots.push_back(Root{r.name, r.mount_dir});
+                if (lib_on()) lib->drive_mounted(r.mount_dir);
+                if (lib_on()) lib->mounts_changed(); /* Music folders: the row says "mounted by Vinyl" */
+                if (view->page() == Page::LibFolders) {
+                    refresh(true);
+                } else if (view->page() == Page::Browser && !choose_mode) {
+                    open_folder(r.mount_dir, "");
+                    refresh(true);
+                } else if (view->page() == Page::Browser) {
+                    open_folder("", "");
+                    refresh(true);
+                }
+                break;
+            case DriveManager::Result::Kind::MountFailed:
+                std::fprintf(stderr, "[vinyl] drives: cannot mount %s: %s\n", r.dev.c_str(), r.reason.c_str());
+                notice(Notice::Kind::Info, "Could not mount it: " + r.reason + ".");
+                break;
+            case DriveManager::Result::Kind::Unmounted:
+                std::fprintf(stderr, "[vinyl] drives: %s unmounted\n", r.dev.c_str());
+                if (demo) roots.erase(std::remove_if(roots.begin(), roots.end(), [&](const Root &x) { return x.path == demo_drive_dir || x.label == r.name; }), roots.end());
+                if (lib_on()) lib->mounts_changed();
+                drop_gone_media(false); /* what was queued from it goes (B50) */
+                if (view->page() == Page::Browser && !folder.empty() && !root_of(roots, folder)) open_folder("", ""); /* it was open: its place is gone */
+                else if (view->page() == Page::Browser && folder.empty()) open_folder("", "");
+                refresh(true);
+                notice(Notice::Kind::Info, r.name + " ejected. You can unplug it.");
+                break;
+            case DriveManager::Result::Kind::UnmountFailed:
+                std::fprintf(stderr, "[vinyl] drives: cannot unmount %s: %s\n", r.dev.c_str(), r.reason.c_str());
+                notice(Notice::Kind::Info, "Could not eject it: " + r.reason + ".");
+                break;
+            }
+        }
+    }
+
+    /* the drives: the real ones through udisks; the scenes' (VINYL_DEMO_DRIVES = unmounted | denied | nofs | nodisks | vinyl) */
+    void make_drives() {
+        if (!demo) {
+            drives = std::make_unique<DriveManager>(make_udisks_backend());
+            return;
+        }
+        const std::string mode = env_str("VINYL_DEMO_DRIVES");
+        if (mode.empty()) return;
+        auto fake = std::make_unique<FakeDrives>();
+        fake->mount_base = demo_world.root + "/media";
+        const std::string base = fake->mount_base;
+        auto make_drive_dir = [](const std::string &dir) {
+            make_dirs(posix_file_ops(), dir);
+            write_demo_wav(dir + "/Flash Song.wav", 90, 44100, "Flash Song", "Flash Artist", "Flash Album", "2020", 1);
+        };
+        DriveInfo gen;
+        gen.dev = "/dev/sdb1";
+        gen.label = "Generic Flash Disk";
+        gen.fstype = "vfat";
+        gen.size = 15500000000ull;
+        fake->devices.push_back(gen);
+        if (mode == "nodisks") fake->has_udisks = false;
+        fake->on_mount = [base, mode, make_drive_dir](const std::string &dev) -> MountReply {
+            MountReply r;
+            if (mode == "denied") r.reason = "this session is not allowed to mount drives";
+            else if (mode == "nofs") r.reason = "the disk has no readable filesystem";
+            else {
+                r.ok = true;
+                r.mount_dir = base + (dev == "/dev/sda1" ? "/SANDISK" : "/Generic Flash Disk");
+                make_drive_dir(r.mount_dir);
+            }
+            return r;
+        };
+        if (mode == "vinyl") { /* SANDISK, mounted by Vinyl and a root of the library; the generic one plugged in, not mounted */
+            DriveInfo sd;
+            sd.dev = "/dev/sda1";
+            sd.label = "SANDISK";
+            sd.fstype = "vfat";
+            sd.size = 31000000000ull;
+            sd.mounted = true;
+            sd.mount_dir = base + "/SANDISK";
+            make_drive_dir(sd.mount_dir);
+            fake->devices.insert(fake->devices.begin(), sd);
+            demo_drive_dir = sd.mount_dir;
+            roots.push_back(Root{"SANDISK", sd.mount_dir});
+        }
+        drive_bases.push_back(DriveBase{base + "/", 1});
+        demo_fake = fake.get();
+        /* the scenes' saved queues (VINYL_DEMO_DRIVE_QUEUE): "drive" = the three songs of SANDISK (playing), "gone" = two songs of a
+         * drive that is not there */
+        const std::string dq = env_str("VINYL_DEMO_DRIVE_QUEUE");
+        if (!dq.empty()) {
+            ResumeState rs;
+            const std::string d = dq == "drive" ? base + "/SANDISK" : base + "/GONE";
+            for (const char *n : {"Flash Song.wav", "Flash Song 2.wav", "Flash Song 3.wav"}) {
+                if (dq == "drive") write_demo_wav(d + "/" + n, 120, 44100, std::string(n, std::strlen(n) - 4), "Flash Artist", "Flash Album", "2020", 1);
+                rs.items.push_back(d + "/" + n);
+            }
+            for (size_t i = 0; i < rs.items.size(); ++i) rs.order.push_back(static_cast<int>(i));
+            rs.current = 0;
+            rs.output = "auto";
+            rs.source = d;
+            save_resume(resume_file, rs);
+        }
+        if (const std::string pa = env_str("VINYL_DEMO_PULL_AFTER"); !pa.empty()) demo_pull_at = mono_ms_now() + static_cast<uint64_t>(std::atoll(pa.c_str()));
+        drives = std::make_unique<DriveManager>(std::move(fake));
+        if (mode == "vinyl") drives->note_mounted("/dev/sda1");
     }
 
     void browser_act(int i) {
         if (i < 0 || i >= static_cast<int>(entries.size())) return;
         const Entry e = entries[static_cast<size_t>(i)];
         switch (e.kind) {
+        case Entry::Kind::Heading: break;
+        case Entry::Kind::Drive: /* a tap mounts it (no password): off the UI thread, then it opens */
+            request_mount(e.path, e.name);
+            break;
         case Entry::Kind::Up: {
             const std::string old = folder;
             std::string up = parent_folder(roots, folder);
-            if (up.empty() && roots.size() > 1) up = "";
+            if (up.empty() && (roots.size() > 1 || drives_listed())) up = ""; /* the list with the drives */
             else if (up.empty()) up = folder;
             open_folder(up, old);
             refresh(true);
@@ -625,6 +873,7 @@ struct VinylApp::Impl final : TransportHost {
             refresh(true);
             break;
         case Entry::Kind::Playlist: {
+            if (choose_mode) return;
             std::ifstream f(e.path);
             std::stringstream ss;
             ss << f.rdbuf();
@@ -643,6 +892,7 @@ struct VinylApp::Impl final : TransportHost {
             break;
         }
         case Entry::Kind::Track: {
+            if (choose_mode) return;
             if (queue.current_path() && *queue.current_path() == e.path && queue.source() == folder) {
                 go(Page::Now);
                 return;
@@ -665,7 +915,10 @@ struct VinylApp::Impl final : TransportHost {
     /* ------------------------------------------------------------------------------------------ rows and keys */
 
     void row(Page p, int i) {
-        if (p == Page::Browser) {
+        if (is_lib_page(p)) {
+            if (lib) lib->row(p, i);
+            refresh(true);
+        } else if (p == Page::Browser) {
             br_sel = i;
             browser_act(i);
         } else if (p == Page::Queue) {
@@ -692,6 +945,7 @@ struct VinylApp::Impl final : TransportHost {
         st.sleep = sleep.mode();
         st.sleep_left_ms = sleep.remaining_ms(mono_ms_now());
         st.output = output_label();
+        st.library = lib_on();
         st.settings = settings.get();
         return st;
     }
@@ -706,6 +960,10 @@ struct VinylApp::Impl final : TransportHost {
             else if (r.id == "playback") open_from(Page::Playback, Page::Menu);
             else if (r.id == "keys") open_from(Page::Keys, Page::Menu);
             else if (r.id == "about") open_from(Page::About, Page::Menu);
+            else if (r.id == "library" && lib_on()) { /* the Library settings, first place of the Library: Esc goes back to the Menu */
+                back_to[Page::LibSettings] = Page::Menu;
+                lib->enter_settings();
+            }
             else if (r.id == "output") button("output"); /* Esc goes back to the Menu */
             return;
         }
@@ -905,9 +1163,15 @@ struct VinylApp::Impl final : TransportHost {
             else if (k == LV_KEY_LEFT) back();
             return;
         }
+        if (is_lib_page(p) && lib) { /* the Library pages: Up / Down move, Enter or Right act, Left goes back (D-29) */
+            if (!lib->sheet_open() && (k == LV_KEY_LEFT || k == LV_KEY_BACKSPACE)) escape();
+            else lib->key(k);
+            refresh(true);
+            return;
+        }
         if (p == Page::Browser) {
-            if (k == LV_KEY_UP) list_move(br_sel, static_cast<int>(entries.size()), -1);
-            else if (k == LV_KEY_DOWN) list_move(br_sel, static_cast<int>(entries.size()), 1);
+            if (k == LV_KEY_UP) browser_move(-1);
+            else if (k == LV_KEY_DOWN) browser_move(1);
             else if (k == LV_KEY_ENTER || k == LV_KEY_RIGHT) browser_act(br_sel);
             else if (k == LV_KEY_LEFT || k == LV_KEY_BACKSPACE) {
                 if (!entries.empty() && entries.front().kind == Entry::Kind::Up) browser_act(0);
@@ -982,6 +1246,8 @@ struct VinylApp::Impl final : TransportHost {
             if (it.key_state == 1 && it.key_code == K_Y) view->dialog_key(0, K_Y);
             return;
         }
+        /* the search field types: no shortcut acts, no letter goes anywhere else (D-32) */
+        if (lib && is_lib_page(view->page()) && view->search_editing()) return;
         if (it.key_code == K_LEFT || it.key_code == K_RIGHT) {
             now_arrow(it); /* the other pages take the arrows from the LVGL keypad (on_key) */
             return;
@@ -992,6 +1258,16 @@ struct VinylApp::Impl final : TransportHost {
         }
         if (it.key_state != 1) return;
         const Page p = view->page();
+        if (lib && is_lib_page(p) && lib->letter(it.key_code, it.mods)) { /* the sheet's letters, "/" and Ctrl+F, Ctrl+O */
+            used = true;
+            refresh(true);
+            return;
+        }
+        if (p == Page::Browser && choose_mode && it.key_code == 22 && !(it.mods & (menu::kModCtrl | menu::kModAlt))) { /* U: use it */
+            used = true;
+            use_folder();
+            return;
+        }
         using menu::KeyCmd;
         const KeyCmd cmd = menu::shortcut_command(it.key_code, it.mods, p == Page::Queue); /* Ctrl+O: the Menu */
         used = cmd != KeyCmd::None;
@@ -1006,7 +1282,7 @@ struct VinylApp::Impl final : TransportHost {
             if (p != Page::Output) button("output");
             break;
         case KeyCmd::Browse:
-            if (p != Page::Browser) go(Page::Browser);
+            if (p != Page::Browser && !is_lib_page(p)) open_browse();
             break;
         case KeyCmd::Menu: button("menu"); break;   /* M, Ctrl+O (P2a) */
         case KeyCmd::Sleep: button("sleep"); break; /* T (P2a): the Sleep timer page */
@@ -1260,6 +1536,225 @@ struct VinylApp::Impl final : TransportHost {
             }
         }
         refresh(true);
+    }
+
+    /* ------------------------------------------------------------------------------------------ the Library (P2b) */
+
+    /* the roots the library indexes now */
+    std::vector<RootSpec> library_wanted() {
+        if (demo) {
+            std::vector<RootSpec> w;
+            if (!demo_world.empty) w.push_back(RootSpec{demo_world.music, "Music"});
+            if (!demo_drive_dir.empty()) w.push_back(RootSpec{demo_drive_dir, "SANDISK"});
+            return w;
+        }
+        const char *hm = std::getenv("HOME"), *us = std::getenv("USER");
+        return library_roots(hm ? hm : "", us ? us : "", read_mounts(), settings.get().library_folders);
+    }
+
+    LibHost lib_host() {
+        LibHost h;
+        h.playing_path = [this]() -> std::string {
+            if (!snap.path.empty()) return snap.path;
+            return queue.current_path() ? *queue.current_path() : std::string();
+        };
+        h.play = [this](const std::vector<std::string> &paths, int start) { play_paths(paths, start); };
+        h.play_next = [this](const std::vector<std::string> &p) { queue_insert(p, true); };
+        h.add_to_queue = [this](const std::vector<std::string> &p) { queue_insert(p, false); };
+        h.notice = [this](Notice::Kind k, const std::string &t) { notice(k, t); };
+        h.show = [this](Page p) { go(p); };
+        h.open_folders = [this] {
+            browser_from_lib = true;
+            choose_mode = false;
+            if (drives_listed()) open_folder("", ""); /* the drives are on the list of roots */
+            go(Page::Browser);
+        };
+        h.choose_folder = [this] {
+            choose_mode = true;
+            browser_from_lib = true;
+            open_folder(roots.size() == 1 ? roots.front().path : std::string(), "");
+            go(Page::Browser);
+        };
+        h.wanted = [this] { return library_wanted(); };
+        h.folders = [this] { return settings.get().library_folders; };
+        h.set_folders = [this](const std::vector<std::string> &f) {
+            Settings st = settings.get();
+            st.library_folders = f;
+            apply_settings(st);
+        };
+        h.mini = [this] { return mini_view(); };
+        h.scroll = [this](Page p, int rows) { view->scroll_page(p, rows); };
+        h.scroll_y = [this] { return view ? view->lib_scroll_y(view->page()) : 0; };
+        if (drives) {
+            h.drives = [this] { return drives ? drives->list() : std::vector<DriveInfo>(); };
+            h.drives_available = [this] { return drives && drives->available(); };
+            h.mount = [this](const std::string &dev, const std::string &name) { request_mount(dev, name); };
+            h.eject = [this](const std::string &dev, const std::string &name) {
+                if (drives && drives->by_vinyl(dev)) drives->unmount_async(dev, name);
+            };
+        }
+        h.search_open = [this](const std::string &t, bool edit) { view->search_open(t, edit); };
+        h.search_edit = [this] { view->search_edit(); };
+        h.search_end_edit = [this] { view->search_end_edit(); };
+        h.show_sheet = [this](const SheetView &v) { view->show_sheet(v); };
+        h.hide_sheet = [this] {
+            if (view) view->hide_sheet();
+        };
+        h.sheet_select = [this](int i) { view->sheet_select(i); };
+        return h;
+    }
+
+    /* the Library: its database opens now (a few ms); without SQLite or with a newer schema Browse stays the folder list */
+    void make_library() {
+        if (demo && !env_on("VINYL_DEMO_LIBRARY")) return;
+        LibConfig lc;
+        lc.demo = demo;
+        lc.ram_mb = system_ram_mb();
+        const char *hm = std::getenv("HOME");
+        lc.home = demo ? demo_world.root : (hm ? hm : "");
+        if (demo) {
+            lc.db_path = demo_world.root + "/library.db";
+            std::string mode = env_str("VINYL_DEMO_LIBRARY");
+            if (mode == "1") mode = "scan";
+            if (mode == "full" && env_str("VINYL_DEMO_DRIVES") == "vinyl") mode = "drives";
+            if (demo_world.empty) mode = "empty";
+            make_demo_library(demo_world, lc.db_path, mode);
+        } else {
+            lc.db_path = library_db_path();
+        }
+        lib = std::make_unique<LibraryCtl>(lib_host(), lc);
+        if (!lib->available()) {
+            std::fprintf(stderr, "[vinyl] the Library is not available: %s (Browse stays the folder list)\n", lib->error().c_str());
+            lib.reset();
+            return;
+        }
+        std::fprintf(stderr, "[vinyl] the Library: %s\n", lc.db_path.c_str());
+        if (demo) { /* the scenes: a scan shown as running, or paused for heat, without the thread */
+            const std::string sc = env_str("VINYL_DEMO_SCAN");
+            if (sc == "scanning" || sc == "paused") {
+                ScanProgress p;
+                p.state = sc == "paused" ? ScanProgress::State::Paused : ScanProgress::State::Scanning;
+                p.files = sc == "paused" ? 735 : 388;
+                lib->demo_progress(p, 1200);
+            }
+        }
+    }
+
+    /* Browse: the Library's hub, or the folder list without a Library */
+    void open_browse() {
+        if (!lib_on()) {
+            go(Page::Browser);
+            return;
+        }
+        browser_from_lib = false;
+        lib->enter();
+    }
+
+    /* the Browser's choose mode: "Use folder" */
+    void use_folder() {
+        if (!choose_mode || !lib_on()) return;
+        if (folder.empty()) {
+            notice(Notice::Kind::Info, "Open a folder first.");
+            return;
+        }
+        choose_mode = false;
+        lib->add_folder(folder);
+    }
+
+    void lib_button(Page p, int i) {
+        if (p == Page::Browser) use_folder();
+        else if (lib) lib->button(p, i);
+        refresh(true);
+    }
+
+    /* "Play": a new queue of these tracks, starting at `start`, then Now playing */
+    void play_paths(const std::vector<std::string> &paths, int start) {
+        if (paths.empty()) return;
+        queue.set(paths, std::clamp(start, 0, static_cast<int>(paths.size()) - 1), "library");
+        ++qgen;
+        ++queue_set_gen;
+        jobs.want_tags(queue.items());
+        play_pos(queue.current(), true);
+        go(Page::Now);
+    }
+
+    /* "Play next" and "Add to queue": the tracks go into the queue, the playing one stays */
+    void queue_insert(const std::vector<std::string> &paths, bool next) {
+        if (paths.empty()) return;
+        if (next) queue.insert_next(paths);
+        else queue.append(paths);
+        ++qgen;
+        jobs.want_tags(paths);
+        update_next();
+        dirty = true;
+        refresh(true);
+    }
+
+    /* Is the drive directory there: listed in the mounts and readable (a stale mount is not)? The scenes' drives are the fake
+     * backend's. */
+    bool media_present(const std::string &dir) {
+        if (demo) {
+            if (!drives) return true;
+            for (const DriveInfo &d : drives->list())
+                if (d.mounted && d.mount_dir == dir) return true;
+            return false;
+        }
+        return drive_present_real(dir);
+    }
+
+    /* A drive went away (pulled, a stale mount that cannot be read, ejected, unmounted at exit): every queue entry that lies on it
+     * is removed from the queue at once (owner ruling 2026-11-14, B50: "if media was removed vinyl should get back to default
+     * music folder and on reopen go to the library directly"). The playing track among them: playback stops cleanly (no "file is
+     * gone", no retry, no skipping through the dead entries), the next entry that is left is loaded paused (never started by
+     * itself: the sound ended with the drive), the queue empty when none is; the red notice says so once. An empty queue leaves
+     * Now playing (or the Queue) for the Library at the default music folder. true when something was removed. */
+    bool drop_gone_media(bool at_start) {
+        if (queue.empty()) return false;
+        const std::vector<std::string> gone =
+            gone_drive_dirs(queue.items(), [this](const std::string &d) { return media_present(d); }, drive_bases,
+                            [this](const std::string &p) { return !demo && ::access(p.c_str(), F_OK) == 0; });
+        if (gone.empty()) return false;
+        const Queue::RemoveResult r = queue.remove_under(gone);
+        std::fprintf(stderr, "[vinyl] media gone (%s): %d queue entr%s removed%s\n", gone.front().c_str(), r.removed, r.removed == 1 ? "y" : "ies",
+                     r.current_removed ? ", the playing one among them" : "");
+        ++qgen;
+        ++queue_set_gen;
+        dirty = true;
+        if (r.current_removed) resume.position_ms = 0;
+        if (at_start) return true;
+        if (r.current_removed || queue.empty()) {
+            engine->stop();
+            long_path.clear();
+            play_path.clear();
+        }
+        if (queue.empty()) {
+            std::fprintf(stderr, "[vinyl] the queue is empty: back to the default music folder\n");
+        } else if (r.current_removed) {
+            engine->load(queue.current(), *queue.current_path(), 0, false); /* the next one that is left, paused */
+            jobs.want_tags({*queue.current_path()});
+        } else {
+            engine_track_moved(); /* the playing track stays: only its place in the queue moved */
+        }
+        update_next();
+        notice(Notice::Kind::Danger, r.current_removed ? "Drive removed. Paused." : "Drive removed. Its tracks left the queue.");
+        if (queue.empty() && (view->page() == Page::Now || view->page() == Page::Queue)) go_default_folder();
+        refresh(true);
+        return true;
+    }
+
+    /* the Library at the default music folder: ~/Music when it is a root, else the first one (Esc: the hub) */
+    void go_default_folder() {
+        std::string def;
+        const char *hm = std::getenv("HOME");
+        const std::string music = hm ? std::string(hm) + "/Music" : std::string();
+        for (const Root &r : roots)
+            if (r.path == music) def = r.path;
+        if (def.empty() && !roots.empty()) def = roots.front().path;
+        browser_from_lib = lib_on();
+        choose_mode = false;
+        open_folder(def, "");
+        go(Page::Browser);
+        notice(Notice::Kind::Danger, "Drive removed. Paused."); /* go() took the first one away with the page: said again here, once */
     }
 
     /* ------------------------------------------------------------------------------------------ notices */
@@ -1566,7 +2061,21 @@ struct VinylApp::Impl final : TransportHost {
             case Entry::Kind::Root:
             case Entry::Kind::Folder:
                 r.text = e.name;
+                r.value = e.extra;
+                r.mono_value = false;
                 r.mark = RowView::Mark::Chevron;
+                break;
+            case Entry::Kind::Heading:
+                r.text = e.name;
+                r.heading = true;
+                r.mark = RowView::Mark::None;
+                break;
+            case Entry::Kind::Drive: /* the amber action dot: a tap mounts it */
+                r.text = e.name;
+                r.value = e.extra;
+                r.mono_value = false;
+                r.mark = RowView::Mark::Dot;
+                r.amber = true;
                 break;
             case Entry::Kind::Playlist:
                 r.text = e.name;
@@ -1602,22 +2111,38 @@ struct VinylApp::Impl final : TransportHost {
         v.selected = br_sel;
         v.rows_gen = rows_gen;
         v.scroll_to = br_scroll;
-        const std::string path = !snap.path.empty() ? snap.path : (playing ? *playing : "");
-        v.mini.shown = !path.empty();
-        if (v.mini.shown) {
-            TrackTags t;
-            const bool known = jobs.tags(path, t);
-            v.mini.title = known && !t.title.empty() ? t.title : title_from_path(path);
-            const uint64_t total = snap.total_ms() ? snap.total_ms() : (known ? t.duration_ms : 0);
-            /* the artist (the view gives it the dots) and the times, whole, h:mm:ss for a track of an hour or more */
-            v.mini.sub = known ? t.artist : "";
-            const bool hours = (total ? total : shown_pos_ms()) >= 3600000;
-            v.mini.time = layout::track_time_text(shown_pos_ms(), hours, true) + " / " +
-                          (total ? layout::track_time_text(total, hours, true) : std::string("--:--"));
-            v.mini.progress = total ? static_cast<double>(shown_pos_ms()) / total : 0;
-            v.mini.playing = snap.state == PlayState::Playing;
+        v.mini = mini_view();
+        if (choose_mode) { /* Music folders > Add a folder: the strip asks for the folder, the mini player is away */
+            v.choose = true;
+            v.heading = "CHOOSE A FOLDER: " + (folder.empty() ? std::string("MUSIC") : breadcrumb(roots, folder));
+            v.mini = MiniView();
+            v.mini.shown = true;
+            v.mini.title = folder.empty() ? std::string("Choose a folder") : folder.substr(folder.rfind('/') == std::string::npos ? 0 : folder.rfind('/') + 1);
+            v.mini.sub = folder.empty() ? "Open a folder" : "Or press U";
         }
         return v;
+    }
+
+    /* the mini player's strip (the Browser's and the Library hub's): the track heard, its times and progress */
+    MiniView mini_view() {
+        MiniView m;
+        const std::string *playing = queue.current_path();
+        const std::string path = queue.empty() ? std::string() : !snap.path.empty() ? snap.path : (playing ? *playing : "");
+        m.shown = !path.empty();
+        if (m.shown) {
+            TrackTags t;
+            const bool known = jobs.tags(path, t);
+            m.title = known && !t.title.empty() ? t.title : title_from_path(path);
+            const uint64_t total = snap.total_ms() ? snap.total_ms() : (known ? t.duration_ms : 0);
+            /* the artist (the view gives it the dots) and the times, whole, h:mm:ss for a track of an hour or more */
+            m.sub = known ? t.artist : "";
+            const bool hours = (total ? total : shown_pos_ms()) >= 3600000;
+            m.time = layout::track_time_text(shown_pos_ms(), hours, true) + " / " +
+                     (total ? layout::track_time_text(total, hours, true) : std::string("--:--"));
+            m.progress = total ? static_cast<double>(shown_pos_ms()) / total : 0;
+            m.playing = snap.state == PlayState::Playing;
+        }
+        return m;
     }
 
     ListView queue_view() {
@@ -1699,6 +2224,7 @@ struct VinylApp::Impl final : TransportHost {
             view->update_list(p, queue_view());
             qu_scroll = -1;
         } else if (p == Page::Output) view->update_list(p, output_view());
+        else if (is_lib_page(p) && lib) view->update_lib(p, lib->view());
         else if (is_menu_list(p)) view->update_menu(p, menu_view(p));
         else if (p == Page::About) {
             const menu::About a = about_now();
@@ -1729,6 +2255,12 @@ struct VinylApp::Impl final : TransportHost {
 
     void tick() {
         const uint64_t now = mono_ms_now();
+        if (lib) lib->tick(now);
+        drive_results();
+        if (pending_escape) { /* the search field's Esc, outside the key event that made it */
+            pending_escape = false;
+            escape();
+        }
         /* engine events */
         EngineEvent ev;
         while (engine->poll_event(ev)) on_engine(ev);
@@ -1753,6 +2285,18 @@ struct VinylApp::Impl final : TransportHost {
         if (worker && now - last_scan > (view->page() == Page::Output ? 2000u : 5000u)) {
             last_scan = now;
             scan(true);
+        }
+        /* the scenes: a drive is pulled after a while */
+        if (demo_pull_at && now >= demo_pull_at && demo_fake) {
+            demo_pull_at = 0;
+            demo_fake->devices.erase(std::remove_if(demo_fake->devices.begin(), demo_fake->devices.end(),
+                                                    [](const DriveInfo &d) { return d.mounted; }),
+                                     demo_fake->devices.end());
+        }
+        /* a drive the queue's files lie on went away: they leave the queue (B50) */
+        if (!queue.empty() && (!demo || drives) && now - gone_checked >= 1000) {
+            gone_checked = now;
+            drop_gone_media(false);
         }
         /* the playing output's volume: the card's mixer without a server (the server's sinks come with the scans) */
         read_output_mixer(now, false);
@@ -1849,6 +2393,7 @@ struct VinylApp::Impl final : TransportHost {
     void on_engine(const EngineEvent &ev) {
         switch (ev.kind) {
         case EngineEvent::Kind::Started:
+            play_path = ev.path;
             if (ev.pos >= 0 && ev.pos < queue.size() && queue.at(ev.pos) == ev.path) queue.set_current(ev.pos);
             ++qgen;
             ++track_gen;
@@ -1861,12 +2406,14 @@ struct VinylApp::Impl final : TransportHost {
             dirty = true;
             break;
         case EngineEvent::Kind::Advanced: {
+            if (lib && !play_path.empty()) lib->note_played(play_path); /* the track before it played to its end */
             const int n = queue.next_after(ev.pos, false);
             if (n >= 0) jobs.want_tags({queue.at(n)});
             name_next(ev.pos);
             break;
         }
         case EngineEvent::Kind::QueueEnd:
+            if (lib && !play_path.empty()) lib->note_played(play_path);
             if (sleep_armed) { /* the sleep timer's track mode: paused, on the next track (the next album's first) */
                 const int n = queue.next_after(ev.pos, false);
                 sleep_ended();
@@ -1876,6 +2423,7 @@ struct VinylApp::Impl final : TransportHost {
             dirty = true;
             break;
         case EngineEvent::Kind::OpenFailed:
+            if (drop_gone_media(false)) break; /* the file was on a drive that went away: no "file is gone" */
             notice(Notice::Kind::Info, ev.text);
             if (ev.pos >= 0 && ev.pos < queue.size()) queue.set_current(ev.pos);
             ++qgen;

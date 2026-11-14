@@ -33,10 +33,13 @@ std::vector<Root> list_roots(const std::string &home, const std::string &user, c
 std::vector<Root> system_roots();
 
 struct Entry {
-    enum class Kind { Up, Root, Folder, Playlist, Track };
+    /* Heading: a section title (never acted on); Drive: a removable drive that is plugged in and not mounted (path: its device;
+     * a tap mounts it: core/drives) */
+    enum class Kind { Up, Root, Folder, Playlist, Track, Heading, Drive };
     Kind kind = Kind::Track;
     std::string name; /* shown: the file or folder name, ".." */
     std::string path;
+    std::string extra; /* the value at the row's right ("14.9 GB, mounted", "not mounted. Tap to mount") */
 };
 
 /* Lists `path` (sorted as above, ".." first unless `top`). Returns 0 or -errno. */

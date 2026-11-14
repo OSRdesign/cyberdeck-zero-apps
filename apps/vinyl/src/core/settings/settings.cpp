@@ -28,6 +28,15 @@ std::string settings_to_json(const Settings &s, const json::Value *keep) {
     root.set("gapless", json::Value::boolean(s.gapless));
     root.set("replaygain", json::Value::string(replaygain_mode_name(s.replaygain)));
     root.set("remember_long", json::Value::boolean(s.remember_long));
+    const json::Value *old = root.get("library");
+    if (!s.library_folders.empty() || (old && old->is_obj())) {
+        json::Value lib = old && old->is_obj() ? *old : json::Value::object(); /* a newer version's keys kept */
+        json::Value folders;
+        folders.type = json::Value::Arr;
+        for (const std::string &f : s.library_folders) folders.arr.push_back(json::Value::string(f));
+        lib.set("folders", folders);
+        root.set("library", lib);
+    }
     return json::write(root);
 }
 
@@ -39,6 +48,10 @@ bool settings_from_json(const std::string &text, Settings &out, json::Value *raw
     if (const json::Value *r = root.get("replaygain"); r && r->type == json::Value::Str)
         out.replaygain = replaygain_mode_from(r->s, out.replaygain);
     if (const json::Value *l = root.get("remember_long"); l && l->type == json::Value::Bool) out.remember_long = l->b;
+    if (const json::Value *lib = root.get("library"); lib && lib->is_obj())
+        if (const json::Value *f = lib->get("folders"); f && f->type == json::Value::Arr)
+            for (const json::Value &v : f->arr)
+                if (v.type == json::Value::Str && !v.s.empty() && v.s[0] == '/') out.library_folders.push_back(v.s);
     if (raw) *raw = root;
     return true;
 }

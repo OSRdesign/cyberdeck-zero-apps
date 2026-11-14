@@ -1,0 +1,29 @@
+# a landscape size has no band (a landscape app on a portrait launcher runs turned): the standard keyboard, as before
+title Vinyl P2b: Search at 480x320 under the PDA launcher (no band: the standard on-screen keyboard)
+band
+sizes 480x320
+ppmm 630
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_LIBRARY full
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE library
+
+keyboards 0
+wait 1200
+expect band none
+tap "Search"
+wait 800
+expect band none
+expect osk on
+shot 01-search-osk
+type fen
+wait 600
+expect text "fen"
+shot 02-search-typed
+keyboards 1
+wait 1300
+expect osk off
+key esc
+wait 600
+expect text "Folders"
