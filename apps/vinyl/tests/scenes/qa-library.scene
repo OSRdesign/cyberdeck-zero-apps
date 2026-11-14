@@ -19,13 +19,16 @@ expect text "Artists"
 expect text "Search"
 expect text "LIBRARY, 166 TRACKS"
 expect noquit
-# Playlists are P2c: the row is there, it opens nothing and says so
+# Playlists (P2c): the row opens the page; none yet: the "+ New playlist" row and the message; Esc is back at the hub
 tap "Playlists"
-wait 300
-shot 03-playlists-later
-expect text "Playlists arrive in a later version."
-tap "Playlists arrive in a later version."
-wait 300
+wait 500
+shot 03-playlists-none
+expect text "PLAYLISTS, 0"
+expect text "+ New playlist"
+expect text "No playlists yet"
+key esc
+wait 400
+expect text "Artists"
 expect noquit
 # Artists: a chevron row opens, a hold of 1.5 s opens the artist's sheet
 tap "Artists"

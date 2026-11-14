@@ -1,0 +1,244 @@
+title Vinyl P2c: playlists (the Playlists page, a playlist's sheet by a 1.5 s hold, the edit page with Move down, Add tracks in pick mode from Search, Rename, Delete after a question, Add to playlist from a song's sheet, Save the queue, a name that is taken, a .m3u imported from Folders, Export M3U to a drive, the notices) (480x320 and 320x480 at their real density)
+sizes 480x320 320x480
+ppmm 630
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_LIBRARY full
+env VINYL_DEMO_PLAYLISTS list
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_DRIVES vinyl
+keyboards 1
+wait 1200
+shot 00-now
+key b
+wait 500
+expect text "Playlists"
+tap "Playlists"
+wait 700
+shot 01-list
+expect text "PLAYLISTS, 4"
+expect text "+ New playlist"
+expect text "Evening"
+expect text "18 tracks"
+expect text "Favourites"
+expect text "31 tracks"
+expect text "Morning run"
+expect text "24 tracks"
+expect text "Road trip"
+expect text "52 tracks"
+expect noquit
+# a row's sheet: Play, Rename, Delete, Export M3U
+hold "Evening" 1800
+wait 400
+shot 02-playlist-sheet
+expect text "EVENING, 18 TRACKS"
+expect text "Rename"
+expect text "Delete"
+expect text "Export M3U"
+expect text "Hold a row for 1.5 s, or press Ctrl+O, to open this sheet."
+key esc
+wait 300
+expect notext "Delete"
+expect text "PLAYLISTS, 4"
+# the edit page: the tracks in order, Rename and Export M3U at the top, the four buttons under the rows
+tap "Evening"
+wait 800
+shot 03-edit
+expect text "Rename"
+expect text "Export M3U"
+expect text "Move up"
+expect text "Move down"
+expect text "Remove"
+expect text "Add tracks"
+expect text "Phoenix, Lisztomania"
+expect noquit
+# Move down: the first track goes below the second (the selection follows it)
+tap "Move down"
+wait 600
+shot 04-edit-moved
+# Add tracks: the Library in pick mode (Search, Artists, Albums, Songs, Genres), the heading names the playlist
+tap "Add tracks"
+wait 700
+shot 05-pick-hub
+expect text "ADD TRACKS TO EVENING"
+expect notext "Folders"
+expect text "Search"
+tap "Search"
+wait 600
+type you and
+wait 900
+key enter
+wait 400
+shot 06-pick-search
+key enter
+wait 600
+shot 07-pick-added
+expect text "Added to Evening."
+expect noquit
+key esc
+wait 500
+key esc
+wait 800
+shot 08-edit-added
+expect text "Rename"
+# Rename: the name box (the keyboard types: the field is the toolkit's), Enter renames
+tap "Rename"
+wait 700
+shot 09-rename
+expect text "Rename playlist"
+expect text "19 tracks. New name:"
+type " run"
+wait 400
+shot 10-rename-typed
+key enter
+wait 900
+shot 11-renamed
+expect noquit
+key esc
+wait 600
+expect text "Evening run"
+expect text "PLAYLISTS, 4"
+# Delete asks first, Cancel is the default; the letter Y deletes
+hold "Evening run" 1800
+wait 400
+key d
+wait 600
+shot 12-delete-question
+expect text "19 tracks. The playlist file is deleted; the songs stay in your library."
+expect text "Cancel"
+key esc
+wait 500
+expect text "Evening run"
+expect notext "19 tracks. The playlist file is deleted; the songs stay in your library."
+hold "Evening run" 1800
+wait 400
+key d
+wait 600
+key y
+wait 900
+shot 13-deleted
+expect notext "Evening run"
+expect text "PLAYLISTS, 3"
+expect text "Playlist deleted."
+expect noquit
+# Add to playlist: from a song's sheet (Search finds it), the picker lists the playlists with their counts
+key esc
+wait 500
+tap "Search"
+wait 600
+type liszt
+wait 900
+key enter
+wait 400
+hold "Lisztomania" 1800
+wait 500
+shot 14-song-sheet
+expect text "Add to playlist"
+tap "Add to playlist"
+wait 800
+shot 15-add-to
+expect text "ADD LISZTOMANIA TO"
+expect text "+ New playlist"
+expect text "Favourites"
+expect text "31 tracks"
+expect text "A song already in a playlist can be added again; it plays twice."
+tap "Favourites"
+wait 800
+shot 16-added
+expect text "Added to Favourites."
+expect noquit
+# Save the queue: the Queue page's chip opens the name box with "Queue"; Enter saves it
+key esc
+wait 500
+key q
+wait 800
+shot 17-queue
+expect text "Save as playlist"
+tap "Save as playlist"
+wait 800
+shot 18-save-queue
+expect text "Save queue as playlist"
+expect text "20 tracks. Name:"
+key enter
+wait 900
+shot 19-saved
+expect text "Playlist saved."
+expect noquit
+# saved again: "Queue 2" is suggested; the name "Queue" is taken, the box says so and stays
+tap "Save as playlist"
+wait 800
+expect text "20 tracks. Name:"
+key backspace
+key backspace
+wait 300
+key enter
+wait 900
+shot 20-name-taken
+expect text "That name is taken. Pick another."
+key esc
+wait 600
+expect notext "That name is taken. Pick another."
+expect noquit
+# a .m3u from Folders: held, its sheet offers Play, Import as a playlist, Add to the queue (the m3u row is the 23rd: the keys go to it)
+key b
+wait 600
+tap "Folders"
+wait 700
+shot 21-folders
+tap "Music"
+wait 800
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+wait 300
+shot 22-music
+hold "Playlist SKI.m3u" 1800
+wait 600
+shot 23-import-sheet
+expect text "PLAYLIST SKI.M3U, 20 ENTRIES"
+expect text "Import as a playlist"
+expect text "Add to the queue"
+tap "Import as a playlist"
+wait 900
+shot 24-imported
+expect text "Imported as Playlist SKI."
+expect noquit
+hold "Playlist SKI.m3u" 1800
+wait 600
+tap "Add to the queue"
+wait 700
+shot 25-added-to-queue
+expect text "Added 20 tracks to the queue."
+expect noquit
+# a name that is taken on import: the box opens with the next free name
+hold "Playlist SKI.m3u" 1800
+wait 600
+tap "Import as a playlist"
+wait 900
+shot 26-import-taken
+expect text "Name:"
+expect text "That name is taken. Pick another."
+key enter
+wait 900
+shot 27-imported-2
+expect text "Imported as Playlist SKI 2."
+expect noquit

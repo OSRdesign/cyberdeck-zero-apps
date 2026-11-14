@@ -86,11 +86,11 @@ bool sleep_from_id(const std::string &id, SleepMode &out);
  * both read this table, the tests check one against the other. */
 enum class KeyCmd {
     None, Toggle, Shuffle, Repeat, Queue, Browse, Output, Menu, Sleep, VolumeDown, VolumeUp, Prev, Next,
-    QueueUp, QueueDown, QueueRemove, QueueClear,
+    QueueUp, QueueDown, QueueRemove, QueueClear, QueueSave,
 };
 /* evdev codes used */
 enum : uint32_t {
-    kKeyMinus = 12, kKeyEqual = 13, kKeyQ = 16, kKeyR = 19, kKeyT = 20, kKeyY = 21, kKeyU = 22, kKeyO = 24, kKeyS = 31,
+    kKeyMinus = 12, kKeyEqual = 13, kKeyQ = 16, kKeyR = 19, kKeyT = 20, kKeyY = 21, kKeyU = 22, kKeyO = 24, kKeyP = 25, kKeyS = 31,
     kKeyD = 32, kKeyX = 45, kKeyC = 46, kKeyB = 48, kKeyM = 50, kKeyComma = 51, kKeyDot = 52, kKeySpace = 57,
     kKeyDelete = 111,
 };

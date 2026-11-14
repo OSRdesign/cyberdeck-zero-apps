@@ -114,6 +114,7 @@ struct ListView {
     /* browser, choose mode (P2b: Music folders > Add a folder): the strip asks "Use folder", the mini player is away */
     bool choose = false;
     std::string choose_text; /* the strip's second line */
+    bool save_chip = false;  /* queue (P2c): the "Save as playlist" chip at the heading's right */
 };
 
 /* The Library pages (P2b): one view per page, filled by the library controller. */
@@ -212,6 +213,7 @@ struct Actions {
     /* P2b */
     std::function<void(Page, int)> lib_row;          /* a tap on a Library row */
     std::function<void(Page, int)> lib_hold;         /* a 1.5 s hold on a Library row */
+    std::function<bool(Page, int)> lib_hold_ok;      /* P2c, the Browser: does this row have a sheet (a .m3u / .m3u8 row) */
     std::function<void(Page)> lib_chip;              /* the hub's Search chip, an album's Play album */
     std::function<void(Page, int)> lib_button;       /* Music folders' buttons, an empty page's button; Browser: choose mode's "Use this folder" */
     std::function<void(const std::string &)> lib_query; /* the search field's text changed */

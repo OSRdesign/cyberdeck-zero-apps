@@ -1,0 +1,66 @@
+title Vinyl P2c: the name box for Save the queue and Rename with the on-screen keyboard (shown only while no physical keyboard is connected; a keyboard connecting takes it away; shortcut letters type in the field) (640x480, the deck)
+sizes 640x480
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_LIBRARY full
+env VINYL_DEMO_PLAYLISTS list
+env VINYL_DEMO_STATE playing
+keyboards 0
+wait 1200
+key q
+wait 800
+tap "Save as playlist"
+wait 900
+expect osk on
+shot 01-save-osk
+expect text "20 tracks. Name:"
+tapkey x
+tapkey y
+wait 700
+shot 02-save-typed-osk
+keyboards 1
+wait 1500
+expect osk off
+shot 03-save-keyboard
+# with a keyboard the shortcut letters are letters in the field (Q, B, O, M, S act elsewhere)
+type qbosm
+wait 800
+shot 04-save-letters
+expect noquit
+key esc
+wait 700
+expect osk off
+expect notext "Save queue as playlist"
+expect text "Save as playlist"
+# Rename: the playlists are in Library > Playlists
+keyboards 0
+wait 600
+key b
+wait 600
+tap "Playlists"
+wait 800
+tap "Evening"
+wait 900
+tap "Rename"
+wait 900
+expect osk on
+shot 05-rename-osk
+expect text "18 tracks. New name:"
+keyboards 1
+wait 1500
+expect osk off
+shot 06-rename-keyboard
+key esc
+wait 700
+expect text "Rename"
+expect noquit
+osk force
+wait 700
+tap "Rename"
+wait 900
+expect osk on
+shot 07-rename-forced
+osk auto
+key esc
+wait 700
+expect noquit

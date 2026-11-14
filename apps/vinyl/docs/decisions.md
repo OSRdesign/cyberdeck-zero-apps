@@ -857,3 +857,138 @@ maintained". Both are done.
   the list came back at the top). `tests/test_lib_ctl.cpp restore_test`, scene `qa-library` (Songs, Track info, Esc).
 - The scene harness has two new commands, `press TEXT` and `release` (a finger held down while the app runs and a shot is made),
   for the cue's shot.
+
+## P2c: playlists (0.4.0 work, 2026-11-14)
+
+Report 060 2.4 and decision D26 ("Playlists are M3U8 files in `~/Music/Playlists`: yes"), built on the approved boards
+(PlaylistsEmpty, AddToPlaylist, RenamePlaylist, DeletePlaylist, PlaylistEditMissing, ImportM3U, NoticesP2c from the P2b canvas set;
+Playlists, PlaylistEdit, SavePlaylist from the UX set). **Owner ruling:** on the evening of 2026-11-14 (the owner's date: 2026-11-15)
+the owner said "go with your recommendations" on the P2c design. The version is 0.4.0; the README says "not published yet"; no
+registry, package or root README row was touched. Where the spec left a choice open, the builder's choice is below, for the
+coordinator to confirm; the deviations from the boards are listed so that nothing is silent.
+
+**Where the code is.** `core/playlist/m3u` (reader and writer), `core/playlist/playlists` (the folder of files: names, atomic writes,
+edits, import, export), `core/playlist/playlist_index` (the database index, the edit page's rows), `core/library/lib_model`
+(rows, headings, sheets), `core/library/library_ctl` (the places Playlists and Playlist, pick mode, the dialogs' answers),
+`ui/library_pages` (the two pages, the chips and buttons, the scrolling sheet), `ui/vinyl_view` (the name and question dialogs, the
+Queue's chip, the Browser's hold), `ui/vinyl_app` (wiring), `core/demo/demo_world` (the scenes' playlists). Tests: `test_m3u`,
+`test_playlists`, `test_playlist_model`, `test_playlist_ctl`; scenes `qa-playlists`, `-empty`, `-missing`, `-export`, `keyboard-playlists`,
+`portrait-band-playlists`.
+
+**The files are the truth.** `<name>.m3u8` in `~/Music/Playlists` (made on the first write); only `.m3u8` is listed there (a `.m3u`
+put in by hand is not; import it from Folders). A write is a hidden temporary file in the same folder, flushed, renamed over the
+old file, the folder flushed: an interrupted write leaves the old file whole and a leftover `.name.m3u8.tmp`, which the next
+listing deletes (`tests/test_playlists.cpp`: a hook stops the write after the temporary file, as a power cut). The tables
+`playlists` and `playlist_items` of schema v1 are a cache (no migration): `playlist_sync` runs when the Playlists page opens and when
+a scan ends, finds files added, changed (their mtime in nanoseconds) or gone, rewrites only those rows and writes nothing when
+nothing changed (SD wear: a test counts `total_changes()`); a playlist Vinyl edits is re-indexed at once; the edit page and playing
+read the FILE, never the cache; a rebuild from empty tables gives the same list (tested). Rows of an entry the library knows keep
+its track id; the counts and lengths come from the library's durations, else the `#EXTINF` seconds.
+
+**Names.** Letters, digits, space, - and _ , 24 characters at most, as Cassette's prefix rules; the builder's reading of "letters":
+every letter of every alphabet counts (a byte sequence from U+00A1 up that is valid UTF-8), so "Été" and an import named in CJK
+work (a name of the Cassette type would have refused an accent), controls, `/ . \ : " * ? < > |` and a bad sequence are refused. A
+name is trimmed; taken is compared without case (a rename that only changes the case of its own file is allowed). A typed name
+is checked: a bad one gets a notice in the box ("Letters, digits, space, - and _ only.", "Use 24 characters or fewer.", "Type a name
+first.") and the box opens again with the text; a taken one the notice "That name is taken. Pick another." (red) the same way. A
+name made from a file name or a default is *cleaned*, not refused (bad characters become one space, cut to 24, "Playlist" when
+nothing is left).
+
+**The notice in the name box.** The board draws the red pill. The name box is the toolkit's Dialog with its TextField (not
+restyled; Cassette's pattern), and the page behind it is hidden while it is up (as Cassette hides its page: the toolkit's keyboard
+lies over the bottom of the screen), so a pill drawn on the page would not be seen: while the box is up the notice is written in the
+box's own message line (red for the red ones). The controller still raises the notice (tests check its words); the view routes it.
+
+**M3U reader** (`core/playlist/m3u`). UTF-8 with or without a BOM; UTF-16 with a BOM; otherwise a text that is not valid UTF-8 is
+read as Windows-1252 (Latin-1 plus the printable 0x80-0x9F), and a Latin-1 file name is looked up as converted (UTF-8 on the disk)
+first and as the raw bytes second; CR LF, LF and a lone CR end lines; backslashes are separators; `file://` (percent escapes
+decoded, `file:///D:/x`) is its path; every other URL is skipped (and its `#EXTINF` is not carried to the next line); a relative
+path is joined to the playlist's folder and made lexical (`P1's parse_m3u` kept `../` in the path; the wrapper's test now expects the
+lexical one); a `D:\...` or `\\server\share\...` path drops its leading folders one by one until the file is found under the
+playlist's folder, then under each music folder; if nothing is found it is kept *as read* with `resolved` false (a missing entry
+that is shown dimmed and written back unchanged); a Linux path from another machine is kept as it is. Known limits: a Windows path is
+matched with its case as written; a name with a literal backslash is read as folders. `#EXTINF` with attributes
+(`#EXTINF:123 key="v",Title`) is read. At most 5,000 entries (the Browser's cap).
+
+**M3U writer.** UTF-8, LF, `#EXTM3U`, `#EXTINF:seconds,Artist - Title` for an entry that has a text or a length (`-1` and an empty
+text are not invented), paths relative to the file's folder when the entry and the file are on the same drive (the drive of
+`core/library/media_guard`: the system disk is one drive; /media/<user>/<label>, /run/media/<user>/<label>, /mnt/<label> are one
+each), else absolute. An entry from the library is written with `Artist - Title` and its length in whole seconds.
+
+**Pages.** The Playlists page follows PlaylistsEmpty and Playlists: "PLAYLISTS, N", the "+ New playlist" row first, the names A-Z
+(natural order) with "N tracks" and a chevron; with none, the board's message sits under the "+ New playlist" row (the row stays).
+The edit page follows PlaylistEdit (the tracks as a dot, "Artist, Title" and the length; the heading "18 TRACKS, 1 H 23 MIN" with ". 2
+NOT FOUND"; Rename and Export M3U at the heading's right, the first chip rightmost as in the board; Move up, Move down, Remove and
+Add tracks (teal) under the rows, flowing onto lines on a narrow panel by their words as the Music folders buttons do). A move
+keeps the selection on the moved row; a removal keeps it at that place; Move up is dimmed on the first row, Move down on the last,
+Remove with nothing selected (dimmed means inert). Other sizes follow the Library pages' scaling (`list_geom(Browser)`, the heading
+band as high as the touch target where a chip shares it, the chips on a line of their own when the heading does not fit beside
+them, as "Play album" at 320x480).
+
+**Choices where the spec left them open.**
+- **Play all** is the *Play* row of the playlist's sheet (a hold or Ctrl+O on a playlist row in the list, or on any track row of its
+  page); a heading is never selectable, so Enter on the heading was not an option. A tap or Enter on a track plays the playlist
+  from there (the queue is replaced, the source is the playlist file, so the sleep timer's playlist rule applies; shuffle and
+  repeat keep their state, as the Library's lists do).
+- **The sheet of an open playlist** has Play, Add tracks (T), Rename (R), Export M3U (E), Delete (D); the list's sheet has Play,
+  Rename, Delete, Export M3U as the brief says. Add tracks is there so that a keyboard-only user can reach it; U, D and X or Delete
+  move and remove on the page (the Queue's letters). Play and Export are dimmed on an empty playlist.
+- **"+ New playlist"** is a row with the action dot and the title after it (owner rule: a dot on every row that acts, the title
+  starts after the dot), not the amber text with a chevron of PlaylistsEmpty / NoticesP2c (the Playlists board itself draws a dot).
+- **New playlist** asks for a name ("An empty playlist. Name:", suggested "Playlist", "Playlist 2" ...) and stays on the list;
+  there is no notice for it, nor for Rename; Delete says "Playlist deleted." after the page it came from is shown (showing a page
+  takes a notice away).
+- **Add tracks (pick mode).** The hub without Folders and Playlists (nothing to pick there), its heading "ADD TRACKS TO <NAME>"; a
+  tapped song is appended and "Added to <name>." shown, the album page's chip reads "Add album" and appends the album; the
+  actions sheets are off in pick mode and nothing plays; Search works; Esc steps back as always and, from the hub, returns to the
+  playlist's page (reloaded). Songs, Search and Albums are all there, as the brief asks; Artists and Genres come free.
+- **Add to playlist** builds the picker on the worker (the playlists' list is synced first) and shows it as a sheet: its title
+  "ADD <TITLE> TO", the playlists' counts in the key column, "N" for "+ New playlist"; more rows than the panel holds scroll inside
+  the sheet (touch and keys); an album or artist adds its tracks in album order (disc, folder, track), duplicates allowed. A
+  sheet may now reach over the panel's bottom edge up to the screen (the 5-row track sheet at 480x320 did already).
+- **Save the queue.** A chip "Save as playlist" at the right of the Queue's heading (shown with the Library and a queue; the heading
+  band grows to the touch target while it shows, the list below gives that height up), and P on the Queue page (Keys page row).
+  The queue is saved in its play order. The suggested name is "Queue" or the next free one ("Queue 2"). Files the library does not know are
+  kept as plain entries.
+- **Import.** The tap on a `.m3u` row keeps its P1 meaning (play). The hold (1.5 s with the cue, only on these rows) or Ctrl+O opens
+  the ImportM3U sheet; "Import as a playlist" copies it under its file name cleaned (a free name: "Imported as <name>."; a taken
+  one: the name box opens with the next free name and the notice "That name is taken. Pick another."). "Play" and "Add to the
+  queue" read the file with the same reader and skip what is not there ("This playlist has no track Vinyl can find." when nothing
+  is).
+- **Export.** The folder chooser is the Browser's choose mode ("EXPORT TO: <path>", the strip's "Use folder", U); Esc goes back to
+  the playlist. The file is `<name>.m3u8` in that folder, replacing one that is there. "Exported to <where>: <name>.m3u8." where
+  <where> is the drive's name for a folder on a drive (SANDISK), else the folder's own name; a folder that cannot be written
+  shows "Could not export here: the folder cannot be written. Choose another." and the Browser stays.
+- **Missing entries** (the rule that wins over "a gone drive's tracks are shown nowhere"): kept in the file through every edit, listed
+  dimmed with "file not found" (the title from the library when it knows the file, else the `#EXTINF` text, else the file name),
+  inert to a tap, skipped when playing and never queued, selectable so that Remove can take them out; the heading counts them; a
+  playlist with nothing playable is still listed.
+
+**Deviations from the boards** (the toolkit's widgets win over pixels).
+- The name box and the question are the toolkit's Dialog (Cassette's look), not the cream boxes; the board's hint line under the field
+  is the dialog's own ("Letters, digits, space, - and _ only. Up to 24 characters."; the keyboard sentence of the board is not
+  drawn: the keyboard's presence is the toolkit's policy). With the on-screen keyboard at 480x320 the dialog's title goes to the page
+  header, as the toolkit does.
+- The delete question has a second line, "Y = Delete, Enter or Esc = Cancel" (the owner's "Clear the queue?" pattern: the letter that
+  confirms is named).
+- Move up, Move down, Remove and Add tracks have no icon (the board draws one); the buttons are 42 design px high; the chips 24.
+- Notices use the Library pages' place (over the last rows) and the owner's six / eight second timing, not the board's centred pills.
+- Playlist rows in the Browser hold no sheet except the .m3u / .m3u8 ones (the cue shows only on them).
+- The edit page shows no row number (the PlaylistEdit board's; PlaylistEditMissing draws numbers) and a missing Windows path shows
+  its file name, not the whole path.
+
+**Tests and scenes.** `test_m3u` (72 checks: Windows backslashes and drive letters, Latin-1, BOM, UTF-16, CRLF, relative, absolute,
+missing kept, URL lines skipped, #EXTINF, the writer, round trips), `test_playlists` (names, sanitising, create / rename / delete /
+move / remove / append, collisions without case, an interrupted write, import, export, the index = the files, rebuild, nothing
+written when nothing changed), `test_playlist_model` (rows, headings, sheets, keys), `test_playlist_ctl` (every page and key:
+New playlist, Add to playlist from a song, an album and an artist, the edit page's buttons and keys, pick mode, play from an entry,
+missing entries, rename, export, delete after a question, Save the queue, a file added outside Vinyl). Scenes (each with `-small` and
+`-deck`): `qa-playlists`, `qa-playlists-empty`, `qa-playlists-missing`, `qa-playlists-export`, `keyboard-playlists` (osk on and off,
+the box for Save and Rename), and `portrait-band-playlists` (480x800, 480x640, the writing band); the Library walks of P2b lost
+their "Playlists arrive in a later version." step for the page.
+
+**Not verified without a board.** That the toolkit's on-screen keyboard and the PDA band behave in the name box on the HackBerry
+and zero8 as in the scenes; the Browser's hold and Ctrl+O on a `.m3u` row on a pointer (the hold is the P2b one); that vfat
+refuses nothing in the export (a read-only stick shows the notice); a playlist with 5,000 entries on the Pi Zero 2 W (the edit page
+reads the file and the library per entry on the worker: about 0.1 ms an entry on the build box); Windows players on the exported
+file (B54).

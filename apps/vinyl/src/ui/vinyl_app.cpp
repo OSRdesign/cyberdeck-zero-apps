@@ -307,9 +307,23 @@ struct VinylApp::Impl final : TransportHost {
             refresh(true);
         };
         a.lib_hold = [this](Page p, int i) {
-            if (lib) lib->hold(p, i);
+            if (p == Page::Browser) browser_hold(i);
+            else if (lib) lib->hold(p, i);
             refresh(true);
         };
+        a.lib_hold_ok = [this](Page p, int i) {
+            return p == Page::Browser && lib_on() && !choose_mode && i >= 0 && i < static_cast<int>(entries.size()) &&
+                   entries[static_cast<size_t>(i)].kind == Entry::Kind::Playlist;
+        };
+        a.name_answer = [this](bool ok, const std::string &t) {
+            if (lib) lib->name_answer(ok, t);
+            refresh(true);
+        };
+        a.confirm_answer = [this](bool yes) {
+            if (lib) lib->confirm_answer(yes);
+            refresh(true);
+        };
+        a.queue_save = [this] { save_queue(); };
         a.lib_chip = [this](Page p) {
             if (lib) lib->chip(p);
             refresh(true);
@@ -497,7 +511,11 @@ struct VinylApp::Impl final : TransportHost {
         case Page::Output: go(back_from_output); break;
         case Page::Notices: go(Page::Now); break;
         case Page::Browser:
-            if (choose_mode && lib_on()) { /* back to the Music folders page */
+            if (lib_on() && lib->sheet_open()) { /* the import sheet */
+                lib->close_sheet();
+                break;
+            }
+            if (choose_mode && lib_on()) { /* back to the Music folders page (or the playlist an export was asked from) */
                 choose_mode = false;
                 lib->choose_cancelled();
                 break;
@@ -1044,6 +1062,12 @@ struct VinylApp::Impl final : TransportHost {
     /* Esc and the header's Esc (core/nav back_step): the "Clear the queue?" dialog takes them until it closes (design QA
      * run 4, D-30: cancelled, nothing else); else a notice goes with the step back */
     void escape() {
+        if (view->name_dialog_shown()) { /* the header's Esc while the name box is up: Cancel */
+            view->close_name_dialog();
+            if (lib) lib->name_answer(false, "");
+            refresh(true);
+            return;
+        }
         switch (back_step(view->dialog_shown(), view->notice_shown())) {
         case BackStep::CloseModal: view->dialog_key(LV_KEY_ESC); return;
         case BackStep::HideNoticeAndBack: view->hide_notice(); back(); return;
@@ -1140,6 +1164,7 @@ struct VinylApp::Impl final : TransportHost {
         const Page p = view->page();
         if (key_echo.drop(k, mono_ms_now())) return;
         if (view->dialog_shown() && view->dialog_key(k)) return; /* "Clear the queue?" takes the keys while it shows */
+        if (view->name_dialog_shown()) return; /* the name field types (its own events); no shortcut acts (D-32) */
         if (k == LV_KEY_ESC) {
             escape();
             return;
@@ -1161,6 +1186,12 @@ struct VinylApp::Impl final : TransportHost {
             if (k == LV_KEY_UP) view->scroll_page(p, -1);
             else if (k == LV_KEY_DOWN) view->scroll_page(p, 1);
             else if (k == LV_KEY_LEFT) back();
+            return;
+        }
+        if (lib && lib->sheet_open() && !is_lib_page(p)) { /* the import sheet over the Browser */
+            if (k == LV_KEY_LEFT || k == LV_KEY_BACKSPACE) escape();
+            else lib->key(k);
+            refresh(true);
             return;
         }
         if (is_lib_page(p) && lib) { /* the Library pages: Up / Down move, Enter or Right act, Left goes back (D-29) */
@@ -1246,8 +1277,9 @@ struct VinylApp::Impl final : TransportHost {
             if (it.key_state == 1 && it.key_code == K_Y) view->dialog_key(0, K_Y);
             return;
         }
-        /* the search field types: no shortcut acts, no letter goes anywhere else (D-32) */
+        /* the search field and the name field type: no shortcut acts, no letter goes anywhere else (D-32) */
         if (lib && is_lib_page(view->page()) && view->search_editing()) return;
+        if (view->name_dialog_shown()) return;
         if (it.key_code == K_LEFT || it.key_code == K_RIGHT) {
             now_arrow(it); /* the other pages take the arrows from the LVGL keypad (on_key) */
             return;
@@ -1258,7 +1290,7 @@ struct VinylApp::Impl final : TransportHost {
         }
         if (it.key_state != 1) return;
         const Page p = view->page();
-        if (lib && is_lib_page(p) && lib->letter(it.key_code, it.mods)) { /* the sheet's letters, "/" and Ctrl+F, Ctrl+O */
+        if (lib && (is_lib_page(p) || lib->sheet_open()) && lib->letter(it.key_code, it.mods)) { /* the sheet's letters, "/" and Ctrl+F, Ctrl+O */
             used = true;
             refresh(true);
             return;
@@ -1266,6 +1298,13 @@ struct VinylApp::Impl final : TransportHost {
         if (p == Page::Browser && choose_mode && it.key_code == 22 && !(it.mods & (menu::kModCtrl | menu::kModAlt))) { /* U: use it */
             used = true;
             use_folder();
+            return;
+        }
+        if (p == Page::Browser && !choose_mode && lib_on() && it.key_code == menu::kKeyO && (it.mods & menu::kModCtrl) && !(it.mods & menu::kModAlt) &&
+            br_sel >= 0 && br_sel < static_cast<int>(entries.size()) && entries[static_cast<size_t>(br_sel)].kind == Entry::Kind::Playlist) {
+            used = true; /* Ctrl+O on a .m3u / .m3u8 row: its sheet (P2c), as the hold */
+            browser_hold(br_sel);
+            refresh(true);
             return;
         }
         using menu::KeyCmd;
@@ -1290,6 +1329,7 @@ struct VinylApp::Impl final : TransportHost {
         case KeyCmd::QueueDown: queue_button(1); break;
         case KeyCmd::QueueRemove: queue_button(2); break;
         case KeyCmd::QueueClear: queue_button(3); break;
+        case KeyCmd::QueueSave: save_queue(); break; /* P (the Queue page): save as a playlist */
         case KeyCmd::VolumeDown: volume_step(-1); break; /* the playing output's volume (D11 as changed), one level */
         case KeyCmd::VolumeUp: volume_step(1); break;
         default: break; /* comma and dot: the transport press above */
@@ -1559,6 +1599,15 @@ struct VinylApp::Impl final : TransportHost {
             return queue.current_path() ? *queue.current_path() : std::string();
         };
         h.play = [this](const std::vector<std::string> &paths, int start) { play_paths(paths, start); };
+        h.play_source = [this](const std::vector<std::string> &paths, int start, const std::string &source) { play_paths(paths, start, source); };
+        h.ask_name = [this](const NameAsk &a) { view->ask_name(a); };
+        h.ask_confirm = [this](const std::string &t, const std::string &b, const std::string &ok) { view->ask_confirm(t, b, ok); };
+        h.choose_export = [this](const std::string &) { /* the Browser in choose mode: the folder the playlist goes to */
+            choose_mode = true;
+            browser_from_lib = true;
+            open_folder(roots.size() == 1 ? roots.front().path : std::string(), "");
+            go(Page::Browser);
+        };
         h.play_next = [this](const std::vector<std::string> &p) { queue_insert(p, true); };
         h.add_to_queue = [this](const std::vector<std::string> &p) { queue_insert(p, false); };
         h.notice = [this](Notice::Kind k, const std::string &t) { notice(k, t); };
@@ -1619,6 +1668,7 @@ struct VinylApp::Impl final : TransportHost {
             if (mode == "full" && env_str("VINYL_DEMO_DRIVES") == "vinyl") mode = "drives";
             if (demo_world.empty) mode = "empty";
             make_demo_library(demo_world, lc.db_path, mode);
+            if (const std::string pl = env_str("VINYL_DEMO_PLAYLISTS"); !pl.empty()) make_demo_playlists(demo_world, pl == "1" ? std::string("list") : pl);
         } else {
             lc.db_path = library_db_path();
         }
@@ -1657,8 +1707,29 @@ struct VinylApp::Impl final : TransportHost {
             notice(Notice::Kind::Info, "Open a folder first.");
             return;
         }
+        if (lib->exporting()) { /* an export: the playlist goes there; the Browser stays up when it could not be written */
+            lib->export_to(folder);
+            return;
+        }
         choose_mode = false;
         lib->add_folder(folder);
+    }
+
+    /* a .m3u / .m3u8 row of the Browser held 1.5 s (or Ctrl+O): the Play / Import as a playlist / Add to the queue sheet (P2c) */
+    void browser_hold(int i) {
+        if (!lib_on() || choose_mode || i < 0 || i >= static_cast<int>(entries.size())) return;
+        const Entry &e = entries[static_cast<size_t>(i)];
+        if (e.kind != Entry::Kind::Playlist) return;
+        br_sel = i;
+        lib->open_import_sheet(e.path);
+    }
+
+    /* the Queue page's "Save as playlist" (the chip, the key P): the queue in its play order */
+    void save_queue() {
+        if (!lib_on() || queue.empty()) return;
+        std::vector<std::string> paths;
+        for (int pos = 0; pos < queue.size(); ++pos) paths.push_back(queue.at(pos));
+        lib->save_queue(paths);
     }
 
     void lib_button(Page p, int i) {
@@ -1668,9 +1739,9 @@ struct VinylApp::Impl final : TransportHost {
     }
 
     /* "Play": a new queue of these tracks, starting at `start`, then Now playing */
-    void play_paths(const std::vector<std::string> &paths, int start) {
+    void play_paths(const std::vector<std::string> &paths, int start, const std::string &source = "library") {
         if (paths.empty()) return;
-        queue.set(paths, std::clamp(start, 0, static_cast<int>(paths.size()) - 1), "library");
+        queue.set(paths, std::clamp(start, 0, static_cast<int>(paths.size()) - 1), source);
         ++qgen;
         ++queue_set_gen;
         jobs.want_tags(queue.items());
@@ -2114,7 +2185,8 @@ struct VinylApp::Impl final : TransportHost {
         v.mini = mini_view();
         if (choose_mode) { /* Music folders > Add a folder: the strip asks for the folder, the mini player is away */
             v.choose = true;
-            v.heading = "CHOOSE A FOLDER: " + (folder.empty() ? std::string("MUSIC") : breadcrumb(roots, folder));
+            v.heading = (lib && lib->exporting() ? "EXPORT TO: " : "CHOOSE A FOLDER: ") +
+                        (folder.empty() ? std::string("MUSIC") : breadcrumb(roots, folder));
             v.mini = MiniView();
             v.mini.shown = true;
             v.mini.title = folder.empty() ? std::string("Choose a folder") : folder.substr(folder.rfind('/') == std::string::npos ? 0 : folder.rfind('/') + 1);
@@ -2148,6 +2220,7 @@ struct VinylApp::Impl final : TransportHost {
     ListView queue_view() {
         ListView v;
         v.queue_buttons = queue_buttons_enabled(queue.size());
+        v.save_chip = lib_on() && !queue.empty(); /* P2c: "Save as playlist" */
         v.left = "Queue";
         v.vol = vol_text();
         v.vol_bt = output_is_bt();

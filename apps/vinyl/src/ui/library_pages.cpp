@@ -210,9 +210,14 @@ struct LibraryPages::Impl {
         /* Library settings: the cream block */
         lv_obj_t *block = nullptr, *block_title = nullptr, *block_bar = nullptr, *block_fill = nullptr, *block_text = nullptr;
         LibNote block_shown;
-        /* Music folders */
-        LibButton buttons[3];
+        /* Music folders; a playlist's edit page (Move up, Move down, Remove, Add tracks) */
+        LibButton buttons[4];
         lv_obj_t *foot = nullptr;
+        /* a playlist's edit page: the chips (Rename, Export M3U) at the heading's right, or on a line under it */
+        LibButton chips[2];
+        std::vector<std::string> chips_seen;
+        bool chips_below = false;
+        int chips_w = 0;
         bool placed = false;
         bool last_empty = false;
         int head_h = 0;            /* the heading's own band */
@@ -223,7 +228,7 @@ struct LibraryPages::Impl {
         std::unique_ptr<cp0::ui::TextField> field;
         int field_h = 0;
     };
-    std::array<P, 11> pages;
+    std::array<P, 13> pages;
     P &at(Page p) { return pages[static_cast<size_t>(static_cast<int>(p) - static_cast<int>(Page::LibHub))]; }
     const P &at(Page p) const { return pages[static_cast<size_t>(static_cast<int>(p) - static_cast<int>(Page::LibHub))]; }
 
@@ -236,6 +241,7 @@ struct LibraryPages::Impl {
     int sheet_sel = 0;
     lv_obj_t *sheet_sel_box = nullptr;
     std::vector<int> sheet_row_y;
+    bool sheet_scroll = false;
     int osk_listener = 0;
     int osk_inset = 0;
 
@@ -317,9 +323,26 @@ struct LibraryPages::Impl {
             L.list->on_hold = [this, p](int i) {
                 if (cb.on_hold) cb.on_hold(p, i);
             };
+            if (cb.on_hold_ok && p != Page::LibPlaylists)
+                L.list->hold_ok = [this, p](int i) { return cb.on_hold_ok(p, i); };
             L.list->enable_hold_cue(r, ri(lg.panel.x) + S(8), ri(lg.panel.bottom()) - S(8), ri(lg.panel.w) - 2 * S(8));
         }
         if (p == Page::LibSearch) L.empty.build(r, R{lg.panel.x, double(L.list_y - S(40)), lg.panel.w, 0}, s, target, nullptr);
+        if (p == Page::LibPlaylists) { /* "No playlists yet" under the "+ New playlist" row (the board: 28 design px under it) */
+            L.empty.build(r, R{lg.panel.x, double(L.list_y + row_h() + S(28) - S(70)), lg.panel.w, 0}, s, target, nullptr);
+            L.list->hold_ok = [](int i) { return i > 0; }; /* the "+ New playlist" row has no sheet */
+        }
+        if (p == Page::LibPlaylist) {
+            L.empty.build(r, R{lg.panel.x, double(L.list_y - S(8)), lg.panel.w, 0}, s, target, nullptr);
+            for (int i = 0; i < 2; ++i)
+                L.chips[i].build(r, ri(lg.panel.x) + S(16), ri(lg.panel.y), S(80), S(24), S(12), col::kRowSel, col::kRowText, "", target, [this, p, i] {
+                    if (cb.on_button) cb.on_button(p, 10 + i);
+                });
+            for (int i = 0; i < 4; ++i)
+                L.buttons[i].build(r, ri(lg.panel.x) + S(16), 0, S(100), S(42), S(12), col::kButton, col::kInk, "", target, [this, p, i] {
+                    if (cb.on_button) cb.on_button(p, i);
+                });
+        }
         if (p == Page::LibSettings) {
             L.block = box(r, ri(lg.panel.x) + S(8), 0, ri(lg.panel.w) - 2 * S(8), S(82), col::kCream, S(8));
             L.block_title = label(L.block, Face::Bold, S(12), col::kInk3, S(12), S(8), 0, LV_TEXT_ALIGN_LEFT, ri(0.04 * 12 * s));
@@ -409,6 +432,109 @@ struct LibraryPages::Impl {
         }
         const int list_bottom = std::min(top - std::max(S(8), (target - bh) / 2), bottom);
         L.list_h = std::max(row_h(), list_bottom - L.list_y);
+        L.list->resize(L.list_h);
+        L.placed = true;
+    }
+
+    /* a playlist's edit page: the heading with the chips at its right (a line under it when they do not fit beside it), the four
+     * buttons at the panel's bottom flowing onto lines as their words fit, the rows between */
+    void place_edit(P &L, const LibView &v) {
+        const int px = ri(lg.panel.x), pw = ri(lg.panel.w), bottom = ri(lg.panel.bottom()) - S(8);
+        const lv_font_t *hf = font(Face::Bold, S(12));
+        const lv_font_t *cf = font(Face::Bold, S(12));
+        const int cn = std::min(2, static_cast<int>(v.chips.size()));
+        const int cgap = S(8), cpad = S(10);
+        int need[2] = {0, 0}, total = 0;
+        for (int i = 0; i < cn; ++i) {
+            need[i] = text_width(cf, v.chips[static_cast<size_t>(i)]) + 2 * cpad;
+            total += need[i] + (i ? cgap : 0);
+        }
+        const int htext = text_width(hf, v.heading, ri(0.04 * 12 * s)) + S(4);
+        const bool below = cn > 0 && htext + total + S(12) + S(16) > ri(lg.heading.w);
+        const int head_h = L.head_h;
+        const int band = below ? head_h + std::max(S(30), target) : std::max(head_h, cn ? target : head_h);
+        const lv_font_t *f12 = hf;
+        lv_obj_set_width(L.heading, below || cn == 0 ? ri(lg.heading.w) : std::max(S(40), ri(lg.heading.w) - total - S(16)));
+        lv_label_set_long_mode(L.heading, LV_LABEL_LONG_MODE_DOTS);
+        lv_obj_set_y(L.heading, ri(lg.heading.y) + ((below ? head_h : band) - lv_font_get_line_height(f12)) / 2);
+        const int ch = S(24);
+        const int cy = below ? ri(lg.panel.y) + head_h + (band - head_h - ch) / 2 : ri(lg.panel.y) + (band - ch) / 2;
+        int x = ri(lg.panel.right()) - S(12);
+        for (int k = 0; k < cn; ++k) { /* drawn from the right: the first chip (Rename) is the rightmost, as the board has it */
+            const int i = k;
+            const int w = need[i];
+            x -= w;
+            LibButton &b = L.chips[i];
+            b.set_text(v.chips[static_cast<size_t>(i)]);
+            b.x = x;
+            b.w = w;
+            lv_obj_set_pos(b.vis, x, cy);
+            lv_obj_set_size(b.vis, w, ch);
+            lv_obj_set_width(b.word, w);
+            const int hw = std::max(w, target), hh = std::max(ch, target);
+            lv_obj_set_pos(b.hitbox, x - (hw - w) / 2, cy - (hh - ch) / 2);
+            lv_obj_set_size(b.hitbox, hw, hh);
+            b.show(true);
+            x -= cgap;
+        }
+        for (int i = cn; i < 2; ++i) L.chips[i].show(false);
+        L.chips_below = below;
+        /* the buttons */
+        const int bh = std::max(S(42), 1), gap = S(8);
+        const int totalw = pw - 2 * S(8);
+        const int n = std::min(4, static_cast<int>(v.buttons.size()));
+        const lv_font_t *bf = font(Face::Bold, S(12));
+        std::vector<int> bneed(static_cast<size_t>(n));
+        for (int i = 0; i < n; ++i) bneed[static_cast<size_t>(i)] = text_width(bf, v.buttons[static_cast<size_t>(i)]) + 2 * S(14);
+        std::vector<std::vector<int>> lines;
+        for (int i = 0; i < n; ++i) {
+            const int w = bneed[static_cast<size_t>(i)];
+            if (!lines.empty()) {
+                int cur = static_cast<int>(lines.back().size()) * gap;
+                for (int k : lines.back()) cur += bneed[static_cast<size_t>(k)];
+                if (cur + w <= totalw) {
+                    lines.back().push_back(i);
+                    continue;
+                }
+            }
+            lines.push_back({i});
+        }
+        const int row_gap = std::max(gap, target - bh);
+        const int rows_n = static_cast<int>(lines.size());
+        const int top = bottom - rows_n * bh - std::max(0, rows_n - 1) * row_gap;
+        for (int i = 0; i < 4; ++i) L.buttons[i].show(i < n);
+        for (int li = 0; li < rows_n; ++li) {
+            const std::vector<int> &ln = lines[static_cast<size_t>(li)];
+            const int room = totalw - static_cast<int>(ln.size() - 1) * gap;
+            const int each = room / static_cast<int>(ln.size()); /* equal buttons on a line, the board's 106 px ones */
+            int bx = px + S(8);
+            for (size_t j = 0; j < ln.size(); ++j) {
+                const int k = ln[j];
+                LibButton &b = L.buttons[k];
+                int bw = each;
+                if (j + 1 == ln.size()) bw = px + S(8) + totalw - bx;
+                const int by = top + li * (bh + row_gap);
+                b.set_text(v.buttons[static_cast<size_t>(k)]);
+                b.x = bx;
+                b.w = bw;
+                lv_obj_set_pos(b.vis, bx, by);
+                lv_obj_set_size(b.vis, bw, bh);
+                lv_obj_set_width(b.word, bw);
+                lv_obj_set_y(b.word, (bh - lv_font_get_line_height(bf)) / 2);
+                const int hw = std::max(bw, target), hh = std::max(bh, target);
+                lv_obj_set_pos(b.hitbox, bx - (hw - bw) / 2, by - (hh - bh) / 2);
+                lv_obj_set_size(b.hitbox, hw, hh);
+                b.set_enabled(v.button_enabled[k]);
+                const bool teal = v.teal_last_button && k == n - 1;
+                set_bg(b.vis, teal ? col::kTeal : col::kButton);
+                lv_obj_set_style_text_color(b.word, lv_color_hex(teal ? col::kWhite : col::kInk), 0);
+                bx += bw + gap;
+            }
+        }
+        L.list_y = ri(lg.panel.y) + band;
+        const int list_bottom = std::min(top - std::max(S(8), (target - bh) / 2), bottom);
+        L.list_h = std::max(row_h(), list_bottom - L.list_y);
+        lv_obj_set_y(L.list->obj(), L.list_y);
         L.list->resize(L.list_h);
         L.placed = true;
     }
@@ -514,6 +640,16 @@ struct LibraryPages::Impl {
         }
         if (L.page == Page::LibSettings) update_block(L, v);
         if (L.page == Page::LibFolders) place_folders(L, v);
+        if (L.page == Page::LibPlaylists) { /* the message sits under the "+ New playlist" row; the row stays */
+            if (v.empty) L.empty.set(v.empty_title, v.empty_sub, "");
+            L.empty.show(v.empty);
+        }
+        if (L.page == Page::LibPlaylist) {
+            place_edit(L, v);
+            if (v.empty) L.empty.set(v.empty_title, v.empty_sub, "");
+            show(L.list->obj(), !v.empty);
+            L.empty.show(v.empty);
+        }
     }
 
     /* ---------------------------------------------------------------------------------------------- the sheet */
@@ -557,9 +693,25 @@ struct LibraryPages::Impl {
         lv_obj_update_layout(hint);
         const int hint_h = v.hint.empty() ? 0 : lv_obj_get_height(hint) + S(10);
         const int n = static_cast<int>(v.rows.size());
-        const int sh = title_h + n * rh + hint_h + S(8);
+        /* more rows than the panel holds (the picker with many playlists): the rows scroll inside their box */
+        const int max_sh = std::max(pb - S(8), H) - (py + S(4)); /* a sheet may reach over the panel's edge, never past the screen */
+        int rows_h = n * rh;
+        if (n > 5 && title_h + rows_h + hint_h + S(8) > max_sh) rows_h = std::max(rh, ((max_sh - title_h - hint_h - S(8)) / rh) * rh);
+        const int sh = title_h + rows_h + hint_h + S(8);
         const int sy = std::max(py + S(4), pb - S(8) - sh);
         box(sheet_root, sx, sy, sw, sh, col::kCream, S(10));
+        lv_obj_t *rbox = lv_obj_create(sheet_root);
+        plain(rbox);
+        lv_obj_set_pos(rbox, sx, sy + title_h);
+        lv_obj_set_size(rbox, sw, rows_h);
+        sheet_scroll = rows_h < n * rh;
+        if (sheet_scroll) {
+            lv_obj_add_flag(rbox, LV_OBJ_FLAG_SCROLLABLE);
+            lv_obj_set_scroll_dir(rbox, LV_DIR_VER);
+            lv_obj_set_scrollbar_mode(rbox, LV_SCROLLBAR_MODE_ACTIVE);
+        } else {
+            lv_obj_remove_flag(rbox, LV_OBJ_FLAG_SCROLLABLE);
+        }
         lv_obj_t *title = label(sheet_root, Face::Bold, S(12), col::kInk3, sx + S(14), sy + S(6), sw - 2 * S(14), LV_TEXT_ALIGN_LEFT,
                                 ri(0.04 * 12 * s));
         set_text(title, v.title);
@@ -569,7 +721,7 @@ struct LibraryPages::Impl {
             const SheetView::Row &r = v.rows[static_cast<size_t>(i)];
             const int ry = sy + title_h + i * rh;
             sheet_row_y.push_back(ry);
-            lv_obj_t *row = box(sheet_root, sx, ry, sw, rh, col::kChip, 0, i == v.selected ? LV_OPA_COVER : LV_OPA_TRANSP);
+            lv_obj_t *row = box(rbox, 0, i * rh, sw, rh, col::kChip, 0, i == v.selected ? LV_OPA_COVER : LV_OPA_TRANSP);
             lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
             lv_obj_add_event_cb(row, sheet_row_cb, LV_EVENT_CLICKED, this);
             const lv_font_t *lf = font(Face::Bold, S(15)), *kf = font(Face::Bold, S(13));
@@ -585,10 +737,11 @@ struct LibraryPages::Impl {
             sheet_rows.push_back(row);
             sheet_enabled.push_back(r.enabled);
         }
-        lv_obj_set_pos(hint, sx + S(14), sy + title_h + n * rh + S(2));
+        lv_obj_set_pos(hint, sx + S(14), sy + title_h + rows_h + S(2));
         lv_obj_move_foreground(hint);
         sheet_sel = v.selected;
         lv_obj_remove_flag(sheet_root, LV_OBJ_FLAG_HIDDEN);
+        if (sheet_scroll && v.selected >= 0 && v.selected < n) lv_obj_scroll_to_view(sheet_rows[static_cast<size_t>(v.selected)], LV_ANIM_OFF);
     }
 
     void hide_sheet() {
@@ -605,6 +758,7 @@ struct LibraryPages::Impl {
         sheet_sel = i;
         for (size_t k = 0; k < sheet_rows.size(); ++k)
             lv_obj_set_style_bg_opa(sheet_rows[k], static_cast<int>(k) == i ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
+        if (sheet_scroll && i >= 0 && i < static_cast<int>(sheet_rows.size())) lv_obj_scroll_to_view(sheet_rows[static_cast<size_t>(i)], LV_ANIM_OFF);
     }
 
     void on_inset(int inset) {

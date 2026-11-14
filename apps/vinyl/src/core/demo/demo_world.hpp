@@ -53,6 +53,12 @@ void remove_demo_world(const DemoWorld &w);
  * Returns false when SQLite is not there or the file cannot be made. */
 bool make_demo_library(const DemoWorld &w, const std::string &db_path, const std::string &mode);
 
+/* The playlists of the scenes (VINYL_DEMO_PLAYLISTS, P2c): files in <music>/Playlists made with the real store, from the demo
+ * music (real, sparse files): "list" Morning run (24 entries), Evening (18), Road trip (52), Favourites (31) as the Playlists
+ * board; "missing" the same with two of Evening's entries not on disk (a file and a Windows path), as PlaylistEditMissing; "empty"
+ * only the folder. */
+bool make_demo_playlists(const DemoWorld &w, const std::string &mode);
+
 OutputWorld demo_output_world(bool lite, const std::string &variant = "");
 LauncherStatus demo_launcher_status();
 /* lite: the outputs of a board without a sound server (ALSA devices, no playback mixer in the demonstration). */

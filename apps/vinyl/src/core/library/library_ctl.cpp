@@ -1467,7 +1467,7 @@ void LibraryCtl::tick(uint64_t now) {
     const std::string playing = host_.playing_path ? host_.playing_path() : std::string();
     if (playing != playing_) {
         const libm::Place pl = nav_.empty() ? libm::Place::Hub : nav_.top().place;
-        if (pl == libm::Place::Songs || pl == libm::Place::Album || pl == libm::Place::Search) rebuild_rows();
+        if (pl == libm::Place::Songs || pl == libm::Place::Album || pl == libm::Place::Search || pl == libm::Place::Playlist) rebuild_rows();
         else playing_ = playing;
     }
 }

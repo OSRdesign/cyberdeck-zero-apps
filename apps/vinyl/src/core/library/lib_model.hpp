@@ -14,8 +14,10 @@
  *               selection gets near the end of what is loaded
  *   notes       the scan strip ("Scanning: 388 of about 1,200 files", "Paused: the board is hot. ...") and the drive
  *               note ("SANDISK is not connected. Its 612 tracks are hidden ..."), from the scanner's progress and roots
- *   sheets      the Track, Album and Artist actions (Enter, N, A, P, I); Add to playlist is drawn dimmed and does nothing
- *               in 0.3.0 (playlists are P2c)
+ *   sheets      the Track, Album and Artist actions (Enter, N, A, P, I); P2c: Add to playlist is real, and the playlist sheets
+ *               (Play, Rename, Delete, Export M3U), the import sheet of a .m3u in Folders and the add-to picker
+ *   playlists   (P2c) the Playlists page's rows ("+ New playlist", names with counts), the edit page's rows and heading, the
+ *               hub while tracks are picked for a playlist
  *   nav         the stack of places the Library has been through (Esc pops it)
  */
 #pragma once

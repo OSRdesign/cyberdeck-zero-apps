@@ -83,6 +83,7 @@ struct LibNoteStrip {
 
 struct LibraryCallbacks {
     std::function<void(Page, int)> on_row, on_hold, on_button;
+    std::function<bool(Page, int)> on_hold_ok; /* does this row have a sheet (null: every row) */
     std::function<void(Page)> on_chip;
     std::function<void(const std::string &)> on_query;
     std::function<void()> on_submit, on_field_escape;

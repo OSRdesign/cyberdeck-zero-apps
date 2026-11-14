@@ -401,6 +401,10 @@ struct View::Impl {
         int ch_x = 0, ch_w = 0, ch_hx = 0, ch_hw = 0;
         uint64_t rows_gen = UINT64_MAX, rows_ver = UINT64_MAX;
         int rows = 0, sel = -2;
+        /* the Queue's "Save as playlist" chip (P2c): it widens the heading's band to the touch target while it shows */
+        LibButton save_chip;
+        bool save_on = false;
+        int list_y0 = 0, list_h0 = 0, save_dy = 0, save_cy0 = 0, save_cy1 = 0, save_hx = 0, save_w = 0;
     };
     ListW br, qu, out;
     std::unique_ptr<MenuPages> menu; /* the Menu pages (P2a) */
@@ -1008,6 +1012,13 @@ struct View::Impl {
                                            value_r, chev_r, [this, p](int i) {
                                                if (act.row) act.row(p, i);
                                            });
+        if (p == Page::Browser) { /* a .m3u / .m3u8 row held 1.5 s: the Play / Import / Add sheet (P2c) */
+            L.list->on_hold = [this, p](int i) {
+                if (act.lib_hold) act.lib_hold(p, i);
+            };
+            L.list->hold_ok = [this, p](int i) { return act.lib_hold_ok && act.lib_hold_ok(p, i); };
+            L.list->enable_hold_cue(r, ri(lg.panel.x) + S(8), ri(lg.panel.bottom()) - S(8), ri(lg.panel.w) - 2 * S(8));
+        }
         const int sx = ri(lg.strip.x), sy = ri(lg.strip.y), sw = ri(lg.strip.w), shh = ri(lg.strip.h);
         if (p == Page::Browser || p == Page::LibHub) {
             L.strip = box(r, sx, sy, sw, shh, col::kCream, S(8));
@@ -1090,6 +1101,25 @@ struct View::Impl {
             const std::vector<R> qa = layout::queue_touch_areas(lg, H, target, list_bottom);
             for (size_t i = 0; i < qa.size() && i < L.qbtns.size(); ++i) place_area(L.qbtns[i].hitbox, qa[i]);
             if (list_bottom < lg.list.bottom()) lv_obj_set_height(L.list->obj(), std::max(1, ri(list_bottom) - ri(lg.list.y)));
+            /* "Save as playlist" (P2c): a chip at the heading's right, shown when the Library is there; with it the heading's band is as
+             * high as the touch target (the list below gives that height up), so no touch area overlaps a row */
+            {
+                const lv_font_t *cf = font(Face::Bold, S(12));
+                const int cw = text_width(cf, "Save as playlist") + 2 * S(10), ch = S(24);
+                const int band0 = ri(lg.heading.h), band1 = std::max(band0, target);
+                L.list_y0 = ri(lg.list.y);
+                L.list_h0 = lv_obj_get_height(L.list->obj());
+                L.save_dy = band1 - band0;
+                L.save_w = cw;
+                const int cx = ri(lg.panel.right()) - S(12) - cw;
+                L.save_cy0 = ri(lg.panel.y) + (band0 - ch) / 2;
+                L.save_cy1 = ri(lg.panel.y) + (band1 - ch) / 2;
+                L.save_chip.build(r, cx, L.save_cy0, cw, ch, S(12), col::kRowSel, col::kRowText, "Save as playlist", target, [this] {
+                    if (act.queue_save) act.queue_save();
+                });
+                L.save_chip.show(false);
+                lv_label_set_long_mode(L.heading, LV_LABEL_LONG_MODE_DOTS);
+            }
         } else {
             L.strip = box(r, sx, sy, sw, shh, col::kCream, S(8));
             const int ip = S(18);
@@ -1103,6 +1133,10 @@ struct View::Impl {
             L.list_y = ri(lg.list.y);
         }
         lv_obj_add_flag(L.root, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    int S_save() const {
+        return std::max(1, ri(8 * layout::list_geom(layout::ListPage::Queue, W, H, body_y).s));
     }
 
     void update_list(ListW &L, Page p, const ListView &v) {
@@ -1130,6 +1164,18 @@ struct View::Impl {
         }
         if (p == Page::Queue) /* the buttons that cannot act dimmed, they do nothing (design QA runs 3, 4: D-81) */
             for (size_t i = 0; i < L.qbtns.size(); ++i) set_dimmed(L.qbtns[i], !(v.queue_buttons & (1u << i)), col::kList);
+        if (p == Page::Queue && L.save_chip.vis && v.save_chip != L.save_on) {
+            L.save_on = v.save_chip;
+            const int cy = v.save_chip ? L.save_cy1 : L.save_cy0;
+            const int ch = lv_obj_get_height(L.save_chip.vis), hh = lv_obj_get_height(L.save_chip.hitbox);
+            lv_obj_set_y(L.save_chip.vis, cy);
+            lv_obj_set_y(L.save_chip.hitbox, cy - (hh - ch) / 2);
+            L.save_chip.show(v.save_chip);
+            const int dy = v.save_chip ? L.save_dy : 0;
+            lv_obj_set_y(L.list->obj(), L.list_y0 + dy);
+            L.list->resize(std::max(1, L.list_h0 - dy));
+            lv_obj_set_width(L.heading, std::max(10, ri(layout::list_geom(layout::ListPage::Queue, W, H, body_y).heading.w) - (v.save_chip ? L.save_w + S_save() : 0)));
+        }
         if ((p == Page::Browser || p == Page::LibHub) && L.strip) {
             show(L.strip, v.mini.shown);
             show(L.mini_play.vis, v.mini.shown);
@@ -1366,6 +1412,10 @@ struct View::Impl {
 
     void show_notice(const Notice &n) {
         hide_notice();
+        if (ndlg) { /* the name dialog is up (the page is hidden): the notice is its message line */
+            ndlg->set_message(n.text, n.kind == Notice::Kind::Danger);
+            return;
+        }
         lv_obj_t *root = cur == Page::Now       ? now_root
                          : cur == Page::Browser ? br.root
                          : cur == Page::LibHub  ? hub.root
@@ -1490,8 +1540,108 @@ struct View::Impl {
      * nothing (the toolkit's backdrop). */
     std::unique_ptr<cp0::ui::Dialog> dlg;
 
+    bool dlg_generic = false; /* P2c: the question is Actions::confirm_answer's, not "Clear the queue?" */
     static void dialog_cancel_cb(void *p) { static_cast<Impl *>(p)->dialog_choose(0); }
     static void dialog_clear_cb(void *p) { static_cast<Impl *>(p)->dialog_choose(1); }
+
+    /* the root of the page shown (a dialog and a notice lie on it) */
+    lv_obj_t *root_of(Page pg) {
+        if (pg == Page::Now) return now_root;
+        if (pg == Page::Browser) return br.root;
+        if (pg == Page::LibHub) return hub.root;
+        if (pg == Page::Queue) return qu.root;
+        if (pg == Page::Output) return out.root;
+        if (is_lib_page(pg) && lib) return lib->root(pg);
+        if (MenuPages::is_menu_page(pg) && menu) return menu->root(pg);
+        return out.root;
+    }
+
+    void ask_confirm(const std::string &title, const std::string &body, const std::string &ok) {
+        close_dialog();
+        lv_obj_t *root = root_of(cur);
+        if (!root || !page) return;
+        dlg_generic = true;
+        cp0::ui::DialogSpec spec;
+        spec.title = title;
+        spec.buttons.push_back({"Cancel", cp0::ui::ButtonRole::Primary, [this] { lv_async_call(dialog_cancel_cb, this); }});
+        spec.buttons.push_back({ok, cp0::ui::ButtonRole::Destructive, [this] { lv_async_call(dialog_clear_cb, this); }});
+        spec.page = page.get();
+        dlg = std::make_unique<cp0::ui::Dialog>(root, tk, std::move(spec));
+        if (!body.empty()) dlg->add_text(body);
+        dlg->add_text("Y = " + ok + ", Enter or Esc = Cancel");
+        dlg->relayout();
+    }
+
+    /* ---- the name dialog (P2c): the toolkit's Dialog with a TextField (Cassette's pattern; the keyboard opens by itself when no
+     * physical keyboard is connected: the toolkit's policy) */
+    std::unique_ptr<cp0::ui::Dialog> ndlg;
+    std::unique_ptr<cp0::ui::TextField> nfield;
+    lv_obj_t *name_hidden_root = nullptr;
+    bool name_closing = false;
+    static void name_ok_cb(void *p) { static_cast<Impl *>(p)->name_choose(true); }
+    static void name_cancel_cb(void *p) { static_cast<Impl *>(p)->name_choose(false); }
+
+    void ask_name(const NameAsk &a) {
+        close_name(false);
+        lv_obj_t *root = root_of(cur);
+        if (!root || !page) return;
+        lv_obj_t *parent = page->root(); /* not the page's own root: that one is hidden while the box is up */
+        cp0::ui::DialogSpec spec;
+        spec.title = a.title;
+        spec.message_line = true;
+        spec.page = page.get();
+        spec.buttons.push_back({"Cancel", cp0::ui::ButtonRole::Cancel, [this] { lv_async_call(name_cancel_cb, this); }});
+        spec.buttons.push_back({a.ok, cp0::ui::ButtonRole::Primary, [this] { lv_async_call(name_ok_cb, this); }});
+        ndlg = std::make_unique<cp0::ui::Dialog>(parent, tk, std::move(spec));
+        cp0::ui::TextFieldSpec fs;
+        fs.label = a.sub;
+        fs.text = a.text;
+        fs.max_bytes = 96;
+        cp0::ui::TextFieldEvents fe;
+        fe.submit = [this](const std::string &) { lv_async_call(name_ok_cb, this); };
+        fe.escape = [this] { lv_async_call(name_cancel_cb, this); };
+        fe.back = [this] { lv_async_call(name_cancel_cb, this); };
+        nfield = std::make_unique<cp0::ui::TextField>(ndlg->body(), ndlg->field_layout(), fs, fe);
+        ndlg->add_text("Letters, digits, space, - and _ only. Up to 24 characters.");
+        ndlg->relayout();
+        if (lv_group_t *g = cdk::input_group()) {
+            lv_group_add_obj(g, nfield->focus_object());
+            lv_group_focus_obj(nfield->focus_object());
+        }
+        nfield->begin_edit();
+        /* the page goes while the box is up: nothing of it may lie under the toolkit's keyboard (the backdrop only dims it) */
+        name_hidden_root = root;
+        lv_obj_add_flag(root, LV_OBJ_FLAG_HIDDEN);
+        hide_notice();
+    }
+
+    bool name_dialog_shown() const { return ndlg != nullptr; }
+
+    /* never delete the box inside its own event: the next LVGL cycle does */
+    void close_name(bool show_page_again) {
+        if (!ndlg || name_closing) return;
+        name_closing = true;
+        auto *pending = new std::pair<std::unique_ptr<cp0::ui::TextField>, std::unique_ptr<cp0::ui::Dialog>>(std::move(nfield), std::move(ndlg));
+        if (pending->second) lv_obj_add_flag(pending->second->root(), LV_OBJ_FLAG_HIDDEN);
+        if (pending->first && pending->first->editing()) pending->first->end_edit();
+        lv_async_call(
+            [](void *q) {
+                delete static_cast<std::pair<std::unique_ptr<cp0::ui::TextField>, std::unique_ptr<cp0::ui::Dialog>> *>(q);
+            },
+            pending);
+        if (name_hidden_root && show_page_again && cur != Page::Notices) lv_obj_remove_flag(name_hidden_root, LV_OBJ_FLAG_HIDDEN);
+        else if (name_hidden_root && !show_page_again) { /* asked again at once: the next dialog hides it as well */
+        }
+        name_hidden_root = nullptr;
+        name_closing = false;
+    }
+
+    void name_choose(bool ok) {
+        if (!ndlg) return;
+        const std::string text = nfield ? nfield->text() : std::string();
+        close_name(true);
+        if (act.name_answer) act.name_answer(ok, text);
+    }
 
     void ask_clear_queue() {
         close_dialog();
@@ -1507,12 +1657,20 @@ struct View::Impl {
         dlg->relayout();
     }
 
-    void close_dialog() { dlg.reset(); }
+    void close_dialog() {
+        dlg.reset();
+        dlg_generic = false;
+    }
 
     void dialog_choose(int which) {
         if (!dlg) return;
+        const bool generic = dlg_generic;
         close_dialog();
-        if (which == 1 && act.queue_clear) act.queue_clear();
+        if (generic) {
+            if (act.confirm_answer) act.confirm_answer(which == 1);
+        } else if (which == 1 && act.queue_clear) {
+            act.queue_clear();
+        }
     }
 
     /* a key while the dialog shows (lv_key from the keypad, evdev the physical key): true while it shows (it takes them) */
@@ -1637,6 +1795,8 @@ View::View(lv_obj_t *screen, Actions actions) : d_(std::make_unique<Impl>()) {
 View::~View() {
     d_->hide_notice();
     d_->close_dialog();
+    d_->nfield.reset();
+    d_->ndlg.reset();
     d_->qlist.reset();
     d_->lib.reset();
     d_->br.list.reset();
@@ -1654,6 +1814,7 @@ void View::show_page(Page p) {
     if (p == d.cur) return;
     d.hide_notice();
     d.close_dialog();
+    d.close_name(false);
     if (d.lib) {
         d.lib->hide_sheet();
         if (d.cur == Page::LibSearch) d.lib->search_end_edit();
@@ -1663,7 +1824,7 @@ void View::show_page(Page p) {
     show(d.now_root, p == Page::Now);
     show(d.br.root, p == Page::Browser);
     show(d.hub.root, p == Page::LibHub);
-    for (int i = static_cast<int>(Page::LibArtists); i <= static_cast<int>(Page::LibFolders); ++i)
+    for (int i = static_cast<int>(Page::LibArtists); i <= static_cast<int>(Page::LibPlaylist); ++i)
         show(d.lib->root(static_cast<Page>(i)), static_cast<int>(p) == i);
     show(d.qu.root, p == Page::Queue);
     show(d.out.root, p == Page::Output);
@@ -1684,6 +1845,8 @@ void View::show_page(Page p) {
     case Page::LibInfo: d.page->set_title({"Track info"}); break;
     case Page::LibSettings: d.page->set_title({"Library"}); break;
     case Page::LibFolders: d.page->set_title({"Music folders"}); break;
+    case Page::LibPlaylists: d.page->set_title({"Playlists"}); break;
+    case Page::LibPlaylist: d.page->set_title({"Playlist"}); break;
     case Page::Menu: d.page->set_title({menu::page_title(menu::Page::Menu)}); break;
     case Page::Sleep: d.page->set_title({menu::page_title(menu::Page::Sleep)}); break;
     case Page::Playback: d.page->set_title({menu::page_title(menu::Page::Playback)}); break;
@@ -1737,6 +1900,10 @@ void View::show_notice(const Notice &n) { d_->show_notice(n); }
 void View::hide_notice() { d_->hide_notice(); }
 bool View::notice_shown() const { return d_->notice != nullptr; }
 void View::ask_clear_queue() { d_->ask_clear_queue(); }
+void View::ask_confirm(const std::string &title, const std::string &body, const std::string &ok) { d_->ask_confirm(title, body, ok); }
+void View::ask_name(const NameAsk &a) { d_->ask_name(a); }
+bool View::name_dialog_shown() const { return d_->name_dialog_shown(); }
+void View::close_name_dialog() { d_->close_name(true); }
 bool View::dialog_shown() const { return d_->dlg != nullptr; }
 bool View::dialog_key(uint32_t key, uint32_t evdev) { return d_->dialog_key(key, evdev); }
 void View::simulate_scrub(double frac) { d_->simulate_scrub(frac); }

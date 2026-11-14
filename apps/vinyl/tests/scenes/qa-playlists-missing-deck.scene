@@ -1,0 +1,34 @@
+title Vinyl P2c: a playlist with two entries that are not on disk (PlaylistEditMissing): dimmed, "file not found", kept, inert, the heading counts them; Remove takes one out (640x480, the deck)
+sizes 640x480
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_LIBRARY full
+env VINYL_DEMO_PLAYLISTS missing
+env VINYL_DEMO_STATE playing
+keyboards 1
+wait 1200
+key b
+wait 500
+tap "Playlists"
+wait 700
+expect text "18 tracks"
+tap "Evening"
+wait 900
+shot 01-edit-missing
+expect text "file not found"
+expect text "Old song.mp3"
+expect text "Gone.mp3"
+expect noquit
+# a dimmed row is inert: nothing plays, the page stays
+tap "Old song.mp3"
+wait 500
+expect text "Old song.mp3"
+expect text "Add tracks"
+shot 02-inert
+# Remove acts on the selected row, a missing one included
+tap "Remove"
+wait 700
+shot 03-removed
+expect notext "Old song.mp3"
+expect text "Gone.mp3"
+expect noquit

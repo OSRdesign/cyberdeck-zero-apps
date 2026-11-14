@@ -68,6 +68,15 @@ public:
     /* "Clear the queue?" (the toolkit's dialog): Cancel (its Primary: Enter), Esc and the header's Esc cancel; Clear (a
      * tap, or the letter Y) calls Actions::queue_clear; while it shows every key goes to dialog_key (true: it took it) */
     void ask_clear_queue();
+    /* P2c: a question with a destructive answer on the toolkit's dialog (Delete "Evening"?): Cancel is the Primary button (Enter),
+     * the letter Y (named in the text) or a tap on `ok` answers Actions::confirm_answer(true) */
+    void ask_confirm(const std::string &title, const std::string &body, const std::string &ok);
+    /* P2c: the name dialog (Save the queue, New playlist, Rename, Import as): the toolkit's Dialog with its TextField, which opens
+     * the on-screen keyboard by itself when no keyboard is connected (the same policy as the Library's search field). The answer is
+     * Actions::name_answer. A notice shown while it is up is written in its message line (the page behind it is hidden). */
+    void ask_name(const NameAsk &a);
+    bool name_dialog_shown() const;
+    void close_name_dialog(); /* cancels it without an answer */
     /* the design-QA scenes (VINYL_DEMO_SCRUB): the seek bar's scrubbing state as if a finger were held at `frac` */
     void simulate_scrub(double frac);
     bool dialog_shown() const;

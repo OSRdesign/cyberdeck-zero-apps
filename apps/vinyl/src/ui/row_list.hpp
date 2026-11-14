@@ -61,6 +61,8 @@ public:
 
     /* a press held HoldTracker::kFireMs on a row (its index) */
     std::function<void(int)> on_hold;
+    /* P2c: which rows have something to open (null: every row but a heading); a row without one starts no hold and shows no cue */
+    std::function<bool(int)> hold_ok;
 
     /* the hold's cue (Markdown Notes' look: a box with an accent border, the message, a bar that fills): over the bottom of
      * the area x .. x + w, `bottom` being its lowest edge, in `parent`'s coordinates */
@@ -277,7 +279,7 @@ private:
             self->swallow_tap_ = false;
             self->hold_.cancel();
             self->hide_cue();
-            if (idx >= 0 && self->on_hold && !self->rows_[static_cast<size_t>(idx)].heading) {
+            if (idx >= 0 && self->on_hold && !self->rows_[static_cast<size_t>(idx)].heading && (!self->hold_ok || self->hold_ok(idx))) {
                 const lv_point_t p = pointer();
                 self->hold_.begin(idx, p.x, p.y, now);
             }
