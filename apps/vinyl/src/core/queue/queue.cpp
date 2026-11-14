@@ -142,6 +142,26 @@ void Queue::clear_except_current() {
     cur_ = 0;
 }
 
+int Queue::insert_at(int item_at, int pos, const std::vector<std::string> &paths) {
+    if (paths.empty()) return -1;
+    const int k = static_cast<int>(paths.size());
+    items_.insert(items_.begin() + item_at, paths.begin(), paths.end());
+    for (int &o : order_)
+        if (o >= item_at) o += k;
+    std::vector<int> added(paths.size());
+    std::iota(added.begin(), added.end(), item_at);
+    order_.insert(order_.begin() + pos, added.begin(), added.end()); /* pos is after the current position: it stays */
+    return pos;
+}
+
+int Queue::insert_next(const std::vector<std::string> &paths) {
+    const bool has_cur = cur_ >= 0 && cur_ < size();
+    const int item_at = has_cur ? order_[static_cast<size_t>(cur_)] + 1 : 0;
+    return insert_at(item_at, has_cur ? cur_ + 1 : 0, paths);
+}
+
+int Queue::append(const std::vector<std::string> &paths) { return insert_at(size(), size(), paths); }
+
 void Queue::restore(std::vector<std::string> items, std::vector<int> order, int current, bool shuffle, Repeat r,
                     const std::string &source) {
     items_ = std::move(items);
