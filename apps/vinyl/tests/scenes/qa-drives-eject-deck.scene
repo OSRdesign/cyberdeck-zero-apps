@@ -15,7 +15,7 @@ wait 700
 tap "Music folders"
 wait 700
 shot 01-music-folders-drives
-expect text "SANDISK (USB drive)"
+@480x320,640x480,800x480,480x480,720x720 expect text "SANDISK (USB drive)"
 @480x320,640x480,800x480,480x480,720x720 expect text "mounted by Vinyl"
 @480x320,640x480,800x480,480x480,720x720 expect text "Generic Flash Disk (USB drive)"
 @480x320,640x480,800x480,480x480,720x720 expect text "not mounted"
