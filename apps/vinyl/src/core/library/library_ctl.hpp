@@ -24,6 +24,8 @@
 
 #include "ui/view_model.hpp"
 
+#include "../playlist/playlist_index.hpp"
+#include "../playlist/playlists.hpp"
 #include "lib_model.hpp"
 #include "library.hpp"
 #include "roots.hpp"
@@ -67,6 +69,12 @@ struct LibHost {
     std::function<void(const SheetView &)> show_sheet;
     std::function<void()> hide_sheet;
     std::function<void(int)> sheet_select;
+    /* P2c, playlists: play with a source (the queue's source is the playlist file), the name dialog and the question dialog (their
+     * answers are LibraryCtl::name_answer / confirm_answer), and the Browser in choose mode to pick the folder an export goes to */
+    std::function<void(const std::vector<std::string> &, int start, const std::string &source)> play_source;
+    std::function<void(const NameAsk &)> ask_name;
+    std::function<void(const std::string &title, const std::string &body, const std::string &ok)> ask_confirm;
+    std::function<void(const std::string &playlist)> choose_export;
 };
 
 struct LibConfig {
@@ -75,6 +83,7 @@ struct LibConfig {
     std::string home;          /* "~" in paths shown */
     bool demo = false;         /* the scenes: no mounts, no launch scan by the thread */
     uint64_t search_debounce_ms = 250;
+    std::string playlists_dir; /* "" : <home>/Music/Playlists (D26) */
     ScanHooks scan_hooks = default_scan_hooks(); /* the tests replace the tag reader */
 };
 
@@ -133,8 +142,22 @@ public:
     void sheet_pick(int i);
     /* Music folders > Add a folder > "Use this folder": the folder joins the library and a scan starts */
     void add_folder(const std::string &path);
-    /* Esc in the choose mode: back to the Music folders page */
+    /* Esc in the choose mode: back to the page the Browser was opened from (Music folders, or a playlist whose export was asked) */
     void choose_cancelled();
+
+    /* ---- P2c, playlists */
+    /* the Queue page's "Save as playlist": the queue's play order; opens the name dialog (default "Queue", or the next free name) */
+    void save_queue(const std::vector<std::string> &paths);
+    /* the Browser's .m3u / .m3u8 row held (or Ctrl+O): the Play / Import as a playlist / Add to the queue sheet */
+    void open_import_sheet(const std::string &file);
+    /* the dialogs' answers (the host calls them) */
+    void name_answer(bool ok, const std::string &text);
+    void confirm_answer(bool yes);
+    /* the Browser in choose mode for an export: the folder chosen ("Use folder") */
+    bool exporting() const { return !export_name_.empty(); }
+    void export_to(const std::string &folder);
+    bool pick_mode() const { return pick_; }
+    const std::string &playlists_dir() const { return playlist_dir_; }
 
     /* the 100 ms tick: the finished jobs, the scan's changes, the debounced search, the mounts */
     void tick(uint64_t now_ms);
@@ -168,6 +191,24 @@ private:
     void open_sheet(int index);
     void sheet_act(const std::string &id);
     void tracks_job(libm::Row::Type type, int64_t id, int mode); /* 0 play, 1 next, 2 add */
+    /* playlists */
+    enum class Ask { None, New, Rename, SaveQueue, AddNew, ImportAs, Delete };
+    void store_job(std::function<void(Library &, PlaylistStore &)> work, std::function<void()> done);
+    std::vector<std::string> root_paths() const;
+    void sync_playlists();
+    void ask(Ask what, const NameAsk &a);
+    void begin_rename(const std::string &name, int tracks);
+    void begin_delete(const std::string &name, int tracks);
+    void begin_export(const std::string &name);
+    void begin_pick(const std::string &name);
+    void pick_add(const std::vector<std::string> &paths);
+    void begin_add_to(const libm::Row &r);
+    void show_sheet_obj(const libm::Sheet &s);
+    void playlist_edit(int what); /* 0 move up, 1 move down, 2 remove */
+    void play_playlist_rows(int start_row);
+    void import_act(const std::string &id);
+    void playlists_changed();     /* the page shown asks again */
+    std::string entry_name() const; /* the playlist whose edit page is on top */
     std::vector<std::string> track_paths(int from, int to) const;
     void start_full_scan(bool visible_notice);
     void sync_mounts(bool force);
@@ -201,6 +242,9 @@ private:
         TrackDetails info;
         bool info_ok = false;
         SearchResults search;
+        std::vector<PlaylistRow> playlists;
+        std::vector<PlaylistEntryRow> entries;
+        PlaylistStats pstats;
         bool search_done = false; /* results (maybe none) for `search.query` arrived */
         bool loaded = false;
         bool failed = false;
@@ -234,6 +278,20 @@ private:
     uint64_t now_ms_ = 0;
     std::vector<std::string> folders_before_;
     bool choose_pending_ = false;
+    /* P2c */
+    std::string playlist_dir_;
+    PlaylistStore store_{""}; /* touched only by the worker's jobs */
+    Ask ask_ = Ask::None;
+    NameAsk ask_spec_;
+    std::string ask_name_, ask_src_, ask_text_;
+    std::vector<std::string> ask_paths_;
+    std::string export_name_;
+    bool pick_ = false;
+    std::string pick_name_;
+    libm::Nav pick_saved_;
+    std::vector<PlaylistRow> addto_lists_;
+    std::vector<std::string> addto_paths_;
+    std::string import_file_;
 };
 
 } // namespace ui

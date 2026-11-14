@@ -385,14 +385,14 @@ void test_lib_model() {
         CHECK(!h.poll(5000));
     }
 
-    /* the sheets: the rows, their keys, Add to playlist drawn and inert */
+    /* the sheets: the rows, their keys, Add to playlist enabled (P2c) */
     Sheet ts = track_sheet("Lisztomania", "Phoenix");
     CHECK_EQ(ts.title, std::string("LISZTOMANIA, PHOENIX"));
     CHECK_EQ(ts.rows.size(), static_cast<size_t>(5));
     CHECK_EQ(ts.rows[0].label, std::string("Play"));
     CHECK_EQ(ts.rows[0].key, std::string("Enter"));
     CHECK_EQ(ts.rows[4].key, std::string("I"));
-    CHECK(!ts.rows[sheet_index(ts, "playlist")].enabled);
+    CHECK(ts.rows[sheet_index(ts, "playlist")].enabled); /* P2c: Add to playlist is real */
     CHECK(ts.rows[sheet_index(ts, "next")].enabled);
     CHECK_EQ(ts.hint, std::string("Hold a row for 1.5 s, or press Ctrl+O, to open this sheet."));
     Sheet as = album_sheet("Wolfgang Amadeus Phoenix", 14);

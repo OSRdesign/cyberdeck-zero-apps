@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
         {"sqlite", test_sqlite}, {"sortkey", test_sortkey}, {"library", test_library}, {"search", test_search},
         {"tags_scan", test_tags_scan}, {"scanner", test_scanner},
         {"lib_model", test_lib_model}, {"lib_ctl", test_lib_ctl}, {"drives", test_drives}, {"media_guard", test_media_guard},
-        {"m3u", test_m3u}, {"playlists", test_playlists},
+        {"m3u", test_m3u}, {"playlists", test_playlists}, {"playlist_ctl", test_playlist_ctl}, {"playlist_model", test_playlist_model},
     };
     for (const Group &g : groups) {
         if (only && std::strcmp(only, g.name) != 0) continue;

@@ -434,11 +434,14 @@ void test_lib_ctl() {
         CHECK(!hv.empty);
         CHECK(!c.back()); /* at the hub: the host decides */
 
-        /* Folders: the host opens the Browser; Playlists: a notice, nothing opens */
+        /* Folders: the host opens the Browser; Playlists: the page (P2c: tests/test_playlist_ctl.cpp), Esc back to the hub */
         c.row(Page::LibHub, 0);
         CHECK_EQ(rec.opened_folders, 1);
         c.row(Page::LibHub, 1);
-        CHECK_EQ(rec.notices.back(), std::string("Playlists arrive in a later version."));
+        pump(c);
+        CHECK_EQ(c.page(), Page::LibPlaylists);
+        CHECK(c.back());
+        pump(c);
         CHECK_EQ(c.page(), Page::LibHub);
 
         /* Artists: 40 rows, the next page when the highlight nears the end (once), 101 in the end */
@@ -482,13 +485,13 @@ void test_lib_ctl() {
         CHECK_EQ(rec.plays.size(), static_cast<size_t>(2));
         CHECK_EQ(rec.starts[1], 1);
 
-        /* the sheet of a track: a hold opens it; N and A act, P is drawn and does nothing, I opens Track info */
+        /* the sheet of a track: a hold opens it; N and A act, P opens the add-to picker (P2c), I opens Track info */
         const int sheets0 = rec.sheets;
         c.hold(Page::LibAlbum, 0);
         CHECK(c.sheet_open());
         CHECK_EQ(rec.sheets, sheets0 + 1);
         CHECK_EQ(c.sheet_view().rows.size(), static_cast<size_t>(5));
-        CHECK(!c.sheet_view().rows[3].enabled);
+        CHECK(c.sheet_view().rows[3].enabled); /* P2c: Add to playlist is real */
         CHECK(c.letter(libm::kKeyN, 0));
         CHECK(!c.sheet_open());
         CHECK_EQ(rec.nexts.size(), static_cast<size_t>(1));
@@ -499,14 +502,21 @@ void test_lib_ctl() {
         CHECK_EQ(rec.adds.size(), static_cast<size_t>(1));
         CHECK_EQ(rec.adds[0][0], std::string("/music/Artist 005/2.mp3"));
         c.hold(Page::LibAlbum, 0);
-        CHECK(c.letter(libm::kKeyP, 0)); /* consumed, nothing happens (P2c) */
+        CHECK(c.letter(libm::kKeyP, 0)); /* the picker comes from the worker: with no playlist, "+ New playlist" only */
+        pump(c);
         CHECK(c.sheet_open());
+        CHECK_EQ(c.sheet_view().title, std::string("ADD SONG ARTIST 005 1 TO"));
+        CHECK_EQ(c.sheet_view().rows.size(), static_cast<size_t>(1));
         CHECK_EQ(rec.nexts.size(), static_cast<size_t>(1));
         CHECK_EQ(rec.adds.size(), static_cast<size_t>(1));
+        c.back(); /* Esc closes the picker */
+        CHECK(!c.sheet_open());
+        c.hold(Page::LibAlbum, 0);
         CHECK(!c.letter(16, 0)); /* Q: not the sheet's, the host's */
-        c.key(18); /* Down: the next row that can act (Play next) */
-        c.key(18);
-        c.key(18); /* Add to queue, then past the inert row to Track info */
+        c.key(18); /* Down: Play next */
+        c.key(18); /* Add to queue */
+        c.key(18); /* Add to playlist */
+        c.key(18); /* Track info */
         c.key(10);
         pump(c);
         CHECK(!c.sheet_open());

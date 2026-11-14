@@ -21,6 +21,7 @@
 #pragma once
 
 #include "../drives/drives.hpp"
+#include "../playlist/playlist_index.hpp"
 #include "library.hpp"
 #include "scanner.hpp"
 
@@ -53,7 +54,7 @@ std::string home_short(const std::string &path, const std::string &home);
 struct Row {
     enum class Kind { Heading, Item };
     enum class Mark { None, Chevron, Dot };
-    enum class Type { None, Hub, Artist, Album, Track, Genre };
+    enum class Type { None, Hub, Artist, Album, Track, Genre, Playlist, NewPlaylist, Entry };
     Kind kind = Kind::Item;
     Mark mark = Mark::Chevron;
     Type type = Type::None;
@@ -74,6 +75,28 @@ struct Row {
 /* The Hub: Folders, Playlists, Artists n, Albums n, Songs n, Genres n. The counts blank (no number) while unknown. */
 std::vector<Row> hub_rows(const LibraryCounts &c, bool counts_known);
 std::string hub_heading(int tracks, bool scanning);
+/* the hub while tracks are being picked for a playlist (Add tracks): Artists, Albums, Songs, Genres only (Folders and Playlists
+ * are not places to pick from) and its heading */
+std::vector<Row> hub_pick_rows(const LibraryCounts &c, bool counts_known);
+std::string hub_pick_heading(const std::string &playlist);
+
+/* ------------------------------------------------------------------------------------------------ playlists (P2c) */
+/* the Playlists page: "+ New playlist" first (an action: the dot), then each playlist with "N tracks" and a chevron */
+std::vector<Row> playlist_list_rows(const std::vector<PlaylistRow> &p);
+std::string playlists_heading(int n);
+/* a playlist's entries as the edit page shows them: a dot (Enter plays from here), "Artist, Title" and its length; an entry whose
+ * file is not there is dimmed and says "file not found" (never dropped) */
+std::vector<Row> playlist_entry_rows(const std::vector<PlaylistEntryRow> &e, const std::string &playing_path);
+/* "1 H 12 MIN", "45 MIN", "" for none */
+std::string length_words(uint64_t ms);
+/* "18 TRACKS, 1 H 12 MIN" with ". 2 NOT FOUND" when some files are not there */
+std::string playlist_heading(const PlaylistStats &s);
+/* where an export went, for "Exported to SANDISK: Evening.m3u8.": the drive's name for a folder on a drive, else the folder's name */
+std::string where_text(const std::string &folder);
+/* the lowest free name among `names` (without case): "Queue", "Queue 2" ... within 24 characters */
+std::string free_name_among(const std::vector<std::string> &names, const std::string &base);
+/* the notice a bad name gets */
+std::string name_problem_text(NameProblem p);
 
 std::vector<Row> artist_rows(const std::vector<ArtistRow> &a, int first_index = 0);
 /* show_artist: Albums and a genre's albums (the artist right of the title); false: an artist's page (the year) */
@@ -164,7 +187,7 @@ std::string played_text(int plays, int64_t last, bool utc = false);
 /* ------------------------------------------------------------------------------------------------ sheets */
 
 /* evdev codes of the sheet's letters */
-enum : uint32_t { kKeyA = 30, kKeyN = 49, kKeyP = 25, kKeyI = 23 };
+enum : uint32_t { kKeyA = 30, kKeyN = 49, kKeyP = 25, kKeyI = 23, kKeyR = 19, kKeyD = 32, kKeyE = 18, kKeyT = 20 };
 
 struct SheetRow {
     std::string id; /* "play", "next", "add", "playlist", "info" */
@@ -172,7 +195,7 @@ struct SheetRow {
     bool enabled = true;
 };
 struct Sheet {
-    enum class Kind { Track, Album, Artist };
+    enum class Kind { Track, Album, Artist, Playlist, Import, AddTo };
     Kind kind = Kind::Track;
     std::string title; /* upper case */
     std::vector<SheetRow> rows;
@@ -184,14 +207,22 @@ struct Sheet {
 Sheet track_sheet(const std::string &title, const std::string &artist);
 Sheet album_sheet(const std::string &title, int tracks);
 Sheet artist_sheet(const std::string &name, int albums);
+/* P2c: the playlist's actions (Play, Rename, Delete, Export; `editing`: the open playlist's page, which adds Add tracks), the
+ * sheet of a .m3u in the Folders browser (Play, Import as a playlist, Add to the queue) and the picker "ADD <WHAT> TO" (+ New
+ * playlist, then each playlist with its count). */
+Sheet playlist_sheet(const std::string &name, int tracks, bool editing);
+Sheet import_sheet(const std::string &file_name, int entries);
+Sheet add_to_sheet(const std::string &what, const std::vector<PlaylistRow> &playlists);
 /* the action a letter key names on the sheet ("" for none); Enter is the selected row, the caller's */
 std::string sheet_action_for_key(uint32_t evdev);
+/* the same for a given sheet (the playlist sheets have their own letters: R, D, E, T; the import sheet's I imports) */
+std::string sheet_action_for_key(uint32_t evdev, const Sheet &s);
 /* the row index of an action id, -1 when the sheet has none */
 int sheet_index(const Sheet &s, const std::string &id);
 
 /* ------------------------------------------------------------------------------------------------ navigation */
 
-enum class Place { Hub, Artists, Artist, Albums, GenreAlbums, Album, Songs, Genres, Search, Info, Settings, Folders };
+enum class Place { Hub, Artists, Artist, Albums, GenreAlbums, Album, Songs, Genres, Search, Info, Settings, Folders, Playlists, Playlist };
 struct Loc {
     Place place = Place::Hub;
     int64_t id = 0;        /* artist, album, genre or track */

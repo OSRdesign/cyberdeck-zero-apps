@@ -28,8 +28,10 @@ enum class Page {
     /* P2b, the Library: the hub (Folders opens the Browser), the lists, an album's tracks, Search, Track info, the Library
      * settings and the Music folders (ui/library_pages.hpp, ui/library_ctl.hpp) */
     LibHub, LibArtists, LibArtist, LibAlbums, LibAlbum, LibSongs, LibGenres, LibSearch, LibInfo, LibSettings, LibFolders,
+    /* P2c, the playlists: the list (with "+ New playlist") and one playlist's edit page */
+    LibPlaylists, LibPlaylist,
 };
-inline bool is_lib_page(Page p) { return p >= Page::LibHub && p <= Page::LibFolders; }
+inline bool is_lib_page(Page p) { return p >= Page::LibHub && p <= Page::LibPlaylist; }
 
 struct RowView {
     enum class Mark { None, Chevron, Dot };
@@ -147,9 +149,15 @@ struct LibView {
     std::string block_title, block_text;
     /* Music folders: the two buttons and the note under them */
     std::vector<std::string> buttons;
-    bool button_enabled[3] = {true, true, true};
-    bool button_primary[3] = {true, false, false}; /* the brown look: Add a folder, or Mount <drive> when that is what the drive button does */
+    bool button_enabled[4] = {true, true, true, true};
+    bool button_primary[4] = {true, false, false, false}; /* the brown look: Add a folder, or Mount <drive> when that is what the drive button does */
     std::string footnote;
+    /* P2c, a playlist's edit page: the chips at the heading's right ("Rename", "Export M3U"; a tap is a button of index 10 + i) and
+     * the four buttons under the rows (Move up, Move down, Remove, Add tracks: the last one in the teal look) */
+    std::vector<std::string> chips;
+    bool teal_last_button = false;
+    /* the Playlists page with no playlist: the message sits under this many rows (the "+ New playlist" row stays) */
+    int empty_after_rows = 0;
     /* Search: the field's text and the line shown while it is empty */
     std::string query;
 };
@@ -183,6 +191,12 @@ struct Notice {
     uint64_t gen = 0;
 };
 
+/* A name asked for in a dialog with a text field (Save the queue, New playlist, Rename, Import as): the title, the line over the field
+ * ("20 tracks. Name:"), its first text and the primary button's word. The answer is Actions::name_answer. */
+struct NameAsk {
+    std::string title, sub, text, ok;
+};
+
 /* What the pages ask the controller to do. */
 struct Actions {
     std::function<void()> back, toggle, prev, next, shuffle, repeat;
@@ -205,6 +219,10 @@ struct Actions {
     std::function<void()> lib_field_escape;          /* Esc in the search field */
     std::function<void(int)> sheet_pick;             /* a tap on a sheet row */
     std::function<void()> sheet_dismiss;             /* a tap outside the sheet */
+    /* P2c */
+    std::function<void(bool, const std::string &)> name_answer; /* the name dialog: true = the primary button, with the text */
+    std::function<void(bool)> confirm_answer;                   /* the question dialog (Delete "Evening"?): true = the destructive answer */
+    std::function<void()> queue_save;                           /* the Queue page's "Save as playlist" */
 };
 
 } // namespace ui
