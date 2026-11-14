@@ -282,7 +282,7 @@ void test_browse() {
     if (items.size() == 4) {
         CHECK_EQ(items[0], dir + "/1 First.MP3");
         CHECK_EQ(items[1], dir + "/2 Second.mp3");
-        CHECK_EQ(items[2], dir + "/Album 2/../10 Last.flac");
+        CHECK_EQ(items[2], dir + "/10 Last.flac"); /* P2c: the path is lexical */
         CHECK_EQ(items[3], dir + "/x.m4a");
     }
     CHECK_EQ(parse_m3u("a.mp3\nb.mp3\n", "/x").size(), static_cast<size_t>(2));

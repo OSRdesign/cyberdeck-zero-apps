@@ -6,6 +6,7 @@
 #include "browse.hpp"
 
 #include "roots.hpp"
+#include "../playlist/m3u.hpp"
 #include "../decode/track_decoder.hpp"
 #include "../tags/tag_reader.hpp"
 
@@ -186,29 +187,16 @@ bool file_exists(const std::string &path) {
 }
 
 std::vector<std::string> parse_m3u(const std::string &text, const std::string &base_dir, bool (*exists)(const std::string &)) {
+    /* P2c: the reading is core/playlist/m3u (Windows paths, Latin-1, file:// URLs); this keeps P1's contract: the files that are
+     * there (all of them when `exists` is null), as absolute paths */
+    m3u::ParseOptions opt;
+    opt.base_dir = base_dir;
+    opt.max_entries = kMaxEntries;
+    if (!exists) opt.exists = [](const std::string &) { return true; };
+    else opt.exists = [exists](const std::string &p) { return exists(p); };
     std::vector<std::string> out;
-    std::istringstream in(text);
-    std::string line;
-    bool first = true;
-    while (std::getline(in, line)) {
-        if (first && line.size() >= 3 && static_cast<unsigned char>(line[0]) == 0xEF &&
-            static_cast<unsigned char>(line[1]) == 0xBB && static_cast<unsigned char>(line[2]) == 0xBF)
-            line.erase(0, 3); /* UTF-8 byte-order mark */
-        first = false;
-        while (!line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t')) line.pop_back();
-        size_t a = 0;
-        while (a < line.size() && (line[a] == ' ' || line[a] == '\t')) ++a;
-        line.erase(0, a);
-        if (line.empty() || line[0] == '#') continue;
-        if (starts_with(line, "file://")) line.erase(0, 7);
-        if (line.find("://") != std::string::npos) continue; /* streams: not in P1 */
-        for (char &c : line)
-            if (c == '\\') c = '/'; /* playlists written on Windows */
-        std::string p = line[0] == '/' ? line : base_dir + "/" + line;
-        if (exists && !exists(p)) continue;
-        out.push_back(p);
-        if (out.size() >= kMaxEntries) break;
-    }
+    for (const m3u::Entry &e : m3u::parse(text, opt))
+        if (e.resolved && (!exists || exists(e.path))) out.push_back(e.path);
     return out;
 }
 

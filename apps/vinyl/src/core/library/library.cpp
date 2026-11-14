@@ -256,6 +256,17 @@ int64_t Library::find_track(const std::string &path) {
     return s.step() == sqlite::kRow ? s.i64(0) : -1;
 }
 
+bool Library::track_by_path(const std::string &path, TrackRow &out) {
+    out = TrackRow();
+    const int64_t id = find_track(path);
+    if (id < 0) return false;
+    Stmt s = db_.prepare(std::string("select ") + kTrackCols + " from tracks t" + kTrackJoins + " where t.id = ?1");
+    s.bind(1, static_cast<long long>(id));
+    if (s.step() != sqlite::kRow) return false;
+    read_track(s, out);
+    return true;
+}
+
 LibraryCounts Library::counts() {
     LibraryCounts c;
     const std::string &f = offline_filter_;

@@ -146,6 +146,9 @@ public:
     bool track(int64_t track_id, TrackDetails &out);
     /* The track of an absolute path (the queue's), or -1. */
     int64_t find_track(const std::string &path);
+    /* The row of the track at an absolute path, even when its drive is away (a playlist shows it dimmed); false when the
+     * library does not know the file. */
+    bool track_by_path(const std::string &path, TrackRow &out);
 
     LibraryCounts counts();
     LibraryStats stats();
