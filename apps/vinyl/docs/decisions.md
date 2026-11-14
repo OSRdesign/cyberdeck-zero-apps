@@ -555,3 +555,85 @@ The QA's three FAILs (D-01, D-32, D-55) and the coordinator's rulings on its WAR
   The music fades out for its last 10 seconds."; the Menu values "This track" and "This album"; the ReplayGain pick
   list's strip "Track: every track as loud as the others. Album: an album keeps its own loudness steps. Files without
   ReplayGain tags play as they are."; the Keys page's actions after the canvas's rows. Listed in the README too.
+
+## P2b core: the library without its pages (0.3.0 work, 2026-11-14)
+
+The core of the Library (report 060 2.3 and 3a; owner decisions D27 and D28 as section 15 changed them; D31 is the UI's):
+SQLite, the scanner, the views, search, the queue's track actions. No page draws it yet. The plan left the points below
+open; each is the builder's choice, the simplest one consistent with report 060, for the coordinator to confirm.
+
+- **SQLite** is loaded at run time (`core/db/sqlite_lib`, the cp0_map_sqlite.c pattern) and joins Depends
+  (`libsqlite3-0`, no version change yet). It needs 3.45 or later (the trigram tokenizer's `remove_diacritics`) and uses
+  FTS5's `contentless_delete=1` (3.43) so a track's FTS row can be deleted or replaced by rowid, instead of FTS5's
+  'delete' command, which needs the old values. Every board has 3.46.1, the build box 3.45.1. Without the library, or
+  with an older one, the Library is unavailable with a reason (`LibraryWorker::open_error()`); playback and the folder
+  browser do not use it.
+- **The file** is `$XDG_DATA_HOME/vinyl/library.db` (`~/.local/share/vinyl/library.db`). The schema version is
+  `PRAGMA user_version` (1). A file SQLite calls corrupt or not a database is moved to `library.db.bad` and made again (the
+  tags come back with a scan; the play counts are lost). A file of a newer schema is left alone and the Library is
+  unavailable, so a downgrade never destroys play counts.
+- **Schema v1** is the plan's DDL plus `tracks.root_id` (an offline drive's rows are hidden with `root_id not in (...)`,
+  without a join), `roots.mount` (the mount point a drive root was found at), and unique `artists.sort` /
+  `genres.sort`: one artist per sort key, so "Beyoncé", "BEYONCE" and "Beyonce" are one artist (the first spelling
+  seen is shown), while "The Beatles" and "Beatles" stay two (the moved article differs). The P2c playlist tables exist
+  already, so P2c needs no migration.
+- **Albums** are keyed by (album sort key, album artist), the album artist being the album-artist tag, else the track
+  artist: CD1 / CD2 folders join. A compilation without an album-artist tag splits by track artist (known limit, no
+  heuristic). A missing album tag is an album titled "" for each artist, a missing artist an artist "" (sorted last; the
+  UI names them). An album's year is the first non-zero year among its tracks.
+- **Sort keys:** only a leading "The " moves (the plan's words; not "A" / "An"). Numbers are padded to 8 digits; a longer
+  run of digits stays as written. Leading ASCII punctuation is skipped. Not folded: half-width katakana and Vietnamese
+  letters (Latin Extended Additional). Unknown names get U+FFFF and sort last.
+- **Views:** Artists lists album artists only (the plan); an artist's page also shows the albums the artist appears on
+  as a track artist (so an artist found by search always has a page). An album's tracks come in disc, folder, track order
+  (two untagged CD folders do not interleave). Songs page by LIMIT / OFFSET; the keyset cursor for 100k tracks is left to
+  P2e's tuning.
+- **Search:** the whole query is one FTS5 phrase (its words in that order, anywhere in the field). Songs match titles,
+  Artists the artist or album-artist fields, Albums the album, Genres the genre; 50 results each. Under three Unicode
+  characters, the start of the sort keys is matched instead (an index range): "ab" finds ABBA and "Abbey Road", "艺术"
+  titles that start with it; a digit query matches whole numbers ("2" finds "2 Become 1", not "25 Minutes"). The 250 ms
+  debounce is the UI's; `LibraryWorker::post(..., key)` replaces a waiting search and interrupts a running one.
+- **Roots:** ~/Music, the drives P1's browser lists (mounted under /media/<user>, /run/media/<user>, /mnt, /media), and
+  the folders of a new setting, `library.folders` in settings.json (written only once a folder was added). A folder that
+  overlaps another root is left out. A drive root keeps its mount point and file-system UUID; it is online only while that
+  mount point is in /proc/self/mounts with that UUID, so the empty folder a pulled stick leaves behind is offline, not an
+  empty drive. A drive mounted again under another name is matched by its UUID and its path updated. Offline roots keep
+  their rows, hidden, with no limit in time (P2e may prune them); removing a folder in the settings deletes its rows
+  (`remove_root`).
+- **Commits:** D27 says "database writes are batched per folder", report 060 "every 500 files or 2 s". Both hold: a
+  batch is committed at a folder boundary once 500 rows were written (1,000 on boards with more than 512 MB, report 060
+  section 4) or 2 s passed since it began; inside one big folder only at the row count. FTS rows and the pruning of empty
+  albums, artists and genres are in the same transaction. An unchanged rescan reads no tag and writes only each root's
+  last-scan time.
+- **Deletes:** a row whose file is not listed is deleted when `lstat` says ENOENT and the root is still online (its mount
+  read again); a folder that is gone goes the same way after a full walk of its root. A file whose tags cannot be read
+  gets no row (an existing row stays as it was). `scan_folder` (one folder) never removes other folders.
+- **Resume:** each commit of a full scan stores the last folder done (`meta.scan_resume`: the root id and the folder, in
+  the walk's fixed order). The next `start_all()` skips the roots and folders before it, then clears it. A scan cancelled
+  before any write keeps the older point (the walk repeats, nothing is read again). Files deleted in folders a resumed run
+  skips are found by the next full scan.
+- **Heat:** `/sys/class/thermal/thermal_zone0/temp`, read every 2 s at the next folder; at 75 °C the open batch is
+  committed and the scan waits, reading every second, until 70 °C. The progress says "paused" with the temperature.
+- **Threads:** the `ScanThread` lowers only itself (nice 19 on its thread id, `ioprio_set` IDLE); the `LibraryWorker`
+  that answers the pages runs at normal priority, each with its own connection (WAL lets the pages read while the scanner
+  writes; busy timeout 2 s). The UI posts jobs and runs their results with `drain()` on its own thread.
+- **D27 wiring is the UI's:** the core offers `start_all()`, `start_folder()` and `cancel()` and never starts by itself.
+  Whether the launch scan also stops when the user is not in the Library is for the UI task to settle with the
+  coordinator (D27's two sentences can be read either way).
+- **Play counts:** `record_play()` when a track played to its end, `record_skip()`; the engine wiring decides when. A
+  re-tagged file keeps its row (and count); a moved or renamed file is a new track. A deleted track's counts go with it
+  (row ids can be reused).
+- **Tags in scan mode** (`read_tags_scan`): FLAC and Ogg comments are walked in the file, so a picture comment costs its
+  first 4 kB; WAV / AIFF id3 chunks now go through the frame-by-frame ID3 walker in both modes; the Ogg length looks at
+  the last 16 kB before the last 64 kB (both modes). An MP3 tag unsynchronised as a whole still reads its first 256 kB
+  (rare). APEv2 is read for APE, WavPack, Musepack and TTA, and between an MP3's ID3v2 and ID3v1 (mp3gain's ReplayGain);
+  those formats get no duration from Vinyl's readers (unknown until played). ID3v1 numeric genres ("(17)") are not mapped.
+- **The queue's track actions:** `insert_next()` (after the current track, first when none) and `append()`; with shuffle
+  on they go into the play order at that place in their own order, and into the list order after the current track, so
+  turning shuffle off keeps them there. The queue's source stays.
+- **Memory (report 060 section 4):** the scan mode reads under 64 kB a file, the page cache is 2 MB on the 415 MB boards,
+  the scanner keeps one folder's rows and a (dev, ino) set. TagJobs' cache of 20,000 entries stays until the pages read
+  the database (the budget's 500 entries is a UI-task change: the folder browser still needs it).
+- **Measured on the build box** (x86, in memory): 1,000 tracks written in 7 ms, 25 Songs pages in 3.6 ms, a search in
+  0.2 ms; the scan mode reads 1.5 kB of an MP3 with a 2 MB cover, 4.3 kB of a FLAC with two, 33 kB of an Ogg Vorbis file
+  with one (mostly its page headers and the length's 16 kB). The board figures are B37-B45's.
