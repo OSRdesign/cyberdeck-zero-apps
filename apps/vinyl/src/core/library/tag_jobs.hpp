@@ -27,7 +27,7 @@ namespace vinyl {
 
 class TagJobs {
 public:
-    static constexpr size_t kMaxCached = 20000;
+    static constexpr size_t kMaxCached = 2000;
     TagJobs();
     ~TagJobs();
     TagJobs(const TagJobs &) = delete;

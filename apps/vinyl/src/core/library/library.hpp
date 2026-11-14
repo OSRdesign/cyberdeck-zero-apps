@@ -60,6 +60,16 @@ struct GenreRow {
     int64_t id = 0;
     std::string name;
     int albums = 0;
+    int tracks = 0;
+};
+
+/* A library folder as the Music folders page lists it (P2b UI). */
+struct RootInfo {
+    int64_t id = 0;
+    std::string path, label, mount;
+    bool online = true;
+    int tracks = 0;       /* the rows kept for it (hidden while it is offline) */
+    int64_t last_scan = 0;
 };
 
 struct TrackRow {
@@ -139,6 +149,8 @@ public:
 
     LibraryCounts counts();
     LibraryStats stats();
+    /* Every root with its track count and online flag, in the order they were first seen. */
+    bool roots_info(std::vector<RootInfo> &out);
 
     /* Play counts: a track played to its end (when: seconds since the epoch); a track skipped. One small write each. */
     bool record_play(int64_t track_id, int64_t when);

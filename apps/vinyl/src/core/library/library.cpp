@@ -136,13 +136,14 @@ bool Library::genres(int offset, int limit, std::vector<GenreRow> &out) {
     const std::string &f = offline_filter_;
     Stmt s = db_.prepare("select g.id, coalesce(g.name, ''), (select count(distinct t.album_id) from tracks t where "
                          "t.genre_id = g.id" +
-                         f + ") from genres g where exists (select 1 from tracks t where t.genre_id = g.id" + f +
+                         f + "), (select count(*) from tracks t where t.genre_id = g.id" + f + ") from genres g where exists (select 1 from tracks t where t.genre_id = g.id" + f +
                          ") order by g.sort, g.id limit ? offset ?");
     s.bind(1, limit).bind(2, offset);
     return collect(s, out, [](const Stmt &st, GenreRow &r) {
         r.id = st.i64(0);
         r.name = st.text(1);
         r.albums = st.i32(2);
+        r.tracks = st.i32(3);
     });
 }
 
@@ -285,6 +286,22 @@ LibraryStats Library::stats() {
     st.db_bytes = static_cast<uint64_t>(std::max<long long>(0, db_.scalar("pragma page_count", 0) *
                                                                    db_.scalar("pragma page_size", 0)));
     return st;
+}
+
+bool Library::roots_info(std::vector<RootInfo> &out) {
+    out.clear();
+    Stmt s = db_.prepare("select r.id, r.path, coalesce(r.label, ''), coalesce(r.mount, ''), coalesce(r.online, 1), "
+                         "(select count(*) from tracks t where t.root_id = r.id), coalesce(r.last_scan, 0) from roots r "
+                         "order by r.id");
+    return collect(s, out, [](const Stmt &st, RootInfo &r) {
+        r.id = st.i64(0);
+        r.path = st.text(1);
+        r.label = st.text(2);
+        r.mount = st.text(3);
+        r.online = st.i32(4) != 0;
+        r.tracks = st.i32(5);
+        r.last_scan = st.i64(6);
+    });
 }
 
 bool Library::record_play(int64_t track_id, int64_t when) {
