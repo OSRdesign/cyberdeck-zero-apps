@@ -373,6 +373,11 @@ void draw_icon(lv_layer_t *layer, Icon ic, int cx, int cy, int px, std::uint32_t
         p.bezier(18, 21, 10, 21, 3, 14, 3, 6);
         p.arc(5, 6, 2, 180, 270);
         break;
+    case Icon::Search: /* the magnifier of the Library canvases' Search chip */
+        p.width = 2.4;
+        p.arc(10.5, 10.5, 6.5, 0, 360);
+        p.seg(15.4, 15.4, 20.5, 20.5);
+        break;
     case Icon::Warning:
         p.width = 2.4;
         p.poly({{12, 3.2}, {2.6, 19.8}, {21.4, 19.8}}, true);

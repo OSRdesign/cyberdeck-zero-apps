@@ -44,6 +44,16 @@ public:
     void update_list(Page p, const ListView &v);
     /* the Menu pages (P2a): a list page's rows, the Keys page's table, the About page's texts; Keys and About scroll */
     void update_menu(Page p, const MenuView &v);
+    /* P2b: the Library pages (LibHub is the Browser's list page with the mini player), the search field and the actions sheet */
+    void update_lib(Page p, const LibView &v);
+    void search_open(const std::string &text, bool edit); /* the field's text; edit: it takes the keys (the page is shown) */
+    void search_edit();
+    void search_end_edit();
+    bool search_editing() const;
+    void show_sheet(const SheetView &v);
+    void hide_sheet();
+    bool sheet_shown() const;
+    void sheet_select(int i);
     void set_keys(const std::vector<menu::KeyHelp> &rows);
     void set_about(const menu::About &a);
     void scroll_page(Page p, int rows);

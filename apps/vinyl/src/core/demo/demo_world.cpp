@@ -5,10 +5,15 @@
  */
 #include "demo_world.hpp"
 
+#include "../library/library.hpp"
+#include "../library/roots.hpp"
+#include "../library/scanner.hpp"
+#include "../library/schema.hpp"
 #include "../state/resume.hpp"
 #include "../util/atomic_file.hpp"
 #include "../volume/output_volume.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -252,6 +257,112 @@ bool make_demo_world(DemoWorld &w, bool lite, const std::string &state, const st
     }
     (void)state;
     return save_resume(w.config + "/vinyl/state.json", s) == 0;
+}
+
+namespace {
+
+struct SynAlbum {
+    const char *artist, *album;
+    int year;
+    const char *genre;
+    int tracks, discs;
+};
+
+const SynAlbum kSynAlbums[] = {
+    {"Beach House", "Teen Dream", 2010, "Indie", 5, 1},
+    {"Beach House", "Bloom", 2012, "Indie", 4, 1},
+    {"Beach House", "Depression Cherry", 2015, "Indie", 4, 1},
+    {"Björk", "Debut", 1993, "Electronic", 5, 1},
+    {"Björk", "Homogenic", 1997, "Electronic", 4, 1},
+    {"Daft Punk", "Homework", 1997, "Electronic", 5, 1},
+    {"Daft Punk", "Discovery", 2001, "Electronic", 4, 1},
+    {"Ghost Beach", "Defender", 2013, "Electronic", 4, 1},
+    {"Phoenix", "Wolfgang Amadeus Phoenix", 2009, "Alternative", 6, 2},
+    {"Phoenix", "Bankrupt!", 2013, "Alternative", 5, 1},
+    {"Phoenix", "Ti Amo", 2017, "Alternative", 4, 1},
+    {"Phoenix", "United", 2000, "Alternative", 4, 1},
+    {"The National", "Boxer", 2007, "Rock", 5, 1},
+    {"The National", "High Violet", 2010, "Rock", 4, 1},
+    {"坂本龍一", "async", 2017, "Classical", 4, 1},
+    {"坂本龍一", "千のナイフ", 1978, "Classical", 3, 1},
+    {"Various artists", "夜明けの歌", 2019, "", 4, 1},
+};
+
+const char *const kSynTitles[] = {"Lisztomania", "1901",     "Fences",    "Love Like a Sunset", "Walk in the Park", "Silver Soul",
+                                  "Norway",      "Zebra",    "Myth",      "Space Song",         "Human Behaviour",  "Aerodynamic",
+                                  "Digital Love", "Around the World", "Veridis Quo", "Blue Monday", "Defender", "Army"};
+const char *const kJpTitles[] = {"夜明けの歌", "戦場のメリークリスマス", "energy flow", "千のナイフ"};
+
+}  // namespace
+
+bool make_demo_library(const DemoWorld &w, const std::string &db_path, const std::string &mode) {
+    Db db;
+    std::string why;
+    if (!open_library_db(db, db_path, 416, &why)) {
+        std::fprintf(stderr, "[vinyl] demo library: %s\n", why.c_str());
+        return false;
+    }
+    if (mode == "empty") return true;
+    {
+        Scanner sc(db);
+        std::atomic<bool> cancel{false};
+        sc.scan_all({RootSpec{w.music, "Music"}}, cancel);
+    }
+    if (mode != "full" && mode != "offline") return true;
+    LibraryWriter lw(db);
+    Transaction tx(db);
+    const int64_t root = lw.root("/demo/synthetic", "Demo");
+    int n = 0;
+    auto add = [&](int64_t rt, const std::string &folder, const std::string &title, const std::string &artist, const std::string &album,
+                   int year, const std::string &genre, int track, int disc, const std::string &album_artist) {
+        TrackTags t;
+        t.title = title;
+        t.artist = artist;
+        t.album = album;
+        t.album_artist = album_artist;
+        t.genre = genre;
+        t.date = year > 0 ? std::to_string(year) : std::string();
+        t.track = track;
+        t.disc = disc;
+        t.codec = "MP3";
+        t.duration_ms = static_cast<uint64_t>(150000 + ((n * 37) % 120) * 1000);
+        t.rate = 44100;
+        t.channels = 2;
+        t.bitrate_kbps = 320;
+        t.ok = true;
+        TrackFile f;
+        f.root_id = rt;
+        f.folder_id = lw.folder(rt, folder, 1);
+        f.name = std::to_string(++n) + ".mp3";
+        f.mtime = 1700000000;
+        f.size = 4000000;
+        lw.add_track(f, t);
+    };
+    int ai = 0;
+    for (const SynAlbum &a : kSynAlbums) {
+        const bool cjk = std::strcmp(a.artist, "坂本龍一") == 0 || std::strcmp(a.artist, "Various artists") == 0;
+        for (int i = 0; i < a.tracks; ++i) {
+            const int disc = a.discs > 1 ? 1 + i / (a.tracks / a.discs) : 0;
+            const int track = a.discs > 1 ? i % (a.tracks / a.discs) + 1 : i + 1;
+            const std::string title = cjk ? kJpTitles[(i + ai) % 4] : kSynTitles[(i + ai * 3) % 18];
+            add(root, std::string(a.artist) + "/" + a.album, title, std::strcmp(a.artist, "Various artists") == 0 ? "坂本龍一" : a.artist,
+                a.album, a.year, a.genre, track, disc, a.artist);
+        }
+        ++ai;
+    }
+    for (int i = 0; i < 70; ++i) /* so that Songs has more than one page */
+        add(root, "Various/Demo Mix", std::string("Demo song ") + (i < 9 ? "0" : "") + std::to_string(i + 1), "Mix artist " + std::to_string(i % 7 + 1),
+            "Demo Mix", 2020, "Pop", i + 1, 0, "Various artists");
+    tx.commit();
+    if (mode == "offline") {
+        const int64_t usb = lw.root("/media/demo/SANDISK", "SANDISK", "DEMO-0001", "/media/demo/SANDISK");
+        Transaction tx2(db);
+        for (int i = 0; i < 12; ++i)
+            add(usb, "Stick/Album", "Stick song " + std::to_string(i + 1), "Stick artist", "Stick album", 2015, "Rock", i + 1, 0, "Stick artist");
+        tx2.commit();
+        db.exec("update roots set online = 0 where id = " + std::to_string(usb));
+    }
+    return true;
 }
 
 void remove_demo_world(const DemoWorld &w) {

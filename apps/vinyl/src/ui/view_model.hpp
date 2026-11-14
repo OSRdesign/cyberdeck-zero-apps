@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <utility>
 #include <string>
 #include <vector>
 
@@ -20,7 +21,13 @@ namespace vinyl {
 namespace ui {
 
 /* Notices: a demonstration page for the scenes only. Menu .. About: the Menu pages (P2a, ui/menu_pages.hpp). */
-enum class Page { Now, Browser, Queue, Output, Notices, Menu, Sleep, Playback, ReplayGain, Keys, About };
+enum class Page {
+    Now, Browser, Queue, Output, Notices, Menu, Sleep, Playback, ReplayGain, Keys, About,
+    /* P2b, the Library: the hub (Folders opens the Browser), the lists, an album's tracks, Search, Track info, the Library
+     * settings and the Music folders (ui/library_pages.hpp, ui/library_ctl.hpp) */
+    LibHub, LibArtists, LibArtist, LibAlbums, LibAlbum, LibSongs, LibGenres, LibSearch, LibInfo, LibSettings, LibFolders,
+};
+inline bool is_lib_page(Page p) { return p >= Page::LibHub && p <= Page::LibFolders; }
 
 struct RowView {
     enum class Mark { None, Chevron, Dot };
@@ -30,9 +37,11 @@ struct RowView {
     bool playing = false;       /* blue dot: the playing track / the chosen output */
     bool dimmed = false;        /* paired, not connected */
     bool mono_value = true;     /* the value in JetBrains Mono (durations) */
+    bool heading = false;       /* P2b: a section heading ("DISC 2", "SONGS"): grey capitals, never tapped */
+    bool flush = false;         /* P2b: no mark and the text at the left edge (the Music folders rows) */
     bool operator==(const RowView &o) const {
         return text == o.text && value == o.value && mark == o.mark && playing == o.playing && dimmed == o.dimmed &&
-               mono_value == o.mono_value;
+               mono_value == o.mono_value && heading == o.heading && flush == o.flush;
     }
 };
 
@@ -88,6 +97,59 @@ struct ListView {
     unsigned queue_buttons = 0xF; /* queue: the buttons that can act (core/nav queue_buttons_enabled), the others dimmed */
     std::string hint;       /* output: the strip's text */
     bool hint_notice = false; /* output: the strip is the "not set up" notice */
+    /* browser, choose mode (P2b: Music folders > Add a folder): the strip asks "Use this folder", the mini player is away */
+    bool choose = false;
+    std::string choose_text; /* the strip's second line */
+};
+
+/* The Library pages (P2b): one view per page, filled by the library controller. */
+struct LibNote {
+    enum class Kind { None, Scan, Offline };
+    Kind kind = Kind::None;
+    std::string text;
+    int pct = -1;     /* Scan: the bar, 0..100, -1 none */
+    bool hot = false; /* Scan: paused for heat, the bar red */
+    bool operator==(const LibNote &o) const { return kind == o.kind && text == o.text && pct == o.pct && hot == o.hot; }
+};
+
+struct LibView {
+    std::string title;      /* the header's title where it names the page (an artist's name); "" keeps the page's own */
+    std::string heading;
+    std::shared_ptr<const std::vector<RowView>> rows;
+    uint64_t rows_ver = 0;  /* changes with the rows' contents */
+    uint64_t rows_gen = 0;  /* a new list (the scroll resets) */
+    int selected = -1;
+    int scroll_to = -1;
+    std::string chip;       /* the top-right chip: the hub's "Search", an album's "Play album" ("" none) */
+    LibNote note;           /* hub: the scan strip or the drive note */
+    MiniView mini;          /* hub */
+    std::string vol;
+    bool vol_bt = false;
+    /* an empty page: the message replaces the rows */
+    bool empty = false;
+    std::string empty_title, empty_sub, empty_button;
+    /* Track info */
+    std::vector<std::pair<std::string, std::string>> info;
+    /* Library settings: the cream block over the rows while a scan runs (its heading, the bar, the sentence) */
+    LibNote block;
+    std::string block_title, block_text;
+    /* Music folders: the two buttons and the note under them */
+    std::vector<std::string> buttons;
+    bool button_enabled[2] = {true, true};
+    std::string footnote;
+    /* Search: the field's text and the line shown while it is empty */
+    std::string query;
+};
+
+/* The actions sheet (Track, Album, Artist). */
+struct SheetView {
+    struct Row {
+        std::string label, key;
+        bool enabled = true;
+    };
+    std::string title, hint;
+    std::vector<Row> rows;
+    int selected = 0;
 };
 
 /* a Menu list page (Menu, Sleep timer, Playback, ReplayGain): core/menu's rows */
@@ -120,6 +182,16 @@ struct Actions {
     std::function<void(int)> volume_step;            /* the volume group's "-" / "+": one level down / up */
     std::function<void()> volume_unavailable;        /* a tap on the volume chip where nothing can change the volume */
     std::function<void()> queue_clear;               /* "Clear the queue?" answered Clear */
+    /* P2b */
+    std::function<void(Page, int)> lib_row;          /* a tap on a Library row */
+    std::function<void(Page, int)> lib_hold;         /* a 3 s hold on a Library row */
+    std::function<void(Page)> lib_chip;              /* the hub's Search chip, an album's Play album */
+    std::function<void(Page, int)> lib_button;       /* Music folders' buttons, an empty page's button; Browser: choose mode's "Use this folder" */
+    std::function<void(const std::string &)> lib_query; /* the search field's text changed */
+    std::function<void()> lib_submit;                /* Enter in the search field */
+    std::function<void()> lib_field_escape;          /* Esc in the search field */
+    std::function<void(int)> sheet_pick;             /* a tap on a sheet row */
+    std::function<void()> sheet_dismiss;             /* a tap outside the sheet */
 };
 
 } // namespace ui

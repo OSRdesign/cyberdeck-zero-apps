@@ -59,15 +59,17 @@ const char *on_off(bool v) { return v ? "On" : "Off"; }
 }  // namespace
 
 std::vector<Row> menu_rows(const State &s) {
-    /* only what is built (owner decision D32): the canvas's Equalizer and Library rows come with their phases; Keys and
-     * About are rows of their own (the brief of P2a) */
-    return {heading("TOOLS"),
-            edit("sleep", "Sleep timer", sleep_menu_value(s.sleep, s.sleep_left_ms)),
-            heading("SETTINGS"),
-            open("playback", "Playback"),
-            open("output", "Output", s.output),
-            open("keys", "Keys"),
-            open("about", "About")};
+    /* only what is built (owner decision D32): the canvas's Equalizer row comes with its phase; the Library row (P2b) is
+     * there while the Library is (its database opened); Keys and About are rows of their own (the brief of P2a) */
+    std::vector<Row> rows = {heading("TOOLS"),
+                             edit("sleep", "Sleep timer", sleep_menu_value(s.sleep, s.sleep_left_ms)),
+                             heading("SETTINGS"),
+                             open("playback", "Playback")};
+    if (s.library) rows.push_back(open("library", "Library"));
+    rows.push_back(open("output", "Output", s.output));
+    rows.push_back(open("keys", "Keys"));
+    rows.push_back(open("about", "About"));
+    return rows;
 }
 
 std::string sleep_id(SleepMode m) {
@@ -208,6 +210,8 @@ std::vector<KeyHelp> key_help() {
         {"Up, Down, Enter", "Lists and the queue pane: move, choose", {}, {}, false, 0},
         {"Left, Right", "Lists: back, choose", {}, {}, false, 0},
         {"Backspace", "Browse: the folder above", {}, {}, false, 0},
+        {"/ or Ctrl+F", "Library: search", {}, {}, false, 0},
+        {"Hold 3 s, or Ctrl+O", "Library: the actions of a row (Enter, N, A, I)", {}, {}, false, 0},
         {"U, D", "Queue: move up, move down", {kKeyU, kKeyD}, {KeyCmd::QueueUp, KeyCmd::QueueDown}, true, 0},
         {"X or Delete", "Queue: remove", {kKeyX}, {KeyCmd::QueueRemove}, true, 0},
         {"C, then Y", "Queue: clear all", {kKeyC}, {KeyCmd::QueueClear}, true, 0},

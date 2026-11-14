@@ -1,0 +1,44 @@
+title Vinyl P2b: Search with the on-screen keyboard at 480x320 (only the field above it: the results are hidden while it shows) and 320x480
+sizes 480x320 320x480
+ppmm 630
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_LIBRARY full
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE library
+# no keyboard (keyboards 0): the on-screen keyboard shows for the Search field, nothing is summoned by hand (D-38, D-39);
+# a keyboard connecting takes it away; a shortcut letter never reaches the field, nor the field a shortcut (D-32)
+keyboards 0
+wait 1200
+tap "Search"
+wait 800
+expect osk on
+shot 01-search-osk
+tapkey f
+tapkey e
+tapkey n
+wait 900
+shot 02-search-typed-osk
+keyboards 1
+wait 1500
+expect osk off
+shot 03-search-keyboard
+# with a keyboard: letters type (Q, B, O, M, S are shortcuts everywhere else and act as letters here)
+type qbosm
+wait 900
+shot 04-search-letters
+expect noquit
+key esc
+wait 500
+expect text "Folders"
+expect noquit
+osk force
+wait 600
+tap "Search"
+wait 800
+expect osk on
+shot 05-search-forced
+osk auto
+key esc
+wait 600
+expect text "Folders"

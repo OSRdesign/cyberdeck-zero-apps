@@ -43,6 +43,16 @@ struct DemoWorld {
 bool make_demo_world(DemoWorld &w, bool lite, const std::string &state, const std::string &variant = "");
 void remove_demo_world(const DemoWorld &w);
 
+/* The Library's database of the demonstration world (VINYL_DEMO_LIBRARY, P2b): the demo music folder scanned by the real
+ * scanner, then, by `mode`:
+ *   "scan"     nothing more (the 22 demo tracks: titles, artists and albums as the drafts' queue)
+ *   "full"     a second folder "Demo" with the canvas boards' artists, albums (one on two discs, one of 70 songs so that
+ *              Songs pages) and genres, with CJK names; none of its files exists (playing them fails)
+ *   "offline"  "full" and a USB drive "SANDISK" that is not connected, its tracks hidden
+ *   "empty"    nothing at all
+ * Returns false when SQLite is not there or the file cannot be made. */
+bool make_demo_library(const DemoWorld &w, const std::string &db_path, const std::string &mode);
+
 OutputWorld demo_output_world(bool lite, const std::string &variant = "");
 LauncherStatus demo_launcher_status();
 /* lite: the outputs of a board without a sound server (ALSA devices, no playback mixer in the demonstration). */
