@@ -86,7 +86,7 @@ key down
 key enter
 wait 700
 shot 06-artist-cjk
-expect text "邓丽君"
+expect text "邓丽君, 1 ALBUM, 1 TRACK"
 key esc
 wait 400
 key esc

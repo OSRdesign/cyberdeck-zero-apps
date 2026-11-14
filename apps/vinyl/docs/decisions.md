@@ -637,3 +637,91 @@ open; each is the builder's choice, the simplest one consistent with report 060,
 - **Measured on the build box** (x86, in memory): 1,000 tracks written in 7 ms, 25 Songs pages in 3.6 ms, a search in
   0.2 ms; the scan mode reads 1.5 kB of an MP3 with a 2 MB cover, 4.3 kB of a FLAC with two, 33 kB of an Ogg Vorbis file
   with one (mostly its page headers and the length's 16 kB). The board figures are B37-B45's.
+
+## P2b: the Library pages (0.3.0 work, 2026-11-14)
+
+The pages of report 060 2.3 on the core above, drawn from the approved canvas boards (the P2b set: Artists, Artist, Albums,
+Album, Songs, Genres, TrackInfo, EmptyNoMusic, EmptyNoResults, DriveOffline, Scanning, ScanPaused, MusicFolders,
+Search-320x480, TrackActions-320x480, AlbumActions, NoticesP2b; and the UX set's Library, Search, TrackActions,
+LibrarySettings; the boards are not in the repository yet). The version stays 0.2.0 until publish. Each point is the builder's choice, for the coordinator to
+confirm; the deviations from the boards are listed so that nothing is silent.
+
+**Where the code is.** `core/library/lib_model` (rows, headings, the pager, the scan strip and drive note, Track info, the
+sheets, the nav stack: pure, `tests/test_lib_model.cpp`), `core/library/library_ctl` (the worker and scanner wiring, the
+places, paging, search, sheets, Music folders, D27: `tests/test_lib_ctl.cpp`), `ui/library_pages` (the pages),
+`ui/row_list.hpp` (the Browser's row list, now shared: heading rows, a 3 s hold), the hub in `ui/vinyl_view.cpp` (the
+Browser's list page, so the mini player stays), the controller in `ui/vinyl_app.cpp`.
+
+**Browse is the hub.** With the library's database open (it opens at start, a few ms) Browse (B, the Browse key, Esc on Now
+playing) opens the Library hub, the app's first page when no queue is resumed, and Esc at the hub ends the app as Esc at the
+Browser did. Folders opens the Browser (Esc goes back to the hub). Without the Library (no SQLite, a newer schema) Browse is
+the folder list as in 0.2.0 and the Menu has no Library row. The scenes run the old Browser unless `VINYL_DEMO_LIBRARY` is set.
+The Menu's Library row (below Playback, as the Menu board draws it) opens the Library settings; Esc there goes back to the Menu.
+
+**D27 as wired.** The owner's words (2026-11-13): "scan at launch and when opening a folder from the library but not out of
+the library". The scan at launch runs once (`start_launch_scan`, after one worker job read the track count for "about N"); a
+folder opened in the Browser from the hub is scanned (`scan_folder`, not recursive); "Rescan now" and a folder just added in
+Music folders start a full scan; the user going into the Library and then leaving it for any page that is not a Library page or
+the Browser opened from Folders (Now playing after Play, the Queue, the Menu) cancels the scan, which resumes at the next
+start. A launch scan nobody went into the Library to look at is left to finish. No timer, no background scan. When the mounts
+change while the Library is open the roots are synced again (a pulled stick's tracks leave the views, hidden not deleted;
+plugged in again they come back); a stick never seen before needs a scan (Rescan now, or a folder opened from Folders). The
+boards' "Esc leaves the page; the scan goes on in the background" note and the settings board's "Scan USB sticks when plugged
+in" row are not drawn: they contradict D27. The settings strip says "...stops when you leave the page or the board gets hot",
+as drawn.
+
+**Pages.** Rows are the Browser's (chevron opens, dot plays, 15 px names, values at the right, the toolkit's compact list
+rows). Hub: Folders, Playlists, Artists n, Albums n, Songs n, Genres n, the Search chip, the mini player. Artists, Albums, Songs
+and Genres load 40 rows and the next 40 when the highlight is within 8 rows of the end (once; a reload by a scan commit keeps
+what was loaded). An artist's page lists albums by year with the albums it appears on; an album lists its tracks in disc order
+with a "DISC 2" row; a track tap plays the list from there (Songs: the loaded rows; album: the album; search: the songs found),
+"Play album" plays from the first. Genres show their track counts and lead to the albums. Esc steps back one place, Left too.
+Search is the toolkit's `TextField` (unrestyled; its label hidden), results after 250 ms on the worker, Songs, Albums, Artists
+then Genres each under a heading row; Enter hands the keys to the results (Up from the first row edits again); Esc leaves the
+field and the page at once (the toolkit's two-step Esc is replaced by the field's `escape` event). While the field edits, no
+shortcut acts and no letter goes anywhere else (D-32). The on-screen keyboard and the PDA band are the toolkit's and
+`_common/osk_policy`'s; the results list shrinks by the keyboard's inset and is hidden when not even one row fits above it
+(480x320 with a keyboard up: only the field). `/` and Ctrl+F open Search on any Library page.
+
+**Actions sheets (D31).** A 3 s hold on a song, an album or an artist row, or Ctrl+O on the selected one, opens the cream sheet
+(Ctrl+O keeps opening the Menu where the selection has no sheet). Track: Play (Enter), Play next (N), Add to queue (A), Add to
+playlist (P), Track info (I). Album: Play album, Play next, Add to queue, Add to playlist. Artist: Play all (its albums in year
+order), the same others. Add to playlist is drawn **dimmed and inert** in 0.3.0 (the boards draw it; playlists are P2c); P
+does nothing. The hint line is on the sheet. A tap on a sheet row acts, a tap outside or Esc or Left closes it. The Playlists
+row of the hub is drawn as the board draws it (normal) and shows the notice "Playlists arrive in a later version." The queue
+changes are `Queue::insert_next` / `append` (the playing track stays); the notices say "Will play next." / "Added to the queue."
+
+**Music folders.** Add a folder opens the Browser in **choose mode**: the mini player's strip becomes "Use this folder" (the key
+U too), tracks and playlists do nothing, Esc goes back to the Music folders page. No board draws this; it is the cheapest use of
+the Browser's own strip and an open design question for the owner (a dedicated page would be a design task). Remove selected
+folder removes only the folders the user added (`library.folders`); Music and the USB drives are always indexed (a removal would
+come back at the next start), so the button says so in a notice. Removing deletes the folder's rows and nothing else.
+
+**Play counts, drives.** A track that played to its end (the engine's Advanced and QueueEnd events) adds a play on the worker.
+While a track plays from a drive, the mount point is checked every 2 s; when it has left /proc/self/mounts playback pauses and
+the red notice "Drive removed. Paused." shows (no engine change: `pause()`).
+
+**Deviations from the boards (the toolkit's widgets and the Browser's rows win over pixels).**
+- Hub rows are the Browser's 36 px (the board's 34); the list scrolls above the mini player. The board draws the mini player and
+  the scan strip over the last row; here the strip sits between the list and the mini player and the list gives up the height.
+- The heading band is as high as the touch target where a chip shares it (Search, Play album): 44 px at 6.3 px/mm against the
+  board's 30. At 320x480 "Play album" has its own line under the heading (it does not fit beside it).
+- Section headings ("DISC 2", "SONGS", "ALBUMS") take a full row, not the board's 18 px.
+- Search: the field is the toolkit's (its colours and cursor, not the board's cream and teal); the dim behind a sheet is 70 %.
+- The sheet sits at the bottom of the panel (the 320x480 board draws it lower than 120 px), its rows at least the touch target.
+- Track info: "Track, disc" says "1, disc 1" (the number of tracks is not in the row), the file is shown with "~"; long values wrap.
+- Music folders: the two buttons sit at the panel's bottom (one over the other on a narrow panel), not under the rows.
+- Not drawn: the Artist board's hint line (an annotation), "3 files could not be read" (the scanner keeps no count of unreadable
+  files: a core change), the Library settings' USB-stick row (D27). "Not enough space for the library" shows when a scan fails
+  with a full disk. Track info has no "of 14".
+- Pause on a pulled drive is polled (2 s), not an event.
+
+**TagJobs** keeps 2,000 entries (was 20,000), not the budget's 500: its cache still serves the Browser and the Queue, which ask
+for every file of a folder or queue, and it empties itself when full, so 500 would drop the first rows of a 600-track queue.
+A least-recently-used cache would allow 500.
+
+**Tests.** `test_lib_model` (rows, headings, the pager, notes, Track info, sheets, nav, the two new queries), `test_lib_ctl` (the
+hub, paging of 101 artists, an album, the sheet keys, search with its debounce, play counts, Music folders, D27 with a slow tag
+reader). Scenes: `qa-library` (800x480 480x480 720x720 480x800 480x640), `-640`, `-wide`, `-small` (480x320, 320x480);
+`qa-library-scan`, `-paused`, `-offline` (each with a `-small`); `qa-empty-library`, `qa-cjk-library` (each with a `-small`);
+`keyboard`, `keyboard-small`, `portrait-band` (480x800, 480x640).

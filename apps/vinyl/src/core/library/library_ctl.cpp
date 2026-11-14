@@ -813,26 +813,33 @@ void LibraryCtl::tick(uint64_t now) {
     now_ms_ = now;
     if (!available_) return;
     if (worker_.drain() > 0) ++view_gen_;
+    if (scan_) { /* the scan's end goes in the journal (B37-B45), the pages ask again at each commit */
+        const uint64_t g = scan_->gen();
+        const ScanProgress prog = scan_->progress();
+        const ScanProgress::State st = prog.state;
+        if (g != scan_gen_seen_ || st != last_state_) {
+            const ScanProgress::State was = last_state_;
+            scan_gen_seen_ = g;
+            last_state_ = st;
+            if (st != was && (st == ScanProgress::State::Done || st == ScanProgress::State::Cancelled || st == ScanProgress::State::Failed))
+                std::fprintf(stderr, "[vinyl] library scan %s: %llu files in %llu folders, %llu tags read, %llu added, %llu changed, %llu removed%s%s\n",
+                             scan_state_name(st), static_cast<unsigned long long>(prog.files), static_cast<unsigned long long>(prog.folders),
+                             static_cast<unsigned long long>(prog.read), static_cast<unsigned long long>(prog.added),
+                             static_cast<unsigned long long>(prog.updated), static_cast<unsigned long long>(prog.removed),
+                             prog.error.empty() ? "" : ": ", prog.error.c_str());
+            reload();
+            if (was == ScanProgress::State::Scanning && st == ScanProgress::State::Failed && host_.notice) {
+                const std::string why = prog.error;
+                host_.notice(Notice::Kind::Info, why.find("full") != std::string::npos ? std::string("Not enough space for the library.")
+                                                                                       : "The library scan stopped: " + why);
+            }
+        }
+    }
     if (!in_library_) return;
     if (query_pending_ && now - query_at_ >= cfg_.search_debounce_ms) {
         query_pending_ = false;
         const std::string q = trimmed(pending_query_);
         if (!q.empty()) request(libm::Place::Search, 0, 0, 0, false, q);
-    }
-    if (scan_) {
-        const uint64_t g = scan_->gen();
-        const ScanProgress::State st = scan_->progress().state;
-        if (g != scan_gen_seen_ || st != last_state_) {
-            const ScanProgress::State was = last_state_;
-            scan_gen_seen_ = g;
-            last_state_ = st;
-            reload();
-            if (was == ScanProgress::State::Scanning && st == ScanProgress::State::Failed && host_.notice) {
-                const std::string why = scan_->progress().error;
-                host_.notice(Notice::Kind::Info, why.find("full") != std::string::npos ? std::string("Not enough space for the library.")
-                                                                                       : "The library scan stopped: " + why);
-            }
-        }
     }
     if (!cfg_.demo && now - mounts_at_ >= 2000) {
         mounts_at_ = now;

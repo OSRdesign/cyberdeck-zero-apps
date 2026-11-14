@@ -415,6 +415,8 @@ struct View::Impl {
     LibNote hub_note_shown;
     bool hub_empty_on = false;
     int hub_list_y0 = 0, hub_list_bottom0 = 0;
+    bool hub_band_below = false;
+    std::string hub_heading_seen;
     std::string lib_title_shown;
     /* the Browser's choose mode (Music folders > Add a folder) */
     bool browse_choose = false;
@@ -1237,14 +1239,28 @@ struct View::Impl {
         hub_note.build(r, ri(lg.strip.x), ri(lg.strip.w), s);
         /* the heading band as tall as the chip's touch area; the list under it */
         const layout::MiniBoxes mb = layout::mini_touch_areas(lg, W, H, target);
-        const int bottom = ri(std::min(lg.list.bottom(), mb.list_bottom));
-        hub_list_y0 = ri(lg.panel.y) + band;
-        hub_list_bottom0 = bottom;
-        lv_obj_set_y(hub.list->obj(), hub_list_y0);
-        hub.list->resize(std::max(1, bottom - hub_list_y0));
+        hub_list_bottom0 = ri(std::min(lg.list.bottom(), mb.list_bottom));
+        apply_hub_band(false);
+    }
+
+    /* the Search chip beside the heading (Library-480x320), or on a line of its own under it when the heading does not fit
+     * beside it ("LIBRARY, 388 TRACKS SO FAR" on a narrow panel) */
+    void apply_hub_band(bool below) {
+        const layout::ListGeom lg = layout::list_geom(layout::ListPage::Browser, W, H, body_y);
+        const double s = lg.s;
+        auto S = [&](double v) { return std::max(1, ri(v * s)); };
+        hub_band_below = below;
+        const int head_h = ri(lg.heading.h), ch = S(24), cw = S(88);
+        const int band = below ? head_h + std::max(S(30), target) : std::max(head_h, target);
         const lv_font_t *hf = font(Face::Bold, S(12));
-        lv_obj_set_y(hub.heading, ri(lg.panel.y) + (band - lv_font_get_line_height(hf)) / 2);
-        lv_obj_set_width(hub.heading, ri(lg.heading.w) - cw - S(12));
+        lv_obj_set_width(hub.heading, ri(lg.heading.w) - (below ? 0 : cw + S(12)));
+        lv_obj_set_y(hub.heading, ri(lg.panel.y) + ((below ? head_h : band) - lv_font_get_line_height(hf)) / 2);
+        const int cy = below ? ri(lg.panel.y) + head_h + (band - head_h - ch) / 2 : ri(lg.panel.y) + (band - ch) / 2;
+        lv_obj_set_y(hub_chip.vis, cy);
+        lv_obj_set_y(hub_chip.hitbox, cy - (std::max(ch, target) - ch) / 2);
+        hub_list_y0 = ri(lg.panel.y) + band;
+        lv_obj_set_y(hub.list->obj(), hub_list_y0);
+        hub.list->resize(std::max(1, hub_list_bottom0 - hub_list_y0));
     }
 
     void update_hub(const LibView &v) {
@@ -1257,6 +1273,14 @@ struct View::Impl {
         lv.heading = v.heading;
         lv.mini = v.mini;
         update_list(hub, Page::LibHub, lv);
+        if (v.heading != hub_heading_seen) {
+            hub_heading_seen = v.heading;
+            const layout::ListGeom g0 = layout::list_geom(layout::ListPage::Browser, W, H, body_y);
+            const double s0 = g0.s;
+            const int need = text_width(font(Face::Bold, std::max(1, ri(12 * s0))), v.heading, ri(0.04 * 12 * s0)) + std::max(1, ri(4 * s0));
+            const bool below = need > ri(g0.heading.w) - std::max(1, ri(88 * s0)) - std::max(1, ri(12 * s0));
+            if (below != hub_band_below) apply_hub_band(below);
+        }
         hub_chip.show(!v.chip.empty());
         show(hub_chip_icon, !v.chip.empty());
         if (v.empty != hub_empty_on || v.empty) {

@@ -215,6 +215,9 @@ struct LibraryPages::Impl {
         lv_obj_t *foot = nullptr;
         bool placed = false;
         bool last_empty = false;
+        int head_h = 0;            /* the heading's own band */
+        bool band_below = false;   /* the chip on a line under the heading */
+        std::string heading_seen;
         bool osk_room = true; /* Search: the results fit above the on-screen keyboard (else they are hidden) */
         /* Search */
         std::unique_ptr<cp0::ui::TextField> field;
@@ -247,10 +250,11 @@ struct LibraryPages::Impl {
         const bool has_heading = p != Page::LibSearch;
         L.has_chip = p == Page::LibAlbum;
         int band = ri(lg.heading.h);
-        /* the chip shares the heading's line when the panel is wide enough for both (the 480x320 board); a narrow panel
-         * (320x480) gives it a line of its own under the heading */
-        const bool chip_below = L.has_chip && ri(lg.panel.w) < S(400);
+        /* the chip shares the heading's line as the 480x320 board draws it; when the heading does not fit beside it (a long
+         * title, a narrow panel: 320x480) the chip gets a line of its own under the heading (apply_band) */
+        const bool chip_below = false;
         const int head_h = band;
+        L.head_h = head_h;
         if (L.has_chip) band = chip_below ? head_h + std::max(S(30), target) : std::max(band, target);
         if (has_heading) {
             L.heading = label(r, Face::Bold, S(12), col::kRowValue, ri(lg.heading.x), ri(lg.heading.y),
@@ -433,8 +437,34 @@ struct LibraryPages::Impl {
         L.block_shown = v.block;
     }
 
+    /* the heading band with the chip beside the heading, or under it when the heading does not fit beside it */
+    void apply_band(P &L, bool below) {
+        L.band_below = below;
+        const int ch = S(24);
+        const int beside = std::max(L.head_h, target);
+        const int band = below ? L.head_h + std::max(S(30), target) : beside;
+        const lv_font_t *hf = font(Face::Bold, S(12));
+        lv_obj_set_width(L.heading, ri(lg.heading.w) - (below ? 0 : S(116)));
+        lv_obj_set_y(L.heading, ri(lg.heading.y) + ((below ? L.head_h : band) - lv_font_get_line_height(hf)) / 2);
+        const int cy = below ? ri(lg.panel.y) + L.head_h + (band - L.head_h - ch) / 2 : ri(lg.panel.y) + (band - ch) / 2;
+        const int hh = std::max(ch, target);
+        lv_obj_set_y(L.chip.vis, cy);
+        lv_obj_set_y(L.chip.hitbox, cy - (hh - ch) / 2);
+        L.list_y = ri(lg.panel.y) + band;
+        L.list_h = std::max(1, ri(lg.panel.bottom()) - S(4) - L.list_y);
+        lv_obj_set_y(L.list->obj(), L.list_y);
+        L.list->resize(L.list_h);
+    }
+
     void update_page(P &L, const LibView &v) {
         if (L.heading) set_text(L.heading, v.heading);
+        if (L.has_chip && v.heading != L.heading_seen) {
+            L.heading_seen = v.heading;
+            const lv_font_t *hf = font(Face::Bold, S(12));
+            const int need = text_width(hf, v.heading, ri(0.04 * 12 * s)) + S(4);
+            const bool below = need > ri(lg.heading.w) - S(116);
+            if (below != L.band_below) apply_band(L, below);
+        }
         if (L.has_chip) {
             L.chip.set_text(v.chip);
             L.chip.show(!v.chip.empty());

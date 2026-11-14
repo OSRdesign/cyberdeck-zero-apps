@@ -385,7 +385,7 @@ void test_lib_ctl() {
     const std::string music = dir2 + "/Music";
     ::mkdir(music.c_str(), 0755);
     for (int i = 0; i < 150; ++i) {
-        char n[16];
+        char n[32];
         std::snprintf(n, sizeof n, "/f%03d.mp3", i);
         write_file(music + n, "x");
     }
@@ -449,7 +449,7 @@ void test_lib_ctl() {
         settle(c);
         CHECK_EQ(reads.load(), 150);
         for (int i = 150; i < 155; ++i) {
-            char n[16];
+            char n[32];
             std::snprintf(n, sizeof n, "/f%03d.mp3", i);
             write_file(music + n, "x");
         }

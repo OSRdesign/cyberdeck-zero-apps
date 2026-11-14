@@ -27,6 +27,8 @@ namespace vinyl {
 
 class TagJobs {
 public:
+    /* P2b: the Library pages read the database, so this serves the Browser and the Queue only (was 20,000; the budget says
+     * 500, but a queue of 600 tracks asks for 600 and the cache empties itself when full: an LRU would allow 500) */
     static constexpr size_t kMaxCached = 2000;
     TagJobs();
     ~TagJobs();

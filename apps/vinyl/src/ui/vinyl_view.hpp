@@ -13,6 +13,9 @@
  *   Output   the output chooser with its hint strip (or the "not set up" notice strip);
  *   Notices  (a demonstration page for the scenes only: the four notices of the notices draft);
  *   Menu ... About  the Menu pages (P2a: ui/menu_pages.hpp).
+ *   LibHub ... LibFolders  the Library (P2b): the hub is the Browser's list page with the Search chip, the scan strip or
+ *            the drive note over the mini player and the empty message; the other pages are ui/library_pages.hpp; the
+ *            Browser also has a choose mode (Music folders > Add a folder).
  * Where the drawing makes a control smaller than the toolkit's touch target, the control keeps its look and gets a larger
  * transparent hit box, never overlapping a neighbour's (layout::place_now_hits). The previous and next buttons report
  * press, release and cancel (the transport press decides). The view only draws: every action goes to the controller

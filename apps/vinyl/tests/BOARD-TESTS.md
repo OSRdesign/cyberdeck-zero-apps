@@ -96,6 +96,27 @@ DAC, or the deck at 640x480):
 | B37 | Menu > Keys, scroll to the end; Menu > About (on the Sharkoon DAC) | Keys: the key chips and their actions, Space to the media keys, the page scrolls by a drag and by Up / Down; About: "Vinyl 0.2.0", the formats, THIS OUTPUT "USB Audio Device: -45.0 to 0.0 dB, 23 levels of 2.05 dB." (the DAC's name as the output button shows it), the libraries, the licences' place; nothing is cut |
 | B38 | Controller (zero8 or the deck, SD card): while a track plays, `stat -c %y ~/.config/vinyl/state.json` every 20 s for 3 minutes; then pause; then `ls -l --time-style=full-iso ~/.config/vinyl/` | state.json changes at most once a minute while playing (0.1.0: every 5 s), and once at the pause; positions.json is not written while a short track plays; settings.json only when a setting changed |
 
+## 0.3.0 (P2b, the Library; not published yet)
+
+The report's steps B37-B45 (060 2.3) are B39-B47 here: B37 and B38 are 0.2.0's. The Library needs `libsqlite3-0` (3.45 or
+later: every board has 3.46.1); the journal says `[vinyl] the Library: <path>` at start, and `library scan done: N files ...`
+at the end of each scan. The scan runs at launch and when a folder is opened from the Library, and stops when the Library is
+left after having been looked at (owner decision D27: "scan at launch and when opening a folder from the library but not out
+of the library"; the journal: `library: left the Library, the scan is stopped`).
+
+| # | Do (owner and Controller, about 30 min) | Expected |
+|---|---|---|
+| B39 | zero8: the 059 scan set (1,000 MP3s, 100 albums) copied to `~/Music/scan`; open Vinyl and stay on the hub (Browse) | a strip over the mini player: "Scanning: N of about M files" with its bar (the first scan: "Scanning: N files", no bar); done in under 30 s; the heading "LIBRARY, 1,0xx TRACKS"; Artists, Albums, Songs and Genres show their counts |
+| B40 | Quit Vinyl and open it again | the journal's `library scan done: ... 0 tags read ...` in under 3 s; no tag is read again |
+| B41 | Play a FLAC, then Menu > Library > Rescan now over a fresh copy of the scan set (touch the files) | no dropout (journal `underruns 0`); the Library settings show the cream block "SCANNING, N OF M" and Rescan now dimmed; Now playing after pressing Play stops the scan (the journal says so) |
+| B42 | Artists > an artist > an album > a track; Songs (scroll to the end: the next 40 rows come); Genres > a genre | pages open at once; disc and track order ("DISC 2" row); CJK names draw; an artist's page lists its albums by year |
+| B43 | Search: "fen", "夜明け", "beyonce", "ab" (a keyboard, then with none connected: the on-screen keyboard; on a PDA the writing band) | results while typing (250 ms), in under 0.5 s; case and accents ignored; "ab" matches the start of a title; Songs, Albums, Artists, Genres under their headings; Enter hands the keys to the results; Esc leaves in one press; nothing found says so; shortcut letters type in the field and act nowhere |
+| B44 | A song row: hold 3 s, and Ctrl+O; then N, A, I, P; on an album and an artist row the same | the sheet lists the actions with their keys and the hold hint; Play next and Add to queue change the queue as chosen (the notices "Will play next." / "Added to the queue."); Track info shows tags, format, ReplayGain, plays and the file; P (Add to playlist) is drawn dimmed and does nothing (P2c) |
+| B45 | HackBerry: a USB stick with music (desktop automount); Folders > its folder (scanned); play a track from it; pull the stick; plug it in again; open Menu > Library > Music folders | its tracks appear; pulled while playing: "Drive removed. Paused." (red) within 2 s; its tracks leave the views, the hub says "<LABEL> is not connected. Its N tracks are hidden and come back when you plug it in.", Music folders lists "<LABEL> (USB drive)", "not connected"; plugged in, they come back without a scan; no error in the journal |
+| B46 | Play one track five times to the end (a short one) | Track info shows "5 times, last <date time>" |
+| B47 | Controller: `ls -l ~/.local/share/vinyl/library.db*` and Vinyl's RSS after B39 | about 1 MB for 1k tracks; RSS within the budget (report 060 section 4) |
+| B48 | Menu > Library > Music folders > Add a folder: choose a folder (the mini player's strip says "Use this folder"; U too), then Remove selected folder on it; try Remove on Music | a new folder is scanned at once (notice "Folder added. Scanning."); a folder inside a known one: "That folder is in the library already."; Remove on a folder you added takes its tracks out (no file is touched); on Music or a drive the notice says they are always in the library |
+
 ## Cleanup
 
 `sudo dpkg -r vinyl`; `rm -r ~/.config/vinyl`; remove the test music the Controller copied.
