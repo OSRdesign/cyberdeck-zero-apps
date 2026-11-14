@@ -250,6 +250,17 @@ void restore_test() {
 }
 
 /* the Music folders page with drives (owner decision 2026-11-14: mount on request) and a root that is gone (nothing of it shown) */
+/* no title starts under its row's dot, at the scales of 480x320, 320x480 and the deck (owner board test 2026-11-14) */
+static void check_titles_clear_of_dots(const std::vector<RowView> &rows) {
+    for (double s : {0.6, 0.8, 1.0, 1.4, 2.0}) {
+        const double dot_x = 16 * s, text_x = 40 * s;
+        for (const RowView &r : rows) {
+            if (r.mark != RowView::Mark::Dot) continue;
+            CHECK(row_title_x(r, dot_x, text_x) >= dot_x + row_dot_diameter(s));
+        }
+    }
+}
+
 void drives_ui_test() {
     const std::string dir = make_temp_dir("libctl4");
     make_library(dir + "/library.db", "/media/stick");
@@ -298,6 +309,13 @@ void drives_ui_test() {
     CHECK(!c.rows()[2].dimmed && c.rows()[2].amber);
     lv = c.view();
     CHECK_EQ(lv.buttons[1], std::string("Mount Generic Flash Disk"));
+    CHECK(lv.rows && !lv.rows->empty());
+    if (lv.rows) {
+        bool dot_row = false;
+        for (const RowView &r : *lv.rows) dot_row = dot_row || r.mark == RowView::Mark::Dot;
+        CHECK(dot_row); /* the not-mounted drive's amber dot row is there to be checked */
+        check_titles_clear_of_dots(*lv.rows);
+    }
     CHECK(lv.button_enabled[1]);
     CHECK(lv.button_primary[1] && !lv.button_primary[0]);
     c.button(Page::LibFolders, 1);

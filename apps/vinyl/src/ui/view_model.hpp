@@ -10,10 +10,12 @@
 #include "menu/menu_model.hpp"
 #include "queue/queue.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <utility>
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -45,6 +47,15 @@ struct RowView {
                mono_value == o.mono_value && heading == o.heading && flush == o.flush && amber == o.amber;
     }
 };
+
+/* Where a row's title starts: after the dot when the row has one (the same indent as the song rows), never under it. Only a row
+ * without a dot may be flush at the left edge (Music folders). Pure, so the tests check it at every size (owner board test
+ * 2026-11-14: the amber dot of an unmounted drive was drawn over the first letter). */
+inline double row_title_x(const RowView &v, double dot_x, double text_x) {
+    if (v.mark == RowView::Mark::Dot) return text_x;
+    return v.flush ? dot_x : text_x;
+}
+inline int row_dot_diameter(double s) { return std::max(4, static_cast<int>(10 * s + 0.5)); }
 
 struct NowView {
     bool has_track = false;

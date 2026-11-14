@@ -201,7 +201,7 @@ private:
         const lv_font_t *tf = font(Face::Bold, text_px_);
         const int right = chev ? ri(chev_r_) + ri(16 * s_) + ri(4 * s_) : ri(value_r_);
         /* a row without a mark keeps its text where a marked row has it, unless it says so (flush: the Music folders) */
-        const int tx = v.flush ? ri(dot_x_) : ri(text_x_);
+        const int tx = ri(row_title_x(v, dot_x_, text_x_)); /* after the dot when there is one */
         /* the name and the value share the row; when both do not fit, the name keeps its width up to 60 % of the room
          * and the value ends with dots (a narrow screen: "Auto" before "follows system: Evolve 65") */
         const int room = std::max(20, w_ - tx - right - ri(8 * s_));
