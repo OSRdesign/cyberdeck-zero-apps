@@ -1,0 +1,39 @@
+# VHS M3: the self-timer before a video (D30, brief 6.7): "Video in N s", the 1280x720 Video size
+# streams from the countdown's start (the chip says so), the scene starts at zero; R during a countdown
+# does nothing, Esc cancels it (nothing recorded).
+title VHS M3: the video self-timer (3 s): the Video size streams from the start, recording at zero
+sizes 800x480 480x800
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+env VHS_FAKE_MIC tone
+env VHS_SET self_timer_s=3
+
+wait 1500
+key tab
+wait 300
+key space
+wait 400
+shot 01-countdown
+expect text "Video in 3 s"
+expect text "Cancel"
+expect text "1280x720  30 fps"
+expect notext "Photo now"
+wait 3400
+shot 02-recording
+expect text "Photo now"
+expect notext "Cancel"
+key r
+wait 1500
+key r
+wait 300
+expect text "Video in 3 s"
+key esc
+wait 400
+shot 03-cancelled
+expect notext "Cancel"
+expect noquit
+key esc
+expect quit

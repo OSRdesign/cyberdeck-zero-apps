@@ -17,16 +17,29 @@
  * writes photo_<NNN>_<when>.jpg (EXIF, Annex K tables when missing, atomic); one flash marks the photo. A camera without
  * MJPEG refuses photos. The photo review (minimal, brief 9.5) lists the folder's photos newest first, decodes one at a
  * time on the worker, and deletes one after the UI has asked.
+ *
+ * M3 (recording, brief section 6, 5.4, 13): R, Space in Video mode or the red shutter start a scene (after the
+ * self-timer when one is set; the Video size streams from its start, so zero acts at once): the stream switches to the
+ * Video size when the preview runs another (hold), the camera microphone is matched by USB ancestry and opened hw: only
+ * (busy or none: video only, with a toast), the capture thread's tap feeds the recorder (record/recorder.hpp), the
+ * audio thread feeds it and the Sound-on lamp. Every stop finishes the file: R, Space or the red button (nothing
+ * asked), the camera lost ("Camera unplugged."; "Camera turned: recording stopped" when it comes back turned), the
+ * disk guard (the red toast), stop() (hide, close, the review, the destructor: SIGTERM ends the loop cleanly and the
+ * app's teardown lands here) and Esc at the root (finish, then quit: the UI). "Photo now" takes the recording's
+ * current frame. A camera without MJPEG and a system without FFmpeg refuse to record (toasts).
  */
 #pragma once
 
 #include "app/notice_queue.hpp"
+#include "audio/alsa/alsa_api.hpp"
+#include "audio/level.hpp"
 #include "camera/capture.hpp"
 #include "camera/fake_camera.hpp"
 #include "live/pipeline.hpp"
 #include "modes/select.hpp"
 #include "modes/soc.hpp"
 #include "power/undervolt.hpp"
+#include "record/recorder.hpp"
 #include "scenes/photos.hpp"
 #include "scenes/worker.hpp"
 #include "settings/settings.hpp"
@@ -65,6 +78,10 @@ struct ControllerConfig {
     int denom = 0;                 /* --scale; 0 = the fit rule */
     bool force_undervolt = false;  /* VHS_FAKE_UNDERVOLT: the scenes' power notice */
     std::string soc_override;      /* VHS_SOC: "bcm2712" ... "other"; "" = detected */
+    std::string fake_mic;          /* VHS_FAKE_MIC: the fake microphone (fake_alsa.hpp); "" = tone */
+    long fake_free_mb = -1;        /* VHS_FAKE_FREE_MB: the free space the fake camera's recorder sees */
+    std::shared_ptr<AlsaApi> alsa; /* tests: the sound system (null: the real one, or the fake with the fake camera) */
+    const AvLibs *av = nullptr;    /* tests: FFmpeg (null: real_av_libs() at the first REC) */
 };
 
 struct Snapshot {
@@ -83,6 +100,18 @@ struct Snapshot {
     bool photo_busy = false;   /* a photo is being taken or saved */
     int photos_saved = 0;      /* in this run */
     std::string last_photo;    /* its file name */
+    bool countdown_video = false; /* the countdown starts a video */
+    /* recording (canvas Recording-480x320) */
+    bool recording = false;    /* REC pressed and not finished (the red shutter, "Photo now") */
+    bool rec_started = false;  /* the first frame is written (the REC timer runs) */
+    std::int64_t rec_ms = 0;   /* the REC timer */
+    std::uint64_t rec_bytes = 0;
+    std::int64_t rec_left_s = -1; /* the time left at the rate written (-1: not known yet) */
+    bool rec_audio = false;    /* with the camera microphone (the lamp is drawn) */
+    bool lamp = false;         /* Sound on */
+    ModeReq rec_mode;          /* the recorded mode */
+    int scenes_recorded = 0;   /* in this run */
+    std::string last_scene;    /* its first part's name */
 };
 
 /* The photo review's state (brief 9.5). */
@@ -134,6 +163,16 @@ public:
     /* The review's picture (LVGL thread; valid until the next step()). */
     const Picture *review_picture() const { return review_pic_.get(); }
 
+    /* R, Space in Video mode, the red shutter: start (after the self-timer when one is set) or stop a scene. */
+    void record(std::int64_t now_ms);
+    bool recording() const { return rec_ != nullptr; }
+    /* "Photo now" during a recording: the recording's current frame. */
+    void photo_now(std::int64_t now_ms);
+    /* Stops a recording and waits until its file is finished (Esc at the root, hide, close, the destructor). */
+    void finish_recording(RecStop why = RecStop::Released);
+    /* The scene's status (tests). */
+    RecorderStatus last_recording() const { return last_rec_; }
+
     Pipeline &pipeline() { return *pipe_; }
     const Settings &settings() const { return store_.get(); }
     const std::string &folder() const { return folder_; }
@@ -152,6 +191,13 @@ private:
     bool synced() const;
     void review_list();
     void review_decode();
+    struct RecSession;
+    void start_recording(std::int64_t now_ms);
+    void stop_recording(RecStop why, bool wait);
+    void end_recording();
+    void rec_step(std::int64_t now_ms, const CaptureStatus &cam, Snapshot &s);
+    ModeReq video_mode(const CaptureStatus &cam) const;
+    std::uint64_t free_bytes(const std::string &folder) const;
 
     ControllerConfig cfg_;
     SocClass soc_ = SocClass::Other;
@@ -197,6 +243,16 @@ private:
     std::shared_ptr<Picture> review_pic_;
     int review_box_w_ = 0, review_box_h_ = 0;
     std::uint64_t review_req_ = 0; /* drops stale decodes */
+
+    /* the recording */
+    std::shared_ptr<AlsaApi> alsa_;
+    std::unique_ptr<RecSession> rec_;
+    RecorderStatus last_rec_;
+    int scenes_recorded_ = 0;
+    std::string last_scene_;
+    std::uint64_t watch_turns_ = 0;  /* a loss stopped a recording: a turn seen before watch_until_ gets its toast */
+    std::int64_t watch_until_ = 0;
+    int ram_mb_ = -1;
 };
 
 /* MemTotal of root/proc/meminfo in MB (board.state's ram_mb), -1 when unknown. */

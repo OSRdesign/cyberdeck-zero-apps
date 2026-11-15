@@ -57,6 +57,9 @@ void apply_settings_overrides(Settings &s, const std::string &list)
             else if (k == "video_size") parse_size(v, s.video_size);
             else if (k == "self_timer_s") s.self_timer_s = clamp_self_timer(std::atoi(v.c_str()));
             else if (k == "prefix" && valid_prefix(v)) s.prefix = v;
+            else if (k == "split") s.split = v == "true" || v == "1";
+            else if (k == "split_mib") s.split_mib = std::max(64, std::min(4096, std::atoi(v.c_str())));       /* hidden */
+            else if (k == "min_free_mb") s.min_free_mb = std::max(100, std::min(100000, std::atoi(v.c_str()))); /* hidden */
         }
         i = j + 1;
     }

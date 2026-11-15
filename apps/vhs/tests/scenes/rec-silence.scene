@@ -1,0 +1,22 @@
+# VHS M3: Cassette's digital-silence rule (3 s of exact zeros): the toast once per scene (D38).
+title VHS M3: the camera microphone delivers exact zeros: the silence toast once
+sizes 480x320
+ppmm 608
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+env VHS_FAKE_MIC silent
+
+wait 1500
+key r
+wait 4200
+shot 01-silence-toast
+expect text "No sound from the camera microphone."
+expect text "Photo now"
+expect notext "Sound on"
+key r
+wait 1200
+key esc
+expect quit

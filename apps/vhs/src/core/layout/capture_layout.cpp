@@ -152,6 +152,17 @@ CaptureLayout capture_layout(const CaptureLayoutIn &in)
     o.cd_d = std::max(16, std::min(R(96), o.picture.h - 2 * R(8)));
     o.cd_border = std::max(2, R(6) * o.cd_d / std::max(1, R(96)));
     o.cd_px = std::max(12, R(52) * o.cd_d / std::max(1, R(96)));
+    /* the recording's tags (canvas Recording-480x320) */
+    o.tag_h = R(22);
+    o.tag_pad = R(8);
+    o.tag_radius = R(11);
+    o.tag_dot = R(10);
+    o.tag_gap = R(6);
+    o.tag_px = R(12);
+    o.photo_now_px = R(12);
+    o.rec_face = std::max(4, o.shutter.w * 34 / 100);
+    o.rec_face_radius = R(6);
+    o.lamp_y = std::max(o.chip_y + o.tag_h + R(4), o.picture.h - R(28));
     return o;
 }
 

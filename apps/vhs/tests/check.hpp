@@ -95,3 +95,6 @@ void test_controller();
 void test_jpeg();
 void test_naming();
 void test_photo();
+void test_record();
+void test_recorder();
+void test_rec_app();

@@ -1,0 +1,26 @@
+# VHS M3: another program records from the camera microphone (EBUSY on hw:): VHS records video only and
+# says so (brief 5.4; the wording is provisional). Server routing comes with the P2 chooser.
+title VHS M3 with the camera microphone busy: video only, the toast
+sizes 800x480 480x800
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+env VHS_FAKE_MIC busy
+
+wait 1500
+key r
+wait 700
+shot 01-busy-toast
+expect text "Camera microphone busy: recording without sound."
+expect text "Photo now"
+wait 4500
+shot 02-video-only
+expect notext "Camera microphone busy: recording without sound."
+expect text "MJPEG 720p without sound. Stop with R, Space or the red button; it asks nothing and saves the scene."
+expect notext "Sound on"
+key r
+wait 1200
+key esc
+expect quit

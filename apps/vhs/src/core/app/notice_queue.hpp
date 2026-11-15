@@ -25,6 +25,15 @@ constexpr const char *kNoticeDrops = "This board drops frames at this size.";
 /* Not on the canvas: provisional wording (brief 12.4 item 3, the Controller's at the gates). */
 constexpr const char *kNoticeNoMjpegPhoto = "Photos need a camera that sends MJPEG.";
 constexpr const char *kNoticePhotoFailed = "Photo not saved: "; /* + the reason */
+/* Recording (M3). Brief 5.5 / plan 3.7 gives the first; the others are provisional (brief 5.4 "wording: Controller",
+ * 12.4 item 3). */
+constexpr const char *kNoticeRecTurned = "Camera turned: recording stopped";
+constexpr const char *kNoticeMicBusy = "Camera microphone busy: recording without sound.";
+constexpr const char *kNoticeNoMic = "No camera microphone: recording without sound.";
+constexpr const char *kNoticeMicFailed = "Camera microphone failed: recording without sound.";
+constexpr const char *kNoticeNoMjpegVideo = "Recording needs a camera that sends MJPEG.";
+constexpr const char *kNoticeNoFfmpeg = "Recording needs FFmpeg: its libraries are missing.";
+constexpr const char *kNoticeRecFailed = "Recording stopped: "; /* + the reason */
 
 struct Notice {
     std::string text; /* "" = none */

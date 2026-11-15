@@ -83,6 +83,14 @@ struct PhotoShot {
  * 15 frames (0.5 s, plan 1.2; brief 5.1 step 5). */
 constexpr int kWarmupFrames = 15;
 
+/* The recorder's tap (brief 6.1): every good frame streamed at the mode asked for, after the warm-up, is handed over on
+ * the capture thread; the receiver copies it and never blocks (a full ring drops the frame and counts it). */
+class FrameTap {
+public:
+    virtual ~FrameTap() = default;
+    virtual void tap_frame(const std::uint8_t *data, std::size_t n, std::int64_t ts_us, const ModeReq &mode) = 0;
+};
+
 /* The mode to stream for a camera's list (brief section 4), at every open; an invalid result means "the first MJPEG
  * mode at 30 fps, else the first YUYV one". */
 using ModeChooser = std::function<ModeReq(const std::vector<CamMode> &listed, const CamIdentity &id)>;
@@ -125,6 +133,11 @@ public:
     void request_photo(const ModeReq &expect, std::uint64_t id);
     void cancel_photo();
     bool take_photo(PhotoShot &out);
+    /* The tap: frames of `expect` (format and size) after kWarmupFrames since their STREAMON go to `tap` until
+     * clear_tap(), which returns only when no call is in progress (the tap may be destroyed then). Any thread. */
+    void set_tap(FrameTap *tap, const ModeReq &expect);
+    void clear_tap();
+    std::uint64_t tapped() const { return tapped_.load(); }
     CaptureStatus status() const;
 
     std::uint64_t frames() const { return frames_.load(); }   /* frames handed to the mailbox */
@@ -173,6 +186,14 @@ private:
     bool photo_ready_ = false;
     PhotoShot photo_;
     std::uint64_t since_on_ = 0; /* the thread's: good frames since STREAMON */
+
+    /* the tap */
+    void tap_from(const Frame &f);
+    std::atomic<bool> tap_on_{false};
+    std::mutex tap_m_;
+    FrameTap *tap_ = nullptr; /* tap_m_ */
+    ModeReq tap_expect_;      /* tap_m_ */
+    std::atomic<std::uint64_t> tapped_{0};
 
     /* the thread's own */
     int fd_ = -1;

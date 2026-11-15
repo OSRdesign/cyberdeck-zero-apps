@@ -1,0 +1,22 @@
+# VHS M3: no sound card on the camera's USB device: video only and a toast (wording provisional).
+title VHS M3 with a camera without a microphone: video only, the toast
+sizes 800x480 480x800
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+env VHS_FAKE_MIC none
+
+wait 1500
+key r
+wait 700
+shot 01-nomic-toast
+expect text "No camera microphone: recording without sound."
+wait 4500
+shot 02-video-only
+expect text "MJPEG 720p without sound. Stop with R, Space or the red button; it asks nothing and saves the scene."
+key r
+wait 1200
+key esc
+expect quit

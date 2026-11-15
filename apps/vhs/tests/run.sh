@@ -8,7 +8,8 @@
 # ~/cdk-build/vhs-spike/tj):
 #   mkdir -p ~/cdk-build/vhs/tj && cd ~/cdk-build/vhs/tj && apt-get download libturbojpeg && dpkg-deb -x libturbojpeg_*.deb root
 # The MJPEG fixture is made with the build box's ffmpeg (testsrc2, 1280x720, 12 frames: synthetic); without ffmpeg its
-# cases skip.
+# cases skip. The recorder's fixtures (M3) use the build box's libavformat (FFmpeg 6.1 in WSL) and check the files with
+# ffprobe / ffmpeg; without them those checks say so loudly.
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 app=$(dirname "$here")
@@ -39,4 +40,11 @@ if [ -z "${VHS_TURBOJPEG:-}" ] && ! ldconfig -p 2> /dev/null | grep -q 'libturbo
     done
 fi
 echo "== vhs unit tests (fakes; TurboJPEG: ${VHS_TURBOJPEG:-the system's, if any}; fixtures $fx)"
-VHS_FIXTURES="$fx" VHS_SETTINGS="$work/no-settings.json" "$work/build/test-vhs"
+if command -v ffprobe > /dev/null 2>&1 && command -v ffmpeg > /dev/null 2>&1; then
+    echo "== the recorder fixtures are checked with $(ffprobe -version | head -1 | cut -d' ' -f1-3)"
+else
+    echo "== ffprobe / ffmpeg MISSING: the recorder's ffprobe checks will NOT run (apt install ffmpeg)"
+fi
+# VHS_GROUPS="record recorder" runs only those groups
+# shellcheck disable=SC2086
+VHS_FIXTURES="$fx" VHS_SETTINGS="$work/no-settings.json" "$work/build/test-vhs" ${VHS_GROUPS:-}

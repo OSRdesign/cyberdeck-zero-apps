@@ -11,10 +11,12 @@
  * (state, chip, note, toast, countdown, flash, the review). The camera is open only while the Capture page shows: the
  * review and a launcher's hide release it (brief 3.3 rule 5; the rest of section 13 is M6).
  *
- * Keys (brief 12.3, by key code): Space the photo (Photo mode); Tab Photo / Video; Esc cancels the countdown, else
- * closes the review, else quits; Stop cancels the countdown; Up / Down / Left / Right move between the buttons, Enter
- * presses one; on the review Left / Right show the other photos and Del asks to delete. R and S do nothing yet
- * (recording M3, settings M6). LVGL thread only.
+ * Keys (brief 12.3, by key code): Space the photo (Photo mode), or starts / stops a scene (Video mode, and always
+ * while recording); R starts / stops a scene in either mode; Tab Photo / Video; Esc cancels the countdown, else closes
+ * the review, else finishes a recording and quits (brief 12.4 item 1), else quits; Stop cancels the countdown; Up /
+ * Down / Left / Right move between the buttons, Enter presses one; on the review Left / Right show the other photos and
+ * Del asks to delete. S does nothing yet (settings M6). While recording, the toggle is "Photo now" and Scenes does
+ * nothing (dimmed). LVGL thread only.
  */
 #pragma once
 

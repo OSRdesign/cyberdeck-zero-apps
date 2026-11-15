@@ -1,0 +1,29 @@
+# VHS M3: the camera (and its microphone) unplugged mid-scene: the file is finished at the last frame
+# (trailer, journal closed), the toast; back within 10 s unturned: a replug, live again, not recording.
+title VHS M3: the camera unplugged while recording: the scene ends at the cut
+sizes 480x320
+ppmm 608
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+env VHS_FAKE_MIC tone
+env VHS_FAKE_SCRIPT unplug@4500,replug@7000
+
+wait 1500
+key r
+wait 2500
+shot 01-recording
+expect text "Photo now"
+wait 1000
+shot 02-unplugged
+expect text "Camera unplugged."
+expect text "Waiting for the camera..."
+expect notext "Photo now"
+wait 4500
+shot 03-back
+expect text "1920x1080  30 fps"
+expect text "Photo | Video"
+key esc
+expect quit

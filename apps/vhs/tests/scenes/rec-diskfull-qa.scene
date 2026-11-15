@@ -1,0 +1,21 @@
+# VHS M3: 200 MB free under the 500 MB floor (VHS_FAKE_FREE_MB): REC is refused with the red toast
+# (brief 6.4).
+title VHS M3: REC refused under the disk floor: the red toast
+sizes 800x480 480x800
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+env VHS_FAKE_MIC tone
+env VHS_FAKE_FREE_MB 200
+
+wait 1500
+key r
+wait 500
+shot 01-refused
+expect text "Disk almost full: recording stopped."
+expect notext "Photo now"
+expect text "Photo | Video"
+key esc
+expect quit

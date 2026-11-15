@@ -5,7 +5,14 @@
  */
 #include "controller.hpp"
 
+#include "audio/alsa/audio_capture.hpp"
+#include "audio/alsa/open_policy.hpp"
+#include "audio/fake_alsa.hpp"
+#include "audio/mic_match.hpp"
+#include "camera/identity.hpp"
 #include "modes/codec_caps.hpp"
+#include "record/av_libs.hpp"
+#include "record/disk_guard.hpp"
 #include "scenes/atomic_file.hpp"
 #include "scenes/fileops.hpp"
 #include "scenes/naming.hpp"
@@ -21,6 +28,27 @@
 #include <sstream>
 
 namespace vhs {
+
+/* One recording: the recorder, the microphone's capture and its lamp, and the capture thread's tap into the recorder.
+ * Declared so that the audio capture goes first, then the recorder (its sink), then the lamp (its period callback). */
+struct Controller::RecSession : FrameTap {
+    SoundLevel level;
+    std::unique_ptr<Recorder> rec;
+    std::unique_ptr<AudioCapture> audio;
+    ModeReq mode;
+    std::string mic;            /* "CM969 16000 Hz 2 ch" for the log */
+    bool held = false;          /* the Video size is held on the capture thread */
+    bool audio_ended = false;
+    bool stopping = false;
+    bool first_logged = false;
+    std::uint64_t losses = 0;   /* the camera's losses at REC */
+    std::int64_t pressed_ms = 0;
+    void tap_frame(const std::uint8_t *data, std::size_t n, std::int64_t ts_us, const ModeReq &m) override
+    {
+        (void)m;
+        rec->push_video(data, n, ts_us);
+    }
+};
 
 int ram_mb(const std::string &root)
 {
@@ -83,6 +111,12 @@ Controller::Controller(ControllerConfig cfg) : cfg_(std::move(cfg)), store_(posi
     }
     finder_->prefer(store_.get().camera_id);
     const int ram = ram_mb(cfg_.sys_root);
+    ram_mb_ = ram;
+    alsa_ = cfg_.alsa;
+    if (!alsa_) {
+        if (cfg_.fake) alsa_ = std::make_unique<FakeAlsa>(fake_mic_options(cfg_.fake_mic));
+        else alsa_ = make_real_alsa();
+    }
     PipelineConfig pc;
     pc.api = api;
     pc.finder = finder_.get();
@@ -138,6 +172,7 @@ void Controller::start()
 void Controller::stop()
 {
     cancel_countdown(); /* brief 13: a countdown ends when the camera is released */
+    finish_recording(RecStop::Released); /* hide, close, the review, SIGTERM's teardown: the file is finished first */
     pipe_->stop();
 }
 
@@ -212,6 +247,10 @@ Snapshot Controller::step(std::int64_t now_ms)
     run_script(now_ms);
     worker_.drain(); /* the scenes worker's completions (photo saved, review list and picture) */
     const CaptureStatus cam = pipe_->camera();
+    if (timer_.active() && timer_.kind() == TimerKind::Video) { /* the video's self-timer */
+        if (cam.state != CamState::Streaming && cam.state != CamState::Turned) cancel_countdown();
+        else if (timer_.fire(now_ms)) start_recording(now_ms);
+    }
     photo_step(now_ms, cam);
     Snapshot s;
     s.state = cam.state;
@@ -249,8 +288,10 @@ Snapshot Controller::step(std::int64_t now_ms)
                 notices_.push(Notice{kNoticePower, false});
         }
     }
+    rec_step(now_ms, cam, s);
     s.notice = notices_.current(now_ms);
     s.countdown = timer_.active() ? std::max(1, timer_.shown(now_ms)) : 0;
+    s.countdown_video = timer_.active() && timer_.kind() == TimerKind::Video;
     s.timer_total = timer_.active() ? timer_.total() : 0;
     s.flash = flash_;
     s.photo_busy = photo_ != PhotoStep::Idle;
@@ -261,7 +302,7 @@ Snapshot Controller::step(std::int64_t now_ms)
 
 void Controller::toggle_capture_mode()
 {
-    if (timer_.active()) return; /* dimmed during the countdown */
+    if (timer_.active() || rec_) return; /* dimmed during the countdown; "Photo now" while recording */
     capture_mode_ = capture_mode_ == CaptureMode::Photo ? CaptureMode::Video : CaptureMode::Photo;
 }
 
@@ -283,7 +324,10 @@ void Controller::release_hold()
 
 void Controller::shutter(std::int64_t now_ms)
 {
-    if (capture_mode_ != CaptureMode::Photo) return; /* a video comes with M3 */
+    if (rec_ || capture_mode_ == CaptureMode::Video) { /* the red button: start or stop a scene (brief 6.8, 12.3) */
+        record(now_ms);
+        return;
+    }
     if (photo_ != PhotoStep::Idle) return;
     const CaptureStatus cam = pipe_->camera();
     if (cam.state != CamState::Streaming) return;
@@ -320,7 +364,7 @@ void Controller::fire(std::int64_t now_ms)
 {
     const Selection s = selection();
     ModeReq expect; /* Instant: the next good frame of whatever streams */
-    if (photo_needs_switch(s)) {
+    if (!rec_ && photo_needs_switch(s)) { /* during a recording: the recording's current frame (brief 7 step 1) */
         expect = s.photo;
         if (!held_) {
             pipe_->capture().hold_mode(s.photo);
@@ -388,6 +432,259 @@ void Controller::photo_step(std::int64_t now_ms, const CaptureStatus &cam)
             }
         };
     });
+}
+
+/* ------------------------------------------------------------------------------------------------ recording */
+
+ModeReq Controller::video_mode(const CaptureStatus &cam) const
+{
+    if (cfg_.mode.valid()) return cam.mode; /* an explicit --mode: what streams */
+    const Selection s = selection();
+    return (s.ok && s.video.valid() && s.video.fourcc == kMJPG) ? s.video : cam.mode;
+}
+
+std::uint64_t Controller::free_bytes(const std::string &folder) const
+{
+    if (cfg_.fake && cfg_.fake_free_mb >= 0) return static_cast<std::uint64_t>(cfg_.fake_free_mb) << 20;
+    std::uint64_t b = 0;
+    if (posix_file_ops().free_space(folder, b) != 0) return UINT64_MAX; /* unknown: not refused */
+    return b;
+}
+
+void Controller::record(std::int64_t now_ms)
+{
+    if (rec_) {
+        if (!rec_->stopping) stop_recording(RecStop::User, false); /* it asks nothing (canvas) */
+        return;
+    }
+    if (timer_.active() || photo_ != PhotoStep::Idle) return;
+    const CaptureStatus cam = pipe_->camera();
+    if (cam.state != CamState::Streaming) return;
+    if (cam.mode.fourcc != kMJPG) { /* P1 records the camera's MJPEG (section 20: no YUYV recording) */
+        notices_.push(Notice{kNoticeNoMjpegVideo, false});
+        return;
+    }
+    const int secs = store_.get().self_timer_s;
+    if (secs > 0) {
+        /* the Video size streams from the countdown's start, so zero acts at once (brief 6.7) */
+        timer_.start(secs, now_ms, TimerKind::Video);
+        const ModeReq m = video_mode(cam);
+        pipe_->capture().hold_mode(m);
+        held_ = true;
+        std::fprintf(stderr, "[vhs] self-timer: %d s, then a video (%s streams meanwhile)\n", secs, mode_text(m).c_str());
+        return;
+    }
+    start_recording(now_ms);
+}
+
+void Controller::photo_now(std::int64_t now_ms)
+{
+    if (!rec_ || rec_->stopping || photo_ != PhotoStep::Idle) return;
+    fire(now_ms);
+}
+
+void Controller::start_recording(std::int64_t now_ms)
+{
+    const CaptureStatus cam = pipe_->camera();
+    auto refuse = [this](const Notice &n) {
+        release_hold(); /* the countdown's hold */
+        if (!n.text.empty()) notices_.push(n);
+    };
+    if (cam.state != CamState::Streaming) return refuse(Notice());
+    if (cam.mode.fourcc != kMJPG) return refuse(Notice{kNoticeNoMjpegVideo, false});
+    std::string why;
+    const AvLibs *av = cfg_.av ? cfg_.av : real_av_libs(&why);
+    if (!av) {
+        std::fprintf(stderr, "[vhs] recording: no FFmpeg: %s\n", why.c_str());
+        return refuse(Notice{kNoticeNoFfmpeg, false});
+    }
+    const Settings st = store_.get();
+    const std::uint64_t min_free = static_cast<std::uint64_t>(st.min_free_mb) << 20;
+    if (ensure_folder(posix_file_ops(), folder_) != 0) {
+        std::fprintf(stderr, "[vhs] recording: the folder %s cannot be made\n", folder_.c_str());
+        return refuse(Notice{std::string(kNoticeRecFailed) + "the folder cannot be written.", false});
+    }
+    const std::uint64_t free_b = free_bytes(folder_);
+    if (DiskGuard::refuse_at_rec(free_b, min_free)) { /* brief 6.4: refused under the floor, the same red toast */
+        std::fprintf(stderr, "[vhs] recording: refused, %llu MB free (the floor is %d MB)\n",
+                     static_cast<unsigned long long>(free_b >> 20), st.min_free_mb);
+        return refuse(Notice{kNoticeDiskFull, true});
+    }
+    auto rs = std::make_unique<RecSession>();
+    rs->mode = video_mode(cam);
+    if (!held_) pipe_->capture().hold_mode(rs->mode); /* the countdown's hold is taken over */
+    held_ = false;
+    rs->held = true;
+
+    /* the camera microphone (brief 5.4): matched by USB ancestry, hw: only */
+    OpenResult mic;
+    bool have_mic = false;
+    const MicCard mc = fake_ ? camera_mic_by_port(*alsa_, cam.id.devpath)
+                             : camera_mic(cfg_.sys_root, usb_device_dir(cfg_.sys_root, video_name_of(cam.device)));
+    if (!mc.found) {
+        std::fprintf(stderr, "[vhs] recording: no sound card on the camera's USB device: video only\n");
+        notices_.push(Notice{kNoticeNoMic, false});
+    } else {
+        OpenOptions oo;
+        oo.allow_server = false; /* busy means video only; the server route comes with the P2 chooser */
+        oo.want_bits = 16;
+        mic = open_capture(*alsa_, mc.card, oo);
+        if (mic.ok() && mic.format.bits == 16) {
+            have_mic = true;
+            rs->mic = mc.card.id + " " + std::to_string(mic.format.rate) + " Hz " + std::to_string(mic.format.channels) + " ch";
+        } else {
+            std::fprintf(stderr, "[vhs] recording: the camera microphone %s: %s: video only\n", pcm_device(mc.card).c_str(),
+                         mic.ok() ? "not 16-bit" : mic.message.c_str());
+            notices_.push(Notice{mic.status == OpenStatus::Busy ? kNoticeMicBusy : kNoticeMicFailed, false});
+            mic = OpenResult();
+        }
+    }
+
+    RecorderConfig rc;
+    rc.av = av;
+    rc.ops = &posix_file_ops();
+    rc.folder = folder_;
+    rc.prefix = st.prefix;
+    rc.when = when_text(static_cast<std::int64_t>(std::time(nullptr)), synced(), cfg_.utc);
+    rc.video.codec = VideoCodec::Mjpeg; /* P1: the camera's MJPEG copied (D24) */
+    rc.video.w = rs->mode.w;
+    rc.video.h = rs->mode.h;
+    rc.video.fps = rs->mode.fps;
+    if (have_mic) {
+        rc.audio_rate = static_cast<int>(mic.format.rate);
+        rc.audio_channels = mic.format.channels;
+    }
+    rc.split_bytes = st.split ? static_cast<std::uint64_t>(st.split_mib) << 20 : 0;
+    rc.min_free_bytes = min_free;
+    rc.ring_seconds = (ram_mb_ > 0 && ram_mb_ <= 512) ? 2 : 4; /* brief 6.1 */
+    if (cfg_.fake && cfg_.fake_free_mb >= 0) {
+        const std::uint64_t fb = static_cast<std::uint64_t>(cfg_.fake_free_mb) << 20;
+        rc.free_space = [fb] { return fb; };
+    }
+    rc.started_unix = static_cast<std::int64_t>(std::time(nullptr));
+    rs->rec = std::make_unique<Recorder>(rc);
+    rs->rec->start();
+    if (have_mic) {
+        rs->level.reset(rc.audio_rate, rc.audio_channels);
+        RecSession *p = rs.get();
+        CaptureOptions co;
+        co.on_period = [p](const void *f, size_t n, const AudioFormat &) { p->level.feed(static_cast<const std::int16_t *>(f), n); };
+        co.on_gap = [p](std::uint64_t lost) { p->rec->audio_gap(lost); };
+        co.on_clock = [p](std::int64_t ns, std::uint64_t pos) { p->rec->audio_clock(ns, pos); };
+        rs->audio = std::make_unique<AudioCapture>(std::move(mic), *rs->rec, co);
+        if (!rs->audio->start()) {
+            std::fprintf(stderr, "[vhs] recording: the microphone did not start: video only\n");
+            rs->audio.reset();
+            rs->rec->audio_end();
+            rs->audio_ended = true;
+            notices_.push(Notice{kNoticeMicFailed, false});
+        }
+    }
+    rs->losses = cam.losses;
+    rs->pressed_ms = now_ms;
+    const std::string split = rc.split_bytes ? std::to_string(st.split_mib) + " MiB" : std::string("off");
+    std::fprintf(stderr, "[vhs] recording: REC %s, %s, folder %s, split %s, floor %d MB, ring %d s\n", mode_text(rs->mode).c_str(),
+                 rs->mic.empty() ? "no sound" : ("sound " + rs->mic).c_str(), folder_.c_str(), split.c_str(), st.min_free_mb,
+                 rc.ring_seconds);
+    pipe_->capture().set_tap(rs.get(), rs->mode); /* frames after the warm-up of the Video size */
+    rec_ = std::move(rs);
+}
+
+void Controller::stop_recording(RecStop why, bool wait)
+{
+    if (!rec_) return;
+    if (!rec_->stopping) {
+        rec_->stopping = true;
+        pipe_->capture().clear_tap(); /* no frame after this */
+        if (rec_->audio) rec_->audio->stop();
+        rec_->rec->request_stop(why);
+        std::fprintf(stderr, "[vhs] recording: stop (%s)\n", rec_stop_name(why));
+    }
+    if (wait) end_recording();
+}
+
+void Controller::end_recording()
+{
+    if (!rec_) return;
+    rec_->rec->join();
+    const RecorderStatus st = rec_->rec->status();
+    CaptureStats as;
+    if (rec_->audio) as = rec_->audio->stats();
+    rec_->audio.reset();
+    if (rec_->held) pipe_->capture().release_hold(); /* back to the preview's mode */
+    last_rec_ = st;
+    if (st.frames > 0) {
+        ++scenes_recorded_;
+        last_scene_ = st.files.empty() ? std::string() : st.files.front();
+    }
+    std::fprintf(stderr,
+                 "[vhs] recording: finished %s: %llu frames, %.1f s, %d part(s), %llu bytes, %llu frames dropped (ring), "
+                 "%llu audio frames dropped, %llu lost in overruns, stop %s\n",
+                 st.stem.c_str(), static_cast<unsigned long long>(st.frames), static_cast<double>(st.written_ms) / 1000.0, st.parts,
+                 static_cast<unsigned long long>(st.bytes), static_cast<unsigned long long>(st.ring_drops),
+                 static_cast<unsigned long long>(st.audio_drops), static_cast<unsigned long long>(as.frames_lost_xrun),
+                 rec_stop_name(st.stop));
+    if (st.stop == RecStop::DiskFull) notices_.push(Notice{kNoticeDiskFull, true});
+    else if (st.stop == RecStop::Error)
+        notices_.push(Notice{std::string(kNoticeRecFailed) + (st.error.empty() ? "an error" : st.error) + ".", false});
+    rec_.reset();
+}
+
+void Controller::finish_recording(RecStop why)
+{
+    if (rec_) stop_recording(why, true);
+}
+
+void Controller::rec_step(std::int64_t now_ms, const CaptureStatus &cam, Snapshot &s)
+{
+    if (watch_until_ != 0) { /* a loss stopped the scene: the camera came back turned (brief 5.5) */
+        if (cam.turns > watch_turns_) {
+            notices_.push(Notice{kNoticeRecTurned, false});
+            watch_until_ = 0;
+        } else if (now_ms > watch_until_) {
+            watch_until_ = 0;
+        }
+    }
+    if (rec_) {
+        const RecorderStatus st = rec_->rec->status();
+        if (!rec_->stopping) {
+            if (cam.losses > rec_->losses) { /* finished at the last frame; "Camera unplugged." comes with the loss */
+                watch_turns_ = cam.turns;
+                watch_until_ = now_ms + 15000;
+                stop_recording(RecStop::CameraLost, false);
+            } else if (st.finished) { /* the writer ended by itself: the disk guard or an error */
+                stop_recording(st.stop, false);
+            }
+        }
+        if (rec_->audio && !rec_->audio_ended && !rec_->audio->running()) {
+            /* the microphone went away (unplugged with the camera, or failed): video goes on alone (brief 5.4) */
+            rec_->audio_ended = true;
+            rec_->rec->audio_end();
+            const CaptureStats as = rec_->audio->stats();
+            std::fprintf(stderr, "[vhs] recording: the microphone stopped (%s): video goes on\n",
+                         as.message.empty() ? capture_error_name(as.stop_reason) : as.message.c_str());
+        }
+        if (rec_->level.silence_event()) notices_.push(Notice{kNoticeNoSound, false}); /* once per scene (D38) */
+        if (st.started && !rec_->first_logged) {
+            rec_->first_logged = true;
+            std::fprintf(stderr, "[vhs] recording: first frame written %lld ms after REC\n",
+                         static_cast<long long>(now_ms - rec_->pressed_ms));
+        }
+        if (rec_->stopping && rec_->rec->status().finished) {
+            end_recording();
+        } else {
+            s.recording = true;
+            s.rec_started = st.started;
+            s.rec_ms = st.written_ms;
+            s.rec_bytes = st.bytes;
+            s.rec_left_s = st.seconds_left;
+            s.rec_audio = rec_->audio != nullptr && !rec_->audio_ended;
+            s.lamp = s.rec_audio && rec_->level.lamp();
+            s.rec_mode = rec_->mode;
+        }
+    }
+    s.scenes_recorded = scenes_recorded_;
+    s.last_scene = last_scene_;
 }
 
 /* ------------------------------------------------------------------------------------------------ the review */

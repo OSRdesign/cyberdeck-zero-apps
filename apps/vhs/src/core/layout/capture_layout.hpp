@@ -50,6 +50,12 @@ struct CaptureLayout {
     int nc_title_px = 18, nc_text_px = 13, nc_hint_px = 11, nc_scenes_px = 14;
     /* the self-timer's countdown ring, centred on the picture (canvas Countdown-480x320); Cancel takes Scenes' place */
     int cd_d = 96, cd_border = 6, cd_px = 52;
+    /* recording (canvas Recording-480x320): the REC tag in the chip's place and the Sound-on tag at the picture's bottom
+     * left (22u high, 8u padding, an 11u radius, a 10u dot, 6u to the text, 12u bold) */
+    int tag_h = 22, tag_pad = 8, tag_radius = 11, tag_dot = 10, tag_gap = 6, tag_px = 12;
+    int photo_now_px = 12;                   /* "Photo now" in the toggle's place (12u, the toggle's own is 11u) */
+    int rec_face = 24, rec_face_radius = 6;  /* the red shutter's rounded square: 0.34 of the shutter, a 6u radius */
+    int lamp_y = 170;                        /* in the picture: its height - 28u */
 };
 
 /* The photo review page (canvas PhotoReview-480x320): the capture page's panel, picture and text places; Previous,

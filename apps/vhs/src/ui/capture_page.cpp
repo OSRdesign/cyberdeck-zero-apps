@@ -6,6 +6,7 @@
 #include "capture_page.hpp"
 
 #include "app.hpp"
+#include "core/record/disk_guard.hpp"
 #include "theme.hpp"
 
 #include "cp0_ui_metrics_lvgl.h"
@@ -93,6 +94,17 @@ void fit_label(lv_obj_t *l, int px, int room)
         lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_WRAP);
         lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
     }
+}
+
+/* the canvas's Recording note, with the recorded size ("720p", "1080p", else WxH); the no-microphone variant is
+ * provisional (brief 12.4 item 3) */
+std::string recording_note(const Snapshot &s)
+{
+    const ModeReq &m = s.rec_mode;
+    std::string size = std::to_string(m.w) + "x" + std::to_string(m.h);
+    if (m.w * 9 == m.h * 16 && (m.h == 720 || m.h == 1080 || m.h == 480 || m.h == 360)) size = std::to_string(m.h) + "p";
+    return "MJPEG " + size + (s.rec_audio ? " with the camera microphone" : " without sound") +
+           ". Stop with R, Space or the red button; it asks nothing and saves the scene.";
 }
 
 bool no_camera_page(CamState s)
@@ -195,18 +207,28 @@ CapturePage::CapturePage(lv_obj_t *root, const CaptureLayout &geo, CaptureAction
     lv_obj_set_style_outline_color(shutter_, lv_color_hex(col::kText), LV_STATE_FOCUS_KEY);
     lv_obj_set_style_outline_width(shutter_, 2, LV_STATE_FOCUS_KEY);
     lv_obj_set_style_outline_pad(shutter_, 2, LV_STATE_FOCUS_KEY);
-    lv_obj_t *face = lv_obj_create(shutter_);
-    plain(face);
+    face_ = lv_obj_create(shutter_);
+    plain(face_);
     const int fd = geo_.shutter.w * 66 / 100;
-    lv_obj_set_size(face, fd, fd);
-    lv_obj_set_style_radius(face, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_bg_color(face, lv_color_hex(col::kWhite), 0);
-    lv_obj_set_style_bg_opa(face, LV_OPA_COVER, 0);
-    lv_obj_center(face);
+    lv_obj_set_size(face_, fd, fd);
+    lv_obj_set_style_radius(face_, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(face_, lv_color_hex(col::kWhite), 0);
+    lv_obj_set_style_bg_opa(face_, LV_OPA_COVER, 0);
+    lv_obj_center(face_);
+    /* recording: the canvas's red rounded square (0.34 of the shutter) in a red ring */
+    rec_face_ = lv_obj_create(shutter_);
+    plain(rec_face_);
+    lv_obj_set_size(rec_face_, geo_.rec_face, geo_.rec_face);
+    lv_obj_set_style_radius(rec_face_, geo_.rec_face_radius, 0);
+    lv_obj_set_style_bg_color(rec_face_, lv_color_hex(col::kHot), 0);
+    lv_obj_set_style_bg_opa(rec_face_, LV_OPA_COVER, 0);
+    lv_obj_center(rec_face_);
+    show(rec_face_, false);
     lv_obj_add_event_cb(shutter_, button_cb, LV_EVENT_CLICKED, this);
     lv_obj_set_user_data(shutter_, reinterpret_cast<void *>(static_cast<std::intptr_t>(0)));
 
     toggle_ = make_button(root_, geo_.toggle, "Photo | Video", geo_.toggle_px, nullptr);
+    toggle_text_ = lv_obj_get_child(toggle_, 0);
     lv_obj_set_user_data(toggle_, reinterpret_cast<void *>(static_cast<std::intptr_t>(1)));
     scenes_ = make_button(root_, geo_.scenes, "Scenes", geo_.button_px, nullptr, &scenes_sub_);
     lv_obj_set_user_data(scenes_, reinterpret_cast<void *>(static_cast<std::intptr_t>(2)));
@@ -242,6 +264,12 @@ CapturePage::CapturePage(lv_obj_t *root, const CaptureLayout &geo, CaptureAction
     set_text(nc_title_, kNoCameraTitle);
     set_text(nc_text_, kNoCameraText);
     place_nocamera(false);
+
+    /* the recording's tags (canvas Recording-480x320): REC at the chip's place, Sound on at the bottom left */
+    rec_tag_ = make_tag(geo_.chip_x, geo_.chip_y, col::kHot, &rec_text_);
+    lv_obj_t *lamp_text = nullptr;
+    lamp_tag_ = make_tag(geo_.chip_x, geo_.lamp_y, col::kLamp, &lamp_text);
+    lv_label_set_text(lamp_text, "Sound on");
 
     toast_ = std::make_unique<Toast>(root_, geo_.toast, geo_.toast_px, nullptr);
 
@@ -284,6 +312,30 @@ lv_obj_t *CapturePage::make_button(lv_obj_t *parent, const Rect &r, const char *
     }
     lv_obj_add_event_cb(b, button_cb, LV_EVENT_CLICKED, this);
     return b;
+}
+
+lv_obj_t *CapturePage::make_tag(int x, int y, std::uint32_t dot, lv_obj_t **text)
+{
+    lv_obj_t *t = lv_obj_create(box_);
+    plain(t);
+    lv_obj_set_pos(t, x, y);
+    lv_obj_set_size(t, LV_SIZE_CONTENT, geo_.tag_h);
+    lv_obj_set_style_bg_color(t, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(t, 140, 0); /* rgba(0,0,0,.55) */
+    lv_obj_set_style_radius(t, geo_.tag_radius, 0);
+    lv_obj_set_style_pad_hor(t, geo_.tag_pad, 0);
+    lv_obj_set_style_pad_column(t, geo_.tag_gap, 0);
+    lv_obj_set_flex_flow(t, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(t, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_t *d = lv_obj_create(t);
+    plain(d);
+    lv_obj_set_size(d, geo_.tag_dot, geo_.tag_dot);
+    lv_obj_set_style_radius(d, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(d, lv_color_hex(dot), 0);
+    lv_obj_set_style_bg_opa(d, LV_OPA_COVER, 0);
+    *text = label(t, geo_.tag_px, col::kWhite);
+    show(t, false);
+    return t;
 }
 
 void CapturePage::button_cb(lv_event_t *e)
@@ -369,10 +421,14 @@ void CapturePage::update(const Snapshot &s)
     const bool live = s.state == CamState::Streaming;
     const bool keep_picture = live || turned || lost;
 
-    /* the chip */
+    const bool rec = s.recording && keep_picture;
+    /* the chip; while recording the REC tag takes its place */
     if (live && s.mode.valid())
         set_text(chip_, std::to_string(s.mode.w) + "x" + std::to_string(s.mode.h) + "  " + std::to_string(s.mode.fps) + " fps");
-    show(chip_, live && s.mode.valid() && have_picture_);
+    show(chip_, live && !rec && s.mode.valid() && have_picture_);
+    if (rec) set_text(rec_text_, "REC " + clock_text(s.rec_ms));
+    show(rec_tag_, rec);
+    show(lamp_tag_, rec && s.rec_audio && s.lamp);
 
     /* the flash: once per photo taken */
     if (s.flash != flash_seen_) {
@@ -402,12 +458,17 @@ void CapturePage::update(const Snapshot &s)
         note = kTurnedNote;
     } else if (counting) {
         note = countdown_note(s.timer_total);
+    } else if (rec) {
+        note = recording_note(s);
     } else if (!s.camera.empty()) {
         note = s.camera + (s.yuyv ? ", YUYV. " : ", MJPEG. ");
         /* the Video line is provisional (the canvas draws the Photo mode only) */
         note += photo ? "Space takes a photo, Tab switches to Video, R records." : "Space or R records, Tab switches to Photo.";
     }
-    set_text(title_, counting ? "Photo in " + std::to_string(s.countdown) + " s" : (photo ? "Photo" : "Video"));
+    std::string title = photo ? "Photo" : "Video";
+    if (counting) title = std::string(s.countdown_video ? "Video in " : "Photo in ") + std::to_string(s.countdown) + " s";
+    else if (rec) title = bytes_text(s.rec_bytes) + (s.rec_left_s >= 0 ? ", " + time_left_text(s.rec_left_s) : std::string());
+    set_text(title_, title);
     set_text(note_, note);
     lv_obj_set_pos(note_, geo_.note.x, turned ? geo_.title.y : geo_.note.y);
 
@@ -416,7 +477,7 @@ void CapturePage::update(const Snapshot &s)
 
     const std::string key = std::string(state_name(s.state)) + "|" + (s.replug_hint ? "hint" : "") + "|" + s.detail +
                             "|" + (toast ? "toast" : "") + "|" + (note.empty() ? "" : "note") + "|" +
-                            (counting ? "count" : "");
+                            (counting ? "count" : "") + "|" + (rec ? "rec" : "");
     if (key == last_key_) return;
     last_key_ = key;
     counting_ = counting;
@@ -430,10 +491,19 @@ void CapturePage::update(const Snapshot &s)
     show(scenes_, !nocam && !counting);
     show(cancel_, !nocam && counting);
     dim(toggle_, counting);
+    /* recording: the red shutter, "Photo now" in the toggle's place, Scenes and Settings dimmed (canvas) */
+    show(face_, !rec);
+    show(rec_face_, rec);
+    lv_obj_set_style_border_color(shutter_, lv_color_hex(rec ? col::kHot : col::kShutterRing), 0);
+    lv_label_set_text(toggle_text_, rec ? "Photo now" : "Photo | Video");
+    lv_obj_set_style_text_font(toggle_text_, cp0_ui_font_px(rec ? geo_.photo_now_px : geo_.toggle_px), 0);
+    lv_obj_set_width(toggle_text_, LV_SIZE_CONTENT);
+    lv_label_set_long_mode(toggle_text_, LV_LABEL_LONG_MODE_CLIP);
+    fit_label(toggle_text_, rec ? geo_.photo_now_px : geo_.toggle_px, geo_.toggle.w - 2 * std::max(2, static_cast<int>(4 * geo_.u)));
     show(title_, !nocam && !turned && !toast);
     show(note_, !nocam && !toast && !note.empty());
-    dim(scenes_, turned);
-    dim(settings_, turned || counting);
+    dim(scenes_, turned || rec);
+    dim(settings_, turned || counting || rec);
     if (!keep_picture && have_picture_) {
         lv_image_set_src(img_, nullptr);
         have_picture_ = false;

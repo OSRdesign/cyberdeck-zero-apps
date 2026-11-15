@@ -183,11 +183,7 @@ void instant()
     CHECK_EQ(e.width, 1920u); /* Instant: the Photo size streams */
     CHECK_EQ(e.height, 1080u);
     CHECK(e.datetime.empty()); /* the clock is not synchronised (forced): no date */
-    /* in Video mode the shutter takes no photo (recording is M3) */
-    ctl.toggle_capture_mode();
-    ctl.shutter(mono_ms());
-    CHECK(!ctl.step(mono_ms()).photo_busy);
-    ctl.toggle_capture_mode();
+    /* (in Video mode the shutter records: test_rec_app.cpp) */
     /* the review: newest first, move, delete */
     ctl.shutter(mono_ms());
     CHECK(step_until(ctl, 3000, [](const Snapshot &x) { return x.photos_saved == 2; }));

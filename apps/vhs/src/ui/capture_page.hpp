@@ -13,7 +13,11 @@
  *   Busy, NoAccess     the page with an empty picture box; the toast says why while it lasts
  *   Countdown          (canvas Countdown-480x320) the self-timer's red ring and number over the live picture, Cancel in
  *                      Scenes' place, Photo | Video and Settings dimmed, "Photo in 3 s" and the timer's note; a tap on
- *                      the picture cancels too
+ *                      the picture cancels too ("Video in 3 s" when the countdown starts a video)
+ *   Recording          (canvas Recording-480x320) the REC tag with the timer in the chip's place, the Sound-on tag at
+ *                      the picture's bottom left while the camera microphone hears something (not drawn without a
+ *                      microphone; hidden while the lamp is off: provisional), the red shutter, "Photo now" in
+ *                      Photo | Video's place, Scenes and Settings dimmed, "size, time left" and the canvas's note
  * A photo taken flashes the picture once (D30; brief 12.4 item 2: provisional, a white veil fading out in 0.25 s).
  * Settings does nothing yet (M6). LVGL thread only.
  */
@@ -72,6 +76,9 @@ private:
     lv_obj_t *title_ = nullptr, *note_ = nullptr;
     lv_obj_t *nc_title_ = nullptr, *nc_text_ = nullptr, *nc_hint_ = nullptr, *nc_scenes_ = nullptr;
     lv_obj_t *cd_ring_ = nullptr, *cd_num_ = nullptr, *cancel_ = nullptr, *flash_ = nullptr;
+    lv_obj_t *face_ = nullptr, *rec_face_ = nullptr, *toggle_text_ = nullptr;
+    lv_obj_t *rec_tag_ = nullptr, *rec_text_ = nullptr, *lamp_tag_ = nullptr;
+    lv_obj_t *make_tag(int x, int y, std::uint32_t dot, lv_obj_t **text);
     std::uint64_t flash_seen_ = 0;
     bool counting_ = false;
     static void box_cb(lv_event_t *e);

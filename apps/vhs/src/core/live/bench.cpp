@@ -96,6 +96,8 @@ ControllerConfig controller_config(const Options &o)
     c.settings_overrides = o.settings_overrides;
     c.folder = o.folder;
     c.clock_synced = o.clock_synced;
+    c.fake_mic = o.fake_mic;
+    c.fake_free_mb = o.fake_free_mb;
     return c;
 }
 
@@ -252,6 +254,8 @@ Options options_from_env(std::string *warnings)
     }
     o.fastdct = getenv_s("VHS_ACCURATE").empty() || getenv_s("VHS_ACCURATE") == "0";
     o.stats = !getenv_s("VHS_STATS").empty() && getenv_s("VHS_STATS") != "0";
+    o.fake_mic = getenv_s("VHS_FAKE_MIC");
+    if (!getenv_s("VHS_FAKE_FREE_MB").empty()) o.fake_free_mb = std::atol(getenv_s("VHS_FAKE_FREE_MB").c_str());
     return o;
 }
 

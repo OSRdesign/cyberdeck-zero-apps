@@ -1,0 +1,18 @@
+# VHS M3: P1 records the camera's MJPEG only (section 20); the wording is provisional.
+title VHS M3: a camera without MJPEG cannot record
+sizes 800x480 480x800
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+env VHS_FAKE yuyv
+
+wait 1500
+key r
+wait 400
+shot 01-refused
+expect text "Recording needs a camera that sends MJPEG."
+expect notext "Photo now"
+key esc
+expect quit

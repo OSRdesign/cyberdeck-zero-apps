@@ -73,15 +73,18 @@ VhsApp::VhsApp(lv_obj_t *screen) : screen_(screen)
     ctl_ = std::make_unique<Controller>(cc);
 
     CaptureActions act;
-    act.toggle = [this] {
-        ctl_->toggle_capture_mode();
+    act.toggle = [this] { /* "Photo now" in its place while recording */
+        if (ctl_->recording()) ctl_->photo_now(now_ms());
+        else ctl_->toggle_capture_mode();
         on_status_timer();
     };
     act.shutter = [this] {
         ctl_->shutter(now_ms());
         on_status_timer();
     };
-    act.scenes = [this] { open_review(); };
+    act.scenes = [this] {
+        if (!ctl_->recording()) open_review(); /* dimmed while recording */
+    };
     act.settings = [] { std::fprintf(stderr, "[vhs] settings: the page comes in M6\n"); };
     act.cancel = [this] {
         ctl_->cancel_countdown();
@@ -275,6 +278,11 @@ void VhsApp::on_back()
         close_review();
     } else if (ctl_->cancel_countdown()) {
         on_status_timer(); /* Esc during the countdown cancels it (D30, brief 12.4 item 1) */
+    } else if (ctl_->recording()) {
+        /* brief 12.4 item 1 (provisional): finish the scene, then quit (Cassette) */
+        std::fprintf(stderr, "[vhs] Esc while recording: the scene is finished, then VHS quits\n");
+        ctl_->finish_recording(RecStop::User);
+        cdk::request_quit(0);
     } else {
         cdk::request_quit(0);
     }
@@ -328,8 +336,11 @@ void VhsApp::on_key(const key_item &item)
     } else if (is(KEY_SPACE, ' ')) {
         ctl_->shutter(now_ms()); /* nothing during the countdown: a tap, Cancel, Esc or Stop cancels it (D30) */
         on_status_timer();
-    } else if (is(KEY_R, 'r') || is(KEY_S, 's')) {
-        std::fprintf(stderr, "[vhs] key %s: comes with a later milestone\n", code == KEY_R ? "R" : "S");
+    } else if (is(KEY_R, 'r')) {
+        ctl_->record(now_ms()); /* start (after the self-timer when set) or stop, in either mode (brief 12.3) */
+        on_status_timer();
+    } else if (is(KEY_S, 's')) {
+        std::fprintf(stderr, "[vhs] key S: the Settings page comes with M6\n");
     } else if (g && (code == KEY_UP || code == KEY_LEFT)) {
         lv_group_focus_prev(g);
     } else if (g && (code == KEY_DOWN || code == KEY_RIGHT)) {

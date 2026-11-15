@@ -206,6 +206,32 @@ void Capture::photo_from(const Frame &f)
     photo_armed_ = false;
 }
 
+void Capture::set_tap(FrameTap *tap, const ModeReq &expect)
+{
+    std::lock_guard<std::mutex> lock(tap_m_);
+    tap_ = tap;
+    tap_expect_ = expect;
+    tap_on_ = tap != nullptr;
+}
+
+void Capture::clear_tap()
+{
+    std::lock_guard<std::mutex> lock(tap_m_); /* waits for a tap_frame() in progress */
+    tap_ = nullptr;
+    tap_on_ = false;
+}
+
+void Capture::tap_from(const Frame &f)
+{
+    if (!tap_on_.load() || since_on_ <= static_cast<std::uint64_t>(kWarmupFrames)) return;
+    std::lock_guard<std::mutex> lock(tap_m_);
+    if (!tap_) return;
+    const ModeReq &e = tap_expect_;
+    if (e.valid() && (e.fourcc != f.mode.fourcc || e.w != f.mode.w || e.h != f.mode.h)) return;
+    tap_->tap_frame(f.data.data(), f.size, f.ts_us, f.mode);
+    tapped_.fetch_add(1);
+}
+
 void Capture::photo_fail(const std::string &why)
 {
     if (!photo_armed_.load()) return;
@@ -329,6 +355,7 @@ void Capture::run()
             f.gen = gen_;
             ++since_on_;
             photo_from(f); /* before publish: back() is still this frame */
+            tap_from(f);
             out_.publish();
             frames_.fetch_add(1);
             if (state() == CamState::Turned) set_state(CamState::Streaming, ""); /* held until the first frame */
