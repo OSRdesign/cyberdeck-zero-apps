@@ -35,6 +35,47 @@ double ms_between(std::int64_t a, std::int64_t b)
 
 } // namespace
 
+bool decode_jpeg_fit(const std::uint8_t *jpeg, std::size_t n, int box_w, int box_h, PixFmt fmt, Picture &out,
+                     std::string *err)
+{
+    JpegDecoder dec;
+    if (!dec.ok()) {
+        if (err) *err = TurboJpeg::get().error().empty() ? "no TurboJPEG decoder" : TurboJpeg::get().error();
+        return false;
+    }
+    JpegInfo info;
+    if (!dec.header(jpeg, n, info)) {
+        if (err) *err = "not a JPEG file: " + dec.last_error();
+        return false;
+    }
+    int fw = 0, fh = 0;
+    fit_size(info.w, info.h, box_w, box_h, fw, fh);
+    const int d = fit_denom(info.w, info.h, fw, fh);
+    const int dw = scaled_up(info.w, d), dh = scaled_up(info.h, d);
+    std::vector<std::uint8_t> scratch(static_cast<std::size_t>(dw) * dh * 4);
+    if (dec.decode_bgrx(jpeg, n, d, scratch.data(), dw * 4, false) < 0) {
+        if (err) *err = dec.last_error();
+        return false;
+    }
+    const int bpp = pix_bytes(fmt);
+    out.px.assign(static_cast<std::size_t>(fw) * fh * bpp, 0);
+    Axis ax, ay;
+    resample_bgrx(scratch.data(), dw, dh, dw * 4, fmt, out.px.data(), fw, fh, fw * bpp, ax, ay);
+    out.fmt = fmt;
+    out.w = fw;
+    out.h = fh;
+    out.stride = fw * bpp;
+    out.box_w = box_w;
+    out.box_h = box_h;
+    out.mode.fourcc = kMJPG;
+    out.mode.w = info.w;
+    out.mode.h = info.h;
+    out.denom = d;
+    out.dec_w = dw;
+    out.dec_h = dh;
+    return true;
+}
+
 Pipeline::Pipeline(PipelineConfig cfg) : cfg_(std::move(cfg)), capture_(capture_config(cfg_), frames_)
 {
     denom_ = cfg_.denom;
@@ -53,6 +94,9 @@ void Pipeline::start()
 {
     if (started_.exchange(true)) return;
     stop_ = false;
+    /* the decode thread's TurboJPEG handle is made here, on the starting thread: libjpeg-turbo reads the environment
+     * when a handle is made, which must not race with a setenv of the main thread */
+    if (TurboJpeg::get().available() && !decoder_) decoder_ = std::make_unique<JpegDecoder>();
     capture_.start();
     decode_thread_ = std::thread([this] { decode_loop(); });
     sample_thread_ = std::thread([this] { sample_loop(); });
@@ -140,8 +184,7 @@ void Pipeline::set_on_interval(std::function<void(const Interval &)> fn)
 void Pipeline::decode_loop()
 {
     decode_tid_ = current_tid();
-    std::unique_ptr<JpegDecoder> dec;
-    if (TurboJpeg::get().available()) dec = std::make_unique<JpegDecoder>();
+    std::unique_ptr<JpegDecoder> dec = std::move(decoder_);
     std::vector<std::uint8_t> scratch;
     while (!stop_) {
         if (!frames_.wait_take(100)) continue;

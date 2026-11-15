@@ -28,6 +28,7 @@
 #pragma once
 
 #include "camera.hpp"
+#include "jpeg/turbojpeg.hpp"
 #include "v4l2_api.hpp"
 
 #include <atomic>
@@ -117,6 +118,7 @@ private:
 
     mutable std::mutex m_;
     FakeOptions opt_;
+    std::unique_ptr<JpegEncoder> enc_; /* used under m_ */
     std::vector<CamMode> modes_;
     std::vector<std::vector<std::uint8_t>> canned_;
     std::string canned_error_;

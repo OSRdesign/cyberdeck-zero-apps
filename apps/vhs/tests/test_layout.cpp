@@ -25,14 +25,21 @@ bool overlap(const Rect &a, const Rect &b)
     return a.x < b.right() && b.x < a.right() && a.y < b.bottom() && b.y < a.bottom();
 }
 
-CaptureLayout make(int w, int h, int body_y, int target)
+CaptureLayoutIn input(int w, int h, int body_y, int target)
 {
     CaptureLayoutIn in;
     in.w = w;
     in.h = h;
     in.body_y = body_y;
     in.target = target;
-    return capture_layout(in);
+    /* the layout service's Square class (cp0_ui_classify) */
+    in.square = 5 * w >= 4 * h && 4 * w <= 5 * h && h >= 400;
+    return in;
+}
+
+CaptureLayout make(int w, int h, int body_y, int target)
+{
+    return capture_layout(input(w, h, body_y, target));
 }
 
 void common(const CaptureLayout &l, int w, int h, int target, bool expect_target)
@@ -59,6 +66,14 @@ void common(const CaptureLayout &l, int w, int h, int target, bool expect_target
         CHECK_EQ(l.toggle.w, 2 * target);
         CHECK(l.toggle.x >= l.picture.right());
         CHECK(!overlap(l.title, l.toggle) && !overlap(l.title, l.scenes) && !overlap(l.title, l.settings));
+    } else if (l.square) {
+        /* one row under the picture, every button TARGET high, the shutter TARGET round */
+        CHECK(l.toggle.y >= l.picture.bottom());
+        CHECK_EQ(l.toggle.y, l.settings.y);
+        CHECK_EQ(l.shutter.y, l.toggle.y);
+        CHECK_EQ(l.shutter.w, target);
+        CHECK(l.toggle.w >= target && l.scenes.w >= target && l.settings.w >= target);
+        CHECK(l.title.y >= l.toggle.bottom());
     } else {
         CHECK(l.shutter.y >= l.picture.bottom());
         CHECK(l.settings.y >= l.shutter.bottom());
@@ -110,6 +125,73 @@ void canvas_sizes()
     common(l, 320, 480, 44, true);
 }
 
+void square()
+{
+    /* G1 review: 480x480 gave a picture a column and a text block left about 240 px wide; the row gives the width */
+    const CaptureLayout a = make(480, 480, 64, 56); /* a 480x480 panel at 8.0 px/mm (Vinyl's np-square) */
+    CHECK(a.square && !a.column);
+    CHECK_EQ(a.picture.w, 432);
+    CHECK_EQ(a.picture.h, 243);
+    common(a, 480, 480, 56, true);
+    const CaptureLayout b = make(720, 720, 64, 70); /* the HackBerry, 10 px/mm */
+    CHECK(b.square);
+    CHECK_EQ(b.picture.w, 672);
+    common(b, 720, 720, 70, true);
+    const CaptureLayout c = make(480, 480, 64, 79); /* the harness's default 11.3 px/mm: height-limited, still wider */
+    CHECK(c.picture.w >= 288);
+    common(c, 480, 480, 79, true);
+    /* 640x480 is not square (4:3): the column stays (the row would leave it smaller) */
+    CHECK(make(640, 480, 56, 63).column);
+    CHECK(make(640, 480, 56, 63).picture.w == 448);
+    /* the canvas sizes are not square: unchanged */
+    CHECK(make(480, 320, 40, 44).column);
+    CHECK(!make(320, 480, 40, 44).square);
+}
+
+void countdown()
+{
+    const CaptureLayout l = make(480, 320, 40, 44);
+    CHECK_EQ(l.cd_d, 96);   /* the canvas's ring */
+    CHECK_EQ(l.cd_border, 6);
+    CHECK_EQ(l.cd_px, 52);
+    const CaptureLayout p = make(320, 480, 40, 44);
+    CHECK(p.cd_d <= p.picture.h);
+}
+
+void review()
+{
+    /* 480x320, the canvas's PhotoReview board: the picture, Previous at panel (368, 8), Next (368, 56), Send to Notes
+     * (368, 112), Delete (368, 160): 88 wide; TARGET high here (the canvas draws 40) */
+    ReviewLayout r = review_layout(input(480, 320, 40, 44));
+    CHECK(r.column);
+    CHECK(r.picture == (Rect{16, 52, 352, 198}));
+    CHECK(r.prev == (Rect{376, 52, 88, 44}));
+    CHECK_EQ(r.next.y, 52 + 44 + 8);
+    CHECK_EQ(r.notes.y, r.next.bottom() + 16);
+    CHECK_EQ(r.del.y, r.notes.bottom() + 8);
+    CHECK(inside(r.del, r.panel));
+    CHECK_EQ(r.title.y, 258);
+    struct Case {
+        int w, h, body_y, target;
+    };
+    for (const Case &c : {Case{320, 480, 40, 47}, Case{800, 480, 56, 64}, Case{480, 480, 64, 56}, Case{720, 720, 64, 70},
+                          Case{480, 800, 56, 60}, Case{640, 480, 56, 79}, Case{480, 320, 40, 45}}) {
+        r = review_layout(input(c.w, c.h, c.body_y, c.target));
+        const Rect screen{0, 0, c.w, c.h};
+        CHECK(inside(r.panel, screen));
+        CHECK(inside(r.picture, r.panel));
+        CHECK_EQ(r.picture.w % 16, 0);
+        for (const Rect &b : {r.prev, r.next, r.del}) {
+            CHECK(inside(b, r.panel));
+            CHECK(!overlap(b, r.picture));
+            CHECK(b.h >= c.target || c.target == 79);
+        }
+        CHECK(!overlap(r.prev, r.next) && !overlap(r.next, r.del));
+        CHECK(r.title.y >= r.picture.bottom());
+        if (!r.column) CHECK(r.title.y >= r.prev.bottom());
+    }
+}
+
 void classes()
 {
     /* the classes of D27 at the harness densities (TARGET = 7 mm): body_y from the class header */
@@ -122,7 +204,7 @@ void classes()
         {320, 480, 40, 47, true},    /* zero8 upright */
         {640, 480, 56, 63, true},    /* Medium, 9.0 px/mm */
         {800, 480, 56, 64, true},    /* the 7" DSI boards */
-        {480, 480, 64, 52, true},    /* Square */
+        {480, 480, 64, 52, true},    /* Square: the row */
         {720, 720, 64, 70, true},    /* Square */
         {480, 800, 56, 60, true},    /* Portrait tall */
         {480, 640, 56, 63, true},    /* Portrait */
@@ -152,4 +234,7 @@ void test_layout()
 {
     canvas_sizes();
     classes();
+    square();
+    countdown();
+    review();
 }

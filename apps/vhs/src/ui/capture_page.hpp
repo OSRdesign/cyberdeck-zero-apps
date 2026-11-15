@@ -11,8 +11,11 @@
  *                      dimmed, the canvas's note in the mode word's place
  *   NoCamera, NotBack, Failed   the NoCamera page: "No camera found", its line, [the replug hint or the reason], Scenes
  *   Busy, NoAccess     the page with an empty picture box; the toast says why while it lasts
- * M1 has no photo, recording, scenes or settings yet: the shutter, Scenes and Settings are drawn and focusable but do
- * nothing (M2, M4, M6). LVGL thread only.
+ *   Countdown          (canvas Countdown-480x320) the self-timer's red ring and number over the live picture, Cancel in
+ *                      Scenes' place, Photo | Video and Settings dimmed, "Photo in 3 s" and the timer's note; a tap on
+ *                      the picture cancels too
+ * A photo taken flashes the picture once (D30; brief 12.4 item 2: provisional, a white veil fading out in 0.25 s).
+ * Settings does nothing yet (M6). LVGL thread only.
  */
 #pragma once
 
@@ -36,6 +39,7 @@ constexpr const char *kReplugHint = "If you moved the camera's switch, unplug an
 
 struct CaptureActions {
     std::function<void()> shutter, toggle, scenes, settings;
+    std::function<void()> cancel; /* the countdown's Cancel and a tap on the picture during it */
 };
 
 class CapturePage {
@@ -50,6 +54,8 @@ public:
     /* A new picture (the frame timer): points the image at it (no copy), centred in the box. */
     void show_picture(const Picture &p);
     void focus_first();
+    /* The page shown or hidden (the photo review over it): its buttons leave the keypad group while hidden. */
+    void show_page(bool on);
 
 private:
     lv_obj_t *make_button(lv_obj_t *parent, const Rect &r, const char *name, int px, std::function<void()> fn,
@@ -65,11 +71,16 @@ private:
     lv_obj_t *shutter_ = nullptr, *toggle_ = nullptr, *scenes_ = nullptr, *settings_ = nullptr, *scenes_sub_ = nullptr;
     lv_obj_t *title_ = nullptr, *note_ = nullptr;
     lv_obj_t *nc_title_ = nullptr, *nc_text_ = nullptr, *nc_hint_ = nullptr, *nc_scenes_ = nullptr;
+    lv_obj_t *cd_ring_ = nullptr, *cd_num_ = nullptr, *cancel_ = nullptr, *flash_ = nullptr;
+    std::uint64_t flash_seen_ = 0;
+    bool counting_ = false;
+    static void box_cb(lv_event_t *e);
+    static void flash_anim_cb(void *obj, int32_t v);
     std::unique_ptr<Toast> toast_;
     lv_image_dsc_t dsc_{};
     bool have_picture_ = false;
     std::string last_key_;
-    std::function<void()> fns_[5];
+    std::function<void()> fns_[6];
 };
 
 } // namespace ui

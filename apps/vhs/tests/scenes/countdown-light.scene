@@ -1,0 +1,50 @@
+# VHS M2: the self-timer for a photo (D30; canvas Countdown-480x320) at 3 s (VHS_SET self_timer_s=3): the red
+# ring and number over the live picture, Cancel in Scenes' place; cancelled by Esc, then by a tap on the
+# picture (nothing taken), then left to run: one photo at zero (the review shows 1 of 1).
+title VHS M2 self-timer on a Light board (the amd64 tablet's class): the Photo size streams from the countdown's start, so zero acts at once
+sizes 800x480
+env VHS_FAKE 1
+env VHS_SOC other
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+env VHS_SET self_timer_s=3
+
+wait 1500
+key space
+wait 300
+shot 01-countdown-3
+expect text "Photo in 3 s"
+expect text "3"
+expect text "Cancel"
+expect text "1920x1080  30 fps"
+expect text "Self-timer 3 s: the countdown runs over the live picture. A tap, Esc or Stop cancels it and nothing is taken. For a video the recording starts at zero; for a photo the picture flashes once."
+expect notext "Scenes"
+wait 1000
+shot 02-countdown-2
+expect text "Photo in 2 s"
+key esc
+wait 400
+shot 03-cancelled-by-esc
+expect text "Photo"
+expect notext "Cancel"
+expect noquit
+wait 600
+key space
+wait 1300
+tap "2"
+wait 400
+shot 04-cancelled-by-tap
+expect notext "Cancel"
+wait 600
+key space
+wait 3600
+shot 05-taken
+expect notext "Cancel"
+tap "Scenes"
+wait 900
+shot 06-one-photo
+expect text "1 of 1"
+key esc
+wait 300
+key esc
+expect quit

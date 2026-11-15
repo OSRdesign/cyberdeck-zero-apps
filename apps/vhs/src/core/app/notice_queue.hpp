@@ -22,6 +22,9 @@ constexpr const char *kNoticePower = "Power too weak for the camera.";
 constexpr const char *kNoticeDiskFull = "Disk almost full: recording stopped."; /* red */
 constexpr const char *kNoticeNoSound = "No sound from the camera microphone.";
 constexpr const char *kNoticeDrops = "This board drops frames at this size.";
+/* Not on the canvas: provisional wording (brief 12.4 item 3, the Controller's at the gates). */
+constexpr const char *kNoticeNoMjpegPhoto = "Photos need a camera that sends MJPEG.";
+constexpr const char *kNoticePhotoFailed = "Photo not saved: "; /* + the reason */
 
 struct Notice {
     std::string text; /* "" = none */

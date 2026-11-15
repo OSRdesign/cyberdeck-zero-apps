@@ -24,6 +24,13 @@ constexpr const char *kTurnedNote = "The camera switch was moved. The picture co
                                     "the sizes the camera now offers.";
 constexpr const char *kNoCameraTitle = "No camera found";
 constexpr const char *kNoCameraText = "Plug the camera into a USB port. VHS shows the picture as soon as it appears.";
+/* the canvas's Countdown note, with the timer's own seconds */
+std::string countdown_note(int total)
+{
+    return "Self-timer " + std::to_string(total) +
+           " s: the countdown runs over the live picture. A tap, Esc or Stop cancels it and nothing is taken. For a "
+           "video the recording starts at zero; for a photo the picture flashes once.";
+}
 
 void plain(lv_obj_t *o)
 {
@@ -65,6 +72,29 @@ void dim(lv_obj_t *b, bool on)
     lv_obj_set_style_opa(b, on ? LV_OPA_50 : LV_OPA_COVER, 0);
 }
 
+/* A label too wide for its button (a dense panel: 480x480 at 11.3 px/mm) takes a font up to 20 % smaller, then wraps
+ * at its spaces onto two centred lines, instead of being cut; a label that fits keeps its font and natural size (the
+ * canvas sizes are unchanged). */
+void fit_label(lv_obj_t *l, int px, int room)
+{
+    if (room <= 0) return;
+    const char *text = lv_label_get_text(l);
+    lv_point_t sz;
+    int p = px;
+    for (; p >= std::max(10, px * 8 / 10); --p) {
+        lv_text_get_size(&sz, text, cp0_ui_font_px(p), 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        if (sz.x <= room) break;
+    }
+    if (p == px) return;
+    if (p < std::max(10, px * 8 / 10)) p = std::max(10, px * 8 / 10);
+    lv_obj_set_style_text_font(l, cp0_ui_font_px(p), 0);
+    if (sz.x > room && std::strchr(text, ' ')) {
+        lv_obj_set_width(l, room);
+        lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_WRAP);
+        lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
+    }
+}
+
 bool no_camera_page(CamState s)
 {
     return s == CamState::NoCamera || s == CamState::NotBack || s == CamState::Failed;
@@ -75,11 +105,17 @@ bool no_camera_page(CamState s)
 CapturePage::CapturePage(lv_obj_t *root, const CaptureLayout &geo, CaptureActions act)
     : root_(root), geo_(geo), act_(std::move(act))
 {
+    /* one layer over the page's root holds every object of this page (shown / hidden with the review page) */
+    root_ = lv_obj_create(root);
+    plain(root_);
+    lv_obj_set_pos(root_, 0, 0);
+    lv_obj_set_size(root_, LV_PCT(100), LV_PCT(100));
     fns_[0] = act_.shutter;
     fns_[1] = act_.toggle;
     fns_[2] = act_.scenes;
     fns_[3] = act_.settings;
     fns_[4] = act_.scenes;
+    fns_[5] = act_.cancel;
 
     panel_ = lv_obj_create(root_);
     plain(panel_);
@@ -122,6 +158,30 @@ CapturePage::CapturePage(lv_obj_t *root, const CaptureLayout &geo, CaptureAction
     lv_obj_center(dim_text_);
     show(dim_, false);
 
+    /* the countdown: the canvas's 96u ring (6u, red #e0553a) over a 35 % black disc, the number 52u white */
+    cd_ring_ = lv_obj_create(box_);
+    plain(cd_ring_);
+    lv_obj_set_size(cd_ring_, geo_.cd_d, geo_.cd_d);
+    lv_obj_set_style_radius(cd_ring_, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(cd_ring_, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(cd_ring_, 89, 0); /* rgba(0,0,0,.35) */
+    lv_obj_set_style_border_color(cd_ring_, lv_color_hex(col::kHot), 0);
+    lv_obj_set_style_border_width(cd_ring_, geo_.cd_border, 0);
+    lv_obj_center(cd_ring_);
+    cd_num_ = label(cd_ring_, geo_.cd_px, col::kWhite);
+    lv_obj_center(cd_num_);
+    show(cd_ring_, false);
+    /* the flash: a white veil over the picture, faded out */
+    flash_ = lv_obj_create(box_);
+    plain(flash_);
+    lv_obj_set_pos(flash_, 0, 0);
+    lv_obj_set_size(flash_, geo_.picture.w, geo_.picture.h);
+    lv_obj_set_style_bg_color(flash_, lv_color_white(), 0);
+    lv_obj_set_style_bg_opa(flash_, LV_OPA_COVER, 0);
+    show(flash_, false);
+    /* a tap on the picture cancels the countdown (the box takes taps only then) */
+    lv_obj_add_event_cb(box_, box_cb, LV_EVENT_CLICKED, this);
+
     shutter_ = lv_button_create(root_);
     lv_obj_remove_style_all(shutter_);
     place(shutter_, geo_.shutter);
@@ -152,6 +212,12 @@ CapturePage::CapturePage(lv_obj_t *root, const CaptureLayout &geo, CaptureAction
     lv_obj_set_user_data(scenes_, reinterpret_cast<void *>(static_cast<std::intptr_t>(2)));
     settings_ = make_button(root_, geo_.settings, "Settings", geo_.button_px, nullptr);
     lv_obj_set_user_data(settings_, reinterpret_cast<void *>(static_cast<std::intptr_t>(3)));
+    /* the countdown's Cancel: the canvas's primary button in Scenes' place */
+    cancel_ = make_button(root_, geo_.scenes, "Cancel", geo_.button_px, nullptr);
+    lv_obj_set_user_data(cancel_, reinterpret_cast<void *>(static_cast<std::intptr_t>(5)));
+    lv_obj_set_style_bg_color(cancel_, lv_color_hex(col::kPrimary), 0);
+    lv_obj_set_style_text_color(lv_obj_get_child(cancel_, 0), lv_color_hex(col::kWhite), 0);
+    show(cancel_, false);
 
     title_ = label(root_, geo_.title_px, col::kText);
     lv_obj_set_pos(title_, geo_.title.x, geo_.title.y);
@@ -180,7 +246,7 @@ CapturePage::CapturePage(lv_obj_t *root, const CaptureLayout &geo, CaptureAction
     toast_ = std::make_unique<Toast>(root_, geo_.toast, geo_.toast_px, nullptr);
 
     if (lv_group_t *g = cdk::input_group()) {
-        for (lv_obj_t *b : {shutter_, toggle_, scenes_, settings_, nc_scenes_}) lv_group_add_obj(g, b);
+        for (lv_obj_t *b : {shutter_, toggle_, scenes_, cancel_, settings_, nc_scenes_}) lv_group_add_obj(g, b);
     }
     for (lv_obj_t *o : {nc_title_, nc_text_, nc_hint_, nc_scenes_}) show(o, false);
     show(chip_, false);
@@ -211,6 +277,7 @@ lv_obj_t *CapturePage::make_button(lv_obj_t *parent, const Rect &r, const char *
     lv_obj_set_flex_align(b, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_t *n = label(b, px, col::kText);
     lv_label_set_text(n, name);
+    fit_label(n, px, r.w - 2 * std::max(2, static_cast<int>(4 * geo_.u)));
     if (sub) {
         *sub = label(b, geo_.sub_px, col::kMuted);
         show(*sub, false); /* the scene count comes with Scenes (M4) */
@@ -224,7 +291,20 @@ void CapturePage::button_cb(lv_event_t *e)
     auto *self = static_cast<CapturePage *>(lv_event_get_user_data(e));
     lv_obj_t *b = static_cast<lv_obj_t *>(lv_event_get_current_target(e));
     const int i = static_cast<int>(reinterpret_cast<std::intptr_t>(lv_obj_get_user_data(b)));
-    if (i >= 0 && i < 5 && self->fns_[i]) self->fns_[i]();
+    if (i >= 0 && i < 6 && self->fns_[i]) self->fns_[i]();
+}
+
+void CapturePage::box_cb(lv_event_t *e)
+{
+    auto *self = static_cast<CapturePage *>(lv_event_get_user_data(e));
+    if (self->counting_ && self->act_.cancel) self->act_.cancel();
+}
+
+void CapturePage::flash_anim_cb(void *obj, int32_t v)
+{
+    lv_obj_t *o = static_cast<lv_obj_t *>(obj);
+    lv_obj_set_style_bg_opa(o, static_cast<lv_opa_t>(v), 0);
+    if (v <= 0) lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
 }
 
 void CapturePage::place_nocamera(bool hint)
@@ -239,6 +319,19 @@ void CapturePage::place_nocamera(bool hint)
     lv_obj_set_pos(nc_hint_, geo_.nc_hint.x, geo_.nc_hint.y);
     lv_obj_set_width(nc_hint_, geo_.nc_hint.w);
     place(nc_scenes_, b);
+}
+
+void CapturePage::show_page(bool on)
+{
+    show(root_, on);
+    lv_group_t *g = cdk::input_group();
+    if (g) {
+        for (lv_obj_t *b : {shutter_, toggle_, scenes_, cancel_, settings_, nc_scenes_}) {
+            if (on) lv_group_add_obj(g, b);
+            else lv_group_remove_obj(b);
+        }
+    }
+    last_key_.clear(); /* everything set again at the next update */
 }
 
 void CapturePage::focus_first()
@@ -281,17 +374,40 @@ void CapturePage::update(const Snapshot &s)
         set_text(chip_, std::to_string(s.mode.w) + "x" + std::to_string(s.mode.h) + "  " + std::to_string(s.mode.fps) + " fps");
     show(chip_, live && s.mode.valid() && have_picture_);
 
+    /* the flash: once per photo taken */
+    if (s.flash != flash_seen_) {
+        const bool first = flash_seen_ == 0 && s.flash > 1; /* a page made after photos: no flash for old ones */
+        flash_seen_ = s.flash;
+        if (!first && live) {
+            lv_anim_t a;
+            lv_anim_init(&a);
+            lv_anim_set_var(&a, flash_);
+            lv_anim_set_values(&a, 230, 0);
+            lv_anim_set_duration(&a, 250);
+            lv_anim_set_exec_cb(&a, flash_anim_cb);
+            lv_obj_set_style_bg_opa(flash_, 230, 0);
+            show(flash_, true);
+            lv_obj_move_foreground(flash_);
+            lv_anim_start(&a);
+        }
+    }
+    /* the countdown */
+    const bool counting = s.countdown > 0 && live;
+    if (counting) set_text(cd_num_, std::to_string(s.countdown));
+
     /* the mode word and the note */
     const bool photo = s.capture_mode == CaptureMode::Photo;
     std::string note;
     if (turned) {
         note = kTurnedNote;
+    } else if (counting) {
+        note = countdown_note(s.timer_total);
     } else if (!s.camera.empty()) {
         note = s.camera + (s.yuyv ? ", YUYV. " : ", MJPEG. ");
         /* the Video line is provisional (the canvas draws the Photo mode only) */
         note += photo ? "Space takes a photo, Tab switches to Video, R records." : "Space or R records, Tab switches to Photo.";
     }
-    set_text(title_, photo ? "Photo" : "Video");
+    set_text(title_, counting ? "Photo in " + std::to_string(s.countdown) + " s" : (photo ? "Photo" : "Video"));
     set_text(note_, note);
     lv_obj_set_pos(note_, geo_.note.x, turned ? geo_.title.y : geo_.note.y);
 
@@ -299,16 +415,25 @@ void CapturePage::update(const Snapshot &s)
     const bool toast = toast_->set(s.notice);
 
     const std::string key = std::string(state_name(s.state)) + "|" + (s.replug_hint ? "hint" : "") + "|" + s.detail +
-                            "|" + (toast ? "toast" : "") + "|" + (note.empty() ? "" : "note");
+                            "|" + (toast ? "toast" : "") + "|" + (note.empty() ? "" : "note") + "|" +
+                            (counting ? "count" : "");
     if (key == last_key_) return;
     last_key_ = key;
+    counting_ = counting;
+    show(cd_ring_, counting);
+    if (counting) lv_obj_move_foreground(cd_ring_);
+    if (counting) lv_obj_add_flag(box_, LV_OBJ_FLAG_CLICKABLE);
+    else lv_obj_remove_flag(box_, LV_OBJ_FLAG_CLICKABLE);
 
-    for (lv_obj_t *o : {box_, shutter_, scenes_, settings_}) show(o, !nocam);
+    for (lv_obj_t *o : {box_, shutter_, settings_}) show(o, !nocam);
     show(toggle_, !nocam && !turned);
+    show(scenes_, !nocam && !counting);
+    show(cancel_, !nocam && counting);
+    dim(toggle_, counting);
     show(title_, !nocam && !turned && !toast);
     show(note_, !nocam && !toast && !note.empty());
     dim(scenes_, turned);
-    dim(settings_, turned);
+    dim(settings_, turned || counting);
     if (!keep_picture && have_picture_) {
         lv_image_set_src(img_, nullptr);
         have_picture_ = false;

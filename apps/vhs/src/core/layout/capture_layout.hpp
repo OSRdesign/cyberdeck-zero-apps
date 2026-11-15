@@ -7,9 +7,11 @@
  * Notices-480x320) draws 480x320 and 320x480 with a 44 px touch target. Its sizes are kept in canvas units
  * u = TARGET / 44, so at a 44 px TARGET they are the canvas's pixels and on a denser panel they grow with the touch
  * target. The other classes are derived by the spike's rule:
- *   - landscape and square: the picture box is the largest 16:9 box whose width is a multiple of 16 (352x198 at 480x320,
- *     the canvas), with a column 2 x TARGET wide at the panel's right edge: the shutter (72u, the column minus 16u),
- *     then Photo | Video, Scenes and Settings; the mode word ("Photo") and the note under the picture;
+ *   - landscape: the picture box is the largest 16:9 box whose width is a multiple of 16 (352x198 at 480x320, the
+ *     canvas), with a column 2 x TARGET wide at the panel's right edge: the shutter (72u, the column minus 16u), then
+ *     Photo | Video, Scenes and Settings; the mode word ("Photo") and the note under the picture;
+ *   - square (the layout service's Square class; G1 review, 2026-11-15): the picture across the panel and one row of
+ *     TARGET-high buttons under it (Photo | Video, the shutter, Scenes, Settings), then the mode word and the note;
  *   - portrait: the picture across the panel (288x162 at 320x480), then a row of Photo | Video, the shutter and Scenes
  *     (the canvas's 88 x 56 side buttons and 84 px shutter), Settings across, the mode word and the note.
  * Buttons are at least TARGET high (the canvas draws 34 and 40 px buttons at 480x320, under its 44 px target; brief
@@ -26,11 +28,13 @@ struct CaptureLayoutIn {
     int w = 0, h = 0;  /* the canvas */
     int body_y = 0;    /* under the header */
     int target = 44;   /* TARGET */
+    bool square = false; /* the layout service's Square class (cp0_ui_classify: 0.8 <= w/h <= 1.25, h >= 400) */
 };
 
 struct CaptureLayout {
     double u = 1;      /* canvas units: TARGET / 44 */
-    bool column = true;/* landscape / square: the buttons in a column right of the picture */
+    bool column = true;/* landscape (not square): the buttons in a column right of the picture */
+    bool square = false; /* Square class: the picture across the panel, one row of buttons under it (G1 review) */
     Rect panel, picture;
     Rect shutter, toggle, scenes, settings;
     Rect title, note, toast;
@@ -44,9 +48,22 @@ struct CaptureLayout {
     Rect nc_title, nc_text, nc_scenes;
     Rect nch_title, nch_text, nc_hint, nch_scenes;
     int nc_title_px = 18, nc_text_px = 13, nc_hint_px = 11, nc_scenes_px = 14;
+    /* the self-timer's countdown ring, centred on the picture (canvas Countdown-480x320); Cancel takes Scenes' place */
+    int cd_d = 96, cd_border = 6, cd_px = 52;
+};
+
+/* The photo review page (canvas PhotoReview-480x320): the capture page's panel, picture and text places; Previous,
+ * Next, Send to Notes (optional, M6: its slot kept, not drawn in P1 yet) and Delete. */
+struct ReviewLayout {
+    double u = 1;
+    bool column = true;
+    Rect panel, picture, prev, next, notes, del, title, note;
+    int chip_x = 0, chip_y = 0;
+    int title_px = 14, note_px = 11, chip_px = 11, button_px = 12, notes_px = 11;
 };
 
 int floor16(int v);
 CaptureLayout capture_layout(const CaptureLayoutIn &in);
+ReviewLayout review_layout(const CaptureLayoutIn &in);
 
 } // namespace vhs

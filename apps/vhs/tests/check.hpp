@@ -92,3 +92,6 @@ void test_pipeline();
 void test_turbojpeg();
 void test_cli();
 void test_controller();
+void test_jpeg();
+void test_naming();
+void test_photo();

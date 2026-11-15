@@ -125,6 +125,99 @@ void Capture::reopen()
     sleep_cv_.notify_all();
 }
 
+void Capture::hold_mode(const ModeReq &m)
+{
+    {
+        std::lock_guard<std::mutex> lock(status_m_);
+        hold_ = m;
+        hold_on_ = true;
+        const bool need = !(status_.mode.fourcc == m.fourcc && status_.mode.w == m.w && status_.mode.h == m.h);
+        hold_switched_ = need;
+        if (need) mode_change_ = true;
+    }
+    {
+        std::lock_guard<std::mutex> lock(sleep_m_);
+    }
+    sleep_cv_.notify_all();
+}
+
+void Capture::release_hold()
+{
+    {
+        std::lock_guard<std::mutex> lock(status_m_);
+        if (!hold_on_) return;
+        hold_on_ = false;
+        if (hold_switched_) mode_change_ = true; /* back to the preview's mode */
+        hold_switched_ = false;
+    }
+    {
+        std::lock_guard<std::mutex> lock(sleep_m_);
+    }
+    sleep_cv_.notify_all();
+}
+
+bool Capture::holding() const
+{
+    std::lock_guard<std::mutex> lock(status_m_);
+    return hold_on_;
+}
+
+void Capture::request_photo(const ModeReq &expect, std::uint64_t id)
+{
+    std::lock_guard<std::mutex> lock(photo_m_);
+    photo_expect_ = expect;
+    photo_id_ = id;
+    photo_ready_ = false;
+    photo_ = PhotoShot();
+    photo_armed_ = true;
+}
+
+void Capture::cancel_photo()
+{
+    std::lock_guard<std::mutex> lock(photo_m_);
+    photo_armed_ = false;
+    photo_ready_ = false;
+}
+
+bool Capture::take_photo(PhotoShot &out)
+{
+    std::lock_guard<std::mutex> lock(photo_m_);
+    if (!photo_ready_) return false;
+    out = std::move(photo_);
+    photo_ = PhotoShot();
+    photo_ready_ = false;
+    return true;
+}
+
+void Capture::photo_from(const Frame &f)
+{
+    if (!photo_armed_.load() || since_on_ <= static_cast<std::uint64_t>(kWarmupFrames)) return;
+    std::lock_guard<std::mutex> lock(photo_m_);
+    if (!photo_armed_.load()) return;
+    const ModeReq &e = photo_expect_;
+    if (e.valid() && !(e.fourcc == f.mode.fourcc && e.w == f.mode.w && e.h == f.mode.h)) return;
+    photo_.id = photo_id_;
+    photo_.ok = true;
+    photo_.data.assign(f.data.begin(), f.data.begin() + static_cast<std::ptrdiff_t>(f.size));
+    photo_.mode = f.mode;
+    photo_.ts_us = f.ts_us;
+    photo_.seq = f.seq;
+    photo_ready_ = true;
+    photo_armed_ = false;
+}
+
+void Capture::photo_fail(const std::string &why)
+{
+    if (!photo_armed_.load()) return;
+    std::lock_guard<std::mutex> lock(photo_m_);
+    if (!photo_armed_.load()) return;
+    photo_ = PhotoShot();
+    photo_.id = photo_id_;
+    photo_.error = why;
+    photo_ready_ = true;
+    photo_armed_ = false;
+}
+
 CaptureStatus Capture::status() const
 {
     std::lock_guard<std::mutex> lock(status_m_);
@@ -234,6 +327,8 @@ void Capture::run()
             if (f.ts_us <= 0 || f.ts_us > now) f.ts_us = now;
             f.dq_us = now;
             f.gen = gen_;
+            ++since_on_;
+            photo_from(f); /* before publish: back() is still this frame */
             out_.publish();
             frames_.fetch_add(1);
             if (state() == CamState::Turned) set_state(CamState::Streaming, ""); /* held until the first frame */
@@ -241,6 +336,7 @@ void Capture::run()
         if (b.index < maps_.size() && cfg_.api->ioctl(fd_, VIDIOC_QBUF, &b) != 0) lost(errno, "QBUF");
     }
     close_device();
+    photo_fail("the camera was released");
 }
 
 void Capture::absent()
@@ -270,6 +366,7 @@ void Capture::lost(int err, const char *where)
             status_.lost_ms = lost_ms_;
         }
         std::fprintf(stderr, "[vhs] camera: gone (%s: %s)\n", where, std::strerror(err));
+        photo_fail("the camera went away");
         absent();
     } else {
         set_state(CamState::Failed, std::string(where) + ": " + std::strerror(err));
@@ -302,10 +399,13 @@ bool Capture::open_device(const CameraRef &ref)
     const std::int64_t now = mono_ms();
     const bool returning = lost_ms_ != 0 && now - lost_ms_ <= cfg_.back_window_ms && same_camera(ref, lost_ref_);
     const bool turned = returning && portrait != lost_portrait_;
-    ModeReq want;
+    ModeReq want, hold;
+    bool holding = false;
     {
         std::lock_guard<std::mutex> lock(status_m_);
         want = want_;
+        hold = hold_;
+        holding = hold_on_;
         status_.card = info.card;
         status_.listed = listed;
         status_.device = ref.path;
@@ -314,7 +414,9 @@ bool Capture::open_device(const CameraRef &ref)
     }
     std::string note;
     ModeReq mode;
-    if (!(want.valid() && resolve_mode(listed, want, mode))) {
+    if (holding && hold.valid() && resolve_mode(listed, hold, mode)) {
+        /* the hold (a Light photo, a countdown in Light) */
+    } else if (!(want.valid() && resolve_mode(listed, want, mode))) {
         if (want.valid()) note = mode_text(want) + " not offered";
         mode = cfg_.choose ? cfg_.choose(listed, ref.id) : ModeReq();
         if (!mode.valid() || !resolve_mode(listed, mode, mode)) mode = fallback_mode(listed);
@@ -383,6 +485,7 @@ bool Capture::open_device(const CameraRef &ref)
     streaming_ = true;
     had_stream_ = true;
     have_seq_ = false;
+    since_on_ = 0;
     eio_run_ = err_polls_ = 0;
     mode_ = mode;
     cur_ = ref;

@@ -52,6 +52,10 @@ bool valid_prefix(const std::string &p);
 /* 0, 3, 5, 10: the nearest (a tie goes to the shorter). */
 int clamp_self_timer(int s);
 
+/* "photo_mode=light,photo_size=1280x960,self_timer_s=3,prefix=take" over s (the fake camera's scenes, VHS_SET);
+ * unknown keys and bad values are ignored. */
+void apply_settings_overrides(Settings &s, const std::string &list);
+
 /* $VHS_SETTINGS, else $XDG_CONFIG_HOME/vhs/settings.json, else ~/.config/vhs/settings.json. */
 std::string settings_path();
 

@@ -42,6 +42,26 @@ int clamp_self_timer(int s)
     return best;
 }
 
+void apply_settings_overrides(Settings &s, const std::string &list)
+{
+    std::size_t i = 0;
+    while (i <= list.size()) {
+        std::size_t j = list.find(',', i);
+        if (j == std::string::npos) j = list.size();
+        const std::string item = list.substr(i, j - i);
+        const std::size_t eq = item.find('=');
+        if (eq != std::string::npos) {
+            const std::string k = item.substr(0, eq), v = item.substr(eq + 1);
+            if (k == "photo_mode") s.have_photo_mode = parse_photo_mode(v, s.photo_mode);
+            else if (k == "photo_size") parse_size(v, s.photo_size);
+            else if (k == "video_size") parse_size(v, s.video_size);
+            else if (k == "self_timer_s") s.self_timer_s = clamp_self_timer(std::atoi(v.c_str()));
+            else if (k == "prefix" && valid_prefix(v)) s.prefix = v;
+        }
+        i = j + 1;
+    }
+}
+
 std::string settings_path()
 {
     if (const char *p = std::getenv("VHS_SETTINGS"))

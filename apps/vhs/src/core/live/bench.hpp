@@ -15,10 +15,12 @@
  * every second instead of every 10 s). The app reads them as environment variables (main() sets them, the scenes use
  * them): VHS_MODE, VHS_SCALE, VHS_DEVICE, VHS_DEV_ROOT, VHS_SYS_ROOT, VHS_FORMAT, VHS_ACCURATE, VHS_FAKE, VHS_FAKE_FILE,
  * VHS_STATS; the scenes' fake-camera fixtures VHS_FAKE_SCRIPT, VHS_FAKE_RESTART_MS, VHS_FAKE_BUS, VHS_FAKE_CTRL,
- * VHS_FAKE_UNDERVOLT, VHS_SOC (the SoC class instead of the detected one); VHS_TURBOJPEG (a library path, turbojpeg.hpp); VHS_SETTINGS (settings.hpp).
+ * VHS_FAKE_UNDERVOLT, VHS_SOC (the SoC class instead of the detected one), VHS_SET (settings for the fake camera),
+ * VHS_FOLDER, VHS_CLOCK_SYNCED; the scenes' VHS_DEMO_NOTICES; VHS_TURBOJPEG (a library path, turbojpeg.hpp); VHS_SETTINGS (settings.hpp).
  */
 #pragma once
 
+#include "app/controller.hpp"
 #include "camera/camera.hpp"
 #include "camera/fake_camera.hpp"
 #include "convert.hpp"
@@ -38,6 +40,9 @@ struct Options {
     std::string dev_root = "/dev";
     std::string sys_root;        /* "" = the real system */
     std::string soc;             /* VHS_SOC (scenes): "bcm2712", "bcm2711", "bcm2837", "other"; "" = detected */
+    std::string settings_overrides; /* VHS_SET (the fake camera's scenes): "photo_mode=light,self_timer_s=3" */
+    std::string folder;          /* VHS_FOLDER: the folder instead of Settings > Folder */
+    int clock_synced = -1;       /* VHS_CLOCK_SYNCED: 0 / 1 instead of systemd-timesyncd's marker */
     ModeReq mode;                /* not valid = the board's selection */
     int denom = 0;               /* 0 = the fit rule */
     bool fmt_set = false;        /* false: the page uses the display's format */
@@ -65,6 +70,9 @@ std::string cli_usage();
 Options options_from_env(std::string *warnings = nullptr);
 
 bool parse_box(const std::string &s, int &w, int &h);
+
+/* The controller's configuration for these options (the app sets the box, the pixel format and its thread). */
+ControllerConfig controller_config(const Options &o);
 
 int run_bench(const Cli &cli);
 int run_list(const Cli &cli);

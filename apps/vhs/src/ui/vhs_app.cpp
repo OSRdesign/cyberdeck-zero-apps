@@ -28,6 +28,15 @@ const Notice kDemoNotices[] = {
     {kNoticeDiskFull, true},   {kNoticeNoSound, false},  {kNoticeDrops, false},
 };
 
+/* not on the canvas: provisional wording (brief 12.4 item 3) */
+constexpr const char *kDeleteTitle = "Delete this photo?";
+constexpr const char *kDeleteKeys = "Y = Delete, Enter or Esc = Cancel";
+
+std::int64_t now_ms()
+{
+    return mono_us() / 1000;
+}
+
 } // namespace
 
 VhsApp::VhsApp(lv_obj_t *screen) : screen_(screen)
@@ -45,7 +54,7 @@ VhsApp::VhsApp(lv_obj_t *screen) : screen_(screen)
 
     const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
     cp0_ui_roller_page(m, cp0::ui::status_strip_left(), &layout_);
-    page_ = std::make_unique<cp0::ui::Page>(screen_, layout_, cp0::ui::add_title, [] { cdk::request_quit(0); });
+    page_ = std::make_unique<cp0::ui::Page>(screen_, layout_, cp0::ui::add_title, [this] { on_back(); });
     cp0::ui::StatusStrip::add(page_->header());
     page_->set_title({"VHS"});
     CaptureLayoutIn in;
@@ -53,39 +62,43 @@ VhsApp::VhsApp(lv_obj_t *screen) : screen_(screen)
     in.h = layout_.h;
     in.body_y = layout_.body_y;
     in.target = m->tok[CP0_TOK_TARGET];
+    in.square = m->cls == CP0_UI_SQUARE;
     geo_ = capture_layout(in);
+    rgeo_ = review_layout(in);
 
-    ControllerConfig cc;
-    cc.fake = opt.fake;
-    cc.fake_opt = opt.fake_opt;
-    cc.fake_script = opt.fake_script;
-    cc.force_undervolt = opt.fake_undervolt;
-    cc.device = opt.device;
-    cc.dev_root = opt.dev_root;
-    cc.sys_root = opt.sys_root;
-    cc.persist = !opt.fake;
-    cc.fmt = opt.fmt;
+    ControllerConfig cc = controller_config(opt);
     cc.box_w = geo_.picture.w;
     cc.box_h = geo_.picture.h;
-    cc.fastdct = opt.fastdct;
     cc.ui_tid = current_tid();
-    cc.log_every = opt.stats ? 1 : 10;
-    cc.mode = opt.mode;
-    cc.denom = opt.denom;
-    cc.soc_override = opt.soc;
     ctl_ = std::make_unique<Controller>(cc);
 
     CaptureActions act;
-    act.toggle = [this] { ctl_->toggle_capture_mode(); on_status_timer(); };
-    act.shutter = [] { std::fprintf(stderr, "[vhs] shutter: photo comes in M2\n"); };
-    act.scenes = [] { std::fprintf(stderr, "[vhs] scenes: the list comes in M4\n"); };
+    act.toggle = [this] {
+        ctl_->toggle_capture_mode();
+        on_status_timer();
+    };
+    act.shutter = [this] {
+        ctl_->shutter(now_ms());
+        on_status_timer();
+    };
+    act.scenes = [this] { open_review(); };
     act.settings = [] { std::fprintf(stderr, "[vhs] settings: the page comes in M6\n"); };
+    act.cancel = [this] {
+        ctl_->cancel_countdown();
+        on_status_timer();
+    };
     capture_ = std::make_unique<CapturePage>(page_->root(), geo_, act);
+    ReviewActions ra;
+    ra.prev = [this] { ctl_->review_move(-1); };
+    ra.next = [this] { ctl_->review_move(1); };
+    ra.del = [this] { ask_delete(); };
+    review_ = std::make_unique<ReviewPage>(page_->root(), rgeo_, ra);
 
-    std::fprintf(stderr, "[vhs] page %dx%d, target %d, picture box %dx%d, %s, %s, refresh %d ms, camera %s, TurboJPEG %s\n",
-                 layout_.w, layout_.h, in.target, geo_.picture.w, geo_.picture.h, pix_name(opt.fmt),
-                 opt.fastdct ? "fastdct" : "accurate DCT", static_cast<int>(LV_DEF_REFR_PERIOD),
-                 opt.fake ? "fake" : (opt.device.empty() ? "discovery" : opt.device.c_str()),
+    std::fprintf(stderr,
+                 "[vhs] page %dx%d (%s), target %d, picture box %dx%d, %s, %s, refresh %d ms, camera %s, TurboJPEG %s\n",
+                 layout_.w, layout_.h, geo_.column ? "column" : (geo_.square ? "square row" : "portrait rows"), in.target,
+                 geo_.picture.w, geo_.picture.h, pix_name(opt.fmt), opt.fastdct ? "fastdct" : "accurate DCT",
+                 static_cast<int>(LV_DEF_REFR_PERIOD), opt.fake ? "fake" : (opt.device.empty() ? "discovery" : opt.device.c_str()),
                  TurboJpeg::get().available() ? TurboJpeg::get().path().c_str() : TurboJpeg::get().error().c_str());
     ctl_->start();
     const char *demo = std::getenv("VHS_DEMO_NOTICE");
@@ -109,7 +122,9 @@ VhsApp::~VhsApp()
     if (display_) lv_display_remove_event_cb_with_user_data(display_, display_cb, this);
     if (screen_ && lv_obj_is_valid(screen_) && LV_EVENT_KEYBOARD != 0)
         lv_obj_remove_event_cb_with_user_data(screen_, keyboard_cb, this);
-    capture_.reset(); /* the image lets go of the picture first */
+    dlg_.reset();
+    capture_.reset(); /* the images let go of the pictures first */
+    review_.reset();
     page_.reset();
     if (ctl_) ctl_->stop();
     ctl_.reset();
@@ -154,7 +169,7 @@ void VhsApp::on_display_event(lv_event_t *e)
 
 void VhsApp::on_frame_timer()
 {
-    if (cdk::hidden() || !ctl_->running()) return;
+    if (cdk::hidden() || in_review_ || !ctl_->running()) return;
     Pipeline &pipe = ctl_->pipeline();
     if (!pipe.pictures().take()) return;
     const Picture &p = pipe.pictures().front();
@@ -175,17 +190,100 @@ void VhsApp::on_status_timer()
         }
         return;
     }
-    if (!ctl_->running()) {
-        std::fprintf(stderr, "[vhs] shown: camera reopened\n");
+    if (!in_review_ && !ctl_->running()) {
+        std::fprintf(stderr, "[vhs] camera opened\n");
         ctl_->start();
     }
-    capture_->update(ctl_->step(mono_us() / 1000));
+    const Snapshot s = ctl_->step(now_ms());
+    if (in_review_) review_->update(ctl_->review(), ctl_->review_picture());
+    else capture_->update(s);
+}
+
+void VhsApp::open_review()
+{
+    if (in_review_) return;
+    ctl_->stop(); /* the camera is open only while the Capture page shows */
+    in_review_ = true;
+    capture_->show_page(false);
+    review_->show(true);
+    page_->set_title({"Photo"});
+    ctl_->review_open(rgeo_.picture.w, rgeo_.picture.h);
+    review_->focus_first();
+    std::fprintf(stderr, "[vhs] review: opened (the camera released)\n");
+}
+
+void VhsApp::close_review()
+{
+    if (!in_review_) return;
+    close_dialog();
+    ctl_->review_close();
+    review_->show(false);
+    in_review_ = false;
+    capture_->show_page(true);
+    page_->set_title({"VHS"});
+    on_status_timer(); /* the camera opens again */
+    capture_->focus_first();
+}
+
+void VhsApp::dialog_cancel_cb(void *p)
+{
+    static_cast<VhsApp *>(p)->dialog_choose(false);
+}
+
+void VhsApp::dialog_delete_cb(void *p)
+{
+    static_cast<VhsApp *>(p)->dialog_choose(true);
+}
+
+void VhsApp::ask_delete()
+{
+    if (!in_review_ || ctl_->review().count == 0 || dlg_) return;
+    /* the toolkit's dialog, as Vinyl's "Clear the queue?": Enter and Esc cancel, Y or the Delete button deletes */
+    cp0::ui::DialogSpec spec;
+    spec.title = kDeleteTitle;
+    spec.buttons.push_back({"Cancel", cp0::ui::ButtonRole::Primary, [this] { lv_async_call(dialog_cancel_cb, this); }});
+    spec.buttons.push_back({"Delete", cp0::ui::ButtonRole::Destructive, [this] { lv_async_call(dialog_delete_cb, this); }});
+    spec.page = page_.get();
+    dlg_ = std::make_unique<cp0::ui::Dialog>(page_->root(), layout_, std::move(spec));
+    dlg_->add_text(kDeleteKeys);
+    dlg_->relayout();
+    if (lv_group_t *g = cdk::input_group()) {
+        lv_group_add_obj(g, dlg_->focus_object());
+        lv_group_focus_obj(dlg_->focus_object());
+    }
+}
+
+void VhsApp::close_dialog()
+{
+    if (!dlg_) return;
+    dlg_.reset();
+    if (in_review_) review_->focus_first();
+}
+
+void VhsApp::dialog_choose(bool del)
+{
+    if (!dlg_) return;
+    close_dialog();
+    if (del) ctl_->review_delete();
+}
+
+void VhsApp::on_back()
+{
+    if (dlg_) {
+        dialog_choose(false);
+    } else if (in_review_) {
+        close_review();
+    } else if (ctl_->cancel_countdown()) {
+        on_status_timer(); /* Esc during the countdown cancels it (D30, brief 12.4 item 1) */
+    } else {
+        cdk::request_quit(0);
+    }
 }
 
 void VhsApp::demo_next_notice()
 {
     demo_index_ = (demo_index_ + 1) % static_cast<int>(sizeof kDemoNotices / sizeof kDemoNotices[0]);
-    ctl_->dismiss_notice(mono_us() / 1000);
+    ctl_->dismiss_notice(now_ms());
     ctl_->push_notice(kDemoNotices[demo_index_]);
     on_status_timer();
 }
@@ -201,16 +299,37 @@ void VhsApp::on_key(const key_item &item)
         if (ch >= 'A' && ch <= 'Z') ch = static_cast<char>(ch - 'A' + 'a');
     }
     auto is = [code, ch](std::uint32_t k, char c) { return code == k || (code == 0 && ch == c); };
+    if (dlg_) { /* the dialog takes Enter and Esc itself (its focus object); Y deletes */
+        if (is(KEY_Y, 'y')) dialog_choose(true);
+        else if (code == KEY_ESC) dialog_choose(false);
+        return;
+    }
     lv_group_t *g = cdk::input_group();
     if (code == KEY_ESC) {
-        cdk::request_quit(0);
+        on_back();
+        return;
+    }
+    if (in_review_) {
+        if (code == KEY_LEFT) ctl_->review_move(-1);
+        else if (code == KEY_RIGHT) ctl_->review_move(1);
+        else if (code == KEY_DELETE) ask_delete();
+        else if (g && code == KEY_UP) lv_group_focus_prev(g);
+        else if (g && code == KEY_DOWN) lv_group_focus_next(g);
+        on_status_timer();
+        return;
+    }
+    if (code == KEY_STOPCD || code == KEY_STOP) {
+        if (ctl_->cancel_countdown()) on_status_timer();
     } else if (is(KEY_TAB, '\t')) {
         ctl_->toggle_capture_mode();
         on_status_timer();
     } else if (demo_notices_ && is(KEY_N, 'n')) {
         demo_next_notice();
-    } else if (is(KEY_SPACE, ' ') || is(KEY_R, 'r') || is(KEY_S, 's')) {
-        std::fprintf(stderr, "[vhs] key %s: comes with a later milestone\n", code == KEY_SPACE ? "Space" : code == KEY_R ? "R" : "S");
+    } else if (is(KEY_SPACE, ' ')) {
+        ctl_->shutter(now_ms()); /* nothing during the countdown: a tap, Cancel, Esc or Stop cancels it (D30) */
+        on_status_timer();
+    } else if (is(KEY_R, 'r') || is(KEY_S, 's')) {
+        std::fprintf(stderr, "[vhs] key %s: comes with a later milestone\n", code == KEY_R ? "R" : "S");
     } else if (g && (code == KEY_UP || code == KEY_LEFT)) {
         lv_group_focus_prev(g);
     } else if (g && (code == KEY_DOWN || code == KEY_RIGHT)) {

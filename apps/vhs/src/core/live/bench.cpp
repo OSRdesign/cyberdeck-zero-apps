@@ -71,6 +71,9 @@ std::string getenv_s(const char *n)
     return v ? v : "";
 }
 
+
+} // namespace
+
 ControllerConfig controller_config(const Options &o)
 {
     ControllerConfig c;
@@ -90,10 +93,11 @@ ControllerConfig controller_config(const Options &o)
     c.denom = o.denom;
     c.log_every = o.stats ? 1 : 10;
     c.soc_override = o.soc;
+    c.settings_overrides = o.settings_overrides;
+    c.folder = o.folder;
+    c.clock_synced = o.clock_synced;
     return c;
 }
-
-} // namespace
 
 bool parse_box(const std::string &s, int &w, int &h)
 {
@@ -234,6 +238,9 @@ Options options_from_env(std::string *warnings)
     if (!getenv_s("VHS_DEV_ROOT").empty()) o.dev_root = getenv_s("VHS_DEV_ROOT");
     o.sys_root = getenv_s("VHS_SYS_ROOT");
     o.soc = getenv_s("VHS_SOC");
+    o.settings_overrides = getenv_s("VHS_SET");
+    o.folder = getenv_s("VHS_FOLDER");
+    if (!getenv_s("VHS_CLOCK_SYNCED").empty()) o.clock_synced = getenv_s("VHS_CLOCK_SYNCED") == "0" ? 0 : 1;
     const std::string mode = getenv_s("VHS_MODE");
     if (!mode.empty() && !parse_mode(mode, o.mode)) warn("VHS_MODE=" + mode + " ignored");
     const std::string scale = getenv_s("VHS_SCALE");

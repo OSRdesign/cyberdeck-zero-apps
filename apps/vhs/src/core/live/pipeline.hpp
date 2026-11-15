@@ -47,6 +47,11 @@ struct Picture {
     std::uint64_t gen = 0;        /* the capture session of its frame */
 };
 
+/* One JPEG (a photo file) decoded to fit a box (the photo review, brief 9.5): the fit rule and the resample of the live
+ * view (convert.hpp). Its own TurboJPEG handle (the scenes worker's call). False with err when it cannot be decoded. */
+bool decode_jpeg_fit(const std::uint8_t *jpeg, std::size_t n, int box_w, int box_h, PixFmt fmt, Picture &out,
+                     std::string *err);
+
 struct PipelineConfig {
     V4l2Api *api = nullptr;
     CameraFinder *finder = nullptr;
@@ -108,6 +113,9 @@ public:
      * end), lat_ms = the driver's timestamp -> end of that redraw; a negative value is not recorded */
     void note_refresh(double ui_ms, double render_ms, double lat_ms);
 
+    /* the capture thread's photo slot and mode hold (capture.hpp) */
+    Capture &capture() { return capture_; }
+
     /* facts, any thread */
     CaptureStatus camera() const { return capture_.status(); }
     bool decoder_ok() const { return TurboJpeg::get().available(); }
@@ -146,6 +154,7 @@ private:
     std::atomic<int> last_denom_{1}, last_dec_w_{0}, last_dec_h_{0}, last_fit_w_{0}, last_fit_h_{0};
     SampleSet dec_ms_, conv_ms_, ui_ms_, render_ms_, lat_ms_;
     Axis ax_, ay_; /* the decode thread's resample tables */
+    std::unique_ptr<JpegDecoder> decoder_; /* made by start(), then the decode thread's */
 
     mutable std::mutex m_;
     std::string last_decode_error_;

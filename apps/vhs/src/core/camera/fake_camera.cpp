@@ -136,6 +136,15 @@ std::unique_ptr<CameraFinder> make_fake_finder(FakeCamera &cam)
 FakeCamera::FakeCamera(FakeOptions o) : opt_(std::move(o))
 {
     if (opt_.frames < 1) opt_.frames = 1;
+    /* the encoder is made here, on the constructing thread: libjpeg-turbo reads the environment (JPEGMEM, JSIMD_*) when
+     * a handle is made and on its first use, which must not race with a setenv of the main thread (the harness's
+     * lifecycle scenes) */
+    enc_ = std::make_unique<JpegEncoder>();
+    if (enc_->ok()) {
+        std::vector<std::uint8_t> card, jpeg;
+        fake_test_card(16, 16, 0, 1, card);
+        enc_->encode_bgrx(card.data(), 16, 16, 50, jpeg);
+    }
     if (opt_.profile == FakeProfile::C270) {
         id_.vid = "046d";
         id_.pid = "0825";
@@ -369,7 +378,7 @@ const std::vector<std::vector<std::uint8_t>> &FakeCamera::frames_for(std::uint32
     if (f == kMJPG && !canned_.empty()) {
         frames = canned_;
     } else if (f == kMJPG) {
-        JpegEncoder enc;
+        JpegEncoder &enc = *enc_;
         std::vector<std::uint8_t> card;
         for (int k = 0; k < opt_.frames; ++k) {
             std::vector<std::uint8_t> jpeg;

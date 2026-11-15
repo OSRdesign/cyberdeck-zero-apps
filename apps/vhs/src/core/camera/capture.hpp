@@ -68,6 +68,21 @@ struct CaptureStatus {
     std::int64_t lost_ms = 0;     /* when it went away (monotonic ms), 0 while it is not away */
 };
 
+/* The photo slot's result (brief 3.2, 7 step 1): one good frame, after the warm-up, of the mode asked for. */
+struct PhotoShot {
+    std::uint64_t id = 0;            /* the request's */
+    bool ok = false;
+    std::string error;               /* when not ok: "the camera went away" ... */
+    std::vector<std::uint8_t> data;  /* the frame's bytes (the camera's JPEG for MJPEG) */
+    ModeReq mode;
+    std::int64_t ts_us = 0;
+    std::uint32_t seq = 0;
+};
+
+/* Frames dropped after STREAMON before a photo (or a recording's first frame) is taken: the exposure settles in about
+ * 15 frames (0.5 s, plan 1.2; brief 5.1 step 5). */
+constexpr int kWarmupFrames = 15;
+
 /* The mode to stream for a camera's list (brief section 4), at every open; an invalid result means "the first MJPEG
  * mode at 30 fps, else the first YUYV one". */
 using ModeChooser = std::function<ModeReq(const std::vector<CamMode> &listed, const CamIdentity &id)>;
@@ -99,6 +114,17 @@ public:
     void request_mode(const ModeReq &m);
     /* Close and open again with the chooser's mode (settings changed). Any thread. */
     void reopen();
+    /* Stream m until release_hold() (the Light photo, the self-timer's countdown in Light: brief 4.1 rule 3, 6.7); the
+     * device is reopened only when m is not the mode streaming. Any thread. */
+    void hold_mode(const ModeReq &m);
+    void release_hold();
+    bool holding() const;
+    /* The photo slot: the next good frame streamed at `expect` (format and size; any mode when invalid) with at least
+     * kWarmupFrames frames since its STREAMON goes to the slot; take_photo() hands the result over once. A new request
+     * replaces an older one; a loss of the camera ends it with an error. Any thread. */
+    void request_photo(const ModeReq &expect, std::uint64_t id);
+    void cancel_photo();
+    bool take_photo(PhotoShot &out);
     CaptureStatus status() const;
 
     std::uint64_t frames() const { return frames_.load(); }   /* frames handed to the mailbox */
@@ -133,6 +159,20 @@ private:
     CaptureStatus status_;
     ModeReq want_;
     bool mode_change_ = false;
+    ModeReq hold_;            /* status_m_ */
+    bool hold_on_ = false;    /* status_m_ */
+    bool hold_switched_ = false;
+
+    /* the photo slot */
+    void photo_from(const Frame &f);
+    void photo_fail(const std::string &why);
+    std::atomic<bool> photo_armed_{false};
+    mutable std::mutex photo_m_;
+    ModeReq photo_expect_;
+    std::uint64_t photo_id_ = 0;
+    bool photo_ready_ = false;
+    PhotoShot photo_;
+    std::uint64_t since_on_ = 0; /* the thread's: good frames since STREAMON */
 
     /* the thread's own */
     int fd_ = -1;
