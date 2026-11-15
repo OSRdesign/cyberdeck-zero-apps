@@ -38,5 +38,5 @@ wait 800
 shot 04-empty-playlist
 expect text "No tracks yet"
 expect text "0 TRACKS"
-expect text "Add tracks"
+expect text "Edit"
 expect noquit

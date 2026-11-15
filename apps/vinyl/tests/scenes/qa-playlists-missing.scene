@@ -15,26 +15,28 @@ tap "Evening"
 wait 900
 shot 01-edit-missing
 expect text "file not found"
-expect text "Old song.mp3"
+expect text "3  Old song.mp3"
 expect noquit
 # a dimmed row is inert: nothing plays, the page stays
-tap "Old song.mp3"
+tap "3  Old song.mp3"
 wait 500
-expect text "Old song.mp3"
-expect text "Add tracks"
+expect text "3  Old song.mp3"
+expect text "Edit"
 shot 02-inert
 # the other one is further down (the selection scrolls to it)
 key down
 key down
 wait 400
-expect text "Gone.mp3"
+expect text "5  Gone.mp3"
 shot 02b-gone
 key up
 key up
 wait 300
-# Remove acts on the selected row, a missing one included
+# Remove (in the edit mode) acts on the selected row, a missing one included
+tap "Edit"
+wait 500
 tap "Remove"
 wait 700
 shot 03-removed
-expect notext "Old song.mp3"
+expect notext "3  Old song.mp3"
 expect noquit

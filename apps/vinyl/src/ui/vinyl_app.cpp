@@ -287,10 +287,6 @@ struct VinylApp::Impl final : TransportHost {
         a.seek_to = [this](double f) { seek_frac(f); };
         a.row = [this](Page p, int i) { row(p, i); };
         a.queue_button = [this](int i) { queue_button(i); };
-        a.queue_clear = [this] {
-            std::fprintf(stderr, "[vinyl] the queue cleared (asked, Clear)\n");
-            queue_edit(3);
-        };
         a.mini_open = [this] { go(Page::Now); };
         a.transport = [this](bool next, int phase) {
             const uint64_t now = mono_ms_now();
@@ -1076,12 +1072,19 @@ struct VinylApp::Impl final : TransportHost {
     }
 
     void queue_button(int i) {
-        if (queue.empty()) return;
         if (!(queue_buttons_enabled(queue.size()) & (1u << i))) return; /* drawn dimmed: it does nothing (D-81) */
-        if (i == 3) { /* Clear all asks first (design QA run 3): "Clear the queue?", Cancel the default */
-            view->ask_clear_queue();
+        if (i == 3) { /* Add: the Library in a multi-select mode that adds to the end of the queue; Done comes back here */
+            if (!lib_on()) {
+                notice(Notice::Kind::Info, "The Library is not available.");
+                return;
+            }
+            std::vector<std::string> paths;
+            for (int pos = 0; pos < queue.size(); ++pos) paths.push_back(queue.at(pos));
+            lib->begin_queue_pick(paths);
+            refresh(true);
             return;
         }
+        if (queue.empty()) return;
         queue_edit(i);
     }
 
@@ -1105,11 +1108,6 @@ struct VinylApp::Impl final : TransportHost {
                     engine_track_moved();
                 }
             }
-        } else if (i == 3) {
-            queue.clear_except_current();
-            qu_sel = 0;
-            if (queue.current() >= 0) engine_track_moved();
-            else engine->stop();
         }
         update_next();
         ++qgen;
@@ -1328,7 +1326,7 @@ struct VinylApp::Impl final : TransportHost {
         case KeyCmd::QueueUp: queue_button(0); break;
         case KeyCmd::QueueDown: queue_button(1); break;
         case KeyCmd::QueueRemove: queue_button(2); break;
-        case KeyCmd::QueueClear: queue_button(3); break;
+        case KeyCmd::QueueAdd: queue_button(3); break; /* A (the Queue page): add songs from the Library */
         case KeyCmd::QueueSave: save_queue(); break; /* P (the Queue page): save as a playlist */
         case KeyCmd::VolumeDown: volume_step(-1); break; /* the playing output's volume (D11 as changed), one level */
         case KeyCmd::VolumeUp: volume_step(1); break;
@@ -1602,6 +1600,7 @@ struct VinylApp::Impl final : TransportHost {
         h.play_source = [this](const std::vector<std::string> &paths, int start, const std::string &source) { play_paths(paths, start, source); };
         h.ask_name = [this](const NameAsk &a) { view->ask_name(a); };
         h.ask_confirm = [this](const std::string &t, const std::string &b, const std::string &ok) { view->ask_confirm(t, b, ok); };
+        h.open_queue = [this] { go(Page::Queue); }; /* Add to the queue: Done comes back here */
         h.choose_export = [this](const std::string &) { /* the Browser in choose mode: the folder the playlist goes to */
             choose_mode = true;
             browser_from_lib = true;

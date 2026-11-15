@@ -229,3 +229,11 @@ bool playlist_list(Library &lib, std::vector<PlaylistRow> &out) {
 }
 
 }  // namespace vinyl
+
+namespace vinyl {
+int playlist_count_of(Library &lib, int64_t playlist_id, const std::string &path) {
+    Stmt q = lib.db().prepare("select count(*) from playlist_items where playlist_id = ?1 and path = ?2");
+    q.bind(1, static_cast<long long>(playlist_id)).bind(2, path);
+    return q.step() == sqlite::kRow ? q.i32(0) : 0;
+}
+}  // namespace vinyl

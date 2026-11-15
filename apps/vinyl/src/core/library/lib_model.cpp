@@ -569,7 +569,39 @@ std::vector<Row> hub_pick_rows(const LibraryCounts &c, bool counts_known) {
     return rows;
 }
 
-std::string hub_pick_heading(const std::string &playlist) { return "ADD TRACKS TO " + upper_text(playlist); }
+std::string hub_pick_heading(const std::string &playlist, int tracks) {
+    return "ADDING TO " + upper_text(playlist) + ", " + upper_text(plural(tracks, "track", "tracks"));
+}
+
+void PickMarks::set(const std::vector<std::string> &paths) {
+    clear();
+    add(paths);
+}
+void PickMarks::add(const std::vector<std::string> &paths) {
+    for (const std::string &p : paths) {
+        ++n_[p];
+        ++total_;
+    }
+}
+void PickMarks::remove(const std::string &path) {
+    auto it = n_.find(path);
+    if (it == n_.end()) return;
+    --total_;
+    if (--it->second <= 0) n_.erase(it);
+}
+int PickMarks::count(const std::string &path) const {
+    auto it = n_.find(path);
+    return it == n_.end() ? 0 : it->second;
+}
+void PickMarks::clear() {
+    n_.clear();
+    total_ = 0;
+}
+void apply_marks(std::vector<Row> &rows, const std::vector<TrackRow> &list, const PickMarks &marks) {
+    for (Row &r : rows)
+        if (r.type == Row::Type::Track && r.index >= 0 && r.index < static_cast<int>(list.size()))
+            r.check = marks.count(list[static_cast<size_t>(r.index)].path);
+}
 
 std::vector<Row> playlist_list_rows(const std::vector<PlaylistRow> &p) {
     std::vector<Row> rows;
@@ -586,7 +618,7 @@ std::string playlists_heading(int n) { return "PLAYLISTS, " + std::to_string(n);
 std::vector<Row> playlist_entry_rows(const std::vector<PlaylistEntryRow> &e, const std::string &playing_path) {
     std::vector<Row> rows;
     for (size_t i = 0; i < e.size(); ++i) {
-        Row r = item(Row::Type::Entry, e[i].track_id, static_cast<int>(i), e[i].label(), "", Row::Mark::Dot);
+        Row r = item(Row::Type::Entry, e[i].track_id, static_cast<int>(i), e[i].label(), "", Row::Mark::None); /* informs: a tap only selects it */
         if (e[i].exists) {
             r.value = duration_text(e[i].duration_ms);
             r.mono_value = true;
@@ -673,6 +705,22 @@ Sheet playlist_sheet(const std::string &name, int tracks, bool editing) {
     return s;
 }
 
+std::string playlist_edit_heading(const std::string &name, int tracks) {
+    return "EDITING " + upper_text(name) + ", " + upper_text(plural(tracks, "track", "tracks"));
+}
+
+Sheet playlist_page_sheet(const std::string &name, int tracks, bool can_play_here) {
+    Sheet s;
+    s.kind = Sheet::Kind::PlaylistPage;
+    s.title = upper_text(name) + ", " + upper_text(plural(tracks, "track", "tracks"));
+    s.rows = {{"playhere", "Play from here", "Enter", can_play_here},
+              {"rename", "Rename", "N", true},
+              {"export", "Export M3U", "E", tracks > 0},
+              {"delete", "Delete playlist", "Del", true}};
+    s.hint = "Hold a row for 1.5 s, or press Ctrl+O. The same sheet opens in the edit mode.";
+    return s;
+}
+
 Sheet import_sheet(const std::string &file_name, int entries) {
     Sheet s;
     s.kind = Sheet::Kind::Import;
@@ -682,13 +730,17 @@ Sheet import_sheet(const std::string &file_name, int entries) {
     return s;
 }
 
-Sheet add_to_sheet(const std::string &what, const std::vector<PlaylistRow> &playlists) {
+Sheet add_to_sheet(const std::string &what, const std::vector<PlaylistRow> &playlists, const std::vector<int> &has) {
     Sheet s;
     s.kind = Sheet::Kind::AddTo;
     s.title = "ADD " + upper_text(what) + " TO";
     s.rows.push_back({"new", "+ New playlist", "N", true});
-    for (size_t i = 0; i < playlists.size(); ++i)
-        s.rows.push_back({"pl:" + std::to_string(i), playlists[i].name, plural(playlists[i].tracks, "track", "tracks"), true});
+    for (size_t i = 0; i < playlists.size(); ++i) {
+        std::string key = plural(playlists[i].tracks, "track", "tracks");
+        const int n = i < has.size() ? has[i] : 0;
+        if (n > 0) key = std::string("in it") + (n > 1 ? " x" + std::to_string(n) : std::string()) + ", " + key; /* the board: "in it x2, 31 tracks" */
+        s.rows.push_back({"pl:" + std::to_string(i), playlists[i].name, key, true});
+    }
     s.hint = "A song already in a playlist can be added again; it plays twice.";
     return s;
 }
@@ -701,6 +753,12 @@ std::string sheet_action_for_key(uint32_t evdev, const Sheet &s) {
         case kKeyD: return "delete";
         case kKeyE: return "export";
         case kKeyT: return "addtracks";
+        default: return "";
+        }
+    case Sheet::Kind::PlaylistPage:
+        switch (evdev) {
+        case kKeyN: return "rename";
+        case kKeyE: return "export";
         default: return "";
         }
     case Sheet::Kind::Import:

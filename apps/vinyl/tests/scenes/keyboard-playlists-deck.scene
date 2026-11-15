@@ -41,7 +41,9 @@ tap "Playlists"
 wait 800
 tap "Evening"
 wait 900
-tap "Rename"
+hold "1  Phoenix, Lisztomania" 1800
+wait 500
+key n
 wait 900
 expect osk on
 shot 05-rename-osk
@@ -52,11 +54,13 @@ expect osk off
 shot 06-rename-keyboard
 key esc
 wait 700
-expect text "Rename"
+expect text "Edit"
 expect noquit
 osk force
 wait 700
-tap "Rename"
+hold "1  Phoenix, Lisztomania" 1800
+wait 500
+key n
 wait 900
 expect osk on
 shot 07-rename-forced

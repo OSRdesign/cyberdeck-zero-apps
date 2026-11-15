@@ -14,6 +14,8 @@ tap "Playlists"
 wait 700
 tap "Evening"
 wait 800
+hold "1  Phoenix, Lisztomania" 1800
+wait 500
 tap "Export M3U"
 wait 900
 shot 01-choose
@@ -22,8 +24,10 @@ expect noquit
 key esc
 wait 600
 shot 02-back
-expect text "Export M3U"
-expect text "Add tracks"
+expect text "Edit"
+expect text "Play"
+hold "1  Phoenix, Lisztomania" 1800
+wait 500
 tap "Export M3U"
 wait 900
 tap "SANDISK"
@@ -33,5 +37,5 @@ tap "Use folder"
 wait 1000
 shot 04-exported
 expect text "Exported to SANDISK: Evening.m3u8."
-expect text "Add tracks"
+expect text "Edit"
 expect noquit

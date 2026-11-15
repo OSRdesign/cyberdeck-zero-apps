@@ -32,10 +32,10 @@ void test_queue() {
     CHECK(back_step(true, true) == BackStep::CloseModal); /* a notice behind the dialog stays until the dialog is gone */
     CHECK(back_step(false, true) == BackStep::HideNoticeAndBack);
     CHECK(back_step(false, false) == BackStep::Back);
-    CHECK_EQ(queue_buttons_enabled(0), 0u);
-    CHECK_EQ(queue_buttons_enabled(1), kQueueRemove); /* only the playing track: Remove only */
-    CHECK_EQ(queue_buttons_enabled(2), kQueueUp | kQueueDown | kQueueRemove | kQueueClear);
-    CHECK_EQ(queue_buttons_enabled(20), kQueueUp | kQueueDown | kQueueRemove | kQueueClear);
+    CHECK_EQ(queue_buttons_enabled(0), kQueueAdd); /* an empty queue can be filled: Add (there is no Clear all any more) */
+    CHECK_EQ(queue_buttons_enabled(1), kQueueRemove | kQueueAdd); /* only the playing track: nothing to move */
+    CHECK_EQ(queue_buttons_enabled(2), kQueueUp | kQueueDown | kQueueRemove | kQueueAdd);
+    CHECK_EQ(queue_buttons_enabled(20), kQueueUp | kQueueDown | kQueueRemove | kQueueAdd);
     /* design QA run 5: the toolkit's dialog unrestyled: Enter and Esc cancel, Y clears, nothing else does anything */
     CHECK(modal_answer(kLvKeyEnter, 0) == ModalAnswer::Cancel);
     CHECK(modal_answer(kLvKeyEsc, 0) == ModalAnswer::Cancel);

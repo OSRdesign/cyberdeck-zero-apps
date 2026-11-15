@@ -75,6 +75,7 @@ struct LibHost {
     std::function<void(const NameAsk &)> ask_name;
     std::function<void(const std::string &title, const std::string &body, const std::string &ok)> ask_confirm;
     std::function<void(const std::string &playlist)> choose_export;
+    std::function<void()> open_queue; /* Add to the queue: Done is back on the Queue page */
 };
 
 struct LibConfig {
@@ -157,6 +158,11 @@ public:
     bool exporting() const { return !export_name_.empty(); }
     void export_to(const std::string &folder);
     bool pick_mode() const { return pick_; }
+    bool pick_queue() const { return pick_queue_; }
+    /* the Queue page's Add: the Library in the multi-select pick mode that adds to the END of the queue (`queue_paths`: what is in it now,
+     * for the marks); the Done button, or Esc, comes back (LibHost::open_queue) */
+    void begin_queue_pick(const std::vector<std::string> &queue_paths);
+    bool edit_mode() const { return edit_mode_; }
     const std::string &playlists_dir() const { return playlist_dir_; }
 
     /* the 100 ms tick: the finished jobs, the scan's changes, the debounced search, the mounts */
@@ -202,10 +208,12 @@ private:
     void begin_export(const std::string &name);
     void begin_pick(const std::string &name);
     void pick_add(const std::vector<std::string> &paths);
+    void finish_pick();
     void begin_add_to(const libm::Row &r);
     void show_sheet_obj(const libm::Sheet &s);
     void playlist_edit(int what); /* 0 move up, 1 move down, 2 remove */
     void play_playlist_rows(int start_row);
+    void play_playlist_first();
     void import_act(const std::string &id);
     void playlists_changed();     /* the page shown asks again */
     std::string entry_name() const; /* the playlist whose edit page is on top */
@@ -287,6 +295,10 @@ private:
     std::vector<std::string> ask_paths_;
     std::string export_name_;
     bool pick_ = false;
+    bool pick_queue_ = false; /* the pick mode adds to the queue, not to a playlist */
+    bool edit_mode_ = false; /* a playlist's page: the edit mode (Move up / down, Remove, Add tracks), else the view (Play, Edit) */
+    bool skip_arrow_ = false;
+    libm::PickMarks pick_marks_; /* Add tracks: how many times each track is in the playlist being edited */
     std::string pick_name_;
     libm::Nav pick_saved_;
     std::vector<PlaylistRow> addto_lists_;

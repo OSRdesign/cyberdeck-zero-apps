@@ -21,7 +21,9 @@ tap "Playlists"
 wait 800
 tap "Evening"
 wait 900
-tap "Rename"
+hold "1  Phoenix, Lisztomania" 1800
+wait 500
+key n
 wait 900
 shot 02-rename-band
 expect text "18 tracks. New name:"

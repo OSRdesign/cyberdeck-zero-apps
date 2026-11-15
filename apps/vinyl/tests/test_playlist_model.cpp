@@ -8,6 +8,8 @@
 
 #include "library/lib_model.hpp"
 
+#include <chrono>
+
 using namespace vinyl;
 using namespace vinyl::libm;
 
@@ -57,7 +59,7 @@ void test_playlist_model() {
                                                            er("Amerie", "1 Thing", 221000, true, "/m/y.mp3")},
                                                           "/m/y.mp3");
         CHECK_EQ(rows.size(), static_cast<size_t>(3));
-        CHECK(rows[0].type == Row::Type::Entry && rows[0].mark == Row::Mark::Dot);
+        CHECK(rows[0].type == Row::Type::Entry && rows[0].mark == Row::Mark::None); /* it informs: a tap only selects */
         CHECK_EQ(rows[0].text, std::string("Phoenix, Lisztomania"));
         CHECK_EQ(rows[0].value, std::string("04:01"));
         CHECK(rows[0].mono_value && !rows[0].dimmed && !rows[0].playing);
@@ -100,7 +102,68 @@ void test_playlist_model() {
         CHECK_EQ(rows[0].key, std::string("artists"));
         CHECK_EQ(rows[3].key, std::string("genres"));
         CHECK_EQ(rows[2].value, std::string("10"));
-        CHECK_EQ(hub_pick_heading("Evening"), std::string("ADD TRACKS TO EVENING"));
+        CHECK_EQ(hub_pick_heading("Evening", 18), std::string("ADDING TO EVENING, 18 TRACKS"));
+        CHECK_EQ(hub_pick_heading("Evening", 1), std::string("ADDING TO EVENING, 1 TRACK"));
+    }
+
+    /* the marks of the pick mode: counts by path, add, add again, a failed add taken back; song rows only */
+    {
+        PickMarks m;
+        m.set({"/m/a.mp3", "/m/b.mp3", "/m/a.mp3", "/gone/x.mp3"}); /* a missing entry counts for its path */
+        CHECK_EQ(m.total(), 4);
+        CHECK_EQ(m.count("/m/a.mp3"), 2);
+        CHECK_EQ(m.count("/m/b.mp3"), 1);
+        CHECK_EQ(m.count("/gone/x.mp3"), 1);
+        CHECK_EQ(m.count("/m/c.mp3"), 0);
+        m.add({"/m/c.mp3", "/m/a.mp3"});
+        CHECK_EQ(m.total(), 6);
+        CHECK_EQ(m.count("/m/a.mp3"), 3);
+        CHECK_EQ(m.count("/m/c.mp3"), 1);
+        m.remove("/m/a.mp3");
+        m.remove("/m/c.mp3");
+        m.remove("/nothing");
+        CHECK_EQ(m.total(), 4);
+        CHECK_EQ(m.count("/m/c.mp3"), 0);
+        std::vector<TrackRow> list(3);
+        list[0].path = "/m/a.mp3";
+        list[1].path = "/m/b.mp3";
+        list[2].path = "/m/c.mp3";
+        std::vector<Row> rows = song_rows(list, "");
+        Row hd;
+        hd.kind = Row::Kind::Heading;
+        rows.insert(rows.begin(), hd);
+        apply_marks(rows, list, m);
+        CHECK_EQ(rows[0].check, 0); /* a heading */
+        CHECK_EQ(rows[1].check, 2);
+        CHECK_EQ(rows[2].check, 1);
+        CHECK_EQ(rows[3].check, 0);
+        std::vector<Row> al = album_rows({}, true); /* album, artist and genre rows are never marked */
+        CHECK(al.empty());
+        /* 5,000 entries: the marks are one hash lookup a row (a sanity bound, not a benchmark) */
+        std::vector<std::string> many;
+        for (int i = 0; i < 5000; ++i) many.push_back("/m/Music/Album " + std::to_string(i / 12) + "/" + std::to_string(i) + ".mp3");
+        std::vector<TrackRow> big(5000);
+        for (int i = 0; i < 5000; ++i) big[static_cast<size_t>(i)].path = many[static_cast<size_t>(i)];
+        const auto t0 = std::chrono::steady_clock::now();
+        PickMarks bm;
+        bm.set(many);
+        bm.add({many[7], many[7]});
+        std::vector<Row> br = song_rows(big, "");
+        apply_marks(br, big, bm);
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        CHECK(ms < 500);
+        CHECK_EQ(bm.total(), 5002);
+        CHECK_EQ(br[7].check, 3);
+        CHECK_EQ(br[4999].check, 1);
+    }
+    /* the picker says which playlists have the song */
+    {
+        const Sheet ms = add_to_sheet("Lisztomania", {pr(1, "Morning run", 24), pr(2, "Evening", 18), pr(3, "Favourites", 31)}, {0, 1, 2});
+        CHECK_EQ(ms.rows[1].key, std::string("24 tracks"));
+        CHECK_EQ(ms.rows[2].key, std::string("in it, 18 tracks"));
+        CHECK_EQ(ms.rows[3].key, std::string("in it x2, 31 tracks"));
+        CHECK_EQ(add_to_sheet("x", {pr(1, "A", 1)}, {3}).rows[1].key, std::string("in it x3, 1 track"));
+        CHECK_EQ(add_to_sheet("x", {pr(1, "A", 1)}).rows[1].key, std::string("1 track")); /* an album or artist: no marks */
     }
 
     /* names */
@@ -119,6 +182,26 @@ void test_playlist_model() {
 
     /* the sheets */
     {
+        const Sheet pg = playlist_page_sheet("Evening", 18, true);
+        CHECK(pg.kind == Sheet::Kind::PlaylistPage);
+        CHECK_EQ(pg.title, std::string("EVENING, 18 TRACKS"));
+        CHECK_EQ(pg.rows.size(), static_cast<size_t>(4));
+        CHECK_EQ(pg.rows[0].label, std::string("Play from here"));
+        CHECK_EQ(pg.rows[0].key, std::string("Enter"));
+        CHECK_EQ(pg.rows[1].label, std::string("Rename"));
+        CHECK_EQ(pg.rows[1].key, std::string("N"));
+        CHECK_EQ(pg.rows[2].label, std::string("Export M3U"));
+        CHECK_EQ(pg.rows[2].key, std::string("E"));
+        CHECK_EQ(pg.rows[3].label, std::string("Delete playlist"));
+        CHECK_EQ(pg.rows[3].key, std::string("Del"));
+        CHECK(pg.rows[0].enabled);
+        CHECK(!playlist_page_sheet("Evening", 18, false).rows[0].enabled); /* a row that is not there cannot be played from */
+        CHECK(!playlist_page_sheet("Evening", 0, false).rows[2].enabled);
+        CHECK_EQ(sheet_action_for_key(kKeyN, pg), std::string("rename"));
+        CHECK_EQ(sheet_action_for_key(kKeyE, pg), std::string("export"));
+        CHECK_EQ(sheet_action_for_key(kKeyD, pg), std::string("")); /* Delete is the Del key */
+        CHECK_EQ(playlist_edit_heading("Evening", 18), std::string("EDITING EVENING, 18 TRACKS"));
+        CHECK_EQ(playlist_edit_heading("Solo", 1), std::string("EDITING SOLO, 1 TRACK"));
         const Sheet ps = playlist_sheet("Evening", 18, false);
         CHECK(ps.kind == Sheet::Kind::Playlist);
         CHECK_EQ(ps.title, std::string("EVENING, 18 TRACKS"));

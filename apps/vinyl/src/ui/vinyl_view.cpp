@@ -413,6 +413,8 @@ struct View::Impl {
     ListW hub;
     std::unique_ptr<LibraryPages> lib;
     LibButton hub_chip;
+    LibButton hub_done; /* Add tracks / Add to the queue: where the mini player is */
+    bool hub_done_on = false;
     lv_obj_t *hub_chip_icon = nullptr;
     LibEmpty hub_empty;
     LibNoteStrip hub_note;
@@ -1073,11 +1075,11 @@ struct View::Impl {
             static const struct {
                 const char *word;
                 Icon ic;
-            } qb[4] = {{"Move up", Icon::Up}, {"Move down", Icon::Down}, {"Remove", Icon::Minus}, {"Clear all", Icon::Trash}};
+            } qb[4] = {{"Move up", Icon::Up}, {"Move down", Icon::Down}, {"Remove", Icon::Minus}, {"Add", Icon::Plus}};
             for (int i = 0; i < 4 && i < static_cast<int>(lg.queue_buttons.size()); ++i) {
                 const R &b = lg.queue_buttons[static_cast<size_t>(i)];
                 Button bt;
-                const bool danger = i == 3;
+                const bool danger = false; /* the four keys have one look: Add is not a destructive key */
                 const int x = ri(b.x), y = ri(b.y), w = ri(b.w), h = ri(b.h);
                 bt.vis = box(r, x, y, w, h, danger ? col::kDanger : col::kButton, S(8));
                 const uint32_t ink = danger ? col::kWhite : col::kInk;
@@ -1108,7 +1110,8 @@ struct View::Impl {
                 const int cw = text_width(cf, "Save as playlist") + 2 * S(10), ch = S(24);
                 const int band0 = ri(lg.heading.h), band1 = std::max(band0, target);
                 L.list_y0 = ri(lg.list.y);
-                L.list_h0 = lv_obj_get_height(L.list->obj());
+                /* NOT lv_obj_get_height: before the first layout it is 1, and the Queue list came up one pixel high (the empty Queue of the board test) */
+                L.list_h0 = list_bottom < lg.list.bottom() ? std::max(1, ri(list_bottom) - ri(lg.list.y)) : std::max(1, ri(lg.list.h));
                 L.save_dy = band1 - band0;
                 L.save_w = cw;
                 const int cx = ri(lg.panel.right()) - S(12) - cw;
@@ -1167,7 +1170,7 @@ struct View::Impl {
         if (p == Page::Queue && L.save_chip.vis && v.save_chip != L.save_on) {
             L.save_on = v.save_chip;
             const int cy = v.save_chip ? L.save_cy1 : L.save_cy0;
-            const int ch = lv_obj_get_height(L.save_chip.vis), hh = lv_obj_get_height(L.save_chip.hitbox);
+            const int ch = L.save_chip.h, hh = std::max(L.save_chip.h, target);
             lv_obj_set_y(L.save_chip.vis, cy);
             lv_obj_set_y(L.save_chip.hitbox, cy - (hh - ch) / 2);
             L.save_chip.show(v.save_chip);
@@ -1284,6 +1287,10 @@ struct View::Impl {
         hub_empty.build(r, lg.panel, s, target, [this] {
             if (act.lib_button) act.lib_button(Page::LibHub, 0);
         });
+        hub_done.build(r, ri(lg.strip.x), ri(lg.strip.y), ri(lg.strip.w), ri(lg.strip.h), S(14), col::kPrimary, col::kWhite, "Done", target, [this] {
+            if (act.lib_button) act.lib_button(Page::LibHub, 20);
+        });
+        hub_done.show(false);
         hub_note.build(r, ri(lg.strip.x), ri(lg.strip.w), s);
         /* the heading band as tall as the chip's touch area; the list under it */
         const layout::MiniBoxes mb = layout::mini_touch_areas(lg, W, H, target);
@@ -1331,6 +1338,8 @@ struct View::Impl {
             if (below != hub_band_below) apply_hub_band(below);
         }
         hub_chip.show(!v.chip.empty());
+        hub_done.show(v.done_button);
+        hub_done_on = v.done_button;
         show(hub_chip_icon, !v.chip.empty());
         if (v.empty != hub_empty_on || v.empty) {
             hub_empty_on = v.empty;
@@ -1344,8 +1353,8 @@ struct View::Impl {
         const int h = v.note.kind == LibNote::Kind::None ? 0 : hub_note.set(v.note);
         if (h > 0 && !v.empty) {
             const int gap = std::max(1, ri(6 * s));
-            const int top = v.mini.shown ? lv_obj_get_y(hub.strip) : ri(lg.panel.bottom()) - std::max(1, ri(8 * s));
-            const int y = top - (v.mini.shown ? gap : 0) - h;
+            const int top = v.done_button ? lv_obj_get_y(hub_done.vis) : v.mini.shown ? lv_obj_get_y(hub.strip) : ri(lg.panel.bottom()) - std::max(1, ri(8 * s));
+            const int y = top - (v.mini.shown || v.done_button ? gap : 0) - h;
             hub_note.place(y, h);
             hub_note.show(true);
             hub.list->resize(std::max(1, y - std::max(1, ri(4 * s)) - hub_list_y0));
@@ -1494,7 +1503,9 @@ struct View::Impl {
             else if (cur == Page::LibHub) under = {hub.mini_open_hit, hub.mini_play.hitbox, hub.mini_next.hitbox};
             else if (cur == Page::Queue)
                 for (Button &b : qu.qbtns) under.push_back(b.hitbox);
-            double list_end = lg.strip.y;
+            R strip_eff = lg.strip; /* the notice lies above the Done button, never over it */
+            if (cur == Page::LibHub && hub_done_on) strip_eff.y -= lg.strip.h + std::max(1.0, std::round(6 * s));
+            double list_end = strip_eff.y;
             std::vector<R> covered;
             for (lv_obj_t *o : under)
                 if (o && !lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN)) {
@@ -1502,7 +1513,7 @@ struct View::Impl {
                     covered.push_back(a);
                     list_end = std::min(list_end, a.y);
                 }
-            const R nbox = layout::notice_box_over_strip(lg.strip, list_end, ri((danger ? 30 : 50) * s));
+            const R nbox = layout::notice_box_over_strip(strip_eff, list_end, ri((danger ? 30 : 50) * s));
             x = ri(nbox.x);
             w = ri(nbox.w);
             y = ri(nbox.y);
@@ -1643,20 +1654,6 @@ struct View::Impl {
         if (act.name_answer) act.name_answer(ok, text);
     }
 
-    void ask_clear_queue() {
-        close_dialog();
-        if (!qu.root || !page) return;
-        cp0::ui::DialogSpec spec;
-        spec.title = "Clear the queue?";
-        /* the actions run inside an LVGL event: the dialog goes after it (lv_async_call) */
-        spec.buttons.push_back({"Cancel", cp0::ui::ButtonRole::Primary, [this] { lv_async_call(dialog_cancel_cb, this); }});
-        spec.buttons.push_back({"Clear", cp0::ui::ButtonRole::Destructive, [this] { lv_async_call(dialog_clear_cb, this); }});
-        spec.page = page.get();
-        dlg = std::make_unique<cp0::ui::Dialog>(qu.root, tk, std::move(spec));
-        dlg->add_text("Y = Clear, Enter or Esc = Cancel");
-        dlg->relayout();
-    }
-
     void close_dialog() {
         dlg.reset();
         dlg_generic = false;
@@ -1664,13 +1661,8 @@ struct View::Impl {
 
     void dialog_choose(int which) {
         if (!dlg) return;
-        const bool generic = dlg_generic;
         close_dialog();
-        if (generic) {
-            if (act.confirm_answer) act.confirm_answer(which == 1);
-        } else if (which == 1 && act.queue_clear) {
-            act.queue_clear();
-        }
+        if (act.confirm_answer) act.confirm_answer(which == 1);
     }
 
     /* a key while the dialog shows (lv_key from the keypad, evdev the physical key): true while it shows (it takes them) */
@@ -1899,7 +1891,6 @@ void View::scroll_page(Page p, int rows) {
 void View::show_notice(const Notice &n) { d_->show_notice(n); }
 void View::hide_notice() { d_->hide_notice(); }
 bool View::notice_shown() const { return d_->notice != nullptr; }
-void View::ask_clear_queue() { d_->ask_clear_queue(); }
 void View::ask_confirm(const std::string &title, const std::string &body, const std::string &ok) { d_->ask_confirm(title, body, ok); }
 void View::ask_name(const NameAsk &a) { d_->ask_name(a); }
 bool View::name_dialog_shown() const { return d_->name_dialog_shown(); }

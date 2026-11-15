@@ -1,0 +1,84 @@
+title Vinyl P2c: Add tracks marks the songs that are already in the playlist (a check; "x2" from two; a tap adds again and the number grows), in Songs and in Search, with the Done chip and the heading "ADDING TO EVENING, N TRACKS"; the add-to picker says which playlists have the song ("in it x2, 22 tracks") (640x480, the deck)
+sizes 640x480
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_LIBRARY full
+env VINYL_DEMO_PLAYLISTS list
+env VINYL_DEMO_STATE playing
+keyboards 1
+wait 1200
+key b
+wait 500
+tap "Playlists"
+wait 700
+tap "Evening"
+wait 800
+expect text "Play"
+tap "Edit"
+wait 500
+tap "Add tracks"
+wait 700
+shot 01-pick-hub
+expect text "ADDING TO EVENING, 18 TRACKS"
+expect text "Done"
+tap "Songs"
+wait 900
+shot 02-songs-marks
+expect text "ADDING TO EVENING, 18 TRACKS"
+expect text "Done"
+expect text "1 Thing (Siik Remix)"
+tap "1 Thing (Siik Remix)"
+wait 700
+shot 03-again
+expect text "Added again."
+expect text "ADDING TO EVENING, 19 TRACKS"
+tap "1 Thing (Siik Remix)"
+wait 700
+shot 04-again-2
+expect text "ADDING TO EVENING, 20 TRACKS"
+expect noquit
+key esc
+wait 500
+tap "Search"
+wait 600
+type malib
+wait 900
+key enter
+wait 400
+shot 05-search-0
+key enter
+wait 700
+shot 06-search-1
+expect text "Added to Evening."
+key enter
+wait 700
+shot 07-search-2
+expect text "Added again."
+expect noquit
+tap "Done"
+wait 800
+shot 08-edit-22
+expect text "EDITING EVENING, 22 TRACKS"
+expect text "Add tracks"
+key esc
+wait 500
+key esc
+wait 500
+key esc
+wait 500
+key esc
+wait 500
+tap "Search"
+wait 600
+type malib
+wait 900
+key enter
+wait 400
+hold "Maliblue" 1800
+wait 500
+tap "Add to playlist"
+wait 800
+shot 09-picker-marks
+expect text "ADD MALIBLUE TO"
+expect text "in it x2, 22 tracks"
+expect noquit

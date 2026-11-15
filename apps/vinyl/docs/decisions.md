@@ -992,3 +992,83 @@ and zero8 as in the scenes; the Browser's hold and Ctrl+O on a `.m3u` row on a p
 refuses nothing in the export (a read-only stick shows the notice); a playlist with 5,000 entries on the Pi Zero 2 W (the edit page
 reads the file and the library per entry on the worker: about 0.1 ms an entry on the build box); Windows players on the exported
 file (B54).
+
+## P2c, round 2: marks in Add tracks, the Play button (owner, 2026-11-15, board test on the Pi 4B)
+
+**Owner, on the marks:** "adding songs to a playlist there's nothing indicating that I already added a song in a playlist. we need an
+indicator in lists that songs are already part of the playlist being created/edited". Answers to the coordinator's two questions: a tap on
+a song already in the playlist ADDS IT AGAIN and the number grows ("Add it again, the number grows"); the Add to playlist picker SHOWS
+which playlists already contain the song ("Yes, a check mark on those playlists"). Boards: AddTracksSongs-480x320 and
+AddToPlaylistMarked-480x320.
+- **The rule.** Marks are on SONG rows only: Songs, Search's songs, an album's tracks (the pages a track can be picked from). An album,
+  artist or genre row is never marked: a mark there would need every track of every row looked up in the playlist (a library walk a row),
+  and "all its tracks are in" is not what the owner asked for; the album's page shows the songs. A track is its path; a missing entry
+  counts for its path. The count is a hash map (`PickMarks`, `core/library/lib_model`) built once from the playlist's entries when Add
+  tracks starts and kept by the controller as tracks are added; a row is one lookup (5,000 entries: well under 500 ms with the rows, in
+  the test; in practice a few ms). The edit page is not reachable while picking, so removals cannot happen in between; the next Add
+  tracks counts again from the file.
+- **A tap** appends the song again at once (the mark and the heading's N change before the file is written, with no list reload, so the
+  scroll stays; a failed write takes it back and says so). The notice: "Added again." when the song was in already, else "Added to
+  <name>.". "Add album" is unchanged.
+- **The header** of every page that has a heading of its own while picking (the hub, Artists, an artist, Albums, a genre's albums, Songs,
+  Genres) reads "ADDING TO <NAME>, N TRACKS" with the brown **Done** chip at its right (the heading's band grows to the touch target while
+  it shows, as the Queue's chip does); an album's page keeps its own heading and its "Add album" chip; Search keeps its field; the hub
+  keeps its Search chip. Done and Esc both go back to the playlist.
+- **Colours** are the board's: the check #3FBF6A, the chip #1D3A28 with #7FE0A0; the toolkit's widgets are not restyled (the check and the
+  chip are drawn by the app's list rows, like the dots and chevrons).
+- **The picker** says "in it, 18 tracks" / "in it x2, 31 tracks" in a playlist's right text for a song (counts from the index, synced
+  just before the sheet); choosing it adds the song again; an album or an artist has no marks (the same rule); the right column grows to its
+  text.
+
+**Owner, on the playlist page (second redesign, the Play button of the first answer is replaced):** "still on the playlist screen : if add
+tracks is a secondary that shoud be the same to remove a track those 2 have similar impact. on a touchscreen only moving up/down tracks is
+not possible as when you click a track it starts to play. on that playlist view a click should not start to play. so overall there's
+something no working on the playlist management we should have by default on this view in a playlist 2 options, play and edit, Play should
+start the playlist from the first track and edit chnage the buttons for move up/down, remove and add track. rename and export M3U should
+be part of the option menu after long press or ctrl+O". Boards: PlaylistView, PlaylistEditMode (480x320 and 320x480), PlaylistOptions.
+- **Two modes.** The VIEW (the default when a playlist opens): numbered tracks (the boards number them and draw no dot: the rows inform), a
+  tap or click ONLY selects a row; Play (primary) and Edit (secondary) under the rows; no Rename or Export chips. Play replaces the queue
+  with the playlist's playable entries, from the first one (shuffle and repeat as set); dimmed with "Nothing in it can be played." (a tap, or
+  Space, says it) when every entry is missing. The EDIT mode: "EDITING <NAME>, N TRACKS", a Done chip at the heading's right, Move up, Move
+  down, Remove and Add tracks all in the same secondary look (no primary button), two rows of two where the four words do not fit in one
+  row (the portrait boards); taps only select. Done or Esc returns to the view; a second Esc leaves the page. Add tracks (the pick mode)
+  returns to the edit mode.
+- **The options sheet** (hold a row 1.5 s, or Ctrl+O, in BOTH modes): Play from here (Enter), Rename (N), Export M3U (E), Delete playlist
+  (the Del key; it asks first, Cancel the default). **The Controller's choice, flagged for the owner's veto:** Enter on the keyboard in the
+  view does "Play from here" (a tap never plays); in the edit mode Enter does nothing. Space plays from the first track in the view (in the
+  edit mode it is the player's play/pause as everywhere).
+- **Keys.** Up and Down move the selection in both modes. In the edit mode Shift+Up and Shift+Down move the selected track (the keypad's
+  own arrow that follows is dropped; NOT verified on a board, so U and D, the Queue's letters, do the same and the buttons are there), X
+  and Delete remove it. Delete outside the edit mode does nothing (a track is not removed by accident).
+- Tests: `test_playlist_model` (the numbered rows without a mark, the options sheet, the editing heading), `test_playlist_ctl` (a tap never
+  plays in the view or the edit mode, Play from the first track and its missing-first-entry and all-missing cases, Enter and Play from
+  here, Done and Esc in order, the four edit buttons, Shift+arrows, the sheet in both modes with Rename, Export and Delete by their keys);
+  scenes `qa-playlists` (the view, the selection, the options, the edit mode, Done), `qa-playlists-missing`, `-export`, `keyboard-playlists`.
+
+## P2c, round 3: the queue (owner, 2026-11-15, board test on the Pi 4B)
+
+**Owner:** "when starting to play a playlist the queue is not populated with that playlist. the more a I try to use the queue the less I
+find it useful clear all makes me think I will delete the files not just clear the queue, I would change that clear all for a add that
+send to the library where user can select multiple track (using the check for playlist) and finish with a done button instead of the mini
+player." Answers to the coordinator's questions: emptying the queue gets NO replacement button ("Nowhere: remove rows one by one"); a tap on
+a song in the queue's pick mode "Adds it at the END of the queue, marks show".
+- **The queue after Play.** Every entry point already replaces the queue with the list that was played, from the chosen index (`Queue::set`,
+  then the engine loads that index): the Playlists page's Play and Play from here, the playlist and the import sheets, an album or an
+  artist, a song list of the Library, a folder's tracks and a `.m3u` row of the Browser. I could not reproduce an unpopulated queue on the
+  build box by reading the code or in the scenes, so this round adds a regression check for each entry point: the unit tests assert what
+  the controller hands to the player (the whole playable list in order, the start index, the playlist file as the source), and the scene
+  `qa-queue-add` plays a playlist, an album and a folder's track in turn and opens the Queue after each, expecting exactly that list
+  (and none of the previous one). If the owner sees it again, the journal of the board (`[vinyl] media gone ...`, which empties the queue
+  of an entry of a drive that is not mounted) is the first thing to read.
+- **No Clear all.** The button, its "Clear the queue?" dialog, the C key, the Keys row and the dialog scenes (`qa-dialog`,
+  `qa-dialog-small`, `qa-640-dialog`) are gone; the toolkit's question dialog stays for Delete playlist. The fourth Queue button is **Add**
+  (the secondary look of the other three, a plus; the A key), enabled with an empty queue too; Move up and Move down are dimmed with one
+  entry.
+- **Add to the queue** is the playlist pick mode aimed at the queue (`LibraryCtl::begin_queue_pick`): the marks are the queue's own entries
+  (a hash map by path, "x2" when twice); the heading "ADDING TO THE QUEUE, N TRACKS"; a tap on a song appends it at the end ("Added to the
+  queue."); the hold or Ctrl+O gives Play next and Add to the queue on a song, an album or an artist (an album or an artist whole, in album
+  order); "Add album" on an album page. The same marks rule as the playlists' (song rows only).
+- **The Done button** is a full-width brown button at the bottom of every pick page where the mini player strip is (the hub hides the strip;
+  on the other pages the list stops above it; it hides while the on-screen keyboard is up in Search). It REPLACES the Done chip of the
+  AddTracksSongs board for the playlists' Add tracks too (the chip stays only in a playlist's edit mode, where it leaves the mode). Done and
+  Esc at the hub both finish; the queue pick returns to the Queue page, the playlist pick to the playlist's edit mode.

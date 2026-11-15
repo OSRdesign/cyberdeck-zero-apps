@@ -40,27 +40,53 @@ key esc
 wait 300
 expect notext "Delete"
 expect text "PLAYLISTS, 4"
-# the edit page: the tracks in order, Rename and Export M3U at the top, the four buttons under the rows
+# a playlist's page, in the view: the tracks numbered, a tap only selects, Play and Edit under the rows
 tap "Evening"
 wait 800
-shot 03-edit
+shot 03-view
+expect text "Play"
+expect text "Edit"
+expect text "1  Phoenix, Lisztomania"
+expect notext "Rename"
+expect notext "Move up"
+expect noquit
+tap "4  Calvin Harris, The Girls"
+wait 500
+shot 03b-selected
+expect text "Edit"
+expect noquit
+# the options: hold a row (the same sheet opens in the edit mode)
+hold "4  Calvin Harris, The Girls" 1800
+wait 500
+shot 03c-options
+expect text "Play from here"
 expect text "Rename"
 expect text "Export M3U"
+expect text "Delete playlist"
+expect text "Hold a row for 1.5 s, or press Ctrl+O. The same sheet opens in the edit mode."
+key esc
+wait 300
+expect notext "Play from here"
+# Edit: EDITING <NAME>, Done, four buttons of one look; a tap only selects the row to move or remove
+tap "Edit"
+wait 600
+shot 03d-edit
+expect text "EDITING EVENING, 18 TRACKS"
+expect text "Done"
 expect text "Move up"
 expect text "Move down"
 expect text "Remove"
 expect text "Add tracks"
-expect text "Phoenix, Lisztomania"
 expect noquit
-# Move down: the first track goes below the second (the selection follows it)
-tap "Move down"
+# Move down: the selected track goes below the next one (the selection follows it)
+key d
 wait 600
 shot 04-edit-moved
 # Add tracks: the Library in pick mode (Search, Artists, Albums, Songs, Genres), the heading names the playlist
 tap "Add tracks"
 wait 700
 shot 05-pick-hub
-expect text "ADD TRACKS TO EVENING"
+expect text "ADDING TO EVENING, 18 TRACKS"
 expect notext "Folders"
 expect text "Search"
 tap "Search"
@@ -73,16 +99,19 @@ shot 06-pick-search
 key enter
 wait 600
 shot 07-pick-added
-expect text "Added to Evening."
+expect text "Added again."
 expect noquit
 key esc
 wait 500
 key esc
 wait 800
 shot 08-edit-added
-expect text "Rename"
-# Rename: the name box (the keyboard types: the field is the toolkit's), Enter renames
-tap "Rename"
+expect text "Done"
+expect text "Add tracks"
+# Rename (in the options): the name box (the keyboard types: the field is the toolkit's), Enter renames
+hold "1  Phoenix, Lisztomania" 1800
+wait 500
+key n
 wait 700
 shot 09-rename
 expect text "Rename playlist"
@@ -94,6 +123,9 @@ key enter
 wait 900
 shot 11-renamed
 expect noquit
+key esc
+wait 500
+expect text "Edit"
 key esc
 wait 600
 expect text "Evening run"
@@ -140,7 +172,7 @@ shot 15-add-to
 expect text "ADD LISZTOMANIA TO"
 expect text "+ New playlist"
 expect text "Favourites"
-expect text "31 tracks"
+expect text "in it, 31 tracks"
 expect text "A song already in a playlist can be added again; it plays twice."
 tap "Favourites"
 wait 800

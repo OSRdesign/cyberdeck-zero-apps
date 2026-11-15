@@ -65,9 +65,6 @@ public:
     void show_notice(const Notice &n);
     void hide_notice();
     bool notice_shown() const;
-    /* "Clear the queue?" (the toolkit's dialog): Cancel (its Primary: Enter), Esc and the header's Esc cancel; Clear (a
-     * tap, or the letter Y) calls Actions::queue_clear; while it shows every key goes to dialog_key (true: it took it) */
-    void ask_clear_queue();
     /* P2c: a question with a destructive answer on the toolkit's dialog (Delete "Evening"?): Cancel is the Primary button (Enter),
      * the letter Y (named in the text) or a tap on `ok` answers Actions::confirm_answer(true) */
     void ask_confirm(const std::string &title, const std::string &body, const std::string &ok);

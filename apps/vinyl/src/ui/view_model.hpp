@@ -44,9 +44,10 @@ struct RowView {
     bool heading = false;       /* P2b: a section heading ("DISC 2", "SONGS"): grey capitals, never tapped */
     bool flush = false;         /* P2b: no mark and the text at the left edge (the Music folders rows) */
     bool amber = false;         /* the action dot is amber (a drive that is not mounted: a tap mounts it) */
+    int check = 0;              /* P2c, Add tracks: the track is already in the playlist this many times (a green check; "x2" from 2) */
     bool operator==(const RowView &o) const {
         return text == o.text && value == o.value && mark == o.mark && playing == o.playing && dimmed == o.dimmed &&
-               mono_value == o.mono_value && heading == o.heading && flush == o.flush && amber == o.amber;
+               mono_value == o.mono_value && heading == o.heading && flush == o.flush && amber == o.amber && check == o.check;
     }
 };
 
@@ -150,15 +151,18 @@ struct LibView {
     std::string block_title, block_text;
     /* Music folders: the two buttons and the note under them */
     std::vector<std::string> buttons;
-    bool button_enabled[4] = {true, true, true, true};
-    bool button_primary[4] = {true, false, false, false}; /* the brown look: Add a folder, or Mount <drive> when that is what the drive button does */
+    bool button_enabled[5] = {true, true, true, true, true};
+    bool button_primary[5] = {true, false, false, false, false}; /* the brown look: Add a folder, or Mount <drive> when that is what the drive button does */
     std::string footnote;
     /* P2c, a playlist's edit page: the chips at the heading's right ("Rename", "Export M3U"; a tap is a button of index 10 + i) and
-     * the four buttons under the rows (Move up, Move down, Remove, Add tracks: the last one in the teal look) */
+     * the five buttons under the rows (Move up, Move down, Remove, Add tracks, Play: the last one in the primary look) */
     std::vector<std::string> chips;
-    bool teal_last_button = false;
     /* the Playlists page with no playlist: the message sits under this many rows (the "+ New playlist" row stays) */
     int empty_after_rows = 0;
+    /* Add tracks (pick mode): the "Done" chip at the heading's right on the list pages (a tap is the button of index 20) */
+    bool done_chip = false;
+    /* Add tracks / Add to the queue: the full-width "Done" button at the bottom, where the mini player strip is (the hub hides the strip) */
+    bool done_button = false;
     /* Search: the field's text and the line shown while it is empty */
     std::string query;
 };
@@ -209,7 +213,6 @@ struct Actions {
     std::function<void(bool, int)> transport;        /* previous (false) / next (true): 0 press, 1 release, 2 cancel */
     std::function<void(int)> volume_step;            /* the volume group's "-" / "+": one level down / up */
     std::function<void()> volume_unavailable;        /* a tap on the volume chip where nothing can change the volume */
-    std::function<void()> queue_clear;               /* "Clear the queue?" answered Clear */
     /* P2b */
     std::function<void(Page, int)> lib_row;          /* a tap on a Library row */
     std::function<void(Page, int)> lib_hold;         /* a 1.5 s hold on a Library row */

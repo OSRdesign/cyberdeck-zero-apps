@@ -181,7 +181,7 @@ KeyCmd letter_command(uint32_t evdev, bool queue_page) {
     case kKeyU: return queue_page ? KeyCmd::QueueUp : KeyCmd::None;
     case kKeyD: return queue_page ? KeyCmd::QueueDown : KeyCmd::None;
     case kKeyX: return queue_page ? KeyCmd::QueueRemove : KeyCmd::None;
-    case kKeyC: return queue_page ? KeyCmd::QueueClear : KeyCmd::None;
+    case kKeyA: return queue_page ? KeyCmd::QueueAdd : KeyCmd::None;
     case kKeyP: return queue_page ? KeyCmd::QueueSave : KeyCmd::None;
     default: return KeyCmd::None;
     }
@@ -216,7 +216,7 @@ std::vector<KeyHelp> key_help() {
         {"U, D, X or Delete", "A playlist: move up, move down, remove", {}, {}, false, 0},
         {"U, D", "Queue: move up, move down", {kKeyU, kKeyD}, {KeyCmd::QueueUp, KeyCmd::QueueDown}, true, 0},
         {"X or Delete", "Queue: remove", {kKeyX}, {KeyCmd::QueueRemove}, true, 0},
-        {"C, then Y", "Queue: clear all", {kKeyC}, {KeyCmd::QueueClear}, true, 0},
+        {"A", "Queue: add songs from the Library (Done when finished)", {kKeyA}, {KeyCmd::QueueAdd}, true, 0},
         {"P", "Queue: save as a playlist", {kKeyP}, {KeyCmd::QueueSave}, true, 0},
         {"Esc", "Back; at Browse: quit", {}, {}, false, 0},
         {"Media keys", "Play, pause, next, previous, stop", {}, {}, false, 0},

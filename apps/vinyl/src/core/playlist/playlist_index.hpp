@@ -50,6 +50,8 @@ struct PlaylistStats {
 bool playlist_sync(Library &lib, PlaylistStore &store);
 bool playlist_reindex(Library &lib, PlaylistStore &store, const std::string &name);
 bool playlist_list(Library &lib, std::vector<PlaylistRow> &out);
+/* how many times a file is in an indexed playlist (the cache; sync first) */
+int playlist_count_of(Library &lib, int64_t playlist_id, const std::string &path);
 bool playlist_rows(Library &lib, const PlaylistStore &store, const std::string &name, std::vector<PlaylistEntryRow> &out,
                    PlaylistStats *stats = nullptr);
 /* the paths of a playlist that can be played (the files that are there), in order; `start_row` (an index into the entries) is

@@ -176,6 +176,8 @@ void LibraryCtl::browser_opened(const std::string &folder) {
 void LibraryCtl::left() {
     if (!in_library_) return;
     in_library_ = false;
+    pick_ = false;
+    pick_queue_ = false;
     sheet_on_ = false;
     if (host_.hide_sheet) host_.hide_sheet();
     if (visited_ && scan_ && scan_->running()) {
@@ -191,6 +193,8 @@ void LibraryCtl::enter() {
     in_library_ = true;
     visited_ = true;
     pick_ = false;
+    pick_queue_ = false;
+    edit_mode_ = false;
     export_name_.clear();
     nav_.clear();
     saved_nav_.clear();
@@ -249,12 +253,14 @@ bool LibraryCtl::back() {
         close_sheet();
         return true;
     }
+    if (edit_mode_ && !pick_ && !nav_.empty() && nav_.top().place == libm::Place::Playlist) { /* Esc: back to the view; a second Esc leaves */
+        edit_mode_ = false;
+        rebuild_rows();
+        return true;
+    }
     if (!nav_.pop()) {
         if (pick_) { /* Add tracks: Esc at the hub is back on the playlist, with what was added */
-            pick_ = false;
-            nav_ = pick_saved_;
-            pick_saved_.clear();
-            open_place(nav_.top(), false);
+            finish_pick();
             return true;
         }
         if (!saved_nav_.empty()) { /* the settings were opened from the Menu over a page: that page is the Library's place again */
@@ -410,6 +416,7 @@ void LibraryCtl::apply(const Fetched &f, const Req &rq, uint64_t serial) {
     }
     if (!f.ok && rq.place == libm::Place::Playlist) { /* deleted outside Vinyl while it was open */
         if (host_.notice) host_.notice(Notice::Kind::Info, "That playlist is gone.");
+        edit_mode_ = false;
         back();
         return;
     }
@@ -508,6 +515,10 @@ void LibraryCtl::rebuild_rows() {
         rows = libm::folder_rows(d_.roots, cfg_.home, d_.drives);
         break;
     }
+    if (pick_) { /* Add tracks: a check on the songs that are in the playlist already (a hash lookup a row) */
+        if (pl == libm::Place::Songs || pl == libm::Place::Album) libm::apply_marks(rows, d_.tracks, pick_marks_);
+        else if (pl == libm::Place::Search) libm::apply_marks(rows, d_.search.songs, pick_marks_);
+    }
     rows_ = std::move(rows);
     rows_cache_.reset();
     ++rows_ver_;
@@ -550,11 +561,15 @@ void LibraryCtl::row(Page, int index) {
     if (sheet_on_ || index < 0 || index >= static_cast<int>(rows_.size())) return;
     if (rows_[static_cast<size_t>(index)].kind != libm::Row::Kind::Item) return;
     set_selection(index, false);
+    if (rows_[static_cast<size_t>(index)].type == libm::Row::Type::Entry) { /* a playlist's track: a tap only selects it, it never plays (owner, 2026-11-15) */
+        ++view_gen_;
+        return;
+    }
     activate(index); /* a tap acts on the first tap, as the Browser's rows */
 }
 
 void LibraryCtl::hold(Page, int index) {
-    if (sheet_on_ || pick_ || index < 0 || index >= static_cast<int>(rows_.size())) return;
+    if (sheet_on_ || (pick_ && !pick_queue_) || index < 0 || index >= static_cast<int>(rows_.size())) return;
     if (!selectable(rows_[static_cast<size_t>(index)].type)) return;
     set_selection(index, false);
     open_sheet(index);
@@ -590,9 +605,12 @@ void LibraryCtl::activate(int index) {
         ask(Ask::New, NameAsk{"New playlist", "An empty playlist. Name:", libm::free_name_among(names, "Playlist"), "Create"});
         break;
     }
-    case libm::Row::Type::Playlist: go(libm::Place::Playlist, r.id, r.text); break;
+    case libm::Row::Type::Playlist:
+        edit_mode_ = false;
+        go(libm::Place::Playlist, r.id, r.text);
+        break;
     case libm::Row::Type::Entry:
-        if (!r.dimmed) play_playlist_rows(r.index); /* a dimmed entry (file not found) is inert */
+        if (!r.dimmed && !edit_mode_) play_playlist_rows(r.index); /* Enter (never a tap): Play from here, in the view; a dimmed entry is inert */
         break;
     case libm::Row::Type::Track: {
         const std::vector<TrackRow> &list = pl == libm::Place::Search ? d_.search.songs : d_.tracks;
@@ -638,6 +656,10 @@ void LibraryCtl::chip(Page p) {
 
 void LibraryCtl::button(Page p, int index) {
     if (sheet_on_) return;
+    if (pick_ && index == 20) { /* the Done button (Add tracks, Add to the queue) */
+        finish_pick();
+        return;
+    }
     if (p == Page::LibHub) { /* the empty library's "Add a music folder": the Music folders page, choosing at once */
         libm::Loc l;
         l.place = libm::Place::Folders;
@@ -646,17 +668,21 @@ void LibraryCtl::button(Page p, int index) {
         if (host_.choose_folder) host_.choose_folder();
         return;
     }
-    if (p == Page::LibPlaylist) { /* Move up, Move down, Remove, Add tracks; the chips are 10 + i: Rename, Export M3U */
+    if (p == Page::LibPlaylist && !pick_) {
         const std::string name = entry_name();
-        if (index >= 0 && index <= 2) playlist_edit(index);
-        else if (index == 3) begin_pick(name);
-        else if (index == 10) begin_rename(name, static_cast<int>(d_.entries.size()));
-        else if (index == 11) {
-            if (d_.entries.empty()) {
-                if (host_.notice) host_.notice(Notice::Kind::Info, "This playlist has no tracks to export.");
-            } else {
-                begin_export(name);
+        if (!edit_mode_) { /* the view: Play (from the first track), Edit */
+            if (index == 0) play_playlist_first();
+            else if (index == 1) {
+                edit_mode_ = true;
+                rebuild_rows();
             }
+        } else if (index == 20) { /* Done */
+            edit_mode_ = false;
+            rebuild_rows();
+        } else if (index >= 0 && index <= 2) { /* Move up, Move down, Remove */
+            playlist_edit(index);
+        } else if (index == 3) { /* Add tracks: the Library in pick mode; it comes back here, in the edit mode */
+            begin_pick(name);
         }
         return;
     }
@@ -749,7 +775,8 @@ bool LibraryCtl::key(uint32_t k) {
             sheet_sel_ = i;
             if (host_.sheet_select) host_.sheet_select(i);
         };
-        if (k == kUp) step(-1);
+        if (k == kKeyDel && sheet_.kind == libm::Sheet::Kind::PlaylistPage) sheet_pick(libm::sheet_index(sheet_, "delete"));
+        else if (k == kUp) step(-1);
         else if (k == kDown) step(1);
         else if (k == kEnter || k == kRight) sheet_pick(sheet_sel_);
         else if (k == kLeft) close_sheet();
@@ -761,8 +788,12 @@ bool LibraryCtl::key(uint32_t k) {
         else if (k == kDown && host_.scroll) host_.scroll(Page::LibInfo, 1);
         return k == kUp || k == kDown;
     }
-    if (k == kKeyDel && pl == libm::Place::Playlist && !pick_) { /* Remove the selected entry */
+    if (k == kKeyDel && pl == libm::Place::Playlist && !pick_ && edit_mode_) { /* Remove the selected entry (the edit mode) */
         playlist_edit(2);
+        return true;
+    }
+    if (skip_arrow_ && (k == kUp || k == kDown)) { /* the arrow of a Shift+arrow that moved a track: not a move of the selection too */
+        skip_arrow_ = false;
         return true;
     }
     if (k == kUp || k == kDown) {
@@ -791,13 +822,22 @@ bool LibraryCtl::letter(uint32_t evdev, uint32_t mods) {
         if (i >= 0 && sheet_.rows[static_cast<size_t>(i)].enabled) sheet_pick(i);
         return true;
     }
-    if (!mods && !pick_ && !nav_.empty() && nav_.top().place == libm::Place::Playlist &&
+    if (mods == 1 && !pick_ && edit_mode_ && !nav_.empty() && nav_.top().place == libm::Place::Playlist && (evdev == 103 || evdev == 108)) {
+        skip_arrow_ = true; /* Shift+Up / Shift+Down: move the selected track (the keypad's own arrow that follows is dropped) */
+        playlist_edit(evdev == 103 ? 0 : 1);
+        return true;
+    }
+    if (!mods && !pick_ && edit_mode_ && !nav_.empty() && nav_.top().place == libm::Place::Playlist &&
         (evdev == kEvKeyU || evdev == kEvKeyD || evdev == kEvKeyX)) { /* the edit page: U up, D down, X remove (the Queue's letters) */
         playlist_edit(evdev == kEvKeyU ? 0 : evdev == kEvKeyD ? 1 : 2);
         return true;
     }
+    if (!mods && !pick_ && !edit_mode_ && evdev == 57 && !nav_.empty() && nav_.top().place == libm::Place::Playlist) { /* Space: Play, as the button */
+        play_playlist_first();
+        return true;
+    }
     if ((mods & kCtrl) && evdev == kEvKeyO) { /* the options key: the sheet of the selected row, else the Menu (the host) */
-        if (!pick_ && sel_ >= 0 && selectable(selected_type())) {
+        if ((!pick_ || pick_queue_) && sel_ >= 0 && selectable(selected_type())) {
             open_sheet(sel_);
             return true;
         }
@@ -859,9 +899,17 @@ void LibraryCtl::open_sheet(int index) {
         if (r.index < 0 || r.index >= static_cast<int>(d_.playlists.size())) return;
         s = libm::playlist_sheet(d_.playlists[static_cast<size_t>(r.index)].name, d_.playlists[static_cast<size_t>(r.index)].tracks, false);
     } else if (r.type == libm::Row::Type::Entry) {
-        s = libm::playlist_sheet(entry_name(), static_cast<int>(d_.entries.size()), true);
+        s = libm::playlist_page_sheet(entry_name(), static_cast<int>(d_.entries.size()), !r.dimmed);
     } else {
         return;
+    }
+    if (pick_queue_) { /* Add to the queue: Play next and Add to the queue on the song, the album or the artist */
+        libm::Sheet q;
+        q.kind = s.kind;
+        q.title = s.title;
+        q.rows = {{"next", "Play next", "N", true}, {"add", "Add to the queue", "A", true}};
+        q.hint = s.hint;
+        s = q;
     }
     sheet_ = s;
     sheet_row_ = r;
@@ -921,7 +969,24 @@ void LibraryCtl::sheet_act(const std::string &id) {
         import_act(id);
         return;
     }
-    if (kind == libm::Sheet::Kind::Playlist) { /* a playlist row on the list, or an entry of the open playlist */
+    if (kind == libm::Sheet::Kind::PlaylistPage) { /* the options of the open playlist, in the view and in the edit mode */
+        const std::string name = entry_name();
+        const int tracks = static_cast<int>(d_.entries.size());
+        if (name.empty()) return;
+        if (id == "playhere") {
+            if (!r.dimmed) play_playlist_rows(r.index);
+        } else if (id == "rename") begin_rename(name, tracks);
+        else if (id == "delete") begin_delete(name, tracks);
+        else if (id == "export") {
+            if (tracks <= 0) {
+                if (host_.notice) host_.notice(Notice::Kind::Info, "This playlist has no tracks to export.");
+            } else {
+                begin_export(name);
+            }
+        }
+        return;
+    }
+    if (kind == libm::Sheet::Kind::Playlist) { /* a playlist row on the list */
         std::string name;
         int tracks = 0;
         if (r.type == libm::Row::Type::Playlist && r.index >= 0 && r.index < static_cast<int>(d_.playlists.size())) {
@@ -967,9 +1032,17 @@ void LibraryCtl::sheet_act(const std::string &id) {
             if (row_index >= 0 && row_index < static_cast<int>(rows_.size())) activate(row_index);
         } else if (id == "next") {
             if (host_.play_next) host_.play_next({t.path});
+            if (pick_queue_) {
+                pick_marks_.add({t.path});
+                rebuild_rows();
+            }
             if (host_.notice) host_.notice(Notice::Kind::Info, "Will play next.");
         } else if (id == "add") {
             if (host_.add_to_queue) host_.add_to_queue({t.path});
+            if (pick_queue_) {
+                pick_marks_.add({t.path});
+                rebuild_rows();
+            }
             if (host_.notice) host_.notice(Notice::Kind::Info, "Added to the queue.");
         } else if (id == "info") {
             libm::Loc l;
@@ -1000,6 +1073,10 @@ void LibraryCtl::tracks_job(libm::Row::Type type, int64_t id, int mode) {
             return;
         }
         const std::string n = libm::plural(static_cast<int64_t>(paths.size()), "track", "tracks");
+        if (pick_queue_ && mode != 0) {
+            pick_marks_.add(paths);
+            rebuild_rows();
+        }
         if (mode == 0 && host_.play) host_.play(paths, 0);
         else if (mode == 1) {
             if (host_.play_next) host_.play_next(paths);
@@ -1093,7 +1170,10 @@ void LibraryCtl::confirm_answer(bool yes) {
     }, [this, res, name] {
         if (*res == PlResult::Ok || *res == PlResult::NotFound) {
             /* the page first (showing a page takes a notice away), then the notice */
-            if (!nav_.empty() && nav_.top().place == libm::Place::Playlist && nav_.top().title == name) back(); /* the open one: its page goes */
+            if (!nav_.empty() && nav_.top().place == libm::Place::Playlist && nav_.top().title == name) {
+                edit_mode_ = false;
+                back(); /* the open one: its page goes */
+            }
             else playlists_changed();
             if (host_.notice) host_.notice(Notice::Kind::Info, "Playlist deleted.");
         } else if (host_.notice) {
@@ -1126,6 +1206,9 @@ void LibraryCtl::export_to(const std::string &folder) {
 }
 
 void LibraryCtl::begin_pick(const std::string &name) {
+    std::vector<std::string> in;
+    for (const PlaylistEntryRow &e : d_.entries) in.push_back(e.entry.path); /* missing entries count for their path */
+    pick_marks_.set(in);
     pick_saved_ = nav_;
     nav_.clear();
     pick_ = true;
@@ -1135,16 +1218,66 @@ void LibraryCtl::begin_pick(const std::string &name) {
     open_place(hub, true);
 }
 
+void LibraryCtl::finish_pick() {
+    if (!pick_) return;
+    const bool q = pick_queue_;
+    pick_ = false;
+    pick_queue_ = false;
+    nav_ = pick_saved_;
+    pick_saved_.clear();
+    pick_marks_.clear();
+    if (q) { /* back on the Queue page */
+        if (host_.open_queue) host_.open_queue();
+        return;
+    }
+    if (!nav_.empty()) open_place(nav_.top(), false);
+}
+
+void LibraryCtl::begin_queue_pick(const std::vector<std::string> &queue_paths) {
+    if (!available_) {
+        if (host_.notice) host_.notice(Notice::Kind::Info, "The Library is not available.");
+        return;
+    }
+    pick_marks_.set(queue_paths);
+    pick_saved_ = nav_;
+    nav_.clear();
+    saved_nav_.clear();
+    pick_ = true;
+    pick_queue_ = true;
+    pick_name_ = "the queue";
+    in_library_ = true;
+    visited_ = true;
+    libm::Loc hub;
+    hub.place = libm::Place::Hub;
+    open_place(hub, true);
+}
+
+/* a tap on a song (or "Add album"): it is appended again even when it is in the playlist (owner, 2026-11-15: "Add it again, the number
+ * grows"); the mark and the count change at once, before the file is written, and are taken back if the write fails */
 void LibraryCtl::pick_add(const std::vector<std::string> &paths) {
     if (!pick_ || paths.empty()) return;
     const std::string name = pick_name_;
+    const bool again = paths.size() == 1 && pick_marks_.count(paths[0]) > 0;
+    if (pick_queue_) { /* a tap adds the song at the END of the queue (owner: "Adds it at the END of the queue, marks show") */
+        if (host_.add_to_queue) host_.add_to_queue(paths);
+        pick_marks_.add(paths);
+        rebuild_rows();
+        if (host_.notice) host_.notice(Notice::Kind::Info, "Added to the queue.");
+        return;
+    }
+    pick_marks_.add(paths);
+    rebuild_rows();
     auto res = std::make_shared<PlResult>(PlResult::Io);
     store_job([res, name, paths](Library &lib, PlaylistStore &st) {
         *res = st.append(name, entries_from_paths(lib, paths));
         if (*res == PlResult::Ok) playlist_reindex(lib, st, name);
-    }, [this, res, name] {
+    }, [this, res, name, paths, again] {
+        if (*res != PlResult::Ok && pick_ && pick_name_ == name) {
+            for (const std::string &p : paths) pick_marks_.remove(p);
+            rebuild_rows();
+        }
         if (!host_.notice) return;
-        if (*res == PlResult::Ok) host_.notice(Notice::Kind::Info, "Added to " + name + ".");
+        if (*res == PlResult::Ok) host_.notice(Notice::Kind::Info, again ? std::string("Added again.") : "Added to " + name + ".");
         else host_.notice(Notice::Kind::Danger, *res == PlResult::NotFound ? "That playlist is gone." : "The playlist could not be saved.");
     });
 }
@@ -1180,11 +1313,14 @@ void LibraryCtl::begin_add_to(const libm::Row &r) {
     }
     auto lists = std::make_shared<std::vector<PlaylistRow>>();
     auto paths = std::make_shared<std::vector<std::string>>();
+    auto has = std::make_shared<std::vector<int>>();
     const libm::Row::Type type = r.type;
     const int64_t id = r.id;
-    store_job([lists, paths, type, id, track_path](Library &lib, PlaylistStore &st) {
+    store_job([lists, paths, has, type, id, track_path](Library &lib, PlaylistStore &st) {
         playlist_sync(lib, st);
         playlist_list(lib, *lists);
+        if (type == libm::Row::Type::Track) /* the playlists that have the song already ("in it", "in it x2") */
+            for (const PlaylistRow &p : *lists) has->push_back(playlist_count_of(lib, p.id, track_path));
         if (type == libm::Row::Type::Track) {
             paths->push_back(track_path);
         } else {
@@ -1193,14 +1329,14 @@ void LibraryCtl::begin_add_to(const libm::Row &r) {
             else lib.artist_tracks(id, t);
             for (const TrackRow &x : t) paths->push_back(x.path);
         }
-    }, [this, lists, paths, what] {
+    }, [this, lists, paths, has, what] {
         if (paths->empty()) {
             if (host_.notice) host_.notice(Notice::Kind::Info, "No track to add: its drive is not connected.");
             return;
         }
         addto_lists_ = *lists;
         addto_paths_ = *paths;
-        show_sheet_obj(libm::add_to_sheet(what, *lists));
+        show_sheet_obj(libm::add_to_sheet(what, *lists, *has));
     });
 }
 
@@ -1290,6 +1426,20 @@ void LibraryCtl::playlist_edit(int what) {
             host_.notice(Notice::Kind::Danger, res->first == PlResult::NotFound ? "That playlist is gone." : "The playlist could not be saved.");
         }
     });
+}
+
+/* the Play button, and Space on the page: the playlist from its first track that is there (owner, 2026-11-15: "when from the library I am in a
+ * playlist at the bottom I should not only have add track but also play") */
+void LibraryCtl::play_playlist_first() {
+    const std::string name = entry_name();
+    int start = -1;
+    const std::vector<std::string> paths = playlist_playable(d_.entries, -1, &start);
+    if (paths.empty() || name.empty()) {
+        if (host_.notice) host_.notice(Notice::Kind::Info, "Nothing in it can be played.");
+        return;
+    }
+    if (host_.play_source) host_.play_source(paths, 0, store_.path_of(name));
+    else if (host_.play) host_.play(paths, 0);
 }
 
 /* Enter or a tap on an entry: the queue becomes the playlist's files that are there, starting at this one */
@@ -1492,8 +1642,10 @@ LibView LibraryCtl::view() {
             rv.playing = r.playing;
             rv.dimmed = r.dimmed;
             rv.amber = r.amber;
+            rv.check = r.check;
             rv.mono_value = r.mono_value;
-            rv.flush = pl == libm::Place::Folders;
+            rv.flush = pl == libm::Place::Folders || pl == libm::Place::Playlist;
+            if (pl == libm::Place::Playlist && r.type == libm::Row::Type::Entry) rv.text = std::to_string(r.index + 1) + "  " + r.text; /* the boards number them */
             out->push_back(rv);
         }
         rows_cache_ = out;
@@ -1507,6 +1659,12 @@ LibView LibraryCtl::view() {
         v.scroll_to = restore_top_;
         restore_top_ = -1;
     }
+    if (pick_ && (pl == libm::Place::Hub || pl == libm::Place::Album || pl == libm::Place::Search)) v.done_button = true; /* every page of the pick mode */
+    if (pick_ && (pl == libm::Place::Artists || pl == libm::Place::Artist || pl == libm::Place::Albums || pl == libm::Place::GenreAlbums ||
+                  pl == libm::Place::Songs || pl == libm::Place::Genres)) {
+        v.done_button = true; /* the Done button at the bottom, with the pick heading */
+        v.heading = libm::hub_pick_heading(pick_name_, pick_marks_.total());
+    }
     ScanProgress prog = demo_progress_on_ ? demo_progress_ : (scan_ ? scan_->progress() : ScanProgress());
     const libm::ScanNote note = libm::scan_note(prog, prior_tracks_);
     switch (pl) {
@@ -1514,7 +1672,8 @@ LibView LibraryCtl::view() {
         int64_t hidden = 0; /* the rows of the roots that are there (a gone drive's stay hidden and count for nothing) */
         for (const RootInfo &r : d_.roots)
             if (r.online) hidden += r.tracks;
-        v.heading = pick_ ? libm::hub_pick_heading(pick_name_) : libm::hub_heading(d_.counts.tracks, note.shown);
+        v.heading = pick_ ? libm::hub_pick_heading(pick_name_, pick_marks_.total()) : libm::hub_heading(d_.counts.tracks, note.shown);
+        if (pick_) v.mini = MiniView(); /* the Done button takes the mini player's place */
         v.chip = "Search";
         v.mini = host_.mini ? host_.mini() : MiniView();
         if (note.shown) {
@@ -1586,19 +1745,29 @@ LibView LibraryCtl::view() {
         break;
     case libm::Place::Playlist: {
         v.title = loc.title;
-        v.heading = libm::playlist_heading(d_.pstats);
-        v.chips = {"Rename", "Export M3U"};
-        v.buttons = {"Move up", "Move down", "Remove", "Add tracks"};
+        bool any_playable = false;
+        for (const PlaylistEntryRow &e : d_.entries) any_playable = any_playable || e.exists;
         const int n = static_cast<int>(rows_.size());
-        v.button_enabled[0] = sel_ > 0;
-        v.button_enabled[1] = sel_ >= 0 && sel_ < n - 1;
-        v.button_enabled[2] = sel_ >= 0 && sel_ < n;
-        v.button_enabled[3] = true;
-        v.teal_last_button = true;
+        for (int i = 0; i < 5; ++i) v.button_primary[i] = false;
+        if (!edit_mode_ || pick_) { /* the view: Play (primary) and Edit; no chips, a tap never plays */
+            v.heading = libm::playlist_heading(d_.pstats);
+            v.buttons = {"Play", "Edit"};
+            v.button_primary[0] = true;
+            v.button_enabled[0] = any_playable; /* dimmed with nothing to play: a tap says so */
+            v.button_enabled[1] = true;
+        } else { /* the edit mode: EDITING <NAME>, N TRACKS, Done, four buttons of the same secondary look */
+            v.heading = libm::playlist_edit_heading(loc.title, static_cast<int>(d_.entries.size()));
+            v.done_chip = true;
+            v.buttons = {"Move up", "Move down", "Remove", "Add tracks"};
+            v.button_enabled[0] = sel_ > 0;
+            v.button_enabled[1] = sel_ >= 0 && sel_ < n - 1;
+            v.button_enabled[2] = sel_ >= 0 && sel_ < n;
+            v.button_enabled[3] = true;
+        }
         if (d_.loaded && d_.entries.empty()) {
             v.empty = true;
             v.empty_title = "No tracks yet";
-            v.empty_sub = "Use Add tracks, or hold a song in the Library and choose Add to playlist.";
+            v.empty_sub = "Press Edit, then Add tracks, or hold a song in the Library and choose Add to playlist.";
         }
         break;
     }
@@ -1635,6 +1804,7 @@ LibView LibraryCtl::view() {
         break;
     }
     }
+    if (pick_ && v.done_button) v.heading = libm::hub_pick_heading(pick_name_, pick_marks_.total()); /* the pages' own headings give way to it */
     return v;
 }
 
