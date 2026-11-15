@@ -5,8 +5,7 @@
  * TurboJPEG at the smallest scale that still covers the row's box and fitted to it (64x36 at 480x320, 56x32 at
  * 320x480, the class's size elsewhere), in the display's format; cached as
  * ~/.cache/vhs/thumbs/<name>-<size>-<mtime>.raw (a small header: magic, w, h, stride, format, box) and deleted with
- * their file. Movies of another codec get no thumbnail in P1's M4 (FFmpeg's decoder comes with playback, M5): the row
- * shows the empty box. LVGL-free; the scenes worker runs it.
+ * their file. Movies of another codec: their first picture through FFmpeg's decoder (movie/video_decoder.hpp, M5). LVGL-free; the scenes worker runs it.
  */
 #pragma once
 

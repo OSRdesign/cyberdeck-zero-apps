@@ -99,3 +99,5 @@ void test_record();
 void test_recorder();
 void test_rec_app();
 void test_scenes();
+void test_play_audio();
+void test_movie();

@@ -7,6 +7,7 @@
 
 #include "atomic_file.hpp"
 #include "fileops.hpp"
+#include "movie/video_decoder.hpp"
 #include "record/av_libs.hpp"
 
 #include <cstdlib>
@@ -122,8 +123,13 @@ bool make_thumb(FileOps &ops, const AvLibs *av, const SceneEntry &e, int box_w, 
         }
         int codec = -1;
         if (!first_video_packet(*av, e.path, jpeg, codec)) {
-            if (why) *why = codec >= 0 && codec != av::kCodecMjpeg ? "no thumbnail for " + codec_label(codec, av->lavf_major) + " in P1 (M5)"
-                                                                 : "no video packet";
+            if (codec >= 0 && codec != av::kCodecMjpeg) { /* another codec: its first picture through FFmpeg (M5) */
+                if (!first_picture(*av, e.path, box_w, box_h, fmt, out, why)) return false;
+                out.box_w = box_w;
+                out.box_h = box_h;
+                return true;
+            }
+            if (why) *why = "no video packet";
             return false;
         }
     }

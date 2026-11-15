@@ -108,6 +108,7 @@ struct Lib {
     int (*val_get_bool)(const snd_ctl_elem_value_t *, unsigned) = nullptr;
     void (*val_set_bool)(snd_ctl_elem_value_t *, unsigned, int) = nullptr;
     int (*get_db_range)(snd_ctl_t *, const snd_ctl_elem_id_t *, long *, long *) = nullptr;
+    int (*convert_to_db)(snd_ctl_t *, const snd_ctl_elem_id_t *, long, long *) = nullptr; /* VHS (Vinyl's), optional */
     /* VHS: the capture clock (brief 6.2): monotonic timestamps and snd_pcm_status; optional (alsa-lib 1.0.29+) */
     int (*status_malloc)(snd_pcm_status_t **) = nullptr;
     void (*status_free)(snd_pcm_status_t *) = nullptr;
@@ -195,6 +196,7 @@ struct Lib {
         sym(val_get_bool, "snd_ctl_elem_value_get_boolean");
         sym(val_set_bool, "snd_ctl_elem_value_set_boolean");
         sym(get_db_range, "snd_ctl_get_dB_range");
+        convert_to_db = reinterpret_cast<decltype(convert_to_db)>(::dlsym(h, "snd_ctl_convert_to_dB")); /* VHS (Vinyl's), optional */
         /* VHS: optional, a missing one only turns the capture clock's timestamps off */
         auto opt = [&](auto &fn, const char *name) {
             fn = reinterpret_cast<std::remove_reference_t<decltype(fn)>>(::dlsym(h, name));
@@ -574,6 +576,12 @@ public:
                     c.has_db = true;
                     c.db_min_cdb = dmin;
                     c.db_max_cdb = dmax;
+                    if (dmin <= kAlsaDbGainMute) { /* VHS (Vinyl's): a dB scale with its mute flag: the real dB of min back */
+                        long dnext = 0;
+                        const bool known = l->convert_to_db && c.max > c.min + 1 &&
+                                           l->convert_to_db(l->hctl_ctl(hc.h), id, c.min + 1, &dnext) >= 0;
+                        alsa_fix_mute_db(c, known, dnext);
+                    }
                 }
             }
             out.push_back(c);

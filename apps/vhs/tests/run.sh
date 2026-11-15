@@ -45,6 +45,14 @@ if command -v ffprobe > /dev/null 2>&1 && command -v ffmpeg > /dev/null 2>&1; th
 else
     echo "== ffprobe / ffmpeg MISSING: the recorder's ffprobe checks will NOT run (apt install ffmpeg)"
 fi
+case "$*" in
+*SAN=thread*)
+    # FFmpeg's uninstrumented decoder threads (tests/tsan.supp: frames inside FFmpeg's libraries only)
+    TSAN_OPTIONS="suppressions=$work/app/tests/tsan.supp ${TSAN_OPTIONS:-}"
+    export TSAN_OPTIONS
+    ;;
+esac
+(cd "$app" && tar cf - tests/tsan.supp) | (cd "$work/app" && tar xf -)
 # VHS_GROUPS="record recorder" runs only those groups
 # shellcheck disable=SC2086
 VHS_FIXTURES="$fx" VHS_SETTINGS="$work/no-settings.json" "$work/build/test-vhs" ${VHS_GROUPS:-}

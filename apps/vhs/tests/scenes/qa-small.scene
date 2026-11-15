@@ -1,7 +1,8 @@
 # VHS M1, the Capture page through its states on the fake camera (a UGREEN FineCam CM969 on a dwc_otg bus, an
 # Instant board: VHS_SOC bcm2837): live in Photo and Video mode, unplugged (Lost: the last picture dimmed, the
 # toast), not back after 5 s (the NoCamera page with the replug hint), turned (back with its portrait list within
-# 10 s: the Turned overlay until the first frame, 2.5 s later here), then the portrait picture pillarboxed.
+# 10 s: the Turned overlay until the first frame, 2.5 s later here), then the portrait picture pillarboxed. Video
+# mode streams the Video size (1280x720, the owner's decision of 2026-11-15).
 title VHS M1 at 480x320 and 320x480 at 6.3 px/mm (qa-small, TARGET 7 mm): Capture live, Video, Lost, NotBack + hint, Turned, portrait
 sizes 480x320 320x480
 ppmm 630
@@ -26,12 +27,13 @@ expect key "Settings" target
 @480x320 expect key "Scenes" target
 @480x320 expect key "Photo | Video" target
 key tab
-wait 400
+wait 700
 shot 02-live-video
 expect text "Video"
 expect text "UGREEN FineCam 1080P CM969, MJPEG. Space or R records, Tab switches to Photo."
+expect text "1280x720  30 fps"
 key tab
-wait 2300
+wait 2000
 shot 03-lost
 expect text "Waiting for the camera..."
 expect text "Camera unplugged."

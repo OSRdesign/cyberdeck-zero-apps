@@ -37,6 +37,9 @@ constexpr int kCodecMjpeg = 7;     /* AV_CODEC_ID_MJPEG */
 constexpr int kCodecH264 = 27;     /* AV_CODEC_ID_H264 (P2) */
 constexpr int kCodecAac = 86018;   /* AV_CODEC_ID_AAC */
 constexpr int kCodecHevc = 173, kCodecMpeg4 = 12, kCodecVp8 = 139, kCodecVp9 = 167; /* the scenes list's codec names */
+/* playback (M5, brief 4.4): the pixel formats the own YUV-to-RGB takes, the seek flag */
+constexpr int kPixYuv420p = 0, kPixYuv422p = 4, kPixYuvj420p = 12, kPixYuvj422p = 13, kPixNv12 = 23;
+constexpr int kSeekBackward = 1; /* AVSEEK_FLAG_BACKWARD */
 constexpr int kIoWrite = 2;        /* AVIO_FLAG_WRITE */
 constexpr int kPktKey = 1;         /* AV_PKT_FLAG_KEY */
 constexpr int kFmtFltp = 8;        /* AV_SAMPLE_FMT_FLTP */
@@ -58,11 +61,11 @@ struct ChannelLayout { /* AVChannelLayout (FFmpeg 5.1 and later) */
 /* The struct fields VHS reads or writes, by libavformat major (the same major for libavcodec in each set). */
 struct Offsets {
     std::size_t fmt_pb = 32, fmt_nb_streams = 44, fmt_streams = 48, fmt_duration = 104; /* AVFormatContext */
-    std::size_t stream_codecpar = 16, stream_time_base = 32;                   /* AVStream */
+    std::size_t stream_codecpar = 16, stream_time_base = 32, stream_avg_frame_rate = 88; /* AVStream */
     std::size_t par_codec_type = 0, par_codec_id = 4, par_width = 72, par_height = 76; /* AVCodecParameters */
     std::size_t ctx_time_base = 84, ctx_sample_fmt = 348;                      /* AVCodecContext (sample_fmt has no AVOption) */
-    std::size_t frame_data = 0, frame_linesize = 64, frame_nb_samples = 112, frame_format = 116, frame_pts = 136,
-                frame_sample_rate = 192, frame_ch_layout = 408;                /* AVFrame */
+    std::size_t frame_data = 0, frame_linesize = 64, frame_width = 104, frame_height = 108, frame_nb_samples = 112,
+                frame_format = 116, frame_pts = 136, frame_sample_rate = 192, frame_ch_layout = 408; /* AVFrame */
     std::size_t pkt_pts = 8, pkt_dts = 16, pkt_data = 24, pkt_size = 32, pkt_stream_index = 36, pkt_flags = 40,
                 pkt_duration = 64;                                             /* AVPacket */
     int codec_av1 = 225;                                                       /* AV_CODEC_ID_AV1 (226 in the 60 set) */
@@ -127,6 +130,13 @@ struct AvLibs {
     av::Packet *(*packet_alloc)() = nullptr;
     void (*packet_free)(av::Packet **) = nullptr;
     void (*packet_unref)(av::Packet *) = nullptr;
+    /* playback (M5): the video decoder of a movie that is not MJPEG, the seek */
+    const av::Codec *(*find_decoder)(int codec_id) = nullptr;
+    int (*parameters_to_context)(av::CodecContext *, const av::CodecParameters *) = nullptr;
+    int (*send_packet)(av::CodecContext *, const av::Packet *) = nullptr;
+    int (*receive_frame)(av::CodecContext *, av::Frame *) = nullptr;
+    void (*flush_buffers)(av::CodecContext *) = nullptr;
+    int (*seek_frame)(av::FormatContext *, int stream_index, std::int64_t timestamp, int flags) = nullptr;
     bool complete() const;
 
     /* field access through the offsets */

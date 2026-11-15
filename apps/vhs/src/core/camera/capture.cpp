@@ -113,6 +113,18 @@ void Capture::request_mode(const ModeReq &m)
     sleep_cv_.notify_all();
 }
 
+void Capture::rechoose()
+{
+    {
+        std::lock_guard<std::mutex> lock(status_m_);
+        mode_change_ = true; /* an in-place switch to what the chooser says now (nothing when it is the same) */
+    }
+    {
+        std::lock_guard<std::mutex> lock(sleep_m_);
+    }
+    sleep_cv_.notify_all();
+}
+
 void Capture::reopen()
 {
     {

@@ -77,4 +77,16 @@ void rgb_to_yuv601(int r, int g, int b, int &y, int &u, int &v);
 void yuv601_to_rgb(int y, int u, int v, int &r, int &g, int &b);
 std::uint16_t rgb565(int r, int g, int b);
 
+/* Playback (brief 4.4: no libswscale): a decoded YUV picture fitted (the nearest sample, centred) into dst_w x dst_h
+ * in the display format. Planar 4:2:0 (vshift 1) or 4:2:2 (vshift 0), limited range, or full range for the J formats;
+ * NV12: u is the interleaved UV plane (v unused). */
+struct YuvPlanes {
+    const std::uint8_t *y = nullptr, *u = nullptr, *v = nullptr;
+    int ys = 0, us = 0, vs = 0;
+    int vshift = 1;
+    bool nv12 = false;
+    bool full_range = false;
+};
+void yuv_fit(PixFmt fmt, const YuvPlanes &p, int src_w, int src_h, std::uint8_t *dst, int dst_w, int dst_h, int dst_stride);
+
 } // namespace vhs

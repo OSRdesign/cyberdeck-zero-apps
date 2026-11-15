@@ -5,7 +5,7 @@
  * user's folder). Synthetic pictures (colour bars, a different hue per file) as photos and as short MJPEG movies made by
  * the recorder (when FFmpeg loads), named as VHS names them, with spread modification times, a locked renamed scene
  * ("Stopwatch test", canvas row 3) and an auto-split scene (_p2):
- *   "1"     the set above (12 files)
+ *   "1"     the set above (14 files: "Sunset" renamed; the newest, "Trip", 10 s with a tone: the playback fixture)
  *   "cjk"   the set plus foreign files with CJK names (qa-cjk)
  * LVGL-free; runs on the scenes worker before the startup repair.
  */

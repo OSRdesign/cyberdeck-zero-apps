@@ -310,8 +310,16 @@ void controller_recording()
         std::fprintf(stderr, "controller: REC to the first written frame %lld ms (with the switch to 1280x720), %llu frames\n",
                      static_cast<long long>(first), static_cast<unsigned long long>(st.frames));
         /* 2. stop() while recording (hide, close, SIGTERM's teardown): the file is finished before it returns */
-        ctl.toggle_capture_mode(); /* Video mode: the shutter records */
+        ctl.toggle_capture_mode(); /* Video mode: the shutter records; the Video size streams (owner, 2026-11-15) */
+        CHECK(step_until(ctl, 3000, [](const Snapshot &x) { return x.mode.w == 1280; }));
+        std::this_thread::sleep_for(std::chrono::milliseconds(700)); /* warmed up */
+        const std::int64_t tv = mono_ms();
         ctl.shutter(mono_ms());
+        CHECK(step_until(ctl, 2000, [](const Snapshot &x) { return x.rec_started; }));
+        const std::int64_t fast = mono_ms() - tv;
+        CHECK(fast <= 400); /* no stream switch: the warm-up is already done */
+        std::fprintf(stderr, "controller: REC in Video mode to the first written frame %lld ms (no switch)\n",
+                     static_cast<long long>(fast));
         CHECK(step_until(ctl, 3000, [](const Snapshot &x) { return x.rec_started && x.rec_ms > 500; }));
         ctl.stop();
         CHECK(!ctl.recording());

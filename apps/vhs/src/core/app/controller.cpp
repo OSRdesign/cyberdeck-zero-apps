@@ -9,7 +9,9 @@
 #include "audio/alsa/open_policy.hpp"
 #include "audio/fake_alsa.hpp"
 #include "audio/mic_match.hpp"
+#include "play/fake_output.hpp"
 #include "camera/identity.hpp"
+#include "live/clock.hpp"
 #include "modes/codec_caps.hpp"
 #include "record/av_libs.hpp"
 #include "record/disk_guard.hpp"
@@ -21,6 +23,7 @@
 #include "scenes/fileops.hpp"
 #include "scenes/naming.hpp"
 
+#include <sys/resource.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -56,6 +59,14 @@ struct Controller::RecSession : FrameTap {
         rec->push_video(data, n, ts_us);
     }
 };
+
+/* the process's CPU time (user + system), ms: the playback's core share in the log */
+static std::int64_t process_cpu_ms()
+{
+    struct rusage ru;
+    if (getrusage(RUSAGE_SELF, &ru) != 0) return 0;
+    return (static_cast<std::int64_t>(ru.ru_utime.tv_sec + ru.ru_stime.tv_sec) * 1000) + (ru.ru_utime.tv_usec + ru.ru_stime.tv_usec) / 1000;
+}
 
 int ram_mb(const std::string &root)
 {
@@ -174,6 +185,7 @@ Controller::Controller(ControllerConfig cfg) : cfg_(std::move(cfg)), store_(posi
 
 Controller::~Controller()
 {
+    playback_close();
     stop();
     worker_.stop(); /* a save in progress finishes first */
 }
@@ -242,6 +254,9 @@ ModeReq Controller::choose(const std::vector<CamMode> &listed, const CamIdentity
     std::fprintf(stderr, "[vhs] %s\n", selection_text(s, soc_).c_str());
     std::lock_guard<std::mutex> lock(sel_m_);
     sel_ = s;
+    /* the owner's decision (2026-11-15): Video mode previews the Video size stream, Photo mode the Photo size (Instant)
+     * or the Light stream; a camera without an MJPEG Video size keeps the preview */
+    if (s.ok && video_preview_.load() && s.video.valid()) return s.video;
     return s.ok ? s.preview : ModeReq();
 }
 
@@ -314,6 +329,7 @@ Snapshot Controller::step(std::int64_t now_ms)
         }
     }
     rec_step(now_ms, cam, s);
+    play_step();
     s.notice = notices_.current(now_ms);
     s.countdown = timer_.active() ? std::max(1, timer_.shown(now_ms)) : 0;
     s.countdown_video = timer_.active() && timer_.kind() == TimerKind::Video;
@@ -330,6 +346,10 @@ void Controller::toggle_capture_mode()
 {
     if (timer_.active() || rec_) return; /* dimmed during the countdown; "Photo now" while recording */
     capture_mode_ = capture_mode_ == CaptureMode::Photo ? CaptureMode::Video : CaptureMode::Photo;
+    video_preview_ = capture_mode_ == CaptureMode::Video;
+    pipe_->capture().rechoose(); /* the stream follows the mode (switched in place; the last picture stays meanwhile) */
+    std::fprintf(stderr, "[vhs] mode: %s, the %s streams\n", capture_mode_ == CaptureMode::Video ? "Video" : "Photo",
+                 capture_mode_ == CaptureMode::Video ? "Video size" : "Photo preview");
 }
 
 /* ------------------------------------------------------------------------------------------------ the photo */
@@ -620,6 +640,7 @@ void Controller::start_recording(std::int64_t now_ms)
                  rc.ring_seconds);
     pipe_->capture().set_tap(rs.get(), rs->mode); /* frames after the warm-up of the Video size */
     rec_ = std::move(rs);
+    send_dim(true); /* brief 10: the screen stays on while recording or playing */
 }
 
 void Controller::stop_recording(RecStop why, bool wait)
@@ -662,6 +683,7 @@ void Controller::end_recording()
     else if (st.stop == RecStop::Error)
         notices_.push(Notice{std::string(kNoticeRecFailed) + (st.error.empty() ? "an error" : st.error) + ".", false});
     rec_.reset();
+    send_dim(false);
 }
 
 void Controller::log_rec_start(std::int64_t now_ms, const RecorderStatus &st)
@@ -961,6 +983,263 @@ void Controller::scene_delete(const std::string &name)
             else recount();
         };
     });
+}
+
+/* ------------------------------------------------------------------------------------------------ playback */
+
+std::int64_t Controller::play_clock_ms() const
+{
+    /* the engine's heard position while it plays the sound; else the monotonic clock (no sound, or the output failed) */
+    std::lock_guard<std::mutex> lock(play_m_);
+    if (!playing_) return mono_clock_.at(mono_ms()); /* paused: exactly where it stopped (the engine's clock may lag) */
+    if (audio_ready_.load() && audio_clock_.open && audio_clock_.has_audio && audio_clock_.error.empty() && !audio_clock_.output_lost)
+        return audio_clock_.heard_ms;
+    return mono_clock_.at(mono_ms());
+}
+
+bool Controller::play_running() const
+{
+    std::lock_guard<std::mutex> lock(play_m_);
+    return playing_;
+}
+
+void Controller::send_dim(bool deny)
+{
+    if (dim_denied_ == deny) return;
+    dim_denied_ = deny;
+    if (cfg_.fake) { /* the harness has no launcher: the request is logged only */
+        std::fprintf(stderr, "[vhs] launcher: dim %s (fake: not sent)\n", deny ? "deny" : "allow");
+        return;
+    }
+    launcher_dim(deny);
+}
+
+std::unique_ptr<AudioPlayer> Controller::make_audio_player(const std::string &output)
+{
+    if (cfg_.audio_factory) return cfg_.audio_factory(output);
+    if (cfg_.fake) { /* the headless scenes: Vinyl's fake output (VHS_FAKE_OUTPUT: ok | lost | none | instant), never a device */
+        const char *m = std::getenv("VHS_FAKE_OUTPUT");
+        return std::make_unique<AudioPlayer>(output, fake_audio_deps(fake_output_options(m && m[0] ? m : "ok")));
+    }
+    return std::make_unique<AudioPlayer>(output);
+}
+
+void Controller::launcher_dim(bool deny)
+{
+    /* brief 10: "dim deny" while playing or recording, "dim allow" on stop, only where board.state's requests lists dim
+     * (Vinyl's launcher link: the requests go out on its own thread) */
+    if (!launcher_status_) launcher_status_ = std::make_unique<LauncherStatusReader>();
+    launcher_status_->poll(static_cast<std::uint64_t>(mono_ms()));
+    if (!launcher_status_->status().has_request("dim")) {
+        std::fprintf(stderr, "[vhs] launcher: dim %s not sent (this board's launcher does not take dim)\n", deny ? "deny" : "allow");
+        return;
+    }
+    if (!launcher_req_) launcher_req_ = std::make_unique<LauncherRequests>();
+    launcher_req_->send(deny ? "dim deny" : "dim allow");
+    std::fprintf(stderr, "[vhs] launcher: dim %s\n", deny ? "deny" : "allow");
+}
+
+void Controller::playback_open(const std::string &name, int box_w, int box_h)
+{
+    playback_close();
+    play_view_ = PlaybackView();
+    play_view_.open = true;
+    play_view_.playing = true; /* it plays at once */
+    play_view_.name = name;
+    const std::size_t dot = name.find_last_of('.');
+    play_view_.title = dot == std::string::npos ? name : name.substr(0, dot);
+    std::string why;
+    const AvLibs *av = cfg_.av ? cfg_.av : real_av_libs(&why);
+    if (!av) {
+        play_view_.error = kNoticeCannotPlay;
+        notices_.push(Notice{kNoticeCannotPlay, false});
+        std::fprintf(stderr, "[vhs] playback: no FFmpeg: %s\n", why.c_str());
+        return;
+    }
+    const std::string path = folder_ + "/" + name;
+    movie_ = std::make_unique<Movie>(*av, [this] { return play_clock_ms(); }, [this] { return play_running(); });
+    if (!movie_->open(path, box_w, box_h, cfg_.fmt, &why)) {
+        play_view_.error = why;
+        notices_.push(Notice{kNoticeCannotPlay, false});
+        std::fprintf(stderr, "[vhs] playback: %s: %s\n", name.c_str(), why.c_str());
+        movie_.reset();
+        return;
+    }
+    audio_ = make_audio_player(store_.get().output);
+    /* the engine opens the file on its own thread (FFmpeg, the output): the picture starts on the monotonic clock and
+     * follows the heard position from the moment the sound plays (play_step) */
+    audio_ready_ = false;
+    if (audio_) {
+        AudioPlayer *ap = audio_.get();
+        audio_open_ = std::async(std::launch::async, [ap, path] { return ap->open(path, 0, false); });
+    }
+    {
+        std::lock_guard<std::mutex> lock(play_m_);
+        audio_clock_ = AudioClock();
+        mono_clock_ = PlayClock();
+        mono_clock_.set(0, mono_ms());
+        mono_clock_.resume(mono_ms());
+        playing_ = true;
+    }
+    const MovieStatus ms = movie_->status();
+    std::fprintf(stderr, "[vhs] playback: %s: %s %dx%d, %s, %s\n", name.c_str(), ms.codec.c_str(), ms.w, ms.h,
+                 duration_text(ms.duration_ms).c_str(), ms.frame_ms > 0 ? (std::to_string(static_cast<int>(1000.0 / ms.frame_ms + 0.5)) + " fps").c_str() : "?");
+    play_t0_us_ = mono_us();
+    play_cpu0_ = process_cpu_ms();
+    send_dim(true);
+}
+
+void Controller::playback_close()
+{
+    if (movie_) {
+        const MovieStatus ms = movie_->status();
+        const double wall = static_cast<double>(mono_us() - play_t0_us_) / 1e6;
+        const double cpu = static_cast<double>(process_cpu_ms() - play_cpu0_) / 1000.0;
+        std::fprintf(stderr, "[vhs] playback: closed after %.1f s: %llu frames decoded (%.1f ms each), %llu dropped late, %llu not shown, %.2f core\n",
+                     wall, static_cast<unsigned long long>(ms.decoded), ms.decode_ms, static_cast<unsigned long long>(ms.dropped),
+                     static_cast<unsigned long long>(ms.shown_dropped), wall > 0 ? cpu / wall : 0.0);
+        last_play_ = ms;
+    }
+    movie_.reset();
+    if (audio_open_.valid()) audio_open_.wait(); /* the engine's open returns within its timeout */
+    audio_ready_ = false;
+    if (audio_) audio_->shutdown();
+    audio_.reset();
+    {
+        std::lock_guard<std::mutex> lock(play_m_);
+        playing_ = false;
+        audio_clock_ = AudioClock();
+    }
+    play_pic_.reset();
+    play_view_ = PlaybackView();
+    send_dim(false);
+}
+
+void Controller::playback_toggle()
+{
+    if (!movie_) return;
+    const std::int64_t cur = play_clock_ms();
+    const std::int64_t now = mono_ms();
+    bool play;
+    {
+        std::lock_guard<std::mutex> lock(play_m_);
+        play = !playing_;
+        /* the monotonic clock takes the position heard now (pausing), or starts from it (playing); at the end Play
+         * starts again from the beginning */
+        mono_clock_.set(play && play_view_.ended ? 0 : cur, now);
+        playing_ = play;
+        if (play) mono_clock_.resume(now);
+        else mono_clock_.pause(now);
+    }
+    if (play && play_view_.ended) {
+        play_view_.ended = false;
+        movie_->seek(0);
+        if (audio_ && audio_ready_.load()) audio_->seek_ms(0);
+    }
+    if (audio_ && audio_ready_.load()) {
+        if (play) audio_->play();
+        else audio_->pause();
+    }
+    send_dim(play);
+}
+
+void Controller::playback_seek_to(std::int64_t ms)
+{
+    if (!movie_) return;
+    const std::int64_t dur = std::max<std::int64_t>(0, movie_->status().duration_ms);
+    ms = std::max<std::int64_t>(0, dur > 0 ? std::min(ms, dur - 1) : ms);
+    {
+        std::lock_guard<std::mutex> lock(play_m_);
+        mono_clock_.set(ms, mono_ms());
+        audio_clock_.heard_ms = ms; /* until the engine reports again */
+    }
+    play_view_.ended = false;
+    movie_->seek(ms);
+    if (audio_ && audio_ready_.load()) audio_->seek_ms(ms);
+    seek_shown_ms_ = ms;
+}
+
+void Controller::playback_seek_by(std::int64_t delta_ms)
+{
+    playback_seek_to(play_clock_ms() + delta_ms);
+}
+
+void Controller::playback_volume(int dir)
+{
+    if (audio_) audio_->volume_step(dir);
+}
+
+std::shared_ptr<Picture> Controller::playback_picture()
+{
+    if (!movie_) return nullptr;
+    std::int64_t pts = -1;
+    auto pic = movie_->presenter().pick(play_clock_ms(), &pts);
+    if (pic) play_pic_ = pic;
+    return pic;
+}
+
+void Controller::play_step()
+{
+    if (!movie_) return;
+    if (audio_ && !audio_ready_.load() && audio_open_.valid() &&
+        audio_open_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        const bool ok = audio_open_.get();
+        const AudioClock c0 = audio_->clock();
+        if (ok && c0.has_audio && c0.error.empty()) {
+            /* the sound joins where the picture is */
+            audio_->seek_ms(play_clock_ms());
+            if (play_running()) audio_->play();
+            audio_ready_ = true;
+            std::fprintf(stderr, "[vhs] playback: sound on %s\n", c0.output_label.c_str());
+        } else {
+            std::fprintf(stderr, "[vhs] playback: no sound (%s): the picture keeps the monotonic clock\n",
+                         !ok ? (c0.error.empty() ? "the engine did not open it" : c0.error.c_str()) : (c0.has_audio ? c0.error.c_str() : "no audio stream"));
+        }
+    }
+    if (audio_ && audio_ready_.load()) {
+        const AudioClock c = audio_->clock();
+        {
+            std::lock_guard<std::mutex> lock(play_m_);
+            audio_clock_ = c;
+        }
+        for (AudioPlayer::Key k = audio_->poll_key(); k != AudioPlayer::Key::None; k = audio_->poll_key()) {
+            if (k == AudioPlayer::Key::PlayPause) playback_toggle();
+            else if (k == AudioPlayer::Key::Play && !play_running()) playback_toggle();
+            else if ((k == AudioPlayer::Key::Pause || k == AudioPlayer::Key::Stop) && play_running()) playback_toggle();
+        }
+    }
+    const MovieStatus ms = movie_->status();
+    const std::int64_t pos = play_clock_ms();
+    if (movie_->take_drops_notice()) notices_.push(Notice{kNoticeDrops, false}); /* brief 10: after 2 s of drops */
+    if (!ms.error.empty() && play_view_.error.empty()) {
+        play_view_.error = ms.error;
+        notices_.push(Notice{kNoticeCannotPlay, false});
+    }
+    /* the end: the last frame decoded and the clock past it: paused there */
+    bool sound_ended;
+    {
+        std::lock_guard<std::mutex> lock(play_m_);
+        sound_ended = audio_ready_.load() && audio_clock_.ended;
+    }
+    if (ms.ended && play_running() && ms.duration_ms > 0 &&
+        (pos >= ms.duration_ms - static_cast<std::int64_t>(ms.frame_ms) || sound_ended)) {
+        std::lock_guard<std::mutex> lock(play_m_);
+        playing_ = false;
+        mono_clock_.pause(mono_ms());
+        play_view_.ended = true;
+    }
+    if (play_view_.ended && audio_ && audio_ready_.load()) audio_->pause();
+    play_view_.playing = play_running();
+    play_view_.duration_ms = ms.duration_ms;
+    play_view_.pos_ms = std::max<std::int64_t>(0, ms.duration_ms > 0 ? std::min(pos, ms.duration_ms) : pos);
+    play_view_.codec = ms.codec;
+    play_view_.volume = audio_ ? audio_->volume_percent() : -1;
+    play_view_.output = audio_ ? audio_->volume_label() : std::string();
+    {
+        std::lock_guard<std::mutex> lock(play_m_);
+        play_view_.has_audio = audio_clock_.has_audio && audio_clock_.error.empty();
+    }
+    if (!play_view_.playing) send_dim(false);
 }
 
 /* ------------------------------------------------------------------------------------------------ the review */

@@ -74,6 +74,7 @@ VhsApp::VhsApp(lv_obj_t *screen) : screen_(screen)
     sin.row = m->tok[CP0_TOK_ROW_H];
     sin.list_row = m->tok[CP0_TOK_LIST_ROW_H];
     sgeo_ = scenes_layout(sin);
+    pgeo_ = playback_layout(in, m->tok[CP0_TOK_ROW_H]);
 
     ControllerConfig cc = controller_config(opt);
     cc.box_w = geo_.picture.w;
@@ -115,6 +116,24 @@ VhsApp::VhsApp(lv_obj_t *screen) : screen_(screen)
     ra.next = [this] { ctl_->review_move(1); };
     ra.del = [this] { ask_delete(); };
     review_ = std::make_unique<ReviewPage>(page_->root(), rgeo_, ra);
+    PlaybackActions pa;
+    pa.toggle = [this] {
+        ctl_->playback_toggle();
+        on_status_timer();
+    };
+    pa.minus = [this] {
+        ctl_->playback_volume(-1);
+        on_status_timer();
+    };
+    pa.plus = [this] {
+        ctl_->playback_volume(1);
+        on_status_timer();
+    };
+    pa.seek = [this](std::int64_t ms) {
+        ctl_->playback_seek_to(ms);
+        on_status_timer();
+    };
+    playback_ = std::make_unique<PlaybackPage>(page_->root(), pgeo_, pa);
 
     std::fprintf(stderr,
                  "[vhs] page %dx%d (%s), target %d, picture box %dx%d, %s, %s, refresh %d ms, camera %s, TurboJPEG %s\n",
@@ -151,6 +170,7 @@ VhsApp::~VhsApp()
     scenes_.reset();
     sheet_.reset();
     review_.reset();
+    playback_.reset();
     page_.reset();
     if (ctl_) ctl_->stop();
     ctl_.reset();
@@ -200,6 +220,10 @@ void VhsApp::on_frame_timer()
         scenes_->tick(now_ms()); /* a held row */
         return;
     }
+    if (view_ == View::Playback) {
+        if (auto pic = ctl_->playback_picture()) playback_->show_picture(*pic); /* the presenter's picture due now */
+        return;
+    }
     if (view_ != View::Capture || !ctl_->running()) return;
     capture_->tick(now_ms()); /* the REC dot while a scene starts */
     Pipeline &pipe = ctl_->pipeline();
@@ -216,6 +240,10 @@ void VhsApp::on_status_timer()
 {
     /* hidden by the launcher: the camera is released (a recording finished first); shown: it reopens (brief 13) */
     if (cdk::hidden()) {
+        if (view_ == View::Playback && ctl_->playback().playing) {
+            std::fprintf(stderr, "[vhs] hidden: playback paused\n"); /* brief 13 step 4 */
+            ctl_->playback_toggle();
+        }
         if (ctl_->running()) {
             std::fprintf(stderr, "[vhs] hidden: camera released\n");
             ctl_->stop();
@@ -229,6 +257,7 @@ void VhsApp::on_status_timer()
     const Snapshot s = ctl_->step(now_ms());
     if (view_ == View::Review) review_->update(ctl_->review(), ctl_->review_picture());
     else if (view_ == View::Scenes) scenes_->update(ctl_->scenes(), s.notice);
+    else if (view_ == View::Playback) playback_->update(ctl_->playback(), s.notice);
     else capture_->update(s);
 }
 
@@ -284,7 +313,15 @@ void VhsApp::scene_open(int index)
             },
             this);
     } else {
-        std::fprintf(stderr, "[vhs] scenes: play %s: playback comes with M5\n", r->e.name.c_str());
+        /* on the next LVGL cycle (the Enter that opened it must not press the page's focused button) */
+        pending_play_ = r->e.name;
+        lv_async_call(
+            [](void *p) {
+                auto *self = static_cast<VhsApp *>(p);
+                if (self->view_ == View::Scenes && !self->pending_play_.empty()) self->open_playback(self->pending_play_);
+                self->pending_play_.clear();
+            },
+            this);
     }
 }
 
@@ -353,6 +390,33 @@ void VhsApp::scenes_key(std::uint32_t code, char ch, bool ctrl)
         sheet_photo_ = r->e.kind == SceneKind::Photo;
         ask_delete();
     }
+    on_status_timer();
+}
+
+/* ------------------------------------------------------------------------------------------------ playback */
+
+void VhsApp::open_playback(const std::string &name)
+{
+    if (view_ != View::Scenes) return;
+    sheet_->close();
+    scenes_->show(false);
+    view_ = View::Playback;
+    playback_->show(true);
+    page_->set_title({"Scene"});
+    ctl_->playback_open(name, pgeo_.picture.w, pgeo_.picture.h);
+    playback_->focus_first();
+    on_status_timer();
+    std::fprintf(stderr, "[vhs] playback: opened %s\n", name.c_str());
+}
+
+void VhsApp::close_playback()
+{
+    if (view_ != View::Playback) return;
+    ctl_->playback_close();
+    playback_->show(false);
+    view_ = View::Scenes;
+    scenes_->show(true);
+    page_->set_title({"Scenes"});
     on_status_timer();
 }
 
@@ -526,6 +590,8 @@ void VhsApp::on_back()
         dialog_choose(false);
     } else if (view_ == View::Review) {
         close_review();
+    } else if (view_ == View::Playback) {
+        close_playback(); /* brief 10: Esc returns to Scenes and stops playback */
     } else if (view_ == View::Scenes) {
         if (sheet_->shown()) sheet_->close();
         else close_scenes();
@@ -573,6 +639,18 @@ void VhsApp::on_key(const key_item &item)
     }
     if (view_ == View::Scenes) {
         scenes_key(code, ch, ctrl);
+        return;
+    }
+    if (view_ == View::Playback) {
+        /* brief 10: Left / Right seek 5 s, Shift 30 s; Space pauses / plays (provisional) */
+        const bool shift = (item.mods & KBD_MOD_SHIFT) != 0;
+        if (code == KEY_LEFT || code == KEY_RIGHT) {
+            const std::int64_t step = shift ? 30000 : 5000;
+            ctl_->playback_seek_by(code == KEY_RIGHT ? step : -step);
+        } else if (is(KEY_SPACE, ' ') || code == KEY_PLAYPAUSE) {
+            ctl_->playback_toggle();
+        }
+        on_status_timer();
         return;
     }
     if (ctrl) return;

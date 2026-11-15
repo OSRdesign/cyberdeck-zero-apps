@@ -40,6 +40,7 @@ key down
 key down
 key down
 key down
+key down
 key delete
 wait 400
 shot 04-delete-asks
@@ -49,7 +50,7 @@ key y
 wait 1000
 shot 05-locked-refused
 expect text "Not deleted: the file is locked."
-expect text "SCENES, 13"
+expect text "SCENES, 14"
 key up
 key delete
 wait 400
@@ -57,7 +58,7 @@ expect text "Delete this photo?"
 key y
 wait 1500
 shot 06-deleted
-expect text "SCENES, 12"
+expect text "SCENES, 13"
 key esc
 wait 1500
 key esc

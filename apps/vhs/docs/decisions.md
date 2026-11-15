@@ -16,6 +16,21 @@ starts with the points resolved during the build.
 | 2026-11-15 | REC start delay (M4 item 2) | One `[vhs] rec-start:` line per REC: stream close, reopen, mode set, controls, buffers + STREAMON, first camera frame, warm-up (15 frames), mic open and writer open (both run while the stream switches), first frame written. A mode change now switches on the open device (STREAMOFF, REQBUFS 0, S_FMT, S_PARM, new buffers, STREAMON; the controls kept) instead of closing and reopening it; any refusal falls back to the full reopen. The warm-up stays 15 frames (no evidence for less). | Controller, G3 |
 | 2026-11-15 | Mic log on a normal stop (M4 item 3) | A user stop no longer logs "the microphone stopped (none)"; the line is for a real microphone loss only, with its reason. | Controller, G3 |
 
+| 2026-11-15 | Preview stream per mode (owner; replaces brief 4.1 rules 5 / 6 for the preview) | Video mode previews the Video size stream (default 1280x720); Photo mode previews the Photo size (Instant) or the Light stream (Light). No mode picking by window size. Tab switches the stream (in place; the last picture stays until the new one comes, the existing behaviour). R in Video mode needs no switch, so the scene starts from a warm stream; R in Photo mode still switches (the rec-start line says which). A photo during a recording ("Photo now") stays the recording's current frame. | Owner via the Controller, M5 |
+
+## Provisional in M5 (for the Controller at G5)
+
+| Point | What the build does now | Basis |
+|---|---|---|
+| "Cannot be played" toast | "This video cannot be played." (no decoder, a pixel format the own converter does not take, a file that does not open) | brief 4.4 "wording: Controller" |
+| Space on Playback | pauses / plays (Vinyl's habit); Left / Right 5 s, Shift 30 s (brief) | brief 12.3 has no playback row for Space |
+| Volume line without an output | "Volume" alone (no percent) while the engine has no output (the harness, a board without sound) | canvas "Volume 72%" |
+| The end of a movie | pauses on the last frame; Play starts again from the beginning | Vinyl's QueueEnd pause |
+| "-" and "+" height | at least TARGET (the canvas's 40u is under the 44u touch rule); "Volume" moves 4u down | harness touch rule |
+| Playback in the undrawn classes | portrait / square: one row under the picture (Pause half, "-" and "+" a quarter each), then volume, seek bar, times, name | brief 12.4 item 7 |
+| Toast place on Playback | over the picture's bottom (the seek bar, the times and the name stay readable) | no canvas toast there |
+| Output setting | Settings > Playback output read from settings.json (`output`, Vinyl's target string) until the Settings page (M6) | coordinator, M5 |
+
 ## Provisional in M4 (for the Controller at G4)
 
 | Point | What the build does now | Basis |

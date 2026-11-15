@@ -61,8 +61,12 @@ void selection_and_toggle()
     CHECK(ctl.capture_mode() == CaptureMode::Photo);
     ctl.toggle_capture_mode();
     CHECK(ctl.step(mono_ms()).capture_mode == CaptureMode::Video);
+    /* the owner's decision: Video mode streams the Video size (1280x720), switched in place */
+    CHECK(step_until(ctl, 3000, [](const Snapshot &x) { return mode_arg(x.mode) == "MJPG:1280x720:30"; }, &s));
+    CHECK_EQ(ctl.fake()->open_count(), 1);
     ctl.toggle_capture_mode();
     CHECK(ctl.capture_mode() == CaptureMode::Photo);
+    CHECK(step_until(ctl, 3000, [](const Snapshot &x) { return mode_arg(x.mode) == "MJPG:1920x1080:30"; }, &s));
     /* stop releases the camera, start opens it again */
     ctl.stop();
     CHECK(!ctl.running());

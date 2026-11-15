@@ -65,7 +65,8 @@ bool AvLibs::complete() const
            avio_closep && avio_flush && write_header && interleaved_write_frame && write_trailer && open_input &&
            find_stream_info && read_frame && close_input && find_encoder_by_name && alloc_context &&
            free_codec_context && open2 && send_frame && receive_packet && parameters_from_context && parameters_copy &&
-           packet_alloc && packet_free && packet_unref;
+           packet_alloc && packet_free && packet_unref && find_decoder && parameters_to_context && send_packet &&
+           receive_frame && flush_buffers && seek_frame;
 }
 
 std::string AvLibs::error_text(int err) const
@@ -127,6 +128,12 @@ const AvLibs *real_av_libs(std::string *why_out)
             sym(fh, lib.find_stream_info, "avformat_find_stream_info", all, w);
             sym(fh, lib.read_frame, "av_read_frame", all, w);
             sym(fh, lib.close_input, "avformat_close_input", all, w);
+            sym(fh, lib.seek_frame, "av_seek_frame", all, w);
+            sym(ch, lib.find_decoder, "avcodec_find_decoder", all, w);
+            sym(ch, lib.parameters_to_context, "avcodec_parameters_to_context", all, w);
+            sym(ch, lib.send_packet, "avcodec_send_packet", all, w);
+            sym(ch, lib.receive_frame, "avcodec_receive_frame", all, w);
+            sym(ch, lib.flush_buffers, "avcodec_flush_buffers", all, w);
             sym(ch, lib.find_encoder_by_name, "avcodec_find_encoder_by_name", all, w);
             sym(ch, lib.alloc_context, "avcodec_alloc_context3", all, w);
             sym(ch, lib.free_codec_context, "avcodec_free_context", all, w);

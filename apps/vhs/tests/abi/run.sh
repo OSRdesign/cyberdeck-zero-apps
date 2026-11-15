@@ -1,7 +1,9 @@
 #!/bin/sh
 # SPDX-License-Identifier: MIT
 #
-# The FFmpeg ABI check of record/av_libs.hpp (brief 15.2), in WSL from a native-filesystem LF copy:
+# The FFmpeg ABI checks (brief 15.2), in WSL from a native-filesystem LF copy: check_av_abi.cpp for record/av_libs.hpp (mux, AAC
+# encode, repair) and check_decode_abi.cpp for play/decode/decode_libs.hpp (the audio decoder of playback, Vinyl's table), both
+# against every root:
 #   wsl -e sh /mnt/c/CLAUDE/zero7/apps-vhs-p1/apps/vhs/tests/abi/run.sh [ROOT ...]
 # ROOT holds usr/include/libavformat ... (a private root, as Vinyl's): the 61 set (Debian 13, FFmpeg 7.1) and the 62
 # set (Ubuntu 26.04, FFmpeg 8.0). Without arguments: every root of the list below that exists, and the build box's own
@@ -24,7 +26,7 @@ fi
 work=$(mktemp -d "${TMPDIR:-/tmp}/vhs-abi-XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/app"
-(cd "$app" && tar cf - src/core/record/av_libs.hpp src/core/record/av_libs.cpp tests/abi) | (cd "$work/app" && tar xf -)
+(cd "$app" && tar cf - src/core/record/av_libs.hpp src/core/record/av_libs.cpp src/core/play/decode tests/abi) | (cd "$work/app" && tar xf -)
 find "$work/app" -type f \( -name '*.cpp' -o -name '*.hpp' \) -exec sed -i 's/\r$//' {} +
 fail=0
 n=0
@@ -46,6 +48,14 @@ for root in "$@"; do
         continue
     fi
     "$work/abi$n" || fail=1
+    # shellcheck disable=SC2086
+    if ! g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations -Wno-ignored-attributes -I"$work/app/src/core" $inc \
+        "$work/app/tests/abi/check_decode_abi.cpp" "$work/app/src/core/play/decode/decode_libs.cpp" -ldl -o "$work/dabi$n"; then
+        echo "abi: the decode table does not compile against $root (a signature differs: see the static_assert above)"
+        fail=1
+        continue
+    fi
+    "$work/dabi$n" || fail=1
 done
 [ "$n" -gt 0 ] || { echo "abi: no header root found"; exit 1; }
 exit $fail

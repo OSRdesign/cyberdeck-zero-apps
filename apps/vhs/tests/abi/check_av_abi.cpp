@@ -86,6 +86,7 @@ int main()
     OFF(fmt_duration, AVFormatContext, duration);
     OFF(stream_codecpar, AVStream, codecpar);
     OFF(stream_time_base, AVStream, time_base);
+    OFF(stream_avg_frame_rate, AVStream, avg_frame_rate);
     OFF(par_codec_type, AVCodecParameters, codec_type);
     OFF(par_codec_id, AVCodecParameters, codec_id);
     OFF(par_width, AVCodecParameters, width);
@@ -94,6 +95,8 @@ int main()
     OFF(ctx_sample_fmt, AVCodecContext, sample_fmt);
     OFF(frame_data, AVFrame, data);
     OFF(frame_linesize, AVFrame, linesize);
+    OFF(frame_width, AVFrame, width);
+    OFF(frame_height, AVFrame, height);
     OFF(frame_nb_samples, AVFrame, nb_samples);
     OFF(frame_format, AVFrame, format);
     OFF(frame_pts, AVFrame, pts);
@@ -121,6 +124,8 @@ int main()
     SIZE(AVCodecContext, sample_fmt, int);
     SIZE(AVFrame, data, std::uint8_t * [8]);
     SIZE(AVFrame, nb_samples, int);
+    SIZE(AVFrame, width, int);
+    SIZE(AVFrame, height, int);
     SIZE(AVFrame, format, int);
     SIZE(AVFrame, pts, std::int64_t);
     SIZE(AVFrame, sample_rate, int);
@@ -153,6 +158,12 @@ int main()
     same("AV_CODEC_ID_VP9", av::kCodecVp9, AV_CODEC_ID_VP9);
     same("AV_CODEC_ID_AV1 (per set)", o.codec_av1, AV_CODEC_ID_AV1);
     same("AV_TIME_BASE (us)", 1000000, AV_TIME_BASE);
+    same("AV_PIX_FMT_YUV420P", av::kPixYuv420p, AV_PIX_FMT_YUV420P);
+    same("AV_PIX_FMT_YUV422P", av::kPixYuv422p, AV_PIX_FMT_YUV422P);
+    same("AV_PIX_FMT_YUVJ420P", av::kPixYuvj420p, AV_PIX_FMT_YUVJ420P);
+    same("AV_PIX_FMT_YUVJ422P", av::kPixYuvj422p, AV_PIX_FMT_YUVJ422P);
+    same("AV_PIX_FMT_NV12", av::kPixNv12, AV_PIX_FMT_NV12);
+    same("AVSEEK_FLAG_BACKWARD", av::kSeekBackward, AVSEEK_FLAG_BACKWARD);
     same("AVIO_FLAG_WRITE", av::kIoWrite, AVIO_FLAG_WRITE);
     same("AV_PKT_FLAG_KEY", av::kPktKey, AV_PKT_FLAG_KEY);
     same("AV_SAMPLE_FMT_FLTP", av::kFmtFltp, AV_SAMPLE_FMT_FLTP);
@@ -202,6 +213,13 @@ int main()
     SIG(av_packet_alloc, AVPacket *(*)());
     SIG(av_packet_free, void (*)(AVPacket **));
     SIG(av_packet_unref, void (*)(AVPacket *));
+    SIG(avcodec_find_decoder, const AVCodec *(*)(enum AVCodecID));
+    SIG(avcodec_parameters_to_context, int (*)(AVCodecContext *, const AVCodecParameters *));
+    SIG(avcodec_send_packet, int (*)(AVCodecContext *, const AVPacket *));
+    SIG(avcodec_receive_frame, int (*)(AVCodecContext *, AVFrame *));
+    SIG(avcodec_flush_buffers, void (*)(AVCodecContext *));
+    SIG(av_seek_frame, int (*)(AVFormatContext *, int, std::int64_t, int));
+    same("sizeof enum AVCodecID (passed as int)", sizeof(enum AVCodecID), sizeof(int));
     /* the AVOptions set on the AAC context by name exist in these headers' option table only at run time: the unit
      * tests' recorder fixtures open the encoder for real (FFmpeg 6.1 there); "sample_fmt" has no AVOption and goes
      * through ctx_sample_fmt above */

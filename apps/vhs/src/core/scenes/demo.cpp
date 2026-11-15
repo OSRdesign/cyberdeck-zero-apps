@@ -62,7 +62,7 @@ bool write_bytes(const std::string &path, const std::vector<std::uint8_t> &b)
 }
 
 bool movie(FileOps &ops, const AvLibs &av, const std::string &folder, const std::string &stem, const std::vector<std::uint8_t> &jpeg,
-           int frames, int w, int h)
+           int frames, int w, int h, bool sound = false)
 {
     RecorderConfig rc;
     rc.av = &av;
@@ -72,10 +72,27 @@ bool movie(FileOps &ops, const AvLibs &av, const std::string &folder, const std:
     rc.video.w = w;
     rc.video.h = h;
     rc.ring_seconds = 60;
+    if (sound) { /* a 440 Hz tone, 16 kHz mono, on the same clock as the frames (the playback fixture, M5) */
+        rc.audio_rate = 16000;
+        rc.audio_channels = 1;
+    }
     Recorder r(rc);
     r.start();
-    for (int i = 0; i < frames; ++i) r.push_video(jpeg.data(), jpeg.size(), 3000000 + i * 33333LL);
-    for (int i = 0; i < 400 && r.status().frames < static_cast<std::uint64_t>(frames); ++i) {
+    std::uint64_t pushed = 0;
+    std::vector<std::int16_t> chunk(1024);
+    const std::int64_t ta0_ns = 3000000LL * 1000 - 300000000LL; /* the microphone 0.3 s before the first frame */
+    for (int i = 0; i < frames; ++i) {
+        const std::int64_t ts_us = 3000000 + i * 33333LL;
+        while (sound && ta0_ns + static_cast<std::int64_t>((pushed + 1024) * 1000000000ULL / 16000) <= ts_us * 1000 + 40000000LL) {
+            for (int k = 0; k < 1024; ++k)
+                chunk[static_cast<std::size_t>(k)] = static_cast<std::int16_t>(std::lround(3000.0 * std::sin(2 * M_PI * 440.0 * static_cast<double>(pushed + static_cast<std::uint64_t>(k)) / 16000)));
+            r.write(chunk.data(), 1024);
+            pushed += 1024;
+            if (pushed % 32768 == 1024) r.audio_clock(ta0_ns + static_cast<std::int64_t>(pushed * 1000000000ULL / 16000), pushed);
+        }
+        r.push_video(jpeg.data(), jpeg.size(), ts_us);
+    }
+    for (int i = 0; i < 1000 && r.status().frames < static_cast<std::uint64_t>(frames); ++i) {
         struct timespec ts{0, 5000000};
         nanosleep(&ts, nullptr);
     }
@@ -113,6 +130,7 @@ int make_demo_scenes(FileOps &ops, const std::string &folder, const AvLibs *av, 
         {"photo_010_20261114-184800.jpg", false, 0, 1794682080},
         {"scene_011_20261114-185200.mkv", true, 36, 1794682320},
         {"Sunset_012_20261114-190000.mkv", true, 24, 1794682800}, /* renamed: its label is "Sunset" in every form */
+        {"Trip_013_20261114-190500.mkv", true, 300, 1794683100}, /* the playback fixture (newest): 10 s with sound, "Trip" */
     };
     if (set == "cjk") {
         items.push_back({"東京の夜.mkv", true, 15, 1794300000});
@@ -130,7 +148,7 @@ int make_demo_scenes(FileOps &ops, const std::string &folder, const AvLibs *av, 
             if (!av) continue;
             const std::string name = it.name;
             const std::string stem = name.substr(0, name.size() - 4);
-            ok = movie(ops, *av, folder, stem, jpeg, it.frames, 1280, 720);
+            ok = movie(ops, *av, folder, stem, jpeg, it.frames, 1280, 720, it.frames >= 300);
             if (ok) { /* the recorder's journal says "closed": keep only the files */
                 ops.unlink(folder + "/.journal/" + stem + ".json");
             }

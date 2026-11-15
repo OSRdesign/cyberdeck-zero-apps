@@ -14,7 +14,7 @@ wait 3500
 tap "Scenes"
 wait 3000
 shot 01-cjk-top
-expect text "SCENES, 17"
+expect text "SCENES, 18"
 key down
 key down
 key down

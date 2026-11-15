@@ -22,6 +22,8 @@
 #pragma once
 
 #include "capture_page.hpp"
+#include "core/layout/playback_layout.hpp"
+#include "playback_page.hpp"
 #include "core/app/controller.hpp"
 #include "core/layout/capture_layout.hpp"
 #include "core/layout/scenes_layout.hpp"
@@ -51,7 +53,9 @@ public:
     VhsApp &operator=(const VhsApp &) = delete;
 
 private:
-    enum class View { Capture, Scenes, Review };
+    enum class View { Capture, Scenes, Review, Playback };
+    void open_playback(const std::string &name);
+    void close_playback();
     void on_frame_timer();
     void on_status_timer();
     void on_key(const key_item &item);
@@ -86,6 +90,9 @@ private:
     CaptureLayout geo_;
     ReviewLayout rgeo_;
     ScenesLayout sgeo_;
+    PlaybackLayout pgeo_;
+    std::unique_ptr<PlaybackPage> playback_;
+    std::string pending_play_;
     std::unique_ptr<cp0::ui::Page> page_;
     std::unique_ptr<CapturePage> capture_;
     std::unique_ptr<ScenesPage> scenes_;

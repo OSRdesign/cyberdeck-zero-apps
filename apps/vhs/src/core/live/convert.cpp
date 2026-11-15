@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <vector>
 
 namespace vhs {
 namespace {
@@ -232,6 +233,54 @@ void yuyv_fit(PixFmt fmt, const std::uint8_t *yuyv, int src_w, int src_h, int sr
             const int Y = pair[(sx & 1) ? 2 : 0], U = pair[1], V = pair[3];
             int r, g, b;
             yuv601_to_rgb(Y, U, V, r, g, b);
+            if (fmt == PixFmt::RGB565) {
+                store16(out + x * 2, rgb565(r, g, b));
+            } else {
+                std::uint8_t *o = out + x * 4;
+                o[0] = static_cast<std::uint8_t>(b);
+                o[1] = static_cast<std::uint8_t>(g);
+                o[2] = static_cast<std::uint8_t>(r);
+                o[3] = 0xFF;
+            }
+        }
+    }
+}
+
+/* full-range (JPEG) YCbCr to RGB (BT.601) */
+static inline void yuv601f_to_rgb(int y, int u, int v, int &r, int &g, int &b)
+{
+    const int d = u - 128, e = v - 128;
+    r = clamp255(y + ((359 * e + 128) >> 8));
+    g = clamp255(y - ((88 * d + 183 * e + 128) >> 8));
+    b = clamp255(y + ((454 * d + 128) >> 8));
+}
+
+void yuv_fit(PixFmt fmt, const YuvPlanes &p, int src_w, int src_h, std::uint8_t *dst, int dst_w, int dst_h, int dst_stride)
+{
+    if (src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0 || !p.y || !p.u) return;
+    std::vector<int> xs(static_cast<std::size_t>(dst_w));
+    for (int x = 0; x < dst_w; ++x) xs[static_cast<std::size_t>(x)] = std::min(src_w - 1, (2 * x + 1) * src_w / (2 * dst_w));
+    for (int y = 0; y < dst_h; ++y) {
+        const int sy = std::min(src_h - 1, (2 * y + 1) * src_h / (2 * dst_h));
+        const std::uint8_t *yr = p.y + static_cast<std::ptrdiff_t>(sy) * p.ys;
+        const int cy = sy >> p.vshift;
+        const std::uint8_t *ur = p.u + static_cast<std::ptrdiff_t>(cy) * p.us;
+        const std::uint8_t *vr = p.nv12 ? ur : p.v + static_cast<std::ptrdiff_t>(cy) * p.vs;
+        std::uint8_t *out = dst + static_cast<std::ptrdiff_t>(y) * dst_stride;
+        for (int x = 0; x < dst_w; ++x) {
+            const int sx = xs[static_cast<std::size_t>(x)];
+            const int Y = yr[sx];
+            int U, V;
+            if (p.nv12) {
+                U = ur[(sx >> 1) * 2];
+                V = ur[(sx >> 1) * 2 + 1];
+            } else {
+                U = ur[sx >> 1];
+                V = vr[sx >> 1];
+            }
+            int r, g, b;
+            if (p.full_range) yuv601f_to_rgb(Y, U, V, r, g, b);
+            else yuv601_to_rgb(Y, U, V, r, g, b);
             if (fmt == PixFmt::RGB565) {
                 store16(out + x * 2, rgb565(r, g, b));
             } else {

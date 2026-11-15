@@ -44,6 +44,9 @@
 #include "camera/capture.hpp"
 #include "camera/fake_camera.hpp"
 #include "live/pipeline.hpp"
+#include "launcher/launcher_link.hpp"
+#include "movie/movie.hpp"
+#include "play/audio_player.hpp"
 #include "modes/select.hpp"
 #include "modes/soc.hpp"
 #include "power/undervolt.hpp"
@@ -55,6 +58,7 @@
 #include "timer/self_timer.hpp"
 
 #include <atomic>
+#include <future>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -93,6 +97,8 @@ struct ControllerConfig {
     std::string demo_scenes;       /* VHS_DEMO_SCENES (the fake camera only): scenes/demo.hpp */
     std::shared_ptr<AlsaApi> alsa; /* tests: the sound system (null: the real one, or the fake with the fake camera) */
     const AvLibs *av = nullptr;    /* tests: FFmpeg (null: real_av_libs() at the first REC) */
+    /* tests: the playback's sound (null: AudioPlayer on Settings > Playback output) */
+    std::function<std::unique_ptr<AudioPlayer>(const std::string &output)> audio_factory;
 };
 
 struct Snapshot {
@@ -126,6 +132,19 @@ struct Snapshot {
     int scenes_recorded = 0;   /* in this run */
     std::string last_scene;    /* its first part's name */
     int scene_count = -1;      /* the folder's movies and photos (the Scenes button; -1: not counted yet) */
+};
+
+/* The Playback page (canvas PlaybackWindowed-480x320; brief 10). */
+struct PlaybackView {
+    bool open = false;
+    std::string name, title;     /* the file, and its stem (the page's name line) */
+    bool playing = false, ended = false;
+    std::int64_t pos_ms = 0, duration_ms = -1;
+    std::string codec;
+    bool has_audio = false;
+    int volume = -1;             /* percent; -1 unknown (no output) */
+    std::string output;          /* the output's label */
+    std::string error;
 };
 
 enum class SceneFilter { All, Movies, Photos };
@@ -216,6 +235,18 @@ public:
     /* The folder counted again (after a recording, a photo, a change): the Scenes button's number. */
     void recount();
 
+    /* Playback (brief 10): open a movie of the folder (plays at once), pause / play, seek, volume, close. */
+    void playback_open(const std::string &name, int box_w, int box_h);
+    void playback_close();
+    void playback_toggle();
+    void playback_seek_to(std::int64_t ms);
+    void playback_seek_by(std::int64_t delta_ms);
+    void playback_volume(int dir);
+    const PlaybackView &playback() const { return play_view_; }
+    /* The frame timer: the picture due now (null: keep the one shown). */
+    std::shared_ptr<Picture> playback_picture();
+    MovieStatus last_playback() const { return last_play_; }
+
     Pipeline &pipeline() { return *pipe_; }
     const Settings &settings() const { return store_.get(); }
     const std::string &folder() const { return folder_; }
@@ -239,6 +270,12 @@ private:
     void scenes_filter_rows();
     void startup_repair();
     void log_rec_start(std::int64_t now_ms, const RecorderStatus &st);
+    std::int64_t play_clock_ms() const;
+    bool play_running() const;
+    void play_step();
+    void send_dim(bool deny);
+    void launcher_dim(bool deny);
+    std::unique_ptr<AudioPlayer> make_audio_player(const std::string &output);
     struct RecSession;
     void start_recording(std::int64_t now_ms);
     void stop_recording(RecStop why, bool wait);
@@ -267,6 +304,7 @@ private:
     std::uint64_t losses_seen_ = 0;
     std::uint64_t interval_seen_ = 0;
     CaptureMode capture_mode_ = CaptureMode::Photo;
+    std::atomic<bool> video_preview_{false}; /* the chooser's (capture thread) view of the mode */
     std::int64_t started_ms_ = 0;
     struct ScriptStep {
         std::int64_t at_ms;
@@ -301,6 +339,23 @@ private:
     std::shared_ptr<std::atomic<std::uint64_t>> scan_id_ = std::make_shared<std::atomic<std::uint64_t>>(0);
     std::string cache_dir_;
     int scene_count_ = -1;
+
+    /* playback */
+    std::unique_ptr<Movie> movie_;
+    std::unique_ptr<AudioPlayer> audio_;
+    mutable std::mutex play_m_;
+    PlayClock mono_clock_;   /* play_m_ */
+    AudioClock audio_clock_; /* play_m_ */
+    bool playing_ = false;   /* play_m_ */
+    std::atomic<bool> audio_ready_{false}; /* the engine opened the file (off the LVGL thread) */
+    std::future<bool> audio_open_;
+    PlaybackView play_view_;
+    std::shared_ptr<Picture> play_pic_;
+    MovieStatus last_play_;
+    std::int64_t play_t0_us_ = 0, play_cpu0_ = 0, seek_shown_ms_ = -1;
+    bool dim_denied_ = false;
+    std::unique_ptr<LauncherStatusReader> launcher_status_;
+    std::unique_ptr<LauncherRequests> launcher_req_;
 
     /* the recording */
     std::shared_ptr<AlsaApi> alsa_;

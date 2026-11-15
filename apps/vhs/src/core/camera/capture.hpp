@@ -138,6 +138,8 @@ public:
     void request_mode(const ModeReq &m);
     /* Close and open again with the chooser's mode (settings changed). Any thread. */
     void reopen();
+    /* Ask the chooser again and switch in place when its answer differs (the Photo / Video mode changed). Any thread. */
+    void rechoose();
     /* Stream m until release_hold() (the Light photo, the self-timer's countdown in Light: brief 4.1 rule 3, 6.7); the
      * device is reopened only when m is not the mode streaming. Any thread. */
     void hold_mode(const ModeReq &m);

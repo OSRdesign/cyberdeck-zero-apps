@@ -37,6 +37,8 @@ constexpr const char *kNoticeRecFailed = "Recording stopped: "; /* + the reason 
 /* The scenes (M4): Cassette's "Not renamed: <reason>" pattern; provisional. */
 constexpr const char *kNoticeNotRenamed = "Not renamed: "; /* + Cassette's reason */
 constexpr const char *kNoticeNotDeleted = "Not deleted: "; /* + the reason ("the file is locked") */
+/* Playback (M5, brief 4.4 "wording: Controller"): provisional. */
+constexpr const char *kNoticeCannotPlay = "This video cannot be played.";
 
 struct Notice {
     std::string text; /* "" = none */
