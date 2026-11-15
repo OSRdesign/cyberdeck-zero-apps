@@ -13,6 +13,10 @@
 #include "modes/codec_caps.hpp"
 #include "record/av_libs.hpp"
 #include "record/disk_guard.hpp"
+#include "record/journal.hpp"
+#include "scenes/demo.hpp"
+#include "scenes/locks.hpp"
+#include "scenes/thumbs.hpp"
 #include "scenes/atomic_file.hpp"
 #include "scenes/fileops.hpp"
 #include "scenes/naming.hpp"
@@ -42,6 +46,9 @@ struct Controller::RecSession : FrameTap {
     bool stopping = false;
     bool first_logged = false;
     std::uint64_t losses = 0;   /* the camera's losses at REC */
+    std::uint64_t gen = 0;      /* the stream session at REC (a later one: the stream switched for the scene) */
+    ModeReq from;               /* the mode streaming at REC */
+    int mic_ms = -1;            /* matching and opening the microphone */
     std::int64_t pressed_ms = 0;
     void tap_frame(const std::uint8_t *data, std::size_t n, std::int64_t ts_us, const ModeReq &m) override
     {
@@ -137,6 +144,24 @@ Controller::Controller(ControllerConfig cfg) : cfg_(std::move(cfg)), store_(posi
     std::fprintf(stderr, "[vhs] folder %s, self-timer %d s, clock %s\n", folder_.c_str(), store_.get().self_timer_s,
                  synced() ? "synchronised" : "not synchronised (names say nodate, no EXIF date)");
     worker_.start();
+    if (cfg_.fake) {
+        const std::size_t s = folder_.find_last_of('/');
+        cache_dir_ = (s == std::string::npos ? folder_ : folder_.substr(0, s)) + "/vhs-cache"; /* never the user's */
+    } else {
+        cache_dir_ = cache_dir();
+    }
+    if (cfg_.fake && !cfg_.demo_scenes.empty()) { /* the headless scenes' demo folder (never the user's) */
+        const std::string folder = folder_, set = cfg_.demo_scenes;
+        const AvLibs *forced = cfg_.av;
+        worker_.post([folder, set, forced]() -> std::function<void()> {
+            std::string why;
+            const AvLibs *av = forced ? forced : real_av_libs(&why);
+            const int n = make_demo_scenes(posix_file_ops(), folder, av, set);
+            std::fprintf(stderr, "[vhs] demo scenes (%s): %d file(s) in %s\n", set.c_str(), n, folder.c_str());
+            return nullptr;
+        });
+    }
+    startup_repair();
     std::stringstream ss(cfg_.fake_script);
     std::string item;
     while (std::getline(ss, item, ',')) {
@@ -297,6 +322,7 @@ Snapshot Controller::step(std::int64_t now_ms)
     s.photo_busy = photo_ != PhotoStep::Idle;
     s.photos_saved = photos_saved_;
     s.last_photo = last_photo_;
+    s.scene_count = scene_count_;
     return s;
 }
 
@@ -427,6 +453,7 @@ void Controller::photo_step(std::int64_t now_ms, const CaptureStatus &cam)
             if (r.ok) {
                 ++photos_saved_;
                 last_photo_ = r.name;
+                recount();
             } else {
                 notices_.push(Notice{std::string(kNoticePhotoFailed) + r.error + ".", false});
             }
@@ -480,6 +507,7 @@ void Controller::record(std::int64_t now_ms)
 void Controller::photo_now(std::int64_t now_ms)
 {
     if (!rec_ || rec_->stopping || photo_ != PhotoStep::Idle) return;
+    if (!rec_->rec->status().started) return; /* dimmed while the scene starts */
     fire(now_ms);
 }
 
@@ -516,7 +544,8 @@ void Controller::start_recording(std::int64_t now_ms)
     held_ = false;
     rs->held = true;
 
-    /* the camera microphone (brief 5.4): matched by USB ancestry, hw: only */
+    /* the camera microphone (brief 5.4): matched by USB ancestry, hw: only; opened while the stream switches */
+    const std::int64_t mic_t0 = mono_ms();
     OpenResult mic;
     bool have_mic = false;
     const MicCard mc = fake_ ? camera_mic_by_port(*alsa_, cam.id.devpath)
@@ -540,6 +569,7 @@ void Controller::start_recording(std::int64_t now_ms)
         }
     }
 
+    rs->mic_ms = static_cast<int>(mono_ms() - mic_t0);
     RecorderConfig rc;
     rc.av = av;
     rc.ops = &posix_file_ops();
@@ -581,6 +611,8 @@ void Controller::start_recording(std::int64_t now_ms)
         }
     }
     rs->losses = cam.losses;
+    rs->gen = cam.gen;
+    rs->from = cam.mode;
     rs->pressed_ms = now_ms;
     const std::string split = rc.split_bytes ? std::to_string(st.split_mib) + " MiB" : std::string("off");
     std::fprintf(stderr, "[vhs] recording: REC %s, %s, folder %s, split %s, floor %d MB, ring %d s\n", mode_text(rs->mode).c_str(),
@@ -596,6 +628,7 @@ void Controller::stop_recording(RecStop why, bool wait)
     if (!rec_->stopping) {
         rec_->stopping = true;
         pipe_->capture().clear_tap(); /* no frame after this */
+        rec_->audio_ended = true;     /* our stop, not a lost microphone: nothing to log about it */
         if (rec_->audio) rec_->audio->stop();
         rec_->rec->request_stop(why);
         std::fprintf(stderr, "[vhs] recording: stop (%s)\n", rec_stop_name(why));
@@ -617,6 +650,7 @@ void Controller::end_recording()
         ++scenes_recorded_;
         last_scene_ = st.files.empty() ? std::string() : st.files.front();
     }
+    recount();
     std::fprintf(stderr,
                  "[vhs] recording: finished %s: %llu frames, %.1f s, %d part(s), %llu bytes, %llu frames dropped (ring), "
                  "%llu audio frames dropped, %llu lost in overruns, stop %s\n",
@@ -628,6 +662,27 @@ void Controller::end_recording()
     else if (st.stop == RecStop::Error)
         notices_.push(Notice{std::string(kNoticeRecFailed) + (st.error.empty() ? "an error" : st.error) + ".", false});
     rec_.reset();
+}
+
+void Controller::log_rec_start(std::int64_t now_ms, const RecorderStatus &st)
+{
+    /* one line per REC: where the time from the press to the first written frame went (M4 item 2) */
+    auto ms = [](int v) { return v < 0 ? std::string("-") : std::to_string(v) + " ms"; };
+    const StreamTiming t = pipe_->capture().stream_timing();
+    std::string sw;
+    if (t.gen > rec_->gen) {
+        sw = "switch " + std::to_string(rec_->from.w) + "x" + std::to_string(rec_->from.h) + " -> " +
+             std::to_string(rec_->mode.w) + "x" + std::to_string(rec_->mode.h) + (t.in_place ? " in place" : " by reopening") +
+             ": stream close " + ms(t.close_ms) + ", reopen " + ms(t.open_ms) + ", mode set " + ms(t.set_ms) +
+             ", controls " + ms(t.controls_ms) + ", buffers + STREAMON " + ms(t.bufs_ms) + ", first camera frame " +
+             ms(t.first_ms) + ", warm-up " + std::to_string(kWarmupFrames) + " frames " + ms(t.warm_ms);
+    } else {
+        sw = "no switch (the Video size was streaming and warm)";
+    }
+    std::fprintf(stderr, "[vhs] rec-start: %lld ms from REC to the first written frame; %s; mic open %s and writer open %s "
+                         "(both while the stream starts); first frame written %lld ms\n",
+                 static_cast<long long>(now_ms - rec_->pressed_ms), sw.c_str(), ms(rec_->mic_ms).c_str(), ms(st.open_ms).c_str(),
+                 static_cast<long long>(now_ms - rec_->pressed_ms));
 }
 
 void Controller::finish_recording(RecStop why)
@@ -667,14 +722,15 @@ void Controller::rec_step(std::int64_t now_ms, const CaptureStatus &cam, Snapsho
         if (rec_->level.silence_event()) notices_.push(Notice{kNoticeNoSound, false}); /* once per scene (D38) */
         if (st.started && !rec_->first_logged) {
             rec_->first_logged = true;
-            std::fprintf(stderr, "[vhs] recording: first frame written %lld ms after REC\n",
-                         static_cast<long long>(now_ms - rec_->pressed_ms));
+            log_rec_start(now_ms, st);
         }
         if (rec_->stopping && rec_->rec->status().finished) {
             end_recording();
         } else {
             s.recording = true;
             s.rec_started = st.started;
+            s.rec_starting = !st.started && !rec_->stopping;
+            s.rec_since_ms = rec_->pressed_ms;
             s.rec_ms = st.written_ms;
             s.rec_bytes = st.bytes;
             s.rec_left_s = st.seconds_left;
@@ -687,10 +743,231 @@ void Controller::rec_step(std::int64_t now_ms, const CaptureStatus &cam, Snapsho
     s.last_scene = last_scene_;
 }
 
+/* ------------------------------------------------------------------------------------------------ the scenes */
+
+void Controller::startup_repair()
+{
+    /* brief 6.3: every open journal repaired on the scenes worker at start; FFmpeg is loaded only when one is open
+     * (brief 3.3 rule 4) */
+    const std::string folder = folder_;
+    worker_.post([this, folder]() -> std::function<void()> {
+        const int open = open_journal_count(posix_file_ops(), folder);
+        int repaired = 0, damaged = 0;
+        if (open > 0) {
+            std::string why;
+            const AvLibs *av = cfg_.av ? cfg_.av : real_av_libs(&why);
+            if (!av) {
+                std::fprintf(stderr, "[vhs] repair: %d open journal(s), no FFmpeg: %s\n", open, why.c_str());
+            } else {
+                for (const RepairItem &it : repair_open_journals(posix_file_ops(), *av, folder)) {
+                    repaired += it.repaired;
+                    damaged += it.damaged;
+                }
+                std::fprintf(stderr, "[vhs] repair at start: %d open journal(s): %d part(s) repaired, %d damaged\n", open,
+                             repaired, damaged);
+            }
+        }
+        int movies = 0, photos = 0;
+        count_scenes(posix_file_ops(), folder, movies, photos);
+        return [this, movies, photos] { scene_count_ = movies + photos; };
+    });
+}
+
+void Controller::recount()
+{
+    const std::string folder = folder_;
+    worker_.post([this, folder]() -> std::function<void()> {
+        int movies = 0, photos = 0;
+        count_scenes(posix_file_ops(), folder, movies, photos);
+        return [this, movies, photos] { scene_count_ = movies + photos; };
+    });
+}
+
+void Controller::scenes_open(int thumb_w, int thumb_h, bool short_form)
+{
+    scenes_.open = true;
+    thumb_w_ = std::max(8, thumb_w);
+    thumb_h_ = std::max(8, thumb_h);
+    short_form_ = short_form;
+    if (all_rows_.empty()) scenes_.loading = true;
+    scenes_scan();
+}
+
+void Controller::scenes_close()
+{
+    scenes_.open = false;
+    scan_id_->fetch_add(1); /* thumbnails still queued are skipped */
+}
+
+void Controller::scenes_set_filter(SceneFilter f)
+{
+    if (scenes_.filter == f) return;
+    scenes_.filter = f;
+    scenes_filter_rows();
+}
+
+void Controller::scenes_filter_rows()
+{
+    scenes_.rows.clear();
+    scenes_.movies = scenes_.photos = 0;
+    for (const SceneRow &r : all_rows_) {
+        const bool photo = r.e.kind == SceneKind::Photo;
+        (photo ? scenes_.photos : scenes_.movies) += 1;
+        if (scenes_.filter == SceneFilter::All || (scenes_.filter == SceneFilter::Photos) == photo) scenes_.rows.push_back(r);
+    }
+    ++scenes_.gen;
+}
+
+void Controller::scenes_scan()
+{
+    const std::uint64_t id = scan_id_->fetch_add(1) + 1;
+    const std::string folder = folder_, cache = cache_dir_, prefix = store_.get().prefix;
+    const bool short_form = short_form_, utc = cfg_.utc;
+    const AvLibs *forced = cfg_.av;
+    worker_.post([this, id, folder, cache, prefix, short_form, utc, forced]() -> std::function<void()> {
+        FileOps &ops = posix_file_ops();
+        auto rows = std::make_shared<std::vector<SceneRow>>();
+        MetaCache mc;
+        mc.load(ops, cache + "/index.json");
+        const AvLibs *av = nullptr;
+        bool av_tried = false;
+        for (SceneEntry &e : list_scenes(ops, folder)) {
+            if (!mc.get(e, e.meta)) {
+                if (e.kind == SceneKind::Photo) {
+                    e.meta = probe_photo(ops, e.path);
+                } else {
+                    if (!av_tried) { /* FFmpeg at the first scan that needs it (brief 3.3 rule 4) */
+                        av_tried = true;
+                        std::string why;
+                        av = forced ? forced : real_av_libs(&why);
+                        if (!av) std::fprintf(stderr, "[vhs] scenes: no FFmpeg (%s): movies listed without their details\n", why.c_str());
+                    }
+                    if (av) e.meta = probe_movie(*av, e.path);
+                }
+                mc.put(e, e.meta);
+            }
+            SceneRow r;
+            r.label = scene_label(e, short_form, prefix);
+            r.meta = scene_meta_text(e, short_form, utc);
+            r.date = short_form ? std::string() : scene_date_text(e.mtime, utc);
+            r.e = std::move(e);
+            rows->push_back(std::move(r));
+        }
+        mc.save(ops);
+        std::fprintf(stderr, "[vhs] scenes: %zu file(s) listed (%zu in the metadata cache)\n", rows->size(), mc.size());
+        return [this, id, rows] {
+            if (id != scan_id_->load()) return;
+            /* thumbnails already made stay with their rows */
+            std::map<std::string, std::shared_ptr<Picture>> had;
+            for (const SceneRow &r : all_rows_)
+                if (r.thumb) had[r.e.name + "|" + std::to_string(r.e.size) + "|" + std::to_string(r.e.mtime)] = r.thumb;
+            all_rows_ = *rows;
+            for (SceneRow &r : all_rows_) {
+                const auto it = had.find(r.e.name + "|" + std::to_string(r.e.size) + "|" + std::to_string(r.e.mtime));
+                if (it != had.end()) r.thumb = it->second;
+            }
+            scenes_.loading = false;
+            scene_count_ = static_cast<int>(all_rows_.size());
+            scenes_filter_rows();
+            scenes_thumbs(id);
+        };
+    });
+}
+
+void Controller::scenes_thumbs(std::uint64_t id)
+{
+    /* one job per missing thumbnail, newest first: the rows fill in as they arrive (brief 9.1) */
+    const std::string cache = cache_dir_;
+    const int tw = thumb_w_, th = thumb_h_;
+    const PixFmt fmt = cfg_.fmt;
+    const AvLibs *forced = cfg_.av;
+    auto ids = scan_id_;
+    for (const SceneRow &r : all_rows_) {
+        if (r.thumb) continue;
+        const SceneEntry e = r.e;
+        worker_.post([this, id, ids, e, cache, tw, th, fmt, forced]() -> std::function<void()> {
+            if (id != ids->load()) return nullptr; /* a newer listing, or the page closed */
+            auto pic = std::make_shared<Picture>();
+            const std::string path = thumb_path(cache, e);
+            bool ok = thumb_load(path, tw, th, fmt, *pic);
+            if (!ok) {
+                const AvLibs *av = nullptr;
+                if (e.kind == SceneKind::Movie) {
+                    std::string why;
+                    av = forced ? forced : real_av_libs(&why);
+                }
+                std::string why;
+                ok = make_thumb(posix_file_ops(), av, e, tw, th, fmt, *pic, &why);
+                if (ok) thumb_save(posix_file_ops(), path, *pic);
+                else std::fprintf(stderr, "[vhs] scenes: %s: no thumbnail (%s)\n", e.name.c_str(), why.c_str());
+            }
+            if (!ok) return nullptr;
+            return [this, id, e, pic] {
+                if (id != scan_id_->load()) return;
+                for (SceneRow &r : all_rows_)
+                    if (r.e.name == e.name && r.e.mtime == e.mtime) r.thumb = pic;
+                scenes_filter_rows();
+            };
+        });
+    }
+}
+
+void Controller::scene_rename(const std::string &name, const std::string &prefix)
+{
+    const std::string folder = folder_, cache = cache_dir_;
+    worker_.post([this, folder, cache, name, prefix]() -> std::function<void()> {
+        std::string to, why;
+        const int r = rename_scene(posix_file_ops(), folder, name, prefix, to, why);
+        std::fprintf(stderr, "[vhs] scenes: rename %s -> %s: %s\n", name.c_str(), r == 0 ? to.c_str() : prefix.c_str(),
+                     r == 0 ? "done" : why.c_str());
+        if (r == 0 && to != name) thumb_remove(posix_file_ops(), cache, name);
+        return [this, r, why] {
+            if (r != 0) notices_.push(Notice{std::string(kNoticeNotRenamed) + why + ".", false});
+            if (scenes_.open) scenes_scan();
+        };
+    });
+}
+
+void Controller::scene_toggle_lock(const std::string &name)
+{
+    const std::string folder = folder_;
+    worker_.post([this, folder, name]() -> std::function<void()> {
+        const bool now = read_locks(posix_file_ops(), folder).count(name) == 0;
+        const int r = set_locked(posix_file_ops(), folder, name, now);
+        std::fprintf(stderr, "[vhs] scenes: %s %s: %s\n", now ? "lock" : "unlock", name.c_str(), r == 0 ? "done" : std::strerror(-r));
+        return [this] {
+            if (scenes_.open) scenes_scan();
+        };
+    });
+}
+
+void Controller::scene_delete(const std::string &name)
+{
+    const std::string folder = folder_, cache = cache_dir_;
+    worker_.post([this, folder, cache, name]() -> std::function<void()> {
+        std::string why;
+        const int r = delete_scene(posix_file_ops(), folder, name, why);
+        if (r == 0) {
+            thumb_remove(posix_file_ops(), cache, name);
+            MetaCache mc;
+            mc.load(posix_file_ops(), cache + "/index.json");
+            mc.erase(name);
+            mc.save(posix_file_ops());
+        }
+        std::fprintf(stderr, "[vhs] scenes: delete %s: %s\n", name.c_str(), r == 0 ? "done" : why.c_str());
+        return [this, r, why] {
+            if (r != 0) notices_.push(Notice{std::string(kNoticeNotDeleted) + why + ".", false});
+            if (scenes_.open) scenes_scan();
+            else recount();
+        };
+    });
+}
+
 /* ------------------------------------------------------------------------------------------------ the review */
 
-void Controller::review_open(int box_w, int box_h)
+void Controller::review_open(int box_w, int box_h, const std::string &start)
 {
+    review_start_ = start;
     review_ = ReviewView();
     review_.open = true;
     review_box_w_ = box_w;
@@ -711,6 +988,11 @@ void Controller::review_list()
             if (req != review_req_ || !review_.open) return;
             review_list_ = *list;
             review_.count = static_cast<int>(review_list_.size());
+            if (!review_start_.empty()) { /* opened from the Scenes page: at that photo */
+                for (std::size_t i = 0; i < review_list_.size(); ++i)
+                    if (review_list_[i].name == review_start_) review_.index = static_cast<int>(i);
+                review_start_.clear();
+            }
             review_.index = std::min(review_.index, std::max(0, review_.count - 1));
             review_.loading = false;
             review_decode();
@@ -765,13 +1047,18 @@ void Controller::review_move(int delta)
 void Controller::review_delete()
 {
     if (!review_.open || review_list_.empty()) return;
-    const std::string path = review_list_[static_cast<std::size_t>(review_.index)].path;
+    const std::string name = review_list_[static_cast<std::size_t>(review_.index)].name;
+    const std::string folder = folder_, cache = cache_dir_;
     const std::uint64_t req = ++review_req_;
     review_.loading = true;
-    worker_.post([this, path, req]() -> std::function<void()> {
-        const int r = posix_file_ops().unlink(path);
-        std::fprintf(stderr, "[vhs] review: delete %s: %s\n", path.c_str(), r == 0 ? "done" : std::strerror(-r));
-        return [this, req] {
+    worker_.post([this, folder, cache, name, req]() -> std::function<void()> {
+        std::string why;
+        const int r = delete_scene(posix_file_ops(), folder, name, why); /* a locked photo is refused */
+        if (r == 0) thumb_remove(posix_file_ops(), cache, name);
+        std::fprintf(stderr, "[vhs] review: delete %s: %s\n", name.c_str(), r == 0 ? "done" : why.c_str());
+        return [this, req, r, why] {
+            if (r != 0) notices_.push(Notice{std::string(kNoticeNotDeleted) + why + ".", false});
+            recount();
             if (req != review_req_ || !review_.open) return;
             review_list(); /* the list again; the index stays (the next older photo), clamped */
         };

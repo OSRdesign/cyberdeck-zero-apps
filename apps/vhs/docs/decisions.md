@@ -12,6 +12,26 @@ starts with the points resolved during the build.
 | 2026-11-15 | Capture page in the Square class (480x480, 720x720) | The side column and the text block left the 480x480 picture far too small: in the layout service's Square class the buttons go in one row under the picture (Photo / Video, the shutter, Scenes, Settings, each TARGET high) and the picture takes the panel's width (432x243 at 480x480, 8 px/mm; 672x378 at 720x720). 640x480 (4:3, not Square) keeps the column: the row would give it a smaller picture. The canvas sizes (480x320, 320x480) are unchanged. | Controller, G1 review |
 | 2026-11-15 | Settings in M2 | The Settings page is M6: until then Photo (`photo_mode`), Photo size and the self-timer (`self_timer_s`) are read from `~/.config/vhs/settings.json` only (docs/SETTINGS.md comes with M7). | Controller, M2 brief |
 
+| 2026-11-15 | REC start indicator (owner idea, camcorder style; M4 item 1) | From the REC press (or the self-timer's zero) until the first frame is written the REC tag's red dot blinks, 500 ms on / 500 ms off starting lit (app/rec_indicator.hpp: the phase from a passed-in clock, the UI's frame timer drives it); the tag reads "REC 00:00:00", Sound on is hidden, Photo now is dimmed and inert. At the first written frame the dot is solid and the timer runs. The stop button works during the start: with nothing written the empty file and its journal are removed (no row, no toast); with frames written it is a normal stop. A hide ends the recording, so the blink never applies after a show or reopen; no new text. | Controller, G3 |
+| 2026-11-15 | REC start delay (M4 item 2) | One `[vhs] rec-start:` line per REC: stream close, reopen, mode set, controls, buffers + STREAMON, first camera frame, warm-up (15 frames), mic open and writer open (both run while the stream switches), first frame written. A mode change now switches on the open device (STREAMOFF, REQBUFS 0, S_FMT, S_PARM, new buffers, STREAMON; the controls kept) instead of closing and reopening it; any refusal falls back to the full reopen. The warm-up stays 15 frames (no evidence for less). | Controller, G3 |
+| 2026-11-15 | Mic log on a normal stop (M4 item 3) | A user stop no longer logs "the microphone stopped (none)"; the line is for a real microphone loss only, with its reason. | Controller, G3 |
+
+## Provisional in M4 (for the Controller at G4)
+
+| Point | What the build does now | Basis |
+|---|---|---|
+| Empty Scenes page | one grey line: "No scenes yet. Record with R or take a photo with Space." | no canvas board; brief 12.4 item 3 |
+| Head count | "SCENES, N" counts the whole folder, whatever the filter | canvas "SCENES, 14" |
+| Toast place on Scenes | the toast line at the panel's bottom | the canvas draws toasts on the Capture page only |
+| Tab on Scenes | the next filter (All, Movies, Photos) | brief 12.3 has no filter key |
+| Sheet "Lock" on a locked file | reads "Unlock" | brief 9.2 "toggles" |
+| Rename on a photo | refused: "Not renamed: photos keep the name photo." (the grammar keeps photos "photo") | brief 8 |
+| Refusal toasts | "Not renamed: <Cassette's reason>.", "Not deleted: the file is locked." | Cassette's pattern |
+| Delete question | "Delete this scene?" / "Delete this photo?" with "Y = Delete, Enter or Esc = Cancel" | M2's photo dialog |
+| Play on a movie, Copy, Send to Notes | log only until M5 (playback) and M6 (copy, notes) | milestones |
+| Thumbnails of other codecs | none until M5 (FFmpeg's decoder comes with playback): the empty box | brief 9.1, milestone order |
+| Tap rule on rows | a tap selects, a tap on the selected row opens (the toolkit's list rule) | cp0::ui::CompactList |
+
 ## Provisional in M3 (for the Controller at G3)
 
 | Point | What the build does now | Basis |

@@ -64,6 +64,7 @@ void Recorder::start()
         st_.audio = cfg_.audio_rate > 0;
     }
     last_audio_ms_ = now_ms();
+    start_ms_ = now_ms();
     th_ = std::thread([this] { run(); });
 }
 
@@ -325,6 +326,10 @@ void Recorder::run()
         st_.audio = enc_ != nullptr;
     }
     const bool opened = open_part(1, 0);
+    {
+        std::lock_guard<std::mutex> lock(m_);
+        st_.open_ms = static_cast<int>(now_ms() - start_ms_);
+    }
     DiskGuard guard(cfg_.min_free_bytes);
     const int fps = std::max(1, cfg_.video.fps);
     const std::int64_t dur_ms = 1000 / fps;

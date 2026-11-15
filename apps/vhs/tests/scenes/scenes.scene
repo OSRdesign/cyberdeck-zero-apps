@@ -1,0 +1,81 @@
+# VHS M4: the Scenes page (canvas Scenes-480x320 / -320x480) on a demo folder (VHS_DEMO_SCENES: 13 synthetic
+# files, newest first, a locked renamed scene, an auto-split part, the newest renamed "Sunset"): the head,
+# the chips (Movies, Photos, All), the rows with thumbnails, a row held 1.5 s opens the options sheet (canvas
+# SceneOptions-480x320), Enter on a photo opens the review, Esc back to Scenes, then to the live picture.
+title VHS M4 Scenes at 480x320 (6.08 px/mm, the canvas's pixels)
+sizes 480x320
+ppmm 608
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+env VHS_DEMO_SCENES 1
+
+wait 3000
+shot 01-live
+expect text "Scenes"
+tap "Scenes"
+wait 2500
+shot 02-scenes
+expect esc
+expect text "SCENES, 13"
+expect text "All"
+expect text "Movies"
+expect text "Photos"
+expect text "Sunset"
+expect text "scene_011_20261114-185200"
+tap "Movies"
+wait 500
+key down
+key down
+key down
+wait 300
+shot 03-locked-row
+expect text "locked"
+expect text "Stopwatch test"
+tap "Photos"
+wait 500
+shot 04-photos
+expect notext "Stopwatch test"
+expect notext "Sunset"
+tap "Movies"
+wait 500
+shot 05-movies
+expect text "Sunset"
+tap "All"
+wait 500
+hold "Sunset" 1700
+wait 300
+shot 06-sheet
+expect text "SUNSET_012_20261114-190000"
+expect text "Play"
+expect text "Rename"
+expect text "Lock"
+expect text "Copy to a USB drive"
+expect text "Send to Notes"
+expect text "photos only"
+expect text "Hold a row for 1.5 s, or press Ctrl+O, to open this sheet."
+key up
+wait 200
+expect text "Delete"
+key esc
+wait 300
+expect notext "Copy to a USB drive"
+expect noquit
+tap "Photos"
+wait 500
+key enter
+wait 1500
+shot 07-review
+expect text "photo_010_20261114-184800.jpg"
+key esc
+wait 1800
+shot 08-back-to-scenes
+expect text "SCENES, 13"
+key esc
+wait 1800
+shot 09-back-live
+expect text "Photo | Video"
+key esc
+expect quit

@@ -27,6 +27,14 @@
  * disk guard (the red toast), stop() (hide, close, the review, the destructor: SIGTERM ends the loop cleanly and the
  * app's teardown lands here) and Esc at the root (finish, then quit: the UI). "Photo now" takes the recording's
  * current frame. A camera without MJPEG and a system without FFmpeg refuse to record (toasts).
+ *
+ * M4 (scenes, brief 9.1, 9.2, 6.3): at start the scenes worker repairs every open journal (FFmpeg is loaded only when
+ * one is open) and counts the files (the Scenes button). The Scenes page lists the folder on the worker (the metadata
+ * cache, libavformat headers for the rest, then one thumbnail at a time; rows fill in as results arrive), filters All /
+ * Movies / Photos, and runs the sheet's actions there: rename (the prefix only), lock, delete (refused on a locked file;
+ * the thumbnails, the cache entry, the journal part and the lock entry go too). Play on a photo opens the review at that
+ * photo. The REC start (M4 items 1-2): rec_starting until the first frame is written (the dot blinks in the UI), a stop
+ * before it removes the empty file, and one [vhs] rec-start: line times the start.
  */
 #pragma once
 
@@ -40,11 +48,13 @@
 #include "modes/soc.hpp"
 #include "power/undervolt.hpp"
 #include "record/recorder.hpp"
+#include "scenes/index.hpp"
 #include "scenes/photos.hpp"
 #include "scenes/worker.hpp"
 #include "settings/settings.hpp"
 #include "timer/self_timer.hpp"
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -80,6 +90,7 @@ struct ControllerConfig {
     std::string soc_override;      /* VHS_SOC: "bcm2712" ... "other"; "" = detected */
     std::string fake_mic;          /* VHS_FAKE_MIC: the fake microphone (fake_alsa.hpp); "" = tone */
     long fake_free_mb = -1;        /* VHS_FAKE_FREE_MB: the free space the fake camera's recorder sees */
+    std::string demo_scenes;       /* VHS_DEMO_SCENES (the fake camera only): scenes/demo.hpp */
     std::shared_ptr<AlsaApi> alsa; /* tests: the sound system (null: the real one, or the fake with the fake camera) */
     const AvLibs *av = nullptr;    /* tests: FFmpeg (null: real_av_libs() at the first REC) */
 };
@@ -104,6 +115,8 @@ struct Snapshot {
     /* recording (canvas Recording-480x320) */
     bool recording = false;    /* REC pressed and not finished (the red shutter, "Photo now") */
     bool rec_started = false;  /* the first frame is written (the REC timer runs) */
+    bool rec_starting = false; /* REC pressed, no frame written yet: the dot blinks (app/rec_indicator.hpp) */
+    std::int64_t rec_since_ms = 0; /* the REC press (or the self-timer's zero): the blink's phase */
     std::int64_t rec_ms = 0;   /* the REC timer */
     std::uint64_t rec_bytes = 0;
     std::int64_t rec_left_s = -1; /* the time left at the rate written (-1: not known yet) */
@@ -112,6 +125,25 @@ struct Snapshot {
     ModeReq rec_mode;          /* the recorded mode */
     int scenes_recorded = 0;   /* in this run */
     std::string last_scene;    /* its first part's name */
+    int scene_count = -1;      /* the folder's movies and photos (the Scenes button; -1: not counted yet) */
+};
+
+enum class SceneFilter { All, Movies, Photos };
+
+/* One row of the Scenes page (brief 9.1). */
+struct SceneRow {
+    SceneEntry e;
+    std::string label, meta, date;   /* the class's form (portrait: short label, the day in the meta, no date) */
+    std::shared_ptr<Picture> thumb;  /* null until made (or none for that file) */
+};
+
+struct ScenesView {
+    bool open = false;
+    bool loading = false;            /* the first listing is on its way */
+    SceneFilter filter = SceneFilter::All;
+    int movies = 0, photos = 0;      /* the whole folder */
+    std::vector<SceneRow> rows;      /* the filter's, newest first */
+    std::uint64_t gen = 0;           /* +1 at every change (rows, a thumbnail) */
 };
 
 /* The photo review's state (brief 9.5). */
@@ -155,7 +187,7 @@ public:
     bool counting_down() const { return timer_.active(); }
 
     /* The photo review: open (lists the folder), move, delete the shown photo (after the UI asked), close. */
-    void review_open(int box_w, int box_h);
+    void review_open(int box_w, int box_h, const std::string &start = std::string());
     void review_move(int delta);
     void review_delete();
     void review_close();
@@ -172,6 +204,17 @@ public:
     void finish_recording(RecStop why = RecStop::Released);
     /* The scene's status (tests). */
     RecorderStatus last_recording() const { return last_rec_; }
+
+    /* The Scenes page: open (lists on the worker), the filter, the sheet's actions, close. */
+    void scenes_open(int thumb_w, int thumb_h, bool short_form);
+    void scenes_close();
+    void scenes_set_filter(SceneFilter f);
+    const ScenesView &scenes() const { return scenes_; }
+    void scene_rename(const std::string &name, const std::string &prefix);
+    void scene_toggle_lock(const std::string &name);
+    void scene_delete(const std::string &name);
+    /* The folder counted again (after a recording, a photo, a change): the Scenes button's number. */
+    void recount();
 
     Pipeline &pipeline() { return *pipe_; }
     const Settings &settings() const { return store_.get(); }
@@ -191,6 +234,11 @@ private:
     bool synced() const;
     void review_list();
     void review_decode();
+    void scenes_scan();
+    void scenes_thumbs(std::uint64_t id);
+    void scenes_filter_rows();
+    void startup_repair();
+    void log_rec_start(std::int64_t now_ms, const RecorderStatus &st);
     struct RecSession;
     void start_recording(std::int64_t now_ms);
     void stop_recording(RecStop why, bool wait);
@@ -243,6 +291,16 @@ private:
     std::shared_ptr<Picture> review_pic_;
     int review_box_w_ = 0, review_box_h_ = 0;
     std::uint64_t review_req_ = 0; /* drops stale decodes */
+    std::string review_start_;
+
+    /* the scenes */
+    ScenesView scenes_;
+    std::vector<SceneRow> all_rows_;
+    int thumb_w_ = 64, thumb_h_ = 36;
+    bool short_form_ = false;
+    std::shared_ptr<std::atomic<std::uint64_t>> scan_id_ = std::make_shared<std::atomic<std::uint64_t>>(0);
+    std::string cache_dir_;
+    int scene_count_ = -1;
 
     /* the recording */
     std::shared_ptr<AlsaApi> alsa_;

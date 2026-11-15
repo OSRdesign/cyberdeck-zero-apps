@@ -83,6 +83,7 @@ int main()
     OFF(fmt_pb, AVFormatContext, pb);
     OFF(fmt_nb_streams, AVFormatContext, nb_streams);
     OFF(fmt_streams, AVFormatContext, streams);
+    OFF(fmt_duration, AVFormatContext, duration);
     OFF(stream_codecpar, AVStream, codecpar);
     OFF(stream_time_base, AVStream, time_base);
     OFF(par_codec_type, AVCodecParameters, codec_type);
@@ -110,6 +111,7 @@ int main()
     SIZE(AVFormatContext, pb, void *);
     SIZE(AVFormatContext, nb_streams, unsigned);
     SIZE(AVFormatContext, streams, void *);
+    SIZE(AVFormatContext, duration, std::int64_t);
     SIZE(AVStream, codecpar, void *);
     SIZE(AVStream, time_base, av::Rational);
     SIZE(AVCodecParameters, codec_type, int);
@@ -145,6 +147,12 @@ int main()
     same("AV_CODEC_ID_MJPEG", av::kCodecMjpeg, AV_CODEC_ID_MJPEG);
     same("AV_CODEC_ID_H264", av::kCodecH264, AV_CODEC_ID_H264);
     same("AV_CODEC_ID_AAC", av::kCodecAac, AV_CODEC_ID_AAC);
+    same("AV_CODEC_ID_HEVC", av::kCodecHevc, AV_CODEC_ID_HEVC);
+    same("AV_CODEC_ID_MPEG4", av::kCodecMpeg4, AV_CODEC_ID_MPEG4);
+    same("AV_CODEC_ID_VP8", av::kCodecVp8, AV_CODEC_ID_VP8);
+    same("AV_CODEC_ID_VP9", av::kCodecVp9, AV_CODEC_ID_VP9);
+    same("AV_CODEC_ID_AV1 (per set)", o.codec_av1, AV_CODEC_ID_AV1);
+    same("AV_TIME_BASE (us)", 1000000, AV_TIME_BASE);
     same("AVIO_FLAG_WRITE", av::kIoWrite, AVIO_FLAG_WRITE);
     same("AV_PKT_FLAG_KEY", av::kPktKey, AV_PKT_FLAG_KEY);
     same("AV_SAMPLE_FMT_FLTP", av::kFmtFltp, AV_SAMPLE_FMT_FLTP);

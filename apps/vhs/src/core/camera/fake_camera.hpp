@@ -57,6 +57,7 @@ struct FakeOptions {
     int jpeg_quality = 85;
     int ctrl = -1;           /* FakeCtrl as int; -1: the profile's (FineCam absent, C270 present = 1) */
     int restart_delay_ms = 0;/* the first frame after a replug comes this much later (a camera re-enumerating) */
+    int start_delay_ms = 0;  /* the first frame after every STREAMON comes this much later (a board camera's start) */
     std::string hc_driver = "xhci_hcd"; /* the identity's bus */
 };
 

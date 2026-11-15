@@ -24,6 +24,10 @@ constexpr std::uint32_t kCream = 0xDCD4BD;     /* the toast */
 constexpr std::uint32_t kInk = 0x222222;       /* the toast's text */
 constexpr std::uint32_t kHot = 0xE0553A;       /* the red toast, REC (M3) */
 constexpr std::uint32_t kLamp = 0x3FBF6A;      /* the Sound-on lamp's dot (canvas Recording-480x320) */
+constexpr std::uint32_t kAccent = 0xF0B400;    /* "locked" (canvas Scenes-480x320) */
+constexpr std::uint32_t kThumb = 0x1A2328;     /* a row's thumbnail box before (or without) its picture */
+constexpr std::uint32_t kSheetKey = 0x6B6552;  /* the sheet's header, keys and note (canvas SceneOptions-480x320) */
+constexpr std::uint32_t kSheetSel = 0xC9C0A5;  /* the sheet's highlighted row */
 constexpr std::uint32_t kPicture = 0x000000;   /* the picture box's border (letterbox / pillarbox) */
 
 } // namespace col

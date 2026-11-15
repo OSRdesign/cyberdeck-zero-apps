@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <utility>
 
 namespace vhs {
 namespace ui {
@@ -29,8 +30,11 @@ const Notice kDemoNotices[] = {
 };
 
 /* not on the canvas: provisional wording (brief 12.4 item 3) */
-constexpr const char *kDeleteTitle = "Delete this photo?";
+constexpr const char *kDeletePhoto = "Delete this photo?";
+constexpr const char *kDeleteScene = "Delete this scene?";
 constexpr const char *kDeleteKeys = "Y = Delete, Enter or Esc = Cancel";
+constexpr const char *kRenameTitle = "Rename";
+constexpr const char *kRenameLabel = "Name";
 
 std::int64_t now_ms()
 {
@@ -65,6 +69,11 @@ VhsApp::VhsApp(lv_obj_t *screen) : screen_(screen)
     in.square = m->cls == CP0_UI_SQUARE;
     geo_ = capture_layout(in);
     rgeo_ = review_layout(in);
+    ScenesLayoutIn sin;
+    sin.base = in;
+    sin.row = m->tok[CP0_TOK_ROW_H];
+    sin.list_row = m->tok[CP0_TOK_LIST_ROW_H];
+    sgeo_ = scenes_layout(sin);
 
     ControllerConfig cc = controller_config(opt);
     cc.box_w = geo_.picture.w;
@@ -83,7 +92,7 @@ VhsApp::VhsApp(lv_obj_t *screen) : screen_(screen)
         on_status_timer();
     };
     act.scenes = [this] {
-        if (!ctl_->recording()) open_review(); /* dimmed while recording */
+        if (!ctl_->recording()) open_scenes(); /* dimmed while recording */
     };
     act.settings = [] { std::fprintf(stderr, "[vhs] settings: the page comes in M6\n"); };
     act.cancel = [this] {
@@ -91,6 +100,16 @@ VhsApp::VhsApp(lv_obj_t *screen) : screen_(screen)
         on_status_timer();
     };
     capture_ = std::make_unique<CapturePage>(page_->root(), geo_, act);
+    ScenesActions sa;
+    sa.open = [this](int i) { scene_open(i); };
+    sa.hold = [this](int i) { open_sheet(i); };
+    sa.filter = [this](SceneFilter f) {
+        ctl_->scenes_set_filter(f);
+        on_status_timer();
+    };
+    scenes_ = std::make_unique<ScenesPage>(page_->root(), sgeo_, sa);
+    sheet_ = std::make_unique<SceneSheet>(page_->root(), sgeo_, [this](SheetAction a) { sheet_act(a); },
+                                          [this] { sheet_->close(); });
     ReviewActions ra;
     ra.prev = [this] { ctl_->review_move(-1); };
     ra.next = [this] { ctl_->review_move(1); };
@@ -125,8 +144,12 @@ VhsApp::~VhsApp()
     if (display_) lv_display_remove_event_cb_with_user_data(display_, display_cb, this);
     if (screen_ && lv_obj_is_valid(screen_) && LV_EVENT_KEYBOARD != 0)
         lv_obj_remove_event_cb_with_user_data(screen_, keyboard_cb, this);
+    field_.reset();
+    text_dlg_.reset();
     dlg_.reset();
     capture_.reset(); /* the images let go of the pictures first */
+    scenes_.reset();
+    sheet_.reset();
     review_.reset();
     page_.reset();
     if (ctl_) ctl_->stop();
@@ -172,7 +195,13 @@ void VhsApp::on_display_event(lv_event_t *e)
 
 void VhsApp::on_frame_timer()
 {
-    if (cdk::hidden() || in_review_ || !ctl_->running()) return;
+    if (cdk::hidden()) return;
+    if (view_ == View::Scenes) {
+        scenes_->tick(now_ms()); /* a held row */
+        return;
+    }
+    if (view_ != View::Capture || !ctl_->running()) return;
+    capture_->tick(now_ms()); /* the REC dot while a scene starts */
     Pipeline &pipe = ctl_->pipeline();
     if (!pipe.pictures().take()) return;
     const Picture &p = pipe.pictures().front();
@@ -185,7 +214,7 @@ void VhsApp::on_frame_timer()
 
 void VhsApp::on_status_timer()
 {
-    /* hidden by the launcher: the camera is released; shown: it reopens (brief 3.3 rule 5) */
+    /* hidden by the launcher: the camera is released (a recording finished first); shown: it reopens (brief 13) */
     if (cdk::hidden()) {
         if (ctl_->running()) {
             std::fprintf(stderr, "[vhs] hidden: camera released\n");
@@ -193,59 +222,215 @@ void VhsApp::on_status_timer()
         }
         return;
     }
-    if (!in_review_ && !ctl_->running()) {
+    if (view_ == View::Capture && !ctl_->running()) {
         std::fprintf(stderr, "[vhs] camera opened\n");
         ctl_->start();
     }
     const Snapshot s = ctl_->step(now_ms());
-    if (in_review_) review_->update(ctl_->review(), ctl_->review_picture());
+    if (view_ == View::Review) review_->update(ctl_->review(), ctl_->review_picture());
+    else if (view_ == View::Scenes) scenes_->update(ctl_->scenes(), s.notice);
     else capture_->update(s);
 }
 
-void VhsApp::open_review()
+/* ------------------------------------------------------------------------------------------------ the scenes */
+
+void VhsApp::open_scenes()
 {
-    if (in_review_) return;
+    if (view_ == View::Scenes) return;
     ctl_->stop(); /* the camera is open only while the Capture page shows */
-    in_review_ = true;
+    view_ = View::Scenes;
     capture_->show_page(false);
+    scenes_->show(true);
+    page_->set_title({"Scenes"});
+    ctl_->scenes_open(sgeo_.thumb.w, sgeo_.thumb.h, sgeo_.portrait);
+    on_status_timer();
+    std::fprintf(stderr, "[vhs] scenes: opened (the camera released)\n");
+}
+
+void VhsApp::close_scenes()
+{
+    if (view_ != View::Scenes) return;
+    sheet_->close();
+    ctl_->scenes_close();
+    scenes_->show(false);
+    view_ = View::Capture;
+    capture_->show_page(true);
+    page_->set_title({"VHS"});
+    ctl_->recount();
+    on_status_timer(); /* the camera opens again */
+    capture_->focus_first();
+}
+
+const SceneRow *VhsApp::scene_at(int index) const
+{
+    const ScenesView &v = ctl_->scenes();
+    if (index < 0 || index >= static_cast<int>(v.rows.size())) return nullptr;
+    return &v.rows[static_cast<std::size_t>(index)];
+}
+
+void VhsApp::scene_open(int index)
+{
+    const SceneRow *r = scene_at(index);
+    if (!r) return;
+    sheet_->close();
+    if (r->e.kind == SceneKind::Photo) {
+        /* on the next LVGL cycle: the Enter that opened it must not also press the review's focused button */
+        pending_review_ = r->e.name;
+        lv_async_call(
+            [](void *p) {
+                auto *self = static_cast<VhsApp *>(p);
+                if (self->view_ == View::Scenes && !self->pending_review_.empty()) self->open_review(self->pending_review_);
+                self->pending_review_.clear();
+            },
+            this);
+    } else {
+        std::fprintf(stderr, "[vhs] scenes: play %s: playback comes with M5\n", r->e.name.c_str());
+    }
+}
+
+void VhsApp::open_sheet(int index)
+{
+    const SceneRow *r = scene_at(index);
+    if (!r) return;
+    sheet_name_ = r->e.name;
+    sheet_photo_ = r->e.kind == SceneKind::Photo;
+    scenes_->select(index);
+    const std::size_t dot = r->e.name.find_last_of('.');
+    sheet_->open(dot == std::string::npos ? r->e.name : r->e.name.substr(0, dot), sheet_photo_, r->e.locked); /* canvas: the stem */
+}
+
+void VhsApp::sheet_act(SheetAction a)
+{
+    const int index = scenes_->selected();
+    switch (a) {
+    case SheetAction::Play: scene_open(index); break;
+    case SheetAction::Rename: ask_rename(); break;
+    case SheetAction::Lock:
+        sheet_->close();
+        if (const SceneRow *r = scene_at(index)) ctl_->scene_toggle_lock(r->e.name);
+        break;
+    case SheetAction::Copy: std::fprintf(stderr, "[vhs] scenes: copy to a USB drive comes with M6\n"); break;
+    case SheetAction::Notes: std::fprintf(stderr, "[vhs] scenes: Send to Notes comes with M6 (optional)\n"); break;
+    case SheetAction::Delete: ask_delete(); break;
+    }
+}
+
+void VhsApp::scenes_key(std::uint32_t code, char ch, bool ctrl)
+{
+    auto is = [code, ch](std::uint32_t k, char c) { return code == k || (code == 0 && ch == c); };
+    if (sheet_->shown()) {
+        if (code == KEY_UP) sheet_->move(-1);
+        else if (code == KEY_DOWN) sheet_->move(1);
+        else if (code == KEY_ENTER || code == KEY_KPENTER) sheet_->choose();
+        else if (is(KEY_N, 'n')) sheet_act(SheetAction::Rename);
+        else if (is(KEY_L, 'l')) sheet_act(SheetAction::Lock);
+        else if (is(KEY_U, 'u')) sheet_act(SheetAction::Copy);
+        else if (code == KEY_DELETE) sheet_act(SheetAction::Delete);
+        return;
+    }
+    const SceneRow *r = scene_at(scenes_->selected());
+    if (ctrl && is(KEY_O, 'o')) {
+        open_sheet(scenes_->selected());
+    } else if (code == KEY_UP) {
+        scenes_->move(-1);
+    } else if (code == KEY_DOWN) {
+        scenes_->move(1);
+    } else if (code == KEY_ENTER || code == KEY_KPENTER) {
+        scene_open(scenes_->selected());
+    } else if (is(KEY_TAB, '\t')) {
+        const ScenesView &v = ctl_->scenes();
+        ctl_->scenes_set_filter(static_cast<SceneFilter>((static_cast<int>(v.filter) + 1) % 3));
+    } else if (r && is(KEY_N, 'n')) {
+        sheet_name_ = r->e.name;
+        sheet_photo_ = r->e.kind == SceneKind::Photo;
+        ask_rename();
+    } else if (r && is(KEY_L, 'l')) {
+        ctl_->scene_toggle_lock(r->e.name);
+    } else if (r && is(KEY_U, 'u')) {
+        std::fprintf(stderr, "[vhs] scenes: copy to a USB drive comes with M6\n");
+    } else if (r && code == KEY_DELETE) {
+        sheet_name_ = r->e.name;
+        sheet_photo_ = r->e.kind == SceneKind::Photo;
+        ask_delete();
+    }
+    on_status_timer();
+}
+
+/* ------------------------------------------------------------------------------------------------ the review */
+
+void VhsApp::open_review(const std::string &start)
+{
+    if (view_ == View::Review) return;
+    ctl_->stop();
+    review_from_scenes_ = view_ == View::Scenes;
+    if (review_from_scenes_) scenes_->show(false);
+    else capture_->show_page(false);
+    view_ = View::Review;
     review_->show(true);
     page_->set_title({"Photo"});
-    ctl_->review_open(rgeo_.picture.w, rgeo_.picture.h);
+    ctl_->review_open(rgeo_.picture.w, rgeo_.picture.h, start);
     review_->focus_first();
     std::fprintf(stderr, "[vhs] review: opened (the camera released)\n");
 }
 
 void VhsApp::close_review()
 {
-    if (!in_review_) return;
+    if (view_ != View::Review) return;
     close_dialog();
     ctl_->review_close();
     review_->show(false);
-    in_review_ = false;
+    if (review_from_scenes_) {
+        view_ = View::Scenes;
+        scenes_->show(true);
+        page_->set_title({"Scenes"});
+        ctl_->scenes_open(sgeo_.thumb.w, sgeo_.thumb.h, sgeo_.portrait); /* a photo may have gone */
+        on_status_timer();
+        return;
+    }
+    view_ = View::Capture;
     capture_->show_page(true);
     page_->set_title({"VHS"});
     on_status_timer(); /* the camera opens again */
     capture_->focus_first();
 }
 
+/* ------------------------------------------------------------------------------------------------ dialogs */
+
 void VhsApp::dialog_cancel_cb(void *p)
 {
     static_cast<VhsApp *>(p)->dialog_choose(false);
 }
 
-void VhsApp::dialog_delete_cb(void *p)
+void VhsApp::dialog_yes_cb(void *p)
 {
     static_cast<VhsApp *>(p)->dialog_choose(true);
 }
 
 void VhsApp::ask_delete()
 {
-    if (!in_review_ || ctl_->review().count == 0 || dlg_) return;
+    if (dlg_ || text_dlg_) return;
+    std::string name;
+    bool photo = true;
+    if (view_ == View::Review) {
+        if (ctl_->review().count == 0) return;
+        name = ctl_->review().name;
+    } else if (view_ == View::Scenes) {
+        name = sheet_name_;
+        photo = sheet_photo_;
+    } else {
+        return;
+    }
+    sheet_->close();
+    on_dialog_ = [this, name](bool yes) {
+        if (!yes) return;
+        if (view_ == View::Review) ctl_->review_delete();
+        else ctl_->scene_delete(name);
+    };
     /* the toolkit's dialog, as Vinyl's "Clear the queue?": Enter and Esc cancel, Y or the Delete button deletes */
     cp0::ui::DialogSpec spec;
-    spec.title = kDeleteTitle;
+    spec.title = photo ? kDeletePhoto : kDeleteScene;
     spec.buttons.push_back({"Cancel", cp0::ui::ButtonRole::Primary, [this] { lv_async_call(dialog_cancel_cb, this); }});
-    spec.buttons.push_back({"Delete", cp0::ui::ButtonRole::Destructive, [this] { lv_async_call(dialog_delete_cb, this); }});
+    spec.buttons.push_back({"Delete", cp0::ui::ButtonRole::Destructive, [this] { lv_async_call(dialog_yes_cb, this); }});
     spec.page = page_.get();
     dlg_ = std::make_unique<cp0::ui::Dialog>(page_->root(), layout_, std::move(spec));
     dlg_->add_text(kDeleteKeys);
@@ -260,22 +445,90 @@ void VhsApp::close_dialog()
 {
     if (!dlg_) return;
     dlg_.reset();
-    if (in_review_) review_->focus_first();
+    if (view_ == View::Review) review_->focus_first();
 }
 
-void VhsApp::dialog_choose(bool del)
+void VhsApp::dialog_choose(bool yes)
 {
     if (!dlg_) return;
+    auto cb = std::move(on_dialog_);
+    on_dialog_ = nullptr;
     close_dialog();
-    if (del) ctl_->review_delete();
+    if (cb) cb(yes);
 }
+
+void VhsApp::ask_rename()
+{
+    if (dlg_ || text_dlg_ || sheet_name_.empty()) return;
+    sheet_->close();
+    SceneName n;
+    const std::string name = sheet_name_;
+    const std::string prefix = parse_scene_name(name, n) ? n.prefix : std::string();
+    on_text_ = [this, name](const std::string &text) { ctl_->scene_rename(name, text); };
+    /* Cassette's text box: the toolkit's Dialog with a TextField (the keyboard policy applies: osk_policy) */
+    cp0::ui::DialogSpec spec;
+    spec.title = kRenameTitle;
+    spec.page = page_.get();
+    spec.buttons.push_back({"Cancel", cp0::ui::ButtonRole::Cancel, [this] { close_text(); }});
+    spec.buttons.push_back({"Save", cp0::ui::ButtonRole::Primary, [this] {
+                                const std::string t = field_ ? field_->text() : std::string();
+                                auto cb = on_text_;
+                                close_text();
+                                if (cb) cb(t);
+                            }});
+    text_dlg_ = std::make_unique<cp0::ui::Dialog>(page_->root(), page_->layout(), spec);
+    cp0::ui::TextFieldSpec fs;
+    fs.label = kRenameLabel;
+    fs.text = prefix;
+    fs.max_bytes = 24;
+    cp0::ui::TextFieldEvents fe;
+    fe.submit = [this](const std::string &t) {
+        auto cb = on_text_;
+        close_text();
+        if (cb) cb(t);
+    };
+    fe.escape = [this] { close_text(); };
+    fe.back = [this] { close_text(); };
+    field_ = std::make_unique<cp0::ui::TextField>(text_dlg_->body(), text_dlg_->field_layout(), fs, fe);
+    text_dlg_->relayout();
+    if (lv_group_t *g = cdk::input_group()) {
+        lv_group_add_obj(g, field_->focus_object());
+        lv_group_focus_obj(field_->focus_object());
+    }
+    field_->begin_edit();
+    /* the page goes while the box is up: nothing of it may lie under the toolkit's keyboard (Cassette) */
+    scenes_->show(false);
+    std::fprintf(stderr, "[vhs] scenes: rename %s\n", name.c_str());
+}
+
+void VhsApp::close_text()
+{
+    if (!text_dlg_) return;
+    /* never delete the box inside its own event: hand the objects to the next LVGL cycle (Cassette) */
+    auto *pending = new std::pair<std::unique_ptr<cp0::ui::TextField>, std::unique_ptr<cp0::ui::Dialog>>(std::move(field_),
+                                                                                                       std::move(text_dlg_));
+    if (pending->second) lv_obj_add_flag(pending->second->root(), LV_OBJ_FLAG_HIDDEN);
+    if (pending->first && pending->first->editing()) pending->first->end_edit();
+    lv_async_call(
+        [](void *p) { delete static_cast<std::pair<std::unique_ptr<cp0::ui::TextField>, std::unique_ptr<cp0::ui::Dialog>> *>(p); },
+        pending);
+    on_text_ = nullptr;
+    if (view_ == View::Scenes) scenes_->show(true);
+}
+
+/* ------------------------------------------------------------------------------------------------ keys */
 
 void VhsApp::on_back()
 {
-    if (dlg_) {
+    if (text_dlg_) {
+        close_text();
+    } else if (dlg_) {
         dialog_choose(false);
-    } else if (in_review_) {
+    } else if (view_ == View::Review) {
         close_review();
+    } else if (view_ == View::Scenes) {
+        if (sheet_->shown()) sheet_->close();
+        else close_scenes();
     } else if (ctl_->cancel_countdown()) {
         on_status_timer(); /* Esc during the countdown cancels it (D30, brief 12.4 item 1) */
     } else if (ctl_->recording()) {
@@ -299,7 +552,9 @@ void VhsApp::demo_next_notice()
 void VhsApp::on_key(const key_item &item)
 {
     if (item.key_state != KBD_KEY_PRESSED) return;
-    if (item.mods & (KBD_MOD_CTRL | KBD_MOD_ALT | KBD_MOD_LOGO)) return;
+    if (text_dlg_) return; /* the text field takes its keys itself */
+    const bool ctrl = (item.mods & KBD_MOD_CTRL) != 0;
+    if (item.mods & (KBD_MOD_ALT | KBD_MOD_LOGO)) return;
     const std::uint32_t code = item.key_code;
     char ch = 0;
     if (code == 0 && item.utf8[0] && !item.utf8[1]) {
@@ -312,12 +567,17 @@ void VhsApp::on_key(const key_item &item)
         else if (code == KEY_ESC) dialog_choose(false);
         return;
     }
-    lv_group_t *g = cdk::input_group();
     if (code == KEY_ESC) {
         on_back();
         return;
     }
-    if (in_review_) {
+    if (view_ == View::Scenes) {
+        scenes_key(code, ch, ctrl);
+        return;
+    }
+    if (ctrl) return;
+    lv_group_t *g = cdk::input_group();
+    if (view_ == View::Review) {
         if (code == KEY_LEFT) ctl_->review_move(-1);
         else if (code == KEY_RIGHT) ctl_->review_move(1);
         else if (code == KEY_DELETE) ask_delete();

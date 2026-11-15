@@ -702,6 +702,7 @@ int FakeCamera::ioctl(int fd, unsigned long req, void *arg)
             streaming_ = true;
             streamons_.fetch_add(1);
             std::int64_t first = opt_.realtime ? 1000000 / std::max(1, pace_fps()) : 0;
+            if (opt_.start_delay_ms > 0) first = static_cast<std::int64_t>(opt_.start_delay_ms) * 1000;
             if (replugged_ && opt_.restart_delay_ms > 0) first = static_cast<std::int64_t>(opt_.restart_delay_ms) * 1000;
             replugged_ = false;
             next_due_us_ = mono_us() + first;

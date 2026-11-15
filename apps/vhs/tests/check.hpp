@@ -98,3 +98,4 @@ void test_photo();
 void test_record();
 void test_recorder();
 void test_rec_app();
+void test_scenes();

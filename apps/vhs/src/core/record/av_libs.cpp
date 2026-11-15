@@ -22,6 +22,8 @@ Offsets offsets_for(int lavf_major)
         o.par_height = 60;
         o.ctx_time_base = 100;
         o.ctx_sample_fmt = 360;
+        o.fmt_duration = 72;
+        o.codec_av1 = 226;
         o.frame_sample_rate = 208;
         o.frame_ch_layout = 448;
     } else if (lavf_major == 62) { /* FFmpeg 8.0: AVFrame lost its deprecated fields */

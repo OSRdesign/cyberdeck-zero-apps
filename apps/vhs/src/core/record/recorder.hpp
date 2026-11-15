@@ -71,6 +71,7 @@ struct RecorderStatus {
     std::string error;
     std::uint64_t free_bytes = 0;
     std::int64_t seconds_left = -1;
+    int open_ms = -1;       /* start() to part 1 open (the AAC encoder, the MKV header, the journal): rec-start */
 };
 
 class Recorder : public FrameSink {
@@ -144,6 +145,7 @@ private:
     std::int64_t last_pts_ = -1;
     std::vector<std::string> files_;
     std::string stem_;
+    std::int64_t start_ms_ = 0;
 };
 
 } // namespace vhs

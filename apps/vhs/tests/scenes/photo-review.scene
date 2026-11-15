@@ -1,6 +1,6 @@
 # VHS M2: two photos by Space (Instant: the next good frame of the 1080p stream, one flash each; saved as
 # photo_<NNN>_nodate.jpg with the clock not synchronised), then the minimal photo review (canvas
-# PhotoReview-480x320) from the Scenes button (the scene list is M4): newest first, Right / Left, Delete asks
+# PhotoReview-480x320) from the Scenes page (Enter on the newest photo): newest first, Right / Left, Delete asks
 # first (the toolkit's dialog; Y deletes), Esc back to the live picture (the camera reopens).
 title VHS M2 photos and the review at 480x320 (6.08 px/mm, the canvas's pixels)
 sizes 480x320
@@ -17,9 +17,11 @@ expect text "1920x1080  30 fps"
 key space
 wait 900
 key space
-wait 900
+wait 2000
 tap "Scenes"
-wait 900
+wait 2000
+key enter
+wait 1200
 shot 02-review
 expect esc
 expect text "1 of 2"
@@ -49,6 +51,8 @@ shot 05-deleted
 expect notext "Delete this photo?"
 expect text "1 of 1"
 expect text "photo_001_nodate.jpg"
+key esc
+wait 1200
 key esc
 wait 1500
 shot 06-back-live

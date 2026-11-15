@@ -41,9 +41,13 @@ wait 3600
 shot 05-taken
 expect notext "Cancel"
 tap "Scenes"
+wait 1500
+key enter
 wait 900
 shot 06-one-photo
 expect text "1 of 1"
+key esc
+wait 800
 key esc
 wait 300
 key esc

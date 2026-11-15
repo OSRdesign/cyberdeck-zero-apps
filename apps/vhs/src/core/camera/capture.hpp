@@ -17,8 +17,11 @@
  *             Streaming at once (silently)
  *   Busy      EBUSY at open / S_FMT / REQBUFS / STREAMON;  NoAccess  EACCES / EPERM at open
  *   Failed    anything else, with the reason (ENOSPC at STREAMON: the USB bandwidth)
- * A mode change closes and reopens the device (uvcvideo refuses S_FMT while buffers exist). The bus is never touched
- * (C12: no unbind, no reset, no authorized toggles).
+ * A mode change (request_mode, hold_mode, release_hold) switches on the open device: STREAMOFF, the buffers freed
+ * (REQBUFS 0: uvcvideo refuses S_FMT while buffers exist), S_FMT, S_PARM, new buffers, STREAMON; the controls stay as
+ * the open set them. Any refusal falls back to the full close and reopen, which reopen() (the settings changed) always
+ * does. Each start's phases are timed (stream_timing(): the rec-start breakdown). The bus is never touched (C12: no
+ * unbind, no reset, no authorized toggles).
  */
 #pragma once
 
@@ -91,6 +94,19 @@ public:
     virtual void tap_frame(const std::uint8_t *data, std::size_t n, std::int64_t ts_us, const ModeReq &mode) = 0;
 };
 
+/* The phases of the last stream start in ms (-1: not measured): the rec-start breakdown (M4). */
+struct StreamTiming {
+    std::uint64_t gen = 0;   /* the streaming session they belong to */
+    bool in_place = false;   /* a switch on the open device; false: a close and an open */
+    int close_ms = -1;       /* STREAMOFF + unmap (+ close) of the previous stream */
+    int open_ms = -1;        /* open + QUERYCAP + the mode list (0 in place) */
+    int set_ms = -1;         /* S_FMT + S_PARM */
+    int controls_ms = -1;    /* exposure_auto_priority (an open only) */
+    int bufs_ms = -1;        /* REQBUFS + mmap + QBUF + STREAMON */
+    int first_ms = -1;       /* STREAMON to the first frame */
+    int warm_ms = -1;        /* the first frame to the end of the warm-up (kWarmupFrames more) */
+};
+
 /* The mode to stream for a camera's list (brief section 4), at every open; an invalid result means "the first MJPEG
  * mode at 30 fps, else the first YUYV one". */
 using ModeChooser = std::function<ModeReq(const std::vector<CamMode> &listed, const CamIdentity &id)>;
@@ -138,6 +154,7 @@ public:
     void set_tap(FrameTap *tap, const ModeReq &expect);
     void clear_tap();
     std::uint64_t tapped() const { return tapped_.load(); }
+    StreamTiming stream_timing() const;
     CaptureStatus status() const;
 
     std::uint64_t frames() const { return frames_.load(); }   /* frames handed to the mailbox */
@@ -154,6 +171,9 @@ private:
     };
     void run();
     bool open_device(const CameraRef &ref);
+    ModeReq pick_mode(const std::vector<CamMode> &listed, const CamIdentity &id, std::string *note);
+    bool start_stream(const ModeReq &mode, bool controls, StreamTiming t, std::string &why, CamState &bad);
+    bool switch_in_place();
     void close_device();
     void absent();
     void lost(int err, const char *where);
@@ -172,6 +192,10 @@ private:
     CaptureStatus status_;
     ModeReq want_;
     bool mode_change_ = false;
+    bool reopen_full_ = false;  /* status_m_ */
+    StreamTiming timing_;       /* status_m_ */
+    std::int64_t t_on_us_ = 0, t_first_us_ = 0; /* the thread's */
+    int pending_close_ms_ = -1;
     ModeReq hold_;            /* status_m_ */
     bool hold_on_ = false;    /* status_m_ */
     bool hold_switched_ = false;

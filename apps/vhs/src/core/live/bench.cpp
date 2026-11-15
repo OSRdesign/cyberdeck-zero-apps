@@ -98,6 +98,7 @@ ControllerConfig controller_config(const Options &o)
     c.clock_synced = o.clock_synced;
     c.fake_mic = o.fake_mic;
     c.fake_free_mb = o.fake_free_mb;
+    c.demo_scenes = o.demo_scenes;
     return c;
 }
 
@@ -230,6 +231,7 @@ Options options_from_env(std::string *warnings)
     o.fake_script = getenv_s("VHS_FAKE_SCRIPT");
     o.fake_undervolt = !getenv_s("VHS_FAKE_UNDERVOLT").empty() && getenv_s("VHS_FAKE_UNDERVOLT") != "0";
     if (!getenv_s("VHS_FAKE_RESTART_MS").empty()) o.fake_opt.restart_delay_ms = std::atoi(getenv_s("VHS_FAKE_RESTART_MS").c_str());
+    if (!getenv_s("VHS_FAKE_START_MS").empty()) o.fake_opt.start_delay_ms = std::atoi(getenv_s("VHS_FAKE_START_MS").c_str());
     if (!getenv_s("VHS_FAKE_BUS").empty()) o.fake_opt.hc_driver = getenv_s("VHS_FAKE_BUS");
     const std::string ctrl = getenv_s("VHS_FAKE_CTRL");
     if (ctrl == "absent") o.fake_opt.ctrl = static_cast<int>(FakeCtrl::Absent);
@@ -255,6 +257,7 @@ Options options_from_env(std::string *warnings)
     o.fastdct = getenv_s("VHS_ACCURATE").empty() || getenv_s("VHS_ACCURATE") == "0";
     o.stats = !getenv_s("VHS_STATS").empty() && getenv_s("VHS_STATS") != "0";
     o.fake_mic = getenv_s("VHS_FAKE_MIC");
+    o.demo_scenes = getenv_s("VHS_DEMO_SCENES");
     if (!getenv_s("VHS_FAKE_FREE_MB").empty()) o.fake_free_mb = std::atol(getenv_s("VHS_FAKE_FREE_MB").c_str());
     return o;
 }

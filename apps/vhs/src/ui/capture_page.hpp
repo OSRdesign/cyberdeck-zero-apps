@@ -17,7 +17,9 @@
  *   Recording          (canvas Recording-480x320) the REC tag with the timer in the chip's place, the Sound-on tag at
  *                      the picture's bottom left while the camera microphone hears something (not drawn without a
  *                      microphone; hidden while the lamp is off: provisional), the red shutter, "Photo now" in
- *                      Photo | Video's place, Scenes and Settings dimmed, "size, time left" and the canvas's note
+ *                      Photo | Video's place, Scenes and Settings dimmed, "size, time left" and the canvas's note;
+ *                      until the first frame is written the dot blinks (500 ms on / off), the tag reads
+ *                      "REC 00:00:00", Sound on is hidden and Photo now dimmed (M4, the start indicator)
  * A photo taken flashes the picture once (D30; brief 12.4 item 2: provisional, a white veil fading out in 0.25 s).
  * Settings does nothing yet (M6). LVGL thread only.
  */
@@ -60,6 +62,8 @@ public:
     void focus_first();
     /* The page shown or hidden (the photo review over it): its buttons leave the keypad group while hidden. */
     void show_page(bool on);
+    /* The frame timer: the REC dot's blink while the scene starts (app/rec_indicator.hpp). */
+    void tick(std::int64_t now_ms);
 
 private:
     lv_obj_t *make_button(lv_obj_t *parent, const Rect &r, const char *name, int px, std::function<void()> fn,
@@ -78,7 +82,10 @@ private:
     lv_obj_t *cd_ring_ = nullptr, *cd_num_ = nullptr, *cancel_ = nullptr, *flash_ = nullptr;
     lv_obj_t *face_ = nullptr, *rec_face_ = nullptr, *toggle_text_ = nullptr;
     lv_obj_t *rec_tag_ = nullptr, *rec_text_ = nullptr, *lamp_tag_ = nullptr;
-    lv_obj_t *make_tag(int x, int y, std::uint32_t dot, lv_obj_t **text);
+    lv_obj_t *make_tag(int x, int y, std::uint32_t dot, lv_obj_t **text, lv_obj_t **dot_obj = nullptr);
+    lv_obj_t *rec_dot_ = nullptr;
+    bool starting_ = false;
+    std::int64_t since_ms_ = 0;
     std::uint64_t flash_seen_ = 0;
     bool counting_ = false;
     static void box_cb(lv_event_t *e);

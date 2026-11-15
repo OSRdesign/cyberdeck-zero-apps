@@ -94,11 +94,17 @@ void streams_and_switches()
     CHECK_EQ(box.front().stride, 1280);
     CHECK_EQ(box.front().size, static_cast<std::size_t>(640 * 360 * 2));
     CHECK_EQ(box.front().gen, 2ull);
-    CHECK_EQ(cap.opens(), 2ull);
+    CHECK_EQ(cap.opens(), 1ull); /* a mode change switches on the open device (M4) */
     CHECK_EQ(r.cam.streamon_count(), 2);
+    CHECK(cap.stream_timing().in_place);
+    CHECK_EQ(cap.stream_timing().gen, 2ull);
+    CHECK(cap.stream_timing().first_ms >= 0);
     /* reopen: the explicit mode stays */
     cap.reopen();
     CHECK(wait_for(3000, [&] { return cap.status().gen == 3 && cap.status().mode.same(yuyv); }));
+    CHECK_EQ(cap.opens(), 2ull); /* reopen(): the full close and open */
+    CHECK(!cap.stream_timing().in_place);
+    CHECK(cap.stream_timing().open_ms >= 0 && cap.stream_timing().close_ms >= 0);
     const std::int64_t t0 = mono_us();
     cap.stop();
     CHECK(mono_us() - t0 < 1000000);

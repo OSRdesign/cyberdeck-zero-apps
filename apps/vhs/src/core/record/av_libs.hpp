@@ -36,6 +36,7 @@ constexpr int kMediaVideo = 0, kMediaAudio = 1;
 constexpr int kCodecMjpeg = 7;     /* AV_CODEC_ID_MJPEG */
 constexpr int kCodecH264 = 27;     /* AV_CODEC_ID_H264 (P2) */
 constexpr int kCodecAac = 86018;   /* AV_CODEC_ID_AAC */
+constexpr int kCodecHevc = 173, kCodecMpeg4 = 12, kCodecVp8 = 139, kCodecVp9 = 167; /* the scenes list's codec names */
 constexpr int kIoWrite = 2;        /* AVIO_FLAG_WRITE */
 constexpr int kPktKey = 1;         /* AV_PKT_FLAG_KEY */
 constexpr int kFmtFltp = 8;        /* AV_SAMPLE_FMT_FLTP */
@@ -56,7 +57,7 @@ struct ChannelLayout { /* AVChannelLayout (FFmpeg 5.1 and later) */
 
 /* The struct fields VHS reads or writes, by libavformat major (the same major for libavcodec in each set). */
 struct Offsets {
-    std::size_t fmt_pb = 32, fmt_nb_streams = 44, fmt_streams = 48;           /* AVFormatContext */
+    std::size_t fmt_pb = 32, fmt_nb_streams = 44, fmt_streams = 48, fmt_duration = 104; /* AVFormatContext */
     std::size_t stream_codecpar = 16, stream_time_base = 32;                   /* AVStream */
     std::size_t par_codec_type = 0, par_codec_id = 4, par_width = 72, par_height = 76; /* AVCodecParameters */
     std::size_t ctx_time_base = 84, ctx_sample_fmt = 348;                      /* AVCodecContext (sample_fmt has no AVOption) */
@@ -64,6 +65,7 @@ struct Offsets {
                 frame_sample_rate = 192, frame_ch_layout = 408;                /* AVFrame */
     std::size_t pkt_pts = 8, pkt_dts = 16, pkt_data = 24, pkt_size = 32, pkt_stream_index = 36, pkt_flags = 40,
                 pkt_duration = 64;                                             /* AVPacket */
+    int codec_av1 = 225;                                                       /* AV_CODEC_ID_AV1 (226 in the 60 set) */
 };
 /* 60, 61 or 62 (anything else: the 61 offsets; the set is refused at load). */
 Offsets offsets_for(int lavf_major);

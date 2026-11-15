@@ -34,6 +34,9 @@ constexpr const char *kNoticeMicFailed = "Camera microphone failed: recording wi
 constexpr const char *kNoticeNoMjpegVideo = "Recording needs a camera that sends MJPEG.";
 constexpr const char *kNoticeNoFfmpeg = "Recording needs FFmpeg: its libraries are missing.";
 constexpr const char *kNoticeRecFailed = "Recording stopped: "; /* + the reason */
+/* The scenes (M4): Cassette's "Not renamed: <reason>" pattern; provisional. */
+constexpr const char *kNoticeNotRenamed = "Not renamed: "; /* + Cassette's reason */
+constexpr const char *kNoticeNotDeleted = "Not deleted: "; /* + the reason ("the file is locked") */
 
 struct Notice {
     std::string text; /* "" = none */

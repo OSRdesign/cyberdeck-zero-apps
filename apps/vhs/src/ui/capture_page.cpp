@@ -6,6 +6,7 @@
 #include "capture_page.hpp"
 
 #include "app.hpp"
+#include "core/app/rec_indicator.hpp"
 #include "core/record/disk_guard.hpp"
 #include "theme.hpp"
 
@@ -266,7 +267,7 @@ CapturePage::CapturePage(lv_obj_t *root, const CaptureLayout &geo, CaptureAction
     place_nocamera(false);
 
     /* the recording's tags (canvas Recording-480x320): REC at the chip's place, Sound on at the bottom left */
-    rec_tag_ = make_tag(geo_.chip_x, geo_.chip_y, col::kHot, &rec_text_);
+    rec_tag_ = make_tag(geo_.chip_x, geo_.chip_y, col::kHot, &rec_text_, &rec_dot_);
     lv_obj_t *lamp_text = nullptr;
     lamp_tag_ = make_tag(geo_.chip_x, geo_.lamp_y, col::kLamp, &lamp_text);
     lv_label_set_text(lamp_text, "Sound on");
@@ -314,7 +315,7 @@ lv_obj_t *CapturePage::make_button(lv_obj_t *parent, const Rect &r, const char *
     return b;
 }
 
-lv_obj_t *CapturePage::make_tag(int x, int y, std::uint32_t dot, lv_obj_t **text)
+lv_obj_t *CapturePage::make_tag(int x, int y, std::uint32_t dot, lv_obj_t **text, lv_obj_t **dot_obj)
 {
     lv_obj_t *t = lv_obj_create(box_);
     plain(t);
@@ -333,9 +334,17 @@ lv_obj_t *CapturePage::make_tag(int x, int y, std::uint32_t dot, lv_obj_t **text
     lv_obj_set_style_radius(d, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(d, lv_color_hex(dot), 0);
     lv_obj_set_style_bg_opa(d, LV_OPA_COVER, 0);
+    if (dot_obj) *dot_obj = d;
     *text = label(t, geo_.tag_px, col::kWhite);
     show(t, false);
     return t;
+}
+
+void CapturePage::tick(std::int64_t now_ms)
+{
+    /* the dot keeps its place while dark (the text does not move) */
+    if (rec_dot_)
+        lv_obj_set_style_opa(rec_dot_, rec_dot_shown(starting_, now_ms, since_ms_) ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
 }
 
 void CapturePage::button_cb(lv_event_t *e)
@@ -426,9 +435,16 @@ void CapturePage::update(const Snapshot &s)
     if (live && s.mode.valid())
         set_text(chip_, std::to_string(s.mode.w) + "x" + std::to_string(s.mode.h) + "  " + std::to_string(s.mode.fps) + " fps");
     show(chip_, live && !rec && s.mode.valid() && have_picture_);
-    if (rec) set_text(rec_text_, "REC " + clock_text(s.rec_ms));
+    starting_ = rec && s.rec_starting;
+    since_ms_ = s.rec_since_ms;
+    if (rec) set_text(rec_text_, "REC " + clock_text(starting_ ? 0 : s.rec_ms));
     show(rec_tag_, rec);
-    show(lamp_tag_, rec && s.rec_audio && s.lamp);
+    show(lamp_tag_, rec && !starting_ && s.rec_audio && s.lamp);
+    /* the Scenes button's number (canvas "Scenes 14"; none while the folder is empty) */
+    if (scenes_sub_) {
+        if (s.scene_count > 0) set_text(scenes_sub_, std::to_string(s.scene_count));
+        show(scenes_sub_, s.scene_count > 0);
+    }
 
     /* the flash: once per photo taken */
     if (s.flash != flash_seen_) {
@@ -477,7 +493,7 @@ void CapturePage::update(const Snapshot &s)
 
     const std::string key = std::string(state_name(s.state)) + "|" + (s.replug_hint ? "hint" : "") + "|" + s.detail +
                             "|" + (toast ? "toast" : "") + "|" + (note.empty() ? "" : "note") + "|" +
-                            (counting ? "count" : "") + "|" + (rec ? "rec" : "");
+                            (counting ? "count" : "") + "|" + (rec ? "rec" : "") + (starting_ ? "start" : "");
     if (key == last_key_) return;
     last_key_ = key;
     counting_ = counting;
@@ -490,7 +506,7 @@ void CapturePage::update(const Snapshot &s)
     show(toggle_, !nocam && !turned);
     show(scenes_, !nocam && !counting);
     show(cancel_, !nocam && counting);
-    dim(toggle_, counting);
+    dim(toggle_, counting || starting_); /* Photo now waits for the first written frame */
     /* recording: the red shutter, "Photo now" in the toggle's place, Scenes and Settings dimmed (canvas) */
     show(face_, !rec);
     show(rec_face_, rec);

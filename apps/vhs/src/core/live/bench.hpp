@@ -52,6 +52,7 @@ struct Options {
     bool stats = false;
     std::string fake_mic;        /* VHS_FAKE_MIC (the fake camera): tone | quiet | silent | busy | none; "" = tone */
     long fake_free_mb = -1;      /* VHS_FAKE_FREE_MB (the fake camera): the free space the recorder sees */
+    std::string demo_scenes;     /* VHS_DEMO_SCENES (the fake camera): "1" or "cjk": a demo scenes folder */
 };
 
 struct Cli {
