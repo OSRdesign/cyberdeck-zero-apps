@@ -1,0 +1,24 @@
+# VHS M1 hidden and shown again (X-Background=run): the camera is released while hidden (nothing drawn) and
+# opened again on show (brief 3.3 rule 5; the recording part of section 13 comes with M3 / M6).
+title VHS hidden and shown again (X-Background=run): the camera released and reopened
+sizes 800x480
+lifecycle
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+env VHS_FORMAT rgb565
+
+wait 1500
+shot 01-live
+expect text "1920x1080  30 fps"
+hide
+wait 800
+expect hidden
+expect nowrite
+show
+wait 1500
+expect visible
+expect repaint
+shot 02-shown
+expect text "1920x1080  30 fps"
+key esc
+expect quit

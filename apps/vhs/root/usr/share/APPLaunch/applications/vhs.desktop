@@ -1,0 +1,13 @@
+[Desktop Entry]
+# X-Background=run (owner answer Q1, 2026-11-15; D37 "foreground only"): on Super or three fingers VHS finishes and saves
+# a recording, releases the camera and hides; shown again it comes back live. No X-MinSize (D27): it lays itself out on
+# any screen. X-Portrait=320x480: its portrait layout (zero8 upright). Below 480 px on the short side the launcher has no
+# multitasking and VHS owns the panel until it exits.
+Name=VHS
+Exec=/usr/share/APPLaunch/bin/vhs
+Terminal=false
+Icon=share/images/vhs.png
+Type=Application
+X-Fullscreen=true
+X-Portrait=320x480
+X-Background=run

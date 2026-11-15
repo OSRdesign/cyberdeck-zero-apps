@@ -1,0 +1,17 @@
+# VHS M1: the user is not in the video group (EACCES at open).
+title VHS M1 without access to the camera (480x320 and 320x480 at 6.3 px/mm): the standing toast
+sizes 480x320 320x480
+ppmm 630
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_FAKE_SCRIPT noaccess@0
+
+wait 1200
+shot 01-noaccess
+expect esc
+expect text "No access to the camera: add your user to the video group."
+expect notext "No camera found"
+key esc
+expect quit

@@ -1,0 +1,57 @@
+# VHS M1, the Capture page through its states on the fake camera (a UGREEN FineCam CM969 on a dwc_otg bus, an
+# Instant board: VHS_SOC bcm2837): live in Photo and Video mode, unplugged (Lost: the last picture dimmed, the
+# toast), not back after 5 s (the NoCamera page with the replug hint), turned (back with its portrait list within
+# 10 s: the Turned overlay until the first frame, 2.5 s later here), then the portrait picture pillarboxed.
+title VHS M1 at 480x320 and 320x480 at 6.3 px/mm (qa-small, TARGET 7 mm): Capture live, Video, Lost, NotBack + hint, Turned, portrait
+sizes 480x320 320x480
+ppmm 630
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_FAKE_BUS dwc_otg
+env VHS_FAKE_RESTART_MS 2500
+env VHS_FAKE_SCRIPT unplug@4000,turn@4050,replug@11500
+
+wait 1500
+shot 01-live-photo
+expect esc
+expect text "Photo"
+expect text "Photo | Video"
+expect text "Scenes"
+expect text "Settings"
+expect text "1920x1080  30 fps"
+expect text "UGREEN FineCam 1080P CM969, MJPEG. Space takes a photo, Tab switches to Video, R records."
+expect key "Settings" target
+@480x320 expect key "Scenes" target
+@480x320 expect key "Photo | Video" target
+key tab
+wait 400
+shot 02-live-video
+expect text "Video"
+expect text "UGREEN FineCam 1080P CM969, MJPEG. Space or R records, Tab switches to Photo."
+key tab
+wait 2300
+shot 03-lost
+expect text "Waiting for the camera..."
+expect text "Camera unplugged."
+expect notext "1920x1080  30 fps"
+wait 5000
+shot 04-notback-hint
+expect text "No camera found"
+expect text "Plug the camera into a USB port. VHS shows the picture as soon as it appears."
+expect text "If you moved the camera's switch, unplug and replug it, or restart the board."
+expect notext "Camera unplugged."
+expect notext "Photo | Video"
+wait 2400
+shot 05-turned
+expect text "Camera turned. Restarting..."
+expect text "The camera switch was moved. The picture comes back in about 3 seconds, upright, at the sizes the camera now offers."
+expect notext "Photo | Video"
+wait 2500
+shot 06-turned-live
+expect text "1080x1920  30 fps"
+expect notext "Camera turned. Restarting..."
+expect text "Photo | Video"
+key esc
+expect quit

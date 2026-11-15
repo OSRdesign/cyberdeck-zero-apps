@@ -1,0 +1,14 @@
+# VHS M1: the C270's largest MJPEG mode is 4:3: the whole frame with a border left and right (never cropped).
+# exposure_auto_priority is set to 0 at open (the log line).
+title VHS M1 with a Logitech C270 on a Pi 4B class board: 1280x960 (no 1080p) pillarboxed in the 16:9 box
+sizes 800x480 720x720
+env VHS_FORMAT rgb565
+env VHS_FAKE c270
+env VHS_SOC bcm2711
+
+wait 1500
+shot 01-c270
+expect text "1280x960  30 fps"
+expect text "C270 HD WEBCAM, MJPEG. Space takes a photo, Tab switches to Video, R records."
+key esc
+expect quit

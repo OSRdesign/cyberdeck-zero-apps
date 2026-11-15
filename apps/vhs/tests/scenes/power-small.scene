@@ -1,0 +1,17 @@
+# VHS M1: the firmware reports under-voltage (here forced, VHS_FAKE_UNDERVOLT): the toast at most once a
+# minute; nothing stops.
+title VHS M1 on a weak supply (480x320 and 320x480 at 6.3 px/mm): the toast once (under-voltage while the camera is open)
+sizes 480x320 320x480
+ppmm 630
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_FAKE_UNDERVOLT 1
+
+wait 1800
+shot 01-power
+expect text "Power too weak for the camera."
+expect text "1920x1080  30 fps"
+key esc
+expect quit

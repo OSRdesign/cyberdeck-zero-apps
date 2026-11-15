@@ -1,0 +1,23 @@
+# VHS M1: no camera was ever plugged in (the fake camera unplugged before the first look): the NoCamera page,
+# without the replug hint (that one is for a camera that went away on a dwc_otg bus, see canvas-*.scene).
+title VHS M1 without a camera (480x320 and 320x480 at 6.3 px/mm): the NoCamera page (canvas NoCamera-480x320), Scenes stays
+sizes 480x320 320x480
+ppmm 630
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_FAKE_SCRIPT unplug@0
+
+wait 1000
+shot 01-nocamera
+expect esc
+expect text "No camera found"
+expect text "Plug the camera into a USB port. VHS shows the picture as soon as it appears."
+expect text "Scenes"
+expect key "Scenes" target
+expect notext "Photo | Video"
+expect notext "Settings"
+expect notext "If you moved the camera's switch, unplug and replug it, or restart the board."
+key esc
+expect quit

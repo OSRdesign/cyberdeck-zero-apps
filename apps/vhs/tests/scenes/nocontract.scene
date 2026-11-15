@@ -1,0 +1,16 @@
+# VHS M1 started by hand (no launcher contract): it runs on its own probe.
+title VHS started by hand (no launcher contract), 480x320
+sizes 480x320
+# a 480x320 panel's own density (6.08 px/mm): without it the probe takes the deck's 11.3
+ppmm 608
+nocontract
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+env VHS_FORMAT rgb565
+
+wait 1500
+shot 01-live
+expect text "1920x1080  30 fps"
+expect text "Photo"
+key esc
+expect quit
