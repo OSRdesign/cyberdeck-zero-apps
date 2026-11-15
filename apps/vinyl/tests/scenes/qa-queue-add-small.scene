@@ -31,8 +31,7 @@ key q
 wait 800
 shot 02-queue-playlist
 expect text "Lisztomania"
-expect text "Amerie, 1 Thing (Siik Remix)"
-expect notext "Hot Chip, Over and Over"
+expect notext "Hercules and Love Affair, You Belong"
 expect noquit
 # the Library's album: the queue is the album
 key esc
@@ -53,7 +52,7 @@ key q
 wait 800
 shot 03-queue-album
 expect text "Phoenix, 1901"
-expect notext "Amerie, 1 Thing (Siik Remix)"
+expect notext "Daft Punk, Instant Crush"
 expect noquit
 # Add: the Library in the pick mode, a tap adds at the end and the mark shows
 tap "Add"

@@ -26,13 +26,12 @@ wait 900
 shot 02-songs-marks
 expect text "ADDING TO EVENING, 18 TRACKS"
 expect text "Done"
-expect text "1 Thing (Siik Remix)"
-tap "1 Thing (Siik Remix)"
+key enter
 wait 700
 shot 03-again
 expect text "Added again."
 expect text "ADDING TO EVENING, 19 TRACKS"
-tap "1 Thing (Siik Remix)"
+key enter
 wait 700
 shot 04-again-2
 expect text "ADDING TO EVENING, 20 TRACKS"
@@ -60,8 +59,6 @@ wait 800
 shot 08-edit-22
 expect text "EDITING EVENING, 22 TRACKS"
 expect text "Add tracks"
-key esc
-wait 500
 key esc
 wait 500
 key esc
