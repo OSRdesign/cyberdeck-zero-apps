@@ -79,6 +79,77 @@ void convert_pcm(const void *in, unsigned in_bits, unsigned in_ch, void *out, Sa
     }
 }
 
+float boost_factor(int db) {
+    const int d = std::max(0, std::min(kMaxBoostDb, db));
+    return d == 0 ? 1.0f : static_cast<float>(std::pow(10.0, d / 20.0));
+}
+
+namespace {
+/* one sample (an int32 at the top of its range) into out_fmt, advancing `o` */
+void pack_sample(unsigned char *&o, SampleFormat fmt, int32_t v) {
+    switch (fmt) {
+    case SampleFormat::S16_LE: {
+        const int16_t s = static_cast<int16_t>(v >> 16);
+        std::memcpy(o, &s, 2);
+        o += 2;
+        break;
+    }
+    case SampleFormat::S24_3LE: {
+        const uint32_t u = static_cast<uint32_t>(v) >> 8;
+        o[0] = static_cast<unsigned char>(u & 0xFF);
+        o[1] = static_cast<unsigned char>((u >> 8) & 0xFF);
+        o[2] = static_cast<unsigned char>((u >> 16) & 0xFF);
+        o += 3;
+        break;
+    }
+    default: std::memcpy(o, &v, 4); o += 4; break;
+    }
+}
+int32_t float_to_s32(float x) {
+    const double v = std::floor(static_cast<double>(x) * 2147483648.0 + 0.5);
+    return static_cast<int32_t>(std::max(-2147483648.0, std::min(2147483647.0, v)));
+}
+/* stereo float frames to out_ch channels of out_fmt (mono: the average, more: zeros after the first two) */
+void put_frames(const float *st, size_t frames, unsigned out_ch, SampleFormat out_fmt, unsigned char *o) {
+    for (size_t f = 0; f < frames; ++f) {
+        const float l = st[2 * f], r = st[2 * f + 1];
+        if (out_ch == 1) {
+            pack_sample(o, out_fmt, float_to_s32(0.5f * (l + r)));
+            continue;
+        }
+        pack_sample(o, out_fmt, float_to_s32(l));
+        pack_sample(o, out_fmt, float_to_s32(r));
+        for (unsigned c = 2; c < out_ch; ++c) pack_sample(o, out_fmt, 0);
+    }
+}
+}  // namespace
+
+void convert_pcm_limited(const void *in, unsigned in_bits, unsigned in_ch, void *out, SampleFormat out_fmt, unsigned out_ch,
+                         size_t frames, float gain, Limiter &lim, std::vector<float> &scratch) {
+    if (in_ch == 0 || out_ch == 0) return;
+    const int16_t *i16 = static_cast<const int16_t *>(in);
+    const int32_t *i32 = static_cast<const int32_t *>(in);
+    scratch.resize(frames * 2);
+    const float k = std::max(0.0f, gain) * (in_bits == 16 ? 1.0f / 32768.0f : 1.0f / 2147483648.0f);
+    for (size_t f = 0; f < frames; ++f) {
+        const size_t a = f * in_ch, b = in_ch > 1 ? a + 1 : a;
+        const float l = in_bits == 16 ? static_cast<float>(i16[a]) : static_cast<float>(i32[a]);
+        const float r = in_bits == 16 ? static_cast<float>(i16[b]) : static_cast<float>(i32[b]);
+        scratch[2 * f] = l * k;
+        scratch[2 * f + 1] = r * k;
+    }
+    lim.process(scratch.data(), frames);
+    put_frames(scratch.data(), frames, out_ch, out_fmt, static_cast<unsigned char *>(out));
+}
+
+size_t limiter_tail_pcm(Limiter &lim, void *out, SampleFormat out_fmt, unsigned out_ch) {
+    std::vector<float> tail(2 * lim.delay());
+    const size_t n = lim.delay();
+    lim.flush(tail.data());
+    put_frames(tail.data(), n, out_ch, out_fmt, static_cast<unsigned char *>(out));
+    return n;
+}
+
 namespace {
 bool same_format(const SinkFormat &a, const SinkFormat &b) {
     return a.rate == b.rate && a.channels == b.channels && a.format == b.format;
@@ -148,6 +219,7 @@ void Engine::set_output(const OutputTarget &t) {
 }
 void Engine::set_gain(float g) { gain_.store(g); }
 void Engine::set_replaygain(ReplayGainMode m) { rg_mode_.store(static_cast<int>(m)); }
+void Engine::set_boost_db(int db) { boost_.store(boost_factor(db)); }
 void Engine::set_gapless(bool on) { gapless_.store(on); }
 void Engine::set_end_fade(bool on) { end_fade_.store(on); }
 
@@ -223,7 +295,7 @@ bool Engine::open_decoder(int pos, const std::string &path, std::unique_ptr<Trac
 }
 
 float Engine::sample_gain(uint64_t frame_before) const {
-    float g = gain_.load() * replaygain_factor(static_cast<ReplayGainMode>(rg_mode_.load()), dec_rg_);
+    float g = gain_.load() * replaygain_factor(static_cast<ReplayGainMode>(rg_mode_.load()), dec_rg_) * boost_.load();
     /* the sleep timer's end fade: the last 10 s of the decoded track when nothing is named next */
     if (end_fade_.load() && next_pos_ < 0 && info_.total_frames && info_.out.rate) {
         const uint64_t left = info_.total_frames > frame_before ? info_.total_frames - frame_before : 0;
@@ -278,7 +350,10 @@ void Engine::handle(const Cmd &c) {
         }
         if (open_) {
             if (!same_format(request_for(inf), req_)) close_output(false);
-            else out_.sink->drop();
+            else {
+                out_.sink->drop();
+                limiter_off();
+            }
         }
         dec_ = std::move(d);
         info_ = inf;
@@ -400,6 +475,7 @@ void Engine::reposition(const Seg &cur, uint64_t frame, PlayState next) {
     }
     if (open_) {
         out_.sink->drop();
+        limiter_off();
         if (next != PlayState::Playing) close_output(false);
     }
     if (dec_) {
@@ -448,6 +524,8 @@ bool Engine::ensure_open() {
     if (granted_.channels == 0) granted_.channels = want.channels;
     out_ = std::move(o);
     open_ = true;
+    lim_.init(granted_.rate ? granted_.rate : want.rate);
+    lim_on_ = false;
     req_ = want;
     last_label_ = out_.label;
     last_name_ = out_.name;
@@ -457,8 +535,17 @@ bool Engine::ensure_open() {
     return true;
 }
 
+void Engine::limiter_drain() {
+    if (!lim_on_ || !open_) return;
+    obuf_.resize(lim_.delay() * granted_.channels * format_bytes(granted_.format));
+    const size_t n = limiter_tail_pcm(lim_, obuf_.data(), granted_.format, granted_.channels);
+    write_all(obuf_.data(), n);
+}
+
 void Engine::close_output(bool drain) {
     if (!open_) return;
+    if (drain) limiter_drain(); /* the last 5 ms the limiter holds */
+    limiter_off();
     if (drain) out_.sink->drain();
     out_.sink->close();
     out_.sink.reset();
@@ -500,6 +587,7 @@ void Engine::output_failed() {
         out_.sink->close();
         out_.sink.reset();
         open_ = false;
+        limiter_off();
     }
     for (int i = 0; i < 5 && !quit_.load(); ++i) {
         {
@@ -543,8 +631,16 @@ void Engine::step() {
         return;
     }
     obuf_.resize(static_cast<size_t>(n) * granted_.channels * format_bytes(granted_.format));
-    convert_pcm(dbuf_.data(), info_.out.bits, info_.out.channels, obuf_.data(), granted_.format, granted_.channels,
-                static_cast<size_t>(n), sample_gain(frame_before));
+    const float gain = sample_gain(frame_before);
+    if (lim_on_ || gain_needs_limiter(gain)) {
+        /* above 0 dB net (a boost, a positive ReplayGain): the look-ahead limiter; it stays in until the stream closes */
+        lim_on_ = true;
+        convert_pcm_limited(dbuf_.data(), info_.out.bits, info_.out.channels, obuf_.data(), granted_.format, granted_.channels,
+                            static_cast<size_t>(n), gain, lim_, fbuf_);
+    } else {
+        convert_pcm(dbuf_.data(), info_.out.bits, info_.out.channels, obuf_.data(), granted_.format, granted_.channels,
+                    static_cast<size_t>(n), gain);
+    }
     write_all(obuf_.data(), static_cast<size_t>(n));
     update_snapshot();
 }

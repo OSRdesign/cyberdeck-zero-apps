@@ -36,6 +36,7 @@
 #include "state/write_policy.hpp"
 #include "transport/transport_press.hpp"
 #include "util/atomic_file.hpp"
+#include "volume/hold_repeat.hpp"
 #include "volume/output_volume.hpp"
 
 #include "app.hpp"
@@ -209,6 +210,11 @@ struct VinylApp::Impl final : TransportHost {
     mutable std::string model_sink;
     mutable int model_card = -2;
     mutable OutputVolumeModel model_of_sink;
+    mutable double model_fine = -1; /* the "Volume steps" step the cached sink model was made for */
+    int demo_boost = -1;            /* the scenes: a gain boost for the output in use (VINYL_DEMO_BOOST) */
+    HoldRepeat vol_hold;            /* the volume group's held "-" / "+" */
+    /* the "Volume steps" step in dB (0: Normal) */
+    double fine_db() const { return volume_steps_db(settings.get().volume_steps); }
 
     /* ------------------------------------------------------------------------------------------ start */
 
@@ -259,6 +265,8 @@ struct VinylApp::Impl final : TransportHost {
             Settings ds = settings.get();
             if (const std::string rg = env_str("VINYL_DEMO_RG"); !rg.empty()) ds.replaygain = replaygain_mode_from(rg, ds.replaygain);
             if (env_on("VINYL_DEMO_NOGAPLESS")) ds.gapless = false;
+            if (const std::string vs = env_str("VINYL_DEMO_VOLSTEPS"); !vs.empty()) ds.volume_steps = volume_steps_from(vs, ds.volume_steps);
+            if (const std::string bs = env_str("VINYL_DEMO_BOOST"); !bs.empty()) demo_boost = std::atoi(bs.c_str());
             if (env_on("VINYL_DEMO_NOREMEMBER")) ds.remember_long = false;
             settings.set(ds);
         }
@@ -297,6 +305,12 @@ struct VinylApp::Impl final : TransportHost {
             refresh(true);
         };
         a.volume_step = [this](int d) { volume_step(d); };
+        a.volume_hold = [this](int d, int phase) { /* the group's button as a held one: a press steps, a hold repeats */
+            if (phase == 0) {
+                volume_step(d);
+                vol_hold.start(d, mono_ms_now());
+            } else vol_hold.stop();
+        };
         a.volume_unavailable = [this] { notice(Notice::Kind::Info, "Volume is not available on this board"); };
         a.lib_row = [this](Page p, int i) {
             if (lib) lib->row(p, i);
@@ -366,6 +380,11 @@ struct VinylApp::Impl final : TransportHost {
             set_app_volume(resume, key, 60);
             set_app_muted(resume, key, true);
         }
+        if (demo && demo_boost >= 0) {
+            Settings ds = settings.get();
+            ds.set_boost(volume_target().key, demo_boost);
+            settings.set(ds);
+        }
         apply_gain();
         Page first = lib_on() ? Page::LibHub : Page::Browser;
         if (!resume.items.empty()) {
@@ -391,6 +410,8 @@ struct VinylApp::Impl final : TransportHost {
             else if (p == "sleep") first = Page::Sleep;
             else if (p == "playback") first = Page::Playback;
             else if (p == "replaygain") first = Page::ReplayGain;
+            else if (p == "boost") first = Page::Boost;
+            else if (p == "volumesteps") first = Page::VolumeSteps;
             else if (p == "keys") first = Page::Keys;
             else if (p == "about") first = Page::About;
             else first = Page::Now;
@@ -412,8 +433,8 @@ struct VinylApp::Impl final : TransportHost {
         }
         if (first == Page::Sleep || first == Page::Playback || first == Page::Keys || first == Page::About)
             back_to[first] = Page::Menu;
-        if (first == Page::ReplayGain) { /* the scenes: as if opened from Playback, itself from the Menu */
-            back_to[Page::ReplayGain] = Page::Playback;
+        if (first == Page::ReplayGain || first == Page::Boost || first == Page::VolumeSteps) { /* the scenes: as if opened from Playback, itself from the Menu */
+            back_to[first] = Page::Playback;
             back_to[Page::Playback] = Page::Menu;
         }
         if (first == Page::Menu || back_to.count(first)) back_to[Page::Menu] = Page::Now;
@@ -480,13 +501,18 @@ struct VinylApp::Impl final : TransportHost {
         refresh(true);
     }
 
-    static bool is_menu_list(Page p) { return p == Page::Menu || p == Page::Sleep || p == Page::Playback || p == Page::ReplayGain; }
+    static bool is_menu_list(Page p) {
+        return p == Page::Menu || p == Page::Sleep || p == Page::Playback || p == Page::ReplayGain || p == Page::Boost ||
+               p == Page::VolumeSteps;
+    }
     static bool is_menu_page(Page p) { return is_menu_list(p) || p == Page::Keys || p == Page::About; }
     static menu::Page menu_page(Page p) {
         switch (p) {
         case Page::Sleep: return menu::Page::Sleep;
         case Page::Playback: return menu::Page::Playback;
         case Page::ReplayGain: return menu::Page::ReplayGain;
+        case Page::Boost: return menu::Page::Boost;
+        case Page::VolumeSteps: return menu::Page::VolumeSteps;
         case Page::Keys: return menu::Page::Keys;
         case Page::About: return menu::Page::About;
         default: return menu::Page::Menu;
@@ -959,6 +985,7 @@ struct VinylApp::Impl final : TransportHost {
         st.sleep = sleep.mode();
         st.sleep_left_ms = sleep.remaining_ms(mono_ms_now());
         st.output = output_label();
+        st.output_key = volume_target().key;
         st.library = lib_on();
         st.settings = settings.get();
         return st;
@@ -994,7 +1021,23 @@ struct VinylApp::Impl final : TransportHost {
             else if (r.id == "replaygain") {
                 open_from(Page::ReplayGain, Page::Playback);
                 return;
+            } else if (r.id == "boost") {
+                open_from(Page::Boost, Page::Playback);
+                return;
+            } else if (r.id == "volume_steps") {
+                open_from(Page::VolumeSteps, Page::Playback);
+                return;
             }
+        } else if (p == Page::Boost) { /* a choice closes the pick list, as ReplayGain's does */
+            st.set_boost(volume_target().key, std::atoi(r.id.c_str()));
+            apply_settings(st);
+            back();
+            return;
+        } else if (p == Page::VolumeSteps) {
+            st.volume_steps = volume_steps_from(r.id, st.volume_steps);
+            apply_settings(st);
+            back();
+            return;
         } else if (p == Page::ReplayGain) {
             st.replaygain = replaygain_mode_from(r.id, st.replaygain);
             apply_settings(st);
@@ -1012,9 +1055,20 @@ struct VinylApp::Impl final : TransportHost {
         if (r < 0) std::fprintf(stderr, "[vinyl] cannot save %s: %s\n", settings.path().c_str(), std::strerror(-r));
         engine->set_gapless(st.gapless);
         engine->set_replaygain(st.replaygain);
+        if (was.volume_steps != st.volume_steps) { /* every output's levels again, the nearest dB kept (read back from the output) */
+            mixer_choice_card.clear();
+            mixer_card.clear();
+            model_fine = -1;
+            pending_level = -1;
+            vol_logged.clear();
+            read_output_mixer(mono_ms_now(), true);
+            std::fprintf(stderr, "[vinyl] volume steps: %s\n", volume_steps_word(st.volume_steps));
+        }
+        apply_gain();
         if (was.remember_long && !st.remember_long) long_path.clear();
-        std::fprintf(stderr, "[vinyl] settings: gapless %s, replaygain %s, remember position in long files %s\n",
-                     st.gapless ? "on" : "off", replaygain_mode_name(st.replaygain), st.remember_long ? "on" : "off");
+        std::fprintf(stderr, "[vinyl] settings: gapless %s, replaygain %s, gain boost %s (%s), volume steps %s, remember position in long files %s\n",
+                     st.gapless ? "on" : "off", replaygain_mode_name(st.replaygain), boost_word(st.boost_of(volume_target().key)).c_str(),
+                     volume_target().key.c_str(), volume_steps_word(st.volume_steps), st.remember_long ? "on" : "off");
     }
 
     /* The sleep timer (core/sleep): the minute modes count on the monotonic clock and fade the gain over their last 10 s
@@ -1399,7 +1453,7 @@ struct VinylApp::Impl final : TransportHost {
         if (t.card != mixer_card) mixer_choice_card.clear();
         const bool changed = t.card != mixer_card || !mixer_choice.ok();
         mixer_card = t.card;
-        read_mixer(*alsa, t.card, mixer_choice_card, mixer_choice, mixer_level);
+        read_mixer(*alsa, t.card, mixer_choice_card, mixer_choice, mixer_level, fine_db());
         if (changed && mixer_choice.ok())
             std::fprintf(stderr, "[vinyl] volume: %s '%s' raw %ld..%ld%s: %s\n", t.card.c_str(), mixer_choice.volume.c_str(),
                          mixer_choice.min, mixer_choice.max, mixer_choice.min_is_mute ? " (min is mute)" : "",
@@ -1409,18 +1463,19 @@ struct VinylApp::Impl final : TransportHost {
     /* A sink's levels (core/volume sink_volume_model): the range of the ALSA card behind it (its proplist), moved under
      * the sink's 0 dB; -60..0 dB for a sink without one (Bluetooth, software sinks). Found once per sink and card. */
     const OutputVolumeModel &sink_model(const PulseDevice &d) const {
-        if (d.name == model_sink && d.alsa_card == model_card) return model_of_sink;
+        if (d.name == model_sink && d.alsa_card == model_card && model_fine == fine_db()) return model_of_sink;
         model_sink = d.name;
         model_card = d.alsa_card;
+        model_fine = fine_db();
         MixerChoice mc;
         bool have = false;
         std::string card;
         if (d.alsa_card >= 0 && alsa) {
             card = "hw:" + std::to_string(d.alsa_card);
             std::vector<CtlInfo> ctls;
-            if (alsa->mixer_list(card, ctls) >= 0) have = choose_playback_mixer(ctls, mc) && mc.has_db;
+            if (alsa->mixer_list(card, ctls) >= 0) have = choose_playback_mixer(ctls, mc, fine_db()) && mc.has_db;
         }
-        model_of_sink = sink_volume_model(have ? &mc : nullptr);
+        model_of_sink = sink_volume_model(have ? &mc : nullptr, fine_db());
         std::string from = have ? card + " '" + mc.volume + "' " + volume_model_text(mc.model) : std::string("no card range known");
         std::fprintf(stderr, "[vinyl] volume: sink %s: %s (%s; base volume 0x%x, %u volume steps, flags 0x%x)\n", d.name.c_str(),
                      volume_model_text(model_of_sink).c_str(), from.c_str(), d.base_volume, d.n_volume_steps, d.sink_flags);
@@ -1490,6 +1545,7 @@ struct VinylApp::Impl final : TransportHost {
         /* the sleep timer's minute modes fade over their last 10 s, and stay silent until the engine has paused */
         const float fade = sleep_silent ? 0.0f : sleep.fade_gain(mono_ms_now());
         engine->set_gain(scan_muted ? 0.0f : gain * fade);
+        engine->set_boost_db(settings.get().boost_of(t.key)); /* the output in use: its own boost, with the limiter */
     }
 
     /* the group's and the keys' "-" / "+" (core/volume: sink_press, mixer_press), one level of the output a press: while
@@ -2036,7 +2092,8 @@ struct VinylApp::Impl final : TransportHost {
         const int vol_step = output_step(&vol_muted, &vol_model);
         v.vol_level = vol_step < 0 ? -1 : vol_model.pct_of(vol_step);
         v.vol_muted = vol_muted;
-        if (vol_step > 0) v.vol_value = volume_level_text(vol_model, vol_step, VolumeUnit::Percent); /* the dB mode: P2/P3 */
+        if (vol_step > 0) /* "Volume steps": Normal shows the percent, 1 / 0.5 / 0.1 dB the output's real level in dB */
+            v.vol_value = volume_level_text(vol_model, vol_step, fine_db() > 0 ? VolumeUnit::Decibel : VolumeUnit::Percent);
         v.vol_adjustable = output_level_adjustable();
         v.queue_empty = queue.empty();
         const std::string path = !snap.path.empty() ? snap.path : (queue.current_path() ? *queue.current_path() : "");
@@ -2372,6 +2429,7 @@ struct VinylApp::Impl final : TransportHost {
         }
         /* the playing output's volume: the card's mixer without a server (the server's sinks come with the scans) */
         read_output_mixer(now, false);
+        for (int n = vol_hold.poll(now); n > 0; --n) volume_step(vol_hold.dir());
         apply_gain();
         log_volume();
         /* cover */

@@ -26,6 +26,7 @@
 #pragma once
 
 #include "../decode/track_decoder.hpp"
+#include "../dsp/limiter.hpp"
 #include "../dsp/replaygain.hpp"
 #include "outputs.hpp"
 
@@ -88,6 +89,17 @@ void convert_pcm(const void *in, unsigned in_bits, unsigned in_ch, void *out, Sa
 /* The software gain of an output without a mixer for a level in dB (core/volume: its model's dB of the level): the
  * amplitude 10^(dB / 20); -infinity (mute) is 0, 0 dB and above 1. */
 float volume_gain_db(double db);
+/* P2a gain boost (report 060 3e): as convert_pcm, but through the look-ahead limiter (core/dsp/limiter): the samples are
+ * scaled by `gain` in float, limited (ceiling -1 dBFS) and delayed by lim.delay() frames (one frame out per frame in), then
+ * written in out_fmt. `scratch` is the caller's float buffer. Used by the engine when the net digital gain is above 0 dB. */
+void convert_pcm_limited(const void *in, unsigned in_bits, unsigned in_ch, void *out, SampleFormat out_fmt, unsigned out_ch,
+                         size_t frames, float gain, Limiter &lim, std::vector<float> &scratch);
+/* Writes the limiter's last frames (lim.flush) as out_fmt samples; returns the frames (lim.delay()). */
+size_t limiter_tail_pcm(Limiter &lim, void *out, SampleFormat out_fmt, unsigned out_ch);
+/* true when a net gain needs the limiter (above 0 dB, 0.001 dB of slack) */
+inline bool gain_needs_limiter(float g) { return g > 1.0001f; }
+/* The gain boost of 0 to +4 dB in whole dB (anything else is clamped) as an amplitude factor. */
+float boost_factor(int db);
 
 /* Reads a file's ReplayGain tags (the engine's thread, when it opens a track): core/tags read_replaygain, a fake in the
  * tests. false: none read. */
@@ -115,6 +127,8 @@ public:
     /* P2a: the ReplayGain mode (applied at once, to the playing track too), gapless on or off (the next change), the
      * sleep timer's end fade (the last 10 s of a track after which nothing is named) */
     void set_replaygain(ReplayGainMode m);
+    /* the software gain boost (0..+4 dB, whole dB; clamped), at the end of the gain chain, with the limiter */
+    void set_boost_db(int db);
     void set_gapless(bool on);
     void set_end_fade(bool on);
     /* the gain ReplayGain applies to the heard track now, in dB (0: off or untagged) */
@@ -183,6 +197,12 @@ private:
     std::atomic<bool> interrupt_{false};
     std::atomic<bool> quit_{false};
     std::atomic<float> gain_{1.0f};
+    std::atomic<float> boost_{1.0f};
+    Limiter lim_;          /* the engine thread's: latched on for an open stream once the net gain went above 0 dB */
+    bool lim_on_ = false;
+    std::vector<float> fbuf_;
+    void limiter_off() { lim_on_ = false; lim_.reset(); } /* the stream was dropped or closed: no tail to play */
+    void limiter_drain(); /* the stream ends gracefully: the limiter's last frames are written */
     std::deque<EngineEvent> events_;
     EngineSnapshot snap_;
 

@@ -1072,3 +1072,35 @@ a song in the queue's pick mode "Adds it at the END of the queue, marks show".
   on the other pages the list stops above it; it hides while the on-screen keyboard is up in Search). It REPLACES the Done chip of the
   AddTracksSongs board for the playlists' Add tracks too (the chip stays only in a playlist's edit mode, where it leaves the mode). Done and
   Esc at the hub both finish; the queue pick returns to the Queue page, the playlist pick to the playlist's edit mode.
+
+
+## Gain boost and Volume steps (0.5.0 work, 2026-11-15)
+
+Built from report 060 3e and 3f with the owner's words of 2026-11-13 (see "Later (not built)" above) and decisions D23 and D24. Not
+published yet; the Controller bumps the version with the Equalizer and the crossfade.
+- **Rows.** Playback is Gapless, ReplayGain, **Gain boost**, **Volume steps**, Remember position in long files, each an Edit row (value, then a
+  chevron) in the style of the others. Gain boost opens a pick list (Off, +1 dB ... +4 dB) and Volume steps one (Normal, 1 dB, 0.5 dB, 0.1 dB);
+  a choice closes the list (the owner's rule for pick lists) and the dot marks the current one. Boards: scenes `qa-gain`, `-small`, `-640` (the
+  page and both lists) and `qa-dbchip`, `-small`, `-640` (the chip in dB). No new component: the lists are `ListPage`s like ReplayGain's.
+- **Boost per output** (D23): `settings.json` `boost_db` {output key: 0..4}, keyed as the volume is (`output_volume_key`), applied at every volume
+  level; the row shows the playing output's value; an out of range value is clamped, a non number ignored. It is part of the engine's gain
+  chain (volume x ReplayGain x boost x the sleep fade); the limiter comes in when that net gain is above 0 dB.
+- **Limiter** (`core/dsp/limiter`): linked stereo, 5 ms look-ahead, release 150 ms, ceiling -1.0 dBFS; the gain is the boxcar average (the
+  look-ahead long) of the release-limited sliding minimum of the required gains, so it never exceeds what a frame needs and moves in ramps;
+  one frame out per frame in (the delay line starts with zeros, `flush` plays the tail). The engine latches it on for an open stream the first
+  time the net gain is above 0 dB (a ReplayGain above 0 dB counts too) and drops it with the stream; with a net gain of 0 dB or less and no
+  limiter latched nothing changes: today's integer `convert_pcm` path, bit-exact. Where the report was silent: no dither (rounded), the 5 ms is
+  not taken off the heard position (at most 5 ms), the first 5 ms of a boosted stream is silence.
+- **Volume steps** (D24): one global setting, `settings.json` `volume_steps` ("normal", "1", "0.5", "0.1"). Normal is 0.4.0 unchanged (about 2 dB,
+  the percent shown). The fine modes use `volume_model_steps`: levels exactly on the grid hi, hi - s, hi - 2s ..., s the step but never finer than
+  the output's own step (the Sharkoon's 1 dB, the Apple adapter's 0.5 dB; the Pi jack's 0.01 dB lets all three through); the chip shows the
+  output's real level in dB with one decimal ("-22.5 dB", "+4.0 dB"); where the text does not fit the box even at the caption size the " dB" goes
+  and the number stays. A sound server's sink is continuous, so its card's step does not limit it (the report's "0.1 dB works even on a 1 dB
+  card"). Changing the step re-reads the output and lands on the nearest dB. The boost is not added to the chip (the chip is the output's level:
+  the jack's top stays "+4.0 dB"). A card without a mixer (Vinyl's own software volume, a percent in state.json) keeps its Normal levels and
+  shows their dB.
+- **Hold to repeat** (`core/volume/hold_repeat`): the group's "-" and "+" act on the press and repeat while held: nothing for 0.5 s, then 10 a
+  second, from 2 s of holding 30 a second (the 100 ms tick; at most 8 steps in one tick after a stall); release or sliding off stops it. The -
+  and = keys repeat through the keyboard's own auto-repeat as before.
+- **Tests.** `tests/test_gain_steps.cpp` (limiter, bypass, gain product, step arithmetic, hold with a fake clock), the engine's boost tests in
+  `test_replaygain.cpp`, the settings round trip in `test_settings_state.cpp`, the pages in `test_menu.cpp`. Board tests B64-B71.

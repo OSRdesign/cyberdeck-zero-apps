@@ -15,6 +15,8 @@ const char *page_title(Page p) {
     case Page::Sleep: return "Sleep timer";
     case Page::Playback: return "Playback";
     case Page::ReplayGain: return "ReplayGain";
+    case Page::Boost: return "Gain boost";
+    case Page::VolumeSteps: return "Volume steps";
     case Page::Keys: return "Keys";
     case Page::About: return "About";
     default: return "Menu";
@@ -98,10 +100,25 @@ std::vector<Row> sleep_rows(SleepMode chosen) {
     return rows;
 }
 
-std::vector<Row> playback_rows(const Settings &s) {
+std::vector<Row> playback_rows(const Settings &s, const std::string &output_key) {
     /* no Speed row (D32: "Speed (later)" dropped); no Crossfade row (P2d) */
     return {edit("gapless", "Gapless", on_off(s.gapless)), edit("replaygain", "ReplayGain", replaygain_mode_word(s.replaygain)),
+            edit("boost", "Gain boost", boost_word(s.boost_of(output_key))),
+            edit("volume_steps", "Volume steps", volume_steps_word(s.volume_steps)),
             edit("remember", "Remember position in long files", on_off(s.remember_long))};
+}
+
+std::vector<Row> boost_rows(int chosen_db) {
+    std::vector<Row> rows;
+    for (int db = 0; db <= kMaxBoostDb; ++db) rows.push_back(choice(std::to_string(db), db == 0 ? "Off" : boost_word(db).c_str(), db == chosen_db));
+    return rows;
+}
+
+std::vector<Row> volume_steps_rows(VolumeSteps chosen) {
+    std::vector<Row> rows;
+    for (VolumeSteps v : {VolumeSteps::Normal, VolumeSteps::Db1, VolumeSteps::Db05, VolumeSteps::Db01})
+        rows.push_back(choice(volume_steps_name(v), volume_steps_word(v), v == chosen));
+    return rows;
 }
 
 std::vector<Row> replaygain_rows(ReplayGainMode chosen) {
@@ -115,8 +132,10 @@ std::vector<Row> rows_of(Page p, const State &s) {
     switch (p) {
     case Page::Menu: return menu_rows(s);
     case Page::Sleep: return sleep_rows(s.sleep);
-    case Page::Playback: return playback_rows(s.settings);
+    case Page::Playback: return playback_rows(s.settings, s.output_key);
     case Page::ReplayGain: return replaygain_rows(s.settings.replaygain);
+    case Page::Boost: return boost_rows(s.settings.boost_of(s.output_key));
+    case Page::VolumeSteps: return volume_steps_rows(s.settings.volume_steps);
     default: return {};
     }
 }
@@ -124,6 +143,8 @@ std::vector<Row> rows_of(Page p, const State &s) {
 std::string page_heading(Page p) {
     if (p == Page::Sleep) return "STOP PLAYING AFTER";
     if (p == Page::ReplayGain) return "REPLAYGAIN";
+    if (p == Page::Boost) return "GAIN BOOST";
+    if (p == Page::VolumeSteps) return "VOLUME STEPS";
     return "";
 }
 
@@ -134,6 +155,13 @@ std::string page_hint(Page p, const State &s) {
     case Page::ReplayGain:
         return "Track: every track as loud as the others. Album: an album keeps its own loudness steps. Files without "
                "ReplayGain tags play as they are.";
+    case Page::Boost: {
+        const std::string name = s.output.empty() ? std::string("the output in use") : s.output;
+        return "Louder than the output's own maximum, for " + name + ". A limiter keeps loud peaks from clipping.";
+    }
+    case Page::VolumeSteps:
+        return "How far one press moves the volume. 1, 0.5 and 0.1 dB show the output's level in dB; an output never "
+               "steps finer than its own control.";
     default: return "";
     }
 }

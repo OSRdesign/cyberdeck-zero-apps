@@ -281,6 +281,8 @@ private:
     Record &r_;
 };
 
+float g_boost_rg = -6.0206f; /* the ReplayGain track gain the boost tests' reader gives b16.wav */
+
 bool wait_end(Engine &e, int ms = 5000) {
     const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
     while (std::chrono::steady_clock::now() < end) {
@@ -615,6 +617,101 @@ void test_engine_gain(const std::string &dir) {
     }
 }
 
+/* The gain boost (report 060 3e): bit-exact at 0 dB, through the limiter above 0 dB net, with ReplayGain and the software
+ * volume in the product. A boosted stream starts with the limiter's 5 ms of delay (221 frames of silence at 44.1 kHz) and
+ * ends with its tail: n + 220 frames. */
+void test_engine_boost(const std::string &dir) {
+    write_file(dir + "/b16.wav", flat_wav(44100, 8192, 16000));
+    auto reader = [](const std::string &path, ReplayGainTags &out) {
+        out = ReplayGainTags();
+        if (path.find("b16.wav") != std::string::npos) {
+            out.has_track = true;
+            out.track_db = g_boost_rg;
+        }
+        return true;
+    };
+    constexpr size_t kD = 221; /* 5 ms at 44.1 kHz (220.5 rounded) */
+    struct Run {
+        std::vector<int16_t> s;
+        bool ended = false;
+    };
+    auto run = [&](ReplayGainMode m, int boost, float gain) {
+        Record r;
+        FakeProvider p(r);
+        Engine e(DecodeLibs(), p, reader);
+        e.set_replaygain(m);
+        e.set_boost_db(boost);
+        e.set_gain(gain);
+        e.load(0, dir + "/b16.wav", 0, true);
+        Run out;
+        out.ended = wait_end(e);
+        std::lock_guard<std::mutex> l(r.mu);
+        out.s = r.samples;
+        return out;
+    };
+    /* 0 dB: the integer path, every sample exact, no extra frames */
+    {
+        const Run o = run(ReplayGainMode::Off, 0, 1.0f);
+        CHECK(o.ended);
+        CHECK_EQ(o.s.size(), static_cast<size_t>(8192 * 2));
+        bool exact = !o.s.empty();
+        for (int16_t v : o.s) exact = exact && v == 16000;
+        CHECK(exact);
+    }
+    /* +4 dB on a flat 16000 (x1.585 = 25358, under the -1 dBFS ceiling of 29204): delayed, then scaled, nothing limited */
+    {
+        const Run o = run(ReplayGainMode::Off, 4, 1.0f);
+        CHECK(o.ended);
+        CHECK_EQ(o.s.size(), static_cast<size_t>((8192 + kD) * 2));
+        if (o.s.size() == static_cast<size_t>((8192 + kD) * 2)) {
+            CHECK_EQ(o.s[0], 0);
+            CHECK_EQ(o.s[2 * (kD - 1)], 0);
+            bool ok = true;
+            for (size_t f = kD; f < 8192 + kD; ++f) ok = ok && std::abs(o.s[2 * f] - 25358) <= 2 && std::abs(o.s[2 * f + 1] - 25358) <= 2;
+            CHECK(ok);
+        }
+    }
+    /* ReplayGain -6.02 dB with +4 dB: the net gain is below 0 dB, so the integer path (x0.7924 = 12679), no delay */
+    g_boost_rg = -6.0206f;
+    {
+        const Run o = run(ReplayGainMode::Track, 4, 1.0f);
+        CHECK(o.ended);
+        CHECK_EQ(o.s.size(), static_cast<size_t>(8192 * 2));
+        bool ok = !o.s.empty();
+        for (int16_t v : o.s) ok = ok && std::abs(v - 12679) <= 2;
+        CHECK(ok);
+    }
+    /* the software volume (an output without a mixer) at 0.5 with +4 dB: 16000 x 0.5 x 1.585 = 12680, integer path */
+    {
+        const Run o = run(ReplayGainMode::Off, 4, 0.5f);
+        CHECK_EQ(o.s.size(), static_cast<size_t>(8192 * 2));
+        bool ok = !o.s.empty();
+        for (int16_t v : o.s) ok = ok && std::abs(v - 12680) <= 2;
+        CHECK(ok);
+    }
+    /* ReplayGain +6.02 dB (a quiet file) with +4 dB: x3.17 would be 50700: the limiter holds the flat signal at the ceiling
+     * (0.8913 x 32768 = 29204) once its gain has settled, and nothing is above it */
+    g_boost_rg = 6.0206f;
+    {
+        const Run o = run(ReplayGainMode::Track, 4, 1.0f);
+        CHECK(o.ended);
+        CHECK_EQ(o.s.size(), static_cast<size_t>((8192 + kD) * 2));
+        int peak = 0;
+        for (int16_t v : o.s) peak = std::max(peak, static_cast<int>(std::abs(v)));
+        CHECK(peak <= 29206);
+        if (o.s.size() == static_cast<size_t>((8192 + kD) * 2)) CHECK(std::abs(o.s[2 * 4000] - 29204) <= 3);
+    }
+    g_boost_rg = -6.0206f;
+    /* out of range boosts are clamped (the setting never gives more than +4 dB) */
+    {
+        const Run o = run(ReplayGainMode::Off, 9, 1.0f);
+        CHECK_EQ(o.s.size(), static_cast<size_t>((8192 + kD) * 2));
+        if (o.s.size() == static_cast<size_t>((8192 + kD) * 2)) CHECK(std::abs(o.s[2 * 4000] - 25358) <= 2);
+        const Run n = run(ReplayGainMode::Off, -3, 1.0f);
+        CHECK_EQ(n.s.size(), static_cast<size_t>(8192 * 2));
+    }
+}
+
 }  // namespace
 
 void test_replaygain() {
@@ -624,5 +721,6 @@ void test_replaygain() {
     test_files(dir);
     test_bounded_mp3(dir);
     test_engine_gain(dir);
+    test_engine_boost(dir);
     rm_tree(dir);
 }

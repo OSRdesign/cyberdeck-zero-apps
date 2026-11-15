@@ -67,18 +67,24 @@ void test_rows() {
     run.sleep_left_ms = 29 * 60000 + 12000;
     CHECK_EQ(page_hint(Page::Sleep, run), std::string("Stops in 29:12. The music fades out for the last 10 seconds."));
     CHECK_EQ(page_hint(Page::Sleep, State()), std::string("")); /* Off: no status line */
-    /* Playback: Gapless, ReplayGain, Remember position in long files; values; no Speed, no Crossfade */
+    /* Playback: Gapless, ReplayGain, Gain boost, Volume steps, Remember position in long files; values; no Speed, no
+     * Crossfade */
     Settings s;
     std::vector<Row> pb = playback_rows(s);
-    CHECK_EQ(pb.size(), static_cast<size_t>(3));
+    CHECK_EQ(pb.size(), static_cast<size_t>(5));
     CHECK(pb[0].id == "gapless" && pb[0].value == "On" && pb[0].kind == Row::Kind::Edit);
     CHECK(pb[1].id == "replaygain" && pb[1].value == "Track");
-    CHECK(pb[2].id == "remember" && pb[2].value == "On" && pb[2].text == "Remember position in long files");
+    CHECK(pb[2].id == "boost" && pb[2].value == "Off" && pb[2].text == "Gain boost" && pb[2].kind == Row::Kind::Edit);
+    CHECK(pb[3].id == "volume_steps" && pb[3].value == "Normal" && pb[3].text == "Volume steps" && pb[3].kind == Row::Kind::Edit);
+    CHECK(pb[4].id == "remember" && pb[4].value == "On" && pb[4].text == "Remember position in long files");
     s.gapless = false;
     s.replaygain = ReplayGainMode::Album;
     s.remember_long = false;
-    pb = playback_rows(s);
-    CHECK(pb[0].value == "Off" && pb[1].value == "Album" && pb[2].value == "Off");
+    s.set_boost("pulse:a", 3);
+    s.volume_steps = VolumeSteps::Db05;
+    pb = playback_rows(s, "pulse:a");
+    CHECK(pb[0].value == "Off" && pb[1].value == "Album" && pb[2].value == "+3 dB" && pb[3].value == "0.5 dB" && pb[4].value == "Off");
+    CHECK_EQ(playback_rows(s, "pulse:b")[2].value, std::string("Off")); /* the boost is the output's own */
     CHECK_EQ(page_hint(Page::Playback, State()), std::string("ReplayGain evens out the loudness between tracks."));
     /* the ReplayGain pick list */
     const std::vector<Row> rg = replaygain_rows(ReplayGainMode::Off);
@@ -86,6 +92,29 @@ void test_rows() {
     CHECK(rg[0].chosen && !rg[1].chosen && !rg[2].chosen);
     CHECK(rg[0].id == "off" && rg[1].id == "track" && rg[2].id == "album");
     CHECK(!page_hint(Page::ReplayGain, State()).empty());
+    /* the Gain boost and Volume steps pick lists: a choice per value, the chosen one with the dot */
+    const std::vector<Row> bo = boost_rows(2);
+    CHECK_EQ(bo.size(), static_cast<size_t>(5));
+    CHECK(bo[0].text == "Off" && bo[0].id == "0" && bo[1].text == "+1 dB" && bo[4].text == "+4 dB" && bo[4].id == "4");
+    for (size_t i = 0; i < bo.size(); ++i) CHECK_EQ(bo[i].chosen, i == 2);
+    CHECK_EQ(initial_item(bo), 2);
+    const std::vector<Row> vs = volume_steps_rows(VolumeSteps::Db1);
+    CHECK_EQ(vs.size(), static_cast<size_t>(4));
+    CHECK(vs[0].id == "normal" && vs[1].id == "1" && vs[2].id == "0.5" && vs[3].id == "0.1");
+    CHECK(vs[0].text == "Normal" && vs[1].text == "1 dB" && vs[3].text == "0.1 dB");
+    CHECK(!vs[0].chosen && vs[1].chosen && !vs[2].chosen && !vs[3].chosen);
+    State bs;
+    bs.settings.set_boost("k", 4);
+    bs.output_key = "k";
+    bs.output = "Headphones";
+    CHECK(rows_of(Page::Boost, bs)[4].chosen);
+    CHECK(rows_of(Page::VolumeSteps, bs)[0].chosen);
+    CHECK_EQ(page_heading(Page::Boost), std::string("GAIN BOOST"));
+    CHECK_EQ(page_heading(Page::VolumeSteps), std::string("VOLUME STEPS"));
+    CHECK(page_hint(Page::Boost, bs).find("Headphones") != std::string::npos);
+    CHECK(!page_hint(Page::VolumeSteps, bs).empty());
+    CHECK_EQ(std::string(page_title(Page::Boost)), std::string("Gain boost"));
+    CHECK_EQ(std::string(page_title(Page::VolumeSteps)), std::string("Volume steps"));
     CHECK_EQ(std::string(page_title(Page::ReplayGain)), std::string("ReplayGain"));
     CHECK_EQ(std::string(page_title(Page::Sleep)), std::string("Sleep timer"));
     /* the selection skips the headings, stops at the ends */

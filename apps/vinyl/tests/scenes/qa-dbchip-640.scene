@@ -1,0 +1,23 @@
+title Vinyl P2a: the volume chip in dB (Volume steps 0.1 dB: the output's real level, never the percent; a box too narrow for "-24.8 dB" shows "-24.8"), "+" and "-" move it by the step (640x480 (9.01 px/mm))
+sizes 640x480
+ppmm 901
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_VOLSTEPS 0.1
+
+wait 1200
+shot 01-now-db
+expect esc
+@640x480 expect text "-24.8"
+expect notext "60"
+tapxy 0.904 0.912
+wait 300
+shot 02-now-db-up
+@640x480 expect text "-24.7"
+tapxy 0.720 0.912
+wait 300
+tapxy 0.720 0.912
+wait 300
+shot 03-now-db-down
+@640x480 expect text "-24.9"
+expect noquit

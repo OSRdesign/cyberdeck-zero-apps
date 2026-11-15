@@ -105,7 +105,7 @@ struct MenuPages::Impl {
         bool clock = false;
         bool strip_in_list = false; /* the strip follows the rows in the scrolling list (they do not fit above it) */
     };
-    ListPage lists[4]; /* Menu, Sleep, Playback, ReplayGain */
+    ListPage lists[6]; /* Menu, Sleep, Playback, ReplayGain, Gain boost, Volume steps */
 
     /* Keys */
     layout::MenuGeom kg;
@@ -124,6 +124,8 @@ struct MenuPages::Impl {
         case Page::Sleep: return 1;
         case Page::Playback: return 2;
         case Page::ReplayGain: return 3;
+        case Page::Boost: return 4;
+        case Page::VolumeSteps: return 5;
         default: return -1;
         }
     }
@@ -132,7 +134,7 @@ struct MenuPages::Impl {
 
     void build_list(ListPage &L, Page p) {
         L.page = p;
-        const bool heading = p == Page::Sleep || p == Page::ReplayGain;
+        const bool heading = p == Page::Sleep || p == Page::ReplayGain || p == Page::Boost || p == Page::VolumeSteps;
         const bool strip = p != Page::Menu;
         L.g = layout::menu_geom(W, H, body_y, p == Page::Playback ? 40 : 34, heading, strip, list_row);
         const layout::MenuGeom &g = L.g;
@@ -490,6 +492,8 @@ MenuPages::MenuPages(std::function<lv_obj_t *()> make_root, int screen_w, int sc
     d.build_list(d.lists[1], Page::Sleep);
     d.build_list(d.lists[2], Page::Playback);
     d.build_list(d.lists[3], Page::ReplayGain);
+    d.build_list(d.lists[4], Page::Boost);
+    d.build_list(d.lists[5], Page::VolumeSteps);
     d.build_keys();
     d.build_about();
 }
@@ -497,8 +501,8 @@ MenuPages::MenuPages(std::function<lv_obj_t *()> make_root, int screen_w, int sc
 MenuPages::~MenuPages() = default;
 
 bool MenuPages::is_menu_page(Page p) {
-    return p == Page::Menu || p == Page::Sleep || p == Page::Playback || p == Page::ReplayGain || p == Page::Keys ||
-           p == Page::About;
+    return p == Page::Menu || p == Page::Sleep || p == Page::Playback || p == Page::ReplayGain || p == Page::Boost ||
+           p == Page::VolumeSteps || p == Page::Keys || p == Page::About;
 }
 
 lv_obj_t *MenuPages::root(Page p) const {

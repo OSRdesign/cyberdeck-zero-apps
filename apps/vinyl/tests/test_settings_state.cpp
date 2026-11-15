@@ -90,6 +90,41 @@ void test_settings_file() {
     Settings u;
     CHECK(settings_from_json("{\"replaygain\": \"loud\"}", u, nullptr));
     CHECK(u.replaygain == ReplayGainMode::Track);
+    /* the gain boost per output and the volume steps: written, read back, unknown values fall back or are clamped */
+    CHECK(st.get().volume_steps == VolumeSteps::Normal);
+    CHECK(st.get().boost_db.empty());
+    Settings b = st.get();
+    b.set_boost("pulse:x", 3);
+    b.set_boost("bt:AA", 9);  /* clamped to +4 */
+    b.set_boost("alsa:y", 0); /* 0 is not stored */
+    b.volume_steps = VolumeSteps::Db01;
+    CHECK_EQ(b.boost_of("bt:AA"), 4);
+    CHECK(b.boost_db.count("alsa:y") == 0);
+    CHECK_EQ(st.set(b), 0);
+    SettingsStore back(ops);
+    back.load(path);
+    CHECK(back.get() == b);
+    CHECK_EQ(back.get().boost_of("pulse:x"), 3);
+    CHECK_EQ(back.get().boost_of("nowhere"), 0);
+    CHECK(back.get().volume_steps == VolumeSteps::Db01);
+    Settings w;
+    CHECK(settings_from_json("{\"volume_steps\": \"0.2\", \"boost_db\": {\"a\": 9, \"b\": -3, \"c\": \"x\", \"d\": 2.4, \"e\": 1}}", w, nullptr));
+    CHECK(w.volume_steps == VolumeSteps::Normal); /* an unknown value: the default */
+    CHECK_EQ(w.boost_of("a"), 4);                 /* clamped */
+    CHECK_EQ(w.boost_of("b"), 0);
+    CHECK(w.boost_db.count("b") == 0);
+    CHECK_EQ(w.boost_of("c"), 0);                 /* not a number: ignored */
+    CHECK_EQ(w.boost_of("d"), 2);
+    CHECK_EQ(w.boost_of("e"), 1);
+    CHECK(settings_from_json("{\"volume_steps\": 5, \"boost_db\": [1, 2]}", w, nullptr)); /* wrong types: the defaults */
+    CHECK(w.volume_steps == VolumeSteps::Normal && w.boost_db.empty());
+    for (VolumeSteps v : {VolumeSteps::Normal, VolumeSteps::Db1, VolumeSteps::Db05, VolumeSteps::Db01})
+        CHECK(volume_steps_from(volume_steps_name(v), VolumeSteps::Normal) == v);
+    CHECK_NEAR(volume_steps_db(VolumeSteps::Normal), 0.0, 1e-12);
+    CHECK_NEAR(volume_steps_db(VolumeSteps::Db05), 0.5, 1e-12);
+    CHECK_EQ(std::string(volume_steps_word(VolumeSteps::Db1)), std::string("1 dB"));
+    CHECK_EQ(boost_word(0), std::string("Off"));
+    CHECK_EQ(boost_word(4), std::string("+4 dB"));
     rm_tree(dir);
 }
 
