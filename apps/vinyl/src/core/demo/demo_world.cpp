@@ -9,10 +9,12 @@
 #include "../library/roots.hpp"
 #include "../library/scanner.hpp"
 #include "../library/schema.hpp"
+#include "../playlist/playlists.hpp"
 #include "../state/resume.hpp"
 #include "../util/atomic_file.hpp"
 #include "../volume/output_volume.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -371,6 +373,52 @@ bool make_demo_library(const DemoWorld &w, const std::string &db_path, const std
         db.exec("update roots set online = 0 where id = " + std::to_string(usb));
     }
     return true;
+}
+
+bool make_demo_playlists(const DemoWorld &w, const std::string &mode) {
+    PlaylistStore st(w.music + "/Playlists", {w.music});
+    ::mkdir(w.music.c_str(), 0755);
+    /* the demo music, the drafts' Evening first: Lisztomania, 1 Thing, Genius, The Girls, Instant Crush, then the rest */
+    std::vector<std::string> files;
+    files.push_back(w.music + "/Phoenix/Lisztomania.wav");
+    for (int i : {3, 4, 5, 6}) files.push_back(w.music + "/" + kTracks[i].folder + "/" + kTracks[i].file + ".wav");
+    for (int i = 0; i < static_cast<int>(sizeof(kTracks) / sizeof(kTracks[0])); ++i)
+        if (i < 3 || i > 6) files.push_back(w.music + "/" + kTracks[i].folder + "/" + kTracks[i].file + ".wav");
+    files.push_back(w.music + "/Phoenix/1901.wav");
+    if (mode == "empty" || files.empty()) return st.write("Playlist", {}) == PlResult::Ok && st.remove("Playlist") == PlResult::Ok;
+    auto make = [&](const std::string &name, int n, int skip) {
+        std::vector<m3u::Entry> e;
+        for (int i = 0; i < n; ++i) {
+            m3u::Entry x;
+            x.path = files[static_cast<size_t>((i + skip) % static_cast<int>(files.size()))];
+            e.push_back(x);
+        }
+        return st.create(name, e) == PlResult::Ok;
+    };
+    bool ok = make("Morning run", 24, 3) && make("Road trip", 52, 7) && make("Favourites", 31, 11);
+    if (mode == "missing") {
+        std::vector<m3u::Entry> e;
+        for (int i = 0; i < 18; ++i) {
+            if (i == 2) {
+                m3u::Entry gone;
+                gone.path = w.music + "/Old song.mp3";
+                e.push_back(gone);
+            } else if (i == 3) {
+                m3u::Entry win;
+                win.path = "D:\\Music\\Gone.mp3";
+                win.resolved = false;
+                e.push_back(win);
+            }
+            m3u::Entry x;
+            x.path = files[static_cast<size_t>(i % static_cast<int>(files.size()))];
+            e.push_back(x);
+        }
+        e.resize(18);
+        ok = ok && st.create("Evening", e) == PlResult::Ok;
+    } else {
+        ok = ok && make("Evening", 18, 0);
+    }
+    return ok;
 }
 
 void remove_demo_world(const DemoWorld &w) {

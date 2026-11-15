@@ -1,0 +1,41 @@
+title Vinyl P2c: no playlist yet (PlaylistsEmpty), New playlist asks for a name (the keyboard, then the on-screen keyboard when none is connected) (640x480, the deck)
+sizes 640x480
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_LIBRARY full
+env VINYL_DEMO_PLAYLISTS empty
+env VINYL_DEMO_STATE playing
+keyboards 1
+wait 1200
+key b
+wait 500
+tap "Playlists"
+wait 700
+shot 01-empty
+expect text "PLAYLISTS, 0"
+expect text "+ New playlist"
+expect text "No playlists yet"
+expect text "Save the queue as a playlist, or add songs from the Library: hold a song and choose Add to playlist. Vinyl keeps them as .m3u8 files in Music/Playlists."
+tap "+ New playlist"
+wait 800
+shot 02-new
+expect text "New playlist"
+expect text "An empty playlist. Name:"
+expect text "Create"
+type " 1"
+wait 300
+key enter
+wait 900
+shot 03-created
+expect text "PLAYLISTS, 1"
+expect text "Playlist 1"
+expect text "0 tracks"
+expect notext "No playlists yet"
+# an empty playlist's page
+tap "Playlist 1"
+wait 800
+shot 04-empty-playlist
+expect text "No tracks yet"
+expect text "0 TRACKS"
+expect text "Edit"
+expect noquit

@@ -14,19 +14,23 @@
  *               selection gets near the end of what is loaded
  *   notes       the scan strip ("Scanning: 388 of about 1,200 files", "Paused: the board is hot. ...") and the drive
  *               note ("SANDISK is not connected. Its 612 tracks are hidden ..."), from the scanner's progress and roots
- *   sheets      the Track, Album and Artist actions (Enter, N, A, P, I); Add to playlist is drawn dimmed and does nothing
- *               in 0.3.0 (playlists are P2c)
+ *   sheets      the Track, Album and Artist actions (Enter, N, A, P, I); P2c: Add to playlist is real, and the playlist sheets
+ *               (Play, Rename, Delete, Export M3U), the import sheet of a .m3u in Folders and the add-to picker
+ *   playlists   (P2c) the Playlists page's rows ("+ New playlist", names with counts), the edit page's rows and heading, the
+ *               hub while tracks are picked for a playlist
  *   nav         the stack of places the Library has been through (Esc pops it)
  */
 #pragma once
 
 #include "../drives/drives.hpp"
+#include "../playlist/playlist_index.hpp"
 #include "library.hpp"
 #include "scanner.hpp"
 
 #include <cstdint>
 #include <string>
 #include <utility>
+#include <unordered_map>
 #include <vector>
 
 namespace vinyl {
@@ -53,7 +57,7 @@ std::string home_short(const std::string &path, const std::string &home);
 struct Row {
     enum class Kind { Heading, Item };
     enum class Mark { None, Chevron, Dot };
-    enum class Type { None, Hub, Artist, Album, Track, Genre };
+    enum class Type { None, Hub, Artist, Album, Track, Genre, Playlist, NewPlaylist, Entry };
     Kind kind = Kind::Item;
     Mark mark = Mark::Chevron;
     Type type = Type::None;
@@ -65,15 +69,60 @@ struct Row {
     bool playing = false; /* the track playing: the blue dot */
     bool mono_value = false;
     bool amber = false; /* the action dot is amber: a drive that is plugged in and can be mounted from here */
+    int check = 0;      /* Add tracks: the track is already in the playlist being edited this many times */
     bool operator==(const Row &o) const {
         return kind == o.kind && mark == o.mark && type == o.type && text == o.text && value == o.value && key == o.key &&
-               id == o.id && index == o.index && dimmed == o.dimmed && playing == o.playing && mono_value == o.mono_value && amber == o.amber;
+               id == o.id && index == o.index && dimmed == o.dimmed && playing == o.playing && mono_value == o.mono_value && amber == o.amber && check == o.check;
     }
 };
 
 /* The Hub: Folders, Playlists, Artists n, Albums n, Songs n, Genres n. The counts blank (no number) while unknown. */
 std::vector<Row> hub_rows(const LibraryCounts &c, bool counts_known);
 std::string hub_heading(int tracks, bool scanning);
+/* the hub while tracks are being picked for a playlist (Add tracks): Artists, Albums, Songs, Genres only (Folders and Playlists
+ * are not places to pick from) and its heading */
+std::vector<Row> hub_pick_rows(const LibraryCounts &c, bool counts_known);
+/* "ADDING TO EVENING, 18 TRACKS": every page of the pick mode that has a heading of its own for it (the board AddTracksSongs) */
+std::string hub_pick_heading(const std::string &playlist, int tracks);
+
+/* The marks of the pick mode (owner, 2026-11-15: "we need an indicator in lists that songs are already part of the playlist being
+ * created/edited"; a tap adds it again and the number grows): how many times each track (by path) is in the playlist, counted once from the
+ * playlist's entries (missing ones count for their path) and then kept up to date as tracks are added. A hash map: a lookup per row, never a scan.
+ * The rule for the rows: a SONG row (Songs, Search, an album's tracks) shows the check, with "x2" from two; an album, artist or genre
+ * row shows nothing (a mark there would need every track of the row looked up). */
+class PickMarks {
+public:
+    void set(const std::vector<std::string> &paths);
+    void add(const std::vector<std::string> &paths);
+    void remove(const std::string &path); /* one occurrence (a failed add taken back) */
+    int count(const std::string &path) const;
+    int total() const { return total_; }
+    void clear();
+
+private:
+    std::unordered_map<std::string, int> n_;
+    int total_ = 0;
+};
+/* sets Row::check of the song rows: `list` is the track list the rows' index points into */
+void apply_marks(std::vector<Row> &rows, const std::vector<TrackRow> &list, const PickMarks &marks);
+
+/* ------------------------------------------------------------------------------------------------ playlists (P2c) */
+/* the Playlists page: "+ New playlist" first (an action: the dot), then each playlist with "N tracks" and a chevron */
+std::vector<Row> playlist_list_rows(const std::vector<PlaylistRow> &p);
+std::string playlists_heading(int n);
+/* a playlist's entries as the edit page shows them: a dot (Enter plays from here), "Artist, Title" and its length; an entry whose
+ * file is not there is dimmed and says "file not found" (never dropped) */
+std::vector<Row> playlist_entry_rows(const std::vector<PlaylistEntryRow> &e, const std::string &playing_path);
+/* "1 H 12 MIN", "45 MIN", "" for none */
+std::string length_words(uint64_t ms);
+/* "18 TRACKS, 1 H 12 MIN" with ". 2 NOT FOUND" when some files are not there */
+std::string playlist_heading(const PlaylistStats &s);
+/* where an export went, for "Exported to SANDISK: Evening.m3u8.": the drive's name for a folder on a drive, else the folder's name */
+std::string where_text(const std::string &folder);
+/* the lowest free name among `names` (without case): "Queue", "Queue 2" ... within 24 characters */
+std::string free_name_among(const std::vector<std::string> &names, const std::string &base);
+/* the notice a bad name gets */
+std::string name_problem_text(NameProblem p);
 
 std::vector<Row> artist_rows(const std::vector<ArtistRow> &a, int first_index = 0);
 /* show_artist: Albums and a genre's albums (the artist right of the title); false: an artist's page (the year) */
@@ -164,7 +213,7 @@ std::string played_text(int plays, int64_t last, bool utc = false);
 /* ------------------------------------------------------------------------------------------------ sheets */
 
 /* evdev codes of the sheet's letters */
-enum : uint32_t { kKeyA = 30, kKeyN = 49, kKeyP = 25, kKeyI = 23 };
+enum : uint32_t { kKeyA = 30, kKeyN = 49, kKeyP = 25, kKeyI = 23, kKeyR = 19, kKeyD = 32, kKeyE = 18, kKeyT = 20 };
 
 struct SheetRow {
     std::string id; /* "play", "next", "add", "playlist", "info" */
@@ -172,7 +221,7 @@ struct SheetRow {
     bool enabled = true;
 };
 struct Sheet {
-    enum class Kind { Track, Album, Artist };
+    enum class Kind { Track, Album, Artist, Playlist, Import, AddTo, PlaylistPage };
     Kind kind = Kind::Track;
     std::string title; /* upper case */
     std::vector<SheetRow> rows;
@@ -184,14 +233,28 @@ struct Sheet {
 Sheet track_sheet(const std::string &title, const std::string &artist);
 Sheet album_sheet(const std::string &title, int tracks);
 Sheet artist_sheet(const std::string &name, int albums);
+/* P2c: the playlist's actions (Play, Rename, Delete, Export; `editing`: the open playlist's page, which adds Add tracks), the
+ * sheet of a .m3u in the Folders browser (Play, Import as a playlist, Add to the queue) and the picker "ADD <WHAT> TO" (+ New
+ * playlist, then each playlist with its count). */
+Sheet playlist_sheet(const std::string &name, int tracks, bool editing);
+Sheet import_sheet(const std::string &file_name, int entries);
+/* the options of an open playlist's page (hold a row, or Ctrl+O, in the view and in the edit mode; PlaylistOptions): Play from here (Enter),
+ * Rename (N), Export M3U (E), Delete playlist (Del); `can_play_here`: the selected row is a file that is there */
+Sheet playlist_page_sheet(const std::string &name, int tracks, bool can_play_here);
+/* "EDITING EVENING, 18 TRACKS" */
+std::string playlist_edit_heading(const std::string &name, int tracks);
+/* `has[i]`: how many times the song is in playlists[i] ("in it, 18 tracks", "in it x2, 31 tracks"); empty: none (an album or an artist) */
+Sheet add_to_sheet(const std::string &what, const std::vector<PlaylistRow> &playlists, const std::vector<int> &has = {});
 /* the action a letter key names on the sheet ("" for none); Enter is the selected row, the caller's */
 std::string sheet_action_for_key(uint32_t evdev);
+/* the same for a given sheet (the playlist sheets have their own letters: R, D, E, T; the import sheet's I imports) */
+std::string sheet_action_for_key(uint32_t evdev, const Sheet &s);
 /* the row index of an action id, -1 when the sheet has none */
 int sheet_index(const Sheet &s, const std::string &id);
 
 /* ------------------------------------------------------------------------------------------------ navigation */
 
-enum class Place { Hub, Artists, Artist, Albums, GenreAlbums, Album, Songs, Genres, Search, Info, Settings, Folders };
+enum class Place { Hub, Artists, Artist, Albums, GenreAlbums, Album, Songs, Genres, Search, Info, Settings, Folders, Playlists, Playlist };
 struct Loc {
     Place place = Place::Hub;
     int64_t id = 0;        /* artist, album, genre or track */

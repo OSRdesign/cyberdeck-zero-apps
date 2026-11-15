@@ -19,9 +19,9 @@ ModalAnswer modal_answer(uint32_t lv_key, uint32_t evdev) {
 }
 
 unsigned queue_buttons_enabled(int queue_size) {
-    if (queue_size <= 0) return 0;
-    if (queue_size == 1) return kQueueRemove; /* only the playing track: nothing to move, nothing to clear */
-    return kQueueUp | kQueueDown | kQueueRemove | kQueueClear;
+    if (queue_size <= 0) return kQueueAdd; /* an empty queue can be filled */
+    if (queue_size == 1) return kQueueRemove | kQueueAdd; /* only the playing track: nothing to move */
+    return kQueueUp | kQueueDown | kQueueRemove | kQueueAdd;
 }
 
 }  // namespace vinyl

@@ -1,0 +1,79 @@
+title Vinyl P2c: the Queue page has Add where Clear all was (no dialog); Play on a playlist, an album from the Library and a track of a folder each REPLACE the queue with exactly that list; Add opens the Library in the multi-select pick mode for the queue (marks, "ADDING TO THE QUEUE, N TRACKS", the Done button where the mini player is) and Done comes back to the Queue (480x320 and 320x480 at their real density)
+sizes 480x320 320x480
+ppmm 630
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_LIBRARY scan
+env VINYL_DEMO_PLAYLISTS list
+env VINYL_DEMO_STATE playing
+keyboards 1
+wait 1200
+key q
+wait 600
+shot 00-queue
+expect text "Add"
+expect notext "Clear all"
+expect text "Move up"
+expect noquit
+# a playlist, from its page: Play replaces the queue with the playlist (the first track is playing, the rest follow)
+key esc
+wait 400
+key b
+wait 500
+tap "Playlists"
+wait 700
+tap "Evening"
+wait 800
+tap "Play"
+wait 1000
+shot 01-playing
+key q
+wait 800
+shot 02-queue-playlist
+expect text "Lisztomania"
+expect notext "Hercules and Love Affair, You Belong"
+expect noquit
+# the Library's album: the queue is the album
+key esc
+wait 400
+key b
+wait 500
+tap "Search"
+wait 600
+type wolfgang
+wait 900
+key enter
+wait 400
+key enter
+wait 800
+tap "Play album"
+wait 1000
+key q
+wait 800
+shot 03-queue-album
+expect text "Phoenix, 1901"
+expect notext "Daft Punk, Instant Crush"
+expect noquit
+# Add: the Library in the pick mode, a tap adds at the end and the mark shows
+tap "Add"
+wait 800
+shot 04-add-hub
+expect text "ADDING TO THE QUEUE, 2 TRACKS"
+expect text "Done"
+expect notext "Move up"
+tap "Songs"
+wait 900
+shot 05-add-songs
+expect text "ADDING TO THE QUEUE, 2 TRACKS"
+expect text "1901"
+tap "1901"
+wait 700
+shot 06-add-again
+expect text "Added to the queue."
+expect text "ADDING TO THE QUEUE, 3 TRACKS"
+tap "Done"
+wait 800
+shot 07-queue-after
+expect text "Add"
+expect text "Move up"
+expect noquit

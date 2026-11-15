@@ -1,0 +1,40 @@
+title Vinyl P2c: Export M3U to a drive (the Browser's choose mode, Use folder, the notice "Exported to SANDISK: Evening.m3u8.")
+sizes 800x480 480x480 720x720 480x800 480x640
+env VINYL_DEMO 1
+env VINYL_DEMO_LIBRARY full
+env VINYL_DEMO_PLAYLISTS list
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_DRIVES vinyl
+keyboards 1
+wait 1200
+key b
+wait 500
+tap "Playlists"
+wait 700
+tap "Evening"
+wait 800
+hold "1  Phoenix, Lisztomania" 1800
+wait 500
+tap "Export M3U"
+wait 900
+shot 01-choose
+expect text "Use folder"
+expect noquit
+key esc
+wait 600
+shot 02-back
+expect text "Edit"
+expect text "Play"
+hold "1  Phoenix, Lisztomania" 1800
+wait 500
+tap "Export M3U"
+wait 900
+tap "SANDISK"
+wait 900
+shot 03-in-drive
+tap "Use folder"
+wait 1000
+shot 04-exported
+expect text "Exported to SANDISK: Evening.m3u8."
+expect text "Edit"
+expect noquit

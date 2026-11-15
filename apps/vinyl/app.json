@@ -1,10 +1,10 @@
 {
   "share_code": "vinyl",
   "package": "vinyl",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "title": "Vinyl",
   "summary": "A music player: MP3, FLAC, Vorbis, Opus, WAV, AAC; wired and Bluetooth.",
-  "description": "Plays ~/Music and USB drives (mounted on request): a Library of artists, albums, songs and genres with search, or by folder and M3U playlist. Gapless, shuffle, repeat, cover art, ReplayGain, a sleep timer, resume. Plays on while you use other apps. Wired outputs, and Bluetooth with a sound server; headset and keyboard play keys. AAC, ALAC, WMA and more through FFmpeg, installed with it. Needs 480x320 or more.",
+  "description": "Plays ~/Music and USB drives (mounted on request): a Library of artists, albums, songs and genres with search, your own playlists (M3U8, import, export), or by folder. Gapless, shuffle, repeat, cover art, ReplayGain, sleep timer, resume. Plays on while you use other apps. Wired and Bluetooth outputs; headset and keyboard play keys. AAC, ALAC, WMA and more through FFmpeg, installed with it. Needs 480x320 or more.",
   "categories": ["Tools"],
   "author": {"github": "OSRdesign", "display_name": "OSRdesign"},
   "license": "MIT",

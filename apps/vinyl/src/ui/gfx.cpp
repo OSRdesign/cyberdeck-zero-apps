@@ -373,6 +373,10 @@ void draw_icon(lv_layer_t *layer, Icon ic, int cx, int cy, int px, std::uint32_t
         p.bezier(18, 21, 10, 21, 3, 14, 3, 6);
         p.arc(5, 6, 2, 180, 270);
         break;
+    case Icon::Check: /* P2c: a track already in the playlist */
+        p.width = 3;
+        p.poly({{5, 12.5}, {9.5, 17}, {19, 7}});
+        break;
     case Icon::Search: /* the magnifier of the Library canvases' Search chip */
         p.width = 2.4;
         p.arc(10.5, 10.5, 6.5, 0, 360);

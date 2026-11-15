@@ -30,6 +30,7 @@ namespace ui {
 
 struct RowW {
     lv_obj_t *row = nullptr, *dot = nullptr, *chev = nullptr, *text = nullptr, *value = nullptr;
+    lv_obj_t *check = nullptr, *chip = nullptr, *chip_icon = nullptr, *chip_text = nullptr; /* P2c: the check mark, the "check x2" chip */
     int index = -1;
 };
 
@@ -61,6 +62,8 @@ public:
 
     /* a press held HoldTracker::kFireMs on a row (its index) */
     std::function<void(int)> on_hold;
+    /* P2c: which rows have something to open (null: every row but a heading); a row without one starts no hold and shows no cue */
+    std::function<bool(int)> hold_ok;
 
     /* the hold's cue (Markdown Notes' look: a box with an accent border, the message, a bar that fills): over the bottom of
      * the area x .. x + w, `bottom` being its lowest edge, in `parent`'s coordinates */
@@ -159,6 +162,17 @@ private:
         r.text = label(r.row, Face::Bold, text_px_, col::kRowText, ri(text_x_), 0, 10);
         lv_obj_set_style_text_line_space(r.text, 0, 0);
         r.value = label(r.row, Face::Mono, value_px_, col::kRowValue, 0, 0, 10, LV_TEXT_ALIGN_RIGHT); /* one line, dots */
+        {
+            const int ck = std::max(8, ri(16 * s_));
+            r.check = icon_obj(r.row, Icon::Check, w_ - ri(14 * s_) - ck, (row_h_ - ck) / 2, ck, ck, ck, col::kCheck);
+            lv_obj_add_flag(r.check, LV_OBJ_FLAG_HIDDEN);
+            const int ch = std::max(10, ri(22 * s_));
+            r.chip = box(r.row, 0, (row_h_ - ch) / 2, 10, ch, col::kCheckChipBg, ch / 2);
+            const int ip = std::max(8, ri(12 * s_));
+            r.chip_icon = icon_obj(r.chip, Icon::Check, std::max(2, ri(7 * s_)), (ch - ip) / 2, ip, ip, ip, col::kCheckChipInk);
+            r.chip_text = label(r.chip, Face::Bold, std::max(1, ri(12 * s_)), col::kCheckChipInk, 0, 0, 10);
+            lv_obj_add_flag(r.chip, LV_OBJ_FLAG_HIDDEN);
+        }
         lv_obj_add_flag(r.row, LV_OBJ_FLAG_HIDDEN);
         return r;
     }
@@ -199,7 +213,26 @@ private:
         if (lv_obj_get_style_text_font(w.value, LV_PART_MAIN) != vf) lv_obj_set_style_text_font(w.value, vf, 0);
         set_text(w.value, v.value);
         const lv_font_t *tf = font(Face::Bold, text_px_);
-        const int right = chev ? ri(chev_r_) + ri(16 * s_) + ri(4 * s_) : ri(value_r_);
+        int chip_w = 0;
+        if (v.check > 1) {
+            const lv_font_t *cf0 = font(Face::Bold, std::max(1, ri(12 * s_)));
+            chip_w = std::max(2, ri(7 * s_)) * 2 + std::max(8, ri(12 * s_)) + std::max(2, ri(3 * s_)) + text_width(cf0, "x" + std::to_string(v.check)) + 2;
+        }
+        const int right = v.check > 1 ? ri(12 * s_) + chip_w + ri(8 * s_) : v.check > 0 ? ri(52 * s_) : chev ? ri(chev_r_) + ri(16 * s_) + ri(4 * s_) : ri(value_r_);
+        show(w.check, v.check == 1);
+        show(w.chip, v.check > 1);
+        if (v.check > 1) { /* the chip: a check and "x2", right-aligned where the board puts it */
+            const lv_font_t *cf = font(Face::Bold, std::max(1, ri(12 * s_)));
+            const std::string t = "x" + std::to_string(v.check);
+            const int ip = std::max(8, ri(12 * s_)), pad = std::max(2, ri(7 * s_));
+            const int tw = text_width(cf, t) + 2;
+            const int cw = pad + ip + std::max(2, ri(3 * s_)) + tw + pad;
+            lv_obj_set_width(w.chip, cw);
+            lv_obj_set_x(w.chip, w_ - ri(12 * s_) - cw);
+            lv_obj_set_pos(w.chip_text, pad + ip + std::max(2, ri(3 * s_)), (lv_obj_get_height(w.chip) - lv_font_get_line_height(cf)) / 2);
+            lv_obj_set_width(w.chip_text, tw);
+            set_text(w.chip_text, t);
+        }
         /* a row without a mark keeps its text where a marked row has it, unless it says so (flush: the Music folders) */
         const int tx = ri(row_title_x(v, dot_x_, text_x_)); /* after the dot when there is one */
         /* the name and the value share the row; when both do not fit, the name keeps its width up to 60 % of the room
@@ -277,7 +310,7 @@ private:
             self->swallow_tap_ = false;
             self->hold_.cancel();
             self->hide_cue();
-            if (idx >= 0 && self->on_hold && !self->rows_[static_cast<size_t>(idx)].heading) {
+            if (idx >= 0 && self->on_hold && !self->rows_[static_cast<size_t>(idx)].heading && (!self->hold_ok || self->hold_ok(idx))) {
                 const lv_point_t p = pointer();
                 self->hold_.begin(idx, p.x, p.y, now);
             }

@@ -28,8 +28,10 @@ enum class Page {
     /* P2b, the Library: the hub (Folders opens the Browser), the lists, an album's tracks, Search, Track info, the Library
      * settings and the Music folders (ui/library_pages.hpp, ui/library_ctl.hpp) */
     LibHub, LibArtists, LibArtist, LibAlbums, LibAlbum, LibSongs, LibGenres, LibSearch, LibInfo, LibSettings, LibFolders,
+    /* P2c, the playlists: the list (with "+ New playlist") and one playlist's edit page */
+    LibPlaylists, LibPlaylist,
 };
-inline bool is_lib_page(Page p) { return p >= Page::LibHub && p <= Page::LibFolders; }
+inline bool is_lib_page(Page p) { return p >= Page::LibHub && p <= Page::LibPlaylist; }
 
 struct RowView {
     enum class Mark { None, Chevron, Dot };
@@ -42,9 +44,10 @@ struct RowView {
     bool heading = false;       /* P2b: a section heading ("DISC 2", "SONGS"): grey capitals, never tapped */
     bool flush = false;         /* P2b: no mark and the text at the left edge (the Music folders rows) */
     bool amber = false;         /* the action dot is amber (a drive that is not mounted: a tap mounts it) */
+    int check = 0;              /* P2c, Add tracks: the track is already in the playlist this many times (a green check; "x2" from 2) */
     bool operator==(const RowView &o) const {
         return text == o.text && value == o.value && mark == o.mark && playing == o.playing && dimmed == o.dimmed &&
-               mono_value == o.mono_value && heading == o.heading && flush == o.flush && amber == o.amber;
+               mono_value == o.mono_value && heading == o.heading && flush == o.flush && amber == o.amber && check == o.check;
     }
 };
 
@@ -112,6 +115,7 @@ struct ListView {
     /* browser, choose mode (P2b: Music folders > Add a folder): the strip asks "Use folder", the mini player is away */
     bool choose = false;
     std::string choose_text; /* the strip's second line */
+    bool save_chip = false;  /* queue (P2c): the "Save as playlist" chip at the heading's right */
 };
 
 /* The Library pages (P2b): one view per page, filled by the library controller. */
@@ -147,9 +151,18 @@ struct LibView {
     std::string block_title, block_text;
     /* Music folders: the two buttons and the note under them */
     std::vector<std::string> buttons;
-    bool button_enabled[3] = {true, true, true};
-    bool button_primary[3] = {true, false, false}; /* the brown look: Add a folder, or Mount <drive> when that is what the drive button does */
+    bool button_enabled[5] = {true, true, true, true, true};
+    bool button_primary[5] = {true, false, false, false, false}; /* the brown look: Add a folder, or Mount <drive> when that is what the drive button does */
     std::string footnote;
+    /* P2c, a playlist's edit page: the chips at the heading's right ("Rename", "Export M3U"; a tap is a button of index 10 + i) and
+     * the five buttons under the rows (Move up, Move down, Remove, Add tracks, Play: the last one in the primary look) */
+    std::vector<std::string> chips;
+    /* the Playlists page with no playlist: the message sits under this many rows (the "+ New playlist" row stays) */
+    int empty_after_rows = 0;
+    /* Add tracks (pick mode): the "Done" chip at the heading's right on the list pages (a tap is the button of index 20) */
+    bool done_chip = false;
+    /* Add tracks / Add to the queue: the full-width "Done" button at the bottom, where the mini player strip is (the hub hides the strip) */
+    bool done_button = false;
     /* Search: the field's text and the line shown while it is empty */
     std::string query;
 };
@@ -183,6 +196,12 @@ struct Notice {
     uint64_t gen = 0;
 };
 
+/* A name asked for in a dialog with a text field (Save the queue, New playlist, Rename, Import as): the title, the line over the field
+ * ("20 tracks. Name:"), its first text and the primary button's word. The answer is Actions::name_answer. */
+struct NameAsk {
+    std::string title, sub, text, ok;
+};
+
 /* What the pages ask the controller to do. */
 struct Actions {
     std::function<void()> back, toggle, prev, next, shuffle, repeat;
@@ -194,10 +213,10 @@ struct Actions {
     std::function<void(bool, int)> transport;        /* previous (false) / next (true): 0 press, 1 release, 2 cancel */
     std::function<void(int)> volume_step;            /* the volume group's "-" / "+": one level down / up */
     std::function<void()> volume_unavailable;        /* a tap on the volume chip where nothing can change the volume */
-    std::function<void()> queue_clear;               /* "Clear the queue?" answered Clear */
     /* P2b */
     std::function<void(Page, int)> lib_row;          /* a tap on a Library row */
     std::function<void(Page, int)> lib_hold;         /* a 1.5 s hold on a Library row */
+    std::function<bool(Page, int)> lib_hold_ok;      /* P2c, the Browser: does this row have a sheet (a .m3u / .m3u8 row) */
     std::function<void(Page)> lib_chip;              /* the hub's Search chip, an album's Play album */
     std::function<void(Page, int)> lib_button;       /* Music folders' buttons, an empty page's button; Browser: choose mode's "Use this folder" */
     std::function<void(const std::string &)> lib_query; /* the search field's text changed */
@@ -205,6 +224,10 @@ struct Actions {
     std::function<void()> lib_field_escape;          /* Esc in the search field */
     std::function<void(int)> sheet_pick;             /* a tap on a sheet row */
     std::function<void()> sheet_dismiss;             /* a tap outside the sheet */
+    /* P2c */
+    std::function<void(bool, const std::string &)> name_answer; /* the name dialog: true = the primary button, with the text */
+    std::function<void(bool)> confirm_answer;                   /* the question dialog (Delete "Evening"?): true = the destructive answer */
+    std::function<void()> queue_save;                           /* the Queue page's "Save as playlist" */
 };
 
 } // namespace ui

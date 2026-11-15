@@ -22,8 +22,8 @@ namespace vinyl {
 enum class BackStep { CloseModal, HideNoticeAndBack, Back };
 BackStep back_step(bool modal_shown, bool notice_shown);
 
-/* bit 0 Move up, bit 1 Move down, bit 2 Remove, bit 3 Clear all */
-constexpr unsigned kQueueUp = 1u, kQueueDown = 2u, kQueueRemove = 4u, kQueueClear = 8u;
+/* bit 0 Move up, bit 1 Move down, bit 2 Remove, bit 3 Add */
+constexpr unsigned kQueueUp = 1u, kQueueDown = 2u, kQueueRemove = 4u, kQueueAdd = 8u; /* Add: songs from the Library (owner, 2026-11-15: "clear all makes me think I will delete the files") */
 unsigned queue_buttons_enabled(int queue_size);
 
 enum class ModalAnswer { None, Cancel, Confirm };

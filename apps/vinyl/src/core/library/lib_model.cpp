@@ -517,7 +517,7 @@ Sheet track_sheet(const std::string &title, const std::string &artist) {
     s.rows = {{"play", "Play", "Enter", true},
               {"next", "Play next", "N", true},
               {"add", "Add to queue", "A", true},
-              {"playlist", "Add to playlist", "P", false}, /* P2c: drawn dimmed, does nothing */
+              {"playlist", "Add to playlist", "P", true},
               {"info", "Track info", "I", true}};
     s.hint = kHoldHint;
     return s;
@@ -530,7 +530,7 @@ Sheet album_sheet(const std::string &title, int tracks) {
     s.rows = {{"play", "Play album", "Enter", true},
               {"next", "Play next", "N", true},
               {"add", "Add to queue", "A", true},
-              {"playlist", "Add to playlist", "P", false}};
+              {"playlist", "Add to playlist", "P", true}};
     s.hint = kHoldHint;
     return s;
 }
@@ -542,7 +542,7 @@ Sheet artist_sheet(const std::string &name, int albums) {
     s.rows = {{"play", "Play all", "Enter", true},
               {"next", "Play next", "N", true},
               {"add", "Add to queue", "A", true},
-              {"playlist", "Add to playlist", "P", false}};
+              {"playlist", "Add to playlist", "P", true}};
     s.hint = kHoldHint;
     return s;
 }
@@ -554,6 +554,221 @@ std::string sheet_action_for_key(uint32_t evdev) {
     case kKeyP: return "playlist";
     case kKeyI: return "info";
     default: return "";
+    }
+}
+
+/* ------------------------------------------------------------------------------------------------ playlists (P2c) */
+
+std::vector<Row> hub_pick_rows(const LibraryCounts &c, bool counts_known) {
+    std::vector<Row> all = hub_rows(c, counts_known), rows;
+    for (const Row &r : all)
+        if (r.key != "folders" && r.key != "playlists") {
+            rows.push_back(r);
+            rows.back().index = static_cast<int>(rows.size()) - 1;
+        }
+    return rows;
+}
+
+std::string hub_pick_heading(const std::string &playlist, int tracks) {
+    return "ADDING TO " + upper_text(playlist) + ", " + upper_text(plural(tracks, "track", "tracks"));
+}
+
+void PickMarks::set(const std::vector<std::string> &paths) {
+    clear();
+    add(paths);
+}
+void PickMarks::add(const std::vector<std::string> &paths) {
+    for (const std::string &p : paths) {
+        ++n_[p];
+        ++total_;
+    }
+}
+void PickMarks::remove(const std::string &path) {
+    auto it = n_.find(path);
+    if (it == n_.end()) return;
+    --total_;
+    if (--it->second <= 0) n_.erase(it);
+}
+int PickMarks::count(const std::string &path) const {
+    auto it = n_.find(path);
+    return it == n_.end() ? 0 : it->second;
+}
+void PickMarks::clear() {
+    n_.clear();
+    total_ = 0;
+}
+void apply_marks(std::vector<Row> &rows, const std::vector<TrackRow> &list, const PickMarks &marks) {
+    for (Row &r : rows)
+        if (r.type == Row::Type::Track && r.index >= 0 && r.index < static_cast<int>(list.size()))
+            r.check = marks.count(list[static_cast<size_t>(r.index)].path);
+}
+
+std::vector<Row> playlist_list_rows(const std::vector<PlaylistRow> &p) {
+    std::vector<Row> rows;
+    Row n = item(Row::Type::NewPlaylist, 0, 0, "+ New playlist", "", Row::Mark::Dot);
+    n.key = "new";
+    rows.push_back(n);
+    for (size_t i = 0; i < p.size(); ++i)
+        rows.push_back(item(Row::Type::Playlist, p[i].id, static_cast<int>(i), p[i].name, plural(p[i].tracks, "track", "tracks"), Row::Mark::Chevron));
+    return rows;
+}
+
+std::string playlists_heading(int n) { return "PLAYLISTS, " + std::to_string(n); }
+
+std::vector<Row> playlist_entry_rows(const std::vector<PlaylistEntryRow> &e, const std::string &playing_path) {
+    std::vector<Row> rows;
+    for (size_t i = 0; i < e.size(); ++i) {
+        Row r = item(Row::Type::Entry, e[i].track_id, static_cast<int>(i), e[i].label(), "", Row::Mark::None); /* informs: a tap only selects it */
+        if (e[i].exists) {
+            r.value = duration_text(e[i].duration_ms);
+            r.mono_value = true;
+            r.playing = !playing_path.empty() && e[i].entry.path == playing_path;
+        } else {
+            r.value = "file not found";
+            r.mono_value = false;
+            r.dimmed = true;
+        }
+        rows.push_back(r);
+    }
+    return rows;
+}
+
+std::string length_words(uint64_t ms) {
+    if (ms == 0) return "";
+    const uint64_t mins = (ms + 30000) / 60000;
+    if (mins >= 60) return std::to_string(mins / 60) + " H " + std::to_string(mins % 60) + " MIN";
+    return std::to_string(mins) + " MIN";
+}
+
+std::string playlist_heading(const PlaylistStats &s) {
+    std::string h = upper_text(plural(s.tracks, "track", "tracks"));
+    const std::string l = length_words(s.ms);
+    if (!l.empty()) h += ", " + l;
+    if (s.missing > 0) h += ". " + std::to_string(s.missing) + " NOT FOUND";
+    return h;
+}
+
+std::string where_text(const std::string &folder) {
+    std::string f = folder;
+    while (f.size() > 1 && f.back() == '/') f.pop_back();
+    const std::string drive = drive_dir_of(f, default_drive_bases());
+    return base_name(drive.empty() ? f : drive);
+}
+
+std::string free_name_among(const std::vector<std::string> &names, const std::string &base_in) {
+    const std::string base = PlaylistStore::clean_name(base_in);
+    auto lower = [](std::string x) {
+        for (char &c : x) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return x;
+    };
+    auto taken = [&](const std::string &n) {
+        for (const std::string &x : names)
+            if (lower(x) == lower(n)) return true;
+        return false;
+    };
+    if (!taken(base)) return base;
+    for (int k = 2; k < 1000; ++k) {
+        const std::string suffix = " " + std::to_string(k);
+        std::string b = base;
+        while (PlaylistStore::name_length(b) + static_cast<int>(suffix.size()) > PlaylistStore::kMaxName && !b.empty()) {
+            size_t cut = b.size() - 1;
+            while (cut > 0 && (static_cast<unsigned char>(b[cut]) & 0xC0) == 0x80) --cut;
+            b.erase(cut);
+        }
+        b = PlaylistStore::trim_name(b) + suffix;
+        if (!taken(b)) return b;
+    }
+    return base + " 1000";
+}
+
+std::string name_problem_text(NameProblem p) {
+    switch (p) {
+    case NameProblem::Empty: return "Type a name first.";
+    case NameProblem::TooLong: return "Use 24 characters or fewer.";
+    case NameProblem::BadChar: return "Letters, digits, space, - and _ only.";
+    case NameProblem::None: break;
+    }
+    return "";
+}
+
+Sheet playlist_sheet(const std::string &name, int tracks, bool editing) {
+    Sheet s;
+    s.kind = Sheet::Kind::Playlist;
+    s.title = upper_text(name) + ", " + upper_text(plural(tracks, "track", "tracks"));
+    s.rows.push_back({"play", "Play", "Enter", tracks > 0});
+    if (editing) s.rows.push_back({"addtracks", "Add tracks", "T", true});
+    s.rows.push_back({"rename", "Rename", "R", true});
+    if (!editing) s.rows.push_back({"delete", "Delete", "D", true});
+    s.rows.push_back({"export", "Export M3U", "E", tracks > 0});
+    if (editing) s.rows.push_back({"delete", "Delete", "D", true});
+    s.hint = kHoldHint;
+    return s;
+}
+
+std::string playlist_edit_heading(const std::string &name, int tracks) {
+    return "EDITING " + upper_text(name) + ", " + upper_text(plural(tracks, "track", "tracks"));
+}
+
+Sheet playlist_page_sheet(const std::string &name, int tracks, bool can_play_here) {
+    Sheet s;
+    s.kind = Sheet::Kind::PlaylistPage;
+    s.title = upper_text(name) + ", " + upper_text(plural(tracks, "track", "tracks"));
+    s.rows = {{"playhere", "Play from here", "Enter", can_play_here},
+              {"rename", "Rename", "N", true},
+              {"export", "Export M3U", "E", tracks > 0},
+              {"delete", "Delete playlist", "Del", true}};
+    s.hint = "Hold a row for 1.5 s, or press Ctrl+O. The same sheet opens in the edit mode.";
+    return s;
+}
+
+Sheet import_sheet(const std::string &file_name, int entries) {
+    Sheet s;
+    s.kind = Sheet::Kind::Import;
+    s.title = upper_text(file_name) + ", " + upper_text(plural(entries, "entry", "entries"));
+    s.rows = {{"play", "Play", "Enter", true}, {"import", "Import as a playlist", "I", true}, {"add", "Add to the queue", "A", true}};
+    s.hint = "Hold a row for 1.5 s, or press Ctrl+O. Windows paths, Latin-1 names and relative paths are understood.";
+    return s;
+}
+
+Sheet add_to_sheet(const std::string &what, const std::vector<PlaylistRow> &playlists, const std::vector<int> &has) {
+    Sheet s;
+    s.kind = Sheet::Kind::AddTo;
+    s.title = "ADD " + upper_text(what) + " TO";
+    s.rows.push_back({"new", "+ New playlist", "N", true});
+    for (size_t i = 0; i < playlists.size(); ++i) {
+        std::string key = plural(playlists[i].tracks, "track", "tracks");
+        const int n = i < has.size() ? has[i] : 0;
+        if (n > 0) key = std::string("in it") + (n > 1 ? " x" + std::to_string(n) : std::string()) + ", " + key; /* the board: "in it x2, 31 tracks" */
+        s.rows.push_back({"pl:" + std::to_string(i), playlists[i].name, key, true});
+    }
+    s.hint = "A song already in a playlist can be added again; it plays twice.";
+    return s;
+}
+
+std::string sheet_action_for_key(uint32_t evdev, const Sheet &s) {
+    switch (s.kind) {
+    case Sheet::Kind::Playlist:
+        switch (evdev) {
+        case kKeyR: return "rename";
+        case kKeyD: return "delete";
+        case kKeyE: return "export";
+        case kKeyT: return "addtracks";
+        default: return "";
+        }
+    case Sheet::Kind::PlaylistPage:
+        switch (evdev) {
+        case kKeyN: return "rename";
+        case kKeyE: return "export";
+        default: return "";
+        }
+    case Sheet::Kind::Import:
+        switch (evdev) {
+        case kKeyI: return "import";
+        case kKeyA: return "add";
+        default: return "";
+        }
+    case Sheet::Kind::AddTo: return evdev == kKeyN ? "new" : "";
+    default: return sheet_action_for_key(evdev);
     }
 }
 

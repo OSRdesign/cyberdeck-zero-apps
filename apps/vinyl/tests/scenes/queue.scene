@@ -10,7 +10,8 @@ shot queue
 expect esc
 expect text "3 OF 20, 1 H 24 MIN LEFT"
 expect text "Move up"
-expect text "Clear all"
+expect text "Add"
+expect notext "Clear all"
 expect text "Amerie, 1 Thing (Siik Remix)"
 key down
 wait 200
