@@ -4,7 +4,7 @@ A music player for CyberdeckZero Launcher boards: it plays the music in `~/Music
 from M3U playlists, with gapless playback, shuffle, repeat, embedded cover art, ReplayGain, a sleep timer and resume where
 you stopped (a long mix or audiobook keeps its own place). It plays on while you use other apps (on boards with
 multitasking), to wired outputs and, on boards with a sound server, to Bluetooth headsets and speakers; headset, speaker
-and keyboard play keys work. Version **0.4.0** (phase P2c of the launcher repo's report 060: playlists,
+and keyboard play keys work. Version **0.5.0** (a software Gain boost for quiet outputs and finer Volume steps; 0.4.0 brought playlists,
 M3U8 files in `~/Music/Playlists`; 0.3.0 brought the Library, a SQLite library kept up to date by a background scan, with
 Artists, Albums, Songs, Genres, Search, Track info and the actions of a row, and USB drives mounted on request; 0.2.0 the
 Menu with the sleep timer, the Playback settings, the keys and About).
@@ -34,12 +34,14 @@ Headless harness, demonstration world (`VINYL_DEMO=1`):
 | ![Music folders: Mount](screenshots/28-mount-button-480x320.png) | ![Playlists](screenshots/30-playlists-480x320.png) |
 | ![a playlist](screenshots/31-playlist-view-480x320.png) | ![editing a playlist](screenshots/32-playlist-edit-480x320.png) |
 | ![Add tracks](screenshots/33-add-tracks-480x320.png) | ![the Queue: Save as playlist](screenshots/34-queue-save-480x320.png) |
-| ![Add to playlist](screenshots/35-add-to-playlist-480x320.png) | |
+| ![Add to playlist](screenshots/35-add-to-playlist-480x320.png) | ![Playback with Gain boost and Volume steps](screenshots/37-playback-480x320.png) |
+| ![the Gain boost list](screenshots/38-gain-boost-480x320.png) | ![the Volume steps list](screenshots/39-volume-steps-480x320.png) |
+| ![the volume chip in dB](screenshots/40-db-chip-480x320.png) | |
 
-The deck (640x480), square (480x480) and large (800x480, two panes), the Menu, the Keys, the Library hub and a playlist at 320x480:
+The deck (640x480), square (480x480) and large (800x480, two panes), the Menu, the Keys, the Library hub, a playlist and the dB chip at 320x480:
 ![deck](screenshots/09-now-playing-640x480.png) ![square](screenshots/06-now-playing-480x480.png)
 ![large](screenshots/07-now-playing-800x480.png) ![Menu portrait](screenshots/18-menu-320x480.png)
-![Keys portrait](screenshots/19-keys-320x480.png) ![Library portrait](screenshots/29-library-hub-320x480.png) ![Playlist portrait](screenshots/36-playlist-view-320x480.png)
+![Keys portrait](screenshots/19-keys-320x480.png) ![Library portrait](screenshots/29-library-hub-320x480.png) ![Playlist portrait](screenshots/36-playlist-view-320x480.png) ![dB chip portrait](screenshots/41-db-chip-320x480.png)
 
 ## What it does
 
@@ -53,7 +55,7 @@ The deck (640x480), square (480x480) and large (800x480, two panes), the Menu, t
 | **Output** | Automatic (the system's default output), the Bluetooth devices (music or call quality), the wired outputs, a paired device that is off (grey: a tap says how to connect it). Vinyl never switches output by itself: when the output in use goes away, playback pauses ("Evolve 65 disconnected. Paused."). |
 | **Menu** (P2a) | TOOLS: Sleep timer (Off, the time left, or the track mode); SETTINGS: Playback, Library (when the Library's database opened: its scan, Rescan now, Music folders), Output (the output's name: it opens the Output page), Keys, About. Only what is built is listed (the Equalizer comes later). |
 | **Sleep timer** | Stop playing after: Off, 15, 30 or 60 minutes, This track, This album or queue (the chosen one has the blue dot; a choice closes the page, the Menu shows the time left); while it runs, "Stops in 29:12. The music fades out for the last 10 seconds." The minutes count from the choice, playing or paused; the last 10 s fade out, then the music pauses ("Sleep timer ended. Paused."). This track stops at the end of the track that plays, This album or queue before the next album (the album tag, else the folder) or at the end of the queue (a playlist plays to its end); the queue then waits on the next track, paused. The timer runs on while you change pages and while Vinyl is hidden; a restart forgets it; it pauses the music and nothing else. |
-| **Playback** | Gapless (On: the next track continues on the same stream when its format is the same; Off: a short gap at every change), ReplayGain (Off / Track / Album, Track by default: the loudness from the files' tags), Remember position in long files (On: a file longer than 20 minutes starts again where you left it). Enter or a tap turns Gapless and Remember on or off; ReplayGain opens its list. |
+| **Playback** | Gapless (On: the next track continues on the same stream when its format is the same; Off: a short gap at every change), ReplayGain (Off / Track / Album, Track by default: the loudness from the files' tags), **Gain boost** (0.5.0: Off, +1 to +4 dB, per output; see Gain boost below), **Volume steps** (0.5.0: Normal, 1 dB, 0.5 dB, 0.1 dB; see below), Remember position in long files (On: a file longer than 20 minutes starts again where you left it). Enter or a tap turns Gapless and Remember on or off; ReplayGain, Gain boost and Volume steps open their lists. |
 | **Keys** | every key and what it does (the key's name, then its action; the rows of now playing say so); it scrolls. |
 | **About** | the version, the formats, THIS OUTPUT (the playing output's range and levels, "Sharkoon Mobile DAC: -45.0 to 0.0 dB, 23 levels of 2.05 dB."), the libraries, where the licences are. |
 
@@ -181,15 +183,25 @@ untagged file plays at 0 dB. The gain never lifts the file's peak (the peak tag)
 own stream, before the output's volume: the volume group's levels, its percent and the output's own level do not move.
 A pre-amp is not offered (0 dB).
 
-## Planned settings
+## Gain boost and Volume steps (0.5.0)
 
-Not in 0.4.0 (the owner's roadmap, 2026-11-13; `docs/decisions.md`, "Later (not built)"), in the Playback settings of the
-Menu (P2):
+Both are in the Playback settings of the Menu.
 
-- **Gain boost**: 0 to +4 dB of software gain in 1 dB steps, with a limiter against clipping, for outputs that are quiet
-  even at their maximum (the Raspberry Pi headphone jack beside a USB DAC).
-- **Volume steps**: Normal (about 2 dB, the percent shown, as now) / 1 dB / 0.5 dB / 0.1 dB; in the dB modes the volume
-  group shows the output's real level in dB ("-22.5 dB"), as some hi-fi amplifiers do.
+- **Gain boost**: Off, or +1 to +4 dB of software gain on top of the output's volume, for an output that is quiet even at
+  its maximum (the headphone jack of a Pi 3 or Pi 4 next to a USB DAC). It is set **per output** (the row shows the value
+  of the output that plays now; a Bluetooth speaker can stay Off while a USB DAC has its own value) and applies at every
+  volume level. A limiter (5 ms look-ahead, ceiling -1 dBFS) keeps the boosted sound from clipping, so a **dense master
+  gains less than the set value**: the limiter takes its peaks. Measured as the RMS loudness gained with +4 dB: a track at a
+  normal level +4.0 dB, peaks at -3 dBFS +3.6 dB, a dense modern master +2.6 dB (about 2 dB on loud dance masters), a
+  hard-clipped master +0.1 dB. The limiter stays as it is on purpose (a louder result would need a clipper and distortion).
+  Without a boost (and with a ReplayGain at or under 0 dB) the limiter is not in the path and the sound is bit-exact.
+- **Volume steps**: Normal (about 2 dB a step, the percent shown, as in 0.4.0), 1 dB, 0.5 dB or 0.1 dB. In the dB modes
+  the volume group shows the output's real level as a **dB chip** ("-22.5 dB"), and "-" and "+" move it by the step,
+  **never finer than the output's own step** (a USB DAC with 1 dB steps moves 1 dB in the 0.5 and 0.1 modes too; the
+  Pi's jack and a sound server's outputs go as fine as 0.1 dB). **Hold "-" or "+" to repeat**: nothing for half a
+  second, then 10 steps a second, 30 a second after two seconds. The chip does not include the boost.
+- **A tip.** The built-in jacks of the Pi 3 and Pi 4 are basic quality; a USB DAC gives a cleaner and louder output. The
+  boost helps most on the built-in jack.
 
 ## Background playback
 
@@ -219,7 +231,7 @@ plays in front (`dim allow`, decision D16).
 
 ## Install
 
-Settings > Apps > Available > Vinyl, or by hand: `sudo apt install ./vinyl_0.4.0_arm64.deb` (apt installs the
+Settings > Apps > Available > Vinyl, or by hand: `sudo apt install ./vinyl_0.5.0_arm64.deb` (apt installs the
 dependencies), `sudo dpkg -r vinyl` to remove it.
 
 ## Files the app keeps
@@ -227,14 +239,14 @@ dependencies), `sudo dpkg -r vinyl` to remove it.
 | Path | What |
 |---|---|
 | `~/.config/vinyl/state.json` | the queue, its order, shuffle, repeat, the position, the output, the browser's folder, the software level of an output without a mixer; written on a change (a track, a pause, the queue, a folder, the exit) and at most once a minute while playing |
-| `~/.config/vinyl/settings.json` | Gapless, ReplayGain, Remember position in long files; written only when one changes |
+| `~/.config/vinyl/settings.json` | Gapless, ReplayGain, Gain boost (per output), Volume steps, Remember position in long files; written only when one changes |
 | `~/Music/Playlists/<name>.m3u8` | the playlists (0.4.0); written atomically (a temporary file renamed over the old one, so a power cut leaves the old file); Vinyl only writes them when you ask |
 | `~/.local/share/vinyl/library.db` | the Library: a cache of the tags and the play counts, rebuilt by a scan (a damaged file is moved aside as `library.db.bad`) |
 | `~/.config/vinyl/positions.json` | where each long file (over 20 minutes) was left, the 500 most recent; written on a pause, a track change, the exit and at most once a minute while a long file plays |
 
 Delete them to start fresh. Vinyl writes nothing else (it never writes tags or music files). The sleep timer is not saved.
 
-## Known limits (0.4.0)
+## Known limits (0.5.0)
 
 - Playlists: only `.m3u8` files in `~/Music/Playlists` are listed (a `.m3u` put there is not; import it from Folders). A
   Windows path is matched with its case as written (a file `Song.MP3` for `song.mp3` is not found); a file name that holds
@@ -251,7 +263,7 @@ Delete them to start fresh. Vinyl writes nothing else (it never writes tags or m
   installs for its user, or the same rule added by hand (an ssh login is refused). It is a run-time need, not a
   dependency: without udisks2 the drives are listed and a tap says "Drives need the udisks2 package."; without the rule
   Vinyl shows "Could not mount it: this session is not allowed to mount drives.". Vinyl unmounts only what it mounted.
-- No EQ and no crossfade (P2d), no gain boost and no Volume steps yet (planned settings, above); no ReplayGain pre-amp.
+- No EQ and no crossfade (P2d); no ReplayGain pre-amp. A dense master gains less than the Gain boost value (the limiter takes its peaks).
   The ReplayGain figure shows on the square and large screens only. No sorting control in the browser (folders and
   tracks are A-Z).
 - No metadata to headsets or car displays (MPRIS / AVRCP) and no folder art (a `cover.jpg` beside the tracks: only
@@ -294,6 +306,11 @@ Board protocol: [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md).
 
 ## Changes
 
+- **0.5.0** (published 2026-11-16): **Gain boost** (0 to +4 dB per output, a limiter against clipping; a dense master gains
+  less than the set value) and **Volume steps** (Normal, 1, 0.5 and 0.1 dB, the dB chip, never finer than the output's own
+  step, hold "-" or "+" to repeat) in the Playback settings, with a gain line in the journal; a list (the queue, the
+  Browser, the Library pages) no longer jumps back to the selected row after you scrolled it: it stays where you left it
+  until a key or a tap on a row, so a long queue can be read while the music changes track.
 - **0.4.0** (published 2026-11-15): phase P2c of report 060: playlists (decision D26: M3U8 files in `~/Music/Playlists`, the
   database an index rebuilt from them): the Playlists page, a playlist's page (Move up, Move down, Remove, Add tracks in a
   Library pick mode, Rename, Export M3U), Add to playlist from the song, album and artist actions, Save the queue as a

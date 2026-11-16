@@ -1141,3 +1141,18 @@ names if I want to select another one."
 - **Scenes.** `qa-queue-scroll`, `-small`, `-640`: a 200-row queue (the demo variant `VINYL_DEMO_BIGQUEUE`, the 101st playing), eight drags away,
   the next track starts by itself (`VINYL_DEMO_NEXT_AFTER`), `expect notscrolled`; then a key and `expect scrolled`.
 
+
+## Vinyl 0.5.0 published (2026-11-16)
+
+Published as 0.5.0: Gain boost, Volume steps (with the dB chip and hold to repeat) and the list scroll fix; the Equalizer and the
+crossfade are not in it and stay P2d. The owner's words: "publish gain boost and volume steps as 0.5.0."
+- **Owner board results before the publish.** Volume steps works (B67, B68 and B69 pass on the Pi 4B; the 1 dB steps verified on a HackBerry
+  USB DAC through the sound server). The gain boost is audible; on dense masters about 2 dB of the 4, which the owner took as physics: **the
+  limiter stays as it is** (measured: normal level +4.00 dB, peaks at -3 dBFS +3.64 dB, dense master +2.62 dB, hard-clipped +0.10 dB). The
+  boost per output was verified (a Bluetooth speaker Off, a USB DAC with its own value).
+- **Not run on hardware at the publish.** B70 second half (0.1 dB on a sound-server output and on a Bluetooth speaker), B71 (the layout on the
+  deck, zero8, HackBerry, pi52 and pi3a: the draft was installed on them and the owner was checking), B59 (accent typing), and the retest of
+  the queue scroll on the board. The unit tests (8452, normal and with the address and undefined sanitizers) and the headless scenes passed.
+- **A tip written into the README**: the built-in jacks of the Pi 3 and Pi 4 are basic quality; a USB DAC is cleaner and louder, and the boost
+  helps most on the built-in jack.
+- **Packages**: vinyl_0.5.0 arm64 and amd64, built against the shared pin 28817a5 (0.1.0 to 0.4.0 kept, as in 0.4.0).
