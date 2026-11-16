@@ -45,6 +45,7 @@ Each app has its own page with the full description, keys, requirements, known l
 | [**System Monitor**](apps/system-monitor/README.md) (`system-monitor`) | 0.3.1 | arm64, amd64 | A live look at the board or PC it runs on: CPU, temperature, memory, storage, network, processes, and the power supply or battery. Category Tools. |
 | [**Vinyl**](apps/vinyl/README.md) (`vinyl`) | 0.5.0 | arm64, amd64 | A music player for the music in `~/Music` and on USB drives (mounted on request, with Eject): a Library of artists, albums, songs and genres with search and the actions of a track, your own playlists (M3U8 files in `~/Music/Playlists`, with import and export), or folder by folder, gapless, shuffle, repeat, embedded cover art and resume where you stopped, with a record that slides out of its sleeve and turns while it plays. MP3, FLAC, Ogg Vorbis and Opus, WAV and AIFF, and through FFmpeg (installed with it) AAC, ALAC, WMA, APE and more. Plays on while you use other apps; wired outputs, and Bluetooth headsets and speakers on boards with a sound server; the volume of the playing output in steps fitted to it (down to 0.1 dB) and a gain boost for quiet outputs; headset and keyboard play keys; drag the seek bar to a point. From 480x320 up: 480x320, 640x480, square, portrait (PDA mode) and two-pane layouts. Category Tools. |
 | [**viz1090**](apps/viz1090/README.md) (`viz1090`) | 0.3.2 | arm64, amd64 | The real viz1090 ADS-B display, full screen on any supported screen, fed by an RTL-SDR dongle, with an intro screen, the app header (Esc) and a world map, upright on portrait screens (PDA mode). Needs the dongle and a launcher with full-screen app support. Category Radio. |
+| [**VHS**](apps/vhs/README.md) (`vhs`) | 0.1.0 | arm64, amd64 | A camcorder for USB cameras (UVC with MJPEG; made for the UGREEN FineCam, the Logitech C270 works too): the live picture of the whole frame, photos (Instant or Light) and movies with the camera's microphone (MJPEG with AAC in MKV, crash-safe, split at 4 GiB, with a self-timer and a blinking red dot until the first frame is written), a Scenes list with windowed playback and seek, and copy to a USB drive. Plays on while you use other apps. From 480x320 up. Needs a USB camera; the Store installs `libturbojpeg` and FFmpeg's libraries with it. Category Tools. |
 
 `arm64` packages run on the Raspberry Pi boards (the decks). The apps marked `amd64` also have a package for x86-64 PCs
 running the launcher, listed in their own registry ([amd64](#amd64-x86-64-pcs)).
@@ -272,14 +273,15 @@ System libraries are not shipped: `apt` installs them.
 | libfreetype6 | FreeType License or GPL-2.0-or-later | linked | every native app |
 | libinput10 | MIT | linked | every native app |
 | libxkbcommon0 | MIT | linked | every native app |
-| libasound2 (ALSA) | LGPL-2.1-or-later | dlopen | Cassette, Vinyl |
+| libasound2 (ALSA) | LGPL-2.1-or-later | dlopen | Cassette, Vinyl, VHS |
 | libFLAC | BSD-3-Clause | dlopen | Cassette, Vinyl |
 | libopus | BSD-3-Clause | dlopen | Cassette, Vinyl |
 | libopusenc | BSD-3-Clause | dlopen | Cassette |
-| libpulse (PulseAudio and PipeWire client) | LGPL-2.1-or-later | dlopen, only with a sound server (Bluetooth audio) | Cassette, Vinyl |
+| libpulse (PulseAudio and PipeWire client) | LGPL-2.1-or-later | dlopen, only with a sound server (Bluetooth audio) | Cassette, Vinyl, VHS |
 | libmpg123 | LGPL-2.1 | dlopen | Vinyl |
 | libvorbisfile, libvorbis, libogg | BSD-3-Clause | dlopen | Vinyl |
-| FFmpeg (libavformat, libavcodec, libavutil, libswresample) | GPL-2.0-or-later as Debian and Raspberry Pi OS build it (LGPL-2.1-or-later upstream) | dlopen, only when a file needs it (AAC, ALAC, WMA, APE...) | Vinyl |
+| FFmpeg (libavformat, libavcodec, libavutil, libswresample) | GPL-2.0-or-later as Debian and Raspberry Pi OS build it (LGPL-2.1-or-later upstream) | dlopen, only when a file needs it (AAC, ALAC, WMA, APE...) | Vinyl, VHS |
+| libturbojpeg (libjpeg-turbo, TurboJPEG API) | IJG License and BSD-3-Clause | dlopen | VHS |
 | libsqlite3 | public domain | dlopen | Deck Atlas |
 | libcurl4t64 | curl license (MIT style) | dlopen | Deck Atlas, Home Assistant |
 | libsystemd (sd-bus) | LGPL-2.1-or-later | dlopen, only for Bluetooth | Mesh Hop, mmWave Radar |
@@ -335,6 +337,7 @@ Walk, Serial Console and System Monitor have none beyond the libraries of the
   map data (Natural Earth, OurAirports, public domain); see [its page](apps/viz1090/README.md).
 * **Cassette** has its own code (MIT) on the LVGL based `cp0_lvgl` runtime (MIT); the handwriting on the cassette label is Caveat SemiBold (SIL OFL 1.1, compiled into the binary, licence in the package's copyright file). It opens libasound, libFLAC, libopus and libopusenc from the system at run time and ships none of them; see [its page](apps/cassette/README.md).
 * **Vinyl** has its own code (MIT) on the LVGL based `cp0_lvgl` runtime (MIT), its sound-server and ALSA layers and the FLAC / Opus readers from this repository's Cassette (same author, MIT), and stb_image 2.30 (public domain or MIT) for embedded cover pictures. It opens libmpg123, libvorbisfile, libFLAC, libopus, libasound, libpulse and FFmpeg from the system at run time, never ships them; see [its page](apps/vinyl/README.md).
+* **VHS** has its own code (MIT) on the LVGL based `cp0_lvgl` runtime (MIT) and the sound-server and ALSA layers of this repository's Vinyl (same author, MIT). It opens libturbojpeg, libasound, libpulse and FFmpeg from the system at run time, never ships them; see [its page](apps/vhs/README.md).
 * **Markdown Notes** parses Markdown with md4c v0.6.0 by Martin Mitas (MIT, vendored unchanged with its licence) and runs on
   the LVGL based `cp0_lvgl` runtime (MIT); see [its page](apps/markdown-notes/README.md).
 * **Mesh Hop** speaks the MeshCore protocol (MeshCore firmware and protocol, MIT; meshcore_py, MIT, as the
