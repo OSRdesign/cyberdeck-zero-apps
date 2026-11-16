@@ -1,0 +1,42 @@
+title Vinyl: the scroll of a 200-row queue is never taken back (480x320 and 320x480 at their real density)
+sizes 480x320 320x480
+ppmm 630
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_BIGQUEUE 1
+env VINYL_DEMO_PAGE queue
+env VINYL_DEMO_NEXT_AFTER 4500
+
+wait 900
+shot 01-queue-at-playing
+# the user scrolls a 200-row queue away from the selected row (the 101st) and reads
+drag 0.50 0.45 0.50 0.20
+wait 120
+drag 0.50 0.45 0.50 0.20
+wait 120
+drag 0.50 0.45 0.50 0.20
+wait 120
+drag 0.50 0.45 0.50 0.20
+wait 120
+drag 0.50 0.45 0.50 0.20
+wait 120
+drag 0.50 0.45 0.50 0.20
+wait 120
+drag 0.50 0.45 0.50 0.20
+wait 120
+drag 0.50 0.45 0.50 0.20
+wait 120
+wait 900
+shot 02-scrolled-away
+scrollmark
+# the next track starts by itself while he reads: the highlight may move, the list must not (owner, 2026-11-15, HackBerry)
+wait 4500
+shot 03-after-track-change
+expect notscrolled
+# a key is an action: the list follows the selection again
+key down
+wait 400
+shot 04-key-follows
+expect scrolled
+expect noquit

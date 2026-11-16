@@ -131,6 +131,7 @@ struct VinylApp::Impl final : TransportHost {
     std::vector<DriveBase> drive_bases = default_drive_bases(); /* where the queue's files may be on a drive */
     FakeDrives *demo_fake = nullptr;                            /* the scenes: the drive that is "pulled" */
     uint64_t demo_pull_at = 0;
+    uint64_t demo_next_at = 0; /* the scenes: the next track starts by itself after a while (VINYL_DEMO_NEXT_AFTER ms) */
     bool lib_on() const { return lib && lib->available(); }
     /* "Mount on request in Vinyl" (owner, 2026-11-14): the removable drives, mounted by udisks off the UI thread */
     std::unique_ptr<DriveManager> drives;
@@ -227,6 +228,7 @@ struct VinylApp::Impl final : TransportHost {
             const std::string variant = env_on("VINYL_DEMO_EMPTY") ? "empty"
                                         : env_on("VINYL_DEMO_CJK")  ? "cjk"
                                         : env_on("VINYL_DEMO_LONG") ? "long"
+                                        : env_on("VINYL_DEMO_BIGQUEUE") ? "bigqueue"
                                                                     : "";
             make_demo_world(demo_world, lite, env_str("VINYL_DEMO_STATE"), variant);
             if (demo_world.empty) roots.clear();
@@ -450,6 +452,7 @@ struct VinylApp::Impl final : TransportHost {
         if (const std::string f = env_str("VINYL_DEMO_SCRUB"); demo && !f.empty()) /* the scenes: a finger held on the bar */
             view->simulate_scrub(std::atof(f.c_str()));
         if (const std::string n = env_str("VINYL_DEMO_NOTICE"); demo && !n.empty()) demo_notice(n);
+        if (const std::string na = env_str("VINYL_DEMO_NEXT_AFTER"); demo && !na.empty()) demo_next_at = mono_ms_now() + static_cast<uint64_t>(std::atoll(na.c_str()));
     }
 
     void stop_all() {
@@ -2162,6 +2165,7 @@ struct VinylApp::Impl final : TransportHost {
             v.queue_rows = pane_cache.rows;
             v.queue_ver = pane_cache.key;
             v.queue_current = cur;
+            v.queue_selected_by_user = pane_sel >= 0;
             v.queue_selected = pane_sel >= 0 ? pane_sel : (cur >= 0 ? cur + 1 < queue.size() ? cur + 1 : cur : -1);
         }
         return v;
@@ -2414,6 +2418,11 @@ struct VinylApp::Impl final : TransportHost {
         if (worker && now - last_scan > (view->page() == Page::Output ? 2000u : 5000u)) {
             last_scan = now;
             scan(true);
+        }
+        /* the scenes: the next track starts by itself (a track change nobody asked for on this page) */
+        if (demo_next_at && now >= demo_next_at) {
+            demo_next_at = 0;
+            if (queue.current() + 1 < queue.size()) play_pos(queue.current() + 1, snap.state == PlayState::Playing);
         }
         /* the scenes: a drive is pulled after a while */
         if (demo_pull_at && now >= demo_pull_at && demo_fake) {

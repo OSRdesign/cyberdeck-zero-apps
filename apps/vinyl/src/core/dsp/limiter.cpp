@@ -10,12 +10,12 @@
 
 namespace vinyl {
 
-void Limiter::init(uint32_t rate) {
+void Limiter::init(uint32_t rate, double release_ms, double ceiling_db) {
     if (rate == 0) rate = 44100;
     d_ = std::max<size_t>(1, static_cast<size_t>(std::lround(rate * kLimiterLookaheadMs / 1000.0)));
     w_ = d_ + 1;
-    ceil_ = static_cast<float>(std::pow(10.0, kLimiterCeilingDb / 20.0));
-    rel_inc_ = static_cast<float>(1.0 / (rate * kLimiterReleaseMs / 1000.0));
+    ceil_ = static_cast<float>(std::pow(10.0, ceiling_db / 20.0));
+    rel_inc_ = static_cast<float>(1.0 / (rate * release_ms / 1000.0));
     xl_.assign(w_, 0.0f);
     xr_.assign(w_, 0.0f);
     qv_.assign(w_, 1.0f);
@@ -33,6 +33,7 @@ void Limiter::reset() {
     rprev_ = 1.0f;
     last_gain_ = 1.0f;
     n_ = 0;
+    stats_ = Stats();
 }
 
 void Limiter::process(float *io, size_t frames) {
@@ -67,6 +68,14 @@ void Limiter::process(float *io, size_t frames) {
         /* the frame d_ old gets the gain of now: its required gain is in the window of the minimum */
         io[2 * f] = ol * g;
         io[2 * f + 1] = orr * g;
+        stats_.peak_in = std::max(stats_.peak_in, pk);
+        stats_.peak_out = std::max(stats_.peak_out, std::max(std::fabs(io[2 * f]), std::fabs(io[2 * f + 1])));
+        ++stats_.frames;
+        if (g < 0.9999f) {
+            ++stats_.limited;
+            stats_.red_sum_db += -20.0 * std::log10(static_cast<double>(g));
+            stats_.min_gain = std::min(stats_.min_gain, g);
+        }
         ++n_;
     }
 }

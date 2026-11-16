@@ -240,6 +240,17 @@ bool make_demo_world(DemoWorld &w, bool lite, const std::string &state, const st
         s.source = w.music + "/" + kLongTracks[0].folder;
         s.browse = s.source;
     }
+    if (variant == "bigqueue") { /* the scroll scenes: a queue of 200 entries (the demo files over and over), the 101st playing */
+        const std::vector<std::string> files = items;
+        s.items.clear();
+        s.order.clear();
+        for (int i = 0; i < 200; ++i) {
+            s.order.push_back(i);
+            s.items.push_back(files[static_cast<size_t>(i) % files.size()]);
+        }
+        s.current = 100;
+        s.position_ms = 2000;
+    }
     if (variant == "cjk") {
         s.items.clear();
         s.order.clear();

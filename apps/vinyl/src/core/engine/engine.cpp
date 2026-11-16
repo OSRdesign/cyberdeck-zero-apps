@@ -79,6 +79,54 @@ void convert_pcm(const void *in, unsigned in_bits, unsigned in_ch, void *out, Sa
     }
 }
 
+namespace {
+double db_of_factor(double f) { return 20.0 * std::log10(std::max(f, 1e-6)); }
+std::string base_name(const std::string &p) {
+    const size_t s = p.rfind('/');
+    return s == std::string::npos ? p : p.substr(s + 1);
+}
+}  // namespace
+
+std::string gain_report_text(double net_db, int boost_db, double replaygain_db, double volume_db, bool limiter,
+                             const Limiter::Stats &st, const std::string &name, const char *when) {
+    char b[512];
+    int n = std::snprintf(b, sizeof b, "gain: net %+.1f dB (boost %+d dB, replaygain %+.1f dB, app volume %+.1f dB) ", net_db,
+                          boost_db, replaygain_db, volume_db);
+    if (!limiter || st.frames == 0) {
+        std::snprintf(b + n, sizeof b - static_cast<size_t>(n), "limiter off (net gain under 0 dB) (%s of %s)", when, name.c_str());
+        return b;
+    }
+    const double avg = st.red_sum_db / static_cast<double>(st.frames);
+    const double max_red = st.min_gain < 1.0f ? -db_of_factor(st.min_gain) : 0.0;
+    const double pct = 100.0 * static_cast<double>(st.limited) / static_cast<double>(st.frames);
+    const double after = db_of_factor(st.peak_in), out = db_of_factor(st.peak_out);
+    std::snprintf(b + n, sizeof b - static_cast<size_t>(n),
+                  "limiter on: reduction avg %.1f dB, max %.1f dB, %.0f %% of frames limited, peak in %+.1f dBFS, after gain %+.1f "
+                  "dBFS, out %+.1f dBFS (%s of %s)",
+                  avg, max_red, pct, after - net_db, after, out, when, name.c_str());
+    return b;
+}
+
+void Engine::gain_log(const char *when) {
+    if (!gstat_on_) return;
+    const float rgf = replaygain_factor(static_cast<ReplayGainMode>(rg_mode_.load()), dec_rg_);
+    const float bf = boost_.load();
+    const double boost_db = db_of_factor(bf);
+    std::string line = gain_report_text(db_of_factor(gstat_net_), static_cast<int>(std::lround(boost_db)), db_of_factor(rgf),
+                                        db_of_factor(gain_.load()), lim_on_, lim_.stats(), base_name(gstat_path_), when);
+    std::fprintf(stderr, "[vinyl] %s\n", line.c_str());
+}
+
+void Engine::gain_track_check() {
+    if (dec_path_ == gstat_path_) return;
+    if (gstat_frames_ > 0 && info_.out.rate && gstat_frames_ >= info_.out.rate / 2) gain_log("track left");
+    gstat_path_ = dec_path_;
+    gstat_frames_ = 0;
+    gstat_2s_ = false;
+    gstat_on_ = false;
+    lim_.clear_stats();
+}
+
 float boost_factor(int db) {
     const int d = std::max(0, std::min(kMaxBoostDb, db));
     return d == 0 ? 1.0f : static_cast<float>(std::pow(10.0, d / 20.0));
@@ -617,6 +665,7 @@ void Engine::step() {
         update_snapshot();
         return;
     }
+    gain_track_check();
     const size_t fb = info_.out.frame_bytes();
     dbuf_.resize(kPeriodFrames * fb);
     const uint64_t frame_before = dec_->position();
@@ -626,6 +675,9 @@ void Engine::step() {
         n = 0;
     }
     if (n == 0) {
+        gain_log("track end");
+        gstat_on_ = false;
+        gstat_frames_ = 0;
         end_of_track();
         update_snapshot();
         return;
@@ -640,6 +692,16 @@ void Engine::step() {
     } else {
         convert_pcm(dbuf_.data(), info_.out.bits, info_.out.channels, obuf_.data(), granted_.format, granted_.channels,
                     static_cast<size_t>(n), gain);
+    }
+    /* the journal line: a boost or a positive net gain is in force: once after the first 2 s, again at the track's end */
+    if (boost_.load() > 1.0001f || gain_needs_limiter(gain)) {
+        gstat_on_ = true;
+        gstat_net_ = gain;
+    }
+    gstat_frames_ += static_cast<uint64_t>(n);
+    if (gstat_on_ && !gstat_2s_ && info_.out.rate && gstat_frames_ >= 2ull * info_.out.rate) {
+        gstat_2s_ = true;
+        gain_log("first 2 s");
     }
     write_all(obuf_.data(), static_cast<size_t>(n));
     update_snapshot();

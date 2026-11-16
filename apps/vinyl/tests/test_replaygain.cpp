@@ -11,11 +11,13 @@
 
 #include "demo/demo_world.hpp"
 #include "dsp/replaygain.hpp"
+#include "decode/track_decoder.hpp"
 #include "engine/engine.hpp"
 #include "tags/tag_reader.hpp"
 
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <dirent.h>
 #include <mutex>
@@ -712,6 +714,44 @@ void test_engine_boost(const std::string &dir) {
     }
 }
 
+/* The boost reaches the output through the FFmpeg tier (the owner's files are .m4a: AAC, tier 2): the same fixture decoded with
+ * the real libraries at 0 and +4 dB, the RMS of what the output received. Skipped without the fixture (run.sh makes sine.m4a
+ * when ffmpeg is installed) or without FFmpeg's libraries on the box. */
+void test_engine_boost_tier2() {
+    const char *fx = std::getenv("VINYL_FIXTURES");
+    const std::string path = std::string(fx ? fx : "") + "/sine.m4a";
+    FILE *f = fx && *fx ? std::fopen(path.c_str(), "rb") : nullptr;
+    if (!f) {
+        SKIP("boost through FFmpeg: no sine.m4a fixture");
+        return;
+    }
+    std::fclose(f);
+    auto rms = [&](int boost, size_t &frames) {
+        Record r;
+        FakeProvider p(r);
+        Engine e(real_decode_libs(), p);
+        e.set_boost_db(boost);
+        e.load(0, path, 0, true);
+        const bool ended = wait_end(e, 15000);
+        std::lock_guard<std::mutex> l(r.mu);
+        frames = r.samples.size() / 2;
+        if (!ended || frames < 20000) return -1.0;
+        double a = 0;
+        size_t n = 0;
+        for (size_t i = 2 * 4000; i + 2 * 4000 < r.samples.size(); ++i, ++n) a += static_cast<double>(r.samples[i]) * r.samples[i];
+        return 10 * std::log10(a / static_cast<double>(n) + 1e-9);
+    };
+    size_t f0 = 0, f4 = 0;
+    const double r0 = rms(0, f0), r4 = rms(4, f4);
+    if (r0 < 0 || r4 < 0) {
+        SKIP("boost through FFmpeg: the FFmpeg libraries or S16 output are not available here");
+        return;
+    }
+    std::fprintf(stderr, "  boost through FFmpeg (sine.m4a): %.2f dB at 0, %.2f dB at +4: %+.2f dB; %zu and %zu frames\n", r0, r4, r4 - r0, f0, f4);
+    CHECK_NEAR(r4 - r0, 4.0, 0.2);
+    CHECK_EQ(f4, f0 + 221); /* the limiter's delay and tail: one stream of the same length plus 5 ms */
+}
+
 }  // namespace
 
 void test_replaygain() {
@@ -722,5 +762,6 @@ void test_replaygain() {
     test_bounded_mp3(dir);
     test_engine_gain(dir);
     test_engine_boost(dir);
+    test_engine_boost_tier2();
     rm_tree(dir);
 }

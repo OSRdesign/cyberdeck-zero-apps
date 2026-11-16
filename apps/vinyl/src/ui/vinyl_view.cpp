@@ -974,6 +974,7 @@ struct View::Impl {
             set_text(qheading, v.queue_heading);
             if (v.queue_ver != queue_ver || v.queue_selected != queue_sel) {
                 const bool reset = v.queue_rows->size() != static_cast<size_t>(qlist->size());
+                if (!reset && v.queue_selected != queue_sel && v.queue_selected_by_user) qlist->note_action(); /* a key in the pane, not a track change */
                 qlist->set_rows(*v.queue_rows, v.queue_selected, reset, reset ? v.queue_current : -1);
                 queue_ver = v.queue_ver;
                 queue_sel = v.queue_selected;
@@ -1168,7 +1169,10 @@ struct View::Impl {
         L.rows_gen = v.rows_gen;
         if (v.rows && (reset || v.rows_ver != L.rows_ver || v.selected != L.sel)) {
             if (!reset && v.rows_ver == L.rows_ver) L.list->set_selected(v.selected, true); /* a key moved the highlight */
-            else L.list->set_rows(*v.rows, v.selected, reset, reset ? v.scroll_to : -1);
+            else {
+                if (!reset && v.selected != L.sel) L.list->note_action(); /* the highlight moved by an action, rows changed too */
+                L.list->set_rows(*v.rows, v.selected, reset, reset ? v.scroll_to : -1);
+            }
             L.rows_ver = v.rows_ver;
             L.sel = v.selected;
             L.rows = static_cast<int>(v.rows->size());

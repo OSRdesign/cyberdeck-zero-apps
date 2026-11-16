@@ -1104,3 +1104,40 @@ published yet; the Controller bumps the version with the Equalizer and the cross
   and = keys repeat through the keyboard's own auto-repeat as before.
 - **Tests.** `tests/test_gain_steps.cpp` (limiter, bypass, gain product, step arithmetic, hold with a fake clock), the engine's boost tests in
   `test_replaygain.cpp`, the settings round trip in `test_settings_state.cpp`, the pages in `test_menu.cpp`. Board tests B64-B71.
+- **What a boost really gives (measured 2026-11-15, owner's board tests on the Pi 4B and the HackBerry).** The limiter is a sample peak limiter with
+  a -1 dBFS ceiling, so a boost can only be as loud as the headroom of the track allows. Measured as RMS loudness gain of a +4 dB boost
+  (`test_dense_loudness`, a deterministic master of kick, bass and noise): a normal level (peaks -12 dBFS) **+4.00 dB**; peaks at -3 dBFS
+  **+3.6 dB**; a dense master (peaks -0.5 dBFS, crest 9.2 dB, the limiter reduces 0.8 dB on average, 4.5 dB at most, 49 % of the frames)
+  **+2.6 dB**; a hard clipped master (crest 3.9 dB) **+0.1 dB**. So "a dense master keeps about 2.6 dB of the 4": the owner measured about
+  2 dB on his dense dance masters on the HackBerry and **decided that is the physical maximum: the limiter stays as it is** (no redesign, no
+  soft clip; a crest reducing clipper would give more at the price of distortion and is not planned). The help text of the Gain boost list says
+  "a dense master gains less than the set value"; B64 expects the same.
+- **The gain journal line** (engine thread): once after the first 2 s of a track, at its end, and when it is left after half a second, while a
+  boost or a positive net gain is in force:
+  `[vinyl] gain: net +4.0 dB (boost +4 dB, replaygain +0.0 dB, app volume +0.0 dB) limiter on: reduction avg 0.8 dB, max 4.5 dB, 48 % of frames
+  limited, peak in -4.1 dBFS, after gain -0.1 dBFS, out -1.0 dBFS (first 2 s of song.m4a)` (a net gain under 0 dB: `limiter off (net gain under 0 dB)`).
+  "App volume" is Vinyl's own software volume and the sleep fade, not the output's mixer. It covers every decoder: the engine applies the gain
+  after the decoder, so the native ones and FFmpeg (tier 2) go through the same code; `test_engine_boost_tier2` plays an AAC .m4a through the
+  real FFmpeg at 0 and +4 dB and checks +4.00 dB at the output.
+- **Gain paths checked** (engine.cpp): the boost is one factor of `sample_gain()`, which every block of every stream uses, so it reaches the output on
+  a gapless next track, after a seek or a pause (the limiter is rebuilt and latches again), under the sleep fade, and when set while playing
+  (an atomic read at the next block, about 20 ms). No path bypasses it.
+
+## A list never jumps while it is browsed (owner, 2026-11-15, HackBerry, a long queue)
+
+**Owner:** "while scrolling on a long queue, when I stop the list reverts to the selected line, so I don't have time to read all the song
+names if I want to select another one."
+- **Cause.** `RowList::set_rows` (ui/row_list.hpp, the one list the Browser, Queue, Output, the Now playing pane and every Library page share)
+  put the highlighted row back in view on every refresh that rebuilt the rows (a track change, a rescan: the rows' version changed), so a list the user
+  had scrolled away from the selection was scrolled back as soon as anything changed. The periodic snapshot itself did not: the rows are only
+  set when their version or the selection changes.
+- **Rule** (`core/nav/scroll_follow.hpp`, a pure policy with timestamps, tested with a fake clock in `tests/test_scroll_follow.cpp`): the user is
+  browsing from his last scroll (a drag and its momentum; the app's own scrolls are fenced off) until his next explicit action (a key that moves the
+  highlight, a tap on a row) or the page being opened again. The list scrolls to the selection when the page opens and on an explicit action; on a
+  refresh only while the user is not browsing. While he browses, a track change may move the highlight and the list stays exactly where it is, with no
+  time limit. Keys keep working as before: the first key after a scroll brings the selection into view.
+- **Where.** In the shared RowList only (the Menu's short lists have their own code and never scroll on a refresh). The Now playing queue pane counts
+  its cursor as an action only when the user moved it (`queue_selected_by_user`), not when the cursor follows the track.
+- **Scenes.** `qa-queue-scroll`, `-small`, `-640`: a 200-row queue (the demo variant `VINYL_DEMO_BIGQUEUE`, the 101st playing), eight drags away,
+  the next track starts by itself (`VINYL_DEMO_NEXT_AFTER`), `expect notscrolled`; then a key and `expect scrolled`.
+

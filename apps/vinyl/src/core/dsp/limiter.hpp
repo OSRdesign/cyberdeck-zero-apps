@@ -29,8 +29,15 @@ constexpr double kLimiterReleaseMs = 150.0;
 
 class Limiter {
 public:
+    /* the measure of what the limiter did (the journal line "gain: ..." of the engine); reset() clears it */
+    struct Stats {
+        uint64_t frames = 0, limited = 0; /* frames processed; frames whose gain was under 0.9999 */
+        double red_sum_db = 0;            /* the reduction in dB summed over the limited frames */
+        float min_gain = 1.0f;            /* the deepest reduction (the smallest gain) */
+        float peak_in = 0, peak_out = 0;  /* the largest sample (either channel) into and out of the limiter */
+    };
     explicit Limiter(uint32_t rate = 44100) { init(rate); }
-    void init(uint32_t rate);
+    void init(uint32_t rate, double release_ms = kLimiterReleaseMs, double ceiling_db = kLimiterCeilingDb);
     void reset();
     /* The frames of `io` (interleaved L R, in place): replaced by the limited frames delayed by delay(). */
     void process(float *io, size_t frames);
@@ -40,6 +47,8 @@ public:
     float ceiling() const { return ceil_; }
     /* the gain the last processed frame got (1 = untouched) */
     float last_gain() const { return last_gain_; }
+    const Stats &stats() const { return stats_; }
+    void clear_stats() { stats_ = Stats(); }
 
 private:
     size_t d_ = 0;          /* look-ahead frames */
@@ -55,6 +64,7 @@ private:
     float rprev_ = 1.0f;
     float last_gain_ = 1.0f;
     uint64_t n_ = 0;                        /* frames in so far */
+    Stats stats_;
 };
 
 }  // namespace vinyl

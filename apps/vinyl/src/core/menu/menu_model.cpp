@@ -157,7 +157,7 @@ std::string page_hint(Page p, const State &s) {
                "ReplayGain tags play as they are.";
     case Page::Boost: {
         const std::string name = s.output.empty() ? std::string("the output in use") : s.output;
-        return "Louder than the output's own maximum, for " + name + ". A limiter keeps loud peaks from clipping.";
+        return "Louder than the output's own maximum, for " + name + ". A limiter takes the peaks of loud tracks, so a dense master gains less than the set value.";
     }
     case Page::VolumeSteps:
         return "How far one press moves the volume. 1, 0.5 and 0.1 dB show the output's level in dB; an output never "

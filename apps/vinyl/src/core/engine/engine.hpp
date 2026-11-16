@@ -96,6 +96,12 @@ void convert_pcm_limited(const void *in, unsigned in_bits, unsigned in_ch, void 
                          size_t frames, float gain, Limiter &lim, std::vector<float> &scratch);
 /* Writes the limiter's last frames (lim.flush) as out_fmt samples; returns the frames (lim.delay()). */
 size_t limiter_tail_pcm(Limiter &lim, void *out, SampleFormat out_fmt, unsigned out_ch);
+/* The journal line of a track played with a boost or a positive net gain (owner's board test of 2026-11-15: "I don't have
+ * the feeling it's working"): "[vinyl] gain: net +4.0 dB (boost +4 dB, replaygain +0.0 dB, app volume +0.0 dB) limiter on:
+ * reduction avg 0.8 dB, max 4.5 dB, 48 % of frames limited, peak in -4.1 dBFS, after gain -0.1 dBFS, out -1.0 dBFS (first 2 s
+ * of a.m4a)". `limiter` false: the net gain is under 0 dB, the integer path ("limiter off (net gain under 0 dB)"). */
+std::string gain_report_text(double net_db, int boost_db, double replaygain_db, double volume_db, bool limiter,
+                             const Limiter::Stats &st, const std::string &name, const char *when);
 /* true when a net gain needs the limiter (above 0 dB, 0.001 dB of slack) */
 inline bool gain_needs_limiter(float g) { return g > 1.0001f; }
 /* The gain boost of 0 to +4 dB in whole dB (anything else is clamped) as an amplitude factor. */
@@ -203,6 +209,13 @@ private:
     std::vector<float> fbuf_;
     void limiter_off() { lim_on_ = false; lim_.reset(); } /* the stream was dropped or closed: no tail to play */
     void limiter_drain(); /* the stream ends gracefully: the limiter's last frames are written */
+    /* the gain journal line per track (the engine thread's) */
+    std::string gstat_path_;
+    uint64_t gstat_frames_ = 0;
+    bool gstat_2s_ = false, gstat_on_ = false;
+    float gstat_net_ = 1.0f;
+    void gain_track_check(); /* a new track: the previous one's line when it was heard for a while, the counters reset */
+    void gain_log(const char *when);
     std::deque<EngineEvent> events_;
     EngineSnapshot snap_;
 

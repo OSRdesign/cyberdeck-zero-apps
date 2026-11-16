@@ -97,6 +97,7 @@ void test_settings_state();
 void test_replaygain();
 void test_menu();
 void test_gain_steps();
+void test_scroll_follow();
 void test_sqlite();
 void test_sortkey();
 void test_library();

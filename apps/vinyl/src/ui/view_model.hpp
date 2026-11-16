@@ -86,6 +86,7 @@ struct NowView {
     std::shared_ptr<const std::vector<RowView>> queue_rows; /* large: the queue pane (shared: built when it changes) */
     uint64_t queue_ver = 0;               /* changes when the rows' contents change */
     int queue_current = -1, queue_selected = -1;
+    bool queue_selected_by_user = false; /* queue_selected is the pane's cursor (a key or a tap), not the track after the playing one */
 };
 
 struct MiniView {

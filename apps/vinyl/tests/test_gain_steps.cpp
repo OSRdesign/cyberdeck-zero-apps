@@ -431,9 +431,94 @@ void test_hold_repeat() {
     CHECK_EQ(s.poll(5000), 0);
 }
 
+/* A deterministic "master": a kick every 0.45 s, a bass line, a noisy top, soft clipped by `drive` and scaled to a peak. */
+std::vector<float> master(size_t frames, double peak_db, double drive) {
+    std::vector<float> v(frames * 2);
+    uint32_t seed = 12345;
+    auto rnd = [&seed]() {
+        seed = seed * 1664525u + 1013904223u;
+        return static_cast<float>(static_cast<int32_t>(seed >> 8)) / 8388608.0f - 1.0f;
+    };
+    float lp = 0;
+    for (size_t i = 0; i < frames; ++i) {
+        const double t = static_cast<double>(i) / 44100.0, ph = std::fmod(t, 0.45);
+        const double kick = std::sin(2 * kPi * (50 + 80 * std::exp(-ph * 30)) * ph) * std::exp(-ph * 9);
+        const double bass = 0.35 * std::sin(2 * kPi * 55 * t);
+        lp += 0.3f * (rnd() - lp);
+        const double top = 0.5 * rnd() * (0.4 + 0.6 * std::exp(-std::fmod(t, 0.225) * 12)) + 0.3 * lp;
+        const double x = std::tanh(drive * (0.9 * kick + bass + 0.45 * top));
+        v[2 * i] = static_cast<float>(x);
+        v[2 * i + 1] = static_cast<float>(0.97 * x + 0.03 * rnd());
+    }
+    const float k = static_cast<float>(std::pow(10.0, peak_db / 20.0)) / peak_of(v);
+    for (float &x : v) x *= k;
+    return v;
+}
+double rms_db(const std::vector<float> &v, size_t from, size_t to) {
+    double a = 0;
+    for (size_t i = from * 2; i < to * 2; ++i) a += static_cast<double>(v[i]) * v[i];
+    return 10 * std::log10(a / (static_cast<double>(to - from) * 2) + 1e-30);
+}
+/* the loudness gain (RMS, dB) of a +4 dB boost through the limiter on `in` (the delay aligned) */
+double boosted_rms_gain(const std::vector<float> &in, Limiter::Stats *st = nullptr) {
+    Limiter lim(44100);
+    std::vector<float> o = in;
+    for (float &x : o) x *= boost_factor(4);
+    for (size_t at = 0; at < o.size() / 2; at += 1024) lim.process(&o[at * 2], std::min<size_t>(1024, o.size() / 2 - at));
+    const size_t d = lim.delay(), n = in.size() / 2;
+    if (st) *st = lim.stats();
+    return rms_db(o, d, n) - rms_db(in, 0, n - d);
+}
+
+/* How much of the 4 dB a boost really gives (owner's board test, 2026-11-15: "not clearly louder" on loud dance masters). The
+ * sample peak limiter cannot raise a signal whose peaks are within the ceiling's reach: the gain is what the headroom and the
+ * crest allow. The numbers go to the journal of the test run. */
+void test_dense_loudness() {
+    Limiter::Stats st;
+    const std::vector<float> dense = master(44100 * 12, -0.5, 1.0);      /* a limited master: peaks -0.5 dBFS, crest 9 dB */
+    const std::vector<float> normal = master(44100 * 12, -12.0, 1.0);    /* an ordinary level: peaks -12 dBFS */
+    const std::vector<float> crushed = master(44100 * 12, -0.5, 3.0);    /* a hard clipped master: crest 4 dB */
+    const std::vector<float> mid = master(44100 * 12, -3.0, 1.0);        /* peaks only 3 dB under full scale */
+    const double g_dense = boosted_rms_gain(dense, &st);
+    const double g_normal = boosted_rms_gain(normal);
+    const double g_crushed = boosted_rms_gain(crushed);
+    const double g_mid = boosted_rms_gain(mid);
+    std::fprintf(stderr,
+                 "  +4 dB boost, RMS loudness gain: dense master (peak -0.5 dBFS, crest %.1f dB) %+.2f dB, peaks -3 dBFS %+.2f dB, normal "
+                 "(peak -12 dBFS) %+.2f dB, hard clipped (crest %.1f dB) %+.2f dB; dense: avg reduction %.2f dB, max %.2f dB, %.0f %% of "
+                 "frames limited\n",
+                 -0.5 - rms_db(dense, 0, dense.size() / 2), g_dense, g_mid, g_normal, -0.5 - rms_db(crushed, 0, crushed.size() / 2),
+                 g_crushed, st.red_sum_db / static_cast<double>(st.frames), -20 * std::log10(st.min_gain),
+                 100.0 * static_cast<double>(st.limited) / static_cast<double>(st.frames));
+    CHECK_NEAR(g_normal, 4.0, 0.05); /* nothing to limit: the full 4 dB */
+    CHECK(g_mid > 3.5);              /* peaks at -3 dBFS: most of it */
+    CHECK(g_dense > 2.4 && g_dense < 3.0); /* a dense master (crest 9 dB) keeps about 2.7 of the 4 dB: the limiter takes its peaks */
+    CHECK(g_crushed > 0.0 && g_crushed < 1.0); /* a hard clipped one has no headroom: the ceiling is the limit, not the limiter */
+    CHECK(g_normal > g_mid && g_mid > g_dense && g_dense > g_crushed);
+    /* the stats the journal line reports */
+    CHECK(st.frames > 500000);
+    CHECK(st.limited > 0 && st.limited < st.frames);
+    CHECK(st.peak_out <= static_cast<float>(std::pow(10.0, kLimiterCeilingDb / 20.0)) + 1e-6f);
+    CHECK(st.peak_in > 1.2f);
+    /* the journal line */
+    Limiter::Stats s2;
+    s2.frames = 1000;
+    s2.limited = 480;
+    s2.red_sum_db = 780.0;
+    s2.min_gain = static_cast<float>(std::pow(10.0, -4.5 / 20));
+    s2.peak_in = static_cast<float>(std::pow(10.0, -0.1 / 20));
+    s2.peak_out = 0.8913f;
+    const std::string line = gain_report_text(4.0, 4, 0.0, 0.0, true, s2, "a.m4a", "first 2 s");
+    CHECK_EQ(line, std::string("gain: net +4.0 dB (boost +4 dB, replaygain +0.0 dB, app volume +0.0 dB) limiter on: reduction avg 0.8 dB, "
+                               "max 4.5 dB, 48 % of frames limited, peak in -4.1 dBFS, after gain -0.1 dBFS, out -1.0 dBFS (first 2 s of "
+                               "a.m4a)"));
+    CHECK(gain_report_text(-3.0, 4, -7.0, 0.0, false, Limiter::Stats(), "b.flac", "track end").find("limiter off") != std::string::npos);
+}
+
 }  // namespace
 
 void test_gain_steps() {
+    test_dense_loudness();
     test_limiter();
     test_bypass_and_conversion();
     test_gain_product();
