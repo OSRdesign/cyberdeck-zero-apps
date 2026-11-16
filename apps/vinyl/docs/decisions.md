@@ -1156,3 +1156,62 @@ crossfade are not in it and stay P2d. The owner's words: "publish gain boost and
 - **A tip written into the README**: the built-in jacks of the Pi 3 and Pi 4 are basic quality; a USB DAC is cleaner and louder, and the boost
   helps most on the built-in jack.
 - **Packages**: vinyl_0.5.0 arm64 and amd64, built against the shared pin 28817a5 (0.1.0 to 0.4.0 kept, as in 0.4.0).
+
+## Knock-knock: the screen off while the music plays (0.6.0 work, 2026-11-16)
+
+**Owner** (request and decisions of 2026-11-16, the launcher roadmap row "Vinyl: knock-knock"): a Vinyl setting, Off by default; three quick
+taps on the cover square switch the backlight fully off and Vinyl ignores every touch but another three quick taps, anywhere, which bring it
+back. Decided: (1) a new `launcher.sock` request switches the backlight off and on without saving it, the launcher restores it by itself when
+the app hides, quits or crashes, on levels and on / off backlights; the setting is hidden where board.state's `requests` lacks the verb; (2)
+while off only the media and volume keys work (headset and keyboard play, pause, next, previous, volume); every other key and touch is
+ignored; holding Esc 3 s still closes the app; (3) taps: three within 1.2 s, each under 0.4 s, gaps under 0.5 s, little finger movement; arm on
+the cover square only, wake anywhere; (4) ships as Vinyl 0.6.0 with a launcher release carrying the request (0.10.4 or later). The launcher half
+is built (launcher branch `backlight-request`, commit 827d6cb7: `screen off|on`, `cp0_app_backlight()`, `requests=...,screen`). Below, the
+builder's readings where the decisions were silent, for the owner to confirm.
+- **The row.** Menu > Playback, last, "Knock-knock" with On / Off, an Edit row like Gapless and Remember position: Enter or a tap toggles it on
+  the first tap, as every Playback row does (the coordinator's brief said "two-tap rows like the other settings"; Vinyl's Menu rows act on the
+  first tap since P2a, so the row follows them). Listed only where the launcher answers `screen` and Vinyl has the request (the device build);
+  a value left On on a board without it does nothing. The Playback strip adds, after its ReplayGain sentence: "Knock-knock: three quick taps on
+  the cover switch the screen off while the music plays on; three quick taps anywhere bring it back." (the builder's words). `settings.json`
+  `knock_knock` (bool).
+- **The taps** (`core/screen/knock`, `TapSequence`, tested with a fake clock): a press shorter than 400 ms (399 counts, 400 does not), a gap from
+  a release to the next press shorter than 500 ms, the three within 1200 ms from the first press to the last release (1200 counts); the finger
+  within the toolkit's tap slop of its press (a sixth of TARGET, at least 6 px: the map widget's rule; 13 px on the deck), checked on its moves
+  and its release. A press elsewhere (arming), a long press, a drag or a lost press breaks the run; the window slides, so after a slow start
+  the last three taps still count and a timeout simply restarts the count. The three taps need not land on the same spot.
+- **Where a tap lands.** The cover square is a transparent box exactly over the sleeve, made right after it, so every control drawn later (a
+  neighbour's touch area grown over the sleeve's edge) keeps its own taps; it acts on nothing. The controller sees every press and release of
+  the touch screen through the pointer's own event list (LVGL 9.5 sends PRESSED and RELEASED there before the object gets them), so a tap
+  elsewhere between two cover taps breaks the run.
+- **While off** (`ScreenGate`: Disabled, Ready, going off, Off): a transparent box over the whole screen on the display's system layer (above the
+  header, the notices, the dialogs and the on-screen keyboard) takes every touch from the moment the third tap is released until the third
+  wake tap is: nothing under it is pressed, the first wake tap included. Keys: the media keys (KEY_PLAYPAUSE, PLAYCD, PAUSECD, NEXTSONG,
+  PREVIOUSSONG, STOPCD, from the evdev reader and the keyboard path) act; the volume and mute keys are the launcher's and Vinyl never acted on
+  them; `-` and `=` (Vinyl's own volume keys) act, one step a press (owner decision, below); every other key is dropped, a short Esc
+  included. The launcher's 3 s
+  Esc reads the keyboards itself and sends SIGTERM, which ends Vinyl cleanly. Nothing is drawn while off (the page refresh and the record's turn
+  stop; the music, the queue, the sleep timer, the saves go on); a held previous / next scan and the volume repeat are cancelled when it goes
+  off.
+- **The request** goes through `cp0_app_backlight()` (given to the app by the device main: the headless harness has no client) on a worker
+  thread (`BacklightWorker`: in order, a waiting request replaced by a newer one, answers matched to their `off` by a tag); input is ignored
+  from the third tap on, without waiting for the answer. Refused or no service: the screen stays on, the input comes back at once, the notice
+  "Screen off is not available." (the builder's words; the brief suggested "Screen off not available"), and an `on` for safety.
+- **Every way out restores** (the launcher does it too, about a second later, but Vinyl does not rely on it): the exit (Esc at the root, the
+  launcher's close, SIGTERM / SIGINT / SIGHUP: the worker stopped, then `screen on` at once on the UI thread whenever an `off` was ever asked),
+  hidden (Super, Alt+Tab, the three-finger hold), the setting turned Off, the launcher no longer listing `screen`, and a crash Vinyl can catch
+  (SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGABRT: `core/screen/crash_guard` sends `screen on` with async-signal-safe calls, then the signal's previous
+  action runs). `kill -9` is the launcher's (its process watch).
+- **Scenes** (the scenes' fake backlight `VINYL_DEMO_SCREEN=1|fail`, `VINYL_DEMO_KNOCK=1`, `VINYL_DEMO_NOTOUCH=1`): `qa-knock`, `-small`,
+  `-640` (the row and the strip, toggled), `qa-knock-old` (no `screen`: no row, a setting left On does nothing), `qa-knock-notouch` (no touch
+  screen: the same), `knock-taps`, `-small`, `-640` (three taps on the cover,
+  then a tap on the output button and the keys Q, Esc, M do nothing, three wake taps on the output button press nothing, then a tap opens
+  it; slow taps on the cover, and a tap on the title between cover taps, do nothing), `knock-refused` (the notice, the input stays),
+  `knock-hide` (hidden while off, shown: the first tap acts, a full repaint). The screen cannot be seen to go dark in the harness: the scenes check what the
+  input does. Board tests B72-B83.
+- **Owner decisions on the open questions** (2026-11-16, through the coordinator): (1) while the screen is off `-` and `=` work (Vinyl's
+  volume down and up, as the other volume keys; every other key stays ignored); (2) the row is also hidden on a board without a touch screen:
+  screen.state's `touch_slots=0` (`core/screen` `screen_touch_slots`, `knock_available`; read once at start; a launcher that writes no
+  `touch_slots`, an older one or multitasking off, means unknown and the row shows); (3) the strip after the rows, reached by scrolling where it
+  does not fit (480x320, 640x480), is accepted as it is. Still to confirm: the two texts above.
+- **Built against** the launcher branch `backlight-request` at 827d6cb7 (an LF copy, not the shared pin): the release pins the launcher
+  release that carries `cp0_app_backlight()`; there is no fallback for a toolkit without it.

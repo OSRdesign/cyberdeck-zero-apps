@@ -1,0 +1,19 @@
+title Vinyl Knock-knock: the Playback page where the launcher answers screen: the Knock-knock row (last, Off) and its sentence in the strip; a tap turns it On, Enter Off again (640x480 (9.01 px/mm))
+sizes 640x480
+ppmm 901
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE playback
+env VINYL_DEMO_SCREEN 1
+
+wait 900
+shot 01-playback-knock-off
+expect text "Knock-knock"
+expect text "Gapless"
+tap "Knock-knock"
+wait 400
+shot 02-playback-knock-on
+key enter
+wait 400
+shot 03-playback-knock-off-again
+expect noquit

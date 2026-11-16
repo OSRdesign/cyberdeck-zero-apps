@@ -1,0 +1,46 @@
+title Vinyl Knock-knock: three quick taps on the cover switch the screen off: a tap on the output button and the keys Q, Esc, M then do nothing; three quick taps on the output button bring it back and press nothing; a tap on the title between cover taps breaks the count (640x480 (9.01 px/mm))
+sizes 640x480
+ppmm 901
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_SCREEN 1
+env VINYL_DEMO_KNOCK 1
+
+wait 800
+# cover, title, cover, cover: the tap elsewhere breaks the count, the screen stays on
+tapxy 0.223 0.373
+tapxy 0.700 0.200
+tapxy 0.223 0.373
+tapxy 0.223 0.373
+wait 300
+tap "Evolve 65"
+wait 300
+expect text "Automatic"
+key esc
+wait 400
+tapxy 0.223 0.373
+tapxy 0.223 0.373
+tapxy 0.223 0.373
+wait 300
+tap "Evolve 65"
+wait 300
+expect notext "Automatic"
+key q
+wait 300
+expect notext "Move up"
+key esc
+wait 300
+key m
+wait 300
+expect notext "Sleep timer"
+shot 01-off-nothing-acted
+tap "Evolve 65"
+tap "Evolve 65"
+tap "Evolve 65"
+wait 300
+expect notext "Automatic"
+tap "Evolve 65"
+wait 300
+expect text "Automatic"
+shot 02-output-after-wake
+expect noquit

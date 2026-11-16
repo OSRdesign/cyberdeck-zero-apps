@@ -230,6 +230,9 @@ struct Actions {
     std::function<void(bool, const std::string &)> name_answer; /* the name dialog: true = the primary button, with the text */
     std::function<void(bool)> confirm_answer;                   /* the question dialog (Delete "Evening"?): true = the destructive answer */
     std::function<void()> queue_save;                           /* the Queue page's "Save as playlist" */
+    /* Knock-knock (2026-11-16): every touch of the screen, whatever it lands on (phase 0 press, 1 move, 2 release, 3 lost;
+     * the point in screen px; on_cover: the press landed on the cover square's zone of Now playing) */
+    std::function<void(int, int, int, bool)> touch;
 };
 
 } // namespace ui

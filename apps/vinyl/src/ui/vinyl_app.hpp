@@ -15,7 +15,10 @@
  * database opened (else the folder list), Folders opens the Browser, Esc steps back one place and at the hub ends the app.
  *
  * Keys: core/menu letter_command (the table the Keys page shows, README.md "Keys and touch"); the volume, mute and
- * brightness keys stay the launcher's. Transport keys of headsets and keyboards: media_keys.hpp. LVGL thread.
+ * brightness keys stay the launcher's. Transport keys of headsets and keyboards: media_keys.hpp. Knock-knock (2026-11-16,
+ * core/screen/knock.hpp): three quick taps on the cover switch the screen off through the launcher; while it is off every
+ * touch and every key but the media and volume keys is ignored, three quick taps anywhere wake it, and every way out
+ * (exit, hidden, the setting Off, a crash the guard catches) gives the light back. LVGL thread.
  */
 #pragma once
 
@@ -38,6 +41,11 @@ public:
 private:
     std::unique_ptr<Impl> d_;
 };
+
+/* Knock-knock (2026-11-16): the launcher's backlight request, cp0_app_backlight (cp0_app_client.h: 0 done, 1 refused, -1
+ * no service; it blocks up to 200 ms, so Vinyl calls it on a worker thread). The device main gives it before the app
+ * starts; without it (the headless harness) the setting is not offered, except the scenes' fake (VINYL_DEMO_SCREEN). */
+void set_backlight_call(int (*call)(int on));
 
 } // namespace ui
 } // namespace vinyl

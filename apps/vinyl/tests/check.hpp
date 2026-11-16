@@ -112,3 +112,4 @@ void test_m3u();
 void test_playlists();
 void test_playlist_ctl();
 void test_playlist_model();
+void test_knock();

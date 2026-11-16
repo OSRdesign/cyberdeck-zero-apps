@@ -100,12 +100,16 @@ std::vector<Row> sleep_rows(SleepMode chosen) {
     return rows;
 }
 
-std::vector<Row> playback_rows(const Settings &s, const std::string &output_key) {
+std::vector<Row> playback_rows(const Settings &s, const std::string &output_key, bool knock) {
     /* no Speed row (D32: "Speed (later)" dropped); no Crossfade row (P2d) */
-    return {edit("gapless", "Gapless", on_off(s.gapless)), edit("replaygain", "ReplayGain", replaygain_mode_word(s.replaygain)),
-            edit("boost", "Gain boost", boost_word(s.boost_of(output_key))),
-            edit("volume_steps", "Volume steps", volume_steps_word(s.volume_steps)),
-            edit("remember", "Remember position in long files", on_off(s.remember_long))};
+    std::vector<Row> rows = {edit("gapless", "Gapless", on_off(s.gapless)),
+                             edit("replaygain", "ReplayGain", replaygain_mode_word(s.replaygain)),
+                             edit("boost", "Gain boost", boost_word(s.boost_of(output_key))),
+                             edit("volume_steps", "Volume steps", volume_steps_word(s.volume_steps)),
+                             edit("remember", "Remember position in long files", on_off(s.remember_long))};
+    /* Knock-knock (2026-11-16): only where the launcher can switch the screen off and on (board.state requests: screen) */
+    if (knock) rows.push_back(edit("knock", "Knock-knock", on_off(s.knock)));
+    return rows;
 }
 
 std::vector<Row> boost_rows(int chosen_db) {
@@ -132,7 +136,7 @@ std::vector<Row> rows_of(Page p, const State &s) {
     switch (p) {
     case Page::Menu: return menu_rows(s);
     case Page::Sleep: return sleep_rows(s.sleep);
-    case Page::Playback: return playback_rows(s.settings, s.output_key);
+    case Page::Playback: return playback_rows(s.settings, s.output_key, s.knock);
     case Page::ReplayGain: return replaygain_rows(s.settings.replaygain);
     case Page::Boost: return boost_rows(s.settings.boost_of(s.output_key));
     case Page::VolumeSteps: return volume_steps_rows(s.settings.volume_steps);
@@ -151,7 +155,10 @@ std::string page_heading(Page p) {
 std::string page_hint(Page p, const State &s) {
     switch (p) {
     case Page::Sleep: return sleep_status_text(s.sleep, s.sleep_left_ms);
-    case Page::Playback: return "ReplayGain evens out the loudness between tracks.";
+    case Page::Playback:
+        if (s.knock)
+            return std::string("ReplayGain evens out the loudness between tracks. ") + kKnockHint;
+        return "ReplayGain evens out the loudness between tracks.";
     case Page::ReplayGain:
         return "Track: every track as loud as the others. Album: an album keeps its own loudness steps. Files without "
                "ReplayGain tags play as they are.";

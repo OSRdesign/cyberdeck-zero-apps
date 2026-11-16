@@ -29,6 +29,8 @@
 #include "library/tag_jobs.hpp"
 #include "menu/menu_model.hpp"
 #include "pulse/pulse_api.hpp"
+#include "screen/crash_guard.hpp"
+#include "screen/knock.hpp"
 #include "settings/settings.hpp"
 #include "sleep/sleep_timer.hpp"
 #include "state/positions.hpp"
@@ -102,7 +104,14 @@ std::string parent_dir(const std::string &path) {
     return slash == std::string::npos ? std::string() : path.substr(0, slash);
 }
 
+/* Knock-knock: the launcher's screen request, given by the device main (cp0_app_backlight); null in the headless harness */
+int (*g_backlight_call)(int) = nullptr;
+
+const char *call_code_word(int code) { return code == 0 ? "done" : code > 0 ? "refused" : "no service"; }
+
 }  // namespace
+
+void set_backlight_call(int (*call)(int on)) { g_backlight_call = call; }
 
 struct VinylApp::Impl final : TransportHost {
     lv_obj_t *screen = nullptr;
@@ -216,6 +225,12 @@ struct VinylApp::Impl final : TransportHost {
     HoldRepeat vol_hold;            /* the volume group's held "-" / "+" */
     /* the "Volume steps" step in dB (0: Normal) */
     double fine_db() const { return volume_steps_db(settings.get().volume_steps); }
+    /* Knock-knock (2026-11-16): the gate and the tap runs, the launcher's screen request on its worker (null: not offered;
+     * the scenes' fake with VINYL_DEMO_SCREEN), whether an `off` was ever asked (the exit then sends a last `on`) */
+    Knock knock;
+    std::unique_ptr<BacklightWorker> backlight;
+    bool knock_ever_off = false;
+    int touch_slots = -1; /* screen.state's touch_slots, read at start (0: no touch screen, the setting not offered; -1 unknown) */
 
     /* ------------------------------------------------------------------------------------------ start */
 
@@ -256,6 +271,25 @@ struct VinylApp::Impl final : TransportHost {
             launcher = std::make_unique<LauncherStatusReader>();
             requests = std::make_unique<LauncherRequests>();
             keys.start();
+            if (g_backlight_call) { /* Knock-knock: offered where board.state's requests has `screen` (the tick looks) */
+                int (*call)(int) = g_backlight_call;
+                backlight = std::make_unique<BacklightWorker>([call](int on) { return call(on); });
+                crash_guard_install(launcher_socket_path());
+            }
+            /* ... and where the board has a touch screen (screen.state touch_slots, APP-CONTRACT section 4) */
+            std::ifstream ss(launcher_state_path("screen.state", env_str("APPLAUNCH_STATE_DIR"), env_str("XDG_RUNTIME_DIR")));
+            std::stringstream text;
+            text << ss.rdbuf();
+            touch_slots = screen_touch_slots(text.str());
+        }
+        if (demo && env_on("VINYL_DEMO_NOTOUCH")) touch_slots = 0; /* the scenes: a board without a touch screen */
+        if (demo && env_on("VINYL_DEMO_SCREEN")) { /* the scenes: a launcher that answers `screen`, a fake backlight */
+            const bool refuse = env_str("VINYL_DEMO_SCREEN") == "fail";
+            status.requests = "hello,caps,toast,beep,volume,brightness,screen";
+            backlight = std::make_unique<BacklightWorker>([refuse](int on) {
+                std::fprintf(stderr, "[vinyl] demo backlight: screen %s%s\n", on ? "on" : "off", refuse ? " (refused)" : "");
+                return refuse ? 1 : 0;
+            });
         }
         std::fprintf(stderr, "[vinyl] %s, %d root(s), state %s\n", demo ? "demonstration world" : "started", static_cast<int>(roots.size()),
                      resume_file.c_str());
@@ -270,15 +304,17 @@ struct VinylApp::Impl final : TransportHost {
             if (const std::string vs = env_str("VINYL_DEMO_VOLSTEPS"); !vs.empty()) ds.volume_steps = volume_steps_from(vs, ds.volume_steps);
             if (const std::string bs = env_str("VINYL_DEMO_BOOST"); !bs.empty()) demo_boost = std::atoi(bs.c_str());
             if (env_on("VINYL_DEMO_NOREMEMBER")) ds.remember_long = false;
+            if (env_on("VINYL_DEMO_KNOCK")) ds.knock = true;
             settings.set(ds);
         }
         engine->set_gapless(settings.get().gapless);
         engine->set_replaygain(settings.get().replaygain);
+        knock.set_enabled(settings.get().knock);
         positions_file = cfg + "/positions.json";
         load_positions(posix_file_ops(), positions_file, positions);
-        std::fprintf(stderr, "[vinyl] settings: gapless %s, replaygain %s, remember position in long files %s; %d position(s)\n",
+        std::fprintf(stderr, "[vinyl] settings: gapless %s, replaygain %s, remember position in long files %s, knock-knock %s; %d position(s)\n",
                      settings.get().gapless ? "on" : "off", replaygain_mode_name(settings.get().replaygain),
-                     settings.get().remember_long ? "on" : "off", static_cast<int>(positions.size()));
+                     settings.get().remember_long ? "on" : "off", settings.get().knock ? "on" : "off", static_cast<int>(positions.size()));
 
         Actions a;
         a.back = [this] { escape(); }; /* the header's Esc: the same as the Esc key (a modal takes it, D-30) */
@@ -336,6 +372,7 @@ struct VinylApp::Impl final : TransportHost {
             refresh(true);
         };
         a.queue_save = [this] { save_queue(); };
+        a.touch = [this](int phase, int x, int y, bool on_cover) { on_touch(phase, x, y, on_cover); };
         a.lib_chip = [this](Page p) {
             if (lib) lib->chip(p);
             refresh(true);
@@ -357,10 +394,13 @@ struct VinylApp::Impl final : TransportHost {
             if (lib) lib->close_sheet();
         };
         view = std::make_unique<View>(screen, a);
+        knock.set_slop(KnockRules::slop_for_target(view->touch_target()));
         make_drives();
         make_library();
-        std::fprintf(stderr, "[vinyl] canvas %dx%d, class %s\n", cdk::screen_w(), cdk::screen_h(),
-                     layout::class_name(view->size_class()));
+        const layout::R cr = view->cover_rect();
+        std::fprintf(stderr, "[vinyl] canvas %dx%d, class %s, cover square %d,%d %dx%d, touch slots %d\n", cdk::screen_w(),
+                     cdk::screen_h(), layout::class_name(view->size_class()), static_cast<int>(cr.x), static_cast<int>(cr.y),
+                     static_cast<int>(cr.w), static_cast<int>(cr.h), touch_slots);
 
         /* the keys: an invisible focus object for the navigation keys, the screen for the physical key codes */
         focus = lv_obj_create(screen);
@@ -458,6 +498,7 @@ struct VinylApp::Impl final : TransportHost {
     void stop_all() {
         if (timer) lv_timer_delete(timer);
         timer = nullptr;
+        knock_exit(); /* the light back first (Esc at the root, the launcher's close, SIGTERM from the 3 s Esc, SIGINT, SIGHUP) */
         note_long_file(true);
         save(true);
         save_positions_now(true);
@@ -470,6 +511,76 @@ struct VinylApp::Impl final : TransportHost {
         if (pulse) pulse->disconnect();
         view.reset();
         if (demo) remove_demo_world(demo_world);
+    }
+
+    /* ------------------------------------------------------------------------------------------ Knock-knock */
+
+    /* what the gate asked for: the requests on the worker, the notice, the zone and the shield */
+    void apply_knock(const ScreenGate::Out &o) {
+        if (o.send_off && backlight) {
+            backlight->request(false, o.tag);
+            knock_ever_off = true;
+            crash_guard_arm(true); /* stays armed: a `screen on` from a crashing Vinyl is harmless when the light is on */
+            /* nothing held goes on in the dark: a scan of the previous / next key, the volume group's repeat */
+            const uint64_t now = mono_ms_now();
+            transport.cancel(TransportKey::Next, now);
+            transport.cancel(TransportKey::Prev, now);
+            vol_hold.stop();
+            std::fprintf(stderr, "[vinyl] knock-knock: screen off asked\n");
+        }
+        if (o.send_on && backlight) {
+            backlight->request(true);
+            std::fprintf(stderr, "[vinyl] knock-knock: screen on asked\n");
+        }
+        if (o.failed) {
+            notice(Notice::Kind::Info, kKnockUnavailable);
+            std::fprintf(stderr, "[vinyl] knock-knock: the screen could not be switched off, it stays on\n");
+        }
+        sync_knock_view();
+    }
+
+    void sync_knock_view() {
+        if (!view) return;
+        view->set_knock_zone(knock.armable());
+        view->set_input_shield(knock.input_blocked());
+    }
+
+    /* every touch of the screen (the view: presses and releases of the pointer, moves and lost presses on the zone and the
+     * shield) */
+    void on_touch(int phase, int x, int y, bool on_cover) {
+        const bool was_blocked = knock.input_blocked();
+        const ScreenGate::Out o = knock.touch(static_cast<TouchPhase>(std::clamp(phase, 0, 3)), x, y, mono_ms_now(),
+                                              on_cover && view->page() == Page::Now);
+        if (!o.send_off && !o.send_on && !o.failed) return;
+        apply_knock(o);
+        if (was_blocked && !knock.input_blocked()) {
+            std::fprintf(stderr, "[vinyl] knock-knock: woken by three taps\n");
+            refresh(true); /* nothing was drawn while it was off */
+        }
+    }
+
+    /* the tick: the board's answer to `screen`, the worker's answers */
+    void knock_tick() {
+        apply_knock(knock.set_available(knock_available(backlight != nullptr, status.has_request("screen"), touch_slots)));
+        BacklightWorker::Result r;
+        while (backlight && backlight->take(r)) {
+            std::fprintf(stderr, "[vinyl] knock-knock: screen %s: %s\n", r.on ? "on" : "off", call_code_word(r.code));
+            apply_knock(knock.result(r.on, r.code, r.tag));
+        }
+    }
+
+    /* the exit: the worker stopped, then `on` at once on this thread if Vinyl ever asked for `off` (one more `on` is
+     * harmless: the launcher ignores an `on` without an `off`) */
+    void knock_exit() {
+        if (!backlight) return;
+        const ScreenGate::Out o = knock.restore();
+        backlight->stop();
+        if (o.send_on || knock_ever_off) {
+            const int r = backlight->call_now(true);
+            std::fprintf(stderr, "[vinyl] knock-knock: screen on at exit: %s\n", call_code_word(r));
+        }
+        crash_guard_arm(false);
+        backlight.reset();
     }
 
     /* ------------------------------------------------------------------------------------------ pages */
@@ -990,6 +1101,7 @@ struct VinylApp::Impl final : TransportHost {
         st.output = output_label();
         st.output_key = volume_target().key;
         st.library = lib_on();
+        st.knock = knock.gate().available(); /* the Knock-knock row where the launcher answers `screen` (and Vinyl can ask it) */
         st.settings = settings.get();
         return st;
     }
@@ -1021,6 +1133,7 @@ struct VinylApp::Impl final : TransportHost {
         if (p == Page::Playback) {
             if (r.id == "gapless") st.gapless = !st.gapless; /* Enter or a tap toggles it */
             else if (r.id == "remember") st.remember_long = !st.remember_long;
+            else if (r.id == "knock") st.knock = !st.knock;
             else if (r.id == "replaygain") {
                 open_from(Page::ReplayGain, Page::Playback);
                 return;
@@ -1069,9 +1182,10 @@ struct VinylApp::Impl final : TransportHost {
         }
         apply_gain();
         if (was.remember_long && !st.remember_long) long_path.clear();
-        std::fprintf(stderr, "[vinyl] settings: gapless %s, replaygain %s, gain boost %s (%s), volume steps %s, remember position in long files %s\n",
+        apply_knock(knock.set_enabled(st.knock)); /* Off while the screen is off: the light back */
+        std::fprintf(stderr, "[vinyl] settings: gapless %s, replaygain %s, gain boost %s (%s), volume steps %s, remember position in long files %s, knock-knock %s\n",
                      st.gapless ? "on" : "off", replaygain_mode_name(st.replaygain), boost_word(st.boost_of(volume_target().key)).c_str(),
-                     volume_target().key.c_str(), volume_steps_word(st.volume_steps), st.remember_long ? "on" : "off");
+                     volume_target().key.c_str(), volume_steps_word(st.volume_steps), st.remember_long ? "on" : "off", st.knock ? "on" : "off");
     }
 
     /* The sleep timer (core/sleep): the minute modes count on the monotonic clock and fade the gain over their last 10 s
@@ -1218,6 +1332,7 @@ struct VinylApp::Impl final : TransportHost {
     void on_key(uint32_t k) {
         const Page p = view->page();
         if (key_echo.drop(k, mono_ms_now())) return;
+        if (knock.input_blocked()) return; /* Knock-knock: the screen is off, no keypad key acts (the media keys come below) */
         if (view->dialog_shown() && view->dialog_key(k)) return; /* "Clear the queue?" takes the keys while it shows */
         if (view->name_dialog_shown()) return; /* the name field types (its own events); no shortcut acts (D-32) */
         if (k == LV_KEY_ESC) {
@@ -1326,6 +1441,15 @@ struct VinylApp::Impl final : TransportHost {
         if (ma != MediaAction::None) {
             MediaEvent me;
             if (keys.accept_other(ma, it.key_state, me)) media(me);
+            return;
+        }
+        /* Knock-knock: while the screen is off only the media keys (above), the volume keys (the launcher's) and - and =
+         * (Vinyl's own volume keys, owner decision 2026-11-16) pass; Vinyl acts on no other key (the launcher still sees Esc
+         * held 3 s: it reads the keyboards itself) */
+        if (!knock.accepts_key(it.key_code)) return;
+        if (knock.input_blocked()) {
+            if (it.key_state == 1 && !(it.mods & (menu::kModCtrl | menu::kModAlt)) && knock_key_kind(it.key_code) == KeyKind::AppVolume)
+                volume_step(it.key_code == menu::kKeyEqual ? 1 : -1);
             return;
         }
         if (view->dialog_shown()) { /* the dialog takes its keys: Enter / Esc through the keypad (on_key), Y here */
@@ -2346,7 +2470,7 @@ struct VinylApp::Impl final : TransportHost {
     }
 
     void refresh(bool force) {
-        if (cdk::hidden()) return;
+        if (cdk::hidden() || knock.input_blocked()) return; /* hidden, or the screen off (Knock-knock): drawn when it is back */
         const Page p = view->page();
         (void)force;
         if (p == Page::Now) view->update_now(now_view());
@@ -2408,6 +2532,7 @@ struct VinylApp::Impl final : TransportHost {
             world.facts = status.facts;
             out_rows = build_output_rows(world, target);
         }
+        knock_tick(); /* Knock-knock: `screen` in board.state's requests, the answers of the worker */
         take_scan();
         /* a sink changed (a volume key, a headset's buttons, a reconnect): look again now, not at the next periodic
          * scan; a scan already running keeps the change for the next tick */
@@ -2458,6 +2583,9 @@ struct VinylApp::Impl final : TransportHost {
         if (!was_hidden && hidden) { /* a key held while the launcher takes the keyboards back never sends its release */
             transport.cancel(TransportKey::Next, now);
             transport.cancel(TransportKey::Prev, now);
+            /* Knock-knock: hidden (Super, Alt+Tab, the three-finger hold) gives the light back (the launcher does too) */
+            if (knock.input_blocked()) std::fprintf(stderr, "[vinyl] knock-knock: hidden, the screen comes back\n");
+            apply_knock(knock.restore());
         }
         was_hidden = hidden;
         /* only where the launcher answers dim on this board (board.state requests: a battery board with backlight levels;
@@ -2523,7 +2651,7 @@ struct VinylApp::Impl final : TransportHost {
         const uint64_t tg = jobs.gen();
         const bool tags_changed = tg != tags_seen;
         tags_seen = tg;
-        if (!hidden) {
+        if (!hidden && !knock.input_blocked()) { /* Knock-knock: nothing is drawn while the screen is off */
             view->tick(snap.state == PlayState::Playing);
             refresh(tags_changed);
         }

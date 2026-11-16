@@ -171,6 +171,28 @@ Notes for the Controller: the limiter adds 5 ms to each boosted stream (its firs
 end) and the position shown can be 5 ms ahead; a boost set while a stream plays inserts those 5 ms once. An output without a
 playback mixer (Vinyl's own software volume, stored as a percent) keeps its Normal levels in the dB modes too and shows their dB.
 
+## Knock-knock (0.6.0 work, not published yet)
+
+Needs the launcher with the `screen` request (branch `backlight-request`, 827d6cb7, or the release that carries it) on a board with a
+backlight and a touch screen (Pi 4B DSI, Pi 3A+, zero8, the deck); the HackBerry (or a launcher 0.10.3) for B73. A headset or a
+keyboard with media keys for B76. Journal: Vinyl's `[vinyl] knock-knock: ...` lines and the launcher's `[req] vinyl: screen off|on`.
+"Quick taps": three taps, each shorter than 0.4 s, the gaps shorter than 0.5 s, all within 1.2 s, without sliding the finger.
+
+| # | Do (owner, about 15 min) | Expected | Result |
+|---|---|---|---|
+| B72 | New launcher: Menu > Playback; look at the last row and the strip; tap the row, tap it again; press Enter on it | the last row is "Knock-knock" with Off; the strip adds "Knock-knock: three quick taps on the cover switch the screen off while the music plays on; three quick taps anywhere bring it back."; each tap and Enter turns it On / Off; `~/.config/vinyl/settings.json` has `"knock_knock": true` while On, and it is still On after a restart | |
+| B73 | The HackBerry (or a launcher 0.10.3), and a board whose screen.state says `touch_slots=0` (no touch screen; `cat $XDG_RUNTIME_DIR/applaunch/screen.state`): Menu > Playback | no Knock-knock row, the strip is the ReplayGain sentence alone; three quick taps on the cover do nothing; the journal's `[vinyl] canvas ...` line ends with `touch slots 0` on the board without touch | |
+| B74 | Knock-knock On, music playing, Now playing: three quick taps on the cover | the screen goes fully dark at once; the music goes on; the journal says `knock-knock: screen off asked` then `screen off: done` | |
+| B75 | While dark: tap where the play key, next, the output button and the header's Esc are; press Space, Enter, the arrows, Q, M, comma, dot and a short Esc; then wake it (B77) | nothing happened: the same page, the same track still playing, no page opened, Vinyl still open | |
+| B76 | While dark: the headset's (or keyboard's) play / pause, next, previous; hold next 2 s; the volume up, down and mute keys; then `-` three times and `=` once | the music pauses and plays, changes track, scans while next is held; the volume changes and mutes (heard); `-` and `=` step the output's volume down and up (heard; after waking the volume group shows the new level, the journal has `volume: set ...` lines); the screen stays dark | |
+| B77 | While dark: three quick taps anywhere, on the play key's place | the screen comes back at its brightness; the music did not pause (the taps pressed nothing); a single tap on the play key afterwards pauses as usual | |
+| B78 | Screen on: three slow taps on the cover (one a second); three long presses (about 0.5 s each); two taps on the cover, one on the title, one on the cover; a drag across the cover. Then dark (B74) and three slow taps anywhere | the screen stays on in every case; while dark, slow taps leave it dark | |
+| B79 | While dark: hold Esc 3 s | Vinyl closes and the screen comes back (at once, or within about a second) on the launcher's home at its brightness | |
+| B80 | Multitasking board, while dark: Super (or Alt+Tab, or the three-finger hold); then go back to Vinyl | the home grid shows lit; the music played on; back in Vinyl the screen is lit and the first tap acts | |
+| B81 | While dark, over ssh: `pkill -9 vinyl` | the screen comes back within about a second (the launcher's restore), on the home grid | |
+| B82 | While dark for 5 minutes across a track change (a sleep timer of 15 minutes running); wake it | the queue advanced: the right track and time show, the sleep timer counted on; nothing was lost (`state.json` written as usual) | |
+| B83 | While dark, over ssh: `pkill -SEGV vinyl`; then turn Knock-knock Off and tap the cover three times quickly | the screen comes back at once (Vinyl's crash guard: the journal of the launcher shows `screen on` from vinyl just before it ends); with the setting Off the taps do nothing | |
+
 ## Cleanup
 
 `sudo dpkg -r vinyl`; `rm -r ~/.config/vinyl`; remove the test music the Controller copied.

@@ -337,6 +337,56 @@ struct View::Impl {
     std::shared_ptr<const PixelImage> cover;
     Img cover_img;
     bool cover_shown = false;
+    /* Knock-knock: the cover square's zone (over the sleeve, under every later control) and the shield (the system layer) */
+    lv_obj_t *knock_zone = nullptr, *shield = nullptr;
+    std::vector<lv_indev_t *> touch_indevs; /* the pointers whose presses and releases go to act.touch */
+
+    static void indev_touch_cb(lv_event_t *e) {
+        auto *self = static_cast<Impl *>(lv_event_get_user_data(e));
+        auto *indev = static_cast<lv_indev_t *>(lv_event_get_current_target(e));
+        auto *obj = static_cast<lv_obj_t *>(lv_event_get_param(e));
+        if (!self || !self->act.touch) return;
+        lv_point_t p{};
+        if (indev) lv_indev_get_point(indev, &p);
+        const bool on_cover = obj && obj == self->knock_zone;
+        self->act.touch(lv_event_get_code(e) == LV_EVENT_PRESSED ? 0 : 2, static_cast<int>(p.x), static_cast<int>(p.y), on_cover);
+    }
+    /* the moves and lost presses on the zone and the shield (the pointer sends only presses and releases to its own list) */
+    static void knock_obj_cb(lv_event_t *e) {
+        auto *self = static_cast<Impl *>(lv_event_get_user_data(e));
+        if (!self || !self->act.touch) return;
+        lv_point_t p{};
+        if (lv_indev_t *in = lv_indev_active()) lv_indev_get_point(in, &p);
+        self->act.touch(lv_event_get_code(e) == LV_EVENT_PRESSING ? 1 : 3, static_cast<int>(p.x), static_cast<int>(p.y), false);
+    }
+    void watch_touch() {
+        lv_display_t *disp = lv_obj_get_display(screen);
+        for (lv_indev_t *in = lv_indev_get_next(nullptr); in; in = lv_indev_get_next(in)) {
+            if (lv_indev_get_type(in) != LV_INDEV_TYPE_POINTER) continue;
+            lv_display_t *idisp = lv_indev_get_display(in);
+            if (idisp && idisp != disp) continue; /* the compat display's pointer, the PDA band's */
+            lv_indev_add_event_cb(in, indev_touch_cb, LV_EVENT_PRESSED, this);
+            lv_indev_add_event_cb(in, indev_touch_cb, LV_EVENT_RELEASED, this);
+            touch_indevs.push_back(in);
+        }
+        /* the shield: over everything, on the system layer of the app's display; hidden until the screen goes off */
+        if (lv_obj_t *sys = lv_display_get_layer_sys(disp)) {
+            shield = lv_obj_create(sys);
+            plain(shield);
+            lv_obj_add_flag(shield, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_set_pos(shield, 0, 0);
+            lv_obj_set_size(shield, W, H);
+            lv_obj_add_event_cb(shield, knock_obj_cb, LV_EVENT_PRESSING, this);
+            lv_obj_add_event_cb(shield, knock_obj_cb, LV_EVENT_PRESS_LOST, this);
+            lv_obj_add_flag(shield, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    void unwatch_touch() {
+        for (lv_indev_t *in : touch_indevs) lv_indev_remove_event_cb_with_user_data(in, indev_touch_cb, this);
+        touch_indevs.clear();
+        if (shield) lv_obj_delete(shield);
+        shield = nullptr;
+    }
     lv_obj_t *title = nullptr, *artist = nullptr, *album = nullptr;
     Chip chips[4]; /* format, (the old Vol chip: none), output, gapless */
     /* the output button and the volume group (owner, 2026-11-13; every class but the large one has the button) */
@@ -600,6 +650,16 @@ struct View::Impl {
         lv_obj_set_style_shadow_color(sleeve, lv_color_black(), 0);
         lv_obj_set_style_shadow_opa(sleeve, 89, 0); /* rgba(0,0,0,.35) */
         lv_obj_set_style_radius(sleeve, P(4), 0);
+        /* Knock-knock's cover zone: exactly the sleeve, made before every control so that a neighbour's touch area drawn
+         * over its edge keeps its taps; it acts on nothing (the controller counts the taps that land on it) */
+        knock_zone = lv_obj_create(r);
+        plain(knock_zone);
+        lv_obj_add_flag(knock_zone, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_pos(knock_zone, X(g.sleeve.x), Y(g.sleeve.y));
+        lv_obj_set_size(knock_zone, sd, sd);
+        lv_obj_add_event_cb(knock_zone, knock_obj_cb, LV_EVENT_PRESSING, this);
+        lv_obj_add_event_cb(knock_zone, knock_obj_cb, LV_EVENT_PRESS_LOST, this);
+        lv_obj_add_flag(knock_zone, LV_OBJ_FLAG_HIDDEN);
 
         /* title, artist, album */
         auto make_text = [&](const layout::Text &t, uint32_t c) {
@@ -1794,9 +1854,11 @@ View::View(lv_obj_t *screen, Actions actions) : d_(std::make_unique<Impl>()) {
                                                std::move(lc));
     }
     d.cur = Page::Now;
+    d.watch_touch();
 }
 
 View::~View() {
+    d_->unwatch_touch();
     d_->hide_notice();
     d_->close_dialog();
     d_->nfield.reset();
@@ -1914,6 +1976,26 @@ bool View::dialog_key(uint32_t key, uint32_t evdev) { return d_->dialog_key(key,
 void View::simulate_scrub(double frac) { d_->simulate_scrub(frac); }
 void View::tick(bool playing) { d_->tick(playing); }
 int View::cover_side() const { return d_->Wd(d_->g.sleeve); }
+int View::touch_target() const { return d_->target; }
+
+void View::set_knock_zone(bool on) {
+    if (d_->knock_zone) show(d_->knock_zone, on);
+}
+
+void View::set_input_shield(bool on) {
+    lv_obj_t *s = d_->shield;
+    if (!s || on == !lv_obj_has_flag(s, LV_OBJ_FLAG_HIDDEN)) return;
+    show(s, on);
+    if (on) lv_obj_move_foreground(s);
+}
+
+bool View::input_shield() const { return d_->shield && !lv_obj_has_flag(d_->shield, LV_OBJ_FLAG_HIDDEN); }
+
+layout::R View::cover_rect() const {
+    const Impl &d = *d_;
+    const int sd = d.Wd(d.g.sleeve);
+    return layout::R{double(d.X(d.g.sleeve.x)), double(d.Y(d.g.sleeve.y)), double(sd), double(sd)};
+}
 
 int View::list_rows(Page p) const {
     const Impl &d = *d_;
