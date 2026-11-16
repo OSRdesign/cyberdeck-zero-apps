@@ -208,6 +208,32 @@ ScreenGate::Out Knock::touch(TouchPhase ph, int x, int y, uint64_t now_ms, bool 
     return changed(blocked ? gate_.wake() : gate_.arm());
 }
 
+/* ------------------------------------------------------------------------------------------ the black cover */
+
+BlankCover::Step BlankCover::update(bool blocked, bool hidden) {
+    Step s;
+    if (blocked) {
+        if (!shown_) {
+            shown_ = true;
+            s.show = true;
+        } else if (!frozen_ && !hidden) {
+            frozen_ = true;
+            s.freeze = true;
+        }
+        return s;
+    }
+    if (shown_) {
+        shown_ = false;
+        s.hide = true;
+        if (frozen_) {
+            frozen_ = false;
+            s.thaw = true;
+        }
+        s.repaint = !hidden;
+    }
+    return s;
+}
+
 /* ------------------------------------------------------------------------------------------ the worker */
 
 BacklightWorker::BacklightWorker(Call call) : call_(std::move(call)) {

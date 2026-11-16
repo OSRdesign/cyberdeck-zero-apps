@@ -1185,15 +1185,25 @@ builder's readings where the decisions were silent, for the owner to confirm.
   neighbour's touch area grown over the sleeve's edge) keeps its own taps; it acts on nothing. The controller sees every press and release of
   the touch screen through the pointer's own event list (LVGL 9.5 sends PRESSED and RELEASED there before the object gets them), so a tap
   elsewhere between two cover taps breaks the run.
-- **While off** (`ScreenGate`: Disabled, Ready, going off, Off): a transparent box over the whole screen on the display's system layer (above the
+- **While off** (`ScreenGate`: Disabled, Ready, going off, Off): an opaque black box over the whole display on its system layer (above the
   header, the notices, the dialogs and the on-screen keyboard) takes every touch from the moment the third tap is released until the third
   wake tap is: nothing under it is pressed, the first wake tap included. Keys: the media keys (KEY_PLAYPAUSE, PLAYCD, PAUSECD, NEXTSONG,
   PREVIOUSSONG, STOPCD, from the evdev reader and the keyboard path) act; the volume and mute keys are the launcher's and Vinyl never acted on
   them; `-` and `=` (Vinyl's own volume keys) act, one step a press (owner decision, below); every other key is dropped, a short Esc
   included. The launcher's 3 s
   Esc reads the keyboards itself and sends SIGTERM, which ends Vinyl cleanly. Nothing is drawn while off (the page refresh and the record's turn
-  stop; the music, the queue, the sleep timer, the saves go on); a held previous / next scan and the volume repeat are cancelled when it goes
-  off.
+  stop, and the drawing is frozen under the black cover, below; the music, the queue, the sleep timer, the saves go on); a held previous /
+  next scan and the volume repeat are cancelled when it goes off.
+- **Black, not only dark** (owner board finding, 2026-11-16, Pi 3A+ Waveshare DSI panel, `/sys/class/backlight/10-0045`, max 255):
+  backlight 0 and even `bl_power=4` only dim that panel, the picture stays faintly visible. As the launcher's own lock screen does,
+  the shield is fully opaque black (no border, no radius, 100 % of the display on the system layer, so every rotation and portrait
+  canvas) from the third tap to the third wake tap: only black pixels remain whatever the backlight can do. Once that black frame is on
+  the panel (the next tick: the pending areas drawn with `lv_refr_now`) the display's invalidation is switched off, so no animation,
+  clock or scrolling label paints under it; on the way back the invalidation comes back and the whole display is invalidated, so the
+  first frame after waking is complete (`core/screen` `BlankCover` decides when, tested: never frozen in the step that showed it nor
+  while hidden, every freeze thawed exactly once, as LVGL counts the pairs and the lifecycle helper nests its own while hidden). Every
+  restore path takes the black away (exit, hide, the setting Off, refused); a crash leaves the last black frame on the framebuffer
+  until the launcher repaints as it takes the panel back (its normal path after an app ends; the crash guard only restores the light).
 - **The request** goes through `cp0_app_backlight()` (given to the app by the device main: the headless harness has no client) on a worker
   thread (`BacklightWorker`: in order, a waiting request replaced by a newer one, answers matched to their `off` by a tag); input is ignored
   from the third tap on, without waiting for the answer. Refused or no service: the screen stays on, the input comes back at once, the notice

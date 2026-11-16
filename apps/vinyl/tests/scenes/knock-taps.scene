@@ -1,4 +1,4 @@
-title Vinyl Knock-knock: three quick taps on the cover switch the screen off (the scenes' fake backlight): a tap on the output button and the keys Q, Esc, M then do nothing; three quick taps anywhere (on the output button) bring it back and press nothing; slow taps on the cover do nothing
+title Vinyl Knock-knock: three quick taps on the cover switch the screen off (all black; the scenes' fake backlight): a tap on the output button and the keys Q, Esc, M then do nothing; three quick taps anywhere (on the output button) bring it back and press nothing; slow taps on the cover do nothing
 sizes 800x480 480x800 480x480
 env VINYL_DEMO 1
 env VINYL_DEMO_STATE playing
@@ -49,7 +49,7 @@ wait 300
 key m
 wait 300
 expect notext "Sleep timer"
-shot 03-off-nothing-acted
+shot 03-off-black-nothing-acted
 # three quick taps anywhere: on the output button, which is not pressed
 tap "Evolve 65"
 tap "Evolve 65"

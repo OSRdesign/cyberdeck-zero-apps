@@ -373,6 +373,71 @@ void test_model() {
     CHECK(f.tap(17600, 200, 200, false).send_on);
 }
 
+/* the black cover: shown at once, frozen at the next step (never in the step that showed it, never hidden), every freeze
+ * thawed exactly once, a repaint on the way back unless hidden */
+void test_blank_cover() {
+    BlankCover c;
+    CHECK(!c.update(false, false).any()); /* nothing to do while the screen is on */
+    BlankCover::Step s = c.update(true, false); /* the third tap: the black cover */
+    CHECK(s.show && !s.freeze && !s.hide && c.shown() && !c.frozen());
+    s = c.update(true, false); /* the tick: the black frame is on the panel, drawing frozen */
+    CHECK(s.freeze && !s.show && c.frozen());
+    CHECK(!c.update(true, false).any()); /* once */
+    s = c.update(false, false); /* the wake taps: hidden, thawed, repainted */
+    CHECK(s.hide && s.thaw && s.repaint && !c.shown() && !c.frozen());
+    CHECK(!c.update(false, false).any());
+    /* refused before the tick froze it: hidden and repainted, no thaw (nothing was frozen) */
+    c.update(true, false);
+    s = c.update(false, false);
+    CHECK(s.hide && !s.thaw && s.repaint);
+    /* hidden by the launcher while off: no freeze while hidden; the restore thaws without a repaint (the show repaints) */
+    c.update(true, false);
+    CHECK(c.update(true, false).freeze);
+    s = c.update(false, true);
+    CHECK(s.hide && s.thaw && !s.repaint);
+    c.update(true, true);
+    CHECK(!c.update(true, true).freeze); /* hidden: never frozen */
+    s = c.update(false, true);
+    CHECK(s.hide && !s.thaw && !s.repaint);
+    /* the pairs balance over a long run, whatever the order */
+    int freezes = 0, thaws = 0;
+    const bool seq[][2] = {{true, false}, {true, false}, {true, true},  {false, false}, {true, true}, {true, false},
+                           {true, false}, {false, true}, {true, false}, {true, false},  {true, false}, {false, false}};
+    for (const auto &e : seq) {
+        const BlankCover::Step st = c.update(e[0], e[1]);
+        freezes += st.freeze;
+        thaws += st.thaw;
+        CHECK(freezes - thaws == (c.frozen() ? 1 : 0));
+    }
+    CHECK_EQ(freezes, thaws);
+    /* the app's model drives it: the gate blocked from the third tap to the third wake tap */
+    Knock k;
+    k.set_available(true);
+    k.set_enabled(true);
+    BlankCover b;
+    Finger f{k};
+    f.tap(0, 10, 10, true);
+    f.tap(200, 10, 10, true);
+    const ScreenGate::Out o = f.tap(400, 10, 10, true);
+    CHECK(b.update(k.input_blocked(), false).show);
+    k.result(false, 0, o.tag);
+    CHECK(b.update(k.input_blocked(), false).freeze);
+    f.tap(1000, 300, 200, false);
+    f.tap(1200, 300, 200, false);
+    f.tap(1400, 300, 200, false);
+    s = b.update(k.input_blocked(), false);
+    CHECK(s.hide && s.thaw && s.repaint);
+    /* exit while off: the restore takes the cover away too */
+    f.tap(2000, 10, 10, true);
+    f.tap(2200, 10, 10, true);
+    f.tap(2400, 10, 10, true);
+    b.update(k.input_blocked(), false);
+    b.update(k.input_blocked(), false);
+    k.restore();
+    s = b.update(k.input_blocked(), false);
+    CHECK(s.hide && s.thaw && !b.shown() && !b.frozen());
+}
+
 /* a fake cp0_app_backlight that can be held inside a call */
 struct FakeBacklight {
     std::mutex mu;
@@ -598,6 +663,7 @@ void test_knock() {
     test_available();
     test_gate();
     test_model();
+    test_blank_cover();
     test_worker();
     test_raw_screen_on();
     test_setting_and_row();

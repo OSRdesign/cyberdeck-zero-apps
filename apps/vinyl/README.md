@@ -214,7 +214,10 @@ To save the battery while you listen: knock on the cover and the screen goes dar
   off) and the board has a touch screen (screen.state does not say `touch_slots=0`). An older launcher, a board without a
   backlight to switch (the HackBerry) or without a touch screen shows no row, and a setting left On does nothing there.
 - **Screen off**: on Now playing, **three quick taps on the cover square** (the album art, or the drawn sleeve). Only the
-  cover counts: taps anywhere else do what they always do, and a tap elsewhere in between starts the count again.
+  cover counts: taps anywhere else do what they always do, and a tap elsewhere in between starts the count again. The
+  screen goes **black**: Vinyl covers the whole display with opaque black and stops drawing, and the backlight goes dark
+  where the panel can (some panels only dim at their lowest backlight, such as the Pi 3A+ Waveshare DSI panel: the black
+  picture keeps them dark too).
 - **Screen on**: **three quick taps anywhere**. They press nothing: no button, no row, no Esc under them acts, the first
   one included.
 - **Quick taps**: each press shorter than 0.4 s, each gap from a release to the next press shorter than 0.5 s, the three
@@ -225,11 +228,12 @@ To save the battery while you listen: knock on the cover and the screen goes dar
   speakers and keyboards (play, pause, next, previous, stop; held next / previous scan as always), the **volume and mute
   keys** (the launcher's) and **`-` and `=`** (Vinyl's own volume keys: the output Vinyl plays on, one step a press) work.
   **Every other key and every touch is ignored**: Space, Enter, the arrows, the letters, comma and dot, a short Esc.
-  **Holding Esc 3 s still closes Vinyl** (the launcher's own watchdog; the screen comes back). Nothing is drawn while it is
-  off.
+  **Holding Esc 3 s still closes Vinyl** (the launcher's own watchdog; the screen comes back). Nothing is drawn under the
+  black while it is off (no animation, no clock, no scrolling title); the first frame after waking is a full repaint.
 - **The screen always comes back**: when Vinyl quits (Esc at the root, the launcher's close, Esc held 3 s, a signal), when
   it is hidden (Super, Alt+Tab, the three-finger hold), when the setting is turned Off, when the launcher stops offering
-  the request, and on a crash Vinyl can catch (it sends `screen on` before it ends). The launcher also restores the light by
+  the request, and on a crash Vinyl can catch (it sends `screen on` before it ends; the black picture it left is then the
+  launcher's to repaint when it takes the panel back). The launcher also restores the light by
   itself, about a second after Vinyl dies (`kill -9` included) and when Vinyl is hidden or replaced, so a black screen is
   never left behind. If the launcher refuses (another app holds the screen off) or does not answer, the screen stays on,
   the input stays as it was and Vinyl says "Screen off is not available.".

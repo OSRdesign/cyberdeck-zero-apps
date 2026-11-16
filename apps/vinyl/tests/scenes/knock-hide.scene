@@ -1,4 +1,4 @@
-title Vinyl Knock-knock and multitasking: the screen off, then hidden (Super, Alt+Tab): the light comes back with the launcher; shown again, the first tap acts (the output button opens its page) and the page is repainted
+title Vinyl Knock-knock and multitasking: the screen off (all black), then hidden (Super, Alt+Tab): the light comes back with the launcher; shown again, the first tap acts (the output button opens its page) and the page is repainted
 sizes 640x480
 ppmm 901
 lifecycle
@@ -15,6 +15,7 @@ wait 300
 tap "Evolve 65"
 wait 300
 expect notext "Automatic"
+shot 00-off-black
 hide
 expect hidden
 wait 600

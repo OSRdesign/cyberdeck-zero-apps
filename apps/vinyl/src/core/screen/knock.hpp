@@ -172,6 +172,29 @@ private:
     GateState seen_ = GateState::Disabled;
 };
 
+/* The black cover (owner board finding of 2026-11-16: the Pi 3A+ Waveshare DSI panel only dims at backlight 0, the
+ * picture stays faintly visible). While the screen is off the shield is fully opaque black over the whole display, and once
+ * that black frame is on the panel the drawing is frozen (the display's invalidation off: no animation, clock or label
+ * scroll paints under it); on the way back the drawing is thawed and the whole screen repainted. The view does the LVGL
+ * work; this decides when, so that every freeze is matched by exactly one thaw (LVGL counts them, and the lifecycle helper
+ * nests its own pair while Vinyl is hidden):
+ *   blocked and not shown          show (paint the black cover)
+ *   blocked, shown, not frozen     freeze (the black frame flushed first), never in the step that showed it, never hidden
+ *   not blocked and shown          hide, thaw if frozen, repaint unless hidden (the lifecycle's show repaints then) */
+class BlankCover {
+public:
+    struct Step {
+        bool show = false, hide = false, freeze = false, thaw = false, repaint = false;
+        bool any() const { return show || hide || freeze || thaw || repaint; }
+    };
+    Step update(bool blocked, bool hidden);
+    bool shown() const { return shown_; }
+    bool frozen() const { return frozen_; }
+
+private:
+    bool shown_ = false, frozen_ = false;
+};
+
 /* The backlight requests on a worker thread, in order (a newer request replaces one that is still waiting, so a quick
  * off-then-on sends only "on"); the results come back through take(). `call` is cp0_app_backlight on the board (0 done,
  * 1 refused, -1 no service), a fake in the tests and the scenes. */

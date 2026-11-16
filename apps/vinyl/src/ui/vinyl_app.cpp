@@ -228,6 +228,7 @@ struct VinylApp::Impl final : TransportHost {
     /* Knock-knock (2026-11-16): the gate and the tap runs, the launcher's screen request on its worker (null: not offered;
      * the scenes' fake with VINYL_DEMO_SCREEN), whether an `off` was ever asked (the exit then sends a last `on`) */
     Knock knock;
+    BlankCover blank; /* the black shield and the frozen drawing while the screen is off */
     std::unique_ptr<BacklightWorker> backlight;
     bool knock_ever_off = false;
     int touch_slots = -1; /* screen.state's touch_slots, read at start (0: no touch screen, the setting not offered; -1 unknown) */
@@ -539,10 +540,16 @@ struct VinylApp::Impl final : TransportHost {
         sync_knock_view();
     }
 
+    /* the zone, and the black cover (core/screen BlankCover): shown at once, the drawing frozen at the next step (the tick),
+     * thawed and repainted on the way back */
     void sync_knock_view() {
         if (!view) return;
         view->set_knock_zone(knock.armable());
-        view->set_input_shield(knock.input_blocked());
+        const BlankCover::Step st = blank.update(knock.input_blocked(), cdk::hidden());
+        if (st.show) view->set_input_shield(true);
+        if (st.freeze) view->freeze_drawing();
+        if (st.hide) view->set_input_shield(false);
+        if (st.thaw || st.repaint) view->thaw_drawing(st.repaint);
     }
 
     /* every touch of the screen (the view: presses and releases of the pointer, moves and lost presses on the zone and the
@@ -574,6 +581,7 @@ struct VinylApp::Impl final : TransportHost {
     void knock_exit() {
         if (!backlight) return;
         const ScreenGate::Out o = knock.restore();
+        sync_knock_view(); /* the black cover away, the drawing thawed */
         backlight->stop();
         if (o.send_on || knock_ever_off) {
             const int r = backlight->call_now(true);

@@ -369,13 +369,21 @@ struct View::Impl {
             lv_indev_add_event_cb(in, indev_touch_cb, LV_EVENT_RELEASED, this);
             touch_indevs.push_back(in);
         }
-        /* the shield: over everything, on the system layer of the app's display; hidden until the screen goes off */
+        /* the shield: over everything, on the system layer of the app's display, fully opaque black (a panel whose
+         * backlight only dims at 0 shows nothing then), the whole display whatever its rotation; hidden until the screen
+         * goes off */
         if (lv_obj_t *sys = lv_display_get_layer_sys(disp)) {
             shield = lv_obj_create(sys);
             plain(shield);
             lv_obj_add_flag(shield, LV_OBJ_FLAG_CLICKABLE);
             lv_obj_set_pos(shield, 0, 0);
-            lv_obj_set_size(shield, W, H);
+            lv_obj_set_size(shield, lv_pct(100), lv_pct(100));
+            lv_obj_set_style_bg_color(shield, lv_color_black(), 0);
+            lv_obj_set_style_bg_opa(shield, LV_OPA_COVER, 0);
+            lv_obj_set_style_border_width(shield, 0, 0);
+            lv_obj_set_style_outline_width(shield, 0, 0);
+            lv_obj_set_style_shadow_width(shield, 0, 0);
+            lv_obj_set_style_radius(shield, 0, 0);
             lv_obj_add_event_cb(shield, knock_obj_cb, LV_EVENT_PRESSING, this);
             lv_obj_add_event_cb(shield, knock_obj_cb, LV_EVENT_PRESS_LOST, this);
             lv_obj_add_flag(shield, LV_OBJ_FLAG_HIDDEN);
@@ -384,8 +392,31 @@ struct View::Impl {
     void unwatch_touch() {
         for (lv_indev_t *in : touch_indevs) lv_indev_remove_event_cb_with_user_data(in, indev_touch_cb, this);
         touch_indevs.clear();
+        thaw(false); /* a freeze is never left behind (LVGL counts them) */
         if (shield) lv_obj_delete(shield);
         shield = nullptr;
+    }
+    /* the drawing frozen under the black cover: what is pending is drawn now (the black frame reaches the panel), then the
+     * display marks nothing more (no animation, label scroll or clock paints under it) */
+    bool frozen = false;
+    void freeze() {
+        if (frozen || !shield) return;
+        lv_display_t *disp = lv_obj_get_display(screen);
+        lv_refr_now(disp);
+        lv_display_enable_invalidation(disp, false);
+        frozen = true;
+    }
+    /* thawed: marking again; repaint: the whole display drawn at the next refresh (the first frame complete) */
+    void thaw(bool repaint) {
+        lv_display_t *disp = lv_obj_get_display(screen);
+        if (frozen) {
+            lv_display_enable_invalidation(disp, true);
+            frozen = false;
+        }
+        if (!repaint) return;
+        for (lv_obj_t *o : {lv_display_get_screen_active(disp), lv_display_get_layer_bottom(disp), lv_display_get_layer_top(disp),
+                            lv_display_get_layer_sys(disp)})
+            if (o) lv_obj_invalidate(o);
     }
     lv_obj_t *title = nullptr, *artist = nullptr, *album = nullptr;
     Chip chips[4]; /* format, (the old Vol chip: none), output, gapless */
@@ -1988,6 +2019,9 @@ void View::set_input_shield(bool on) {
     show(s, on);
     if (on) lv_obj_move_foreground(s);
 }
+
+void View::freeze_drawing() { d_->freeze(); }
+void View::thaw_drawing(bool repaint) { d_->thaw(repaint); }
 
 bool View::input_shield() const { return d_->shield && !lv_obj_has_flag(d_->shield, LV_OBJ_FLAG_HIDDEN); }
 
