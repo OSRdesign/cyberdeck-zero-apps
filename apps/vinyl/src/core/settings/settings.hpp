@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * Vinyl settings (P2a, the Playback page of the Menu; report 060 2.2, owner decisions D25 and D32 of 2026-11-13):
+ * Vinyl settings (P2a, the Playback page of the Menu, and Knock-knock in its TOOLS; report 060 2.2, owner decisions D25 and D32 of 2026-11-13):
  *
  *   gapless        On (default): the next track continues on the same open stream when its format is the same; Off:
  *                  every track change drains the stream and opens it again (a short gap)
@@ -12,7 +12,11 @@
  *   volume_steps   "normal" (default: about 2 dB, the percent shown) / "1" / "0.5" / "0.1": the step of the volume in dB
  *                  and its display as the output's real level (report 060 3f, D24); one global setting
  *   remember_long  On (default): a file longer than 20 minutes keeps where it stopped (core/state/positions.hpp)
- *   library        {"folders": [...]}: folders the library indexes besides ~/Music and the mounted drives (P2b,
+ *   knock_knock    Off (default): "Knock-knock" (owner, 2026-11-16): three quick taps on the cover switch the screen off
+ *                  while the music plays, three quick taps anywhere bring it back (core/screen/knock.hpp); its row is in the
+ *                  Menu's TOOLS, under the Sleep timer (not on the Playback page); shown and used only where the launcher
+ *                  answers `screen` (board.state requests) on a board with a touch screen
+ *   library       {"folders": [...]}: folders the library indexes besides ~/Music and the mounted drives (P2b,
  *                  core/library/roots.hpp); written only once a folder was added
  *
  * ~/.config/vinyl/settings.json (XDG_CONFIG_HOME when set), a file of its own: written atomically, only when a setting
@@ -48,6 +52,7 @@ struct Settings {
     bool gapless = true;
     ReplayGainMode replaygain = ReplayGainMode::Track;
     bool remember_long = true;
+    bool knock = false; /* "Knock-knock" (knock_knock in the file) */
     VolumeSteps volume_steps = VolumeSteps::Normal;
     std::map<std::string, int> boost_db; /* per output key; 0 is never stored */
     int boost_of(const std::string &key) const {
@@ -61,7 +66,7 @@ struct Settings {
     }
     std::vector<std::string> library_folders; /* absolute paths */
     bool operator==(const Settings &o) const {
-        return gapless == o.gapless && replaygain == o.replaygain && remember_long == o.remember_long &&
+        return gapless == o.gapless && replaygain == o.replaygain && remember_long == o.remember_long && knock == o.knock &&
                volume_steps == o.volume_steps && boost_db == o.boost_db && library_folders == o.library_folders;
     }
     bool operator!=(const Settings &o) const { return !(*this == o); }

@@ -1,0 +1,40 @@
+title Vinyl Knock-knock: three quick taps on the cover switch the screen off (all black): a tap on the output button and the keys Q, Esc, M then do nothing; three quick taps on the output button bring it back and press nothing (480x320 and 320x480 at their real density)
+sizes 480x320 320x480
+ppmm 630
+# the 3.5-inch panel's 6.3 px/mm (the owner's rule R-4)
+allow-small
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_SCREEN 1
+env VINYL_DEMO_KNOCK 1
+
+wait 800
+@480x320 tapxy 0.196 0.406
+@320x480 tapxy 0.344 0.287
+@480x320 tapxy 0.196 0.406
+@320x480 tapxy 0.344 0.287
+@480x320 tapxy 0.196 0.406
+@320x480 tapxy 0.344 0.287
+wait 300
+tap "Evolve 65"
+wait 300
+expect notext "Automatic"
+key q
+wait 300
+expect notext "Move up"
+key esc
+wait 300
+key m
+wait 300
+expect notext "Sleep timer"
+shot 01-off-black-nothing-acted
+tap "Evolve 65"
+tap "Evolve 65"
+tap "Evolve 65"
+wait 300
+expect notext "Automatic"
+tap "Evolve 65"
+wait 300
+expect text "Automatic"
+shot 02-output-after-wake
+expect noquit

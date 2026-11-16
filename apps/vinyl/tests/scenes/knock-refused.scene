@@ -1,0 +1,20 @@
+title Vinyl Knock-knock refused by the launcher (another app holds the screen off, or no service): the notice "Screen off is not available.", the screen and the input stay as they were
+sizes 640x480
+ppmm 901
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_SCREEN fail
+env VINYL_DEMO_KNOCK 1
+
+wait 800
+tapxy 0.223 0.373
+tapxy 0.223 0.373
+tapxy 0.223 0.373
+wait 400
+shot 01-refused-notice
+expect text "Screen off is not available."
+tap "Evolve 65"
+wait 300
+expect text "Automatic"
+shot 02-input-stays
+expect noquit

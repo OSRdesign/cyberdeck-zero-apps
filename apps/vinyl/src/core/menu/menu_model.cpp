@@ -63,10 +63,12 @@ const char *on_off(bool v) { return v ? "On" : "Off"; }
 std::vector<Row> menu_rows(const State &s) {
     /* only what is built (owner decision D32): the canvas's Equalizer row comes with its phase; the Library row (P2b) is
      * there while the Library is (its database opened); Keys and About are rows of their own (the brief of P2a) */
-    std::vector<Row> rows = {heading("TOOLS"),
-                             edit("sleep", "Sleep timer", sleep_menu_value(s.sleep, s.sleep_left_ms)),
-                             heading("SETTINGS"),
-                             open("playback", "Playback")};
+    std::vector<Row> rows = {heading("TOOLS"), edit("sleep", "Sleep timer", sleep_menu_value(s.sleep, s.sleep_left_ms))};
+    /* Knock-knock (owner, 2026-11-16): a tool, directly under the Sleep timer; only where the launcher can switch the screen
+     * off and on for Vinyl (board.state requests: screen) on a board with a touch screen */
+    if (s.knock) rows.push_back(edit("knock", "Knock-knock", on_off(s.settings.knock)));
+    rows.push_back(heading("SETTINGS"));
+    rows.push_back(open("playback", "Playback"));
     if (s.library) rows.push_back(open("library", "Library"));
     rows.push_back(open("output", "Output", s.output));
     rows.push_back(open("keys", "Keys"));
@@ -102,10 +104,12 @@ std::vector<Row> sleep_rows(SleepMode chosen) {
 
 std::vector<Row> playback_rows(const Settings &s, const std::string &output_key) {
     /* no Speed row (D32: "Speed (later)" dropped); no Crossfade row (P2d) */
-    return {edit("gapless", "Gapless", on_off(s.gapless)), edit("replaygain", "ReplayGain", replaygain_mode_word(s.replaygain)),
-            edit("boost", "Gain boost", boost_word(s.boost_of(output_key))),
-            edit("volume_steps", "Volume steps", volume_steps_word(s.volume_steps)),
-            edit("remember", "Remember position in long files", on_off(s.remember_long))};
+    std::vector<Row> rows = {edit("gapless", "Gapless", on_off(s.gapless)),
+                             edit("replaygain", "ReplayGain", replaygain_mode_word(s.replaygain)),
+                             edit("boost", "Gain boost", boost_word(s.boost_of(output_key))),
+                             edit("volume_steps", "Volume steps", volume_steps_word(s.volume_steps)),
+                             edit("remember", "Remember position in long files", on_off(s.remember_long))};
+    return rows;
 }
 
 std::vector<Row> boost_rows(int chosen_db) {

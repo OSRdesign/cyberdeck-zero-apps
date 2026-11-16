@@ -1,0 +1,32 @@
+title Vinyl Knock-knock and multitasking: the screen off (all black), then hidden (Super, Alt+Tab): the light comes back with the launcher; shown again, the first tap acts (the output button opens its page) and the page is repainted
+sizes 640x480
+ppmm 901
+lifecycle
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_SCREEN 1
+env VINYL_DEMO_KNOCK 1
+
+wait 800
+tapxy 0.223 0.373
+tapxy 0.223 0.373
+tapxy 0.223 0.373
+wait 300
+tap "Evolve 65"
+wait 300
+expect notext "Automatic"
+shot 00-off-black
+hide
+expect hidden
+wait 600
+show
+expect visible
+wait 400
+expect repaint
+shot 01-shown-again
+tap "Evolve 65"
+wait 300
+expect text "Automatic"
+shot 02-first-tap-acts
+close
+expect quit

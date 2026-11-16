@@ -18,8 +18,8 @@
  *            Browser also has a choose mode (Music folders > Add a folder).
  * Where the drawing makes a control smaller than the toolkit's touch target, the control keeps its look and gets a larger
  * transparent hit box, never overlapping a neighbour's (layout::place_now_hits). The previous and next buttons report
- * press, release and cancel (the transport press decides). The view only draws: every action goes to the controller
- * through Actions. LVGL thread only.
+ * press, release and cancel (the transport press decides). Knock-knock adds the cover zone and the shield (below). The
+ * view only draws: every action goes to the controller through Actions. LVGL thread only.
  */
 #pragma once
 
@@ -84,6 +84,26 @@ public:
     int list_rows(Page p) const;
     /* the sleeve's size on this canvas (the cover is decoded to it) */
     int cover_side() const;
+    /* the toolkit's TARGET in px (the touch size) */
+    int touch_target() const;
+    /* Knock-knock (2026-11-16). Every press and release of the touch screen goes to Actions::touch (the pointer's own
+     * events, seen before any object gets them); the moves and lost presses of the two boxes below too.
+     *   the cover zone   a transparent box exactly over the sleeve, under every control drawn after it (a neighbour's
+     *                    touch area keeps its taps), shown while the taps on the cover count; it does nothing itself
+     *   the shield       a fully opaque black box over the whole display on its system layer (over the header, the
+     *                    notices, the dialogs and the on-screen keyboard), shown while the screen is off: only black pixels
+     *                    remain (a panel whose backlight only dims at 0 shows nothing), and every touch lands on it, so nothing
+     *                    under it is pressed, the first touch of the wake taps included
+     * freeze_drawing: the pending areas drawn now (the black frame reaches the panel), then the display marks nothing more;
+     * thaw_drawing: marking again (each freeze thawed once: LVGL counts them), repaint: the whole display at the next
+     * refresh. core/screen BlankCover decides when. */
+    void set_knock_zone(bool on);
+    void set_input_shield(bool on);
+    bool input_shield() const;
+    void freeze_drawing();
+    void thaw_drawing(bool repaint);
+    /* the cover zone's place in screen px (the log at start) */
+    layout::R cover_rect() const;
 
     struct Impl;
 

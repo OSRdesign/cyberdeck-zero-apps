@@ -68,6 +68,7 @@ std::string settings_to_json(const Settings &s, const json::Value *keep) {
     root.set("gapless", json::Value::boolean(s.gapless));
     root.set("replaygain", json::Value::string(replaygain_mode_name(s.replaygain)));
     root.set("remember_long", json::Value::boolean(s.remember_long));
+    root.set("knock_knock", json::Value::boolean(s.knock));
     root.set("volume_steps", json::Value::string(volume_steps_name(s.volume_steps)));
     if (!s.boost_db.empty() || root.get("boost_db")) {
         json::Value b = json::Value::object();
@@ -94,6 +95,7 @@ bool settings_from_json(const std::string &text, Settings &out, json::Value *raw
     if (const json::Value *r = root.get("replaygain"); r && r->type == json::Value::Str)
         out.replaygain = replaygain_mode_from(r->s, out.replaygain);
     if (const json::Value *l = root.get("remember_long"); l && l->type == json::Value::Bool) out.remember_long = l->b;
+    if (const json::Value *k = root.get("knock_knock"); k && k->type == json::Value::Bool) out.knock = k->b;
     if (const json::Value *v = root.get("volume_steps"); v && v->type == json::Value::Str)
         out.volume_steps = volume_steps_from(v->s, out.volume_steps);
     if (const json::Value *b = root.get("boost_db"); b && b->is_obj())

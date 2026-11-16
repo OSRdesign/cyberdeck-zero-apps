@@ -5,7 +5,9 @@
  * Keys-320x480, About-480x320; report 060 with the owner's decisions of 2026-11-13): what the Menu pages list, pure and
  * tested (tests/test_menu.cpp); the view draws it (ui/menu_pages.cpp).
  *
- *   Menu        TOOLS: Sleep timer (Off or the time left); SETTINGS: Playback, Output (the output's name), Keys, About.
+ *   Menu        TOOLS: Sleep timer (Off or the time left), Knock-knock (On / Off: Enter or a tap toggles it; owner,
+ *               2026-11-16: directly under the Sleep timer, only where the launcher answers `screen` on a board with a
+ *               touch screen); SETTINGS: Playback, Output (the output's name), Keys, About.
  *               Only built features (owner decision D32, "OK"): no Equalizer or Library row until their phases
  *   Sleep timer STOP PLAYING AFTER: Off, 15 minutes, 30 minutes, 60 minutes, This track, This album or queue (the chosen
  *               one with the blue dot); the status line while it runs ("Stops in 29:12. ...")
@@ -43,7 +45,7 @@ const char *page_title(Page p); /* the header's title: "Menu", "Sleep timer", "P
 struct Row {
     enum class Kind { Heading, Open, Edit, Choice };
     Kind kind = Kind::Open;
-    std::string id;    /* what a tap or Enter does: "sleep", "playback", "output", "keys", "about"; "gapless",
+    std::string id;    /* what a tap or Enter does: "sleep", "knock", "playback", "output", "keys", "about"; "gapless",
                           "replaygain", "remember"; a choice's value ("off", "15" ... "album") */
     std::string text;
     std::string value; /* Edit: its value; Open: an optional value (the Output row's name) */
@@ -59,6 +61,10 @@ struct State {
     std::string output; /* the output's name as now playing shows it ("" when none is known) */
     std::string output_key; /* the output's volume key (output_volume_key): where its gain boost is kept ("" none) */
     bool library = false; /* P2b: the Library is available (its database opened): the Library row, below Playback */
+    /* Knock-knock (2026-11-16): the launcher answers `screen` on this board (board.state requests) and the board has a touch
+     * screen (screen.state touch_slots not 0; core/screen knock_available); else the row is not listed (an older launcher, a
+     * board without a backlight to switch, the HackBerry, a board without a touch screen) */
+    bool knock = false;
     Settings settings;
 };
 

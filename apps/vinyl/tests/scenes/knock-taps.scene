@@ -1,0 +1,64 @@
+title Vinyl Knock-knock: three quick taps on the cover switch the screen off (all black; the scenes' fake backlight): a tap on the output button and the keys Q, Esc, M then do nothing; three quick taps anywhere (on the output button) bring it back and press nothing; slow taps on the cover do nothing
+sizes 800x480 480x800 480x480
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_SCREEN 1
+env VINYL_DEMO_KNOCK 1
+
+wait 800
+shot 01-now
+# slow taps on the cover (one every 0.8 s): nothing happens, the input acts
+@800x480 tapxy 0.531 0.339
+@480x800 tapxy 0.344 0.254
+@480x480 tapxy 0.255 0.345
+wait 600
+@800x480 tapxy 0.531 0.339
+@480x800 tapxy 0.344 0.254
+@480x480 tapxy 0.255 0.345
+wait 600
+@800x480 tapxy 0.531 0.339
+@480x800 tapxy 0.344 0.254
+@480x480 tapxy 0.255 0.345
+wait 300
+tap "Evolve 65"
+wait 300
+expect text "Automatic"
+shot 02-slow-taps-nothing
+key esc
+wait 400
+# three quick taps on the cover: the screen off
+@800x480 tapxy 0.531 0.339
+@480x800 tapxy 0.344 0.254
+@480x480 tapxy 0.255 0.345
+@800x480 tapxy 0.531 0.339
+@480x800 tapxy 0.344 0.254
+@480x480 tapxy 0.255 0.345
+@800x480 tapxy 0.531 0.339
+@480x800 tapxy 0.344 0.254
+@480x480 tapxy 0.255 0.345
+wait 300
+# nothing acts while it is off
+tap "Evolve 65"
+wait 300
+expect notext "Automatic"
+key q
+wait 300
+expect notext "Move up"
+key esc
+wait 300
+key m
+wait 300
+expect notext "Sleep timer"
+shot 03-off-black-nothing-acted
+# three quick taps anywhere: on the output button, which is not pressed
+tap "Evolve 65"
+tap "Evolve 65"
+tap "Evolve 65"
+wait 300
+expect notext "Automatic"
+shot 04-woken
+tap "Evolve 65"
+wait 300
+expect text "Automatic"
+shot 05-output-after-wake
+expect noquit

@@ -1,0 +1,26 @@
+title Vinyl Knock-knock on a board without a touch screen (screen.state touch_slots=0), the launcher answering screen: no row in the Menu, and a setting left On does nothing (three quick taps on the cover, then the output button opens its page)
+sizes 640x480
+ppmm 901
+env VINYL_DEMO 1
+env VINYL_DEMO_STATE playing
+env VINYL_DEMO_PAGE menu
+env VINYL_DEMO_SCREEN 1
+env VINYL_DEMO_NOTOUCH 1
+env VINYL_DEMO_KNOCK 1
+
+wait 900
+shot 01-menu-no-row
+expect text "Sleep timer"
+expect notext "Knock-knock"
+key left
+wait 600
+shot 02-now
+tapxy 0.223 0.373
+tapxy 0.223 0.373
+tapxy 0.223 0.373
+wait 300
+tap "Evolve 65"
+wait 300
+shot 03-output-opens
+expect text "Automatic"
+expect noquit

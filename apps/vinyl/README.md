@@ -4,7 +4,7 @@ A music player for CyberdeckZero Launcher boards: it plays the music in `~/Music
 from M3U playlists, with gapless playback, shuffle, repeat, embedded cover art, ReplayGain, a sleep timer and resume where
 you stopped (a long mix or audiobook keeps its own place). It plays on while you use other apps (on boards with
 multitasking), to wired outputs and, on boards with a sound server, to Bluetooth headsets and speakers; headset, speaker
-and keyboard play keys work. Version **0.5.0** (a software Gain boost for quiet outputs and finer Volume steps; 0.4.0 brought playlists,
+and keyboard play keys work. Version **0.6.0** (Knock-knock: three taps on the cover switch the screen off while the music plays; 0.5.0 brought a software Gain boost for quiet outputs and finer Volume steps; 0.4.0 brought playlists,
 M3U8 files in `~/Music/Playlists`; 0.3.0 brought the Library, a SQLite library kept up to date by a background scan, with
 Artists, Albums, Songs, Genres, Search, Track info and the actions of a row, and USB drives mounted on request; 0.2.0 the
 Menu with the sleep timer, the Playback settings, the keys and About).
@@ -53,7 +53,7 @@ The deck (640x480), square (480x480) and large (800x480, two panes), the Menu, t
 | **Now playing** | cover art (embedded JPEG or PNG, else the drawn sleeve) with the record sliding out (its label about a third out, with a dot and a centre ring that show it turning), title (one line that scrolls, or two lines on the 640x480, square and large screens), artist, album and year, the format and Gapless as information (one line at 480x320, flat chips at 640x480, plain text elsewhere; on the square and large screens the playing track's ReplayGain after it, "Gapless, RG -3.2 dB"), the output (a full-width button with the device's name and a chevron; a chip on 800x480 and wider), the volume group ("-", the level on teal, "+"); the position with a seek bar (a tap seeks, a drag scrubs), previous, play / pause, next, shuffle, repeat (off, all, one: a teal mark, and a "1" for one); the Menu key (the sliders icon: the seventh transport key at 480x320, the sixth on the square screens, an icon key at the left of the bottom row in portrait, a bottom-row key with its word on 640x480 and 800x480 and wider); the queue key (480x320) or the Queue key of the bottom row; the Browse key (640x480, square, large); up next (square), the queue pane and the sleep-timer key (large). An empty queue dims the transport keys, which then do nothing (the Queue, Browse, Menu and sleep-timer keys stay: they open their pages). |
 | **Queue** | the play order from the playing track, "3 OF 20, 1 H 24 MIN LEFT"; Move up, Move down, Remove and **Add** (0.4.0; there is no Clear all: remove rows one by one). Add opens the Library in a multi-select mode ("ADDING TO THE QUEUE, N TRACKS"): a green check marks the songs that are in the queue already ("check x2" when twice), a tap adds the song at the END of the queue ("Added to the queue."), a hold (or Ctrl+O) offers Play next and Add to the queue on a song, an album or an artist (an album is added whole, in album order), "Add album" on an album page; the **Done** button at the bottom, where the mini player is (or Esc), comes back to the Queue. With the queue empty only Add acts; with only the playing track Move up and Move down are dimmed. Save as playlist is the chip at the heading (or P). No dragging in the lists (the seek bar is the one control that drags). |
 | **Output** | Automatic (the system's default output), the Bluetooth devices (music or call quality), the wired outputs, a paired device that is off (grey: a tap says how to connect it). Vinyl never switches output by itself: when the output in use goes away, playback pauses ("Evolve 65 disconnected. Paused."). |
-| **Menu** (P2a) | TOOLS: Sleep timer (Off, the time left, or the track mode); SETTINGS: Playback, Library (when the Library's database opened: its scan, Rescan now, Music folders), Output (the output's name: it opens the Output page), Keys, About. Only what is built is listed (the Equalizer comes later). |
+| **Menu** (P2a) | TOOLS: Sleep timer (Off, the time left, or the track mode), **Knock-knock** (0.6.0: On / Off, Off by default, directly under the Sleep timer, only where the launcher can switch the screen off on a board with a touch screen; Enter or a tap turns it on or off; see Knock-knock below); SETTINGS: Playback, Library (when the Library's database opened: its scan, Rescan now, Music folders), Output (the output's name: it opens the Output page), Keys, About. Only what is built is listed (the Equalizer comes later). |
 | **Sleep timer** | Stop playing after: Off, 15, 30 or 60 minutes, This track, This album or queue (the chosen one has the blue dot; a choice closes the page, the Menu shows the time left); while it runs, "Stops in 29:12. The music fades out for the last 10 seconds." The minutes count from the choice, playing or paused; the last 10 s fade out, then the music pauses ("Sleep timer ended. Paused."). This track stops at the end of the track that plays, This album or queue before the next album (the album tag, else the folder) or at the end of the queue (a playlist plays to its end); the queue then waits on the next track, paused. The timer runs on while you change pages and while Vinyl is hidden; a restart forgets it; it pauses the music and nothing else. |
 | **Playback** | Gapless (On: the next track continues on the same stream when its format is the same; Off: a short gap at every change), ReplayGain (Off / Track / Album, Track by default: the loudness from the files' tags), **Gain boost** (0.5.0: Off, +1 to +4 dB, per output; see Gain boost below), **Volume steps** (0.5.0: Normal, 1 dB, 0.5 dB, 0.1 dB; see below), Remember position in long files (On: a file longer than 20 minutes starts again where you left it). Enter or a tap turns Gapless and Remember on or off; ReplayGain, Gain boost and Volume steps open their lists. |
 | **Keys** | every key and what it does (the key's name, then its action; the rows of now playing say so); it scrolls. |
@@ -88,6 +88,7 @@ output lists are read in the background).
 | Close a notice | Esc (it also goes back as Esc always does: at the browser Vinyl quits) | tap it (it also goes after 6 s, 8 s for a disconnect) |
 | Back; at the browser, quit | Esc (from a Menu page: the Menu; from the Menu: the page it was opened from) | the header's Esc |
 | Headset, speaker, keyboard media keys | Play/Pause, PlayCD, PauseCD (a toggle), Next, Previous (as Right / Left above, held too), Stop (pause and back to the start) | |
+| Screen off / on (Knock-knock, 0.6.0, when it is On) | while it is off: the media keys, the volume keys and `-` / `=` only | three quick taps on the cover of Now playing switch it off; three quick taps anywhere bring it back |
 
 Previous and next act when the key is released, the same from every path (the transport press, owner ruling
 2026-11-12): next plays the next track (at the end of the queue with repeat off it stays on the last one; repeat all and
@@ -203,6 +204,45 @@ Both are in the Playback settings of the Menu.
 - **A tip.** The built-in jacks of the Pi 3 and Pi 4 are basic quality; a USB DAC gives a cleaner and louder output. The
   boost helps most on the built-in jack.
 
+## Knock-knock: the screen off while the music plays (0.6.0)
+
+To save the battery while you listen: knock on the cover and the screen goes dark, knock anywhere and it comes back.
+
+- **The setting**: Menu > TOOLS > **Knock-knock**, directly under the Sleep timer (the owner's place for it, 2026-11-16),
+  Off by default (Enter or a tap turns it on or off; the Menu page has no help strip). The row shows only where the launcher can switch the screen off and on for an app (board.state's
+  `requests` lists `screen`: a launcher with the screen request, 0.10.4 or later, on a board with a backlight, levels or on /
+  off) and the board has a touch screen (screen.state does not say `touch_slots=0`). An older launcher, a board without a
+  backlight to switch (the HackBerry) or without a touch screen shows no row, and a setting left On does nothing there.
+- **Screen off**: on Now playing, **three quick taps on the cover square** (the album art, or the drawn sleeve). Only the
+  cover counts: taps anywhere else do what they always do, and a tap elsewhere in between starts the count again. The
+  screen goes **black**: Vinyl covers the whole display with opaque black and stops drawing, and the backlight goes dark
+  where the panel can (some panels only dim at their lowest backlight, such as the Pi 3A+ Waveshare DSI panel: the black
+  picture keeps them dark too).
+- **Screen on**: **three quick taps anywhere**. They press nothing: no button, no row, no Esc under them acts, the first
+  one included.
+- **Quick taps**: each press shorter than 0.4 s, each gap from a release to the next press shorter than 0.5 s, the three
+  within 1.2 s from the first press to the last release, and the finger still (it may move a sixth of the touch target
+  between its press and its release: about 1 mm, 13 px on the deck). Slower taps, long presses and drags do nothing. After
+  a slow start the last three taps still count (the count slides; nothing has to be waited for).
+- **While it is off**: the music plays on, the queue advances, the sleep timer runs; the **media keys** of headsets,
+  speakers and keyboards (play, pause, next, previous, stop; held next / previous scan as always), the **volume and mute
+  keys** (the launcher's) and **`-` and `=`** (Vinyl's own volume keys: the output Vinyl plays on, one step a press) work.
+  **Every other key and every touch is ignored**: Space, Enter, the arrows, the letters, comma and dot, a short Esc.
+  (Holding Esc 3 s is a launcher feature that depends on the board's multitasking and key setup; it is not part of Vinyl and Vinyl does not
+  implement it.) Nothing is drawn under the
+  black while it is off (no animation, no clock, no scrolling title); the first frame after waking is a full repaint.
+- **The screen always comes back**: when Vinyl quits (Esc at the root, the launcher's close, a signal), when
+  it is hidden (Super, Alt+Tab, the three-finger hold), when the setting is turned Off, when the launcher stops offering
+  the request, and on a crash Vinyl can catch (it sends `screen on` before it ends; the black picture it left is then the
+  launcher's to repaint when it takes the panel back). The launcher also restores the light by
+  itself, about a second after Vinyl dies (`kill -9` included) and when Vinyl is hidden or replaced, so a black screen is
+  never left behind. If the launcher refuses (another app holds the screen off) or does not answer, the screen stays on,
+  the input stays as it was and Vinyl says "Screen off is not available.".
+- **Nothing is saved by it**: the brightness and the launcher's Settings stay as they were; the screen comes back at the
+  level it had.
+- **Needs a touch screen**: where the launcher says the board has none (`touch_slots=0`) the row is not listed. Where the
+  launcher does not say (an older launcher, multitasking off) the row shows; without a touch screen it then does nothing.
+
 ## Background playback
 
 `.desktop` `X-Background=run`: on a launcher with multitasking (canvases 480 px and more on the short side) Super, Alt+Tab
@@ -231,7 +271,7 @@ plays in front (`dim allow`, decision D16).
 
 ## Install
 
-Settings > Apps > Available > Vinyl, or by hand: `sudo apt install ./vinyl_0.5.0_arm64.deb` (apt installs the
+Settings > Apps > Available > Vinyl, or by hand: `sudo apt install ./vinyl_0.6.0_arm64.deb` (apt installs the
 dependencies), `sudo dpkg -r vinyl` to remove it.
 
 ## Files the app keeps
@@ -239,14 +279,14 @@ dependencies), `sudo dpkg -r vinyl` to remove it.
 | Path | What |
 |---|---|
 | `~/.config/vinyl/state.json` | the queue, its order, shuffle, repeat, the position, the output, the browser's folder, the software level of an output without a mixer; written on a change (a track, a pause, the queue, a folder, the exit) and at most once a minute while playing |
-| `~/.config/vinyl/settings.json` | Gapless, ReplayGain, Gain boost (per output), Volume steps, Remember position in long files; written only when one changes |
+| `~/.config/vinyl/settings.json` | Gapless, ReplayGain, Gain boost (per output), Volume steps, Remember position in long files, Knock-knock (`knock_knock`, 0.6.0); written only when one changes |
 | `~/Music/Playlists/<name>.m3u8` | the playlists (0.4.0); written atomically (a temporary file renamed over the old one, so a power cut leaves the old file); Vinyl only writes them when you ask |
 | `~/.local/share/vinyl/library.db` | the Library: a cache of the tags and the play counts, rebuilt by a scan (a damaged file is moved aside as `library.db.bad`) |
 | `~/.config/vinyl/positions.json` | where each long file (over 20 minutes) was left, the 500 most recent; written on a pause, a track change, the exit and at most once a minute while a long file plays |
 
 Delete them to start fresh. Vinyl writes nothing else (it never writes tags or music files). The sleep timer is not saved.
 
-## Known limits (0.5.0)
+## Known limits (0.6.0)
 
 - Playlists: only `.m3u8` files in `~/Music/Playlists` are listed (a `.m3u` put there is not; import it from Folders). A
   Windows path is matched with its case as written (a file `Song.MP3` for `song.mp3` is not found); a file name that holds
@@ -289,7 +329,7 @@ the FLAC / Opus readers come from this repository's Cassette (same author, MIT).
 
 ```sh
 wsl -e sh apps/vinyl/tests/run.sh               # the unit tests (-Werror) and the real-library fixtures
-wsl -e sh apps/vinyl/build.sh host              # harness, unit tests, 77 scenes (qa* for the design QA), sheets
+wsl -e sh apps/vinyl/build.sh host              # harness, unit tests, 163 scenes (qa* for the design QA, knock* for Knock-knock), sheets
 wsl -e sh apps/vinyl/build.sh cross             # the arm64 binary; --arch amd64 for PCs
 wsl -e sh apps/vinyl/tests/abi/run.sh [root]    # the hand-written FFmpeg / mpg123 / vorbisfile ABI against headers
 python3 tools/make_registry.py --only vinyl --out <folder>    # a local .deb (not published)
@@ -306,6 +346,10 @@ Board protocol: [`tests/BOARD-TESTS.md`](tests/BOARD-TESTS.md).
 
 ## Changes
 
+- **0.6.0** (published 2026-11-16): **Knock-knock** (owner request and decisions of 2026-11-16): Menu > Tools, directly under the Sleep timer, Off by
+  default. Needs **launcher 0.10.4 or later** (the `screen` request) and a board with a backlight and a touch screen; hidden otherwise:
+  three quick taps on the cover switch the screen off while the music plays on, three quick taps anywhere bring it back;
+  while it is off only the media and volume keys (and `-` / `=`) act; the screen comes back on every way out (exit, hidden, the setting Off, a caught crash).
 - **0.5.0** (published 2026-11-16): **Gain boost** (0 to +4 dB per output, a limiter against clipping; a dense master gains
   less than the set value) and **Volume steps** (Normal, 1, 0.5 and 0.1 dB, the dB chip, never finer than the output's own
   step, hold "-" or "+" to repeat) in the Playback settings, with a gain line in the journal; a list (the queue, the
