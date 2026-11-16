@@ -269,6 +269,19 @@ struct PlaybackSnap {
     unsigned underruns = 0;     /* the Player's underrun count for the take being played */
 };
 
+/* The playback VOLUME (core/playback/output_volume.hpp; the owner's request of 2026-11-16, Vinyl's model): the volume of the
+ * output a take plays on, in levels fitted to that output. The recorder shows it in SOFT's place while a take plays, scans, is
+ * paused or previews (ui_format.hpp volume_in_soft_slot); volume_step() and the - / = keys change it. */
+struct VolumeSnap {
+    bool active = false;       /* a take plays, scans, is paused or previews, or the Edit page's PLAY runs: volume_step acts */
+    int pct = -1;              /* the level in percent of the output's levels (the level it comes back at while muted); -1 not known */
+    bool muted = false;        /* the output is muted (its switch, its mute value, the sink's mute, or Cassette's own mute) */
+    bool can_down = false, can_up = false; /* "-" ("-" at the first level mutes) / "+" would change something */
+    bool software = false;     /* the output has no volume control: Cassette's own software volume (the Player's gain) */
+    std::string output;        /* the output's key in settings.json playback_volume ("alsa:hw:CARD=UC02", "bt:<MAC>",
+                                * "pulse:<sink>", "alsa:default"); "" while not known */
+};
+
 /* The live monitor (settings monitor, monitor_level, monitor_output). */
 struct MonitorSnap {
     bool active = false;        /* the microphone is being played right now */
@@ -389,6 +402,7 @@ struct Snapshot {
     CardSnap card;
     CaptureSnap capture;
     PlaybackSnap playback;
+    VolumeSnap volume;
     MonitorSnap monitor;
     TakeSnap take;
     ProblemSnap problems;
@@ -498,6 +512,10 @@ public:
      * and snapshot().monitor says why. */
     bool set_monitor_output(const std::string &id);
     bool set_wave_fit(bool on);            /* the trim waveform's scale (settings wave_fit): TRUE (false) or FIT (true); persisted at once */
+    /* The playback VOLUME (VolumeSnap): one level of the output a take plays on, down (dir < 0) or up; at the first level "-"
+     * mutes, muted "-" does nothing and "+" brings the level back. Only while snapshot().volume.active; it never touches the
+     * input gain (CARD, SOFT). false: nothing changed (nothing plays, the level is not known, the end of the range). */
+    bool volume_step(int dir);
     bool select_card(int index);           /* index into snapshot().card.labels (ALSA cards, then Bluetooth devices); refused while a take runs */
     bool select_output(const std::string &device); /* "" for automatic; "bt:<MAC>" a Bluetooth output (a placeholder stays when it is not there) */
     void refresh_cards();                  /* re-lists the capture cards (the labels), e.g. on opening Settings */

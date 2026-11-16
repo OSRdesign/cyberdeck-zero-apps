@@ -43,6 +43,7 @@ struct PulseSinkOptions {
     uint32_t stuck_ms = 3000;        /* no progress for this long: the device is gone (-EIO) */
     std::string stream_name = "Cassette playback";
     std::string role = "music";
+    bool own_volume = true;          /* the take: its stream at 100 % with its own restore key (PulsePlaybackRequest::own_volume) */
 };
 
 /* The playback options of the live monitor: a small server target and ring (study C4: about 20 ms fragments, total delay below

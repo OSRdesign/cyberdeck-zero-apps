@@ -59,6 +59,9 @@
  *   notsetup-server (T8) Settings: the Input picker with the two USB cards and the footer "The sound server is not running" (the
  *                launcher says a sound server owns the Bluetooth endpoints, none answers)
  *
+ * CASSETTE_DEMO_VOLUME=mute|unknown|<percent>: the playback VOLUME shown in SOFT's slot while a take plays (default 50 %, level 15 of
+ * 30; volume_step moves one level, "-" at level 1 mutes, "+" un-mutes, only while a take plays).
+ *
  * DemoDriver's UiActions change the model the way the controller would in simple cases (the steppers step, toggles
  * flip, a choice is taken, a tap on the countdown cancels it, the trim marker, zoom, flags, IN / OUT and the boxes
  * follow; a small deck: REC records, PLAY/PAUSE plays Take 006 or pauses, STOP stops, REW / FWD held scan at 5x and

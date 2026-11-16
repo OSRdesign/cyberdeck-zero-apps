@@ -241,8 +241,11 @@ Stepper::Stepper(lv_obj_t *parent, const Fit &fit, DRect r, const char *caption,
     border(frame_, fit.px(3), col::kFrame);
     caption_ = label(parent, Face::Bold, fit.px(look.cap_px), col::kScale, 0, 0, fit.w(r.x + bw, r.w - 2 * bw),
                      LV_TEXT_ALIGN_CENTER, ls_px(look.cap_ls, fit.s));
-    set_fitted(caption_, Face::Bold, fit.px(look.cap_px), ls_px(look.cap_ls, fit.s),
-               std::max(8, fit.px(look.cap_px * 9 / 11)), caption);
+    cap_px_ = fit.px(look.cap_px);
+    cap_ls_ = ls_px(look.cap_ls, fit.s);
+    cap_min_ = std::max(8, fit.px(look.cap_px * 9 / 11));
+    caption_text_ = caption ? caption : "";
+    set_fitted(caption_, Face::Bold, cap_px_, cap_ls_, cap_min_, caption_text_);
     value_ = label(parent, Face::Mono, fit.px(value_px), col::kDigit, 0, 0, 10, LV_TEXT_ALIGN_CENTER);
     auto step = on_step;
     down_ = std::make_unique<IconButton>(parent, fit, DRect{r.x, r.y, bw, r.h}, minus, [step] { if (step) step(-1); }, look.icon);
@@ -253,6 +256,8 @@ Stepper::Stepper(lv_obj_t *parent, const Fit &fit, DRect r, const char *caption,
 
 void Stepper::place(const Fit &fit, DRect r, double value_px)
 {
+    fit_ = fit;
+    r_ = r;
     value_px_ = value_px;
     lv_obj_set_pos(frame_, fit.x(r.x), fit.y(r.y));
     lv_obj_set_size(frame_, fit.w(r.x, r.w), fit.h(r.y, r.h));
@@ -279,6 +284,14 @@ void Stepper::set_value(const std::string &value)
     value_text_ = value;
     const int px = static_cast<int>(std::lround(value_px_ * s_));
     set_fitted(value_, Face::Mono, px, 0, std::max(8, px * 3 / 4), value);
+}
+
+void Stepper::set_caption(const std::string &caption)
+{
+    if (caption == caption_text_) return;
+    caption_text_ = caption;
+    set_fitted(caption_, Face::Bold, cap_px_, cap_ls_, cap_min_, caption_text_);
+    place(fit_, r_, value_px_); /* the caption's line again (a fitted size may differ) */
 }
 
 void Stepper::set_enabled(bool down, bool up)

@@ -68,6 +68,27 @@ PlayKeyLook play_key_look(Transport t)
     return {false, false};
 }
 
+bool volume_in_soft_slot(Transport t)
+{
+    return t == Transport::Playing || t == Transport::PlayingPaused || t == Transport::ScanForward || t == Transport::ScanReverse;
+}
+
+StepperSlots stepper_slots(bool card_shown, Transport t)
+{
+    StepperSlots s;
+    s.volume = volume_in_soft_slot(t);
+    s.card = card_shown && !s.volume;
+    s.wide = !s.card;
+    return s;
+}
+
+std::string volume_text(const VolumeVm &v)
+{
+    if (v.pct < 0) return "--";
+    if (v.muted) return "Mute";
+    return std::to_string(std::min(100, v.pct)) + " %";
+}
+
 double hub_speed_dps(Transport t, int jump_dir)
 {
     if (jump_dir > 0) return 3 * kHubPlayDps;

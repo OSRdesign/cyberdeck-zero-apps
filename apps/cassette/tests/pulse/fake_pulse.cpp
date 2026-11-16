@@ -175,6 +175,36 @@ int FakePulse::list_cards(std::vector<PulseCard> &out) {
     return 0;
 }
 
+int FakePulse::set_sink_volume_raw(const std::string &sink, unsigned channels, uint32_t volume, int mute) {
+    (void)channels;
+    nap();
+    std::lock_guard<std::recursive_mutex> g(mu_);
+    if (!connected_) return kPulseState;
+    if (volume_missing) return kPulseMissing;
+    ++volume_calls;
+    for (PulseDevice &d : sinks)
+        if (d.name == sink) {
+            d.volume_raw = volume;
+            if (mute >= 0) d.muted = mute != 0;
+            notify(PulseChange::What::Sink, PulseChange::Kind::Change, d.index);
+            return 0;
+        }
+    return kPulseNoDevice;
+}
+
+int FakePulse::read_sink_volume(const std::string &sink, uint32_t &volume, bool &muted) {
+    nap();
+    std::lock_guard<std::recursive_mutex> g(mu_);
+    if (!connected_) return kPulseState;
+    for (const PulseDevice &d : sinks)
+        if (d.name == sink && d.volume_raw >= 0) {
+            volume = static_cast<uint32_t>(d.volume_raw);
+            muted = d.muted;
+            return 0;
+        }
+    return kPulseNoDevice;
+}
+
 int FakePulse::card_by_name(const std::string &name, PulseCard &out) {
     nap();
     std::lock_guard<std::recursive_mutex> g(mu_);
@@ -286,7 +316,7 @@ int FakePulse::open_playback(const PulsePlaybackRequest &req, std::unique_ptr<Pu
     rec.channels = fmt.channels;
     rec.flags = fmt.flags;
     rec.attr = fmt.requested;
-    rec.props = pulse_stream_props(req.stream_name, req.role, "Cassette");
+    rec.props = pulse_stream_props(req.stream_name, req.role, "Cassette", req.own_volume);
     streams.push_back(rec);
     const size_t i = streams.size() - 1;
     std::unique_ptr<PulsePlayback> pb(new PulsePlayback(req, fmt, [this] { return clock.load(); }));

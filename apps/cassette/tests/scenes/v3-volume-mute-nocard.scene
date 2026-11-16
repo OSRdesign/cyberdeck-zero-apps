@@ -1,0 +1,36 @@
+title Cassette playback VOLUME: muted it reads Mute (- does nothing, = brings 50 % back); a card without a level control: SOFT at the full width while recording, VOLUME in the same place while the take plays
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO nocard
+env CASSETTE_DEMO_VOLUME mute
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+expect text "SOFT"
+expect notext "CARD"
+shot nocard-recording
+key x
+wait 300
+key space
+wait 400
+expect text "VOLUME"
+expect text "Mute"
+expect notext "SOFT"
+shot nocard-volume-mute
+type -
+wait 300
+expect text "Mute"
+say - while muted does nothing
+type =
+wait 300
+expect text "50 %"
+expect notext "Mute"
+say = un-mutes at the level it had
+shot nocard-volume
+key x
+wait 300
+expect text "SOFT"
+expect notext "VOLUME"
+expect notext "CARD"
+expect notext "LAYOUT FAIL"
+expect noquit

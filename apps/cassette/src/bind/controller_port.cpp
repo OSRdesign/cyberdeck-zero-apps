@@ -49,6 +49,7 @@ public:
     bool set_limiter(bool on) override { return c_.set_limiter(on); }
     bool set_monitor(bool on) override { return c_.set_monitor(on); }
     bool set_wave_fit(bool on) override { return c_.set_wave_fit(on); }
+    bool volume_step(int dir) override { return c_.volume_step(dir); }
     bool set_monitor_level(int p) override { return c_.set_monitor_level(p); }
     bool set_monitor_output(const std::string &id) override { return c_.set_monitor_output(id); }
     bool set_mute(bool on) override { return c_.set_mute(on); }

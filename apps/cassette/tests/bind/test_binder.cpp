@@ -102,6 +102,15 @@ void test_steppers()
     r.act.soft_gain(0);
     CHECK(r.calls().empty());
 
+    /* VOLUME (the stepper in SOFT's slot while a take plays, and the - / = keys): one level a press, straight to the
+     * controller, which ignores it while nothing plays; never the input gain */
+    r.act.volume_step(+1);
+    r.act.volume_step(-1);
+    r.act.volume_step(0);
+    c = r.calls();
+    CHECK(c.size() == 2 && c[0] == "volume_step 1" && c[1] == "volume_step -1");
+    CHECK(!has(c, "set_soft_gain_db 24.0") && !has(c, "set_level_db"));
+
     /* CARD: one 1 dB step on a fine card */
     r.port.snap.card.level_db = 12.0;
     r.act.card_gain(+1);

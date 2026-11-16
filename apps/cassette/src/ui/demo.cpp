@@ -769,6 +769,22 @@ ViewModel demo_model(const std::string &scene)
     }
     /* CASSETTE_DEMO_NOTICE=<text>: a notice that stays until a tap dismisses it (the narrow recorder) or the scene ends */
     if (const char *n = std::getenv("CASSETTE_DEMO_NOTICE")) vm.notice = n;
+    /* the playback VOLUME (shown in SOFT's slot while a take plays): level 15 of a -60..0 dB output's 30 levels, 50 %;
+     * CASSETTE_DEMO_VOLUME=mute (muted at that level) | unknown ("--", both buttons dimmed) | <percent> */
+    vm.rec.volume.pct = 50;
+    vm.rec.volume.can_down = vm.rec.volume.can_up = true;
+    if (const char *v = std::getenv("CASSETTE_DEMO_VOLUME"); v && *v) {
+        const std::string s = v;
+        if (s == "mute") {
+            vm.rec.volume.muted = true;
+            vm.rec.volume.can_down = false;
+        } else if (s == "unknown") {
+            vm.rec.volume = VolumeVm();
+        } else {
+            vm.rec.volume.pct = std::clamp(std::atoi(v), 0, 100);
+            vm.rec.volume.can_up = vm.rec.volume.pct < 100;
+        }
+    }
     /* CASSETTE_DEMO_LIM / CASSETTE_DEMO_LOWCUT = on|off: the LIM and LOW CUT lamps (lit: the function is on in Settings) */
     if (const char *v = std::getenv("CASSETTE_DEMO_LIM"); v && *v) vm.rec.info.limiter = std::string(v) == "on";
     if (const char *v = std::getenv("CASSETTE_DEMO_LOWCUT"); v && *v) vm.rec.info.low_cut = std::string(v) == "on";
@@ -958,6 +974,25 @@ UiActions DemoDriver::actions()
     a.soft_gain = [this](int d) {
         log_action("soft_gain " + std::to_string(d));
         vm_.rec.soft.db = std::clamp(vm_.rec.soft.db + d, 0.0, 24.0);
+        emit();
+    };
+    a.volume_step = [this](int d) {
+        log_action("volume_step " + std::to_string(d));
+        /* as the controller: only while a take plays; one of 30 levels a press, "-" at level 1 mutes, "+" muted un-mutes */
+        VolumeVm &v = vm_.rec.volume;
+        if (!volume_in_soft_slot(vm_.rec.transport) || v.pct < 0 || d == 0) return;
+        int level = std::clamp((v.pct * 30 + 50) / 100, 0, 30);
+        if (v.muted) {
+            if (d < 0) return;
+            v.muted = false;
+        } else if (d < 0 && level <= 1) {
+            v.muted = true;
+        } else {
+            level = std::clamp(level + (d < 0 ? -1 : 1), 1, 30);
+            v.pct = (100 * level + 15) / 30;
+        }
+        v.can_down = !v.muted;
+        v.can_up = v.muted || level < 30;
         emit();
     };
     a.notice_dismiss = [this] {

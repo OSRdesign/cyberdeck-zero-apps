@@ -88,6 +88,22 @@ struct PlayKeyLook {
 };
 PlayKeyLook play_key_look(Transport t);
 
+/* The playback VOLUME on the recorder (the owner's request of 2026-11-16): while a take plays, scans, is paused or previews
+ * (Playing, PlayingPaused, ScanForward, ScanReverse: a list preview runs the deck too) the SOFT stepper's slot is the VOLUME
+ * stepper and the CARD stepper is hidden; idle, the countdown, recording and a paused recording keep CARD and SOFT. */
+bool volume_in_soft_slot(Transport t);
+/* The two stepper places of the recorder: whether CARD shows (only with a card level and outside the VOLUME states), whether
+ * the second slot is VOLUME (else SOFT), and whether it takes the full width (whenever CARD is hidden: the CassetteNoCard
+ * place, so nothing else on the page moves). */
+struct StepperSlots {
+    bool card = false;
+    bool volume = false;
+    bool wide = false;
+};
+StepperSlots stepper_slots(bool card_shown, Transport t);
+/* The VOLUME value: "52 %", "Mute" (the level it comes back at is not shown), "--" while not known. */
+std::string volume_text(const VolumeVm &v);
+
 /* The cassette hubs (owner, 2026-11-09): both hubs turn the same way at the same speed (a real cassette), in degrees per
  * second, counterclockwise positive:
  *   Recording, Playing                 +kHubPlayDps   (one turn in 2.4 s)

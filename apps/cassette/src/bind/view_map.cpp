@@ -991,6 +991,12 @@ ui::ViewModel map_view(const MapInput &in)
     r.soft.db = s.card.soft_gain_db;
     r.soft.can_down = s.card.soft_gain_db > kSoftGainMin + 0.01;
     r.soft.can_up = s.card.soft_gain_db < kSoftGainMax - 0.01;
+    /* the playback VOLUME: the page shows it in SOFT's place while a take plays, scans, is paused or previews (the transport
+     * decides: ui_format.hpp volume_in_soft_slot); CARD and SOFT keep their values */
+    r.volume.pct = s.volume.active ? s.volume.pct : -1;
+    r.volume.muted = s.volume.active && s.volume.muted;
+    r.volume.can_down = s.volume.active && s.volume.can_down;
+    r.volume.can_up = s.volume.active && s.volume.can_up;
 
     /* ---- settings ---- */
     vm.settings.rows = settings_rows(s, local.next_take);
@@ -1138,6 +1144,8 @@ bool same(const ui::RecorderVm &a, const ui::RecorderVm &b)
     auto gain = [](const ui::GainVm &g, const ui::GainVm &h) {
         return g.shown == h.shown && g.db == h.db && g.can_down == h.can_down && g.can_up == h.can_up;
     };
+    const ui::VolumeVm &u = a.volume, &w = b.volume;
+    if (u.pct != w.pct || u.muted != w.muted || u.can_down != w.can_down || u.can_up != w.can_up) return false;
     return gain(a.card, b.card) && gain(a.soft, b.soft);
 }
 

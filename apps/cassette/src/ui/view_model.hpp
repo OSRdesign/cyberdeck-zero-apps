@@ -68,6 +68,15 @@ struct GainVm {
     bool can_down = true, can_up = true; /* false: that button dimmed */
 };
 
+/* The playback VOLUME (the owner's request of 2026-11-16): the volume of the output a take plays on, shown by the SOFT stepper's
+ * slot while a take plays, scans, is paused or previews (ui_format.hpp volume_in_soft_slot: the caption VOLUME, the value
+ * "52 %", the CARD stepper hidden and the slot at the full width, as SOFT without a card level). */
+struct VolumeVm {
+    int pct = -1;                /* the output's level in percent of its levels; -1: not known ("--") */
+    bool muted = false;          /* shown "Mute" */
+    bool can_down = false, can_up = false; /* false: that button dimmed */
+};
+
 /* What the info strip and the portrait info box say (joined by ui_format.hpp info_line / info_title / info_detail). */
 struct InfoVm {
     std::string take;            /* "TAKE 007" (recording, idle) or the playing take "TAKE 006" */
@@ -122,6 +131,7 @@ struct RecorderVm {
     std::string standing_notice;
     GainVm card;                 /* CARD stepper */
     GainVm soft;                 /* SOFT stepper */
+    VolumeVm volume;             /* VOLUME in SOFT's slot while a take plays (volume_in_soft_slot of `transport`) */
 };
 
 /* ------------------------------------------------------------------------------------------------ settings */
@@ -359,6 +369,8 @@ struct UiActions {
     std::function<void()> countdown_cancel;           /* a tap on the countdown panel, or Esc during the countdown */
     std::function<void(int dir)> card_gain;           /* CARD -1 / +1 step */
     std::function<void(int dir)> soft_gain;           /* SOFT -1 / +1 step */
+    std::function<void(int dir)> volume_step;         /* VOLUME -1 / +1 level (the stepper in SOFT's slot while a take plays, and
+                                                       * the - / = keys on every page; nothing while no take plays) */
     /* navigation: the page now shown (Recorder after Esc, List, Settings, Trim after EDIT) */
     std::function<void(Screen)> open;
     /* a tap on the notice that covers the counter row of the narrow recorder: dismisses it (the next one may follow) */

@@ -127,6 +127,12 @@ ui::UiActions Binder::actions()
             port_.set_soft_gain_db(std::clamp(cur + dir * step, kSoftGainMin, kSoftGainMax));
         });
     };
+    /* the playback VOLUME (the stepper in SOFT's place while a take plays, and the - / = keys on every page): the controller
+     * ignores it while nothing plays; it never touches the input gain */
+    a.volume_step = [this](int dir) {
+        if (dir == 0) return;
+        post([this, dir] { port_.volume_step(dir); });
+    };
     a.notice_dismiss = [this] { local_.notice.clear(); }; /* the next notice comes with the next tick */
     a.open = [this](ui::Screen s) {
         const ui::Screen was = screen_;

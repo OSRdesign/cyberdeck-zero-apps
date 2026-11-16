@@ -1,0 +1,34 @@
+title Cassette bound (CASSETTE_DEMO=1): a 3 s take played back: VOLUME 100 % in the SOFT slot (the scripted output has no volume control: Cassette's software volume), - steps it to 97 %, STOP brings CARD and SOFT back unchanged
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO 1
+env CASSETTE_DEMO_HOME demo-home
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 1500
+expect text "CARD"
+expect text "SOFT"
+tap "REC"
+wait 3300
+tap "STOP"
+wait 1000
+expect text "SOFT"
+expect notext "VOLUME"
+key space
+wait 800
+expect text "VOLUME"
+expect text "100 %"
+expect notext "CARD"
+shot bound-volume
+type -
+wait 500
+expect text "97 %"
+say - set the software volume one level down
+key x
+wait 800
+expect text "CARD"
+expect text "SOFT"
+expect notext "VOLUME"
+shot bound-stopped
+expect notext "LAYOUT FAIL"
+expect noquit

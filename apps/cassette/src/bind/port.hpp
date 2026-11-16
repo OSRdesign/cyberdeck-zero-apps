@@ -56,6 +56,7 @@ public:
     virtual bool set_monitor_level(int percent) = 0;
     virtual bool set_monitor_output(const std::string &id) = 0; /* "" automatic, "bt:<MAC>", an ALSA device */
     virtual bool set_wave_fit(bool on) = 0;
+    virtual bool volume_step(int dir) = 0; /* the playback VOLUME, one level (Controller::volume_step) */
     virtual bool set_mute(bool on) = 0;
     virtual bool set_sync_interval(int seconds) = 0;
     virtual bool select_output(const std::string &device) = 0;

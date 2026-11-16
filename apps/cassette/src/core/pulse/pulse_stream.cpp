@@ -162,15 +162,49 @@ uint32_t pulse_playback_flags(const PulsePlaybackRequest &req) {
     uint32_t f = pa::kStreamDontMove | pa::kStreamAdjustLatency | pa::kStreamInterpolateTiming |
                  pa::kStreamAutoTimingUpdate;
     if (req.fail_on_suspend) f |= pa::kStreamFailOnSuspend;
+    if (req.own_volume) f |= pa::kStreamStartUnmuted; /* a mute the server restored never silences the take */
     return f;
 }
 
+PulseVolume pulse_norm_volume(unsigned channels) {
+    PulseVolume v;
+    v.channels = std::min(std::max(channels, 1u), 32u);
+    for (unsigned c = 0; c < v.channels; ++c) v.values[c] = 0x10000; /* PA_VOLUME_NORM */
+    return v;
+}
+
+int pulse_alsa_card(const std::string &alsa_card, const std::string &api_alsa_card, const std::string &path) {
+    auto number = [](const std::string &s) {
+        if (s.empty() || s.size() > 3) return -1;
+        int v = 0;
+        for (char c : s) {
+            if (c < '0' || c > '9') return -1;
+            v = v * 10 + (c - '0');
+        }
+        return v;
+    };
+    if (int n = number(alsa_card); n >= 0) return n;
+    if (int n = number(api_alsa_card); n >= 0) return n;
+    const size_t colon = path.find(':');
+    if (colon == std::string::npos) return -1;
+    std::string rest = path.substr(colon + 1);
+    if (rest.compare(0, 5, "CARD=") == 0) rest = rest.substr(5);
+    const size_t end = rest.find_first_of(",.");
+    return number(end == std::string::npos ? rest : rest.substr(0, end));
+}
+
 std::vector<std::pair<std::string, std::string>> pulse_stream_props(const std::string &stream_name, const std::string &role,
-                                                                    const std::string &app_name) {
+                                                                    const std::string &app_name, bool own_volume) {
     std::vector<std::pair<std::string, std::string>> p;
     p.emplace_back("media.name", stream_name);
     if (!role.empty()) p.emplace_back("media.role", role);
     p.emplace_back("application.name", app_name.empty() ? std::string("Cassette") : app_name);
+    if (own_volume) { /* the take's own identity and restore key, no restored level or target (Vinyl's board test B7) */
+        p.emplace_back("application.id", "cassette");
+        p.emplace_back("module-stream-restore.id", "sink-input-by-application-id:cassette");
+        p.emplace_back("state.restore-props", "false");
+        p.emplace_back("state.restore-target", "false");
+    }
     /* PipeWire: pipewire-pulse copies the stream's properties onto its node. WirePlumber then destroys the stream when its
      * device goes away (dont-reconnect) and refuses to link it to another device when the target is missing
      * (dont-fallback) instead of the silent relink measured in P5. */

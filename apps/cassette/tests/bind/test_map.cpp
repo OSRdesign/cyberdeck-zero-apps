@@ -297,6 +297,29 @@ void test_recorder()
     CHECK(!vm.rec.card.can_down && !vm.rec.card.can_up);
     s.card.has_level = true;
 
+    /* the playback VOLUME: mapped only while the controller says it is active (a take plays, scans, is paused or previews);
+     * CARD and SOFT keep their values (the page shows VOLUME in SOFT's slot by the transport: ui_format.hpp) */
+    s.volume.pct = 52;
+    s.volume.can_down = s.volume.can_up = true;
+    vm = map(s, {}, local);
+    CHECK_EQ(vm.rec.volume.pct, -1); /* not active: nothing */
+    CHECK(!vm.rec.volume.can_down && !vm.rec.volume.can_up);
+    s.volume.active = true;
+    s.deck.state = kDeckPlaying;
+    vm = map(s, {}, local);
+    CHECK_EQ(vm.rec.volume.pct, 52);
+    CHECK(!vm.rec.volume.muted);
+    CHECK(vm.rec.volume.can_down && vm.rec.volume.can_up);
+    CHECK(vm.rec.transport == ui::Transport::Playing);
+    CHECK(vm.rec.card.shown); /* the controller's facts: the page hides CARD while VOLUME shows */
+    CHECK(std::fabs(vm.rec.soft.db - 6.0) < 1e-9);
+    s.volume.muted = true;
+    s.volume.can_down = false;
+    vm = map(s, {}, local);
+    CHECK(vm.rec.volume.muted && !vm.rec.volume.can_down && vm.rec.volume.can_up);
+    s.volume = VolumeSnap();
+    s.deck.state = kDeckIdle;
+
     /* recording: the new take, the length, REC latched (not dimmed although the deck says a press does nothing) */
     s.deck.state = kDeckRecording;
     s.deck.rec.enabled = false;
@@ -842,14 +865,17 @@ void test_settings()
         r = find_row(tv, "takenum");
         CHECK(r && r->value == "Next: 012" && r->pos == 12);
         lc.next_take = 1234;
-        r = find_row(map(s, {}, lc), "takenum");
+        tv = map(s, {}, lc); /* the row points into the model (ASan: never into a temporary) */
+        r = find_row(tv, "takenum");
         CHECK(r && r->value == "Next: 1234" && r->pos == 1234);
         lc.next_take = 20000; /* past the setting's range: the page starts at the top of it */
-        r = find_row(map(s, {}, lc), "takenum");
+        tv = map(s, {}, lc);
+        r = find_row(tv, "takenum");
         CHECK(r && r->value == "Next: 20000" && r->pos == 9999);
         Snapshot rec = s;
         rec.deck.state = kDeckRecording;
-        r = find_row(map(rec, {}, lc), "takenum");
+        tv = map(rec, {}, lc);
+        r = find_row(tv, "takenum");
         CHECK(r && !r->enabled); /* not while a take runs */
     }
 
@@ -1239,6 +1265,12 @@ void test_same()
     CHECK(!same(a, c));
     c = a;
     c.rec.soft.db += 1;
+    CHECK(!same(a, c));
+    c = a;
+    c.rec.volume.pct += 4;
+    CHECK(!same(a, c));
+    c = a;
+    c.rec.volume.muted = !c.rec.volume.muted;
     CHECK(!same(a, c));
     c = a;
     c.list.selected = 3;

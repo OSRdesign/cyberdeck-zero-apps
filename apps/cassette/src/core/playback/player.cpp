@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <chrono>
+#include <cmath>
 #include <fcntl.h>
 
 namespace cassette {
@@ -476,6 +477,8 @@ bool Player::pump() {
     out_.resize(static_cast<size_t>(nout) * och * obytes);
     tmp_.resize(sch);
     int32_t lpk[2] = {0, 0}; /* the level tap: the sample peak of what is sent, per source channel (first two) */
+    const float gain = gain_.load(std::memory_order_relaxed); /* the VOLUME stepper's software volume (1: untouched) */
+    const bool scaled = gain != 1.0f;
     for (uint64_t j = 0; j < nout; ++j) {
         uint64_t a, b; /* source frames [a, b) of the block */
         if (!reverse) {
@@ -505,6 +508,7 @@ bool Player::pump() {
                 for (unsigned k = 0; k < sch; ++k) s += tmp_[k];
                 v = mean(s, sch);
             } else v = c < sch ? tmp_[c] : 0;
+            if (scaled) v = static_cast<int32_t>(std::lround(static_cast<double>(v) * gain)); /* gain <= 1: never clips */
             store_sample(o + c * obytes, obytes, v);
         }
     }
@@ -629,6 +633,11 @@ unsigned Player::underruns() const {
     std::lock_guard<std::mutex> g(mu_);
     return snap_.underruns;
 }
+void Player::set_gain(float gain) {
+    if (!(gain >= 0.0f)) gain = 0.0f;
+    gain_.store(std::min(gain, 1.0f), std::memory_order_relaxed);
+}
+
 uint32_t Player::level(float peak[2], uint16_t *channels) const {
     const uint32_t q = level_seq_.load(std::memory_order_acquire);
     peak[0] = level_peak_[0].load(std::memory_order_relaxed);

@@ -183,6 +183,17 @@ void sink_cb(pa::Context *, const pa::SinkInfo *i, int eol, void *ud) {
     v.card = i->card;
     v.state = state_of(i->state);
     read_props(d->L, i->proplist, v);
+    if (i->volume.channels > 0) { /* the playback VOLUME reads the raw value (the loudest channel) */
+        uint32_t top = 0;
+        for (unsigned ch = 0; ch < i->volume.channels && ch < pa::kChannelsMax; ++ch) top = std::max(top, i->volume.values[ch]);
+        v.volume_raw = top;
+    }
+    v.muted = i->mute != 0;
+    v.base_volume = i->base_volume;
+    v.n_volume_steps = i->n_volume_steps;
+    v.sink_flags = i->flags;
+    v.alsa_card = pulse_alsa_card(prop(d->L, i->proplist, "alsa.card"), prop(d->L, i->proplist, "api.alsa.card"),
+                                  first_of(prop(d->L, i->proplist, "api.alsa.path"), prop(d->L, i->proplist, "device.string")));
     d->out->push_back(v);
 }
 
@@ -650,6 +661,38 @@ public:
         return c.run_op(c.L->context_get_sink_info_list(c.ctx, sink_cb, &d), kOpTimeoutMs);
     }
 
+    int set_sink_volume_raw(const std::string &sink, unsigned channels, uint32_t volume, int mute) override {
+        std::lock_guard<std::mutex> g(mu_);
+        if (!conn_) return kPulseState;
+        Conn &c = *conn_;
+        if (!c.L->context_set_sink_volume_by_name) return kPulseMissing;
+        LockGuard lg(c);
+        if (!c.ready()) return kPulseDisconnected;
+        pa::CVolume cv{};
+        cv.channels = static_cast<uint8_t>(std::max(1u, std::min(channels, pa::kChannelsMax)));
+        for (unsigned ch = 0; ch < cv.channels; ++ch) cv.values[ch] = volume;
+        int r = c.run_op(c.L->context_set_sink_volume_by_name(c.ctx, sink.c_str(), &cv, nullptr, nullptr), kOpTimeoutMs);
+        if (r == 0 && mute >= 0 && c.L->context_set_sink_mute_by_name)
+            r = c.run_op(c.L->context_set_sink_mute_by_name(c.ctx, sink.c_str(), mute ? 1 : 0, nullptr, nullptr), kOpTimeoutMs);
+        return r;
+    }
+
+    int read_sink_volume(const std::string &sink, uint32_t &volume, bool &muted) override {
+        std::lock_guard<std::mutex> g(mu_);
+        if (!conn_) return kPulseState;
+        Conn &c = *conn_;
+        LockGuard lg(c);
+        if (!c.ready()) return kPulseDisconnected;
+        std::vector<PulseDevice> one;
+        DeviceList d{c.L, &one};
+        const int r = c.run_op(c.L->context_get_sink_info_by_name(c.ctx, sink.c_str(), sink_cb, &d), kOpTimeoutMs);
+        if (r != 0) return r;
+        if (one.empty() || one.front().volume_raw < 0) return kPulseNoDevice;
+        volume = static_cast<uint32_t>(one.front().volume_raw);
+        muted = one.front().muted;
+        return 0;
+    }
+
     int list_cards(std::vector<PulseCard> &out) override {
         std::lock_guard<std::mutex> g(mu_);
         out.clear();
@@ -792,7 +835,7 @@ public:
         PlaybackLink *link = new PlaybackLink(cp, pb.get(), fmt.channels, scratch);
         pb->attach(std::unique_ptr<PulseStreamLink>(link));
         const pa::SampleSpec ss{pa::kSampleS16LE, fmt.rate, static_cast<uint8_t>(fmt.channels)};
-        pa::Proplist *pl = make_props(L, pulse_stream_props(req.stream_name, req.role, app_));
+        pa::Proplist *pl = make_props(L, pulse_stream_props(req.stream_name, req.role, app_, req.own_volume));
         pa::Stream *s = L->stream_new_with_proplist(c.ctx, req.stream_name.c_str(), &ss, nullptr, pl);
         if (pl) L->proplist_free(pl);
         if (!s) {
@@ -808,7 +851,15 @@ public:
         L->stream_set_moved_callback(s, PlaybackLink::moved_cb, link);
         L->stream_set_suspended_callback(s, PlaybackLink::suspended_cb, link);
         const pa::BufferAttr a = to_pa(fmt.requested);
-        if (L->stream_connect_playback(s, req.sink.c_str(), &a, static_cast<int>(fmt.flags), nullptr, nullptr) < 0) {
+        /* own_volume (the take): the stream's own volume at every open is 100 % (Vinyl's board test B7: never a restored value) */
+        pa::CVolume cv{};
+        if (req.own_volume) {
+            const PulseVolume nv = pulse_norm_volume(fmt.channels);
+            cv.channels = static_cast<uint8_t>(nv.channels);
+            for (unsigned ch = 0; ch < nv.channels && ch < pa::kChannelsMax; ++ch) cv.values[ch] = nv.values[ch];
+        }
+        if (L->stream_connect_playback(s, req.sink.c_str(), &a, static_cast<int>(fmt.flags), req.own_volume ? &cv : nullptr,
+                                       nullptr) < 0) {
             const int e = pulse_error_from_pa(c.err());
             const std::string t = c.err_text();
             link->close_locked();

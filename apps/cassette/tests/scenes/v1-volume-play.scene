@@ -1,0 +1,37 @@
+title Cassette playback VOLUME: while Take 006 plays the SOFT slot reads VOLUME 50 % at the full width and CARD is hidden; = and - move one level; STOP brings CARD and SOFT back where they were
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO playing
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+expect text "VOLUME"
+expect text "50 %"
+expect notext "SOFT"
+expect notext "CARD"
+shot volume-playing
+type =
+wait 300
+expect text "53 %"
+say = called volume_step +1
+type -
+type -
+wait 300
+expect text "47 %"
+say - called volume_step -1 (twice)
+key x
+wait 400
+expect text "SOFT"
+expect text "CARD"
+expect notext "VOLUME"
+@480x320,640x480 expect text "+6.0 dB"
+@320x480 expect text "+6 dB"
+say STOP: CARD and SOFT are back, SOFT still +6 dB
+shot volume-stopped
+type =
+wait 300
+@480x320,640x480 expect text "+6.0 dB"
+@320x480 expect text "+6 dB"
+say = does nothing while no take plays (SOFT unchanged)
+expect notext "LAYOUT FAIL"
+expect noquit

@@ -28,6 +28,8 @@
  *               the merge)
  *   Settings    Up / Down move, Enter or Right change / open (Left / Right step a slider row), Esc back (a picker
  *               first), L the recordings
+ *   Every page  - and = (keypad - and +): the playback VOLUME down / up, a level a press (held: the key repeats); only while a
+ *               take plays, scans, is paused or previews (the recorder shows VOLUME in SOFT's slot then); otherwise nothing
  *
  * Text entry (the File prefix setting, RENAME): the toolkit's Dialog with a TextField, so the keyboard policy applies
  * as everywhere (a physical keyboard first; the toolkit's fallback keyboard only when none is connected).

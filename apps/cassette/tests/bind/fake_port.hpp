@@ -225,6 +225,13 @@ public:
         log(std::string("set_wave_fit ") + (on ? "on" : "off"));
         return true;
     }
+    bool volume_step(int dir) override
+    {
+        log("volume_step " + std::to_string(dir));
+        if (!snap.volume.active || snap.volume.pct < 0) return false;
+        snap.volume.pct = std::max(0, std::min(100, snap.volume.pct + 4 * dir));
+        return true;
+    }
     bool set_monitor_level(int p) override
     {
         log("set_monitor_level " + std::to_string(p));

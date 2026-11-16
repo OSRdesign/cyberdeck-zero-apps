@@ -34,6 +34,7 @@ struct ScanRequest {
     PulseChangeCallback callback;  /* installed after a successful connect (when not empty) */
     std::string app_name = "Cassette";
     int connect_timeout_ms = 2000;
+    bool want_info = false;        /* also ask the server's info (its default sink: the VOLUME of the default output) */
 };
 
 struct ScanResult {
@@ -44,6 +45,8 @@ struct ScanResult {
     bool callback_set = false;
     std::vector<PulseDevice> sources, sinks;
     std::vector<PulseCard> cards;
+    bool have_info = false;  /* want_info: the server's info was read */
+    PulseServerInfo info;    /* ... its default sink */
 };
 
 struct CardResult {
@@ -78,6 +81,11 @@ public:
     bool take_scan(ScanResult &out);
     bool take_card(CardResult &out);
     bool take_identity(IdentityResult &out);
+    /* The playback VOLUME (copied from Vinyl): sets a sink's volume and mute (PulseApi::set_sink_volume_raw) on the worker,
+     * then asks the sink again and logs `log` + " raw=<volume> read back raw=<what the sink holds>"; a newer request replaces
+     * one still waiting, so quick presses never queue up. false only after stop(). */
+    bool request_sink_volume(const std::string &sink, unsigned channels, uint32_t volume, int mute, const std::string &log);
+    int sink_levels_done() const; /* sets carried out so far */
 
     /* Ends the thread; waits for the call in progress (bounded by the server's own timeouts). Idempotent. */
     void stop();
@@ -96,6 +104,12 @@ private:
     CardResult card_;
     IdentityResult ident_;
     unsigned seq_ = 0;
+    bool level_busy_ = false, level_have_ = false; /* request_sink_volume */
+    std::string level_sink_;
+    unsigned level_channels_ = 2;
+    uint32_t level_volume_ = 0;
+    int level_mute_ = -1, levels_done_ = 0;
+    std::string level_log_;
     std::thread th_;
 };
 

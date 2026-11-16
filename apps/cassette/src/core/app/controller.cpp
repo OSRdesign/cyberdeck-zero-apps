@@ -23,6 +23,7 @@
 #include "../playback/deck.hpp"
 #include "../playback/monitor.hpp"
 #include "../playback/output.hpp"
+#include "../playback/output_volume.hpp"
 #include "../playback/player.hpp"
 #include "../playback/pulse_sink.hpp"
 #include "../playback/sink.hpp"
@@ -51,6 +52,11 @@ namespace {
 
 constexpr uint64_t kSpaceRefreshMs = 2000;
 constexpr uint64_t kPlayLevelStaleMs = 150; /* no new played period for this long: the playback level falls */
+/* the playback VOLUME (Vinyl's figures) */
+constexpr uint64_t kVolMixerMs = 300;     /* a card's playback control is read this often while a take plays (the launcher's keys) */
+constexpr uint64_t kVolPendingMs = 1500;  /* a sink level asked for is shown until the server's event brings it, at most this long */
+constexpr uint64_t kVolSaveMs = 1000;     /* playback_volume is written at most this often (a held key) */
+constexpr uint64_t kVolInfoMs = 1000;     /* the server's default sink is asked again this often while it is not known */
 
 /* Bluetooth input (docs/PULSE.md, study C5 C9 C15 C16 C18) */
 const char kBtNotSetUp[] = "Bluetooth audio is not set up";
@@ -308,6 +314,26 @@ struct Controller::Impl : public DeckCommands {
     /* the last 5 s jump, for ScanSnap::jump_dir */
     uint64_t jump_ms = 0;
     int jump_dir = 0;
+    /* the playback VOLUME (core/playback/output_volume.hpp): the output a take plays on, its levels, Cassette's own part (the
+     * settings' playback_volume). Under mu. */
+    VolumeTarget vol_target;
+    std::string vol_choice_card;           /* the card vol_choice was looked up for */
+    MixerChoice vol_choice;                /* a card's playback control */
+    MixerLevel vol_mixer;                  /* ... and its level, read every kVolMixerMs while a take plays */
+    uint64_t vol_mixer_ms = 0;
+    std::vector<PulseDevice> pulse_sinks;  /* the server's sinks of the last scan (their volume and mute) */
+    std::string pulse_default_sink;        /* the server's default sink (asked while a take plays on the default output) */
+    uint64_t vol_info_ms = 0;              /* when a scan with the server's info was last asked for */
+    std::string vol_model_sink;            /* the sink vol_sink_model was made for ... */
+    int vol_model_card = -2;               /* ... with this card behind it */
+    OutputVolumeModel vol_sink_model;
+    int vol_pending = -1;                  /* a sink level asked for, shown until the server's event brings it (kVolPendingMs) */
+    std::string vol_pending_sink;
+    uint64_t vol_pending_until = 0;
+    std::string vol_first_done;            /* the output the first-use rule has looked at in this run */
+    std::string vol_logged;                /* the output whose model was logged */
+    bool vol_dirty = false;                /* playback_volume changed: saved within kVolSaveMs (a held key writes once) */
+    uint64_t vol_dirty_ms = 0;
 
     /* the take being recorded */
     std::unique_ptr<Ring> ring;
@@ -650,6 +676,9 @@ struct Controller::Impl : public DeckCommands {
                 bt_dirty.store(true);
             };
         }
+        /* the playback VOLUME of the default output through the server: its default sink, while a take plays */
+        rq.want_info = vol_active() && !plan.chosen.bluetooth && mixer_card_for(plan.chosen.device) == "default";
+        if (rq.want_info) vol_info_ms = clk->mono_ms();
         if (!w->request_scan(rq)) { /* one is running: ask again soon */
             if (lost_conn) bt_gone.store(true);
             bt_rescan = true;
@@ -688,6 +717,13 @@ struct Controller::Impl : public DeckCommands {
         bt_scan_ms = bt_scan_asked_ms; /* the request's time: an answer counts from when the server was asked */
         if (r.callback_set) bt_cb_set = true;
         bt_is_connected = r.connected;
+        /* the playback VOLUME: the sinks' levels (and the default sink when it was asked) */
+        if (r.connected && r.listed) {
+            pulse_sinks = r.sinks;
+            if (r.have_info) pulse_default_sink = r.info.default_sink;
+        } else {
+            pulse_sinks.clear();
+        }
         if (r.connect_result != 1 && r.connect_result != 0) {
             bt_status = (r.connect_result == kPulseMissing || r.connect_result == kPulseNoServer) ? kBtNotSetUp : kBtNotResponding;
             bt_no_server = r.connect_result == kPulseNoServer;
@@ -1531,6 +1567,316 @@ struct Controller::Impl : public DeckCommands {
         return false;
     }
 
+    /* ================================================================================================================ */
+    /* the playback VOLUME (core/playback/output_volume.hpp, Vinyl's model): the volume of the output a take plays on */
+
+    /* a take plays, scans, is paused or previews (the deck), PLAY waits for a Bluetooth output, or the Edit page's PLAY runs */
+    bool vol_active() const { return playing_family() || pwait.active || tr.previewing; }
+
+    /* the output a take plays on and how its volume is set (output_volume.hpp volume_target_for) */
+    VolumeTarget resolve_vol_target() const {
+        const bool server = bt_status.empty() && bt_is_connected;
+        const bool expected = server || bt_status == kBtNotResponding;
+        std::string bt_name;
+        if (plan.chosen.bluetooth) {
+            const BtOutput *o = bt_out_chosen();
+            if (sink_listed(o)) bt_name = o->sink;
+        }
+        VolumeTarget t = volume_target_for(plan.chosen.device, plan.chosen.bluetooth, bt_name, server, expected, pulse_default_sink);
+        if (t.kind == VolumeTarget::Kind::Sink)
+            for (const PulseDevice &d : pulse_sinks)
+                if (d.name == t.sink && d.channels > 0) t.channels = d.channels;
+        return t;
+    }
+
+    /* Cassette's own part of an output (its settings entry, the defaults when it has none) */
+    OwnVolume vol_own(const std::string &key) const {
+        OwnVolume v;
+        const auto &m = store.values().playback_volume;
+        auto it = m.find(key);
+        if (it != m.end()) {
+            v.pct = it->second.pct;
+            v.muted = it->second.muted;
+        }
+        return v;
+    }
+    /* remembers an output's entry (written within kVolSaveMs) */
+    void vol_remember(const std::string &key, int pct, bool muted) {
+        if (key.empty() || pct < 0) return;
+        auto &m = store.values().playback_volume;
+        if (!m.count(key) && m.size() >= kPlaybackVolumesMax) m.erase(m.begin());
+        PlaybackVolume &e = m[key];
+        e.pct = std::max(0, std::min(100, pct));
+        e.muted = muted;
+        vol_dirty = true;
+        vol_dirty_ms = clk->mono_ms();
+    }
+
+    /* reads the card's playback control (at most every kVolMixerMs, at once when forced) */
+    void vol_read_mixer(uint64_t now, bool force) {
+        if (vol_target.kind != VolumeTarget::Kind::Mixer) {
+            vol_mixer = MixerLevel();
+            return;
+        }
+        if (!force && vol_mixer_ms && now - vol_mixer_ms < kVolMixerMs) return;
+        vol_mixer_ms = now ? now : 1;
+        read_mixer(*cap_api(), vol_target.card, vol_choice_card, vol_choice, vol_mixer);
+    }
+
+    /* a sink's levels: the range of the ALSA card behind it moved under the sink's 0 dB, -60..0 dB without one (found once per
+     * sink and card) */
+    const OutputVolumeModel &vol_sink_model_of(const PulseDevice &d) {
+        if (d.name == vol_model_sink && d.alsa_card == vol_model_card) return vol_sink_model;
+        vol_model_sink = d.name;
+        vol_model_card = d.alsa_card;
+        MixerChoice mc;
+        bool have = false;
+        std::string card;
+        if (d.alsa_card >= 0) {
+            card = "hw:" + std::to_string(d.alsa_card);
+            std::vector<CtlInfo> ctls;
+            if (cap_api()->mixer_list(card, ctls) >= 0) have = choose_playback_mixer(ctls, mc) && mc.has_db;
+        }
+        vol_sink_model = sink_volume_model(have ? &mc : nullptr);
+        std::fprintf(stderr, "[cassette] volume: sink %s: %s (%s)\n", d.name.c_str(), volume_model_text(vol_sink_model).c_str(),
+                     have ? (card + " '" + mc.volume + "' " + volume_model_text(mc.model)).c_str() : "no card range known");
+        return vol_sink_model;
+    }
+
+    /* the output's model and level now: -1 not known; *muted (also Cassette's own mute), *software (no volume control) */
+    int vol_level(bool *muted, OutputVolumeModel *model, bool *software) {
+        *muted = false;
+        *software = false;
+        const VolumeTarget &t = vol_target;
+        if (t.kind == VolumeTarget::Kind::Sink) {
+            const PulseDevice *d = nullptr;
+            for (const PulseDevice &s : pulse_sinks)
+                if (s.name == t.sink) d = &s;
+            if (!d || d->volume_raw < 0) return -1;
+            const OutputVolumeModel &m = vol_sink_model_of(*d);
+            *model = m;
+            const int lv = sink_level_for_volume(m, static_cast<uint32_t>(d->volume_raw));
+            if (vol_pending >= 0 && vol_pending_sink == t.sink && clk->mono_ms() < vol_pending_until && lv != vol_pending)
+                return vol_pending; /* asked for, the server's event not back yet */
+            *muted = d->muted || lv == 0;
+            return lv;
+        }
+        if (t.kind == VolumeTarget::Kind::Mixer) {
+            const OwnVolume own = vol_own(t.key);
+            if (!vol_mixer.has_mixer) { /* no playback control (or none could be read): Cassette's software volume */
+                *software = true;
+                *model = default_volume_model();
+                return software_level(own, muted);
+            }
+            *model = vol_choice.model;
+            const MixerLevel shown = mixer_level_shown(vol_choice, vol_mixer, own.muted);
+            *muted = shown.muted;
+            return shown.level;
+        }
+        return -1;
+    }
+
+    /* the Player's gain: the software level of an output without a playback control, 0 while Cassette's own mute holds, else
+     * 1 (the output's own volume does the work; the samples go out untouched) */
+    void vol_apply_gain() {
+        if (!player) return;
+        float g = 1.0f;
+        if (vol_target.kind == VolumeTarget::Kind::Mixer) {
+            const OwnVolume own = vol_own(vol_target.key);
+            if (!vol_mixer.has_mixer) {
+                bool muted = false;
+                const int lv = software_level(own, &muted);
+                g = muted || lv <= 0 ? 0.0f : volume_gain_for_db(default_volume_model().db_of(lv));
+            } else if (mute_by(vol_choice) == MuteBy::Cassette && own.muted && vol_mixer.level >= 1) {
+                g = 0.0f;
+            }
+        }
+        player->set_gain(g);
+    }
+
+    /* the target again (a new output: its control read at once), the model logged once, the gain applied */
+    void vol_refresh(uint64_t now, bool force) {
+        const VolumeTarget t = resolve_vol_target();
+        const bool changed = !(t == vol_target);
+        if (changed) {
+            vol_target = t;
+            vol_mixer = MixerLevel();
+            vol_mixer_ms = 0;
+            vol_pending = -1;
+        }
+        vol_read_mixer(now, force || changed);
+        if (!vol_target.key.empty() && vol_target.key != vol_logged && vol_target.kind != VolumeTarget::Kind::None &&
+            (vol_target.kind != VolumeTarget::Kind::Mixer || vol_mixer_ms)) {
+            vol_logged = vol_target.key;
+            if (vol_target.kind == VolumeTarget::Kind::Mixer && vol_mixer.has_mixer)
+                std::fprintf(stderr, "[cassette] volume: %s '%s' raw %ld..%ld%s: %s\n", vol_target.card.c_str(),
+                             vol_choice.volume.c_str(), vol_choice.min, vol_choice.max,
+                             vol_choice.min_is_mute ? " (min is mute)" : "", volume_model_text(vol_choice.model).c_str());
+            else if (vol_target.kind == VolumeTarget::Kind::Mixer)
+                std::fprintf(stderr, "[cassette] volume: %s has no playback control: software volume (%s)\n",
+                             vol_target.card.c_str(), volume_model_text(default_volume_model()).c_str());
+        }
+        vol_apply_gain();
+    }
+
+    /* sets a level of the output (an output with its own volume): the sink through the worker, or the card's control */
+    bool vol_set_level(int level, const OutputVolumeModel &m, const char *why) {
+        const VolumeTarget &t = vol_target;
+        if (t.kind == VolumeTarget::Kind::Sink) {
+            PulseWorker *w = worker();
+            if (!w) return false;
+            const uint32_t vol = sink_volume_for_db(m.db_of(level));
+            std::string log = volume_set_log_text("sink " + t.sink, m, level, vol, -1, 0);
+            if (const size_t cut = log.find(" raw="); cut != std::string::npos) log.resize(cut);
+            if (why) log += std::string(" (") + why + ")";
+            if (!w->request_sink_volume(t.sink, t.channels, vol, 0, log)) return false;
+            vol_pending = level;
+            vol_pending_sink = t.sink;
+            vol_pending_until = clk->mono_ms() + kVolPendingMs;
+            /* the sink list shows the new level at the next scan: ask for one now */
+            bt_refresh_soon();
+            return true;
+        }
+        if (t.kind == VolumeTarget::Kind::Mixer && vol_mixer.has_mixer) {
+            const int r = write_mixer_level(*cap_api(), t.card, vol_choice, level);
+            long back = 0;
+            const int rr = r >= 0 ? cap_api()->mixer_get(t.card, vol_choice.volume, back) : r;
+            std::fprintf(stderr, "[cassette] volume: %s%s%s%s\n",
+                         volume_set_log_text(t.card + " '" + vol_choice.volume + "'", vol_choice.model, level,
+                                             mixer_raw_for_level(vol_choice, level), rr, back)
+                             .c_str(),
+                         why ? " (" : "", why ? why : "", why ? ")" : "");
+            vol_read_mixer(clk->mono_ms(), true);
+            return r >= 0;
+        }
+        return false;
+    }
+
+    /* The first use of an output (output_volume.hpp first_use_silent): an output that has no playback_volume entry yet and is
+     * silent gets the level nearest kFirstUsePct; the entry is written either way (the rule runs once per output). The
+     * software volume keeps its default (100 %) and no entry until it is changed. */
+    void vol_first_use() {
+        const std::string key = vol_target.key;
+        if (key.empty() || key == vol_first_done || vol_target.kind == VolumeTarget::Kind::None) return;
+        if (store.values().playback_volume.count(key)) {
+            vol_first_done = key;
+            return;
+        }
+        bool muted = false, software = false;
+        OutputVolumeModel m;
+        const int lv = vol_level(&muted, &m, &software);
+        if (software) {
+            vol_first_done = key;
+            return;
+        }
+        if (lv < 0) return; /* not known yet: the next tick */
+        vol_first_done = key;
+        int pct = m.pct_of(lv);
+        if (first_use_silent(lv, muted)) {
+            const int to = std::max(1, m.from_pct(kFirstUsePct));
+            if (vol_set_level(to, m, "first use of a silent output")) pct = m.pct_of(to);
+        }
+        vol_remember(key, pct, false);
+    }
+
+    /* One press of "-" / "+" (output_volume.hpp: sink_press, mixer_press, software_press). true when something changed. */
+    bool vol_step(int d) {
+        vol_refresh(clk->mono_ms(), true);
+        const VolumeTarget t = vol_target;
+        bool muted = false, software = false;
+        OutputVolumeModel m;
+        const int cur = vol_level(&muted, &m, &software);
+        if (t.kind == VolumeTarget::Kind::Sink) {
+            const VolumePress p = sink_press(m, cur, muted, d);
+            if (p.kind == VolumePress::Kind::None) return false;
+            PulseWorker *w = worker();
+            if (!w) return false;
+            const int level = p.kind == VolumePress::Kind::Mute ? cur : p.level;
+            const uint32_t vol = sink_volume_for_db(m.db_of(level));
+            const int mute = p.kind == VolumePress::Kind::Mute ? 1 : 0;
+            std::string log = mute ? "set sink " + t.sink + " muted (level " + std::to_string(level) + " kept)"
+                                   : volume_set_log_text("sink " + t.sink, m, level, vol, -1, 0);
+            if (const size_t cut = log.find(" raw="); cut != std::string::npos) log.resize(cut);
+            if (!w->request_sink_volume(t.sink, t.channels, vol, mute, log)) return false;
+            if (!mute) {
+                vol_pending = level;
+                vol_pending_sink = t.sink;
+                vol_pending_until = clk->mono_ms() + kVolPendingMs;
+            }
+            /* the fake and slow servers: the list catches up at the next scan, asked for now */
+            for (PulseDevice &s : pulse_sinks)
+                if (s.name == t.sink) {
+                    s.volume_raw = vol;
+                    s.muted = mute != 0;
+                }
+            bt_refresh_soon();
+            vol_remember(t.key, m.pct_of(level), false);
+            return true;
+        }
+        if (t.kind != VolumeTarget::Kind::Mixer) return false;
+        if (software) {
+            OwnVolume own = vol_own(t.key);
+            const VolumePress p = software_press(own, d); /* Cassette's own mute keeps the level */
+            if (p.kind == VolumePress::Kind::None) return false;
+            vol_remember(t.key, own.pct, own.muted);
+            vol_apply_gain();
+            bool mu = false;
+            const int level = software_level(own, &mu);
+            char what[48];
+            if (mu) std::snprintf(what, sizeof what, "muted, level %d kept", level);
+            else std::snprintf(what, sizeof what, "%.2f dB", m.db_of(level));
+            std::fprintf(stderr, "[cassette] volume: software step %d/%d %d %% (%s) for %s (no playback control)\n", mu ? 0 : level,
+                         m.n, mu ? 0 : m.pct_of(level), what, t.key.c_str());
+            return true;
+        }
+        const OwnVolume own = vol_own(t.key);
+        const MixerLevel shown = mixer_level_shown(vol_choice, vol_mixer, own.muted);
+        const VolumePress p = mixer_press(vol_choice, shown, d);
+        const MuteBy by = mute_by(vol_choice);
+        const bool on_off = p.kind == VolumePress::Kind::Mute || p.kind == VolumePress::Kind::Unmute;
+        if (p.kind == VolumePress::Kind::None) return false;
+        int r = 0;
+        if (p.kind == VolumePress::Kind::Set) {
+            r = vol_set_level(p.level, m, nullptr) ? 0 : -EIO;
+        } else if (on_off && by == MuteBy::Switch) {
+            r = write_mixer_switch(*cap_api(), t.card, vol_choice, p.kind == VolumePress::Kind::Unmute);
+            std::fprintf(stderr, "[cassette] volume: set %s '%s' %s%s\n", t.card.c_str(), vol_choice.sw.c_str(),
+                         p.kind == VolumePress::Kind::Mute ? "off (muted)" : "on (un-muted)", r < 0 ? " failed" : "");
+            vol_read_mixer(clk->mono_ms(), true);
+        } else if (on_off) { /* MuteBy::Cassette: the Player silent, the card's level kept */
+            std::fprintf(stderr, "[cassette] volume: %s '%s' %s by Cassette (no switch, no mute value; level %d kept)\n",
+                         t.card.c_str(), vol_choice.volume.c_str(), p.kind == VolumePress::Kind::Mute ? "muted" : "un-muted",
+                         shown.level);
+        }
+        if (r < 0) return false;
+        /* Cassette's own mute: set by a Mute, cleared by every other press (only for a control with neither switch nor mute value) */
+        const bool own_muted = by == MuteBy::Cassette && p.kind == VolumePress::Kind::Mute;
+        const int level = p.kind == VolumePress::Kind::Set ? p.level : shown.level;
+        vol_remember(t.key, m.pct_of(std::max(level, 0)), own_muted);
+        vol_apply_gain();
+        return true;
+    }
+
+    /* once per service tick */
+    void vol_tick(uint64_t now) {
+        if (vol_active()) {
+            vol_refresh(now, false);
+            /* the default output through the server: its default sink is asked with the scans while a take plays */
+            if (vol_target.kind == VolumeTarget::Kind::None && !plan.chosen.bluetooth && bt_status.empty() && bt_is_connected &&
+                pulse_default_sink.empty() && now - vol_info_ms >= kVolInfoMs) {
+                vol_info_ms = now ? now : 1;
+                bt_refresh_soon();
+            }
+            vol_first_use();
+        } else {
+            vol_pending = -1;
+        }
+        if (vol_dirty && now - vol_dirty_ms >= kVolSaveMs) {
+            vol_dirty = false;
+            persist();
+        }
+    }
+
     /* The card's profile class as far as is known now: the last card poll when it is newer than the last scan, else the scan. */
     std::string bt_profile_now(const BtOutput &o) const {
         if (bt_card.found && bt_card.name == o.card && bt_card_ms >= bt_scan_ms) return profile_class(bt_card.card.active_profile);
@@ -1596,6 +1942,7 @@ struct Controller::Impl : public DeckCommands {
             add_notice(Notice::Info, "This take cannot be played: " + decode_error_text(r, path));
             return Start::Failed;
         }
+        vol_refresh(clk->mono_ms(), true); /* the playback VOLUME: the output's control read, the software level on the Player */
         switch (after) {
         case PlayWait::Play: r = player->play(); break;
         case PlayWait::ScanFwd: r = player->scan(Direction::Forward, kScanSpeed); break;
@@ -2258,6 +2605,7 @@ struct Controller::Impl : public DeckCommands {
         if (now - last_space_ms >= kSpaceRefreshMs) refresh_space();
         update_play_meter(now);
         monitor_delay_tick(now);
+        vol_tick(now);
         publish();
     }
 
@@ -2396,6 +2744,23 @@ struct Controller::Impl : public DeckCommands {
                                      ? pb_quality
                                      : (plan.chosen.hint_profile.empty() ? std::string("unknown") : plan.chosen.hint_profile);
         if (player && playing_family()) s.playback.underruns = player->underruns();
+        /* the playback VOLUME */
+        VolumeSnap &v = s.volume;
+        v.active = vol_active();
+        if (v.active) {
+            bool muted = false, software = false;
+            OutputVolumeModel vm;
+            const int lv = vol_level(&muted, &vm, &software);
+            v.output = vol_target.key;
+            v.software = software && lv >= 0;
+            const bool settable = vol_target.kind == VolumeTarget::Kind::Mixer || (vol_target.kind == VolumeTarget::Kind::Sink && cfg.pulse);
+            if (lv >= 0) {
+                v.pct = vm.pct_of(lv);
+                v.muted = muted;
+                v.can_down = settable && !muted;
+                v.can_up = settable && (muted || lv < vm.n);
+            }
+        }
         /* monitor */
         MonitorSnap &m = s.monitor;
         m.active = mon && mon->running();
@@ -2734,6 +3099,14 @@ bool Controller::set_mute(bool on) {
     d.save_card_state();
     d.publish();
     return ok;
+}
+bool Controller::volume_step(int dir) {
+    Locked l(p_->mu);
+    Impl &d = *p_;
+    if (dir == 0 || !d.started || d.down || !d.vol_active()) return false;
+    const bool r = d.vol_step(dir < 0 ? -1 : 1);
+    d.publish();
+    return r;
 }
 bool Controller::set_soft_gain_db(double db) {
     Locked l(p_->mu);
@@ -3212,6 +3585,7 @@ bool Controller::preview(bool on) {
     d.decoders();
     if (d.player->open(d.tr.path) < 0) return false;
     d.player->seek(from);
+    d.vol_refresh(d.clk->mono_ms(), true); /* the playback VOLUME's software level on the Player */
     if (d.player->play() < 0) return false;
     d.tr.pos = from;
     d.tr.previewing = true;

@@ -194,7 +194,8 @@ void input_picker()
     {
         Snapshot s = base_snapshot();
         s.card.bt_status = "Bluetooth audio is not responding";
-        const ui::SettingRow *in = find_row(map(s), "input");
+        const ui::ViewModel vm = map(s); /* the row points into it (ASan: not into a temporary) */
+        const ui::SettingRow *in = find_row(vm, "input");
         CHECK(in && in->formats_footer.empty());
         s.card.labels.clear();
         CHECK(!find_row(map(s), "input")->enabled); /* nothing to show: as before */

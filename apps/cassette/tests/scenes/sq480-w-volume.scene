@@ -1,0 +1,23 @@
+title square screen, playback VOLUME: VOLUME 50 % in the SOFT slot at the full width while Take 006 plays (CARD hidden), = steps it; STOP brings CARD and SOFT back
+sizes 480x480
+ppmm 667
+env CASSETTE_DEMO playing
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+expect text "VOLUME"
+expect text "50 %"
+expect notext "SOFT"
+expect notext "CARD"
+shot volume-playing
+type =
+wait 300
+expect text "53 %"
+key x
+wait 400
+expect text "SOFT"
+expect text "CARD"
+expect notext "VOLUME"
+shot volume-stopped
+expect notext "LAYOUT FAIL"
+expect noquit

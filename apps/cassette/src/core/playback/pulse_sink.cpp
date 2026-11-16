@@ -14,6 +14,7 @@ PulseSinkOptions pulse_monitor_sink_options() {
     o.write_timeout_ms = 10;
     o.stream_name = "Cassette monitor";
     o.role = "production";
+    o.own_volume = false; /* the monitor keeps the server's handling of its stream */
     return o;
 }
 
@@ -53,6 +54,7 @@ int PulsePlaybackSink::open(const AudioFormat &src, SinkFormat &granted) {
     rq.ready_timeout_ms = opt_.ready_timeout_ms;
     rq.stream_name = opt_.stream_name;
     rq.role = opt_.role;
+    rq.own_volume = opt_.own_volume;
     std::unique_ptr<PulsePlayback> pb;
     std::string why;
     const int r = api_.open_playback(rq, pb, &why);

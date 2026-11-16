@@ -42,6 +42,7 @@ How the file behaves:
 | `output_device` | the playback device: an ALSA device name (`hw:CARD=...,DEV=0`, `default`) or `"bt:AA:BB:CC:DD:EE:FF"` | absent: automatic | Settings > Output |
 | `bt_names` | an object `{ "AA:BB:CC:DD:EE:FF": "last name seen" }`: the names of Bluetooth devices, so a paired one that is not connected still shows its name. Capital hex digits with colons; at most 16 entries (extra entries are ignored); not written when empty | absent | automatic, not a setting |
 | `cards` | an object with one entry per sound card (see below) | absent | Input level, Auto gain (card), Mic mute (card) |
+| `playback_volume` | an object with one entry per playback output a take has played on (see [below](#the-playback_volume-entries)); at most 32 (extra entries are ignored); not written when empty | absent | the VOLUME stepper (and the keys `-` / `=`) while a take plays |
 | `version` | `1` | written by the app | not a setting |
 
 ### Folder
@@ -60,6 +61,30 @@ card and applies them again at start. The entry is named by the same text as `ca
 | `level_db` | a number of dB, -120 to 60 (clamped; the card's mixer limits it further) | the recording level; absent = the card has no level control |
 | `auto_gain` | `true` or `false` | the card's own automatic gain |
 | `mute` | `true` or `false` | the card's microphone mute |
+
+### The `playback_volume` entries
+
+The VOLUME stepper sets the volume of the output a take plays on (see the README's
+[Playback volume](../README.md#playback-volume)). An output with its own volume (a card's playback control, a sound
+server's sink, a Bluetooth headset) keeps its level itself; Cassette stores per output only what is its own. An entry is
+named after the output:
+
+| Name | The output |
+|---|---|
+| `alsa:hw:CARD=<id>` | a sound card Cassette plays on directly (its ALSA id, as in `output_device`) |
+| `alsa:default` | ALSA's default output on a board without a sound server |
+| `pulse:<sink>` | the sound server's default output (its sink name, for example `pulse:alsa_output.usb-Sharkoon...analog-stereo`) |
+| `bt:AA:BB:CC:DD:EE:FF` | a Bluetooth headset or speaker (by its address, whatever the sound server calls its node) |
+
+| Key inside an entry | Values | Meaning |
+|---|---|---|
+| `volume` | 0 to 100 (clamped) | the level last set from Cassette, in percent of that output's own levels. For an output without a volume control this **is** the level (Cassette's software volume; 100 = the take as recorded, the default when there is no entry); for the others it is information only, the output keeps its own level |
+| `muted` | `true` (absent = `false`) | Cassette's own mute: an output without a volume control, or a control with neither a switch nor a mute value; the level is kept while muted |
+
+The entry also records that the **first-use rule** has run for that output: the first time a take plays on an output
+that is silent (muted, or at the bottom of its range), Cassette sets it near 50 % and writes the entry; with the entry
+there, the output is left as it is. Delete an entry to have the rule run again (and an output without a volume control
+back at 100 %). The file is written within a second of the last change (a held key writes once) and when the app ends.
 
 ### Not in this file
 

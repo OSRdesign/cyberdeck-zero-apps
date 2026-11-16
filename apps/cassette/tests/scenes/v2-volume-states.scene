@@ -1,0 +1,32 @@
+title Cassette playback VOLUME in the other playback states: paused (PAUSE latched) and while REW is held, VOLUME stays in the SOFT slot; REC brings CARD and SOFT back for the recording
+sizes 480x320 320x480 640x480
+ppmm 608
+env CASSETTE_DEMO play-paused
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+expect text "PAUSE"
+expect text "VOLUME"
+expect text "50 %"
+expect notext "CARD"
+shot volume-paused
+key space
+wait 300
+expect text "VOLUME"
+press "REW"
+wait 400
+expect text "VOLUME"
+expect notext "SOFT"
+shot volume-rew
+release
+wait 300
+expect text "VOLUME"
+key r
+wait 400
+expect text "SOFT"
+expect text "CARD"
+expect notext "VOLUME"
+say REC: recording with CARD and SOFT
+shot volume-rec
+expect notext "LAYOUT FAIL"
+expect noquit

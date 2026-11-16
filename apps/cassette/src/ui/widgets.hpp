@@ -98,6 +98,8 @@ public:
     void set_value(const std::string &value);
     void set_enabled(bool down, bool up);
     void set_shown(bool shown);
+    /* The caption (SOFT's slot reads VOLUME while a take plays): the same face, size and fitting as at construction. */
+    void set_caption(const std::string &caption);
     lv_obj_t *frame() const { return frame_; }
 
 private:
@@ -105,9 +107,12 @@ private:
     lv_obj_t *caption_ = nullptr, *value_ = nullptr;
     std::unique_ptr<IconButton> down_, up_;
     double value_px_ = 17;
-    std::string value_text_;
+    std::string value_text_, caption_text_;
     double s_ = 1;
     StepperLook look_;
+    int cap_px_ = 11, cap_ls_ = 0, cap_min_ = 8; /* the caption's fitting, in screen px */
+    Fit fit_;                                   /* where place() last put it */
+    DRect r_{0, 0, 0, 0};
 };
 
 class Lamp {

@@ -128,6 +128,8 @@ private:
     std::string state_shown_ = "?";
     int strip_x_ = 0, strip_w_ = 0, strip_y_ = 0, strip_h_ = 0;
     bool card_shown_ = true;
+    bool vol_mode_ = false;  /* SOFT's slot is the playback VOLUME (ui_format.hpp stepper_slots): its buttons step the volume */
+    void soft_step(int d);   /* the slot's - / +: SOFT gain, or VOLUME while a take plays */
     bool limiter_ = false, low_cut_ = false;
     int lamp_glow_ = 2; /* the meter panel lamps' glow (portrait, square) */
     lv_obj_t *lim_label_ = nullptr, *cut_label_ = nullptr; /* the list's LIM and LOW CUT labels (portrait, square) */
