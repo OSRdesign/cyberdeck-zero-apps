@@ -329,4 +329,40 @@ void test_settings_bt() {
         CHECK_EQ(u.load(), 0);
         CHECK_EQ(u.values().bt_names.size(), kBtNamesMax);
     }
+    {   /* the playback VOLUME: one entry per output (volume 0..100, muted written only when true), round trip, clamped, bad
+         * entries dropped, at most 32, absent when empty (an older file saves without the key) */
+        TempDir d4;
+        const std::string p4 = default_settings_path(d4.path);
+        std::filesystem::create_directories(std::filesystem::path(p4).parent_path());
+        write_text(p4, "{\"version\":1,\"playback_volume\":{\"alsa:hw:CARD=UC02\":{\"volume\":52},"
+                       "\"bt:70:BF:92:53:6B:8B\":{\"volume\":140,\"muted\":true},\"alsa:default\":{\"volume\":-3},"
+                       "\"pulse:x\":7,\"\":{\"volume\":1},\"alsa:hw:CARD=B\":{\"other\":1}}}");
+        SettingsStore s(ops, p4);
+        CHECK_EQ(s.load(), 0);
+        auto &v = s.values().playback_volume;
+        CHECK_EQ(v.size(), 4u);
+        CHECK_EQ(v["alsa:hw:CARD=UC02"].pct, 52);
+        CHECK(!v["alsa:hw:CARD=UC02"].muted);
+        CHECK_EQ(v["bt:70:BF:92:53:6B:8B"].pct, 100); /* clamped */
+        CHECK(v["bt:70:BF:92:53:6B:8B"].muted);
+        CHECK_EQ(v["alsa:default"].pct, 0);
+        CHECK_EQ(v["alsa:hw:CARD=B"].pct, 100); /* an entry without a volume: the default */
+        v["pulse:alsa_output.usb-Sharkoon"] = PlaybackVolume{40, false};
+        CHECK_EQ(s.save(), 0);
+        const std::string text = read_text(p4);
+        CHECK(text.find("\"pulse:alsa_output.usb-Sharkoon\"") != std::string::npos);
+        CHECK(text.find("\"muted\": true") != std::string::npos || text.find("\"muted\":true") != std::string::npos);
+        SettingsStore t(ops, p4);
+        CHECK_EQ(t.load(), 0);
+        CHECK(t.values().playback_volume == s.values().playback_volume);
+        t.values().playback_volume.clear();
+        CHECK_EQ(t.save(), 0);
+        CHECK(read_text(p4).find("playback_volume") == std::string::npos);
+        std::string many = "{\"version\":1,\"playback_volume\":{";
+        for (int i = 0; i < 40; ++i) many += std::string(i ? "," : "") + "\"alsa:hw:CARD=C" + std::to_string(i) + "\":{\"volume\":50}";
+        write_text(p4, many + "}}");
+        SettingsStore u(ops, p4);
+        CHECK_EQ(u.load(), 0);
+        CHECK_EQ(u.values().playback_volume.size(), kPlaybackVolumesMax);
+    }
 }

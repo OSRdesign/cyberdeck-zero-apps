@@ -75,6 +75,11 @@ public:
     void set_change_callback(PulseChangeCallback cb) override;
     int open_capture(const PulseCaptureRequest &req, std::unique_ptr<PulseCapture> &out, std::string *why) override;
     int open_playback(const PulsePlaybackRequest &req, std::unique_ptr<PulsePlayback> &out, std::string *why) override;
+    /* the playback VOLUME: the sink's volume_raw / muted change (a Change event follows); volume_calls counts the sets */
+    int set_sink_volume_raw(const std::string &sink, unsigned channels, uint32_t volume, int mute) override;
+    int read_sink_volume(const std::string &sink, uint32_t &volume, bool &muted) override;
+    bool volume_missing = false;   /* set_sink_volume_raw -> kPulseMissing (an old libpulse) */
+    unsigned volume_calls = 0;
 
     /* the server's side, driven by the tests (any thread) */
     void advance(double seconds) { clock.store(clock.load() + seconds); }

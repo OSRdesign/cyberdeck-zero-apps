@@ -136,6 +136,11 @@ bool load_pulse_lib(const char *file, PulseLib &out, std::string &why) {
         return false;
     }
     if (const char *v = l.get_library_version()) l.version = v;
+    /* optional: without them the VOLUME stepper shows a sink's level but cannot change it */
+    l.context_set_sink_volume_by_name = reinterpret_cast<decltype(l.context_set_sink_volume_by_name)>(
+        ::dlsym(h, "pa_context_set_sink_volume_by_name"));
+    l.context_set_sink_mute_by_name = reinterpret_cast<decltype(l.context_set_sink_mute_by_name)>(
+        ::dlsym(h, "pa_context_set_sink_mute_by_name"));
     return true;
 }
 

@@ -89,7 +89,7 @@ numbers are explained below. The other layouts hold the same parts in another or
 | 3 | **Recordings** and **Settings** buttons | Open the recordings list (key **L**) and the settings (key **S**). |
 | 4 | **Info strip** | The take's name in capitals, the format and the time left on the card (for example `TAKE 007 · 48k/16 WAV · 12 h 40 left`); while a take plays it reads `PLAYING TAKE 006 · 05:44 / 12:08`. At the right: the **LIM** and **LOW CUT** lamps (lit when those switches in Settings are on) and, while the deck works, a red **REC** or green **PLAY** word with a lamp. A notice replaces the strip for a few seconds (a take saved, the card unplugged, a refusal). On narrow and square screens this is a box next to the counter instead (the two lamps then sit in the meter panel, see *Low cut and Limiter*): its first line, in bold, is the codec and rate (`WAV 48k`, `FLAC 48k`, `OPUS 48k · 32 kbps`: Opus adds its bit rate), its second line the time left (`12 h 40 left`) or, while a take plays, the position (`05:44 / 12:08`). The box does not show the take's name (it is on the cassette label). While recording it names the codec of the take being recorded; when idle, the choice in Settings (what the next take would use); while a take plays, that take's codec and rate. With no sound input it still names the Settings choice. The REC or PLAY lamp sits at the right end of the second line, so the codec line has the whole width of the box. Neither line wraps: the codec line uses the largest type size at which it fits the box. |
 | 5 | **Level meter** | 15 bars from -40 to 0 dBFS, one row per channel (a mono card has one row, a stereo card two: L over R). Details below. |
-| 6 | **CARD** and **SOFT** gain | CARD is the sound card's own level (shown only when the card has a level control). SOFT is gain added by Cassette, 0 to +24 dB. Each has a minus and a plus button, 1 dB a step. |
+| 6 | **CARD** and **SOFT** gain | CARD is the sound card's own level (shown only when the card has a level control). SOFT is gain added by Cassette, 0 to +24 dB. Each has a minus and a plus button, 1 dB a step. While a take plays, scans, is paused or previews, SOFT's place shows **VOLUME** (the playback volume, see [Playing](#playing)) at the full width and CARD is hidden. |
 | 7 | **The five keys** | REW, PLAY / PAUSE, FWD, STOP, REC. |
 
 ### The level meter
@@ -117,6 +117,8 @@ numbers are explained below. The other layouts hold the same parts in another or
   drawn and SOFT takes the full width.
 - **SOFT** multiplies the signal in software, 0 to +24 dB. Use CARD first, SOFT when CARD is at its top. SOFT also makes the card's hiss louder (see
   [Troubleshooting](#troubleshooting)).
+- Both are for **recording**. While a take plays the same place holds the **VOLUME** stepper (see
+  [Playback volume](#playback-volume)); CARD and SOFT come back, unchanged, when the playback stops.
 
 ![A card without a level control](img/no-card-level.png)
 
@@ -253,6 +255,30 @@ more than one output, Settings > **Output** lets you choose, Bluetooth headsets 
 | PLAY pressed in, the meter shows the played level on L and R | PAUSE pressed in, the meter falls away | 5x badge, REW and PLAY pressed in |
 
 If the playback device is lost, the deck pauses and the notice *The sound output was lost* shows.
+
+### Playback volume
+
+While a take plays, scans with REW / FWD, is paused in playback or previews from the recordings list, the SOFT stepper's
+place reads **VOLUME** with the volume in percent (for example `52 %`), at the full width; the CARD stepper is hidden.
+Nothing else on the screen moves. Its **-** and **+** buttons, and the keys **-** and **=** (on every page, also on the
+keypad; held, the key repeats), move the volume one level. STOP, REC or the end of the take bring CARD and SOFT back
+exactly as they were: VOLUME never changes the recording level.
+
+- VOLUME sets the volume of the **output the take plays on**: the USB card's own playback level, the Bluetooth
+  headset's or speaker's level, or, on a board with a sound server (PipeWire), the level of its default output. Cassette
+  remembers nothing on top of it: the output keeps its level, and other programs see the same number (alsamixer,
+  `wpctl`, the launcher).
+- An output with no volume control of its own (an HDMI output on a board without a sound server) gets Cassette's own
+  volume: the take is scaled as it is sent, 100 % is the take as recorded. Cassette keeps that level per output.
+- The steps are fitted to each output: about 2 dB a step over the top 60 dB of what the output can do, so 50 % is the
+  middle of that output's own range. Two different outputs at 50 % can sound different, as their hardware does.
+- **-** at the lowest level mutes: the stepper reads **Mute**. Muted, **-** does nothing and **+** brings the sound back
+  at the level it had. A level that is not known yet (a Bluetooth headset that is still connecting) reads `--`.
+- The **launcher's volume keys** keep working: they change the board's default output, and when the take plays on it the
+  stepper follows within about half a second.
+- **The first time** a take plays on an output that is silent (muted, or at the very bottom of its range), Cassette sets
+  it to about 50 % so the take can be heard. That happens once per output; afterwards the output keeps the level you
+  set.
 
 ## The recordings list
 
@@ -954,6 +980,9 @@ merge: Esc stops the merge (Enter only after Left / Right / Tab has outlined CAN
 **Settings:** Up / Down move; Enter or Right change or open a row; on a slider Left / Right step it; L the list; Esc
 back (a choice list first, then the recorder).
 
+**Every page:** **-** and **=** (keypad - and +) turn the playback VOLUME down and up while a take plays, scans, is
+paused or previews (held, the key repeats); otherwise they do nothing.
+
 The full map is in [KEYS.md](KEYS.md).
 
 ## Files and where they live
@@ -969,7 +998,7 @@ The full map is in [KEYS.md](KEYS.md).
 | Edit numbers already used | `~/Recordings/.edits/` (so a deleted `-2` is never handed out again) |
 | The waveform overview of a take | `<take>.wav.peaks` (`.flac.peaks`, `.opus.peaks`) next to the take, built the first time the Edit page opens it; Cassette checks it against the take's size and time on every use and rebuilds it if they changed. Safe to delete. |
 | Leftover temporary files | `.tmp-*` in the folder (`.tmp-merge-*` from a merge), from a save or a merge that was cut short; removed at the next start |
-| The settings | `~/.config/cassette/settings.json`; also each card's level, auto gain and mute. Delete it to reset everything. Every key is listed in [SETTINGS.md](SETTINGS.md). |
+| The settings | `~/.config/cassette/settings.json`; also each card's level, auto gain and mute, and one playback VOLUME entry per output a take has played on. Delete it to reset everything. Every key is listed in [SETTINGS.md](SETTINGS.md). |
 
 The WAV files are standard (Broadcast Wave), and the FLAC and Ogg Opus files are standard too (the take's name and,
 when the clock is set, the date are in the file's Vorbis comments). Any player or editor opens them. Copy them off the

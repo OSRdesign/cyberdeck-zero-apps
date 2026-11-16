@@ -138,6 +138,11 @@ public:
      * (the return value: unchanged means no new period). Written by the playback thread with atomics only (no lock, no
      * allocation); any thread may read it. */
     uint32_t level(float peak[2], uint16_t *channels = nullptr) const;
+    /* The VOLUME stepper's software volume (core/playback/output_volume.hpp): an amplitude 0..1 the Player applies to what it
+     * sends, only for an output without a playback mixer and for Cassette's own mute (0); 1 (the default) leaves the samples
+     * untouched, bit for bit. The level tap stays before it. Any thread; takes effect from the next period. */
+    void set_gain(float gain);
+    float gain() const { return gain_.load(std::memory_order_relaxed); }
 
 private:
     struct Cmd;
@@ -194,6 +199,7 @@ private:
     std::atomic<uint32_t> level_seq_{0};
     std::atomic<float> level_peak_[2] = {{0.0f}, {0.0f}};
     std::atomic<uint16_t> level_channels_{0};
+    std::atomic<float> gain_{1.0f};
 };
 
 } // namespace cassette

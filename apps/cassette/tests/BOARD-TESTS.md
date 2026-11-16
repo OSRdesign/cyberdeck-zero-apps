@@ -846,6 +846,96 @@ On a launcher 0.10.0 (or any build without the `bt_audio*` keys: its `status.sta
 
 Report: pass or fail, anything that differs from B24-B35 as you saw them last.
 
+## B37-B44. Playback VOLUME (the version after 0.3.1; about 45 min in all)
+
+The VOLUME stepper takes SOFT's place on the recorder while a take plays, scans, is paused or previews; it sets the volume
+of the output the take plays on (README, *Playback volume*). Keep a take of a minute or more of speech or music in the list.
+The log lines are in Cassette's journal: run it from a shell (`/usr/share/APPLaunch/bin/cassette 2>&1 | grep volume`) or
+read the launcher's log.
+
+## B37. The stepper swaps and comes back (any board, 5 min)
+
+1. Idle: CARD (when the card has a level) and SOFT as usual; note SOFT's value.
+2. PLAY. Expected: SOFT's place reads **VOLUME** with a percent, at the full width; CARD is gone; nothing else on the page
+   moves (the keys, the meter, the counter row stay where they were).
+3. PAUSE, then hold REW, then hold FWD: VOLUME stays in each state.
+4. STOP: CARD and SOFT come back where they were, SOFT with the value of step 1.
+5. PLAY again, then REC: the recording starts with CARD and SOFT (not VOLUME). STOP.
+6. PLAY and let the take reach its end: CARD and SOFT come back by themselves.
+7. Recordings list, double tap a take (preview), then `-` / `=`: the volume changes while it previews. Esc.
+
+Report: pass or fail, a photo of the recorder playing and stopped.
+
+## B38. VOLUME on a USB card without a sound server (deck or zero8, 5 min)
+
+1. Plug a USB card or headset with a playback level (`amixer -c <card> scontrols` lists e.g. `Speaker` or `PCM`). Settings > Output:
+   that card. PLAY a take.
+2. Press `=` and `-` a few times (or the stepper's + and -). Expected: the sound gets louder and quieter in even steps; in a second
+   shell `amixer -c <card> sget <control>` follows (about 2 dB a step); the log shows `volume: set hw:CARD=... step i/N`.
+3. `-` down to the lowest level, once more: the stepper reads **Mute**, the sound stops, `amixer` shows the switch `[off]` (or the
+   control at its mute value). `-` again does nothing; `=` brings the sound back at the lowest level.
+4. Change the level with `alsamixer` while the take plays: the stepper follows within about half a second.
+
+Report: pass or fail, the card's name, the log line of one set, the percent at the loudest level you find comfortable.
+
+## B39. VOLUME on a Bluetooth speaker or headset (HackBerry or RPI52, 5 min)
+
+1. Settings > Output: the Bluetooth device. PLAY.
+2. `=` / `-`: the device's own volume moves (`wpctl status` or `pactl list sinks short` + `pactl get-sink-volume <sink>`); the log shows
+   `volume: set sink bluez_output... step i/N ... read back raw=...`.
+3. Change the volume on the device itself (its buttons), if it has any: the stepper follows.
+4. `-` to Mute and back with `=`.
+5. Switch the device off and on, PLAY again: the stepper shows the level the device kept.
+
+Report: pass or fail, the device, the log line of one set.
+
+## B40. The first use of an output and the level kept per output (any board, 10 min)
+
+1. Close Cassette. Remove `playback_volume` from `~/.config/cassette/settings.json` (or the whole file). Make the output silent:
+   `amixer -c <card> sset <control> 0%` (or `mute`), or `wpctl set-volume <sink> 0` for a sink.
+2. Open Cassette, PLAY. Expected: the take is heard; the stepper shows about **50 %**; the log says `(first use of a silent output)`;
+   `settings.json` gets a `playback_volume` entry for that output (within a second; `alsa:hw:CARD=...`, `bt:...` or `pulse:...`).
+3. STOP, make the output silent again, PLAY: this time it stays silent (the rule ran once); `=` brings it up.
+4. Set different levels on two outputs (Settings > Output), switch between them: each shows its own level.
+5. Restart Cassette (and the board, for a USB card): each output shows the level it had (a card that resets at boot shows the
+   level it came up with).
+
+Report: pass or fail, the `playback_volume` part of settings.json.
+
+## B41. The launcher's volume keys (a board with volume keys, playing on the default output, 3 min)
+
+1. Settings > Output: Automatic (or the board's default output). PLAY.
+2. Press the launcher's volume up / down keys (or the keyboard's media volume keys). Expected: the launcher changes the volume as
+   always, and the VOLUME stepper follows within about half a second. The launcher's mute key: the stepper reads Mute.
+3. `=` / `-` in Cassette: the launcher's own volume display (if shown) follows on the default output.
+
+Report: pass or fail, the board.
+
+## B42. An output without a volume control (zero8 HDMI or any card without a playback level, 5 min)
+
+1. Choose an output with no playback control (`amixer -c <card> scontrols` lists none for playback). PLAY.
+2. Expected: VOLUME reads **100 %** at first; the log says `has no playback control: software volume`. `-` makes it quieter in steps;
+   the lowest level then Mute silences it; `=` brings it back. CARD and SOFT are unchanged after STOP.
+3. Restart Cassette, PLAY: the software level is kept (`settings.json` `playback_volume` ... `volume`).
+
+Report: pass or fail, the output.
+
+## B43. The layouts (deck 640x480, zero8 320x480 portrait (PDA), HackBerry 720x720, RPI52 800x480; 2 min each)
+
+On each board: a photo of the recorder idle and one while playing. Expected: VOLUME in SOFT's place at the full width, nothing
+else moves between the two photos, the value fits (`100 %`, `Mute`), the - and + buttons are as large as SOFT's.
+
+Report: pass or fail per board, the photos.
+
+## B44. The keys on every page (any board with a keyboard, 3 min)
+
+1. PLAY, open the recordings list (L): `-` / `=` change the volume while the take plays; Settings (S): the same.
+2. Edit page of a take, Space (PLAY): `-` / `=` change the volume.
+3. Nothing plays: `-` / `=` do nothing on any page (SOFT does not move).
+4. Hold `=`: the volume climbs a level at each key repeat.
+
+Report: pass or fail.
+
 ## Results
 
 B24 to B31, B33 and B35 are filled from the owner's HackBerry session (PipeWire 1.4.2, launcher 0.10.1, a Jabra Evolve 65 paired directly,
@@ -891,6 +981,14 @@ outside the repository (the owner's log); this table is the blank form for them.
 | B34 no sound server | Pi 3A+ | not run |  |
 | B35 paired but not connected | HackBerry | PASS | 2026-11-11/12; build bt2/bt3, then 0.3.0; launcher 0.10.1 |
 | B36 launcher without the keys | HackBerry | not run | needs a launcher older than 0.10.1; covered by the unit tests |
+| B37 VOLUME swaps and comes back |  |  |  |
+| B38 VOLUME on a USB card (no server) |  |  |  |
+| B39 VOLUME on Bluetooth |  |  |  |
+| B40 first use, level kept per output |  |  |  |
+| B41 launcher volume keys |  |  |  |
+| B42 output without a volume control |  |  |  |
+| B43 VOLUME layouts |  |  |  |
+| B44 - / = on every page |  |  |  |
 
 **What to send back:** the table; the probe output per board (B0) and `cassette-probe --server` (B24, B34); the measured
 monitor delays (B30, B31); the `watch` and `take` outputs of B1, B3, B4; the

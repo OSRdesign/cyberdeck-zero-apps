@@ -98,7 +98,21 @@ struct CtlInfo {
     long min = 0, max = 0, step = 1;
     bool has_db = false;   /* the driver reports dB for min and max */
     long db_min_cdb = 0, db_max_cdb = 0; /* hundredths of a dB, when has_db */
+    /* Playback volume (the VOLUME stepper, copied from Vinyl): snd_ctl_get_dB_range reports the lowest value of a dB scale
+     * with its mute flag as SND_CTL_TLV_DB_GAIN_MUTE (kAlsaDbGainMute), not as its real dB (the Raspberry Pi jack's 'PCM
+     * Playback Volume'). real_alsa then also reads the dB of min + 1 (snd_ctl_convert_to_dB, an optional symbol) into
+     * db_next_cdb (db_next_known). has_db and db_min_cdb stay as the driver gave them (the capture controls are read as
+     * before); alsa_fix_mute_db puts the real range back on a copy. */
+    bool db_next_known = false;
+    long db_next_cdb = 0;
+    bool min_is_mute = false; /* set by alsa_fix_mute_db: the lowest value is "mute", the lowest sound is min + 1 */
 };
+
+constexpr long kAlsaDbGainMute = -9999999;
+/* A dB scale with its mute flag (db_min_cdb at or under kAlsaDbGainMute): min_is_mute set and the real dB of min put back
+ * from the dB of min + 1 (a dB scale is linear in steps); without that dB (db_next_known false) the control is taken as
+ * having no dB data (has_db false). Anything else is left as it is. From Vinyl's alsa_api (the Pi 4B, 2026-11-13). */
+void alsa_fix_mute_db(CtlInfo &c);
 
 class AlsaApi {
 public:

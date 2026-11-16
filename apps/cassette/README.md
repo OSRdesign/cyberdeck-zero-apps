@@ -24,6 +24,7 @@ category Tools. Plan: [launcher `docs/dev/tasks/016-cassette-recorder.md`](https
   playing, the list, the Edit page (trim and split), merging takes, settings, Bluetooth, files, crash safety,
   troubleshooting, limits), with pictures.
 - [`docs/KEYS.md`](docs/KEYS.md): the keyboard map.
+- [`docs/decisions.md`](docs/decisions.md): the owner's decisions recorded with the code (the playback VOLUME).
 - [`docs/MAKING-SCREENSHOTS.md`](docs/MAKING-SCREENSHOTS.md): how to render the guide's pictures again after a change
   (`docs/make-doc-images.sh`).
 - [`docs/PULSE.md`](docs/PULSE.md): the sound-server backend (PipeWire / PulseAudio through libpulse) for Bluetooth
@@ -60,7 +61,10 @@ Four pages and four boxes:
   meter (15 steps over -40 to 0 dBFS, one bar per channel, peak hold, the PEAK lamp, the target zone from -18 to
   -6 dBFS marked on the scale), the **CARD** stepper (the card's own level, only when the card has a level control) and
   the **SOFT** stepper (software gain 0 to +24 dB on top of the card's level, with a clip counter; SOFT takes the full
-  width on a card without a level control), and the five deck keys REC, PLAY / PAUSE, STOP, REW and FWD. REW and FWD
+  width on a card without a level control), and the five deck keys REC, PLAY / PAUSE, STOP, REW and FWD. While a take
+  plays, scans, is paused in playback or previews from the list, SOFT's place holds the **VOLUME** stepper instead (the
+  playback volume of the output the take plays on, in percent, at the full width; the CARD stepper is hidden; see
+  [Playback volume](#playback-volume)); STOP, REC or the end of the take bring CARD and SOFT back as they were. REW and FWD
   scan at 5x while held (or jump 5 s per tap, setting). The PLAY / PAUSE key shows the current state: PLAY latched while
   a take plays (also while REW / FWD is held), PAUSE latched while a take or a recording is paused, PAUSE unlatched while
   recording (what a press does), PLAY unlatched when stopped (the table is in [`docs/KEYS.md`](docs/KEYS.md)). Both hubs
@@ -130,6 +134,37 @@ Four pages and four boxes:
 A short notice at the bottom of every page tells what happened (a take saved, the card unplugged, a save that failed
 and why, an action refused while recording).
 
+### Playback volume
+
+While a take plays (also scanning with REW / FWD, paused in playback, or previewed from the Recordings list) the recorder
+shows **VOLUME** in SOFT's place, at the full width, with the CARD stepper hidden: the same stepper, its - and + buttons,
+and the keys `-` and `=` on every page (a level a press; held, the key repeats). It sets the volume of the **output the
+take plays on**, the same model as Vinyl (its `docs/decisions.md`, "Volume levels fitted to each output"); it never
+touches the input gain, and CARD and SOFT keep their values. STOP, REC or the end of the take bring CARD and SOFT back
+exactly as they were; recording and the idle meter are unchanged.
+
+- **A card without a sound server** (the deck, zero8, the Pi 3A+): the card's own playback control (`Master`, `PCM`,
+  `Speaker`, `Headphone`, `Headset`, else another `... Playback Volume`; a microphone's loop-back such as the PCM2902's
+  `Mic Playback Volume` is never taken), set by raw value; its switch mutes.
+- **A Bluetooth speaker or headset, or the default output on a board with a sound server** (PipeWire / PulseAudio): the
+  sink's own volume, the one `pactl` / `wpctl` show (so a headset keeps its level across a reconnect); the take's stream
+  itself plays at 100 % with its own restore key.
+- **An output with no volume control at all** (an HDMI output on a Lite board): Cassette's software volume over -60..0
+  dB, applied to the samples it sends; at 100 % the take goes out bit for bit. The stepper reads the same percent.
+- **Levels fitted to each output**: the top 60 dB of the output's real range at most, cut in levels about 2 dB apart,
+  linear in dB (a USB DAC of -45..0 dB has 23 levels, 52 % is its middle -22.5 dB; an output with no known range, a
+  Bluetooth sink, has 30 levels over -60..0 dB). "-" at the first level mutes and the stepper reads **Mute**; muted, "-"
+  does nothing and "+" brings the level back. A level that is not known yet reads `--`.
+- **The launcher's volume keys** stay the launcher's: they act on the system's default output, and when the take plays
+  there the stepper follows them (the card's control is read every 0.3 s, a sink's level comes with the sound server's
+  change events).
+- **First use of an output**: the first time a take plays on an output and that output is silent (muted, or at the
+  bottom of its range), Cassette sets it near 50 % (the owner's rule); after that the output keeps its own level. Each
+  output Cassette has played on has an entry in `settings.json` (`playback_volume`, see
+  [`docs/SETTINGS.md`](docs/SETTINGS.md)): the software volume and Cassette's own mute live there; an output with its
+  own control keeps its level itself.
+- Each set is written to the journal of the app (stderr): `[cassette] volume: set <output> step i/N P % target X dB ...`.
+
 ### Keys and touch
 
 Every key also has its control on the screen; Esc is "back" everywhere (a box, a picker or a text field closes first;
@@ -144,6 +179,7 @@ The full map is [`docs/KEYS.md`](docs/KEYS.md).
 | | , (comma) / . (period) | REW / FWD: held, scan backwards / forwards at 5x |
 | | L / S | the recordings list / the settings |
 | | Esc | end the app (cancels a running countdown) |
+| Every page | - / = (keypad - / +) | VOLUME down / up while a take plays, scans, is paused or previews (nothing otherwise) |
 | Recordings | Up / Down | move the selection |
 | | Enter | PREVIEW the selected take (again on it: stop and rewind) |
 | | L | LOAD the selected take into the deck |
@@ -378,6 +414,12 @@ package's `copyright` file names them, with the system libraries the binaries li
 
 ## Changes
 
+- Next version (not published yet): a playback **VOLUME** stepper in SOFT's place while a take plays, scans, is paused or
+  previews (CARD hidden, the full width), keys `-` and `=` on every page; it sets the playback output's own volume in levels
+  fitted to that output (Vinyl's model): a card's playback control, a sound server's sink (Bluetooth included), or Cassette's
+  software volume where the output has none; a silent output is set near 50 % the first time a take plays on it; one
+  `playback_volume` entry per output in `settings.json`. See [Playback volume](#playback-volume) and
+  [`docs/decisions.md`](docs/decisions.md).
 - 0.3.1: the package's copyright file names the libraries Cassette uses; no functional change. See
   [`docs/RELEASE-0.3.1.md`](docs/RELEASE-0.3.1.md).
 - 0.3.0: Bluetooth audio: record from a Bluetooth headset (16 kHz mSBC or 8 kHz CVSD, mono), play to Bluetooth headsets and speakers, live

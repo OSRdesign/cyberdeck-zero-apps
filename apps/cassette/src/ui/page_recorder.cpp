@@ -238,7 +238,7 @@ void RecorderPage::build_landscape()
     card_ = std::make_unique<Stepper>(root_, fit_, DRect{16, 206, 220, 44}, "CARD", 17, Icon::Minus, Icon::Plus,
                                       [this](int d) { if (act_.card_gain && !window_->loading()) act_.card_gain(d); });
     soft_ = std::make_unique<Stepper>(root_, fit_, DRect{244, 206, 220, 44}, "SOFT", 17, Icon::Minus, Icon::Plus,
-                                      [this](int d) { if (act_.soft_gain && !window_->loading()) act_.soft_gain(d); });
+                                      [this](int d) { soft_step(d); });
 }
 
 void RecorderPage::build_portrait()
@@ -278,7 +278,7 @@ void RecorderPage::build_portrait()
     card_ = std::make_unique<Stepper>(root_, fit_, DRect{16, 352, 142, 44}, "CARD", 14, Icon::Minus, Icon::Plus,
                                       [this](int d) { if (act_.card_gain && !window_->loading()) act_.card_gain(d); });
     soft_ = std::make_unique<Stepper>(root_, fit_, DRect{162, 352, 142, 44}, "SOFT", 14, Icon::Minus, Icon::Plus,
-                                      [this](int d) { if (act_.soft_gain && !window_->loading()) act_.soft_gain(d); });
+                                      [this](int d) { soft_step(d); });
 }
 
 /* The square layout: one column, every number the 720x720 mockup's (design px, scaled by width / 720). */
@@ -350,7 +350,7 @@ void RecorderPage::build_square()
                                       Icon::Plus, [this](int d) { if (act_.card_gain && !window_->loading()) act_.card_gain(d); },
                                       look);
     soft_ = std::make_unique<Stepper>(root_, fit_, DRect{368, g_.step_y, 328, g_.step_h}, "SOFT", 28, Icon::Minus,
-                                      Icon::Plus, [this](int d) { if (act_.soft_gain && !window_->loading()) act_.soft_gain(d); },
+                                      Icon::Plus, [this](int d) { soft_step(d); },
                                       look);
     sq_stereo_ = true; /* drawn for two channels; the default (one) is applied now */
     square_stereo(false);
@@ -424,6 +424,16 @@ void RecorderPage::square_stereo(bool stereo)
     for (const Moved &m : sq_moved_) {
         const double d = stereo ? 0 : m.mono_dy;
         lv_obj_set_y(m.obj, m.y + fit_.y(g_.meter_y + d) - fit_.y(g_.meter_y));
+    }
+}
+
+void RecorderPage::soft_step(int d)
+{
+    if (window_->loading()) return;
+    if (vol_mode_) {
+        if (act_.volume_step) act_.volume_step(d);
+    } else if (act_.soft_gain) {
+        act_.soft_gain(d);
     }
 }
 
@@ -624,12 +634,23 @@ void RecorderPage::update_deck(const RecorderVm &rec)
         low_cut_ = rec.info.low_cut;
     }
 
-    place_steppers(rec.card.shown);
+    /* while a take plays, scans, is paused or previews, SOFT's slot is the playback VOLUME at the full width and CARD is hidden
+     * (ui_format.hpp stepper_slots: the CassetteNoCard places, so nothing else moves); CARD and SOFT come back as they were */
+    const StepperSlots slots = stepper_slots(rec.card.shown, rec.transport);
+    vol_mode_ = slots.volume;
+    place_steppers(slots.card);
     const bool decimal = !frame_.portrait;
     card_->set_value(fmt_db(rec.card.db, decimal));
     card_->set_enabled(rec.card.can_down, rec.card.can_up);
-    soft_->set_value(fmt_db(rec.soft.db, decimal));
-    soft_->set_enabled(rec.soft.can_down, rec.soft.can_up);
+    if (slots.volume) {
+        soft_->set_caption("VOLUME");
+        soft_->set_value(volume_text(rec.volume));
+        soft_->set_enabled(rec.volume.can_down, rec.volume.can_up);
+    } else {
+        soft_->set_caption("SOFT");
+        soft_->set_value(fmt_db(rec.soft.db, decimal));
+        soft_->set_enabled(rec.soft.can_down, rec.soft.can_up);
+    }
 
     /* the PLAY/PAUSE key shows the current state (the table in ui_format.hpp, play_key_look): PLAY latched while a take
      * plays or scans, PAUSE latched while paused, PAUSE unlatched while recording, PLAY unlatched otherwise; the latch is

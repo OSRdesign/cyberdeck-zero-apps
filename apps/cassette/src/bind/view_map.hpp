@@ -15,7 +15,9 @@
  *             The counter: the take's length while recording, the position while playing, else 0. The cassette and the
  *             info strip name the take being recorded, the take playing, else the take REC would write next ("Take 008").
  *             No sound input (the capture path is not running): the empty window, "NO INPUT", no CARD stepper; the card's
- *             message goes to the strip when a card is listed but cannot be used (busy, unsupported).
+ *             message goes to the strip when a card is listed but cannot be used (busy, unsupported). The playback VOLUME
+ *             (Snapshot::volume, while it is active): its percent, mute and the -/+ buttons; the page shows it in SOFT's
+ *             place while a take plays, scans, is paused or previews (ui_format.hpp volume_in_soft_slot).
  *   names     "Take 006-1": the file's prefix with its first letter raised, then its label ("006-1", take_label).
  *   settings  the board's rows; Input level and Auto gain only when the card has them; Channels shown and dimmed (the
  *             controller has no channel setting); the recording format is three rows, Codec, Sample rate and Quality (Bit

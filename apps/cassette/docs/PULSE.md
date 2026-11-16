@@ -596,6 +596,28 @@ proof of the fallback.
 keys: as before) in `tests/BOARD-TESTS.md`. To try it without a launcher: write `v=1`, a live `pid` and the keys to
 `$APPLAUNCH_STATE_DIR/status.state` and `board.state` (the provider follows them within a second).
 
+## What the playback VOLUME uses (the version after 0.3.1, `src/core/playback/output_volume.*`)
+
+The VOLUME stepper (README, *Playback volume*; `docs/decisions.md`) sets the volume of the output a take plays on, with
+Vinyl's model. From this layer it uses:
+
+- the sinks' own volume in every listing: `PulseDevice::volume_raw` (the loudest channel's `pa_volume_t`), `muted`,
+  `base_volume`, `n_volume_steps`, `sink_flags` and `alsa_card` (the ALSA card behind a sink: `alsa.card`, `api.alsa.card`,
+  or the N of `api.alsa.path` / `device.string`, `pulse_alsa_card`); a sink's levels are its card's range moved under the
+  sink's 0 dB, -60..0 dB without a card (Bluetooth);
+- `PulseApi::set_sink_volume_raw` / `read_sink_volume` (`pa_context_set_sink_volume_by_name` and
+  `pa_context_set_sink_mute_by_name`, optional symbols: without them the level shows and cannot change), called on the
+  worker (`PulseWorker::request_sink_volume`: a newer request replaces one still waiting; each set logs what the sink holds
+  after it);
+- `ScanRequest::want_info`: the server's info (its default sink) with a listing, asked only while a take plays on ALSA's
+  `default` (that output is the default sink then);
+- the take's playback stream opens unmuted at 100 % with its own restore key (`PulsePlaybackRequest::own_volume`:
+  `START_UNMUTED`, `module-stream-restore.id` `sink-input-by-application-id:cassette`, WirePlumber's `state.restore-props` /
+  `state.restore-target` false), so the sink's volume is the whole volume; the live monitor's stream is opened as before.
+
+The server's change events (sinks are subscribed already) re-list within `pulse_refresh_ms`, so a level changed elsewhere
+(a headset's buttons, the launcher's keys on the default sink) shows in the stepper within about a tick and a round trip.
+
 ## Tests
 
 `wsl -e sh tests/pulse/run.sh [SAN=thread|SAN=address,undefined]`:

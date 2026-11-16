@@ -314,6 +314,8 @@ SHAPE(pa_context_get_source_info_by_name, context_get_source_info_by_name);
 SHAPE(pa_context_get_source_info_by_index, context_get_source_info_by_index);
 SHAPE(pa_context_get_sink_info_list, context_get_sink_info_list);
 SHAPE(pa_context_get_sink_info_by_name, context_get_sink_info_by_name);
+SHAPE(pa_context_set_sink_volume_by_name, context_set_sink_volume_by_name); /* optional: the playback VOLUME */
+SHAPE(pa_context_set_sink_mute_by_name, context_set_sink_mute_by_name);
 SHAPE(pa_context_get_sink_info_by_index, context_get_sink_info_by_index);
 SHAPE(pa_context_get_card_info_list, context_get_card_info_list);
 SHAPE(pa_context_get_card_info_by_name, context_get_card_info_by_name);

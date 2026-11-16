@@ -46,6 +46,8 @@ wait 300
 expect text "Codec"
 key esc
 wait 300
-expect text "SOFT"
+expect text "VOLUME"
+expect notext "SOFT"
+say back on the recorder while Take 006 still plays: VOLUME in SOFT's place
 expect notext "LAYOUT FAIL"
 expect noquit

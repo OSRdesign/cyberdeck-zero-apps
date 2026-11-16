@@ -61,3 +61,4 @@ void test_monitor();
 void test_codec_play();
 void test_pulse_sink();
 void test_pulse_monitor();
+void test_volume();

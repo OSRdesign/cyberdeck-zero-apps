@@ -397,6 +397,16 @@ void CassetteUi::Impl::on_keyboard(const key_item &item)
         }
         return;
     }
+    /* - and = (keypad - and +): the playback VOLUME on every page, a level a press, the key's own repeat while held; the
+     * controller acts only while a take plays (the recorder shows it in SOFT's slot then) */
+    if (is(KEY_MINUS, '-') || code == KEY_KPMINUS) {
+        if (act.volume_step) act.volume_step(-1);
+        return;
+    }
+    if (is(KEY_EQUAL, '=') || code == KEY_KPPLUS || (code == 0 && ch == '+')) {
+        if (act.volume_step) act.volume_step(1);
+        return;
+    }
     switch (cur) {
     case Screen::Recorder:
         if (press && is(KEY_L, 'l')) go(Screen::List);

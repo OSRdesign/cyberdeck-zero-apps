@@ -1,0 +1,18 @@
+title Cassette playback VOLUME at other sizes and their own densities (800x480 at 9.2 px/mm, 480x800 at 8.5): VOLUME in the SOFT slot while Take 006 plays, CARD and SOFT back after STOP
+sizes 800x480 480x800
+env CASSETTE_DEMO playing
+env CASSETTE_LAYOUT_CHECK 1
+
+wait 600
+expect text "VOLUME"
+expect text "50 %"
+expect notext "CARD"
+shot other-volume
+key x
+wait 400
+expect text "SOFT"
+expect text "CARD"
+expect notext "VOLUME"
+shot other-stopped
+expect notext "LAYOUT FAIL"
+expect noquit

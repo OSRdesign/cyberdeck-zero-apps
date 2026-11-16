@@ -21,6 +21,19 @@ app (during the record countdown it cancels the countdown). The header's Esc but
 
 A held deck key is drawn pressed until it is released.
 
+## Every page: the playback VOLUME
+
+| Key | Does |
+|---|---|
+| - (minus; keypad -) | VOLUME down one level ("-" at the lowest level mutes; muted it does nothing) |
+| = (equals; keypad +) | VOLUME up one level (muted: the sound comes back at the level it had) |
+
+They act only while a take plays, scans, is paused in playback or previews from the list (also the Edit page's PLAY):
+then the recorder shows VOLUME in SOFT's place and the keys and its - / + buttons set the playback output's own volume.
+Held, the key repeats (the keyboard's own repeat). Otherwise they do nothing: they never change SOFT or CARD (which have
+no keys; their buttons are on the screen). The launcher's volume keys stay the launcher's (the board's default output);
+the VOLUME stepper follows them when the take plays on that output. Not while a box, a picker or a text field is open.
+
 The PLAY / PAUSE key shows the current state, latched (drawn pressed down) like REC while recording; what a press does
 does not change (it plays, pauses and resumes). The same at every screen size:
 

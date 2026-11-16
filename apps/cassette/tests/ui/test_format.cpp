@@ -456,8 +456,54 @@ void list_keys()
     CHECK_EQ(list_hint(l), "Choose the takes in order, then MERGE. Esc cancels.");
 }
 
+/* The playback VOLUME on the recorder (the owner's request of 2026-11-16): which stepper fills the two places in every transport
+ * state, with and without a card level, and the VOLUME value's text. */
+void volume_slot()
+{
+    struct Row {
+        Transport t;
+        bool volume;
+    };
+    const Row rows[] = {
+        {Transport::Idle, false},          {Transport::Countdown, false},     {Transport::Recording, false},
+        {Transport::RecordingPaused, false}, {Transport::Playing, true},      {Transport::PlayingPaused, true},
+        {Transport::ScanForward, true},    {Transport::ScanReverse, true},
+    };
+    for (const Row &r : rows) {
+        CHECK_EQ(volume_in_soft_slot(r.t), r.volume);
+        /* a card with a level: CARD and SOFT side by side; while a take plays CARD hides and VOLUME takes the full width */
+        StepperSlots s = stepper_slots(true, r.t);
+        CHECK_EQ(s.volume, r.volume);
+        CHECK_EQ(s.card, !r.volume);
+        CHECK_EQ(s.wide, r.volume);
+        /* a card without a level (CassetteNoCard): SOFT at the full width already; VOLUME takes the same place */
+        s = stepper_slots(false, r.t);
+        CHECK_EQ(s.volume, r.volume);
+        CHECK(!s.card);
+        CHECK(s.wide);
+    }
+    /* STOP, REC or the take's end: back to CARD and SOFT exactly as before */
+    const StepperSlots play = stepper_slots(true, Transport::Playing), idle = stepper_slots(true, Transport::Idle),
+                       rec = stepper_slots(true, Transport::Recording);
+    CHECK(play.volume && !idle.volume && !rec.volume);
+    CHECK(idle.card && rec.card && !play.card);
+    /* the value */
+    VolumeVm v;
+    CHECK_EQ(volume_text(v), "--"); /* not known */
+    v.pct = 52;
+    CHECK_EQ(volume_text(v), "52 %");
+    v.pct = 100;
+    CHECK_EQ(volume_text(v), "100 %");
+    v.pct = 0;
+    CHECK_EQ(volume_text(v), "0 %");
+    v.pct = 52;
+    v.muted = true;
+    CHECK_EQ(volume_text(v), "Mute"); /* never the level it comes back at */
+}
+
 void test_format()
 {
+    volume_slot();
     list_row_heights();
     list_keys();
     times();

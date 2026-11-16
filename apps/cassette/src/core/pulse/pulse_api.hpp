@@ -82,7 +82,17 @@ struct PulseDevice {
     std::string bt_codec;           /* api.bluez5.codec / bluetooth.codec: "msbc", "cvsd", "sbc", ... */
     std::string device_description; /* device.description */
     std::string device_api;         /* device.api: "bluez5", "alsa" */
+    /* sinks, for the playback VOLUME (copied from Vinyl): */
+    int64_t volume_raw = -1;        /* the loudest channel's pa_volume_t (0x10000 = 0 dB); -1 = not reported */
+    bool muted = false;
+    uint32_t base_volume = 0;       /* pa_sink_info.base_volume */
+    uint32_t n_volume_steps = 0;    /* pa_sink_info.n_volume_steps */
+    int sink_flags = 0;             /* pa_sink_flags_t */
+    int alsa_card = -1;             /* the ALSA card behind it (alsa.card, api.alsa.card, api.alsa.path); -1 none */
 };
+/* The ALSA card number of a sink's properties: alsa.card, else api.alsa.card, else the N of an "hw:N" / "front:N" / "hw:N,0"
+ * api.alsa.path or device.string; -1 when none (Bluetooth, software sinks). From Vinyl. */
+int pulse_alsa_card(const std::string &alsa_card, const std::string &api_alsa_card, const std::string &path);
 
 struct PulseProfile {
     std::string name;        /* "a2dp-sink", "a2dp-sink-sbc_xq", "headset-head-unit", "headset-head-unit-cvsd", "off" */
@@ -206,6 +216,10 @@ struct PulsePlaybackRequest {
     uint32_t ready_timeout_ms = 2000;
     std::string stream_name = "Cassette playback";
     std::string role = "music";
+    /* The playback VOLUME (Vinyl's rule): the stream opens unmuted at 100 % with its own restore key, so the server never
+     * brings back another stream's level and the output's own volume is the whole volume. The take playback sets it; the
+     * live monitor does not (the server keeps handling its stream as before). */
+    bool own_volume = false;
 };
 
 /* What a stream got. Always S16LE interleaved. */
@@ -468,6 +482,12 @@ public:
                              std::string *why = nullptr) = 0;
     virtual int open_playback(const PulsePlaybackRequest &req, std::unique_ptr<PulsePlayback> &out,
                               std::string *why = nullptr) = 0;
+    /* The playback VOLUME (copied from Vinyl): sets a sink's volume to the pa_volume_t `volume` on its `channels` channels and
+     * its mute (mute < 0 leaves it, 0 un-mutes, 1 mutes). A round trip: call it from a worker, never the UI thread. 0,
+     * kPulseMissing (libpulse lacks the call), kPulseNoDevice, kPulseState, kPulseTimeout. */
+    virtual int set_sink_volume_raw(const std::string &sink, unsigned channels, uint32_t volume, int mute) = 0;
+    /* A sink's volume asked again (the loudest channel) and its mute. */
+    virtual int read_sink_volume(const std::string &sink, uint32_t &volume, bool &muted) = 0;
 };
 
 /* The production implementation: loads libpulse.so.0 on the first connect(). Never null. */
@@ -475,13 +495,22 @@ std::unique_ptr<PulseApi> make_real_pulse();
 
 /* ---- the parts of a stream open that are the same for every implementation (tested on the fake, used by the real one) */
 
-/* The stream flags: DONT_MOVE always, ADJUST_LATENCY, INTERPOLATE_TIMING, AUTO_TIMING_UPDATE, FAIL_ON_SUSPEND on request. */
+/* The stream flags: DONT_MOVE always, ADJUST_LATENCY, INTERPOLATE_TIMING, AUTO_TIMING_UPDATE, FAIL_ON_SUSPEND on request;
+ * playback with own_volume also START_UNMUTED. */
 uint32_t pulse_capture_flags(const PulseCaptureRequest &req);
 uint32_t pulse_playback_flags(const PulsePlaybackRequest &req);
 /* The stream properties: media.name, media.role, application.name, and PipeWire's node.dont-reconnect and
- * node.dont-fallback (= true), node.dont-move (= true). */
+ * node.dont-fallback (= true), node.dont-move (= true). own_volume (a take's playback stream, Vinyl's rule): also
+ * application.id "cassette", its own restore key module-stream-restore.id "sink-input-by-application-id:cassette" and
+ * WirePlumber's state.restore-props / state.restore-target = false (no stored level or target applied to it). */
 std::vector<std::pair<std::string, std::string>> pulse_stream_props(const std::string &stream_name, const std::string &role,
-                                                                    const std::string &app_name);
+                                                                    const std::string &app_name, bool own_volume = false);
+/* The initial volume of a playback stream opened with own_volume: 100 % (0 dB) on each channel. */
+struct PulseVolume {
+    unsigned channels = 0;
+    uint32_t values[32] = {};
+};
+PulseVolume pulse_norm_volume(unsigned channels);
 /* The capture format for a request on `source`: rate 0 -> the source's rate; channels 0 -> the source's, limited to 1..2.
  * false with `why` when the request cannot be served (an empty or "default" name, a monitor source, no rate). */
 bool pulse_capture_format(const PulseCaptureRequest &req, const PulseDevice &source, PulseStreamFormat &fmt,

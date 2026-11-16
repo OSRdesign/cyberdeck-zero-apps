@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: MIT */
 #include "pulse_worker.hpp"
 
+#include <cstdio> /* the volume read-back line */
+
 namespace cassette {
 
 PulseWorker::PulseWorker(PulseApi &api) : api_(api) { th_ = std::thread([this] { run(); }); }
@@ -48,6 +50,7 @@ bool PulseWorker::request_scan(const ScanRequest &rq) {
                     r.callback_set = true;
                 }
                 r.listed = api_.list_sources(r.sources) >= 0 && api_.list_sinks(r.sinks) >= 0 && api_.list_cards(r.cards) >= 0;
+                if (rq.want_info) r.have_info = api_.server_info(r.info) == 0;
             }
             std::lock_guard<std::mutex> g2(mu_);
             r.seq = ++seq_;
@@ -58,6 +61,63 @@ bool PulseWorker::request_scan(const ScanRequest &rq) {
     }
     cv_.notify_all();
     return true;
+}
+
+bool PulseWorker::request_sink_volume(const std::string &sink, unsigned channels, uint32_t volume, int mute,
+                                      const std::string &log) {
+    {
+        std::lock_guard<std::mutex> g(mu_);
+        if (quit_) return false;
+        level_sink_ = sink;
+        level_channels_ = channels;
+        level_volume_ = volume;
+        level_mute_ = mute;
+        level_log_ = log;
+        level_have_ = true;
+        if (level_busy_) return true; /* the running loop takes the newest */
+        level_busy_ = true;
+        jobs_.push_back([this] {
+            for (;;) {
+                std::string s, log;
+                unsigned ch = 2;
+                uint32_t vol = 0;
+                int mute = -1;
+                {
+                    std::lock_guard<std::mutex> g2(mu_);
+                    if (!level_have_ || quit_) {
+                        level_busy_ = false;
+                        return;
+                    }
+                    s = level_sink_;
+                    ch = level_channels_;
+                    vol = level_volume_;
+                    mute = level_mute_;
+                    log = level_log_;
+                    level_have_ = false;
+                }
+                const int r = api_.set_sink_volume_raw(s, ch, vol, mute);
+                uint32_t back = 0;
+                bool back_muted = false;
+                const int rr = r == 0 ? api_.read_sink_volume(s, back, back_muted) : r;
+                if (!log.empty()) {
+                    if (rr == 0)
+                        std::fprintf(stderr, "[cassette] volume: %s raw=%u read back raw=%u%s\n", log.c_str(), vol, back,
+                                     back_muted ? " (muted)" : "");
+                    else
+                        std::fprintf(stderr, "[cassette] volume: %s raw=%u read back failed (%d)\n", log.c_str(), vol, rr);
+                }
+                std::lock_guard<std::mutex> g2(mu_);
+                ++levels_done_;
+            }
+        });
+    }
+    cv_.notify_all();
+    return true;
+}
+
+int PulseWorker::sink_levels_done() const {
+    std::lock_guard<std::mutex> g(mu_);
+    return levels_done_;
 }
 
 bool PulseWorker::request_card(const std::string &name) {

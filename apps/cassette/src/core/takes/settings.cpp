@@ -142,6 +142,18 @@ int SettingsStore::load() {
             }
         }
     }
+    if (const json::Value *vols = root.get("playback_volume")) {
+        if (vols->is_obj()) {
+            for (const auto &kv : vols->obj) {
+                if (s_.playback_volume.size() >= kPlaybackVolumesMax) break;
+                if (!kv.second.is_obj() || kv.first.empty() || kv.first.size() > 160) continue;
+                PlaybackVolume v;
+                if (get_num(kv.second, "volume", d) && std::isfinite(d)) v.pct = static_cast<int>(std::lround(clampd(d, 0, 100)));
+                get_bool(kv.second, "muted", v.muted);
+                s_.playback_volume[kv.first] = v;
+            }
+        }
+    }
     clamp_settings(s_);
 
     if (const json::Value *cards = root.get("cards")) {
@@ -198,6 +210,20 @@ int SettingsStore::save() {
         for (const auto &kv : s_.bt_names)
             if (n++ < kBtNamesMax) names.set(kv.first, json::Value::string(kv.second));
         root.set("bt_names", names);
+    }
+    if (s_.playback_volume.empty()) {
+        root.erase("playback_volume"); /* absent = no output used yet (older files stay byte-compatible) */
+    } else {
+        json::Value vols = json::Value::object();
+        size_t n = 0;
+        for (const auto &kv : s_.playback_volume) {
+            if (n++ >= kPlaybackVolumesMax) break;
+            json::Value e = json::Value::object();
+            e.set("volume", json::Value::number(std::clamp(kv.second.pct, 0, 100)));
+            if (kv.second.muted) e.set("muted", json::Value::boolean(true));
+            vols.set(kv.first, e);
+        }
+        root.set("playback_volume", vols);
     }
 
     json::Value cards = json::Value::object();

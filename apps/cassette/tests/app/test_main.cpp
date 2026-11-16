@@ -36,6 +36,7 @@ int main(int argc, char **argv) {
     test_edit();
     test_load();
     test_playmeter();
+    test_volume_app();
     test_monitor_app();
     test_formats_app();
     test_merge_app();

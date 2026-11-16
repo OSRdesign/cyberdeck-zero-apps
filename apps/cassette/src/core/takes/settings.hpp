@@ -23,7 +23,9 @@
      "monitor_output": "" (automatic) | "bt:AA:BB:CC:DD:EE:FF" | "<alsa device>" (absent: automatic),
  *     "bt_names": { "AA:BB:CC:DD:EE:FF": "<last label seen>" } (T8: the names of Bluetooth devices, for a paired one that is not
  *     connected; at most 16, absent when empty),
- *     "cards": { "<descriptor>": { "level_db": number (absent: no level control), "auto_gain": bool, "mute": bool } } }
+ *     "cards": { "<descriptor>": { "level_db": number (absent: no level control), "auto_gain": bool, "mute": bool } },
+ *     "playback_volume": { "<output key>": { "volume": 0..100, "muted": bool } } (the playback VOLUME per output; absent when
+ *     empty) }
  */
 #pragma once
 
@@ -45,6 +47,17 @@ constexpr double kSoftGainMin = 0.0, kSoftGainMax = 24.0;
 constexpr size_t kBtNamesMax = 16;       /* "bt_names": the most devices whose last label is remembered */
 constexpr double kCardLevelMin = -120.0, kCardLevelMax = 60.0; /* a sanity range only; the mixer clamps further */
 extern const int kRecordTimerChoices[4];                       /* 0 (Off), 3, 10, 20 seconds */
+constexpr size_t kPlaybackVolumesMax = 32;                     /* "playback_volume": the most outputs remembered */
+
+/* One output's entry of "playback_volume". `pct`: the level last set from Cassette, in percent of that output's levels; for an
+ * output without a playback mixer it IS the level (Cassette's software volume, 100 until changed), for the others the output
+ * keeps its own level and the entry also says that the first-use rule has run. `muted`: Cassette's own mute (an output without
+ * a mixer, or a control with neither a switch nor a mute value), the level kept. */
+struct PlaybackVolume {
+    int pct = 100;
+    bool muted = false;
+    bool operator==(const PlaybackVolume &o) const { return pct == o.pct && muted == o.muted; }
+};
 
 struct Settings {
     RecFormat format = RecFormat::Wav;
@@ -69,6 +82,9 @@ struct Settings {
     std::string monitor_output; /* where the live monitor plays: "" automatic (the capture card's playback side, or the Bluetooth headset
                                  * that is the input), "bt:<MAC>" or an ALSA device as output_device spells it */
     std::map<std::string, std::string> bt_names; /* "bt_names": upper-case MAC with colons -> the last label seen (T8; empty: absent) */
+    /* "playback_volume": the playback VOLUME, one entry per output a take has played on (core/playback/output_volume.hpp), keyed
+     * "bt:<MAC>", "pulse:<sink>", "alsa:hw:CARD=<id>" or "alsa:default"; at most kPlaybackVolumesMax; empty: absent */
+    std::map<std::string, PlaybackVolume> playback_volume;
 };
 
 struct CardState {
