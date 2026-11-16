@@ -2,7 +2,7 @@
 
 A sound recorder for the cyberdeck with the look of a tape deck: it records from any USB sound card or headset (or a Bluetooth headset, on boards with a sound server) to WAV
 (Broadcast Wave), FLAC or Ogg Opus files, shows a level meter with a target zone, adds software gain, starts on a timer,
-trims, splits and merges takes, and plays them back with a 5x scan. Native fullscreen app on the launcher's `cp0_lvgl`, MIT, version 0.3.1,
+trims, splits and merges takes, and plays them back with a 5x scan. Native fullscreen app on the launcher's `cp0_lvgl`, MIT, version 0.4.0,
 category Tools. Plan: [launcher `docs/dev/tasks/016-cassette-recorder.md`](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/dev/tasks/016-cassette-recorder.md); study: [launcher report 058](https://github.com/OSRdesign/cyberdeck-zero-launcher/blob/main/docs/dev/reports/058-sound-recorder-study.md).
 
 - **Crash-safe.** A take is synced to the card every 10 s (5-30 s, setting) and its header is rewritten after every
@@ -32,7 +32,7 @@ category Tools. Plan: [launcher `docs/dev/tasks/016-cassette-recorder.md`](https
 
 ## Screenshots
 
-All ten were rendered on a PC by the headless harness (`build.sh host`, version 0.3.1) from the UI's scenes on
+All ten were rendered on a PC by the headless harness (`build.sh host`, version 0.4.0) from the UI's scenes on
 their synthetic model (generated levels and takes, no sound hardware, the header clock frozen at 12:00). Real-board
 captures (a HackBerry 720x720 and a Pi 3A+ in portrait) are in the user guide's "Screen sizes" section.
 Each comes from a scene in `tests/scenes` (named below): the build writes its PNGs to
@@ -273,7 +273,7 @@ speed. Through the sound server the take is S16 at 48000 Hz.
 
 ## Install
 
-Settings > Apps (category Tools). By hand: `sudo apt install ./cassette_0.3.1_arm64.deb` (apt fetches the codec libraries; plain `dpkg -i` needs them already installed).
+Settings > Apps (category Tools). By hand: `sudo apt install ./cassette_0.4.0_arm64.deb` (apt fetches the codec libraries; plain `dpkg -i` needs them already installed).
 
 The package also installs `/usr/share/APPLaunch/bin/cassette-probe`, a listen-only command line tool for the board
 tests: it lists the capture cards, what each offers and its mixer controls, then opens each card (or the one given
@@ -414,7 +414,7 @@ package's `copyright` file names them, with the system libraries the binaries li
 
 ## Changes
 
-- Next version (not published yet): a playback **VOLUME** stepper in SOFT's place while a take plays, scans, is paused or
+- 0.4.0: a playback **VOLUME** stepper in SOFT's place while a take plays, scans, is paused or
   previews (CARD hidden, the full width), keys `-` and `=` on every page; it sets the playback output's own volume in levels
   fitted to that output (Vinyl's model): a card's playback control, a sound server's sink (Bluetooth included), or Cassette's
   software volume where the output has none; a silent output is set near 50 % the first time a take plays on it; one
