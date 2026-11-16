@@ -1168,12 +1168,14 @@ ignored; holding Esc 3 s still closes the app; (3) taps: three within 1.2 s, eac
 the cover square only, wake anywhere; (4) ships as Vinyl 0.6.0 with a launcher release carrying the request (0.10.4 or later). The launcher half
 is built (launcher branch `backlight-request`, commit 827d6cb7: `screen off|on`, `cp0_app_backlight()`, `requests=...,screen`). Below, the
 builder's readings where the decisions were silent, for the owner to confirm.
-- **The row.** Menu > Playback, last, "Knock-knock" with On / Off, an Edit row like Gapless and Remember position: Enter or a tap toggles it on
-  the first tap, as every Playback row does (the coordinator's brief said "two-tap rows like the other settings"; Vinyl's Menu rows act on the
-  first tap since P2a, so the row follows them). Listed only where the launcher answers `screen` and Vinyl has the request (the device build);
-  a value left On on a board without it does nothing. The Playback strip adds, after its ReplayGain sentence: "Knock-knock: three quick taps on
-  the cover switch the screen off while the music plays on; three quick taps anywhere bring it back." (the builder's words). `settings.json`
-  `knock_knock` (bool).
+- **The row** (moved by the owner after the first board look, 2026-11-16): the Menu page, TOOLS, directly under the Sleep timer:
+  "Knock-knock" with On / Off, an Edit row (the value, then a chevron) like the Sleep timer's; Enter or a tap toggles it on the first tap, as
+  every Menu row acts (the coordinator's brief said "two-tap rows like the other settings"; Vinyl's Menu rows act on the first tap since P2a).
+  Listed only where `knock_available` (Vinyl has the request, board.state's `requests` lists `screen`, screen.state's `touch_slots` is not
+  0); a value left On where it is not listed does nothing. The Playback page lists it no more and its strip is its ReplayGain sentence
+  again. The Menu page has no help strip (Menu-480x320 draws none), so the sentence written for the Playback strip ("Knock-knock: three quick
+  taps on the cover switch the screen off while the music plays on; three quick taps anywhere bring it back.") went with the Playback row:
+  the explanation is in this README and the board tests only. `settings.json` `knock_knock` (bool).
 - **The taps** (`core/screen/knock`, `TapSequence`, tested with a fake clock): a press shorter than 400 ms (399 counts, 400 does not), a gap from
   a release to the next press shorter than 500 ms, the three within 1200 ms from the first press to the last release (1200 counts); the finger
   within the toolkit's tap slop of its press (a sixth of TARGET, at least 6 px: the map widget's rule; 13 px on the deck), checked on its moves
@@ -1202,7 +1204,7 @@ builder's readings where the decisions were silent, for the owner to confirm.
   (SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGABRT: `core/screen/crash_guard` sends `screen on` with async-signal-safe calls, then the signal's previous
   action runs). `kill -9` is the launcher's (its process watch).
 - **Scenes** (the scenes' fake backlight `VINYL_DEMO_SCREEN=1|fail`, `VINYL_DEMO_KNOCK=1`, `VINYL_DEMO_NOTOUCH=1`): `qa-knock`, `-small`,
-  `-640` (the row and the strip, toggled), `qa-knock-old` (no `screen`: no row, a setting left On does nothing), `qa-knock-notouch` (no touch
+  `-640` (the Menu with the row under the Sleep timer, toggled; the Playback page without it), `qa-knock-old` (no `screen`: no row, a setting left On does nothing), `qa-knock-notouch` (no touch
   screen: the same), `knock-taps`, `-small`, `-640` (three taps on the cover,
   then a tap on the output button and the keys Q, Esc, M do nothing, three wake taps on the output button press nothing, then a tap opens
   it; slow taps on the cover, and a tap on the title between cover taps, do nothing), `knock-refused` (the notice, the input stays),
@@ -1212,6 +1214,8 @@ builder's readings where the decisions were silent, for the owner to confirm.
   volume down and up, as the other volume keys; every other key stays ignored); (2) the row is also hidden on a board without a touch screen:
   screen.state's `touch_slots=0` (`core/screen` `screen_touch_slots`, `knock_available`; read once at start; a launcher that writes no
   `touch_slots`, an older one or multitasking off, means unknown and the row shows); (3) the strip after the rows, reached by scrolling where it
-  does not fit (480x320, 640x480), is accepted as it is. Still to confirm: the two texts above.
+  does not fit (480x320, 640x480), is accepted as it is (since the move the Playback strip is its one sentence again); (4) the row is a tool:
+  Menu > TOOLS, under the Sleep timer (see The row). Still to confirm: the notice "Screen off is not available." and whether the Menu should
+  say how Knock-knock works anywhere (it has no strip).
 - **Built against** the launcher branch `backlight-request` at 827d6cb7 (an LF copy, not the shared pin): the release pins the launcher
   release that carries `cp0_app_backlight()`; there is no fallback for a toolkit without it.

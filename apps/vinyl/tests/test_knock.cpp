@@ -7,7 +7,7 @@
  * gate (Disabled until the setting and the board allow it, the requests it asks for, answers that come late, every way
  * out restoring the light), the app's model fed with touches (arm on the cover only, wake anywhere, nothing swallowed
  * counts twice), the worker thread (order, a waiting request replaced, the exit), the crash guard's raw `screen on`, the
- * setting in settings.json and its row and sentence on the Playback page.
+ * setting in settings.json and its row in the Menu's TOOLS, under the Sleep timer.
  */
 #include "check.hpp"
 
@@ -207,7 +207,9 @@ void test_available() {
     CHECK(k.state() == GateState::Disabled);
     menu::State st;
     st.knock = knock_available(true, true, 0);
-    CHECK_EQ(menu::rows_of(menu::Page::Playback, st).size(), static_cast<size_t>(5));
+    CHECK_EQ(menu::rows_of(menu::Page::Menu, st).size(), static_cast<size_t>(7)); /* no Knock-knock row */
+    st.knock = knock_available(true, true, -1);
+    CHECK_EQ(menu::rows_of(menu::Page::Menu, st).size(), static_cast<size_t>(8));
 }
 
 void test_gate() {
@@ -525,31 +527,40 @@ void test_setting_and_row() {
     CHECK(settings_from_json(text, back, nullptr) && back.knock && back == s);
     CHECK(settings_from_json("{\"knock_knock\": \"yes\"}", back, nullptr) && !back.knock); /* a wrong type: the default */
     CHECK(settings_from_json("{\"gapless\": false}", back, nullptr) && !back.knock);       /* an older file */
-    /* the Playback page: the row only where the board answers `screen`, last, On / Off; the strip's sentence with it */
-    Settings p;
-    std::vector<menu::Row> rows = menu::playback_rows(p);
-    CHECK_EQ(rows.size(), static_cast<size_t>(5));
-    for (const menu::Row &r : rows) CHECK(r.id != "knock");
-    rows = menu::playback_rows(p, "", true);
-    CHECK_EQ(rows.size(), static_cast<size_t>(6));
-    CHECK(rows.back().id == "knock" && rows.back().text == "Knock-knock" && rows.back().value == "Off");
-    CHECK(rows.back().kind == menu::Row::Kind::Edit);
-    p.knock = true;
-    CHECK_EQ(menu::playback_rows(p, "", true).back().value, std::string("On"));
+    /* the Menu page (owner, 2026-11-16): the row under the Sleep timer in TOOLS, only where the board answers `screen` (and
+     * has a touch screen: knock_available), On / Off; the Playback page never lists it and its strip is unchanged */
     menu::State st;
-    st.settings = p;
-    CHECK_EQ(menu::rows_of(menu::Page::Playback, st).size(), static_cast<size_t>(5)); /* not available: no row, even when On */
-    CHECK_EQ(menu::page_hint(menu::Page::Playback, st), std::string("ReplayGain evens out the loudness between tracks."));
+    st.output = "Evolve 65";
+    std::vector<menu::Row> m = menu::menu_rows(st);
+    CHECK_EQ(m.size(), static_cast<size_t>(7)); /* not available: TOOLS, Sleep timer, SETTINGS, Playback, Output, Keys, About */
+    for (const menu::Row &r : m) CHECK(r.id != "knock");
+    st.settings.knock = true;
+    CHECK_EQ(menu::menu_rows(st).size(), static_cast<size_t>(7)); /* On but not available: still no row */
     st.knock = true;
-    CHECK_EQ(menu::rows_of(menu::Page::Playback, st).size(), static_cast<size_t>(6));
-    const std::string hint = menu::page_hint(menu::Page::Playback, st);
-    CHECK(hint.find("ReplayGain evens out the loudness between tracks.") == 0);
-    CHECK(hint.find(menu::kKnockHint) != std::string::npos);
-    CHECK(hint.find("three quick taps on the cover") != std::string::npos);
-    /* the selection moves onto it and back */
+    st.settings.knock = false;
+    m = menu::menu_rows(st);
+    CHECK_EQ(m.size(), static_cast<size_t>(8));
+    CHECK(m[0].kind == menu::Row::Kind::Heading && m[0].text == "TOOLS");
+    CHECK(m[1].id == "sleep");
+    CHECK(m[2].id == "knock" && m[2].text == "Knock-knock" && m[2].value == "Off" && m[2].kind == menu::Row::Kind::Edit);
+    CHECK(m[3].kind == menu::Row::Kind::Heading && m[3].text == "SETTINGS");
+    CHECK(m[4].id == "playback" && m[5].id == "output" && m[6].id == "keys" && m[7].id == "about");
+    st.settings.knock = true;
+    CHECK_EQ(menu::rows_of(menu::Page::Menu, st)[2].value, std::string("On"));
+    st.library = true; /* the Library row stays under Playback */
+    m = menu::menu_rows(st);
+    CHECK(m[2].id == "knock" && m[4].id == "playback" && m[5].id == "library");
+    /* the keys: Down from the Sleep timer lands on it, Down again skips the SETTINGS heading */
+    CHECK_EQ(menu::step_item(m, 1, 1), 2);
+    CHECK_EQ(menu::step_item(m, 2, 1), 4);
+    CHECK_EQ(menu::step_item(m, 4, -1), 2);
+    CHECK_EQ(menu::first_item(m), 1);
+    /* the Playback page: five rows, no Knock-knock, its own strip */
     const std::vector<menu::Row> pr = menu::rows_of(menu::Page::Playback, st);
-    CHECK_EQ(menu::step_item(pr, 4, 1), 5);
-    CHECK_EQ(menu::step_item(pr, 5, 1), 5);
+    CHECK_EQ(pr.size(), static_cast<size_t>(5));
+    for (const menu::Row &r : pr) CHECK(r.id != "knock");
+    CHECK_EQ(menu::page_hint(menu::Page::Playback, st), std::string("ReplayGain evens out the loudness between tracks."));
+    CHECK_EQ(menu::page_hint(menu::Page::Menu, st), std::string()); /* the Menu page has no strip */
 }
 
 /* the cover zone (exactly the sleeve) at every QA size: under the header, on the screen, at least the touch target */

@@ -1113,6 +1113,12 @@ struct VinylApp::Impl final : TransportHost {
         const menu::Row &r = rows[static_cast<size_t>(i)];
         if (p == Page::Menu) {
             if (r.id == "sleep") open_from(Page::Sleep, Page::Menu);
+            else if (r.id == "knock") { /* Knock-knock (TOOLS, under the Sleep timer): Enter or a tap toggles it */
+                Settings st = settings.get();
+                st.knock = !st.knock;
+                apply_settings(st);
+                refresh(true);
+            }
             else if (r.id == "playback") open_from(Page::Playback, Page::Menu);
             else if (r.id == "keys") open_from(Page::Keys, Page::Menu);
             else if (r.id == "about") open_from(Page::About, Page::Menu);
@@ -1133,7 +1139,6 @@ struct VinylApp::Impl final : TransportHost {
         if (p == Page::Playback) {
             if (r.id == "gapless") st.gapless = !st.gapless; /* Enter or a tap toggles it */
             else if (r.id == "remember") st.remember_long = !st.remember_long;
-            else if (r.id == "knock") st.knock = !st.knock;
             else if (r.id == "replaygain") {
                 open_from(Page::ReplayGain, Page::Playback);
                 return;

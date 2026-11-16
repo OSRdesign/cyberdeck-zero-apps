@@ -63,10 +63,12 @@ const char *on_off(bool v) { return v ? "On" : "Off"; }
 std::vector<Row> menu_rows(const State &s) {
     /* only what is built (owner decision D32): the canvas's Equalizer row comes with its phase; the Library row (P2b) is
      * there while the Library is (its database opened); Keys and About are rows of their own (the brief of P2a) */
-    std::vector<Row> rows = {heading("TOOLS"),
-                             edit("sleep", "Sleep timer", sleep_menu_value(s.sleep, s.sleep_left_ms)),
-                             heading("SETTINGS"),
-                             open("playback", "Playback")};
+    std::vector<Row> rows = {heading("TOOLS"), edit("sleep", "Sleep timer", sleep_menu_value(s.sleep, s.sleep_left_ms))};
+    /* Knock-knock (owner, 2026-11-16): a tool, directly under the Sleep timer; only where the launcher can switch the screen
+     * off and on for Vinyl (board.state requests: screen) on a board with a touch screen */
+    if (s.knock) rows.push_back(edit("knock", "Knock-knock", on_off(s.settings.knock)));
+    rows.push_back(heading("SETTINGS"));
+    rows.push_back(open("playback", "Playback"));
     if (s.library) rows.push_back(open("library", "Library"));
     rows.push_back(open("output", "Output", s.output));
     rows.push_back(open("keys", "Keys"));
@@ -100,15 +102,13 @@ std::vector<Row> sleep_rows(SleepMode chosen) {
     return rows;
 }
 
-std::vector<Row> playback_rows(const Settings &s, const std::string &output_key, bool knock) {
+std::vector<Row> playback_rows(const Settings &s, const std::string &output_key) {
     /* no Speed row (D32: "Speed (later)" dropped); no Crossfade row (P2d) */
     std::vector<Row> rows = {edit("gapless", "Gapless", on_off(s.gapless)),
                              edit("replaygain", "ReplayGain", replaygain_mode_word(s.replaygain)),
                              edit("boost", "Gain boost", boost_word(s.boost_of(output_key))),
                              edit("volume_steps", "Volume steps", volume_steps_word(s.volume_steps)),
                              edit("remember", "Remember position in long files", on_off(s.remember_long))};
-    /* Knock-knock (2026-11-16): only where the launcher can switch the screen off and on (board.state requests: screen) */
-    if (knock) rows.push_back(edit("knock", "Knock-knock", on_off(s.knock)));
     return rows;
 }
 
@@ -136,7 +136,7 @@ std::vector<Row> rows_of(Page p, const State &s) {
     switch (p) {
     case Page::Menu: return menu_rows(s);
     case Page::Sleep: return sleep_rows(s.sleep);
-    case Page::Playback: return playback_rows(s.settings, s.output_key, s.knock);
+    case Page::Playback: return playback_rows(s.settings, s.output_key);
     case Page::ReplayGain: return replaygain_rows(s.settings.replaygain);
     case Page::Boost: return boost_rows(s.settings.boost_of(s.output_key));
     case Page::VolumeSteps: return volume_steps_rows(s.settings.volume_steps);
@@ -155,10 +155,7 @@ std::string page_heading(Page p) {
 std::string page_hint(Page p, const State &s) {
     switch (p) {
     case Page::Sleep: return sleep_status_text(s.sleep, s.sleep_left_ms);
-    case Page::Playback:
-        if (s.knock)
-            return std::string("ReplayGain evens out the loudness between tracks. ") + kKnockHint;
-        return "ReplayGain evens out the loudness between tracks.";
+    case Page::Playback: return "ReplayGain evens out the loudness between tracks.";
     case Page::ReplayGain:
         return "Track: every track as loud as the others. Album: an album keeps its own loudness steps. Files without "
                "ReplayGain tags play as they are.";
