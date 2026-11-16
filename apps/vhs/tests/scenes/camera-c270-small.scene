@@ -1,0 +1,13 @@
+# VHS M1: as camera-c270.scene at the canvas's size.
+title VHS M1 with a Logitech C270 at 480x320 (6.08 px/mm): pillarboxed
+sizes 480x320
+ppmm 608
+env VHS_FORMAT rgb565
+env VHS_FAKE c270
+env VHS_SOC bcm2711
+
+wait 1500
+shot 01-c270
+expect text "1280x960  30 fps"
+key esc
+expect quit

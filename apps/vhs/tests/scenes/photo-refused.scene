@@ -1,0 +1,15 @@
+# VHS M2: a camera without MJPEG: Space takes no photo and says why (brief section 20; the wording is provisional).
+title VHS M2: no photo from a YUYV-only camera
+sizes 480x320
+ppmm 608
+env VHS_FAKE yuyv
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+
+wait 1500
+key space
+wait 400
+shot 01-refused
+expect text "Photos need a camera that sends MJPEG."
+key esc
+expect quit

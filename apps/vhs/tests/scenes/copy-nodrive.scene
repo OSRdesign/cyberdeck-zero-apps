@@ -1,0 +1,28 @@
+# VHS M6: no drive plugged in (VHS_FAKE_DRIVES none): Copy from the options sheet gives the notice "No USB drive
+# found." (provisional) and nothing else.
+title VHS M6 copy with no drive at 480x320 (6.08 px/mm)
+sizes 480x320
+ppmm 608
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+env VHS_DEMO_SCENES 1
+env VHS_FAKE_DRIVES none
+
+wait 3500
+tap "Scenes"
+wait 3000
+hold "Trip" 1700
+wait 300
+expect text "Copy to a USB drive"
+tap "Copy to a USB drive"
+wait 600
+shot 01-no-drive
+expect notext "Copy to a USB drive"
+expect text "No USB drive found."
+key esc
+wait 1800
+key esc
+expect quit

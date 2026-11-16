@@ -1,0 +1,27 @@
+# VHS M3: the FineCam's switch moved during a recording (a loss, then back turned within 10 s): the
+# scene is finished at the loss; "Camera unplugged." then "Camera turned: recording stopped" (brief
+# 5.5, plan 3.7).
+title VHS M3: the camera's switch moved while recording: the scene ends, then the turned toast
+sizes 800x480 480x800
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+env VHS_FAKE_MIC tone
+env VHS_FAKE_RESTART_MS 1500
+env VHS_FAKE_SCRIPT unplug@4500,turn@4550,replug@5500
+
+wait 1500
+key r
+wait 2500
+expect text "Photo now"
+wait 1000
+shot 01-unplugged
+expect text "Camera unplugged."
+wait 4000
+shot 02-turned-toast
+expect text "Camera turned: recording stopped"
+expect text "1080x1920  30 fps"
+key esc
+expect quit

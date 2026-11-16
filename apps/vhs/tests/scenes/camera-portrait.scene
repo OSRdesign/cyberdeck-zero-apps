@@ -1,0 +1,12 @@
+# VHS M1: a portrait camera in the 16:9 picture box: the narrow picture centred, never cropped.
+title VHS M1 started with the FineCam's switch in position A (portrait): 1080x1920 in the box, upright, whole
+sizes 800x480 480x800
+env VHS_FORMAT rgb565
+env VHS_FAKE portrait
+env VHS_SOC bcm2837
+
+wait 1500
+shot 01-portrait
+expect text "1080x1920  30 fps"
+key esc
+expect quit

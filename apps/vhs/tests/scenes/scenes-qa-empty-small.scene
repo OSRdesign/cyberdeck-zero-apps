@@ -1,0 +1,22 @@
+# M7: the scenes-qa-empty scene in the qa-small class (brief 15.3), the same steps.
+# VHS M4: no scene and no photo yet: the head says 0 and one grey line (provisional text).
+title VHS M4 Scenes of an empty folder at 480x320 and 320x480 at 6.3 px/mm (qa-small, TARGET 7 mm)
+sizes 480x320 320x480
+ppmm 630
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+
+wait 1500
+tap "Scenes"
+wait 1500
+shot 01-empty
+expect text "SCENES, 0"
+expect text "No scenes yet. Record with R or take a photo with Space."
+key esc
+wait 1500
+expect text "Photo | Video"
+key esc
+expect quit

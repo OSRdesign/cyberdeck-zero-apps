@@ -1,0 +1,55 @@
+# VHS M5: the windowed Playback page (canvas PlaybackWindowed-480x320, no Full screen button: P2) on the demo
+# folder's fixture "Trip" (10 s of MJPEG 1280x720 with a 16 kHz tone, made by the recorder): Enter on Scenes
+# opens it playing; Space pauses (Play), Left goes back 5 s (clamped to 0:00), Right 5 s on (0:05 exactly while
+# paused), Space plays on; Esc back to Scenes, then to the live picture. The harness has no sound output: the
+# engine reports its output failed and the picture runs on the monotonic clock.
+title VHS M5 playback at 480x480 (8.0 px/mm)
+sizes 480x480
+ppmm 800
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+env VHS_DEMO_SCENES 1
+
+wait 3500
+tap "Scenes"
+wait 3000
+shot 01-scenes
+expect text "Trip"
+key enter
+wait 2500
+shot 02-playing
+expect esc
+expect text "Pause"
+expect text "-"
+expect text "+"
+expect text "Trip_013_20261114-190500"
+expect text "00:10"
+expect notext "Full screen"
+key space
+wait 600
+shot 03-paused
+expect text "Play"
+key left
+wait 800
+expect text "00:00"
+key right
+wait 1200
+shot 04-seek-5s
+expect text "00:05"
+key space
+wait 1500
+shot 05-playing-on
+expect text "Pause"
+expect notext "00:05"
+key esc
+wait 2000
+shot 06-back-to-scenes
+expect text "SCENES, 14"
+key esc
+wait 1800
+expect text "Photo | Video"
+key esc
+expect quit

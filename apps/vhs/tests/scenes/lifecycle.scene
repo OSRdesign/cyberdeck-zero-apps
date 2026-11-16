@@ -1,0 +1,37 @@
+# VHS hidden and shown again (X-Background=run): the camera is released while hidden (nothing drawn) and opened
+# again on show (brief 3.3 rule 5). M3: a hide during a recording finishes the scene first (brief 13, owner answer
+# D37: finish and save, hide with the camera released, come back live); a close during a recording too (the file is
+# finished in the teardown, after the quit).
+title VHS hidden and shown again (X-Background=run): the camera released and reopened, a recording finished
+sizes 800x480
+lifecycle
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+env VHS_FAKE_MIC tone
+
+wait 1500
+shot 01-live
+expect text "1920x1080  30 fps"
+key r
+wait 2000
+shot 02-recording
+expect text "Photo now"
+hide
+wait 800
+expect hidden
+expect nowrite
+show
+wait 1500
+expect visible
+expect repaint
+shot 03-shown
+expect text "1920x1080  30 fps"
+expect text "Photo | Video"
+expect notext "Photo now"
+key r
+wait 1500
+expect text "Photo now"
+close
+expect quit

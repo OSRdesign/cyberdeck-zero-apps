@@ -1,0 +1,53 @@
+# VHS M6: the Settings page at 480x320 and 320x480 at 6.3 px/mm (qa-small, TARGET 7 mm): the rows, a pick list
+# (a choice closes it), the prefix rule's toast.
+title VHS M6 Settings at 480x320 and 320x480 at 6.3 px/mm
+sizes 480x320 320x480
+ppmm 630
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+
+wait 1500
+tap "Settings"
+wait 800
+shot 01-settings
+expect esc
+expect text "Folder"
+expect text "Name prefix"
+expect text "Self-timer"
+tap "Photo"
+wait 200
+tap "Photo"
+wait 400
+shot 02-photo-list
+expect text "Instant"
+expect text "Light"
+tap "Light"
+wait 200
+tap "Light"
+wait 400
+shot 03-light
+expect text "Light"
+expect notext "Instant"
+tap "Name prefix"
+wait 200
+tap "Name prefix"
+wait 500
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+type a.b
+key enter
+wait 600
+shot 04-prefix-refused
+expect text "Not saved: use letters, digits, space, - and _."
+expect text "scene"
+key esc
+wait 1800
+expect text "Photo | Video"
+key esc
+expect quit

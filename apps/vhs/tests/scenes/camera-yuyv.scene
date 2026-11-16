@@ -1,0 +1,12 @@
+# VHS M1: brief 4.1 rule 8.
+title VHS M1 with a camera without MJPEG: the YUYV live view only (photo and record refused later)
+sizes 800x480
+env VHS_FORMAT rgb565
+env VHS_FAKE yuyv
+
+wait 1500
+shot 01-yuyv
+expect text "640x480  30 fps"
+expect text "Fake YUYV Camera, YUYV. Space takes a photo, Tab switches to Video, R records."
+key esc
+expect quit

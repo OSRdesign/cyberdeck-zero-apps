@@ -1,0 +1,58 @@
+# VHS M6 hidden and shown again (X-Background=run, brief 13) on the other pages: a hide during playback pauses it
+# (step 4: it shows "Play" when it comes back); a copy goes on while VHS is hidden and its end shows after the show;
+# the Settings page is kept across a hide; the launcher's close quits (a recording's hide and close: lifecycle.scene).
+title VHS M6 lifecycle: playback paused by a hide, a copy that goes on while hidden, Settings kept, close
+sizes 480x320
+ppmm 608
+lifecycle
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+env VHS_DEMO_SCENES 1
+env VHS_FAKE_DRIVES one
+env VHS_FAKE_COPY_KBPS 3000
+
+wait 3500
+tap "Scenes"
+wait 3000
+key enter
+wait 1500
+expect text "Pause"
+hide
+wait 600
+expect hidden
+show
+wait 800
+expect visible
+shot 01-playback-paused-by-hide
+expect text "Play"
+key esc
+wait 1500
+key u
+wait 1200
+shot 02-copying
+expect text "Copying to SANDISK"
+hide
+wait 4000
+expect hidden
+show
+wait 800
+expect visible
+shot 03-copied-while-hidden
+expect notext "Copying to SANDISK"
+expect text "Copied to SANDISK."
+key esc
+wait 1800
+tap "Settings"
+wait 600
+hide
+wait 400
+show
+wait 600
+expect visible
+shot 04-settings-after-show
+expect text "Name prefix"
+close
+expect quit

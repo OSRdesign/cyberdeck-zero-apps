@@ -1,0 +1,23 @@
+# VHS M1: another program holds the camera (EBUSY at S_FMT): the toast says so while it lasts (Cassette's
+# standing notice); VHS tries again every second and shows the picture when the camera is free.
+title VHS M1 with the camera busy (480x320 and 320x480 at 6.3 px/mm): the empty picture box and the standing toast; free again: live
+sizes 480x320 320x480
+ppmm 630
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_FAKE_SCRIPT busy@0,free@3500
+
+wait 1200
+shot 01-busy
+expect esc
+expect text "Camera busy: another program uses it."
+expect notext "No camera found"
+expect notext "1920x1080  30 fps"
+wait 3200
+shot 02-free
+expect notext "Camera busy: another program uses it."
+expect text "1920x1080  30 fps"
+key esc
+expect quit

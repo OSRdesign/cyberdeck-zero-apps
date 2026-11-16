@@ -1,0 +1,66 @@
+# VHS M4: N renames the selected scene (the toolkit's text box; the keyboard policy applies): the prefix only,
+# the row shows the new prefix alone (12.4 item 4); Del asks first; a locked file is refused with the toast; a
+# photo is deleted (its thumbnail too) and the head counts one less.
+title VHS M4 rename and delete from the keyboard (keyboard)
+sizes 480x320
+ppmm 608
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+env VHS_DEMO_SCENES 1
+
+wait 3000
+tap "Scenes"
+wait 2500
+key n
+wait 500
+shot 01-rename
+expect text "Rename"
+expect text "Name"
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+key backspace
+type Holiday
+wait 200
+shot 02-typed
+key enter
+wait 1500
+shot 03-renamed
+expect text "Holiday"
+expect notext "Rename"
+key down
+key down
+key down
+key down
+key down
+key down
+key down
+key delete
+wait 400
+shot 04-delete-asks
+expect text "Delete this scene?"
+expect text "Y = Delete, Enter or Esc = Cancel"
+key y
+wait 1000
+shot 05-locked-refused
+expect text "Not deleted: the file is locked."
+expect text "SCENES, 14"
+key up
+key delete
+wait 400
+expect text "Delete this photo?"
+key y
+wait 1500
+shot 06-deleted
+expect text "SCENES, 13"
+key esc
+wait 1500
+key esc
+expect quit

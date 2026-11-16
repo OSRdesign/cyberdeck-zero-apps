@@ -1,0 +1,44 @@
+# VHS M6: copy a scene to a USB drive (brief 9.3; canvas CopyToUsb-480x320) on the demo drives (VHS_FAKE_DRIVES
+# one: SANDISK, vfat, not mounted) with a copy slowed to 2 MB/s (VHS_FAKE_COPY_KBPS) so the dialog shows: U on the
+# selected scene (Trip, 9 MB): VHS mounts the drive (Vinyl's "Mounting SANDISK..."), the dialog over the dimmed list
+# (title, the line, the bar, bytes and time left, Cancel); Cancel removes the .part; U again copies to the end
+# ("Copied to SANDISK.", provisional). At exit VHS unmounts the drive it mounted.
+title VHS M6 copy to a USB drive at 480x320 (6.08 px/mm, the canvas's pixels)
+sizes 480x320
+ppmm 608
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+env VHS_DEMO_SCENES 1
+env VHS_FAKE_DRIVES one
+env VHS_FAKE_COPY_KBPS 2000
+
+wait 3500
+tap "Scenes"
+wait 3000
+expect text "Trip"
+key u
+wait 1800
+shot 01-copying
+expect text "Copying to SANDISK"
+expect text "Trip_013_20261114-190500.mkv, 9 MB. The file appears on the drive only when the copy is complete."
+expect text "Cancel"
+tap "Cancel"
+wait 900
+shot 02-cancelled
+expect notext "Copying to SANDISK"
+expect text "SCENES, 14"
+key u
+wait 1500
+expect text "Copying to SANDISK"
+wait 5500
+shot 03-copied
+expect notext "Copying to SANDISK"
+expect text "Copied to SANDISK."
+key esc
+wait 1800
+expect text "Photo | Video"
+key esc
+expect quit

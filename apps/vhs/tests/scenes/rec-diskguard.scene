@@ -1,0 +1,26 @@
+# VHS M3: 200 MB free above a 100 MB floor (VHS_SET min_free_mb=100): REC starts; once the rate is known
+# (2 s) 200 MB is under 2 minutes at the fake camera's 720p rate: the scene is finished, the red toast.
+title VHS M3: the disk guard stops a scene (under 2 minutes left at the rate written)
+sizes 480x320
+ppmm 608
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+env VHS_FAKE_MIC tone
+env VHS_FAKE_FREE_MB 200
+env VHS_SET min_free_mb=100
+
+wait 1500
+key r
+wait 1200
+shot 01-recording
+expect text "Photo now"
+wait 3800
+shot 02-stopped
+expect text "Disk almost full: recording stopped."
+expect text "Photo | Video"
+expect notext "Photo now"
+key esc
+expect quit

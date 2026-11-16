@@ -1,0 +1,62 @@
+# VHS M2: two photos by Space (Instant: the next good frame of the 1080p stream, one flash each; saved as
+# photo_<NNN>_nodate.jpg with the clock not synchronised), then the minimal photo review (canvas
+# PhotoReview-480x320) from the Scenes page (Enter on the newest photo): newest first, Right / Left, Delete asks
+# first (the toolkit's dialog; Y deletes), Esc back to the live picture (the camera reopens).
+title VHS M2 photos and the review at 480x480 (8.0 px/mm)
+sizes 480x480
+ppmm 800
+env VHS_FAKE 1
+env VHS_SOC bcm2837
+# RGB565 as on the 16-bit panels; the harness's own display is 32-bit
+env VHS_FORMAT rgb565
+env VHS_CLOCK_SYNCED 0
+
+wait 1500
+shot 01-live
+expect text "1920x1080  30 fps"
+key space
+wait 900
+key space
+wait 2000
+tap "Scenes"
+wait 2000
+key enter
+wait 1200
+shot 02-review
+expect esc
+expect text "1 of 2"
+expect text "photo_002_nodate.jpg"
+expect text "Previous"
+expect text "Next"
+expect text "Delete"
+expect notext "Photo | Video"
+@480x480 expect key "Previous" target
+@480x480 expect key "Delete" target
+key right
+wait 700
+shot 03-older
+expect text "2 of 2"
+expect text "photo_001_nodate.jpg"
+key left
+wait 700
+expect text "1 of 2"
+tap "Delete"
+wait 400
+shot 04-delete-asks
+expect text "Delete this photo?"
+expect text "Y = Delete, Enter or Esc = Cancel"
+key y
+wait 900
+shot 05-deleted
+expect notext "Delete this photo?"
+expect text "1 of 1"
+expect text "photo_001_nodate.jpg"
+key esc
+wait 1200
+key esc
+wait 1500
+shot 06-back-live
+expect text "1920x1080  30 fps"
+expect text "Photo | Video"
+key esc
+expect quit

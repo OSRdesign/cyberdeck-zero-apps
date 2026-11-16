@@ -1,0 +1,13 @@
+# VHS M1: Settings > Photo defaults to Light outside BCM2712 / BCM2711 / BCM2837 (D6 ruling): the Light mode
+# streams.
+title VHS M1 on a board of the Other SoC class (the amd64 tablet): Light, the preview at 720p
+sizes 800x480
+env VHS_FORMAT rgb565
+env VHS_FAKE 1
+env VHS_SOC other
+
+wait 1500
+shot 01-light
+expect text "1280x720  30 fps"
+key esc
+expect quit
